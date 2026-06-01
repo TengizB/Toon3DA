@@ -167,6 +167,9 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
             case ROTATE_RIGHT: drawRotateArrow(cx, cy, extent, false);      break;
             case STRAFE_LEFT:  drawDoubleChevron(cx, cy, extent, true);     break;
             case STRAFE_RIGHT: drawDoubleChevron(cx, cy, extent, false);    break;
+            case FIRE:         drawCrosshair(cx, cy, extent);               break;
+            case SKIP_TURN:    drawSkipIcon(cx, cy, extent);                break;
+            case RELOAD:       drawReloadIcon(cx, cy, extent);              break;
             default: break;
         }
     }
@@ -250,6 +253,57 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
             shapeRenderer.rectLine(openX, cy + halfVert, apexX, cy, lineWidth);
             shapeRenderer.rectLine(apexX, cy, openX, cy - halfVert, lineWidth);
         }
+    }
+
+    /** Crosshair: four short arms with a filled dot at centre. */
+    private void drawCrosshair(float cx, float cy, float extent) {
+        float lineWidth  = Math.max(2f, extent * 0.15f);
+        float arm        = extent * 0.80f;
+        float gapRadius  = extent * 0.24f;
+        shapeRenderer.rectLine(cx - arm, cy, cx - gapRadius, cy, lineWidth);
+        shapeRenderer.rectLine(cx + gapRadius, cy, cx + arm, cy, lineWidth);
+        shapeRenderer.rectLine(cx, cy - arm, cx, cy - gapRadius, lineWidth);
+        shapeRenderer.rectLine(cx, cy + gapRadius, cx, cy + arm, lineWidth);
+        shapeRenderer.circle(cx, cy, gapRadius * 0.55f, 8);
+    }
+
+    /** Skip icon: vertical bar followed by a right-pointing filled triangle. */
+    private void drawSkipIcon(float cx, float cy, float extent) {
+        float lineWidth = Math.max(2f, extent * 0.16f);
+        float halfH     = extent * 0.70f;
+        float barX      = cx - extent * 0.55f;
+        float triLeft   = cx - extent * 0.08f;
+        float triRight  = cx + extent * 0.62f;
+        shapeRenderer.rectLine(barX, cy - halfH, barX, cy + halfH, lineWidth * 1.4f);
+        shapeRenderer.triangle(triRight, cy, triLeft, cy + halfH, triLeft, cy - halfH);
+    }
+
+    /** Reload icon: circular arc (300°) with an arrowhead at the open end. */
+    private void drawReloadIcon(float cx, float cy, float extent) {
+        float radius    = extent * 0.65f;
+        float lineWidth = Math.max(2f, extent * 0.14f);
+        float arrowSize = extent * 0.30f;
+        float startDeg  = 110f;
+        float arcSpan   = 300f;
+        int   segments  = 12;
+        for (int segmentIndex = 0; segmentIndex < segments; segmentIndex++) {
+            float angle1 = startDeg + arcSpan / segments * segmentIndex;
+            float angle2 = startDeg + arcSpan / segments * (segmentIndex + 1);
+            float x1 = cx + radius * MathUtils.cosDeg(angle1);
+            float y1 = cy + radius * MathUtils.sinDeg(angle1);
+            float x2 = cx + radius * MathUtils.cosDeg(angle2);
+            float y2 = cy + radius * MathUtils.sinDeg(angle2);
+            shapeRenderer.rectLine(x1, y1, x2, y2, lineWidth);
+        }
+        float endDeg     = startDeg + arcSpan;
+        float tipX       = cx + radius * MathUtils.cosDeg(endDeg);
+        float tipY       = cy + radius * MathUtils.sinDeg(endDeg);
+        float tangentDeg = endDeg + 90f;
+        float fin1X = tipX + MathUtils.cosDeg(tangentDeg + 140f) * arrowSize;
+        float fin1Y = tipY + MathUtils.sinDeg(tangentDeg + 140f) * arrowSize;
+        float fin2X = tipX + MathUtils.cosDeg(tangentDeg - 140f) * arrowSize;
+        float fin2Y = tipY + MathUtils.sinDeg(tangentDeg - 140f) * arrowSize;
+        shapeRenderer.triangle(tipX, tipY, fin1X, fin1Y, fin2X, fin2Y);
     }
 
     // -------------------------------------------------------------------------

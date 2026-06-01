@@ -7,6 +7,8 @@ public final class TouchButton {
     final float       rectX, rectY, rectWidth, rectHeight;
     final TouchAction action;
     final Shape       shape;
+    /** Tap-only buttons fire once on press and do not repeat while held. */
+    final boolean     tapOnly;
 
     boolean pressed;
     int     pointerId;       // -1 = no finger bound to this button
@@ -14,12 +16,18 @@ public final class TouchButton {
 
     TouchButton(float rectX, float rectY, float rectWidth, float rectHeight,
                 TouchAction action, Shape shape) {
+        this(rectX, rectY, rectWidth, rectHeight, action, shape, false);
+    }
+
+    TouchButton(float rectX, float rectY, float rectWidth, float rectHeight,
+                TouchAction action, Shape shape, boolean tapOnly) {
         this.rectX      = rectX;
         this.rectY      = rectY;
         this.rectWidth  = rectWidth;
         this.rectHeight = rectHeight;
         this.action     = action;
         this.shape      = shape;
+        this.tapOnly    = tapOnly;
         this.pointerId  = -1;
     }
 

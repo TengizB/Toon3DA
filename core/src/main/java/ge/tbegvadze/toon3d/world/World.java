@@ -254,15 +254,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         floorCeilingRenderer.setLightingTime(facilityTimeSeconds);
         wallRenderer.setLightingTime(facilityTimeSeconds);
 
-        float currentAlertPulse;
-        if (gameState.redAlert) {
-            alertTimeSeconds += Gdx.graphics.getDeltaTime();
-            currentAlertPulse = GameMath.alertPulse(alertTimeSeconds,
-                    Constants.ALERT_PULSE_SPEED_RADIANS_PER_SECOND);
-        } else {
-            alertTimeSeconds  = 0f;
-            currentAlertPulse = 0f;
-        }
+        alertTimeSeconds  = 0f;
+        float currentAlertPulse = 0f;
         wallRenderer.setAlertPulse(currentAlertPulse);
 
         float shakeOffsetX = impactEffectSystem.getShakeOffsetX();
@@ -307,7 +300,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         player.render(camera);
 
-        hudState.alertActive = gameState.redAlert;
+        hudState.alertActive = false;
         float deltaTime = Gdx.graphics.getDeltaTime();
         hudRenderer.update(deltaTime);
         hudRenderer.render(camera);

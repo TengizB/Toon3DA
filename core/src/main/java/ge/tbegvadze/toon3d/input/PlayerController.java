@@ -204,27 +204,32 @@ public class PlayerController {
     }
 
     private void pollInput() {
-        TouchAction touchAction = touchInputState != null
+        TouchAction heldAction = touchInputState != null
             ? touchInputState.getHeldAction()
+            : TouchAction.NONE;
+        TouchAction tapAction = touchInputState != null
+            ? touchInputState.consumeTapAction()
             : TouchAction.NONE;
 
         if (Gdx.input.isKeyJustPressed(Constants.KEY_HEAL)) {
             tryHeal();
-        } else if (Gdx.input.isKeyJustPressed(Constants.KEY_FIRE)) {
+        } else if (Gdx.input.isKeyJustPressed(Constants.KEY_FIRE) || tapAction == TouchAction.FIRE) {
             tryFire();
-        } else if (Gdx.input.isKeyJustPressed(Constants.KEY_SKIP_TURN)) {
+        } else if (Gdx.input.isKeyJustPressed(Constants.KEY_SKIP_TURN) || tapAction == TouchAction.SKIP_TURN) {
             trySkipTurn();
-        } else if (Gdx.input.isKeyPressed(Input.Keys.W) || touchAction == TouchAction.FORWARD) {
+        } else if (tapAction == TouchAction.RELOAD) {
+            tryReload();
+        } else if (Gdx.input.isKeyPressed(Input.Keys.W) || heldAction == TouchAction.FORWARD) {
             tryMove(player.directionX, player.directionY);
-        } else if (Gdx.input.isKeyPressed(Input.Keys.S) || touchAction == TouchAction.BACK) {
+        } else if (Gdx.input.isKeyPressed(Input.Keys.S) || heldAction == TouchAction.BACK) {
             tryMove(-player.directionX, -player.directionY);
-        } else if (Gdx.input.isKeyPressed(Input.Keys.A) || touchAction == TouchAction.ROTATE_LEFT) {
+        } else if (Gdx.input.isKeyPressed(Input.Keys.A) || heldAction == TouchAction.ROTATE_LEFT) {
             startRotation(MathUtils.PI / 2f);  // CCW 90°
-        } else if (Gdx.input.isKeyPressed(Input.Keys.D) || touchAction == TouchAction.ROTATE_RIGHT) {
+        } else if (Gdx.input.isKeyPressed(Input.Keys.D) || heldAction == TouchAction.ROTATE_RIGHT) {
             startRotation(-MathUtils.PI / 2f); // CW 90°
-        } else if (Gdx.input.isKeyPressed(Input.Keys.Q) || touchAction == TouchAction.STRAFE_LEFT) {
+        } else if (Gdx.input.isKeyPressed(Input.Keys.Q) || heldAction == TouchAction.STRAFE_LEFT) {
             tryMove(-player.directionY, player.directionX);
-        } else if (Gdx.input.isKeyPressed(Constants.KEY_STRAFE_RIGHT) || touchAction == TouchAction.STRAFE_RIGHT) {
+        } else if (Gdx.input.isKeyPressed(Constants.KEY_STRAFE_RIGHT) || heldAction == TouchAction.STRAFE_RIGHT) {
             tryMove(player.directionY, -player.directionX);
         } else if (Gdx.input.isKeyPressed(Constants.KEY_INTERACT)) {
             tryInteract();
@@ -310,6 +315,13 @@ public class PlayerController {
     }
 
     private void trySkipTurn() {
+        actionState    = ActionState.SKIPPING;
+        actionProgress = 0f;
+    }
+
+    private void tryReload() {
+        Weapon weapon = inventory.getEquippedWeapon();
+        if (weapon == null || !weapon.requestManualReload()) return;
         actionState    = ActionState.SKIPPING;
         actionProgress = 0f;
     }
