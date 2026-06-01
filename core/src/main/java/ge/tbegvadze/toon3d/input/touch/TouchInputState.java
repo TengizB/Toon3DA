@@ -53,18 +53,18 @@ public final class TouchInputState extends InputAdapter {
             Constants.TOUCH_BUTTON_SIZE, Constants.TOUCH_BUTTON_SIZE,
             TouchAction.ROTATE_RIGHT, TouchButton.Shape.ROUNDED_SQUARE);
 
-        // Strafe pads: tall capsules inboard-left of the diamond
+        // Strafe buttons flank FORWARD on both sides (same row as FORWARD, ±armOffset in X)
         buttons[INDEX_STRAFE_LEFT] = new TouchButton(
-            Constants.TOUCH_STRAFE_COLUMN_X, Constants.TOUCH_STRAFE_UPPER_Y,
-            Constants.TOUCH_STRAFE_WIDTH,    Constants.TOUCH_STRAFE_HEIGHT,
-            TouchAction.STRAFE_LEFT, TouchButton.Shape.CAPSULE);
+            centerX - armOffset - half, centerY + armOffset - half,
+            Constants.TOUCH_BUTTON_SIZE, Constants.TOUCH_BUTTON_SIZE,
+            TouchAction.STRAFE_LEFT, TouchButton.Shape.ROUNDED_SQUARE);
 
         buttons[INDEX_STRAFE_RIGHT] = new TouchButton(
-            Constants.TOUCH_STRAFE_COLUMN_X, Constants.TOUCH_STRAFE_LOWER_Y,
-            Constants.TOUCH_STRAFE_WIDTH,    Constants.TOUCH_STRAFE_HEIGHT,
-            TouchAction.STRAFE_RIGHT, TouchButton.Shape.CAPSULE);
+            centerX + armOffset - half, centerY + armOffset - half,
+            Constants.TOUCH_BUTTON_SIZE, Constants.TOUCH_BUTTON_SIZE,
+            TouchAction.STRAFE_RIGHT, TouchButton.Shape.ROUNDED_SQUARE);
 
-        // Action buttons — tap-only, left side of screen
+        // Action buttons — tap-only, right side of screen aligned above movement diamond
         float fireHalf   = Constants.TOUCH_FIRE_SIZE   / 2f;
         float actionHalf = Constants.TOUCH_ACTION_SIZE / 2f;
 
