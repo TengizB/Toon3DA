@@ -17,11 +17,6 @@ public class LevelRenderer implements Renderable, Disposable {
     private static final Color GRID_COLOR      = new Color(0.2f, 0.2f, 0.2f, 1f);
     private static final Color WALL_COLOR      = Color.WHITE;
     private static final Color BORDER_COLOR    = new Color(0.6f, 0.6f, 0.6f, 1f);
-    private static final Color RAY_HIT_COLOR   = new Color(1f, 0.8f, 0f, 0.8f);
-    private static final Color RAY_MISS_COLOR  = new Color(0f, 0.7f, 0.7f, 0.3f);
-
-    // Half the visible tile span — rays beyond this radius are clipped to the mini-map boundary.
-    private static final float MINI_MAP_HALF_TILE_SPAN = MINI_MAP_TILE_COUNT / 2f;
 
     // One extra ring of tiles beyond the visible radius to fill partial cells at edges
     private static final int RENDER_TILE_RADIUS = MINI_MAP_TILE_RADIUS + 1;
@@ -32,7 +27,6 @@ public class LevelRenderer implements Renderable, Disposable {
 
     private float playerWorldX = 0f;
     private float playerWorldY = 0f;
-    private RayCastResult[] rayResults = null;
 
     public LevelRenderer(Level level, DoorManager doorManager) {
         this.level       = level;
@@ -43,10 +37,6 @@ public class LevelRenderer implements Renderable, Disposable {
     public void setPlayerWorldPosition(float worldX, float worldY) {
         this.playerWorldX = worldX;
         this.playerWorldY = worldY;
-    }
-
-    public void setRayResults(RayCastResult[] rayResults) {
-        this.rayResults = rayResults;
     }
 
     @Override
@@ -122,53 +112,6 @@ public class LevelRenderer implements Renderable, Disposable {
         shapes.setColor(BORDER_COLOR);
         shapes.rect(miniMapLeft, miniMapBottom, MINI_MAP_WORLD_SIZE, MINI_MAP_WORLD_SIZE);
         shapes.end();
-
-        // Ray pass — draw DDA rays on the mini-map, clipped to the visible tile area
-        if (rayResults != null) {
-            float playerTileX = playerWorldX / CELL_SIZE;
-            float playerTileY = playerWorldY / CELL_SIZE;
-
-            shapes.begin(ShapeRenderer.ShapeType.Line);
-            shapes.setColor(RAY_HIT_COLOR);
-            for (RayCastResult ray : rayResults) {
-                if (!ray.hitWall) continue;
-                float clampedEndX = miniMapCenterX + clampRayDelta(ray.endTileX - playerTileX, ray.endTileY - playerTileY, true)  * MINI_MAP_CELL_SIZE;
-                float clampedEndY = miniMapCenterY + clampRayDelta(ray.endTileX - playerTileX, ray.endTileY - playerTileY, false) * MINI_MAP_CELL_SIZE;
-                shapes.line(miniMapCenterX, miniMapCenterY, clampedEndX, clampedEndY);
-            }
-            shapes.end();
-
-            shapes.begin(ShapeRenderer.ShapeType.Line);
-            shapes.setColor(RAY_MISS_COLOR);
-            for (RayCastResult ray : rayResults) {
-                if (ray.hitWall) continue;
-                float clampedEndX = miniMapCenterX + clampRayDelta(ray.endTileX - playerTileX, ray.endTileY - playerTileY, true)  * MINI_MAP_CELL_SIZE;
-                float clampedEndY = miniMapCenterY + clampRayDelta(ray.endTileX - playerTileX, ray.endTileY - playerTileY, false) * MINI_MAP_CELL_SIZE;
-                shapes.line(miniMapCenterX, miniMapCenterY, clampedEndX, clampedEndY);
-            }
-            shapes.end();
-        }
-    }
-
-    /**
-     * Scales down the ray delta so neither axis exceeds the mini-map half-span, then returns the
-     * requested axis component. Both components must be passed together so the scale applied to X
-     * is the same as the one applied to Y, preserving the ray direction.
-     *
-     * @param returnX true to return the X component, false for Y
-     */
-    private static float clampRayDelta(float deltaTileX, float deltaTileY, boolean returnX) {
-        float absoluteDeltaX = Math.abs(deltaTileX);
-        float absoluteDeltaY = Math.abs(deltaTileY);
-        if (absoluteDeltaX > MINI_MAP_HALF_TILE_SPAN || absoluteDeltaY > MINI_MAP_HALF_TILE_SPAN) {
-            float scaleFactor = Math.min(
-                absoluteDeltaX > 0f ? MINI_MAP_HALF_TILE_SPAN / absoluteDeltaX : Float.MAX_VALUE,
-                absoluteDeltaY > 0f ? MINI_MAP_HALF_TILE_SPAN / absoluteDeltaY : Float.MAX_VALUE
-            );
-            deltaTileX *= scaleFactor;
-            deltaTileY *= scaleFactor;
-        }
-        return returnX ? deltaTileX : deltaTileY;
     }
 
     @Override

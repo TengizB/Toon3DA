@@ -56,8 +56,8 @@ public final class Constants {
     public static final float HORIZONTAL_FACE_SHADE_MULTIPLIER = 0.7f;
 
     // Floor & Ceiling texture rendering — see docs/dda-raycasting-math.txt
-    // SCALE_DIVISOR=2 → 640×360 backdrop (~4× cheaper than full-res); stretched by SpriteBatch
-    public static final int    FLOOR_BACKDROP_SCALE_DIVISOR    = 2;
+    // SCALE_DIVISOR=4 → 320×180 backdrop (~16× cheaper than full-res); stretched by SpriteBatch
+    public static final int    FLOOR_BACKDROP_SCALE_DIVISOR    = 4;
     public static final int    FLOOR_BACKDROP_WIDTH             = WORLD_WIDTH  / FLOOR_BACKDROP_SCALE_DIVISOR;
     public static final int    FLOOR_BACKDROP_HEIGHT            = WORLD_HEIGHT / FLOOR_BACKDROP_SCALE_DIVISOR;
     // FLOOR_CAMERA_Z = 0.5 → camera exactly centred (horizon at screen centre)
