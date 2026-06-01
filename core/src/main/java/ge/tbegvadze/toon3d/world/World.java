@@ -36,7 +36,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private final PlayerInventory      inventory;
     private final GameState            gameState;
     private final HudState             hudState;
-    private final RayCaster            rayCaster;
     private final WeaponHudRenderer    weaponHudRenderer;
     private final HudRenderer          hudRenderer;
     private final ImpactEffectSystem   impactEffectSystem;
@@ -101,7 +100,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         inventory          = new PlayerInventory();
         gameState          = new GameState();
         hudState           = new HudState();
-        rayCaster          = new RayCaster();
         impactEffectSystem = new ImpactEffectSystem();
 
         // Run-persistent renderers
@@ -304,12 +302,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         impactEffectRenderer.renderScreenOverlays(camera);
 
-        RayCastResult[] rays = rayCaster.castRays(
-                player.positionX, player.positionY,
-                player.directionX, player.directionY,
-                player.fieldOfViewRadians, level);
         levelRenderer.setPlayerWorldPosition(player.positionX, player.positionY);
-        levelRenderer.setRayResults(rays);
         levelRenderer.render(camera);
 
         player.render(camera);

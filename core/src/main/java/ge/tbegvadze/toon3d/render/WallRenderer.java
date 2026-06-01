@@ -83,13 +83,15 @@ public class WallRenderer implements Renderable, Disposable {
     private final int columnTextureWidth;
     private final int columnTextureHeight;
 
-    private float playerWorldX       = 0f;
-    private float playerWorldY       = 0f;
-    private float directionX         = 1f;
-    private float directionY         = 0f;
-    private float fieldOfViewRadians = PLAYER_FIELD_OF_VIEW_RADIANS;
+    private float playerWorldX        = 0f;
+    private float playerWorldY        = 0f;
+    private float directionX          = 1f;
+    private float directionY          = 0f;
+    // Camera-plane vectors cached in setPlayerState() to avoid Math.tan() inside render().
+    private float cachedPlaneX        = 0f;
+    private float cachedPlaneY        = CAMERA_PLANE_SCALE;
     // Current alert pulse intensity [0, 1]; 0 = normal lighting, 1 = full red wash.
-    private float alertPulse         = 0f;
+    private float alertPulse          = 0f;
     // Monotonically increasing facility clock used to evaluate 'f' (flickering) tile brightness.
     private float lightingTimeSeconds = 0f;
 
@@ -642,11 +644,13 @@ public class WallRenderer implements Renderable, Disposable {
     public void setPlayerState(float worldX, float worldY,
                                float playerDirectionX, float playerDirectionY,
                                float playerFieldOfViewRadians) {
-        this.playerWorldX       = worldX;
-        this.playerWorldY       = worldY;
-        this.directionX         = playerDirectionX;
-        this.directionY         = playerDirectionY;
-        this.fieldOfViewRadians = playerFieldOfViewRadians;
+        this.playerWorldX = worldX;
+        this.playerWorldY = worldY;
+        this.directionX   = playerDirectionX;
+        this.directionY   = playerDirectionY;
+        float planeScale  = (float) Math.tan(playerFieldOfViewRadians / 2.0);
+        this.cachedPlaneX = GameMath.cameraPlaneX(playerDirectionY, planeScale);
+        this.cachedPlaneY = GameMath.cameraPlaneY(playerDirectionX, planeScale);
     }
 
     public void setAlertPulse(float pulse) {
@@ -669,9 +673,8 @@ public class WallRenderer implements Renderable, Disposable {
         float playerTileX = playerWorldX / CELL_SIZE;
         float playerTileY = playerWorldY / CELL_SIZE;
 
-        float planeScale = (float) Math.tan(fieldOfViewRadians / 2.0);
-        float planeX     = GameMath.cameraPlaneX(directionY, planeScale);
-        float planeY     = GameMath.cameraPlaneY(directionX, planeScale);
+        float planeX = cachedPlaneX;
+        float planeY = cachedPlaneY;
 
         batch.begin();
 
