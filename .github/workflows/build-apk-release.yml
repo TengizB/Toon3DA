@@ -53,7 +53,7 @@ jobs:
         if: inputs.build_type == 'debug'
         run: ./gradlew android:assembleDebug
 
-      # Release build requires three repository secrets:
+      # Release build requires four repository secrets:
       #   RELEASE_KEYSTORE_BASE64 — base64-encoded .jks / .keystore file
       #     Generate:  keytool -genkey -v -keystore release.keystore \
       #                  -alias <alias> -keyalg RSA -keysize 2048 -validity 10000
