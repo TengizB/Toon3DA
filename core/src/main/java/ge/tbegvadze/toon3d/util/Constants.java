@@ -398,6 +398,15 @@ public final class Constants {
     public static final float TOUCH_ICON_EXTENT          = 22f;
     public static final float TOUCH_RIM_THICKNESS        = 3f;
     public static final int   TOUCH_ARC_SEGMENTS         = 8;
+    // Action button cluster — left side of screen, left-thumb reach (above left HUD panel, y > 130)
+    public static final float TOUCH_FIRE_SIZE            = 110f;
+    public static final float TOUCH_FIRE_CENTER_X        = 200f;
+    public static final float TOUCH_FIRE_CENTER_Y        = 310f;
+    public static final float TOUCH_ACTION_SIZE          = 82f;
+    public static final float TOUCH_RELOAD_CENTER_X      = 90f;
+    public static final float TOUCH_RELOAD_CENTER_Y      = 208f;
+    public static final float TOUCH_SKIP_CENTER_X        = 330f;
+    public static final float TOUCH_SKIP_CENTER_Y        = 208f;
 
     // Level transitions — stairs-down tile ('>' char)
     // STAIRS_DOWN_CHAR: classic roguelike glyph; exactly one per procedurally generated floor.

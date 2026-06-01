@@ -14,10 +14,14 @@ public final class TouchInputState extends InputAdapter {
     private static final int INDEX_ROTATE_RIGHT = 3;
     private static final int INDEX_STRAFE_LEFT  = 4;
     private static final int INDEX_STRAFE_RIGHT = 5;
+    private static final int INDEX_FIRE         = 6;
+    private static final int INDEX_RELOAD       = 7;
+    private static final int INDEX_SKIP_TURN    = 8;
 
-    private final TouchButton[] buttons;
-    private final Viewport      viewport;
-    private final Vector2       touchWorldCoords; // pre-allocated; never recreated in event handlers
+    private final TouchButton[]  buttons;
+    private final Viewport       viewport;
+    private final Vector2        touchWorldCoords; // pre-allocated; never recreated in event handlers
+    private       TouchAction    pendingTapAction = TouchAction.NONE;
 
     public TouchInputState(Viewport viewport) {
         this.viewport         = viewport;
@@ -28,7 +32,7 @@ public final class TouchInputState extends InputAdapter {
         float centerX   = Constants.TOUCH_DIAMOND_CENTER_X;
         float centerY   = Constants.TOUCH_DIAMOND_CENTER_Y;
 
-        buttons = new TouchButton[6];
+        buttons = new TouchButton[9];
         buttons[INDEX_FORWARD] = new TouchButton(
             centerX - half,          centerY + armOffset - half,
             Constants.TOUCH_BUTTON_SIZE, Constants.TOUCH_BUTTON_SIZE,
@@ -59,14 +63,43 @@ public final class TouchInputState extends InputAdapter {
             Constants.TOUCH_STRAFE_COLUMN_X, Constants.TOUCH_STRAFE_LOWER_Y,
             Constants.TOUCH_STRAFE_WIDTH,    Constants.TOUCH_STRAFE_HEIGHT,
             TouchAction.STRAFE_RIGHT, TouchButton.Shape.CAPSULE);
+
+        // Action buttons — tap-only, left side of screen
+        float fireHalf   = Constants.TOUCH_FIRE_SIZE   / 2f;
+        float actionHalf = Constants.TOUCH_ACTION_SIZE / 2f;
+
+        buttons[INDEX_FIRE] = new TouchButton(
+            Constants.TOUCH_FIRE_CENTER_X   - fireHalf,   Constants.TOUCH_FIRE_CENTER_Y   - fireHalf,
+            Constants.TOUCH_FIRE_SIZE,                    Constants.TOUCH_FIRE_SIZE,
+            TouchAction.FIRE, TouchButton.Shape.ROUNDED_SQUARE, true);
+
+        buttons[INDEX_RELOAD] = new TouchButton(
+            Constants.TOUCH_RELOAD_CENTER_X - actionHalf, Constants.TOUCH_RELOAD_CENTER_Y - actionHalf,
+            Constants.TOUCH_ACTION_SIZE,                  Constants.TOUCH_ACTION_SIZE,
+            TouchAction.RELOAD, TouchButton.Shape.ROUNDED_SQUARE, true);
+
+        buttons[INDEX_SKIP_TURN] = new TouchButton(
+            Constants.TOUCH_SKIP_CENTER_X   - actionHalf, Constants.TOUCH_SKIP_CENTER_Y   - actionHalf,
+            Constants.TOUCH_ACTION_SIZE,                  Constants.TOUCH_ACTION_SIZE,
+            TouchAction.SKIP_TURN, TouchButton.Shape.ROUNDED_SQUARE, true);
     }
 
-    /** Returns the highest-priority currently-pressed action, or NONE. */
+    /** Returns the highest-priority currently-pressed held action (movement), or NONE. */
     public TouchAction getHeldAction() {
         for (TouchButton button : buttons) {
-            if (button.pressed) return button.action;
+            if (button.pressed && !button.tapOnly) return button.action;
         }
         return TouchAction.NONE;
+    }
+
+    /**
+     * Returns and clears the pending tap action (FIRE, RELOAD, SKIP_TURN).
+     * Returns NONE if no tap is pending.
+     */
+    public TouchAction consumeTapAction() {
+        TouchAction tap   = pendingTapAction;
+        pendingTapAction  = TouchAction.NONE;
+        return tap;
     }
 
     public TouchButton[] getButtons() { return buttons; }
@@ -87,6 +120,9 @@ public final class TouchInputState extends InputAdapter {
                 touchButton.pressed        = true;
                 touchButton.pointerId      = pointer;
                 touchButton.pressGlowTimer = Constants.TOUCH_PRESS_GLOW_DURATION;
+                if (touchButton.tapOnly) {
+                    pendingTapAction = touchButton.action;
+                }
                 return true;
             }
         }

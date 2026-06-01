@@ -57,6 +57,18 @@ public abstract class Weapon {
     }
 
     /**
+     * Manually starts a reload when the weapon is idle and the clip is not already full.
+     * Bypasses the normal-to-reload delay. Returns true if a reload was started.
+     */
+    public boolean requestManualReload() {
+        if (visualState != WeaponVisualState.NORMAL) return false;
+        if (shotsInClip >= clipSize) return false;
+        visualState    = WeaponVisualState.RELOADING;
+        ticksRemaining = reloadTime;
+        return true;
+    }
+
+    /**
      * Advances real-time state each frame (muzzle-flash and normal-hold timers).
      * FIRING → NORMAL (clip still has shots) or NORMAL-hold (clip empty).
      * After NORMAL-hold elapses → RELOADING.
