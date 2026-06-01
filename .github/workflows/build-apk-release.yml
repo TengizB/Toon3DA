@@ -1,0 +1,127 @@
+name: Build and Publish APK Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version name (e.g. 1.2.3)'
+        required: true
+        default: '1.0.0'
+      release_notes:
+        description: 'Release notes'
+        required: false
+        default: 'New release'
+      build_type:
+        description: 'Build type (debug works without any setup; release requires keystore secrets)'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Install Android SDK 36 and build tools
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            2>/dev/null
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        if: inputs.build_type == 'debug'
+        run: ./gradlew android:assembleDebug
+
+      # Release build requires three repository secrets:
+      #   RELEASE_KEYSTORE_BASE64 — base64-encoded .jks / .keystore file
+      #     Generate:  keytool -genkey -v -keystore release.keystore \
+      #                  -alias <alias> -keyalg RSA -keysize 2048 -validity 10000
+      #     Encode:    base64 -w 0 release.keystore
+      #   KEYSTORE_PASSWORD — password passed to -storepass
+      #   KEY_ALIAS         — alias used when generating the key
+      #   KEY_PASSWORD      — password passed to -keypass (often same as store password)
+      - name: Decode signing keystore
+        if: inputs.build_type == 'release'
+        run: |
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode \
+            > android/release.keystore
+
+      - name: Build Release APK
+        if: inputs.build_type == 'release'
+        run: |
+          ./gradlew android:assembleRelease \
+            -Pandroid.injected.signing.store.file="$GITHUB_WORKSPACE/android/release.keystore" \
+            -Pandroid.injected.signing.store.password="${{ secrets.KEYSTORE_PASSWORD }}" \
+            -Pandroid.injected.signing.key.alias="${{ secrets.KEY_ALIAS }}" \
+            -Pandroid.injected.signing.key.password="${{ secrets.KEY_PASSWORD }}"
+
+      - name: Locate built APK
+        id: apk
+        run: |
+          if [ "${{ inputs.build_type }}" = "release" ]; then
+            APK_PATH=$(find android/build/outputs/apk/release -name "*.apk" | head -1)
+          else
+            APK_PATH=$(find android/build/outputs/apk/debug -name "*.apk" | head -1)
+          fi
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: No APK found after build" >&2
+            exit 1
+          fi
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "name=toon3d-v${{ inputs.version_name }}.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Delete all existing releases and tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_IDS=$(gh api "repos/${{ github.repository }}/releases" \
+            --paginate -q '.[].id')
+          if [ -z "$RELEASE_IDS" ]; then
+            echo "No existing releases to delete."
+          else
+            for RELEASE_ID in $RELEASE_IDS; do
+              TAG_NAME=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID" \
+                -q '.tag_name')
+              echo "Deleting release $RELEASE_ID (tag: $TAG_NAME)"
+              gh api --method DELETE \
+                "repos/${{ github.repository }}/releases/$RELEASE_ID"
+              gh api --method DELETE \
+                "repos/${{ github.repository }}/git/refs/tags/$TAG_NAME" 2>/dev/null \
+                || echo "  Tag $TAG_NAME already gone or not found, skipping."
+            done
+          fi
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ inputs.version_name }}"
+          APK_DEST="${{ steps.apk.outputs.name }}"
+          cp "${{ steps.apk.outputs.path }}" "$APK_DEST"
+
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "Toon3D $TAG" \
+            --notes "${{ inputs.release_notes }}" \
+            "$APK_DEST"
