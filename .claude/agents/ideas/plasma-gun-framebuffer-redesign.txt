@@ -1,0 +1,412 @@
+STATUS: IMPLEMENTED
+CATEGORY: Visual
+TITLE: Plasma Gun Sprite Redesign — ShapeRenderer + FrameBuffer
+CREATED: 2026-05-30
+---
+
+OVERVIEW
+========
+The current procedural plasma gun in WeaponHudRenderer is drawn with Pixmap
+fillRectangle calls. Pixmap can only stamp axis-aligned rectangles, so the
+silhouette is a stack of boxes: it reads as "pile of grey crates," not a gun.
+This document specifies replacing the Pixmap generator with a one-time render
+pass into an offscreen FrameBuffer using ShapeRenderer, which supports
+arbitrary triangles and polygons. That unlocks tapered barrels, an angled grip,
+a curved trigger guard, and a circular emitter — a real first-person plasma
+rifle silhouette in the classic Quake 1 / 1990s-FPS centered-weapon style.
+
+Scope is purely the static "normal" sprite (the `normalTexture` field). The
+FIRING / RELOADING animation logic, the recoil offset, the slide-down on
+reload, and the live plasma muzzle burst (renderPlasmaEffect) are NOT touched —
+they already use ShapeRenderer in world space and look good. We are only
+swapping how the gun-at-rest texture is generated.
+
+
+GAMEPLAY LOOP
+=============
+This is a visual-only change; it adds no new player action and consumes no
+turn. The relevant "loop" is the rendering lifecycle:
+
+1. WeaponHudRenderer constructor runs once (PlasmaRifle equipped, no asset file
+   on disk) -> calls the new generatePlasmaRifleTexture().
+2. generatePlasmaRifleTexture() creates a FrameBuffer at PLASMA_SPRITE_PIXEL_*
+   resolution, binds it, clears to transparent, and draws the gun with a
+   ShapeRenderer using an orthographic projection sized to the FrameBuffer in
+   PIXEL space.
+3. The FrameBuffer's color texture is copied into a standalone Texture (so the
+   FrameBuffer itself can be disposed and we are not holding a GL FBO for the
+   lifetime of the renderer). Returns that Texture as `normalTexture`.
+4. Every frame, render() draws normalTexture with SpriteBatch exactly as today:
+   batch.draw(normalTexture, drawX, currentOffsetY, WEAPON_HUD_WIDTH,
+   WEAPON_HUD_HEIGHT). drawX is already (WORLD_WIDTH - WEAPON_HUD_WIDTH)/2 =
+   450, so the gun is horizontally centered. No call-site changes.
+
+
+PLAYER EXPERIENCE
+=================
+The player should instantly recognize the equipped weapon as an energy rifle,
+not a generic block. Centered framing reads as "heavy two-handed weapon braced
+in front of the marine" — the Quake 1 nailgun / Doom plasma-rifle pose. The
+glowing cyan emitter and energy coils telegraph "this shoots plasma" before a
+single shot, reinforcing the weapon's identity (pierce-down-a-corridor energy
+gun, per plasma-rifle.txt). When idle, the coils and emitter give a faint
+"charged and dangerous" read; the existing FIRING burst then erupts from the
+emitter tip, which now visually lines up with a real muzzle instead of a box
+corner. Decision created: none directly — but clearer weapon silhouettes help
+the player track which gun is equipped at a glance during fast fights.
+
+
+SILHOUETTE BREAKDOWN
+====================
+Design target: classic 90s sci-fi plasma rifle, first-person, CENTERED and
+roughly bilaterally symmetric about the vertical centerline of the sprite. The
+barrel points UP-and-slightly-forward (toward top of sprite = into the scene),
+muzzle at top, grip at the bottom — same vertical orientation the current
+Pixmap uses (Pixmap row 0 = top = muzzle).
+
+IMPORTANT coordinate note: the FrameBuffer ShapeRenderer works in PIXEL space
+with a bottom-left origin (standard LibGDX FBO + Ortho camera). So inside the
+generator, +Y is UP and the muzzle is at the TOP (high Y). When the resulting
+texture is drawn by SpriteBatch with normal (non-flipped) UVs, it appears
+upright on screen. (This is the opposite vertical convention from the old
+Pixmap code, where row 0 was the top — keep that in mind when porting numbers;
+do NOT blindly reuse the old Y values.)
+
+All coordinates below are given as FRACTIONS of the sprite pixel dimensions
+(spriteWidth W, spriteHeight H) so the artist/dev can pick the resolution.
+centerX = 0.5 * W is the symmetry axis. Recommended resolution
+PLASMA_SPRITE_PIXEL_WIDTH = 256, PLASMA_SPRITE_PIXEL_HEIGHT = 192 (4:3-ish,
+matches the 380x263 world target aspect ~1.44; 256/192 = 1.33 — close enough,
+SpriteBatch stretches to fill, see OPEN QUESTIONS for exact aspect match).
+
+Shapes, from structural to detail. Each "shape" is one or more ShapeRenderer
+primitives (triangle / rect / circle / arc). ShapeRenderer.rect is fine for
+true rectangles; use triangle pairs for trapezoids/parallelograms; circle for
+the emitter; arc/curve approximated by a fan of triangles for the trigger
+guard. Coordinates are (x, y) with y-up.
+
+(1) MAIN BODY / RECEIVER — the central mass.
+    A wide rounded-rectangle block, centered.
+    - Rect: x from 0.30W to 0.70W, y from 0.30H to 0.62H.
+    - This is the heaviest visual element; it anchors the centered composition.
+
+(2) TAPERED BARREL — extends UP from the body toward the muzzle, narrowing.
+    A symmetric trapezoid (wide at bottom where it meets the body, narrow at
+    top near the muzzle). Built from 2 triangles.
+    - Bottom edge (wide): from (0.36W, 0.60H) to (0.64W, 0.60H).
+    - Top edge (narrow):  from (0.43W, 0.86H) to (0.57W, 0.86H).
+    - Triangle A: (0.36W,0.60H), (0.64W,0.60H), (0.57W,0.86H).
+    - Triangle B: (0.36W,0.60H), (0.57W,0.86H), (0.43W,0.86H).
+    Symmetric about centerX so it reads as a clean tapered barrel.
+
+(3) EMITTER HOUSING + PRONGS — at the very top (muzzle).
+    - Short narrow rect (muzzle collar): x 0.42W..0.58W, y 0.84H..0.90H.
+    - Two emitter prongs (thin verticals flanking the glow), one each side of
+      centerX, slightly taller than the collar:
+      left prong rect  x 0.40W..0.435W, y 0.86H..0.96H.
+      right prong rect x 0.565W..0.60W, y 0.86H..0.96H.
+      (Mirror images about centerX.)
+
+(4) CIRCULAR PLASMA EMITTER — the glowing muzzle eye, between the prongs.
+    Concentric filled circles, centered at (0.5W, 0.90H):
+    - Outer glow circle  radius 0.085W, color outer-blue, alpha ~0.55.
+    - Mid circle         radius 0.060W, color bright-cyan.
+    - Hot core circle    radius 0.032W, color white-cyan.
+    - Pinpoint           radius 0.014W, pure white.
+    This is the focal point and the anchor the FIRING burst emits from.
+
+(5) ENERGY COILS — cyan bands wrapping the barrel.
+    3 to 4 thin horizontal rects across the tapered barrel. Because the barrel
+    tapers, each coil should span only the barrel width AT THAT HEIGHT (so they
+    don't stick out past the trapezoid edges). Compute barrel half-width at a
+    given y by linear interpolation between the wide bottom and narrow top:
+      halfWidth(y) = lerp(0.14W at y=0.60H, 0.07W at y=0.86H).
+    Coil heights (y): 0.64H, 0.70H, 0.76H, 0.82H. Each coil rect:
+      x = centerX - halfWidth(y), width = 2*halfWidth(y), height = 0.012H.
+    Add a half-alpha fringe rect 1px above and below each coil for glow bleed.
+
+(6) ANGLED GRIP — the pistol grip, extending DOWN from the body, raked back.
+    A parallelogram (not axis-aligned) so it reads as an ergonomic raked grip.
+    Built from 2 triangles. Rake the bottom of the grip toward the player's
+    side; since the gun is centered, rake it slightly toward screen-right
+    (positive X) for a natural right-handed hold, OR keep it vertical-symmetric
+    for a pure-centered look (see OPEN QUESTIONS — recommend a SLIGHT right rake
+    of ~0.04W to avoid a sterile look while staying centered).
+    - Top edge:    (0.44W, 0.32H) to (0.56W, 0.32H).
+    - Bottom edge: (0.48W, 0.06H) to (0.60W, 0.06H)  (shifted +0.04W = rake).
+    - Triangle A: (0.44W,0.32H), (0.56W,0.32H), (0.60W,0.06H).
+    - Triangle B: (0.44W,0.32H), (0.60W,0.06H), (0.48W,0.06H).
+
+(7) TRIGGER GUARD — curved loop in front of the grip.
+    A C-shaped / D-shaped loop below the body, ahead of the grip. ShapeRenderer
+    has no stroked-arc-with-thickness primitive, so approximate the curve as a
+    thick arc band: draw an outer filled arc and then "cut" the inside by
+    drawing a smaller transparent... NOTE: you cannot erase on an FBO with
+    alpha blend the way Pixmap can. Instead build the guard as a ring of small
+    quads: sample N points (N=10) along a half-circle of radius 0.10W centered
+    at (0.42W, 0.26H), and connect inner radius 0.07W to outer radius 0.10W
+    with quads (each quad = 2 triangles). This yields a real curved guard with a
+    hollow center, no erasing required. Sweep from ~200deg to ~340deg so the
+    opening faces up toward the grip/trigger.
+    (Simpler fallback: a single thin curved band of triangles, accept a solid
+    look. See OPEN QUESTIONS.)
+
+(8) TARGETING / DETAIL ACCENTS (optional polish, draw last):
+    - Top bevel highlight on the body: thin bright rect along body top edge.
+    - Bottom shadow on the body: thin dark rect along body bottom edge.
+    - A small power-cell indicator: 3-4 short cyan charge bars stacked on the
+      right shoulder of the body (x ~0.62W..0.70W). Mirrors the existing
+      "charge bars = full clip" read.
+    - A subtle scope/sight bump: small rect centered on top of the body where
+      the barrel meets it (x 0.46W..0.54W, y 0.58H..0.64H).
+
+
+COLOR PALETTE
+=============
+Steel body (cool blue-gray), cyan energy, white-hot core. RGBA 0-1 floats.
+
+  BODY_BASE        (0.26, 0.30, 0.40, 1.0)   main receiver fill
+  BODY_HIGHLIGHT   (0.40, 0.46, 0.58, 1.0)   top bevel / left edges
+  BODY_SHADOW      (0.16, 0.19, 0.27, 1.0)   bottom edge / grooves
+  BARREL_BASE      (0.30, 0.34, 0.44, 1.0)   tapered barrel fill
+  GRIP_BASE        (0.18, 0.20, 0.26, 1.0)   pistol grip (darker than body)
+  GRIP_HIGHLIGHT   (0.30, 0.33, 0.42, 1.0)   grip edge
+  GUARD_METAL      (0.22, 0.26, 0.34, 1.0)   trigger guard ring
+  COIL_CYAN        (0.00, 0.88, 1.00, 1.0)   energy coils (matches existing)
+  COIL_FRINGE      (0.00, 0.62, 0.90, 0.5)   coil glow bleed (matches existing)
+  EMITTER_OUTER    (0.08, 0.52, 1.00, 0.55)  outer emitter glow
+  EMITTER_MID      (0.30, 0.82, 1.00, 1.0)   mid emitter
+  EMITTER_CORE     (0.75, 0.97, 1.00, 1.0)   hot core
+  EMITTER_POINT    (1.00, 1.00, 1.00, 1.0)   pinpoint
+  CHARGE_BAR       (0.00, 0.72, 1.00, 0.95)  power-cell indicator bars
+  POWER_LED        (0.00, 1.00, 0.28, 1.0)   green "charged" LED (1 dot)
+
+These intentionally match the existing palette so the new gun and the unchanged
+plasma muzzle burst (renderPlasmaEffect) read as the same weapon.
+
+
+LAYER DRAWING ORDER (back to front inside the FrameBuffer)
+==========================================================
+ShapeRenderer Filled mode. Later draws paint over earlier (no depth test).
+Draw order so silhouette structure sits behind detail and glow sits on top:
+
+  1. Trigger guard ring (GUARD_METAL)        -- behind everything else, lowest
+  2. Grip parallelogram (GRIP_BASE)
+  3. Grip highlight edge (GRIP_HIGHLIGHT)
+  4. Main body rect (BODY_BASE)
+  5. Body top bevel (BODY_HIGHLIGHT) + bottom shadow (BODY_SHADOW)
+  6. Tapered barrel trapezoid (BARREL_BASE)
+  7. Energy coils (COIL_FRINGE first, then COIL_CYAN on top)
+  8. Emitter housing collar + prongs (BODY_BASE / BODY_SHADOW)
+  9. Charge-bar indicator + scope bump + green LED
+ 10. Circular emitter: EMITTER_OUTER -> EMITTER_MID -> EMITTER_CORE ->
+     EMITTER_POINT (largest first, smallest last so the hot core sits on top)
+
+Rationale: the emitter glow is the brightest, smallest, foreground-most element
+and must not be overpainted, so it is drawn dead last.
+
+
+TECHNICAL NOTES
+===============
+Affected class:
+  core/src/main/java/ge/tbegvadze/toon3d/render/WeaponHudRenderer.java
+  - REPLACE the body of generatePlasmaRifleTexture() (currently Pixmap-based)
+    with the FrameBuffer + ShapeRenderer approach below.
+  - generateFallbackWeaponTexture() may stay Pixmap-based (it's a crash guard)
+    OR be ported the same way — low priority.
+  - render(), dispose(), animation methods, renderPlasmaEffect(): UNCHANGED.
+
+FrameBuffer generation (static helper, runs once at construction):
+  import com.badlogic.gdx.graphics.glutils.FrameBuffer;
+  import com.badlogic.gdx.graphics.Pixmap.Format;  (Format.RGBA8888)
+  import com.badlogic.gdx.graphics.OrthographicCamera;
+  import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+
+  Steps:
+    int width  = Constants.PLASMA_SPRITE_PIXEL_WIDTH;   // e.g. 256
+    int height = Constants.PLASMA_SPRITE_PIXEL_HEIGHT;  // e.g. 192
+    FrameBuffer frameBuffer = new FrameBuffer(Format.RGBA8888, width, height, false);
+    OrthographicCamera spriteCamera = new OrthographicCamera(width, height);
+    // place origin at bottom-left: setToOrtho(false, width, height)
+    spriteCamera.setToOrtho(false, width, height);
+    spriteCamera.update();
+    ShapeRenderer spriteShapes = new ShapeRenderer();
+    spriteShapes.setProjectionMatrix(spriteCamera.combined);
+
+    frameBuffer.begin();
+      Gdx.gl.glClearColor(0, 0, 0, 0);            // transparent background
+      Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+      Gdx.gl.glEnable(GL20.GL_BLEND);
+      Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+      spriteShapes.begin(ShapeRenderer.ShapeType.Filled);
+        ... draw all layers (order above), using width/height to expand the
+            fractional coordinates from SILHOUETTE BREAKDOWN ...
+      spriteShapes.end();
+    frameBuffer.end();
+
+  Capture into a standalone Texture so we can dispose the FBO:
+    Texture fboTexture = frameBuffer.getColorBufferTexture();
+    // The FBO texture is Y-FLIPPED relative to normal Texture sampling.
+    // Two options:
+    //  (A) Keep the FBO and its texture alive for the renderer's lifetime, and
+    //      compensate the flip in the batch.draw UVs (draw with flipY=true via
+    //      a TextureRegion). Simpler GL, but holds an FBO.
+    //  (B) Copy to an independent Texture via Pixmap readback:
+    //         Pixmap copy = Pixmap.createFromFrameBuffer(0,0,width,height);
+    //         Texture result = new Texture(copy);
+    //         copy.dispose();  frameBuffer.dispose();  spriteShapes.dispose();
+    //      createFromFrameBuffer already returns top-left-origin pixels, so the
+    //      resulting Texture draws upright with the EXISTING batch.draw call
+    //      (no UV flip needed). RECOMMENDED — keeps render() untouched.
+    result.setFilter(TextureFilter.Linear, TextureFilter.Linear);
+    return result;
+
+  NOTE on filtering: ShapeRenderer triangles are not pixel-art; Linear filtering
+  gives smooth tapered edges when stretched 256->380. If a crisp retro look is
+  preferred, use Nearest (matches the old Pixmap call). RECOMMEND Linear here
+  because the whole point is smooth angled/curved edges. See OPEN QUESTIONS.
+
+  IMPORTANT: this generator runs at CONSTRUCTION time, not in render(). The
+  "no allocations in render()" rule is satisfied — the FrameBuffer, camera, and
+  temporary ShapeRenderer are all created and disposed inside the one-time
+  static helper. The per-frame render() still only does batch.draw of a cached
+  Texture.
+
+  WARNING — FBO state save/restore: binding a FrameBuffer during construction
+  is fine because the renderer is built during World setup, not mid-frame. If
+  this generator is ever called inside an active SpriteBatch/ShapeRenderer
+  begin() block, the FBO bind will corrupt that batch. Guard: only call from
+  the constructor / a dedicated init pass with no active batch.
+
+  Pixmap.createFromFrameBuffer must be called WHILE the FrameBuffer is bound
+  (between frameBuffer.begin() and frameBuffer.end()), because it reads the
+  currently-bound framebuffer via glReadPixels. Sequence:
+    frameBuffer.begin();
+      ...clear + draw...
+      Pixmap copy = Pixmap.createFromFrameBuffer(0, 0, width, height);
+    frameBuffer.end();
+    Texture result = new Texture(copy);
+    copy.dispose();
+    frameBuffer.dispose();
+    spriteShapes.dispose();
+
+Constants to add (util/Constants.java, in the weapon HUD section near
+WEAPON_HUD_WIDTH):
+  public static final int PLASMA_SPRITE_PIXEL_WIDTH  = 256;
+  public static final int PLASMA_SPRITE_PIXEL_HEIGHT = 192;
+  (All silhouette fractions can live as local finals in the generator, OR be
+   promoted to Constants if you want them tunable. Recommend keeping the many
+   shape fractions LOCAL to the generator to avoid Constants bloat — they are
+   art layout, not gameplay numbers. This is a judgement call; flag for review.)
+
+GameMath:
+  lerp for the coil half-width taper: use the existing linear-interpolation
+  helper in GameMath if one exists (e.g. GameMath.lerp(start, end, factor)); if
+  not, add one with the mandatory derivation comment block. Do NOT inline the
+  lerp.
+
+Data to store: none new. normalTexture field type and lifecycle unchanged
+(still a Texture, still disposed in dispose()).
+
+
+VISUAL DESIGN
+=============
+- Net read: a centered, bilaterally symmetric energy rifle braced in front of
+  the marine, muzzle high. Cool steel body, cyan coils, a single bright cyan
+  emitter eye at the top center.
+- Centering: the sprite itself is drawn symmetric about its own centerX. The
+  SpriteBatch draw places it at drawX=450 (already (1280-380)/2), so the gun's
+  centerline lands on the screen centerline (x=640). The 440px clear HUD gap
+  (420..860) fully contains the 380px-wide sprite — no occlusion.
+- Vertical placement: WEAPON_HUD_HEIGHT=263 drawn from y=currentOffsetY (0 at
+  rest). Grip bottom sits near screen bottom; emitter at ~0.90H lands around
+  y=237 world units — comfortably above the 130px HUD panels.
+- The existing FIRING burst (renderPlasmaEffect) emits from
+  barrelY = currentOffsetY + WEAPON_HUD_HEIGHT * WEAPON_BARREL_TIP_Y_FRACTION
+  with WEAPON_BARREL_TIP_Y_FRACTION = 1.0, i.e. the very top of the sprite
+  (y=263). Our emitter circle center is at 0.90H = ~237. There is a ~26px gap
+  between the emitter art and where the burst spawns. RECOMMEND nudging
+  WEAPON_BARREL_TIP_Y_FRACTION to ~0.90 so the burst originates exactly at the
+  emitter eye. Flag this as a one-line tuning change for the implementer.
+- Animations affected: none authored here. Recoil (slide up/down) and reload
+  slide both translate the whole cached texture — they keep working unchanged.
+
+
+BALANCE NOTES
+=============
+No gameplay balance impact (cosmetic). "Balance" here = visual tuning, all
+PLACEHOLDER and to be eyeballed on screen:
+  - Sprite resolution 256x192 (placeholder). If edges look soft when stretched
+    to 380x263, bump to 320x240. If performance/memory matters (it won't for one
+    sprite), 192x144 is the floor.
+  - Coil count 4 (placeholder 3-4). 4 reads as "more energized."
+  - Grip rake +0.04W (placeholder). 0 = sterile symmetric; 0.06W = aggressive.
+  - Trigger-guard arc 200deg..340deg, radii 0.07W..0.10W (placeholder).
+  - Emitter glow alpha 0.55 outer (placeholder); raise toward 0.7 if the eye
+    looks weak against the bright HUD-gap background.
+  - Linear vs Nearest filtering: start Linear; switch if it looks "blurry mush"
+    rather than "smooth metal."
+
+
+INTERACTIONS
+============
+1. renderPlasmaEffect() (FIRING burst) — same class. The burst spawns at the
+   barrel tip; its origin should align with the new emitter circle. Tune
+   WEAPON_BARREL_TIP_Y_FRACTION (Constants) to ~0.90 so the burst erupts from
+   the emitter, not 26px above it. Palette is shared so burst + gun match.
+
+2. WeaponHudRenderer animation (recoil / reload slide) — same class. These
+   translate the whole normalTexture via drawX/currentOffsetY. A
+   centered-symmetric sprite makes the straight-up recoil kick look correct
+   (an off-center gun kicking straight up looks wrong). No code change, but the
+   centering is what makes the existing recoil read well.
+
+3. plasma-rifle.txt (Combat design doc, STATUS: IN PROGRESS) — that doc
+   specifies the procedural Pixmap sprite. This doc SUPERSEDES its sprite-
+   generation section. When implementing, update plasma-rifle.txt's VISUAL/
+   sprite note to point here, and confirm the cyan identity color
+   (0.0,0.88,1.0) stays consistent between bolt, emitter, and coils.
+
+4. HUD layout (HudRenderer) — the centered 380px sprite must stay within the
+   420..860 clear gap. Our sprite is symmetric and 380 wide at drawX=450, so it
+   occupies exactly 450..830 — 30px clear of each panel, unchanged. If the
+   resolution aspect changes the apparent width, verify it still fits.
+
+5. procedural-hud-no-textures.txt — this change keeps the "no asset files,
+   everything procedural" philosophy (still generated at runtime, just with
+   ShapeRenderer instead of Pixmap). Consistent with that direction.
+
+
+OPEN QUESTIONS
+==============
+1. Exact sprite resolution / aspect. Target world rect is 380x263 (~1.44).
+   256x192 is ~1.33, so SpriteBatch stretches X slightly. Match aspect with
+   256x178 or 380x263? Recommend 256x178 (true aspect, no distortion) unless
+   178 height feels low-res — then 380x263 (1:1 world units, crisp, more fill).
+   Decision left to implementer after eyeballing.
+
+2. Y-flip handling: confirm Pixmap.createFromFrameBuffer returns top-origin
+   pixels on the target platform (it does on LWJGL3). If a flipped sprite
+   appears in testing, switch to the TextureRegion flipY approach (option A) or
+   call pixmap row-flip. Verify on first run.
+
+3. Trigger guard: full hollow ring-of-quads (nicer, more code) vs single solid
+   curved band (simpler, slightly chunky)? Recommend the ring-of-quads; fall
+   back to solid band if it looks noisy at 256px.
+
+4. Grip rake direction: pure-symmetric (rake 0, most "Quake centered") vs
+   slight right rake (+0.04W, more natural right-handed hold). Recommend slight
+   right rake; revisit if it breaks the centered feel.
+
+5. Filtering: Linear (smooth, recommended) vs Nearest (retro pixel, matches old
+   look and the rest of the game's Nearest textures). The game's other
+   procedural sprites use Nearest — a consistency argument for Nearest. Decide
+   based on whether smooth gun edges clash with pixelated walls.
+
+6. Should the fallback weapon texture also move to FrameBuffer/ShapeRenderer
+   for consistency, or stay a cheap Pixmap crash-guard? Low priority.
+
+7. Whether to expose the silhouette layout fractions as Constants (tunable, but
+   ~30 new constants of pure art layout) or keep them local to the generator.
+   Recommend local; confirm with code-reviewer's "no magic numbers" stance —
+   these are art coordinates, arguably exempt, but flag it.

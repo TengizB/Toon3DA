@@ -1,0 +1,187 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Items
+TITLE: Slot Inventory, Loot Drops & Corpse Ransacking
+---
+
+OVERVIEW
+========
+A unified item-and-inventory backbone for the run. It introduces a small,
+weight-limited slot inventory, ground loot that the player steps onto and picks
+up, and the Doom RPG "ransack the corpse" verb — every dead enemy leaves a
+lootable husk that may cough up ammo, credits, a medkit, or (rarely) a weapon
+mod. This is the connective tissue the rest of the game economy hangs on:
+medkits, ammo types, keycards, stims, and shop purchases all become concrete
+items that live in slots and compete for space.
+
+The design leans into the roguelike pillar of "meaningful choice under
+pressure." Inventory is small enough that the player must constantly decide
+what to carry and what to leave behind. Because every action costs a turn,
+ransacking a corpse mid-fight is a genuine gamble — you spend a turn looting
+while other enemies close in. Loot is generated, not placed: each run produces
+a different distribution of drops, so route planning and risk assessment never
+calcify into memorized solutions.
+
+Thematically this is pure UAC scavenging: you are a lone marine stripping gear
+off fallen comrades and prying ammo from twitching demon husks while the
+facility burns. Dark humor is welcome in the flavor text ("You find half a
+sandwich. And a clip." / "The zombie's pockets contained only regret and 6
+shells.").
+
+GAMEPLAY LOOP
+=============
+1. Player kills an enemy → enemy entity is removed from active simulation and
+   replaced by a CORPSE prop on its tile (reuses the existing `m` corpse decal
+   visual, tinted by enemy type).
+2. Player steps onto OR faces-adjacent to a corpse/loot tile → a context prompt
+   appears in the HUD status line: "[F] Ransack" or "[F] Pick up SHELLS x6".
+3. Player presses F (the new INTERACT/LOOT key) → this consumes one turn:
+   - For a corpse: roll the enemy's loot table once. Spawn 0-2 ground items on
+     that tile (or auto-collect ammo/credits straight into inventory if space
+     allows). Corpse becomes "ransacked" (visual desaturated, cannot loot again).
+   - For a ground item: attempt to add to inventory. If a free slot exists or it
+     stacks, collect it; otherwise show "INVENTORY FULL" and leave it on ground.
+4. Enemies then take their turn as normal (looting is not free — the world
+   advances).
+5. Player opens the inventory overlay with TAB (does NOT cost a turn; it pauses
+   input like a menu). Player can: inspect an item, USE a consumable (closing
+   the menu and spending one turn on use), or DROP an item (spawns it on the
+   current tile, costs one turn on menu close).
+6. Stackable items (ammo, credits, stims) merge automatically. Unique items
+   (weapons, keycards, weapon mods) each occupy one slot.
+
+PLAYER EXPERIENCE
+=================
+The player feels the constant low hum of scarcity. Picking up a third medkit
+when you already carry two means dropping something — maybe the spare keycard,
+maybe rockets you were saving. The ransack verb adds a sharp tactical tension:
+the satisfying click of stepping onto a fresh corpse is tempered by the fact
+that bending down to loot lets the imp behind you take a free swing. Good
+players learn to clear a room before ransacking; greedy players learn why that
+is a rule. Opening the TAB inventory is a moment of calm planning — a small
+"safe room" in menu form — which contrasts nicely with the turn-pressure of the
+world.
+
+The core decision this creates: "Is this turn better spent looting, attacking,
+or retreating?" Every corpse is a question.
+
+TECHNICAL NOTES
+===============
+New package: `…toon3d.item`.
+
+New classes:
+- `item/ItemType.java` (enum): SHELLS, BULLETS, ROCKETS, PLASMA_CELLS, CREDITS,
+  MEDKIT_SMALL, MEDKIT_LARGE, STIMPACK, ARMOR_SHARD, KEYCARD_BLUE,
+  KEYCARD_RED, KEYCARD_YELLOW, WEAPON_SHOTGUN, WEAPON_PLASMA, WEAPON_MOD_*, etc.
+  Each enum constant stores: display name, isStackable, maxStackSize, weight,
+  glyph/color for ground rendering, and a category for sorting.
+- `item/ItemStack.java`: { ItemType type; int quantity; } — value-style holder.
+  Pre-allocate; reuse rather than churn in hot paths.
+- `item/Inventory.java`: fixed-size `ItemStack[]` (size = INVENTORY_SLOT_COUNT)
+  plus a separate uncapped "ammo pouch" map if ammo should not eat slots (see
+  OPEN QUESTIONS). Methods: `tryAdd(ItemType, qty)`, `remove(slot, qty)`,
+  `use(slot)`, `findStack(ItemType)`, `isFull()`. No allocations in add/use.
+- `item/GroundItem.java`: an entity-like { int tileColumn; int tileRow;
+  ItemStack stack; } owned by a `GroundItemManager`.
+- `item/GroundItemManager.java` (in `…toon3d.world` or `…toon3d.item`): holds
+  the list of active ground items, answers `itemAt(column,row)`, handles spawn
+  and pickup. Rendered as billboards by extending the existing PropRenderer
+  path (ground items use the walkable-decal billboard style, ~0.20x wall).
+- `item/LootTable.java`: maps an enemy type id → weighted list of possible
+  drops. `rollDrops(enemyTypeId, random)` returns 0-2 ItemStacks. Use a fixed
+  `java.util.Random` seeded per-run for reproducibility.
+- `render/InventoryOverlayRenderer.java`: the TAB menu — a grid of slots drawn
+  with the existing procedural-HUD shape/text style (no textures). Implements
+  Renderable + Disposable.
+
+Modified classes:
+- `Level.java`: no new wall chars needed; loot is entity-side, not tile-side.
+  (Optional: a `'$'` tile for a pre-placed credit cache if level designers want
+  hand-seeded loot — see OPEN QUESTIONS.)
+- `PlayerController.java`: add INTERACT/LOOT (F) and TOGGLE_INVENTORY (TAB) to
+  the input priority order. Looting and item-use must route through the turn
+  system so they advance the world exactly one turn (TAB open/close must NOT).
+- `World.java` / `GlobalTickEventSystem` (see existing global-tick-event-system
+  idea): looting/using emit a turn the same way a move does. Hook here.
+- `HudRenderer.java`: render the context prompt ("[F] Ransack") in the left
+  panel status line; reflect ammo counts from the new Inventory rather than
+  ad-hoc fields.
+- Enemy death (see existing enemy_system idea): on death, register a corpse with
+  GroundItemManager and tag it with the enemy type id for later ransack roll.
+
+Turn-based fit: nothing here is real-time. Looting is one action = one turn.
+The inventory menu is a hard pause, like any roguelike pack screen. All spatial
+queries (itemAt, corpseAt) are integer tile lookups — no float, no LOS needed
+because the player must be ON or cardinally ADJACENT to the tile.
+
+Constants to add (`Constants.java`):
+- INVENTORY_SLOT_COUNT = 8 (placeholder)
+- INVENTORY_MAX_WEIGHT = 40f (placeholder; only if weight enabled)
+- LOOT_GROUND_ITEM_HEIGHT_FRACTION = 0.20f
+- RANSACK_MAX_DROPS = 2
+- AMMO_STACK_MAX_SHELLS = 60, _BULLETS = 200, _ROCKETS = 20, _CELLS = 120
+  (placeholders, mirror Doom RPG ranges)
+
+VISUAL DESIGN
+=============
+- Ground items: small flat billboards near the floor, color-coded by category —
+  shells = brass/yellow, bullets = copper, rockets = olive, cells = cyan,
+  medkit = white box with red cross, credits = pale green chip, keycards = the
+  matching keycard color. A subtle 1-tile "shimmer" (brightness oscillation via
+  the flickering-floor sine path) marks a fresh, uncollected item so it reads at
+  a distance.
+- Corpse states: fresh corpse uses the existing `m` decal at full color; once
+  ransacked it desaturates ~40% and loses the shimmer, signaling "empty."
+- Context prompt: drawn in the HUD left-panel status line in the CRT amber of
+  the existing procedural HUD ("[F] RANSACK", "[F] PICK UP — SHELLS x6",
+  "INVENTORY FULL" flashes red for ~0.4s of real time, purely cosmetic).
+- TAB inventory overlay: an 8-slot grid centered on screen using the procedural
+  HUD chrome panels (alpha ~0.9), each slot a square with the item glyph, a
+  stack-count number bottom-right, item name on hover/selection, and a footer
+  line listing weight used / max. Selected slot gets an amber border.
+
+BALANCE NOTES
+=============
+- 8 slots is deliberately tight. If ammo lives in a separate uncapped pouch
+  (recommended), slots are reserved for medkits, stims, keycards, weapons, and
+  mods — making the squeeze about utility items, not bullets.
+- Loot table weights (placeholder, per common zombie): 45% nothing useful (a few
+  credits), 35% small ammo stack, 12% small medkit, 6% stimpack, 2% weapon mod.
+  Tougher enemies shift the curve toward larger/rarer drops.
+- Ransack should pay out enough to be tempting but not so much that grinding
+  trash mobs trivializes the economy. Target: full clear of a floor yields
+  roughly enough ammo to refill ~60% of expended rounds, never 100%.
+- The free-hit cost of looting mid-combat is the natural balancer — keep loot
+  generous and let the turn cost discipline the player.
+- Flag ALL numbers above as placeholders pending playtest.
+
+INTERACTIONS
+============
+1. Enemy system (enemy_system.txt): every enemy needs a loot-table id and must
+   register a corpse on death. The ransack gamble interlocks with enemy turn
+   timing — looting gives adjacent enemies a free action.
+2. Medkit system (medkit-field-medicine-system.txt): medkits become inventory
+   items. Using one from the TAB menu spends a turn and routes through that
+   system's healing logic.
+3. Keycard doors (uac-keycard-doors-security-tiers.txt): keycards occupy unique
+   slots; the door check reads the Inventory instead of a boolean flag, so a
+   dropped/lost keycard can actually lock you out (interesting tension).
+4. Progression (levelup-stim-boon-choice-progression.txt): stims/boons can grant
+   "+1 inventory slot" or "auto-collect ammo to pouch ignoring weight," turning
+   inventory pressure itself into a build axis.
+5. Weapon systems (shotgun, plasma-rifle): picking up a weapon you already own
+   converts to ammo; weapon mods become rare ransack/loot rewards.
+
+OPEN QUESTIONS
+==============
+- Does ammo consume inventory slots, or live in a separate uncapped pouch?
+  (Recommendation: separate pouch — keeps slot pressure focused on choices.)
+- Is there a weight system at all, or pure slot count? Weight adds depth but
+  also UI burden; slot-only may be cleaner for a tight roguelike.
+- Should ransacking require facing the corpse, or is standing-on-the-tile
+  enough? Facing-adjacent is more "Doom RPG"; standing-on is simpler.
+- Do unransacked corpses persist if the player leaves and returns, or decay
+  after N turns? Decay adds urgency but may frustrate.
+- Should a pre-placed `'$'` loot tile exist for level designers, or is all loot
+  enemy/generation driven?
+- Auto-pickup vs manual pickup for ammo/credits: auto reduces tedium but removes
+  a (small) decision. Suggest auto for ammo/credits, manual for everything else.

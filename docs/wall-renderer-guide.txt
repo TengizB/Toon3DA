@@ -1,0 +1,79 @@
+# Moved from: .claude/CLAUDE.md
+# WallRenderer implementation details — reference for agents extending the renderer.
+
+=== PER-FRAME PIPELINE (2 GPU draw calls total) ===
+
+1. Ceiling rect (top half, dark navy 0.1,0.1,0.2) via 1×1 white pixel texture tinted.
+2. Floor rect (bottom half, dark gray 0.12,0.12,0.12) — same approach.
+3. [Auto batch flush here: whitePixelTexture → wallTexture]
+4. For each screen column: cast DDA ray → perpWallDistance → texColumn → draw 1px-wide wall stripe.
+   All 1280 draws accumulated in one batch call.
+
+batch.draw per column:
+  batch.draw(wallTexture,
+             screenColumn * WALL_COLUMN_WIDTH, drawBottom,
+             WALL_COLUMN_WIDTH, drawTop - drawBottom,
+             texColumn, 0, 1, textureHeight,   // srcX, srcY, srcW, srcH
+             false, false);                     // no flip needed
+  srcY=0 = top of image; LibGDX Y-up maps image row 0 to visual top without manual flip.
+
+Shading: batch.setColor(shade, shade, shade, 1f) before each draw — embeds tint in vertex data, no flush.
+
+Performance:
+  Ceiling + floor  → 0 GL calls (batched, same texture)
+  Texture switch   → 1 GL call  (whitePixelTexture → wallTexture)
+  1280 wall cols   → 1 GL call  (at batch.end())
+  Total: 2 GL draw calls regardless of resolution or texture size.
+
+=== RESOLUTION CONTROL ===
+
+WALL_PROJECTION_SCREEN_WIDTH = WORLD_WIDTH (1280) → crisp output
+Set to 320 for retro pixelated Doom look (each stripe = 4 world units wide).
+WALL_COLUMN_WIDTH = WORLD_WIDTH / WALL_PROJECTION_SCREEN_WIDTH
+Only one constant to change.
+
+=== Z-BUFFER ===
+
+perpWallDistance stored per column in pre-allocated float[] zBuffer.
+Retrieve: getZBufferAt(int screenColumn).
+Required for sprite rendering: only draw sprite pixel at column c if depth < zBuffer[c].
+
+=== GAMEMATH METHODS — 3D PROJECTION ===
+
+cameraPlaneX(dirY, scale)              → −dirY × scale
+cameraPlaneY(dirX, scale)              → +dirX × scale
+cameraPlaneParameter(col, width)       → 1 − 2×col/width  (Y-up column mapping)
+cameraPlaneRayDirectionX/Y(...)        → dir + plane × cameraParam
+perpWallDistance(sideDist, deltaDist)  → sideDist − deltaDist
+wallStripeHeight(screenH, perpDist)    → screenH / perpDist
+wallStripeDrawBottom/Top(screenH, lineH) → centre stripe on horizon
+wallShade(perpDist, falloff)           → 1 / (1 + d² × falloff)
+wallHitPosition(...)                   → fractional hit position along wall face
+wallHitPositionMirrored(...)           → mirror correction for opposite-side reads
+textureColumn(wallHitU, width)         → (int)(u × width) clamped to [0, width−1]
+wallTextureClipSrcY(...)               → texel row start for close-wall clipping
+wallTextureClipSrcHeight(...)          → texel row count for close-wall clipping
+
+=== EXTENDING THE RENDERER ===
+
+Change wall texture:
+  Replace assets/textures/wall.png, update Constants.WALL_TEXTURE_PATH.
+  Sizes 64–1024 work without code changes (width/height read at load time).
+
+Multiple wall types:
+  Extend level.getCell() → pick Texture per char in render loop.
+  Switching textures causes flush per switch — pre-sort columns by texture if perf matters.
+
+Add floor/ceiling textures:
+  Replace solid-colour rects with per-pixel row casting (Lodev floor casting).
+  Apply Y-up cameraParameter sign flip.
+
+Add sprites:
+  Sort by distance. For each sprite column: check depth < zBuffer[col] before drawing.
+
+Change FOV at runtime:
+  Set player.fieldOfViewRadians — planeScale recomputed each frame in WallRenderer.
+
+Add new wall math:
+  Put in GameMath with formula/derivation/edge-cases comment block.
+  Never inline wall-projection math in WallRenderer.

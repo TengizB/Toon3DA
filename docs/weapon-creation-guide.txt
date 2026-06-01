@@ -1,0 +1,374 @@
+WEAPON CREATION GUIDE — toon3D
+==============================================
+Complete reference for implementing a new weapon from constants to procedural sprite.
+Covers: game logic, marchShot, WeaponHudRenderer integration, FrameBuffer sprite.
+
+---
+
+## ARCHITECTURE OVERVIEW
+
+Every weapon is an instance of the abstract class `Weapon` (entity package).
+WeaponHudRenderer renders it as a bottom-centre sprite + fire effect each frame.
+World.java owns the WeaponHudRenderer; the player holds one weapon at a time.
+
+```
+Weapon (abstract)
+  ├─ Shotgun          — pump-action, 1-shot clip, 1-tick reload
+  └─ PlasmaRifle      — 4-shot clip, 3-tick reload, piercing
+
+WeaponHudRenderer
+  ├─ normalTexture    — procedurally generated or loaded from asset file
+  ├─ renderFlameEffect()     — generic orange fire cone (all non-plasma weapons)
+  └─ renderPlasmaEffect()    — cyan-blue disc burst (PlasmaRifle only)
+```
+
+Turn vs real-time separation — critical invariant:
+  update(deltaTime)  — frame tick; advances flash timer and normalToReload timer only
+  onTick()           — game tick (move or fire action); advances reload countdown only
+  These two MUST never decrement each other's counters.
+
+---
+
+## STEP 1 — ADD CONSTANTS TO Constants.java
+
+Every weapon stat, timing, and texture path must be a constant.
+Group them under a comment block, after the existing weapon groups.
+
+Required constants:
+  <WEAPON>_DAMAGE              int     base damage at distance 1
+  <WEAPON>_CLIP_SIZE           int     shots before forced reload
+  <WEAPON>_RELOAD_TIME_TICKS   int     move-steps required to reload
+  <WEAPON>_DAMAGE_DROP_COEFF   float   fraction of damage lost per tile (0.10–0.25 typical)
+  <WEAPON>_RANGE_TILES         int     max tiles the shot travels
+  <WEAPON>_PENETRATION         boolean true = pierces all enemies in line
+  <WEAPON>_NORMAL_TEXTURE_PATH String  "textures/guns/<name>/<name>.png"
+  <WEAPON>_FIRE_TEXTURE_PATH   String  "textures/guns/<name>/<name>_fire.png"
+  <WEAPON>_RELOAD_TEXTURE_PATH String  "textures/guns/<name>/<name>_reload.png"
+
+Canvas size constants (if weapon has a dedicated procedural sprite):
+  <WEAPON>_CANVAS_WIDTH        int     pixel width  of FrameBuffer (use 192)
+  <WEAPON>_CANVAS_HEIGHT       int     pixel height of FrameBuffer (use 134)
+
+Damage drop table (coefficient C, floor 0.15):
+  multiplier(d) = max(1 - C * d, DAMAGE_MIN_MULTIPLIER)
+  distance 1: D * (1 - C)
+  distance 3: D * (1 - 3C)  … etc.
+  Document this table in the Weapon subclass Javadoc.
+
+---
+
+## STEP 2 — CREATE THE WEAPON SUBCLASS
+
+Package: ge.tbegvadze.toon3d.entity
+Extends: Weapon
+Naming: one word, PascalCase (e.g. RailGun, Flamethrower, Crossbow)
+
+Template:
+```java
+package ge.tbegvadze.toon3d.entity;
+
+import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.Constants;
+
+/**
+ * [One-sentence description].
+ *
+ * Stats: damage N, clipSize N, reloadTime N ticks, dropCoeff N, range N tiles.
+ * [Description of marchShot behaviour: stops at wall, pierces or not, etc.]
+ *
+ * Damage table (coefficient N, floor 0.15):
+ *   distance 1: D × (1 - N) = X
+ *   distance 3: D × (1 - 3N) = Y
+ */
+public class MyWeapon extends Weapon {
+
+    public MyWeapon() {
+        super("DISPLAY NAME",
+              Constants.MYWEAPON_DAMAGE,
+              Constants.MYWEAPON_CLIP_SIZE,
+              Constants.MYWEAPON_RELOAD_TIME_TICKS,
+              Constants.MYWEAPON_DAMAGE_DROP_COEFF,
+              Constants.MYWEAPON_RANGE_TILES);
+    }
+
+    @Override
+    protected FireResult marchShot(int playerTileColumn, int playerTileRow,
+                                    int facingStepColumn, int facingStepRow,
+                                    Level level, EnemyHitTarget enemyHitTarget) {
+        for (int distanceTiles = 1; distanceTiles <= range; distanceTiles++) {
+            int targetColumn = playerTileColumn + facingStepColumn * distanceTiles;
+            int targetRow    = playerTileRow    + facingStepRow    * distanceTiles;
+            char targetCell  = level.getCell(targetColumn, targetRow);
+            if (Level.isWall(targetCell)) {
+                return FireResult.HIT_WALL;
+            }
+            if (enemyHitTarget != null) {
+                Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
+                if (hitEnemy != null) {
+                    enemyHitTarget.applyDamageTo(hitEnemy, damageAtDistance(distanceTiles));
+                    if (!Constants.MYWEAPON_PENETRATION) {
+                        return new FireResult(false, distanceTiles);
+                    }
+                }
+            }
+        }
+        return FireResult.MISSED;
+    }
+
+    @Override public String getNormalTexturePath() { return Constants.MYWEAPON_NORMAL_TEXTURE_PATH; }
+    @Override public String getFireTexturePath()   { return Constants.MYWEAPON_FIRE_TEXTURE_PATH;   }
+    @Override public String getReloadTexturePath() { return Constants.MYWEAPON_RELOAD_TEXTURE_PATH; }
+}
+```
+
+hudAmmoString() override: if you use a non-standard ammo prefix, override it:
+```java
+@Override public String hudAmmoString() {
+    if (visualState == WeaponVisualState.RELOADING) return "RELOAD";
+    return "SHELLS " + shotsInClip + "/" + clipSize;
+}
+```
+
+---
+
+## STEP 3 — ADD PROCEDURAL SPRITE TO WeaponHudRenderer
+
+File: core/src/main/java/ge/tbegvadze/toon3d/render/WeaponHudRenderer.java
+
+### 3a. Add import (once, if not already present)
+```java
+import com.badlogic.gdx.graphics.glutils.FrameBuffer;
+```
+
+### 3b. Add instanceof check in loadOrGenerateNormalTexture()
+```java
+if (weapon instanceof MyWeapon) {
+    return generateMyWeaponTexture();
+}
+```
+Insert BEFORE the final `return generateFallbackWeaponTexture();`.
+
+### 3c. Implement generateMyWeaponTexture()
+
+ALWAYS use the FrameBuffer + ShapeRenderer approach (not Pixmap rectangles):
+
+```java
+private static Texture generateMyWeaponTexture() {
+    int canvasWidth  = Constants.MYWEAPON_CANVAS_WIDTH;   // 192
+    int canvasHeight = Constants.MYWEAPON_CANVAS_HEIGHT;  // 134
+
+    FrameBuffer   frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
+    ShapeRenderer temporaryShapeRenderer = new ShapeRenderer();
+    OrthographicCamera camera            = new OrthographicCamera(canvasWidth, canvasHeight);
+    camera.position.set(canvasWidth / 2f, canvasHeight / 2f, 0f);
+    camera.update();
+
+    frameBuffer.begin();
+    Gdx.gl.glClearColor(0f, 0f, 0f, 0f);
+    Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+    Gdx.gl.glEnable(GL20.GL_BLEND);
+    Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+    temporaryShapeRenderer.setProjectionMatrix(camera.combined);
+    temporaryShapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+    drawMyWeaponShape(temporaryShapeRenderer, canvasWidth / 2f);
+    temporaryShapeRenderer.end();
+
+    // Read pixels while FBO is bound — Y=0 at GL bottom, must flip before upload.
+    Pixmap rawPixmap = new Pixmap(canvasWidth, canvasHeight, Pixmap.Format.RGBA8888);
+    Gdx.gl.glReadPixels(0, 0, canvasWidth, canvasHeight,
+                        GL20.GL_RGBA, GL20.GL_UNSIGNED_BYTE, rawPixmap.getPixels());
+
+    Gdx.gl.glDisable(GL20.GL_BLEND);
+    frameBuffer.end();
+    frameBuffer.dispose();
+    temporaryShapeRenderer.dispose();
+
+    Pixmap flippedPixmap = flipPixmapVertically(rawPixmap);
+    rawPixmap.dispose();
+
+    Texture texture = new Texture(flippedPixmap);
+    texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+    flippedPixmap.dispose();
+    return texture;
+}
+```
+
+---
+
+## CANVAS COORDINATE SYSTEM
+
+Canvas: 192 × 134 pixels. Displayed at 380 × 263 world units (SpriteBatch stretches it).
+ShapeRenderer renders with Y-UP (0 = bottom of canvas, 134 = top).
+After glReadPixels + flipPixmapVertically, the texture has correct orientation.
+
+Pixel → world scale: 1 px ≈ 2.0 world units.
+
+```
+Y=134  ← muzzle / barrel tip (appears at TOP of weapon sprite on screen)
+Y=100  ← barrel
+Y=80   ← upper receiver
+Y=40   ← main body / lower receiver
+Y=0    ← grip bottom (partially off-screen; weapon sprite extends below HUD_HEIGHT)
+```
+
+centerX = 96 (half of 192). ALL weapons MUST be symmetric about this axis.
+This maps to screen X = 640 (screen centre) — Quake 1 centred-weapon look.
+
+---
+
+## SHAPE DRAWING PRIMITIVES
+
+ShapeRenderer in Filled mode supports:
+  shapeRenderer.rect(x, y, width, height)          — axis-aligned rectangle, (x,y) = bottom-left
+  shapeRenderer.triangle(x1,y1, x2,y2, x3,y3)     — filled triangle (CCW winding preferred)
+  shapeRenderer.ellipse(x, y, width, height)       — ellipse, (x,y) = bottom-left of bounding box
+  shapeRenderer.circle(x, y, radius)               — circle, (x,y) = centre
+
+drawSymmetricTrapezoid helper (add once to WeaponHudRenderer if not present):
+```java
+private static void drawSymmetricTrapezoid(ShapeRenderer shapeRenderer,
+                                            float centerX,
+                                            float bottomHalfWidth, float bottomY,
+                                            float topHalfWidth,    float topY) {
+    float leftBottom  = centerX - bottomHalfWidth;
+    float rightBottom = centerX + bottomHalfWidth;
+    float leftTop     = centerX - topHalfWidth;
+    float rightTop    = centerX + topHalfWidth;
+    shapeRenderer.triangle(leftBottom, bottomY, rightBottom, bottomY, rightTop, topY);
+    shapeRenderer.triangle(leftBottom, bottomY, rightTop, topY, leftTop, topY);
+}
+```
+
+flipPixmapVertically helper (add once to WeaponHudRenderer if not present):
+```java
+private static Pixmap flipPixmapVertically(Pixmap source) {
+    int width  = source.getWidth();
+    int height = source.getHeight();
+    Pixmap flipped = new Pixmap(width, height, source.getFormat());
+    for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+            flipped.drawPixel(col, row, source.getPixel(col, height - 1 - row));
+        }
+    }
+    return flipped;
+}
+```
+
+---
+
+## SPRITE DESIGN GUIDELINES
+
+### Layer Order (draw back-to-front)
+1. Stock / grip
+2. Trigger guard
+3. Main body / receiver
+4. Body highlights and shadow strips
+5. Magazine / power indicator
+6. Upper receiver / stepped section
+7. Barrel(s)
+8. Barrel highlights and groove accents
+9. Muzzle details (prongs, shroud)
+10. Muzzle emitter or barrel opening (darkest or glowing)
+
+### Color Palette
+
+Ballistic weapons (shotgun, rifle, etc.):
+  Barrel / receiver: dark gunmetal  (0.22, 0.24, 0.28) – (0.32, 0.34, 0.40)
+  Top highlight:     light steel    (0.42, 0.46, 0.52)
+  Bottom shadow:     near-black     (0.12, 0.13, 0.17)
+  Wood stock:        dark mahogany  (0.42, 0.22, 0.08) with grain at (0.34, 0.16, 0.05)
+  Muzzle bore:       near-black     (0.05, 0.05, 0.06, 0.95)
+  Rubber grip:       dark charcoal  (0.18, 0.19, 0.22)
+
+Energy weapons (plasma, rail, etc.):
+  Body:              steel blue     (0.28, 0.32, 0.42)
+  Emitter core:      blue → cyan → white (0.08,0.52,1.0) → (0.30,0.82,1.0) → (1,1,1)
+  Coils/vents:       bright cyan    (0.00, 0.88, 1.00) with glow fringe
+
+### Proportions Guide
+  Stock / grip:      ~ 32–48 px wide, 30–40 px tall (partially off-screen)
+  Main body:         ~ 120–150 px wide, 40–55 px tall
+  Barrel:            ~ 40–80 px wide, 30–50 px tall
+  Total height used: fill canvas (0..134)
+
+### Common Details
+  Top highlight strip on body: 3 px tall, lighter color
+  Bottom shadow strip on body: 3 px tall, darker color
+  Mid-barrel groove: 2 px tall, darkest color
+  Trigger guard: U-shape, 3 rects (left bar, right bar, top bar)
+  Muzzle bore: dark ellipse, no glow (ballistic) or layered ellipses (energy)
+
+---
+
+## STEP 4 — WIRE INTO World.java (when equipping the weapon)
+
+File: core/src/main/java/ge/tbegvadze/toon3d/world/World.java
+
+Change the weapon construction:
+```java
+MyWeapon myWeapon = new MyWeapon();
+inventory.setEquippedWeapon(myWeapon);
+weaponHudRenderer = new WeaponHudRenderer(myWeapon);
+```
+
+---
+
+## FIRE EFFECT TYPES
+
+renderFlameEffect() — orange/red layered cone. Used for ALL ballistic weapons automatically
+  unless you override the instanceof check in render().
+  Configured by WEAPON_FLAME_HEIGHT and WEAPON_FLAME_BASE_WIDTH constants.
+
+renderPlasmaEffect() — cyan-blue expanding disc. Currently PlasmaRifle-specific.
+  Add `|| equippedWeapon instanceof MyEnergyWeapon` to the check in render().
+
+Adding a custom fire effect:
+  1. Add a private void renderMyEffect(OrthographicCamera camera, float normalizedTime) method.
+  2. Add instanceof check in render():
+     ```java
+     if (equippedWeapon instanceof MyWeapon) {
+         renderMyEffect(camera, normalizedTime);
+     }
+     ```
+  normalizedTime goes 0→1 over FIRE_FLASH_DURATION (0.22 s).
+  Use: alpha = 1 - normalizedTime; scale = 1 - normalizedTime * shrinkFactor;
+
+---
+
+## NAMING CONVENTIONS (mandatory per CLAUDE.md)
+
+No abbreviations in any Java identifier.
+
+  distanceTiles (not dist, d, or tiles)
+  facingStepColumn (not stepX, dx, or col)
+  playerTileColumn (not playerX, x, or tileX)
+  targetColumn (not tx, tc, or col)
+  canvasWidth, canvasHeight (not w, h, width, height)
+  temporaryShapeRenderer (not sr, shape, renderer)
+  frameBuffer (not fb, fbo, buffer)
+  centerX (not cx, midX, mid)
+  bottomHalfWidth, topHalfWidth (not halfBase, hw, bw)
+
+Loop variable over tiles must describe what it counts:
+  for (int distanceTiles = 1; ...)  ✓
+  for (int i = 1; ...)              ✗
+
+---
+
+## CHECKLIST FOR A NEW WEAPON
+
+  [ ] Constants added to Constants.java (damage, clip, reload, drop, range, penetration, paths)
+  [ ] Canvas size constants added (CANVAS_WIDTH, CANVAS_HEIGHT = 192, 134)
+  [ ] Weapon subclass created in entity package
+  [ ] marchShot() implemented (wall check, enemy check, penetration flag)
+  [ ] getNormalTexturePath() / getFireTexturePath() / getReloadTexturePath() implemented
+  [ ] generateMyWeaponTexture() added to WeaponHudRenderer (FrameBuffer + ShapeRenderer)
+  [ ] drawMyWeaponShape() implemented — symmetric, 10 depth layers, Y-up coords
+  [ ] drawSymmetricTrapezoid() present in WeaponHudRenderer (add if not already there)
+  [ ] flipPixmapVertically() present in WeaponHudRenderer (add if not already there)
+  [ ] FrameBuffer import added to WeaponHudRenderer
+  [ ] instanceof check added in loadOrGenerateNormalTexture()
+  [ ] World.java updated to instantiate and equip the new weapon
+  [ ] Idea file in .claude/agents/ideas/ updated to STATUS: IMPLEMENTED
+  [ ] Build passes: ./gradlew :core:compileJava

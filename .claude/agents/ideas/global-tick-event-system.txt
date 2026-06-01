@@ -1,0 +1,337 @@
+STATUS: IMPLEMENTED
+CATEGORY: Systems
+TITLE: Global Tick Event System
+---
+
+=============================================================================
+OVERVIEW
+=============================================================================
+The game advances in discrete turns. Today, a single PlayerController.TurnListener
+callback fires after every turn-consuming action and World forwards it directly
+to EnemyManager.takeTurn(). That works for exactly one subscriber and bakes the
+turn-order policy into World. This design replaces that one-callback wiring with
+a tiny pub/sub event bus (TickEventBus) and a TickSubscriber interface, so that
+enemies, weapon reload, traps, and any future world system can each register to
+be notified once per game tick — in a defined, deterministic order — without
+World knowing about any of them individually.
+
+It belongs here because the turn loop is the spine of the entire game. Every
+gameplay system invented later (hazard chain reactions, status effects, ambient
+spawns, environmental clocks) needs a clean "one tick just happened" hook. Build
+the spine once, correctly, with zero per-tick allocation, and never touch the
+core dispatch again.
+
+=============================================================================
+GAMEPLAY LOOP
+=============================================================================
+1. Player is IDLE. PlayerController.pollInput() reads input.
+2. Player presses a key:
+   - W / S / Q / E  → tile step       → IS a tick (only if a tile was actually
+                                          entered; wall-blocked move = no tick).
+   - FIRE           → gun fires        → IS a tick.
+   - A / D          → 90° rotation     → NOT a tick.
+   - INTERACT       → door open        → NOT a tick.
+3. The action animates (MOVING / FIRING / ROTATING / INTERACTING). Input is
+   locked during animation (existing action-lock behaviour, unchanged).
+4. On animation completion (finishAction):
+   - If the completed action was a tick-causing action → call
+     tickEventBus.fireTick().
+   - Otherwise → do nothing; return to IDLE immediately.
+5. tickEventBus.fireTick() iterates its registered subscribers IN REGISTRATION
+   ORDER and calls onTick(...) on each. Order is fixed and documented:
+       (1) WeaponReloadSubscriber   — advances reload countdown.
+       (2) EnemyTurnSubscriber      — runs the full enemy simulation.
+       (3) any future subscriber    — appended after, runs last.
+6. EnemyTurnSubscriber.onTick() calls enemyManager.takeTurn(...). All enemies
+   perceive, chain-alert, and act synchronously inside that one call (existing
+   zero-allocation simulation, unchanged).
+7. fireTick() returns. PlayerController is already back in IDLE, so on the next
+   update() the player may act again.
+8. Player lock guarantee: because the enemy simulation runs synchronously inside
+   fireTick(), which runs inside finishAction(), which runs inside the same
+   update() frame, the player is structurally unable to act until every enemy
+   has finished. No explicit "waiting for enemies" flag is needed yet — but the
+   architecture (step 9) supports adding one when enemy turns become animated.
+9. RELOAD-as-a-tick clarification: "reload causes a tick" does NOT mean the
+   player presses a Reload key. There is no manual reload action. Reload is an
+   automatic multi-tick process: when the clip empties, the weapon enters
+   RELOADING and counts down one step per tick. Each tick that arrives while
+   RELOADING advances the counter. The "reload tick" requirement is satisfied
+   by routing the existing onMovementTick() through the bus as a general
+   onTick() — so reload now advances on ANY tick (move OR fire), not only on
+   movement. See INTERACTIONS for the behaviour-change note.
+
+=============================================================================
+PLAYER EXPERIENCE
+=============================================================================
+No new on-screen feature; this is plumbing. But it sharpens an existing tactical
+decision: because firing now also counts as a tick, a reloading shotgun makes
+progress whether the marine repositions OR fires another (already-chambered)
+weapon — every action the marine spends is a beat the world gets to respond to.
+The felt experience stays exactly as the marine expects from Doom RPG: "I did
+one thing, the monsters did one thing." It must remain impossible for the player
+to squeeze two actions in before enemies react — the bus enforces that.
+
+=============================================================================
+TECHNICAL NOTES
+=============================================================================
+--- New interface: TickSubscriber -------------------------------------------
+Package: ge.tbegvadze.toon3d.world
+(Lives in world because the tick is a top-level simulation concept, and both
+enemy and entity packages may depend on world without creating a cycle. world
+already imports enemy + entity, so subscribers implemented as adapters in world
+avoid any new cross-package dependency.)
+
+    package ge.tbegvadze.toon3d.world;
+
+    /**
+     * Receives exactly one notification per game tick.
+     * Implementations must NOT allocate and must NOT block.
+     * The world has already advanced the turn when this is called.
+     */
+    public interface TickSubscriber {
+        /**
+         * @param context immutable per-tick context (player tile position,
+         *                tick index, cause). Never null. Do not retain.
+         */
+        void onTick(TickContext context);
+    }
+
+--- New class: TickContext ---------------------------------------------------
+Package: ge.tbegvadze.toon3d.world
+A single mutable, REUSED instance owned by TickEventBus. It is NOT allocated per
+tick — the bus mutates one cached instance before dispatch. Subscribers must
+read it during onTick() and never store the reference.
+
+    public final class TickContext {
+        // package-private fields, set by TickEventBus before dispatch
+        int     playerTileColumn;
+        int     playerTileRow;
+        long    tickIndex;        // monotonically increasing, starts at 0
+        TickCause cause;          // MOVE or FIRE (see enum below)
+
+        public int  getPlayerTileColumn() { return playerTileColumn; }
+        public int  getPlayerTileRow()    { return playerTileRow; }
+        public long getTickIndex()        { return tickIndex; }
+        public TickCause getCause()       { return cause; }
+    }
+
+    public enum TickCause { MOVE, FIRE }
+
+(Player reference: pass the Player object too, since EnemyManager.takeTurn needs
+it to apply damage. Add a package-private `Player player;` field + getPlayer().
+Player lives in entity; world already imports entity, so this is allowed.)
+
+--- New class: TickEventBus --------------------------------------------------
+Package: ge.tbegvadze.toon3d.world
+Owns the subscriber registry and the single reused TickContext. Fixed-capacity
+backing array — no ArrayList growth, no iterator allocation.
+
+    public final class TickEventBus {
+        private final TickSubscriber[] subscribers;   // fixed capacity
+        private int subscriberCount = 0;
+        private final TickContext context = new TickContext();
+        private long nextTickIndex = 0L;
+
+        public TickEventBus() {
+            this(Constants.MAX_TICK_SUBSCRIBERS);
+        }
+        public TickEventBus(int capacity) {
+            this.subscribers = new TickSubscriber[capacity];
+        }
+
+        /** Register in dispatch order. Call only during setup, not per frame. */
+        public void subscribe(TickSubscriber subscriber) {
+            if (subscriberCount >= subscribers.length)
+                throw new IllegalStateException("TickEventBus capacity exceeded");
+            subscribers[subscriberCount++] = subscriber;
+        }
+
+        /** Optional: remove a subscriber (compacts the array). Rare; not per-frame. */
+        public void unsubscribe(TickSubscriber subscriber) {
+            for (int index = 0; index < subscriberCount; index++) {
+                if (subscribers[index] == subscriber) {
+                    System.arraycopy(subscribers, index + 1, subscribers,
+                                     index, subscriberCount - index - 1);
+                    subscribers[--subscriberCount] = null;
+                    return;
+                }
+            }
+        }
+
+        /** Fire one tick. Mutates the reused context, then dispatches in order. */
+        public void fireTick(int playerTileColumn, int playerTileRow,
+                             Player player, TickCause cause) {
+            context.playerTileColumn = playerTileColumn;
+            context.playerTileRow    = playerTileRow;
+            context.player           = player;
+            context.cause            = cause;
+            context.tickIndex        = nextTickIndex++;
+            for (int index = 0; index < subscriberCount; index++) {
+                subscribers[index].onTick(context);   // plain indexed loop = no iterator alloc
+            }
+        }
+    }
+
+ZERO-ALLOCATION GUARANTEE:
+  - subscribers stored in a pre-sized array; iterated with an int index, not a
+    for-each (no Iterator object).
+  - one TickContext instance reused for the lifetime of the bus.
+  - fireTick takes primitives + existing object refs; allocates nothing.
+  - EnemyManager.takeTurn already allocation-free (preserved verbatim).
+
+--- New class: EnemyTurnSubscriber -------------------------------------------
+Package: ge.tbegvadze.toon3d.world  (thin adapter; keeps EnemyManager unaware of
+the bus and keeps enemy package free of a world dependency).
+
+    final class EnemyTurnSubscriber implements TickSubscriber {
+        private final EnemyManager enemyManager;
+        private final GameState gameState;
+        EnemyTurnSubscriber(EnemyManager m, GameState g) { ... }
+        @Override public void onTick(TickContext context) {
+            enemyManager.takeTurn(context.getPlayerTileColumn(),
+                                  context.getPlayerTileRow(),
+                                  context.getPlayer());
+            if (enemyManager.anyAlerted()) gameState.redAlert = true;
+        }
+    }
+
+--- New class: WeaponReloadSubscriber ----------------------------------------
+Package: ge.tbegvadze.toon3d.world  (adapter over the equipped weapon held by
+PlayerInventory; avoids entity package importing world).
+
+    final class WeaponReloadSubscriber implements TickSubscriber {
+        private final PlayerInventory inventory;
+        WeaponReloadSubscriber(PlayerInventory inventory) { ... }
+        @Override public void onTick(TickContext context) {
+            Weapon weapon = inventory.getEquippedWeapon();
+            if (weapon != null) weapon.onTick();   // renamed from onMovementTick()
+        }
+    }
+
+--- Constants to add (util/Constants.java) -----------------------------------
+    public static final int MAX_TICK_SUBSCRIBERS = 16;   // generous fixed ceiling
+
+--- Affected existing classes ------------------------------------------------
+PlayerController (input):
+  - DELETE the nested `TurnListener` interface and the `turnListener` field +
+    setTurnListener(). DELETE notifyWeaponMovementTick() (its job moves to the
+    bus via WeaponReloadSubscriber).
+  - ADD a field `private TickEventBus tickEventBus;` + setter
+    setTickEventBus(TickEventBus bus). (PlayerController already imports nothing
+    from world; add import ge.tbegvadze.toon3d.world.TickEventBus and TickCause.)
+  - ADD a transient field `private TickCause pendingTickCause;` set when a
+    tick-causing action STARTS, read when it finishes. This is needed because
+    finishAction() is shared by all states and must know whether to fire a tick
+    and with what cause.
+  - finishAction() rework:
+        private void finishAction(boolean causesTick, TickCause cause) {
+            actionState = IDLE; actionProgress = 0f;
+            if (causesTick && tickEventBus != null) {
+                int column = MathUtils.floor(player.positionX / CELL_SIZE);
+                int row    = MathUtils.floor(player.positionY / CELL_SIZE);
+                tickEventBus.fireTick(column, row, player, cause);
+            }
+        }
+    Callers:
+      advanceMove   completion → finishAction(true,  TickCause.MOVE)
+      advanceFiring completion → finishAction(true,  TickCause.FIRE)
+      advanceRotate completion → finishAction(false, null)
+      advanceInteracting comp. → finishAction(false, null)
+  - REMOVE the in-line weapon.onMovementTick() call from advanceMove; reload now
+    advances inside WeaponReloadSubscriber on every tick.
+
+Weapon (entity):
+  - RENAME onMovementTick() → onTick(). Behaviour body unchanged (decrement
+    ticksRemaining while RELOADING, restore clip at zero). Update the Javadoc:
+    "Called once per game tick (move OR fire), NOT on rotations/interactions."
+  - Shotgun and any subclass: no change unless they override onMovementTick()
+    (none currently do).
+
+World (world):
+  - REMOVE `implements TurnListener` usage and the onPlayerTurnCompleted()
+    method body that calls enemyManager.takeTurn directly.
+  - ADD field `private final TickEventBus tickEventBus;`
+  - In constructor, after building enemyManager / inventory / gameState:
+        tickEventBus = new TickEventBus();
+        tickEventBus.subscribe(new WeaponReloadSubscriber(inventory));   // order 1
+        tickEventBus.subscribe(new EnemyTurnSubscriber(enemyManager, gameState)); // order 2
+        playerController.setTickEventBus(tickEventBus);
+    REMOVE playerController.setTurnListener(this::onPlayerTurnCompleted);
+  - playerController.setEnemyManager(enemyManager) stays — PlayerController still
+    needs EnemyManager as the EnemyHitTarget for weapon.fire(). The bus replaces
+    only the TURN-ADVANCE path, not the hit-target path.
+
+EnemyManager (enemy):
+  - NO CHANGES. takeTurn(...) signature and zero-alloc internals preserved. It is
+    driven by EnemyTurnSubscriber instead of World directly.
+
+=============================================================================
+VISUAL DESIGN
+=============================================================================
+No visual output. This is a non-rendering system. It must add no draw calls and
+must run entirely inside update(deltaTime), never inside render(camera).
+
+=============================================================================
+BALANCE NOTES
+=============================================================================
+- MAX_TICK_SUBSCRIBERS = 16 (placeholder). Three slots used at launch
+  (reload, enemies, + headroom). Bump only if a real subscriber count approaches
+  it; keeping it small keeps the iteration cache-friendly.
+- Dispatch ORDER is a balance lever, document it: reload advances BEFORE enemies
+  act, so the tick on which a reload completes re-arms the weapon a fraction
+  "before" the monsters move — but since the player can't act until next tick
+  anyway, this is cosmetic. If a future trap subscriber must hurt enemies before
+  they move, insert it before EnemyTurnSubscriber. Flag any order change in code
+  review.
+- tickIndex is a long: at 1 tick/action it never realistically overflows; no
+  wrap handling needed.
+
+=============================================================================
+INTERACTIONS
+=============================================================================
+1. WEAPON RELOAD (behaviour change — call out in review): Previously reload only
+   advanced on MOVEMENT ticks (onMovementTick was called only from advanceMove).
+   Under this design reload advances on EVERY tick including FIRE ticks. With the
+   current shotgun (clip 1, must reload after each shot) the marine cannot fire
+   while RELOADING anyway (canFire() requires NORMAL state), so the only new case
+   is a multi-shot future weapon: it could now "reload by shooting" its remaining
+   chambered rounds. If that is undesirable for a specific weapon, that weapon
+   overrides onTick() to ignore FIRE-cause ticks — the cause is available via the
+   context if onTick's signature is widened later; for now keep onTick() argument-
+   less and accept move-or-fire advance. (OPEN QUESTION addresses this.)
+2. ENEMY SYSTEM: EnemyManager.takeTurn is now invoked by a subscriber, in a fixed
+   slot. Chain-alert, LOS, and zero-alloc behaviour are untouched. gameState.redAlert
+   is still raised right after the enemy turn, inside EnemyTurnSubscriber.
+3. DOORS: door open is explicitly a NON-tick interaction (finishAction(false,...)).
+   DoorManager.notifyPlayerSettled and keycard pickup still happen in advanceMove
+   BEFORE the tick fires, so enemies see the player's new tile and any opened door
+   on the same tick. Order within advanceMove: settle door → pick up keycard →
+   finishAction(true, MOVE) [which fires the tick]. Keep that order.
+4. FUTURE HAZARDS (see hazard-chain-reactions idea): a HazardSubscriber can be
+   subscribed between reload and enemies, or after enemies, to tick fire spread /
+   toxic clouds once per turn — no World or PlayerController change required.
+5. FUTURE ASYNC ENEMY TURNS: when enemy turns become animated, add a boolean
+   `worldBusy` owned by World/bus; PlayerController.pollInput() early-returns
+   while worldBusy is true, and the enemy subscriber clears it when its animation
+   queue drains. The bus dispatch point is the single place to add this gate.
+
+=============================================================================
+OPEN QUESTIONS
+=============================================================================
+1. Should onTick() receive the TickContext (and thus TickCause) so individual
+   weapons can ignore FIRE-cause ticks for reload? Recommendation: keep
+   Weapon.onTick() argument-less now (simplest, matches current single-weapon
+   reality); widen to onTick(TickCause) only when a multi-shot weapon ships and
+   the "reload by firing" case actually matters.
+2. Should TickContext expose the Player at all, or should EnemyManager.takeTurn
+   be refactored to not need the Player ref (e.g. take an interface for applying
+   damage)? Passing Player keeps the change minimal; a future cleanup could
+   narrow it to a PlayerDamageSink interface in entity.
+3. Do we want a hard assert that fireTick() is never re-entered (a subscriber
+   triggering another tick)? Cheap to add a `boolean dispatching` guard that
+   throws on re-entry; recommended once more subscribers exist.
+4. Confirm: is FIRE intended to consume a turn even when the shot hits a wall and
+   nothing happens? This design says YES (firing always ticks). If a "dry/blocked"
+   fire should be free, gate the FIRE tick on weapon.fire() returning a non-null /
+   non-empty FireResult instead of always firing on FIRING completion.

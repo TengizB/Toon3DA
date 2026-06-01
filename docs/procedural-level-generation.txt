@@ -1,0 +1,208 @@
+# Procedural Level Generation — Technical Reference
+# LevelGenerator.java · level package · see also .claude/agents/ideas/procedural-level-generation.txt
+
+=== OVERVIEW ===
+
+LevelGenerator produces a Level object at runtime without loading a .txt file.
+The algorithm is a three-phase room-placement dungeon generator inspired by
+Shattered Pixel Dungeon (open-source roguelike by 00-Evan):
+
+  Phase 1 — Room Placement   (randomised collision-rejection)
+  Phase 2 — Connectivity     (greedy MST + L-shaped corridors + door post-pass)
+  Phase 3 — Decoration       (floor lighting, wall variety, props, enemy spawns)
+
+=== KEY REFERENCES ===
+
+Shattered Pixel Dungeon source: https://github.com/00-Evan/shattered-pixel-dungeon
+SPD Level Generation wiki: https://deepwiki.com/00-Evan/shattered-pixel-dungeon/2.3-level-generation
+RogueBasin Dungeon-Building Algorithm: https://www.roguebasin.com/index.php?title=Dungeon-Building_Algorithm
+L-shaped corridor reference: https://journal.stuffwithstuff.com/2014/12/21/rooms-and-mazes/
+
+=== GRID COORDINATE CONVENTION ===
+
+Matches project-wide convention: (0,0) = bottom-left, Y-up.
+  grid[tileRow][tileColumn]
+  tileRow=0 = bottom row of world, tileRow=GRID_HEIGHT-1 = top row.
+  tileColumn=0 = left column, tileColumn=GRID_WIDTH-1 = right column.
+
+The outer ring of tiles (row 0, row H-1, column 0, column W-1) is never touched
+by the generator, remaining solid 'x'. This guarantees a closed outer boundary.
+
+=== TILE CHARS PRODUCED ===
+
+Walls (solid, block movement + raycasting):
+  'x'  Plain wall     — 82% of visible walls (default)
+  'c'  Conduit wall   — 10% (utility corridors, pipes)
+  'v'  Vent wall      — 5%  (room side walls)
+  'w'  Wires wall     — 2%  (near equipment areas)
+  't'  Terminal wall  — 1%  (rare corner alcoves)
+
+Doors:
+  'd'  Door — placed at every corridor-room boundary
+
+Floor tiles (walkable):
+  ' '  Lit floor      — default room interior (1.55× brightness)
+  'l'  Normal floor   — corridor default + 25% of room tiles (1.0× brightness)
+  'u'  Unlit floor    — 5% of room tiles, dread zones (0.55× brightness)
+  'f'  Flickering     — 2-3 tiles per room max, at chokepoints
+
+Special:
+  'p'  Player spawn   — center of first room placed
+
+Solid props (placed in non-entrance rooms at ~13% tile density):
+  'g'  Radioactive barrel, 'E' Explosive barrel, 'C' Crate, 'T' Terminal, 'L' Locker
+
+Walkable decal props:
+  '.'  Blood stain, 'm' Corpse, 'O' Oil pool
+
+Enemy spawn tiles (stored in EnemySpawnPoint list, grid tile stays as floor):
+  '1'  Corruptor spawn (65% probability)
+  '2'  Vortex Eye spawn (35%)
+
+=== PHASE 1: ROOM PLACEMENT ===
+
+Algorithm: collision-rejection random placement
+
+  for attempt in 0..LEVEL_GEN_PLACEMENT_TRIES:
+    pick random interior size (width: MIN_W..MAX_W, height: MIN_H..MAX_H)
+    total room bounding box = interior + 2 (1 wall tile each side)
+    pick random leftColumn in [1, GRID_WIDTH - totalWidth - 1]
+    pick random bottomRow  in [1, GRID_HEIGHT - totalHeight - 1]
+    if candidate.overlaps(any existing room, margin=ROOM_MARGIN): skip
+    else: add room to list
+
+The first room placed becomes the entrance (player spawn). The generator does NOT
+sort rooms by distance; the "furthest" room is implicitly determined by MST traversal order.
+
+Room.overlaps() uses ROOM_MARGIN = 2 tiles minimum gap between bounding boxes.
+This prevents rooms from sharing walls, which would create ambiguous wall/corridor
+geometry for the raycaster.
+
+=== PHASE 2: CONNECTIVITY ===
+
+2a. Carve Room Interiors
+    Set every tile inside [left+1..right-1] × [bottom+1..top-1] to ' ' (lit floor).
+    The perimeter tiles of each room remain 'x' (room walls), to be punched through
+    by the corridor carving step.
+
+2b. Greedy MST Corridor Carving
+    Start: connected = {rooms[0]}, unconnected = {rooms[1..n-1]}
+    While unconnected is non-empty:
+      Find the (connected_room, unconnected_room) pair with minimum Manhattan distance
+      Carve an L-shaped corridor between their centers (50/50: H-then-V or V-then-H)
+      Move unconnected_room to connected set
+
+    carveLShapedCorridor(from, to):
+      fromColumn = from.centerColumn(), fromRow = from.centerRow()
+      toColumn   = to.centerColumn(),   toRow   = to.centerRow()
+      if random: carveHorizontal(fromRow, fromColumn→toColumn) + carveVertical(toColumn, fromRow→toRow)
+      else:      carveVertical(fromColumn, fromRow→toRow)       + carveHorizontal(toRow, fromColumn→toColumn)
+
+    carveHorizontal / carveVertical only overwrites 'x' tiles → room interior tiles ' ' are preserved.
+    Wall tiles punched by the corridor become 'l' (corridor floor).
+
+2c. Door Post-Pass
+    After all corridors are carved, scan every non-border tile:
+      if cell == 'l' AND any cardinal neighbor is a room-floor tile (' ', 'u', 'f'):
+        replace with 'd' (door)
+
+    This works because:
+    - Room interior tiles are ' ' (never 'l') at this stage.
+    - Corridor tiles crossing room perimeter walls become 'l'.
+    - Those 'l' tiles are directly adjacent to the room interior ' ' tiles.
+    - Converting them to 'd' creates a natural door at every room entry.
+
+    Corner case: when the L-shape corner is inside a room interior (' '), the corridor
+    only touches 'x' tiles on the room perimeter → exactly one 'l' tile on each side
+    of the room boundary → exactly two doors per connection (entry + exit). ✓
+
+=== PHASE 3: DECORATION ===
+
+3a. Floor Lighting (per-room pass, only on ' ' tiles):
+    roll < 0.05 AND flickerBudget > 0 → 'f' (flickering)
+    roll < 0.10                       → 'u' (unlit)
+    roll < 0.35                       → 'l' (normal)
+    else                              → keep ' ' (lit)
+    Max flickering tiles per room: 2–3 (randomly chosen per room)
+
+3b. Wall Variety (all 'x' tiles adjacent to any non-wall tile):
+    roll < 0.01 → 't'
+    roll < 0.02 → 'w'
+    roll < 0.07 → 'v'
+    roll < 0.17 → 'c'
+    else        → keep 'x'
+
+3c. Props (non-entrance rooms, 13% per interior floor tile):
+    randomPropChar() distribution:
+      g=22%, E=8%, C=10%, T=10%, L=8%, .=16%, m=14%, O=12%
+
+3d. Enemy spawns (non-entrance rooms, placed after props to avoid overlap):
+    enemyCount = min(MAX_ENEMIES, 1 + random(max(1, area/6)))
+    For each spawn: pick random walkable floor tile (' ', 'l', 'u', 'f')
+    char = '1' with probability CORRUPTOR_RATIO (0.65), else '2'
+    Spawns recorded in List<EnemySpawnPoint> passed to Level constructor.
+    Grid tiles are NOT modified by spawn placement (EnemyManager reads from EnemySpawnPoint list).
+
+=== OPERATOR ORDER (critical for correctness) ===
+
+  1. fillAll('x')                    — start with all walls
+  2. placeRooms()                    — pick room positions
+  3. carveRoomInteriors()            — set interior tiles to ' '
+  4. connectRoomsWithCorridors()     — set corridor tiles to 'l'
+  5. placeDoors()                    — convert 'l' adjacent to ' '/'u'/'f' → 'd'
+     * Must run before assignFloorLighting() because lighting changes ' ' to 'l'/'u'/'f',
+       which would confuse the door-detection heuristic.
+  6. assignFloorLighting()           — vary ' ' within rooms
+  7. assignWallVariety()             — vary 'x' adjacent to non-walls
+  8. placePlayerSpawn()              — set 'p' at entrance room center
+  9. placeProps()                    — stamp prop chars on floor tiles (runs before enemies)
+  10. spawnEnemiesInRoom() per room  — add EnemySpawnPoints on walkable floor tiles
+  11. new Level(grid, spawnPoints)   — construct Level from generated grid
+
+=== CONSTANTS (all in Constants.java, prefix LEVEL_GEN_) ===
+
+  LEVEL_GEN_GRID_WIDTH            80    matches 1280 / CELL_SIZE
+  LEVEL_GEN_GRID_HEIGHT           45    matches  720 / CELL_SIZE
+  LEVEL_GEN_ROOM_MIN_WIDTH         3    interior tiles, excluding perimeter walls
+  LEVEL_GEN_ROOM_MIN_HEIGHT        3
+  LEVEL_GEN_ROOM_MAX_WIDTH        12
+  LEVEL_GEN_ROOM_MAX_HEIGHT        7
+  LEVEL_GEN_ROOM_MARGIN            2    min gap between room bounding boxes (tiles)
+  LEVEL_GEN_TARGET_ROOMS          10    stop adding rooms once count reached
+  LEVEL_GEN_PLACEMENT_TRIES      300    max attempts to place each room
+  LEVEL_GEN_PROP_CHANCE         0.13f   probability any floor tile gets a prop
+  LEVEL_GEN_MAX_ENEMIES_PER_ROOM   3    ceiling on enemies spawned per room
+  LEVEL_GEN_CORRUPTOR_RATIO      0.65f  probability spawn char is '1' (Corruptor)
+
+=== INTEGRATION ===
+
+  World has two constructors:
+    World(Level level)        — accepts any Level, procedural or file-loaded
+    World(String levelFile)   — delegates to World(level) via LevelLoader
+
+  Main.java creates the World with a procedurally generated level:
+    world = new World(new LevelGenerator(System.currentTimeMillis()).generate());
+
+  To revert to a hand-crafted level for debugging:
+    world = new World("levels/level2.txt");
+
+=== TESTING / DEBUGGING ===
+
+  Use a fixed seed for a reproducible layout:
+    new LevelGenerator(12345L).generate()
+
+  Dump the generated grid as text (add a debug method to LevelGenerator):
+    for (int tileRow = gridHeight-1; tileRow >= 0; tileRow--) {
+        System.out.println(new String(grid[tileRow]));
+    }
+  (Rows are printed top-to-bottom by iterating in reverse because grid[0] = bottom row.)
+
+=== KNOWN LIMITATIONS ===
+
+  • No flood-fill validation: if room placement is unusually unlucky, some rooms could
+    theoretically be disconnected (not yet observed in practice; MST guarantees connectivity
+    for all rooms in the connected list, but room placement can sometimes fail).
+  • All rooms are rectangular; no L-shaped, T-shaped, or irregular rooms.
+  • No special room types beyond entrance + standard.
+  • Corridors are always 1 tile wide; no wider passages or open-plan connections.
+  • No level depth scaling; difficulty is constant across runs.

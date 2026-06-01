@@ -1,0 +1,471 @@
+STATUS: IN PROGRESS
+CATEGORY: Combat
+TITLE: Plasma Rifle — piercing energy weapon (CELLS, 4-shot clip)
+CREATED: 2026-05-29
+---
+
+OVERVIEW
+========
+The Plasma Rifle is the player's mid-tier energy weapon and the first gun that
+rewards positioning over panic. It fires a blue-cyan plasma bolt that PIERCES
+every enemy in a straight line ahead (no penetration cap — the bolt does not
+stop on the first body), carries a 4-shot clip, reaches 8 tiles with a gentle
+0.10 damage-drop coefficient, and pays for all that power with a slow 3-tick
+reload. Where the shotgun is "get close, one big hit, reload," the plasma rifle
+is "line them up down a corridor and melt the whole column." It reuses the
+existing Weapon abstraction (clipSize / reloadTime / damageDropCoefficient),
+the AmmoType.CELLS pool already reserved in the weapon system, and the
+WeaponEventBus / muzzle-flash compositing path. Its weapon sprite and muzzle
+bolt are PROCEDURALLY GENERATED (Pixmap) — no asset file required, matching the
+textureless direction of the procedural HUD.
+
+Why now: the shotgun ships the whole weapon system (Weapon base class, ammo
+pools, fire-resolution code path, WeaponSlot, muzzle/flash compositing). The
+plasma rifle is the cleanest possible second weapon to prove the abstraction
+generalizes — it changes only the stat block, the line-march logic (pierce vs.
+penetrate-1), the muzzle color, and the sprite. It also gives CELLS a consumer
+and gives the player a reason to manage two ammo economies (shells vs. cells).
+
+
+GAMEPLAY LOOP
+=============
+PRE-PICKUP STATE
+- Player may already have fists + shotgun (see pump-action-shotgun.txt).
+- The plasma rifle is found in the level (placed on a corpse `m`, in a locker
+  `L`, or as a dedicated weapon decal — see OPEN QUESTIONS for the tile char).
+
+PICKUP
+1. Player steps onto / interacts with the tile holding the rifle.
+2. After the move completes (post-snap, IDLE), World checks the tile.
+3. Rifle is added to inventory in WeaponSlot.SECONDARY. Cells: +12 (3 clips).
+4. HUD pickup banner: "PLASMA RIFLE  +12 CELLS" — 2-turn fade.
+5. Auto-equip only if the player currently holds fists (don't yank a loaded
+   shotgun out of their hands mid-fight). Otherwise it stays holstered until
+   the player swaps to it.
+
+AIM (free)
+- Rotating (A / D) to line the bolt up with a row of enemies is FREE — it does
+  not advance a reload tick (identical rule to the shotgun). The player WILL
+  spend rotations lining up a corridor before firing. This is the core skill.
+
+FIRING (one full turn)
+1. Player presses the attack key (Constants.KEY_ATTACK = SPACE) with the rifle
+   equipped.
+2. PlayerController checks state == IDLE and weapon.canFire() (shotsInClip > 0
+   and state == NORMAL). If FALSE (mid-reload or empty clip), play a dry energy
+   "fizzle" click, flash the HUD ammo readout red 0.15s, consume NO turn.
+3. If TRUE, transition to ATTACKING. Weapon.fire(player, level, enemyManager,
+   eventBus) resolves instantly in game logic:
+   a. Build a "bolt ray" starting at the player tile, marching forward one tile
+      at a time along (directionX, directionY), up to PLASMA_RANGE_TILES (8).
+   b. For each tile crossed:
+        - If it contains a WALL (Level.isWall): the bolt stops at that tile.
+          The wall absorbs the bolt (a scorch/flash decal is optional polish).
+        - If it contains a CLOSED door: bolt stops (does not open it).
+        - If it contains one or more enemies: register a hit on each, apply
+          damage with falloff, and CONTINUE marching (PIERCE — no cap).
+   c. Damage at tile distance D: PLASMA_BASE_DAMAGE × dropMultiplier(D), where
+      dropMultiplier(D) = max(MIN, 1 - PLASMA_DROP_COEFFICIENT × (D - 1)).
+      See BALANCE for the resolved per-tile table.
+   d. shotsInClip -= 1.
+4. Visual: weapon sprite plays the FIRE frame for ~0.12s; a blue-cyan plasma
+   bolt streaks the full traveled length (see VISUAL DESIGN); a cool-toned
+   cyan screen flash at low alpha pops for 0.05s; every hit enemy plays its
+   hurt animation simultaneously. A high "VWAP" energy-discharge sample plays.
+5. Turn ends. Enemies take their turn.
+6. If shotsInClip is now 0, the weapon swaps NORMAL -> RELOADING and arms
+   ticksRemaining = PLASMA_RELOAD_TICKS (3). If shotsInClip > 0, the weapon
+   stays NORMAL and can fire again next turn.
+
+RELOAD (tick-driven — slow, this is the cost)
+1. While RELOADING, the rifle needs PLASMA_RELOAD_TICKS (3) MOVEMENT ticks to
+   re-energize the cell chamber. A tick = one COMPLETED tile step:
+     - W / S / Q / E that actually change tiles: +1 tick.
+     - A / D (rotate): NOT a tick — aiming stays free.
+     - A blocked move (bumped wall, no tile change): NOT a tick.
+2. Each completed step calls weapon.onMovementTick() -> ticksRemaining -= 1.
+3. When ticksRemaining reaches 0: shotsInClip = min(PLASMA_CLIP_SIZE, cells in
+   pool); deduct that many from the CELLS pool; state -> NORMAL.
+4. RATIONALE: 3 ticks is deliberately punishing. After dumping a 4-bolt clip
+   down a hallway you are exposed for three of your own moves. The player learns
+   to retreat to safety BEFORE the clip runs dry, or to fire in disciplined
+   2-bolt bursts and reload early in a lull.
+
+EMPTY / OUT-OF-CELLS
+- Fire with shotsInClip == 0 (reload not yet finished): dry fizzle, no turn.
+- Reload completes with 0 cells in pool: clip stays empty, HUD shows "PLASMA
+  0/4" in red, firing keeps fizzling. Player must swap weapon. Fists remain the
+  never-softlock fallback (per shotgun doc).
+
+
+MECHANICS
+=========
+
+PLASMA RIFLE STAT BLOCK (placeholders — tune in playtest)
+---------------------------------------------------------
+  Base Damage (per bolt, per enemy):      18
+  Damage Drop Coefficient:                0.10  (per tile beyond the first)
+  Min Damage Floor:                       0.30  (× base; bolt never fizzles to 0)
+  Effective Range:                        8 tiles (bolt stops at 8 or at a wall)
+  Penetration:                            UNLIMITED (pierces all enemies in line)
+  Clip Size:                              4 bolts
+  Ammo per Shot:                          1 cell
+  Reload Time:                            3 movement ticks
+  Pickup Cells:                           12 (3 clips)
+  Max Cells Carried:                      40 (later upgrades raise this)
+  Ammo Type:                              CELLS (shared with future BFG/plasma guns)
+
+WHY PIERCE (NOT PENETRATE-1)
+----------------------------
+The shotgun penetrates exactly ONE enemy (pellet flavor). The plasma rifle is
+defined by the OPPOSITE: a coherent energy bolt that does not lose itself in
+flesh. Mechanically this makes the rifle the answer to the shotgun's weakness —
+lines of enemies in a corridor. The shotgun wants enemies bunched at point
+blank; the rifle wants them strung out down a hall. Two guns, two ideal
+geometries, same grid. This is the whole reason the rifle exists.
+
+DAMAGE FALLOFF (8-tile reach, coefficient 0.10)
+-----------------------------------------------
+dropMultiplier(D) = clamp(1 - 0.10 × (D - 1), 0.30, 1.0)
+
+  Tile distance D   Multiplier   Damage (base 18)
+    1                1.00          18
+    2                0.90          16   (16.2 -> round)
+    3                0.80          14   (14.4)
+    4                0.70          13   (12.6)
+    5                0.60          11   (10.8)
+    6                0.50           9
+    7                0.40           7   (7.2)
+    8                0.30           5   (5.4, floored at 0.30×)
+
+Store the resolved per-tile multipliers in
+Constants.PLASMA_DROP_BY_TILE = {0f, 1.00f, 0.90f, 0.80f, 0.70f, 0.60f, 0.50f,
+0.40f, 0.30f} (index = tile distance; index 0 unused). This mirrors the
+shotgun's SHOTGUN_FALLOFF_BY_TILE pattern so the fire-resolution code can share
+a "lookup multiplier by distance" path. Note the shotgun's array is empirical
+per-tile; the plasma array is the coefficient formula pre-evaluated — keep BOTH
+as explicit arrays so designers tune numbers, not formulas, in playtest.
+
+COMPARISON TO SHOTGUN (so the two never feel redundant)
+-------------------------------------------------------
+                       Shotgun                 Plasma Rifle
+  Ideal geometry       enemies CLUSTERED        enemies IN A LINE
+                       at point blank           down a corridor
+  Range                6 tiles (steep falloff)  8 tiles (gentle falloff)
+  Penetration          1 enemy                  unlimited
+  Clip / reload        1 shot / 1 tick          4 shots / 3 ticks
+  Per-hit damage       7 pellets, spread        18, single coherent bolt
+  Ammo                 SHELLS                   CELLS
+  Feel                 heavy, punchy, close      precise, electric, ranged
+
+
+TECHNICAL NOTES
+===============
+
+REUSES EXISTING WEAPON SYSTEM (from shotgun-weapon-system.txt)
+--------------------------------------------------------------
+No new package. Lives in ge.tbegvadze.toon3d.weapon alongside Weapon, Fists,
+PumpActionShotgun. The base Weapon class already exposes the stat block fields
+(clipSize, reloadTime, damageDropCoefficient), the WeaponState machine
+(NORMAL / FIRE / RELOADING / EMPTY), shotsInClip, ticksRemaining,
+canFire(), onMovementTick(), update(deltaTime), and hudAmmoString(). The plasma
+rifle only overrides what differs.
+
+NEW CLASS
+---------
+  weapon/PlasmaRifle.java extends Weapon
+    - Constructor sets: displayName = "PLASMA RIFLE"; ammoType = AmmoType.CELLS;
+      clipSize = Constants.PLASMA_CLIP_SIZE; reloadTime =
+      Constants.PLASMA_RELOAD_TICKS; baseDamage = Constants.PLASMA_BASE_DAMAGE;
+      damageDropCoefficient = Constants.PLASMA_DROP_COEFFICIENT;
+      rangeTiles = Constants.PLASMA_RANGE_TILES; penetration = UNLIMITED.
+    - Override fire(Player, Level, EnemyManager, WeaponEventBus): the bolt-march
+      loop described in GAMEPLAY LOOP step 3. Marches tile-by-tile, applies
+      dropMultiplier from Constants.PLASMA_DROP_BY_TILE, does NOT break on enemy
+      hit (only on wall / closed door / max range). Posts onShotFired with the
+      hit list and onHit per enemy via the WeaponEventBus.
+    - Override hudAmmoString(): returns "PLASMA <shotsInClip>/<clipSize>",
+      e.g. "PLASMA 3/4". (Build into the weapon's reusable StringBuilder; no
+      per-frame allocation — the HUD reads this string each frame.)
+    - needsReload()/onMovementTick() inherited from Weapon (tick decrement),
+      because the 3-tick logic is identical to the shotgun's 1-tick logic with
+      a different count. The ONLY difference is the constant.
+
+GAMEMATH ADDITIONS (util/GameMath.java)
+---------------------------------------
+  plasmaDamageDropMultiplier(int distanceTiles, float coefficient,
+                             float minMultiplier) -> float
+    /*
+     * Formula: linear damage falloff with a floor
+     * Derivation: multiplier = 1 - coefficient * (distanceTiles - 1);
+     *   at D=1 -> 1.0 (point blank, no drop); each tile beyond subtracts
+     *   `coefficient`. Clamp to [minMultiplier, 1.0] so a long bolt still bites.
+     * Edge cases: distanceTiles < 1 -> treat as 1 (clamp); coefficient 0 ->
+     *   flat 1.0 at all ranges; large coefficient -> floor dominates quickly.
+     */
+  (The shotgun uses a precomputed array; this formula is what generated
+   PLASMA_DROP_BY_TILE. Keep the method for tuning and for future energy guns,
+   but the runtime fire loop should read the precomputed array for speed and
+   designer-tunability — never compute inside render().)
+
+CONSTANTS ADDITIONS (util/Constants.java)
+-----------------------------------------
+  PLASMA_BASE_DAMAGE          = 18
+  PLASMA_DROP_COEFFICIENT     = 0.10f
+  PLASMA_DAMAGE_MIN_MULTIPLIER= 0.30f
+  PLASMA_RANGE_TILES          = 8
+  PLASMA_CLIP_SIZE            = 4
+  PLASMA_RELOAD_TICKS         = 3
+  PLASMA_PICKUP_CELLS         = 12
+  PLASMA_MAX_CELLS            = 40
+  PLASMA_DROP_BY_TILE         = {0f,1.00f,0.90f,0.80f,0.70f,0.60f,0.50f,0.40f,0.30f}
+  PLASMA_SCREEN_FLASH_ALPHA   = 0.22f   // cooler / dimmer than shotgun's 0.40
+  PLASMA_SCREEN_FLASH_DURATION= 0.05f
+  PLASMA_SHAKE_INTENSITY      = 2f      // electric buzz, NOT the shotgun's 6f kick
+  PLASMA_BOLT_TRACER_DURATION = 0.10f   // seconds the on-screen bolt streak shows
+  // Procedural sprite/bolt colors (RGBA floats for Pixmap.setColor)
+  PLASMA_COLOR_CORE           = (0.80, 1.00, 1.00, 1.0)  // near-white cyan core
+  PLASMA_COLOR_MID            = (0.20, 0.75, 1.00, 1.0)  // cyan
+  PLASMA_COLOR_GLOW           = (0.10, 0.35, 0.95, 1.0)  // deep electric blue
+  PLASMA_COLOR_STEEL          = (0.36, 0.40, 0.46, 1.0)  // gun body
+  PLASMA_COLOR_STEEL_DARK     = (0.16, 0.18, 0.22, 1.0)  // body shadow
+
+PROCEDURAL WEAPON SPRITE GENERATION (no asset file)
+---------------------------------------------------
+Generate the weapon sprite into a Pixmap ONCE at load (in the renderer's
+constructor / show()), upload to a Texture, then draw it like any sprite. NEVER
+generate inside render(). This mirrors the procedural-HUD philosophy: every
+pixel is code.
+
+  weapon/ProceduralWeaponSprites.java  (or fold into the existing weapon sprite
+  renderer from the shotgun doc — recommended, keep one weapon-sprite owner)
+    - Builds a small set of Pixmaps for the plasma rifle frames and converts
+      each to a Texture (disposed on shutdown). Frame canvas ~480x320 (match the
+      shotgun sprite size so HUD layout / centering is unchanged).
+    - FRAMES:
+        idle      — rifle held barrel-up, coils dim (PLASMA_COLOR_GLOW at low
+                     brightness), chamber dark.
+        fire      — coils flare to PLASMA_COLOR_CORE, chamber white-hot, the
+                     emitter muzzle replaced by a bright cyan burst.
+        reload    — chamber open, a spent cell ejecting, coils dim/flickering.
+    - DRAWING RECIPE (all rectangles / lines / filled circles — no external art):
+        1. STEEL BODY: a chunky angular receiver. Fill a trapezoid-ish stack of
+           rectangles in PLASMA_COLOR_STEEL; add a one-pixel PLASMA_COLOR_STEEL
+           _DARK bottom/right edge for a beveled metal lip (same two-tone bevel
+           trick as the HUD chrome). Marine-hand grip block at bottom-center.
+        2. PLASMA CHAMBER: a vertical glass cylinder set into the body near the
+           top. Draw as a filled rounded rect (compose with filled circles at
+           the corners). Fill it with a vertical gradient PLASMA_COLOR_GLOW ->
+           PLASMA_COLOR_MID -> PLASMA_COLOR_CORE (interpolate the color row by
+           row down the chamber). In the FIRE frame, bias the whole gradient
+           toward CORE (white-hot). This is the focal "energy" read.
+        3. ENERGY COILS: 3-4 horizontal coil rings wrapping the barrel, drawn as
+           stacked thin ellipses / filled rects in PLASMA_COLOR_MID with a
+           PLASMA_COLOR_CORE highlight pixel on top. In FIRE, brighten coils to
+           CORE; in RELOAD, dim to GLOW and skip every other coil (flicker).
+        4. EMITTER MUZZLE: a small ring at the barrel tip. Idle = dark; FIRE =
+           filled PLASMA_COLOR_CORE disc with a PLASMA_COLOR_MID halo ring.
+        5. GLOW BLEED: optionally, after drawing, blit a few semi-transparent
+           PLASMA_COLOR_GLOW rects around the chamber/coils for a bloom feel.
+      Keep it readable as a chunky pixel sci-fi rifle: STEEL BODY + GLASS PLASMA
+      CHAMBER + GLOWING COILS + EMITTER. The blue-cyan glow is the identity.
+
+PROCEDURAL MUZZLE / BOLT (no orange flame — blue-cyan plasma)
+-------------------------------------------------------------
+  - MUZZLE BURST (on the weapon sprite): an additively-blended quad over the
+    emitter for PLASMA_BOLT_TRACER_DURATION. Procedural: a small PLASMA_COLOR
+    _CORE disc, PLASMA_COLOR_MID mid-ring, PLASMA_COLOR_GLOW outer halo. NO
+    orange, NO yellow — explicitly the cool palette. This is the single most
+    important visual contrast vs. the shotgun's warm muzzle flash.
+  - ON-SCREEN BOLT STREAK (in the 3D view): the plasma bolt is fired along the
+    player's facing, which in the first-person view is dead-center. Render a
+    brief vertical-ish cyan streak / glow column up the center of the screen
+    for PLASMA_BOLT_TRACER_DURATION, additively blended, fading out. Because the
+    player only ever fires straight ahead (no free-aim), this is a fixed
+    center-screen effect — a tall thin PLASMA_COLOR_CORE rect with a
+    PLASMA_COLOR_GLOW falloff on each side, drawn over the world but under the
+    HUD. No per-tile world projection needed; it is a stylized tracer, and the
+    actual hits are resolved in tile space.
+  - SCREEN FLASH: cool cyan, PLASMA_SCREEN_FLASH_ALPHA (0.22 — noticeably
+    dimmer/cooler than the shotgun's 0.40 warm-white). Snaps off, no fade.
+  - LIGHTING BUMP: like the shotgun, briefly bump nearby-wall shade in
+    WallRenderer for the flash window, but tint the bump COOL (boost blue
+    channel) rather than warm. Implemented as a transient shade multiplier with
+    a blue bias; composited over the existing lighting calc.
+
+PLAYERCONTROLLER / TURN INTEGRATION
+-----------------------------------
+- No new states beyond the shotgun's ATTACKING. Firing the plasma rifle uses
+  the same ATTACKING action (Constants.PLAYER_ATTACK_DURATION) — the weapon
+  decides what fire() does.
+- Rotation does NOT tick the reload (free aim). Completed W/S/Q/E steps tick.
+  This is the inherited Weapon.onMovementTick() contract.
+- Weapon swap (KEY_WEAPON_NEXT / _PREV from the shotgun doc) selects the rifle
+  if owned. Swapping does NOT reset reload progress (ticksRemaining persists on
+  the weapon instance).
+
+NO-ALLOCATION COMPLIANCE
+------------------------
+- Pixmaps/Textures built once at load, disposed at shutdown.
+- hudAmmoString() writes into a preallocated StringBuilder (cleared with
+  setLength(0)); never concatenates in render().
+- Bolt-march loop uses a preallocated hit buffer (int[] enemy ids + parallel
+  damage array) sized to a max-hits cap; no per-shot allocation. fire() runs in
+  game logic, not render(), but keep it allocation-free regardless.
+
+
+VISUAL DESIGN
+=============
+WEAPON SPRITE (bottom-center, ~480x320, procedural)
+  - Identity silhouette: steel rifle body, a GLOWING vertical plasma chamber
+    set into the top of the receiver, 3-4 energy coils wrapping the barrel, a
+    dark emitter ring at the muzzle. Marine glove grip at bottom-center.
+  - Palette is deliberately COOL: steel grays for the body, blue-cyan gradient
+    for anything energized. The chamber is the brightest element at idle so the
+    gun reads as "charged and dangerous" even when not firing.
+  FRAMES:
+    idle    — coils dim glow, chamber softly lit (GLOW->MID gradient).
+    fire    — coils + chamber flare to CORE white-cyan; emitter pops a bright
+              disc; weapon kicks UP ~6px (a buzz, not the shotgun's heavy lurch).
+    reload  — chamber breech open, a spent cylindrical cell ejecting up-right,
+              coils flickering (every other coil dimmed), chamber dark/refilling.
+
+MUZZLE & BOLT
+  - Cool blue-cyan ONLY. Core near-white-cyan, mid cyan, outer deep electric
+    blue. No orange, no yellow, no smoke. Optional faint white "spark" pixels.
+  - Center-screen vertical bolt streak for 0.10s, additive, fading.
+
+SCREEN FLASH & SHAKE
+  - Cyan flash, alpha 0.22, instant off.
+  - Light vertical buzz shake, 2px peak, decays over ~0.12s. The rifle should
+    feel electric and controlled, not concussive.
+
+AUDIO
+  - FIRE: a sharp high "VWAP" / "ZWIP" energy discharge with a brief tail.
+  - RELOAD: an electric whine that rises over the 3 ticks (one rising whine
+    blip per completed tick reads as "recharging"), ending in a "ka-CHK" cell
+    seat on the final tick.
+  - DRY FIRE: a flat low "fzzt" fizzle (failed discharge), distinct from the
+    shotgun's metallic dry click.
+
+HUD
+  - Right panel ammo string from hudAmmoString(): "PLASMA 3/4". Big digits show
+    shotsInClip; the "/4" is clip size. The HUD's existing yellow change-glow
+    fires on each bolt; the empty (0/4) state pulses red per the procedural HUD
+    doc. Weapon name strip: "PLASMA RIFLE".
+  - Reload feedback: while RELOADING, the ammo digits can render in the dim
+    "recharging" color (PHOSPHOR_DIM from the HUD palette) until the clip refills
+    to 4, then snap bright with the change-glow. (Optional polish; the existing
+    HUD empty/glow logic already conveys the state.)
+
+
+BALANCE & TUNING
+================
+ROLE
+- The plasma rifle is the corridor-control / line-clear weapon and the player's
+  first sustained-DPS option (4 bolts before a reload vs. the shotgun's 1).
+
+PER-CLIP OUTPUT (full clip, point blank, vs. a single target)
+- 4 bolts × 18 = 72 damage before reload. Against a typical zombie (8 HP) that
+  is gross overkill on one body — the rifle is NOT meant for single weak enemies
+  (waste of cells). It shines when those 4 bolts each pierce 2-3 enemies in a
+  line: 4 bolts × ~2.5 enemies × ~14 avg = ~140 distributed damage per clip.
+
+THE RELOAD IS THE BALANCE
+- 3 movement ticks of exposure after 4 bolts. Net cadence when dumping a full
+  clip: 4 attack-turns of fire, then 3 move-turns defenseless = a 7-turn cycle.
+  If enemies are still alive after the clip, those 3 reload steps are when you
+  take damage. Discipline (fire 2, reload early in a lull, keep distance) is the
+  intended counterplay. PLACEHOLDER — if reload feels oppressive, drop to 2.
+
+CELL ECONOMY (separate from shells — TWO economies to juggle)
+- Pickup gives 12 cells (3 clips). Max carry 40 (10 clips).
+- Cells should be RARER than shells per level so the rifle stays a "pick your
+  moment" weapon, not the default. Suggested ~8-16 cells per level beyond the
+  initial pickup. The player is meant to clear trash with the shotgun and SAVE
+  cells for dense rooms / a boss line-up.
+
+DIFFICULTY LEVERS (single knobs)
+- PLASMA_BASE_DAMAGE — global damage knob.
+- PLASMA_DROP_COEFFICIENT — raise toward shotgun-like steepness to nerf long
+  range; lower toward 0 for a flat railgun.
+- PLASMA_CLIP_SIZE / PLASMA_RELOAD_TICKS — the cadence/exposure dial.
+- Cell drop rate — the "how often can you use it" dial.
+
+PLACEHOLDER FLAGS
+- 18 base / 0.10 coeff / 4 clip / 3 ticks are all first-pass numbers. The
+  intended FEEL is "noticeably stronger and longer-ranged than the shotgun, but
+  you can't spam it and you can't afford to waste cells on stragglers."
+
+
+INTERACTIONS
+============
+SHOTGUN / WEAPON SYSTEM (pump-action-shotgun.txt, shotgun-weapon-system.txt)
+  - Drop-in second weapon: same Weapon base, same fire-resolution path, same
+    tick-driven reload, same WeaponEventBus events, same WeaponSlot system. The
+    rifle goes in SECONDARY; the shotgun in PRIMARY. Swapping preserves each
+    weapon's reload progress. This doc is the proof the abstraction generalizes.
+  - Deliberate anti-redundancy: shotgun = cluster/point-blank/penetrate-1;
+    plasma = line/range/pierce-all. See the comparison table in MECHANICS.
+
+ENEMY SYSTEM (enemy_system.txt) + HEALTH BARS / HIT REACTIONS
+  - PIERCE means a single bolt can trigger multiple enemies' hurt animations and
+    health-bar updates in ONE turn. The hit-reaction system must handle N
+    simultaneous hits from one shot (the shotgun already does for its cone, so
+    the path exists). Order hits front-to-back along the bolt so any death
+    animations / corpse drops resolve in a sensible sequence.
+  - Enemy weaknesses: if an enemy type defines an energy/plasma weakness
+    multiplier (mirroring the zombie's shotgun 1.5×), apply it in fire() when
+    resolving each pierced target. Reserve a per-enemy-type weakness lookup.
+
+PROCEDURAL HUD (procedural-hud-no-textures.txt)
+  - hudAmmoString() "PLASMA 3/4" flows into the right-panel ammo digits +
+    weapon name exactly like the shotgun's "8/24". The empty-state red pulse and
+    change-glow logic are reused unchanged. No HUD code changes required beyond
+    reading a different weapon's string.
+
+HAZARD CHAIN REACTIONS (hazard-chain-reactions-fire-toxic-explosive.txt)
+  - A piercing bolt that crosses a tile containing an explosive barrel (`B`)
+    should detonate it — the bolt passes THROUGH and can detonate a barrel AND
+    hit enemies beyond it in the same line. This makes the rifle a fun
+    chain-reaction trigger down a corridor lined with barrels. Decide whether
+    the bolt stops at the barrel or continues past the explosion (recommend:
+    continue — the bolt is coherent energy; the explosion is a separate AoE).
+  - Radioactive / toxic tiles are unaffected by the bolt (no interaction).
+
+DOORS (doors.txt, uac-keycard-doors-security-tiers.txt)
+  - The bolt does NOT open or destroy doors (preserves keycard gating). A closed
+    door stops the bolt like a wall. An OPEN door tile lets the bolt pass.
+
+EMERGENCY RED ALERT PULSE (emergency-red-alert-pulse.txt)
+  - The plasma discharge is a loud "noise event" the alert/hearing system can
+    subscribe to (like the shotgun BOOM), raising local alarm state. The rising
+    reload whine is NOT a combat noise event.
+
+
+OPEN QUESTIONS
+==============
+1. PICKUP TILE: what represents the rifle on the map? Options: reuse a corpse
+   `m` / locker `L` as a container, or add a dedicated weapon-decal char (e.g.
+   reuse the `s` pattern with a new glyph for "energy weapon"). Recommendation:
+   add a single new walkable weapon-decal char for clarity, generated as a
+   glowing-cyan-rifle billboard (procedural, matches the sprite palette).
+2. PIERCE THROUGH EXPLOSIONS: does the bolt continue past a barrel it detonates,
+   or stop? Recommendation: CONTINUE (coherent energy); the AoE is separate.
+3. MAX PIERCE TARGETS: truly unlimited, or cap at, say, 6 to bound the hit
+   buffer? Recommendation: cap the BUFFER at a generous number (range is only 8
+   tiles, so at most ~8 enemy tiles anyway) — effectively unlimited, but
+   allocation-safe.
+4. RELOAD TICK COUNT: 3 is the design intent (punishing). If playtest finds it
+   miserable with fast enemies, drop to 2. Do NOT go to 1 — that erases the
+   identity (it would just be a 4-shot shotgun).
+5. PARTIAL RELOAD: if the player has only 2 cells in the pool when a reload
+   finishes, the clip refills to 2/4 (min(clipSize, pool)). Confirm this matches
+   the shotgun's pool-deduction behavior. Recommendation: YES, identical.
+6. BOLT TRACER: stylized fixed center-screen streak (recommended, cheap) vs. a
+   true 3D-projected bolt traveling down the corridor (expensive, needs the
+   billboard/raycast pipeline). Recommendation: stylized center streak for v1;
+   upgrade to a projected bolt in a polish pass if desired.
+7. SHOULD AIM-FREE ROTATION DURING RELOAD ALSO APPLY HERE: confirmed yes
+   (inherited). Flag only if it feels exploitable with the longer 3-tick reload
+   (it should be fine — you still can't fire while reloading).

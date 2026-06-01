@@ -1,0 +1,189 @@
+# Enemy System — Turn-Based AI Design & Implementation Reference
+
+## Overview
+
+Enemies are turn-based entities that act once after every player action.
+Two archetypes: Corruptor (melee bruiser) and Vortex Eye (ranged kiter).
+Dormant until alerted by proximity or line-of-sight.
+
+## Turn Sequence
+
+ONE FULL TURN:
+
+1. Player presses a key (W/S/A/D/Q/F/SPACE).
+2. PlayerController enters its action state (MOVING, ROTATING, FIRING, INTERACTING).
+3. Animation plays for its duration (PLAYER_MOVE_DURATION, etc.).
+   No enemy logic runs during this window.
+4. finishAction(causesTick, cause) snaps the player to their settled position.
+5. If causesTick: tickEventBus.fireTick() dispatches to all subscribers in order:
+     a. WeaponReloadSubscriber — advances weapon reload counter.
+     b. EnemyTurnSubscriber   — calls enemyManager.takeTurn(playerTile, player).
+6. EnemyManager runs three phases (see below).
+7. fireTick() returns. PlayerController is back to IDLE.
+
+Tick-causing actions: W/S/Q/F tile step (MOVE tick), SPACE weapon fire (FIRE tick).
+Non-tick actions: A/D rotation, E door interaction, wall-blocked moves (never reach finishAction).
+
+See docs/tick-system.txt for the full tick architecture.
+
+## Enemy Simulation Phases (EnemyManager.takeTurn)
+
+### Phase A — Perception
+For every DORMANT enemy:
+  - Chebyshev distance to player <= ALERT_RADIUS_TILES (4) → alert immediately.
+  - OR Chebyshev <= LOS_MAX_RANGE_TILES (16) AND hasLineOfSight → alert.
+
+### Phase A2 — Chain Alert (BFS)
+Newly alerted enemies propagate wakeup to DORMANT enemies within
+CHAIN_ALERT_RADIUS_TILES (5) via breadth-first search.
+Chain alert does NOT require LOS — represents a scream traveling through the room.
+The first wakeup sets World.gameState.redAlert = true (drives the red wall pulse).
+
+### Phase B — Action
+Every ALERTED/CHASING/ATTACKING enemy acts once:
+
+  CORRUPTOR (melee):
+    - Chebyshev distance == 1 → swing, deal CORRUPTOR_ATTACK_DAMAGE (14) to player.
+    - Else → step toward player via greedy Manhattan minimizer.
+    - Moves every 2 turns (CORRUPTOR_MOVE_EVERY_N_TURNS = 2), attacks every turn.
+
+  VORTEX EYE (ranged kiter):
+    - Distance < VORTEX_EYE_KITE_MIN_TILES (2) → flee (step away), then fire if LOS.
+    - Distance in [2, VORTEX_EYE_RANGE_TILES=5] AND has LOS → fire in place (no move).
+    - Distance > range OR no LOS → step toward player.
+    - Deals VORTEX_EYE_ATTACK_DAMAGE (8) on a successful ranged shot.
+    - Moves every turn (fast).
+
+## Enemy AI State Machine
+
+  DORMANT    — inactive; only perception phase touches it.
+  ALERTED    — just woke this turn; transitions immediately into CHASING/ATTACKING.
+  CHASING    — moving toward player.
+  ATTACKING  — dealt damage this turn.
+
+States only advance forward — no enemy ever returns to DORMANT.
+
+## Movement AI
+
+Greedy cardinal stepper: evaluate all four cardinal directions, pick the one with
+smallest Manhattan distance to the player that passes isPassableForEnemy() checks.
+
+Passability rules:
+  - level.isBlockedAt() (walls, solid props, closed doors) → blocked.
+  - occupancy[col][row] (another enemy is there this turn) → blocked.
+  - Player's tile → blocked (attack instead of stepping onto them).
+
+Greedy-stuck mitigation: if stuck for STUCK_TURNS_BEFORE_WIGGLE (2) consecutive turns,
+pick a random legal cardinal step (deterministic RNG seed 12345, reproducible).
+
+## Line of Sight
+
+GameMath.tileLineOfSightClear(fromColumn, fromRow, toColumn, toRow, solidTest):
+  Parametric sampling: advance step/maxSteps along both axes simultaneously,
+  testing max(|dc|,|dr|)−1 intermediate tiles. A tile is opaque if:
+    - Level.isWall(cell) OR
+    - DoorManager.blocksSight (CLOSED/CLOSING door) OR
+    - Level.isPropSolid(cell) (lockers, terminals, barrels, crates).
+  Decals and floor-light tiles are transparent.
+
+Pre-check: if Chebyshev > LOS_MAX_RANGE_TILES (16), return false without walking.
+
+## Level Placement
+
+Spawn characters (replaced with ' ' at load time — underlying tile becomes floor):
+  '1' → Corruptor
+  '2' → Vortex Eye
+
+LevelLoader records EnemySpawnPoint(spawnChar, tileColumn, tileRow) before rewriting.
+EnemyManager reads level.getEnemySpawnPoints() to build the initial enemy list.
+
+Placement guidance:
+  Corruptors ('1'): chokepoints, doorways, unlit rooms — obstacles the player MUST engage.
+  Vortex Eyes ('2'): open rooms with long sightlines, near columns ('P') for LOS cover.
+  Mixed pack (1 Corruptor + 2 Vortex Eyes in a room behind a door): signature encounter.
+
+## Enemy Types
+
+  CORRUPTOR  (textures/enemies/enemy_corruptor.png)
+    HP: 60     Attack: 14/hit     Speed: move every 2 turns     Height: 0.95× wall
+    Role: slow tank that pressures the player into tight spaces.
+
+  VORTEX EYE (textures/enemies/enemy_vortex_eye.png)
+    HP: 18     Attack: 8/hit      Speed: every turn              Height: 0.55× wall
+    Role: fast ranged harasser that punishes open sightlines.
+    Visual: rendered higher (hover offset = 0.25× full wall height).
+
+## Combat Integration
+
+Player damages enemies:
+  Shotgun.marchShot() walks facing tiles; on first tile with a living enemy,
+  enemyHitTarget.applyDamageTo(enemy, damageAtDistance(dist)) is called.
+  On HP <= 0: enemy removed from list, corpse 'm' stamped into level grid.
+
+Enemy damages player:
+  Player.applyDamage(amount) is called in EnemyManager.phaseB().
+  Player.health starts at PLAYER_MAX_HEALTH (100).
+  Player.isDead() returns true when health reaches 0.
+
+## Rendering
+
+EnemyRenderer (render/EnemyRenderer.java):
+  - Mirrors PropRenderer: same projection math, same painter's-algorithm depth sort,
+    same per-column z-buffer occlusion test, zero per-frame allocations.
+  - Textures loaded from asset paths at construction; procedural fallbacks if absent.
+  - DORMANT enemies rendered with shade *= DORMANT_SHADE_DAMPEN (0.7) — visibly darker.
+  - VORTEX EYE drawBottom raised by VORTEX_EYE_HOVER_OFFSET_FRACTION (0.25) × lineHeight.
+  - Inserted in World.render() after propRenderer.render(), before weaponHudRenderer.render().
+
+## Tick Wiring
+
+  EnemyManager is driven by EnemyTurnSubscriber, a package-private adapter in world/.
+  World constructor registers two subscribers on TickEventBus (in order):
+    1. new WeaponReloadSubscriber(inventory)      — reload advances first
+    2. new EnemyTurnSubscriber(enemyManager, gameState) — enemies act second
+  World sets: playerController.setTickEventBus(tickEventBus)
+  World sets: playerController.setEnemyManager(enemyManager)  — for weapon hit-target only
+  PlayerController.finishAction(true, TickCause.MOVE or FIRE) fires the bus.
+  EnemyTurnSubscriber calls enemyManager.takeTurn(playerTile, player)
+    and sets gameState.redAlert = true when anyAlerted().
+
+  See docs/tick-system.txt for the full tick architecture.
+
+## Key Classes
+
+  enemy/EnemyType.java      — enum: CORRUPTOR, VORTEX_EYE (config per type)
+  enemy/EnemyState.java     — enum: DORMANT, ALERTED, CHASING, ATTACKING
+  enemy/Enemy.java          — runtime instance: tile pos, health, state, turn counter
+  enemy/EnemyManager.java   — simulation core + EnemyHitTarget implementation
+  render/EnemyRenderer.java — billboard renderer (mirrors PropRenderer)
+  entity/EnemyHitTarget.java — narrow interface so Weapon.fire() can hit enemies
+
+## New Constants (util/Constants.java)
+
+  ENEMY_CORRUPTOR_PATH / ENEMY_VORTEX_EYE_PATH
+  ALERT_RADIUS_TILES (4)         CHAIN_ALERT_RADIUS_TILES (5)
+  LOS_MAX_RANGE_TILES (16)       PLAYER_MAX_HEALTH (100)
+  CORRUPTOR_MAX_HEALTH (60)      CORRUPTOR_ATTACK_DAMAGE (14)
+  CORRUPTOR_MOVE_EVERY_N_TURNS (2)  CORRUPTOR_HEIGHT_MULTIPLIER (0.95)
+  VORTEX_EYE_MAX_HEALTH (18)    VORTEX_EYE_ATTACK_DAMAGE (8)
+  VORTEX_EYE_RANGE_TILES (5)    VORTEX_EYE_KITE_MIN_TILES (2)
+  VORTEX_EYE_HEIGHT_MULTIPLIER (0.55)  VORTEX_EYE_HOVER_OFFSET_FRACTION (0.25)
+  DORMANT_SHADE_DAMPEN (0.7)    MAX_ENEMY_DRAW_DISTANCE_TILES (14)
+  STUCK_TURNS_BEFORE_WIGGLE (2) ENEMY_GREEDY_WIGGLE_ENABLED (true)
+
+## New GameMath Methods
+
+  chebyshevDistanceTiles(fromC, fromR, toC, toR) — max(|dc|,|dr|)
+  manhattanDistanceTiles(fromC, fromR, toC, toR) — |dc|+|dr|
+  tileLineOfSightClear(fromC, fromR, toC, toR, TileSolidTest) — parametric LOS walk
+  TileSolidTest — @FunctionalInterface nested in GameMath
+
+## Open Questions / Future Work
+
+  1. Smooth enemy movement: v1 snaps; future polish pass can lerp renderX/renderY.
+  2. Game-over flow: player.isDead() detected but no death screen yet.
+  3. Corpse rendering: stamped into level grid but PropRenderer doesn't pick up
+     runtime-added cells (it scans only at construction time). V1 enemies vanish.
+  4. Enemy doors: enemies treat closed doors as walls (player can use doors defensively).
+  5. Health HUD: HEALTH readout not yet added to WeaponHudRenderer.
+  6. Mini-map enemy dots: not yet added to LevelRenderer.

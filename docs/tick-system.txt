@@ -1,0 +1,167 @@
+# Tick Event System — Reference for Agents & Developers
+
+## What Is a Tick?
+
+A tick is one unit of in-game time. The world (enemies, weapons, hazards) advances
+by exactly one step per tick. Only player-initiated actions cause ticks — the game
+is otherwise frozen. This is the same model as Doom RPG.
+
+## Actions That Cause a Tick
+
+  MOVE  — player completes a tile step (W, S, Q, strafe-right F).
+           Blocked moves (wall, closed door, prop) never reach finishAction and never tick.
+  FIRE  — player fires a weapon (SPACE). Always ticks, even if the shot hits a wall.
+
+## Actions That Do NOT Cause a Tick
+
+  ROTATE   — A/D rotate 90°. Purely cosmetic facing change. No world advance.
+  INTERACT — E opens a door. Door state changes but enemies do not act.
+
+## Tick Lifecycle (one frame)
+
+  1. Player is IDLE. PlayerController.pollInput() reads input.
+  2. Key pressed → PlayerController enters MOVING, FIRING, ROTATING, or INTERACTING.
+  3. Animation plays (PLAYER_MOVE_DURATION=0.12s, PLAYER_FIRE_DURATION=0.14s, etc.).
+     All input blocked during this window.
+  4. Animation completes → finishAction(causesTick, cause) called:
+       - MOVING   → finishAction(true,  TickCause.MOVE)
+       - FIRING   → finishAction(true,  TickCause.FIRE)
+       - ROTATING → finishAction(false, null)
+       - INTERACT → finishAction(false, null)
+  5. If causesTick: tickEventBus.fireTick(playerTileColumn, playerTileRow, player, cause).
+  6. TickEventBus iterates its subscriber array (by index, no allocation) and calls
+     onTick(context) on each subscriber in registration order.
+  7. Each subscriber acts (see Dispatch Order below).
+  8. fireTick() returns. PlayerController is back in IDLE. Next input can be read.
+
+  Key guarantee: enemy simulation runs synchronously inside fireTick(), inside
+  finishAction(), inside the same update() frame. The player structurally cannot
+  act until every subscriber has finished.
+
+## TickEventBus (world/TickEventBus.java)
+
+Fixed-capacity subscriber registry. Zero allocations per tick.
+
+  Capacity:     Constants.MAX_TICK_SUBSCRIBERS = 16
+  Backing store: TickSubscriber[] array, iterated by int index
+  Context:       One TickContext instance reused for the lifetime of the bus
+  Thread:        Update thread only; not thread-safe
+
+  API:
+    subscribe(TickSubscriber)   — register in dispatch order; call only during setup
+    unsubscribe(TickSubscriber) — compact-removes; never call from inside onTick()
+    fireTick(column, row, player, cause) — dispatch one tick to all subscribers
+
+## TickSubscriber Interface (world/TickSubscriber.java)
+
+  public interface TickSubscriber {
+      void onTick(TickContext context);
+  }
+
+  Rules for implementations:
+    - Must NOT allocate.
+    - Must NOT block (no I/O, no sleep).
+    - Must NOT call tickEventBus.fireTick() — re-entrant dispatch is undefined.
+    - Must NOT retain the TickContext reference beyond the onTick() call.
+
+## TickContext (world/TickContext.java)
+
+  One instance reused per bus. Fields are mutated before each dispatch.
+  Read only; never store.
+
+    getPlayerTileColumn() — tile column of player at tick time
+    getPlayerTileRow()    — tile row of player at tick time
+    getPlayer()           — Player reference (for damage application, etc.)
+    getTickIndex()        — monotonically increasing long; starts at 0
+    getCause()            — TickCause.MOVE or TickCause.FIRE
+
+## TickCause (world/TickCause.java)
+
+  MOVE — fired when player completes a tile step
+  FIRE — fired when player completes a weapon fire action
+
+## Dispatch Order (World constructor registration sequence)
+
+  1. WeaponReloadSubscriber — advances the equipped weapon's reload counter.
+     Runs first so the clip is restored before enemies take their turn on that
+     same tick (otherwise the marine would be unarmed for one extra tick).
+  2. EnemyTurnSubscriber   — drives EnemyManager.takeTurn(); sets redAlert flag.
+  3. (future subscribers appended here — e.g. HazardSubscriber, TimerSubscriber)
+
+  ORDER IS A BALANCE LEVER. Changing it changes when effects resolve relative to
+  each other. Document any reordering in this file and in the commit message.
+
+## Existing Subscribers
+
+WeaponReloadSubscriber (world/WeaponReloadSubscriber.java)
+  - Calls inventory.getEquippedWeapon().onTick() each tick.
+  - Weapon.onTick() decrements ticksRemaining while RELOADING; restores clip at 0.
+  - Reload advances on both MOVE and FIRE ticks — any action the player takes
+    is one beat the weapon uses to reload.
+
+EnemyTurnSubscriber (world/EnemyTurnSubscriber.java)
+  - Calls enemyManager.takeTurn(column, row, player).
+  - After takeTurn returns: if anyAlerted() → sets gameState.redAlert = true.
+  - EnemyManager is unmodified; this adapter keeps it ignorant of the bus.
+
+## How to Add a New Subscriber
+
+  1. Create a class implementing TickSubscriber in the world package (if it adapts
+     an existing manager) or in the relevant package (if self-contained).
+  2. Do not allocate inside onTick(). Use constructor-time pre-allocation.
+  3. In World constructor, subscribe AFTER existing subscribers unless order matters.
+     Document the chosen position in this file.
+  4. If the subscriber wraps a manager from another package, make it a package-private
+     adapter class (like EnemyTurnSubscriber) to avoid cross-package bus dependency.
+
+Example skeleton:
+  final class HazardTickSubscriber implements TickSubscriber {
+      private final HazardManager hazardManager;
+      HazardTickSubscriber(HazardManager m) { this.hazardManager = m; }
+      @Override public void onTick(TickContext context) {
+          hazardManager.stepHazards(context.getPlayerTileColumn(),
+                                    context.getPlayerTileRow());
+      }
+  }
+
+  // In World constructor, after EnemyTurnSubscriber:
+  tickEventBus.subscribe(new HazardTickSubscriber(hazardManager));
+
+## Weapon Reload — Tick vs Real-Time Separation
+
+  Weapon has two update paths:
+    update(deltaTime)  — every frame; advances muzzle-flash timer (real-time).
+    onTick()           — once per tick (move OR fire); advances reload countdown.
+
+  These must NEVER decrement each other's counters. update() never touches
+  ticksRemaining. onTick() never touches fireFlashTimerSeconds.
+
+  Practical result: the reload countdown advances by 1 each time the player does
+  anything that costs a tick. The player cannot "skip" a reload by rotating in
+  place — rotations are free and do not call onTick().
+
+## Future Extension: Async Enemy Turns
+
+  Currently enemy turns are synchronous (all in one update() frame). If enemy turns
+  are ever animated:
+    1. Add boolean worldBusy to World (or TickEventBus).
+    2. PlayerController.pollInput() returns early while worldBusy is true.
+    3. EnemyTurnSubscriber.onTick() sets worldBusy = true before queuing animations.
+    4. When all enemy animations drain, worldBusy = false.
+  The bus dispatch point (finishAction → fireTick) is the single place to add
+  this gate — no other class needs to change.
+
+## Key Constants (util/Constants.java)
+
+  MAX_TICK_SUBSCRIBERS = 16    generous fixed ceiling; 2 slots used at launch
+
+## Key Classes
+
+  world/TickSubscriber.java          — interface
+  world/TickContext.java             — per-tick data snapshot (reused)
+  world/TickCause.java               — enum MOVE | FIRE
+  world/TickEventBus.java            — bus: subscribe, unsubscribe, fireTick
+  world/WeaponReloadSubscriber.java  — adapter: Weapon.onTick()
+  world/EnemyTurnSubscriber.java     — adapter: EnemyManager.takeTurn()
+  input/PlayerController.java        — fires ticks via finishAction(bool, cause)
+  entity/Weapon.java                 — onTick() advances reload counter

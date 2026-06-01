@@ -1,0 +1,637 @@
+STATUS: IMPLEMENTED
+CATEGORY: Combat / Visual
+TITLE: Enemy Hit Impact Effects — Maximum Satisfaction
+CREATED: 2026-05-30
+---
+
+OVERVIEW
+========
+A unified, purely-cosmetic "juice" layer that fires on every enemy hit and every
+enemy kill: screen shake, floating damage numbers, hit-spark particles, a death
+burst, a full-screen kill flash, and a HUD face-box reaction. All effects are
+real-time (wall-clock) overlays driven by a single ImpactEffectSystem fed by the
+two existing combat hooks (EnemyManager.applyDamageTo and its private killEnemy).
+Nothing here touches turn logic, collision, LOS, or input — it only makes the
+moment of impact feel brutal and readable. No new textures: everything is
+ShapeRenderer geometry, the existing white-pixel texture, or the BitmapFont that
+HudRenderer already owns.
+
+This belongs here because combat is mechanically complete but emotionally flat —
+the existing white sprite flash and floating health bar tell you a hit landed,
+but nothing makes the hit FEEL like it landed. Doom RPG / Hades-grade feedback is
+the difference between "I clicked and a number changed" and "I just deleted that
+thing." This system is the deliberate escalation: hits are taps, the kill is the
+payoff.
+
+
+GAMEPLAY LOOP
+=============
+Event-driven, not input-driven. The player never presses a key for it.
+
+ON HIT (non-lethal):
+  1. Player fires → weapon resolves → EnemyManager.applyDamageTo(enemy, amount)
+     reduces health but health stays > 0.
+  2. applyDamageTo() calls impactEffectSystem.onEnemyHit(enemy, amount).
+  3. onEnemyHit() does, in one call (pool reuse, no allocation):
+       a. screen-shake impulse of magnitude SHAKE_HIT_MAGNITUDE.
+       b. one floating damage number "-<amount>" anchored to the enemy.
+       c. HIT_PARTICLE_COUNT spark particles ejecting from the enemy.
+     (The white sprite flash is ALREADY handled by enemy.triggerHitFlash() in the
+     existing applyDamageTo — keep that call; this system adds to it.)
+  4. Each render frame, impactEffectSystem.update(deltaTime) ages all live
+     effects; ImpactEffectRenderer draws them; expired effects return to pools.
+     No turn is consumed.
+
+ON KILL (lethal):
+  1. Damage drops health to <= 0 → existing code calls private killEnemy(enemy)
+     (removes from list, clears occupancy, stamps 'm' corpse decal).
+  2. applyDamageTo, on the lethal branch, then calls
+     impactEffectSystem.onEnemyKilled(enemy, amount) — the killing blow amount.
+     The Enemy object is still intact (killEnemy only mutates the manager's list
+     and occupancy grid), so its tileColumn/tileRow/type are valid to snapshot.
+  3. onEnemyKilled() spawns, in one call:
+       a. large screen-shake impulse SHAKE_KILL_MAGNITUDE.
+       b. a death burst (expanding ring + white-hot core + heavy debris) at the
+          enemy screen position.
+       c. a damage number in KILL colour + larger scale ("-24!").
+       d. a brief full-screen kill flash (warm-white screen-edge brightening).
+       e. a HUD face-box kill pulse (see HUD KILL FEEDBACK).
+  4. Effects continue to render and age out after the enemy is gone — they are
+     decoupled snapshots, so removing the enemy mid-effect is safe.
+
+DECISION-FREE BY DESIGN: this is reward, not mechanic. It shapes upstream
+decisions — punchier, clearer feedback lets the player read damage falloff,
+multi-hits, and kills at a glance, informing target priority and ammo economy.
+
+
+PLAYER EXPERIENCE
+=================
+- On hit: the world jolts a hair, a red "-17" pops off the enemy and floats up, a
+  spray of dark-red sparks kicks out toward the camera. The enemy is clearly
+  "taking it."
+- On kill: the screen kicks hard, a warm flash snaps and decays, the enemy's
+  on-screen position erupts in debris and an expanding shock ring, a bold "-24!"
+  punches out, and the marine's HUD face flashes a bloody snarl. The kill reads
+  as an EVENT, distinct from a hit.
+- The escalation from hit→kill is the core emotional beat. Big enemies dying feel
+  bigger (burst scales with enemy height multiplier).
+
+Readability rule: effects must never obscure remaining live enemies or the line
+of fire. Damage numbers are small, sparks short-lived, the kill flash brief and
+edge-biased so the centre stays legible.
+
+
+TECHNICAL NOTES
+===============
+This is the load-bearing section. Follow exactly. All identifiers below were
+VERIFIED against the current source on 2026-05-30.
+
+--- VERIFIED CURRENT CODE (do not contradict) ---
+
+  EnemyManager (enemy package):
+    @Override public void applyDamageTo(Object enemyObject, int amount) {
+        Enemy enemy = (Enemy) enemyObject;
+        enemy.applyDamage(amount);
+        enemy.triggerHitFlash();
+        if (!enemy.isAlive()) { killEnemy(enemy); }
+    }
+    public void advanceHitFlash(float deltaTime) { ... }   // called per frame by World
+    public void takeTurn(int playerColumn, int playerRow, Player player) { ... }
+    private void killEnemy(Enemy enemy) { ... }            // removal + 'm' stamp
+
+  Enemy (enemy package) — RELEVANT MEMBERS (note: fields are public):
+    public final EnemyType type;
+    public int   tileColumn, tileRow;       // authoritative grid position
+    public int   health;
+    public float hitFlashTimerSeconds;
+    public boolean isAlive();
+    public void   applyDamage(int amount);
+    public void   triggerHitFlash();
+    public void   advanceHitFlash(float deltaTime);
+    public float  getHitFlashStrength();
+    public float  worldCenterX();           // tileColumn*CELL_SIZE + CELL_SIZE/2
+    public float  worldCenterY();           // tileRow   *CELL_SIZE + CELL_SIZE/2
+
+  IMPORTANT: there is NO Enemy.getMaxHealth() exposed here and NO
+  getHeightMultiplier(). Max health and height come from EnemyType (see below).
+
+  WallRenderer (render package): owns the shared SpriteBatch and a
+    private final Texture whitePixelTexture (a 1×1 white pixel). It exposes
+    getZBufferAt(int screenColumn). Add a getter for whitePixelTexture (or build a
+    fresh shared 1×1 white Texture in World and pass it to the effect renderer).
+
+  HudRenderer (hud package): ALREADY owns a BitmapFont `font` (default LibGDX
+    font, linear-filtered) and a SpriteBatch, and already draws scaled numeric
+    readouts via font.getData().setScale(...) + font.draw(...). Damage numbers
+    CAN therefore reuse a BitmapFont (no new dependency, no FreeType). See the
+    damage-number pass for the two rendering options.
+
+--- NEW CLASSES ---
+
+1) ge.tbegvadze.toon3d.render.ImpactEffectSystem
+   Owns all live-effect state and the object pools. Pure simulation + spawning;
+   does NOT draw. Holds no GPU resources (no dispose needed). Lifecycle owned by
+   World: created in World ctor/create(), updated each frame before rendering.
+
+   Fields (ALL pre-allocated, fixed-size — NO per-frame allocation):
+     // screen shake — single accumulator, not a pool
+     float shakeTimeRemaining, shakeDuration, shakeMagnitude;
+     float shakeOffsetX, shakeOffsetY;       // recomputed each update()
+     // damage numbers
+     DamageNumber[] damageNumbers = new DamageNumber[MAX_DAMAGE_NUMBERS];
+     // hit-spark particles (shared pool for hit sparks AND death debris)
+     Particle[] particles = new Particle[MAX_PARTICLES];
+     // death bursts (expanding rings + core)
+     DeathBurst[] deathBursts = new DeathBurst[MAX_DEATH_BURSTS];
+     // full-screen kill flash — single accumulator
+     float killFlashTimeRemaining;
+     // HUD face-box kill pulse — single accumulator
+     float faceKillPulseTimeRemaining;
+   Construct all array elements eagerly in the constructor (each struct active=false).
+
+   Nested static structs (public mutable fields; one reset() each, no logic):
+     static final class DamageNumber {
+         boolean active;
+         float worldX, worldY;       // enemy worldCenterX/Y at spawn (re-projected
+                                     //   every frame so the number tracks turns)
+         float billboardTopOffsetY;  // world-units above worldCenter where the
+                                     //   number anchors (≈ sprite top; see anchor)
+         float ageSeconds, lifeSeconds;
+         int amount; boolean isKill;
+         float screenDriftX;
+     }
+     static final class Particle {
+         boolean active;
+         float screenX, screenY;         // current screen position (world units)
+         float velocityX, velocityY;     // screen-space velocity (world units/sec)
+         float ageSeconds, lifeSeconds;
+         float red, green, blue;
+         float size;                     // half-extent in world units
+     }
+     static final class DeathBurst {
+         boolean active;
+         float screenX, screenY;
+         float ageSeconds, lifeSeconds;
+         float maxRadius;                // ring final radius (world units)
+     }
+
+   Methods:
+     void onEnemyHit(Enemy enemy, int amount)
+     void onEnemyKilled(Enemy enemy, int killingBlowAmount)
+     void update(float deltaTime)         // ages everything; recomputes shake
+     // setPlayerState(...) — World pushes the current camera basis each frame so
+     //   spawn-time projection works. Mirror EnemyRenderer's setPlayerState
+     //   signature: (playerX, playerY, dirX, dirY, planeX, planeY) or whatever
+     //   EnemyRenderer already takes. Store these; use for projection.
+     float getShakeOffsetX(); float getShakeOffsetY();
+     float getKillFlashAlpha();           // 0..1 * KILL_FLASH_PEAK_ALPHA
+     float getFaceKillPulse01();          // 0..1 remaining fraction (HudRenderer reads)
+     // accessors for the renderer: expose the three arrays package-private, OR
+     //   pass them into ImpactEffectRenderer.render(...). Prefer passing the
+     //   ImpactEffectSystem reference to the renderer and adding package-private
+     //   getters.
+
+   SCREEN PROJECTION of enemy world position:
+   Damage numbers live ~0.75-1.05s, during which the player may rotate — they
+   MUST track the camera. So store worldX/worldY and RE-PROJECT every frame using
+   the SAME billboard math EnemyRenderer uses. Add to GameMath:
+     /* Formula: world-point → screen column + depth (camera-plane projection)
+      * Derivation: transform (point - player) into camera basis:
+      *   relativeX = pointX - playerX;  relativeY = pointY - playerY;
+      *   invDet = 1 / (planeX*dirY - dirX*planeY);
+      *   transformX = invDet * (dirY*relativeX - dirX*relativeY);   // lateral
+      *   transformDepth = invDet * (-planeY*relativeX + planeX*relativeY); // depth
+      *   screenColumnX = (WORLD_WIDTH/2) * (1 + transformX / transformDepth);
+      *     NOTE: confirm sign convention against EnemyRenderer's existing
+      *     projection (this project uses the Y-up cameraPlaneParameter
+      *     1 - 2*col/W); if EnemyRenderer mirrors X, mirror here identically so
+      *     numbers land exactly on sprites.
+      * Edge cases: transformDepth <= PROP_BEHIND_PLAYER_EPSILON_TILES*CELL_SIZE
+      *     → behind player → mark effect inactive / skip draw (no divide).
+      */
+     GameMath.projectWorldPointToScreen(worldX, worldY, playerX, playerY,
+         dirX, dirY, planeX, planeY, float[] out)  // out[0]=screenColumnX,
+                                                    // out[1]=depth (world units)
+   Sparks and bursts FREEZE their screen position at spawn (cheap, fine for
+   <0.7s). To get the spawn screen position, call the same projection once in
+   onEnemyHit/onEnemyKilled.
+   The vertical anchor (screenY) for a number = top of the enemy's projected
+   billboard, the SAME value EnemyRenderer computes for the floating health bar.
+   Reuse that computation; do not re-derive ad hoc. As a fallback, anchor at
+   screenY = horizon + (billboardHeight * 0.6) where billboardHeight =
+   (WORLD_HEIGHT / depthInTiles) * enemyHeightMultiplier.
+
+2) ge.tbegvadze.toon3d.render.ImpactEffectRenderer  (implements Renderable, Disposable)
+   Draws all effects EXCEPT screen shake (shake is applied by World to the view
+   passes). Owns its OWN ShapeRenderer (dispose it). Reuses the shared SpriteBatch
+   and the HudRenderer-style BitmapFont approach for numbers — see PASS 2 options.
+   Owns NO new textures.
+
+   render() passes, in this order (so bursts sit under numbers):
+     PASS 1 (ShapeRenderer Filled, alpha blend ON): hit-spark particles + death
+            debris squares + death-burst rings + cores.
+     PASS 2 (damage numbers): EITHER
+            (2a, DEFAULT) SpriteBatch + a BitmapFont — same technique HudRenderer
+                 uses: font.getData().setScale(scale); font.setColor(r,g,b,a);
+                 font.draw(batch, text, drawX, drawY). The renderer may either
+                 hold its own `new BitmapFont()` (dispose it) or accept a shared
+                 BitmapFont from World. Reset scale to 1 and color to white after
+                 the pass. Use a pre-allocated StringBuilder field for the text
+                 (NO per-frame String concatenation: clear() then append '-',
+                 append(amount), and append('!') if isKill — StringBuilder.append
+                 (int) does not allocate a String).
+            (2b, alt) procedural 5×7 pixel digits via ShapeRenderer (no font, no
+                 SpriteBatch) — see OPEN QUESTIONS #3. Use only if you want zero
+                 font dependency; (2a) is simpler since the font already exists.
+     PASS 3 (ShapeRenderer Filled, ADDITIVE blend): full-screen kill flash drawn
+            as four screen-edge rectangles (vignette-inverse). Restore default
+            blend (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) at end of pass.
+   Each pass begins/ends its batch ONCE. Iterate fixed arrays, skip !active.
+   IMPORTANT: set ShapeRenderer.setProjectionMatrix to the same camera.combined
+   the other renderers use, and (for additive) Gdx.gl.glBlendFunc(GL_SRC_ALPHA,
+   GL_ONE) wrapped in ShapeRenderer begin/end with blending enabled.
+
+   Z-OCCLUSION: enemy sprites are z-buffer-occluded billboard columns. Default
+   rule: effects draw UNCONDITIONALLY on top — they are <0.7s flourishes from a
+   target the player just shot (which was in front of a wall). DO NOT per-pixel
+   z-test particles. Optional future polish: compare an effect's stored depth
+   against WallRenderer.getZBufferAt(screenColumn) and skip if depth > zbuffer.
+   Default OFF.
+
+--- MODIFIED CLASSES ---
+
+3) ge.tbegvadze.toon3d.enemy.EnemyManager
+   - Add field: private final ImpactEffectSystem impactEffectSystem; inject via
+     the constructor (add the parameter; World constructs EnemyManager).
+   - Rewrite applyDamageTo so hit/kill effects never double-fire and the kill
+     captures the killing blow:
+         @Override public void applyDamageTo(Object enemyObject, int amount) {
+             Enemy enemy = (Enemy) enemyObject;
+             enemy.applyDamage(amount);
+             enemy.triggerHitFlash();
+             if (!enemy.isAlive()) {
+                 killEnemy(enemy);                                 // existing
+                 impactEffectSystem.onEnemyKilled(enemy, amount);  // killing blow
+             } else {
+                 impactEffectSystem.onEnemyHit(enemy, amount);     // non-lethal
+             }
+         }
+     onEnemyKilled is called AFTER killEnemy: killEnemy only mutates the manager's
+     list/occupancy; the Enemy instance and its tileColumn/tileRow/type stay
+     valid for the snapshot. If killEnemy ever begins recycling/nulling Enemy
+     objects, move onEnemyKilled BEFORE killEnemy. onEnemyKilled only READS.
+   - WORLD COORDS: use enemy.worldCenterX() / worldCenterY() (already exist).
+   - HEIGHT MULTIPLIER (for burst scaling): the constant is on the enemy type.
+     Add EnemyType.getHeightMultiplier() returning the per-type constant
+     (CORRUPTOR_HEIGHT_MULTIPLIER ≈ 0.95, VORTEX_EYE_HEIGHT_MULTIPLIER ≈ 0.55),
+     and EnemyType.getMaxHealth() (CORRUPTOR_MAX_HEALTH, VORTEX_EYE_MAX_HEALTH)
+     if not already present. Do NOT hardcode these numbers in the effect system.
+
+4) ge.tbegvadze.toon3d.world.World
+   - Instantiate ImpactEffectSystem and ImpactEffectRenderer in create(); pass
+     ImpactEffectSystem into the EnemyManager constructor; dispose the renderer.
+   - Each frame, BEFORE rendering: impactEffectSystem.setPlayerState(...) with the
+     current camera basis (same values pushed to EnemyRenderer), then
+     impactEffectSystem.update(deltaTime). (advanceHitFlash already runs per frame;
+     leave it.)
+   - SCREEN SHAKE APPLICATION: shake must move the 3D view + weapon, NOT the HUD.
+     The view renderers draw through the shared SpriteBatch / ShapeRenderer using
+     camera.combined. Cleanest approach:
+        * Build the normal OrthographicCamera matrix.
+        * For the SHAKEN passes, set the SpriteBatch (and any ShapeRenderer)
+          projection matrix to a copy translated by (shakeOffsetX, shakeOffsetY):
+          take camera.combined into a pre-allocated Matrix4 field, .translate(
+          shakeOffsetX, shakeOffsetY, 0), and feed that to the view renderers.
+          Pre-allocate the Matrix4 in create() (NO per-frame allocation).
+        * After the view passes, restore the un-translated camera.combined for
+          the mini-map and HUD passes (they must NOT shake).
+     If a view renderer does not honor an external projection matrix, fall back to
+     adding (shakeOffsetX, shakeOffsetY) to its draw origin via a small offset
+     setter. Verify WallRenderer/FloorCeilingRenderer/PropRenderer/EnemyRenderer
+     each use the shared batch's projection (they should).
+     WEAPON HUD: shake the weapon sprite too (sells recoil) — apply a SMALLER
+     offset (shakeOffset * WEAPON_SHAKE_FACTOR), added to the existing recoil
+     offset, NOT to the HUD panels.
+   - NEW RENDER ORDER (insert ImpactEffectRenderer after EnemyRenderer):
+        1 FloorCeiling  2 Wall  3 Prop  4 Enemy   [all SHAKEN]
+        4.5 ImpactEffectRenderer (sparks, bursts, numbers, kill flash) [SHAKEN
+            for sparks/bursts/numbers; the kill-flash edge rects may be drawn
+            UN-shaken so the frame stays glued to screen edges — draw the kill
+            flash in a small separate un-shaken sub-pass if edge gaps appear]
+        5 WeaponHud [SHAKEN by WEAPON_SHAKE_FACTOR]
+        6 MiniMap   [un-shaken]  7 Player dot [un-shaken]  8 Hud [un-shaken]
+
+5) ge.tbegvadze.toon3d.hud.HudRenderer  (face-box kill reaction)
+   - HudRenderer reads impactEffectSystem.getFaceKillPulse01() each frame (inject
+     the system reference, or have World pass the pulse value into render()).
+   - When pulse > 0, the face box (placed via the existing HUD_FACE_BOX_* layout):
+       (a) gets a blood-red ADDITIVE tint overlay (filled rect in the face box,
+           alpha = FACE_KILL_TINT_PEAK_ALPHA * pulse).
+       (b) if a "grin/snarl" face frame exists, swap to it for the pulse duration;
+           the project currently draws the face procedurally, so instead overlay
+           two short upward ShapeRenderer.Line marks at the mouth region (a snarl)
+           and briefly brighten the eyes. Classic Doom face energy.
+   - Reuse existing HUD_FACE_BOX_* constants for placement; add the snarl marks
+     only inside that box.
+
+6) ge.tbegvadze.toon3d.util.GameMath
+   - Add projectWorldPointToScreen(...) (above) with the mandated comment block.
+   - Add easing helpers, each with the /* Formula / Derivation / Edge cases */
+     block, pure, no LibGDX state:
+        easeOutCubic(float t)  = 1 - (1-t)^3
+        smoothstep(float edge0, float edge1, float x)
+        screenShakeTrauma(float remaining, float duration) = (remaining/duration)^2
+
+--- MATH / ALGORITHMS ---
+
+SCREEN SHAKE (trauma model):
+  Impulse: shakeMagnitude = max(shakeMagnitude, magnitude); // never cancel a
+           bigger ongoing shake; shakeDuration = max(shakeDuration, duration);
+           shakeTimeRemaining = max(shakeTimeRemaining, duration).
+  update(deltaTime):
+     shakeTimeRemaining = max(0, shakeTimeRemaining - deltaTime);
+     if (shakeTimeRemaining <= 0) { shakeOffsetX = shakeOffsetY = 0;
+                                    shakeMagnitude = 0; return; }
+     float progress  = shakeTimeRemaining / shakeDuration;       // 1→0
+     float trauma    = progress * progress;                      // quadratic
+     float amplitude = shakeMagnitude * trauma;
+     shakeOffsetX = amplitude * MathUtils.random(-1f, 1f);
+     shakeOffsetY = amplitude * MathUtils.random(-1f, 1f);
+  Quadratic decay (trauma²) snaps hard then settles (Squirrel Eiserloh / GDC).
+  Pure-noise offset reads as "impact" not "vibration." (Sine-rattle is an
+  optional variant via SHAKE_FREQUENCY_HZ.)
+
+DAMAGE NUMBER motion:
+  Spawn: ageSeconds=0; lifeSeconds = isKill ? DMG_NUMBER_KILL_LIFE : DMG_NUMBER_LIFE;
+         screenDriftX = MathUtils.random(-DMG_NUMBER_DRIFT, DMG_NUMBER_DRIFT).
+  Each frame:
+     ageSeconds += deltaTime; if (ageSeconds >= lifeSeconds) { active=false; continue; }
+     project worldX,worldY → baseScreenX (and depth); if depth behind → active=false;
+     baseScreenY = enemy billboard top (see anchor note);
+     float t = ageSeconds / lifeSeconds;                          // 0→1
+     float riseY = DMG_NUMBER_RISE_PIXELS * easeOutCubic(t);
+     float drawX = baseScreenX + screenDriftX * t;
+     float drawY = baseScreenY + riseY;
+     float alpha = 1f - smoothstep(DMG_NUMBER_FADE_START, 1f, t); // fade late
+     float pop   = 1f + DMG_NUMBER_POP * (1f - easeOutCubic(Math.min(1f, t * 8f)));
+     float scale = (isKill ? DMG_NUMBER_KILL_SCALE : DMG_NUMBER_SCALE) * pop;
+     // birth "pop": oversized for the first ~1/8 of life, then settles.
+  Center the text horizontally: with BitmapFont, draw at drawX - (glyphWidth/2).
+  Compute glyphWidth via a pre-allocated GlyphLayout field (NOT a new one per
+  frame) OR approximate as digitCount * fontDigitWidth * scale to avoid GlyphLayout.
+
+HIT-SPARK PARTICLES (ballistic, screen space):
+  Spawn HIT_PARTICLE_COUNT at (screenX,screenY)=(baseScreenX, baseScreenY -
+  0.4*billboardHeight) (chest height). Per particle:
+     float angleRadians = MathUtils.random(0f, MathUtils.PI2);
+     float speed = MathUtils.random(HIT_PARTICLE_SPEED_MIN, HIT_PARTICLE_SPEED_MAX);
+     velocityX = cos(angleRadians) * speed;
+     velocityY = sin(angleRadians) * speed + HIT_PARTICLE_UPWARD_BIAS; // arc up
+     lifeSeconds = MathUtils.random(HIT_PARTICLE_LIFE_MIN, HIT_PARTICLE_LIFE_MAX);
+     size = MathUtils.random(HIT_PARTICLE_SIZE_MIN, HIT_PARTICLE_SIZE_MAX);
+     // colour: blood by default; with PARTICLE_FLECK_CHANCE use the bright fleck.
+  Each frame:
+     ageSeconds += deltaTime; if expired → active=false;
+     velocityY -= PARTICLE_GRAVITY * deltaTime;   // fall back down
+     screenX += velocityX * deltaTime; screenY += velocityY * deltaTime;
+     float t = ageSeconds / lifeSeconds;
+     float alpha = 1f - t*t;                       // ease-in fade
+     half-extent = size * (1f - 0.5f * t);
+     draw filled square (ShapeRenderer.rect(screenX-he, screenY-he, 2he, 2he)).
+  DEATH DEBRIS reuses Particle with DEATH_PARTICLE_COUNT, DEATH_PARTICLE_SPEED_*,
+  DEATH_PARTICLE_LIFE_*, DEATH_PARTICLE_SIZE_* — more, faster, bigger, longer.
+
+DEATH BURST (expanding ring + white-hot core):
+  scale = enemy height multiplier (Corruptor ≈0.95 → bigger; Vortex Eye ≈0.55).
+  maxRadius = DEATH_BURST_BASE_RADIUS * scale; lifeSeconds = DEATH_BURST_LIFE.
+  Each frame: t = ageSeconds/lifeSeconds (0→1).
+     RING: radius = maxRadius * easeOutCubic(t); ringAlpha = 1 - t; colour lerps
+       (DEATH_BURST_RING_START_* → DEATH_BURST_RING_END_*) by t (hot-orange→deep-
+       red). ShapeRenderer Filled has no annulus → draw DEATH_BURST_RING_SEGMENTS
+       small filled trapezoids around the circle using a PRE-COMPUTED unit-circle
+       cos/sin table (static float[DEATH_BURST_RING_SEGMENTS] built once in the
+       renderer constructor — NO per-frame trig, NO allocation). Ring band
+       thickness = DEATH_BURST_RING_THICKNESS * (1 - t).
+     CORE: a bright filled circle (ShapeRenderer.circle) that collapses fast:
+       coreRadius = maxRadius * 0.5f * (1 - easeOutCubic(Math.min(1f, t*3f)));
+       coreAlpha  = 1 - Math.min(1f, t*3f); colour = KILL_FLASH white-warm.
+  Draw burst with ADDITIVE blend for the glow, then restore default blend.
+
+FULL-SCREEN KILL FLASH (vignette-inverse, 4 edge rects):
+  On kill: killFlashTimeRemaining = max(killFlashTimeRemaining, KILL_FLASH_DURATION).
+  getKillFlashAlpha() = (killFlashTimeRemaining/KILL_FLASH_DURATION)^2 *
+                        KILL_FLASH_PEAK_ALPHA.
+  Draw (ADDITIVE) four filled rects along the screen edges, each
+  KILL_FLASH_EDGE_THICKNESS wide, colour (KILL_FLASH_RED/GREEN/BLUE), alpha=flash:
+     bottom: (0,0, WORLD_WIDTH, T); top: (0, WORLD_HEIGHT-T, WORLD_WIDTH, T);
+     left:   (0,0, T, WORLD_HEIGHT); right: (WORLD_WIDTH-T,0, T, WORLD_HEIGHT).
+  Centre stays clear → readable. (No radial-gradient texture needed.)
+
+HUD FACE KILL PULSE:
+  On kill: faceKillPulseTimeRemaining = max(current, FACE_KILL_PULSE_DURATION).
+  update: faceKillPulseTimeRemaining = max(0, ... - deltaTime).
+  getFaceKillPulse01() = faceKillPulseTimeRemaining / FACE_KILL_PULSE_DURATION.
+
+--- CONSTANTS TO ADD (Constants.java) ---
+  // Screen shake
+  public static final float SHAKE_HIT_MAGNITUDE          = 4f;    // world units
+  public static final float SHAKE_HIT_DURATION           = 0.10f;
+  public static final float SHAKE_KILL_MAGNITUDE         = 11f;
+  public static final float SHAKE_KILL_DURATION          = 0.22f;
+  public static final float WEAPON_SHAKE_FACTOR          = 0.45f; // gun shakes less
+  public static final float SHAKE_FREQUENCY_HZ           = 30f;   // sine-rattle variant
+
+  // Damage numbers
+  public static final int   MAX_DAMAGE_NUMBERS           = 24;
+  public static final float DMG_NUMBER_LIFE              = 0.75f;
+  public static final float DMG_NUMBER_KILL_LIFE         = 1.05f;
+  public static final float DMG_NUMBER_RISE_PIXELS       = 46f;
+  public static final float DMG_NUMBER_DRIFT             = 14f;   // ± screen units
+  public static final float DMG_NUMBER_SCALE             = 1.0f;  // BitmapFont scale
+  public static final float DMG_NUMBER_KILL_SCALE        = 1.7f;
+  public static final float DMG_NUMBER_POP               = 0.6f;  // birth oversize
+  public static final float DMG_NUMBER_FADE_START        = 0.55f; // t fade begins
+  // hit number colour (blood red)
+  public static final float DMG_NUMBER_HIT_RED           = 1.0f;
+  public static final float DMG_NUMBER_HIT_GREEN         = 0.30f;
+  public static final float DMG_NUMBER_HIT_BLUE          = 0.18f;
+  // kill number colour (hot white-orange)
+  public static final float DMG_NUMBER_KILL_RED          = 1.0f;
+  public static final float DMG_NUMBER_KILL_GREEN        = 0.85f;
+  public static final float DMG_NUMBER_KILL_BLUE         = 0.30f;
+  // if procedural-digit route (2b) is chosen instead of BitmapFont:
+  public static final float DMG_NUMBER_PIXEL             = 2.5f;  // 5x7 cell size
+
+  // Hit-spark particles
+  public static final int   MAX_PARTICLES                = 256;
+  public static final int   HIT_PARTICLE_COUNT           = 8;
+  public static final float HIT_PARTICLE_SPEED_MIN       = 90f;   // world units/sec
+  public static final float HIT_PARTICLE_SPEED_MAX       = 230f;
+  public static final float HIT_PARTICLE_UPWARD_BIAS     = 60f;
+  public static final float HIT_PARTICLE_LIFE_MIN        = 0.18f;
+  public static final float HIT_PARTICLE_LIFE_MAX        = 0.40f;
+  public static final float HIT_PARTICLE_SIZE_MIN        = 2.5f;  // half-extent
+  public static final float HIT_PARTICLE_SIZE_MAX        = 6f;
+  public static final float PARTICLE_GRAVITY             = 520f;  // world units/sec²
+  public static final float PARTICLE_BLOOD_RED           = 0.65f;
+  public static final float PARTICLE_BLOOD_GREEN         = 0.06f;
+  public static final float PARTICLE_BLOOD_BLUE          = 0.06f;
+  public static final float PARTICLE_FLECK_CHANCE        = 0.25f;
+  public static final float PARTICLE_FLECK_RED           = 1.0f;
+  public static final float PARTICLE_FLECK_GREEN         = 0.55f;
+  public static final float PARTICLE_FLECK_BLUE          = 0.25f;
+
+  // Death debris (reuses Particle pool, different spawn params)
+  public static final int   DEATH_PARTICLE_COUNT         = 22;
+  public static final float DEATH_PARTICLE_SPEED_MIN     = 140f;
+  public static final float DEATH_PARTICLE_SPEED_MAX     = 360f;
+  public static final float DEATH_PARTICLE_LIFE_MIN      = 0.35f;
+  public static final float DEATH_PARTICLE_LIFE_MAX      = 0.70f;
+  public static final float DEATH_PARTICLE_SIZE_MIN      = 4f;
+  public static final float DEATH_PARTICLE_SIZE_MAX      = 10f;
+
+  // Death burst ring + core
+  public static final int   MAX_DEATH_BURSTS             = 8;
+  public static final float DEATH_BURST_LIFE             = 0.45f;
+  public static final float DEATH_BURST_BASE_RADIUS      = 120f;  // scaled by height
+  public static final float DEATH_BURST_RING_THICKNESS   = 18f;
+  public static final int   DEATH_BURST_RING_SEGMENTS    = 40;
+  public static final float DEATH_BURST_RING_START_RED   = 1.0f;  // hot orange
+  public static final float DEATH_BURST_RING_START_GREEN = 0.70f;
+  public static final float DEATH_BURST_RING_START_BLUE  = 0.20f;
+  public static final float DEATH_BURST_RING_END_RED     = 0.85f; // deep red
+  public static final float DEATH_BURST_RING_END_GREEN   = 0.08f;
+  public static final float DEATH_BURST_RING_END_BLUE    = 0.08f;
+
+  // Full-screen kill flash (4 edge rects)
+  public static final float KILL_FLASH_DURATION          = 0.16f;
+  public static final float KILL_FLASH_PEAK_ALPHA        = 0.45f;
+  public static final float KILL_FLASH_EDGE_THICKNESS    = 90f;   // world units
+  public static final float KILL_FLASH_RED               = 1.0f;
+  public static final float KILL_FLASH_GREEN             = 0.92f;
+  public static final float KILL_FLASH_BLUE              = 0.80f;
+
+  // HUD face-box kill reaction
+  public static final float FACE_KILL_PULSE_DURATION     = 0.55f;
+  public static final float FACE_KILL_TINT_RED           = 1.0f;
+  public static final float FACE_KILL_TINT_GREEN         = 0.25f;
+  public static final float FACE_KILL_TINT_BLUE          = 0.20f;
+  public static final float FACE_KILL_TINT_PEAK_ALPHA    = 0.55f;
+
+
+VISUAL DESIGN
+=============
+- DAMAGE NUMBERS: reuse the chunky default BitmapFont HudRenderer already uses
+  (linear-filtered). Hit numbers blood-red ("-17"), small, rise ~46px and drift
+  slightly. Kill numbers larger (1.7×), hot white-orange, with a trailing "!"
+  ("-24!"), a sharp birth "pop" (oversized for ~1/8 of life then settles), longer
+  life. Fully opaque for the first half of life, then fade via smoothstep —
+  readability first, fade last.
+- HIT SPARKS: 8 tiny dark-red squares ejecting in a fan biased upward, arcing
+  under gravity, shrinking and fading. ~25% are bright orange "flecks" for a
+  spark/viscera mix. Filled ShapeRenderer quads ~3-6px. Lifetime <0.4s.
+- DEATH BURST: at the enemy's on-screen centre, a white-hot core circle that snaps
+  bright then collapses in ~0.15s, surrounded by an expanding shock RING that goes
+  hot-orange → deep-red as it grows and thins (additive). Plus a heavy spray of 22
+  larger, darker debris chunks (reused Particle pool) flying out faster and living
+  longer than hit sparks. Bigger enemies → bigger burst + more violent debris.
+- KILL FLASH: a brief warm-white brightening of the screen EDGES (four edge rects,
+  additive) — frames the kill like a camera-flash recoil without blinding the
+  centre. Peaks at 45% alpha, decays in 0.16s (quadratic).
+- HUD FACE BOX: on kill, the marine's face flashes a blood-red additive tint
+  inside the existing 88×88 face box (HUD_FACE_BOX_*), plus a procedural snarl
+  (two upward ShapeRenderer line marks at the mouth) and brightened eyes for
+  0.55s. Classic Doom face energy.
+- SCREEN SHAKE: world view (floor/wall/prop/enemy) and weapon sprite jolt; HUD
+  and mini-map stay rock-steady so health/ammo stay readable. Hit = 4px over
+  0.10s; kill = 11px over 0.22s.
+
+Palette intent: hits read "wet, red, small"; kills read "hot, white-orange, big."
+The colour-temperature escalation (red → white-orange) reinforces the payoff.
+
+
+BALANCE NOTES
+=============
+All numbers are PLACEHOLDERS — tune in playtest. Guidance:
+- SHAKE: 4px hit / 11px kill is a strong start at 1280×720. If rapid-fire (plasma
+  4-round clip) feels nauseating, drop SHAKE_HIT_MAGNITUDE to 2-3px and DURATION
+  to 0.07s — frequent small shakes accumulate into mush. The max-merge impulse
+  rule already prevents magnitude stacking.
+- DAMAGE NUMBER LIFE: 0.75s hit / 1.05s kill keeps the screen from filling during
+  sustained fire. Plasma penetration can hit 3 enemies in one shot → 3 numbers
+  same frame; MAX_DAMAGE_NUMBERS=24 is ample.
+- PARTICLE BUDGET: worst case ≈ DEATH_PARTICLE_COUNT(22) + several hits' sparks.
+  MAX_PARTICLES=256 covers ~10 simultaneous deaths. On overflow, the spawn loop
+  simply finds no free slot (graceful — no crash, no alloc).
+- KILL_FLASH_PEAK_ALPHA=0.45 is restrained (edge-only). Raise to 0.55 if weak,
+  drop to 0.30 if distracting.
+- BIG-ENEMY SCALING: burst radius scales with EnemyType height multiplier so a
+  boss death (large multiplier) feels huge — but see INTERACTIONS #4 (boss may
+  want a bespoke death; gate generic FX behind a flag).
+- OVERKILL (optional): if killingBlowAmount >> EnemyType.getMaxHealth(), scale
+  burst/debris up by a small overkill factor for gib satisfaction. Default OFF.
+
+
+INTERACTIONS
+============
+1. EXISTING WHITE HIT FLASH + HEALTH BAR (enemy-health-bars-and-hit-reactions,
+   IMPLEMENTED): COMPLEMENTARY. Keep enemy.triggerHitFlash() and advanceHitFlash()
+   as-is. Damage numbers reuse the SAME billboard-top anchor the health bar
+   already computes in EnemyRenderer — share that projection, do not duplicate.
+   On a lethal hit, the white flash fires for one frame before the enemy vanishes;
+   the kill burst dominates, so this is harmless (no need to suppress it).
+2. EMERGENCY RED ALERT PULSE (emergency-red-alert-pulse, IMPLEMENTED): the kill
+   flash and burst are additive and brief; they layer cleanly over the red tint.
+   CRITICAL: ImpactEffectRenderer must RESTORE the default blend func
+   (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) after its additive passes, or the alert
+   pulse and subsequent passes render wrong.
+3. WEAPON HUD / RECOIL (plasma + shotgun, IMPLEMENTED): apply screen shake to the
+   weapon sprite as an ADD to the existing WEAPON_RECOIL_OFFSET_Y, scaled by
+   WEAPON_SHAKE_FACTOR, so recoil and shake reinforce. The plasma blast / muzzle
+   flash is the "cause," hit sparks at the target are the "effect" — they bookend
+   the shot.
+4. HAZARD CHAIN REACTIONS / EXPLOSIVE BARRELS (hazard-chain-reactions; barrels
+   call applyDamageTo on enemies): a chain can kill several enemies in one frame →
+   multiple onEnemyKilled calls. The max-merge shake rule prevents an absurd
+   super-shake (it takes the max, not the sum); each burst/number gets its own
+   pooled slot. Desirable: a chain detonation should feel like a big multi-kill.
+   BOSS bespoke death: gate the generic kill FX behind an
+   Enemy/EnemyType flag (e.g. usesGenericDeathFx) so boss-encounter-facility-
+   overseer can opt out and run its own multi-stage death sequence.
+5. CORPSE STAMP ('m'): killEnemy stamps an 'm' corpse decal at the enemy tile. The
+   death burst fires at the SAME screen location, so the burst visually "becomes"
+   the corpse as it fades (~0.45s burst; the 'm' is drawn by PropRenderer next
+   frame). Smooth handoff.
+6. GLOBAL TICK EVENT SYSTEM (global-tick-event-system, IMPLEMENTED): impact
+   effects are real-time, NOT tick-driven — they must NOT subscribe to the tick
+   bus or advance turns. They run purely off render deltaTime. This is the
+   firewall between cosmetic juice and game logic.
+
+
+OPEN QUESTIONS
+==============
+1. Screen-shake application: matrix-translate the shared SpriteBatch projection
+   vs. per-renderer draw offsets. Matrix-translate is cleaner but requires
+   restoring the un-shaken matrix before the mini-map/HUD passes. Confirm each
+   view renderer honors the shared projection matrix (they should — they use
+   camera.combined). If WallRenderer bypasses it, fall back to an offset setter.
+2. Re-projection vs frozen screen pos: numbers re-project every frame (track
+   turns); sparks/bursts freeze at spawn. If projection proves jittery, freeze
+   numbers too — acceptable given short life.
+3. Damage-number rendering route: (2a) reuse a BitmapFont (the project ALREADY
+   has one in HudRenderer — recommended, simplest) vs (2b) procedural 5×7 pixel
+   digits via ShapeRenderer (zero font dependency, matches chunky HUD aesthetic).
+   If (2b): static final int[12][7] glyph table (0-9, '-', '!'), each int a 5-bit
+   row mask; draw a filled rect per set bit at cell size DMG_NUMBER_PIXEL*scale;
+   advance 6 cells/glyph; centre over the enemy. Extract digits with %10/÷10 into
+   a pre-allocated int[] scratch (NO Integer.toString). DECISION: default to (2a).
+4. Zero-damage hits (full armor / immune): spawn a greyed "0" number with no
+   sparks, or suppress entirely? Default: suppress (applyDamageTo with amount<=0
+   currently isn't guarded — add an early return for amount<=0 if needed).
+5. Effect z-occlusion behind walls: OFF by default. Revisit if bleed-through
+   reads as wrong in playtest (then depth-test vs WallRenderer.getZBufferAt).
+6. Boss bespoke death: add the usesGenericDeathFx flag (default true) so the
+   boss-overseer can run its own death sequence instead of this generic burst.
+7. Kill flash and shake interaction: if the shaken kill-flash edge rects reveal
+   gaps at the screen border, draw the kill flash in a separate UN-shaken sub-pass
+   (its job is to frame the screen edges, which don't move).

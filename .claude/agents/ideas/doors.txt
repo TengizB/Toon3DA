@@ -1,0 +1,655 @@
+STATUS: IMPLEMENTED
+CATEGORY: Systems
+TITLE: Sliding Doors (two-press open, auto-close behind player)
+CREATED: 2026-05-26
+---
+
+OVERVIEW
+========
+A door is a tile that occupies one cell of the grid and toggles between two
+solid states (CLOSED, OPENING) and two passable states (OPEN, CLOSING). The
+player opens a door by pressing W (step-forward) while facing it from an
+adjacent cell — the first press plays the opening animation in place (the
+player does not move and consumes one turn), and the second W press actually
+walks into the now-open door cell. After the player leaves the door cell on
+the far side, the door auto-closes behind them with the reverse animation.
+
+This is the most important non-combat tile interaction in a Doom RPG style
+dungeon. Doors gate rooms, hide threats, segment encounter pacing, and create
+the iconic moment of cracking open a corridor and seeing what's inside. They
+also become the foundation for later systems: locked / key-card doors, blast
+doors that need a weapon to breach, scripted demon-busts-the-door reveals,
+and stealth (closing a door behind you to break enemy line-of-sight).
+
+The mechanic is also a perfect first proof that the game can hold per-tile
+runtime state — every later interactable (terminals, pressure plates, lifts,
+breakable crates) will follow the same pattern this design establishes.
+
+
+GAMEPLAY LOOP
+=============
+Per player turn (when controller is IDLE, processing W):
+
+1. Player stands in tile (playerTileColumn, playerTileRow) facing (directionX,
+   directionY). The cell directly in front is the "target tile".
+
+2. PlayerController computes the target tile char via Level.getCell(...).
+
+3. Branch on the char:
+
+   a. Floor (space) and not a door — existing behaviour: tryMove() walks one cell.
+
+   b. Wall (Level.isWall(char) == true) — existing behaviour: blocked, no move,
+      no turn consumed.
+
+   c. Door char ('d') — NEW branch:
+      Look up the door's current state from DoorManager.getStateAt(column, row).
+
+      - CLOSED:
+          DoorManager.requestOpen(column, row).
+          Door transitions to OPENING.
+          PlayerController enters a new INTERACTING animation-lock state for
+          DOOR_OPEN_DURATION seconds (player does NOT move; one turn consumed).
+
+      - OPENING:
+          Impossible to observe as IDLE input — controller is locked during the
+          animation. Defensive: ignore W press.
+
+      - OPEN:
+          tryMove() succeeds. Player walks INTO the door cell (which is now
+          passable). Standard MOVING animation. One turn consumed.
+
+      - CLOSING:
+          The door is still passable during CLOSING. Treat exactly like OPEN —
+          tryMove() succeeds and the player can step into / through it. (The
+          animation continues independently; see "auto-close").
+
+4. Auto-close trigger: whenever the player completes a MOVING action (snapping
+   back to IDLE), DoorManager.notifyPlayerSettled(playerTileColumn,
+   playerTileRow) is called. For every door currently in state OPEN, DoorManager
+   checks "is the player NOT standing on this door tile AND NOT in either of
+   the two cells the door connects" — if so, transition to CLOSING. CLOSING
+   reaches CLOSED after DOOR_CLOSE_DURATION seconds.
+
+   Concretely, the cheapest rule that gives the desired feel:
+       For each OPEN door (column, row):
+           if (playerTileColumn, playerTileRow) != (column, row)
+               AND no other entity is currently on (column, row):
+               start CLOSING.
+
+   Doors with an entity standing on them stay OPEN. (Tag this "open-while-blocked"
+   logic; future enemies use the same check.)
+
+5. CLOSING → CLOSED transition: when the close animation completes, the cell is
+   solid again. If during CLOSING the player walks back into the doorway,
+   DoorManager re-opens it (CLOSING → OPENING with a continuation of the
+   animation progress, so it does not snap).
+
+Per frame (regardless of player state):
+
+A. DoorManager.update(deltaTime) advances every animating door's progress by
+       progress += deltaTime / DOOR_OPEN_DURATION   (or DOOR_CLOSE_DURATION)
+   When progress reaches 1.0 it transitions to the next state (OPENING→OPEN,
+   CLOSING→CLOSED) and progress is snapped to 0.0.
+
+B. WallRenderer queries DoorManager.getOpenFractionAt(column, row) for any door
+   it raycasts into. The open fraction (0 = fully closed, 1 = fully open)
+   selects which texture column/row to sample (see TEXTURE MAPPING).
+
+C. Mini-map (LevelRenderer): door cells are drawn in a distinct colour so the
+   player can read door state at a glance — closed doors in dull steel,
+   opening / open doors in cyan. This is purely cosmetic but high value.
+
+
+DOOR STATES
+===========
+Enum DoorState lives in level package (or its own door subpackage — see
+TECHNICAL NOTES). Each entry encodes solidity for collision and passability
+for movement.
+
++----------+-------------+----------------+-------------------------+----------------------+
+| State    | Solid?      | Player can     | Renders as              | Transition out       |
+|          | (blocks W)  | step into?     |                         |                      |
++----------+-------------+----------------+-------------------------+----------------------+
+| CLOSED   | YES         | NO             | Full closed door        | On W press into it:  |
+|          |             |                | texture                 | → OPENING            |
++----------+-------------+----------------+-------------------------+----------------------+
+| OPENING  | YES         | NO             | Animated frame:         | Auto on progress=1:  |
+|          |             |                | door panel sliding up   | → OPEN               |
+|          |             |                | (height shrinking)      |                      |
++----------+-------------+----------------+-------------------------+----------------------+
+| OPEN     | NO          | YES            | Empty doorway frame     | Auto when player no  |
+|          | (passable)  |                | (door fully retracted;  | longer in/on tile:   |
+|          |             |                | the renderer must NOT   | → CLOSING            |
+|          |             |                | draw a wall stripe for  |                      |
+|          |             |                | this cell)              |                      |
++----------+-------------+----------------+-------------------------+----------------------+
+| CLOSING  | NO          | YES            | Animated frame:         | Auto on progress=1:  |
+|          | (passable)  | (and re-opens  | door panel sliding down | → CLOSED             |
+|          |             |  it)           | (height growing)        | If player enters:    |
+|          |             |                |                         | → OPENING (carry     |
+|          |             |                |                         |   progress)          |
++----------+-------------+----------------+-------------------------+----------------------+
+
+Input rules summary (PlayerController, W key):
+
+  CLOSED  : consume turn, animate-in-place lock for DOOR_OPEN_DURATION,
+            kick door to OPENING. Player position unchanged.
+  OPENING : ignored (controller is locked during the animate-in-place period
+            spawned by the first press; treat as defensive guard).
+  OPEN    : consume turn, walk into the cell (standard MOVING animation).
+  CLOSING : consume turn, walk into the cell (standard MOVING animation).
+            DoorManager flips the door back to OPENING (progress preserved).
+
+Note: a single Level.isWall(char) call is no longer sufficient for door cells
+— solidity depends on the door's runtime state. PlayerController must call a
+new helper Level.isBlockedAt(column, row, doorManager) (or equivalent) that
+unifies static walls and dynamic doors. See TECHNICAL NOTES.
+
+
+ANIMATION
+=========
+Two animations: opening and closing. Both are pure float progress lerps
+matching the existing PlayerController lerp model exactly — no frame-based
+sprite-sheet timing, just a continuous open fraction.
+
+Open fraction semantics:
+    openFraction = 0.0  →  door fully covers the doorway (CLOSED visual)
+    openFraction = 1.0  →  doorway is fully empty (OPEN visual)
+
+State → openFraction mapping each frame:
+    CLOSED:   openFraction = 0.0
+    OPENING:  openFraction = progress           (0 → 1 over DOOR_OPEN_DURATION)
+    OPEN:     openFraction = 1.0
+    CLOSING:  openFraction = 1.0 − progress     (1 → 0 over DOOR_CLOSE_DURATION)
+
+Slide direction: door slides upward into the ceiling (Doom-style). This is
+implemented purely as a vertical UV crop in WallRenderer — there is no actual
+geometry that moves; the wall stripe simply samples a shorter section of the
+door texture, shifted to the bottom of the doorway.
+
+Integration with player animation lock:
+
+  The PlayerController already has the IDLE / MOVING / ROTATING state machine
+  with actionProgress driving lerps. Add one new state INTERACTING with the
+  same actionProgress field:
+
+      INTERACTING: lock all input, count actionProgress 0 → 1 at rate
+                   1 / DOOR_OPEN_DURATION. When it reaches 1.0 the
+                   controller returns to IDLE. The player's positionX/Y
+                   are NOT mutated during this state.
+
+  DoorManager runs its own internal progress timer for the door's openFraction.
+  These two timers (controller INTERACTING progress and door OPENING progress)
+  use the same source duration (DOOR_OPEN_DURATION) and the same deltaTime, so
+  they stay in lockstep without explicit synchronisation.
+
+  After the door reaches OPEN, the controller is already back to IDLE. If W is
+  still held, the next frame's pollInput() sees the now-open door, walks the
+  player into it via the standard MOVING animation. This achieves the
+  "press W twice" feel exactly as specified.
+
+Closing is fully passive — no controller lock. The door closes on its own
+timer while the player keeps acting. This matters: if the player turns around
+and walks back through a closing door, they should be able to. The closing
+animation simply runs in the background; the wall renderer reads its current
+openFraction every frame.
+
+
+TILE REPRESENTATION
+===================
+Char: 'd' represents a door cell in the level grid.
+
+Level.isWall change:
+  Doors are NOT treated as walls by Level.isWall, because Level.isWall is a
+  static lookup that knows nothing about runtime state. Instead:
+
+  - Level.isWall('d')  →  FALSE  (a door is not statically solid)
+  - Add Level.isDoor(char): returns true for 'd' (and future variants like
+    'D' for locked door, 'b' for blast door, etc.)
+  - Add Level.isBlockedAt(column, row, doorManager): the new single authority
+    for "can the player step into this cell THIS TURN". Definition:
+
+        char cell = getCell(column, row);
+        if (isWall(cell)) return true;
+        if (isDoor(cell)) {
+            DoorState state = doorManager.getStateAt(column, row);
+            return state == CLOSED || state == OPENING;
+        }
+        return false;
+
+  All callers that currently do `if (Level.isWall(level.getCell(c, r)))` must
+  switch to `if (level.isBlockedAt(c, r, doorManager))`. There is exactly one
+  such caller today: PlayerController.tryMove.
+
+WallRenderer change:
+  WallRenderer.selectWallTexture treats 'd' as a door cell and dispatches to a
+  separate door rendering path (see TEXTURE MAPPING). The DDA loop still
+  considers 'd' as a wall hit when openFraction < 1.0; when openFraction is
+  exactly 1.0 the cell is treated as floor (ray passes through). For non-zero
+  but non-one fractions the door is still drawn — only its visible portion
+  shrinks — but the cell still stops the ray. This avoids rays leaking through
+  a half-open door and revealing rooms early.
+
+  IMPORTANT subtlety: even when the door is OPEN (openFraction = 1.0) and the
+  ray passes through, the renderer must still draw the door frame (the hollow
+  doorway) — practically this is done by sampling a "frame" texture for the
+  surrounding wall stripe, but for v1 it is acceptable to just let the ray
+  pass into the adjacent room and sample whatever wall is beyond. v2 can add
+  a proper top frame.
+
+Door orientation:
+  Whether a door is "horizontal" (N/S facing, ray hits a horizontal wall face)
+  or "vertical" (E/W facing) is determined entirely by the DDA hit side — the
+  same crossedVerticalLine flag the wall renderer already computes. No extra
+  data is stored per-door; orientation is implicit in the geometry of the
+  neighbouring walls. (A door in a north-south corridor is approached from
+  N or S; a door in an east-west corridor is approached from E or W.)
+
+
+TEXTURE MAPPING
+===============
+Expected asset files (naming follows the established lab_wall_*.jpg pattern):
+
+  assets/textures/lab/lab_door_closed.jpg
+      Square texture (e.g. 256x256 or 512x512). Depicts the full closed door
+      panel — metal, recessed handle, hazard chevrons. Used at openFraction = 0.
+
+  assets/textures/lab/lab_door_frame.jpg
+      Square texture matching the surrounding wall colour with a darker
+      doorway recess at the bottom. Used to render the empty space above the
+      sliding panel as it retracts. Optional for v1 — can be omitted in
+      favour of using the ceiling/floor colours.
+
+  assets/textures/lab/lab_door_animation.png  (optional — frames sheet)
+      A horizontal strip of N keyframes (e.g. N = 8) showing the door panel
+      progressively retracting upward. Each frame is one square cell of the
+      strip. Used INSTEAD of the procedural UV-crop approach when frame-based
+      animation is preferred.
+
+For v1, use the UV-crop approach (no animation sheet needed — only lab_door_closed.jpg
+is required). The animation sheet is a v2 enhancement.
+
+UV-crop approach (recommended, simplest):
+
+  The door panel "slides up into the ceiling". Visually this means the
+  visible portion of the door panel shrinks from full height (openFraction=0)
+  to zero height (openFraction=1), with the panel anchored to the FLOOR.
+
+  Procedure per ray column hitting a door cell:
+    1. Compute the standard wall hit: perpWallDistance, lineHeight,
+       drawBottom, drawTop, texColumn — exactly as for any other wall.
+    2. Read openFraction = doorManager.getOpenFractionAt(column, row).
+    3. The visible door panel occupies the bottom (1 − openFraction) of the
+       doorway:
+          panelTop      = drawBottom + (drawTop − drawBottom) × (1 − openFraction)
+          panelBottom   = drawBottom
+       The top region (panelTop → drawTop) is the cavity above the retracted
+       door panel. For v1, draw this as a dark rectangle in the ceiling colour.
+    4. Sample the door texture only from the bottom (1 − openFraction) of the
+       image height:
+          srcYStart  = 0
+          srcHeight  = (int) (textureHeight × (1 − openFraction))
+       Draw the panel:
+          batch.draw(lab_door_closed,
+                     screenColumn × WALL_COLUMN_WIDTH, panelBottom,
+                     WALL_COLUMN_WIDTH, panelTop − panelBottom,
+                     texColumn, srcYStart, 1, srcHeight,
+                     false, false);
+       (Note: srcY=0 is the top of the image in LibGDX texture coordinates.
+       Verify against the existing wall draw call in WallRenderer to keep
+       the same convention.)
+    5. Apply the same shade as a normal wall.
+
+  Edge case: when openFraction is exactly 1.0, srcHeight = 0 → skip the door
+  draw entirely. The DDA loop also treats fully-open doors as floor (the ray
+  continues past), so this column will render the wall behind the door
+  instead.
+
+  Edge case: when openFraction is exactly 0.0 the math reduces to a normal
+  wall draw — verify there is no off-by-one stripe of background showing.
+
+Sheet-based alternative (v2):
+
+  If lab_door_animation.png exists, compute the frame index:
+      frameCount = textureWidth / textureHeight    // strip of square frames
+      frameIndex = clamp((int)(openFraction × frameCount), 0, frameCount − 1)
+      srcX = frameIndex × textureHeight + texColumn
+  And sample the strip at that X. This produces non-uniform animation
+  (chunky machined motion, brief shake at top) and is preferred long-term.
+
+WallRenderer selection logic:
+
+  switch (cell) {
+      case 'x': texture = LAB_WALL_PLAIN;    break;
+      case 'c': texture = LAB_WALL_CONDUIT;  break;
+      case 'v': texture = LAB_WALL_VENT;     break;
+      case 't': texture = LAB_WALL_TERMINAL; break;
+      case 'w': texture = LAB_WALL_WIRES;    break;
+      case 'd': drawDoorStripe(...);  return;   // separate path
+      default:  texture = LAB_WALL_PLAIN;
+  }
+
+  drawDoorStripe is the per-column door-aware path described above.
+
+
+TECHNICAL NOTES
+===============
+New classes (all in a new subpackage: ge.tbegvadze.toon3d.door):
+
+  DoorState (enum)
+    Values: CLOSED, OPENING, OPEN, CLOSING.
+
+  Door (POJO)
+    Fields:
+        int tileColumn
+        int tileRow
+        DoorState state
+        float animationProgress   // 0..1 within current animating state
+    Constructor takes column/row, initial state = CLOSED, progress = 0.
+
+  DoorManager
+    Owns all door instances for the current level. Built once at level load
+    time by scanning Level.matrix for 'd' cells.
+
+    Fields:
+        Map<Long, Door> doorsByPackedKey
+          // key = (tileColumn << 32) | (tileRow & 0xFFFFFFFFL)
+          // pre-sized to the count of doors found at load time.
+
+    Public API:
+        void update(float deltaTime)
+            Advances every OPENING/CLOSING door's animationProgress; promotes
+            to OPEN/CLOSED when progress reaches 1.
+
+        DoorState getStateAt(int column, int row)
+            Returns CLOSED if the cell is not a door — but PlayerController
+            should only call this on cells that are actually 'd'.
+
+        float getOpenFractionAt(int column, int row)
+            Returns 0 for CLOSED, animationProgress for OPENING, 1 for OPEN,
+            (1 − animationProgress) for CLOSING. Called per-column from
+            WallRenderer.
+
+        void requestOpen(int column, int row)
+            CLOSED   → OPENING (progress = 0)
+            CLOSING  → OPENING (progress carries: new progress = 1 − old
+                                progress so animation continues smoothly)
+            OPENING / OPEN → no-op.
+
+        void notifyPlayerSettled(int playerTileColumn, int playerTileRow)
+            Called by PlayerController whenever it returns to IDLE after a
+            MOVING action. For each OPEN door, if the player is not on the
+            door tile, transition to CLOSING with progress = 0.
+
+        boolean isPassable(int column, int row)
+            Returns true if cell is 'd' AND state is OPEN or CLOSING.
+            Returns false if cell is 'd' AND state is CLOSED or OPENING.
+            Returns true for non-door cells (use Level.isWall for those).
+
+Modified classes:
+
+  Level (level package)
+    Add: public static boolean isDoor(char cell) { return cell == 'd'; }
+    Add: public boolean isBlockedAt(int column, int row, DoorManager doorManager)
+         that unifies static wall + dynamic door checks (see TILE REPRESENTATION).
+    Keep: Level.isWall unchanged. 'd' is intentionally NOT a wall.
+
+  LevelLoader (level package)
+    No change to parsing — 'd' is just another char written into the matrix.
+    After Level construction, the caller (World) instantiates DoorManager by
+    scanning the matrix.
+
+  Player (entity package)
+    No change.
+
+  PlayerController (input package)
+    - Add INTERACTING value to the state enum.
+    - Constructor now takes a DoorManager reference as well.
+    - tryMove(): replace the wall check with the new isBlockedAt(...) call.
+      Also, BEFORE the standard wall-block path runs, inspect the target cell:
+          if (Level.isDoor(cell)) {
+              DoorState state = doorManager.getStateAt(column, row);
+              if (state == CLOSED) {
+                  doorManager.requestOpen(column, row);
+                  enterInteractingState();      // animation lock, no move
+                  return;
+              }
+              // OPENING: shouldn't happen, defensive ignore.
+              if (state == OPENING) return;
+              // OPEN or CLOSING: fall through to normal move below.
+          }
+      Continue with the existing MOVING setup.
+    - update(deltaTime): when MOVING completes (snap to target, return to IDLE),
+      call doorManager.notifyPlayerSettled(playerTileColumn, playerTileRow).
+    - Add the INTERACTING update path: advance actionProgress by
+      deltaTime / DOOR_OPEN_DURATION; on completion snap to IDLE. No position
+      mutation.
+
+  WallRenderer (render package)
+    - Load lab_door_closed.jpg (and optionally lab_door_frame.jpg) in the
+      constructor; add them to the disposed-textures list.
+    - Hold a reference to DoorManager (passed via setter or constructor) so
+      the per-column draw can look up openFraction.
+    - In selectWallTexture / per-column logic, branch on 'd' to call the
+      drawDoorStripe path described in TEXTURE MAPPING.
+    - DDA loop: when a 'd' cell is the hit cell, check
+      doorManager.getOpenFractionAt(column, row). If fraction >= DOOR_OPEN_THRESHOLD
+      (very close to 1.0, e.g. 0.99) treat the cell as floor and continue the
+      ray. Otherwise treat as a wall hit (the half-open panel still occludes).
+
+  World (world package)
+    - On construction: instantiate DoorManager(level) AFTER LevelLoader returns
+      the Level; pass DoorManager into both PlayerController and WallRenderer.
+    - In update(deltaTime): call doorManager.update(deltaTime) BEFORE
+      playerController.update(deltaTime) (so door state seen by the controller
+      this frame is fresh).
+    - On dispose: nothing — DoorManager owns no GPU resources.
+
+  LevelRenderer (render package, mini-map)
+    - On the filled pass, draw 'd' cells in a distinct colour:
+          CLOSED   → dull steel  (0.6, 0.6, 0.7)
+          OPENING  → pale cyan, lerped from steel toward cyan by progress
+          OPEN     → no fill (passable; show floor)
+          CLOSING  → pale cyan, lerped from cyan toward steel by progress
+      This requires LevelRenderer to also hold a DoorManager reference.
+
+Constants & GameMath additions:
+
+  Constants.java — see CONSTANTS NEEDED below.
+  GameMath.java — add the door-stripe geometry helpers as pure static methods
+  so WallRenderer never inlines the math:
+
+      doorPanelTop(drawBottom, drawTop, openFraction)
+          // returns drawBottom + (drawTop − drawBottom) × (1 − openFraction)
+          // Formula: linear interpolation from drawBottom (fully open) to
+          //   drawTop (fully closed), parameterised by (1 − openFraction).
+          // Edge cases: openFraction clamped to [0, 1] by the caller.
+
+      doorTextureSourceHeight(textureHeight, openFraction)
+          // returns (int) (textureHeight × (1 − openFraction))
+          // Edge cases: returns 0 when openFraction = 1; clamp to >= 0.
+
+  Both methods get the standard 3-line GameMath comment block.
+
+Per-frame allocation policy:
+
+  DoorManager.update mutates Door instances in place; no allocations.
+  PlayerController stores no per-action garbage. The pre-allocated
+  doorsByPackedKey map is sized at load time and never grows.
+
+
+CONSTANTS NEEDED
+================
+Add to Constants.java in a new section titled "Doors":
+
+  // -------------------------------------------------------------------------
+  // Doors
+  // 'd' cells in a level are doors. State and animation progress live in
+  // DoorManager; these constants tune timing and rendering thresholds.
+  // -------------------------------------------------------------------------
+
+  // Seconds for a CLOSED door to fully open. Tunable.
+  // Matches PLAYER_MOVE_DURATION (0.12) by default to feel like a normal
+  // turn, but can be raised to make doors feel chunkier (e.g. 0.30).
+  public static final float DOOR_OPEN_DURATION  = 0.30f;   // tunable
+
+  // Seconds for an OPEN door to fully close. Tunable.
+  // Slightly slower than opening to give a satisfying "thunk" feel.
+  public static final float DOOR_CLOSE_DURATION = 0.40f;   // tunable
+
+  // openFraction above which the DDA ray treats the door as passable scenery
+  // and continues past it. Should be very close to 1.0 to avoid the player
+  // seeing through doors that are almost-but-not-quite open.
+  public static final float DOOR_OPEN_THROUGH_THRESHOLD = 0.99f;  // tunable
+
+  // Asset paths for door textures.
+  public static final String LAB_DOOR_CLOSED_PATH = "textures/lab/lab_door_closed.jpg";
+  public static final String LAB_DOOR_FRAME_PATH  = "textures/lab/lab_door_frame.jpg";  // optional v1
+
+  // Mini-map colours for door states (RGB triplets; alpha defaults to 1).
+  public static final float DOOR_MINIMAP_CLOSED_R = 0.60f;
+  public static final float DOOR_MINIMAP_CLOSED_G = 0.60f;
+  public static final float DOOR_MINIMAP_CLOSED_B = 0.70f;
+  public static final float DOOR_MINIMAP_OPEN_R   = 0.20f;
+  public static final float DOOR_MINIMAP_OPEN_G   = 0.80f;
+  public static final float DOOR_MINIMAP_OPEN_B   = 0.85f;
+
+
+PLAYER EXPERIENCE
+=================
+The first-time player walks up to a metal door, sees the closed panel with
+hazard chevrons, presses W expecting to walk forward. Instead, the screen
+locks for a beat, the door panel slides upward with a mechanical whirr (audio
+will be added later), and the doorway reveals what's beyond. They press W
+again and step through. Behind them, the door closes itself — they hear
+(eventually) the thunk and know they have committed to this corridor.
+
+The "two presses" feel is critical: it makes opening a door a deliberate act
+the player can choose to do or not. They can peek a corridor (open + look)
+without entering it, which becomes a stealth / reconnaissance primitive once
+enemies exist. The auto-close behind them rewards careful play — a closed
+door behind you means an enemy on the other side can't see or pathfind to
+you, breaking line of sight.
+
+The animation duration is deliberately a touch longer than a normal step
+(0.30s vs 0.12s) so that doors feel heavy and the door-opening turn feels
+materially different from a step turn. This sells the "doors are mechanical
+objects, not just transparent floor" idea.
+
+
+BALANCE NOTES
+=============
+- DOOR_OPEN_DURATION = 0.30s: long enough to feel like opening a real door,
+  short enough that scanning a corridor (open-look-close) does not become
+  tedious. Tune downward if playtesters complain about door fatigue.
+
+- DOOR_CLOSE_DURATION = 0.40s: slightly longer so closing feels deliberate.
+  This also gives the player a short window to double-back without re-opening
+  cost.
+
+- Auto-close-while-blocked behaviour means an enemy parked in a doorway holds
+  it open. Designers can use this as an enemy hazard pattern: a melee
+  enemy that camps in a doorway forces the player to engage rather than
+  retreat and close the door.
+
+- For locked / key-card doors (future variant 'D'): same state machine, but
+  requestOpen() returns failure if the player lacks the key. The W press
+  is consumed (one turn) but the door stays CLOSED. Suggest a brief
+  "ACCESS DENIED" HUD blink in the future.
+
+- For blast doors (future variant 'b'): require a weapon discharge (rocket,
+  BFG). Same state machine but the OPENING trigger is a damage event, not a
+  W press into them. Walking into a blast door does nothing.
+
+
+INTERACTIONS
+============
+1. Player movement (PlayerController):
+   The defining interaction — see GAMEPLAY LOOP. The state machine gains a
+   new INTERACTING state for the open-in-place lock.
+
+2. Enemy AI (future):
+   Enemies must also respect door state for pathfinding. The same
+   DoorManager.isPassable check is reused. Some enemy types (zombies,
+   imps) can open doors; others (cacodemons, lost souls) cannot — they
+   bounce off CLOSED doors. This becomes a tactical wrinkle: close a door
+   to break LoS but not all enemies are stopped equally.
+
+3. Line of sight / fog of war (future):
+   When line-of-sight is added (visibility, enemy sight cones), a CLOSED or
+   OPENING door blocks LoS. An OPEN or CLOSING door does not. The same
+   DoorManager.isPassable check serves as the LoS predicate for the door
+   cell. This means peeking through an open door lets the player see and
+   be seen — a real risk/reward decision.
+
+4. Sound / noise propagation (future):
+   Opening a door makes noise (alerts nearby enemies in adjacent tiles).
+   Future NoiseManager can subscribe to DoorManager state transitions.
+   Closing a door is quieter than opening.
+
+5. Emergency Red Alert Pulse (already implemented, see emergency-red-alert-pulse.txt):
+   The pulse tints door panels along with everything else — the door texture
+   simply receives the same per-stripe shade boost from the alert pulse. No
+   special handling needed; the existing alert tint code in WallRenderer is
+   applied uniformly to all wall stripes including doors. This means a
+   pulsing red-lit corridor with a single closed steel door at the end is
+   automatically dramatic.
+
+6. Mini-map (LevelRenderer):
+   Doors render in a distinct steel colour so the player can spot them at a
+   glance and plan paths around them. Open doors disappear from the mini-map
+   wall layer (rendered as floor) to signal passability.
+
+7. Procedural generation (future):
+   The level generator must place 'd' cells at exactly the throat of a
+   corridor or in the centre of a room-to-corridor join — i.e. a 'd' cell
+   must have wall cells on at least two opposite sides (its "frame") and
+   floor cells on the perpendicular two sides (the cells you approach from
+   and exit into). Place doors at room entrances; never in the middle of a
+   floor.
+
+
+OPEN QUESTIONS
+==============
+1. Should the door animation also play SFX when audio is added? Implied yes
+   (mechanical whirr open, metallic thunk close), but this requires the audio
+   system which does not yet exist.
+
+2. When the player walks into a CLOSING door, the design says re-open with
+   carried progress. Should the re-opened progress carry exactly (i.e. if it
+   was 60% closed, re-open from 40% open with progress = 0.40), or should it
+   restart cleanly from progress = 0? Carrying feels right (no visual jump)
+   but is one extra branch to test. Recommend carrying.
+
+3. Door textures: should there be multiple variants for visual variety
+   (lab_door_closed_a.jpg, ..._b.jpg, ..._scarred.jpg)? Not needed for v1;
+   a single panel design is fine. v2 candidate.
+
+4. Should the door also draw a top-frame strip (the slab of doorway above the
+   retracted door panel) using a separate frame texture? Cleaner visually,
+   but v1 can simply render that strip as ceiling colour. Defer to v2.
+
+5. Door orientation visual: a door in a north-south corridor is approached
+   from the south; the closed door texture must read correctly from both
+   sides. Standard wall mirroring (already in GameMath.wallHitPositionMirrored)
+   handles this for free as long as the door texture is symmetric. If
+   asymmetric door art is used later, the renderer may need an explicit
+   "door faces N/S vs E/W" flag stored per-Door.
+
+6. Should the door open faster on subsequent re-opens (familiarity)? Cute
+   but probably unnecessary. Reject unless playtesting suggests it.
+
+7. Does the player turn count actually increase when opening a door, for
+   purposes of future hunger / status-effect ticks? Yes — the W press that
+   triggers OPENING IS one consumed turn, exactly equivalent to a step.
+   This is already specified in GAMEPLAY LOOP but flagging it here so the
+   hunger / status agent does not miss it.
+
+8. Does the auto-close trigger only when the player STEPS OFF the door tile,
+   or also when they step OFF AND the door is no longer "framed" by the
+   player's position? The design uses the simpler rule (player not on door
+   tile = start closing). This may cause doors to start closing the instant
+   the player exits, which is what we want — but if that feels too fast,
+   add a "DOOR_AUTOCLOSE_DELAY_TURNS" constant (e.g. 1 turn) so doors stay
+   open for one extra turn before closing.

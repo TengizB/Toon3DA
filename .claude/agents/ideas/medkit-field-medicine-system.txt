@@ -1,0 +1,275 @@
+STATUS: IMPLEMENTED
+CATEGORY: Items
+TITLE: Medkit & Field Medicine System
+CREATED: 2026-05-29
+---
+
+OVERVIEW
+========
+The first healing system for the marine. Two tiers of medical supply spawn on
+the floor as walkable decal props (UAC field stim-packs and full wall-mounted
+medkits), get picked up automatically into a tiny carried stash, and are spent
+on a dedicated HEAL action that costs exactly one turn. Because using a medkit
+burns a turn while every enemy in the room gets a free swing, healing is never
+"free": the player must read the fight and decide whether to step, shoot, or
+patch up. This is the Doom RPG "press a key, pick up the bonus" pickup loop
+crossed with DCSS's quaff-under-fire tension — and it is the missing
+counterweight to the damage the enemy and hazard systems already deal.
+
+This doc owns: the medical pickup props, the PlayerInventory medical stash, the
+HEAL turn action, and the heal-application numbers. It deliberately does NOT
+re-define max HP, the Vitality stat, or the HUD heal feedback — those are owned
+by levelup-stim-boon-choice-progression.txt and scanline-crt-hud-marine-vitals
+.txt respectively. This system CONSUMES Player.applyHealing(int) (defined in the
+HUD doc) and is clamped by maxHealth (defined in the progression doc).
+
+
+GAMEPLAY LOOP
+=============
+ACQUIRING (automatic, on entering the tile — Doom RPG style):
+1. Player steps onto a tile holding a medical pickup ('h' stim or 'H' medkit).
+2. On move-completion, BEFORE the tick fires, World checks the destination tile
+   for a pickup (same hook order the tick doc uses: settle door -> pick up ->
+   fireTick). Reuse that exact ordering so the world sees the consumed pickup.
+3. The pickup type maps to a heal-charge value. If the marine's medical stash
+   has room (carry cap not exceeded), the charge is added and the prop tile is
+   converted to plain floor (the decal disappears).
+4. A toast routes through the HUD banner ("STIM-PACK +1" / "FIELD MEDKIT +1").
+5. If the stash is already FULL, the pickup is NOT consumed: it stays on the
+   tile, and a "MED STASH FULL" toast fires. The player can leave and return.
+   (Anti-waste rule — never silently destroy medicine the player can't hold.)
+6. Walking onto a pickup is NOT a separate action — it happens during the
+   normal step. The step is the only tick. Picking up costs no extra turn.
+
+HEALING (deliberate, costs one turn):
+1. Player is IDLE and presses HEAL (default key: R — "Recover"; NUM keys 1/2/3
+   are reserved by the boon overlay, so HEAL gets a letter).
+2. PlayerController checks: do we have at least one charge of ANY tier, and is
+   currentHealth < maxHealth? If either fails -> reject, brief red flash of the
+   medkit HUD slot, NO turn consumed (a wasted heal at full HP is a known
+   roguelike trap; we forbid it).
+3. If valid: select the SMALLEST sufficient tier first (spend a stim before a
+   full medkit when a stim alone tops you off — avoids overheal waste). See
+   BALANCE for the selection rule.
+4. The HEAL action animates over PLAYER_HEAL_DURATION (same action-lock model as
+   move/fire). During this the marine is locked, exactly like reloading.
+5. On completion: call Player.applyHealing(healAmount) (HUD doc method; clamps
+   to maxHealth, fires PlayerHealed event -> green sparkle + bar glide up),
+   decrement the stash, then finishAction(true, TickCause.HEAL) -> the tick
+   fires -> EVERY enemy takes its turn and may hit the marine.
+6. Net tension: you regain N HP but eat one round of incoming damage. Healing
+   early (safe) wastes the buffer; healing late (under fire) risks dying mid-
+   animation. This is the decision the system exists to create.
+
+
+ITEM TIERS
+==========
+TIER 1 — STIM-PACK ('h'): the common drip-feed heal.
+  - Small, single-use injector. Heals MEDKIT_STIM_HEAL HP (placeholder 8).
+  - Drops frequently: from supply rooms, lockers, and occasionally enemy
+    corpses (Scavenger boon synergy). The "I found a little something" beat.
+  - Cheap to spend; you'll often pop one between fights to stay topped.
+
+TIER 2 — FIELD MEDKIT ('H'): the rare panic button.
+  - Bulky UAC wall medkit / full kit. Heals MEDKIT_FULL_HEAL HP (placeholder 25)
+    OR heals to MEDKIT_FULL_HEAL_FRACTION of max, whichever the developer picks
+    (see OPEN QUESTIONS). The "save it for when I'm bleeding out" item.
+  - Rare: 0-2 per floor, hand-placed by the level designer near boss/objective
+    rooms or behind a keycard door.
+  - Same one-turn cost as a stim — so the medkit isn't slower, just stronger and
+    scarcer. The tension is scarcity, not action economy.
+
+Both tiers share ONE carry stash with a combined cap (see PICKUP MECHANICS).
+They are tracked as separate counts but compete for the same inventory pressure.
+
+
+TILE SYMBOLS (new chars needed)
+===============================
+Add two WALKABLE DECAL PROP chars (player can walk over them; rendered as flat
+billboards, same family as 'm' corpse / 's' shotgun / '.' blood):
+
+  'h' — STIM-PACK pickup.  Height 0.20x wall (small, near floor).
+        Visual: white injector / small white box with a red cross, faint cyan
+        UAC glow underneath. Sits flat-ish like the dropped shotgun.
+
+  'H' — FIELD MEDKIT pickup. Height 0.30x wall (chunkier than a stim).
+        Visual: white/olive hard case, bold red cross on the lid, small green
+        status LED. Reads instantly as "bigger heal" from across a room.
+
+Both are NON-SOLID (Level.isWall returns false) so the player walks onto them to
+trigger pickup, exactly like 'm'/'s'/'.'/'O'. Do NOT add them to the wall set.
+A wall-mounted variant is cosmetic only; logically it still occupies a floor
+tile the player steps onto. NO new wall chars, NO grid-format change beyond
+these two decal symbols.
+
+
+PICKUP MECHANICS
+================
+CARRY MODEL — small stash, deliberate scarcity:
+  - Combined cap: MEDKIT_TOTAL_CARRY_CAP charges across both tiers (placeholder
+    4). Example legal states: 4 stims; or 2 stims + 2 medkits; or 1 medkit + 3
+    stims. The cap is on TOTAL charges, not per-tier, so a medkit "costs" the
+    same slot as a stim — picking up a fat medkit means carrying fewer stims.
+  - Optional per-tier sub-cap (medkits capped at MEDKIT_FULL_CARRY_CAP = 2) to
+    stop the player hoarding only big kits. Flag as tunable.
+  - When full, pickups are left on the floor (see GAMEPLAY LOOP step 5). They
+    persist; the tile is unchanged until a charge frees up.
+
+PICKUP RESOLUTION ORDER (must match tick doc):
+  In the move-completion path: settle door -> resolve medical pickup -> resolve
+  other pickups (ammo/keycard) -> finishAction(true, MOVE). The pickup mutates
+  inventory and clears the tile BEFORE the tick, so enemies react to the post-
+  pickup world state on the same turn.
+
+NO MANUAL "PICK UP" KEY: stepping on the tile is the whole interaction. Keeps
+the Doom RPG instant-grab feel and avoids a second turn-cost.
+
+
+TECHNICAL NOTES
+===============
+NEW / MODIFIED CLASSES
+
+  entity/PlayerInventory.java (likely already exists per tick doc — it holds the
+  equipped weapon). ADD medical stash fields + methods:
+      private int stimCharges;        // tier 1
+      private int medkitCharges;      // tier 2
+      int  getStimCharges();
+      int  getMedkitCharges();
+      int  getTotalMedicalCharges();  // stim + medkit, vs the cap
+      boolean canAcceptMedical(MedicalTier tier);   // checks total + per-tier cap
+      boolean addMedical(MedicalTier tier);          // returns false if full
+      // selection + spend, used by the HEAL action:
+      MedicalTier chooseHealTier(int missingHealth); // smallest-sufficient rule
+      int  spendHeal(MedicalTier tier);              // decrements, returns HP value
+      boolean hasAnyMedical();
+
+  entity/MedicalTier.java (enum, entity package):
+      STIM(Constants.MEDKIT_STIM_HEAL),
+      FIELD_MEDKIT(Constants.MEDKIT_FULL_HEAL);
+      Carries its heal value + a display name string key (in Constants for i18n).
+
+  level/Level.java:
+      - Recognize 'h' and 'H' as walkable decal props (isWall -> false for both).
+      - Add a way to query and clear a pickup at a tile: e.g.
+        char getPickupAt(int tileColumn, int tileRow) and
+        clearPickupAt(int tileColumn, int tileRow) (set tile to the underlying
+        floor char). If decal props are stored in a separate prop layer rather
+        than the char grid, use that layer's existing add/remove API instead.
+
+  render/ billboard prop renderer (the existing 'm'/'s'/'.' sprite path):
+      - Register 'h' and 'H' with their heights (0.20x, 0.30x) and sprite
+        textures. No new renderer class — extend the prop sprite table.
+
+  input/PlayerController.java:
+      - Add HEAL to the input priority poll (after move/fire, before nothing
+        special — pick a spot that doesn't shadow movement keys).
+      - New action state HEALING (mirrors FIRING): on key, validate via
+        inventory.hasAnyMedical() && player.getHealth() < player.getMaxHealth();
+        if invalid -> reject, no state change, fire a "heal denied" HUD blip.
+      - advanceHealing() lerps actionProgress over PLAYER_HEAL_DURATION.
+      - On completion: tier = inventory.chooseHealTier(missing);
+        int amount = inventory.spendHeal(tier);
+        player.applyHealing(amount);            // HUD doc method, clamps + events
+        finishAction(true, TickCause.HEAL);
+
+  world/TickContext + TickCause (tick doc):
+      - Add HEAL to the TickCause enum. HEAL is a tick-causing action (the world
+        advances; enemies act). This is the entire point of the system.
+
+  hud/ (scanline HUD doc):
+      - Add a MEDKIT slot to the HUD showing carried charges (e.g. a cross icon
+        + "x3"). PlayerHealed already drives the green sparkle. "MED STASH FULL"
+        and "STIM-PACK +1" route through the existing toast banner.
+
+  util/Constants.java — ADD:
+      MEDKIT_STIM_HEAL              = 8      // tier 1 HP restored
+      MEDKIT_FULL_HEAL             = 25      // tier 2 HP restored
+      MEDKIT_TOTAL_CARRY_CAP       = 4       // combined charge cap
+      MEDKIT_FULL_CARRY_CAP        = 2       // optional per-tier cap on medkits
+      PLAYER_HEAL_DURATION         = 0.18f   // s; slightly longer than move (0.12)
+      KEY_HEAL                     = Input.Keys.R
+      MEDKIT_STIM_SPRITE_HEIGHT    = 0.20f   // x wall height
+      MEDKIT_FULL_SPRITE_HEIGHT    = 0.30f
+
+ZERO-ALLOCATION: heal resolution touches only primitive counters and one enum
+ref; the prop removal reuses the existing prop layer API. No allocation in
+render() — the HUD slot draws a pre-allocated sprite + a pre-built digit string
+(use GameMath.appendIntToBuilder from the HUD doc).
+
+
+BALANCE NOTES
+=============
+All numbers are PLACEHOLDERS pending playtest against enemy damage output.
+
+- STIM heal = 8, MEDKIT heal = 25. Against a starting pool around 20-30 HP (set
+  by the progression doc's Vitality base), a stim is a "patch" and a medkit is a
+  "full reset." Tune STIM and MEDKIT together with PLAYER_STARTING_HP.
+- ONE-TURN COST is the core balance lever, not the heal size. Healing always
+  gives enemies a free turn; in a 3-enemy room that may cost more HP than a stim
+  restores, which correctly discourages panic-healing mid-swarm and rewards
+  retreating to a cleared corridor first. This is the intended tension.
+- SMALLEST-SUFFICIENT SELECTION: chooseHealTier() spends a STIM if a stim alone
+  brings you to >= maxHealth - MEDKIT_OVERHEAL_SLACK (or if no medkit exists);
+  otherwise spends a MEDKIT. Prevents wasting a 25-heal kit to top off 5 HP.
+  Provide an OPEN QUESTION on whether the player should choose manually instead.
+- CARRY CAP = 4 keeps medicine precious; the player can't turtle behind an
+  infinite stash. If runs feel too punishing, raise the cap before raising heal
+  values (cap changes the strategic texture less than heal-size changes do).
+- FULL-HP HEAL FORBIDDEN: pressing HEAL at max HP costs no turn and just blips
+  the HUD — protects the player from a fat-finger that would otherwise gift the
+  enemies a free round for zero gain.
+- DROP RATES (placeholder): stim spawn ~1 per 2 rooms + ~10% enemy-corpse drop
+  (scales with the Scavenger boon); medkit 0-2 per floor, hand-placed. Keep
+  total available healing per floor under the total damage a careful player
+  takes per floor, so HP is a managed resource, not a faucet.
+
+
+INTERACTIONS
+============
+1. PROGRESSION / VITALITY (levelup-stim-boon-choice doc): maxHealth and the
+   Vitality "heal-to-full on level-up" are owned there; this system only ever
+   calls applyHealing(amount) and is clamped by that maxHealth. The Vitality
+   level-up heal and a field medkit must not double-count — both go through the
+   same clamp, so they compose safely. A future "Field Medic" boon could grant
+   +1 carry cap or +50% medkit potency, reading MEDKIT_* constants.
+2. HUD (scanline-crt-hud doc): consumes the existing PlayerHealed event (green
+   sparkle, bar glide), the toast banner (pickup + full-stash messages), and
+   adds one MEDKIT count slot. No new event bus — reuse GameEvents.PlayerHealed.
+3. TICK SYSTEM (global-tick-event doc): HEAL is a new TickCause; the heal
+   completes, the tick fires, enemies act. The pickup-before-tick ordering
+   matches the doc's settle-door -> pickup -> fireTick rule exactly.
+4. ENEMIES (enemy_system doc): the one-turn heal cost means healing in melee
+   range of a Corruptor invites a hit; the Vortex Eye's ranged threat makes
+   "heal now or dodge now" a genuine dilemma. Scavenger-boosted corpse drops let
+   aggressive play partly self-fund healing.
+5. HAZARDS (hazard-chain-reactions doc): standing in fire/toxic and healing is a
+   trap — the hazard tick during the HEAL turn can out-damage the heal. The
+   Pyromaniac boon's halved fire damage interacts here (heal becomes viable in
+   fire). Oil pools ('O') under a medkit make for cruel, readable placements.
+6. LEVEL DESIGN: 'h'/'H' give the level designer a pacing tool — a stim before a
+   hard room signals "you'll need this"; a medkit behind a keycard door rewards
+   exploration. Pairs with the keycard-doors doc for gated medical caches.
+
+
+OPEN QUESTIONS
+==============
+1. FIELD MEDKIT — flat heal (25) or percentage/heal-to-full? Recommendation:
+   flat 25 for v1 (predictable, scales cleanly with maxHealth tuning); revisit a
+   heal-to-full variant if max HP pools grow large late-run.
+2. AUTO tier-selection (smallest-sufficient) vs MANUAL choose (separate keys for
+   stim vs medkit)? Recommendation: AUTO for v1 (one HEAL key, less UI); add a
+   manual "use medkit" key only if playtesters want to deliberately bank stims.
+3. Should picking up over the carry cap PARTIALLY fill a kit (no, charges are
+   discrete) — confirmed discrete. Leave the pickup on the floor instead.
+4. Enemy-corpse stim drops: rolled by the enemy system on death or by this
+   system listening to a kill event? Recommendation: enemy system rolls it (it
+   owns the loot table) and calls inventory.addMedical(STIM); this doc just
+   provides the addMedical API and the drop-rate constant.
+5. Should HEAL be interruptible if the marine would die from the post-heal
+   enemy turn? No — turn integrity is sacred; the heal resolves, then enemies
+   act, then death is evaluated. The player chose to heal under fire.
+6. Does a medkit cure status effects (bleed/toxic) if those ship later, or only
+   restore HP? Recommendation: HP only for v1; a separate "antitoxin" item or a
+   medkit upgrade boon can own cleanse later.
+7. PLAYER_HEAL_DURATION longer than a move (0.18 vs 0.12) for weight — confirm
+   in playtest it doesn't feel sluggish under pressure.

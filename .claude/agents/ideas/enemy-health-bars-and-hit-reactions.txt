@@ -1,0 +1,507 @@
+STATUS: IMPLEMENTED
+CATEGORY: Combat / UI
+TITLE: Enemy Health Bars and Hit Reactions
+CREATED: 2026-05-29
+---
+
+=============================================================================
+OVERVIEW
+=============================================================================
+Two tightly-coupled feedback layers bolted onto the existing (IMPLEMENTED)
+enemy system: a floating health bar drawn above each living enemy's billboard
+sprite, and a damage flash that lights the sprite up white-hot for a brief
+real-time window whenever it is hit. Together they answer the two questions a
+turn-based shooter must answer instantly: "is this thing about to die?" and
+"did my shell actually connect?"
+
+This belongs here because combat already exists (shotgun marches tiles, enemies
+take damage, die, and stamp a corpse), but the player currently has ZERO read
+on enemy HP. A Corruptor takes ~3 point-blank shells; without a bar the player
+cannot tell shell two from shell three, so the back-pedal-and-reload rhythm the
+enemy system was tuned around becomes guesswork. The bar makes the existing
+balance legible. The hit flash makes every trigger pull feel like it landed —
+the Hades "juice" contract — without adding a single new gameplay rule.
+
+Design lineage: Doom RPG (chunky on-sprite enemy state readouts), DCSS (the
+player must always be able to read the board state at a glance), Hades (hit
+feedback so punchy you feel the contact frame).
+
+Hard dependency: the enemy system idea (.claude/agents/ideas/enemy_system.txt,
+STATUS: IMPLEMENTED). This document does NOT re-specify enemies; it extends
+Enemy, EnemyManager.applyDamageTo, and EnemyRenderer only.
+
+=============================================================================
+GAMEPLAY LOOP
+=============================================================================
+This feature is PURELY FEEDBACK. It never consumes a turn, never blocks input,
+never changes who lives or dies. It rides entirely on events the combat system
+already produces.
+
+HEALTH BAR (passive, every frame):
+1. EnemyRenderer is already iterating living enemies farthest-first and drawing
+   each billboard, per-column, with z-buffer occlusion.
+2. Immediately AFTER drawing an enemy's sprite columns, the renderer draws that
+   same enemy's health bar as a second, smaller billboard quad positioned above
+   the sprite's top edge.
+3. The bar's fill fraction = enemy.health / enemy.type.maxHealth(). The fill
+   color is interpolated green->yellow->red from that fraction.
+4. The bar is occluded by the SAME per-column z-buffer test as the sprite, so a
+   wall hides the bar exactly when it hides the enemy.
+
+HIT FLASH (event-driven, on damage):
+1. Player presses W to face... no — player presses the FIRE key. Shotgun
+   resolves the shot in tile space. On the first tile holding a living enemy,
+   EnemyManager.applyDamageTo(enemy, dealt) runs (existing code).
+2. applyDamageTo, AFTER subtracting health, calls enemy.triggerHitFlash() ->
+   sets enemy.hitFlashTimerSeconds = Constants.ENEMY_HIT_FLASH_DURATION_SECONDS.
+3. The FIRING animation completes; onPlayerTurnCompleted() fires; surviving
+   enemies retaliate. The flash timer is NOT tied to turns — it is wall-clock.
+4. Every frame, EnemyRenderer (or World, see TECHNICAL NOTES) decrements each
+   enemy's hitFlashTimerSeconds by deltaTime, clamped at 0.
+5. While hitFlashTimerSeconds > 0, the enemy sprite is rendered with its shade
+   pushed toward white (lerp toward (1,1,1) by a curve of the remaining timer).
+   When the timer reaches 0 the sprite renders normally again.
+6. If the same enemy is hit again before the flash expires, the timer simply
+   resets to full — a rapid second hit re-flashes cleanly.
+
+DEATH (existing behavior, with one addition):
+1. If applyDamageTo drops health <= 0, the enemy dies NOW (removed from active
+   list, corpse 'm' stamped) — existing behavior.
+2. The health bar and flash both vanish instantly because the renderer only
+   draws bars/flashes for LIVING enemies in the active list. No death animation
+   for the bar is specified in v1 (see OPEN QUESTIONS for an optional shatter).
+
+=============================================================================
+PLAYER EXPERIENCE
+=============================================================================
+- "ONE MORE SHELL": the bar turns the abstract 60-HP Corruptor into a visible
+  countdown. The player sees the bar drop to a red sliver and KNOWS the next
+  point-blank shell ends it — so they commit to one more step forward instead
+  of retreating. The bar converts the tuned HP numbers into a felt decision.
+
+- "I CONNECTED": the white flash is the contact frame. Even when a shot does
+  chip damage at range (4 HP at distance 5), the flash confirms the pellets
+  landed. Without it, a low-damage long-range hit reads as a miss and the player
+  wastes shells trying to "aim better" at a target they were already hitting.
+
+- READABLE TRIAGE IN A PACK: in the signature 1 Corruptor + 2 Vortex Eye room,
+  three bars float at three heights (the eyes hover higher, see enemy_system
+  heightMultiplier). The player triages at a glance — "the eye on the left is
+  one sliver from dead, kill it first" — exactly the DCSS read-the-board moment.
+
+- HONEST DEATH (theirs): when an enemy's bar empties and it collapses to a
+  corpse, the cause is unambiguous. No "did it die or did it run off?" The bar
+  emptying IS the death, on the frame it happens.
+
+- NO NEW COST: the player never spends anything for this information. It is a
+  pure legibility upgrade. The tension stays in the shell count and spacing; the
+  bar just lets the player do that math without a calculator.
+
+=============================================================================
+HEALTH BAR — VISUAL SPEC
+=============================================================================
+GEOMETRY (all billboard, all in screen space derived from the sprite quad):
+The bar is a horizontal rectangle drawn ABOVE the sprite, parallel to the
+screen's X axis (i.e. flat/horizontal in the 3D view, the classic floating bar).
+It is NOT floor-projected into perspective; it is a flat axis-aligned quad whose
+width and height scale with the sprite's on-screen size, so it shrinks with
+distance exactly like the sprite.
+
+Per enemy, the renderer already computes (reusing PropRenderer/EnemyRenderer
+math): spriteScreenCenterColumn, spriteScreenHeight, spriteDrawWidth (=
+spriteScreenHeight * texW/texH), spriteDrawTop (top edge Y of the sprite quad).
+
+Derive the bar rectangle:
+  barWidth        = spriteDrawWidth * Constants.ENEMY_HEALTH_BAR_WIDTH_FRACTION
+                    (default 0.9 — bar is 90% of sprite width, slightly inset)
+  barHeight       = spriteScreenHeight * Constants.ENEMY_HEALTH_BAR_HEIGHT_FRACTION
+                    (default 0.06 — a thin slab; min-clamped, see below)
+  barCenterColumn = spriteScreenCenterColumn
+  barBottom       = spriteDrawTop + spriteScreenHeight
+                      * Constants.ENEMY_HEALTH_BAR_GAP_FRACTION
+                    (default gap 0.04 — a small float above the head)
+  barTop          = barBottom + barHeight
+  barLeft         = barCenterColumn - barWidth / 2
+  barRight        = barCenterColumn + barWidth / 2
+
+MINIMUM SIZE CLAMP (readability at distance):
+  barHeight = max(barHeight, Constants.ENEMY_HEALTH_BAR_MIN_PIXELS) (default 3
+    world units). Without this, far enemies get sub-pixel bars that vanish. The
+    bar should stay at least faintly visible as long as the sprite is.
+
+MAXIMUM DISTANCE:
+  Skip the bar entirely if spriteDepth > Constants.ENEMY_HEALTH_BAR_MAX_DISTANCE
+  _TILES (default 12 — slightly less than MAX_ENEMY_DRAW_DISTANCE_TILES 14 so a
+  barely-visible far enemy doesn't carry a clutter bar). Beyond that the sprite
+  still draws, but bare.
+
+THREE LAYERS (drawn back-to-front, all via the white-pixel texture tinted):
+  1. BORDER / BACKDROP: a rectangle barWidth+2*pad by barHeight+2*pad, tinted
+     near-black (0.05, 0.05, 0.05) at alpha ~0.85. pad = ENEMY_HEALTH_BAR_BORDER
+     _PIXELS (default 1). Gives the bar a frame so it reads against bright walls.
+  2. EMPTY TRACK: the full bar rectangle tinted dark red-gray (0.18, 0.05, 0.05).
+     This is the "missing health" portion, always full width.
+  3. FILL: a rectangle from barLeft to (barLeft + barWidth * fillFraction),
+     tinted by the gradient color (below). This is current health.
+  (Fill grows from the LEFT — health drains right-to-left, the universal read.)
+
+COLOR GRADIENT (fillFraction in [0,1], 1 = full health):
+  Two-stop interpolation through yellow for a readable midpoint:
+    if fillFraction >= 0.5:
+        // green -> yellow over [1.0 .. 0.5]
+        localT = (1.0 - fillFraction) / 0.5      // 0 at full, 1 at half
+        red   = lerp(0.10, 1.00, localT)
+        green = lerp(0.85, 0.85, localT)         // stays high
+        blue  = 0.10
+    else:
+        // yellow -> red over [0.5 .. 0.0]
+        localT = (0.5 - fillFraction) / 0.5      // 0 at half, 1 at empty
+        red   = 1.00
+        green = lerp(0.85, 0.10, localT)
+        blue  = 0.10
+  Result: full = bright green (0.10, 0.85, 0.10); half = yellow (1.0, 0.85, 0.1);
+  empty-ish = bright red (1.0, 0.10, 0.10). Put this in GameMath as a pure
+  function writing into a passed float[3] or a small reusable color holder (NO
+  per-call allocation — see TECHNICAL NOTES). Place values in Constants so the
+  palette is tunable.
+
+ALERT-PULSE INTERACTION: when redAlert is active the scene tints red. To keep
+  the bar legible, do NOT apply the red-alert multiplier to the FILL color (the
+  green must stay green so the gradient stays readable). The border/track MAY
+  take the alert tint. Flag this explicitly so the implementer doesn't blanket-
+  multiply everything by alertShade.
+
+DORMANT ENEMIES: do NOT draw a bar for a DORMANT enemy. A slumped, un-woken
+  Corruptor with a floating health bar breaks the ambush dread (you'd know it's
+  a live threat before it stirs). Only draw bars for enemies where
+  enemy.isAlerted() is true (state != DORMANT). This also means the FIRST shell
+  that wakes-and-hits a sleeper: it becomes alerted in the same combat tick, so
+  its bar appears the moment it takes damage — clean.
+
+=============================================================================
+HIT REACTION — VISUAL SPEC
+=============================================================================
+EFFECT: the entire enemy sprite blanches toward white for a short real-time
+window, then eases back to its normal distance-shaded color. This is the
+"impact frame" flash, the most readable hit-feedback for flat sprites (no
+sprite-sheet damage frame needed; it works on the single existing PNG).
+
+TIMING (WALL-CLOCK, not turn-based — this is the one place real time is allowed
+because it is purely cosmetic and decoupled from simulation; it never advances
+the world):
+  ENEMY_HIT_FLASH_DURATION_SECONDS = 0.18  (default; ~11 frames at 60fps)
+  The timer counts DOWN from this value to 0. At the project's snappy feel
+  (PLAYER_MOVE_DURATION 0.12) a 0.18s flash slightly outlives a single action so
+  the player sees it even mid-animation, but it is short enough to fully clear
+  before the next deliberate shot.
+
+INTENSITY CURVE (how white, given remaining timer):
+  flashStrength = hitFlashTimerSeconds / ENEMY_HIT_FLASH_DURATION_SECONDS  // 1->0
+  Optional ease for a punchier front: flashStrength = flashStrength * flashStrength
+  would fade slower at the start; default is LINEAR for predictability. Expose
+  ENEMY_HIT_FLASH_EASE_SQUARED (default false).
+
+APPLYING THE FLASH TO THE EXISTING SHADE:
+  The renderer already computes a per-sprite base shade (distance falloff, the
+  dormant dampen, the alert tint) producing a tint color (shadeRed, shadeGreen,
+  shadeBlue) set on the batch before drawing the sprite's columns. The flash
+  lerps that tint toward pure white:
+    flashRed   = lerp(shadeRed,   1.0, flashStrength)
+    flashGreen = lerp(shadeGreen, 1.0, flashStrength)
+    flashBlue  = lerp(shadeBlue,  1.0, flashStrength)
+  Set batch color to (flashRed, flashGreen, flashBlue, 1) for that enemy's
+  sprite columns this frame. flashStrength 0 => unchanged normal shade.
+  Put the lerp in GameMath (additive-toward-white tint) with the comment block.
+
+  IMPORTANT — flashing a SILHOUETTE not a square: because the sprite PNG is
+  transparent around the enemy and SpriteBatch tinting multiplies RGB but
+  respects the texture's per-texel ALPHA, tinting toward white only lights the
+  opaque enemy pixels. The flash naturally takes the enemy's shape. No mask
+  needed. (Do NOT instead draw a white quad over the sprite bounding box — that
+  would flash a rectangle, not the creature.)
+
+OPTIONAL KNOCK/POP (deferred, flag off by default): a 1-frame vertical "pop"
+  (raise drawBottom/drawTop by spriteScreenHeight * 0.03 for the flash window)
+  adds a flinch. Flag ENEMY_HIT_FLASH_POP_ENABLED, default false for v1 — keep
+  the billboard grounded and readable first.
+
+RANGED-CASTER FIRE FLASH (do not confuse with hit flash): enemy_system already
+  specifies a brief brighten when a Vortex Eye FIRES. That is a DIFFERENT event
+  (the enemy attacking, not being hit) and may reuse the same flash field with a
+  distinct trigger and a cyan-biased target color instead of white. Keep them
+  separable: triggerHitFlash() (white) vs an optional triggerCastFlash() (cyan).
+  v1 scope is the white HIT flash; the cast flash is noted for reuse only.
+
+=============================================================================
+TECHNICAL NOTES
+=============================================================================
+PRINCIPLE: extend the existing enemy + renderer; add no new packages, no new
+GL resources beyond what EnemyRenderer already owns (it already has a
+SpriteBatch and a white/1x1 pixel texture path — if it does not own a white
+pixel texture, reuse WallRenderer's whitePixelTexture by passing a reference,
+or add one to EnemyRenderer and dispose it). ZERO per-frame allocations.
+
+CHANGES TO EXISTING CLASSES:
+
+  enemy/Enemy.java
+    Add field:
+      float hitFlashTimerSeconds = 0f;
+    Add methods:
+      void triggerHitFlash()   { hitFlashTimerSeconds =
+          Constants.ENEMY_HIT_FLASH_DURATION_SECONDS; }
+      void advanceHitFlash(float deltaTime) {
+          if (hitFlashTimerSeconds > 0f) {
+              hitFlashTimerSeconds -= deltaTime;
+              if (hitFlashTimerSeconds < 0f) hitFlashTimerSeconds = 0f;
+          }
+      }
+      float getHitFlashStrength() {   // 0..1, 1 = freshly hit
+          return Constants.ENEMY_HIT_FLASH_DURATION_SECONDS <= 0f ? 0f
+              : hitFlashTimerSeconds / Constants.ENEMY_HIT_FLASH_DURATION_SECONDS;
+      }
+    Enemy.health and Enemy.type.maxHealth() already exist (enemy_system) — the
+    bar reads them directly. No new health state.
+
+  enemy/EnemyManager.java
+    In applyDamageTo(enemy, amount), AFTER enemy.applyDamage(amount) and BEFORE
+    the death check (so a killed enemy doesn't bother flashing — it's removed
+    anyway), call enemy.triggerHitFlash(). Single line. If a future "show the
+    death blow flash then die" is wanted, move it before the death removal and
+    let the renderer flash on the final frame — but v1 keeps it simple: dead
+    enemies are gone, no flash.
+    NOTE: the Vortex Eye ranged-hit-on-PLAYER does not touch this; the player
+    pain flash is a separate HUD effect (enemy_system VISUAL DESIGN).
+
+  render/EnemyRenderer.java  (the bulk of the work)
+    a) FLASH TIMER ADVANCE: EnemyRenderer.render() needs deltaTime. Two clean
+       options:
+         - Pass deltaTime into render via a setter setFrameDeltaTime(float) that
+           World calls before enemyRenderer.render(camera) (mirrors the existing
+           setPlayerState pattern), OR
+         - Advance flash timers in World.update(deltaTime) by iterating
+           enemyManager.getEnemies() and calling advanceHitFlash(deltaTime).
+       RECOMMEND the World.update approach: flash decay is simulation-adjacent
+       state, not render state, and keeping it out of render() avoids coupling
+       the timer to frame draw order. render() then only READS getHitFlashStrength().
+
+    b) PER-ENEMY SPRITE TINT: where EnemyRenderer currently does
+         batch.setColor(shade*alertR, shade*alertG, shade*alertB, 1f);
+       wrap with the flash lerp:
+         float flash = enemy.getHitFlashStrength();
+         float red   = GameMath.lerpTowardWhite(baseRed,   flash);
+         float green = GameMath.lerpTowardWhite(baseGreen, flash);
+         float blue  = GameMath.lerpTowardWhite(baseBlue,  flash);
+         batch.setColor(red, green, blue, 1f);
+       (baseRed/Green/Blue = the already-computed shaded tint.) setColor embeds
+       the tint in vertex data — no extra flush, same as wall shading.
+
+    c) HEALTH BAR DRAW: after the sprite's column loop for an enemy, if
+       enemy.isAlerted() && spriteDepth <= ENEMY_HEALTH_BAR_MAX_DISTANCE_TILES:
+         - compute bar rectangle (see VISUAL SPEC) from the already-known
+           spriteScreenCenterColumn / spriteScreenHeight / spriteDrawWidth /
+           spriteDrawTop. NO new projection math — pure arithmetic on values the
+           sprite pass already produced. Cache them in the per-enemy scratch
+           struct so the bar pass reads them without recompute.
+         - fillFraction = (float) enemy.health / enemy.type.maxHealth();
+           clamp to [0,1] (a chip overkill could momentarily read >1? no, health
+           is clamped >=0 and <= max; still clamp defensively).
+         - GameMath.healthBarColor(fillFraction, outColorFloat3) -> fill RGB.
+         - Z-BUFFER OCCLUSION: draw the bar PER-COLUMN exactly like the sprite.
+           For each screen column from barLeft..barRight:
+               if column < 0 || column >= screenWidth -> skip
+               if spriteDepth >= wallRenderer.getZBufferAt(column) -> skip
+               draw a 1-px-wide vertical slice of the bar (border, then track,
+               then fill if this column is within the fill portion) from the
+               appropriate Y bounds using the white-pixel texture tinted.
+           This guarantees the bar clips behind walls/corners identically to the
+           sprite (a half-occluded enemy shows a half-occluded bar). Using the
+           SAME spriteDepth as the sprite for the z-test keeps them consistent.
+           (Simplification allowed for v1: if per-column bar clipping is deemed
+           overkill, gate the WHOLE bar on a single z-test at barCenterColumn —
+           draw it only if spriteDepth < getZBufferAt(barCenterColumn). This
+           pops the bar on/off at the sprite's center as it rounds a corner;
+           acceptable but less pretty. Default to per-column; document the
+           fallback. See OPEN QUESTIONS.)
+         - The bar uses the white-pixel texture, so it draws in the SAME batch.
+           BUT note a texture switch: sprite columns use the enemy PNG, bar
+           columns use the white pixel. Drawing all sprites then all bars would
+           need re-sorting; simplest is to draw [sprite then its bar] per enemy,
+           accepting up to 2 texture switches per enemy. With <30 enemies that is
+           <60 flushes worst case — over the "32 draws/frame" guideline but only
+           when many enemies are on screen at once, which is the rare set-piece.
+           OPTIMIZATION if needed: TWO PASSES — pass 1 draws every enemy sprite
+           (enemy texture(s) only), pass 2 draws every health bar (white pixel
+           only). That collapses to ~2-3 texture switches total. RECOMMEND the
+           two-pass approach; it keeps draw calls flat and bars naturally render
+           on top of all sprites (correct, since bars float above heads and
+           should never be hidden by a nearer enemy's body unless a WALL is
+           between — and the per-column z-test still handles the wall case).
+           Two-pass requires caching each visible enemy's bar geometry +
+           fillFraction + depth in the pre-allocated scratch array during pass 1,
+           then iterating that array in pass 2. No allocation: the scratch array
+           is already sized to spawn count.
+
+  util/GameMath.java  (new pure functions, each with the mandatory comment block)
+    1) void healthBarColor(float fillFraction, float[] outRgb)
+         Two-stop green->yellow->red interpolation (see VISUAL SPEC). Writes
+         outRgb[0..2]. Caller passes a pre-allocated float[3] reused every call
+         (EnemyRenderer field) — pure function, no allocation, no LibGDX import.
+         Edge cases: clamp fillFraction to [0,1]; fillFraction exactly 0.5 picks
+         the yellow seam from either branch (continuous, so either is fine).
+    2) float lerpTowardWhite(float channel, float flashStrength)
+         return channel + (1.0f - channel) * clamp(flashStrength, 0, 1);
+         Derivation: standard lerp(channel, 1, t). Edge cases: flashStrength<=0
+         returns channel unchanged; >=1 returns 1 (full white). No div, no NaN.
+    (If chebyshev/manhattan/LOS helpers from enemy_system already added similar
+     util, keep these grouped near them.)
+
+  util/Constants.java  (ALL placeholders — tune in BALANCE)
+    ENEMY_HIT_FLASH_DURATION_SECONDS      = 0.18f
+    ENEMY_HIT_FLASH_EASE_SQUARED          = false
+    ENEMY_HIT_FLASH_POP_ENABLED           = false
+    ENEMY_HEALTH_BAR_WIDTH_FRACTION       = 0.9f
+    ENEMY_HEALTH_BAR_HEIGHT_FRACTION      = 0.06f
+    ENEMY_HEALTH_BAR_GAP_FRACTION         = 0.04f
+    ENEMY_HEALTH_BAR_MIN_PIXELS           = 3f
+    ENEMY_HEALTH_BAR_BORDER_PIXELS        = 1f
+    ENEMY_HEALTH_BAR_MAX_DISTANCE_TILES   = 12f
+    ENEMY_HEALTH_BAR_BORDER_RED/GREEN/BLUE= 0.05f, 0.05f, 0.05f
+    ENEMY_HEALTH_BAR_BORDER_ALPHA         = 0.85f
+    ENEMY_HEALTH_BAR_TRACK_RED/GREEN/BLUE = 0.18f, 0.05f, 0.05f
+    ENEMY_HEALTH_FULL_RED/GREEN/BLUE      = 0.10f, 0.85f, 0.10f
+    ENEMY_HEALTH_HALF_RED/GREEN/BLUE      = 1.00f, 0.85f, 0.10f
+    ENEMY_HEALTH_EMPTY_RED/GREEN/BLUE     = 1.00f, 0.10f, 0.10f
+    (GameMath reads the FULL/HALF/EMPTY stops from Constants so the palette is
+     tunable without touching math.)
+
+DRAW-CALL / ALLOCATION BUDGET:
+  - Two-pass renderer = ~2-3 texture switches added regardless of enemy count.
+  - Bar geometry cached in the existing pre-allocated scratch array (extend its
+    fields, do not allocate a new one).
+  - GameMath helpers write into a renderer-owned float[3] — no allocation.
+  - Flash timers are primitive float fields on Enemy — no allocation.
+  - Alpha blending: the border uses alpha 0.85; ensure SpriteBatch blending is
+    enabled (it is, for transparent sprite PNGs already). No state change needed.
+
+=============================================================================
+BALANCE / TUNING NOTES   (ALL VALUES PLACEHOLDER)
+=============================================================================
+- FLASH DURATION 0.18s: long enough to be unmissable, short enough to clear
+  before a deliberate next shot at the 0.12s action cadence. If it feels mushy,
+  drop to 0.12s (exactly one action). If hits feel weak, raise to 0.22s.
+- BAR HEIGHT 6% of sprite: a thin slab reads as "UI", a thick one competes with
+  the sprite. The 3px minimum is the real lever for distant readability — bump
+  to 4px if testers squint at far eyes.
+- GRADIENT MIDPOINT at 50%: matches intuition. For the Corruptor (60 HP, ~3
+  shells) the bar is green after shell 1 (40/60=0.67), yellow-ish after shell 2
+  (20/60=0.33 -> already red-orange), red sliver before shell 3 — which nicely
+  signals "one more". For the Vortex Eye (18 HP) most hits are lethal or near-
+  lethal, so its bar mostly flickers from full to gone — correct for a glass
+  cannon; the bar's value there is confirming the chip when you DON'T one-shot.
+- MAX BAR DISTANCE 12 < MAX_ENEMY_DRAW 14: a far enemy is a silhouette without a
+  bar (less clutter); it gains a bar as you close. If players want long-range
+  triage, raise to 14 to match the sprite range.
+- DO NOT animate the bar fill smoothly draining over time in v1 (no tween from
+  old fraction to new). Turn-based hits are discrete; an instant snap to the new
+  fraction is the honest read and avoids a "lag bar" that misrepresents current
+  HP mid-animation. Smooth drain is an OPEN QUESTION polish item.
+
+=============================================================================
+INTERACTIONS
+=============================================================================
+1. ENEMY SYSTEM (enemy_system.txt, IMPLEMENTED): direct extension. Reads
+   Enemy.health, Enemy.type.maxHealth(), Enemy.isAlerted(), Enemy.state. Hooks
+   EnemyManager.applyDamageTo for the flash trigger. The bar's "only when
+   alerted" rule preserves the dormant-ambush dread the enemy system is built on.
+
+2. SHOTGUN / WEAPON SYSTEM (shotgun-weapon-system.txt): every shotgun hit that
+   reaches EnemyManager.applyDamageTo now produces a flash + a bar update on the
+   same frame the FireResult resolves. Chip-damage hits at range (4-7 HP) become
+   legible — the flash proves the pellets connected, the bar shows the dent.
+   Future: FireResult already carries hit/damage data; a future floating damage
+   NUMBER could spawn from the same hook (see OPEN QUESTIONS).
+
+3. RED ALERT / WALL PULSE (emergency-red-alert-pulse.txt): the FILL color must
+   bypass the alert red-multiply to stay readable green/yellow; the border/track
+   may take the tint. This is the one place the otherwise-global alert shade must
+   be selectively NOT applied. Explicitly flagged so the implementer doesn't
+   blanket-multiply the bar.
+
+4. Z-BUFFER (WallRenderer.getZBufferAt): the bar uses the SAME per-column depth
+   test and the SAME spriteDepth as the enemy sprite, so bar and body clip behind
+   walls/corners identically. Hard dependency on the existing z-buffer API.
+
+5. PROP / BILLBOARD PIPELINE (billboard-prop-sprites.txt): EnemyRenderer mirrors
+   PropRenderer. The flash tint reuses the exact batch.setColor mechanism props
+   use for shading (zero extra flush). The bar's white-pixel slices reuse the
+   1-px vertical-slice draw idiom the wall/prop renderers already use.
+
+6. CORPSES (enemy_system death -> 'm' decal): when an enemy dies, it leaves the
+   active list, so its bar and flash disappear on that frame. The corpse prop
+   has no bar (correct — it is no longer an Enemy). Clean handoff, no special
+   case needed.
+
+=============================================================================
+EDGE CASES
+=============================================================================
+- MULTIPLE ENEMIES: bars are per-enemy and depth-sorted with the sprites
+  (farthest-first). The recommended two-pass draw means a near enemy's bar never
+  hides behind a far enemy's body, and the per-column z-test still hides any bar
+  behind a WALL. Overlapping bars of two enemies on adjacent tiles simply stack
+  visually — acceptable and informative.
+- OCCLUDED ENEMY (behind a wall, partial): per-column z-test clips the bar exactly
+  like the sprite. A half-behind-a-corner enemy shows half a bar. If using the
+  v1 fallback (single center z-test) the bar pops on/off at the center column —
+  document which mode shipped.
+- ENEMY DIRECTLY BEHIND / ATOP PLAYER: spriteDepth <= behind-player epsilon is
+  already filtered before the sprite is projected (enemy_system / prop pipeline);
+  the bar pass only runs for enemies that passed that filter, so no div-by-zero
+  and no bar for an enemy the player is standing on.
+- DEAD ENEMY: removed from the active list before the next render — never gets a
+  bar or flash. If applyDamageTo flashes-then-kills, the kill removal wins and no
+  flash is seen on the death frame (v1 accepts this; see OPEN QUESTIONS for an
+  optional death flash).
+- FULL HEALTH: fillFraction = 1.0 -> bar full green. Some games hide the bar at
+  full HP to reduce clutter. DECISION for v1: always show the bar for ALERTED
+  enemies even at full (the player wants to see the target acquired). Optional
+  hide-at-full flag noted below.
+- OVERKILL / NEGATIVE HEALTH: Enemy.applyDamage clamps health at 0 (enemy_system);
+  fillFraction clamps to [0,1] defensively. A 0-fraction bar is an all-track
+  (empty) bar, but in practice a 0-HP enemy is already removed, so the empty bar
+  is never actually drawn.
+- VERY CLOSE ENEMY (sprite fills screen): barWidth could exceed screen width;
+  the per-column loop clips to [0, screenWidth) so off-screen bar columns are
+  simply skipped. No crash, bar just runs to the screen edges.
+- TINY/FAR ENEMY: barHeight min-clamp (3px) keeps the bar visible; beyond
+  ENEMY_HEALTH_BAR_MAX_DISTANCE_TILES the bar is skipped entirely.
+- RAPID RE-HIT: a second hit before the flash expires resets the timer to full
+  (triggerHitFlash overwrites, not adds) — clean re-flash, no stacking blowout.
+- PAUSE / NO DELTA: if the game pauses and deltaTime is 0 or not advanced, the
+  flash timer simply freezes (fine) and resumes on unpause. If deltaTime can
+  spike (lag frame), the subtract-and-clamp prevents negative timer values.
+
+=============================================================================
+OPEN QUESTIONS
+=============================================================================
+1. PER-COLUMN bar clipping vs single CENTER z-test: recommend per-column for
+   pretty corner reveals; the single-center fallback is cheaper and simpler.
+   Which ships in v1? (Default: per-column.)
+2. HIDE BAR AT FULL HEALTH: add ENEMY_HEALTH_BAR_HIDE_AT_FULL (default false)?
+   Reduces clutter but hides "target acquired" confirmation. Team call.
+3. SMOOTH FILL DRAIN: tween the fill from old fraction to new over ~0.2s for
+   juice, or snap instantly (honest)? Recommend snap for v1; tween is polish.
+4. FLOATING DAMAGE NUMBERS: FireResult carries damage dealt — spawn a small
+   rising "−20" sprite/number from the same applyDamageTo hook? Separate feature
+   (needs a number-rendering path / bitmap font in the 3D view). Defer; noted as
+   a natural sibling.
+5. DEATH FLASH / SHATTER: on the killing blow, play a one-frame full-white flash
+   and/or a quick bar "shatter" before swapping to the corpse? Adds death juice
+   but needs the renderer to hold the dying enemy for one extra frame. Defer.
+6. CAST FLASH REUSE: should the Vortex Eye's "I'm firing" brighten reuse the
+   hitFlash field with a cyan target color (triggerCastFlash) or be a separate
+   field? Recommend a separate trigger + target color to keep hit vs cast
+   readable. Out of v1 scope (v1 = white HIT flash only).
+7. POP/FLINCH: ship the 1-frame vertical pop (ENEMY_HIT_FLASH_POP_ENABLED) or
+   keep the billboard grounded? Recommend off for v1.
+8. MINI-MAP HP: should the mini-map enemy dots also encode HP (dot color shifts
+   green->red)? Low priority; the floating bar already covers it in the 3D view.

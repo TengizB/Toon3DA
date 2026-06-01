@@ -1,0 +1,233 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: The Lurker — Blind-Spot Flanker + Facing-As-Defense System
+CREATED: 2026-05-31
+---
+
+OVERVIEW
+========
+The Lurker is a fast, fragile demon that refuses to fight you face-to-face. It
+skitters along ceilings and walls just out of view, circles the player, and only
+strikes the tile DIRECTLY BEHIND your current facing — your blind spot. To the
+player it is a predator that vanishes the instant you turn toward it and lunges
+the instant you turn away. It exists to make the player's FACING DIRECTION a
+live tactical resource, not just a way to aim. Because the player can only face
+four cardinal directions and every rotation costs a turn, "which way am I
+looking?" becomes a constant defensive decision.
+
+This pairs the enemy with a small, reusable subsystem: the FLANK / BLIND-SPOT
+model. Any enemy can be tagged as a "flanker" that deals bonus damage from your
+rear arc, and the player gains a readable "threat-behind" warning. The Lurker is
+the showcase enemy for it, but the system also retroactively deepens every
+existing melee enemy: getting surrounded now genuinely matters, and turning to
+face a threat is a meaningful trade (you expose your back to whatever was there).
+
+It is dripping with Doom-RPG dread: you hear claws scuttling overhead, the screen
+edges darken behind you, and a UAC bio-scanner voice mutters "Motion — behind
+you." The counterplay is pure positioning: back into a corner so you have no
+blind spot, use a wall as your "sixth wall," or bait the lunge and spin to meet
+it.
+
+GAMEPLAY LOOP
+=============
+Core definitions:
+- A tile's REAR TILE = the tile immediately behind the player, i.e. player tile
+  minus the facing vector: (playerColumn - directionX, playerRow - directionY).
+- BLIND ARC = the rear tile plus the two diagonally-rear tiles (3 tiles). Logic
+  stays cardinal; diagonals are only used for the "is this enemy flanking me"
+  check, never for movement.
+
+Lurker behavior, evaluated once per player turn during the enemy phase:
+1. STALK: while not adjacent, the Lurker pathfinds toward the player BUT always
+   tries to end its move on a tile inside the player's current blind arc. If a
+   blind-arc tile is reachable this turn, it moves there; otherwise it moves one
+   step closer along the normal path. While in the player's front/side view it is
+   rendered semi-transparent and "climbing the wall" (see VISUAL) — a tell, not a
+   full reveal.
+2. POSITION → COIL: when the Lurker reaches the player's REAR TILE specifically,
+   it does not attack immediately. It spends one turn "coiling" (a clear wind-up
+   pose + audio hiss). This is the player's warning window.
+3. POUNCE: on its next turn, if it is STILL in the player's blind arc, it deals a
+   heavy backstab hit (LURKER_BACKSTAB_DAMAGE) and recoils back one tile.
+4. PLAYER COUNTER — the whole point:
+   - ROTATE TO FACE IT: rotating so the Lurker is now in your FRONT arc cancels
+     the pounce, staggers the Lurker for one turn (STAGGERED state, can't act),
+     and lets you attack it while it's exposed. BUT rotating costs your turn and
+     exposes your NEW rear tile to anything else.
+   - BACK INTO COVER: if your rear tile is a wall/door/solid prop, you have NO
+     blind spot — the Lurker cannot reach a rear tile and is forced into your
+     front arc to engage, where it is far weaker. Corners (two walls behind) are
+     safest of all.
+   - JUST MOVE: stepping forward breaks the coil (the rear tile changes), but the
+     fast Lurker re-establishes position quickly, so running only delays it.
+5. DEATH: very low HP — one solid hit from most weapons kills it. Drops a small
+   amount of credits/ammo (ties into loot/ransack). It is a glass cannon: lethal
+   if ignored, trivial if faced.
+
+PLAYER EXPERIENCE
+=================
+The Lurker turns the camera into a survival instrument. The player constantly
+asks "what is behind me right now?" — a question this genre rarely forces because
+most dungeon crawlers let you see threats you're walking toward. It creates a
+delicious tension loop: you WANT to keep facing forward to progress and aim, but
+something is exploiting exactly that. The fix (rotate to face it) feels great —
+a hard spin-and-blast that staggers the thing — but it always costs you tempo and
+re-exposes a different flank, so it never feels free.
+
+The decision it forces every encounter: "Do I give up my forward progress / my
+aim on the enemy in front to deal with the thing behind me, or do I find a wall
+to put my back against?" It also teaches spatial literacy: experienced players
+will fight Lurkers in corridors and corners, not open rooms. Death to a Lurker
+always reads as "I let it sit behind me too long" — fair, legible, your fault.
+
+TECHNICAL NOTES
+===============
+Builds on the planned enemy framework (enemy_system.txt) and the enemy turn
+driver (global-tick-event-system.txt). All logic is integer tile space; visuals
+are cosmetic overlays through the existing billboard/raycast pipeline. No
+allocations in render().
+
+New tile symbol:
+- 'k' = Lurker spawn (k for "skitter"; 'l'/'L' are taken by floor/locker). Add to
+  LevelLoader; spawn a Lurker entity, treat the tile as floor for the grid. Like
+  other enemies, solidity is entity-side, so Level.isWall stays unchanged.
+
+New / modified classes:
+- entity/Lurker.java (or a config + behavior strategy in the enemy system):
+  fields tileColumn, tileRow, facing (for its sprite), state enum
+  {STALKING, COILING, STAGGERED, RECOILING}, health, coilTurnsRemaining.
+  Method takeTurn(playerColumn, playerRow, playerDirectionX, playerDirectionY,
+  level, doorManager).
+- entity/FlankComponent.java (the reusable subsystem): a small data tag
+  { boolean isFlanker; float rearDamageMultiplier; } that ANY enemy can carry.
+  The damage-resolution code checks, when an enemy attacks, whether the enemy
+  occupies the player's blind arc and applies the multiplier. This is what lets
+  the Lurker model generalize to all melee enemies.
+- util/GameMath.java — add pure helpers (each with the mandatory
+  Formula/Derivation/Edge-cases comment block):
+  * rearTile(playerColumn, playerRow, playerDirectionX, playerDirectionY) ->
+    returns the column/row of the tile directly behind the player.
+    Derivation: rear = player - facing unit vector. Edge case: facing is always a
+    cardinal unit vector, so result is always an integer-adjacent tile.
+  * isInBlindArc(enemyColumn, enemyRow, playerColumn, playerRow,
+    playerDirectionX, playerDirectionY) -> boolean. Compute the vector from
+    player to enemy; project onto the facing vector; enemy is in the blind arc if
+    the dot product is negative (behind) AND it is within the 3-tile rear cluster
+    (rear + two rear-diagonals). Returns false for tiles in front or directly to
+    the side. Edge case: enemy on the same tile (dot == 0) -> not behind.
+  * Reuse cardinalLineOfSightClear(...) if added by the turret idea, for the
+    Lurker's "can I see/path to a blind tile" checks.
+- render/EnemyRenderer.java: render Lurker billboard with state-driven appearance
+  (transparent/climbing while in view, opaque + coil pose when behind). Because a
+  billboard behind the player is off-screen, the "behind you" threat is conveyed
+  by the HUD overlay below, NOT by drawing the Lurker on screen.
+- render/HudRenderer.java (or a new render/ThreatVignetteRenderer.java): draw a
+  REAR-THREAT indicator — a red/orange darkening + claw-mark vignette on the
+  BOTTOM edge of the 3D view (the bottom edge reads as "near/behind the camera")
+  whenever an enemy is in the player's blind arc. Intensity ramps from STALKING
+  (faint) to COILING (bright, pulsing). Pre-allocate the vignette texture/quad in
+  create(); never allocate in render().
+- render/LevelRenderer.java: on the mini-map, draw the player's blind arc tiles
+  with a faint tint so the player can read their own vulnerable rear from the map,
+  and draw the Lurker normally (mini-map shows it even when "hidden" in 3D —
+  rewarding map-watchers; or gate this behind a stat/upgrade for stealth depth).
+
+Constants to add (Constants.java) — ALL PLACEHOLDER:
+- LURKER_HEALTH = 10
+- LURKER_BACKSTAB_DAMAGE = 18
+- LURKER_FRONT_DAMAGE = 4        (weak chip if forced to fight you face-on)
+- LURKER_COIL_TURNS = 1          (warning window before the pounce)
+- LURKER_STAGGER_TURNS = 1       (free hit window after you spin to face it)
+- LURKER_MOVE_RANGE_TILES = 1    (one tile per enemy turn; it's fast via good pathing, not multi-step)
+- FLANK_REAR_DAMAGE_MULTIPLIER = 1.5  (generic flanker bonus for other enemies)
+- THREAT_VIGNETTE_BASE_ALPHA / _PULSE_ALPHA (rear-threat overlay colors/alpha)
+
+VISUAL DESIGN
+=============
+- Sprite: a low, spider-limbed demon-imp the color of dried blood and ash —
+  hunched, too many joints, a single sweep of pale eyes. Reads as "wrong, fast,
+  cowardly."
+- In-view (front/side arc) state: rendered at ~45% alpha and pressed flat against
+  a wall/ceiling, limbs splayed ("climbing"). The semi-transparency says
+  "not fully here yet / can't hit me like this." Slight jitter animation.
+- Coil state (in your blind arc): full opacity, body drawn back like a spring,
+  pale eyes flaring. Accompanied by a sharp hiss SFX and the rear-threat vignette
+  spiking to bright pulsing red on the bottom screen edge.
+- Pounce: a one-frame claw-slash overlay sweeping across the lower screen + screen
+  shake; the Lurker is then drawn briefly in the front arc as it recoils.
+- Stagger (after you spin to face it): it's caught mid-air/exposed, eyes dim, a
+  white hit-flash outline — clearly "now's your chance."
+- Rear-threat HUD vignette: claw-mark silhouettes darkening the bottom 1/5 of the
+  3D view. STALKING = faint amber, steady. COILING = saturated red, ~2 Hz pulse.
+  This is the single most important readability element — the player fights what
+  they cannot see, so the vignette IS the enemy's on-screen presence.
+- Audio: directional scuttling that grows louder as it nears your rear; a
+  bio-scanner voice barks "Motion — behind you" on first coil of an encounter.
+- Mini-map: small fast-moving dot; player's blind-arc tiles faintly tinted red.
+
+BALANCE NOTES
+=============
+- Fairness lever = LURKER_COIL_TURNS. At 1, the player always gets exactly one
+  turn of warning (vignette spikes) before the backstab — enough to spin or step.
+  Set to 0 only on the deepest floors for terror; raise to 2 if early deaths feel
+  cheap.
+- Glass-cannon tuning: HP 10 means nearly any weapon one-shots it, so the threat
+  is purely positional, not a damage sponge. Backstab 18 is scary vs ~50-100 HP
+  but not an instant kill from full; two ignored backstabs should kill, punishing
+  sustained neglect rather than a single slip.
+- Front damage must stay low (4) so that forcing the Lurker into your front arc
+  (via cover) feels like a hard counter, reinforcing the "back to a wall" lesson.
+- Stagger 1 turn guarantees the spin-to-face counter always yields a free hit,
+  making the skillful response feel rewarding.
+- Spawn guidance for generators/level designers: Lurkers shine in OPEN rooms and
+  multi-exit junctions (blind spots everywhere) and are near-useless in tight
+  1-wide corridors (player's back is a wall) — place them to push the player OUT
+  of safe corridors into exposed space. Never spawn 2 Lurkers such that facing
+  one always exposes you to the other unless that's a deliberate late-floor
+  gauntlet. Cap ~1-2 per room early game.
+- All numbers above are placeholders pending playtest.
+
+INTERACTIONS
+============
+1. All melee enemies (enemy_system.txt): the FlankComponent generalizes — give
+   any chaser isFlanker=true and surrounding the player suddenly matters. The
+   Lurker is the tutorial that teaches the rule that then applies game-wide.
+2. Cover: columns 'P', doors 'd', solid props (barrels/crates/lockers) and walls
+   all serve as "rear blockers." This makes the existing prop/cover layout
+   tactically richer at zero new art cost. A locker at your back is a panic button.
+3. Sentry Turret (sentry-turret-stationary-enemy): brutal synergy — a Lurker
+   forces you to keep spinning, and a turret punishes you for facing the wrong
+   lane. The two together create a true positional puzzle; level designers should
+   use the pairing deliberately and sparingly.
+4. Noise propagation (noise-propagation-and-3d-sound-cues): the Lurker's scuttle
+   is a directional audio cue, and loud weapons that wake it should let it flank
+   from stealth — silent counters (melee spin) preserve quiet.
+5. Hazards (hazard-wall-tile, pressure-plate-trap-tiles, hazard chains): baiting a
+   Lurker's pounce so it recoils onto a hazard tile or pressure plate is an
+   emergent kill — rewards spatial setup.
+6. Progression / boons (levelup-stim-boon-choice): natural boon candidates — a
+   "rear motion radar" that shows blind-arc enemies on the mini-map, a "spinal
+   plate" that caps backstab bonus damage, or a "whirl" boon that lets a rotation
+   also attack the tile you're turning past. Strong build-identity hooks.
+7. Berserk / melee builds: a high-Strength melee player who learns to spin-and-one-
+   shot Lurkers plays completely differently from a ranged player who walls up —
+   feeds the build-diversity pillar.
+
+OPEN QUESTIONS
+==============
+- Does the Lurker appear on the mini-map while "hidden" in 3D, or is map-visibility
+  a stealth-relevant property gated behind IQ / a radar upgrade? (Showing it on the
+  map is more readable; hiding it makes the audio/vignette tells matter more.)
+- Should rotating to face it ALSO require you to then attack, or is the stagger
+  enough of a reward on its own? (Auto-flinch on facing vs. flinch-only-on-hit.)
+- Blind arc = 3 tiles (rear + rear diagonals) or strictly 1 (rear only)? Three is
+  more dangerous and forgiving to the enemy's pathfinding; one is more precise and
+  punishing to face. Recommend 3 for v1, tune down if it feels unfair.
+- Should backing into a corner make it give up entirely (wander off) after N turns,
+  or hover and re-engage the moment you step out? Wandering off rewards patience but
+  can feel anticlimactic.
+- Climbing-on-walls visual: render it as a wall-attached sprite (needs a wall-decal
+  draw path) or just a floating semi-transparent billboard? Recommend billboard for
+  v1 to reuse the existing pipeline; upgrade later.
+- Does the front-arc "forced fight" use a separate weak attack, or does it simply
+  flee and re-flank? Forced weak fight is more decisive and readable; recommend it.

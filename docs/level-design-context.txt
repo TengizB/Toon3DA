@@ -1,0 +1,65 @@
+# Moved from: .claude/agents/game-level-designer.md
+# Background context for game-level-designer agent — not needed at runtime.
+
+=== DOOM RPG DNA ===
+
+First-person pseudo-3D raycasting: corridors/rooms rendered as vertical wall stripes (Wolfenstein 3D principle).
+Entirely turn-based: every step, rotation, attack, item use costs one turn; all enemies act once after.
+
+Level design implications:
+- 1-tile-wide hallway fills screen with walls on both sides — use deliberately for tension, open rooms for relief.
+- Player sees ~5–8 tiles ahead before distance shading fades to near-black.
+- Corners and T-junctions are inherently dramatic — player doesn't know what's around the bend.
+- Room scale: 10×10 open room feels enormous; 3×5 room feels tight. Most rooms: 4×6 to 8×10 interior floor space.
+- Asymmetry makes spaces feel organic; symmetry reads as deliberate (signals importance — use for boss rooms).
+
+Doom RPG level features:
+- Key card gating: colored key cards unlock doors, forcing exploration.
+- Secrets: wall segments identical to 'x' but interactable — reveal hidden passages/item caches.
+- Computer terminals: shop/lore/puzzle nodes at dead ends or room corners.
+- Episode variety: UAC offices → maintenance corridors → demon zones → hellscapes.
+
+=== ROGUELIKE STRUCTURE ===
+
+- Levels procedurally generated each run (future). Hand-crafted templates used now.
+- Permadeath: one life per run. Death resets everything.
+- Resource scarcity: ammo, health, keys finite per floor. Every room could be the player's last.
+- Floor escalation: deeper = more enemies, tighter corridors, less health.
+- Safe rooms: one per floor — rest point, shop, lore terminal. Reward cautious exploration.
+
+=== SPATIAL DESIGN PRINCIPLES (roguelike references) ===
+
+Shattered Pixel Dungeon — rooms connected by corridors, clear entry/exit. Every room has purpose
+  (combat, loot, puzzle, rest). Corridors are transition spaces, not play spaces.
+
+DCSS — branching layouts; player chooses which path to explore. Dead ends contain rewards.
+  Main path never obvious.
+
+Enter the Gungeon — each room is self-contained encounter, cleared fully before moving on.
+  Rooms designed around enemy placement, not just geometry.
+
+Brogue — elegant, minimal. Rooms feel hand-sculpted. Pillars, alcoves, irregular shapes break monotony.
+
+=== VISUAL VOCABULARY ===
+
+Long straight corridors → dramatic vanishing-point perspective. Use for grand entrances or final approaches.
+90° corners → sudden reveals; player cannot see around. Gate information, create tension.
+Open rooms → walls feel distant, ceiling/floor dominate. Use 'v' tiles on room walls to break repetition.
+Narrow corridors with 'c' tiles → industrial, cramped, utilitarian. Perfect for maintenance passages.
+Terminal alcoves with 't' tiles → visual reward for exploration (terminal glows conceptually).
+Distance shading → walls >~5 tiles away fade toward black. Put important things in well-lit (close) spaces;
+  put secrets and rewards in darker far corners.
+
+=== EXAMPLE LAYOUTS (illustrative — real levels span full 80×45 grid) ===
+
+Minimal test level structure:
+  xxxxxxxx...
+  x      x...
+  x  p   x...
+  x      x...
+  xxxxxxxx...
+  (rooms connected by corridors, each room 4×6+ interior, dead ends with purpose)
+
+Accent tile usage:
+  xvx  [room interior]  x   ← 'v' vent on room wall
+  xwxxxxxxxxxxxxxxxxcccx    ← 'w' wires near equipment, 'c' conduit run in utility corridor

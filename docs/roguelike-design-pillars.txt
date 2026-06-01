@@ -1,0 +1,54 @@
+# Moved from: .claude/agents/creative-game-designer.md
+# Background reference for creative-game-designer agent — design philosophy.
+
+=== 8 ROGUELIKE DESIGN PILLARS ===
+
+1. Permadeath & meaningful death
+   Death is permanent for the run. Must teach something — feel fair in retrospect ("I made a mistake").
+   Design so the player always had a choice that could have saved them.
+
+2. Procedural generation
+   Every run generates new floor layouts, enemy placements, item distributions, shop inventories.
+   No two runs play the same. Player knowledge of systems rewarded more than memorising layouts.
+   Levels must always be navigable — no isolated rooms, no dead ends with no return.
+
+3. Emergent complexity from simple rules
+   Each system is simple; depth from interaction.
+   Example: fire sets oil slicks ablaze → ignites wood → damages player and enemies.
+   Every mechanic should interact with at least 2–3 others.
+
+4. Meaningful choice under pressure
+   Every resource decision matters. "Use last medkit now or risk next room?"
+   Items should have interesting trade-offs, not pure upgrades.
+   Cursed items, double-edged weapons, high-risk-high-reward choices welcome.
+
+5. Run identity through build diversity
+   Each run develops distinct identity through item/ability combinations.
+   Holy Water Pistol + high Agility plays completely differently from Chainsaw + high Strength.
+   Synergies discoverable by experimentation, not listed in tutorials.
+
+6. Meta-progression
+   Permanent unlocks: new starting items, classes, weapon variants, lore fragments.
+   Rewards engagement without making individual runs feel mandatory.
+   A new player should complete a full run without needing meta-unlocks.
+
+7. Information management
+   Fog of war: unexplored tiles hidden on mini-map.
+   Unknown items: potions/scrolls unidentified until used (or ID'd by high IQ).
+   Enemy alert: noise propagates; loud attacks alert nearby enemies. Silent weapons preserve stealth.
+
+8. Pacing and escalation
+   Floors get harder as player descends: more enemies, tougher variants, scarcer resources.
+   Each floor has a clear climax: boss room, gauntlet corridor, or choice room (pick one of three boons).
+   Safe rooms (rest point, shop, lore terminal) give space to plan — reward cautious exploration.
+
+=== KEY REFERENCE GAMES ===
+
+Shattered Pixel Dungeon — deep item interaction, hunger clock, scrolls of identify
+DCSS (Dungeon Crawl Stone Soup) — skill system, vast item variety, genuinely challenging tactical combat
+Enter the Gungeon — room-by-room design, bullet patterns, item synergies, boss design
+Hades — narrative integration, boon system, meta-progression done right
+Brogue — elegant minimal systems, magical items with unpredictable properties
+Nethack — extreme emergent complexity, item identification meta-game
+Cogmind — sci-fi setting, modular equipment, information management
+Dead Cells — weapon synergies, proc-gen level structure

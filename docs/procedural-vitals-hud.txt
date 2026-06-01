@@ -1,0 +1,202 @@
+PROCEDURAL VITALS HUD — Implementation Reference
+==================================================
+Package: ge.tbegvadze.toon3d.hud
+Status:  IMPLEMENTED (branch claude/procedural-vitals-hud-5IQfh)
+
+
+OVERVIEW
+--------
+A bottom-strip HUD drawn entirely with LibGDX ShapeRenderer primitives and the
+built-in BitmapFont.  Zero textures loaded — every pixel is a hardcoded
+rectangle, ellipse, polyline, or text string.  Doom-RPG game-feel DNA: segmented
+HP/armor bars, synthetic marine face, phosphor-green readouts, dirty-steel chrome.
+
+The HUD occupies y 0..130 world units (18% of the 1280x720 canvas) as a
+horizontal strip split into three bevelled panels.
+
+
+NEW FILES
+---------
+  core/src/main/java/ge/tbegvadze/toon3d/hud/HudRenderer.java
+      Implements Renderable + Disposable.
+      Owns ONE ShapeRenderer, ONE SpriteBatch, ONE BitmapFont.
+      No-allocation render: all Colors pre-allocated, StringBuilder/GlyphLayout reused.
+      Three ordered render passes per frame (see RENDER PASSES below).
+
+  core/src/main/java/ge/tbegvadze/toon3d/world/HudState.java
+      Plain mutable holder for game state the HUD displays:
+        int currentAmmo, maxAmmo  — ammo count and clip size
+        String weaponName         — displayed in the right panel
+        int turnCounter           — displayed as "T:0142"
+        boolean alertActive       — drives LED + STATUS line color
+        String statusOverride     — transient message (e.g. "LOCKED"); clears when timer expires
+        float statusOverrideSeconds — seconds remaining for the override
+
+
+MODIFIED FILES
+--------------
+  util/Constants.java
+      Added HUD geometry, bar, face, compass, animation, and player-armor constants.
+      Added MINI_MAP_ORIGIN_X / MINI_MAP_ORIGIN_Y — relocates the mini-map to the
+      top-left corner (y ≈ 412..712) so it no longer overlaps the HUD strip.
+
+  util/GameMath.java
+      Added three pure static helpers (each with mandatory Formula/Derivation/Edge-cases block):
+        segmentFillCount(fraction, segmentCount) -> int
+            round(fraction × count), clamped to [0, count].
+        pulseMultiplier(clockSeconds, hertz, minMul, maxMul) -> float
+            minMul + (maxMul−minMul) × 0.5 × (1 + sin(2π × hertz × clock)).
+        appendIntPadded(StringBuilder, value, minDigits)
+            Zero-padded integer append; no boxing, no String allocation.
+
+  entity/Player.java
+      Added armor field (initialized to 0), maxArmor (from Constants.PLAYER_MAX_ARMOR=100).
+      Added getArmor(), getMaxArmor(), applyArmor(int), getHealthFraction(), getArmorFraction().
+      Updated render() to offset the mini-map dot and direction indicator by
+      MINI_MAP_ORIGIN_X / MINI_MAP_ORIGIN_Y.
+
+  render/LevelRenderer.java
+      Replaced hardcoded (0, 0) mini-map origin with MINI_MAP_ORIGIN_X / MINI_MAP_ORIGIN_Y
+      across all draw calls (fill, grid lines, border, ray fan).
+
+  world/World.java
+      Instantiates HudState (placeholder values) and HudRenderer in constructor.
+      Adds HUD to dispose() chain.
+      Wires hudState.alertActive from gameState.redAlert each frame.
+      Calls hudRenderer.update(deltaTime) then hudRenderer.render(camera) last in
+      the render pipeline (after mini-map, before nothing).
+
+
+RENDER PASSES
+-------------
+Each frame HudRenderer executes three strictly ordered passes:
+
+  Pass A — ShapeRenderer.Filled
+      Panel backgrounds (STEEL_DARK fill + STEEL_BLACK recessed well)
+      Corner rivets (BEVEL_LIGHT circles)
+      Status LEDs (LED_GREEN or ALERT_RED pulsed)
+      Dashed perforated dividers between panels
+      Synthetic face (rounded rect head, brow bar, eyes, facial fill)
+      HP and armor bar segments (filled with gradient colors)
+      Compass highlight background box
+      Ammo separator line
+
+  Pass B — ShapeRenderer.Line
+      Outer and inner bevels on all three panels (two-tone raised/sunken look)
+      Corner rivet outlines
+      Face silhouette outline and mouth stroke / frown / zigzag / X-eyes
+      Compass highlight box outline
+
+  Pass C — SpriteBatch + BitmapFont
+      "HP" label and numeric health value (red + pulsing at low HP)
+      "AR" label and numeric armor value
+      STATUS line: "STATUS: NOMINAL/ALERT/KIA   T:0142"
+      "AMMO" label, big ammo digits with 4-way phosphor glow halo, weapon name
+      Compass glyph row (W NW N NE E SE S SW W; current facing highlighted)
+
+ShapeRenderer and SpriteBatch must NOT share a begin/end block; each pass ends
+before the next begins.
+
+
+LAYOUT (world units)
+--------------------
+  Strip:  x 0..1280,  y 0..130
+  LEFT:   x 0..360       (face + compass)
+  CENTER: x 360..920     (HP bar, AR bar, status line)
+  RIGHT:  x 920..1280    (ammo digits, weapon name)
+  Dividers at x=360 and x=920 (dashed column of 2×5 rectangles)
+
+  Panel chrome (identical recipe for all three):
+    1. STEEL_DARK fill
+    2. STEEL_BLACK inset well (6 units inset each side)
+    3. Two-tone outer bevel (BEVEL_LIGHT top+left, BEVEL_DARK bottom+right)
+    4. Two-tone inner bevel (reversed — sunken feel)
+    5. Four corner rivets (filled BEVEL_LIGHT circles, BEVEL_DARK ring outline)
+    6. Status LED top-right corner (LED_GREEN / ALERT_RED pulsed)
+
+
+FACE HEALTH BUCKETS
+-------------------
+  >= 0.75  PRISTINE  : full ellipse eyes (14×10), flat mouth
+  0.50-0.74 NEUTRAL  : eyes 1 unit shorter (14×9), flat mouth
+  0.25-0.49 STRAINED : eyes droop 4 units, frown (two line segments)
+  < 0.25   CRITICAL  : slit eyes (filled rect 14×3, HP_ORANGE), zigzag mouth,
+                        whole face tinted toward HP_RED, eyes/digits pulse at HUD_PULSE_HZ
+  isDead             : X-eyes (crossed lines), flat mouth, monochrome tint
+
+
+HP BAR GRADIENT (20 segments, left to right)
+--------------------------------------------
+  Segments 0-6  : HP_DARKRED  #5A0E0E
+  Segments 7-13 : HP_RED      #E01818
+  Segments 14-19: HP_ORANGE   #FFB020
+  Empty slots   : HP_EMPTY    #2A0A0A
+  Pulse (low HP): all filled segments multiply brightness by pulseMultiplier
+
+
+ARMOR BAR GRADIENT (20 segments)
+----------------------------------
+  Segments 0-6  : ARM_DEEPCYAN  #0A4A66
+  Segments 7-13 : ARM_CYAN      #18C0E0
+  Segments 14-19: ARM_WHITE     #D8F8FF
+  Empty slots   : ARM_EMPTY     #0A1A22
+
+
+ANIMATION / REACTIVE BEHAVIOUR
+--------------------------------
+  update(deltaTime) called once per frame before render():
+    - animationClockSeconds advances, wraps at 1000s
+    - displayedHealthFraction and displayedArmorFraction lerp toward real values
+      at HUD_BAR_LERP_RATE (3.5 fraction units/sec) — produces a smooth "damage glide"
+    - Ammo change detected by comparing previousAmmo: arms ammoGlowTimerSeconds (0.18s)
+    - Weapon change detected by comparing previousWeaponName: arms weaponBannerTimerSeconds (0.30s)
+    - statusOverrideSeconds counts down; clears statusOverride on expiry
+
+  Pulses use GameMath.pulseMultiplier(clock, HUD_PULSE_HZ=4, 0.6, 1.0).
+
+  Ammo glow: when ammoGlowTimerSeconds > 0, the digit halo is WARN_YELLOW.
+             When ammo == 0, halo and digits are HP_RED, pulsing.
+  Weapon banner: when weaponBannerTimerSeconds > 0, weapon name is WARN_YELLOW.
+  Status override: set hudState.statusOverride + hudState.statusOverrideSeconds
+                   from any system (e.g. door locked feedback → "LOCKED" for 1.5s).
+
+
+MINI-MAP RELOCATION
+-------------------
+Previously at world (0,0)...(300,300), overlapping the HUD strip.
+Now at:
+  MINI_MAP_ORIGIN_X = 8
+  MINI_MAP_ORIGIN_Y = WORLD_HEIGHT − 8 − MINI_MAP_WORLD_SIZE  = 412
+So the map occupies world (8, 412)..(308, 712) — upper-left quadrant, clear of the HUD.
+Change touches LevelRenderer (all draw calls) and Player.render() (dot + direction indicator).
+
+
+FUTURE EXTENSION HOOKS
+-----------------------
+  - Keycard sockets: reserve LEFT panel local y 0..14 (currently empty).
+  - Alert bezel tint: multiply all panel STEEL_DARK fill by (1 + 0.15 × alertPulse) red channel.
+  - Compass scroll: expose PlayerController.actionProgress for sliding highlight during rotation.
+  - CRT/scanline upgrade: swap HudRenderer for a texture + shader version; keep HudState unchanged.
+  - Armor pickup: call player.applyArmor(amount) from any pickup system.
+  - Turn-counter wiring: increment hudState.turnCounter in TickEventBus when the weapon/turn system lands.
+
+
+PALETTE (hex → float RGB)
+--------------------------
+  STEEL_DARK      #1A1A1F  (0.102, 0.102, 0.122)
+  STEEL_BLACK     #0E0E12  (0.055, 0.055, 0.071)
+  BEVEL_LIGHT     #4A4A55  (0.290, 0.290, 0.333)
+  BEVEL_DARK      #08080A  (0.031, 0.031, 0.039)
+  PHOSPHOR_GREEN  #00FF88  (0.000, 1.000, 0.533)
+  PHOSPHOR_DIM    #00553A  (0.000, 0.333, 0.227)
+  HP_DARKRED      #5A0E0E  (0.353, 0.055, 0.055)
+  HP_RED          #E01818  (0.878, 0.094, 0.094)
+  HP_ORANGE       #FFB020  (1.000, 0.690, 0.125)
+  HP_EMPTY        #2A0A0A  (0.165, 0.039, 0.039)
+  ARM_DEEPCYAN    #0A4A66  (0.039, 0.290, 0.400)
+  ARM_CYAN        #18C0E0  (0.094, 0.753, 0.878)
+  ARM_WHITE       #D8F8FF  (0.847, 0.973, 1.000)
+  ARM_EMPTY       #0A1A22  (0.039, 0.102, 0.133)
+  WARN_YELLOW     #FFE000  (1.000, 0.878, 0.000)
+  ALERT_RED       #FF2A2A  (1.000, 0.165, 0.165)
+  LED_GREEN       #30FF60  (0.188, 1.000, 0.376)

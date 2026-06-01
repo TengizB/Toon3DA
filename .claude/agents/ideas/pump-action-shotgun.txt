@@ -1,0 +1,437 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Items
+TITLE: Pump-Action Shotgun (first weapon + weapon system foundation)
+CREATED: 2026-05-27
+---
+
+OVERVIEW
+========
+Introduces the Pump-Action Shotgun — the player's first real weapon and the
+keystone that stands up the entire weapon system. One shotgun shell consumes
+one turn, deals heavy point-blank damage, falls off with distance, and locks
+the player into a one-turn "pump" reload animation that the enemies absolutely
+will use to close on you. This is the Doom RPG opening loop: you find the
+shotgun on a corpse, you shoot a zombie at 2 tiles, you pump, a second zombie
+slaps you, you shoot again, you live. Every weapon shipped after this
+(plasma rifle, chainsaw, BFG, pistol) reuses the same Weapon abstraction,
+ammo-pool system, attack-resolution code path, and muzzle-flash compositing.
+
+Why now: the `s` (dropped shotgun) decal already exists on the tile spec, the
+zombie design doc already calls out shotgun as a 1.5× weakness, the turn engine
+exists, and the player currently has no way to actually fight back. This is the
+single highest-leverage feature in the backlog after enemies themselves.
+
+
+GAMEPLAY LOOP
+=============
+PRE-PICKUP STATE
+- Player spawns unarmed (fists do 1 damage, used as fallback).
+- A shotgun is placed in the level at one or more tiles marked `s`.
+
+PICKUP
+1. Player steps onto a tile containing the `s` decal.
+2. World checks the tile after the move completes (post-snap, IDLE state).
+3. If `s`: shotgun is added to inventory, tile char is rewritten to whatever
+   floor char it was before (default ` `). Shells: +8 (one box).
+4. HUD pickup banner: "PUMP-ACTION SHOTGUN  +8 SHELLS" — 2-turn fade.
+5. Weapon is auto-equipped (player had no weapon).
+
+FIRING (one full turn)
+1. Player presses SPACE (attack key — NEW input, see Constants).
+2. PlayerController checks state == IDLE and weapon.canFire() (has ammo + not
+   in pump cooldown). If yes, transitions to ATTACKING state.
+3. Weapon.fire(player, level, enemies) resolves instantly in game logic:
+   a. Build a "shot ray" starting at player tile, marching forward
+      (directionX, directionY) one tile at a time, up to SHOTGUN_RANGE_TILES.
+   b. For each tile crossed: if it contains a wall, stop. If it contains an
+      enemy, register hit, apply damage with falloff, continue (the shotgun
+      pellets penetrate one enemy — pellet-pierce flavor; see BALANCE).
+   c. Damage at distance D: base × falloffMultiplier(D). See BALANCE.
+4. Visual: weapon sprite plays MUZZLE_FLASH frame for 0.10s, screen flashes
+   warm-white at 0.40 alpha for 0.05s, hit enemies play their hurt animation
+   simultaneously. A short "BOOM" sample plays.
+5. Turn ends. Enemies take their turn. Now player is in PUMP_PENDING.
+
+PUMP RELOAD (next turn)
+1. Player presses ANYTHING (move, rotate, attack — anything).
+2. Before the action resolves, if weapon.needsPump() == true: the input is
+   consumed by the pump action instead of the requested action. Weapon plays
+   pump animation (sprite frames forward → back, 0.20s), distinctive
+   "CHK-CHUNK" sample plays, and the turn ends normally. Enemies act.
+3. Weapon.canFire() becomes true again the moment pump animation completes.
+4. RATIONALE: this is what makes the shotgun *feel* heavy and tactical — you
+   literally lose a turn after every shot. The player learns to back into a
+   chokepoint *before* shooting, not after.
+
+EMPTY-CLICK
+- If player presses SPACE with 0 shells, weapon plays "click" sample at 0.40
+  volume, NO turn is consumed, HUD ammo counter flashes red for 0.15s. Free
+  to retry / switch weapon / run.
+
+OUT-OF-AMMO FALLBACK
+- If player has shotgun but 0 shells, SPACE swaps weapon to FISTS for one
+  attack (1 damage, range 1, no pump). This way the player is never softlocked.
+
+
+MECHANICS
+=========
+
+SHOTGUN STAT BLOCK (placeholders, tune in playtest)
+---------------------------------------------------
+  Base Damage (per pellet, 7 pellets):       2
+  Pellet Spread:                             1 tile cone (see below)
+  Effective Range:                           4 tiles (full damage)
+  Falloff Range:                             5–6 tiles (50% damage)
+  Max Range:                                 6 tiles (no damage past this)
+  Penetration:                               1 enemy (kill or wound first one,
+                                              continues to second behind it)
+  Ammo per Shot:                             1 shell
+  Starting Shells (on pickup):               8
+  Max Shells Carried:                        24 (later upgrades raise this)
+  Pump Time:                                 1 turn (forced, after every shot)
+  Zombie Weakness Multiplier:                1.5× (already in zombie doc)
+
+PELLET CONE
+-----------
+Tile-space pellet pattern (player at @ facing right):
+
+    . . p . . .
+    . p P P P .       p = side pellet (deals 1× damage)
+    @ P P P P P       P = center pellet (deals 2× damage)
+    . p P P P .
+    . . p . . .
+
+A simpler integer model (preferred for v1):
+- 5 pellets along the forward axis (1 per tile up to range 5).
+- 1 pellet 45° off each side at range 1 only (catches diagonal-adjacent
+  enemies — important since the player can't strafe-shoot).
+
+The cone is processed left-to-right by tile distance, applying damage in order
+so that hit-stop / camera shake fires only once per shot.
+
+DAMAGE FALLOFF
+--------------
+Distance (tiles)   Damage Multiplier
+  1                 1.50  (point blank — devastating)
+  2                 1.00
+  3                 1.00
+  4                 0.75
+  5                 0.50
+  6                 0.25
+  7+                0.00
+
+Stored as a small float array Constants.SHOTGUN_FALLOFF_BY_TILE for easy tuning.
+
+WHY NO HITSCAN ARC / WHY TILES
+------------------------------
+Because the player faces strictly N/S/E/W and enemies live on a grid, a true
+"cone" with angles would be lying — the underlying logic must remain integer
+tile checks for consistency with LOS and pathfinding. The cone above is a
+visual approximation; the *game logic* is "march forward N tiles, also check
+the two diagonals at distance 1."
+
+
+TECHNICAL NOTES
+===============
+
+NEW PACKAGE
+-----------
+  ge.tbegvadze.toon3d.weapon
+    Reason: weapons are gameplay objects with state (ammo, pump, equipped),
+    they don't fit in `entity` (not on the map) or `item` (which doesn't exist
+    yet — items will go in `…toon3d.item` later). Keep them isolated.
+
+NEW CLASSES
+-----------
+  weapon/Weapon.java           (abstract base class)
+    - String displayName
+    - int ammoInReserve, maxAmmo
+    - WeaponState state         (READY, FIRING, PUMP_PENDING, PUMPING, EMPTY)
+    - float animationProgress   (0..1 driven by deltaTime in update())
+    - abstract void fire(Player, Level, EnemyManager, WeaponEventBus)
+    - abstract boolean needsPump()
+    - boolean canFire()         (state == READY && ammoInReserve > 0)
+    - void update(float deltaTime)
+    - String hudAmmoString()    e.g. "8 / 24"
+
+  weapon/PumpActionShotgun.java extends Weapon
+    - implements the pellet cone in fire(...)
+    - holds reference to Sound assets (boom, pump, click)
+    - in update(): when state == FIRING && animationProgress >= 1, transitions
+      to PUMP_PENDING. Pump itself is started by PlayerController on next input.
+
+  weapon/Fists.java extends Weapon
+    - infinite ammo, range 1, damage 1, no pump
+    - serves as default fallback
+
+  weapon/WeaponSpriteRenderer.java
+    - Draws the equipped weapon sprite at the bottom-center of the screen each
+      frame, using current weapon + current frame index.
+    - Pre-allocates a Sprite[] per weapon (idle, fire, pump 1/2/3). No allocs
+      in render().
+    - Position: centered on x = WORLD_WIDTH / 2; bottom edge at y = 0; size
+      tuned to feel like a marine arm + barrel (placeholder 480×320 sprite).
+
+  weapon/WeaponEventBus.java
+    - Tiny callback registry: onShotFired(damage, hits[]), onHit(enemyId,
+      damage), onEmptyClick(), onAmmoChanged(weapon).
+    - HUD subscribes (ammo counter), camera-shake subscribes, screen-flash
+      subscribes, audio subscribes. Decouples weapon logic from presentation.
+
+  entity/PlayerInventory.java
+    - Owned by Player.
+    - Map<WeaponSlot, Weapon> weapons; WeaponSlot currentSlot.
+    - Ammo pools shared per ammo-type, not per weapon (shells live here, not
+      on the shotgun itself — future: shotgun + super-shotgun share shells).
+    - Methods: equip(slot), next(), previous(), addAmmo(AmmoType, amount),
+      hasAmmo(AmmoType, amount), consumeAmmo(AmmoType, amount).
+
+NEW ENUMS
+---------
+  weapon/AmmoType { SHELLS, BULLETS, CELLS, ROCKETS, NONE }
+  weapon/WeaponSlot { MELEE, PRIMARY, SECONDARY, HEAVY, SPECIAL }
+  weapon/WeaponState { READY, FIRING, PUMP_PENDING, PUMPING, EMPTY }
+
+PLAYERCONTROLLER CHANGES
+------------------------
+- Add new PlayerActionState value: ATTACKING.
+- In pollInput(): before checking W/A/S/D/Q/E, check SPACE (Constants
+  .KEY_ATTACK). If pressed and currentWeapon.canFire(), start ATTACKING.
+- If currentWeapon.needsPump() and ANY action key pressed: divert to PUMPING
+  action (consumes the turn, doesn't move/rotate).
+- ATTACKING uses Constants.PLAYER_ATTACK_DURATION (0.18s — slightly longer
+  than move so the muzzle flash reads).
+- TurnEngine.onPlayerActionStarted() is still called once per action — pumping
+  counts as a turn.
+
+LEVEL.JAVA CHANGES
+------------------
+- `s` is already a walkable decal. Add new method consumeDecalAt(tileColumn,
+  tileRow) which atomically reads the decal char and rewrites it to the
+  underlying floor char (default ` `). Stores the original floor char in a
+  parallel sparse map so we don't lose unlit/flickering state when a decal is
+  picked up over them. (Alternative: store decals in a separate layer entirely —
+  recommended long-term; the per-tile-char approach is convenient for now.)
+
+WALLRENDERER / WEAPON SPRITE INTEGRATION
+----------------------------------------
+- WeaponSpriteRenderer.render() is called AFTER WallRenderer and AFTER
+  enemy/billboard rendering, but BEFORE LevelRenderer (mini-map). The weapon
+  is always on top of the world.
+- Uses its own SpriteBatch (or shares the HUD batch — see HUD idea).
+- Muzzle flash is a separate additive-blended quad drawn over the weapon
+  sprite for 0.10s.
+
+SCREEN SHAKE
+------------
+- New util class: render/ScreenShake.java
+  - shakeAmount, decayPerSecond.
+  - When shotgun fires: shakeAmount = SHOTGUN_SHAKE_INTENSITY (placeholder 6f).
+  - WallRenderer reads shake offset before rendering and applies a 2D translate
+    to its batch (camera offset only, no world-space change). Snap to integer
+    pixel offsets so the pixelated look isn't muddied.
+
+GAMEMATH ADDITIONS
+------------------
+  shotgunFalloffMultiplier(int distanceTiles) -> float
+  pelletConeTiles(playerTileColumn, playerTileRow, dirX, dirY, range)
+    -> int[][] (allocates? NO — fill a pre-allocated buffer passed in)
+
+CONSTANTS ADDITIONS
+-------------------
+  KEY_ATTACK                     = Input.Keys.SPACE
+  KEY_WEAPON_NEXT                = Input.Keys.NUM_2  (reserved for future)
+  KEY_WEAPON_PREV                = Input.Keys.NUM_1
+  PLAYER_ATTACK_DURATION         = 0.18f  (seconds)
+  PLAYER_PUMP_DURATION           = 0.22f  (seconds)
+  SHOTGUN_RANGE_TILES            = 6
+  SHOTGUN_PELLET_COUNT           = 7
+  SHOTGUN_BASE_DAMAGE_PER_PELLET = 2
+  SHOTGUN_PENETRATION_COUNT      = 1
+  SHOTGUN_PICKUP_SHELLS          = 8
+  SHOTGUN_MAX_SHELLS             = 24
+  SHOTGUN_FALLOFF_BY_TILE        = {0f, 1.50f, 1.00f, 1.00f, 0.75f, 0.50f, 0.25f}
+  SHOTGUN_SHAKE_INTENSITY        = 6f
+  SHOTGUN_SCREEN_FLASH_ALPHA     = 0.40f
+  SHOTGUN_SCREEN_FLASH_DURATION  = 0.05f
+  FISTS_DAMAGE                   = 1
+  FISTS_RANGE_TILES              = 1
+
+
+VISUAL DESIGN
+=============
+
+WEAPON SPRITE (idle)
+- A gloved marine arm holding a black/grey pump-action shotgun, barrel pointing
+  toward the top of the screen. Visible furniture: wooden pump-grip, ribbed
+  heat shield over barrel, blued-steel receiver. Bottom of sprite anchors at
+  the screen bottom — barrel takes up the lower ~30% of the screen.
+
+WEAPON SPRITE FRAMES (5 total, all 480×320 pixel-art canvas)
+  1. idle           — barrel raised, hand on pump grip
+  2. fire           — barrel kicks UP 12 pixels, muzzle replaced with bright
+                       orange-white flash + smoke, ejected shell mid-flight
+  3. pump-back      — pump grip slid back 20 pixels, breech open, smoke wisp
+  4. pump-forward   — pump grip mid-return, ejected shell falling
+  5. pump-idle      — back to idle pose (re-uses frame 1)
+
+The hand-pump-back motion is the iconic "I just killed a zombie" feedback.
+
+MUZZLE FLASH
+- A second additively-blended quad over the weapon, ~96px tall, palette
+  shifts orange → yellow → white in 3 frames over 0.10s.
+- Brief warm-tinted lightening of nearby walls — implemented as a shade
+  multiplier bump in WallRenderer during the muzzle-flash window. Falls off
+  with distance.
+
+SCREEN FLASH
+- Full-screen white quad at 0.40 alpha for 0.05s. Snaps off — does not fade.
+
+CAMERA SHAKE
+- Up-down only (a real shotgun kicks vertically). 6px peak, decays over 0.18s.
+
+AUDIO
+- "BOOM" — short, low, punchy. Mono. ~0.4s tail.
+- "CHK-CHUNK" — two-stage pump click. ~0.5s with a small silence between
+  the two clicks. This silence is the *gameplay tell* — enemies hear the pump.
+- "Click" — empty-chamber dry firing. Hollow, slightly metallic.
+- "Pellets impact wall" — wet thwacks on hit-tile wall (future polish).
+
+HUD ELEMENTS
+- Bottom-right ammo counter: large yellow digits "8" with smaller "/ 24" below.
+  Font: pixel display, 32px high, slight outer glow when ammo just changed.
+- Bottom-left weapon name strip: "PUMP-ACTION  SHOTGUN" fades in/out on swap.
+- Both elements go through the HUD idea (scanline CRT HUD).
+
+CORPSE/PICKUP VISUAL
+- `s` decal sprite: dark steel-grey shotgun lying flat on the floor, slight
+  bloom/highlight on barrel so it's visible in dim tiles. Already part of the
+  billboard-prop-sprites design.
+
+
+BALANCE & TUNING
+================
+
+EARLY GAME (no shotgun)
+- Player has fists. Fists do 1 dmg, range 1. Zombies have 8 HP. 8 turns to
+  kill a zombie with fists, taking 4–8 chip hits from the zombie in return.
+- The shotgun MUST be findable within the first 1–2 rooms of level 1.
+
+WITH SHOTGUN, FULL DAMAGE TILE (distance 2)
+- 7 pellets × 2 dmg × 1.0× = 14 base, but pellet cone usually hits ~3 pellets
+  per enemy in the center column. Realistic per-shot damage = 4–8.
+- Apply 1.5× zombie weakness: 6–12 effective. Zombies have 8 HP → most one-shot,
+  some two-shot.
+- Point-blank (distance 1): 3 pellets × 2 × 1.5 × 1.5 (zombie) = 13.5 — always
+  one-shots a zombie. THIS is the tactical reward for letting it get close.
+
+PUMP PENALTY
+- Effective cadence: one shot every 2 player turns.
+- Net DPS = ~7 zombie-effective damage / 2 turns = 3.5 / turn. Zombie does
+  2 / turn melee. Net: player wins 1-vs-1 zombie trades easily *if* they have
+  the shells. Player struggles 1-vs-3 in open rooms (correct).
+
+SHELL ECONOMY
+- Average shells per level: 12 (pickup) + 8 from boxes scattered in rooms.
+- 20 shells / 12 zombies per level = 1.67 shells per kill budget.
+- If the player misses, panics, or fires at distance, they will run out.
+- This pressures the player to (a) get close, (b) use chokepoints, (c) save
+  shells for tough rooms.
+
+DIFFICULTY LEVERS
+- SHOTGUN_BASE_DAMAGE_PER_PELLET (single knob for everything)
+- SHOTGUN_PENETRATION_COUNT (0 = harder; 2 = anti-horde monster)
+- SHOTGUN_PICKUP_SHELLS / shell box size
+- Pump duration (could be removed entirely on a hypothetical "rapid pump" upgrade)
+
+
+INTEGRATION POINTS
+==================
+
+EXISTING CLASSES TOUCHED
+------------------------
+  Player.java
+    - Holds a `PlayerInventory` reference.
+    - Exposes `getCurrentWeapon()`.
+    - No direct combat code — that lives in Weapon and the EnemyManager
+      (which doesn't exist yet — comes with the zombie idea).
+
+  PlayerController.java
+    - New ATTACKING / PUMPING action states.
+    - New input poll for SPACE.
+    - Routes shotgun pump-pending interception (any input → pump turn).
+    - Calls Player.getCurrentWeapon().fire(...).
+
+  Level.java
+    - `consumeDecalAt(tileColumn, tileRow)` for `s` shotgun and (future)
+      shell-box pickups.
+    - `isDecal(char)` static helper.
+
+  WallRenderer.java
+    - Reads ScreenShake offset before applying its batch transform.
+    - Reads MuzzleFlash brightness bump during shading pass.
+
+  TurnEngine (from zombie doc)
+    - ATTACKING and PUMPING are valid player turns. The engine doesn't care
+      what kind of turn it is — just that it ended.
+
+  Constants.java
+    - All new constants listed above.
+
+  GameMath.java
+    - shotgunFalloffMultiplier, pelletConeTiles (with documented derivations).
+
+CROSS-FEATURE INTERACTIONS
+--------------------------
+  ZOMBIE ENEMY
+    - Already specifies "Weapon Weakness: Shotgun (1.5×)". This is where that
+      multiplier finally has a consumer. Apply when Weapon.fire() resolves
+      damage on a target whose enemy type defines a weakness.
+
+  DOORS
+    - Shotgun cannot blast doors open in v1 (would trivialize keycards).
+    - FUTURE: a weak "wooden barricade" door type could be shotgun-breakable.
+    - Pump-CHUNK noise WILL alert any enemy within hearing range, including
+      through closed (but not locked) doors. Hooks into noise propagation.
+
+  LABORATORY LIGHTING
+    - Muzzle flash temporarily brightens nearby walls. Implemented as a global
+      shade bump in WallRenderer for ~0.10s after fire — independent of and
+      composited over the existing lighting calculation.
+
+  BILLBOARD PROP SPRITES
+    - The `s` decal is already speced as a billboard floor decal — no new
+      sprite work, just pickup logic. The dropped-shotgun sprite is reused
+      from the same texture if the player later DROPS the shotgun (out of
+      scope for v1 but architecturally clean).
+
+  RED ALERT PULSE
+    - Shotgun BOOM is a "noise event" the alert system can subscribe to,
+      raising local alarm state in the future.
+
+  FLOOR/CEILING TEXTURE RENDERING
+    - Ejected shell visual is a tiny 1-frame brass particle that lands on
+      the floor; can be implemented as a transient decal that fades after
+      a few turns, or skipped entirely in v1.
+
+
+OPEN QUESTIONS
+==============
+1. Should the shotgun pellet "penetration" stop at walls or pass through
+   1-thick wall fragments? Recommendation: STOP at walls. No exceptions.
+2. Should pumping be cancellable by weapon-swap? E.g. swap to fists mid-pump
+   to avoid wasting a turn? Recommendation: NO — pump completes once started;
+   prevents abuse and keeps weapons feeling weighty.
+3. Should pump noise wake distant enemies (hearing range > sight range)?
+   Recommendation: YES, 6-tile omni-directional alert radius. Noise mechanics
+   are a high-value future system.
+4. Should the player start with fists, or empty hands? Recommendation: fists.
+   "Empty hands" creates a softlock-feeling moment if all weapons run dry.
+5. Pellet cone diagonal pellets — do they go through walls at distance 1?
+   Recommendation: NO. A wall directly N of the player blocks the NW + NE
+   pellets at distance 1. Standard LOS rules apply.
+6. Multi-shotgun pickup behavior — second `s` pickup gives shells only, not
+   a second weapon. Code path is identical to a future "shell box" pickup.
+7. Should we ship a "Super Shotgun" variant in the same idea, or save for
+   a follow-up doc? Recommendation: separate doc — Super Shotgun is its
+   own decision (double-barrel, 2 shells per shot, no penetration, 16 pellets).

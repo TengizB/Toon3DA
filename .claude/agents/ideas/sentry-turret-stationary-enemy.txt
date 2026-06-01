@@ -1,0 +1,184 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: UAC Sentry Turret — Stationary Line-of-Fire Enemy
+---
+
+OVERVIEW
+========
+The Sentry Turret is a stationary, ceiling- or floor-mounted UAC defense gun
+that the facility's hacked security system has turned against you. Unlike every
+other enemy planned, it never moves — it bolts to a single tile and rotates to
+track the player, firing down a clean cardinal line of sight. This makes it the
+game's first true "area-denial" threat: it does not chase, it controls a
+corridor. The player's job is not to outrun it but to break its line of fire,
+flank to its blind arc, or destroy it before it shreds them.
+
+The turret is built specifically for the tile/cardinal architecture. Because
+the player moves and faces in four cardinal directions, the turret's firing line
+is always a straight run of tiles along a row or column. Line of sight is a
+trivial integer tile walk — no float math, no free-aim. The turret only fires
+when the player is on its row or column AND no wall/door blocks the line. Step
+out of the lane and you are instantly safe; step back in and it punishes you.
+This reads instantly to the player: "stay out of the red lane."
+
+Thematically it is dripping UAC: a sleek charcoal pod with a glowing targeting
+laser and a corporate voice line ("UAC Sentry online. Hostile detected.
+Compliance is mandatory."). It can be hacked (with sufficient IQ / a terminal
+nearby) to flip allegiance, or simply blown up. It is the natural inhabitant of
+chokepoints, vault approaches, and the lane outside a keycard door.
+
+GAMEPLAY LOOP
+=============
+1. A turret occupies one tile (it is solid — blocks movement and raycasting like
+   a column, but is a destructible entity, not a wall). It has a facing and an
+   "alert" state: DORMANT, TRACKING, or FIRING.
+2. On each enemy turn the turret evaluates: is the player on my row or column,
+   within range, with an unobstructed cardinal line (no wall, closed door, or
+   solid prop between us)?
+   - If NO: it rotates one 90° step toward the player's general direction (slow
+     tracking) and stays DORMANT/TRACKING. It does not fire.
+   - If YES and it is already facing the player's lane: it enters FIRING and
+     deals ranged damage this turn (a hitscan down the lane).
+   - If YES but not yet facing: it spends this turn rotating to face the lane
+     (TRACKING) and fires NEXT turn — giving the player one turn of warning.
+3. The player sees the threat through (a) the turret's targeting laser drawn
+   down its facing lane on the mini-map and in 3D, and (b) a HUD/audio warning
+   when they enter a tracked lane.
+4. Player options to survive:
+   - STEP OUT of the lane (one perpendicular move = instant safety; turret loses
+     line of sight and reverts to TRACKING).
+   - APPROACH FROM THE BLIND ARC: the turret rotates only one quarter-turn per
+     enemy turn, so a player who circles fast enough can reach an adjacent tile
+     in its blind arc and attack melee with reduced risk.
+   - DESTROY IT: it has modest HP; explosive barrels in the lane are a clean
+     one-shot. A closing door also fully blocks it.
+   - HACK IT (optional, see INTERACTIONS): convert it to fire on enemies.
+5. When destroyed it leaves a smoking wreck prop and may drop plasma cells
+   (ties into loot/ransack).
+
+PLAYER EXPERIENCE
+=================
+The turret rewires how the player reads a room. Open corridors stop being safe
+running lanes and become kill-zones with a clear, fair tell. The one-turn
+"warning shot" (rotate this turn, fire next) makes deaths feel earned: you saw
+the laser swing onto you and chose to stand there. It introduces positional
+puzzle-solving into combat — "how do I cross this hall?" — answered by timing,
+cover (columns, doors), or sacrificing a barrel. It also creates great synergy
+moments: luring a chasing demon into the turret's lane so the turret does your
+work, or shooting an explosive barrel sitting in the lane to kill both.
+
+The decision it forces: "Do I spend resources to kill it, or do I just route
+around its lane and leave it alive behind me?"
+
+TECHNICAL NOTES
+===============
+Fits cleanly into the planned enemy framework (enemy_system.txt). The turret is
+an enemy with movementPattern = STATIONARY and a specialized targeting routine.
+
+New tile symbol: `'G'` = Sentry turret spawn (gun). Add to LevelLoader parsing;
+on load, spawn a turret entity at that tile and treat the tile as floor for the
+grid (the entity itself is solid via the entity collision layer, mirroring how
+solid props block movement). `Level.isWall` stays unchanged — solidity for
+entities is handled entity-side, consistent with barrels/crates being props.
+
+New / modified classes:
+- `entity/SentryTurret.java` (or an enemy-type config within the enemy system):
+  fields tileColumn, tileRow, facingX, facingY (cardinal unit vector),
+  alertState (enum), health. Method `takeTurn(playerColumn, playerRow, level,
+  doorManager)` implements the rotate/track/fire logic above.
+- `GameMath.java`: add a pure helper
+  `cardinalLineOfSightClear(fromColumn, fromRow, toColumn, toRow, level,
+  doorManager)` → boolean. It returns false immediately if the two points are
+  not on the same row or column; otherwise it walks the integer tiles between
+  them and returns false if any is a wall, a closed door, or a solid prop.
+  Include the required Formula/Derivation/Edge-cases comment block (edge cases:
+  same tile, adjacent tiles, diagonal request → not aligned → false).
+- `GameMath.java`: `quarterTurnToward(currentFacingX, currentFacingY,
+  targetColumnDelta, targetRowDelta)` → returns the cardinal facing one 90° step
+  closer to the target (for slow tracking).
+- `EnemyRenderer.java`: render the turret billboard (pod + barrel) and its
+  targeting laser as a thin emissive stripe along the lane (the laser can be a
+  cheap colored quad drawn per visible lane tile through the existing billboard
+  path — no render() allocations; pre-allocate).
+- `LevelRenderer.java`: draw the turret and a colored line down its current lane
+  on the mini-map (TRACKING = amber, FIRING = red).
+- Enemy turn driver / GlobalTickEventSystem: turret takeTurn() runs in the enemy
+  phase like any enemy.
+
+All logic is integer tile space; the 3D laser is cosmetic only.
+
+Constants to add (`Constants.java`):
+- TURRET_MAX_RANGE_TILES = 8 (placeholder)
+- TURRET_DAMAGE_PER_SHOT = 8 (placeholder)
+- TURRET_HEALTH = 24 (placeholder)
+- TURRET_TRACK_TURNS_BEFORE_FIRE = 1 (warning window)
+- TURRET_LASER_COLOR_TRACKING / _FIRING (color constants)
+
+VISUAL DESIGN
+=============
+- Billboard: a compact charcoal-and-steel pod with a stubby cylindrical barrel
+  and a single red optical "eye" lens. Mount it slightly above floor center so
+  it reads as a fixed emplacement, ~0.7x wall height. A faint cyan UAC stencil
+  on the housing.
+- Targeting laser: a thin translucent line running from the barrel straight down
+  its facing lane to the first obstruction. Amber/orange while TRACKING (low
+  alpha, "searching"), snaps to bright red and thickens for one frame-burst when
+  FIRING (the muzzle also flashes). The laser is the player's primary read.
+- Eye lens color mirrors state: dim red dormant, pulsing amber tracking, hard
+  white-red flash on fire.
+- Mini-map: turret as a small square with a short colored line indicating lane
+  and state, so the player can plan routes from the map alone.
+- Death: a quick orange spark burst, then a desaturated "wreck" billboard
+  (barrel drooping) that remains as cover/flavor and can be ransacked for cells.
+
+BALANCE NOTES
+=============
+- The one-turn warning is the core fairness lever. If deaths feel cheap, raise
+  TURRET_TRACK_TURNS_BEFORE_FIRE to 2; if it feels toothless, lower to 0 in
+  later/harder floors only.
+- Damage should sting but not one-shot a healthy player (8 dmg vs ~50-100 HP).
+  Standing in the lane for 3+ turns should be lethal — punishing greed, not
+  punishing a single mistake.
+- Range 8 tiles keeps lanes long enough to matter without covering whole levels.
+- HP low enough that a shotgun blast or one barrel kills it, so the player
+  always has a clean answer if they choose to spend resources.
+- Placement guidance for generators/level designers: one turret per chokepoint,
+  never two covering the same lane (that removes the "step out" answer). Pair
+  with at least one piece of cover (column/door) on the approach.
+- All numbers above are placeholders pending playtest.
+
+INTERACTIONS
+============
+1. Explosive barrels & hazard chains (hazard-chain-reactions): a barrel in the
+   turret's lane is the cleanest counter — shoot it to destroy the turret. The
+   turret can also detonate barrels by firing at the player past one.
+2. Doors (doors.txt, keycard-doors): a closed/closing door fully blocks the
+   lane, so doors become tactical shields. A turret guarding a keycard door is a
+   classic setup.
+3. Enemy AI (enemy_system.txt): mobile enemies wandering into the lane get hit
+   by friendly fire — the player can weaponize the turret by kiting demons
+   through it. Turret targeting must (optionally) ignore other enemies unless
+   hacked, to keep behavior readable.
+4. Loot/ransack system (inventory-loot-ransack): the wreck drops plasma cells,
+   rewarding the resource spent to kill it.
+5. Noise system (noise-propagation): turret fire is loud and can wake nearby
+   dormant enemies — destroying it quietly (melee from the blind arc) preserves
+   stealth.
+6. Columns `'P'` and cover props: provide the perpendicular cover that makes
+   crossing a lane a solvable spatial puzzle.
+
+OPEN QUESTIONS
+==============
+- Does the turret track through DORMANT instantly on first sighting, or only
+  begin tracking after the player has been in line for a turn? (Affects how
+  punishing first contact is.)
+- Should it ever fire on other enemies by default, or only after hacking? Pure
+  player-targeting is more readable; friendly-fire-on-all is more emergent.
+- Hacking path: does it require the Scientist/IQ stat, a nearby terminal, or a
+  consumable "hack tool" item? (Could defer hacking to a later iteration and
+  ship destroy-only first.)
+- Ceiling vs floor mount — purely cosmetic, but ceiling mount may render
+  awkwardly in the billboard pipeline; recommend floor/wall mount for v1.
+- Should a turret on the player's lane but facing away still get the one-turn
+  rotate warning, or fire same-turn once aligned? Recommend always granting the
+  rotate turn for fairness.

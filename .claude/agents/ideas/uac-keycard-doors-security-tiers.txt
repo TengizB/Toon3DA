@@ -1,0 +1,382 @@
+STATUS: IMPLEMENTED
+CATEGORY: Level Design
+TITLE: UAC Keycard Doors + Security Tier Progression
+CREATED: 2026-05-27
+---
+
+OVERVIEW
+========
+Layers a classic Doom-style three-color keycard hierarchy (Red, Yellow, Blue)
+on top of the existing door system to create intra-level exploration goals
+and rationed progression. Keycards are dropped by specific enemy variants
+or placed on UAC security terminals, and they gate doors marked with the
+matching tier. A roguelike level generator can use the tier system as a
+constraint solver: "place exit behind blue door → place blue card behind
+yellow door → place yellow card behind red door → place red card anywhere
+the player can reach from start," producing a guaranteed solvable but
+non-linear layout in the spirit of classic Doom + DCSS branch design.
+
+This is the smallest possible system that produces meaningful "where do I
+go next?" decisions without requiring quests, NPCs, or scripting. It also
+sets up the architectural foundation for FUTURE locked containers (lockers
+needing keycards), secret areas, and faction security clearances.
+
+
+GAMEPLAY LOOP
+=============
+ROOM DISCOVERY (passive)
+- Player walks corridor, sees a door at the end of it.
+- As the player approaches, the door's tier-color glow becomes visible from
+  several tiles away (red/yellow/blue tinted accent light around the door
+  frame). HUD does NOT immediately tell you it's locked — the COLOR tells you.
+
+INTERACTION
+1. Player faces the door tile, presses E (interact — NEW input).
+2. World checks the door at the tile in front of the player.
+3. If door is unlocked (regular `d` from existing door system): it opens
+   normally per the existing doors design.
+4. If door is locked (`R`, `Y`, `B`): consult inventory.
+   - Has matching keycard: door unlocks permanently (visual: a small
+     scrolling-light "scan" animation along the frame, soft beep), then
+     opens immediately as if unlocked. Stays unlocked for the rest of the
+     level.
+   - No matching keycard: HUD banner says "RED ACCESS REQUIRED" (or whichever
+     tier), short "denial" buzzer sound, door doesn't open. NO turn consumed.
+
+ACQUIRING KEYCARDS
+- Two acquisition modes per level (pick one per card or mix):
+  a) ENEMY DROP: a specific "officer" zombie variant (UAC Security Officer)
+     guaranteed to drop the card on death.
+  b) TERMINAL: a special keycard-bearing decal placed on the floor (new
+     decals `r`, `y`, `b` — see Level chars). Player walks onto tile to pick
+     up.
+- Optional third mode (future, advanced levels): a HACK terminal (uses the
+  existing `t` terminal wall tile) that grants the card after a 5-turn
+  hacking minigame.
+
+LEVEL GOALS
+- The exit tile (new `X` tile, or reuse existing concept) is always behind
+  the highest-tier door present on the level.
+- Level 1 (tutorial): just one red door, one red card. Simple.
+- Level 3+: full chain — red → yellow → blue.
+- Boss levels: one tier (blue) but with a boss arena instead of more rooms.
+
+PROGRESSION FEEL
+The player learns: "I am in a UAC facility, sealed by security; I am unwelcome.
+I must steal authorization." Every keycard pickup is a small victory.
+
+
+DOOR / KEY DEFINITIONS
+======================
+
+DOOR TILE CHARS (in addition to existing `d` plain door)
+--------------------------------------------------------
+| Char | Meaning                                          | Texture                     |
+|------|--------------------------------------------------|-----------------------------|
+| `d`  | Plain door (already exists)                       | lab_door_1.jpg              |
+| `R`  | Red keycard door                                  | lab_door_red.jpg            |
+| `Y`  | Yellow keycard door                               | lab_door_yellow.jpg         |
+| `B`  | Blue keycard door                                 | lab_door_blue.jpg           |
+
+KEYCARD DECAL CHARS (walkable, player picks up by stepping on)
+-------------------------------------------------------------
+| Char | Meaning                                | Color       |
+|------|----------------------------------------|-------------|
+| `r`  | Red keycard pickup                     | bright red  |
+| `y`  | Yellow keycard pickup                  | yellow      |
+| `b`  | Blue keycard pickup                    | cyan-blue   |
+
+NOTE: Lowercase `r`/`y`/`b` are NOT currently used in the tile spec (only
+`x`, `c`, `v`, `t`, `w` are walls). Add them to Level.isWall() with a
+return-false guard and to Level.isDecal() helper.
+
+NOTE: Uppercase `B` conflicts with the existing explosive barrel char. RESOLVE
+by renaming explosive barrel to a different glyph (proposal: `E` for explosive
+barrel, freeing `B` for blue door). OR use unicode/rare ASCII for doors
+(proposal: keep door chars lowercase: `r`/`y`/`b` are decals, doors are
+something else). FINAL recommendation: rename explosive barrel `B` → `E`,
+because doors of three colors are the iconic Doom feature and deserve
+intuitive glyphs. See OPEN QUESTIONS.
+
+ALTERNATIVE: keycard doors could share the `d` glyph with a sibling property
+stored in a parallel "door metadata" layer (text after the tile grid in the
+.txt level file). This is cleaner long-term but harder to author by hand.
+Recommendation: use distinct glyphs in v1 for hand-authored readability,
+move to metadata layer when procedural generation arrives.
+
+
+TECHNICAL NOTES
+===============
+
+NEW DATA
+--------
+  level/KeycardColor.java  enum { RED, YELLOW, BLUE }
+
+  level/LockedDoorInfo.java
+    - KeycardColor requiredColor
+    - boolean unlocked (false initially; once true, stays true)
+    - Lives in DoorManager (or a new LockedDoorManager extending it).
+
+PLAYER INVENTORY ADDITIONS
+--------------------------
+  entity/PlayerInventory.java (created by the shotgun idea)
+    Add:
+      EnumSet<KeycardColor> keycards;
+      boolean hasKeycard(KeycardColor color)
+      void addKeycard(KeycardColor color)
+    Keycards are persistent within a single run, RESET on level change
+    (per classic Doom convention). Confirm with a design decision —
+    alternative: persist across the run for "meta-corridor" feel.
+    Recommendation: RESET per level (each level is its own facility wing,
+    locks are local).
+
+DOOR MANAGER CHANGES
+--------------------
+  door/DoorManager.java
+    - When `R`/`Y`/`B` tile is loaded from level, register a LockedDoorInfo
+      keyed by (tileColumn, tileRow).
+    - tryInteract(tileColumn, tileRow, Player):
+        if not registered → behave as plain door (existing path).
+        if registered + locked + player lacks card → fire DoorDeniedEvent
+          (HUD toast + buzzer sample). Return false (NO turn consumed).
+        if registered + locked + player has card → unlock, fire
+          DoorUnlockedEvent, then continue to "open" path (turn IS consumed).
+        if registered + already unlocked → behave as plain door.
+
+  Note: "no turn consumed" on denied is important so the player doesn't get
+  punished for trying a locked door — they wasted a key press but not a tactical
+  turn.
+
+LEVEL.JAVA CHANGES
+------------------
+  - Add static helpers:
+      isLockedDoor(char tile)        // R, Y, B
+      keycardColorOfDoor(char tile)
+      isKeycardDecal(char tile)      // r, y, b
+      keycardColorOfDecal(char tile)
+  - In isWall(): return TRUE for R, Y, B until DoorManager flips them open.
+    (Same model as existing `d` plain door — solid until opened.)
+  - In consumeDecalAt() (created by shotgun idea): handle r/y/b too.
+
+PLAYERCONTROLLER CHANGES
+------------------------
+  - Add INTERACTING action state (or reuse existing door interaction if it
+    already exists per the doors idea).
+  - Key: Constants.KEY_INTERACT = Input.Keys.E (NOTE: currently E is strafe
+    right; rebind strafe right to F, freeing E for interact, OR add a
+    modifier — see OPEN QUESTIONS. Recommendation: rebind strafe to F).
+  - On INTERACT press: identify tile directly in front of player; pass to
+    a new InteractionDispatcher that routes to doors, terminals, lockers,
+    pickups by tile char.
+
+NEW PACKAGE / CLASS
+-------------------
+  ge.tbegvadze.toon3d.interaction
+    interaction/InteractionDispatcher.java
+      - dispatch(tileColumn, tileRow, Player, Level, DoorManager, ...)
+      - Routes to the appropriate handler based on Level.charAt(c,r).
+
+LEVELLOADER CHANGES
+-------------------
+  - Recognize new chars R/Y/B as door tiles (set to walls in grid, register
+    with DoorManager).
+  - Recognize r/y/b as decals (store in decal layer, do NOT mark as walls).
+
+CONSTANTS ADDITIONS
+-------------------
+  KEY_INTERACT                    = Input.Keys.E
+  KEY_STRAFE_LEFT                 = Input.Keys.Q
+  KEY_STRAFE_RIGHT                = Input.Keys.F   // rebind from E
+  DOOR_DENIED_TURN_PENALTY        = 0
+  DOOR_UNLOCK_ANIMATION_DURATION  = 0.40f
+  KEYCARD_DOOR_GLOW_RADIUS_TILES  = 3
+  KEYCARD_DOOR_GLOW_INTENSITY     = 0.25f
+
+GAMEMATH ADDITIONS
+------------------
+  /*
+   * Returns 1.0 at tile distance 0, falling linearly to 0.0 at glowRadius.
+   * Used for tinting walls near keycard doors.
+   */
+  static float keycardGlowFalloff(int distanceTiles, int glowRadius)
+
+
+VISUAL DESIGN
+=============
+
+DOOR TEXTURE
+- Same base mesh/UV as the existing plain door, but with a colored stripe
+  along the vertical seam (the "lock indicator strip"), and a colored LED
+  panel at marine eye-height.
+- RED door: deep crimson stripe, black panel with red LED reading "SEC-3".
+- YELLOW door: industrial-yellow stripe, panel reads "SEC-2".
+- BLUE door: cyan stripe, panel reads "SEC-1" (lowest number = highest
+  clearance, classic UAC corporate inversion).
+- When LOCKED: LED pulses 1 Hz.
+- When UNLOCKED: LED switches to solid green.
+
+DOOR-FRAME TINT (ambient glow)
+- For any wall within KEYCARD_DOOR_GLOW_RADIUS_TILES (3) of a keycard door,
+  the WallRenderer applies a soft additive tint of the door's color.
+- Falls off with distance per GameMath.keycardGlowFalloff.
+- Computed once per level load (cached per tile), not per frame.
+- Subtle — 0.25 max intensity. Players should feel the color, not be blinded.
+- This is the player's "this corridor leads somewhere locked" signal.
+
+DENIAL ANIMATION
+- Door does not animate open. Instead, the colored LED panel flashes red
+  twice rapidly (60ms on, 80ms off, 60ms on).
+- "BZZT-BZZT" buzzer sample, ~0.3s.
+- HUD toast banner: "RED ACCESS REQUIRED" (color matches door).
+- Player's facing/position unchanged; turn NOT consumed.
+
+UNLOCK ANIMATION
+- LED panel goes from pulsing red → solid green.
+- A bright accent line travels around the doorframe perimeter once over 0.4s
+  (the "scan" effect — chaser light).
+- Soft "scanner accept" beep, ~0.3s.
+- Door then opens immediately (slide-up if doors use slide-up, fade if doors
+  use fade — defer to the existing doors design).
+
+KEYCARD PICKUP DECAL
+- Small flat sprite, 32×32, animated 2-frame slow blink (a hovering colored
+  hologram-card lying on the floor — silly but classic).
+- Player walking onto tile triggers:
+    - Pickup sample (rising-pitch "blip").
+    - Tile decal is removed (consumeDecalAt).
+    - Keycard slot on HUD fills (sets fade-in animation, see HUD idea).
+    - Toast banner: "RED KEYCARD ACQUIRED" (matching color text).
+
+UAC SECURITY OFFICER ZOMBIE (variant — optional)
+- A new enemy subtype: same stats as base zombie but +2 HP, slightly faster
+  to alert, drops 1 specific keycard guaranteed.
+- Sprite: similar to base zombie but with shoulder patch + colored beret
+  matching the dropped card. Sells the lore: "this guy was the one with
+  red clearance."
+
+
+BALANCE & TUNING
+================
+
+LEVEL CHAIN STRUCTURE
+- LEVEL 1 (tutorial): no locked doors. Player learns combat first.
+- LEVEL 2: 1 locked door (red). 1 red keycard available behind a non-locked
+  room. Total rooms: 4. Exit behind red.
+- LEVEL 3: red → yellow chain. 6 rooms. Exit behind yellow.
+- LEVEL 4: full red → yellow → blue chain. 8 rooms. Exit behind blue.
+- BOSS LEVEL (every 5th): single blue door to boss arena.
+
+KEYCARD PLACEMENT RULES (for level generator)
+- Each keycard must be reachable using only the keycards of LOWER tiers
+  already obtained (and no card for the first).
+- The exit must be reachable using ALL keycards.
+- No keycard may be placed in a dead-end with only the matching-tier door
+  (that would soft-lock — entering means card must already be possessed).
+- Optionally, place ONE extra "shortcut" door of a higher tier than the
+  rationally available card to reward exploration with a future-level head start.
+
+KEY DENSITY
+- 1 keycard per tier, 1 door per tier (don't gate multiple corridors with
+  the same color — confuses signposting).
+- Exception: boss levels can have 2 same-color doors as alternate entrances.
+
+DIFFICULTY LEVERS
+- Number of rooms between cards (more = more combat encounters).
+- Whether cards drop from officers (fights to get cards) or sit on floor
+  (just exploration).
+- Whether locked doors can be HEARD when an enemy slams against them from
+  the other side (huge atmospheric win, also a tactical "what's behind that
+  door" signal).
+- Whether keycards persist across levels (currently NO — reset per level).
+
+
+INTERACTIONS
+============
+
+DOORS (existing idea)
+- Strict superset of the existing door system. Locked doors USE the open/close
+  animation and DoorManager — they just have an extra "unlock" pre-step.
+- Plain `d` doors remain unchanged.
+
+ZOMBIE ENEMY + TURN ENGINE
+- Adds UAC Security Officer variant (optional). Same logic, different stat
+  block and a guaranteed-drop hook.
+- Zombies can hear keycard pickup sound (small alert radius).
+- Zombies cannot path through locked doors (treat as walls).
+
+LABORATORY LIGHTING
+- Door-frame glow composites with existing lighting. Keycard doors in unlit
+  (`u`) corridors are even more visually striking — a colored beacon in the
+  dark. Strongly encourage placing locked doors at the END of unlit halls
+  for atmosphere.
+
+EMERGENCY RED ALERT PULSE
+- When alarm is RED: locked-door denial sound is LOUDER and triggers a
+  zombie alert in a 5-tile radius. "Trying the wrong door at the wrong
+  time is dangerous."
+
+HUD (scanline CRT HUD idea)
+- Keycard slots in the center HUD panel fill on pickup.
+- Toast banner shows "RED KEYCARD ACQUIRED" / "BLUE ACCESS REQUIRED".
+
+PUMP-ACTION SHOTGUN
+- Cannot shoot doors open. Locked or unlocked — doors are story-state, not
+  HP. (Future "weak wooden door" type could be shotgun-breakable; not these.)
+
+BILLBOARD PROP SPRITES
+- Keycard pickup is a billboard decal sharing the existing decal rendering
+  pipeline (`s`, `m`, `.`, `O`). Just three new sprite assets.
+
+FLOOR/CEILING TEXTURE RENDERING
+- Floor tiles adjacent to keycard doors can use the `f` flickering variant
+  for extra spook value. Optional level-design pattern.
+
+LEVEL FORMAT / FUTURE LEVEL GENERATOR
+- The keycard chain is a perfect constraint for a procedural level generator:
+  walk the BSP tree backwards from the exit, placing tier-N door at depth D,
+  tier-N-1 card in subtree at depth < D, etc.
+
+
+OPEN QUESTIONS
+==============
+1. Glyph conflict: `B` is both "blue door" and "explosive barrel." Best
+   resolution: rename explosive barrel to `E`. Alternative: use `1`/`2`/`3`
+   for doors (less readable). FINAL recommendation: rename barrel to `E`,
+   touch billboard-prop-sprites and laboratory-lighting docs to reflect.
+
+2. `E` is the current strafe-right key. Two options:
+   (a) Rebind strafe-right to F, use E for interact (recommended — interact
+       is more common than strafe in most playthroughs, deserves a thumb
+       key).
+   (b) Use Space for interact + something else for attack (collides with
+       shotgun).
+   (c) Use ENTER for interact.
+   Recommendation: (a) — strafe to F, interact to E.
+
+3. Should locked doors visibly differ from unlocked when far away? Yes —
+   the frame tint glow is the signal. Confirmed.
+
+4. Keycards persist across levels Y/N?
+   - PERSISTING means later levels can have "find any old keycard" puzzles
+     (e.g. a blue door on level 5 with no blue card on level 5; the player
+     had to keep one).
+   - NOT persisting means cleaner per-level design and prevents one bad
+     level from breaking many.
+   Recommendation: do NOT persist by default. Add a per-card "binds across
+   levels" flag for future special-case puzzles.
+
+5. Should there be a 4th tier (e.g. SKULL key for the BFG room)? Out of
+   scope; mention in roadmap. Doom did it; we can too eventually.
+
+6. Multiple-room keycards (one card opens 2+ doors): allowed Y/N?
+   Recommendation: YES, but use sparingly. Two same-color doors on the
+   same level = "two ways into the same wing" — fine for boss arenas.
+
+7. What if the player kills the officer in a way that the corpse falls onto
+   an unwalkable tile (over a column, into a wall)? Recommendation: the card
+   drops on the officer's LAST walkable tile, not the corpse tile. Spawn a
+   billboard `r`/`y`/`b` decal there.
+
+8. Procedural-gen integration timeline: this design assumes hand-authored
+   levels first, generator later. Generator-friendliness is built in but
+   not blocking.

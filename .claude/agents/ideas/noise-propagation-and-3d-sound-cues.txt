@@ -1,0 +1,168 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Noise Propagation & Directional Sound Cues
+---
+
+OVERVIEW
+========
+A unified audio-and-noise system that makes sound a first-class tactical
+resource. Every player and enemy action emits a "noise event" with a loudness
+value that floods outward through the 2D tile grid (walls block it, doors
+muffle it). Enemies that are still asleep wake and path toward the loudest
+recent noise they can "hear"; the player, in turn, gets directional audio cues
+(panned/attenuated) for off-screen threats — footsteps, growls, distant
+gunfire, alarm klaxons. This turns the silence-vs-firepower tension at the
+heart of Doom RPG stealth into a readable, exploitable system that ties
+directly into Pillar 7 (information management) and Pillar 3 (emergent
+complexity).
+
+Because the renderer is first-person and the mini-map only shows explored
+tiles, sound is the primary channel for "something is behind that wall."
+Loud weapons (shotgun, plasma) trade burst damage for a wide noise radius that
+can pull a second pack into the fight; melee, the Holy Water Pistol's hiss, and
+a future silenced pistol stay quiet. Knocking over a barrel or triggering a
+hazard becomes a deliberate noisemaker to lure enemies away from a chokepoint.
+
+GAMEPLAY LOOP
+=============
+1. Player performs an action on their turn (step, attack, reload, use item,
+   break a prop). The action declares a loudness value (0..100) and an origin
+   tile.
+2. A NoiseEvent is pushed into the noise system for that turn.
+3. During the world tick, the noise floods the grid via a bounded BFS:
+   effective loudness at a tile = sourceLoudness - distanceInTiles * FALLOFF,
+   minus an extra penalty each time the flood crosses a closed door
+   (DOOR_MUFFLE). Walls block flood propagation entirely (BFS only steps
+   through non-wall tiles, so sound travels down corridors, not through rock).
+4. Each enemy reads the loudness at its own tile. If loudness >=
+   enemy.hearingThreshold AND the enemy is currently UNAWARE, it transitions to
+   INVESTIGATING and stores the noise origin as its target tile.
+   - This reuses the existing enemy alert/aggro hooks from enemy_system.txt;
+     noise is just a second way (besides line-of-sight) to flip an enemy awake.
+5. For the player: every noise event NOT originating from the player is
+   evaluated for audibility at the player tile. If audible, play the matching
+   sound with volume = f(loudness) and stereo pan = f(bearing of origin
+   relative to player facing). Player hears a growl off to their right before
+   the imp rounds the corner.
+6. Klaxon / red-alert state (emergency-red-alert-pulse.txt) emits a recurring
+   high-loudness ambient noise that suppresses player situational awareness
+   (everything is "loud") — a deliberate downside of triggering the alarm.
+
+PLAYER EXPERIENCE
+=================
+The player learns to "listen to the dungeon." Creeping forward with a melee
+weapon, they hear faint shuffling panned hard-left and choose to peel left to
+ambush rather than walk into the open. After firing the shotgun, a chorus of
+distant growls tells them they just woke the next room — do they push the
+advantage or fall back to the corridor chokepoint? The core decision created:
+"How much noise is this action worth?" Every loud action is a gamble against
+the unknown population of adjacent rooms.
+
+TECHNICAL NOTES
+===============
+New package: ...toon3d.audio
+
+New classes:
+- audio/NoiseEvent.java
+    Immutable-ish value object: int originColumn, originRow, float loudness,
+    NoiseSource source (enum: PLAYER_STEP, PLAYER_GUNSHOT, PLAYER_MELEE,
+    ENEMY_GROWL, ENEMY_STEP, PROP_BREAK, ALARM, EXPLOSION). Pre-allocate a
+    pool (NOISE_EVENT_POOL_SIZE) — never allocate during a tick.
+- audio/NoiseSystem.java
+    Owns the per-tick flood. Method: floodAndDispatch(Level level, DoorManager
+    doors, List<Enemy> enemies, Player player). Uses a reusable int[] or
+    float[] scratch grid sized levelWidth*levelHeight, cleared per flood (not
+    reallocated). BFS uses a pre-allocated int ring-buffer queue.
+- audio/SoundDirector.java (libgdx-specialist territory)
+    Maps NoiseSource -> Sound asset, computes volume + pan, and calls
+    Gdx.audio sound.play(volume, pitch, pan). Holds Sound handles, disposes
+    them. NO allocation in playback path.
+
+Modified classes:
+- input/PlayerController.java — on completing an action, ask the active
+  weapon / action for its loudness and push a NoiseEvent. Stepping pushes a
+  small PLAYER_STEP event (footstep loudness, very low).
+- world/World.java — owns NoiseSystem; calls floodAndDispatch() exactly once
+  per world tick, after the player action resolves and before enemies choose
+  moves (so enemies react same turn). Integrates with global-tick-event-system.
+- entity/Enemy (from enemy_system.txt) — add int hearingThreshold and reuse
+  existing investigate/target-tile fields. No new state machine needed if
+  enemy_system already has UNAWARE/INVESTIGATING/AGGRO.
+
+Math (math-expert):
+- Flood loudness falloff: loudnessAtTile = sourceLoudness
+      - tilesTraveled * NOISE_FALLOFF_PER_TILE
+      - closedDoorsCrossed * NOISE_DOOR_MUFFLE.
+  BFS distance = tiles traveled along the open-tile graph (NOT Euclidean), so
+  a noise around a corner correctly attenuates by path length, giving free
+  "sound goes around corners" behaviour.
+- Stereo pan: bearingRadians = atan2 of (originTile - playerTile) relative to
+  player facing; pan = clamp(sin(relativeBearing), -1, 1). Volume =
+  clamp(loudnessAtPlayer / 100, 0, 1) shaped by a mild curve. Provide a pure
+  GameMath method: stereoPanFromBearing(...) and audibleVolume(...).
+
+CONSTANTS TO ADD (Constants.java)
+=================================
+NOISE_FALLOFF_PER_TILE       = 6f      // loudness lost per tile of travel
+NOISE_DOOR_MUFFLE            = 25f      // extra loudness lost per closed door
+NOISE_FLOOD_MAX_TILES        = 18       // BFS cutoff radius (perf bound)
+NOISE_EVENT_POOL_SIZE        = 32
+LOUDNESS_FOOTSTEP            = 12f
+LOUDNESS_MELEE               = 25f
+LOUDNESS_SHOTGUN            = 85f
+LOUDNESS_PLASMA            = 70f
+LOUDNESS_PISTOL            = 55f
+LOUDNESS_PROP_BREAK         = 60f
+LOUDNESS_EXPLOSION          = 100f
+LOUDNESS_ALARM              = 100f
+ENEMY_HEARING_THRESHOLD_DEFAULT = 20f
+
+VISUAL DESIGN
+=============
+Audio-first, but reinforce with optional minimal visuals:
+- A brief directional "ping" arc on the mini-map edge pointing toward an
+  unseen loud noise (thin colored chevron, fades over ~3 turns). Color-coded:
+  red chevron = enemy noise, white = environmental.
+- When the player makes a loud noise, a faint expanding ring drawn on the
+  mini-map (only over explored tiles) for one turn — readable feedback that
+  "you were loud here." Drawn by LevelRenderer using existing ShapeRenderer
+  pass; no new texture.
+- HUD status line (procedural-hud) can show a tiny "!" speaker icon when a
+  fresh off-screen enemy noise was heard this turn.
+
+BALANCE NOTES (placeholders — TUNE)
+===================================
+- Footstep loudness (12) must sit BELOW default hearing threshold (20) after
+  even one tile of falloff, so simply walking does not wake the whole floor —
+  walking is "quiet but not silent": a sleeping enemy in the same room two
+  tiles away might stir, one across a wall will not.
+- Shotgun (85) should reliably wake everything within ~10 open tiles. This is
+  the intended downside vs the plasma/melee.
+- Door muffle (25) means a closed door is worth ~4 tiles of distance —
+  meaningful, but a shotgun blast still leaks through one closed door.
+- NOISE_FLOOD_MAX_TILES caps BFS cost; tune for perf vs largest expected room
+  span. With 80x45 grids, 18 is safe.
+
+INTERACTIONS
+============
+1. Weapons (shotgun/plasma/pistol/melee idea files): each declares loudness;
+   this is the system-level reason melee and a future silenced sidearm matter.
+2. enemy_system.txt: noise is the second wake trigger beside LOS; enemies
+   path to noise origin, enabling lure-and-ambush play and corpse-shot tricks.
+3. hazard-chain-reactions + emergency-red-alert-pulse: explosions and the
+   klaxon emit max-loudness noise, chaining aggro across rooms; the alarm
+   masks the player's own audio cues (downside of tripping it).
+4. doors.txt: closed doors muffle noise (DOOR_MUFFLE); opening a door is itself
+   a small noise and removes the muffle for everything behind it.
+5. billboard-prop-sprites / breakable barrels: breaking a prop is a deliberate
+   noisemaker to bait enemies off a chokepoint (Pillar 3 emergence).
+
+OPEN QUESTIONS
+==============
+- Should enemy-to-enemy "growl relay" exist (a woken enemy growls, waking
+  others), or is that too cascade-prone? Could be a per-variant flag.
+- Does the player get a passive "Acute Hearing" boon (level-up) that adds the
+  mini-map chevron only when unlocked, keeping base game audio-only?
+- Should reloading be a separate (small) noise, encouraging reload-in-cover?
+- Pitch variation per enemy variant for audio identification (Pillar 7) — nice
+  to have; defer to SoundDirector polish.

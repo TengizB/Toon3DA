@@ -1,0 +1,97 @@
+# Moved from: .claude/CLAUDE.md and .claude/agents/creative-game-designer.md
+# Background reference — game inspiration. Not needed at runtime; agents check this for creative/design decisions.
+
+=== DOOM RPG (2005) ===
+
+Developed by id Software / Fountainhead Entertainment for mobile. Primary design reference.
+
+Visual style:
+- Pseudo-3D first-person raycasting. Enemies/objects are billboard sprites always facing player, scaled by distance.
+- Flat 2D tile grid. No polygons. Hand-crafted levels. Episodic: UAC facility on Mars.
+
+Movement:
+- Cardinal only, one tile at a time. Step forward/backward, strafe left/right, rotate 90° left/right.
+- Player always occupies exactly one tile.
+
+Combat (turn-based):
+- Every action (step, rotate, attack, item use) costs exactly one turn.
+- After player acts, every enemy in level acts once.
+- Stat-based — no twitch skill. Weapon weakness per enemy type; correct weapon = bonus damage.
+
+Weapons:
+- Fists, Pistol, Shotgun, Super Shotgun, Chainsaw, Rocket Launcher, Plasma Rifle, BFG 9000.
+- Improvised melee: Fire Axe, Fire Extinguisher (effective vs specific enemies).
+- Chainsaw/fists infinite-use melee. BFG costs many cells.
+
+Enemies:
+- Zombie, Sergeant, Imp, Demon, Hell Knight, Baron of Hell, Cacodemon, Lost Soul, Revenant, Arachnotron, Spider Mastermind.
+- Each has weapon weakness, attack type (melee/ranged), movement pattern.
+- Alert nearby enemies when they spot the player.
+
+Progression & economy:
+- XP from kills → level-up → choose Strength / Health Max / Agility.
+- Credits from environment → spend at computer terminals (medkits, ammo, upgrades).
+- Pet mechanic: mind-control collar captures Hellhound — melee weapon + living shield.
+
+Level design:
+- Hand-crafted, episodic (5 episodes). Not procedural.
+- Secrets: displaced wall segments identical to solid walls. Searching reveals hidden rooms.
+- Colored key cards unlock matching doors. Terminals for shops/lore/hints.
+- Environments: UAC offices, maintenance corridors, demon-infested zones, hellscapes.
+
+Inventory:
+- Slot-based. Medkit (small/large), Stimpack, Armor Shard, Security Armor, Combat Armor, Backpack.
+- Ammo: Bullets, Shells, Rockets, Plasma Cells.
+- Special: Berserk Pack (melee ×mult for N turns), Invulnerability Sphere, Radiation Suit.
+
+=== DOOM II RPG (2009) ===
+
+Sequel for iOS. Same raycasting renderer, updated for larger screens. Billboard sprites.
+
+Character classes (chosen at run start):
+  Sergeant  | Strength High | Agility Med | IQ Low  | Melee tank, chainsaw specialist
+  Major     | Strength Med  | Agility High| IQ Med  | Balanced; best dodge/accuracy
+  Scientist | Strength Low  | Agility Low | IQ High | Hacking, bargaining, scouting
+
+Stats:
+- Strength: melee damage, carry capacity bonus.
+- Agility: dodge chance, attack accuracy.
+- IQ: minigame success rate, cheaper shop prices, faster item identification.
+
+Weapons (additions over Doom RPG):
+- Holy Water Pistol: two water streams → fear (enemies flee, can't attack, N turns). Refill at any water source.
+- BFG: splash damage hits all in a line. Costs 10 plasma cells.
+- Improvised: sentry bots (deployable one-use turrets), plumbing fixtures thrown as projectiles, toilets (high damage, humorous).
+- Chainsaw damage scales with current Strength.
+
+Enemies:
+- 11 base types, multiple colour-coded difficulty variants per type (e.g. Imp → Demon Imp → Hell Imp → Arch Imp).
+- 4 end-of-episode bosses. Every class has weapon weakness.
+
+Turn-based system:
+- Same one-action-per-turn model. Actions: move N/S/E/W, rotate, attack, use item, talk to NPC, ransack corpse, skip turn.
+- Ransacking corpses: yields ammo, credits, occasionally rare items.
+
+Level structure:
+- 9 hand-crafted episodes + secret levels.
+- Hidden blue crates (require IQ/searching) with rare equipment.
+- Pressure plates, floor hazards, trap doors.
+- NPC quests with credit/item rewards.
+
+Minigames:
+- Hacking: puzzle to unlock terminals. Success scales with IQ.
+- Bargaining: negotiate shop prices. Higher IQ = better deals.
+- Scout bot: maps nearby area. Range/accuracy scales with IQ.
+
+=== TARGET GENRE: TURN-BASED ROGUELIKE ===
+
+Doom RPG DNA + roguelike structure:
+  Perspective     | First-person pseudo-3D raycasting       | —
+  Movement        | One tile/turn, cardinal directions       | —
+  Combat          | Turn-based, stat + weapon vs enemy type  | —
+  Progression     | XP → level-up → stats grow              | Per-run only; death resets
+  Levels          | —                                        | Procedurally generated each run
+  Continuity      | Fixed episodes, save & resume           | Permadeath — one life per run
+  Meta-progress   | —                                        | Unlocks persist across runs
+  Loot            | Fixed item placement                    | Randomised drops and shops
+  Character       | Fixed protagonist                       | Class selection each run

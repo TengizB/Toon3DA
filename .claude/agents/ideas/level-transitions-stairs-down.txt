@@ -1,0 +1,305 @@
+STATUS: IMPLEMENTED
+CATEGORY: Systems
+TITLE: Level Transitions — Stairs Down
+CREATED: 2026-05-31
+---
+
+OVERVIEW
+========
+A descent-stairs tile (the "exit") that ends one floor and begins the next. Stepping onto it
+loads a fresh level — procedurally generated or hand-crafted — repositions the marine at the
+new floor's 'p' spawn, and advances a persistent depth counter. This is the connective tissue
+the roguelike currently lacks: it turns isolated levels into a descent (Pillar #8, Pacing &
+Escalation), gives each run a measurable "how deep did you get" score, and is the single hook
+every difficulty-ramp and meta-progression system will read from.
+
+The stairs are rendered as a billboard prop (a glowing red descent-grate set into the floor),
+reusing the existing PropRenderer pipeline — no new renderer, no new geometry. The transition
+itself is a turn-based, deterministic state swap wrapped in a short non-blocking fade so the
+player reads "I went down" without a jarring teleport.
+
+Lore framing: each floor is a deeper sub-level of the same UAC facility. The grate is a
+freight/maintenance shaft. UAC stencil on the rim, hazard chevrons, a red "LEVEL -N" decal.
+You are descending toward the source of the incursion. It only ever goes down. There is no
+way back up — committing to the descent is the point.
+
+
+GAMEPLAY LOOP
+=============
+1. Player explores the floor. Somewhere on the floor (in procgen: the room furthest from
+   spawn — the "EXIT" room already named as planned in procedural-level-generation.txt) sits
+   exactly ONE stairs-down tile, char '>'.
+2. The stairs render as a billboard decal prop on the floor (walkable — the player must be
+   able to step ONTO it, so it is a DECAL prop, not a SOLID prop).
+3. Player presses W/S/Q/E to step onto the '>' tile. The move resolves normally through
+   PlayerController.tryMove → advanceMove. On the frame the move completes (actionProgress
+   >= 1, the "settled tile" block at PlayerController.advanceMove line ~88), the controller
+   checks: is the settled tile a stairs tile?
+4. If YES → controller fires a descent request (does NOT mutate the level itself — it signals
+   World). World enters a TRANSITIONING state:
+      a. Input is locked (player can take no further turns).
+      b. A brief screen fade-to-black plays (FADE_OUT, ~0.30 s) — purely a render overlay,
+         not a turn, not a gameplay-time delay.
+      c. At full black, World swaps in the next Level: generates LevelGenerator(seed)
+         .generate() at depth+1 (or loads the next hand-crafted file), rebuilds the
+         level-dependent renderers/managers, and repositions the player at the new 'p'.
+      d. FADE_IN (~0.30 s) reveals the new floor.
+      e. World returns to PLAYING; input unlocks; depth counter now reads N+1.
+5. A HUD message banner ("DESCENDING — SUBLEVEL 2") flashes during the fade.
+6. Loop repeats. Death (HP <= 0) ends the run; the reached depth is the run's score.
+
+Determinism note: the fade is cosmetic. The turn that stepped onto the stairs is a normal
+turn (enemies on the OLD floor get their reaction as usual via the tick bus BEFORE the swap,
+or the swap is queued for after the tick — see OPEN QUESTIONS). The new floor starts fresh;
+no enemy from the old floor follows.
+
+
+PLAYER EXPERIENCE
+=================
+- The grate is a beacon. Its red pulsing glow is visible down a corridor and reads instantly
+  as "the way deeper." Finding it is a navigation goal that structures exploration.
+- Stepping on it is a COMMITMENT. There is no staircase back up. The decision the tile creates:
+  "Do I descend now, or sweep this floor first for ammo / medkits / armour I'll need below?"
+  This is the core meaningful-choice tension (Pillar #4): leave loot behind to escape a bad
+  floor, or risk one more room to stock up before a harder one.
+- The fade + banner gives a satisfying "level cleared" punctuation — a Hades-style beat
+  between rooms that lets the player exhale and re-plan.
+- Escalation is felt: floor 3 visibly has more enemies and darker lighting than floor 1.
+  The player learns "deeper = deadlier" without being told.
+
+
+TECHNICAL NOTES
+===============
+
+NEW TILE SYMBOL
+---------------
+  '>'  — Stairs down / descent grate. WALKABLE (decal-class prop). Exactly one per level.
+         Chosen for readability: '>' is the classic roguelike "down" glyph (NetHack/DCSS/
+         Brogue all use it), it is unused in the current alphabet, and it reads correctly
+         in a raw .txt map.
+  (Reserve '<' for a future "stairs up" / return tile if back-tracking is ever added.
+   Not implemented now — descent is one-way by design.)
+
+Level.java
+  - Add '>' to the prop classification authority. It is a DECAL prop (does NOT block movement):
+        isProp('>')       → true
+        isPropDecal('>')  → true
+        isPropSolid('>')  → false
+        isWall('>')       → false   (must remain walkable so the player can stand on it)
+  - Add a query method:
+        public boolean isStairsDown(int tileColumn, int tileRow)
+            → getCell(tileColumn, tileRow) == STAIRS_DOWN_CHAR
+  - Add a locator the generator/loader and World can use:
+        public int getStairsTileColumn() / getStairsTileRow()
+        (cache on construction by scanning for '>', like findPlayerStart does for 'p';
+         return -1 if absent so World can assert "every level must have stairs").
+
+util/Constants.java  (add)
+        public static final char  STAIRS_DOWN_CHAR              = '>';
+        public static final float STAIRS_SPRITE_HEIGHT          = 0.20f;  // decal, low to floor
+        public static final float LEVEL_TRANSITION_FADE_OUT_SECONDS = 0.30f;
+        public static final float LEVEL_TRANSITION_FADE_IN_SECONDS  = 0.30f;
+        public static final int   STARTING_DEPTH                = 1;
+        public static final float DESCEND_BANNER_SECONDS        = 1.50f;  // HUD message hold
+
+render/PropRenderer.java
+  - Add '>' to the propHeightMultiplier switch: case '>': return STAIRS_SPRITE_HEIGHT;
+  - Add a generated texture for it (PropRenderer already builds prop textures procedurally
+    via Pixmap — see existing prop texture construction). Build a "descent grate" Pixmap:
+    dark steel square, diagonal hazard chevrons (yellow/black) on the rim, a black recessed
+    centre with three horizontal grate bars, a red emissive border. See VISUAL DESIGN.
+  - Because it is a decal anchored low to the floor, it draws like blood/oil ('.'/'O') —
+    short, flat-ish, walked over. No occlusion changes; reuses the wall z-buffer clip.
+
+input/PlayerController.java
+  - In advanceMove(), inside the "settled tile" completion block (currently ~lines 85–90,
+    right after pickUpKeycardIfPresent), add:
+        if (level.isStairsDown(settledTileColumn, settledTileRow)) {
+            requestDescent();        // signals World; does NOT load the level here
+        }
+  - requestDescent() sets a flag / calls a listener. The controller must NOT itself build a
+    new Level (it has no business owning level lifecycle). Use a small callback interface:
+        public interface DescentRequestListener { void onDescentRequested(); }
+        + private DescentRequestListener descentListener;
+        + public void setDescentRequestListener(DescentRequestListener l)
+    World registers itself (same pattern as setBarrelHitTarget / setEnemyManager already used).
+  - Order within the settled block matters: the stairs check should run AFTER pickups so a
+    pickup sitting on the same tile is still collected (edge case — generator should avoid
+    placing pickups on '>', but be defensive).
+
+world/World.java  — the heavyweight change
+  - Currently World takes a Level in its constructor and builds ~15 level-dependent objects
+    (floorCeilingRenderer, doorManager, wallRenderer, propRenderer, levelRenderer, enemyManager,
+    explosiveBarrelManager, player position, etc.). For descent, these must be REBUILT for the
+    new floor while PRESERVING cross-floor state.
+  - Two viable implementations (pick one — see OPEN QUESTIONS):
+      OPTION A (recommended, minimal blast radius): keep the marine's PERSISTENT state
+        (PlayerInventory, Player health/armour, equipped weapon, ammo, depth counter) in
+        fields that survive, and extract the level-dependent block into a private
+        rebuildForLevel(Level newLevel) method. On descent:
+            depth++;
+            Level next = new LevelGenerator(seedForDepth(depth)).generate();
+            rebuildForLevel(next);     // disposes old level renderers, builds new ones
+            reposition player to next 'p', restore facing to a default (e.g. (1,0))
+            re-inject inventory/health into the rebuilt PlayerController
+        Player HP/armour/inventory are NOT reset — you carry your wounds and your loot down.
+      OPTION B: World becomes swappable behind a GameSession/ScreenManager that holds the
+        persistent run state and constructs a new World per floor. Cleaner long-term but a
+        larger refactor; defer unless a Screen layer is being added anyway.
+  - Add a transition state machine to World.update():
+        enum RunPhase { PLAYING, FADE_OUT, FADE_IN }
+        private RunPhase phase = PLAYING;
+        private float    fadeTimer;
+        private int      depth = STARTING_DEPTH;
+    While phase != PLAYING: do NOT call playerController.update (input locked), DO keep
+    rendering, advance fadeTimer. At FADE_OUT end → perform the swap → FADE_IN. At FADE_IN
+    end → PLAYING.
+  - dispose() concern: rebuildForLevel must dispose the OLD floor's Disposables (the old
+    wallRenderer, propRenderer, floorCeilingRenderer, levelRenderer own Textures/SpriteBatch/
+    ShapeRenderer). Failing to dispose = texture leak per floor. This is the single biggest
+    correctness risk in the feature — call .dispose() on every replaced renderer before
+    reassigning. Persistent renderers that do NOT depend on the level (weaponHudRenderer,
+    impactEffectRenderer, hudRenderer) are kept and reused.
+
+render — fade overlay
+  - The fade is a full-screen quad of black at alpha = fadeAlpha, drawn LAST (after HUD) so it
+    covers everything. Cheapest implementation: reuse an existing 1x1 white/black pixel texture
+    (WallRenderer already owns a whitePixelTexture pattern) or a tiny ShapeRenderer filled rect
+    in screen-world coords (0,0)-(WORLD_WIDTH, WORLD_HEIGHT). No per-frame allocation: the pixel
+    texture is created once. fadeAlpha derived from fadeTimer / FADE_*_SECONDS (clamped 0..1).
+    Suggested home: a small FadeOverlayRenderer in render package, owned by World, or fold into
+    HudRenderer as a drawFade(alpha) call.
+
+Depth seeding
+  - seedForDepth(depth): either (a) one master run-seed + depth → deterministic, shareable
+    "run seeds" (same run seed reproduces the whole descent — good for Pillar #2 + speedrun/
+    debug), or (b) System.currentTimeMillis() per floor. Recommend (a):
+        long floorSeed = runSeed * 0x9E3779B97F4A7C15L + depth;   // splitmix-style mix
+    Store runSeed in World/Main. Main.java already passes System.currentTimeMillis() to the
+    generator — promote that value to the run seed.
+
+Generator integration  (procedural-level-generation.txt is IMPLEMENTED)
+  - LevelGenerator must STAMP exactly one '>' per generated level. Natural home: the planned
+    EXIT room (room furthest from entrance — the generator already computes "last room placed
+    tends to be furthest away"). Place '>' on a guaranteed-walkable interior tile of that room,
+    away from doors and not on a prop/enemy tile. Add a Phase to the pipeline:
+        Phase: stampStairs() — pick exit room, choose a clear interior floor tile, set '>'.
+    The flood-fill connectivity audit (Phase 5) already guarantees the exit room is reachable;
+    run stampStairs AFTER the audit so the chosen tile is provably reachable.
+  - Depth must be PASSED to the generator so it can scale (see procedural-level-generation.txt
+    "Depth-scaling" future improvement). Add LevelGenerator(long seed, int depth) overload;
+    keep the single-arg ctor for depth=1 / tests.
+
+Hand-crafted levels
+  - For authored .txt floors, the level author simply places one '>' tile. LevelLoader needs
+    no change beyond Level recognising '>' as a known char. A hand-crafted-sequence mode would
+    be: a String[] floorFiles in order; descent loads floorFiles[depth-1]. Procedural is the
+    default; the sequence is an optional override.
+
+
+VISUAL DESIGN
+=============
+Sprite (procedural Pixmap, ~32x32 or 48x48 source, drawn as a low decal):
+  - Outer rim: dark gunmetal steel frame (RGB ~50,52,58).
+  - Hazard chevrons on top/bottom rim: alternating UAC yellow (230,200,40) and black — the
+    "do not stand here" industrial look.
+  - Recessed centre: near-black pit (12,10,12) with 3–4 horizontal grate bars (steel grey)
+    so it reads as "an opening going DOWN," not a flat panel.
+  - Emissive accent: a thin RED border glow (210,40,40) around the centre pit. Red = "active
+    descent shaft / danger." This is the colour the eye locks onto down a corridor.
+  - Optional tiny stencil "▼" or "-N" decal on the rim (skip if Pixmap text is fiddly).
+
+Animation:
+  - Subtle red pulse on the emissive border, driven by the existing facilityTimeSeconds clock
+    in World (already used for flicker). sin-based alpha on the red channel, period ~1.5 s.
+    Reuse the emergency-red-alert-pulse approach if that idea ships — same clock, same maths.
+  - No frame animation needed; the pulse alone sells "live shaft."
+
+Lighting:
+  - The grate's TILE should be lit floor (' ') or even flickering ('f') around it so the glow
+    has contrast. Generator: set the stairs tile and its neighbours to ' ' (lit) so the marker
+    is never lost in an 'u' unlit dead zone.
+
+Fade overlay:
+  - Pure black, full screen, alpha ramps 0→1 (out) then 1→0 (in). No tint/colour — keep it
+    clean so the new floor's first frame reads instantly.
+
+HUD banner ("DESCENDING — SUBLEVEL 2"):
+  - Centre-screen text, large, drawn during the fade (visible against the black so it pops).
+    Use the HUD's existing font/BitmapFont. Hold DESCEND_BANNER_SECONDS, fade with the overlay.
+  - Persistent depth readout: add a small "SUBLEVEL N" or "DEPTH N" label to the HUD right
+    panel (860–1280 region) or under the weapon name. Always visible during PLAYING so the
+    player always knows how deep they are — this is the run's score, keep it on screen.
+
+
+BALANCE NOTES   (all values PLACEHOLDER — tune in playtest)
+=============
+- Stairs per floor: exactly 1. (A future "two exits, one is a trap/shortcut" variant is a
+  fun roguelike idea but out of scope here.)
+- Fade timing: 0.30 s out + 0.30 s in = 0.60 s total. Long enough to read the banner, short
+  enough not to annoy on floor 20. If it feels sluggish, drop to 0.20 + 0.20.
+- Depth difficulty ramp (feed these into LevelGenerator(seed, depth)):
+      enemies per room:   base 1–3 at depth 1, +~0.4 average per depth, soft-cap ~6.
+      enemy mix:          tougher variants weighted in with depth (e.g. Vortex Eye share
+                          rises from 35% → 60% by depth 5).
+      lighting:           unlit/flicker tile share rises with depth (darker = scarier deeper).
+                          depth 1 ~5% unlit; depth 6+ ~20% unlit.
+      resource scarcity:  medkit/ammo pickup density DROPS slightly with depth (Pillar #8).
+      room size/count:    optionally grow with depth for longer floors.
+  Keep depth 1 GENTLE — a new player must be able to clear floor 1 with starting kit
+  (Pillar #6: a run is completable without meta-unlocks).
+- Boss cadence: every Nth floor (e.g. 5) the EXIT room is a boss room
+  (see boss-encounter-facility-overseer.txt) — stairs only spawn AFTER the boss dies, or are
+  revealed by the boss death. Out of scope to implement now, but the stairs system is the hook:
+  generator can withhold '>' until a "floor objective complete" flag flips.
+- No fall damage, no cost to descend. Descent is free; the COST is what you leave behind.
+
+
+INTERACTIONS
+============
+1. Procedural generation (procedural-level-generation.txt, IMPLEMENTED): the generator owns
+   stairs placement (EXIT room) and consumes the depth parameter for the difficulty ramp. This
+   feature is the consumer of the generator's planned "EXIT room" and "Depth-scaling" items —
+   it turns two FUTURE IMPROVEMENTS into shipped behaviour.
+2. PlayerInventory / Player health / weapons / armour-kit (armour-kit-system.txt) / keycards:
+   ALL persist across descent. You carry HP, armour, ammo, weapons, and any consumables down.
+   Keycards do NOT persist (each floor has its own security tiers — a red keycard from floor 1
+   should not open floor 2's red door). Decide explicitly: recommend keycards RESET per floor.
+3. EnemyManager / tick system (global-tick-event-system.txt): the old floor's enemies are
+   discarded on swap; the new floor's EnemyManager is freshly built. The descent turn itself
+   is a normal tick (enemies on the old floor act, THEN the swap happens) — this prevents a
+   "free escape" exploit where stepping on stairs dodges a lethal enemy turn. (See OPEN Q.)
+4. Boss encounter (boss-encounter-facility-overseer.txt): boss floors gate the stairs behind
+   the boss's death — generator withholds '>' until objective complete.
+5. Doors (doors.txt) / explosive barrels / hazards: all are per-floor and rebuilt on swap;
+   their managers (DoorManager, ExplosiveBarrelManager) are part of rebuildForLevel.
+6. Meta-progression (Pillar #6) / scanline HUD vitals: reached depth = the run score; it is
+   the natural unlock currency ("reach depth 5 to unlock the Chaingun start"). The persistent
+   depth field is the single source for that.
+7. Fog-of-war / mini-map (LevelRenderer): mini-map resets each floor (new layout). If
+   fog-of-war ships, exploration state is per-floor and starts hidden on descent.
+
+
+OPEN QUESTIONS
+==============
+1. Tick ordering on the descent turn: does the enemy turn resolve on the OLD floor BEFORE the
+   swap (recommended — no free escape), or is the descent turn "spent" entirely on descending
+   (enemies get no swing)? Recommend old-floor enemies act first, then swap. Confirm with the
+   tick-system owner.
+2. World rebuild strategy: Option A (rebuildForLevel inside World, preserve persistent fields)
+   vs Option B (GameSession/Screen layer holds run state, new World per floor). A is faster to
+   ship; B is cleaner if a Screen layer is coming anyway. Needs java-architect call.
+3. Player facing on arrival: snap to a fixed default (1,0)? Face away from the nearest wall?
+   Face the direction of the new floor's first corridor? Simplest = fixed default; nicest =
+   face into open space. Defer to a helper in the generator (mark a preferred facing at 'p').
+4. Keycard persistence across floors — recommend RESET per floor (each floor = own security),
+   but confirm against uac-keycard-doors-security-tiers.txt intent.
+5. Fade overlay home: standalone FadeOverlayRenderer vs a HudRenderer.drawFade(alpha) method.
+   Lean standalone for separation of concerns; libgdx-specialist to decide cheapest draw.
+6. Stairs-up / backtracking: explicitly OUT of scope (descent is one-way). '<' reserved only.
+   Revisit only if a "town hub" or retreat mechanic is ever designed.
+7. Run-seed exposure: show the run seed somewhere (debug overlay / death screen) so runs are
+   reproducible/shareable? Cheap and useful for QA — recommend yes, on the death screen.
+8. Should descent fully heal / partially heal the marine (Hades-style between-floor sip)?
+   Recommend NO by default (carrying damage down is the tension), but flag as a tunable if
+   floors prove too punishing.

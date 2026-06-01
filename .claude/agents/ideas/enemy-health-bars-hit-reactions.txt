@@ -1,0 +1,546 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Enemy Health Bars & Hit Reactions
+CREATED: 2026-05-29
+---
+
+=============================================================================
+OVERVIEW
+=============================================================================
+A combat-feedback layer that sits on top of the already-designed enemy system
+(enemy_system.txt). It gives every living enemy two pieces of readable juice:
+(1) a floating health bar billboarded above the sprite that appears only after
+the enemy takes damage, and (2) a hit reaction — a one-shot white damage flash
+plus a brief recoil/knockback shudder on the sprite the turn it is struck, with
+a distinct death lurch when the killing blow lands. Nothing here changes a
+single game rule; it is pure rendering and a few transient per-enemy timers,
+and it is the difference between a shotgun blast that feels like a confirmed,
+satisfying hit and one that feels like the pellets vanished into fog.
+
+It belongs here because the enemy system resolves damage instantly in tile
+space (a shell either reduces HP or it does not), but the player currently has
+no way to read HOW MUCH a target has left or even confirm that THAT enemy was
+the one hit. In a turn-based crawler where every shell costs a one-step reload,
+"will this next blast kill the Corruptor or do I need to back-pedal one more
+tile?" is THE core combat decision. Health bars answer it; hit reactions sell
+it. This is the readability contract from DCSS (you always know enemy HP state)
+delivered through the Doom-RPG billboard aesthetic.
+
+Design lineage: DCSS (health-as-information, monster HP always inspectable),
+Doom / Doom RPG (white pain-frame flash on hit, the chunky satisfying recoil),
+Hades (every hit reads instantly — flash, shake, number-free legibility).
+
+=============================================================================
+GAMEPLAY LOOP
+=============================================================================
+This feature is feedback-only. It does NOT consume turns, does NOT change AI,
+does NOT alter damage. It hooks the two existing damage events from
+enemy_system.txt and animates in REAL TIME (over wall-clock frames), the same
+way the player pain flash and the red-alert wall pulse already animate
+independently of the turn clock.
+
+WHEN THE PLAYER SHOOTS AN ENEMY (player FIRE turn):
+1. Player presses FIRE → Shotgun.marchShot walks facing tiles → first tile with
+   a living enemy → EnemyManager.applyDamageTo(enemy, dealt) (existing path).
+2. INSIDE applyDamageTo, AFTER health is reduced, set transient feedback timers
+   on that enemy:
+       enemy.healthBarVisibleTimer = HEALTH_BAR_VISIBLE_SECONDS
+       enemy.hitFlashTimer         = HIT_FLASH_SECONDS
+       enemy.recoilTimer           = HIT_RECOIL_SECONDS
+       enemy.recoilDirectionColumn = sign(enemy.tileColumn - playerColumn)
+       enemy.recoilDirectionRow    = sign(enemy.tileRow    - playerRow)
+   (recoil pushes the sprite AWAY from the shooter along the facing axis.)
+3. If health <= 0 → enemy dies (existing removal + corpse 'm' stamp). On the
+   frame death is detected, ALSO set:
+       enemy.deathLurchTimer = DEATH_LURCH_SECONDS
+   and let the renderer play one death lurch before the sprite is removed (see
+   DEATH HANDOFF in TECHNICAL NOTES — the sprite must survive a few frames past
+   logical death OR the corpse prop must inherit the lurch; recommend the
+   former: a short-lived "dying" render entry).
+4. EnemyRenderer.render() (already in the frame loop) reads these timers every
+   frame, draws the flash/recoil/bar, and decrements the timers by deltaTime.
+   NO turn advances because of any of this.
+
+WHEN A VORTEX EYE IS DAMAGED BY A FUTURE SOURCE (chain-reaction barrel, etc.):
+- Identical: any call into applyDamageTo arms the same timers. Health bars are
+  source-agnostic; they react to the HP delta, not to who caused it.
+
+ENEMIES DO NOT GET HEALTH BARS FOR ENEMY-VS-PLAYER DAMAGE:
+- When an enemy hits the PLAYER, the player's existing pain flash fires; enemies
+  are unaffected. Health bars are strictly for ENEMY HP shown to the player.
+
+VISIBILITY RULE (the key loop decision):
+- A health bar is shown for an enemy ONLY while healthBarVisibleTimer > 0 (it
+  fades out HEALTH_BAR_VISIBLE_SECONDS after the LAST hit) OR, optionally, while
+  the enemy is the one directly in the player's facing crosshair tile-line
+  (ALWAYS_SHOW_BAR_FOR_TARGETED_ENEMY flag — see OPEN QUESTIONS). Default v1:
+  damage-triggered only. This keeps the screen clean (no forest of bars) and
+  ties the bar to the moment the player actually needs it: right after a shot,
+  deciding whether one more shell finishes the job.
+
+=============================================================================
+PLAYER EXPERIENCE
+=============================================================================
+- THE FINISH-OR-FLEE DECISION: the player fires at the Corruptor, the bar pops
+  in showing ~one third left. Now the decision is legible: chamber one more
+  shell (costs a step the slow bruiser uses to close one tile) or back-pedal and
+  reset spacing. Before this feature that read was invisible; the player guessed.
+- CONFIRMED HITS: the white flash + recoil is instant, frame-one confirmation
+  "I hit THAT one." In a corridor with a Corruptor and a Vortex Eye stacked at
+  range, the flash tells you which silhouette ate the pellets — critical when
+  the eye is the priority kill.
+- SATISFYING KILLS: the death lurch (a sharp recoil + flash + the bar draining
+  to empty as the sprite drops to the corpse decal) gives the shotgun weight.
+  Doom's whole feel is "the gun is loud and things visibly react." This is that.
+- HONEST DEATHS, HONEST KILLS: the player can always reconstruct combat. "The
+  eye was at a sliver — I should have spent the shell on it instead of the
+  Corruptor that was still near full." The bar makes the misplay nameable, which
+  is the DCSS legibility contract this whole project is built on.
+- CLEAN SCREEN: because bars only appear on recently-damaged enemies and fade,
+  the dread of a dormant room full of still silhouettes is preserved — you do
+  NOT see a bar until you commit to a fight. Information arrives exactly when
+  earned.
+
+=============================================================================
+HEALTH BAR — VISUAL SPEC
+=============================================================================
+A health bar is a small billboarded quad drawn ABOVE the enemy sprite, scaled
+by the same distance projection as the sprite so it shrinks with range and stays
+glued to its owner. It is composed of flat colored rectangles (no texture
+needed — reuse the existing 1x1 whitePixel texture WallRenderer already owns, or
+give EnemyRenderer its own 1x1 white texture).
+
+LAYOUT (three stacked layers, back to front):
+  1. BORDER / FRAME  — a 1-screen-pixel dark outline (near-black, e.g. RGB
+     20,20,24) drawn as a rectangle slightly larger than the bar on every side.
+     Sells it as a UAC HUD element, not a floating smear.
+  2. BACKGROUND TRACK — the full bar width in a dim desaturated red/maroon
+     (e.g. RGB 60,18,18). This is the "missing health" track that stays visible
+     so the player reads the ratio, not just the remaining nub.
+  3. FILL — the remaining-health portion, width = trackWidth * (health /
+     maxHealth). Color is health-state coded:
+         > 60% : bright toxic green   (RGB 90,210,80)   — "healthy"
+         30–60%: amber/yellow         (RGB 235,190,40)  — "wounded"
+         < 30% : hot red              (RGB 235,55,40)   — "critical", and the
+                 fill PULSES (brightness oscillates via sin(facilityTime *
+                 BAR_CRITICAL_PULSE_SPEED)) to scream "one more shell."
+     The fill is anchored to the LEFT edge of the track (drains right-to-left,
+     the universal convention).
+
+POSITION & SIZE (all in screen space, derived from the sprite projection):
+  - barCenterColumn = the sprite's spriteScreenColumnCenter (same value the
+    sprite uses — bar is centered over the sprite horizontally).
+  - barWidthScreen  = spriteScreenWidth * HEALTH_BAR_WIDTH_FRACTION (e.g. 0.9 —
+    slightly narrower than the sprite).
+  - barHeightScreen = clamp(spriteScreenHeight * HEALTH_BAR_HEIGHT_FRACTION,
+                            HEALTH_BAR_MIN_HEIGHT_PX, HEALTH_BAR_MAX_HEIGHT_PX)
+    (e.g. fraction 0.06, min 3px, max 14px — never a hairline, never a slab).
+  - barBottomScreen = sprite drawTop + spriteScreenHeight *
+                      HEALTH_BAR_VERTICAL_GAP_FRACTION (e.g. 0.05 — floats just
+                      above the silhouette's head). For the floating Vortex Eye
+                      include its hover bob so the bar rides the bob.
+
+FADE: alpha = smooth fade over the last HEALTH_BAR_FADE_SECONDS of
+  healthBarVisibleTimer (e.g. linear from 1 → 0 in the final 0.4s). Fully opaque
+  while freshly damaged, then dissolves. Apply alpha to ALL three layers
+  uniformly so the whole widget fades as a unit.
+
+DISTANCE CULL: do not draw the bar if spriteDepth >
+  HEALTH_BAR_MAX_DRAW_DISTANCE_TILES (e.g. 12 — a bar on a barely-visible far
+  enemy is unreadable noise). Bars on the nearest threats are what matter.
+
+OCCLUSION: the bar uses the SAME per-column z-buffer test as the sprite. If a
+  wall column is closer than the enemy at that screen column, that slice of the
+  bar is culled — a bar peeking over a wall corner clips correctly, exactly like
+  the sprite body. Use the enemy's spriteDepth for the test (the bar sits at the
+  enemy's depth).
+
+READABILITY GUARANTEE: because the bar is built from solid high-contrast rects
+  with a dark frame, it stays legible against the dim UAC walls and survives the
+  red-alert tint. IMPORTANT: do NOT multiply the bar colors by the red-alert
+  tint or the distance shade — the bar is a HUD-style readout pinned to a
+  world-space sprite; it must read at full saturation regardless of lighting.
+  (The sprite body still shades normally; only the bar ignores shade/tint.)
+
+=============================================================================
+HIT REACTION — VISUAL EFFECT
+=============================================================================
+Three layered effects, all driven by transient per-enemy timers, all real-time:
+
+1. DAMAGE FLASH (the Doom pain frame):
+   - For the duration of hitFlashTimer (e.g. 0.10s), tint the enemy sprite
+     toward white. flashAmount = hitFlashTimer / HIT_FLASH_SECONDS (1 → 0).
+     Blend the per-column sprite color toward white:
+         drawColor = lerp(normalShadedColor, WHITE, flashAmount * FLASH_STRENGTH)
+     with FLASH_STRENGTH ~0.85 so even at peak a hint of silhouette remains.
+   - This overrides the dormant-dampen and red-alert tint for the flash window
+     (a hit always reads, even on a freshly-woken enemy).
+   - Implementation: SpriteBatch.setColor before drawing the sprite's columns,
+     reset to the shaded color after. One setColor per enemy per frame — no
+     allocation.
+
+2. RECOIL / KNOCKBACK SHUDDER (cosmetic only — the enemy does NOT change tiles):
+   - For the duration of recoilTimer (e.g. 0.14s), offset the sprite's render
+     position AWAY from the shooter, then ease back to its tile center.
+   - recoilProgress = recoilTimer / HIT_RECOIL_SECONDS (1 → 0).
+   - recoilOffsetTiles = RECOIL_MAX_OFFSET_TILES *
+                         GameMath.recoilEnvelope(recoilProgress)
+     where recoilEnvelope is a quick out-and-back curve (e.g. a half-sine:
+     sin(recoilProgress * PI) — peaks mid-window, zero at both ends) so the
+     sprite jerks back and snaps home. RECOIL_MAX_OFFSET_TILES ~0.18 (a fifth of
+     a tile — a visible shudder, never a teleport).
+   - Apply along (recoilDirectionColumn, recoilDirectionRow) added to the
+     enemy's render world position BEFORE projection. Pure render offset: the
+     authoritative tileColumn/tileRow are untouched, so AI, occupancy, LOS, and
+     collision are all unaffected. This is critical — the shudder is a lie told
+     only to the renderer.
+   - Optional micro-vertical-jitter for extra crunch: add a tiny vertical screen
+     wobble (a few pixels) scaled by recoilProgress. Keep subtle.
+
+3. DEATH LURCH (the killing blow):
+   - When the hit is lethal, instead of an instant disappear, play one final
+     reaction over deathLurchTimer (e.g. 0.20s):
+       * A stronger flash (start near full white, FLASH_STRENGTH 1.0).
+       * A stronger recoil (DEATH_RECOIL_OFFSET_TILES ~0.30) that does NOT ease
+         back — the sprite is knocked away and DROPS: lerp the sprite's drawTop
+         downward (sinks toward the floor line) and fade alpha 1 → 0 over the
+         window, so it visibly crumples into the corpse decal that is being
+         stamped at its tile.
+       * The health bar fill drains to 0 and fades with the body.
+   - After deathLurchTimer expires, the dying render entry is dropped; the
+     corpse 'm' prop (already stamped at logical-death time) remains. See DEATH
+     HANDOFF for ordering so the live sprite and the corpse prop do not double-
+     draw for those frames.
+
+PER-COLUMN INTEGRATION: all three effects ride the existing per-column sprite
+draw loop. Flash = setColor; recoil = a world-position offset applied before
+spriteScreenColumnCenter / spriteDepth are computed; death sink = a drawTop/
+alpha modifier. None of them add a draw pass — they modulate the pass the
+EnemyRenderer already performs.
+
+=============================================================================
+TECHNICAL NOTES (LibGDX RAYCASTING RENDERER)
+=============================================================================
+This feature extends the EnemyRenderer and Enemy classes defined in
+enemy_system.txt. It introduces NO new turn logic and NO new package.
+
+ENEMY.JAVA — add transient feedback fields (all default 0; all decremented in
+the renderer, NOT in the turn loop):
+    float healthBarVisibleTimer;   // seconds remaining the bar is shown
+    float hitFlashTimer;           // seconds remaining of white flash
+    float recoilTimer;             // seconds remaining of shudder
+    float deathLurchTimer;         // seconds remaining of death animation
+    int   recoilDirectionColumn;   // -1/0/+1 push axis (away from shooter)
+    int   recoilDirectionRow;      // -1/0/+1 push axis
+    boolean dying;                 // true once health<=0 but lurch not finished
+  Helper:
+    void armHitFeedback(int shooterColumn, int shooterRow)  // sets bar/flash/
+        recoil timers + recoil direction (sign of tile delta; if both signs are
+        0 because shooter and enemy share a tile edge case, default push along
+        the larger axis or skip recoil).
+    void armDeathFeedback()        // sets deathLurchTimer, dying=true, stronger
+        recoil; called when applyDamage drops health to <=0.
+  These are PLAIN DATA + setters. No LibGDX state on Enemy (keeps it pure data
+  per the enemy_system.txt contract).
+
+ENEMYMANAGER.JAVA — in applyDamageTo(enemy, amount):
+    enemy.applyDamage(amount);
+    if (enemy.isAlive()) {
+        enemy.armHitFeedback(lastShooterColumn, lastShooterRow);
+    } else {
+        enemy.armDeathFeedback();
+        // DO NOT immediately remove from the live list. Move it to a short-lived
+        // "dying" set so EnemyRenderer can play the lurch. Clear its occupancy
+        // NOW (it no longer blocks movement / cannot be targeted again) and
+        // stamp the corpse 'm' NOW (so the tile reads as a corpse to AI/LOS),
+        // but keep the dying sprite in the RENDER list until deathLurchTimer
+        // expires (EnemyRenderer reports expiry, or EnemyManager ticks the
+        // dying timers in a tiny per-frame update — see DEATH HANDOFF).
+    }
+  applyDamageTo needs the shooter tile. Either pass it through
+    (applyDamageTo(enemy, amount, shooterColumn, shooterRow)) or have
+    EnemyManager remember the player tile from the last takeTurn / fire. Cleanest
+    is to add the two int params to applyDamageTo and the EnemyHitTarget
+    interface signature (Shotgun already knows the player tile when it marches).
+
+DEATH HANDOFF (the one ordering subtlety):
+  Logical death and visual death must be decoupled so the lurch can play:
+    - At logical death: clear occupancy, stamp corpse 'm', set dying=true. The
+      enemy is now untargetable (enemyAt() must return null for a dying enemy so
+      a second pellet/turn cannot "re-hit" a corpse) and does not act in AI.
+    - For deathLurchTimer frames: EnemyRenderer still draws this dying enemy
+      (with sink + fade) AND the corpse prop exists at the tile. To avoid a
+      double-draw, EITHER (recommended) have PropRenderer skip drawing the 'm'
+      corpse at a tile that currently has a dying enemy overlapping it, OR delay
+      the corpse stamp until the lurch finishes. Recommend: delay the corpse
+      stamp until lurch end — simplest, no cross-renderer coupling. (If AI/LOS
+      must immediately treat the tile as walkable corpse, prefer the skip-draw
+      approach instead.) FLAG in OPEN QUESTIONS.
+    - Ticking dying timers: the cleanest place is a new lightweight
+      EnemyManager.updateFeedback(deltaTime) called every frame from World.update
+      (NOT from the turn callback). It decrements healthBarVisibleTimer,
+      hitFlashTimer, recoilTimer, deathLurchTimer on all enemies (live + dying),
+      and when a dying enemy's deathLurchTimer hits 0 it is finally removed and
+      the corpse is stamped. This keeps all real-time feedback ticking off
+      wall-clock time independent of turns. Alternatively decrement inside
+      EnemyRenderer.render using Gdx.graphics.getDeltaTime(); recommend the
+      explicit updateFeedback(deltaTime) call for testability and to avoid
+      mutating state inside a render pass.
+
+ENEMYRENDERER.JAVA — extend the existing per-enemy billboard pass:
+  Per enemy (live or dying), in the existing sorted draw loop:
+    1. Compute render world position WITH recoil/death offset:
+         offsetTiles = recoil envelope (live) or death recoil (dying)
+         renderWorldX = tileCenterX + recoilDirectionColumn * offsetTiles * CELL_SIZE
+         renderWorldY = tileCenterY + recoilDirectionRow    * offsetTiles * CELL_SIZE
+       (For the Vortex Eye, also add the existing hover bob to renderWorldY's
+        screen projection as already specified in enemy_system.txt.)
+    2. Compute spriteDepth, spriteScreenColumnCenter, spriteScreenHeight,
+       spriteScreenWidth EXACTLY as today, using the offset render position.
+    3. Determine the sprite tint:
+         base = distance-shaded color (with dormant dampen / red-alert tint as
+                today)
+         if hitFlashTimer>0 or dying: blend base toward white by
+                (timer/duration) * FLASH_STRENGTH  (death uses 1.0)
+       batch.setColor(tint.r, tint.g, tint.b, alpha) once before the column loop.
+       alpha = 1 normally; for dying, alpha = deathLurchTimer/DEATH_LURCH_SECONDS.
+    4. Draw the sprite columns as today (z-buffer test per column unchanged). For
+       dying enemies, additionally lower drawTop toward the floor as the lurch
+       progresses (sink) — a single lerp on drawTop before the column loop.
+    5. HEALTH BAR PASS (only if healthBarVisibleTimer>0 OR dying, and within
+       HEALTH_BAR_MAX_DRAW_DISTANCE_TILES):
+         - Reset batch.setColor to opaque (bars ignore shade/tint).
+         - Compute barCenterColumn = spriteScreenColumnCenter, barWidthScreen,
+           barHeightScreen, barBottomScreen as in HEALTH BAR — VISUAL SPEC.
+         - Draw three rects with the 1x1 white texture: frame, track, fill.
+           Each rect is drawn column-clipped the SAME way as the sprite — for a
+           solid rect this means clamping its left/right screen columns to
+           [0, screenWidth) and, for occlusion, testing spriteDepth against the
+           z-buffer per column the rect spans. A solid bar can be drawn as a
+           handful of clipped sub-rects between z-buffer "windows", OR, simpler,
+           per-column 1px-wide draws like the sprite loop (a bar is only tens of
+           columns wide — negligible cost). Recommend per-column draw for
+           pixel-perfect occlusion parity with the sprite.
+         - Apply the bar fade alpha to all three rects.
+  ZERO PER-FRAME ALLOCATIONS: the bar rects use the pre-existing 1x1 texture and
+  fixed scalars. No new arrays. The dying set can reuse a pre-sized array. Any
+  Color objects must be pre-allocated fields on EnemyRenderer (reuse a single
+  scratch Color, set its components per enemy) — never `new Color()` in render.
+
+  EnemyRenderer needs a 1x1 white texture. Either inject WallRenderer's
+  whitePixelTexture (it already owns one) via a getter, or create+own+dispose a
+  1x1 white Texture in EnemyRenderer. Recommend EnemyRenderer owns its own to
+  avoid lifetime coupling; dispose it in dispose().
+
+GAMEMATH ADDITIONS (pure, with the mandatory derivation comment block):
+  - GameMath.recoilEnvelope(float progress) -> float
+        Returns the out-and-back recoil magnitude in [0,1]. Half-sine:
+        sin(progress * PI). Peaks at progress=0.5, zero at 0 and 1.
+        Edge cases: clamp progress to [0,1]; outside the window callers should
+        not invoke it (offset is 0).
+  - GameMath.healthBarFillFraction(int currentHealth, int maxHealth) -> float
+        = clamp(currentHealth / (float)maxHealth, 0, 1).
+        Edge cases: maxHealth <= 0 returns 0 (avoid div-by-zero); negative
+        currentHealth clamps to 0.
+  - GameMath.fadeAlpha(float timerRemaining, float fadeWindowSeconds) -> float
+        = clamp(timerRemaining / fadeWindowSeconds, 0, 1).
+        Used for both bar fade and death alpha. Edge: fadeWindowSeconds<=0 -> 1.
+  (Health-state COLOR selection can stay a tiny private helper in EnemyRenderer
+   since it returns a color, not a number; or expose a GameMath function that
+   returns a packed int / fills a scratch Color. Keep GameMath LibGDX-free —
+   prefer the EnemyRenderer-local color picker.)
+
+CHANGES TO EXISTING/PLANNED CLASSES:
+  Enemy.java          — new transient timer fields + armHitFeedback /
+                        armDeathFeedback (see above).
+  EnemyManager.java   — applyDamageTo arms feedback; updateFeedback(deltaTime)
+                        ticks timers and finalizes dying enemies; enemyAt()
+                        excludes dying enemies; EnemyHitTarget.applyDamageTo
+                        signature gains shooterColumn/shooterRow.
+  EnemyRenderer.java  — recoil offset, flash tint, death sink/fade, health bar
+                        pass; owns a 1x1 white texture + a scratch Color.
+  Shotgun.java        — pass shooterColumn/shooterRow into applyDamageTo (it
+                        already has the player tile when marching).
+  World.java          — call enemyManager.updateFeedback(Gdx.graphics
+                        .getDeltaTime()) each frame in update() (real-time tick,
+                        separate from the per-turn takeTurn callback).
+  Constants.java      — all the constants below.
+
+CONSTANTS TO ADD (util/Constants.java — ALL placeholders, tune in BALANCE):
+  HEALTH_BAR_VISIBLE_SECONDS         = 2.5f
+  HEALTH_BAR_FADE_SECONDS            = 0.4f
+  HEALTH_BAR_WIDTH_FRACTION          = 0.9f
+  HEALTH_BAR_HEIGHT_FRACTION         = 0.06f
+  HEALTH_BAR_MIN_HEIGHT_PX           = 3f
+  HEALTH_BAR_MAX_HEIGHT_PX           = 14f
+  HEALTH_BAR_VERTICAL_GAP_FRACTION   = 0.05f
+  HEALTH_BAR_MAX_DRAW_DISTANCE_TILES = 12f
+  HEALTH_BAR_FRAME_THICKNESS_PX      = 1f
+  HEALTH_BAR_CRITICAL_THRESHOLD      = 0.30f
+  HEALTH_BAR_WOUNDED_THRESHOLD       = 0.60f
+  HEALTH_BAR_CRITICAL_PULSE_SPEED    = 8.0f   // radians/sec for critical pulse
+  HIT_FLASH_SECONDS                  = 0.10f
+  FLASH_STRENGTH                     = 0.85f
+  HIT_RECOIL_SECONDS                 = 0.14f
+  RECOIL_MAX_OFFSET_TILES            = 0.18f
+  DEATH_LURCH_SECONDS                = 0.20f
+  DEATH_RECOIL_OFFSET_TILES          = 0.30f
+  DEATH_FLASH_STRENGTH               = 1.0f
+  ALWAYS_SHOW_BAR_FOR_TARGETED_ENEMY = false  // v1: damage-triggered only
+
+=============================================================================
+BALANCE / TUNING NOTES  (ALL VALUES PLACEHOLDERS)
+=============================================================================
+- HEALTH_BAR_VISIBLE_SECONDS 2.5s: long enough to survive a back-pedal-and-
+  reload (one shell reload + one step ~ under a second of real time) so the bar
+  is still up when the player decides on the follow-up shot, short enough that a
+  fled-from enemy's bar clears before the next encounter.
+- The three-band color thresholds (60% / 30%) map cleanly onto the shotgun
+  damage table from enemy_system.txt:
+    Corruptor (60 HP): point-blank shell = 20 dmg. 60->40 (amber, "wounded",
+    crossed 60%), 40->20 (red critical, pulsing — "one more!"), 20->0 (death
+    lurch). Three shells, three readable states. The bar TEACHES the breakpoints.
+    Vortex Eye (18 HP): a point-blank 20 one-shots it — bar never even appears
+    (death feedback only). A dist-2 hit (15) drops it to 3 -> instant red pulse,
+    telling the player a single chip finishes it. Exactly the right read.
+- HIT_FLASH_SECONDS 0.10 and HIT_RECOIL_SECONDS 0.14: tuned just longer than the
+  PLAYER_MOVE_DURATION (0.12s) so the reaction is fully visible even if the
+  player immediately chains the next action; but short enough it has resolved
+  before the enemy's retaliation lands on the same turn.
+- RECOIL_MAX_OFFSET_TILES 0.18: must stay well under 0.5 (half a tile) so the
+  sprite never visually crosses into an adjacent tile — that would falsely read
+  as movement. 0.18 is a meaty shudder that still clearly stays put.
+- Critical pulse speed 8 rad/s ~1.27 Hz — a tense, urgent throb, not a seizure.
+- DEATH_LURCH_SECONDS 0.20: long enough to feel the kill, short enough not to
+  stall the player rounding the next corner. If it ever feels like it gates
+  follow-up fire, note that targeting is already disabled at logical death, so
+  the player can fire THROUGH a dying sprite at the enemy behind it on the same
+  turn — the lurch is cosmetic and never blocks.
+- FLAG: if multiple enemies are damaged in one barrel chain-reaction (future),
+  many bars + flashes pop at once. Confirm the screen stays readable; if noisy,
+  consider capping simultaneously-drawn bars to the nearest N.
+
+=============================================================================
+INTERACTIONS
+=============================================================================
+1. ENEMY SYSTEM (enemy_system.txt): this is a strict superset of the existing
+   damage path. armHitFeedback hangs off applyDamageTo; the dying-set + corpse
+   handoff refines the "remove + stamp 'm'" step already specified there. The
+   four-state EnemyState (DORMANT/ALERTED/CHASING/ATTACKING) is untouched —
+   "dying" is a render-only flag, not a fifth AI state.
+
+2. SHOTGUN / WEAPON SYSTEM (shotgun-weapon-system.txt, pump-action-shotgun.txt):
+   the bar is the readout that makes the single-shell + one-step-reload cadence
+   meaningful — the player can see whether the chambered shell will finish the
+   target. FireResult (already planned to carry hit enemy/damage) can feed a
+   future on-screen hitmarker, but the bar/flash are sufficient confirmation on
+   their own. The flash also disambiguates which of several lined-up enemies the
+   march-shot actually struck (the shot stops at the first; the flash marks it).
+
+3. PROP RENDERER / CORPSES (billboard-prop-sprites.txt): the death lurch hands
+   off to the existing 'm' corpse decal. The handoff (delay-stamp vs skip-draw)
+   is the one coupling point — see DEATH HANDOFF and OPEN QUESTIONS. The bar
+   rendering reuses PropRenderer's exact projection + z-buffer occlusion pattern,
+   so far enemies' bars clip behind walls identically to prop occlusion.
+
+4. RED-ALERT PULSE (emergency-red-alert-pulse.txt): the sprite body still
+   honors the red-alert tint; the health bar deliberately does NOT (it is a HUD
+   readout pinned in world space and must stay legible while the room throbs
+   red). The hit flash overrides both the red tint and the dormant dampen for
+   its brief window so a hit always reads.
+
+5. PLAYER PAIN FLASH / HEALTH HUD (scanline-crt-hud-marine-vitals.txt): mirror
+   image — the player's own damage uses the full-screen pain flash and the HUD
+   vitals readout; enemies use floating bars. Same visual language (red =
+   hurt, drains right-to-left) keeps the combat HUD coherent. Consider matching
+   the bar's critical-red exactly to the HUD's low-health red.
+
+6. FUTURE — HAZARD CHAIN REACTIONS (hazard-chain-reactions-fire-toxic-
+   explosive.txt): barrel/fire/toxic damage routes through the same
+   applyDamageTo, so chain-reaction kills get flashes, bars, and lurches for
+   free — a barrel detonation visibly staggering a pack of Corruptors is a big
+   payoff with zero extra feedback code.
+
+7. FUTURE — ENEMY VARIETY / ARMOR: if armored enemies arrive, the bar can gain
+   a second segmented overlay (a thin blue armor strip above the health fill),
+   slotting cleanly into the three-layer layout without restructuring.
+
+=============================================================================
+EDGE CASES
+=============================================================================
+1. DIV-BY-ZERO ON FILL: maxHealth must be > 0; GameMath.healthBarFillFraction
+   guards it (returns 0). An enemy spawned with maxHealth 0 is a data bug, not a
+   crash.
+2. OVERKILL: a hit dealing more than remaining HP clamps health at 0 (existing
+   applyDamage clamp). Bar fill clamps to [0,1]; death feedback fires once.
+3. RE-HIT A DYING ENEMY: enemyAt() must return null for dying enemies so a
+   second pellet on the same march, or a follow-up turn, cannot re-trigger death
+   feedback or "kill" a corpse. The shot passes THROUGH to the next tile/enemy.
+4. SPRITE FULLY BEHIND A WALL: if every column of the enemy fails the z-buffer
+   test, neither sprite nor bar draws — the bar must run the SAME per-column
+   occlusion, never draw "on top of" an occluding wall. A bar floating over a
+   wall the enemy is hidden behind is the classic bug; per-column z-test fixes it.
+5. SPRITE PARTIALLY OFF-SCREEN: the bar center column can be off-screen while
+   part of the bar is visible (enemy at the screen edge). Clamp the bar's column
+   span to [0, screenWidth-1]; never skip the whole bar because its center is
+   off-screen.
+6. RECOIL DIRECTION DEGENERATE: if shooter and enemy share a tile (should be
+   impossible — you cannot stand on an enemy — but guard anyway), both recoil
+   signs are 0; skip recoil (offset 0), keep flash + bar. Never normalize a zero
+   vector.
+7. RECOIL ACROSS A WALL: the cosmetic recoil offset could push the render
+   position into a wall tile visually. That is fine (it is sub-tile, ~0.18, and
+   the sprite is a billboard, not collided) — but the z-buffer test still runs on
+   the OFFSET depth, so a sprite shoved a hair toward a near wall simply clips a
+   touch more. Acceptable. Do NOT clamp the cosmetic offset against walls (would
+   add tile lookups to render for no visible benefit).
+8. ENEMY DIES WHILE RED-ALERT PULSE IS AT PEAK: death flash uses FLASH_STRENGTH
+   1.0 toward white, which dominates the red tint — the kill reads regardless of
+   pulse phase. Verified by spec ordering (flash applied after tint).
+9. VERY DISTANT ENEMY DAMAGED (e.g. future ranged/explosive): bar is culled
+   past HEALTH_BAR_MAX_DRAW_DISTANCE_TILES even if just damaged. The flash on
+   the tiny far sprite is still drawn (cheap, and it confirms the far hit), but
+   the unreadable bar is suppressed. Confirm this feels right (OPEN QUESTIONS).
+10. MANY SIMULTANEOUS DEATHS (chain reaction): each dying enemy holds its own
+    deathLurchTimer; the dying set must be sized to the level's enemy count so a
+    full wipe in one explosion never overflows or allocates. Pre-size it.
+11. FRAME-RATE INDEPENDENCE: timers decrement by real deltaTime, so feedback
+    looks identical at 30 or 144 fps. A single huge deltaTime spike (alt-tab) can
+    skip an entire short flash — acceptable; clamp deltaTime upstream if the
+    project already does so for other animations.
+12. TURN CHAINS DURING FEEDBACK: the player can complete several turns while a
+    bar is still fading (turns are fast). Each new hit RE-ARMS the timers to full
+    (resets the fade), so a steadily-shot enemy keeps a solid bar — correct.
+13. ENEMY KILLED THE SAME TURN IT WAKES: a one-shot kill on a still-dormant
+    enemy must still play the death lurch (flash overrides dormant dampen). The
+    dormant-dampen shade is irrelevant once the death flash strength is 1.0.
+
+=============================================================================
+OPEN QUESTIONS
+=============================================================================
+1. CORPSE HANDOFF: delay the 'm' stamp until the lurch ends (simplest, no cross-
+   renderer coupling, but the tile reads as "live enemy" to AI/LOS for ~0.2s) vs
+   stamp immediately + have PropRenderer skip a corpse that overlaps a dying
+   enemy (immediate AI/LOS correctness, adds one cross-renderer check)? Recommend
+   delay-stamp for v1; the 0.2s window is below one turn and harmless.
+2. ALWAYS-SHOW-ON-TARGET: should the enemy currently in the player's facing
+   tile-line ALWAYS show its bar (pre-shot intel, DCSS-style inspect) even
+   before being hit? Default off (damage-triggered) to keep the screen clean and
+   preserve dormant dread. Could be a toggle/accessibility option.
+3. FAR-ENEMY BAR CULL: is HEALTH_BAR_MAX_DRAW_DISTANCE_TILES=12 right, or should
+   bars show at any range an enemy is visible? Recommend the cull; revisit if
+   players want long-range HP intel for ranged kiting.
+4. NUMERIC HP READOUT: should a tiny "NN" number ride the bar (needs the font/
+   BitmapFont from the HUD work) or is the colored bar enough? Recommend bar-only
+   for v1 (cleaner, no font dependency in the world pass); numbers can come with
+   the inspect/look action later.
+5. DEATH SINK STYLE: sprite sinks straight down into the corpse (current spec)
+   vs topples/scales-down? Sink is cheapest and reads fine; toppling needs a
+   skew the per-column draw does not currently support. Defer toppling.
+6. ENEMY-VS-ENEMY DAMAGE (future friendly-fire from barrels): bars react the
+   same; confirm we WANT enemies showing bars when hurt by a barrel they stand
+   next to (yes — it is the same readable event). No special-casing needed.
+7. MINI-MAP: should a damaged enemy's dot on the mini-map also reflect HP (e.g.
+   shrink or darken)? Low priority; the world-space bar is the primary readout.
+8. SHOULD THE FLASH HAVE A COLOR PER DAMAGE TYPE (white=ballistic, green=toxic,
+   orange=fire) once hazards ship? Nice future hook; v1 is white for all.

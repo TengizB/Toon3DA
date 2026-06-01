@@ -1,0 +1,299 @@
+STATUS: IN PROGRESS
+CATEGORY: Visual
+TITLE: Hazard Wall 'h' — caution-stripe industrial danger-zone wall
+CREATED: 2026-05-29
+---
+
+OVERVIEW
+========
+A new wall tile type `'h'` — the Hazard Wall — that visually screams "do not be
+here." It is a solid wall like `'x'` in every gameplay respect (blocks movement,
+blocks raycasting, blocks line-of-sight), but its texture is a procedurally
+generated yellow-and-black diagonal safety-stripe pattern (caution-tape look)
+inside a dark steel border frame with corner rivets. Its job is pure
+WAYFINDING and ATMOSPHERE: it marks restricted zones, biohazard containment,
+high-voltage rooms, and reactor/airlock perimeters so the player instantly reads
+"something dangerous lives behind / around this." It contrasts hard against the
+muted grey `lab_wall_generic` so the eye snaps to it from across a room.
+
+No asset file is required: the texture is generated into a Pixmap at load and
+uploaded to a Texture, in keeping with the project's procedural-rendering
+direction (see procedural-hud-no-textures.txt). It slots into the existing wall
+pipeline exactly like the other lettered wall types (`c`, `v`, `t`, `w`).
+
+Why now: the wall texture system and per-char wall typing already exist; adding
+a hazard wall is a tiny, high-value art/wayfinding win that future systems
+(biohazard rooms, high-voltage hazards, reactor bosses, keycard-gated danger
+zones) can lean on for free signposting.
+
+
+GAMEPLAY LOOP
+=============
+Hazard walls have NO unique gameplay verb in v1 — they are a WALL. The "loop"
+is the perception loop:
+
+1. LevelLoader reads an `'h'` char from a level `.txt`. Level stores it as a
+   wall tile with wall-type HAZARD.
+2. Level.isWall('h') returns TRUE (solid — single authority, per CLAUDE.md).
+3. PlayerController.tryMove() treats an `'h'` target tile as blocked, identical
+   to `'x'`. The player cannot walk through it.
+4. RayCaster / WallRenderer hit-test an `'h'` tile exactly like any wall (DDA
+   stops), but the wall-type-to-texture lookup selects the procedurally
+   generated HAZARD texture instead of the generic one.
+5. The player SEES the yellow/black stripes from a distance and reads the room
+   beyond as restricted/dangerous — they slow down, expect a trap, an enemy
+   ambush, a locked door, or an environmental hazard. That anticipation IS the
+   feature.
+
+FUTURE GAMEPLAY HOOKS (NOT v1 — flagged so the char is reserved coherently):
+- Hazard walls could gate biohazard/high-voltage rooms whose floor tiles damage
+  the player (toxic/electrified floor), with the striped walls as the warning.
+- A "breachable hazard panel" variant (shotgun/plasma-destructible) could open
+  shortcuts into sealed danger zones. Out of scope here.
+
+
+VISUAL DESIGN
+=============
+THE READ (one sentence): "industrial caution tape framed in dark steel."
+
+LAYOUT OF ONE WALL FACE (the generated texture, e.g. 128x128 or 256x256 px)
+---------------------------------------------------------------------------
+  +------------------------------+   <- dark steel BORDER FRAME (all 4 edges)
+  | o                          o |   <- corner RIVETS (one per corner)
+  |   ////////////////////////   |
+  |   ////////////////////////   |   <- central FIELD: 45-degree diagonal
+  |   ////////////////////////   |      yellow/black HAZARD STRIPES
+  |   ////////////////////////   |
+  | o                          o |
+  +------------------------------+
+
+COLORS (RGBA floats for Pixmap.setColor; add to Constants)
+  HAZARD_YELLOW       = (0.95, 0.78, 0.05, 1.0)   // caution yellow
+  HAZARD_YELLOW_DIM   = (0.62, 0.50, 0.04, 1.0)   // shaded stripe (depth/grime)
+  HAZARD_BLACK        = (0.08, 0.07, 0.05, 1.0)   // stripe black (warm, not pure)
+  HAZARD_FRAME_STEEL  = (0.22, 0.23, 0.26, 1.0)   // dark steel border
+  HAZARD_FRAME_SHADOW = (0.10, 0.11, 0.13, 1.0)   // inner frame bevel shadow
+  HAZARD_FRAME_LIGHT  = (0.40, 0.42, 0.46, 1.0)   // outer frame bevel highlight
+  HAZARD_RIVET        = (0.55, 0.57, 0.60, 1.0)   // rivet head
+  HAZARD_RIVET_SHADOW = (0.06, 0.06, 0.08, 1.0)   // rivet drop shadow
+
+DIAGONAL STRIPES (the signature)
+  - 45-degree stripes. For each pixel (px, py) in the central field, the stripe
+    phase is (px + py) (or (px - py) to flip the lean). A pixel is YELLOW if
+    ((px + py) / HAZARD_STRIPE_WIDTH) is even, else BLACK. Stripe width
+    ~14-18 px at 128 res reads as proper "hazard tape" thickness.
+  - Add grime/depth: darken every other stripe edge by blending toward
+    HAZARD_YELLOW_DIM / a darker black near stripe boundaries (a 1-2 px shaded
+    lip on each stripe) so it doesn't look flat-vector. Optional sparse darker
+    "scuff" pixels for wear.
+
+BORDER FRAME
+  - A dark steel border HAZARD_FRAME_WIDTH px thick (~10-14 px at 128 res) on
+    all four edges, framing the striped field. Give it a two-tone bevel: the
+    outer edge HAZARD_FRAME_LIGHT (top/left) -> HAZARD_FRAME_SHADOW (bottom/right
+    and the inner edge against the stripes) so the frame reads as a raised metal
+    plate around recessed tape. Same bevel trick as the HUD chrome.
+
+CORNER RIVETS
+  - One filled rivet per corner, inset into the frame. Draw a HAZARD_RIVET_SHADOW
+    disc first, then a slightly smaller HAZARD_RIVET disc offset up-left by 1 px
+    for a lit screwhead. Radius ~3-4 px at 128 res.
+
+CONTRAST GOAL (vs. plain 'x')
+  - lab_wall_generic is muted grey. The hazard wall is high-chroma yellow with
+    hard black edges. Under the existing DISTANCE SHADING and FLOOR-LIGHTING
+    brightness multipliers, the yellow stays the most saturated thing on screen,
+    so the eye is pulled to it even in a dim corridor. This is intentional —
+    hazard walls are landmarks.
+
+ANIMATION
+  - v1: STATIC (no animation), like the other wall textures. The pattern alone
+    is enough to read.
+  - FUTURE (optional polish): pair hazard walls with `'f'` flickering floor or a
+    red-alert pulse to make the zone feel "live." A scrolling-stripe or pulsing
+    yellow shimmer is possible but NOT needed for v1 and would require per-frame
+    shading work — defer.
+
+
+TECHNICAL NOTES
+===============
+
+LEVEL.JAVA CHANGES (the single authority)
+-----------------------------------------
+- Add `'h'` to the set recognized by Level.isWall(char) -> returns TRUE. This is
+  the FIRST and most important change (per CLAUDE.md: isWall is the single
+  authority on solidity; both WallRenderer and PlayerController call it). Adding
+  it here makes the player collide with hazard walls and makes the raycaster
+  stop on them — for free.
+- Add `'h'` to the wall-type classification used by the renderer to pick a
+  texture. If the project uses a WallType enum or a char->texture map, add a
+  HAZARD entry. Mirror exactly how `'c'` (conduit), `'v'` (vent), `'t'`
+  (terminal), `'w'` (wires) are classified.
+- No new movement/collision logic — it is a wall. Nothing in PlayerController
+  changes (it already asks Level.isWall).
+
+WALLRENDERER CHANGES
+--------------------
+- The renderer already maps a wall char to a wall texture. Add the HAZARD case:
+  when the DDA-hit tile is `'h'`, sample the procedurally generated hazard
+  Texture instead of lab_wall_generic.
+- Distance shading and floor-lighting brightness multipliers apply UNCHANGED —
+  the hazard texture is just another wall texture in the existing pipeline. No
+  special shading path.
+- Z-buffer, texture-column sampling, stripe-height math: all identical to other
+  walls. The hazard wall costs nothing extra at render time.
+
+PROCEDURAL TEXTURE GENERATION (no asset file)
+---------------------------------------------
+  NEW CLASS: render/ProceduralWallTextures.java
+    (or fold into wherever wall textures are currently owned/loaded — if
+     WallRenderer loads lab_wall_*.jpg today, give it a sibling method that
+     builds the hazard Texture procedurally and stores it alongside the others.)
+    - Builds the hazard wall Pixmap ONCE at load (constructor / show()), uploads
+      to a Texture, stores it. Disposed in dispose() with the other wall
+      textures. NEVER generate inside render().
+    - Method sketch:
+        Texture buildHazardWallTexture(int size):
+          Pixmap pixmap = new Pixmap(size, size, RGBA8888);
+          // 1. fill central field with diagonal stripes (loop px, py):
+          //    phase = (px + py) / HAZARD_STRIPE_WIDTH;
+          //    color = (phase even) ? HAZARD_YELLOW : HAZARD_BLACK;
+          //    add a 1-2px dim lip near stripe boundaries.
+          // 2. draw the steel border frame (4 beveled rects, two-tone).
+          // 3. draw 4 corner rivets (shadow disc + lit disc).
+          Texture texture = new Texture(pixmap);
+          texture.setFilter(Nearest, Nearest);   // keep the chunky pixel look
+          pixmap.dispose();
+          return texture;
+    - Use Nearest filtering (no smoothing) so stripes stay crisp and pixelated
+      to match the game's aesthetic.
+
+GAMEMATH ADDITIONS (util/GameMath.java) — optional but recommended
+------------------------------------------------------------------
+  hazardStripeIsYellow(int pixelX, int pixelY, int stripeWidth) -> boolean
+    /*
+     * Formula: 45-degree diagonal stripe test
+     * Derivation: along the line px+py = constant the stripe is uniform; the
+     *   stripe index is floor((px+py)/stripeWidth); even index = yellow, odd =
+     *   black. Using px+py (sum) gives a "/" lean; px-py gives "\".
+     * Edge cases: stripeWidth <= 0 -> guard (return false / treat as 1);
+     *   negative coords not expected (texture space is >= 0).
+     */
+  (Keep the stripe math out of inline texture-gen code per the "formulas live in
+   GameMath" rule. The generation loop calls this per pixel at LOAD time only.)
+
+CONSTANTS ADDITIONS (util/Constants.java)
+-----------------------------------------
+  HAZARD_WALL_TEXTURE_SIZE   = 128     // generated texture resolution (px)
+  HAZARD_STRIPE_WIDTH        = 16      // diagonal stripe thickness (px)
+  HAZARD_FRAME_WIDTH         = 12      // steel border thickness (px)
+  HAZARD_RIVET_RADIUS        = 4       // corner rivet radius (px)
+  HAZARD_RIVET_INSET         = 8       // rivet offset from corner (px)
+  // Colors (RGBA floats) — list from VISUAL DESIGN:
+  HAZARD_YELLOW, HAZARD_YELLOW_DIM, HAZARD_BLACK,
+  HAZARD_FRAME_STEEL, HAZARD_FRAME_SHADOW, HAZARD_FRAME_LIGHT,
+  HAZARD_RIVET, HAZARD_RIVET_SHADOW
+
+DOCUMENTATION CHANGES
+---------------------
+- Add `'h'` to the Walls table in CLAUDE.md (Level.java section) and to any
+  level-format reference docs, with note "procedural texture, no asset file."
+
+NO-ALLOCATION COMPLIANCE
+------------------------
+- Texture built once at load, disposed at shutdown. Zero per-frame cost.
+- Rendering reuses the existing wall draw path — no new render() allocations.
+
+
+BALANCE & TUNING
+================
+Hazard walls have no combat numbers — the "balance" is information design and
+placement discipline:
+
+PLACEMENT GUIDANCE (for the level designer / generator)
+  - SPARSE. Like `'t'` terminal walls, hazard walls are LANDMARKS, not filler.
+    Use them to FRAME a danger, not to tile a whole corridor. A handful per
+    level, clustered around one zone, reads far stronger than scattering them.
+  - GOOD USES:
+      * The perimeter wall band around a biohazard / reactor / high-voltage room
+        (e.g. the 1-2 tiles flanking the door INTO the dangerous room).
+      * The back wall behind a boss arena or an explosive-barrel cluster.
+      * Sealing off a restricted vault that needs a high-tier keycard.
+  - BAD USES:
+      * Replacing generic `'x'` everywhere (destroys the contrast that makes the
+        signal work — if everything is hazard, nothing is).
+      * Random single tiles with no danger behind them (cries wolf; the player
+        learns to ignore the warning).
+  - RULE OF THUMB: every hazard-wall cluster should have a PAYOFF behind/near it
+    (a hazard floor, a tough enemy, explosive barrels, a locked danger room).
+    The wall is a promise; keep it.
+
+CONTRAST TUNING (placeholders)
+  - HAZARD_YELLOW chroma and HAZARD_STRIPE_WIDTH are the main "how loud" knobs.
+    If the wall looks too busy/noisy at distance, widen the stripes; if too
+    subtle, raise yellow saturation. PLACEHOLDER values — verify in the actual
+    distance-shaded 3D view, not in isolation.
+
+
+INTERACTIONS
+============
+LEVEL FORMAT / EXISTING WALL TYPES (Level.java, LevelLoader.java)
+  - Drops into the same per-char wall pipeline as `c`/`v`/`t`/`w`. The only
+    structural requirement is the Level.isWall + wall-type classification edit.
+    LevelLoader needs no change (it already passes chars through).
+
+LABORATORY LIGHTING (laboratory-lighting.txt) + FLOOR LIGHTING TILES
+  - Distance shading and floor-brightness multipliers apply to hazard walls
+    unchanged. A hazard wall over an `'u'` (unlit) floor zone still reads — the
+    yellow is the most luminous thing in a dark area, which is exactly right for
+    a "dread zone" warning. Pairing `'h'` walls with `'u'`/`'f'` floors
+    amplifies the "do not enter" feeling.
+
+EMERGENCY RED ALERT PULSE (emergency-red-alert-pulse.txt)
+  - During a red alert, hazard walls sitting in red-tinted light will shift
+    toward orange — a strong "everything is on fire" read. No code needed; the
+    alert's global tint multiplies the hazard texture like any wall. FUTURE
+    polish could make hazard walls pulse their own yellow in sync with the alert.
+
+BIOHAZARD / HIGH-VOLTAGE / HAZARD FLOORS (future; hazard-chain-reactions...)
+  - This wall is the visual ANCHOR for any future damaging-floor or
+    environmental-hazard zone. When toxic/electrified floor tiles are added,
+    hazard walls are the standard way to telegraph them. Reserve `'h'` as the
+    "danger-zone marker" so the vocabulary stays consistent.
+
+KEYCARD DOORS (uac-keycard-doors-security-tiers.txt)
+  - Hazard walls framing a high-tier keycard door reinforce "restricted /
+    authorized personnel only." Pairs naturally with the security-tier color
+    coding on the door itself.
+
+SECRET ROOMS (secret-rooms-hidden-passages.txt)
+  - A hazard wall is a poor candidate for a hidden push-wall (its loud pattern
+    draws attention, the opposite of a secret). Recommend the generator NOT use
+    `'h'` as a secret-wall face — keep secrets behind plain `'x'`.
+
+
+OPEN QUESTIONS
+==============
+1. STRIPE LEAN: "/" (px+py) vs "\" (px-py), or alternate per-wall for variety?
+   Recommendation: fix one lean ("/") for consistency; a single recognizable
+   pattern is a stronger landmark than visual variety here.
+2. TEXTURE RESOLUTION: 128 vs 256. Recommendation: 128 with Nearest filtering
+   — crisp, cheap, on-aesthetic. Bump to 256 only if stripes alias badly up
+   close in the 3D view.
+3. SHOULD HAZARD WALLS BE DESTRUCTIBLE: a "breachable hazard panel" variant
+   (shotgun/plasma can blast it open into a sealed danger room) is appealing but
+   is a SEPARATE mechanic (destructible walls) — defer to its own design doc.
+   Keep v1 `'h'` as plain solid.
+4. SUB-VARIANTS: do we want distinct hazard themes (yellow=caution,
+   green=biohazard trefoil, blue=high-voltage)? Recommendation: ship the
+   yellow/black caution wall first; if it earns its keep, add a biohazard
+   variant char (e.g. `'H'`) reusing the same generator with a green palette and
+   a trefoil stamp instead of stripes.
+5. DOES THE PATTERN NEED ANIMATION: recommend NO for v1 (static is enough and
+   keeps the wall pipeline allocation/animation-free). Revisit only if the
+   red-alert pairing wants a synced pulse.
+6. PLACEMENT ENFORCEMENT: should the generator be REQUIRED to put a payoff
+   behind every hazard cluster, or is that a soft guideline for hand-authored
+   levels? Recommendation: soft guideline now; if a procedural generator places
+   `'h'`, add a rule that hazard walls only spawn adjacent to a flagged
+   danger-zone region.

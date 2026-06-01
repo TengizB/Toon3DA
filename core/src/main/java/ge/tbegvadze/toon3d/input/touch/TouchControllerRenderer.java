@@ -1,0 +1,263 @@
+package ge.tbegvadze.toon3d.input.touch;
+
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.render.Renderable;
+import ge.tbegvadze.toon3d.util.Constants;
+
+public final class TouchControllerRenderer implements Renderable, Disposable {
+
+    // Palette — datapad chrome + phosphor palette (matches HUD aesthetic)
+    private static final float STEEL_DARK_R    = 0x1A / 255f;
+    private static final float STEEL_DARK_G    = 0x1A / 255f;
+    private static final float STEEL_DARK_B    = 0x1F / 255f;
+    private static final float BEVEL_LIGHT_R   = 0x4A / 255f;
+    private static final float BEVEL_LIGHT_G   = 0x4A / 255f;
+    private static final float BEVEL_LIGHT_B   = 0x55 / 255f;
+    private static final float BEVEL_DARK_R    = 0x08 / 255f;
+    private static final float BEVEL_DARK_G    = 0x08 / 255f;
+    private static final float BEVEL_DARK_B    = 0x0A / 255f;
+    private static final float PHOSPHOR_R      = 0x00 / 255f;
+    private static final float PHOSPHOR_G      = 0xFF / 255f;
+    private static final float PHOSPHOR_B      = 0x88 / 255f;
+    private static final float PHOSPHOR_DIM_R  = 0x00 / 255f;
+    private static final float PHOSPHOR_DIM_G  = 0x55 / 255f;
+    private static final float PHOSPHOR_DIM_B  = 0x3A / 255f;
+    private static final float WARN_R          = 1.00f;
+    private static final float WARN_G          = 0.87f;
+    private static final float WARN_B          = 0.00f;
+
+    private final ShapeRenderer shapeRenderer;
+    private final TouchButton[] buttons;
+    private boolean actionLocked;
+
+    public TouchControllerRenderer(TouchInputState touchInputState) {
+        this.buttons       = touchInputState.getButtons();
+        this.shapeRenderer = new ShapeRenderer();
+    }
+
+    /** Dims icon alphas when the player controller is animating an action. */
+    public void setActionLocked(boolean locked) { this.actionLocked = locked; }
+
+    @Override
+    public void render(OrthographicCamera camera) {
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        for (TouchButton button : buttons) {
+            drawBody(button);
+            drawBevel(button);
+            drawIcon(button);
+        }
+
+        shapeRenderer.end();
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    // -------------------------------------------------------------------------
+    // Body fill
+    // -------------------------------------------------------------------------
+
+    private void drawBody(TouchButton button) {
+        float alpha = button.pressed ? Constants.TOUCH_FILL_ALPHA_PRESSED : Constants.TOUCH_FILL_ALPHA_IDLE;
+        shapeRenderer.setColor(STEEL_DARK_R, STEEL_DARK_G, STEEL_DARK_B, alpha);
+        if (button.shape == TouchButton.Shape.CAPSULE) {
+            drawCapsule(button.rectX, button.rectY, button.rectWidth, button.rectHeight);
+        } else {
+            drawRoundedRect(button.rectX, button.rectY, button.rectWidth, button.rectHeight,
+                            Constants.TOUCH_BUTTON_CORNER_RADIUS);
+        }
+    }
+
+    private void drawRoundedRect(float x, float y, float width, float height, float radius) {
+        // Cross-shaped fill so the body covers the full bounding rect
+        shapeRenderer.rect(x + radius, y,          width - 2 * radius, height);
+        shapeRenderer.rect(x,          y + radius,  width,              height - 2 * radius);
+        // Four corner quarter-pie sectors (filled arc = sector in Filled mode)
+        shapeRenderer.arc(x + radius,         y + radius,          radius, 180, 90);
+        shapeRenderer.arc(x + width - radius, y + radius,          radius, 270, 90);
+        shapeRenderer.arc(x + width - radius, y + height - radius, radius,   0, 90);
+        shapeRenderer.arc(x + radius,         y + height - radius, radius,  90, 90);
+    }
+
+    private void drawCapsule(float x, float y, float width, float height) {
+        float radius = width / 2f;
+        shapeRenderer.rect(x, y + radius, width, height - 2 * radius);
+        shapeRenderer.arc(x + radius, y + radius,          radius, 180, 180); // bottom semicircle
+        shapeRenderer.arc(x + radius, y + height - radius, radius,   0, 180); // top semicircle
+    }
+
+    // -------------------------------------------------------------------------
+    // Bevel rim
+    // -------------------------------------------------------------------------
+
+    private void drawBevel(TouchButton button) {
+        boolean pressed   = button.pressed;
+        float   rimAlpha  = Constants.TOUCH_RIM_ALPHA;
+        float   thickness = Constants.TOUCH_RIM_THICKNESS;
+        float   x = button.rectX, y = button.rectY;
+        float   w = button.rectWidth, h = button.rectHeight;
+
+        // Yellow glow pulse on first press, fades over TOUCH_PRESS_GLOW_DURATION
+        float glowFraction = Constants.TOUCH_PRESS_GLOW_DURATION > 0f
+            ? button.pressGlowTimer / Constants.TOUCH_PRESS_GLOW_DURATION
+            : 0f;
+
+        float rimLightR = MathUtils.lerp(BEVEL_LIGHT_R, WARN_R, glowFraction);
+        float rimLightG = MathUtils.lerp(BEVEL_LIGHT_G, WARN_G, glowFraction);
+        float rimLightB = MathUtils.lerp(BEVEL_LIGHT_B, WARN_B, glowFraction);
+
+        // Pressed state inverts the bevel (button looks physically depressed)
+        float topLeftR, topLeftG, topLeftB, botRightR, botRightG, botRightB;
+        if (pressed) {
+            topLeftR = BEVEL_DARK_R;  topLeftG = BEVEL_DARK_G;  topLeftB = BEVEL_DARK_B;
+            botRightR = rimLightR;    botRightG = rimLightG;     botRightB = rimLightB;
+        } else {
+            topLeftR = rimLightR;     topLeftG = rimLightG;      topLeftB = rimLightB;
+            botRightR = BEVEL_DARK_R; botRightG = BEVEL_DARK_G;  botRightB = BEVEL_DARK_B;
+        }
+
+        // Top + left edges (raised side when idle)
+        shapeRenderer.setColor(topLeftR, topLeftG, topLeftB, rimAlpha);
+        shapeRenderer.rectLine(x, y + h, x + w, y + h, thickness); // top
+        shapeRenderer.rectLine(x, y,     x,      y + h, thickness); // left
+
+        // Bottom + right edges (sunken side when idle)
+        shapeRenderer.setColor(botRightR, botRightG, botRightB, rimAlpha);
+        shapeRenderer.rectLine(x,     y, x + w, y,     thickness); // bottom
+        shapeRenderer.rectLine(x + w, y, x + w, y + h, thickness); // right
+    }
+
+    // -------------------------------------------------------------------------
+    // Icons
+    // -------------------------------------------------------------------------
+
+    private void drawIcon(TouchButton button) {
+        float cx = button.rectX + button.rectWidth  / 2f;
+        float cy = button.rectY + button.rectHeight / 2f;
+
+        float iconAlpha = actionLocked
+            ? Constants.TOUCH_ICON_ALPHA_LOCKED
+            : (button.pressed ? Constants.TOUCH_ICON_ALPHA_PRESSED : Constants.TOUCH_ICON_ALPHA_IDLE);
+
+        float extent = Constants.TOUCH_ICON_EXTENT;
+
+        // Soft halo: redraw slightly larger in dim phosphor to keep glyphs readable over bright walls
+        shapeRenderer.setColor(PHOSPHOR_DIM_R, PHOSPHOR_DIM_G, PHOSPHOR_DIM_B, iconAlpha * 0.55f);
+        drawGlyph(button.action, cx, cy, extent + 3f);
+
+        // Crisp foreground glyph in phosphor green
+        shapeRenderer.setColor(PHOSPHOR_R, PHOSPHOR_G, PHOSPHOR_B, iconAlpha);
+        drawGlyph(button.action, cx, cy, extent);
+    }
+
+    private void drawGlyph(TouchAction action, float cx, float cy, float extent) {
+        switch (action) {
+            case FORWARD:      drawTriangleUp(cx, cy, extent);              break;
+            case BACK:         drawTriangleDown(cx, cy, extent);            break;
+            case ROTATE_LEFT:  drawRotateArrow(cx, cy, extent, true);       break;
+            case ROTATE_RIGHT: drawRotateArrow(cx, cy, extent, false);      break;
+            case STRAFE_LEFT:  drawDoubleChevron(cx, cy, extent, true);     break;
+            case STRAFE_RIGHT: drawDoubleChevron(cx, cy, extent, false);    break;
+            default: break;
+        }
+    }
+
+    /** Solid up-pointing triangle (▲). */
+    private void drawTriangleUp(float cx, float cy, float extent) {
+        float halfBase = extent * 0.75f;
+        float rise     = extent * 0.90f;
+        shapeRenderer.triangle(
+            cx,            cy + rise * 0.55f,
+            cx - halfBase, cy - rise * 0.45f,
+            cx + halfBase, cy - rise * 0.45f);
+    }
+
+    /** Solid down-pointing triangle (▽). */
+    private void drawTriangleDown(float cx, float cy, float extent) {
+        float halfBase = extent * 0.75f;
+        float rise     = extent * 0.90f;
+        shapeRenderer.triangle(
+            cx,            cy - rise * 0.55f,
+            cx - halfBase, cy + rise * 0.45f,
+            cx + halfBase, cy + rise * 0.45f);
+    }
+
+    /**
+     * Bent "turn left/right" arrow — a vertical arm rising from center with a
+     * horizontal bar at the top and an arrowhead pointing left (CCW) or right (CW).
+     * Clearly distinct from the straight double-chevron strafe icons.
+     */
+    private void drawRotateArrow(float cx, float cy, float extent, boolean counterClockwise) {
+        float lineWidth = Math.max(2f, extent * 0.13f);
+        float armLength = extent * 0.75f;
+        float barLength = extent * 0.80f;
+        float arrowSize = extent * 0.30f;
+
+        // Vertical arm: rises from below-center to above-center
+        float armX       = counterClockwise ? cx + armLength * 0.25f : cx - armLength * 0.25f;
+        float armBottomY = cy - armLength * 0.45f;
+        float armTopY    = cy + armLength * 0.45f;
+        shapeRenderer.rectLine(armX, armBottomY, armX, armTopY, lineWidth);
+
+        // Horizontal bar at top, extending toward the arrowhead
+        float barStartX  = armX;
+        float barEndX    = counterClockwise ? armX - barLength : armX + barLength;
+        float barY       = armTopY;
+        shapeRenderer.rectLine(barStartX, barY, barEndX, barY, lineWidth);
+
+        // Arrowhead at the tip of the horizontal bar
+        float tipX      = barEndX;
+        float tipY      = barY;
+        float arrowDeg  = counterClockwise ? 180f : 0f;
+        float fin1X     = tipX + MathUtils.cosDeg(arrowDeg + 140f) * arrowSize;
+        float fin1Y     = tipY + MathUtils.sinDeg(arrowDeg + 140f) * arrowSize;
+        float fin2X     = tipX + MathUtils.cosDeg(arrowDeg - 140f) * arrowSize;
+        float fin2Y     = tipY + MathUtils.sinDeg(arrowDeg - 140f) * arrowSize;
+        shapeRenderer.triangle(tipX, tipY, fin1X, fin1Y, fin2X, fin2Y);
+    }
+
+    /**
+     * Double chevron (<<  or  >>) for strafe actions.
+     * Clearly distinct from the bent-arrow rotate icons.
+     */
+    private void drawDoubleChevron(float cx, float cy, float extent, boolean pointingLeft) {
+        float halfArm   = extent * 0.22f;
+        float halfVert  = extent * 0.52f;
+        float spacing   = extent * 0.44f;
+        float lineWidth = Math.max(2f, extent * 0.13f);
+
+        // Two chevrons, each offset horizontally from center
+        float[] offsets = { -spacing / 2f, spacing / 2f };
+        for (float offsetX : offsets) {
+            float apexX;
+            float openX;
+            if (pointingLeft) {
+                apexX = cx + offsetX - halfArm;
+                openX = cx + offsetX + halfArm;
+            } else {
+                apexX = cx + offsetX + halfArm;
+                openX = cx + offsetX - halfArm;
+            }
+            shapeRenderer.rectLine(openX, cy + halfVert, apexX, cy, lineWidth);
+            shapeRenderer.rectLine(apexX, cy, openX, cy - halfVert, lineWidth);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Dispose
+    // -------------------------------------------------------------------------
+
+    @Override
+    public void dispose() {
+        shapeRenderer.dispose();
+    }
+}

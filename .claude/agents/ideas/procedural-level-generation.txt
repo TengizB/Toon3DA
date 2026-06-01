@@ -1,0 +1,112 @@
+STATUS: IMPLEMENTED
+CATEGORY: Level Design / Systems
+TITLE: Procedural Dungeon Generation (Shattered Pixel Dungeon-inspired)
+---
+
+OVERVIEW
+Replaces hand-crafted .txt level files with a runtime-generated dungeon using a
+room-placement algorithm inspired by Shattered Pixel Dungeon. Every run generates
+a unique, fully connected layout of rectangular rooms linked by 1-tile-wide corridors.
+
+INSPIRATION
+Shattered Pixel Dungeon uses a three-phase generate→connect→decorate pipeline:
+  1. Initialize: create room objects (entrance, standard, special)
+  2. Build:      connect rooms via a spanning tree; carve corridors
+  3. Paint:      decorate each room with floor tiles, props, and enemies
+
+This implementation follows the same three-phase structure, simplified for the
+first-person raycasting context.
+
+ALGORITHM SUMMARY
+
+  Phase 1 — Room Placement (collision-detection method)
+  -------------------------------------------------------
+  • Fill the entire grid with wall tiles ('x').
+  • Attempt up to LEVEL_GEN_PLACEMENT_TRIES random room placements.
+  • Each room is a rectangle (interior 3–12 × 3–7 tiles) plus a 1-tile perimeter wall.
+  • Reject any candidate that overlaps an existing room by fewer than LEVEL_GEN_ROOM_MARGIN tiles.
+  • First room placed = entrance (player start). Last room placed tends to be furthest away.
+
+  Phase 2 — Connectivity (greedy MST + L-shaped corridors)
+  ----------------------------------------------------------
+  • Connect all rooms via a minimum spanning tree (greedy nearest-neighbour algorithm).
+  • Each connection carves a 1-tile-wide L-shaped corridor between the two room centers.
+  • The corridor only overwrites solid wall tiles ('x'); room interior tiles (' ') are preserved.
+  • After all corridors are carved, a post-processing pass converts any 'l' (corridor) tile
+    adjacent to a room interior tile (' ', 'u', 'f') into a door ('d').
+  • Result: every room entry has a door, corridors are slightly darker (normal floor 'l').
+
+  Phase 3 — Decoration
+  ---------------------
+  • Floor lighting variety per room (70% lit ' ', 25% normal 'l', 5% unlit 'u', 2–3% flickering 'f').
+  • Wall variety for all walls adjacent to passable tiles
+    (82% plain 'x', 10% conduit 'c', 5% vent 'v', 2% wires 'w', 1% terminal 't').
+  • Props placed at 13% of interior floor tiles in non-entrance rooms
+    (radioactive barrel 'g', explosive barrel 'E', crate 'C', terminal 'T', locker 'L',
+    blood stain '.', corpse 'm', oil pool 'O').
+  • Enemy spawns placed in non-entrance rooms after props (so enemies never overlap props):
+    Corruptor '1' (65% chance) or Vortex Eye '2' (35%); 1–3 per room.
+
+CONNECTIVITY GUARANTEE (two-layer approach)
+Layer 1 — Greedy MST: visits every room exactly once and always creates a connection;
+  theoretically guarantees full connectivity for all rooms in the list.
+Layer 2 — BFS flood-fill audit (Phase 5): after full generation, a depth-first flood-fill
+  starts from the player-spawn room center and checks every other room's center tile.
+  Any unreachable room gets a door-free emergency corridor that carves through walls and
+  solid props — permanently open, no door can re-block it. Emergency corridors are L-shaped
+  (horizontal then vertical) from the entrance room to the disconnected room.
+  Doors count as passable for the BFS (the player can open all doors).
+
+SEEDED RANDOMNESS
+Constructor takes a long seed → passed to java.util.Random. Same seed → identical level.
+In Main.java the seed is System.currentTimeMillis() for a unique layout each run.
+Can be overridden with a fixed seed for debugging or shareable runs.
+
+ROOM TYPES (current implementation)
+  ENTRANCE — Room index 0; contains player spawn 'p'; no enemies; no props.
+  STANDARD — All other rooms; enemies + props; floor/wall variety applied.
+
+ROOM TYPES (planned extensions)
+  EXIT      — Furthest room from entrance; could hold a stairway tile or boss trigger.
+  SHOP      — 1 per level; locked door requires key; terminal + lockers + no enemies.
+  ARMORY    — Dense props (lockers, crates), no enemies; ammo reward room.
+  TRAP ROOM — Dense hazard tiles ('h' walls, pressure plates), few enemies.
+  SECRET    — Hidden door ('h' wall that opens on interact); high-value props.
+
+WALL VARIETY (all 6 types, context-aware — IMPLEMENTED)
+  Context determined by adjacent tile types:
+  - CORRIDOR walls (adjacent to 'l'/'d'):     'c' 30%, 'w' 8%, 'x' 62%
+  - ROOM walls (adjacent to ' '/'u'/'f'):     'h' 0.5%, 't' 1%, 'w' 1%, 'v' 8%, 'c' 8%, 'x' rest
+  - MIXED walls (adjacent to both):           blend of above
+  - INTERIOR walls (no passable neighbor):    always 'x' (never rendered)
+  'h' hazard walls also stamped on walls adjacent to 'E' explosive barrels (45% per tile).
+
+LOOP CORRIDORS (IMPLEMENTED)
+  After MST, adds rooms.size()/3 extra corridor connections between random room pairs
+  whose centers are within LEVEL_GEN_LOOP_MAX_DISTANCE (25 tiles) of each other.
+  Creates shortcuts and navigation loops beyond the minimum spanning tree.
+  These extra corridors also go through the standard door-placement pass.
+
+FUTURE IMPROVEMENTS
+  • Room-type assignment (entrance, exit, shop, special) with per-type painters.
+  • Mini-boss/elite spawn in exit room.
+  • Keycard doors ('R', 'Y', 'B') and matching keycard pickups ('r', 'y', 'b').
+  • Depth-scaling: larger rooms, more enemies, denser props at higher depths.
+  • Column props ('P') in large rooms for cover and visual depth.
+  • Fog-of-war: only explored tiles shown on mini-map.
+  • Level-feeling modifier (darkness, abundance, danger) applied at generation time.
+
+TECHNICAL NOTES
+  • LevelGenerator lives in the `ge.tbegvadze.toon3d.level` package to access the
+    package-private Level(char[][], List<EnemySpawnPoint>) constructor directly.
+  • No LibGDX imports in LevelGenerator — pure Java logic, fully unit-testable.
+  • World.java has an overloaded constructor World(Level) so both file-loaded and
+    procedurally generated levels are accepted without code duplication.
+  • All constants live in Constants.java under the LEVEL_GEN_ prefix.
+  • Grid size defaults to 80×45 tiles = 1280×720 world units at CELL_SIZE=16.
+
+GAMEPLAY LOOP IMPACT
+  Before: same hand-crafted level every run — memorisable, zero replayability.
+  After:  unique dungeon each run — knowledge of systems rewarded over map memory.
+  Aligns with Roguelike Design Pillar #2 (Procedural generation) and Pillar #5
+  (Run identity through build diversity).

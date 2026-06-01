@@ -1,0 +1,419 @@
+STATUS: IMPLEMENTED
+CATEGORY: Visual
+TITLE: Three New Procedural Wall Types
+CREATED: 2026-05-31
+---
+
+OVERVIEW
+========
+Three new SOLID wall tile types, each procedurally generated into a Pixmap at
+load (no asset files), each slotting into the existing per-char wall pipeline
+exactly like the hazard wall `'h'` (see hazard-wall-tile.txt). They share the
+same plumbing: Level.isWall(char) returns TRUE, RayCaster/WallRenderer hit-test
+them identically, and WallRenderer's wallTextureFor/widthFor/heightFor switch
+gains one case each. The only new code is one generateXxxWallTexture() method
+per wall, built once in the WallRenderer constructor and disposed in dispose().
+
+The three walls each do a distinct ATMOSPHERE + WAYFINDING job that the current
+set (x generic, c conduit, v vent, t terminal, w wires, h hazard) does not:
+
+  1. `'r'`  RUST / CORROSION wall   — decay, abandonment, water damage.
+  2. `'g'`  GORE / INFESTATION wall — demonic flesh growth, the invasion's reach.
+  3. `'k'`  BULKHEAD / BLAST-DOOR wall — heavy sealed military armor, dead-ends
+            and vault perimeters.
+
+NOTE ON CHAR CHOICE: `'g'`, `'R'`, `'Y'`, `'B'`, `'E'` are listed as taken in
+the brief. This doc uses LOWERCASE `'r'`, `'g'`, `'k'` — verify against
+Level.isWall and any enemy/spawn char tables before wiring. If `'g'` collides
+(e.g. with a gore/green entity), fall back to `'G'`; if `'r'` collides, fall
+back to a free symbol such as `'#'` or `'='`. The DESIGN is char-agnostic; only
+the switch labels change. (See OPEN QUESTIONS.)
+
+
+=====================================================================
+WALL 1 — `'r'`  RUST / CORROSION WALL   ("the facility is rotting")
+=====================================================================
+
+VISUAL DESCRIPTION (pixel-by-pixel)
+-----------------------------------
+A steel plate that water and time have eaten. Base is the same cold lab grey as
+generic walls, OVERPAINTED with broad organic patches of oxidized iron in three
+warm tones (deep maroon-brown -> rust orange -> pale flaking ochre), heaviest at
+the BOTTOM of the texture (water pools and wicks up) and fading toward the top.
+Long vertical streaks of dried run-off drip downward from rivets and seams.
+Horizontal panel seam lines every ~third of the height, with corroded rivets
+that have bled rust halos. Sparse near-black pit holes where the metal has
+perforated.
+
+THE READ: "this section of the base flooded, was abandoned, and is rotting."
+
+COLORS (RGBA, add to Constants)
+  RUST_STEEL_BASE      = (0.30, 0.31, 0.34, 1.0)   // dry steel, top of plate
+  RUST_DEEP            = (0.34, 0.16, 0.09, 1.0)    // deepest oxide, bottom
+  RUST_MID             = (0.55, 0.27, 0.10, 1.0)    // classic rust orange
+  RUST_PALE            = (0.62, 0.45, 0.22, 1.0)    // pale flaking ochre edge
+  RUST_STREAK          = (0.26, 0.13, 0.07, 1.0)    // dried drip run-off
+  RUST_SEAM            = (0.14, 0.13, 0.13, 1.0)     // panel seam shadow
+  RUST_RIVET           = (0.20, 0.14, 0.10, 1.0)     // corroded rivet head
+  RUST_PIT             = (0.05, 0.04, 0.04, 1.0)      // perforation hole
+
+GAME CONTEXT / PLACEMENT TRIGGER
+--------------------------------
+Generator places `'r'` as a CONTEXTUAL RESKIN of plain `'x'` walls inside or
+bordering "decayed" regions, not as a special landmark like hazard. Triggers:
+  - Walls bounding tiles flagged UNLIT (`'u'`) — broken-bulb dread zones read as
+    long-abandoned, so rust them.
+  - Walls adjacent to oil pools (`'O'`) and blood (`'.'`) decal clusters.
+  - Flooded / lower-deck themed sub-regions: convert a contiguous band of `'x'`
+    in such a region to `'r'` with ~50-70% probability (leave some `'x'` for
+    variety — uniform rust looks flat).
+  - Sparingly along old maintenance dead-ends.
+RULE: rust spreads in BLOTCHES, not single tiles — cluster `'r'` so a whole
+decayed room/corridor reads consistently.
+
+ATMOSPHERE
+----------
+Neglect, entropy, the slow death of the facility BEFORE the demons arrived.
+Cold and damp. The warm oxide tones are the only warmth in an otherwise grey
+palette, but it's the warmth of decay, not safety. Pairs with `'u'` unlit
+floors and dripping ambience for maximum "nobody has been here in years."
+
+PROCEDURAL TEXTURE ALGORITHM SKETCH
+-----------------------------------
+size = RUST_WALL_TEXTURE_SIZE (128). Deterministic Random seeded by a constant
+(RUST_WALL_SEED) so the texture is identical every load.
+
+1. BASE GRADIENT + RUST WICK (per pixel loop column,row):
+   - verticalFactor = row / size   // 0 at top row, 1 at bottom row (note: in
+     this Pixmap, row 0 is the visual TOP per the project's draw convention; the
+     wick should be heaviest at the BOTTOM, so use bottomFactor = row/size if
+     row increases downward — confirm against generateHazardWallTexture()'s row
+     orientation and match it).
+   - Start each pixel at RUST_STEEL_BASE.
+2. RUST PATCHES (value-noise blotches):
+   - Build a coarse noise field: pick N_RUST_BLOBS (~14) random blob centers
+     with random radius (8..28 px) and a random oxide tone (DEEP/MID/PALE).
+     For each pixel, accumulate a falloff weight from every blob within range
+     (weight = max(0, 1 - distance/radius)). Multiply total rust weight by
+     bottomFactor so the bottom oxidizes far more than the top.
+   - rustAmount = clamp(totalWeight, 0, 1).
+   - Blend pixel color = lerp(RUST_STEEL_BASE, blendedOxideTone, rustAmount).
+     blendedOxideTone is itself a lerp DEEP->MID->PALE by a per-pixel hash so
+     patch interiors are darker and edges paler (flaking look).
+   - Add fine per-pixel grain: jitter each channel by +/- 0.03 from a hash.
+3. PANEL SEAMS + RIVETS:
+   - Draw horizontal seam lines at row = size/3 and 2*size/3 in RUST_SEAM
+     (fillRectangle full width, 2px tall).
+   - Place rivets along seams every ~size/4 px: a 3px RUST_RIVET square, then
+     a vertical RUST_STREAK drip beneath each rivet (a 1-2px wide column running
+     down ~10-25 px, alpha-blended/darkening so it fades out — implement as
+     darkening the existing pixels under the rivet, not opaque overwrite).
+4. PITS:
+   - Scatter N_RUST_PITS (~10) RUST_PIT pixels/2x2 squares in the heaviest rust
+     zones (only where rustAmount > 0.6) for perforation.
+5. Upload Texture, setFilter(Nearest, Nearest), dispose Pixmap.
+
+GAMEMATH ADDITION
+  rustWickFactor / blobFalloff helpers can live inline in the gen loop (load
+  time only) OR as a GameMath.radialFalloff(distance, radius) pure helper.
+  Recommend GameMath.radialFalloff since gore wall reuses the same blob math.
+
+
+=====================================================================
+WALL 2 — `'g'`  GORE / INFESTATION WALL   ("the invasion is here")
+=====================================================================
+
+VISUAL DESCRIPTION (pixel-by-pixel)
+-----------------------------------
+A lab wall being consumed by demonic biomass. The lower/edge portion is still
+recognizable grey steel; creeping up and over it is a wet, dark-red fleshy
+growth with embedded sinew strands, pulsing veins (drawn brighter red), and a
+few pale bone-white nodules / tendril tips. Glistening highlights (small bright
+specular dots) make it read as WET. Thin black cracks where the flesh has split
+the wall plating. The growth is heaviest in one CORNER and creeps diagonally
+across, so no two placements feel identical if seeded per-region.
+
+THE READ: "the demons have been through here; the building itself is infected."
+
+COLORS (RGBA, add to Constants)
+  GORE_STEEL_BASE      = (0.26, 0.27, 0.29, 1.0)    // remaining clean wall
+  GORE_FLESH_DARK      = (0.20, 0.04, 0.05, 1.0)    // deep meat shadow
+  GORE_FLESH_MID       = (0.45, 0.08, 0.09, 1.0)    // body of the growth
+  GORE_VEIN            = (0.72, 0.12, 0.14, 1.0)     // bright pulsing vein/sinew
+  GORE_BONE            = (0.80, 0.76, 0.66, 1.0)     // bone nodule / tendril tip
+  GORE_SPECULAR        = (0.95, 0.55, 0.55, 1.0)     // wet glisten highlight
+  GORE_CRACK           = (0.03, 0.02, 0.02, 1.0)      // split-plate black crack
+
+GAME CONTEXT / PLACEMENT TRIGGER
+--------------------------------
+Gore is a TENSION/PROXIMITY signal. Generator triggers:
+  - Walls bounding rooms flagged as ENEMY DENS / spawn-heavy regions — the
+    flesh telegraphs "monsters live here," same way hazard telegraphs danger.
+  - Walls near the level's deepest/most-corrupted zone (escalates as the player
+    descends; later levels carry more `'g'`).
+  - Adjacent to corpse decals (`'m'`) and blood (`'.'`) — a marine died here and
+    the corruption took hold.
+  - The back wall of a boss arena (pairs with boss-encounter-facility-overseer).
+RULE: gore should CLUSTER and ESCALATE — a single tile near the entrance is a
+warning; a fully-infested room is the heart of the incursion. Density of `'g'`
+is a difficulty/dread dial the generator turns up with depth.
+
+ATMOSPHERE
+----------
+Visceral dread, body horror, the Doom signature. Where rust is slow cold death,
+gore is FRESH violent corruption — recent, alive, watching. The wet specular
+highlights and the bright veins against grey steel pull the eye and quicken the
+pulse. This is the wall that makes a corridor feel like a throat.
+
+PROCEDURAL TEXTURE ALGORITHM SKETCH
+-----------------------------------
+size = GORE_WALL_TEXTURE_SIZE (128). Deterministic Random seeded by GORE_WALL_SEED.
+
+1. BASE: fill whole Pixmap with GORE_STEEL_BASE (plus the same fine grain jitter
+   as rust for a non-flat metal look).
+2. FLESH MASS (corner-anchored blob field, reuse GameMath.radialFalloff):
+   - Anchor the growth at one corner (e.g. top-left): infectionOriginX=0,
+     infectionOriginY=0.
+   - Place N_GORE_BLOBS (~18) blob centers biased toward the origin corner
+     (centerX = origin + random*size*0.7), radius 10..30 px.
+   - fleshWeight(pixel) = sum of radialFalloff over blobs, clamped 0..1.
+   - Where fleshWeight > FLESH_THRESHOLD (~0.35): color =
+     lerp(GORE_FLESH_DARK, GORE_FLESH_MID, fleshWeight) so blob cores are
+     brighter meat, edges are dark coagulated shadow. Below threshold: leave
+     steel (creates a ragged organic boundary, not a clean circle).
+3. VEINS / SINEW (only inside flesh region, fleshWeight > 0.4):
+   - Trace M_GORE_VEINS (~6) random-walk polylines: start at a random flesh
+     pixel, step in a slightly-perturbed direction for K steps, drawPixel in
+     GORE_VEIN (1-2px). Veins should branch occasionally (50% chance spawn a
+     short child walk). This gives the pulsing-vein look without per-frame cost.
+4. WET SPECULAR HIGHLIGHTS:
+   - Scatter N_GORE_GLINTS (~25) single bright GORE_SPECULAR pixels only where
+     fleshWeight > 0.5, clustered slightly (a glint + a 1px dimmer neighbor) so
+     they read as wet droplets catching light.
+5. BONE NODULES:
+   - Place N_GORE_BONE (~4) small GORE_BONE blobs (3-4px discs) near the densest
+     flesh cores, each with a 1px GORE_FLESH_DARK outline so they pop as bone
+     pushing through meat.
+6. CRACKS:
+   - Draw 2-3 thin GORE_CRACK random-walk lines radiating from the corner across
+     the steel/flesh boundary (the wall is splitting under the growth).
+7. Upload Texture, setFilter(Nearest, Nearest), dispose Pixmap.
+
+ANIMATION: v1 STATIC (matches all other walls; allocation-free). FUTURE polish:
+a subtle vein-pulse could be done by storing two texture variants and crossfading
+via batch tint, but this is out of scope and the static read is already strong.
+
+
+=====================================================================
+WALL 3 — `'k'`  BULKHEAD / BLAST-DOOR WALL   ("sealed and reinforced")
+=====================================================================
+
+VISUAL DESCRIPTION (pixel-by-pixel)
+-----------------------------------
+A heavy armored bulkhead plate — the thickest, most deliberate-looking wall in
+the set. Cool gunmetal blue-grey. Dominant feature: a strong RECESSED CENTER
+PANEL framed by a beveled raised border (lit top/left edge, shadowed
+bottom/right — the same bevel trick as the HUD chrome and hazard frame). A bold
+DENSE rivet/bolt grid runs around the inner border. A single horizontal
+hydraulic seam splits the center panel across the middle (where a blast door
+would part). A small stenciled designation mark (a few blocky pixels forming a
+number/symbol, e.g. "7" or a chevron) sits in one corner like a hull section ID.
+Clean, intact, machined — the OPPOSITE of rust and gore. It looks IMPENETRABLE.
+
+THE READ: "this is a heavy sealed bulkhead — a boundary, an end, or a vault."
+
+COLORS (RGBA, add to Constants)
+  BULKHEAD_STEEL       = (0.30, 0.33, 0.39, 1.0)    // gunmetal blue-grey field
+  BULKHEAD_PANEL       = (0.24, 0.27, 0.33, 1.0)    // recessed center (darker)
+  BULKHEAD_BEVEL_LIGHT = (0.46, 0.50, 0.57, 1.0)    // raised edge highlight
+  BULKHEAD_BEVEL_DARK  = (0.13, 0.15, 0.19, 1.0)    // recessed edge shadow
+  BULKHEAD_BOLT        = (0.58, 0.62, 0.68, 1.0)     // bolt/rivet head
+  BULKHEAD_BOLT_SHADOW = (0.08, 0.09, 0.11, 1.0)     // bolt drop shadow
+  BULKHEAD_SEAM        = (0.06, 0.07, 0.09, 1.0)      // hydraulic door split line
+  BULKHEAD_STENCIL     = (0.70, 0.66, 0.30, 1.0)       // faded yellow stencil mark
+
+GAME CONTEXT / PLACEMENT TRIGGER
+--------------------------------
+Bulkhead is a STRUCTURAL / WAYFINDING landmark, used sparingly like terminal
+`'t'`. Generator triggers:
+  - DEAD-END corridor caps — a dead end faced with a bulkhead reads as "this
+    route is intentionally sealed," not "the generator ran out of room." Far
+    more satisfying than a plain `'x'` at a dead end.
+  - The wall band FLANKING heavy/keycard doors and vault/secret-room entrances
+    (pairs with uac-keycard-doors and secret-rooms-hidden-passages) — heavy
+    armor framing a heavy door reads as "high security."
+  - The perimeter of the level boundary on key approach corridors, so the edge
+    of the playable area feels like the hull of the facility, not an invisible
+    limit.
+  - Behind/around the exit stairs (level-transitions-stairs-down) to frame the
+    way deeper as a deliberate sealed passage.
+RULE: SPARSE landmark. A few clusters per level. Overuse flattens its "this is
+important / this is the edge" meaning.
+
+ATMOSPHERE
+----------
+Cold military competence and CONTAINMENT. Where rust says "abandoned" and gore
+says "invaded," the bulkhead says "this was BUILT to hold something in — or
+out." It implies authority, secrets, and weight. A bulkhead at a dead end is a
+small mystery; a bulkhead around a door is a promise of consequence.
+
+PROCEDURAL TEXTURE ALGORITHM SKETCH
+-----------------------------------
+size = BULKHEAD_WALL_TEXTURE_SIZE (128). border = BULKHEAD_FRAME_WIDTH (~14px).
+
+1. FIELD: fill whole Pixmap with BULKHEAD_STEEL + faint grain jitter (+-0.02).
+2. RECESSED CENTER PANEL:
+   - Inner rect = (border, border) to (size-border, size-border).
+   - Fill inner rect with BULKHEAD_PANEL (darker -> reads as recessed).
+3. BEVEL FRAME (the signature 3D read):
+   - The band between the outer edge and the inner panel is the raised frame.
+   - Draw a 2-3px BULKHEAD_BEVEL_LIGHT line along the OUTER top + left edges and
+     also along the INNER bottom + right edges of the recess (light catches the
+     top of the raised lip and the far inner wall).
+   - Draw a 2-3px BULKHEAD_BEVEL_DARK line along the OUTER bottom + right edges
+     and the INNER top + left edges of the recess (shadow side).
+   - Match the exact light direction used by the hazard frame / HUD chrome so
+     all beveled surfaces agree (top-left lit). Reuse a shared
+     drawBeveledRect(pixmap, x, y, w, h, lightColor, darkColor, raised) helper
+     if one is added — recommend extracting it since hazard + bulkhead both bevel.
+4. BOLT GRID:
+   - Around the inner edge of the frame, place bolts every BULKHEAD_BOLT_SPACING
+     (~size/6) px along all four sides. Each bolt: 1px BULKHEAD_BOLT_SHADOW
+     square offset down-right, then a 2-3px BULKHEAD_BOLT square (lit head).
+5. HYDRAULIC SEAM:
+   - Draw one horizontal BULKHEAD_SEAM line (2px) across the center panel at
+     row = size/2, with a 1px BULKHEAD_BEVEL_LIGHT line just above it (the upper
+     door leaf edge catching light). This sells "blast door that parts here."
+6. STENCIL MARK:
+   - In one corner of the center panel, stamp a tiny blocky glyph in
+     BULKHEAD_STENCIL by drawing a hardcoded 5x7-ish pixel pattern (a digit or a
+     chevron). Keep it small (~10px) and slightly faded (blend 60% toward panel
+     color) so it reads as worn paint, not a label.
+7. Upload Texture, setFilter(Nearest, Nearest), dispose Pixmap.
+
+
+=====================================================================
+SHARED TECHNICAL NOTES (all three walls)
+=====================================================================
+
+LEVEL.JAVA (single authority)
+  - Add `'r'`, `'g'`, `'k'` to Level.isWall(char) -> TRUE. This alone gives
+    collision (PlayerController) and ray-stop (RayCaster) for free.
+  - Add them to the wall-type classification the renderer uses to pick a texture,
+    mirroring exactly how `'c'`/`'v'`/`'t'`/`'w'`/`'h'` are handled.
+  - LevelLoader needs NO change (it passes chars through).
+
+WALLRENDERER.JAVA (mirror the existing hazard wiring exactly)
+  - New fields: wallTextureRust / wallTextureGore / wallTextureBulkhead, plus
+    their cached width/height ints (like wallTextureHazardWidth/Height).
+  - In the constructor, after wallTextureHazard is built, build each via a new
+    private static generateRustWallTexture() / generateGoreWallTexture() /
+    generateBulkheadWallTexture(). (Optionally allow a disk override like the
+    hazard wall's `Gdx.files.internal(...).exists() ? load : generate`.)
+  - Extend the existing switch methods (wallTextureFor / widthFor / heightFor)
+    with `case 'r':` / `case 'g':` / `case 'k':` returning the new textures.
+  - dispose() must dispose all three new textures alongside wallTextureHazard.
+  - Distance shading + floor-brightness multipliers apply UNCHANGED — these are
+    just more wall textures in the existing draw path. Zero per-frame cost,
+    NO allocations in render() (all generation at construction).
+
+CONSTANTS.JAVA additions
+  - Texture sizes/seeds:
+      RUST_WALL_TEXTURE_SIZE=128, RUST_WALL_SEED, N_RUST_BLOBS=14, N_RUST_PITS=10
+      GORE_WALL_TEXTURE_SIZE=128, GORE_WALL_SEED, N_GORE_BLOBS=18,
+        M_GORE_VEINS=6, N_GORE_GLINTS=25, N_GORE_BONE=4, FLESH_THRESHOLD=0.35
+      BULKHEAD_WALL_TEXTURE_SIZE=128, BULKHEAD_FRAME_WIDTH=14,
+        BULKHEAD_BOLT_SPACING=21
+  - All RGBA color tuples listed under each wall above.
+  (Seeds make textures deterministic across runs — same wall every load.)
+
+GAMEMATH.JAVA additions (formulas live here, called at LOAD time only)
+  - radialFalloff(distance, radius) -> float in [0,1] = max(0, 1 - distance/radius).
+    Shared by rust + gore blob fields.
+  - Optional: a small deterministic hash(pixelX, pixelY, seed) -> float in [0,1]
+    for grain jitter and per-pixel tone selection without allocating a Random in
+    the inner loop (or just reuse a single seeded java.util.Random instance —
+    fine at load time, but the hash keeps it pure/repeatable per pixel).
+  Each needs the mandatory Formula/Derivation/Edge-cases comment block.
+
+REFACTOR OPPORTUNITY (recommend to java-architect)
+  - WallRenderer now owns generateHazard + 3 new generators + door + column
+    generators. Consider extracting a render/ProceduralWallTextures class that
+    builds and owns all procedural wall textures (and a shared drawBeveledRect
+    helper used by hazard + bulkhead). WallRenderer would ask it for textures by
+    char. This is the design hazard-wall-tile.txt already anticipated. Optional
+    but increasingly worth it with 4 procedural walls.
+
+
+=====================================================================
+INTERACTIONS (cross-system)
+=====================================================================
+LIGHTING / FLOOR TILES (laboratory-lighting.txt, u/l/f floors)
+  - Rust pairs with `'u'` unlit floors -> "drowned, dead deck."
+  - Gore pairs with `'f'` flickering floors -> "alive and twitching."
+  - Bulkhead stays crisp under bright `' '` lit floors -> "maintained, secure."
+  Distance shading multiplies all three unchanged.
+
+ENEMIES / SPAWNS (enemy_system.txt, boss-encounter-facility-overseer.txt)
+  - Gore walls telegraph dens and boss arenas; generator should bias enemy
+    spawn density up in `'g'`-clustered regions so the warning pays off.
+
+DOORS / KEYCARDS / SECRETS / STAIRS (uac-keycard-doors, secret-rooms,
+level-transitions-stairs-down)
+  - Bulkhead frames heavy/keycard doors, vault entrances, and exit stairs.
+  - Like hazard, bulkhead is a POOR secret push-wall face (too deliberate/clean
+    to read as ordinary) — keep secrets behind plain `'x'`.
+
+HAZARD WALL (hazard-wall-tile.txt)
+  - All four procedural walls share the generate-once/Nearest-filter pattern and
+    (recommended) a common drawBeveledRect helper. Hazard = active danger
+    (barrels, voltage); bulkhead = structural boundary; rust = decay; gore =
+    corruption. Distinct vocabulary, no overlap — that's the point.
+
+PROPS / DECALS (billboard-prop-sprites.txt)
+  - Generator should co-place: rust near `O`/`.`, gore near `m`/`.`, bulkhead
+    near `L`/`T` (secure storage). Consistent prop+wall pairing strengthens each
+    region's identity.
+
+EMERGENCY RED ALERT (emergency-red-alert-pulse.txt)
+  - Global red tint multiplies all three like any wall; gore goes blood-black,
+    bulkhead goes ominous, rust goes furnace-orange. No code needed.
+
+
+=====================================================================
+BALANCE / PLACEMENT TUNING
+=====================================================================
+These are atmosphere walls, so "balance" = placement discipline + readability.
+  - RUST: cluster in blotches (50-70% reskin of `'x'` within decayed regions),
+    never single isolated tiles. Most common of the three.
+  - GORE: density scales with depth/danger; a dial the generator turns up per
+    level. Cluster around dens/bosses/corpses. Mid frequency.
+  - BULKHEAD: SPARSE landmark like `'t'`. A few clusters/level at dead-ends and
+    heavy-door frames. Overuse kills its "boundary/important" read.
+  - CONTRAST CHECK: all blob counts, thresholds, sizes, and colors are
+    PLACEHOLDERS — verify in the actual distance-shaded 3D view at multiple
+    ranges, not in an isolated texture viewer. Gore veins and rust grain can
+    alias at distance; if so, widen features or bump texture size to 256.
+
+
+=====================================================================
+OPEN QUESTIONS
+=====================================================================
+1. CHAR COLLISIONS: confirm `'r'`, `'g'`, `'k'` are free in Level.isWall and any
+   enemy/spawn/item char tables before wiring. Fallbacks: `'G'` for gore, `'#'`
+   or `'='` for rust, `'k'` is very likely free. Design is char-agnostic.
+2. PROCEDURAL OWNERSHIP: extract render/ProceduralWallTextures now (4 walls) or
+   keep generators in WallRenderer until it gets unwieldy? Recommend extracting.
+3. SHARED BEVEL HELPER: factor drawBeveledRect out of hazard + bulkhead now?
+   Recommend yes — both need identical top-left-lit bevel logic.
+4. TEXTURE RESOLUTION: 128 for all (cheap, on-aesthetic, Nearest filter). Bump
+   gore/rust to 256 only if fine detail aliases badly up close.
+5. GORE ANIMATION: ship static; revisit a two-texture vein-pulse crossfade only
+   if the static read feels inert next to the red-alert pulse.
+6. GENERATOR INTEGRATION: should `'r'`/`'g'`/`'k'` be a post-pass region-reskin
+   step in LevelGenerator (tag region -> convert `'x'` to themed wall) rather
+   than placed inline? Recommend a post-pass: generate structure first, then
+   "theme" regions, so a region reads consistently.
+7. STENCIL GLYPH (bulkhead): fixed glyph for recognizability, or vary per
+   cluster as a "hull section ID"? Recommend a small fixed set (2-3 glyphs)
+   chosen deterministically per region.

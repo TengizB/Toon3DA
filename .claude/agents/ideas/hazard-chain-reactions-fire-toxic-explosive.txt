@@ -1,0 +1,262 @@
+STATUS: IN PROGRESS
+CATEGORY: Combat
+TITLE: Hazard Chain Reactions (fire, oil, toxic, explosive barrels)
+CREATED: 2026-05-28
+---
+
+OVERVIEW
+========
+A turn-based environmental hazard layer that turns the level itself into a
+weapon. Explosive barrels (`B`) detonate, throwing fire onto adjacent tiles;
+oil pools (`O`) ignite into spreading fire; fire damages and panics anything
+standing in it; radioactive barrels (`b`) rupture into lingering toxic gas.
+The pillar is emergent complexity from simple rules: a single shotgun pellet
+into a barrel beside an oil slick can wipe a corridor of zombies — or cook the
+marine who fired it. Every hazard is a tile-space cellular automaton ticked
+once per turn, fully consistent with the existing grid + turn engine.
+
+This is the first feature that makes positioning and the level layout a
+combat resource rather than just scenery. It reuses props and decals that
+already exist in the tile spec (`B`, `b`, `O`) and the planned weapon-damage
+code path, so it adds depth without inventing new art.
+
+
+GAMEPLAY LOOP
+=============
+HAZARDS ARE TILE-LAYER STATE, TICKED ONCE PER ENEMY PHASE.
+A new HazardField owns a parallel grid of HazardCell state laid over the Level.
+It ticks exactly once per full turn (during the ENEMIES_ACTING phase from the
+turn engine), so hazards advance in lockstep with everything else. No real-time
+fire.
+
+IGNITION (player-driven, the interesting decision):
+1. Player fires a weapon (shotgun pellet ray) or punches/melee a barrel tile.
+2. Weapon damage resolution already marches tile-by-tile (see pump-action
+   shotgun doc). When the marched tile contains a hazard prop, route the hit to
+   HazardField.onTileDamaged(tileColumn, tileRow, damage, source) INSTEAD of /
+   in addition to a normal enemy-hit.
+3. Explosive barrel `B` reaching 0 HP -> EXPLODE event queued for next tick.
+4. Oil pool `O` taking any FIRE-typed damage, or being adjacent to a FIRE cell,
+   -> becomes a BURNING cell.
+5. Radioactive barrel `b` reaching 0 HP -> RUPTURE event (toxic gas) queued.
+
+PER-TURN HAZARD TICK (HazardField.tick(level, enemies, player)):
+1. Resolve queued EXPLODE events first (instantaneous, this tick):
+   - Deal EXPLOSION_DAMAGE to player/enemy on the barrel tile and the 4
+     cardinal neighbours (cross pattern, not diagonals — grid-consistent).
+   - Each affected FLOOR/decal tile (not walls) is set to FIRE with
+     FIRE_LIFETIME_TURNS. Walls block the blast: a neighbour that is a wall is
+     not set on fire and shields the tile beyond it.
+   - If a neighbour tile contains another `B`, it takes EXPLOSION_DAMAGE ->
+     chain detonation queued for the NEXT tick (one-tick delay = visible
+     "domino" cascade, very readable, very Doom).
+   - If a neighbour contains `O`, that oil ignites this tick.
+2. Resolve queued RUPTURE events: set the barrel tile + 4 neighbours to TOXIC
+   gas with GAS_LIFETIME_TURNS. Toxic does not spread further on its own; it
+   only dissipates.
+3. Spread fire: any FLOOR tile cardinally adjacent to a BURNING tile that also
+   contains `O` oil becomes BURNING (fire follows oil trails). Plain floor does
+   NOT catch fire — only oil carries flame. This keeps spread bounded and
+   designer-controllable via oil placement.
+4. Apply standing damage: any actor (player or enemy) whose tile is FIRE takes
+   FIRE_DAMAGE_PER_TURN; any actor on TOXIC takes TOXIC_DAMAGE_PER_TURN.
+   Enemies standing in fire also gain a PANIC flag (see INTERACTIONS).
+5. Decrement every hazard cell's remaining lifetime by 1. At 0, FIRE -> SCORCHED
+   floor decal (permanent cosmetic blackening), TOXIC -> clears to floor.
+
+PLAYER EXPERIENCE
+=================
+The player learns to read the room before shooting. A barrel is no longer
+scenery; it is a question: "Do I lure the zombie conga line next to that
+explosive barrel and pop it, or is the blast going to reach me too?" Oil trails
+become fuses the player can deliberately exploit ("shoot the barrel at the far
+end, watch the fire run down the oil into the pack"). The standout feeling is
+the domino cascade — barrels chaining one tile per turn, each detonation
+lighting the next, a slow-motion grid explosion you set off with one shell.
+
+The flip side is dread: walking through a flickering, oil-streaked maintenance
+corridor knowing a single stray shot or a panicking enemy could turn the floor
+to flame. Death by your own barrel must feel earned ("I shot point-blank into
+the barrel I was standing next to") — never random.
+
+
+TECHNICAL NOTES
+===============
+
+NEW PACKAGE & CLASSES
+---------------------
+- ge.tbegvadze.toon3d.hazard.HazardField   — owns the parallel hazard grid;
+                                              tick(), onTileDamaged(), query
+                                              methods getHazardAt(col,row).
+- ge.tbegvadze.toon3d.hazard.HazardCell    — value object: HazardType type,
+                                              int turnsRemaining,
+                                              DamageSource source.
+- ge.tbegvadze.toon3d.hazard.HazardType    — enum: NONE, FIRE, TOXIC, SCORCHED.
+- ge.tbegvadze.toon3d.hazard.PropHealth    — sparse map of barrel HP keyed by
+                                              packed (column,row) int; barrels
+                                              are not full enemies, just
+                                              destructible props.
+- ge.tbegvadze.toon3d.hazard.HazardEvent   — value object for queued EXPLODE /
+                                              RUPTURE events (column, row, type).
+
+HAZARD GRID STORAGE
+-------------------
+- byte[] per cell is enough: pack HazardType ordinal (low bits) + turnsRemaining
+  (high bits) into one byte/short, OR keep a small HazardCell[] sized to the
+  level. Pre-allocate at level load; never allocate during tick or render.
+- Walls and solid props are looked up from Level, not duplicated here. Hazards
+  only ever live on walkable tiles (floor + decal tiles).
+
+TURN ENGINE INTEGRATION
+-----------------------
+- TurnEngine (zombie doc) calls HazardField.tick(...) exactly once, at the START
+  of the ENEMIES_ACTING phase, BEFORE enemies decide their turns. This ordering
+  matters: an enemy should react to the fire that is already on its tile this
+  turn (it should try to flee a burning tile, not walk onto it next turn).
+- Damage applied by HazardField uses the same player/enemy HP fields and the
+  same death handling as weapon damage. Reuse, do not duplicate.
+
+DAMAGE TYPING
+-------------
+- Introduce a tiny DamageSource/DamageType concept (PHYSICAL, FIRE, TOXIC,
+  EXPLOSION). Only FIRE-typed damage ignites oil. The shotgun pellet is
+  PHYSICAL — so a normal shot does NOT ignite oil, but DOES damage/detonate a
+  barrel. A future flamethrower / incendiary round would be FIRE-typed and
+  ignite oil directly. This keeps the door open for build diversity.
+
+EVENT QUEUE
+-----------
+- HazardField holds an explodeQueue and ruptureQueue (pre-sized array-backed
+  ring buffers, no per-turn allocation). Queued this turn, resolved next tick,
+  giving the one-tick domino delay. Guard against infinite loops: a tile can
+  only be set on fire once per tick (dirty-flag pass).
+
+GAMEMATH ADDITIONS (with derivation comment blocks)
+---------------------------------------------------
+- packTileKey(tileColumn, tileRow) -> int (column * levelWidth + row)
+- cardinalNeighbourOffsets() — the four (dColumn,dRow) cross offsets, as a
+  static final int[][] in Constants (NOT a fresh allocation).
+- No trig needed; this is all integer grid logic.
+
+CONSTANTS ADDITIONS (placeholders — tune in playtest)
+-----------------------------------------------------
+  EXPLOSIVE_BARREL_HP            = 1     (one pellet pops it)
+  RADIOACTIVE_BARREL_HP         = 4     (tougher; must be deliberately broken)
+  EXPLOSION_DAMAGE              = 12    (lethal to zombies, badly hurts player)
+  FIRE_DAMAGE_PER_TURN          = 3
+  TOXIC_DAMAGE_PER_TURN         = 2
+  FIRE_LIFETIME_TURNS           = 3
+  GAS_LIFETIME_TURNS            = 5
+  FIRE_SPREAD_ONLY_ON_OIL       = true  (design flag, documents the rule)
+  HAZARD_CHAIN_DELAY_TURNS      = 1     (domino visible delay)
+  EXPLOSION_NOISE_RADIUS_TILES  = 8     (feeds noise/alert system)
+
+
+LEVEL / TILE IMPLICATIONS
+=========================
+- NO new tile chars required. Uses existing `B` (explosive barrel), `b`
+  (radioactive barrel), `O` (oil pool). This is intentional — the feature
+  weaponizes art that already exists.
+- New COSMETIC decal char (optional, low priority): `:` SCORCHED floor, the
+  permanent black mark left after fire burns out. If not added, FIRE simply
+  reverts to its original floor char on expiry.
+- Level designers gain a real combat-design vocabulary:
+    * A `B` next to a `O` trail laid through a corridor = a player-triggerable
+      trap line.
+    * Two or three `B` in a line = a domino cascade waiting for one pellet.
+    * `b` radioactive barrels in a dead-end side room reward greedy looters
+      with a toxic-cloud punishment if they break one carelessly.
+- Generator guidance: barrels should sit on or adjacent to walkable tiles the
+  player and enemies actually traverse, never sealed behind walls where the
+  blast does nothing. Oil trails should connect a barrel to a likely combat
+  tile (chokepoint, doorway) to make the fuse meaningful.
+
+Example test snippet (player can pop the barrel and watch fire run the oil):
+  xxxxxxxxxxx
+  xp        x
+  x OOOOO B x      <- shoot B (right), fire runs left along the oil
+  x   Z Z   x      <- two zombies caught in the oil trail
+  xxxxxxxxxxx
+
+
+VISUAL DESIGN
+=============
+- FIRE cell: animated additive orange/yellow billboard on the tile floor,
+  flickering at real-time speed (like the existing `f` flickering floor — reuse
+  that animation timing). Casts a warm shade bump on nearby walls via the same
+  WallRenderer brightness-bump hook the muzzle flash uses (lab lighting +
+  muzzle-flash precedent). Fire is bright; it should genuinely light the corridor.
+- EXPLOSION: a single-frame full-tile flash + screen shake (reuse ScreenShake
+  from the shotgun doc, higher intensity) + brief screen brighten. One punchy
+  "WHUMP" sample.
+- TOXIC gas: semi-transparent sickly green billboard fog over the tile, gently
+  rising; the existing radioactive-barrel green palette. Slightly desaturates /
+  green-tints the player's view when the player tile is TOXIC.
+- SCORCHED floor: dark charred decal, no animation. Pure atmosphere/breadcrumb
+  ("a fight happened here").
+- HUD: when the player is on FIRE or TOXIC, the marine-vitals HUD shows a
+  status icon (flame / biohazard) and the screen edge pulses the matching
+  colour, distinct from the generic red damage flash.
+- Billboard ordering: hazard floor sprites render with enemy sprites in the
+  painter's-algorithm pass (after walls, before mini-map), z-buffer clipped per
+  the existing SpriteRenderer.
+
+
+BALANCE NOTES
+=============
+- EXPLOSION_DAMAGE = 12 one-shots an 8-HP zombie and removes ~60% of a 20-HP
+  marine — barrels must feel genuinely dangerous to both sides, or the decision
+  is trivial. Flag as the primary tuning knob.
+- FIRE_DAMAGE_PER_TURN = 3 over FIRE_LIFETIME_TURNS = 3 = up to 9 damage if an
+  actor stands in it the whole time; enemies should usually flee after one tick,
+  so realistic fire damage to a fleeing zombie is ~3-6. The player must never be
+  forced to walk through fire with no alternative route (generator rule).
+- Chain caps: cap total simultaneous active FIRE/EXPLODE cells per tick
+  (placeholder 64) to bound worst-case cost and prevent a whole-floor inferno
+  from one shot in a pathological level.
+- Radioactive barrels are higher-HP and lower-reward-by-default so the player
+  has to CHOOSE to break them (e.g. to deny a corridor to a melee horde) rather
+  than popping them reflexively.
+- All numbers above are placeholders pending playtest.
+
+
+INTERACTIONS
+============
+- ZOMBIE + TURN ENGINE (zombie doc): enemies on a FIRE tile gain PANIC for one
+  turn — they move to a random adjacent NON-FIRE walkable tile instead of
+  chasing (overrides greedy-step pathing). This produces the classic "burning
+  monster runs around" moment and lets fire herd enemies. Fire/explosion/toxic
+  damage routes through the same enemy HP + DEAD handling.
+- PUMP-ACTION SHOTGUN (shotgun doc): the pellet ray is the primary ignition
+  source. Add a barrel/oil branch in fire() resolution: if a marched tile holds
+  a hazard prop, call HazardField.onTileDamaged(...). Penetration rule: a pellet
+  stops at a barrel it destroys (the barrel is now gone, but the blast continues
+  the chain). EXPLOSION_NOISE feeds the planned noise/alert radius.
+- NOISE / RED ALERT (zombie + red-alert docs): an EXPLODE event emits a large
+  NoiseEvent (EXPLOSION_NOISE_RADIUS_TILES), waking enemies across the floor and
+  intensifying the red-alert pulse — explosions are loud and have consequences.
+- LAB LIGHTING + FLICKERING FLOOR (lighting docs): fire reuses the flicker
+  animation cadence and the wall brightness-bump hook; unlit `u` tiles become
+  briefly visible while fire burns there.
+- FUTURE ITEMS: a Radiation Suit negates TOXIC damage; an incendiary shell or
+  flamethrower deals FIRE-typed damage that ignites oil directly; a fire
+  extinguisher (Doom RPG improvised weapon) could clear FIRE cells in front of
+  the player — strong build-defining synergies.
+
+
+OPEN QUESTIONS
+=============
+1. Should plain floor ever catch fire, or strictly only oil? Recommendation:
+   only oil (and the explosion's direct cross), to keep spread bounded and
+   designer-authored. Revisit if fire feels too contained.
+2. Do walls fully block explosions, or do thin (1-tile) walls let blast through?
+   Recommendation: walls fully block — consistent with LOS, simplest to reason
+   about.
+3. Should the player be able to push/kick a barrel one tile to reposition it?
+   Recommendation: defer to a future "kick" action; tempting but expands scope.
+4. Permanent SCORCHED decal or revert-to-floor on burnout? Recommendation:
+   add `:` scorched decal if cheap; otherwise revert. Cosmetic only.
+5. Does toxic gas drift (spread one tile/turn) or stay put? Recommendation:
+   stay put for v1 (predictable); drifting gas is a great later upgrade.
+6. Friendly-fire on the player from their own explosion — always on?
+   Recommendation: yes, always. The danger to self is the entire decision.

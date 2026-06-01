@@ -1,0 +1,219 @@
+STATUS: IMPLEMENTED
+CATEGORY: Visual
+TITLE: Emergency Red-Alert Pulse (atmospheric facility lighting)
+CREATED: 2026-05-26
+---
+
+OVERVIEW
+========
+A facility-wide "red alert" lighting state that periodically washes the entire 3D
+view with a deep red emergency-light tint, pulsing in and out on a slow sine wave.
+The whole scene — walls, ceiling, floor — breathes with red light as if the UAC
+facility's emergency klaxons are spinning overhead. It is purely a visual/rendering
+effect with zero gameplay impact; it transforms the sterile lab corridors into a
+demon-overrun catastrophe in a single render pass change.
+
+This is the cheapest, most dramatic atmospheric upgrade available to the current
+renderer: it requires no new game systems, no per-tile state, no enemies, and no
+texture work. It sells the Doom fantasy instantly the moment the player presses W.
+
+
+GAMEPLAY LOOP
+=============
+The effect is ambient and continuous — it does not interact with player turns.
+
+Every frame, inside World.render() (BEFORE WallRenderer.render() is called):
+1. World holds a single float field, alertTimeSeconds, accumulated every frame:
+       alertTimeSeconds += Gdx.graphics.getDeltaTime();
+2. World computes the current pulse intensity using a sine wave:
+       pulse = 0.5 + 0.5 * sin(alertTimeSeconds * ALERT_PULSE_SPEED_RADIANS_PER_SECOND)
+   This yields a value in [0, 1] that smoothly oscillates with a period of
+       2 * PI / ALERT_PULSE_SPEED_RADIANS_PER_SECOND  ≈ 4 seconds.
+3. World passes this pulse value into WallRenderer via a setter:
+       wallRenderer.setAlertPulse(pulse);
+4. WallRenderer applies the pulse in three places during its existing render pass:
+   a. Ceiling rectangle: lerp the existing dark-navy color toward ALERT_RED by
+      pulse * ALERT_CEILING_TINT_STRENGTH.
+   b. Floor rectangle: lerp the existing dark-gray color toward ALERT_RED by
+      pulse * ALERT_FLOOR_TINT_STRENGTH (weaker than ceiling — emergency light
+      pools on the ceiling, less on the floor).
+   c. Wall stripes: when computing the final stripe color from shade, multiply
+      the red channel by (1 + pulse * ALERT_WALL_RED_BOOST) and the green/blue
+      channels by (1 - pulse * ALERT_WALL_GB_DAMPEN). This shifts walls toward
+      red without going pure red — they stay readable.
+5. The mini-map renders normally on top, unaffected by the tint.
+
+No player input changes. No turn advancement. The effect is purely cosmetic and
+runs every frame regardless of game state.
+
+
+PLAYER EXPERIENCE
+=================
+The first thing the player sees on launching the game is a corridor breathing
+with red emergency light, ceiling pulsing brighter, walls flushing red and
+fading back to their normal lab textures every 4 seconds. There is no UI
+announcement, no tutorial — the lighting alone communicates "something has gone
+catastrophically wrong in this facility."
+
+The slow pulse rate (~4s period) is deliberately calmer than a heartbeat or
+strobe — it should feel like a heavy-duty industrial warning beacon spinning
+above the corridor, not a stress-inducing fire alarm. The player has space to
+think, but the room never lets them forget where they are.
+
+Because the effect is continuous and global, it costs the player nothing
+cognitively. They are not asked to react. They simply absorb it.
+
+
+TECHNICAL NOTES
+===============
+Affected classes:
+- world/World.java
+    - Add field:   private float alertTimeSeconds;
+    - In render(): accumulate alertTimeSeconds += Gdx.graphics.getDeltaTime();
+                   compute pulse via GameMath.alertPulse(alertTimeSeconds);
+                   call wallRenderer.setAlertPulse(pulse) BEFORE wallRenderer.render().
+- render/WallRenderer.java
+    - Add field:   private float alertPulse;     // 0..1 each frame
+    - Add setter:  public void setAlertPulse(float pulse) { this.alertPulse = pulse; }
+    - In render():
+        * Ceiling rect color: lerp(CEILING_BASE_COLOR, ALERT_RED,
+                                   alertPulse * ALERT_CEILING_TINT_STRENGTH).
+        * Floor rect color:   lerp(FLOOR_BASE_COLOR, ALERT_RED,
+                                   alertPulse * ALERT_FLOOR_TINT_STRENGTH).
+        * For each wall stripe, after computing 'shade', tint the SpriteBatch
+          color before drawing the textured stripe:
+              float red   = shade * (1f + alertPulse * ALERT_WALL_RED_BOOST);
+              float green = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+              float blue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+              batch.setColor(red, green, blue, 1f);
+          Clamp red to <= 1.0f to avoid SpriteBatch overflow on textured draws.
+- util/GameMath.java
+    - Add static method:
+          public static float alertPulse(float timeSeconds, float pulseSpeedRadiansPerSecond)
+      with the standard comment block (Formula / Derivation / Edge cases).
+      Derivation: half-amplitude sine offset, period = 2π / pulseSpeed.
+    - Optionally add a lerpColor() helper if not already present (otherwise inline
+      the per-channel lerp in WallRenderer).
+- util/Constants.java — ADD these tunable constants:
+        ALERT_PULSE_SPEED_RADIANS_PER_SECOND = 1.57f   // ≈ 4 second full period
+        ALERT_RED                            = (0.9f, 0.05f, 0.05f)  // deep blood red
+        ALERT_CEILING_TINT_STRENGTH          = 0.55f   // ceiling glows strongly red
+        ALERT_FLOOR_TINT_STRENGTH            = 0.25f   // floor catches some bounce
+        ALERT_WALL_RED_BOOST                 = 0.35f   // walls flush red at pulse peak
+        ALERT_WALL_GB_DAMPEN                 = 0.30f   // walls lose green/blue at peak
+    Also keep the existing CEILING / FLOOR base colors as named Constants if they
+    are still inline literals — promote them now so the lerp endpoints are explicit.
+
+Performance: the effect adds one sin() call per frame in World, one color lerp
+on two rectangles, and a single multiply/subtract per wall stripe (already inside
+the existing per-column loop). No allocations. Zero new draw calls.
+
+Math correctness: sin() in LibGDX MathUtils takes radians — the constant name
+ends in ...RADIANS_PER_SECOND to enforce this and follow the project naming rule.
+
+
+VISUAL DESIGN
+=============
+Color palette:
+- Base ceiling: existing dark navy (0.10, 0.10, 0.20).
+- Base floor:   existing dark gray (0.12, 0.12, 0.12).
+- Alert red:    (0.90, 0.05, 0.05) — deep, saturated, slightly desaturated to
+                avoid HDR clipping when multiplied with bright wall textures.
+- At pulse peak (pulse = 1.0):
+    * Ceiling reads as (0.54, 0.07, 0.12) — strong red wash, navy still hinted.
+    * Floor reads as (0.32, 0.10, 0.07) — warm reddish concrete.
+    * Walls keep their texture detail but shift visibly red-warm; conduits and
+      wires read more menacingly.
+- At pulse trough (pulse = 0.0):
+    * Everything renders at its normal base colors — the room "exhales" and
+      looks like a normal (if dim) lab corridor.
+
+Timing:
+- 4 second period (sin frequency ≈ 1.57 rad/s) — slow enough to feel ambient,
+  fast enough that the player notices it in motion.
+- Sine wave, not square wave: smooth in/out, no harsh strobe (also accessibility-
+  friendly — no flash frequencies near the seizure-trigger band).
+
+Optional polish (still inside the time budget):
+- Phase-shift the floor pulse by π/4 relative to the ceiling, so the light
+  "rolls" through the room instead of pulsing uniformly. One extra constant.
+
+What it should NOT do:
+- No screen-space overlay quad. Keep the effect inside the existing two
+  rectangles + textured stripes. Adds zero draw calls.
+- No flicker, no random jitter — the rotating-beacon read comes from the smooth
+  sine alone.
+
+
+BALANCE NOTES
+=============
+All values below are tunable starting points.
+
+| Constant                              | Starting value | Rationale                                  |
+|---------------------------------------|----------------|--------------------------------------------|
+| ALERT_PULSE_SPEED_RADIANS_PER_SECOND  | 1.57           | ≈ 4s period — calm industrial beacon       |
+| ALERT_CEILING_TINT_STRENGTH           | 0.55           | Ceiling is the strongest red source        |
+| ALERT_FLOOR_TINT_STRENGTH             | 0.25           | Floor catches some bounce light, weaker    |
+| ALERT_WALL_RED_BOOST                  | 0.35           | Walls flush warmly but stay textured       |
+| ALERT_WALL_GB_DAMPEN                  | 0.30           | Shifts hue toward red without going mono   |
+
+If the effect feels too intense during playtest, halve all four tint constants.
+If too subtle, double them. The speed should rarely need changing — anything
+faster than ~2.5 rad/s (≈ 2.5s period) starts feeling stressful.
+
+Accessibility: the pulse is a smooth sine with no flash frequency anywhere near
+3–30 Hz (the photosensitive epilepsy danger band). A user toggle to disable the
+pulse entirely (force alertPulse = 0) would be trivial to add later — one bool
+in Constants or an input keybind.
+
+
+INTERACTIONS
+============
+1. Wall textures — the wall-stripe tint multiplies on top of the existing
+   distance shade and the directional-lighting multiplier (N/S walls × 0.7).
+   Order of operations: shade × directionalLightingMultiplier × alertTint.
+   The dampened green/blue channels preserve the directional lighting cue —
+   N/S walls still read as darker than E/W walls during the alert.
+
+2. Future enemy sprites — when sprites are added, they will be rendered with
+   the same SpriteBatch and should pick up the same batch.setColor() tint,
+   automatically participating in the alert wash. Demons silhouetted against
+   a red-pulsing corridor will read beautifully.
+
+3. Future muzzle flash / hit flash — these will want to OVERRIDE the alert
+   tint briefly (set their own batch color, then restore). Document this in
+   the implementing class so it doesn't reset to the wrong base color.
+
+4. Future floor/ceiling textures — when these replace the flat rectangles, the
+   tint should move from "color lerp" to "batch.setColor() before drawing the
+   textured floor/ceiling row." The math is the same; the surface changes.
+
+5. Mini-map — explicitly UNAFFECTED. The mini-map is a clean overlay; tinting
+   it red would hurt readability. WallRenderer.setAlertPulse() must not leak
+   batch color state into the LevelRenderer or Player render passes — verify
+   batch.setColor(Color.WHITE) (or batch.end()) is called before they run.
+
+
+OPEN QUESTIONS
+==============
+1. Should the pulse phase be shared across all future "red alert" effects
+   (e.g. blinking strip lights painted onto wall textures, a future siren
+   sound), or should each effect run its own oscillator? Recommendation: keep
+   a single global facility clock in World; future effects sample it.
+
+2. Should the alert state ever turn OFF? Possibilities for later:
+   - Off until the first enemy spots the player, then on permanently for that
+     run.
+   - On in "hot" floors (combat-heavy), off in "safe" floors (shops, rest).
+   - Driven by an in-fiction "alarm tripped" event when a key card is taken.
+   For the initial implementation: always on. Toggling can be added later by
+   replacing the constant pulse with `enabled ? pulse : 0`.
+
+3. Color choice — pure red is the Doom-canonical alert color. A future floor
+   theme (e.g. Hell levels) might want a different alert color (deep orange,
+   sickly green for biolabs). Recommendation: leave ALERT_RED as a Constants
+   value so future floor-themed variants are a one-line change.
+
+4. Should the BASE ceiling/floor colors also move into Constants now? Yes —
+   doing so makes the lerp endpoints explicit and lets us swap floor moods
+   later without touching renderer code.

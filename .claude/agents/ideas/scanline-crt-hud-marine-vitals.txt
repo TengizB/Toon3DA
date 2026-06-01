@@ -1,0 +1,407 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Scanline CRT HUD — Marine Vitals + Cracked Datapad
+CREATED: 2026-05-27
+---
+
+OVERVIEW
+========
+A bottom-of-screen heads-up display in the Doom RPG spirit: a chunky pixel-art
+status bar showing the player's helmet-cam face portrait (Doom-face style HP
+reactor), HP bar, armor bar, current ammo / weapon, and a compass strip. The
+whole thing is rendered with a faint scanline + chromatic-aberration shader to
+sell the "marine's cracked tactical datapad" diegesis. It is the player's
+single most-consulted UI surface — and right now there is no HUD at all, so
+this is both an aesthetic and informational priority.
+
+The HUD is also a *gameplay feedback surface*: it pulses red on damage, flickers
+during alarm states, fizzles briefly on EMP, shows a small turn-counter glyph
+during pump-pending, and acts as the host for all toast notifications
+(weapon pickup, keycard found, room cleared).
+
+
+GAMEPLAY LOOP
+=============
+The HUD has no input handling of its own — it is purely an observer of game
+state. The "loop" is the visual-feedback loop:
+
+1. Every render frame (after world render), HudRenderer.render() draws the HUD
+   strip at the bottom 18% of the screen (y = 0..130).
+2. HudRenderer subscribes to game events via the WeaponEventBus + new GameEvents
+   bus (see TECHNICAL NOTES). Events fire effects:
+   - Player took damage → face portrait swaps to a more bloodied frame, HP bar
+     glides down over 0.30s, full-HUD red vignette pulses for 0.20s.
+   - Player healed → face shifts back toward fresh, HP bar glides up, soft
+     green sparkle over the medkit slot.
+   - Ammo changed → ammo digits snap to new value, brief yellow glow.
+   - Weapon swapped → weapon icon cross-fades, name banner appears for 1.5s.
+   - Keycard acquired → keycard slot fills with appropriately-colored card.
+   - Turn counter ticks → tiny "T:0124" counter rolls over (rotated wheel).
+3. Idle behavior: the face portrait blinks every 4–8 seconds; the scanline
+   shader shifts by 1 pixel every 0.25s for living-display feel; the compass
+   strip continuously updates with player facing.
+
+INTERACTIVE TOAST EVENTS (only via game-state, no input):
+- Pickup banner: 4 lines of text scroll up from the HUD top edge ("PUMP-ACTION
+  SHOTGUN  +8 SHELLS"). Lasts 2 turns or 2.5 seconds, whichever is longer.
+- Death banner: HUD goes monochrome, face portrait is replaced by skull, text
+  "MARINE STATUS: KIA" overlays the entire HUD area.
+
+
+HUD LAYOUT
+==========
+Bottom strip, 1280 × 130 world units. Three panels:
+
+  +-------------------------------------------------------------------------+
+  | LEFT PANEL (320w)   | CENTER PANEL (640w)        | RIGHT PANEL (320w)  |
+  |                     |                            |                      |
+  |   [PORTRAIT 96x96]  |  HP: [#######...]  76/100  |   AMMO              |
+  |                     |  AR: [####.......]  32/100 |     08              |
+  |   <COMPASS NORTH>   |  COMPASS: N E S W STRIP    |     ---             |
+  |                     |  TURN: T:0124  ALERT: NO   |     24              |
+  |                     |  KEY: [R][Y][B]            |   PUMP-ACTION       |
+  +-------------------------------------------------------------------------+
+
+LEFT PANEL — Marine portrait + small directional indicator.
+CENTER PANEL — HP bar, armor bar, mid-strip status text, keycard sockets.
+RIGHT PANEL — Big ammo readout (current / total) and weapon name.
+
+All three panels share a common bezel frame (dark-grey brushed metal,
+rivets at corners, glowing green LED in top-right corner of each panel).
+
+
+VISUAL DESIGN
+=============
+
+PORTRAIT — DOOM FACE
+--------------------
+Pixel-art marine portrait, 96×96. 8 health states × 3 facing variants × blink
+frame. State selection:
+
+  HP %      State
+  100..81   Pristine — clean, eyes forward, slight scowl
+  80..61    Mild damage — small cut on cheek
+  60..41    Bloodied — visible blood streak, jaw tight
+  40..21    Heavy — both cheeks bloody, one eye half-closed
+  20..1     Critical — face mostly red, gritting teeth
+  0         Dead — head tilted, eyes closed, blood pooling
+
+For each state, three sub-frames:
+  - look-left  (last enemy hit player from west)
+  - look-fwd   (default, or hit from front/back)
+  - look-right (last enemy hit player from east)
+
+Plus a "berserk" override frame (red-eyed snarl) when berserk powerup is
+active (future powerup feature).
+
+Blink frame: every 4–8 seconds, swap to a brief eyes-shut frame for 1 render
+frame (~16ms). Tiny detail, huge life.
+
+HP / ARMOR BARS
+---------------
+- HP bar: red gradient (dark red → bright red → white-hot at full).
+- Armor bar: cyan gradient (deep cyan → bright cyan → near-white).
+- Each bar is exactly 200px wide, segmented into 20 chunks (each chunk = 5%).
+  Easy to read at a glance, "5 chunks left = ~25%" intuition.
+- Damage flashes the affected bar white for 0.10s.
+
+COMPASS STRIP
+-------------
+A horizontal strip showing the 8 compass directions, scrolling so that the
+player's current facing is centered. Even though the game is 4-directional,
+we show NE/SE/SW/NW tick marks for spatial readability.
+- Width 240px, height 16px.
+- Tick marks every 22.5° of *visual* heading; current facing locks to N/E/S/W.
+- Smooth scroll during ROTATE animation (using same lerp factor).
+
+KEYCARD SOCKETS
+---------------
+Three small (24×16) rounded slots labeled R / Y / B (Red / Yellow / Blue) —
+classic Doom keycard hierarchy. Slot is dark grey when empty, fills with the
+appropriate solid color + faint glow when acquired. Ties into the keycard
+door system idea.
+
+TURN COUNTER
+------------
+Tiny mechanical-counter widget showing the current turn number (4 digits,
+rolls digit-by-digit when changing). Doesn't track real-world time —
+tracks player turns since level start. Useful telemetry for the player and
+for the alarm-pulse / monster-respawn systems.
+
+ALERT INDICATOR
+---------------
+Word "ALERT:" followed by either "NO" (green) or "RED" (red, pulsing). Driven
+by global alarm state from the existing Red Alert Pulse idea.
+
+WEAPON NAME BANNER
+------------------
+When weapon swapped or picked up, "PUMP-ACTION SHOTGUN" sweeps in from right
+to center over 0.3s, holds 1.5s, fades out 0.4s. Pixel-bold font with a
+slight chromatic-aberration glitch frame on appearance.
+
+SCANLINE + CRT SHADER
+---------------------
+A simple full-HUD shader applied to the HUD strip only (NOT the 3D view):
+- Horizontal scanlines every 2 pixels (alpha 0.15 dark line).
+- Subtle vertical sub-pixel mask every 3 pixels (RGB stripe pattern at alpha
+  0.10).
+- Tiny chromatic aberration: red channel offset -1px X, blue channel +1px X.
+- Slow vertical scroll of the scanline pattern (1 pixel every 0.25s).
+- ~1% white noise overlay flickered at 8 Hz.
+
+This is a screen-space post effect on the HUD's framebuffer only; do not
+apply to the 3D view (would tank performance and obscure pixel art).
+
+DAMAGE VIGNETTE
+---------------
+When player takes damage:
+- A radial red gradient over the ENTIRE screen (not just HUD), peaking at
+  alpha 0.55 at the edges, alpha 0 at center.
+- Fades over 0.35s.
+- Direction-of-source bias: gradient is offset toward the direction of the
+  attacker for the first 0.10s (e.g. zombie hits from south → vignette is
+  brighter on the bottom). Reads as "marine flinches."
+
+LOW-HP HEARTBEAT
+----------------
+When HP ≤ 25%:
+- HP bar pulses (gentle 4 Hz scale 1.0 ↔ 1.05).
+- Audio: faint heartbeat sample at 1.2 Hz, ducked to 0.4 vol.
+- Portrait switches to critical state.
+
+
+TECHNICAL NOTES
+===============
+
+NEW PACKAGE
+-----------
+  ge.tbegvadze.toon3d.hud
+    Reason: HUD is presentation-only, distinct from the 3D world renderer.
+    Keeps render/ uncluttered.
+
+NEW CLASSES
+-----------
+  hud/HudRenderer.java         implements Renderable, Disposable
+    - render(OrthographicCamera) draws all three panels.
+    - Owns one SpriteBatch + one ShapeRenderer + the CRT shader program.
+    - Pre-allocates all Sprites, Glyphs, NinePatches in constructor.
+    - update(deltaTime) advances bar lerps, vignette decay, blink timer,
+      banner timer.
+
+  hud/HudFace.java
+    - Owns the marine portrait texture atlas + state machine.
+    - Reads Player.getHealthPercent() and last-damage-direction.
+    - Returns the current Sprite to draw for the portrait.
+
+  hud/HudBar.java
+    - Generic bar component (used for HP, armor, future stamina).
+    - Lerps displayed value toward target value at fixed rate (4 units/sec).
+    - Stores last-flash-time for damage white-flash.
+
+  hud/HudCompass.java
+    - Reads Player direction + interpolated rotation angle.
+    - Scrolls compass strip; renders to 240×16 area.
+
+  hud/HudToastBanner.java
+    - Single banner with a queue of pending messages.
+    - render() draws current message, decrements remaining time, advances
+      queue.
+
+  hud/CrtPostProcess.java
+    - Captures HUD strip to a 1280×130 FrameBuffer.
+    - Applies CRT shader (vertex + fragment GLSL files in assets/shaders/).
+    - Draws to default framebuffer.
+
+  hud/GameEvents.java
+    - Simple synchronous event bus (NOT for cross-thread; render thread only).
+    - Events: PlayerDamaged(damage, sourceDirX, sourceDirY), PlayerHealed,
+      KeycardAcquired(color), AlertStateChanged(boolean), TurnAdvanced,
+      WeaponPickedUp(weaponName), AmmoChanged.
+    - Listeners list pre-allocated to a small fixed capacity (e.g. 16).
+
+PLAYER.JAVA CHANGES
+-------------------
+  Add fields (all in the player domain — no new "Stats" class needed yet):
+    int health, maxHealth;
+    int armor, maxArmor;
+    float lastDamageDirectionX, lastDamageDirectionY;  // for vignette bias
+  Add methods:
+    applyDamage(int amount, float sourceDirX, float sourceDirY)
+    applyHealing(int amount)
+    getHealthFraction() -> float [0..1]
+    getArmorFraction() -> float [0..1]
+  Each fires the appropriate GameEvents call internally.
+
+WORLD.JAVA CHANGES
+------------------
+- Owns the HudRenderer.
+- Render order:
+    1. WallRenderer.render()
+    2. LevelRenderer.render()   (mini-map)
+    3. Player.render()           (mini-map dot)
+    4. HudRenderer.render()      ← NEW
+- HudRenderer is rendered LAST so it sits on top of everything including the
+  mini-map. The mini-map's position should be moved to avoid overlap (see
+  OPEN QUESTIONS).
+
+CRT SHADER (assets/shaders/crt.frag)
+------------------------------------
+  uniform sampler2D u_texture;
+  uniform vec2 u_resolution;        // 1280, 130
+  uniform float u_scanlineOffset;
+  uniform float u_chromaticAberration;
+  uniform float u_noiseSeed;
+
+  void main() {
+    vec2 uv = v_texCoords;
+
+    // chromatic aberration
+    float ca = u_chromaticAberration / u_resolution.x;
+    float r = texture2D(u_texture, uv + vec2(-ca, 0.0)).r;
+    float g = texture2D(u_texture, uv).g;
+    float b = texture2D(u_texture, uv + vec2(+ca, 0.0)).b;
+
+    // scanline
+    float scan = step(0.5, mod((gl_FragCoord.y + u_scanlineOffset) * 0.5, 1.0));
+    float scanlineMul = mix(0.85, 1.0, scan);
+
+    // noise (cheap hash)
+    float n = fract(sin(dot(gl_FragCoord.xy + u_noiseSeed, vec2(12.9898, 78.233))) * 43758.5453);
+    float noiseMul = mix(0.97, 1.0, n);
+
+    gl_FragColor = vec4(vec3(r, g, b) * scanlineMul * noiseMul, 1.0);
+  }
+
+Costs ~1 fragment shader pass over 1280×130 = 166k pixels. Trivial.
+
+FONT
+----
+- Use a bitmap font (BitmapFont or GLFW pixel font). Hand-tuned 8×8 monospace
+  pixel font in assets/fonts/. Avoid FreeType (already optional).
+- Two sizes: large (32px, ammo numbers, banner) and small (12px, turn counter,
+  alert text, keycard labels).
+
+NO ALLOCATIONS IN RENDER()
+--------------------------
+- All Sprites pre-allocated in HudRenderer constructor.
+- toString() of ints uses a pre-allocated StringBuilder + manual digit logic
+  (no Integer.toString() autoboxing). Provide GameMath.appendIntToBuilder().
+- Color objects pre-allocated; mutate in place via Color.set().
+
+CONSTANTS ADDITIONS
+-------------------
+  HUD_HEIGHT                    = 130f
+  HUD_LEFT_PANEL_WIDTH          = 320f
+  HUD_RIGHT_PANEL_WIDTH         = 320f
+  HUD_PORTRAIT_SIZE             = 96f
+  HUD_BAR_WIDTH                 = 200f
+  HUD_BAR_HEIGHT                = 16f
+  HUD_BAR_LERP_RATE             = 4f      // bar units per second
+  HUD_DAMAGE_VIGNETTE_DURATION  = 0.35f
+  HUD_DAMAGE_VIGNETTE_MAX_ALPHA = 0.55f
+  HUD_BLINK_INTERVAL_MIN_SEC    = 4f
+  HUD_BLINK_INTERVAL_MAX_SEC    = 8f
+  HUD_BLINK_FRAME_DURATION      = 0.10f
+  HUD_TOAST_HOLD_DURATION       = 1.5f
+  HUD_TOAST_FADE_DURATION       = 0.4f
+  HUD_LOW_HP_THRESHOLD          = 0.25f
+  HUD_SCANLINE_SCROLL_PERIOD    = 0.25f
+
+
+BALANCE & TUNING
+================
+Most of this UI is information density, not balance, but the readability
+levers matter:
+
+PORTRAIT STATE THRESHOLDS
+- 6 states across 0–100% HP. Even spacing (20% buckets) feels natural.
+- Sharp transitions, not gradients — players should *feel* the bracket change.
+
+VIGNETTE INTENSITY
+- 0.55 alpha at edges is loud; reduce to 0.40 if playtest finds it annoying.
+- The vignette is the player's #1 "you got hit" signal. Better too loud than
+  too quiet.
+
+LOW-HP HEARTBEAT THRESHOLD
+- 25% feels right (5 HP at 20 max). Lower = more punishing, more dread.
+- If health pools scale up, switch to absolute "5 HP left" instead of percent.
+
+BANNER DURATION
+- 1.5s hold + 0.4s fade = 1.9s on screen. Long enough to read, short enough
+  to not block sight. Skip-able by next event (queue replaces).
+
+SCANLINE OPACITY
+- 0.15 dark-line alpha is the lowest that's still visible. Higher than 0.25
+  obscures pixel art. Stay under 0.20.
+
+
+INTERACTIONS
+============
+
+PUMP-ACTION SHOTGUN
+- Ammo counter in right panel reads from current weapon.
+- Weapon name banner fires on shotgun pickup.
+- Empty-click triggers a brief red flash of the ammo digits.
+- Muzzle flash also brightens the HUD bottom edge by 5% (sells the "ambient
+  light from gunfire" effect into the UI).
+
+ZOMBIE ENEMY + TURN ENGINE
+- Subscribes to TurnAdvanced → ticks the turn counter widget.
+- Subscribes to PlayerDamaged from any enemy melee → portrait + vignette.
+- Subscribes to enemy-killed → screen briefly desaturates by 5% for 0.10s
+  ("kill-cam" feedback).
+
+EMERGENCY RED ALERT PULSE
+- Alert state binds to the ALERT indicator (NO ↔ RED).
+- When alarm is RED, the ENTIRE HUD bezel tints 15% red and the scanline
+  scroll rate doubles. Makes the player feel time pressure even outside
+  combat.
+
+LABORATORY LIGHTING
+- The HUD itself is unaffected (always equally lit — it's the helmet display).
+- Flickering floor tiles cause a small synchronized flicker in the HUD's
+  "ambient light" — purely cosmetic, 5% brightness dip on `f` tile flicker
+  frames. Sells diegesis: same broken UAC power grid feeds the marine's
+  datapad.
+
+DOORS
+- Keycard sockets fill when keycard is acquired.
+- "Door locked" message routes through the toast banner.
+
+BILLBOARD PROP SPRITES
+- "Picked up: SHOTGUN" / "Picked up: MEDKIT" etc. all flow through the toast
+  banner. Unified message channel.
+
+FLOOR/CEILING TEXTURE RENDERING
+- Doesn't interact directly. The HUD covers the bottom 18% of the screen,
+  so the floor renderer can skip rendering below y = HUD_HEIGHT for a
+  small perf win (see OPEN QUESTIONS).
+
+
+OPEN QUESTIONS
+==============
+1. Where does the mini-map go now that the HUD claims the bottom 130px?
+   Recommendation: move mini-map to top-left, 200×200, semi-transparent.
+   Alternative: embed a minimum-size mini-map (96×96) inside the LEFT HUD
+   panel below the portrait.
+
+2. Should the floor renderer (future) skip the HUD-occluded area to save
+   fragments? Recommendation: YES, but only after profiling — early levels
+   may not need the perf.
+
+3. Should turn counter reset per level or be lifetime? Recommendation: per
+   level. Cross-level total is meta-progression for the run summary screen.
+
+4. Multi-language support for banners? Out of scope for v1. Keep all strings
+   in Constants for a future i18n pass.
+
+5. Should the damage vignette also play on "near miss" events (enemy attacked
+   but missed)? Recommendation: NO — would dilute the signal. Maybe a much
+   subtler yellow flash on a future Dodge mechanic.
+
+6. Pixel-perfect rendering — the HUD must render at integer screen positions
+   regardless of viewport scaling. Use a Pixmap-snapped offset on resize.
+
+7. CRT shader on weak GPUs — provide a Constants.HUD_CRT_ENABLED flag (default
+   true) so users on intel-iGPUs can switch it off via an in-game options
+   menu later.

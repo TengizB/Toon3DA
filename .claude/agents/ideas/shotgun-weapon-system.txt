@@ -1,0 +1,567 @@
+STATUS: IMPLEMENTED
+CATEGORY: Combat
+TITLE: Shotgun Weapon System with Base Weapon Class
+CREATED: 2026-05-28
+---
+
+OVERVIEW
+========
+A first weapon plus the reusable Weapon abstraction it stands on. The Shotgun
+is a one-shell, one-shot, point-blank cannon: fire it and you are immediately
+empty, and reloading costs you exactly ONE forward/back/strafe tile step
+(rotating to aim is FREE — it does not advance the reload). Damage is huge up
+close and bleeds off per tile of distance via a simple geometric drop
+coefficient. The whole thing is built on a small abstract Weapon class
+(damage / clipSize / reloadTime / damageDropCoefficient) so every later gun
+(pistol, plasma, super-shotgun) drops in by subclassing.
+
+This is the concrete, field-exact specification the developer asked for. It is
+a tightened, narrower sibling of the earlier `pump-action-shotgun.txt` doc.
+Where the two disagree, THIS doc wins for the v1 shotgun:
+  - Reload is a TICK COUNT (movement steps), not "any input consumes a turn".
+  - Rotation does NOT count as a tick (you may aim freely while reloading).
+  - Three visual states only: NORMAL / FIRE / RELOAD (matches the 3 PNG assets).
+  - Weapon entities live in `entity/`, HUD rendering in `render/` (no new
+    `weapon/` package — keeps the footprint minimal and matches existing
+    PlayerInventory living in `entity/`).
+See INTERACTIONS for how this reconciles with the pump-action doc and the
+zombie/turn-engine doc.
+
+
+GAMEPLAY LOOP
+=============
+The player is holding the Shotgun (clip loaded, state NORMAL).
+
+FIRING
+1. Player presses the FIRE key (Constants.KEY_FIRE = SPACE) while
+   PlayerController is IDLE.
+2. PlayerController checks weapon.canFire() (state == NORMAL && shotsInClip > 0).
+   - If FALSE (mid-reload or empty clip): play a dry "click", flash the HUD ammo
+     red, consume NO turn, stay IDLE. Player is free to retry / move / rotate.
+   - If TRUE: enter ActionState.FIRING.
+3. Resolve the shot INSTANTLY in 2D tile space (see DAMAGE / TILE MARCH below):
+   march forward along the current facing direction one tile at a time, up to
+   weapon.range tiles. Stop at the first wall. Apply damage = damage ×
+   damageDropMultiplier(distanceTiles) to the first enemy hit (penetration
+   optional, see BALANCE). shotsInClip -= 1.
+4. Visual: weapon sprite swaps NORMAL -> FIRE for FIRE_FLASH_DURATION (a brief
+   real-time flash, ~0.10s). A muzzle/screen flash + "BOOM" fire simultaneously.
+   This is a player action: the turn ends, enemies take their turn.
+5. When the FIRE flash elapses AND shotsInClip == 0 (clipSize is 1, so this is
+   always after one shot): weapon swaps FIRE -> RELOAD and arms the reload
+   counter: ticksRemaining = reloadTime. State is now RELOADING.
+
+RELOAD (tick-driven — THIS is the core mechanic)
+6. The weapon now needs `reloadTime` MOVEMENT ticks to finish. A tick is
+   counted ONLY when a tile-step action COMPLETES:
+     - W (forward), S (back), Q (strafe left), E (strafe right): +1 tick on the
+       frame the move snaps to its target tile (PlayerController.advanceMove
+       completion).
+     - A / D (rotate): NOT a tick. Aiming is free.
+     - Bumping a wall (blocked move, no actual tile change): NOT a tick — no
+       move completed, so no world turn advanced, so no reload progress.
+7. Each completed step: weapon.onMovementTick() -> ticksRemaining -= 1.
+8. When ticksRemaining reaches 0: shotsInClip = clipSize, weapon swaps
+   RELOAD -> NORMAL, a "CHK-CHUNK" rack sound plays. Ready to fire again.
+
+So with reloadTime = 1: fire -> take one step in any direction -> reloaded.
+The shotgun is "shoot, reposition one tile, shoot". You can rotate to track a
+strafing enemy for free, but you must commit to a STEP to chamber the next
+shell. That single step is the tactical cost.
+
+EMPTY-CLICK (defensive)
+- Pressing FIRE while RELOADING or with shotsInClip == 0 never consumes a turn
+  and never advances reload. It is a safe no-op with audio/visual feedback.
+
+
+WEAPON STAT MODEL (the requested fields)
+========================================
+Every weapon is described by exactly these four tunable fields plus a range:
+
+  damage                  base damage dealt per shot at point blank (distance 0/1)
+  clipSize                shots that can be fired before a reload is required
+  reloadTime              movement TICKS needed to reload (rotations excluded)
+  damageDropCoefficient   fractional damage lost per tile of distance (0..1)
+  range                   max tiles the shot travels (hard cutoff; supporting)
+
+SHOTGUN CONCRETE VALUES
+-----------------------
+  damage                = 24
+  clipSize              = 1
+  reloadTime            = 1     (one completed tile step reloads)
+  damageDropCoefficient = 0.18  (loses 18% of base damage per tile)
+  range                 = 5     (tiles; shot dies past this)
+
+Rationale: at clipSize 1 / reloadTime 1, the shotgun fires every OTHER turn
+(shot turn, then step turn). Against the existing Zombie (8 HP, see zombie doc)
+24 base damage one-shots at any range it can reach, but the drop coefficient
+makes the player want to close the distance for the satisfying gib, and the
+forced step keeps a second zombie in the conga line dangerous. See BALANCE for
+the full damage-by-tile table and tuning levers.
+
+
+DAMAGE DROP FORMULA
+===================
+Linear drop with a floor, computed purely from integer tile distance. This is
+the formula the user specified ("damage falls off per tile/cell of distance").
+
+  damageDropMultiplier(distanceTiles):
+      multiplier = 1 - damageDropCoefficient * distanceTiles
+      clamp multiplier to [DAMAGE_MIN_MULTIPLIER, 1.0]   // floor so far shots
+                                                          // still scratch
+      return multiplier
+
+  finalDamage = round( damage * damageDropMultiplier(distanceTiles) )
+
+distanceTiles = Chebyshev/cardinal tile count from player tile to target tile
+along the facing axis (the player only fires N/S/E/W, so it is simply the
+number of tiles marched: 0 at the player's own tile, 1 for the adjacent tile,
+etc). DAMAGE_MIN_MULTIPLIER prevents a "0 damage" dead zone that would feel
+buggy to the player.
+
+WORKED TABLE (shotgun: damage 24, coefficient 0.18, floor 0.15)
+  distance 0:  24 × 1.00 = 24   (muzzle-pressed; rare)
+  distance 1:  24 × 0.82 = 20   (adjacent tile — the bread-and-butter shot)
+  distance 2:  24 × 0.64 = 15
+  distance 3:  24 × 0.46 = 11
+  distance 4:  24 × 0.28 =  7
+  distance 5:  24 × 0.15 =  4   (clamped by floor; edge of range)
+  distance 6+: no hit (beyond range)
+
+ALTERNATIVE (exponential) — documented for tuning, NOT the default:
+  multiplier = (1 - damageDropCoefficient) ^ distanceTiles
+This curves more gently near the muzzle and harsher far out. Ship the LINEAR
+version first; it is more readable to the player ("each tile shaves a chunk").
+Both go in GameMath so swapping is a one-line change.
+
+
+TICK COUNTING SYSTEM
+====================
+A "tick" = one COMPLETED tile step. It is the heartbeat of the turn-based world
+and the unit the reload counts in. Tie it to the exact moment a move snaps to
+its target tile, which already exists in PlayerController.advanceMove():
+
+  PlayerController.advanceMove(deltaTime):
+      ...existing lerp + completion code...
+      if (actionProgress >= 1f):
+          player.positionX = targetPositionX
+          player.positionY = targetPositionY
+          ...existing settle/keycard code...
+          inventory.getEquippedWeapon().onMovementTick();   // <-- NEW: count tick
+          finishAction()
+
+WHAT COUNTS AS A TICK
+  - W / S / Q / E that result in an ACTUAL move completion -> 1 tick.
+WHAT DOES NOT COUNT
+  - A / D rotations (advanceRotate completion): never call onMovementTick().
+  - Blocked moves (wall bump): tryMove returns without entering MOVING, so
+    advanceMove never completes -> no tick. Correct: you didn't change tiles.
+  - INTERACTING (door open): a door-open does not move the player to a new tile
+    in that action; recommend it does NOT tick the reload (the actual step
+    THROUGH the open door on the following turn is the tick). See OPEN QUESTIONS.
+
+Weapon.onMovementTick() is a no-op unless state == RELOADING. When reloading it
+decrements ticksRemaining and, at 0, completes the reload. Because it is driven
+by the existing completion branch, it is automatically:
+  - turn-accurate (one tick per world turn),
+  - allocation-free,
+  - decoupled from real-time (animation duration does not affect tick count).
+
+If/when the zombie TurnEngine lands, the cleanest home for the tick call moves
+from PlayerController to TurnEngine.onPlayerActionStarted/Completed, but the
+contract is identical: tick on MOVE-type turns, not on ROTATE-type turns.
+
+
+VISUAL STATE MACHINE (HUD weapon display)
+=========================================
+Three art states, matching the three existing PNGs in
+assets/textures/guns/shotgun/:
+  NORMAL   -> shotgun.png         (idle/ready pose, held at bottom-center)
+  FIRE     -> shotgun_fire.png    (muzzle flash, barrel kick)
+  RELOAD   -> shotgun_reload.png  (breech open / shell being chambered)
+
+LOGICAL STATES (drive both art and game logic):
+  enum WeaponVisualState { NORMAL, FIRE, RELOADING }
+
+TRANSITIONS (exactly as the user described):
+  NORMAL --(fire pressed, canFire)--> FIRE
+      set fireFlashTimerSeconds = FIRE_FLASH_DURATION
+      shotsInClip -= 1
+  FIRE  --(fireFlashTimerSeconds <= 0)--> RELOADING
+      [clipSize == 1 so the clip is always empty here]
+      swap art shotgun_fire.png -> shotgun_reload.png
+      ticksRemaining = reloadTime
+  FIRE  --(fireFlashTimerSeconds <= 0, shotsInClip > 0)--> NORMAL
+      [only reached by future multi-shell weapons; shotgun never takes this]
+  RELOADING --(ticksRemaining == 0)--> NORMAL
+      shotsInClip = clipSize
+      swap art shotgun_reload.png -> shotgun.png
+
+Note the user's phrasing "switch to FIRE, then back to NORMAL, then to RELOAD"
+is preserved for multi-shot weapons (fire flash returns to NORMAL only if the
+clip still has shots). For the 1-shell shotgun the clip is empty after one
+shot, so the flash resolves straight into RELOAD. Implement the general rule;
+the shotgun just always falls into the empty branch.
+
+TIMERS vs TICKS — keep them separate:
+  - fireFlashTimerSeconds is REAL-TIME (cosmetic muzzle flash, ~0.10s). Advanced
+    in Weapon.update(deltaTime), called every frame from World.update.
+  - ticksRemaining is TURN-TIME (movement steps). Advanced only by
+    onMovementTick(). NEVER decremented by deltaTime.
+This separation is the crux of the design: the flash is animation, the reload
+is gameplay turns.
+
+WeaponHudRenderer (render/) picks the texture by current WeaponVisualState and
+draws it bottom-center each frame. During RELOADING it may also overlay a small
+shell-rack progress pip ("LOADING") so the player understands they owe a step.
+
+
+PACKAGE PLACEMENT
+=================
+Following the existing structure (PlayerInventory already lives in entity/,
+all renderers in render/), and intentionally NOT creating a new `weapon`
+package for this minimal first cut:
+
+  entity/Weapon.java            (abstract base — weapon state + stats)
+  entity/Shotgun.java           (concrete; extends Weapon)
+  entity/WeaponVisualState.java (enum: NORMAL, FIRE, RELOADING)
+  render/WeaponHudRenderer.java (draws the equipped weapon sprite + ammo)
+
+PlayerInventory (entity/, already exists) gains an equipped-weapon reference.
+If the roster later explodes (5+ weapons, ammo pools, slots), promote these to
+a dedicated `entity.weapon` subpackage — note that in CLAUDE.md when you do.
+The earlier pump-action doc proposed a top-level `weapon` package; this doc
+deliberately keeps it in `entity/` to match what is actually on disk today.
+
+
+TECHNICAL NOTES
+===============
+
+NEW CLASS: entity/Weapon.java  (abstract)
+-----------------------------------------
+Fields (all final stats, plus mutable runtime state):
+  protected final String displayName;
+  protected final int    damage;                 // base, point-blank
+  protected final int    clipSize;
+  protected final int    reloadTime;              // movement ticks to reload
+  protected final float  damageDropCoefficient;   // fraction lost per tile
+  protected final int    range;                   // max tiles
+
+  protected int   shotsInClip;                    // starts = clipSize
+  protected int   ticksRemaining;                 // reload countdown (ticks)
+  protected WeaponVisualState visualState = WeaponVisualState.NORMAL;
+  protected float fireFlashTimerSeconds;          // real-time, cosmetic
+
+Methods:
+  boolean canFire()
+      return visualState == NORMAL && shotsInClip > 0;
+
+  void update(float deltaTime)                    // called every frame
+      if (visualState == FIRE):
+          fireFlashTimerSeconds -= deltaTime
+          if (fireFlashTimerSeconds <= 0):
+              if (shotsInClip > 0) visualState = NORMAL
+              else { visualState = RELOADING; ticksRemaining = reloadTime; }
+
+  void onMovementTick()                           // called once per completed step
+      if (visualState == RELOADING):
+          ticksRemaining -= 1
+          if (ticksRemaining <= 0):
+              shotsInClip = clipSize
+              visualState = NORMAL
+
+  // Resolves the shot in tile space. Returns nothing for v1 (no enemies yet);
+  // when enemies exist it applies damage. Kept abstract so each weapon defines
+  // its own marching/spread pattern.
+  abstract FireResult fire(int playerTileColumn, int playerTileRow,
+                           int facingStepColumn, int facingStepRow,
+                           Level level /*, EnemyManager when it exists */);
+
+  // Damage at a tile distance, using the shared GameMath formula + this
+  // weapon's coefficient.
+  int damageAtDistance(int distanceTiles)
+      return Math.round(damage *
+             GameMath.damageDropMultiplier(damageDropCoefficient, distanceTiles,
+                                           Constants.DAMAGE_MIN_MULTIPLIER));
+
+  int   getShotsInClip();
+  int   getClipSize();
+  WeaponVisualState getVisualState();
+  String hudAmmoString();   // e.g. "SHELLS 1/1" or "RELOAD"
+
+NEW CLASS: entity/Shotgun.java extends Weapon
+---------------------------------------------
+  Constructor passes the SHOTGUN_* constants up to Weapon.
+  fire(...) implementation:
+      enter FIRE state, set fireFlashTimerSeconds = FIRE_FLASH_DURATION,
+      shotsInClip-- , then march:
+        for distanceTiles in 1..range:
+            column = playerTileColumn + facingStepColumn * distanceTiles
+            row    = playerTileRow    + facingStepRow    * distanceTiles
+            if level.isWall(level.getCell(column,row)): break   // wall stops shot
+            // when EnemyManager exists:
+            //   enemy = enemies.at(column,row)
+            //   if enemy != null:
+            //       enemy.applyDamage(damageAtDistance(distanceTiles))
+            //       if (SHOTGUN_PENETRATION) continue; else break;
+      For v1 (no enemies) fire() just plays the visual/audio + state change so
+      the loop and reload can be tested against walls and the HUD.
+
+NEW ENUM: entity/WeaponVisualState.java
+---------------------------------------
+  NORMAL, FIRE, RELOADING
+
+NEW CLASS: render/WeaponHudRenderer.java
+----------------------------------------
+  implements Renderable, Disposable.
+  Owns its own SpriteBatch + 3 Textures (loaded from
+    textures/guns/shotgun/shotgun.png, shotgun_fire.png, shotgun_reload.png).
+  Pre-allocates the 3 Textures in the constructor — NO allocations in render().
+  render(camera): pick texture by weapon.getVisualState(); draw bottom-center.
+    drawWidth  = Constants.WEAPON_HUD_WIDTH
+    drawHeight = Constants.WEAPON_HUD_HEIGHT
+    drawX = (Constants.WORLD_WIDTH - drawWidth) / 2f
+    drawY = 0                        // anchored to screen bottom
+  Optionally draws ammo text ("1/1" or "RELOAD") bottom-right.
+  dispose() releases the SpriteBatch and all 3 Textures.
+
+MODIFIED: entity/PlayerInventory.java
+-------------------------------------
+  Add: private Weapon equippedWeapon;
+  Add: Weapon getEquippedWeapon(); void setEquippedWeapon(Weapon w);
+  (Shotgun is constructed in World and set here at spawn for v1.)
+
+MODIFIED: input/PlayerController.java
+-------------------------------------
+  - Add ActionState.FIRING to the enum {IDLE, MOVING, ROTATING, INTERACTING,
+    FIRING}.
+  - pollInput(): add a branch BEFORE the movement keys:
+        if (Gdx.input.isKeyPressed(Constants.KEY_FIRE)) { tryFire(); }
+  - tryFire():
+        Weapon weapon = inventory.getEquippedWeapon();
+        if (weapon == null || !weapon.canFire()) { /* dry click feedback */ return; }
+        int playerTileColumn = floor(player.positionX / CELL_SIZE);
+        int playerTileRow    = floor(player.positionY / CELL_SIZE);
+        int facingStepColumn = Math.round(player.directionX);
+        int facingStepRow    = Math.round(player.directionY);
+        weapon.fire(playerTileColumn, playerTileRow,
+                    facingStepColumn, facingStepRow, level);
+        actionState   = ActionState.FIRING;
+        actionProgress = 0f;
+  - advanceFiring(deltaTime): advance actionProgress at
+    1/Constants.PLAYER_FIRE_DURATION; on completion finishAction(). (The
+    cosmetic flash is owned by Weapon.update; this just locks input for the
+    fire turn, mirroring advanceMove/advanceRotate.)
+  - In advanceMove() completion branch, add the tick call:
+        inventory.getEquippedWeapon().onMovementTick();
+    (Guard for null weapon. Do NOT add this to advanceRotate or advanceFiring.)
+
+MODIFIED: world/World.java
+--------------------------
+  - Construct the Shotgun and set it on the inventory at spawn:
+        Shotgun shotgun = new Shotgun();
+        inventory.setEquippedWeapon(shotgun);
+    (inventory currently created inline in the World constructor — hoist it to a
+    field or pass it through so both PlayerController and WeaponHudRenderer can
+    reach the equipped weapon.)
+  - Construct a WeaponHudRenderer(shotgun-aware: reads inventory.getEquippedWeapon()).
+  - update(deltaTime): after playerController.update, call
+        inventory.getEquippedWeapon().update(deltaTime);   // advances fire flash
+  - render(camera): call weaponHudRenderer.render(camera) AFTER walls + props +
+    floor, and BEFORE the mini-map (LevelRenderer) so the gun sits on top of the
+    world but under the map overlay. (Mirrors the render-order note in CLAUDE.md.)
+  - dispose(): weaponHudRenderer.dispose().
+
+NEW: util/GameMath.java additions (with required derivation comment blocks)
+---------------------------------------------------------------------------
+  /*
+   * Formula: damageDropMultiplier (linear)
+   * Derivation: each tile of distance removes a fixed fraction
+   *   `coefficient` of base damage: m = 1 - coefficient * distanceTiles.
+   *   Clamped to [minimumMultiplier, 1.0] so point-blank never exceeds base and
+   *   far shots never reach exactly 0 (avoids a confusing dead zone).
+   * Edge cases: distanceTiles == 0 -> 1.0; large distanceTiles -> minimumMultiplier;
+   *   negative distance not expected (caller marches forward only).
+   */
+  public static float damageDropMultiplier(float coefficient, int distanceTiles,
+                                           float minimumMultiplier)
+
+  // Optional exponential variant for later tuning experiments:
+  /*
+   * Formula: damageDropMultiplierExponential
+   * Derivation: m = (1 - coefficient)^distanceTiles. Smooth geometric decay.
+   * Edge cases: coefficient >= 1 -> degenerate (clamp coefficient to [0,1)).
+   */
+  public static float damageDropMultiplierExponential(float coefficient,
+                                                       int distanceTiles)
+
+NEW: util/Constants.java additions
+----------------------------------
+  KEY_FIRE                       = Input.Keys.SPACE
+  PLAYER_FIRE_DURATION           = 0.14f   // input lock for the fire turn (s)
+  FIRE_FLASH_DURATION            = 0.10f   // real-time muzzle flash (s)
+  DAMAGE_MIN_MULTIPLIER          = 0.15f   // damage floor at extreme range
+
+  SHOTGUN_DAMAGE                 = 24
+  SHOTGUN_CLIP_SIZE              = 1
+  SHOTGUN_RELOAD_TIME_TICKS      = 1
+  SHOTGUN_DAMAGE_DROP_COEFF      = 0.18f
+  SHOTGUN_RANGE_TILES            = 5
+  SHOTGUN_PENETRATION            = false   // stops at first enemy by default
+
+  WEAPON_HUD_WIDTH               = 520f    // world units; tune to taste
+  WEAPON_HUD_HEIGHT              = 360f
+  // (drawX is centered, drawY = 0 — no constant needed)
+
+DATA TO STORE (runtime, per weapon instance)
+--------------------------------------------
+  shotsInClip, ticksRemaining, visualState, fireFlashTimerSeconds.
+  All live on the Weapon instance held by PlayerInventory. Nothing is stored on
+  the Level or the renderer — the renderer is a pure view of weapon state.
+
+
+VISUAL DESIGN
+=============
+WEAPON SPRITE (bottom-center, ~520×360 world units)
+  NORMAL  (shotgun.png): gloved marine hand + pump shotgun, barrel toward the
+          top of the frame, lower ~30% of the screen. Idle, ready.
+  FIRE    (shotgun_fire.png): bright orange-white muzzle flash, barrel kicked
+          up, brief smoke. Held for FIRE_FLASH_DURATION (~0.10s) only.
+  RELOAD  (shotgun_reload.png): breech open, shell being chambered, hand on the
+          pump grip. Held for the entire RELOADING state (until the player takes
+          their step). It should read as "I am committed, I owe a move".
+
+MUZZLE / SCREEN FLASH (optional polish, reuse existing flash plumbing)
+  - A short additive warm-white screen flash at ~0.35 alpha for ~0.05s on fire.
+  - A brief brightness bump on nearby walls during the flash window
+    (WallRenderer already has a shade pipeline + alert pulse; piggyback on it).
+
+HUD AMMO READOUT (bottom-right)
+  - NORMAL/empty: "SHELLS 1/1" or "SHELLS 0/1" in pixel digits.
+  - RELOADING: blinking "RELOAD" or a single shell-rack pip; clears to "1/1" when
+    the step completes.
+  - On a dry click: flash the readout red for ~0.15s.
+
+ANIMATION TIMING SUMMARY
+  - FIRE pose: real-time, FIRE_FLASH_DURATION ~0.10s, then -> RELOAD pose.
+  - RELOAD pose: NOT timed — persists until exactly reloadTime movement ticks
+    have completed (1 step for the shotgun). This is the visible feedback that
+    reload is a turn cost, not a stopwatch.
+
+AUDIO
+  - Fire: short punchy "BOOM" (~0.4s tail).
+  - Reload complete: "CHK-CHUNK" rack on the tick that finishes the reload.
+  - Dry click: hollow metallic "click" on fire-while-not-ready.
+
+
+BALANCE NOTES
+=============
+All values below are PLACEHOLDERS — tune in playtest. Single most important
+knobs: SHOTGUN_DAMAGE and SHOTGUN_DAMAGE_DROP_COEFF.
+
+CADENCE
+  clipSize 1 + reloadTime 1 = the shotgun fires every OTHER turn:
+  turn 1 shoot, turn 2 step (reload), turn 3 shoot, ...
+  Net effect: ~50% uptime on damage. A lone zombie dies turn 1; a SECOND zombie
+  closes one tile during your forced reload step — which is exactly the
+  "shoot, reposition, shoot" tension we want.
+
+VS ZOMBIE (from zombie-enemy-and-turn-engine.txt: 8 HP, 2 dmg melee)
+  - distance 1 (adjacent): 20 dmg -> one-shot kill.
+  - distance 5 (max range): 4 dmg -> chip; you will NOT clear a far zombie in one
+    shot, pushing the player to close distance. Good.
+  - With the zombie's existing 1.5× shotgun weakness multiplier applied AFTER
+    drop: distance 1 = 20 × 1.5 = 30 (massive overkill, satisfying gib);
+    distance 5 = 4 × 1.5 = 6 (still not a one-shot — range matters).
+
+SHELL ECONOMY (when an ammo pool lands — see pump-action doc)
+  - v1 of THIS doc assumes infinite reloads (clip always refills on the step).
+    The damageDropCoefficient + forced step are the throttle, not ammo scarcity.
+  - When the shared shell pool from pump-action-shotgun.txt is implemented,
+    reload should consume 1 shell from the pool, and an empty pool keeps the
+    weapon in RELOADING (or swaps to fists). That is a follow-up, not v1.
+
+TUNING LEVERS (in order of impact)
+  1. SHOTGUN_DAMAGE (24) — global lethality.
+  2. SHOTGUN_DAMAGE_DROP_COEFF (0.18) — how hard the player is pushed to close.
+     Lower = sniper-feel; higher = brawler-feel.
+  3. reloadTime (1) — raise to 2 to make the shotgun feel heavier (two steps to
+     chamber). 1 is the snappy default the user requested.
+  4. SHOTGUN_RANGE_TILES (5) — caps the engagement envelope.
+  5. DAMAGE_MIN_MULTIPLIER (0.15) — guarantees far shots still register.
+
+FAILURE READABILITY (design pillar: player understands why they died)
+  - The forced reload step is fully visible (RELOAD pose + HUD). If a player gets
+    swarmed mid-reload, the cause is legible: "I shot, I had to step, three more
+    were behind it." That is earned difficulty, not a cheap death.
+
+
+INTERACTIONS
+============
+1. TURN ENGINE / ZOMBIE (zombie-enemy-and-turn-engine.txt — NOT IMPLEMENTED yet)
+   - Firing is a player turn: enemies act after the shot resolves, exactly like
+     a move. The tick that completes the reload is ALSO a player turn, so enemies
+     advance on your reload step — that is the danger window.
+   - When TurnEngine exists, move the onMovementTick() call out of
+     PlayerController and into the engine's "player MOVE turn completed" hook so
+     ticks stay the single source of turn truth. Rotation turns must not tick.
+   - The Shotgun.fire() enemy-marching loop is the consumer of the zombie's
+     "Weapon Weakness: Shotgun 1.5×" metadata — apply the weakness multiplier
+     AFTER damageAtDistance().
+
+2. PUMP-ACTION SHOTGUN DOC (pump-action-shotgun.txt — overlapping, older)
+   - That doc models reload as "any input consumes a pump turn" and proposes a
+     top-level `weapon` package + ammo pools + pellet cone. THIS doc is the
+     tighter v1: tick-based reload, rotation-free aiming, entity/+render/
+     packages, 3 art states. RECOMMENDATION: implement THIS doc first; fold the
+     pump doc's ammo-pool, pellet-cone, and Super Shotgun ideas in as later
+     extensions on the same Weapon base class. Mark the pump-action doc as
+     superseded-for-v1 once this ships.
+
+3. EXISTING DOORS / INTERACTING (door/ package, IMPLEMENTED)
+   - Door-open uses ActionState.INTERACTING and does not move the player to a new
+     tile in that action, so it should NOT tick the reload (see OPEN QUESTIONS).
+     The actual step through the open doorway on the next turn IS the tick.
+   - v1 shotgun cannot blast doors open (would trivialize keycards). Shots stop
+     at any wall, and closed doors count as walls for the fire march.
+
+4. KEYCARD PICKUP (PlayerController.pickUpKeycardIfPresent, IMPLEMENTED)
+   - Both keycard pickup and the new reload tick happen in the SAME advanceMove
+     completion branch. Order is irrelevant (independent), but keep the tick
+     call after the existing settle/keycard code to avoid touching that logic.
+
+5. RED ALERT PULSE / WALL LIGHTING (IMPLEMENTED)
+   - The muzzle flash can piggyback on WallRenderer's existing shade/alert-pulse
+     plumbing for a one-frame brightness bump. No new render pass required.
+
+6. SCANLINE CRT HUD (scanline-crt-hud-marine-vitals.txt — planned)
+   - The ammo readout and weapon sprite should eventually be drawn through the
+     same HUD layer/SpriteBatch as the marine vitals for visual consistency.
+     For v1, WeaponHudRenderer owns its own batch; merge later.
+
+
+OPEN QUESTIONS
+==============
+1. Does opening a door (ActionState.INTERACTING) count as a reload tick?
+   RECOMMENDATION: NO. Only an actual tile-position change ticks. The step
+   through the door next turn is the tick. Confirm in playtest — if it feels
+   bad that "open door, then step" reloads on the step rather than the open,
+   it is trivial to also tick on INTERACTING completion.
+2. Should pressing FIRE while RELOADING fast-forward the reload if the player is
+   willing to "waste" the press? RECOMMENDATION: NO. Fire-while-reloading is a
+   safe no-op (dry click). Reload only advances on movement, never on fire.
+3. Penetration: does the shotgun hit one enemy or pierce? RECOMMENDATION: stop
+   at first enemy for v1 (SHOTGUN_PENETRATION = false); revisit when crowds
+   exist. Walls ALWAYS stop the shot, no exceptions.
+4. Should the fire turn lock be its own duration (PLAYER_FIRE_DURATION 0.14s) or
+   reuse PLAYER_MOVE_DURATION? RECOMMENDATION: separate constant so the fire
+   feels a touch heavier than a step without coupling the two.
+5. Infinite reload (v1) vs shared shell pool (pump doc) — when does ammo scarcity
+   enter? RECOMMENDATION: ship infinite-reload v1 to validate the tick/reload
+   feel, add the shell pool as the immediate follow-up.
+6. Multi-shot weapons and the "FIRE -> NORMAL" branch: confirm the general
+   state machine (return to NORMAL while clip > 0) is implemented now even
+   though the shotgun never exercises it, so the pistol drops in for free.
+7. Should rotating while RELOADING be allowed to fire-cancel into NORMAL? No —
+   rotation never changes weapon state; it is purely aim. Reload completes only
+   on a step. (Reaffirms the core mechanic; listed to prevent regressions.)

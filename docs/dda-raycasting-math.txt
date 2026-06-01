@@ -1,0 +1,152 @@
+# Moved from: .claude/CLAUDE.md
+# MATH - do not modify
+
+=== CAMERA PLANE ===
+
+planeScale = tan(fieldOfViewRadians / 2)   // = 1.0 for 90° FOV
+planeX     = -directionY * planeScale      // CCW rotation of direction
+planeY     = +directionX * planeScale
+
+Y-UP SIGN CORRECTION (vs Lodev Y-down tutorial):
+  Lodev:        cameraParameter = 2 × col / W − 1
+  This project: cameraParameter = 1 − 2 × col / W   ← CORRECT for Y-up
+
+Verification (facing +X, dir=(1,0), plane=(0,scale)):
+  col=0           → cameraParam=+1 → ray=(1,+scale) → toward +Y = visual LEFT  ✓
+  col=screenW-1   → cameraParam≈-1 → ray=(1,-scale) → toward -Y = visual RIGHT ✓
+
+The plane vectors (planeX, planeY) are the same in both conventions.
+Only the column-to-parameter mapping is inverted.
+Implemented in GameMath.cameraPlaneParameter().
+
+=== WHY perpWallDistance IS PERPENDICULAR (NOT EUCLIDEAN) ===
+
+Ray R = direction + plane × cameraParameter
+|direction| = 1, plane ⊥ direction
+
+  R · direction = direction·direction + (plane·direction)×cameraParameter
+               = 1 + 0 = 1   (for every column)
+
+DDA parameter t satisfies: hitPoint = playerPos + t × R
+  perpDist = (hitPoint − playerPos) · direction
+           = t × (R · direction) = t × 1 = t
+
+So perpWallDistance from DDA = true perpendicular distance.
+No fish-eye correction is ever needed.
+
+For a Y-FACE hit the same argument holds with the Y component.
+Units: perpWallDistance is in TILE units.
+
+=== WALL STRIPE FORMULA ===
+
+lineHeight  = WORLD_HEIGHT / perpWallDistance    // inverse perspective
+drawBottom  = WORLD_HEIGHT/2 − lineHeight/2      // Y-up: origin at bottom
+drawTop     = WORLD_HEIGHT/2 + lineHeight/2
+Clamp drawBottom to 0, drawTop to WORLD_HEIGHT before drawing.
+
+=== DISTANCE SHADING ===
+
+shade = 1 / (1 + perpWallDistance² × WALL_SHADING_FALLOFF)
+At d=0: shade=1.0. At d=10, falloff=0.05: shade≈0.167.
+Horizontal faces (N/S) multiplied by HORIZONTAL_FACE_SHADE_MULTIPLIER=0.7.
+
+=== WALL TEXTURE MAPPING ===
+
+wallHitRaw = wallHitPosition(playerTileX, playerTileY, rayDirX, rayDirY, perpWallDistance, crossedVerticalLine)
+wallHitU   = wallHitPositionMirrored(wallHitRaw, rayDirX, rayDirY, crossedVerticalLine)
+texColumn  = textureColumn(wallHitU, textureWidth)
+
+wallHitPosition — fractional pos [0,1) along struck wall face:
+  Vertical face   (crossedVerticalLine=true):  frac(playerTileY + perpWallDistance × rayDirectionY)
+  Horizontal face (crossedVerticalLine=false): frac(playerTileX + perpWallDistance × rayDirectionX)
+  Y-up does NOT change this formula — hit-point reconstruction is in tile space already Y-up.
+
+wallHitPositionMirrored — flip to prevent mirroring from opposite sides:
+  Vertical face:   flip when rayDirectionX > 0
+  Horizontal face: flip when rayDirectionY < 0
+  Conditions identical to Lodev (Y-down) because Y-up difference absorbed by cameraPlaneParameter.
+
+textureColumn — maps U to pixel column:
+  clamp((int)(wallHitU × textureWidth), 0, textureWidth−1)
+  Clamp guards against float jitter producing exactly 1.0.
+
+=== DDA ALGORITHM — KEY INVARIANTS ===
+
+All DDA math in tile space: tileX = worldX / CELL_SIZE (fractional)
+
+  deltaDistanceX = 1 / |rayDirectionX|   (Float.MAX_VALUE if rayDirectionX=0)
+  deltaDistanceY = 1 / |rayDirectionY|
+
+  sideDistanceX = initial ray length to first vertical grid crossing
+  sideDistanceY = initial ray length to first horizontal grid crossing
+
+  perpWallDistance = sideDist − deltaDist  (GameMath.perpWallDistance)
+
+Loop steps toward whichever crossing comes first (sideDistX < sideDistY).
+Hit-point reconstruction: endTileX = playerTileX + rayDirectionX × travelDistance
+
+=== MINI-MAP COORDINATE TRANSFORM ===
+
+angleOffset = −FOV/2 + rayIndex × (FOV / (RAY_COUNT − 1))
+
+screenX = MINI_MAP_CENTER_X + (endTileX − playerTileX) × MINI_MAP_CELL_SIZE
+screenY = MINI_MAP_CENTER_Y + (endTileY − playerTileY) × MINI_MAP_CELL_SIZE
+
+Endpoints outside visible square clamped by clampRayDelta() using MINI_MAP_TILE_COUNT / 2f as half-span.
+
+=== TEXTURE CLIPPING (close walls) ===
+
+When perpWallDistance is small, lineHeight > screenHeight.
+Renderer must clip to only the visible texture slice:
+
+  topClipPixels = max(0, unclampedTop - screenHeight)
+  texSrcY       = (int)(topClipPixels * textureHeight / lineHeight)
+  texSrcHeight  = (int)((drawTop - drawBottom) * textureHeight / lineHeight)
+  texSrcHeight  = min(texSrcHeight, textureHeight - texSrcY)
+  texSrcHeight  = max(1, texSrcHeight)
+
+LibGDX convention: srcY=0 = top of image = visual top of sprite in Y-up space.
+
+Implemented in:
+  GameMath.wallTextureClipSrcY(unclampedTop, screenHeight, lineHeight, textureHeight)
+  GameMath.wallTextureClipSrcHeight(drawTop, drawBottom, lineHeight, textureHeight)
+
+=== CYLINDRICAL COLUMN RAY-CIRCLE INTERSECTION ===
+
+Ray:    P(t) = (originX + t·rayDirX,  originY + t·rayDirY)
+Circle: |P(t) − center|² = radius²
+
+Let d = origin − center:
+  t²·(rx²+ry²) + t·2·(dx·rx+dy·ry) + (dx²+dy²−r²) = 0
+  a = rx²+ry²,  b = 2·(dx·rx+dy·ry),  c = dx²+dy²−r²
+
+  discriminant = b²−4ac
+  If discriminant < 0: ray misses, continue DDA.
+  tNear = (−b − √discriminant) / (2a)   [front-face root]
+  If tNear > 0: use as perpWallDistance.
+
+Note: a = |R|² ≠ 1 for camera-plane rays. Full quadratic with non-unit a is required.
+tNear = perpWallDistance in same units as z-buffer; no correction needed.
+
+Implemented in: GameMath.rayCircleIntersection(originX, originY, rayDirX, rayDirY, centerX, centerY, radiusTiles)
+
+=== CYLINDRICAL COLUMN TEXTURE UV ===
+
+normalX = hitTileX − columnCenterTileX
+normalY = hitTileY − columnCenterTileY
+angle   = atan2(normalY, normalX)   ∈ [−π, π]
+u       = (angle + π) / (2π)        ∈ [0, 1]
+
+Seam (angle=±π) appears at back of column, rarely visible.
+Implemented in: GameMath.columnTextureU(hitTileX, hitTileY, columnCenterTileX, columnCenterTileY)
+
+=== CYLINDRICAL COLUMN LAMBERT SHADING ===
+
+normalX    = (hitTileX − centerX) / COLUMN_RADIUS_TILES
+normalY    = (hitTileY − centerY) / COLUMN_RADIUS_TILES
+lambertian = max(0, normalX·LIGHT_DIR_X + normalY·LIGHT_DIR_Y)
+shade      = wallShade(depth) × (COLUMN_SHADE_MIN + (1−COLUMN_SHADE_MIN)·lambertian)
+
+COLUMN_LIGHT_DIRECTION = (0.707, 0.707) (45° NE).
+COLUMN_SHADE_MIN = 0.50 keeps darkest face half-bright.
+Constants: COLUMN_RADIUS_TILES, COLUMN_SHADE_MIN, COLUMN_LIGHT_DIRECTION_X/Y in Constants.java.

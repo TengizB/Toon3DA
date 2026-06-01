@@ -1,0 +1,397 @@
+STATUS: IMPLEMENTED
+CATEGORY: Items
+TITLE: Armour Kit & Armour System
+CREATED: 2026-05-31
+---
+
+OVERVIEW
+========
+The companion to the medkit system: armour. Two tiers of UAC body-armour spawn
+on the floor as walkable decal props (a small vest shard and a full security
+vest), and — unlike a medkit — are applied INSTANTLY on pickup with NO turn
+cost. Armour points (AR) form a second, parallel health pool that sits IN FRONT
+of HP: incoming damage is split, a fraction soaked by armour (consuming it) and
+the remainder spent on HP. Where the medkit is the active, turn-costing "patch
+under fire" decision, armour is passive, pre-fight insurance — you grab it when
+you find it and it quietly buys you survival later. This is the classic Doom
+"green/blue armour bonus" loop: instant pickup, no menu, no turn burned, just a
+rising cyan AR bar that means you live a little longer.
+
+This doc owns: the two armour pickup props, the AR resource numbers (current /
+max armour), the DAMAGE-ABSORPTION SPLIT, the F-key apply-on-pickup flow, and
+the armour balance. It does NOT re-define the Player.applyDamage signature, the
+HP pool, or the AR HUD bar geometry — those are owned by
+scanline-crt-hud-marine-vitals.txt (which already declares `int armor, maxArmor`
+and `applyDamage(int amount, float sourceDirX, float sourceDirY)`). This system
+INSERTS the absorption math into that existing applyDamage path and CONSUMES the
+existing AR bar. It mirrors and reuses the pickup-resolution order defined by
+medkit-field-medicine-system.txt so the two pickup types live in one code path.
+
+
+GAMEPLAY LOOP
+=============
+ACQUIRING + APPLYING (automatic, instant, NO turn cost — the key difference vs
+the medkit, which banks a charge then spends a turn to use it):
+1. Player steps onto a tile holding an armour pickup ('a' shard or 'A' vest).
+2. On move-completion, BEFORE the tick fires, World checks the destination tile
+   for a pickup. REUSE the exact same resolution hook the medkit doc defines:
+       settle door -> resolve medical pickup -> resolve ARMOUR pickup
+       -> resolve other pickups (ammo/keycard) -> finishAction(true, MOVE)
+   Armour resolves in this same pre-tick window so enemies see the post-pickup
+   world on the same turn.
+3. Armour is NOT banked into a stash. It is APPLIED IMMEDIATELY to the AR pool:
+       newArmor = min(currentArmor + tierValue, maxArmor)
+   The prop tile is converted to plain floor (the decal disappears).
+4. A toast routes through the HUD banner ("ARMOUR SHARD +" / "SECURITY VEST +").
+   The cyan AR bar glides up via the existing PlayerArmorChanged event.
+5. OVERFILL RULE (differs from the medkit's "full stash, leave it" rule): if the
+   AR pool is already at maxArmor, the pickup grants NOTHING and is LEFT on the
+   floor (tile unchanged), with an "ARMOUR FULL" toast. This lets the player top
+   up later. A partial pickup (e.g. AR at 48/50, a shard worth 5) DOES consume
+   the prop and clamps to 50 — the player chooses to "waste" the overflow by
+   walking over it, exactly like Doom armour bonuses. See OPEN QUESTIONS for the
+   alternative (leave partials on the floor too).
+6. Walking onto armour is NOT a separate action — it happens during the normal
+   step. The step is the only tick. Picking up + applying costs no extra turn.
+
+THE 'F' KEY (apply / inspect — see OPEN QUESTIONS):
+- Per the brief, armour is auto-applied on pickup, so in v1 NO key press is
+  required to gain armour. The 'F' key is RESERVED here (KEY_ARMOUR_APPLY =
+  Input.Keys.F) for the manual-apply variant: if armour is later changed to bank
+  as a carried pad (like the medkit stash), 'F' applies one pad with NO turn
+  cost (armour is passive protection, not active healing — applying it does not
+  advance the world). 'F' is chosen specifically because 'R' is the medkit HEAL
+  key and must not be shadowed. For v1 (auto-apply), wire 'F' as a no-op-safe
+  inspect/confirm and document it; do not burn a turn on it under any branch.
+
+SPENDING (passive, during any incoming hit — no input):
+1. An enemy or hazard calls Player.applyDamage(rawAmount, sourceDirX, sourceDirY)
+   (HUD-doc method). This is where the absorption split lives.
+2. If currentArmor > 0, split the raw damage: a fraction is soaked by armour and
+   subtracted from currentArmor; the remainder is subtracted from HP. See the
+   DAMAGE ABSORPTION FORMULA section for the exact split.
+3. Armour is consumed as it protects — every hit that armour soaks lowers AR.
+   When AR hits 0, all subsequent damage lands fully on HP until armour is
+   replenished by another pickup.
+4. The marine never gets a turn-cost or animation for being protected; armour is
+   invisible plumbing inside the damage pipeline.
+
+
+ITEM TIERS
+==========
+TIER 1 — ARMOUR SHARD ('a'): the common drip-feed armour, mirror of the stim.
+  - A torn-off plate / vest fragment. Grants ARMOUR_SHARD_VALUE AR (placeholder
+    5) on pickup, clamped to maxArmor.
+  - Drops frequently: supply rooms, lockers, occasional enemy corpses (Scavenger
+    boon synergy, same loot hook the medkit uses). The "chip away toward a full
+    bar" beat — you rarely top out from shards alone.
+  - Reads as the small, low pickup across a room.
+
+TIER 2 — SECURITY VEST ('A'): the rare big slab, mirror of the field medkit.
+  - A full UAC security vest. Grants ARMOUR_VEST_VALUE AR (placeholder 25) on
+    pickup, clamped to maxArmor. The "now I can push the next room" item.
+  - Rare: 0-2 per floor, hand-placed by the level designer near boss/objective
+    rooms or behind a keycard door (pairs with uac-keycard-doors doc).
+  - Same instant, no-turn-cost pickup as the shard — the vest isn't slower, just
+    a bigger single grant. The tension is scarcity, not action economy.
+
+Both tiers feed the SAME AR pool (capped at ARMOUR_MAX, placeholder 50). They
+are not carried as discrete charges — armour is a continuous pool, unlike the
+medkit's discrete stash. This is the deliberate design contrast: medicine is a
+banked resource you spend on a turn; armour is a buffer you accumulate and bleed.
+
+
+TILE SYMBOLS (new chars needed)
+===============================
+Add two WALKABLE DECAL PROP chars (player walks over them; flat billboards, same
+family as 'm' corpse / 's' shotgun / '.' blood / 'h' stim / 'H' medkit):
+
+  'a' — ARMOUR SHARD pickup.  Height 0.25x wall (slightly taller than a stim's
+        0.20x, to read as "armour, not medical").
+        Visual: an angular cyan/steel plate fragment, dull metal with a thin
+        bright-cyan rim-light and a faint cyan glow pool underneath. Hard-edged
+        and geometric — contrasts with the rounded white+red-cross medical kit.
+
+  'A' — SECURITY VEST pickup. Height 0.35x wall (chunkier; reads as "big armour"
+        from across a room).
+        Visual: a standing/propped UAC torso vest, gunmetal grey with cyan trim
+        plates and a small white UAC stencil. A soft cyan status glow. Instantly
+        distinct from the olive-and-red-cross field medkit by COLOUR (cyan vs
+        red) — colour is the primary at-a-glance tell.
+
+COLOUR LANGUAGE (critical for readability): MEDICAL = white/olive + RED CROSS;
+ARMOUR = steel/gunmetal + CYAN. This matches the HUD where HP is red/green and AR
+is cyan (scanline HUD doc: "Armor bar: cyan gradient"). Same colour on the floor
+prop, the HUD bar, and the pickup toast — one consistent armour-is-cyan story.
+
+Both are NON-SOLID (Level.isWall returns false). Do NOT add them to the wall set.
+NO new wall chars, NO grid-format change beyond these two decal symbols.
+
+
+PICKUP MECHANICS
+================
+POOL MODEL — continuous buffer, no carry slots:
+  - There is NO armour stash and NO carry cap on "kits" because armour is applied
+    instantly. The only cap is the POOL cap: ARMOUR_MAX (placeholder 50). You
+    cannot carry armour for later; you bank it directly into the AR bar.
+  - Picking up while at ARMOUR_MAX: prop is LEFT on the floor, "ARMOUR FULL"
+    toast (GAMEPLAY LOOP step 5). Persists until AR drops and the player returns.
+  - Picking up while below max: AR rises, clamps to ARMOUR_MAX, prop is consumed
+    and the tile cleared.
+
+PICKUP RESOLUTION ORDER (MUST match the medkit doc and tick doc exactly):
+  settle door -> resolve medical pickup -> resolve ARMOUR pickup -> resolve other
+  pickups -> finishAction(true, MOVE). Both medical and armour mutate the world
+  and clear their tiles BEFORE the tick so enemies react to the post-pickup
+  state on the same turn. Armour resolves AFTER medical purely for a stable,
+  documented order; on any single tile only one pickup char exists, so ordering
+  only matters for code structure, not gameplay.
+
+NO MANUAL "PICK UP" KEY: stepping on the tile is the whole interaction (Doom RPG
+instant-grab feel). The 'F' key is reserved for the future manual-apply variant
+only (see GAMEPLAY LOOP / OPEN QUESTIONS), never as a required pickup step.
+
+
+DAMAGE ABSORPTION FORMULA
+=========================
+This is the heart of the system. It lives INSIDE Player.applyDamage and runs on
+every hit. The model is Doom's classic split-absorption (a fixed FRACTION of
+each hit is soaked by armour, and armour is consumed 1:1 with the damage it
+soaks), with a floor so armour can never fully negate a hit.
+
+Inputs:  rawDamage (int, > 0), currentArmor (int, >= 0)
+Constants: ARMOUR_ABSORB_FRACTION (placeholder 0.5f), ARMOUR_MIN_HP_FRACTION
+           (placeholder 0.0f — see balance note on guaranteed chip damage)
+
+Algorithm (compute in a GameMath helper, NOT inline):
+  if currentArmor <= 0:
+      hpDamage = rawDamage; armorDamage = 0
+  else:
+      // amount of the hit armour WOULD like to soak
+      desiredSoak = round(rawDamage * ARMOUR_ABSORB_FRACTION)
+      // armour can only soak as much as it has left
+      armorDamage = min(desiredSoak, currentArmor)
+      hpDamage    = rawDamage - armorDamage
+  // optional guaranteed-chip floor: never let armour reduce a hit below a
+  // minimum HP bite (prevents an armour wall trivialising every hit):
+  minHpDamage = ceil(rawDamage * ARMOUR_MIN_HP_FRACTION)
+  if hpDamage < minHpDamage:
+      // shift the difference back onto HP, refund it to armour
+      shift = minHpDamage - hpDamage
+      armorDamage = max(0, armorDamage - shift)
+      hpDamage    = minHpDamage
+  currentArmor = currentArmor - armorDamage
+  currentHealth = currentHealth - hpDamage   // existing HP clamp/death follows
+
+WORKED EXAMPLES (ARMOUR_ABSORB_FRACTION = 0.5, ARMOUR_MIN_HP_FRACTION = 0):
+  - rawDamage 10, AR 50  -> armorDamage 5, hpDamage 5  -> AR 45, HP -5.
+  - rawDamage 10, AR 3   -> desiredSoak 5, but AR only 3 -> armorDamage 3,
+                            hpDamage 7 -> AR 0, HP -7. (Armour partially soaks
+                            its last points, then breaks.)
+  - rawDamage 10, AR 0   -> hpDamage 10. (No armour, full hit.)
+  Net: armour HALVES incoming damage while it lasts, and is drained by exactly
+  the amount it soaks. 50 AR at 0.5 absorption buys ~100 raw damage of HP
+  protection over its lifetime (50 soaked / 0.5) — a meaningful but finite slab.
+
+WHY A FRACTION, NOT A FLAT REDUCTION: a flat "-3 per hit" makes armour worthless
+vs big hits and overpowered vs swarms of weak hits. A fraction scales cleanly
+with any enemy damage the enemy_system doc throws at it and is the readable Doom
+behaviour the genre expects. Put the whole thing in GameMath.applyArmourSplit so
+it is one tested formula with a derivation comment, never duplicated.
+
+
+TECHNICAL NOTES
+===============
+NEW / MODIFIED CLASSES
+
+  entity/Player.java (fields already declared by the HUD doc: int armor,
+  maxArmor). ADD/CONFIRM:
+      - Initialise armor = Constants.ARMOUR_STARTING (0), maxArmor =
+        Constants.ARMOUR_MAX (50) in the player's init.
+      - applyArmour(int amount): newArmor = min(armor + amount, maxArmor);
+        if newArmor == armor -> return false (full; no change, no consume);
+        else armor = newArmor; fire GameEvents.PlayerArmorChanged; return true.
+      - getArmorFraction() -> armor / (float) maxArmor  (HUD doc already lists
+        this; ensure it divides by maxArmor, guard maxArmor == 0).
+      - INSIDE the existing applyDamage(int amount, float sourceDirX, sourceDirY):
+        call GameMath.applyArmourSplit(...) to get armorDamage + hpDamage, then
+        subtract each, fire PlayerArmorChanged if armorDamage > 0, then the
+        existing HP-damage / death path. Do NOT add a second applyDamage.
+
+  entity/ArmourTier.java (enum, entity package — mirrors MedicalTier):
+      SHARD(Constants.ARMOUR_SHARD_VALUE),
+      SECURITY_VEST(Constants.ARMOUR_VEST_VALUE);
+      Carries its AR value + a display-name string key (in Constants).
+      Helper: static ArmourTier forTileChar(char) -> 'a'->SHARD, 'A'->VEST,
+      else null.
+
+  util/GameMath.java — ADD pure static helper with the mandatory derivation
+  comment block:
+      applyArmourSplit(int rawDamage, int currentArmor,
+                       float absorbFraction, float minHpFraction,
+                       int[] outArmorAndHpDamage)
+      // Writes outArmorAndHpDamage[0]=armorDamage, [1]=hpDamage. Caller passes a
+      // pre-allocated length-2 int[] (a Player field) so the hit path allocates
+      // nothing. Pure function: no side effects, no LibGDX state. See DAMAGE
+      // ABSORPTION FORMULA for the algorithm and edge cases (AR 0, AR < soak,
+      // min-HP floor, rawDamage 0).
+
+  level/Level.java:
+      - Recognize 'a' and 'A' as walkable decal props (isWall -> false for both).
+      - REUSE the same pickup-query API the medkit doc adds: getPickupAt /
+        clearPickupAt (or the prop-layer add/remove API if decals live in a
+        separate layer). No new query method — armour and medical share it.
+
+  render/ billboard prop renderer (existing 'm'/'s'/'.'/'h'/'H' sprite path):
+      - Register 'a' (0.25x) and 'A' (0.35x) with their sprite textures. No new
+        renderer class — extend the prop sprite table.
+
+  world/World.java (pickup resolution):
+      - In the move-completion path, after resolving a medical pickup, add the
+        armour branch: tier = ArmourTier.forTileChar(pickupChar); if non-null,
+        if player.applyArmour(tier.getArmourValue()) -> clearPickupAt + toast
+        "<tier> +"; else (full) -> leave tile + "ARMOUR FULL" toast.
+      - Picking up does NOT change TickCause — it rides the MOVE tick. NO new
+        TickCause (contrast: the medkit HEAL is its own tick-causing action;
+        armour pickup is not an action at all).
+
+  input/PlayerController.java:
+      - Reserve KEY_ARMOUR_APPLY (F) in the input map. In v1 (auto-apply) this is
+        a documented no-op / inspect; it MUST NOT consume a turn or transition
+        out of IDLE. Only wire a real action here if the manual-apply variant in
+        OPEN QUESTIONS is chosen — and even then it costs NO turn (no tick).
+
+  hud/ (scanline-crt-hud doc): the AR bar (cyan) already exists and already reads
+  getArmorFraction(). This system only needs the PlayerArmorChanged event to
+  drive the bar glide + a brief cyan flash, plus the pickup toasts through the
+  existing banner. NO new HUD widget.
+
+  util/Constants.java — ADD:
+      ARMOUR_STARTING            = 0      // marine starts with no armour
+      ARMOUR_MAX                 = 50     // AR pool cap
+      ARMOUR_SHARD_VALUE         = 5      // tier 1 AR granted
+      ARMOUR_VEST_VALUE          = 25     // tier 2 AR granted
+      ARMOUR_ABSORB_FRACTION     = 0.5f   // fraction of each hit armour soaks
+      ARMOUR_MIN_HP_FRACTION     = 0.0f   // guaranteed-chip floor (0 = off)
+      KEY_ARMOUR_APPLY           = Input.Keys.F   // reserved; v1 no-op
+      ARMOUR_SHARD_SPRITE_HEIGHT = 0.25f  // x wall height
+      ARMOUR_VEST_SPRITE_HEIGHT  = 0.35f
+
+ZERO-ALLOCATION: the hit path uses GameMath.applyArmourSplit writing into a
+pre-allocated length-2 int[] held on Player — no per-hit allocation. Pickup
+resolution touches only the int armor field + one enum ref and reuses the prop
+layer API. No allocation in render(): the AR bar and toast reuse pre-built HUD
+sprites and digit builders (GameMath.appendIntToBuilder per the HUD doc).
+
+
+VISUAL DESIGN
+=============
+FLOOR PROPS: see TILE SYMBOLS. Steel/gunmetal bodies, cyan rim-light + cyan glow
+pool, hard geometric silhouette (vs the rounded white medical kits). The cyan
+glow pool is the read-at-distance cue in dark ('u'/unlit) rooms.
+
+HUD: AR bar is the existing cyan gradient bar in the left panel (deep cyan ->
+bright cyan -> near-white at full), sitting directly under the red HP bar. On
+gain: bar glides up + a one-frame brighter cyan flash on the bar fill. On
+absorb (taking a hit that armour soaks): a short cyan tick-down + a faint cyan
+edge pulse on the bar to telegraph "armour just saved you." When AR reaches 0,
+the bar empties and a subtle one-shot grey "ARMOUR DEPLETED" micro-toast can fire
+(optional; flag as tunable) so the player KNOWS the buffer is gone and the next
+hit is full HP — readability of why-you-died is a design pillar.
+
+TOASTS (existing banner): "ARMOUR SHARD +", "SECURITY VEST +", "ARMOUR FULL", and
+optionally "ARMOUR DEPLETED". All tinted cyan to reinforce the colour language.
+
+NO new 3D effect, NO screen-space shader. Everything rides the existing prop
+billboard pipeline + the existing HUD bar.
+
+
+BALANCE NOTES
+=============
+All numbers are PLACEHOLDERS pending playtest against enemy damage output.
+
+- ARMOUR_MAX 50 + ARMOUR_ABSORB_FRACTION 0.5 means a full bar absorbs 50 AR worth
+  of soak, i.e. it eats ~100 raw damage of HP protection before breaking. Against
+  a starting HP pool of ~20-30 (progression doc), full armour roughly TRIPLES
+  effective survivability while it lasts — a big, deliberate swing, which is why
+  armour is scarcer than medicine and never carryable.
+- ABSORB FRACTION is the master lever. 0.5 = "halves hits." Lower it (0.33) if
+  armour feels oppressive; raise it (0.66) only if armour spawns rarely. Tune
+  absorb fraction BEFORE touching tier values — fraction changes the texture of
+  every fight; tier values only change how often you top up.
+- SHARD 5 / VEST 25 vs MAX 50: a vest is 50% of a full bar, a shard 10%. So a
+  player chips up with shards and resets with a vest, mirroring stim/medkit
+  pacing exactly — intentional symmetry so the two systems feel like siblings.
+- GUARANTEED CHIP (ARMOUR_MIN_HP_FRACTION): default 0 (off). If playtesters find
+  fully-armoured play trivialises early rooms, set ~0.2 so every hit still bites
+  at least 20% to HP — keeps HP relevant and prevents an armour turtle. Flag as
+  the first knob to try if armour feels too safe.
+- OVERFILL: walking over a shard at 48/50 banks 2 and "wastes" 3 (Doom bonus
+  behaviour). This is intended minor waste, not a bug — it rewards picking up
+  armour at the RIGHT time, not hoarding routes. The full-bar case leaves the
+  prop on the floor so a perfectly-full player loses nothing by ignoring it.
+- DROP RATES (placeholder): shard ~1 per 2-3 rooms + small enemy-corpse chance
+  (Scavenger boon scales it); vest 0-2 per floor, hand-placed. Keep TOTAL armour
+  granted per floor below the total damage a careful player takes, so AR stays a
+  managed buffer, not a permanent shield.
+- NO TURN COST is the core contrast with the medkit. Armour is "free" to gain,
+  so its cost is OPPORTUNITY (scarcity + you can't carry it) and the fact it
+  only delays death, never reverses it (it never adds HP). The medkit reverses
+  damage at a turn cost; armour prevents damage for free but runs out. The two
+  must be tuned together: if both are abundant the marine is unkillable.
+
+
+INTERACTIONS
+============
+1. MEDKIT / FIELD MEDICINE (medkit-field-medicine-system doc): the two are
+   deliberate siblings sharing the pickup-resolution order, the prop billboard
+   path, the Scavenger corpse-drop hook, and the toast banner. They are the
+   complementary halves of survival: armour PREVENTS damage (passive, free, runs
+   out), medkit REVERSES damage (active, one turn, banked). A common decision:
+   low HP + full armour -> push on; low HP + no armour -> retreat and HEAL. They
+   must be balanced against each other, not in isolation.
+2. HUD (scanline-crt-hud-marine-vitals doc): consumes the already-declared
+   armor/maxArmor fields, getArmorFraction(), the cyan AR bar, and a
+   PlayerArmorChanged event for the bar glide/flash. No new HUD widget; this
+   doc just supplies the gameplay reasons the bar moves.
+3. ENEMIES (enemy_system doc): the absorption split runs inside applyDamage, so
+   EVERY enemy hit (Corruptor melee, Vortex Eye ranged) is auto-split. The
+   "armoured Corruptor" enemy is the marine's mirror — consider giving enemies a
+   read-only armour value through the same GameMath.applyArmourSplit so player
+   weapons and enemy armour share one tested formula (OPEN QUESTION).
+4. HAZARDS (hazard-chain-reactions doc): decide whether fire/toxic ticks route
+   through applyDamage (and thus get absorbed by armour) or bypass armour as
+   "environmental" damage. Recommendation: hazards DO go through applyArmourSplit
+   for consistency, but with a possible separate hazard absorb fraction later.
+5. PROGRESSION / BOONS (levelup-stim-boon-choice doc): a future "Plating" boon
+   could raise ARMOUR_MAX or ARMOUR_ABSORB_FRACTION; a "Salvager" boon could add
+   armour to the corpse loot table. All read the ARMOUR_* constants — no new
+   plumbing. maxArmor changes must re-clamp current armor.
+6. LEVEL DESIGN: 'a'/'A' give the designer the same pacing tool as 'h'/'H' — a
+   vest before a hard room signals "gear up"; a vest behind a keycard door
+   (uac-keycard-doors doc) rewards exploration. A shard on an oil pool ('O') or
+   beside a flickering tile makes a tense, readable grab.
+
+
+OPEN QUESTIONS
+==============
+1. OVERFILL behaviour: consume-and-waste (Doom bonus style, recommended for v1)
+   vs leave-partials-on-floor (only consume if the full value fits)? Recommend
+   consume-and-waste for v1 — simpler, more Doom-like, rewards timing.
+2. POOL vs BANKED armour: v1 applies instantly to a pool (no carry). Should a
+   "carried armour pad" variant exist (bank it, apply with 'F', still no turn
+   cost)? Recommend NO for v1 — instant-apply is the cleaner contrast with the
+   medkit's banked stash. The F key is reserved in case this is revisited.
+3. ABSORB MODEL: fixed fraction (recommended) vs Doom-2's two-tier green(1/3)/
+   blue(1/2) armour where the tier sets the fraction? A two-tier fraction (shard
+   = green = 0.33 absorb, vest = blue = 0.5 absorb) is a tempting depth knob but
+   needs the AR bar to track "which absorb class is active." Defer to v2.
+4. GUARANTEED CHIP: ship with ARMOUR_MIN_HP_FRACTION = 0 (off) and only enable if
+   armour trivialises fights? Recommend yes — start off, tune in only if needed.
+5. ENEMY ARMOUR: should enemies reuse GameMath.applyArmourSplit so the formula is
+   shared? Recommend yes for consistency, but that is the enemy_system doc's call
+   to wire; this doc just keeps the formula pure and reusable.
+6. HAZARD damage: absorbed by armour or environmental-bypass? Recommend absorbed
+   (through applyArmourSplit) for v1; revisit a hazard-specific fraction later.
+7. "ARMOUR DEPLETED" micro-toast on AR hitting 0: helpful readability or HUD
+   noise? Recommend a single subtle one-shot; flag tunable so it can be muted.

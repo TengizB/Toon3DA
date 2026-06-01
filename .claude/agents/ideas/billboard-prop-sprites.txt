@@ -1,0 +1,529 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Billboard Prop Sprites (barrels, terminals, lockers, bodies)
+CREATED: 2026-05-27
+---
+
+OVERVIEW
+========
+Populate floor tiles with 2D billboard sprites — barrels, computer terminals,
+storage lockers, supply crates, dead UAC marines, scattered scientific equipment
+— that always face the player and scale by distance, exactly like enemies and
+pickups in Wolfenstein 3D and Doom RPG. Each prop occupies one floor tile and
+is drawn AFTER the wall pass using the existing z-buffer for per-column
+occlusion. This single feature transforms the corridors from "empty geometric
+tunnels" into a recognisable, lived-in UAC research facility, and it lays down
+the entire billboard rendering pipeline that the future zombie / pickup / item
+systems will reuse for free.
+
+This is the highest visual-impact-per-line-of-code upgrade still on the table.
+Floor and ceiling textures are already implemented; emergency lighting is
+already implemented; doors are already implemented. The one thing the player
+still sees no matter where they look is *empty room*. Props fix that with no
+new gameplay rules — every prop is, for now, a purely cosmetic obstacle.
+
+
+VISUAL IMPACT
+=============
+What the player actually sees, walking down a corridor for the first time after
+this feature ships:
+
+  - A row of three green-and-yellow chemical BARRELS lined against the wall on
+    the left, each scaled correctly with distance — the nearest one almost as
+    tall as the wall, the farthest one a small silhouette down the hall.
+  - A glowing-screened COMPUTER TERMINAL recessed into a wall alcove, its
+    monitor casting a pale cyan glow that you can see flickering in your
+    peripheral vision as you pass.
+  - A dead UAC SECURITY MARINE crumpled in a doorway, blood pooled around him,
+    his shotgun on the floor beside him (the shotgun being its own separate,
+    smaller prop sprite). He never moves. He is a story told in one tile.
+  - A row of grey STORAGE LOCKERS along a side wall, some dented, one hanging
+    open, one with a red biohazard sticker.
+  - Scattered SUPPLY CRATES — wooden, stencilled "UAC", some intact some
+    smashed open — that the player must walk around.
+
+Every prop:
+  - is a flat 2D sprite that always rotates to face the player camera (the
+    classic billboard technique — no actual 3D geometry).
+  - scales inversely with distance: a prop two tiles away is twice as tall as
+    a prop four tiles away.
+  - is per-column occluded by walls: if a wall is between the player and the
+    prop, the wall blocks the prop. If only HALF the prop is hidden behind a
+    corner, only that half is hidden — pixel-perfect column clipping.
+  - sits on the floor: its bottom edge always touches the floor of its tile,
+    its top edge is computed from the sprite's aspect ratio and the wall
+    stripe height at that distance.
+  - has a tile-aligned position (centre of its tile, in world units).
+  - is solid by default — the player cannot step into a prop tile, the
+    PlayerController collision check treats it as a wall.
+
+Side effect of correct occlusion: walking around a corner reveals a barrel
+sliding into view from behind the wall *column by column*, exactly the
+Wolfenstein feeling. Walking past a dead marine, his body sinks below the
+floor horizon as you get closer, then rises behind you. This is the signature
+look of pseudo-3D raycasting and it is currently 100% absent from the game.
+
+
+MECHANICS
+=========
+
+1. TILE SYMBOLS — extension to the level format
+
+The current tile alphabet is:
+    x c v t w     — wall variants (solid)
+    p             — player start (passable, single-use)
+    (space)       — floor (passable)
+
+Add a new GROUP of FLOOR-PASSABLE-OR-BLOCKING symbols for props. Each prop
+char is a SEPARATE tile state (it lives in the same Level char grid). The
+char tells WallRenderer "draw this sprite on this tile" AND tells
+PlayerController whether the tile is walkable.
+
+Proposed prop chars (lowercase digits and symbols — easy to read in .txt):
+
+    | Char | Prop                  | Walkable | Texture file                      |
+    |------|-----------------------|----------|-----------------------------------|
+    | 'b'  | Chemical barrel       | NO       | prop_barrel_chem.png              |
+    | 'B'  | Explosive red barrel  | NO       | prop_barrel_explosive.png         |
+    | 'T'  | Computer terminal     | NO       | prop_terminal.png                 |
+    | 'L'  | Storage locker        | NO       | prop_locker.png                   |
+    | 'C'  | Wooden supply crate   | NO       | prop_crate.png                    |
+    | 'm'  | Dead UAC marine       | YES      | prop_corpse_marine.png            |
+    | 's'  | Dropped shotgun       | YES      | prop_dropped_shotgun.png          |
+    | '.'  | Blood splatter        | YES      | prop_blood_splatter.png           |
+    | 'O'  | Oil slick / leak      | YES      | prop_oil_slick.png                |
+
+(Existing wall chars `c`, `t`, `w` remain reserved for walls — we explicitly
+chose `C` (capital) for crates, `T` (capital) for terminals so case
+distinguishes them. `b` does not clash; capitalisation matters in Level chars.)
+
+Two categories:
+    SOLID PROPS    (b B T L C) — block movement, drawn at full height anchored
+                                  to the floor. Player cannot enter the tile.
+    DECAL PROPS    (m s . O)    — do not block movement, drawn flat or short,
+                                  visually decorative. Player walks over them.
+
+2. LEVEL.JAVA EXTENSION
+
+Add three new authority methods on Level:
+
+    public boolean isProp(char tileChar)       — true for any prop char.
+    public boolean isPropSolid(char tileChar)  — true for solid props only.
+    public boolean isPropDecal(char tileChar)  — true for decal props only.
+
+Update Level.isWall(char) DOES NOT include props. Walls are still walls.
+Movement collision (PlayerController.tryMove) becomes:
+
+    if (level.isWall(targetChar) || level.isPropSolid(targetChar)) → block
+
+Floor and ceiling renderers do NOT need to know about props — props are drawn
+on top of the floor as sprites.
+
+3. PROP DRAW PASS — added AFTER the wall column loop, BEFORE the mini-map.
+
+Render order becomes:
+
+    1. WallRenderer.render()    — ceiling + floor + wall columns + z-buffer
+    2. PropRenderer.render()    — billboard sprites, clipped by z-buffer  ← NEW
+    3. LevelRenderer.render()   — mini-map overlay
+    4. Player.render()           — player dot on mini-map
+
+PropRenderer pseudocode (per frame):
+
+    a. Build a list of (tileColumn, tileRow, char) for every prop tile within
+       a max draw range (default 12 tiles). This list is built ONCE at level
+       load — props don't move. Store it on Level as a List<PropPlacement>.
+
+    b. For each prop placement:
+        - Compute the prop's WORLD position (centre of its tile).
+        - Compute differenceX = propWorldX − playerWorldX,
+                  differenceY = propWorldY − playerWorldY.
+        - Compute spriteDepth = differenceX × directionX + differenceY × directionY
+          (perpendicular distance — same convention as perpWallDistance).
+        - SKIP if spriteDepth ≤ 0.1 tile (prop is behind the player or on top).
+        - SKIP if spriteDepth > MAX_PROP_DRAW_DISTANCE_TILES (default 12).
+
+    c. SORT the surviving placements by spriteDepth DESCENDING (farthest first)
+       so near props correctly overdraw far props. Use an indexed sort into a
+       pre-allocated int[] index buffer — no allocations per frame.
+
+    d. For each prop in sorted order:
+        - Project the prop centre to a screen column using the inverse camera
+          plane transform (see TECHNICAL NOTES — formula goes in GameMath).
+        - Compute the sprite's screen height = WORLD_HEIGHT / spriteDepth,
+          same formula as wall stripes. This guarantees correct scale.
+        - Compute the sprite's screen width = spriteHeight × (textureWidth /
+          textureHeight) so non-square sprites keep their aspect ratio.
+        - Compute drawBottom and drawTop:
+            SOLID prop: drawBottom = horizon − spriteHeight / 2,
+                        drawTop    = horizon + spriteHeight / 2
+            DECAL prop: anchor to the FLOOR, top half of sprite only:
+                        drawBottom = horizon − spriteHeight / 2 (clamp 0),
+                        drawTop    = horizon (lays the sprite flat on the
+                                              floor — see VISUAL DESIGN).
+            (Decal vs solid decision is per-prop; pick whichever looks right.)
+        - For each screen column inside [centerColumn − width/2, centerColumn
+                                          + width/2]:
+              if column outside [0, screenWidth) → skip
+              if spriteDepth ≥ zBuffer[column]   → skip (wall is closer)
+              compute textureColumn = (column − leftEdge) / width × textureWidth
+              draw a 1-px-wide vertical slice of the prop texture at that
+              column, from drawBottom to drawTop, with the appropriate shade.
+
+    e. Shading uses the same formula as walls:
+           shade = 1 / (1 + spriteDepth² × WALL_SHADING_FALLOFF)
+       so distant props fade into the same darkness as distant walls.
+
+The per-column draw loop is the same pattern WallRenderer already uses, so
+the rendering code style stays consistent.
+
+
+TECHNICAL NOTES
+===============
+
+Files to create:
+
+    core/.../render/PropRenderer.java
+        - Implements Renderable + Disposable.
+        - Holds a Map<Character, Texture> of loaded prop textures.
+        - Holds a reference to the Level (so it can read the prop placement
+          list each frame).
+        - Holds a reference to the WallRenderer (so it can read the z-buffer
+          via getZBufferAt()).
+        - Pre-allocates: int[] sortedPropIndices, float[] sortedPropDepths,
+          PropDrawData[] scratch (one entry per prop in the level — sized
+          once at construction).
+        - Owns a single SpriteBatch.
+
+    core/.../render/PropPlacement.java
+        - Plain data class: int tileColumn, int tileRow, char propChar,
+          float worldX, float worldY (precomputed centre of tile).
+
+    core/.../render/PropDrawData.java  (private scratch, optional)
+        - Mutable per-frame data: depth, screenCenterColumn, drawWidth,
+          drawHeight, drawBottom, drawTop. Avoids allocations in render().
+
+Files to modify:
+
+    core/.../level/Level.java
+        - Add isProp / isPropSolid / isPropDecal methods.
+        - Add getPropPlacements(): List<PropPlacement>.
+        - At construction, scan the grid once and build the prop list.
+
+    core/.../level/LevelLoader.java
+        - Treat prop chars as PASSABLE for char-grid parsing (do not error
+          out on unknown chars — let Level decide what each char means).
+        - The 'p' player-start tile already treats the underlying tile as a
+          space; props use the same passable-floor rule but record the prop.
+
+    core/.../input/PlayerController.java
+        - In tryMove(): replace
+              if (level.isWall(targetChar)) → block
+          with
+              if (level.isWall(targetChar) || level.isPropSolid(targetChar))
+                  → block
+
+    core/.../world/World.java
+        - Construct PropRenderer with (level, wallRenderer).
+        - Add propRenderer.render(camera) between wallRenderer.render() and
+          levelRenderer.render().
+        - Dispose propRenderer.
+
+    core/.../util/Constants.java
+        - PROP_TEXTURE_DIRECTORY                = "textures/props/"
+        - MAX_PROP_DRAW_DISTANCE_TILES          = 12f
+        - PROP_BEHIND_PLAYER_EPSILON_TILES      = 0.1f
+        - PROP_TEXTURE_PATH_<NAME> constants per prop (e.g. PROP_TEXTURE_PATH_BARREL_CHEM)
+
+    core/.../util/GameMath.java — add three pure functions:
+
+        a) spriteDepth(differenceX, differenceY, directionX, directionY)
+           = differenceX × directionX + differenceY × directionY
+           Derivation: the perpendicular distance is the projection of the
+           player-to-prop vector onto the player's facing unit vector. This
+           gives a depth on the same scale as perpWallDistance, so the same
+           z-buffer comparison is valid.
+
+        b) spriteScreenColumnCenter(differenceX, differenceY, directionX,
+                                    directionY, planeX, planeY, screenWidth)
+           Implements the standard sprite-projection formula:
+
+               inverseDet = 1 / (planeX * directionY − directionX * planeY)
+               transformX = inverseDet * (directionY * differenceX
+                                          − directionX * differenceY)
+               transformY = inverseDet * (−planeY * differenceX
+                                          + planeX * differenceY)
+               screenColumnCenter = (screenWidth / 2)
+                                    * (1 − transformX / transformY)
+
+           transformY here IS spriteDepth. The Y-UP sign correction lives in
+           the (1 − transformX / transformY) versus the Lodev (1 + …) form,
+           matching cameraPlaneParameter's Y-up flip. Document the
+           derivation in the comment block.
+
+        c) spriteScreenHeight(screenHeight, spriteDepth)
+           = screenHeight / spriteDepth
+           Edge case: spriteDepth must be > 0 (callers must filter behind-
+           player cases first to avoid div-by-zero and huge stripe heights).
+
+Algorithm summary the implementer follows:
+    1. Project prop centre → screen column.
+    2. Sprite height = screen height / depth.
+    3. Sprite width  = sprite height × (texW / texH).
+    4. Loop columns within [centerColumn − width/2, centerColumn + width/2].
+    5. For each column, z-buffer test, then draw 1-px-wide texture slice.
+
+Textures:
+    Each prop is a transparent PNG. Recommended size 128×128 for solid props,
+    128×64 for decals (wider-than-tall decals lie flat on the floor better).
+    All textures preloaded at construction (a fixed small set — 9 props × <100KB
+    each is trivial).
+
+Z-buffer interaction:
+    WallRenderer.getZBufferAt(column) already exists. The prop column draw
+    must compare `spriteDepth < zBuffer[column]` strictly less than — equal
+    means the wall is at the same depth and should win to avoid Z-fighting
+    flicker at corners.
+
+Sort allocation rule:
+    Do NOT use Collections.sort or Arrays.sort(boxed Integer[]). Use an
+    in-place insertion sort over a pre-allocated int[] paired with a
+    pre-allocated float[] of depths. With prop counts under ~50 per level
+    insertion sort is faster than quicksort and allocates nothing.
+
+PropRenderer owns: SpriteBatch + each Texture loaded for props. All
+disposed in dispose(). It does NOT dispose Level or WallRenderer.
+
+
+LEVEL DESIGN GUIDELINES
+=======================
+
+Density (per 10×10 tile room):
+    Solid props:    1 to 3   (chokepoints, side alcoves, room centres)
+    Decal props:    0 to 5   (blood splatters, oil slicks for atmosphere)
+
+Total prop count per 80×45 level should be 40–80 props. More than 100 props
+in view at once is the soft performance ceiling for the per-column inner
+loop (see PERFORMANCE NOTES). Most rooms will only have a few props visible
+at any moment thanks to walls occluding the rest.
+
+Placement rules for procedural generation (when that lands):
+    BARRELS (`b`, `B`):
+        - Always against a wall, never centre of a wide room.
+        - Often in groups of 2–4 in a row along one wall.
+        - Explosive barrels (`B`) sparse — at most 1 per room.
+
+    TERMINALS (`T`):
+        - Against a wall, ideally in an alcove (one tile recess).
+        - One per "shop / save room" tile, otherwise sparse.
+
+    LOCKERS (`L`):
+        - Against a wall, often in rows of 3–5.
+        - Common in barracks / armoury rooms.
+
+    CRATES (`C`):
+        - Either against a wall OR in the centre of a room creating cover.
+        - Sometimes blocking a corridor as a soft obstacle (forces detour).
+
+    CORPSES (`m`):
+        - In doorways, at the foot of stairs, against walls.
+        - Each corpse is one tile of environmental storytelling.
+
+    DROPPED SHOTGUNS (`s`):
+        - Always adjacent to a corpse `m`. The pairing tells the story.
+
+    BLOOD (`.`):
+        - Trails of 2–6 in a line leading from a corpse to a doorway.
+        - Splatters in front of walls where someone was thrown.
+
+    OIL SLICKS (`O`):
+        - Near barrels or in maintenance corridors.
+        - Sparse, 1–2 per level until the explosion-chain mechanic ships.
+
+Hand-built test level: place 1 of each prop in starter level1.txt so the
+implementer has an immediate visual sanity check.
+
+Procedural generation hook (future): the generator emits the room layout
+first using `x` and ` ` only, THEN runs a post-pass that scatters props
+according to a room-type table and the rules above. This keeps prop logic
+separate from layout logic.
+
+
+PERFORMANCE NOTES
+=================
+
+Worst-case cost per frame: 100 visible props × 80 columns each (rough average
+sprite screen width) = 8000 per-column z-buffer checks plus up to 8000 1-px
+textured draws in the same SpriteBatch. This is the same order of magnitude
+as the 1280 wall column draws and should sit comfortably under 1ms on the
+target hardware (LWJGL3 desktop).
+
+Draw-call budget added: ONE flush when SpriteBatch switches from wallTexture
+to the first prop texture, then one additional flush every time the prop
+texture changes. To minimise flushes:
+    - Group props by type before drawing (sort key = (depth, char)? no, depth
+      DESCENDING dominates; just accept the per-prop-type flushes).
+    - With 9 prop types and depth-sorted draw order, expect up to ~9 flushes
+      added — still well within budget (target < 32 draws / frame).
+
+Memory: 9 textures × ~128×128 RGBA × 4 bytes = ~600 KB. Negligible.
+
+Per-frame allocations: ZERO. All scratch arrays pre-allocated in constructor.
+The PropDrawData[] is sized to the maximum prop count found in the level.
+
+Sort cost: insertion sort over 100 ints is ~5000 ops max — irrelevant.
+
+Z-fighting at corners: use STRICT less-than (`spriteDepth < zBuffer[col]`).
+Test ensures wall wins on a tie.
+
+Behind-player guard: must check spriteDepth > epsilon BEFORE computing
+spriteScreenColumnCenter; division by ~zero produces NaN and stripes that
+fill the whole screen. The epsilon is 0.1 tile (see Constants).
+
+Gotcha — texture filtering: set Texture.Filter.Nearest on prop textures
+(matching the chunky pixel aesthetic) and Texture.Filter.Linear if the user
+wants smoother sprites. Decide once and put it in PropRenderer constructor.
+
+Gotcha — sprite at exactly screen edge: clip the inner column loop with
+Math.max(0, centerColumn − width/2) and Math.min(screenWidth − 1, center +
+width/2). Do NOT skip the whole sprite when partially off-screen.
+
+
+EXAMPLE LEVEL SNIPPET
+=====================
+
+A small 12×8 fragment of a UAC barracks room with the new props. (`.`,
+'B', etc. are the new prop chars from the table above — read carefully:
+the dots are blood splatters, not walls.)
+
+    xxxxxxxxxxxx
+    xL L L L L x
+    x          x
+    x  C  C   tx
+    x .   .    x
+    x  m s   p x
+    x ...  B   x
+    xxxxxxxxxxxx
+
+Reading row-by-row (top of file = top of world, since the loader keeps
+file-top = high Y already):
+
+    Row 7 (top):   solid wall border
+    Row 6:         five LOCKERS (`L`) along the north wall
+    Row 5:         empty corridor for movement
+    Row 4:         two wooden CRATES in the centre and a TERMINAL `t` in
+                   the NE corner (NB: `t` here is the existing wall char,
+                   indicating a wall-mounted terminal — distinct from `T`
+                   which would be a floor-standing one. Pick whichever
+                   matches the level designer's intent.)
+    Row 3:         two BLOOD SPLATTERS (`.`)
+    Row 2:         DEAD MARINE (`m`) with his DROPPED SHOTGUN (`s`) and the
+                   player start `p`
+    Row 1:         a BLOOD TRAIL (`...`) leading to an EXPLOSIVE BARREL
+                   (`B`) against the east wall
+    Row 0 (bottom):solid wall border
+
+What the player sees on spawn (`p` at column 9, row 2, facing north — assuming
+default north on level load):
+
+    - Immediately left: the dead marine with his shotgun, blood pooled around.
+    - Ahead and slightly left: more blood. A wooden crate in the middle of the
+      next room. Another crate further in. A wall-mounted terminal in the
+      far corner glowing faintly. A row of five lockers across the back wall.
+    - Behind (only seen on turning): the explosive barrel and the blood trail.
+
+That single 12×8 fragment, with zero new gameplay rules, now tells a story:
+the marine was killed by something that came from the east (explosive barrel
+the demon broke through?), he crawled toward the door before dying, and the
+players walks in to find what's left.
+
+This is the entire point of props.
+
+
+INTERACTIONS
+============
+
+1. Z-BUFFER (existing wall pass): props sample WallRenderer.getZBufferAt()
+   to clip per-column behind walls. Hard dependency on WallRenderer
+   exposing the z-buffer (it already does).
+
+2. PLAYER COLLISION: PlayerController.tryMove already does a tile-char
+   lookup; the addition is one OR-clause checking isPropSolid(). Decal
+   props do not affect collision.
+
+3. FLOOR / CEILING RENDERER (already implemented): no interaction needed.
+   Props draw on top of the textured floor in the same frame.
+
+4. EMERGENCY RED-ALERT PULSE (already implemented): the alert tint is
+   applied as a global colour multiplier. PropRenderer must respect the
+   current red-alert shade by multiplying its per-sprite shade by the
+   same alert factor. Expose World.getCurrentAlertShadeRed/Green/Blue()
+   or pass the alert shade into PropRenderer.render() — implementer's
+   choice.
+
+5. DOORS (already implemented): doors are wall-state tiles. A door in
+   the OPEN state is still NOT a prop. Props should not be placed in
+   door tiles (level-design rule; renderer does nothing special).
+
+6. FUTURE — ENEMIES (zombie idea): zombies are also billboard sprites.
+   PropRenderer is intentionally written as a per-tile sprite renderer
+   so that the enemy renderer can either (a) share the same renderer
+   with a dynamic per-frame placement list, or (b) be a near-identical
+   sibling class. The math (sprite projection, z-buffer test, per-column
+   draw) is the SAME — only the source of placements differs.
+
+7. FUTURE — EXPLOSIVE BARRELS: the explosive barrel (`B`) is a SOLID prop
+   today and a future combat object. When combat ships, attacking a `B`
+   tile destroys the prop, spawns an explosion AoE that damages
+   adjacent tiles, and may chain into nearby `B` and `O` (oil slicks).
+   The prop-removal API on Level is therefore a needed extension:
+   `Level.removeProp(tileColumn, tileRow)` — but it can be added later;
+   not in scope for V1.
+
+8. FUTURE — INVESTIGATE / RANSACK ACTION: corpses (`m`), terminals (`T`,
+   `t`), and lockers (`L`) become INTERACTIVE in later milestones. The
+   player faces the tile and presses an interact key to ransack — yielding
+   ammo / credits / lore. PropRenderer is unaffected; the interaction
+   layer reads the same prop chars from Level.
+
+9. MINI-MAP: decide whether prop tiles render specially on the mini-map.
+   Recommendation: solid props as small grey dots, decals as not-drawn
+   (otherwise the map gets noisy). Easy 5-line addition to LevelRenderer.
+
+
+OPEN QUESTIONS
+==============
+
+1. Texture authoring: who creates the 9 prop PNGs? Recommend
+   placeholder solid-colour silhouettes for V1 (a green rectangle for
+   "barrel", grey rectangle for "locker") so the renderer can ship
+   independently of art. Real art replaces them later.
+
+2. Decal projection: should decals truly be drawn FLAT (a perspective-
+   correct floor projection — i.e. trapezoid) or just as a short sprite
+   anchored to the floor? The latter is much cheaper and "good enough"
+   for a chunky pixel game. Recommend short-sprite for V1; a true floor-
+   projected decal is a future enhancement.
+
+3. Should props animate? A flickering terminal monitor would be lovely.
+   Recommend deferring: ship static V1, add a per-prop animation frame
+   index in a follow-up.
+
+4. Should solid props have a small "footprint" that allows the player
+   to see PARTIALLY over them (i.e. draw shorter than a full wall)? The
+   spec above uses sprite-height = WORLD_HEIGHT / depth which scales to
+   full wall height — too tall for a barrel. Recommend a per-prop
+   HEIGHT MULTIPLIER (barrel = 0.5, locker = 0.9, terminal = 0.7) stored
+   in a per-char table inside PropRenderer.
+
+5. What about a "sprite scale" config separate from "sprite height
+   multiplier"? Probably overkill; one multiplier per prop type is
+   enough.
+
+6. Mini-map representation: dots, coloured squares, or invisible? See
+   INTERACTIONS #9 — recommend small grey dots for solid props only.
+
+7. Should the level loader validate that prop tiles are not on walls?
+   E.g. a `.txt` file that puts `b` in the middle of a wall block. A
+   warning log line is sufficient — do not error out; just ignore the
+   prop placement.

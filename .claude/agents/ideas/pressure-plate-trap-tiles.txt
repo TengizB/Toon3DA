@@ -1,0 +1,200 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Pressure Plates & Triggered Trap Tiles
+---
+
+OVERVIEW
+========
+A family of floor-based traps that turn the act of walking through the facility
+into a tactical reading exercise. The core primitive is a TRIGGER tile (a
+pressure plate, tripwire, or pad) that fires an EFFECT when the player steps
+onto it. Effects range from immediate damage (a vent gout of flame, a crushing
+ceiling slab, an electrified grate) to environmental sabotage (slamming a door
+shut behind you, dropping you through a trapdoor to a deeper sub-level, raising
+an alarm that wakes every enemy on the floor). Traps are the level itself
+fighting back — the UAC's failed automated defenses, half-broken and
+indiscriminate, hurting marine and demon alike.
+
+Because everything is turn-based and tile-based, trap timing is expressed in
+turns, not seconds. A pressure plate "arms" when stepped on and resolves either
+the same turn (instant trap) or after a fixed number of player turns (telegraph
+window), letting the careful player step back off in time. Crucially, traps are
+detectable — a perceptive player (or one with the right stat/tool) sees a faint
+seam, scorch ring, or laser tripline before committing. This is the
+"information management" pillar made physical: the floor is data, and reading it
+keeps you alive.
+
+The hazardous-tile work already specced for walls and the hazard chain-reaction
+system are siblings to this; pressure plates are the *triggered, one-shot or
+re-armable* counterpart living in the floor, and they deliberately hook into
+those hazards (a flame trap ignites an oil pool, a trapdoor drops a barrel).
+
+GAMEPLAY LOOP
+=============
+1. Level generation/design places trigger tiles and links each to an effect
+   (some traps are visible, some hidden until detected).
+2. Player approaches. If the trap is DETECTED (visible seam / they passed a
+   perception check / they used a scanner), the HUD shows a subtle marker and
+   mini-map flags the tile. If UNDETECTED, nothing is shown.
+3. Player steps onto a trigger tile → the step resolves as one turn, and the
+   trap ARMS:
+   - INSTANT trap (e.g. electrified grate, spike grate): effect resolves this
+     same turn — damage applied immediately. Lesson learned the hard way.
+   - DELAYED trap (e.g. flame vent winding up, ceiling crusher rising): a
+     telegraph plays and the effect fires after TRAP_TELEGRAPH_TURNS player
+     turns. The player may step off in time to avoid it — a tense escape.
+   - PERSISTENT trap (re-armable hazard, e.g. an arc-field that pulses every N
+     turns): occupies the tile as a recurring danger until disabled.
+4. Effect fires → routed through the appropriate system: deal damage, spawn a
+   fire/toxic hazard, slam a linked door, raise an alarm (noise event), or
+   trapdoor → transition the player down a floor.
+5. Some traps are RE-ARMABLE (reset after firing) and can therefore be exploited
+   by the player: lure an enemy onto a flame vent, or back a demon onto a
+   crusher plate.
+6. Disarming (optional, stat/tool gated): a detected trap adjacent to the player
+   can be DISARMED with the INTERACT key, spending one turn, removing the danger
+   and possibly salvaging components (credits/cells).
+
+PLAYER EXPERIENCE
+=================
+Traps make movement itself risky and deliberate. The player learns to scan the
+floor, to distrust the obvious straight path, and to weigh "rush through this
+corridor while enemies chase me" against "slow down, I might be running onto a
+plate." The delayed-trap telegraph creates pure roguelike drama: you hear the
+flame vent spool up and have two turns to scramble clear while an imp blocks
+your exit. Detected traps become tools — the satisfaction of luring a Hell
+Knight onto the crusher you cleverly avoided is a peak emergent moment.
+
+The decision this creates repeatedly: "Is the fast route worth the risk, and can
+I turn this trap against my enemies instead of just avoiding it?"
+
+TECHNICAL NOTES
+===============
+New package: `…toon3d.trap` (or fold into a broader `…toon3d.hazard` package if
+one is created for the existing hazard ideas — coordinate with those docs).
+
+New tile symbols (all are walkable floor for movement; danger is entity/overlay
+side, like props):
+- `'^'` = generic pressure plate (effect defined by level metadata / a parallel
+  trap-link layer, see below)
+- `'~'` = flame vent trap (delayed gout)
+- `'='` = electrified / spike grate (instant damage)
+- `'V'` = trapdoor (drop to next floor) — capital V to avoid clash with `'v'`
+  vent wall
+- `'A'` = alarm pad (raises facility alert / wakes enemies via noise event)
+Re-check these against LevelLoader's existing symbol set before finalizing to
+avoid collisions; adjust glyphs as needed. `Level.isWall` is unaffected (traps
+are walkable). Solidity/effect handled by a TrapManager, mirroring how the
+DoorManager owns door runtime state.
+
+Linking traps to effects: because a plain `.txt` grid cannot encode "plate X
+slams door Y," support an OPTIONAL second metadata block appended after the
+grid (e.g. lines after a `---TRAPS---` separator: `^ 12 7 -> door 20 7 close`).
+LevelLoader parses these into TrapDefinition objects. Generators can emit the
+same format. Unlinked trap glyphs use their default self-contained effect.
+
+New / modified classes:
+- `trap/TrapType.java` (enum): PRESSURE_PLATE, FLAME_VENT, SHOCK_GRATE,
+  TRAPDOOR, ALARM_PAD — each with: isInstant/isDelayed/isPersistent,
+  telegraphTurns, damage, reArmable, detectionDifficulty.
+- `trap/Trap.java`: { tileColumn, tileRow, TrapType type, armed, turnsUntilFire,
+  detected, optional linkTargetColumn/Row, optional linkAction }.
+- `trap/TrapManager.java`: owns active traps; `onPlayerEnterTile(column,row)`
+  arms/resolves; `tick()` advances delayed traps each turn and fires them;
+  `trapAt(column,row)`; `tryDisarm(column,row)`; `tryDetect(...)`. Lives in the
+  enemy/turn phase of the global tick.
+- `trap/TrapDefinition.java`: parsed-from-file template used to instantiate
+  Traps at load.
+- `render/TrapRenderer.java` (or extend PropRenderer): draws floor decals
+  (plate seams, scorch rings, grate texture, trapdoor outline) as walkable
+  billboards, plus telegraph effects (flame vent glow ramping over its
+  telegraph turns; arc sparks on shock grates). No render() allocations.
+- `LevelLoader.java`: parse new glyphs + optional `---TRAPS---` metadata block.
+- `LevelRenderer.java`: flag DETECTED traps on the mini-map.
+- `PlayerController.java`: stepping onto a tile notifies TrapManager; INTERACT
+  key can disarm an adjacent detected trap (one turn).
+- `GameMath.java`: a pure `perceptionDetectChance(...)` helper if detection is
+  stat-based (with the required comment block), or detection can be purely
+  proximity-based (always reveal within 1-2 tiles) for a simpler v1.
+
+All timing is in turns; nothing is real-time. Telegraph "animations" are
+cosmetic interpolations driven by render time, but the *fire* moment is the
+turn counter hitting zero.
+
+Constants to add (`Constants.java`):
+- TRAP_TELEGRAPH_TURNS = 2 (placeholder, delayed traps)
+- TRAP_FLAME_DAMAGE = 15, TRAP_SHOCK_DAMAGE = 12 (placeholders)
+- TRAP_DETECT_RANGE_TILES = 2 (if proximity detection)
+- TRAP_DISARM_SALVAGE_CHANCE = 0.5f
+- ALARM_PAD_NOISE_LOUDNESS (ties to noise system loudness scale)
+
+VISUAL DESIGN
+=============
+- Pressure plate: a square floor decal with a recessed seam and four corner
+  bolts, slightly darker than surrounding floor; when armed it depresses 1-2px
+  and a thin amber edge-glow appears.
+- Flame vent: a circular grille decal; telegraph = a deepening orange glow and
+  rising heat-shimmer over its telegraph turns, then a bright vertical flame
+  billboard on fire turn (reuse fire hazard visuals).
+- Shock grate: a metallic grid decal; instant arc of cyan-white electricity
+  snapping across it on trigger.
+- Trapdoor: a square seam with hinge marks; on trigger the seam "opens" (dark
+  hole) and a fall transition plays before loading the next floor.
+- Alarm pad: a red-and-yellow hazard-striped pad; on trigger the whole view
+  briefly pulses red (hook the existing emergency-red-alert-pulse) and a klaxon
+  plays.
+- Detected traps gain a faint outline marker visible in 3D and a flag on the
+  mini-map; undetected traps render as plain (or near-plain) floor.
+
+BALANCE NOTES
+=============
+- Trap damage must be meaningful but rarely instantly lethal at full HP — the
+  punishment for missing a tell, not a coin-flip death. 12-15 dmg vs ~50-100 HP.
+- Delayed traps with a 2-turn telegraph are "fair"; instant traps must therefore
+  carry strong visual tells (you should be able to see a shock grate). Reserve
+  fully-hidden traps for higher floors and lower their damage.
+- Trapdoors should be opt-in surprises, not run-enders: dropping a floor early
+  skips loot but isn't death — frame it as a shortcut/penalty, not a kill.
+- Re-armable traps are the fun ones; bias generation toward re-armable flame/
+  shock traps near enemy patrol routes so players can exploit them.
+- Disarm salvage keeps disarming worthwhile vs just walking around.
+- Density guidance: ~2-5 traps per floor early, scaling up; never block the ONLY
+  path with an instant-lethal trap (navigability pillar).
+- All numbers above are placeholders pending playtest.
+
+INTERACTIONS
+============
+1. Hazard chain reactions (hazard-chain-reactions-fire-toxic-explosive): a flame
+   vent trap igniting an oil pool or an explosive barrel is the headline combo —
+   traps are first-class ignition sources.
+2. Doors (doors.txt, keycard-doors): pressure plates can slam, lock, or open
+   linked doors — enabling "trap room" setups and puzzle gates.
+3. Enemy AI (enemy_system.txt): enemies path across traps too; flame/shock traps
+   damage them, and a clever player herds enemies onto re-armable traps. Decide
+   whether smart enemies avoid known traps.
+4. Noise system (noise-propagation) & red-alert pulse (emergency-red-alert):
+   the alarm pad is literally a noise/alert trap — one tile that wakes the floor
+   and triggers the red-alert visual.
+5. Loot/ransack & progression (inventory-loot-ransack, levelup-stim-boon):
+   disarming yields salvage; a perception/IQ stat or a "trap scanner" item gates
+   detection, making trap-reading a build axis.
+6. Turrets (sentry-turret-stationary-enemy): a trap that slams a door can also
+   cut a turret's firing lane — layered chokepoint design.
+
+OPEN QUESTIONS
+==============
+- Detection model: proximity-based (always reveal within N tiles, simple and
+  fair) vs stat/roll-based (deeper, but can feel arbitrary)? Recommend proximity
+  for v1, add a stat modifier later.
+- Should the linked-trap metadata block be required, or ship v1 with only
+  self-contained traps (no linking) to reduce LevelLoader complexity?
+- Do enemies trigger pressure plates, or only the player? Enemy-triggering is
+  far more emergent but needs careful tuning to avoid traps clearing the floor
+  for free.
+- Trapdoor destination: always the next sequential floor, or a special
+  "dropped-in" mini-area with a risk/reward cache?
+- How many trap glyphs are too many for level designers to track? Consider one
+  generic `'^'` plate whose behavior is set entirely by the metadata layer,
+  keeping the symbol set lean.
+- Confirm chosen glyphs don't collide with current/planned LevelLoader symbols
+  (especially `'A'`, `'V'`, `'='`).

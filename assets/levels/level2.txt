@@ -1,0 +1,44 @@
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xt  T   T  xllllllllllllxxxxxxxxxxxxxxxxxxxxxxxxxx          xllllllllllllllllltx
+x g        xlL  L  L  Llxxxxxxxxxxccccccxxxxxxxcxxx          xl T   T   T   T  vx
+x          dl          l              g g g g     v         dl                 x
+x  P    P  xlg  P  P   l    P                     x         xl  P         P    x
+x          xlg         l                          x  P    P x l                x
+x          xl   P  P   l    P                     x         xl                 x
+x  P    P  xl          l                          x         xl  P         P    x
+x          xlC C  gOEEl xxxxcccxxxxxv xxxxxccccxxxx         xl T   T   T   T  wx
+x          xlllllllllllxxxxxxxxxxxxxxdxxxxxxxxdxxxxxxxxdxxxxllllllllllllllllllxx
+xxxxdxxccxdxxxxxxxxxxdxcccccc                             xxxxxdxxxxxxxxxxxxxxxx
+x     ggx        g      g                                                      x
+x       x   P                                                         P        x
+x       d         1                     g        g           g                 x
+x  p    x                                                                      x
+x       x      P       P                                            P          x
+x       d                                   2                                  x
+x       x                                                                      x
+x       x   P                                                         P        x
+x       x                                                                      x
+xxxxxdxxxxxxxxxxxxxxxxxxxxxxdxxxxxxxxxxxxxxxxxxxxxxxxxxdxxxxxxxxxxxdxxxxxxxdxxxx
+xuuuuuuuuuuuuuuuuxllllllllllllllllllllllllllllxlllllllllllllllllllllllxlllllllxx
+xum   .  .   guuxl  T  T  T   L  L  L        xl  .   s   .   m   .    xlC C  lxx
+xuuuO  .  .  uuuxl                            xl                       xl     lx
+xuO uuu .  Ouuuux                              l                       xl C C lx
+xu  fuu .  uuuuux                              l        ggggg          dl     lx
+xuO uuu O uuuuuuxlxxxxxxxxxxxxxxxxxxxxxxxxxxxxxlxxxxxxxxxxxxxxxxxxxxxxxlC C  lxx
+xuuuOuuuuO .uuuuxl                            xl                       xl     lx
+xuum  .O  uuuguuxl  L  L  L   T  T  T        xl  .   m   .   s   .   . xl C   lx
+xuuuuuuuuuuuuuuuxlllllllllllllllllllllllllllllxlllllllllllllllllllllllxllllllx x
+xxxxxxxxxxdxxxxxxxxxxxxxxxxxxxxxxxxxxdxxxxxxxxxxxxxxxxxdxxxxxxxxxxxxxxdxxxxxxxxx
+xwwwwwwwwwwwwwwwwwwwwwwwwxfffx                                                 x
+x                        xfffx       P              P             P           xx
+x  T  T      L  L        xfffx                                                vx
+x                        xfffx                                                 x
+x  T  T      L  L        xfffx       P              P             P           xx
+xcccccccccccccccccccccccxfffxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxdxxxxxxxxxxxxxxxxxxxxx
+xc                      c                                                      x
+xc  g   g   g   g   g   c    P        P        P        P        P        P   xx
+xc                      c                                                      x
+xc  O   O   O   O   O   c                                                      x
+xc                      c    P        P        P        P        P        P   xx
+xccccccccccccccccccccccxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxtxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

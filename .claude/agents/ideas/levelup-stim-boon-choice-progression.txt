@@ -1,0 +1,238 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Progression
+TITLE: Combat Stim Level-Up + Boon Choice (per-run progression)
+CREATED: 2026-05-28
+---
+
+OVERVIEW
+========
+The per-run character growth spine. XP from kills (the zombie already drops 5
+XP) accumulates toward thresholds; on threshold the run pauses and the marine
+"jacks a Combat Stim", presenting a choice of THREE boons drawn from a weighted
+pool. The player picks one. Stats and unlocked perks shape the rest of the run.
+This is the Doom RPG level-up (Strength / Health / Agility) crossed with the
+Hades boon-choice moment: meaningful choice under pressure, run identity through
+build diversity, and a clean payoff for the XP numbers already designed into
+enemies and weapons.
+
+Death resets all of it (permadeath). A thin meta-progression layer persists
+across runs by unlocking NEW boons into the pool — never raw power — so the
+first run is winnable with no unlocks and later runs feel fresh, not just
+stronger.
+
+
+GAMEPLAY LOOP
+=============
+EARNING XP (continuous, passive):
+1. Any enemy dies (weapon/hazard/melee). Its xpReward (zombie = 5) is added to
+   Player.experience.
+2. A small "+5 XP" entry posts to the kill-feed/message log (already speced).
+
+LEVEL-UP TRIGGER (turn-gated, never mid-animation):
+1. After damage/death resolution, ProgressionManager checks
+   experience >= experienceForNextLevel.
+2. If true, it does NOT interrupt the current turn. It sets a pendingLevelUp
+   flag. The level-up screen opens only when the turn engine is back in
+   WAITING_FOR_PLAYER (input idle) — so the choice never appears while an
+   animation or enemy phase is running.
+3. The world pauses (turn engine frozen; this is a menu, it costs no turn).
+
+THE STIM CHOICE (the decision):
+1. A CRT-style overlay slides in: "COMBAT STIM AUTHORIZED — SELECT ONE".
+2. Three boon cards are drawn from the pool (see DRAWING below). Each card shows
+   icon, name, one-line effect, and rarity colour.
+3. Player selects with 1 / 2 / 3 (or left/right + confirm). NEW input, only
+   live while the overlay is open.
+4. The chosen boon applies immediately (stat bump, perk flag, or item grant).
+   experienceForNextLevel increases for the next level. Overlay slides out.
+5. If multiple level-ups are pending (big XP dump from a chain explosion),
+   present them back-to-back.
+6. Turn engine resumes; player continues from the same tile, same facing.
+
+CORE STAT BOONS (always eligible, the Doom RPG three):
+- +STRENGTH: +melee/explosive damage and (later) carry capacity.
+- +VITALITY: +max HP and heal to full now (the "panic pick" when low).
+- +AGILITY: +dodge chance vs enemy attacks and +accuracy/less falloff.
+
+PERK BOONS (examples — the build-diversity layer):
+- Adrenal Pump: gain a free extra action the turn after you kill an enemy.
+- Steady Hands: shotgun pump costs no turn 25% of the time.
+- Pyromaniac: you take half damage from FIRE; your explosions deal +25%.
+- Scavenger: enemies drop +1 ammo; +50% credits.
+- Ironclad: first hit each room is reduced to 1 damage.
+(Perks pull directly on the weapon, hazard, and enemy systems for synergy.)
+
+PLAYER EXPERIENCE
+=================
+Every kill feeds a bar the player watches fill; the level-up is a reward beat
+that breaks the tension and hands the player agency. The three-card draw forces
+a real decision: heal-to-full Vitality when you're bleeding out, or gamble on
+the Pyromaniac perk because you just found a corridor full of barrels? Over a
+run, these picks compound into a recognizable build ("this is my high-Agility
+dodge-tank run" vs "my explosion-spec run"), satisfying the run-identity pillar.
+Because death wipes it all, each choice carries weight; because meta-unlocks
+only widen the pool, a veteran's run feels different, not just easier.
+
+
+TECHNICAL NOTES
+===============
+
+NEW PACKAGE & CLASSES
+---------------------
+- ge.tbegvadze.toon3d.progression.ProgressionManager — owns XP, level,
+  threshold curve, pendingLevelUp flag; checkForLevelUp(); applyBoon(Boon).
+- ge.tbegvadze.toon3d.progression.Boon            — value object: id, name,
+  description, BoonRarity, BoonCategory, and an apply(Player, RunState) hook.
+- ge.tbegvadze.toon3d.progression.BoonPool        — holds all eligible boons;
+  drawThree() with weighting + de-duplication; respects unlocked set.
+- ge.tbegvadze.toon3d.progression.BoonRarity      — enum: COMMON, RARE, EPIC
+  (drives draw weight + card colour).
+- ge.tbegvadze.toon3d.progression.PlayerStats     — strength, vitality, agility,
+  maxHp, dodgeChance, derived modifiers; lives on Player or RunState.
+- ge.tbegvadze.toon3d.screen.LevelUpOverlay        — the CRT card-select UI
+  (render package if it is a renderer rather than a full Screen; reuse the
+  scanline-CRT HUD style).
+- ge.tbegvadze.toon3d.progression.MetaProgress     — persisted-across-runs
+  unlocked-boon ids; loaded at app start, saved on unlock.
+
+MODIFIED CLASSES
+----------------
+- Player.java: holds PlayerStats; maxHp now comes from stats, not a flat
+  constant. currentHp clamped to maxHp.
+- TurnEngine (zombie doc): exposes isIdle()/WAITING_FOR_PLAYER so
+  ProgressionManager only opens the overlay between turns; while the overlay is
+  open, the engine is paused and PlayerController input is suppressed.
+- Enemy (zombie doc): on death, calls ProgressionManager.awardExperience(
+  enemy.xpReward). xpReward field already exists in the zombie stat block.
+- Weapon damage + HazardField damage: read damage modifiers from PlayerStats
+  (strength -> melee/explosion; agility -> accuracy/falloff). Single source of
+  truth for modifiers.
+- Constants.java: PLAYER_STARTING_HP becomes the BASE for VITALITY level 0;
+  add the constants below.
+
+XP CURVE
+--------
+- experienceForNextLevel = XP_BASE + (level - 1) * XP_STEP (linear is plenty
+  for a roguelike run length; flag for tuning). Stored on ProgressionManager,
+  not hardcoded at the call site.
+
+BOON DRAW ALGORITHM (BoonPool.drawThree)
+----------------------------------------
+1. Build the eligible list: all boons whose unlock requirement is met (core
+   stats always; perks gated by MetaProgress) AND not already at max stacks
+   (e.g. a +max-HP heal-to-full could be repeatable; a unique perk taken once
+   is removed from the pool).
+2. Weighted sample without replacement by rarity weight
+   (COMMON:RARE:EPIC = 70:25:5 placeholder). Use a seeded RNG tied to the run
+   seed for reproducibility (procedural-generation pillar).
+3. Guarantee at least one CORE STAT boon among the three (anti-bricking: the
+   player can always pick a safe stat). Re-roll the third slot if all three
+   came up perks.
+4. Pre-allocate the 3-card result array; no per-open allocation in render.
+
+PERSISTENCE (meta layer)
+------------------------
+- MetaProgress serialized to a small file via Gdx.files.local() (JSON or a
+  simple key=value). Contains: set of unlocked boon ids, run count, best depth.
+- Unlock triggers (placeholder): reaching a floor depth for the first time,
+  killing a boss, or completing a run unlocks a specific new perk into the pool.
+- INVARIANT: meta-unlocks add OPTIONS, never flat stats. A fresh install can win.
+
+CONSTANTS ADDITIONS (placeholders — tune in playtest)
+-----------------------------------------------------
+  XP_BASE                       = 20    (XP for level 2; ~4 zombies)
+  XP_STEP                       = 15    (added per level)
+  STRENGTH_DAMAGE_PER_POINT     = 1
+  VITALITY_HP_PER_POINT         = 4
+  VITALITY_LEVELUP_HEAL_TO_FULL = true
+  AGILITY_DODGE_PER_POINT       = 0.04f (4% dodge per point, cap below)
+  AGILITY_DODGE_CAP             = 0.40f
+  BOON_DRAW_COUNT               = 3
+  BOON_WEIGHT_COMMON            = 70
+  BOON_WEIGHT_RARE              = 25
+  BOON_WEIGHT_EPIC              = 5
+  KEY_BOON_SELECT_1             = Input.Keys.NUM_1
+  KEY_BOON_SELECT_2             = Input.Keys.NUM_2
+  KEY_BOON_SELECT_3             = Input.Keys.NUM_3
+
+
+LEVEL / TILE IMPLICATIONS
+=========================
+- NO new tile chars and NO level-format changes. Progression is entirely an
+  entity/UI/state-layer feature; it does not touch the grid.
+- Indirect level-design hook (future, optional): a "Stim Station" terminal tile
+  could let the player bank XP or re-roll a boon for credits, fitting the
+  Doom RPG terminal-shop fantasy — but that is a separate doc; v1 needs no map
+  changes at all.
+- Pacing hook (pillar 8): boss/climax rooms can grant a guaranteed level-up or
+  an EPIC-only choice as the floor's reward — handled by ProgressionManager
+  flags, still no tile changes.
+
+
+VISUAL DESIGN
+=============
+- XP BAR: thin segmented bar on the marine-vitals HUD (reuse scanline-CRT HUD
+  style), fills toward the next level; a brief glow + tick sound on each kill.
+- LEVEL-UP OVERLAY: dims the 3D view, draws three vertical "datapad" cards
+  centered on screen. CRT scanlines, cyan terminal font, a low UAC "stim
+  authorized" hum. Card border colour = rarity (white COMMON, blue RARE, gold
+  EPIC). Selected card flashes and the others fade out.
+- Each card: pixel icon (dumbbell = Strength, cross = Vitality, boot = Agility,
+  custom icons for perks), name in caps, one-line effect, rarity tag.
+- VITALITY pick: a green heal-to-full flash over the marine portrait.
+- Keep it readable and snappy — overlay slide-in/out ~0.2s real time; this is a
+  reward beat, not a menu the player dreads.
+
+
+BALANCE NOTES
+=============
+- XP_BASE = 20 with 5 XP/zombie means level 2 at ~4 kills — the first stim comes
+  early so the player learns the system in room 1-2. Flag as primary knob.
+- Heal-to-full on Vitality is deliberately strong: it makes Vitality the
+  "I'm in trouble" pick, creating a real opportunity cost against a tempting
+  offensive perk. Tune by gating it (e.g. heal only every other Vitality pick)
+  if it dominates.
+- AGILITY dodge is capped (0.40) so the player can never become un-hittable —
+  preserves enemy threat and the meaningful-death pillar.
+- Perk stacking: most perks are unique (one copy). Stat boons repeat. This keeps
+  the pool varied late in a run and prevents a single perk from snowballing.
+- All numbers are placeholders pending playtest; the XP curve and VITALITY_HP
+  per point should be tuned together against enemy damage output.
+
+
+INTERACTIONS
+============
+- ZOMBIE + TURN ENGINE (zombie doc): consumes the existing xpReward; the
+  overlay only opens in WAITING_FOR_PLAYER so it never breaks turn alternation.
+  awardExperience() is called from the same death path that spawns corpses.
+- PUMP-ACTION SHOTGUN (shotgun doc): Strength feeds explosion/melee damage;
+  the "Steady Hands" perk modifies the shotgun's pump-turn cost; Agility could
+  reduce damage falloff. The weapon reads modifiers from PlayerStats.
+- HAZARD CHAIN REACTIONS (hazard doc): the "Pyromaniac" perk halves player FIRE
+  damage and boosts explosion damage — a build that turns the level's barrels
+  into a primary weapon. A big chain kill can dump enough XP to trigger
+  back-to-back level-ups (handled by the pending-queue).
+- KEYCARD DOORS / SECURITY TIERS (keycard doc): future "Scientist/IQ"-style
+  boons could improve hacking minigame success, tying progression to the
+  exploration/lock systems.
+- META-PROGRESSION (pillar 6): unlocking new boons across runs widens build
+  variety without power-creeping the baseline run.
+
+
+OPEN QUESTIONS
+=============
+1. Single stat lines (Doom RPG: pick one of three each level) vs a broader boon
+   pool? Recommendation: hybrid — guarantee one core-stat option, fill the rest
+   from the perk pool. Best of both references (Doom RPG clarity + Hades depth).
+2. Should the overlay cost a turn? Recommendation: NO — it is a meta pause, not
+   a world action; the player's tile/facing are unchanged on resume.
+3. Can the player decline / bank a level-up? Recommendation: no for v1 (forced
+   choice keeps momentum); a future "Stim Station" terminal could add banking.
+4. Re-roll option (spend credits/IQ to redraw the three cards)? Recommendation:
+   defer; great synergy with a future shop/IQ stat but out of scope for v1.
+5. How are perks unlocked into the meta pool exactly? Recommendation: tie to
+   first-time milestones (reach floor N, kill boss X); finalize once floors and
+   bosses exist.
+6. Where do PlayerStats live — on Player or a separate RunState object?
+   Recommendation: a RunState object owned by World, so a clean "new run" wipe
+   is trivial for permadeath. Player references it.

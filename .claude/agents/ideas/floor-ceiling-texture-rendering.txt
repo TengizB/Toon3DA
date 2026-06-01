@@ -1,0 +1,630 @@
+STATUS: IMPLEMENTED
+CATEGORY: Visual
+TITLE: Textured Floor & Ceiling (Lodev floor-casting, Y-up adapted)
+CREATED: 2026-05-26
+---
+
+OVERVIEW
+========
+Replace the two flat-colour rectangles currently drawn for the ceiling and floor
+with real, per-pixel textured surfaces. The renderer will use the classical Lodev
+floor-casting algorithm (cast one HORIZONTAL row of screen pixels at a time,
+compute the world-space tile coordinate of each pixel in that row, sample a
+texture) adapted to this project's Y-up coordinate system. The result transforms
+the corridors from "two-tone Wolfenstein" into "concrete-floored UAC facility"
+in a single render pass — without breaking the existing wall-rendering pipeline,
+the z-buffer, or the 2-draw-call budget of the wall pass.
+
+This is purely a rendering upgrade. No gameplay state changes. No new tile
+chars. The world stays a 2D grid of walls and floor tiles; the floor pass simply
+tiles a single floor texture across all open floor area, and the ceiling pass
+tiles a single ceiling texture across all open ceiling area.
+
+
+GAMEPLAY LOOP
+=============
+This feature has no per-turn gameplay loop — it is a passive rendering effect
+that runs every frame. The relevant loop is the RENDER loop, executed once per
+frame inside WallRenderer.render() BEFORE the wall column loop.
+
+Per frame, WallRenderer:
+
+1. Receives the latest player state (worldX, worldY, dirX, dirY, fov) via
+   setPlayerState(...) as it does today.
+
+2. Builds a Pixmap-backed floor/ceiling framebuffer (described in TECHNICAL
+   NOTES below). This is the "floor & ceiling backdrop".
+
+3. For each screen row in the bottom half of the screen (drawY = 0 .. H/2 - 1),
+   the floor-casting math computes:
+     - the perpendicular distance from the player to the floor strip visible
+       at that row,
+     - the world tile coordinate (floorTileX_left, floorTileY_left) at the
+       leftmost screen column for that row,
+     - the per-column step (floorStepTileX, floorStepTileY) that advances the
+       world tile coordinate as we scan rightward across the row.
+
+4. For each pixel in that row, we sample one texel from the floor texture
+   using `frac(floorTileX) * TEX_W` and `frac(floorTileY) * TEX_H` as the UV.
+
+5. For the ceiling, the screen row drawY' = WORLD_HEIGHT - 1 - drawY (mirror
+   above the horizon) is computed and written using the SAME world tile
+   coordinates as the floor pixel at drawY — because the camera sits at
+   z = 0.5 between a floor at z = 0 and a ceiling at z = 1, the projection
+   is symmetric around the horizon. (We sample a DIFFERENT texture though.)
+
+6. The completed Pixmap is uploaded to a single Texture (or directly drawn
+   via a Pixmap-backed Texture that lives across frames) and rendered as
+   ONE full-screen quad before the wall column loop runs.
+
+7. The 1280 wall columns are then drawn on top of the floor/ceiling backdrop
+   exactly as they are today. Walls visually cover the parts of the floor &
+   ceiling that they should occlude, because they are drawn on top and use the
+   same horizon as their vertical centre.
+
+There is no per-tile state, no animation state, and no input. The floor and
+ceiling are static surfaces that "tile" infinitely; only the player's position
+and direction change what is sampled per frame.
+
+
+PLAYER EXPERIENCE
+=================
+Before: corridors feel sterile and unanchored. Without floor texture, depth
+perception is poor; the player's only reference for "how far have I moved" is
+the changing wall stripes. The ceiling looks like a flat painted board. There
+is no surface continuity across tile boundaries.
+
+After: the player perceives a continuous concrete floor stretching down each
+corridor toward the vanishing point, slowly tiling past their feet as they
+step forward. Faint metal-grate seams in the ceiling pass overhead. When the
+player rotates 90°, the floor and ceiling rotate with the world, reinforcing
+the sense that the camera is anchored to a real space. Distance fog blends
+both surfaces into the wall shading so the corridor visually "closes in" at
+range — the same atmospheric darkening already used for walls.
+
+The decision this creates for the player is implicit, not explicit: the world
+becomes legible. They start noticing floor patterns repeat every tile, which
+means each tile is a discrete distance unit they can count visually as well as
+mechanically. This reinforces the tile-grid identity of the game.
+
+
+TECHNICAL NOTES
+===============
+
+------------------------------------------------------------------------------
+1. THE Y-UP FLOOR-CASTING MATH
+------------------------------------------------------------------------------
+
+Floor casting (Lodev, Y-down convention) projects a screen pixel back into the
+world to find which floor tile it shows. The standard formulas are:
+
+    p           = drawY - SCREEN_HEIGHT / 2           // pixel offset BELOW horizon
+    posZ        = 0.5 * SCREEN_HEIGHT                 // camera Z (constant)
+    rowDistance = posZ / p                            // perp dist to that row
+
+    floorStepTileX = rowDistance * (rayDirRightX - rayDirLeftX) / SCREEN_WIDTH
+    floorStepTileY = rowDistance * (rayDirRightY - rayDirLeftY) / SCREEN_WIDTH
+
+    floorTileX = playerTileX + rowDistance * rayDirLeftX
+    floorTileY = playerTileY + rowDistance * rayDirLeftY
+
+Where rayDirLeft is the ray for the LEFTMOST screen column (cameraParameter
+gives the column at screen edge), and rayDirRight is for the RIGHTMOST column.
+
+==> Y-up adaptation (CRITICAL — this is the difference from Lodev):
+
+In Y-down, "screen row 0" is the top of the screen, the horizon is at H/2,
+and the floor occupies rows H/2+1 .. H-1, i.e. drawY > H/2. So `p` is
+`drawY - H/2`, a POSITIVE value when scanning the floor.
+
+In this project Y-up, "screen row 0" is the BOTTOM of the screen, the horizon
+is still at H/2, and the floor occupies rows 0 .. H/2-1, i.e. drawY < H/2.
+The pixel offset "below the horizon" is therefore:
+
+    pixelOffsetBelowHorizon = (SCREEN_HEIGHT / 2) - drawY        // Y-up form
+
+This is the value to use in place of `p` in Lodev's `rowDistance = posZ / p`.
+It is positive for floor rows (drawY < H/2) and undefined at drawY == H/2.
+
+For the ceiling, in Y-down it occupies drawY < H/2 (above horizon). In Y-up it
+occupies drawY > H/2 (above horizon, since Y increases upward). The pixel
+offset above the horizon is:
+
+    pixelOffsetAboveHorizon = drawY - (SCREEN_HEIGHT / 2)        // Y-up form
+
+By symmetry, pixelOffsetAboveHorizon at row (H/2 + k) equals
+pixelOffsetBelowHorizon at row (H/2 - 1 - k). So we can compute ONE
+rowDistance per offset value, sample BOTH the floor texture at the computed
+tile coordinate AND the ceiling texture at the SAME tile coordinate, and write
+them to two pixels in the framebuffer (one below, one above horizon) in the
+same pass. Half the math, half the pixels touched per logical row.
+
+NOTHING ELSE CHANGES from Lodev. The ray-direction-at-left / ray-direction-
+at-right computation uses the same camera-plane construction WallRenderer
+already uses; the only adapted formula is `cameraPlaneParameter` (which the
+existing GameMath.cameraPlaneParameter() already handles correctly for Y-up).
+
+For the leftmost screen column (column 0), cameraParameter = +1
+(GameMath.cameraPlaneParameter(0, WIDTH) returns 1 - 0 = 1). For the rightmost
+column (column WIDTH-1), cameraParameter ≈ -1. Therefore:
+
+    rayDirLeftX  = directionX + planeX * (+1) = directionX + planeX
+    rayDirLeftY  = directionY + planeY * (+1) = directionY + planeY
+    rayDirRightX = directionX + planeX * (-1) = directionX - planeX
+    rayDirRightY = directionY + planeY * (-1) = directionY - planeY
+
+Note: in Lodev (Y-down) cameraParameter at column 0 is -1, so rayDirLeft uses
+`direction - plane`. In our Y-up project it is +1, so rayDirLeft uses
+`direction + plane`. This is the only place the sign flip is visible in the
+floor-cast setup. The implementing agent MUST be aware of this — it is the
+single most common bug in adapting Lodev to Y-up.
+
+------------------------------------------------------------------------------
+2. PERFORMANCE: PIXMAP-PER-FRAME WITH HALF-RESOLUTION BACKDROP
+------------------------------------------------------------------------------
+
+A naive implementation at 1280x720 with two samples per pixel (floor +
+ceiling) is 1280 * 360 = 460,800 outer iterations, each doing two texel reads
+and two pixel writes — call it ~1M memory operations per frame. On the JVM,
+this is *borderline*: in pure Java with array accesses (not Pixmap.drawPixel
+which has overhead) it runs at 5-15ms per frame. Doable, but tight.
+
+PRIMARY STRATEGY — half-resolution Pixmap, upscaled at draw time:
+
+  - Render the floor & ceiling into a Pixmap of size FLOOR_BACKDROP_WIDTH x
+    FLOOR_BACKDROP_HEIGHT = (WORLD_WIDTH / 2) x (WORLD_HEIGHT / 2) = 640 x 360.
+  - This brings the per-frame workload down to 640 * 180 = 115,200 outer
+    iterations — ~4× cheaper.
+  - When drawing the backdrop to the screen, scale it 2× via SpriteBatch's
+    rect-size parameters. LibGDX uses GL_LINEAR by default for the upscale
+    which softens the texture sample but the wall pass on top of it stays
+    crisp, so the visual hit is minimal and intentionally matches Doom RPG's
+    chunky aesthetic.
+  - For tunable quality vs perf, expose FLOOR_BACKDROP_SCALE_DIVISOR as a
+    Constant: divisor 1 = full-res, 2 = half-res (recommended), 4 = retro.
+
+SECONDARY STRATEGY — direct ByteBuffer/int[] writes (skip Pixmap.drawPixel):
+
+  - Pixmap.drawPixel() has per-call boundary checks and colour packing
+    overhead. For 100k+ pixels per frame this is the bottleneck.
+  - Instead, retrieve the Pixmap's backing ByteBuffer once via
+    pixmap.getPixels() and write 4 bytes (RGBA) per pixel directly. Or
+    pre-allocate a parallel int[] backbuffer and ByteBuffer.asIntBuffer()
+    .put(intArray) once per frame.
+  - Floor and ceiling texture data should be cached as int[][] (one int per
+    texel, ARGB-packed) at load time. This eliminates Pixmap.getPixel() calls
+    inside the inner loop, replacing them with single array reads.
+
+TERTIARY STRATEGY — distance cull:
+
+  - Pixels whose rowDistance exceeds RAY_MAX_LENGTH_CELLS contribute essentially
+    nothing because distance shading multiplies them to near-black. Cap
+    rowDistance at RAY_MAX_LENGTH_CELLS * 1.5 and write the ambient floor/
+    ceiling colour instead of sampling. Removes the cost of texel reads in the
+    far-distance band near the horizon (the band where the math diverges and
+    rowDistance → infinity anyway).
+
+UPLOAD STRATEGY — one Texture.draw() per frame:
+
+  - At Floor/CeilingRenderer construction, allocate ONE GL Texture sized
+    FLOOR_BACKDROP_WIDTH x FLOOR_BACKDROP_HEIGHT, format RGBA8888, filter
+    LINEAR (or NEAREST for hard-pixel retro look).
+  - Each frame, after writing all pixels into the Pixmap, call
+    texture.draw(pixmap, 0, 0) to upload the entire buffer in one GL call.
+  - In WallRenderer.render(), before the wall loop, draw the backdrop:
+        batch.draw(backdropTexture, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    This batches in front of (or in lieu of) the existing 1x1 ceiling/floor
+    rectangles.
+
+TARGET BUDGET — keep the entire 3D pass under 16ms (60 FPS):
+  - Floor + ceiling pass: < 6ms (was effectively 0)
+  - Wall pass: ~3ms (unchanged)
+  - GPU upload: ~1ms (one glTexSubImage2D call)
+  - Headroom: ~6ms for sprites, UI, etc.
+
+If half-res still misses the budget, the implementing agent should fall back
+to FLOOR_BACKDROP_SCALE_DIVISOR = 4 (320x180 internal resolution). At divisor
+4 the entire floor+ceiling pass should be < 2ms on modern hardware.
+
+------------------------------------------------------------------------------
+3. CLASS-LEVEL CHANGES
+------------------------------------------------------------------------------
+
+NEW CLASS: render/FloorCeilingRenderer.java
+  - Implements Renderable + Disposable, same shape as WallRenderer.
+  - Owns:
+      Pixmap backdropPixmap                  // CPU-side framebuffer
+      Texture backdropTexture                // GPU-side upload target
+      Texture floorTexture, ceilingTexture   // source textures
+      int[] floorTexelARGB                   // cached int[] of floor texture
+      int[] ceilingTexelARGB                 // cached int[] of ceiling texture
+      SpriteBatch batch                      // for the final upload-and-draw
+      float playerX, playerY, dirX, dirY, fovRadians, planeScale
+  - Public API:
+      setPlayerState(worldX, worldY, dirX, dirY, fovRadians)
+      render(OrthographicCamera camera)
+      dispose()
+  - Does NOT own the wall texture. Does NOT do DDA. Is invoked BEFORE
+    WallRenderer in World.render().
+
+WHY A SEPARATE CLASS (not in WallRenderer):
+  - Separates two distinct algorithms (camera-plane DDA vs floor casting).
+  - Keeps WallRenderer single-purpose and easy to reason about.
+  - Allows independent enable/disable, resolution tuning, and texture swapping.
+  - The two renderers share NO state beyond what's already passed via
+    setPlayerState — no coupling.
+
+MODIFIED: world/World.java
+  - Construct FloorCeilingRenderer alongside WallRenderer.
+  - In render(), call:
+        floorCeilingRenderer.setPlayerState(...);
+        floorCeilingRenderer.render(camera);     // backdrop
+        wallRenderer.setPlayerState(...);
+        wallRenderer.render(camera);             // walls on top
+  - Dispose FloorCeilingRenderer alongside WallRenderer in dispose().
+
+MODIFIED: render/WallRenderer.java
+  - Remove the two solid-colour ceiling/floor rectangles. They are replaced
+    by the FloorCeilingRenderer backdrop drawn just before walls.
+  - All wall column drawing stays unchanged.
+  - Keep the whitePixelTexture (still useful for the alert tint overlay).
+
+MODIFIED: util/Constants.java
+  Add the following constants (with documentation comments):
+      LAB_FLOOR_TEXTURE_PATH    = "textures/lab/lab_floor_concrete.jpg"
+      LAB_CEILING_TEXTURE_PATH  = "textures/lab/lab_ceiling_panel.jpg"
+      FLOOR_BACKDROP_SCALE_DIVISOR = 2          // 1=full, 2=half (default), 4=retro
+      FLOOR_BACKDROP_WIDTH         = WORLD_WIDTH  / FLOOR_BACKDROP_SCALE_DIVISOR
+      FLOOR_BACKDROP_HEIGHT        = WORLD_HEIGHT / FLOOR_BACKDROP_SCALE_DIVISOR
+      FLOOR_CAMERA_Z               = 0.5f       // unit-cube convention
+      FLOOR_SHADING_FALLOFF        = 0.05f      // same falloff as walls for visual consistency
+      FLOOR_AMBIENT_COLOUR_PACKED  = packed ARGB for far-distance fallback (matches dark concrete)
+      CEILING_AMBIENT_COLOUR_PACKED = packed ARGB for far-distance fallback (matches dark navy panel)
+      FLOOR_MAX_VISIBLE_DISTANCE_CELLS = 15.0f  // beyond this, write ambient colour instead of sampling
+
+MODIFIED: util/GameMath.java
+  Add these pure static methods (all with the standard formula/derivation/
+  edge-cases comment block):
+
+      floorRowDistance(pixelOffsetFromHorizon, screenHeight)
+          // = (screenHeight * FLOOR_CAMERA_Z) / pixelOffsetFromHorizon
+          // Edge cases: pixelOffsetFromHorizon == 0 ⇒ infinite (horizon row);
+          //             caller must skip drawY == H/2 or clamp the divisor.
+
+      floorPixelOffsetBelowHorizon(drawY, screenHeight)
+          // = (screenHeight / 2) - drawY                       // Y-UP form
+          // Edge cases: drawY >= screenHeight/2 ⇒ negative / zero (above horizon).
+
+      floorPixelOffsetAboveHorizon(drawY, screenHeight)
+          // = drawY - (screenHeight / 2)                       // Y-UP form
+          // Edge cases: drawY <= screenHeight/2 ⇒ negative / zero (below horizon).
+
+      floorStepTileComponent(rowDistance, rayDirRightComponent,
+                              rayDirLeftComponent, screenWidth)
+          // = rowDistance * (rayDirRight - rayDirLeft) / screenWidth
+          // Single formula reused for both X and Y components.
+
+      floorOriginTileComponent(playerTileComponent, rowDistance, rayDirLeftComponent)
+          // = playerTile + rowDistance * rayDirLeft
+          // Single formula reused for both X and Y components.
+
+      floorTexelColumn(floorTileX, textureWidth)
+          // = clamp((int)((floorTileX - floor(floorTileX)) * textureWidth), 0, textureWidth - 1)
+          // Edge cases: negative floorTileX (player off-grid) ⇒ Math.floor handles sign.
+
+      floorTexelRow(floorTileY, textureHeight)
+          // = clamp((int)((floorTileY - floor(floorTileY)) * textureHeight), 0, textureHeight - 1)
+          // Same shape as floorTexelColumn.
+
+      floorShade(rowDistance, falloff)
+          // Same shape as wallShade: 1 / (1 + rowDistance² * falloff).
+          // Reuses the existing wallShade formula but with rowDistance instead
+          // of perpWallDistance. May simply delegate to wallShade().
+
+All inner-loop work in FloorCeilingRenderer must call these GameMath methods
+(per project convention) rather than inlining the math.
+
+------------------------------------------------------------------------------
+4. THE INNER LOOP — PSEUDOCODE
+------------------------------------------------------------------------------
+
+This is the spec the implementing agent should follow exactly.
+
+    int screenWidth  = FLOOR_BACKDROP_WIDTH;
+    int screenHeight = FLOOR_BACKDROP_HEIGHT;
+    int horizonRow   = screenHeight / 2;
+
+    float playerTileX = playerX / CELL_SIZE;
+    float playerTileY = playerY / CELL_SIZE;
+
+    planeScale = tan(fovRadians / 2);
+    planeX = -directionY * planeScale;
+    planeY =  directionX * planeScale;
+
+    // Left and right edge ray directions (NOTE: + sign for left, - sign for
+    // right in our Y-up project — opposite of Lodev).
+    float rayDirLeftX  = directionX + planeX;
+    float rayDirLeftY  = directionY + planeY;
+    float rayDirRightX = directionX - planeX;
+    float rayDirRightY = directionY - planeY;
+
+    // Sweep only the BOTTOM HALF of the screen (drawY = 0 .. horizonRow - 1).
+    // For each floor row drawY, we compute its mirror ceiling row at
+    // (screenHeight - 1 - drawY) and write both in the same iteration.
+    for (int drawY = 0; drawY < horizonRow; drawY++) {
+
+        int floorOffset    = GameMath.floorPixelOffsetBelowHorizon(drawY, screenHeight);
+        // The corresponding ceiling row's offset above horizon equals
+        // floorOffset by mirror symmetry, so we don't need a separate call.
+
+        float rowDistance = GameMath.floorRowDistance(floorOffset, screenHeight);
+
+        // Far-distance cull
+        if (rowDistance > FLOOR_MAX_VISIBLE_DISTANCE_CELLS) {
+            // fill row with ambient colours and continue
+            writeRowSolid(drawY, FLOOR_AMBIENT_COLOUR_PACKED);
+            writeRowSolid(screenHeight - 1 - drawY, CEILING_AMBIENT_COLOUR_PACKED);
+            continue;
+        }
+
+        float floorStepTileX = GameMath.floorStepTileComponent(rowDistance,
+                                  rayDirRightX, rayDirLeftX, screenWidth);
+        float floorStepTileY = GameMath.floorStepTileComponent(rowDistance,
+                                  rayDirRightY, rayDirLeftY, screenWidth);
+        float floorTileX     = GameMath.floorOriginTileComponent(playerTileX,
+                                  rowDistance, rayDirLeftX);
+        float floorTileY     = GameMath.floorOriginTileComponent(playerTileY,
+                                  rowDistance, rayDirLeftY);
+
+        float shade = GameMath.floorShade(rowDistance, FLOOR_SHADING_FALLOFF);
+        // pre-multiply shade into an int once per row, then bit-blend per pixel
+
+        int ceilRow = screenHeight - 1 - drawY;
+
+        for (int drawX = 0; drawX < screenWidth; drawX++) {
+            int texelCol = GameMath.floorTexelColumn(floorTileX, floorTextureWidth);
+            int texelRow = GameMath.floorTexelRow   (floorTileY, floorTextureHeight);
+
+            int floorTexelARGB   = floorTexelArrayPacked[texelRow * floorTextureWidth + texelCol];
+            int ceilingTexelARGB = ceilingTexelArrayPacked[
+                                       /* same UV */ texelRow * ceilingTextureWidth + texelCol];
+
+            // apply shade (multiply RGB channels by shade, leave A=255)
+            int floorPixel   = applyShade(floorTexelARGB,   shade);
+            int ceilingPixel = applyShade(ceilingTexelARGB, shade);
+
+            // Write to the int[] backbuffer (Y-up: drawY is the row from the
+            // bottom, so we index as [drawY * screenWidth + drawX]). For the
+            // ceiling we index [ceilRow * screenWidth + drawX].
+            backbuffer[drawY   * screenWidth + drawX] = floorPixel;
+            backbuffer[ceilRow * screenWidth + drawX] = ceilingPixel;
+
+            floorTileX += floorStepTileX;
+            floorTileY += floorStepTileY;
+        }
+    }
+
+    // Upload backbuffer to backdropTexture (one GL call)
+    // Then in render(): batch.begin(); batch.draw(backdropTexture, 0, 0,
+    // WORLD_WIDTH, WORLD_HEIGHT); batch.end();
+
+Note that the ceiling AND floor use the SAME (floorTileX, floorTileY)
+sampling coordinates. This is correct in a Doom RPG / Wolf3D unit-cube world
+where floor at z=0 and ceiling at z=1 are mirror surfaces through the camera
+at z=0.5. The ceiling does NOT need a separate ray-cast — it inherits the
+floor's geometry, and only the texture sample differs.
+
+------------------------------------------------------------------------------
+5. BACKBUFFER STORAGE FORMAT
+------------------------------------------------------------------------------
+
+Use an int[] of length FLOOR_BACKDROP_WIDTH * FLOOR_BACKDROP_HEIGHT, indexed
+[row * width + col]. ARGB-packed in the form 0xRRGGBBAA (matching
+Pixmap.Format.RGBA8888 byte order on little-endian) or 0xAARRGGBB depending
+on platform endianness — the implementing agent must verify by writing one
+known colour and inspecting the rendered result.
+
+Upload to GL Texture via:
+
+    Pixmap pixmap = backdropPixmap;
+    ByteBuffer pixels = pixmap.getPixels();
+    pixels.asIntBuffer().put(backbuffer);
+    pixels.position(0);
+    backdropTexture.draw(pixmap, 0, 0);
+
+Allocate `backbuffer`, `backdropPixmap`, and `backdropTexture` ONCE at
+construction. Never allocate inside render().
+
+
+VISUAL DESIGN
+=============
+
+Aesthetic target: UAC research facility, ground level. Mid-2000s industrial
+sci-fi look (Doom 3 / Doom RPG era). Concrete-and-metal, not Hell-marble.
+
+NEW TEXTURE ASSETS (square JPEGs, 256x256 or 512x512 to match wall set):
+
+  - assets/textures/lab/lab_floor_concrete.jpg
+        Dark gray sealed concrete, very subtle hexagonal joint pattern at
+        the tile centre (one repeat per tile), faint hazard-yellow scuff
+        marks near the edges. Brightness ~25-35% to avoid out-shining walls.
+        Should tile seamlessly: edges must match left↔right and top↔bottom.
+
+  - assets/textures/lab/lab_ceiling_panel.jpg
+        Dark blue-gray suspended ceiling. Square fluorescent fixture in the
+        centre (a flat lit rectangle, slightly bluer/brighter than surrounds).
+        Faint cable-tray seams at the tile edges. Brightness ~20-30%, with
+        the fixture being 60-70% brightness so it reads as a light source.
+
+Both textures palette-match the existing lab_wall_*.jpg set: cool gray-blue
+core, no warm tones, no organic patterns. The ceiling fixture is the only
+"bright" element on either surface — it gives the corridor visible
+"lighting" without any actual lighting engine.
+
+DISTANCE SHADING — must match wallShade() falloff so the corridor closes in
+uniformly. Use the same WALL_SHADING_FALLOFF value (0.05). At the horizon,
+rowDistance → ∞, so the ambient fallback colours kick in and the band right
+at the vanishing point is essentially black — matches Doom's deep-corridor
+look perfectly.
+
+STATIC vs ANIMATED — start static. An animated variant ("ceiling fixture
+flickers occasionally") is an obvious follow-up but introduces per-tile state
+the floor caster currently doesn't have. Park it as an OPEN QUESTION.
+
+ALERT-MODE INTERACTION — the existing emergency-red-alert-pulse effect
+multiplies the ceiling and floor colours by a red tint each frame. With
+textured floors and ceilings, the same multiplication should apply, but now
+operates on the per-pixel sampled colours instead of the solid ambient
+colours. The tint must be applied as a per-pixel multiply during the
+inner-loop write (not as a post-pass overlay), otherwise it doubles up.
+
+PLAYER PERCEPTION — the floor should tile fast enough that one tile step
+clearly translates one repeat of the floor pattern. With 16-world-unit cells
+and a 512-pixel texture, one tile = one full texture repeat, which is the
+right scale: each step is visually "one floor panel".
+
+
+BALANCE NOTES
+=============
+
+There is no gameplay balance to tune. Numbers below are RENDER TUNING values
+and all are tunable.
+
+  FLOOR_BACKDROP_SCALE_DIVISOR = 2
+      Default. Targets ~3ms backdrop pass on a 2018-era mid-range CPU.
+      Bump to 4 if profiling shows > 6ms; drop to 1 for high-end machines if
+      we expose a graphics setting later.
+
+  FLOOR_MAX_VISIBLE_DISTANCE_CELLS = 15.0f
+      One tile beyond the wall ray reach (RAY_MAX_LENGTH_CELLS = 10) plus
+      headroom. Beyond this, ambient colour is written instead of texture
+      samples. Lower this to 12.0 for retro look (visible fog cutoff);
+      raise to 20.0 if max visibility increases.
+
+  FLOOR_SHADING_FALLOFF = 0.05f
+      Identical to WALL_SHADING_FALLOFF for visual coherence. Do not diverge
+      these without a strong reason — the eye instantly detects when the
+      floor "lights" differently from the walls.
+
+  FLOOR_AMBIENT_COLOUR_PACKED   ≈ ARGB(0x14, 0x14, 0x18, 0xFF)   // very dark gray
+  CEILING_AMBIENT_COLOUR_PACKED ≈ ARGB(0x10, 0x10, 0x1C, 0xFF)   // very dark navy
+
+  FLOOR_CAMERA_Z = 0.5f
+      Mathematical constant for the unit-cube projection. DO NOT change
+      unless you also change the wall stripe formula — they share the same
+      camera-at-half-cell-height assumption.
+
+  Texture sizes: 256x256 minimum, 512x512 preferred. Larger gives less
+  per-tile repetition pattern, but quadruples the texel array memory.
+  512x512 RGBA8888 = 1 MB per texture; we have two = 2 MB resident. Fine.
+
+
+INTERACTIONS
+============
+
+1. EMERGENCY RED-ALERT PULSE
+   The existing alert-pulse effect (see emergency-red-alert-pulse.txt,
+   STATUS: IMPLEMENTED) tints the ceiling and floor rectangles with a red
+   wash on a sine wave. With textured surfaces, the SAME tint must be
+   applied as a per-pixel RGB multiply during the floor cast inner loop,
+   not as a post-pass overlay. Concretely: the FloorCeilingRenderer needs a
+   `setAlertTint(redBoost, gbDampen)` method which World wires up each
+   frame, and the inner loop multiplies the sampled texel by those values
+   before writing. The wall pass already does this per-column; the floor
+   pass must mirror that behaviour to keep the whole frame coherent.
+
+2. SPRITES + Z-BUFFER (future)
+   When billboard sprites are added (enemies, items), the existing wall
+   z-buffer (`zBuffer[screenColumn]` = perpWallDistance) is used to clip
+   sprite pixels behind walls. For floor sprites (like blood splatters,
+   item drops sitting on the floor), we would want a *floor depth* per
+   pixel too — but in practice, "floor sprite" billboards have their bottom
+   pixel at the floor and project up like wall stripes, so they still use
+   the wall z-buffer for clipping. NO change to the z-buffer required.
+   The textured floor visually "passes under" sprites by virtue of the
+   sprite being drawn on top after both backdrop and walls.
+
+3. DIFFERENT FLOOR/CEILING TEXTURES PER TILE (future)
+   Currently this design uses ONE global floor texture and ONE global
+   ceiling texture. A future extension could read the floor tile char
+   (e.g. ' ' = concrete, 'b' = blood-stained concrete, 'h' = hellscape
+   floor for corrupted areas) and sample a different texture per tile.
+   To do this, in the inner loop:
+       int floorTileChar = level.getCell((int)floor(floorTileX), (int)floor(floorTileY));
+       int[] textureToUse = selectFloorTexture(floorTileChar);
+   Cost is one Level.getCell() call per pixel — acceptable at half-res
+   (~115k calls per frame, the lookup is an int array index). DO NOT
+   implement this in v1; v1 ships with one floor + one ceiling.
+
+4. PERFORMANCE INTERACTION WITH WALL PASS
+   The wall pass is unchanged. Total per-frame cost is now:
+       - Backdrop pass:  ~3ms  (was 0)
+       - Backdrop draw:  ~1 GL call
+       - Wall pass:      ~3ms  (unchanged)
+       - Wall draw:      1 GL call (batched)
+       - Total GL draws: 3 (was 2)
+   The third draw call comes from inserting the backdrop quad before the
+   wall column batch. This is acceptable. To stay at 2 calls, we could
+   draw the backdrop INSIDE the same SpriteBatch as the walls (just before
+   the column loop), which keeps the count at 2. The implementing agent
+   should attempt this — the backdrop texture and the wall texture are
+   different so a flush happens at the boundary, giving us exactly 2 GL
+   draws still.
+
+5. MINI-MAP
+   No interaction. The mini-map renders 2D top-down with ShapeRenderer
+   and is completely independent of the 3D backdrop. Drawn AFTER the 3D
+   pass, on top.
+
+
+OPEN QUESTIONS
+==============
+
+1. NEAREST vs LINEAR texture filtering on backdropTexture?
+   - NEAREST gives a hard-pixel retro look that visually unifies with the
+     chunky raycasting aesthetic.
+   - LINEAR softens the upscale (when running at half-res) and reads as
+     "smoother surface" but slightly fights the pixel-art identity.
+   The implementing agent should ship NEAREST by default and let the
+   developer A/B test by toggling Texture.setFilter().
+
+2. Should the ceiling fixture actually emit light?
+   Right now, "ceiling fixture is brighter" is purely a texture pattern.
+   A future enhancement could detect bright-ceiling pixels and brighten
+   adjacent floor pixels — fake bloom. Out of scope for v1; flagged as
+   a stretch goal.
+
+3. Animated ceiling flicker — per-tile or global?
+   A "flickering corridor" effect could be:
+     (a) global: multiply ALL ceiling pixels by a 0.85-1.0 random value
+         each frame. Costs nothing extra. Implement first if we want
+         flicker.
+     (b) per-tile: only certain tiles flicker. Requires per-tile state
+         on the Level and a flicker-tile char. More expensive, more
+         atmospheric. Park for a separate idea file.
+
+4. Should the floor cast also write to a depth buffer for future use?
+   If billboard sprites in the future need to clip against floor depth
+   (e.g. a sprite partially submerged in water on a "wet" floor tile),
+   we would need `floorDepth[screenColumn]` for each column. NOT needed
+   for v1 — wall z-buffer suffices.
+
+5. Where exactly does the alert tint multiply happen — in GameMath or
+   inlined in the inner loop?
+   GameMath.applyTintToPackedARGB(packed, redBoost, gbDampen, shade) is
+   the right home for it. But it runs 115k+ times per frame, so we need
+   it to be JIT-friendly: small, branch-free, returning an int. The
+   implementing agent should benchmark with the call in GameMath vs
+   inlined and choose based on numbers. Project convention prefers the
+   GameMath version; only inline if it costs more than 10% of the
+   frame budget.
+
+6. Texture authoring — who creates lab_floor_concrete.jpg and
+   lab_ceiling_panel.jpg?
+   The existing lab wall textures appear authored. The agent
+   implementing this feature should either:
+   (a) request the user to provide the texture JPEGs, or
+   (b) generate placeholder solid-with-noise textures procedurally
+       at runtime (via Pixmap), so the feature can be tested and
+       merged before final art arrives.
+   Path (b) is recommended for the initial implementation pass.

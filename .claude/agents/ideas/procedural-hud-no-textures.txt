@@ -1,0 +1,503 @@
+STATUS: IMPLEMENTED
+CATEGORY: UI
+TITLE: Procedural Vitals HUD — ShapeRenderer + BitmapFont, Zero Textures
+CREATED: 2026-05-29
+---
+
+OVERVIEW
+========
+A bottom-strip heads-up display drawn entirely with LibGDX ShapeRenderer
+primitives and the built-in BitmapFont — no loaded images, no Pixmaps, no
+GLSL shaders. It is the implementable sibling of the texture-heavy
+`scanline-crt-hud-marine-vitals.txt` design: same Doom-RPG game-feel DNA
+(synthetic marine face, segmented red HP / cyan armor bars, glowing phosphor
+readouts, dirty steel chrome) but every pixel is a hardcoded rectangle,
+triangle, ellipse, polyline, or text string. This is the HUD the game can ship
+TODAY. The CRT version remains the future "polish pass" once a texture +
+shader pipeline exists.
+
+The HUD occupies the bottom 130 world units (18%) of the 1280x720 screen as a
+horizontal strip split into three bezelled panels: LEFT (synthetic face +
+compass), CENTER (HP bar, armor bar, status line), RIGHT (big ammo digits +
+weapon name). It is purely an observer of game state and handles no input.
+
+
+GAMEPLAY LOOP
+=============
+The HUD has no input. Its loop is the visual-feedback loop, advanced once per
+render frame (real-time deltaTime for animation, but it never advances the
+turn-based world):
+
+1. World.render() calls HudRenderer.update(deltaTime) then
+   HudRenderer.render(camera) LAST in the frame (after walls, mini-map,
+   player dot).
+2. update(deltaTime):
+   - Lerps each bar's displayedFraction toward the Player's real fraction at
+     HUD_BAR_LERP_RATE per second (smooth glide, not snap).
+   - Advances a free-running animationClockSeconds (wraps at 1000s) used for
+     all pulses/blinks via sine.
+   - Decrements the weapon-name banner timer if active.
+   - Recomputes face state from current health fraction bucket.
+3. render(camera):
+   - Pass A (ShapeRenderer.Filled): backgrounds, bar segments, face fill,
+     glow rectangles, compass highlight box fill.
+   - Pass B (ShapeRenderer.Line): all bevel polylines, dashed dividers,
+     face outline, eyes/mouth strokes, compass tick box.
+   - Pass C (SpriteBatch + BitmapFont): all text (labels, numbers, compass
+     glyphs, weapon name).
+   ShapeRenderer cannot be mixed with SpriteBatch inside one begin/end, so the
+   three passes are strictly ordered: end the ShapeRenderer before begin() on
+   the SpriteBatch.
+4. Reactive behavior driven purely by reading Player state each frame:
+   - HP <= HUD_LOW_HP_THRESHOLD fraction (0.25): HP bar's filled segments and
+     the face both pulse brightness via sine at HUD_PULSE_HZ (4 Hz); face
+     switches to its critical expression.
+   - HP fraction drop between frames (displayedFraction > realFraction):
+     the bar is still gliding down — no extra event needed, the lerp IS the
+     "damage glide."
+   - Weapon/ammo change: detected by comparing cached previous values; on
+     change, set a 0.18s yellow glow timer on the ammo digits.
+
+
+HUD LAYOUT
+==========
+Bottom strip: x = 0..1280, y = 0..130 world units. Origin of every element
+below is given relative to the strip (local y where 0 = HUD bottom edge =
+world y 0; local y 130 = HUD top edge = world y 130).
+
+Three panels separated by dashed perforated dividers:
+  LEFT   : x 0   .. 360   (width 360)
+  CENTER : x 360 .. 920   (width 560)
+  RIGHT  : x 920 .. 1280  (width 360)
+
+  +=============================+===============================+=========================+
+  | LEFT (360w)                 | CENTER (560w)                 | RIGHT (360w)            |
+  |  +------+                   |  HP  [|||||||||||........]  68 |        AMMO             |
+  |  | FACE |   W NW N NE E ... |  AR  [||||||||............]  40 |       0 8               |
+  |  |  ^^  |  [compass row]    |                               |     -------             |
+  |  | ---- |   < N highlighted>|  STATUS: ALERT  T:0142        |   SHOTGUN  / 24         |
+  |  +------+                   |                               |                         |
+  +=============================+===============================+=========================+
+   ^ dashed perforated divider at x=360 and x=920 (column of short vertical dashes)
+
+LEFT PANEL contents:
+  - Synthetic face box: 88x88, local pos (24, 30).
+  - Compass row: 9 glyphs across, baseline at local y 18, spanning x 130..344.
+
+CENTER PANEL contents:
+  - "HP" label + HP segmented bar + numeric value, row centered at local y 86.
+  - "AR" label + armor segmented bar + numeric value, row centered at local y 50.
+  - Status line ("STATUS: <alert>   T:<turn>") at local y 18.
+
+RIGHT PANEL contents:
+  - "AMMO" small label, top, centered at local y 104.
+  - Big current-ammo digits, centered at local y 58.
+  - Thin separator line under digits at local y 40.
+  - Weapon name + "/ maxAmmo" at local y 20.
+
+
+VISUAL DESIGN
+=============
+All colors below are given as hex and as 0..1 RGB floats for Color.set().
+World units == the FitViewport virtual canvas, so all sizes are in those units.
+"Bevel polyline" = a 4-segment rectangle outline drawn in ShapeType.Line; a
+"two-tone bevel" draws a bright top+left edge and a dark bottom+right edge to
+fake a raised metal lip.
+
+PALETTE (hardcode these)
+------------------------
+  STEEL_DARK      #1A1A1F  (0.102, 0.102, 0.122)  panel background
+  STEEL_BLACK     #0E0E12  (0.055, 0.055, 0.071)  deepest recess / behind bars
+  BEVEL_LIGHT     #4A4A55  (0.290, 0.290, 0.333)  top/left raised edge
+  BEVEL_DARK      #08080A  (0.031, 0.031, 0.039)  bottom/right sunken edge
+  PHOSPHOR_GREEN  #00FF88  (0.000, 1.000, 0.533)  primary readout / facing glyph
+  PHOSPHOR_DIM    #00553A  (0.000, 0.333, 0.227)  unlit glyph / shadow of green
+  HP_DARKRED      #5A0E0E  (0.353, 0.055, 0.055)  leftmost HP segment when full
+  HP_RED          #E01818  (0.878, 0.094, 0.094)  mid HP segment
+  HP_ORANGE       #FFB020  (1.000, 0.690, 0.125)  rightmost HP segment
+  HP_EMPTY        #2A0A0A  (0.165, 0.039, 0.039)  unfilled HP segment slot
+  ARM_DEEPCYAN    #0A4A66  (0.039, 0.290, 0.400)  leftmost armor segment
+  ARM_CYAN        #18C0E0  (0.094, 0.753, 0.878)  mid armor segment
+  ARM_WHITE       #D8F8FF  (0.847, 0.973, 1.000)  rightmost armor segment
+  ARM_EMPTY       #0A1A22  (0.039, 0.102, 0.133)  unfilled armor segment slot
+  WARN_YELLOW     #FFE000  (1.000, 0.878, 0.000)  ammo-change glow, alert text
+  ALERT_RED       #FF2A2A  (1.000, 0.165, 0.165)  ALERT state text/pulse
+  LED_GREEN       #30FF60  (0.188, 1.000, 0.376)  corner status LED
+
+PANEL CHROME (drawn once per panel, all three identical recipe)
+---------------------------------------------------------------
+For each panel rectangle (px, py, pw, ph) in local coords:
+  1. Filled STEEL_DARK rectangle fills the whole panel.
+  2. Filled STEEL_BLACK inset rectangle, 6 units inset on all sides
+     (px+6, py+6, pw-12, ph-12) — the recessed "screen well."
+  3. Bevel polyline OUTER (ShapeType.Line) around the full panel:
+       - draw top edge and left edge in BEVEL_LIGHT
+       - draw bottom edge and right edge in BEVEL_DARK
+       (4 separate line() calls, 1 unit thick — for thickness draw the line
+        twice offset by 1 unit, or use rectLine width 2.)
+  4. Bevel polyline INNER around the inset well, colors swapped
+     (top/left BEVEL_DARK, bottom/right BEVEL_LIGHT) so the well reads sunken.
+  5. Corner rivets: 4 filled circles radius 2.5, BEVEL_LIGHT, at each panel
+     corner offset 8,8 inward. Draw a 1-unit BEVEL_DARK ring (Line circle)
+     around each for a screwhead look.
+  6. Status LED: filled circle radius 3 at panel top-right corner offset
+     (-14, -14). Color LED_GREEN normally; ALERT_RED when alert state is ON.
+     LED brightness multiplies by (0.6 + 0.4*sin) at HUD_PULSE_HZ when alert.
+
+PANELS ARE NOT FLUSH: leave a 4-unit gutter between panels so the dashed
+dividers sit in negative space. So LEFT well ends ~x356, divider at 358-362.
+
+PERFORATED DIVIDERS
+-------------------
+At x=360 and x=920, draw a vertical column of dashes: filled rectangles
+2 wide x 5 tall, BEVEL_LIGHT, stacked every 9 units from local y 14 to y 116.
+That is ~12 dashes. Behind them a single 1-wide BEVEL_DARK full-height line at
+the exact divider x for depth.
+
+SYNTHETIC FACE (LEFT panel, box 88x88 at local (24,30))
+-------------------------------------------------------
+A purely geometric "marine helmet face." All coords relative to face box.
+  - Head plate: filled rounded rectangle. ShapeRenderer has no rounded rect,
+    so compose it: one filled rect (8,8,72,72) STEEL_DARK lightened to
+    #2E2E38 (0.180,0.180,0.220), plus 4 filled circles radius 8 at the four
+    inner corners to round them. Outline the silhouette with a BEVEL_LIGHT
+    Line pass (rect + corner arcs approximated by Line circles).
+  - Brow bar: filled rect (16, 56, 56, 6) BEVEL_DARK — a helmet brow shadow.
+  - Eyes: two filled ellipses. ShapeRenderer.ellipse(x,y,w,h). Normal state:
+    each eye 14 wide x 10 tall, PHOSPHOR_GREEN, centers at (30,46) and (58,46).
+    Add a 2-unit STEEL_BLACK pupil dot at eye center for a "glowing optic" read.
+  - Mouth: a horizontal stroke. ShapeType.Line, PHOSPHOR_DIM, from (28,26) to
+    (60,26), 2 units thick.
+  Face REACTS to health fraction (read each frame, hard bucket switch):
+    >= 0.75  PRISTINE  : eyes full ellipses, level; mouth flat line.
+    0.50-0.74 NEUTRAL  : identical to pristine but eyes 1 unit shorter.
+    0.25-0.49 STRAINED : eyes droop — render each eye as a filled ellipse
+                          whose center drops 4 units (to y42) and tilt the
+                          mouth into a shallow frown: draw mouth as 2 line
+                          segments meeting 3 units lower at center
+                          ( (28,28)->(44,25)->(60,28) ).
+    < 0.25   CRITICAL   : eyes become thin slits — draw as filled rects
+                          14x3 instead of ellipses, color shifts to HP_ORANGE;
+                          mouth becomes a gritted-teeth zigzag: a polyline of
+                          5 points alternating y by 2 units across (28..60).
+                          Whole face fill tints toward HP_RED by 35% and
+                          pulses brightness at HUD_PULSE_HZ.
+    Face color tint: multiply the green eye color channels by
+    (0.55 + 0.45 * healthFraction) so eyes literally dim as HP falls.
+
+COMPASS ROW (LEFT panel, glyph row, baseline local y 18, x 130..344)
+--------------------------------------------------------------------
+Nine fixed glyph slots, 24 units apart, representing a window of headings:
+  W  NW  N  NE  E  SE  S  SW  W   (note W at both ends so the strip reads as
+  continuous when facing rotates). Game is 4-directional, so only N/E/S/W are
+  ever "current"; the diagonal glyphs are decorative spatial context.
+  - Each glyph: BitmapFont, scaled ~0.8, color PHOSPHOR_DIM by default.
+  - The slot matching player's current facing is the CENTER slot (index 4)
+    by design when facing N; we scroll the labels so current facing sits at
+    center. Simplest implementation: do NOT scroll — instead always render the
+    fixed 9 labels and HIGHLIGHT whichever fixed slot equals current facing.
+    Facing -> highlighted glyph: directionY>0.5 = N, <-0.5 = S,
+    directionX>0.5 = E, <-0.5 = W. Highlight the FIRST matching fixed slot
+    (N at index 2, E at index 4, S at index 6, W at index 0).
+  - Highlight: draw a PHOSPHOR_GREEN filled box behind that glyph (glyph width
+    +6 by 22 tall) at 25% alpha, then a PHOSPHOR_GREEN Line box around it
+    (full alpha), then redraw that glyph in bright PHOSPHOR_GREEN.
+  - During ROTATION animation (PlayerController lerping), the highlight box
+    can slide between the old and new slot using the same actionProgress; if
+    that coupling is too invasive for v1, just snap the highlight on rotation
+    completion. (See OPEN QUESTIONS.)
+
+HP SEGMENTED BAR (CENTER, row centered local y 86)
+--------------------------------------------------
+  - "HP" label: BitmapFont scale 0.9, PHOSPHOR_GREEN, at local (372, 96).
+  - Bar bounds: x 410..690 (width 280), height 18, bottom at local y 78.
+  - 20 segments. Each segment width = (280 - 19*GAP) / 20 where GAP = 2 units;
+    => segment width ~12 units, height 18, 2-unit gap between.
+  - Fill count = round(displayedHealthFraction * 20).
+  - Filled segment color is a LEFT->RIGHT gradient by segment index i (0..19):
+       i in 0..6   : HP_DARKRED
+       i in 7..13  : HP_RED
+       i in 14..19 : HP_ORANGE
+    (So a nearly-full bar ends bright orange on the right; a near-empty bar is
+     only the dark-red left chunk — color itself signals danger.)
+  - Empty segment slot: filled HP_EMPTY rect (always drawn first so gaps read).
+  - Each segment gets a 1-unit BEVEL_DARK Line outline.
+  - Low-HP pulse: when fraction <= 0.25, multiply every filled segment's
+    color by (0.6 + 0.4*sin(animationClock * 2pi * HUD_PULSE_HZ)).
+  - Numeric value: integer health (e.g. "68"), BitmapFont scale 1.0,
+    PHOSPHOR_GREEN, right of the bar at local (700, 94). When fraction<=0.25
+    color = HP_RED.
+
+ARMOR SEGMENTED BAR (CENTER, row centered local y 50)
+-----------------------------------------------------
+  - Identical geometry to HP bar but bottom at local y 42; label "AR".
+  - Filled gradient:
+       i in 0..6   : ARM_DEEPCYAN
+       i in 7..13  : ARM_CYAN
+       i in 14..19 : ARM_WHITE
+  - Empty slot color ARM_EMPTY. No low-armor pulse (armor depleting is less
+    urgent than HP). Numeric value in ARM_CYAN.
+
+STATUS LINE (CENTER, local y 18)
+--------------------------------
+  Single BitmapFont line, scale 0.75, at local (372, 24):
+    "STATUS: " in PHOSPHOR_DIM, then either "NOMINAL" (PHOSPHOR_GREEN) or
+    "ALERT" (ALERT_RED, pulsing brightness at HUD_PULSE_HZ).
+  Then "   T:" + turnCounter (4-digit zero-padded, e.g. "0142") in
+  PHOSPHOR_DIM, right-aligned ending near x 900.
+
+AMMO READOUT (RIGHT panel)
+--------------------------
+  - "AMMO" label: BitmapFont scale 0.7, PHOSPHOR_DIM, centered horizontally in
+    the panel at local y 104.
+  - Big current-ammo digits: BitmapFont scale 2.6, centered, baseline local
+    y 58. Color PHOSPHOR_GREEN. GLOW EFFECT (texture-free): draw the SAME
+    digit string 4 times first in PHOSPHOR_DIM, each offset by +1/-1 unit in
+    X and Y (the 4 cardinal offsets), THEN draw the crisp green string on top.
+    This 4-way dim halo reads as a phosphor bloom with zero textures.
+    On ammo change, the glow color lerps from WARN_YELLOW back to PHOSPHOR_DIM
+    over HUD_AMMO_GLOW_DURATION (0.18s); on empty (ammo==0) the glow halo is
+    HP_RED and the main digits pulse red at HUD_PULSE_HZ.
+  - Separator: filled rect 200 wide x 2 tall, BEVEL_LIGHT, centered, local y 40.
+  - Weapon name + max: BitmapFont scale 0.8, centered, local y 20:
+    weapon name (e.g. "SHOTGUN") in PHOSPHOR_GREEN, then " / 24" max-ammo in
+    PHOSPHOR_DIM.
+  - WEAPON-SWAP BANNER (optional, reuses this slot): on weapon change, the
+    name flashes WARN_YELLOW for 0.3s then settles to green. No separate
+    banner widget needed for v1.
+
+MINI-MAP RELOCATION
+-------------------
+The mini-map currently sits at world (0,0)..(MINI_MAP_WORLD_SIZE=300, 300),
+which the HUD's LEFT panel (y 0..130) would overlap. Move the mini-map to the
+TOP-LEFT corner: anchor its bottom-left at world (8, WORLD_HEIGHT - 8 -
+MINI_MAP_WORLD_SIZE) so its top is 8 units below the screen top. This keeps it
+clear of the bottom HUD strip and the center-screen action. See TECHNICAL
+NOTES for the exact constant change. (Alternative considered & rejected for
+v1: a tiny 96x96 map inside the LEFT panel — too small to read with the face
+sharing the panel.)
+
+
+TECHNICAL NOTES
+===============
+
+NEW PACKAGE
+-----------
+  ge.tbegvadze.toon3d.hud
+    Presentation-only; keeps render/ uncluttered and signals "screen-space UI,
+    not world rendering."
+
+NEW CLASSES
+-----------
+  hud/HudRenderer.java   implements Renderable, Disposable
+    - Owns ONE ShapeRenderer + ONE SpriteBatch + ONE BitmapFont. (Reuse the
+      built-in font: `new BitmapFont()` with no args loads LibGDX's default
+      Arial-ish font — no asset file required. Set font.getData().setScale()
+      per draw, or pre-store scale and reset after.)
+    - Pre-allocates all Color objects (one per palette entry) and one
+      reusable StringBuilder in the constructor. NO allocation in render().
+    - Holds references to Player (for stats) and a HudModel/accessors for
+      ammo, weapon name, turn counter, alert flag (see PLAYER/WORLD changes).
+    - Fields: displayedHealthFraction, displayedArmorFraction (lerp targets),
+      animationClockSeconds, ammoGlowTimerSeconds, weaponBannerTimerSeconds,
+      previousAmmo, previousWeaponName.
+    - update(float deltaTime): advance clock, lerp the two displayed
+      fractions toward real fractions, decrement timers, detect ammo/weapon
+      change vs previous* and arm glow timers.
+    - render(OrthographicCamera): three ordered passes (Filled / Line / text)
+      as in GAMEPLAY LOOP. setProjectionMatrix(camera.combined) on BOTH the
+      ShapeRenderer and SpriteBatch so the HUD draws in world units.
+    - Private draw helpers (all take local coords, add HUD origin internally):
+        drawPanelChrome(px,py,pw,ph)
+        drawDashedDivider(x)
+        drawSegmentedBar(x,y,fraction, isHealth)  // picks gradient palette
+        drawFace(boxX,boxY,healthFraction)
+        drawCompass(facingDirectionX, facingDirectionY, rotationProgress)
+        drawAmmo(current,max,weaponName,glowColor)
+        drawStatusLine(turnCounter, alertActive)
+      Filled-pass helpers and Line-pass helpers must be split or internally
+      flush via begin/end transitions; cleanest is to make each helper push to
+      the currently-active pass and have render() call them grouped by pass.
+
+  hud/GameMathHud is NOT needed — but ADD these pure helpers to util/GameMath:
+    - segmentFillCount(fraction, segmentCount) -> int (round, clamp 0..count)
+    - pulseMultiplier(clockSeconds, hertz, minMul, maxMul) -> float
+        // returns minMul + (maxMul-minMul)*0.5*(1+sin(2*PI*hertz*clock))
+    - appendIntPadded(StringBuilder, value, minDigits)  // zero-pad, no boxing
+    Each with the mandatory Formula/Derivation/Edge-cases comment block.
+
+PLAYER.JAVA CHANGES
+-------------------
+  Player already has: health, maxHealth, applyDamage(int), getHealth(),
+  getMaxHealth(). ADD:
+    private int armor;
+    private final int maxArmor;          // init from Constants.PLAYER_MAX_ARMOR
+    public int getArmor();  public int getMaxArmor();
+    public void applyArmor(int amount);   // clamp 0..maxArmor
+    public float getHealthFraction() { return maxHealth==0?0:(float)health/maxHealth; }
+    public float getArmorFraction()  { return maxArmor==0?0:(float)armor/maxArmor; }
+  Do NOT move position/direction logic. The HUD only READS Player.
+  Ammo / weapon name / turn counter / alert flag do NOT live on Player yet
+  (no weapon-instance or turn-engine class exists). For v1, expose them via a
+  tiny holder so the HUD compiles before those systems land:
+    world/HudState.java (or fold into World): mutable fields
+      int currentAmmo, maxAmmo; String weaponName; int turnCounter;
+      boolean alertActive;
+    World seeds placeholder values (e.g. ammo 8/24, "SHOTGUN", turn 0, alert
+    false). When the weapon system (see shotgun-weapon-system.txt) and a turn
+    engine land, they write into this holder instead of the HUD reading them
+    directly. Keeps the HUD decoupled from not-yet-built systems.
+
+WORLD.JAVA CHANGES
+------------------
+  - Instantiate HudRenderer in World's constructor/create, passing Player +
+    HudState. Dispose it in World.dispose().
+  - Render order (HUD LAST so it sits atop the mini-map):
+      1. WallRenderer.render()
+      2. LevelRenderer.render()      (mini-map, now top-left)
+      3. Player.render()             (mini-map dot)
+      4. hudRenderer.update(deltaTime); hudRenderer.render(camera)   <- NEW
+  - World must have access to deltaTime (Gdx.graphics.getDeltaTime()) to feed
+    the HUD update; the 3D pipeline does not currently need it but the HUD
+    does for its animation clock.
+
+CONSTANTS ADDITIONS (util/Constants.java)
+-----------------------------------------
+  // HUD geometry
+  HUD_HEIGHT                 = 130f
+  HUD_LEFT_PANEL_WIDTH       = 360f
+  HUD_RIGHT_PANEL_WIDTH      = 360f
+  HUD_PANEL_GUTTER           = 4f
+  HUD_PANEL_INSET            = 6f
+  HUD_RIVET_RADIUS           = 2.5f
+  HUD_LED_RADIUS             = 3f
+  // Bars
+  HUD_BAR_WIDTH              = 280f
+  HUD_BAR_HEIGHT             = 18f
+  HUD_BAR_SEGMENT_COUNT      = 20
+  HUD_BAR_SEGMENT_GAP        = 2f
+  HUD_BAR_LERP_RATE          = 3.5f   // fraction units/sec toward real value
+  // Face
+  HUD_FACE_BOX_SIZE          = 88f
+  HUD_FACE_BOX_LOCAL_X       = 24f
+  HUD_FACE_BOX_LOCAL_Y       = 30f
+  // Compass
+  HUD_COMPASS_GLYPH_SPACING  = 24f
+  HUD_COMPASS_BASELINE_LOCAL_Y = 18f
+  // Animation
+  HUD_PULSE_HZ               = 4f
+  HUD_LOW_HP_THRESHOLD       = 0.25f
+  HUD_AMMO_GLOW_DURATION     = 0.18f
+  HUD_WEAPON_BANNER_DURATION = 0.30f
+  // Player stats
+  PLAYER_MAX_ARMOR           = 100    // PLAYER_MAX_HEALTH already exists
+  // Mini-map relocation: derive top-left anchor (used by LevelRenderer/Player)
+  MINI_MAP_ORIGIN_X          = 8f
+  MINI_MAP_ORIGIN_Y          = WORLD_HEIGHT - 8f - MINI_MAP_WORLD_SIZE
+  // NOTE: LevelRenderer and Player.render() currently hardcode mini-map at
+  // (0,0)+MINI_MAP_CENTER_*. Refactor them to offset by MINI_MAP_ORIGIN_X/Y
+  // (add the origin to MINI_MAP_CENTER_X/Y at draw time). This is the only
+  // change required to clear the HUD strip.
+
+NO-ALLOCATION COMPLIANCE
+------------------------
+  - Pre-allocate every Color in the constructor; mutate via Color.set() for
+    pulses (do not `new Color()` per frame).
+  - Build all number/text strings into a single reusable StringBuilder cleared
+    with setLength(0); never use Integer.toString()/String concatenation in
+    render() (autoboxing + garbage). font.draw accepts CharSequence, so pass
+    the StringBuilder directly.
+  - ShapeRenderer auto-batches; just avoid begin/end thrash — group all Filled
+    primitives, then all Line primitives.
+
+
+BALANCE & TUNING
+================
+This is information design more than balance, but the readability levers:
+  - SEGMENT COUNT 20: each segment = 5% (5 HP at 100 max). "4 segments left =
+    danger" is the intended at-a-glance read. Don't exceed 20 — segments get
+    too thin to see at 12 units wide.
+  - GRADIENT BANDS: the 7/7/6 split (dark-red/red/orange) is deliberate — the
+    orange "hot" zone only shows when HP is high, so a bright bar = healthy,
+    a dull dark-red stub = near death. This is the opposite of a naive "red =
+    bad" bar and reads faster in peripheral vision. Placeholder; playtest the
+    band boundaries.
+  - HUD_BAR_LERP_RATE 3.5/sec: a full-bar drain glides over ~0.29s. Fast
+    enough to feel responsive, slow enough to register a hit. PLACEHOLDER.
+  - HUD_PULSE_HZ 4: matches a tense heartbeat. Above 6 Hz it strobes
+    uncomfortably; below 2 Hz it reads as "broken," not "urgent." PLACEHOLDER.
+  - HUD_LOW_HP_THRESHOLD 0.25: pulse + red numerics kick in at 25% HP. If max
+    health later scales up, switch this to an absolute "<= 20 HP" check.
+  - AMMO GLOW 0.18s: just long enough to notice the shell count changed
+    without lingering. PLACEHOLDER.
+  - Font scale for big ammo (2.6x default font ~ 38px tall): largest single
+    element on the HUD because ammo is checked most often mid-combat.
+
+
+INTERACTIONS
+============
+MINI-MAP (existing LevelRenderer + Player.render)
+  - Mini-map MOVES to top-left (MINI_MAP_ORIGIN_X/Y). LevelRenderer's three
+    passes and Player's mini-map dot/direction line must all add the new
+    origin offset. After the move there is zero overlap with the HUD strip.
+  - No z-order conflict: HUD renders last but occupies only y 0..130; the
+    relocated map lives near y ~412..712.
+
+WEAPON SYSTEM (shotgun-weapon-system.txt / pump-action-shotgun.txt)
+  - RIGHT panel ammo digits and weapon name read from HudState.currentAmmo /
+    maxAmmo / weaponName. When the shotgun fires (SHOTGUN_CLIP_SIZE=1), the
+    digit drops to 0 and the empty-state red pulse triggers; on reload tick
+    it returns to 1 and the yellow glow fires. The weapon-name yellow flash
+    is the swap banner.
+  - Fire action is one turn (PLAYER_FIRE_DURATION); the HUD's animation clock
+    is real-time, so the muzzle-driven glow continues smoothly even while the
+    turn-based world is paused mid-animation. No conflict.
+
+DOOR SYSTEM (doors.txt / uac-keycard-doors-security-tiers.txt)
+  - This no-texture HUD has NO keycard sockets in v1 (the textured CRT design
+    did; keycards can be added later as 3 small bevelled boxes in the LEFT
+    panel below the compass — reserve local y 0..14 there). "Door locked"
+    feedback for now routes through the STATUS line (briefly show "LOCKED" in
+    WARN_YELLOW for 1.5s). Hook: HudState gets a transient statusOverride
+    string + timer.
+
+ALERT / TURN SYSTEMS (emergency-red-alert-pulse.txt, global-tick-event-system)
+  - HudState.alertActive drives: STATUS line text/color, the corner LEDs
+    (green->red pulsing), and could tint the whole HUD bezel 15% red (future).
+  - HudState.turnCounter drives the "T:0142" readout; the global tick system
+    increments it once per player action. Until that system lands, World can
+    bump it each completed player action.
+
+EXISTING PLAYER HEALTH
+  - Player already tracks health/maxHealth and isDead(). On isDead(), the HUD
+    can go monochrome (multiply all colors by 0.4 + a STEEL tint) and the face
+    switches to an "X-eyes" variant (eyes = two crossed Line strokes, mouth =
+    flat). Lightweight death-state read, no new event bus needed.
+
+
+OPEN QUESTIONS
+==============
+1. Compass scroll vs snap during rotation: smooth-sliding the highlight box
+   using PlayerController.actionProgress requires the HUD to read that
+   in-progress value. Player exposes only final direction. Recommendation:
+   v1 snaps the highlight on rotation completion; expose a
+   getRotationProgress() later if the slide is wanted.
+2. Default BitmapFont quality: the built-in font is low-res and may look soft
+   when scaled to 2.6x for ammo. Acceptable for the "dirty datapad" vibe, but
+   if it reads too blurry, generate a crisp monospace BitmapFont via FreeType
+   (already an optional dependency) — still texture-free from the asset POV.
+3. Should HUD respect the alert bezel tint now or defer? Recommendation:
+   defer; ship LED + STATUS text first, add bezel tint in a polish pass.
+4. Keycard sockets: reserve LEFT-panel local y 0..14 now, or wait for the
+   keycard door system to be implemented? Recommendation: reserve the space
+   in layout comments but draw nothing until keycards exist.
+5. Mini-map opacity after moving to top-left: keep it fully opaque or fade to
+   ~70% so it occludes less of the 3D view? Recommendation: 70% alpha on the
+   background fill only; keep walls/player dot opaque.
+6. ShapeRenderer line thickness: ShapeRenderer Line mode draws 1px lines
+   ignoring scale; for crisp 2-unit bevels under FitViewport scaling, use
+   rectLine(...) or draw filled thin rects instead of line(). Implementer's
+   choice — flag if bevels look too thin at 1080p.
+7. Pixel-snapping: under FitViewport non-integer scaling, text/shapes may land
+   on sub-pixel positions and shimmer. If it matters, round local coords to
+   whole units before drawing. Low priority at this resolution.

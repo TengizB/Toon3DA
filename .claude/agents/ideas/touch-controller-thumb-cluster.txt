@@ -1,0 +1,441 @@
+STATUS: IMPLEMENTED
+CATEGORY: UI
+TITLE: Transparent Touch Controller — Right-Thumb Combat Cluster
+CREATED: 2026-06-01
+---
+
+OVERVIEW
+========
+A semi-transparent on-screen touch controller for the Android landscape build,
+laid out entirely on the RIGHT side of the 1280x720 screen so a player gripping
+the device with both hands controls everything with the right thumb. It maps the
+six existing tile-based actions (forward, back, rotate-left, rotate-right,
+strafe-left, strafe-right) onto a Doom/FPS-flavoured control cluster: a 4-button
+diamond D-pad for move+rotate, plus a vertical twin of "shoulder" strafe pads
+just inboard of it. Every button is drawn with the same procedural ShapeRenderer
+chrome + phosphor palette as the existing HUD (see procedural-hud-no-textures.txt)
+so it reads as part of the marine's datapad, not a generic gamepad overlay.
+
+It belongs here because the game is shipping to Android in landscape and currently
+has only keyboard input (W/S/A/D/Q/E). The control scheme must respect the sacred
+tile grid: a button press is a discrete action request, identical to a keypress —
+it never drives free movement. The whole LEFT half of the screen is intentionally
+left empty for a future left-thumb addition (look-strafe joystick, map button,
+quick-item wheel) and is reserved here so later work does not collide with this.
+
+
+GAMEPLAY LOOP
+=============
+The controller does NOT advance the world itself. It is an input source that
+behaves exactly like the keyboard: it sets a "requested action" that the existing
+PlayerController consumes only when it is IDLE. This preserves the action-lock
+model (all input blocked while an animation plays) with zero changes to the turn
+engine.
+
+Per-frame loop:
+
+1. Touch DOWN inside a button's hit rectangle (in world coordinates, after
+   camera.unproject) -> that button enters PRESSED visual state and registers
+   its TouchAction (FORWARD / BACK / ROTATE_LEFT / ROTATE_RIGHT / STRAFE_LEFT /
+   STRAFE_RIGHT) into a TouchInputState holder.
+2. PlayerController.pollInput() (currently reads Gdx.input.isKeyPressed in
+   priority order) ALSO reads TouchInputState.getHeldAction(). If a touch action
+   is held AND no key is pressed, it is treated identically to the matching key.
+3. PlayerController IDLE -> consumes the held action -> transitions to MOVING or
+   ROTATING -> the world advances exactly one turn. Identical to keyboard today.
+4. While PlayerController is MOVING/ROTATING (action-locked), pollInput() is not
+   called, so further touches are ignored — same as held keys. The button stays
+   visually PRESSED (finger still down) but queues nothing.
+5. Touch UP / finger leaves the button rectangle -> button returns to IDLE
+   visual state, its action is cleared from TouchInputState.
+6. If the finger is STILL held on a button when PlayerController returns to IDLE,
+   the next action fires immediately — this gives "hold to walk" auto-repeat that
+   exactly mirrors holding W on the keyboard. Repeat cadence == animation length
+   (PLAYER_MOVE_DURATION 0.12s), so holding forward steps one tile every 0.12s.
+
+Multi-touch: each button tracks its own pointer id. Holding STRAFE_LEFT with one
+thumb-edge while tapping ROTATE_RIGHT is allowed; priority resolution (below)
+decides which single action the IDLE PlayerController consumes that turn.
+
+ACTION PRIORITY (when more than one button is held, matches existing key order):
+   1 FORWARD   2 BACK   3 ROTATE_LEFT   4 ROTATE_RIGHT   5 STRAFE_LEFT
+   6 STRAFE_RIGHT
+The highest-priority held button wins for that turn. (Confirm against the exact
+order in PlayerController.pollInput — see OPEN QUESTIONS.)
+
+
+PLAYER EXPERIENCE
+=================
+The player feels the same crisp, deliberate, one-tap-one-step rhythm the keyboard
+gives, but with a thumb. The diamond D-pad makes "forward = up, back = down,
+turn = left/right" instantly legible — the universal FPS-on-mobile mental model.
+The strafe pads sit as a separate vertical pair so sidestepping a fireball reads
+as a distinct, intentional act, not an accidental turn. Because every press is a
+discrete tile commitment, the player never fights analog drift; the tension is
+positional and tactical (do I step into the open doorway or strafe behind the
+column?), exactly the Doom RPG feel.
+
+Transparency is a deliberate decision-support choice: the buttons sit over the
+peripheral lower-right of the 3D view, so the player can see a demon in that
+corner THROUGH the controller while their thumb is on it. The centre of the
+screen — where the player aims and reads threats — is never covered.
+
+KEY DECISION THIS CREATES: hand commitment. The right thumb owns movement and
+turning; the design deliberately keeps strafe slightly harder to reach than
+turn (inboard, requires a small thumb stretch) so that ROTATING to face a threat
+is the fast default and STRAFING is the considered, costlier option — reinforcing
+that you fight what you face.
+
+
+CONTROLLER LAYOUT (world coordinates, origin bottom-left, Y-up)
+==============================================================
+All geometry lives in the RIGHT-of-centre, ABOVE-HUD safe zone:
+   Safe X band : 880 .. 1264   (right of the centre weapon gap, 16px screen margin)
+   Safe Y band : 146 .. 574    (above HUD top y=130 with 16px gap; below mini-map)
+The LEFT half (x 0..640) and the screen centre are intentionally EMPTY.
+
+Two clusters. All coordinates are CENTRES unless a rectangle is given.
+
+--- CLUSTER A: DIAMOND D-PAD (move + rotate) ---
+A 4-button diamond, the player's primary thumb home. Diamond centre at
+(1140, 300). Each button is a rounded square, BUTTON_SIZE = 96 x 96, spaced so
+the four are arranged as a plus/diamond with a 12px gap to the dead centre.
+
+   Vertical offset of top/bottom buttons from centre : 92
+   Horizontal offset of left/right buttons from centre: 92
+
+   B_FORWARD  (top)    centre (1140, 392)  rect (1092, 344, 96, 96)  -> FORWARD
+   B_BACK     (bottom) centre (1140, 208)  rect (1092, 160, 96, 96)  -> BACK
+   B_ROT_LEFT (left)   centre (1048, 300)  rect (1000, 252, 96, 96)  -> ROTATE_LEFT
+   B_ROT_RIGHT(right)  centre (1232, 300)  rect (1184, 252, 96, 96)  -> ROTATE_RIGHT
+
+   NOTE: B_ROT_RIGHT right edge = 1232+48 = 1280 = screen edge exactly. If a
+   device safe-inset is desired, shift the whole diamond centre left to (1124,300)
+   (right edge lands at 1264, a 16px margin). RECOMMENDED: use centre (1124,300);
+   the values below the cluster header assume the 16px-margin variant — see the
+   CANONICAL TABLE for the final shipping numbers.
+
+--- CLUSTER B: STRAFE PADS (vertical twin, inboard of the diamond) ---
+Two tall, narrow capsule pads placed to the LEFT of the diamond (inboard, toward
+screen centre) so they fall under the lower joint of the thumb. They are a
+distinct shape (tall capsules, not squares) so they are never confused with the
+diamond by touch alone.
+
+   STRAFE pad size: STRAFE_W = 64, STRAFE_H = 132
+   Column X (left edge) : 904   (centre X 936)
+   B_STRAFE_LEFT  (upper) rect (904, 312, 64, 132)  centre (936, 378) -> STRAFE_LEFT
+   B_STRAFE_RIGHT (lower) rect (904, 164, 64, 132)  centre (936, 230) -> STRAFE_RIGHT
+   16px vertical gap between the two capsules.
+
+These sit at x 904..968, clear of the diamond's left button (left edge ~988 in
+the 16px-margin variant) by ~20px of negative space.
+
+
+CANONICAL TABLE (FINAL shipping pixel values, 16px-margin diamond variant)
+==========================================================================
+Diamond centre = (1124, 300). All rects are (x, y, width, height), world units.
+
+   ID              ACTION        SHAPE         RECT (x, y, w, h)          CENTRE
+   --------------  ------------  ------------  -------------------------  ----------
+   B_FORWARD       FORWARD       rounded sq    (1076, 344, 96, 96)        (1124, 392)
+   B_BACK          BACK          rounded sq    (1076, 160, 96, 96)        (1124, 208)
+   B_ROT_LEFT      ROTATE_LEFT   rounded sq    ( 984, 252, 96, 96)        (1032, 300)
+   B_ROT_RIGHT     ROTATE_RIGHT  rounded sq    (1168, 252, 96, 96)        (1216, 300)
+   B_STRAFE_LEFT   STRAFE_LEFT   tall capsule  ( 904, 312, 64, 132)       ( 936, 378)
+   B_STRAFE_RIGHT  STRAFE_RIGHT  tall capsule  ( 904, 164, 64, 132)       ( 936, 230)
+
+Bounding envelope of all six buttons: x 904 .. 1264, y 160 .. 440.
+   - Right edge 1264 -> 16px margin to screen edge 1280. OK.
+   - Bottom edge 160 -> 30px above HUD top (y=130). OK, no overlap.
+   - Top edge 440 -> well below the relocated top-left mini-map (~y 412..712 sits
+     on the LEFT; the controller is on the RIGHT, no overlap even in Y). OK.
+   - Left edge 904 -> 44px right of the centre weapon-sprite gap (gap ends x=860).
+     The weapon sprite (centred 450..830) is never touched. OK.
+
+
+VISUAL DESIGN
+=============
+Reuse the HUD palette and chrome recipe verbatim so the controller is diegetic
+"datapad glass," not a foreign overlay. All ShapeRenderer; ZERO textures.
+
+PALETTE (from procedural-hud-no-textures.txt; pull from Constants once added)
+   STEEL_DARK   #1A1A1F  button glass fill (drawn at low alpha)
+   BEVEL_LIGHT  #4A4A55  raised top/left rim
+   BEVEL_DARK   #08080A  sunken bottom/right rim
+   PHOSPHOR_GREEN #00FF88 icon glyphs, idle
+   PHOSPHOR_DIM #00553A  icon glyph shadow / disabled
+   WARN_YELLOW  #FFE000  pressed-state flash
+   ALERT_RED    #FF2A2A  reserved (e.g. action-locked feedback, future)
+
+ALPHA / TRANSPARENCY (the core requirement)
+   BUTTON_FILL_ALPHA_IDLE     = 0.22   (glass barely tints the 3D view)
+   BUTTON_FILL_ALPHA_PRESSED  = 0.40   (press darkens/solidifies the glass)
+   BUTTON_RIM_ALPHA           = 0.55   (bevel rim always semi-visible)
+   BUTTON_ICON_ALPHA_IDLE     = 0.70   (phosphor glyph legible but see-through)
+   BUTTON_ICON_ALPHA_PRESSED  = 1.00   (glyph snaps to full bright on touch)
+   The 3D view always shows through; even pressed, fill stays under 50% alpha.
+
+BUTTON BODY (rounded square, the diamond four)
+   - Fill: STEEL_DARK at BUTTON_FILL_ALPHA_IDLE. Rounded corners faked the HUD
+     way: one filled rect inset by the corner radius on each axis, plus 4 filled
+     quarter-disc circles (radius BUTTON_CORNER_RADIUS = 16) at the corners.
+   - Rim: two-tone bevel. Top + left edges drawn in BEVEL_LIGHT, bottom + right
+     in BEVEL_DARK, each as a 3-unit-thick rectLine (ShapeRenderer Line ignores
+     thickness — use rectLine or thin filled rects, per HUD note #6). Rim at
+     BUTTON_RIM_ALPHA.
+   - Pressed: swap the bevel (top/left -> BEVEL_DARK, bottom/right -> BEVEL_LIGHT)
+     so the button reads as physically depressed; raise fill to
+     BUTTON_FILL_ALPHA_PRESSED; tint the rim toward WARN_YELLOW for one frame
+     burst then settle (optional 0.12s glow timer, real-time).
+
+CAPSULE BODY (the two strafe pads)
+   - A stadium/capsule: one filled rect (full width, height minus 2*radius) plus
+     two filled half-circles (radius = STRAFE_W/2 = 32) capping top and bottom.
+     Same fill/rim/alpha rules as the squares.
+
+ICONS (procedural, drawn as filled triangles / arcs — no font glyphs needed)
+   All icons centred in their button, glyph extent ~44px, PHOSPHOR_GREEN.
+   - FORWARD     : solid up-pointing triangle (apex up).
+   - BACK        : solid down-pointing triangle (apex down).
+   - ROTATE_LEFT : a 270deg arc (open on the right) with a small arrowhead
+                   triangle at the arc's tail pointing counter-clockwise. Reads
+                   as "turn", NOT "move left" — critical so players don't expect
+                   strafing from the D-pad sides. (See OPEN QUESTIONS on whether
+                   a curved-arrow vs a chevron reads faster on a 4-dir game.)
+   - ROTATE_RIGHT: mirrored 270deg arc, arrowhead clockwise.
+   - STRAFE_LEFT : a pair of horizontal chevrons pointing LEFT ( << ) — the
+                   double chevron differentiates "slide" from the D-pad's
+                   single-shape turn arc.
+   - STRAFE_RIGHT: a pair of horizontal chevrons pointing RIGHT ( >> ).
+   Icon glow: redraw each glyph 4x at +/-1px cardinal offsets in PHOSPHOR_DIM
+   under the crisp green (the HUD's texture-free bloom trick) so glyphs stay
+   readable against bright wall textures showing through.
+
+ACTION-LOCKED HINT (optional polish)
+   While PlayerController is animating (world busy), dim ALL icon alphas to 0.35
+   and desaturate the green toward PHOSPHOR_DIM. This silently tells the player
+   "input is locked, the turn is resolving" — mirroring the keyboard's ignored
+   keypresses. Re-brighten on return to IDLE.
+
+LABELS: none. Icons only. The datapad has no room for text and the shapes are
+self-evident; adding letters would clutter the transparent glass.
+
+
+TECHNICAL NOTES
+===============
+
+RECOMMENDED APPROACH: raw touch + ShapeRenderer (NOT Scene2D)
+   The project already renders all UI procedurally with ShapeRenderer and reads
+   input via Gdx.input directly (PlayerController.pollInput). Pulling in Scene2D
+   (Stage/Skin/TextButton) would add a parallel UI paradigm, a Skin/atlas
+   dependency, and an input multiplexer, all to draw six rectangles. Stay
+   consistent: draw the buttons with ShapeRenderer in the existing HUD render
+   pass family, and detect touches with manual hit-testing in world coordinates.
+   (If a richer touch UI grows later — drag wheels, menus — revisit Scene2D then.)
+
+NEW PACKAGE
+   ge.tbegvadze.toon3d.input.touch   (subpackage of input/; touch is input)
+   OR keep flat in ...toon3d.input. Recommend the subpackage to group the
+   touch widgets away from PlayerController.
+
+NEW CLASSES
+   input/touch/TouchButton.java
+     - Immutable layout: float rectX, rectY, rectWidth, rectHeight; an enum
+       TouchAction action; an enum Shape { ROUNDED_SQUARE, CAPSULE }.
+     - State: boolean pressed; int pointerId (-1 = none); float pressGlowTimer.
+     - boolean contains(float worldX, float worldY) -> point-in-rect test (for
+       the capsule, the rect test is fine; the rounded corners are cosmetic, the
+       hit area can stay rectangular — slightly forgiving, which is good for thumbs).
+     - render helpers are external (in the renderer) to keep this a data object,
+       OR give it draw(ShapeRenderer) — implementer's choice; keep no-alloc.
+
+   input/touch/TouchAction.java  (enum)
+     FORWARD, BACK, ROTATE_LEFT, ROTATE_RIGHT, STRAFE_LEFT, STRAFE_RIGHT, NONE.
+
+   input/touch/TouchInputState.java
+     - Holds the six TouchButton instances (pre-allocated in constructor).
+     - Implements LibGDX InputProcessor (touchDown/touchUp/touchDragged) OR is
+       polled from an existing InputProcessor. On touchDown: unproject the screen
+       pointer through the world camera, find the first button whose contains()
+       is true, mark it pressed and bind pointerId. On touchUp: clear any button
+       bound to that pointerId. On touchDragged: if the finger leaves a button's
+       rect, release it (and optionally acquire a new one it dragged onto —
+       "slide between buttons", nice-to-have).
+     - public TouchAction getHeldAction(): returns the highest-PRIORITY pressed
+       button's action (see ACTION PRIORITY), or NONE.
+     - Multi-touch: LibGDX gives up to 20 pointers on Android; track pointerId per
+       button so two thumbs / thumb-edges can hold two buttons.
+
+   input/touch/TouchControllerRenderer.java  implements Renderable, Disposable
+     - Owns ONE ShapeRenderer (or borrows the HUD's — see INTERACTIONS). Draws
+       all six buttons in two passes (Filled bodies + icons, then Line bevels) to
+       avoid begin/end thrash. setProjectionMatrix(camera.combined) -> world units.
+     - Pre-allocate all Color objects in the constructor; mutate via Color.set()
+       for press/lock states. NO allocation in render() (Critical Rule).
+     - Enable GL blending for the alpha (Gdx.gl.glEnable(GL20.GL_BLEND)) — the
+       HUD likely already does; coordinate so blend state isn't toggled twice.
+
+PLAYERCONTROLLER CHANGES (minimal, the only logic touch-in point)
+   - Constructor gains a TouchInputState reference (nullable for desktop).
+   - In pollInput(), AFTER the existing key checks (or interleaved at matching
+     priority), consult touchInputState.getHeldAction() and treat it as the
+     equivalent key. Cleanest: compute a single "requestedAction" from EITHER
+     keyboard OR touch using the same priority order, then branch once.
+   - No change to the IDLE/MOVING/ROTATING state machine, no change to action
+     lock, no change to turn advancement. A touch is just another way to set the
+     same request.
+
+WORLD.JAVA CHANGES
+   - Instantiate TouchInputState + TouchControllerRenderer; pass TouchInputState
+     into PlayerController.
+   - Register TouchInputState (or a multiplexer) via Gdx.input.setInputProcessor.
+     If a processor is already set, wrap both in an InputMultiplexer.
+   - Render order: draw TouchControllerRenderer AFTER WallRenderer/PropRenderer/
+     EnemyRenderer/WeaponHudRenderer but it can go before or after HudRenderer;
+     recommend BEFORE HudRenderer so the solid HUD panels always win z-order at
+     the very bottom strip (the controller never overlaps the strip anyway).
+   - Update press-glow timers each frame with deltaTime.
+   - Dispose TouchControllerRenderer in World.dispose().
+
+PLATFORM GATING
+   - Show the controller only on touch devices. Gate on
+     Gdx.app.getType() == ApplicationType.Android (and iOS) OR on
+     Gdx.input.isPeripheralAvailable(Peripheral.MultitouchScreen). On desktop,
+     skip rendering and skip the touch processor so nothing changes for keyboard.
+   - Constant: TOUCH_CONTROLS_ENABLED resolved at startup from the above.
+
+CONSTANTS ADDITIONS (util/Constants.java)
+   TOUCH_BUTTON_SIZE              = 96f
+   TOUCH_BUTTON_CORNER_RADIUS     = 16f
+   TOUCH_DIAMOND_CENTER_X         = 1124f
+   TOUCH_DIAMOND_CENTER_Y         = 300f
+   TOUCH_DIAMOND_ARM_OFFSET       = 92f    // centre-to-button-centre, plus shape
+   TOUCH_STRAFE_WIDTH             = 64f
+   TOUCH_STRAFE_HEIGHT            = 132f
+   TOUCH_STRAFE_LEFT_EDGE_X       = 904f
+   TOUCH_STRAFE_GAP               = 16f
+   TOUCH_FILL_ALPHA_IDLE          = 0.22f
+   TOUCH_FILL_ALPHA_PRESSED       = 0.40f
+   TOUCH_RIM_ALPHA                = 0.55f
+   TOUCH_ICON_ALPHA_IDLE          = 0.70f
+   TOUCH_ICON_ALPHA_PRESSED       = 1.00f
+   TOUCH_ICON_ALPHA_LOCKED        = 0.35f
+   TOUCH_PRESS_GLOW_DURATION      = 0.12f
+   TOUCH_ICON_EXTENT              = 44f
+   // Safe-zone reference (asserts, not drawn): controller envelope
+   // x 904..1264, y 160..440.
+
+NO-ALLOCATION COMPLIANCE
+   - All six TouchButton + all Color instances built in constructors.
+   - Hit-testing uses primitive float math, no Vector2 allocation per touch
+     (reuse one Vector3 for unproject, stored as a field).
+   - Icon geometry (triangle vertices, arc points) computed once into pre-sized
+     float[] arrays in the constructor where possible; arcs can be drawn with
+     ShapeRenderer.arc() which is allocation-free.
+
+
+BALANCE NOTES
+=============
+This is ergonomics tuning, not combat balance. Levers (all PLACEHOLDER, playtest
+on a real 6"-6.7" landscape phone):
+   - BUTTON_SIZE 96 world units. On a 1280x720 virtual canvas FitViewport-scaled
+     to a ~6.5" phone (~150mm wide), 96 units ~= 11mm. The accepted minimum
+     comfortable touch target is ~9mm (Material) / ~7mm (Apple); 11mm gives a
+     forgiving thumb target. Do NOT drop below ~80 units.
+   - DIAMOND_ARM_OFFSET 92: buttons nearly touch at the diamond centre (12px
+     dead zone) so the thumb can roll between forward/turn without lifting —
+     a deliberate "rocker" feel. If players mis-hit, widen the dead zone.
+   - STRAFE pads inboard + narrower (64 wide vs 96) is INTENTIONAL friction:
+     strafing should feel like a small reach so turning stays the default. If
+     playtest says strafe is too fiddly under pressure, widen to 80 and accept
+     the reduced negative-space gap.
+   - ALPHA_IDLE 0.22 / ICON_IDLE 0.70: tuned so a dark wall behind the glass
+     still shows the green glyph and a bright wall still shows the demon through
+     the glass. If glyphs vanish over bright textures, the 4x dim halo (visual
+     design) is the fix before raising alpha.
+   - Auto-repeat cadence == PLAYER_MOVE_DURATION (0.12s). Holding forward walks
+     ~8 tiles/sec. If that feels too fast for tactical play, the fix is on the
+     movement-duration side, not here — the controller just mirrors the key.
+   - LEFT half (x 0..640) reserved EMPTY: do not place anything there in v1.
+     This is the budget for a future left-thumb feature.
+
+
+INTERACTIONS
+============
+1. PLAYERCONTROLLER / TURN ENGINE (input/PlayerController.java)
+   The controller is a pure alternate input into the EXISTING action-lock state
+   machine. It cannot break turn-based invariants because it only sets a
+   requested action that IDLE consumes; it never moves the player or advances a
+   turn directly. Held-button auto-repeat == held-key auto-repeat. Zero risk to
+   the "one action = one turn" rule.
+
+2. HUD (procedural-hud-no-textures.txt / HudRenderer)
+   Shares the palette, chrome recipe, and texture-free philosophy so they look
+   like one datapad. Spatially disjoint: HUD owns y 0..130, controller owns
+   y 160..440 on the right. The controller could BORROW HudRenderer's
+   ShapeRenderer/SpriteBatch to save a GL context object — recommend a shared
+   ShapeRenderer passed in, to keep one blend-state owner. Z-order: HUD strip
+   draws last/on-top; controller never enters the strip so no occlusion fight.
+
+3. WEAPON HUD (WeaponHudRenderer, shotgun/plasma idea files)
+   The weapon sprite occupies the centre gap (x 450..830). The controller's
+   leftmost element (strafe pads at x 904) clears it by 74px. When a FIRE action
+   exists (future 7th button), it should go on the LEFT thumb side or as a tap-
+   anywhere-on-3D-view gesture, NOT crammed into this right cluster — reserve the
+   LEFT half for it. Flag: firing in a 4-dir game = "attack in facing direction",
+   so a single FIRE button (no aim) fits the no-free-aim constraint cleanly.
+
+4. MINI-MAP (LevelRenderer, relocated top-left per the HUD doc)
+   Mini-map sits top-LEFT (~x 8..308, y 412..712); controller sits bottom-RIGHT.
+   No overlap in either axis. A future "expand map" button belongs on the LEFT
+   thumb cluster near the map, not here.
+
+5. ENEMY / THREAT READABILITY (enemy_system.txt, enemy billboards)
+   Transparency is a combat-readability feature: an enemy billboard rendered in
+   the lower-right corner of the 3D view stays partially visible THROUGH the
+   semi-transparent buttons, so the controller never hides a threat the player
+   needs to react to. This is why pressed alpha is capped under 0.50.
+
+6. DOORS / INTERACT (doors.txt, uac-keycard-doors-security-tiers.txt)
+   An "interact / open door" action will need a 7th input. Recommended pattern:
+   make door-open implicit on stepping into a door tile (no button), OR add a
+   single contextual button on the LEFT thumb side that lights up only when a
+   door/terminal is in front of the player. Do NOT add it to this right cluster.
+
+
+OPEN QUESTIONS
+==============
+1. Exact key priority order in PlayerController.pollInput(): this doc assumes
+   FORWARD > BACK > ROT_LEFT > ROT_RIGHT > STRAFE_LEFT > STRAFE_RIGHT. Confirm
+   against the real code and mirror it exactly so touch and keyboard resolve
+   identically when several inputs are held.
+
+2. Rotate icon legibility: does a curved 270deg arrow read as "turn 90 left"
+   faster than a simpler bent-chevron on a tiny transparent button under combat
+   stress? Recommend prototyping both; the arc is more evocative, the chevron is
+   more legible at 44px. Cheap to swap (icon is procedural).
+
+3. Diamond vs. who-controls-strafe: should strafe instead live as the LEFT/RIGHT
+   of the diamond and rotate move to capsules? Current choice puts ROTATE on the
+   diamond (turning is the most-used action in a face-what-you-fight game) and
+   strafe on the secondary capsules. Validate with playtest; the mapping is a
+   one-line change.
+
+4. Left-thumb future cluster: reserve specifics now or stay fully open? This doc
+   reserves x 0..640 empty and names candidates (FIRE, INTERACT, MAP, ITEM).
+   Decide whether FIRE should be a button at all or a tap-on-the-3D-view gesture
+   given there is no free-aim.
+
+5. Drag-to-slide between buttons (lift-free thumb travel from forward to strafe):
+   implement in v1 or defer? It improves feel but complicates pointer tracking.
+   Recommend deferring; ship clean per-button down/up first.
+
+6. Should the controller fade out after N seconds of no touch (auto-hide) to
+   fully clear the 3D view, reappearing on first touch? Nice for screenshots and
+   immersion, but risks the player tapping a hidden control. Recommend OFF for
+   v1; revisit as an options toggle.
+
+7. Device safe-area insets (notches, gesture bars in landscape): the 16px margin
+   here is a virtual-canvas margin, not a hardware safe-area. On notched devices
+   the FitViewport letterboxes, so the virtual margin is usually enough, but
+   verify the right-edge buttons aren't under a gesture bar on tested hardware.

@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "A Java file was just modified. The changed file path is available in the tool input: $ARGUMENTS\n\nExtract the file_path from the JSON input. If the file ends with .java, run the code-reviewer subagent on it. Check for: correctness (logic bugs, off-by-one errors), LibGDX best practices (no render-loop allocations, proper Disposable lifecycle, camera usage), memory safety (every Disposable disposed), math accuracy (angle unit mixing, coordinate system — origin bottom-left Y-up, world 1280×720), constants that should be in Constants.java, and math formulas that should be in GameMath.java. If the file does NOT end with .java, do nothing and exit silently.",
+            "statusMessage": "Running code review on changed Java file...",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

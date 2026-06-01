@@ -1,0 +1,506 @@
+STATUS: IMPLEMENTED
+CATEGORY: Visual
+TITLE: Tile-Based Ambient Lighting for Laboratory
+CREATED: 2026-05-27
+---
+
+OVERVIEW
+========
+A per-tile ambient lighting system for the laboratory environments. Designers
+mark individual floor tiles in the level .txt file as "lit" (ceiling lamp
+above), "unlit" (a darker, broken-light zone), or "flickering" (a busted
+fluorescent that strobes irregularly). At render time the system computes a
+per-tile brightness multiplier — sampled per ray hit for walls, per pixel
+for floor and ceiling — and multiplies it into the existing distance shade.
+No raytracing of light, no per-light radius computation, no shadow volumes:
+the lighting is baked into the tile grid itself, exactly the same way the
+wall texture variants (`x`, `c`, `v`, `t`, `w`) are baked into it.
+
+This system layers cleanly on top of two systems already implemented:
+- Per-column distance shading in WallRenderer (`shade = 1/(1+d²×falloff)`).
+- The floor/ceiling texture pass that samples world-tile coordinates per row.
+- The emergency red-alert global pulse.
+
+The combined effect: a dim, atmospheric UAC corridor whose pools of overhead
+light divide rooms into "safe" stretches and "dark" ambush zones, with the
+occasional flickering ceiling tube hinting that something has gone badly
+wrong with the facility's power. Every laboratory wing gets visual identity
+from where the designer places lit and dark tiles, not from new textures.
+
+
+TILE CHARACTERS
+===============
+Three new floor-tile characters are added to the level file format. They
+remain WALKABLE — Level.isWall() returns false for all three — and they
+behave identically to a plain space `' '` for movement, collision, and
+pathfinding. The only thing they do is set a lighting value on the tile.
+
+| Char | Name        | brightnessMultiplier | Ceiling cue                                |
+|------|-------------|----------------------|--------------------------------------------|
+| ' '  | Floor       | 1.00 (baseline)      | none — ambient ceiling colour              |
+| 'l'  | Lit floor   | 1.55                 | bright square (lamp panel) on the ceiling  |
+| 'u'  | Unlit floor | 0.55                 | unchanged — but darker ambient feel        |
+| 'f'  | Flickering  | animated 0.20 ↔ 1.70 | flickering bright square on the ceiling    |
+
+The chars are mnemonic: l=lit, u=unlit, f=flickering. They sit beside the
+existing `p` (player start) and `d` (door) characters in the level format.
+
+`Level.isWall()` stays the canonical authority on walkability. It returns
+true ONLY for the wall chars (`x`,`c`,`v`,`t`,`w`). The lighting chars are
+treated as floor by every existing system.
+
+A new method `Level.getTileBrightness(tileColumn, tileRow, timeSeconds)` is
+the canonical authority on the per-tile multiplier. It returns 1.0 for
+plain floor and for any out-of-bounds tile (the current behaviour for "no
+tile"), 1.55 for `l`, 0.55 for `u`, and the flicker function value for `f`.
+
+
+GAMEPLAY / VISUAL BEHAVIOUR
+===========================
+What the player sees per frame, walking down a procedurally-generated
+laboratory corridor:
+
+1. The corridor floor has the baseline concrete texture, slightly dim
+   (multiplier 1.0). Walls flanking that stretch are at their normal
+   distance-shaded brightness.
+
+2. Ahead, a square of floor is visibly brighter — that is an `l` tile.
+   A panel of light is painted onto the ceiling directly above it (a
+   1×1 bright square in the ceiling texture pass, NOT a separate sprite).
+   The two wall tiles immediately bordering that lit tile catch the spill
+   and read 30% brighter than the rest of the wall.
+
+3. Further down, a short stretch of `u` tiles makes a "shadow pool" where
+   the floor visibly darkens and the walls dim. The eye reads it as a
+   broken bulb zone — a place a demon could be hiding.
+
+4. One ceiling tile flickers. Two or three times per second it spikes
+   bright then collapses to dark, intermittently illuminating the wall
+   beside it. This is the `f` tile — same logic as `l` but with a
+   time-driven random multiplier.
+
+The lighting NEVER affects gameplay (no stealth bonus, no enemy AI hook —
+those can be added later in a separate idea). It is purely visual identity
+for the level. Roguelike floors that lean "creepy" simply place more `u`
+and `f` tiles; floors that lean "operational" place more `l` tiles.
+
+
+PLAYER EXPERIENCE
+=================
+The corridor stops feeling like a flat-shaded test level and starts feeling
+like a place — a place where the lights are failing. Long unbroken lit
+stretches feel safe; the dark patches feel pregnant with threat. Walking
+from a lit tile into an unlit tile produces a visible step-down in
+brightness; the player can SEE that they have moved into the dark. A
+flickering tile pulls the eye and breaks the monotony of identical lab
+corridors.
+
+Cognitively this asks nothing of the player — there is no UI, no number,
+no rule to learn. It is pure atmospheric feedback. But it changes the
+felt pacing of a floor: the player will instinctively pause, look around,
+and move more carefully through unlit zones, even though there is no
+mechanical reason to do so. That instinct can be exploited later by item
+or enemy placement.
+
+
+TECHNICAL NOTES
+===============
+Affected classes:
+
+- level/Level.java
+    - Update `isWall(char)` if needed — confirm that `l`, `u`, `f` are NOT
+      treated as walls (they fall through to floor-tile behaviour today
+      because isWall only returns true for the explicit wall chars).
+    - Add public method:
+        public float getTileBrightness(int tileColumn, int tileRow,
+                                       float timeSeconds)
+      Returns the brightness multiplier for that tile char. Implementation:
+        char tile = getCell(tileColumn, tileRow); // returns ' ' if oob
+        if (tile == LIT_TILE_CHAR)          return LIT_TILE_BRIGHTNESS;
+        if (tile == UNLIT_TILE_CHAR)        return UNLIT_TILE_BRIGHTNESS;
+        if (tile == FLICKERING_TILE_CHAR)
+            return GameMath.flickerMultiplier(tileColumn, tileRow, timeSeconds);
+        return BASE_TILE_BRIGHTNESS; // 1.0
+    - All four constants and chars live in Constants.java.
+
+- level/LevelLoader.java
+    - No code change required. The loader already accepts arbitrary chars
+      and stores them verbatim. Just make sure no parser rejects `l`/`u`/`f`.
+    - Add the three chars to the legal-char documentation comment if such
+      a comment exists.
+
+- render/WallRenderer.java
+    - Add a `private float lightingTimeSeconds` field, plus a setter
+      `setLightingTime(float timeSeconds)`. World.render() supplies it
+      every frame (same accumulator used by the alert pulse, or a sibling
+      accumulator — see OPEN QUESTIONS).
+    - In the wall column loop, AFTER the DDA hit produces `mapX, mapY`,
+      compute the lit-floor tile that the wall STANDS NEXT TO (the floor
+      tile facing the player, i.e. one step back along the ray normal),
+      and sample its brightness:
+          int floorTileColumn = mapX - stepColumn;     // tile in front of the wall face
+          int floorTileRow    = mapY - stepRow;
+          float wallTileBrightness =
+              level.getTileBrightness(floorTileColumn, floorTileRow,
+                                      lightingTimeSeconds);
+      Apply this multiplier into the column's shade:
+          float finalShade = shade * wallTileBrightness;
+      Then clamp finalShade to [0, MAX_LIGHTING_SHADE] (1.0 by default —
+      see VISUAL DESIGN for the over-1.0 lit case) before setting batch
+      colour.
+    - In the floor & ceiling texture pass, after computing the world tile
+      coordinates of the pixel (`floorTileColumn`, `floorTileRow`),
+      sample the tile brightness exactly the same way and multiply it
+      into the per-pixel shade BEFORE writing to the pixmap row.
+    - For the CEILING pixel above an `l` or `f` tile, additionally swap
+      its base texture sample for a CEILING_LIGHT_PANEL_COLOR (or a small
+      lamp texture if one is added later). This is what produces the
+      visible "ceiling lamp" above a lit tile. The simplest version: if
+      the ceiling-pixel's source tile char is `l` or `f`, multiply the
+      ceiling colour by CEILING_LAMP_BRIGHTNESS_BOOST (e.g. 2.5) and
+      tint slightly warm. This avoids needing a new ceiling texture.
+
+- util/GameMath.java
+    - Add `flickerMultiplier(tileColumn, tileRow, timeSeconds)`:
+      a deterministic pseudo-random oscillator seeded by tile position
+      and sampled at the given time. Specification below in FLICKERING.
+    - Standard Formula/Derivation/Edge-cases comment block as always.
+
+- util/Constants.java
+    - Add:
+        LIT_TILE_CHAR              = 'l'
+        UNLIT_TILE_CHAR            = 'u'
+        FLICKERING_TILE_CHAR       = 'f'
+        BASE_TILE_BRIGHTNESS       = 1.00f
+        LIT_TILE_BRIGHTNESS        = 1.55f
+        UNLIT_TILE_BRIGHTNESS      = 0.55f
+        FLICKER_MIN_BRIGHTNESS     = 0.20f
+        FLICKER_MAX_BRIGHTNESS     = 1.70f
+        FLICKER_NOISE_FREQUENCY    = 7.0f    // base oscillation in Hz
+        FLICKER_FAILURE_THRESHOLD  = 0.35f   // below this, lamp is "off" briefly
+        MAX_LIGHTING_SHADE         = 1.00f   // upper clamp on shade*brightness
+        CEILING_LAMP_BRIGHTNESS_BOOST = 2.5f
+        CEILING_LAMP_TINT          = (1.00f, 0.95f, 0.85f) // warm white panels
+
+Performance:
+- One extra `getCell` lookup per wall column (1280 per frame, O(1) each).
+- One extra `getCell` lookup per floor/ceiling pixel (one per pixel in the
+  bottom + top halves of the screen). The lookup is an array index; the
+  floor pass already converts pixel-to-tile, so we reuse those values
+  with zero extra arithmetic.
+- One float multiply per stripe and per pixel. Negligible.
+- For `f` tiles only: a single `MathUtils.sin()` plus a deterministic hash
+  call per ray that hits a wall NEXT to that tile, and per floor/ceiling
+  pixel inside it. The hash is integer-only, no allocation.
+
+No allocations inside render(). All constants and helper arrays are
+pre-allocated.
+
+
+FLICKERING MECHANIC
+===================
+Flickering is a deterministic per-tile function of position and time. Two
+constraints drive the design:
+- It must be cheap (called every frame, potentially for many tiles).
+- Different `f` tiles must flicker out of phase so a long flickering
+  corridor doesn't pulse in unison.
+
+Function specification (in GameMath.flickerMultiplier):
+
+    long seed = combineHash(tileColumn, tileRow)   // bit-mixed integer hash
+    float phaseOffsetRadians = (seed % 1000) * 0.006283185f   // 0..2π
+    float baseSin = sin(timeSeconds * FLICKER_NOISE_FREQUENCY * 2π
+                        + phaseOffsetRadians)
+    // baseSin ∈ [-1, 1]; map to a "smooth" oscillation in [0, 1]
+    float smoothLevel = (baseSin + 1f) * 0.5f
+    // Add a second, faster oscillation hashed differently for jitter
+    float jitter = sin(timeSeconds * FLICKER_NOISE_FREQUENCY * 5.7f
+                       + (seed >> 8 % 1000) * 0.006283185f)
+    float combined = smoothLevel * 0.7f + (jitter + 1f) * 0.15f
+    // combined ∈ [0, 1]
+    // Threshold: below FLICKER_FAILURE_THRESHOLD the lamp is "off"
+    if (combined < FLICKER_FAILURE_THRESHOLD)
+        return FLICKER_MIN_BRIGHTNESS
+    // Else lerp from min to max across the live range
+    float live = (combined - FLICKER_FAILURE_THRESHOLD)
+                 / (1f - FLICKER_FAILURE_THRESHOLD)
+    return lerp(FLICKER_MIN_BRIGHTNESS, FLICKER_MAX_BRIGHTNESS, live)
+
+Behavioural shape over time:
+- Most frames the tile sits near its bright value (close to 1.7).
+- A few times per second the lamp "drops out" to MIN (0.2) for one or two
+  frames, producing the classic fluorescent flicker.
+- Two `f` tiles placed next to each other will not flicker in sync because
+  of the tile-position hash.
+- All `f` tiles globally have the same average duty cycle, controlled by
+  FLICKER_FAILURE_THRESHOLD. Raising the threshold makes lamps die more
+  often; lowering it makes them flicker only occasionally.
+
+Frequency choice: 7 Hz is intentionally above the 1–3 Hz "stress strobe"
+band but below the 30 Hz danger threshold for photosensitive epilepsy. It
+reads as "unhealthy fluorescent" without being harmful. The jitter term
+prevents it from feeling like a smooth sine.
+
+Determinism: the tile-position hash means the same `f` tile flickers in
+the same pattern across runs (because seeded by position, not random). A
+designer placing a flicker tile in a specific corner will always get the
+same flicker rhythm from that corner. If desired we can later seed with
+the run's random seed to randomise per run — one-line change.
+
+
+LEVEL DESIGN GUIDANCE
+=====================
+For human designers AND for the future procedural generator:
+
+- Light density target: roughly 1 lit tile per 6–10 floor tiles in a
+  "normal" corridor. Less, and the corridor reads as uniformly dim. More,
+  and it loses the pools-of-light feel.
+- Place `l` tiles at decision points (intersections, room centres) so the
+  player's eye is naturally drawn there.
+- Use `u` tiles to telegraph ambush zones: a 2–3 tile patch of `u` in a
+  corridor reads as "something is hunting here." Pair them later with
+  enemy spawn points.
+- Use `f` tiles sparingly: 1–2 per floor is plenty. They are an attention
+  grabber and lose impact in volume. Place them near doorways or above
+  doors for cinematic punch.
+- Adjacent walls catch spill: an `l` tile placed against a `t` (terminal)
+  wall makes the terminal pop visually — a free way to highlight an
+  interactable.
+- For boss rooms: place a ring of `l` tiles around the centre and a few
+  `f` tiles at the edges. The boss is spotlit; the corners hide adds.
+- AVOID placing `l`/`u`/`f` against a door's threshold tile, because the
+  threshold flips between walkable and solid during the open/close
+  animation — the brightness will appear to pop in/out. (This is a
+  cosmetic glitch only, not a bug.)
+
+Example level snippet (8×8 ascii) showing the convention:
+
+    xxxxxxxx
+    x  l   x
+    x      x
+    x u  u x
+    x      x
+    x   f  x
+    x   p  x
+    xxxxxxxx
+
+Here, `l` is the bright spot near the top, `u u` is a creepy shadow band,
+`f` is a busted lamp near the player start.
+
+
+VISUAL DESIGN
+=============
+Per-stripe shade composition (top to bottom, left to right of the pipeline):
+
+    finalShade = clamp(
+        wallShade(perpWallDistance, WALL_SHADING_FALLOFF)   // distance
+        × directionalLightingMultiplier                      // N/S 0.7 multiplier
+        × tileBrightness(adjacentFloorTile, time)            // NEW: lighting
+        , 0, MAX_LIGHTING_SHADE)
+
+Then the alert pulse is layered on TOP of finalShade (per the existing
+emergency-red-alert-pulse design) — meaning the alert pulse tints already-
+shaded pixels. Order: distance → directional → tile lighting → alert tint.
+
+Brightness ceiling: MAX_LIGHTING_SHADE = 1.0 caps how bright a wall can
+get under a lit tile, because SpriteBatch.setColor can't legitimately go
+above 1.0 with a textured draw — values above 1 just clamp silently in
+fixed-function pipelines. For "over-bright" lit zones we instead REDUCE
+the global ambient (multiply ALL non-lit tiles by, say, 0.7) so the lit
+tiles read brighter by contrast. This is a tuning choice; the initial
+implementation can simply cap at 1.0 and accept that "lit" means "full
+brightness, not blown out."
+
+Ceiling lamp panels: above each `l` or `f` tile, the ceiling pixel sample
+is overridden:
+    if (ceilingSourceTile == 'l') {
+        baseCeilingColor *= CEILING_LAMP_BRIGHTNESS_BOOST;
+        baseCeilingColor *= CEILING_LAMP_TINT;
+    }
+    else if (ceilingSourceTile == 'f') {
+        baseCeilingColor *= CEILING_LAMP_BRIGHTNESS_BOOST
+                           * flickerMultiplier(tileColumn, tileRow, time);
+        baseCeilingColor *= CEILING_LAMP_TINT;
+    }
+The result: a clear bright square painted on the ceiling, directly above
+the lit floor tile. From a distance it reads as "a hanging fluorescent
+panel" without needing an actual sprite or geometry.
+
+Colour reference values:
+- Lit ceiling panel: warm white (1.00, 0.95, 0.85) × 2.5 boost = clamped
+  near pure white with a warm tint.
+- Unlit floor: existing concrete colour × 0.55 = noticeably shadowed but
+  still readable.
+- Flickering panel: oscillates 0.2× → 1.7× of the base ceiling colour —
+  visible "lamp going out" effect from across the room.
+
+The mini-map is UNAFFECTED. Lighting is purely a 3D-view effect.
+
+
+BALANCE NOTES
+=============
+All values below are tunable starting points.
+
+| Constant                       | Start  | Rationale                                |
+|--------------------------------|--------|------------------------------------------|
+| LIT_TILE_BRIGHTNESS            | 1.55   | Bright enough to read as "lit" vs floor  |
+| UNLIT_TILE_BRIGHTNESS          | 0.55   | Visibly darker, still navigable          |
+| FLICKER_MIN_BRIGHTNESS         | 0.20   | Lamp "off" — almost black                |
+| FLICKER_MAX_BRIGHTNESS         | 1.70   | Lamp "on" — brighter than steady lit     |
+| FLICKER_NOISE_FREQUENCY        | 7.0 Hz | Sub-strobe, above stress band            |
+| FLICKER_FAILURE_THRESHOLD      | 0.35   | Drop-out roughly 35% of the time         |
+| MAX_LIGHTING_SHADE             | 1.00   | Hard cap to prevent batch overflow       |
+| CEILING_LAMP_BRIGHTNESS_BOOST  | 2.5    | Strong visual cue for ceiling panel      |
+
+If lit tiles do not read brightly enough: lower the global ambient
+distance shading by raising WALL_SHADING_FALLOFF slightly (everything
+gets dimmer; lit tiles stand out more). Avoid raising LIT_TILE_BRIGHTNESS
+past 1.6 — diminishing returns past the 1.0 clamp.
+
+Accessibility: the flicker is well outside the photosensitive-epilepsy
+band, but a future user setting `LIGHTING_FLICKER_ENABLED` can force all
+`f` tiles to render as steady `l` tiles. One-line change in
+Level.getTileBrightness.
+
+
+INTERACTIONS
+============
+1. Distance shading (existing) — lighting multiplier composes by multiplication
+   into the existing per-column shade. Far lit tiles still dim with distance;
+   close lit tiles read brightest. The two systems do not fight.
+
+2. Directional lighting (existing) — the 0.7 multiplier on N/S wall faces is
+   applied FIRST, then the tile lighting multiplier. A lit N/S wall is
+   brighter than an unlit one, but still darker than a lit E/W wall at the
+   same depth. The directional cue survives.
+
+3. Emergency red-alert pulse (implemented, see red-alert idea) — the alert
+   tint is the LAST stage. It applies to the already-lit shade. During the
+   pulse peak, lit tiles glow warmer red; unlit tiles stay murky red. The
+   atmospheric layers stack rather than cancelling.
+
+4. Wall texture variants (`c`, `v`, `t`, `w`) — entirely orthogonal. A
+   terminal wall (`t`) next to a lit tile (`l`) lights up beautifully —
+   the terminal screens read at full brightness. The system encourages
+   designers to use lighting to highlight wall variants instead of needing
+   new textures.
+
+5. Floor & ceiling texturing (implemented) — the existing per-pixel floor/
+   ceiling pass becomes the natural place to apply per-tile brightness.
+   The pixel-to-tile conversion needed for sampling lighting is already
+   computed in the floor-cast math.
+
+6. Doors (implemented) — a door tile (`d`) flipping between solid and
+   walkable does NOT change its lighting (doors don't carry a brightness
+   multiplier). Lit tiles flanking a door spill light onto the door's
+   wall column when it is solid — a free atmospheric touch.
+
+7. Future enemy AI / stealth — `u` tiles are an obvious hook for "enemy
+   ambush spawn here" or "noise propagation reduced here". Not part of
+   THIS design, but the data is already there for any later system to read.
+
+8. Future muzzle flash — a weapon flash overrides the per-column tint
+   briefly to maximum brightness, regardless of the tile underneath. The
+   composition is multiplicative, so a flash setColor(1,1,1,1) just wins.
+
+
+OPEN QUESTIONS
+==============
+1. Should the lighting time accumulator be the SAME float as the
+   alert-pulse time, or a sibling accumulator? Recommendation: ONE
+   `facilityTimeSeconds` float in World, sampled by both systems. Easier
+   reasoning, fewer state owners.
+
+2. Should `u` (unlit) tiles also darken the CEILING above them, or only
+   the floor + adjacent walls? Recommendation: yes, darken the ceiling
+   too — uniform brightness drop on all three surfaces makes the zone
+   read as a coherent "dark patch" instead of "dim floor under a normal
+   ceiling." One extra multiply in the ceiling pass; trivial cost.
+
+3. Should lit-tile spill propagate to ADJACENT non-lit tiles (one-tile
+   bleed)? It would soften the hard edges between lit and unlit floor.
+   Cost: 4 extra getCell calls per pixel/stripe. Recommendation: NOT in
+   v1. Hard edges are a recognisable Doom RPG look (pixelated light
+   pools); soften only if playtesting shows it's distracting.
+
+4. Should flickering be deterministic-per-position (current design) or
+   seeded by the run's seed? Recommendation: position-only for v1. If a
+   future "run signature" feature wants every run's lights to flicker
+   differently, mix run-seed into the hash. One-line change.
+
+5. Should we add a coloured-light variant, e.g. `r` (red emergency lamp),
+   `b` (blue isolation room)? Recommendation: defer. Get the brightness
+   system landed first; coloured-light variants are a one-line add later
+   per char, mapped to a tint vector in Constants.
+
+6. Should the procedural level generator (not yet built) be responsible
+   for SCATTERING `l`/`u`/`f` chars during generation, or should an
+   "ambient lighting pass" run as a separate post-process step that
+   walks the generated grid and decorates floor tiles by rules? Strong
+   recommendation: separate post-process pass. Keeps generator logic
+   focused on layout; lighting becomes its own composable theme module
+   (one for "operational lab", one for "abandoned wing", one for "hell-
+   corrupted ruin"). This unlocks per-floor lighting moods without
+   touching the layout generator.
+
+
+IMPLEMENTATION STEPS
+====================
+Suggested ordering for the implementing agent. Each step is a small,
+independently testable change.
+
+1. Constants & tile chars.
+   - Add the four new lighting constants and three new tile chars to
+     util/Constants.java.
+   - No behaviour change yet.
+
+2. Level support.
+   - In level/Level.java, add `getTileBrightness(tileColumn, tileRow,
+     timeSeconds)`. Initially have it call GameMath.flickerMultiplier
+     even though that method doesn't exist yet — implement the GameMath
+     method next.
+   - Verify Level.isWall() still treats `l`/`u`/`f` as floor (it should,
+     since isWall returns true only for explicit wall chars).
+
+3. Flicker formula.
+   - Add GameMath.flickerMultiplier with the full formula above and the
+     standard derivation comment block. Add GameMath.combineHash helper
+     if not already present (integer bit-mixer for two ints → one long).
+
+4. Wall lighting.
+   - Thread `lightingTimeSeconds` from World into WallRenderer via a
+     setter; World accumulates the float every frame (or reuses the
+     existing alert-pulse accumulator).
+   - Inside the wall column loop, after the DDA hit, compute the
+     adjacent-floor tile and multiply its brightness into shade. Clamp.
+   - Visually verify in a hand-crafted test level that `l`, `u` walls
+     read as expected.
+
+5. Floor lighting.
+   - In the floor texture pass, after computing the world tile for each
+     pixel, multiply the per-pixel shade by getTileBrightness for that
+     tile. Verify floor tile colour changes correctly across boundaries.
+
+6. Ceiling lighting + lamp panel.
+   - In the ceiling pass, do the same brightness multiply.
+   - Additionally, when the source tile is `l` or `f`, swap the base
+     ceiling colour for the brighter "lamp panel" colour (tint × boost).
+   - Verify a visible ceiling panel above every `l` tile from across
+     the corridor.
+
+7. Flickering integration.
+   - Make sure the flicker time path runs through both the wall and the
+     floor/ceiling sampling — a single `f` tile must look consistent on
+     all three surfaces in any given frame.
+
+8. Test level.
+   - Edit a copy of assets/levels/level1.txt to include `l`, `u`, and
+     `f` tiles in a small showcase corridor. Walk through and confirm
+     atmosphere.
+
+9. Update STATUS line in this file to IMPLEMENTED.
+
+10. Optional follow-up (not part of v1): expose a single-key debug
+    toggle that draws each lit tile's center on the mini-map (a small
+    yellow dot for `l`, dark grey for `u`, blinking yellow for `f`).
+    Helps designers see lighting placement at a glance.

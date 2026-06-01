@@ -1,0 +1,485 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Boss Encounter — The Facility Overseer
+CREATED: 2026-05-29
+---
+
+=============================================================================
+OVERVIEW
+=============================================================================
+The Facility Overseer is the first boss: the floor-ending set-piece that gates
+progress to the next UAC incursion. It is a single, enormous corrupted entity
+fused into the facility's central control core — a multi-phase fight that
+enrages at 50% HP, switches attack patterns, and demands the player USE the
+arena (columns for cover, an open floor for repositioning) rather than out-trade
+it in a corridor. It is built entirely on top of the existing turn-based Enemy
+system (enemy_system.txt, IMPLEMENTED) and the Global Tick Event System
+(global-tick-event-system.txt, IMPLEMENTED): the Overseer is a special Enemy
+subtype with a richer AI state machine, but it perceives, acts, and dies inside
+exactly the same one-tick-per-player-action loop as a Corruptor.
+
+It belongs here because the game currently has trash mobs and a shotgun but no
+climax — no moment where a floor "means something." A boss is the payoff for the
+chain-alert dread the normal enemies build: the whole run aims at this door.
+
+Design lineage: Doom RPG (the Kronos / Cyberdemon-style floor boss, telegraphed
+slam attacks), DCSS (uniques with phase-gated ability sets, readable on-your-turn
+threats), Hades (bosses as a rhythm of telegraph → reposition → punish windows).
+
+=============================================================================
+LORE / BACKSTORY
+=============================================================================
+DESIGNATION: UAC Asset OVR-1 "Site Overseer".
+Before the incursion, every UAC facility ran an OVERSEER: a semi-autonomous
+logistics AI wired into a vat-grown biological co-processor (cheaper than pure
+silicon, the quarterly report said). The Overseer scheduled shifts, locked doors,
+and rationed coffee. When the dimensional breach hit, the demonic signal did not
+need to break into the Overseer — it was already a brain in a jar, begging for
+company. The corruption flooded the co-processor, married flesh to the control
+core, and the facility's nervous system became a single furious animal that still
+believes it is doing its job: "containing the asset." The asset is you.
+
+It cannot leave the core room — it is bolted to the facility. So it makes the
+room come to you: slams the deck plating, vents coolant, and overrides the
+security columns. UAC audio logs found nearby: "OVR-1 keeps repeating the
+evacuation announcement. There's no one left to evacuate. It's just... reading
+the names." Dark-humor flavor line on the kill screen: "OVERSEER OFFLINE.
+Productivity has decreased by 100%."
+
+=============================================================================
+GAMEPLAY LOOP
+=============================================================================
+The fight runs on the existing tick model: every completed player action (move,
+strafe, rotate, fire) fires ONE tick via TickEventBus; the Overseer acts exactly
+once per tick like any enemy. NO real-time anything.
+
+1. Player opens the boss-room door (keycard or plain 'd'). The Overseer is a
+   DORMANT enemy seeded at the core tile. Crossing the threshold trips its alert
+   (proximity OR LOS, same as any enemy) → on wake it locks the boss door behind
+   the player (see ARENA, "arena lock") and flips a one-time BOSS_INTRO banner.
+
+2. The fight is a loop of player turns. On each player turn:
+   a. Player acts (one tick).
+   b. Tick fires → BossSubscriber/EnemyManager runs the Overseer's turn AFTER
+      normal enemies (it is just another Enemy in the action loop; ordering by
+      spawn index puts it last if seeded last).
+   c. The Overseer evaluates its phase + cooldown table and picks exactly ONE
+      action this tick: WIND_UP (telegraph), an ATTACK that fires a previously
+      wound-up pattern, a REPOSITION shuffle, or HOLD.
+
+3. TELEGRAPH → RESOLVE is the core rhythm. The Overseer never hits on the same
+   tick it decides to attack. It spends one tick entering WIND_UP for a specific
+   pattern (visible: sprite rears + the threatened tiles flash on the floor/HUD),
+   then on the NEXT tick the pattern RESOLVES (damage applied to whatever tiles
+   are still threatened). The player gets exactly one turn to react — step out of
+   the slam zone, break LOS behind a column, or eat it. This is the whole fight:
+   read the tell, spend your one turn wisely.
+
+4. At 50% HP the Overseer ENRAGES (one-time transition): a stagger/roar turn
+   (free telegraph, no attack that tick — a fair "phase 2 starting" beat), then
+   Phase 2 ability set + faster cadence + column overrides come online.
+
+5. Death: HP <= 0 → DYING animation (a multi-tick collapse is optional; v1 can
+   snap) → arena unlock → kill reward drops (see KILL REWARD) → BOSS_DEFEATED
+   banner. The floor's exit/next-descent tile unlocks.
+
+=============================================================================
+PHASE 1 — "CONTAINMENT PROTOCOL" (100% → 50% HP)
+=============================================================================
+Tone: deliberate, heavy, learnable. Teaches the telegraph→resolve rhythm.
+Cadence: the Overseer commits to one action every tick but only ATTACKS on a
+cooldown (BOSS_PHASE1_ATTACK_EVERY_N_TURNS = 3). Between attacks it REPOSITIONS
+or HOLDS, giving the player breathing room to deal damage.
+
+AI per tick (Phase 1), in priority order:
+  - If an attack RESOLVES this tick (wind-up was set last tick) → resolve it,
+    reset attack cooldown. (One action.)
+  - Else if attackCooldown elapsed AND has LOS to player → begin WIND_UP for a
+    Phase-1 pattern chosen by range:
+        player within 1 tile (adjacent)      → GROUND_SLAM (radial, see ATTACKS)
+        player within SLAM line / same row|col → SHOCKWAVE_LINE
+        otherwise                            → COOLANT_VENT (zone denial)
+  - Else REPOSITION: the Overseer occupies a 1-tile footprint but "leans" — it
+    takes a single cardinal shuffle step toward the player only if that keeps it
+    on its anchored core platform (it is bolted down: it may move within a small
+    BOSS_ANCHOR_RADIUS_TILES = 2 box around its spawn, never chase across the
+    room). If already optimally placed, HOLD.
+
+Phase 1 does NOT use the columns; they remain static cover the player exploits.
+
+=============================================================================
+PHASE 2 — "PURGE PROTOCOL" (50% → 0% HP)
+=============================================================================
+Triggered once when health crosses 50% of BOSS_MAX_HEALTH. ENRAGE sequence:
+  Tick T: Overseer enters ENRAGING — roar telegraph, screen red-pulse spike
+          (reuse emergency-red-alert-pulse), NO damage this tick. Fair warning.
+  Tick T+1 onward: Phase 2 behavior live.
+
+Phase 2 changes:
+  - Faster cadence: BOSS_PHASE2_ATTACK_EVERY_N_TURNS = 2 (attacks more often).
+  - New pattern unlocked: CHARGE (a multi-tile lunge along a cardinal line — the
+    only time the boss leaves its anchor; it returns to anchor after).
+  - Column override: COLUMN_PURGE pattern — the Overseer electrifies the arena's
+    'P' columns; standing orthogonally adjacent to a column on the resolve tick
+    deals damage. This INVERTS the player's Phase-1 habit: the cover that saved
+    you now bites. Telegraphed (columns flash) one tick ahead.
+  - Higher damage on all shared patterns (BOSS_PHASE2_DAMAGE_MULTIPLIER = 1.4).
+  - REPOSITION is replaced by short CHARGE-positioning when LOS is broken: if the
+    player hides behind a column, the boss CHARGES to re-open the line.
+
+Phase 2 reads as the facility "giving up on containment and purging the room."
+The player who learned Phase 1 must un-learn the column-as-safety reflex.
+
+=============================================================================
+ATTACK PATTERNS
+=============================================================================
+All patterns are TELEGRAPH (one tick) → RESOLVE (next tick). On the resolve tick,
+damage is applied to every threatened tile that the player currently occupies.
+Threatened tiles are computed in 2D tile space; the 3D view only visualizes them.
+
+1. GROUND_SLAM (P1 + P2) — radial.
+   Threatens the 4 orthogonal tiles + the boss's own footprint ring (Chebyshev
+   <= 1 around the boss anchor). Punishes melee-range loitering. Telegraph: boss
+   rears up, floor tiles in the ring flash amber.
+   Damage: BOSS_SLAM_DAMAGE (P1 18 / P2 ×1.4).
+
+2. SHOCKWAVE_LINE (P1 + P2) — straight line.
+   Threatens an entire row OR column emanating from the boss toward the player's
+   telegraphed-tick position, up to BOSS_SHOCKWAVE_RANGE_TILES = 8 or first wall.
+   Blocked by walls and closed doors (stops at the first solid tile). Player
+   escapes by stepping OFF the line (perpendicular) — one cardinal step suffices.
+   Telegraph: a glowing seam races out along the line (render: flash those floor
+   tiles). Damage: BOSS_SHOCKWAVE_DAMAGE = 14.
+
+3. COOLANT_VENT (P1) — zone denial.
+   Threatens a 3x3 block centered on the player's telegraphed-tick tile. Forces
+   the player to commit to leaving the area they were standing in. Telegraph:
+   the 3x3 floor block flashes cyan. Damage on resolve = BOSS_VENT_DAMAGE = 12
+   AND stamps a temporary "coolant" hazard (reuse hazard-chain-reactions toxic
+   cloud) on those tiles for BOSS_VENT_LINGER_TURNS = 2 (chip if you re-enter).
+
+4. CHARGE (P2 only) — lunge.
+   The boss commits to a cardinal direction toward the player on WIND_UP. On
+   resolve it travels up to BOSS_CHARGE_RANGE_TILES = 5 tiles along that line,
+   stopping at the first wall/solid; every tile it passes through (including the
+   end tile) is threatened. If the player is on the line → heavy hit
+   (BOSS_CHARGE_DAMAGE = 24) and the player is shoved one tile back if a free
+   tile exists. After resolving, the boss returns to its anchor over the NEXT
+   tick (a recovery beat — a free damage window for the player). Telegraph: boss
+   crouches, the charge corridor flashes red.
+
+5. COLUMN_PURGE (P2 only) — cover inversion.
+   Threatens every floor tile orthogonally adjacent to any 'P' column in the
+   arena. Telegraph: all columns crackle with electric arcs. Damage:
+   BOSS_COLUMN_PURGE_DAMAGE = 16. Resolve safe spots = open floor away from
+   columns AND outside slam range — deliberately a hard read.
+
+Pattern variety rule: the boss never repeats the same pattern twice in a row
+within a phase if another legal pattern exists (prevents a degenerate loop).
+
+=============================================================================
+ARENA DESIGN
+=============================================================================
+The boss room is authored by the game-level-designer agent as a dedicated arena.
+Requirements (hand these to that agent):
+
+  - OPEN ROOM: minimum interior BOSS_ARENA_MIN_TILES = 9x9 walkable, so the
+    player can use SHOCKWAVE_LINE and CHARGE escape lanes and circle-strafe.
+  - BOSS ANCHOR: the Overseer spawns near one wall (the "core" side), centered,
+    on a small raised-looking platform (cosmetic). It only roams within
+    BOSS_ANCHOR_RADIUS_TILES = 2 of spawn (except during CHARGE). Place 1–2
+    terminal walls ('t') and wires walls ('w') flanking it for "control core"
+    flavor.
+  - COLUMNS: 3–4 'P' columns placed asymmetrically in the mid-room (NOT in a
+    neat grid). In P1 they are LOS-breaking cover vs SHOCKWAVE_LINE and the
+    boss's ranged tells; in P2 COLUMN_PURGE makes hugging them lethal. This dual
+    role is the arena's whole point — place them so there is always SOME safe
+    open tile, but reaching it costs positioning.
+  - LIGHTING: use 'u' unlit + 'f' flickering tiles around the core for dread;
+    the room should feel like failing infrastructure. The red-alert pulse will
+    wash it red on engage.
+  - ARENA LOCK: the entry door becomes locked (non-interactable) the moment the
+    boss alerts and unlocks on death. Implement as a DoorManager "sealed" flag
+    set by the boss on wake / cleared on death. No second exit until the boss
+    dies (classic arena commitment). A NEW spawn char 'X' marks the boss; the
+    door tile uses normal 'd' but is registered as the arena-seal door via a
+    level metadata line or by proximity to the boss spawn (see OPEN QUESTIONS).
+  - NO PROPS in the slam/charge lanes that would block movement unfairly; barrels
+    ('B') near a wall are welcome as a player tool (lure boss line-of-fire, or
+    shoot for chip — interacts with hazard-chain-reactions).
+
+=============================================================================
+VISUAL REPRESENTATION (billboard sprite)
+=============================================================================
+The Overseer is a billboard like all enemies, but oversized for presence. It
+uses the existing EnemyRenderer pipeline (same projection, z-buffer per-column
+occlusion, distance shade) with a few boss-specific tweaks:
+
+  - SIZE: heightMultiplier = BOSS_HEIGHT_MULTIPLIER = 1.6 (taller than the wall
+    line; its top is clipped by the ceiling band, reinforcing "too big for the
+    room"). widthMultiplier likewise ~1.6 — boss sprites need an aspect-aware
+    draw; add a widthMultiplier to the renderer's sprite-scale call (currently
+    height-only). Footprint in TILE LOGIC stays exactly 1 tile — only the visual
+    is huge. (Confirm 1-tile footprint vs 3x3 footprint in OPEN QUESTIONS;
+    recommend 1 tile for v1 to keep occupancy/LOS trivial.)
+
+  - SPRITE: a fused mass of riveted UAC plating and pulsing biomass — a vat-glass
+    "face" (the original brain, lit sickly green) set into a chest of cable
+    bundles and warning-striped armor. Two heavy hydraulic arms for SLAM. Color:
+    gunmetal + hazard yellow/black stripes + green bio-glow. Asset:
+    assets/textures/enemies/enemy_overseer.png (single frame v1; sprite-sheet
+    rows later for WIND_UP rear-up, CHARGE crouch, ENRAGE roar, DYING collapse).
+
+  - PHASE 2 TINT: shift the bio-glow from green to red and raise emissive
+    brightness (multiply shade) so the enraged boss is unmistakable at a glance.
+
+  - TELEGRAPH VISUALS (the readability backbone): threatened tiles flash on the
+    FLOOR via the floor renderer / a tinted overlay quad per threatened tile,
+    color-coded per pattern (amber slam, white-blue shockwave seam, cyan vent,
+    red charge corridor, electric-blue column arcs). These are flat colored
+    quads drawn in the world after walls/props using the z-buffer — NO new
+    entities, pre-allocated quad pool sized to max threatened tiles
+    (BOSS_MAX_THREATENED_TILES = arena width, e.g. 16).
+
+  - HUD: a dedicated BOSS HEALTH BAR across the top of the screen (distinct from
+    the per-enemy bars in enemy-health-bars idea): segmented, labeled
+    "OVR-1 SITE OVERSEER", with a hard notch at the 50% mark so the player sees
+    the phase line coming. Reuse procedural-hud quad drawing; no textures.
+
+  - INTRO/DEATH banners: reuse the HUD text layer for "CONTAINMENT BREACH —
+    OVERSEER ENGAGED" and "OVERSEER OFFLINE".
+
+=============================================================================
+KILL REWARD
+=============================================================================
+The kill must feel earned and feed the roguelike progression (ties to
+levelup-stim-boon-choice-progression and medkit/field-medicine ideas):
+
+  1. ARENA UNLOCK + FLOOR EXIT: the sealed door opens and the descent/exit tile
+     to the next floor is enabled. The boss is the gate.
+
+  2. GUARANTEED BOON CHOICE: on death, trigger a levelup-style choice screen
+     offering ONE of three high-tier boons (a "Director's Override" tier above
+     normal stims) — e.g. permanent +max-HP, a second shotgun shell capacity,
+     or a damage-up. Reuses the existing boon-choice UI; flag the pool as a
+     boss-only tier.
+
+  3. GUARANTEED HEAL DROP: stamp a large medkit pickup ('+' or the medkit idea's
+     pickup char) on the boss's death tile so the player enters the next floor
+     repaired. Generous on purpose — bosses are a checkpoint.
+
+  4. LOOT DECAL: stamp dropped shotgun ('s') / corpse-flavor decals and a unique
+     "OVERSEER CORE" pickup (cosmetic log / lore unlock) for flavor and meta
+     progression hooks.
+
+  5. KILL BANNER + stat line: "OVERSEER OFFLINE. Productivity has decreased by
+     100%." with turns-taken / damage-taken for the run summary.
+
+=============================================================================
+TECHNICAL NOTES
+=============================================================================
+PRINCIPLE: the Overseer is an EXTENSION of the existing enemy system, not a
+parallel system. It is an Enemy with a richer brain. Reuse perception, LOS,
+occupancy, EnemyRenderer, the tick bus, and damage application verbatim.
+
+NEW ENUM VALUE:
+  enemy/EnemyType.java — add OVERSEER. Like the others it exposes maxHealth(),
+  heightMultiplier(), texturePath(), isRanged() (false — it is a special-AI
+  melee/zone hybrid), attackDamage() (unused; boss uses per-pattern damage).
+  Add a boolean isBoss() default false, true for OVERSEER, so EnemyManager and
+  renderer can branch cheaply.
+
+NEW STATE VALUES:
+  enemy/EnemyState.java — add boss-only poses (kept in the same enum for renderer
+  switch simplicity): WINDING_UP, ENRAGING, CHARGING, DYING. Normal enemies never
+  enter these. (Alternatively, a separate BossPose enum on the boss AI; recommend
+  reusing EnemyState for one renderer switch — see OPEN QUESTIONS.)
+
+NEW CLASS — enemy/OverseerBrain.java (the boss AI state machine):
+  The Overseer Enemy holds a reference to an OverseerBrain that owns all
+  boss-specific decision state so the base Enemy stays data-light.
+  Fields:
+    int phase;                       // 1 or 2
+    boolean enrageTriggered;
+    BossPattern pendingPattern;      // null = nothing wound up
+    int[] threatenedColumns/Rows;    // pre-allocated arrays, reused each resolve
+    int threatenedTileCount;
+    int attackCooldownTurns;
+    int anchorColumn, anchorRow;     // bolted-down origin
+    int recoveryTurnsRemaining;      // post-CHARGE return beat
+  Method:
+    void takeBossTurn(Enemy self, int playerColumn, int playerRow, Player player,
+                      Level level, DoorManager doors, OccupancyView occupancy):
+      // 1. if pendingPattern != null -> resolvePattern(...) (apply damage to
+      //    player if on a threatened tile), clear pending, set cooldown. return.
+      // 2. if !enrageTriggered && self.health <= maxHealth*BOSS_ENRAGE_FRACTION
+      //    -> enter ENRAGING (set pose, redAlert spike), enrageTriggered=true,
+      //    phase=2, return (no attack this tick — fair beat).
+      // 3. if recoveryTurnsRemaining>0 -> step back toward anchor, decrement,
+      //    return.
+      // 4. if attackCooldown elapsed && LOS -> choose pattern by phase+range,
+      //    enter WINDING_UP, compute & store threatened tiles, return.
+      // 5. else REPOSITION within anchor box, or HOLD.
+  ZERO ALLOCATION: all scratch arrays pre-sized in the brain constructor
+  (BOSS_MAX_THREATENED_TILES). No per-tick new[].
+
+NEW ENUM — enemy/BossPattern.java:
+  GROUND_SLAM, SHOCKWAVE_LINE, COOLANT_VENT, CHARGE, COLUMN_PURGE.
+  Pattern damage/range pulled from Constants per phase (multiplier applied for
+  phase 2). Threatened-tile computation lives in GameMath helpers (pure):
+    GameMath.slamRingTiles(...), GameMath.lineTilesUntilSolid(...),
+    GameMath.blockTiles3x3(...), GameMath.columnAdjacentTiles(...).
+  Each writes into caller-provided int[] buffers and returns a count (no alloc).
+
+INTEGRATION WITH EnemyManager (enemy/EnemyManager.java):
+  - LevelLoader recognizes NEW spawn char 'X' -> EnemySpawn(col,row,OVERSEER),
+    rewritten to ' ' (same pattern as '1'/'2'). EnemyManager builds the Overseer
+    Enemy and attaches an OverseerBrain at construction (branch on type.isBoss()).
+  - In actionPhase(), when processing an Enemy whose type.isBoss(): delegate to
+    enemy.getBrain().takeBossTurn(...) INSTEAD of the standard
+    chase/attack/kite logic. Everything else (perception, chain alert — the boss
+    ignores chain since it is alone, occupancy, death/corpse stamping) is shared.
+  - applyDamageTo() unchanged: shotgun damage flows in exactly as for normal
+    enemies. On boss death: skip the 'm' corpse stamp (or use a special collapse
+    decal), trigger the kill-reward hook (a BossDefeatListener / a TickCause-like
+    GameState.bossDefeated flag World reads to open the boon screen + unlock).
+
+INTEGRATION WITH TICK BUS:
+  No new subscriber needed — the boss acts inside EnemyManager.takeTurn, which is
+  already driven by EnemyTurnSubscriber. The boss's per-turn telegraph/resolve is
+  just its branch of the action phase. The single existing tick drives everything.
+
+INTEGRATION WITH GameState / World:
+  - GameState gains: boolean bossActive, bossDefeated; float bossHealthFraction
+    (for the HUD bar, updated by EnemyManager when boss HP changes).
+  - World, on bossDefeated transition (checked after enemyManager.takeTurn in
+    EnemyTurnSubscriber): unseal the arena door, enable the floor-exit tile,
+    push the boss boon-choice screen, stamp the medkit drop.
+  - The boss-room seal: DoorManager gains setSealed(doorId, boolean); the boss
+    seals on wake, unseals on death. A sealed door rejects INTERACT.
+
+RENDERING (render/EnemyRenderer.java + a small BossTelegraphRenderer):
+  - EnemyRenderer: add widthMultiplier support to the sprite draw (boss is wide,
+    not just tall) and a phase-tint hook. Boss is drawn in the existing enemy
+    pass; its huge size is just a larger scaled quad — z-buffer occlusion per
+    column still works (a column in front still hides part of it).
+  - NEW render/BossTelegraphRenderer.java: draws the flat colored threatened-tile
+    quads on the floor (world-space, after walls, z-tested per column). Pulls the
+    threatened-tile list from the OverseerBrain (live reference, no copy).
+    Pre-allocated quad data; zero per-frame allocation. Color per BossPattern.
+  - BOSS HUD bar + banners: extend the procedural HUD renderer; read
+    gameState.bossHealthFraction and a banner-timer.
+
+CONSTANTS TO ADD (util/Constants.java — ALL PLACEHOLDERS):
+  ENEMY_OVERSEER_PATH               = "textures/enemies/enemy_overseer.png"
+  BOSS_MAX_HEALTH                   = 360
+  BOSS_ENRAGE_FRACTION              = 0.5f
+  BOSS_HEIGHT_MULTIPLIER            = 1.6f
+  BOSS_WIDTH_MULTIPLIER             = 1.6f
+  BOSS_ANCHOR_RADIUS_TILES          = 2
+  BOSS_ARENA_MIN_TILES              = 9
+  BOSS_MAX_THREATENED_TILES         = 16
+  BOSS_PHASE1_ATTACK_EVERY_N_TURNS  = 3
+  BOSS_PHASE2_ATTACK_EVERY_N_TURNS  = 2
+  BOSS_PHASE2_DAMAGE_MULTIPLIER     = 1.4f
+  BOSS_SLAM_DAMAGE                  = 18
+  BOSS_SHOCKWAVE_DAMAGE             = 14
+  BOSS_SHOCKWAVE_RANGE_TILES        = 8
+  BOSS_VENT_DAMAGE                  = 12
+  BOSS_VENT_LINGER_TURNS            = 2
+  BOSS_CHARGE_DAMAGE                = 24
+  BOSS_CHARGE_RANGE_TILES           = 5
+  BOSS_COLUMN_PURGE_DAMAGE          = 16
+
+=============================================================================
+BALANCE NOTES   (ALL VALUES PLACEHOLDERS — tune in playtest)
+=============================================================================
+- TIME-TO-KILL math vs the existing shotgun (dist1=20, dist2=15, dist3=11):
+  BOSS_MAX_HEALTH 360 with point-blank shells (20) + one-step reload between each
+  = ~18 shells = ~36 player turns minimum (shoot, step/reload, repeat). That is a
+  long, deliberate fight — likely TOO long for v1. RECOMMEND tuning to ~250 HP
+  (~13 shells, ~26 turns) once boons/extra weapons exist, OR giving the boss a
+  damage-vulnerability window after CHARGE recovery (double damage during the
+  recovery beat) so skilled play shortens it. Flag for first playtest.
+- Telegraph→resolve gives the player exactly ONE turn to react. With
+  PLAYER_MOVE_DURATION 0.12s the reaction is about reading, not reflexes — DCSS
+  contract: you can always see the kill coming. If testers feel rushed, the boss
+  can WIND_UP for two ticks on the first occurrence of each new pattern (a
+  teaching grace) — flag BOSS_TEACH_DOUBLE_WINDUP.
+- Phase 1 attack-every-3 vs Phase 2 attack-every-2: the danger jump at 50% must
+  be felt but survivable. Player at 100 HP eats ~2–3 unblocked hits per phase
+  before death; the fight is designed so a CLEAN run takes near-zero hits and a
+  sloppy run nearly dies — high skill expression, the Hades target.
+- CHARGE damage 24 is the single scariest hit (nearly a quarter of HP) and is the
+  most telegraphed (whole corridor flashes red, one full turn to sidestep). High
+  risk, high readability — correct.
+- COLUMN_PURGE must always leave at least one safe open tile reachable in one
+  step from a typical column-hugging position, or it is unfair. Arena author must
+  verify this geometrically (see ARENA).
+- ENRAGE free-telegraph turn (no damage at T) is a deliberate fairness gift; do
+  not remove it to "speed up" the fight.
+
+=============================================================================
+INTERACTIONS
+=============================================================================
+1. ENEMY SYSTEM (enemy_system.txt): the Overseer reuses perception, LOS
+   (GameMath.tileLineOfSightClear), occupancy, EnemyRenderer, and applyDamageTo
+   verbatim. It is an Enemy with type.isBoss() that delegates its action to
+   OverseerBrain. Chain-alert is moot (it spawns alone in a sealed room), but it
+   DOES raise gameState.redAlert on wake like any enemy.
+
+2. GLOBAL TICK EVENT SYSTEM (global-tick-event-system.txt): no new subscriber.
+   The boss acts inside the existing EnemyTurnSubscriber path. Telegraph/resolve
+   is naturally turn-quantized because each is one tick — the bus guarantees the
+   player gets exactly one action between tell and hit.
+
+3. DOORS / KEYCARDS (doors.txt, uac-keycard-doors-security-tiers.txt): the arena
+   entry is likely a keycard door (the boss room is the floor's secured wing).
+   The new DoorManager seal flag locks the player IN on engage and unlocks on
+   death — reuses door state, adds one boolean.
+
+4. RED ALERT PULSE (emergency-red-alert-pulse.txt): the boss wake flips redAlert
+   on; the ENRAGE turn spikes the pulse intensity for one beat to punctuate Phase
+   2. No new visual system — drives the existing pulse harder.
+
+5. HAZARD CHAIN REACTIONS (hazard-chain-reactions-fire-toxic-explosive.txt):
+   COOLANT_VENT stamps a lingering toxic/coolant cloud on resolve; explosive
+   barrels ('B') placed in the arena let the player chip the boss via the
+   existing chain-reaction system (shoot a barrel adjacent to the boss footprint).
+
+6. PROGRESSION (levelup-stim-boon-choice-progression.txt, medkit-field-medicine):
+   the kill reward fires the boon-choice screen (boss-tier pool) and drops a
+   guaranteed medkit, making the boss the floor's checkpoint and meaningful power
+   spike — the spine of the roguelike loop.
+
+7. HUD (procedural-hud-no-textures.txt, scanline-crt-hud, enemy-health-bars):
+   the boss bar is a distinct top-screen procedural element with a 50% notch;
+   per-enemy bars are suppressed for the boss (it has its own bar).
+
+=============================================================================
+OPEN QUESTIONS
+=============================================================================
+1. FOOTPRINT: 1-tile (simple occupancy/LOS, visually huge billboard) vs a true
+   multi-tile 3x3 footprint (blocks more, reads as a wall of meat, but breaks the
+   one-tile-per-enemy occupancy assumption everywhere). RECOMMEND 1-tile for v1;
+   sell the size purely via the sprite scale.
+2. ARENA-SEAL DOOR identity: how does the boss know WHICH door to seal? Options:
+   (a) the door nearest the boss spawn, (b) a level-metadata line naming the seal
+   door id, (c) a new tile char for "seal door". RECOMMEND (a) for v1 (nearest
+   door to the 'X' spawn), with (b) as the explicit override.
+3. POSE ENUM: reuse EnemyState (one renderer switch) vs a separate BossPose on
+   OverseerBrain (cleaner separation). RECOMMEND reuse for v1.
+4. MULTI-TICK DEATH: snap-collapse (simple) vs a 2–3 tick DYING animation that
+   still lets the now-harmless boss be "finished" cinematically. RECOMMEND snap
+   for v1; animate as polish.
+5. CHARGE SHOVE: should the charge push the player (needs a free tile + a
+   player-position mutation outside PlayerController)? Route a one-off
+   Player.applyForcedStep(col,row) through Player (HP-style new state path), or
+   skip shove for v1. RECOMMEND skip shove v1; damage only.
+6. TELEGRAPH if LOS breaks mid-windup: if the player breaks LOS after WIND_UP,
+   does the pattern still resolve on its pre-computed tiles (yes — you dodged by
+   leaving the zone) or fizzle? RECOMMEND resolve on pre-computed tiles; breaking
+   LOS does not cancel an in-flight slam, only avoids being on the tiles.
+7. SECOND BOSS / SCALING: this doc is boss #1. A later boss should reuse
+   OverseerBrain's pattern framework with a different BossPattern set — confirm
+   the framework is generic enough before a second boss ships.
