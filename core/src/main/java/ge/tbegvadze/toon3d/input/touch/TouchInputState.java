@@ -27,61 +27,51 @@ public final class TouchInputState extends InputAdapter {
         this.viewport         = viewport;
         this.touchWorldCoords = new Vector2();
 
-        float half      = Constants.TOUCH_BUTTON_SIZE / 2f;
-        float armOffset = Constants.TOUCH_DIAMOND_ARM_OFFSET;
-        float centerX   = Constants.TOUCH_DIAMOND_CENTER_X;
-        float centerY   = Constants.TOUCH_DIAMOND_CENTER_Y;
+        float size    = Constants.TOUCH_BUTTON_SIZE;
+        float half    = size / 2f;
+        float arm     = Constants.TOUCH_GRID_ARM_OFFSET;
+        float centerX = Constants.TOUCH_GRID_CENTER_X;
+        float baseY   = Constants.TOUCH_GRID_BASE_Y;    // center Y of row 1 (BACK)
 
         buttons = new TouchButton[9];
-        buttons[INDEX_FORWARD] = new TouchButton(
-            centerX - half,          centerY + armOffset - half,
-            Constants.TOUCH_BUTTON_SIZE, Constants.TOUCH_BUTTON_SIZE,
-            TouchAction.FORWARD, TouchButton.Shape.ROUNDED_SQUARE);
 
+        // Row 1 (bottom) — center column only
         buttons[INDEX_BACK] = new TouchButton(
-            centerX - half,          centerY - armOffset - half,
-            Constants.TOUCH_BUTTON_SIZE, Constants.TOUCH_BUTTON_SIZE,
-            TouchAction.BACK, TouchButton.Shape.ROUNDED_SQUARE);
+            centerX - half,       baseY - half,
+            size, size, TouchAction.BACK, TouchButton.Shape.ROUNDED_SQUARE);
 
+        // Row 2 — ROT_L | FIRE | ROT_R
+        float row2Y = baseY + arm;
         buttons[INDEX_ROTATE_LEFT] = new TouchButton(
-            centerX - armOffset - half, centerY - half,
-            Constants.TOUCH_BUTTON_SIZE, Constants.TOUCH_BUTTON_SIZE,
-            TouchAction.ROTATE_LEFT, TouchButton.Shape.ROUNDED_SQUARE);
-
-        buttons[INDEX_ROTATE_RIGHT] = new TouchButton(
-            centerX + armOffset - half, centerY - half,
-            Constants.TOUCH_BUTTON_SIZE, Constants.TOUCH_BUTTON_SIZE,
-            TouchAction.ROTATE_RIGHT, TouchButton.Shape.ROUNDED_SQUARE);
-
-        // Strafe buttons flank FORWARD on both sides (same row as FORWARD, ±armOffset in X)
-        buttons[INDEX_STRAFE_LEFT] = new TouchButton(
-            centerX - armOffset - half, centerY + armOffset - half,
-            Constants.TOUCH_BUTTON_SIZE, Constants.TOUCH_BUTTON_SIZE,
-            TouchAction.STRAFE_LEFT, TouchButton.Shape.ROUNDED_SQUARE);
-
-        buttons[INDEX_STRAFE_RIGHT] = new TouchButton(
-            centerX + armOffset - half, centerY + armOffset - half,
-            Constants.TOUCH_BUTTON_SIZE, Constants.TOUCH_BUTTON_SIZE,
-            TouchAction.STRAFE_RIGHT, TouchButton.Shape.ROUNDED_SQUARE);
-
-        // Action buttons — tap-only, right side of screen aligned above movement diamond
-        float fireHalf   = Constants.TOUCH_FIRE_SIZE   / 2f;
-        float actionHalf = Constants.TOUCH_ACTION_SIZE / 2f;
-
+            centerX - arm - half, row2Y - half,
+            size, size, TouchAction.ROTATE_LEFT, TouchButton.Shape.ROUNDED_SQUARE);
         buttons[INDEX_FIRE] = new TouchButton(
-            Constants.TOUCH_FIRE_CENTER_X   - fireHalf,   Constants.TOUCH_FIRE_CENTER_Y   - fireHalf,
-            Constants.TOUCH_FIRE_SIZE,                    Constants.TOUCH_FIRE_SIZE,
-            TouchAction.FIRE, TouchButton.Shape.ROUNDED_SQUARE, true);
+            centerX - half,       row2Y - half,
+            size, size, TouchAction.FIRE, TouchButton.Shape.ROUNDED_SQUARE, true);
+        buttons[INDEX_ROTATE_RIGHT] = new TouchButton(
+            centerX + arm - half, row2Y - half,
+            size, size, TouchAction.ROTATE_RIGHT, TouchButton.Shape.ROUNDED_SQUARE);
 
+        // Row 3 — STR_L | FORWARD | STR_R
+        float row3Y = baseY + 2 * arm;
+        buttons[INDEX_STRAFE_LEFT] = new TouchButton(
+            centerX - arm - half, row3Y - half,
+            size, size, TouchAction.STRAFE_LEFT, TouchButton.Shape.ROUNDED_SQUARE);
+        buttons[INDEX_FORWARD] = new TouchButton(
+            centerX - half,       row3Y - half,
+            size, size, TouchAction.FORWARD, TouchButton.Shape.ROUNDED_SQUARE);
+        buttons[INDEX_STRAFE_RIGHT] = new TouchButton(
+            centerX + arm - half, row3Y - half,
+            size, size, TouchAction.STRAFE_RIGHT, TouchButton.Shape.ROUNDED_SQUARE);
+
+        // Row 4 (top) — [blank] | RELOAD | SKIP
+        float row4Y = baseY + 3 * arm;
         buttons[INDEX_RELOAD] = new TouchButton(
-            Constants.TOUCH_RELOAD_CENTER_X - actionHalf, Constants.TOUCH_RELOAD_CENTER_Y - actionHalf,
-            Constants.TOUCH_ACTION_SIZE,                  Constants.TOUCH_ACTION_SIZE,
-            TouchAction.RELOAD, TouchButton.Shape.ROUNDED_SQUARE, true);
-
+            centerX - half,       row4Y - half,
+            size, size, TouchAction.RELOAD, TouchButton.Shape.ROUNDED_SQUARE, true);
         buttons[INDEX_SKIP_TURN] = new TouchButton(
-            Constants.TOUCH_SKIP_CENTER_X   - actionHalf, Constants.TOUCH_SKIP_CENTER_Y   - actionHalf,
-            Constants.TOUCH_ACTION_SIZE,                  Constants.TOUCH_ACTION_SIZE,
-            TouchAction.SKIP_TURN, TouchButton.Shape.ROUNDED_SQUARE, true);
+            centerX + arm - half, row4Y - half,
+            size, size, TouchAction.SKIP_TURN, TouchButton.Shape.ROUNDED_SQUARE, true);
     }
 
     /** Returns the highest-priority currently-pressed held action (movement), or NONE. */
