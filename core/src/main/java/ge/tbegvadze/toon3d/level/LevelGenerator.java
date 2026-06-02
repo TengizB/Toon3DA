@@ -11,7 +11,8 @@ import java.util.Random;
  *
  * Phase 1 — Room Placement:     randomly sized rectangular rooms placed without overlap.
  * Phase 2 — Connectivity:       greedy MST + optional loop corridors; single door pass.
- * Phase 3 — Decoration:         context-aware wall variety, floor lighting, props, hazard walls.
+ * Phase 3 — Decoration:         context-aware wall variety, floor lighting, columns, props,
+ *                                pickups, and hazard walls.
  * Phase 4 — Enemy Placement:    enemy spawns in non-entrance rooms, after props to avoid overlap.
  * Phase 5 — Connectivity Audit: BFS flood-fill from player spawn; emergency corridors for any
  *                                unreachable room (guaranteed passage, no doors, clears obstacles).
@@ -19,6 +20,9 @@ import java.util.Random;
  * Grid convention: (0,0) = bottom-left tile, Y-up (matches project-wide standard).
  * No LibGDX imports — pure Java logic, fully unit-testable without an OpenGL context.
  * Lives in the level package to access the package-private Level(char[][], List) constructor.
+ *
+ * What the generator may place is controlled by a {@link LevelGenConfig} passed at construction.
+ * The default config disables lockers and flickering floors; all other categories are on.
  *
  * Wall types used and their generation context:
  *   'x' plain      — default (majority of all walls)
@@ -37,10 +41,16 @@ public class LevelGenerator {
 
     private enum WallContext { CORRIDOR, ROOM, MIXED, INTERIOR }
 
-    private final Random random;
+    private final Random         random;
+    private final LevelGenConfig config;
 
     public LevelGenerator(long seed) {
+        this(seed, new LevelGenConfig());
+    }
+
+    public LevelGenerator(long seed, LevelGenConfig config) {
         this.random = new Random(seed);
+        this.config = config;
     }
 
     // -------------------------------------------------------------------------
@@ -66,7 +76,9 @@ public class LevelGenerator {
         assignFloorLighting(grid, rooms);
         assignWallVariety(grid);
         placePlayerSpawn(grid, rooms.get(0));
+        placeColumns(grid, rooms);
         placeProps(grid, rooms);
+        placePickups(grid, rooms);
         placeHazardWallsNearBarrels(grid);
 
         // Phase 4 — enemies (after props so spawns land on walkable tiles only)
@@ -269,6 +281,10 @@ public class LevelGenerator {
      * Any 'l' corridor tile directly adjacent to a room-floor tile (' ', 'u', 'f') becomes
      * a door 'd' with LEVEL_GEN_DOOR_CHANCE probability — natural placement at every room entry.
      *
+     * Doors are additionally required to sit in a proper doorway slot: walls on two opposing
+     * sides (north+south or east+west). This prevents doors from appearing at corridor corners,
+     * which would look wrong and block diagonal movement through junctions.
+     *
      * Must run before assignFloorLighting() since lighting converts some ' ' to 'l',
      * which the adjacency heuristic uses to distinguish room floor from corridor floor.
      */
@@ -278,11 +294,30 @@ public class LevelGenerator {
                 if (grid[tileRow][tileColumn] != 'l') continue;
                 if (!isAdjacentToRoomFloor(grid, tileColumn, tileRow)) continue;
                 if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                if (!isDoorwayAligned(grid, tileColumn, tileRow)) continue;
                 if (random.nextFloat() < Constants.LEVEL_GEN_DOOR_CHANCE) {
                     grid[tileRow][tileColumn] = 'd';
                 }
             }
         }
+    }
+
+    /**
+     * Returns true only when the candidate tile has walls on two OPPOSING sides
+     * (north+south or east+west), forming a proper doorway slot rather than a corner.
+     * Out-of-bounds neighbours count as walls.
+     */
+    private boolean isDoorwayAligned(char[][] grid, int tileColumn, int tileRow) {
+        boolean wallNorth = isWallAt(grid, tileColumn, tileRow + 1);
+        boolean wallSouth = isWallAt(grid, tileColumn, tileRow - 1);
+        boolean wallEast  = isWallAt(grid, tileColumn + 1, tileRow);
+        boolean wallWest  = isWallAt(grid, tileColumn - 1, tileRow);
+        return (wallNorth && wallSouth) || (wallEast && wallWest);
+    }
+
+    private boolean isWallAt(char[][] grid, int tileColumn, int tileRow) {
+        if (!isInBounds(tileColumn, tileRow)) return true;
+        return Level.isWall(grid[tileRow][tileColumn]);
     }
 
     private boolean isAdjacentToDoor(char[][] grid, int tileColumn, int tileRow) {
@@ -317,17 +352,17 @@ public class LevelGenerator {
 
     private void assignFloorLighting(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
-            int flickerBudget = 2 + random.nextInt(2);
+            int flickerBudget = config.flickeringFloors ? 2 + random.nextInt(2) : 0;
             for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
                 for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
                     if (grid[tileRow][tileColumn] != ' ') continue;
                     float roll = random.nextFloat();
-                    if (roll < 0.05f && flickerBudget > 0) {
+                    if (config.flickeringFloors && roll < 0.05f && flickerBudget > 0) {
                         grid[tileRow][tileColumn] = 'f';
                         flickerBudget--;
-                    } else if (roll < 0.10f) {
+                    } else if (config.unlitFloors && roll < 0.10f) {
                         grid[tileRow][tileColumn] = 'u';
-                    } else if (roll < 0.35f) {
+                    } else if (config.normalFloors && roll < 0.35f) {
                         grid[tileRow][tileColumn] = 'l';
                     }
                     // else: keep as ' ' (lit floor, default)
@@ -411,6 +446,50 @@ public class LevelGenerator {
         grid[startRoom.centerRow()][startRoom.centerColumn()] = 'p';
     }
 
+    /**
+     * Places cylindrical columns ('P') in non-entrance rooms.
+     * Columns are only placed in rooms large enough to accommodate them without blocking
+     * passage, and never adjacent to another column (prevents impassable clusters).
+     * Controlled by {@link LevelGenConfig#columns} and related fields.
+     */
+    private void placeColumns(char[][] grid, List<Room> rooms) {
+        if (!config.columns) return;
+        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            if (room.interiorWidth()  < config.columnMinRoomSize) continue;
+            if (room.interiorHeight() < config.columnMinRoomSize) continue;
+            if (random.nextFloat() > config.columnChancePerRoom)  continue;
+
+            int columnCount = config.columnMinCount
+                    + random.nextInt(config.columnMaxCount - config.columnMinCount + 1);
+            int placed   = 0;
+            int attempts = 0;
+            while (placed < columnCount && attempts < 30) {
+                attempts++;
+                // Keep one tile margin inside the room wall so the column is never flush against a wall.
+                int tileColumn = room.leftColumn + 2 + random.nextInt(Math.max(1, room.interiorWidth()  - 2));
+                int tileRow    = room.bottomRow  + 2 + random.nextInt(Math.max(1, room.interiorHeight() - 2));
+                if (isWalkableFloor(grid, tileColumn, tileRow)
+                        && !isAdjacentToColumn(grid, tileColumn, tileRow)) {
+                    grid[tileRow][tileColumn] = 'P';
+                    placed++;
+                }
+            }
+        }
+    }
+
+    private boolean isAdjacentToColumn(char[][] grid, int tileColumn, int tileRow) {
+        int[] deltaColumns = { 0, 0, 1, -1 };
+        int[] deltaRows    = { 1, -1, 0, 0 };
+        for (int direction = 0; direction < 4; direction++) {
+            int neighborColumn = tileColumn + deltaColumns[direction];
+            int neighborRow    = tileRow    + deltaRows[direction];
+            if (!isInBounds(neighborColumn, neighborRow)) continue;
+            if (grid[neighborRow][neighborColumn] == 'P') return true;
+        }
+        return false;
+    }
+
     private void placeProps(char[][] grid, List<Room> rooms) {
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
@@ -418,23 +497,67 @@ public class LevelGenerator {
                 for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
                     if (isWalkableFloor(grid, tileColumn, tileRow)
                             && random.nextFloat() < Constants.LEVEL_GEN_PROP_CHANCE) {
-                        grid[tileRow][tileColumn] = randomPropChar();
+                        char propChar = randomPropChar();
+                        if (propChar != '\0') grid[tileRow][tileColumn] = propChar;
                     }
                 }
             }
         }
     }
 
+    /**
+     * Picks a random prop character based on the enabled categories and their relative weights.
+     * Disabled categories are excluded; the remaining weights are normalised at runtime.
+     * Returns '\0' if no categories are enabled (caller skips placement).
+     */
     private char randomPropChar() {
-        float roll = random.nextFloat();
-        if (roll < 0.22f) return 'g';
-        if (roll < 0.30f) return 'E';
-        if (roll < 0.40f) return 'C';
-        if (roll < 0.50f) return 'T';
-        if (roll < 0.58f) return 'L';
-        if (roll < 0.74f) return '.';
-        if (roll < 0.88f) return 'm';
-        return 'O';
+        char[]  chars   = new char[8];
+        float[] weights = new float[8];
+        int     count   = 0;
+        float   total   = 0f;
+
+        if (config.radioactiveBarrels) { chars[count] = 'g'; weights[count++] = config.radioactiveBarrelWeight; total += config.radioactiveBarrelWeight; }
+        if (config.explosiveBarrels)   { chars[count] = 'E'; weights[count++] = config.explosiveBarrelWeight;   total += config.explosiveBarrelWeight;   }
+        if (config.crates)             { chars[count] = 'C'; weights[count++] = config.crateWeight;             total += config.crateWeight;             }
+        if (config.computerTerminals)  { chars[count] = 'T'; weights[count++] = config.terminalWeight;          total += config.terminalWeight;          }
+        if (config.lockers)            { chars[count] = 'L'; weights[count++] = config.lockerWeight;            total += config.lockerWeight;            }
+        if (config.bloodStains)        { chars[count] = '.'; weights[count++] = config.bloodStainWeight;        total += config.bloodStainWeight;        }
+        if (config.corpses)            { chars[count] = 'm'; weights[count++] = config.corpseWeight;            total += config.corpseWeight;            }
+        if (config.oilPools)           { chars[count] = 'O'; weights[count++] = config.oilPoolWeight;           total += config.oilPoolWeight;           }
+
+        if (count == 0 || total <= 0f) return '\0';
+
+        float roll       = random.nextFloat() * total;
+        float cumulative = 0f;
+        for (int propIndex = 0; propIndex < count; propIndex++) {
+            cumulative += weights[propIndex];
+            if (roll < cumulative) return chars[propIndex];
+        }
+        return chars[count - 1];
+    }
+
+    /**
+     * Places medkit ('H') and armour-kit ('A') pickups in non-entrance rooms.
+     * Each room rolls independently; at most one of each pickup type per room.
+     * Runs after placeProps so pickups land on remaining empty floor tiles.
+     */
+    private void placePickups(char[][] grid, List<Room> rooms) {
+        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            if (config.medkits    && random.nextFloat() < config.medkitChancePerRoom)  tryPlacePickup(grid, room, 'H');
+            if (config.armourKits && random.nextFloat() < config.armourChancePerRoom)  tryPlacePickup(grid, room, 'A');
+        }
+    }
+
+    private void tryPlacePickup(char[][] grid, Room room, char pickupChar) {
+        for (int attempt = 0; attempt < 20; attempt++) {
+            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
+            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
+            if (isWalkableFloor(grid, tileColumn, tileRow)) {
+                grid[tileRow][tileColumn] = pickupChar;
+                return;
+            }
+        }
     }
 
     /**
