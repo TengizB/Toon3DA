@@ -237,29 +237,30 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      *
      * Visually distinct from the pump-action Shotgun:
      *   - Walnut wood receiver (warm brown) vs. steel pump receiver
-     *   - Break-action hinge line divides receiver from barrel breech
-     *   - Top-lever latch knob centred on breech
-     *   - Shorter, slightly wider barrel tubes with a narrower centre gap
+     *   - Nearly face-on view: two large bore openings dominate the upper half
+     *   - Each barrel 78 px wide; bore is a large 66×50 dark ellipse inside a 78×58 steel rim
+     *   - Walnut receiver and steel breech visible below; bottom cut off by screen edge
      *
      * Canvas coordinate system (ShapeRenderer Y-up):
      *   Y =   0 → bottom of canvas (grip region — transparent, cut off)
-     *   Y = 134 → top of canvas (barrel muzzles pointing into the level)
+     *   Y = 134 → top of canvas (barrel muzzles pointing toward the horizon)
      *
      * Layout zones:
-     *   Y  0– 14  transparent — grip cut off below screen
-     *   Y 14– 60  walnut receiver body (top surface)
-     *   Y 58– 74  gunmetal breech block with break-action hinge
-     *   Y 72–122  barrel tubes (top surface, shorter than pump-action)
-     *   Y 120–134 muzzle end-caps + bore openings
+     *   Y  0– 14  transparent  — grip cut off below screen
+     *   Y 14– 38  walnut receiver (warm brown, partially cut off)
+     *   Y 36– 56  steel breech block with break-action hinge groove
+     *   Y 52–130  barrel bodies — 78 px wide each, gunmetal with cylinder shading
+     *   Y 74–132  bore openings — large nearly-circular (78×58 rim, 66×50 bore)
      *
      * Layers drawn back-to-front:
      *   1. Walnut receiver    — warm brown trapezoid with horizontal grain lines
-     *   2. Gunmetal breech    — block above receiver with hinge groove and top-lever
-     *   3. Left barrel        — top-surface cylinder: outer/inner shadow + crown highlight
+     *   2. Gunmetal breech    — block above receiver with hinge groove
+     *   3. Left barrel        — wide gunmetal body; outer/inner shadow + crown highlight
      *   4. Right barrel       — mirror of left barrel
-     *   5. Centre channel     — tight shadow gap + narrow sighting rib
-     *   6. Muzzle end-caps    — flat plates closing each barrel tube
-     *   7. Bore openings      — foreshortened dark ellipses + rim-shine fringe
+     *   5. Centre gap         — deep shadow channel between barrels
+     *   6. Retaining band     — steel collar ring near muzzle
+     *   7. Left bore          — large nearly-circular dark opening + top-rim shine
+     *   8. Right bore         — mirror of left bore
      */
     private static Texture generateDoubleBarrelShotgunTexture() {
         int canvasWidth  = Constants.DBL_SHOTGUN_CANVAS_WIDTH;
@@ -301,94 +302,96 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     }
 
     /**
-     * Draws a break-action double-barrel shotgun in Quake-1 top-down-angle perspective.
-     * Visually distinct from the pump-action Shotgun: warm walnut receiver, break-action
-     * hinge visible from above, top-lever latch knob centred on breech, shorter + wider
-     * barrel tubes with a tighter gap between them.
+     * Draws a break-action double-barrel shotgun in Quake-1 first-person style.
      *
-     * All coordinates in canvas pixel space; Y=0 = near/grip (cut off), Y=134 = far/muzzle.
-     * centerX = 96 keeps the sprite perfectly symmetric on the 192-wide canvas.
+     * The gun is viewed nearly face-on from slightly above. The two large bore openings
+     * dominate the upper half of the sprite — each barrel is 78 px wide and the bore
+     * diameter is the primary visual element, ringed by a thin steel rim.
+     *
+     * Layout zones (Y-up, Y=0=grip cut-off, Y=134=muzzle):
+     *   Y  0– 14  transparent  — grip cut off below screen
+     *   Y 14– 38  walnut receiver (warm brown, partially cut off)
+     *   Y 36– 56  steel breech block with break-action hinge
+     *   Y 52–130  barrel bodies  — 78 px wide each, gunmetal with cylinder shading
+     *   Y 74–132  bore openings  — large 78×58 ellipse (steel rim) + 66×50 dark bore
      *
      * Symmetry reference (all dimensions from centerX=96):
-     *   Barrel outer edge:    ±22 px  (X 74 / 118)
-     *   Barrel inner edge:    ± 4 px  (X 92 / 100)
-     *   Centre gap:             8 px wide (X 92–100)
+     *   Barrel outer edge:  ±82 px  (X 14 / 178)
+     *   Barrel inner edge:  ± 4 px  (X 92 / 100)
+     *   Centre gap:           8 px wide (X 92–100)
+     *   Bore center:         ±43 px  (X 53 / 139)
      */
     private static void drawDoubleBarrelShotgunShape(ShapeRenderer shapeRenderer, float centerX) {
 
-        // 1. Walnut receiver — warm brown trapezoid, top-surface perspective taper
-        //    Darker and deeper than pump-action's steel receiver — key visual differentiator
-        shapeRenderer.setColor(0.38f, 0.18f, 0.06f, 1f);
-        drawSymmetricTrapezoid(shapeRenderer, centerX, 56f, 14f, 46f, 60f);
-        // Grain lines (horizontal wood-grain bands across full receiver width)
-        shapeRenderer.setColor(0.27f, 0.12f, 0.04f, 1f);
-        shapeRenderer.rect(centerX - 52f, 20f, 104f, 2f);
-        shapeRenderer.rect(centerX - 50f, 30f, 100f, 2f);
-        shapeRenderer.rect(centerX - 48f, 42f, 96f,  2f);
-        shapeRenderer.rect(centerX - 46f, 52f, 92f,  2f);
-        // Near-edge shadow
+        // 1. Walnut receiver — warm brown, partially cut off at screen bottom
+        shapeRenderer.setColor(0.42f, 0.22f, 0.08f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 54f, 14f, 42f, 38f);
+        shapeRenderer.setColor(0.34f, 0.16f, 0.05f, 1f);
+        shapeRenderer.rect(centerX - 50f, 18f, 100f, 2f);
+        shapeRenderer.rect(centerX - 46f, 26f,  92f, 2f);
+        shapeRenderer.rect(centerX - 42f, 34f,  84f, 2f);
         shapeRenderer.setColor(0.22f, 0.10f, 0.03f, 1f);
-        shapeRenderer.rect(centerX - 56f, 14f, 112f, 3f);
+        shapeRenderer.rect(centerX - 54f, 14f, 108f, 3f);  // near-edge shadow
 
-        // 2. Gunmetal breech block — sits above receiver, houses the break-action mechanism
-        shapeRenderer.setColor(0.26f, 0.28f, 0.34f, 1f);
-        shapeRenderer.rect(centerX - 46f, 58f, 92f, 16f);
-        // Far-edge highlight
-        shapeRenderer.setColor(0.42f, 0.46f, 0.54f, 1f);
-        shapeRenderer.rect(centerX - 46f, 71f, 92f, 3f);
-        // Near-edge shadow
-        shapeRenderer.setColor(0.12f, 0.13f, 0.17f, 1f);
-        shapeRenderer.rect(centerX - 46f, 58f, 92f, 3f);
-        // Break-action hinge groove (horizontal line dividing receiver from breech)
-        shapeRenderer.setColor(0.14f, 0.15f, 0.19f, 1f);
-        shapeRenderer.rect(centerX - 46f, 70f, 92f, 2f);
+        // 2. Steel breech block — full width of both barrels, break-action hinge groove
+        shapeRenderer.setColor(0.24f, 0.26f, 0.32f, 1f);
+        shapeRenderer.rect(centerX - 50f, 36f, 100f, 20f);
         shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
-        shapeRenderer.rect(centerX - 46f, 72f, 92f, 1f);  // bright seam above groove
-        // Top-lever latch knob — centred, oval (break-action actuator seen from above)
-        shapeRenderer.setColor(0.34f, 0.38f, 0.46f, 1f);
-        shapeRenderer.ellipse(centerX - 10f, 61f, 20f, 10f);
-        shapeRenderer.setColor(0.52f, 0.58f, 0.66f, 1f);
-        shapeRenderer.ellipse(centerX -  7f, 64f, 14f,  6f);  // latch highlight
-
-        // 3. Left barrel — NARROW (18px) × TALL (50px): top surface of tube pointing away
-        shapeRenderer.setColor(0.22f, 0.24f, 0.28f, 1f);
-        shapeRenderer.rect(centerX - 22f, 72f, 18f, 50f);   // barrel body
+        shapeRenderer.rect(centerX - 50f, 53f, 100f,  3f);  // far-edge highlight
+        shapeRenderer.setColor(0.12f, 0.13f, 0.17f, 1f);
+        shapeRenderer.rect(centerX - 50f, 36f, 100f,  3f);  // near-edge shadow
         shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
-        shapeRenderer.rect(centerX - 22f, 72f,  3f, 50f);   // outer-edge shadow
-        shapeRenderer.setColor(0.44f, 0.48f, 0.54f, 1f);
-        shapeRenderer.rect(centerX - 19f, 72f,  7f, 50f);   // crown highlight
-        shapeRenderer.setColor(0.12f, 0.13f, 0.16f, 1f);
-        shapeRenderer.rect(centerX -  7f, 72f,  3f, 50f);   // inner-edge shadow
+        shapeRenderer.rect(centerX - 50f, 50f, 100f,  2f);  // hinge groove
+        shapeRenderer.setColor(0.38f, 0.42f, 0.50f, 1f);
+        shapeRenderer.rect(centerX - 50f, 52f, 100f,  1f);  // groove shine
 
-        // 4. Right barrel — mirror of left
+        // 3. Left barrel body — 78 px wide, gunmetal, cylinder-shaded from above
         shapeRenderer.setColor(0.22f, 0.24f, 0.28f, 1f);
-        shapeRenderer.rect(centerX +  4f, 72f, 18f, 50f);   // barrel body
-        shapeRenderer.setColor(0.12f, 0.13f, 0.16f, 1f);
-        shapeRenderer.rect(centerX +  4f, 72f,  3f, 50f);   // inner-edge shadow
-        shapeRenderer.setColor(0.44f, 0.48f, 0.54f, 1f);
-        shapeRenderer.rect(centerX + 12f, 72f,  7f, 50f);   // crown highlight
+        shapeRenderer.rect(centerX - 82f, 52f, 78f, 78f);
         shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
-        shapeRenderer.rect(centerX + 19f, 72f,  3f, 50f);   // outer-edge shadow
+        shapeRenderer.rect(centerX - 82f, 52f,  7f, 78f);  // outer-edge shadow
+        shapeRenderer.setColor(0.42f, 0.46f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 53f, 52f, 20f, 78f);  // crown highlight (barrel center)
+        shapeRenderer.setColor(0.12f, 0.13f, 0.17f, 1f);
+        shapeRenderer.rect(centerX - 10f, 52f,  6f, 78f);  // inner-edge shadow
 
-        // 5. Centre channel — 8px dark gap + narrow sighting rib
-        shapeRenderer.setColor(0.06f, 0.07f, 0.08f, 1f);
-        shapeRenderer.rect(centerX -  4f, 72f,  8f, 50f);
-        shapeRenderer.setColor(0.20f, 0.22f, 0.26f, 1f);
-        shapeRenderer.rect(centerX -  2f, 72f,  4f, 50f);
+        // 4. Right barrel body — mirror of left
+        shapeRenderer.setColor(0.22f, 0.24f, 0.28f, 1f);
+        shapeRenderer.rect(centerX +  4f, 52f, 78f, 78f);
+        shapeRenderer.setColor(0.12f, 0.13f, 0.17f, 1f);
+        shapeRenderer.rect(centerX +  4f, 52f,  6f, 78f);  // inner-edge shadow
+        shapeRenderer.setColor(0.42f, 0.46f, 0.52f, 1f);
+        shapeRenderer.rect(centerX + 33f, 52f, 20f, 78f);  // crown highlight
+        shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
+        shapeRenderer.rect(centerX + 75f, 52f,  7f, 78f);  // outer-edge shadow
 
-        // 6. Muzzle end-caps (18px wide, matching barrel width)
-        shapeRenderer.setColor(0.18f, 0.19f, 0.23f, 1f);
-        shapeRenderer.rect(centerX - 22f, 120f, 18f, 4f);   // left cap
-        shapeRenderer.rect(centerX +  4f, 120f, 18f, 4f);   // right cap
+        // 5. Centre gap between barrels — deep shadow channel
+        shapeRenderer.setColor(0.06f, 0.07f, 0.09f, 1f);
+        shapeRenderer.rect(centerX -  4f, 52f,  8f, 78f);
 
-        // 7. Bore openings — nearly circular (18×14): heavier gauge = slightly wider than pump
-        shapeRenderer.setColor(0.04f, 0.04f, 0.05f, 0.95f);
-        shapeRenderer.ellipse(centerX - 22f, 114f, 18f, 14f);  // left bore
-        shapeRenderer.ellipse(centerX +  4f, 114f, 18f, 14f);  // right bore
-        // Rim shine
-        shapeRenderer.setColor(0.30f, 0.32f, 0.36f, 0.60f);
-        shapeRenderer.ellipse(centerX - 22f, 126f, 18f,  3f);
-        shapeRenderer.ellipse(centerX +  4f, 126f, 18f,  3f);
+        // 6. Muzzle retaining band — steel collar near muzzle end
+        shapeRenderer.setColor(0.30f, 0.33f, 0.40f, 1f);
+        shapeRenderer.rect(centerX - 82f, 106f, 78f, 8f);
+        shapeRenderer.rect(centerX +  4f, 106f, 78f, 8f);
+        shapeRenderer.setColor(0.50f, 0.54f, 0.62f, 1f);
+        shapeRenderer.rect(centerX - 82f, 112f, 78f, 2f);  // band highlight
+        shapeRenderer.rect(centerX +  4f, 112f, 78f, 2f);
+
+        // 7. Left bore — large nearly-circular dark opening (dominant visual element)
+        shapeRenderer.setColor(0.18f, 0.20f, 0.24f, 1f);
+        shapeRenderer.ellipse(centerX - 82f, 74f, 78f, 58f);  // steel barrel face / outer rim
+        shapeRenderer.setColor(0.04f, 0.04f, 0.05f, 0.97f);
+        shapeRenderer.ellipse(centerX - 76f, 78f, 66f, 50f);  // bore darkness
+        shapeRenderer.setColor(0.44f, 0.48f, 0.58f, 0.65f);
+        shapeRenderer.ellipse(centerX - 76f, 116f, 66f, 14f); // top-rim shine crescent
+
+        // 8. Right bore — mirror of left
+        shapeRenderer.setColor(0.18f, 0.20f, 0.24f, 1f);
+        shapeRenderer.ellipse(centerX +  4f, 74f, 78f, 58f);
+        shapeRenderer.setColor(0.04f, 0.04f, 0.05f, 0.97f);
+        shapeRenderer.ellipse(centerX + 10f, 78f, 66f, 50f);
+        shapeRenderer.setColor(0.44f, 0.48f, 0.58f, 0.65f);
+        shapeRenderer.ellipse(centerX + 10f, 116f, 66f, 14f);
     }
 
     /**
