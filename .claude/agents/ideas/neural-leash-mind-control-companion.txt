@@ -1,0 +1,201 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Neural Leash — Hijack an Enemy as a Turn-Based Companion
+CREATED: 2026-06-02
+---
+
+OVERVIEW
+========
+The Neural Leash is a one-handed UAC prototype device that lets the marine HIJACK a
+single living enemy and turn it into a temporary, leashed companion that fights at the
+player's side for a limited number of turns. It is the spiritual descendant of Doom RPG's
+mind-control collar (Hellhound pet), rebuilt for a procedural roguelike: the leash is a
+build-defining resource, not a guaranteed pet. You aim it in your facing direction, spend
+a charge, and the closest enemy in that lane becomes "DOMINATED" — it walks behind you,
+body-blocks incoming fire, and attacks other enemies. When its leash timer expires it
+either dies (overload) or breaks free and turns hostile again, mid-fight, possibly behind
+you. It belongs here because it converts the existing turn-based enemy AI into an ally with
+zero new movement rules, and it creates the kind of high-risk/high-reward, "do I trust this
+thing" decision the design pillars demand (Pillars 3, 4, 5, 7).
+
+This is a SYSTEM + ITEM, not a weapon. It occupies an inventory slot (works with
+inventory-loot-ransack-system.txt) and consumes a new resource: NEURAL CHARGE.
+
+
+GAMEPLAY LOOP
+=============
+Acquire:
+1. Leash starts EMPTY (0 charges) — found as a rare drop / shop item, or as a meta-unlock
+   starting item. Neural Charge cells are picked up off the floor and from ransacked corpses.
+
+Hijack:
+2. Player faces a direction and presses the LEASH action key (proposed: F). This consumes
+   one full turn AND one Neural Charge.
+3. Engine fires a tile-space lane scan from the player's tile in the facing direction (same
+   straight-line LOS walk used by the sentry turret and ranged enemies — reuse it). The FIRST
+   living, non-dominated enemy in that lane within LEASH_RANGE_TILES is the target.
+4. Roll dominate chance:  successChance = LEASH_BASE_CHANCE - target.tier * LEASH_TIER_PENALTY
+   (clamped to [LEASH_MIN_CHANCE, LEASH_MAX_CHANCE]). Scale up with player IQ/Agility stat if
+   stat system exists (levelup-stim-boon-choice-progression.txt).
+   - SUCCESS -> target enters state DOMINATED. Set target.leashTurnsRemaining = LEASH_DURATION_TURNS.
+     Spawn a cyan tether beam (see VISUAL). Target's faction flips to ALLY.
+   - FAIL -> charge is still spent, target is ENRAGED for LEASH_ENRAGE_TURNS (moves+attacks
+     toward player every turn, ignores normal wander). Punishes spraying the leash blindly.
+5. If no valid target in lane: charge is NOT spent (dry-fire click, quarter feedback), turn is
+   still consumed.
+
+Companion behaviour (runs in the existing enemy turn phase, AFTER player acts):
+6. A DOMINATED enemy acts once per player turn like any enemy, but with ALLY logic:
+   - Target selection: nearest HOSTILE enemy by tile (Manhattan) within its aggro range.
+   - If a hostile is adjacent -> it attacks that hostile using its own normal attack.
+   - Else if a hostile is visible -> it steps one tile along the shortest cardinal path toward it
+     (reuse enemy pathing).
+   - Else (no hostiles known) -> it FOLLOWS the player: steps toward the player's tile but never
+     onto it, preferring the tile directly behind the player's facing.
+7. Body-block: a DOMINATED ally is solid to hostile movement and to hostile ranged shots — a
+   hostile lane scan that hits the ally stops there and damages the ally instead of the player.
+   This is the core tactical payoff: a meat shield you steer.
+
+Leash decay & break:
+8. Every player turn, decrement leashTurnsRemaining. Tether beam color shifts cyan -> yellow ->
+   red as it nears 0 (telegraph).
+9. When leashTurnsRemaining hits 0, roll LEASH_BREAK_OUTCOME:
+   - OVERLOAD (default, prob LEASH_OVERLOAD_PROB): ally's brain fries. It dies, dropping a small
+     Neural Charge fragment LEASH_OVERLOAD_REFUND of the time. Clean, no betrayal.
+   - BREAK FREE (1 - LEASH_OVERLOAD_PROB): faction flips back to HOSTILE and it gets a free
+     "betrayal" attack if currently adjacent to the player. This is the gotcha — never fully trust it.
+10. Re-leash: pressing LEASH on an already-dominated ally with leashTurnsRemaining low spends a
+    fresh charge to TOP UP the timer back to full (no re-roll). Lets a charge-rich build maintain
+    a permanent pet at high cost.
+
+Death of the ally during combat:
+11. If a DOMINATED ally is killed by hostiles, it dies normally and drops nothing extra. The tether
+    snaps with a visual zap. No penalty beyond losing the shield.
+
+
+PLAYER EXPERIENCE
+=================
+The leash is a gamble dressed as power. The fantasy: walk into a room, turn the biggest demon
+in it into your bodyguard, and let it soak the crossfire while you reposition. The tension:
+every charge spent is a charge not saved for the next room, the dominate roll can fail and
+ENRAGE the target, and even on success the thing might turn on you the moment its timer pops —
+ideally while it's standing right behind you. Decisions created:
+- "Do I leash the Demon now as a shield, or save the charge and just shoot it?"
+- "Its tether is red — do I burn another charge to keep it, retreat, or kill it myself for the refund?"
+- "Two hostiles left and my pet is between them — if it breaks free I'm flanked. Reposition first."
+It also defines a whole build: a charge-hoarding "Beastmaster" run that fights almost entirely
+through dominated proxies plays nothing like a shotgun-and-medkit run (Pillar 5).
+
+
+TECHNICAL NOTES
+===============
+New enum / state (entity package):
+- Add DOMINATED and ENRAGED to the enemy state enum (see enemy_system.txt / docs/enemy-system.txt).
+- Add a Faction enum { HOSTILE, ALLY } or a boolean isDominated on the enemy entity.
+- Enemy fields to add: int leashTurnsRemaining; (0 when not leashed).
+
+New class: entity/NeuralLeash.java  (package ge.tbegvadze.toon3d.entity)
+- Holds: int neuralCharges; int maxNeuralCharges;
+- Method tryHijack(Player player, EnemyManager enemies, Level level) -> HijackResult enum
+  { DOMINATED, FAILED_ENRAGED, NO_TARGET, NO_CHARGE }.
+- Lane scan: reuse the existing straight-line tile walk used by ranged enemies / sentry turret
+  (sentry-turret-stationary-enemy.txt). Convert player worldX/Y to tile space first (CELL_SIZE).
+  Walk one tile per step in facing (directionX, directionY rounded to {-1,0,1}); stop on wall via
+  Level.isWall; first enemy tile hit is the target. Respect LEASH_RANGE_TILES.
+
+Companion turn integration:
+- In the enemy update/turn phase (the loop that ticks every enemy once per player turn — see
+  global-tick-event-system.txt / tick-system.txt), branch on faction:
+    HOSTILE  -> existing hostile AI.
+    DOMINATED-> ally AI (target nearest HOSTILE, else follow player).
+- Body-block: in the hostile ranged lane scan, an ALLY tile is treated as a blocking, damageable
+  occupant exactly like the player tile. Reuse whatever "enemy occupies tile" collision the mover
+  already uses so two allies/hostiles never stack.
+- Pathing: reuse enemy cardinal step-toward-target. No new pathfinder. No diagonal — all logic in
+  2D tile space (grid is sacred).
+
+Math (put in util/GameMath.java with derivation comment):
+- dominateSuccessChance(int tier, float playerStatBonus): clamp(LEASH_BASE_CHANCE
+  - tier*LEASH_TIER_PENALTY + playerStatBonus, LEASH_MIN_CHANCE, LEASH_MAX_CHANCE).
+- tetherColorForTurns(int turnsRemaining, int maxTurns): lerp cyan->yellow->red by ratio. Pure.
+
+Constants to add (util/Constants.java):
+  LEASH_RANGE_TILES        = 6
+  LEASH_DURATION_TURNS     = 8
+  LEASH_ENRAGE_TURNS       = 4
+  LEASH_BASE_CHANCE        = 0.85f
+  LEASH_TIER_PENALTY       = 0.18f   // per enemy difficulty tier
+  LEASH_MIN_CHANCE         = 0.15f
+  LEASH_MAX_CHANCE         = 0.95f
+  LEASH_OVERLOAD_PROB      = 0.6f    // chance leash end = death not betrayal
+  LEASH_OVERLOAD_REFUND    = 0.5f    // chance a fried ally drops a charge fragment
+  LEASH_MAX_CHARGES        = 3
+  NEURAL_CHARGE_FRAGMENT   = 1       // charges per pickup
+  LEASH_TETHER_WIDTH_PX    = 4f
+
+Render (no allocations in render()):
+- Tether beam = a single screen-space line/quad drawn in the existing sprite/shape pass between
+  the player HUD anchor and the dominated enemy's projected billboard center. The enemy is already
+  a billboard via EnemyRenderer — reuse its computed screen X and the z-buffer for occlusion so the
+  tether is hidden behind walls. Pre-allocate the color objects in create()/show().
+- DOMINATED enemies get a cyan rim/tint added in EnemyRenderer (multiply sprite by a cool tint).
+  ENRAGED enemies get a red tint + the existing hit-flash style pulse (enemy-hit-impact-effects.txt).
+
+
+VISUAL DESIGN
+=============
+- Leash device HUD: small inventory-slot icon, a clawed collar with a cyan power coil. Charge count
+  shown as 0-3 cyan pips (procedural, matches procedural-hud-no-textures.txt — ShapeRenderer pips).
+- Hijack flash: a brief cyan radial pulse over the targeted enemy billboard on success; a red jagged
+  crackle on failure/enrage.
+- Tether beam: animated electric arc, cyan when fresh, lerps to yellow ~3 turns left, red at 1 turn,
+  flickering rapidly the turn before break. 4px wide, additive blend. Occluded by walls via z-buffer.
+- Dominated enemy: cool cyan rim light tint so allies are instantly readable as "yours" in a crowded
+  room (information management, Pillar 7). Enraged enemy: hot red tint + faster idle bob.
+- Break-free zap: white flash on the tether snap + brief screen-edge red vignette pulse if it lands a
+  betrayal hit (reuse emergency-red-alert-pulse.txt vignette path).
+- Color language stays consistent: CYAN = under your control, RED = hostile/danger, YELLOW = warning.
+
+
+BALANCE NOTES (all placeholders — tune in playtest)
+===================================================
+- LEASH_DURATION_TURNS = 8 is short on purpose: a shield, not a free win. A full leash on a strong
+  enemy should feel like ~one room's worth of help.
+- LEASH_TIER_PENALTY makes weak enemies near-guaranteed (cheap fodder shields) and bosses nearly
+  impossible to leash (don't let players trivialize the Facility Overseer — flag bosses with an
+  isLeashable=false hard block to be safe).
+- LEASH_MAX_CHARGES = 3 keeps it scarce; a Beastmaster build leans on meta-unlocks / shop charges.
+- LEASH_OVERLOAD_PROB = 0.6f: 40% betrayal keeps trust low. If players feel cheated, raise to 0.75f.
+- Failure ENRAGE is the anti-spam tax. If too punishing for new players, gate ENRAGE behind floor depth.
+- PLACEHOLDER: dominate-vs-stat scaling needs the final stat system before tuning playerStatBonus.
+
+
+INTERACTIONS (at least 3)
+=========================
+1. Hazard chain reactions (hazard-chain-reactions-fire-toxic-explosive.txt): a dominated enemy can be
+   walked/lured into fire or shot near an explosive barrel; conversely a betrayal-mid-fire is brutal.
+   Allies take environmental damage too — steer them carefully.
+2. Inventory / ransack (inventory-loot-ransack-system.txt): Neural Charge is a stackable consumable in
+   a slot; fried allies (OVERLOAD) leave a ransackable corpse like any kill, so leash-kills still feed
+   the loot economy.
+3. Noise propagation (noise-propagation-and-3d-sound-cues.txt): a dominated ally's attacks make noise
+   and can pull OTHER hostiles' aggro onto the ally instead of you — a stealth tool: leash one enemy,
+   let it loudly aggro the room, slip past.
+4. Boss encounter (boss-encounter-facility-overseer.txt): bosses are isLeashable=false, but adds the
+   boss spawns CAN be leashed and turned against it — a designed counterplay moment.
+5. Level-up boons (levelup-stim-boon-choice-progression.txt): natural boon hooks — "+1 max charge",
+   "+15% dominate chance", "overload always refunds a charge", "betrayal disabled but duration -2".
+
+
+OPEN QUESTIONS
+==============
+- Should a dominated ally be steerable directly (a "guard here" / "attack that" command costing a turn)
+  or stay fully autonomous? Autonomous is simpler and keeps the chaos; manual command adds depth but
+  needs targeting UI. Recommend autonomous for v1.
+- Can the player hold MORE than one dominated ally at once (multi-leash build), or hard cap at 1?
+  Cap at 1 for v1 to keep the AI/render and tactics readable; multi-leash as a late meta-unlock.
+- Does re-leashing (top-up) re-roll the break outcome or just reset the timer? Spec says reset only;
+  confirm in playtest.
+- On betrayal, should the enemy keep any damage it took while dominated (HP carries over) — yes,
+  recommended, so a weakened pet is easy to finish off after it turns.
+- Key binding: F proposed. Confirm no clash with future "use/interact" key for doors/terminals.
