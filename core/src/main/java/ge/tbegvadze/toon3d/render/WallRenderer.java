@@ -902,7 +902,7 @@ public class WallRenderer implements Renderable, Disposable {
                 break;
             }
             if (Level.isDoor(cell)) {
-                float openFraction = doorManager.getOpenFractionAt(tileColumn, tileRow);
+                float openFraction = doorManager.openFractionAtFast(tileColumn, tileRow);
                 if (openFraction >= DOOR_OPEN_THROUGH_THRESHOLD) {
                     continue; // Fully open — ray passes through into the room beyond.
                 }
@@ -915,7 +915,10 @@ public class WallRenderer implements Renderable, Disposable {
                     doorHitOpenFraction        = openFraction;
                     doorHitCell                = cell;
                 }
-                continue; // Keep casting to find the surface behind the door.
+                if (openFraction <= 0f) {
+                    break; // Closed door — fully opaque, terminate ray here.
+                }
+                continue; // Partially open — keep casting to find the surface behind.
             }
         }
 

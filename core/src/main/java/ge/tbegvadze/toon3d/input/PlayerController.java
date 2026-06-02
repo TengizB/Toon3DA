@@ -9,6 +9,7 @@ import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.*;
 import ge.tbegvadze.toon3d.level.KeycardColor;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
@@ -31,6 +32,7 @@ public class PlayerController {
     private BarrelHitTarget         barrelHitTarget   = null;
     private LevelTransitionListener transitionListener = null;
     private TouchInputState         touchInputState   = null;
+    private EventTextSystem         eventTextSystem   = null;
 
     private ActionState actionState = ActionState.IDLE;
     private float actionProgress = 0f;
@@ -65,6 +67,10 @@ public class PlayerController {
 
     public void setTransitionListener(LevelTransitionListener listener) {
         this.transitionListener = listener;
+    }
+
+    public void setEventTextSystem(EventTextSystem system) {
+        this.eventTextSystem = system;
     }
 
     public void setTouchInputState(TouchInputState state) {
@@ -135,6 +141,7 @@ public class PlayerController {
             if (inventory.canAcceptMedical(tier)) {
                 inventory.addMedical(tier);
                 level.consumePickupAt(tileColumn, tileRow);
+                if (eventTextSystem != null) eventTextSystem.spawn("+HP");
             }
         }
     }
@@ -147,6 +154,7 @@ public class PlayerController {
                 int restore = Level.armourRestoreOfPickup(cell);
                 player.applyArmor(restore);
                 level.consumePickupAt(tileColumn, tileRow);
+                if (eventTextSystem != null) eventTextSystem.spawn("+AR");
             }
         }
     }
@@ -306,6 +314,7 @@ public class PlayerController {
         }
 
         if (level.isBlockedAt(targetTileColumn, targetTileRow, doorManager)) return;
+        if (enemyManager != null && enemyManager.isTileOccupiedByEnemy(targetTileColumn, targetTileRow)) return;
         sourcePositionX = player.positionX;
         sourcePositionY = player.positionY;
         targetPositionX = newPositionX;
@@ -315,6 +324,7 @@ public class PlayerController {
     }
 
     private void trySkipTurn() {
+        if (eventTextSystem != null) eventTextSystem.spawn("Turn skipped");
         actionState    = ActionState.SKIPPING;
         actionProgress = 0f;
     }

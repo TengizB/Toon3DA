@@ -470,7 +470,9 @@ public class LevelGenerator {
                 int tileColumn = room.leftColumn + 2 + random.nextInt(Math.max(1, room.interiorWidth()  - 2));
                 int tileRow    = room.bottomRow  + 2 + random.nextInt(Math.max(1, room.interiorHeight() - 2));
                 if (isWalkableFloor(grid, tileColumn, tileRow)
-                        && !isAdjacentToColumn(grid, tileColumn, tileRow)) {
+                        && !isAdjacentToColumn(grid, tileColumn, tileRow)
+                        && !isAdjacentToDoor(grid, tileColumn, tileRow)
+                        && !isAdjacentToDoorAxis(grid, tileColumn, tileRow)) {
                     grid[tileRow][tileColumn] = 'P';
                     placed++;
                 }
@@ -495,14 +497,48 @@ public class LevelGenerator {
             Room room = rooms.get(roomIndex);
             for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
                 for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
-                    if (isWalkableFloor(grid, tileColumn, tileRow)
-                            && random.nextFloat() < Constants.LEVEL_GEN_PROP_CHANCE) {
+                    if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+                    if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                    if (random.nextFloat() < Constants.LEVEL_GEN_PROP_CHANCE) {
                         char propChar = randomPropChar();
+                        if (Level.isPropSolid(propChar) && isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
                         if (propChar != '\0') grid[tileRow][tileColumn] = propChar;
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Returns true when the tile is on the movement axis of an adjacent door.
+     * A door at (c, r) with walls east+west blocks movement north-south; the tile directly
+     * north or south of that door would block its through-axis. Conversely a door with walls
+     * north+south blocks east-west passage; tiles to the east or west are on the axis.
+     * Solid props placed on-axis would make the door impassable even when open.
+     */
+    private boolean isAdjacentToDoorAxis(char[][] grid, int tileColumn, int tileRow) {
+        int[] deltaColumns = { 0, 0, 1, -1 };
+        int[] deltaRows    = { 1, -1, 0, 0 };
+        for (int direction = 0; direction < 4; direction++) {
+            int neighborColumn = tileColumn + deltaColumns[direction];
+            int neighborRow    = tileRow    + deltaRows[direction];
+            if (!isInBounds(neighborColumn, neighborRow)) continue;
+            if (grid[neighborRow][neighborColumn] != 'd') continue;
+            // Found an adjacent door. Check if this tile lies on its movement axis.
+            boolean doorHasWallNorth = isWallAt(grid, neighborColumn, neighborRow + 1);
+            boolean doorHasWallSouth = isWallAt(grid, neighborColumn, neighborRow - 1);
+            boolean doorHasWallEast  = isWallAt(grid, neighborColumn + 1, neighborRow);
+            boolean doorHasWallWest  = isWallAt(grid, neighborColumn - 1, neighborRow);
+            // Door with N+S walls → E-W passage axis; tile is east or west of door → on axis.
+            if (doorHasWallNorth && doorHasWallSouth) {
+                if (tileRow == neighborRow) return true;
+            }
+            // Door with E+W walls → N-S passage axis; tile is north or south of door → on axis.
+            if (doorHasWallEast && doorHasWallWest) {
+                if (tileColumn == neighborColumn) return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -693,17 +729,28 @@ public class LevelGenerator {
         int area       = room.interiorWidth() * room.interiorHeight();
         int enemyCount = Math.min(Constants.LEVEL_GEN_MAX_ENEMIES_PER_ROOM,
                                   1 + random.nextInt(Math.max(1, area / 6)));
-        int placed     = 0;
-        int attempts   = 0;
+        int[] placedColumns = new int[enemyCount];
+        int[] placedRows    = new int[enemyCount];
+        int placed          = 0;
+        int attempts        = 0;
         while (placed < enemyCount && attempts < 50) {
             attempts++;
             int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
             int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
-            if (isWalkableFloor(grid, tileColumn, tileRow)) {
-                char spawnChar = random.nextFloat() < Constants.LEVEL_GEN_CORRUPTOR_RATIO ? '1' : '2';
-                spawnPoints.add(new EnemySpawnPoint(spawnChar, tileColumn, tileRow));
-                placed++;
+            if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+            boolean tileAlreadyUsed = false;
+            for (int placedIndex = 0; placedIndex < placed; placedIndex++) {
+                if (placedColumns[placedIndex] == tileColumn && placedRows[placedIndex] == tileRow) {
+                    tileAlreadyUsed = true;
+                    break;
+                }
             }
+            if (tileAlreadyUsed) continue;
+            placedColumns[placed] = tileColumn;
+            placedRows[placed]    = tileRow;
+            char spawnChar = random.nextFloat() < Constants.LEVEL_GEN_CORRUPTOR_RATIO ? '1' : '2';
+            spawnPoints.add(new EnemySpawnPoint(spawnChar, tileColumn, tileRow));
+            placed++;
         }
     }
 

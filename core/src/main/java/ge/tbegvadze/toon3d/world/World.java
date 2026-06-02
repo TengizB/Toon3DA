@@ -38,6 +38,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private final ImpactEffectSystem   impactEffectSystem;
     private final ImpactEffectRenderer impactEffectRenderer;
     private final FadeOverlayRenderer  fadeOverlayRenderer;
+    private final EventTextSystem      eventTextSystem;
+    private final EventTextRenderer    eventTextRenderer;
+    private final HitVignetteRenderer  hitVignetteRenderer;
 
     // Touch controller — null on desktop (platform-gated to touch screens)
     private TouchInputState         touchInputState;
@@ -99,9 +102,21 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hudState           = new HudState();
         impactEffectSystem = new ImpactEffectSystem();
 
+        // Event text and hit vignette — run-persistent feedback systems
+        eventTextSystem    = new EventTextSystem();
+        eventTextRenderer  = new EventTextRenderer(eventTextSystem);
+        hitVignetteRenderer = new HitVignetteRenderer();
+
+        // Wire damage listener: player damage triggers both vignette flash and screen text.
+        player.setPlayerDamageListener(netDamage -> {
+            hitVignetteRenderer.setIntensity(1f);
+            eventTextSystem.spawnDamage(netDamage);
+        });
+
         // Run-persistent renderers
         DoubleBarrelShotgun shotgun = new DoubleBarrelShotgun();
         inventory.setEquippedWeapon(shotgun);
+        shotgun.setEventTextSystem(eventTextSystem);
         weaponHudRenderer    = new WeaponHudRenderer(shotgun);
         hudRenderer          = new HudRenderer(player, hudState);
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);
@@ -171,6 +186,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setBarrelHitTarget(explosiveBarrelManager);
         playerController.setTickEventBus(tickEventBus);
         playerController.setTransitionListener(this);
+        playerController.setEventTextSystem(eventTextSystem);
         if (touchInputState != null) {
             playerController.setTouchInputState(touchInputState);
         }
@@ -239,6 +255,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         impactEffectSystem.setPlayerState(player.positionX, player.positionY,
                 player.directionX, player.directionY, player.fieldOfViewRadians);
         impactEffectSystem.update(deltaTime);
+        eventTextSystem.update(deltaTime);
+        hitVignetteRenderer.update(deltaTime);
     }
 
     // -------------------------------------------------------------------------
@@ -292,6 +310,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         impactEffectRenderer.renderScreenOverlays(camera);
 
+        // Hit vignette: red edge glow drawn under the minimap and HUD panels.
+        hitVignetteRenderer.render(camera);
+
         levelRenderer.setPlayerWorldPosition(player.positionX, player.positionY);
         levelRenderer.render(camera);
 
@@ -306,6 +327,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             touchControllerRenderer.setActionLocked(!playerController.isIdle());
             touchControllerRenderer.render(camera);
         }
+
+        // Event text: rising screen-space text drawn above HUD but below the fade overlay.
+        eventTextRenderer.render(camera);
 
         // Fade overlay drawn last — covers every other layer including the HUD.
         if (runPhase != RunPhase.PLAYING) {
@@ -334,6 +358,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hudRenderer.dispose();
         impactEffectRenderer.dispose();
         fadeOverlayRenderer.dispose();
+        eventTextRenderer.dispose();
+        hitVignetteRenderer.dispose();
         if (touchControllerRenderer != null) touchControllerRenderer.dispose();
         player.dispose();
     }

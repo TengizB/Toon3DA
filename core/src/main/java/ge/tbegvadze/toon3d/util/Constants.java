@@ -356,8 +356,8 @@ public final class Constants {
     // Interior tile count, excluding the 1-tile perimeter wall on each side.
     public static final int   LEVEL_GEN_ROOM_MIN_WIDTH        = 3;
     public static final int   LEVEL_GEN_ROOM_MIN_HEIGHT       = 3;
-    public static final int   LEVEL_GEN_ROOM_MAX_WIDTH        = 12;
-    public static final int   LEVEL_GEN_ROOM_MAX_HEIGHT       = 7;
+    public static final int   LEVEL_GEN_ROOM_MAX_WIDTH        = 16;
+    public static final int   LEVEL_GEN_ROOM_MAX_HEIGHT       = 11;
     // Minimum gap between room bounding boxes so rooms never share a wall tile.
     public static final int   LEVEL_GEN_ROOM_MARGIN           = 2;
     public static final int   LEVEL_GEN_TARGET_ROOMS          = 10;
@@ -417,6 +417,17 @@ public final class Constants {
     public static final float TOUCH_ICON_EXTENT          = 22f;
     public static final float TOUCH_RIM_THICKNESS        = 3f;
     public static final int   TOUCH_ARC_SEGMENTS         = 8;
+
+    // Event Text (F1) — screen-space rising text for game events
+    public static final int   EVENT_TEXT_MAX             = 8;
+    public static final float EVENT_TEXT_LIFE_SECONDS    = 1.5f;
+    public static final float EVENT_TEXT_RISE_PIXELS     = 70f;
+    public static final float EVENT_TEXT_ANCHOR_Y        = 470f;
+    public static final float EVENT_TEXT_LINE_STEP       = 34f;
+
+    // Hit Vignette (F2) — red screen-edge flash when player takes damage
+    public static final float HIT_VIGNETTE_FADE_SECONDS  = 0.6f;
+    public static final float HIT_VIGNETTE_MAX_ALPHA     = 0.55f;
 
     // Level transitions — stairs-down tile ('>' char)
     // STAIRS_DOWN_CHAR: classic roguelike glyph; exactly one per procedurally generated floor.

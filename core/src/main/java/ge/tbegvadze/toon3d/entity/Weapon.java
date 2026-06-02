@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
@@ -40,6 +41,8 @@ public abstract class Weapon {
     protected float             fireFlashTimerSeconds      = 0f;
     protected float             normalToReloadTimerSeconds = 0f;
 
+    private EventTextSystem eventTextSystem;
+
     protected Weapon(String displayName, int damage, int clipSize, int reloadTime,
                      float damageDropCoefficient, int range) {
         this.displayName           = displayName;
@@ -49,6 +52,10 @@ public abstract class Weapon {
         this.damageDropCoefficient = damageDropCoefficient;
         this.range                 = range;
         this.shotsInClip           = clipSize;
+    }
+
+    public void setEventTextSystem(EventTextSystem system) {
+        this.eventTextSystem = system;
     }
 
     /** True only when the weapon can accept a fire command right now. */
@@ -65,6 +72,7 @@ public abstract class Weapon {
         if (shotsInClip >= clipSize) return false;
         visualState    = WeaponVisualState.RELOADING;
         ticksRemaining = reloadTime;
+        if (eventTextSystem != null) eventTextSystem.spawn("Reloading...");
         return true;
     }
 
@@ -88,6 +96,7 @@ public abstract class Weapon {
                 normalToReloadTimerSeconds = 0f;
                 visualState                = WeaponVisualState.RELOADING;
                 ticksRemaining             = reloadTime;
+                if (eventTextSystem != null) eventTextSystem.spawn("Reloading...");
             }
         }
     }
@@ -103,6 +112,7 @@ public abstract class Weapon {
             if (ticksRemaining <= 0) {
                 shotsInClip = clipSize;
                 visualState = WeaponVisualState.NORMAL;
+                if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
             }
         }
     }
