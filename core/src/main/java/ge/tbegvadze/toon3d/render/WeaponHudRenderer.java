@@ -310,7 +310,7 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      * centerX = 96 keeps the sprite perfectly symmetric on the 192-wide canvas.
      *
      * Symmetry reference (all dimensions from centerX=96):
-     *   Barrel outer edge:    ±54 px  (X 42 / 150)
+     *   Barrel outer edge:    ±22 px  (X 74 / 118)
      *   Barrel inner edge:    ± 4 px  (X 92 / 100)
      *   Centre gap:             8 px wide (X 92–100)
      */
@@ -350,46 +350,45 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         shapeRenderer.setColor(0.52f, 0.58f, 0.66f, 1f);
         shapeRenderer.ellipse(centerX -  7f, 64f, 14f,  6f);  // latch highlight
 
-        // 3. Left barrel tube — top-surface cylinder view (50 px wide vs pump's 48 px)
+        // 3. Left barrel — NARROW (18px) × TALL (50px): top surface of tube pointing away
         shapeRenderer.setColor(0.22f, 0.24f, 0.28f, 1f);
-        shapeRenderer.rect(centerX - 54f, 72f, 50f, 50f);   // barrel body
+        shapeRenderer.rect(centerX - 22f, 72f, 18f, 50f);   // barrel body
         shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
-        shapeRenderer.rect(centerX - 54f, 72f,  4f, 50f);   // outer-edge shadow
+        shapeRenderer.rect(centerX - 22f, 72f,  3f, 50f);   // outer-edge shadow
         shapeRenderer.setColor(0.44f, 0.48f, 0.54f, 1f);
-        shapeRenderer.rect(centerX - 44f, 72f, 12f, 50f);   // crown highlight strip
+        shapeRenderer.rect(centerX - 19f, 72f,  7f, 50f);   // crown highlight
         shapeRenderer.setColor(0.12f, 0.13f, 0.16f, 1f);
-        shapeRenderer.rect(centerX -  8f, 72f,  4f, 50f);   // inner-edge shadow
+        shapeRenderer.rect(centerX -  7f, 72f,  3f, 50f);   // inner-edge shadow
 
-        // 4. Right barrel tube — mirror of left
+        // 4. Right barrel — mirror of left
         shapeRenderer.setColor(0.22f, 0.24f, 0.28f, 1f);
-        shapeRenderer.rect(centerX +  4f, 72f, 50f, 50f);   // barrel body
+        shapeRenderer.rect(centerX +  4f, 72f, 18f, 50f);   // barrel body
         shapeRenderer.setColor(0.12f, 0.13f, 0.16f, 1f);
-        shapeRenderer.rect(centerX +  4f, 72f,  4f, 50f);   // inner-edge shadow
+        shapeRenderer.rect(centerX +  4f, 72f,  3f, 50f);   // inner-edge shadow
         shapeRenderer.setColor(0.44f, 0.48f, 0.54f, 1f);
-        shapeRenderer.rect(centerX + 32f, 72f, 12f, 50f);   // crown highlight strip
+        shapeRenderer.rect(centerX + 12f, 72f,  7f, 50f);   // crown highlight
         shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
-        shapeRenderer.rect(centerX + 50f, 72f,  4f, 50f);   // outer-edge shadow
+        shapeRenderer.rect(centerX + 19f, 72f,  3f, 50f);   // outer-edge shadow
 
-        // 5. Centre channel — tight 8 px shadow gap (narrower than pump = break-action look)
+        // 5. Centre channel — 8px dark gap + narrow sighting rib
         shapeRenderer.setColor(0.06f, 0.07f, 0.08f, 1f);
         shapeRenderer.rect(centerX -  4f, 72f,  8f, 50f);
-        // Narrow sighting rib
         shapeRenderer.setColor(0.20f, 0.22f, 0.26f, 1f);
         shapeRenderer.rect(centerX -  2f, 72f,  4f, 50f);
 
-        // 6. Muzzle end-caps
+        // 6. Muzzle end-caps (18px wide, matching barrel width)
         shapeRenderer.setColor(0.18f, 0.19f, 0.23f, 1f);
-        shapeRenderer.rect(centerX - 54f, 120f, 50f, 4f);   // left cap
-        shapeRenderer.rect(centerX +  4f, 120f, 50f, 4f);   // right cap
+        shapeRenderer.rect(centerX - 22f, 120f, 18f, 4f);   // left cap
+        shapeRenderer.rect(centerX +  4f, 120f, 18f, 4f);   // right cap
 
-        // 7. Bore openings — foreshortened ellipses, slightly wider than pump (heavier gauge)
+        // 7. Bore openings — nearly circular (18×14): heavier gauge = slightly wider than pump
         shapeRenderer.setColor(0.04f, 0.04f, 0.05f, 0.95f);
-        shapeRenderer.ellipse(centerX - 52f, 116f, 46f, 12f);  // left bore
-        shapeRenderer.ellipse(centerX +  6f, 116f, 46f, 12f);  // right bore
+        shapeRenderer.ellipse(centerX - 22f, 114f, 18f, 14f);  // left bore
+        shapeRenderer.ellipse(centerX +  4f, 114f, 18f, 14f);  // right bore
         // Rim shine
         shapeRenderer.setColor(0.30f, 0.32f, 0.36f, 0.60f);
-        shapeRenderer.ellipse(centerX - 52f, 124f, 46f,  4f);
-        shapeRenderer.ellipse(centerX +  6f, 124f, 46f,  4f);
+        shapeRenderer.ellipse(centerX - 22f, 126f, 18f,  3f);
+        shapeRenderer.ellipse(centerX +  4f, 126f, 18f,  3f);
     }
 
     /**
