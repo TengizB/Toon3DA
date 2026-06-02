@@ -100,7 +100,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         impactEffectSystem = new ImpactEffectSystem();
 
         // Run-persistent renderers
-        Shotgun shotgun = new Shotgun();
+        DoubleBarrelShotgun shotgun = new DoubleBarrelShotgun();
         inventory.setEquippedWeapon(shotgun);
         weaponHudRenderer    = new WeaponHudRenderer(shotgun);
         hudRenderer          = new HudRenderer(player, hudState);
