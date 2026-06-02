@@ -376,13 +376,15 @@ public final class Constants {
     public static final int   BULKHEAD_FRAME_WIDTH            = 14;
     public static final int   BULKHEAD_BOLT_SPACING           = 21;
 
-    // Touch Controller — transparent on-screen button cluster for Android landscape
-    // Safe zone: x 960..1240, y 160..615; spatially disjoint from HUD (y 0..130) and mini-map (top-left)
+    // Touch Controller — 4-row grid, right side of screen, all buttons 96×96
+    // Grid columns (center X): left=1004, center=1100, right=1196
+    // Grid rows   (center Y): row1(BACK)=200, row2(FIRE/ROT)=296, row3(FWD/STR)=392, row4(RELOAD/SKIP)=488
+    // Safe zone: x 956..1244, y 152..536; above HUD (y 0..130), avoids mini-map (top-left)
     public static final float TOUCH_BUTTON_SIZE          = 96f;
     public static final float TOUCH_BUTTON_CORNER_RADIUS = 16f;
-    public static final float TOUCH_DIAMOND_CENTER_X     = 1100f;
-    public static final float TOUCH_DIAMOND_CENTER_Y     = 300f;
-    public static final float TOUCH_DIAMOND_ARM_OFFSET   = 92f;
+    public static final float TOUCH_GRID_CENTER_X        = 1100f;  // center-column X
+    public static final float TOUCH_GRID_BASE_Y          = 200f;   // center Y of bottom row (BACK)
+    public static final float TOUCH_GRID_ARM_OFFSET      = 96f;    // row & column spacing (= button size → rows touch)
     public static final float TOUCH_FILL_ALPHA_IDLE      = 0.22f;
     public static final float TOUCH_FILL_ALPHA_PRESSED   = 0.40f;
     public static final float TOUCH_RIM_ALPHA            = 0.55f;
@@ -393,15 +395,6 @@ public final class Constants {
     public static final float TOUCH_ICON_EXTENT          = 22f;
     public static final float TOUCH_RIM_THICKNESS        = 3f;
     public static final int   TOUCH_ARC_SEGMENTS         = 8;
-    // Action button cluster — right side of screen, aligned with movement diamond columns
-    public static final float TOUCH_FIRE_SIZE            = 110f;
-    public static final float TOUCH_FIRE_CENTER_X        = 1100f;
-    public static final float TOUCH_FIRE_CENTER_Y        = 560f;
-    public static final float TOUCH_ACTION_SIZE          = 82f;
-    public static final float TOUCH_RELOAD_CENTER_X      = 1008f;
-    public static final float TOUCH_RELOAD_CENTER_Y      = 560f;
-    public static final float TOUCH_SKIP_CENTER_X        = 1192f;
-    public static final float TOUCH_SKIP_CENTER_Y        = 560f;
 
     // Level transitions — stairs-down tile ('>' char)
     // STAIRS_DOWN_CHAR: classic roguelike glyph; exactly one per procedurally generated floor.
