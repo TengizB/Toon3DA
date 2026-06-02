@@ -211,13 +211,12 @@ The muzzle / barrel tip points AWAY from the player — toward the top of the ca
 The grip / stock is completely cut off below the screen edge — it must NOT be drawn.
 
 ```
-Y=134  ← muzzle / barrel tip or emitter (far end of weapon, pointing into the level)
-Y=110  ← barrel tubes (upper portion, top-surface view)
-Y=85   ← barrel tubes (lower portion) / action area
-Y=68   ← upper receiver / scope
-Y=40   ← main body / receiver (top surface)
-Y=18   ← bottom of visible weapon (transition to transparent zone)
-Y=0    ← TRANSPARENT — grip cut off below screen; draw NOTHING below Y=18
+Y=134  ← muzzle / barrel tip (pointing toward the horizon)
+Y=120  ← muzzle caps and bore openings
+Y=90   ← barrel tubes (narrow top surface, pointing away from player)
+Y=62   ← top of receiver / upper body
+Y=14   ← LOWEST VISIBLE PIXEL — body starts here; Y=0..14 is transparent
+Y=0    ← grip (fully off-screen; player's eye is above the gun)
 ```
 
 DO NOT DRAW:
@@ -237,6 +236,19 @@ Use this shading for EVERY barrel tube, on both the outer and inner edges.
 
 centerX = 96 (half of 192). ALL weapons MUST be symmetric about this axis.
 This maps to screen X = 640 (screen centre) — Quake 1 centred-weapon look.
+
+### FIRST-PERSON ABOVE-HORIZON PERSPECTIVE — CRITICAL
+
+The player looks at the horizon. The gun rests below eye level, pointing toward the horizon.
+This means the player sees the gun from SLIGHTLY ABOVE. Consequences for sprite design:
+
+  Grip / stock   → fully below the screen edge. DO NOT DRAW. Y=0..14 = transparent.
+  Receiver body  → visible as a wide flat top surface. Draw as wide trapezoid from Y=14.
+  Barrel tubes   → pointing away from player. You see the narrow TOP surface of each tube.
+                   Barrel must be NARROW (16–20px wide) and TALL (50–56px high), ratio ≈ 1:3.
+                   A 44×36px barrel (nearly square) is WRONG — that looks sideways.
+  Bore openings  → face nearly straight at the viewer. Use nearly circular ellipses (16×14px).
+                   A 32×10px ellipse (very flat) is WRONG — the muzzle wouldn't face you.
 
 ---
 
@@ -284,19 +296,19 @@ private static Pixmap flipPixmapVertically(Pixmap source) {
 
 ### Layer Order (draw back-to-front)
 
-All sprites use Quake-1 top-down-angle perspective.
 Grip/stock/trigger guard are NEVER drawn — they are off-screen.
 
-1. Receiver body (top-surface trapezoid: wider at near/Y≈18, narrower at far/Y≈68)
-2. Body far-edge highlight (+3px lighter) and near-edge shadow (+3px darker)
-3. Action detail (pump slide, breech block, magazine well, power indicator — all symmetric)
-4. Upper receiver / stepped section
-5. Scope or sights (centred, prominent from top view)
-6. Barrel(s) — top-surface cylinder: body + outer shadow + crown highlight + inner shadow
-7. Barrel centre channel (dark gap or shadow zone between tubes)
-8. Barrel band / retaining ring
-9. Muzzle end-caps
-10. Muzzle bore (foreshortened ellipse: wide + shallow = overhead angle) or emitter layers
+1. (Grip / stock / trigger guard — NOT drawn; Y=0..14 left transparent)
+2. Main body / receiver (wide trapezoid, starts at Y≈14)
+3. Body highlights and shadow strips
+4. Action assembly (pump slide for ballistic; coils/power cell for energy)
+5. Upper receiver / stepped section
+6. Scope or sights (centered)
+7. Barrel(s) — NARROW × TALL for ballistic (top surface of tube pointing away);
+              tapered trapezoid for energy (wide at receiver, narrow at muzzle)
+8. Barrel accessories (bands, prongs, shroud)
+9. Muzzle caps (thin rect at barrel tips)
+10. Muzzle bore (nearly circular dark ellipse) or emitter (layered glowing ellipses)
 
 ### Color Palette
 
@@ -304,9 +316,9 @@ Ballistic weapons (shotgun, rifle, etc.):
   Barrel / receiver: dark gunmetal  (0.22, 0.24, 0.28) – (0.32, 0.34, 0.40)
   Top highlight:     light steel    (0.42, 0.46, 0.52)
   Bottom shadow:     near-black     (0.12, 0.13, 0.17)
-  Wood stock:        dark mahogany  (0.42, 0.22, 0.08) with grain at (0.34, 0.16, 0.05)
+  Crown highlight:   bright steel   (0.45, 0.49, 0.56) — top surface of barrel cylinder
+  Outer edge shadow: near-black     (0.10, 0.11, 0.14) — sides of barrel cylinder
   Muzzle bore:       near-black     (0.05, 0.05, 0.06, 0.95)
-  Rubber grip:       dark charcoal  (0.18, 0.19, 0.22)
 
 Energy weapons (plasma, rail, etc.):
   Body:              steel blue     (0.28, 0.32, 0.42)
@@ -314,19 +326,24 @@ Energy weapons (plasma, rail, etc.):
   Coils/vents:       bright cyan    (0.00, 0.88, 1.00) with glow fringe
 
 ### Proportions Guide
-  Grip / stock:     NOT DRAWN — transparent zone Y 0–18
-  Receiver body:    ~ 88–120 px wide, 40–55 px tall  (Y 18–68)
-  Barrel tubes:     ~ 40–60 px wide each, 44–52 px tall  (Y 78–126)
-  Centre gap:       8–20 px wide between barrel tubes
-  Muzzle bore:      wide shallow ellipse (wide ≈ barrel width − 4 px, height ≈ 10–14 px)
-  Total height used: Y 18..134 (116 px; bottom 18 px transparent)
+  Grip / stock:      NOT DRAWN — cut off below screen (see perspective note above)
+  Trigger guard:     NOT DRAWN — cut off below screen
+  Main body:         ~ 80–100 px wide, 48 px tall (Y=14..62)
+  Ballistic barrel:  16–20 px wide × 50–56 px tall  ← ratio MUST be ≈ 1:3 (narrow × tall)
+  Energy barrel:     tapered: 52px wide at receiver → 28px at muzzle, ~24px tall
+  Muzzle bore:       16×14 px (ballistic, nearly circular) or layered ellipses (energy)
+  Total height used: Y=14..130 (116 px effective)
 
 ### Common Details
   Top highlight strip on body: 3 px tall, lighter color
   Bottom shadow strip on body: 3 px tall, darker color
   Mid-barrel groove: 2 px tall, darkest color
-  Trigger guard: U-shape, 3 rects (left bar, right bar, top bar)
-  Muzzle bore: dark ellipse, no glow (ballistic) or layered ellipses (energy)
+  Ballistic barrel cylinder shading (left barrel example, centerX=96):
+    — outer-edge shadow: 3px from outer edge, color (0.10, 0.11, 0.14)
+    — crown highlight:   5px inward from outer edge, color (0.45, 0.49, 0.56)
+    — inner-edge shadow: 3px from inner edge, color (0.12, 0.13, 0.16)
+  Muzzle bore: dark ellipse (16×14), no glow for ballistic; layered ellipses for energy
+  Bore rim shine: dim (0.32, 0.34, 0.38, 0.50) ellipse at top of bore opening
 
 ---
 

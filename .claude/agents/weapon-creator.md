@@ -78,21 +78,20 @@ The FrameBuffer is ALWAYS discarded after pixel readback. Never store it as a fi
 **Symmetry:** All sprites MUST be symmetric about canvas centerX = 96.
 This maps to screen X = 640 (screen centre) — Quake 1 centred-weapon look.
 
-**Quake-1 top-down-angle perspective (MANDATORY for all weapons):**
-The virtual camera sits slightly above and behind the player's hands.
-The barrel/muzzle end faces AWAY from the player — toward the top of the canvas.
-The grip/stock is cut off below the screen — it MUST NOT be drawn.
-
-- Y = 0..~18  → TRANSPARENT — grip region, cut off at screen bottom. Draw nothing here.
-- Y = 18..~72 → Main body / receiver seen from slightly above (top surface visible)
-- Y = 66..~82 → Fore-end / action area (slide, breech, scope housing)
-- Y = 80..~126 → Barrel tubes — most prominent element; drawn as top-surface cylinders
-- Y = 124..134 → Muzzle end-caps + bore openings / emitter
+**First-person above-horizon perspective — MANDATORY:**
+The player's eye is ABOVE the gun, which points toward the horizon. Consequences:
+- Grip, stock, and trigger guard fall BELOW the screen edge. Do NOT draw them.
+- Y=0..14 must be left transparent (grip cut-off zone).
+- Each barrel points AWAY from the player → you see its narrow top surface.
+  Barrel tubes MUST be NARROW (16–20px wide) and TALL (50–56px high), ratio ≈ 1:3.
+  Do NOT draw wide, squat barrel shapes — those look like the gun is sideways.
+- The bore openings face nearly straight at the viewer from slightly above →
+  use nearly circular ellipses (16×14px or similar aspect ratio ≈ 1:0.875).
 
 **Top-surface cylinder shading (for barrel tubes):**
-  Outer edge:      narrow shadow strip (4 px) — cylinder curves away from camera
-  Crown highlight: wider lighter strip (12 px) — top of cylinder facing camera
-  Inner edge:      narrow shadow strip (4 px) — cylinder curves toward centre gap
+  Outer edge:      narrow shadow strip (3 px) — cylinder curves away from camera
+  Crown highlight: 5 px lighter strip — top of cylinder facing camera
+  Inner edge:      narrow shadow strip (3 px) — cylinder curves toward centre gap
 
 **Do NOT draw:**
   - Stock or wooden butt
@@ -101,20 +100,22 @@ The grip/stock is cut off below the screen — it MUST NOT be drawn.
   These items are all cut off below the screen edge.
 
 **Canvas coordinates (ShapeRenderer Y-up):**
-  Y = 0   → bottom of canvas (grip region — TRANSPARENT, cut off)
-  Y = 134 → top of canvas (barrel muzzle / emitter pointing into the level)
+  Y =   0 → bottom of canvas (grip, fully off-screen at runtime)
+  Y =  14 → lowest visible pixel (start body/receiver here)
+  Y = 134 → top of canvas (muzzle bores, pointing toward horizon)
 
 **Layer order (draw back-to-front):**
-1. Receiver body (top-surface trapezoid, slightly wider at near/Y=18, narrower at far/Y≈68)
-2. Body highlights (far/top edge +3px lighter) and shadow (near/bottom edge +3px darker)
-3. Action detail (pump slide, breech block, magazine, power indicator — symmetric)
-4. Upper receiver / stepped section
-5. Scope or sights (centred on upper receiver)
-6. Barrel(s) — top-surface cylinder view with crown highlight + edge shadows
-7. Barrel centre channel (dark gap between tubes, or shadow below single barrel)
-8. Barrel band / retaining ring
-9. Muzzle end-caps
-10. Muzzle bore (foreshortened dark ellipse, wide & shallow) or emitter (layered glowing ellipses)
+1. (Grip/stock/trigger guard — NOT drawn; Y=0..14 transparent)
+2. Main body / receiver (wide trapezoid/rect, starts at Y≈14)
+3. Body highlights (top +3px lighter) and shadow (bottom +3px darker)
+4. Barrel detail (pump slide for ballistic, coils for energy)
+5. Upper receiver / stepped section
+6. Scope or sights (centered)
+7. Barrel(s) — NARROW (16–20px) × TALL (50–56px) for ballistic;
+               tapered trapezoid (wide at receiver, narrow at muzzle) for energy
+8. Barrel accessories (bands, prongs, shroud)
+9. Muzzle caps (thin rect at barrel tip)
+10. Muzzle bore (nearly circular dark ellipse) or emitter (layered glowing ellipses)
 
 **Ballistic weapon color palette:**
   Receiver/barrel:   dark gunmetal  rgba(0.22, 0.24, 0.28, 1)
