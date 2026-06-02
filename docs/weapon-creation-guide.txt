@@ -204,13 +204,36 @@ After glReadPixels + flipPixmapVertically, the texture has correct orientation.
 
 Pixel → world scale: 1 px ≈ 2.0 world units.
 
+### QUAKE-1 TOP-DOWN-ANGLE PERSPECTIVE (mandatory for all weapon sprites)
+
+The virtual camera sits slightly above and behind the player's hands.
+The muzzle / barrel tip points AWAY from the player — toward the top of the canvas.
+The grip / stock is completely cut off below the screen edge — it must NOT be drawn.
+
 ```
-Y=134  ← muzzle / barrel tip (appears at TOP of weapon sprite on screen)
-Y=100  ← barrel
-Y=80   ← upper receiver
-Y=40   ← main body / lower receiver
-Y=0    ← grip bottom (partially off-screen; weapon sprite extends below HUD_HEIGHT)
+Y=134  ← muzzle / barrel tip or emitter (far end of weapon, pointing into the level)
+Y=110  ← barrel tubes (upper portion, top-surface view)
+Y=85   ← barrel tubes (lower portion) / action area
+Y=68   ← upper receiver / scope
+Y=40   ← main body / receiver (top surface)
+Y=18   ← bottom of visible weapon (transition to transparent zone)
+Y=0    ← TRANSPARENT — grip cut off below screen; draw NOTHING below Y=18
 ```
+
+DO NOT DRAW:
+  - Wooden stock or rubber butt
+  - Pistol grip or grip panels
+  - Trigger guard (U-shape)
+  These are all hidden below the screen edge in the Quake-1 perspective.
+
+### TOP-SURFACE CYLINDER SHADING (for barrel tubes)
+
+Barrel tubes are viewed from above at a slight angle. Render as flat-top cylinders:
+  Outer edge shadow:   narrow strip (≈4 px), dark —  cylinder curves away from camera
+  Crown highlight:     wider strip (≈12 px), light —  top of cylinder facing upward camera
+  Inner edge shadow:   narrow strip (≈4 px), dark —  cylinder curves toward centre gap
+
+Use this shading for EVERY barrel tube, on both the outer and inner edges.
 
 centerX = 96 (half of 192). ALL weapons MUST be symmetric about this axis.
 This maps to screen X = 640 (screen centre) — Quake 1 centred-weapon look.
@@ -260,16 +283,20 @@ private static Pixmap flipPixmapVertically(Pixmap source) {
 ## SPRITE DESIGN GUIDELINES
 
 ### Layer Order (draw back-to-front)
-1. Stock / grip
-2. Trigger guard
-3. Main body / receiver
-4. Body highlights and shadow strips
-5. Magazine / power indicator
-6. Upper receiver / stepped section
-7. Barrel(s)
-8. Barrel highlights and groove accents
-9. Muzzle details (prongs, shroud)
-10. Muzzle emitter or barrel opening (darkest or glowing)
+
+All sprites use Quake-1 top-down-angle perspective.
+Grip/stock/trigger guard are NEVER drawn — they are off-screen.
+
+1. Receiver body (top-surface trapezoid: wider at near/Y≈18, narrower at far/Y≈68)
+2. Body far-edge highlight (+3px lighter) and near-edge shadow (+3px darker)
+3. Action detail (pump slide, breech block, magazine well, power indicator — all symmetric)
+4. Upper receiver / stepped section
+5. Scope or sights (centred, prominent from top view)
+6. Barrel(s) — top-surface cylinder: body + outer shadow + crown highlight + inner shadow
+7. Barrel centre channel (dark gap or shadow zone between tubes)
+8. Barrel band / retaining ring
+9. Muzzle end-caps
+10. Muzzle bore (foreshortened ellipse: wide + shallow = overhead angle) or emitter layers
 
 ### Color Palette
 
@@ -287,10 +314,12 @@ Energy weapons (plasma, rail, etc.):
   Coils/vents:       bright cyan    (0.00, 0.88, 1.00) with glow fringe
 
 ### Proportions Guide
-  Stock / grip:      ~ 32–48 px wide, 30–40 px tall (partially off-screen)
-  Main body:         ~ 120–150 px wide, 40–55 px tall
-  Barrel:            ~ 40–80 px wide, 30–50 px tall
-  Total height used: fill canvas (0..134)
+  Grip / stock:     NOT DRAWN — transparent zone Y 0–18
+  Receiver body:    ~ 88–120 px wide, 40–55 px tall  (Y 18–68)
+  Barrel tubes:     ~ 40–60 px wide each, 44–52 px tall  (Y 78–126)
+  Centre gap:       8–20 px wide between barrel tubes
+  Muzzle bore:      wide shallow ellipse (wide ≈ barrel width − 4 px, height ≈ 10–14 px)
+  Total height used: Y 18..134 (116 px; bottom 18 px transparent)
 
 ### Common Details
   Top highlight strip on body: 3 px tall, lighter color

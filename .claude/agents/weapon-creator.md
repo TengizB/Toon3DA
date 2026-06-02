@@ -78,21 +78,43 @@ The FrameBuffer is ALWAYS discarded after pixel readback. Never store it as a fi
 **Symmetry:** All sprites MUST be symmetric about canvas centerX = 96.
 This maps to screen X = 640 (screen centre) — Quake 1 centred-weapon look.
 
+**Quake-1 top-down-angle perspective (MANDATORY for all weapons):**
+The virtual camera sits slightly above and behind the player's hands.
+The barrel/muzzle end faces AWAY from the player — toward the top of the canvas.
+The grip/stock is cut off below the screen — it MUST NOT be drawn.
+
+- Y = 0..~18  → TRANSPARENT — grip region, cut off at screen bottom. Draw nothing here.
+- Y = 18..~72 → Main body / receiver seen from slightly above (top surface visible)
+- Y = 66..~82 → Fore-end / action area (slide, breech, scope housing)
+- Y = 80..~126 → Barrel tubes — most prominent element; drawn as top-surface cylinders
+- Y = 124..134 → Muzzle end-caps + bore openings / emitter
+
+**Top-surface cylinder shading (for barrel tubes):**
+  Outer edge:      narrow shadow strip (4 px) — cylinder curves away from camera
+  Crown highlight: wider lighter strip (12 px) — top of cylinder facing camera
+  Inner edge:      narrow shadow strip (4 px) — cylinder curves toward centre gap
+
+**Do NOT draw:**
+  - Stock or wooden butt
+  - Pistol grip or rubber grip panels
+  - Trigger guard (U-shape)
+  These items are all cut off below the screen edge.
+
 **Canvas coordinates (ShapeRenderer Y-up):**
-  Y = 0   → bottom of canvas (grip, may be partially off-screen at runtime)
-  Y = 134 → top of canvas (barrel tip / muzzle — appears at top of weapon on screen)
+  Y = 0   → bottom of canvas (grip region — TRANSPARENT, cut off)
+  Y = 134 → top of canvas (barrel muzzle / emitter pointing into the level)
 
 **Layer order (draw back-to-front):**
-1. Stock / grip
-2. Trigger guard (U-shape: left bar + right bar + top bar)
-3. Main body / receiver (wide rect)
-4. Body highlights (top +3px lighter) and shadow (bottom +3px darker)
-5. Barrel detail (coils for energy, grooves for ballistic)
-6. Upper receiver / stepped section
-7. Scope or sights (centered)
-8. Barrel(s) — trapezoid via drawSymmetricTrapezoid
-9. Barrel prongs / shroud
-10. Muzzle bore (dark ellipse) or emitter (layered glowing ellipses)
+1. Receiver body (top-surface trapezoid, slightly wider at near/Y=18, narrower at far/Y≈68)
+2. Body highlights (far/top edge +3px lighter) and shadow (near/bottom edge +3px darker)
+3. Action detail (pump slide, breech block, magazine, power indicator — symmetric)
+4. Upper receiver / stepped section
+5. Scope or sights (centred on upper receiver)
+6. Barrel(s) — top-surface cylinder view with crown highlight + edge shadows
+7. Barrel centre channel (dark gap between tubes, or shadow below single barrel)
+8. Barrel band / retaining ring
+9. Muzzle end-caps
+10. Muzzle bore (foreshortened dark ellipse, wide & shallow) or emitter (layered glowing ellipses)
 
 **Ballistic weapon color palette:**
   Receiver/barrel:   dark gunmetal  rgba(0.22, 0.24, 0.28, 1)
