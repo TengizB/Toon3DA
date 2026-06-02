@@ -114,7 +114,7 @@ public final class Constants {
     public static final float DAMAGE_MIN_MULTIPLIER = 0.15f;
 
     // Shotgun stats
-    public static final int     SHOTGUN_DAMAGE             = 24;
+    public static final int     SHOTGUN_DAMAGE             = 50;
     public static final int     SHOTGUN_CLIP_SIZE          = 1;
     public static final int     SHOTGUN_RELOAD_TIME_TICKS  = 1;
     public static final float   SHOTGUN_DAMAGE_DROP_COEFF  = 0.18f;
