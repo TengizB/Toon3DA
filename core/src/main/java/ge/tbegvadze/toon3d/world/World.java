@@ -8,10 +8,7 @@ import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
-import ge.tbegvadze.toon3d.entity.DoubleBarrelShotgun;
-import ge.tbegvadze.toon3d.entity.Player;
-import ge.tbegvadze.toon3d.entity.PlayerInventory;
-import ge.tbegvadze.toon3d.entity.Weapon;
+import ge.tbegvadze.toon3d.entity.*;
 import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
 import ge.tbegvadze.toon3d.hud.HudRenderer;
 import ge.tbegvadze.toon3d.input.PlayerController;
@@ -103,9 +100,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         impactEffectSystem = new ImpactEffectSystem();
 
         // Run-persistent renderers
-        DoubleBarrelShotgun dblShotgun = new DoubleBarrelShotgun();
-        inventory.setEquippedWeapon(dblShotgun);
-        weaponHudRenderer    = new WeaponHudRenderer(dblShotgun);
+        Shotgun shotgun = new Shotgun();
+        inventory.setEquippedWeapon(shotgun);
+        weaponHudRenderer    = new WeaponHudRenderer(shotgun);
         hudRenderer          = new HudRenderer(player, hudState);
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);
         fadeOverlayRenderer  = new FadeOverlayRenderer();
