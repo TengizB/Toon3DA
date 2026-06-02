@@ -377,17 +377,12 @@ public final class Constants {
     public static final int   BULKHEAD_BOLT_SPACING           = 21;
 
     // Touch Controller — transparent on-screen button cluster for Android landscape
-    // Safe zone: x 904..1264, y 160..440; spatially disjoint from HUD (y 0..130) and mini-map (top-left)
+    // Safe zone: x 960..1240, y 160..615; spatially disjoint from HUD (y 0..130) and mini-map (top-left)
     public static final float TOUCH_BUTTON_SIZE          = 96f;
     public static final float TOUCH_BUTTON_CORNER_RADIUS = 16f;
-    public static final float TOUCH_DIAMOND_CENTER_X     = 1124f;
+    public static final float TOUCH_DIAMOND_CENTER_X     = 1100f;
     public static final float TOUCH_DIAMOND_CENTER_Y     = 300f;
     public static final float TOUCH_DIAMOND_ARM_OFFSET   = 92f;
-    public static final float TOUCH_STRAFE_WIDTH         = 64f;
-    public static final float TOUCH_STRAFE_HEIGHT        = 132f;
-    public static final float TOUCH_STRAFE_COLUMN_X      = 904f;
-    public static final float TOUCH_STRAFE_UPPER_Y       = 312f;
-    public static final float TOUCH_STRAFE_LOWER_Y       = 164f;
     public static final float TOUCH_FILL_ALPHA_IDLE      = 0.22f;
     public static final float TOUCH_FILL_ALPHA_PRESSED   = 0.40f;
     public static final float TOUCH_RIM_ALPHA            = 0.55f;
@@ -398,15 +393,15 @@ public final class Constants {
     public static final float TOUCH_ICON_EXTENT          = 22f;
     public static final float TOUCH_RIM_THICKNESS        = 3f;
     public static final int   TOUCH_ARC_SEGMENTS         = 8;
-    // Action button cluster — left side of screen, left-thumb reach (above left HUD panel, y > 130)
+    // Action button cluster — right side of screen, aligned with movement diamond columns
     public static final float TOUCH_FIRE_SIZE            = 110f;
-    public static final float TOUCH_FIRE_CENTER_X        = 200f;
-    public static final float TOUCH_FIRE_CENTER_Y        = 310f;
+    public static final float TOUCH_FIRE_CENTER_X        = 1100f;
+    public static final float TOUCH_FIRE_CENTER_Y        = 560f;
     public static final float TOUCH_ACTION_SIZE          = 82f;
-    public static final float TOUCH_RELOAD_CENTER_X      = 90f;
-    public static final float TOUCH_RELOAD_CENTER_Y      = 208f;
-    public static final float TOUCH_SKIP_CENTER_X        = 330f;
-    public static final float TOUCH_SKIP_CENTER_Y        = 208f;
+    public static final float TOUCH_RELOAD_CENTER_X      = 1008f;
+    public static final float TOUCH_RELOAD_CENTER_Y      = 560f;
+    public static final float TOUCH_SKIP_CENTER_X        = 1192f;
+    public static final float TOUCH_SKIP_CENTER_Y        = 560f;
 
     // Level transitions — stairs-down tile ('>' char)
     // STAIRS_DOWN_CHAR: classic roguelike glyph; exactly one per procedurally generated floor.
