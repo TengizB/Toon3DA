@@ -1,0 +1,8 @@
+-source
+21
+-target
+21
+--class-path
+/dev/null
+-proc:none
+/home/user/Toon3DA/core/src/main/java/ge/tbegvadze/toon3d/render/WallRenderer.java
