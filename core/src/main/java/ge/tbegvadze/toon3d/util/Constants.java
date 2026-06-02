@@ -130,6 +130,28 @@ public final class Constants {
     public static final int SHOTGUN_CANVAS_WIDTH  = 192;
     public static final int SHOTGUN_CANVAS_HEIGHT = 134;
 
+    // Double-Barrel Shotgun stats — higher burst damage, shorter range, 2-shot clip, slower reload
+    // Damage table (coefficient 0.22, floor 0.15):
+    //   distance 1: 32 × 0.78 = 25   distance 2: 32 × 0.56 = 18
+    //   distance 3: 32 × 0.34 = 11   distance 4: 32 × 0.15 =  5   (clamped by floor)
+    public static final int     DBL_SHOTGUN_DAMAGE             = 32;
+    public static final int     DBL_SHOTGUN_CLIP_SIZE          = 2;
+    public static final int     DBL_SHOTGUN_RELOAD_TIME_TICKS  = 2;
+    public static final float   DBL_SHOTGUN_DAMAGE_DROP_COEFF  = 0.22f;
+    public static final int     DBL_SHOTGUN_RANGE_TILES        = 4;
+    // DBL_SHOTGUN_PENETRATION: false = stops at first enemy (spread dissipates on first target)
+    public static final boolean DBL_SHOTGUN_PENETRATION        = false;
+
+    // Double-Barrel Shotgun HUD textures — always procedural (no asset files)
+    public static final String DBL_SHOTGUN_NORMAL_TEXTURE_PATH = "textures/guns/dbl_shotgun/dbl_shotgun.png";
+    public static final String DBL_SHOTGUN_FIRE_TEXTURE_PATH   = "textures/guns/dbl_shotgun/dbl_shotgun_fire.png";
+    public static final String DBL_SHOTGUN_RELOAD_TEXTURE_PATH = "textures/guns/dbl_shotgun/dbl_shotgun_reload.png";
+    // Double-Barrel Shotgun procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer
+    public static final int DBL_SHOTGUN_CANVAS_WIDTH  = 192;
+    public static final int DBL_SHOTGUN_CANVAS_HEIGHT = 134;
+    // Display name shown in the HUD ammo readout
+    public static final String DBL_SHOTGUN_DISPLAY_NAME = "DBL SHOTGUN";
+
     // Plasma Rifle stats — high clip, long range, lower per-shot damage, moderate drop
     // Damage table (coefficient 0.10, floor 0.15):
     //   distance 1: 18 × 0.90 = 16   distance 4: 18 × 0.60 = 11
