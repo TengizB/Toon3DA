@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.entity.DoubleBarrelShotgun;
 import ge.tbegvadze.toon3d.entity.PlasmaRifle;
 import ge.tbegvadze.toon3d.entity.Shotgun;
 import ge.tbegvadze.toon3d.entity.Weapon;
@@ -55,6 +56,9 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         }
         if (weapon instanceof PlasmaRifle) {
             return generatePlasmaRifleTexture();
+        }
+        if (weapon instanceof DoubleBarrelShotgun) {
+            return generateDoubleBarrelShotgunTexture();
         }
         if (weapon instanceof Shotgun) {
             return generateShotgunTexture();
@@ -222,7 +226,175 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     }
 
     /**
-     * Generates a symmetric double-barrel shotgun sprite using ShapeRenderer into an
+     * Generates an over-under double-barrel shotgun sprite using ShapeRenderer into an
+     * offscreen FrameBuffer. The two barrels are stacked vertically (one above the other),
+     * making this weapon instantly distinguishable from the side-by-side pump-action Shotgun.
+     *
+     * Canvas coordinate system (ShapeRenderer Y-up):
+     *   Y =   0 → bottom of canvas (stock butt, partially off-screen at runtime)
+     *   Y = 134 → top of canvas (muzzle opening of upper barrel)
+     *
+     * Layers drawn back-to-front:
+     *   1. Wooden stock     — deep walnut trapezoid with horizontal grain lines
+     *   2. Trigger guard    — narrow steel U-shape (break-action guns have compact guards)
+     *   3. Main receiver    — wide gunmetal block with break-action hinge line
+     *   4. Hinge latch      — oval latch knob on right side of hinge
+     *   5. Lower barrel     — wider steel tube, background position (Y 76-116)
+     *   6. Upper barrel     — narrower steel tube, foreground position (Y 92-132)
+     *   7. Ventilated rib   — thin steel strip running along top edge of lower barrel
+     *   8. Lower muzzle cap — flat end-plate at bottom barrel tip
+     *   9. Upper muzzle cap — flat end-plate at upper barrel tip
+     *  10. Lower bore        — dark near-black ellipse + rim shine
+     *  11. Upper bore        — dark near-black ellipse + rim shine
+     */
+    private static Texture generateDoubleBarrelShotgunTexture() {
+        int canvasWidth  = Constants.DBL_SHOTGUN_CANVAS_WIDTH;
+        int canvasHeight = Constants.DBL_SHOTGUN_CANVAS_HEIGHT;
+
+        FrameBuffer   frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
+        ShapeRenderer temporaryShapeRenderer = new ShapeRenderer();
+        OrthographicCamera camera            = new OrthographicCamera(canvasWidth, canvasHeight);
+        camera.position.set(canvasWidth / 2f, canvasHeight / 2f, 0f);
+        camera.update();
+
+        frameBuffer.begin();
+        Gdx.gl.glClearColor(0f, 0f, 0f, 0f);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        temporaryShapeRenderer.setProjectionMatrix(camera.combined);
+        temporaryShapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        drawDoubleBarrelShotgunShape(temporaryShapeRenderer, canvasWidth / 2f);
+        temporaryShapeRenderer.end();
+
+        Pixmap rawPixmap = new Pixmap(canvasWidth, canvasHeight, Pixmap.Format.RGBA8888);
+        Gdx.gl.glReadPixels(0, 0, canvasWidth, canvasHeight,
+                            GL20.GL_RGBA, GL20.GL_UNSIGNED_BYTE, rawPixmap.getPixels());
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+        frameBuffer.end();
+        frameBuffer.dispose();
+        temporaryShapeRenderer.dispose();
+
+        Pixmap flippedPixmap = flipPixmapVertically(rawPixmap);
+        rawPixmap.dispose();
+
+        Texture texture = new Texture(flippedPixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        flippedPixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Draws a break-action over-under shotgun silhouette.
+     * Two barrels are stacked vertically (lower barrel behind/below, upper barrel in front/above).
+     * This is the defining visual difference from the side-by-side pump-action Shotgun sprite.
+     * All coordinates in canvas pixel space; Y=0 = stock butt, Y=134 = upper muzzle opening.
+     * centerX = 96 keeps the weapon perfectly symmetric on the 192-wide canvas.
+     */
+    private static void drawDoubleBarrelShotgunShape(ShapeRenderer shapeRenderer, float centerX) {
+
+        // 1. Wooden stock — deep walnut (darker than pump-action Shotgun to differentiate)
+        shapeRenderer.setColor(0.34f, 0.16f, 0.05f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 18f, 0f, 34f, 40f);
+        // Grain lines (four tight horizontal bands)
+        shapeRenderer.setColor(0.25f, 0.10f, 0.03f, 1f);
+        shapeRenderer.rect(centerX - 18f,  7f, 36f, 2f);
+        shapeRenderer.rect(centerX - 18f, 14f, 36f, 2f);
+        shapeRenderer.rect(centerX - 18f, 21f, 36f, 2f);
+        shapeRenderer.rect(centerX - 18f, 28f, 36f, 2f);
+        // Stock cheek piece highlight (right side only — break-action stocks are asymmetric)
+        shapeRenderer.setColor(0.42f, 0.20f, 0.06f, 1f);
+        shapeRenderer.rect(centerX + 6f, 8f, 8f, 26f);
+
+        // 2. Trigger guard — compact steel U (break-action guard is narrower than pump)
+        shapeRenderer.setColor(0.20f, 0.22f, 0.26f, 1f);
+        shapeRenderer.rect(centerX - 16f, 24f, 5f, 18f);  // left bar
+        shapeRenderer.rect(centerX + 11f, 24f, 5f, 18f);  // right bar
+        shapeRenderer.rect(centerX - 16f, 38f, 32f, 4f);  // top bar
+
+        // 3. Main receiver — wide gunmetal block (break-action receivers are boxy)
+        shapeRenderer.setColor(0.26f, 0.28f, 0.34f, 1f);
+        shapeRenderer.rect(18f, 38f, 156f, 38f);
+        shapeRenderer.setColor(0.42f, 0.46f, 0.54f, 1f);
+        shapeRenderer.rect(18f, 73f, 156f, 3f);             // top highlight strip
+        shapeRenderer.setColor(0.12f, 0.13f, 0.17f, 1f);
+        shapeRenderer.rect(18f, 38f, 156f, 3f);             // bottom shadow strip
+        // Engraving panel — decorative side panel typical of break-action guns
+        shapeRenderer.setColor(0.30f, 0.33f, 0.40f, 1f);
+        shapeRenderer.rect(30f, 48f, 60f, 20f);
+        shapeRenderer.setColor(0.22f, 0.24f, 0.30f, 1f);
+        shapeRenderer.rect(32f, 50f, 56f, 16f);             // inset recess
+
+        // 4. Break-action hinge — horizontal division line and latch knob
+        shapeRenderer.setColor(0.14f, 0.15f, 0.19f, 1f);
+        shapeRenderer.rect(18f, 73f, 156f, 3f);             // hinge groove line
+        shapeRenderer.setColor(0.36f, 0.40f, 0.48f, 1f);
+        shapeRenderer.rect(18f, 74f, 156f, 1f);             // bright hinge seam
+        // Latch knob on right (top-lever break-action actuator)
+        shapeRenderer.setColor(0.34f, 0.38f, 0.46f, 1f);
+        shapeRenderer.ellipse(148f, 68f, 18f, 12f);
+        shapeRenderer.setColor(0.50f, 0.56f, 0.66f, 1f);
+        shapeRenderer.ellipse(150f, 70f, 14f,  8f);         // latch highlight
+
+        // 5. Lower barrel — background tube (wider, seen behind upper barrel)
+        shapeRenderer.setColor(0.22f, 0.24f, 0.29f, 1f);
+        shapeRenderer.rect(48f, 76f, 96f, 40f);
+        shapeRenderer.setColor(0.42f, 0.46f, 0.54f, 1f);
+        shapeRenderer.rect(48f, 76f,  2f, 40f);             // left outer highlight
+        shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
+        shapeRenderer.rect(142f, 76f, 2f, 40f);             // right shadow
+        shapeRenderer.setColor(0.36f, 0.40f, 0.48f, 1f);
+        shapeRenderer.rect(48f, 113f, 96f, 3f);             // lower barrel top-edge highlight
+
+        // 6. Upper barrel — foreground tube (narrower, in front of lower barrel)
+        shapeRenderer.setColor(0.26f, 0.28f, 0.34f, 1f);
+        shapeRenderer.rect(58f, 92f, 76f, 40f);
+        shapeRenderer.setColor(0.44f, 0.48f, 0.58f, 1f);
+        shapeRenderer.rect(58f, 92f,  2f, 40f);             // left outer highlight
+        shapeRenderer.setColor(0.12f, 0.13f, 0.17f, 1f);
+        shapeRenderer.rect(132f, 92f, 2f, 40f);             // right shadow
+        shapeRenderer.setColor(0.38f, 0.42f, 0.50f, 1f);
+        shapeRenderer.rect(58f, 129f, 76f, 3f);             // upper barrel top-edge highlight
+
+        // 7. Ventilated rib — thin strip running between the two stacked barrels
+        //    (classic over-under sighting rib; also serves to separate the tubes visually)
+        shapeRenderer.setColor(0.38f, 0.42f, 0.50f, 1f);
+        shapeRenderer.rect(centerX - 6f, 92f, 12f, 22f);   // rib body
+        shapeRenderer.setColor(0.50f, 0.55f, 0.64f, 1f);
+        shapeRenderer.rect(centerX - 4f, 94f,  8f, 18f);   // rib top surface
+        // Rib vents (three small gaps for the ventilated look)
+        shapeRenderer.setColor(0.14f, 0.15f, 0.19f, 1f);
+        shapeRenderer.rect(centerX - 3f,  96f, 6f, 3f);
+        shapeRenderer.rect(centerX - 3f, 102f, 6f, 3f);
+        shapeRenderer.rect(centerX - 3f, 108f, 6f, 3f);
+
+        // 8. Lower muzzle end-cap — steel plate closing the lower barrel tube
+        shapeRenderer.setColor(0.16f, 0.17f, 0.21f, 1f);
+        shapeRenderer.rect(48f, 114f, 96f, 4f);
+
+        // 9. Upper muzzle end-cap — steel plate closing the upper barrel tube
+        shapeRenderer.setColor(0.18f, 0.19f, 0.23f, 1f);
+        shapeRenderer.rect(58f, 130f, 76f, 4f);
+
+        // 10. Lower bore — near-black ellipse looking down the lower barrel tube
+        shapeRenderer.setColor(0.04f, 0.04f, 0.05f, 0.95f);
+        shapeRenderer.ellipse(56f, 112f, 80f, 10f);
+        // Lower bore rim shine
+        shapeRenderer.setColor(0.28f, 0.31f, 0.37f, 0.55f);
+        shapeRenderer.ellipse(56f, 119f, 80f, 4f);
+
+        // 11. Upper bore — near-black ellipse looking down the upper barrel tube
+        shapeRenderer.setColor(0.04f, 0.04f, 0.05f, 0.95f);
+        shapeRenderer.ellipse(64f, 128f, 64f, 8f);
+        // Upper bore rim shine
+        shapeRenderer.setColor(0.28f, 0.31f, 0.37f, 0.55f);
+        shapeRenderer.ellipse(64f, 133f, 64f, 3f);
+    }
+
+    /**
+     * Generates a symmetric pump-action shotgun sprite using ShapeRenderer into an
      * offscreen FrameBuffer.  Classic Doom / Quake 1 centred-weapon look.
      *
      * Canvas coordinate system (ShapeRenderer Y-up):
