@@ -208,7 +208,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
             int firstColumn = Math.max(0, leftScreenColumn);
             int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
-                if (depth >= wallRenderer.getZBufferAt(screenColumn)) continue;
+                if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
 
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
@@ -270,7 +270,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 // Single centre-column z-test: bar appears/disappears as enemy rounds a corner
                 int barCenterColumn = (int)(barLeft + barWidth / 2f);
                 if (barCenterColumn < 0 || barCenterColumn >= WALL_PROJECTION_SCREEN_WIDTH) continue;
-                if (depth >= wallRenderer.getZBufferAt(barCenterColumn)) continue;
+                if (depth >= wallRenderer.getZBufferUnchecked(barCenterColumn)) continue;
 
                 float borderPixels = ENEMY_HEALTH_BAR_BORDER_PIXELS;
 

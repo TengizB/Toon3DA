@@ -218,7 +218,7 @@ public class PropRenderer implements Renderable, Disposable {
             int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 // Skip columns where a wall (or closer prop) is in front.
-                if (depth >= wallRenderer.getZBufferAt(screenColumn)) continue;
+                if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
 
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);

@@ -12,7 +12,11 @@ import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.GameMath;
 
+import java.util.Arrays;
 import java.util.Random;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Phaser;
 
 import static ge.tbegvadze.toon3d.util.Constants.*;
 
@@ -35,6 +39,13 @@ import static ge.tbegvadze.toon3d.util.Constants.*;
  *   planeX = −dirY × scale,  planeY = dirX × scale      (CCW-rotated direction)
  *   cameraParameter = 1 − 2 × column / screenWidth       (INVERTED vs Lodev Y-down)
  *   See GameMath.cameraPlaneX/Y and GameMath.cameraPlaneParameter for derivations.
+ *
+ * Multithreading:
+ *   The per-column DDA computation (ray casting + shading math) runs across a fixed worker pool
+ *   — same structured-concurrency pattern used by FloorCeilingRenderer. Each worker fills a
+ *   disjoint range of columnResults[] and zBuffer[]; no synchronisation is needed during the
+ *   compute phase. A Phaser barrier ensures all columns are computed before the GL-thread draw
+ *   pass begins. All SpriteBatch calls happen on the GL thread only.
  */
 public class WallRenderer implements Renderable, Disposable {
 
@@ -83,6 +94,13 @@ public class WallRenderer implements Renderable, Disposable {
     private final int columnTextureWidth;
     private final int columnTextureHeight;
 
+    // Char-indexed lookup tables (ASCII index 0–127) replace three switch statements per column.
+    // Arrays.fill initialises every slot to the plain-wall default; named chars override it.
+    private final Texture[] wallTextureTable;
+    private final int[]     wallWidthTable;
+    private final int[]     wallHeightTable;
+    private final Texture[] doorTextureTable;
+
     private float playerWorldX        = 0f;
     private float playerWorldY        = 0f;
     private float directionX          = 1f;
@@ -94,6 +112,70 @@ public class WallRenderer implements Renderable, Disposable {
     private float alertPulse          = 0f;
     // Monotonically increasing facility clock used to evaluate 'f' (flickering) tile brightness.
     private float lightingTimeSeconds = 0f;
+
+    // Tile-space player position computed once per frame; workers read via happens-before from
+    // ExecutorService.execute(), which is established after these fields are written.
+    private float cachedPlayerTileX;
+    private float cachedPlayerTileY;
+
+    // --- Structured concurrency: parallel DDA compute phase ---
+    private final WallColumnResult[] columnResults;
+    private final int                workerCount;
+    private final ExecutorService    workerPool;
+    private final WallColumnWorker[] workers;
+    private final Phaser             phaser;
+
+    // -------------------------------------------------------------------------
+    // Per-column compute result — populated by worker threads, consumed by the
+    // GL-thread draw pass. Static so it carries no implicit outer-class reference.
+    // -------------------------------------------------------------------------
+    private static final class WallColumnResult {
+        // Wall or cylinder surface drawn behind any door panel.
+        boolean drawSurface;
+        Texture surfaceTexture;
+        int     surfaceTexColumn;
+        int     surfaceTexSrcY;
+        int     surfaceTexSrcHeight;
+        float   surfaceDrawBottom;
+        float   surfaceDrawTop;
+        float   surfaceRed;
+        float   surfaceGreen;
+        float   surfaceBlue;
+
+        // Door panel composited on top of the surface (present when door is mid-animation).
+        boolean drawDoorPanel;
+        Texture doorPanelTexture;
+        int     doorPanelTexColumn;
+        int     doorPanelTexSrcY;
+        int     doorPanelTexSrcHeight;
+        float   doorPanelDrawBottom;
+        float   doorPanelDrawTop;
+        float   doorPanelRed;
+        float   doorPanelGreen;
+        float   doorPanelBlue;
+    }
+
+    // -------------------------------------------------------------------------
+    // Pre-allocated worker task — processes a contiguous range of screen columns.
+    // Non-static so it can access outer-instance fields via happens-before.
+    // -------------------------------------------------------------------------
+    private final class WallColumnWorker implements Runnable {
+        private int startColumn;
+        private int endColumn;
+
+        void configure(int startColumn, int endColumn) {
+            this.startColumn = startColumn;
+            this.endColumn   = endColumn;
+        }
+
+        @Override
+        public void run() {
+            for (int screenColumn = startColumn; screenColumn < endColumn; screenColumn++) {
+                computeWallColumn(screenColumn);
+            }
+            phaser.arrive();
+        }
+    }
 
     public WallRenderer(Level level, DoorManager doorManager) {
         this.level       = level;
@@ -152,6 +234,50 @@ public class WallRenderer implements Renderable, Disposable {
         whitePixel.fill();
         whitePixelTexture = new Texture(whitePixel);
         whitePixel.dispose();
+
+        // --- Texture lookup tables (char → texture / width / height) ---
+        // Fill entire range with the plain-wall default so any unrecognised wall char
+        // renders as the plain texture rather than throwing a NullPointerException.
+        wallTextureTable = new Texture[128];
+        wallWidthTable   = new int[128];
+        wallHeightTable  = new int[128];
+        Arrays.fill(wallTextureTable, wallTexturePlain);
+        Arrays.fill(wallWidthTable,   wallTexturePlainWidth);
+        Arrays.fill(wallHeightTable,  wallTexturePlainHeight);
+        wallTextureTable['c'] = wallTextureConduit;   wallWidthTable['c'] = wallTextureConduitWidth;   wallHeightTable['c'] = wallTextureConduitHeight;
+        wallTextureTable['v'] = wallTextureVent;      wallWidthTable['v'] = wallTextureVentWidth;      wallHeightTable['v'] = wallTextureVentHeight;
+        wallTextureTable['t'] = wallTextureTerminal;  wallWidthTable['t'] = wallTextureTerminalWidth;  wallHeightTable['t'] = wallTextureTerminalHeight;
+        wallTextureTable['w'] = wallTextureWires;     wallWidthTable['w'] = wallTextureWiresWidth;     wallHeightTable['w'] = wallTextureWiresHeight;
+        wallTextureTable['h'] = wallTextureHazard;    wallWidthTable['h'] = wallTextureHazardWidth;    wallHeightTable['h'] = wallTextureHazardHeight;
+        wallTextureTable['r'] = wallTextureRust;      wallWidthTable['r'] = wallTextureRustWidth;      wallHeightTable['r'] = wallTextureRustHeight;
+        wallTextureTable['G'] = wallTextureGore;      wallWidthTable['G'] = wallTextureGoreWidth;      wallHeightTable['G'] = wallTextureGoreHeight;
+        wallTextureTable['k'] = wallTextureBulkhead;  wallWidthTable['k'] = wallTextureBulkheadWidth;  wallHeightTable['k'] = wallTextureBulkheadHeight;
+
+        doorTextureTable = new Texture[128];
+        Arrays.fill(doorTextureTable, doorTexture);
+        doorTextureTable['R'] = doorTextureRed;
+        doorTextureTable['Y'] = doorTextureYellow;
+        doorTextureTable['B'] = doorTextureBlue;
+
+        // --- Parallel compute infrastructure ---
+        columnResults = new WallColumnResult[WALL_PROJECTION_SCREEN_WIDTH];
+        for (int columnIndex = 0; columnIndex < WALL_PROJECTION_SCREEN_WIDTH; columnIndex++) {
+            columnResults[columnIndex] = new WallColumnResult();
+        }
+
+        workerCount = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
+        phaser      = new Phaser(workerCount);
+
+        if (workerCount > 1) {
+            workerPool = Executors.newFixedThreadPool(workerCount - 1);
+            workers    = new WallColumnWorker[workerCount - 1];
+            for (int workerIndex = 0; workerIndex < workers.length; workerIndex++) {
+                workers[workerIndex] = new WallColumnWorker();
+            }
+        } else {
+            workerPool = null;
+            workers    = new WallColumnWorker[0];
+        }
     }
 
     private static Texture loadWallTexture(String path) {
@@ -590,57 +716,6 @@ public class WallRenderer implements Renderable, Disposable {
         return texture;
     }
 
-    private Texture selectDoorTexture(char cell) {
-        switch (cell) {
-            case 'R': return doorTextureRed;
-            case 'Y': return doorTextureYellow;
-            case 'B': return doorTextureBlue;
-            default:  return doorTexture;
-        }
-    }
-
-    private Texture selectWallTexture(char cell) {
-        switch (cell) {
-            case 'c': return wallTextureConduit;
-            case 'v': return wallTextureVent;
-            case 't': return wallTextureTerminal;
-            case 'w': return wallTextureWires;
-            case 'h': return wallTextureHazard;
-            case 'r': return wallTextureRust;
-            case 'G': return wallTextureGore;
-            case 'k': return wallTextureBulkhead;
-            default:  return wallTexturePlain;
-        }
-    }
-
-    private int selectWallTextureWidth(char cell) {
-        switch (cell) {
-            case 'c': return wallTextureConduitWidth;
-            case 'v': return wallTextureVentWidth;
-            case 't': return wallTextureTerminalWidth;
-            case 'w': return wallTextureWiresWidth;
-            case 'h': return wallTextureHazardWidth;
-            case 'r': return wallTextureRustWidth;
-            case 'G': return wallTextureGoreWidth;
-            case 'k': return wallTextureBulkheadWidth;
-            default:  return wallTexturePlainWidth;
-        }
-    }
-
-    private int selectWallTextureHeight(char cell) {
-        switch (cell) {
-            case 'c': return wallTextureConduitHeight;
-            case 'v': return wallTextureVentHeight;
-            case 't': return wallTextureTerminalHeight;
-            case 'w': return wallTextureWiresHeight;
-            case 'h': return wallTextureHazardHeight;
-            case 'r': return wallTextureRustHeight;
-            case 'G': return wallTextureGoreHeight;
-            case 'k': return wallTextureBulkheadHeight;
-            default:  return wallTexturePlainHeight;
-        }
-    }
-
     public void setPlayerState(float worldX, float worldY,
                                float playerDirectionX, float playerDirectionY,
                                float playerFieldOfViewRadians) {
@@ -666,276 +741,349 @@ public class WallRenderer implements Renderable, Disposable {
         return zBuffer[MathUtils.clamp(screenColumn, 0, WALL_PROJECTION_SCREEN_WIDTH - 1)];
     }
 
+    /**
+     * Returns the perpendicular wall distance for the given screen column without bounds checking.
+     * Callers must guarantee screenColumn is in [0, WALL_PROJECTION_SCREEN_WIDTH).
+     */
+    public float getZBufferUnchecked(int screenColumn) {
+        return zBuffer[screenColumn];
+    }
+
     @Override
     public void render(OrthographicCamera camera) {
         batch.setProjectionMatrix(camera.combined);
 
-        float playerTileX = playerWorldX / CELL_SIZE;
-        float playerTileY = playerWorldY / CELL_SIZE;
+        // Tile-space player position written before workers are submitted; the
+        // happens-before from ExecutorService.execute() makes them visible to workers.
+        cachedPlayerTileX = playerWorldX / CELL_SIZE;
+        cachedPlayerTileY = playerWorldY / CELL_SIZE;
 
-        float planeX = cachedPlaneX;
-        float planeY = cachedPlaneY;
-
-        batch.begin();
-
-        for (int screenColumn = 0; screenColumn < WALL_PROJECTION_SCREEN_WIDTH; screenColumn++) {
-            float cameraParameter = GameMath.cameraPlaneParameter(screenColumn, WALL_PROJECTION_SCREEN_WIDTH);
-            float rayDirectionX   = GameMath.cameraPlaneRayDirectionX(directionX, planeX, cameraParameter);
-            float rayDirectionY   = GameMath.cameraPlaneRayDirectionY(directionY, planeY, cameraParameter);
-
-            float deltaDistanceX = GameMath.ddaDeltaDistanceX(rayDirectionX);
-            float deltaDistanceY = GameMath.ddaDeltaDistanceY(rayDirectionY);
-
-            int tileColumn = MathUtils.floor(playerTileX);
-            int tileRow    = MathUtils.floor(playerTileY);
-
-            float sideDistanceX = GameMath.ddaInitialSideDistanceX(playerTileX, tileColumn, rayDirectionX, deltaDistanceX);
-            float sideDistanceY = GameMath.ddaInitialSideDistanceY(playerTileY, tileRow,    rayDirectionY, deltaDistanceY);
-
-            int stepColumn = (rayDirectionX < 0f) ? -1 : 1;
-            int stepRow    = (rayDirectionY < 0f) ? -1 : 1;
-
-            boolean hitWall             = false;
-            boolean crossedVerticalLine = false;
-            float   perpWallDistance    = RAY_MAX_LENGTH_CELLS;
-            char    hitWallCell         = 'x';
-            // When the ray passes through a mid-animation door we save its data here and
-            // continue casting so we can render the background surface behind it too.
-            boolean hitPartialDoor             = false;
-            float   doorPerpWallDistance       = 0f;
-            int     doorHitTileColumn          = 0;
-            int     doorHitTileRow             = 0;
-            boolean doorHitCrossedVerticalLine = false;
-            float   doorHitOpenFraction        = 0f;
-            char    doorHitCell                = 'd';
-
-            while (true) {
-                if (sideDistanceX < sideDistanceY) {
-                    sideDistanceX      += deltaDistanceX;
-                    tileColumn         += stepColumn;
-                    crossedVerticalLine = true;
-                } else {
-                    sideDistanceY      += deltaDistanceY;
-                    tileRow            += stepRow;
-                    crossedVerticalLine = false;
-                }
-
-                perpWallDistance = crossedVerticalLine
-                        ? GameMath.perpWallDistance(sideDistanceX, deltaDistanceX)
-                        : GameMath.perpWallDistance(sideDistanceY, deltaDistanceY);
-
-                if (perpWallDistance >= RAY_MAX_LENGTH_CELLS) {
-                    perpWallDistance = RAY_MAX_LENGTH_CELLS;
-                    break;
-                }
-
-                char cell = level.getCell(tileColumn, tileRow);
-                if (Level.isColumn(cell)) {
-                    float columnCenterTileX = tileColumn + 0.5f;
-                    float columnCenterTileY = tileRow    + 0.5f;
-                    float columnHitDistance = GameMath.rayCircleIntersection(
-                            playerTileX, playerTileY,
-                            rayDirectionX, rayDirectionY,
-                            columnCenterTileX, columnCenterTileY,
-                            COLUMN_RADIUS_TILES);
-                    if (columnHitDistance > 0f && columnHitDistance < RAY_MAX_LENGTH_CELLS) {
-                        hitWall          = true;
-                        hitWallCell      = cell;
-                        perpWallDistance = columnHitDistance;
-                        break;
-                    }
-                    continue; // Ray misses column — passes around it into the cell beyond.
-                }
-                if (Level.isWall(cell)) {
-                    hitWall     = true;
-                    hitWallCell = cell;
-                    break;
-                }
-                if (Level.isDoor(cell)) {
-                    float openFraction = doorManager.getOpenFractionAt(tileColumn, tileRow);
-                    if (openFraction >= DOOR_OPEN_THROUGH_THRESHOLD) {
-                        continue; // Fully open — ray passes through into the room beyond.
-                    }
-                    if (!hitPartialDoor) {
-                        hitPartialDoor             = true;
-                        doorPerpWallDistance       = perpWallDistance;
-                        doorHitTileColumn          = tileColumn;
-                        doorHitTileRow             = tileRow;
-                        doorHitCrossedVerticalLine = crossedVerticalLine;
-                        doorHitOpenFraction        = openFraction;
-                        doorHitCell                = cell;
-                    }
-                    continue; // Keep casting to find the surface behind the door.
-                }
+        // Phase 1 — Parallel DDA compute.
+        // Each column is fully independent: workers write to disjoint ranges of
+        // columnResults[] and zBuffer[]; all other accesses (level, doorManager,
+        // textures, player-state fields) are read-only during this phase.
+        if (workerCount > 1) {
+            int columnsPerWorker = WALL_PROJECTION_SCREEN_WIDTH / workerCount;
+            for (int workerIndex = 0; workerIndex < workers.length; workerIndex++) {
+                int startColumn = workerIndex * columnsPerWorker;
+                int endColumn   = startColumn + columnsPerWorker;
+                workers[workerIndex].configure(startColumn, endColumn);
+                workerPool.execute(workers[workerIndex]);
             }
-
-            // Use the door's (closer) distance for Z-buffer so sprites don't bleed through the panel.
-            zBuffer[screenColumn] = hitPartialDoor ? doorPerpWallDistance : perpWallDistance;
-
-            if (!hitWall && !hitPartialDoor) continue;
-
-            // --- Step 1: Render the background surface (wall or column) ---
-            // Drawn first so the door panel, rendered in step 2, composites on top.
-            if (hitWall) {
-                float lineHeight      = GameMath.wallStripeHeight(WALL_PROJECTION_SCREEN_HEIGHT, perpWallDistance);
-                float unclampedBottom = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, lineHeight);
-                float unclampedTop    = GameMath.wallStripeDrawTop(WALL_PROJECTION_SCREEN_HEIGHT, lineHeight);
-                float drawBottom      = Math.max(0f, unclampedBottom);
-                float drawTop         = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, unclampedTop);
-
-                if (Level.isColumn(hitWallCell)) {
-                    float columnCenterTileX = tileColumn + 0.5f;
-                    float columnCenterTileY = tileRow    + 0.5f;
-                    float hitTileX          = playerTileX + perpWallDistance * rayDirectionX;
-                    float hitTileY          = playerTileY + perpWallDistance * rayDirectionY;
-
-                    float columnU         = GameMath.columnTextureU(hitTileX, hitTileY,
-                                                                     columnCenterTileX, columnCenterTileY);
-                    int   columnTexColumn = GameMath.textureColumn(columnU, columnTextureWidth);
-
-                    // Lambert shading: dot of the outward surface normal with the world light direction.
-                    float normalX          = (hitTileX - columnCenterTileX) / COLUMN_RADIUS_TILES;
-                    float normalY          = (hitTileY - columnCenterTileY) / COLUMN_RADIUS_TILES;
-                    float lambertian       = Math.max(0f,
-                                                     normalX * COLUMN_LIGHT_DIRECTION_X
-                                                   + normalY * COLUMN_LIGHT_DIRECTION_Y);
-                    float cylindricalShade = COLUMN_SHADE_MIN + (1f - COLUMN_SHADE_MIN) * lambertian;
-
-                    float columnTileBrightness = level.getTileBrightness(tileColumn, tileRow, lightingTimeSeconds);
-                    float shade = Math.min(
-                            GameMath.wallShade(perpWallDistance, WALL_SHADING_FALLOFF)
-                            * cylindricalShade * columnTileBrightness,
-                            MAX_LIGHTING_SHADE);
-                    float columnRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-                    float columnGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-                    float columnBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-                    batch.setColor(columnRed, columnGreen, columnBlue, 1f);
-
-                    int columnTexSrcY      = GameMath.wallTextureClipSrcY(
-                                                unclampedTop, WALL_PROJECTION_SCREEN_HEIGHT,
-                                                lineHeight, columnTextureHeight);
-                    int columnTexSrcHeight = GameMath.wallTextureClipSrcHeight(
-                                                drawTop, drawBottom,
-                                                lineHeight, columnTextureHeight);
-                    columnTexSrcHeight = Math.min(columnTexSrcHeight, columnTextureHeight - columnTexSrcY);
-                    columnTexSrcHeight = Math.max(1, columnTexSrcHeight);
-
-                    batch.draw(columnTexture,
-                               screenColumn * WALL_COLUMN_WIDTH, drawBottom,
-                               WALL_COLUMN_WIDTH, drawTop - drawBottom,
-                               columnTexColumn, columnTexSrcY, 1, columnTexSrcHeight,
-                               false, false);
-                } else {
-                    float wallHitFraction         = GameMath.wallHitPosition(playerTileX, playerTileY,
-                                                                             rayDirectionX, rayDirectionY,
-                                                                             perpWallDistance, crossedVerticalLine);
-                    float wallHitFractionMirrored = GameMath.wallHitPositionMirrored(wallHitFraction,
-                                                                                      rayDirectionX, rayDirectionY,
-                                                                                      crossedVerticalLine);
-
-                    // Floor tile adjacent to the hit wall face — its brightness spills onto the wall.
-                    int   adjacentFloorColumn = crossedVerticalLine ? tileColumn - stepColumn : tileColumn;
-                    int   adjacentFloorRow    = crossedVerticalLine ? tileRow                 : tileRow - stepRow;
-                    float wallTileBrightness  = level.getTileBrightness(adjacentFloorColumn, adjacentFloorRow, lightingTimeSeconds);
-
-                    Texture selectedTexture       = selectWallTexture(hitWallCell);
-                    int     selectedTextureWidth  = selectWallTextureWidth(hitWallCell);
-                    int     selectedTextureHeight = selectWallTextureHeight(hitWallCell);
-                    int     wallTextureColumn     = GameMath.textureColumn(wallHitFractionMirrored, selectedTextureWidth);
-
-                    // Distance shading + directional lighting + tile-brightness + alert tint.
-                    // batch.setColor() embeds tint in vertex data and does NOT flush.
-                    float shade = GameMath.wallShade(perpWallDistance, WALL_SHADING_FALLOFF);
-                    if (!crossedVerticalLine) shade *= HORIZONTAL_FACE_SHADE_MULTIPLIER;
-                    shade = Math.min(shade * wallTileBrightness, MAX_LIGHTING_SHADE);
-                    float wallRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-                    float wallGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-                    float wallBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-                    batch.setColor(wallRed, wallGreen, wallBlue, 1f);
-
-                    // Texture clipping — when the stripe overflows the screen sample only the
-                    // texel rows corresponding to the visible portion.
-                    int texSrcY      = GameMath.wallTextureClipSrcY(
-                                           unclampedTop, WALL_PROJECTION_SCREEN_HEIGHT,
-                                           lineHeight, selectedTextureHeight);
-                    int texSrcHeight = GameMath.wallTextureClipSrcHeight(
-                                           drawTop, drawBottom,
-                                           lineHeight, selectedTextureHeight);
-                    texSrcHeight = Math.min(texSrcHeight, selectedTextureHeight - texSrcY);
-                    texSrcHeight = Math.max(1, texSrcHeight);
-
-                    batch.draw(selectedTexture,
-                               screenColumn * WALL_COLUMN_WIDTH, drawBottom,
-                               WALL_COLUMN_WIDTH, drawTop - drawBottom,
-                               wallTextureColumn, texSrcY, 1, texSrcHeight,
-                               false, false);
-                }
+            // Main thread handles the tail chunk (absorbs any remainder columns).
+            int mainThreadStart = workers.length * columnsPerWorker;
+            for (int screenColumn = mainThreadStart; screenColumn < WALL_PROJECTION_SCREEN_WIDTH; screenColumn++) {
+                computeWallColumn(screenColumn);
             }
-
-            // --- Step 2: Render the door panel on top of the background ---
-            // The panel is anchored at the ceiling; its bottom edge rises as the door opens,
-            // so the background rendered in step 1 is progressively revealed below it.
-            if (hitPartialDoor) {
-                float doorLineHeight      = GameMath.wallStripeHeight(WALL_PROJECTION_SCREEN_HEIGHT, doorPerpWallDistance);
-                float doorUnclampedBottom = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, doorLineHeight);
-                float doorUnclampedTop    = GameMath.wallStripeDrawTop(WALL_PROJECTION_SCREEN_HEIGHT, doorLineHeight);
-                float doorDrawTop         = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, doorUnclampedTop);
-
-                float doorWallHitFraction         = GameMath.wallHitPosition(playerTileX, playerTileY,
-                                                                             rayDirectionX, rayDirectionY,
-                                                                             doorPerpWallDistance,
-                                                                             doorHitCrossedVerticalLine);
-                float doorWallHitFractionMirrored = GameMath.wallHitPositionMirrored(doorWallHitFraction,
-                                                                                      rayDirectionX, rayDirectionY,
-                                                                                      doorHitCrossedVerticalLine);
-
-                int   doorAdjacentFloorColumn = doorHitCrossedVerticalLine
-                        ? doorHitTileColumn - stepColumn : doorHitTileColumn;
-                int   doorAdjacentFloorRow    = doorHitCrossedVerticalLine
-                        ? doorHitTileRow : doorHitTileRow - stepRow;
-                float doorTileBrightness = level.getTileBrightness(
-                        doorAdjacentFloorColumn, doorAdjacentFloorRow, lightingTimeSeconds);
-
-                float panelHeight = GameMath.doorPanelHeight(doorLineHeight, doorHitOpenFraction);
-                if (panelHeight >= 1f) {
-                    float unclampedPanelBottom = GameMath.doorPanelBottom(
-                            doorUnclampedBottom, doorUnclampedTop, doorHitOpenFraction);
-                    float clampedPanelBottom   = Math.max(0f, unclampedPanelBottom);
-                    float clampedPanelTop      = doorDrawTop;
-
-                    if (clampedPanelTop > clampedPanelBottom) {
-                        int doorTexSrcY      = GameMath.wallTextureClipSrcY(
-                                                   doorUnclampedTop, WALL_PROJECTION_SCREEN_HEIGHT,
-                                                   panelHeight, doorTextureHeight);
-                        int doorTexSrcHeight = GameMath.wallTextureClipSrcHeight(
-                                                   clampedPanelTop, clampedPanelBottom,
-                                                   panelHeight, doorTextureHeight);
-                        doorTexSrcHeight = Math.min(doorTexSrcHeight, doorTextureHeight - doorTexSrcY);
-                        doorTexSrcHeight = Math.max(1, doorTexSrcHeight);
-
-                        Texture selectedDoorTexture = selectDoorTexture(doorHitCell);
-                        int   doorTexColumn = GameMath.textureColumn(doorWallHitFractionMirrored, doorTextureWidth);
-                        float shade = GameMath.wallShade(doorPerpWallDistance, WALL_SHADING_FALLOFF);
-                        if (!doorHitCrossedVerticalLine) shade *= HORIZONTAL_FACE_SHADE_MULTIPLIER;
-                        shade = Math.min(shade * doorTileBrightness, MAX_LIGHTING_SHADE);
-                        batch.setColor(
-                                Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST)),
-                                shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN),
-                                shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN),
-                                1f);
-                        batch.draw(selectedDoorTexture,
-                                   screenColumn * WALL_COLUMN_WIDTH, clampedPanelBottom,
-                                   WALL_COLUMN_WIDTH, clampedPanelTop - clampedPanelBottom,
-                                   doorTexColumn, doorTexSrcY, 1, doorTexSrcHeight,
-                                   false, false);
-                    }
-                }
+            // Arrive and block until all background workers have finished their ranges.
+            phaser.arriveAndAwaitAdvance();
+        } else {
+            for (int screenColumn = 0; screenColumn < WALL_PROJECTION_SCREEN_WIDTH; screenColumn++) {
+                computeWallColumn(screenColumn);
             }
         }
 
+        // Phase 2 — GL-thread draw pass.
+        // Reads the fully-populated columnResults[] and issues SpriteBatch draw calls.
+        // All OpenGL state changes happen on the GL thread only.
+        batch.begin();
+        for (int screenColumn = 0; screenColumn < WALL_PROJECTION_SCREEN_WIDTH; screenColumn++) {
+            WallColumnResult result = columnResults[screenColumn];
+            if (!result.drawSurface && !result.drawDoorPanel) continue;
+
+            if (result.drawSurface) {
+                batch.setColor(result.surfaceRed, result.surfaceGreen, result.surfaceBlue, 1f);
+                batch.draw(result.surfaceTexture,
+                           screenColumn * WALL_COLUMN_WIDTH, result.surfaceDrawBottom,
+                           WALL_COLUMN_WIDTH, result.surfaceDrawTop - result.surfaceDrawBottom,
+                           result.surfaceTexColumn, result.surfaceTexSrcY,
+                           1, result.surfaceTexSrcHeight,
+                           false, false);
+            }
+
+            if (result.drawDoorPanel) {
+                batch.setColor(result.doorPanelRed, result.doorPanelGreen, result.doorPanelBlue, 1f);
+                batch.draw(result.doorPanelTexture,
+                           screenColumn * WALL_COLUMN_WIDTH, result.doorPanelDrawBottom,
+                           WALL_COLUMN_WIDTH, result.doorPanelDrawTop - result.doorPanelDrawBottom,
+                           result.doorPanelTexColumn, result.doorPanelTexSrcY,
+                           1, result.doorPanelTexSrcHeight,
+                           false, false);
+            }
+        }
         // Reset to white so no alert tint leaks into other renderers that share GL state.
         batch.setColor(Color.WHITE);
         batch.end();
+    }
+
+    /**
+     * Computes all render data for one screen column and writes it into columnResults[screenColumn].
+     * Also writes the z-buffer value for the column. Safe to call from any thread since each
+     * column index is owned by exactly one concurrent caller.
+     */
+    private void computeWallColumn(int screenColumn) {
+        WallColumnResult result = columnResults[screenColumn];
+        result.drawSurface   = false;
+        result.drawDoorPanel = false;
+
+        float playerTileX = cachedPlayerTileX;
+        float playerTileY = cachedPlayerTileY;
+
+        float cameraParameter = GameMath.cameraPlaneParameter(screenColumn, WALL_PROJECTION_SCREEN_WIDTH);
+        float rayDirectionX   = GameMath.cameraPlaneRayDirectionX(directionX, cachedPlaneX, cameraParameter);
+        float rayDirectionY   = GameMath.cameraPlaneRayDirectionY(directionY, cachedPlaneY, cameraParameter);
+
+        float deltaDistanceX = GameMath.ddaDeltaDistanceX(rayDirectionX);
+        float deltaDistanceY = GameMath.ddaDeltaDistanceY(rayDirectionY);
+
+        int tileColumn = MathUtils.floor(playerTileX);
+        int tileRow    = MathUtils.floor(playerTileY);
+
+        float sideDistanceX = GameMath.ddaInitialSideDistanceX(playerTileX, tileColumn, rayDirectionX, deltaDistanceX);
+        float sideDistanceY = GameMath.ddaInitialSideDistanceY(playerTileY, tileRow,    rayDirectionY, deltaDistanceY);
+
+        int stepColumn = (rayDirectionX < 0f) ? -1 : 1;
+        int stepRow    = (rayDirectionY < 0f) ? -1 : 1;
+
+        boolean hitWall             = false;
+        boolean crossedVerticalLine = false;
+        float   perpWallDistance    = RAY_MAX_LENGTH_CELLS;
+        char    hitWallCell         = 'x';
+        // When the ray passes through a mid-animation door we save its data here and
+        // continue casting so we can render the background surface behind it too.
+        boolean hitPartialDoor             = false;
+        float   doorPerpWallDistance       = 0f;
+        int     doorHitTileColumn          = 0;
+        int     doorHitTileRow             = 0;
+        boolean doorHitCrossedVerticalLine = false;
+        float   doorHitOpenFraction        = 0f;
+        char    doorHitCell                = 'd';
+
+        while (true) {
+            if (sideDistanceX < sideDistanceY) {
+                sideDistanceX      += deltaDistanceX;
+                tileColumn         += stepColumn;
+                crossedVerticalLine = true;
+            } else {
+                sideDistanceY      += deltaDistanceY;
+                tileRow            += stepRow;
+                crossedVerticalLine = false;
+            }
+
+            perpWallDistance = crossedVerticalLine
+                    ? GameMath.perpWallDistance(sideDistanceX, deltaDistanceX)
+                    : GameMath.perpWallDistance(sideDistanceY, deltaDistanceY);
+
+            if (perpWallDistance >= RAY_MAX_LENGTH_CELLS) {
+                perpWallDistance = RAY_MAX_LENGTH_CELLS;
+                break;
+            }
+
+            char cell = level.getCell(tileColumn, tileRow);
+            if (Level.isColumn(cell)) {
+                float columnCenterTileX = tileColumn + 0.5f;
+                float columnCenterTileY = tileRow    + 0.5f;
+                float columnHitDistance = GameMath.rayCircleIntersection(
+                        playerTileX, playerTileY,
+                        rayDirectionX, rayDirectionY,
+                        columnCenterTileX, columnCenterTileY,
+                        COLUMN_RADIUS_TILES);
+                if (columnHitDistance > 0f && columnHitDistance < RAY_MAX_LENGTH_CELLS) {
+                    hitWall          = true;
+                    hitWallCell      = cell;
+                    perpWallDistance = columnHitDistance;
+                    break;
+                }
+                continue; // Ray misses column — passes around it into the cell beyond.
+            }
+            if (Level.isWall(cell)) {
+                hitWall     = true;
+                hitWallCell = cell;
+                break;
+            }
+            if (Level.isDoor(cell)) {
+                float openFraction = doorManager.getOpenFractionAt(tileColumn, tileRow);
+                if (openFraction >= DOOR_OPEN_THROUGH_THRESHOLD) {
+                    continue; // Fully open — ray passes through into the room beyond.
+                }
+                if (!hitPartialDoor) {
+                    hitPartialDoor             = true;
+                    doorPerpWallDistance       = perpWallDistance;
+                    doorHitTileColumn          = tileColumn;
+                    doorHitTileRow             = tileRow;
+                    doorHitCrossedVerticalLine = crossedVerticalLine;
+                    doorHitOpenFraction        = openFraction;
+                    doorHitCell                = cell;
+                }
+                continue; // Keep casting to find the surface behind the door.
+            }
+        }
+
+        // Use the door's (closer) distance for Z-buffer so sprites don't bleed through the panel.
+        // Each column writes to its own index — no race condition with concurrent workers.
+        zBuffer[screenColumn] = hitPartialDoor ? doorPerpWallDistance : perpWallDistance;
+
+        if (!hitWall && !hitPartialDoor) return;
+
+        // --- Step 1: Compute render data for the background surface (wall or column) ---
+        if (hitWall) {
+            float lineHeight      = GameMath.wallStripeHeight(WALL_PROJECTION_SCREEN_HEIGHT, perpWallDistance);
+            float unclampedBottom = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, lineHeight);
+            float unclampedTop    = GameMath.wallStripeDrawTop(WALL_PROJECTION_SCREEN_HEIGHT, lineHeight);
+            float drawBottom      = Math.max(0f, unclampedBottom);
+            float drawTop         = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, unclampedTop);
+
+            if (Level.isColumn(hitWallCell)) {
+                // tileColumn/tileRow = the cylinder's tile at DDA exit.
+                float columnCenterTileX = tileColumn + 0.5f;
+                float columnCenterTileY = tileRow    + 0.5f;
+                float hitTileX          = playerTileX + perpWallDistance * rayDirectionX;
+                float hitTileY          = playerTileY + perpWallDistance * rayDirectionY;
+
+                float columnU         = GameMath.columnTextureU(hitTileX, hitTileY,
+                                                                 columnCenterTileX, columnCenterTileY);
+                int   columnTexColumn = GameMath.textureColumn(columnU, columnTextureWidth);
+
+                // Lambert shading: dot of the outward surface normal with the world light direction.
+                float normalX          = (hitTileX - columnCenterTileX) / COLUMN_RADIUS_TILES;
+                float normalY          = (hitTileY - columnCenterTileY) / COLUMN_RADIUS_TILES;
+                float lambertian       = Math.max(0f,
+                                                   normalX * COLUMN_LIGHT_DIRECTION_X
+                                                 + normalY * COLUMN_LIGHT_DIRECTION_Y);
+                float cylindricalShade = COLUMN_SHADE_MIN + (1f - COLUMN_SHADE_MIN) * lambertian;
+
+                float columnTileBrightness = level.getTileBrightness(tileColumn, tileRow, lightingTimeSeconds);
+                float shade = Math.min(
+                        GameMath.wallShade(perpWallDistance, WALL_SHADING_FALLOFF)
+                        * cylindricalShade * columnTileBrightness,
+                        MAX_LIGHTING_SHADE);
+
+                int texSrcY      = GameMath.wallTextureClipSrcY(
+                                       unclampedTop, WALL_PROJECTION_SCREEN_HEIGHT,
+                                       lineHeight, columnTextureHeight);
+                int texSrcHeight = GameMath.wallTextureClipSrcHeight(
+                                       drawTop, drawBottom,
+                                       lineHeight, columnTextureHeight);
+                texSrcHeight = Math.min(texSrcHeight, columnTextureHeight - texSrcY);
+                texSrcHeight = Math.max(1, texSrcHeight);
+
+                result.drawSurface         = true;
+                result.surfaceTexture      = columnTexture;
+                result.surfaceTexColumn    = columnTexColumn;
+                result.surfaceTexSrcY      = texSrcY;
+                result.surfaceTexSrcHeight = texSrcHeight;
+                result.surfaceDrawBottom   = drawBottom;
+                result.surfaceDrawTop      = drawTop;
+                result.surfaceRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+                result.surfaceGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                result.surfaceBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            } else {
+                float wallHitFraction         = GameMath.wallHitPosition(playerTileX, playerTileY,
+                                                                         rayDirectionX, rayDirectionY,
+                                                                         perpWallDistance, crossedVerticalLine);
+                float wallHitFractionMirrored = GameMath.wallHitPositionMirrored(wallHitFraction,
+                                                                                  rayDirectionX, rayDirectionY,
+                                                                                  crossedVerticalLine);
+
+                // Floor tile adjacent to the hit wall face — its brightness spills onto the wall.
+                int   adjacentFloorColumn = crossedVerticalLine ? tileColumn - stepColumn : tileColumn;
+                int   adjacentFloorRow    = crossedVerticalLine ? tileRow                 : tileRow - stepRow;
+                float wallTileBrightness  = level.getTileBrightness(adjacentFloorColumn, adjacentFloorRow, lightingTimeSeconds);
+
+                // O(1) array lookup replaces three sequential switch statements.
+                int     hitCharIndex          = hitWallCell & 0x7F;
+                Texture selectedTexture       = wallTextureTable[hitCharIndex];
+                int     selectedTextureWidth  = wallWidthTable[hitCharIndex];
+                int     selectedTextureHeight = wallHeightTable[hitCharIndex];
+                int     wallTextureColumn     = GameMath.textureColumn(wallHitFractionMirrored, selectedTextureWidth);
+
+                float shade = GameMath.wallShade(perpWallDistance, WALL_SHADING_FALLOFF);
+                if (!crossedVerticalLine) shade *= HORIZONTAL_FACE_SHADE_MULTIPLIER;
+                shade = Math.min(shade * wallTileBrightness, MAX_LIGHTING_SHADE);
+
+                int texSrcY      = GameMath.wallTextureClipSrcY(
+                                       unclampedTop, WALL_PROJECTION_SCREEN_HEIGHT,
+                                       lineHeight, selectedTextureHeight);
+                int texSrcHeight = GameMath.wallTextureClipSrcHeight(
+                                       drawTop, drawBottom,
+                                       lineHeight, selectedTextureHeight);
+                texSrcHeight = Math.min(texSrcHeight, selectedTextureHeight - texSrcY);
+                texSrcHeight = Math.max(1, texSrcHeight);
+
+                result.drawSurface         = true;
+                result.surfaceTexture      = selectedTexture;
+                result.surfaceTexColumn    = wallTextureColumn;
+                result.surfaceTexSrcY      = texSrcY;
+                result.surfaceTexSrcHeight = texSrcHeight;
+                result.surfaceDrawBottom   = drawBottom;
+                result.surfaceDrawTop      = drawTop;
+                result.surfaceRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+                result.surfaceGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                result.surfaceBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            }
+        }
+
+        // --- Step 2: Compute render data for the door panel overlay ---
+        // The panel is anchored at the ceiling; its bottom edge rises as the door opens,
+        // so the background rendered in step 1 is progressively revealed below it.
+        if (hitPartialDoor) {
+            float doorLineHeight      = GameMath.wallStripeHeight(WALL_PROJECTION_SCREEN_HEIGHT, doorPerpWallDistance);
+            float doorUnclampedBottom = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, doorLineHeight);
+            float doorUnclampedTop    = GameMath.wallStripeDrawTop(WALL_PROJECTION_SCREEN_HEIGHT, doorLineHeight);
+            float doorDrawTop         = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, doorUnclampedTop);
+
+            float doorWallHitFraction         = GameMath.wallHitPosition(playerTileX, playerTileY,
+                                                                         rayDirectionX, rayDirectionY,
+                                                                         doorPerpWallDistance,
+                                                                         doorHitCrossedVerticalLine);
+            float doorWallHitFractionMirrored = GameMath.wallHitPositionMirrored(doorWallHitFraction,
+                                                                                  rayDirectionX, rayDirectionY,
+                                                                                  doorHitCrossedVerticalLine);
+
+            int   doorAdjacentFloorColumn = doorHitCrossedVerticalLine
+                    ? doorHitTileColumn - stepColumn : doorHitTileColumn;
+            int   doorAdjacentFloorRow    = doorHitCrossedVerticalLine
+                    ? doorHitTileRow : doorHitTileRow - stepRow;
+            float doorTileBrightness = level.getTileBrightness(
+                    doorAdjacentFloorColumn, doorAdjacentFloorRow, lightingTimeSeconds);
+
+            float panelHeight = GameMath.doorPanelHeight(doorLineHeight, doorHitOpenFraction);
+            if (panelHeight >= 1f) {
+                float unclampedPanelBottom = GameMath.doorPanelBottom(
+                        doorUnclampedBottom, doorUnclampedTop, doorHitOpenFraction);
+                float clampedPanelBottom   = Math.max(0f, unclampedPanelBottom);
+                float clampedPanelTop      = doorDrawTop;
+
+                if (clampedPanelTop > clampedPanelBottom) {
+                    int doorTexSrcY      = GameMath.wallTextureClipSrcY(
+                                               doorUnclampedTop, WALL_PROJECTION_SCREEN_HEIGHT,
+                                               panelHeight, doorTextureHeight);
+                    int doorTexSrcHeight = GameMath.wallTextureClipSrcHeight(
+                                               clampedPanelTop, clampedPanelBottom,
+                                               panelHeight, doorTextureHeight);
+                    doorTexSrcHeight = Math.min(doorTexSrcHeight, doorTextureHeight - doorTexSrcY);
+                    doorTexSrcHeight = Math.max(1, doorTexSrcHeight);
+
+                    // O(1) array lookup for door texture variant (plain/red/yellow/blue).
+                    Texture selectedDoorTexture = doorTextureTable[doorHitCell & 0x7F];
+                    int     doorTexColumn       = GameMath.textureColumn(doorWallHitFractionMirrored, doorTextureWidth);
+                    float shade = GameMath.wallShade(doorPerpWallDistance, WALL_SHADING_FALLOFF);
+                    if (!doorHitCrossedVerticalLine) shade *= HORIZONTAL_FACE_SHADE_MULTIPLIER;
+                    shade = Math.min(shade * doorTileBrightness, MAX_LIGHTING_SHADE);
+
+                    result.drawDoorPanel          = true;
+                    result.doorPanelTexture       = selectedDoorTexture;
+                    result.doorPanelTexColumn     = doorTexColumn;
+                    result.doorPanelTexSrcY       = doorTexSrcY;
+                    result.doorPanelTexSrcHeight  = doorTexSrcHeight;
+                    result.doorPanelDrawBottom    = clampedPanelBottom;
+                    result.doorPanelDrawTop       = clampedPanelTop;
+                    result.doorPanelRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+                    result.doorPanelGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                    result.doorPanelBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                }
+            }
+        }
     }
 
     @Override
@@ -956,5 +1104,8 @@ public class WallRenderer implements Renderable, Disposable {
         doorTextureBlue.dispose();
         columnTexture.dispose();
         whitePixelTexture.dispose();
+        if (workerPool != null) {
+            workerPool.shutdown();
+        }
     }
 }
