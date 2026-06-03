@@ -319,6 +319,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         player.render(camera);
 
         hudState.alertActive = false;
+        Weapon hudWeapon = inventory.getEquippedWeapon();
+        if (hudWeapon != null) {
+            hudState.currentAmmo = hudWeapon.getShotsInClip();
+            hudState.clipSize    = hudWeapon.getClipSize();
+        } else {
+            hudState.currentAmmo = 0;
+            hudState.clipSize    = 1;
+        }
         float deltaTime = Gdx.graphics.getDeltaTime();
         hudRenderer.update(deltaTime);
         hudRenderer.render(camera);
