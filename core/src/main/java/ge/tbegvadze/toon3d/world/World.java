@@ -268,6 +268,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         facilityTimeSeconds += Gdx.graphics.getDeltaTime();
         floorCeilingRenderer.setLightingTime(facilityTimeSeconds);
         wallRenderer.setLightingTime(facilityTimeSeconds);
+        propRenderer.setLightingTime(facilityTimeSeconds);
 
         alertTimeSeconds  = 0f;
         float currentAlertPulse = 0f;
