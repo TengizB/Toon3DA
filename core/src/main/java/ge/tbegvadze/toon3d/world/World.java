@@ -113,11 +113,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             eventTextSystem.spawnDamage(netDamage);
         });
 
-        // Run-persistent renderers
-        Chaingun chaingun = new Chaingun();
-        inventory.setEquippedWeapon(chaingun);
-        chaingun.setEventTextSystem(eventTextSystem);
-        weaponHudRenderer    = new WeaponHudRenderer(chaingun);
+        // Build the full weapon arsenal — player starts with all weapons equipped in order.
+        Shotgun              shotgun    = new Shotgun();
+        DoubleBarrelShotgun  dblShotgun = new DoubleBarrelShotgun();
+        PlasmaRifle          plasmaRifle = new PlasmaRifle();
+        Chaingun             chaingun   = new Chaingun();
+        for (Weapon weapon : new Weapon[]{shotgun, dblShotgun, plasmaRifle, chaingun}) {
+            weapon.setEventTextSystem(eventTextSystem);
+        }
+        inventory.setArsenal(java.util.List.of(shotgun, dblShotgun, plasmaRifle, chaingun));
+        weaponHudRenderer    = new WeaponHudRenderer(inventory.getEquippedWeapon());
         hudRenderer          = new HudRenderer(player, hudState);
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);
         fadeOverlayRenderer  = new FadeOverlayRenderer();
@@ -187,6 +192,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setTickEventBus(tickEventBus);
         playerController.setTransitionListener(this);
         playerController.setEventTextSystem(eventTextSystem);
+        playerController.setWeaponSwitchCallback(
+            () -> weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon()));
         if (touchInputState != null) {
             playerController.setTouchInputState(touchInputState);
         }

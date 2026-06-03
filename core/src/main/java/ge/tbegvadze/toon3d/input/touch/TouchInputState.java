@@ -8,15 +8,16 @@ import ge.tbegvadze.toon3d.util.Constants;
 public final class TouchInputState extends InputAdapter {
 
     // Ordered by action priority: index 0 = highest priority
-    private static final int INDEX_FORWARD      = 0;
-    private static final int INDEX_BACK         = 1;
-    private static final int INDEX_ROTATE_LEFT  = 2;
-    private static final int INDEX_ROTATE_RIGHT = 3;
-    private static final int INDEX_STRAFE_LEFT  = 4;
-    private static final int INDEX_STRAFE_RIGHT = 5;
-    private static final int INDEX_FIRE         = 6;
-    private static final int INDEX_RELOAD       = 7;
-    private static final int INDEX_SKIP_TURN    = 8;
+    private static final int INDEX_FORWARD       = 0;
+    private static final int INDEX_BACK          = 1;
+    private static final int INDEX_ROTATE_LEFT   = 2;
+    private static final int INDEX_ROTATE_RIGHT  = 3;
+    private static final int INDEX_STRAFE_LEFT   = 4;
+    private static final int INDEX_STRAFE_RIGHT  = 5;
+    private static final int INDEX_FIRE          = 6;
+    private static final int INDEX_RELOAD        = 7;
+    private static final int INDEX_SKIP_TURN     = 8;
+    private static final int INDEX_SWITCH_WEAPON = 9;
 
     private final TouchButton[]  buttons;
     private final Viewport       viewport;
@@ -33,7 +34,7 @@ public final class TouchInputState extends InputAdapter {
         float centerX = Constants.TOUCH_GRID_CENTER_X;
         float baseY   = Constants.TOUCH_GRID_BASE_Y;    // center Y of row 1 (BACK)
 
-        buttons = new TouchButton[9];
+        buttons = new TouchButton[10];
 
         // Row 1 (bottom) — center column only
         buttons[INDEX_BACK] = new TouchButton(
@@ -64,8 +65,11 @@ public final class TouchInputState extends InputAdapter {
             centerX + arm - half, row3Y - half,
             size, size, TouchAction.STRAFE_RIGHT, TouchButton.Shape.ROUNDED_SQUARE);
 
-        // Row 4 (top) — [blank] | RELOAD | SKIP
+        // Row 4 (top) — SWITCH_WEAPON | RELOAD | SKIP
         float row4Y = baseY + 3 * arm;
+        buttons[INDEX_SWITCH_WEAPON] = new TouchButton(
+            centerX - arm - half, row4Y - half,
+            size, size, TouchAction.SWITCH_WEAPON, TouchButton.Shape.ROUNDED_SQUARE, true);
         buttons[INDEX_RELOAD] = new TouchButton(
             centerX - half,       row4Y - half,
             size, size, TouchAction.RELOAD, TouchButton.Shape.ROUNDED_SQUARE, true);

@@ -97,10 +97,11 @@ public final class Constants {
     public static final float COLUMN_LIGHT_DIRECTION_Y  = 0.70710678f;
 
     // Input key bindings — single source of truth for remappable keys
-    public static final int KEY_STRAFE_RIGHT = com.badlogic.gdx.Input.Keys.E;
-    public static final int KEY_INTERACT     = com.badlogic.gdx.Input.Keys.F;
-    public static final int KEY_FIRE         = com.badlogic.gdx.Input.Keys.SPACE;
-    public static final int KEY_SKIP_TURN    = com.badlogic.gdx.Input.Keys.TAB;
+    public static final int KEY_STRAFE_RIGHT  = com.badlogic.gdx.Input.Keys.E;
+    public static final int KEY_INTERACT      = com.badlogic.gdx.Input.Keys.F;
+    public static final int KEY_FIRE          = com.badlogic.gdx.Input.Keys.SPACE;
+    public static final int KEY_SKIP_TURN     = com.badlogic.gdx.Input.Keys.TAB;
+    public static final int KEY_SWITCH_WEAPON = com.badlogic.gdx.Input.Keys.G;
 
     // Weapon system — timing
     // PLAYER_FIRE_DURATION: how long the fire action locks input (slightly heavier than a step)

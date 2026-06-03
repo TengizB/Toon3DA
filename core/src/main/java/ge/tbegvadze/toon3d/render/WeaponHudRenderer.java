@@ -28,8 +28,8 @@ import ge.tbegvadze.toon3d.util.Constants;
  */
 public class WeaponHudRenderer implements Renderable, Disposable {
 
-    private final Weapon        equippedWeapon;
-    private final Texture       normalTexture;
+    private Weapon              equippedWeapon;
+    private Texture             normalTexture;
     private final SpriteBatch   batch;
     private final ShapeRenderer shapeRenderer;
     private final float         drawX;
@@ -45,6 +45,20 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         this.batch          = new SpriteBatch();
         this.shapeRenderer  = new ShapeRenderer();
         this.drawX          = (Constants.WORLD_WIDTH - Constants.WEAPON_HUD_WIDTH) / 2f;
+    }
+
+    /**
+     * Swaps to a different weapon, disposing the old texture and generating the new one.
+     * The weapon sprite slides in from below to signal the switch.
+     */
+    public void setEquippedWeapon(Weapon weapon) {
+        normalTexture.dispose();
+        equippedWeapon      = weapon;
+        normalTexture       = loadOrGenerateNormalTexture(weapon);
+        previousState       = WeaponVisualState.NORMAL;
+        animationTimer      = 0f;
+        lastFlashCycleCount = weapon.getFlashCycleCount();
+        currentOffsetY      = Constants.WEAPON_HUD_BASE_Y - Constants.WEAPON_RELOAD_SLIDE_Y;
     }
 
     /**
