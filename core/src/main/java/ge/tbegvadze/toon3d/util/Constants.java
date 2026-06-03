@@ -204,11 +204,14 @@ public final class Constants {
 
     // Weapon HUD rendering — sprite anchored at screen bottom-centre
     // drawX = (WORLD_WIDTH - WEAPON_HUD_WIDTH) / 2f; drawY = WEAPON_HUD_BASE_Y
-    public static final float WEAPON_HUD_WIDTH  = 500f;
-    public static final float WEAPON_HUD_HEIGHT = 350f;
-    // Transparent grip area at canvas bottom = (14/134) × WEAPON_HUD_HEIGHT ≈ 37 world units.
-    // Setting drawY to -37 hides the grip below the screen edge, putting the body flush.
-    public static final float WEAPON_HUD_BASE_Y = -37f;
+    // Canvas is 192×134; grip occupies Y=0..14 (transparent, cut off below screen edge).
+    // Visible height = WEAPON_HUD_HEIGHT + WEAPON_HUD_BASE_Y = 268 − 28 = 240 world units
+    //   = exactly 1/3 of WORLD_HEIGHT (720).  Width maintains the 192:134 canvas aspect ratio.
+    public static final float WEAPON_HUD_WIDTH  = 384f;
+    public static final float WEAPON_HUD_HEIGHT = 268f;
+    // Transparent grip area at canvas bottom = (14/134) × 268 ≈ 28 world units.
+    // Setting drawY to -28 hides the grip below the screen edge, putting the body flush.
+    public static final float WEAPON_HUD_BASE_Y = -28f;
     // Recoil: weapon drops instantly by RECOIL_OFFSET_Y on fire, eases back over FIRE_FLASH_DURATION
     public static final float WEAPON_RECOIL_OFFSET_Y         = 55f;
     // Reload slide: weapon lerps this many world-units downward (mostly off screen) while reloading

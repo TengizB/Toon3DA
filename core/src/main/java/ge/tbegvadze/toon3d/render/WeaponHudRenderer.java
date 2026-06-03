@@ -34,9 +34,10 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     private final ShapeRenderer shapeRenderer;
     private final float         drawX;
 
-    private WeaponVisualState previousState  = WeaponVisualState.NORMAL;
-    private float             animationTimer = 0f;
-    private float             currentOffsetY = Constants.WEAPON_HUD_BASE_Y;
+    private WeaponVisualState previousState       = WeaponVisualState.NORMAL;
+    private float             animationTimer      = 0f;
+    private float             currentOffsetY      = Constants.WEAPON_HUD_BASE_Y;
+    private int               lastFlashCycleCount = 0;
 
     public WeaponHudRenderer(Weapon weapon) {
         this.equippedWeapon = weapon;
@@ -631,31 +632,44 @@ public class WeaponHudRenderer implements Renderable, Disposable {
 
     /**
      * Generates a triple-barrel rotary chaingun sprite using ShapeRenderer into an
-     * offscreen FrameBuffer.  Quake-1 style: camera sits slightly above-and-behind.
+     * offscreen FrameBuffer.  Front-facing perspective: player looks slightly downward
+     * at the three muzzle faces pointing directly toward them.
      * The grip is NOT drawn — cut off below screen edge.
      *
      * Canvas coordinate system (ShapeRenderer Y-up):
      *   Y =   0 → bottom of canvas (grip region — transparent, cut off)
-     *   Y = 134 → top of canvas (muzzle bores pointing toward the horizon)
+     *   Y = 134 → top of canvas (muzzle faces closest to player / top of screen)
+     *
+     * IMPORTANT — orientation convention for this weapon:
+     *   Unlike top-down weapons (plasma rifle, shotgun) the chaingun must be rendered
+     *   front-facing so the three bore openings are clearly visible.  The barrels point
+     *   TOWARD the player (muzzle faces at high Y = top of screen), not away.
+     *   Do NOT revert to a top-down barrel-tube design; the bore holes must be prominent.
      *
      * Layout zones:
      *   Y  0– 14  transparent   — grip cut off below screen
-     *   Y 14– 50  receiver base — wide gunmetal top surface
-     *   Y 50– 78  barrel drum   — ring housing connecting three barrel tubes
-     *   Y 76–128  three barrel tubes (each 14px wide × 52px tall, top-surface view)
-     *   Y 122–128 muzzle caps + bore openings
+     *   Y 14– 50  receiver body — military olive-green trapezoid
+     *   Y 46– 70  motor drum    — bronze/copper housing
+     *   Y 68– 86  shroud collar — steel ring with amber accent
+     *   Y 82–128  barrel faces  — three cylindrical muzzle ends (front view, 19/18/19 px wide)
+     *   Y 94–122  bore openings — large dark ellipses (prominently visible)
+     *   Y 116–124 heat rim glow — amber superheated rim around each bore
+     *
+     * Three-barrel layout (centerX=96, each barrel separated by a 4 px gap):
+     *   Left   barrel: CX−32..CX−13 (19 px)
+     *   Center barrel: CX− 9..CX+ 9 (18 px)
+     *   Right  barrel: CX+13..CX+32 (19 px)
      *
      * Layers (back-to-front):
-     *   1. Receiver base     — wide gunmetal trapezoid, top-surface perspective
-     *   2. Drum housing      — wide ring housing with concentric detail
-     *   3. Warning rings     — orange-red hazard stripes on housing
-     *   4. Left barrel       — narrow (14px) × tall (52px) tube from above
-     *   5. Center barrel     — centered on centerX, same dimensions
-     *   6. Right barrel      — mirror of left barrel
-     *   7. Inter-barrel gaps — deep shadow channels between tubes
-     *   8. Retaining band    — steel collar ring across all barrels
-     *   9. Muzzle caps       — flat steel plates at each barrel tip
-     *  10. Bore openings     — nearly circular (14×12) dark ellipses + rim-shine
+     *   1. Receiver body    — olive-green trapezoid + hazard stripe
+     *   2. Motor drum       — bronze/copper housing with concentric ring detail
+     *   3. Shroud collar    — steel ring with amber accent line
+     *   4. Barrel bodies    — three gunmetal cylinders (face-on)
+     *   5. Cylinder shading — outer shadow / crown highlight / inner shadow per barrel
+     *   6. Gap channels     — deep shadow between barrels
+     *   7. Muzzle rim rings — steel annulus at barrel tips
+     *   8. Bore openings    — prominent dark ellipses
+     *   9. Heat rim glow    — amber/orange heat suggestion at bore edges
      */
     private static Texture generateChaingunTexture() {
         int canvasWidth  = Constants.CHAINGUN_CANVAS_WIDTH;
@@ -710,99 +724,100 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      *   Gaps:   base CX−14..CX−7  and CX+7..CX+14 → muzzle CX−9..CX−5 and CX+5..CX+9
      */
     private static void drawChaingunShape(ShapeRenderer shapeRenderer, float centerX) {
+        // Front-facing view: three barrel muzzle ends point toward the player (camera).
+        // Barrel muzzle faces occupy the upper half of the canvas; receiver at bottom.
+        // Y=0..14 transparent — grip cut off below screen.
 
-        // Y=0..14 transparent — grip cut off below screen
-
-        // 1. Receiver body — military olive-green, top-surface trapezoid Y=14..62
+        // 1. Receiver body — military olive-green trapezoid (Y=14..50), wider at near end
         shapeRenderer.setColor(0.18f, 0.20f, 0.13f, 1f);
-        drawSymmetricTrapezoid(shapeRenderer, centerX, 48f, 14f, 42f, 62f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 48f, 14f, 38f, 50f);
         shapeRenderer.setColor(0.28f, 0.31f, 0.20f, 1f);
-        shapeRenderer.rect(centerX - 42f, 59f, 84f, 3f);    // far-edge highlight
+        shapeRenderer.rect(centerX - 38f, 47f, 76f, 3f);    // far-edge highlight
         shapeRenderer.setColor(0.10f, 0.11f, 0.07f, 1f);
         shapeRenderer.rect(centerX - 48f, 14f, 96f, 3f);    // near-edge shadow
-        shapeRenderer.setColor(0.13f, 0.14f, 0.09f, 1f);
-        shapeRenderer.rect(centerX - 44f, 38f, 88f, 2f);    // mid-surface groove
+        shapeRenderer.setColor(0.85f, 0.50f, 0.05f, 1f);   // amber hazard stripe
+        shapeRenderer.rect(centerX - 36f, 30f, 72f, 5f);
+        shapeRenderer.setColor(0.10f, 0.10f, 0.08f, 1f);   // stripe dividers
+        shapeRenderer.rect(centerX - 24f, 30f, 3f, 5f);
+        shapeRenderer.rect(centerX -  6f, 30f, 3f, 5f);
+        shapeRenderer.rect(centerX +  9f, 30f, 3f, 5f);
+        shapeRenderer.rect(centerX + 24f, 30f, 3f, 5f);
 
-        // 2. Amber hazard warning stripe with dark vertical separator bars (Y=44..52)
-        shapeRenderer.setColor(0.85f, 0.50f, 0.05f, 1f);
-        shapeRenderer.rect(centerX - 42f, 44f, 84f, 8f);
-        shapeRenderer.setColor(0.10f, 0.10f, 0.08f, 1f);    // vertical dividers
-        shapeRenderer.rect(centerX - 30f, 44f,  3f, 8f);
-        shapeRenderer.rect(centerX - 12f, 44f,  3f, 8f);
-        shapeRenderer.rect(centerX +  9f, 44f,  3f, 8f);
-        shapeRenderer.rect(centerX + 27f, 44f,  3f, 8f);
-        shapeRenderer.setColor(0.60f, 0.34f, 0.03f, 1f);    // border lines
-        shapeRenderer.rect(centerX - 42f, 52f, 84f, 1f);
-        shapeRenderer.rect(centerX - 42f, 43f, 84f, 1f);
-
-        // 3. Bronze/copper motor drum housing (Y=58..84) with concentric ring detail
+        // 2. Bronze/copper motor drum housing (Y=46..70) with concentric ring detail
         shapeRenderer.setColor(0.38f, 0.26f, 0.09f, 1f);
-        shapeRenderer.rect(centerX - 36f, 58f, 72f, 26f);
+        shapeRenderer.rect(centerX - 36f, 46f, 72f, 24f);
         shapeRenderer.setColor(0.52f, 0.36f, 0.13f, 1f);
-        shapeRenderer.rect(centerX - 36f, 81f, 72f,  3f);   // far-edge highlight
+        shapeRenderer.rect(centerX - 36f, 67f, 72f, 3f);   // far highlight
         shapeRenderer.setColor(0.22f, 0.14f, 0.05f, 1f);
-        shapeRenderer.rect(centerX - 36f, 58f, 72f,  3f);   // near-edge shadow
+        shapeRenderer.rect(centerX - 36f, 46f, 72f, 3f);   // near shadow
         shapeRenderer.setColor(0.28f, 0.18f, 0.06f, 1f);
-        shapeRenderer.rect(centerX - 28f, 63f, 56f, 16f);   // inner dark concentric band
+        shapeRenderer.rect(centerX - 28f, 51f, 56f, 14f);  // inner dark band
         shapeRenderer.setColor(0.46f, 0.32f, 0.11f, 1f);
-        shapeRenderer.rect(centerX - 22f, 66f, 44f, 10f);   // inner lighter ring highlight
+        shapeRenderer.rect(centerX - 22f, 54f, 44f, 8f);   // inner lighter ring
 
-        // 4. Three perspective-tapered gunmetal barrel tubes (base Y=80, muzzle Y=128)
-        //    drawGeneralTrapezoid(SR, leftBase, rightBase, baseY, leftMuzzle, rightMuzzle, muzzleY)
-        shapeRenderer.setColor(0.20f, 0.22f, 0.26f, 1f);    // gunmetal base color
-        drawGeneralTrapezoid(shapeRenderer, centerX - 26f, centerX - 14f, 80f, centerX - 17f, centerX -  9f, 128f);
-        drawGeneralTrapezoid(shapeRenderer, centerX -  7f, centerX +  7f, 80f, centerX -  5f, centerX +  5f, 128f);
-        drawGeneralTrapezoid(shapeRenderer, centerX + 14f, centerX + 26f, 80f, centerX +  9f, centerX + 17f, 128f);
-
-        // Cylinder shading — outer-edge shadow, crown highlight, inner-edge shadow on each barrel.
-        // Percentages are along the 0→100% axis from the barrel's inner edge to outer edge.
-        // Left barrel (outer = left, inner = right):
-        shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX - 26f, centerX - 23f, 80f, centerX - 17f, centerX - 15f, 128f); // outer shadow
-        drawGeneralTrapezoid(shapeRenderer, centerX - 17f, centerX - 14f, 80f, centerX - 11f, centerX -  9f, 128f); // inner shadow
-        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX - 23f, centerX - 17f, 80f, centerX - 15f, centerX - 11f, 128f); // crown
-        // Center barrel (symmetric, both edges shadow):
-        shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX -  7f, centerX -  4f, 80f, centerX -  5f, centerX -  3f, 128f); // left shadow
-        drawGeneralTrapezoid(shapeRenderer, centerX +  4f, centerX +  7f, 80f, centerX +  3f, centerX +  5f, 128f); // right shadow
-        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX -  4f, centerX +  4f, 80f, centerX -  3f, centerX +  3f, 128f); // crown
-        // Right barrel (outer = right, inner = left):
-        shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX + 14f, centerX + 17f, 80f, centerX +  9f, centerX + 11f, 128f); // inner shadow
-        drawGeneralTrapezoid(shapeRenderer, centerX + 23f, centerX + 26f, 80f, centerX + 15f, centerX + 17f, 128f); // outer shadow
-        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX + 17f, centerX + 23f, 80f, centerX + 11f, centerX + 15f, 128f); // crown
-
-        // 5. Inter-barrel gap shadow channels (also perspective-tapered)
-        shapeRenderer.setColor(0.06f, 0.07f, 0.08f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX - 14f, centerX -  7f, 80f, centerX -  9f, centerX -  5f, 128f); // left gap
-        drawGeneralTrapezoid(shapeRenderer, centerX +  7f, centerX + 14f, 80f, centerX +  5f, centerX +  9f, 128f); // right gap
-
-        // 6. Barrel shroud collar — steel ring clamping all barrels (Y=96..102) with amber accent
+        // 3. Barrel shroud collar (Y=68..86) — steel ring with amber accent line
         shapeRenderer.setColor(0.28f, 0.30f, 0.36f, 1f);
-        shapeRenderer.rect(centerX - 28f, 96f, 56f, 6f);
+        shapeRenderer.rect(centerX - 34f, 68f, 68f, 18f);
         shapeRenderer.setColor(0.85f, 0.50f, 0.05f, 1f);
-        shapeRenderer.rect(centerX - 28f, 100f, 56f, 2f);   // amber accent line
+        shapeRenderer.rect(centerX - 34f, 80f, 68f, 2f);   // amber accent
         shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
-        shapeRenderer.rect(centerX - 28f, 101f, 56f, 1f);   // top highlight
+        shapeRenderer.rect(centerX - 34f, 82f, 68f, 1f);   // top highlight
+        shapeRenderer.setColor(0.15f, 0.16f, 0.20f, 1f);
+        shapeRenderer.rect(centerX - 34f, 68f, 68f, 2f);   // bottom shadow
 
-        // 7. Muzzle caps — flat steel plates at each barrel tip (Y=124..128)
-        shapeRenderer.setColor(0.18f, 0.19f, 0.23f, 1f);
-        shapeRenderer.rect(centerX - 17f, 124f,  8f, 4f);   // left cap
-        shapeRenderer.rect(centerX -  5f, 124f, 10f, 4f);   // center cap
-        shapeRenderer.rect(centerX +  9f, 124f,  8f, 4f);   // right cap
+        // 4. Three barrel faces — front-facing cylindrical ends (Y=82..128)
+        //    Left: CX-32..CX-13 (19 px), Center: CX-9..CX+9 (18 px), Right: CX+13..CX+32 (19 px)
+        shapeRenderer.setColor(0.20f, 0.22f, 0.26f, 1f);
+        shapeRenderer.rect(centerX - 32f, 82f, 19f, 46f);  // left barrel body
+        shapeRenderer.rect(centerX -  9f, 82f, 18f, 46f);  // center barrel body
+        shapeRenderer.rect(centerX + 13f, 82f, 19f, 46f);  // right barrel body
 
-        // 8. Bore openings + amber heat rim shine (suggests superheated barrels)
-        shapeRenderer.setColor(0.04f, 0.04f, 0.05f, 0.95f);
-        shapeRenderer.ellipse(centerX - 17f, 118f,  8f, 10f);  // left bore
-        shapeRenderer.ellipse(centerX -  5f, 118f, 10f, 10f);  // center bore
-        shapeRenderer.ellipse(centerX +  9f, 118f,  8f, 10f);  // right bore
+        // Cylinder shading: outer shadow, crown highlight, inner shadow per barrel.
+        // Left barrel (outer edge = left, inner edge = right):
+        shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
+        shapeRenderer.rect(centerX - 32f, 82f,  3f, 46f);  // left outer shadow
+        shapeRenderer.rect(centerX - 16f, 82f,  3f, 46f);  // left inner shadow
+        shapeRenderer.setColor(0.38f, 0.42f, 0.50f, 1f);
+        shapeRenderer.rect(centerX - 29f, 82f, 10f, 46f);  // left crown highlight
+        // Center barrel (both edges shadow, wider crown):
+        shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
+        shapeRenderer.rect(centerX -  9f, 82f,  3f, 46f);  // center left shadow
+        shapeRenderer.rect(centerX +  6f, 82f,  3f, 46f);  // center right shadow
+        shapeRenderer.setColor(0.38f, 0.42f, 0.50f, 1f);
+        shapeRenderer.rect(centerX -  6f, 82f, 12f, 46f);  // center crown highlight
+        // Right barrel (outer edge = right, inner edge = left):
+        shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
+        shapeRenderer.rect(centerX + 13f, 82f,  3f, 46f);  // right inner shadow
+        shapeRenderer.rect(centerX + 29f, 82f,  3f, 46f);  // right outer shadow
+        shapeRenderer.setColor(0.38f, 0.42f, 0.50f, 1f);
+        shapeRenderer.rect(centerX + 16f, 82f, 10f, 46f);  // right crown highlight
+
+        // 5. Inter-barrel gap shadow channels
+        shapeRenderer.setColor(0.05f, 0.06f, 0.07f, 1f);
+        shapeRenderer.rect(centerX - 13f, 82f,  4f, 46f);  // left gap
+        shapeRenderer.rect(centerX +  9f, 82f,  4f, 46f);  // right gap
+
+        // 6. Muzzle rim rings — steel annulus at each barrel tip (Y=118..128)
+        shapeRenderer.setColor(0.32f, 0.34f, 0.40f, 1f);
+        shapeRenderer.rect(centerX - 32f, 118f, 19f, 10f); // left rim
+        shapeRenderer.rect(centerX -  9f, 118f, 18f, 10f); // center rim
+        shapeRenderer.rect(centerX + 13f, 118f, 19f, 10f); // right rim
+        shapeRenderer.setColor(0.48f, 0.52f, 0.60f, 1f);  // top edge highlight
+        shapeRenderer.rect(centerX - 32f, 126f, 19f, 2f);
+        shapeRenderer.rect(centerX -  9f, 126f, 18f, 2f);
+        shapeRenderer.rect(centerX + 13f, 126f, 19f, 2f);
+
+        // 7. Bore openings — prominent dark ellipses visible inside each barrel face
+        shapeRenderer.setColor(0.04f, 0.04f, 0.05f, 0.97f);
+        shapeRenderer.ellipse(centerX - 30f, 94f, 15f, 28f);  // left bore
+        shapeRenderer.ellipse(centerX -  7f, 94f, 14f, 28f);  // center bore
+        shapeRenderer.ellipse(centerX + 15f, 94f, 15f, 28f);  // right bore
+
+        // 8. Amber heat rim glow — superheated suggestion at bore edges
         shapeRenderer.setColor(0.85f, 0.50f, 0.05f, 0.55f);
-        shapeRenderer.ellipse(centerX - 17f, 126f,  8f, 3f);   // left rim glow
-        shapeRenderer.ellipse(centerX -  5f, 126f, 10f, 3f);   // center rim glow
-        shapeRenderer.ellipse(centerX +  9f, 126f,  8f, 3f);   // right rim glow
+        shapeRenderer.ellipse(centerX - 30f, 116f, 15f, 8f);  // left rim glow
+        shapeRenderer.ellipse(centerX -  7f, 116f, 14f, 8f);  // center rim glow
+        shapeRenderer.ellipse(centerX + 15f, 116f, 15f, 8f);  // right rim glow
     }
 
     /**
@@ -833,6 +848,15 @@ public class WeaponHudRenderer implements Renderable, Disposable {
             animationTimer = 0f;
             previousState  = state;
         }
+
+        // Reset the flash animation on every individual shot, including burst bullets that
+        // keep the weapon in FIRING state without a NORMAL transition.
+        int currentFlashCycle = equippedWeapon.getFlashCycleCount();
+        if (currentFlashCycle != lastFlashCycleCount) {
+            animationTimer      = 0f;
+            lastFlashCycleCount = currentFlashCycle;
+        }
+
         animationTimer += deltaTime;
 
         advanceOffsetY(state, deltaTime);

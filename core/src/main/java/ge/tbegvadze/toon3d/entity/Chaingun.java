@@ -69,7 +69,10 @@ public class Chaingun extends Weapon {
                                    int facingStepColumn, int facingStepRow,
                                    Level level, EnemyHitTarget enemyHitTarget,
                                    BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
-        pendingBurstBullets  = Constants.CHAINGUN_BURST_SIZE - 1;
+        // shotsInClip was already decremented by fire() for bullet 1; guard so pending
+        // bullets never exceed what remains in the clip (defensive; canFire() normally
+        // ensures shotsInClip >= BURST_SIZE before we get here).
+        pendingBurstBullets  = Math.min(Constants.CHAINGUN_BURST_SIZE - 1, shotsInClip);
         burstPlayerColumn    = playerTileColumn;
         burstPlayerRow       = playerTileRow;
         burstFacingColumn    = facingStepColumn;
@@ -104,6 +107,7 @@ public class Chaingun extends Weapon {
             if (fireFlashTimerSeconds <= 0f) {
                 pendingBurstBullets--;
                 shotsInClip--;
+                flashCycleCount++;
                 fireSingleBullet(burstPlayerColumn, burstPlayerRow,
                         burstFacingColumn, burstFacingRow,
                         burstLevel, burstEnemyHitTarget, burstBarrelHitTarget, burstDoorBlocksQuery);
