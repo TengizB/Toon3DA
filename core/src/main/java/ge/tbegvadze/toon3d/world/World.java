@@ -114,10 +114,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         });
 
         // Run-persistent renderers
-        DoubleBarrelShotgun shotgun = new DoubleBarrelShotgun();
-        inventory.setEquippedWeapon(shotgun);
-        shotgun.setEventTextSystem(eventTextSystem);
-        weaponHudRenderer    = new WeaponHudRenderer(shotgun);
+        Chaingun chaingun = new Chaingun();
+        inventory.setEquippedWeapon(chaingun);
+        chaingun.setEventTextSystem(eventTextSystem);
+        weaponHudRenderer    = new WeaponHudRenderer(chaingun);
         hudRenderer          = new HudRenderer(player, hudState);
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);
         fadeOverlayRenderer  = new FadeOverlayRenderer();

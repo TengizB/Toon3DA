@@ -173,6 +173,29 @@ public final class Constants {
     public static final int PLASMA_RIFLE_CANVAS_WIDTH  = 192;
     public static final int PLASMA_RIFLE_CANVAS_HEIGHT = 134;
 
+    // Chaingun — triple-barrel rotary weapon, sustained fire, medium range
+    public static final String CHAINGUN_DISPLAY_NAME        = "CHAINGUN";
+    // Chaingun stats — rapid-fire rotary weapon, 8-shot clip, 3-tick reload, medium range
+    // Damage table (coefficient 0.10, floor 0.15):
+    //   distance 1: 10 × 0.90 = 9    distance 2: 10 × 0.80 = 8
+    //   distance 4: 10 × 0.60 = 6    distance 6: 10 × 0.40 = 4
+    //   distance 8: 10 × 0.20 = 2    (minimum floor applies at extreme range)
+    public static final int     CHAINGUN_DAMAGE             = 10;
+    public static final int     CHAINGUN_CLIP_SIZE          = 8;
+    public static final int     CHAINGUN_RELOAD_TIME_TICKS  = 3;
+    public static final float   CHAINGUN_DAMAGE_DROP_COEFF  = 0.10f;
+    public static final int     CHAINGUN_RANGE_TILES        = 8;
+    // CHAINGUN_PENETRATION: false = stops at first enemy (bullets are stopped by armour)
+    public static final boolean CHAINGUN_PENETRATION        = false;
+
+    // Chaingun HUD textures — always procedural (no asset files)
+    public static final String CHAINGUN_NORMAL_TEXTURE_PATH = "textures/guns/chaingun/chaingun.png";
+    public static final String CHAINGUN_FIRE_TEXTURE_PATH   = "textures/guns/chaingun/chaingun_fire.png";
+    public static final String CHAINGUN_RELOAD_TEXTURE_PATH = "textures/guns/chaingun/chaingun_reload.png";
+    // Chaingun procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer
+    public static final int CHAINGUN_CANVAS_WIDTH  = 192;
+    public static final int CHAINGUN_CANVAS_HEIGHT = 134;
+
     // Plasma muzzle blast — blue-cyan sphere burst; replaces the shotgun orange flame
     public static final float PLASMA_BLAST_RADIUS = 85f;
 
