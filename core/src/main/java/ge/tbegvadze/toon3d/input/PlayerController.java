@@ -141,7 +141,7 @@ public class PlayerController {
             if (inventory.canAcceptMedical(tier)) {
                 inventory.addMedical(tier);
                 level.consumePickupAt(tileColumn, tileRow);
-                if (eventTextSystem != null) eventTextSystem.spawn("+HP");
+                if (eventTextSystem != null) eventTextSystem.spawnWithColor("+HP", EventTextSystem.COLOR_GREEN);
             }
         }
     }
@@ -154,7 +154,7 @@ public class PlayerController {
                 int restore = Level.armourRestoreOfPickup(cell);
                 player.applyArmor(restore);
                 level.consumePickupAt(tileColumn, tileRow);
-                if (eventTextSystem != null) eventTextSystem.spawn("+AR");
+                if (eventTextSystem != null) eventTextSystem.spawnWithColor("+AR", EventTextSystem.COLOR_GREEN);
             }
         }
     }

@@ -19,19 +19,24 @@ import ge.tbegvadze.toon3d.util.Constants;
  */
 public final class EventTextRenderer implements Disposable {
 
-    private static final Color SHADOW_COLOR = new Color(0f, 0f, 0f, 1f);
-    private static final Color TEXT_COLOR   = new Color(1f, 1f, 1f, 1f);
+    // Base palette — never mutated; per-frame alpha is written into temporaryColor only.
+    private static final Color BASE_SHADOW = new Color(0f,    0f,    0f,    1f);
+    private static final Color BASE_WHITE  = new Color(1f,    1f,    1f,    1f);
+    private static final Color BASE_GREEN  = new Color(0.25f, 1f,    0.25f, 1f);
+    private static final Color BASE_RED    = new Color(1f,    0.18f, 0.18f, 1f);
 
     private final EventTextSystem eventTextSystem;
     private final SpriteBatch     batch;
     private final BitmapFont      font;
     private final GlyphLayout     layout;
+    // Reusable scratch color — receives a base color copy then has alpha set each draw call.
+    private final Color           temporaryColor = new Color();
 
     public EventTextRenderer(EventTextSystem eventTextSystem) {
         this.eventTextSystem = eventTextSystem;
         this.batch           = new SpriteBatch();
         this.font            = new BitmapFont();
-        this.font.getData().setScale(1.4f);
+        this.font.getData().setScale(1.8f);
         this.font.getData().markupEnabled = false;
         this.layout          = new GlyphLayout();
     }
@@ -56,18 +61,28 @@ public final class EventTextRenderer implements Disposable {
             layout.setText(font, text);
             float textX = (Constants.WORLD_WIDTH - layout.width) / 2f;
 
-            SHADOW_COLOR.a = alpha * 0.7f;
-            font.setColor(SHADOW_COLOR);
+            temporaryColor.set(BASE_SHADOW);
+            temporaryColor.a = alpha * 0.7f;
+            font.setColor(temporaryColor);
             font.draw(batch, text, textX + 1f, baseY - 1f);
 
-            TEXT_COLOR.a = alpha;
-            font.setColor(TEXT_COLOR);
+            temporaryColor.set(resolveBaseColor(eventTextSystem.getColorType(slotIndex)));
+            temporaryColor.a = alpha;
+            font.setColor(temporaryColor);
             font.draw(batch, text, textX, baseY);
 
             stackOffset++;
         }
 
         batch.end();
+    }
+
+    private static Color resolveBaseColor(byte colorType) {
+        switch (colorType) {
+            case EventTextSystem.COLOR_GREEN: return BASE_GREEN;
+            case EventTextSystem.COLOR_RED:   return BASE_RED;
+            default:                          return BASE_WHITE;
+        }
     }
 
     @Override

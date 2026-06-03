@@ -228,11 +228,11 @@ public final class ImpactEffectRenderer implements Disposable {
             float riseOffset       = Constants.DAMAGE_NUMBER_RISE_SPEED * age;
             float screenY          = spriteTop + riseOffset + 10f;
 
-            // Colour: kill = bold gold, hit = bright white
+            // Colour: kill = bold gold, hit = orange-red
             if (system.numberIsKill[numberIndex]) {
                 font.setColor(1f, 0.85f, 0.10f, alpha);
             } else {
-                font.setColor(1f, 1f, 1f, alpha);
+                font.setColor(1f, 0.40f, 0.15f, alpha);
             }
 
             // Build "-N" (and "-N!" for kills) without String allocation
