@@ -22,6 +22,7 @@ public class Player implements Renderable, Disposable {
     private final int maxArmor;
 
     private final ShapeRenderer shapes;
+    private PlayerDamageListener damageListener;
 
     public Player(float positionX, float positionY, float directionX, float directionY) {
         this.positionX          = positionX;
@@ -36,10 +37,18 @@ public class Player implements Renderable, Disposable {
         this.armor              = 0;
     }
 
+    public void setPlayerDamageListener(PlayerDamageListener listener) {
+        this.damageListener = listener;
+    }
+
     public void applyDamage(int amount) {
         int armorAbsorbed = GameMath.armorAbsorb(amount, armor, Constants.ARMOUR_ABSORB_FRACTION);
         armor  = Math.max(0, armor  - armorAbsorbed);
-        health = Math.max(0, health - (amount - armorAbsorbed));
+        int netDamage = amount - armorAbsorbed;
+        health = Math.max(0, health - netDamage);
+        if (damageListener != null && netDamage > 0) {
+            damageListener.onPlayerDamaged(netDamage);
+        }
     }
 
     public void applyHealing(int amount) {

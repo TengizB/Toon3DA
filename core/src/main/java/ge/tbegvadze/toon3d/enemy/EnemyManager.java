@@ -353,6 +353,15 @@ public final class EnemyManager implements EnemyHitTarget {
         occupancy[targetColumn][targetRow] = true;
     }
 
+    /** Returns true if any live enemy currently occupies the given tile. Safe to call at any time. */
+    public boolean isTileOccupiedByEnemy(int tileColumn, int tileRow) {
+        for (int enemyIndex = 0; enemyIndex < enemies.size(); enemyIndex++) {
+            Enemy enemy = enemies.get(enemyIndex);
+            if (enemy.tileColumn == tileColumn && enemy.tileRow == tileRow) return true;
+        }
+        return false;
+    }
+
     private boolean isPassableForEnemy(int targetColumn, int targetRow, int playerColumn, int playerRow) {
         if (level.isBlockedAt(targetColumn, targetRow, doorManager)) return false;
         if (occupancy[targetColumn][targetRow]) return false;

@@ -10,15 +10,27 @@ import java.util.*;
  * Scans the level on construction and registers every 'd' cell as a Door.
  * Single authority over each door's DoorState and animationProgress.
  * No allocations in update().
+ *
+ * Render fast-path: openFractionAtFast() and blocksSightFast() read flat arrays
+ * indexed by (tileRow * snapshotWidth + tileColumn) instead of HashMap lookup +
+ * autoboxing. The snapshot is rebuilt once per frame in update() by iterating the
+ * small door map (typically ~10 doors), eliminating up to 1280 boxed-Long allocations
+ * per frame that previously occurred in WallRenderer's per-column DDA loop.
  */
 public class DoorManager {
 
     // Packed long key (high 32 bits = column, low 32 bits = row) avoids wrapper allocation on lookup.
-    private final Map<Long, Door>          doorsByPackedKey;
+    private final Map<Long, Door>         doorsByPackedKey;
     // Keycard color required per locked door tile ('R'/'Y'/'B'). Empty = plain door.
-    private final Map<Long, KeycardColor>  lockedDoorColors;
+    private final Map<Long, KeycardColor> lockedDoorColors;
     // Set of locked-door keys that the player has permanently unlocked this level.
-    private final Set<Long>                unlockedDoors;
+    private final Set<Long>               unlockedDoors;
+
+    // Flat per-cell arrays for the render hot path — indexed by (row * snapshotWidth + column).
+    // Refreshed in update() after advancing animations; WallRenderer reads these directly.
+    private final float[]   openFractionSnapshot;
+    private final boolean[] blocksSightSnapshot;
+    private final int       snapshotWidth;
 
     public DoorManager(Level level) {
         doorsByPackedKey = new HashMap<>();
@@ -26,6 +38,9 @@ public class DoorManager {
         unlockedDoors    = new HashSet<>();
         int levelWidth  = level.getWidth();
         int levelHeight = level.getHeight();
+        snapshotWidth        = levelWidth;
+        openFractionSnapshot = new float[levelWidth * levelHeight];
+        blocksSightSnapshot  = new boolean[levelWidth * levelHeight];
         for (int tileRow = 0; tileRow < levelHeight; tileRow++) {
             for (int tileColumn = 0; tileColumn < levelWidth; tileColumn++) {
                 char cell = level.getCell(tileColumn, tileRow);
@@ -35,6 +50,8 @@ public class DoorManager {
                     if (Level.isLockedDoor(cell)) {
                         lockedDoorColors.put(key, Level.keycardColorOfDoor(cell));
                     }
+                    // All doors start CLOSED: openFraction = 0 (array default), blocksSight = true.
+                    blocksSightSnapshot[tileRow * levelWidth + tileColumn] = true;
                 }
             }
         }
@@ -44,7 +61,10 @@ public class DoorManager {
         return (long) tileColumn << 32 | ((long) tileRow & 0xFFFFFFFFL);
     }
 
-    /** Advances every animating door by deltaTime seconds. */
+    /**
+     * Advances every animating door by deltaTime seconds, then refreshes the flat snapshot
+     * arrays so the render hot-path reads current values without any HashMap lookup.
+     */
     public void update(float deltaTime) {
         for (Door door : doorsByPackedKey.values()) {
             switch (door.state) {
@@ -67,6 +87,55 @@ public class DoorManager {
                     break;
             }
         }
+        refreshSnapshot();
+    }
+
+    private void refreshSnapshot() {
+        for (Door door : doorsByPackedKey.values()) {
+            int snapshotIndex = door.tileRow * snapshotWidth + door.tileColumn;
+            switch (door.state) {
+                case CLOSED:
+                    openFractionSnapshot[snapshotIndex] = 0f;
+                    blocksSightSnapshot[snapshotIndex]  = true;
+                    break;
+                case OPENING:
+                    openFractionSnapshot[snapshotIndex] = door.animationProgress;
+                    blocksSightSnapshot[snapshotIndex]  = false;
+                    break;
+                case OPEN:
+                    openFractionSnapshot[snapshotIndex] = 1f;
+                    blocksSightSnapshot[snapshotIndex]  = false;
+                    break;
+                case CLOSING:
+                    openFractionSnapshot[snapshotIndex] = 1f - door.animationProgress;
+                    blocksSightSnapshot[snapshotIndex]  = true;
+                    break;
+            }
+        }
+    }
+
+    /**
+     * O(1) open-fraction lookup for the render hot path.
+     * Reads the flat snapshot array; no HashMap lookup, no autoboxing.
+     * Returns 0 for non-door tiles or out-of-bounds positions.
+     */
+    public float openFractionAtFast(int tileColumn, int tileRow) {
+        if (tileColumn < 0 || tileRow < 0) return 0f;
+        int snapshotIndex = tileRow * snapshotWidth + tileColumn;
+        if (snapshotIndex >= openFractionSnapshot.length) return 0f;
+        return openFractionSnapshot[snapshotIndex];
+    }
+
+    /**
+     * O(1) sight-blocking lookup for the render hot path.
+     * Reads the flat snapshot array; no HashMap lookup, no autoboxing.
+     * Returns false for non-door tiles or out-of-bounds positions.
+     */
+    public boolean blocksSightFast(int tileColumn, int tileRow) {
+        if (tileColumn < 0 || tileRow < 0) return false;
+        int snapshotIndex = tileRow * snapshotWidth + tileColumn;
+        if (snapshotIndex >= blocksSightSnapshot.length) return false;
+        return blocksSightSnapshot[snapshotIndex];
     }
 
     /** Returns the door's state, or CLOSED if no door exists at the given position. */

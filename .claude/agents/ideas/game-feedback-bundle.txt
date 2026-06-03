@@ -1,0 +1,819 @@
+STATUS: IN PROGRESS
+CATEGORY: Systems
+TITLE: Game Feedback Bundle (text, vignette, door perf, gen, occupancy)
+CREATED: 2026-06-02
+---
+
+================================================================================
+GAME FEEDBACK BUNDLE — 5 RELATED FEATURES
+================================================================================
+
+This is one cohesive bundle that makes the game READABLE and FAIR. The Doom RPG
+design pillar is "the player should always understand what just happened and why
+they died." Four of these features are about communicating world events back to
+the marine; one (door perf) removes a stutter that breaks that readability; one
+(occupancy) closes a tactical fairness hole. They share data sources (the turn
+tick, the player HP/AR fields, the EnemyManager) so they are designed together.
+
+The five features:
+
+  F1. Floating Event Text     — center-screen, rises + fades (turn/reload/damage/pickup)
+  F2. Red Hit Vignette        — screen edges flash red when the marine is struck
+  F3. Door-Proximity Lag Fix  — kill the stutter when standing next to a door
+  F4. Improved Level Gen       — spacious + non-rectangular rooms, safe door slots
+  F5. Tile Occupation Rule    — no two actors ever share a tile
+
+--------------------------------------------------------------------------------
+CRITICAL PRE-READ: WHAT ALREADY EXISTS (do not duplicate)
+--------------------------------------------------------------------------------
+
+The codebase already has an enemy-side feedback system. DO NOT rebuild it; F1/F2
+must COEXIST with it and reuse its patterns.
+
+  - render/ImpactEffectSystem.java   — pre-allocated particle + damage-number +
+                                       screen-shake + kill-flash pools. Zero alloc.
+  - render/ImpactEffectRenderer.java  — renderWorldEffects() (drawn during shake)
+                                       and renderScreenOverlays() (drawn after shake).
+                                       Already draws ENEMY damage numbers (world-
+                                       projected) and a kill-flash EDGE overlay.
+  - entity/ImpactEventListener.java   — onEnemyHit(...) / onEnemyKilled(...).
+  - world/TickEventBus.java           — zero-alloc pub/sub. fireTick(col,row,player,cause).
+  - world/TickCause.java              — MOVE / FIRE / SKIP_TURN / HEAL.
+  - input/PlayerController.java       — finishAction(causesTick, cause) fires the tick;
+                                       advanceSkipping/advanceHealing/pickUp* live here.
+  - entity/Player.java                — applyDamage(int), applyHealing(int),
+                                       applyArmor(int), getHealth/getArmor/etc.
+  - enemy/EnemyManager.java           — phaseB applies player damage via
+                                       player.applyDamage(enemy.type.attackDamage()).
+                                       Has occupancy[][] grid + isPassableForEnemy().
+  - door/DoorManager.java             — getOpenFractionAt / blocksSight / isPassable.
+  - render/WallRenderer.java          — per-column DDA; door branch re-queries
+                                       doorManager.getOpenFractionAt() every ray.
+  - level/LevelGenerator.java         — 6-phase generator, rectangular rooms only,
+                                       placeDoors() with isDoorwayAligned() guard.
+
+KEY DISTINCTION:
+  - ImpactEffectSystem damage numbers = ENEMY hits, projected at the enemy's WORLD
+    position via the camera plane (they float over the monster you shot).
+  - F1 Floating Event Text = PLAYER-CENTRIC messages, always at SCREEN CENTER,
+    in screen space (no world projection). Different lifetime, different anchor,
+    different content (strings, not just numbers). These are SEPARATE systems.
+    Build F1 as its own EventTextSystem; do NOT shove strings into the number pool.
+
+
+
+================================================================================
+FEATURE 1 — FLOATING EVENT TEXT
+================================================================================
+
+OVERVIEW
+--------
+A screen-space message channel. Short strings spawn near screen center, drift
+upward, and fade out over ~1.5 s. Used for player-centric events the HUD bars do
+not make obvious in the moment: turn skipped, reloading / ready, damage taken,
+HP/AR pickups. Multiple messages stack vertically so they never overlap. This is
+the "subtitle track" for the marine's own actions and the hits landed on him.
+
+GAMEPLAY LOOP
+-------------
+  - Player presses Tab (skip) -> turn resolves -> "TURN SKIPPED" rises + fades.
+  - Player taps reload -> "RELOADING..." shows; on reload-complete tick -> "READY!".
+  - Enemy attack resolves in EnemyManager.phaseB -> "-12" (red) rises + fades.
+  - Player walks onto a medkit -> "+25 HP" (green) rises + fades.
+  - Player walks onto armor -> "+20 AR" (cyan) rises + fades.
+  - If several fire in one tick (e.g. two enemies hit), each new message is
+    offset DOWN by one line-height from the previous live message so they read
+    as a clean stack instead of overprinting.
+
+PLAYER EXPERIENCE
+-----------------
+Confirmation and consequence. The marine never wonders "did my skip register?"
+or "why did my health drop?" Damage numbers in red create a small jolt of dread;
+green pickups a beat of relief. It is the same dopamine loop as Hades hit-text,
+adapted to a turn-based pace where each line maps to exactly one world event.
+
+TECHNICAL NOTES
+---------------
+New package: render. New classes:
+
+  render/EventTextSystem.java
+    Pure data + lifetime, zero allocation after construction (mirror
+    ImpactEffectSystem's parallel-array style — do NOT use ArrayList<Message>).
+    Fields (all pre-allocated arrays, capacity = Constants.EVENT_TEXT_MAX = 8):
+        boolean[] active
+        float[]   age            // seconds since spawn
+        float[]   life           // == Constants.EVENT_TEXT_LIFE_SECONDS
+        float[]   spawnOffsetY   // initial downward stack offset (line stacking)
+        String[]  text           // pooled refs; see "string allocation" below
+        float[]   red, green, blue
+    API:
+        void spawn(String text, float r, float g, float b)
+            // finds a free slot; sets spawnOffsetY = (live message count) * LINE_STEP,
+            //   clamped so the stack never pushes off the top of the play area.
+            // if pool full, overwrite the OLDEST slot (highest age) — newest event wins.
+        void update(float deltaTime)   // age += dt; active=false when age>=life.
+        getters for the renderer (parallel-array accessors).
+
+  render/EventTextRenderer.java
+    Owns one SpriteBatch(EVENT_TEXT_MAX) + one BitmapFont. Disposable.
+    render(OrthographicCamera camera):
+        for each active slot:
+            float fraction = age/life;                  // 0..1
+            float alpha    = fraction < 0.15f            // quick fade-in
+                             ? fraction/0.15f
+                             : 1f - (fraction-0.15f)/0.85f;   // long fade-out
+            float riseY    = EVENT_TEXT_RISE_PIXELS * fraction;  // drift up
+            float x        = WORLD_WIDTH/2f - <measured half width>;
+            float y        = EVENT_TEXT_ANCHOR_Y - spawnOffsetY + riseY;
+            font.setColor(r,g,b,alpha); font.draw(batch, text, x, y);
+        // Use GlyphLayout ONCE per text change for centering — but GlyphLayout
+        // allocates. To stay zero-alloc in render(): pre-measure at spawn() time
+        // and store halfWidth[] in the System, OR accept that font.draw with a
+        // CharSequence and a fixed left X is "good enough" centered for short
+        // strings (recommended: store halfWidth[] computed in spawn()).
+
+Wiring (World.java):
+    - Construct EventTextSystem + EventTextRenderer in the run-persistent block
+      (alongside impactEffectSystem / impactEffectRenderer) so messages survive
+      floor transitions.
+    - Render: call eventTextRenderer.render(camera) in renderScreenOverlays slot,
+      AFTER impactEffectRenderer.renderScreenOverlays(camera) and AFTER
+      hudRenderer.render() so text sits on top of the HUD. (It is screen feedback.)
+    - update: eventTextSystem.update(deltaTime) in World.update() PLAYING branch.
+
+Event sources — where each message is fired:
+    +HP / +AR pickup:
+        In PlayerController.pickUpMedicalIfPresent / pickUpArmourIfPresent, after a
+        successful consume, call an injected EventTextSink. Add a setter:
+        playerController.setEventTextSink(eventTextSystem-wrapper). Wire in World.
+        BUT pickup HP amount is currently added to a STASH, not applied to HP (see
+        medkit-field-medicine-system.txt). So pickup text = "+1 STIMPAK" style OR
+        the armor case which IS applied immediately = "+20 AR". Decide per OPEN Q.
+    Damage taken ("-12"):
+        Best single choke point = Player.applyDamage(int). Have Player notify a
+        DamageObserver. Simplest: EnemyManager already calls player.applyDamage in
+        phaseB — fire the event there (it knows the amount). Recommended: fire from
+        the SAME place that already owns ImpactEventListener so all combat feedback
+        flows through one seam. Pass amount; EventTextSystem.spawn("-"+amount, red).
+        NOTE: "-"+amount allocates a String each hit. Use a small pre-built cache:
+        Constants.EVENT_TEXT_MAX small ints are common; build a String[] cache of
+        "-1".."-99" once at startup, index by clamp(amount,0,99). For >99 fall back
+        to a single reused StringBuilder (rare).
+    Skip / Reload / Ready:
+        These map cleanly to the tick. Add a TickSubscriber:
+        world/EventTextTickSubscriber.java — onTick(ctx):
+            if ctx.cause == SKIP_TURN -> spawn("TURN SKIPPED", grey)
+        Reload is two events:
+            - "RELOADING..." -> fire when reload STARTS (PlayerController tryReload
+              / weapon.beginReload).
+            - "READY!" -> fire when WeaponReloadSubscriber completes the reload.
+              Add the spawn call inside that subscriber's completion branch.
+
+Constants to add (util/Constants.java):
+    EVENT_TEXT_MAX            = 8
+    EVENT_TEXT_LIFE_SECONDS   = 1.5f
+    EVENT_TEXT_RISE_PIXELS    = 70f      // total upward drift over life
+    EVENT_TEXT_LINE_STEP      = 34f      // vertical gap between stacked messages
+    EVENT_TEXT_ANCHOR_Y       = 470f     // base Y (above weapon, below crosshair zone)
+    EVENT_TEXT_FONT_SCALE     = 1.6f
+    Color constants: EVENT_TEXT_DAMAGE_{R,G,B} (red), _HEAL_ (green),
+                     _ARMOR_ (cyan), _NEUTRAL_ (light grey).
+
+VISUAL DESIGN
+-------------
+  - Default BitmapFont, scale ~1.6, with a 1px dark shadow draw (draw the string
+    once in (0,0,0,alpha*0.6) at +2,-2 offset, then the colored string on top) so
+    text is legible over both bright floor and dark wall.
+  - Colors:
+        DAMAGE  "-12"        -> (0.90, 0.16, 0.16)  blood red
+        HEAL    "+25 HP"     -> (0.30, 0.85, 0.35)  med green
+        ARMOR   "+20 AR"     -> (0.30, 0.70, 0.95)  shield cyan
+        SKIP    "TURN SKIPPED" -> (0.70, 0.70, 0.72) grey
+        RELOAD  "RELOADING..." -> (0.85, 0.75, 0.30) amber
+        READY   "READY!"     -> (0.85, 0.85, 0.40)  bright amber-white
+  - Motion: ease-out rise (fast at first, slows) feels punchier than linear; if
+    cheap, use riseY = RISE * (1 - (1-fraction)^2).
+  - Layout reference:
+
+        +---------------------------------------------------+
+        |                                                   |
+        |                  -12          <- newest, top      |  y = ANCHOR_Y
+        |              TURN SKIPPED     <- older, pushed dn  |  y = ANCHOR_Y - STEP
+        |                                                   |
+        |            [ weapon sprite ]                      |
+        +----[HP/AR panel]------------------[ammo panel]----+
+
+BALANCE NOTES (placeholders — tune in playtest)
+-----------------------------------------------
+  - 1.5 s life is long enough to read one line but short enough that a flurry of
+    combat does not clog the screen. If combat spam is bad, drop to 1.1 s.
+  - Pool size 8 is generous; 3-4 enemies hitting in one tick + a pickup = ~5 max.
+  - LINE_STEP 34 vs FONT_SCALE 1.6: keep STEP >= rendered line height or stacks
+    visually merge. Verify after font scale is final.
+
+INTERACTIONS
+------------
+  - F2 Vignette: a damage event spawns BOTH "-12" text (F1) and the red vignette
+    (F2) from the same seam. Fire them together so they always agree.
+  - HUD: text is redundant-by-design with the HP/AR bars; that redundancy is the
+    point (bars show STATE, text shows the DELTA event). Render text above HUD.
+  - Existing enemy damage numbers (ImpactEffectSystem): keep them. They sit over
+    enemies (world space); F1 sits at screen center (player space). No conflict.
+  - F5 Occupancy: no direct interaction, but a blocked enemy shove could optionally
+    spawn no text (silent) — keep it silent to avoid spam.
+
+OPEN QUESTIONS
+--------------
+  - Pickup semantics: medkits go to a STASH (not instant HP). Should pickup text
+    read "+1 STIMPAK" (stash gained) or be suppressed for medkits and only shown
+    for armor (which IS instantly applied)? Recommend: "+1 STIMPAK" amber for med
+    stash, "+20 AR" cyan for armor, and reserve "+25 HP" green for the HEAL action
+    (when a stimpak is actually spent).
+  - Should "READY!" also fire for the double-barrel's per-shot recock, or only on a
+    full magazine reload? (Weapon-dependent; ask weapon-creator.)
+
+
+
+================================================================================
+FEATURE 2 — RED HIT VIGNETTE
+================================================================================
+
+OVERVIEW
+--------
+When the marine takes damage, the screen edges bloom red and fade over ~0.6 s. A
+full-screen, edge-weighted overlay (transparent center, red rim) rendered just
+before the HUD. Classic FPS "you got hit" cue, turn-based: it pulses once per
+damaging hit rather than continuously.
+
+GAMEPLAY LOOP
+-------------
+  - Enemy resolves an attack in EnemyManager.phaseB -> player.applyDamage(n).
+  - Same seam fires onPlayerHit(n) -> vignette intensity set to 1.0.
+  - Each frame: intensity -= deltaTime / VIGNETTE_FADE_SECONDS, clamped to 0.
+  - render: if intensity > 0, draw the red edge overlay at alpha scaled by intensity.
+  - A second hit before fade-out re-spikes intensity back to 1.0 (no stacking past 1).
+
+PLAYER EXPERIENCE
+-----------------
+Visceral "ow." Peripheral red is pre-attentive — the player feels the hit before
+reading the "-12". With HP this matters for the "I understand why I died" pillar:
+the last few hits before death paint the rim solid red, so death never feels
+arbitrary. Intensity could optionally scale with how big the hit was.
+
+TECHNICAL NOTES
+---------------
+Two viable implementations; pick A for simplicity, B for quality.
+
+  A) Pre-baked vignette texture (RECOMMENDED, no shader):
+     New class render/HitVignetteRenderer.java (Disposable).
+       - In constructor build ONE Texture from a Pixmap (e.g. 256x256): fill with
+         red where alpha = f(distanceFromCenter) — center alpha 0, rim alpha 1,
+         smoothstep ramp starting ~55% out to the edge. Store as a single Texture.
+       - Pre-build once; NO per-frame Pixmap work (Pixmap->Texture in render() is
+         forbidden — it allocates and uploads).
+       - render(camera, intensity):
+            if intensity <= 0 return;
+            enable blend (SRC_ALPHA, ONE_MINUS_SRC_ALPHA);
+            batch.setColor(1,1,1, intensity);   // texture already red; alpha scales
+            batch.draw(vignetteTexture, 0,0, WORLD_WIDTH, WORLD_HEIGHT);
+            // stretching 256x256 to 1280x720 is fine; linear filter smooths it.
+       - Owns SpriteBatch(1) + Texture; dispose both.
+     State lives in World (or a tiny VignetteState): float hitVignetteIntensity.
+
+  B) Procedural rim with a 1x1 white pixel + multiple quads:
+     Cheaper memory, uglier. Draw four gradient-edge strips. Not recommended;
+     gradients via SpriteBatch tinting per-vertex need a mesh. Skip unless A is
+     blocked.
+
+Driving the intensity (World.java):
+    - Add field: private float hitVignetteIntensity = 0f;
+    - In update() PLAYING branch:
+        hitVignetteIntensity = Math.max(0f,
+            hitVignetteIntensity - deltaTime / Constants.HIT_VIGNETTE_FADE_SECONDS);
+    - The damage seam (same one that fires F1 "-12") sets:
+        hitVignetteIntensity = 1f;   // or min(1, intensity + hitDamage/scaleRef)
+    - render order: call hitVignetteRenderer.render(camera, hitVignetteIntensity)
+      AFTER renderScreenOverlays (kill-flash) and BEFORE hudRenderer.render(), so
+      the HUD chrome stays crisp on top of the red wash. (Per request: "rendered
+      before HUD." Matches.)
+
+Damage seam (shared with F1) — concrete recommendation:
+    Add interface entity/PlayerDamageListener { void onPlayerDamaged(int amount); }
+    Player.applyDamage(int amount) notifies the listener (after clamping). World
+    registers a listener that does BOTH:
+        eventTextSystem.spawn("-"+amount, red);
+        hitVignetteIntensity = 1f;
+    This guarantees text + vignette never desync, and is the single source of truth.
+    (Player currently has no listener field — add one nullable setter, no alloc.)
+
+Constants to add:
+    HIT_VIGNETTE_FADE_SECONDS = 0.6f
+    HIT_VIGNETTE_MAX_ALPHA    = 0.55f   // rim alpha at intensity=1 (don't fully blind)
+    HIT_VIGNETTE_INNER_RADIUS = 0.55f   // fraction of half-diagonal where red begins
+    Color: HIT_VIGNETTE_R/G/B = (0.75, 0.0, 0.0)
+
+VISUAL DESIGN
+-------------
+  - Pure transparent center so gameplay stays readable; red only in the outer ~45%.
+  - Cap effective alpha at HIT_VIGNETTE_MAX_ALPHA (multiply intensity by it) so even
+    a fresh hit never fully obscures the view — the player must still see the enemy.
+  - Smoothstep ramp, not linear, for a soft organic bloom rather than a hard ring.
+  - Optional polish: at very low HP (< 25%) hold a faint baseline vignette (intensity
+    floor of ~0.2) as a persistent "critical" warning. Gate behind an OPEN Q.
+
+BALANCE NOTES
+-------------
+  - 0.6 s fade is snappy; pairs with the existing camera shake from kills. If hits
+    feel weak, raise MAX_ALPHA to 0.65; if blinding, lower to 0.45.
+  - Re-spike (not stack) prevents a wall of red during a swarm while still flashing
+    on every hit.
+
+INTERACTIONS
+------------
+  - F1: same seam, always co-fire. Mandatory pairing.
+  - ImpactEffectSystem kill-flash: that is a WHITE/different edge flash on ENEMY
+    kills. Different color, different trigger (you killing vs you hurt). They can
+    overlap visually; ensure red draws AFTER white so a kill-on-the-same-frame-as-
+    a-hit still reads as "I got hurt." Confirm draw order.
+  - emergency-red-alert-pulse.txt: that idea pulses walls red on alert. Distinct
+    from hit vignette (alert = ambient room tint; vignette = edge-only, transient).
+    They can coexist; just confirm they don't both peak red simultaneously and wash
+    the frame — if so, dampen vignette while red-alert is at peak.
+
+OPEN QUESTIONS
+--------------
+  - Scale intensity with hit size, or always full spike? Recommend: spike =
+    clamp(0.5 + amount/40, 0, 1) so chip damage flashes faintly, big hits hard.
+  - Persistent low-HP vignette floor: yes/no?
+
+
+
+================================================================================
+FEATURE 3 — DOOR-PROXIMITY LAG FIX
+================================================================================
+
+OVERVIEW
+--------
+Standing next to (or looking at) a door causes a frame-rate stutter. Root cause is
+the per-column raycast door branch in WallRenderer: when a door is mid-animation
+the ray does NOT terminate — it keeps marching past the door to find the surface
+behind it (see lines ~904-919), AND it re-queries doorManager.getOpenFractionAt()
+(a HashMap<Long,Door> lookup with autoboxing of a packed long key) for every ray
+that touches a door. With ~1280 columns and a door filling much of the view, that
+is hundreds-to-thousands of HashMap lookups + extended DDA marches per frame.
+
+ROOT CAUSE BREAKDOWN
+--------------------
+  1. HashMap<Long, Door> keyed by a boxed Long. getOpenFractionAt/blocksSight/
+     getStateAt each do packKey()->autobox->hashmap lookup. Called per ray, per
+     frame, for every door-touching column. Autoboxing allocates a Long per call
+     inside a hot render path (also a GC-pressure source -> stutter spikes).
+  2. Doors that are mid-animation force the DDA loop to CONTINUE past the door tile
+     to render the wall/room behind it. A door right in front of the player can be
+     the FIRST tile every ray hits, so every column pays the "keep marching" cost
+     plus the partial-door composite draw (2 draws per column instead of 1).
+  3. doorManager.update() iterates ALL doors every frame even when none animate.
+     Minor, but trivially fixable.
+
+OPTIMIZATION APPROACH
+---------------------
+Goal: remove allocation + redundant lookups from the render hot path. Game logic
+unchanged. Three layered fixes, smallest-risk first:
+
+  FIX 3a — Per-frame door snapshot (eliminates HashMap-in-render entirely).
+    Add to DoorManager a flat lookup the renderer reads instead of the HashMap:
+       float[] openFractionGrid   // size levelWidth*levelHeight, index = row*W+col
+       boolean[] blocksSightGrid
+    These are NOT rebuilt per door query; they are refreshed ONCE per frame in
+    DoorManager.update() (or a new refreshSnapshot()), iterating only the door MAP
+    values (there are few doors), writing into the flat arrays. Default cells:
+    openFraction 0, blocksSight false. WallRenderer then reads:
+       float open = doorManager.openFractionAtFast(col,row); // array read, no box
+    Net: render path becomes pure int-indexed array reads. Zero allocation, O(1),
+    no hashing. This alone likely removes the stutter.
+
+    Implementation detail: allocate the flat arrays in DoorManager constructor
+    (sized to level). Add openFractionAtFast(col,row) and blocksSightFast(col,row)
+    that bounds-check and read the array. Keep the old HashMap methods for non-hot
+    callers (LOS in EnemyManager runs once/turn — fine to leave as-is, or point it
+    at the fast path too).
+
+  FIX 3b — Early-out in DoorManager.update().
+    Track an int animatingDoorCount. update() only loops doors when count > 0.
+    requestOpen / notifyPlayerSettled adjust the count when a door enters/leaves an
+    animating state. Refresh the snapshot (3a) only when a door state changed OR a
+    door is animating (a dirty flag). When nothing animates, update() is ~free.
+
+  FIX 3c — Cap the door "march-behind" cost (only if 3a/3b insufficient).
+    The partial-door pass-through is correct for translucency but expensive when a
+    door dominates the view. Option: when openFraction == 0 (fully CLOSED), treat
+    the door EXACTLY like a wall and TERMINATE the ray (no march-behind, single
+    draw). A closed door shows nothing behind it anyway. Only OPENING/CLOSING/OPEN
+    fractions in (0,1) need the march-behind. In WallRenderer's door branch:
+        if (open <= 0f) { hitWall = true; hitWallCell = cell; break; }  // closed = wall
+        if (open >= DOOR_OPEN_THROUGH_THRESHOLD) continue;              // open = passthrough
+        // else partial: existing march-behind path
+    This collapses the common "closed door in front of me" case to one draw/column.
+
+GAMEPLAY LOOP IMPLICATIONS
+--------------------------
+None. Pure performance. Door open/close timing, LOS, and visuals are byte-for-byte
+identical for OPENING/CLOSING/OPEN states. The ONLY visible change is from 3c: a
+fully CLOSED door renders as an opaque panel that terminates the ray (it already
+looked opaque; now it is also cheap). Verify no seam/z-fighting where a closed door
+meets the wall behind it — there should be none since the ray now stops at the door
+face.
+
+TECHNICAL NOTES
+---------------
+Affected classes:
+  - door/DoorManager.java   — add flat snapshot arrays, refreshSnapshot(),
+                              animatingDoorCount, dirty flag, *Fast() readers.
+  - render/WallRenderer.java — replace getOpenFractionAt() calls in the per-column
+                              loop with openFractionAtFast(); add the closed-door
+                              early terminate (3c).
+  - world/World.java        — ensure DoorManager.update()/refreshSnapshot() runs
+                              before wallRenderer.render() each frame (it already
+                              calls doorManager.update(deltaTime) first in update()).
+Math/data:
+  - index = tileRow * levelWidth + tileColumn (row-major flat array).
+  - Memory: two arrays of W*H (80*45 = 3600) -> ~14KB float + 3.6KB bool. Trivial.
+Profiling guidance:
+  - Before: stand facing a door 1 tile away, watch frame time. Expect a spike,
+    especially during open/close animation and from GC (the boxed Longs).
+  - After 3a: spike should vanish. If it persists, the cost is the march-behind
+    (apply 3c) or the 2-draws-per-column composite (acceptable; only during the
+    ~0.x s animation window).
+
+VISUAL DESIGN
+-------------
+No visual change intended. (3c makes closed doors strictly opaque, which they
+already appeared to be.)
+
+BALANCE NOTES
+-------------
+N/A (no gameplay numbers).
+
+INTERACTIONS
+------------
+  - DoorManager.blocksSight() is used by EnemyManager LOS (once/turn). If you add a
+    blocksSightFast() snapshot, EnemyManager can use it too, but it is not hot —
+    leave or migrate at your discretion.
+  - F5 occupancy and F4 gen don't touch this; orthogonal.
+  - Keycard doors (uac-keycard-doors) add door variants but use the same
+    getOpenFractionAt path — the snapshot covers them automatically.
+
+OPEN QUESTIONS
+--------------
+  - Does the stutter reproduce on desktop, mobile, or both? If mobile-only, GC from
+    the boxed Long is almost certainly the cause and 3a alone fixes it.
+  - Is the SpriteBatch flushing between the surface draw and the door-panel draw
+    (different setColor) per column? If WallRenderer batches all surfaces then all
+    panels, good; if it interleaves color changes per column it forces extra flushes
+    — worth checking while in there (out of scope but cheap win).
+
+
+
+================================================================================
+FEATURE 4 — IMPROVED LEVEL GENERATION
+================================================================================
+
+OVERVIEW
+--------
+Today rooms are random rectangles connected by 1-tile L-corridors. It reads as a
+maze of tight boxes. This feature adds spacious rooms, NON-RECTANGULAR shapes
+(L / T / plus), wider corridors and alcoves, and — critically — a door-safety pass
+so doors are NEVER placed where a solid prop (barrel, crate, terminal, locker,
+column) blocks the doorway. The generator stays in the same 6-phase pipeline; we
+extend phases, we do not rewrite them.
+
+GAMEPLAY LOOP IMPLICATIONS
+--------------------------
+  - Bigger rooms -> ranged enemies (Vortex Eye) get real kiting space; melee
+    Corruptors must cross open ground under fire. More tactical positioning.
+  - Non-rect rooms -> cover and sightline breaks inside a single room (an L-room's
+    elbow blocks LOS), enabling peek-and-retreat play.
+  - Wider corridors -> the player can sidestep a charging enemy instead of being
+    funneled. Alcoves -> ambush nooks and loot stashes.
+  - Door safety -> no more "door welded shut by a barrel" soft-locks; every door is
+    a usable threshold. Reinforces the "fair" pillar.
+
+TECHNICAL NOTES
+---------------
+Affected class: level/LevelGenerator.java (+ Constants, + LevelGenConfig flags).
+All changes operate on the char[][] grid in tile space; pure Java, unit-testable.
+
+  4a — SPACIOUS ROOMS:
+    Raise the room-size ceiling. Tune Constants:
+        LEVEL_GEN_ROOM_MAX_WIDTH  / _MAX_HEIGHT  upward (e.g. +3..+5).
+    Keep MIN where it is so variety persists. Bigger rooms means fewer fit, so
+    nudge LEVEL_GEN_TARGET_ROOMS down slightly to keep corridor density sane, OR
+    raise LEVEL_GEN_PLACEMENT_TRIES so placement still succeeds.
+
+  4b — NON-RECTANGULAR ROOMS (L / T / plus):
+    The Room struct stays an axis-aligned bounding box for placement/overlap (keep
+    overlaps() as-is for collision). Shape is applied at CARVE time. Add a RoomShape
+    enum { RECT, L_SHAPE, T_SHAPE, PLUS } chosen per room with weights.
+    carveRoomInteriors() dispatches on shape:
+        RECT   — current behavior (carve full interior box).
+        L_SHAPE— carve the full box, then RE-FILL one corner quadrant back to 'x'.
+                 Pick a random corner; fill a sub-rectangle ~30-45% of W x H in it.
+        T_SHAPE— carve a horizontal bar across the full width at mid-height band +
+                 a vertical stem down (or up) from it; the two "shoulders" stay 'x'.
+                 Equivalent: carve full box, re-fill the two bottom corners.
+        PLUS   — carve a vertical bar (center columns) + horizontal bar (center
+                 rows); re-fill all four corners back to 'x'.
+    Implementation pattern (cleanest): always carveFullInterior(room), then call
+    a maskShape(grid, room, shape) that writes 'x' back into the masked-off corner
+    rectangles. This keeps one carve routine and N small mask routines.
+    CRITICAL INVARIANTS after masking:
+        - The room must remain internally connected (the carved cells form one
+          orthogonally-connected region). L/T/plus built by corner-masking are
+          always connected — good. Do NOT mask the center.
+        - The room center tile (used for corridor endpoints, spawn, stairs) MUST
+          stay floor. Corner-masking never touches center — good. Add an assert:
+          if maskShape would leave center as 'x', fall back to RECT.
+        - Corridor connection points: corridors connect room CENTERS today. Center
+          is guaranteed floor, so connectivity is preserved. The connectivity audit
+          (phase 5) BFS remains the safety net.
+
+  4c — WIDER CORRIDORS + ALCOVES:
+    Corridors are carved 1-tile wide via carveHorizontal/VerticalSegment. Add an
+    optional thickness:
+        - With probability LEVEL_GEN_WIDE_CORRIDOR_CHANCE, carve a corridor 2 tiles
+          wide (carve the fixedRow AND fixedRow+1, clamped in bounds, only writing
+          into 'x'). Gives breathing room and sidestep space.
+        - Keep most corridors 1-wide for claustrophobic contrast (Doom RPG vibe).
+    Alcoves: after rooms+corridors, a decoration pass pokes 1-tile recesses into
+    room walls:
+        - For each room, with small per-wall probability, carve a single 'x'->'l'
+          notch one tile deep into an exterior wall segment that has solid 'x'
+          behind it (don't break into another room/corridor — verify the tile
+          BEHIND the notch is still 'x' so the alcove is a dead pocket).
+        - Alcoves are prime spots for placePickups()/placeProps() to favor (a
+          stash in a nook). Optional: bias pickup placement toward alcove tiles.
+
+  4d — DOOR-SAFETY PASS (the must-have):
+    PROBLEM: placeProps()/placeColumns() run AFTER placeDoors(), and can drop a
+    solid prop onto a tile ADJACENT to a door, or onto the door's only walkable
+    neighbor, blocking the threshold. The connectivity audit clears the PATH but
+    can leave a door visually/physically obstructed on one side.
+    FIX — guard prop & column placement against door-adjacency, and re-validate
+    doors after props:
+      (i) In placeProps()/placeColumns()/placePickups(), reject any candidate tile
+          that is cardinally adjacent to a door 'd' (add isAdjacentToDoor()-style
+          check; one already exists for the door pass — reuse the helper). A door
+          needs its two walkable neighbors (the two cells the doorway opens into)
+          kept clear. Minimum rule: never place a SOLID prop or column on a tile
+          orthogonally adjacent to a door.
+      (ii) Add a final validateDoorways(grid) pass AFTER all props/columns:
+          for each door tile, look at its two "through" neighbors (the floor cells
+          on the doorway axis — determined like isDoorwayAligned: if walls N+S then
+          through-axis is E/W, so neighbors are E and W; if walls E+W then N and S).
+          If EITHER through-neighbor is a solid prop / column / wall, the door is
+          blocked: either (a) DELETE the offending solid prop (replace with floor),
+          or (b) downgrade the door to plain floor 'l' (remove the door). Prefer (a)
+          — keep the door, clear the prop — so the architecture reads intentionally.
+      (iii) Solid prop set to check = Level.isPropSolid(cell) || Level.isColumn(cell)
+          || Level.isWall(cell). Walkable decals (corpse 'm', blood '.', oil 'O',
+          dropped shotgun 's') are FINE next to/under a door — they don't block.
+
+  Order of phases after this feature (additions in CAPS):
+        placeRooms (4a sizing)
+        carveRoomInteriors  -> now SHAPE-AWARE (4b)
+        connectRoomsWithCorridors / addLoopCorridors -> WIDE option (4c)
+        placeDoors  (unchanged; isDoorwayAligned already prevents corner doors)
+        CARVE ALCOVES (4c)
+        assignFloorLighting / assignWallVariety / placePlayerSpawn
+        placeColumns / placeProps  -> DOOR-ADJACENCY GUARD (4d-i)
+        placePickups
+        placeHazardWallsNearBarrels
+        spawnEnemies
+        rust/gore/bulkhead passes
+        verifyAndRepairConnectivity
+        VALIDATE DOORWAYS (4d-ii)   <-- new, runs late, after everything solid is placed
+        stampStairsDown
+
+  Constants to add:
+    LEVEL_GEN_ROOM_MAX_WIDTH       (raise existing)
+    LEVEL_GEN_ROOM_MAX_HEIGHT      (raise existing)
+    LEVEL_GEN_SHAPE_RECT_WEIGHT    = 0.55f
+    LEVEL_GEN_SHAPE_L_WEIGHT       = 0.20f
+    LEVEL_GEN_SHAPE_T_WEIGHT       = 0.15f
+    LEVEL_GEN_SHAPE_PLUS_WEIGHT    = 0.10f
+    LEVEL_GEN_SHAPE_MIN_ROOM_SIZE  = 6     // only non-rect if room big enough
+    LEVEL_GEN_WIDE_CORRIDOR_CHANCE = 0.25f
+    LEVEL_GEN_ALCOVE_CHANCE_PER_ROOM = 0.4f
+  LevelGenConfig flags (so tests/levels can disable): nonRectRooms,
+    wideCorridors, alcoves, doorSafety (default all true except keep parity with
+    current default-off categories per existing config convention).
+
+VISUAL DESIGN
+-------------
+  - Non-rect rooms read instantly in first-person: an L-room's elbow is a wall jut
+    you must walk around; a plus-room has four alcove arms. Lean wall variety
+    (assignWallVariety already context-classifies) so the inner corners of L/T/plus
+    get ROOM-context vent/conduit walls, not flat 'x'.
+  - Wide corridors: lighting pass should treat the second lane as 'l' too; consider
+    a center strip of ' ' (lit) flanked by 'l' for a "main artery" look.
+  - Alcoves: drop a single prop or pickup and maybe a 'u' unlit floor tile for a
+    "what's hiding in there" beat.
+
+BALANCE NOTES
+-------------
+  - Bigger rooms + ranged enemies can spike difficulty. Keep
+    LEVEL_GEN_MAX_ENEMIES_PER_ROOM tied to interior AREA (already is) but verify
+    the new larger areas don't overspawn — cap per-room enemy count.
+  - Shape weights: 55/20/15/10 keeps most rooms rectangular (readable baseline)
+    with frequent-enough variety. Tune after a few generated seeds are eyeballed.
+  - Only apply non-rect to rooms >= SHAPE_MIN_ROOM_SIZE so tiny rooms don't become
+    unusable slivers.
+
+INTERACTIONS
+------------
+  - F5 Occupancy: bigger rooms = more enemies maneuvering = occupancy matters more
+    (two Corruptors funneling through a doorway must not stack). F4 and F5 reinforce.
+  - F3 Door perf: door-safety means doors stay functional; perf fix means they're
+    cheap. Both improve the door experience.
+  - Existing column placement (placeColumns) already avoids clustering; extend its
+    candidate rejection with the door-adjacency guard rather than duplicating logic.
+  - Connectivity audit (phase 5) is the backstop: if a non-rect mask or door-safety
+    deletion ever isolates a region, the BFS + emergency corridor repairs it. Keep
+    validateDoorways BEFORE stairs (so stairs land in a known-good room) but it can
+    run after the audit since it only removes props/doors, never adds walls.
+
+OPEN QUESTIONS
+--------------
+  - For T_SHAPE/PLUS, randomize orientation (stem up/down/left/right)? Recommend yes,
+    cheap, more variety.
+  - Door-safety conflict resolution: when a prop blocks a door, prefer deleting the
+    PROP (keep door) or deleting the DOOR (keep prop)? Recommend keep door, delete
+    prop — doors are structural, props are cosmetic.
+  - Should wide corridors ever get doors? A 2-wide doorway needs 2 door tiles or a
+    "double door." Simplest: doors only spawn on 1-wide pinch points (placeDoors'
+    isDoorwayAligned already requires opposing walls, which a 2-wide gap fails) —
+    so wide corridors naturally stay door-free. Confirm that's acceptable.
+
+
+
+================================================================================
+FEATURE 5 — TILE OCCUPATION ENFORCEMENT
+================================================================================
+
+OVERVIEW
+--------
+No tile may ever hold two actors. The player and an enemy can't share a tile;
+two enemies can't share a tile. When an enemy tries to move, it must treat tiles
+occupied by the player or another enemy as impassable, and pick a different legal
+step (or hold position). Most of this ALREADY EXISTS for enemy-vs-enemy and
+enemy-vs-player on the enemy's move; this feature audits, hardens, and closes the
+remaining gaps (intra-turn ordering, ranged repositioning, the player's own move).
+
+GAMEPLAY LOOP IMPLICATIONS
+--------------------------
+  - Enemies can't pile onto one tile to gang-stack damage — they must surround,
+    which spaces out incoming hits and rewards corner/doorway play (fight them
+    one-at-a-time in a choke).
+  - The player can't walk INTO an enemy (and vice versa); contact = the enemy
+    attacks from the adjacent tile, never by overlapping. Cleaner combat reads.
+  - Enables future shove/swap mechanics on a solid foundation.
+
+WHAT ALREADY EXISTS (verify, don't rebuild)
+-------------------------------------------
+  EnemyManager:
+    - occupancy[col][row] rebuilt at the start of each takeTurn (rebuildOccupancy).
+    - commitMove() updates occupancy as each enemy moves (so later enemies in the
+      same turn see earlier movers) — GOOD, intra-turn ordering is handled.
+    - isPassableForEnemy() rejects: level.isBlockedAt, occupancy[target], and the
+      player's tile. So enemy-vs-enemy and enemy-vs-player are ALREADY enforced on
+      the enemy side.
+    - stepToward/stepAway/wiggleStep all route through isPassableForEnemy -> good.
+  PlayerController:
+    - tryMove() checks level.isWall / isBlockedAt for the target tile. It does NOT
+      currently check enemy occupancy -> THE PLAYER CAN WALK ONTO AN ENEMY'S TILE.
+      This is the main gap.
+
+GAPS TO CLOSE
+-------------
+  5a — PLAYER-INTO-ENEMY (primary fix):
+    PlayerController.tryMove() must reject a target tile occupied by a living enemy.
+    Add a query path: PlayerController already has setEnemyManager(enemyManager).
+    Add EnemyManager.isTileOccupiedByEnemy(col,row) (loop the enemy list, O(enemies)
+    — fine, or expose the occupancy grid via a getter). In tryMove(), after the wall
+    check:
+        if (enemyManager != null &&
+            enemyManager.isTileOccupiedByEnemy(targetColumn, targetRow)) return; // blocked
+    Result: the player bumps an enemy instead of overlapping it. (Design choice:
+    bumping does nothing / costs no turn, OR optionally becomes a melee — out of
+    scope; default = blocked, no turn consumed, like bumping a wall.)
+    NOTE: enemies that DIED leave a corpse decal 'm' (walkable) — the player SHOULD
+    be able to walk over corpses. isTileOccupiedByEnemy must only count LIVING
+    enemies (enemy.isAlive()). The occupancy grid already clears dead enemies.
+
+  5b — STALE OCCUPANCY ACROSS THE PLAYER'S MOVE:
+    occupancy[][] is rebuilt at the start of takeTurn (enemy turn). Between enemy
+    turns the player moves; an enemy that died mid-player-turn (e.g. from an
+    explosive barrel chain on the player's tick) is removed from the list and
+    killEnemy() clears its occupancy cell — so the grid stays consistent. Verify:
+    any code path that removes/moves an enemy OUTSIDE takeTurn (barrel explosions,
+    future traps) MUST also clear that enemy's occupancy cell, or rely on the
+    rebuild at next takeTurn. Since occupancy is only CONSUMED inside takeTurn (and
+    rebuilt at its start), stale data between turns is harmless. Document this
+    invariant in EnemyManager: "occupancy is valid only during takeTurn; always
+    rebuilt at entry." Add a comment; no code change unless an enemy can MOVE
+    outside takeTurn (none currently).
+
+  5c — RANGED ENEMY REPOSITION (stepAway) ALREADY GUARDED:
+    actVortexEye -> stepAway -> isPassableForEnemy. Confirmed safe. No change.
+
+  5d — SPAWN-TIME OVERLAP:
+    Two spawn points could theoretically land on the same tile (generator places
+    enemies independently per room with collision-free intent, but two ROOMS can't
+    overlap, and within a room placement checks isWalkableFloor, NOT prior enemy
+    placement). Low risk but: buildInitialEnemies should skip a spawn whose tile is
+    already taken by an earlier enemy, OR LevelGenerator.spawnEnemiesInRoom should
+    mark placed tiles. Cheap guard: in spawnEnemiesInRoom, track placed tiles and
+    reject duplicates (it already loops with attempts; add an occupied-set check).
+
+TECHNICAL NOTES
+---------------
+Affected classes:
+  - enemy/EnemyManager.java  — add isTileOccupiedByEnemy(col,row) (public). Keep it
+                              O(n) over the enemy list (counts living only) OR expose
+                              a read-only occupancy accessor. Document occupancy
+                              validity invariant.
+  - input/PlayerController.java — tryMove() consults enemyManager occupancy; reject
+                              blocked target (no turn consumed). Already has the
+                              enemyManager reference.
+  - level/LevelGenerator.java — (optional 5d) dedupe enemy spawn tiles.
+Data:
+  - No new persistent data; reuse existing occupancy grid + enemy list.
+Algorithm:
+  - Enemy move legality (existing): target is legal IFF
+        !level.isBlockedAt(target, doorManager)
+        && !occupancy[target]
+        && target != playerTile.
+    This is already implemented in isPassableForEnemy — the feature mainly ADDS the
+    symmetric player-side check (5a).
+
+VISUAL DESIGN
+-------------
+No new visuals. (Optionally: when the player tries to step into an enemy, F1 could
+stay silent and the weapon/camera could do nothing — a "bump" feels like hitting a
+wall, which is the existing no-op. Keep it silent to avoid feedback spam.)
+
+BALANCE NOTES
+-------------
+  - Blocking player-into-enemy means a doorway with an enemy in it is a hard stop —
+    the player must shoot or wait. This is intended (chokepoint tactics). Ensure
+    enemies can't permanently trap the player in a 1-tile dead-end with no LOS to
+    shoot; the wider corridors / alcoves from F4 mitigate this. Flag for playtest.
+  - Enemy-vs-enemy blocking can make a swarm queue up single-file in a corridor —
+    desirable (you fight them one at a time), but verify the greedy + wiggle fallback
+    (STUCK_TURNS_BEFORE_WIGGLE) keeps a stuck back-rank enemy from freezing forever.
+
+INTERACTIONS
+------------
+  - F4 Gen: wider corridors / non-rect rooms give enemies room to NOT block each
+    other; without F4, F5 can cause conga-line traffic jams. Ship together.
+  - F1/F2: a blocked player move yields no tick, no damage, no text — consistent
+    with bumping a wall. An enemy that CAN'T reach the player (all paths occupied)
+    just holds; it deals no damage that turn, which the player reads via the absence
+    of a "-N" / vignette. Good implicit feedback.
+  - Explosive barrels (ExplosiveBarrelManager) kill enemies outside takeTurn-style
+    flow — confirm those kills clear occupancy (they go through EnemyManager's
+    damage path which calls killEnemy -> clears occupancy). Verify.
+
+OPEN QUESTIONS
+--------------
+  - Should bumping an enemy with a melee weapon equipped auto-attack instead of
+    being a no-op? (Future; default = no-op, blocked move, no turn spent.)
+  - Should the player be allowed to SWAP places with a fleeing enemy (Vortex Eye
+    kiting INTO the player's tile)? Default: no — enemy already treats player tile
+    as impassable, so it routes around. No swap.
+
+
+
+================================================================================
+BUNDLE-WIDE IMPLEMENTATION ORDER (recommended)
+================================================================================
+  1. F3 Door perf      — isolated, pure win, unblocks comfortable testing of the rest.
+  2. F5 Occupancy      — small, closes a fairness hole; mostly one new check.
+  3. F1 + F2 together  — share the damage seam (PlayerDamageListener); build the
+                         seam once, fire text + vignette from it.
+  4. F4 Level gen      — largest; benefits from F5 (enemies maneuver) and is easiest
+                         to eyeball once feedback (F1/F2) makes test runs legible.
+
+SHARED SEAM TO BUILD FIRST (for F1+F2):
+  entity/PlayerDamageListener { void onPlayerDamaged(int amount); }
+  - Player.applyDamage(amount) -> after clamp, notify listener (nullable, no alloc).
+  - World registers one listener that does: eventTextSystem.spawn("-"+amount,red)
+    AND hitVignetteIntensity = 1f. Single source of truth; text + vignette never
+    disagree.
+
+ZERO-ALLOCATION REMINDERS (project rule):
+  - No allocation inside any render(). Pre-build the vignette Texture, the
+    "-1".."-99" String cache, and all EventText parallel arrays at construction.
+  - GlyphLayout allocates — measure text width at spawn() (cold path), store it.
+  - DoorManager snapshot arrays + EnemyManager occupancy: allocate in constructors,
+    never per frame/turn.
