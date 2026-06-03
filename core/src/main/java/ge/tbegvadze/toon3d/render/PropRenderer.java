@@ -68,13 +68,14 @@ public class PropRenderer implements Renderable, Disposable {
     private final int[]   sortedIndices;
     private final float[] sortedDepths;
 
-    private float playerWorldX   = 0f;
-    private float playerWorldY   = 0f;
-    private float directionX     = 1f;
-    private float directionY     = 0f;
-    private float planeX         = 0f;
-    private float planeY         = 1f;
-    private float alertPulse     = 0f;
+    private float playerWorldX      = 0f;
+    private float playerWorldY      = 0f;
+    private float directionX        = 1f;
+    private float directionY        = 0f;
+    private float planeX            = 0f;
+    private float planeY            = 1f;
+    private float alertPulse        = 0f;
+    private float lightingTimeSeconds = 0f;
 
     public PropRenderer(Level level, WallRenderer wallRenderer) {
         this.level          = level;
@@ -119,6 +120,10 @@ public class PropRenderer implements Renderable, Disposable {
 
     public void setAlertPulse(float pulse) {
         this.alertPulse = pulse;
+    }
+
+    public void setLightingTime(float timeSeconds) {
+        this.lightingTimeSeconds = timeSeconds;
     }
 
     @Override
@@ -206,8 +211,11 @@ public class PropRenderer implements Renderable, Disposable {
             texSrcHeight = Math.min(texSrcHeight, textureHeight - texSrcY);
             texSrcHeight = Math.max(1, texSrcHeight);
 
-            // Distance + alert shading — same formula as WallRenderer for visual consistency.
-            float shade       = GameMath.wallShade(depth, WALL_SHADING_FALLOFF);
+            // Distance shading × tile brightness (lit/normal/unlit/flickering) — matches
+            // the formula WallRenderer uses so props integrate seamlessly into their environment.
+            float tileBrightness = level.getTileBrightness(prop.tileColumn, prop.tileRow, lightingTimeSeconds);
+            float shade          = Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * tileBrightness,
+                                            MAX_LIGHTING_SHADE);
             float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
             float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);

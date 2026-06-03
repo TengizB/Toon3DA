@@ -1,0 +1,292 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Lighting System Overhaul — Prop Tile Inheritance & Atmosphere
+CREATED: 2026-06-03
+---
+
+OVERVIEW
+========
+The tile-based ambient lighting system (laboratory-lighting.txt, IMPLEMENTED)
+already lights walls, floor, and ceiling per-tile via Level.getTileBrightness().
+Props, however, are shaded by DISTANCE ONLY — a barrel standing on a 1.55× lit
+tile renders at the same darkness as one in a 1.0× side room, so it visually
+detaches from the floor it sits on and the whole cell reads "wrong." This
+overhaul closes that gap and pushes the lighting from "functional" to
+"atmospheric" by adding three composable layers on top of the existing
+multiplicative shade chain: (1) prop tile-brightness inheritance, including
+flicker propagation, (2) a subtle per-zone ambient COLOUR tint that gives lit /
+unlit / flickering zones distinct moods, and (3) a small set of cheap
+atmospheric touches (depth desaturation, a warm flicker colour spike). Every
+change stays per-tile, allocation-free in render(), and reuses the existing
+Level / GameMath API surface. No new render passes, no per-pixel prop work.
+
+
+GAMEPLAY LOOP
+=============
+This is a pure-visual system; the "loop" is the per-frame render contract.
+
+Per frame, for each visible prop in PropRenderer.render():
+1. Prop's tile (prop.tileColumn, prop.tileRow) is already known from placement.
+2. Renderer queries Level.getTileBrightness(tileColumn, tileRow, lightingTime)
+   → returns 1.55 (lit) / 1.0 (normal) / 0.55 (unlit) / animated (flicker).
+3. finalShade = wallShade(depth) × tileBrightness  (clamped to MAX_LIGHTING_SHADE).
+   → Prop on a lit tile now glows as bright as the floor beneath it.
+   → Prop on a flickering tile now strobes IN SYNC with that tile (because the
+     same flickerMultiplier(column,row,time) drives both surfaces).
+4. The renderer looks up the tile's ambient TINT (warm / neutral / cool) and
+   multiplies it into the RGB channels → the prop picks up the zone's colour
+   cast, matching walls/floor in that zone.
+5. Existing alert-pulse red boost is applied LAST, unchanged.
+
+Player-facing consequence: when the player walks past a flickering lamp, the
+crate beside it flickers too; when they step into a dark "unlit" pool, the
+barrels there go murky and blue-shifted like everything else around them. The
+scene now reads as one coherently-lit space rather than floating sprites.
+
+
+PLAYER EXPERIENCE
+=================
+The player should never consciously notice this system — they should simply
+stop noticing the OLD bug. Right now the eye snags on a prop that is "too dark"
+for its surroundings; it breaks the pseudo-3D illusion and makes the world feel
+like a flat test scene. After this change:
+
+- Lit pools of light feel like real pools: props within them are part of the
+  light, not a dark cut-out pasted on top.
+- Dark zones feel genuinely dark and uniform — a barrel in an unlit ambush
+  corridor is now a dim silhouette, increasing the "what's hiding here" dread.
+- Flickering chokepoints become genuinely cinematic: the strobe sweeps across
+  the floor, walls, AND the objects standing on the floor, all at once. A
+  flickering lamp above an explosive barrel becomes a tense, readable image.
+- The ambient tint gives each zone-type a subliminal mood: operational lit
+  areas feel sterile-warm (UAC fluorescent), dead zones feel cold-blue and
+  abandoned. The player learns the colour language without being taught it.
+
+The decision this creates is indirect but real: a darker, colder, flicker-lit
+stretch reads as "slow down, something is wrong here" — exactly the instinct
+laboratory-lighting.txt wanted to plant, now reinforced because props obey the
+same rules and the cue is no longer undercut by mismatched sprites.
+
+
+TECHNICAL NOTES
+===============
+This overhaul touches THREE renderers (PropRenderer, EnemyRenderer, and the
+ImpactEffect/EventText sprite renderers if they billboard in-world), plus
+Constants and GameMath. The core fix is small; the atmosphere layers are
+additive and independently shippable.
+
+--- A. PROP TILE-BRIGHTNESS INHERITANCE (the core fix) ---
+
+Affected class: render/PropRenderer.java
+
+PropRenderer already holds `level` and a per-frame lighting time is NOT yet
+threaded in. Two changes:
+
+1. Add a field + setter, mirroring setAlertPulse():
+       private float lightingTimeSeconds = 0f;
+       public void setLightingTime(float timeSeconds) {
+           this.lightingTimeSeconds = timeSeconds;
+       }
+   In world/World.java, call propRenderer.setLightingTime(facilityTimeSeconds)
+   every frame, using the SAME accumulator already fed to WallRenderer's
+   lighting time (laboratory-lighting OPEN QUESTION 1 recommended a single
+   `facilityTimeSeconds` float in World — reuse it; do not add a sibling).
+
+2. In render(), the shade block currently reads (line ~210):
+       float shade = GameMath.wallShade(depth, WALL_SHADING_FALLOFF);
+   Change to fold in the prop's tile brightness:
+       float tileBrightness = level.getTileBrightness(
+               prop.tileColumn, prop.tileRow, lightingTimeSeconds);
+       float shade = GameMath.wallShade(depth, WALL_SHADING_FALLOFF)
+                     * tileBrightness;
+       shade = Math.min(shade, MAX_LIGHTING_SHADE);
+   This is ONE array lookup + one multiply + one clamp per VISIBLE prop (not
+   per pixel, not per column) — set once before the per-column draw loop.
+   MAX_LIGHTING_SHADE (= 1.0) already exists from laboratory-lighting.
+
+   IMPORTANT consistency note: WallRenderer samples the brightness of the
+   FLOOR tile a wall stands next to (mapX - stepColumn). Props instead sample
+   THEIR OWN tile directly, because a prop occupies a floor tile, not a wall
+   face. This is correct and intentional — document it in a code comment so a
+   future reader does not "fix" it to match the wall logic.
+
+3. Flicker propagation falls out for free: getTileBrightness already calls
+   GameMath.flickerMultiplier(column,row,time) for 'f' tiles, so a prop on an
+   'f' tile inherits the identical oscillator value the floor/wall/ceiling use
+   that frame. No extra code. (This solves stated Problem 3.)
+
+Apply the IDENTICAL three-line change to render/EnemyRenderer.java's shade
+computation so enemies also inherit tile lighting (an enemy lurking in an
+unlit pool should be a dim silhouette — this is a free stealth-feel win and
+keeps enemies consistent with props). If EnemyRenderer does not yet exist as
+real code, leave this as a TODO note in its eventual shade block.
+
+--- B. AMBIENT ZONE TINT (atmosphere layer) ---
+
+Goal: give each lighting tier a faint COLOUR cast so zones feel distinct
+without changing brightness. This is multiplicative RGB, computed per-tile,
+shared by walls, floor, ceiling, props, and enemies.
+
+Affected: util/Constants.java, util/GameMath.java, Level.java (one helper),
+and every in-world sprite/wall shade site.
+
+1. Constants.java — add three tint triples (kept SUBTLE; these are nudges,
+   not gels). Values are placeholders, flag for tuning:
+       // Ambient zone tint — multiplied into final RGB AFTER brightness.
+       LIT_TINT_RED   = 1.00f  LIT_TINT_GREEN   = 0.98f  LIT_TINT_BLUE   = 0.90f  // warm fluorescent
+       NORMAL_TINT_RED= 1.00f  NORMAL_TINT_GREEN= 1.00f  NORMAL_TINT_BLUE= 1.00f  // neutral (no-op)
+       UNLIT_TINT_RED = 0.82f  UNLIT_TINT_GREEN = 0.88f  UNLIT_TINT_BLUE = 1.00f  // cold blue, dead
+       FLICKER_TINT_RED=1.00f  FLICKER_TINT_GREEN=0.96f  FLICKER_TINT_BLUE=0.86f  // warm, like lit but pushed
+   Keep every channel within ~0.80–1.00 so the tint never blows out or hard-
+   colours the scene — it must read as "mood," not "coloured spotlight."
+
+2. Level.java — add a tint accessor that mirrors getTileBrightness. Returns the
+   packed tint or writes into a caller-supplied 3-float scratch array to avoid
+   allocation. Recommended signature (no allocation, fills a shared float[3]):
+       public void getTileTint(int tileColumn, int tileRow, float[] outRgb3) {
+           char tile = getCell(tileColumn, tileRow);
+           if (tile == LIT_TILE_CHAR)        { outRgb3[0]=LIT_TINT_RED; ... }
+           else if (tile == UNLIT_TILE_CHAR) { outRgb3[0]=UNLIT_TINT_RED; ... }
+           else if (tile == FLICKERING_TILE_CHAR) { outRgb3[0]=FLICKER_TINT_RED; ... }
+           else { outRgb3[0]=outRgb3[1]=outRgb3[2]=1f; } // neutral / oob
+       }
+   Each renderer owns ONE pre-allocated `private final float[] tintScratch =
+   new float[3];` (allocated in constructor, never inside render()).
+
+3. Apply at each shade site. In PropRenderer, after computing shade:
+       level.getTileTint(prop.tileColumn, prop.tileRow, tintScratch);
+       float spriteRed   = Math.min(1f, shade * tintScratch[0] * (1f + alertPulse*ALERT_WALL_RED_BOOST));
+       float spriteGreen = shade * tintScratch[1] * (1f - alertPulse*ALERT_WALL_GB_DAMPEN);
+       float spriteBlue  = shade * tintScratch[2] * (1f - alertPulse*ALERT_WALL_GB_DAMPEN);
+       batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
+   In WallRenderer, multiply tintScratch into the column colour at the same
+   place the tile brightness is already applied (use the FLOOR tile in front
+   of the wall — same tile already sampled for brightness). In the floor/
+   ceiling pass, multiply tintScratch into the per-pixel colour using the tile
+   already computed for that pixel (zero extra tile lookups; reuse the index).
+
+   Composition order at EVERY site (this is the canonical chain — keep it
+   identical across renderers so the scene stays coherent):
+       distance shade  →  × tileBrightness  →  clamp to MAX_LIGHTING_SHADE
+                        →  × ambientTint(rgb) →  × alert-pulse term  →  setColor
+
+--- C. ATMOSPHERIC EXTRAS (optional, cheap, ship last) ---
+
+C1. Depth desaturation ("fog of distance"). Far surfaces currently just get
+    darker; pushing them slightly toward a cool grey reads as airborne haze and
+    improves depth legibility. In GameMath add:
+        /* Formula: depthDesaturationFactor
+         * Derivation: linear ramp 0→1 over [0, DESAT_MAX_DISTANCE_TILES],
+         *   clamped. 0 = full colour (near), 1 = fully desaturated (far).
+         *   factor = clamp(depthTiles / DESAT_MAX_DISTANCE_TILES, 0, 1)
+         *           × DESAT_STRENGTH
+         * Edge cases: DESAT_MAX_DISTANCE_TILES must be > 0 (compile-time const). */
+        public static float depthDesaturationFactor(float depthTiles) {...}
+    Apply by lerping each RGB channel toward the luminance grey of the pixel
+    by `factor` BEFORE setColor. Constants: DESAT_MAX_DISTANCE_TILES = 14f,
+    DESAT_STRENGTH = 0.25f (placeholder — keep weak; this is a whisper).
+    Cheap: one mul + one lerp per column/sprite. Skip in the floor pass if
+    per-pixel cost is a concern; walls + props alone sell the effect.
+
+C2. Flicker warm-spike. When a flicker tile is in its bright phase it should
+    read marginally WARMER than a steady lit tile (a dying tube runs hot/
+    yellow). The FLICKER_TINT above already biases warm; no extra code if B
+    ships. Listed here so it is not "rediscovered" as a separate task.
+
+C3. (Defer) One-tile light bleed — softening hard edges between lit/unlit
+    floor by averaging neighbour brightness. laboratory-lighting OPEN QUESTION
+    3 already recommends NOT doing this in v1 (hard pixel-pool edges are the
+    intended Doom-RPG look). Keep deferred; revisit only if playtest flags the
+    prop-vs-floor edges as harsh.
+
+Performance summary: per visible prop = 1 getTileBrightness + 1 getTileTint
+(both array-index + branch, no allocation) + a handful of float muls, all
+computed ONCE before the per-column draw loop. Wall/floor cost is the tint
+multiply folded into the brightness sample already being done. No new passes,
+no per-pixel prop work, no allocations in render().
+
+
+VISUAL DESIGN
+=============
+- Lit zone ('l'->1.55× here is " " in current CLAUDE.md; follow whichever the
+  code uses): warm-white fluorescent. Props/walls/floor share a faint
+  (1.00, 0.98, 0.90) cast. Sterile, operational, "the power still works here."
+- Normal zone: neutral, no tint (1,1,1). Baseline reference look.
+- Unlit zone: cold blue-grey (0.82, 0.88, 1.00) and 0.55× dim. Reads as a dead,
+  abandoned, refrigerated-morgue pocket. This is the dread colour.
+- Flicker zone: warm (1.00, 0.96, 0.86), brightness strobing 0.20–1.70×. During
+  the bright spike the whole cell — floor, wall spill, ceiling lamp panel, and
+  any prop/enemy standing there — flashes together, then collapses to near-dark.
+- Depth haze (C1): distant geometry drifts ~25% toward grey, separating fore-
+  ground threats from background corridor clutter.
+- No new textures, no new sprites, no geometry. Everything rides the existing
+  SpriteBatch.setColor() tint on the existing draws. Mini-map UNAFFECTED.
+
+
+BALANCE NOTES
+=============
+All values are PLACEHOLDERS to tune in-engine:
+| Constant                    | Start                | Notes                              |
+|-----------------------------|----------------------|------------------------------------|
+| MAX_LIGHTING_SHADE          | 1.00 (existing)      | Caps prop+brightness; do not raise |
+| LIT_TINT (R,G,B)            | 1.00, 0.98, 0.90     | Keep within 0.85–1.00 per channel  |
+| UNLIT_TINT (R,G,B)          | 0.82, 0.88, 1.00     | Coldest tint; most visible mood    |
+| FLICKER_TINT (R,G,B)        | 1.00, 0.96, 0.86     | Slightly warmer than LIT           |
+| DESAT_MAX_DISTANCE_TILES    | 14.0                 | Should be ≤ RAY_MAX_LENGTH_CELLS   |
+| DESAT_STRENGTH              | 0.25                 | Keep ≤ 0.35 or scene goes flat-grey|
+
+Tuning order: (1) land prop brightness inheritance and verify the mismatch is
+gone with tints OFF (neutral 1,1,1 everywhere). (2) Enable tints at HALF the
+listed deviation from 1.0, raise until zones feel distinct but never "coloured."
+(3) Add depth desat last, weakest setting, raise only if depth reads poorly.
+Watch the flicker FLOOR (note: code has FLICKER_NOISE_FREQUENCY = 0.7f, not the
+7.0 the original doc text quotes — verify the felt strobe rate before retuning).
+
+
+INTERACTIONS
+============
+1. Tile ambient lighting (laboratory-lighting.txt, IMPLEMENTED): this overhaul
+   is a strict EXTENSION — it reuses getTileBrightness, the lighting time
+   accumulator, MAX_LIGHTING_SHADE, and the multiplicative shade chain. Props
+   simply join the same chain walls/floor/ceiling already use. No contradiction.
+2. Emergency red-alert pulse (emergency-red-alert-pulse.txt): alert tint stays
+   the LAST multiplier in the chain on every surface, including props. During a
+   pulse the warm/cold ambient tints are overridden toward red, as intended —
+   the alert "wins" because it multiplies last. Verify the ordering matches the
+   existing PropRenderer alert math (spriteRed boosted, G/B dampened).
+3. Flickering tiles: props/enemies on 'f' tiles now strobe in sync because the
+   same deterministic flickerMultiplier(column,row,time) feeds all surfaces.
+   This directly fixes stated Problem 3.
+4. Enemy rendering (enemy_system.txt): enemies inherit the identical shade+tint
+   chain, so an enemy in an unlit pool is a dim cold silhouette — a free stealth-
+   atmosphere synergy and a hook for future "harder to see in the dark" tuning.
+5. Explosive barrels (hazard-chain-reactions): a flickering lamp over an 'E'
+   barrel now makes the barrel itself flash — strong readable danger framing.
+6. Floor/ceiling texture pass (floor-ceiling-texture-rendering.txt): the tint
+   multiply folds into the per-pixel shade already computed there; the pixel-to-
+   tile index is reused, so ambient tint costs ~nothing extra in that pass.
+
+
+OPEN QUESTIONS
+==============
+1. Should pickups (keycards, medkits, armour) inherit tile brightness too, or
+   stay full-bright so they always read as "grabbable loot"? Recommendation:
+   give them a FLOOR of brightness (e.g. shade = max(tileBrightness, 0.6) ×
+   distance) so loot never disappears into an unlit pool. Decide per prop class
+   via a small isLootProp(char) check; flag for design review.
+2. Should the ambient tint also tint the ceiling LAMP PANEL colour, or should
+   the lamp panel keep its own CEILING_LAMP_TINT (already in Constants)? They
+   may double-warm. Recommendation: lamp panel keeps its dedicated tint and is
+   EXEMPT from the zone tint to avoid stacking.
+3. Per-floor mood themes: should each generated floor pick a tint PALETTE
+   ("operational", "abandoned-cold", "hell-corrupted-red") that shifts the three
+   tint triples? laboratory-lighting OPEN QUESTION 6 suggests a lighting post-
+   process pass — that pass could also set the floor's tint palette. Defer to a
+   future "level mood" idea but design Constants so the triples could be swapped
+   at level-load if desired.
+4. Should depth desaturation be skipped on the floor pass for performance, or
+   is per-pixel cost acceptable at 1280×720? Profile before committing C1 to
+   the floor pass; walls + sprites may be sufficient.
+5. Confirm the real flicker frequency: code shows FLICKER_NOISE_FREQUENCY=0.7f
+   while the original design text says 7.0 Hz. The warm-spike timing (C2) and
+   the felt "strobe" depend on this — verify in-engine before tuning tints.
