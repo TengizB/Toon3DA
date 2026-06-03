@@ -75,11 +75,27 @@ Consequences for the sprite:
   - Each barrel points AWAY from the player → you see its NARROW TOP SURFACE.
     Barrel tubes MUST be NARROW (16–20px wide) and TALL (50–56px high), ratio ≈ 1:3.
     A nearly-square barrel (44×36px) is WRONG — that looks like the gun is sideways.
-  - Bore openings face NEARLY STRAIGHT at the viewer from slightly above →
-    use NEARLY CIRCULAR ellipses (16×14px aspect ratio ≈ 1:0.875).
-    A flat ellipse (32×10px) is WRONG — the muzzle wouldn't face you.
   - The receiver/body is the WIDE TOP SURFACE of the weapon seen from above.
     Draw it as a wide trapezoid (wider near viewer, narrower toward horizon) starting at Y≈14.
+
+### BORE HOLE VISIBILITY RULE (mandatory — violation = rendering bug)
+
+Bore holes are only visible when the barrel END faces toward the camera.
+
+TOP-DOWN VIEW (default — barrels point away from player, convergence factor ≈ 0.65):
+  Bore holes face AWAY from the camera. They are COMPLETELY INVISIBLE.
+  → DO NOT draw bore hole ellipses. Draw a MUZZLE CAP instead:
+    A 2px bright steel rect at the barrel tip Y, width = muzzle barrel width.
+    This is the circular steel rim edge that IS visible from the side on a receding tube.
+  All ballistic weapons using the top-down view (Shotgun, Chaingun, etc.) follow this rule.
+
+FACE-ON VIEW (rare — barrel angled toward camera, convergence factor ≈ 0.80):
+  The muzzle end is partly visible. Draw bore holes as nearly-circular dark ellipses (16×14px).
+  A flat ellipse (32×10px) is WRONG even here — the muzzle doesn't face you at 90°.
+  Example: DoubleBarrelShotgun at a low approach angle.
+
+Violating this rule (drawing bore holes on a top-down weapon) is a rendering error:
+it implies the barrel is pointing toward the camera when it is not.
 
 ### Mental Model
 
@@ -241,8 +257,8 @@ Canvas: 192 × 134 pixels. Displayed at 380 × 263 world units (SpriteBatch stre
 ShapeRenderer renders with Y-UP (0 = bottom of canvas, 134 = top).
 
 ```
-Y=134  ← muzzle / barrel tip (pointing toward the horizon/centre of screen)
-Y=120  ← muzzle caps and bore openings
+Y=134  ← muzzle / barrel tip (pointing toward the horizon, farthest from player)
+Y=120  ← muzzle caps (2px bright steel rim edge — bore holes NOT drawn for top-down weapons)
 Y= 90  ← barrel tubes (narrow top surface, pointing away from player)
 Y= 62  ← top of receiver / upper body
 Y= 14  ← LOWEST VISIBLE PIXEL — body starts here
@@ -263,8 +279,10 @@ This maps to screen X = 640 (screen centre) — Quake-1 centred-weapon look.
 7. Barrel(s) — NARROW (16–20px) × TALL (50–56px) for ballistic;
                tapered trapezoid for energy
 8. Barrel accessories (bands, prongs, shroud)
-9. Muzzle caps (thin rect at barrel tip)
-10. Muzzle bore (nearly circular dark ellipse) or emitter (layered glowing ellipses)
+9. Muzzle caps — 2px bright steel rect at barrel tip Y, width = muzzle barrel width (ALL weapons)
+10. Muzzle bore — ONLY for face-on weapons (convergence ≈ 0.80) where barrel END faces camera.
+    NEVER draw bore holes for top-down weapons (convergence ≈ 0.65) — bores face away, invisible.
+    Energy weapons: layered glowing ellipses for the emitter instead.
 
 ### Perspective Foreshortening — MANDATORY for all barrel tubes
 
@@ -277,7 +295,9 @@ Rule: every x-offset from centerX MUST scale by a convergence factor from barrel
 
   Top-down view (above-horizon, e.g. Shotgun, Chaingun): convergence factor ≈ 0.65
     offset_at_muzzle = offset_at_base × 0.65
+    Bore holes NOT drawn — barrels face away, bores are invisible. Use muzzle cap instead.
   Face-on view (e.g. DoubleBarrelShotgun looking into the bores): convergence factor ≈ 0.80
+    Bore holes ARE drawn (16×14px ellipses) — barrel ends are angled toward the camera.
 
 Example — Shotgun left barrel (base Y=72, muzzle Y=122, factor 0.65):
   Base:   left=CX-22, right=CX-6   (outer offset -22, inner offset -6)
@@ -300,7 +320,8 @@ Apply the same factor to all sub-elements (shading strips, gap channels):
   - Inter-barrel gap channel: scale both edges
   - Retaining band: use rect() at the band's Y, with width = original_width × scale_at_that_Y
     scale_at_Y = 1.0 - (1-factor) × (Y - baseY) / (muzzleY - baseY)
-  - Muzzle caps and bores: use the muzzle-scale positions (offsets × factor)
+  - Muzzle caps: use the muzzle-scale positions (offsets × factor) — ALL weapons
+  - Bore ellipses: only for face-on weapons; use muzzle-scale x-positions
 
 ### Top-Surface Cylinder Shading (for barrel tubes)
 
