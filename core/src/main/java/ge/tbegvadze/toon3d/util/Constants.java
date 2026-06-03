@@ -181,7 +181,10 @@ public final class Constants {
     //   distance 4: 10 × 0.60 = 6    distance 6: 10 × 0.40 = 4
     //   distance 8: 10 × 0.20 = 2    (minimum floor applies at extreme range)
     public static final int     CHAINGUN_DAMAGE             = 10;
-    public static final int     CHAINGUN_CLIP_SIZE          = 8;
+    // 8 bursts × 3 shots = 24 total rounds per clip
+    public static final int     CHAINGUN_CLIP_SIZE          = 24;
+    // Each press of fire launches CHAINGUN_BURST_SIZE simultaneous bullets in one volley
+    public static final int     CHAINGUN_BURST_SIZE         = 3;
     public static final int     CHAINGUN_RELOAD_TIME_TICKS  = 3;
     public static final float   CHAINGUN_DAMAGE_DROP_COEFF  = 0.10f;
     public static final int     CHAINGUN_RANGE_TILES        = 8;
@@ -200,9 +203,12 @@ public final class Constants {
     public static final float PLASMA_BLAST_RADIUS = 85f;
 
     // Weapon HUD rendering — sprite anchored at screen bottom-centre
-    // drawX = (WORLD_WIDTH - WEAPON_HUD_WIDTH) / 2f; drawY = 0
-    public static final float WEAPON_HUD_WIDTH  = 380f;
-    public static final float WEAPON_HUD_HEIGHT = 263f;
+    // drawX = (WORLD_WIDTH - WEAPON_HUD_WIDTH) / 2f; drawY = WEAPON_HUD_BASE_Y
+    public static final float WEAPON_HUD_WIDTH  = 500f;
+    public static final float WEAPON_HUD_HEIGHT = 350f;
+    // Transparent grip area at canvas bottom = (14/134) × WEAPON_HUD_HEIGHT ≈ 37 world units.
+    // Setting drawY to -37 hides the grip below the screen edge, putting the body flush.
+    public static final float WEAPON_HUD_BASE_Y = -37f;
     // Recoil: weapon drops instantly by RECOIL_OFFSET_Y on fire, eases back over FIRE_FLASH_DURATION
     public static final float WEAPON_RECOIL_OFFSET_Y         = 55f;
     // Reload slide: weapon lerps this many world-units downward (mostly off screen) while reloading
