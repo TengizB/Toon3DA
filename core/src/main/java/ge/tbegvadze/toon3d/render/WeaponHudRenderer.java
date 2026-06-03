@@ -666,7 +666,8 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      *   4. Barrel bodies    — three tapered gunmetal trapezoids
      *   5. Gap channels     — deep shadow between barrels (also tapered)
      *   6. Cylinder shading — outer shadow / crown highlight / mid-dark per barrel
-     *   7. Muzzle caps      — thin bright steel lip at barrel tips
+     *   7. Retaining rings  — two full-width steel clamp bands at Y≈97 and Y≈113
+     *   8. Muzzle caps      — thin bright steel lip at barrel tips
      */
     private static Texture generateChaingunTexture() {
         int canvasWidth  = Constants.CHAINGUN_CANVAS_WIDTH;
@@ -838,8 +839,30 @@ public class WeaponHudRenderer implements Renderable, Disposable {
             centerX + 19f, centerX + 23f, 82f,
             centerX + 12f, centerX + 14f, 128f);  // mid-dark transition (4px→2px)
 
-        // 7. Muzzle steel cap band (Y=126..128) — the circular rim edge is visible from the side
-        //    even on a pointed-away barrel, like the tip of a pencil viewed from above.
+        // 7. Barrel retaining rings — two steel bands clamping the barrel cluster.
+        //    On a rotary Gatling-style gun the barrels are held together by a nose ring
+        //    and a mid-barrel ring, both clearly visible as horizontal bands crossing all
+        //    three tubes. Each ring tapers with the same vanishing point as the barrel
+        //    assembly (leftEdge(Y) = CX-34 + 13*(Y-82)/46) so edges stay parallel in
+        //    perspective. The ring spans the full cluster width, covering the gap channels.
+        //
+        //    Ring 1 at Y=97..100 (Y≈1/3 of barrel length):
+        //      base(Y=97): CX-30..CX+30 (60px)  muzzle(Y=100): CX-29..CX+29 (58px)
+        //    Ring 2 at Y=113..116 (Y≈2/3 of barrel length):
+        //      base(Y=113): CX-25..CX+25 (50px)  muzzle(Y=116): CX-24..CX+24 (48px)
+        shapeRenderer.setColor(0.28f, 0.30f, 0.36f, 1f);
+        drawGeneralTrapezoid(shapeRenderer,
+            centerX - 30f, centerX + 30f, 97f,
+            centerX - 29f, centerX + 29f, 100f);  // ring 1 body
+        drawGeneralTrapezoid(shapeRenderer,
+            centerX - 25f, centerX + 25f, 113f,
+            centerX - 24f, centerX + 24f, 116f);  // ring 2 body
+        shapeRenderer.setColor(0.44f, 0.48f, 0.56f, 1f);  // leading-edge highlight
+        shapeRenderer.rect(centerX - 29f, 99f, 58f, 1f);  // ring 1 top highlight
+        shapeRenderer.rect(centerX - 24f, 115f, 48f, 1f); // ring 2 top highlight
+
+        // 8. Muzzle steel cap band (Y=126..128) — the circular rim edge is visible from the
+        //    side even on a pointed-away barrel, like the tip of a pencil viewed from above.
         //    A thin bright strip confirms barrel length without exposing any bore.
         shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
         shapeRenderer.rect(centerX - 21f, 126f, 11f, 2f);  // left muzzle cap
