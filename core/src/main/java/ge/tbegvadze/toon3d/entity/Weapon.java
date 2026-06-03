@@ -40,6 +40,9 @@ public abstract class Weapon {
     protected WeaponVisualState visualState                = WeaponVisualState.NORMAL;
     protected float             fireFlashTimerSeconds      = 0f;
     protected float             normalToReloadTimerSeconds = 0f;
+    // Incremented on every actual shot (including burst bullets) so the HUD renderer can
+    // detect each new flash cycle and reset its animation timer independently.
+    protected int               flashCycleCount            = 0;
 
     private EventTextSystem eventTextSystem;
 
@@ -146,6 +149,7 @@ public abstract class Weapon {
         shotsInClip--;
         visualState           = WeaponVisualState.FIRING;
         fireFlashTimerSeconds = Constants.FIRE_FLASH_DURATION;
+        flashCycleCount++;
         return marchShot(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
                          level, enemyHitTarget, barrelHitTarget, doorBlocksQuery);
     }
@@ -180,10 +184,11 @@ public abstract class Weapon {
         return Math.round(damage * multiplier);
     }
 
-    public WeaponVisualState getVisualState() { return visualState; }
-    public int               getShotsInClip() { return shotsInClip; }
-    public int               getClipSize()    { return clipSize; }
-    public String            getDisplayName() { return displayName; }
+    public WeaponVisualState getVisualState()    { return visualState; }
+    public int               getShotsInClip()   { return shotsInClip; }
+    public int               getClipSize()      { return clipSize; }
+    public String            getDisplayName()   { return displayName; }
+    public int               getFlashCycleCount() { return flashCycleCount; }
 
     /** Short ammo string for the HUD readout, e.g. "SHELLS 1/1" or "RELOAD". */
     public String hudAmmoString() {
