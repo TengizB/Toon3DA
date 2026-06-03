@@ -10,6 +10,10 @@ import ge.tbegvadze.toon3d.util.Constants;
  */
 public final class EventTextSystem {
 
+    public static final byte COLOR_WHITE = 0;
+    public static final byte COLOR_GREEN = 1;
+    public static final byte COLOR_RED   = 2;
+
     // Pre-built damage strings "-0".."-99" to avoid allocation on enemy hit.
     private static final String[] DAMAGE_STRINGS = buildDamageStrings();
 
@@ -24,6 +28,7 @@ public final class EventTextSystem {
     // Parallel flat arrays for the active text pool — no object allocation per event.
     private final String[] texts;
     private final float[]  ageSeconds;
+    private final byte[]   colorTypes;
     private final int      poolSize;
     private int            nextSlot;
 
@@ -31,6 +36,7 @@ public final class EventTextSystem {
         poolSize   = Constants.EVENT_TEXT_MAX;
         texts      = new String[poolSize];
         ageSeconds = new float[poolSize];
+        colorTypes = new byte[poolSize];
         nextSlot   = 0;
     }
 
@@ -45,19 +51,25 @@ public final class EventTextSystem {
         }
     }
 
-    /** Spawns a new event text. Evicts the oldest entry if the pool is full. */
+    /** Spawns a new event text in white. Evicts the oldest entry if the pool is full. */
     public void spawn(String text) {
+        spawnWithColor(text, COLOR_WHITE);
+    }
+
+    /** Spawns a new event text with an explicit color type. Evicts the oldest entry if the pool is full. */
+    public void spawnWithColor(String text, byte colorType) {
         texts[nextSlot]      = text;
         ageSeconds[nextSlot] = 0f;
+        colorTypes[nextSlot] = colorType;
         nextSlot = (nextSlot + 1) % poolSize;
     }
 
-    /** Spawns a damage text for the given net HP loss. Uses pre-built strings; no allocation. */
+    /** Spawns a red damage text for the given net HP loss. Uses pre-built strings; no allocation. */
     public void spawnDamage(int netDamage) {
         String text = netDamage >= 0 && netDamage < DAMAGE_STRINGS.length
                 ? DAMAGE_STRINGS[netDamage]
                 : "-" + netDamage;
-        spawn(text);
+        spawnWithColor(text, COLOR_RED);
     }
 
     public int getPoolSize() { return poolSize; }
@@ -67,4 +79,7 @@ public final class EventTextSystem {
 
     /** Returns age in [0, EVENT_TEXT_LIFE_SECONDS] for slot index. */
     public float getAge(int slotIndex) { return ageSeconds[slotIndex]; }
+
+    /** Returns the color type constant for the slot (COLOR_WHITE, COLOR_GREEN, or COLOR_RED). */
+    public byte getColorType(int slotIndex) { return colorTypes[slotIndex]; }
 }
