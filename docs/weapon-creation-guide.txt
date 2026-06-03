@@ -225,14 +225,44 @@ DO NOT DRAW:
   - Trigger guard (U-shape)
   These are all hidden below the screen edge in the Quake-1 perspective.
 
+### PERSPECTIVE FORESHORTENING — MANDATORY for all barrel tubes
+
+Barrels point AWAY from the player. Parts closest to the player (low Y) appear wider;
+parts farthest away (high Y, near muzzle) appear narrower. A barrel drawn as a perfect
+rectangle looks like it is pointing at the ceiling. It MUST taper toward the horizon.
+
+Rule: every x-offset from centerX scales by a convergence factor from base to muzzle.
+
+  Top-down view (Shotgun, Chaingun): factor ≈ 0.65
+  Face-on view (DoubleBarrelShotgun): factor ≈ 0.80
+
+  offset_at_muzzle = offset_at_base × factor
+
+Example — Shotgun left barrel (base Y=72, muzzle Y=122, factor 0.65):
+  Base:   [CX-22, CX-6]    →  Muzzle: [CX-14, CX-4]
+
+Use drawGeneralTrapezoid (NOT rect) for every barrel tube and every shading strip:
+```java
+private static void drawGeneralTrapezoid(ShapeRenderer shapeRenderer,
+                                          float leftBottom, float rightBottom, float bottomY,
+                                          float leftTop,    float rightTop,    float topY) {
+    shapeRenderer.triangle(leftBottom, bottomY, rightBottom, bottomY, rightTop, topY);
+    shapeRenderer.triangle(leftBottom, bottomY, rightTop, topY, leftTop, topY);
+}
+```
+
+Also scale: gap channels, retaining bands (rect at band Y using interpolated width),
+muzzle caps, and bore ellipse x-positions.
+
 ### TOP-SURFACE CYLINDER SHADING (for barrel tubes)
 
-Barrel tubes are viewed from above at a slight angle. Render as flat-top cylinders:
-  Outer edge shadow:   narrow strip (≈4 px), dark —  cylinder curves away from camera
-  Crown highlight:     wider strip (≈12 px), light —  top of cylinder facing upward camera
-  Inner edge shadow:   narrow strip (≈4 px), dark —  cylinder curves toward centre gap
+Barrel tubes are viewed from above at a slight angle. Render as flat-top cylinders using
+drawGeneralTrapezoid for each strip so the shading also converges toward the muzzle:
+  Outer edge shadow:   ≈3–4 px at base → narrower at muzzle, darkest
+  Crown highlight:     ≈5 px at base → narrower at muzzle, brightest
+  Inner edge shadow:   ≈3–4 px at base → narrower at muzzle, dark
 
-Use this shading for EVERY barrel tube, on both the outer and inner edges.
+Use this shading for EVERY barrel tube.
 
 centerX = 96 (half of 192). ALL weapons MUST be symmetric about this axis.
 This maps to screen X = 640 (screen centre) — Quake 1 centred-weapon look.
@@ -259,6 +289,16 @@ ShapeRenderer in Filled mode supports:
   shapeRenderer.triangle(x1,y1, x2,y2, x3,y3)     — filled triangle (CCW winding preferred)
   shapeRenderer.ellipse(x, y, width, height)       — ellipse, (x,y) = bottom-left of bounding box
   shapeRenderer.circle(x, y, radius)               — circle, (x,y) = centre
+
+drawGeneralTrapezoid helper (add once to WeaponHudRenderer if not present — required for perspective-tapered barrels):
+```java
+private static void drawGeneralTrapezoid(ShapeRenderer shapeRenderer,
+                                          float leftBottom, float rightBottom, float bottomY,
+                                          float leftTop,    float rightTop,    float topY) {
+    shapeRenderer.triangle(leftBottom, bottomY, rightBottom, bottomY, rightTop, topY);
+    shapeRenderer.triangle(leftBottom, bottomY, rightTop, topY, leftTop, topY);
+}
+```
 
 drawSymmetricTrapezoid helper (add once to WeaponHudRenderer if not present):
 ```java
