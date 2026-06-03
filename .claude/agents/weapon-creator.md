@@ -266,14 +266,50 @@ This maps to screen X = 640 (screen centre) — Quake-1 centred-weapon look.
 9. Muzzle caps (thin rect at barrel tip)
 10. Muzzle bore (nearly circular dark ellipse) or emitter (layered glowing ellipses)
 
+### Perspective Foreshortening — MANDATORY for all barrel tubes
+
+Barrels point AWAY from the player toward the horizon. In first-person perspective this means
+parts of the barrel closest to the player (low Y on canvas) appear wider; parts farthest from
+the player (high Y, near the muzzle) appear narrower. Without this taper, barrels look like
+they are pointing at the ceiling rather than toward the horizon.
+
+Rule: every x-offset from centerX MUST scale by a convergence factor from barrel base to muzzle.
+
+  Top-down view (above-horizon, e.g. Shotgun, Chaingun): convergence factor ≈ 0.65
+    offset_at_muzzle = offset_at_base × 0.65
+  Face-on view (e.g. DoubleBarrelShotgun looking into the bores): convergence factor ≈ 0.80
+
+Example — Shotgun left barrel (base Y=72, muzzle Y=122, factor 0.65):
+  Base:   left=CX-22, right=CX-6   (outer offset -22, inner offset -6)
+  Muzzle: left=CX-14, right=CX-4   (-22×0.65=−14.3≈−14, -6×0.65=−3.9≈−4)
+
+Draw EVERY barrel tube using drawGeneralTrapezoid (NOT rect):
+```java
+private static void drawGeneralTrapezoid(ShapeRenderer shapeRenderer,
+                                          float leftBottom, float rightBottom, float bottomY,
+                                          float leftTop,    float rightTop,    float topY) {
+    shapeRenderer.triangle(leftBottom, bottomY, rightBottom, bottomY, rightTop, topY);
+    shapeRenderer.triangle(leftBottom, bottomY, rightTop, topY, leftTop, topY);
+}
+```
+
+Apply the same factor to all sub-elements (shading strips, gap channels):
+  - Outer-edge shadow strip: scale both its left and right x-offsets by factor
+  - Crown highlight strip: scale both edges
+  - Inner-edge shadow strip: scale both edges
+  - Inter-barrel gap channel: scale both edges
+  - Retaining band: use rect() at the band's Y, with width = original_width × scale_at_that_Y
+    scale_at_Y = 1.0 - (1-factor) × (Y - baseY) / (muzzleY - baseY)
+  - Muzzle caps and bores: use the muzzle-scale positions (offsets × factor)
+
 ### Top-Surface Cylinder Shading (for barrel tubes)
 
 Each barrel tube is viewed from above at a slight angle. Render as a flat-top cylinder:
-  Outer edge shadow:  ≈3–4 px, darkest — cylinder curves away from camera
-  Crown highlight:    ≈5–12 px, lightest — top of cylinder facing upward camera
-  Inner edge shadow:  ≈3–4 px, dark — cylinder curves toward centre gap
+  Outer edge shadow:  ≈3–4 px at base (narrows toward muzzle), darkest — cylinder curves away
+  Crown highlight:    ≈5–12 px at base (narrows toward muzzle), lightest — top facing camera
+  Inner edge shadow:  ≈3–4 px at base (narrows toward muzzle), dark — cylinder curves inward
 
-Apply this shading to EVERY barrel tube.
+Apply this shading to EVERY barrel tube using drawGeneralTrapezoid for each strip.
 
 ---
 
@@ -308,6 +344,13 @@ Apply this shading to EVERY barrel tube.
 ## PART 8: HELPER METHODS (add to WeaponHudRenderer if not already present)
 
 ```java
+private static void drawGeneralTrapezoid(ShapeRenderer shapeRenderer,
+                                          float leftBottom, float rightBottom, float bottomY,
+                                          float leftTop,    float rightTop,    float topY) {
+    shapeRenderer.triangle(leftBottom, bottomY, rightBottom, bottomY, rightTop, topY);
+    shapeRenderer.triangle(leftBottom, bottomY, rightTop, topY, leftTop, topY);
+}
+
 private static void drawSymmetricTrapezoid(ShapeRenderer shapeRenderer,
                                             float centerX,
                                             float bottomHalfWidth, float bottomY,
@@ -370,7 +413,7 @@ Pattern: `float alpha = 1f - normalizedTime;  float scale = 1f - normalizedTime 
 5. Add constants to Constants.java (group after existing weapon groups).
 6. Create the Weapon subclass in entity package.
 7. Add the sprite generator + shape drawing method to WeaponHudRenderer.
-8. Verify drawSymmetricTrapezoid() and flipPixmapVertically() are present (add if not).
+8. Verify drawGeneralTrapezoid(), drawSymmetricTrapezoid(), and flipPixmapVertically() are present (add if not).
 9. Verify FrameBuffer import is present in WeaponHudRenderer.
 10. Add instanceof check in loadOrGenerateNormalTexture() BEFORE the final fallback.
 11. Update World.java: change constructor to instantiate and equip the new weapon.
