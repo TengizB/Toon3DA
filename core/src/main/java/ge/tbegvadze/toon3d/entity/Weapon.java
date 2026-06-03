@@ -58,6 +58,13 @@ public abstract class Weapon {
         this.eventTextSystem = system;
     }
 
+    /** Lets subclasses emit event text without exposing the private eventTextSystem field. */
+    protected void spawnEventText(String text) {
+        if (eventTextSystem != null) {
+            eventTextSystem.spawn(text);
+        }
+    }
+
     /** True only when the weapon can accept a fire command right now. */
     public boolean canFire() {
         return visualState == WeaponVisualState.NORMAL && shotsInClip > 0;

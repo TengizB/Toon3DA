@@ -4,24 +4,45 @@ import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.Constants;
 
 /**
- * Triple-barrel rotary chaingun — burst fire sustained weapon filling the medium-range damage niche.
+ * Triple-barrel rotary chaingun — sequential burst-fire weapon for medium-range sustained damage.
  *
- * Each fire press launches CHAINGUN_BURST_SIZE (3) bullets simultaneously, consuming 3 shots from
- * the clip. The clip holds 24 rounds (8 bursts). canFire() requires at least BURST_SIZE shots so
- * the weapon never fires a partial burst.
+ * Firing mechanic:
+ *   Each press of fire launches CHAINGUN_BURST_SIZE (3) bullets, one per flash cycle.
+ *   Bullet 1 fires immediately when fire() is called.  Bullets 2 and 3 are queued and
+ *   dispatched by update() once the previous flash animation expires — each resets the flash
+ *   timer so the muzzle-flash plays a separate cycle for every shot.
+ *
+ *   Per-bullet effects (each cycle):
+ *     • shotsInClip decrements by 1  → HUD large-digit ticks down once per bullet
+ *     • fireSingleBullet() applies damage  → enemy health bar updates after each hit
+ *     • spawnEventText("BURST FIRE")  → event text entry for each round fired
+ *
+ *   canFire() requires shotsInClip >= BURST_SIZE so no partial burst is ever started.
+ *   The clip holds 24 rounds (8 full bursts).
  *
  * Stats: damage 10, clipSize 24, burstSize 3, reloadTime 3 ticks, dropCoeff 0.10, range 8 tiles.
- * Each bullet in a burst marches the facing direction independently — all three share the same
- * target line, so the burst hits as if it were one powerful shot rather than a spread pattern.
- * No penetration: the first enemy or obstacle stops all bullets that reach it.
+ * No penetration: the first enemy or obstacle stops the bullet.
  *
  * Damage per bullet (coefficient 0.10, floor 0.15):
  *   distance 1: 10 × 0.90 = 9    distance 2: 10 × 0.80 = 8
  *   distance 4: 10 × 0.60 = 6    distance 6: 10 × 0.40 = 4
  *   distance 8: 10 × 0.20 = 2    (floor applies at extreme range)
- * Total burst damage = 3× per-bullet damage at each distance.
+ * Total burst damage = 3× per-bullet damage at each distance (3 separate hits).
  */
 public class Chaingun extends Weapon {
+
+    // Number of burst bullets still waiting to fire after the current flash cycle ends.
+    private int pendingBurstBullets = 0;
+
+    // Cached fire parameters forwarded to pending bullets in update().
+    private int            burstPlayerColumn;
+    private int            burstPlayerRow;
+    private int            burstFacingColumn;
+    private int            burstFacingRow;
+    private Level          burstLevel;
+    private EnemyHitTarget   burstEnemyHitTarget;
+    private BarrelHitTarget  burstBarrelHitTarget;
+    private DoorBlocksQuery  burstDoorBlocksQuery;
 
     public Chaingun() {
         super(Constants.CHAINGUN_DISPLAY_NAME,
@@ -39,24 +60,60 @@ public class Chaingun extends Weapon {
     }
 
     /**
-     * Fires CHAINGUN_BURST_SIZE bullets along the facing direction.
-     * The first bullet's shotsInClip decrement is handled by fire() before this method runs.
-     * Each additional bullet in the burst decrements shotsInClip here directly.
+     * Fires bullet 1 immediately and queues the remaining BURST_SIZE-1 bullets.
+     * Queued bullets are dispatched one-per-flash-cycle by update().
+     * shotsInClip for bullet 1 was already decremented by fire() before this runs.
      */
     @Override
     protected FireResult marchShot(int playerTileColumn, int playerTileRow,
                                    int facingStepColumn, int facingStepRow,
                                    Level level, EnemyHitTarget enemyHitTarget,
                                    BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
-        FireResult lastResult = fireSingleBullet(playerTileColumn, playerTileRow,
+        pendingBurstBullets  = Constants.CHAINGUN_BURST_SIZE - 1;
+        burstPlayerColumn    = playerTileColumn;
+        burstPlayerRow       = playerTileRow;
+        burstFacingColumn    = facingStepColumn;
+        burstFacingRow       = facingStepRow;
+        burstLevel           = level;
+        burstEnemyHitTarget  = enemyHitTarget;
+        burstBarrelHitTarget = barrelHitTarget;
+        burstDoorBlocksQuery = doorBlocksQuery;
+
+        FireResult result = fireSingleBullet(playerTileColumn, playerTileRow,
                 facingStepColumn, facingStepRow, level, enemyHitTarget, barrelHitTarget, doorBlocksQuery);
-        int remainingBullets = Math.min(Constants.CHAINGUN_BURST_SIZE - 1, shotsInClip);
-        for (int bulletIndex = 0; bulletIndex < remainingBullets; bulletIndex++) {
-            shotsInClip--;
-            lastResult = fireSingleBullet(playerTileColumn, playerTileRow,
-                    facingStepColumn, facingStepRow, level, enemyHitTarget, barrelHitTarget, doorBlocksQuery);
+        spawnEventText("BURST FIRE");
+        return result;
+    }
+
+    /**
+     * Extends the base update to dispatch queued burst bullets one per flash cycle.
+     *
+     * While pendingBurstBullets > 0 and the weapon is FIRING:
+     *   • Manages the flash timer directly (does NOT call super) so the base class
+     *     cannot transition FIRING → NORMAL before all burst shots are complete.
+     *   • When the flash timer expires: fire next bullet, decrement shotsInClip,
+     *     spawn event text, reset flash timer for the next cycle.
+     *
+     * Once pendingBurstBullets reaches 0 the next frame delegates to super.update(),
+     * which handles the final FIRING → NORMAL transition normally.
+     */
+    @Override
+    public void update(float deltaTime) {
+        if (visualState == WeaponVisualState.FIRING && pendingBurstBullets > 0) {
+            fireFlashTimerSeconds -= deltaTime;
+            if (fireFlashTimerSeconds <= 0f) {
+                pendingBurstBullets--;
+                shotsInClip--;
+                fireSingleBullet(burstPlayerColumn, burstPlayerRow,
+                        burstFacingColumn, burstFacingRow,
+                        burstLevel, burstEnemyHitTarget, burstBarrelHitTarget, burstDoorBlocksQuery);
+                spawnEventText("BURST FIRE");
+                fireFlashTimerSeconds = Constants.FIRE_FLASH_DURATION;
+            }
+            // Do not call super — the base class must not transition FIRING→NORMAL yet.
+        } else {
+            super.update(deltaTime);
         }
-        return lastResult;
     }
 
     private FireResult fireSingleBullet(int playerTileColumn, int playerTileRow,
@@ -91,13 +148,14 @@ public class Chaingun extends Weapon {
         return FireResult.MISSED;
     }
 
-    /** Shows burst count rather than individual rounds, since ammo is spent in groups of 3. */
+    /**
+     * Shows individual round count so the HUD text also reflects each per-bullet decrement
+     * during the burst animation (24 → 23 → 22 → 21 per burst).
+     */
     @Override
     public String hudAmmoString() {
         if (visualState == WeaponVisualState.RELOADING) return "RELOAD";
-        int burstsRemaining = shotsInClip / Constants.CHAINGUN_BURST_SIZE;
-        int burstsTotal     = clipSize    / Constants.CHAINGUN_BURST_SIZE;
-        return "BURSTS " + burstsRemaining + "/" + burstsTotal;
+        return "ROUNDS " + shotsInClip + "/" + clipSize;
     }
 
     @Override public String getNormalTexturePath() { return Constants.CHAINGUN_NORMAL_TEXTURE_PATH; }
