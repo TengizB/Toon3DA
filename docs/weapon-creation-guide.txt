@@ -211,12 +211,12 @@ The muzzle / barrel tip points AWAY from the player — toward the top of the ca
 The grip / stock is completely cut off below the screen edge — it must NOT be drawn.
 
 ```
-Y=134  ← muzzle / barrel tip (pointing toward the horizon)
-Y=120  ← muzzle caps and bore openings
-Y=90   ← barrel tubes (narrow top surface, pointing away from player)
-Y=62   ← top of receiver / upper body
-Y=14   ← LOWEST VISIBLE PIXEL — body starts here; Y=0..14 is transparent
-Y=0    ← grip (fully off-screen; player's eye is above the gun)
+Y=134  ← muzzle / barrel tip (pointing toward the horizon, farthest from player)
+Y=120  ← muzzle caps (thin bright rim edge — bore holes NOT visible here; see rule below)
+Y= 90  ← barrel tubes (narrow top surface; barrels point away, bores face away)
+Y= 62  ← top of receiver / upper body
+Y= 14  ← LOWEST VISIBLE PIXEL — body starts here; Y=0..14 is transparent
+Y=  0  ← grip (fully off-screen; player's eye is above the gun)
 ```
 
 DO NOT DRAW:
@@ -225,23 +225,73 @@ DO NOT DRAW:
   - Trigger guard (U-shape)
   These are all hidden below the screen edge in the Quake-1 perspective.
 
+---
+
+### BORE HOLE VISIBILITY — CRITICAL RULE
+
+This rule has a root cause that the original implementation got wrong: the relationship
+between BARREL DIRECTION and what the camera can physically see.
+
+Mental model — point a gun away from you and look at it from slightly above:
+  - You see the top surface of the barrel (a narrow elongated strip, narrowing toward the muzzle)
+  - The muzzle end points away — you CANNOT see into the bore from this angle
+  - The only visible evidence of the bore at the tip is the rim edge (a thin bright ring)
+
+Contrast with face-on: if the barrel were pointing toward you, you'd see the dark circle of the bore.
+THESE TWO SITUATIONS PRODUCE COMPLETELY DIFFERENT IMAGES. You must choose one.
+
+TOP-DOWN VIEW (barrels pointing away — DEFAULT for all weapons, convergence factor ≈ 0.65):
+  The muzzle end faces AWAY from the player. Bore holes are COMPLETELY INVISIBLE.
+  DO NOT draw bore hole ellipses. Draw a MUZZLE CAP instead:
+    A 2px bright steel band at the barrel tip Y using rect() at muzzle barrel width.
+    This represents the circular steel rim edge visible from the side on a receding tube —
+    like a pencil held horizontally away from you; you see the eraser's circumference ring,
+    not the flat face of the eraser.
+  Example (Chaingun, left barrel muzzle at CX-21..CX-10, Y=126..128):
+    shapeRenderer.rect(centerX - 21f, 126f, 11f, 2f);  // left muzzle cap
+
+FACE-ON VIEW (barrel angled toward camera, convergence factor ≈ 0.80, rare):
+  The muzzle end is angled partly toward the player. Bore holes are partly visible.
+  Draw as nearly-circular dark ellipses (16×14px aspect ratio ≈ 1:0.875).
+  A flat ellipse (32×10px) is WRONG even here — the muzzle doesn't face you at 90°.
+  Example: DoubleBarrelShotgun at a low approach angle.
+
+Weapons by view mode:
+  Shotgun              → top-down    → NO bore holes, use muzzle caps
+  Chaingun             → top-down    → NO bore holes, use muzzle caps
+  DoubleBarrelShotgun  → face-on     → bore ellipses OK (16×14px per barrel)
+  PlasmaRifle          → top-down    → NO bore, use layered glowing emitter ellipses
+
+NEVER draw bore holes on a top-down weapon. Doing so implies the barrel is pointing toward
+the camera when it is not — a rendering contradiction that looks physically wrong.
+
+---
+
 ### PERSPECTIVE FORESHORTENING — MANDATORY for all barrel tubes
 
-Barrels point AWAY from the player. Parts closest to the player (low Y) appear wider;
-parts farthest away (high Y, near muzzle) appear narrower. A barrel drawn as a perfect
-rectangle looks like it is pointing at the ceiling. It MUST taper toward the horizon.
+Barrels point AWAY from the player toward the horizon. In first-person perspective this means
+parts of the barrel closest to the player (low Y on canvas) appear wider; parts farthest from
+the player (high Y, near the muzzle) appear narrower. Without this taper, barrels look like
+they are pointing at the ceiling rather than toward the horizon.
 
-Rule: every x-offset from centerX scales by a convergence factor from base to muzzle.
+Think of it this way: a cylinder of constant radius viewed from slightly above will appear as a
+rectangle only if we ignore perspective. With perspective, the near end appears wider and the
+far end narrower, converging toward the same vanishing point as all other receding objects.
+A barrel drawn as a perfect rectangle looks wrong because it defies this convergence.
 
-  Top-down view (Shotgun, Chaingun): factor ≈ 0.65
-  Face-on view (DoubleBarrelShotgun): factor ≈ 0.80
+Rule: every x-offset from centerX MUST scale by a convergence factor from barrel base to muzzle.
 
-  offset_at_muzzle = offset_at_base × factor
+  Top-down view (Shotgun, Chaingun): convergence factor ≈ 0.65
+    offset_at_muzzle = offset_at_base × 0.65
+    Bore holes NOT drawn — barrels face away, bores invisible. Use muzzle caps instead.
+  Face-on view (DoubleBarrelShotgun): convergence factor ≈ 0.80
+    Bore holes ARE drawn (16×14px ellipses) — barrel ends angled toward the camera.
 
 Example — Shotgun left barrel (base Y=72, muzzle Y=122, factor 0.65):
-  Base:   [CX-22, CX-6]    →  Muzzle: [CX-14, CX-4]
+  Base:   left=CX-22, right=CX-6   (outer offset -22, inner offset -6)
+  Muzzle: left=CX-14, right=CX-4   (-22×0.65=−14.3≈−14, -6×0.65=−3.9≈−4)
 
-Use drawGeneralTrapezoid (NOT rect) for every barrel tube and every shading strip:
+Draw EVERY barrel tube using drawGeneralTrapezoid (NOT rect):
 ```java
 private static void drawGeneralTrapezoid(ShapeRenderer shapeRenderer,
                                           float leftBottom, float rightBottom, float bottomY,
@@ -251,21 +301,27 @@ private static void drawGeneralTrapezoid(ShapeRenderer shapeRenderer,
 }
 ```
 
-Also scale: gap channels, retaining bands (rect at band Y using interpolated width),
-muzzle caps, and bore ellipse x-positions.
+Apply the same factor to all sub-elements so shading strips stay parallel in perspective:
+  - Outer-edge shadow strip: scale both left and right x-offsets by factor
+  - Crown highlight strip: scale both edges
+  - Inner-edge shadow strip: scale both edges
+  - Inter-barrel gap channel: scale both edges
+  - Retaining bands/rings: use rect() at the band's Y with width = base_width × scale_at_Y
+    scale_at_Y = 1.0 - (1-factor) × (Y - baseY) / (muzzleY - baseY)
+  - Muzzle caps: use muzzle-scale positions (all weapons)
+  - Bore ellipses: only for face-on weapons, at muzzle-scale x-positions
 
 ### TOP-SURFACE CYLINDER SHADING (for barrel tubes)
 
 Barrel tubes are viewed from above at a slight angle. Render as flat-top cylinders using
 drawGeneralTrapezoid for each strip so the shading also converges toward the muzzle:
-  Outer edge shadow:   ≈3–4 px at base → narrower at muzzle, darkest
-  Crown highlight:     ≈5 px at base → narrower at muzzle, brightest
-  Inner edge shadow:   ≈3–4 px at base → narrower at muzzle, dark
+  Outer edge shadow:   ≈3–4 px at base → narrower at muzzle, darkest (surface curves away)
+  Crown highlight:     ≈5–12 px at base → narrower at muzzle, brightest (top faces camera)
+  Inner edge shadow:   ≈3–4 px at base → narrower at muzzle, dark (cylinder curves inward)
 
-Use this shading for EVERY barrel tube.
+For multi-barrel weapons, also taper gap channels between barrels with the same factor.
 
-centerX = 96 (half of 192). ALL weapons MUST be symmetric about this axis.
-This maps to screen X = 640 (screen centre) — Quake 1 centred-weapon look.
+Use this shading for EVERY barrel tube using the same convergence factor.
 
 ### FIRST-PERSON ABOVE-HORIZON PERSPECTIVE — CRITICAL
 
@@ -277,8 +333,12 @@ This means the player sees the gun from SLIGHTLY ABOVE. Consequences for sprite 
   Barrel tubes   → pointing away from player. You see the narrow TOP surface of each tube.
                    Barrel must be NARROW (16–20px wide) and TALL (50–56px high), ratio ≈ 1:3.
                    A 44×36px barrel (nearly square) is WRONG — that looks sideways.
-  Bore openings  → face nearly straight at the viewer. Use nearly circular ellipses (16×14px).
-                   A 32×10px ellipse (very flat) is WRONG — the muzzle wouldn't face you.
+  Bore openings  → the muzzle end points AWAY — bores are invisible from this angle.
+                   DO NOT draw bore hole ellipses for top-down weapons.
+                   Use a 2px muzzle cap band at barrel tip Y instead.
+
+centerX = 96 (half of 192). ALL weapons MUST be symmetric about this axis.
+This maps to screen X = 640 (screen centre) — Quake-1 centred-weapon look.
 
 ---
 
@@ -290,7 +350,7 @@ ShapeRenderer in Filled mode supports:
   shapeRenderer.ellipse(x, y, width, height)       — ellipse, (x,y) = bottom-left of bounding box
   shapeRenderer.circle(x, y, radius)               — circle, (x,y) = centre
 
-drawGeneralTrapezoid helper (add once to WeaponHudRenderer if not present — required for perspective-tapered barrels):
+drawGeneralTrapezoid helper (add once to WeaponHudRenderer — required for perspective barrels):
 ```java
 private static void drawGeneralTrapezoid(ShapeRenderer shapeRenderer,
                                           float leftBottom, float rightBottom, float bottomY,
@@ -336,7 +396,7 @@ private static Pixmap flipPixmapVertically(Pixmap source) {
 
 ### Layer Order (draw back-to-front)
 
-Grip/stock/trigger guard are NEVER drawn — they are off-screen.
+Grip/stock/trigger guard are NEVER drawn — they are off-screen below Y=14.
 
 1. (Grip / stock / trigger guard — NOT drawn; Y=0..14 left transparent)
 2. Main body / receiver (wide trapezoid, starts at Y≈14)
@@ -346,44 +406,57 @@ Grip/stock/trigger guard are NEVER drawn — they are off-screen.
 6. Scope or sights (centered)
 7. Barrel(s) — NARROW × TALL for ballistic (top surface of tube pointing away);
               tapered trapezoid for energy (wide at receiver, narrow at muzzle)
-8. Barrel accessories (bands, prongs, shroud)
-9. Muzzle caps (thin rect at barrel tips)
-10. Muzzle bore (nearly circular dark ellipse) or emitter (layered glowing ellipses)
+8. Barrel accessories (retaining bands/rings, shroud collar — all tapered)
+9. Muzzle caps — 2px bright steel band at barrel tip Y, muzzle barrel width (ALL weapons)
+10. Muzzle bore — ONLY for face-on weapons where barrel END faces the camera.
+    NEVER draw bore holes for top-down weapons (bores face away, invisible).
+    Energy weapons: layered glowing ellipses for the emitter instead.
 
 ### Color Palette
 
-Ballistic weapons (shotgun, rifle, etc.):
-  Barrel / receiver: dark gunmetal  (0.22, 0.24, 0.28) – (0.32, 0.34, 0.40)
-  Top highlight:     light steel    (0.42, 0.46, 0.52)
-  Bottom shadow:     near-black     (0.12, 0.13, 0.17)
-  Crown highlight:   bright steel   (0.45, 0.49, 0.56) — top surface of barrel cylinder
-  Outer edge shadow: near-black     (0.10, 0.11, 0.14) — sides of barrel cylinder
-  Muzzle bore:       near-black     (0.05, 0.05, 0.06, 0.95)
+Ballistic weapons (shotgun, rifle, chaingun, etc.):
+  Barrel / receiver: dark gunmetal   rgba(0.22, 0.24, 0.28, 1) – rgba(0.32, 0.34, 0.40, 1)
+  Top highlight:     light steel     rgba(0.42, 0.46, 0.52, 1)
+  Bottom shadow:     near-black      rgba(0.12, 0.13, 0.17, 1)
+  Crown highlight:   bright steel    rgba(0.45, 0.49, 0.56, 1) — top surface of barrel cylinder
+  Outer edge shadow: darkest metal   rgba(0.10, 0.11, 0.14, 1) — sides of barrel cylinder
+  Wood stock:        dark mahogany   rgba(0.42, 0.22, 0.08, 1) with grain rgba(0.34, 0.16, 0.05, 1)
+  Rubber grip:       dark charcoal   rgba(0.18, 0.19, 0.22, 1)
+  Muzzle bore:       near-black      rgba(0.05, 0.05, 0.06, 0.95) — face-on weapons only
+  Metal highlight:   warm silver     rgba(0.55, 0.58, 0.62, 1)
+  Accent detail:     orange-red      rgba(0.80, 0.30, 0.05, 1)  — hazard markings, heat
 
 Energy weapons (plasma, rail, etc.):
-  Body:              steel blue     (0.28, 0.32, 0.42)
-  Emitter core:      blue → cyan → white (0.08,0.52,1.0) → (0.30,0.82,1.0) → (1,1,1)
-  Coils/vents:       bright cyan    (0.00, 0.88, 1.00) with glow fringe
+  Body:              steel blue      rgba(0.28, 0.32, 0.42, 1)
+  Emitter outer:     deep blue       rgba(0.08, 0.52, 1.00, 0.95)
+  Emitter mid:       bright cyan     rgba(0.30, 0.82, 1.00, 1)
+  Emitter core:      white-cyan      rgba(0.75, 0.97, 1.00, 1)
+  Coils/vents:       bright cyan     rgba(0.00, 0.88, 1.00, 1) with glow fringe
 
 ### Proportions Guide
-  Grip / stock:      NOT DRAWN — cut off below screen (see perspective note above)
+  Grip / stock:      NOT DRAWN — cut off below screen (Y=0..14 transparent)
   Trigger guard:     NOT DRAWN — cut off below screen
   Main body:         ~ 80–100 px wide, 48 px tall (Y=14..62)
   Ballistic barrel:  16–20 px wide × 50–56 px tall  ← ratio MUST be ≈ 1:3 (narrow × tall)
   Energy barrel:     tapered: 52px wide at receiver → 28px at muzzle, ~24px tall
-  Muzzle bore:       16×14 px (ballistic, nearly circular) or layered ellipses (energy)
+  Muzzle cap:        2px tall at barrel tip Y, width = muzzle barrel width (ALL weapons)
+  Muzzle bore:       16×14 px (face-on weapons ONLY — DO NOT draw for top-down barrels)
   Total height used: Y=14..130 (116 px effective)
 
 ### Common Details
   Top highlight strip on body: 3 px tall, lighter color
   Bottom shadow strip on body: 3 px tall, darker color
   Mid-barrel groove: 2 px tall, darkest color
-  Ballistic barrel cylinder shading (left barrel example, centerX=96):
-    — outer-edge shadow: 3px from outer edge, color (0.10, 0.11, 0.14)
-    — crown highlight:   5px inward from outer edge, color (0.45, 0.49, 0.56)
-    — inner-edge shadow: 3px from inner edge, color (0.12, 0.13, 0.16)
-  Muzzle bore: dark ellipse (16×14), no glow for ballistic; layered ellipses for energy
-  Bore rim shine: dim (0.32, 0.34, 0.38, 0.50) ellipse at top of bore opening
+  Ballistic barrel cylinder shading (left barrel example):
+    — outer-edge shadow: ≈3px from outer edge, rgba(0.10, 0.11, 0.14, 1)
+    — crown highlight:   ≈5–8px inward from outer edge, rgba(0.45, 0.49, 0.56, 1)
+    — inner-edge shadow: ≈3px from inner edge, rgba(0.12, 0.13, 0.16, 1)
+    — all shading strips use drawGeneralTrapezoid with the same taper factor
+  Muzzle cap: bright steel rect rgba(0.40, 0.44, 0.52, 1), 2px tall — ALL weapons
+  Muzzle bore: dark ellipse rgba(0.05, 0.05, 0.06, 0.95), 16×14px — face-on only
+  Bore rim shine: dim rgba(0.32, 0.34, 0.38, 0.50) ellipse at top of bore — face-on only
+  Retaining bands (multi-barrel): full-width steel rect at ~1/3 and 2/3 barrel height;
+    width interpolated between base and muzzle widths; 3px tall with 1px bright top edge
 
 ---
 
@@ -451,6 +524,10 @@ Loop variable over tiles must describe what it counts:
   [ ] getNormalTexturePath() / getFireTexturePath() / getReloadTexturePath() implemented
   [ ] generateMyWeaponTexture() added to WeaponHudRenderer (FrameBuffer + ShapeRenderer)
   [ ] drawMyWeaponShape() implemented — symmetric, 10 depth layers, Y-up coords
+  [ ] All barrel tubes use drawGeneralTrapezoid (NOT rect) with correct taper factor
+  [ ] No bore hole ellipses drawn for top-down weapons (convergence ≈ 0.65)
+  [ ] Muzzle caps (2px bright rect) drawn at barrel tip Y for all weapons
+  [ ] drawGeneralTrapezoid() present in WeaponHudRenderer (add if not already there)
   [ ] drawSymmetricTrapezoid() present in WeaponHudRenderer (add if not already there)
   [ ] flipPixmapVertically() present in WeaponHudRenderer (add if not already there)
   [ ] FrameBuffer import added to WeaponHudRenderer
