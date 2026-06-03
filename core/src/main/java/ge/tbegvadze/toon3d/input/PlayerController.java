@@ -27,12 +27,13 @@ public class PlayerController {
     private final DoorManager doorManager;
     private final PlayerInventory inventory;
 
-    private TickEventBus            tickEventBus      = null;
-    private EnemyManager            enemyManager      = null;
-    private BarrelHitTarget         barrelHitTarget   = null;
-    private LevelTransitionListener transitionListener = null;
-    private TouchInputState         touchInputState   = null;
-    private EventTextSystem         eventTextSystem   = null;
+    private TickEventBus            tickEventBus          = null;
+    private EnemyManager            enemyManager          = null;
+    private BarrelHitTarget         barrelHitTarget       = null;
+    private LevelTransitionListener transitionListener    = null;
+    private TouchInputState         touchInputState       = null;
+    private EventTextSystem         eventTextSystem       = null;
+    private Runnable                weaponSwitchCallback  = null;
 
     private ActionState actionState = ActionState.IDLE;
     private float actionProgress = 0f;
@@ -75,6 +76,10 @@ public class PlayerController {
 
     public void setTouchInputState(TouchInputState state) {
         this.touchInputState = state;
+    }
+
+    public void setWeaponSwitchCallback(Runnable callback) {
+        this.weaponSwitchCallback = callback;
     }
 
     public boolean isIdle() { return actionState == ActionState.IDLE; }
@@ -219,6 +224,12 @@ public class PlayerController {
             ? touchInputState.consumeTapAction()
             : TouchAction.NONE;
 
+        // Weapon switching is free — no turn consumed, works regardless of action state.
+        if (Gdx.input.isKeyJustPressed(Constants.KEY_SWITCH_WEAPON) || tapAction == TouchAction.SWITCH_WEAPON) {
+            trySwitchWeapon();
+            return;
+        }
+
         if (Gdx.input.isKeyJustPressed(Constants.KEY_HEAL)) {
             tryHeal();
         } else if (Gdx.input.isKeyJustPressed(Constants.KEY_FIRE) || tapAction == TouchAction.FIRE) {
@@ -321,6 +332,14 @@ public class PlayerController {
         targetPositionY = newPositionY;
         actionState     = ActionState.MOVING;
         actionProgress  = 0f;
+    }
+
+    private void trySwitchWeapon() {
+        Weapon nextWeapon = inventory.switchToNextWeapon();
+        if (weaponSwitchCallback != null) weaponSwitchCallback.run();
+        if (eventTextSystem != null && nextWeapon != null) {
+            eventTextSystem.spawn(nextWeapon.getDisplayName());
+        }
     }
 
     private void trySkipTurn() {

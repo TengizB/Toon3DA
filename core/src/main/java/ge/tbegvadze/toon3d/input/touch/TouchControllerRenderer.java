@@ -161,17 +161,41 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
 
     private void drawGlyph(TouchAction action, float cx, float cy, float extent) {
         switch (action) {
-            case FORWARD:      drawTriangleUp(cx, cy, extent);              break;
-            case BACK:         drawTriangleDown(cx, cy, extent);            break;
-            case ROTATE_LEFT:  drawRotateArrow(cx, cy, extent, true);       break;
-            case ROTATE_RIGHT: drawRotateArrow(cx, cy, extent, false);      break;
-            case STRAFE_LEFT:  drawDoubleChevron(cx, cy, extent, true);     break;
-            case STRAFE_RIGHT: drawDoubleChevron(cx, cy, extent, false);    break;
-            case FIRE:         drawCrosshair(cx, cy, extent);               break;
-            case SKIP_TURN:    drawSkipIcon(cx, cy, extent);                break;
-            case RELOAD:       drawReloadIcon(cx, cy, extent);              break;
+            case FORWARD:       drawTriangleUp(cx, cy, extent);              break;
+            case BACK:          drawTriangleDown(cx, cy, extent);            break;
+            case ROTATE_LEFT:   drawRotateArrow(cx, cy, extent, true);       break;
+            case ROTATE_RIGHT:  drawRotateArrow(cx, cy, extent, false);      break;
+            case STRAFE_LEFT:   drawDoubleChevron(cx, cy, extent, true);     break;
+            case STRAFE_RIGHT:  drawDoubleChevron(cx, cy, extent, false);    break;
+            case FIRE:          drawCrosshair(cx, cy, extent);               break;
+            case SKIP_TURN:     drawSkipIcon(cx, cy, extent);                break;
+            case RELOAD:        drawReloadIcon(cx, cy, extent);              break;
+            case SWITCH_WEAPON: drawSwitchWeaponIcon(cx, cy, extent);        break;
             default: break;
         }
+    }
+
+    /**
+     * Switch-weapon icon: two stacked horizontal bars (representing different weapons)
+     * with a right-pointing arrow indicating cycling forward.
+     */
+    private void drawSwitchWeaponIcon(float cx, float cy, float extent) {
+        float lineWidth  = Math.max(2f, extent * 0.13f);
+        float barHalf    = extent * 0.55f;
+        float spacing    = extent * 0.28f;
+        float arrowSize  = extent * 0.28f;
+
+        // Two horizontal bars representing weapon silhouettes
+        shapeRenderer.rectLine(cx - barHalf, cy + spacing, cx + barHalf * 0.45f, cy + spacing, lineWidth);
+        shapeRenderer.rectLine(cx - barHalf, cy - spacing, cx + barHalf * 0.45f, cy - spacing, lineWidth);
+
+        // Right-pointing arrowhead at the right end of the top bar — indicates "next"
+        float tipX = cx + barHalf * 0.45f;
+        float tipY = cy + spacing;
+        shapeRenderer.triangle(
+            tipX,              tipY,
+            tipX - arrowSize,  tipY + arrowSize * 0.55f,
+            tipX - arrowSize,  tipY - arrowSize * 0.55f);
     }
 
     /** Solid up-pointing triangle (▲). */

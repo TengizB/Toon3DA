@@ -2,6 +2,6 @@ package ge.tbegvadze.toon3d.input.touch;
 
 public enum TouchAction {
     FORWARD, BACK, ROTATE_LEFT, ROTATE_RIGHT, STRAFE_LEFT, STRAFE_RIGHT,
-    FIRE, SKIP_TURN, RELOAD,
+    FIRE, SKIP_TURN, RELOAD, SWITCH_WEAPON,
     NONE
 }

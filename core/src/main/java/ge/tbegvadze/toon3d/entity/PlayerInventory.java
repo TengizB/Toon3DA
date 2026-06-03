@@ -3,7 +3,10 @@ package ge.tbegvadze.toon3d.entity;
 import ge.tbegvadze.toon3d.level.KeycardColor;
 import ge.tbegvadze.toon3d.util.Constants;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
+import java.util.List;
 
 /**
  * Tracks items the player is carrying during a level.
@@ -12,7 +15,11 @@ import java.util.EnumSet;
 public class PlayerInventory {
 
     private final EnumSet<KeycardColor> keycards = EnumSet.noneOf(KeycardColor.class);
-    private Weapon equippedWeapon;
+
+    // Arsenal is the single source of truth for equipped weapon.
+    // equippedWeaponIndex always points to the active weapon in the list.
+    private final List<Weapon> arsenal = new ArrayList<>();
+    private int equippedWeaponIndex = 0;
 
     // Medical stash — combined cap across both tiers.
     private int stimCharges   = 0;
@@ -30,13 +37,38 @@ public class PlayerInventory {
         keycards.clear();
     }
 
-    /** Returns the currently equipped weapon, or null if the player is unarmed. */
-    public Weapon getEquippedWeapon() {
-        return equippedWeapon;
+    /**
+     * Replaces the entire weapon arsenal and equips the first weapon.
+     * This is the primary way to set up weapons for a run.
+     */
+    public void setArsenal(List<Weapon> weapons) {
+        arsenal.clear();
+        arsenal.addAll(weapons);
+        equippedWeaponIndex = 0;
     }
 
+    public List<Weapon> getArsenal() {
+        return Collections.unmodifiableList(arsenal);
+    }
+
+    /** Returns the currently equipped weapon, or null if the player is unarmed. */
+    public Weapon getEquippedWeapon() {
+        return arsenal.isEmpty() ? null : arsenal.get(equippedWeaponIndex);
+    }
+
+    /** Sets the arsenal to a single weapon. Prefer setArsenal() for multi-weapon runs. */
     public void setEquippedWeapon(Weapon weapon) {
-        equippedWeapon = weapon;
+        setArsenal(java.util.List.of(weapon));
+    }
+
+    /**
+     * Advances to the next weapon in the arsenal (wraps around).
+     * Returns the newly equipped weapon, or the current weapon if only one weapon exists.
+     */
+    public Weapon switchToNextWeapon() {
+        if (arsenal.size() <= 1) return getEquippedWeapon();
+        equippedWeaponIndex = (equippedWeaponIndex + 1) % arsenal.size();
+        return getEquippedWeapon();
     }
 
     public int getStimCharges()    { return stimCharges; }
