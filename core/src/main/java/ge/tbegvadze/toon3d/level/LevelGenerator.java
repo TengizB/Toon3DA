@@ -10,7 +10,9 @@ import java.util.Random;
  * Procedural dungeon generator — six-phase algorithm inspired by Shattered Pixel Dungeon.
  *
  * Phase 1 — Room Placement:     randomly sized rectangular rooms placed without overlap,
- *                                typed as ENTRANCE / STANDARD / LARGE / SERVER_ROOM.
+ *                                typed as one of: ENTRANCE, STANDARD, LARGE, SERVER_ROOM,
+ *                                MEDICAL_BAY, ARMORY, CRYO_CHAMBER, POWER_PLANT,
+ *                                COMMAND_CENTER, or CONTAINMENT_BLOCK.
  * Phase 2 — Connectivity:       greedy MST + optional loop corridors; 2-3 MST edges
  *                                widened to 3-tile grand hallways with centre-line columns.
  *                                Single door pass after all corridor carving.
@@ -23,10 +25,16 @@ import java.util.Random;
  * Phase 6 — Stairs:             exactly one exit in the furthest / largest landmark room.
  *
  * Room types:
- *   ENTRANCE    — player spawn room; fully lit, no hazards.
- *   STANDARD    — baseline UAC lab room; existing decoration logic.
- *   LARGE       — landmark arena (reactor floor, cargo bay); patterned columns, sparse props.
- *   SERVER_ROOM — data vault; terminal walls 't', rack rows of T/L props, dark atmosphere.
+ *   ENTRANCE          — player spawn room; fully lit, no hazards.
+ *   STANDARD          — baseline UAC lab room; existing decoration logic.
+ *   LARGE             — landmark arena (reactor floor, cargo bay); patterned columns, sparse props.
+ *   SERVER_ROOM       — data vault; terminal walls 't', rack rows of T/L props, dark atmosphere.
+ *   MEDICAL_BAY       — guaranteed once per level; medical-tile 'M' walls, medkit/stim pickups.
+ *   ARMORY            — last-stand room; blast-scarred 'X' walls, weapon racks '=', corpses.
+ *   CRYO_CHAMBER      — cryogenic bay; frost 'Z' walls, bio-pod '&' rows, dim lighting.
+ *   POWER_PLANT       — reactor core (LARGE-class); radiation 'U' walls, generator '%' cluster.
+ *   COMMAND_CENTER    — control room (LARGE-class); glass 'N' walls, terminal 'T' rows.
+ *   CONTAINMENT_BLOCK — cell block; glass 'N' cell fronts, quarantine 'Q' walls, high enemy den.
  *
  * Wide hallways: 2-3 MST edges widened to 3 tiles (centre lit, ribs normal) with evenly
  * spaced 'P' columns along the centre spine. The width-3 invariant guarantees at least one
@@ -40,7 +48,11 @@ public class LevelGenerator {
 
     private enum WallContext { CORRIDOR, ROOM, MIXED, INTERIOR }
 
-    private enum RoomType { ENTRANCE, STANDARD, LARGE, SERVER_ROOM }
+    private enum RoomType {
+        ENTRANCE, STANDARD, LARGE, SERVER_ROOM,
+        MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
+        POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK
+    }
 
     private final Random         random;
     private final LevelGenConfig config;
@@ -69,7 +81,7 @@ public class LevelGenerator {
     public Level generate() {
         char[][] grid = new char[Constants.LEVEL_GEN_GRID_HEIGHT][Constants.LEVEL_GEN_GRID_WIDTH];
         fillAll(grid, 'x');
-        mstEdgeRooms       = new ArrayList<>();
+        mstEdgeRooms          = new ArrayList<>();
         wideHallwaySpineTiles = new ArrayList<>();
 
         List<Room> rooms = placeRooms();
@@ -94,6 +106,7 @@ public class LevelGenerator {
         assignFloorLighting(grid, rooms);
         assignWallVariety(grid);
         themeServerRoomWalls(grid, rooms);
+        themeNewRoomWalls(grid, rooms);
         placePlayerSpawn(grid, rooms.get(0));
         placeColumns(grid, rooms);
         placeLargeRoomColumns(grid, rooms);
@@ -101,6 +114,12 @@ public class LevelGenerator {
         placeProps(grid, rooms);
         placeServerRoomProps(grid, rooms);
         placeLargeRoomProps(grid, rooms);
+        placeMedicalBayProps(grid, rooms);
+        placeArmoryProps(grid, rooms);
+        placeCryoChamberProps(grid, rooms);
+        placePowerPlantProps(grid, rooms);
+        placeCommandCenterProps(grid, rooms);
+        placeContainmentBlockProps(grid, rooms);
         placePickups(grid, rooms);
         placeHazardWallsNearBarrels(grid);
 
@@ -118,7 +137,7 @@ public class LevelGenerator {
         // Phase 5 — connectivity audit
         verifyAndRepairConnectivity(grid, rooms);
 
-        // Phase 6 — stamp exactly one stairs-down exit; prefer a LARGE room
+        // Phase 6 — stamp exactly one stairs-down exit
         stampStairsDown(grid, rooms);
 
         return new Level(grid, spawnPoints);
@@ -196,38 +215,181 @@ public class LevelGenerator {
     }
 
     /**
-     * Assigns RoomType to every placed room.
+     * Multi-step room-type assignment:
      *
-     * Room 0 is always ENTRANCE (player spawn). Remaining rooms are classified by size first,
-     * then weighted roll, with hard caps so special rooms stay rare:
-     *   - LARGE:       interiorWidth >= LARGE_MIN_DIM AND interiorHeight >= LARGE_MIN_DIM,
-     *                  roll < LARGE_ROOM_CHANCE; capped at LARGE_ROOM_MAX_PER_LEVEL.
-     *   - SERVER_ROOM: any remaining room (large-ineligible or failed LARGE roll),
-     *                  roll < SERVER_ROOM_CHANCE; capped at SERVER_ROOM_MAX_PER_LEVEL.
-     *   - STANDARD:    everything else (guaranteed majority ~65-75 %).
+     * Step A — Guaranteed/rare uniques (run first to ensure they always appear):
+     *   ENTRANCE:       room 0, always.
+     *   MEDICAL_BAY:    guaranteed one per level, mid-distance, ≥7×6, hard cap 1.
+     *   COMMAND_CENTER: deepest eligible room ≥8×7, 50% chance, hard cap 1.
+     *   ARMORY:         random eligible ≥6×6, 80% chance, hard cap 1.
+     *
+     * Step B — LARGE-class rooms (consume LARGE-eligible rooms after uniques are placed):
+     *   POWER_PLANT:    from LARGE-eligible candidates, 45% chance, hard cap 1; rest → LARGE.
+     *
+     * Step C — Remaining rooms classified by sequential cumulative roll bands (one roll per room):
+     *   CRYO_CHAMBER:       ≥7×7, roll in [0, CRYO_CHANCE)           → ~16 % of rolls, hard cap 2.
+     *   CONTAINMENT_BLOCK:  ≥8×6, roll in [CRYO_CHANCE, +CONTAIN)    → next ~16 % band, hard cap 2.
+     *   SERVER_ROOM:        any,   roll in [prev, +SERVER_CHANCE)     → next ~16 % band, hard cap per config.
+     *   STANDARD:           fallback for all remaining rolls.
+     *
+     * Because these are else-if branches on a single roll, the bands are mutually exclusive per room.
+     * A room that is cryo-ineligible falls through to the CONTAINMENT check at the same roll value,
+     * so its effective CONTAINMENT threshold is the full [0, CRYO+CONTAIN) range (~32 %).
      */
     private void assignRoomTypes(List<Room> rooms) {
         rooms.get(0).type = RoomType.ENTRANCE;
-        int largeRoomCount  = 0;
-        int serverRoomCount = 0;
+
+        boolean medicalBayPlaced    = false;
+        boolean armoryPlaced        = false;
+        boolean commandCenterPlaced = false;
+        boolean powerPlantPlaced    = false;
+        int     cryoChamberCount    = 0;
+        int     containmentCount    = 0;
+        int     serverRoomCount     = 0;
+
+        // Step A — Medical Bay: guaranteed, mid-distance room with minimum size
+        if (!medicalBayPlaced) {
+            Room medicalCandidate = findMedicalBayCandidate(rooms);
+            if (medicalCandidate != null) {
+                medicalCandidate.type = RoomType.MEDICAL_BAY;
+                medicalBayPlaced = true;
+            }
+        }
+
+        // Step A — Command Center: deepest eligible LARGE-class room at 50% chance
+        if (!commandCenterPlaced && random.nextFloat() < Constants.LEVEL_GEN_COMMAND_CHANCE) {
+            Room commandCandidate = findCommandCenterCandidate(rooms);
+            if (commandCandidate != null) {
+                commandCandidate.type = RoomType.COMMAND_CENTER;
+                commandCenterPlaced = true;
+            }
+        }
+
+        // Step A — Armory: random eligible room at 80% chance
+        if (!armoryPlaced && random.nextFloat() < Constants.LEVEL_GEN_ARMORY_CHANCE) {
+            Room armoryCandidate = findArmoryCandidate(rooms);
+            if (armoryCandidate != null) {
+                armoryCandidate.type = RoomType.ARMORY;
+                armoryPlaced = true;
+            }
+        }
+
+        // Step B — LARGE-eligible rooms: Power Plant or plain LARGE
+        int largeRoomCount = 0;
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
-            Room    room          = rooms.get(roomIndex);
+            Room room = rooms.get(roomIndex);
+            if (room.type != RoomType.STANDARD) continue;
             boolean largeEligible = room.interiorWidth()  >= Constants.LEVEL_GEN_LARGE_MIN_DIM
                                  && room.interiorHeight() >= Constants.LEVEL_GEN_LARGE_MIN_DIM;
+            if (!largeEligible) continue;
             if (config.enableLargeRooms
-                    && largeEligible
-                    && largeRoomCount < Constants.LEVEL_GEN_LARGE_ROOM_MAX_PER_LEVEL
-                    && random.nextFloat() < Constants.LEVEL_GEN_LARGE_ROOM_CHANCE) {
-                room.type = RoomType.LARGE;
+                    && largeRoomCount < Constants.LEVEL_GEN_LARGE_ROOM_MAX_PER_LEVEL) {
+                if (!powerPlantPlaced
+                        && random.nextFloat() < Constants.LEVEL_GEN_POWERPLANT_CHANCE) {
+                    room.type = RoomType.POWER_PLANT;
+                    powerPlantPlaced = true;
+                } else {
+                    room.type = RoomType.LARGE;
+                }
                 largeRoomCount++;
+            }
+        }
+
+        // Step C — remaining STANDARD rooms get specialty or stay STANDARD
+        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            if (room.type != RoomType.STANDARD) continue;
+
+            boolean cryoEligible        = room.interiorWidth()  >= Constants.LEVEL_GEN_CRYO_MIN_WIDTH
+                                       && room.interiorHeight() >= Constants.LEVEL_GEN_CRYO_MIN_HEIGHT;
+            boolean containmentEligible = room.interiorWidth()  >= Constants.LEVEL_GEN_CONTAINMENT_MIN_WIDTH
+                                       && room.interiorHeight() >= Constants.LEVEL_GEN_CONTAINMENT_MIN_HEIGHT;
+
+            float roll = random.nextFloat();
+            if (cryoEligible
+                    && cryoChamberCount < Constants.LEVEL_GEN_CRYO_MAX
+                    && roll < Constants.LEVEL_GEN_CRYO_CHANCE) {
+                room.type = RoomType.CRYO_CHAMBER;
+                cryoChamberCount++;
+            } else if (containmentEligible
+                    && containmentCount < Constants.LEVEL_GEN_CONTAINMENT_MAX
+                    && roll < Constants.LEVEL_GEN_CRYO_CHANCE + Constants.LEVEL_GEN_CONTAINMENT_CHANCE) {
+                room.type = RoomType.CONTAINMENT_BLOCK;
+                containmentCount++;
             } else if (config.enableServerRooms
                     && serverRoomCount < Constants.LEVEL_GEN_SERVER_ROOM_MAX_PER_LEVEL
-                    && random.nextFloat() < Constants.LEVEL_GEN_SERVER_ROOM_CHANCE) {
+                    && roll < Constants.LEVEL_GEN_CRYO_CHANCE
+                              + Constants.LEVEL_GEN_CONTAINMENT_CHANCE
+                              + Constants.LEVEL_GEN_SERVER_ROOM_CHANCE) {
                 room.type = RoomType.SERVER_ROOM;
                 serverRoomCount++;
             }
             // else: remains STANDARD
         }
+    }
+
+    /**
+     * Finds the best candidate for a Medical Bay: a STANDARD room at roughly mid-depth
+     * (not the nearest rooms, not the deepest) meeting minimum size requirements.
+     */
+    private Room findMedicalBayCandidate(List<Room> rooms) {
+        int midIndex = rooms.size() / 2;
+        // Search outward from mid-point to find first eligible room
+        for (int radius = 0; radius <= rooms.size() / 2; radius++) {
+            int forwardIndex  = midIndex + radius;
+            int backwardIndex = midIndex - radius;
+            if (forwardIndex < rooms.size()) {
+                Room candidate = rooms.get(forwardIndex);
+                if (candidate.type == RoomType.STANDARD
+                        && candidate.interiorWidth()  >= Constants.LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH
+                        && candidate.interiorHeight() >= Constants.LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT) {
+                    return candidate;
+                }
+            }
+            if (backwardIndex > 0 && backwardIndex != forwardIndex) {
+                Room candidate = rooms.get(backwardIndex);
+                if (candidate.type == RoomType.STANDARD
+                        && candidate.interiorWidth()  >= Constants.LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH
+                        && candidate.interiorHeight() >= Constants.LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT) {
+                    return candidate;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Finds the best candidate for a Command Center: the deepest STANDARD room
+     * meeting minimum size requirements (≥8×7).
+     */
+    private Room findCommandCenterCandidate(List<Room> rooms) {
+        for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
+            Room candidate = rooms.get(roomIndex);
+            if (candidate.type == RoomType.STANDARD
+                    && candidate.interiorWidth()  >= Constants.LEVEL_GEN_COMMAND_MIN_WIDTH
+                    && candidate.interiorHeight() >= Constants.LEVEL_GEN_COMMAND_MIN_HEIGHT) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Finds the best candidate for an Armory: any STANDARD room meeting minimum size (≥6×6),
+     * selected randomly from eligible candidates.
+     */
+    private Room findArmoryCandidate(List<Room> rooms) {
+        List<Room> eligible = new ArrayList<>();
+        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
+            Room candidate = rooms.get(roomIndex);
+            if (candidate.type == RoomType.STANDARD
+                    && candidate.interiorWidth()  >= Constants.LEVEL_GEN_ARMORY_MIN_WIDTH
+                    && candidate.interiorHeight() >= Constants.LEVEL_GEN_ARMORY_MIN_HEIGHT) {
+                eligible.add(candidate);
+            }
+        }
+        if (eligible.isEmpty()) return null;
+        return eligible.get(random.nextInt(eligible.size()));
     }
 
     // -------------------------------------------------------------------------
@@ -315,8 +477,12 @@ public class LevelGenerator {
         for (Room[] edge : mstEdgeRooms) {
             boolean touchesLandmark = edge[0].type == RoomType.ENTRANCE
                                    || edge[0].type == RoomType.LARGE
+                                   || edge[0].type == RoomType.COMMAND_CENTER
+                                   || edge[0].type == RoomType.POWER_PLANT
                                    || edge[1].type == RoomType.ENTRANCE
-                                   || edge[1].type == RoomType.LARGE;
+                                   || edge[1].type == RoomType.LARGE
+                                   || edge[1].type == RoomType.COMMAND_CENTER
+                                   || edge[1].type == RoomType.POWER_PLANT;
             if (touchesLandmark) {
                 priorityEdges.add(edge);
             } else {
@@ -507,20 +673,30 @@ public class LevelGenerator {
 
     /**
      * Assigns floor lighting for each room type:
-     *   ENTRANCE    — fully lit ' ' (safe start zone, no conversion).
-     *   LARGE       — mostly lit ' ', ring of 'l' at edges, one small 'u' dark alcove.
-     *   SERVER_ROOM — dark 'u' dominant, sprinkle of 'f' flickering, no bright ' '.
-     *   STANDARD    — existing mixed logic (config-driven unlitFloors / normalFloors).
+     *   ENTRANCE          — fully lit ' ' (safe start zone, no conversion).
+     *   SERVER_ROOM       — dark 'u' dominant, sprinkle of 'f' flickering, no bright ' '.
+     *   LARGE             — mostly lit ' ', ring of 'l' at edges, one small 'u' dark alcove.
+     *   MEDICAL_BAY       — fully lit ' ' (clinical brightness).
+     *   ARMORY            — mostly lit ' ', dark 'u' corners for hiding stashes.
+     *   CRYO_CHAMBER      — dim 'l' dominant with rare 'u' patches (cold, unwelcoming).
+     *   POWER_PLANT       — dark 'u' floor, 'f' flickering near centre (reactor hum).
+     *   COMMAND_CENTER    — lit ' ' dominant, thin 'l' ring at perimeter.
+     *   CONTAINMENT_BLOCK — very dark 'u' dominant, 'f' flickering at cell fronts.
+     *   STANDARD          — existing mixed logic (config-driven unlitFloors / normalFloors).
      */
     private void assignFloorLighting(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type == RoomType.ENTRANCE) continue;
-            if (room.type == RoomType.SERVER_ROOM) {
-                assignServerRoomFloor(grid, room);
-            } else if (room.type == RoomType.LARGE) {
-                assignLargeRoomFloor(grid, room);
-            } else {
-                assignStandardRoomFloor(grid, room);
+            switch (room.type) {
+                case SERVER_ROOM:       assignServerRoomFloor(grid, room);       break;
+                case LARGE:             assignLargeRoomFloor(grid, room);         break;
+                case MEDICAL_BAY:       assignMedicalBayFloor(grid, room);        break;
+                case ARMORY:            assignArmoryFloor(grid, room);             break;
+                case CRYO_CHAMBER:      assignCryoChamberFloor(grid, room);        break;
+                case POWER_PLANT:       assignPowerPlantFloor(grid, room);         break;
+                case COMMAND_CENTER:    assignCommandCenterFloor(grid, room);      break;
+                case CONTAINMENT_BLOCK: assignContainmentBlockFloor(grid, room);   break;
+                default:                assignStandardRoomFloor(grid, room);       break;
             }
         }
     }
@@ -544,8 +720,7 @@ public class LevelGenerator {
     }
 
     private void assignLargeRoomFloor(char[][] grid, Room room) {
-        // One dark alcove in a random corner for hidden-loot tension
-        boolean hasAlcove   = random.nextBoolean();
+        boolean hasAlcove    = random.nextBoolean();
         int     alcoveColumn = random.nextBoolean() ? room.leftColumn + 1  : room.rightColumn - 1;
         int     alcoveRow    = random.nextBoolean() ? room.bottomRow  + 1  : room.topRow      - 1;
         for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
@@ -557,7 +732,6 @@ public class LevelGenerator {
                     grid[tileRow][tileColumn] = 'u';
                     continue;
                 }
-                // Edge ring slightly dimmer for depth
                 boolean isEdgeTile = tileColumn == room.leftColumn  + 1
                                   || tileColumn == room.rightColumn - 1
                                   || tileRow    == room.bottomRow   + 1
@@ -565,7 +739,95 @@ public class LevelGenerator {
                 if (isEdgeTile && random.nextFloat() < 0.50f) {
                     grid[tileRow][tileColumn] = 'l';
                 }
-                // Centre stays ' ' (lit) — the grand-hall bright-runway feeling
+            }
+        }
+    }
+
+    private void assignMedicalBayFloor(char[][] grid, Room room) {
+        // Medical bays are fully lit for clinical visibility — no conversion needed
+        // (all tiles are already ' ' from carveRoomInteriors)
+    }
+
+    private void assignArmoryFloor(char[][] grid, Room room) {
+        // Mostly lit, dark corners for tension and hidden pickups
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                boolean isCorner = (tileColumn <= room.leftColumn  + 2 || tileColumn >= room.rightColumn - 2)
+                                && (tileRow    <= room.bottomRow   + 2 || tileRow    >= room.topRow      - 2);
+                if (isCorner && random.nextFloat() < 0.60f) {
+                    grid[tileRow][tileColumn] = 'u';
+                } else if (random.nextFloat() < 0.12f) {
+                    grid[tileRow][tileColumn] = 'l';
+                }
+            }
+        }
+    }
+
+    private void assignCryoChamberFloor(char[][] grid, Room room) {
+        // Dim 'l' dominant; rare 'u' patches give a cold, unwelcoming feel
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                float roll = random.nextFloat();
+                if (roll < 0.15f) {
+                    grid[tileRow][tileColumn] = 'u';
+                } else {
+                    grid[tileRow][tileColumn] = 'l';
+                }
+            }
+        }
+    }
+
+    private void assignPowerPlantFloor(char[][] grid, Room room) {
+        // Dark 'u' floor, 'f' flickering near the centre (reactor hum)
+        int centreColumn = room.centerColumn();
+        int centreRow    = room.centerRow();
+        int flickerBudget = 4;
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                boolean nearCentre = Math.abs(tileColumn - centreColumn) <= 2
+                                  && Math.abs(tileRow    - centreRow)    <= 2;
+                if (nearCentre && flickerBudget > 0 && random.nextFloat() < 0.40f) {
+                    grid[tileRow][tileColumn] = 'f';
+                    flickerBudget--;
+                } else {
+                    grid[tileRow][tileColumn] = 'u';
+                }
+            }
+        }
+    }
+
+    private void assignCommandCenterFloor(char[][] grid, Room room) {
+        // Lit ' ' dominant, thin 'l' ring at perimeter
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                boolean isEdgeTile = tileColumn == room.leftColumn  + 1
+                                  || tileColumn == room.rightColumn - 1
+                                  || tileRow    == room.bottomRow   + 1
+                                  || tileRow    == room.topRow      - 1;
+                if (isEdgeTile && random.nextFloat() < 0.35f) {
+                    grid[tileRow][tileColumn] = 'l';
+                }
+            }
+        }
+    }
+
+    private void assignContainmentBlockFloor(char[][] grid, Room room) {
+        // Very dark 'u' dominant, 'f' flickering at random spots for dread
+        int flickerBudget = 3;
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                float roll = random.nextFloat();
+                if (roll < 0.08f && flickerBudget > 0) {
+                    grid[tileRow][tileColumn] = 'f';
+                    flickerBudget--;
+                } else {
+                    grid[tileRow][tileColumn] = 'u';
+                }
             }
         }
     }
@@ -651,12 +913,8 @@ public class LevelGenerator {
     }
 
     /**
-     * Overrides perimeter walls of every SERVER_ROOM to terminal walls 't' with
-     * SERVER_WALL_TERMINAL_CHANCE probability. The remaining ~20% keep whatever
-     * generic variety was assigned, giving a 80/20 blend.
-     *
-     * Runs AFTER assignWallVariety() so it overrides the generic vent/conduit theming
-     * for server rooms only — non-server rooms are unaffected.
+     * Overrides perimeter walls of SERVER_ROOM to terminal walls 't'.
+     * Runs AFTER assignWallVariety() so it overrides the generic vent/conduit theming.
      */
     private void themeServerRoomWalls(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
@@ -668,6 +926,80 @@ public class LevelGenerator {
                     if (!facesRoomInterior(grid, tileColumn, tileRow, room)) continue;
                     if (random.nextFloat() < Constants.LEVEL_GEN_SERVER_WALL_TERMINAL_CHANCE) {
                         grid[tileRow][tileColumn] = 't';
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Applies room-type-specific wall theming for the 6 new room types.
+     * Runs AFTER themeServerRoomWalls() so ordering is consistent.
+     *
+     * Per-type wall replacement rules (perimeter only, using facesRoomInterior):
+     *   MEDICAL_BAY:       70% 'M' (medical wall), 10% 'Q' (bio accent), rest keep generic.
+     *   ARMORY:            50% 'X' (blast wall), rest keep generic.
+     *   CRYO_CHAMBER:      70% 'Z' (cryo wall), 15% 'N' (glass accent), rest keep generic.
+     *   POWER_PLANT:       40% 'U' (radiation wall), 20% 'S' (emergency strip), rest keep generic.
+     *   COMMAND_CENTER:    30% 'N' (glass observation), 15% 'S' (emergency strip), rest keep generic.
+     *   CONTAINMENT_BLOCK: 40% 'N' (glass cell fronts), 15% 'Q' (quarantine), rest keep generic.
+     */
+    private void themeNewRoomWalls(char[][] grid, List<Room> rooms) {
+        for (Room room : rooms) {
+            for (int tileRow = room.bottomRow; tileRow <= room.topRow; tileRow++) {
+                for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
+                    if (!isInBounds(tileColumn, tileRow)) continue;
+                    if (!Level.isWall(grid[tileRow][tileColumn])) continue;
+                    if (!facesRoomInterior(grid, tileColumn, tileRow, room)) continue;
+                    float roll = random.nextFloat();
+                    switch (room.type) {
+                        case MEDICAL_BAY:
+                            if (roll < Constants.LEVEL_GEN_MEDICAL_WALL_CHANCE) {
+                                grid[tileRow][tileColumn] = 'M';
+                            } else if (roll < Constants.LEVEL_GEN_MEDICAL_WALL_CHANCE
+                                             + Constants.LEVEL_GEN_MEDICAL_BIO_WALL_CHANCE) {
+                                grid[tileRow][tileColumn] = 'Q';
+                            }
+                            break;
+                        case ARMORY:
+                            if (roll < Constants.LEVEL_GEN_ARMORY_BLAST_WALL_CHANCE) {
+                                grid[tileRow][tileColumn] = 'X';
+                            }
+                            break;
+                        case CRYO_CHAMBER:
+                            if (roll < Constants.LEVEL_GEN_CRYO_WALL_CHANCE) {
+                                grid[tileRow][tileColumn] = 'Z';
+                            } else if (roll < Constants.LEVEL_GEN_CRYO_WALL_CHANCE
+                                             + Constants.LEVEL_GEN_CRYO_GLASS_WALL_CHANCE) {
+                                grid[tileRow][tileColumn] = 'N';
+                            }
+                            break;
+                        case POWER_PLANT:
+                            if (roll < Constants.LEVEL_GEN_POWERPLANT_RAD_WALL_CHANCE) {
+                                grid[tileRow][tileColumn] = 'U';
+                            } else if (roll < Constants.LEVEL_GEN_POWERPLANT_RAD_WALL_CHANCE
+                                             + Constants.LEVEL_GEN_POWERPLANT_EMERG_WALL_CHANCE) {
+                                grid[tileRow][tileColumn] = 'S';
+                            }
+                            break;
+                        case COMMAND_CENTER:
+                            if (roll < Constants.LEVEL_GEN_COMMAND_GLASS_WALL_CHANCE) {
+                                grid[tileRow][tileColumn] = 'N';
+                            } else if (roll < Constants.LEVEL_GEN_COMMAND_GLASS_WALL_CHANCE
+                                             + Constants.LEVEL_GEN_COMMAND_EMERG_WALL_CHANCE) {
+                                grid[tileRow][tileColumn] = 'S';
+                            }
+                            break;
+                        case CONTAINMENT_BLOCK:
+                            if (roll < Constants.LEVEL_GEN_CONTAINMENT_GLASS_CHANCE) {
+                                grid[tileRow][tileColumn] = 'N';
+                            } else if (roll < Constants.LEVEL_GEN_CONTAINMENT_GLASS_CHANCE
+                                             + Constants.LEVEL_GEN_CONTAINMENT_BIO_CHANCE) {
+                                grid[tileRow][tileColumn] = 'Q';
+                            }
+                            break;
+                        default:
+                            break;
                     }
                 }
             }
@@ -701,15 +1033,15 @@ public class LevelGenerator {
     }
 
     /**
-     * Places columns in STANDARD rooms only (LARGE and SERVER_ROOM have custom handlers).
-     * Columns are only placed in rooms large enough to avoid blocking passage, and never
-     * adjacent to another column. Controlled by LevelGenConfig column fields.
+     * Places columns in STANDARD rooms only — all special room types have dedicated
+     * prop/column handlers (LARGE, SERVER_ROOM, MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
+     * POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK).
      */
     private void placeColumns(char[][] grid, List<Room> rooms) {
         if (!config.columns) return;
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
-            if (room.type == RoomType.LARGE || room.type == RoomType.SERVER_ROOM) continue;
+            if (room.type != RoomType.STANDARD) continue;
             if (room.interiorWidth()  < config.columnMinRoomSize) continue;
             if (room.interiorHeight() < config.columnMinRoomSize) continue;
             if (random.nextFloat() > config.columnChancePerRoom)  continue;
@@ -845,11 +1177,14 @@ public class LevelGenerator {
         return false;
     }
 
+    /**
+     * Places props in STANDARD rooms only — all special room types have dedicated
+     * prop handlers.
+     */
     private void placeProps(char[][] grid, List<Room> rooms) {
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
-            // SERVER_ROOM and LARGE rooms have dedicated prop handlers
-            if (room.type == RoomType.SERVER_ROOM || room.type == RoomType.LARGE) continue;
+            if (room.type != RoomType.STANDARD) continue;
             for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
                 for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
                     if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
@@ -867,13 +1202,6 @@ public class LevelGenerator {
     /**
      * Places props in SERVER_ROOM rooms as rack rows of terminals ('T') and lockers ('L'),
      * reading as a UAC data vault — dense, claustrophobic, tactically dangerous.
-     *
-     * Racks run along the short axis (perpendicular to the longer axis) so they fill the
-     * room most naturally. Rack rows start at the second interior row (leaving a clear entry
-     * buffer at the walls) and alternate: rack row / walking lane / rack row / walking lane.
-     *
-     * Atmosphere props (oil pools, radioactive barrel) are scattered afterward to trigger
-     * the existing rust-wall post-pass and sell the "this room is leaking" decay feel.
      */
     private void placeServerRoomProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
@@ -888,10 +1216,9 @@ public class LevelGenerator {
     private void placeServerRoomRacks(char[][] grid, Room room) {
         boolean horizontalRacks = room.interiorWidth() >= room.interiorHeight();
         if (horizontalRacks) {
-            // Racks are horizontal rows; skip first and last interior row as entry buffers
             for (int tileRow = room.bottomRow + 2; tileRow < room.topRow - 1; tileRow++) {
                 int rowOffset = tileRow - (room.bottomRow + 2);
-                if (rowOffset % 2 != 0) continue; // odd offsets are walking lanes
+                if (rowOffset % 2 != 0) continue;
                 for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
                     if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
@@ -901,10 +1228,9 @@ public class LevelGenerator {
                 }
             }
         } else {
-            // Racks are vertical columns; skip first and last interior column as entry buffers
             for (int tileColumn = room.leftColumn + 2; tileColumn < room.rightColumn - 1; tileColumn++) {
                 int columnOffset = tileColumn - (room.leftColumn + 2);
-                if (columnOffset % 2 != 0) continue; // odd offsets are walking lanes
+                if (columnOffset % 2 != 0) continue;
                 for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
                     if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
@@ -917,10 +1243,8 @@ public class LevelGenerator {
     }
 
     /**
-     * Places sparse props in LARGE rooms at LEVEL_GEN_LARGE_PROP_CHANCE density (~half the
-     * global rate). Crates ('C') and radioactive barrels ('g') only — no blood/corpse clutter
-     * so the open floor reads as a combat arena rather than a slaughter zone.
-     * One optional explosive barrel ('E') as a tactical hazard near existing columns.
+     * Places sparse props in LARGE rooms: crates and barrels at low density,
+     * one optional explosive barrel near existing columns.
      */
     private void placeLargeRoomProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
@@ -936,11 +1260,287 @@ public class LevelGenerator {
                     }
                 }
             }
-            // One explosive barrel for tactical interest (30 % chance per large room)
             if (config.explosiveBarrels && random.nextFloat() < 0.30f) {
                 tryPlaceAtmosphericPropNearWall(grid, room, 'E');
             }
         }
+    }
+
+    /**
+     * Medical Bay props: weapon racks '=' as equipment storage, security cameras '#'
+     * near walls, blood stains '.' and corpses 'm' for backstory. Sparse overall.
+     */
+    private void placeMedicalBayProps(char[][] grid, List<Room> rooms) {
+        for (Room room : rooms) {
+            if (room.type != RoomType.MEDICAL_BAY) continue;
+            // Place security cameras '#' near walls
+            tryPlaceAtmosphericPropNearWall(grid, room, '#');
+            if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, '#');
+            // Scatter blood stains and a corpse for narrative
+            if (config.bloodStains) tryPlaceAtmosphericProp(grid, room, '.');
+            if (config.bloodStains) tryPlaceAtmosphericProp(grid, room, '.');
+            if (config.corpses && random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'm');
+            // General sparse props
+            for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+                for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                    if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+                    if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                    if (random.nextFloat() < Constants.LEVEL_GEN_MEDICAL_PROP_CHANCE) {
+                        char prop = randomMedicalPropChar();
+                        if (prop != '\0' && !(Level.isPropSolid(prop)
+                                && isAdjacentToDoorAxis(grid, tileColumn, tileRow))) {
+                            grid[tileRow][tileColumn] = prop;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private char randomMedicalPropChar() {
+        float roll = random.nextFloat();
+        if (roll < 0.35f) return 'C';   // crate (supply box)
+        if (roll < 0.55f) return 'T';   // terminal (medical console)
+        if (roll < 0.70f) return '.';   // blood stain
+        if (roll < 0.85f) return 'O';   // oil/fluid pool
+        return 'm';                      // corpse
+    }
+
+    /**
+     * Armory props: weapon racks '=' in rows, crates 'C' (ammo), security camera '#',
+     * scattered blood stains and corpses for the "last stand" narrative.
+     */
+    private void placeArmoryProps(char[][] grid, List<Room> rooms) {
+        for (Room room : rooms) {
+            if (room.type != RoomType.ARMORY) continue;
+            // Weapon rack rows along the short axis
+            placeArmoryWeaponRacks(grid, room);
+            // Security camera at entrance wall
+            tryPlaceAtmosphericPropNearWall(grid, room, '#');
+            // Battlefield aftermath
+            if (config.bloodStains) {
+                tryPlaceAtmosphericProp(grid, room, '.');
+                tryPlaceAtmosphericProp(grid, room, '.');
+            }
+            if (config.corpses) {
+                tryPlaceAtmosphericPropNearWall(grid, room, 'm');
+                if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'm');
+            }
+            if (config.explosiveBarrels && random.nextFloat() < 0.40f) {
+                tryPlaceAtmosphericPropNearWall(grid, room, 'E');
+            }
+        }
+    }
+
+    private void placeArmoryWeaponRacks(char[][] grid, Room room) {
+        int racksPlaced = 0;
+        int maxRacks    = Constants.LEVEL_GEN_ARMORY_MIN_WEAPON_RACKS + random.nextInt(3);
+        for (int attempt = 0; attempt < 40 && racksPlaced < maxRacks; attempt++) {
+            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
+            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
+            if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+            if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+            if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
+            if (!isAdjacentToAnyWall(grid, tileColumn, tileRow)) continue;
+            grid[tileRow][tileColumn] = '=';
+            racksPlaced++;
+        }
+    }
+
+    /**
+     * Cryo Chamber props: bio-pods '&' in rows (specimen containment), security cameras '#',
+     * oil pools 'O' (coolant leaks), crates 'C' for cryo-supply.
+     */
+    private void placeCryoChamberProps(char[][] grid, List<Room> rooms) {
+        for (Room room : rooms) {
+            if (room.type != RoomType.CRYO_CHAMBER) continue;
+            placeCryoPodRows(grid, room);
+            tryPlaceAtmosphericPropNearWall(grid, room, '#');
+            if (config.oilPools) {
+                tryPlaceAtmosphericProp(grid, room, 'O');
+                if (random.nextBoolean()) tryPlaceAtmosphericProp(grid, room, 'O');
+            }
+            if (config.crates && random.nextBoolean()) {
+                tryPlaceAtmosphericPropNearWall(grid, room, 'C');
+            }
+        }
+    }
+
+    private void placeCryoPodRows(char[][] grid, Room room) {
+        // Place bio-pods '&' along the longer wall in a row
+        boolean horizontalRow = room.interiorWidth() >= room.interiorHeight();
+        if (horizontalRow) {
+            int podRow = room.bottomRow + 2;
+            for (int tileColumn = room.leftColumn + 2; tileColumn < room.rightColumn - 1; tileColumn += 2) {
+                if (!isWalkableFloor(grid, tileColumn, podRow)) continue;
+                if (isAdjacentToDoor(grid, tileColumn, podRow)) continue;
+                if (isAdjacentToDoorAxis(grid, tileColumn, podRow)) continue;
+                grid[podRow][tileColumn] = '&';
+            }
+            // Second row on opposite wall if room is tall enough
+            if (room.interiorHeight() >= 5) {
+                int podRow2 = room.topRow - 2;
+                for (int tileColumn = room.leftColumn + 2; tileColumn < room.rightColumn - 1; tileColumn += 2) {
+                    if (!isWalkableFloor(grid, tileColumn, podRow2)) continue;
+                    if (isAdjacentToDoor(grid, tileColumn, podRow2)) continue;
+                    if (isAdjacentToDoorAxis(grid, tileColumn, podRow2)) continue;
+                    grid[podRow2][tileColumn] = '&';
+                }
+            }
+        } else {
+            int podColumn = room.leftColumn + 2;
+            for (int tileRow = room.bottomRow + 2; tileRow < room.topRow - 1; tileRow += 2) {
+                if (!isWalkableFloor(grid, podColumn, tileRow)) continue;
+                if (isAdjacentToDoor(grid, podColumn, tileRow)) continue;
+                if (isAdjacentToDoorAxis(grid, podColumn, tileRow)) continue;
+                grid[tileRow][podColumn] = '&';
+            }
+            if (room.interiorWidth() >= 5) {
+                int podColumn2 = room.rightColumn - 2;
+                for (int tileRow = room.bottomRow + 2; tileRow < room.topRow - 1; tileRow += 2) {
+                    if (!isWalkableFloor(grid, podColumn2, tileRow)) continue;
+                    if (isAdjacentToDoor(grid, podColumn2, tileRow)) continue;
+                    if (isAdjacentToDoorAxis(grid, podColumn2, tileRow)) continue;
+                    grid[tileRow][podColumn2] = '&';
+                }
+            }
+        }
+    }
+
+    /**
+     * Power Plant props: generators '%' clustered near centre, security cameras '#',
+     * radioactive barrels 'g' scattered around (coolant drums), explosive barrel 'E' hazard.
+     */
+    private void placePowerPlantProps(char[][] grid, List<Room> rooms) {
+        for (Room room : rooms) {
+            if (room.type != RoomType.POWER_PLANT) continue;
+            // Cluster of generators near centre
+            int generatorCount = Constants.LEVEL_GEN_POWERPLANT_MIN_GENERATORS
+                    + random.nextInt(Constants.LEVEL_GEN_POWERPLANT_MAX_GENERATORS
+                                     - Constants.LEVEL_GEN_POWERPLANT_MIN_GENERATORS + 1);
+            placeGeneratorCluster(grid, room, generatorCount);
+            // Atmosphere props
+            tryPlaceAtmosphericPropNearWall(grid, room, '#');
+            if (config.radioactiveBarrels) {
+                tryPlaceAtmosphericPropNearWall(grid, room, 'g');
+                if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'g');
+            }
+            if (config.explosiveBarrels && random.nextFloat() < 0.50f) {
+                tryPlaceAtmosphericPropNearWall(grid, room, 'E');
+            }
+            if (config.oilPools) {
+                tryPlaceAtmosphericProp(grid, room, 'O');
+            }
+        }
+    }
+
+    private void placeGeneratorCluster(char[][] grid, Room room, int generatorCount) {
+        int centreColumn = room.centerColumn();
+        int centreRow    = room.centerRow();
+        int[] tryColumns = { centreColumn, centreColumn - 1, centreColumn + 1,
+                             centreColumn - 2, centreColumn + 2,
+                             centreColumn, centreColumn };
+        int[] tryRows    = { centreRow, centreRow, centreRow,
+                             centreRow, centreRow,
+                             centreRow - 1, centreRow + 1 };
+        int placed = 0;
+        for (int attempt = 0; attempt < tryColumns.length && placed < generatorCount; attempt++) {
+            int tileColumn = tryColumns[attempt];
+            int tileRow    = tryRows[attempt];
+            if (!isInBounds(tileColumn, tileRow)) continue;
+            if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+            if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+            if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
+            grid[tileRow][tileColumn] = '%';
+            placed++;
+        }
+    }
+
+    /**
+     * Command Center props: terminals 'T' in a row (operator stations), security camera '#',
+     * weapon rack '=' near the back, scattered blood stains for fallen crew.
+     */
+    private void placeCommandCenterProps(char[][] grid, List<Room> rooms) {
+        for (Room room : rooms) {
+            if (room.type != RoomType.COMMAND_CENTER) continue;
+            placeCommandTerminalRow(grid, room);
+            tryPlaceAtmosphericPropNearWall(grid, room, '#');
+            if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, '#');
+            tryPlaceAtmosphericPropNearWall(grid, room, '=');
+            if (config.bloodStains) tryPlaceAtmosphericProp(grid, room, '.');
+            if (config.corpses && random.nextFloat() < 0.30f) {
+                tryPlaceAtmosphericPropNearWall(grid, room, 'm');
+            }
+        }
+    }
+
+    private void placeCommandTerminalRow(char[][] grid, Room room) {
+        int terminalCount  = Constants.LEVEL_GEN_COMMAND_MIN_TERMINALS
+                + random.nextInt(Constants.LEVEL_GEN_COMMAND_MAX_TERMINALS
+                                 - Constants.LEVEL_GEN_COMMAND_MIN_TERMINALS + 1);
+        // Place terminals along the back wall (top row of interior)
+        int backRow   = room.topRow - 2;
+        int placed    = 0;
+        int attempts  = 0;
+        for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn && placed < terminalCount; tileColumn++) {
+            attempts++;
+            if (!isWalkableFloor(grid, tileColumn, backRow)) continue;
+            if (isAdjacentToDoor(grid, tileColumn, backRow)) continue;
+            if (isAdjacentToDoorAxis(grid, tileColumn, backRow)) continue;
+            grid[backRow][tileColumn] = 'T';
+            placed++;
+        }
+        // Fill remainder randomly if back-row placement is short
+        for (int extra = placed; extra < terminalCount && attempts < 40; extra++, attempts++) {
+            tryPlaceAtmosphericPropNearWall(grid, room, 'T');
+        }
+    }
+
+    /**
+     * Containment Block props: bio-pods '&' (cell interiors), security cameras '#' at
+     * cell fronts, blood stains and corpses throughout (harrowing atmosphere).
+     */
+    private void placeContainmentBlockProps(char[][] grid, List<Room> rooms) {
+        for (Room room : rooms) {
+            if (room.type != RoomType.CONTAINMENT_BLOCK) continue;
+            // Bio-pods scattered as cell contents
+            for (int attempt = 0; attempt < 20; attempt++) {
+                int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
+                int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
+                if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+                if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                if (random.nextFloat() < Constants.LEVEL_GEN_CONTAINMENT_PROP_CHANCE) {
+                    char prop = randomContainmentPropChar();
+                    if (prop != '\0' && !(Level.isPropSolid(prop)
+                            && isAdjacentToDoorAxis(grid, tileColumn, tileRow))) {
+                        grid[tileRow][tileColumn] = prop;
+                    }
+                }
+            }
+            // Security cameras at walls
+            tryPlaceAtmosphericPropNearWall(grid, room, '#');
+            tryPlaceAtmosphericPropNearWall(grid, room, '#');
+            // Harrowing aftermath
+            if (config.bloodStains) {
+                tryPlaceAtmosphericProp(grid, room, '.');
+                tryPlaceAtmosphericProp(grid, room, '.');
+                if (random.nextBoolean()) tryPlaceAtmosphericProp(grid, room, '.');
+            }
+            if (config.corpses) {
+                tryPlaceAtmosphericPropNearWall(grid, room, 'm');
+                if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'm');
+            }
+        }
+    }
+
+    private char randomContainmentPropChar() {
+        float roll = random.nextFloat();
+        if (roll < 0.30f) return '&';   // bio-pod
+        if (roll < 0.50f) return 'm';   // corpse
+        if (roll < 0.65f) return '.';   // blood stain
+        if (roll < 0.75f) return 'O';   // fluid pool
+        if (roll < 0.85f) return 'C';   // crate
+        return '\0';
     }
 
     private void tryPlaceAtmosphericProp(char[][] grid, Room room, char propChar) {
@@ -1030,21 +1630,54 @@ public class LevelGenerator {
     }
 
     /**
-     * Places medkit ('H') and armour-kit ('A') pickups in non-entrance rooms.
-     * SERVER_ROOM and LARGE rooms use boosted pickup chances — they are the loot hubs.
+     * Places medkit ('H'), stim-pack ('+'), and armour-kit ('A') pickups in non-entrance rooms.
+     * Per-type boosts:
+     *   MEDICAL_BAY:       high medkit + stim chance (loot hub).
+     *   ARMORY:            high armour chance, low medkit (last-stand gear).
+     *   COMMAND_CENTER:    moderate medkit + armour (VIP resupply).
+     *   SERVER_ROOM/LARGE: existing boosted chances.
      */
     private void placePickups(char[][] grid, List<Room> rooms) {
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room  room         = rooms.get(roomIndex);
             float medkitChance = config.medkitChancePerRoom;
             float armourChance = config.armourChancePerRoom;
-            if (room.type == RoomType.SERVER_ROOM) {
-                medkitChance = Constants.LEVEL_GEN_SERVER_MEDKIT_CHANCE;
-                armourChance = Constants.LEVEL_GEN_SERVER_ARMOUR_CHANCE;
-            } else if (room.type == RoomType.LARGE) {
-                medkitChance = Constants.LEVEL_GEN_LARGE_MEDKIT_CHANCE;
-                armourChance = Constants.LEVEL_GEN_LARGE_ARMOUR_CHANCE;
+
+            switch (room.type) {
+                case SERVER_ROOM:
+                    medkitChance = Constants.LEVEL_GEN_SERVER_MEDKIT_CHANCE;
+                    armourChance = Constants.LEVEL_GEN_SERVER_ARMOUR_CHANCE;
+                    break;
+                case LARGE:
+                    medkitChance = Constants.LEVEL_GEN_LARGE_MEDKIT_CHANCE;
+                    armourChance = Constants.LEVEL_GEN_LARGE_ARMOUR_CHANCE;
+                    break;
+                case MEDICAL_BAY:
+                    // Guaranteed medkit + high stim chance
+                    tryPlacePickup(grid, room, 'H');
+                    if (random.nextFloat() < 0.70f) tryPlacePickup(grid, room, '+');
+                    if (random.nextFloat() < 0.30f) tryPlacePickup(grid, room, 'A');
+                    continue;
+                case ARMORY:
+                    medkitChance = 0.40f;
+                    armourChance = 0.80f;
+                    if (random.nextFloat() < armourChance) tryPlacePickup(grid, room, 'A');
+                    if (random.nextFloat() < medkitChance) tryPlacePickup(grid, room, 'H');
+                    continue;
+                case COMMAND_CENTER:
+                    medkitChance = 0.50f;
+                    armourChance = 0.50f;
+                    break;
+                case POWER_PLANT:
+                case CRYO_CHAMBER:
+                case CONTAINMENT_BLOCK:
+                    medkitChance = 0.25f;
+                    armourChance = 0.20f;
+                    break;
+                default:
+                    break;
             }
+
             if (config.medkits    && random.nextFloat() < medkitChance) tryPlacePickup(grid, room, 'H');
             if (config.armourKits && random.nextFloat() < armourChance)  tryPlacePickup(grid, room, 'A');
         }
@@ -1132,9 +1765,9 @@ public class LevelGenerator {
         int[] deltaRows    = { 1, -1,  0,  0 };
         for (int tileRow = 0; tileRow < Constants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
             for (int tileColumn = 0; tileColumn < Constants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
-                char cell          = grid[tileRow][tileColumn];
-                boolean isDeadEnd  = false;
-                boolean isStairs   = (cell == Constants.STAIRS_DOWN_CHAR);
+                char cell        = grid[tileRow][tileColumn];
+                boolean isDeadEnd = false;
+                boolean isStairs  = (cell == Constants.STAIRS_DOWN_CHAR);
                 if (cell == 'l' || cell == ' ' || cell == 'u') {
                     int walkableCount = 0;
                     int wallCount     = 0;
@@ -1305,17 +1938,26 @@ public class LevelGenerator {
     // -------------------------------------------------------------------------
 
     /**
-     * Stamps exactly one stairs-down tile, preferring a LARGE room so the exit landmark
-     * matches the scale of the grand hall (cinematic payoff). Falls back to any non-entrance
-     * room (furthest first), then the entrance room as absolute last resort.
+     * Stamps exactly one stairs-down tile. Preference order (furthest first within each tier):
+     *   1. COMMAND_CENTER — cinematic payoff for conquering the control room.
+     *   2. POWER_PLANT    — reactor shutdown = level complete.
+     *   3. LARGE          — landmark scale suits an exit landmark.
+     *   4. Any non-entrance room.
+     *   5. Entrance room  — absolute last resort.
      */
     private void stampStairsDown(char[][] grid, List<Room> rooms) {
-        // First pass: try LARGE rooms (furthest from start first)
+        for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
+            Room room = rooms.get(roomIndex);
+            if (room.type == RoomType.COMMAND_CENTER && tryStampInRoom(grid, room)) return;
+        }
+        for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
+            Room room = rooms.get(roomIndex);
+            if (room.type == RoomType.POWER_PLANT && tryStampInRoom(grid, room)) return;
+        }
         for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
             Room room = rooms.get(roomIndex);
             if (room.type == RoomType.LARGE && tryStampInRoom(grid, room)) return;
         }
-        // Second pass: any non-entrance room
         for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
             if (tryStampInRoom(grid, rooms.get(roomIndex))) return;
         }
