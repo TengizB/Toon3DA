@@ -406,7 +406,16 @@ public final class Constants {
     public static final float LEVEL_GEN_PROP_CHANCE           = 0.13f;
     public static final int   LEVEL_GEN_MAX_ENEMIES_PER_ROOM  = 3;
     // Probability that a spawn point produces a Corruptor ('1') vs Vortex Eye ('2').
-    public static final float LEVEL_GEN_CORRUPTOR_RATIO       = 0.65f;
+    // Cumulative thresholds for enemy type selection (each range maps to one type):
+    //   [0.00, 0.25) → CORRUPTOR   25 % heavy melee
+    //   [0.25, 0.40) → VORTEX_EYE  15 % ranged
+    //   [0.40, 0.60) → GHOUL        20 % light melee
+    //   [0.60, 0.80) → CRAWLER      20 % light melee
+    //   [0.80, 1.00) → REVENANT     20 % light melee
+    public static final float LEVEL_GEN_CORRUPTOR_THRESHOLD   = 0.25f;
+    public static final float LEVEL_GEN_VORTEX_EYE_THRESHOLD  = 0.40f;
+    public static final float LEVEL_GEN_GHOUL_THRESHOLD        = 0.60f;
+    public static final float LEVEL_GEN_CRAWLER_THRESHOLD      = 0.80f;
     // Probability that a corridor-room boundary 'l' tile becomes a door ('d').
     // 0.75 = roughly 3 out of 4 room entries get a door; some stay open for flow variety.
     public static final float LEVEL_GEN_DOOR_CHANCE           = 0.75f;

@@ -748,10 +748,19 @@ public class LevelGenerator {
             if (tileAlreadyUsed) continue;
             placedColumns[placed] = tileColumn;
             placedRows[placed]    = tileRow;
-            char spawnChar = random.nextFloat() < Constants.LEVEL_GEN_CORRUPTOR_RATIO ? '1' : '2';
+            char spawnChar = randomEnemySpawnChar();
             spawnPoints.add(new EnemySpawnPoint(spawnChar, tileColumn, tileRow));
             placed++;
         }
+    }
+
+    private char randomEnemySpawnChar() {
+        float roll = random.nextFloat();
+        if (roll < Constants.LEVEL_GEN_CORRUPTOR_THRESHOLD)  return '1';
+        if (roll < Constants.LEVEL_GEN_VORTEX_EYE_THRESHOLD) return '2';
+        if (roll < Constants.LEVEL_GEN_GHOUL_THRESHOLD)       return '3';
+        if (roll < Constants.LEVEL_GEN_CRAWLER_THRESHOLD)     return '4';
+        return '5';
     }
 
     // -------------------------------------------------------------------------
