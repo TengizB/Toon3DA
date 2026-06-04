@@ -17,6 +17,10 @@ import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.entity.WeaponVisualState;
 import ge.tbegvadze.toon3d.util.Constants;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * Draws the equipped weapon sprite as a bottom-centre HUD element.
  *
@@ -28,6 +32,11 @@ import ge.tbegvadze.toon3d.util.Constants;
  */
 public class WeaponHudRenderer implements Renderable, Disposable {
 
+    // All weapon textures are generated once at construction so that no FrameBuffer
+    // operations happen during gameplay. FrameBuffer.end() resets the GL viewport to
+    // the full back-buffer size, which would overwrite the FitViewport letterbox and
+    // cause visual deformation + touch-coordinate misalignment for the rest of the frame.
+    private final Map<Class<? extends Weapon>, Texture> weaponTextureCache;
     private Weapon              equippedWeapon;
     private Texture             normalTexture;
     private final SpriteBatch   batch;
@@ -39,22 +48,29 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     private float             currentOffsetY      = Constants.WEAPON_HUD_BASE_Y;
     private int               lastFlashCycleCount = 0;
 
-    public WeaponHudRenderer(Weapon weapon) {
-        this.equippedWeapon = weapon;
-        this.normalTexture  = loadOrGenerateNormalTexture(weapon);
+    /**
+     * Pre-generates normal textures for every weapon in the arsenal.
+     * All FrameBuffer work happens here, at startup, before the game loop begins.
+     */
+    public WeaponHudRenderer(List<Weapon> arsenal) {
+        weaponTextureCache = new HashMap<>();
+        for (Weapon weapon : arsenal) {
+            weaponTextureCache.put(weapon.getClass(), loadOrGenerateNormalTexture(weapon));
+        }
+        this.equippedWeapon = arsenal.get(0);
+        this.normalTexture  = weaponTextureCache.get(equippedWeapon.getClass());
         this.batch          = new SpriteBatch();
         this.shapeRenderer  = new ShapeRenderer();
         this.drawX          = (Constants.WORLD_WIDTH - Constants.WEAPON_HUD_WIDTH) / 2f;
     }
 
     /**
-     * Swaps to a different weapon, disposing the old texture and generating the new one.
+     * Swaps to a different weapon. Looks up the pre-generated texture — no GL operations.
      * The weapon sprite slides in from below to signal the switch.
      */
     public void setEquippedWeapon(Weapon weapon) {
-        normalTexture.dispose();
         equippedWeapon      = weapon;
-        normalTexture       = loadOrGenerateNormalTexture(weapon);
+        normalTexture       = weaponTextureCache.get(weapon.getClass());
         previousState       = WeaponVisualState.NORMAL;
         animationTimer      = 0f;
         lastFlashCycleCount = weapon.getFlashCycleCount();
@@ -1152,7 +1168,9 @@ public class WeaponHudRenderer implements Renderable, Disposable {
 
     @Override
     public void dispose() {
-        normalTexture.dispose();
+        for (Texture texture : weaponTextureCache.values()) {
+            texture.dispose();
+        }
         batch.dispose();
         shapeRenderer.dispose();
     }
