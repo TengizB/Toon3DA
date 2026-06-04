@@ -241,7 +241,12 @@ public class PropRenderer implements Renderable, Disposable {
                 // Skip columns where a nearer prop was already drawn (painter's order, far→near,
                 // so a shallower depth here means a previous iteration already wrote it).
                 if (depth >= propSpriteZBuffer[screenColumn]) continue;
-                propSpriteZBuffer[screenColumn] = depth;
+                // Only solid props (barrels, terminals, lockers, crates) write to the z-buffer.
+                // Decal props (medkits, corpses, blood, oil, keycards, stairs) are flat floor items;
+                // an enemy standing on the same tile must render in front of them.
+                if (Level.isPropSolid(prop.propChar)) {
+                    propSpriteZBuffer[screenColumn] = depth;
+                }
 
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
