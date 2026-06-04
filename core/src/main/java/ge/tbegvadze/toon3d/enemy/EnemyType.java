@@ -23,6 +23,36 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return Constants.VORTEX_EYE_HEIGHT_MULTIPLIER; }
         @Override public String texturePath()        { return Constants.ENEMY_VORTEX_EYE_PATH; }
+    },
+
+    GHOUL {
+        @Override public int    maxHealth()         { return Constants.LIGHT_MELEE_MAX_HEALTH; }
+        @Override public int    attackDamage()       { return Constants.LIGHT_MELEE_ATTACK_DAMAGE; }
+        @Override public int    attackRangeTiles()   { return 1; }
+        @Override public int    moveEveryNTurns()    { return Constants.LIGHT_MELEE_MOVE_EVERY_N_TURNS; }
+        @Override public boolean isRanged()          { return false; }
+        @Override public float  heightMultiplier()   { return Constants.LIGHT_MELEE_HEIGHT_MULTIPLIER; }
+        @Override public String texturePath()        { return Constants.ENEMY_GHOUL_PATH; }
+    },
+
+    CRAWLER {
+        @Override public int    maxHealth()         { return Constants.LIGHT_MELEE_MAX_HEALTH; }
+        @Override public int    attackDamage()       { return Constants.LIGHT_MELEE_ATTACK_DAMAGE; }
+        @Override public int    attackRangeTiles()   { return 1; }
+        @Override public int    moveEveryNTurns()    { return Constants.LIGHT_MELEE_MOVE_EVERY_N_TURNS; }
+        @Override public boolean isRanged()          { return false; }
+        @Override public float  heightMultiplier()   { return Constants.LIGHT_MELEE_HEIGHT_MULTIPLIER; }
+        @Override public String texturePath()        { return Constants.ENEMY_CRAWLER_PATH; }
+    },
+
+    REVENANT {
+        @Override public int    maxHealth()         { return Constants.LIGHT_MELEE_MAX_HEALTH; }
+        @Override public int    attackDamage()       { return Constants.LIGHT_MELEE_ATTACK_DAMAGE; }
+        @Override public int    attackRangeTiles()   { return 1; }
+        @Override public int    moveEveryNTurns()    { return Constants.LIGHT_MELEE_MOVE_EVERY_N_TURNS; }
+        @Override public boolean isRanged()          { return false; }
+        @Override public float  heightMultiplier()   { return Constants.LIGHT_MELEE_HEIGHT_MULTIPLIER; }
+        @Override public String texturePath()        { return Constants.ENEMY_REVENANT_PATH; }
     };
 
     public abstract int     maxHealth();

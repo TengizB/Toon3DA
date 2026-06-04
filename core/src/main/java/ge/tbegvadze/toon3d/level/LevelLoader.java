@@ -50,14 +50,15 @@ public class LevelLoader {
             matrix[row] = rowChars;
         }
 
-        // Scan for enemy spawn characters ('1' = Corruptor, '2' = Vortex Eye).
+        // Scan for enemy spawn characters ('1'=Corruptor, '2'=Vortex Eye,
+        // '3'=Ghoul, '4'=Crawler, '5'=Revenant).
         // Record each spawn, then replace the cell with lit-floor so the grid
         // stays traversable and existing renderers need no changes.
         List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
         for (int tileRow = 0; tileRow < levelHeight; tileRow++) {
             for (int tileColumn = 0; tileColumn < levelWidth; tileColumn++) {
                 char cell = matrix[tileRow][tileColumn];
-                if (cell == '1' || cell == '2') {
+                if (cell == '1' || cell == '2' || cell == '3' || cell == '4' || cell == '5') {
                     spawnPoints.add(new EnemySpawnPoint(cell, tileColumn, tileRow));
                     matrix[tileRow][tileColumn] = ' ';
                 }
