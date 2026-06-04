@@ -57,7 +57,15 @@ public final class EnemyManager implements EnemyHitTarget {
     private static List<Enemy> buildInitialEnemies(List<EnemySpawnPoint> spawnPoints) {
         List<Enemy> list = new ArrayList<>(spawnPoints.size());
         for (EnemySpawnPoint spawnPoint : spawnPoints) {
-            EnemyType type = spawnPoint.spawnChar == '1' ? EnemyType.CORRUPTOR : EnemyType.VORTEX_EYE;
+            EnemyType type;
+            switch (spawnPoint.spawnChar) {
+                case '1': type = EnemyType.CORRUPTOR;  break;
+                case '2': type = EnemyType.VORTEX_EYE; break;
+                case '3': type = EnemyType.GHOUL;       break;
+                case '4': type = EnemyType.CRAWLER;     break;
+                case '5': type = EnemyType.REVENANT;    break;
+                default:  type = EnemyType.CORRUPTOR;  break;
+            }
             list.add(new Enemy(type, spawnPoint.tileColumn, spawnPoint.tileRow));
         }
         return list;
@@ -210,8 +218,10 @@ public final class EnemyManager implements EnemyHitTarget {
                 enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
 
         if (!enemy.type.isRanged()) {
-            // CORRUPTOR — melee
-            if (chebyshev <= 1) {
+            // Melee — attack only when player is in an adjacent cardinal tile (no diagonal)
+            boolean cardinalAdjacent = GameMath.manhattanDistanceTiles(
+                    enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
+            if (cardinalAdjacent) {
                 player.applyDamage(enemy.type.attackDamage());
                 enemy.state = EnemyState.ATTACKING;
             } else {
@@ -230,15 +240,16 @@ public final class EnemyManager implements EnemyHitTarget {
         boolean hasLOS = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
 
         if (distanceToPlayer < Constants.VORTEX_EYE_KITE_MIN_TILES) {
-            // Too close — flee first, then fire if still has LOS
+            // Too close — flee first, then re-evaluate
             stepAway(enemy, playerColumn, playerRow);
             hasLOS = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
             distanceToPlayer = GameMath.chebyshevDistanceTiles(
                     enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
-        } else if (distanceToPlayer <= Constants.VORTEX_EYE_RANGE_TILES && hasLOS) {
-            // Perfect kiting range — hold position and fire; no movement
+        } else if (distanceToPlayer <= Constants.VORTEX_EYE_RANGE_TILES && hasLOS
+                && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)) {
+            // Perfect kiting range on a cardinal line — hold position and fire; no movement
         } else {
-            // Too far or LOS blocked — advance toward player
+            // Too far, LOS blocked, or not on a cardinal line — advance toward player
             if (enemy.shouldMoveThisTurn()) {
                 stepToward(enemy, playerColumn, playerRow);
             }
@@ -247,12 +258,37 @@ public final class EnemyManager implements EnemyHitTarget {
                     enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
         }
 
-        if (distanceToPlayer <= Constants.VORTEX_EYE_RANGE_TILES && hasLOS) {
+        boolean canFire = distanceToPlayer <= Constants.VORTEX_EYE_RANGE_TILES
+                && hasLOS
+                && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                && !hasEnemyBlockingShot(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+        if (canFire) {
             player.applyDamage(enemy.type.attackDamage());
             enemy.state = EnemyState.ATTACKING;
         } else {
             enemy.state = EnemyState.CHASING;
         }
+    }
+
+    private static boolean isSameCardinalLine(int column1, int row1, int column2, int row2) {
+        return column1 == column2 || row1 == row2;
+    }
+
+    private boolean hasEnemyBlockingShot(int fromColumn, int fromRow, int toColumn, int toRow) {
+        if (fromColumn == toColumn) {
+            int minRow = Math.min(fromRow, toRow) + 1;
+            int maxRow = Math.max(fromRow, toRow) - 1;
+            for (int row = minRow; row <= maxRow; row++) {
+                if (occupancy[fromColumn][row]) return true;
+            }
+        } else {
+            int minColumn = Math.min(fromColumn, toColumn) + 1;
+            int maxColumn = Math.max(fromColumn, toColumn) - 1;
+            for (int column = minColumn; column <= maxColumn; column++) {
+                if (occupancy[column][fromRow]) return true;
+            }
+        }
+        return false;
     }
 
     // -------------------------------------------------------------------------

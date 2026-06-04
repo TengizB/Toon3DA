@@ -319,6 +319,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
         Map<EnemyType, Texture> map = new HashMap<>();
         map.put(EnemyType.CORRUPTOR,  loadOrGenerateFallback(ENEMY_CORRUPTOR_PATH,  generateFallback(0.15f, 0.55f, 0.15f)));
         map.put(EnemyType.VORTEX_EYE, loadOrGenerateFallback(ENEMY_VORTEX_EYE_PATH, generateFallback(0.50f, 0.10f, 0.70f)));
+        map.put(EnemyType.GHOUL,      loadOrGenerateFallback(ENEMY_GHOUL_PATH,       generateFallback(0.65f, 0.60f, 0.40f)));
+        map.put(EnemyType.CRAWLER,    loadOrGenerateFallback(ENEMY_CRAWLER_PATH,     generateFallback(0.40f, 0.25f, 0.15f)));
+        map.put(EnemyType.REVENANT,   loadOrGenerateFallback(ENEMY_REVENANT_PATH,    generateFallback(0.70f, 0.70f, 0.70f)));
         return map;
     }
 

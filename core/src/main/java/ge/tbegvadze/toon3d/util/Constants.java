@@ -253,6 +253,9 @@ public final class Constants {
     // Enemy system
     public static final String  ENEMY_CORRUPTOR_PATH             = "textures/enemies/enemy_corruptor.png";
     public static final String  ENEMY_VORTEX_EYE_PATH            = "textures/enemies/enemy_vortex_eye.png";
+    public static final String  ENEMY_GHOUL_PATH                 = "textures/enemies/enemy_ghoul.png";
+    public static final String  ENEMY_CRAWLER_PATH               = "textures/enemies/enemy_crawler.png";
+    public static final String  ENEMY_REVENANT_PATH              = "textures/enemies/enemy_revenant.png";
     public static final int     ALERT_RADIUS_TILES               = 4;
     public static final int     CHAIN_ALERT_RADIUS_TILES         = 5;
     public static final int     LOS_MAX_RANGE_TILES              = 16;
@@ -263,10 +266,14 @@ public final class Constants {
     public static final float   CORRUPTOR_HEIGHT_MULTIPLIER      = 0.95f;
     public static final int     VORTEX_EYE_MAX_HEALTH            = 18;
     public static final int     VORTEX_EYE_ATTACK_DAMAGE         = 8;
-    public static final int     VORTEX_EYE_RANGE_TILES           = 5;
+    public static final int     VORTEX_EYE_RANGE_TILES           = 2;
     public static final int     VORTEX_EYE_KITE_MIN_TILES        = 2;
     public static final float   VORTEX_EYE_HEIGHT_MULTIPLIER     = 0.55f;
     public static final float   VORTEX_EYE_HOVER_OFFSET_FRACTION = 0.25f;
+    public static final int     LIGHT_MELEE_MAX_HEALTH           = 18;
+    public static final int     LIGHT_MELEE_ATTACK_DAMAGE        = 10;
+    public static final int     LIGHT_MELEE_MOVE_EVERY_N_TURNS   = 1;
+    public static final float   LIGHT_MELEE_HEIGHT_MULTIPLIER    = 0.85f;
     public static final float   DORMANT_SHADE_DAMPEN             = 0.7f;
     public static final int     STUCK_TURNS_BEFORE_WIGGLE        = 2;
     public static final boolean ENEMY_GREEDY_WIGGLE_ENABLED      = true;
