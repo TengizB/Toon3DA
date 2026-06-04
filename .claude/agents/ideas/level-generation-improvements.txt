@@ -1,0 +1,403 @@
+STATUS: IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Level Generation Improvements — Diverse Rooms and Wide Hallways
+---
+
+OVERVIEW
+The current LevelGenerator (core/.../level/LevelGenerator.java) places ~10 same-flavoured
+rectangular rooms (interior 3-16 x 3-11) joined by 1-tile L-shaped corridors. Every room
+reads the same: medium box, scattered props, random lighting. This upgrade introduces a
+ROOM TYPE SYSTEM (ENTRANCE / STANDARD / LARGE / SERVER_ROOM), a WIDE-HALLWAY pass that
+carves 3-tile grand corridors with centre-line columns alongside the existing 1-tile
+passages, and a dedicated SERVER_ROOM theme (terminal walls, dense terminals/lockers, dark
+data-center atmosphere). The goal: a UAC facility that feels architecturally varied and
+claustrophobic-yet-grand, where the player can read a room's purpose before entering it.
+
+This document is written against the ACTUAL implemented pipeline (six phases: room placement,
+connectivity, doors, decoration, enemies + atmosphere post-passes, connectivity audit, stairs).
+It extends that pipeline; it does not replace it. The connectivity audit (Phase 5) and stairs
+stamp (Phase 6) remain unchanged and continue to act as the safety net.
+
+NOTE ON TILE SYMBOLS (authoritative, matches code): radioactive barrel = 'g', explosive
+barrel = 'E'. The prompt's 'b'/'B' are the legacy hand-authored chars; the generator emits
+'g'/'E'. Use 'g'/'E' here. Terminal prop = 'T', locker = 'L', column = 'P', terminal WALL = 't'.
+
+
+GAMEPLAY LOOP
+This is generation logic, not a per-turn loop, but the player-facing consequence loop is:
+
+1. Player steps through a doorway -> the room's TYPE is immediately legible from walls,
+   lighting, prop density, and ceiling-implied scale (large rooms render distant walls small).
+2. Player enters a WIDE HALLWAY -> 3-tile width + evenly spaced 'P' columns down the centre
+   read as a "main artery." Player can strafe around columns for cover; sightlines are long.
+3. Player enters a SERVER_ROOM -> terminal walls + 'u'/'f' floor + rows of 'T'/'L' props.
+   The room is dark, cluttered, and tactically dangerous (tight lanes between server racks).
+4. Player enters a LARGE landmark room -> open floor, 2-4 columns in a deliberate pattern,
+   long sightlines, likely the room that holds a key pickup, mini-arena, or the stairs.
+5. STANDARD rooms remain the connective-tissue baseline (current behaviour, unchanged feel).
+
+The generator assigns each placed Room a RoomType, then each decoration pass branches on type.
+
+
+PLAYER EXPERIENCE
+- Legibility: the player should name a room's function on sight ("that's the server vault,"
+  "this is the main hall"). Doom RPG / DCSS both rely on rooms telegraphing their role.
+- Rhythm: alternating tight 1-tile corridors and wide 3-tile arteries creates a breathe-in /
+  breathe-out pacing. Tight corridors = dread and ambush; wide halls = relief and orientation.
+- Tactical decisions: columns in wide halls and server racks in vaults give the player cover
+  to break line of fire and round corners. The decision is "do I push through the open hall
+  fast, or hug the columns and clear racks one lane at a time?"
+- Reward anticipation: LARGE and SERVER rooms should visibly read as "worth the detour" —
+  the player chooses to risk the dark data-center because it telegraphs loot.
+
+
+ROOM TYPE SYSTEM
+
+New enum (LevelGenerator private, or promote to package-level if other classes need it):
+    enum RoomType { ENTRANCE, STANDARD, LARGE, SERVER_ROOM }
+
+Room struct gains a field:
+    RoomType type;   // assigned right after placeRooms(), before decoration
+
+Assignment pass — assignRoomTypes(List<Room> rooms):
+  - rooms.get(0) is ALWAYS ENTRANCE (player spawn; current code already treats index 0 special).
+  - Remaining rooms are classified by SIZE first, then a weighted roll, in this order:
+      1. If interiorWidth >= LARGE_MIN_DIM AND interiorHeight >= LARGE_MIN_DIM (placeholder 9):
+         eligible for LARGE. Roll LARGE_ROOM_CHANCE (placeholder 0.55) -> LARGE, else STANDARD.
+      2. If NOT large-eligible, the room is small/medium: roll SERVER_ROOM_CHANCE
+         (placeholder 0.18) -> SERVER_ROOM (server vaults are intentionally cramped),
+         else STANDARD.
+  - Hard caps: at most SERVER_ROOM_MAX_PER_LEVEL (placeholder 2) and at most
+    LARGE_ROOM_MAX_PER_LEVEL (placeholder 3). Once a cap is hit, downgrade further
+    candidates to STANDARD. This guarantees STANDARD stays the majority and special
+    rooms feel special.
+
+ENTRANCE generation:
+  - Identical to current entrance handling: carve interior, place 'p' at centre, NO enemies,
+    NO hazardous props near spawn. Lighting fully lit (' '). This is the safe-start room.
+
+STANDARD generation:
+  - Current behaviour, unchanged. Size from existing ROOM_MIN/MAX constants. Mixed lighting
+    via assignFloorLighting(). Props via placeProps() at LEVEL_GEN_PROP_CHANCE. Columns via
+    existing placeColumns() (only if interior >= columnMinRoomSize). This preserves the
+    proven baseline; the new room types are layered on top, not a rewrite.
+
+LARGE generation: see LARGE ROOM SPECIFICATION.
+SERVER_ROOM generation: see SERVER ROOM SPECIFICATION.
+
+
+LARGER LEVELS (more rooms, bigger footprint)
+The grid is fixed at 80 x 45 (Constants.LEVEL_GEN_GRID_WIDTH/HEIGHT, derived from world size /
+CELL_SIZE) — do NOT change the grid dimensions; the raycaster and viewport depend on world size.
+"Larger levels" means denser room packing within the existing 80x45 grid:
+
+  - LEVEL_GEN_TARGET_ROOMS: 10 -> 16 (placeholder). With LARGE rooms consuming more area,
+    raise PLACEMENT_TRIES from 300 -> 600 so packing still succeeds.
+  - Allow a wider max room footprint to support LARGE rooms:
+      ROOM_MAX_WIDTH: 16 -> 20 (placeholder)
+      ROOM_MAX_HEIGHT: 11 -> 14 (placeholder)
+    (45-row grid: a 14-tall interior + 2 walls = 16 rows, leaving room to place 2-3 stacked.)
+  - Keep ROOM_MARGIN = 2 so wide-hallway carving (below) has wall mass to cut through.
+  - Because more/larger rooms reduce empty wall mass, the wide-hallway pass must run on the
+    remaining 'x' fill BETWEEN rooms, not inside them.
+
+Sanity: 80x45 = 3600 tiles. 16 rooms averaging ~70 interior tiles = ~1120 room tiles, leaving
+~2400 tiles for walls + corridors. That is comfortably packable; PLACEMENT_TRIES=600 covers
+the worst case. If placeRooms() returns < TARGET it simply yields fewer rooms (already handled).
+
+
+WIDE HALLWAY GENERATION
+
+Goal: keep the existing 1-tile corridor network (it is doing the connectivity work), and
+ADD a smaller number of 3-tile-wide "grand artery" corridors between a few high-traffic rooms,
+with columns marching down the centre line.
+
+When to widen:
+  - After connectRoomsWithCorridors() and addLoopCorridors() carve the 1-tile network, run a
+    new pass widenSelectedCorridors() that promotes a subset of the MST edges to width 3.
+  - Pick WIDE_HALLWAY_COUNT (placeholder 2-3) edges, preferring edges that connect ENTRANCE or
+    LARGE rooms (main arteries lead to/from the important rooms). Use the same room pairs the
+    MST already chose so connectivity is never broken.
+
+How to widen (per chosen L-shaped path):
+  - The existing carve writes a 1-tile spine of 'l'. For a wide hall, carve the spine PLUS the
+    two tiles perpendicular to travel direction (the "ribs"), giving width 3:
+      * Horizontal segment at fixedRow -> also carve fixedRow-1 and fixedRow+1.
+      * Vertical segment at fixedColumn -> also carve fixedColumn-1 and fixedColumn+1.
+  - Only convert tiles that are currently 'x' (or already corridor 'l'); never overwrite room
+    floor, doors, props, or the player spawn. Out-of-bounds and grid-edge tiles are skipped
+    (keep a 1-tile world border of solid wall, matching current placement constraints).
+  - Floor of wide halls = ' ' (lit) on the spine, 'l' (normal) on the ribs. This gives the
+    centre a bright runway and the edges a slightly dimmer shoulder — reads as ceiling strip
+    lighting down the middle of the corridor.
+
+Column placement in wide halls — placeWideHallwayColumns():
+  - Walk the spine tiles in order. Every WIDE_HALLWAY_COLUMN_SPACING tiles (placeholder 3),
+    place a 'P' column ON THE SPINE tile.
+  - NEVER place a column:
+      * within 2 tiles of either end of the hall (so room mouths stay clear),
+      * on or adjacent to a door 'd' (reuse existing isAdjacentToDoor / isAdjacentToDoorAxis),
+      * on the spawn tile or a stairs tile.
+  - Because the hall is width 3, a single centre column always leaves a 1-tile lane on each
+    side -> passage is NEVER blocked. This is the key invariant that makes centre columns safe
+    (unlike columns in 1-tile corridors, which would seal the path).
+  - Connectivity guarantee: the Phase 5 BFS audit treats 'P' as impassable and will carve an
+    emergency corridor if anything is sealed — but with width-3 + centre-only columns this
+    should never trigger. Still, do not disable the audit.
+
+L-junction handling:
+  - At the corner of an L-shaped wide hall, the horizontal and vertical width-3 bands overlap
+    into a 3x3 plaza. That is desirable (reads as a junction node). Do not place a column in
+    the exact corner tile — keep the 3x3 turn open so the player can round it cleanly.
+
+
+SERVER ROOM SPECIFICATION
+
+Concept: a UAC data vault. Wall-to-wall server racks, failing power, the hum of a dying
+mainframe. Tactically the worst place to get cornered — tight lanes, low light, hard to see
+the enemy that is two racks over.
+
+Eligibility: small/medium rooms only (NOT large). Cramped is the point. Capped at
+SERVER_ROOM_MAX_PER_LEVEL (placeholder 2).
+
+Walls — themeServerRoomWalls(room):
+  - Convert the room's perimeter wall ring to terminal walls 't' with high probability
+    SERVER_WALL_TERMINAL_CHANCE (placeholder 0.80); the remaining ~20% stay 'x' for variety
+    so it is not a monotone box. Run this AFTER assignWallVariety() so it overrides the generic
+    vent/conduit theming for this room only. Important: only convert tiles that are walls
+    (Level.isWall) AND face this room's interior — do not paint corridor-side faces 't'.
+
+Floor — themeServerRoomFloor(room):
+  - Override the per-room lighting result for this room: floor is predominantly 'u' (unlit,
+    0.55x) with a sprinkle of 'f' (flickering) at SERVER_FLICKER_CHANCE (placeholder 0.12).
+    No bright ' ' floor inside a server room. This forces flickeringFloors usage even though
+    LevelGenConfig.flickeringFloors defaults false — server rooms get a local override flag,
+    OR (simpler) the generator always permits 'f' inside SERVER_ROOM regardless of config.
+  - Leave a guaranteed lit-or-normal 'l' tile on the doorway-adjacent entry tile so the
+    threshold is readable from the corridor (a black void doorway is disorienting).
+
+Props — placeServerRoomProps(room):
+  - Lay props in ROWS, not random scatter, to read as server racks:
+      * Choose a rack axis: if interiorWidth >= interiorHeight, racks run vertical (columns of
+        props); else horizontal.
+      * Place rows of 'T' terminals spaced 2 tiles apart along the rack axis, leaving a 1-tile
+        walking lane between each rack row. Mix in 'L' lockers at SERVER_LOCKER_RATIO
+        (placeholder 0.30 of rack tiles) — lockers are the "loot" racks.
+  - Density target: SERVER_PROP_DENSITY (placeholder 0.45) of interior floor tiles become
+    solid props ('T'/'L'). This is ~3.5x the global LEVEL_GEN_PROP_CHANCE (0.13) — deliberately
+    cluttered.
+  - CRITICAL passability: after laying racks, run the existing connectivity helper logic to
+    confirm every non-prop floor tile in the room is reachable from the entry tile. If a rack
+    accidentally seals a pocket, remove the prop that seals it. (Reuse a localized BFS, or
+    simply guarantee 1-tile lanes by construction: never place props on two consecutive tiles
+    perpendicular to the lane.) Phase 5 audit is the final backstop.
+  - LevelGenConfig.lockers defaults OFF globally — server rooms must locally enable lockers
+    regardless of the global flag (they are the room's whole identity).
+
+Atmosphere props: scatter 1-2 'O' oil pools and a 'g' radioactive barrel near a corner for
+the "this room is leaking" feel; these also trigger the existing rust-wall post-pass on
+adjacent 'x' walls, reinforcing decay.
+
+Loot justification: because lockers ('L') are the inventory/ransack containers (see
+inventory-loot-ransack-system.txt), the server room reads as a high-value, high-risk vault.
+Bias medkit/armour pickups slightly toward server rooms (raise their per-room pickup chance).
+
+
+LARGE ROOM SPECIFICATION
+
+Concept: a landmark — reactor floor, cargo bay, atrium, or mini-arena. Open, bright-ish,
+long sightlines, deliberate column architecture. Often the room that holds the stairs, a key
+pickup, or a tougher enemy cluster.
+
+Size: interior LARGE_MIN_DIM..ROOM_MAX (placeholder min 9 x 9, up to 20 x 14). Eligibility is
+checked at placement time (a candidate must FIT before it can be tagged LARGE).
+
+Lighting — themeLargeRoomFloor(room):
+  - Mostly lit ' ' floor (open and readable). Add a ring or patch of 'l' normal floor toward
+    the edges for depth. Optionally one small 'u' alcove for a hidden-loot dark corner.
+  - Avoid 'f' flickering here — large rooms are the "stable, powered" areas; flickering belongs
+    to corridors and server rooms.
+
+Columns — placeLargeRoomColumns(room):
+  - Replace random scatter with a PATTERN chosen by a roll:
+      * SYMMETRIC_FOUR: a column near each of the four interior quadrant centres (the classic
+        "four pillars" hall). Requires interior >= 9x9.
+      * CENTRE_AVENUE: a single row of columns down the room's long axis, spaced 3 tiles,
+        splitting the room into two naves.
+      * PERIMETER_RING: columns hugging the interior just inside the walls at the four
+        mid-edges — leaves a wide open centre (good for a mini-arena fight).
+  - Spacing/clearance rules (reuse existing helpers): never adjacent to another 'P', never on
+    a door axis, always >= 1 tile from any wall (so the column reads as free-standing).
+  - Column count for LARGE: LARGE_COLUMN_MIN..MAX (placeholder 4..6), higher than the
+    standard-room 1..3 (LevelGenConfig.columnMinCount/MaxCount), to sell the "grand hall" scale.
+
+Props: keep prop density LOW in large rooms (LARGE_PROP_CHANCE placeholder 0.06, below the
+global 0.13) so the open floor stays open. A few 'C' crates against a wall, maybe an 'E'
+explosive barrel as a tactical hazard near a column. Enemies: large rooms can carry more
+enemies (the existing area/6 formula already scales up), making them the set-piece fights.
+
+
+BALANCING GUIDANCE — ROOM TYPE MIX
+Target distribution per level (after the ENTRANCE is fixed as room 0), with ~15 non-entrance
+rooms at TARGET_ROOMS=16:
+
+  ENTRANCE      : exactly 1            (always room 0)
+  LARGE         : 2-3 rooms  (~15-20%) — capped by LARGE_ROOM_MAX_PER_LEVEL = 3
+  SERVER_ROOM   : 1-2 rooms  (~7-13%)  — capped by SERVER_ROOM_MAX_PER_LEVEL = 2
+  STANDARD      : remainder  (~65-75%) — the connective baseline, stays dominant
+
+Rationale: special rooms must stay rare to feel special (DCSS vault philosophy). If every
+other room were a server vault, the dread evaporates. STANDARD must dominate so the special
+rooms are punctuation, not the sentence.
+
+Wide hallways: WIDE_HALLWAY_COUNT = 2-3 per level. With ~15 MST edges + loop corridors, that
+is ~15-20% of corridors widened. Most travel still happens in tight 1-tile passages (the
+default dread tone); wide halls are the occasional relief/landmark artery.
+
+ALL numbers above are PLACEHOLDERS — flag for playtest tuning. Tune room-type chances and
+caps first (they have the biggest feel impact), then wide-hallway count, then server density.
+
+
+ATMOSPHERE NOTES PER ROOM TYPE
+- ENTRANCE: bright, clean, safe. Fully lit ' '. No corpses, no hazards. The calm before.
+  The one room where the marine catches his breath.
+- STANDARD: the UAC's ordinary guts — labs, offices, storage. Mixed lighting, vent/conduit
+  walls, light prop scatter, occasional corpse/blood telling a small story. Baseline dread.
+- LARGE: industrial grandeur. Reactor hum, cargo scale, echoing space. Bright-ish, columned,
+  long sightlines. The player feels exposed — open ground means no cover except the pillars.
+  This is where the facility shows its scale and where set-piece fights happen.
+- SERVER_ROOM: the data tomb. Near-black 'u' floor, a stuttering 'f' tile or two, terminal
+  walls 't' glowing faintly, racks of 'T'/'L' in claustrophobic rows. The hum of dying drives.
+  Worst place to be flanked. Highest loot, highest dread. Lean into "I can't see what's two
+  racks over." Pair with noise-propagation cues so unseen enemies in the racks are felt.
+- WIDE HALLWAY: the facility's spine. Bright centre runway, columned, long. Reads as
+  "important — this leads somewhere." Tactically a shooting gallery: long sightlines reward
+  ranged weapons, columns let both sides break line of fire. Breathe-out space between the
+  tight corridors that bookend it.
+
+
+TECHNICAL NOTES
+Affected class: core/src/main/java/ge/tbegvadze/toon3d/level/LevelGenerator.java
+Affected config: core/src/main/java/ge/tbegvadze/toon3d/level/LevelGenConfig.java
+Affected constants: core/src/main/java/ge/tbegvadze/toon3d/util/Constants.java
+No renderer changes required — all new tiles ('t','T','L','P','u','f', etc.) already render.
+
+Pipeline insertion points (current generate() order preserved):
+  placeRooms()
+  -> assignRoomTypes(rooms)                         // NEW: tag each room with RoomType
+  carveRoomInteriors(rooms)
+  connectRoomsWithCorridors(rooms)
+  addLoopCorridors(rooms)
+  -> widenSelectedCorridors(grid, rooms)            // NEW: promote 2-3 edges to width 3
+  placeDoors(grid)
+  assignFloorLighting(grid, rooms)                  // STANDARD rooms only branch unchanged
+  -> themeLargeRoomFloor / themeServerRoomFloor      // NEW: override lighting for special rooms
+  assignWallVariety(grid)
+  -> themeServerRoomWalls(room)                      // NEW: paint 't' over generic theming
+  placePlayerSpawn(rooms.get(0))
+  placeColumns(grid, rooms)                          // STANDARD rooms only
+  -> placeLargeRoomColumns(room)                     // NEW: patterned columns in LARGE
+  -> placeWideHallwayColumns(grid, hall spines)      // NEW: centre-line columns in wide halls
+  placeProps(grid, rooms)                            // STANDARD rooms only branch
+  -> placeServerRoomProps(room)                      // NEW: rack rows
+  -> placeLargeRoomProps(room)                       // NEW: sparse
+  placePickups(grid, rooms)                          // bias toward SERVER/LARGE
+  ... (hazard/rust/gore/bulkhead post-passes unchanged) ...
+  verifyAndRepairConnectivity(grid, rooms)           // UNCHANGED safety net — keep treating 'P' impassable
+  stampStairsDown(grid, rooms)                       // prefer a LARGE room as the exit room
+
+Data to store: add RoomType field to the private Room struct. Store the chosen wide-hallway
+spine tiles (List of (column,row)) so placeWideHallwayColumns walks them after carving.
+Keep all of this in local generation state — none of it persists into Level (Level only needs
+the final char[][] grid + spawn list, exactly as today).
+
+Widening reuses the existing carveHorizontal/VerticalSegment pattern; add overloads that also
+write the two perpendicular rib tiles. Guard every write with isInBounds and "only overwrite
+'x' or 'l'."
+
+New Constants (placeholders — all to be tuned):
+  LEVEL_GEN_TARGET_ROOMS               10 -> 16
+  LEVEL_GEN_PLACEMENT_TRIES            300 -> 600
+  LEVEL_GEN_ROOM_MAX_WIDTH             16 -> 20
+  LEVEL_GEN_ROOM_MAX_HEIGHT            11 -> 14
+  LEVEL_GEN_LARGE_MIN_DIM              9
+  LEVEL_GEN_LARGE_ROOM_CHANCE          0.55f
+  LEVEL_GEN_LARGE_ROOM_MAX_PER_LEVEL   3
+  LEVEL_GEN_LARGE_COLUMN_MIN           4
+  LEVEL_GEN_LARGE_COLUMN_MAX           6
+  LEVEL_GEN_LARGE_PROP_CHANCE          0.06f
+  LEVEL_GEN_SERVER_ROOM_CHANCE         0.18f
+  LEVEL_GEN_SERVER_ROOM_MAX_PER_LEVEL  2
+  LEVEL_GEN_SERVER_WALL_TERMINAL_CHANCE 0.80f
+  LEVEL_GEN_SERVER_FLICKER_CHANCE      0.12f
+  LEVEL_GEN_SERVER_PROP_DENSITY        0.45f
+  LEVEL_GEN_SERVER_LOCKER_RATIO        0.30f
+  LEVEL_GEN_WIDE_HALLWAY_COUNT         3
+  LEVEL_GEN_WIDE_HALLWAY_COLUMN_SPACING 3
+
+New LevelGenConfig fields (so server rooms can override global flags locally):
+  boolean enableServerRooms = true;
+  boolean enableLargeRooms  = true;
+  boolean enableWideHallways = true;
+  (server rooms internally force lockers + flickering ON regardless of the global
+   lockers/flickeringFloors flags.)
+
+
+VISUAL DESIGN
+- WIDE HALLWAY: spine = lit ' ' (1.55x) reads as a centre ceiling-strip runway; ribs = 'l'
+  (1.0x) reads as dimmer shoulders. 'P' columns are already rendered as 3D cylinders via
+  ray-circle intersection — evenly spaced centre columns produce a strong receding-pillar
+  perspective in the raycaster (the signature "grand corridor" look).
+- SERVER_ROOM: terminal walls 't' (lab_wall_terminal.jpg) faintly glowing; floor 'u' (0.55x,
+  near-black) with 1-2 'f' flickering tiles stuttering. Rows of 'T' terminals (charcoal-blue,
+  cyan screens, 0.75x height) and 'L' lockers (steel blue-gray, 0.90x) form the rack silhouette.
+  Cyan terminal screens are the only meaningful light source — eerie, cold, data-center glow.
+- LARGE ROOM: mostly ' ' lit floor with 'l' edge ring; 4-6 'P' columns in a readable pattern
+  give strong vertical rhythm. Sparse 'C' crates and maybe one 'E' barrel break the openness.
+- HUD/UI: no changes. Mini-map (LevelRenderer) will naturally show wide halls as thicker
+  passages and large rooms as bigger filled areas — already a navigation aid, no code needed.
+
+
+INTERACTIONS
+1. Connectivity audit (Phase 5, verifyAndRepairConnectivity): treats 'P' and solid props as
+   impassable. Wide-hall centre columns are SAFE by the width-3 invariant, but server-room rack
+   density is the real risk — the audit is the backstop, but placeServerRoomProps must build
+   guaranteed lanes so the audit never has to bulldoze a rack (which would ruin the vault look).
+2. Doors (placeDoors / doors.txt): wide halls and server rooms still get doors at room mouths.
+   Column placement explicitly avoids door tiles and door axes (reuse isAdjacentToDoor /
+   isAdjacentToDoorAxis) so no door is ever blocked by a pillar or a rack.
+3. Stairs (Phase 6, stampStairsDown): bias the exit toward a LARGE room — a grand hall makes a
+   satisfying "end of floor" landmark. Falls back to current furthest-room logic if no LARGE
+   room exists. Keep lightSurroundingFloor so the grate is readable.
+4. Inventory/loot (inventory-loot-ransack-system.txt): server-room lockers 'L' are prime
+   ransack targets; the dense rack of lockers makes the vault the loot hub. Bias pickups there.
+5. Enemy placement (spawnEnemiesInRoom): the existing area/6 formula already scales enemy count
+   with room size, so LARGE rooms auto-become bigger fights and tight server racks become
+   ambush mazes — no formula change needed, but server rooms could get a small enemy-count
+   multiplier for "cornered in the racks" tension (flag as optional tuning).
+6. Atmosphere post-passes (rust/gore near unlit/oil/corpses): server rooms emit lots of 'u'
+   floor and 'O' oil, so the existing rust-wall pass will naturally decay their walls further —
+   free synergy, no extra code.
+7. Noise propagation / 3D sound (noise-propagation-and-3d-sound-cues.txt): server-room low
+   light + rack occlusion makes audio cues the primary way to track unseen enemies — the room
+   type and that system reinforce each other.
+
+
+OPEN QUESTIONS
+1. Should RoomType be promoted from a private enum to a package-level type? Only needed if a
+   future minimap/UI wants to label rooms ("SERVER VAULT"). Default: keep private for now.
+2. Wide-hall edge selection: prefer MST edges touching ENTRANCE/LARGE (proposed), or pick the
+   longest edges (most dramatic), or both? Needs playtest — long halls look grand but eat tiles.
+3. Server-room rack orientation: always along the longer axis (proposed), or randomized for
+   variety? Randomizing risks worse passability; deterministic is safer to start.
+4. Should wide halls be allowed to MERGE with a LARGE room into one continuous grand space
+   (no door, hall opens directly into the hall)? Cinematic, but complicates door logic and the
+   connectivity audit. Recommend NOT for v1; revisit if levels feel choppy.
+5. Do we need a minimum spacing rule between two SERVER_ROOMs so both don't cluster in one
+   corner? Probably yes — add a "no two special rooms adjacent" check if clustering looks bad.
+6. With TARGET_ROOMS=16 on 80x45, does placeRooms reliably hit the target, or settle at ~12-13?
+   Needs a generation stress test across many seeds; if it underfills, either lower TARGET to
+   13-14 or shrink ROOM_MARGIN to 1 for tighter packing (watch wide-hall carve room for that).
+7. Should LARGE rooms occasionally be NON-rectangular (L-shaped, by merging two adjacent
+   placements)? Out of scope here (the generator is strictly rectangular), but flagged as the
+   natural next step for landmark variety.

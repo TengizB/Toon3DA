@@ -396,12 +396,12 @@ public final class Constants {
     // Interior tile count, excluding the 1-tile perimeter wall on each side.
     public static final int   LEVEL_GEN_ROOM_MIN_WIDTH        = 3;
     public static final int   LEVEL_GEN_ROOM_MIN_HEIGHT       = 3;
-    public static final int   LEVEL_GEN_ROOM_MAX_WIDTH        = 16;
-    public static final int   LEVEL_GEN_ROOM_MAX_HEIGHT       = 11;
+    public static final int   LEVEL_GEN_ROOM_MAX_WIDTH        = 20;
+    public static final int   LEVEL_GEN_ROOM_MAX_HEIGHT       = 14;
     // Minimum gap between room bounding boxes so rooms never share a wall tile.
     public static final int   LEVEL_GEN_ROOM_MARGIN           = 2;
-    public static final int   LEVEL_GEN_TARGET_ROOMS          = 10;
-    public static final int   LEVEL_GEN_PLACEMENT_TRIES       = 300;
+    public static final int   LEVEL_GEN_TARGET_ROOMS          = 16;
+    public static final int   LEVEL_GEN_PLACEMENT_TRIES       = 600;
     // Probability that any interior floor tile in a non-entrance room receives a prop.
     public static final float LEVEL_GEN_PROP_CHANCE           = 0.13f;
     public static final int   LEVEL_GEN_MAX_ENEMIES_PER_ROOM  = 3;
@@ -424,6 +424,40 @@ public final class Constants {
     // Maximum Manhattan distance (room-center to room-center) for optional loop corridors.
     // Keeps loop connections local so they add shortcuts rather than crossing the entire dungeon.
     public static final int   LEVEL_GEN_LOOP_MAX_DISTANCE     = 25;
+
+    // --- Room type system ---
+    // LARGE rooms: interior must meet LARGE_MIN_DIM in both axes to be eligible.
+    public static final int   LEVEL_GEN_LARGE_MIN_DIM              = 9;
+    // Probability that an eligible (large enough) room becomes a LARGE landmark room.
+    public static final float LEVEL_GEN_LARGE_ROOM_CHANCE          = 0.55f;
+    // Hard cap: at most this many LARGE rooms per level so they feel special.
+    public static final int   LEVEL_GEN_LARGE_ROOM_MAX_PER_LEVEL   = 3;
+    // Column count range for LARGE rooms (more than the standard 1-3).
+    public static final int   LEVEL_GEN_LARGE_COLUMN_MIN           = 4;
+    public static final int   LEVEL_GEN_LARGE_COLUMN_MAX           = 6;
+    // Prop density for LARGE rooms — sparse so the open floor stays navigable.
+    public static final float LEVEL_GEN_LARGE_PROP_CHANCE          = 0.06f;
+    // Probability that a SERVER_ROOM perimeter wall tile is converted to terminal wall 't'.
+    public static final float LEVEL_GEN_SERVER_WALL_TERMINAL_CHANCE = 0.80f;
+    // Probability that any small/medium room becomes a SERVER_ROOM (data vault).
+    public static final float LEVEL_GEN_SERVER_ROOM_CHANCE         = 0.18f;
+    // Hard cap: at most this many SERVER_ROOMs per level so they feel special.
+    public static final int   LEVEL_GEN_SERVER_ROOM_MAX_PER_LEVEL  = 2;
+    // Probability a floor tile in a server room becomes a flickering tile.
+    public static final float LEVEL_GEN_SERVER_FLICKER_CHANCE      = 0.12f;
+    // Ratio of rack props that are lockers vs terminals in a server room.
+    public static final float LEVEL_GEN_SERVER_LOCKER_RATIO        = 0.30f;
+    // Boosted pickup chances for special rooms (loot hubs / set-piece arenas).
+    public static final float LEVEL_GEN_SERVER_MEDKIT_CHANCE       = 0.55f;
+    public static final float LEVEL_GEN_SERVER_ARMOUR_CHANCE       = 0.35f;
+    public static final float LEVEL_GEN_LARGE_MEDKIT_CHANCE        = 0.50f;
+    public static final float LEVEL_GEN_LARGE_ARMOUR_CHANCE        = 0.30f;
+
+    // --- Wide hallway generation ---
+    // Number of MST edges widened to 3-tile grand corridors per level.
+    public static final int   LEVEL_GEN_WIDE_HALLWAY_COUNT          = 3;
+    // Spine column spacing for wide-hall 'P' columns (place one every N eligible spine tiles).
+    public static final int   LEVEL_GEN_WIDE_HALLWAY_COLUMN_SPACING = 3;
 
     // Procedural wall placement chances — post-pass reskin probability for new atmospheric walls.
     public static final float LEVEL_GEN_RUST_WALL_CHANCE      = 0.60f; // 'x' near unlit tiles
