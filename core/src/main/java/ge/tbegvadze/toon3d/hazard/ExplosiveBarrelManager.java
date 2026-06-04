@@ -3,6 +3,7 @@ package ge.tbegvadze.toon3d.hazard;
 import com.badlogic.gdx.math.MathUtils;
 import ge.tbegvadze.toon3d.entity.BarrelHitTarget;
 import ge.tbegvadze.toon3d.entity.EnemyHitTarget;
+import ge.tbegvadze.toon3d.entity.ImpactEventListener;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.Constants;
@@ -24,9 +25,10 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
     private static final int[] BLAST_STEP_COLUMNS = { 0,  1, -1,  0,  0 };
     private static final int[] BLAST_STEP_ROWS    = { 0,  0,  0,  1, -1 };
 
-    private final Level          level;
-    private final EnemyHitTarget enemyHitTarget;
-    private final Player         player;
+    private final Level               level;
+    private final EnemyHitTarget      enemyHitTarget;
+    private final Player              player;
+    private       ImpactEventListener impactEventListener = null;
 
     // Pre-allocated BFS chain queue — never reallocated after construction.
     private final int[] chainColumns;
@@ -41,9 +43,14 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
         this.chainRows      = new int[Constants.EXPLOSION_CHAIN_MAX];
     }
 
+    public void setImpactEventListener(ImpactEventListener listener) {
+        this.impactEventListener = listener;
+    }
+
     @Override
     public boolean isExplosiveBarrel(int tileColumn, int tileRow) {
-        return level.getCell(tileColumn, tileRow) == 'E';
+        char cell = level.getCell(tileColumn, tileRow);
+        return cell == 'E' || cell == 'g';
     }
 
     @Override
@@ -57,9 +64,17 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
     }
 
     private void detonateBarrel(int tileColumn, int tileRow) {
-        if (level.getCell(tileColumn, tileRow) != 'E') return;
+        char barrelCell = level.getCell(tileColumn, tileRow);
+        if (barrelCell != 'E' && barrelCell != 'g') return;
         // Remove the barrel first — prevents re-queuing the same tile as a chain target.
         level.setCell(tileColumn, tileRow, ' ');
+
+        // Trigger explosion visual effect at the barrel's world-space centre.
+        if (impactEventListener != null) {
+            float worldX = tileColumn * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
+            float worldY = tileRow    * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
+            impactEventListener.onEnemyKilled(worldX, worldY, 0.65f, Constants.EXPLOSION_DAMAGE);
+        }
 
         int playerTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
         int playerTileRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
@@ -82,9 +97,9 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
                 }
             }
 
-            // Queue adjacent explosive barrels for chain detonation.
-            // blastCell was read before setCell above, so 'E' tiles still read as 'E' here.
-            if (blastCell == 'E' && chainCount < Constants.EXPLOSION_CHAIN_MAX) {
+            // Queue adjacent explosive/toxic barrels for chain detonation.
+            // blastCell was read before setCell above, so barrel tiles still read correctly here.
+            if ((blastCell == 'E' || blastCell == 'g') && chainCount < Constants.EXPLOSION_CHAIN_MAX) {
                 boolean alreadyQueued = false;
                 for (int checkIndex = 0; checkIndex < chainCount; checkIndex++) {
                     if (chainColumns[checkIndex] == blastColumn && chainRows[checkIndex] == blastRow) {

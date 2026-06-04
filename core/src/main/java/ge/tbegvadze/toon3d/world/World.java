@@ -181,6 +181,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         explosiveBarrelManager = new ExplosiveBarrelManager(targetLevel, enemyManager, player);
         enemyRenderer          = new EnemyRenderer(enemyManager, wallRenderer);
         enemyManager.setImpactEventListener(impactEffectSystem);
+        explosiveBarrelManager.setImpactEventListener(impactEffectSystem);
+        enemyRenderer.setPropRenderer(propRenderer);
 
         tickEventBus = new TickEventBus();
         tickEventBus.subscribe(new WeaponReloadSubscriber(inventory));

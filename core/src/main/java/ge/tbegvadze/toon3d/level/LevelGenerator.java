@@ -485,7 +485,7 @@ public class LevelGenerator {
 
     private boolean isDoorCell(char[][] grid, int tileColumn, int tileRow) {
         if (!isInBounds(tileColumn, tileRow)) return false;
-        return grid[tileRow][tileColumn] == 'd';
+        return Level.isDoor(grid[tileRow][tileColumn]);
     }
 
     private boolean isAdjacentToRoomFloor(char[][] grid, int tileColumn, int tileRow) {
@@ -1178,6 +1178,7 @@ public class LevelGenerator {
             int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
             int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
             if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+            if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
             boolean alreadyUsed = false;
             for (int placedIndex = 0; placedIndex < placed; placedIndex++) {
                 if (placedColumns[placedIndex] == tileColumn && placedRows[placedIndex] == tileRow) {

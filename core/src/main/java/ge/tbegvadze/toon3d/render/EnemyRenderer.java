@@ -30,6 +30,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
     private final EnemyManager            enemyManager;
     private final WallRenderer            wallRenderer;
+    private       PropRenderer            propRenderer  = null;
     private final Map<EnemyType, Texture> textures;
     private final Texture                 whitePixelTexture;
     private final SpriteBatch             batch;
@@ -89,6 +90,14 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
     public void setAlertPulse(float pulse) {
         this.alertPulse = pulse;
+    }
+
+    /**
+     * Wires in the PropRenderer so enemy sprites are occluded by closer props.
+     * PropRenderer is owned and disposed by World — EnemyRenderer holds a non-owning reference.
+     */
+    public void setPropRenderer(PropRenderer renderer) {
+        this.propRenderer = renderer;
     }
 
     @Override
@@ -205,10 +214,13 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float spriteBlue  = GameMath.lerpTowardWhite(baseBlue,  hitFlashStrength);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
+            float[] propZBuffer = (propRenderer != null) ? propRenderer.getPropSpriteZBuffer() : null;
+
             int firstColumn = Math.max(0, leftScreenColumn);
             int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                if (propZBuffer != null && depth >= propZBuffer[screenColumn]) continue;
 
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
