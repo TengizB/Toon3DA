@@ -120,6 +120,9 @@ public class PlayerController {
             MedicalTier tier   = inventory.chooseHealTier(player.getHealth(), player.getMaxHealth());
             int         amount = inventory.spendHeal(tier);
             player.applyHealing(amount);
+            if (amount > 0 && eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("+" + amount + " HP", EventTextSystem.COLOR_GREEN);
+            }
             finishAction(true, TickCause.HEAL);
         }
     }

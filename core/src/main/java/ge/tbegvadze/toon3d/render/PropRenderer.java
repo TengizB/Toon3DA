@@ -68,6 +68,9 @@ public class PropRenderer implements Renderable, Disposable {
     private final int[]   sortedIndices;
     private final float[] sortedDepths;
 
+    // Per-column depth written during render — lets EnemyRenderer occlude against props.
+    private final float[] propSpriteZBuffer;
+
     private float playerWorldX      = 0f;
     private float playerWorldY      = 0f;
     private float directionX        = 1f;
@@ -82,8 +85,9 @@ public class PropRenderer implements Renderable, Disposable {
         this.wallRenderer   = wallRenderer;
         this.propPlacements = buildPropPlacements(level);
         int propCount       = propPlacements.size();
-        this.sortedIndices  = new int[propCount];
-        this.sortedDepths   = new float[propCount];
+        this.sortedIndices    = new int[propCount];
+        this.sortedDepths     = new float[propCount];
+        this.propSpriteZBuffer = new float[WALL_PROJECTION_SCREEN_WIDTH];
         // SpriteBatch capacity = one sprite per screen column (1-pixel-wide column draws).
         this.batch    = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
         this.textures = buildTextures();
@@ -126,9 +130,16 @@ public class PropRenderer implements Renderable, Disposable {
         this.lightingTimeSeconds = timeSeconds;
     }
 
+    /** Returns the per-column depth buffer written during render so EnemyRenderer can occlude against props. */
+    public float[] getPropSpriteZBuffer() {
+        return propSpriteZBuffer;
+    }
+
     @Override
     public void render(OrthographicCamera camera) {
         int propCount = propPlacements.size();
+        // Reset z-buffer every frame so stale depths from the previous frame don't occlude.
+        java.util.Arrays.fill(propSpriteZBuffer, Float.MAX_VALUE);
         if (propCount == 0) return;
 
         // --- Cull and collect visible props, computing depth for each. ---
@@ -227,6 +238,10 @@ public class PropRenderer implements Renderable, Disposable {
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 // Skip columns where a wall (or closer prop) is in front.
                 if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                // Skip columns where a nearer prop was already drawn (painter's order, far→near,
+                // so a shallower depth here means a previous iteration already wrote it).
+                if (depth >= propSpriteZBuffer[screenColumn]) continue;
+                propSpriteZBuffer[screenColumn] = depth;
 
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
