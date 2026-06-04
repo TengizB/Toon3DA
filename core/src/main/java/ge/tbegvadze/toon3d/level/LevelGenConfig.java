@@ -66,6 +66,15 @@ public final class LevelGenConfig {
     /** Cylindrical columns ('P'). Adds visual depth and cover in larger rooms. */
     public boolean columns = true;
 
+    /** Enable LARGE landmark rooms (reactor floors, cargo bays, arenas). */
+    public boolean enableLargeRooms = true;
+
+    /** Enable SERVER_ROOM data vaults (terminal walls, rack rows, dark atmosphere). */
+    public boolean enableServerRooms = true;
+
+    /** Enable wide (3-tile) grand hallways with centre-line columns on 2-3 MST edges. */
+    public boolean enableWideHallways = true;
+
     // -------------------------------------------------------------------------
     // Pickups (walkable; collected on contact)
     // -------------------------------------------------------------------------
