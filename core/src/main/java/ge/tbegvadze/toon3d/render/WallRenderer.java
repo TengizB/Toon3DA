@@ -61,6 +61,13 @@ public class WallRenderer implements Renderable, Disposable {
     private final Texture wallTextureRust;
     private final Texture wallTextureGore;
     private final Texture wallTextureBulkhead;
+    private final Texture wallTextureGlass;
+    private final Texture wallTextureBio;
+    private final Texture wallTextureEmerg;
+    private final Texture wallTextureMed;
+    private final Texture wallTextureCryo;
+    private final Texture wallTextureRad;
+    private final Texture wallTextureBlast;
     private final Texture doorTexture;
     private final Texture doorTextureRed;
     private final Texture doorTextureYellow;

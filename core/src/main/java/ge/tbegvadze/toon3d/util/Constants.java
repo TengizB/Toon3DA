@@ -481,6 +481,130 @@ public final class Constants {
     public static final int   BULKHEAD_FRAME_WIDTH            = 14;
     public static final int   BULKHEAD_BOLT_SPACING           = 21;
 
+    // -------------------------------------------------------------------------
+    // NEW WALL TYPES — procedural textures ('N','Q','S','M','Z','U','X')
+    // Note: 'R' and 'Y' are reserved for red/yellow keycard doors — use 'S'/'U'.
+    // -------------------------------------------------------------------------
+
+    // 'N' — Reinforced Containment Glass (cracked observation window)
+    public static final int   GLASS_WALL_TEXTURE_SIZE         = 128;
+    public static final long  GLASS_WALL_SEED                 = 0x476C6173L; // "Glas"
+    public static final int   GLASS_CRACK_BRANCH_COUNT        = 5;
+    public static final int   GLASS_CRACK_STEPS               = 30;
+    public static final int   GLASS_GHOST_BLOB_COUNT          = 3;
+    public static final int   GLASS_SHEEN_STREAK_COUNT        = 2;
+
+    // 'Q' — Bio-Containment / Quarantine Wall
+    public static final int   BIO_WALL_TEXTURE_SIZE           = 128;
+    public static final long  BIO_WALL_SEED                   = 0x42696F57L; // "BioW"
+    public static final int   BIO_STRIPE_PITCH                = 10;
+
+    // 'S' — Emergency Lighting Strip Wall (static red — maps visual alarm state)
+    public static final int   EMERG_WALL_TEXTURE_SIZE         = 128;
+    public static final long  EMERG_WALL_SEED                 = 0x456D6572L; // "Emer"
+    public static final int   EMERG_CAGE_COUNT                = 4;
+
+    // 'M' — Medical Tile Wall (white tile + green accent + cross)
+    public static final int   MED_WALL_TEXTURE_SIZE           = 128;
+    public static final long  MED_WALL_SEED                   = 0x4D656469L; // "Medi"
+    public static final int   MED_TILE_SIZE                   = 16;
+    public static final int   MED_BLOOD_FLECK_COUNT           = 12;
+
+    // 'Z' — Cryo / Frost-Damaged Wall (ice rime, icicles, frost fractures)
+    public static final int   CRYO_WALL_TEXTURE_SIZE          = 128;
+    public static final long  CRYO_WALL_SEED                  = 0x4372796FL; // "Cryo"
+    public static final int   CRYO_ICICLE_COUNT               = 4;
+    public static final int   CRYO_FRACTURE_COUNT             = 3;
+    public static final int   CRYO_GLINT_COUNT                = 15;
+    public static final int   CRYO_FROST_CORNER_RADIUS        = 40;
+
+    // 'U' — Radiation-Burned Wall (scorched black, glowing green-yellow cracks)
+    public static final int   RAD_WALL_TEXTURE_SIZE           = 128;
+    public static final long  RAD_WALL_SEED                   = 0x52616469L; // "Radi"
+    public static final int   RAD_CRACK_COUNT                 = 5;
+    public static final int   RAD_CRACK_STEPS                 = 35;
+    public static final int   RAD_DUST_COUNT                  = 20;
+
+    // 'X' — Blast-Scarred Wall (bullet pocks, blast craters, through-holes)
+    public static final int   BLAST_WALL_TEXTURE_SIZE         = 128;
+    public static final long  BLAST_WALL_SEED                 = 0x426C6173L; // "Blas"
+    public static final int   BLAST_BULLET_HOLE_COUNT         = 18;
+    public static final int   BLAST_CRATER_COUNT              = 3;
+    public static final int   BLAST_THROUGH_HOLE_COUNT        = 2;
+    public static final int   BLAST_SCORCH_COUNT              = 4;
+
+    // -------------------------------------------------------------------------
+    // NEW ROOM TYPES — level generator configuration
+    // -------------------------------------------------------------------------
+
+    // MEDICAL_BAY — guaranteed once per level (reliable heal stop)
+    public static final int   LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH    = 7;
+    public static final int   LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT   = 6;
+    public static final float LEVEL_GEN_MEDICAL_WALL_CHANCE      = 0.70f; // 'M' dominant
+    public static final float LEVEL_GEN_MEDICAL_BIO_WALL_CHANCE  = 0.10f; // 'Q' accent
+    public static final float LEVEL_GEN_MEDICAL_PROP_CHANCE      = 0.16f;
+    public static final int   LEVEL_GEN_MEDICAL_BAY_MAX          = 1;
+
+    // ARMORY — present in ~80% of levels, at most once
+    public static final float LEVEL_GEN_ARMORY_CHANCE            = 0.80f;
+    public static final int   LEVEL_GEN_ARMORY_MIN_WIDTH         = 6;
+    public static final int   LEVEL_GEN_ARMORY_MIN_HEIGHT        = 6;
+    public static final float LEVEL_GEN_ARMORY_BLAST_WALL_CHANCE = 0.50f; // 'X' dominant
+    public static final float LEVEL_GEN_ARMORY_PROP_CHANCE       = 0.22f;
+    public static final int   LEVEL_GEN_ARMORY_MIN_WEAPON_RACKS  = 2;
+    public static final int   LEVEL_GEN_ARMORY_MAX               = 1;
+
+    // CRYO_CHAMBER — ~16% of levels, at most 2
+    public static final float LEVEL_GEN_CRYO_CHANCE              = 0.16f;
+    public static final int   LEVEL_GEN_CRYO_MIN_WIDTH           = 7;
+    public static final int   LEVEL_GEN_CRYO_MIN_HEIGHT          = 7;
+    public static final float LEVEL_GEN_CRYO_WALL_CHANCE         = 0.70f; // 'Z' dominant
+    public static final float LEVEL_GEN_CRYO_GLASS_WALL_CHANCE   = 0.15f; // 'N' accent
+    public static final float LEVEL_GEN_CRYO_PROP_CHANCE         = 0.20f;
+    public static final int   LEVEL_GEN_CRYO_MAX                 = 2;
+
+    // POWER_PLANT — ~45% of LARGE-eligible rooms, at most 1
+    public static final float LEVEL_GEN_POWERPLANT_CHANCE        = 0.45f;
+    public static final float LEVEL_GEN_POWERPLANT_RAD_WALL_CHANCE = 0.40f; // 'U' near core
+    public static final float LEVEL_GEN_POWERPLANT_EMERG_WALL_CHANCE = 0.20f; // 'S' approach
+    public static final float LEVEL_GEN_POWERPLANT_PROP_CHANCE   = 0.18f;
+    public static final int   LEVEL_GEN_POWERPLANT_MIN_GENERATORS = 2;
+    public static final int   LEVEL_GEN_POWERPLANT_MAX_GENERATORS = 4;
+    public static final int   LEVEL_GEN_POWERPLANT_MAX           = 1;
+
+    // COMMAND_CENTER — ~50% of levels, deepest large room, at most 1
+    public static final float LEVEL_GEN_COMMAND_CHANCE           = 0.50f;
+    public static final int   LEVEL_GEN_COMMAND_MIN_WIDTH        = 8;
+    public static final int   LEVEL_GEN_COMMAND_MIN_HEIGHT       = 7;
+    public static final float LEVEL_GEN_COMMAND_GLASS_WALL_CHANCE = 0.30f; // 'N' one wall band
+    public static final float LEVEL_GEN_COMMAND_EMERG_WALL_CHANCE = 0.15f; // 'S' accent
+    public static final float LEVEL_GEN_COMMAND_PROP_CHANCE      = 0.15f;
+    public static final int   LEVEL_GEN_COMMAND_MIN_TERMINALS    = 3;
+    public static final int   LEVEL_GEN_COMMAND_MAX_TERMINALS    = 5;
+    public static final int   LEVEL_GEN_COMMAND_MAX              = 1;
+
+    // CONTAINMENT_BLOCK — ~16% of levels, at most 2
+    public static final float LEVEL_GEN_CONTAINMENT_CHANCE       = 0.16f;
+    public static final int   LEVEL_GEN_CONTAINMENT_MIN_WIDTH    = 8;
+    public static final int   LEVEL_GEN_CONTAINMENT_MIN_HEIGHT   = 6;
+    public static final float LEVEL_GEN_CONTAINMENT_GLASS_CHANCE = 0.40f; // 'N' cell fronts
+    public static final float LEVEL_GEN_CONTAINMENT_BIO_CHANCE   = 0.15f; // 'Q' approach
+    public static final float LEVEL_GEN_CONTAINMENT_PROP_CHANCE  = 0.18f;
+    public static final int   LEVEL_GEN_CONTAINMENT_MAX          = 2;
+
+    // Global accent wall chances (post-pass, any room type)
+    public static final float LEVEL_GEN_EMERG_STRIP_CORRIDOR_CHANCE = 0.25f; // 'S' near keycard doors
+    public static final float LEVEL_GEN_BLAST_NEAR_CORPSE_CHANCE    = 0.10f; // 'X' near corpse clusters
+
+    // -------------------------------------------------------------------------
+    // NEW PROP HEIGHT MULTIPLIERS (relative to full wall stripe)
+    // -------------------------------------------------------------------------
+    public static final float PROP_CAMERA_HEIGHT      = 0.80f; // '#' security camera
+    public static final float PROP_GENERATOR_HEIGHT   = 0.85f; // '%' power generator / reactor
+    public static final float PROP_BIOPOD_HEIGHT      = 0.90f; // '&' bio-pod / specimen tank
+    public static final float PROP_RACK_HEIGHT        = 0.70f; // '=' weapon rack
+    public static final float PROP_VENDOR_HEIGHT      = 0.88f; // '@' vending / supply dispenser
+
     // Touch Controller — 4-row grid, right side of screen, all buttons 96×96
     // Grid columns (center X): left=1004, center=1100, right=1196
     // Grid rows   (center Y): row1(BACK)=200, row2(FIRE/ROT)=296, row3(FWD/STR)=392, row4(RELOAD/SKIP)=488
