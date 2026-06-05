@@ -6,9 +6,9 @@ import ge.tbegvadze.toon3d.util.Constants;
 /**
  * Break-open double-barrel shotgun — fires one barrel per shot, two shots before reload.
  *
- * Stats: damage 32, clipSize 2, reloadTime 2 ticks, dropCoeff 0.22, range 4 tiles.
+ * Stats: damage 32, clipSize 2, reloadTime 1 tick, dropCoeff 0.22, range 4 tiles.
  * Each fire() call depletes one barrel (shotsInClip decremented by 1 per fire).
- * Both barrels must be empty before the break-open reload begins, costing 2 movement ticks.
+ * Both barrels must be empty before the break-open reload begins, costing 1 movement tick.
  * No penetration — the blast dissipates on the first enemy contacted.
  *
  * marchShot() walks the facing direction tile by tile up to DBL_SHOTGUN_RANGE_TILES.

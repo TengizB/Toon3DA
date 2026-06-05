@@ -137,7 +137,7 @@ public final class Constants {
     //   distance 3: 32 × 0.34 = 11   distance 4: 32 × 0.15 =  5   (clamped by floor)
     public static final int     DBL_SHOTGUN_DAMAGE             = 32;
     public static final int     DBL_SHOTGUN_CLIP_SIZE          = 2;
-    public static final int     DBL_SHOTGUN_RELOAD_TIME_TICKS  = 2;
+    public static final int     DBL_SHOTGUN_RELOAD_TIME_TICKS  = 1;
     public static final float   DBL_SHOTGUN_DAMAGE_DROP_COEFF  = 0.22f;
     public static final int     DBL_SHOTGUN_RANGE_TILES        = 4;
     // DBL_SHOTGUN_PENETRATION: false = stops at first enemy (spread dissipates on first target)
@@ -159,7 +159,7 @@ public final class Constants {
     //   distance 6: 18 × 0.40 =  7   distance 8: 18 × 0.20 =  4
     public static final int   PLASMA_RIFLE_DAMAGE             = 18;
     public static final int   PLASMA_RIFLE_CLIP_SIZE          = 4;
-    public static final int   PLASMA_RIFLE_RELOAD_TIME_TICKS  = 3;
+    public static final int   PLASMA_RIFLE_RELOAD_TIME_TICKS  = 1;
     public static final float PLASMA_RIFLE_DAMAGE_DROP_COEFF  = 0.10f;
     public static final int   PLASMA_RIFLE_RANGE_TILES        = 8;
     // PLASMA_RIFLE_PENETRATION: true = shot pierces all enemies in a line
@@ -186,7 +186,7 @@ public final class Constants {
     public static final int     CHAINGUN_CLIP_SIZE          = 24;
     // Each press of fire launches CHAINGUN_BURST_SIZE simultaneous bullets in one volley
     public static final int     CHAINGUN_BURST_SIZE         = 3;
-    public static final int     CHAINGUN_RELOAD_TIME_TICKS  = 3;
+    public static final int     CHAINGUN_RELOAD_TIME_TICKS  = 1;
     public static final float   CHAINGUN_DAMAGE_DROP_COEFF  = 0.10f;
     public static final int     CHAINGUN_RANGE_TILES        = 8;
     // CHAINGUN_PENETRATION: false = stops at first enemy (bullets are stopped by armour)
@@ -202,6 +202,38 @@ public final class Constants {
 
     // Plasma muzzle blast — blue-cyan sphere burst; replaces the shotgun orange flame
     public static final float PLASMA_BLAST_RADIUS = 85f;
+
+    // Per-weapon fire effects — world-unit dimensions used by WeaponHudRenderer render*Effect methods
+    // Shotgun — wide short burst; horizontal disc is the primary element
+    public static final float SHOTGUN_EFFECT_FLAME_HEIGHT     = 65f;
+    public static final float SHOTGUN_EFFECT_FLAME_BASE_WIDTH = 190f;
+    public static final float SHOTGUN_EFFECT_DISC_HALF_WIDTH  = 100f;
+    public static final float SHOTGUN_EFFECT_DISC_HALF_HEIGHT = 28f;
+    // Double-Barrel Shotgun — two separate side-by-side flame tongues
+    public static final float DBL_SHOTGUN_EFFECT_FLAME_HEIGHT      = 72f;
+    public static final float DBL_SHOTGUN_EFFECT_TONGUE_BASE_WIDTH = 68f;
+    public static final float DBL_SHOTGUN_EFFECT_TONGUE_OFFSET_X   = 55f; // offset of each tongue centre from barrel centre
+    // Chaingun — tight narrow cone plus scattered spark dots
+    public static final float CHAINGUN_EFFECT_CONE_HEIGHT     = 90f;
+    public static final float CHAINGUN_EFFECT_CONE_BASE_WIDTH = 60f;
+    public static final int   CHAINGUN_EFFECT_SPARK_COUNT     = 10;
+    public static final float CHAINGUN_EFFECT_SPARK_SPREAD_X  = 70f;  // half-width of spark scatter
+    public static final float CHAINGUN_EFFECT_SPARK_SPREAD_Y  = 80f;  // height of spark scatter
+    public static final float CHAINGUN_EFFECT_SPARK_SIZE      = 5f;   // world units per spark square side
+    // Railgun — electric lance: no flame; narrow bright-white bolt with crackling side arcs
+    public static final float RAILGUN_EFFECT_LANCE_HEIGHT    = 220f;
+    public static final float RAILGUN_EFFECT_LANCE_BASE_WIDTH = 18f;
+    public static final float RAILGUN_EFFECT_ARC_SPREAD      = 60f;   // horizontal reach of side arcs
+    public static final float RAILGUN_EFFECT_ARC_HEIGHT      = 140f;  // vertical height of side arcs
+    // Incinerator — large wide lingering flame; slower shrink so it fills more space
+    public static final float INCINERATOR_EFFECT_FLAME_HEIGHT     = 130f;
+    public static final float INCINERATOR_EFFECT_FLAME_BASE_WIDTH = 220f;
+    public static final float INCINERATOR_EFFECT_SHRINK_RATE      = 0.25f; // slower than default 0.55
+    // Grenade Launcher — grey-white smoke puff outer ring + orange core explosion + rising wisps
+    public static final float GRENADE_EFFECT_PUFF_RADIUS     = 90f;
+    public static final float GRENADE_EFFECT_CORE_RADIUS     = 55f;
+    public static final float GRENADE_EFFECT_WISP_HEIGHT     = 100f;
+    public static final float GRENADE_EFFECT_WISP_BASE_WIDTH = 18f;
 
     // Weapon HUD rendering — sprite anchored at screen bottom-centre
     // drawX = (WORLD_WIDTH - WEAPON_HUD_WIDTH) / 2f; drawY = WEAPON_HUD_BASE_Y
@@ -384,6 +416,10 @@ public final class Constants {
     public static final float DAMAGE_NUMBER_DURATION_SECONDS = 0.80f;
     public static final float DAMAGE_NUMBER_RISE_SPEED       = 55f;  // world units/s upward
     public static final float DAMAGE_NUMBER_FONT_SCALE       = 1.4f;
+    // Damage numbers grow above this threshold: scale = base + (amount - threshold + 1) * perPoint
+    public static final int   DAMAGE_NUMBER_SCALE_THRESHOLD  = 8;
+    public static final float DAMAGE_NUMBER_SCALE_PER_POINT  = 0.04f;
+    public static final float DAMAGE_NUMBER_MAX_FONT_SCALE   = 3.0f;
 
     // Explosive barrel hazard — detonation damage and chain limit
     public static final int   EXPLOSION_DAMAGE    = 12;
@@ -657,7 +693,7 @@ public final class Constants {
     public static final float   RAILGUN_DAMAGE_MIN_MULTIPLIER     = 0.70f;
     public static final int     RAILGUN_RANGE_TILES               = 16;
     public static final int     RAILGUN_CLIP_SIZE                 = 1;
-    public static final int     RAILGUN_RELOAD_TIME_TICKS         = 4;
+    public static final int     RAILGUN_RELOAD_TIME_TICKS         = 2;
     public static final int     RAILGUN_PICKUP_SLUGS              = 4;
     public static final int     RAILGUN_MAX_SLUGS                 = 12;
     public static final boolean RAILGUN_PENETRATION               = true;
@@ -683,12 +719,9 @@ public final class Constants {
     public static final int     FLAME_RANGE_TILES          = 3;
     public static final int     FLAME_CLIP_SIZE            = 30;
     public static final int     FUEL_PER_SHOT              = 3;
-    public static final int     FLAME_RELOAD_TICKS         = 3;
+    public static final int     FLAME_RELOAD_TICKS         = 1;
     public static final int     FLAME_PICKUP_FUEL          = 60;
     public static final int     FLAME_MAX_FUEL             = 120;
-    // Cone offset table: each entry is {forwardDepth, lateralOffset}.
-    // Lateral=0 reaches depth 1-3; lateral=+-1 reaches depth 2-3 only (7-tile fan).
-    public static final int[][] FLAME_CONE_OFFSETS         = {{1,0},{2,-1},{2,0},{2,1},{3,-1},{3,0},{3,1}};
     public static final float   FLAME_SHAKE_INTENSITY      = 4f;
     public static final float   FLAME_SCREEN_GLOW_ALPHA    = 0.30f;
     // Incinerator procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer
@@ -714,7 +747,7 @@ public final class Constants {
     // Prevents point-blank abuse; unarmed grenade passes through enemies harmlessly.
     public static final int     GRENADE_ARM_TILES          = 2;
     public static final int     GRENADE_CLIP_SIZE          = 3;
-    public static final int     GRENADE_RELOAD_TIME_TICKS  = 4;
+    public static final int     GRENADE_RELOAD_TIME_TICKS  = 2;
     public static final int     GRENADE_PICKUP_AMMO        = 6;
     public static final int     GRENADE_MAX_AMMO           = 18;
     // GRENADE_PENETRATION is not used by the custom marchShot, kept for API completeness.

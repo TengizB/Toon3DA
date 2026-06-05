@@ -6,7 +6,7 @@ import ge.tbegvadze.toon3d.util.Constants;
 /**
  * Short-range cone flamethrower that sprays a widening fan of fire directly ahead.
  *
- * Stats: impact damage 8 (5 at depth 3), clipSize 30 fuel, reloadTime 3 ticks,
+ * Stats: impact damage 8 (5 at depth 3), clipSize 30 fuel, reloadTime 1 tick,
  * dropCoeff 0.0 (depth falloff handled explicitly), range 3 tiles.
  *
  * Each spray consumes FUEL_PER_SHOT (3) fuel units. canFire() therefore requires

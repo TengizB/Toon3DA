@@ -190,10 +190,23 @@ public final class ImpactEffectRenderer implements Disposable {
 
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        font.getData().setScale(Constants.DAMAGE_NUMBER_FONT_SCALE);
 
         for (int numberIndex = 0; numberIndex < ImpactEffectSystem.MAX_DAMAGE_NUMBERS; numberIndex++) {
             if (!system.numberActive[numberIndex]) continue;
+
+            int amount = system.numberAmount[numberIndex];
+            float fontScale;
+            if (amount < Constants.DAMAGE_NUMBER_SCALE_THRESHOLD) {
+                fontScale = Constants.DAMAGE_NUMBER_FONT_SCALE;
+            } else {
+                fontScale = Math.min(
+                    Constants.DAMAGE_NUMBER_FONT_SCALE
+                        + (amount - Constants.DAMAGE_NUMBER_SCALE_THRESHOLD + 1)
+                          * Constants.DAMAGE_NUMBER_SCALE_PER_POINT,
+                    Constants.DAMAGE_NUMBER_MAX_FONT_SCALE
+                );
+            }
+            font.getData().setScale(fontScale);
 
             float age      = system.numberAge[numberIndex];
             float life     = system.numberLife[numberIndex];

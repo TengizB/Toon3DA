@@ -6,7 +6,7 @@ import ge.tbegvadze.toon3d.util.Constants;
 /**
  * Single-barrel break-action grenade launcher with indirect-fire and AoE splash.
  *
- * Stats: center damage 30, falloff damage 16, clipSize 3, reloadTime 4 ticks,
+ * Stats: center damage 30, falloff damage 16, clipSize 3, reloadTime 2 ticks,
  * dropCoeff 0.0 (no travel falloff — splash damage is constant), range 6 tiles.
  *
  * The grenade launcher does NOT use the standard linear pierce loop. It walks a path

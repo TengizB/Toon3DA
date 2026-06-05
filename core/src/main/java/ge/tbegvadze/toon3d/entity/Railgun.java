@@ -7,7 +7,7 @@ import ge.tbegvadze.toon3d.util.GameMath;
 /**
  * Charge-up infinite-pierce hitscan sniper — the longest-range weapon in the game.
  *
- * Stats: nominal damage 90 (full charge), clipSize 1, reloadTime 4 ticks,
+ * Stats: nominal damage 90 (full charge), clipSize 1, reloadTime 2 ticks,
  *        dropCoeff 0.02, range 16 tiles. Full pierce — slug passes through every
  *        enemy in the line and stops only at a wall or closed door.
  *
