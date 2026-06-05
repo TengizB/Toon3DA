@@ -670,6 +670,35 @@ public final class Constants {
     public static final String  RAILGUN_FIRE_TEXTURE_PATH         = "textures/guns/railgun/railgun_fire.png";
     public static final String  RAILGUN_RELOAD_TEXTURE_PATH       = "textures/guns/railgun/railgun_reload.png";
 
+    // Incinerator — short-range cone flamethrower (FUEL ammo)
+    // Impact damage applied to every enemy in the cone on each spray.
+    // Depth-3 (far-edge) tiles use FLAME_FALLOFF instead of FLAME_IMPACT_DAMAGE.
+    // FLAME_DAMAGE_DROP_COEFF = 0.0: depth falloff is handled explicitly, not by the drop curve.
+    // Burn DoT constants (FLAME_BURN_*) are reserved for the enemy system when implemented.
+    public static final int     FLAME_IMPACT_DAMAGE        = 8;
+    public static final int     FLAME_FALLOFF              = 5;
+    public static final int     FLAME_BURN_DAMAGE_PER_TURN = 6;
+    public static final int     FLAME_BURN_TURNS           = 4;
+    public static final float   FLAME_DAMAGE_DROP_COEFF    = 0.0f;
+    public static final int     FLAME_RANGE_TILES          = 3;
+    public static final int     FLAME_CLIP_SIZE            = 30;
+    public static final int     FUEL_PER_SHOT              = 3;
+    public static final int     FLAME_RELOAD_TICKS         = 3;
+    public static final int     FLAME_PICKUP_FUEL          = 60;
+    public static final int     FLAME_MAX_FUEL             = 120;
+    // Cone offset table: each entry is {forwardDepth, lateralOffset}.
+    // Lateral=0 reaches depth 1-3; lateral=+-1 reaches depth 2-3 only (7-tile fan).
+    public static final int[][] FLAME_CONE_OFFSETS         = {{1,0},{2,-1},{2,0},{2,1},{3,-1},{3,0},{3,1}};
+    public static final float   FLAME_SHAKE_INTENSITY      = 4f;
+    public static final float   FLAME_SCREEN_GLOW_ALPHA    = 0.30f;
+    // Incinerator procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer
+    public static final int     FLAME_CANVAS_WIDTH         = 192;
+    public static final int     FLAME_CANVAS_HEIGHT        = 134;
+    // Incinerator HUD textures — always procedural (no asset files)
+    public static final String  FLAME_NORMAL_TEXTURE_PATH  = "textures/guns/incinerator/incinerator.png";
+    public static final String  FLAME_FIRE_TEXTURE_PATH    = "textures/guns/incinerator/incinerator_fire.png";
+    public static final String  FLAME_RELOAD_TEXTURE_PATH  = "textures/guns/incinerator/incinerator_reload.png";
+
     // Tile-Based Ambient Lighting — floor tiles ' ', 'l', 'u', 'f' carry brightness multipliers
     // finalShade = clamp(distanceShade * directionalMultiplier * tileBrightness, 0, MAX_LIGHTING_SHADE)
     // ' ' (space) = lit bright floor (1.55×); 'l' = normal floor (1.0×);
