@@ -1,0 +1,458 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Railgun — charge-up infinite-pierce hitscan sniper (SLUGS)
+CREATED: 2026-06-05
+---
+
+OVERVIEW
+========
+The Railgun is the player's long-range precision power weapon and the only gun
+in the game with a CHARGE-UP fire mode. Pressing attack does not fire instantly:
+it begins charging the capacitor, and the shot must be RELEASED (or auto-fires at
+full charge). When it fires, it sends a single hyper-velocity slug in a perfectly
+straight line that PIERCES EVERYTHING — every enemy AND keeps going — for the
+full length of the corridor (up to 16 tiles, double the plasma rifle's reach)
+with essentially NO damage falloff, dealing massive single-hit damage scaled by
+how long it charged. It is the answer to a heavily-armored enemy at the end of a
+hall, to a perfectly-aligned column of foes you want to delete in one shot, and
+to the player who wants to play patient and positional. It reuses the Weapon
+abstraction and the marchShot() full-pierce loop (same line walk as the plasma
+rifle) but adds a charge state to the turn machine.
+
+Why it belongs: the plasma rifle pierces but is a sustained-fire mid-range gun
+(4-shot clip, moderate damage). Nothing in the arsenal rewards PATIENCE, nothing
+reaches across a long hall, and nothing delivers a single devastating burst at
+the cost of a turn spent charging. The railgun is the "snipe the whole corridor"
+fantasy: low ammo, slow cadence, enormous payoff, and a built-in risk/reward in
+the charge gamble (do you take the half-charge shot now, or hold for full and let
+the enemy close a tile?).
+
+
+GAMEPLAY ROLE
+=============
+- Niche: long-range, high-single-hit, charge-gamble precision. Longest range in
+  the game (16 tiles). Highest single-target damage in the game (at full charge).
+  Infinite pierce like the plasma, but one big slug, not a stream.
+- Ideal geometry: a long straight corridor with an armored or high-value target
+  (or a column of enemies) at the far end. Reward for lining up and holding.
+- Anti-niche (deliberate weakness): close-quarters swarms (the charge turn gets
+  you mauled; you cannot react fast), and ammo-hungry trash clearing (slugs are
+  the rarest ammo — one slug to kill one zombie is a waste). It is a SCALPEL, not
+  a broom. This keeps it from overlapping the chaingun/shotgun roles.
+- Role differentiation table:
+
+                    Plasma Rifle    Chaingun         Railgun
+  Range             8 tiles         8 tiles          16 tiles (longest)
+  Pierce            unlimited       none             unlimited
+  Damage model      18/bolt, x4     10x3 burst       40-90 single slug
+                                                     (charge-scaled)
+  Cadence           fast (4-clip)   fast stream      SLOW (charge then 1)
+  Fire trigger      tap             tap (stream)     HOLD to charge, RELEASE
+  Falloff           gentle 0.10     present          ~none (coherent slug)
+  Best vs           a line of       sustained DPS    one armored target /
+                    enemies         on one target    a perfectly-aligned column
+  Player tempo      aggressive      aggressive       PATIENT / positional
+
+
+GAMEPLAY LOOP
+=============
+THE CHARGE STATE (the signature mechanic)
+The railgun adds one concept to the turn machine: a CHARGING phase that lives
+ENTIRELY on the player's own turns. Charging does NOT advance the world — it is a
+"held action." Each press/hold of the attack key while equipped advances a charge
+level. The shot fires on RELEASE or at max charge.
+
+  CHARGE MODEL (turn-true, no real-time timers):
+  - The railgun has chargeLevel in {0, 1, 2} (RAILGUN_MAX_CHARGE = 2).
+  - Pressing KEY_ATTACK with chargeLevel == 0 and a loaded slug: begin charging,
+    chargeLevel -> 1. THIS CONSUMES THE PLAYER'S TURN (the world advances; enemies
+    act). You are exposed while spinning up the capacitor. This is the risk.
+  - On the NEXT turn, the player chooses:
+      (a) Press KEY_ATTACK again -> RELEASE the shot at the current chargeLevel
+          (fires now). OR continue holding to raise charge (see auto rule).
+      (b) Press KEY_RAIL_RELEASE (or simply KEY_ATTACK as "fire now") -> fire at
+          current charge.
+      (c) MOVE / ROTATE -> this RELEASES the charge as a shot at the current level
+          ... OR cancels it (see OPEN QUESTIONS). Recommended: moving FIRES at
+          current charge in the facing direction BEFORE the move resolves
+          (snap-shot), so the capacitor is never wasted silently.
+  - AUTO-FIRE AT MAX: holding/pressing attack again while chargeLevel == 1 raises
+    it to 2 (max) and FIRES THAT SAME TURN at full power. So:
+      Turn 1: press attack -> chargeLevel 1 (spin-up, world advances).
+      Turn 2: press attack -> chargeLevel 2 -> AUTO-FIRE full slug this turn.
+    A half-charge shot is available on Turn 2 by choosing "fire now" instead of
+    charging further (release at level 1). This is the charge GAMBLE: full power
+    costs two exposed turns; a half-power shot costs one.
+
+FIRING (resolves the slug)
+1. canFire() requires a slug in the clip (slugsInClip > 0) and chargeLevel >= 1.
+2. On fire, marchShot() resolves instantly in tile space:
+   a. March forward from the player tile along facing, one tile per step, up to
+      RAILGUN_RANGE_TILES (16).
+   b. At each tile:
+        - WALL or CLOSED door: the slug STOPS at that tile (a railgun slug does
+          not pierce walls — it pierces flesh). End.
+        - ENEMY/ENEMIES: apply damage to every enemy on the tile and CONTINUE
+          (infinite pierce — the slug keeps going through bodies).
+   c. Damage = RAILGUN_DAMAGE_BY_CHARGE[chargeLevel] with falloff
+      multiplier dropMultiplier(D) = max(MIN, 1 - RAILGUN_DROP_COEFF*(D-1)).
+      RAILGUN_DROP_COEFF is tiny (0.02) so a 16-tile shot still hits hard.
+   d. slugsInClip -= 1. chargeLevel -> 0.
+3. Visual: a BLINDING thin white-blue beam snaps down the full corridor for
+   RAILGUN_BEAM_DURATION (a true line, longest tracer in the game), a sharp crack
+   of light, brief screen whiteout, a hard recoil kick. Every pierced enemy
+   reacts simultaneously.
+4. Turn ends (the fire-release turn). Enemies act. If the clip is now empty,
+   weapon -> RELOADING with RAILGUN_RELOAD_TICKS armed.
+
+CHARGE FEEDBACK (so the player always reads the gamble)
+- While chargeLevel >= 1, the weapon sprite shows a rising glow in the rail
+  capacitor (level 1 = dim blue hum, level 2 = blinding white-hot, ready). A
+  rising electric whine plays one step up per charge level. The HUD ammo readout
+  shows a CHARGE indicator (e.g. "RAIL >  " at level 1, "RAIL >> " at level 2).
+- Because charging spends turns, the player can SEE enemies advancing while they
+  hold — the tension of "fire the half-charge now or risk one more turn for full."
+
+RELOAD (tick-driven)
+- Standard tick model: each completed tile step decrements ticksRemaining;
+  rotations and blocked bumps do not. When it hits 0: slugsInClip = min(clipSize,
+  pool); deduct from SLUGS pool; state -> NORMAL. Long reload (4 ticks) — racking
+  a fresh slug and recharging the rail takes time.
+
+EMPTY / OUT-OF-SLUGS
+- Press attack with no slug (mid-reload or empty pool): dry "no-charge" click,
+  HUD red, no turn, no charge begins.
+- Reload finishes with 0 slugs: clip 0/N, HUD red, keeps clicking. Swap weapon.
+  Fists remain the never-softlock fallback.
+
+
+STATS
+=====
+(Placeholders — tune in playtest. Tuned so it is devastating but slow & rationed.)
+
+  Damage at Charge 1 (half):     40   (RAILGUN_DAMAGE_BY_CHARGE[1])
+  Damage at Charge 2 (full):     90   (RAILGUN_DAMAGE_BY_CHARGE[2])
+  Damage Drop Coefficient:       0.02 (near-zero — coherent slug)
+  Min Damage Floor:              0.70 (x base; even at 16 tiles it bites hard)
+  Range (max travel tiles):      16   (longest in the game)
+  Pierce:                        UNLIMITED (pierces all enemies; stops at wall)
+  Max Charge Level:              2
+  Charge cost:                   1 turn to reach level 1; +1 turn (or same-turn
+                                 auto at level 2) to reach full
+  Clip Size:                     1   (single-shot — rack a slug each reload)
+  Ammo per Shot:                 1 slug
+  Reload Time:                   4 movement ticks
+  Pickup Slugs:                  4   (4 shots)
+  Max Slugs Carried:             12
+  Ammo Type:                     SLUGS (new pool — rarest ammo in the game)
+
+
+SPECIAL MECHANICS
+=================
+1. CHARGE-UP / CHARGE GAMBLE — the only weapon that does not fire on the turn you
+   press attack. Charging costs an exposed turn; full power costs two. The player
+   constantly weighs "half-charge shot now vs full-charge shot next turn while the
+   enemy closes a tile." A genuine risk/reward decision baked into the trigger.
+2. INFINITE PIERCE + LONGEST RANGE — deletes an entire aligned column of enemies
+   across a 16-tile hall in one slug. The plasma rifle pierces too, but at 8
+   tiles with per-bolt damage; the railgun is one enormous slug that does not run
+   out of clip mid-corridor.
+3. NEAR-ZERO FALLOFF — damage barely drops over 16 tiles. The far end of the hall
+   is as dangerous as point-blank. Rewards holding the line at maximum range.
+4. SNAP-SHOT ON MOVE — moving while charged fires the slug at current charge
+   before the step resolves, so a charge is never silently wasted (and gives a
+   "fire and reposition" option). See OPEN QUESTIONS for cancel-vs-fire choice.
+5. SINGLE-SHOT CLIP — clip size 1 means every shot is followed by a reload. The
+   railgun's rhythm is charge -> fire -> reposition-while-reloading -> charge.
+   Deliberately the slowest, most deliberate cadence in the arsenal.
+
+
+VISUAL DESIGN
+=============
+WEAPON SPRITE (procedural FrameBuffer, 192x134 canvas, Quake-1 top-down angle)
+  Identity silhouette: a LONG, SLEEK rifle — the opposite of the grenade
+  launcher's stubby fatness. The signature feature is a pair of parallel
+  CONDUCTOR RAILS running the length of the barrel with a glowing capacitor
+  block at the receiver. Energy-weapon palette (steel blue body, electric cyan
+  energy) but COLDER and whiter than the plasma rifle (plasma = cyan; rail =
+  white-blue, almost ultraviolet).
+
+  View mode: TOP-DOWN, convergence ~0.65, muzzle CAP (no bore ellipse).
+
+  DRAW LAYERS (back to front, Y-up, centerX = 96):
+    1. RECEIVER BODY: a narrow, long steel-blue block rgba(0.26,0.30,0.40,1) from
+       Y=14 to Y=58. Narrower than other weapons (~70px) to read as sleek/precise.
+       3px top highlight rgba(0.44,0.50,0.62,1), 3px bottom shadow
+       rgba(0.14,0.16,0.22,1).
+    2. CAPACITOR BLOCK: a rectangular energy cell set into the top of the receiver
+       (Y=30..52, ~36px wide, centered). At idle it holds a DIM blue glow
+       rgba(0.10,0.35,0.85,1). At charge level 1 it brightens to cyan
+       rgba(0.20,0.65,1.0,1); at level 2 it is blinding white-blue
+       rgba(0.80,0.92,1.0,1). This is the charge-state read.
+    3. TWIN CONDUCTOR RAILS: two thin parallel bars running from the receiver
+       (Y=58) to the muzzle (Y=124), one on each side of centerX (e.g. at
+       centerX-8 and centerX+8 at base, converging to centerX-5/+5 at muzzle via
+       the 0.65 factor). Drawn as two narrow tapered trapezoids (drawGeneralTrapezoid)
+       in steel rgba(0.40,0.44,0.52,1) with a 1px electric-cyan top edge
+       rgba(0.20,0.75,1.0,1). When charged, the rails GLOW (brighten the cyan edge
+       toward white). The rails ARE the barrel — there is no enclosing tube, which
+       is the railgun's unmistakable silhouette.
+    4. RAIL CROSS-BRACES: 2-3 thin steel rungs connecting the rails at intervals
+       (small rects spanning rail-to-rail at Y=78, Y=98, Y=116), rgba(0.36,0.40,0.48,1).
+    5. EMITTER / MUZZLE GAP: between the rail tips at Y=122, a small bright energy
+       point rgba(0.80,0.92,1.0,1) (where the slug accelerates out) — a tiny disc,
+       brighter with charge level.
+    6. MUZZLE CAP: 2px bright steel band at Y=124 spanning the rail tips. NO bore
+       ellipse (top-down, and there is no tube anyway).
+
+  FRAMES:
+    idle    — capacitor dim, rails dark steel, emitter dark.
+    charge1 — capacitor cyan, rail edges glow cyan, emitter point lit.
+    charge2 — capacitor white-blue blinding, rails glow white, emitter bright,
+              faint arcing spark pixels between the rails.
+    fire    — the whole rail flashes white, emitter erupts; weapon kicks UP ~10px
+              (hardest recoil with the grenade launcher); capacitor instantly
+              dark (discharged).
+    reload  — capacitor dark/refilling (a sweep of blue fills it bottom-to-top
+              over the tick count), a spent slug casing ejecting up-right.
+
+FIRE EFFECT (custom — distinct white-blue beam)
+  - BEAM: a thin, BLINDING white-blue vertical line up the center of the screen
+    (the slug travels dead-ahead = screen center) for RAILGUN_BEAM_DURATION,
+    additively blended, with a white core rgba(0.95,0.98,1.0,1) and a thin cyan
+    glow falloff rgba(0.20,0.70,1.0,0.6) on each side. The longest, thinnest,
+    brightest tracer in the game — it should read as a hyper-velocity line, not
+    a fat plasma streak.
+  - SCREEN FLASH: a hard near-white whiteout, alpha ~0.45, instant on, fast fade
+    (the crack of a railgun discharge).
+  - SHAKE: a single sharp jolt RAILGUN_SHAKE_INTENSITY ~10px, decays fast (~0.15s)
+    — a crack, not a rumble.
+  - CHARGE GLOW (per turn while charging): a soft cool-blue vignette pulse at the
+    screen edges that intensifies from charge 1 to charge 2, telegraphing the
+    held shot. Implemented as a low-alpha blue edge gradient over the world.
+
+HUD
+  - hudAmmoString(): when NORMAL/loaded and not charging: "SLUGS <slugsInClip>/1"
+    (effectively "SLUGS 1/1" or "SLUGS 0/1"). When charging, show a charge
+    indicator instead: "RAIL >" (level 1) / "RAIL >>" (level 2, READY). Reuses
+    the right-panel digits + weapon name "RAILGUN".
+  - Charge level can also drive a small bar or arrow glyphs in the right panel.
+
+AUDIO
+  - CHARGE: a rising electric whine, one pitch step per charge level (charge 1 =
+    low hum, charge 2 = high ready-tone). The ready-tone at level 2 is a clear
+    "it will fire next press" cue.
+  - FIRE: a sharp "KRA-KOW" crack with a brief ringing tail (the longest, most
+    dramatic fire sound).
+  - RELOAD: a heavy slug rack "CHA-CHUNK" + a capacitor recharge hum over the
+    ticks.
+  - DRY FIRE: a flat dead "click" (no charge available).
+
+
+TECHNICAL NOTES
+===============
+NEW CLASS
+  entity/Railgun.java extends Weapon
+    Constructor:
+      super("RAILGUN",
+            Constants.RAILGUN_DAMAGE_BY_CHARGE[Constants.RAILGUN_MAX_CHARGE], // nominal base
+            Constants.RAILGUN_CLIP_SIZE,
+            Constants.RAILGUN_RELOAD_TIME_TICKS,
+            Constants.RAILGUN_DROP_COEFF,
+            Constants.RAILGUN_RANGE_TILES);
+    New field: int chargeLevel (0..RAILGUN_MAX_CHARGE), persisted on the instance.
+
+  CHARGE INTEGRATION (PlayerController / Weapon coordination)
+    The charge state is the one piece that touches the turn machine. Two clean
+    options; pick per java-architect review:
+      (a) Weapon owns chargeLevel and exposes:
+            boolean isCharging()        -> chargeLevel >= 1
+            void    advanceCharge()     -> chargeLevel = min(max, chargeLevel+1)
+            boolean shouldAutoFire()    -> chargeLevel == RAILGUN_MAX_CHARGE
+            void    resetCharge()       -> chargeLevel = 0
+          PlayerController's attack handler: if equipped weapon isCharging()==false
+          and a slug is loaded -> advanceCharge() and CONSUME THE TURN without
+          firing (spin-up). If isCharging()==true -> either advanceCharge() (and
+          if shouldAutoFire(), call fire() this same turn) or fire() at current
+          level if the player chose "fire now."
+      (b) A WeaponState.CHARGING added to the weapon state machine, with
+          chargeLevel as sub-state. Either is fine; (a) keeps the shared state
+          machine untouched and localizes railgun-specific logic.
+    MOVING WHILE CHARGED: PlayerController checks isCharging() before a move; per
+    recommendation, it calls fire() (snap-shot at current charge in the facing
+    direction) THEN proceeds with the move on the next turn — or simply fires and
+    the move is the same turn's end. Confirm in OPEN QUESTIONS.
+
+  marchShot() OVERRIDE — identical structure to the plasma rifle's full-pierce
+  loop, with charge-scaled damage:
+    for (int distanceTiles = 1; distanceTiles <= range; distanceTiles++) {
+        int targetColumn = playerTileColumn + facingStepColumn * distanceTiles;
+        int targetRow    = playerTileRow    + facingStepRow    * distanceTiles;
+        char targetCell  = level.getCell(targetColumn, targetRow);
+        if (Level.isWall(targetCell)) return FireResult.HIT_WALL; // slug stops at wall
+        if (enemyHitTarget != null) {
+            Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
+            if (hitEnemy != null) {
+                float baseForCharge = Constants.RAILGUN_DAMAGE_BY_CHARGE[chargeLevel];
+                int damage = Math.round(baseForCharge
+                              * GameMath.railgunFalloff(distanceTiles,
+                                   Constants.RAILGUN_DROP_COEFF,
+                                   Constants.RAILGUN_DAMAGE_MIN_MULTIPLIER));
+                enemyHitTarget.applyDamageTo(hitEnemy, damage);
+                // CONTINUE — infinite pierce
+            }
+        }
+    }
+    return FireResult.MISSED;
+    // After the loop, caller resets chargeLevel and decrements the clip.
+
+  hudAmmoString() override: if RELOADING -> "RELOAD"; else if chargeLevel == 2 ->
+  "RAIL >>"; else if chargeLevel == 1 -> "RAIL >"; else -> "SLUGS " + slugsInClip
+  + "/" + clipSize. Built into the preallocated StringBuilder.
+
+CONSTANTS TO ADD (util/Constants.java)
+  RAILGUN_DAMAGE_BY_CHARGE       = {0, 40, 90}   // index = chargeLevel
+  RAILGUN_MAX_CHARGE             = 2
+  RAILGUN_DROP_COEFF             = 0.02f
+  RAILGUN_DAMAGE_MIN_MULTIPLIER  = 0.70f
+  RAILGUN_RANGE_TILES            = 16
+  RAILGUN_CLIP_SIZE              = 1
+  RAILGUN_RELOAD_TIME_TICKS      = 4
+  RAILGUN_PICKUP_SLUGS           = 4
+  RAILGUN_MAX_SLUGS              = 12
+  RAILGUN_PENETRATION            = true
+  RAILGUN_BEAM_DURATION          = 0.14f
+  RAILGUN_SHAKE_INTENSITY        = 10f
+  RAILGUN_SCREEN_FLASH_ALPHA     = 0.45f
+  RAILGUN_CANVAS_WIDTH           = 192
+  RAILGUN_CANVAS_HEIGHT          = 134
+  RAILGUN_NORMAL_TEXTURE_PATH    = "textures/guns/railgun/railgun.png"
+  RAILGUN_FIRE_TEXTURE_PATH      = "textures/guns/railgun/railgun_fire.png"
+  RAILGUN_RELOAD_TEXTURE_PATH    = "textures/guns/railgun/railgun_reload.png"
+  // Sprite / beam colors (RGBA)
+  RAILGUN_COLOR_BODY             = (0.26,0.30,0.40,1)
+  RAILGUN_COLOR_CAP_DIM          = (0.10,0.35,0.85,1)
+  RAILGUN_COLOR_CAP_CHARGED      = (0.80,0.92,1.00,1)
+  RAILGUN_COLOR_RAIL             = (0.40,0.44,0.52,1)
+  RAILGUN_COLOR_BEAM_CORE        = (0.95,0.98,1.00,1)
+  RAILGUN_COLOR_BEAM_GLOW        = (0.20,0.70,1.00,0.6)
+
+GAMEMATH ADDITIONS (util/GameMath.java)
+  railgunFalloff(int distanceTiles, float coefficient, float minMultiplier) -> float
+    /*
+     * Formula: near-flat linear damage falloff with a high floor.
+     * Derivation: multiplier = 1 - coefficient * (distanceTiles - 1); at D=1 ->
+     *   1.0; with coefficient 0.02 a 16-tile shot = 1 - 0.02*15 = 0.70 (the
+     *   floor), so the slug stays lethal at maximum range. Clamp to
+     *   [minMultiplier, 1.0].
+     * Edge cases: distanceTiles < 1 -> clamp to 1; coefficient 0 -> flat 1.0;
+     *   large coefficient -> floor dominates (but railgun uses a tiny coeff).
+     */
+  (Mirrors plasmaDamageDropMultiplier; can share one generic linearFalloff helper
+   if java-architect prefers — keep distinct constants either way.)
+
+WEAPONHUDRENDERER ADDITIONS
+  - instanceof Railgun check in loadOrGenerateNormalTexture() ->
+    generateRailgunTexture().
+  - generateRailgunTexture() via FrameBuffer + ShapeRenderer. drawRailgunShape():
+    receiver block, capacitor (color by chargeLevel for the charge frames), TWIN
+    rails via drawGeneralTrapezoid, cross-braces, emitter point, muzzle cap.
+  - Custom fire effect renderRailgunBeam() (thin white-blue center line) gated by
+    instanceof Railgun in render(), instead of the shared flame cone.
+  - Custom charge telegraph renderRailgunChargeGlow() drawn while isCharging()
+    (cool-blue edge vignette, intensity by chargeLevel).
+
+NO-ALLOCATION COMPLIANCE
+  - Sprite textures built once per frame variant at load; disposed at shutdown.
+    (If charge frames are separate textures, generate all at load.)
+  - chargeLevel is a primitive int on the instance — no allocation.
+  - hudAmmoString uses a preallocated StringBuilder.
+  - marchShot walks integers; damage math via GameMath (pure).
+
+
+BALANCE NOTES
+=============
+- THE CHARGE IS THE BALANCE. A 90-damage full-charge slug that pierces a whole
+  16-tile corridor is the strongest shot in the game — but it costs TWO exposed
+  turns to set up (spin to level 1, then to level 2), then a 4-tick reload, and
+  slugs are the rarest ammo. The half-charge 40-damage shot is available in one
+  turn for players who cannot afford two.
+- CHARGE GAMBLE TENSION: because charging spends turns and enemies advance, the
+  player visibly trades safety for power. If full charge feels never-worth-it
+  (enemies always close before turn 2), shorten the charge to 1 extra turn at
+  higher damage, or let charge 2 be reachable same-turn-as-charge-1 by a
+  hold-press (already supported by the auto-fire-at-max rule). Tune
+  RAILGUN_DAMAGE_BY_CHARGE so full charge is clearly worth the extra turn against
+  beefy targets but overkill on trash.
+- AMMO RARITY: 4 slugs per pickup, max 12. Suggested ~3-5 slugs found per level.
+  The railgun is a "boss / armored elite / perfect-corridor" tool, never a trash
+  broom. One slug per zombie is a deliberate waste the player learns to avoid.
+- RANGE 16 is intentionally double the plasma's 8 so the railgun OWNS long halls.
+  If levels rarely have 16-tile sightlines, the effective advantage self-limits
+  (good — it shines exactly where long sightlines exist).
+- DIFFICULTY KNOBS: RAILGUN_DAMAGE_BY_CHARGE (power curve), charge turn cost
+  (exposure), RAILGUN_RELOAD_TIME_TICKS (cadence), slug drop rate (availability),
+  RAILGUN_DROP_COEFF (long-range potency).
+- ALL NUMBERS ARE FIRST-PASS PLACEHOLDERS. Intended FEEL: "the patient sniper —
+  you pick your corridor, you hold your breath through the charge while they
+  close, and you delete the whole line in one crack of light."
+
+
+INTERACTIONS
+============
+1. PLASMA RIFLE / WEAPON SYSTEM (plasma-rifle.txt): both infinite-pierce, but
+   deliberately non-redundant. Plasma = fast, 8-tile, per-bolt, sustained.
+   Railgun = slow charge, 16-tile, one huge slug, single-shot clip. The railgun
+   reuses the plasma's full-pierce marchShot loop nearly verbatim (proving the
+   pierce path generalizes) and adds only the charge state and damage scaling.
+2. ENEMY SYSTEM + HIT REACTIONS (enemy_system.txt, enemy-health-bars-...): one
+   slug triggers simultaneous hurt/death on every pierced enemy in the line.
+   Reuses the existing multi-hit reaction path. Order hits front-to-back so death
+   animations / corpse drops resolve along the beam sensibly.
+3. ARMOR / ENEMY WEAKNESS: if an armored enemy type defines high bullet
+   resistance, the railgun's huge single hit is the intended counter — apply any
+   "slug / armor-piercing" weakness multiplier in marchShot per target, mirroring
+   the shotgun/plasma weakness pattern. The railgun should feel like THE answer
+   to heavy armor.
+4. HAZARD CHAIN REACTIONS (hazard-chain-reactions-...): a slug crossing an
+   explosive barrel (B) detonates it and CONTINUES (coherent slug pierces past
+   the barrel, like the plasma bolt). Lining a barrel up mid-corridor lets one
+   full-charge slug delete a column AND pop the barrel.
+5. DOORS (doors.txt): a CLOSED door stops the slug like a wall (no opening/
+   destroying — keycard gating preserved). An OPEN door tile lets the slug pass.
+6. EMERGENCY RED ALERT PULSE (emergency-red-alert-pulse.txt): the discharge crack
+   is a loud noise event the alarm system subscribes to. The rising charge whine
+   is NOT a combat noise event (charging is silent to enemies — only the shot
+   announces you), which rewards the patient sniper who fires from concealment.
+
+
+OPEN QUESTIONS
+=============
+1. MOVE-WHILE-CHARGED: does moving FIRE the slug at current charge (snap-shot) or
+   CANCEL the charge (capacitor bleeds off, no shot, no slug spent)? Recommendation:
+   FIRE at current charge in the facing direction (never silently waste a charge;
+   gives a "fire and reposition" option). If that feels punishing for accidental
+   moves, switch to CANCEL with a brief warning cue.
+2. CHARGE PERSISTENCE ACROSS WEAPON SWAP: if the player swaps away while charged,
+   does the charge hold or bleed off? Recommendation: bleed to 0 on swap (you let
+   go of the trigger). Confirm with the inventory/weapon-swap system.
+3. SAME-TURN FULL CHARGE: should reaching full charge be possible in ONE turn
+   (press = instant full) on lower difficulties, or always require the two-turn
+   commit? Recommendation: always two-turn commit for identity; expose the auto-
+   fire-at-max so a player who presses twice across two turns gets full power
+   without a separate release input.
+4. CHARGE DECAY OVER IDLE TURNS: if the player charges to level 1 then does
+   nothing further (no input), does the charge decay? Since charging consumes the
+   turn, "doing nothing" is not really possible — every action either advances or
+   fires. Recommendation: no passive decay; charge only changes on explicit
+   actions. Flag if a "wait" action is ever added.
+5. KEY BINDING FOR RELEASE: reuse KEY_ATTACK for both charge-up and fire-now
+   (press while charged = fire), or add a dedicated KEY_RAIL_RELEASE? Recommendation:
+   reuse KEY_ATTACK (press while charged-but-not-max = fire now; press while at
+   level 1 with intent to hold... ambiguous). To resolve the ambiguity cleanly:
+   press at level 1 ALWAYS raises to level 2 and auto-fires that turn; a player
+   who wants the half-charge shot uses a tap-and-move (snap-shot) or a dedicated
+   release key. Decide with input/PlayerController owner.
+6. BEAM VISUAL: stylized center-screen line (recommended, cheap, and correct
+   since the slug always travels dead-ahead) vs a projected 3D beam. The line is
+   the right call here — a railgun trace IS a perfect screen-center vertical.

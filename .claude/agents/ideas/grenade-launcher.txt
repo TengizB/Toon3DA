@@ -1,0 +1,453 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Grenade Launcher — bouncing lobbed splash weapon (GRENADES)
+CREATED: 2026-06-05
+---
+
+OVERVIEW
+========
+The Grenade Launcher is the player's first true AREA weapon. Every existing gun
+hits a single straight line of tiles; the grenade launcher instead lobs a single
+grenade down the player's facing that TRAVELS, BOUNCES off the first wall it
+hits (turning a corner once), and DETONATES in a plus-shaped splash that damages
+every enemy in a 5-tile area (impact tile + the 4 orthogonal neighbours). It is
+the answer to enemies clustered in a side room you cannot get a clean line on,
+to packs around a corner, and to the player's recurring problem: "they are
+bunched up but a wall is between us." It reuses the Weapon abstraction
+(clipSize / reloadTime / damageDropCoefficient / range), the marchShot() tile
+walk, and the procedural FrameBuffer sprite pipeline. Its identity is the
+ARC-AND-BANK lob and the AoE blast — the only weapon that can hit a tile the
+player has no line of sight to.
+
+Why it belongs: the four existing weapons (shotgun cluster, double-barrel burst,
+chaingun stream, plasma pierce) are ALL single-line, single-target-or-pierce
+hitscan. There is no splash, no indirect fire, no "throw it around the corner."
+The grenade launcher is the cleanest orthogonal addition — it makes geometry the
+puzzle. Where the plasma rifle wants enemies in a straight line, the grenade
+launcher wants them in a CLUMP, ideally one you cannot shoot directly.
+
+
+GAMEPLAY ROLE
+=============
+- Niche: indirect-fire area-of-effect. The ONLY weapon that damages tiles the
+  player has no straight line to (via a single wall bounce) and the ONLY weapon
+  that hits a 2D cluster instead of a 1D line.
+- Ideal geometry: 2-4 enemies bunched in a small room or around one corner.
+- Anti-niche (deliberate weakness): single enemies in open corridors (splash is
+  wasted, ammo is precious), and point-blank fights (the grenade must travel a
+  minimum distance before it can detonate — see ARMING below — so you can NOT
+  drop it on an adjacent enemy; firing into a wall 1 tile ahead is a dud or
+  self-risk depending on tuning). This keeps it from replacing the shotgun.
+- Role differentiation table:
+
+                    Shotgun     Plasma Rifle   Grenade Launcher
+  Damage pattern    1D cluster  1D pierce      2D plus-splash
+  Targeting         line-of-    line-of-       can BANK around
+                    sight       sight          one corner (indirect)
+  Best vs           1 close     a line of      a CLUMP / packed room
+                    enemy       enemies        / around-corner pack
+  Range             5 tiles     8 tiles        up to 6 tiles travel
+  Ammo economy      common      uncommon       RARE (3-4 per clip total)
+  Risk              none        none           SELF-DAMAGE if blast tile
+                                               is adjacent to the player
+
+
+GAMEPLAY LOOP
+=============
+PRE-FIRE (free aim)
+- As with all weapons, rotating (A/D) to choose the lob direction is FREE and
+  does not advance reload/turn. The player lines up the corridor or wall they
+  want to bank off.
+
+FIRING (one full turn)
+1. Player presses KEY_ATTACK with the launcher equipped.
+2. PlayerController checks state == IDLE and weapon.canFire() (grenadesInClip > 0
+   and not RELOADING). If false: dry "clunk" (empty breech), HUD ammo flashes
+   red, NO turn consumed.
+3. If true: transition to ATTACKING. Weapon.marchShot() resolves the grenade
+   path instantly in tile space:
+   a. March forward from the player tile along (facingStepColumn, facingStepRow),
+      one tile per step, counting traveledTiles.
+   b. At each tile:
+        - If the tile is a WALL or CLOSED door: the grenade BOUNCES (see BOUNCE
+        below) IF it has not bounced yet AND traveledTiles >= GRENADE_ARM_TILES;
+        otherwise it detonates on contact with the wall (a grenade that hits a
+        wall before arming just blows up against it). Record this as the
+        pre-bounce wall hit and switch to the bounced direction.
+        - If the tile contains an ENEMY and traveledTiles >= GRENADE_ARM_TILES:
+        the grenade detonates ON that tile (direct impact). Go to DETONATE.
+        - If the tile contains an ENEMY but traveledTiles < GRENADE_ARM_TILES:
+        the grenade is not yet armed — it passes THROUGH harmlessly (a thrown,
+        un-armed shell). This is the minimum-range weakness.
+   c. If traveledTiles reaches GRENADE_RANGE_TILES (6) with no impact: the
+      grenade detonates on the final reached floor tile (air-burst at max range).
+4. DETONATE (impactColumn, impactRow):
+   a. Build the splash set: the impact tile + its 4 orthogonal neighbours (N/S/E/W
+      one tile each) = up to 5 tiles. (Plus shape. NOT diagonals — keeps it on
+      the cardinal grid and readable.)
+   b. For each splash tile: if it is NOT a wall, apply GRENADE_SPLASH_DAMAGE to
+      every enemy standing there. The CENTER (impact) tile gets full damage; the
+      4 neighbours get GRENADE_FALLOFF_DAMAGE (reduced — splash edge).
+   c. If the impact tile or any splash tile is an explosive barrel (B): detonate
+      it (chain reaction — see INTERACTIONS).
+   d. SELF-DAMAGE: if the player's own tile is within the splash set, the player
+      takes GRENADE_SELF_DAMAGE. This is the high-skill risk: never bank a
+      grenade into a wall one tile away from yourself.
+   e. grenadesInClip -= 1.
+5. Visual: weapon sprite plays FIRE (breech smoke puff), a small arcing grenade
+   billboard travels the path (optional polish; v1 can use a center-screen
+   "thunk" + a delayed blast flash), then an orange-white expanding blast ring
+   at the impact location. Screen shake (heavy). A deep "THUMP ... BLAM."
+6. Turn ends. Enemies act. If clip now empty, weapon -> RELOADING with
+   GRENADE_RELOAD_TICKS armed.
+
+RELOAD (tick-driven)
+- Same tick model as every weapon: each COMPLETED tile step (W/S/Q/E that
+  changes tiles) decrements ticksRemaining. Rotations and blocked bumps do NOT
+  tick. When ticksRemaining hits 0: grenadesInClip = min(clipSize, pool); deduct
+  from the GRENADES pool; state -> NORMAL. The reload is slow (4 ticks) because
+  the weapon is so strong — break the breech, feed shells, you are exposed.
+
+EMPTY / OUT-OF-GRENADES
+- Fire while empty mid-reload: dry clunk, no turn.
+- Reload finishes with 0 grenades in pool: clip stays 0/N, HUD red, keeps
+  clunking. Swap to another weapon. Fists remain the never-softlock fallback.
+
+BOUNCE RULE (the signature mechanic)
+- A grenade bounces EXACTLY ONCE off the first wall it meets (after arming).
+  The bounce reflects the travel direction by 90 degrees:
+    - If the grenade was traveling along X and hits a wall, it continues along
+      the player's facing-perpendicular axis. Because movement is cardinal-only,
+      the deterministic rule is: on hitting a wall, the grenade turns toward
+      whichever orthogonal direction has OPEN floor (prefer the side the player
+      is "leaning," see OPEN QUESTIONS for tie-break). If BOTH perpendicular
+      neighbours are open, default to the player's last-rotation bias; if NEITHER
+      is open, the grenade detonates at the wall (dead-end bank).
+    - After bouncing once, a second wall contact = detonation (no double bounce).
+- This single-bounce "bank shot" is the whole reason to learn the weapon: you
+  rotate to face a wall at an angle to the room you want to hit, lob, and the
+  grenade rounds the corner into the pack.
+
+
+STATS
+=====
+(Placeholders — tune in playtest. Numbers chosen so it is strong but rationed.)
+
+  Center (direct) Damage:        30   (GRENADE_SPLASH_DAMAGE)
+  Neighbour (edge) Damage:       16   (GRENADE_FALLOFF_DAMAGE)
+  Self Damage (if caught):       20   (GRENADE_SELF_DAMAGE)
+  Damage Drop Coefficient:       0.0  (splash damage does NOT fall off with
+                                       travel distance — a grenade is a grenade;
+                                       distance only affects WHERE it lands)
+  Range (max travel tiles):      6    (GRENADE_RANGE_TILES)
+  Arm Distance (min travel):     2    (GRENADE_ARM_TILES — cannot detonate
+                                       within 2 tiles; the min-range weakness)
+  Splash Shape:                  plus (impact + 4 orthogonal neighbours)
+  Bounces:                       1    (single 90-degree bank off first wall)
+  Clip Size:                     3    (grenades before reload)
+  Ammo per Shot:                 1 grenade
+  Reload Time:                   4 movement ticks (slow — this is the cost)
+  Pickup Grenades:               6    (2 clips)
+  Max Grenades Carried:          18   (6 clips)
+  Ammo Type:                     GRENADES (new pool; shared with future
+                                  launchers / the boss's mortar if reused)
+  Penetration:                   N/A  (it is splash, not a line; marchShot
+                                  walks the path then detonates)
+
+
+SPECIAL MECHANICS
+=================
+1. INDIRECT FIRE / SINGLE BOUNCE — the only weapon that hits tiles outside the
+   player's straight line of sight. The grenade walks, banks once around a
+   corner, and detonates. Deterministic (cardinal grid), so a skilled player can
+   PLAN the bank.
+2. PLUS-SHAPED SPLASH — hits a 2D cluster on the cardinal grid. Center full
+   damage, 4 neighbours reduced. No diagonals (grid-consistent, readable).
+3. MINIMUM ARM DISTANCE — cannot detonate within GRENADE_ARM_TILES (2) of the
+   muzzle. Lobbing into an adjacent enemy fails (passes through un-armed). Forces
+   the player to keep the launcher for mid-range clumps, not point-blank panic.
+4. SELF-DAMAGE — if the blast catches the player's tile (e.g. banked a grenade
+   into a wall right next to themselves), they eat GRENADE_SELF_DAMAGE. The only
+   weapon that can hurt its own user. High-risk, high-reward.
+5. BARREL CHAINING — a grenade that lands on or splashes an explosive barrel (B)
+   detonates it, and that explosion can chain further. The launcher is the
+   premier barrel-trigger weapon.
+
+
+VISUAL DESIGN
+=============
+WEAPON SPRITE (procedural FrameBuffer, 192x134 canvas, Quake-1 top-down angle)
+  Identity silhouette: a STUBBY, FAT single-tube launcher — short and wide, the
+  opposite of the rifle silhouette. A break-action grenade launcher: thick
+  receiver block, a single very WIDE bore tube (the launcher mouth is the widest
+  barrel of any weapon), and a hazard-striped collar near the muzzle.
+
+  View mode: this is a FACE-ON exception candidate, but to stay consistent with
+  the guide's default, render TOP-DOWN with convergence factor ~0.65 and a
+  MUZZLE CAP (no bore ellipse). Rationale: a wide muzzle cap band reads as a fat
+  grenade tube perfectly; a bore ellipse would imply it points at the camera.
+
+  DRAW LAYERS (back to front, Y-up canvas, centerX = 96):
+    1. RECEIVER BODY: a wide chunky trapezoid from Y=14 (lowest visible) up to
+       Y=66. Dark gunmetal rgba(0.24,0.26,0.30,1). It is the WIDEST body of any
+       weapon (~110px at base) to read as heavy/stubby. Add a 3px top highlight
+       strip rgba(0.42,0.46,0.52,1) and a 3px bottom shadow rgba(0.12,0.13,0.17,1).
+    2. HAZARD STRIPE: a diagonal yellow/black warning band across the receiver
+       face (Y=30..40), alternating rgba(0.85,0.70,0.10,1) and
+       rgba(0.10,0.10,0.10,1) — sells "ordnance / explosive." This is the
+       launcher's signature color accent (no other weapon has yellow hazard).
+    3. BREAK-ACTION HINGE: a small dark notch at the receiver/barrel join (Y=64),
+       two rgba(0.16,0.18,0.22,1) rects flanking centerX — implies it breaks open
+       to load. In the RELOAD frame, draw the barrel TILTED/split here.
+    4. SINGLE WIDE BARREL TUBE: one fat tube from base Y=66 (half-width ~22px) to
+       muzzle Y=124 (half-width ~22*0.65 = ~14px), drawn with drawSymmetricTrapezoid
+       / drawGeneralTrapezoid for perspective. Crown highlight strip
+       rgba(0.45,0.49,0.56,1) down the center; outer-edge shadow strips
+       rgba(0.10,0.11,0.14,1) on each side. The tube is SHORTER and FATTER than a
+       rifle barrel (ratio ~1:2.5, not 1:3) to read as a grenade launcher.
+    5. MUZZLE COLLAR / HAZARD RING: a retaining band at ~Y=110, full muzzle width,
+       3px tall, rgba(0.40,0.44,0.52,1) with a 1px yellow rgba(0.85,0.70,0.10,1)
+       top edge — a second hazard accent at the mouth.
+    6. MUZZLE CAP: 2px bright steel band rgba(0.40,0.44,0.52,1) at the barrel tip
+       Y=124, muzzle width. NO bore ellipse (top-down rule).
+
+  FRAMES:
+    idle    — as above, breech closed, muzzle dark.
+    fire    — a gray smoke puff (rgba(0.55,0.55,0.55,0.6) expanding disc) at the
+              muzzle, a brief orange rgba(0.95,0.55,0.15,1) flash inside the
+              collar, weapon kicks UP ~8px (heavy lob recoil).
+    reload  — barrel broken open at the hinge (tube tilted up ~15px and gapped),
+              a spent grenade casing ejecting up-right (a small brass
+              rgba(0.70,0.55,0.20,1) cylinder), breech dark.
+
+FIRE EFFECT (custom — distinct from the shared orange flame cone)
+  - MUZZLE: a gray smoke puff + small orange core flash (NOT the rifle's bright
+    cone). Use a custom renderGrenadeMuzzle(): an expanding semi-transparent gray
+    disc with a brief orange center, fading over FIRE_FLASH_DURATION.
+  - BLAST (at impact): an expanding orange-to-white ring drawn over the world for
+    GRENADE_BLAST_DURATION. Since the impact may be off-center (banked), v1 can
+    render a center-screen blast flash + heavy shake to imply it; a polish pass
+    can billboard the blast at the projected impact tile. Palette: core white
+    rgba(1,1,0.9,1) -> orange rgba(0.95,0.45,0.10,1) -> dark smoke
+    rgba(0.3,0.25,0.2,0.5) outer.
+  - SCREEN FLASH: warm orange, alpha ~0.35, with a fast fade (slower than the
+    shotgun's snap — a blast lingers).
+  - SHAKE: heaviest of any weapon — GRENADE_SHAKE_INTENSITY ~8px, decays over
+    ~0.25s.
+
+HUD
+  - hudAmmoString(): "GRENADES <grenadesInClip>/<clipSize>", e.g. "GRENADES 2/3".
+    Reuses the right-panel ammo digits + weapon name "GRENADE LAUNCHER".
+  - Empty-state red pulse and change-glow logic reused unchanged.
+
+AUDIO
+  - FIRE: a hollow "THUMP / THOONK" launch.
+  - DETONATE: a delayed "BLAM" with a low rumble tail (the gap between THUMP and
+    BLAM sells the travel time).
+  - RELOAD: "CRACK" (break open), "clink clink" (load), "CHUNK" (snap shut) over
+    the 4 ticks.
+  - DRY FIRE: a flat metallic "clunk" (empty breech).
+
+
+TECHNICAL NOTES
+===============
+NEW CLASS
+  entity/GrenadeLauncher.java extends Weapon
+    Constructor:
+      super("GRENADE LAUNCHER",
+            Constants.GRENADE_SPLASH_DAMAGE,     // base damage = center damage
+            Constants.GRENADE_CLIP_SIZE,
+            Constants.GRENADE_RELOAD_TIME_TICKS,
+            Constants.GRENADE_DAMAGE_DROP_COEFF, // 0.0 — no falloff
+            Constants.GRENADE_RANGE_TILES);
+
+  marchShot() OVERRIDE — this weapon does NOT use the standard line-pierce loop.
+  It walks a path, handles ONE bounce, then applies a plus-splash. Pseudocode
+  (cardinal grid, all integer tile math, allocation-free):
+
+    int currentColumn = playerTileColumn;
+    int currentRow    = playerTileRow;
+    int directionColumn = facingStepColumn;
+    int directionRow    = facingStepRow;
+    boolean hasBounced = false;
+    int impactColumn = -1, impactRow = -1;
+
+    for (int traveledTiles = 1; traveledTiles <= range; traveledTiles++) {
+        int nextColumn = currentColumn + directionColumn;
+        int nextRow    = currentRow    + directionRow;
+        char nextCell  = level.getCell(nextColumn, nextRow);
+
+        if (Level.isWall(nextCell)) {
+            if (!hasBounced && traveledTiles >= Constants.GRENADE_ARM_TILES) {
+                // bank: turn 90 degrees toward an open perpendicular neighbour
+                int[] turned = chooseBounceDirection(currentColumn, currentRow,
+                                  directionColumn, directionRow, level);
+                if (turned == null) { impactColumn = currentColumn;
+                                      impactRow = currentRow; break; } // dead end
+                directionColumn = turned[0]; directionRow = turned[1];
+                hasBounced = true;
+                continue; // re-evaluate from current tile in new direction
+            } else {
+                impactColumn = currentColumn; impactRow = currentRow; break;
+            }
+        }
+
+        currentColumn = nextColumn; currentRow = nextRow;
+
+        if (enemyHitTarget != null
+            && traveledTiles >= Constants.GRENADE_ARM_TILES
+            && enemyHitTarget.enemyAt(currentColumn, currentRow) != null) {
+            impactColumn = currentColumn; impactRow = currentRow; break;
+        }
+    }
+    if (impactColumn < 0) { impactColumn = currentColumn; impactRow = currentRow; }
+    applyPlusSplash(impactColumn, impactRow, level, enemyHitTarget, player);
+    return new FireResult(/* hit */ true, distanceTo(impactColumn, impactRow));
+
+  - chooseBounceDirection(): returns the 90-degree-turned (column,row) step whose
+    target tile is open floor. If both perpendicular neighbours are open, pick a
+    deterministic tie-break (see OPEN QUESTIONS). If neither is open, return null
+    (detonate at the wall). Pre-allocate the returned int[2] as a reusable field
+    on the weapon to stay allocation-free; do NOT new int[] per shot.
+  - applyPlusSplash(): iterate the 5 plus tiles. For each non-wall tile, for each
+    enemy there, apply center vs neighbour damage. Check the player's own tile
+    for self-damage. Trigger barrel chains. Use a preallocated 5-element offset
+    table Constants.GRENADE_SPLASH_OFFSETS = {{0,0},{1,0},{-1,0},{0,1},{0,-1}}.
+
+  hudAmmoString() override: "GRENADES " + grenadesInClip + "/" + clipSize, built
+  into the weapon's preallocated StringBuilder (setLength(0); append...). No
+  per-frame allocation.
+
+  getNormalTexturePath()/getFireTexturePath()/getReloadTexturePath(): return the
+  Constants paths (procedural sprite, so these are nominal — the FrameBuffer
+  generator supplies the actual texture).
+
+CONSTANTS TO ADD (util/Constants.java)
+  GRENADE_SPLASH_DAMAGE          = 30
+  GRENADE_FALLOFF_DAMAGE         = 16
+  GRENADE_SELF_DAMAGE            = 20
+  GRENADE_DAMAGE_DROP_COEFF      = 0.0f
+  GRENADE_RANGE_TILES            = 6
+  GRENADE_ARM_TILES              = 2
+  GRENADE_CLIP_SIZE              = 3
+  GRENADE_RELOAD_TIME_TICKS      = 4
+  GRENADE_PICKUP_AMMO            = 6
+  GRENADE_MAX_AMMO               = 18
+  GRENADE_PENETRATION            = false  // not used by custom marchShot
+  GRENADE_SPLASH_OFFSETS         = {{0,0},{1,0},{-1,0},{0,1},{0,-1}}
+  GRENADE_BLAST_DURATION         = 0.30f
+  GRENADE_SHAKE_INTENSITY        = 8f
+  GRENADE_SCREEN_FLASH_ALPHA     = 0.35f
+  GRENADE_CANVAS_WIDTH           = 192
+  GRENADE_CANVAS_HEIGHT          = 134
+  GRENADE_NORMAL_TEXTURE_PATH    = "textures/guns/grenade/grenade.png"
+  GRENADE_FIRE_TEXTURE_PATH      = "textures/guns/grenade/grenade_fire.png"
+  GRENADE_RELOAD_TEXTURE_PATH    = "textures/guns/grenade/grenade_reload.png"
+  // Sprite colors (RGBA)
+  GRENADE_COLOR_BODY             = (0.24,0.26,0.30,1)
+  GRENADE_COLOR_HAZARD_YELLOW    = (0.85,0.70,0.10,1)
+  GRENADE_COLOR_BLAST_CORE       = (1.00,1.00,0.90,1)
+  GRENADE_COLOR_BLAST_MID        = (0.95,0.45,0.10,1)
+  GRENADE_COLOR_SMOKE            = (0.55,0.55,0.55,0.6)
+
+GAMEMATH ADDITIONS (util/GameMath.java)
+  No new falloff math (coefficient is 0). The bounce/splash logic is integer
+  tile reflection; if a helper is wanted:
+    cardinalReflectStep(directionColumn, directionRow, preferColumn, preferRow,
+                        levelOpenLeft, levelOpenRight) -> chosen step
+  with a derivation comment: a 90-degree turn of (dc,dr) yields (-dr,dc) [CCW]
+  or (dr,-dc) [CW]; pick whichever lands on open floor. Keep tile logic integer.
+
+WEAPONHUDRENDERER ADDITIONS
+  - instanceof GrenadeLauncher check in loadOrGenerateNormalTexture() -> return
+    generateGrenadeLauncherTexture().
+  - generateGrenadeLauncherTexture() via FrameBuffer + ShapeRenderer (per guide).
+  - drawGrenadeLauncherShape(): the layers above. Single fat barrel through
+    drawSymmetricTrapezoid; hazard stripes via small rects; muzzle cap rect.
+  - Custom fire effect renderGrenadeMuzzle() (smoke + orange core) gated by
+    instanceof GrenadeLauncher in render(), instead of the shared flame cone.
+
+NO-ALLOCATION COMPLIANCE
+  - Sprite textures built once at load, disposed at shutdown.
+  - Splash offset table and bounce-direction scratch int[] preallocated on the
+    weapon instance. marchShot walks integers only.
+  - hudAmmoString uses a preallocated StringBuilder.
+
+
+BALANCE NOTES
+=============
+- PER-SHOT CEILING: a perfect plus-splash hitting 5 enemies = 30 + 4*16 = 94
+  distributed damage in one turn. That is the highest single-turn AoE in the
+  game by design — but you only get 3 before a 4-tick reload, ammo is the rarest
+  in the game, and you risk self-damage. Strong, rare, risky.
+- THE RELOAD + AMMO RARITY ARE THE BALANCE. 6 grenades found per level beyond
+  the pickup (suggested) means the player hoards them for packed rooms and
+  barrel chains, not trash.
+- SELF-DAMAGE (20) must be enough to PUNISH a careless point-blank bank but not
+  instakill a healthy marine. Tune against player max HP (placeholder assumes
+  ~100). If players never self-damage, the min-arm + self-damage are doing their
+  job (the weakness is real and avoided by skill).
+- ARM DISTANCE (2) is the anti-shotgun guard. If it feels frustrating that
+  adjacent enemies are immune, lower to 1 — but do NOT go to 0 (point-blank
+  self-detonation would make it a suicide button, not a skill).
+- DIFFICULTY KNOBS: GRENADE_SPLASH_DAMAGE (power), GRENADE_RELOAD_TIME_TICKS
+  (cadence/exposure), pickup/max ammo (availability), GRENADE_ARM_TILES (min
+  range weakness), GRENADE_SELF_DAMAGE (risk).
+- ALL NUMBERS ARE FIRST-PASS PLACEHOLDERS. Intended FEEL: "the heavy ordnance
+  option — you save it for the right room, you respect the blast radius, and
+  when it lands on a pack it is the most satisfying shot in the game."
+
+
+INTERACTIONS
+============
+1. HAZARD CHAIN REACTIONS (hazard-chain-reactions-fire-toxic-explosive.txt):
+   The grenade launcher is the PREMIER barrel trigger. A grenade landing on or
+   splashing an explosive barrel (B) detonates it; that explosion can chain to
+   further barrels and enemies. Banking a grenade around a corner onto a barrel
+   in a packed room is the weapon's signature highlight-reel moment.
+2. ENEMY SYSTEM + HIT REACTIONS (enemy_system.txt, enemy-health-bars-...):
+   ONE shot can damage up to 5 enemies simultaneously (the plus splash). The
+   multi-hit hit-reaction path already exists for the shotgun cone / plasma
+   pierce; the launcher reuses it. Resolve splash hits center-first so death
+   animations and corpse drops order sensibly.
+3. DOORS (doors.txt, uac-keycard-doors-security-tiers.txt): a CLOSED door stops
+   the grenade like a wall (it can bounce off a closed door, or detonate against
+   it if unarmed/already bounced). The grenade does NOT open or destroy doors —
+   keycard gating preserved. An OPEN door tile lets the grenade pass.
+4. EMERGENCY RED ALERT PULSE (emergency-red-alert-pulse.txt): the launch THUMP
+   and especially the detonation BLAM are loud noise events the alarm/hearing
+   system subscribes to — the loudest in the game, raising local alarm state
+   strongly. Indirect fire still announces your position.
+5. ENEMY weakness multipliers: if an enemy type defines an "explosive" weakness
+   (e.g. an armored type that is tough to bullets but cracks to blast), apply it
+   in applyPlusSplash per target, mirroring the plasma/shotgun weakness pattern.
+
+
+OPEN QUESTIONS
+=============
+1. BOUNCE TIE-BREAK: when both perpendicular neighbours are open floor at the
+   bank wall, which way does the grenade turn? Options: (a) toward the side the
+   player most recently rotated (requires PlayerController to expose last-rotation
+   bias); (b) a fixed handedness (always CW, i.e. (dr,-dc)); (c) toward the
+   neighbour with more open floor beyond it (a 1-tile lookahead). Recommendation:
+   (b) fixed CW for v1 — deterministic and learnable; revisit if players want the
+   lean-based control of (a).
+2. TRAVEL VISUALIZATION: v1 stylized (center-screen thunk + delayed blast flash
+   + shake) vs a true billboard grenade arcing down the projected path and a
+   billboard blast at the impact tile. Recommendation: stylized for v1; upgrade
+   to a projected billboard in a polish pass (reuse the prop billboard pipeline).
+3. SELF-DAMAGE ON DIRECT WALL DUD: if an UNARMED grenade hits a wall < ARM_TILES
+   away (point-blank), does it (a) detonate and self-damage, or (b) fizzle as a
+   dud (no blast, no turn refund)? Recommendation: (b) dud — the turn is still
+   consumed and the grenade is still spent (punishes the misplay) but no
+   self-damage; reserve self-damage for ARMED blasts that catch the player.
+4. MAX BOUNCES: confirmed 1 (single bank). A 2-bounce version is tempting but
+   harder to read/plan on the grid — keep at 1 unless playtest wants more.
+5. SPLASH THROUGH WALLS: the plus splash currently SKIPS wall tiles (no damage
+   through walls). Confirm a blast does not hurt an enemy on the far side of a
+   wall neighbour. Recommendation: YES, walls block splash tiles (a wall in the
+   plus simply contributes no damage).
+6. PICKUP TILE: what represents the launcher / grenade ammo on the map? Reuse a
+   corpse `m` or locker `L` container, or a dedicated glyph. Defer to the
+   inventory/loot system (inventory-loot-ransack-system.txt). Recommendation: a
+   locker `L` drops the launcher; small ammo pickups drop grenades.

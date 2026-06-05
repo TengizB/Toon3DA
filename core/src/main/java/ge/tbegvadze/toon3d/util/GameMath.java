@@ -1177,6 +1177,32 @@ public final class GameMath {
         return Math.max(minimumMultiplier, Math.min(1f, multiplier));
     }
 
+    // =========================================================================
+    // RAILGUN DAMAGE FALLOFF — near-flat linear falloff with a high floor
+    // =========================================================================
+    /*
+     * Formula: railgunFalloff
+     * Derivation:
+     *   The railgun fires a coherent slug; damage barely drops over 16 tiles.
+     *   multiplier = 1 - coefficient × (distanceTiles - 1)
+     *   At distanceTiles = 1: multiplier = 1.0 (no drop at point-blank).
+     *   With coefficient = 0.02 and distanceTiles = 16:
+     *     multiplier = 1 - 0.02 × 15 = 0.70 (hits the floor exactly at max range).
+     *   Result is clamped to [minMultiplier, 1.0].
+     *   The (distanceTiles - 1) form ensures full damage at tile 1 (adjacent tile),
+     *   distinguishing railgun feel from the standard damageDropMultiplier which begins
+     *   dropping at tile 1.
+     * Edge cases:
+     *   distanceTiles < 1: formula gives > 1.0, clamped to 1.0 by the min().
+     *   coefficient = 0: constant 1.0 (no falloff — infinite precision slug).
+     *   Large coefficient: floor dominates; railgun uses tiny coefficient (0.02).
+     *   minMultiplier > 1.0: degenerate; caller must pass a valid value in [0, 1].
+     */
+    public static float railgunFalloff(int distanceTiles, float coefficient, float minMultiplier) {
+        float multiplier = 1f - coefficient * (distanceTiles - 1);
+        return Math.max(minMultiplier, Math.min(1f, multiplier));
+    }
+
     /*
      * Formula: damageDropMultiplierExponential (geometric decay — tuning alternative)
      * Derivation:

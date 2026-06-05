@@ -645,6 +645,31 @@ public final class Constants {
     public static final float LEVEL_TRANSITION_FADE_IN_SECONDS   = 0.30f;
     public static final int   STARTING_DEPTH                     = 1;
 
+    // Railgun — charge-up infinite-pierce hitscan sniper (SLUGS ammo)
+    // Damage table (coefficient 0.02, floor 0.70):
+    //   charge 1 (half), distance 1: 40 × 1.00 = 40
+    //   charge 1 (half), distance 16: 40 × max(0.70, 1 - 0.02×15) = 40 × 0.70 = 28
+    //   charge 2 (full), distance 1: 90 × 1.00 = 90
+    //   charge 2 (full), distance 16: 90 × 0.70 = 63
+    public static final int[]   RAILGUN_DAMAGE_BY_CHARGE          = {0, 40, 90};
+    public static final int     RAILGUN_MAX_CHARGE                = 2;
+    public static final float   RAILGUN_DROP_COEFF                = 0.02f;
+    public static final float   RAILGUN_DAMAGE_MIN_MULTIPLIER     = 0.70f;
+    public static final int     RAILGUN_RANGE_TILES               = 16;
+    public static final int     RAILGUN_CLIP_SIZE                 = 1;
+    public static final int     RAILGUN_RELOAD_TIME_TICKS         = 4;
+    public static final int     RAILGUN_PICKUP_SLUGS              = 4;
+    public static final int     RAILGUN_MAX_SLUGS                 = 12;
+    public static final boolean RAILGUN_PENETRATION               = true;
+    public static final float   RAILGUN_BEAM_DURATION             = 0.14f;
+    public static final float   RAILGUN_SHAKE_INTENSITY           = 10f;
+    public static final float   RAILGUN_SCREEN_FLASH_ALPHA        = 0.45f;
+    public static final int     RAILGUN_CANVAS_WIDTH              = 192;
+    public static final int     RAILGUN_CANVAS_HEIGHT             = 134;
+    public static final String  RAILGUN_NORMAL_TEXTURE_PATH       = "textures/guns/railgun/railgun.png";
+    public static final String  RAILGUN_FIRE_TEXTURE_PATH         = "textures/guns/railgun/railgun_fire.png";
+    public static final String  RAILGUN_RELOAD_TEXTURE_PATH       = "textures/guns/railgun/railgun_reload.png";
+
     // Tile-Based Ambient Lighting — floor tiles ' ', 'l', 'u', 'f' carry brightness multipliers
     // finalShade = clamp(distanceShade * directionalMultiplier * tileBrightness, 0, MAX_LIGHTING_SHADE)
     // ' ' (space) = lit bright floor (1.55×); 'l' = normal floor (1.0×);
