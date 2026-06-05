@@ -396,10 +396,10 @@ public class PropRenderer implements Renderable, Disposable {
                 float lobeAngleRadians = (float)(lobeIndex * 2.0 * Math.PI / 3.0);
                 int lobeX = (int)(trefoilCenterX + trefoilOrbitRadius * (float)Math.cos(lobeAngleRadians)) - 3;
                 int lobeY = (int)(trefoilCenterY + trefoilOrbitRadius * (float)Math.sin(lobeAngleRadians)) - 3;
-                pixmap.fillOval(lobeX, lobeY, 6, 6);
+                pixmap.fillCircle(lobeX + 3, lobeY + 3, 3);
             }
             // Centre disc of trefoil
-            pixmap.fillOval((int)trefoilCenterX - 2, (int)trefoilCenterY - 2, 4, 4);
+            pixmap.fillCircle((int)trefoilCenterX, (int)trefoilCenterY, 2);
             // Ooze drip streak from row 22 down 8 rows at column 20
             pixmap.setColor(0.14f, 0.45f, 0.08f, 1f);
             pixmap.fillRectangle(20, 22, 2, 8);
@@ -763,7 +763,7 @@ public class PropRenderer implements Renderable, Disposable {
         pixmap.fillRectangle(45, 16, 1, 19);
         // Lens disc (black)
         pixmap.setColor(0.03f, 0.03f, 0.04f, 1f);
-        pixmap.fillOval(26, 20, 10, 10);
+        pixmap.fillCircle(31, 25, 5);
         // Lens specular glint
         pixmap.setColor(0.40f, 0.45f, 0.50f, 1f);
         pixmap.drawPixel(28, 22);
@@ -846,7 +846,7 @@ public class PropRenderer implements Renderable, Disposable {
         }
         // Specimen silhouette: curled organic blob
         pixmap.setColor(0.10f, 0.22f, 0.16f, 1f);
-        pixmap.fillOval(22, 56, 20, 22);
+        pixmap.fillCircle(32, 67, 10);
         // Ascending bubbles
         pixmap.setColor(0.70f, 0.90f, 0.82f, 1f);
         int[] bubbleColumns = { 24, 38, 30, 20, 44 };
