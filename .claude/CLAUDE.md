@@ -70,7 +70,7 @@ On completion: snap each component to `Math.round()` → always exactly `(1,0)`,
 - Player always occupies exactly one tile; faces/moves in four cardinal directions only.
 - Every player action (move, rotate, attack, use item, interact) advances the world by exactly one turn.
 - Enemies act once per player turn — no real-time movement needed.
-- Level format: tile grids of `'x'` walls and `' '` (lit) / `'l'` (normal) / `'u'` (unlit) / `'f'` (flickering) floors; roguelike generator must use this format.
+- Level format: tile grids; full symbol list in `docs/tile-symbols.txt`. Roguelike generator must use only symbols defined there.
 - 3D view is purely cosmetic — all game logic (pathfinding, collision, LOS) operates in 2D tile space.
 - No free-aiming; player always attacks in current facing direction.
 
@@ -175,57 +175,32 @@ Every non-trivial formula as a `public static` method. **Never implement a formu
 Methods must be pure functions — no side effects, no LibGDX render state.
 
 ### `level/Level.java`
-2D tile grid. Cell chars and their meanings:
+2D tile grid. **Full tile symbol reference: `docs/tile-symbols.txt`** — single source of truth for every character used in level files.
 
-**Walls** (solid, block movement and raycasting):
-
-| Symbol | Meaning | Texture |
-|---|---|---|
-| `x` | Plain wall (default — use for 80-90% of all walls) | `lab_wall_generic.jpg` |
-| `c` | Conduit wall (utility corridors, pipes; sparse) | `lab_wall_conduit.jpg` |
-| `v` | Vent wall (room side walls, 1–2 per room) | `lab_wall_vent.jpg` |
-| `t` | Terminal wall (rare — 1–2 per level, corner alcoves) | `lab_wall_terminal.jpg` |
-| `w` | Wires wall (near equipment areas; sparse) | `lab_wall_wires.jpg` |
-
-**Floor lighting tiles** (walkable; brightness multiplier applied to wall/floor shading):
-
-| Symbol | Meaning | Brightness |
-|---|---|---|
-| ` ` | **Lit floor** — standard bright corridor floor (default; use for most open areas) | 1.55× |
-| `l` | Normal floor — base brightness, slightly dimmer feel; use in side rooms / recesses | 1.0× |
-| `u` | Unlit floor — broken bulb zone, very dark; use sparingly for dread zones | 0.55× |
-| `f` | Flickering floor — animated failing fluorescent; use 1–3 tiles at chokepoints | varies |
-
-**Special tiles**:
-
-| Symbol | Meaning | Notes |
-|---|---|---|
-| `P` | Cylindrical column (solid, rendered as 3D cylinder via ray-circle intersection) | Place inside open rooms; creates cover and visual depth. Works best in groups of 2-4. |
-| `d` | Door (opens on player interaction; runtime state in DoorManager) | `lab_door_1.jpg` |
-| `p` | Player start (exactly one per level) | — |
-
-**Solid props** (block player movement; rendered as billboard sprites):
-
-| Symbol | Meaning | Height |
-|---|---|---|
-| `b` | Radioactive barrel (dark green) | 0.65× wall |
-| `B` | Explosive barrel (orange-red with yellow rings) | 0.65× wall |
-| `T` | Computer terminal (charcoal-blue with cyan screen) | 0.75× wall |
-| `L` | Locker (steel blue-gray, double-door) | 0.90× wall |
-| `C` | Crate (warm brown wood, cross-plank) | 0.50× wall |
-
-**Walkable decal props** (player can walk over; rendered as flat billboard):
-
-| Symbol | Meaning | Height |
-|---|---|---|
-| `m` | Corpse / fallen marine | 0.35× wall |
-| `s` | Dropped shotgun | 0.22× wall |
-| `.` | Blood stain / splatter | 0.18× wall |
-| `O` | Oil pool (dark teal iridescent) | 0.18× wall |
+Quick summary of categories:
+- **Walls (16):** `x c v t w h r G k N Q S M Z U X`
+- **Doors (4):** `d R Y B`
+- **Floor lighting (4):** `(space) l u f`
+- **Special (3):** `p` (start), `P` (column), `>` (exit)
+- **Solid props (10):** `g E T L C # % & = @`
+- **Walkable decals (4):** `m s . O`
+- **Pickups (7):** `r y b + H a A`
+- **Enemy spawns (5):** `1 2 3 4 5` (replaced with floor at load time)
 
 `Level.isWall(char)` is the single authority on which chars are solid — both `WallRenderer` and `PlayerController` call it. When adding a new wall type, add it there first.
 
 Tile grid indexed by `(x, y)` where `(0, 0)` = bottom-left tile (Y-up). Package-private constructor — always instantiate via `LevelLoader`.
+
+#### STRICT RULE — Adding a new tile symbol
+
+**Every new symbol must be introduced in a single commit that includes ALL of:**
+1. An entry in `docs/tile-symbols.txt` (correct section, description, notes).
+2. The symbol added to `Level.java` in the appropriate method (`isWall()`, `isPropSolid()`, etc.).
+3. Texture/sprite lookup wired in `WallRenderer.java` or `PropRenderer.java`.
+4. Any new `Constants` entries (texture path, height multiplier, etc.).
+5. The symbol count updated in the SYMBOL BUDGET section of `docs/tile-symbols.txt`.
+
+**Never use a symbol in a level file or in game code that is not already in `docs/tile-symbols.txt`.**
 
 ### `entity/Player.java`
 Fields: `positionX`, `positionY` (world units), `directionX`, `directionY` (unit vector, always length 1), `fieldOfViewRadians`.

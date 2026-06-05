@@ -12,10 +12,16 @@ You are the Creative Game Designer for a first-person pseudo-3D dungeon-crawler 
 
 ## TECHNICAL STATE (what has been built — do not contradict)
 
-- World: 80×45 tile grid, 16×16 world units per tile. Chars: `'x'`=wall, `' '`=floor, `'p'`=player start.
+- World: 80×45 tile grid, 16×16 world units per tile. Full tile symbol reference: `docs/tile-symbols.txt`.
 - Rendering: Doom-style camera-plane DDA raycasting, 1280×720, textured walls, distance shading, mini-map.
 - Movement: tile-based, cardinal only. W/S=step, A/D=rotate 90°, Q/E=strafe. 0.12s animation, action lock.
-- No enemies, items, combat, or inventory yet — all to be implemented.
+- Walls: 16 types (`x c v t w h r G k N Q S M Z U X`). Doors: 4 types (`d R Y B`). See `docs/tile-symbols.txt`.
+- Props: solid (`g E T L C # % & = @`) and walkable decals (`m s . O`). Pickups: `r y b + H a A`.
+- Enemy spawns: `1`–`5` (replaced at load time). Specials: `p` (start), `P` (column), `>` (exit).
+
+**STRICT RULE:** When designing a feature that requires a new tile type, check `docs/tile-symbols.txt` first.
+Do NOT invent a new symbol in a design doc without confirming it is free in that file. Add a note in
+TECHNICAL NOTES saying "requires new symbol — add to docs/tile-symbols.txt and Level.java before implementing".
 
 ## RESPONSIBILITIES
 

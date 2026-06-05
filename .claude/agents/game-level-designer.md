@@ -18,30 +18,104 @@ You are the Level Designer for this first-person pseudo-3D turn-based roguelike.
 
 ## TILE REFERENCE
 
+**Full symbol list:** `docs/tile-symbols.txt` — this is the single source of truth for every tile character. Read it before placing any tile type you are unsure about.
+
+**STRICT RULE:** If you need a tile type that does not exist in `docs/tile-symbols.txt`, do NOT invent a symbol. Stop and ask the developer to add it first (they must update the code and the doc together).
+
 ### Wall tiles (solid — block movement, cast walls in 3D view)
 
 | Char | Name | Texture | Usage |
 |---|---|---|---|
 | `x` | Plain wall | `lab_wall_plain.jpg` | **Default.** 80–90% of all wall tiles. |
-| `c` | Conduit wall | `lab_wall_conduit.jpg` | Utility corridors only. 1-in-8 to 1-in-12 wall tiles in those areas. Never in rooms. |
+| `c` | Conduit wall | `lab_wall_conduit.jpg` | Utility corridors only. Sparse. Never in rooms. |
 | `v` | Vent wall | `lab_wall_vent.jpg` | Interior room walls only. 1–2 tiles per room max. Never on perimeter. |
-| `t` | Terminal wall | `lab_wall_terminal.jpg` | 1–2 per level. Corners or dead-end alcoves only. Never in corridors. |
+| `t` | Terminal wall | `lab_wall_terminal.jpg` | 1–2 per level. Corners or dead-end alcoves only. |
 | `w` | Wires wall | `lab_wall_wires.jpg` | Near server/generator areas. Sparse. |
+| `h` | Hazard wall | — | Near explosive barrels. Yellow/black stripes. |
+| `r` | Rust wall | — | Corroded steel. Near unlit floors or oil pools. |
+| `G` | Gore wall | — | Flesh-infested. Near corpse clusters. |
+| `k` | Bulkhead wall | — | Heavy armoured plates. Dead ends and stairwells. |
+| `N` | Glass wall | — | Reinforced containment glass. Special rooms only. |
+| `Q` | Bio/Quarantine wall | — | Biohazard markings. Containment areas. |
+| `S` | Emergency strip wall | — | Emergency lighting corridors. |
+| `M` | Medical wall | — | Hospital/clinic rooms. |
+| `Z` | Cryo wall | — | Frost-damaged cryogenic chambers. |
+| `U` | Radiation wall | — | Radiation-burned power-plant areas. |
+| `X` | Blast wall | — | Battle-scarred armory areas. |
 
-`Level.isWall(char)` treats `x`, `c`, `v`, `t`, `w` as solid.
+`Level.isWall(char)` is the runtime authority on which chars are solid.
 
-### Floor / special tiles (passable)
+### Doors
 
 | Char | Name | Notes |
 |---|---|---|
-| `p` | Player start | Exactly **one** per level. Safe area, not on any edge. |
-| ` ` | Empty floor | Walkable. Raycaster draws nothing (ceiling + floor colours only). |
-| `l` | Lit floor | Bright area (1.55× brightness). |
-| `u` | Unlit floor | Dark area (0.55× brightness). |
-| `f` | Flickering floor | Failing fluorescent (animated brightness). |
+| `d` | Plain door | Unlocked. Opens on interaction. |
+| `R` | Red keycard door | Requires red keycard pickup `r`. |
+| `Y` | Yellow keycard door | Requires yellow keycard pickup `y`. |
+| `B` | Blue keycard door | Requires blue keycard pickup `b`. |
 
-### Reserved (not yet implemented — do not place in live levels)
-`d`=door, `e`=enemy spawn, `i`=item, `k`=key card, `s`=secret wall, `h`=hazard, `P`=column
+### Floor / lighting tiles (passable)
+
+| Char | Name | Brightness | Notes |
+|---|---|---|---|
+| ` ` | Lit floor | 1.55× | Default. Most open areas. |
+| `l` | Normal floor | 1.0× | Side rooms, recesses. |
+| `u` | Unlit floor | 0.55× | Dark dread zones. Use sparingly. |
+| `f` | Flickering floor | varies | Failing fluorescent. 1–3 tiles at chokepoints. |
+
+### Special
+
+| Char | Name | Notes |
+|---|---|---|
+| `p` | Player start | Exactly **one** per level. Not on any edge tile. |
+| `P` | Cylindrical column | Solid. Rendered as 3D cylinder. Groups of 2–4 work best. |
+| `>` | Stairs / exit | Exactly one per level. |
+
+### Solid props (block movement, billboard sprites)
+
+| Char | Name | Notes |
+|---|---|---|
+| `g` | Radioactive barrel | Dark green drum. |
+| `E` | Explosive barrel | Orange-red drum. |
+| `T` | Computer terminal | Charcoal-blue, cyan screen. |
+| `L` | Locker | Steel blue-gray cabinet. |
+| `C` | Crate | Warm brown wood box. |
+| `#` | Security camera | Near walls. |
+| `%` | Generator | Clusters in power-plant areas. |
+| `&` | Bio-pod | Cryo and containment areas. |
+| `=` | Weapon rack | Armory and command rooms. |
+| `@` | Special equipment | Rare. Standard rooms only. |
+
+### Walkable decals (player walks over, flat billboard)
+
+| Char | Name | Notes |
+|---|---|---|
+| `m` | Corpse | Fallen marine or enemy. |
+| `s` | Blood stain (alt) | Variant blood decal. |
+| `.` | Blood stain | Pooled blood near combat zones. |
+| `O` | Oil/fluid pool | Dark teal iridescent spill. |
+
+### Pickups (collected on player step)
+
+| Char | Name |
+|---|---|
+| `r` | Red keycard |
+| `y` | Yellow keycard |
+| `b` | Blue keycard |
+| `+` | Stim pack (small heal) |
+| `H` | Field medkit (large heal) |
+| `a` | Armor shard (small armor) |
+| `A` | Security vest (large armor) |
+
+### Enemy spawn markers (replaced with floor `' '` at load time)
+
+| Char | Enemy |
+|---|---|
+| `1` | Corruptor |
+| `2` | Vortex Eye |
+| `3` | Ghoul |
+| `4` | Crawler |
+| `5` | Revenant |
 
 ## LEVEL FILE FORMAT
 
