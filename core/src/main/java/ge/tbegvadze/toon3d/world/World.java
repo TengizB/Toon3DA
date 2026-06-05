@@ -114,16 +114,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         });
 
         // Build the full weapon arsenal — player starts with all weapons equipped in order.
-        Shotgun              shotgun     = new Shotgun();
-        DoubleBarrelShotgun  dblShotgun  = new DoubleBarrelShotgun();
-        PlasmaRifle          plasmaRifle = new PlasmaRifle();
-        Chaingun             chaingun    = new Chaingun();
-        Railgun              railgun     = new Railgun();
-        Incinerator          incinerator = new Incinerator();
-        for (Weapon weapon : new Weapon[]{shotgun, dblShotgun, plasmaRifle, chaingun, railgun, incinerator}) {
+        Shotgun              shotgun          = new Shotgun();
+        DoubleBarrelShotgun  dblShotgun       = new DoubleBarrelShotgun();
+        PlasmaRifle          plasmaRifle      = new PlasmaRifle();
+        Chaingun             chaingun         = new Chaingun();
+        Railgun              railgun          = new Railgun();
+        Incinerator          incinerator      = new Incinerator();
+        GrenadeLauncher      grenadeLauncher  = new GrenadeLauncher();
+        for (Weapon weapon : new Weapon[]{shotgun, dblShotgun, plasmaRifle, chaingun, railgun, incinerator, grenadeLauncher}) {
             weapon.setEventTextSystem(eventTextSystem);
         }
-        inventory.setArsenal(java.util.List.of(shotgun, dblShotgun, plasmaRifle, chaingun, railgun, incinerator));
+        inventory.setArsenal(java.util.List.of(shotgun, dblShotgun, plasmaRifle, chaingun, railgun, incinerator, grenadeLauncher));
         weaponHudRenderer    = new WeaponHudRenderer(inventory.getArsenal());
         hudRenderer          = new HudRenderer(player, hudState);
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);

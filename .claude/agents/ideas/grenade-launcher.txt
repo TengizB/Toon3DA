@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Combat
 TITLE: Grenade Launcher — bouncing lobbed splash weapon (GRENADES)
 CREATED: 2026-06-05

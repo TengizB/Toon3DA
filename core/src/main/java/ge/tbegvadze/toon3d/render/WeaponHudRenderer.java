@@ -11,6 +11,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.Chaingun;
 import ge.tbegvadze.toon3d.entity.DoubleBarrelShotgun;
+import ge.tbegvadze.toon3d.entity.GrenadeLauncher;
 import ge.tbegvadze.toon3d.entity.Incinerator;
 import ge.tbegvadze.toon3d.entity.PlasmaRifle;
 import ge.tbegvadze.toon3d.entity.Railgun;
@@ -105,6 +106,9 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         }
         if (weapon instanceof Incinerator) {
             return generateIncineratorTexture();
+        }
+        if (weapon instanceof GrenadeLauncher) {
+            return generateGrenadeLauncherTexture();
         }
         return generateFallbackWeaponTexture();
     }
@@ -1348,6 +1352,178 @@ public class WeaponHudRenderer implements Renderable, Disposable {
             centerX + 2f, 120f,
             centerX,      126f
         );
+    }
+
+    /**
+     * Generates a grenade launcher sprite using ShapeRenderer into an offscreen FrameBuffer.
+     * Quake-1 style top-down perspective: camera slightly above and behind the weapon.
+     * The grip is NOT drawn — cut off below screen edge (Y=0..14 transparent).
+     *
+     * Canvas coordinate system (ShapeRenderer Y-up):
+     *   Y =   0 → bottom of canvas (grip region — transparent, cut off)
+     *   Y = 134 → top of canvas (muzzle tip, pointing toward horizon)
+     *
+     * Layout zones:
+     *   Y  0– 14  transparent  — grip cut off below screen
+     *   Y 14– 66  receiver body — wide chunky dark gunmetal trapezoid (~110px at base)
+     *   Y 30– 42  hazard stripe — yellow/black diagonal warning band across receiver
+     *   Y 62– 66  break-action hinges — dark notch rects flanking centerX
+     *   Y 66–124  single wide barrel tube — perspective-tapered (factor 0.65)
+     *   Y 108–112 muzzle collar — retaining band with yellow top edge
+     *   Y 124     muzzle cap — 2px bright steel band (NO bore ellipse, top-down rule)
+     *
+     * View mode: TOP-DOWN, convergence factor ~0.65, muzzle cap (no bore ellipse).
+     */
+    private static Texture generateGrenadeLauncherTexture() {
+        int canvasWidth  = Constants.GRENADE_CANVAS_WIDTH;
+        int canvasHeight = Constants.GRENADE_CANVAS_HEIGHT;
+
+        FrameBuffer        frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
+        ShapeRenderer      temporaryShapeRenderer = new ShapeRenderer();
+        OrthographicCamera camera                 = new OrthographicCamera(canvasWidth, canvasHeight);
+        camera.position.set(canvasWidth / 2f, canvasHeight / 2f, 0f);
+        camera.update();
+
+        frameBuffer.begin();
+        Gdx.gl.glClearColor(0f, 0f, 0f, 0f);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        temporaryShapeRenderer.setProjectionMatrix(camera.combined);
+        temporaryShapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        drawGrenadeLauncherShape(temporaryShapeRenderer, canvasWidth / 2f);
+        temporaryShapeRenderer.end();
+
+        // glReadPixels returns rows with GL Y=0 at bottom; must flip before Texture upload.
+        Pixmap rawPixmap = new Pixmap(canvasWidth, canvasHeight, Pixmap.Format.RGBA8888);
+        Gdx.gl.glReadPixels(0, 0, canvasWidth, canvasHeight,
+                            GL20.GL_RGBA, GL20.GL_UNSIGNED_BYTE, rawPixmap.getPixels());
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+        frameBuffer.end();
+        frameBuffer.dispose();
+        temporaryShapeRenderer.dispose();
+
+        Pixmap flippedPixmap = flipPixmapVertically(rawPixmap);
+        rawPixmap.dispose();
+
+        Texture texture = new Texture(flippedPixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        flippedPixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Draws a break-action grenade launcher in Quake-1 top-down first-person perspective.
+     *
+     * Identity silhouette: a stubby, fat single-tube launcher — short and wide, the
+     * opposite of the rifle silhouette. The widest body of any weapon (~110px at base)
+     * reads as heavy ordnance. Yellow hazard striping is the signature accent color.
+     *
+     * Top-down view, convergence factor 0.65: barrel points AWAY from camera.
+     * Bore invisible — muzzle cap only, no bore ellipse.
+     *
+     * Barrel layout (single tube, offsets from centerX=96, factor 0.65):
+     *   Base  Y=66: half-width 22px → left CX-22, right CX+22
+     *   Muzzle Y=124: half-width ~14px (22 × 0.65 = 14.3 ≈ 14)
+     *
+     * Layer order (back-to-front):
+     *   1. Receiver body           Y=14..66  — wide dark gunmetal trapezoid
+     *   2. Receiver edge strips    Y=14..66  — top highlight, bottom shadow
+     *   3. Hazard stripe           Y=30..42  — yellow/black warning band
+     *   4. Break-action hinges     Y=62..66  — dark notch rects flanking centerX
+     *   5. Barrel tube             Y=66..124 — perspective-tapered gunmetal tube
+     *   6. Barrel cylinder shading —         — outer shadow, crown highlight, inner shadow
+     *   7. Muzzle collar           Y=108..112 — retaining band with yellow top accent
+     *   8. Muzzle cap              Y=124..126 — 2px bright steel rim (NO bore ellipse)
+     */
+    private static void drawGrenadeLauncherShape(ShapeRenderer shapeRenderer, float centerX) {
+
+        // Y=0..14 transparent — grip cut off below screen (first-person: eyes above gun)
+
+        // 1. Receiver body — wide chunky dark gunmetal trapezoid, top-surface perspective.
+        //    Wider at near end (~110px) than far end to read as heavy/stubby ordnance.
+        shapeRenderer.setColor(0.24f, 0.26f, 0.30f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 55f, 14f, 52f, 66f);
+
+        // 2. Receiver edge strips — far edge brighter (top surface faces camera), near darker
+        shapeRenderer.setColor(0.42f, 0.46f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 52f, 63f, 104f, 3f);    // far-edge top highlight
+        shapeRenderer.setColor(0.12f, 0.13f, 0.17f, 1f);
+        shapeRenderer.rect(centerX - 55f, 14f, 110f, 3f);    // near-edge bottom shadow
+        // Mid-body groove
+        shapeRenderer.setColor(0.18f, 0.19f, 0.22f, 1f);
+        shapeRenderer.rect(centerX - 50f, 52f, 100f, 2f);
+
+        // 3. Hazard stripe — yellow/black warning band across receiver face (Y=30..42).
+        //    Alternating yellow and dark bands sell "ordnance / explosive."
+        //    Yellow stripe 1: Y=30..34
+        shapeRenderer.setColor(0.85f, 0.70f, 0.10f, 1f);
+        shapeRenderer.rect(centerX - 48f, 30f, 96f, 4f);
+        // Black divider: Y=34..36
+        shapeRenderer.setColor(0.10f, 0.10f, 0.10f, 1f);
+        shapeRenderer.rect(centerX - 48f, 34f, 96f, 2f);
+        // Yellow stripe 2: Y=36..40
+        shapeRenderer.setColor(0.85f, 0.70f, 0.10f, 1f);
+        shapeRenderer.rect(centerX - 48f, 36f, 96f, 4f);
+        // Black divider top: Y=40..42
+        shapeRenderer.setColor(0.10f, 0.10f, 0.10f, 1f);
+        shapeRenderer.rect(centerX - 48f, 40f, 96f, 2f);
+
+        // 4. Break-action hinges — two small dark notch rects flanking centerX at the
+        //    receiver/barrel join (Y=62..66), implying the barrel breaks open to load.
+        shapeRenderer.setColor(0.16f, 0.18f, 0.22f, 1f);
+        shapeRenderer.rect(centerX - 22f, 62f, 10f, 4f);     // left hinge notch
+        shapeRenderer.rect(centerX + 12f, 62f, 10f, 4f);     // right hinge notch
+        // Hinge highlight line — a thin brighter strip at the break joint
+        shapeRenderer.setColor(0.38f, 0.42f, 0.48f, 1f);
+        shapeRenderer.rect(centerX - 22f, 65f, 10f, 1f);     // left hinge shine
+        shapeRenderer.rect(centerX + 12f, 65f, 10f, 1f);     // right hinge shine
+
+        // 5. Single wide barrel tube — perspective-tapered, top surface of a fat cylinder.
+        //    A grenade launcher barrel is shorter/fatter than a rifle barrel (ratio ~1:2.5).
+        //    Base Y=66: half-width 22px → left CX-22, right CX+22 (total 44px).
+        //    Muzzle Y=124: half-width 14px → left CX-14, right CX+14 (22 × 0.65 = 14.3 ≈ 14).
+        shapeRenderer.setColor(0.26f, 0.28f, 0.32f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 22f, 66f, 14f, 124f);
+
+        // 6. Barrel cylinder shading — the curved top surface of the wide tube.
+        //    Outer-edge shadow strips (3px at base → 2px at muzzle, both sides)
+        shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 22f, centerX - 19f, 66f,
+                                            centerX - 14f, centerX - 12f, 124f);  // left outer shadow
+        drawGeneralTrapezoid(shapeRenderer, centerX + 19f, centerX + 22f, 66f,
+                                            centerX + 12f, centerX + 14f, 124f);  // right outer shadow
+
+        // Crown highlight (6px at base → 4px at muzzle, centered on top of the cylinder)
+        shapeRenderer.setColor(0.45f, 0.49f, 0.56f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX -  3f, centerX +  3f, 66f,
+                                            centerX -  2f, centerX +  2f, 124f);  // center crown highlight
+
+        // Inner-edge shadow strips (3px at base → 2px at muzzle, just inside outer shadows)
+        shapeRenderer.setColor(0.14f, 0.15f, 0.18f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 19f, centerX - 16f, 66f,
+                                            centerX - 12f, centerX - 10f, 124f);  // left inner shadow
+        drawGeneralTrapezoid(shapeRenderer, centerX + 16f, centerX + 19f, 66f,
+                                            centerX + 10f, centerX + 12f, 124f);  // right inner shadow
+
+        // 7. Muzzle collar — retaining band at Y=108..112, full muzzle-width.
+        //    At Y=110 mid-band: scale = 1.0 - (1-0.65) × (110-66) / (124-66)
+        //      = 1.0 - 0.35 × 44/58 = 1.0 - 0.265 = 0.735
+        //    Half-width at collar: 22 × 0.735 ≈ 16px → left CX-16, right CX+16
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 16f, 108f, 32f, 4f);    // collar body
+        // Yellow accent top edge — second hazard marking at the muzzle mouth
+        shapeRenderer.setColor(0.85f, 0.70f, 0.10f, 1f);
+        shapeRenderer.rect(centerX - 16f, 111f, 32f, 1f);    // yellow top edge
+
+        // 8. Muzzle cap — 2px bright steel band at barrel tip Y=124, muzzle width.
+        //    Top-down view: bore faces away, bore hole is completely invisible.
+        //    Width = muzzle barrel half-width 14px × 2 = 28px total.
+        //    NO bore ellipse (top-down rule — bores face away from camera).
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 14f, 124f, 28f, 2f);    // muzzle cap
     }
 
     /**
