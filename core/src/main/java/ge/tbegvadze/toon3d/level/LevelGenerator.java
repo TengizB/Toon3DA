@@ -1588,7 +1588,7 @@ public class LevelGenerator {
             int neighborColumn = tileColumn + deltaColumns[direction];
             int neighborRow    = tileRow    + deltaRows[direction];
             if (!isInBounds(neighborColumn, neighborRow)) continue;
-            if (grid[neighborRow][neighborColumn] != 'd') continue;
+            if (!Level.isDoor(grid[neighborRow][neighborColumn])) continue;
             boolean doorHasWallNorth = isWallAt(grid, neighborColumn, neighborRow + 1);
             boolean doorHasWallSouth = isWallAt(grid, neighborColumn, neighborRow - 1);
             boolean doorHasWallEast  = isWallAt(grid, neighborColumn + 1, neighborRow);
@@ -1810,7 +1810,7 @@ public class LevelGenerator {
             attempts++;
             int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
             int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
-            if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+            if (!isEnemySpawnEligible(grid, tileColumn, tileRow)) continue;
             if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
             boolean alreadyUsed = false;
             for (int placedIndex = 0; placedIndex < placed; placedIndex++) {
@@ -2005,6 +2005,20 @@ public class LevelGenerator {
         if (!isInBounds(tileColumn, tileRow)) return false;
         char cell = grid[tileRow][tileColumn];
         return cell == ' ' || cell == 'l' || cell == 'u' || cell == 'f';
+    }
+
+    /**
+     * Wider eligibility check for enemy spawn positions.
+     * Accepts the four floor tile types plus walkable decal props (blood stains, oil pools,
+     * and corpses) — all of which are passable for both player and enemy during movement.
+     * Excludes keycards, medical/armour pickups, and stairs to avoid destroying them on
+     * enemy death (killEnemy stamps 'm' at the enemy's last tile).
+     */
+    private boolean isEnemySpawnEligible(char[][] grid, int tileColumn, int tileRow) {
+        if (!isInBounds(tileColumn, tileRow)) return false;
+        char cell = grid[tileRow][tileColumn];
+        if (cell == ' ' || cell == 'l' || cell == 'u' || cell == 'f') return true;
+        return cell == '.' || cell == 'O' || cell == 'm';
     }
 
     private boolean isInBounds(int tileColumn, int tileRow) {

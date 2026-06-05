@@ -427,8 +427,15 @@ public final class EnemyManager implements EnemyHitTarget {
 
     private void killEnemy(Enemy enemy) {
         occupancy[enemy.tileColumn][enemy.tileRow] = false;
-        // Stamp a corpse decal onto the level grid so PropRenderer renders it
-        level.setCell(enemy.tileColumn, enemy.tileRow, 'm');
+        // Stamp a corpse decal only on floor tiles and non-critical decals.
+        // Never overwrite stairs, pickups, or keycards — those would be permanently destroyed.
+        char currentCell = level.getCell(enemy.tileColumn, enemy.tileRow);
+        if (!Level.isStairsDown(currentCell)
+                && !Level.isMedicalPickup(currentCell)
+                && !Level.isArmourPickup(currentCell)
+                && !Level.isKeycardPickup(currentCell)) {
+            level.setCell(enemy.tileColumn, enemy.tileRow, 'm');
+        }
         enemies.remove(enemy);
     }
 }
