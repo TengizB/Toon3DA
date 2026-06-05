@@ -17,7 +17,7 @@ import ge.tbegvadze.toon3d.world.HudState;
 
 /**
  * Left-panel HUD: one semi-transparent chrome panel anchored to the bottom-left.
- * Three full-width segmented bars: HP (red gradient), AR (cyan gradient), CL (yellow).
+ * Four full-width segmented bars (top to bottom): HP, AR, CL, XP.
  * Label on the left, numeric value on the right, bar spanning between them.
  *
  * Render order per frame:
@@ -48,6 +48,9 @@ public class HudRenderer implements Renderable, Disposable {
     private static final Color CLIP_DARK_YELLOW = new Color(0.200f, 0.150f, 0.000f, 1f);
     private static final Color ALERT_RED        = new Color(1.000f, 0.165f, 0.165f, 1f);
     private static final Color LED_GREEN        = new Color(0.188f, 1.000f, 0.376f, 1f);
+    private static final Color XP_DARK_GOLD    = new Color(0.220f, 0.160f, 0.010f, 1f);
+    private static final Color XP_GOLD         = new Color(1.000f, 0.780f, 0.050f, 1f);
+    private static final Color XP_BRIGHT_GOLD  = new Color(1.000f, 0.960f, 0.400f, 1f);
 
     // Reusable mutable color for pulse calculations — never allocated inside render()
     private final Color temporaryColor = new Color();
@@ -76,6 +79,7 @@ public class HudRenderer implements Renderable, Disposable {
     // -------------------------------------------------------------------------
     private float displayedHealthFraction = 1f;
     private float displayedArmorFraction  = 0f;
+    private float displayedXpFraction     = 0f;
     private float animationClockSeconds   = 0f;
 
     // Reusable — no String allocations inside render()
@@ -100,6 +104,7 @@ public class HudRenderer implements Renderable, Disposable {
         float lerpRate = Constants.HUD_BAR_LERP_RATE * deltaTime;
         displayedHealthFraction = approach(displayedHealthFraction, player.getHealthFraction(), lerpRate);
         displayedArmorFraction  = approach(displayedArmorFraction,  player.getArmorFraction(),  lerpRate);
+        displayedXpFraction     = approach(displayedXpFraction,     hudState.xpFraction,         lerpRate);
     }
 
     private static float approach(float current, float target, float maxStep) {
@@ -126,6 +131,7 @@ public class HudRenderer implements Renderable, Disposable {
         drawHpBarFilled(pulse, lowHp, isDead);
         drawArmorBarFilled(isDead);
         drawClipBarFilled(isDead);
+        drawXpBarFilled(isDead);
         shapes.end();
 
         // ---- Pass B: Line ----
@@ -139,6 +145,7 @@ public class HudRenderer implements Renderable, Disposable {
         drawHpLabel(lowHp, pulse, isDead);
         drawArmorLabel(isDead);
         drawClipLabel(isDead);
+        drawXpLabel(isDead);
         batch.end();
     }
 
@@ -233,6 +240,23 @@ public class HudRenderer implements Renderable, Disposable {
         }
     }
 
+    private void drawXpBarFilled(boolean isDead) {
+        float barX      = Constants.HUD_BAR_START_X;
+        float barY      = Constants.HUD_XP_BAR_Y;
+        float barWidth  = Constants.HUD_BAR_FULL_WIDTH;
+        float barHeight = Constants.HUD_BAR_HEIGHT;
+        int   segments  = Constants.HUD_BAR_SEGMENT_COUNT;
+        float gap       = Constants.HUD_BAR_SEGMENT_GAP;
+        float segWidth  = (barWidth - (segments - 1) * gap) / segments;
+        int   fillCount = isDead ? 0 : GameMath.segmentFillCount(displayedXpFraction, segments);
+
+        for (int segmentIndex = 0; segmentIndex < segments; segmentIndex++) {
+            float segX = barX + segmentIndex * (segWidth + gap);
+            shapes.setColor(segmentIndex < fillCount ? xpSegmentColor(segmentIndex) : XP_DARK_GOLD);
+            shapes.rect(segX, barY, segWidth, barHeight);
+        }
+    }
+
     // =========================================================================
     // PASS B: Line helpers
     // =========================================================================
@@ -315,6 +339,20 @@ public class HudRenderer implements Renderable, Disposable {
         font.draw(batch, stringBuilder, Constants.HUD_BAR_NUMBER_X, labelY);
     }
 
+    private void drawXpLabel(boolean isDead) {
+        float labelX = Constants.HUD_BAR_LABEL_X;
+        float labelY = Constants.HUD_XP_BAR_Y + Constants.HUD_BAR_HEIGHT;
+
+        font.getData().setScale(0.9f);
+        font.setColor(isDead ? PHOSPHOR_DIM : XP_GOLD);
+        font.draw(batch, "XP", labelX, labelY);
+
+        stringBuilder.setLength(0);
+        stringBuilder.append("LV.");
+        stringBuilder.append(hudState.playerLevel);
+        font.draw(batch, stringBuilder, Constants.HUD_BAR_NUMBER_X, labelY);
+    }
+
     // =========================================================================
     // Helpers
     // =========================================================================
@@ -329,6 +367,11 @@ public class HudRenderer implements Renderable, Disposable {
         if (segmentIndex <= 6)  return ARM_DEEPCYAN;
         if (segmentIndex <= 13) return ARM_CYAN;
         return ARM_WHITE;
+    }
+
+    private static Color xpSegmentColor(int segmentIndex) {
+        if (segmentIndex <= 9)  return XP_GOLD;
+        return XP_BRIGHT_GOLD;
     }
 
     @Override

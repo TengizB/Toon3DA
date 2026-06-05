@@ -240,7 +240,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 float barLeft           = screenCenterColumn - barWidth / 2f;
                 float barBottomPosition = drawTop + spriteScreenHeight * ENEMY_HEALTH_BAR_GAP_FRACTION;
                 float fillFraction      = Math.max(0f, Math.min(1f,
-                                              (float) enemy.health / enemy.type.maxHealth()));
+                                              (float) enemy.health / enemy.maxHealth));
 
                 barLeftPositions[sortedPosition]   = barLeft;
                 barBottomPositions[sortedPosition] = barBottomPosition;

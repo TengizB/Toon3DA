@@ -17,9 +17,9 @@ public class Player implements Renderable, Disposable {
     public float fieldOfViewRadians;
 
     private int health;
-    private final int maxHealth;
+    private int maxHealth;
     private int armor;
-    private final int maxArmor;
+    private int maxArmor;
 
     private final ShapeRenderer shapes;
     private PlayerDamageListener damageListener;
@@ -53,6 +53,26 @@ public class Player implements Renderable, Disposable {
 
     public void applyHealing(int amount) {
         health = Math.min(maxHealth, health + amount);
+    }
+
+    /**
+     * Permanently increases the player's maximum HP by the given amount and immediately
+     * heals the player by the same amount so the bonus HP is not wasted.
+     * Called when the player picks the HP_BOOST level-up reward.
+     */
+    public void increaseMaxHealth(int amount) {
+        maxHealth += amount;
+        health     = Math.min(maxHealth, health + amount);
+    }
+
+    /**
+     * Permanently increases the player's maximum armour pool by the given amount and
+     * immediately grants the bonus armour.
+     * Called when the player picks the ARMOR_BOOST level-up reward.
+     */
+    public void increaseMaxArmor(int amount) {
+        maxArmor += amount;
+        armor     = Math.min(maxArmor, armor + amount);
     }
 
     public boolean isDead() {

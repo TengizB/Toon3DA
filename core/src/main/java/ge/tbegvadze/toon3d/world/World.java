@@ -17,30 +17,36 @@ import ge.tbegvadze.toon3d.input.touch.TouchInputState;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
 import ge.tbegvadze.toon3d.level.LevelLoader;
+import ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer;
+import ge.tbegvadze.toon3d.progression.LevelUpReward;
+import ge.tbegvadze.toon3d.progression.PlayerProgress;
 import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
-    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN }
+    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY }
 
     // -------------------------------------------------------------------------
     // Run-persistent resources — kept alive across all floor transitions
     // -------------------------------------------------------------------------
-    private final long                 runSeed;
-    private final Player               player;
-    private final PlayerInventory      inventory;
-    private final GameState            gameState;
-    private final HudState             hudState;
-    private final WeaponHudRenderer    weaponHudRenderer;
-    private final HudRenderer          hudRenderer;
-    private final ImpactEffectSystem   impactEffectSystem;
-    private final ImpactEffectRenderer impactEffectRenderer;
-    private final FadeOverlayRenderer  fadeOverlayRenderer;
-    private final EventTextSystem      eventTextSystem;
-    private final EventTextRenderer    eventTextRenderer;
-    private final HitVignetteRenderer  hitVignetteRenderer;
+    private final long                   runSeed;
+    private final Player                 player;
+    private final PlayerInventory        inventory;
+    private final GameState              gameState;
+    private final HudState               hudState;
+    private final WeaponHudRenderer      weaponHudRenderer;
+    private final HudRenderer            hudRenderer;
+    private final ImpactEffectSystem     impactEffectSystem;
+    private final ImpactEffectRenderer   impactEffectRenderer;
+    private final FadeOverlayRenderer    fadeOverlayRenderer;
+    private final EventTextSystem        eventTextSystem;
+    private final EventTextRenderer      eventTextRenderer;
+    private final HitVignetteRenderer    hitVignetteRenderer;
+    private final PlayerProgress         playerProgress;
+    private final LevelUpOverlayRenderer levelUpOverlayRenderer;
 
     // Touch controller — null on desktop (platform-gated to touch screens)
     private TouchInputState         touchInputState;
@@ -101,6 +107,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         gameState          = new GameState();
         hudState           = new HudState();
         impactEffectSystem = new ImpactEffectSystem();
+
+        // Progression — lives for the entire run; not reset between floors
+        playerProgress         = new PlayerProgress();
+        levelUpOverlayRenderer = new LevelUpOverlayRenderer(playerProgress);
 
         // Event text and hit vignette — run-persistent feedback systems
         eventTextSystem    = new EventTextSystem();
@@ -180,10 +190,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         wallRenderer           = new WallRenderer(targetLevel, doorManager);
         propRenderer           = new PropRenderer(targetLevel, wallRenderer);
         levelRenderer          = new LevelRenderer(targetLevel, doorManager);
-        enemyManager           = new EnemyManager(targetLevel, doorManager);
+        enemyManager           = new EnemyManager(targetLevel, doorManager, currentDepth);
         explosiveBarrelManager = new ExplosiveBarrelManager(targetLevel, enemyManager, player);
         enemyRenderer          = new EnemyRenderer(enemyManager, wallRenderer);
         enemyManager.setImpactEventListener(impactEffectSystem);
+        enemyManager.setKillXpListener(xpAwarded -> playerProgress.addXp(xpAwarded));
+        enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
         explosiveBarrelManager.setImpactEventListener(impactEffectSystem);
         enemyRenderer.setPropRenderer(propRenderer);
 
@@ -253,6 +265,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
+        // LEVEL_UP_OVERLAY — game paused while player picks a stat upgrade
+        if (runPhase == RunPhase.LEVEL_UP_OVERLAY) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_1)) {
+                applyLevelUpReward(LevelUpReward.HP_BOOST);
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_2)) {
+                applyLevelUpReward(LevelUpReward.ARMOR_BOOST);
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_3) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_3)) {
+                applyLevelUpReward(LevelUpReward.DAMAGE_BOOST);
+            }
+            return;
+        }
+
         // PLAYING phase — normal game simulation
         doorManager.update(deltaTime);
         playerController.update(deltaTime);
@@ -269,6 +293,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         impactEffectSystem.update(deltaTime);
         eventTextSystem.update(deltaTime);
         hitVignetteRenderer.update(deltaTime);
+
+        // Transition to level-up overlay as soon as XP threshold is crossed
+        if (playerProgress.hasPendingLevelUp() && !player.isDead()) {
+            runPhase = RunPhase.LEVEL_UP_OVERLAY;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -331,7 +360,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         player.render(camera);
 
-        hudState.alertActive = false;
+        // Populate HudState each frame so renderers read current values without polling Player directly
+        hudState.alertActive    = false;
+        hudState.playerLevel    = playerProgress.getPlayerLevel();
+        hudState.xpFraction     = playerProgress.getXpFraction();
+        hudState.xpForNextLevel = playerProgress.getXpForNextLevel();
         Weapon hudWeapon = inventory.getEquippedWeapon();
         if (hudWeapon != null) {
             hudState.currentAmmo = hudWeapon.getShotsInClip();
@@ -344,6 +377,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hudRenderer.update(deltaTime);
         hudRenderer.render(camera);
 
+        // Level-up overlay drawn above all HUD elements while the player is choosing a reward
+        if (runPhase == RunPhase.LEVEL_UP_OVERLAY) {
+            levelUpOverlayRenderer.render(camera);
+        }
+
         if (touchControllerRenderer != null) {
             touchControllerRenderer.setActionLocked(!playerController.isIdle());
             touchControllerRenderer.render(camera);
@@ -353,7 +391,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         eventTextRenderer.render(camera);
 
         // Fade overlay drawn last — covers every other layer including the HUD.
-        if (runPhase != RunPhase.PLAYING) {
+        if (runPhase == RunPhase.FADING_OUT || runPhase == RunPhase.FADING_IN) {
             float fadeAlpha;
             if (runPhase == RunPhase.FADING_OUT) {
                 fadeAlpha = Math.min(1f, fadeTimerSeconds / Constants.LEVEL_TRANSITION_FADE_OUT_SECONDS);
@@ -381,6 +419,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         fadeOverlayRenderer.dispose();
         eventTextRenderer.dispose();
         hitVignetteRenderer.dispose();
+        levelUpOverlayRenderer.dispose();
         if (touchControllerRenderer != null) touchControllerRenderer.dispose();
         player.dispose();
     }
@@ -388,6 +427,19 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /** Applies the chosen level-up reward and returns the game to PLAYING state. */
+    private void applyLevelUpReward(LevelUpReward reward) {
+        playerProgress.applyLevelUpReward(reward);
+        if (reward == LevelUpReward.HP_BOOST) {
+            player.increaseMaxHealth(GameBalance.LEVEL_UP_HP_BONUS);
+        } else if (reward == LevelUpReward.ARMOR_BOOST) {
+            player.increaseMaxArmor(GameBalance.LEVEL_UP_ARMOR_BONUS);
+        } else if (reward == LevelUpReward.DAMAGE_BOOST) {
+            enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
+        }
+        runPhase = RunPhase.PLAYING;
+    }
 
     /*
      * Formula: floorSeed

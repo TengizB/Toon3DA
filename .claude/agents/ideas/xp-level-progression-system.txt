@@ -1,0 +1,509 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Progression
+TITLE: XP + Level Progression + Enemy Scaling (GameBalance core)
+CREATED: 2026-06-05
+---
+
+OVERVIEW
+========
+The numeric spine of per-run character growth. Killing enemies grants XP; XP
+fills a level curve; each level-up pauses the world and offers THREE concrete
+stat upgrades (+max HP, +armor, +weapon damage multiplier). Descending to a new
+dungeon floor scales every enemy's HP and damage by a depth coefficient. All
+tuning lives in ONE class, GameBalance.java, so a designer can rebalance the
+whole economy without touching gameplay code.
+
+This is the deliberately SIMPLE, ship-first version of progression: three fixed
+stat choices, a closed-form XP curve, multiplicative enemy scaling. It is the
+concrete foundation the richer boon system
+(levelup-stim-boon-choice-progression.txt) can later be built on top of — that
+doc's ProgressionManager + LevelUpOverlay become the home for these mechanics,
+and the three stat choices here are exactly that doc's "CORE STAT BOONS" with
+hard numbers attached. See DEDUPLICATION below: this doc OWNS the numbers, the
+curve, the HUD bar, and enemy scaling; it does NOT re-invent the boon-pool /
+meta-unlock layer.
+
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING DOCS
+=============================================
+- levelup-stim-boon-choice-progression.txt (NOT IMPLEMENTED): the broad
+  boon-pool + meta-unlock design. THIS doc is the v1 subset: the same
+  ProgressionManager, the same "pick 1 of 3 on level-up" beat, but with three
+  fixed stat upgrades instead of a weighted boon pool. Build THIS first; the
+  boon pool is a later expansion that swaps drawThree() in. Both can coexist:
+  GameBalance holds the numbers either way. If/when the boon doc is built, the
+  three upgrades here become its guaranteed core-stat cards.
+- level-transitions-stairs-down.txt (IMPLEMENTED): already owns the dungeon
+  DEPTH counter (World.depth, STARTING_DEPTH) and the '>' descent tile. Enemy
+  scaling here READS that existing depth field on the descent swap. This doc
+  adds NO tile, NO descent logic — it only multiplies enemy stats inside
+  rebuildForLevel(). That doc even lists "scale enemy HP/damage with depth" as a
+  future hook; this doc fills it with concrete math.
+- enemy_system.txt (IMPLEMENTED): defines Enemy with int health, melee/ranged
+  damage, and the 1-5 spawn mapping (1 Corruptor, 2 Vortex Eye, 3 Ghoul,
+  4 Crawler, 5 Revenant). This doc ADDS an xpReward to each type and a
+  scaleStats(depth) call; it does not change combat resolution.
+
+NO NEW TILE SYMBOL IS REQUIRED for this feature. Progression is entirely an
+entity/UI/state-layer system. (The boon doc says the same.)
+
+
+GAMEPLAY LOOP
+=============
+EARN XP (passive, every kill):
+1. Player fires → enemy HP <= 0 → EnemyManager removes it and stamps a corpse
+   (existing behavior).
+2. On that death, EnemyManager calls
+   progressionManager.awardExperience(enemy.getXpReward()).
+3. enemy.getXpReward() = base XP for that type, already baked at spawn time from
+   GameBalance (NOT scaled by depth — see BALANCE NOTES, "why XP is flat").
+4. A "+N XP" entry posts to the message log / kill feed (reuse existing feed).
+5. The HUD XP bar (left panel) advances toward the next-level threshold.
+
+LEVEL-UP TRIGGER (turn-gated, never mid-animation):
+1. After the kill/damage resolution for the turn completes, ProgressionManager
+   checks: experience >= experienceForNextLevel(currentLevel)?
+2. If yes, it sets pendingLevelUps += 1 (a COUNT, so a chain explosion that
+   dumps a big XP lump can queue multiple level-ups). It does NOT interrupt the
+   in-flight turn.
+3. World only OPENS the upgrade overlay when the turn engine is idle
+   (PlayerController is IDLE, no fade/transition in progress). This guarantees
+   the choice never appears mid-slide or mid-enemy-phase.
+
+THE UPGRADE CHOICE (the decision):
+1. World enters phase LEVEL_UP. The 3D view dims; an overlay renders three
+   cards. The turn engine is frozen — this costs NO turn; the marine stands on
+   the same tile, same facing.
+2. PlayerController input is suppressed; a dedicated overlay input reads
+   1 / 2 / 3 (and optionally LEFT/RIGHT + ENTER).
+   - Card 1 — VITALITY: max HP += GameBalance.LEVEL_UP_MAX_HP_BONUS, and
+     current HP += the same amount (you gain the new headroom immediately, NOT a
+     full heal — see BALANCE NOTES).
+   - Card 2 — PLATING: max armor += GameBalance.LEVEL_UP_MAX_ARMOR_BONUS, and
+     current armor += the same amount.
+   - Card 3 — WEAPON: weaponDamageMultiplier *= (1 +
+     GameBalance.LEVEL_UP_DAMAGE_MULT_BONUS). Stacks multiplicatively each pick.
+3. Player presses 1/2/3 → the chosen stat applies → currentLevel += 1 →
+   experience -= experienceForNextLevel(oldLevel) (carry the overflow XP) →
+   pendingLevelUps -= 1.
+4. If pendingLevelUps > 0, present the next card screen back-to-back. Else the
+   overlay slides out and World returns to PLAYING; the player resumes from the
+   same tile/facing.
+
+DUNGEON DESCENT SCALING (on '>' transition, existing system):
+1. Player steps on '>' → existing descent flow runs (stairs doc): depth += 1,
+   World.rebuildForLevel(nextFloor).
+2. Inside rebuildForLevel, AFTER the new EnemyManager is built, World calls
+   enemyManager.applyDepthScaling(depth) (or each enemy is spawned already
+   scaled — see TECHNICAL NOTES "where scaling applies").
+3. Each enemy's effective HP and damage are multiplied by the depth coefficient
+   (see GameBalance). The marine's level/XP/stats PERSIST (the stairs doc
+   already carries HP/armor/weapons down). XP rewards stay at base.
+
+
+PLAYER EXPERIENCE
+=================
+- Every kill ticks a bar the player watches fill. The level-up is a reward beat
+  that breaks combat tension and hands the player agency.
+- The three-card choice is a real decision under run state: bleeding out and low
+  on a deep floor? Take VITALITY for the immediate HP. Tanking a Corruptor pack?
+  PLATING. Want to two-shot Revenants instead of three-shot? WEAPON. Over a run
+  these picks compound into a recognizable lean (glass-cannon damage stack vs
+  bunker tank), satisfying the run-identity pillar.
+- Descent escalation is FELT, not told: floor 4 enemies visibly soak more shells
+  and hit harder than floor 1. The player learns "deeper = deadlier" and weighs
+  "sweep this floor for one more level before I take the stairs?" against the
+  stairs doc's commitment tension.
+- Readable death: because scaling is a published coefficient and damage is
+  turn-based, a dead player can reconstruct "the depth-5 Corruptor hit for 28,
+  not 14 — I should have leveled VITALITY."
+
+
+TECHNICAL NOTES
+===============
+
+NEW PACKAGE & CLASSES
+---------------------
+- ge.tbegvadze.toon3d.progression  (NEW package; same package the boon doc
+  proposes, so the two designs converge cleanly).
+
+- GameBalance  (ge.tbegvadze.toon3d.progression.GameBalance)
+  ALL tuning constants for XP, curve, level-up bonuses, and enemy scaling.
+  Pure constants + a few pure helper methods. No LibGDX, no state.
+  NOTE: per project rule, raw magic numbers normally live in Constants.java.
+  GameBalance is a DESIGNER-FACING grouping of balance knobs; treat it as a
+  themed extension of Constants (the java-architect may instead choose to put
+  these directly in Constants.java with an XP_/LEVEL_UP_/ENEMY_SCALE_ prefix —
+  either is acceptable; the constant NAMES below are the contract). Recommend a
+  dedicated class so a designer edits one small file.
+
+  Fields (defaults in GAMEBALANCE CONSTANTS section):
+    XP reward per enemy type (indexed by spawn type 1-5).
+    XP curve coefficients (base, linear, exponent or growth factor).
+    Level-up stat bonuses (HP, armor, damage mult step).
+    Enemy depth-scaling coefficients (HP factor, damage factor, optional caps).
+
+  Helper methods (pure, mirrored into GameMath if they involve a real formula):
+    static int xpRewardForEnemyType(int enemyType)
+    static int experienceForNextLevel(int currentLevel)
+    static float enemyHealthScale(int depth)
+    static float enemyDamageScale(int depth)
+
+- ProgressionManager  (ge.tbegvadze.toon3d.progression.ProgressionManager)
+  Owns the live run-progression state. One instance, owned by World, PERSISTS
+  across floors (must survive rebuildForLevel — keep it in a World field that is
+  NOT rebuilt, like the player/inventory).
+  Fields:
+    int currentLevel            (starts at 1)
+    int experience              (XP toward next level, carries overflow)
+    int experienceForNextLevel  (cached = GameBalance.experienceForNextLevel(currentLevel))
+    int pendingLevelUps         (queued, drained by the overlay)
+    float weaponDamageMultiplier (starts 1.0; the WEAPON upgrade scales it)
+  Methods:
+    void awardExperience(int amount)   // experience += amount; while
+                                       // experience >= experienceForNextLevel:
+                                       //   experience -= experienceForNextLevel;
+                                       //   pendingLevelUps++;
+                                       //   (recompute the NEXT threshold using
+                                       //    currentLevel + pendingLevelUps)
+                                       // does NOT mutate stats — only queues
+    boolean hasPendingLevelUp()        // pendingLevelUps > 0
+    void applyUpgrade(UpgradeChoice c, Player player)
+                                       // mutate stat, currentLevel++, recache
+                                       // experienceForNextLevel, pendingLevelUps--
+    float getXpBarFraction()           // experience / (float) experienceForNextLevel, clamp 0..1
+    int getCurrentLevel()
+    float getWeaponDamageMultiplier()
+  THREADING/ALLOC: all integer math, no per-call allocation.
+
+- UpgradeChoice  (enum in the progression package)
+    VITALITY, PLATING, WEAPON
+  Lightweight; the overlay maps key 1/2/3 → enum → applyUpgrade.
+
+- LevelUpOverlay  (ge.tbegvadze.toon3d.render.LevelUpOverlay implements
+  Renderable, Disposable)
+  Pre-allocates everything in its constructor (BitmapFont/Glyph layouts, a
+  reusable ShapeRenderer or the shared whitePixel pattern). render() draws the
+  dim quad + three cards. NO allocation in render(). Reads ProgressionManager +
+  Player to display current/after values.
+  (If the boon doc later ships, this overlay is reused / generalized to draw
+  boon cards; for v1 the three cards are fixed.)
+
+MODIFIED CLASSES
+----------------
+- Enemy (entity / enemy package per enemy_system.txt):
+    + int xpReward                 (set at construction from GameBalance by type)
+    + getXpReward()
+    + applyDepthScaling(int depth) OR construct already-scaled:
+        health      = round(baseHealth  * GameBalance.enemyHealthScale(depth))
+        maxHealth   = same
+        meleeDamage = round(baseMelee   * GameBalance.enemyDamageScale(depth))
+        rangedDamage= round(baseRanged  * GameBalance.enemyDamageScale(depth))
+      Store the BASE stats as constants (already in enemy_system) and apply the
+      scale once at spawn. Keep base + scaled separate so re-scaling is
+      idempotent (avoid compounding the multiplier twice).
+  WHERE SCALING APPLIES — pick ONE (see OPEN QUESTIONS):
+    (A) EnemyManager/spawner reads World.depth when it instantiates each enemy
+        from the level's spawn list and passes the depth scale in. CLEANEST —
+        scaling is applied exactly once, at birth, no idempotency worry.
+    (B) enemyManager.applyDepthScaling(depth) iterates live enemies after
+        rebuild. Riskier (double-apply if called twice). Recommend (A).
+
+- EnemyManager:
+    + holds a reference to ProgressionManager (or a turn callback to it).
+    + on confirmed kill (the existing HP<=0 branch), call
+      progressionManager.awardExperience(deadEnemy.getXpReward()) BEFORE the
+      enemy is dropped from the list.
+    + on construction/spawn, stamps xpReward + depth scale per type from
+      GameBalance (option A above).
+
+- Player (entity/Player.java):
+    enemy_system already added int health, int maxHealth. ADD parallel armor:
+    + int armor, int maxArmor (if not already present from an armor doc; the
+      armour-kit-system.txt may own armor — coordinate: if armor fields exist,
+      reuse them; do NOT duplicate). VITALITY raises maxHealth+health; PLATING
+      raises maxArmor+armor.
+    Weapon damage multiplier is NOT stored on Player — it lives on
+    ProgressionManager and is READ by the weapon at fire time (single source).
+
+- Weapon / Shotgun (and all future weapons):
+    At damage computation, multiply the base damage by
+    progressionManager.getWeaponDamageMultiplier(). One read at fire time. This
+    keeps weapon classes ignorant of progression internals.
+    Round AFTER multiplying so a 1.10x on a 20-damage shell = 22, not 20.
+
+- World (world/World.java):
+    + ProgressionManager progressionManager (PERSISTENT field — NOT rebuilt by
+      rebuildForLevel; it must survive descent like player HP does).
+    + LevelUpOverlay levelUpOverlay (persistent renderer; reused every floor).
+    + new RunPhase value LEVEL_UP added to the existing phase enum
+      (PLAYING / FADE_OUT / FADE_IN from the stairs doc → add LEVEL_UP).
+    update(): if phase == PLAYING && playerController.isIdle() &&
+              progressionManager.hasPendingLevelUp() → phase = LEVEL_UP.
+              While phase == LEVEL_UP: skip playerController.update (input
+              locked), feed overlay input, render overlay. On selection apply +
+              decrement; when no pending remain → phase = PLAYING.
+    render(): draw levelUpOverlay LAST among world content but the HUD can stay
+              on top, or draw overlay above HUD — choose for readability
+              (recommend overlay above everything except a thin "LEVEL UP"
+              banner). XP bar in the HUD renders every frame regardless of phase.
+    rebuildForLevel(): does NOT touch progressionManager. After building the new
+              EnemyManager, depth scaling is already handled at spawn (option A).
+
+- HudRenderer: draw the XP bar + level number in the LEFT panel (layout below).
+
+util/GameMath.java additions (the real formulas, with derivation comments):
+    experienceForNextLevel(level)  — closed-form curve (see CURVE below)
+    enemyHealthScale(depth)        — geometric growth
+    enemyDamageScale(depth)        — geometric growth
+  GameBalance helper methods can delegate to these so the formula lives once in
+  GameMath (project rule: no inline formulas). GameBalance holds the COEFFICIENTS;
+  GameMath holds the EQUATION.
+
+XP CURVE (closed form, configurable)
+------------------------------------
+Use a polynomial-with-exponent curve so early levels come fast and later levels
+stretch out, without runaway numbers:
+
+    experienceForNextLevel(level) =
+        round( XP_CURVE_BASE * pow(level, XP_CURVE_EXPONENT) )
+        + XP_CURVE_LINEAR * (level - 1)
+
+  - level is the player's CURRENT level (>= 1); the result is XP needed to reach
+    level+1.
+  - XP_CURVE_BASE scales the whole curve.
+  - XP_CURVE_EXPONENT between 1.0 (linear-ish) and 2.0 (steep). ~1.5 gives a
+    pleasant ramp.
+  - XP_CURVE_LINEAR adds a flat slope so very early levels are not trivially
+    cheap.
+  Edge cases: level >= 1 always (clamp). pow with float base/exponent — fine for
+  small level counts; cache experienceForNextLevel so pow runs once per level-up,
+  never per frame.
+
+ENEMY DEPTH SCALING (geometric)
+-------------------------------
+    enemyHealthScale(depth) = pow(ENEMY_HP_SCALE_PER_DEPTH,  depth - 1)
+    enemyDamageScale(depth) = pow(ENEMY_DMG_SCALE_PER_DEPTH, depth - 1)
+
+  - depth starts at 1 (STARTING_DEPTH from stairs doc) → scale = 1.0 on floor 1
+    (no scaling, floor 1 stays gentle per the stairs doc's "depth 1 GENTLE"
+    rule and the meaningful-death pillar).
+  - Geometric (multiplicative) so each floor is a fixed % harder than the last.
+  - Optional hard caps (ENEMY_HP_SCALE_CAP / ENEMY_DMG_SCALE_CAP) so very deep
+    runs do not become unkillable; clamp the result.
+  Edge case: depth < 1 clamps to 1.
+
+
+HUD LAYOUT CHANGES
+==================
+Goal: add a LEVEL number + XP bar to the LEFT panel (0-420) WITHOUT colliding
+with the existing face box (88x88 at local 24,30), HP bar, and AR bar. The HUD
+is 130px tall. The face box + two 200px bars already occupy most of the left
+panel. The XP bar must be THIN and live in the dead space.
+
+Chosen placement: a thin horizontal XP bar spanning the bottom edge of the left
+panel, UNDER the HP/AR bars, with the level number as a small badge next to the
+face box.
+
+  LEFT PANEL (0-420), HUD vertical band y = HUD bottom .. HUD bottom + 130:
+    - Face box: unchanged (local 24,30, 88x88).
+    - HP bar: unchanged (local x 140, 200px wide, upper of the two bars).
+    - AR bar: unchanged (local x 140, 200px wide, lower of the two bars).
+    - NEW XP bar: a thin bar (height ~10px) running along the BOTTOM of the
+      left panel, local x 140 .. 340 (same 200px width as HP/AR for visual
+      alignment), local y ~8 (below the AR bar). Fill fraction =
+      progressionManager.getXpBarFraction().
+    - NEW LEVEL badge: small text "LVL N" (N = currentLevel) placed at the
+      bottom-left, under the face box (local x 24, local y ~8), or as a number
+      overlaid on the face-box bottom strip. Keep it tiny — 16-20px font.
+
+  New Constants (HUD):
+    HUD_XP_BAR_WIDTH        = 200f   (match HP/AR for alignment)
+    HUD_XP_BAR_HEIGHT       = 10f
+    HUD_XP_BAR_LOCAL_X      = 140f   (align with HUD_LEFT_BAR_X)
+    HUD_XP_BAR_LOCAL_Y      = 8f     (bottom strip of the left panel)
+    HUD_LEVEL_LABEL_LOCAL_X = 24f
+    HUD_LEVEL_LABEL_LOCAL_Y = 8f
+
+  If the left panel is too crowded, ALTERNATIVE placement: put "LVL N" + XP bar
+  in the RIGHT panel (860-1280) under the weapon name, where the depth/SUBLEVEL
+  readout from the stairs doc also lives. Recommend LEFT panel primary (XP is a
+  marine-vitals stat, belongs with HP/AR); flag for the libgdx-specialist to
+  confirm no overlap once the panel is laid out.
+
+  Colors: XP bar fill = UAC cyan/amber gradient or solid amber (230,200,40) to
+  read distinct from green HP and blue AR. Empty track = dark steel. On level-up
+  the bar briefly flashes white then resets to the carried-over overflow.
+
+
+LEVEL-UP OVERLAY VISUAL DESIGN
+==============================
+- Dim the 3D view with a full-screen dark quad (alpha ~0.55) drawn over world
+  content. Reuse the stairs doc's fade-quad pattern / shared pixel texture (no
+  new alloc).
+- Three vertical "datapad" cards, centered, evenly spaced across the 420-860
+  clear gap region extended upward (cards can be tall, centered vertically).
+- Card content (each):
+    Header: "1  VITALITY" / "2  PLATING" / "3  WEAPON" (number = hotkey).
+    Icon (pixel art): cross (Vitality), shield (Plating), gun/chevron (Weapon).
+    Effect line with the ACTUAL delta:
+        VITALITY: "+20 MAX HP  (100 -> 120)"
+        PLATING:  "+15 MAX ARMOR (50 -> 65)"
+        WEAPON:   "+10% DAMAGE  (x1.00 -> x1.10)"
+    Pull the current/after numbers live from Player + ProgressionManager.
+  Card border colors: keep them all UAC-uniform for v1 (white/steel). When the
+  boon-pool doc ships, border color encodes rarity (that doc's scheme).
+- Title banner top-center: "FIELD PROMOTION — LEVEL N" or the stim doc's
+  "COMBAT STIM AUTHORIZED — SELECT ONE" (pick one voice; recommend the stim
+  voice for continuity with that doc).
+- Selection feedback: chosen card flashes, others fade, overlay slides out
+  (~0.2s real time). VITALITY pick = green flash on the marine portrait;
+  PLATING = blue flash; WEAPON = muzzle-orange flash on the weapon sprite.
+- CRT scanline styling consistent with scanline-crt-hud-marine-vitals.txt.
+
+
+GAMEBALANCE CONSTANTS (defaults — ALL PLACEHOLDER, tune in playtest)
+====================================================================
+// --- XP rewards per enemy spawn type (1-5) ---
+// Roughly proportional to threat/HP. Corruptor 60HP bruiser > Vortex Eye 18HP.
+XP_REWARD_TYPE_1_CORRUPTOR   = 12   // tanky melee bruiser
+XP_REWARD_TYPE_2_VORTEX_EYE  =  6   // fragile ranged glass cannon
+XP_REWARD_TYPE_3_GHOUL       =  8   // (per enemy_system roster; tune to its HP)
+XP_REWARD_TYPE_4_CRAWLER     =  5   // fast/weak swarm unit
+XP_REWARD_TYPE_5_REVENANT    = 20   // elite/heavy
+// Helper default for unknown type:
+XP_REWARD_DEFAULT            =  5
+
+// --- Level-up XP curve ---
+// experienceForNextLevel(level) = round(BASE * level^EXPONENT) + LINEAR*(level-1)
+XP_CURVE_BASE                = 18f   // level 1->2 ~= 18 XP (~1-2 kills): first
+                                     // promotion comes fast, teaches the system
+XP_CURVE_EXPONENT            = 1.5f  // gentle super-linear ramp
+XP_CURVE_LINEAR              = 6     // flat slope so deep levels are not trivial
+// Sanity check with these defaults (round(18*L^1.5)+6*(L-1)):
+//   L1->2:  18      L2->3:  57      L3->4: 105      L4->5: 162
+//   L5->6:  225     L6->7:  295     ...
+// (Tune BASE/EXPONENT together against total XP available per floor.)
+
+// --- Level-up stat bonuses (the three cards) ---
+LEVEL_UP_MAX_HP_BONUS        = 20    // +max HP, also +current HP by same amount
+LEVEL_UP_MAX_ARMOR_BONUS     = 15    // +max armor, also +current armor by same
+LEVEL_UP_DAMAGE_MULT_BONUS   = 0.10f // weaponDamageMultiplier *= 1.10 per pick
+
+// --- Enemy depth scaling (geometric, depth starts at 1) ---
+// scale = factor^(depth-1). Floor 1 = 1.0x (no scaling).
+ENEMY_HP_SCALE_PER_DEPTH     = 1.18f // +18% HP per floor deeper
+ENEMY_DMG_SCALE_PER_DEPTH    = 1.12f // +12% damage per floor deeper
+ENEMY_HP_SCALE_CAP           = 6.0f  // never more than 6x base HP (anti-spongy)
+ENEMY_DMG_SCALE_CAP          = 4.0f  // never more than 4x base damage
+// Sanity check (HP factor 1.18):
+//   depth1: 1.00x  depth2: 1.18x  depth3: 1.39x  depth5: 1.94x  depth8: 3.19x
+//   Corruptor 60HP -> depth5 ~116HP; Revenant heavy -> deep floors get scary.
+
+// --- HUD XP bar (see HUD LAYOUT) ---
+HUD_XP_BAR_WIDTH    = 200f
+HUD_XP_BAR_HEIGHT   = 10f
+HUD_XP_BAR_LOCAL_X  = 140f
+HUD_XP_BAR_LOCAL_Y  = 8f
+HUD_LEVEL_LABEL_LOCAL_X = 24f
+HUD_LEVEL_LABEL_LOCAL_Y = 8f
+
+// --- Overlay input ---
+KEY_UPGRADE_SELECT_1 = Input.Keys.NUM_1
+KEY_UPGRADE_SELECT_2 = Input.Keys.NUM_2
+KEY_UPGRADE_SELECT_3 = Input.Keys.NUM_3
+LEVEL_UP_DIM_ALPHA   = 0.55f
+LEVEL_UP_SLIDE_SECONDS = 0.2f
+
+
+BALANCE NOTES
+=============
+- Why XP is FLAT (not depth-scaled): if XP scaled with depth, the player's level
+  would track depth automatically and the curve would feel meaningless. Keeping
+  XP flat means deeper floors give the SAME XP per kill but enemies are tougher,
+  so the player levels SLOWER relative to threat the deeper they push — the
+  classic roguelike pressure that rewards thorough early floors. Flag as a knob:
+  if deep runs feel under-leveled, add a small XP_DEPTH_BONUS_PER_FLOOR.
+- Why VITALITY/PLATING add headroom + current (not full heal): a full heal makes
+  VITALITY the auto-pick when hurt and trivializes attrition (the stairs doc's
+  "carry your wounds down" tension). Adding only the bonus amount keeps the
+  choice honest. The boon doc's heal-to-full Vitality is a SEPARATE, stronger
+  rarer option for the later boon pool — do not conflate.
+- WEAPON multiplier is multiplicative and uncapped by design: a player who
+  stacks it 5x reaches ~1.61x damage — strong but not absurd, and they paid for
+  it by skipping survivability. Watch for it trivializing bosses; cap via a soft
+  ceiling if needed.
+- Curve first promotion at ~18 XP (1-2 kills) is intentional: the player learns
+  the level-up flow in room 1. Primary tuning knob is XP_CURVE_BASE.
+- Floor 1 scale = 1.0x is mandatory (pillar: a fresh run must be clearable with
+  starting kit). Enemy scaling only bites from floor 2.
+- All five XP rewards should be re-checked against each enemy's actual HP once
+  the full roster (Ghoul/Crawler/Revenant) is finalized in enemy_system.
+
+
+INTERACTIONS
+============
+1. STAIRS / DEPTH (level-transitions-stairs-down.txt, IMPLEMENTED): enemy
+   scaling reads the existing World.depth. ProgressionManager is a PERSISTENT
+   World field that survives rebuildForLevel exactly like player HP/inventory.
+   No tile/descent change.
+2. ENEMY SYSTEM (enemy_system.txt, IMPLEMENTED): adds xpReward per type and a
+   spawn-time depth scale; the kill path that stamps corpses also calls
+   awardExperience. Combat resolution otherwise unchanged.
+3. BOON PROGRESSION (levelup-stim-boon-choice-progression.txt): this doc is the
+   v1 core; that doc's ProgressionManager + LevelUpOverlay + boon pool extend
+   it. The three cards here become its guaranteed core-stat options. GameBalance
+   numbers are shared. Build THIS first, swap drawThree() in later.
+4. WEAPONS (shotgun-weapon-system.txt + all weapon docs): every weapon multiplies
+   base damage by getWeaponDamageMultiplier() at fire time — one integration
+   point, future weapons inherit it free.
+5. ARMOR (armour-kit-system.txt): PLATING raises maxArmor/armor. If that doc owns
+   the armor fields, REUSE them — do not duplicate. Coordinate ownership with
+   the implementing agent.
+6. HUD (procedural-hud-no-textures.txt / scanline-crt-hud-marine-vitals.txt): XP
+   bar + level badge join the left-panel vitals; overlay reuses CRT styling.
+7. MESSAGE/KILL FEED (game-feedback-bundle.txt): "+N XP" and "LEVEL UP!" entries.
+
+
+IMPLEMENTATION ORDER
+====================
+1. GameBalance.java — constants + pure helpers (delegating formulas to GameMath).
+   Add the curve/scale formulas to GameMath with derivation comments. (No
+   behavior yet; compiles, testable in isolation.)
+2. Enemy + EnemyManager — add xpReward by type from GameBalance; apply depth
+   scale at spawn (option A) reading World.depth. Unit-test scaling is applied
+   once and respects caps.
+3. ProgressionManager — XP accumulation, threshold curve, pendingLevelUps queue,
+   applyUpgrade, getXpBarFraction, getWeaponDamageMultiplier. Owned by World as a
+   PERSISTENT field. Wire EnemyManager kill path → awardExperience.
+4. Weapon damage read — multiply base damage by getWeaponDamageMultiplier() at
+   fire time in Shotgun (and document the pattern for future weapons).
+5. HUD XP bar + level badge in HudRenderer (left panel), new HUD constants.
+   Verify no overlap with face box / HP / AR bars at 1280x720.
+6. World phase LEVEL_UP + input gating: open overlay only when idle, freeze turn
+   engine, suppress PlayerController input, drain pendingLevelUps.
+7. LevelUpOverlay renderer — dim quad + three cards with live before/after
+   numbers; 1/2/3 selection; slide in/out. No render() allocation.
+8. Playtest pass: tune XP_CURVE_BASE/EXPONENT vs floor XP budget, level-up
+   bonuses vs enemy scaling, confirm floor 1 stays clearable.
+
+
+OPEN QUESTIONS
+==============
+1. Scaling site: apply depth scale at enemy SPAWN (option A, recommended,
+   idempotent) vs a post-rebuild applyDepthScaling loop (option B)? Recommend A.
+2. XP flat vs lightly depth-scaled? Recommend flat for v1 (creates pressure);
+   add XP_DEPTH_BONUS_PER_FLOOR only if deep runs feel under-leveled.
+3. Does the overlay cost a turn? Recommend NO (meta pause; tile/facing unchanged
+   on resume) — matches the boon doc's recommendation.
+4. Can the player decline / bank a level-up? Recommend NO for v1 (forced choice
+   keeps momentum).
+5. Weapon multiplier cap? Recommend uncapped for v1, add a soft ceiling if it
+   trivializes bosses.
+6. Where do armor fields live (Player vs armour-kit-system)? Resolve ownership
+   with java-architect before adding maxArmor/armor.
+7. Should reaching certain player levels auto-grant a milestone (e.g. every 5th
+   level gives all three)? Out of scope for v1; revisit with the boon doc.
+8. Persisting XP/level across DEATH? No — permadeath wipes it (the boon doc's
+   meta layer is the only cross-run persistence, and it unlocks OPTIONS not
+   power). Confirmed alignment with that doc.

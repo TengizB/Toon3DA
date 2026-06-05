@@ -6,7 +6,9 @@ import ge.tbegvadze.toon3d.entity.ImpactEventListener;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.level.EnemySpawnPoint;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.progression.KillXpListener;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.ArrayList;
@@ -30,6 +32,10 @@ public final class EnemyManager implements EnemyHitTarget {
     private final Level       level;
     private final DoorManager doorManager;
     private ImpactEventListener impactEventListener;
+    private KillXpListener      killXpListener;
+
+    /** Flat damage bonus from player level-up DAMAGE_BOOST choices; added to every hit. */
+    private int playerFlatDamageBonus = 0;
 
     // Pre-allocated scratch state — never re-allocated after construction
     private final boolean[][]  occupancy;           // [column][row] — true if an enemy is there this turn
@@ -40,10 +46,14 @@ public final class EnemyManager implements EnemyHitTarget {
 
     private boolean anyAlertedEver = false;
 
-    public EnemyManager(Level level, DoorManager doorManager) {
+    /**
+     * @param dungeonDepth current floor number (1-based); drives enemy health and damage scaling.
+     *                     Pass {@code Constants.STARTING_DEPTH} for the first floor.
+     */
+    public EnemyManager(Level level, DoorManager doorManager, int dungeonDepth) {
         this.level       = level;
         this.doorManager = doorManager;
-        this.enemies     = buildInitialEnemies(level.getEnemySpawnPoints());
+        this.enemies     = buildInitialEnemies(level.getEnemySpawnPoints(), dungeonDepth);
         int levelWidth   = level.getWidth();
         int levelHeight  = level.getHeight();
         int enemyCount   = enemies.size();
@@ -54,7 +64,9 @@ public final class EnemyManager implements EnemyHitTarget {
         this.wiggleRandom       = new Random(12345L);
     }
 
-    private static List<Enemy> buildInitialEnemies(List<EnemySpawnPoint> spawnPoints) {
+    private static List<Enemy> buildInitialEnemies(List<EnemySpawnPoint> spawnPoints, int dungeonDepth) {
+        float healthScale = GameBalance.enemyHealthScaleForDepth(dungeonDepth);
+        float damageScale = GameBalance.enemyDamageScaleForDepth(dungeonDepth);
         List<Enemy> list = new ArrayList<>(spawnPoints.size());
         for (EnemySpawnPoint spawnPoint : spawnPoints) {
             EnemyType type;
@@ -66,7 +78,12 @@ public final class EnemyManager implements EnemyHitTarget {
                 case '5': type = EnemyType.REVENANT;    break;
                 default:  type = EnemyType.CORRUPTOR;  break;
             }
-            list.add(new Enemy(type, spawnPoint.tileColumn, spawnPoint.tileRow));
+            Enemy enemy = new Enemy(type, spawnPoint.tileColumn, spawnPoint.tileRow);
+            int scaledHealth = Math.max(1, Math.round(type.maxHealth() * healthScale));
+            enemy.maxHealth              = scaledHealth;
+            enemy.health                 = scaledHealth;
+            enemy.attackDamageMultiplier = damageScale;
+            list.add(enemy);
         }
         return list;
     }
@@ -74,6 +91,19 @@ public final class EnemyManager implements EnemyHitTarget {
     /** Wires the visual-effect system so every hit/kill fires cosmetic events. */
     public void setImpactEventListener(ImpactEventListener listener) {
         this.impactEventListener = listener;
+    }
+
+    /** Wires the XP system so every kill awards experience to the player. */
+    public void setKillXpListener(KillXpListener listener) {
+        this.killXpListener = listener;
+    }
+
+    /**
+     * Sets the flat damage bonus from player progression.  Added to every weapon shot
+     * that hits an enemy.  Call after each level-up reward and after each floor rebuild.
+     */
+    public void setPlayerFlatDamageBonus(int bonus) {
+        this.playerFlatDamageBonus = bonus;
     }
 
     /** Read-only view of the live enemy list; used by EnemyRenderer each frame. */
@@ -105,23 +135,27 @@ public final class EnemyManager implements EnemyHitTarget {
     public void applyDamageTo(Object enemyObject, int amount) {
         Enemy enemy = (Enemy) enemyObject;
         // Snapshot world position before killEnemy() removes the enemy from the list
-        float worldX          = enemy.worldCenterX();
-        float worldY          = enemy.worldCenterY();
+        float worldX           = enemy.worldCenterX();
+        float worldY           = enemy.worldCenterY();
         float heightMultiplier = enemy.type.heightMultiplier();
 
-        enemy.applyDamage(amount);
+        int totalDamage = amount + playerFlatDamageBonus;
+        enemy.applyDamage(totalDamage);
         enemy.triggerHitFlash();
 
         if (!enemy.isAlive()) {
+            if (killXpListener != null) {
+                killXpListener.onEnemyKilledForXp(enemy.type.baseXpReward());
+            }
             killEnemy(enemy);
             // Fire after killEnemy: enemy position/type are still valid (killEnemy only
             // mutates the manager's list and occupancy grid, not the Enemy object itself)
             if (impactEventListener != null) {
-                impactEventListener.onEnemyKilled(worldX, worldY, heightMultiplier, amount);
+                impactEventListener.onEnemyKilled(worldX, worldY, heightMultiplier, totalDamage);
             }
         } else {
             if (impactEventListener != null) {
-                impactEventListener.onEnemyHit(worldX, worldY, heightMultiplier, amount);
+                impactEventListener.onEnemyHit(worldX, worldY, heightMultiplier, totalDamage);
             }
         }
     }
@@ -222,7 +256,7 @@ public final class EnemyManager implements EnemyHitTarget {
             boolean cardinalAdjacent = GameMath.manhattanDistanceTiles(
                     enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
             if (cardinalAdjacent) {
-                player.applyDamage(enemy.type.attackDamage());
+                player.applyDamage(enemy.scaledAttackDamage());
                 enemy.state = EnemyState.ATTACKING;
             } else {
                 if (enemy.shouldMoveThisTurn()) {
@@ -263,7 +297,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
                 && !hasEnemyBlockingShot(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
         if (canFire) {
-            player.applyDamage(enemy.type.attackDamage());
+            player.applyDamage(enemy.scaledAttackDamage());
             enemy.state = EnemyState.ATTACKING;
         } else {
             enemy.state = EnemyState.CHASING;
