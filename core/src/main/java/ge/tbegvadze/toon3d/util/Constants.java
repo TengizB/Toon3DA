@@ -569,6 +569,19 @@ public final class Constants {
     public static final int   BLAST_THROUGH_HOLE_COUNT        = 2;
     public static final int   BLAST_SCORCH_COUNT              = 4;
 
+    // 'D' — Holo-Data Display Wall (glowing cyan UI panels, data bars, readout grid)
+    public static final int   HOLO_DATA_WALL_TEXTURE_SIZE     = 128;
+    public static final long  HOLO_DATA_WALL_SEED             = 0x44617461L; // "Data"
+    public static final int   HOLO_DATA_BAR_COUNT             = 4;
+    public static final int   HOLO_DATA_READOUT_COLUMNS       = 8;
+    public static final int   HOLO_DATA_READOUT_ROWS          = 6;
+
+    // 'F' — Force-Field Arc Wall (electric-blue lattice with emitter posts)
+    public static final int   FORCE_FIELD_WALL_TEXTURE_SIZE   = 128;
+    public static final long  FORCE_FIELD_WALL_SEED           = 0x466F7263L; // "Forc"
+    public static final int   FORCE_FIELD_ARC_COUNT           = 4;
+    public static final int   FORCE_FIELD_BAND_COUNT          = 2;
+
     // -------------------------------------------------------------------------
     // NEW ROOM TYPES — level generator configuration
     // -------------------------------------------------------------------------
@@ -628,6 +641,19 @@ public final class Constants {
     public static final float LEVEL_GEN_CONTAINMENT_PROP_CHANCE  = 0.18f;
     public static final int   LEVEL_GEN_CONTAINMENT_MAX          = 2;
 
+    // RESEARCH_LAB — uncommon sci-fi set-piece; at most 1 per level
+    public static final float LEVEL_GEN_RESEARCH_LAB_CHANCE         = 0.40f;
+    public static final int   LEVEL_GEN_RESEARCH_LAB_MIN_WIDTH      = 6;
+    public static final int   LEVEL_GEN_RESEARCH_LAB_MIN_HEIGHT     = 5;
+    public static final float LEVEL_GEN_RESEARCH_LAB_HOLO_WALL_CHANCE = 0.55f; // 'D' far-wall band
+    public static final float LEVEL_GEN_RESEARCH_LAB_FIELD_WALL_CHANCE = 0.80f; // 'F' alcove barrier (placed directly)
+    public static final int   LEVEL_GEN_RESEARCH_LAB_MIN_TANKS      = 2;
+    public static final int   LEVEL_GEN_RESEARCH_LAB_MAX_TANKS      = 4;
+    public static final float LEVEL_GEN_RESEARCH_LAB_CRACKED_CHANCE = 0.30f; // per 'I' tank: cracked variant
+    public static final int   LEVEL_GEN_RESEARCH_LAB_SCORCH_MIN     = 2;
+    public static final int   LEVEL_GEN_RESEARCH_LAB_SCORCH_MAX     = 5;
+    public static final int   LEVEL_GEN_RESEARCH_LAB_MAX            = 1;
+
     // Global accent wall chances (post-pass, any room type)
     public static final float LEVEL_GEN_EMERG_STRIP_CORRIDOR_CHANCE = 0.25f; // 'S' near keycard doors
     public static final float LEVEL_GEN_BLAST_NEAR_CORPSE_CHANCE    = 0.10f; // 'X' near corpse clusters
@@ -635,11 +661,15 @@ public final class Constants {
     // -------------------------------------------------------------------------
     // NEW PROP HEIGHT MULTIPLIERS (relative to full wall stripe)
     // -------------------------------------------------------------------------
-    public static final float PROP_CAMERA_HEIGHT      = 0.80f; // '#' security camera
-    public static final float PROP_GENERATOR_HEIGHT   = 0.85f; // '%' power generator / reactor
-    public static final float PROP_BIOPOD_HEIGHT      = 0.90f; // '&' bio-pod / specimen tank
-    public static final float PROP_RACK_HEIGHT        = 0.70f; // '=' weapon rack
-    public static final float PROP_VENDOR_HEIGHT      = 0.88f; // '@' vending / supply dispenser
+    public static final float PROP_CAMERA_HEIGHT               = 0.80f; // '#' security camera
+    public static final float PROP_GENERATOR_HEIGHT            = 0.85f; // '%' power generator / reactor
+    public static final float PROP_BIOPOD_HEIGHT               = 0.90f; // '&' bio-pod / specimen tank
+    public static final float PROP_RACK_HEIGHT                 = 0.70f; // '=' weapon rack
+    public static final float PROP_VENDOR_HEIGHT               = 0.88f; // '@' vending / supply dispenser
+    public static final float PROP_HEIGHT_SPECIMEN_TANK        = 0.85f; // 'I' specimen tank
+    public static final float PROP_HEIGHT_HOLO_WORKSTATION     = 0.70f; // 'W' holo-workstation
+    public static final float PROP_HEIGHT_AICORE_NODE          = 0.95f; // 'J' AI core node
+    public static final float PROP_HEIGHT_ENERGY_SCORCH        = 0.18f; // 'e' energy scorch decal
 
     // Touch Controller — 4-row grid, right side of screen, all buttons 96×96
     // Grid columns (center X): left=1004, center=1100, right=1196

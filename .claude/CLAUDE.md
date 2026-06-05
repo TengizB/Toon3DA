@@ -178,12 +178,12 @@ Methods must be pure functions — no side effects, no LibGDX render state.
 2D tile grid. **Full tile symbol reference: `docs/tile-symbols.txt`** — single source of truth for every character used in level files.
 
 Quick summary of categories:
-- **Walls (16):** `x c v t w h r G k N Q S M Z U X`
+- **Walls (18):** `x c v t w h j G k N Q S M Z U X D F`
 - **Doors (4):** `d R Y B`
 - **Floor lighting (4):** `(space) l u f`
 - **Special (3):** `p` (start), `P` (column), `>` (exit)
-- **Solid props (10):** `g E T L C # % & = @`
-- **Walkable decals (4):** `m s . O`
+- **Solid props (13):** `g E T L C # % & = @ I J W`
+- **Walkable decals (5):** `m s . O e`
 - **Pickups (7):** `r y b + H a A`
 - **Enemy spawns (5):** `1 2 3 4 5` (replaced with floor at load time)
 

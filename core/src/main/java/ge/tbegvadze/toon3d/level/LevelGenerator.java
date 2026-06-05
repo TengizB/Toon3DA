@@ -35,6 +35,8 @@ import java.util.Random;
  *   POWER_PLANT       — reactor core (LARGE-class); radiation 'U' walls, generator '%' cluster.
  *   COMMAND_CENTER    — control room (LARGE-class); glass 'N' walls, terminal 'T' rows.
  *   CONTAINMENT_BLOCK — cell block; glass 'N' cell fronts, quarantine 'Q' walls, high enemy den.
+ *   RESEARCH_LAB      — sci-fi set-piece; holo-data 'D' walls, specimen tanks 'I', AI core 'J',
+ *                        force-field barrier 'F', energy scorch 'e' decals. At most 1 per level.
  *
  * Wide hallways: 2-3 MST edges widened to 3 tiles (centre lit, ribs normal) with evenly
  * spaced 'P' columns along the centre spine. The width-3 invariant guarantees at least one
@@ -51,7 +53,8 @@ public class LevelGenerator {
     private enum RoomType {
         ENTRANCE, STANDARD, LARGE, SERVER_ROOM,
         MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
-        POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK
+        POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK,
+        RESEARCH_LAB
     }
 
     private final Random         random;
@@ -120,6 +123,7 @@ public class LevelGenerator {
         placePowerPlantProps(grid, rooms);
         placeCommandCenterProps(grid, rooms);
         placeContainmentBlockProps(grid, rooms);
+        placeResearchLabProps(grid, rooms);
         placePickups(grid, rooms);
         placeHazardWallsNearBarrels(grid);
 
@@ -243,6 +247,7 @@ public class LevelGenerator {
         boolean armoryPlaced        = false;
         boolean commandCenterPlaced = false;
         boolean powerPlantPlaced    = false;
+        boolean researchLabPlaced   = false;
         int     cryoChamberCount    = 0;
         int     containmentCount    = 0;
         int     serverRoomCount     = 0;
@@ -323,6 +328,15 @@ public class LevelGenerator {
                               + Constants.LEVEL_GEN_SERVER_ROOM_CHANCE) {
                 room.type = RoomType.SERVER_ROOM;
                 serverRoomCount++;
+            } else if (!researchLabPlaced
+                    && room.interiorWidth()  >= Constants.LEVEL_GEN_RESEARCH_LAB_MIN_WIDTH
+                    && room.interiorHeight() >= Constants.LEVEL_GEN_RESEARCH_LAB_MIN_HEIGHT
+                    && roll < Constants.LEVEL_GEN_CRYO_CHANCE
+                              + Constants.LEVEL_GEN_CONTAINMENT_CHANCE
+                              + Constants.LEVEL_GEN_SERVER_ROOM_CHANCE
+                              + Constants.LEVEL_GEN_RESEARCH_LAB_CHANCE) {
+                room.type = RoomType.RESEARCH_LAB;
+                researchLabPlaced = true;
             }
             // else: remains STANDARD
         }
@@ -998,6 +1012,11 @@ public class LevelGenerator {
                                 grid[tileRow][tileColumn] = 'Q';
                             }
                             break;
+                        case RESEARCH_LAB:
+                            if (roll < Constants.LEVEL_GEN_RESEARCH_LAB_HOLO_WALL_CHANCE) {
+                                grid[tileRow][tileColumn] = 'D';
+                            }
+                            break;
                         default:
                             break;
                     }
@@ -1533,6 +1552,116 @@ public class LevelGenerator {
         }
     }
 
+    /**
+     * Places Research Lab props: specimen tanks ('I') along one interior wall,
+     * a central holo-workstation ('W'), an AI core node ('J') near a wall,
+     * force-field tiles ('F') as a partial barrier, a reward pickup behind it,
+     * and energy scorch decals ('e') throughout.
+     */
+    private void placeResearchLabProps(char[][] grid, List<Room> rooms) {
+        for (Room room : rooms) {
+            if (room.type != RoomType.RESEARCH_LAB) continue;
+
+            // --- Specimen tank row along one interior wall ---
+            boolean tankRowHorizontal = room.interiorWidth() >= room.interiorHeight();
+            int tankTarget = Constants.LEVEL_GEN_RESEARCH_LAB_MIN_TANKS
+                           + random.nextInt(Constants.LEVEL_GEN_RESEARCH_LAB_MAX_TANKS
+                                           - Constants.LEVEL_GEN_RESEARCH_LAB_MIN_TANKS + 1);
+            int tanksPlaced = 0;
+            if (tankRowHorizontal) {
+                for (int tileColumn = room.leftColumn + 2;
+                     tileColumn < room.rightColumn - 1 && tanksPlaced < tankTarget;
+                     tileColumn++) {
+                    int tileRow = room.bottomRow + 1;
+                    if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+                    if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                    grid[tileRow][tileColumn] = 'I';
+                    tanksPlaced++;
+                    if (random.nextFloat() < Constants.LEVEL_GEN_RESEARCH_LAB_CRACKED_CHANCE) {
+                        int scorchRow = tileRow + 1;
+                        if (isWalkableFloor(grid, tileColumn, scorchRow)) {
+                            grid[scorchRow][tileColumn] = 'e';
+                        }
+                    }
+                }
+            } else {
+                for (int tileRow = room.bottomRow + 2;
+                     tileRow < room.topRow - 1 && tanksPlaced < tankTarget;
+                     tileRow++) {
+                    int tileColumn = room.leftColumn + 1;
+                    if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+                    if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                    grid[tileRow][tileColumn] = 'I';
+                    tanksPlaced++;
+                    if (random.nextFloat() < Constants.LEVEL_GEN_RESEARCH_LAB_CRACKED_CHANCE) {
+                        int scorchColumn = tileColumn + 1;
+                        if (isWalkableFloor(grid, scorchColumn, tileRow)) {
+                            grid[tileRow][scorchColumn] = 'e';
+                        }
+                    }
+                }
+            }
+
+            // --- Holo-workstation near room centre ---
+            tryPlaceAtmosphericProp(grid, room, 'W');
+
+            // --- AI core node against a wall ---
+            tryPlaceAtmosphericPropNearWall(grid, room, 'J');
+
+            // --- Force-field partial barrier (phase 1: decorative, reward in open room) ---
+            if (room.interiorHeight() >= 4) {
+                int barrierRow      = room.bottomRow + room.interiorHeight() * 2 / 3;
+                int barrierStartCol = room.leftColumn + 2;
+                int barrierLength   = Math.min(3, room.interiorWidth() - 2);
+                for (int fColumn = barrierStartCol;
+                     fColumn < barrierStartCol + barrierLength;
+                     fColumn++) {
+                    if (!isWalkableFloor(grid, fColumn, barrierRow)) continue;
+                    if (isAdjacentToDoor(grid, fColumn, barrierRow)) continue;
+                    grid[barrierRow][fColumn] = 'F';
+                }
+                // Scorch approaching the barrier
+                int approachRow = barrierRow - 1;
+                if (approachRow > room.bottomRow
+                        && isWalkableFloor(grid, barrierStartCol, approachRow)) {
+                    grid[approachRow][barrierStartCol] = 'e';
+                }
+                // Reward in open room area
+                int rewardRow    = barrierRow + 1;
+                int rewardColumn = barrierStartCol + 1;
+                if (rewardRow < room.topRow
+                        && rewardColumn < room.rightColumn
+                        && isWalkableFloor(grid, rewardColumn, rewardRow)) {
+                    grid[rewardRow][rewardColumn] = pickResearchLabReward();
+                }
+            }
+
+            // --- Additional energy scorch decals ---
+            int scorchTarget = Constants.LEVEL_GEN_RESEARCH_LAB_SCORCH_MIN
+                             + random.nextInt(Constants.LEVEL_GEN_RESEARCH_LAB_SCORCH_MAX
+                                             - Constants.LEVEL_GEN_RESEARCH_LAB_SCORCH_MIN + 1);
+            int scorchPlaced = 0;
+            for (int attempt = 0; attempt < 40 && scorchPlaced < scorchTarget; attempt++) {
+                int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
+                int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
+                if (isWalkableFloor(grid, tileColumn, tileRow)
+                        && !isAdjacentToDoor(grid, tileColumn, tileRow)) {
+                    grid[tileRow][tileColumn] = 'e';
+                    scorchPlaced++;
+                }
+            }
+        }
+    }
+
+    private char pickResearchLabReward() {
+        float roll = random.nextFloat();
+        if (roll < 0.35f) return 'H';   // field medkit
+        if (roll < 0.65f) return 'A';   // security vest
+        if (roll < 0.80f) return 'r';   // red keycard
+        if (roll < 0.90f) return 'y';   // yellow keycard
+        return 'a';                      // armour shard fallback
+    }
+
     private char randomContainmentPropChar() {
         float roll = random.nextFloat();
         if (roll < 0.30f) return '&';   // bio-pod
@@ -1731,9 +1860,9 @@ public class LevelGenerator {
                     if (neighbor == 'O' || neighbor == '.') nearDecal = true;
                 }
                 if (nearUnlit && random.nextFloat() < Constants.LEVEL_GEN_RUST_WALL_CHANCE) {
-                    grid[tileRow][tileColumn] = 'r';
+                    grid[tileRow][tileColumn] = 'j';
                 } else if (nearDecal && random.nextFloat() < Constants.LEVEL_GEN_RUST_OIL_CHANCE) {
-                    grid[tileRow][tileColumn] = 'r';
+                    grid[tileRow][tileColumn] = 'j';
                 }
             }
         }

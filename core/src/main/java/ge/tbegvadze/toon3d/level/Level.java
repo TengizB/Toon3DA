@@ -43,9 +43,10 @@ public class Level {
     /** Returns true for any symbol that represents a solid wall tile. */
     public static boolean isWall(char cell) {
         return cell == 'x' || cell == 'c' || cell == 'v' || cell == 't' || cell == 'w' || cell == 'h'
-            || cell == 'r' || cell == 'G' || cell == 'k'
+            || cell == 'j' || cell == 'G' || cell == 'k'
             || cell == 'N' || cell == 'Q' || cell == 'S' || cell == 'M'
-            || cell == 'Z' || cell == 'U' || cell == 'X';
+            || cell == 'Z' || cell == 'U' || cell == 'X'
+            || cell == 'D' || cell == 'F';
     }
 
     /** Returns true for any symbol that represents a door tile (plain or keycard-locked). */
@@ -152,7 +153,8 @@ public class Level {
     public static boolean isProp(char cell) {
         return cell == 'g' || cell == 'E' || cell == 'T' || cell == 'L' || cell == 'C'
             || cell == '#' || cell == '%' || cell == '&' || cell == '=' || cell == '@'
-            || cell == 'm' || cell == 's' || cell == '.' || cell == 'O'
+            || cell == 'I' || cell == 'J' || cell == 'W'
+            || cell == 'm' || cell == 's' || cell == '.' || cell == 'O' || cell == 'e'
             || isKeycardPickup(cell) || isMedicalPickup(cell) || isArmourPickup(cell)
             || isStairsDown(cell);
     }
@@ -160,12 +162,13 @@ public class Level {
     /** Returns true for solid props that block player movement (barrels, terminals, lockers, crates, new equipment). */
     public static boolean isPropSolid(char cell) {
         return cell == 'g' || cell == 'E' || cell == 'T' || cell == 'L' || cell == 'C'
-            || cell == '#' || cell == '%' || cell == '&' || cell == '=' || cell == '@';
+            || cell == '#' || cell == '%' || cell == '&' || cell == '=' || cell == '@'
+            || cell == 'I' || cell == 'J' || cell == 'W';
     }
 
     /** Returns true for walkable decal props (corpses, dropped items, stains, keycard pickups, medical and armour pickups, stairs). */
     public static boolean isPropDecal(char cell) {
-        return cell == 'm' || cell == 's' || cell == '.' || cell == 'O'
+        return cell == 'm' || cell == 's' || cell == '.' || cell == 'O' || cell == 'e'
             || isKeycardPickup(cell) || isMedicalPickup(cell) || isArmourPickup(cell)
             || isStairsDown(cell);
     }
