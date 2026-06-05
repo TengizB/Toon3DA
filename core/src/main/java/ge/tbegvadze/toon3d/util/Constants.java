@@ -699,6 +699,41 @@ public final class Constants {
     public static final String  FLAME_FIRE_TEXTURE_PATH    = "textures/guns/incinerator/incinerator_fire.png";
     public static final String  FLAME_RELOAD_TEXTURE_PATH  = "textures/guns/incinerator/incinerator_reload.png";
 
+    // Grenade Launcher — bouncing indirect-fire AoE splash weapon (GRENADES ammo)
+    // Damage table (coefficient 0.0 — no travel falloff; splash is splash):
+    //   impact tile:           GRENADE_SPLASH_DAMAGE  = 30 (full blast)
+    //   4 orthogonal neighbours: GRENADE_FALLOFF_DAMAGE = 16 (edge of plus)
+    //   player self-damage:    GRENADE_SELF_DAMAGE    = 20 (if caught in blast)
+    // Per-shot ceiling: 5 enemies in plus = 30 + 4×16 = 94 distributed damage.
+    public static final int     GRENADE_SPLASH_DAMAGE      = 30;
+    public static final int     GRENADE_FALLOFF_DAMAGE     = 16;
+    public static final int     GRENADE_SELF_DAMAGE        = 20;
+    public static final float   GRENADE_DAMAGE_DROP_COEFF  = 0.0f;
+    public static final int     GRENADE_RANGE_TILES        = 6;
+    // GRENADE_ARM_TILES: grenade must travel this many tiles before it can detonate.
+    // Prevents point-blank abuse; unarmed grenade passes through enemies harmlessly.
+    public static final int     GRENADE_ARM_TILES          = 2;
+    public static final int     GRENADE_CLIP_SIZE          = 3;
+    public static final int     GRENADE_RELOAD_TIME_TICKS  = 4;
+    public static final int     GRENADE_PICKUP_AMMO        = 6;
+    public static final int     GRENADE_MAX_AMMO           = 18;
+    // GRENADE_PENETRATION is not used by the custom marchShot, kept for API completeness.
+    public static final boolean GRENADE_PENETRATION        = false;
+    // 5-tile plus splash offsets: {forwardDelta, lateralDelta} relative to impact tile.
+    // Index 0 = center (full damage); indices 1-4 = orthogonal neighbours (falloff damage).
+    public static final int[][] GRENADE_SPLASH_OFFSETS     = {{0,0},{1,0},{-1,0},{0,1},{0,-1}};
+    // Visual effect timings (reserved for ImpactEffectSystem wiring)
+    public static final float   GRENADE_BLAST_DURATION     = 0.30f;
+    public static final float   GRENADE_SHAKE_INTENSITY    = 8f;
+    public static final float   GRENADE_SCREEN_FLASH_ALPHA = 0.35f;
+    // Procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer
+    public static final int     GRENADE_CANVAS_WIDTH       = 192;
+    public static final int     GRENADE_CANVAS_HEIGHT      = 134;
+    // Grenade Launcher HUD textures — always procedural (no asset files)
+    public static final String  GRENADE_NORMAL_TEXTURE_PATH  = "textures/guns/grenade/grenade.png";
+    public static final String  GRENADE_FIRE_TEXTURE_PATH    = "textures/guns/grenade/grenade_fire.png";
+    public static final String  GRENADE_RELOAD_TEXTURE_PATH  = "textures/guns/grenade/grenade_reload.png";
+
     // Tile-Based Ambient Lighting — floor tiles ' ', 'l', 'u', 'f' carry brightness multipliers
     // finalShade = clamp(distanceShade * directionalMultiplier * tileBrightness, 0, MAX_LIGHTING_SHADE)
     // ' ' (space) = lit bright floor (1.55×); 'l' = normal floor (1.0×);
