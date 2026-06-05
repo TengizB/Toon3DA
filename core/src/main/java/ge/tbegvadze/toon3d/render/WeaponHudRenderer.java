@@ -51,6 +51,19 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     private float             currentOffsetY      = Constants.WEAPON_HUD_BASE_Y;
     private int               lastFlashCycleCount = 0;
 
+    // Chaingun spark positions — static to avoid per-frame heap allocation.
+    // Each pair (sparkFractionsX[i], sparkFractionsY[i]) is a fraction of the spark
+    // spread constants applied from the barrel origin. Ten fixed positions produce
+    // an asymmetric scatter that reads as random without using java.util.Random.
+    private static final float[] CHAINGUN_SPARK_FRACTIONS_X = {
+        -0.82f,  0.55f, -0.40f,  0.72f, -0.62f,
+         0.30f, -0.90f,  0.48f, -0.18f,  0.65f
+    };
+    private static final float[] CHAINGUN_SPARK_FRACTIONS_Y = {
+         0.45f,  0.72f,  0.88f,  0.38f,  0.62f,
+         0.92f,  0.55f,  0.78f,  0.42f,  0.68f
+    };
+
     /**
      * Pre-generates normal textures for every weapon in the arsenal.
      * All FrameBuffer work happens here, at startup, before the game loop begins.
@@ -496,6 +509,27 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         shapeRenderer.setColor(0.44f, 0.48f, 0.58f, 0.60f);
         shapeRenderer.ellipse(centerX - 24f, 124f, 12f,  4f);  // left bore top-rim shine
         shapeRenderer.ellipse(centerX + 12f, 124f, 12f,  4f);  // right bore top-rim shine
+
+        // 9. Front bead sight — small raised knob on the top barrel rib at the muzzle end.
+        //    Centered between both bores. In face-on view it sits above the bore plane.
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 2f, 128f, 4f, 3f);     // bead post
+        shapeRenderer.setColor(0.62f, 0.66f, 0.72f, 1f);
+        shapeRenderer.rect(centerX - 1f, 130f, 2f, 2f);     // bright bead tip
+
+        // 10. Break-open latch detail — a small raised latch tab at the break-action hinge
+        //     center (Y=50..56), centered between the two barrels.
+        shapeRenderer.setColor(0.32f, 0.35f, 0.42f, 1f);
+        shapeRenderer.rect(centerX - 5f, 50f, 10f, 6f);     // latch housing
+        shapeRenderer.setColor(0.48f, 0.52f, 0.60f, 1f);
+        shapeRenderer.rect(centerX - 5f, 54f, 10f, 2f);     // latch top highlight
+        shapeRenderer.setColor(0.14f, 0.15f, 0.19f, 1f);
+        shapeRenderer.rect(centerX - 5f, 50f, 10f, 2f);     // latch bottom shadow
+
+        // 11. Additional wood grain lines on receiver for richer material read.
+        shapeRenderer.setColor(0.34f, 0.16f, 0.05f, 1f);
+        shapeRenderer.rect(centerX - 32f, 22f, 64f, 1f);    // extra grain line 1
+        shapeRenderer.rect(centerX - 28f, 30f, 56f, 1f);    // extra grain line 2
     }
 
     /**
@@ -694,6 +728,30 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
         shapeRenderer.rect(centerX - 14f, 120f, 10f, 2f);   // left muzzle cap
         shapeRenderer.rect(centerX +  4f, 120f, 10f, 2f);   // right muzzle cap
+
+        // 9. Front bead sight — a small raised knob at the muzzle end (Y=114..118), centered
+        //    between the barrels on the sighting rib. Bright metal bead catches the light.
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 2f, 114f, 4f, 4f);     // front bead base post
+        shapeRenderer.setColor(0.62f, 0.66f, 0.72f, 1f);
+        shapeRenderer.rect(centerX - 1f, 117f, 2f, 2f);     // bright bead tip
+
+        // 10. Rear notch sight — a U-shaped notch cut into the receiver top (Y=66..70).
+        //     Drawn as a dark central slot flanked by bright metal wings.
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 10f, 66f, 8f, 4f);     // left sight wing
+        shapeRenderer.rect(centerX +  2f, 66f, 8f, 4f);     // right sight wing
+        shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
+        shapeRenderer.rect(centerX -  2f, 66f, 4f, 4f);     // notch slot (dark gap)
+
+        // 11. Second retaining band near receiver (Y=84..88) — matches band at Y=96..101.
+        //     Confirms the barrel tubes are clamped together for a proper twin-tube read.
+        shapeRenderer.setColor(0.30f, 0.32f, 0.38f, 1f);
+        shapeRenderer.rect(centerX - 16f,  84f, 12f, 4f);   // left barrel band
+        shapeRenderer.rect(centerX +  4f,  84f, 12f, 4f);   // right barrel band
+        shapeRenderer.setColor(0.42f, 0.46f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 16f,  87f, 12f, 1f);   // left band highlight
+        shapeRenderer.rect(centerX +  4f,  87f, 12f, 1f);   // right band highlight
     }
 
     /**
@@ -958,6 +1016,32 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         shapeRenderer.rect(centerX - 21f, 126f, 11f, 2f);  // left muzzle cap
         shapeRenderer.rect(centerX -  6f, 126f, 12f, 2f);  // center muzzle cap
         shapeRenderer.rect(centerX + 10f, 126f, 11f, 2f);  // right muzzle cap
+
+        // 8. Cooling vents — two rows of dark rectangular slots cut into the shroud collar
+        //    (Y=72..80), showing the ventilation openings visible from above.
+        shapeRenderer.setColor(0.12f, 0.13f, 0.16f, 1f);
+        shapeRenderer.rect(centerX - 30f, 72f, 5f, 6f);    // left vent 1
+        shapeRenderer.rect(centerX - 22f, 72f, 5f, 6f);    // left vent 2
+        shapeRenderer.rect(centerX + 17f, 72f, 5f, 6f);    // right vent 1
+        shapeRenderer.rect(centerX + 25f, 72f, 5f, 6f);    // right vent 2
+
+        // 9. Carry handle — an arched loop structure sitting atop the motor drum housing
+        //    (Y=60..70), centered. Read as two thick uprights connected by a crossbar.
+        shapeRenderer.setColor(0.24f, 0.26f, 0.32f, 1f);
+        shapeRenderer.rect(centerX - 14f, 58f, 5f, 10f);   // left handle upright
+        shapeRenderer.rect(centerX +  9f, 58f, 5f, 10f);   // right handle upright
+        shapeRenderer.rect(centerX - 14f, 65f, 28f,  3f);  // handle crossbar top
+        shapeRenderer.setColor(0.38f, 0.42f, 0.50f, 1f);
+        shapeRenderer.rect(centerX - 14f, 67f, 28f,  1f);  // crossbar top highlight
+        shapeRenderer.setColor(0.14f, 0.15f, 0.18f, 1f);
+        shapeRenderer.rect(centerX - 14f, 58f, 28f,  2f);  // handle base shadow
+
+        // 10. Rotation indicator marks on motor drum — three small bright dots arranged
+        //     symmetrically on the drum ring, suggesting a rotating barrel assembly.
+        shapeRenderer.setColor(0.58f, 0.40f, 0.14f, 1f);
+        shapeRenderer.rect(centerX - 2f, 52f, 4f, 4f);     // center marker
+        shapeRenderer.rect(centerX - 16f, 54f, 3f, 3f);    // left marker
+        shapeRenderer.rect(centerX + 13f, 54f, 3f, 3f);    // right marker
     }
 
     /**
@@ -1143,6 +1227,32 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
         shapeRenderer.rect(centerX - 7f, 124f, 4f, 2f);      // left rail muzzle cap
         shapeRenderer.rect(centerX + 3f, 124f, 4f, 2f);      // right rail muzzle cap
+
+        // 10. Sight rail — a flat steel mounting bar running along the top of the receiver,
+        //     centered (Y=56..64, 8px wide). The angular top surface of this rail provides
+        //     the aiming reference for the weapon's precise hitscan nature.
+        shapeRenderer.setColor(0.32f, 0.36f, 0.46f, 1f);
+        shapeRenderer.rect(centerX - 4f, 56f, 8f, 8f);       // rail body
+        shapeRenderer.setColor(0.50f, 0.56f, 0.68f, 1f);
+        shapeRenderer.rect(centerX - 4f, 62f, 8f, 2f);       // rail far-edge highlight
+        shapeRenderer.setColor(0.16f, 0.18f, 0.26f, 1f);
+        shapeRenderer.rect(centerX - 4f, 56f, 8f, 2f);       // rail near-edge shadow
+        // Mounting screws — two symmetric dark dots on the rail
+        shapeRenderer.setColor(0.12f, 0.14f, 0.20f, 1f);
+        shapeRenderer.rect(centerX - 3f, 58f, 2f, 2f);       // left mounting screw
+        shapeRenderer.rect(centerX + 1f, 58f, 2f, 2f);       // right mounting screw
+
+        // 11. Blue power cell indicator lights — two small bright-blue LED windows on the
+        //     receiver flanks (Y=18..24), indicating remaining charge level.
+        shapeRenderer.setColor(0.12f, 0.16f, 0.28f, 1f);
+        shapeRenderer.rect(centerX - 28f, 18f, 10f, 6f);     // left indicator housing
+        shapeRenderer.rect(centerX + 18f, 18f, 10f, 6f);     // right indicator housing
+        shapeRenderer.setColor(0.10f, 0.45f, 0.90f, 1f);
+        shapeRenderer.rect(centerX - 26f, 20f, 6f, 4f);      // left indicator glow
+        shapeRenderer.rect(centerX + 20f, 20f, 6f, 4f);      // right indicator glow
+        shapeRenderer.setColor(0.40f, 0.80f, 1.00f, 0.70f);
+        shapeRenderer.rect(centerX - 26f, 22f, 6f, 2f);      // left indicator bright band
+        shapeRenderer.rect(centerX + 20f, 22f, 6f, 2f);      // right indicator bright band
     }
 
     /**
@@ -1437,6 +1547,7 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      *   6. Barrel cylinder shading —         — outer shadow, crown highlight, inner shadow
      *   7. Muzzle collar           Y=108..112 — retaining band with yellow top accent
      *   8. Muzzle cap              Y=124..126 — 2px bright steel rim (NO bore ellipse)
+     *   9. Front sight post        Y=118..121 — small raised steel post on barrel crown
      */
     private static void drawGrenadeLauncherShape(ShapeRenderer shapeRenderer, float centerX) {
 
@@ -1524,6 +1635,14 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         //    NO bore ellipse (top-down rule — bores face away from camera).
         shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
         shapeRenderer.rect(centerX - 14f, 124f, 28f, 2f);    // muzzle cap
+
+        // 9. Front sight post — small raised steel post on the barrel crown near the muzzle.
+        //    Centered on the crown highlight, just inside the muzzle collar at Y=118..121.
+        //    At Y=119 mid-post: scale ≈ 0.690 → crown position is exactly centerX ±2px.
+        shapeRenderer.setColor(0.50f, 0.54f, 0.62f, 1f);
+        shapeRenderer.rect(centerX - 2f, 118f, 4f, 3f);      // post body — steel-grey
+        shapeRenderer.setColor(0.68f, 0.72f, 0.80f, 1f);
+        shapeRenderer.rect(centerX - 1f, 120f, 2f, 1f);      // post tip highlight
     }
 
     /**
@@ -1578,6 +1697,18 @@ public class WeaponHudRenderer implements Renderable, Disposable {
             if (normalizedTime < 1f) {
                 if (equippedWeapon instanceof PlasmaRifle) {
                     renderPlasmaEffect(camera, normalizedTime);
+                } else if (equippedWeapon instanceof Shotgun) {
+                    renderShotgunEffect(camera, normalizedTime);
+                } else if (equippedWeapon instanceof DoubleBarrelShotgun) {
+                    renderDoubleBarrelShotgunEffect(camera, normalizedTime);
+                } else if (equippedWeapon instanceof Chaingun) {
+                    renderChaingunEffect(camera, normalizedTime);
+                } else if (equippedWeapon instanceof Railgun) {
+                    renderRailgunEffect(camera, normalizedTime);
+                } else if (equippedWeapon instanceof Incinerator) {
+                    renderIncineratorEffect(camera, normalizedTime);
+                } else if (equippedWeapon instanceof GrenadeLauncher) {
+                    renderGrenadeLauncherEffect(camera, normalizedTime);
                 } else {
                     renderFlameEffect(camera, normalizedTime);
                 }
@@ -1661,6 +1792,483 @@ public class WeaponHudRenderer implements Renderable, Disposable {
             barrelX - arcHalfBase * 0.09f, barrelY,
             barrelX + arcHalfBase * 0.09f, barrelY,
             barrelX,                        barrelY + radius * 1.15f
+        );
+
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    /**
+     * Draws a short wide muzzle blast for the pump-action Shotgun.
+     *
+     * The primary element is a fat horizontal disc at the muzzle mouth — wider than it is
+     * tall — representing the wide spread of the shot charge. Two short red side tongues
+     * erupt left and right, and a modest orange cone rises above the disc.
+     * All layers fade and shrink as normalizedTime approaches 1.
+     */
+    private void renderShotgunEffect(OrthographicCamera camera, float normalizedTime) {
+        float alpha          = 1f - normalizedTime;
+        float scale          = 1f - normalizedTime * 0.55f;
+        float barrelX        = Constants.WORLD_WIDTH / 2f;
+        float barrelY        = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
+                               * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float height         = Constants.SHOTGUN_EFFECT_FLAME_HEIGHT * scale;
+        float halfBase       = Constants.SHOTGUN_EFFECT_FLAME_BASE_WIDTH / 2f * scale;
+        float discHalfWidth  = Constants.SHOTGUN_EFFECT_DISC_HALF_WIDTH  * scale;
+        float discHalfHeight = Constants.SHOTGUN_EFFECT_DISC_HALF_HEIGHT * scale;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Outer translucent blast halo disc — wide and very flat
+        shapeRenderer.setColor(1.00f, 0.72f, 0.20f, alpha * 0.35f);
+        shapeRenderer.ellipse(barrelX - discHalfWidth * 1.20f, barrelY - discHalfHeight * 1.20f,
+                              discHalfWidth * 2.40f, discHalfHeight * 2.40f);
+
+        // Primary muzzle disc — fat, low, orange-yellow
+        shapeRenderer.setColor(1.00f, 0.58f, 0.08f, alpha * 0.72f);
+        shapeRenderer.ellipse(barrelX - discHalfWidth, barrelY - discHalfHeight,
+                              discHalfWidth * 2f, discHalfHeight * 2f);
+
+        // Bright inner disc core — yellow-white, smaller
+        shapeRenderer.setColor(1.00f, 0.90f, 0.50f, alpha * 0.85f);
+        shapeRenderer.ellipse(barrelX - discHalfWidth * 0.55f, barrelY - discHalfHeight * 0.55f,
+                              discHalfWidth * 1.10f, discHalfHeight * 1.10f);
+
+        // Left red side tongue
+        shapeRenderer.setColor(0.90f, 0.10f, 0.00f, alpha * 0.65f);
+        shapeRenderer.triangle(
+            barrelX - halfBase,              barrelY - discHalfHeight * 0.5f,
+            barrelX - discHalfWidth * 0.8f,  barrelY,
+            barrelX - halfBase * 0.55f,      barrelY + height * 0.38f
+        );
+
+        // Right red side tongue
+        shapeRenderer.triangle(
+            barrelX + discHalfWidth * 0.8f,  barrelY,
+            barrelX + halfBase,              barrelY - discHalfHeight * 0.5f,
+            barrelX + halfBase * 0.55f,      barrelY + height * 0.38f
+        );
+
+        // Central orange flame cone above the disc
+        shapeRenderer.setColor(1.00f, 0.45f, 0.00f, alpha * 0.78f);
+        shapeRenderer.triangle(
+            barrelX - halfBase * 0.45f, barrelY,
+            barrelX + halfBase * 0.45f, barrelY,
+            barrelX,                    barrelY + height
+        );
+
+        // Yellow inner core of the flame
+        shapeRenderer.setColor(1.00f, 0.86f, 0.10f, alpha * 0.80f);
+        shapeRenderer.triangle(
+            barrelX - halfBase * 0.22f, barrelY,
+            barrelX + halfBase * 0.22f, barrelY,
+            barrelX,                    barrelY + height * 0.72f
+        );
+
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    /**
+     * Draws two side-by-side muzzle blast tongues for the Double-Barrel Shotgun.
+     *
+     * Two separate flame columns erupt left and right of centre, reflecting the
+     * twin barrel layout. Each tongue has its own orange/red cone and yellow core.
+     * A shared horizontal disc at the base blends the two columns together.
+     * All layers fade and shrink as normalizedTime approaches 1.
+     */
+    private void renderDoubleBarrelShotgunEffect(OrthographicCamera camera, float normalizedTime) {
+        float alpha          = 1f - normalizedTime;
+        float scale          = 1f - normalizedTime * 0.55f;
+        float barrelX        = Constants.WORLD_WIDTH / 2f;
+        float barrelY        = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
+                               * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float tongueHeight   = Constants.DBL_SHOTGUN_EFFECT_FLAME_HEIGHT * scale;
+        float tongueHalfBase = Constants.DBL_SHOTGUN_EFFECT_TONGUE_BASE_WIDTH / 2f * scale;
+        float tongueOffsetX  = Constants.DBL_SHOTGUN_EFFECT_TONGUE_OFFSET_X * scale;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Shared muzzle disc spanning both barrels
+        float sharedDiscHalfWidth  = (tongueOffsetX + tongueHalfBase) * 1.05f;
+        float sharedDiscHalfHeight = tongueHalfBase * 0.55f;
+        shapeRenderer.setColor(1.00f, 0.62f, 0.12f, alpha * 0.42f);
+        shapeRenderer.ellipse(barrelX - sharedDiscHalfWidth, barrelY - sharedDiscHalfHeight,
+                              sharedDiscHalfWidth * 2f, sharedDiscHalfHeight * 2f);
+
+        // Left barrel tongue — red outer cone
+        float leftCenterX = barrelX - tongueOffsetX;
+        shapeRenderer.setColor(0.88f, 0.10f, 0.00f, alpha * 0.70f);
+        shapeRenderer.triangle(
+            leftCenterX - tongueHalfBase, barrelY,
+            leftCenterX + tongueHalfBase, barrelY,
+            leftCenterX,                  barrelY + tongueHeight * 0.62f
+        );
+        // Left barrel tongue — orange mid cone
+        shapeRenderer.setColor(1.00f, 0.46f, 0.00f, alpha * 0.80f);
+        shapeRenderer.triangle(
+            leftCenterX - tongueHalfBase * 0.68f, barrelY,
+            leftCenterX + tongueHalfBase * 0.68f, barrelY,
+            leftCenterX,                           barrelY + tongueHeight * 0.85f
+        );
+        // Left barrel tongue — yellow core
+        shapeRenderer.setColor(1.00f, 0.88f, 0.12f, alpha * 0.88f);
+        shapeRenderer.triangle(
+            leftCenterX - tongueHalfBase * 0.32f, barrelY,
+            leftCenterX + tongueHalfBase * 0.32f, barrelY,
+            leftCenterX,                           barrelY + tongueHeight
+        );
+
+        // Right barrel tongue — red outer cone
+        float rightCenterX = barrelX + tongueOffsetX;
+        shapeRenderer.setColor(0.88f, 0.10f, 0.00f, alpha * 0.70f);
+        shapeRenderer.triangle(
+            rightCenterX - tongueHalfBase, barrelY,
+            rightCenterX + tongueHalfBase, barrelY,
+            rightCenterX,                  barrelY + tongueHeight * 0.62f
+        );
+        // Right barrel tongue — orange mid cone
+        shapeRenderer.setColor(1.00f, 0.46f, 0.00f, alpha * 0.80f);
+        shapeRenderer.triangle(
+            rightCenterX - tongueHalfBase * 0.68f, barrelY,
+            rightCenterX + tongueHalfBase * 0.68f, barrelY,
+            rightCenterX,                           barrelY + tongueHeight * 0.85f
+        );
+        // Right barrel tongue — yellow core
+        shapeRenderer.setColor(1.00f, 0.88f, 0.12f, alpha * 0.88f);
+        shapeRenderer.triangle(
+            rightCenterX - tongueHalfBase * 0.32f, barrelY,
+            rightCenterX + tongueHalfBase * 0.32f, barrelY,
+            rightCenterX,                           barrelY + tongueHeight
+        );
+
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    /**
+     * Draws a tight rapid muzzle flash for the Chaingun.
+     *
+     * A narrow bright cone with scattered yellow spark dots surrounding the tip.
+     * The cone is thinner and taller than a shotgun blast — reading as high-velocity
+     * rapid fire. Sparks are placed using a deterministic pattern (no allocations).
+     * All layers fade and shrink as normalizedTime approaches 1.
+     */
+    private void renderChaingunEffect(OrthographicCamera camera, float normalizedTime) {
+        float alpha        = 1f - normalizedTime;
+        float scale        = 1f - normalizedTime * 0.55f;
+        float barrelX      = Constants.WORLD_WIDTH / 2f;
+        float barrelY      = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
+                             * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float coneHeight   = Constants.CHAINGUN_EFFECT_CONE_HEIGHT * scale;
+        float coneHalfBase = Constants.CHAINGUN_EFFECT_CONE_BASE_WIDTH / 2f * scale;
+        float sparkSpreadX = Constants.CHAINGUN_EFFECT_SPARK_SPREAD_X * scale;
+        float sparkSpreadY = Constants.CHAINGUN_EFFECT_SPARK_SPREAD_Y * scale;
+        float sparkSize    = Constants.CHAINGUN_EFFECT_SPARK_SIZE * scale;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Outer red narrow cone
+        shapeRenderer.setColor(0.90f, 0.12f, 0.00f, alpha * 0.68f);
+        shapeRenderer.triangle(
+            barrelX - coneHalfBase, barrelY,
+            barrelX + coneHalfBase, barrelY,
+            barrelX,                barrelY + coneHeight * 0.60f
+        );
+
+        // Orange middle cone — taller than the outer
+        shapeRenderer.setColor(1.00f, 0.48f, 0.00f, alpha * 0.80f);
+        shapeRenderer.triangle(
+            barrelX - coneHalfBase * 0.65f, barrelY,
+            barrelX + coneHalfBase * 0.65f, barrelY,
+            barrelX,                         barrelY + coneHeight * 0.82f
+        );
+
+        // Yellow tight inner cone
+        shapeRenderer.setColor(1.00f, 0.90f, 0.10f, alpha * 0.90f);
+        shapeRenderer.triangle(
+            barrelX - coneHalfBase * 0.32f, barrelY,
+            barrelX + coneHalfBase * 0.32f, barrelY,
+            barrelX,                         barrelY + coneHeight
+        );
+
+        // White-yellow hot core
+        shapeRenderer.setColor(1.00f, 1.00f, 0.80f, alpha * 0.72f);
+        shapeRenderer.triangle(
+            barrelX - coneHalfBase * 0.14f, barrelY,
+            barrelX + coneHalfBase * 0.14f, barrelY,
+            barrelX,                         barrelY + coneHeight * 0.70f
+        );
+
+        // Spark dots — deterministic positions from the static class-level arrays
+        // CHAINGUN_SPARK_FRACTIONS_X / _Y (no per-frame allocation).
+        // Ten fixed positions spread around the barrel tip; each drawn as a small square.
+        shapeRenderer.setColor(1.00f, 0.95f, 0.30f, alpha * 0.85f);
+        for (int sparkIndex = 0; sparkIndex < Constants.CHAINGUN_EFFECT_SPARK_COUNT; sparkIndex++) {
+            float sparkX = barrelX + CHAINGUN_SPARK_FRACTIONS_X[sparkIndex] * sparkSpreadX - sparkSize * 0.5f;
+            float sparkY = barrelY + CHAINGUN_SPARK_FRACTIONS_Y[sparkIndex] * sparkSpreadY;
+            shapeRenderer.rect(sparkX, sparkY, sparkSize, sparkSize);
+        }
+
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    /**
+     * Draws an electric discharge effect for the Railgun.
+     *
+     * No flame — this is pure energy. A bright white-blue lance (tall and very narrow)
+     * shoots upward from the muzzle. Two crackling side arcs branch outward from the base.
+     * All elements fade and narrow as normalizedTime approaches 1.
+     */
+    private void renderRailgunEffect(OrthographicCamera camera, float normalizedTime) {
+        float alpha         = 1f - normalizedTime;
+        float scale         = 1f - normalizedTime * 0.55f;
+        float barrelX       = Constants.WORLD_WIDTH / 2f;
+        float barrelY       = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
+                              * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float lanceHeight   = Constants.RAILGUN_EFFECT_LANCE_HEIGHT * scale;
+        float lanceHalfBase = Constants.RAILGUN_EFFECT_LANCE_BASE_WIDTH / 2f * scale;
+        float arcSpread     = Constants.RAILGUN_EFFECT_ARC_SPREAD * scale;
+        float arcHeight     = Constants.RAILGUN_EFFECT_ARC_HEIGHT * scale;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Outer electric glow halo — wide translucent blue cone
+        shapeRenderer.setColor(0.20f, 0.50f, 1.00f, alpha * 0.22f);
+        shapeRenderer.triangle(
+            barrelX - lanceHalfBase * 4.0f, barrelY,
+            barrelX + lanceHalfBase * 4.0f, barrelY,
+            barrelX,                         barrelY + lanceHeight * 0.80f
+        );
+
+        // Left crackling side arc
+        shapeRenderer.setColor(0.40f, 0.70f, 1.00f, alpha * 0.58f);
+        shapeRenderer.triangle(
+            barrelX - lanceHalfBase * 1.5f, barrelY,
+            barrelX - lanceHalfBase * 0.5f, barrelY,
+            barrelX - arcSpread,             barrelY + arcHeight
+        );
+        // Left arc inner bright branch
+        shapeRenderer.setColor(0.70f, 0.88f, 1.00f, alpha * 0.72f);
+        shapeRenderer.triangle(
+            barrelX - lanceHalfBase * 1.0f, barrelY,
+            barrelX - lanceHalfBase * 0.3f, barrelY,
+            barrelX - arcSpread * 0.55f,    barrelY + arcHeight * 0.62f
+        );
+
+        // Right crackling side arc
+        shapeRenderer.setColor(0.40f, 0.70f, 1.00f, alpha * 0.58f);
+        shapeRenderer.triangle(
+            barrelX + lanceHalfBase * 0.5f, barrelY,
+            barrelX + lanceHalfBase * 1.5f, barrelY,
+            barrelX + arcSpread,             barrelY + arcHeight
+        );
+        // Right arc inner bright branch
+        shapeRenderer.setColor(0.70f, 0.88f, 1.00f, alpha * 0.72f);
+        shapeRenderer.triangle(
+            barrelX + lanceHalfBase * 0.3f, barrelY,
+            barrelX + lanceHalfBase * 1.0f, barrelY,
+            barrelX + arcSpread * 0.55f,    barrelY + arcHeight * 0.62f
+        );
+
+        // Main lance — bright white-blue, tall and narrow
+        shapeRenderer.setColor(0.60f, 0.82f, 1.00f, alpha * 0.85f);
+        shapeRenderer.triangle(
+            barrelX - lanceHalfBase * 1.6f, barrelY,
+            barrelX + lanceHalfBase * 1.6f, barrelY,
+            barrelX,                         barrelY + lanceHeight * 0.90f
+        );
+
+        // Lance bright core — white with blue tint
+        shapeRenderer.setColor(0.88f, 0.95f, 1.00f, alpha * 0.92f);
+        shapeRenderer.triangle(
+            barrelX - lanceHalfBase * 0.8f, barrelY,
+            barrelX + lanceHalfBase * 0.8f, barrelY,
+            barrelX,                         barrelY + lanceHeight
+        );
+
+        // Hottest tip — pure white
+        shapeRenderer.setColor(1.00f, 1.00f, 1.00f, alpha * 0.78f);
+        shapeRenderer.triangle(
+            barrelX - lanceHalfBase * 0.4f, barrelY,
+            barrelX + lanceHalfBase * 0.4f, barrelY,
+            barrelX,                         barrelY + lanceHeight * 0.70f
+        );
+
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    /**
+     * Draws a large lingering wide flame for the Incinerator.
+     *
+     * Wider base, more intense orange-red saturation, and a slower shrink rate
+     * (INCINERATOR_EFFECT_SHRINK_RATE = 0.25) so the flame fills more screen space
+     * for longer. Wide outer tongues sell the cone shape of a flamethrower stream.
+     * All layers fade as normalizedTime approaches 1.
+     */
+    private void renderIncineratorEffect(OrthographicCamera camera, float normalizedTime) {
+        float alpha    = 1f - normalizedTime;
+        float scale    = 1f - normalizedTime * Constants.INCINERATOR_EFFECT_SHRINK_RATE;
+        float barrelX  = Constants.WORLD_WIDTH / 2f;
+        float barrelY  = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
+                         * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float height   = Constants.INCINERATOR_EFFECT_FLAME_HEIGHT * scale;
+        float halfBase = Constants.INCINERATOR_EFFECT_FLAME_BASE_WIDTH / 2f * scale;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Outer translucent heat shimmer disc — very wide and flat
+        shapeRenderer.setColor(1.00f, 0.55f, 0.08f, alpha * 0.30f);
+        shapeRenderer.ellipse(barrelX - halfBase * 1.10f, barrelY - halfBase * 0.22f,
+                              halfBase * 2.20f, halfBase * 0.44f);
+
+        // Wide deep-red outer cone — fullest spread of the flame stream
+        shapeRenderer.setColor(0.80f, 0.06f, 0.00f, alpha * 0.68f);
+        shapeRenderer.triangle(
+            barrelX - halfBase, barrelY,
+            barrelX + halfBase, barrelY,
+            barrelX,            barrelY + height * 0.42f
+        );
+
+        // Left spreading tongue
+        shapeRenderer.setColor(0.92f, 0.18f, 0.00f, alpha * 0.72f);
+        shapeRenderer.triangle(
+            barrelX - halfBase,         barrelY,
+            barrelX - halfBase * 0.10f, barrelY,
+            barrelX - halfBase * 0.70f, barrelY + height * 0.55f
+        );
+
+        // Right spreading tongue
+        shapeRenderer.setColor(0.92f, 0.18f, 0.00f, alpha * 0.72f);
+        shapeRenderer.triangle(
+            barrelX + halfBase * 0.10f, barrelY,
+            barrelX + halfBase,         barrelY,
+            barrelX + halfBase * 0.70f, barrelY + height * 0.55f
+        );
+
+        // Main orange flame body
+        shapeRenderer.setColor(1.00f, 0.46f, 0.00f, alpha * 0.82f);
+        shapeRenderer.triangle(
+            barrelX - halfBase * 0.72f, barrelY,
+            barrelX + halfBase * 0.72f, barrelY,
+            barrelX,                    barrelY + height * 0.78f
+        );
+
+        // Bright orange-yellow mid cone
+        shapeRenderer.setColor(1.00f, 0.68f, 0.04f, alpha * 0.88f);
+        shapeRenderer.triangle(
+            barrelX - halfBase * 0.45f, barrelY,
+            barrelX + halfBase * 0.45f, barrelY,
+            barrelX,                    barrelY + height * 0.92f
+        );
+
+        // Yellow hot core
+        shapeRenderer.setColor(1.00f, 0.90f, 0.12f, alpha * 0.90f);
+        shapeRenderer.triangle(
+            barrelX - halfBase * 0.24f, barrelY,
+            barrelX + halfBase * 0.24f, barrelY,
+            barrelX,                    barrelY + height
+        );
+
+        // White-yellow superheated tip
+        shapeRenderer.setColor(1.00f, 0.98f, 0.70f, alpha * 0.72f);
+        shapeRenderer.triangle(
+            barrelX - halfBase * 0.12f, barrelY,
+            barrelX + halfBase * 0.12f, barrelY,
+            barrelX,                    barrelY + height * 0.68f
+        );
+
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    /**
+     * Draws a thick smoke-puff and blast explosion for the Grenade Launcher.
+     *
+     * Three distinct layers: a grey-white outer smoke puff ellipse, an orange/yellow
+     * core explosion, and two rising smoke wisps. The outer puff is the most prominent
+     * element — reading as a thick propellant cloud rather than a clean muzzle blast.
+     * All layers fade as normalizedTime approaches 1.
+     */
+    private void renderGrenadeLauncherEffect(OrthographicCamera camera, float normalizedTime) {
+        float alpha        = 1f - normalizedTime;
+        float scale        = 1f - normalizedTime * 0.55f;
+        float barrelX      = Constants.WORLD_WIDTH / 2f;
+        float barrelY      = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
+                             * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float puffRadius   = Constants.GRENADE_EFFECT_PUFF_RADIUS * scale;
+        float coreRadius   = Constants.GRENADE_EFFECT_CORE_RADIUS * scale;
+        float wispHeight   = Constants.GRENADE_EFFECT_WISP_HEIGHT * scale;
+        float wispHalfBase = Constants.GRENADE_EFFECT_WISP_BASE_WIDTH / 2f * scale;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Outer grey-white smoke puff — large flat ellipse
+        shapeRenderer.setColor(0.75f, 0.72f, 0.68f, alpha * 0.42f);
+        shapeRenderer.ellipse(barrelX - puffRadius, barrelY - puffRadius * 0.50f,
+                              puffRadius * 2f, puffRadius);
+
+        // Secondary lighter smoke ring
+        shapeRenderer.setColor(0.90f, 0.88f, 0.85f, alpha * 0.32f);
+        shapeRenderer.ellipse(barrelX - puffRadius * 0.72f, barrelY - puffRadius * 0.36f,
+                              puffRadius * 1.44f, puffRadius * 0.72f);
+
+        // Orange core explosion — rounder blast ball
+        shapeRenderer.setColor(1.00f, 0.44f, 0.00f, alpha * 0.80f);
+        shapeRenderer.ellipse(barrelX - coreRadius, barrelY - coreRadius * 0.60f,
+                              coreRadius * 2f, coreRadius * 1.20f);
+
+        // Yellow bright inner core
+        shapeRenderer.setColor(1.00f, 0.82f, 0.10f, alpha * 0.88f);
+        shapeRenderer.ellipse(barrelX - coreRadius * 0.58f, barrelY - coreRadius * 0.35f,
+                              coreRadius * 1.16f, coreRadius * 0.70f);
+
+        // White-hot centre of the blast
+        shapeRenderer.setColor(1.00f, 0.96f, 0.70f, alpha * 0.78f);
+        shapeRenderer.ellipse(barrelX - coreRadius * 0.28f, barrelY - coreRadius * 0.17f,
+                              coreRadius * 0.56f, coreRadius * 0.34f);
+
+        // Left rising smoke wisp
+        shapeRenderer.setColor(0.62f, 0.60f, 0.58f, alpha * 0.48f);
+        shapeRenderer.triangle(
+            barrelX - puffRadius * 0.65f - wispHalfBase, barrelY,
+            barrelX - puffRadius * 0.65f + wispHalfBase, barrelY,
+            barrelX - puffRadius * 0.85f,                 barrelY + wispHeight
+        );
+
+        // Right rising smoke wisp
+        shapeRenderer.triangle(
+            barrelX + puffRadius * 0.65f - wispHalfBase, barrelY,
+            barrelX + puffRadius * 0.65f + wispHalfBase, barrelY,
+            barrelX + puffRadius * 0.85f,                 barrelY + wispHeight
+        );
+
+        // Centre upward smoke column
+        shapeRenderer.setColor(0.72f, 0.70f, 0.68f, alpha * 0.38f);
+        shapeRenderer.triangle(
+            barrelX - wispHalfBase * 0.8f, barrelY,
+            barrelX + wispHalfBase * 0.8f, barrelY,
+            barrelX,                        barrelY + wispHeight * 0.85f
         );
 
         shapeRenderer.end();
