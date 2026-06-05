@@ -12,6 +12,7 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.Chaingun;
 import ge.tbegvadze.toon3d.entity.DoubleBarrelShotgun;
 import ge.tbegvadze.toon3d.entity.PlasmaRifle;
+import ge.tbegvadze.toon3d.entity.Railgun;
 import ge.tbegvadze.toon3d.entity.Shotgun;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.entity.WeaponVisualState;
@@ -97,6 +98,9 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         }
         if (weapon instanceof Chaingun) {
             return generateChaingunTexture();
+        }
+        if (weapon instanceof Railgun) {
+            return generateRailgunTexture();
         }
         return generateFallbackWeaponTexture();
     }
@@ -946,6 +950,191 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         shapeRenderer.rect(centerX - 21f, 126f, 11f, 2f);  // left muzzle cap
         shapeRenderer.rect(centerX -  6f, 126f, 12f, 2f);  // center muzzle cap
         shapeRenderer.rect(centerX + 10f, 126f, 11f, 2f);  // right muzzle cap
+    }
+
+    /**
+     * Generates a railgun sprite using ShapeRenderer into an offscreen FrameBuffer.
+     * Quake-1 style top-down perspective: camera slightly above and behind the weapon.
+     * The grip is NOT drawn — cut off below screen edge (Y=0..14 transparent).
+     *
+     * Canvas coordinate system (ShapeRenderer Y-up):
+     *   Y =   0 → bottom of canvas (grip region — transparent, cut off)
+     *   Y = 134 → top of canvas (muzzle end, pointing toward horizon)
+     *
+     * Layout zones:
+     *   Y  0– 14  transparent — grip cut off below screen
+     *   Y 14– 58  receiver body — narrow steel-blue block (~70px wide)
+     *   Y 30– 52  capacitor block — energy cell set into receiver top
+     *   Y 58–124  twin conductor rails — two tapered rects converging 0.65 factor
+     *   Y 78, 98, 116 — cross-braces connecting the rails
+     *   Y 122     emitter point — bright energy disc between rail tips
+     *   Y 124     muzzle caps — 2px bright steel band (NO bore ellipse)
+     *
+     * View mode: TOP-DOWN, convergence ~0.65, muzzle cap (no bore ellipse).
+     */
+    private static Texture generateRailgunTexture() {
+        int canvasWidth  = Constants.RAILGUN_CANVAS_WIDTH;
+        int canvasHeight = Constants.RAILGUN_CANVAS_HEIGHT;
+
+        FrameBuffer        frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
+        ShapeRenderer      temporaryShapeRenderer = new ShapeRenderer();
+        OrthographicCamera camera                 = new OrthographicCamera(canvasWidth, canvasHeight);
+        camera.position.set(canvasWidth / 2f, canvasHeight / 2f, 0f);
+        camera.update();
+
+        frameBuffer.begin();
+        Gdx.gl.glClearColor(0f, 0f, 0f, 0f);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        temporaryShapeRenderer.setProjectionMatrix(camera.combined);
+        temporaryShapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        drawRailgunShape(temporaryShapeRenderer, canvasWidth / 2f);
+        temporaryShapeRenderer.end();
+
+        // glReadPixels returns rows with GL Y=0 at bottom; must flip before Texture upload.
+        Pixmap rawPixmap = new Pixmap(canvasWidth, canvasHeight, Pixmap.Format.RGBA8888);
+        Gdx.gl.glReadPixels(0, 0, canvasWidth, canvasHeight,
+                            GL20.GL_RGBA, GL20.GL_UNSIGNED_BYTE, rawPixmap.getPixels());
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+        frameBuffer.end();
+        frameBuffer.dispose();
+        temporaryShapeRenderer.dispose();
+
+        Pixmap flippedPixmap = flipPixmapVertically(rawPixmap);
+        rawPixmap.dispose();
+
+        Texture texture = new Texture(flippedPixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        flippedPixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Draws a railgun in Quake-1 top-down first-person perspective.
+     *
+     * Identity silhouette: a long sleek rifle with twin conductor rails instead of an
+     * enclosing barrel tube, and a glowing capacitor block at the receiver. The rails
+     * ARE the barrel — there is no surrounding shroud — giving the unmistakable railgun
+     * silhouette. Energy-weapon palette (steel-blue body, electric cyan edges) but colder
+     * and whiter than the plasma rifle.
+     *
+     * Top-down view, convergence factor 0.65: barrels point AWAY from camera.
+     * Bore invisible — muzzle cap only, no bore ellipse.
+     *
+     * Rail layout (offsets from centerX=96, taper factor 0.65):
+     *   Left  rail: base CX-11..CX-5  (6px) → muzzle CX-7..CX-3  (factor 0.65)
+     *   Right rail: base CX+5..CX+11  (6px) → muzzle CX+3..CX+7
+     *   Gap between rails at base: 10px (CX-5 to CX+5) → muzzle 6px (CX-3 to CX+3)
+     *
+     * Layer order (back-to-front):
+     *   1. Receiver body          Y=14..58   — narrow steel-blue block
+     *   2. Receiver highlights    Y=55..58   — top/bottom edge shading
+     *   3. Capacitor block        Y=30..52   — dim blue energy cell at center
+     *   4. Left conductor rail    Y=58..124  — perspective-tapered steel bar + cyan edge
+     *   5. Right conductor rail   Y=58..124  — mirror of left rail
+     *   6. Rail gap shadow        Y=58..124  — dark channel between rails
+     *   7. Cross-braces           Y=78,98,116 — thin steel rungs spanning rail-to-rail
+     *   8. Emitter point          Y=120..124 — bright energy disc between rail tips
+     *   9. Muzzle caps            Y=124..126 — 2px bright steel rim (NO bore ellipse)
+     */
+    private static void drawRailgunShape(ShapeRenderer shapeRenderer, float centerX) {
+
+        // Y=0..14 left transparent — grip cut off below screen
+
+        // 1. Receiver body — narrow steel-blue block, top-surface perspective
+        //    Narrower than other weapons (~70px) to read as sleek and precise.
+        shapeRenderer.setColor(0.26f, 0.30f, 0.40f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 35f, 14f, 30f, 58f);
+
+        // 2. Receiver edge highlights — far edge brighter (top surface faces camera)
+        shapeRenderer.setColor(0.44f, 0.50f, 0.62f, 1f);
+        shapeRenderer.rect(centerX - 30f, 55f, 60f, 3f);     // far-edge top highlight
+        shapeRenderer.setColor(0.14f, 0.16f, 0.22f, 1f);
+        shapeRenderer.rect(centerX - 35f, 14f, 70f, 3f);     // near-edge bottom shadow
+
+        // 3. Capacitor block — rectangular energy cell set into the receiver top surface.
+        //    At idle the capacitor holds a DIM blue glow (charge-level colouring is done
+        //    at runtime; the static sprite always shows the idle state).
+        //    Housing: Y=30..52, ~36px wide centred.
+        shapeRenderer.setColor(0.18f, 0.22f, 0.32f, 1f);
+        shapeRenderer.rect(centerX - 18f, 30f, 36f, 22f);    // housing backing
+        shapeRenderer.setColor(0.10f, 0.35f, 0.85f, 1f);
+        shapeRenderer.rect(centerX - 15f, 32f, 30f, 18f);    // dim blue capacitor face
+        // Capacitor top edge highlight — faint bright band indicating the charged surface
+        shapeRenderer.setColor(0.22f, 0.50f, 0.95f, 0.80f);
+        shapeRenderer.rect(centerX - 15f, 48f, 30f,  2f);    // top-edge glow band
+        // Capacitor bottom shadow
+        shapeRenderer.setColor(0.06f, 0.20f, 0.55f, 1f);
+        shapeRenderer.rect(centerX - 15f, 32f, 30f,  2f);    // bottom shadow band
+
+        // 4. Left conductor rail — perspective-tapered gunmetal bar with cyan top edge.
+        //    Base Y=58: outer CX-11, inner CX-5  (6px wide)
+        //    Muzzle Y=124: outer CX-7, inner CX-3  (4px wide, 0.65 factor: 11*0.65=7.15~7, 5*0.65=3.25~3)
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 11f, centerX - 5f, 58f,
+                                            centerX -  7f, centerX - 3f, 124f);
+        // Cyan top-edge highlight strip on rail (1-2px, runs full rail length)
+        shapeRenderer.setColor(0.20f, 0.75f, 1.00f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 11f, centerX - 10f, 58f,
+                                            centerX -  7f, centerX -  6f, 124f);
+        // Dark bottom-edge shadow strip on rail
+        shapeRenderer.setColor(0.24f, 0.27f, 0.34f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX -  6f, centerX -  5f, 58f,
+                                            centerX -  4f, centerX -  3f, 124f);
+
+        // 5. Right conductor rail — mirror of left
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX + 5f, centerX + 11f, 58f,
+                                            centerX + 3f, centerX +  7f, 124f);
+        // Cyan top-edge highlight
+        shapeRenderer.setColor(0.20f, 0.75f, 1.00f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX + 10f, centerX + 11f, 58f,
+                                            centerX +  6f, centerX +  7f, 124f);
+        // Dark bottom-edge shadow
+        shapeRenderer.setColor(0.24f, 0.27f, 0.34f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX +  5f, centerX +  6f, 58f,
+                                            centerX +  3f, centerX +  4f, 124f);
+
+        // 6. Rail gap shadow — dark channel between the two rails
+        //    Base: CX-5 to CX+5 (10px), Muzzle: CX-3 to CX+3 (6px)
+        shapeRenderer.setColor(0.06f, 0.07f, 0.10f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 5f, centerX + 5f, 58f,
+                                            centerX - 3f, centerX + 3f, 124f);
+
+        // 7. Cross-braces — thin steel rungs connecting the two rails at three intervals.
+        //    Width at each brace Y = interpolated full rail span (outer-left to outer-right).
+        //    At Y=78: t=(78-58)/(124-58)=0.303 → outer: 11*(1-0.35*0.303)=11*0.894=9.8~10px each side
+        //    At Y=98: t=(98-58)/(124-58)=0.606 → outer: 11*(1-0.35*0.606)=11*0.788=8.7~9px each side
+        //    At Y=116: t=(116-58)/(124-58)=0.879 → outer: 11*(1-0.35*0.879)=11*0.692=7.6~8px each side
+        shapeRenderer.setColor(0.36f, 0.40f, 0.48f, 1f);
+        shapeRenderer.rect(centerX - 10f, 78f, 20f, 3f);     // lower cross-brace
+        shapeRenderer.rect(centerX -  9f, 98f, 18f, 3f);     // middle cross-brace
+        shapeRenderer.rect(centerX -  8f, 116f, 16f, 2f);    // upper cross-brace
+        // Brace highlight top edges
+        shapeRenderer.setColor(0.48f, 0.52f, 0.60f, 1f);
+        shapeRenderer.rect(centerX - 10f, 80f, 20f, 1f);
+        shapeRenderer.rect(centerX -  9f, 100f, 18f, 1f);
+        shapeRenderer.rect(centerX -  8f, 117f, 16f, 1f);
+
+        // 8. Emitter point — bright energy disc between the rail tips at muzzle.
+        //    A small concentrated circle where the slug accelerates out.
+        shapeRenderer.setColor(0.18f, 0.22f, 0.32f, 1f);
+        shapeRenderer.ellipse(centerX - 4f, 119f, 8f, 6f);   // dark housing ring
+        shapeRenderer.setColor(0.20f, 0.65f, 1.00f, 0.90f);
+        shapeRenderer.ellipse(centerX - 3f, 120f, 6f, 5f);   // outer blue glow
+        shapeRenderer.setColor(0.80f, 0.92f, 1.00f, 1f);
+        shapeRenderer.ellipse(centerX - 2f, 121f, 4f, 4f);   // bright white-blue core
+
+        // 9. Muzzle caps — 2px bright steel band at barrel tip Y=124 spanning the rail tips.
+        //    Left rail muzzle width: outer CX-7 to inner CX-3 = 4px.
+        //    Right rail muzzle width: inner CX+3 to outer CX+7 = 4px.
+        //    NO bore ellipse: top-down view, rail tips face away, bore invisible.
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 7f, 124f, 4f, 2f);      // left rail muzzle cap
+        shapeRenderer.rect(centerX + 3f, 124f, 4f, 2f);      // right rail muzzle cap
     }
 
     /**

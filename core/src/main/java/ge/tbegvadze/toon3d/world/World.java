@@ -118,10 +118,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         DoubleBarrelShotgun  dblShotgun = new DoubleBarrelShotgun();
         PlasmaRifle          plasmaRifle = new PlasmaRifle();
         Chaingun             chaingun   = new Chaingun();
-        for (Weapon weapon : new Weapon[]{shotgun, dblShotgun, plasmaRifle, chaingun}) {
+        Railgun              railgun    = new Railgun();
+        for (Weapon weapon : new Weapon[]{shotgun, dblShotgun, plasmaRifle, chaingun, railgun}) {
             weapon.setEventTextSystem(eventTextSystem);
         }
-        inventory.setArsenal(java.util.List.of(shotgun, dblShotgun, plasmaRifle, chaingun));
+        inventory.setArsenal(java.util.List.of(shotgun, dblShotgun, plasmaRifle, chaingun, railgun));
         weaponHudRenderer    = new WeaponHudRenderer(inventory.getArsenal());
         hudRenderer          = new HudRenderer(player, hudState);
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);
