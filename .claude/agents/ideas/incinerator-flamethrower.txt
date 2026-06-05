@@ -1,0 +1,472 @@
+STATUS: IMPLEMENTED
+CATEGORY: Combat
+TITLE: Incinerator — short-range cone + damage-over-time burn (FUEL)
+CREATED: 2026-06-05
+---
+
+OVERVIEW
+========
+The Incinerator is the player's short-range crowd-melt weapon and the only gun
+that applies a PERSISTENT damage-over-time effect. Pulling the trigger sprays a
+gout of fire that fills a short WIDENING CONE directly ahead — the tile in front
+(1 wide), then the two tiles beyond (3 wide), then the front of that (a final
+band) — hitting every enemy in that fan for modest immediate damage AND setting
+them ON FIRE. Burning enemies take BURN damage at the start of every subsequent
+turn for several turns, even after the player stops firing or looks away. It is
+the answer to a swarm of weak enemies pouring down a corridor, to "I cannot kill
+them all this turn but I can light them all up and let the fire finish them,"
+and to creating a wall of flame the player retreats behind. It reuses the Weapon
+abstraction and a cone-shaped marchShot (like the shotgun's spread, but multi-
+tile-deep) plus a new per-enemy BURN status that the global tick system advances.
+
+Why it belongs: the existing weapons all resolve their entire damage in the turn
+they fire. Nothing leaves a lingering effect, nothing rewards "tag everything and
+disengage," and nothing fills a 2D area in front of the player at melee range
+with sustained pressure. The shotgun is a single point-blank burst; the
+incinerator is a sustained cone that keeps killing on its own. It is the swarm
+answer and the only weapon whose damage outlives the trigger pull.
+
+
+GAMEPLAY ROLE
+=============
+- Niche: short-range area suppression + damage-over-time. The ONLY weapon that
+  deals damage on turns AFTER you fire (the burn), and the only one that fills a
+  multi-tile cone in front of the player.
+- Ideal geometry: a swarm of weak enemies bunched and advancing at close range
+  (a corridor mouth, a doorway flood). Light them all, back up, let them burn.
+- Anti-niche (deliberate weakness): single tough/armored targets (the per-hit
+  immediate damage is low and burn is a slow drip — inefficient vs one beefy
+  foe), and long range (the cone reaches only 3 tiles; useless across a hall).
+  This keeps it clearly distinct from the railgun (single armored target at
+  range) and the plasma rifle (a line at mid range).
+- Role differentiation table:
+
+                    Shotgun        Grenade Launcher   Incinerator
+  Damage area       1D cluster     2D plus-splash     2D widening CONE
+                    (point blank)  (at impact tile)   (sustained, in front)
+  Range             5 tiles        6 tiles (lobbed)   3 tiles (short cone)
+  Persistence       none           none (instant)     BURN over ~4 turns
+  Best vs           1 close enemy  a clump / corner   a SWARM at the doorway
+  Damage timing     all this turn  all this turn      a little now + a lot
+                                                      over the next turns
+  Ammo              shells common  grenades RARE      FUEL common-ish but
+                                                      drains fast (3/shot)
+
+
+GAMEPLAY LOOP
+=============
+PRE-FIRE (free aim)
+- Rotating to face the swarm is FREE (no tick, no turn), as with all weapons.
+
+FIRING (one full turn)
+1. Player presses KEY_ATTACK with the incinerator equipped.
+2. canFire() requires fuelInClip >= FUEL_PER_SHOT (3) and not RELOADING. If not:
+   a hollow "spit / sputter" (no flame), HUD fuel flashes red, NO turn consumed.
+3. If true: transition to ATTACKING. marchShot() resolves the cone in tile space:
+   a. Build the cone tiles relative to facing (facingStepColumn, facingStepRow)
+      and the perpendicular axis (perpColumn, perpRow) = (-facingStepRow,
+      facingStepColumn):
+        Depth 1 (1 tile ahead):  the single tile directly in front.
+        Depth 2 (2 tiles ahead): the front tile PLUS its two perpendicular
+                                  neighbours (3 tiles wide).
+        Depth 3 (3 tiles ahead): the center tile PLUS its two perpendicular
+                                  neighbours (3 tiles wide).
+      Total up to 7 cone tiles forming a widening fan. (See FLAME_CONE_OFFSETS in
+      TECHNICAL NOTES for the exact offset table.)
+   b. The cone is BLOCKED BY WALLS along each depth ray: if depth 1's center tile
+      is a wall, the flame stops (nothing past it on that ray). Flame does not
+      pass through walls. Compute reachable cone tiles by walking each depth ray
+      from the player and stopping a ray at the first wall (so a doorway naturally
+      funnels the flame).
+   c. For every reachable cone tile, for every enemy on it:
+        - Apply FLAME_IMPACT_DAMAGE immediately (modest — see STATS), reduced
+          slightly at depth 3 (FLAME_FALLOFF) for the cone's far edge.
+        - Apply or REFRESH the BURN status on that enemy: set its
+          burnTurnsRemaining = FLAME_BURN_TURNS (4). Re-spraying a burning enemy
+          REFRESHES the timer (does not stack damage, resets duration).
+   d. fuelInClip -= FUEL_PER_SHOT (3 per shot — fuel drains fast).
+4. Visual: weapon sprite plays the continuous FIRE frame (nozzle gout), a layered
+   orange-yellow flame cone billows from the bottom-center of the screen, a warm
+   orange screen-edge glow pulses, and every hit enemy ignites (a small flame
+   overlay billboard on each burning enemy persists until the burn ends). A
+   roaring "FWOOOOSH."
+5. Turn ends. Enemies act. BURN ticks resolve (see BURN below). If fuelInClip <
+   FUEL_PER_SHOT, weapon -> RELOADING with FLAME_RELOAD_TICKS armed.
+
+BURN STATUS (the signature mechanic — damage over time)
+- Each enemy carries burnTurnsRemaining (int, default 0). The global tick / world
+  step processes burns at the START of every turn AFTER the player's action
+  (i.e. when the world advances):
+    For each enemy with burnTurnsRemaining > 0:
+      apply FLAME_BURN_DAMAGE_PER_TURN to that enemy;
+      burnTurnsRemaining -= 1;
+      when it reaches 0, remove the flame overlay.
+- Burn damage is applied REGARDLESS of where the player is or faces — the fire
+  keeps working after you disengage. This is the "tag and retreat" payoff.
+- Burning is visible: each burning enemy renders a small animated flame overlay
+  (orange flicker) on its billboard so the player can read who is on fire and for
+  roughly how long (intensity can dim as burnTurnsRemaining decreases).
+- A burning enemy that walks does NOT spread fire to tiles (v1 — keep it simple;
+  see OPEN QUESTIONS for optional floor-fire spread via the hazard system).
+
+RELOAD (tick-driven)
+- Standard tick model: each completed tile step decrements ticksRemaining;
+  rotations/blocked bumps do not. On 0: fuelInClip = min(clipSize, pool); deduct
+  from FUEL pool; state -> NORMAL. Reload (3 ticks) = swapping/repressurizing the
+  fuel canister.
+
+EMPTY / OUT-OF-FUEL
+- Fire with fuelInClip < FUEL_PER_SHOT (mid-reload or low pool): sputter, HUD red,
+  no turn.
+- Reload finishes with insufficient fuel: clip stays low/empty, HUD red, keeps
+  sputtering. Swap weapon. Fists are the never-softlock fallback.
+- IMPORTANT: enemies already burning continue to burn even when the player is out
+  of fuel — the DoT you already applied still resolves. A clutch dynamic: light
+  the swarm, run dry, and the fire still finishes them.
+
+
+STATS
+=====
+(Placeholders — tune in playtest.)
+
+  Immediate Impact Damage:       8    (FLAME_IMPACT_DAMAGE, per enemy per spray)
+  Far-edge (depth 3) Damage:     5    (FLAME_FALLOFF applied at max depth)
+  Burn Damage per Turn:          6    (FLAME_BURN_DAMAGE_PER_TURN)
+  Burn Duration:                 4 turns (FLAME_BURN_TURNS)
+  Total burn potential per tag:  24   (6 x 4, if not refreshed)
+  Damage Drop Coefficient:       0.0  (cone is short; use explicit depth falloff)
+  Range (cone depth):            3 tiles (FLAME_RANGE_TILES)
+  Cone Shape:                    widening fan, up to 7 tiles (see offsets)
+  Clip Size:                     30 fuel (FLAME_CLIP_SIZE)
+  Ammo per Shot:                 3 fuel (FUEL_PER_SHOT) -> 10 sprays per clip
+  Reload Time:                   3 movement ticks (FLAME_RELOAD_TICKS)
+  Pickup Fuel:                   60   (2 clips)
+  Max Fuel Carried:              120  (4 clips)
+  Ammo Type:                     FUEL (new pool)
+  Penetration:                   N/A  (area cone; not a line)
+
+
+SPECIAL MECHANICS
+=================
+1. DAMAGE OVER TIME (BURN) — the ONLY weapon whose damage continues on turns
+   after you fire. Tag an enemy, and it loses HP every turn for 4 turns even if
+   you disengage, retreat, or run out of fuel. Rewards "light them up and back
+   off." Refreshing (re-spraying) resets the timer; it does not stack.
+2. WIDENING CONE — fills a 2D fan in front of the player (up to 7 tiles), the
+   only weapon that area-suppresses melee range. A doorway funnels it (walls
+   block cone rays), turning a chokepoint into a kill zone.
+3. SUSTAINED PRESSURE / SOFT CONTROL — even modest immediate damage plus burn
+   means the incinerator wears down a whole swarm over several turns. It does not
+   delete enemies instantly (low per-hit) but guarantees attrition.
+4. FUEL BURN RATE — 3 fuel per spray means the clip empties in 10 sprays; the
+   player must be economical and time the disengage. The tension is "how many
+   more sprays before I have to reload and retreat."
+5. SYNERGY WITH HAZARDS — flame can ignite oil pools / explosive barrels in the
+   cone (see INTERACTIONS), turning the environment into part of the weapon.
+
+
+VISUAL DESIGN
+=============
+WEAPON SPRITE (procedural FrameBuffer, 192x134 canvas, Quake-1 top-down angle)
+  Identity silhouette: a bulky nozzle weapon with a visible FUEL CANISTER and a
+  pilot-light flame at the nozzle tip. Industrial, not military — reads as a
+  repurposed UAC incineration / pest-control tool (dark humor: "approved for
+  vermin extermination"). Warm ballistic-ish palette but with an orange pilot
+  flame and a fuel-tank accent.
+
+  View mode: TOP-DOWN, convergence ~0.65, muzzle CAP (no bore ellipse). The
+  nozzle is WIDE (it is a sprayer), wider than a rifle barrel, narrower than the
+  grenade tube.
+
+  DRAW LAYERS (back to front, Y-up, centerX = 96):
+    1. RECEIVER / HOUSING: a wide industrial body Y=14..60, dark gunmetal
+       rgba(0.24,0.26,0.28,1), with a 3px top highlight rgba(0.42,0.46,0.50,1)
+       and 3px bottom shadow rgba(0.12,0.13,0.15,1). Add a couple of rivet dots
+       rgba(0.36,0.38,0.42,1) for an industrial read.
+    2. FUEL CANISTER: a cylindrical tank mounted on the LEFT-back of the housing
+       (Y=16..50, centered around centerX-30), drawn as a rounded rect (rect +
+       circles at corners) in rust-red rgba(0.55,0.20,0.12,1) with a faded HAZARD
+       label band rgba(0.85,0.70,0.10,1) and a dark fuel-gauge stripe. This
+       asymmetric tank is the incinerator's signature silhouette (most weapons are
+       symmetric; the tank breaks it — but keep the NOZZLE centered on centerX for
+       the centered-weapon look; only the tank decoration sits off-axis). NOTE:
+       per the guide weapons should read symmetric about centerX; if strict
+       symmetry is required, mirror a small twin canister on the right, or accept
+       the tank as a centered detail. See OPEN QUESTIONS.
+    3. FEED HOSE: a curved dark rubber hose rgba(0.16,0.16,0.18,1) from the
+       canister to the nozzle base (a few short connected rects approximating a
+       curve), selling the fuel path.
+    4. NOZZLE TUBE: a wide-ish tube from base Y=60 (half-width ~16px) to muzzle
+       Y=120 (half-width ~16*0.65 ~10px) via drawSymmetricTrapezoid. Crown
+       highlight rgba(0.45,0.49,0.54,1); outer-edge shadows rgba(0.10,0.11,0.13,1).
+    5. IGNITER RING: a small ring at the nozzle tip Y=116, steel
+       rgba(0.40,0.44,0.50,1), where the pilot flame sits.
+    6. PILOT FLAME (idle): a tiny ever-present orange flicker at the nozzle tip
+       (Y=120..126), a small triangle/teardrop rgba(0.95,0.55,0.15,1) with a
+       yellow core rgba(1.0,0.85,0.30,1). Even at idle the gun shows a live pilot
+       light — it reads as "ready to burn."
+    7. MUZZLE CAP: 2px bright steel band at Y=120, muzzle width. NO bore ellipse.
+
+  FRAMES:
+    idle    — pilot flame small and steady, canister full.
+    fire    — a large flame gout erupts from the nozzle (handled mostly by the
+              cone fire effect over the world); on the sprite, the pilot flame
+              swells, the nozzle glows orange, weapon shakes/vibrates ~4px
+              (continuous spray rumble, not a single kick).
+    reload  — canister detaching/swapping (the tank rect drops/gaps), pilot flame
+              guttering low, a fresh canister sliding in over the ticks.
+
+FIRE EFFECT (custom — the flame cone is the whole identity)
+  - FLAME CONE OVER THE WORLD: a layered, animated orange-yellow flame fan rising
+    from bottom-center of the screen and billowing UP and slightly OUTWARD,
+    representing the cone (which is always dead-ahead). Build from stacked
+    semi-transparent triangles/ellipses in three color bands:
+      outer  rgba(0.85,0.30,0.05,0.7) (deep orange-red)
+      mid    rgba(0.98,0.55,0.12,0.85) (orange)
+      core   rgba(1.0,0.85,0.30,0.95) (yellow-white)
+    Animate by jittering the flame tongue heights/offsets per frame (use a small
+    precomputed jitter table to stay allocation-free). This is the most
+    persistent on-screen effect — it should fill more of the lower screen than
+    any other muzzle effect.
+  - SCREEN GLOW: a warm orange screen-edge glow, alpha ~0.30, that pulses while
+    firing (NOT a snap flash — a sustained warm bath).
+  - SHAKE: a low continuous rumble FLAME_SHAKE_INTENSITY ~4px while firing (the
+    sprayer vibrates), decaying after the spray ends.
+  - BURNING-ENEMY OVERLAY (on enemy billboards): each enemy with
+    burnTurnsRemaining > 0 gets a small animated flame overlay drawn on its
+    billboard (a few flickering orange triangles at its base), dimming as the
+    burn timer runs down. This is rendered by EnemyRenderer, not the weapon HUD.
+
+HUD
+  - hudAmmoString(): "FUEL <fuelInClip>/<clipSize>", e.g. "FUEL 21/30". Reuses
+    the right-panel digits + weapon name "INCINERATOR". Low-fuel (cannot afford a
+    spray) pulses red via existing logic.
+
+AUDIO
+  - FIRE: a roaring "FWOOOOSH" that sustains for the spray, with a crackle tail.
+  - BURN (ambient): a soft crackle loop while any enemy is burning (low volume).
+  - RELOAD: a hiss (depressurize), a clunk (canister swap), a hiss (repressurize)
+    over the 3 ticks.
+  - DRY FIRE: a sputtering "fft-fft" (pilot light, no fuel pressure).
+
+
+TECHNICAL NOTES
+===============
+NEW CLASS
+  entity/Incinerator.java extends Weapon
+    Constructor:
+      super("INCINERATOR",
+            Constants.FLAME_IMPACT_DAMAGE,
+            Constants.FLAME_CLIP_SIZE,
+            Constants.FLAME_RELOAD_TICKS,
+            Constants.FLAME_DAMAGE_DROP_COEFF, // 0.0; depth falloff handled explicitly
+            Constants.FLAME_RANGE_TILES);
+
+  marchShot() OVERRIDE — cone fan, not a line. Walks each depth ray, stops a ray
+  at the first wall, applies impact damage + burn. Pseudocode (integer tiles,
+  allocation-free; perpendicular axis from facing):
+
+    int perpColumn = -facingStepRow;   // 90-degree CCW of facing
+    int perpRow    =  facingStepColumn;
+    // For each cone tile (depth, lateralOffset) in FLAME_CONE_OFFSETS:
+    //   tileColumn = playerTileColumn + facingStep*depth + perp*lateral
+    //   tileRow    = playerTileRow    + facingStep*depth + perp*lateral
+    // But first determine reachable depth per lateral ray (wall-blocking):
+    for each lateralOffset in {-1, 0, +1}:
+        for (int depth = 1; depth <= range; depth++) {
+            int coneColumn = playerTileColumn + facingStepColumn*depth + perpColumn*lateralOffset;
+            int coneRow    = playerTileRow    + facingStepRow*depth    + perpRow*lateralOffset;
+            // gate: this tile only exists in the cone if its depth is allowed
+            //  (lateral=0 reaches depth 1..3; lateral=+-1 reaches depth 2..3 only)
+            if (!coneTileExists(depth, lateralOffset)) continue;
+            char coneCell = level.getCell(coneColumn, coneRow);
+            if (Level.isWall(coneCell)) break; // wall stops this lateral ray
+            if (enemyHitTarget != null) {
+                Object hitEnemy = enemyHitTarget.enemyAt(coneColumn, coneRow);
+                if (hitEnemy != null) {
+                    int damage = (depth >= range)
+                        ? Constants.FLAME_FALLOFF
+                        : Constants.FLAME_IMPACT_DAMAGE;
+                    enemyHitTarget.applyDamageTo(hitEnemy, damage);
+                    enemyHitTarget.applyBurn(hitEnemy, Constants.FLAME_BURN_TURNS);
+                }
+            }
+        }
+    return FireResult.MISSED; // or a hit result; cone has no single "stop" tile
+
+  - coneTileExists / FLAME_CONE_OFFSETS: define the fan shape as a static offset
+    table so it is data, not branches. Suggested 7-tile fan:
+      depth1: (1, 0)
+      depth2: (2,-1) (2,0) (2,+1)
+      depth3: (3,-1) (3,0) (3,+1)
+    where each entry is (forwardDepth, lateralOffset). The reachability/wall-block
+    above is computed per lateral ray; the offset table defines membership.
+  - enemyHitTarget.applyBurn(enemy, turns): NEW method on the EnemyHitTarget /
+    enemy-damage interface — sets enemy.burnTurnsRemaining = max(existing, turns)
+    (refresh, not stack). The enemy system owns the burn field and ticking.
+
+  hudAmmoString() override: "FUEL " + fuelInClip + "/" + clipSize, built into the
+  preallocated StringBuilder.
+
+BURN TICK (enemy system + global tick)
+  - Add int burnTurnsRemaining to the Enemy (or a Burn status component if ECS).
+  - In the world/enemy turn-advance (the same place enemies take their turn —
+    see enemy_system.txt and global-tick-event-system.txt), BEFORE or AFTER enemy
+    actions, process burns:
+      if (enemy.burnTurnsRemaining > 0) {
+          enemy.takeDamage(Constants.FLAME_BURN_DAMAGE_PER_TURN);
+          enemy.burnTurnsRemaining -= 1;
+      }
+    Order relative to enemy movement is a tuning choice (recommend burn FIRST so a
+    burning enemy can die before acting). A killed-by-burn enemy drops loot/corpse
+    normally.
+  - This hooks the global-tick-event-system: a "burn tick" can post an event for
+    the flame overlay / crackle audio.
+
+CONSTANTS TO ADD (util/Constants.java)
+  FLAME_IMPACT_DAMAGE            = 8
+  FLAME_FALLOFF                  = 5
+  FLAME_BURN_DAMAGE_PER_TURN     = 6
+  FLAME_BURN_TURNS               = 4
+  FLAME_DAMAGE_DROP_COEFF        = 0.0f
+  FLAME_RANGE_TILES              = 3
+  FLAME_CLIP_SIZE               = 30
+  FUEL_PER_SHOT                  = 3
+  FLAME_RELOAD_TICKS             = 3
+  FLAME_PICKUP_FUEL              = 60
+  FLAME_MAX_FUEL                 = 120
+  FLAME_PENETRATION              = false
+  FLAME_CONE_OFFSETS             = {{1,0},{2,-1},{2,0},{2,1},{3,-1},{3,0},{3,1}}
+  FLAME_SHAKE_INTENSITY          = 4f
+  FLAME_SCREEN_GLOW_ALPHA        = 0.30f
+  FLAME_CANVAS_WIDTH             = 192
+  FLAME_CANVAS_HEIGHT            = 134
+  FLAME_NORMAL_TEXTURE_PATH      = "textures/guns/incinerator/incinerator.png"
+  FLAME_FIRE_TEXTURE_PATH        = "textures/guns/incinerator/incinerator_fire.png"
+  FLAME_RELOAD_TEXTURE_PATH      = "textures/guns/incinerator/incinerator_reload.png"
+  // Sprite / flame colors (RGBA)
+  FLAME_COLOR_BODY               = (0.24,0.26,0.28,1)
+  FLAME_COLOR_TANK               = (0.55,0.20,0.12,1)
+  FLAME_COLOR_HAZARD             = (0.85,0.70,0.10,1)
+  FLAME_COLOR_FIRE_OUTER         = (0.85,0.30,0.05,0.7)
+  FLAME_COLOR_FIRE_MID           = (0.98,0.55,0.12,0.85)
+  FLAME_COLOR_FIRE_CORE          = (1.00,0.85,0.30,0.95)
+
+GAMEMATH ADDITIONS (util/GameMath.java)
+  No falloff curve needed (explicit depth-3 FLAME_FALLOFF constant). If a helper
+  is wanted to compute the perpendicular axis:
+    perpendicularStepColumn(facingStepColumn, facingStepRow) -> int  // = -facingStepRow
+    perpendicularStepRow(facingStepColumn, facingStepRow)    -> int  // =  facingStepColumn
+  with a derivation comment: rotating a cardinal step 90 degrees CCW maps
+  (c,r) -> (-r, c). Keep integer.
+
+WEAPONHUDRENDERER ADDITIONS
+  - instanceof Incinerator check in loadOrGenerateNormalTexture() ->
+    generateIncineratorTexture(). drawIncineratorShape(): housing, fuel canister
+    (rounded rect), feed hose, nozzle tube (drawSymmetricTrapezoid), igniter ring,
+    pilot flame, muzzle cap.
+  - Custom fire effect renderFlameCone() (layered animated orange fan) gated by
+    instanceof Incinerator in render(), instead of the shared brief flame cone.
+    Use a precomputed jitter table (no per-frame allocation) for the flicker.
+
+ENEMYRENDERER ADDITIONS (burning overlay)
+  - When drawing an enemy with burnTurnsRemaining > 0, draw a small animated flame
+    overlay on its billboard (a few flickering triangles), intensity scaled by
+    burnTurnsRemaining / FLAME_BURN_TURNS. Reuse a precomputed jitter table.
+
+NO-ALLOCATION COMPLIANCE
+  - Sprite textures and jitter tables built once at load; disposed at shutdown.
+  - Cone offset table and perpendicular axis are computed from primitives.
+  - applyBurn sets an int field; no allocation. hudAmmoString uses a preallocated
+    StringBuilder.
+
+
+BALANCE NOTES
+=============
+- DESIGNED FOR SWARMS, NOT SINGLES. Per-hit immediate damage is low (8) by
+  design; the value is in (a) hitting up to 7 tiles at once and (b) the burn
+  (6/turn x 4 = 24 follow-up per tagged enemy). Against a 5-enemy swarm, one
+  spray = 5 x 8 immediate + 5 x 24 burn potential = 40 now + 120 over the next
+  4 turns. That is the highest TOTAL multi-target damage in the game — but spread
+  over time, low per-instant, and only at melee range. Strong vs swarms, weak vs
+  a single tank (8 + 24 over 4 turns is slow for one beefy target).
+- BURN BALANCE: 4 turns x 6 = 24 is the key knob. If swarms melt too easily, drop
+  burn turns to 3 or damage to 5. If the burn feels negligible, raise to 8/turn.
+  REFRESH (not stack) is deliberate — prevents a player from stacking infinite
+  burn by spamming; instead it maintains pressure. If stacking is wanted later,
+  cap stacks at 2.
+- FUEL ECONOMY: 3 fuel/spray, 30/clip = 10 sprays per clip; 120 max = 40 sprays.
+  Fuel should be moderately common (it is a workhorse swarm tool) but drains fast
+  enough that the player cannot hold the trigger forever. Suggested ~40-60 fuel
+  found per level.
+- RANGE 3 is the hard weakness. The incinerator cannot touch anything past 3
+  tiles — it forces the player into dangerous close range, which the burn-and-
+  retreat loop is meant to mitigate. Do NOT extend range past 3-4; long range
+  would erase its identity and overlap the plasma/chaingun.
+- DIFFICULTY KNOBS: FLAME_BURN_DAMAGE_PER_TURN x FLAME_BURN_TURNS (DoT power),
+  FLAME_IMPACT_DAMAGE (burst), FUEL_PER_SHOT and clip/max (sustain), cone offset
+  table (area), FLAME_RANGE_TILES (the weakness dial).
+- ALL NUMBERS ARE FIRST-PASS PLACEHOLDERS. Intended FEEL: "the crowd answer —
+  when the doorway floods, you bathe the whole mouth in fire, back up, and watch
+  them cook. Low immediate punch, relentless attrition, scary at melee."
+
+
+INTERACTIONS
+============
+1. GLOBAL TICK / ENEMY SYSTEM (global-tick-event-system.txt, enemy_system.txt):
+   the BURN status is the first per-enemy DoT and requires the enemy turn-advance
+   to process burn damage each turn. This is a clean extension of the existing
+   tick loop — a new "process burns" step. Burn ticks can post events for the
+   crackle audio / overlay via the event bus.
+2. HAZARD CHAIN REACTIONS (hazard-chain-reactions-fire-toxic-explosive.txt): the
+   incinerator is the NATURAL fire source for the hazard system. Flame in a cone
+   tile containing an OIL POOL (`O`) ignites it (spreading floor fire if that
+   system supports it); flame on an explosive barrel (`B`) detonates it; flame in
+   a toxic/radioactive cloud could ignite it. This is the deepest environmental
+   synergy of any weapon — the incinerator turns the level's hazards into part of
+   its kit. Recommend: cone tile with `O` -> ignite floor-fire tile; cone tile
+   with `B` -> detonate.
+3. ENEMY HIT REACTIONS / HEALTH BARS (enemy-health-bars-...): burning enemies
+   show the flame overlay AND continue updating their health bar each burn tick.
+   The multi-target spray reuses the existing multi-hit reaction path.
+4. SHOTGUN / WEAPON SYSTEM: drop-in via the Weapon base, same tick reload, same
+   WeaponEventBus. Deliberately non-redundant: shotgun = single point-blank
+   burst; incinerator = sustained melee-range cone with DoT.
+5. EMERGENCY RED ALERT PULSE (emergency-red-alert-pulse.txt): the FWOOOSH is a
+   loud noise event raising local alarm. The ambient burn crackle is NOT a combat
+   noise event.
+6. ENEMY weakness/resistance: a "flammable" enemy type (e.g. a gas-bloated demon)
+   could take bonus burn damage or a longer burn; a "fireproof" type (a hell
+   knight?) could resist burn entirely — apply a per-type burn multiplier in
+   applyBurn, mirroring the shotgun/plasma weakness pattern. This gives level
+   designers a reason to mix enemy types against the incinerator.
+
+
+OPEN QUESTIONS
+=============
+1. SPRITE SYMMETRY VS FUEL TANK: the off-axis fuel canister breaks the guide's
+   "symmetric about centerX" rule. Options: (a) keep the nozzle centered and
+   accept the tank as an off-axis detail (most readable, recommended); (b) mirror
+   twin tanks on both sides (symmetric but less iconic); (c) center a single tank
+   behind the nozzle. Recommendation: (a).
+2. BURN STACK VS REFRESH: confirmed REFRESH (re-spray resets to FLAME_BURN_TURNS,
+   does not add). If playtest wants more reward for sustained spraying, allow up
+   to 2 stacks. Recommendation: refresh-only for v1.
+3. FLOOR FIRE SPREAD: should a burning enemy or an ignited oil pool leave a
+   damaging fire tile that the hazard system spreads/ticks, hitting the player
+   too? This is powerful but couples tightly to the hazard system. Recommendation:
+   defer floor-fire to the hazard-chain-reactions feature; v1 incinerator only
+   burns ENEMIES directly, with oil/barrel ignition delegated to that system if
+   present.
+4. BURN TICK ORDER: process burn BEFORE enemy movement (a burning enemy can die
+   before acting) or AFTER (it always gets one action)? Recommendation: BEFORE —
+   the player who lit them up should be rewarded with potential pre-action kills.
+5. FRIENDLY FIRE / SELF-BURN: can the player catch fire (e.g. standing in ignited
+   oil)? For v1 the cone only points away, so no direct self-burn. If floor-fire
+   spread is added later, the player CAN be burned by standing in it — a good
+   risk for the retreat-behind-flame fantasy. Defer with #3.
+6. CONE WIDTH/DEPTH: the 7-tile fan (1/3/3) is the proposed shape. Alternatives:
+   a narrower 1/1/1 straight 3-tile blast (more shotgun-like) or a wider 1/3/5
+   fan (more area, harder to balance). Recommendation: 1/3/3 (the {{1,0},{2,-1},
+   {2,0},{2,1},{3,-1},{3,0},{3,1}} table) — clearly a cone, clearly melee, clearly
+   distinct from every other weapon's pattern.

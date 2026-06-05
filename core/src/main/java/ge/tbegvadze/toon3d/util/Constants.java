@@ -645,6 +645,95 @@ public final class Constants {
     public static final float LEVEL_TRANSITION_FADE_IN_SECONDS   = 0.30f;
     public static final int   STARTING_DEPTH                     = 1;
 
+    // Railgun — charge-up infinite-pierce hitscan sniper (SLUGS ammo)
+    // Damage table (coefficient 0.02, floor 0.70):
+    //   charge 1 (half), distance 1: 40 × 1.00 = 40
+    //   charge 1 (half), distance 16: 40 × max(0.70, 1 - 0.02×15) = 40 × 0.70 = 28
+    //   charge 2 (full), distance 1: 90 × 1.00 = 90
+    //   charge 2 (full), distance 16: 90 × 0.70 = 63
+    public static final int[]   RAILGUN_DAMAGE_BY_CHARGE          = {0, 40, 90};
+    public static final int     RAILGUN_MAX_CHARGE                = 2;
+    public static final float   RAILGUN_DROP_COEFF                = 0.02f;
+    public static final float   RAILGUN_DAMAGE_MIN_MULTIPLIER     = 0.70f;
+    public static final int     RAILGUN_RANGE_TILES               = 16;
+    public static final int     RAILGUN_CLIP_SIZE                 = 1;
+    public static final int     RAILGUN_RELOAD_TIME_TICKS         = 4;
+    public static final int     RAILGUN_PICKUP_SLUGS              = 4;
+    public static final int     RAILGUN_MAX_SLUGS                 = 12;
+    public static final boolean RAILGUN_PENETRATION               = true;
+    public static final float   RAILGUN_BEAM_DURATION             = 0.14f;
+    public static final float   RAILGUN_SHAKE_INTENSITY           = 10f;
+    public static final float   RAILGUN_SCREEN_FLASH_ALPHA        = 0.45f;
+    public static final int     RAILGUN_CANVAS_WIDTH              = 192;
+    public static final int     RAILGUN_CANVAS_HEIGHT             = 134;
+    public static final String  RAILGUN_NORMAL_TEXTURE_PATH       = "textures/guns/railgun/railgun.png";
+    public static final String  RAILGUN_FIRE_TEXTURE_PATH         = "textures/guns/railgun/railgun_fire.png";
+    public static final String  RAILGUN_RELOAD_TEXTURE_PATH       = "textures/guns/railgun/railgun_reload.png";
+
+    // Incinerator — short-range cone flamethrower (FUEL ammo)
+    // Impact damage applied to every enemy in the cone on each spray.
+    // Depth-3 (far-edge) tiles use FLAME_FALLOFF instead of FLAME_IMPACT_DAMAGE.
+    // FLAME_DAMAGE_DROP_COEFF = 0.0: depth falloff is handled explicitly, not by the drop curve.
+    // Burn DoT constants (FLAME_BURN_*) are reserved for the enemy system when implemented.
+    public static final int     FLAME_IMPACT_DAMAGE        = 8;
+    public static final int     FLAME_FALLOFF              = 5;
+    public static final int     FLAME_BURN_DAMAGE_PER_TURN = 6;
+    public static final int     FLAME_BURN_TURNS           = 4;
+    public static final float   FLAME_DAMAGE_DROP_COEFF    = 0.0f;
+    public static final int     FLAME_RANGE_TILES          = 3;
+    public static final int     FLAME_CLIP_SIZE            = 30;
+    public static final int     FUEL_PER_SHOT              = 3;
+    public static final int     FLAME_RELOAD_TICKS         = 3;
+    public static final int     FLAME_PICKUP_FUEL          = 60;
+    public static final int     FLAME_MAX_FUEL             = 120;
+    // Cone offset table: each entry is {forwardDepth, lateralOffset}.
+    // Lateral=0 reaches depth 1-3; lateral=+-1 reaches depth 2-3 only (7-tile fan).
+    public static final int[][] FLAME_CONE_OFFSETS         = {{1,0},{2,-1},{2,0},{2,1},{3,-1},{3,0},{3,1}};
+    public static final float   FLAME_SHAKE_INTENSITY      = 4f;
+    public static final float   FLAME_SCREEN_GLOW_ALPHA    = 0.30f;
+    // Incinerator procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer
+    public static final int     FLAME_CANVAS_WIDTH         = 192;
+    public static final int     FLAME_CANVAS_HEIGHT        = 134;
+    // Incinerator HUD textures — always procedural (no asset files)
+    public static final String  FLAME_NORMAL_TEXTURE_PATH  = "textures/guns/incinerator/incinerator.png";
+    public static final String  FLAME_FIRE_TEXTURE_PATH    = "textures/guns/incinerator/incinerator_fire.png";
+    public static final String  FLAME_RELOAD_TEXTURE_PATH  = "textures/guns/incinerator/incinerator_reload.png";
+
+    // Grenade Launcher — bouncing indirect-fire AoE splash weapon (GRENADES ammo)
+    // Damage table (coefficient 0.0 — no travel falloff; splash is splash):
+    //   impact tile:           GRENADE_SPLASH_DAMAGE  = 30 (full blast)
+    //   4 orthogonal neighbours: GRENADE_FALLOFF_DAMAGE = 16 (edge of plus)
+    //   player self-damage:    GRENADE_SELF_DAMAGE    = 20 (if caught in blast)
+    // Per-shot ceiling: 5 enemies in plus = 30 + 4×16 = 94 distributed damage.
+    public static final int     GRENADE_SPLASH_DAMAGE      = 30;
+    public static final int     GRENADE_FALLOFF_DAMAGE     = 16;
+    public static final int     GRENADE_SELF_DAMAGE        = 20;
+    public static final float   GRENADE_DAMAGE_DROP_COEFF  = 0.0f;
+    public static final int     GRENADE_RANGE_TILES        = 6;
+    // GRENADE_ARM_TILES: grenade must travel this many tiles before it can detonate.
+    // Prevents point-blank abuse; unarmed grenade passes through enemies harmlessly.
+    public static final int     GRENADE_ARM_TILES          = 2;
+    public static final int     GRENADE_CLIP_SIZE          = 3;
+    public static final int     GRENADE_RELOAD_TIME_TICKS  = 4;
+    public static final int     GRENADE_PICKUP_AMMO        = 6;
+    public static final int     GRENADE_MAX_AMMO           = 18;
+    // GRENADE_PENETRATION is not used by the custom marchShot, kept for API completeness.
+    public static final boolean GRENADE_PENETRATION        = false;
+    // 5-tile plus splash offsets: {forwardDelta, lateralDelta} relative to impact tile.
+    // Index 0 = center (full damage); indices 1-4 = orthogonal neighbours (falloff damage).
+    public static final int[][] GRENADE_SPLASH_OFFSETS     = {{0,0},{1,0},{-1,0},{0,1},{0,-1}};
+    // Visual effect timings (reserved for ImpactEffectSystem wiring)
+    public static final float   GRENADE_BLAST_DURATION     = 0.30f;
+    public static final float   GRENADE_SHAKE_INTENSITY    = 8f;
+    public static final float   GRENADE_SCREEN_FLASH_ALPHA = 0.35f;
+    // Procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer
+    public static final int     GRENADE_CANVAS_WIDTH       = 192;
+    public static final int     GRENADE_CANVAS_HEIGHT      = 134;
+    // Grenade Launcher HUD textures — always procedural (no asset files)
+    public static final String  GRENADE_NORMAL_TEXTURE_PATH  = "textures/guns/grenade/grenade.png";
+    public static final String  GRENADE_FIRE_TEXTURE_PATH    = "textures/guns/grenade/grenade_fire.png";
+    public static final String  GRENADE_RELOAD_TEXTURE_PATH  = "textures/guns/grenade/grenade_reload.png";
+
     // Tile-Based Ambient Lighting — floor tiles ' ', 'l', 'u', 'f' carry brightness multipliers
     // finalShade = clamp(distanceShade * directionalMultiplier * tileBrightness, 0, MAX_LIGHTING_SHADE)
     // ' ' (space) = lit bright floor (1.55×); 'l' = normal floor (1.0×);

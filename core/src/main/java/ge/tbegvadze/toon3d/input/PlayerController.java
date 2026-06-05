@@ -261,6 +261,22 @@ public class PlayerController {
     private void tryFire() {
         Weapon weapon = inventory.getEquippedWeapon();
         if (weapon == null || !weapon.canFire()) return;
+
+        // Railgun requires a charge turn before the slug is released.
+        if (weapon instanceof Railgun) {
+            Railgun railgun = (Railgun) weapon;
+            if (!railgun.isCharging()) {
+                // First press: spin up the capacitor — consume a turn but do not fire.
+                railgun.advanceCharge();
+                if (eventTextSystem != null) eventTextSystem.spawn("CHARGING...");
+                actionState    = ActionState.FIRING;
+                actionProgress = 0f;
+                return;
+            }
+            // Second press: advance to full charge and fire this same turn.
+            railgun.advanceCharge();
+        }
+
         int playerTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
         int playerTileRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
         int facingStepColumn = Math.round(player.directionX);
@@ -338,6 +354,10 @@ public class PlayerController {
     }
 
     private void trySwitchWeapon() {
+        Weapon currentWeapon = inventory.getEquippedWeapon();
+        if (currentWeapon instanceof Railgun) {
+            ((Railgun) currentWeapon).resetCharge();
+        }
         Weapon nextWeapon = inventory.switchToNextWeapon();
         if (weaponSwitchCallback != null) weaponSwitchCallback.run();
         if (eventTextSystem != null && nextWeapon != null) {
