@@ -20,6 +20,10 @@ import ge.tbegvadze.toon3d.util.Constants;
  * Fire passes through enemies (full-cone damage; no early termination on hit).
  * Explosive barrels in the cone are detonated and their ray is terminated.
  *
+ * Fuel consumption: Weapon.fire() (final) decrements shotsInClip by 1. marchShot()
+ * deducts the remaining (FUEL_PER_SHOT - 1) units immediately so the total consumed
+ * per spray is exactly FUEL_PER_SHOT.
+ *
  * Damage table (explicit depth falloff, no drop coefficient):
  *   depth 1: FLAME_IMPACT_DAMAGE = 8
  *   depth 2: FLAME_IMPACT_DAMAGE = 8
@@ -53,28 +57,15 @@ public class Incinerator extends Weapon {
     }
 
     /**
-     * Overrides fire() to deduct the extra FUEL_PER_SHOT - 1 units before calling
-     * super.fire() (which deducts 1 itself), so the total deduction is FUEL_PER_SHOT.
-     */
-    @Override
-    public final FireResult fire(int playerTileColumn, int playerTileRow,
-                                 int facingStepColumn, int facingStepRow,
-                                 Level level, EnemyHitTarget enemyHitTarget,
-                                 BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
-        // Deduct the extra fuel now; super.fire() will deduct the remaining 1.
-        shotsInClip -= (Constants.FUEL_PER_SHOT - 1);
-        return super.fire(playerTileColumn, playerTileRow,
-                          facingStepColumn, facingStepRow,
-                          level, enemyHitTarget, barrelHitTarget, doorBlocksQuery);
-    }
-
-    /**
      * Marches a widening cone fan (up to 7 tiles) defined by FLAME_CONE_OFFSETS.
+     *
+     * Fuel deduction: Weapon.fire() already decremented shotsInClip by 1 before calling
+     * here. We deduct the remaining (FUEL_PER_SHOT - 1) now so the total is FUEL_PER_SHOT.
      *
      * Algorithm:
      *   For each lateral offset in {-1, 0, +1}:
-     *     Walk depth 1..range along the facing + perpendicular axes.
-     *     Skip tiles not in the cone shape (lateral +-1 are blocked at depth 1).
+     *     Walk distanceTiles from 1..range along the facing + perpendicular axes.
+     *     Skip tiles not in the cone shape (lateral +-1 are blocked at distanceTiles < 2).
      *     Stop the ray at the first wall or closed door on this lateral ray.
      *     Apply FLAME_IMPACT_DAMAGE (or FLAME_FALLOFF at max depth) to each enemy hit.
      *     Detonate explosive barrels and stop the ray.
@@ -90,22 +81,25 @@ public class Incinerator extends Weapon {
                                    int facingStepColumn, int facingStepRow,
                                    Level level, EnemyHitTarget enemyHitTarget,
                                    BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
+        // Deduct the extra fuel units here; Weapon.fire() already consumed 1.
+        shotsInClip -= (Constants.FUEL_PER_SHOT - 1);
+
         // Perpendicular axis (90-degree CCW rotation of the facing cardinal direction).
         int perpColumn = -facingStepRow;
         int perpRow    =  facingStepColumn;
 
         for (int lateralOffset = -1; lateralOffset <= 1; lateralOffset++) {
-            for (int depthTiles = 1; depthTiles <= range; depthTiles++) {
+            for (int distanceTiles = 1; distanceTiles <= range; distanceTiles++) {
                 // Gate: lateral +-1 rays only exist at depth 2 and beyond.
-                if (lateralOffset != 0 && depthTiles < 2) {
+                if (lateralOffset != 0 && distanceTiles < 2) {
                     continue;
                 }
 
                 int targetColumn = playerTileColumn
-                        + facingStepColumn * depthTiles
+                        + facingStepColumn * distanceTiles
                         + perpColumn       * lateralOffset;
                 int targetRow    = playerTileRow
-                        + facingStepRow    * depthTiles
+                        + facingStepRow    * distanceTiles
                         + perpRow          * lateralOffset;
 
                 char targetCell = level.getCell(targetColumn, targetRow);
@@ -129,7 +123,7 @@ public class Incinerator extends Weapon {
                 if (enemyHitTarget != null) {
                     Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                     if (hitEnemy != null) {
-                        int impactDamage = (depthTiles >= range)
+                        int impactDamage = (distanceTiles >= range)
                                 ? Constants.FLAME_FALLOFF
                                 : Constants.FLAME_IMPACT_DAMAGE;
                         enemyHitTarget.applyDamageTo(hitEnemy, impactDamage);
