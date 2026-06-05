@@ -1,0 +1,626 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Lab Level Content Expansion (walls, props, rooms, generator)
+CREATED: 2026-06-04
+---
+
+OVERVIEW
+========
+A bulk content pass that deepens the UAC facility vocabulary: 7 NEW procedural
+wall types, 5 NEW solid billboard props, visual reworks of 4 EXISTING bare props,
+6 NEW room templates, and the generator changes to weave them in. Everything
+slots into the ALREADY-BUILT pipelines (per-char wall switch in WallRenderer,
+billboard PropRenderer, RoomType decoration in LevelGenerator) with zero new
+runtime architecture — it is content, not new systems. The goal: a player should
+be able to name any room on sight (med bay, armory, cryo, reactor) and read its
+danger from the walls before stepping in.
+
+This document does NOT redefine any existing tile. It only ADDS. See
+procedural-wall-types.txt (r/G/k walls — IMPLEMENTED), billboard-prop-sprites.txt,
+and level-generation-improvements.txt (RoomType system — IMPLEMENTED) for the
+plumbing this rides on. All new procedural textures reuse the established
+"generate Pixmap once in constructor, Nearest filter, dispose in dispose()"
+pattern and the shared radialFalloff / drawBeveledRect helpers from those docs.
+
+
+CHARACTER AUDIT (what is already taken — DO NOT reuse)
+=====================================================
+Walls (solid):   x c v t w h r G k
+Solid props:     b B T L C  (generator also emits g=barrel, E=explosive)
+Decal props:     m s . O  + keycards r/y/b, stim +, medkit H, armour a/A, stairs >
+Floor lighting:  (space) l u f
+Special:         P (column) d (door) p (player) g E (generator prop aliases)
+Enemy spawns:    1 2
+
+Conclusion: lowercase r, G, g, E are ALL in use. New chars below are chosen from
+the confirmed-free set:
+  capitals  : N M Q R S U V W X Y Z   (R/S/U/V/W/X/Y/Z safe; M/N/Q safe)
+  lowercase : e i j n o q z
+  symbols   : * ~ % & = # @ ^
+Each new symbol is justified in the assignment table (SECTION 6).
+
+
+===================================================================
+SECTION 1 — NEW WALL TYPES (7)
+===================================================================
+All are SOLID (Level.isWall -> TRUE), procedural Pixmap, 128x128, Nearest filter,
+deterministic seed. Each adds one case to wallTextureFor / widthFor / heightFor.
+Drawing layer order is listed per wall (back-to-front). Distance shading and
+floor-brightness multipliers apply unchanged.
+
+--- WALL 1.1 : 'N' — REINFORCED CONTAINMENT GLASS (cracked observation window) ---
+THE READ: "something is (or was) being watched/held on the other side."
+Base: dark tinted glass over a steel frame. A thick beveled steel FRAME border
+(14px) like the bulkhead, then an inner glass pane that is semi-transparent dark
+teal with faint diagonal sheen streaks and a spiderweb CRACK radiating from one
+off-center impact point. Behind the glass, a few dim shapes (suggested, not
+detailed): vertical bars or a pale silhouette blob.
+COLORS (RGBA):
+  GLASS_FRAME_STEEL   = (0.28, 0.31, 0.36, 1.0)
+  GLASS_FRAME_LIGHT   = (0.46, 0.50, 0.57, 1.0)   raised bevel top/left
+  GLASS_FRAME_DARK    = (0.12, 0.14, 0.18, 1.0)   bevel bottom/right
+  GLASS_PANE_DARK     = (0.07, 0.13, 0.15, 1.0)   tinted glass body
+  GLASS_PANE_LIGHT    = (0.16, 0.27, 0.30, 1.0)   sheen streak
+  GLASS_SHEEN         = (0.55, 0.72, 0.74, 1.0)    bright diagonal highlight, 1px
+  GLASS_CRACK         = (0.78, 0.85, 0.88, 1.0)    hairline crack (near white)
+  GLASS_CRACK_DARK    = (0.02, 0.05, 0.06, 1.0)    crack shadow doubling
+  GLASS_GHOST         = (0.20, 0.24, 0.22, 1.0)     dim shape behind glass
+LAYER ORDER: 1 fill frame steel + grain  2 inner pane gradient (dark->light top
+to bottom)  3 ghost silhouette blobs (2-3 soft radialFalloff smears in GHOST)
+  4 sheen: 2 diagonal SHEEN streaks  5 crack: random-walk lines from one impact
+point, each crack drawn 2px CRACK with a 1px CRACK_DARK offset for depth
+  6 beveled frame border (drawBeveledRect helper, top-left lit).
+ROOMS / FREQUENCY: Containment Cell block (cell fronts, 60% of cell-facing walls),
+Cryo Chamber (pod-bay viewing wall, 1 band), Command Center (1 observation wall).
+Rare elsewhere. ~2-4 tiles per level outside its native rooms.
+LORE: UAC observation glass. Cracked = the thing inside got out.
+
+--- WALL 1.2 : 'Q' — BIO-CONTAINMENT / QUARANTINE WALL ---
+THE READ: "biohazard zone — turn back."
+Base: clean white-grey clinical panel crossed by bold diagonal QUARANTINE stripes
+(black + biohazard-green, 45deg), with a stenciled biohazard trefoil and a faded
+"QUARANTINE" stencil bar. Slight green underglow at the seams as if lit by hazmat
+strip lighting.
+COLORS (RGBA):
+  BIO_PANEL_WHITE     = (0.74, 0.77, 0.74, 1.0)   clinical base
+  BIO_PANEL_SHADOW    = (0.40, 0.44, 0.41, 1.0)   panel seam shade
+  BIO_STRIPE_BLACK    = (0.06, 0.07, 0.06, 1.0)
+  BIO_STRIPE_GREEN    = (0.28, 0.78, 0.30, 1.0)   warning green
+  BIO_TREFOIL         = (0.10, 0.10, 0.10, 1.0)   biohazard symbol ink
+  BIO_GLOW            = (0.18, 0.55, 0.22, 1.0)     seam underglow
+LAYER ORDER: 1 white panel + faint grain  2 horizontal seam shadows at 1/3,2/3
+  3 diagonal stripe band across lower third (alternate BLACK/GREEN, ~10px pitch)
+  4 stenciled trefoil (three 120deg arcs around a center disc) in TREFOIL, faded
+80% toward panel  5 1px BIO_GLOW line under the stripe band.
+ROOMS / FREQUENCY: Containment Cell block (corridor walls leading in, 30%),
+Medical Bay (1-2 accent walls). Sparse landmark, ~3-5 tiles/level.
+LORE: The outbreak started behind one of these. UAC sealed it. It did not hold.
+
+--- WALL 1.3 : 'R' — EMERGENCY LIGHTING STRIP WALL ---
+THE READ: "alarm state — this corridor is on backup power."
+Base: standard dark lab steel with a single horizontal recessed channel at eye
+height containing a glowing RED emergency strip. The strip casts a soft red
+bleed onto the steel above and below it (gradient). Small caged-bulb housings
+punctuate the strip every ~size/4.
+COLORS (RGBA):
+  EMERG_STEEL         = (0.20, 0.21, 0.24, 1.0)   dark steel field
+  EMERG_CHANNEL       = (0.08, 0.06, 0.06, 1.0)   recessed channel
+  EMERG_STRIP_CORE    = (0.95, 0.18, 0.16, 1.0)   bright red strip core
+  EMERG_STRIP_GLOW    = (0.55, 0.10, 0.10, 1.0)   bleed onto steel
+  EMERG_CAGE          = (0.10, 0.10, 0.11, 1.0)    bulb cage wire
+LAYER ORDER: 1 steel field + grain  2 vertical glow gradient toward the strip row
+(EMERG_STRIP_GLOW lerped by distance from strip center row)  3 recessed channel
+(2-3px CHANNEL band) at row ~size*0.45  4 STRIP_CORE bright band inside channel
+(2px) with 1px white-hot center  5 cage housings: small CAGE crosshatch every
+size/4 over the strip.
+NOTE: This is STATIC red (paints the alarm look). It composes with the global
+emergency-red-alert-pulse tint — when that pulse fires, this wall reads as the
+SOURCE of the alarm light. No animation code needed.
+ROOMS / FREQUENCY: Power Plant approach, Command Center, any corridor flanking a
+keycard door. Use in short BANDS (2-4 contiguous tiles) so a corridor reads as
+"alarmed," not single scattered tiles. ~6-10 tiles/level.
+LORE: Backup power only keeps the red strips alive. Main grid is gone.
+
+--- WALL 1.4 : 'M' — MEDICAL TILE WALL (clinic / med bay) ---
+THE READ: "infirmary — safe(ish), supplies likely."
+Base: clean white square TILE grid (small tiles, dark grout lines) with one
+horizontal accent stripe in medical green and a red+white MEDICAL CROSS stenciled
+once. A few tiles cracked or blood-flecked to keep it from reading sterile-cute.
+COLORS (RGBA):
+  MED_TILE_WHITE      = (0.82, 0.84, 0.83, 1.0)   tile face
+  MED_TILE_OFF        = (0.72, 0.74, 0.73, 1.0)   alt tile (subtle checker)
+  MED_GROUT           = (0.34, 0.36, 0.36, 1.0)   grout line
+  MED_GREEN_STRIPE    = (0.20, 0.62, 0.45, 1.0)   accent band
+  MED_CROSS_RED       = (0.80, 0.16, 0.16, 1.0)   medical cross
+  MED_BLOOD_FLECK     = (0.36, 0.05, 0.05, 1.0)    dried blood speck
+LAYER ORDER: 1 fill OFF  2 draw tile grid: each ~16px cell alternates WHITE/OFF
+checker, 1px GROUT borders  3 horizontal GREEN_STRIPE band (3px) at row ~size*0.6
+  4 MEDICAL CROSS (red plus on white square) stamped once, off-center  5 scatter
+~12 BLOOD_FLECK 1-2px specks low on the wall.
+ROOMS / FREQUENCY: Medical Bay (dominant wall, 70%+), Cryo Chamber (lab annex,
+20%). Outside med bay: very rare. Native to the rare once-per-level Med Bay.
+LORE: The only place that looks like it might save you. It probably won't.
+
+--- WALL 1.5 : 'Z' — CRYO / FROST-DAMAGED WALL ---
+THE READ: "cryogenic section — cold, brittle, failing coolant."
+Base: pale blue-grey steel sheeted in FROST. Heavy ice rime crusts the bottom and
+corners (white-cyan), thinning upward. Vertical frozen drip icicles hang from a
+horizontal coolant pipe seam. A few hairline frost-fractures in pale cyan. Faint
+condensation sheen.
+COLORS (RGBA):
+  CRYO_STEEL          = (0.34, 0.40, 0.46, 1.0)   cold blue-grey steel
+  CRYO_FROST_LIGHT    = (0.86, 0.93, 0.97, 1.0)   bright rime
+  CRYO_FROST_MID      = (0.62, 0.76, 0.84, 1.0)   pale ice body
+  CRYO_ICE_BLUE       = (0.50, 0.70, 0.82, 1.0)   icicle / fracture
+  CRYO_PIPE           = (0.24, 0.28, 0.33, 1.0)    coolant pipe seam
+  CRYO_SHEEN          = (0.95, 0.98, 1.00, 1.0)     condensation glint, 1px
+LAYER ORDER: 1 steel field + grain  2 frost wick: bottom-heavy + corner-heavy
+rime via radialFalloff from the 4 corners and bottom edge (lerp STEEL->FROST_MID
+->FROST_LIGHT by frost weight)  3 horizontal CRYO_PIPE seam (2px) at row size*0.4
+  4 icicles: short downward ICE_BLUE tapers hanging from the pipe seam, 3-5 of
+them  5 frost-fractures: 2-3 thin ICE_BLUE random-walk lines  6 scatter ~15
+SHEEN 1px glints in the frost zones.
+ROOMS / FREQUENCY: Cryo Chamber (dominant, 70%). Sparse elsewhere as a "coolant
+leak" accent near Power Plant. ~native to Cryo + 0-3 stray tiles.
+LORE: Cryo-stasis bay. Coolant is leaking. Whatever was frozen here is thawing.
+
+--- WALL 1.6 : 'Y' — RADIATION-BURNED WALL (scorched, glowing cracks) ---
+THE READ: "reactor breach — irradiated, do not linger."
+Base: steel SCORCHED near-black, blistered and warped, with a network of glowing
+GREEN-YELLOW cracks (Cherenkov-ish) bleeding light through the burned plate.
+Heaviest scorch radiates from one hot-spot. Faint yellow grain dusting (fallout).
+COLORS (RGBA):
+  RAD_SCORCH_BLACK    = (0.08, 0.08, 0.07, 1.0)   burned steel
+  RAD_SCORCH_BROWN    = (0.22, 0.16, 0.08, 1.0)   heat-stained edge
+  RAD_CRACK_CORE      = (0.85, 0.95, 0.30, 1.0)   glowing crack core (hot)
+  RAD_CRACK_GLOW      = (0.40, 0.62, 0.14, 1.0)   green-yellow bleed
+  RAD_DUST            = (0.55, 0.58, 0.22, 1.0)    fallout speckle
+LAYER ORDER: 1 fill SCORCH_BLACK + heavy grain  2 heat halo: radialFalloff from a
+hot-spot lerping BLACK->BROWN  3 crack network: 4-6 branching random-walk lines;
+each crack drawn as 2px RAD_CRACK_GLOW with a 1px RAD_CRACK_CORE center (glow
+under, hot core over)  4 scatter ~20 RAD_DUST 1px specks weighted toward the
+hot-spot.
+NOTE: pairs naturally with a future "radiation floor damage" tick; for now purely
+visual. The glowing cracks read at distance better than gore veins (high contrast
+on black).
+ROOMS / FREQUENCY: Power Plant / reactor core (dominant, 60%), deep-level dread
+corridors (scales up with depth like gore 'G'). ~native + depth-scaled.
+LORE: The reactor went critical. This wall is cooking you.
+
+--- WALL 1.7 : 'X' — BLAST-SCARRED WALL (combat damage, impact craters) ---
+THE READ: "a firefight happened here — recent violence."
+Base: standard lab steel pocked with BULLET impacts (small dark craters with
+bright rim), 2-3 larger BLAST craters (deep black with charred radial streaks),
+scorch smears, and a couple of through-holes showing dark behind. Distinct from
+'h' hazard (deliberate paint) and 'X' is chaotic accidental damage.
+COLORS (RGBA):
+  BLAST_STEEL         = (0.27, 0.28, 0.31, 1.0)   lab steel field
+  BLAST_CRATER_DARK   = (0.05, 0.05, 0.06, 1.0)   crater depth
+  BLAST_CRATER_RIM    = (0.46, 0.47, 0.50, 1.0)   bright deformed rim
+  BLAST_SCORCH        = (0.12, 0.10, 0.09, 1.0)    soot smear
+  BLAST_HOLE          = (0.02, 0.02, 0.02, 1.0)     through-hole black
+LAYER ORDER: 1 steel field + grain  2 scorch smears: 3-4 soft radialFalloff
+BLAST_SCORCH blobs  3 bullet pocks: ~18 small (2-3px) CRATER_DARK discs each with
+a 1px CRATER_RIM top-left highlight  4 blast craters: 2-3 larger (8-14px)
+CRATER_DARK discs with charred radial streaks and a CRATER_RIM ring  5 through-
+holes: 1-2 BLAST_HOLE 4px discs.
+ROOMS / FREQUENCY: Armory (dominant, last-stand look, 50%), any room flagged as a
+prior combat site (near corpse 'm' clusters), Command Center. ~native + co-placed
+with corpses.
+LORE: The marines made their stand here. The wall remembers it.
+
+
+===================================================================
+SECTION 2 — NEW SOLID PROPS (5)
+===================================================================
+Billboard sprites via PropRenderer (see billboard-prop-sprites.txt). Each blocks
+movement (isPropSolid -> TRUE) unless noted. Height = multiplier of wall height.
+Sprites are procedural (ShapeRenderer/Pixmap to a FrameBuffer or Pixmap atlas
+cell). Layer order = back to front.
+
+--- PROP 2.1 : '#' — SECURITY CAMERA (wall-mounted, on a post) ---
+HEIGHT: 0.80x wall (mounted high; silhouette is mostly upper-screen).
+A short dark post/bracket rising to a swiveled camera housing: a dark grey boxy
+body, a black lens disc with a small RED status LED, and a thin antenna. Reads as
+"you are being watched."
+COLORS: body (0.18,0.19,0.22), housing trim (0.30,0.32,0.36), lens black
+(0.03,0.03,0.04), lens glint (0.40,0.45,0.50) 1px, LED red (0.95,0.20,0.18),
+post (0.14,0.15,0.17).
+LAYER: 1 post  2 bracket arm  3 housing box  4 lens disc + glint  5 red LED dot.
+ROOMS: Command Center, Containment Cell block, corridors near keycard doors.
+HOOK: future stealth/alert system can read camera LOS; for now cosmetic dread.
+
+--- PROP 2.2 : '%' — POWER GENERATOR / REACTOR UNIT ---
+HEIGHT: 0.85x wall (bulky, floor-standing).
+A heavy industrial cabinet: dark steel base, a central glowing CORE window
+(pulsing-look green or amber), cooling fins on the sides, warning chevrons on the
+base, thick conduit pipes exiting the top. Hums menace.
+COLORS: cabinet (0.22,0.24,0.27), fins (0.16,0.17,0.19), core glow
+(0.30,0.85,0.40) green OR (0.95,0.70,0.20) amber variant, core frame
+(0.10,0.11,0.12), chevron yellow (0.85,0.72,0.18), conduit (0.30,0.31,0.34).
+LAYER: 1 cabinet body  2 side cooling fins  3 base chevron stripe  4 core window
+frame  5 core glow disc + bright center  6 top conduit pipes.
+ROOMS: Power Plant (centerpiece, 2-4 in a row), occasionally Server Room.
+HOOK: destructible -> chain with explosive barrels (hazard-chain-reactions doc).
+
+--- PROP 2.3 : '&' — BIO-POD / SPECIMEN TANK ---
+HEIGHT: 0.90x wall (tall cylinder).
+A vertical glass cylinder on a metal base with a domed metal cap: greenish
+nutrient fluid, rising bubbles, and a dim SPECIMEN silhouette suspended inside
+(a curled organic shape — could be empty/broken in damaged variant). Cyan readout
+strip on the base.
+COLORS: base/cap metal (0.26,0.28,0.32), glass tint (0.18,0.40,0.34 alpha-ish),
+fluid (0.20,0.55,0.42), bubble highlight (0.70,0.90,0.82), specimen
+(0.10,0.22,0.16), readout cyan (0.30,0.80,0.85), glass sheen (0.75,0.92,0.88) 1px.
+LAYER: 1 base  2 fluid cylinder  3 specimen silhouette  4 bubbles  5 glass sheen
+streak  6 domed cap  7 readout strip.
+ROOMS: Containment Cell block, Cryo Chamber, Medical Bay (lab annex). Broken/empty
+variant near gore 'G' walls = "it got loose."
+HOOK: thematic spawn anchor — enemies can be flagged to spawn near broken pods.
+
+--- PROP 2.4 : '=' — WEAPON RACK ---
+HEIGHT: 0.70x wall (waist-to-shoulder rack).
+A wall-leaning steel rack holding 2-3 stylized weapon silhouettes (rifle/shotgun
+shapes) in slots, plus an empty slot or two (someone grabbed a gun). Small ammo
+crate at the base.
+COLORS: rack frame (0.24,0.26,0.29), weapon dark (0.10,0.11,0.12), weapon metal
+highlight (0.40,0.42,0.46), wood stock (0.34,0.22,0.12), ammo crate
+(0.30,0.34,0.22) with stencil (0.80,0.78,0.40).
+LAYER: 1 rack frame  2 weapon silhouettes in slots  3 metal highlights  4 base
+ammo crate + stencil.
+ROOMS: Armory (multiple, defining prop), occasionally near dropped-shotgun 's'.
+HOOK: future loot — interacting could yield ammo/weapon pickups.
+
+--- PROP 2.5 : '@' — VENDING / SUPPLY DISPENSER MACHINE ---
+HEIGHT: 0.88x wall (tall appliance).
+A UAC supply vending machine: tall boxy cabinet, a lit front panel showing rows
+of stocked items behind plastic, a glowing selection keypad, and a dispenser
+tray at the bottom. Dark humor: UAC-branded "NUKA"-style cola or "STIMPAK
+DISPENSER" stencil. One cracked/dark variant (out of order).
+COLORS: cabinet (0.26,0.22,0.30) plum-grey, front glass (0.10,0.14,0.20), item
+rows accent (0.85,0.30,0.30 / 0.30,0.55,0.85 alternating), keypad glow
+(0.40,0.85,0.55), tray (0.14,0.15,0.17), stencil (0.85,0.82,0.50).
+LAYER: 1 cabinet  2 front glass panel  3 item rows behind glass  4 keypad glow
+  5 stencil label  6 dispenser tray.
+ROOMS: Entrance-adjacent break rooms, corridors, Medical Bay (stim dispenser
+variant). Low density — flavor + dark humor.
+HOOK: future interaction -> dispense stim/medkit for a cost or randomly jammed.
+
+
+===================================================================
+SECTION 3 — REWORKED EXISTING PROPS (4 barest)
+===================================================================
+These keep their CHARS and heights; only the procedural sprite gains layers.
+
+--- 3.1 : 'b' RADIOACTIVE BARREL (currently flat dark green) ---
+ADD: vertical cylinder shading (dark green left, lit green right edge), 2 yellow
+warning RINGS, a black radiation TREFOIL stencil, a rim lip at top, a slight
+GLOW puddle of green at the base, dripping ooze streaks. Dented/rusted variant.
+NEW LAYERS: cylinder gradient -> rings -> trefoil -> top rim -> base glow -> drip.
+
+--- 3.2 : 'C' CRATE (currently flat brown cross-plank) ---
+ADD: plank shading (lit top edge, shadowed bottom), corner metal brackets with
+bolt dots, stenciled "UAC" + a fragile/biohazard icon, a few cracked planks on a
+"smashed" variant showing dark interior, faint floor contact shadow.
+NEW LAYERS: box base -> plank seams -> corner brackets+bolts -> stencil -> damage
+cracks (variant) -> contact shadow.
+
+--- 3.3 : 'L' LOCKER (currently flat steel double-door) ---
+ADD: vertical seam between doors with handle/latch nubs, a louvered vent slit set
+near the top, a small ID label plate, dents and a red biohazard sticker, one
+HANGING-OPEN variant (one door ajar showing dark interior + maybe a hint of loot
+glint). Top/left lit bevel, bottom/right shadow.
+NEW LAYERS: body bevel -> door seam -> latches -> vent louvers -> label plate ->
+sticker/dents -> open-door variant interior.
+
+--- 3.4 : 'T' COMPUTER TERMINAL (currently charcoal w/ cyan screen) ---
+ADD: a beveled monitor bezel, scanline texture on the cyan screen, a few stylized
+text/graph glyphs (2-3 horizontal bars of fake readout), a blinking-look cursor
+block, a keyboard ledge at the base, a small status LED, and a dead/cracked-screen
+variant (dark screen with a crack). Pairs with terminal wall 't'.
+NEW LAYERS: cabinet -> monitor bezel -> screen fill -> scanlines -> readout
+glyphs -> cursor block -> keyboard ledge -> status LED.
+
+
+===================================================================
+SECTION 4 — NEW ROOM TEMPLATES (6)
+===================================================================
+Each extends the RoomType enum and gets a decorate() branch in LevelGenerator.
+Dimensions are INTERIOR tiles. "Floor mix" uses the lighting chars. Spatial layout
+is described relative to the room rectangle (the entry door side varies per
+connection — patterns are door-agnostic, anchored to room corners/center).
+
+--- 4.1 : MEDICAL BAY  (RARE — once per level) ---
+LORE: Infirmary where the wounded were triaged before the place fell.
+DIMENSIONS: 7x6 to 9x7.
+WALLS: 'M' medical tile dominant; 1-2 'Q' bio-containment accent; 1 'N' glass
+(lab annex view). Corners may be plain 'x'.
+PROPS: rows of 'L' lockers (medical supply) along one long wall; 1-2 '@' stim
+dispensers; 1 '&' bio-pod in a corner annex; scatter '+' stim and 'H' medkit
+pickups on the floor (this is the level's reliable heal stop); a 'm' corpse on a
+"bed" (corpse + blood '.' cluster).
+FLOOR MIX: mostly lit ' '; one 'f' flicker tile at the door chokepoint; a small
+'u' unlit corner (the morgue corner). Clean, bright overall.
+CONNECTS: 1-2 doors; ideally off a main corridor, not a dead-end (player should
+find it). Generator should bias it toward mid-distance from entrance.
+
+--- 4.2 : ARMORY  (RARE — once per level) ---
+LORE: Weapons locker; site of the marines' last stand.
+DIMENSIONS: 6x6 to 8x7.
+WALLS: 'X' blast-scarred dominant; 'h' hazard stripe accent near the gun racks;
+'k' bulkhead framing the door (high security).
+PROPS: 2-4 '=' weapon racks along the back wall; 'B' explosive barrels (1-2,
+risky); 'C' UAC crates stacked; '#' security camera by the door; 'm' corpses +
+'s' dropped shotguns + '.' blood (the last stand). Loot-dense.
+FLOOR MIX: ' ' lit with 1-2 'u' unlit (the back where bodies fell). Combat-worn.
+CONNECTS: 1 door, often behind a keycard door (uac-keycard-doors). Bulkhead frame
+sells "secure." Can be a rewarding dead-end (bulkhead at a dead end reads right).
+
+--- 4.3 : CRYO CHAMBER ---
+LORE: Cryogenic stasis bay; coolant failing, occupants thawing.
+DIMENSIONS: 7x7 to 10x8.
+WALLS: 'Z' cryo/frost dominant; 'N' containment glass (pod viewing wall); 'M'
+tile on the lab-annex side.
+PROPS: rows of '&' bio-pods / cryo-tanks down two parallel walls (the pod bay
+look — like server room but tanks); 'T' terminals (control consoles, reworked
+sprite); 1 '%' generator (coolant unit). Some pods broken (place near 'G' gore if
+adjacent).
+FLOOR MIX: 'l' normal + 'u' unlit lanes between pods (cold dark); 1-2 'f' flicker.
+Dim and blue-cold in feel.
+CONNECTS: 2 doors (it's a through-room). Pods create tight lanes -> tactical.
+
+--- 4.4 : POWER PLANT / REACTOR ---
+LORE: The facility reactor; breached and irradiated.
+DIMENSIONS: 9x8 to 12x9 (LARGE-class footprint).
+WALLS: 'Y' radiation-burned dominant near the core; 'R' emergency-strip on
+approach walls; 'c' conduit; 'k' bulkhead perimeter; 'h' hazard near barrels.
+PROPS: 2-4 '%' generator/reactor units in a central cluster or two rows; 'b'
+radioactive barrels around them; 'B' explosive barrels (chain-reaction setup);
+'P' columns for cover; 'T' control terminals on the perimeter.
+FLOOR MIX: 'l'/'u' dominant (dark, only emergency-lit); 'f' flicker at chokepoints;
+NO bright ' ' near the core. Dread + danger.
+CONNECTS: 2-3 doors (hub-like, central artery). Often holds the stairs '>' or a
+key. A signature dangerous landmark.
+
+--- 4.5 : COMMAND CENTER ---
+LORE: Facility control room; status boards, the overseer's domain.
+DIMENSIONS: 8x7 to 10x8 (LARGE-class).
+WALLS: 'N' containment/observation glass (big window wall); 'R' emergency strips;
+'t' terminal walls; 'k' bulkhead. Authoritative, high-tech.
+PROPS: a U-shaped or back-wall ROW of 'T' terminals (command consoles) facing the
+entry; '#' security cameras in corners; 1-2 'L' lockers; central open floor for
+movement; maybe 1 'P' column. Clean, commanding silhouette.
+FLOOR MIX: mostly lit ' '; 'f' flicker for tension; small 'u' corner.
+CONNECTS: 2 doors; strong candidate for the BOSS arena (boss-encounter-facility-
+overseer.txt) or for the level key/objective. Place deep (far from entrance).
+
+--- 4.6 : CONTAINMENT CELL BLOCK ---
+LORE: Holding cells / specimen containment; the outbreak's ground zero.
+DIMENSIONS: 8x6 to 11x7 (corridor-with-cells layout).
+WALLS: 'N' glass cell fronts (alternating with 'x' between cells); 'Q' bio-
+containment on the approach; 'G' gore creeping in (escalates with depth); 'k'
+bulkhead.
+PROPS: '&' bio-pods inside cells (some broken); 'm' corpses + '.' blood (failed
+containment); '#' cameras; sparse 'L' lockers. A central walkway with cells on
+each side.
+FLOOR MIX: 'u' unlit + 'f' flicker dominant (power failing); minimal ' ' lit.
+Maximum dread. Pair with gore walls for "the breach happened here."
+CONNECTS: 2 doors (through-corridor block). High enemy-spawn bias (den).
+
+
+===================================================================
+SECTION 5 — LEVEL GENERATION UPDATES
+===================================================================
+Extends the IMPLEMENTED RoomType pipeline (level-generation-improvements.txt).
+Generation structure (placement -> connectivity -> doors -> typed decoration ->
+post-passes -> audit -> stairs) is UNCHANGED. We add enum values, an assignment
+pass, per-type decorators, and a wall-reskin post-pass for new wall types.
+
+5.1 ENUM ADDITIONS
+  enum RoomType {
+    ENTRANCE, STANDARD, LARGE, SERVER_ROOM,            // existing
+    MEDICAL_BAY, ARMORY, CRYO_CHAMBER,                 // new
+    POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK     // new
+  }
+
+5.2 ASSIGNMENT PASS (assignRoomTypes, extends existing weighted logic)
+  Order of assignment (after ENTRANCE = room[0]):
+  STEP A — RARE UNIQUES (at most one each per level, claimed first):
+    - MEDICAL_BAY:  pick one mid-distance room with interior >= 7x6. Guaranteed
+      1 per level (heal economy). If no room qualifies, relax size to 6x5.
+    - ARMORY:       pick one room >= 6x6, prefer a dead-end or keycard-gated room.
+      Guaranteed ~80% of levels (LEVEL_GEN_ARMORY_CHANCE = 0.80); not strictly
+      every level so finding it feels lucky.
+    - COMMAND_CENTER: pick the DEEPEST large room (max MST distance from entrance),
+      interior >= 8x7. ~50% of levels OR forced if boss level.
+  STEP B — LARGE-CLASS SPECIALS (from remaining LARGE-eligible rooms, >= 9x8):
+    - POWER_PLANT: roll LEVEL_GEN_POWERPLANT_CHANCE = 0.45 -> POWER_PLANT.
+    - else LARGE (existing behavior).
+  STEP C — SMALL/MEDIUM SPECIALS (remaining rooms):
+    - CRYO_CHAMBER:        roll 0.16 (needs >= 7x7; else skip)
+    - CONTAINMENT_BLOCK:   roll 0.16 (needs >= 8x6, elongated; else skip)
+    - SERVER_ROOM:         roll 0.16 (existing)
+    - else STANDARD.
+  HARD CAPS (downgrade to STANDARD once hit):
+    MEDICAL_BAY max 1, ARMORY max 1, COMMAND_CENTER max 1,
+    POWER_PLANT max 1, CRYO_CHAMBER max 2, CONTAINMENT_BLOCK max 2,
+    SERVER_ROOM max 2 (existing). STANDARD must remain the plurality.
+  DEPTH SCALING (if/when level depth exists): increase gore 'G' and rad 'Y'
+  reskin density, CONTAINMENT_BLOCK/POWER_PLANT chance, and enemy density with
+  depth. Until depth exists, use the flat probabilities above.
+
+5.3 PER-TYPE DECORATORS
+  Each new RoomType gets a decorateXxx(room, grid, random) method called from the
+  decoration switch, mirroring decorateServerRoom. Each sets: a dominant wall
+  reskin char (its native wall), a prop layout (Section 4), and a floor-lighting
+  bias. Reuse existing placeProps/assignFloorLighting with type-specific params:
+    - MEDICAL_BAY:    bright bias (low 'u'/'f'), guaranteed 1-2 'H'/'+' pickups,
+                      lockers along one wall, low enemy density.
+    - ARMORY:         loot-dense props (=,C,B), corpses+shotguns, mid enemy.
+    - CRYO_CHAMBER:   two pod rows (&), dim ('l'/'u'), mid enemy.
+    - POWER_PLANT:    central % cluster + barrels, dark, HIGH hazard, high enemy.
+    - COMMAND_CENTER: terminal row (T), cameras, clean, boss-candidate flag.
+    - CONTAINMENT_BLOCK: cell layout (alternating N/x fronts + & inside), gore,
+                      dark, HIGHEST enemy density (den).
+
+5.4 WALL-RESKIN POST-PASS (new walls)
+  Run AFTER assignWallVariety, as a TYPED region reskin (recommended in procedural-
+  wall-types.txt OPEN Q6). For each room, with probability per its type, convert
+  eligible 'x' perimeter tiles (those adjacent to the room interior) to the room's
+  native wall char:
+    MEDICAL_BAY      -> 'M' (70%), 'Q' (10%)
+    ARMORY           -> 'X' (50%), 'h' (15%), 'k' on door-flank tiles
+    CRYO_CHAMBER     -> 'Z' (70%), 'N' (15%)
+    POWER_PLANT      -> 'Y' (40% near core side), 'R' (20% approach), 'k' perimeter
+    COMMAND_CENTER   -> 'N' (30% on one wall as a window band), 'R' (15%), 't' (10%)
+    CONTAINMENT_BLOCK-> 'N' (40% cell fronts, alternate with 'x'), 'Q' (15%), 'G' (depth%)
+  GLOBAL accents (any room, low prob, after type reskin):
+    'R' emergency strip in 2-4 tile BANDS along corridors flanking keycard doors.
+    'X' blast-scar near any 'm' corpse cluster (combat memory), 10%.
+  RULE: reskin in BANDS/CLUSTERS, never single scattered tiles (matches rust/gore
+  discipline) so a wall reads as belonging to its room.
+
+5.5 PROP DENSITY RULES (new rooms)
+  Base LEVEL_GEN_PROP_CHANCE = 0.13 stays for STANDARD. Per-type overrides:
+    MEDICAL_BAY      0.16 (orderly), guarantee >=1 medkit + >=1 stim.
+    ARMORY           0.22 (cluttered last-stand), guarantee >=2 weapon racks '='.
+    CRYO_CHAMBER     0.20 (pod rows are structured, place along walls not random).
+    POWER_PLANT      0.18, guarantee 2-4 '%' central + 2-3 barrels.
+    COMMAND_CENTER   0.15, guarantee a terminal row (3-5 'T') + 2 cameras '#'.
+    CONTAINMENT_BLOCK 0.18, structured cells (& inside cell tiles).
+  STRUCTURED placement (rows/walls) for rack/pod/terminal rooms should use a
+  deterministic wall-hugging loop, NOT the random-scatter placeProps, so the
+  "row of racks/pods/consoles" silhouette reads cleanly.
+
+5.6 ENSURING RARE-ROOM UNIQUENESS
+  Claimed-first + hard-cap-of-1 (Step A) guarantees Medical/Armory/Command appear
+  at most once. Boolean flags (medicalBayPlaced, armoryPlaced, commandPlaced)
+  short-circuit further assignment. Medical Bay is the only GUARANTEED room
+  (heal economy); the rest are probabilistic so each run's room set differs.
+
+
+===================================================================
+SECTION 6 — IMPLEMENTATION NOTES
+===================================================================
+
+6.1 CHARACTER ASSIGNMENT TABLE
+  | Char | Section | Kind         | Solid | Notes                                |
+  |------|---------|--------------|-------|--------------------------------------|
+  | 'N'  | 1.1     | wall glass   | yes   | containment/observation window       |
+  | 'Q'  | 1.2     | wall bio     | yes   | quarantine stripes                   |
+  | 'R'  | 1.3     | wall emerg   | yes   | red emergency strip (static red)     |
+  | 'M'  | 1.4     | wall medical | yes   | white tile + cross                   |
+  | 'Z'  | 1.5     | wall cryo    | yes   | frost-damaged                        |
+  | 'Y'  | 1.6     | wall rad     | yes   | radiation-burned, glowing cracks     |
+  | 'X'  | 1.7     | wall blast   | yes   | combat impact craters                |
+  | '#'  | 2.1     | prop camera  | yes   | 0.80x; wall-mounted look             |
+  | '%'  | 2.2     | prop reactor | yes   | 0.85x; glowing core                  |
+  | '&'  | 2.3     | prop bio-pod | yes   | 0.90x; specimen tank                 |
+  | '='  | 2.4     | prop rack    | yes   | 0.70x; weapon rack                   |
+  | '@'  | 2.5     | prop vendor  | yes   | 0.88x; supply machine                |
+  All seven new wall chars MUST be added to Level.isWall(char) -> TRUE first
+  (single authority). All five new prop chars to Level.isProp / isPropSolid.
+  VERIFY none collide with enemy-spawn or future item chars before wiring;
+  '#','%','&','=','@' and 'N','Q','R','M','Z','Y','X' are confirmed free today.
+  CAUTION: 'R' (wall) is distinct from decal keycard 'r' (lowercase) — case
+  matters, but flag to implementer to confirm no uppercase keycard exists.
+
+6.2 PROCEDURAL VS ASSET
+  ALL new walls (1.1-1.7): PROCEDURAL Pixmap, generated once in WallRenderer
+  constructor (or the recommended render/ProceduralWallTextures class), Nearest
+  filter, deterministic per-char seed constant, disposed in dispose(). No asset
+  files — matches r/G/k/h precedent.
+  ALL new props (2.1-2.5) and reworked props (3.1-3.4): PROCEDURAL sprites drawn
+  with ShapeRenderer/Pixmap into the existing prop sprite pipeline (same path as
+  current barrels/crates). No PNGs.
+  Shared helpers to (re)use: GameMath.radialFalloff (blobs/frost/scorch),
+  drawBeveledRect (glass frame, bulkhead), a deterministic hash(x,y,seed) for
+  grain. Add new RGBA color constants + seed/size/count constants to Constants.java
+  (grouped by feature with the prefixes shown in each section).
+
+6.3 ORDER OF IMPLEMENTATION (strict, lowest-risk first)
+  PHASE 1 — WALLS: add 7 chars to Level.isWall; add 7 generators + switch cases
+  to WallRenderer; add constants. Validate each in the 3D view at multiple
+  distances (watch for aliasing on Y rad-cracks and N glass cracks; bump to 256
+  if needed). No generator changes yet — test by hand-authoring a level .txt with
+  the new chars (ask game-level-designer for a test level).
+  PHASE 2 — PROPS: add 5 prop chars to Level prop methods; add 5 procedural prop
+  sprites to PropRenderer; verify billboard scaling/occlusion/collision. Then do
+  the 4 prop REWORKS (3.1-3.4) — pure sprite upgrades, no new chars.
+  PHASE 3 — ROOM TEMPLATES: extend RoomType enum; write 6 decorateXxx methods
+  using the now-available walls+props. Test each in isolation via forced-type
+  seeds.
+  PHASE 4 — GENERATOR: wire assignRoomTypes (Step A/B/C + caps + uniqueness flags),
+  the typed wall-reskin post-pass, and per-type prop densities. Tune probabilities
+  in playtest. Update docs/procedural-level-generation.txt to match.
+  Rationale: walls and props are leaf content with no generator dependency, so
+  they can ship and be tested standalone; rooms compose them; the generator is
+  the last and most entangled step.
+
+
+===================================================================
+INTERACTIONS (cross-system)
+===================================================================
+1. EMERGENCY RED ALERT PULSE (emergency-red-alert-pulse.txt): 'R' emergency-strip
+   walls become the diegetic SOURCE of the alarm light; the global red tint
+   multiplies all new walls. Command Center / Power Plant with 'R' bands sell the
+   "facility on alert" state for free.
+2. KEYCARD DOORS (uac-keycard-doors-security-tiers.txt): Armory behind a keycard
+   door framed by 'k' bulkhead + 'R' strips reads as high-security; Containment
+   Block and Command Center are natural gated-objective rooms.
+3. BOSS ENCOUNTER (boss-encounter-facility-overseer.txt): Command Center is the
+   prime boss arena (terminal row, observation glass, deep placement); Containment
+   Block / Power Plant are alt arenas. Generator can flag the chosen room.
+4. HAZARD CHAIN REACTIONS (hazard-chain-reactions-fire-toxic-explosive.txt):
+   Power Plant '%' generators + 'b'/'B' barrels + 'Y' rad walls form a destructible
+   danger cluster — a future explosion chain set-piece.
+5. MEDKIT / STIM ECONOMY (medkit-field-medicine-system.txt, levelup-stim-boon):
+   Medical Bay is the guaranteed heal stop and stim/medkit source; '@' dispensers
+   add an optional risk/reward heal interaction.
+6. ENEMY SYSTEM (enemy_system.txt): Containment Block = highest spawn density
+   (den), telegraphed by 'G' gore + broken '&' pods; Medical Bay = low density
+   (relief beat). Gore/rad wall density doubles as the difficulty dial.
+7. SECRET ROOMS (secret-rooms-hidden-passages.txt): keep secrets behind plain 'x';
+   the new deliberate walls (M/Q/R/Z/Y/N/k) read too "intentional" to be push-walls.
+
+
+===================================================================
+BALANCE / TUNING (all values PLACEHOLDER — verify in 3D view + playtest)
+===================================================================
+- Rare-room guarantees: Medical 100%, Armory 80%, Command 50% (or forced on boss
+  levels). Tune so a run has 1-2 "destination" rooms, not five.
+- Wall reskin probabilities (5.4) are per-room dominance targets, not per-tile
+  noise — apply in bands. If walls look too busy at distance, halve the accents.
+- Prop densities (5.5) trade clutter vs navigability. Structured rows (racks/pods/
+  terminals) must leave a 1-tile walk lane — verify no room becomes impassable
+  (the existing connectivity audit is the safety net but won't catch a room the
+  player can enter but not cross).
+- Texture sizes 128 default; raise rad 'Y' and glass 'N' to 256 only if their
+  high-contrast cracks alias.
+- Heal economy: Medical Bay should restore enough to matter but not trivialize a
+  level (tune medkit count there against enemy density).
+
+
+===================================================================
+OPEN QUESTIONS
+===================================================================
+1. CHAR CONFIRMATION: re-verify 'N','Q','R','M','Z','Y','X','#','%','&','=','@'
+   against the live Level.isWall/isProp tables and any uppercase keycard/item
+   chars before wiring. Design is char-agnostic; only switch labels change.
+2. PROCEDURAL OWNERSHIP: with 11+ procedural walls, definitely extract
+   render/ProceduralWallTextures (already recommended). Build all wall + prop
+   procedural textures there?
+3. PROP VARIANTS: should damaged/broken variants (broken pod, dead terminal,
+   out-of-order vendor) be separate chars, a per-instance random flag, or a
+   region-driven choice (e.g. broken near gore)? Recommend region-driven random.
+4. STRUCTURED PLACEMENT API: add a placePropRow(room, wallSide, char, spacing)
+   helper for racks/pods/terminals/consoles (shared by Armory/Cryo/Command/Server)?
+   Recommend yes.
+5. CONTAINMENT CELL GEOMETRY: cells as alternating 'N'/'x' fronts on a central
+   walkway needs a mini sub-layout, not just a reskin. Define a fixed cell-stamp
+   pattern (e.g. 2-wide cells every 3 tiles) for the decorator.
+6. DEPTH SCALING: gate gore/rad density and rare-room chances on level depth once
+   level-transitions-stairs-down depth counter exists; until then, flat probs.
+7. BOSS-ARENA FLAG: should COMMAND_CENTER assignment set a boolean the boss system
+   reads, or should the boss system pick its own arena post-generation? Recommend
+   generator flags one candidate, boss system confirms.

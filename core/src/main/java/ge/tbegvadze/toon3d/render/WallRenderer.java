@@ -61,6 +61,13 @@ public class WallRenderer implements Renderable, Disposable {
     private final Texture wallTextureRust;
     private final Texture wallTextureGore;
     private final Texture wallTextureBulkhead;
+    private final Texture wallTextureGlass;
+    private final Texture wallTextureBio;
+    private final Texture wallTextureEmerg;
+    private final Texture wallTextureMed;
+    private final Texture wallTextureCryo;
+    private final Texture wallTextureRad;
+    private final Texture wallTextureBlast;
     private final Texture doorTexture;
     private final Texture doorTextureRed;
     private final Texture doorTextureYellow;
@@ -89,6 +96,20 @@ public class WallRenderer implements Renderable, Disposable {
     private final int wallTextureGoreHeight;
     private final int wallTextureBulkheadWidth;
     private final int wallTextureBulkheadHeight;
+    private final int wallTextureGlassWidth;
+    private final int wallTextureGlassHeight;
+    private final int wallTextureBioWidth;
+    private final int wallTextureBioHeight;
+    private final int wallTextureEmergWidth;
+    private final int wallTextureEmergHeight;
+    private final int wallTextureMedWidth;
+    private final int wallTextureMedHeight;
+    private final int wallTextureCryoWidth;
+    private final int wallTextureCryoHeight;
+    private final int wallTextureRadWidth;
+    private final int wallTextureRadHeight;
+    private final int wallTextureBlastWidth;
+    private final int wallTextureBlastHeight;
     private final int doorTextureWidth;
     private final int doorTextureHeight;
     private final int columnTextureWidth;
@@ -217,6 +238,29 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureBulkheadWidth  = wallTextureBulkhead.getWidth();
         wallTextureBulkheadHeight = wallTextureBulkhead.getHeight();
 
+        wallTextureGlass = generateGlassWallTexture();
+        wallTextureBio   = generateBioWallTexture();
+        wallTextureEmerg = generateEmergWallTexture();
+        wallTextureMed   = generateMedWallTexture();
+        wallTextureCryo  = generateCryoWallTexture();
+        wallTextureRad   = generateRadWallTexture();
+        wallTextureBlast = generateBlastWallTexture();
+
+        wallTextureGlassWidth  = wallTextureGlass.getWidth();
+        wallTextureGlassHeight = wallTextureGlass.getHeight();
+        wallTextureBioWidth    = wallTextureBio.getWidth();
+        wallTextureBioHeight   = wallTextureBio.getHeight();
+        wallTextureEmergWidth  = wallTextureEmerg.getWidth();
+        wallTextureEmergHeight = wallTextureEmerg.getHeight();
+        wallTextureMedWidth    = wallTextureMed.getWidth();
+        wallTextureMedHeight   = wallTextureMed.getHeight();
+        wallTextureCryoWidth   = wallTextureCryo.getWidth();
+        wallTextureCryoHeight  = wallTextureCryo.getHeight();
+        wallTextureRadWidth    = wallTextureRad.getWidth();
+        wallTextureRadHeight   = wallTextureRad.getHeight();
+        wallTextureBlastWidth  = wallTextureBlast.getWidth();
+        wallTextureBlastHeight = wallTextureBlast.getHeight();
+
         doorTexture      = loadOrGenerateDoorTexture(LAB_DOOR_CLOSED_PATH, 0f, 0f, 0f);
         doorTextureWidth  = doorTexture.getWidth();
         doorTextureHeight = doorTexture.getHeight();
@@ -252,6 +296,13 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureTable['r'] = wallTextureRust;      wallWidthTable['r'] = wallTextureRustWidth;      wallHeightTable['r'] = wallTextureRustHeight;
         wallTextureTable['G'] = wallTextureGore;      wallWidthTable['G'] = wallTextureGoreWidth;      wallHeightTable['G'] = wallTextureGoreHeight;
         wallTextureTable['k'] = wallTextureBulkhead;  wallWidthTable['k'] = wallTextureBulkheadWidth;  wallHeightTable['k'] = wallTextureBulkheadHeight;
+        wallTextureTable['N'] = wallTextureGlass;     wallWidthTable['N'] = wallTextureGlassWidth;     wallHeightTable['N'] = wallTextureGlassHeight;
+        wallTextureTable['Q'] = wallTextureBio;       wallWidthTable['Q'] = wallTextureBioWidth;       wallHeightTable['Q'] = wallTextureBioHeight;
+        wallTextureTable['S'] = wallTextureEmerg;     wallWidthTable['S'] = wallTextureEmergWidth;     wallHeightTable['S'] = wallTextureEmergHeight;
+        wallTextureTable['M'] = wallTextureMed;       wallWidthTable['M'] = wallTextureMedWidth;       wallHeightTable['M'] = wallTextureMedHeight;
+        wallTextureTable['Z'] = wallTextureCryo;      wallWidthTable['Z'] = wallTextureCryoWidth;      wallHeightTable['Z'] = wallTextureCryoHeight;
+        wallTextureTable['U'] = wallTextureRad;       wallWidthTable['U'] = wallTextureRadWidth;       wallHeightTable['U'] = wallTextureRadHeight;
+        wallTextureTable['X'] = wallTextureBlast;     wallWidthTable['X'] = wallTextureBlastWidth;     wallHeightTable['X'] = wallTextureBlastHeight;
 
         doorTextureTable = new Texture[128];
         Arrays.fill(doorTextureTable, doorTexture);
@@ -581,16 +632,16 @@ public class WallRenderer implements Renderable, Disposable {
         for (int veinIndex = 0; veinIndex < GORE_VEIN_COUNT; veinIndex++) {
             int   veinColumn = random.nextInt(size / 2);
             int   veinRow    = random.nextInt(size / 2);
-            float veinAngle  = random.nextFloat() * (float)(Math.PI * 2);
-            for (int step = 0; step < 30; step++) {
+            float veinAngleRadians = random.nextFloat() * (float)(Math.PI * 2);
+            for (int stepIndex = 0; stepIndex < 30; stepIndex++) {
                 if (veinColumn < 0 || veinColumn >= size || veinRow < 0 || veinRow >= size) break;
                 if (fleshWeightMap[veinRow * size + veinColumn] > 0.40f) {
                     pixmap.setColor(0.72f, 0.12f, 0.14f, 1f);
                     pixmap.drawPixel(veinColumn, veinRow);
                 }
-                veinAngle  += (random.nextFloat() - 0.5f) * 0.8f;
-                veinColumn += (int) Math.round(Math.cos(veinAngle));
-                veinRow    += (int) Math.round(Math.sin(veinAngle));
+                veinAngleRadians += (random.nextFloat() - 0.5f) * 0.8f;
+                veinColumn       += (int) Math.round(Math.cos(veinAngleRadians));
+                veinRow          += (int) Math.round(Math.sin(veinAngleRadians));
             }
         }
 
@@ -618,16 +669,16 @@ public class WallRenderer implements Renderable, Disposable {
 
         // Cracks radiating from top-left corner across the steel/flesh boundary
         for (int crackIndex = 0; crackIndex < 3; crackIndex++) {
-            int   crackColumn = crackIndex * 5;
-            int   crackRow    = crackIndex * 4;
-            float crackAngle  = (float)(Math.PI / 4) + (random.nextFloat() - 0.5f) * 0.6f;
-            for (int step = 0; step < 40; step++) {
+            int   crackColumn      = crackIndex * 5;
+            int   crackRow         = crackIndex * 4;
+            float crackAngleRadians = (float)(Math.PI / 4) + (random.nextFloat() - 0.5f) * 0.6f;
+            for (int stepIndex = 0; stepIndex < 40; stepIndex++) {
                 if (crackColumn < 0 || crackColumn >= size || crackRow < 0 || crackRow >= size) break;
                 pixmap.setColor(0.03f, 0.02f, 0.02f, 1f);
                 pixmap.drawPixel(crackColumn, crackRow);
-                crackAngle  += (random.nextFloat() - 0.5f) * 0.4f;
-                crackColumn += (int) Math.round(Math.cos(crackAngle));
-                crackRow    += (int) Math.round(Math.sin(crackAngle));
+                crackAngleRadians += (random.nextFloat() - 0.5f) * 0.4f;
+                crackColumn       += (int) Math.round(Math.cos(crackAngleRadians));
+                crackRow          += (int) Math.round(Math.sin(crackAngleRadians));
             }
         }
 
@@ -708,6 +759,662 @@ public class WallRenderer implements Renderable, Disposable {
             int indent = chevronRow <= 3 ? chevronRow : 6 - chevronRow;
             pixmap.drawPixel(stencilX + indent, stencilY + chevronRow);
             if (indent > 0) pixmap.drawPixel(stencilX + indent - 1, stencilY + chevronRow);
+        }
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Generates a reinforced containment glass wall texture ('N').
+     * Steel frame base with a tinted inner glass pane, ghost silhouette smears,
+     * diagonal sheen streaks, a spiderweb crack from an off-center impact point,
+     * and a beveled frame border.
+     */
+    private static Texture generateGlassWallTexture() {
+        int    size   = GLASS_WALL_TEXTURE_SIZE;
+        Random random = new Random(GLASS_WALL_SEED);
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Layer 1: Steel frame base with fine grain
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                float grain = ((row * 7 + column * 11) % 13 - 6) / 150f;
+                pixmap.setColor(Math.max(0f, Math.min(1f, 0.28f + grain)),
+                                Math.max(0f, Math.min(1f, 0.31f + grain)),
+                                Math.max(0f, Math.min(1f, 0.36f + grain)), 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // Layer 2: Inner glass pane — tinted dark blue-green body
+        pixmap.setColor(0.07f, 0.13f, 0.15f, 1f);
+        pixmap.fillRectangle(14, 14, 100, 100);
+
+        // Layer 3: Ghost silhouette blobs — soft radial smears inside the pane
+        for (int blobIndex = 0; blobIndex < GLASS_GHOST_BLOB_COUNT; blobIndex++) {
+            int blobCenterColumn = 34 + blobIndex * 22;
+            int blobCenterRow    = 40 + blobIndex * 14;
+            int blobRadius       = 18;
+            for (int pixelRow = blobCenterRow - blobRadius; pixelRow <= blobCenterRow + blobRadius; pixelRow++) {
+                for (int pixelColumn = blobCenterColumn - blobRadius; pixelColumn <= blobCenterColumn + blobRadius; pixelColumn++) {
+                    if (pixelColumn < 14 || pixelColumn >= 114 || pixelRow < 14 || pixelRow >= 114) continue;
+                    float differenceX = pixelColumn - blobCenterColumn;
+                    float differenceY = pixelRow    - blobCenterRow;
+                    float distance    = (float) Math.sqrt(differenceX * differenceX + differenceY * differenceY);
+                    float weight      = GameMath.radialFalloff(distance, blobRadius);
+                    if (weight <= 0f) continue;
+                    // Read current pixel and blend ghost color on top
+                    float blendedRed   = 0.07f + weight * (0.20f - 0.07f);
+                    float blendedGreen = 0.13f + weight * (0.24f - 0.13f);
+                    float blendedBlue  = 0.15f + weight * (0.22f - 0.15f);
+                    pixmap.setColor(Math.min(1f, blendedRed),
+                                    Math.min(1f, blendedGreen),
+                                    Math.min(1f, blendedBlue), 1f);
+                    pixmap.drawPixel(pixelColumn, pixelRow);
+                }
+            }
+        }
+
+        // Layer 4: Two diagonal sheen streaks across the pane (top-left toward bottom-right)
+        pixmap.setColor(0.55f, 0.72f, 0.74f, 1f);
+        for (int streakIndex = 0; streakIndex < GLASS_SHEEN_STREAK_COUNT; streakIndex++) {
+            int streakOffset = 15 + streakIndex * 30;
+            for (int stepIndex = 0; stepIndex < 90; stepIndex++) {
+                int pixelColumn = 14 + streakOffset + stepIndex;
+                int pixelRow    = 14 + stepIndex;
+                if (pixelColumn >= 114 || pixelRow >= 114) break;
+                pixmap.drawPixel(pixelColumn, pixelRow);
+            }
+        }
+
+        // Layer 5: Spiderweb crack from impact point at (85, 45)
+        int impactColumn = 85;
+        int impactRow    = 45;
+        for (int branchIndex = 0; branchIndex < GLASS_CRACK_BRANCH_COUNT; branchIndex++) {
+            int   crackColumn      = impactColumn;
+            int   crackRow         = impactRow;
+            float crackAngleRadians = (float)(Math.PI * 2) * branchIndex / GLASS_CRACK_BRANCH_COUNT
+                                      + (random.nextFloat() - 0.5f) * 0.6f;
+            for (int stepIndex = 0; stepIndex < GLASS_CRACK_STEPS; stepIndex++) {
+                if (crackColumn < 14 || crackColumn >= 114 || crackRow < 14 || crackRow >= 114) break;
+                // 1px shadow offset in darker color
+                if (crackColumn + 1 < size && crackRow + 1 < size) {
+                    pixmap.setColor(0.02f, 0.05f, 0.06f, 1f);
+                    pixmap.drawPixel(crackColumn + 1, crackRow + 1);
+                }
+                // 2px crack core
+                pixmap.setColor(0.78f, 0.85f, 0.88f, 1f);
+                pixmap.drawPixel(crackColumn, crackRow);
+                if (crackColumn + 1 < size) pixmap.drawPixel(crackColumn + 1, crackRow);
+                crackAngleRadians += (random.nextFloat() - 0.5f) * 0.6f;
+                crackColumn       += (int) Math.round(Math.cos(crackAngleRadians));
+                crackRow          += (int) Math.round(Math.sin(crackAngleRadians));
+            }
+        }
+
+        // Layer 6: Beveled frame border
+        // Top and left edges — lit highlight
+        pixmap.setColor(0.46f, 0.50f, 0.57f, 1f);
+        pixmap.fillRectangle(14, 14, 100, 2);
+        pixmap.fillRectangle(14, 14, 2, 100);
+        // Bottom and right edges — shadow
+        pixmap.setColor(0.12f, 0.14f, 0.18f, 1f);
+        pixmap.fillRectangle(14, 112, 100, 2);
+        pixmap.fillRectangle(112, 14, 2, 100);
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Generates a bio-containment / quarantine wall texture ('Q').
+     * White panel base with horizontal seams, a diagonal black-and-green warning stripe band
+     * across the lower third, an approximate biohazard trefoil stencil, and a green glow line.
+     */
+    private static Texture generateBioWallTexture() {
+        int    size   = BIO_WALL_TEXTURE_SIZE;
+        Random random = new Random(BIO_WALL_SEED);
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Layer 1: White panel base with fine grain
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                float grain = ((row * 7 + column * 11) % 13 - 6) / 150f;
+                pixmap.setColor(Math.max(0f, Math.min(1f, 0.74f + grain)),
+                                Math.max(0f, Math.min(1f, 0.77f + grain)),
+                                Math.max(0f, Math.min(1f, 0.74f + grain)), 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // Layer 2: Two horizontal panel seams at 1/3 and 2/3 height
+        pixmap.setColor(0.40f, 0.44f, 0.41f, 1f);
+        pixmap.fillRectangle(0, size / 3, size, 1);
+        pixmap.fillRectangle(0, 2 * size / 3, size, 1);
+
+        // Layer 3: Diagonal warning stripe band across rows 85..115
+        for (int row = 85; row <= 115 && row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                int stripePhase = ((row + column) % BIO_STRIPE_PITCH + BIO_STRIPE_PITCH) % BIO_STRIPE_PITCH;
+                if (stripePhase < BIO_STRIPE_PITCH / 2) {
+                    // Black stripe
+                    pixmap.setColor(0.06f, 0.07f, 0.06f, 1f);
+                } else {
+                    // Green stripe
+                    pixmap.setColor(0.28f, 0.78f, 0.30f, 1f);
+                }
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // Layer 4: Biohazard trefoil approximation at center (48, 50)
+        // Three overlapping rectangular blocks rotated 0°, 120°, 240° (approximated as
+        // axis-aligned + diagonal fills). Center disc first.
+        int trefoilCenterColumn = 48;
+        int trefoilCenterRow    = 50;
+        // Mix 80% of (0.10, 0.10, 0.10) with 20% of panel white (0.74, 0.77, 0.74)
+        float trefoilRed   = 0.10f * 0.80f + 0.74f * 0.20f;
+        float trefoilGreen = 0.10f * 0.80f + 0.77f * 0.20f;
+        float trefoilBlue  = 0.10f * 0.80f + 0.74f * 0.20f;
+        pixmap.setColor(trefoilRed, trefoilGreen, trefoilBlue, 1f);
+        // Center disc (radius 4)
+        pixmap.fillRectangle(trefoilCenterColumn - 4, trefoilCenterRow - 4, 8, 8);
+        // Lobe 0: upward arc block
+        pixmap.fillRectangle(trefoilCenterColumn - 4, trefoilCenterRow - 14, 8, 8);
+        // Lobe 1: lower-right arc block (approx 120° rotation)
+        pixmap.fillRectangle(trefoilCenterColumn + 4, trefoilCenterRow + 2, 8, 8);
+        // Lobe 2: lower-left arc block (approx 240° rotation)
+        pixmap.fillRectangle(trefoilCenterColumn - 12, trefoilCenterRow + 2, 8, 8);
+        // Gap ring between lobes and center — redraw center disc in panel white to punch gap
+        pixmap.setColor(0.74f, 0.77f, 0.74f, 1f);
+        pixmap.fillRectangle(trefoilCenterColumn - 2, trefoilCenterRow - 2, 4, 4);
+
+        // Layer 5: 1px green glow line just below the stripe band at row 115
+        pixmap.setColor(0.18f, 0.55f, 0.22f, 1f);
+        if (115 < size) {
+            pixmap.fillRectangle(0, 115, size, 1);
+        }
+
+        // Suppress unused variable warning — random is seeded for determinism but
+        // this texture's layers are position-driven rather than random-walk driven.
+        random.nextInt();
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Generates an emergency lighting strip wall texture ('S').
+     * Dark steel base with a vertical red glow gradient centred on a recessed channel,
+     * a bright red strip core with white-hot centre line, and evenly spaced cage housings.
+     */
+    private static Texture generateEmergWallTexture() {
+        int    size   = EMERG_WALL_TEXTURE_SIZE;
+        Random random = new Random(EMERG_WALL_SEED);
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Layer 1: Dark steel base with grain, then Layer 2: vertical glow gradient applied per pixel
+        int stripCenterRow = 58;
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                float grain    = ((row * 7 + column * 11) % 13 - 6) / 150f;
+                float steelRed   = Math.max(0f, Math.min(1f, 0.20f + grain));
+                float steelGreen = Math.max(0f, Math.min(1f, 0.21f + grain));
+                float steelBlue  = Math.max(0f, Math.min(1f, 0.24f + grain));
+                float distanceFromStrip = Math.abs(row - stripCenterRow);
+                float glowWeight = Math.max(0f, 1f - distanceFromStrip / 22f);
+                float red   = steelRed   + glowWeight * (0.55f - steelRed);
+                float green = steelGreen * (1f - glowWeight * 0.85f);
+                float blue  = steelBlue  * (1f - glowWeight * 0.95f);
+                pixmap.setColor(Math.max(0f, Math.min(1f, red)),
+                                Math.max(0f, Math.min(1f, green)),
+                                Math.max(0f, Math.min(1f, blue)), 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // Layer 3: Recessed channel
+        pixmap.setColor(0.08f, 0.06f, 0.06f, 1f);
+        pixmap.fillRectangle(0, 55, size, 3);
+
+        // Layer 4: Red strip core and white-hot centre line
+        pixmap.setColor(0.95f, 0.18f, 0.16f, 1f);
+        pixmap.fillRectangle(0, 57, size, 2);
+        pixmap.setColor(1.00f, 0.70f, 0.70f, 1f);
+        for (int column = 0; column < size; column++) {
+            pixmap.drawPixel(column, 58);
+        }
+
+        // Layer 5: Cage housings every (size / EMERG_CAGE_COUNT) columns
+        int cageSpacing = size / EMERG_CAGE_COUNT;
+        for (int cageIndex = 0; cageIndex < EMERG_CAGE_COUNT; cageIndex++) {
+            int cageCenterColumn = cageIndex * cageSpacing + cageSpacing / 2;
+            pixmap.setColor(0.10f, 0.10f, 0.11f, 1f);
+            // 5-wide × 4-tall crosshatch of pixels centred on strip row
+            for (int offsetRow = -2; offsetRow <= 1; offsetRow++) {
+                for (int offsetColumn = -2; offsetColumn <= 2; offsetColumn++) {
+                    int pixelColumn = cageCenterColumn + offsetColumn;
+                    int pixelRow    = stripCenterRow   + offsetRow;
+                    if (pixelColumn >= 0 && pixelColumn < size && pixelRow >= 0 && pixelRow < size) {
+                        pixmap.drawPixel(pixelColumn, pixelRow);
+                    }
+                }
+            }
+        }
+
+        // Suppress unused variable warning — seeded for determinism
+        random.nextInt();
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Generates a medical tile wall texture ('M').
+     * Checkerboard white/off-white tiles with 1px grout borders, a green accent stripe,
+     * a red medical cross on a white background, and scattered blood flecks.
+     */
+    private static Texture generateMedWallTexture() {
+        int    size   = MED_WALL_TEXTURE_SIZE;
+        Random random = new Random(MED_WALL_SEED);
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Layer 1: Tile grid — checker pattern with 1px grout at tile boundaries
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                boolean isGrout = (row % MED_TILE_SIZE == 0) || (column % MED_TILE_SIZE == 0);
+                if (isGrout) {
+                    pixmap.setColor(0.34f, 0.36f, 0.36f, 1f);
+                } else {
+                    int tileIndexColumn = column / MED_TILE_SIZE;
+                    int tileIndexRow    = row    / MED_TILE_SIZE;
+                    boolean isWhiteTile = ((tileIndexColumn + tileIndexRow) & 1) == 0;
+                    if (isWhiteTile) {
+                        pixmap.setColor(0.82f, 0.84f, 0.83f, 1f);
+                    } else {
+                        pixmap.setColor(0.72f, 0.74f, 0.73f, 1f);
+                    }
+                }
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // Layer 2: Green accent stripe at row 76, 3px tall
+        pixmap.setColor(0.20f, 0.62f, 0.45f, 1f);
+        pixmap.fillRectangle(0, 76, size, 3);
+
+        // Layer 3: Medical cross at approx (60, 28) — white 20×20 backing, red cross bars
+        int crossCenterColumn = 60;
+        int crossCenterRow    = 28;
+        // White background square
+        pixmap.setColor(0.90f, 0.92f, 0.90f, 1f);
+        pixmap.fillRectangle(crossCenterColumn - 10, crossCenterRow - 10, 20, 20);
+        // Red cross — 8×20 vertical bar and 20×8 horizontal bar
+        pixmap.setColor(0.80f, 0.16f, 0.16f, 1f);
+        pixmap.fillRectangle(crossCenterColumn - 4,  crossCenterRow - 10, 8,  20);
+        pixmap.fillRectangle(crossCenterColumn - 10, crossCenterRow - 4,  20, 8);
+
+        // Layer 4: Blood flecks scattered in the lower half
+        for (int fleckIndex = 0; fleckIndex < MED_BLOOD_FLECK_COUNT; fleckIndex++) {
+            int fleckColumn = random.nextInt(size);
+            int fleckRow    = size / 2 + random.nextInt(size / 2);
+            int fleckSize   = 1 + random.nextInt(2); // 1 or 2 pixels
+            pixmap.setColor(0.36f, 0.05f, 0.05f, 1f);
+            pixmap.fillRectangle(fleckColumn, fleckRow, fleckSize, fleckSize);
+        }
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Generates a cryo / frost-damaged wall texture ('Z').
+     * Cold steel base with a radial + edge frost rime overlay, a horizontal coolant pipe seam
+     * with hanging icicles, thin frost fracture lines, and scattered ice glints.
+     */
+    private static Texture generateCryoWallTexture() {
+        int    size   = CRYO_WALL_TEXTURE_SIZE;
+        Random random = new Random(CRYO_WALL_SEED);
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Pre-compute frost weight map: radialFalloff from 4 corners + bottom-edge gradient
+        float[] frostWeightMap = new float[size * size];
+        int[][] cornerCenters = { {0, 0}, {size - 1, 0}, {0, size - 1}, {size - 1, size - 1} };
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                float cornerWeight = 0f;
+                for (int[] corner : cornerCenters) {
+                    float differenceX = column - corner[0];
+                    float differenceY = row    - corner[1];
+                    float distance    = (float) Math.sqrt(differenceX * differenceX + differenceY * differenceY);
+                    cornerWeight = Math.max(cornerWeight,
+                                            GameMath.radialFalloff(distance, CRYO_FROST_CORNER_RADIUS));
+                }
+                float edgeGradient = (float) row / (size - 1) * 0.8f;
+                frostWeightMap[row * size + column] = Math.min(1f, cornerWeight + edgeGradient);
+            }
+        }
+
+        // Layer 1: Cold steel base with grain, Layer 2: frost rime overlay blended in per pixel
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                float grain      = ((row * 7 + column * 11) % 13 - 6) / 150f;
+                float steelRed   = Math.max(0f, Math.min(1f, 0.34f + grain));
+                float steelGreen = Math.max(0f, Math.min(1f, 0.40f + grain));
+                float steelBlue  = Math.max(0f, Math.min(1f, 0.46f + grain));
+                float frostWeight = frostWeightMap[row * size + column];
+                // Two-stop lerp: steel -> frost blue -> near-white
+                float midRed   = 0.62f; float midGreen = 0.76f; float midBlue = 0.84f;
+                float highRed  = 0.86f; float highGreen = 0.93f; float highBlue = 0.97f;
+                float red, green, blue;
+                if (frostWeight < 0.5f) {
+                    float t = frostWeight * 2f;
+                    red   = steelRed   + t * (midRed   - steelRed);
+                    green = steelGreen + t * (midGreen - steelGreen);
+                    blue  = steelBlue  + t * (midBlue  - steelBlue);
+                } else {
+                    float t = (frostWeight - 0.5f) * 2f;
+                    red   = midRed   + t * (highRed   - midRed);
+                    green = midGreen + t * (highGreen - midGreen);
+                    blue  = midBlue  + t * (highBlue  - midBlue);
+                }
+                pixmap.setColor(Math.max(0f, Math.min(1f, red)),
+                                Math.max(0f, Math.min(1f, green)),
+                                Math.max(0f, Math.min(1f, blue)), 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // Layer 3: Horizontal coolant pipe seam at row 51
+        pixmap.setColor(0.24f, 0.28f, 0.33f, 1f);
+        pixmap.fillRectangle(0, 51, size, 2);
+        pixmap.setColor(0.50f, 0.65f, 0.78f, 1f);
+        pixmap.fillRectangle(0, 50, size, 1); // 1px highlight above seam
+
+        // Layer 4: Icicles hanging from the pipe seam
+        int[] icicleColumns = new int[CRYO_ICICLE_COUNT];
+        for (int icicleIndex = 0; icicleIndex < CRYO_ICICLE_COUNT; icicleIndex++) {
+            icicleColumns[icicleIndex] = 10 + icicleIndex * (size / CRYO_ICICLE_COUNT);
+        }
+        for (int icicleIndex = 0; icicleIndex < CRYO_ICICLE_COUNT; icicleIndex++) {
+            int icicleLength  = 8 + random.nextInt(7); // 8..14 rows
+            int icicleBaseCol = icicleColumns[icicleIndex];
+            for (int stepIndex = 0; stepIndex < icicleLength; stepIndex++) {
+                int pixelRow    = 53 + stepIndex;
+                int halfWidth   = stepIndex / 2;
+                if (pixelRow >= size) break;
+                // Fade from icy blue at base to lighter tip
+                float tipFraction = (float) stepIndex / icicleLength;
+                float icicleRed   = 0.50f + tipFraction * 0.30f;
+                float icicleGreen = 0.70f + tipFraction * 0.20f;
+                float icicleBlue  = 0.82f + tipFraction * 0.12f;
+                pixmap.setColor(Math.min(1f, icicleRed),
+                                Math.min(1f, icicleGreen),
+                                Math.min(1f, icicleBlue), 1f);
+                for (int offsetColumn = -halfWidth; offsetColumn <= halfWidth; offsetColumn++) {
+                    int pixelColumn = icicleBaseCol + offsetColumn;
+                    if (pixelColumn >= 0 && pixelColumn < size) {
+                        pixmap.drawPixel(pixelColumn, pixelRow);
+                    }
+                }
+            }
+        }
+
+        // Layer 5: Frost fracture lines — thin random-walk lines in frost zones
+        for (int fractureIndex = 0; fractureIndex < CRYO_FRACTURE_COUNT; fractureIndex++) {
+            // Start from a frost-heavy area (corners / bottom)
+            int   crackColumn      = random.nextInt(size / 3) + (fractureIndex * size / CRYO_FRACTURE_COUNT);
+            int   crackRow         = size - 1 - random.nextInt(size / 4);
+            float crackAngleRadians = -(float)(Math.PI / 2) + (random.nextFloat() - 0.5f) * 1.2f;
+            for (int stepIndex = 0; stepIndex < 25; stepIndex++) {
+                if (crackColumn < 0 || crackColumn >= size || crackRow < 0 || crackRow >= size) break;
+                if (frostWeightMap[crackRow * size + crackColumn] > 0.25f) {
+                    pixmap.setColor(0.50f, 0.70f, 0.82f, 1f);
+                    pixmap.drawPixel(crackColumn, crackRow);
+                }
+                crackAngleRadians += (random.nextFloat() - 0.5f) * 0.5f;
+                crackColumn       += (int) Math.round(Math.cos(crackAngleRadians));
+                crackRow          += (int) Math.round(Math.sin(crackAngleRadians));
+            }
+        }
+
+        // Layer 6: Ice glints — bright 1px specks in frost zones
+        for (int glintIndex = 0; glintIndex < CRYO_GLINT_COUNT; glintIndex++) {
+            int glintColumn = random.nextInt(size);
+            int glintRow    = random.nextInt(size);
+            if (frostWeightMap[glintRow * size + glintColumn] > 0.40f) {
+                pixmap.setColor(0.95f, 0.98f, 1.00f, 1f);
+                pixmap.drawPixel(glintColumn, glintRow);
+            }
+        }
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Generates a radiation-burned wall texture ('U').
+     * Scorched black base with heavy grain, a radial heat halo from a hot-spot,
+     * branching green-yellow crack network, and scattered radiation dust specks.
+     */
+    private static Texture generateRadWallTexture() {
+        int    size     = RAD_WALL_TEXTURE_SIZE;
+        Random random   = new Random(RAD_WALL_SEED);
+        int    hotColumn = 85;
+        int    hotRow    = 90;
+        Pixmap pixmap   = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Layer 1: Scorched black base with heavy grain
+        // Layer 2: Heat halo from hot-spot blended in per pixel
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                float grain = ((row * 7 + column * 11) % 13 - 6) / 60f;
+                float baseRed   = Math.max(0f, Math.min(1f, 0.08f + grain));
+                float baseGreen = Math.max(0f, Math.min(1f, 0.08f + grain));
+                float baseBlue  = Math.max(0f, Math.min(1f, 0.07f + grain));
+                float differenceX = column - hotColumn;
+                float differenceY = row    - hotRow;
+                float distance    = (float) Math.sqrt(differenceX * differenceX + differenceY * differenceY);
+                float haloWeight  = GameMath.radialFalloff(distance, 50f);
+                float red   = baseRed   + haloWeight * (0.22f - baseRed);
+                float green = baseGreen + haloWeight * (0.16f - baseGreen);
+                float blue  = baseBlue  + haloWeight * (0.08f - baseBlue);
+                pixmap.setColor(Math.max(0f, Math.min(1f, red)),
+                                Math.max(0f, Math.min(1f, green)),
+                                Math.max(0f, Math.min(1f, blue)), 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // Layer 3: Crack network — branching random-walk lines from near the hot-spot
+        for (int crackIndex = 0; crackIndex < RAD_CRACK_COUNT; crackIndex++) {
+            int   crackColumn      = hotColumn + random.nextInt(21) - 10;
+            int   crackRow         = hotRow    + random.nextInt(21) - 10;
+            float crackAngleRadians = (float)(Math.PI * 2) * crackIndex / RAD_CRACK_COUNT
+                                      + (random.nextFloat() - 0.5f) * 0.4f;
+            for (int stepIndex = 0; stepIndex < RAD_CRACK_STEPS; stepIndex++) {
+                if (crackColumn < 0 || crackColumn >= size || crackRow < 0 || crackRow >= size) break;
+                // 2px glow halo
+                pixmap.setColor(0.40f, 0.62f, 0.14f, 1f);
+                if (crackColumn + 1 < size) pixmap.drawPixel(crackColumn + 1, crackRow);
+                if (crackRow    + 1 < size) pixmap.drawPixel(crackColumn, crackRow + 1);
+                // 1px bright core
+                pixmap.setColor(0.85f, 0.95f, 0.30f, 1f);
+                pixmap.drawPixel(crackColumn, crackRow);
+                crackAngleRadians += (random.nextFloat() - 0.5f) * 0.5f;
+                crackColumn       += (int) Math.round(Math.cos(crackAngleRadians));
+                crackRow          += (int) Math.round(Math.sin(crackAngleRadians));
+            }
+        }
+
+        // Layer 4: Radiation dust — 1px specks weighted toward hot-spot
+        for (int dustIndex = 0; dustIndex < RAD_DUST_COUNT; dustIndex++) {
+            // Bias toward hot-spot: place within a range that skews toward (hotColumn, hotRow)
+            int dustColumn = (hotColumn + random.nextInt(size)) % size;
+            int dustRow    = (hotRow    + random.nextInt(size)) % size;
+            pixmap.setColor(0.55f, 0.58f, 0.22f, 1f);
+            pixmap.drawPixel(dustColumn, dustRow);
+        }
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Generates a blast-scarred wall texture ('X').
+     * Lab steel base with soft scorch smear blobs, bullet pock marks (small discs with
+     * highlight), larger blast craters with radial scorch streaks and crater rims,
+     * and through-holes punched all the way to near-black.
+     */
+    private static Texture generateBlastWallTexture() {
+        int    size   = BLAST_WALL_TEXTURE_SIZE;
+        Random random = new Random(BLAST_WALL_SEED);
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Layer 1: Lab steel base with grain
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                float grain = ((row * 7 + column * 11) % 13 - 6) / 150f;
+                pixmap.setColor(Math.max(0f, Math.min(1f, 0.27f + grain)),
+                                Math.max(0f, Math.min(1f, 0.28f + grain)),
+                                Math.max(0f, Math.min(1f, 0.31f + grain)), 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // Layer 2: Scorch smear blobs — soft radialFalloff darkening
+        int[] scorchCenterColumn = new int[BLAST_SCORCH_COUNT];
+        int[] scorchCenterRow    = new int[BLAST_SCORCH_COUNT];
+        int[] scorchRadius       = new int[BLAST_SCORCH_COUNT];
+        for (int scorchIndex = 0; scorchIndex < BLAST_SCORCH_COUNT; scorchIndex++) {
+            scorchCenterColumn[scorchIndex] = random.nextInt(size);
+            scorchCenterRow[scorchIndex]    = random.nextInt(size);
+            scorchRadius[scorchIndex]       = 15 + random.nextInt(11); // 15..25
+        }
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                float maxScorchWeight = 0f;
+                for (int scorchIndex = 0; scorchIndex < BLAST_SCORCH_COUNT; scorchIndex++) {
+                    float differenceX = column - scorchCenterColumn[scorchIndex];
+                    float differenceY = row    - scorchCenterRow[scorchIndex];
+                    float distance    = (float) Math.sqrt(differenceX * differenceX + differenceY * differenceY);
+                    maxScorchWeight   = Math.max(maxScorchWeight,
+                                                  GameMath.radialFalloff(distance, scorchRadius[scorchIndex]));
+                }
+                if (maxScorchWeight > 0f) {
+                    float grain = ((row * 7 + column * 11) % 13 - 6) / 150f;
+                    float baseRed   = Math.max(0f, Math.min(1f, 0.27f + grain));
+                    float baseGreen = Math.max(0f, Math.min(1f, 0.28f + grain));
+                    float baseBlue  = Math.max(0f, Math.min(1f, 0.31f + grain));
+                    float red   = baseRed   + maxScorchWeight * (0.12f - baseRed);
+                    float green = baseGreen + maxScorchWeight * (0.10f - baseGreen);
+                    float blue  = baseBlue  + maxScorchWeight * (0.09f - baseBlue);
+                    pixmap.setColor(Math.max(0f, red), Math.max(0f, green), Math.max(0f, blue), 1f);
+                    pixmap.drawPixel(column, row);
+                }
+            }
+        }
+
+        // Layer 3: Bullet pock marks — small 2-3px discs with top-left highlight
+        for (int holeIndex = 0; holeIndex < BLAST_BULLET_HOLE_COUNT; holeIndex++) {
+            int holeCenterColumn = random.nextInt(size);
+            int holeCenterRow    = random.nextInt(size);
+            int holeRadius       = 1 + random.nextInt(2); // radius 1 or 2 → disc 2 or 3 px across
+            for (int pixelRow = holeCenterRow - holeRadius; pixelRow <= holeCenterRow + holeRadius; pixelRow++) {
+                for (int pixelColumn = holeCenterColumn - holeRadius; pixelColumn <= holeCenterColumn + holeRadius; pixelColumn++) {
+                    if (pixelColumn < 0 || pixelColumn >= size || pixelRow < 0 || pixelRow >= size) continue;
+                    float differenceX = pixelColumn - holeCenterColumn;
+                    float differenceY = pixelRow    - holeCenterRow;
+                    if (differenceX * differenceX + differenceY * differenceY <= (float)(holeRadius * holeRadius)) {
+                        pixmap.setColor(0.05f, 0.05f, 0.06f, 1f);
+                        pixmap.drawPixel(pixelColumn, pixelRow);
+                    }
+                }
+            }
+            // 1px top-left highlight on the rim
+            if (holeCenterColumn - holeRadius >= 0 && holeCenterRow - holeRadius >= 0) {
+                pixmap.setColor(0.46f, 0.47f, 0.50f, 1f);
+                pixmap.drawPixel(holeCenterColumn - holeRadius, holeCenterRow - holeRadius);
+            }
+        }
+
+        // Layer 4: Blast craters — larger 8-14px discs with radial scorch streaks and crater rims
+        for (int craterIndex = 0; craterIndex < BLAST_CRATER_COUNT; craterIndex++) {
+            int craterCenterColumn = random.nextInt(size);
+            int craterCenterRow    = random.nextInt(size);
+            int craterRadius       = 4 + random.nextInt(4); // 4..7 → disc 8..14 px across
+            int streakCount        = 4 + random.nextInt(3); // 4..6 radial streaks
+
+            // Dark crater disc
+            for (int pixelRow = craterCenterRow - craterRadius; pixelRow <= craterCenterRow + craterRadius; pixelRow++) {
+                for (int pixelColumn = craterCenterColumn - craterRadius; pixelColumn <= craterCenterColumn + craterRadius; pixelColumn++) {
+                    if (pixelColumn < 0 || pixelColumn >= size || pixelRow < 0 || pixelRow >= size) continue;
+                    float differenceX = pixelColumn - craterCenterColumn;
+                    float differenceY = pixelRow    - craterCenterRow;
+                    if (differenceX * differenceX + differenceY * differenceY <= (float)(craterRadius * craterRadius)) {
+                        pixmap.setColor(0.05f, 0.05f, 0.06f, 1f);
+                        pixmap.drawPixel(pixelColumn, pixelRow);
+                    }
+                }
+            }
+
+            // Radial scorch streaks
+            for (int streakIndex = 0; streakIndex < streakCount; streakIndex++) {
+                float streakAngleRadians = (float)(Math.PI * 2) * streakIndex / streakCount;
+                int   streakColumn       = craterCenterColumn;
+                int   streakRow          = craterCenterRow;
+                for (int stepIndex = 0; stepIndex < craterRadius + 8; stepIndex++) {
+                    if (streakColumn < 0 || streakColumn >= size || streakRow < 0 || streakRow >= size) break;
+                    pixmap.setColor(0.12f, 0.10f, 0.09f, 1f);
+                    pixmap.drawPixel(streakColumn, streakRow);
+                    streakColumn += (int) Math.round(Math.cos(streakAngleRadians));
+                    streakRow    += (int) Math.round(Math.sin(streakAngleRadians));
+                }
+            }
+
+            // Crater rim circle (1px)
+            pixmap.setColor(0.46f, 0.47f, 0.50f, 1f);
+            for (int rimStep = 0; rimStep < 64; rimStep++) {
+                float rimAngleRadians = (float)(Math.PI * 2) * rimStep / 64;
+                int   rimColumn       = craterCenterColumn + (int) Math.round(craterRadius * Math.cos(rimAngleRadians));
+                int   rimRow          = craterCenterRow    + (int) Math.round(craterRadius * Math.sin(rimAngleRadians));
+                if (rimColumn >= 0 && rimColumn < size && rimRow >= 0 && rimRow < size) {
+                    pixmap.drawPixel(rimColumn, rimRow);
+                }
+            }
+        }
+
+        // Layer 5: Through-holes — very small near-black 4px discs
+        for (int throughIndex = 0; throughIndex < BLAST_THROUGH_HOLE_COUNT; throughIndex++) {
+            int holeCenterColumn = random.nextInt(size);
+            int holeCenterRow    = random.nextInt(size);
+            int holeRadius       = 2; // 4px disc
+            for (int pixelRow = holeCenterRow - holeRadius; pixelRow <= holeCenterRow + holeRadius; pixelRow++) {
+                for (int pixelColumn = holeCenterColumn - holeRadius; pixelColumn <= holeCenterColumn + holeRadius; pixelColumn++) {
+                    if (pixelColumn < 0 || pixelColumn >= size || pixelRow < 0 || pixelRow >= size) continue;
+                    float differenceX = pixelColumn - holeCenterColumn;
+                    float differenceY = pixelRow    - holeCenterRow;
+                    if (differenceX * differenceX + differenceY * differenceY <= (float)(holeRadius * holeRadius)) {
+                        pixmap.setColor(0.02f, 0.02f, 0.02f, 1f);
+                        pixmap.drawPixel(pixelColumn, pixelRow);
+                    }
+                }
+            }
         }
 
         Texture texture = new Texture(pixmap);
@@ -1101,6 +1808,13 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureRust.dispose();
         wallTextureGore.dispose();
         wallTextureBulkhead.dispose();
+        wallTextureGlass.dispose();
+        wallTextureBio.dispose();
+        wallTextureEmerg.dispose();
+        wallTextureMed.dispose();
+        wallTextureCryo.dispose();
+        wallTextureRad.dispose();
+        wallTextureBlast.dispose();
         doorTexture.dispose();
         doorTextureRed.dispose();
         doorTextureYellow.dispose();
