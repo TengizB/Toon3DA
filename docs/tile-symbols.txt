@@ -1,0 +1,129 @@
+TILE SYMBOL REFERENCE
+=====================
+Single source of truth for every character used in level .txt files.
+
+STRICT RULE: Every time a new symbol is introduced anywhere in the codebase
+(Level.java, LevelLoader.java, LevelGenerator.java, WallRenderer.java, or any
+other class that reads tile characters), this file MUST be updated in the same
+commit. No symbol may be used in a level file or recognised by game code unless
+it appears here first.
+
+Authority class: Level.java — isWall(), isColumn(), isPropSolid(), isPropDecal(),
+and the pickup/door/special checks are the single runtime source of truth.
+When this file and the code disagree, fix the code to match this file.
+
+---
+
+WALLS (solid — block movement and raycasting)
+---------------------------------------------
+x   Plain wall          Default. Use for 80-90% of all wall tiles.           lab_wall_plain.jpg
+c   Conduit wall        Utility corridors, visible pipes. Sparse.             lab_wall_conduit.jpg
+v   Vent wall           Room interior side walls. 1-2 per room max.           lab_wall_vent.jpg
+t   Terminal wall       Rare. Corner alcoves, dead-ends. Max 1-2 per level.   lab_wall_terminal.jpg
+w   Wires wall          Near server/generator areas. Sparse.                  lab_wall_wires.jpg
+h   Hazard wall         Industrial caution stripes (yellow/black). Near explosive barrels.
+r   Rust wall           Corroded steel. Near unlit floors or oil pools.
+G   Gore wall           Flesh-infested demonic surface. Near corpse clusters.
+k   Bulkhead wall       Heavy armoured plates. Dead ends, stairwells.
+N   Glass wall          Reinforced containment glass. Special rooms only.
+Q   Bio/Quarantine wall Biohazard warning markings. Containment areas.
+S   Emergency strip wall Emergency lighting corridor walls.
+M   Medical wall        Hospital/clinic room walls.
+Z   Cryo wall           Frost-damaged cryogenic chamber walls.
+U   Radiation wall      Radiation-burned power-plant walls.
+X   Blast wall          Battle-scarred armory walls.
+
+DOORS (solid until opened; runtime state managed by DoorManager)
+----------------------------------------------------------------
+d   Plain door          Unlocked. Opens on player interaction.                lab_door_1.jpg
+R   Red keycard door    Locked. Requires red keycard (pickup 'r').
+Y   Yellow keycard door Locked. Requires yellow keycard (pickup 'y').
+B   Blue keycard door   Locked. Requires blue keycard (pickup 'b').
+
+FLOOR LIGHTING (walkable; brightness multiplier applied to wall/floor shading)
+-------------------------------------------------------------------------------
+  (space)  Lit floor       Standard bright corridor. Default. Use for most open areas.  1.55x brightness
+l          Normal floor     Base brightness. Side rooms, recesses.                       1.0x brightness
+u          Unlit floor      Broken bulb zone. Very dark. Use sparingly for dread.        0.55x brightness
+f          Flickering floor Animated failing fluorescent. Use 1-3 tiles at chokepoints.  varies
+
+SPECIAL TILES
+-------------
+p   Player start        Exactly one per level. Never on a map edge.
+P   Cylindrical column  Solid. Rendered as 3D cylinder (ray-circle intersection). Groups of 2-4.
+>   Stairs / exit       Level exit. Exactly one per generated level.
+
+SOLID PROPS (block player movement; rendered as billboard sprites)
+------------------------------------------------------------------
+g   Radioactive barrel  Dark green hazard drum.                                0.65x wall height
+E   Explosive barrel    Orange-red volatile drum. Triggers hazard walls nearby. 0.65x wall height
+T   Computer terminal   Control console (charcoal-blue, cyan screen).          0.75x wall height
+L   Locker              Equipment storage cabinet (steel blue-gray).           0.90x wall height
+C   Crate               Supply/ammo box (warm brown wood, cross-plank).        0.50x wall height
+#   Security camera     Mounted surveillance device. Near walls.
+%   Generator           Power generation unit. Clusters in power plant areas.
+&   Bio-pod             Cryogenic/specimen container. Cryo and containment.
+=   Weapon rack         Gun/equipment display stand. Armory, command rooms.
+@   Special equipment   Advanced machinery. Rare. Standard rooms only.
+
+WALKABLE DECALS (player walks over; rendered as flat billboard)
+--------------------------------------------------------------
+m   Corpse              Fallen marine or enemy. Atmosphere.                    0.35x wall height
+s   Blood stain (alt)   Variant blood decal.                                   0.22x wall height
+.   Blood stain         Pooled blood. Near corpses and combat zones.           0.18x wall height
+O   Oil/fluid pool      Coolant spill or fluid leak. Dark teal iridescent.     0.18x wall height
+
+PICKUPS (walkable; collected on player step)
+-------------------------------------------
+r   Red keycard         Unlocks 'R' doors.
+y   Yellow keycard      Unlocks 'Y' doors.
+b   Blue keycard        Unlocks 'B' doors.
++   Stim pack           Small health recovery.
+H   Field medkit        Large health recovery.
+a   Armor shard         Small armor restoration.
+A   Security vest       Large armor restoration.
+
+ENEMY SPAWN MARKERS (temporary — extracted by LevelLoader, then replaced with floor ' ')
+----------------------------------------------------------------------------------------
+1   Corruptor spawn
+2   Vortex Eye spawn
+3   Ghoul spawn
+4   Crawler spawn
+5   Revenant spawn
+
+---
+
+SYMBOL BUDGET
+-------------
+Total printable ASCII characters: 95  (codes 32-126)
+Currently assigned:               52
+Remaining:                        43
+
+Free characters (not yet assigned):
+! " $ ^ _ ` ~ | { } [ ] \ / < > ( ) * - + (some already used — check above)
+Digits: 6 7 8 9  (0-5 used for enemy spawns)
+Uppercase: D F I J K V W Z (careful — check walls/doors above)
+Lowercase: e i j n o q z
+
+PREFERRED SYMBOLS FOR NEW ADDITIONS
+------------------------------------
+- Uppercase letters for new solid/blocking things (walls, doors, props).
+- Lowercase letters for new walkable/decal things.
+- Digits (6-9) for additional enemy spawn types.
+- Punctuation only when clearly readable in a plain-text editor.
+- Avoid: \ | < > (confusing in text editors); " ' (quoting conflicts).
+
+---
+
+ADDING A NEW SYMBOL — CHECKLIST
+--------------------------------
+1. Pick an unused symbol from the free list above.
+2. Add it to this file (correct section, with description and notes).
+3. Add it to Level.java in the appropriate method: isWall(), isPropSolid(),
+   isPropDecal(), or a new dedicated check.
+4. Add texture/sprite lookup in WallRenderer.java or PropRenderer.java.
+5. Add any Constants entries (texture path, height multiplier, etc.).
+6. Update docs if the symbol affects level generation (LevelGenerator.java).
+7. Update the symbol count in SYMBOL BUDGET above.
+8. Commit all of the above together — never add a symbol in code without
+   updating this file in the same commit.
