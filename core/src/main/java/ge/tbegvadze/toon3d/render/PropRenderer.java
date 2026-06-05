@@ -59,6 +59,10 @@ public class PropRenderer implements Renderable, Disposable {
             case '&': return PROP_BIOPOD_HEIGHT;
             case '=': return PROP_RACK_HEIGHT;
             case '@': return PROP_VENDOR_HEIGHT;
+            case 'I': return PROP_HEIGHT_SPECIMEN_TANK;
+            case 'W': return PROP_HEIGHT_HOLO_WORKSTATION;
+            case 'J': return PROP_HEIGHT_AICORE_NODE;
+            case 'e': return PROP_HEIGHT_ENERGY_SCORCH;
             default:  return 0.70f;
         }
     }
@@ -320,6 +324,10 @@ public class PropRenderer implements Renderable, Disposable {
         map.put('&', generateBioPodTexture());
         map.put('=', generateWeaponRackTexture());
         map.put('@', generateVendorTexture());
+        map.put('I', generateSpecimenTankTexture());
+        map.put('W', generateHoloWorkstationTexture());
+        map.put('J', generateAiCoreNodeTexture());
+        map.put('e', generateEnergyScorchTexture());
         return map;
     }
 
@@ -969,4 +977,121 @@ public class PropRenderer implements Renderable, Disposable {
         pixmap.fillRectangle(8, 10, 8, 6);
         return finalize(pixmap);
     }
+
+    private static Texture generateSpecimenTankTexture() {
+        Pixmap pixmap = new Pixmap(64, 128, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Steel base and top caps
+        pixmap.setColor(0.20f, 0.22f, 0.26f, 1f);
+        pixmap.fillRectangle(8, 108, 48, 20);
+        pixmap.fillRectangle(8, 0,   48, 10);
+        // Fluid body — cylindrical sheen via column-by-column tinting
+        for (int column = 10; column < 54; column++) {
+            float fraction = (float)(column - 10) / 43f;
+            float rim = (fraction < 0.20f || fraction > 0.80f) ? 0f : 1f;
+            float fluidRed   = 0.12f + 0.18f * rim;
+            float fluidGreen = 0.45f + 0.20f * rim;
+            float fluidBlue  = 0.55f + 0.40f * rim;
+            pixmap.setColor(fluidRed, fluidGreen, fluidBlue, 1f);
+            pixmap.fillRectangle(column, 10, 1, 98);
+        }
+        // Specimen silhouette — dark oval centre
+        pixmap.setColor(0.06f, 0.10f, 0.08f, 1f);
+        pixmap.fillRectangle(20, 40, 24, 46);
+        // Glass highlight streak (left)
+        pixmap.setColor(0.80f, 0.92f, 0.95f, 1f);
+        pixmap.fillRectangle(11, 12, 3, 94);
+        // Rising bubble dots
+        pixmap.setColor(0.80f, 0.95f, 1.00f, 1f);
+        for (int bubbleRow = 20; bubbleRow < 100; bubbleRow += 14) {
+            pixmap.fillRectangle(32, bubbleRow,     2, 2);
+            pixmap.fillRectangle(40, bubbleRow + 7, 2, 2);
+        }
+        return finalize(pixmap);
+    }
+
+    private static Texture generateHoloWorkstationTexture() {
+        Pixmap pixmap = new Pixmap(80, 64, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Console body (lower portion)
+        pixmap.setColor(0.18f, 0.20f, 0.24f, 1f);
+        pixmap.fillRectangle(4, 44, 72, 18);
+        // Cyan control strip
+        pixmap.setColor(0.35f, 0.95f, 1.00f, 1f);
+        pixmap.fillRectangle(8, 42, 64, 3);
+        // Hologram projection cone — fanning lines from console top upward
+        for (int column = 20; column <= 60; column += 5) {
+            float brightness = 1f - Math.abs(column - 40) / 25f;
+            pixmap.setColor(0.55f * brightness, 0.95f * brightness, 1.00f * brightness, 1f);
+            int topY = (int)(4 + (1f - brightness) * 18);
+            pixmap.fillRectangle(column, topY, 2, 42 - topY);
+        }
+        // Wireframe ring at hologram apex
+        pixmap.setColor(0.35f, 0.95f, 1.00f, 1f);
+        pixmap.fillRectangle(26, 6,  28, 2);
+        pixmap.fillRectangle(26, 18, 28, 2);
+        pixmap.fillRectangle(26, 6,  2,  14);
+        pixmap.fillRectangle(52, 6,  2,  14);
+        return finalize(pixmap);
+    }
+
+    private static Texture generateAiCoreNodeTexture() {
+        Pixmap pixmap = new Pixmap(48, 128, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Heatsink frame
+        pixmap.setColor(0.12f, 0.13f, 0.16f, 1f);
+        pixmap.fillRectangle(2, 2, 44, 124);
+        // 5 stacked processing slabs
+        int slabCount  = 5;
+        int slabHeight = 20;
+        int slabGap    = 4;
+        for (int slabIndex = 0; slabIndex < slabCount; slabIndex++) {
+            int slabTop = 6 + slabIndex * (slabHeight + slabGap);
+            // Slab body
+            pixmap.setColor(0.20f, 0.55f, 0.70f, 1f);
+            pixmap.fillRectangle(6, slabTop, 36, slabHeight);
+            // Central light seam
+            pixmap.setColor(0.60f, 0.95f, 1.00f, 1f);
+            pixmap.fillRectangle(22, slabTop, 4, slabHeight);
+            // Status LEDs — amber on slab 1, cyan elsewhere
+            if (slabIndex == 1) {
+                pixmap.setColor(1.00f, 0.65f, 0.15f, 1f);
+            } else {
+                pixmap.setColor(0.35f, 0.95f, 1.00f, 1f);
+            }
+            pixmap.fillRectangle(8,  slabTop + 8, 4, 4);
+            pixmap.fillRectangle(36, slabTop + 8, 4, 4);
+        }
+        return finalize(pixmap);
+    }
+
+    private static Texture generateEnergyScorchTexture() {
+        Pixmap pixmap = new Pixmap(64, 64, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Outer desaturated scorch ring
+        pixmap.setColor(0.20f, 0.18f, 0.16f, 1f);
+        pixmap.fillRectangle(6, 6, 52, 52);
+        // Blackened centre
+        pixmap.setColor(0.05f, 0.05f, 0.06f, 1f);
+        pixmap.fillRectangle(14, 14, 36, 36);
+        // Radiating electric-blue arc filaments from centre
+        pixmap.setColor(0.40f, 0.75f, 1.00f, 1f);
+        for (int step = 0; step < 20; step++) {
+            pixmap.drawPixel(32 + step,          32 - step);
+            pixmap.drawPixel(32 - step,          32 - step);
+            pixmap.drawPixel(32 + step,          32 + step / 2);
+            pixmap.drawPixel(32 - step,          32 + step / 2);
+        }
+        // Hot white flecks at burn centre
+        pixmap.setColor(0.90f, 0.96f, 1.00f, 1f);
+        pixmap.fillRectangle(30, 30, 4, 4);
+        pixmap.fillRectangle(28, 28, 2, 2);
+        pixmap.fillRectangle(34, 34, 2, 2);
+        return finalize(pixmap);
+    }
+
 }

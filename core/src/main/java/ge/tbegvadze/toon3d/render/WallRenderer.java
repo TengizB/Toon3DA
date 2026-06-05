@@ -68,6 +68,8 @@ public class WallRenderer implements Renderable, Disposable {
     private final Texture wallTextureCryo;
     private final Texture wallTextureRad;
     private final Texture wallTextureBlast;
+    private final Texture wallTextureHoloData;
+    private final Texture wallTextureForceField;
     private final Texture doorTexture;
     private final Texture doorTextureRed;
     private final Texture doorTextureYellow;
@@ -110,6 +112,10 @@ public class WallRenderer implements Renderable, Disposable {
     private final int wallTextureRadHeight;
     private final int wallTextureBlastWidth;
     private final int wallTextureBlastHeight;
+    private final int wallTextureHoloDataWidth;
+    private final int wallTextureHoloDataHeight;
+    private final int wallTextureForceFieldWidth;
+    private final int wallTextureForceFieldHeight;
     private final int doorTextureWidth;
     private final int doorTextureHeight;
     private final int columnTextureWidth;
@@ -244,7 +250,9 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureMed   = generateMedWallTexture();
         wallTextureCryo  = generateCryoWallTexture();
         wallTextureRad   = generateRadWallTexture();
-        wallTextureBlast = generateBlastWallTexture();
+        wallTextureBlast     = generateBlastWallTexture();
+        wallTextureHoloData  = generateHoloDataWallTexture();
+        wallTextureForceField = generateForceFieldWallTexture();
 
         wallTextureGlassWidth  = wallTextureGlass.getWidth();
         wallTextureGlassHeight = wallTextureGlass.getHeight();
@@ -258,8 +266,12 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureCryoHeight  = wallTextureCryo.getHeight();
         wallTextureRadWidth    = wallTextureRad.getWidth();
         wallTextureRadHeight   = wallTextureRad.getHeight();
-        wallTextureBlastWidth  = wallTextureBlast.getWidth();
-        wallTextureBlastHeight = wallTextureBlast.getHeight();
+        wallTextureBlastWidth       = wallTextureBlast.getWidth();
+        wallTextureBlastHeight      = wallTextureBlast.getHeight();
+        wallTextureHoloDataWidth    = wallTextureHoloData.getWidth();
+        wallTextureHoloDataHeight   = wallTextureHoloData.getHeight();
+        wallTextureForceFieldWidth  = wallTextureForceField.getWidth();
+        wallTextureForceFieldHeight = wallTextureForceField.getHeight();
 
         doorTexture      = loadOrGenerateDoorTexture(LAB_DOOR_CLOSED_PATH, 0f, 0f, 0f);
         doorTextureWidth  = doorTexture.getWidth();
@@ -293,7 +305,7 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureTable['t'] = wallTextureTerminal;  wallWidthTable['t'] = wallTextureTerminalWidth;  wallHeightTable['t'] = wallTextureTerminalHeight;
         wallTextureTable['w'] = wallTextureWires;     wallWidthTable['w'] = wallTextureWiresWidth;     wallHeightTable['w'] = wallTextureWiresHeight;
         wallTextureTable['h'] = wallTextureHazard;    wallWidthTable['h'] = wallTextureHazardWidth;    wallHeightTable['h'] = wallTextureHazardHeight;
-        wallTextureTable['r'] = wallTextureRust;      wallWidthTable['r'] = wallTextureRustWidth;      wallHeightTable['r'] = wallTextureRustHeight;
+        wallTextureTable['j'] = wallTextureRust;      wallWidthTable['j'] = wallTextureRustWidth;      wallHeightTable['j'] = wallTextureRustHeight;
         wallTextureTable['G'] = wallTextureGore;      wallWidthTable['G'] = wallTextureGoreWidth;      wallHeightTable['G'] = wallTextureGoreHeight;
         wallTextureTable['k'] = wallTextureBulkhead;  wallWidthTable['k'] = wallTextureBulkheadWidth;  wallHeightTable['k'] = wallTextureBulkheadHeight;
         wallTextureTable['N'] = wallTextureGlass;     wallWidthTable['N'] = wallTextureGlassWidth;     wallHeightTable['N'] = wallTextureGlassHeight;
@@ -302,7 +314,9 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureTable['M'] = wallTextureMed;       wallWidthTable['M'] = wallTextureMedWidth;       wallHeightTable['M'] = wallTextureMedHeight;
         wallTextureTable['Z'] = wallTextureCryo;      wallWidthTable['Z'] = wallTextureCryoWidth;      wallHeightTable['Z'] = wallTextureCryoHeight;
         wallTextureTable['U'] = wallTextureRad;       wallWidthTable['U'] = wallTextureRadWidth;       wallHeightTable['U'] = wallTextureRadHeight;
-        wallTextureTable['X'] = wallTextureBlast;     wallWidthTable['X'] = wallTextureBlastWidth;     wallHeightTable['X'] = wallTextureBlastHeight;
+        wallTextureTable['X'] = wallTextureBlast;      wallWidthTable['X'] = wallTextureBlastWidth;      wallHeightTable['X'] = wallTextureBlastHeight;
+        wallTextureTable['D'] = wallTextureHoloData;  wallWidthTable['D'] = wallTextureHoloDataWidth;   wallHeightTable['D'] = wallTextureHoloDataHeight;
+        wallTextureTable['F'] = wallTextureForceField; wallWidthTable['F'] = wallTextureForceFieldWidth; wallHeightTable['F'] = wallTextureForceFieldHeight;
 
         doorTextureTable = new Texture[128];
         Arrays.fill(doorTextureTable, doorTexture);
@@ -1815,6 +1829,8 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureCryo.dispose();
         wallTextureRad.dispose();
         wallTextureBlast.dispose();
+        wallTextureHoloData.dispose();
+        wallTextureForceField.dispose();
         doorTexture.dispose();
         doorTextureRed.dispose();
         doorTextureYellow.dispose();
@@ -1824,5 +1840,159 @@ public class WallRenderer implements Renderable, Disposable {
         if (workerPool != null) {
             workerPool.shutdown();
         }
+    }
+
+    /**
+     * Generates a holo-data display wall texture ('D').
+     * Near-black glass panel with glowing cyan data bars, a readout grid (mostly cyan, some amber
+     * warnings), a subtle vertical scan band, and a thin steel bezel framing the panel edges.
+     */
+    private static Texture generateHoloDataWallTexture() {
+        int    size   = HOLO_DATA_WALL_TEXTURE_SIZE;
+        Random random = new Random(HOLO_DATA_WALL_SEED);
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Glass panel base
+        pixmap.setColor(0.04f, 0.05f, 0.07f, 1f);
+        pixmap.fill();
+
+        // Subtle vertical scan band — one third from left, slightly brighter
+        int scanBandLeft = size / 3;
+        for (int column = scanBandLeft; column < scanBandLeft + size / 6; column++) {
+            for (int row = 4; row < size - 4; row++) {
+                pixmap.setColor(0.07f, 0.10f, 0.13f, 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // Horizontal data bars (varying fill widths)
+        int barHeight = 6;
+        int barMargin = 6;
+        for (int barIndex = 0; barIndex < HOLO_DATA_BAR_COUNT; barIndex++) {
+            int barTop  = barMargin + barIndex * ((size - 2 * barMargin) / HOLO_DATA_BAR_COUNT);
+            int fillWidth = (int)((0.40f + random.nextFloat() * 0.50f) * (size - 2 * barMargin));
+            // Dim background track
+            pixmap.setColor(0.10f, 0.45f, 0.55f, 1f);
+            pixmap.fillRectangle(barMargin, barTop, size - 2 * barMargin, barHeight);
+            // Bright filled portion
+            pixmap.setColor(0.35f, 0.95f, 1.00f, 1f);
+            pixmap.fillRectangle(barMargin, barTop, fillWidth, barHeight);
+        }
+
+        // Readout grid — small squares below the bars
+        int gridTop   = barMargin + HOLO_DATA_BAR_COUNT * ((size - 2 * barMargin) / HOLO_DATA_BAR_COUNT) + 8;
+        int cellSize  = (size - 2 * barMargin) / HOLO_DATA_READOUT_COLUMNS;
+        int cellInner = cellSize - 2;
+        for (int gridRow = 0; gridRow < HOLO_DATA_READOUT_ROWS; gridRow++) {
+            for (int gridColumn = 0; gridColumn < HOLO_DATA_READOUT_COLUMNS; gridColumn++) {
+                int cellLeft = barMargin + gridColumn * cellSize;
+                int cellTop  = gridTop  + gridRow    * cellSize;
+                if (cellTop + cellInner >= size - 4) continue;
+                boolean amber = random.nextFloat() < 0.10f;
+                if (amber) {
+                    pixmap.setColor(1.00f, 0.65f, 0.15f, 1f);
+                } else {
+                    boolean bright = random.nextFloat() < 0.60f;
+                    if (bright) {
+                        pixmap.setColor(0.35f, 0.95f, 1.00f, 1f);
+                    } else {
+                        pixmap.setColor(0.10f, 0.45f, 0.55f, 1f);
+                    }
+                }
+                pixmap.fillRectangle(cellLeft + 1, cellTop + 1, cellInner, cellInner);
+            }
+        }
+
+        // Steel bezel — 4px on all edges
+        pixmap.setColor(0.18f, 0.20f, 0.24f, 1f);
+        pixmap.fillRectangle(0,        0,        size, 4);
+        pixmap.fillRectangle(0,        size - 4, size, 4);
+        pixmap.fillRectangle(0,        0,        4,    size);
+        pixmap.fillRectangle(size - 4, 0,        4,    size);
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Generates a force-field arc wall texture ('F').
+     * Near-transparent dark base with bright electric-blue vertical arc lines, two horizontal
+     * energy bands, glowing intersection nodes, and dark steel emitter posts on the left and
+     * right edges that anchor the field visually.
+     */
+    private static Texture generateForceFieldWallTexture() {
+        int    size   = FORCE_FIELD_WALL_TEXTURE_SIZE;
+        Random random = new Random(FORCE_FIELD_WALL_SEED);
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Near-transparent dark base
+        pixmap.setColor(0.03f, 0.05f, 0.10f, 1f);
+        pixmap.fill();
+
+        // Emitter posts — left and right edges (8px wide, dark steel with cyan glow slot)
+        int postWidth  = 8;
+        int slotHeight = size / 3;
+        int slotTop    = (size - slotHeight) / 2;
+        pixmap.setColor(0.16f, 0.18f, 0.22f, 1f);
+        pixmap.fillRectangle(0,          0, postWidth, size);
+        pixmap.fillRectangle(size - postWidth, 0, postWidth, size);
+        // Glowing slot on each post
+        pixmap.setColor(0.30f, 0.70f, 1.00f, 1f);
+        pixmap.fillRectangle(2,              slotTop, 4, slotHeight);
+        pixmap.fillRectangle(size - postWidth + 2, slotTop, 4, slotHeight);
+
+        // Vertical arc lines with slight zigzag
+        int[] arcXPositions = new int[FORCE_FIELD_ARC_COUNT];
+        int usableWidth = size - 2 * postWidth;
+        for (int arcIndex = 0; arcIndex < FORCE_FIELD_ARC_COUNT; arcIndex++) {
+            arcXPositions[arcIndex] = postWidth + (arcIndex + 1) * usableWidth / (FORCE_FIELD_ARC_COUNT + 1);
+        }
+        for (int arcIndex = 0; arcIndex < FORCE_FIELD_ARC_COUNT; arcIndex++) {
+            int arcX = arcXPositions[arcIndex];
+            for (int row = 0; row < size; row++) {
+                int zigzag = (int)(Math.sin(row * 0.15 + arcIndex) * 2);
+                int drawX  = Math.max(postWidth, Math.min(size - postWidth - 1, arcX + zigzag));
+                // Outer glow
+                pixmap.setColor(0.30f, 0.70f, 1.00f, 1f);
+                if (drawX > 0)        pixmap.drawPixel(drawX - 1, row);
+                if (drawX < size - 1) pixmap.drawPixel(drawX + 1, row);
+                // Bright core
+                pixmap.setColor(0.85f, 0.95f, 1.00f, 1f);
+                pixmap.drawPixel(drawX, row);
+            }
+        }
+
+        // Horizontal energy bands
+        int[] bandRows = new int[FORCE_FIELD_BAND_COUNT];
+        for (int bandIndex = 0; bandIndex < FORCE_FIELD_BAND_COUNT; bandIndex++) {
+            bandRows[bandIndex] = size / (FORCE_FIELD_BAND_COUNT + 1) * (bandIndex + 1);
+        }
+        for (int bandRow : bandRows) {
+            pixmap.setColor(0.30f, 0.70f, 1.00f, 1f);
+            pixmap.fillRectangle(postWidth, bandRow - 1, usableWidth, 3);
+            pixmap.setColor(0.85f, 0.95f, 1.00f, 1f);
+            pixmap.fillRectangle(postWidth, bandRow,     usableWidth, 1);
+        }
+
+        // Glowing nodes at arc–band intersections
+        for (int arcIndex = 0; arcIndex < FORCE_FIELD_ARC_COUNT; arcIndex++) {
+            for (int bandRow : bandRows) {
+                int nodeX = arcXPositions[arcIndex];
+                pixmap.setColor(0.55f, 0.85f, 1.00f, 1f);
+                pixmap.fillRectangle(nodeX - 2, bandRow - 2, 5, 5);
+                pixmap.setColor(0.85f, 0.95f, 1.00f, 1f);
+                pixmap.fillRectangle(nodeX - 1, bandRow - 1, 3, 3);
+            }
+        }
+
+        // Suppress unused variable warning — seeded for determinism
+        random.nextInt();
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
     }
 }

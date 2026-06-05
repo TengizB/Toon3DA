@@ -1,0 +1,383 @@
+STATUS: IMPLEMENTED
+CATEGORY: Level Design
+TITLE: RESEARCH_LAB room type + 2 walls, 3 props, 1 decal
+CREATED: 2026-06-05
+---
+
+OVERVIEW
+========
+RESEARCH_LAB is a high-tech UAC research facility room: alien specimen study,
+energy/plasma experiments, and a humming AI core under holographic light. It is
+the "what were they MESSING with?" room. Distinct from SERVER_ROOM (pure data /
+racks) and COMMAND_CENTER (oversight / weapon racks): the Research Lab is where
+the invasion was INVITED — experiments went wrong, a containment tank cracked, an
+AI started thinking for itself. Tonally it pairs cold clinical light with arcing
+energy and biological wrongness.
+
+This document ADDS only. It reuses existing pipelines (per-char wall switch in
+WallRenderer, billboard PropRenderer, RoomType decoration in LevelGenerator). No
+new runtime architecture. It defines:
+  - 1 new room type:  RESEARCH_LAB
+  - 2 new walls:      D (holo-data display wall), F (force-field arc wall)
+  - 3 new solid props: I (specimen tank), W (holo-workstation), J (AI core node)
+  - 1 new walkable decal: e (energy scorch / plasma burn)
+
+All chosen symbols are confirmed FREE in docs/tile-symbols.txt (uppercase D F I J
+W available; lowercase e available). See TECHNICAL NOTES for the exact budget.
+
+
+ROOM ATMOSPHERE
+===============
+You step in and the light changes character. Standard corridors are warm-yellow
+fluorescent; the Research Lab is lit cold cyan-white from above, with a secondary
+unstable cyan/magenta flicker thrown by holographic displays and a force-field
+barrier somewhere in the room. The far wall is a wall of glowing data (wall 'D').
+A bank of fluid-filled specimen tanks ('I') line one side, each lit from within,
+some intact, some cracked and leaking onto the floor. A central holographic
+workstation ('W') projects a slowly rotating wireframe — a molecule, a creature,
+a facility map. At the heart of the room sits the AI core node ('J'), a tall
+column of stacked translucent processing slabs pulsing with light, faintly
+talking to itself. A blue force-field barrier ('F') seals off a back alcove
+(usually the loot or the worst enemy). Plasma burns ('e') scorch the floor where
+an experiment, or its subject, broke loose. It should read as: brilliant science,
+abandoned in a hurry, now half-demonic.
+
+The emotional beat: AWE then DREAD. The tech is beautiful; the cracked tank and
+the scorch marks tell you the beauty already failed.
+
+
+GAMEPLAY LOOP
+=============
+1. Player enters a RESEARCH_LAB room (generated room template).
+2. Room READ: cold cyan light + holo-flicker + tanks + AI core = "research; expect
+   energy enemies and a sealed reward."
+3. Player approaches the back alcove and finds it sealed by a force-field wall 'F'.
+   The force-field is treated as a SOLID wall (blocks movement + raycast) BUT it
+   is keyed to the AI core node 'J' (see INTERACTIONS).
+4. Player presses W into the AI core node 'J' (interact, like a terminal). 'J'
+   toggles to a "shut down" state -> every 'F' tile in the SAME room becomes
+   passable floor (force-field drops). This advances the world by one turn.
+   - If 'J' interaction is not implemented in phase 1, ship 'F' as decorative-only
+     (always solid, no alcove gating) and the room still works. See OPEN QUESTIONS.
+5. Dropping the force-field RELEASES whatever was behind it (commonly a Vortex Eye
+   '2' or Revenant '5') AND opens access to a high-value pickup (medkit 'H',
+   security vest 'A', or a keycard). Risk/reward: shut down the core to loot, but
+   you wake what it was containing.
+6. Cracked specimen tanks 'I' may, on a per-room roll, be "live" — stepping
+   adjacent on the turn you damage one (splash) can spawn a Crawler '4' (phase 2,
+   optional). Phase 1: tanks are pure atmosphere props.
+7. Plasma scorch decals 'e' are pure visual; they hint where the force-field arc
+   or a previous energy discharge struck — a breadcrumb toward the alcove.
+
+
+PLAYER EXPERIENCE
+=================
+The core decision: "Do I shut down the AI core?" Shutting it down is the only way
+past the force-field to the reward, but it unleashes the contained threat and
+silences a (planned, optional) ambient benefit the running core might provide.
+This is the roguelike "meaningful choice under pressure" pillar made physical: a
+locked door whose key is also an alarm. Secondary feel: the room teaches enemy
+expectation through architecture — cyan light = energy enemies (Vortex Eye), so a
+trained player pre-loads the right weapon before opening anything.
+
+
+NEW WALL TYPES (2)
+==================
+
+--- WALL 'D' — HOLO-DATA DISPLAY WALL ---
+THE READ: "this is where the thinking happened — live data, still running."
+SOLID: yes (Level.isWall -> true). Full-height wall.
+VISUAL: near-black glass panel base. Over it, glowing cyan UI elements rendered
+as a procedural Pixmap: 3-4 stacked horizontal data bars of varying fill, a grid
+of small square "readout" cells (some lit cyan, a few amber-warning), a faint
+rotating-arc ring motif in one quadrant, and 2-3 scrolling-look horizontal text
+lines drawn as dotted cyan runs. A subtle vertical scan-band one shade brighter.
+Edges framed by a thin dark steel bezel (4px) so adjacent plain walls read as a
+seam, not a blur.
+COLORS (RGBA):
+  DATA_GLASS_BLACK   = (0.04, 0.05, 0.07, 1.0)   panel base
+  DATA_CYAN_DIM      = (0.10, 0.45, 0.55, 1.0)   unlit/dim UI element
+  DATA_CYAN_BRIGHT   = (0.35, 0.95, 1.00, 1.0)   lit bar / active readout
+  DATA_AMBER_WARN    = (1.00, 0.65, 0.15, 1.0)   warning cells (use sparingly, ~10%)
+  DATA_BEZEL_STEEL   = (0.18, 0.20, 0.24, 1.0)   frame
+HEIGHT: 1.0x (standard full wall).
+FREQUENCY: 1 full wall (or 1 wall band) per RESEARCH_LAB, usually the far wall the
+player faces on entry. Max 1-2 tiles elsewhere per level. Looks best lit by the
+room's cold-cyan lighting; do NOT place behind unlit 'u' floor (kills the glow).
+
+--- WALL 'F' — FORCE-FIELD ARC WALL ---
+THE READ: "energy barrier — do not touch / sealed beyond."
+SOLID: yes by default (Level.isWall -> true). May become passable when gated by an
+AI core 'J' (see INTERACTIONS). Full-height.
+VISUAL: mostly transparent-dark base suggesting you can ALMOST see through it,
+overlaid with a vertical lattice of bright electric-blue arcs: 3-4 vertical
+"current" lines that zig slightly, crossed by 2 horizontal energy bands, plus a
+scatter of small bright nodes where lines intersect. Two heavy emitter posts down
+the left and right edges (dark steel with a glowing slot) anchor the field so it
+reads as a deliberate barrier, not a glitch. Per-frame brightness can pulse via
+the existing global-tick / flicker hook if available (optional polish).
+COLORS (RGBA):
+  FIELD_VOID         = (0.03, 0.05, 0.10, 1.0)   near-transparent dark base
+  FIELD_ARC_BLUE     = (0.30, 0.70, 1.00, 1.0)   electric arc lines
+  FIELD_ARC_WHITE    = (0.85, 0.95, 1.00, 1.0)   arc hot core (1px highlight)
+  FIELD_NODE_GLOW    = (0.55, 0.85, 1.00, 1.0)   intersection nodes
+  FIELD_EMITTER_STEEL= (0.16, 0.18, 0.22, 1.0)   edge posts
+HEIGHT: 1.0x.
+FREQUENCY: 1-3 contiguous tiles forming a single barrier across an alcove mouth,
+1 barrier per RESEARCH_LAB max. Never use as a structural exterior wall (player
+expects to be able to drop it; a force-field on the map edge is a trap).
+
+
+NEW SOLID PROPS (3)
+===================
+All block movement (Level.isPropSolid -> true), rendered as billboard sprites by
+PropRenderer, procedural Pixmap, Nearest filter, disposed in dispose().
+
+--- PROP 'I' — SPECIMEN TANK (incubator) ---
+NAME: Specimen tank
+VISUAL: a tall cylindrical glass tube in a dark steel base + cap, filled with a
+glowing fluid (sickly green or cold blue, randomize per instance via seed). A
+suspended SILHOUETTE floats inside — a curled humanoid or a clawed organic blob,
+drawn as a darker translucent mass with one or two faint highlight edges. A column
+of rising bubble dots. Two randomized states: INTACT (clean glass, full fluid) or
+CRACKED (jagged white crack line, fluid level lower, a thin drip and an 'e' or 'O'
+decal likely placed on an adjacent floor tile by the generator).
+HEIGHT MULTIPLIER: 0.85x wall height (tall, reads as a containment cylinder).
+COLORS (RGBA):
+  TANK_FLUID_GREEN   = (0.25, 0.85, 0.45, 1.0)   variant A fluid
+  TANK_FLUID_BLUE    = (0.30, 0.65, 0.95, 1.0)   variant B fluid
+  TANK_GLASS_SHEEN   = (0.80, 0.92, 0.95, 0.5)   vertical highlight streak
+  TANK_STEEL_BASE    = (0.20, 0.22, 0.26, 1.0)   base + cap
+  TANK_SPECIMEN_DARK = (0.06, 0.10, 0.08, 0.85)  floating silhouette
+  TANK_CRACK_WHITE   = (0.90, 0.95, 0.98, 1.0)   crack line (cracked variant)
+USAGE: place in a row of 2-4 along one interior side wall (against the wall, not
+mid-floor). The signature furniture of the room. ~30% of placed tanks roll CRACKED.
+
+--- PROP 'W' — HOLO-WORKSTATION (projection table) ---
+NAME: Holo-workstation
+VISUAL: a low dark console table (steel + a strip of cyan controls) projecting a
+floating HOLOGRAM above it: a slowly implied wireframe drawn as thin cyan lines
+forming a rotating ring/molecule/creature outline, brightest at the base where the
+projector cone fans up, fading toward the top. A soft cyan glow halo sells the
+light source. Because it is a billboard, the hologram is a fixed iconic shape (no
+true rotation needed); the projector-cone gradient sells the "floating" read.
+HEIGHT MULTIPLIER: 0.70x wall height (console is low, hologram extends the visible
+sprite upward but stays below full wall height).
+COLORS (RGBA):
+  HOLO_TABLE_STEEL   = (0.18, 0.20, 0.24, 1.0)   console body
+  HOLO_CTRL_CYAN     = (0.35, 0.95, 1.00, 1.0)   control strip
+  HOLO_PROJ_BRIGHT   = (0.55, 0.95, 1.00, 0.9)   cone base / brightest hologram
+  HOLO_PROJ_DIM      = (0.25, 0.70, 0.85, 0.5)   upper faded hologram
+USAGE: 1 per RESEARCH_LAB, placed near room center as the visual anchor. Walkable
+tiles all around it so the player can circle it. Distinct from 'T' computer
+terminal (T is a flat wall-screen console; W projects volumetric light).
+
+--- PROP 'J' — AI CORE NODE ---
+NAME: AI core node
+VISUAL: a tall vertical stack of 5-6 translucent processing slabs (like glowing
+glass bricks) in a dark heatsink frame, with a bright vertical light seam running
+up the center and small status LEDs (mostly cyan, one or two amber). Faint
+horizontal scan pulses travel up the seam. The tallest/heaviest prop in the room —
+it should dominate sightlines.
+HEIGHT MULTIPLIER: 0.95x wall height (near-full; it is the "boss furniture").
+COLORS (RGBA):
+  AICORE_FRAME_DARK  = (0.12, 0.13, 0.16, 1.0)   heatsink frame
+  AICORE_SLAB_GLASS  = (0.20, 0.55, 0.70, 0.8)   processing slab body
+  AICORE_SEAM_BRIGHT = (0.60, 0.95, 1.00, 1.0)   central light seam
+  AICORE_LED_CYAN    = (0.35, 0.95, 1.00, 1.0)   status LED
+  AICORE_LED_AMBER   = (1.00, 0.65, 0.15, 1.0)   warning LED (1-2 only)
+USAGE: exactly 1 per RESEARCH_LAB. INTERACTABLE (treated like a terminal): facing
+it and pressing W toggles a SHUT_DOWN state that drops the room's 'F' force-field
+barrier (see INTERACTIONS). If interaction isn't implemented in phase 1, it is a
+pure tall light prop.
+
+
+NEW WALKABLE DECAL (1)
+======================
+--- DECAL 'e' — ENERGY SCORCH (plasma burn) ---
+NAME: Energy scorch
+VISUAL: an irregular blackened scorch blotch on the floor with a desaturated outer
+ring, overlaid by 3-5 thin radiating ELECTRIC-blue arc filaments (lichtenberg-
+style branching) that have not fully faded, and a couple of bright white-hot
+flecks at the center. Reads as: "energy discharged here recently."
+HEIGHT MULTIPLIER: 0.18x wall height (flat ground decal, same band as '.' / 'O').
+COLORS (RGBA):
+  SCORCH_BLACK       = (0.05, 0.05, 0.06, 1.0)   burn center
+  SCORCH_RING        = (0.20, 0.18, 0.16, 1.0)   desaturated outer ring
+  SCORCH_ARC_BLUE    = (0.40, 0.75, 1.00, 1.0)   residual arc filaments
+  SCORCH_HOT_WHITE   = (0.90, 0.96, 1.00, 1.0)   center flecks
+USAGE: walkable. Scatter 2-5 per RESEARCH_LAB, biased toward (a) tiles adjacent to
+cracked specimen tanks 'I' and (b) tiles leading up to the force-field 'F' alcove,
+forming a visual breadcrumb. Distinct from 'O' oil pool (teal, no arcs) and '.'
+blood (red, no arcs).
+
+
+ROOM GENERATION RULES
+=====================
+SIZE: medium-to-large. Interior floor footprint 6x5 to 9x7 tiles (excluding the
+wall ring). Smaller than LARGE/COMMAND_CENTER, bigger than a STANDARD room. Needs
+room for one tank row + central workstation + an alcove.
+
+LIGHTING: floor inside the room uses a mix of lit ' ' and a few flickering 'f'
+tiles near the AI core and force-field (sells unstable energy). Avoid 'u' unlit
+floor in the main body (it kills the cyan glow reads). 1-2 'f' tiles max.
+
+LAYOUT TEMPLATE (conceptual, generator fills a rectangle then decorates):
+  - Far wall (opposite the entrance): a band of 'D' holo-data display wall.
+  - One long interior side: a row of 2-4 'I' specimen tanks flush to the wall,
+    ~30% rolled CRACKED, each cracked tank places an 'e' or 'O' on an adjacent
+    floor tile.
+  - Room center: exactly 1 'W' holo-workstation, walkable on all 4 sides.
+  - A back alcove (2x2 or 1x3 recess): mouth sealed by 1-3 'F' force-field tiles;
+    inside the alcove place 1 high-value pickup (H / A / a keycard) AND 1 enemy
+    spawn behind the field (commonly '2' Vortex Eye, sometimes '5' Revenant).
+  - Exactly 1 'J' AI core node, placed against a wall in line-of-sight of the
+    force-field alcove (it is the "key").
+  - 2-5 'e' energy scorch decals scattered, biased toward cracked tanks and the
+    alcove approach.
+
+PROP PLACEMENT DENSITY (per room, placeholder values — TUNE):
+  'I' specimen tank      : 2-4   (one wall-aligned row)
+  'W' holo-workstation   : exactly 1 (center anchor)
+  'J' AI core node       : exactly 1 (wall, near alcove)
+  'e' energy scorch      : 2-5
+  'D' holo-data wall     : 1 band / far wall (3-6 tiles wide)
+  'F' force-field        : 1-3 contiguous (single alcove barrier)
+Keep total solid props <= ~7 so the room stays navigable (no boxed-in player).
+
+ENEMY SPAWNS (thematic fit): cold cyan energy theme leans ENERGY/PSYCHIC enemies.
+  - Primary: '2' Vortex Eye (energy/psychic — perfect thematic match, behind 'F').
+  - Secondary: '5' Revenant (a failed experiment / reanimated subject) behind 'F'
+    in higher-difficulty rooms.
+  - Ambient body of room: 0-2 of '3' Ghoul or '4' Crawler loose (leaked specimens).
+  - Avoid heavy industrial spawns here (this is not a reactor floor).
+RARITY: RESEARCH_LAB should be UNCOMMON — at most 1 per generated level, sometimes
+0. It is a set-piece room, not filler.
+
+
+VISUAL DESIGN SUMMARY (palette discipline)
+==========================================
+The room's identity is COLD CYAN + ELECTRIC BLUE with AMBER WARNINGS as accent and
+sickly green/blue tank fluid as the only organic color. This palette deliberately
+contrasts the warm-yellow corridors and the red/orange of hazard/armory rooms, so
+the Research Lab reads instantly different on sight. Force-field and AI core share
+the electric-blue family on purpose: the player learns "blue glow = energy system =
+the AI controls it." Amber is the only warning color and must stay rare (~10% of
+lit elements) or it loses meaning.
+
+
+TECHNICAL NOTES
+===============
+NEW SYMBOLS — ALL CONFIRMED FREE in docs/tile-symbols.txt (uppercase D F I J W
+free; lowercase e free). EXACT ASSIGNMENTS:
+
+  WALLS (add to Level.isWall -> true; add case to WallRenderer wall switch):
+    'D'  Holo-data display wall   1.0x height   lab_wall_holodata (procedural)
+    'F'  Force-field arc wall     1.0x height   lab_wall_forcefield (procedural)
+
+  SOLID PROPS (add to Level.isPropSolid -> true; add case to PropRenderer):
+    'I'  Specimen tank            0.85x height
+    'W'  Holo-workstation         0.70x height
+    'J'  AI core node             0.95x height (INTERACTABLE — see below)
+
+  WALKABLE DECAL (add to Level.isPropDecal -> true; add case to PropRenderer):
+    'e'  Energy scorch            0.18x height
+
+REQUIRED — adding each symbol MUST follow the STRICT RULE checklist in
+docs/tile-symbols.txt (this design does NOT modify code; it specifies it):
+  1. Add all 6 symbols to docs/tile-symbols.txt in the correct sections
+     (D,F under WALLS; I,J,W under SOLID PROPS; e under WALKABLE DECALS).
+  2. Update SYMBOL BUDGET in docs/tile-symbols.txt: "Currently assigned" 52 -> 58,
+     "Remaining" 43 -> 37; remove D F I J W e from the Free-characters lists.
+  3. Add D,F to Level.isWall(); add I,J,W to Level.isPropSolid(); add e to
+     Level.isPropDecal().
+  4. Wire textures/sprites: D,F in WallRenderer (procedural Pixmap, Nearest,
+     dispose in dispose()); I,J,W,e in PropRenderer.
+  5. Add Constants: per-prop height multipliers
+     (PROP_HEIGHT_SPECIMEN_TANK=0.85f, PROP_HEIGHT_HOLO_WORKSTATION=0.70f,
+      PROP_HEIGHT_AICORE_NODE=0.95f, PROP_HEIGHT_ENERGY_SCORCH=0.18f),
+     any texture-seed constants, and the RGBA color constants listed above
+     (or local Pixmap-build constants in the renderer).
+
+AFFECTED CLASSES:
+  - Level.java          : isWall (D,F), isPropSolid (I,J,W), isPropDecal (e).
+  - WallRenderer.java   : two new procedural wall Pixmaps + switch cases.
+  - PropRenderer.java   : four new billboard sprites + height-multiplier lookup.
+  - LevelGenerator.java : add RoomType.RESEARCH_LAB enum value + a decorate
+    method following the existing RoomType decoration pattern (place 'D' far wall,
+    'I' tank row, 'W' center, 'J' wall, 'F' alcove barrier + reward + spawn, 'e'
+    scatter). Add RESEARCH_LAB to the room-type roll table at LOW weight (uncommon,
+    cap 1 per level).
+  - Constants.java      : height multipliers + color/seed constants.
+  - docs/tile-symbols.txt : symbol entries + budget update.
+
+AI CORE 'J' INTERACTION (phase 2, optional — see OPEN QUESTIONS):
+  - Needs an "interactable prop" hook. If the project already has terminal/door
+    interaction (player presses W facing an interactable -> event), reuse it.
+  - State to store: per-room boolean aiCoreShutDown. On toggle, find all 'F' tiles
+    in the same room region and convert them to walkable floor ' ' (and stop
+    rendering them as solid). One turn consumed.
+  - If no interaction hook exists yet, ship phase 1 with 'F' as a permanently solid
+    decorative wall and place the reward in the open room body instead of an alcove.
+    The room is fully shippable without the gating mechanic.
+
+MATH/ALGORITHM NOTES:
+  - No new geometry math. Walls reuse the existing DDA wall pipeline; props reuse
+    the existing billboard projection. The only new "logic" is the optional 'F'
+    drop, which is a tile-state mutation (solid->floor) over a room region — pure
+    2D grid op, no raycast changes.
+
+
+BALANCE NOTES (all PLACEHOLDER — flag for tuning)
+=================================================
+  - RESEARCH_LAB spawn weight: LOW. Target ~0-1 per generated level. (PLACEHOLDER)
+  - Cracked-tank probability: 30% per placed 'I'. (PLACEHOLDER)
+  - Force-field reward: exactly 1 high-value pickup (H / A / keycard) behind 'F'.
+  - Force-field guard: 1 spawn behind 'F' ('2' Vortex Eye default, '5' Revenant on
+    deeper levels). Releasing it on core shutdown is the cost of the reward.
+  - Loose ambient enemies in room body: 0-2 (Ghoul/Crawler). (PLACEHOLDER)
+  - 'f' flickering floor tiles: 1-2 max (energy instability flavor, not strobe spam).
+  - Keep solid-prop count <= 7 so the room never boxes the player in.
+  - Cyan/amber ratio: amber accents <= ~10% of lit UI elements (warning legibility).
+
+
+INTERACTIONS (with existing / planned systems)
+==============================================
+1. AI CORE 'J'  <->  FORCE-FIELD 'F': the core is the "key" to the field. Shutting
+   the core down drops the field, granting the reward but releasing the contained
+   enemy. This is the room's central risk/reward and the reason both share the
+   electric-blue palette. (Pairs with any keycard-door / interactable-terminal
+   system already designed in uac-keycard-doors-security-tiers.txt.)
+2. SPECIMEN TANK 'I'  <->  HAZARD CHAIN REACTIONS: cracked tanks naturally invite
+   the planned hazard-chain system — a live tank that is shot could splash and
+   spawn a leaked Crawler '4' or apply a brief slow/toxic floor (ties into
+   hazard-chain-reactions-fire-toxic-explosive.txt). Phase 1: atmosphere only.
+3. RESEARCH_LAB LIGHTING  <->  LABORATORY-LIGHTING / colored-light systems: the
+   cold-cyan room tint and holo-flicker should drive the existing/planned colored
+   lighting (laboratory-lighting.txt, lighting-system-overhaul.txt). 'D' walls and
+   'W'/'J' props are emissive accents the lighting pass can sample.
+4. ENERGY SCORCH 'e'  <->  ENEMY THEMING: scorch breadcrumbs reinforce that this
+   floor hosts ENERGY enemies (Vortex Eye), training the player to swap to plasma/
+   energy weapons (plasma-gun / plasma-rifle / railgun docs) before opening 'F'.
+5. ROOM TYPE TABLE  <->  level-generation-improvements RoomType system: slots in as
+   one more RoomType.RESEARCH_LAB with its own decorate method; no generator
+   rewrite, just a new low-weight entry capped at 1 per level.
+
+
+OPEN QUESTIONS
+==============
+1. Does an interactable-prop hook exist yet (press W facing a prop -> event)? If
+   not, ship 'J' as decorative and 'F' as always-solid (reward in open room body),
+   or fast-follow the hook. Which?
+2. Should the dropped force-field 'F' stay down for the rest of the run, or
+   re-raise when the player leaves the room? (Recommend: stays down — one-way.)
+3. Live specimen tanks (shoot 'I' -> splash/spawn): in-scope for phase 1 or defer
+   to the hazard-chain system? (Recommend: defer; ship tanks as atmosphere first.)
+4. Should the running AI core 'J' grant a passive room buff (e.g. brief mini-map
+   reveal / scan) that you LOSE by shutting it down, deepening the trade-off?
+   (Recommend yes as phase 2 polish — strengthens the meaningful-choice pillar.)
+5. Force-field VFX: animate brightness via the global-tick/flicker hook, or static
+   Pixmap? (Static is cheaper and respects "no allocations in render()"; animate
+   only by swapping/scaling brightness, never reallocating the Pixmap.)
+6. Should 'D' holo-data walls ever appear OUTSIDE the Research Lab (e.g. 1-2 in a
+   Command Center)? (Recommend: very rare, to keep the read mostly lab-exclusive.)

@@ -22,7 +22,7 @@ v   Vent wall           Room interior side walls. 1-2 per room max.           la
 t   Terminal wall       Rare. Corner alcoves, dead-ends. Max 1-2 per level.   lab_wall_terminal.jpg
 w   Wires wall          Near server/generator areas. Sparse.                  lab_wall_wires.jpg
 h   Hazard wall         Industrial caution stripes (yellow/black). Near explosive barrels.
-r   Rust wall           Corroded steel. Near unlit floors or oil pools.
+j   Rust wall           Corroded steel. Near unlit floors or oil pools.
 G   Gore wall           Flesh-infested demonic surface. Near corpse clusters.
 k   Bulkhead wall       Heavy armoured plates. Dead ends, stairwells.
 N   Glass wall          Reinforced containment glass. Special rooms only.
@@ -32,6 +32,8 @@ M   Medical wall        Hospital/clinic room walls.
 Z   Cryo wall           Frost-damaged cryogenic chamber walls.
 U   Radiation wall      Radiation-burned power-plant walls.
 X   Blast wall          Battle-scarred armory walls.
+D   Holo-data wall      Glowing cyan data-panel display wall. Research Lab far wall.
+F   Force-field wall    Electric-blue energy barrier. Research Lab alcove mouth.
 
 DOORS (solid until opened; runtime state managed by DoorManager)
 ----------------------------------------------------------------
@@ -65,6 +67,9 @@ C   Crate               Supply/ammo box (warm brown wood, cross-plank).        0
 &   Bio-pod             Cryogenic/specimen container. Cryo and containment.
 =   Weapon rack         Gun/equipment display stand. Armory, command rooms.
 @   Special equipment   Advanced machinery. Rare. Standard rooms only.
+I   Specimen tank       Tall glass cylinder with suspended specimen. Research Lab tank row.   0.85x wall height
+W   Holo-workstation    Low console projecting a holographic wireframe above it.              0.70x wall height
+J   AI core node        Tall stack of translucent processing slabs, glowing cyan seam.        0.95x wall height
 
 WALKABLE DECALS (player walks over; rendered as flat billboard)
 --------------------------------------------------------------
@@ -72,6 +77,7 @@ m   Corpse              Fallen marine or enemy. Atmosphere.                    0
 s   Blood stain (alt)   Variant blood decal.                                   0.22x wall height
 .   Blood stain         Pooled blood. Near corpses and combat zones.           0.18x wall height
 O   Oil/fluid pool      Coolant spill or fluid leak. Dark teal iridescent.     0.18x wall height
+e   Energy scorch       Plasma burn with residual electric-arc filaments.       0.18x wall height
 
 PICKUPS (walkable; collected on player step)
 -------------------------------------------
@@ -96,14 +102,14 @@ ENEMY SPAWN MARKERS (temporary — extracted by LevelLoader, then replaced with 
 SYMBOL BUDGET
 -------------
 Total printable ASCII characters: 95  (codes 32-126)
-Currently assigned:               52
-Remaining:                        43
+Currently assigned:               59
+Remaining:                        36
 
 Free characters (not yet assigned):
 ! " $ ^ _ ` ~ | { } [ ] \ / < > ( ) * - + (some already used — check above)
 Digits: 6 7 8 9  (0-5 used for enemy spawns)
-Uppercase: D F I J K V W Z (careful — check walls/doors above)
-Lowercase: e i j n o q z
+Uppercase: K V  (D F I J W taken; Z taken as cryo; check walls/doors above)
+Lowercase: i n o q z  (e j taken)
 
 PREFERRED SYMBOLS FOR NEW ADDITIONS
 ------------------------------------
