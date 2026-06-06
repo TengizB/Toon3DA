@@ -5,6 +5,8 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
@@ -50,6 +52,12 @@ public final class EnemyRenderer implements Renderable, Disposable {
     // Reused per-frame colour buffer written by GameMath.healthBarColor — no allocation
     private final float[]   barColorRgb = new float[3];
 
+    // Name tag rendering — font and layout pre-allocated to avoid render-loop allocation
+    private final BitmapFont  nameTagFont;
+    private final GlyphLayout nameTagLayout;
+    // Reusable scratch color for name tag tinting — never allocated inside render()
+    private final Color       nameTagColor = new Color();
+
     private float playerWorldX = 0f;
     private float playerWorldY = 0f;
     private float directionX   = 1f;
@@ -74,6 +82,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.batch              = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
         this.textures           = buildTextures();
         this.whitePixelTexture  = buildWhitePixelTexture();
+        this.nameTagFont        = new BitmapFont();
+        this.nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
+        this.nameTagLayout      = new GlyphLayout();
     }
 
     public void setPlayerState(float worldX, float worldY,
@@ -308,9 +319,35 @@ public final class EnemyRenderer implements Renderable, Disposable {
                     batch.draw(whitePixelTexture, barLeft, barBottom, fillWidth, barHeight,
                                0, 0, 1, 1, false, false);
                 }
+
+                // Layer 4: Name tag — level-coloured text above the health bar when close enough
+                Enemy tagEnemy = enemies.get(sortedIndices[sortedPosition]);
+                if (depth <= ENEMY_NAME_TAG_MAX_DISTANCE_TILES && !tagEnemy.nameTag.isEmpty()) {
+                    nameTagLayout.setText(nameTagFont, tagEnemy.nameTag);
+                    float tagX = barLeft + (barWidth - nameTagLayout.width) / 2f;
+                    float tagY = barBottom + barHeight + ENEMY_NAME_TAG_BAR_GAP + nameTagLayout.height;
+                    resolveNameTagColor(tagEnemy.dungeonLevel, nameTagColor);
+                    nameTagFont.setColor(nameTagColor);
+                    nameTagFont.draw(batch, nameTagLayout, tagX, tagY);
+                }
             }
             batch.setColor(Color.WHITE);
+            nameTagFont.setColor(Color.WHITE);
             batch.end();
+        }
+    }
+
+    private static void resolveNameTagColor(int dungeonLevel, Color out) {
+        if (dungeonLevel <= 2) {
+            out.set(ENEMY_NAME_TAG_TIER1_R, ENEMY_NAME_TAG_TIER1_G, ENEMY_NAME_TAG_TIER1_B, 1f);
+        } else if (dungeonLevel <= 4) {
+            out.set(ENEMY_NAME_TAG_TIER2_R, ENEMY_NAME_TAG_TIER2_G, ENEMY_NAME_TAG_TIER2_B, 1f);
+        } else if (dungeonLevel <= 5) {
+            out.set(ENEMY_NAME_TAG_TIER3_R, ENEMY_NAME_TAG_TIER3_G, ENEMY_NAME_TAG_TIER3_B, 1f);
+        } else if (dungeonLevel <= 7) {
+            out.set(ENEMY_NAME_TAG_TIER4_R, ENEMY_NAME_TAG_TIER4_G, ENEMY_NAME_TAG_TIER4_B, 1f);
+        } else {
+            out.set(ENEMY_NAME_TAG_TIER5_R, ENEMY_NAME_TAG_TIER5_G, ENEMY_NAME_TAG_TIER5_B, 1f);
         }
     }
 
@@ -318,6 +355,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
     public void dispose() {
         batch.dispose();
         whitePixelTexture.dispose();
+        nameTagFont.dispose();
         for (Texture texture : textures.values()) {
             texture.dispose();
         }

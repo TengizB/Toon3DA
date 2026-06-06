@@ -1,0 +1,93 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI / Systems
+TITLE: Fog of War on Mini-Map
+---
+
+## OVERVIEW
+
+The mini-map currently renders all tiles within the MINI_MAP_TILE_RADIUS window with
+full knowledge — walls, floors, doors, and room layouts are all visible regardless of
+whether the player has explored them. Fog of War limits the mini-map to only tiles the
+player has physically visited, creating genuine exploration tension and making the map
+feel like a reward that builds over time.
+
+---
+
+## GAMEPLAY FEEL
+
+- New level starts fully dark; player can only see the entrance tile.
+- Each tile the player steps on is permanently revealed on the mini-map.
+- Unexplored tiles within the radius window are drawn as a featureless dark colour,
+  not as walls or floors.
+- Previously explored tiles that are currently off-screen remain visible; the map
+  is never un-revealed.
+- Doors, pickups, and enemy positions are only visible once the tile is explored.
+  (Enemies that move out of a revealed area disappear from the map.)
+
+---
+
+## DATA STRUCTURE
+
+A 2D boolean grid `explored[LEVEL_GEN_GRID_WIDTH][LEVEL_GEN_GRID_HEIGHT]` tracks
+which tiles have been visited. This array lives in `Level` or a new lightweight
+`FogOfWarMap` class in the `level` package.
+
+Marking: every time `advanceMove()` in `PlayerController` settles on a new tile it
+calls `fogMap.reveal(tileColumn, tileRow)`. Consider also auto-revealing all tiles
+adjacent to the player's settled position (so walls are pre-revealed one step ahead,
+matching Doom RPG behaviour).
+
+Persistence: the `explored` grid is level-scoped and reset when descending stairs.
+It is NOT persisted across runs (roguelike convention).
+
+---
+
+## RENDERING CHANGES  (`LevelRenderer.java`)
+
+Current flow: iterate over all tiles in the radius window and draw each tile's colour.
+
+New flow: before drawing a tile check `fogMap.isRevealed(tileColumn, tileRow)`.
+- Revealed tile → draw as today (wall/floor/door colour).
+- Unrevealed tile → draw as `FOG_COLOR` (dark grey, e.g. `0.08, 0.08, 0.08`).
+- Out-of-bounds tile → draw nothing (already the case).
+
+A second optional effect: tiles that are revealed but NOT in the current render radius
+can be drawn at reduced brightness (dim memory) to distinguish "seen long ago" from
+"near and fresh". This is optional polish, not required for the core feature.
+
+---
+
+## CONSTANTS TO ADD  (`Constants.java`)
+
+```
+FOG_OF_WAR_REVEAL_RADIUS  = 0   // tiles auto-revealed around settled position (0 = only current tile)
+FOG_MINIMAP_UNEXPLORED_R  = 0.08f
+FOG_MINIMAP_UNEXPLORED_G  = 0.08f
+FOG_MINIMAP_UNEXPLORED_B  = 0.08f
+FOG_MINIMAP_MEMORY_DIM    = 0.55f  // brightness multiplier for explored-but-distant tiles (optional)
+```
+
+---
+
+## TECHNICAL NOTES
+
+- `FogOfWarMap` should be a plain Java class (no LibGDX dependency) in the `level`
+  package. It wraps a `boolean[][]` with `reveal(col, row)` and `isRevealed(col, row)`
+  accessors. Size is fixed at construction from level dimensions.
+- `Level` can own and expose the `FogOfWarMap` as a package-accessible field, or it
+  can be passed through World → LevelRenderer → PlayerController as a dependency.
+- Prefer passing as a constructor argument (avoids null checks vs optional wiring).
+- Zero per-frame allocations: `isRevealed()` is a simple array lookup.
+- `LevelRenderer` already iterates the tile window in `render()` — the change is
+  one extra boolean guard per tile, negligible cost.
+
+---
+
+## IMPLEMENTATION ORDER
+
+1. Add `FogOfWarMap` class in `level/` package.
+2. Wire `reveal()` calls into `PlayerController.advanceMove()` on settle.
+3. Pass `FogOfWarMap` reference to `LevelRenderer` constructor.
+4. Add the `isRevealed()` guard in `LevelRenderer.render()`.
+5. Add constants to `Constants.java`.
+6. Reset the fog grid in `World.buildLevelDependentResources()` when descending.

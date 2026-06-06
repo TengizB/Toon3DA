@@ -125,7 +125,6 @@ public class LevelGenerator {
         placeContainmentBlockProps(grid, rooms);
         placeResearchLabProps(grid, rooms);
         placePickups(grid, rooms);
-        placeHazardWallsNearBarrels(grid);
 
         // Phase 4 — enemies (after props so spawns land on walkable tiles only)
         List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
@@ -1279,9 +1278,6 @@ public class LevelGenerator {
                     }
                 }
             }
-            if (config.explosiveBarrels && random.nextFloat() < 0.30f) {
-                tryPlaceAtmosphericPropNearWall(grid, room, 'E');
-            }
         }
     }
 
@@ -1344,9 +1340,6 @@ public class LevelGenerator {
             if (config.corpses) {
                 tryPlaceAtmosphericPropNearWall(grid, room, 'm');
                 if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'm');
-            }
-            if (config.explosiveBarrels && random.nextFloat() < 0.40f) {
-                tryPlaceAtmosphericPropNearWall(grid, room, 'E');
             }
         }
     }
@@ -1428,7 +1421,7 @@ public class LevelGenerator {
 
     /**
      * Power Plant props: generators '%' clustered near centre, security cameras '#',
-     * radioactive barrels 'g' scattered around (coolant drums), explosive barrel 'E' hazard.
+     * radioactive barrels 'g' scattered around (coolant drums), oil pools 'O'.
      */
     private void placePowerPlantProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
@@ -1443,9 +1436,6 @@ public class LevelGenerator {
             if (config.radioactiveBarrels) {
                 tryPlaceAtmosphericPropNearWall(grid, room, 'g');
                 if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'g');
-            }
-            if (config.explosiveBarrels && random.nextFloat() < 0.50f) {
-                tryPlaceAtmosphericPropNearWall(grid, room, 'E');
             }
             if (config.oilPools) {
                 tryPlaceAtmosphericProp(grid, room, 'O');
@@ -1739,7 +1729,6 @@ public class LevelGenerator {
         float   total   = 0f;
 
         if (config.radioactiveBarrels) { chars[count] = 'g'; weights[count++] = config.radioactiveBarrelWeight; total += config.radioactiveBarrelWeight; }
-        if (config.explosiveBarrels)   { chars[count] = 'E'; weights[count++] = config.explosiveBarrelWeight;   total += config.explosiveBarrelWeight;   }
         if (config.crates)             { chars[count] = 'C'; weights[count++] = config.crateWeight;             total += config.crateWeight;             }
         if (config.computerTerminals)  { chars[count] = 'T'; weights[count++] = config.terminalWeight;          total += config.terminalWeight;          }
         if (config.lockers)            { chars[count] = 'L'; weights[count++] = config.lockerWeight;            total += config.lockerWeight;            }
@@ -1819,26 +1808,6 @@ public class LevelGenerator {
             if (isWalkableFloor(grid, tileColumn, tileRow)) {
                 grid[tileRow][tileColumn] = pickupChar;
                 return;
-            }
-        }
-    }
-
-    private void placeHazardWallsNearBarrels(char[][] grid) {
-        int[] deltaColumns = { 0,  0,  1, -1 };
-        int[] deltaRows    = { 1, -1,  0,  0 };
-        for (int tileRow = 0; tileRow < Constants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
-            for (int tileColumn = 0; tileColumn < Constants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
-                if (grid[tileRow][tileColumn] != 'E') continue;
-                for (int direction = 0; direction < 4; direction++) {
-                    int neighborColumn = tileColumn + deltaColumns[direction];
-                    int neighborRow    = tileRow    + deltaRows[direction];
-                    if (!isInBounds(neighborColumn, neighborRow)) continue;
-                    if (Level.isWall(grid[neighborRow][neighborColumn])
-                            && grid[neighborRow][neighborColumn] == 'x'
-                            && random.nextFloat() < Constants.LEVEL_GEN_HAZARD_WALL_CHANCE) {
-                        grid[neighborRow][neighborColumn] = 'h';
-                    }
-                }
             }
         }
     }

@@ -34,9 +34,6 @@ public final class LevelGenConfig {
     /** Radioactive barrels ('g'). */
     public boolean radioactiveBarrels = true;
 
-    /** Explosive barrels ('E'). Placement also triggers hazard-wall post-pass. */
-    public boolean explosiveBarrels = true;
-
     /** Crates ('C'). */
     public boolean crates = true;
 
@@ -92,7 +89,6 @@ public final class LevelGenConfig {
     // -------------------------------------------------------------------------
 
     public float radioactiveBarrelWeight = 0.22f;
-    public float explosiveBarrelWeight   = 0.08f;
     public float crateWeight             = 0.10f;
     public float terminalWeight          = 0.10f;
     public float lockerWeight            = 0.08f;
