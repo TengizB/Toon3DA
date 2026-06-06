@@ -6,6 +6,7 @@ import ge.tbegvadze.toon3d.entity.ImpactEventListener;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.level.EnemySpawnPoint;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.progression.KillEventListener;
 import ge.tbegvadze.toon3d.progression.KillXpListener;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameBalance;
@@ -33,6 +34,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private final DoorManager doorManager;
     private ImpactEventListener impactEventListener;
     private KillXpListener      killXpListener;
+    private KillEventListener   killEventListener;
 
     /** Flat damage bonus from player level-up DAMAGE_BOOST choices; added to every hit. */
     private int playerFlatDamageBonus = 0;
@@ -83,6 +85,8 @@ public final class EnemyManager implements EnemyHitTarget {
             enemy.maxHealth              = scaledHealth;
             enemy.health                 = scaledHealth;
             enemy.attackDamageMultiplier = damageScale;
+            enemy.dungeonLevel           = dungeonDepth;
+            enemy.nameTag                = type.displayName() + " LVL " + dungeonDepth;
             list.add(enemy);
         }
         return list;
@@ -96,6 +100,11 @@ public final class EnemyManager implements EnemyHitTarget {
     /** Wires the XP system so every kill awards experience to the player. */
     public void setKillXpListener(KillXpListener listener) {
         this.killXpListener = listener;
+    }
+
+    /** Wires the kill-message system so every kill fires a display notification with name + XP. */
+    public void setKillEventListener(KillEventListener listener) {
+        this.killEventListener = listener;
     }
 
     /**
@@ -144,8 +153,12 @@ public final class EnemyManager implements EnemyHitTarget {
         enemy.triggerHitFlash();
 
         if (!enemy.isAlive()) {
+            int xpAwarded = enemy.type.baseXpReward();
             if (killXpListener != null) {
-                killXpListener.onEnemyKilledForXp(enemy.type.baseXpReward());
+                killXpListener.onEnemyKilledForXp(xpAwarded);
+            }
+            if (killEventListener != null) {
+                killEventListener.onEnemyKilled(enemy.nameTag, xpAwarded);
             }
             killEnemy(enemy);
             // Fire after killEnemy: enemy position/type are still valid (killEnemy only

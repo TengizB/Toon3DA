@@ -706,6 +706,13 @@ public final class Constants {
     public static final float HIT_VIGNETTE_FADE_SECONDS  = 0.6f;
     public static final float HIT_VIGNETTE_MAX_ALPHA     = 0.55f;
 
+    // Level-up Vignette — cyan screen-edge burst played after choosing a level-up card
+    public static final float LEVEL_UP_VIGNETTE_FADE_SECONDS = 0.8f;
+    public static final float LEVEL_UP_VIGNETTE_MAX_ALPHA    = 0.55f;
+
+    // Enemy name tag — shown above health bar only when close enough
+    public static final float ENEMY_NAME_TAG_MAX_DISTANCE_TILES = 8f;
+
     // Level transitions — stairs-down tile ('>' char)
     // STAIRS_DOWN_CHAR: classic roguelike glyph; exactly one per procedurally generated floor.
     public static final char  STAIRS_DOWN_CHAR                   = '>';
