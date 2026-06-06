@@ -26,6 +26,12 @@ public final class Enemy {
     /** Wall-clock seconds remaining in the white hit-flash. Purely cosmetic — does not affect simulation. */
     public float      hitFlashTimerSeconds = 0f;
 
+    /** Dungeon floor on which this enemy spawned (1-based). Used for the name-tag display "Type LVL N". */
+    public int        dungeonLevel = 1;
+
+    /** Pre-built display string shown above the health bar, e.g. "Corruptor LVL 2". Set at spawn time. */
+    public String     nameTag = "";
+
     public Enemy(EnemyType type, int tileColumn, int tileRow) {
         this.type       = type;
         this.tileColumn = tileColumn;

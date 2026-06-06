@@ -8,9 +8,11 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.util.Constants;
 
 /**
- * Draws a red radial-gradient vignette over the full screen when the player takes damage.
+ * Draws a radial-gradient vignette over the full screen.
+ * Two independent overlays share one texture:
+ *   - Red (damage)    — triggered by setDamageIntensity(1f)
+ *   - Cyan (level-up) — triggered by setLevelUpIntensity(1f)
  * The gradient is baked into a 256×256 texture at construction — zero per-frame work.
- * Call setIntensity(1f) on damage; intensity decays to 0 over HIT_VIGNETTE_FADE_SECONDS.
  */
 public final class HitVignetteRenderer implements Disposable {
 
@@ -18,34 +20,50 @@ public final class HitVignetteRenderer implements Disposable {
 
     private final SpriteBatch batch;
     private final Texture     vignetteTexture;
-    private float             intensity;
+    private float             damageIntensity;
+    private float             levelUpIntensity;
 
     public HitVignetteRenderer() {
-        batch           = new SpriteBatch();
-        vignetteTexture = buildVignetteTexture();
-        intensity       = 0f;
+        batch            = new SpriteBatch();
+        vignetteTexture  = buildVignetteTexture();
+        damageIntensity  = 0f;
+        levelUpIntensity = 0f;
     }
 
-    /** Sets the flash intensity to the given value (1 = full hit, decays to 0). */
+    /** Triggers the red damage vignette at full intensity. */
     public void setIntensity(float newIntensity) {
-        intensity = newIntensity;
+        damageIntensity = newIntensity;
     }
 
-    /** Call once per frame in World.update() to decay the intensity. */
+    /** Triggers the cyan level-up vignette at full intensity. */
+    public void setLevelUpIntensity(float newIntensity) {
+        levelUpIntensity = newIntensity;
+    }
+
+    /** Call once per frame in World.update() to decay both intensities. */
     public void update(float deltaTime) {
-        if (intensity > 0f) {
-            intensity = Math.max(0f, intensity - deltaTime / Constants.HIT_VIGNETTE_FADE_SECONDS);
+        if (damageIntensity > 0f) {
+            damageIntensity = Math.max(0f, damageIntensity - deltaTime / Constants.HIT_VIGNETTE_FADE_SECONDS);
+        }
+        if (levelUpIntensity > 0f) {
+            levelUpIntensity = Math.max(0f, levelUpIntensity - deltaTime / Constants.LEVEL_UP_VIGNETTE_FADE_SECONDS);
         }
     }
 
     public void render(OrthographicCamera camera) {
-        if (intensity <= 0f) return;
-        float alpha = intensity * Constants.HIT_VIGNETTE_MAX_ALPHA;
+        if (damageIntensity <= 0f && levelUpIntensity <= 0f) return;
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        batch.setColor(1f, 0f, 0f, alpha);
-        batch.draw(vignetteTexture,
-                0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
+        if (damageIntensity > 0f) {
+            float alpha = damageIntensity * Constants.HIT_VIGNETTE_MAX_ALPHA;
+            batch.setColor(1f, 0f, 0f, alpha);
+            batch.draw(vignetteTexture, 0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
+        }
+        if (levelUpIntensity > 0f) {
+            float alpha = levelUpIntensity * Constants.LEVEL_UP_VIGNETTE_MAX_ALPHA;
+            batch.setColor(0f, 0.85f, 1f, alpha);
+            batch.draw(vignetteTexture, 0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
+        }
         batch.setColor(1f, 1f, 1f, 1f);
         batch.end();
     }
