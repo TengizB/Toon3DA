@@ -12,6 +12,14 @@ public final class Enemy {
     public int tileRow;
 
     public int        health;
+    /** Effective max HP for this instance — may exceed type.maxHealth() on deeper floors. */
+    public int        maxHealth;
+    /**
+     * Depth-scaling multiplier applied to type.attackDamage() on each turn.
+     * Set to {@code GameBalance.enemyDamageScaleForDepth(depth)} at spawn time.
+     * Floor 1 = 1.0 (no scaling).
+     */
+    public float      attackDamageMultiplier = 1f;
     public EnemyState state              = EnemyState.DORMANT;
     public int        turnCounter        = 0;
     public int        stuckTurns         = 0;
@@ -22,7 +30,13 @@ public final class Enemy {
         this.type       = type;
         this.tileColumn = tileColumn;
         this.tileRow    = tileRow;
-        this.health     = type.maxHealth();
+        this.maxHealth  = type.maxHealth();
+        this.health     = this.maxHealth;
+    }
+
+    /** Returns this enemy's attack damage scaled by the depth multiplier, minimum 1. */
+    public int scaledAttackDamage() {
+        return Math.max(1, Math.round(type.attackDamage() * attackDamageMultiplier));
     }
 
     public boolean isAlive() {

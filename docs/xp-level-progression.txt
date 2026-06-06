@@ -1,0 +1,146 @@
+XP AND LEVEL PROGRESSION SYSTEM
+================================
+docs/xp-level-progression.txt
+Related: docs/doom-rpg-reference.txt, docs/roguelike-design-pillars.txt
+
+
+OVERVIEW
+--------
+Adds a lightweight roguelike progression layer on top of the existing combat loop.
+Killing enemies earns XP; when the XP threshold is crossed the game pauses and
+offers the player one of three permanent stat upgrades.  Enemy strength scales with
+dungeon depth so each new floor is tougher than the last.
+
+
+KEY CLASSES
+-----------
+
+GameBalance.java  (util/)
+  - Single config file for ALL balance numbers.  Adjust here for tuning.
+  - Constants: XP_REWARD_*, XP_BASE_REQUIREMENT, XP_CURVE_EXPONENT,
+               LEVEL_UP_HP_BONUS, LEVEL_UP_ARMOR_BONUS, LEVEL_UP_DAMAGE_BONUS,
+               ENEMY_HEALTH_SCALE_PER_DEPTH, ENEMY_DAMAGE_SCALE_PER_DEPTH.
+  - Helper methods: xpRequiredForLevel(level), enemyHealthScaleForDepth(depth),
+                    enemyDamageScaleForDepth(depth).
+
+PlayerProgress.java  (progression/)
+  - Tracks playerLevel (starts at 1), currentXp, xpForNextLevel.
+  - addXp(int) — called by KillXpListener; sets pendingLevelUp when threshold crossed.
+  - applyLevelUpReward(LevelUpReward) — advances level, carries over excess XP,
+    increments flatDamageBonus if DAMAGE_BOOST chosen.
+  - Owned by World; lives for the entire run (not reset between floors).
+
+KillXpListener.java  (progression/)
+  - Interface: onEnemyKilledForXp(int xpAwarded).
+  - EnemyManager calls it after every kill; World wires PlayerProgress as the listener
+    via a lambda.
+
+LevelUpReward.java  (progression/)
+  - Enum: HP_BOOST, ARMOR_BOOST, DAMAGE_BOOST.
+  - Describes the three choices presented to the player on level-up.
+
+LevelUpOverlayRenderer.java  (progression/)
+  - Full-screen overlay drawn on top of the frozen game.
+  - Shows LEVEL UP! title, incoming level number, and three labelled choice rows.
+  - Input handling is in World.java — this class is pure rendering.
+  - Dispose() owned by World alongside other run-persistent renderers.
+
+
+XP CURVE
+--------
+xpRequired(level) = XP_BASE_REQUIREMENT × level ^ XP_CURVE_EXPONENT
+
+  level 1 → 2:   100 × 1^1.5 =   100 XP  (~2 Corruptors)
+  level 2 → 3:   100 × 2^1.5 =   283 XP
+  level 3 → 4:   100 × 3^1.5 =   520 XP
+  level 4 → 5:   100 × 4^1.5 =   800 XP
+  level 5 → 6:   100 × 5^1.5 = 1 118 XP
+
+XP rewards per enemy type:
+  CORRUPTOR  = 50   VORTEX_EYE = 35   GHOUL = 20
+  CRAWLER    = 20   REVENANT   = 25
+
+Formulas live in GameMath.xpRequiredForLevel() and GameMath.compoundScaleForDepth().
+
+
+ENEMY DEPTH SCALING
+-------------------
+On each dungeon floor transition (World.rebuildForLevel), EnemyManager is constructed
+with the new currentDepth.  During buildInitialEnemies():
+
+  scaledHealth = max(1, round(type.maxHealth() × ENEMY_HEALTH_SCALE_PER_DEPTH^(depth-1)))
+  enemy.maxHealth = scaledHealth
+  enemy.health    = scaledHealth
+  enemy.attackDamageMultiplier = ENEMY_DAMAGE_SCALE_PER_DEPTH^(depth-1)
+
+The Enemy.scaledAttackDamage() method is used in EnemyManager.actEnemy() instead of
+type.attackDamage().  EnemyRenderer.java uses enemy.maxHealth (not type.maxHealth())
+for the floating health-bar fill fraction.
+
+Scale example (CORRUPTOR base HP=60, base DMG=14):
+  depth 1:  HP= 60, DMG=14   (×1.00)
+  depth 2:  HP= 69, DMG=15   (×1.15 / ×1.10)
+  depth 3:  HP= 79, DMG=17   (×1.32 / ×1.21)
+  depth 5:  HP=105, DMG=20   (×1.75 / ×1.46)
+  depth 10: HP=211, DMG=33   (×3.52 / ×2.36)
+
+
+PLAYER STAT BONUSES
+-------------------
+All bonuses are permanent for the current run (not saved between runs).
+
+HP_BOOST:    Player.increaseMaxHealth(LEVEL_UP_HP_BONUS) — increases maxHealth and
+             immediately heals the player by the bonus amount.
+ARMOR_BOOST: Player.increaseMaxArmor(LEVEL_UP_ARMOR_BONUS) — increases maxArmor and
+             immediately grants the bonus armor.
+DAMAGE_BOOST: PlayerProgress.flatDamageBonus += LEVEL_UP_DAMAGE_BONUS.
+             Applied in EnemyManager.applyDamageTo() as an additive damage bonus.
+             Updated in EnemyManager via setPlayerFlatDamageBonus() after each reward
+             and also after each floor rebuild.
+
+
+HUD XP BAR
+----------
+Located in the left HUD panel at the bottom (HUD_XP_BAR_Y = 14f).
+The panel height was increased from 130 to 168 to accommodate the new bar;
+existing HP/AR/CL bar Y positions were all shifted up by 38.
+
+Layout:
+  Label "XP"  at HUD_BAR_LABEL_X
+  Segmented bar from HUD_BAR_START_X to HUD_BAR_START_X + HUD_BAR_FULL_WIDTH
+  Number text "LV.N" at HUD_BAR_NUMBER_X
+  Bar colour: gold/amber gradient (like clip bar but gold palette)
+  Fill fraction: PlayerProgress.getXpFraction() (0..1)
+
+HudState carries: playerLevel, currentXp, xpForNextLevel, xpFraction.
+These are written by World.render() each frame from PlayerProgress.
+
+
+WORLD INTEGRATION
+-----------------
+RunPhase gains a fourth state: LEVEL_UP_OVERLAY.
+
+Transition logic (World.update):
+  PLAYING → LEVEL_UP_OVERLAY  when playerProgress.hasPendingLevelUp() && !player.isDead()
+  LEVEL_UP_OVERLAY → PLAYING  when player presses 1, 2 or 3
+
+While in LEVEL_UP_OVERLAY:
+  - Normal game update is skipped (enemies don't act, player can't move).
+  - Keys NUM_1/NUM_2/NUM_3 (number row) and NUMPAD_1/NUMPAD_2/NUMPAD_3 are detected.
+  - applyLevelUpReward(choice) calls: playerProgress.applyLevelUpReward(),
+    player.increaseMaxHealth() or player.increaseMaxArmor() as applicable,
+    and enemyManager.setPlayerFlatDamageBonus() if DAMAGE_BOOST.
+
+World.render():
+  LevelUpOverlayRenderer.render(camera) is called after HudRenderer whenever
+  runPhase == LEVEL_UP_OVERLAY.
+
+
+ADDING / MODIFYING
+------------------
+To change balance numbers: edit GameBalance.java only.
+To add a new enemy type and its XP reward: add XP_REWARD_<TYPE> to GameBalance,
+  and return it from EnemyType.<TYPE>.baseXpReward().
+To add a fourth level-up choice: add an enum value to LevelUpReward, handle it in
+  PlayerProgress.applyLevelUpReward(), World.applyLevelUpReward(), and add a row
+  in LevelUpOverlayRenderer.drawChoiceRow().

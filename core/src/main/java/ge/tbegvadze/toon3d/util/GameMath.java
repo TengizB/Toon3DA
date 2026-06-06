@@ -1564,4 +1564,41 @@ public final class GameMath {
             outRgb[2] = lerp(Constants.ENEMY_HEALTH_HALF_BLUE,  Constants.ENEMY_HEALTH_EMPTY_BLUE,  localInterpolationFactor);
         }
     }
+
+    // =========================================================================
+    // XP PROGRESSION CURVE
+    // =========================================================================
+    /*
+     * Formula: xpRequiredForLevel
+     * Derivation:
+     *   xpRequired = base * level ^ exponent
+     *   Polynomial curve: faster growth than linear, slower than exponential.
+     *   Example (base=100, exponent=1.5):
+     *     level 1 → 2:  100 * 1^1.5 =  100 XP
+     *     level 2 → 3:  100 * 2^1.5 =  283 XP
+     *     level 5 → 6:  100 * 5^1.5 = 1118 XP
+     * Edge cases:
+     *   currentLevel < 1 is clamped to 1 (no negative or zero XP requirements).
+     */
+    public static int xpRequiredForLevel(int base, float exponent, int currentLevel) {
+        int safeLevel = Math.max(1, currentLevel);
+        return (int)(base * Math.pow(safeLevel, exponent));
+    }
+
+    // =========================================================================
+    // COMPOUND DEPTH SCALE
+    // =========================================================================
+    /*
+     * Formula: compoundScaleForDepth
+     * Derivation:
+     *   result = scaleFactor ^ max(0, depth - 1)
+     *   Compound multiplier: depth=1 → 1.0 exactly (no scaling on first floor).
+     *   depth=2 → scaleFactor^1, depth=3 → scaleFactor^2, etc.
+     * Edge cases:
+     *   depth < 1 returns 1.0 (no negative scaling).
+     *   scaleFactor < 1 causes shrinkage per floor — only use values >= 1.0 for growth.
+     */
+    public static float compoundScaleForDepth(float scaleFactor, int depth) {
+        return (float) Math.pow(scaleFactor, Math.max(0, depth - 1));
+    }
 }

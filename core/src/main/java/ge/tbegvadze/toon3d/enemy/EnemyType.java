@@ -1,8 +1,9 @@
 package ge.tbegvadze.toon3d.enemy;
 
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.GameBalance;
 
-/** Per-type configuration for each enemy archetype. Values drawn from Constants. */
+/** Per-type configuration for each enemy archetype. Values drawn from Constants and GameBalance. */
 public enum EnemyType {
 
     CORRUPTOR {
@@ -13,6 +14,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return Constants.CORRUPTOR_HEIGHT_MULTIPLIER; }
         @Override public String texturePath()        { return Constants.ENEMY_CORRUPTOR_PATH; }
+        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_CORRUPTOR; }
     },
 
     VORTEX_EYE {
@@ -23,6 +25,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return Constants.VORTEX_EYE_HEIGHT_MULTIPLIER; }
         @Override public String texturePath()        { return Constants.ENEMY_VORTEX_EYE_PATH; }
+        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_VORTEX_EYE; }
     },
 
     GHOUL {
@@ -33,6 +36,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return Constants.LIGHT_MELEE_HEIGHT_MULTIPLIER; }
         @Override public String texturePath()        { return Constants.ENEMY_GHOUL_PATH; }
+        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_GHOUL; }
     },
 
     CRAWLER {
@@ -43,6 +47,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return Constants.LIGHT_MELEE_HEIGHT_MULTIPLIER; }
         @Override public String texturePath()        { return Constants.ENEMY_CRAWLER_PATH; }
+        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_CRAWLER; }
     },
 
     REVENANT {
@@ -53,6 +58,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return Constants.LIGHT_MELEE_HEIGHT_MULTIPLIER; }
         @Override public String texturePath()        { return Constants.ENEMY_REVENANT_PATH; }
+        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_REVENANT; }
     };
 
     public abstract int     maxHealth();
@@ -62,4 +68,6 @@ public enum EnemyType {
     public abstract boolean isRanged();
     public abstract float   heightMultiplier();
     public abstract String  texturePath();
+    /** XP awarded to the player when this enemy archetype is killed at dungeon depth 1. */
+    public abstract int     baseXpReward();
 }

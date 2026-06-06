@@ -342,7 +342,8 @@ public final class Constants {
     public static final float   ENEMY_HEALTH_EMPTY_BLUE             = 0.10f;
 
     // HUD geometry — left panel anchored to bottom-left, y 0..HUD_HEIGHT.
-    public static final float HUD_HEIGHT                      = 130f;
+    // Panel height increased from 130 to 168 to fit the XP progress bar below the clip bar.
+    public static final float HUD_HEIGHT                      = 168f;
     public static final float HUD_LEFT_PANEL_WIDTH            = 420f;
     public static final float HUD_PANEL_GUTTER                = 4f;
     public static final float HUD_PANEL_INSET                 = 6f;
@@ -359,9 +360,12 @@ public final class Constants {
     public static final float HUD_BAR_SEGMENT_GAP             = 2f;
     public static final float HUD_BAR_LERP_RATE               = 3.5f;
     // Bar Y positions (bottom edge); bars span y: barY .. barY+HUD_BAR_HEIGHT
-    public static final float HUD_HP_BAR_Y                    = 90f;
-    public static final float HUD_AR_BAR_Y                    = 52f;
-    public static final float HUD_CLIP_BAR_Y                  = 14f;
+    // All bars shifted up by 38 vs the previous layout to make room for the XP bar below.
+    public static final float HUD_HP_BAR_Y                    = 128f;
+    public static final float HUD_AR_BAR_Y                    = 90f;
+    public static final float HUD_CLIP_BAR_Y                  = 52f;
+    // XP bar — gold/amber segmented bar showing progress toward next player level
+    public static final float HUD_XP_BAR_Y                    = 14f;
     // HUD animation
     public static final float HUD_PULSE_HZ                    = 4f;
     public static final float HUD_LOW_HP_THRESHOLD            = 0.25f;
