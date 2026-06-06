@@ -98,6 +98,16 @@ public final class TouchInputState extends InputAdapter {
 
     public TouchButton[] getButtons() { return buttons; }
 
+    /** Releases all held buttons and clears any pending tap action. */
+    public void resetAllButtonStates() {
+        for (TouchButton button : buttons) {
+            button.pressed        = false;
+            button.pointerId      = -1;
+            button.pressGlowTimer = 0f;
+        }
+        pendingTapAction = TouchAction.NONE;
+    }
+
     public void update(float deltaTime) {
         for (TouchButton button : buttons) {
             if (button.pressGlowTimer > 0f) {
