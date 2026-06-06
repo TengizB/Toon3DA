@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import ge.tbegvadze.toon3d.door.DoorManager;
@@ -51,6 +52,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // Touch controller — null on desktop (platform-gated to touch screens)
     private TouchInputState         touchInputState;
     private TouchControllerRenderer touchControllerRenderer;
+    private Viewport                gameViewport;
+    private final Vector2           cardTouchPosition = new Vector2();
 
     // -------------------------------------------------------------------------
     // Level-dependent resources — rebuilt on every floor descent
@@ -226,6 +229,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      */
     public void initTouchControls(Viewport viewport) {
         if (!Gdx.input.isPeripheralAvailable(Input.Peripheral.MultitouchScreen)) return;
+        gameViewport            = viewport;
         touchInputState         = new TouchInputState(viewport);
         touchControllerRenderer = new TouchControllerRenderer(touchInputState);
         Gdx.input.setInputProcessor(touchInputState);
@@ -273,6 +277,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 applyLevelUpReward(LevelUpReward.ARMOR_BOOST);
             } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_3) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_3)) {
                 applyLevelUpReward(LevelUpReward.DAMAGE_BOOST);
+            } else if (gameViewport != null && Gdx.input.justTouched()) {
+                cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+                gameViewport.unproject(cardTouchPosition);
+                LevelUpReward tapped = levelUpOverlayRenderer.getTappedReward(cardTouchPosition.x, cardTouchPosition.y);
+                if (tapped != null) {
+                    applyLevelUpReward(tapped);
+                }
             }
             return;
         }
@@ -296,6 +307,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // Transition to level-up overlay as soon as XP threshold is crossed
         if (playerProgress.hasPendingLevelUp() && !player.isDead()) {
+            if (touchInputState != null) {
+                touchInputState.resetAllButtonStates();
+            }
             runPhase = RunPhase.LEVEL_UP_OVERLAY;
         }
     }
@@ -377,12 +391,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hudRenderer.update(deltaTime);
         hudRenderer.render(camera);
 
-        // Level-up overlay drawn above all HUD elements while the player is choosing a reward
+        // Level-up overlay drawn above all HUD elements while the player is choosing a reward.
+        // Touch controller is hidden during the overlay so buttons don't obscure the cards.
         if (runPhase == RunPhase.LEVEL_UP_OVERLAY) {
             levelUpOverlayRenderer.render(camera);
-        }
-
-        if (touchControllerRenderer != null) {
+        } else if (touchControllerRenderer != null) {
             touchControllerRenderer.setActionLocked(!playerController.isIdle());
             touchControllerRenderer.render(camera);
         }
@@ -437,6 +450,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             player.increaseMaxArmor(GameBalance.LEVEL_UP_ARMOR_BONUS);
         } else if (reward == LevelUpReward.DAMAGE_BOOST) {
             enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
+        }
+        if (touchInputState != null) {
+            touchInputState.resetAllButtonStates();
         }
         runPhase = RunPhase.PLAYING;
     }
