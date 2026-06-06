@@ -53,7 +53,7 @@ SPECIAL TILES
 -------------
 p   Player start        Exactly one per level. Never on a map edge.
 P   Cylindrical column  Solid. Rendered as 3D cylinder (ray-circle intersection). Groups of 2-4.
->   Stairs / exit       Level exit. Exactly one per generated level.
+>   Portal / exit       Level exit. Full-height interdimensional rift portal. Exactly one per generated level.
 
 SOLID PROPS (block player movement; rendered as billboard sprites)
 ------------------------------------------------------------------

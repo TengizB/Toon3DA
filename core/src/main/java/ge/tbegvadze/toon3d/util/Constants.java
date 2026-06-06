@@ -738,11 +738,11 @@ public final class Constants {
     public static final float ENEMY_NAME_TAG_TIER5_G = 0.18f;
     public static final float ENEMY_NAME_TAG_TIER5_B = 0.18f;
 
-    // Level transitions — stairs-down tile ('>' char)
+    // Level transitions — exit portal tile ('>' char)
     // STAIRS_DOWN_CHAR: classic roguelike glyph; exactly one per procedurally generated floor.
     public static final char  STAIRS_DOWN_CHAR                   = '>';
-    // Decal-height sprite — drawn flat and low to the floor, like blood/oil.
-    public static final float STAIRS_SPRITE_HEIGHT               = 0.20f;
+    // Full-height billboard — stands exactly as tall as walls, a landmark visible down any corridor.
+    public static final float PORTAL_SPRITE_HEIGHT               = 1.0f;
     public static final float LEVEL_TRANSITION_FADE_OUT_SECONDS  = 0.30f;
     public static final float LEVEL_TRANSITION_FADE_IN_SECONDS   = 0.30f;
     public static final int   STARTING_DEPTH                     = 1;
