@@ -137,7 +137,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         for (Weapon weapon : new Weapon[]{shotgun, dblShotgun, plasmaRifle, chaingun, railgun, incinerator, grenadeLauncher}) {
             weapon.setEventTextSystem(eventTextSystem);
         }
-        inventory.setArsenal(java.util.List.of(shotgun, dblShotgun, plasmaRifle, chaingun, railgun, incinerator, grenadeLauncher));
+        inventory.setArsenal(java.util.List.of(chaingun, shotgun, dblShotgun, plasmaRifle, railgun, incinerator, grenadeLauncher));
         weaponHudRenderer    = new WeaponHudRenderer(inventory.getArsenal());
         hudRenderer          = new HudRenderer(player, hudState);
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);
