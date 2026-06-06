@@ -53,7 +53,7 @@ public class PropRenderer implements Renderable, Disposable {
             case 'H': return MEDKIT_FULL_SPRITE_HEIGHT;
             case 'a': return ARMOUR_SHARD_SPRITE_HEIGHT;
             case 'A': return ARMOUR_VEST_SPRITE_HEIGHT;
-            case '>': return STAIRS_SPRITE_HEIGHT;
+            case '>': return PORTAL_SPRITE_HEIGHT;
             case '#': return PROP_CAMERA_HEIGHT;
             case '%': return PROP_GENERATOR_HEIGHT;
             case '&': return PROP_BIOPOD_HEIGHT;
@@ -318,7 +318,7 @@ public class PropRenderer implements Renderable, Disposable {
         map.put('H', generateFieldMedkitTexture());
         map.put('a', generateArmourShardTexture());
         map.put('A', generateSecurityVestTexture());
-        map.put('>', generateStairsTexture());
+        map.put('>', generatePortalTexture());
         map.put('#', generateCameraTexture());
         map.put('%', generateGeneratorTexture());
         map.put('&', generateBioPodTexture());
@@ -717,36 +717,152 @@ public class PropRenderer implements Renderable, Disposable {
         return finalize(pixmap);
     }
 
-    // Stairs-down grate ('>') — descent shaft set into the floor.
-    // Dark steel frame, UAC hazard chevrons on the rim, black recessed pit with grate bars,
-    // red emissive border that marks this tile as the exit from a distance.
-    private static Texture generateStairsTexture() {
-        Pixmap pixmap = new Pixmap(48, 32, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
+    // UAC Interdimensional Rift Portal ('>') — full-height gateway standing as tall as walls.
+    // Dark steel frame with bevel, swirling concentric energy rings (void-core → indigo → electric
+    // blue → cyan → near-white edge flash), corner energy nodes, vertical conduit lines on the
+    // frame sides, top energy emitters, and UAC hazard chevrons at the base. Beacon visible from
+    // the far end of any corridor.
+    private static Texture generatePortalTexture() {
+        int textureWidth  = 48;
+        int textureHeight = 64;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
+
+        // --- Steel frame base ---
+        pixmap.setColor(0.17f, 0.18f, 0.22f, 1f);
         pixmap.fill();
-        // Outer steel frame
-        pixmap.setColor(0.20f, 0.20f, 0.23f, 1f);
-        pixmap.fillRectangle(0, 0, 48, 32);
-        // Recessed black pit
-        pixmap.setColor(0.05f, 0.04f, 0.05f, 1f);
-        pixmap.fillRectangle(6, 4, 36, 24);
-        // Three horizontal grate bars across the pit
-        pixmap.setColor(0.30f, 0.30f, 0.33f, 1f);
-        pixmap.fillRectangle(6,  8, 36, 3);
-        pixmap.fillRectangle(6, 14, 36, 3);
-        pixmap.fillRectangle(6, 20, 36, 3);
-        // Red emissive border around the pit — the beacon colour visible down corridors
-        pixmap.setColor(0.82f, 0.16f, 0.16f, 1f);
-        pixmap.fillRectangle(4,  2, 40,  2);  // top edge
-        pixmap.fillRectangle(4, 28, 40,  2);  // bottom edge
-        pixmap.fillRectangle(4,  2,  2, 28);  // left edge
-        pixmap.fillRectangle(42, 2,  2, 28);  // right edge
-        // Hazard chevrons on the top rim — alternating yellow / black 6-pixel blocks
-        for (int chevronIndex = 0; chevronIndex < 4; chevronIndex++) {
-            boolean isYellow = chevronIndex % 2 == 0;
-            pixmap.setColor(isYellow ? 0.90f : 0.08f, isYellow ? 0.78f : 0.08f, 0.05f, 1f);
-            pixmap.fillRectangle(6 + chevronIndex * 9, 0, 9, 2);
+
+        // Bevel highlight: top and left edges lighter
+        pixmap.setColor(0.32f, 0.34f, 0.40f, 1f);
+        pixmap.fillRectangle(0, 0, textureWidth, 1);
+        pixmap.fillRectangle(0, 0, 1, textureHeight);
+
+        // Bevel shadow: bottom and right edges darker
+        pixmap.setColor(0.08f, 0.08f, 0.10f, 1f);
+        pixmap.fillRectangle(0, textureHeight - 1, textureWidth, 1);
+        pixmap.fillRectangle(textureWidth - 1, 0, 1, textureHeight);
+
+        // --- Hazard base stripe (bottom 7 rows) — UAC yellow / black alternating 4-px columns ---
+        for (int column = 0; column < textureWidth; column++) {
+            boolean isYellow = (column / 4) % 2 == 0;
+            pixmap.setColor(isYellow ? 0.92f : 0.06f,
+                            isYellow ? 0.80f : 0.06f,
+                            isYellow ? 0.02f : 0.05f,
+                            1f);
+            pixmap.fillRectangle(column, 57, 1, 6);
         }
+
+        // --- Portal opening bounds (inside the steel frame) ---
+        int portalLeft   = 4;
+        int portalTop    = 4;
+        int portalRight  = 44;  // exclusive — column 44 is the right frame pixel
+        int portalBottom = 57;  // exclusive — row 57 is the hazard base
+        int portalWidth  = portalRight  - portalLeft;   // 40
+        int portalHeight = portalBottom - portalTop;    // 53
+
+        float centerX = portalLeft + portalWidth  / 2f - 0.5f;   // 23.5
+        float centerY = portalTop  + portalHeight / 2f - 0.5f;   // 30.5
+        float halfW   = portalWidth  / 2f;                        // 20.0
+        float halfH   = portalHeight / 2f;                        // 26.5
+
+        // --- Energy field: pixel-by-pixel distance-based coloring ---
+        for (int pixelRow = portalTop; pixelRow < portalBottom; pixelRow++) {
+            for (int pixelColumn = portalLeft; pixelColumn < portalRight; pixelColumn++) {
+                float normalizedX = (pixelColumn - centerX) / halfW;
+                float normalizedY = (pixelRow    - centerY) / halfH;
+                float dist = (float) Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+
+                float red, green, blue;
+                if (dist < 0.12f) {
+                    // Void core
+                    red = 0.01f; green = 0.005f; blue = 0.05f;
+                } else if (dist < 0.30f) {
+                    float interpolationFactor = (dist - 0.12f) / 0.18f;
+                    red   = 0.01f  + interpolationFactor * 0.19f;
+                    green = 0.005f + interpolationFactor * 0.045f;
+                    blue  = 0.05f  + interpolationFactor * 0.60f;
+                } else if (dist < 0.50f) {
+                    float interpolationFactor = (dist - 0.30f) / 0.20f;
+                    red   = 0.20f + interpolationFactor * (-0.12f);
+                    green = 0.05f + interpolationFactor * 0.10f;
+                    blue  = 0.65f + interpolationFactor * 0.25f;
+                } else if (dist < 0.70f) {
+                    float interpolationFactor = (dist - 0.50f) / 0.20f;
+                    red   = 0.08f + interpolationFactor * (-0.03f);
+                    green = 0.15f + interpolationFactor * 0.40f;
+                    blue  = 0.90f + interpolationFactor * 0.08f;
+                } else if (dist < 0.85f) {
+                    float interpolationFactor = (dist - 0.70f) / 0.15f;
+                    red   = 0.05f + interpolationFactor * 0.35f;
+                    green = 0.55f + interpolationFactor * 0.30f;
+                    blue  = 0.98f + interpolationFactor * 0.02f;
+                } else if (dist <= 1.0f) {
+                    float interpolationFactor = (dist - 0.85f) / 0.15f;
+                    red   = 0.40f + interpolationFactor * 0.50f;
+                    green = 0.85f + interpolationFactor * 0.12f;
+                    blue  = 1.00f;
+                } else {
+                    // Corner pixels (outside ellipse but inside rectangle) — frame colour
+                    red = 0.17f; green = 0.18f; blue = 0.22f;
+                }
+
+                // Concentric ring shimmer: cos modulation fades toward the edge
+                if (dist <= 1.0f) {
+                    // 4 shimmer peaks across the radius (dist 0→1 = 4 half-cycles)
+                    float ringShimmer      = (float) Math.cos(dist * Math.PI * 8) * 0.5f + 0.5f;
+                    float shimmerStrength  = 0.15f * (1.0f - dist);
+                    float factor = 1.0f - shimmerStrength + ringShimmer * shimmerStrength * 2f;
+                    red   = Math.min(1f, red   * factor);
+                    green = Math.min(1f, green * factor);
+                    blue  = Math.min(1f, blue  * factor);
+                }
+
+                pixmap.setColor(red, green, blue, 1f);
+                pixmap.drawPixel(pixelColumn, pixelRow);
+            }
+        }
+
+        // --- Bright cyan energy border around the portal opening ---
+        pixmap.setColor(0.55f, 0.88f, 1.00f, 1f);
+        pixmap.fillRectangle(portalLeft - 1, portalTop - 1, portalWidth + 2, 1);   // top
+        pixmap.fillRectangle(portalLeft - 1, portalBottom,  portalWidth + 2, 1);   // bottom
+        pixmap.fillRectangle(portalLeft - 1, portalTop - 1, 1, portalHeight + 2);  // left
+        pixmap.fillRectangle(portalRight,    portalTop - 1, 1, portalHeight + 2);  // right
+
+        // --- Corner energy nodes (bright 3×3 squares at portal mouth corners) ---
+        pixmap.setColor(0.95f, 0.98f, 1.00f, 1f);
+        pixmap.fillRectangle(portalLeft  - 2, portalTop    - 2, 3, 3);  // top-left
+        pixmap.fillRectangle(portalRight - 1, portalTop    - 2, 3, 3);  // top-right
+        pixmap.fillRectangle(portalLeft  - 2, portalBottom - 1, 3, 3);  // bottom-left
+        pixmap.fillRectangle(portalRight - 1, portalBottom - 1, 3, 3);  // bottom-right
+
+        // --- Vertical energy conduit lines on inner frame edges ---
+        pixmap.setColor(0.25f, 0.75f, 1.00f, 1f);
+        pixmap.fillRectangle(1,              portalTop, 1, portalHeight);  // left conduit
+        pixmap.fillRectangle(textureWidth - 2, portalTop, 1, portalHeight);  // right conduit
+
+        // --- Top arch energy emitters (three discharge ports) ---
+        pixmap.setColor(0.60f, 0.90f, 1.00f, 1f);
+        pixmap.fillRectangle(12, 0, 5, 3);   // left emitter
+        pixmap.fillRectangle(31, 0, 5, 3);   // right emitter
+        pixmap.setColor(0.85f, 0.96f, 1.00f, 1f);
+        pixmap.fillRectangle(21, 0, 6, 2);   // centre emitter (brighter)
+
+        // --- Hazard divider line at the portal-base boundary ---
+        pixmap.setColor(0.55f, 0.88f, 1.00f, 1f);
+        pixmap.fillRectangle(0, 56, textureWidth, 1);
+
+        // --- Energy spark accents near the portal border ---
+        pixmap.setColor(1.00f, 1.00f, 1.00f, 1f);
+        pixmap.drawPixel(7,  8);
+        pixmap.drawPixel(40, 8);
+        pixmap.drawPixel(7,  52);
+        pixmap.drawPixel(40, 52);
+        pixmap.setColor(0.80f, 0.95f, 1.00f, 1f);
+        pixmap.drawPixel(5,  20);
+        pixmap.drawPixel(42, 20);
+        pixmap.drawPixel(5,  40);
+        pixmap.drawPixel(42, 40);
+
         return finalize(pixmap);
     }
 
