@@ -143,14 +143,23 @@ public class PlayerController {
 
     private void pickUpMedicalIfPresent(int tileColumn, int tileRow) {
         char cell = level.getCell(tileColumn, tileRow);
-        if (Level.isMedicalPickup(cell)) {
-            MedicalTier tier = Level.medicalTierOfPickup(cell);
-            // Anti-waste: if stash is full, leave the pickup on the floor.
-            if (inventory.canAcceptMedical(tier)) {
-                inventory.addMedical(tier);
-                level.consumePickupAt(tileColumn, tileRow);
-                if (eventTextSystem != null) eventTextSystem.spawnWithColor("+HP", EventTextSystem.COLOR_GREEN);
-            }
+        if (!Level.isMedicalPickup(cell)) return;
+        MedicalTier tier       = Level.medicalTierOfPickup(cell);
+        int         healAmount = (tier == MedicalTier.STIM)
+                                     ? Constants.MEDKIT_STIM_HEAL
+                                     : Constants.MEDKIT_FULL_HEAL;
+        if (player.getHealth() < player.getMaxHealth()) {
+            // Apply healing immediately — player expects health to restore on contact.
+            level.consumePickupAt(tileColumn, tileRow);
+            player.applyHealing(healAmount);
+            if (eventTextSystem != null)
+                eventTextSystem.spawnWithColor("+" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
+        } else if (inventory.canAcceptMedical(tier)) {
+            // Already full — stash for later use with R key.
+            inventory.addMedical(tier);
+            level.consumePickupAt(tileColumn, tileRow);
+            if (eventTextSystem != null)
+                eventTextSystem.spawnWithColor("MEDKIT STASHED", EventTextSystem.COLOR_GREEN);
         }
     }
 

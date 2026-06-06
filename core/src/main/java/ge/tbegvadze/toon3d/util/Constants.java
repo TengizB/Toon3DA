@@ -607,8 +607,8 @@ public final class Constants {
     public static final int   LEVEL_GEN_ARMORY_MIN_WEAPON_RACKS  = 2;
     public static final int   LEVEL_GEN_ARMORY_MAX               = 1;
 
-    // CRYO_CHAMBER — ~16% of levels, at most 2
-    public static final float LEVEL_GEN_CRYO_CHANCE              = 0.16f;
+    // CRYO_CHAMBER — ~25% of levels, at most 2
+    public static final float LEVEL_GEN_CRYO_CHANCE              = 0.25f;
     public static final int   LEVEL_GEN_CRYO_MIN_WIDTH           = 7;
     public static final int   LEVEL_GEN_CRYO_MIN_HEIGHT          = 7;
     public static final float LEVEL_GEN_CRYO_WALL_CHANCE         = 0.70f; // 'Z' dominant
@@ -712,6 +712,31 @@ public final class Constants {
 
     // Enemy name tag — shown above health bar only when close enough
     public static final float ENEMY_NAME_TAG_MAX_DISTANCE_TILES = 8f;
+    // Name tag font scale applied to the default BitmapFont
+    public static final float ENEMY_NAME_TAG_FONT_SCALE         = 0.65f;
+    // Vertical gap between name tag baseline and top of health bar (screen pixels)
+    public static final float ENEMY_NAME_TAG_BAR_GAP            = 4f;
+    // Level-tier colors for the name tag text (determined by dungeonLevel at spawn)
+    // Tier 1 LVL 1-2: white
+    public static final float ENEMY_NAME_TAG_TIER1_R = 1.00f;
+    public static final float ENEMY_NAME_TAG_TIER1_G = 1.00f;
+    public static final float ENEMY_NAME_TAG_TIER1_B = 1.00f;
+    // Tier 2 LVL 3-4: green
+    public static final float ENEMY_NAME_TAG_TIER2_R = 0.25f;
+    public static final float ENEMY_NAME_TAG_TIER2_G = 1.00f;
+    public static final float ENEMY_NAME_TAG_TIER2_B = 0.25f;
+    // Tier 3 LVL 5: blue
+    public static final float ENEMY_NAME_TAG_TIER3_R = 0.25f;
+    public static final float ENEMY_NAME_TAG_TIER3_G = 0.60f;
+    public static final float ENEMY_NAME_TAG_TIER3_B = 1.00f;
+    // Tier 4 LVL 6-7: violet
+    public static final float ENEMY_NAME_TAG_TIER4_R = 0.80f;
+    public static final float ENEMY_NAME_TAG_TIER4_G = 0.25f;
+    public static final float ENEMY_NAME_TAG_TIER4_B = 1.00f;
+    // Tier 5 LVL 8+: red
+    public static final float ENEMY_NAME_TAG_TIER5_R = 1.00f;
+    public static final float ENEMY_NAME_TAG_TIER5_G = 0.18f;
+    public static final float ENEMY_NAME_TAG_TIER5_B = 0.18f;
 
     // Level transitions — stairs-down tile ('>' char)
     // STAIRS_DOWN_CHAR: classic roguelike glyph; exactly one per procedurally generated floor.

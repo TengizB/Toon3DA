@@ -198,6 +198,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyRenderer          = new EnemyRenderer(enemyManager, wallRenderer);
         enemyManager.setImpactEventListener(impactEffectSystem);
         enemyManager.setKillXpListener(xpAwarded -> playerProgress.addXp(xpAwarded));
+        enemyManager.setKillEventListener((nameTag, xpAwarded) ->
+            eventTextSystem.spawnWithColor(nameTag + " +" + xpAwarded + "XP", EventTextSystem.COLOR_GREEN));
         enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
         explosiveBarrelManager.setImpactEventListener(impactEffectSystem);
         enemyRenderer.setPropRenderer(propRenderer);

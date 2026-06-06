@@ -55,7 +55,7 @@ public final class EnemyManager implements EnemyHitTarget {
     public EnemyManager(Level level, DoorManager doorManager, int dungeonDepth) {
         this.level       = level;
         this.doorManager = doorManager;
-        this.enemies     = buildInitialEnemies(level.getEnemySpawnPoints(), dungeonDepth);
+        this.enemies     = buildInitialEnemies(level.getEnemySpawnPoints(), dungeonDepth, new Random());
         int levelWidth   = level.getWidth();
         int levelHeight  = level.getHeight();
         int enemyCount   = enemies.size();
@@ -66,9 +66,8 @@ public final class EnemyManager implements EnemyHitTarget {
         this.wiggleRandom       = new Random(12345L);
     }
 
-    private static List<Enemy> buildInitialEnemies(List<EnemySpawnPoint> spawnPoints, int dungeonDepth) {
-        float healthScale = GameBalance.enemyHealthScaleForDepth(dungeonDepth);
-        float damageScale = GameBalance.enemyDamageScaleForDepth(dungeonDepth);
+    private static List<Enemy> buildInitialEnemies(List<EnemySpawnPoint> spawnPoints,
+                                                    int dungeonDepth, Random spawnVariance) {
         List<Enemy> list = new ArrayList<>(spawnPoints.size());
         for (EnemySpawnPoint spawnPoint : spawnPoints) {
             EnemyType type;
@@ -80,13 +79,26 @@ public final class EnemyManager implements EnemyHitTarget {
                 case '5': type = EnemyType.REVENANT;    break;
                 default:  type = EnemyType.CORRUPTOR;  break;
             }
+            // Small chance to spawn a lower-level enemy for variety at higher depths.
+            // Gives the player occasional easier encounters so deeper floors feel manageable.
+            int effectiveDepth = dungeonDepth;
+            if (dungeonDepth > 2) {
+                float roll = spawnVariance.nextFloat();
+                if (roll < 0.05f) {
+                    effectiveDepth = Math.max(1, dungeonDepth - 2);
+                } else if (roll < 0.15f) {
+                    effectiveDepth = Math.max(1, dungeonDepth - 1);
+                }
+            }
+            float healthScale = GameBalance.enemyHealthScaleForDepth(effectiveDepth);
+            float damageScale = GameBalance.enemyDamageScaleForDepth(effectiveDepth);
             Enemy enemy = new Enemy(type, spawnPoint.tileColumn, spawnPoint.tileRow);
             int scaledHealth = Math.max(1, Math.round(type.maxHealth() * healthScale));
             enemy.maxHealth              = scaledHealth;
             enemy.health                 = scaledHealth;
             enemy.attackDamageMultiplier = damageScale;
-            enemy.dungeonLevel           = dungeonDepth;
-            enemy.nameTag                = type.displayName() + " LVL " + dungeonDepth;
+            enemy.dungeonLevel           = effectiveDepth;
+            enemy.nameTag                = type.displayName() + " LVL " + effectiveDepth;
             list.add(enemy);
         }
         return list;

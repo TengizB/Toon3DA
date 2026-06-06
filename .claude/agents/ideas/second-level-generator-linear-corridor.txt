@@ -1,0 +1,166 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design / Systems
+TITLE: Second Level Generator — Linear Corridor Layout
+---
+
+## OVERVIEW
+
+The existing `LevelGenerator` produces BSP-style scattered rooms connected by
+corridors. A second generator using a **linear corridor spine** algorithm creates a
+distinctly different spatial feel: levels that read as a single long passageway with
+side-rooms branching off it, evoking a military corridor, submarine corridor, or
+prison cell-block. Because the generation algorithm is fundamentally different, the
+spatial vocabulary, pacing rhythm, and visual identity of its levels are immediately
+distinguishable from the current generator's output.
+
+Future generators (third, fourth…) can be added alongside these two with zero changes
+to the selection logic, because all generators share a common interface.
+
+---
+
+## COMMON INTERFACE  (`ILevelGenerator`)
+
+A new interface in the `level` package that both generators (and all future ones) must
+implement:
+
+```java
+package ge.tbegvadze.toon3d.level;
+
+public interface ILevelGenerator {
+    Level generate();
+}
+```
+
+- `LevelGenerator` is retrofitted to implement `ILevelGenerator` (trivial — it
+  already has `public Level generate()`).
+- `LinearCorridorGenerator` (new class) also implements `ILevelGenerator`.
+- Both constructors accept `(long seed)` and `(long seed, LevelGenConfig config)`.
+
+### Random Selection in `World.java`
+
+`World.buildLevelDependentResources()` currently calls `new LevelGenerator(seed).generate()`.
+It should be changed to:
+
+```java
+ILevelGenerator generator = pickGenerator(seed);
+Level level = generator.generate();
+```
+
+Where `pickGenerator(long seed)` randomly chooses a generator with equal probability:
+
+```java
+private static ILevelGenerator pickGenerator(long seed) {
+    Random rng = new Random(seed ^ 0xDEADBEEFL);
+    return rng.nextBoolean()
+        ? new LevelGenerator(seed)
+        : new LinearCorridorGenerator(seed);
+}
+```
+
+Using `seed ^ CONSTANT` to derive the selection roll guarantees reproducibility
+without consuming entropy from the generator's own sequence.
+
+---
+
+## LINEAR CORRIDOR GENERATOR — ALGORITHM
+
+### Concept
+
+A single horizontal (or vertical) **spine corridor** runs most of the level width.
+Side rooms are placed at regular intervals along both sides of the spine.
+One end of the spine is the entrance; the other terminates in a boss/landmark room.
+The result looks like a vertebrate skeleton: long spine, symmetrical ribs.
+
+### Phase 1 — Spine Carving
+
+1. Choose spine orientation: horizontal (more common, 70%) or vertical (30%).
+2. Pick a spine row (horizontal) or column (vertical) 40–60% of the way across the
+   grid — off-centre spines feel less rigid.
+3. Carve a 3-tile-wide spine corridor for 75–90% of the grid's length.
+   (3 tiles wide = a grand hallway; use column props 'P' at regular intervals.)
+4. Reserve the first room at the spine head as ENTRANCE, the last as a landmark room
+   (COMMAND_CENTER, POWER_PLANT, or LARGE based on RNG).
+
+### Phase 2 — Side Room Placement
+
+1. Walk the spine in steps of 6–10 tiles.
+2. At each step, attempt to place one side room on each side of the spine
+   (north/south for horizontal spine). Side rooms are 4–10 tiles wide, 4–8 tall.
+3. Connection: carve a single-tile doorway from the room's nearest spine wall.
+4. Apply minimum spacing rules so adjacent side rooms don't share walls.
+5. Room type assignment follows the same priority logic as `LevelGenerator`:
+   - One MEDICAL_BAY guaranteed in the middle third.
+   - One ARMORY at 60–80% depth.
+   - Remaining rooms assigned SERVER_ROOM, CRYO_CHAMBER, RESEARCH_LAB, STANDARD
+     with the same cumulative probability bands as the current generator.
+
+### Phase 3 — Decoration
+
+Reuse all existing decoration helpers unchanged:
+- `assignFloorLighting()` — same logic
+- `assignWallVariety()` + `themeNewRoomWalls()` — same post-passes
+- `placeProps()` / per-room prop placers — same methods
+- `placePickups()` — same logic
+- `placeDoors()` — same logic (doors at spine↔room junctions)
+
+The generators **share** decoration code by extracting it into static utility methods
+on a new `LevelGenDecorators` class, called by both generators.
+
+### Phase 4 — Enemies
+
+Reuse `spawnEnemiesInRoom()` — identical to the current generator's Phase 4.
+
+### Phase 5 — Connectivity + Stairs
+
+Same connectivity audit (`verifyAndRepairConnectivity`) and stairs stamp.
+
+---
+
+## VISUAL IDENTITY MARKERS
+
+To make linear levels feel visually distinct even before the player notices the layout:
+
+- Spine corridor always uses wide-hallway column props (`LEVEL_GEN_WIDE_HALLWAY_COLUMN_SPACING`).
+- Spine floor is fully lit (' ' tiles) — it's a main thoroughfare.
+- Side rooms use their standard room-type lighting (unlit for server rooms, etc.).
+- A higher proportion of 'S' (emergency-strip) walls along the spine approach to
+  landmark rooms creates a "warning zone" feel.
+
+---
+
+## CONSTANTS TO ADD  (`Constants.java`)
+
+```
+LEVEL_GEN_SPINE_HORIZONTAL_CHANCE  = 0.70f   // probability spine runs E-W
+LEVEL_GEN_SPINE_WIDTH              = 3        // tiles wide (grand corridor)
+LEVEL_GEN_SPINE_LENGTH_MIN_FRAC    = 0.75f   // fraction of grid dimension
+LEVEL_GEN_SPINE_LENGTH_MAX_FRAC    = 0.90f
+LEVEL_GEN_SPINE_SIDE_STEP_MIN      = 6        // tiles between side-room slots
+LEVEL_GEN_SPINE_SIDE_STEP_MAX      = 10
+```
+
+---
+
+## FILE PLAN
+
+| File | Action |
+|------|--------|
+| `level/ILevelGenerator.java` | NEW — common interface |
+| `level/LevelGenerator.java` | EDIT — add `implements ILevelGenerator` |
+| `level/LinearCorridorGenerator.java` | NEW — full generator implementation |
+| `level/LevelGenDecorators.java` | NEW — shared static decoration helpers extracted from LevelGenerator |
+| `world/World.java` | EDIT — `pickGenerator()` random selection |
+| `util/Constants.java` | EDIT — add spine constants |
+
+---
+
+## IMPLEMENTATION ORDER
+
+1. Create `ILevelGenerator` interface.
+2. Add `implements ILevelGenerator` to `LevelGenerator` — zero logic change, confirms interface.
+3. Extract shared decoration helpers into `LevelGenDecorators` (or keep them in `LevelGenerator`
+   as package-private statics initially — refactor to shared class once the second generator needs them).
+4. Implement `LinearCorridorGenerator` phase by phase, testing each phase standalone.
+5. Wire `pickGenerator()` in `World.java`.
+6. Add constants.
+7. Play-test that both generators produce playable, connected, well-decorated levels.
