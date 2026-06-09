@@ -1601,4 +1601,24 @@ public final class GameMath {
     public static float compoundScaleForDepth(float scaleFactor, int depth) {
         return (float) Math.pow(scaleFactor, Math.max(0, depth - 1));
     }
+
+    // =========================================================================
+    // PLAY TIME FORMATTER
+    // =========================================================================
+    /*
+     * Formula: formatPlayTime
+     * Derivation:
+     *   minutes = floor(totalSeconds / 60)
+     *   seconds = floor(totalSeconds % 60)
+     *   Formatted as "M:SS" — minutes are unbounded; seconds are always two digits.
+     * Edge cases:
+     *   Negative input clamped to 0 via Math.max before integer cast.
+     *   totalSeconds > 5999 renders as e.g. "100:05" — no realistic run exceeds this.
+     */
+    public static String formatPlayTime(float totalSeconds) {
+        int safeTotalSeconds = Math.max(0, (int) totalSeconds);
+        int minutes = safeTotalSeconds / 60;
+        int seconds = safeTotalSeconds % 60;
+        return minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
+    }
 }
