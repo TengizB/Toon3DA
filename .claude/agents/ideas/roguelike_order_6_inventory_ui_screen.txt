@@ -1,0 +1,224 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Inventory UI Screen (TAB / I overlay)
+CREATED: 2026-06-09
+---
+
+OVERVIEW
+========
+The front-end pack screen for the slot inventory backbone defined in order 5
+(inventory-loot-ransack-system.txt). Pressing I (or TAB) freezes the world and
+draws a full-screen retro overlay: a grid of item slots on the left, a detail
+panel on the right. The player navigates with arrow keys, uses/equips with
+Enter, and drops with D. This is purely a presentation + input layer over the
+already-designed Inventory data model — it stores no game state of its own, it
+reads and commands the Inventory.
+
+It belongs here because the order-5 doc explicitly defers the menu to a
+"render/InventoryOverlayRenderer.java" and lists the TAB toggle as a non-turn
+pause. This doc is that renderer plus its input handling, specified to
+implementation grade and consistent with the procedural-HUD aesthetic
+(procedural-hud-no-textures.txt — no textures, all ShapeRenderer + BitmapFont).
+
+
+GAMEPLAY LOOP
+=============
+1. World is in PLAYING phase, PlayerController is IDLE. Player presses I or TAB.
+   -> This does NOT advance a turn. World enters a new phase INVENTORY_OPEN.
+      PlayerController.update() is skipped (input frozen), enemies do not act,
+      facilityTimeSeconds (cosmetic clock) may keep running for flicker only.
+2. InventoryOverlayRenderer draws on top of the frozen 3D frame (the last world
+   frame stays rendered underneath, dimmed by a 60%-black scrim). A grid of
+   INVENTORY_SLOT_COUNT slots appears; slot 0 is selected by default (amber
+   border). Right panel shows the selected item's name, description, and stats.
+3. Player presses Arrow keys (or W/A/S/D? -> NO, reserve WASD; use arrows only to
+   avoid colliding with movement muscle memory). Selection cursor moves across
+   the grid: LEFT/RIGHT change column, UP/DOWN change row, clamped to filled and
+   empty slots alike (you can land on an empty slot; detail panel reads "EMPTY").
+4. Player presses ENTER on a filled slot:
+   - If the item is a CONSUMABLE (medkit, stim, armor shard): the overlay calls
+     Inventory.use(selectedSlot). This is the one action that DOES cost a turn.
+     The overlay closes, World returns to PLAYING, and the use is submitted as a
+     single turn through the existing turn system (same path as order-5 "USE a
+     consumable ... spending one turn on use").
+   - If the item is a WEAPON: Inventory equips it (delegates to order 8's weapon
+     slot system). Equipping is a free menu action (no turn) per order 8;
+     overlay stays open, the equipped weapon shows a "[EQUIPPED]" tag.
+   - If the item is a KEYCARD or quest item: ENTER does nothing useful; show a
+     brief "Cannot use here" flash in the detail panel.
+5. Player presses D (drop) on a filled slot:
+   - Inventory.remove(selectedSlot, fullStack) and GroundItemManager spawns the
+     stack on the player's current tile. Per order 5 this costs one turn on menu
+     close. Overlay closes, world returns to PLAYING, turn is submitted.
+   - Guard: if the player's tile already holds a ground item, prefer an adjacent
+     free tile; if none, refuse the drop and flash "No room to drop here."
+6. Player presses I, TAB, or ESC again -> overlay closes, World returns to
+   PLAYING. Closing alone costs NO turn.
+
+Key fact: opening/closing/navigating/equipping are FREE. Only USE and DROP spend
+a turn, and they spend it by closing the menu and submitting one world tick.
+
+
+PLAYER EXPERIENCE
+=================
+The inventory is the calm in the storm — a Hades-boon-screen / DCSS-pack-screen
+beat where the turn clock stops and the player breathes and plans. It reads
+instantly as "the game is paused": the world dims, a chrome panel slides in, the
+amber CRT type glows. The core decisions it surfaces: "Do I burn a medkit now or
+hoard it?", "Is this stack worth the slot, or do I drop it for the rockets I'll
+find deeper?", "Which weapon do I want ready before I open that door?" Because
+USE and DROP cost a turn but happen on close, the player learns to do their
+thinking safely in the menu and commit to exactly one consequential action.
+
+
+TECHNICAL NOTES
+===============
+DEPENDENCIES (must exist first):
+- ORDER 5 (inventory-loot-ransack-system.txt): item/Inventory.java,
+  item/ItemType.java, item/ItemStack.java, item/GroundItemManager.java. This
+  doc is dead without that data model. It is the single hard dependency.
+- World run-phase state machine from level-transitions-stairs-down.txt
+  (IMPLEMENTED): add INVENTORY_OPEN to the existing RunPhase enum
+  {PLAYING, FADE_OUT, FADE_IN} -> {..., INVENTORY_OPEN}.
+- procedural-hud-no-textures.txt (for the visual style + shared BitmapFont/
+  ShapeRenderer conventions). Soft dependency — match its palette.
+- ORDER 8 (weapon switching) for the EQUIP path; if order 8 is not yet built,
+  weapons simply show their stats and ENTER does nothing (graceful degrade).
+
+NEW CLASS:
+- render/InventoryOverlayRenderer.java — implements Renderable + Disposable.
+  Fields: a reference to Inventory (not owned), a reference to Player (read-only,
+  for tile coords on drop), selectedSlotIndex (int), an enum-free flash timer for
+  transient messages, and pre-allocated drawing primitives. Owns its own
+  ShapeRenderer + BitmapFont (or shares HudRenderer's — see OPEN QUESTIONS).
+  NO allocations in render(): pre-build all GlyphLayout / StringBuilder scratch
+  in the constructor; reuse a single StringBuilder for the quantity/stat text.
+
+INPUT HANDLING:
+- input/PlayerController.java (or a small dedicated InventoryInputHandler):
+  add TOGGLE_INVENTORY (I and TAB) to the IDLE-state input poll. When toggled,
+  it calls World.openInventory() / World.closeInventory() rather than mutating
+  level state. While World.phase == INVENTORY_OPEN, PlayerController.pollInput()
+  is not called at all; instead World routes arrow/Enter/D/ESC keys to the
+  overlay's handleInput(deltaTime). Use isKeyJustPressed (not isKeyPressed) for
+  menu navigation so a single tap = one cursor move (no auto-repeat scroll).
+- World.java: openInventory() sets phase=INVENTORY_OPEN; closeInventory(boolean
+  spendTurn) returns to PLAYING and, if spendTurn, submits exactly one world tick
+  through the existing turn path. USE and DROP call closeInventory(true);
+  ESC/I/TAB call closeInventory(false).
+
+GRID MATH (all in world units, origin bottom-left, Y-up):
+- Grid columns INVENTORY_GRID_COLUMNS = 4, rows = ceil(SLOT_COUNT / COLUMNS).
+  For SLOT_COUNT=8 -> 4x2 grid.
+- slotIndex = row * COLUMNS + column. Selection clamps: column in [0,COLUMNS-1],
+  row in [0, rows-1]; reject moves that would point past the last slot.
+- Slot screen rect (world units):
+    slotX = INV_GRID_ORIGIN_X + column * (INV_SLOT_SIZE + INV_SLOT_GAP)
+    slotY = INV_GRID_ORIGIN_Y - row * (INV_SLOT_SIZE + INV_SLOT_GAP)
+  (subtract because rows count downward visually while Y is up; ORIGIN_Y is the
+   TOP row's baseline). Put this layout formula in a GameMath helper or as plain
+   loop arithmetic in the renderer — no DDA-style helper needed.
+
+CONSTANTS TO ADD (Constants.java, INVENTORY_UI_ prefix; all PLACEHOLDER):
+  INVENTORY_GRID_COLUMNS        = 4
+  INV_SLOT_SIZE                 = 96f
+  INV_SLOT_GAP                  = 12f
+  INV_GRID_ORIGIN_X             = 80f
+  INV_GRID_ORIGIN_Y             = 600f   (top row baseline)
+  INV_DETAIL_PANEL_X            = 740f
+  INV_DETAIL_PANEL_WIDTH        = 460f
+  INV_SCRIM_ALPHA               = 0.60f  (world dim behind overlay)
+  INV_PANEL_ALPHA               = 0.92f  (overlay chrome, denser than HUD 0.82)
+  INV_SELECT_BORDER_THICKNESS   = 3f
+  INV_FLASH_SECONDS             = 0.45f  (transient message hold, cosmetic)
+
+RENDER ORDER:
+- The overlay draws AFTER HudRenderer (step 8) when phase == INVENTORY_OPEN, i.e.
+  it is the new step 9, always on top. The dimming scrim is the overlay's first
+  draw call (full-screen quad at INV_SCRIM_ALPHA), then chrome, then slots, then
+  detail panel, then flash message.
+
+
+VISUAL DESIGN
+=============
+Aesthetic: Doom-RPG / UAC field-terminal. Match procedural-hud-no-textures.txt —
+no image textures, everything ShapeRenderer rects + BitmapFont in CRT amber
+(approx 230,170,40) on charcoal (18,18,22). Optional 1px scanline overlay reusing
+the scanline-crt-hud idea's pattern.
+
+- Background scrim: full-screen black at 0.60 alpha so the frozen 3D view is
+  faintly visible — "the world is still there, just paused."
+- Header bar: "FIELD INVENTORY" left, "SUBLEVEL N" right (read depth from World),
+  thin amber underline.
+- Slot grid (left): each slot a charcoal square with a 1px steel border. Filled
+  slots show:
+    * Item glyph — a chunky procedural icon drawn from ShapeRenderer primitives
+      OR an ASCII-style single-char glyph centered (see OPEN QUESTIONS). Color by
+      ItemType category, reusing order 5's ground-item color code (shells=brass,
+      cells=cyan, medkit=white+red cross, keycards=their door color).
+    * Stack count bottom-right (e.g. "x6") in small white type; hidden if 1.
+  Empty slots show a faint dashed outline only.
+- Selected slot: thick amber border (INV_SELECT_BORDER_THICKNESS) plus a subtle
+  pulsing brightness on the border (reuse facilityTimeSeconds sin) so the cursor
+  is unmistakable.
+- Detail panel (right): item name (large amber), category line, multi-line
+  description (white, wrapped to INV_DETAIL_PANEL_WIDTH), and a stats block
+  (e.g. medkit: "+75 HP", weapon: "DMG 12  AMMO shells"). Equipped weapons get a
+  green "[EQUIPPED]" tag. Empty selection: panel reads "— EMPTY SLOT —".
+- Footer: control hints in dim type — "[ARROWS] Move   [ENTER] Use/Equip
+  [D] Drop   [I/TAB/ESC] Close". Right side: "WEIGHT 24/40" or "SLOTS 6/8" per
+  order-5's chosen capacity model.
+- Transient flash messages ("Cannot use here", "No room to drop") appear centered
+  below the grid in red for INV_FLASH_SECONDS, purely cosmetic.
+
+
+BALANCE NOTES
+=============
+- This is UI; it owns no combat numbers. The only tunables are layout + the fact
+  that USE/DROP cost a turn (inherited from order 5, do not change here).
+- 4-wide grid with 8 slots = 4x2, fits comfortably in the left 60% of screen with
+  room for the detail panel. If order 5 raises SLOT_COUNT (boon "+1 slot"), the
+  grid grows downward; ORIGIN_Y/row count must accommodate up to ~16 slots
+  (4x4) before needing a second page. Flag: cap at 16 or add paging.
+- All spacing/alpha values above are placeholders pending a visual pass.
+
+
+INTERACTIONS
+============
+1. Order 5 (inventory backbone): this is its presentation layer. Every action
+   here is a thin call into Inventory (use/remove/findStack) and GroundItemManager
+   (spawn on drop). It must not duplicate stacking or capacity logic.
+2. Order 8 (weapon pickup & switching): the EQUIP path delegates to order 8's
+   weapon-slot model. The detail panel reads weapon stats from the same source
+   order 8 uses for the HUD weapon-slot icons, keeping a single source of truth.
+3. Order 7 (health/armor pickups): consumable medkits/armor live as ItemType
+   entries; USE routes through order 7's heal/armor application so HP/AR bars
+   react identically whether used from a floor pickup or from this menu.
+4. Order 9 (multi-floor progression): the header reads World.depth for the
+   "SUBLEVEL N" label; inventory persists across descent (it is run-state, not
+   floor-state), so the overlay simply re-reads the same Inventory after a swap.
+5. World run-phase machine (level-transitions): INVENTORY_OPEN is a sibling pause
+   state to FADE_OUT/FADE_IN. Cannot open inventory mid-fade (guard:
+   openInventory() only valid from PLAYING).
+
+
+OPEN QUESTIONS
+=============
+1. Item icons: hand-built ShapeRenderer "pixel-art" glyphs (more work, more
+   characterful) vs single ASCII char per ItemType in a slot (trivial, very
+   roguelike-readable). Recommend ASCII-glyph v1, upgrade to ShapeRenderer icons
+   later. Either way the glyph mapping lives on ItemType (order 5 already plans a
+   "glyph/color for ground rendering" field — reuse it).
+2. Shared vs owned ShapeRenderer/BitmapFont: sharing HudRenderer's avoids a second
+   font load but couples the classes. Recommend the overlay owns its own (clean
+   lifecycle, disposed in dispose()) unless memory is a concern.
+3. Should navigating with isKeyJustPressed feel too slow on large grids? If so add
+   a held-key repeat after ~0.35s real-time (cosmetic, not a turn).
+4. Does dropping a stack drop the WHOLE stack or one item? Recommend whole stack
+   for v1 (simpler); a "split stack" verb (Shift+D) is a later nicety.
+5. Should ESC be reserved for a future pause/quit menu? If so, only I/TAB close
+   the inventory and ESC opens the system menu. Confirm with whoever owns the
+   pause menu (not yet designed).
+6. Mouse support: out of scope for v1 (keyboard-only per the Doom-RPG control
+   model), but slot rects are defined so a later mouse-hover/click is trivial to
+   add via camera.unproject.
