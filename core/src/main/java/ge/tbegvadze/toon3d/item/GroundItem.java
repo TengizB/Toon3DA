@@ -20,7 +20,10 @@ public final class GroundItem {
     /** The item stack sitting on this tile. The stack object is owned by this GroundItem. */
     public final ItemStack stack;
 
+    // Tile-bounds validation is the caller's responsibility (requires a Level reference).
     public GroundItem(int tileColumn, int tileRow, ItemType itemType, int quantity) {
+        if (itemType == null) throw new IllegalArgumentException("itemType must not be null");
+        if (quantity < 1)    throw new IllegalArgumentException("quantity must be >= 1");
         this.tileColumn = tileColumn;
         this.tileRow    = tileRow;
         this.stack      = new ItemStack();

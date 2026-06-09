@@ -26,9 +26,11 @@ public final class ItemStack {
 
     /**
      * Fills this slot with the given type and quantity.
-     * Called by Inventory to occupy a previously empty slot.
+     * Called by Inventory and GroundItem to occupy a previously empty slot.
      */
     void occupy(ItemType itemType, int stackQuantity) {
+        if (itemType == null)  throw new IllegalArgumentException("itemType must not be null");
+        if (stackQuantity < 1) throw new IllegalArgumentException("stackQuantity must be >= 1");
         this.type     = itemType;
         this.quantity = stackQuantity;
     }
