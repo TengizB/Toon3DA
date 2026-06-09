@@ -148,8 +148,12 @@ Reference: boss-encounter-facility-overseer.txt for full lore/flavor. Condensed
 contract here.
 
 IDENTITY: Security/logistics robot fused into the facility control core. Cannot
-leave the arena (bolted in). Sprite: hulking turreted control-core mech with a
-single glowing optic and articulated arm-cannons.
+leave the arena (bolted in).
+PROCEDURAL SPRITE (FrameBuffer, ShapeRenderer — no PNG assets): a wide squat
+rectangle body (steel-grey #7A8C99) with a circular "optic" eye (cyan #00CCFF,
+large, centered) and two articulated arm-cannon rectangles extending from the
+sides. Thick black outline plates. On TELEGRAPH state the optic glows white-hot.
+The sprite is oversized (2× enemy height) to convey the boss scale.
 
 PHASE 1 — RANGED LASERS (HP 100%..50%)
 - Move list (one per tick, repeating):
@@ -191,9 +195,13 @@ BOSS 2 — THE CORRUPTOR (depth 10)
 IDENTITY: A UAC lead scientist, mutated by exposure to the breach signal he was
 studying. Hunched, swollen, dripping; trails a personal cloud of acidic vapor.
 He is mobile and cowardly — he keeps distance, hides behind the monsters he
-births. Sprite: a bloated lab-coated figure, one arm fused into a birthing sac,
-acid bubbling at the hem. Reuses the 'Corruptor' enemy aesthetic family but
-boss-scaled.
+births.
+PROCEDURAL SPRITE (FrameBuffer, ShapeRenderer): a bloated oval torso (sickly
+yellow-green #7A9A22) with a hunched posture (torso rectangle tilted forward).
+One arm is a normal bent-elbow shape; the other is a fused swollen blob
+(large oval, acid-green #AAFF00). Green drip lines hang from the hem. A small
+round head with dark sunken eyes. At phase 2 the sac oval expands and pulses.
+Boss-scaled (2× normal enemy height).
 
 PHASE 1 — SUMMONER (HP 100%..50%)
 - The Corruptor flees: each tick it REPOSITIONS one tile to maximize distance
@@ -234,9 +242,14 @@ BOSS 3 — HELL BARON (depth 15)
 ===============================
 IDENTITY: An armored greater demon — the first creature the breach sent that was
 purpose-built for war, not a corrupted human or machine. Slow, immense, armored;
-hits like a truck. Sprite: a towering bipedal demon with bone plating, cloven
-hooves, and fire leaking between armor seams. The "you have arrived in Hell now"
-boss.
+hits like a truck.
+PROCEDURAL SPRITE (FrameBuffer, ShapeRenderer): a very tall rectangular torso
+(dark bone-ivory #C8B87A) with thick armor plates (overlapping dark rectangles
+along the edges). Two thick pillar legs ending in cloven-hoof V-shapes. Angular
+horns at the head. Orange-red fire glow fills the gaps between plates (bright
+filled rects in #FF4400 between the armor layers). At phase 2 (ENRAGE) all gap-
+fire changes to white-hot (#FFEEAA) and the overall tint shifts red. The tallest
+sprite (2.5× enemy height).
 
 PHASE 1 — FIREWALL (HP 100%..50%)
 - The Baron advances slowly (REPOSITION one tile toward player every OTHER tick;

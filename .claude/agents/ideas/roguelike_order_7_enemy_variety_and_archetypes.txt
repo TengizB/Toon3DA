@@ -78,7 +78,12 @@ ARCHETYPE 1 — ZOMBIE  (spawn '1')   ROLE: slow attrition wall
 VISUAL: shambling reanimated UAC security guard in tattered armor, exposed ribs,
   one dragging leg. Desaturated green-grey skin, dim flashlight still clipped to
   the chest. Sprite sways slightly when dormant; lurches forward one tile per two
-  turns when chasing. assets/textures/enemies/enemy_zombie.png
+  turns when chasing.
+  PROCEDURAL SPRITE: drawn once into a FrameBuffer via ShapeRenderer (same
+  pipeline as WeaponHudRenderer). A humanoid silhouette: rounded rectangular head
+  (desaturated green-grey #8C9F73), wider rectangular torso with a small yellow
+  square "flashlight" patch on the chest, stubby arm rectangles, thick dark
+  outlines. Head tilts 5° to sell the shambling pose.
 HP: 60        DAMAGE: 14 (melee)      ATTACK TYPE: MELEE, range 1 (Chebyshev==1)
 MOVEMENT: CHASE, moveEveryNTurns = 2 (slow — Corruptor cadence).
 XP REWARD: 8
@@ -96,7 +101,11 @@ ARCHETYPE 2 — IMP  (spawn '2')   ROLE: ranged poke / sightline punisher
 =============================================================================
 VISUAL: hunched leathery brown demon, glowing orange palms it cocks back before
   hurling a fireball. Spindly limbs, white eyes. Telegraph: palms flare bright one
-  frame before the shot (readable tell). enemy_imp.png
+  turn before the shot (readable tell).
+  PROCEDURAL SPRITE: hunched narrow torso (brown #7A4F2A), thin arm lines tapering
+  to bright orange circles at the palms (fireball glow), small angular head with
+  two white dot eyes on a dark face. On FIRE state, palm circles brighten to white-
+  orange. ShapeRenderer lines + filled circles into a FrameBuffer.
 HP: 18        DAMAGE: 8 (ranged fireblast)   ATTACK TYPE: RANGED, range 5
 MOVEMENT: CHASE/KITE, moveEveryNTurns = 1 (fast — Vortex Eye cadence).
 XP REWARD: 6
@@ -115,7 +124,11 @@ ARCHETYPE 3 — PINKY DEMON  (spawn '3')   ROLE: straight-line charger
 =============================================================================
 VISUAL: bulky pink hairless bull-demon, enormous jaw, tiny legs, no ranged
   capacity. Lowers its head and snorts (telegraph) one turn before it charges.
-  enemy_pinky.png
+  PROCEDURAL SPRITE: a low, wide shape dominated by a massive lower jaw rectangle
+  (pale pink #E8A0A0) with a dark gap for the maw and four white rectangle teeth.
+  A small rounded head above, tiny vestigial arm nubs at the sides. On WIND-UP
+  state, the head tilts forward (head rect translated downward). ShapeRenderer
+  filled rects + circles into a FrameBuffer.
 HP: 45        DAMAGE: 18 (melee, +knockback on charge hit)   ATTACK TYPE: MELEE 1
 MOVEMENT: CHARGE, moveEveryNTurns = 1 normally; CHARGE special below.
 XP REWARD: 10
@@ -138,7 +151,13 @@ FLOORS: 2-9.
 ARCHETYPE 4 — LOST SOUL  (spawn '4')   ROLE: flying swarm / wall-ignoring harasser
 =============================================================================
 VISUAL: a flaming flying skull, no body, trailing embers, mouth agape. Bobs in
-  place when dormant. enemy_lost_soul.png
+  place when dormant.
+  PROCEDURAL SPRITE: an ivory oval skull (color #ECDCB8) with two dark filled-
+  circle eye sockets, a jagged maw of 6 small triangle teeth, and a bright
+  orange-yellow flame corona behind/around the skull (4-6 radiating filled
+  triangles in orange #FF8C00 fading to yellow at tips). Flame triangles shift
+  slightly each frame via a sin-wave offset seeded per enemy for organic bob.
+  ShapeRenderer into a FrameBuffer.
 HP: 12        DAMAGE: 6 (melee bite on contact)   ATTACK TYPE: MELEE 1
 MOVEMENT: FLOAT, ignoresWalls = true, moveEveryNTurns = 1 (fast).
 XP REWARD: 5
@@ -163,7 +182,14 @@ ARCHETYPE 5 — CACODEMON  (spawn '5')   ROLE: hovering area-denial acid floater
 =============================================================================
 VISUAL: a giant floating spherical red demon, one huge central eye, a maw of
   jagged teeth, tiny horns. Hovers, drifts. Cheeks puff before an acid spit
-  (telegraph). enemy_cacodemon.png
+  (telegraph).
+  PROCEDURAL SPRITE: a large filled circle (deep red #BF1A1A) taking most of the
+  FrameBuffer. A single large white circle with a dark filled-circle pupil as the
+  eye, centered slightly above mid. Six white triangle teeth along the lower arc
+  of the mouth. Two small filled-triangle horn stubs at the top. A faint outer
+  ring (slightly lighter red, line only) as an aura. On TELEGRAPH state, cheeks
+  puff: the main circle radius grows by ~10% briefly. ShapeRenderer into a
+  FrameBuffer.
 HP: 70        DAMAGE: 12 (ranged acid spit, applies Poisoned)   ATTACK TYPE: RANGED 4
 MOVEMENT: FLOAT (slow drift), moveEveryNTurns = 2. Does NOT ignore walls (too big
   to phase — it's a hovering blob, not an incorporeal skull). ignoresWalls=false.
@@ -184,7 +210,13 @@ ARCHETYPE 6 — HELL KNIGHT  (spawn '6' — NEW)   ROLE: armored elite, melee + 
 =============================================================================
 VISUAL: tall muscular grey-brown humanoid demon, goat legs, armored shoulders,
   glowing green fists it can cock back for a ranged plasma-like bolt OR swing in
-  melee. The "you are in trouble now" silhouette. enemy_hell_knight.png
+  melee. The "you are in trouble now" silhouette.
+  PROCEDURAL SPRITE: a tall rectangular torso (grey-brown #8C7355) with wide
+  shoulder-plate rectangles extending past the torso width. Triangular horn stubs
+  at the head top. A narrow dark visor-slit for eyes. Two bright green filled
+  circles (fists, #22FF44) at the ends of short arm rectangles. On FIRE state,
+  fist circles elongate into a green bolt streak. Larger overall than other enemy
+  sprites to convey bulk. ShapeRenderer filled rects + circles into a FrameBuffer.
 HP: 120       DAMAGE: 22 melee / 16 ranged bolt   ATTACK TYPE: BOTH
 MOVEMENT: CHASE, moveEveryNTurns = 1 (it is fast for its size — relentless).
 XP REWARD: 35
@@ -269,7 +301,10 @@ DEPENDENCIES (must exist first)
    knockback-immunity flags to mean anything; ship archetypes' resist data with it.
 4. tile-symbols.txt + LevelLoader update for the new '6' spawn digit (or use the
    generator's elite pass instead — OPEN Q).
-5. Sprites: six enemy_*.png billboards (EnemyRenderer already billboards sprites).
+5. Procedural enemy FrameBuffer sprites: each archetype's billboard is drawn once
+   into a FrameBuffer at enemy instantiation using ShapeRenderer geometric shapes
+   following the WeaponHudRenderer procedural-sprite pipeline. EnemyRenderer
+   already billboards the resulting textures. No PNG assets required.
 
 OPEN QUESTIONS
 ==============

@@ -189,13 +189,16 @@ GAMEMATH (add)
 
 VISUAL DESIGN
 =============
-MERCHANT BILLBOARD
-- A hunched figure behind a makeshift counter: patched UAC jumpsuit, welding-
-  goggles, a sack of gear, a flickering "OPEN" sign hologram above. 2-3 frame
-  idle (breathing, sign flicker). Warm amber rim-light to distinguish the safe
-  room from the cold facility.
-- Alt concept: a battered vendor drone — a floating UAC dispensary bot with a
-  cracked screen-face. Pick one; recommend the survivor for stronger lore.
+MERCHANT BILLBOARD (procedural FrameBuffer sprite — no PNG assets)
+- A hunched humanoid figure: a grey-orange rectangle torso (UAC jumpsuit color
+  #BB7733), a circular head with two amber goggle circles (filled circles, dark
+  rim), and a pack/sack shape (dark rectangle) slung over one shoulder. A small
+  rectangle "counter" in front at tile-floor level. Above the head: a flickering
+  amber text glyph "OPEN" drawn with BitmapFont (pulsing alpha via sin-wave for
+  the hologram flicker). 2-frame idle bob via sin offset on the torso Y position.
+  Warm amber SpriteBatch tint to distinguish the shop room from cold grey halls.
+- Drawn once into a FrameBuffer at floor generation; displayed as a stationary
+  billboard via EnemyRenderer (or a dedicated PropRenderer path). No PNG needed.
 
 SHOP UI OVERLAY (full-screen, on top of a darkened/paused game)
 - Left: merchant portrait + a rotating flavor line ("Cash only. The afterlife
