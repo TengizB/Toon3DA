@@ -1,0 +1,427 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Boss Floor Encounters — Every 5th Floor
+---
+
+OVERVIEW
+========
+Every 5th floor (depth 5, 10, 15, ...) is a BOSS FLOOR: the descent stops at a
+single large arena holding one unique, named, multi-phase boss. The arena is
+cleared of all trash mobs; the boss fills it. Each boss runs on the existing
+turn-based Enemy system (one boss action per completed player turn) and the
+existing depth counter from level-transitions-stairs-down.txt (IMPLEMENTED).
+Three bosses ship in v1, keyed to depth: The Overseer (5), The Corruptor (10),
+Hell Baron (15). Beyond depth 15 the boss table cycles with scaled stats.
+
+This is the climax pacing beat (Roguelike Pillar #8, Pacing & Escalation): a run
+is a staircase of trash encounters punctuated by set-piece fights the player
+remembers and narrates. It is the payoff for the chain-alert dread the normal
+enemies build.
+
+NOTE ON EXISTING WORK: boss-encounter-facility-overseer.txt already specs a
+deep, standalone Overseer fight. THIS document is the umbrella SYSTEM (boss-floor
+cadence, shared phase/HP-bar/intro framework, the roster of three) and treats
+that file as the detailed Overseer reference. When implementing the Overseer,
+read both; this doc's Overseer section is the condensed contract, the other file
+is the long form. The Corruptor and Hell Baron are specced fully here.
+
+
+DEPENDENCIES (must exist first)
+===============================
+1. Enemy system (enemy_system.txt, IMPLEMENTED) — base Enemy class, per-tick AI,
+   billboard rendering via EnemyRenderer, HP/damage, alert/LOS.
+2. Global Tick Event System (global-tick-event-system.txt, IMPLEMENTED) — one
+   tick per player action; bosses subscribe and act once per tick.
+3. Level transitions / depth counter (level-transitions-stairs-down.txt,
+   IMPLEMENTED) — provides World.depth, the trigger for "is this a boss floor?".
+4. Enemy health bars + hit reactions (enemy-health-bars-hit-reactions.txt) —
+   the per-enemy bar is reused; the full-screen boss bar extends it.
+5. Procedural level generation (procedural-level-generation.txt) — must be able
+   to emit a single-room "arena" layout when depth % 5 == 0.
+SOFT DEPENDENCIES (enhance but not required):
+- Keycard doors (uac-keycard-doors-security-tiers.txt, IMPLEMENTED) — boss door
+  can be a blue door; arena-lock reuses door state.
+- XP/leveling (roguelike_order_11) — bosses grant a large XP bounty.
+
+
+GAMEPLAY LOOP
+=============
+FLOOR ENTRY
+1. World finishes a descent (depth increments). World checks: depth % 5 == 0?
+   If yes, the generator was told to emit a BOSS ARENA floor (see TECHNICAL
+   NOTES → arena generation). The floor has: one spawn 'p', a short approach
+   corridor, one door, one large arena room, the boss seeded at the arena
+   centre, and the '>' exit hidden/disabled until the boss dies.
+2. Player walks the approach corridor and opens the arena door.
+
+AWAKEN + INTRO
+3. Crossing the arena threshold trips the boss alert (proximity OR LOS, same as
+   any enemy). On wake:
+   a. The arena door LOCKS behind the player (arena lock — door state forced to
+      LOCKED, treated as a wall, reopens only on boss death). No retreat.
+   b. A one-time BOSS INTRO plays (see VISUAL DESIGN → Intro): screen letterbox
+      bars slide in, boss name + epithet typed out, a 2.0s pause, bars slide out.
+      Input is locked ONLY during the intro (the only non-turn-based moment in
+      the game, justified as a cutscene; ~2.5s total).
+   c. The full-screen BOSS HP BAR fades in at the top of the screen and stays
+      until the boss dies.
+
+PHASE 1 COMBAT
+4. The fight runs on the tick model: every completed player action fires one
+   tick; the boss acts exactly once per tick. Phase 1 attack pattern runs (per
+   boss, below). The player reads telegraphs, repositions using arena cover
+   (columns 'P'), and trades damage.
+
+PHASE TRANSITION
+5. When boss HP crosses its phase-2 threshold (default 50%), a PHASE TRANSITION
+   fires on the NEXT boss tick:
+   a. Boss becomes briefly INVULNERABLE for PHASE_TRANSITION_TURNS (default 1
+      tick) while a transition animation/roar plays.
+   b. A transition banner shows the phase name ("THE OVERSEER OVERRIDES THE
+      DECK").
+   c. The boss switches to its phase-2 attack pattern. HP bar gets a second
+      colored segment marker.
+
+PHASE 2 COMBAT
+6. Phase-2 pattern (more aggressive / area-denial, per boss). Player keeps
+   fighting until boss HP hits 0.
+
+DEATH + REWARD
+7. On boss death:
+   a. A death animation plays (collapse + screen flash); a kill-screen flavor
+      line shows in the HUD toast.
+   b. The arena door UNLOCKS. The '>' exit tile is enabled (reveal animation).
+   c. GUARANTEED RARE DROP spawns on the boss's last tile (a billboard pickup
+      decal): a weapon/upgrade keyed to that boss (see per-boss REWARD).
+   d. A large XP bounty is granted (if XP system present).
+8. Player collects the drop, steps onto '>', descends. Run continues.
+
+DEATH OF PLAYER
+- If the player dies in the arena it is a normal permadeath (roguelike_order_1).
+  The death screen reads "KILLED BY THE OVERSEER ON FLOOR 5" — bosses make
+  memorable death lines.
+
+
+SHARED BOSS FRAMEWORK
+=====================
+All three bosses share one base type and differ by data + an attack-pattern
+strategy object.
+
+PHASES
+- Every boss has exactly 2 phases in v1.
+- phase2HpThreshold: fraction of max HP at which phase 2 begins (default 0.50).
+- On crossing, a one-tick invulnerable transition fires (PHASE_TRANSITION_TURNS).
+- Phase is stored as an int (1 or 2) on the boss; the active attack pattern is
+  selected by phase.
+
+ATTACK PATTERN MODEL (turn-based, telegraph → resolve)
+- Each phase owns an ordered list of MOVES. A move is one of:
+    TELEGRAPH(move, turnsUntilResolve) — boss shows wind-up, marks danger tiles.
+    RESOLVE(move) — danger tiles deal damage / spawn hazards this tick.
+    REPOSITION — boss moves/teleports per its movement rule.
+    SUMMON(type, count) — spawn minions (Corruptor only in v1).
+- The boss cycles its phase's move list, one move per tick. Telegraphed moves
+  give the player a readable window to step out of the marked tiles (the core
+  fairness contract: the player should always know why they died).
+
+DANGER-TILE TELEGRAPH (shared primitive — reused by all bosses)
+- A boss can mark a SET of tiles as "will be hit in N turns."
+- Marked tiles get a pulsing red floor overlay (drawn via the floor/decal
+  pipeline or a sprite overlay; NO render() allocations — pre-allocate the
+  overlay sprite/pool at floor load).
+- On resolve, any actor (player OR enemy) standing on a marked tile takes the
+  move's damage. This makes telegraphs usable to bait, and makes summoned
+  minions vulnerable to the boss's own area attacks (emergent comedy).
+
+FULL-SCREEN BOSS HP BAR
+- A wide bar across the top of the screen (margin 80px each side, ~24px tall),
+  drawn in HudRenderer AFTER everything (it is HUD). Shows boss name (left),
+  current/max as a fill (center), phase markers (notch at phase2HpThreshold).
+- Color: phase 1 = boss accent color; phase 2 = the same color but pulsing
+  brighter / shifted toward white-hot.
+- Fades in on awaken, fades out on death.
+
+
+BOSS 1 — THE OVERSEER (depth 5)
+================================
+Reference: boss-encounter-facility-overseer.txt for full lore/flavor. Condensed
+contract here.
+
+IDENTITY: Security/logistics robot fused into the facility control core. Cannot
+leave the arena (bolted in). Sprite: hulking turreted control-core mech with a
+single glowing optic and articulated arm-cannons.
+
+PHASE 1 — RANGED LASERS (HP 100%..50%)
+- Move list (one per tick, repeating):
+  1. TELEGRAPH "LASER LANE", 1 turn: marks every tile in the row OR column the
+     player currently occupies (cross-arena beam line). The optic glows + a
+     thin aim-line draws down the lane.
+  2. RESOLVE: tiles in the lane take LASER_DAMAGE (default 20). Player must have
+     stepped off the lane (sideways) during the telegraph tick.
+  3. TELEGRAPH "TWIN LANE", 1 turn: marks the player's row AND column (a plus).
+  4. RESOLVE.
+- The Overseer does NOT move in phase 1 (it is a stationary turret). The arena
+  columns ('P') are the only safe break in lanes — the player learns to fight
+  from cover.
+
+PHASE 2 — MELEE CHARGE (HP 50%..0%)
+- The Overseer rips free of some mounts and gains 1-tile-per-tick movement
+  toward the player (cardinal pathfinding, existing enemy pathing).
+- Move list:
+  1. REPOSITION: step one tile toward the player.
+  2. Every 3rd tick instead: TELEGRAPH "RAM", 1 turn — marks the up-to-3 tiles
+     directly ahead of it in its facing.
+  3. RESOLVE RAM: those tiles take CHARGE_DAMAGE (default 30); the Overseer
+     lurches forward 2 tiles (stops at walls/columns). Smashing into a column
+     stuns it for 1 tick (punish window).
+- Faster, scarier, but readable: the player kites around columns, baits the ram
+  into a column, unloads during the stun.
+
+REWARD (guaranteed): "Overseer Optic" — unlocks/grants a charge-laser weapon OR,
+if weapon roster is full, a permanent +1 weapon damage upgrade token. Plus a
+medkit. Big XP.
+
+NUMBERS (placeholders, tune):
+  Max HP 300 | phase2 at 50% | LASER_DAMAGE 20 | CHARGE_DAMAGE 30
+  Ram cooldown 3 ticks | column-stun 1 tick.
+
+
+BOSS 2 — THE CORRUPTOR (depth 10)
+==================================
+IDENTITY: A UAC lead scientist, mutated by exposure to the breach signal he was
+studying. Hunched, swollen, dripping; trails a personal cloud of acidic vapor.
+He is mobile and cowardly — he keeps distance, hides behind the monsters he
+births. Sprite: a bloated lab-coated figure, one arm fused into a birthing sac,
+acid bubbling at the hem. Reuses the 'Corruptor' enemy aesthetic family but
+boss-scaled.
+
+PHASE 1 — SUMMONER (HP 100%..50%)
+- The Corruptor flees: each tick it REPOSITIONS one tile to maximize distance
+  from the player (existing flee/pathing logic).
+- Move list:
+  1. REPOSITION (flee).
+  2. Every SUMMON_COOLDOWN ticks (default 3): SUMMON(minion, 2) — spawns 2 trash
+     minions on free tiles adjacent to the Corruptor (reuse base Corruptor or
+     Ghoul enemy type). Cap total live minions at MINION_CAP (default 5); over
+     cap, summon is skipped.
+- The player must choose: chase the boss through its own minions, or clear
+  minions first and let the boss heal distance. Classic add-management.
+
+PHASE 2 — ACID SPLASH (HP 50%..0%)
+- The birthing sac ruptures; he stops summoning and goes on the offensive with
+  area denial.
+- Move list:
+  1. REPOSITION (still kites, but less).
+  2. Every 2nd tick: TELEGRAPH "ACID BURST", 1 turn — marks a 3x3 block of tiles
+     centered on the PLAYER'S CURRENT tile. Green bubbling overlay.
+  3. RESOLVE: marked tiles take ACID_DAMAGE (default 15) AND convert to a
+     lingering TOXIC POOL hazard for ACID_POOL_DURATION turns (default 3) — this
+     reuses the toxic-pool hazard from roguelike_order_20. The arena slowly
+     fills with acid; standing still kills you.
+- Any minions still alive from phase 1 also take acid damage (they don't dodge
+  well) — the player can lure the Corruptor into nuking his own swarm.
+
+REWARD (guaranteed): "Mutagen Vial" — a permanent stat boost choice (e.g. +max
+HP or +1 to a stat, routed through the levelup-boon system) OR a rare acid/toxic
+weapon. Plus an armor pickup. Big XP.
+
+NUMBERS (placeholders, tune):
+  Max HP 450 | phase2 at 50% | SUMMON_COOLDOWN 3 | MINION_CAP 5
+  ACID_DAMAGE 15 | ACID_POOL_DURATION 3 turns | acid burst cooldown 2 ticks.
+
+
+BOSS 3 — HELL BARON (depth 15)
+===============================
+IDENTITY: An armored greater demon — the first creature the breach sent that was
+purpose-built for war, not a corrupted human or machine. Slow, immense, armored;
+hits like a truck. Sprite: a towering bipedal demon with bone plating, cloven
+hooves, and fire leaking between armor seams. The "you have arrived in Hell now"
+boss.
+
+PHASE 1 — FIREWALL (HP 100%..50%)
+- The Baron advances slowly (REPOSITION one tile toward player every OTHER tick;
+  it is heavy). It controls space with fire.
+- Move list:
+  1. REPOSITION (every other tick).
+  2. Every FIREWALL_COOLDOWN ticks (default 4): TELEGRAPH "FIREWALL", 1 turn —
+     marks a full row OR column line of tiles (whichever the player is NOT on,
+     chosen to cut the arena and herd the player). Cracks of fire on the floor.
+  3. RESOLVE FIREWALL: the marked line becomes a WALL OF FIRE hazard for
+     FIREWALL_DURATION turns (default 4) — lingering fire tiles dealing
+     FIRE_DAMAGE (default 12) per turn entered/stood on. Splits the arena;
+     player must navigate the shrinking safe space. Reuses the fire hazard from
+     hazard-chain-reactions / roguelike_order_20.
+  4. Melee: if the player is adjacent in the Baron's facing, CLEAVE for
+     CLEAVE_DAMAGE (default 35), telegraphed 1 turn.
+
+PHASE 2 — ENRAGE (HP 50%..0%)
+- The Baron sheds armor (visual: plates fall, more fire). It gets FASTER and
+  hits HARDER:
+  - REPOSITION every tick (no longer every other).
+  - FIREWALL_COOLDOWN drops to 2.
+  - CLEAVE_DAMAGE +50% and cleave reach extends to the 3 tiles ahead.
+  - Movement/attack speed expressed in turn terms only (more actions per player
+    turn is NOT allowed — instead, fewer cooldown ticks and bigger hits).
+- An "ENRAGED" banner + the boss sprite goes red-hot. This is the run's hardest
+  sustained pressure: the safe space is tiny and the Baron is on top of you.
+
+REWARD (guaranteed): "Baron's Heart" — a major run-defining artifact (e.g. a
+fire-immunity charm, a big permanent damage/HP package, or the game's heaviest
+weapon if roster allows). Plus a large medkit + armor. Largest XP bounty.
+
+NUMBERS (placeholders, tune):
+  Max HP 700 | phase2 at 50% | FIREWALL_COOLDOWN 4 (p1) / 2 (p2)
+  FIREWALL_DURATION 4 turns | FIRE_DAMAGE 12/turn
+  CLEAVE_DAMAGE 35 (p1) / 52 (p2) | move cadence every-other-tick (p1) / every-tick (p2).
+
+
+BOSS ROSTER BEYOND DEPTH 15
+===========================
+- Depth 20+: re-use the three bosses in a rotating table (Overseer → Corruptor →
+  Baron → ...) with stats scaled by a depth multiplier:
+    scaledHp = baseHp * (1 + BOSS_DEPTH_HP_SCALE * (depth - firstAppearanceDepth))
+    scaledDamage similarly with BOSS_DEPTH_DAMAGE_SCALE.
+- Future: add depth-20 / depth-25 unique bosses; v1 ships the cycle.
+
+
+TECHNICAL NOTES
+===============
+PACKAGES / CLASSES
+- entity/boss/Boss.java — extends the base Enemy. Adds: int phase, float
+  phase2HpThreshold, BossAttackPattern phase1Pattern, phase2Pattern, boolean
+  invulnerable, String bossName, String bossEpithet, String killLine.
+- entity/boss/BossAttackPattern.java — interface: nextMove(Boss, Player, Level,
+  int tickIndex) → BossMove. Concrete: OverseerPhase1Pattern, OverseerPhase2-
+  Pattern, CorruptorPhase1Pattern, ... (6 classes).
+- entity/boss/BossMove.java — small struct/enum result: {TELEGRAPH, RESOLVE,
+  REPOSITION, SUMMON, MELEE} + payload (tile set, damage, summon type/count).
+- entity/boss/DangerTileSet.java — holds marked (column,row) tiles + turnsLeft +
+  damage + onResolve effect (damage / spawn hazard). Lives on the boss; advanced
+  one step per tick.
+- world/BossFloorController.java — on descent, if depth % 5 == 0, instantiates
+  the correct Boss from a depth→boss table, applies depth scaling, wires the
+  full-screen HP bar, arena-lock, intro, and the death→reward→exit-enable flow.
+- render/BossHudRenderer.java (or extend HudRenderer) — full-screen boss HP bar
+  + intro letterbox + phase/enrage banners. Pre-allocate all sprites/glyph
+  buffers at floor load (NO render() allocations).
+
+LEVEL.JAVA / GENERATION
+- Generator must emit a boss-arena layout for depth % 5 == 0: one open room
+  (e.g. 11x11 to 15x15 tiles) with 2-4 columns ('P') for cover, an approach
+  corridor, one door, boss seeded at center, '>' placed but DISABLED until kill.
+- Use a new generator mode flag, NOT a new tile symbol — the boss is an Enemy
+  seeded at a tile, the arena is normal walls/floor/columns. NO NEW TILE SYMBOL
+  REQUIRED for the arena itself.
+- The boss enemy needs a spawn marker. Existing enemy spawns are '1'-'5'. A boss
+  is selected by depth, so it can reuse a normal spawn marker placed at center
+  and have BossFloorController REPLACE that spawned enemy with the depth-correct
+  boss — OR add a dedicated boss spawn digit. RECOMMENDATION: reserve digit '6'
+  as a generic "boss spawn (resolved by depth)" marker.
+  => requires new symbol '6' — add to docs/tile-symbols.txt (ENEMY SPAWN
+     MARKERS section) and Level.java/LevelLoader before implementing.
+
+TICK INTEGRATION
+- Boss subscribes to TickEventBus like any enemy: on each tick, if not in
+  intro/transition, advance DangerTileSet timers (resolve expired sets), then
+  ask the active phase pattern for nextMove and execute it. Exactly one move per
+  tick. Phase transition checked after damage is applied each tick.
+
+ARENA LOCK
+- Reuse DoorManager: on boss awaken, force the arena door to a LOCKED state that
+  isWall()-returns-true and ignores interaction until BossFloorController flips
+  it open on death. If keycard doors present, can author it as a 'B' blue door
+  pre-opened then re-locked by the controller.
+
+CONSTANTS (add to Constants.java)
+  BOSS_FLOOR_INTERVAL              = 5
+  BOSS_PHASE2_THRESHOLD            = 0.50f
+  BOSS_PHASE_TRANSITION_TURNS      = 1
+  BOSS_HP_BAR_MARGIN               = 80f
+  BOSS_HP_BAR_HEIGHT               = 24f
+  BOSS_INTRO_DURATION              = 2.5f   // seconds, cutscene-only input lock
+  BOSS_DEPTH_HP_SCALE              = 0.20f
+  BOSS_DEPTH_DAMAGE_SCALE          = 0.12f
+  // Per-boss numbers as listed in each boss section (OVERSEER_MAX_HP, etc.)
+
+GAMEMATH (add)
+  bossDepthScaledStat(baseStat, depth, firstAppearanceDepth, scalePerStep)
+  isBossFloor(depth) → depth > 0 && depth % BOSS_FLOOR_INTERVAL == 0
+
+
+VISUAL DESIGN
+=============
+INTRO (cutscene, ~2.5s, only input-locked moment)
+- Black letterbox bars slide in top and bottom (each ~120px).
+- Boss name types out large center-screen (e.g. "THE OVERSEER"), epithet smaller
+  below ("SITE LOGISTICS CORE OVR-1").
+- The boss sprite does an idle "wake" twitch / optic flare.
+- 2.0s hold, then bars retract, HP bar fades in, control returns.
+
+FULL-SCREEN HP BAR
+- Top of screen, BOSS_HP_BAR_MARGIN inset. Dark backing, accent-colored fill,
+  thin notch at the 50% phase line. Boss name top-left of the bar.
+- Overseer accent: cyan-white. Corruptor: toxic green. Baron: ember orange-red.
+
+DANGER TELEGRAPH OVERLAY
+- Marked tiles: pulsing translucent overlay in the boss's accent color (red for
+  imminent-1-turn). Drawn via floor/decal overlay sprites, pre-allocated.
+
+PHASE/ENRAGE BANNERS
+- Short centered banner ("THE BARON IS ENRAGED") for ~1.2s on transition, plus a
+  full-screen color flash (red for Baron, green for Corruptor, white for
+  Overseer).
+
+DEATH
+- Boss sprite collapse animation + a white screen flash; '>' exit reveal pulse;
+  kill-line HUD toast (Overseer: "OVERSEER OFFLINE. Productivity has decreased
+  by 100%."; Corruptor: "The experiment is concluded."; Baron: "The gate stands
+  open. Keep descending.").
+
+
+BALANCE NOTES
+=============
+- All HP/damage/cooldown numbers above are PLACEHOLDERS — tune against the
+  player's expected DPS and HP at the relevant depth.
+- Fairness contract: every damaging move is telegraphed at least 1 full turn
+  ahead. A player who reads the telegraph and steps off the marked tiles takes
+  zero damage from that move. Deaths must feel earned.
+- Phase 2 must NEVER be expressed as "more actions per player turn" (breaks the
+  turn model). Express escalation only via bigger hits, shorter cooldowns, and
+  faster (per-tick) movement.
+- Boss HP should require roughly 2-4 minutes of careful play, not a war of
+  attrition — bias toward dodge-heavy, punish-window combat over bullet-sponge.
+- Guaranteed drops must matter: a boss kill should visibly change the run.
+
+
+INTERACTIONS
+============
+- DEPTH COUNTER (level transitions): the sole trigger. depth % 5 == 0 → boss
+  floor; the '>' exit is gated on the kill.
+- TRAPS & HAZARDS (roguelike_order_20): Corruptor acid pools and Baron firewalls
+  REUSE the toxic-pool and fire hazard primitives — implement those first, or
+  stub them. Pressure plates etc. are NOT placed in arenas (boss is the threat).
+- KEYCARD DOORS: arena door can be a 'B' blue door; arena-lock reuses door state.
+- XP/LEVELING (roguelike_order_11): bosses grant a large XP bounty; the levelup
+  boon choice can be the delivery vehicle for Mutagen Vial / Baron's Heart.
+- INVENTORY/SHOP (roguelike_order_18): boss reward weapons/upgrades enter the
+  same item/inventory pipeline; a shop is a good pre-boss "loadout" beat (place
+  a shop on the floor BEFORE a boss floor when possible).
+- ENEMY HEALTH BARS: the per-enemy bar is suppressed on bosses (the full-screen
+  bar replaces it); minions still show normal bars.
+- PERMADEATH (roguelike_order_1): boss death lines feed the death screen.
+
+
+OPEN QUESTIONS
+==============
+1. Boss spawn marker: dedicated '6' (recommended) vs reusing a normal spawn that
+   the controller replaces by depth? Decide before generation work.
+2. Should the player be able to flee a boss floor (no — arena lock is the point)?
+   Confirmed: no retreat. But should a player who entered with very low HP get a
+   one-time "the door is still open, last chance" grace tick before lock?
+3. Do bosses drop their reward if the player has a full weapon roster — convert
+   weapon rewards to upgrade tokens automatically? (Recommended: yes.)
+4. Three bosses for v1; do depth-20/25 get unique bosses or is the cycle fine
+   for first release? (Recommended: cycle for v1.)
+5. Should phase 2 transition fully heal nothing / shield briefly only? Confirmed:
+   no heal, just a 1-tick invuln transition.
+6. Music/audio cue on boss floor entry — out of scope here, flag for audio pass.

@@ -1,0 +1,186 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Player Health, Damage & Hit Feedback
+---
+
+OVERVIEW
+========
+The foundation of all combat: the marine has a finite HP pool, enemies deal
+damage when they attack, and at 0 HP the marine dies (triggering order-1
+permadeath). This document owns the DAMAGE PIPELINE — how raw damage becomes lost
+HP, how armor soaks part of it, how brief post-hit invincibility prevents
+multi-hit chain-death, and how every hit is made readable (screen flash, floating
+damage numbers, directional indicator). Without this, enemies (already
+implemented) have nothing to hurt and the HP bar is cosmetic.
+
+It belongs here because legible, fair damage is the precondition for permadeath
+feeling earned rather than cheap. The player must always understand WHY they took
+damage and from WHERE.
+
+OWNERSHIP / WHAT ALREADY EXISTS — read before implementing:
+- scanline-crt-hud-marine-vitals.txt declares the HP/AR pool fields
+  (int health, maxHealth, armor, maxArmor) and the method signature
+  Player.applyDamage(int amount, float sourceDirX, float sourceDirY). DO NOT
+  redefine these. This doc INSERTS behavior into that applyDamage path.
+- armour-kit-system.txt (IMPLEMENTED) owns the damage ABSORPTION SPLIT (how raw
+  damage is divided between AR and HP). DO NOT duplicate that math; call into it.
+- enemy_system.txt (IMPLEMENTED) defines the enemy ATTACK branch that calls
+  applyDamage, and melee-vs-ranged attack gating.
+This doc fills the gaps the brief asks for: HP definition + death threshold,
+invincibility frames, hit-flash, floating damage numbers, and how melee vs ranged
+damage values are sourced.
+
+GAMEPLAY LOOP
+=============
+1. During the enemy ACTION phase (order 2), an alerted enemy that can attack calls
+   Player.applyDamage(rawAmount, sourceDirX, sourceDirY). sourceDir is the unit
+   vector from the enemy tile to the player tile (used for directional feedback).
+2. INVINCIBILITY CHECK (new): if the player is currently in i-frames
+   (invincibleTicksRemaining > 0), the hit is IGNORED (zero damage, no feedback
+   flash, but the attack still "happened" for AI purposes). Otherwise continue.
+3. ABSORPTION SPLIT (existing, armour-kit-system.txt): if armor > 0, a fraction of
+   rawAmount is soaked by AR (lowering AR), the remainder hits HP. If armor == 0,
+   the full rawAmount hits HP.
+4. HP is reduced: health = max(0, health - hpPortion). RunStats.totalDamageTaken
+   += hpPortion (+ armor portion if counted — see OPEN QUESTIONS).
+5. FEEDBACK (cosmetic, render-only, advances no turn):
+     - Full-screen red vignette/flash pulses (alpha scales with damage fraction).
+     - A floating damage number spawns in 3D space above the player's view edge
+       biased toward sourceDir (so the player reads "hit from the left").
+     - The Doom-face portrait swaps to a bloodier frame; HP bar glides down (owned
+       by the HUD doc — fire a PlayerDamaged event).
+6. INVINCIBILITY GRANT (new): set invincibleTicksRemaining =
+   PLAYER_INVINCIBLE_TICKS after a damaging hit, so the player cannot be chain-
+   killed by multiple enemies in the SAME tick beyond the configured budget. The
+   counter decrements once per tick (a tiny TickSubscriber or inside applyDamage's
+   owning entity update).
+7. DEATH CHECK: handled by order 1 AFTER the full tick resolves — when
+   health == 0, isDead() returns true and the run ends. applyDamage itself does
+   NOT trigger the death screen mid-tick.
+
+PLAYER EXPERIENCE
+=================
+Getting hit must be visceral and unambiguous. The red flash + directional damage
+number tells the player instantly "you lost 14 HP, from the imp on your left."
+HP scarcity drives the entire risk economy: with no regeneration (only medkits),
+every point of HP is a spent resource, and the player constantly weighs "push or
+retreat." Invincibility frames exist purely to keep death FAIR — they prevent the
+unreadable "three enemies all hit me at once and I died from full HP in one tick"
+death that would make permadeath feel arbitrary. The player should never die
+without at least one tick of warning at low HP.
+
+TECHNICAL NOTES
+===============
+DEPENDENCIES (must exist first):
+- scanline-crt-hud-marine-vitals.txt: HP/AR fields + applyDamage signature + the
+  HUD bars and Doom-face portrait. (HUD bar geometry exists in CLAUDE.md already.)
+- armour-kit-system.txt (IMPLEMENTED): the absorption split.
+- order 2 (turn system) + enemy_system.txt (IMPLEMENTED): the caller of
+  applyDamage.
+- order 1 (permadeath): consumes isDead() and the hit-flash overlay.
+
+New / modified:
+- entity/Player.java: add fields (per HUD doc if not already present)
+    int health, maxHealth;            // owned by HUD doc — do not duplicate
+    int invincibleTicksRemaining;     // NEW, this doc
+  Add isDead() => health <= 0. Add invincibility decrement (once per tick).
+  NEVER mutate health outside the applyDamage / heal paths.
+- Damage pipeline lives in Player.applyDamage (HUD-doc method): order is
+    (a) if invincibleTicksRemaining > 0 -> return early (no damage, no feedback)
+    (b) absorption split (armour-kit-system.txt)
+    (c) subtract HP, clamp at 0
+    (d) record RunStats.totalDamageTaken
+    (e) fire PlayerDamaged event (drives HUD + flash + damage number)
+    (f) set invincibleTicksRemaining = PLAYER_INVINCIBLE_TICKS
+- render/DamageFlashRenderer.java (new, ...toon3d.render) OR fold into HudRenderer:
+  a full-screen red quad whose alpha decays over real time after a PlayerDamaged
+  event. Pre-allocated white/red pixel texture; NO allocation in render(). This
+  same overlay is reused by order-1's killing-hit flash.
+- render/FloatingDamageRenderer.java (new): a small fixed-capacity object pool of
+  floating number labels (e.g. 8 slots). On PlayerDamaged, activate one slot with
+  the value, a screen position biased toward sourceDir, and a real-time lifetime;
+  it rises and fades. Pool is pre-allocated — NO per-hit allocation. (This is the
+  player-damage counterpart to enemy-hit numbers in enemy-hit-impact-effects.txt;
+  share that pool/renderer if it already exists.)
+- Damage values are SOURCED from the enemy, not invented here: each enemy type in
+  enemy_system.txt carries a melee/ranged damage stat. Melee enemies deal their
+  melee value when Chebyshev-adjacent; ranged enemies deal their ranged value when
+  in range + LOS. This doc only defines the PIPELINE that consumes those values.
+
+Constants to add (Constants.java):
+- PLAYER_MAX_HEALTH = 100            (placeholder; may already be in HUD doc)
+- PLAYER_INVINCIBLE_TICKS = 0 or 1   (see BALANCE — recommend 0 for v1, 1 if
+                                       multi-enemy ticks feel unfair)
+- DAMAGE_FLASH_DURATION_SECONDS = 0.25f
+- DAMAGE_FLASH_MAX_ALPHA = 0.55f
+- DAMAGE_NUMBER_LIFETIME_SECONDS = 0.9f
+- DAMAGE_NUMBER_RISE_WORLD_UNITS = 60f
+- DAMAGE_NUMBER_POOL_SIZE = 8
+
+Turn-based fit: damage application is instantaneous within the enemy's turn (no
+animation, no real-time cooldown). All feedback (flash, numbers, face swap) is
+cosmetic real-time decay that advances ZERO turns. Invincibility is counted in
+TICKS, never seconds, honoring the "no second-based cooldowns" rule.
+
+VISUAL DESIGN
+=============
+- Red flash: full-screen red vignette, denser at screen edges, peaking at
+  DAMAGE_FLASH_MAX_ALPHA scaled by (damage / maxHealth), decaying to 0 over
+  DAMAGE_FLASH_DURATION_SECONDS. Stacks/refreshes on repeat hits.
+- Floating damage number: chunky pixel font, blood-red, e.g. "-14", spawned near
+  the top-center of the 3D view, nudged left/right/up by sourceDir so the number
+  drifts in from the direction of the hit. Rises DAMAGE_NUMBER_RISE_WORLD_UNITS
+  and fades over its lifetime.
+- Directional damage indicator (optional v1.1): a brief red arc on the screen
+  edge pointing toward sourceDir — strong Doom-style "you were hit from here" cue.
+- HP bar + Doom-face: owned by scanline-crt-hud-marine-vitals.txt. This doc only
+  fires the PlayerDamaged / PlayerHealed events that drive them.
+- At critical HP (<= 20%) the HUD doc's portrait goes "critical" and the edge
+  vignette may pulse faintly red even between hits (low-health heartbeat) — a fair
+  warning before a permadeath.
+
+BALANCE NOTES
+=============
+- PLAYER_MAX_HEALTH = 100 with starting enemy melee in the ~8-16 range means a
+  fresh marine survives 6-12 unanswered hits — enough that death is always
+  preceded by a readable low-HP state. Verify no enemy combination one-shots a
+  full-HP marine in a single tick (the order-1 fairness rule).
+- PLAYER_INVINCIBLE_TICKS: recommend 0 for v1 (turn-based games rarely need
+  i-frames since the player chooses to walk into danger). Set to 1 ONLY if
+  multi-enemy ticks produce unfair burst deaths in playtest. If used, i-frames
+  must NOT make the player invincible to a deliberate second turn of standing in
+  danger — they only cap damage within concurrent same-tick attacks.
+- No passive HP regen: healing is medkits only (medkit-field-medicine-system.txt).
+  This keeps HP a scarce, spent resource per the roguelike economy.
+- Flag ALL numbers above as placeholders pending playtest.
+
+INTERACTIONS
+============
+1. Armour (armour-kit-system.txt): applyDamage routes through the absorption split
+   before touching HP. AR is the front layer; HP is the back layer.
+2. Enemy system (enemy_system.txt): enemies are the callers; each type's melee /
+   ranged damage stat feeds rawAmount. Melee needs adjacency; ranged needs range +
+   LOS.
+3. Permadeath (order 1): isDead() is the death trigger, checked after the full
+   tick; the hit-flash overlay is reused for the killing blow.
+4. HUD vitals (scanline-crt-hud-marine-vitals.txt): consumes PlayerDamaged /
+   PlayerHealed events for the HP bar glide and Doom-face swap.
+5. Medkits (medkit-field-medicine-system.txt): the heal path (USE a medkit costs a
+   turn) raises HP and fires PlayerHealed; the inverse of this pipeline.
+6. Turn system (order 2): invincibleTicksRemaining decrements once per tick via a
+   subscriber or the player's per-tick update.
+
+OPEN QUESTIONS
+==============
+- Does totalDamageTaken count armor-soaked damage, or only HP lost? Recommend
+  counting HP lost only (the report metric players care about is HP), but expose
+  both if the death screen wants "damage absorbed by armor" as a flex stat.
+- i-frames in ticks: 0 or 1 for v1? Lean 0; promote to 1 only on playtest evidence
+  of unfair concurrent-hit deaths.
+- Should there be a separate "last damage source" stored for a death-screen "KILLED
+  BY: REVENANT" line? Cheap to add an enemyTypeId param to applyDamage; recommend
+  adding it so order-1's report can name the killer.
+- Knockback on hit? Movement is tile-based and cardinal — knockback would be a
+  forced 1-tile shove (a turn-space effect). Defer; out of scope for v1.
+- Does the directional damage indicator (screen-edge arc) ship in v1 or v1.1?
+  Recommend v1.1; the flash + floating number are sufficient for legibility first.

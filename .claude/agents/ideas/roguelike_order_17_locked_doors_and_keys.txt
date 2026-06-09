@@ -1,0 +1,256 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Locked Doors & Keys — Procgen Gating from Floor 3+
+---
+
+OVERVIEW
+========
+A key-and-locked-door system in the classic Doom mold: three key colors (Blue,
+Yellow, Red), three matching locked door colors. Keys are floor pickups or enemy
+drops; carrying the matching key auto-opens the matching door on approach/use.
+Locked doors gate bonus rooms, shortcuts, and required path progression, giving
+every floor a small "where do I go / what do I need?" exploration puzzle
+(Roguelike Pillars: Exploration + Information Management).
+
+IMPORTANT — RELATIONSHIP TO EXISTING WORK: the tile-symbol layer for this ALREADY
+EXISTS and is IMPLEMENTED. docs/tile-symbols.txt already defines doors R/Y/B and
+keycard pickups r/y/b, and uac-keycard-doors-security-tiers.txt (STATUS:
+IMPLEMENTED) already specs the door/inventory/InteractionDispatcher mechanics.
+THIS document does NOT re-invent those. It specifies the ROGUELIKE GENERATION,
+PLACEMENT, AND BALANCE layer on top of the implemented system: how the generator
+guarantees a solvable locked-door chain on every floor 3+, single-use key
+consumption semantics, the auto-use-on-approach convenience, and the
+floor-by-floor key/door budget. Treat the keycard doc as the engine; this is the
+content/balance contract that drives it from procedural generation.
+
+
+DEPENDENCIES (must exist first)
+===============================
+1. Keycard doors + security tiers (uac-keycard-doors-security-tiers.txt,
+   IMPLEMENTED) — door tiles R/Y/B, pickup tiles r/y/b, PlayerInventory keycard
+   set, DoorManager unlock path, InteractionDispatcher, HUD keycard slots,
+   "ACCESS REQUIRED" toast + glow. ALL of this is already built.
+2. Tile symbols (docs/tile-symbols.txt) — R/Y/B doors and r/y/b pickups already
+   present. NO NEW SYMBOLS REQUIRED for this feature.
+3. Procedural level generation (procedural-level-generation.txt) — the room/BSP
+   graph this layer constrains.
+4. Level transitions / depth counter (IMPLEMENTED) — drives the floor-3+ rule.
+SOFT: enemy system (for key-on-enemy-drop placement), inventory UI
+(roguelike_order_6) to show carried keys.
+
+
+DESIGN DELTAS FROM THE IMPLEMENTED KEYCARD DOC
+==============================================
+The implemented keycard doc left several decisions open; this doc resolves them
+for the roguelike generator and tightens two behaviors:
+
+1. AUTO-USE ON APPROACH (convenience layer)
+   - The implemented system opens locked doors via KEY_INTERACT (E) when the
+     player has the matching key. This doc ADDS an auto-use option: when the
+     player STEPS toward a locked door tile (tryMove blocked by it) and holds
+     the matching key, the door auto-unlocks and opens as part of that action
+     (one turn), no separate E press needed. Bumping a locked door you CAN open
+     just opens it. Bumping one you cannot still shows the "ACCESS REQUIRED"
+     toast (no turn consumed). Manual E still works for ranged/early opening.
+   - Rationale: in a fast tile-crawler, requiring a separate keypress on a door
+     you can obviously open is friction. Doom auto-opened color doors on bump.
+
+2. SINGLE-USE KEYS (consumption)
+   - DELTA from the implemented doc, which made an unlocked door stay unlocked
+     and keys persist for the level. THIS doc makes keys SINGLE-USE: opening a
+     locked door CONSUMES the matching key (removed from inventory, HUD slot
+     clears). The door, once opened, stays open (door state), but the KEY is
+     gone — it cannot open a second same-color door.
+   - Rationale: single-use keys make placement a real resource/route puzzle (if
+     two red doors exist, you choose which to open) and make extra keys a
+     genuine reward. The generator (below) guarantees one key per required door
+     so the path is always solvable.
+   - CONFIGURABLE: KEY_SINGLE_USE flag (default true). If false, falls back to
+     the implemented "persist for level" behavior. Document the choice.
+
+3. KEYS RESET PER FLOOR
+   - Confirmed (matches implemented recommendation): unused keys do NOT carry to
+     the next floor. Each floor's locks are local.
+
+
+GAMEPLAY LOOP
+=============
+1. Floor generates with a locked-door chain (see GENERATION). Player spawns
+   without keys.
+2. Player explores. Sees a colored door (red/yellow/blue) — its frame glows that
+   color from a few tiles away (existing keycard glow). HUD does not say
+   "locked"; the COLOR tells the player what they need.
+3. Player finds the matching key:
+   a. FLOOR PICKUP: a glowing keycard decal (r/y/b) on a floor tile. Stepping on
+      it picks it up (existing pickup path). HUD keycard slot fills; "RED KEYCARD
+      ACQUIRED" toast.
+   b. ENEMY DROP: a designated "UAC Security Officer" enemy variant guaranteed to
+      drop a specific key on death; the key spawns as an r/y/b decal on the
+      enemy's last walkable tile.
+4. Player returns to the matching door:
+   a. If they STEP into it (W) and hold the matching key → auto-unlock: door
+      runs its unlock animation, opens, KEY IS CONSUMED (HUD slot clears). One
+      turn.
+   b. If they press E facing it with the key → same result.
+   c. If they lack the key → "ACCESS REQUIRED" toast + denial buzzer; door stays
+      shut; NO turn consumed.
+5. Door is now permanently open. Player proceeds. The key is spent.
+6. On descent ('>'), all remaining keys clear; next floor regenerates its own
+   chain.
+
+
+PROCEDURAL GENERATION & PLACEMENT
+=================================
+The generator treats locked doors as a constraint solver over the room graph
+(BSP/room-and-corridor). Goal: every floor 3+ is GUARANTEED SOLVABLE and has at
+least one locked door + one key.
+
+ROOM GRAPH + REACHABILITY
+- Build the room connectivity graph. Pick the spawn room (contains 'p') and the
+  exit room (contains '>').
+- A "lock placement" places a colored door on an edge of the graph, splitting it
+  into a reachable side (from spawn) and a gated side. The matching key must be
+  placed on the REACHABLE side (or behind a strictly-lower constraint already
+  solved). This is the core invariant.
+
+PER-FLOOR LOCK BUDGET (depth-scaled)
+- Floors 1-2: NO locked doors (teach combat/movement first).
+- Floor 3-4: exactly 1 locked door, 1 matching key. The exit is behind it
+  (required-path gate) OR it gates a bonus room (player choice). Generator picks
+  per seed.
+- Floor 5 (boss floor): per the boss doc, a single 'B' door fronts the arena;
+  the blue key (if used) is placed on the floor's approach. (Boss floors may
+  forgo keys and just use the arena-lock; see OPEN QUESTIONS.)
+- Floors 6-9: 1-2 locked doors. Introduce a TWO-LINK CHAIN occasionally: red key
+  → red door → yellow key behind it → yellow door → exit.
+- Floors 10+: up to a full RED → YELLOW → BLUE chain (3 doors, 3 keys), the exit
+  behind the highest tier.
+
+CHAIN SOLVER RULES
+- Order tiers by "depth in the lock chain," not by color prestige. The generator
+  may map colors to chain depth freely per floor (red isn't always first), but
+  must be CONSISTENT within a floor and use distinct colors per door so
+  signposting stays unambiguous (one color = one door per floor, except boss
+  alternate entrances).
+- Each key K_n must be reachable using only keys K_1..K_{n-1} already obtainable.
+- The exit must be reachable after consuming all required keys.
+- NO key may be placed inside the region its own door gates (soft-lock guard).
+- BONUS placement: optionally place ONE extra locked door whose region holds
+  pure loot (not required for exit) and whose key is an OPTIONAL find — rewards
+  full exploration. Because keys are single-use, a player with one key must
+  CHOOSE: open the bonus door or the progress door first if both share a color
+  (generator should avoid same-color required+bonus unless intentional).
+
+KEY ACQUISITION MODE (per key, per seed)
+- 60% floor pickup (pure exploration), 40% enemy drop (a fight to earn the key).
+  Tunable via KEY_DROP_FROM_ENEMY_CHANCE. Enemy-drop keys use the Security
+  Officer variant.
+
+WHAT LOCKED DOORS GUARD (weighted)
+- Required path (exit gate): ~50% of locked doors.
+- Bonus loot room (extra ammo/medkit/armor, occasionally a weapon): ~35%.
+- Shortcut (connects two already-reachable areas to cut backtracking): ~15%.
+
+
+TECHNICAL NOTES
+===============
+MOST OF THE ENGINE EXISTS. New work is generator-side + two behavior deltas.
+
+GENERATOR (level/LevelGenerator.java or a LockPlacement helper)
+- After room graph + spawn/exit are chosen, run a LockChainPlanner:
+    LockChainPlanner.plan(roomGraph, spawnRoom, exitRoom, depth, random)
+    → list of LockPlacement{ doorColor, doorEdge(tile), keyColor, keyTile,
+      keyMode(PICKUP|ENEMY_DROP), guards(EXIT|BONUS|SHORTCUT) }
+- Apply placements: write R/Y/B door chars on the chosen corridor tiles, write
+  r/y/b pickup decals (or tag the Security Officer enemy spawn) on key tiles.
+- Reachability via flood-fill on the tile grid (BFS from spawn, doors of an
+  un-obtained color treated as walls), iterated as keys are "granted" in chain
+  order. This proves solvability at generation time.
+
+BEHAVIOR DELTA 1 — AUTO-USE ON APPROACH (PlayerController + DoorManager)
+- In tryMove, when the target tile is a locked door (Level.isLockedDoor) and
+  PlayerInventory.hasKeycard(color): route to DoorManager.unlockAndOpen, consume
+  the key, complete the move/turn (or stop adjacent and open, matching existing
+  plain-door bump behavior). If no key: existing denial path, no turn.
+
+BEHAVIOR DELTA 2 — SINGLE-USE CONSUMPTION (DoorManager + PlayerInventory)
+- On a successful unlock: if Constants.KEY_SINGLE_USE, call
+  PlayerInventory.removeKeycard(color); fire a HUD "slot clear" event. The door's
+  unlocked state persists; the key does not.
+
+KEY RESET ON DESCENT (World)
+- On floor transition, PlayerInventory.clearKeycards() (already implied by
+  "reset per level" in the keycard doc — ensure it is actually called).
+
+CONSTANTS (add)
+  LOCKED_DOOR_MIN_DEPTH            = 3
+  KEY_SINGLE_USE                   = true
+  KEY_AUTO_USE_ON_BUMP             = true
+  KEY_DROP_FROM_ENEMY_CHANCE       = 0.40f
+  LOCK_BUDGET_BY_DEPTH             // table: depth → (minDoors, maxDoors)
+  LOCK_GUARD_WEIGHTS               // EXIT 0.50 / BONUS 0.35 / SHORTCUT 0.15
+
+NO NEW TILE SYMBOLS REQUIRED — R/Y/B and r/y/b already exist in
+docs/tile-symbols.txt. (If a 4th "skull/master" tier is ever added, THAT would
+need a new symbol; out of scope here.)
+
+GAMEMATH (add)
+  lockBudgetForDepth(depth) → (min,max) door count
+  // reachability is graph/BFS logic, lives in the planner, not GameMath.
+
+
+VISUAL DESIGN
+=============
+- Doors and keys reuse the EXISTING keycard visuals: colored door stripe + LED
+  panel, frame glow within 3 tiles, hovering colored keycard pickup decal,
+  pickup blip, "ACQUIRED"/"ACCESS REQUIRED" toasts, HUD keycard slots.
+- NEW: on single-use consumption, the HUD keycard slot does a brief "spent"
+  animation (slot icon desaturates and fades) so the player clearly registers
+  the key was used up.
+- Inventory UI (roguelike_order_6) shows carried keys as small colored card
+  icons; consumed keys disappear from it.
+
+
+BALANCE NOTES
+=============
+- Guarantee: every floor 3+ has >= 1 locked door and >= 1 matching key, and is
+  always solvable (proven by the planner's flood-fill).
+- One color = one required door per floor (clear signposting). Same-color second
+  doors only for boss alternate entrances or deliberate bonus/choice setups.
+- Single-use keys make EXTRA keys a real reward; the generator should
+  occasionally drop a spare key (e.g. on a hard optional enemy) that lets a
+  player open a bonus door they'd otherwise skip.
+- Don't over-gate: max 3 locked doors per floor even deep. More than that turns
+  exploration into a fetch-quest slog.
+- Enemy-drop keys should sit on enemies that are along a natural route, never
+  requiring the player to clear the WHOLE floor to find the one officer.
+
+
+INTERACTIONS
+============
+- BOSS FLOORS (roguelike_order_16): the arena door can be a 'B' door; the boss
+  arena-lock and key-gating are compatible (boss doc owns the lock-after-entry).
+- SECRET ROOMS (roguelike_order_19): a secret can hide a SPARE key or an
+  optional door's key — secrets and locks layer nicely (a hidden key opens a
+  visible bonus door).
+- SHOP (roguelike_order_18): a merchant could sell a "master skeleton key"
+  consumable that opens any one locked door — a credits sink with route value.
+- ENEMY SYSTEM: the Security Officer variant is the key-drop vector; it should
+  not path through locked doors (treat as wall), and can be heard slamming a
+  door from the gated side (atmosphere + signposting).
+- INVENTORY UI: carried keys shown; consumed keys removed.
+
+
+OPEN QUESTIONS
+==============
+1. SINGLE-USE vs persistent keys: this doc defaults to single-use (KEY_SINGLE_-
+   USE=true), a DELTA from the implemented keycard doc. Confirm with design — if
+   the implemented build assumed persistence, flip the flag or migrate.
+2. Auto-use-on-bump vs E-only: default auto-use=true. Confirm it doesn't
+   surprise players who wanted to NOT open a door yet (rare; bumping = intent).
+3. Boss floors: do they place a key at all, or rely purely on the arena-lock?
+   (Recommended: boss arena uses arena-lock; the colored door is cosmetic/pre-
+   opened, no key needed.)
+4. Should a spare key be carriable to the next floor for special multi-floor
+   puzzles (the keycard doc's "binds across levels" flag)? Default no.
+5. Master skeleton key shop item — in scope for shop doc or out? Flag to shop.

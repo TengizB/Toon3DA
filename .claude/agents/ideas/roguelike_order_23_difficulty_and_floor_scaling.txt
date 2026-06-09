@@ -1,0 +1,227 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Difficulty & Floor Scaling — Depth Curves + 3 Modes
+---
+
+OVERVIEW
+========
+A run must get harder as you descend, and the player must pick how hard the whole
+incursion is up front. This doc defines two layered systems: (1) per-FLOOR scaling
+curves that ramp enemy HP, damage, count, type unlocks, AI speed, and drop rates
+as depth increases; and (2) three DIFFICULTY MODES (Easy / Normal / Nightmare)
+chosen at run start that multiply those curves and toggle hard rules. Nightmare is
+the gauntlet: permadeath (already the default) PLUS no pickups on the ground —
+enemies are your only supply line.
+
+This is the "pacing & escalation" pillar made into a formula. The marine should
+feel the floor underneath getting meaner in a way they can name — "the Ghouls hit
+twice as hard down here and there's three of them per room."
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING DOCS
+=============================================
+- roguelike_order_11_xp_and_player_leveling.txt: XP rewards are NOT depth-scaled
+  (that doc's deliberate choice — deeper enemies give the same XP but are tougher).
+  This doc honors that: scaling touches HP/damage/count/AI/drops, NOT xpReward.
+- enemy_system.txt (IMPLEMENTED): defines the 5 enemy types and the 1-5 spawn
+  mapping. This doc ADDS a scaling layer applied at spawn time and a per-type
+  "first floor it can appear" gate. It does NOT change base combat resolution.
+- level-transitions-stairs-down.txt (IMPLEMENTED): owns the authoritative depth
+  counter this entire doc reads from.
+- procedural-level-generation.txt (NOT IMPLEMENTED): owns room/enemy placement;
+  this doc feeds it the per-floor enemy-count target and the allowed-type list.
+- roguelike_order_1_permadeath_and_death_screen.txt: permadeath is the baseline;
+  Nightmare does not ADD permadeath (it's already on) — it adds the no-ground-
+  pickups rule. Easy/Normal also use permadeath (this is a roguelike). Difficulty
+  changes danger, never the permanence of death.
+
+NO NEW TILE SYMBOL IS REQUIRED. Scaling is applied to spawned enemy entities and to
+drop-table rolls; difficulty mode is a run-level flag. Pure entity/state layer.
+
+GAMEPLAY LOOP
+=============
+1. At run start (main menu, roguelike_order_25), the player selects a DifficultyMode
+   (Easy / Normal / Nightmare). This is fixed for the entire run — no mid-run
+   changes (anti-save-scum).
+2. Each time a floor loads (depth N from level-transitions), the spawner computes
+   the floor's scaling profile = baseScaling(depth) x modeMultipliers(mode).
+3. For each enemy placed: its maxHp, damage, and AI speed are multiplied by the
+   profile's factors at spawn time (stored on the entity instance — scaling is
+   "baked in" when the enemy is created, never recomputed per turn).
+4. Enemy COUNT per room and the ALLOWED TYPE LIST are passed to the procgen
+   placer: tougher types (Revenant, etc.) are excluded until their unlock floor.
+5. Drop rolls (health/ammo pickups) use the profile's drop-rate multiplier — fewer
+   health drops deeper. On NIGHTMARE, ground pickups are disabled entirely; only
+   enemy death-drops (if/when that system exists) supply the marine.
+6. Enemies act once per player turn as always; "faster AI" means a higher chase
+   aggression / reduced patrol hesitation, NOT real-time speed (turn-based stays
+   intact — see TECHNICAL NOTES on what "speed" means here).
+
+SCALING FORMULAS (depth N, 1-based; clamp at a cap so floor 15+ plateaus)
+=========================================================================
+Let N = floor depth (1 = first floor). Define a soft cap depth CAP = 15.
+Use Nclamped = min(N, CAP) so deeper-than-15 (Endless mode) keeps growing only via
+the explicit endless overflow term below.
+
+HP MULTIPLIER (target: x1.0 at floor 1 -> ~x3.5 at floor 15+):
+  hpMultiplier(N) = 1.0 + (3.5 - 1.0) * (Nclamped - 1) / (CAP - 1)
+  -> linear ramp from 1.00 (N=1) to 3.50 (N=15). Simple, readable, tunable.
+  Endless overflow (N > 15): hpMultiplier += ENDLESS_HP_PER_FLOOR * (N - CAP).
+
+DAMAGE MULTIPLIER (gentler than HP so deep floors are tense, not one-shot lethal;
+target x1.0 -> ~x2.25 at floor 15):
+  damageMultiplier(N) = 1.0 + (2.25 - 1.0) * (Nclamped - 1) / (CAP - 1)
+  Endless overflow: += ENDLESS_DAMAGE_PER_FLOOR * (N - CAP).
+
+ENEMY COUNT PER ROOM (integer; ramps slowly, capped to keep rooms readable):
+  baseCount(N) = round( ENEMIES_BASE + ENEMIES_PER_FLOOR * (Nclamped - 1) )
+  clamped to [1, ENEMIES_MAX_PER_ROOM]. Placeholder: BASE=1, PER_FLOOR=0.25,
+  MAX=5 -> ~1 at floor 1, ~2 at floor 5, ~4-5 deep.
+
+AI SPEED / AGGRESSION (turn-based — see notes): an aggression tier 0..2 by depth:
+  aggression(N) = floor( (Nclamped - 1) / (CAP/3) )  -> 0 early, 1 mid, 2 deep.
+  Tier raises chase commitment and lowers idle/patrol hesitation; it does NOT give
+  extra actions per turn (that would break the one-action-per-turn invariant).
+
+TYPE UNLOCK GATES (first floor a type may spawn — placeholder, tune with order 13):
+  Corruptor (1): floor 1+    | Vortex Eye (2): floor 1+
+  Ghoul (3): floor 3+        | Crawler (4): floor 4+
+  Revenant (5): floor 6+
+  Deeper floors weight spawns toward the tougher unlocked types.
+
+MODE MULTIPLIERS (applied on top of the depth curves):
+  EASY    : hp x0.75, damage x0.65, count x0.80, drop-rate x1.40, aggression -1
+            (min 0). Ground pickups: ON. Permadeath: ON (still a roguelike).
+  NORMAL  : all x1.00, aggression +0. The reference balance.
+  NIGHTMARE: hp x1.30, damage x1.25, count x1.20, aggression +1 (max 2).
+            GROUND PICKUPS: OFF (enemy drops only). Permadeath: ON (baseline).
+            Type unlock gates shift one floor EARLIER (Ghoul at 2, etc.).
+
+PLAYER EXPERIENCE
+=================
+Easy is a learning run: you can take hits, supplies are plentiful, demons hesitate.
+Normal is the intended brutal-but-fair Doom-RPG experience. Nightmare is a
+survival horror loop — every fight is a resource you can't afford, and the only
+medkit is the demon you just killed. Picking the mode is a statement of intent;
+the death screen (order 24) showing "NIGHTMARE — FLOOR 9" carries weight. Crucially
+the curves are smooth and named, so a death always reads as "I went too deep
+unprepared," never "the numbers spiked unfairly."
+
+TECHNICAL NOTES
+===============
+DEPENDENCIES (must exist first):
+- level-transitions-stairs-down.txt (IMPLEMENTED) — the depth counter. HARD dep.
+- enemy_system.txt (IMPLEMENTED) — Enemy entity with maxHp/damage/AI. HARD dep.
+- procedural-level-generation.txt (NOT IMPLEMENTED) — consumes count + allowed-type
+  list. HARD dep for the placement side (HP/damage scaling can land first against
+  hand-crafted levels).
+- roguelike_order_25 (main menu) — provides the mode selection UI. SOFT — until it
+  exists, default to NORMAL via a constant.
+
+New / modified classes:
+- world/DifficultyMode.java (NEW enum, ...toon3d.world): EASY, NORMAL, NIGHTMARE,
+  each holding its multiplier set + flags (groundPickupsEnabled, unlockGateShift).
+- world/GameBalance.java (referenced by order 11 / xp docs — extend it here): the
+  single home for the scaling FORMULAS as pure methods: hpMultiplier(depth, mode),
+  damageMultiplier(depth, mode), enemyCountForRoom(depth, mode),
+  allowedEnemyTypes(depth, mode), aggressionTier(depth, mode), dropRateMultiplier(
+  depth, mode). Mirror these (or delegate) to GameMath for the raw curve math with
+  derivation comments; GameBalance applies the mode layer + clamps.
+- util/GameMath.java: add the raw ramp formulas (linear interpolation with clamp)
+  as pure functions with the mandatory derivation comment block.
+- Enemy spawner / procgen placer: read GameBalance at floor build time; bake
+  multipliers onto each spawned Enemy instance. Pass allowed-type list + count to
+  placement.
+- Drop / pickup placement: multiply roll thresholds by dropRateMultiplier; skip
+  ground pickup placement entirely when mode.groundPickupsEnabled == false.
+- The run holds the selected DifficultyMode (run-scoped, set once at start).
+
+Turn-based fit: "AI speed" is an AGGRESSION TIER affecting decision-making
+(commit to chase vs patrol), NOT extra turns. Enemies still act exactly once per
+player turn — the one-action-per-turn invariant is sacred. Faster "patrol/chase"
+means tighter pathfinding toward the player and less wandering, realized inside the
+single per-turn enemy action. Scaling is computed at floor load, baked onto
+entities, never recomputed per turn (no per-tick cost).
+
+No allocations in render(): all of this is simulation/state layer; nothing here
+touches render(). The allowed-type list can be a reusable scratch buffer or a small
+EnumSet built once per floor load.
+
+Constants to add (Constants.java):
+- DIFFICULTY_DEFAULT = NORMAL
+- SCALE_CAP_DEPTH = 15
+- HP_MULTIPLIER_AT_CAP = 3.5f
+- DAMAGE_MULTIPLIER_AT_CAP = 2.25f
+- ENEMIES_BASE_PER_ROOM = 1
+- ENEMIES_PER_FLOOR = 0.25f
+- ENEMIES_MAX_PER_ROOM = 5
+- ENDLESS_HP_PER_FLOOR = 0.15f
+- ENDLESS_DAMAGE_PER_FLOOR = 0.08f
+- TYPE_UNLOCK_FLOOR_GHOUL = 3, _CRAWLER = 4, _REVENANT = 6
+- EASY_HP_MULT=0.75f, EASY_DAMAGE_MULT=0.65f, EASY_DROP_MULT=1.40f, ...
+- NIGHTMARE_HP_MULT=1.30f, NIGHTMARE_DAMAGE_MULT=1.25f, NIGHTMARE_GROUND_PICKUPS=
+  false, NIGHTMARE_UNLOCK_SHIFT=1, ...
+  (All multipliers PLACEHOLDER — tune in playtest.)
+
+VISUAL DESIGN
+=============
+- Mode is shown on the HUD or pause screen as a small badge ("NORMAL" amber /
+  "NIGHTMARE" pulsing red / "EASY" cool blue) so the player always knows the stakes.
+- Floor banner on descent (reuses level-transitions banner) can append the mode for
+  the first floor of a run.
+- Nightmare's no-pickups rule deserves a one-time tutorial-ish note on the first
+  Nightmare descent ("NIGHTMARE: the facility offers no supplies. Take what the
+  dead leave behind.").
+- Deeper floors can lean on existing wall/lighting variety (gore walls, unlit
+  floors) so the escalation is felt in the environment, not just the numbers —
+  hand off to procgen biome selection by depth.
+
+BALANCE NOTES — EXPECTED SURVIVAL (PLACEHOLDER targets for playtest)
+====================================================================
+These are TARGETS to tune toward, not guarantees. "Reach" = median floor a
+competent player gets to before dying, fresh (no meta-unlocks).
+- EASY: median reach floor ~10-12; designed so a careful new player can clear to
+  the floor-15 boss with practice. Forgiving, learnable.
+- NORMAL: median reach floor ~6-8; clearing to floor 15 is a real achievement that
+  requires good build/relic decisions and resource discipline.
+- NIGHTMARE: median reach floor ~3-5; clearing is a flex. The no-pickups rule means
+  early mistakes compound — most deaths come from running dry, not from a single
+  hit. A full Nightmare clear should be rare and bragged about.
+- Tuning order: lock NORMAL first (it's the reference), then derive Easy/Nightmare
+  multipliers from playtest deltas. Verify NO floor-1 enemy on any mode can two-
+  turn-kill a full-HP fresh marine (fairness pillar from order 1).
+- Watch the HP-vs-damage gap: HP climbs faster (x3.5) than damage (x2.25) on
+  purpose so deep enemies are spongy-threatening, not instakill-lethal — keeps
+  fights tactical rather than coin-flips.
+
+INTERACTIONS
+============
+1. Depth counter (level-transitions): the single input to every curve.
+2. XP/Leveling (order 11): XP is NOT scaled, so deeper = slower leveling relative
+   to threat, which IS the difficulty pressure. Easy's faster clears -> faster
+   leveling, compounding the easier feel.
+3. Artifacts (roguelike_order_21): Nightmare's no-ground-pickups suppresses deep-
+   floor ground relic seeding, pushing relics onto boss/secret sources. Drop-rate
+   multiplier should NOT apply to relic seeding (relics have their own table).
+4. Procgen (procedural-level-generation): consumes enemyCountForRoom +
+   allowedEnemyTypes; depth can also drive biome/wall-type selection for felt
+   escalation.
+5. Run stats / leaderboard (roguelike_order_24): the mode is stored on the
+   RunRecord; leaderboards should segment or tag by mode so Nightmare runs aren't
+   buried under Easy floor counts.
+6. Fog of war (roguelike_order_22): Nightmare can reduce FOG_SIGHT_RADIUS for added
+   dread (cross-referenced there).
+
+OPEN QUESTIONS
+==============
+- Linear HP/damage ramp vs a sllight ease-in curve? Linear is the safe, readable
+  v1; revisit if early floors feel too samey or floor 15 feels like a wall.
+- Do enemy DROPS exist yet (needed for Nightmare's only supply)? If not, Nightmare
+  needs the death-drop system as a co-dependency — flag it. Until then Nightmare
+  could allow a minimal ammo trickle.
+- Should Easy disable permadeath (limited revives)? Recommendation: NO — keep
+  permadeath universal; Easy softens the curve, not the core loop. Revisit only if
+  playtest shows Easy is too punishing for true newcomers.
+- A 4th "Ultra-Nightmare" mode (one life across all runs, DCSS-style)? Defer to a
+  meta-progression unlock.
+- Per-floor enemy count cap interaction with room size — should big arena rooms
+  override ENEMIES_MAX_PER_ROOM? Defer to procgen tuning.

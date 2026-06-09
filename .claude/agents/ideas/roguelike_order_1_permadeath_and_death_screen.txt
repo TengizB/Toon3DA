@@ -1,0 +1,179 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Meta
+TITLE: Permadeath, Death Screen & Persistent Run Stats
+---
+
+OVERVIEW
+========
+Permadeath is the spine of the roguelike: when the marine's HP hits 0 the run
+ends for good — no save-scumming, no continue, no reload. Death drops the player
+into a full-screen "incursion terminated" report listing what they accomplished
+this run, then back to the main menu to start a fresh incursion into a newly
+generated UAC facility. A thin layer of persistent data survives across runs
+(best-run records, lifetime totals) so the player has a long-term scoreboard to
+beat without ever making an individual run easier.
+
+This belongs in the game because permadeath is roguelike pillar #1: death must
+be permanent AND feel fair. The death screen is where the run earns its meaning —
+the player should read it and think "I pushed too far on floor 4," not "the game
+cheated me." It is first in the bring-up order because everything downstream
+(turns, damage, ammo, inventory) assumes a defined end state.
+
+GAMEPLAY LOOP
+=============
+1. During an enemy turn, Player.applyDamage(int amount, float sourceDirX, float
+   sourceDirY) reduces health (this method already exists — owned by
+   scanline-crt-hud-marine-vitals.txt; the absorption split is owned by
+   armour-kit-system.txt). When health reaches 0, Player.isDead() returns true.
+2. Death is checked AFTER the tick fully resolves — i.e. after the
+   EnemyTurnSubscriber has finished inside tickEventBus.fireTick() (see
+   global-tick-event-system.txt, IMPLEMENTED). NEVER mid-tick. This guarantees
+   the killing enemy's full turn is honored and the player sees the final blow.
+   Add a final tick subscriber (DeathCheckSubscriber) registered LAST in the bus,
+   or check player.isDead() in World immediately after fireTick() returns.
+3. On death: World captures a RunStats snapshot, sets GameState.phase = DEAD, and
+   freezes the simulation (PlayerController.pollInput() returns early while phase
+   != PLAYING, so no input can tick the world).
+4. A short death beat plays: ~1.0s of real time where the 3D view desaturates to
+   greyscale and dims to black (cosmetic, render-only, advances ZERO turns). One
+   red full-screen flash on the killing hit (reuse the order-3 hit-flash overlay).
+5. DeathScreen (a LibGDX Screen) replaces the game screen. It draws the run report
+   (see VISUAL DESIGN) over a black/blood-streaked backdrop.
+6. The death screen compares this run to persisted records and flags any new
+   record inline ("FLOOR REACHED: 5  *** NEW BEST ***").
+7. Player presses any key / clicks CONTINUE -> persistent stats are written to
+   disk -> return to MainMenuScreen.
+8. From the main menu, "NEW INCURSION" generates a brand-new run: fresh level
+   seed, full HP, starting loadout. Nothing from the dead run carries over except
+   the persisted records and any meta-unlocks (see INTERACTIONS).
+
+PLAYER EXPERIENCE
+=================
+Death should land like a punch, not a shrug. The greyscale-tilt beat gives a
+half-second of "oh no" before the report. The report itself is the catharsis:
+concrete numbers that tell the story of the run ("23 demons down, 4 floors deep,
+took 612 damage — that last Revenant got me"). Because there is no continue, the
+player feels the weight of every medkit hoarded and every corridor pushed into
+unprepared. The persistent best-run line gives a reason to immediately hit "NEW
+INCURSION" — chase the record. Fairness is non-negotiable: the player must always
+be able to point at the decision that killed them, which is why the death beat
+shows the final blow and why order-3 damage feedback must be readable.
+
+TECHNICAL NOTES
+===============
+DEPENDENCIES (must exist first):
+- NONE strictly required to build the permadeath spine — but it only becomes
+  reachable once order-3 (player health/damage) can drive HP to 0. Build the
+  RunStats + DeathScreen + GameState.phase plumbing alongside or just after
+  order-3.
+- global-tick-event-system.txt (IMPLEMENTED): death is checked after fireTick().
+- scanline-crt-hud-marine-vitals.txt (HUD vitals): owns HP/AR fields, applyDamage
+  signature, and isDead(). Do NOT redefine these here.
+
+New / modified classes:
+- world/GameState.java (likely exists for redAlert — extend it): add enum
+  GamePhase { PLAYING, DEAD } and a RunStats currentRun reference. redAlert
+  already lives here per global-tick-event-system.txt.
+- world/RunStats.java (new, ...toon3d.world): mutable per-run accumulator. All
+  primitive fields (no allocation churn):
+    int floorReached;        // highest floor index entered (1-based)
+    int enemiesKilled;
+    int itemsCollected;      // pickups + ground items
+    int totalDamageDealt;    // damage applied to enemies
+    int totalDamageTaken;    // damage applied to player
+    int shotsFired;
+    long ticksElapsed;       // world ticks survived
+    float realSecondsPlayed; // accumulated deltaTime while PLAYING
+  Plus increment methods (recordKill(), recordDamageDealt(int), etc.) called from
+  the relevant systems. Reset/reconstruct at run start.
+- screen/DeathScreen.java (new, ...toon3d.screen): implements LibGDX Screen. Owns
+  its own SpriteBatch / BitmapFont / ShapeRenderer (all Disposable — dispose in
+  hide()/dispose()). Reads RunStats + PersistentStats. World units (1280x720) via
+  FitViewport per coordinate-system invariant.
+- world/PersistentStats.java (new): cross-run records. Fields: bestFloor,
+  mostKills, fastestClearTicks, longestSurvivalTicks, lifetimeKills, totalRuns,
+  totalDeaths. Load on app start, save on death.
+- util/StatsStore.java (new, ...toon3d.util): persistence adapter using LibGDX
+  Preferences (Gdx.app.getPreferences("toon3d_records")) — no file IO, no extra
+  dependency, works on all backends. load() / save(PersistentStats).
+- input/PlayerController.java: in pollInput(), return immediately if
+  GameState.phase != PLAYING (freezes the world on death).
+- world/World.java: after fireTick() returns, call checkDeath() — if
+  player.isDead() && phase == PLAYING, set phase = DEAD and snapshot RunStats.
+  World.update() advances realSecondsPlayed only while PLAYING. World triggers the
+  screen swap (via Main holding the Game instance).
+
+Turn-based fit: death is detected AFTER a fully resolved tick — never mid-tick —
+preserving "one action = one fully resolved world step." The death beat and death
+screen are real-time/cosmetic only; they advance zero turns.
+
+No allocations in render(): DeathScreen pre-builds its label strings once in
+show() (death is a rare one-shot event — a single StringBuilder pass is fine).
+
+Constants to add (Constants.java):
+- DEATH_BEAT_DURATION_SECONDS = 1.0f   (greyscale dim-to-black, placeholder)
+- DEATH_BEAT_GREYSCALE = true
+- STATS_PREFS_NAME = "toon3d_records"
+- RUN_FIRST_FLOOR_INDEX = 1
+
+VISUAL DESIGN
+=============
+- Death beat: 3D view fades toward greyscale and dims to ~10% brightness over
+  DEATH_BEAT_DURATION_SECONDS; a slight downward camera-plane tilt sells "marine
+  collapses" (cosmetic plane-vector lerp, render-only). One red full-screen flash
+  (alpha ~0.5 -> 0) on the killing hit.
+- Death screen backdrop: pure black with faint vertical blood streaks and the CRT
+  scanline overlay reused from scanline-crt-hud-marine-vitals.txt, for continuity.
+- Header: "INCURSION TERMINATED" in HUD amber, large; subhead "MARINE KIA —
+  FACILITY OVERRUN" smaller, dim red.
+- Report block (monospace, centered column):
+    FLOOR REACHED .......... 5      *** NEW BEST ***
+    DEMONS PURGED .......... 23
+    SUPPLIES SCAVENGED ..... 11
+    DAMAGE DEALT ........... 1,840
+    DAMAGE TAKEN ........... 612
+    SHOTS FIRED ............ 96
+    TURNS SURVIVED ......... 1,204
+    TIME IN FACILITY ....... 14:32
+  New-record lines get an amber "*** NEW BEST ***" tag.
+- Footer: blinking "[ANY KEY] RETURN TO STAGING" prompt.
+- A short grim flavor line from a small pool ("The facility keeps its dead." /
+  "UAC will deny you ever existed." / "Another marine. Another statistic.").
+
+BALANCE NOTES
+=============
+- Permadeath has no balance knobs — death is death. Fairness levers live in the
+  systems that cause death (damage telegraphing in order 3, ammo scarcity in
+  order 4). Flag for playtest: no unavoidable one-tick kills at run start — a
+  fresh full-HP marine should never die in a single enemy turn.
+- realSecondsPlayed is for the report only; it must NEVER affect simulation.
+- "NEW BEST" thresholds are strict greater-than to avoid ties spamming the tag.
+
+INTERACTIONS
+============
+1. Turn system (global-tick-event-system.txt): death is checked after the tick
+   fully resolves. The pollInput early-return on phase != PLAYING is the single
+   gate that stops the world.
+2. Health & damage (order 3): RunStats.totalDamageTaken/Dealt are fed by the
+   damage path; isDead() is the trigger. The red death-flash reuses order-3's
+   hit-flash overlay.
+3. Meta-progression (xp-level-progression-system, levelup-stim-boon-choice):
+   persistent unlocks stored alongside PersistentStats in the same Preferences
+   blob — death is when earned meta-currency is banked. Per pillar #6 unlocks add
+   variety, never raw power, so first-run players can win with zero unlocks.
+4. Level transitions (level-transitions-stairs-down): descending bumps
+   RunStats.floorReached — the primary "how far did I get" metric.
+5. Inventory (inventory-loot-ransack-system / order 5): itemsCollected is bumped
+   by the pickup path.
+
+OPEN QUESTIONS
+==============
+- Hardcore vs casual toggle (e.g. one-time revive item), or strict permadeath?
+  Recommendation: strict only for v1; a rare in-run revive ITEM is cleaner than a
+  mode toggle.
+- Show a mini-map of the final floor with the death tile marked? Defer.
+- Award partial meta-currency on death (Hades-style), or only on full clears?
+  Tie to meta-progression when it lands.
+- Per-floor breakdown vs aggregate totals? Aggregate for v1.
+- Confirm whether GameState already exists (redAlert lives there) and extend it
+  rather than duplicate.

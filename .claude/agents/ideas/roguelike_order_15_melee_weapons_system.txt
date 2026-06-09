@@ -1,0 +1,305 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Melee Weapons — Fist / Knife / Pipe / Chainsaw (No-Ammo Fallback)
+---
+
+OVERVIEW
+========
+A melee weapon class so the marine always has a reliable, no-ammo answer when the
+clips run dry. Melee resolves INSTANTLY in tile space — no marching projectile,
+no travel — by hitting whatever living enemy occupies the single tile directly in
+the player's facing direction. Four melee weapons cover a clear power/risk curve:
+the always-available FIST (last resort), the COMBAT KNIFE (fast, low damage), the
+STEEL PIPE (medium damage + knockback), and the rare CHAINSAW (high sustained
+damage). Because melee is "face an adjacent enemy and swing", it slots perfectly
+into the cardinal, turn-based grid the whole game runs on.
+
+This document OWNS: the four melee weapons' stat blocks, the instant
+adjacent-tile resolution, the FIST-always-equipped rule, knockback, attack-speed
+(turns-per-attack) handling, and melee-specific feedback (screen shake, hit flash).
+It does NOT redefine the abstract Weapon class, the equip flow, or the damage
+pipeline — it EXTENDS the Weapon abstraction from shotgun-weapon-system.txt and
+feeds the same EnemyManager.applyDamageTo path used by ranged weapons.
+
+NO NEW TILE SYMBOL IS REQUIRED FOR THE FIST OR FOR SWINGING. Melee weapon PICKUPS
+on the floor (knife/pipe/chainsaw lying in the world) WOULD each need a symbol —
+see TECHNICAL NOTES "PICKUP SYMBOLS" (flag, do not invent here).
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING DOCS
+=============================================
+- shotgun-weapon-system.txt (the Weapon abstraction): defines abstract
+  entity/Weapon with fire(playerTileColumn, playerTileRow, ...) -> FireResult,
+  int damageAtDistance(distanceTiles), canFire(), the NORMAL/FIRE/RELOAD visual
+  state machine, and PlayerInventory.getEquippedWeapon()/setEquippedWeapon(). THIS
+  doc adds a MeleeWeapon subclass tree that overrides fire() to do an instant
+  range-1 hit instead of a march. NO ammo, NO reload.
+- enemy_system.txt (IMPLEMENTED): melee calls the SAME EnemyManager.applyDamageTo
+  and corpse-decal-on-death path the shotgun uses; melee FIRE still triggers
+  onPlayerTurnCompleted so enemies retaliate on the same turn.
+- roguelike_order_12 (stats): final melee damage = base * STRENGTH melee
+  multiplier (getMeleeDamageMultiplier).
+- roguelike_order_11 (perks): berserker (melee +100% under 30% HP) and brawn
+  (+STR) scale melee; honed_edge/overcharge scale weaponDamageMultiplier (applies
+  to melee too if melee reads it — see DAMAGE FORMULA).
+- roguelike_order_13 (archetypes): canBeKnockedBack gate — Pinky/Lost Soul/Hell
+  Knight ignore knockback; Hell Knight has 25% physical reduction.
+- roguelike_order_14 (status): Steel Pipe charged hit can apply STUN; melee can
+  carry no status by default.
+
+THE FOUR MELEE WEAPONS (stat blocks — placeholders)
+===================================================
+All have range 1 (Chebyshev == 1 to the target tile in the facing direction;
+cardinal facing means it is the orthogonally-adjacent tile ahead). NO ammo.
+
+1. FIST              ALWAYS EQUIPPED / FALLBACK
+   - baseDamage      : 4
+   - turnsPerAttack  : 1   (one swing = one turn)
+   - knockback       : none
+   - special         : none. The "out of everything" option; chip damage only.
+   - Occupies the melee slot whenever no other melee weapon is held; CANNOT be
+     dropped. Selecting "melee" with no melee pickup uses the Fist.
+
+2. COMBAT KNIFE      fast, low damage
+   - baseDamage      : 8
+   - turnsPerAttack  : 1   (snappy)
+   - knockback       : none
+   - special         : fastest melee; slight bonus vs low-HP chaff (clean one-shots
+     on Lost Souls / Imps after stats). Flavor: equipping it grants +1 AGILITY
+     (order_12 equipment hook) — optional.
+
+3. STEEL PIPE        medium damage + knockback
+   - baseDamage      : 14
+   - turnsPerAttack  : 1
+   - knockback       : 1 tile (pushes a knockback-eligible enemy one tile directly
+     away from the player, if that tile is free floor).
+   - special         : a CHARGED swing (hold the attack: see CHARGE below) deals
+     +50% and applies STUN (order_14) for 1 turn. The crowd-control melee.
+
+4. CHAINSAW          rare, high sustained damage
+   - baseDamage      : 12 per turn but it CONTINUES: see "continuous" rule
+   - turnsPerAttack  : 1   (but holding the attack key keeps it revving — each held
+     turn is another hit on the adjacent enemy, no wind-down)
+   - knockback       : none (it grinds in place — keeps the enemy adjacent)
+   - special         : "continuous" — while the attack key is held AND a valid
+     adjacent target remains, each consumed turn deals baseDamage again with a
+     short hit-cadence; great DPS but ROOTS you next to the enemy (you cannot move
+     while sawing without releasing). High risk vs Hell Knight. Rare drop.
+
+INSTANT ADJACENT-TILE RESOLUTION (the core difference from ranged)
+==================================================================
+MeleeWeapon.fire(playerTileColumn, playerTileRow, playerDirectionX,
+                 playerDirectionY, level, enemyManager):
+  1. Compute the single TARGET tile:
+        targetColumn = playerTileColumn + round(playerDirectionX)
+        targetRow    = playerTileRow    + round(playerDirectionY)
+     (Facing is always an exact cardinal unit vector after rotation snapping, so
+      round() yields one of (±1,0)/(0,±1). This is the tile DIRECTLY AHEAD.)
+  2. Query enemyManager for a LIVING enemy whose tile == (targetColumn,targetRow).
+     - If none: "whiff" — swing animation plays, screen does NOT shake, no hit
+       flash, but the swing STILL costs one turn (you committed the action;
+       enemies retaliate). Emit a soft "miss" feedback. Return FireResult(hit=false).
+     - If a target exists: HIT (see DAMAGE FORMULA), apply knockback/status,
+       trigger screen shake + hit flash. Return FireResult(hit=true).
+  3. No march, no projectile, no z-buffer query, no distance falloff — melee is
+     binary at range 1.
+
+DAMAGE FORMULA  (GameMath.meleeDamage, with derivation comment)
+===============================================================
+  finalMelee = round( weapon.baseDamage
+                      * stats.getMeleeDamageMultiplier()     // STRENGTH (order_12)
+                      * weaponDamageMultiplier               // honed_edge/overcharge perks
+                      * berserkerMultiplier )                // 2.0 if perk + HP<30%, else 1.0
+  Then EnemyManager.applyDamageTo handles the TARGET's physical reduction (Hell
+  Knight 25%) and Empowered/other outgoing buffs are folded in via
+  weaponDamageMultiplier or a dedicated outgoing-buff read (order_14 EMPOWERED).
+  Decision: melee DOES read weaponDamageMultiplier so damage perks feel universal;
+  if that proves too strong, gate honed_edge to ranged only (OPEN Q).
+
+ATTACK SPEED — turnsPerAttack on the GRID
+=========================================
+The grid is one-action-one-turn, so "attack speed" is expressed as turnsPerAttack:
+  - turnsPerAttack = 1 (all four v1 weapons): each swing is a single turn; the
+    enemy gets its turn after each swing. This keeps the invariant clean.
+  - For a FUTURE heavy weapon (turnsPerAttack = 2): the swing animation spans the
+    first turn doing nothing (a "wind-up" turn) and lands on the second — modeled
+    by a small pendingSwingTurns counter on the weapon, decremented each turn,
+    damage applied when it hits 0. v1 does NOT need this; the field is defined for
+    extensibility. Faster-than-1 (a weapon that hits twice in one turn) is
+    DISALLOWED — it would break the one-action-one-turn invariant.
+  - CHAINSAW "continuous": NOT faster than 1 turn; it simply lets the held attack
+    key auto-issue a new swing every turn against the same adjacent enemy without
+    re-press, so the player chain-saws across multiple turns. Each turn is still a
+    full world turn (enemy retaliates each turn) — that is the risk.
+  - STEEL PIPE CHARGE: hold the attack key for MELEE_CHARGE_TURNS (default the
+    swing is charged if the key was held through one idle turn) -> the next swing
+    is the charged variant (+50%, STUN). Releasing early = normal swing. (v1 may
+    simplify charge to "every Nth swing is charged" if hold-detection is fiddly —
+    OPEN Q.)
+
+KNOCKBACK (Steel Pipe)
+======================
+On a hit by a knockback weapon against a canBeKnockedBack==true enemy:
+  pushColumn = targetColumn + round(playerDirectionX)
+  pushRow    = targetRow    + round(playerDirectionY)
+  If (pushColumn,pushRow) is in-bounds, NOT a wall (Level.isWall), NOT a solid
+  prop, and NOT occupied by another enemy/the player -> move the enemy there
+  (instant, this turn). Else the enemy stays (it hit a wall — optionally +small
+  "crunch" bonus damage; defer). Knockback is an INSTANT position change, not a
+  status. Pinky / Lost Soul / Hell Knight (canBeKnockedBack==false, order_13)
+  ignore it entirely.
+
+FIST-ALWAYS-EQUIPPED + SLOT RULE
+================================
+- PlayerInventory holds a meleeWeapon reference, defaulting to a FIST instance at
+  run start. The Fist instance is never null and never dropped.
+- Picking up a Knife/Pipe/Chainsaw REPLACES the meleeWeapon reference (the old
+  melee weapon, if not the Fist, drops to the floor as a pickup — or is discarded;
+  OPEN Q). The Fist returns automatically only if the held melee weapon is somehow
+  removed (it cannot be in v1).
+- Weapon selection: a "melee" weapon-select key (or cycling the weapon wheel)
+  selects the current meleeWeapon. Firing with melee selected runs MeleeWeapon.fire.
+- Ranged weapons and the melee weapon are SEPARATE slots; switching between "ranged
+  selected" and "melee selected" is itself a free UI action (does NOT cost a turn —
+  consistent with how weapon-switch is treated; confirm vs shotgun doc).
+
+TECHNICAL NOTES
+===============
+NEW CLASSES (package entity/, alongside the existing Weapon tree):
+  - entity/MeleeWeapon.java  (abstract, extends Weapon): overrides fire() with the
+    instant range-1 resolution above; canFire() always true (no ammo); reload is a
+    no-op; declares baseDamage, turnsPerAttack, knockbackTiles, appliesStun flag,
+    continuous flag.
+  - entity/Fist.java, entity/CombatKnife.java, entity/SteelPipe.java,
+    entity/Chainsaw.java  (concrete subclasses; supply the stat block + sprite id).
+MODIFIED:
+  - entity/PlayerInventory: add Weapon meleeWeapon (default Fist) + getters/setter;
+    a notion of "selected slot" (RANGED vs MELEE) if not already present.
+  - input/PlayerController (or the World fire handler): on the attack key, if the
+    melee slot is selected, route to MeleeWeapon.fire; still fires
+    onPlayerTurnCompleted after resolution.
+  - render/WeaponHudRenderer: procedural sprites for the four melee weapons
+    (NORMAL/SWING states; no RELOAD state). Reuse the FrameBuffer procedural-sprite
+    approach from the weapon-creation guide. Chainsaw needs a 2-3 frame rev loop.
+  - GameMath: add meleeDamage(...) per the formula above (pure function).
+  - util/Constants / GameBalance: the stat blocks below.
+PICKUP SYMBOLS (FLAG — do not invent here):
+  - The FIST needs no symbol (innate). KNIFE/PIPE/CHAINSAW lying in the world as
+    pickups WOULD each need a new walkable-pickup tile symbol. REQUIRES NEW SYMBOL
+    — before implementing world-pickups for melee weapons, add them to
+    docs/tile-symbols.txt (PICKUPS section), wire Level.java pickup checks, add the
+    PropRenderer/decal sprite, and update the SYMBOL BUDGET count. ALTERNATIVE that
+    needs NO new symbol: place melee weapons in existing weapon racks ('=') /
+    lockers ('L') / crates ('C') as their loot, or grant them via a level-up perk.
+    Recommend reusing '=' weapon racks as the melee source for v1.
+
+GAMEBALANCE CONSTANTS (placeholders — flag for playtest)
+========================================================
+  MELEE_FIST_DAMAGE        = 4    MELEE_FIST_TURNS       = 1
+  MELEE_KNIFE_DAMAGE       = 8    MELEE_KNIFE_TURNS      = 1
+  MELEE_PIPE_DAMAGE        = 14   MELEE_PIPE_TURNS       = 1
+  MELEE_PIPE_KNOCKBACK_TILES = 1
+  MELEE_PIPE_CHARGE_BONUS  = 0.5f      // +50% on charged swing
+  MELEE_PIPE_CHARGE_STUN_TURNS = 1
+  MELEE_CHAINSAW_DAMAGE    = 12   MELEE_CHAINSAW_TURNS   = 1   (continuous)
+  MELEE_RANGE_TILES        = 1
+  BERSERKER_HP_THRESHOLD   = 0.30f     // perk gate (owned by order_11)
+  BERSERKER_MULTIPLIER     = 2.0f
+  // feedback
+  MELEE_HIT_SHAKE_PIXELS   = 6f   MELEE_HIT_SHAKE_SECONDS = 0.10f
+  MELEE_HIT_FLASH_ALPHA    = 0.25f MELEE_HIT_FLASH_SECONDS = 0.08f
+
+VISUAL DESIGN
+=============
+- WEAPON HUD SPRITES (bottom-center, 380px slot, same as ranged):
+    FIST     : two armored gauntlets; SWING = one fist thrusts forward, knuckles
+               flare on contact.
+    KNIFE    : a combat knife held low-right; SWING = quick upward slash arc.
+    PIPE     : a rusted steel pipe held vertical; SWING = horizontal sweep; a
+               CHARGED swing has a brief white wind-up glow then a heavier sweep.
+    CHAINSAW : center-held, teeth animate (2-3 frame rev loop) continuously while
+               revving; SWING = teeth bite forward, blood/spark particles.
+- HIT FEEDBACK (only on a connecting hit):
+    * Screen shake: brief, MELEE_HIT_SHAKE_PIXELS amplitude over
+      MELEE_HIT_SHAKE_SECONDS (camera offset, restored — NO origin move; reuse any
+      existing shake hook or add a tiny one in the renderer).
+    * Hit flash: a quick white full-screen quad at MELEE_HIT_FLASH_ALPHA
+      (reuse the tint-quad pattern; no alloc).
+    * Enemy hit-reaction (recoil/flash) via enemy-hit-impact-effects.txt.
+    * Knockback: the target billboard slides one tile back over the hit window.
+- A WHIFF (no target) plays the swing with NO shake/flash — readability: shake
+  means you connected.
+- CHAINSAW audio/visual: a continuous rev tone while held + grind sparks; the most
+  "committed" feeling weapon.
+
+BALANCE NOTES
+=============
+- Melee fills the "out of ammo" gap and a high-risk burst niche; it must be WORTH
+  the danger of standing adjacent. Chainsaw vs a tanky enemy out-DPS-es most ranged
+  options but roots you in melee range eating retaliation each turn — the classic
+  Doom chainsaw gamble.
+- Fist is deliberately feeble (4) so it is a true last resort, not a viable main.
+- Knife one-shots chaff after a couple of STRENGTH points (8 * 1.25 = 10 >= Lost
+  Soul 12? close — tune so a mid-run knife reliably one-shots the 12-HP fliers).
+- Steel Pipe's knockback + charge-STUN is the tactical melee: create space or lock
+  down a single threat. STUN sources are kept rare (order_14), so the charged pipe
+  is a meaningful tool, not spammable (charge costs the hold time).
+- Knockback into a wall doing nothing is fine for v1; "wall slam bonus damage" is a
+  stretch goal.
+- Because every swing (even a whiff) costs a turn and provokes retaliation, melee
+  punishes mis-spacing — deaths stay readable ("I swung at nothing and the Hell
+  Knight got a free hit").
+
+INTERACTIONS
+============
+1. WEAPON ABSTRACTION (shotgun-weapon-system.txt): MeleeWeapon extends Weapon;
+   reuses canFire/fire/HUD-state plumbing and EnemyManager.applyDamageTo. No ammo,
+   no reload.
+2. TURN ENGINE (enemy_system.txt): a swing is a FIRE turn — onPlayerTurnCompleted
+   fires after resolution, so adjacent enemies retaliate; the chainsaw's held loop
+   issues one swing per turn.
+3. STATS (order_12): STRENGTH melee multiplier scales every swing; equipping the
+   Knife may grant +1 AGILITY / Chainsaw +1 STRENGTH via the equipment hook.
+4. PERKS (order_11): berserker doubles melee under 30% HP (the intended "go loud
+   when bleeding" payoff); brawn/honed_edge feed the formula.
+5. STATUS (order_14): Steel Pipe charged hit applies STUN; EMPOWERED buff scales
+   melee damage; melee can KILL a Burning/Poisoned enemy and claim the XP via the
+   normal death path.
+6. ENEMY ARCHETYPES (order_13): canBeKnockedBack gates pipe knockback (Pinky/Lost
+   Soul/Hell Knight immune); Hell Knight physical reduction shaves melee damage;
+   Pinky/Hell Knight punish standing adjacent (the melee risk).
+7. AMMO ECONOMY: melee is the pressure valve when ranged ammo is dry, reinforcing
+   the resource-scarcity roguelike pillar — a guaranteed (if dangerous) option.
+
+DEPENDENCIES (must exist first)
+===============================
+1. shotgun-weapon-system.txt — the abstract Weapon class, PlayerInventory
+   equipped-weapon plumbing, WeaponHudRenderer procedural-sprite pattern,
+   EnemyManager.applyDamageTo.
+2. enemy_system.txt (IMPLEMENTED) — enemies to hit, tile-lookup, corpse decal,
+   retaliation turn.
+3. RECOMMENDED with: order_12 (STRENGTH scaling), order_11 (berserker/brawn),
+   order_13 (knockback-immunity flags), order_14 (STUN for the charged pipe). The
+   FIST + KNIFE work standalone with flat damage; Pipe/Chainsaw specials are richer
+   with those systems.
+4. For world PICKUPS of melee weapons: either new pickup symbols (symbol commit) OR
+   reuse weapon racks '=' / lockers 'L' as the source (recommended, no symbol).
+
+OPEN QUESTIONS
+==============
+1. Does melee read weaponDamageMultiplier (honed_edge/overcharge apply to melee)?
+   Recommend YES for v1 (perks feel universal); gate to ranged-only if melee scales
+   too hard.
+2. Steel Pipe charge detection: true "hold the key across a turn" vs simpler "every
+   3rd swing is charged"? Recommend the simpler every-Nth for v1, upgrade later.
+3. When a new melee weapon is picked up, does the old one drop to the floor
+   (re-pickable) or vanish? Recommend vanish for v1 (no slot juggling); revisit with
+   the inventory screen (order_6).
+4. Is weapon-slot switching (ranged <-> melee) free, or does it cost a turn?
+   Recommend FREE (a UI action), matching the expectation that drawing a knife when
+   out of shells is instant.
+5. Source of melee weapons in v1: weapon racks '=' (no symbol) vs dedicated pickup
+   symbols vs a perk? Recommend weapon racks '=' for the Pipe, a rare Chainsaw in a
+   guarded room (Hell Knight loot), Knife as a common early rack find.
+6. Should the Chainsaw consume something (fuel) to bound its power, or stay pure
+   no-ammo? Recommend pure no-ammo for v1 (its risk is the root-in-melee), add fuel
+   only if it trivializes elites.

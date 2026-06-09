@@ -1,0 +1,303 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Status Effects — Burning / Poison / Stun / Blind / Slow / Empowered
+---
+
+OVERVIEW
+========
+A unified, turn-based status-effect layer that any combat source (weapon, enemy
+attack, environmental hazard, or stim item) can apply to any actor (the player or
+an enemy). Effects tick once per world turn, decrement their own duration, and
+either damage, impair, or buff the host. Because everything is turn-gated, status
+effects fold cleanly into the existing one-action-equals-one-turn model: "Burning,
+3 turns left" is a promise the player can read and plan around. This is the system
+that lets fire weapons, acid spitters, heavy hits, flashbangs, and stim packs all
+speak the same language.
+
+This document OWNS: the StatusEffect data structure, the StatusEffectController
+that ticks them, the six v1 effect types with their stack/replace rules, the
+resist/immunity hook, the per-effect visual feedback, and how each weapon/enemy
+source applies them. It does NOT own weapon damage numbers (weapon docs), enemy
+resistance VALUES (roguelike_order_13 lists each archetype's resists), the player
+damage pipeline order (roguelike_order_12 defines it), or hazard tile mechanics
+(hazard docs apply effects through THIS system's API).
+
+NO NEW TILE SYMBOL IS REQUIRED. Effects are an actor-state layer. (Hazard TILES
+that apply them are owned by existing hazard docs and already have symbols.)
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING DOCS
+=============================================
+- enemy_system.txt (IMPLEMENTED): the turn callback (onPlayerTurnCompleted) and
+  EnemyManager.takeTurn are the tick anchor. THIS system adds a status-tick PHASE
+  to the turn. Player HP / Player.applyDamage and Enemy HP already exist.
+- roguelike_order_12 (stats): Slowed multiplies getActionDurationMultiplier;
+  Empowered stacks with the stat melee/ranged multipliers; dodge is rolled BEFORE
+  status application per that doc's pipeline.
+- roguelike_order_13 (archetypes): owns each enemy's resist/immunity VALUES (Imp
+  half-fire, Caco half-poison + poison-immune, Lost Soul fire-immune, Hell Knight
+  half-stun, knockback-immune). THIS doc owns the MECHANISM that reads them.
+- hazard-chain-reactions / hazard-wall-tile / pressure-plate docs: those apply
+  Burning/Poison via StatusEffectController.apply(...). No duplication — they are
+  SOURCES.
+- incinerator-flamethrower / plasma / weapon docs: each declares which effect it
+  inflicts and at what chance; THIS doc defines the apply API they call.
+
+ACTORS & ARCHITECTURE
+=====================
+New package: ge.tbegvadze.toon3d.status
+New classes:
+  enum StatusType { BURNING, POISONED, STUNNED, BLINDED, SLOWED, EMPOWERED }
+
+  enum StackMode { STACK_MAGNITUDE,   // new application adds stacks (Poison)
+                   REFRESH_DURATION,  // re-applying resets the timer to the longer
+                   REPLACE_IF_LONGER } // keep whichever instance lasts longer
+
+  class StatusEffect {            // a live instance on one actor
+      StatusType type;
+      int remainingTurns;          // counts down each tick; <=0 -> expire
+      int magnitude;               // damage-per-turn, FOV degrees, dmg% etc.
+      int stacks;                  // for STACK_MAGNITUDE effects (Poison)
+      Object source;               // who/what applied it (for kill attribution / XP)
+  }
+
+  interface StatusHost {           // implemented by Player and Enemy
+      EnumMap<StatusType, StatusEffect> getActiveEffects(); // pre-sized, no per-tick alloc
+      StatusResistance getStatusResistance();   // per-actor resist/immunity table
+      void applyDamage(int amount, float sourceDirX, float sourceDirY); // existing
+      // host-specific reads (skipTurn flag, fovOverrideRadians, etc.) below
+  }
+
+  class StatusResistance {         // per archetype / player
+      // multiplier on incoming effect DURATION & DAMAGE (1.0 normal, 0 immune, 0.5 half)
+      float damageMultiplier(StatusType t);   // e.g. Imp fire 0.5, Caco poison 0.5
+      boolean isImmune(StatusType t);          // e.g. Lost Soul BURNING, Caco POISONED
+      float durationMultiplier(StatusType t);  // e.g. Hell Knight STUN 0.5
+  }
+
+  class StatusEffectController {   // owned by World; ticks all hosts each turn
+      void apply(StatusHost host, StatusType type, int turns, int magnitude,
+                 Object source)    // single entry point; honors resist + stack rules
+      void tickAll(...)            // called once per world turn (see TICK ORDER)
+      void clear(StatusHost host)  // on death / level transition for player-kept effects
+  }
+
+Storage choice: an EnumMap<StatusType, StatusEffect> per host (at most 6 entries,
+fixed). Pre-allocated at host construction. No allocation during tickAll or apply
+(reuse the stored StatusEffect instance; only mutate its fields).
+
+THE SIX EFFECTS (v1)
+====================
+1. BURNING        (debuff, damage-over-time)
+   - magnitude = fire damage per turn (default 4). Duration 3-5 turns.
+   - StackMode REFRESH_DURATION: re-applying refreshes the timer (and takes the
+     higher magnitude), does NOT stack damage. Prevents fire-lock spirals.
+   - Damage routes through host.applyDamage each tick (sourceDir = 0,0 -> no
+     knockback from a tick). Can kill -> awards XP to the fire's source.
+   - Visual: orange screen-edge vignette pulse (player); flickering orange tint on
+     enemy billboard; a small flame status icon.
+
+2. POISONED       (debuff, stacking damage-over-time)
+   - magnitude = base poison per stack (default 2). StackMode STACK_MAGNITUDE:
+     each application adds +1 stack (cap POISON_MAX_STACKS = 5). Per-turn damage =
+     magnitude * stacks. Duration refreshes to POISON_DURATION (default 4) on each
+     new stack. Slow attrition that punishes lingering in acid / Cacodemon fights.
+   - Visual: sickly green screen-edge tint (player); green drip particles on enemy;
+     poison icon with a small stack-count number.
+
+3. STUNNED        (control, skip next action)
+   - magnitude unused. Duration in ACTIONS-skipped (default 1, heavy hits 2).
+   - On the host's next would-be turn, the action is consumed doing nothing
+     (player: input ignored for that turn with a "STUNNED" flash; enemy: skips its
+     Phase B action). Decrements per turn skipped. Hell Knight halves duration
+     (durationMultiplier 0.5 -> rounds down, min 1 if applied).
+   - This is the heaviest control effect — gate it behind rare sources (heavy melee
+     like the Steel Pipe crit, a future flashbang). Visual: white concussion ring +
+     swirling-stars overlay; brief desaturation for the player.
+
+4. BLINDED        (debuff, FOV reduction — PLAYER-ONLY meaningful)
+   - magnitude = the clamped FOV in degrees while active (default 30). Duration 2.
+   - While active, Player.fieldOfViewRadians is OVERRIDDEN to BLIND_FOV (30 deg)
+     via a fovOverrideRadians field read by the renderer; restored on expiry.
+   - Does almost nothing to enemies (their "vision" is the LOS check), so v1 treats
+     BLINDED as player-only; applying it to an enemy is a no-op (or optionally
+     shrinks the enemy's LOS-wake range — OPEN Q). Visual: heavy dark vignette
+     squeezing the view to a narrow cone; eye-with-slash icon.
+
+5. SLOWED         (debuff, action cost / animation doubled)
+   - magnitude unused. Duration default 3.
+   - Player: multiplies getActionDurationMultiplier (order_12) by SLOW_FACTOR
+     (default 2.0) so animations crawl. Turn COUNT is unchanged (invariant) — it is
+     a feel/threat effect, plus it can be combined with enemy speed for danger.
+   - Enemy: increases effective moveEveryNTurns (a slowed fast enemy moves like a
+     slow one) — a clean knob since enemies already throttle movement.
+   - Visual: blue-grey motion-blur-ish edge tint (player), heavy/sluggish bob on
+     enemy; downward-arrow icon.
+
+6. EMPOWERED      (BUFF, +50% damage — from stim items)
+   - magnitude = damage bonus percent (default 50 -> *1.5). Duration default 5.
+   - Multiplies outgoing damage (both melee and ranged) at the host's fire/swing
+     resolution, stacking MULTIPLICATIVELY with stat and perk multipliers.
+     StackMode REFRESH_DURATION (re-stim refreshes, does not stack to *2.25).
+   - Primarily a player buff from a "Combat Stim" consumable / stim pickup; enemies
+     could gain it from a future buffer demon. Visual: red adrenaline screen-edge
+     glow + slightly punchier weapon-bob; upward red chevron icon.
+
+APPLY RULES (StatusEffectController.apply)
+==========================================
+1. resist = host.getStatusResistance(). If isImmune(type) -> ignore entirely
+   (emit "IMMUNE" floater if visible). DONE.
+2. effDuration = round(turns * resist.durationMultiplier(type)); if <1 after a
+   non-zero request, floor at 1 (a half-stun on a heavy frame is still 1).
+3. effMagnitude = round(magnitude * resist.damageMultiplier(type)) for DoT effects.
+4. existing = host.getActiveEffects().get(type).
+   - If none: store a fresh (reused) StatusEffect with stacks=1.
+   - If present, apply StackMode:
+       STACK_MAGNITUDE  -> stacks = min(stacks+1, cap); remainingTurns = max(
+                           remainingTurns, effDuration).
+       REFRESH_DURATION -> remainingTurns = max(remainingTurns, effDuration);
+                           magnitude = max(magnitude, effMagnitude).
+       REPLACE_IF_LONGER-> if effDuration > remainingTurns, overwrite.
+5. On apply, set/refresh any host override (BLINDED -> fovOverride; SLOWED ->
+   slow flag). On expiry, clear the override.
+
+TICK ORDER (within one world turn — extends enemy_system.txt's turn)
+====================================================================
+After the player's action resolves and BEFORE/within EnemyManager.takeTurn, run
+StatusEffectController.tickAll in this order so attribution and skips are correct:
+  1. PLAYER status tick: apply DoT (Burning/Poison) to player; check STUNNED to
+     decide if the player's NEXT input is consumed; expire finished effects.
+  2. ENEMY status tick (per enemy, spawn-index order): apply DoT; if an enemy died
+     to a tick, route XP to the effect's source (the player) via awardExperience;
+     mark STUNNED enemies to skip their Phase B action this turn; expire finished.
+  3. Then enemy perception/action phases run as normal (stunned enemies skip).
+A status tick does NOT itself cost an extra turn — it is part of the single turn
+the player already spent. DoT that kills still stamps the corpse decal as usual.
+
+WHICH SOURCES INFLICT WHICH EFFECT (the source map)
+===================================================
+WEAPONS (each weapon doc declares its own chance; listed here for cohesion):
+  - Incinerator / Flamethrower (incinerator-flamethrower.txt): BURNING on hit,
+    high chance (e.g. 100% on direct, magnitude from the weapon).
+  - Plasma weapons (plasma-*.txt): small BURNING chance OR none (designer choice).
+  - Grenade / explosive (grenade-launcher.txt, explosive barrels): BURNING on
+    targets in blast.
+  - Steel Pipe heavy hit (roguelike_order_15): STUN on a crit/charged swing.
+  - Stim item (a "Combat Stim" consumable): EMPOWERED on the player (self-buff).
+ENEMIES (from roguelike_order_13):
+  - Imp fireball: low BURNING chance.
+  - Cacodemon acid spit: POISONED (stacks).
+  - (Future) a "screecher" could apply BLINDED; a "tar demon" SLOWED.
+ENVIRONMENT:
+  - Fire hazard tiles / chain-reaction fire: BURNING.
+  - Toxic pools (oil/coolant 'O' if upgraded to hazardous): POISONED.
+
+RESIST / IMMUNITY (per actor — values owned by order_13)
+========================================================
+StatusResistance is built per archetype at spawn and once for the player:
+  - Imp: damageMultiplier(BURNING)=0.5, isImmune(BURNING self)=true.
+  - Cacodemon: isImmune(POISONED)=true, damageMultiplier(POISONED)=0.5 (incoming).
+  - Lost Soul: isImmune(BURNING)=true.
+  - Hell Knight: durationMultiplier(STUNNED)=0.5.
+  - Player baseline: no resists; the pyromaniac perk (order_11) sets the player's
+    damageMultiplier(BURNING)=0.5. A future "rad suit" could grant poison resist.
+Immunity beats stacking (an immune target never accrues stacks).
+
+GAMEBALANCE CONSTANTS (placeholders — flag for playtest)
+========================================================
+  BURN_DAMAGE_PER_TURN      = 4    BURN_DURATION_MIN = 3   BURN_DURATION_MAX = 5
+  POISON_DAMAGE_PER_STACK   = 2    POISON_MAX_STACKS = 5   POISON_DURATION   = 4
+  STUN_DURATION_DEFAULT     = 1    STUN_DURATION_HEAVY = 2
+  BLIND_FOV_DEGREES         = 30   BLIND_DURATION    = 2
+  SLOW_FACTOR               = 2.0f SLOW_DURATION     = 3
+  EMPOWERED_DAMAGE_PERCENT  = 50   EMPOWERED_DURATION = 5
+  STATUS_MAX_TYPES          = 6    // EnumMap sizing
+  // screen-tint alphas
+  STATUS_TINT_ALPHA         = 0.22f
+
+VISUAL DESIGN
+=============
+PLAYER (screen-edge feedback, reuse the existing full-screen tint-quad pattern,
+no new alloc; tints composite by max so multiple effects don't oversaturate):
+  - Burning  : orange vignette, gentle flicker each tick.
+  - Poisoned : green vignette, intensity scales with stack count.
+  - Stunned  : white concussion ring + swirling stars, brief desaturate.
+  - Blinded  : heavy black vignette squeezing the cone (pairs with the actual
+               30-deg FOV change so it both LOOKS and IS narrow).
+  - Slowed   : cold blue-grey edge tint + sluggish weapon-bob timing.
+  - Empowered: red adrenaline glow + punchier bob.
+HUD STATUS ICONS (left panel "status line", already reserved in HUD layout):
+  - A horizontal row of up to 6 small (16x16) pixel icons at the bottom of the
+    left panel, each with its remaining-turn number; Poison shows its stack count.
+  - Icons: flame, green-drop, stars, slashed-eye, down-arrow, up-chevron.
+  - New constants: HUD_STATUS_ICON_SIZE=16f, HUD_STATUS_ICON_GAP=4f,
+    HUD_STATUS_ROW_LOCAL_X=24f, HUD_STATUS_ROW_LOCAL_Y=4f.
+ENEMY (on billboard, via EnemyRenderer tint — ties to hit-reaction docs):
+  - Per-effect color tint multiplied into the sprite + a tiny icon floating above
+    the billboard for the dominant effect. Keeps deep-floor fights readable.
+
+BALANCE NOTES
+=============
+- DoT must never out-damage a kill the player already earned: Poison cap (5
+  stacks * 2 = 10/turn) and Burn (4-5/turn) are tuned so they THREATEN over a few
+  turns, not instantly delete. Against the player they create urgency (find cover,
+  out-wait) rather than instant death.
+- STUN is the strongest effect; keep its sources rare and its player-facing
+  duration short (1). A 2-turn stun on the player from a heavy enemy hit should be
+  a memorable "ouch", not a routine occurrence.
+- BLINDED's FOV squeeze must be a clamp/override, NOT a permanent FOV mutation, so
+  it cleanly restores and never fights the wide_eyes perk (on expiry, restore to
+  the perk-modified FOV, not the hard default).
+- EMPOWERED stacking multiplicatively with perks/stats can spike player damage;
+  the REFRESH (not stack) rule and 5-turn window keep it a burst tool, not a
+  permanent state.
+- All DoT ticks respect AGILITY dodge? No — per order_12 OPEN Q, dodge applies to
+  direct hits only; ticks always land (you can't dodge fire you're standing in).
+
+INTERACTIONS
+============
+1. TURN ENGINE (enemy_system.txt): status tick is a new sub-phase of the single
+   world turn; stunned enemies skip Phase B; DoT kills route XP to the source.
+2. STATS (order_12): SLOWED scales action-duration; EMPOWERED stacks with melee/
+   ranged stat multipliers; dodge precedes status application.
+3. ENEMY ARCHETYPES (order_13): supplies the per-archetype resist/immunity values;
+   Caco poison + Imp burn are the primary enemy sources.
+4. WEAPONS (all weapon docs): each declares its inflict chance/effect; this doc is
+   the apply API. Pyromaniac perk (order_11) halves player fire damage.
+5. MELEE (order_15): Steel Pipe charged hit applies STUN; knockback is a separate
+   instantaneous push (NOT a status), but a future "stagger" could be modeled here.
+6. HAZARDS (hazard-*.txt): fire/toxic tiles apply BURNING/POISONED through apply().
+7. HUD (procedural-hud / scanline-crt): status icon row lives in the reserved
+   left-panel status line; tint quads reuse the fade-quad pattern.
+8. PERMADEATH/LEVEL TRANSITION: player-side effects are CLEARED on level
+   transition (a fresh floor) but PERSIST across a single turn; on death they are
+   irrelevant. Enemy effects die with the enemy.
+
+DEPENDENCIES (must exist first)
+===============================
+1. enemy_system.txt (IMPLEMENTED) — turn callback + EnemyManager tick anchor +
+   Enemy/Player HP.
+2. Player.applyDamage(amount, sourceDirX, sourceDirY) (IMPLEMENTED).
+3. Player.fieldOfViewRadians is renderer-read each frame (it is) so a BLINDED
+   override takes effect immediately.
+4. RECOMMENDED with: order_12 (Slowed/Empowered multiplier hooks, dodge order) and
+   order_13 (resist values). Burning/Poison/Stun work standalone; Slowed/Empowered
+   are richer with order_12.
+5. At least one SOURCE to be useful: simplest first source = Cacodemon poison or a
+   fire hazard tile (already designed).
+
+OPEN QUESTIONS
+==============
+1. Does BLINDED affect enemies (shrink LOS-wake range) or stay player-only?
+   Recommend player-only for v1 (enemies have no real "sight cone", only the LOS
+   check).
+2. Should there be a global cap on simultaneous DoT (e.g. Burn + Poison both
+   ticking) damage per turn to avoid burst-deleting the player? Recommend a soft
+   cap = a fraction of maxHealth per turn from combined DoT; revisit in playtest.
+3. Empowered as a found PICKUP (a new 'Combat Stim' walkable item) vs only an
+   internal effect granted by a perk/event? Recommend a pickup item, but that
+   needs a new tile symbol — defer the symbol to a dedicated stim-item doc; ship
+   the EFFECT now so perks/events can grant it without a tile.
+4. Visual stacking of multiple screen tints: composite-by-max (chosen) vs additive?
+   Max avoids oversaturation; confirm it reads clearly with Burn+Slow together.
+5. Do enemies show a status-resistance "IMMUNE" floater, or fail silently? Recommend
+   a floater when the enemy is on-screen (teaches the player not to flame Lost Souls).
