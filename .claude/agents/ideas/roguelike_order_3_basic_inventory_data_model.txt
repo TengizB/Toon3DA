@@ -1,0 +1,194 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Items
+TITLE: Inventory Data Model (Backend Only, No UI)
+---
+
+OVERVIEW
+========
+The backend data layer for carried items: the item type catalog, the stack model,
+the slot-based Inventory container, and the rules for picking up, using, and
+consuming items. This is PURE DATA AND LOGIC — there is NO UI here (the menu is
+order 6, inventory_ui_screen.txt, which renders and commands this model). This
+doc defines exactly what an item is, how many the marine can carry, how a pickup
+becomes an inventory entry, and how using an item routes into the health, ammo,
+and weapon pools.
+
+It belongs here because every economy system (ammo, medkits, armour, keycards,
+weapons, future shop/mods) needs one canonical "what the marine is carrying"
+structure. Building it once, cleanly, with zero per-action allocation, lets every
+downstream system read and command a single source of truth.
+
+RELATIONSHIP TO inventory-loot-ransack-system.txt: that doc (the loot/ransack
+design) ALREADY proposes this exact backbone (ItemType enum, ItemStack,
+Inventory, GroundItem(Manager), LootTable) and is referenced by order 6 as "order
+5." THIS doc is the focused, implementation-ready DATA-MODEL slice of that design:
+it is the authoritative spec for the item/Inventory classes; the loot/ransack doc
+owns the corpse-ransack VERB and loot tables on top. Where the two overlap on the
+data structures, THIS doc is the source of truth; build these classes first, then
+layer ransack on top.
+
+GAMEPLAY LOOP (data-layer behavior; no rendering)
+=================================================
+1. PICKUP (walk-over auto vs press-to-pick):
+   - AMMO / KEYCARDS / ARMOUR / CREDITS: AUTO-pickup on the player step, resolved
+     in the existing pre-tick window (door settle -> pickups -> finishAction).
+     These either apply instantly (armour, ammo into pool) or auto-add to
+     inventory (keycards). No slot pressure for these.
+   - CONSUMABLES (medkit, stim) and WEAPONS / MODS / KEY ITEMS: PRESS-TO-PICK via
+     the F/LOOT verb (one turn), so the player chooses whether to spend a slot. If
+     inventory is full, the pickup fails gracefully (item stays on the floor,
+     "INVENTORY FULL" feedback). This split keeps slot pressure focused on
+     meaningful choices, not bullets.
+2. ADD: Inventory.tryAdd(ItemType, quantity):
+   - If the type isStackable and an existing stack of that type has room, merge
+     into it (up to maxStackSize), spilling overflow into a new stack if a free
+     slot exists.
+   - Else if a free slot exists, occupy it with a new ItemStack.
+   - Else return false (full). No allocation on the merge path.
+3. USE: Inventory.use(slotIndex) — called by order 6's menu (USE costs one turn,
+   spent on menu close) or by a quick-use key:
+   - CONSUMABLE: route into the owning system — medkit/stim -> heal path
+     (medkit-field-medicine-system.txt, fires PlayerHealed), armour shard if ever
+     carried -> AR apply. Decrement stack; remove the stack when quantity hits 0.
+   - WEAPON: equip it (delegates to the weapon-slot system; free menu action, no
+     turn). Not "consumed."
+   - KEYCARD / KEY ITEM: not usable from the menu; door checks READ the inventory
+     for the matching keycard rather than a boolean flag.
+4. REMOVE / DROP: Inventory.remove(slotIndex, quantity) -> the order-6 menu spawns
+   the removed stack as a GroundItem on a free tile (costs one turn on menu close).
+5. CONNECTION TO POOLS: ammo does NOT consume slots — it flows into the ammo
+   reserve pool (order 4). HP/AR are pools, not items. The Inventory holds
+   CONSUMABLES, WEAPONS, KEY ITEMS, MODS, and CREDITS only. This is the key design
+   decision that keeps the 10-slot grid about utility choices.
+
+PLAYER EXPERIENCE
+=================
+This layer is invisible on its own, but it creates the felt scarcity that order 6
+surfaces: a tight slot count means "do I carry a third medkit or keep the spare
+keycard?" Because ammo and armour bypass slots, the inventory is purely about
+high-value utility — every slot taken is a deliberate bet on what the run will
+need. The data model must make that bet HONEST: stacking, capacity, and pickup
+rules have to be predictable so the player can plan, not be surprised by silent
+item loss.
+
+TECHNICAL NOTES
+===============
+DEPENDENCIES (must exist first):
+- NONE hard — this is a foundational data layer. But it is only USEFUL once it has
+  consumers: order 3 (health, for medkit USE), order 4 (ammo pool, which it routes
+  to but does not store), the weapon system (for WEAPON equip), and order 6 (the
+  UI that drives use/drop).
+- It is the hard dependency FOR: order 6 (inventory UI) and the corpse-ransack
+  verb in inventory-loot-ransack-system.txt.
+
+New package: ...toon3d.item
+
+New classes:
+- item/ItemType.java (enum): the catalog. Categories and members:
+    WEAPONS:     WEAPON_PISTOL, WEAPON_SHOTGUN, WEAPON_PLASMA, WEAPON_ROCKET, ...
+    CONSUMABLES: MEDKIT_SMALL, MEDKIT_LARGE, STIMPACK
+    KEY ITEMS:   KEYCARD_RED, KEYCARD_YELLOW, KEYCARD_BLUE
+    MODS:        WEAPON_MOD_* (future)
+    MISC:        CREDITS
+  (AMMO types — SHELLS/BULLETS/CELLS/ROCKETS — are defined for the pouch/pool in
+  order 4 and do NOT occupy inventory slots; keep them out of the slotted grid.)
+  Each constant stores: displayName, ItemCategory category, boolean isStackable,
+  int maxStackSize, a glyph char + color (for order-6 rendering, reuse the
+  ground-item palette), and an optional reference to its effect (e.g. heal amount,
+  weapon id). Use a small ItemCategory enum { WEAPON, CONSUMABLE, KEY_ITEM, MOD,
+  MISC } for sorting/branching.
+- item/ItemStack.java: value-style holder { ItemType type; int quantity; }.
+  Pre-allocate the Inventory's array of stacks and REUSE them (mutate type/quantity
+  in place; an empty slot is type == null or quantity == 0). No churn in hot paths.
+- item/Inventory.java: fixed-size ItemStack[] of length INVENTORY_SLOT_COUNT.
+    Methods: tryAdd(ItemType, int quantity) -> boolean; remove(int slot, int qty);
+    use(int slot); ItemStack findStack(ItemType); boolean isFull();
+    int firstFreeSlot(); int countOf(ItemType). All allocation-free.
+    Holds NO LibGDX/render state — pure model, lives outside any renderer.
+  (Per inventory-loot-ransack-system.txt this may also be named PlayerInventory
+  and is already referenced by WeaponReloadSubscriber as inventory.getEquippedWeapon
+  — keep that accessor: the Inventory also tracks the equipped weapon slot.)
+- item/GroundItem.java: { int tileColumn; int tileRow; ItemStack stack; } owned by
+  a GroundItemManager (spawn on drop / ransack; itemAt(column,row); pickup). Lives
+  in ...toon3d.item or ...toon3d.world; rendered as a billboard via PropRenderer.
+  (This is shared with the ammo floor-pickup path in order 4 and the loot doc.)
+
+Modified:
+- input/PlayerController.java: add the F/LOOT and quick-use verbs to the input
+  priority order, routing through finishAction(true, cause) so they cost one tick
+  (TAB open/close is NOT a tick — that gate lives in order 6).
+- door/* keycard check: read Inventory.countOf(KEYCARD_*) instead of a boolean
+  flag, so a dropped keycard can actually lock the player out (intended tension).
+- The weapon system: equipping a WEAPON item sets the Inventory's equipped-weapon
+  slot; WeaponReloadSubscriber already calls inventory.getEquippedWeapon().
+
+Constants to add (Constants.java) — PLACEHOLDER:
+  INVENTORY_SLOT_COUNT      = 10   (brief asks for ~10; loot doc used 8 — RECONCILE,
+                                    see OPEN QUESTIONS; recommend 10 and update the
+                                    loot doc's 4x2 grid to 5x2)
+  ITEM_STACK_MAX_DEFAULT    = 99   (generic stackable cap; per-type overrides on
+                                    the enum, e.g. MEDKIT_SMALL maxStack 5)
+  (Ammo stack/reserve caps live in order 4, NOT here.)
+
+Turn-based fit: pure data; mutations happen inside a turn that some other action
+already spent (USE/LOOT/DROP). Opening the model for inspection (order 6) is a
+non-turn pause. No real-time anything. No allocations on add/use/remove.
+
+VISUAL DESIGN
+=============
+NONE. This is the backend data layer. All rendering — slot grid, glyphs, detail
+panel — is owned by order 6 (inventory_ui_screen.txt). The ONLY visual-adjacent
+data this layer provides is the per-ItemType glyph char + color, stored on the
+enum so order 6 and PropRenderer (ground items) share one mapping.
+
+BALANCE NOTES
+=============
+- INVENTORY_SLOT_COUNT = 10 is deliberately tight. Because ammo and armour bypass
+  slots, those 10 slots are pure utility: medkits, stims, spare keycards, spare
+  weapons, mods, credits. Tune up/down only after playtest; a "+1 slot" boon
+  (levelup-stim-boon-choice-progression.txt) is a natural build axis.
+- Per-type maxStackSize is the real lever: small medkits stack to ~5 (you can
+  hoard a few), weapons never stack (1 each, big slot cost), credits stack high.
+- Flag all numbers as placeholders.
+
+INTERACTIONS
+============
+1. Inventory UI (order 6, inventory_ui_screen.txt): order 6 is the presentation +
+   input layer over THIS model. It calls tryAdd/use/remove/findStack and reads the
+   per-type glyph/color. This doc is its single hard dependency.
+2. Loot / ransack (inventory-loot-ransack-system.txt): corpse ransack rolls a loot
+   table and calls tryAdd or spawns GroundItems — built ON TOP of these classes.
+3. Ammo (order 4): ammo does NOT live in slots; it flows to the reserve pool. The
+   Inventory only routes ammo pickups to that pool, never stores them.
+4. Health/medkits (order 3, medkit-field-medicine-system.txt): use() of a medkit
+   routes into the heal path; HP is a pool, not an item.
+5. Armour (armour-kit-system.txt): armour applies instantly on pickup (no slot);
+   the Inventory is not involved unless a future "carried armour pad" variant
+   ships.
+6. Keycard doors (uac-keycard-doors-security-tiers.txt): door checks read the
+   Inventory for the matching keycard item.
+7. Weapons + reload (global-tick-event-system.txt): the Inventory tracks the
+   equipped weapon; WeaponReloadSubscriber already depends on
+   inventory.getEquippedWeapon().
+
+OPEN QUESTIONS
+==============
+- SLOT COUNT RECONCILIATION: the brief asks ~10 slots; inventory-loot-ransack-
+  system.txt and inventory_ui_screen.txt assume 8 (a 4x2 grid). Recommend settling
+  on 10 (5x2 grid) and updating the UI doc's INVENTORY_GRID_COLUMNS/layout to
+  match. Confirm before building so order 6's grid math is correct.
+- Weight system or pure slot count? inventory-loot-ransack-system.txt left this
+  open. Recommend PURE SLOT COUNT for v1 (cleaner UI, less bookkeeping); drop
+  INVENTORY_MAX_WEIGHT entirely unless a designer wants the depth.
+- Do keycards occupy slots or live in a dedicated keycard tray (like the HUD's
+  [R][Y][B] sockets)? Recommend a dedicated tray (HUD already shows it), so the 10
+  utility slots aren't eaten by keys. If so, keycards are KEY_ITEMs tracked
+  separately, not in the ItemStack[].
+- Does CREDITS belong in a slot or a separate counter? Recommend a separate counter
+  (like ammo) unless a shop economy wants it slotted.
+- ItemType glyphs: single ASCII char per type (trivial, very roguelike) vs built
+  ShapeRenderer icons (order 6 OPEN QUESTION). Store a char now; order 6 can
+  upgrade rendering later without touching this layer.
+- Quick-use hotkeys (e.g. number keys to use a medkit without opening the menu)?
+  Out of scope for the data layer, but the use(slot) entry point already supports
+  it — leave the door open for a future input doc.

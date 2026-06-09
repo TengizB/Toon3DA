@@ -1,0 +1,293 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Progression
+TITLE: Player Stats & Attributes (STR / AGI / TGH / MRK)
+---
+
+OVERVIEW
+========
+Four core attributes give the marine a numeric backbone that every combat system
+reads from: STRENGTH (melee damage), AGILITY (move/rotate speed + dodge chance),
+TOUGHNESS (max HP bonus + flat damage reduction), and MARKSMANSHIP (ranged damage
++ accuracy). Stats start at difficulty-dependent base values and grow ONLY through
+level-up perks (roguelike_order_11) and equipment modifiers. They are displayed on
+the character/inventory screen (roguelike_order_6) and are the single source of
+truth for the multipliers that weapons, melee, and the damage pipeline consult.
+
+This document OWNS: the PlayerStats data structure, the per-difficulty base values,
+the per-stat caps, the EXACT formula each stat feeds, and the modifier-stacking
+rule (base + perk bumps + equipment). It does NOT own the perk pool (order_11), the
+HP pool (scanline-crt-hud-marine-vitals.txt), the AR pool (armour-kit-system.txt),
+melee weapons (order_15), or status effects (order_14) — it provides the numbers
+those systems multiply by.
+
+NO NEW TILE SYMBOL IS REQUIRED. This is an entity/state-layer feature only.
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING DOCS
+=============================================
+- roguelike_order_11_xp_and_player_leveling.txt: its stat-bump perks (iron_skin,
+  quick_step, brawn, marksman_focus) each call PlayerStats.addPermanent(stat, +1).
+  That doc owns the perk; THIS doc owns the stat field, cap check, and effect math.
+- enemy_system.txt (IMPLEMENTED): Player.applyDamage already exists. TOUGHNESS
+  inserts a reduction step into that path (see INTERACTIONS). HP-pool fields are
+  owned by the HUD vitals doc; TOUGHNESS only ADDS to maxHealth.
+- armour-kit-system.txt (IMPLEMENTED): AR absorbs first, THEN TOUGHNESS reduces the
+  HP-bound remainder. Strict order defined in INTERACTIONS so the two never
+  double-count.
+- roguelike_order_6_inventory_ui_screen.txt: renders the four stat rows. THIS doc
+  defines the getters it reads.
+- All weapon docs: read getMeleeDamageMultiplier / getRangedDamageMultiplier /
+  getAccuracyMultiplier at fire time.
+
+DATA STRUCTURE
+==============
+New package: ge.tbegvadze.toon3d.progression
+New class:   PlayerStats  (a plain value/aggregate object, NOT a renderer)
+
+Stats are stored as an enum-indexed array so adding a fifth stat later is trivial
+and there is no per-frame allocation.
+
+  enum Attribute { STRENGTH, AGILITY, TOUGHNESS, MARKSMANSHIP }   // 4 entries
+
+  class PlayerStats {
+      // Index by Attribute.ordinal(). Pre-sized int[4] arrays — no allocation
+      // after construction.
+      private final int[] baseValue;        // set once from difficulty at run start
+      private final int[] permanentBonus;    // accumulated from level-up perks
+      private final int[] equipmentBonus;    // recomputed when gear changes (NOT per frame)
+
+      int getBase(Attribute a)        // baseValue[a.ordinal()]
+      int getEffective(Attribute a)   // clamp(base + permanent + equipment, MIN, CAP[a])
+      void addPermanent(Attribute a, int delta)   // perk hook; re-clamps
+      void setEquipmentBonus(Attribute a, int total) // called by equipment system on change
+
+      // Derived multiplier getters — pure reads of getEffective(...), routed
+      // through GameMath. Cached only if profiling shows a hotspot; cheap enough
+      // to call at fire time.
+      float getMeleeDamageMultiplier()   // from STRENGTH
+      float getRangedDamageMultiplier()  // from MARKSMANSHIP
+      float getAccuracyMultiplier()      // from MARKSMANSHIP
+      float getDodgeChance()             // from AGILITY  (0..DODGE_CAP)
+      int   getMaxHealthBonus()          // from TOUGHNESS (added to Player.maxHealth)
+      int   getFlatDamageReduction()     // from TOUGHNESS
+      float getActionDurationMultiplier()// from AGILITY (scales move/rotate seconds)
+  }
+
+OWNERSHIP / LIFECYCLE
+- PlayerStats is owned by RunState (or by World if RunState does not yet exist),
+  persistent across LevelLoader.rebuildForLevel — same lifetime as Player HP and
+  ProgressionManager. Created at run start from the chosen difficulty.
+- equipmentBonus is recomputed ONLY when a weapon/armor item is equipped or
+  dropped (an event, never per turn, never per frame). The recompute walks the
+  equipped items, sums their per-attribute modifiers, and calls
+  setEquipmentBonus for each Attribute.
+
+STAT EFFECT FORMULAS  (all live in GameMath with derivation comments)
+=====================================================================
+Convention: a "base" reference value is the stat value at which the multiplier is
+exactly 1.0 (no bonus). The user spec ("Strength 5 = +25% melee damage") implies
+each point above the reference grants +5%. We use a per-point linear model with a
+configurable reference so designers can re-center without touching call sites.
+
+  STRENGTH -> melee damage multiplier:
+      meleeMult = 1.0 + (STRENGTH - STAT_REFERENCE) * STR_MELEE_PER_POINT
+      With STAT_REFERENCE = 0 (raw spec) and STR_MELEE_PER_POINT = 0.05:
+          STR 5  -> 1.0 + 5*0.05 = 1.25  (+25%, matches spec)
+      RECOMMENDED v1: STAT_REFERENCE = 0 so the spec example holds exactly. (If
+      base stats start at 5 we instead set STAT_REFERENCE = startingBase so a
+      fresh marine sits at 1.0x; this is the OPEN QUESTION below — pick one.)
+
+  MARKSMANSHIP -> ranged damage multiplier:
+      rangedMult = 1.0 + (MARKSMANSHIP - STAT_REFERENCE) * MRK_DAMAGE_PER_POINT
+      MRK_DAMAGE_PER_POINT = 0.04  (ranged scales slightly slower than melee — melee
+      is the risk-reward, high-touch option).
+
+  MARKSMANSHIP -> accuracy multiplier (spread / hit-chance for weapons that roll):
+      accuracyMult = 1.0 + (MARKSMANSHIP - STAT_REFERENCE) * MRK_ACCURACY_PER_POINT
+      MRK_ACCURACY_PER_POINT = 0.03. Hitscan weapons currently always hit, so v1
+      uses this to TIGHTEN shotgun spread / reduce a future miss-chance roll. If no
+      weapon rolls accuracy yet, the getter exists but is dormant (see OPEN Q).
+
+  AGILITY -> action duration multiplier (snappier movement):
+      durationMult = clamp(1.0 - (AGILITY - STAT_REFERENCE) * AGI_SPEED_PER_POINT,
+                           AGI_MIN_DURATION_MULT, 1.0)
+      AGI_SPEED_PER_POINT = 0.03, AGI_MIN_DURATION_MULT = 0.55 (floor so animation
+      never becomes unreadably fast). PlayerController reads:
+          effectiveMoveDuration = PLAYER_MOVE_DURATION * durationMult
+      NOTE: this changes ANIMATION speed only. Turn ORDER is unchanged — one player
+      action is still exactly one world turn (the turn-based invariant is sacred).
+      Agility makes you LOOK faster and feel snappier; it does NOT grant extra turns.
+      (A literal "extra turn" is the adrenal_pump EPIC perk, owned by order_11.)
+
+  AGILITY -> dodge chance (avoid an incoming hit entirely):
+      dodgeChance = clamp((AGILITY - STAT_REFERENCE) * AGI_DODGE_PER_POINT,
+                          0.0, DODGE_CAP)
+      AGI_DODGE_PER_POINT = 0.02, DODGE_CAP = 0.35 (never more than 35% — a dodge
+      wall would make the game unreadable). Rolled in Player.applyDamage BEFORE
+      armor/toughness; on a successful dodge, damage = 0 and a "DODGE" floater
+      shows. Seeded by the run RNG for reproducibility.
+
+  TOUGHNESS -> max HP bonus:
+      maxHealthBonus = (TOUGHNESS - STAT_REFERENCE) * TGH_HP_PER_POINT
+      TGH_HP_PER_POINT = 5. Added to Player.maxHealth whenever TOUGHNESS changes
+      (perk or equipment). Raising maxHealth does NOT auto-heal; current HP is
+      unchanged (matches the vitality-perk philosophy in order_11).
+
+  TOUGHNESS -> flat damage reduction (applied AFTER armor, to HP-bound damage):
+      flatReduction = (TOUGHNESS - STAT_REFERENCE) * TGH_REDUCTION_PER_POINT
+      TGH_REDUCTION_PER_POINT = 1 (each point shaves 1 off every HP-bound hit).
+      Clamp the post-reduction HP damage to a minimum of TGH_MIN_DAMAGE = 1 so a
+      tanky build never becomes fully immune to a weak attacker.
+
+PER-DIFFICULTY BASE VALUES  (GameBalance constants)
+===================================================
+Difficulty is chosen at run start (see permadeath/run-setup docs). Base values
+seed baseValue[]. Placeholders — tune in playtest.
+
+  Difficulty       STR  AGI  TGH  MRK   (also sets starting HP elsewhere)
+  ---------------  ---  ---  ---  ---
+  RECRUIT (easy)    3    3    4    3
+  MARINE (normal)   2    2    2    2     <- the "reference" loadout if STAT_REFERENCE
+  NIGHTMARE (hard)  1    1    1    1        is centered on MARINE
+  ULTRA (brutal)    0    1    1    1
+
+  Rationale: normal "MARINE" is the balance anchor. Easier modes start with extra
+  toughness/all-round padding; harder modes start lean and lean on perk picks.
+
+STAT CAPS  (GameBalance constants)
+==================================
+Each stat is independently capped so no single attribute trivializes the game.
+  STAT_CAP_STRENGTH      = 12
+  STAT_CAP_AGILITY       = 10   (gated by DODGE_CAP and AGI_MIN_DURATION_MULT anyway)
+  STAT_CAP_TOUGHNESS     = 12
+  STAT_CAP_MARKSMANSHIP  = 12
+  STAT_MIN               = 0    (effective value floored at 0)
+getEffective clamps to [STAT_MIN, STAT_CAP_<x>]. Perks and equipment can push
+toward the cap but never past it; surplus +1 perk picks on a maxed stat should be
+hidden from the draw (PerkPool already removes perks at maxStacks — wire the stat
+cap into that eligibility check so a maxed stat stops offering its bump perk).
+
+WHICH PERKS / ITEMS MODIFY WHICH STATS
+======================================
+PERKS (from roguelike_order_11; each calls addPermanent):
+  brawn          -> +1 STRENGTH
+  quick_step     -> +1 AGILITY
+  iron_skin      -> +1 TOUGHNESS
+  marksman_focus -> +1 MARKSMANSHIP
+  (vitality/plating touch HP/AR pools directly, NOT stats — keep them separate so
+  the player can build raw HP without inflating TOUGHNESS reduction.)
+
+EQUIPMENT (recompute setEquipmentBonus on equip/unequip):
+  - Melee weapons (order_15): the Chainsaw could grant +1 STRENGTH while equipped;
+    Combat Knife +1 AGILITY. (Optional flavor; numbers owned by order_15's item
+    modifier block, summed here.)
+  - Armor tiers (armour-kit-system.txt): a future "heavy security vest" variant
+    could grant +1 TOUGHNESS while worn. (Current armor is consumable AR, not a
+    worn slot; only add stat bonuses if a persistent armor slot is introduced.)
+  - Future trinkets/augments: arbitrary per-attribute modifiers, summed into
+    equipmentBonus.
+
+GAMEBALANCE CONSTANTS (placeholders — flag for playtest)
+========================================================
+  STAT_REFERENCE              = 0      // or = MARINE base; see OPEN QUESTION
+  STAT_MIN                    = 0
+  STAT_CAP_STRENGTH           = 12
+  STAT_CAP_AGILITY            = 10
+  STAT_CAP_TOUGHNESS          = 12
+  STAT_CAP_MARKSMANSHIP       = 12
+  STR_MELEE_PER_POINT         = 0.05f
+  MRK_DAMAGE_PER_POINT        = 0.04f
+  MRK_ACCURACY_PER_POINT      = 0.03f
+  AGI_SPEED_PER_POINT         = 0.03f
+  AGI_MIN_DURATION_MULT       = 0.55f
+  AGI_DODGE_PER_POINT         = 0.02f
+  DODGE_CAP                   = 0.35f
+  TGH_HP_PER_POINT            = 5
+  TGH_REDUCTION_PER_POINT     = 1
+  TGH_MIN_DAMAGE              = 1
+  // base tables: STAT_BASE_RECRUIT_STR ... STAT_BASE_ULTRA_MRK (16 entries)
+
+VISUAL DESIGN
+=============
+- Character/inventory screen (order_6) shows four rows, each: stat name in caps,
+  a short bar of pip squares (filled = current value, hollow up to cap), the raw
+  number, and the live derived effect in parentheses, e.g.:
+      STRENGTH      [####------]  4   (+20% MELEE)
+      AGILITY       [###-------]  3   (FASTER, 6% DODGE)
+      TOUGHNESS     [#####-----]  5   (+25 MAX HP, -5 DMG)
+      MARKSMANSHIP  [##--------]  2   (+8% RANGED)
+- Stat color coding (consistent with HUD palette): STR red-orange, AGI green,
+  TGH steel-cyan (matches AR bar), MRK amber.
+- A +1 to a stat from a level-up perk flashes the corresponding row on the next
+  character-screen open (a brief white pulse on the affected pip).
+- No new HUD-band element required; stats live on the menu screen only. (The
+  DERIVED pools — HP, AR — remain on the always-on HUD band.)
+
+BALANCE NOTES
+=============
+- Linear per-point scaling is intentional: it is readable ("each point = +5%
+  melee") and easy to reason about at the perk-choice moment. Avoid exponential
+  curves — they make the character screen lie.
+- TOUGHNESS is deliberately double-duty (max HP + flat reduction) so a tank build
+  is a real archetype, but flat reduction is capped by TGH_MIN_DAMAGE=1 so chip
+  damage (poison/burn ticks from order_14) still threatens turtles.
+- DODGE is capped at 35% and rolled with the run seed — a high-AGI build feels
+  slippery without being immune; deaths stay readable ("the hit landed, I didn't
+  dodge that one").
+- AGILITY's snappiness reward must NOT leak into turn count. Keep the
+  "1 action = 1 turn" invariant absolute; only the animation seconds shrink.
+
+INTERACTIONS
+============
+1. DAMAGE PIPELINE (strict order — defines how every incoming hit resolves;
+   reconciles enemy_system + armour-kit + this doc + order_14):
+      a. AGILITY dodge roll. Success -> damage = 0, emit "DODGE", DONE.
+      b. Armor absorption (armour-kit-system.txt split): some soaked by AR.
+      c. TOUGHNESS flat reduction applied to the HP-bound remainder; floor at
+         TGH_MIN_DAMAGE.
+      d. Subtract from Player.health.
+   This entire chain lives inside the existing Player.applyDamage(amount,
+   sourceDirX, sourceDirY); this doc inserts steps (a) and (c).
+2. MELEE (order_15): melee final damage = baseWeaponDamage *
+   getMeleeDamageMultiplier(). berserker EPIC perk multiplies AFTER this.
+3. RANGED WEAPONS (all weapon docs): final damage = weaponBase *
+   weaponDamageMultiplier (from perks) * getRangedDamageMultiplier (from MRK).
+   Two independent multipliers — perks and stats stack multiplicatively.
+4. STATUS EFFECTS (order_14): Slowed multiplies getActionDurationMultiplier;
+   Stunned is a turn-skip (overrides AGILITY entirely for that turn); a future
+   "resist" stat could read TOUGHNESS for shorter effect durations.
+5. XP/PERKS (order_11): the four stat-bump perks are the primary growth vector;
+   PerkPool eligibility must hide a bump perk once its stat is at cap.
+6. INVENTORY (order_6): reads all getters for display; equipment changes there
+   trigger setEquipmentBonus recompute.
+
+DEPENDENCIES (must exist first)
+===============================
+1. Player HP fields + applyDamage(amount, sourceDirX, sourceDirY)
+   (scanline-crt-hud-marine-vitals.txt / enemy_system.txt — IMPLEMENTED).
+2. armour-kit-system.txt (IMPLEMENTED) — AR absorption must already run inside
+   applyDamage so TOUGHNESS slots in after it.
+3. RunState (or a persistent World-owned holder) to carry PlayerStats across
+   level rebuilds. If not present, create a minimal RunState now (also needed by
+   order_11's perk takenCount tracking).
+4. RECOMMENDED alongside: roguelike_order_11 (the perks that grow stats) and
+   roguelike_order_6 (the screen that displays them).
+
+OPEN QUESTIONS
+==============
+1. STAT_REFERENCE = 0 (spec example "STR 5 = +25%" holds literally, but a fresh
+   MARINE with STR 2 already gets +10% melee) OR STAT_REFERENCE = MARINE base so
+   a default marine sits at exactly 1.0x and bonuses are purely additive growth?
+   Recommend STAT_REFERENCE = 0 for v1 to match the user's literal spec; revisit
+   if normal feels too strong out of the gate.
+2. Does MARKSMANSHIP accuracy do anything in v1 if no weapon rolls hit-chance?
+   Recommend: wire it to tighten shotgun pellet spread (a future shotgun-spread
+   stat) and otherwise keep the getter dormant until a rolling weapon exists.
+3. Should AGILITY dodge also apply to status-effect application (dodge the
+   "Burning" proc), or only to direct HP damage? Recommend HP damage only for v1;
+   dodging a fire patch is unintuitive.
+4. Are stats visible/raised via a Doom-RPG-style standalone "level up your stat"
+   pick, or ONLY through the unified perk pool? Recommend perk-pool only — one
+   level-up UI, no second system.
+5. Equipment stat bonuses: ship in v1 (knife=+AGI, chainsaw=+STR) or defer until a
+   real equipment-slot system exists? Recommend defer; ship the field + recompute
+   hook now, populate it when order_15 lands.

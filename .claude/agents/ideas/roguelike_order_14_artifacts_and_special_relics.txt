@@ -1,0 +1,243 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Items
+TITLE: Artifacts & Special Relics — Passive Always-On Boons
+---
+
+OVERVIEW
+========
+Artifacts are rare, named relics with powerful always-on PASSIVE effects — no
+activation, no charges, just a permanent rewrite of one rule for the rest of the
+run. The marine can carry at most TWO at once, so finding a third forces a brutal
+swap decision. Artifacts are the run's "build-defining" loot tier: a weapon perk
+shifts a number, an artifact bends a system. They are found in secret rooms,
+dropped by bosses, or seeded only on deep floors (5+), so seeing one at all is a
+small event.
+
+This belongs to the Doom-RPG-on-DCSS/Hades brain: the Demon Core that doubles
+your melee but bleeds you on every kill is a classic devil's-bargain relic; the
+UAC Dog Tags are a clean stacking-economy boon. Two-slot scarcity keeps every
+pickup a genuine decision rather than a strictly-better grab.
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING DOCS
+=============================================
+- inventory-loot-ransack-system.txt (NOT IMPLEMENTED): owns the general inventory
+  + ground-item + pickup plumbing. Artifacts are a NEW item CATEGORY that lives
+  alongside consumables/keycards there; this doc does NOT re-invent pickup code,
+  it adds an ArtifactSlot subsystem and the two reserved relic slots.
+- roguelike_order_11_xp_and_player_leveling.txt: perks are temporary per-level
+  numeric tweaks; artifacts are system-bending relics. Dog Tags (+15% XP) reads
+  ProgressionManager.awardExperience — see INTERACTIONS.
+- secret-rooms-hidden-passages.txt (NOT IMPLEMENTED): a primary artifact spawn
+  source. Boss drops come from boss-encounter-facility-overseer.txt and the
+  order-16 Hell Baron.
+- level-transitions-stairs-down.txt (IMPLEMENTED): exposes the depth counter that
+  gates "floor 5+" artifact seeding and drives the once-per-floor reset on the
+  Invincibility Frame Module.
+
+NO NEW TILE SYMBOL IS REQUIRED. Artifacts are picked up via the existing ground-
+item / pickup path or handed out by boss death code; they are an entity/UI layer.
+(If a dedicated floor relic-pedestal tile is ever wanted, that WOULD require a new
+symbol — add to docs/tile-symbols.txt and Level.java before implementing. For v1,
+reuse the ground-item drop path; no symbol needed.)
+
+GAMEPLAY LOOP
+=============
+PICK UP:
+1. An artifact exists in the world as a ground item (glowing pedestal sprite) or
+   appears at a boss's death tile.
+2. Player steps onto the tile (W/S/Q/E). On the settled-tile frame, World checks
+   the tile's ground item; if it is an artifact, control routes to ArtifactSlots.
+3. If a free slot exists (fewer than 2 held): the artifact is equipped instantly,
+   its onEquip() hook fires, a HUD banner reads "RELIC BONDED — <NAME>", and the
+   passive is now live. Costs NO extra turn beyond the step that grabbed it.
+4. If both slots are full: the world enters a brief RELIC_SWAP phase (turn engine
+   frozen, same as the level-up overlay). The player sees the two held relics +
+   the new one and picks "drop slot 1", "drop slot 2", or "leave it". Choosing a
+   slot fires onUnequip() on the dropped relic (it returns to the floor as a
+   ground item so it is recoverable until you leave the floor) and onEquip() on
+   the new one. "Leave it" resumes with no change.
+
+WHILE HELD (passive hooks, fired by the relevant system, never polled in render):
+- onEquip(player, runState) / onUnequip(...): apply/remove static modifiers.
+- onKill(enemy): Demon Core bleeds 1 HP; Dog Tags do nothing here (XP hook is in
+  the award path, not the kill path).
+- onFloorStart(): Invincibility Frame Module re-arms its one free hit.
+- onIncomingDamage(amount) -> modifiedAmount: Invincibility Module zeroes the
+  first hit of the floor then disarms; Berserker checks the HP threshold.
+- onOutgoingDamage(amount, isMelee) -> modifiedAmount: Demon Core x2 melee;
+  Berserker x2 all damage while below threshold.
+- onFire(weapon) -> shotPlan: Reactor Shard adds a second projectile and doubles
+  the ammo cost.
+
+THE SIX SHIP-FIRST ARTIFACTS
+============================
+Each: NAME | RARITY | passive | hook(s) used | the cost/tension.
+
+1. UAC DOG TAGS        | Uncommon  | +15% all XP gain.
+   Hook: ProgressionManager.awardExperience multiplies by 1.15.
+   Cost: none — the "safe" pick, but it occupies a precious slot a build-defining
+   legendary could use. Opportunity cost IS the cost.
+
+2. NIGHT VISION GOGGLES | Uncommon | World renders full-bright; darkness/unlit
+   floors and flickering tiles lose their shading penalty.
+   Hook: a global lightingOverride flag read by the shading multiplier in
+   WallRenderer / FloorCeilingRenderer.
+   Cost: removes atmosphere/dread and the lurker-blindspot advantage demons get in
+   the dark; trades fear-management for total information.
+
+3. REACTOR SHARD       | Rare      | Weapons fire 2 projectiles per shot but
+   consume double ammo.
+   Hook: onFire() returns a shotPlan with projectileCount=2, ammoCost x2.
+   Cost: ammo economy halves. With order-4 scarcity this is a real gamble.
+
+4. BERSERKER IMPLANT   | Rare      | While HP <= 20% max, all outgoing damage x2.
+   Hook: onOutgoingDamage checks player.healthFraction() <= 0.20.
+   Cost: rewards staying in the death zone — pure risk-for-reward, Doom Berserk
+   energy. Synergy bait with low-HP relics; suicidal with the Demon Core.
+
+5. DEMON CORE          | Legendary | Melee damage x2; lose 1 HP on every kill
+   (any source, including ranged — the Core feeds on death itself).
+   Hook: onOutgoingDamage (isMelee -> x2) + onKill (player loses 1 HP, cannot
+   self-kill below 1 — clamps to 1, never lethal).
+   Cost: a slow bleed that punishes clear-the-room sprees; pairs viciously with
+   Berserker (drop yourself into the x2 window on purpose).
+
+6. INVINCIBILITY FRAME MODULE | Legendary | Immune to the FIRST incoming hit of
+   each floor.
+   Hook: onFloorStart() re-arms; onIncomingDamage zeroes one hit then disarms for
+   the floor.
+   Cost: it only saves you once per floor, so it rewards pushing into the unknown
+   (scout aggressively, eat the free hit) but is dead weight in a long grind on
+   one floor. Reads level-transitions depth changes for the re-arm.
+
+RARITY TIERS
+============
+- UNCOMMON: small, safe, stat-flavored boons (Dog Tags, Night Vision).
+- RARE: build-shaping with a clear cost (Reactor Shard, Berserker Implant).
+- LEGENDARY: system-bending devil's bargains (Demon Core, Invincibility Module).
+Rarity drives drop weight and visual treatment (see VISUAL DESIGN) and gates which
+sources can roll which tier (see BALANCE NOTES).
+
+PLAYER EXPERIENCE
+=================
+Artifacts are the moments a run gets a personality. Finding the Demon Core on
+floor 6 makes you rethink the next ten rooms — do I lean melee, do I grab
+Berserker to live in the x2 zone? The two-slot cap means the third relic is the
+hardest pickup in the game: you must drop power to gain power. The HUD indicator
+keeps the bargain visible so a death never feels mysterious — "the Core bled me to
+4 HP and the Revenant finished it" is a fair, legible story.
+
+TECHNICAL NOTES
+===============
+DEPENDENCIES (must exist first):
+- inventory-loot-ransack-system.txt (ground items, pickup routing). HARD dep.
+- roguelike_order_11 ProgressionManager (Dog Tags XP hook). Soft — Dog Tags can be
+  stubbed if absent.
+- level-transitions-stairs-down.txt depth counter (IMPLEMENTED). HARD for floor-5+
+  gating and the Invincibility re-arm.
+- A central damage path for onIncoming/onOutgoing hooks — Player.applyDamage and
+  the weapon's marchShot/damage-apply step. Build the hook seams there.
+
+New / modified classes:
+- items/Artifact.java (NEW, ...toon3d.items — add this package; document it in
+  CLAUDE.md package table): enum or class-per-relic. Recommend an enum
+  ArtifactType holding id, displayName, Rarity, and lore string, plus an
+  ArtifactEffect interface with the lifecycle hooks (onEquip, onUnequip, onKill,
+  onFloorStart, onIncomingDamage, onOutgoingDamage, onFire, awardExperience
+  multiplier). Keep effects as small stateless strategy objects; per-run mutable
+  flags (e.g. Invincibility "armed this floor") live in...
+- items/ArtifactSlots.java (NEW): holds Artifact[2], the equip/unequip/swap logic,
+  and per-relic per-run state flags. Owned by the run/World, not the Level (relics
+  persist across floor descents; they are run-scoped, not level-scoped).
+- world/World.java: route artifact pickups; add RELIC_SWAP phase (mirror the
+  LEVEL_UP overlay freeze pattern). Fire onFloorStart() from the descent path.
+- entity/Player.java: damage path calls ArtifactSlots.modifyIncoming/Outgoing.
+- Weapon fire path: call ArtifactSlots.onFire() to get the shotPlan (projectile
+  count + ammo multiplier).
+- render/HudRenderer.java: draw the two relic indicator icons (see VISUAL DESIGN).
+- screen/ or render/: a RelicSwapOverlay (reuse the level-up overlay rendering
+  scaffolding rather than a new Screen).
+
+Turn-based fit: equipping is free (rides the pickup step). The swap overlay
+freezes the turn engine and costs zero turns, identical to the level-up overlay.
+All passive hooks fire inside already-resolved turn steps — no real-time, no
+cooldowns.
+
+No allocations in render(): relic icons and labels are pre-built once on
+equip/swap; the HUD draw is texture/quad draws only.
+
+Constants to add (Constants.java):
+- ARTIFACT_MAX_SLOTS = 2
+- ARTIFACT_MIN_FLOOR_FOR_GROUND_SPAWN = 5
+- ARTIFACT_DOG_TAGS_XP_MULTIPLIER = 1.15f
+- ARTIFACT_BERSERKER_HP_FRACTION = 0.20f
+- ARTIFACT_BERSERKER_DAMAGE_MULTIPLIER = 2.0f
+- ARTIFACT_DEMON_CORE_MELEE_MULTIPLIER = 2.0f
+- ARTIFACT_DEMON_CORE_HP_COST_PER_KILL = 1
+- ARTIFACT_REACTOR_SHARD_PROJECTILES = 2
+- ARTIFACT_REACTOR_SHARD_AMMO_MULTIPLIER = 2
+- ARTIFACT_HUD_ICON_SIZE = 40f  (placeholder)
+- Drop-weight constants per rarity (see BALANCE NOTES).
+
+VISUAL DESIGN
+=============
+- Ground form: a small glowing pedestal billboard, color-coded by rarity —
+  uncommon = cool steel-cyan glow, rare = violet, legendary = pulsing blood-amber.
+  A slow vertical bob + a faint particle shimmer sells "this is special." Reuse
+  the PropRenderer billboard pipeline; no new tile symbol.
+- HUD indicator: two small relic icon slots tucked into the LEFT panel under the
+  status line (or just inside the left edge of the centre gap if the left panel is
+  full). Each shows the relic glyph + a 1px rarity-colored border. Empty slot =
+  dim outline. On a conditional relic going live (Berserker entering the x2 zone,
+  Invincibility absorbing its hit) the icon flashes once.
+- Demon Core kill-bleed: a tiny red HP tick + a brief vignette pulse so the cost
+  is felt, not just numerically applied.
+- Night Vision: when equipped, a faint green tint over the 3D view + the lighting
+  override; on unequip the darkness snaps back (deliberately ominous).
+- Relic swap overlay: three large cards (held A, held B, new), rarity-bordered,
+  with name + one-line passive + cost text; "[1]/[2] DROP   [LEAVE]" prompts.
+
+BALANCE NOTES
+=============
+- Drop sources / weights (PLACEHOLDER, tune in playtest):
+  * Secret rooms (floor 1-4): uncommon only, ~60% to contain a relic at all.
+  * Secret rooms (floor 5+): uncommon ~55% / rare ~40% / legendary ~5%.
+  * Boss drops: guaranteed one relic, rolled rare ~70% / legendary ~30%.
+  * Deep-floor ground seeding (floor 5+): at most ONE per floor, low base chance
+    (~12%), rarity scaling up with depth.
+- Two-slot cap is the master balance lever — do NOT raise it without re-tuning;
+  three slots makes legendaries stack into degenerate combos (Demon Core +
+  Berserker + Reactor Shard).
+- Demon Core HP cost must clamp to never drop the player below 1 from a kill
+  (death comes from enemies, not your own relic — fairness pillar).
+- Berserker x2 window stacking with Demon Core x2 melee = x4 melee: this is an
+  intentional "glass-cannon" combo and is fine BECAUSE you live at <=20% HP and
+  bleed on every kill. Flag for playtest; it should feel insane, not safe.
+- Reactor Shard with order-4 ammo scarcity should feel like a gamble, not a
+  no-brainer — verify ammo drops do not trivialize the double cost.
+
+INTERACTIONS
+============
+1. XP/Leveling (order 11): Dog Tags multiply ProgressionManager.awardExperience.
+   Night Vision removing darkness indirectly speeds clears -> more XP/min.
+2. Difficulty scaling (roguelike_order_23): deeper floors gate higher relic tiers;
+   Nightmare's no-ground-pickups rule means deep-floor ground seeding of artifacts
+   is suppressed there, pushing relics onto boss/secret sources only.
+3. Combat / weapons: Reactor Shard rewrites the fire path; Berserker & Demon Core
+   ride the outgoing-damage path; Invincibility & Demon Core ride incoming/kill.
+4. Permadeath & run stats (order 1 / order 24): relics held at death are logged in
+   the run record ("RELICS BONDED: Demon Core, Berserker Implant") for the story.
+5. Secret rooms & bosses: primary high-tier sources, making exploration and boss
+   fights the path to build-defining loot.
+
+OPEN QUESTIONS
+==============
+- Should dropped relics persist on the floor after you descend, or vanish? (v1:
+  vanish on descent — recoverable only until you leave the floor.)
+- Cursed relics that cannot be voluntarily dropped (DCSS-style)? Defer to v2.
+- A third "legendary-only" slot unlocked via meta-progression? Defer — keep the
+  two-slot tension pure for v1.
+- Should Night Vision's atmosphere loss be partly offset (e.g. enemies see you
+  better in the light)? Interesting; defer to lurker/AI tuning.
+- Dedicated relic-pedestal TILE vs ground-item drop? v1 uses ground items (no new
+  symbol). Revisit if hand-crafted relic vaults are wanted.
