@@ -1,0 +1,239 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Meta
+TITLE: Run Statistics & Local Leaderboard
+---
+
+OVERVIEW
+========
+Every run ends as a STORY told in numbers. This doc defines the full run-record
+capture (floors reached, kills by type, damage in/out, items, secrets, time,
+final level, cause of death), local persistence of the top 10 runs via LibGDX
+Preferences (no network), a main-menu leaderboard, a death-screen "Personal Best"
+comparison, a win-screen trophy layout, and achievement-style unlocks. It is the
+scoreboard that gives permadeath its meaning: the reason to slam "NEW INCURSION"
+the instant you die is the record one floor out of reach.
+
+This extends, not replaces, the permadeath spine (order 1), which already sketched
+a RunStats accumulator and a DeathScreen. This doc is the authoritative, expanded
+spec for the data model, persistence format, leaderboard, and achievements.
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING DOCS
+=============================================
+- roguelike_order_1_permadeath_and_death_screen.txt: OWNS the death trigger,
+  GameState.phase = DEAD, the death beat, DeathScreen existence, RunStats (mutable
+  per-run accumulator), PersistentStats (cross-run records), and StatsStore (the
+  Preferences adapter). THIS doc EXPANDS that data model (adds kills-by-type, cause
+  of death, secrets, difficulty mode, etc.), adds the TOP-10 leaderboard structure,
+  the win/trophy screen, and achievements. Where the two overlap on RunStats/
+  StatsStore, order 1 defines the class HOMES; this doc defines the fuller FIELD
+  SET and the leaderboard/achievement layer on top. Do not duplicate the death-
+  trigger logic — read order 1 for that.
+- roguelike_order_25 (main menu): hosts the Leaderboard menu entry and renders the
+  board. This doc provides the data + suggested layout; that doc owns the menu nav.
+- roguelike_order_23 (difficulty): each RunRecord stores its DifficultyMode so the
+  board can tag/segment by mode.
+- roguelike_order_26 (win condition): the win/trophy screen consumes the same
+  RunRecord; this doc defines its content.
+
+NO NEW TILE SYMBOL IS REQUIRED. Pure data/persistence/UI layer.
+
+DATA MODEL
+==========
+world/RunRecord.java (NEW, immutable snapshot taken at run end — distinct from the
+live mutable RunStats accumulator from order 1):
+  int   floorsReached            // highest floor depth entered (1-based)
+  int   totalEnemiesKilled
+  int[] killsByType              // indexed by enemy type id (Corruptor..Revenant)
+  int   totalDamageDealt
+  int   totalDamageTaken
+  int   itemsFound               // pickups + ground items + relics
+  int   secretsFound
+  long  ticksElapsed             // world turns survived (deterministic)
+  float realSecondsPlayed        // wall-clock, display only
+  int   finalPlayerLevel
+  int   causeOfDeathTypeId       // enemy type that landed the kill (-1 = won / hazard)
+  int   difficultyModeOrdinal    // EASY/NORMAL/NIGHTMARE
+  boolean won                    // reached extraction (order 26)
+  long  timestampEpochMillis     // when the run ended (for tie-break / display)
+  long  seed                     // optional: the run seed, for "replay this seed"
+
+RunStats (live accumulator, order 1) gains the new fields it must track during play:
+killsByType, secretsFound, finalPlayerLevel (read from ProgressionManager at death),
+causeOfDeathTypeId (set by the killing blow), difficultyMode (copied at run start).
+RunRecord is built FROM RunStats at run end.
+
+LEADERBOARD storage:
+- Keep the top N (N=10) RunRecords, sorted by a primary SCORE. Default score =
+  floorsReached, tie-broken by (totalEnemiesKilled, then fewest ticksElapsed, then
+  most recent). A "won" run always outranks a non-won run of equal floor depth.
+- OPTIONAL: segment boards by difficulty (three 10-entry boards) so Nightmare runs
+  aren't buried. Recommended for v1 (see OPEN QUESTIONS).
+
+PERSISTENCE (LibGDX Preferences — no files, no network, all backends)
+=====================================================================
+- util/StatsStore.java (from order 1, extended): persists to
+  Gdx.app.getPreferences("toon3d_records").
+- A RunRecord has no native Preferences type, so SERIALIZE each record to a
+  compact delimited string (e.g. pipe-separated fields) under keys
+  "lb.<mode>.<rank>" (rank 0..9), plus a "lb.<mode>.count" int. On save: insert the
+  new record into the in-memory sorted list, trim to 10, rewrite the keys.
+- Lifetime/aggregate PersistentStats (lifetimeKills, totalRuns, totalDeaths,
+  bestFloor, fastestWinTicks, achievement bitset) live under their own keys.
+- prefs.flush() exactly once per run end (death OR win) — never per turn.
+- Versioning: store "schema.version" int; on a mismatch, migrate or reset the
+  board (never crash on an old blob).
+
+GAMEPLAY / SCREEN FLOW
+======================
+1. During play, RunStats accumulates (kill path bumps killsByType + total; damage
+   path bumps dealt/taken; pickup path bumps itemsFound; secret discovery bumps
+   secretsFound; descent bumps floorsReached; the killing blow records
+   causeOfDeathTypeId).
+2. On RUN END (death from order 1, OR win from order 26): World builds a RunRecord
+   from RunStats, hands it to StatsStore.submit(record) which returns the achieved
+   RANK (or -1 if it didn't crack the top 10) and a "isNewBest" flag, then flushes.
+3. DEATH SCREEN (order 1): shows this run's stats AND the Personal-Best comparison
+   inline (this run's value vs the stored best, with NEW BEST tags). If the run
+   cracked the board, show "RANKED #k OF 10".
+4. WIN SCREEN (order 26): full trophy layout (this doc defines content) — same
+   RunRecord, celebratory framing.
+5. LEADERBOARD SCREEN (reached from main menu, order 25): renders the stored top 10
+   for the selected mode, plus lifetime aggregates, plus the achievement grid.
+6. ACHIEVEMENTS: checked at run end against the cumulative + this-run data; newly
+   unlocked ones are flagged on the death/win screen ("ACHIEVEMENT: PURGE — 100
+   demons slain") and stored in the persistent bitset (never reset by a new run).
+
+ACHIEVEMENT POOL (PLACEHOLDER — id, name, condition)
+====================================================
+- FIRST_BLOOD     : kill your first enemy.
+- DESCENT_5       : reach floor 5 in a single run.
+- DESCENT_10      : reach floor 10.
+- PURGE_100       : 100 lifetime kills.
+- PURGE_1000      : 1000 lifetime kills.
+- SPELUNKER       : find 10 secrets (lifetime).
+- UNTOUCHABLE     : clear a floor taking zero damage.
+- PACIFIST_FLOOR  : reach the stairs of a floor without killing anything.
+- EXTRACTION      : win a run (reach extraction, order 26).
+- NIGHTMARE_5     : reach floor 5 on Nightmare.
+- NIGHTMARE_CLEAR : win on Nightmare (the flex).
+- RELIC_HOARDER   : hold 2 legendary relics at once (order 21).
+Achievements grant FLAVOR/recognition, not power (roguelike pillar — unlocks add
+variety/cosmetics at most, never raw stat boosts). If meta-progression unlocks are
+added later, gate them through achievements but keep them non-power per order 1.
+
+PLAYER EXPERIENCE
+=================
+The death screen's "FLOOR REACHED 6 (best 7)" is a gut-punch and a hook in one
+line. Kills-by-type tells you HOW you died ("12 Ghouls, 3 Revenants — and a
+Revenant got me"). The leaderboard is the long game: chasing your own floor-15 ghost
+across dozens of runs. Achievements give intermediate goals so even a floor-3 death
+can unlock something. Because everything is local and offline, it's always
+instant and always yours.
+
+TECHNICAL NOTES
+===============
+DEPENDENCIES (must exist first):
+- roguelike_order_1 (RunStats, PersistentStats, StatsStore, DeathScreen,
+  GameState.phase). HARD dep — this doc extends those.
+- roguelike_order_11 ProgressionManager (finalPlayerLevel source). SOFT.
+- roguelike_order_23 DifficultyMode (stored on the record). SOFT (default NORMAL).
+- enemy_system.txt (IMPLEMENTED) for enemy type ids (killsByType indexing,
+  causeOfDeath).
+- roguelike_order_25 (main menu) to surface the leaderboard. SOFT — the data layer
+  can ship and be tested before the menu exists.
+
+New / modified classes:
+- world/RunRecord.java (NEW, immutable). Pure data, no LibGDX dep.
+- world/Leaderboard.java (NEW): in-memory sorted top-10 list(s), insert/trim/rank
+  logic, score comparator. Pure Java.
+- util/StatsStore.java (EXTEND): serialize/deserialize RunRecord <-> Preferences
+  strings; load board on app start, submit() + flush() on run end; achievement
+  bitset get/set; schema version handling.
+- world/Achievements.java (NEW): enum of achievements + a checker that takes
+  (RunRecord, PersistentStats) and returns newly unlocked ids. Stateless logic;
+  the unlocked-set lives in PersistentStats.
+- world/RunStats.java (EXTEND, order 1): add the new live fields + increment hooks
+  (recordKill(typeId), recordSecret(), setCauseOfDeath(typeId), etc.).
+- screen/DeathScreen.java (EXTEND): add the Personal-Best comparison + rank line +
+  newly-unlocked achievement callouts.
+- screen/WinScreen.java (NEW, owned jointly with order 26): trophy layout.
+- screen/LeaderboardScreen.java (NEW) OR a panel within the main-menu screen
+  (order 25 decides). Renders board + aggregates + achievement grid.
+
+Turn-based fit: nothing here advances turns. Stats accumulate on already-resolved
+turn events; persistence happens once at run end. Real-time only on the
+result/leaderboard screens (cosmetic).
+
+No allocations in render(): build all label strings once in show() of each result
+screen (a run ends rarely — a single StringBuilder pass is fine). The leaderboard
+screen pre-builds its rows in show(). Serialization happens on the (rare) submit,
+not per frame.
+
+Persistence performance: top-10 x 3 modes = 30 short strings + a handful of ints —
+trivial for Preferences. flush() once per run end only.
+
+Constants to add (Constants.java):
+- LEADERBOARD_MAX_ENTRIES = 10
+- LEADERBOARD_SEGMENT_BY_DIFFICULTY = true
+- STATS_SCHEMA_VERSION = 1
+- ACHIEVEMENT_PURGE_KILLS = 100, ACHIEVEMENT_PURGE_KILLS_GOLD = 1000
+- ACHIEVEMENT_SECRETS_THRESHOLD = 10
+- (reuse STATS_PREFS_NAME = "toon3d_records" from order 1)
+
+VISUAL DESIGN
+=============
+- Leaderboard screen: a monospace ranked table over the black/scanline backdrop
+  (continuity with the death screen). Columns: RANK | FLOOR | KILLS | TIME | LVL |
+  MODE | DATE. The viewing player's most recent run row is highlighted amber.
+  A mode toggle (EASY/NORMAL/NIGHTMARE tabs) switches the segmented board.
+- Below the table: LIFETIME block (total runs, total kills, best floor, fastest
+  win) and an ACHIEVEMENT GRID (small icons; locked = dim silhouette, unlocked =
+  lit + name on hover/focus).
+- Death-screen comparison: each stat line shows "value (best B)"; beaten records
+  get the amber "*** NEW BEST ***" tag from order 1; a "RANKED #k" banner if it
+  cracked the board.
+- Win/trophy screen (order 26 detail): a celebratory header ("EXTRACTION
+  SUCCESSFUL"), the full RunRecord, a gold frame, and any achievements unlocked by
+  winning. Distinct palette (gold/green) from the death screen's red.
+- Newly unlocked achievement: a brief toast on the result screen.
+
+BALANCE NOTES
+=============
+- Score function tuning: floors-first is the most legible primary score for a
+  descent roguelike. If players game it by descending recklessly, add a small
+  kills/secrets weighting — but keep "how deep" dominant.
+- Segmenting by difficulty is strongly recommended so a wall of Easy floor-12 runs
+  doesn't bury a heroic Nightmare floor-6. If not segmented, at least TAG the mode
+  and consider a mode-weighted score.
+- Achievement thresholds are placeholders; set lifetime ones (PURGE_1000) high
+  enough to be long-term goals but reachable for a dedicated player.
+- "won" must always outrank equal-floor non-won runs so a clear sits at the top.
+
+INTERACTIONS
+============
+1. Permadeath (order 1): run end is the single capture+persist point; this doc
+   reuses that trigger and the DeathScreen.
+2. Win condition (order 26): a won RunRecord flows to the trophy screen and tops
+   the board; "won" flag + extraction is the EXTRACTION achievement.
+3. Difficulty (order 23): mode stored per record; drives board segmentation and
+   the NIGHTMARE_* achievements.
+4. XP/Leveling (order 11): finalPlayerLevel captured at run end; level milestones
+   could feed future achievements.
+5. Secrets (secret-rooms-hidden-passages) + Artifacts (order 21): secretsFound and
+   relic-related achievements (RELIC_HOARDER) read those systems.
+6. Main menu (order 25): hosts the Leaderboard entry; lifetime totals can also
+   surface on the title screen.
+
+OPEN QUESTIONS
+==============
+- Segment boards by difficulty (3x10) vs one unified mode-weighted board?
+  Recommendation: segment (simplest to read fairly). Confirm in playtest.
+- Store the run SEED for "replay this seed" / daily-challenge later? Cheap to store
+  now; defer the feature.
+- Cause-of-death granularity: just the enemy TYPE, or the specific instance/floor?
+  v1: type id is enough for the story line.
+- Do hazard/self-inflicted deaths (Demon Core, traps) need their own cause ids?
+  Reserve negative ids (-2 = hazard, -3 = relic) so the death line can read "killed
+  by the facility" vs a demon.
+- Should achievements ever unlock cosmetic-only content (new face graphic, color)?
+  Good fit for the non-power rule; defer to a cosmetics doc.
