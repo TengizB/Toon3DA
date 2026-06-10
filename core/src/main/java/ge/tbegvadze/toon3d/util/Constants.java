@@ -343,8 +343,8 @@ public final class Constants {
     public static final float   ENEMY_HEALTH_EMPTY_BLUE             = 0.10f;
 
     // HUD geometry — left panel anchored to bottom-left, y 0..HUD_HEIGHT.
-    // Panel height increased from 130 to 168 to fit the XP progress bar below the clip bar.
-    public static final float HUD_HEIGHT                      = 168f;
+    // Panel height increased from 168 to 206 to fit the weapon slot strip below the XP bar.
+    public static final float HUD_HEIGHT                      = 206f;
     public static final float HUD_LEFT_PANEL_WIDTH            = 420f;
     public static final float HUD_PANEL_GUTTER                = 4f;
     public static final float HUD_PANEL_INSET                 = 6f;
@@ -361,12 +361,12 @@ public final class Constants {
     public static final float HUD_BAR_SEGMENT_GAP             = 2f;
     public static final float HUD_BAR_LERP_RATE               = 3.5f;
     // Bar Y positions (bottom edge); bars span y: barY .. barY+HUD_BAR_HEIGHT
-    // All bars shifted up by 38 vs the previous layout to make room for the XP bar below.
-    public static final float HUD_HP_BAR_Y                    = 128f;
-    public static final float HUD_AR_BAR_Y                    = 90f;
-    public static final float HUD_CLIP_BAR_Y                  = 52f;
+    // All bars shifted up by 38 vs the previous layout to make room for the weapon slot strip.
+    public static final float HUD_HP_BAR_Y                    = 166f;
+    public static final float HUD_AR_BAR_Y                    = 128f;
+    public static final float HUD_CLIP_BAR_Y                  = 90f;
     // XP bar — gold/amber segmented bar showing progress toward next player level
-    public static final float HUD_XP_BAR_Y                    = 14f;
+    public static final float HUD_XP_BAR_Y                    = 52f;
     // HUD animation
     public static final float HUD_PULSE_HZ                    = 4f;
     public static final float HUD_LOW_HP_THRESHOLD            = 0.25f;
@@ -933,4 +933,21 @@ public final class Constants {
     public static final float INV_PANEL_ALPHA                = 0.92f;
     public static final float INV_SELECT_BORDER_THICKNESS    = 3f;
     public static final float INV_FLASH_SECONDS              = 0.45f;
+
+    // -------------------------------------------------------------------------
+    // Weapon Loadout (Order 5) — slot management and HUD strip
+    // -------------------------------------------------------------------------
+    public static final int   WEAPON_SLOT_COUNT             = 4;
+    public static final float WEAPON_SLOT_ICON_SIZE         = 44f;
+    public static final float WEAPON_SLOT_ICON_GAP          = 8f;
+    public static final float WEAPON_SLOT_STRIP_ORIGIN_X    = 24f;
+    public static final float WEAPON_SLOT_STRIP_ORIGIN_Y    = 8f;
+    public static final float WEAPON_SWITCH_RAISE_SECONDS   = 0.10f;
+    // Slot selection keys — free action, no turn consumed
+    public static final int   KEY_SLOT_1    = com.badlogic.gdx.Input.Keys.NUM_1;
+    public static final int   KEY_SLOT_2    = com.badlogic.gdx.Input.Keys.NUM_2;
+    public static final int   KEY_SLOT_3    = com.badlogic.gdx.Input.Keys.NUM_3;
+    public static final int   KEY_SLOT_4    = com.badlogic.gdx.Input.Keys.NUM_4;
+    public static final int   KEY_SLOT_PREV = com.badlogic.gdx.Input.Keys.LEFT_BRACKET;
+    public static final int   KEY_SLOT_NEXT = com.badlogic.gdx.Input.Keys.RIGHT_BRACKET;
 }
