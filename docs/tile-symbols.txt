@@ -88,6 +88,10 @@ b   Blue keycard        Unlocks 'B' doors.
 H   Field medkit        Large health recovery.
 a   Armor shard         Small armor restoration.
 A   Security vest       Large armor restoration.
+6   Bullet box          Grants AMMO_BOX_BULLETS (20) rounds to BULLETS reserve.   Copper-tinted billboard. 0.20x wall height.
+7   Shell box           Grants AMMO_BOX_SHELLS (8) shells to SHELLS reserve.      Brass/yellow billboard.  0.20x wall height.
+8   Plasma cell pack    Grants AMMO_BOX_CELLS (20) cells to CELLS reserve.        Cyan billboard.          0.20x wall height.
+9   Rocket bundle       Grants AMMO_BOX_ROCKETS (2) rockets to ROCKETS reserve.   Olive billboard.         0.20x wall height.
 
 ENEMY SPAWN MARKERS (temporary — extracted by LevelLoader, then replaced with floor ' ')
 ----------------------------------------------------------------------------------------
@@ -102,12 +106,11 @@ ENEMY SPAWN MARKERS (temporary — extracted by LevelLoader, then replaced with 
 SYMBOL BUDGET
 -------------
 Total printable ASCII characters: 95  (codes 32-126)
-Currently assigned:               59
-Remaining:                        36
+Currently assigned:               63
+Remaining:                        32
 
 Free characters (not yet assigned):
 ! " $ ^ _ ` ~ | { } [ ] \ / < > ( ) * - + (some already used — check above)
-Digits: 6 7 8 9  (0-5 used for enemy spawns)
 Uppercase: K V  (D F I J W taken; Z taken as cryo; check walls/doors above)
 Lowercase: i n o q z  (e j taken)
 
@@ -115,7 +118,7 @@ PREFERRED SYMBOLS FOR NEW ADDITIONS
 ------------------------------------
 - Uppercase letters for new solid/blocking things (walls, doors, props).
 - Lowercase letters for new walkable/decal things.
-- Digits (6-9) for additional enemy spawn types.
+- Digits: 6-9 now used for ammo pickups; no free digits remain.
 - Punctuation only when clearly readable in a plain-text editor.
 - Avoid: \ | < > (confusing in text editors); " ' (quoting conflicts).
 

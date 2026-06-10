@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.entity.MedicalTier;
+import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
@@ -125,6 +126,24 @@ public class Level {
     }
 
     /**
+     * Returns true for ammo-box pickup tiles ('6'=bullets, '7'=shells, '8'=cells, '9'=rockets).
+     * These are walkable; the player collects them on step.
+     */
+    public static boolean isAmmoPickup(char cell) {
+        return cell == '6' || cell == '7' || cell == '8' || cell == '9';
+    }
+
+    /**
+     * Returns the AmmoType for the given ammo-pickup tile.
+     * Caller must guard with isAmmoPickup() first.
+     */
+    public static AmmoType ammoTypeOfPickup(char cell) {
+        AmmoType type = AmmoType.fromPickupChar(cell);
+        if (type == null) throw new IllegalArgumentException("Not an ammo pickup: " + cell);
+        return type;
+    }
+
+    /**
      * Returns the armour points granted by an armour pickup cell.
      * Caller must guard with isArmourPickup() first.
      */
@@ -156,6 +175,7 @@ public class Level {
             || cell == 'I' || cell == 'J' || cell == 'W'
             || cell == 'm' || cell == 's' || cell == '.' || cell == 'O' || cell == 'e'
             || isKeycardPickup(cell) || isMedicalPickup(cell) || isArmourPickup(cell)
+            || isAmmoPickup(cell)
             || isStairsDown(cell);
     }
 
@@ -166,10 +186,11 @@ public class Level {
             || cell == 'I' || cell == 'J' || cell == 'W';
     }
 
-    /** Returns true for walkable decal props (corpses, dropped items, stains, keycard pickups, medical and armour pickups, stairs). */
+    /** Returns true for walkable decal props (corpses, dropped items, stains, keycard pickups, medical, armour, ammo pickups, stairs). */
     public static boolean isPropDecal(char cell) {
         return cell == 'm' || cell == 's' || cell == '.' || cell == 'O' || cell == 'e'
             || isKeycardPickup(cell) || isMedicalPickup(cell) || isArmourPickup(cell)
+            || isAmmoPickup(cell)
             || isStairsDown(cell);
     }
 

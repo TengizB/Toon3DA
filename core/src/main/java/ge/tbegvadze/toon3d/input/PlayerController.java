@@ -7,6 +7,8 @@ import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.door.DoorState;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.*;
+import ge.tbegvadze.toon3d.item.AmmoPool;
+import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.KeycardColor;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
@@ -34,6 +36,7 @@ public class PlayerController {
     private TouchInputState         touchInputState       = null;
     private EventTextSystem         eventTextSystem       = null;
     private Runnable                weaponSwitchCallback  = null;
+    private AmmoPool                ammoPool              = null;
 
     private ActionState actionState = ActionState.IDLE;
     private float actionProgress = 0f;
@@ -82,6 +85,10 @@ public class PlayerController {
         this.weaponSwitchCallback = callback;
     }
 
+    public void setAmmoPool(AmmoPool pool) {
+        this.ammoPool = pool;
+    }
+
     public boolean isIdle() { return actionState == ActionState.IDLE; }
 
     public void update(float deltaTime) {
@@ -109,6 +116,7 @@ public class PlayerController {
             pickUpMedicalIfPresent(settledTileColumn, settledTileRow);
             pickUpArmourIfPresent(settledTileColumn, settledTileRow);
             pickUpKeycardIfPresent(settledTileColumn, settledTileRow);
+            pickUpAmmoIfPresent(settledTileColumn, settledTileRow);
             checkStairsDescentIfPresent(settledTileColumn, settledTileRow);
             finishAction(true, TickCause.MOVE);
         }
@@ -182,6 +190,19 @@ public class PlayerController {
             KeycardColor color = Level.keycardColorOfPickup(cell);
             inventory.addKeycard(color);
             level.consumeKeycardAt(tileColumn, tileRow);
+        }
+    }
+
+    private void pickUpAmmoIfPresent(int tileColumn, int tileRow) {
+        char cell = level.getCell(tileColumn, tileRow);
+        if (!Level.isAmmoPickup(cell)) return;
+        if (ammoPool == null) return;
+        AmmoType type     = Level.ammoTypeOfPickup(cell);
+        int      absorbed = ammoPool.add(type, type.getAmountPerBox());
+        level.consumePickupAt(tileColumn, tileRow);
+        if (absorbed > 0 && eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("+" + absorbed + " " + type.getDisplayName().toUpperCase(),
+                                           EventTextSystem.COLOR_GREEN);
         }
     }
 

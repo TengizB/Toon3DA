@@ -15,6 +15,7 @@ import ge.tbegvadze.toon3d.hud.HudRenderer;
 import ge.tbegvadze.toon3d.input.PlayerController;
 import ge.tbegvadze.toon3d.input.touch.TouchControllerRenderer;
 import ge.tbegvadze.toon3d.input.touch.TouchInputState;
+import ge.tbegvadze.toon3d.item.AmmoPool;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
 import ge.tbegvadze.toon3d.level.LevelLoader;
@@ -79,6 +80,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private int      currentDepth     = Constants.STARTING_DEPTH;
 
     // -------------------------------------------------------------------------
+    // Ammo reserve pool (Order 2)
+    // -------------------------------------------------------------------------
+    private final AmmoPool ammoPool;
+
+    // -------------------------------------------------------------------------
     // Permadeath — run stats, death beat animation, and reset handshake
     // -------------------------------------------------------------------------
     private final RunStats             runStats;
@@ -130,6 +136,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         eventTextSystem    = new EventTextSystem();
         eventTextRenderer  = new EventTextRenderer(eventTextSystem);
         hitVignetteRenderer = new HitVignetteRenderer();
+
+        ammoPool             = new AmmoPool();
 
         // Permadeath — run stats and death overlay
         runStats             = new RunStats();
@@ -233,6 +241,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setTickEventBus(tickEventBus);
         playerController.setTransitionListener(this);
         playerController.setEventTextSystem(eventTextSystem);
+        playerController.setAmmoPool(ammoPool);
         playerController.setWeaponSwitchCallback(
             () -> weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon()));
         if (touchInputState != null) {

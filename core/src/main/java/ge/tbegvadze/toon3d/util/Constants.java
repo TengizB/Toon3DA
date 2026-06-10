@@ -895,4 +895,25 @@ public final class Constants {
     // Weapons never stack — each weapon occupies exactly one slot.
     public static final int ITEM_STACK_MAX_WEAPON         = 1;
     public static final int ITEM_STACK_MAX_CREDITS        = 999;
+
+    // -------------------------------------------------------------------------
+    // Ammo system (Order 2) — reserve caps, box grants, starting reserves
+    // All values are PLACEHOLDERS pending playtest.
+    // -------------------------------------------------------------------------
+    public static final int   AMMO_RESERVE_CAP_BULLETS    = 200;
+    public static final int   AMMO_RESERVE_CAP_SHELLS     = 60;
+    public static final int   AMMO_RESERVE_CAP_CELLS      = 120;
+    public static final int   AMMO_RESERVE_CAP_ROCKETS    = 20;
+
+    public static final int   AMMO_BOX_BULLETS            = 20;
+    public static final int   AMMO_BOX_SHELLS             = 8;
+    public static final int   AMMO_BOX_CELLS              = 20;
+    public static final int   AMMO_BOX_ROCKETS            = 2;
+
+    public static final int   AMMO_START_BULLETS          = 50;
+    public static final int   AMMO_START_SHELLS           = 16;
+    public static final int   AMMO_START_CELLS            = 0;
+    public static final int   AMMO_START_ROCKETS          = 0;
+
+    public static final float AMMO_PICKUP_HEIGHT_FRACTION = 0.20f;
 }
