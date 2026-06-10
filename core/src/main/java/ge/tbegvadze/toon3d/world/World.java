@@ -175,6 +175,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         inventory.setArsenal(java.util.List.of(chaingun, shotgun, dblShotgun, plasmaRifle, railgun, incinerator, grenadeLauncher));
         weaponHudRenderer    = new WeaponHudRenderer(inventory.getArsenal());
         hudRenderer          = new HudRenderer(player, hudState);
+        hudRenderer.setLoadout(inventory.getLoadout());
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);
         fadeOverlayRenderer  = new FadeOverlayRenderer();
 
@@ -252,6 +253,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setTransitionListener(this);
         playerController.setEventTextSystem(eventTextSystem);
         playerController.setAmmoPool(ammoPool);
+        playerController.setLoadout(inventory.getLoadout());
         playerController.setWeaponSwitchCallback(
             () -> weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon()));
         playerController.setInventoryToggleCallback(this::openInventory);

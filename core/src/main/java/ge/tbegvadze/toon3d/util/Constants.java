@@ -20,6 +20,10 @@ public final class Constants {
     // FOV stored as degrees for readability; radians derived from it.
     public static final float PLAYER_FIELD_OF_VIEW_DEGREES = 90f;
     public static final float PLAYER_FIELD_OF_VIEW_RADIANS = PLAYER_FIELD_OF_VIEW_DEGREES * ((float) Math.PI / 180f);
+    // 90-degree turn angles used by PlayerController rotation state machine.
+    // CCW (A key) adds this offset; CW (D key) subtracts it.
+    public static final float PLAYER_ROTATE_CCW_RADIANS = (float) (Math.PI / 2.0);
+    public static final float PLAYER_ROTATE_CW_RADIANS  = -(float) (Math.PI / 2.0);
 
     // Mini-map — renders (2*RADIUS+1)² tile window centred on player at world (0,0)
     public static final int   MINI_MAP_TILE_RADIUS  = 12;

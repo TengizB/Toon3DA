@@ -38,6 +38,7 @@ public class PlayerController {
     private Runnable                weaponSwitchCallback      = null;
     private Runnable                inventoryToggleCallback   = null;
     private AmmoPool                ammoPool                  = null;
+    private Loadout                 loadout                   = null;
 
     private ActionState actionState = ActionState.IDLE;
     private float actionProgress = 0f;
@@ -92,6 +93,10 @@ public class PlayerController {
 
     public void setAmmoPool(AmmoPool pool) {
         this.ammoPool = pool;
+    }
+
+    public void setLoadout(Loadout loadoutReference) {
+        this.loadout = loadoutReference;
     }
 
     public boolean isIdle() { return actionState == ActionState.IDLE; }
@@ -268,7 +273,17 @@ public class PlayerController {
             return;
         }
 
-        // Weapon switching is free — no turn consumed, works regardless of action state.
+        // Slot selection — free action, no turn consumed; checked before the legacy cycle key.
+        if (loadout != null) {
+            if (Gdx.input.isKeyJustPressed(Constants.KEY_SLOT_1)) { trySelectSlot(0); return; }
+            if (Gdx.input.isKeyJustPressed(Constants.KEY_SLOT_2)) { trySelectSlot(1); return; }
+            if (Gdx.input.isKeyJustPressed(Constants.KEY_SLOT_3)) { trySelectSlot(2); return; }
+            if (Gdx.input.isKeyJustPressed(Constants.KEY_SLOT_4)) { trySelectSlot(3); return; }
+            if (Gdx.input.isKeyJustPressed(Constants.KEY_SLOT_PREV)) { trySelectSlotRelative(-1); return; }
+            if (Gdx.input.isKeyJustPressed(Constants.KEY_SLOT_NEXT)) { trySelectSlotRelative(1);  return; }
+        }
+
+        // Weapon cycling (legacy G key) — free action, no turn consumed.
         if (Gdx.input.isKeyJustPressed(Constants.KEY_SWITCH_WEAPON) || tapAction == TouchAction.SWITCH_WEAPON) {
             trySwitchWeapon();
             return;
@@ -403,6 +418,47 @@ public class PlayerController {
         if (weaponSwitchCallback != null) weaponSwitchCallback.run();
         if (eventTextSystem != null && nextWeapon != null) {
             eventTextSystem.spawn(nextWeapon.getDisplayName());
+        }
+    }
+
+    /**
+     * Selects a specific loadout slot by index.
+     * No-op when the slot is empty or the index is out of range.
+     * Resets any Railgun charge on the weapon being holstered.
+     */
+    private void trySelectSlot(int index) {
+        if (loadout == null || loadout.getSlot(index) == null) return;
+        Weapon currentWeapon = loadout.active();
+        if (currentWeapon instanceof Railgun) {
+            ((Railgun) currentWeapon).resetCharge();
+        }
+        loadout.selectSlot(index);
+        if (weaponSwitchCallback != null) weaponSwitchCallback.run();
+        if (eventTextSystem != null && loadout.active() != null) {
+            eventTextSystem.spawn(loadout.active().getDisplayName());
+        }
+    }
+
+    /**
+     * Selects the next (direction = +1) or previous (direction = -1) filled loadout slot.
+     * No-op when the loadout has only one filled slot.
+     * Resets any Railgun charge on the weapon being holstered.
+     */
+    private void trySelectSlotRelative(int direction) {
+        if (loadout == null) return;
+        int activeIndex = loadout.getActiveSlotIndex();
+        int targetIndex = (direction > 0)
+            ? loadout.nextFilledSlot(activeIndex)
+            : loadout.previousFilledSlot(activeIndex);
+        if (targetIndex == activeIndex) return;
+        Weapon currentWeapon = loadout.active();
+        if (currentWeapon instanceof Railgun) {
+            ((Railgun) currentWeapon).resetCharge();
+        }
+        loadout.selectSlot(targetIndex);
+        if (weaponSwitchCallback != null) weaponSwitchCallback.run();
+        if (eventTextSystem != null && loadout.active() != null) {
+            eventTextSystem.spawn(loadout.active().getDisplayName());
         }
     }
 
