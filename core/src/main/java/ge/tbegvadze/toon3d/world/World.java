@@ -296,8 +296,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             deathBeatTimerSeconds += deltaTime;
             if (deathBeatTimerSeconds >= Constants.DEATH_BEAT_DURATION_SECONDS) {
                 deathBlinkTimerSeconds += deltaTime;
-                if (Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY)
-                        || (touchInputState != null && Gdx.input.justTouched())) {
+                if (touchInputState != null && Gdx.input.justTouched()) {
                     StatsStore.updateAndSave(runStats, persistentStats);
                     resetRequested = true;
                 }
@@ -327,35 +326,20 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // INVENTORY_OPEN — world paused; route input to the overlay
         if (runPhase == RunPhase.INVENTORY_OPEN) {
-            InventoryOverlayRenderer.CloseAction action = inventoryOverlayRenderer.handleInput(deltaTime);
-            if (action == InventoryOverlayRenderer.CloseAction.CLOSE_FREE) {
-                closeInventory(false);
-                return;
-            } else if (action == InventoryOverlayRenderer.CloseAction.CLOSE_WITH_TURN) {
-                closeInventory(true);
-                return;
-            }
-            // Touch: OPEN_INVENTORY tap-button acts as toggle-close; slot taps navigate/use.
-            // Cache justTouched() before consuming the tap action so both checks see the same frame state.
-            if (touchInputState != null) {
-                boolean touchedThisFrame = gameViewport != null && Gdx.input.justTouched();
-                TouchAction inventoryTap = touchInputState.consumeTapAction();
-                if (inventoryTap == TouchAction.OPEN_INVENTORY) {
+            inventoryOverlayRenderer.handleInput(deltaTime);
+            if (touchInputState != null && gameViewport != null && Gdx.input.justTouched()) {
+                // Discard any pending tap action so the invisible OPEN_INVENTORY button area
+                // cannot accidentally close the overlay. All closing goes through the overlay's
+                // own visible CLOSE button, the header bar, and the USE/DROP buttons.
+                touchInputState.consumeTapAction();
+                cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+                gameViewport.unproject(cardTouchPosition);
+                InventoryOverlayRenderer.CloseAction touchAction =
+                        inventoryOverlayRenderer.handleTouchAt(cardTouchPosition.x, cardTouchPosition.y);
+                if (touchAction == InventoryOverlayRenderer.CloseAction.CLOSE_FREE) {
                     closeInventory(false);
-                    return;
-                }
-                // Only process as a slot/header tap when the touch was NOT already consumed
-                // by the OPEN_INVENTORY button (they cannot both be true for the same tap).
-                if (touchedThisFrame && inventoryTap == TouchAction.NONE) {
-                    cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
-                    gameViewport.unproject(cardTouchPosition);
-                    InventoryOverlayRenderer.CloseAction touchAction =
-                            inventoryOverlayRenderer.handleTouchAt(cardTouchPosition.x, cardTouchPosition.y);
-                    if (touchAction == InventoryOverlayRenderer.CloseAction.CLOSE_FREE) {
-                        closeInventory(false);
-                    } else if (touchAction == InventoryOverlayRenderer.CloseAction.CLOSE_WITH_TURN) {
-                        closeInventory(true);
-                    }
+                } else if (touchAction == InventoryOverlayRenderer.CloseAction.CLOSE_WITH_TURN) {
+                    closeInventory(true);
                 }
             }
             return;
@@ -363,13 +347,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // LEVEL_UP_OVERLAY — game paused while player picks a stat upgrade
         if (runPhase == RunPhase.LEVEL_UP_OVERLAY) {
-            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_1)) {
-                applyLevelUpReward(LevelUpReward.HP_BOOST);
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_2)) {
-                applyLevelUpReward(LevelUpReward.ARMOR_BOOST);
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_3) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_3)) {
-                applyLevelUpReward(LevelUpReward.DAMAGE_BOOST);
-            } else if (gameViewport != null && Gdx.input.justTouched()) {
+            if (gameViewport != null && Gdx.input.justTouched()) {
                 cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
                 gameViewport.unproject(cardTouchPosition);
                 LevelUpReward tapped = levelUpOverlayRenderer.getTappedReward(cardTouchPosition.x, cardTouchPosition.y);

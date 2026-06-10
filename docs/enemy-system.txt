@@ -10,7 +10,7 @@ Dormant until alerted by proximity or line-of-sight.
 
 ONE FULL TURN:
 
-1. Player presses a key (W/S/A/D/Q/F/SPACE).
+1. Player taps a touch button (move, rotate, fire, strafe, etc.).
 2. PlayerController enters its action state (MOVING, ROTATING, FIRING, INTERACTING).
 3. Animation plays for its duration (PLAYER_MOVE_DURATION, etc.).
    No enemy logic runs during this window.
@@ -21,8 +21,8 @@ ONE FULL TURN:
 6. EnemyManager runs three phases (see below).
 7. fireTick() returns. PlayerController is back to IDLE.
 
-Tick-causing actions: W/S/Q/F tile step (MOVE tick), SPACE weapon fire (FIRE tick).
-Non-tick actions: A/D rotation, E door interaction, wall-blocked moves (never reach finishAction).
+Tick-causing actions: forward/back/strafe tile step (MOVE tick), FIRE button (FIRE tick).
+Non-tick actions: left/right rotation, door interaction, wall-blocked moves (never reach finishAction).
 
 See docs/tick-system.txt for the full tick architecture.
 

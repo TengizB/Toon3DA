@@ -45,6 +45,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private final int[]        wiggleLegalColumns;  // reused in wiggleStep — avoids allocation in takeTurn
     private final int[]        wiggleLegalRows;
     private final Random       wiggleRandom;
+    private final Random       dropRandom;
 
     private boolean anyAlertedEver = false;
 
@@ -64,6 +65,7 @@ public final class EnemyManager implements EnemyHitTarget {
         this.wiggleLegalColumns = new int[4];
         this.wiggleLegalRows    = new int[4];
         this.wiggleRandom       = new Random(12345L);
+        this.dropRandom         = new Random();
     }
 
     private static List<Enemy> buildInitialEnemies(List<EnemySpawnPoint> spawnPoints,
@@ -486,15 +488,32 @@ public final class EnemyManager implements EnemyHitTarget {
 
     private void killEnemy(Enemy enemy) {
         occupancy[enemy.tileColumn][enemy.tileRow] = false;
-        // Stamp a corpse decal only on floor tiles and non-critical decals.
+        // Stamp a drop or corpse decal only on floor tiles and non-critical decals.
         // Never overwrite stairs, pickups, or keycards — those would be permanently destroyed.
         char currentCell = level.getCell(enemy.tileColumn, enemy.tileRow);
         if (!Level.isStairsDown(currentCell)
                 && !Level.isMedicalPickup(currentCell)
                 && !Level.isArmourPickup(currentCell)
-                && !Level.isKeycardPickup(currentCell)) {
-            level.setCell(enemy.tileColumn, enemy.tileRow, 'm');
+                && !Level.isKeycardPickup(currentCell)
+                && !Level.isAmmoPickup(currentCell)) {
+            char drop = rollEnemyDrop(enemy.type);
+            level.setCell(enemy.tileColumn, enemy.tileRow, drop);
         }
         enemies.remove(enemy);
+    }
+
+    private char rollEnemyDrop(EnemyType type) {
+        if (dropRandom.nextFloat() >= Constants.ENEMY_AMMO_DROP_CHANCE) {
+            return 'm'; // corpse decal, no item
+        }
+        // Each enemy type favours its thematic ammo, with a fallback spread
+        switch (type) {
+            case CORRUPTOR:  return '6'; // bullets
+            case VORTEX_EYE: return '8'; // cells  — ranged energy attacker
+            case GHOUL:      return '7'; // shells — brawler
+            case CRAWLER:    return '6'; // bullets — basic
+            case REVENANT:   return '9'; // rockets — heavy
+            default:         return '6';
+        }
     }
 }

@@ -1760,37 +1760,43 @@ public class LevelGenerator {
             Room  room         = rooms.get(roomIndex);
             float medkitChance = config.medkitChancePerRoom;
             float armourChance = config.armourChancePerRoom;
+            float ammoChance   = Constants.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
 
             switch (room.type) {
                 case SERVER_ROOM:
                     medkitChance = Constants.LEVEL_GEN_SERVER_MEDKIT_CHANCE;
                     armourChance = Constants.LEVEL_GEN_SERVER_ARMOUR_CHANCE;
+                    ammoChance   = 0.45f;
                     break;
                 case LARGE:
                     medkitChance = Constants.LEVEL_GEN_LARGE_MEDKIT_CHANCE;
                     armourChance = Constants.LEVEL_GEN_LARGE_ARMOUR_CHANCE;
+                    ammoChance   = 0.55f;
                     break;
                 case MEDICAL_BAY:
-                    // Guaranteed medkit + high stim chance
                     tryPlacePickup(grid, room, 'H');
                     if (random.nextFloat() < 0.70f) tryPlacePickup(grid, room, '+');
                     if (random.nextFloat() < 0.30f) tryPlacePickup(grid, room, 'A');
+                    if (random.nextFloat() < 0.30f) tryPlacePickup(grid, room, randomAmmoChar());
                     continue;
                 case ARMORY:
-                    medkitChance = 0.40f;
-                    armourChance = 0.80f;
-                    if (random.nextFloat() < armourChance) tryPlacePickup(grid, room, 'A');
-                    if (random.nextFloat() < medkitChance) tryPlacePickup(grid, room, 'H');
+                    if (random.nextFloat() < 0.80f) tryPlacePickup(grid, room, 'A');
+                    if (random.nextFloat() < 0.40f) tryPlacePickup(grid, room, 'H');
+                    // Armory always has ammo; often two boxes
+                    tryPlacePickup(grid, room, randomAmmoChar());
+                    if (random.nextBoolean()) tryPlacePickup(grid, room, randomAmmoChar());
                     continue;
                 case COMMAND_CENTER:
                     medkitChance = 0.50f;
                     armourChance = 0.50f;
+                    ammoChance   = 0.60f;
                     break;
                 case POWER_PLANT:
                 case CRYO_CHAMBER:
                 case CONTAINMENT_BLOCK:
                     medkitChance = 0.25f;
                     armourChance = 0.20f;
+                    ammoChance   = 0.30f;
                     break;
                 default:
                     break;
@@ -1798,6 +1804,17 @@ public class LevelGenerator {
 
             if (config.medkits    && random.nextFloat() < medkitChance) tryPlacePickup(grid, room, 'H');
             if (config.armourKits && random.nextFloat() < armourChance)  tryPlacePickup(grid, room, 'A');
+            if (random.nextFloat() < ammoChance) tryPlacePickup(grid, room, randomAmmoChar());
+        }
+    }
+
+    private char randomAmmoChar() {
+        switch (random.nextInt(5)) {
+            case 0:  return '6'; // bullets
+            case 1:  return '7'; // shells
+            case 2:  return '8'; // cells
+            case 3:  return '9'; // rockets
+            default: return '0'; // slugs
         }
     }
 
