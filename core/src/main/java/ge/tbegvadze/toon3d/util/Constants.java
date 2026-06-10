@@ -97,11 +97,12 @@ public final class Constants {
     public static final float COLUMN_LIGHT_DIRECTION_Y  = 0.70710678f;
 
     // Input key bindings — single source of truth for remappable keys
-    public static final int KEY_STRAFE_RIGHT  = com.badlogic.gdx.Input.Keys.E;
-    public static final int KEY_INTERACT      = com.badlogic.gdx.Input.Keys.F;
-    public static final int KEY_FIRE          = com.badlogic.gdx.Input.Keys.SPACE;
-    public static final int KEY_SKIP_TURN     = com.badlogic.gdx.Input.Keys.TAB;
-    public static final int KEY_SWITCH_WEAPON = com.badlogic.gdx.Input.Keys.G;
+    public static final int KEY_STRAFE_RIGHT    = com.badlogic.gdx.Input.Keys.E;
+    public static final int KEY_INTERACT        = com.badlogic.gdx.Input.Keys.F;
+    public static final int KEY_FIRE            = com.badlogic.gdx.Input.Keys.SPACE;
+    public static final int KEY_SKIP_TURN       = com.badlogic.gdx.Input.Keys.TAB;
+    public static final int KEY_SWITCH_WEAPON   = com.badlogic.gdx.Input.Keys.G;
+    public static final int KEY_OPEN_INVENTORY  = com.badlogic.gdx.Input.Keys.I;
 
     // Weapon system — timing
     // PLAYER_FIRE_DURATION: how long the fire action locks input (slightly heavier than a step)
@@ -916,4 +917,19 @@ public final class Constants {
     public static final int   AMMO_START_ROCKETS          = 0;
 
     public static final float AMMO_PICKUP_HEIGHT_FRACTION = 0.20f;
+
+    // -------------------------------------------------------------------------
+    // Inventory UI overlay (Order 4) — all values in world units; placeholders
+    // -------------------------------------------------------------------------
+    public static final int   INVENTORY_GRID_COLUMNS        = 4;
+    public static final float INV_SLOT_SIZE                  = 96f;
+    public static final float INV_SLOT_GAP                   = 12f;
+    public static final float INV_GRID_ORIGIN_X              = 80f;
+    public static final float INV_GRID_ORIGIN_Y              = 620f;
+    public static final float INV_DETAIL_PANEL_X             = 740f;
+    public static final float INV_DETAIL_PANEL_WIDTH         = 460f;
+    public static final float INV_SCRIM_ALPHA                = 0.60f;
+    public static final float INV_PANEL_ALPHA                = 0.92f;
+    public static final float INV_SELECT_BORDER_THICKNESS    = 3f;
+    public static final float INV_FLASH_SECONDS              = 0.45f;
 }
