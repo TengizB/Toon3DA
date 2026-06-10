@@ -16,10 +16,11 @@ public class PlayerInventory {
 
     private final EnumSet<KeycardColor> keycards = EnumSet.noneOf(KeycardColor.class);
 
-    // Arsenal is the single source of truth for equipped weapon.
-    // equippedWeaponIndex always points to the active weapon in the list.
+    // Arsenal is the legacy backing list; the Loadout is the authoritative source for the
+    // equipped weapon. Both are kept in sync via setArsenal().
     private final List<Weapon> arsenal = new ArrayList<>();
     private int equippedWeaponIndex = 0;
+    private Loadout loadout = new Loadout();
 
     // Medical stash — combined cap across both tiers.
     private int stimCharges   = 0;
@@ -38,22 +39,30 @@ public class PlayerInventory {
     }
 
     /**
-     * Replaces the entire weapon arsenal and equips the first weapon.
-     * This is the primary way to set up weapons for a run.
+     * Replaces the entire weapon arsenal and re-seeds the loadout from the new list.
+     * The first up-to-WEAPON_SLOT_COUNT weapons are placed into loadout slots in order.
+     * The loadout becomes the authoritative source for the equipped weapon after this call.
      */
     public void setArsenal(List<Weapon> weapons) {
         arsenal.clear();
         arsenal.addAll(weapons);
         equippedWeaponIndex = 0;
+        loadout = new Loadout();
+        for (int slotIndex = 0; slotIndex < Math.min(weapons.size(), Constants.WEAPON_SLOT_COUNT); slotIndex++) {
+            loadout.tryEquip(weapons.get(slotIndex));
+        }
     }
 
     public List<Weapon> getArsenal() {
         return Collections.unmodifiableList(arsenal);
     }
 
-    /** Returns the currently equipped weapon, or null if the player is unarmed. */
+    /**
+     * Returns the currently equipped weapon from the loadout, or null if the player is unarmed.
+     * Delegates entirely to the loadout so all callers share the same selection state.
+     */
     public Weapon getEquippedWeapon() {
-        return arsenal.isEmpty() ? null : arsenal.get(equippedWeaponIndex);
+        return loadout.active();
     }
 
     /** Sets the arsenal to a single weapon. Prefer setArsenal() for multi-weapon runs. */
@@ -62,14 +71,17 @@ public class PlayerInventory {
     }
 
     /**
-     * Advances to the next weapon in the arsenal (wraps around).
-     * Returns the newly equipped weapon, or the current weapon if only one weapon exists.
+     * Advances to the next filled loadout slot (wraps around).
+     * Returns the newly equipped weapon, or the current weapon if only one slot is filled.
      */
     public Weapon switchToNextWeapon() {
-        if (arsenal.size() <= 1) return getEquippedWeapon();
-        equippedWeaponIndex = (equippedWeaponIndex + 1) % arsenal.size();
-        return getEquippedWeapon();
+        int nextSlotIndex = loadout.nextFilledSlot(loadout.getActiveSlotIndex());
+        loadout.selectSlot(nextSlotIndex);
+        return loadout.active();
     }
+
+    /** Provides direct access to the loadout for slot-selection UI and input handling. */
+    public Loadout getLoadout() { return loadout; }
 
     public int getStimCharges()    { return stimCharges; }
     public int getMedkitCharges()  { return medkitCharges; }

@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.entity.Loadout;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.render.Renderable;
 import ge.tbegvadze.toon3d.util.Constants;
@@ -52,6 +53,13 @@ public class HudRenderer implements Renderable, Disposable {
     private static final Color XP_GOLD         = new Color(1.000f, 0.780f, 0.050f, 1f);
     private static final Color XP_BRIGHT_GOLD  = new Color(1.000f, 0.960f, 0.400f, 1f);
 
+    // Weapon slot strip — four icons at bottom-left of left panel
+    private static final Color SLOT_ACTIVE_AMBER = new Color(1.000f, 0.720f, 0.000f, 1f);
+    private static final Color SLOT_FILLED_DIM   = new Color(0.350f, 0.250f, 0.010f, 1f);
+    private static final Color SLOT_EMPTY_DARK   = new Color(0.060f, 0.060f, 0.080f, 0.85f);
+    private static final Color SLOT_EMPTY_BORDER = new Color(0.180f, 0.180f, 0.220f, 1f);
+    private static final Color SLOT_NUMBER_DIM   = new Color(0.280f, 0.260f, 0.180f, 1f);
+
     // Reusable mutable color for pulse calculations — never allocated inside render()
     private final Color temporaryColor = new Color();
 
@@ -73,6 +81,7 @@ public class HudRenderer implements Renderable, Disposable {
     // -------------------------------------------------------------------------
     private final Player   player;
     private final HudState hudState;
+    private       Loadout  loadout = null;
 
     // -------------------------------------------------------------------------
     // Animation state
@@ -95,6 +104,11 @@ public class HudRenderer implements Renderable, Disposable {
         // Linear filtering reduces pixelation when font is scaled.
         this.font.getRegion().getTexture().setFilter(
                 Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+    }
+
+    /** Provides the loadout whose slots are drawn in the left-panel strip. */
+    public void setLoadout(Loadout newLoadout) {
+        this.loadout = newLoadout;
     }
 
     public void update(float deltaTime) {
@@ -132,11 +146,13 @@ public class HudRenderer implements Renderable, Disposable {
         drawArmorBarFilled(isDead);
         drawClipBarFilled(isDead);
         drawXpBarFilled(isDead);
+        if (loadout != null) drawSlotStripFilled(loadout, pulse);
         shapes.end();
 
         // ---- Pass B: Line ----
         shapes.begin(ShapeRenderer.ShapeType.Line);
         drawPanelChromeLines(0f, 0f, LEFT_WIDTH, PANEL_HEIGHT);
+        if (loadout != null) drawSlotStripLines(loadout);
         shapes.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
@@ -146,6 +162,7 @@ public class HudRenderer implements Renderable, Disposable {
         drawArmorLabel(isDead);
         drawClipLabel(isDead);
         drawXpLabel(isDead);
+        if (loadout != null) drawSlotStripText(loadout, isDead);
         batch.end();
     }
 
@@ -351,6 +368,99 @@ public class HudRenderer implements Renderable, Disposable {
         stringBuilder.append("LV.");
         stringBuilder.append(hudState.playerLevel);
         font.draw(batch, stringBuilder, Constants.HUD_BAR_NUMBER_X, labelY);
+    }
+
+    // =========================================================================
+    // Weapon slot strip — Pass A, B, C helpers
+    // =========================================================================
+
+    private void drawSlotStripFilled(Loadout activeLoadout, float pulse) {
+        float originX  = Constants.WEAPON_SLOT_STRIP_ORIGIN_X;
+        float originY  = Constants.WEAPON_SLOT_STRIP_ORIGIN_Y;
+        float iconSize = Constants.WEAPON_SLOT_ICON_SIZE;
+        float iconGap  = Constants.WEAPON_SLOT_ICON_GAP;
+        int   active   = activeLoadout.getActiveSlotIndex();
+
+        for (int slotIndex = 0; slotIndex < activeLoadout.getSlotCount(); slotIndex++) {
+            float   slotX  = originX + slotIndex * (iconSize + iconGap);
+            boolean filled = activeLoadout.getSlot(slotIndex) != null;
+            boolean isActive = slotIndex == active && filled;
+
+            if (filled) {
+                float brightness = isActive ? pulse : 0.6f;
+                shapes.setColor(SLOT_FILLED_DIM.r * brightness, SLOT_FILLED_DIM.g * brightness,
+                                SLOT_FILLED_DIM.b * brightness, 0.90f);
+            } else {
+                shapes.setColor(SLOT_EMPTY_DARK);
+            }
+            shapes.rect(slotX, originY, iconSize, iconSize);
+
+            if (filled) {
+                float indicatorW = iconSize * 0.65f;
+                float indicatorH = iconSize * 0.18f;
+                float indicatorX = slotX + (iconSize - indicatorW) / 2f;
+                float indicatorY = originY + iconSize * 0.55f;
+                float bright = isActive ? pulse : 0.85f;
+                shapes.setColor(SLOT_ACTIVE_AMBER.r * bright, SLOT_ACTIVE_AMBER.g * bright, 0f, 1f);
+                shapes.rect(indicatorX, indicatorY, indicatorW, indicatorH);
+            }
+        }
+    }
+
+    private void drawSlotStripLines(Loadout activeLoadout) {
+        float originX  = Constants.WEAPON_SLOT_STRIP_ORIGIN_X;
+        float originY  = Constants.WEAPON_SLOT_STRIP_ORIGIN_Y;
+        float iconSize = Constants.WEAPON_SLOT_ICON_SIZE;
+        float iconGap  = Constants.WEAPON_SLOT_ICON_GAP;
+        int   active   = activeLoadout.getActiveSlotIndex();
+
+        for (int slotIndex = 0; slotIndex < activeLoadout.getSlotCount(); slotIndex++) {
+            float   slotX  = originX + slotIndex * (iconSize + iconGap);
+            boolean filled = activeLoadout.getSlot(slotIndex) != null;
+            boolean isActive = slotIndex == active && filled;
+
+            if (isActive) {
+                shapes.setColor(SLOT_ACTIVE_AMBER);
+            } else if (filled) {
+                shapes.setColor(SLOT_FILLED_DIM.r * 2f, SLOT_FILLED_DIM.g * 2f, SLOT_FILLED_DIM.b * 2f, 1f);
+            } else {
+                shapes.setColor(SLOT_EMPTY_BORDER);
+            }
+            shapes.rect(slotX, originY, iconSize, iconSize);
+        }
+    }
+
+    private void drawSlotStripText(Loadout activeLoadout, boolean isDead) {
+        float originX  = Constants.WEAPON_SLOT_STRIP_ORIGIN_X;
+        float originY  = Constants.WEAPON_SLOT_STRIP_ORIGIN_Y;
+        float iconSize = Constants.WEAPON_SLOT_ICON_SIZE;
+        float iconGap  = Constants.WEAPON_SLOT_ICON_GAP;
+        int   active   = activeLoadout.getActiveSlotIndex();
+
+        for (int slotIndex = 0; slotIndex < activeLoadout.getSlotCount(); slotIndex++) {
+            float   slotX    = originX + slotIndex * (iconSize + iconGap);
+            boolean filled   = activeLoadout.getSlot(slotIndex) != null;
+            boolean isActive = slotIndex == active && filled;
+
+            font.getData().setScale(0.75f);
+            if (isDead) {
+                font.setColor(PHOSPHOR_DIM);
+            } else {
+                font.setColor(isActive ? SLOT_ACTIVE_AMBER : SLOT_NUMBER_DIM);
+            }
+            stringBuilder.setLength(0);
+            stringBuilder.append(slotIndex + 1);
+            font.draw(batch, stringBuilder, slotX + 3f, originY + iconSize - 2f);
+
+            if (filled && !isDead) {
+                String weaponName = activeLoadout.getSlot(slotIndex).getDisplayName();
+                String abbreviation = weaponName.length() > 4 ? weaponName.substring(0, 4) : weaponName;
+                font.getData().setScale(0.55f);
+                font.setColor(isActive ? SLOT_ACTIVE_AMBER : SLOT_NUMBER_DIM);
+                font.draw(batch, abbreviation, slotX + 3f, originY + 16f);
+                font.getData().setScale(0.75f);
+            }
+        }
     }
 
     // =========================================================================
