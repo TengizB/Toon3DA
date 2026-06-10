@@ -161,16 +161,18 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
 
     private void drawGlyph(TouchAction action, float cx, float cy, float extent) {
         switch (action) {
-            case FORWARD:       drawTriangleUp(cx, cy, extent);              break;
-            case BACK:          drawTriangleDown(cx, cy, extent);            break;
-            case ROTATE_LEFT:   drawRotateArrow(cx, cy, extent, true);       break;
-            case ROTATE_RIGHT:  drawRotateArrow(cx, cy, extent, false);      break;
-            case STRAFE_LEFT:   drawDoubleChevron(cx, cy, extent, true);     break;
-            case STRAFE_RIGHT:  drawDoubleChevron(cx, cy, extent, false);    break;
-            case FIRE:          drawCrosshair(cx, cy, extent);               break;
-            case SKIP_TURN:     drawSkipIcon(cx, cy, extent);                break;
-            case RELOAD:        drawReloadIcon(cx, cy, extent);              break;
-            case SWITCH_WEAPON: drawSwitchWeaponIcon(cx, cy, extent);        break;
+            case FORWARD:         drawTriangleUp(cx, cy, extent);              break;
+            case BACK:            drawTriangleDown(cx, cy, extent);            break;
+            case ROTATE_LEFT:     drawRotateArrow(cx, cy, extent, true);       break;
+            case ROTATE_RIGHT:    drawRotateArrow(cx, cy, extent, false);      break;
+            case STRAFE_LEFT:     drawDoubleChevron(cx, cy, extent, true);     break;
+            case STRAFE_RIGHT:    drawDoubleChevron(cx, cy, extent, false);    break;
+            case FIRE:            drawCrosshair(cx, cy, extent);               break;
+            case SKIP_TURN:       drawSkipIcon(cx, cy, extent);                break;
+            case RELOAD:          drawReloadIcon(cx, cy, extent);              break;
+            case SWITCH_WEAPON:   drawSwitchWeaponIcon(cx, cy, extent);        break;
+            case HEAL:            drawHealIcon(cx, cy, extent);                break;
+            case OPEN_INVENTORY:  drawInventoryIcon(cx, cy, extent);           break;
             default: break;
         }
     }
@@ -328,6 +330,34 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
         float fin2X = tipX + MathUtils.cosDeg(tangentDeg - 140f) * arrowSize;
         float fin2Y = tipY + MathUtils.sinDeg(tangentDeg - 140f) * arrowSize;
         shapeRenderer.triangle(tipX, tipY, fin1X, fin1Y, fin2X, fin2Y);
+    }
+
+    /** Medical cross (+): two overlapping thick bars forming a plus sign. */
+    private void drawHealIcon(float cx, float cy, float extent) {
+        float barHalf  = extent * 0.60f;
+        float armWidth = extent * 0.28f;
+        shapeRenderer.rectLine(cx - barHalf, cy, cx + barHalf, cy, armWidth);
+        shapeRenderer.rectLine(cx, cy - barHalf, cx, cy + barHalf, armWidth);
+    }
+
+    /** Inventory grid icon: four small squares arranged in a 2×2 grid. */
+    private void drawInventoryIcon(float cx, float cy, float extent) {
+        float squareHalf = extent * 0.22f;
+        float spacing    = extent * 0.28f;
+        float lineWidth  = Math.max(2f, extent * 0.13f);
+        // Top-left, top-right, bottom-left, bottom-right squares (outline only)
+        float[] offsetsX = { -spacing, spacing, -spacing, spacing };
+        float[] offsetsY = {  spacing, spacing, -spacing, -spacing };
+        for (int squareIndex = 0; squareIndex < 4; squareIndex++) {
+            float left   = cx + offsetsX[squareIndex] - squareHalf;
+            float bottom = cy + offsetsY[squareIndex] - squareHalf;
+            float right  = left   + squareHalf * 2f;
+            float top    = bottom + squareHalf * 2f;
+            shapeRenderer.rectLine(left,  bottom, right, bottom, lineWidth);
+            shapeRenderer.rectLine(right, bottom, right, top,    lineWidth);
+            shapeRenderer.rectLine(right, top,    left,  top,    lineWidth);
+            shapeRenderer.rectLine(left,  top,    left,  bottom, lineWidth);
+        }
     }
 
     // -------------------------------------------------------------------------
