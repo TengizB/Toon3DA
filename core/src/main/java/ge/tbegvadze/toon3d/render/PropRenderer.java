@@ -54,10 +54,10 @@ public class PropRenderer implements Renderable, Disposable {
             case 'a': return ARMOUR_SHARD_SPRITE_HEIGHT;
             case 'A': return ARMOUR_VEST_SPRITE_HEIGHT;
             case '>': return PORTAL_SPRITE_HEIGHT;
-            case '6': return Constants.AMMO_PICKUP_HEIGHT_FRACTION;
-            case '7': return Constants.AMMO_PICKUP_HEIGHT_FRACTION;
-            case '8': return Constants.AMMO_PICKUP_HEIGHT_FRACTION;
-            case '9': return Constants.AMMO_PICKUP_HEIGHT_FRACTION;
+            case '6': return AMMO_PICKUP_HEIGHT_FRACTION;
+            case '7': return AMMO_PICKUP_HEIGHT_FRACTION;
+            case '8': return AMMO_PICKUP_HEIGHT_FRACTION;
+            case '9': return AMMO_PICKUP_HEIGHT_FRACTION;
             case '#': return PROP_CAMERA_HEIGHT;
             case '%': return PROP_GENERATOR_HEIGHT;
             case '&': return PROP_BIOPOD_HEIGHT;
