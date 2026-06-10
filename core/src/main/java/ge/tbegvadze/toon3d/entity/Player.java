@@ -42,6 +42,7 @@ public class Player implements Renderable, Disposable {
     }
 
     public void applyDamage(int amount) {
+        if (Constants.debug) return;
         int armorAbsorbed = GameMath.armorAbsorb(amount, armor, Constants.ARMOUR_ABSORB_FRACTION);
         armor  = Math.max(0, armor  - armorAbsorbed);
         int netDamage = amount - armorAbsorbed;

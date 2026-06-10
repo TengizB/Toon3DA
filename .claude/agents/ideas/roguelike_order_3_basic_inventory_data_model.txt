@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Items
 TITLE: Inventory Data Model (Backend Only, No UI)
 ---

@@ -833,6 +833,35 @@ public final class Constants {
     public static final String  GRENADE_FIRE_TEXTURE_PATH    = "textures/guns/grenade/grenade_fire.png";
     public static final String  GRENADE_RELOAD_TEXTURE_PATH  = "textures/guns/grenade/grenade_reload.png";
 
+    // Permadeath — death beat and persistent stats
+    public static boolean debug                         = false;  // immortal mode; flip to true for testing
+    public static final float  DEATH_BEAT_DURATION_SECONDS = 1.0f;
+    public static final String STATS_PREFS_NAME             = "toon3d_records";
+
+    // Death overlay — full-screen incursion-terminated report
+    public static final float DEATH_OVERLAY_PANEL_X        = 280f;
+    public static final float DEATH_OVERLAY_PANEL_Y        = 80f;
+    public static final float DEATH_OVERLAY_PANEL_WIDTH    = 720f;
+    public static final float DEATH_OVERLAY_PANEL_HEIGHT   = 560f;
+    public static final float DEATH_OVERLAY_LABEL_X        = DEATH_OVERLAY_PANEL_X + 60f;
+    public static final float DEATH_OVERLAY_VALUE_X_MAX    = DEATH_OVERLAY_PANEL_X + DEATH_OVERLAY_PANEL_WIDTH - 60f;
+    public static final float DEATH_OVERLAY_HEADER_SCALE   = 2.5f;
+    public static final float DEATH_OVERLAY_SUBHEAD_SCALE  = 1.3f;
+    public static final float DEATH_OVERLAY_STAT_SCALE     = 1.2f;
+    public static final float DEATH_OVERLAY_NEWBEST_SCALE  = 0.9f;
+    public static final float DEATH_OVERLAY_FLAVOR_SCALE   = 1.0f;
+    public static final float DEATH_OVERLAY_PROMPT_SCALE   = 1.3f;
+    // Y positions relative to panel top (PANEL_Y + PANEL_HEIGHT)
+    public static final float DEATH_OVERLAY_HEADER_Y_BELOW_TOP   = 55f;
+    public static final float DEATH_OVERLAY_SUBHEAD_Y_BELOW_TOP  = 100f;
+    public static final float DEATH_OVERLAY_FIRST_STAT_Y_BELOW_TOP = 175f;
+    public static final float DEATH_OVERLAY_STAT_LINE_STEP        = 48f;
+    // Y positions relative to panel bottom (PANEL_Y)
+    public static final float DEATH_OVERLAY_FLAVOR_Y_ABOVE_BOTTOM = 130f;
+    public static final float DEATH_OVERLAY_PROMPT_Y_ABOVE_BOTTOM = 50f;
+    // Horizontal gap between right-edge of value text and "NEW BEST" tag
+    public static final float DEATH_OVERLAY_NEWBEST_GAP            = 18f;
+
     // Tile-Based Ambient Lighting — floor tiles ' ', 'l', 'u', 'f' carry brightness multipliers
     // finalShade = clamp(distanceShade * directionalMultiplier * tileBrightness, 0, MAX_LIGHTING_SHADE)
     // ' ' (space) = lit bright floor (1.55×); 'l' = normal floor (1.0×);
@@ -849,4 +878,21 @@ public final class Constants {
     public static final float FLICKER_NOISE_FREQUENCY    = 0.7f;
     public static final float FLICKER_FAILURE_THRESHOLD  = 0.35f;
     public static final float MAX_LIGHTING_SHADE         = 1.00f;
+
+    // -------------------------------------------------------------------------
+    // Inventory system (Order 3) — slot count and per-type stack caps
+    // -------------------------------------------------------------------------
+    // INVENTORY_SLOT_COUNT: 10 slots (5×2 grid) gives tight but meaningful choice.
+    // Ammo and armour bypass slots entirely; only consumables, weapons, key items,
+    // mods, and credits occupy the slotted grid.
+    public static final int INVENTORY_SLOT_COUNT          = 10;
+    // ITEM_STACK_MAX_DEFAULT: generic fallback cap for any stackable not listed below.
+    public static final int ITEM_STACK_MAX_DEFAULT        = 99;
+    // Per-type stack caps — these are the definitive balance numbers; tune via Constants only.
+    public static final int ITEM_STACK_MAX_MEDKIT_SMALL   = 5;
+    public static final int ITEM_STACK_MAX_MEDKIT_LARGE   = 2;
+    public static final int ITEM_STACK_MAX_STIMPACK       = 5;
+    // Weapons never stack — each weapon occupies exactly one slot.
+    public static final int ITEM_STACK_MAX_WEAPON         = 1;
+    public static final int ITEM_STACK_MAX_CREDITS        = 999;
 }

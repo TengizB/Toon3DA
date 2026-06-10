@@ -25,10 +25,11 @@ import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.StatsStore;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
-    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY }
+    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD }
 
     // -------------------------------------------------------------------------
     // Run-persistent resources — kept alive across all floor transitions
@@ -78,6 +79,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private int      currentDepth     = Constants.STARTING_DEPTH;
 
     // -------------------------------------------------------------------------
+    // Permadeath — run stats, death beat animation, and reset handshake
+    // -------------------------------------------------------------------------
+    private final RunStats             runStats;
+    private final PersistentStats      persistentStats;
+    private final DeathOverlayRenderer deathOverlayRenderer;
+    private       float                deathBeatTimerSeconds  = 0f;
+    private       float                deathBlinkTimerSeconds = 0f;
+    private       boolean              resetRequested         = false;
+
+    // -------------------------------------------------------------------------
     // Timing accumulators
     // -------------------------------------------------------------------------
     private float alertTimeSeconds    = 0f;
@@ -120,10 +131,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         eventTextRenderer  = new EventTextRenderer(eventTextSystem);
         hitVignetteRenderer = new HitVignetteRenderer();
 
-        // Wire damage listener: player damage triggers both vignette flash and screen text.
+        // Permadeath — run stats and death overlay
+        runStats             = new RunStats();
+        persistentStats      = StatsStore.load();
+        deathOverlayRenderer = new DeathOverlayRenderer();
+
+        // Wire damage listener: player damage triggers vignette flash, screen text, and stats.
         player.setPlayerDamageListener(netDamage -> {
             hitVignetteRenderer.setIntensity(1f);
             eventTextSystem.spawnDamage(netDamage);
+            runStats.recordDamageTaken(netDamage);
         });
 
         // Build the full weapon arsenal — player starts with all weapons equipped in order.
@@ -198,8 +215,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyRenderer          = new EnemyRenderer(enemyManager, wallRenderer);
         enemyManager.setImpactEventListener(impactEffectSystem);
         enemyManager.setKillXpListener(xpAwarded -> playerProgress.addXp(xpAwarded));
-        enemyManager.setKillEventListener((nameTag, xpAwarded) ->
-            eventTextSystem.spawnWithColor(nameTag + " +" + xpAwarded + "XP", EventTextSystem.COLOR_GREEN));
+        enemyManager.setKillEventListener((nameTag, xpAwarded) -> {
+            eventTextSystem.spawnWithColor(nameTag + " +" + xpAwarded + "XP", EventTextSystem.COLOR_GREEN);
+            runStats.recordKill();
+        });
         enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
         explosiveBarrelManager.setImpactEventListener(impactEffectSystem);
         enemyRenderer.setPropRenderer(propRenderer);
@@ -252,10 +271,25 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
 
     public void update(float deltaTime) {
+        // DEAD phase — death beat then death screen; no game simulation
+        if (runPhase == RunPhase.DEAD) {
+            deathBeatTimerSeconds += deltaTime;
+            if (deathBeatTimerSeconds >= Constants.DEATH_BEAT_DURATION_SECONDS) {
+                deathBlinkTimerSeconds += deltaTime;
+                if (Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY)
+                        || (touchInputState != null && Gdx.input.justTouched())) {
+                    StatsStore.updateAndSave(runStats, persistentStats);
+                    resetRequested = true;
+                }
+            }
+            return;
+        }
+
         if (runPhase == RunPhase.FADING_OUT) {
             fadeTimerSeconds += deltaTime;
             if (fadeTimerSeconds >= Constants.LEVEL_TRANSITION_FADE_OUT_SECONDS) {
                 currentDepth++;
+                runStats.recordFloor(currentDepth);
                 rebuildForLevel(new LevelGenerator(floorSeed(runSeed, currentDepth)).generate());
                 fadeTimerSeconds = 0f;
                 runPhase = RunPhase.FADING_IN;
@@ -291,8 +325,20 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
 
         // PLAYING phase — normal game simulation
+        runStats.realSecondsPlayed += deltaTime;
         doorManager.update(deltaTime);
         playerController.update(deltaTime);
+
+        // Death check: resolved after the tick fully completes, never mid-tick
+        if (player.isDead()) {
+            runStats.recordFloor(currentDepth);
+            deathOverlayRenderer.show(runStats, persistentStats);
+            runPhase              = RunPhase.DEAD;
+            deathBeatTimerSeconds = 0f;
+            deathBlinkTimerSeconds = 0f;
+            return;
+        }
+
         if (touchInputState != null) {
             touchInputState.update(deltaTime);
         }
@@ -415,6 +461,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             }
             fadeOverlayRenderer.render(camera, fadeAlpha, currentDepth);
         }
+
+        // Death beat: fade to black over DEATH_BEAT_DURATION; then show the death report.
+        if (runPhase == RunPhase.DEAD) {
+            if (deathBeatTimerSeconds < Constants.DEATH_BEAT_DURATION_SECONDS) {
+                float deathFadeAlpha = deathBeatTimerSeconds / Constants.DEATH_BEAT_DURATION_SECONDS;
+                fadeOverlayRenderer.render(camera, deathFadeAlpha, currentDepth);
+            } else {
+                boolean showPrompt = deathBlinkTimerSeconds % 1.0f < 0.5f;
+                deathOverlayRenderer.render(camera, showPrompt);
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -436,8 +493,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hitVignetteRenderer.dispose();
         levelUpOverlayRenderer.dispose();
         if (touchControllerRenderer != null) touchControllerRenderer.dispose();
+        deathOverlayRenderer.dispose();
         player.dispose();
     }
+
+    /** Returns true once after the player acknowledges the death screen; Main recreates the World. */
+    public boolean isResetRequested() { return resetRequested; }
 
     // -------------------------------------------------------------------------
     // Helpers
