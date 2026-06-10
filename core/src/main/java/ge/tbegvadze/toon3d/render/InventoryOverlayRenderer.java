@@ -181,10 +181,41 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         }
 
         if (Gdx.input.isKeyJustPressed(Constants.KEY_OPEN_INVENTORY)
-                || Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+                || Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)
+                || Gdx.input.isKeyJustPressed(Input.Keys.BACK)) {
             return CloseAction.CLOSE_FREE;
         }
 
+        return CloseAction.NONE;
+    }
+
+    /**
+     * Handles a touch tap at the given world coordinates while the overlay is open.
+     * Tap on a slot: selects it on first tap, uses/equips on second tap of the same slot.
+     * Tap on the header bar: closes the overlay freely (natural "tap title to close" UX).
+     * Returns the appropriate CloseAction, or NONE if the tap was navigation only.
+     */
+    public CloseAction handleTouchAt(float worldX, float worldY) {
+        for (int slotIndex = 0; slotIndex < Constants.INVENTORY_SLOT_COUNT; slotIndex++) {
+            int   slotRow    = slotIndex / Constants.INVENTORY_GRID_COLUMNS;
+            int   slotColumn = slotIndex % Constants.INVENTORY_GRID_COLUMNS;
+            float slotX      = slotLeft(slotColumn);
+            float slotY      = slotBottom(slotRow);
+            if (worldX >= slotX && worldX <= slotX + Constants.INV_SLOT_SIZE
+                    && worldY >= slotY && worldY <= slotY + Constants.INV_SLOT_SIZE) {
+                if (slotColumn == selectedSlotColumn && slotRow == selectedSlotRow) {
+                    return handleUse();
+                }
+                selectedSlotColumn = slotColumn;
+                selectedSlotRow    = slotRow;
+                return CloseAction.NONE;
+            }
+        }
+        // Tapping the header bar (title bar at top of overlay) closes the inventory.
+        if (worldX >= HEADER_X && worldX <= HEADER_X + HEADER_WIDTH
+                && worldY >= HEADER_Y && worldY <= HEADER_Y + HEADER_HEIGHT) {
+            return CloseAction.CLOSE_FREE;
+        }
         return CloseAction.NONE;
     }
 

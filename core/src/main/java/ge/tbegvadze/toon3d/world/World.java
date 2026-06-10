@@ -13,6 +13,7 @@ import ge.tbegvadze.toon3d.entity.*;
 import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
 import ge.tbegvadze.toon3d.hud.HudRenderer;
 import ge.tbegvadze.toon3d.input.PlayerController;
+import ge.tbegvadze.toon3d.input.touch.TouchAction;
 import ge.tbegvadze.toon3d.input.touch.TouchControllerRenderer;
 import ge.tbegvadze.toon3d.input.touch.TouchInputState;
 import ge.tbegvadze.toon3d.item.AmmoPool;
@@ -273,7 +274,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         touchInputState         = new TouchInputState(viewport);
         touchControllerRenderer = new TouchControllerRenderer(touchInputState);
         Gdx.input.setInputProcessor(touchInputState);
-        playerController.setTouchInputState(touchInputState);
+        if (playerController != null) playerController.setTouchInputState(touchInputState);
     }
 
     public GameState getGameState()  { return gameState; }
@@ -329,8 +330,33 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             InventoryOverlayRenderer.CloseAction action = inventoryOverlayRenderer.handleInput(deltaTime);
             if (action == InventoryOverlayRenderer.CloseAction.CLOSE_FREE) {
                 closeInventory(false);
+                return;
             } else if (action == InventoryOverlayRenderer.CloseAction.CLOSE_WITH_TURN) {
                 closeInventory(true);
+                return;
+            }
+            // Touch: OPEN_INVENTORY tap-button acts as toggle-close; slot taps navigate/use.
+            // Cache justTouched() before consuming the tap action so both checks see the same frame state.
+            if (touchInputState != null) {
+                boolean touchedThisFrame = gameViewport != null && Gdx.input.justTouched();
+                TouchAction inventoryTap = touchInputState.consumeTapAction();
+                if (inventoryTap == TouchAction.OPEN_INVENTORY) {
+                    closeInventory(false);
+                    return;
+                }
+                // Only process as a slot/header tap when the touch was NOT already consumed
+                // by the OPEN_INVENTORY button (they cannot both be true for the same tap).
+                if (touchedThisFrame && inventoryTap == TouchAction.NONE) {
+                    cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+                    gameViewport.unproject(cardTouchPosition);
+                    InventoryOverlayRenderer.CloseAction touchAction =
+                            inventoryOverlayRenderer.handleTouchAt(cardTouchPosition.x, cardTouchPosition.y);
+                    if (touchAction == InventoryOverlayRenderer.CloseAction.CLOSE_FREE) {
+                        closeInventory(false);
+                    } else if (touchAction == InventoryOverlayRenderer.CloseAction.CLOSE_WITH_TURN) {
+                        closeInventory(true);
+                    }
+                }
             }
             return;
         }
@@ -469,11 +495,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hudRenderer.update(deltaTime);
         hudRenderer.render(camera);
 
-        // Level-up overlay drawn above all HUD elements while the player is choosing a reward.
-        // Touch controller is hidden during the overlay so buttons don't obscure the cards.
+        // Level-up overlay and inventory overlay each take full control of the screen —
+        // hide touch buttons so they don't obscure cards or inventory slots.
         if (runPhase == RunPhase.LEVEL_UP_OVERLAY) {
             levelUpOverlayRenderer.render(camera);
-        } else if (touchControllerRenderer != null) {
+        } else if (touchControllerRenderer != null && runPhase != RunPhase.INVENTORY_OPEN) {
             touchControllerRenderer.setActionLocked(!playerController.isIdle());
             touchControllerRenderer.render(camera);
         }
@@ -545,6 +571,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     /** Opens the inventory overlay. Only valid from PLAYING phase; ignored otherwise. */
     private void openInventory() {
         if (runPhase != RunPhase.PLAYING) return;
+        if (touchInputState != null) touchInputState.resetAllButtonStates();
         inventoryOverlayRenderer.onOpen();
         runPhase = RunPhase.INVENTORY_OPEN;
     }

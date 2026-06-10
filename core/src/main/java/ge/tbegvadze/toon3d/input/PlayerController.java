@@ -263,7 +263,7 @@ public class PlayerController {
             : TouchAction.NONE;
 
         // Inventory toggle — free action, opens overlay without spending a turn.
-        if (Gdx.input.isKeyJustPressed(Constants.KEY_OPEN_INVENTORY)) {
+        if (Gdx.input.isKeyJustPressed(Constants.KEY_OPEN_INVENTORY) || tapAction == TouchAction.OPEN_INVENTORY) {
             if (inventoryToggleCallback != null) inventoryToggleCallback.run();
             return;
         }
@@ -274,7 +274,7 @@ public class PlayerController {
             return;
         }
 
-        if (Gdx.input.isKeyJustPressed(Constants.KEY_HEAL)) {
+        if (Gdx.input.isKeyJustPressed(Constants.KEY_HEAL) || tapAction == TouchAction.HEAL) {
             tryHeal();
         } else if (Gdx.input.isKeyJustPressed(Constants.KEY_FIRE) || tapAction == TouchAction.FIRE) {
             tryFire();

@@ -8,16 +8,18 @@ import ge.tbegvadze.toon3d.util.Constants;
 public final class TouchInputState extends InputAdapter {
 
     // Ordered by action priority: index 0 = highest priority
-    private static final int INDEX_FORWARD       = 0;
-    private static final int INDEX_BACK          = 1;
-    private static final int INDEX_ROTATE_LEFT   = 2;
-    private static final int INDEX_ROTATE_RIGHT  = 3;
-    private static final int INDEX_STRAFE_LEFT   = 4;
-    private static final int INDEX_STRAFE_RIGHT  = 5;
-    private static final int INDEX_FIRE          = 6;
-    private static final int INDEX_RELOAD        = 7;
-    private static final int INDEX_SKIP_TURN     = 8;
-    private static final int INDEX_SWITCH_WEAPON = 9;
+    private static final int INDEX_FORWARD         = 0;
+    private static final int INDEX_BACK            = 1;
+    private static final int INDEX_ROTATE_LEFT     = 2;
+    private static final int INDEX_ROTATE_RIGHT    = 3;
+    private static final int INDEX_STRAFE_LEFT     = 4;
+    private static final int INDEX_STRAFE_RIGHT    = 5;
+    private static final int INDEX_FIRE            = 6;
+    private static final int INDEX_RELOAD          = 7;
+    private static final int INDEX_SKIP_TURN       = 8;
+    private static final int INDEX_SWITCH_WEAPON   = 9;
+    private static final int INDEX_HEAL            = 10;
+    private static final int INDEX_OPEN_INVENTORY  = 11;
 
     private final TouchButton[]  buttons;
     private final Viewport       viewport;
@@ -34,7 +36,7 @@ public final class TouchInputState extends InputAdapter {
         float centerX = Constants.TOUCH_GRID_CENTER_X;
         float baseY   = Constants.TOUCH_GRID_BASE_Y;    // center Y of row 1 (BACK)
 
-        buttons = new TouchButton[10];
+        buttons = new TouchButton[12];
 
         // Row 1 (bottom) — center column only
         buttons[INDEX_BACK] = new TouchButton(
@@ -76,6 +78,15 @@ public final class TouchInputState extends InputAdapter {
         buttons[INDEX_SKIP_TURN] = new TouchButton(
             centerX + arm - half, row4Y - half,
             size, size, TouchAction.SKIP_TURN, TouchButton.Shape.ROUNDED_SQUARE, true);
+
+        // Left secondary cluster — HEAL (row 2 height) | OPEN_INVENTORY (row 3 height)
+        float leftCenterX = Constants.TOUCH_GRID_LEFT_CENTER_X;
+        buttons[INDEX_HEAL] = new TouchButton(
+            leftCenterX - half, (baseY + arm) - half,
+            size, size, TouchAction.HEAL, TouchButton.Shape.ROUNDED_SQUARE, true);
+        buttons[INDEX_OPEN_INVENTORY] = new TouchButton(
+            leftCenterX - half, (baseY + 2 * arm) - half,
+            size, size, TouchAction.OPEN_INVENTORY, TouchButton.Shape.ROUNDED_SQUARE, true);
     }
 
     /** Returns the highest-priority currently-pressed held action (movement), or NONE. */
