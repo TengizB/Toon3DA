@@ -8,19 +8,19 @@ is otherwise frozen. This is the same model as Doom RPG.
 
 ## Actions That Cause a Tick
 
-  MOVE  — player completes a tile step (W, S, Q, strafe-right F).
+  MOVE  — player completes a tile step (forward, backward, or strafe).
            Blocked moves (wall, closed door, prop) never reach finishAction and never tick.
-  FIRE  — player fires a weapon (SPACE). Always ticks, even if the shot hits a wall.
+  FIRE  — player fires a weapon (FIRE button). Always ticks, even if the shot hits a wall.
 
 ## Actions That Do NOT Cause a Tick
 
-  ROTATE   — A/D rotate 90°. Purely cosmetic facing change. No world advance.
-  INTERACT — E opens a door. Door state changes but enemies do not act.
+  ROTATE   — Rotate 90° left/right. Purely cosmetic facing change. No world advance.
+  INTERACT — Tap a door button. Door state changes but enemies do not act.
 
 ## Tick Lifecycle (one frame)
 
   1. Player is IDLE. PlayerController.pollInput() reads input.
-  2. Key pressed → PlayerController enters MOVING, FIRING, ROTATING, or INTERACTING.
+  2. Touch button tapped/held → PlayerController enters MOVING, FIRING, ROTATING, or INTERACTING.
   3. Animation plays (PLAYER_MOVE_DURATION=0.12s, PLAYER_FIRE_DURATION=0.14s, etc.).
      All input blocked during this window.
   4. Animation completes → finishAction(causesTick, cause) called:

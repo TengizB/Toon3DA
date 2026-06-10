@@ -10,22 +10,30 @@ First-person pseudo-3D dungeon-crawler roguelike. World is a flat 2D tile grid; 
 
 Player never moves freely. Every action = one tile step or one 90° rotation. Animation plays between states; all input is blocked while animating (action lock). Same model as Doom RPG.
 
+**Platform: Mobile only (smartphones).** No keyboard. All input is touch-based via on-screen buttons.
+
 ### Controls
 
-| Key | Action |
+| Touch Button | Action |
 |---|---|
-| `W` | Step forward (current facing direction) |
-| `S` | Step backward |
-| `A` | Rotate left 90° CCW |
-| `D` | Rotate right 90° CW |
-| `Q` | Strafe left (no facing change) |
-| `E` | Strafe right (no facing change) |
+| Forward | Step forward (current facing direction) |
+| Back | Step backward |
+| Rotate Left | Rotate 90° CCW |
+| Rotate Right | Rotate 90° CW |
+| Strafe Left | Strafe left (no facing change) |
+| Strafe Right | Strafe right (no facing change) |
+| Fire | Fire equipped weapon |
+| Reload | Reload equipped weapon |
+| Heal | Use a medkit from inventory |
+| Skip Turn | Advance world one turn without moving |
+| Open Inventory | Open inventory overlay |
+| Switch Weapon | Cycle to next weapon |
 
 ### Action Lifecycle (PlayerController)
 
-1. **IDLE** — `pollInput()` checks `Gdx.input.isKeyPressed()` in priority order. First pressed key calls `tryMove()` or `startRotation()` → transitions to `MOVING` or `ROTATING`.
+1. **IDLE** — `pollInput()` reads `TouchInputState` (held action or consumed tap). Calls `tryMove()` or `startRotation()` → transitions to `MOVING` or `ROTATING`.
 2. **MOVING / ROTATING** — each `update(deltaTime)` advances `actionProgress` from 0→1 at `1 / PLAYER_MOVE_DURATION` (or `_ROTATE_DURATION`) per second. Position or angle lerped between source and target. No input read during this phase.
-3. **Completion** — `actionProgress` ≥ 1 → snap to exact target (eliminates float drift) → return to IDLE. If key still held, next action starts immediately.
+3. **Completion** — `actionProgress` ≥ 1 → snap to exact target (eliminates float drift) → return to IDLE. If button still held, next action starts immediately.
 
 ### Movement
 
@@ -43,14 +51,14 @@ Player always centred in tile: `tileColumn × CELL_SIZE + CELL_SIZE / 2`.
 **Strafe directions** (rotate facing 90°):
 | Strafe | Direction vector |
 |---|---|
-| Left (Q) | `(−directionY, directionX)` — 90° CCW of facing |
-| Right (E) | `(directionY, −directionX)` — 90° CW of facing |
+| Left | `(−directionY, directionX)` — 90° CCW of facing |
+| Right | `(directionY, −directionX)` — 90° CW of facing |
 
 ### Rotation
 
 ```
 sourceAngle = atan2(directionY, directionX)
-targetAngle = sourceAngle + angleOffsetRadians   // +π/2 for A, −π/2 for D
+targetAngle = sourceAngle + angleOffsetRadians   // +π/2 for rotate-left, −π/2 for rotate-right
 
 currentAngle = lerp(sourceAngle, targetAngle, actionProgress)
 directionX   = cos(currentAngle)

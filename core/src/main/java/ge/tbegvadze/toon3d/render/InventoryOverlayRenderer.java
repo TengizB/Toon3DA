@@ -1,7 +1,6 @@
 package ge.tbegvadze.toon3d.render;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
@@ -79,11 +78,26 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     private static final float HEADER_WIDTH       = Constants.INV_DETAIL_PANEL_X
                                                     + Constants.INV_DETAIL_PANEL_WIDTH - LEFT_PANEL_X;
 
-    // Footer bar — sits just below the two content panels
-    private static final float FOOTER_HEIGHT      = 28f;
+    // Footer bar — sits just below the two content panels; tall enough for touch buttons
+    private static final float FOOTER_HEIGHT      = 44f;
     private static final float FOOTER_Y           = LEFT_PANEL_Y - Constants.INV_SLOT_GAP - FOOTER_HEIGHT;
     private static final float FOOTER_X           = LEFT_PANEL_X;
     private static final float FOOTER_WIDTH       = HEADER_WIDTH;
+
+    // Action buttons inside the footer bar: [USE/EQUIP] [DROP] [CLOSE]
+    private static final float BTN_PADDING  = 6f;
+    private static final float BTN_GAP      = 8f;
+    private static final float BTN_HEIGHT   = FOOTER_HEIGHT - 2 * BTN_PADDING;
+    private static final float BTN_WIDTH    = (FOOTER_WIDTH - 2 * BTN_PADDING - 2 * BTN_GAP) / 3f;
+    private static final float BTN_Y        = FOOTER_Y + BTN_PADDING;
+    private static final float BTN_USE_X    = FOOTER_X + BTN_PADDING;
+    private static final float BTN_DROP_X   = BTN_USE_X  + BTN_WIDTH + BTN_GAP;
+    private static final float BTN_CLOSE_X  = BTN_DROP_X + BTN_WIDTH + BTN_GAP;
+
+    private static final Color  BTN_BG           = new Color(0.14f, 0.14f, 0.17f, 1f);
+    private static final Color  BTN_BORDER       = new Color(0.35f, 0.35f, 0.40f, 1f);
+    private static final String[] BTN_LABELS     = { "USE / EQUIP", "DROP", "CLOSE" };
+    private static final float[]  BTN_LEFT_EDGES = { BTN_USE_X, BTN_DROP_X, BTN_CLOSE_X };
 
     // -------------------------------------------------------------------------
     // Owned resources — disposed in dispose()
@@ -146,56 +160,35 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     // Input — called by World each update frame while INVENTORY_OPEN
     // -------------------------------------------------------------------------
 
-    /**
-     * Process one frame of keyboard input.
-     * Returns NONE while the overlay stays open, CLOSE_FREE for a free close,
-     * or CLOSE_WITH_TURN when the action costs a game turn (use/drop).
-     */
+    /** Updates the flash timer each frame. All input on mobile goes through handleTouchAt(). */
     public CloseAction handleInput(float deltaTime) {
         if (flashTimerSeconds > 0f) {
             flashTimerSeconds -= deltaTime;
         }
-
-        if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT)) {
-            moveSelection(-1, 0);
-            return CloseAction.NONE;
-        }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT)) {
-            moveSelection(1, 0);
-            return CloseAction.NONE;
-        }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
-            moveSelection(0, -1);
-            return CloseAction.NONE;
-        }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
-            moveSelection(0, 1);
-            return CloseAction.NONE;
-        }
-
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
-            return handleUse();
-        }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.D)) {
-            return handleDrop();
-        }
-
-        if (Gdx.input.isKeyJustPressed(Constants.KEY_OPEN_INVENTORY)
-                || Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)
-                || Gdx.input.isKeyJustPressed(Input.Keys.BACK)) {
-            return CloseAction.CLOSE_FREE;
-        }
-
         return CloseAction.NONE;
     }
 
     /**
      * Handles a touch tap at the given world coordinates while the overlay is open.
-     * Tap on a slot: selects it on first tap, uses/equips on second tap of the same slot.
-     * Tap on the header bar: closes the overlay freely (natural "tap title to close" UX).
-     * Returns the appropriate CloseAction, or NONE if the tap was navigation only.
+     * Slot tap: selects on first tap; use/equip on second tap of the same slot.
+     * Footer buttons: USE/EQUIP, DROP, CLOSE.
+     * Header tap: closes freely.
      */
     public CloseAction handleTouchAt(float worldX, float worldY) {
+        // Footer action buttons — checked first so they take priority over anything below
+        if (worldY >= BTN_Y && worldY <= BTN_Y + BTN_HEIGHT) {
+            if (worldX >= BTN_USE_X && worldX <= BTN_USE_X + BTN_WIDTH) {
+                return handleUse();
+            }
+            if (worldX >= BTN_DROP_X && worldX <= BTN_DROP_X + BTN_WIDTH) {
+                return handleDrop();
+            }
+            if (worldX >= BTN_CLOSE_X && worldX <= BTN_CLOSE_X + BTN_WIDTH) {
+                return CloseAction.CLOSE_FREE;
+            }
+        }
+
+        // Slot grid
         for (int slotIndex = 0; slotIndex < Constants.INVENTORY_SLOT_COUNT; slotIndex++) {
             int   slotRow    = slotIndex / Constants.INVENTORY_GRID_COLUMNS;
             int   slotColumn = slotIndex % Constants.INVENTORY_GRID_COLUMNS;
@@ -211,7 +204,8 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                 return CloseAction.NONE;
             }
         }
-        // Tapping the header bar (title bar at top of overlay) closes the inventory.
+
+        // Header tap closes the overlay
         if (worldX >= HEADER_X && worldX <= HEADER_X + HEADER_WIDTH
                 && worldY >= HEADER_Y && worldY <= HEADER_Y + HEADER_HEIGHT) {
             return CloseAction.CLOSE_FREE;
@@ -233,16 +227,6 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     // -------------------------------------------------------------------------
     // Input helpers
     // -------------------------------------------------------------------------
-
-    private void moveSelection(int columnDelta, int rowDelta) {
-        int newColumn    = MathUtils.clamp(selectedSlotColumn + columnDelta, 0, Constants.INVENTORY_GRID_COLUMNS - 1);
-        int newRow       = MathUtils.clamp(selectedSlotRow    + rowDelta,    0, GRID_ROW_COUNT - 1);
-        int newSlotIndex = newRow * Constants.INVENTORY_GRID_COLUMNS + newColumn;
-        if (newSlotIndex < Constants.INVENTORY_SLOT_COUNT) {
-            selectedSlotColumn = newColumn;
-            selectedSlotRow    = newRow;
-        }
-    }
 
     private CloseAction handleUse() {
         ItemStack slot = inventory.getSlot(selectedSlotIndex());
@@ -325,6 +309,12 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         // Footer bar
         shapeRenderer.rect(FOOTER_X, FOOTER_Y, FOOTER_WIDTH, FOOTER_HEIGHT);
 
+        // Action button backgrounds
+        shapeRenderer.setColor(BTN_BG);
+        shapeRenderer.rect(BTN_USE_X,   BTN_Y, BTN_WIDTH, BTN_HEIGHT);
+        shapeRenderer.rect(BTN_DROP_X,  BTN_Y, BTN_WIDTH, BTN_HEIGHT);
+        shapeRenderer.rect(BTN_CLOSE_X, BTN_Y, BTN_WIDTH, BTN_HEIGHT);
+
         // Individual slot backgrounds
         for (int slotIndex = 0; slotIndex < Constants.INVENTORY_SLOT_COUNT; slotIndex++) {
             int   slotRow    = slotIndex / Constants.INVENTORY_GRID_COLUMNS;
@@ -386,6 +376,12 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                            LEFT_PANEL_Y + LEFT_PANEL_HEIGHT,
                            Constants.INV_DETAIL_PANEL_X + Constants.INV_DETAIL_PANEL_WIDTH,
                            LEFT_PANEL_Y + LEFT_PANEL_HEIGHT);
+
+        // Action button borders
+        shapeRenderer.setColor(BTN_BORDER);
+        shapeRenderer.rect(BTN_USE_X,   BTN_Y, BTN_WIDTH, BTN_HEIGHT);
+        shapeRenderer.rect(BTN_DROP_X,  BTN_Y, BTN_WIDTH, BTN_HEIGHT);
+        shapeRenderer.rect(BTN_CLOSE_X, BTN_Y, BTN_WIDTH, BTN_HEIGHT);
 
         shapeRenderer.end();
     }
@@ -519,12 +515,17 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     }
 
     private void drawFooter() {
-        font.setColor(DIM_COLOR);
-        font.draw(spriteBatch,
-                  "[ARROWS] Move  [ENTER] Use/Equip  [D] Drop  [I/ESC] Close",
-                  FOOTER_X + 8f,
-                  FOOTER_Y + FOOTER_HEIGHT - 6f);
+        // Draw action button labels centred in each button
+        for (int buttonIndex = 0; buttonIndex < BTN_LABELS.length; buttonIndex++) {
+            glyphLayout.setText(font, BTN_LABELS[buttonIndex]);
+            // In LibGDX Y-up, font.draw() Y = top of text; centre = bottom + (height + textHeight) / 2
+            float labelX = BTN_LEFT_EDGES[buttonIndex] + (BTN_WIDTH  - glyphLayout.width)  / 2f;
+            float labelY = BTN_Y                       + (BTN_HEIGHT + glyphLayout.height)  / 2f;
+            font.setColor(AMBER);
+            font.draw(spriteBatch, BTN_LABELS[buttonIndex], labelX, labelY);
+        }
 
+        // Slot usage counter at bottom-right of footer bar
         int usedSlotCount = 0;
         for (int slotIndex = 0; slotIndex < Constants.INVENTORY_SLOT_COUNT; slotIndex++) {
             if (!inventory.getSlot(slotIndex).isEmpty()) usedSlotCount++;
@@ -536,7 +537,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         font.setColor(DIM_COLOR);
         font.draw(spriteBatch, slotsLabel,
                   FOOTER_X + FOOTER_WIDTH - glyphLayout.width - 8f,
-                  FOOTER_Y + FOOTER_HEIGHT - 6f);
+                  FOOTER_Y + FOOTER_HEIGHT - 4f);
     }
 
     private void drawFlashMessage() {

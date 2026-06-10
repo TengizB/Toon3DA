@@ -1,7 +1,5 @@
 package ge.tbegvadze.toon3d.input;
 
-import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
 import com.badlogic.gdx.math.MathUtils;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.door.DoorState;
@@ -262,57 +260,41 @@ public class PlayerController {
     }
 
     private void pollInput() {
-        TouchAction heldAction = touchInputState != null
-            ? touchInputState.getHeldAction()
-            : TouchAction.NONE;
-        TouchAction tapAction = touchInputState != null
-            ? touchInputState.consumeTapAction()
-            : TouchAction.NONE;
+        if (touchInputState == null) return;
 
-        // Inventory toggle — free action, opens overlay without spending a turn.
-        if (Gdx.input.isKeyJustPressed(Constants.KEY_OPEN_INVENTORY) || tapAction == TouchAction.OPEN_INVENTORY) {
+        TouchAction heldAction = touchInputState.getHeldAction();
+        TouchAction tapAction  = touchInputState.consumeTapAction();
+
+        if (tapAction == TouchAction.OPEN_INVENTORY) {
             if (inventoryToggleCallback != null) inventoryToggleCallback.run();
             return;
         }
 
-        // Slot selection — free action, no turn consumed; checked before the legacy cycle key.
-        if (loadout != null) {
-            if (Gdx.input.isKeyJustPressed(Constants.KEY_SLOT_1)) { trySelectSlot(0); return; }
-            if (Gdx.input.isKeyJustPressed(Constants.KEY_SLOT_2)) { trySelectSlot(1); return; }
-            if (Gdx.input.isKeyJustPressed(Constants.KEY_SLOT_3)) { trySelectSlot(2); return; }
-            if (Gdx.input.isKeyJustPressed(Constants.KEY_SLOT_4)) { trySelectSlot(3); return; }
-            if (Gdx.input.isKeyJustPressed(Constants.KEY_SLOT_PREV)) { trySelectSlotRelative(-1); return; }
-            if (Gdx.input.isKeyJustPressed(Constants.KEY_SLOT_NEXT)) { trySelectSlotRelative(1);  return; }
-        }
-
-        // Weapon cycling (legacy G key) — free action, no turn consumed.
-        if (Gdx.input.isKeyJustPressed(Constants.KEY_SWITCH_WEAPON) || tapAction == TouchAction.SWITCH_WEAPON) {
+        if (tapAction == TouchAction.SWITCH_WEAPON) {
             trySwitchWeapon();
             return;
         }
 
-        if (Gdx.input.isKeyJustPressed(Constants.KEY_HEAL) || tapAction == TouchAction.HEAL) {
+        if (tapAction == TouchAction.HEAL) {
             tryHeal();
-        } else if (Gdx.input.isKeyJustPressed(Constants.KEY_FIRE) || tapAction == TouchAction.FIRE) {
+        } else if (tapAction == TouchAction.FIRE) {
             tryFire();
-        } else if (Gdx.input.isKeyJustPressed(Constants.KEY_SKIP_TURN) || tapAction == TouchAction.SKIP_TURN) {
+        } else if (tapAction == TouchAction.SKIP_TURN) {
             trySkipTurn();
         } else if (tapAction == TouchAction.RELOAD) {
             tryReload();
-        } else if (Gdx.input.isKeyPressed(Input.Keys.W) || heldAction == TouchAction.FORWARD) {
+        } else if (heldAction == TouchAction.FORWARD) {
             tryMove(player.directionX, player.directionY);
-        } else if (Gdx.input.isKeyPressed(Input.Keys.S) || heldAction == TouchAction.BACK) {
+        } else if (heldAction == TouchAction.BACK) {
             tryMove(-player.directionX, -player.directionY);
-        } else if (Gdx.input.isKeyPressed(Input.Keys.A) || heldAction == TouchAction.ROTATE_LEFT) {
-            startRotation(MathUtils.PI / 2f);  // CCW 90°
-        } else if (Gdx.input.isKeyPressed(Input.Keys.D) || heldAction == TouchAction.ROTATE_RIGHT) {
-            startRotation(-MathUtils.PI / 2f); // CW 90°
-        } else if (Gdx.input.isKeyPressed(Input.Keys.Q) || heldAction == TouchAction.STRAFE_LEFT) {
+        } else if (heldAction == TouchAction.ROTATE_LEFT) {
+            startRotation(MathUtils.PI / 2f);
+        } else if (heldAction == TouchAction.ROTATE_RIGHT) {
+            startRotation(-MathUtils.PI / 2f);
+        } else if (heldAction == TouchAction.STRAFE_LEFT) {
             tryMove(-player.directionY, player.directionX);
-        } else if (Gdx.input.isKeyPressed(Constants.KEY_STRAFE_RIGHT) || heldAction == TouchAction.STRAFE_RIGHT) {
+        } else if (heldAction == TouchAction.STRAFE_RIGHT) {
             tryMove(player.directionY, -player.directionX);
-        } else if (Gdx.input.isKeyPressed(Constants.KEY_INTERACT)) {
-            tryInteract();
         }
     }
 

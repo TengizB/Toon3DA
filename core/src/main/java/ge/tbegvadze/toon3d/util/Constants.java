@@ -293,6 +293,8 @@ public final class Constants {
     public static final String  ENEMY_GHOUL_PATH                 = "textures/enemies/enemy_ghoul.png";
     public static final String  ENEMY_CRAWLER_PATH               = "textures/enemies/enemy_crawler.png";
     public static final String  ENEMY_REVENANT_PATH              = "textures/enemies/enemy_revenant.png";
+    // Probability (0–1) that a killed enemy drops an ammo pickup on its tile.
+    public static final float   ENEMY_AMMO_DROP_CHANCE           = 0.25f;
     public static final int     ALERT_RADIUS_TILES               = 4;
     public static final int     CHAIN_ALERT_RADIUS_TILES         = 5;
     public static final int     LOS_MAX_RANGE_TILES              = 16;
@@ -497,6 +499,8 @@ public final class Constants {
     public static final float LEVEL_GEN_SERVER_ARMOUR_CHANCE       = 0.35f;
     public static final float LEVEL_GEN_LARGE_MEDKIT_CHANCE        = 0.50f;
     public static final float LEVEL_GEN_LARGE_ARMOUR_CHANCE        = 0.30f;
+    // Base probability that any non-entrance room contains at least one ammo box pickup.
+    public static final float LEVEL_GEN_AMMO_CHANCE_PER_ROOM       = 0.35f;
 
     // --- Wide hallway generation ---
     // Number of MST edges widened to 3-tile grand corridors per level.

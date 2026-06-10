@@ -156,7 +156,7 @@ public enum ItemType {
             ItemCategory.AMMO,
             true,
             Constants.AMMO_RESERVE_CAP_BULLETS,
-            '*',
+            'b',
             0.72f, 0.48f, 0.18f
     ),
 
@@ -165,7 +165,7 @@ public enum ItemType {
             ItemCategory.AMMO,
             true,
             Constants.AMMO_RESERVE_CAP_SHELLS,
-            '*',
+            'h',
             0.78f, 0.68f, 0.12f
     ),
 
@@ -174,7 +174,7 @@ public enum ItemType {
             ItemCategory.AMMO,
             true,
             Constants.AMMO_RESERVE_CAP_CELLS,
-            '*',
+            'c',
             0.10f, 0.80f, 0.90f
     ),
 
@@ -183,7 +183,7 @@ public enum ItemType {
             ItemCategory.AMMO,
             true,
             Constants.AMMO_RESERVE_CAP_ROCKETS,
-            '*',
+            'r',
             0.45f, 0.55f, 0.20f
     ),
 
@@ -192,7 +192,7 @@ public enum ItemType {
             ItemCategory.AMMO,
             true,
             Constants.RAILGUN_MAX_SLUGS,
-            '*',
+            'g',
             0.85f, 0.90f, 0.95f
     );
 
