@@ -250,6 +250,11 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
 
         ItemCategory category = slot.getType().getCategory();
 
+        if (category == ItemCategory.AMMO) {
+            showFlash("Loaded by weapons");
+            return CloseAction.NONE;
+        }
+
         if (category == ItemCategory.KEY_ITEM
                 || category == ItemCategory.MOD
                 || category == ItemCategory.MISC) {

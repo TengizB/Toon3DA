@@ -126,11 +126,11 @@ public class Level {
     }
 
     /**
-     * Returns true for ammo-box pickup tiles ('6'=bullets, '7'=shells, '8'=cells, '9'=rockets).
-     * These are walkable; the player collects them on step.
+     * Returns true for ammo-box pickup tiles ('6'=bullets, '7'=shells, '8'=cells,
+     * '9'=rockets, '0'=slugs). These are walkable; the player collects them on step.
      */
     public static boolean isAmmoPickup(char cell) {
-        return cell == '6' || cell == '7' || cell == '8' || cell == '9';
+        return cell == '6' || cell == '7' || cell == '8' || cell == '9' || cell == '0';
     }
 
     /**

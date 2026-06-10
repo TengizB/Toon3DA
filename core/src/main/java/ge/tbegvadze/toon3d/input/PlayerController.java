@@ -7,8 +7,8 @@ import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.door.DoorState;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.*;
-import ge.tbegvadze.toon3d.item.AmmoPool;
 import ge.tbegvadze.toon3d.item.AmmoType;
+import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.level.KeycardColor;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
@@ -37,7 +37,7 @@ public class PlayerController {
     private EventTextSystem         eventTextSystem       = null;
     private Runnable                weaponSwitchCallback      = null;
     private Runnable                inventoryToggleCallback   = null;
-    private AmmoPool                ammoPool                  = null;
+    private Inventory               itemInventory             = null;
     private Loadout                 loadout                   = null;
 
     private ActionState actionState = ActionState.IDLE;
@@ -91,8 +91,8 @@ public class PlayerController {
         this.inventoryToggleCallback = callback;
     }
 
-    public void setAmmoPool(AmmoPool pool) {
-        this.ammoPool = pool;
+    public void setItemInventory(Inventory inventory) {
+        this.itemInventory = inventory;
     }
 
     public void setLoadout(Loadout loadoutReference) {
@@ -206,13 +206,15 @@ public class PlayerController {
     private void pickUpAmmoIfPresent(int tileColumn, int tileRow) {
         char cell = level.getCell(tileColumn, tileRow);
         if (!Level.isAmmoPickup(cell)) return;
-        if (ammoPool == null) return;
-        AmmoType type     = Level.ammoTypeOfPickup(cell);
-        int      absorbed = ammoPool.add(type, type.getAmountPerBox());
-        level.consumePickupAt(tileColumn, tileRow);
-        if (absorbed > 0 && eventTextSystem != null) {
-            eventTextSystem.spawnWithColor("+" + absorbed + " " + type.getDisplayName().toUpperCase(),
-                                           EventTextSystem.COLOR_GREEN);
+        if (itemInventory == null) return;
+        AmmoType type   = Level.ammoTypeOfPickup(cell);
+        int      amount = type.getAmountPerBox();
+        if (itemInventory.tryAdd(type.getItemType(), amount)) {
+            level.consumePickupAt(tileColumn, tileRow);
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("+" + amount + " " + type.getDisplayName().toUpperCase(),
+                                               EventTextSystem.COLOR_GREEN);
+            }
         }
     }
 

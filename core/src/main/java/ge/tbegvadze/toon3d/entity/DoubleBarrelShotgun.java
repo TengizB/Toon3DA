@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.entity;
 
+import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.Constants;
 
@@ -29,7 +30,8 @@ public class DoubleBarrelShotgun extends Weapon {
               Constants.DBL_SHOTGUN_CLIP_SIZE,
               Constants.DBL_SHOTGUN_RELOAD_TIME_TICKS,
               Constants.DBL_SHOTGUN_DAMAGE_DROP_COEFF,
-              Constants.DBL_SHOTGUN_RANGE_TILES);
+              Constants.DBL_SHOTGUN_RANGE_TILES,
+              AmmoType.SHELLS);
     }
 
     @Override

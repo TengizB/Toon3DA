@@ -1,0 +1,69 @@
+STATUS: IN PROGRESS
+CATEGORY: Systems
+TITLE: Ammo as Inventory Slot Items (Fix Infinite Ammo)
+---
+
+## Problem
+
+Two compounding bugs prevent finite ammo from working:
+
+1. **Wiring bug:** `Weapon.setAmmoPool()` and `Weapon.setAmmoType()` are never called
+   in `World.java`. Both fields stay null, so `Weapon.onTick()` always hits the
+   infinite-ammo fallback (`shotsInClip = clipSize`). Every weapon reloads for free.
+
+2. **Architecture mismatch:** Ammo pickups flow to a separate `AmmoPool` reserve that
+   weapons never read from (because wiring is missing). The design document (Order 2)
+   always intended ammo to be finite, but the wiring step was never completed.
+
+## Design: Ammo Lives in Inventory Slots
+
+Replace the standalone `AmmoPool` with inventory-slot items. Ammo boxes picked up
+from the floor become stackable items in the 10-slot inventory, exactly like medkits.
+
+### Rules
+- Ammo pickups add to inventory slots (not a hidden pool).
+- Weapons read from inventory on reload; they spend from the ammo stack.
+- Ammo already loaded into the weapon's clip is tracked in `Weapon.shotsInClip`
+  and does NOT appear in the inventory — only reserve ammo is shown.
+- When the inventory stack for that ammo type hits 0, the clip is 0 after reload
+  and `canFire()` returns false.
+- Picking up ammo when the stack is full (at maxStackSize) consumes the floor tile
+  but overflows are discarded — anti-hoarding.
+
+### New ItemType Entries
+| ItemType        | Display         | Category | Stack cap |
+|-----------------|-----------------|----------|-----------|
+| AMMO_BULLETS    | Bullets         | AMMO     | 200       |
+| AMMO_SHELLS     | Shells          | AMMO     | 60        |
+| AMMO_CELLS      | Plasma Cells    | AMMO     | 120       |
+| AMMO_ROCKETS    | Rockets         | AMMO     | 20        |
+
+### Weapon → AmmoType Mapping
+| Weapon              | AmmoType  |
+|---------------------|-----------|
+| Chaingun            | BULLETS   |
+| Shotgun             | SHELLS    |
+| DoubleBarrelShotgun | SHELLS    |
+| PlasmaRifle         | CELLS     |
+| Railgun             | ROCKETS   |
+| Incinerator         | CELLS     |
+| GrenadeLauncher     | ROCKETS   |
+
+## Technical Notes
+
+- `AmmoType.getItemType()` maps each AmmoType to its ItemType.
+- `Inventory.spend(ItemType, int)` deducts ammo from the first matching stacks.
+- `Weapon` constructor gains an `AmmoType` parameter (compile-time enforcement).
+- `Weapon.setAmmoInventory(Inventory)` replaces `setAmmoPool(AmmoPool)`.
+- `PlayerController` holds `Inventory itemInventory` instead of `AmmoPool ammoPool`.
+- `AmmoPool.java` is deleted — no longer needed.
+- Starting ammo is seeded into `itemInventory` at World construction time.
+
+## Gameplay Loop
+
+1. Player picks up '6' tile → "BULLETS ×20" added to inventory slot.
+2. Player fires Chaingun → `shotsInClip` decrements each shot.
+3. Clip empties → weapon enters RELOADING state.
+4. On reload tick: `ammoInventory.spend(AMMO_BULLETS, clipSize)` deducts from slot.
+5. If inventory has 0 bullets → clip stays 0 → "OUT OF AMMO!" message.
+6. Player must find another ammo pickup to continue firing.

@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.entity;
 
+import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.Constants;
 
@@ -43,7 +44,8 @@ public class Incinerator extends Weapon {
               Constants.FLAME_CLIP_SIZE,
               Constants.FLAME_RELOAD_TICKS,
               Constants.FLAME_DAMAGE_DROP_COEFF,
-              Constants.FLAME_RANGE_TILES);
+              Constants.FLAME_RANGE_TILES,
+              AmmoType.CELLS);
     }
 
     /**

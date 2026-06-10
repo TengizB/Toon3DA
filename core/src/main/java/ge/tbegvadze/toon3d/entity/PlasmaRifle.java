@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.entity;
 
+import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.Constants;
 
@@ -23,7 +24,8 @@ public class PlasmaRifle extends Weapon {
               Constants.PLASMA_RIFLE_CLIP_SIZE,
               Constants.PLASMA_RIFLE_RELOAD_TIME_TICKS,
               Constants.PLASMA_RIFLE_DAMAGE_DROP_COEFF,
-              Constants.PLASMA_RIFLE_RANGE_TILES);
+              Constants.PLASMA_RIFLE_RANGE_TILES,
+              AmmoType.CELLS);
     }
 
     @Override

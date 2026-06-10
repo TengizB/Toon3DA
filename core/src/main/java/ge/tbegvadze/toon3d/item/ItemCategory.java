@@ -11,11 +11,14 @@ package ge.tbegvadze.toon3d.item;
  * KEY_ITEM   — non-consumable quest/progress items such as keycards.
  * MOD        — weapon modification chips (reserved for a future order).
  * MISC       — trade goods, credits, and any other non-combat items.
+ * AMMO       — reserve ammunition stacks (bullets, shells, cells, rockets); not usable
+ *              directly from the menu — the weapon system spends them on reload.
  */
 public enum ItemCategory {
     WEAPON,
     CONSUMABLE,
     KEY_ITEM,
     MOD,
-    MISC
+    MISC,
+    AMMO
 }
