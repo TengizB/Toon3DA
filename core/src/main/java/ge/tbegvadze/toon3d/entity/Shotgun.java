@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.entity;
 
+import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.Constants;
 
@@ -28,7 +29,8 @@ public class Shotgun extends Weapon {
               Constants.SHOTGUN_CLIP_SIZE,
               Constants.SHOTGUN_RELOAD_TIME_TICKS,
               Constants.SHOTGUN_DAMAGE_DROP_COEFF,
-              Constants.SHOTGUN_RANGE_TILES);
+              Constants.SHOTGUN_RANGE_TILES,
+              AmmoType.SHELLS);
     }
 
     @Override

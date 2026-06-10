@@ -16,8 +16,8 @@ import ge.tbegvadze.toon3d.input.PlayerController;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
 import ge.tbegvadze.toon3d.input.touch.TouchControllerRenderer;
 import ge.tbegvadze.toon3d.input.touch.TouchInputState;
-import ge.tbegvadze.toon3d.item.AmmoPool;
 import ge.tbegvadze.toon3d.item.Inventory;
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
 import ge.tbegvadze.toon3d.level.LevelLoader;
@@ -82,12 +82,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private int      currentDepth     = Constants.STARTING_DEPTH;
 
     // -------------------------------------------------------------------------
-    // Ammo reserve pool (Order 2)
-    // -------------------------------------------------------------------------
-    private final AmmoPool ammoPool;
-
-    // -------------------------------------------------------------------------
-    // Slot-based item inventory (Order 3 data model) and its UI overlay (Order 4)
+    // Slot-based item inventory — holds items AND ammo reserve stacks (Order 6)
     // -------------------------------------------------------------------------
     private final Inventory                itemInventory;
     private final InventoryOverlayRenderer inventoryOverlayRenderer;
@@ -145,9 +140,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         eventTextRenderer  = new EventTextRenderer(eventTextSystem);
         hitVignetteRenderer = new HitVignetteRenderer();
 
-        ammoPool                  = new AmmoPool();
         itemInventory             = new Inventory();
         inventoryOverlayRenderer  = new InventoryOverlayRenderer(itemInventory);
+        // Seed starting ammo directly into inventory slots (Order 6 design).
+        itemInventory.tryAdd(ItemType.AMMO_BULLETS, Constants.AMMO_START_BULLETS);
+        itemInventory.tryAdd(ItemType.AMMO_SHELLS,  Constants.AMMO_START_SHELLS);
 
         // Permadeath — run stats and death overlay
         runStats             = new RunStats();
@@ -171,6 +168,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         GrenadeLauncher      grenadeLauncher  = new GrenadeLauncher();
         for (Weapon weapon : new Weapon[]{shotgun, dblShotgun, plasmaRifle, chaingun, railgun, incinerator, grenadeLauncher}) {
             weapon.setEventTextSystem(eventTextSystem);
+            weapon.setAmmoInventory(itemInventory);
         }
         inventory.setArsenal(java.util.List.of(chaingun, shotgun, dblShotgun, plasmaRifle, railgun, incinerator, grenadeLauncher));
         weaponHudRenderer    = new WeaponHudRenderer(inventory.getArsenal());
@@ -252,7 +250,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setTickEventBus(tickEventBus);
         playerController.setTransitionListener(this);
         playerController.setEventTextSystem(eventTextSystem);
-        playerController.setAmmoPool(ammoPool);
+        playerController.setItemInventory(itemInventory);
         playerController.setLoadout(inventory.getLoadout());
         playerController.setWeaponSwitchCallback(
             () -> weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon()));

@@ -5,7 +5,7 @@ import ge.tbegvadze.toon3d.util.Constants;
 /**
  * The four ammo types carried in the marine's reserve pool.
  *
- * Each constant stores the data needed by AmmoPool, Level, PropRenderer, and HudRenderer:
+ * Each constant stores the data needed by Level, PropRenderer, HudRenderer, and Inventory:
  *   displayName    — label shown in the HUD right panel and pickup toasts.
  *   reserveCap     — maximum units storable in the reserve pool.
  *   pickupTileChar — the level-tile character that grants this ammo on player step.
@@ -46,6 +46,14 @@ public enum AmmoType {
             '9',
             Constants.AMMO_BOX_ROCKETS,
             0.45f, 0.55f, 0.20f   // olive
+    ),
+
+    SLUGS(
+            "Slugs",
+            Constants.RAILGUN_MAX_SLUGS,
+            '0',
+            Constants.RAILGUN_PICKUP_SLUGS,
+            0.85f, 0.90f, 0.95f   // silver/white
     );
 
     private final String displayName;
@@ -84,5 +92,17 @@ public enum AmmoType {
             if (type.pickupTileChar == cell) return type;
         }
         return null;
+    }
+
+    /** Returns the inventory ItemType that holds reserve ammo of this type. */
+    public ItemType getItemType() {
+        switch (this) {
+            case BULLETS: return ItemType.AMMO_BULLETS;
+            case SHELLS:  return ItemType.AMMO_SHELLS;
+            case CELLS:   return ItemType.AMMO_CELLS;
+            case ROCKETS: return ItemType.AMMO_ROCKETS;
+            case SLUGS:   return ItemType.AMMO_SLUGS;
+            default: throw new IllegalStateException("Unhandled AmmoType: " + this);
+        }
     }
 }

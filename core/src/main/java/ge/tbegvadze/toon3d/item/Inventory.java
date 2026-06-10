@@ -10,7 +10,8 @@ import ge.tbegvadze.toon3d.util.Constants;
  * zero new allocations occur on any add/remove/use/query path.
  *
  * Design decisions:
- *  - Ammo does NOT live here; it flows to the reserve pool (Order 4).
+ *  - Ammo lives here as AMMO_* ItemType stacks (Order 6 redesign).
+ *    Weapons spend ammo via spend(ItemType, int) on every reload.
  *  - HP and armour are pools, not items.
  *  - The equipped weapon slot index is tracked here so WeaponReloadSubscriber
  *    and other systems can call getEquippedWeaponSlot() without coupling to
@@ -150,6 +151,36 @@ public final class Inventory {
         }
 
         // KEY_ITEM, MOD, MISC: not usable from the menu in this order; no-op for now.
+    }
+
+    /**
+     * Removes up to the requested quantity of itemType across all matching stacks,
+     * starting from the lowest slot index. Returns the number of units actually removed
+     * (may be less than quantity if the inventory holds fewer than requested).
+     *
+     * Used by the weapon system to spend ammo from reserve on every reload.
+     *
+     * @param itemType the type to deduct; must not be null
+     * @param quantity how many units to remove; must be >= 1
+     * @return units actually removed (0 if none found)
+     */
+    public int spend(ItemType itemType, int quantity) {
+        if (itemType == null) throw new IllegalArgumentException("itemType must not be null");
+        if (quantity < 1)     throw new IllegalArgumentException("quantity must be >= 1");
+
+        int remaining = quantity;
+        for (int slotIndex = 0; slotIndex < slots.length && remaining > 0; slotIndex++) {
+            ItemStack slot = slots[slotIndex];
+            if (slot.type == itemType && !slot.isEmpty()) {
+                int taken = Math.min(slot.quantity, remaining);
+                slot.quantity -= taken;
+                remaining     -= taken;
+                if (slot.quantity <= 0) {
+                    slot.clear();
+                }
+            }
+        }
+        return quantity - remaining;
     }
 
     // =========================================================================

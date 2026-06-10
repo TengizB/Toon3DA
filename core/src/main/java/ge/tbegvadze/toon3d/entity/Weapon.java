@@ -1,7 +1,7 @@
 package ge.tbegvadze.toon3d.entity;
 
-import ge.tbegvadze.toon3d.item.AmmoPool;
 import ge.tbegvadze.toon3d.item.AmmoType;
+import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.util.Constants;
@@ -29,10 +29,11 @@ import ge.tbegvadze.toon3d.util.GameMath;
  *   These two must never decrement each other's counters.
  *
  * Ammo economy:
- *   ammoType  — the reserve pool this weapon draws from on reload; null = infinite ammo.
- *   ammoPool  — injected by World after construction via setAmmoPool(); null = infinite ammo.
- *   When both are non-null, onTick() spends clipSize rounds from the reserve pool when a
- *   reload completes. If the reserve is empty the clip stays at 0 and canFire() returns false.
+ *   ammoType      — declared in each subclass constructor; determines which inventory stack
+ *                   the weapon draws from on reload. null = infinite ammo (test/fallback).
+ *   ammoInventory — injected by World via setAmmoInventory(); null = infinite ammo fallback.
+ *   When both are non-null, onTick() calls ammoInventory.spend(ammoType.getItemType(), clipSize)
+ *   when a reload completes. If the stack is empty the clip stays at 0 and canFire() returns false.
  */
 public abstract class Weapon {
 
@@ -52,20 +53,22 @@ public abstract class Weapon {
     // detect each new flash cycle and reset its animation timer independently.
     protected int               flashCycleCount            = 0;
 
-    // Both null until wired by World after construction; null = infinite ammo fallback.
-    private AmmoType ammoType = null;
-    private AmmoPool ammoPool = null;
+    // Declared by each subclass constructor; null = infinite ammo (test fallback only).
+    private final AmmoType ammoType;
+    // Injected by World after construction; null until wired.
+    private Inventory ammoInventory = null;
 
     private EventTextSystem eventTextSystem;
 
     protected Weapon(String displayName, int damage, int clipSize, int reloadTime,
-                     float damageDropCoefficient, int range) {
+                     float damageDropCoefficient, int range, AmmoType ammoType) {
         this.displayName           = displayName;
         this.damage                = damage;
         this.clipSize              = clipSize;
         this.reloadTime            = reloadTime;
         this.damageDropCoefficient = damageDropCoefficient;
         this.range                 = range;
+        this.ammoType              = ammoType;
         this.shotsInClip           = clipSize;
     }
 
@@ -73,14 +76,9 @@ public abstract class Weapon {
         this.eventTextSystem = system;
     }
 
-    /** Declares which reserve pool this weapon draws from; call before the first shot. */
-    public void setAmmoType(AmmoType type) {
-        this.ammoType = type;
-    }
-
-    /** Injects the shared reserve pool so this weapon draws ammo on reload. */
-    public void setAmmoPool(AmmoPool pool) {
-        this.ammoPool = pool;
+    /** Injects the shared item inventory so this weapon can spend ammo on reload. */
+    public void setAmmoInventory(Inventory inventory) {
+        this.ammoInventory = inventory;
     }
 
     /** Lets subclasses emit event text without exposing the private eventTextSystem field. */
@@ -102,7 +100,8 @@ public abstract class Weapon {
     public boolean requestManualReload() {
         if (visualState != WeaponVisualState.NORMAL) return false;
         if (shotsInClip >= clipSize) return false;
-        if (ammoPool != null && ammoType != null && ammoPool.isEmpty(ammoType)) return false;
+        if (ammoInventory != null && ammoType != null
+                && ammoInventory.countOf(ammoType.getItemType()) == 0) return false;
         visualState    = WeaponVisualState.RELOADING;
         ticksRemaining = reloadTime;
         if (eventTextSystem != null) eventTextSystem.spawn("Reloading...");
@@ -138,15 +137,15 @@ public abstract class Weapon {
      * Called once per game tick (any tick-causing action: tile step OR weapon fire).
      * Rotations and door interactions do NOT trigger this.
      * Decrements the reload counter; when reload completes, spends rounds from the ammo
-     * reserve pool (if wired). If the reserve is empty the clip stays at 0 and canFire()
-     * will return false until the player picks up matching ammo.
+     * inventory (if wired). If the inventory stack is empty the clip stays at 0 and
+     * canFire() will return false until the player picks up matching ammo.
      */
     public void onTick() {
         if (visualState == WeaponVisualState.RELOADING) {
             ticksRemaining--;
             if (ticksRemaining <= 0) {
-                if (ammoPool != null && ammoType != null) {
-                    int roundsLoaded = ammoPool.spend(ammoType, clipSize);
+                if (ammoInventory != null && ammoType != null) {
+                    int roundsLoaded = ammoInventory.spend(ammoType.getItemType(), clipSize);
                     shotsInClip = roundsLoaded;
                     if (roundsLoaded == 0) {
                         if (eventTextSystem != null) eventTextSystem.spawn("OUT OF AMMO!");
@@ -154,6 +153,7 @@ public abstract class Weapon {
                         if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
                     }
                 } else {
+                    // ammoInventory not yet injected — infinite ammo fallback for tests.
                     shotsInClip = clipSize;
                     if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
                 }
@@ -228,8 +228,8 @@ public abstract class Weapon {
     public AmmoType          getAmmoType()        { return ammoType; }
     /** Current reserve for this weapon's ammo type; -1 if no reserve is tracked. */
     public int               getReserveAmmo() {
-        if (ammoPool == null || ammoType == null) return -1;
-        return ammoPool.get(ammoType);
+        if (ammoInventory == null || ammoType == null) return -1;
+        return ammoInventory.countOf(ammoType.getItemType());
     }
 
     /** Short ammo string for the HUD readout, e.g. "SHELLS 1/1" or "RELOAD". */

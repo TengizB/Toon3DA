@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.entity;
 
+import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -37,7 +38,8 @@ public class Railgun extends Weapon {
               Constants.RAILGUN_CLIP_SIZE,
               Constants.RAILGUN_RELOAD_TIME_TICKS,
               Constants.RAILGUN_DROP_COEFF,
-              Constants.RAILGUN_RANGE_TILES);
+              Constants.RAILGUN_RANGE_TILES,
+              AmmoType.SLUGS);
     }
 
     // -------------------------------------------------------------------------

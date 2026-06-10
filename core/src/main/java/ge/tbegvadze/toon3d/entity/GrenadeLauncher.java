@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.entity;
 
+import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.Constants;
 
@@ -43,7 +44,8 @@ public class GrenadeLauncher extends Weapon {
               Constants.GRENADE_CLIP_SIZE,
               Constants.GRENADE_RELOAD_TIME_TICKS,
               Constants.GRENADE_DAMAGE_DROP_COEFF,
-              Constants.GRENADE_RANGE_TILES);
+              Constants.GRENADE_RANGE_TILES,
+              AmmoType.ROCKETS);
     }
 
     /**

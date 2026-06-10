@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.entity;
 
+import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.Constants;
 
@@ -50,7 +51,8 @@ public class Chaingun extends Weapon {
               Constants.CHAINGUN_CLIP_SIZE,
               Constants.CHAINGUN_RELOAD_TIME_TICKS,
               Constants.CHAINGUN_DAMAGE_DROP_COEFF,
-              Constants.CHAINGUN_RANGE_TILES);
+              Constants.CHAINGUN_RANGE_TILES,
+              AmmoType.BULLETS);
     }
 
     /** Requires a full burst worth of ammo so the weapon never fires a partial volley. */

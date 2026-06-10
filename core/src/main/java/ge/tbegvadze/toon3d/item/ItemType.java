@@ -5,9 +5,9 @@ import ge.tbegvadze.toon3d.util.Constants;
 /**
  * Catalog of every item the marine can carry in the slotted inventory.
  *
- * NOTE: AMMO types (SHELLS, BULLETS, CELLS, ROCKETS, FUEL, GRENADES, SLUGS) are
- * defined separately for the reserve pool in Order 4 and do NOT appear here — they
- * never occupy inventory slots.
+ * Ammo types (AMMO_BULLETS, AMMO_SHELLS, AMMO_CELLS, AMMO_ROCKETS) live here as
+ * stackable inventory items in the AMMO category. Weapons spend them from the
+ * inventory on reload via Inventory.spend(). They are not manually usable.
  *
  * Each constant stores all data needed by the inventory layer and the order-6 UI:
  *   displayName   — human-readable label shown in the slot grid and detail panel.
@@ -143,6 +143,57 @@ public enum ItemType {
             Constants.ITEM_STACK_MAX_CREDITS,
             '$',
             1.00f, 0.85f, 0.10f
+    ),
+
+    // -------------------------------------------------------------------------
+    // AMMO — reserve ammunition stacks; spent by weapons on reload.
+    // Stack caps match the AMMO_RESERVE_CAP_* constants so one slot holds a full
+    // reserve. Not manually usable from the inventory menu.
+    // -------------------------------------------------------------------------
+
+    AMMO_BULLETS(
+            "Bullets",
+            ItemCategory.AMMO,
+            true,
+            Constants.AMMO_RESERVE_CAP_BULLETS,
+            '*',
+            0.72f, 0.48f, 0.18f
+    ),
+
+    AMMO_SHELLS(
+            "Shells",
+            ItemCategory.AMMO,
+            true,
+            Constants.AMMO_RESERVE_CAP_SHELLS,
+            '*',
+            0.78f, 0.68f, 0.12f
+    ),
+
+    AMMO_CELLS(
+            "Plasma Cells",
+            ItemCategory.AMMO,
+            true,
+            Constants.AMMO_RESERVE_CAP_CELLS,
+            '*',
+            0.10f, 0.80f, 0.90f
+    ),
+
+    AMMO_ROCKETS(
+            "Rockets",
+            ItemCategory.AMMO,
+            true,
+            Constants.AMMO_RESERVE_CAP_ROCKETS,
+            '*',
+            0.45f, 0.55f, 0.20f
+    ),
+
+    AMMO_SLUGS(
+            "Slugs",
+            ItemCategory.AMMO,
+            true,
+            Constants.RAILGUN_MAX_SLUGS,
+            '*',
+            0.85f, 0.90f, 0.95f
     );
 
     // -------------------------------------------------------------------------

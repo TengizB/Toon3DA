@@ -92,6 +92,7 @@ A   Security vest       Large armor restoration.
 7   Shell box           Grants AMMO_BOX_SHELLS (8) shells to SHELLS reserve.      Brass/yellow billboard.  0.20x wall height.
 8   Plasma cell pack    Grants AMMO_BOX_CELLS (20) cells to CELLS reserve.        Cyan billboard.          0.20x wall height.
 9   Rocket bundle       Grants AMMO_BOX_ROCKETS (2) rockets to ROCKETS reserve.   Olive billboard.         0.20x wall height.
+0   Slug canister       Grants RAILGUN_PICKUP_SLUGS (4) slugs to SLUGS reserve.   Silver/white billboard.  0.20x wall height.
 
 ENEMY SPAWN MARKERS (temporary — extracted by LevelLoader, then replaced with floor ' ')
 ----------------------------------------------------------------------------------------
@@ -106,8 +107,8 @@ ENEMY SPAWN MARKERS (temporary — extracted by LevelLoader, then replaced with 
 SYMBOL BUDGET
 -------------
 Total printable ASCII characters: 95  (codes 32-126)
-Currently assigned:               63
-Remaining:                        32
+Currently assigned:               64
+Remaining:                        31
 
 Free characters (not yet assigned):
 ! " $ ^ _ ` ~ | { } [ ] \ / < > ( ) * - + (some already used — check above)

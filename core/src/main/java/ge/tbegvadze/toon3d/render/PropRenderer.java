@@ -58,6 +58,7 @@ public class PropRenderer implements Renderable, Disposable {
             case '7': return AMMO_PICKUP_HEIGHT_FRACTION;
             case '8': return AMMO_PICKUP_HEIGHT_FRACTION;
             case '9': return AMMO_PICKUP_HEIGHT_FRACTION;
+            case '0': return AMMO_PICKUP_HEIGHT_FRACTION;
             case '#': return PROP_CAMERA_HEIGHT;
             case '%': return PROP_GENERATOR_HEIGHT;
             case '&': return PROP_BIOPOD_HEIGHT;
@@ -327,6 +328,7 @@ public class PropRenderer implements Renderable, Disposable {
         map.put('7', generateAmmoBoxTexture(0.78f, 0.68f, 0.12f));  // SHELLS  — brass
         map.put('8', generateAmmoBoxTexture(0.10f, 0.80f, 0.90f));  // CELLS   — cyan
         map.put('9', generateAmmoBoxTexture(0.45f, 0.55f, 0.20f));  // ROCKETS — olive
+        map.put('0', generateAmmoBoxTexture(0.85f, 0.90f, 0.95f));  // SLUGS   — silver
         map.put('#', generateCameraTexture());
         map.put('%', generateGeneratorTexture());
         map.put('&', generateBioPodTexture());
