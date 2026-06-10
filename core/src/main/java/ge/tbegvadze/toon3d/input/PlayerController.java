@@ -35,8 +35,9 @@ public class PlayerController {
     private LevelTransitionListener transitionListener    = null;
     private TouchInputState         touchInputState       = null;
     private EventTextSystem         eventTextSystem       = null;
-    private Runnable                weaponSwitchCallback  = null;
-    private AmmoPool                ammoPool              = null;
+    private Runnable                weaponSwitchCallback      = null;
+    private Runnable                inventoryToggleCallback   = null;
+    private AmmoPool                ammoPool                  = null;
 
     private ActionState actionState = ActionState.IDLE;
     private float actionProgress = 0f;
@@ -83,6 +84,10 @@ public class PlayerController {
 
     public void setWeaponSwitchCallback(Runnable callback) {
         this.weaponSwitchCallback = callback;
+    }
+
+    public void setInventoryToggleCallback(Runnable callback) {
+        this.inventoryToggleCallback = callback;
     }
 
     public void setAmmoPool(AmmoPool pool) {
@@ -256,6 +261,12 @@ public class PlayerController {
         TouchAction tapAction = touchInputState != null
             ? touchInputState.consumeTapAction()
             : TouchAction.NONE;
+
+        // Inventory toggle — free action, opens overlay without spending a turn.
+        if (Gdx.input.isKeyJustPressed(Constants.KEY_OPEN_INVENTORY)) {
+            if (inventoryToggleCallback != null) inventoryToggleCallback.run();
+            return;
+        }
 
         // Weapon switching is free — no turn consumed, works regardless of action state.
         if (Gdx.input.isKeyJustPressed(Constants.KEY_SWITCH_WEAPON) || tapAction == TouchAction.SWITCH_WEAPON) {

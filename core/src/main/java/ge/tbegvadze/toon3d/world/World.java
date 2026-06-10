@@ -16,6 +16,7 @@ import ge.tbegvadze.toon3d.input.PlayerController;
 import ge.tbegvadze.toon3d.input.touch.TouchControllerRenderer;
 import ge.tbegvadze.toon3d.input.touch.TouchInputState;
 import ge.tbegvadze.toon3d.item.AmmoPool;
+import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
 import ge.tbegvadze.toon3d.level.LevelLoader;
@@ -30,7 +31,7 @@ import ge.tbegvadze.toon3d.util.StatsStore;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
-    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD }
+    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN }
 
     // -------------------------------------------------------------------------
     // Run-persistent resources — kept alive across all floor transitions
@@ -85,6 +86,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private final AmmoPool ammoPool;
 
     // -------------------------------------------------------------------------
+    // Slot-based item inventory (Order 3 data model) and its UI overlay (Order 4)
+    // -------------------------------------------------------------------------
+    private final Inventory                itemInventory;
+    private final InventoryOverlayRenderer inventoryOverlayRenderer;
+
+    // -------------------------------------------------------------------------
     // Permadeath — run stats, death beat animation, and reset handshake
     // -------------------------------------------------------------------------
     private final RunStats             runStats;
@@ -137,7 +144,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         eventTextRenderer  = new EventTextRenderer(eventTextSystem);
         hitVignetteRenderer = new HitVignetteRenderer();
 
-        ammoPool             = new AmmoPool();
+        ammoPool                  = new AmmoPool();
+        itemInventory             = new Inventory();
+        inventoryOverlayRenderer  = new InventoryOverlayRenderer(itemInventory);
 
         // Permadeath — run stats and death overlay
         runStats             = new RunStats();
@@ -244,6 +253,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setAmmoPool(ammoPool);
         playerController.setWeaponSwitchCallback(
             () -> weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon()));
+        playerController.setInventoryToggleCallback(this::openInventory);
         if (touchInputState != null) {
             playerController.setTouchInputState(touchInputState);
         }
@@ -310,6 +320,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (fadeTimerSeconds >= Constants.LEVEL_TRANSITION_FADE_IN_SECONDS) {
                 fadeTimerSeconds = 0f;
                 runPhase = RunPhase.PLAYING;
+            }
+            return;
+        }
+
+        // INVENTORY_OPEN — world paused; route input to the overlay
+        if (runPhase == RunPhase.INVENTORY_OPEN) {
+            InventoryOverlayRenderer.CloseAction action = inventoryOverlayRenderer.handleInput(deltaTime);
+            if (action == InventoryOverlayRenderer.CloseAction.CLOSE_FREE) {
+                closeInventory(false);
+            } else if (action == InventoryOverlayRenderer.CloseAction.CLOSE_WITH_TURN) {
+                closeInventory(true);
             }
             return;
         }
@@ -460,6 +481,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Event text: rising screen-space text drawn above HUD but below the fade overlay.
         eventTextRenderer.render(camera);
 
+        // Inventory overlay — drawn above HUD and event text, below fade/death overlays.
+        if (runPhase == RunPhase.INVENTORY_OPEN) {
+            inventoryOverlayRenderer.setTime(facilityTimeSeconds);
+            inventoryOverlayRenderer.setCurrentDepth(currentDepth);
+            inventoryOverlayRenderer.render(camera);
+        }
+
         // Fade overlay drawn last — covers every other layer including the HUD.
         if (runPhase == RunPhase.FADING_OUT || runPhase == RunPhase.FADING_IN) {
             float fadeAlpha;
@@ -501,6 +529,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         eventTextRenderer.dispose();
         hitVignetteRenderer.dispose();
         levelUpOverlayRenderer.dispose();
+        inventoryOverlayRenderer.dispose();
         if (touchControllerRenderer != null) touchControllerRenderer.dispose();
         deathOverlayRenderer.dispose();
         player.dispose();
@@ -508,6 +537,30 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     /** Returns true once after the player acknowledges the death screen; Main recreates the World. */
     public boolean isResetRequested() { return resetRequested; }
+
+    // -------------------------------------------------------------------------
+    // Inventory overlay — open/close
+    // -------------------------------------------------------------------------
+
+    /** Opens the inventory overlay. Only valid from PLAYING phase; ignored otherwise. */
+    private void openInventory() {
+        if (runPhase != RunPhase.PLAYING) return;
+        inventoryOverlayRenderer.onOpen();
+        runPhase = RunPhase.INVENTORY_OPEN;
+    }
+
+    /**
+     * Closes the inventory overlay and returns to PLAYING.
+     * When spendTurn is true, fires one world tick so enemies react (USE / DROP actions).
+     */
+    private void closeInventory(boolean spendTurn) {
+        runPhase = RunPhase.PLAYING;
+        if (spendTurn && tickEventBus != null) {
+            int playerTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
+            int playerTileRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
+            tickEventBus.fireTick(playerTileColumn, playerTileRow, player, TickCause.SKIP_TURN);
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Helpers
