@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Items
 TITLE: Ammo as a Finite, Pickable Resource
 ---

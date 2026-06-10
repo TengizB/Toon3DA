@@ -271,6 +271,7 @@ No abbreviations, single letters, or opaque shorthand in any Java identifier.
 - **Camera:** call `camera.update()` before using `camera.combined` or `camera.unproject()`.
 - **Render thread:** all OpenGL/LibGDX draw calls on render thread. Use `Gdx.app.postRunnable()` if needed from another thread.
 - **AssetManager:** check `manager.update()` before `manager.get()`.
+- **Viewport — call `viewport.apply()` every frame in `Main.render()`, before any draw calls.** `resize()` fires only on OS size events, not on in-frame state resets (e.g. world dispose → recreate after death screen). If `apply()` is missing, the GL viewport stays at raw screen dimensions after any such reset: every draw stretches to fill the screen and `FitViewport.unproject()` maps touch to wrong world coordinates (FitViewport stores its own offset/size, but the GL viewport no longer matches). **Never rely on `resize()` alone to keep the viewport current.**
 
 ## Math Conventions
 

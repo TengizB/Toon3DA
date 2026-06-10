@@ -33,6 +33,15 @@ public class Main extends ApplicationAdapter {
     @Override
     public void render() {
         ScreenUtils.clear(0.15f, 0.15f, 0.2f, 1f);
+        // INVARIANT: apply() must be called every frame.
+        // FitViewport.apply() calls glViewport() and (when centerCamera=true) glScissor()
+        // to restrict drawing to the letterboxed play area. Without it, any path that
+        // disposes and recreates the World (e.g. death → new run) leaves the GL viewport
+        // pointing at the raw screen dimensions, which stretches every subsequent draw
+        // and breaks touch unprojection (FitViewport.unproject uses its stored offset/size,
+        // not the GL viewport, so the two diverge). resize() alone is not enough: it fires
+        // only on OS-triggered size events, not on in-frame state resets.
+        viewport.apply();
         world.update(Gdx.graphics.getDeltaTime());
         if (world.isResetRequested()) {
             world.dispose();

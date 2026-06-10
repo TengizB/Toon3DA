@@ -54,6 +54,10 @@ public class PropRenderer implements Renderable, Disposable {
             case 'a': return ARMOUR_SHARD_SPRITE_HEIGHT;
             case 'A': return ARMOUR_VEST_SPRITE_HEIGHT;
             case '>': return PORTAL_SPRITE_HEIGHT;
+            case '6': return Constants.AMMO_PICKUP_HEIGHT_FRACTION;
+            case '7': return Constants.AMMO_PICKUP_HEIGHT_FRACTION;
+            case '8': return Constants.AMMO_PICKUP_HEIGHT_FRACTION;
+            case '9': return Constants.AMMO_PICKUP_HEIGHT_FRACTION;
             case '#': return PROP_CAMERA_HEIGHT;
             case '%': return PROP_GENERATOR_HEIGHT;
             case '&': return PROP_BIOPOD_HEIGHT;
@@ -319,6 +323,10 @@ public class PropRenderer implements Renderable, Disposable {
         map.put('a', generateArmourShardTexture());
         map.put('A', generateSecurityVestTexture());
         map.put('>', generatePortalTexture());
+        map.put('6', generateAmmoBoxTexture(0.72f, 0.48f, 0.18f));  // BULLETS — copper
+        map.put('7', generateAmmoBoxTexture(0.78f, 0.68f, 0.12f));  // SHELLS  — brass
+        map.put('8', generateAmmoBoxTexture(0.10f, 0.80f, 0.90f));  // CELLS   — cyan
+        map.put('9', generateAmmoBoxTexture(0.45f, 0.55f, 0.20f));  // ROCKETS — olive
         map.put('#', generateCameraTexture());
         map.put('%', generateGeneratorTexture());
         map.put('&', generateBioPodTexture());
@@ -1207,6 +1215,31 @@ public class PropRenderer implements Renderable, Disposable {
         pixmap.fillRectangle(30, 30, 4, 4);
         pixmap.fillRectangle(28, 28, 2, 2);
         pixmap.fillRectangle(34, 34, 2, 2);
+        return finalize(pixmap);
+    }
+
+    /** Generates a flat ammo-box pickup sprite tinted with the given colour. */
+    private static Texture generateAmmoBoxTexture(float red, float green, float blue) {
+        Pixmap pixmap = new Pixmap(48, 32, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Box body — slightly darker base tint
+        pixmap.setColor(red * 0.55f, green * 0.55f, blue * 0.55f, 1f);
+        pixmap.fillRectangle(2, 6, 44, 20);
+        // Top highlight edge
+        pixmap.setColor(Math.min(1f, red + 0.25f), Math.min(1f, green + 0.25f), Math.min(1f, blue + 0.25f), 1f);
+        pixmap.fillRectangle(2, 6, 44, 3);
+        // Stencil warning stripes — dark vertical bars across the body
+        pixmap.setColor(0.05f, 0.05f, 0.05f, 1f);
+        for (int barOffset = 0; barOffset < 44; barOffset += 8) {
+            pixmap.fillRectangle(2 + barOffset, 9, 4, 14);
+        }
+        // Lid seam line
+        pixmap.setColor(0.10f, 0.10f, 0.10f, 1f);
+        pixmap.fillRectangle(2, 16, 44, 2);
+        // Latch dot — bright accent at centre
+        pixmap.setColor(Math.min(1f, red + 0.30f), Math.min(1f, green + 0.30f), Math.min(1f, blue + 0.30f), 1f);
+        pixmap.fillRectangle(22, 14, 4, 4);
         return finalize(pixmap);
     }
 
