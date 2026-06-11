@@ -6,6 +6,16 @@ First-person pseudo-3D dungeon-crawler roguelike. World is a flat 2D tile grid; 
 
 **Inspiration & design context:** See `docs/doom-rpg-reference.txt` and `docs/roguelike-design-pillars.txt`.
 
+## ⚠️ PLATFORM: MOBILE ONLY — Android Smartphones
+
+This game runs on **Android phones only**. The `lwjgl3/` desktop launcher exists for development testing only.
+
+- **NO keyboard input ever** — never use `Gdx.input.isKeyPressed()`, `Gdx.input.isKeyJustPressed()`, or `Input.Keys.*`
+- **NO key binding constants** — if you ever see a `*_KEY` constant referencing keyboard keys, it is dead/legacy code; remove it
+- **Touch controls only** — all player input flows through `TouchInputState` → `TouchControllerRenderer`
+- **Touch-friendly targets** — on-screen buttons must be large enough to tap with a thumb
+- **Never suggest** keyboard shortcuts, hotkeys, F-keys, or any desktop-only feature
+
 ## Tile-Based Player Movement
 
 Player never moves freely. Every action = one tile step or one 90° rotation. Animation plays between states; all input is blocked while animating (action lock). Same model as Doom RPG.
@@ -87,19 +97,86 @@ On completion: snap each component to `Math.round()` → always exactly `(1,0)`,
 ```
 toon3D/
 ├── core/src/main/java/ge/tbegvadze/toon3d/
-│   ├── Main.java               # ApplicationListener — entry point (root package only)
-│   ├── util/Constants.java     # ALL game-wide constants
-│   ├── util/GameMath.java      # ALL math formulas as static methods with derivation comments
-│   ├── level/Level.java        # Tile-based level grid
-│   ├── level/LevelLoader.java  # Loads Level from .txt asset file
-│   ├── entity/Player.java      # Player position, direction, FOV
-│   ├── render/                 # Renderers (WallRenderer, LevelRenderer, RayCaster, etc.)
-│   ├── input/PlayerController.java
-│   ├── door/                   # Door state and animation
-│   └── world/World.java        # Top-level simulation — owns Level and renderers
-├── lwjgl3/src/            # Desktop launcher
-├── assets/levels/         # Level .txt files
-└── docs/                  # Extended reference (not needed at runtime)
+│   ├── Main.java                        # ApplicationListener — entry point (root package only)
+│   ├── util/
+│   │   ├── Constants.java               # Core: world size, CELL_SIZE, player, minimap, DDA
+│   │   ├── WeaponConstants.java         # All weapon stats, timing, HUD, fire effects
+│   │   ├── EnemyConstants.java          # Enemy stats, textures, health bar geometry
+│   │   ├── HudConstants.java            # HUD panels, bars, face box, death overlay
+│   │   ├── RenderConstants.java         # Wall/floor/ceiling textures, props, red-alert
+│   │   ├── LevelGenConstants.java       # Procedural generation params, room types
+│   │   ├── ItemConstants.java           # Items, ammo, inventory, medical/armour pickups
+│   │   ├── EffectConstants.java         # Screen shake, vignette, ambient light, transitions
+│   │   ├── ProgressionConstants.java    # XP, death screen, stats persistence keys
+│   │   ├── TouchConstants.java          # On-screen touch button layout
+│   │   ├── GameMath.java                # ALL math formulas as static methods
+│   │   ├── GameBalance.java             # Tunable difficulty/balance numbers
+│   │   └── StatsStore.java              # Persistent stats read/write (Preferences)
+│   ├── level/
+│   │   ├── Level.java                   # Tile grid — isWall(), isPropSolid(), etc.
+│   │   ├── LevelLoader.java             # Parses .txt asset into Level
+│   │   ├── LevelGenerator.java          # Procedural dungeon generation
+│   │   └── LevelGenConfig.java          # Parameters for LevelGenerator
+│   ├── entity/
+│   │   ├── Player.java                  # positionX/Y, directionX/Y, FOV
+│   │   ├── Weapon.java                  # Abstract base: marchShot(), marchBlast()
+│   │   ├── Shotgun.java / DoubleBarrelShotgun.java / PlasmaRifle.java
+│   │   ├── Chaingun.java / Railgun.java / Incinerator.java / GrenadeLauncher.java
+│   │   ├── PlayerInventory.java         # Bridges Player ↔ Inventory + Loadout
+│   │   └── Loadout.java                 # Active weapon slots
+│   ├── render/
+│   │   ├── WallRenderer.java            # DDA 3D wall projection (1280×720)
+│   │   ├── FloorCeilingRenderer.java    # Textured floor & ceiling backdrop
+│   │   ├── PropRenderer.java            # Billboard prop sprites
+│   │   ├── EnemyRenderer.java           # Enemy billboard sprites + health bars
+│   │   ├── WeaponHudRenderer.java       # Procedural weapon sprite (FrameBuffer)
+│   │   ├── HudRenderer.java             # Left/right HUD chrome panels
+│   │   ├── LevelRenderer.java           # 2D mini-map overlay
+│   │   ├── ImpactEffectSystem.java      # Screen shake, kill flash, particles
+│   │   ├── ImpactEffectRenderer.java    # Draws impact effect sprites
+│   │   ├── InventoryOverlayRenderer.java
+│   │   ├── LevelUpOverlayRenderer.java
+│   │   ├── DeathOverlayRenderer.java
+│   │   ├── FadeOverlayRenderer.java
+│   │   ├── HitVignetteRenderer.java
+│   │   ├── EventTextRenderer.java / EventTextSystem.java
+│   │   └── RayCaster.java / RayCastResult.java / Renderable.java
+│   ├── input/
+│   │   ├── PlayerController.java        # IDLE→MOVING/ROTATING state machine
+│   │   └── touch/
+│   │       ├── TouchInputState.java     # Current held/tapped action
+│   │       ├── TouchControllerRenderer.java  # Renders on-screen buttons
+│   │       ├── TouchButton.java
+│   │       └── TouchAction.java
+│   ├── item/
+│   │   ├── ItemType.java                # Enum of all item types with metadata
+│   │   ├── Inventory.java               # Item slots, stack caps, add/remove
+│   │   ├── AmmoType.java                # Ammo categories (bullets, shells, cells, rockets)
+│   │   └── ItemStack.java / GroundItem.java / ItemCategory.java
+│   ├── enemy/
+│   │   ├── EnemyManager.java            # Spawn, AI turns, attacks, death
+│   │   ├── Enemy.java                   # Enemy instance state
+│   │   └── EnemyType.java / EnemyState.java
+│   ├── door/
+│   │   ├── DoorManager.java             # Open/close animation, keycard checks
+│   │   └── Door.java / DoorState.java
+│   ├── hazard/
+│   │   └── ExplosiveBarrelManager.java
+│   ├── progression/
+│   │   ├── PlayerStats.java             # Attributes, XP, current level
+│   │   ├── PlayerProgress.java          # Run-level state tracking
+│   │   └── Attribute.java / LevelUpReward.java / KillEventListener.java
+│   └── world/
+│       ├── World.java                   # Top-level sim: owns all managers + renderers
+│       ├── TickEventBus.java            # Turn event dispatch
+│       ├── GameState.java / HudState.java / RunStats.java
+│       └── TickCause.java / TickContext.java / TickSubscriber.java
+├── android/                             # Android launcher
+├── lwjgl3/                              # Desktop launcher (development testing only)
+├── assets/
+│   ├── levels/                          # Hand-crafted .txt level files
+│   └── textures/                        # Wall, enemy, weapon sprite textures
+└── docs/                                # Reference docs — see "Docs Directory" section below
 ```
 
 ## Package Rules
@@ -108,14 +185,18 @@ Root package (`ge.tbegvadze.toon3d`) is reserved for `Main.java` only.
 
 | Package | Purpose |
 |---|---|
-| `…toon3d.util` | Stateless utilities: `Constants`, `GameMath` |
-| `…toon3d.level` | Level data and loading |
-| `…toon3d.entity` | Game entities / ECS components |
+| `…toon3d.util` | Stateless utilities: `Constants*`, `GameMath`, `GameBalance`, `StatsStore` |
+| `…toon3d.level` | Level data, loading, and procedural generation |
+| `…toon3d.entity` | Player, weapons, loadout |
 | `…toon3d.screen` | LibGDX `Screen` implementations |
-| `…toon3d.render` | Renderers, shaders, batch helpers |
-| `…toon3d.world` | Top-level simulation objects |
-| `…toon3d.input` | Input processors |
-| `…toon3d.door` | Door state/animation |
+| `…toon3d.render` | All renderers, FrameBuffer pipelines, batch helpers |
+| `…toon3d.world` | Top-level simulation: `World`, tick bus, game state |
+| `…toon3d.input` | Input processors; touch sub-package for on-screen controls |
+| `…toon3d.door` | Door state and animation |
+| `…toon3d.item` | Item types, inventory, ammo definitions |
+| `…toon3d.enemy` | Enemy manager, types, AI state |
+| `…toon3d.hazard` | Explosive barrels and environmental hazards |
+| `…toon3d.progression` | Player stats, XP, attributes, level-up rewards |
 
 New class: pick the most specific matching package. If none fits, add a subpackage and document it here.
 
@@ -168,8 +249,21 @@ TITLE: [short title, max 60 chars]
 
 ## Key Classes
 
-### `util/Constants.java`
-Single source of truth for every magic number. **Never hardcode a value elsewhere.** Add to `Constants` first, then reference it.
+### `util/Constants*.java` — Split Constant Files
+Never hardcode a value anywhere. Always add to the matching constant file first, then reference it.
+
+| File | What it holds |
+|---|---|
+| `Constants.java` | Core world/grid/player/minimap/raycasting constants |
+| `WeaponConstants.java` | Per-weapon stats, timing, fire effects, HUD position |
+| `EnemyConstants.java` | Enemy textures, health/damage/speed, health bar geometry |
+| `HudConstants.java` | HUD panel dimensions, bar sizes, face box, death overlay |
+| `RenderConstants.java` | Wall texture paths, floor/ceiling, props, red-alert pulse |
+| `LevelGenConstants.java` | Procedural generation parameters, room type definitions |
+| `ItemConstants.java` | Medical/armour pickups, ammo caps, inventory UI |
+| `EffectConstants.java` | Screen shake, vignette, ambient lighting, fade durations |
+| `ProgressionConstants.java` | XP, death beat, stats preferences key |
+| `TouchConstants.java` | On-screen button sizes, positions, alpha values |
 
 ### `util/GameMath.java`
 Every non-trivial formula as a `public static` method. **Never implement a formula inline in game code.** Required comment block above every method:
@@ -181,6 +275,12 @@ Every non-trivial formula as a `public static` method. **Never implement a formu
  */
 ```
 Methods must be pure functions — no side effects, no LibGDX render state.
+
+### `util/GameBalance.java`
+Tunable difficulty numbers (enemy damage multipliers, loot rates, etc.) that game designers may want to tweak without touching mechanics code.
+
+### `level/LevelGenerator.java`
+Procedural dungeon generator. Takes `LevelGenConfig` and produces a `Level`. All generation params live in `LevelGenConstants.java`.
 
 ### `level/Level.java`
 2D tile grid. **Full tile symbol reference: `docs/tile-symbols.txt`** — single source of truth for every character used in level files.
@@ -232,6 +332,81 @@ Reads `.txt` asset via `Gdx.files.internal()`. First line = top of world. Shorte
 
 ### `render/Renderable.java`
 Interface: `void render(OrthographicCamera camera)`. All renderers also implement `Disposable`.
+
+### `render/WeaponHudRenderer.java`
+Draws the current weapon sprite procedurally with a FrameBuffer pipeline. Each weapon has its own draw method inside this class. See `docs/weapon-creation-guide.txt` for the full pipeline.
+
+### `render/FloorCeilingRenderer.java`
+Draws the textured floor and ceiling backdrop before walls. Must run first in the render order.
+
+### `render/PropRenderer.java`
+Billboard prop sprites (barrels, crates, etc.). Uses WallRenderer's Z-buffer to sort props.
+
+### `render/EnemyRenderer.java`
+Enemy billboard sprites with procedural health bars drawn on top. See `docs/enemy-health-bars.txt`.
+
+### `world/World.java`
+Top-level simulation class. Owns all managers (`EnemyManager`, `DoorManager`, `ExplosiveBarrelManager`, etc.) and all renderers. Orchestrates the tick system.
+
+### `world/TickEventBus.java`
+Turn-based event dispatch: every player action fires a tick that subscribers (enemies, reload, etc.) respond to. See `docs/tick-system.txt`.
+
+### `input/touch/TouchInputState.java`
+Holds which `TouchAction` is currently held or was just tapped. `PlayerController` polls this each frame.
+
+### `input/touch/TouchControllerRenderer.java`
+Renders the on-screen thumb cluster (movement D-pad, action buttons). This is the **only** input source for the player — no keyboard ever.
+
+### `enemy/EnemyManager.java`
+Spawns enemies from level spawn points, runs AI turns after each player action, handles attacks, death, and loot drops. See `docs/enemy-system.txt`.
+
+### `item/ItemType.java`
+Enum of every item with metadata (category, display name, pickup logic). The canonical list of all pickup item types.
+
+### `progression/PlayerStats.java`
+Player level, XP, attribute points. Drives the level-up system. See `docs/xp-level-progression.txt`.
+
+### `util/StatsStore.java`
+Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permadeath high-score tracking.
+
+## Where to Find Info
+
+| Topic | File to read |
+|---|---|
+| Tile symbols, level file format | `docs/tile-symbols.txt` |
+| DDA raycasting math proofs | `docs/dda-raycasting-math.txt` |
+| Wall renderer pipeline | `docs/wall-renderer-guide.txt` |
+| Weapon implementation (end-to-end) | `docs/weapon-creation-guide.txt` |
+| Enemy AI, types, stats | `docs/enemy-system.txt` |
+| Enemy health bar rendering | `docs/enemy-health-bars.txt` |
+| HUD procedural rendering (no textures) | `docs/procedural-vitals-hud.txt` |
+| Procedural level generation | `docs/procedural-level-generation.txt` |
+| Turn/tick system architecture | `docs/tick-system.txt` |
+| XP and leveling system | `docs/xp-level-progression.txt` |
+| Level design philosophy | `docs/level-design-context.txt` |
+| Doom RPG design inspiration | `docs/doom-rpg-reference.txt` |
+| Roguelike design pillars | `docs/roguelike-design-pillars.txt` |
+| Feature ideas backlog (64 docs) | `.claude/agents/ideas/` directory |
+
+## Docs Directory (`docs/`)
+
+All 13 reference docs — read these before implementing anything in their domain:
+
+| File | Lines | What it covers |
+|---|---|---|
+| `tile-symbols.txt` | 139 | Complete tile character reference — walls, doors, floors, props, pickups, enemies. **Single source of truth for level format.** |
+| `weapon-creation-guide.txt` | 537 | End-to-end weapon implementation: constants → Weapon subclass → marchShot → FrameBuffer sprite → World wiring |
+| `enemy-health-bars.txt` | 282 | Health bar geometry, gradient colors, HP text rendering spec |
+| `procedural-level-generation.txt` | 208 | Dungeon generator algorithm, room types, wall distribution logic |
+| `procedural-vitals-hud.txt` | 202 | HUD rendering pipeline — procedural shapes, no sprite textures |
+| `enemy-system.txt` | 189 | Enemy types, AI turn logic, pathfinding, attack resolution |
+| `tick-system.txt` | 167 | Turn-based game loop, TickEventBus, TickSubscriber pattern |
+| `xp-level-progression.txt` | 146 | Player leveling curve, attribute rewards, level-up card system |
+| `dda-raycasting-math.txt` | 152 | DDA algorithm proof, perspective projection, Y-up correction |
+| `doom-rpg-reference.txt` | 97 | Doom RPG design reference — tile movement, UI patterns |
+| `wall-renderer-guide.txt` | 79 | WallRenderer pipeline, texture mapping, shade calculation |
+| `level-design-context.txt` | 65 | Level design philosophy, environment theming |
+| `roguelike-design-pillars.txt` | 54 | Core roguelike principles this game follows |
 
 ## Naming Conventions — MANDATORY
 
@@ -318,7 +493,7 @@ X:  0 ──────── 420    420 ──────── 860    860 �
 - Panel backgrounds use `HUD_PANEL_ALPHA = 0.82f` (18% see-through).
 - No compass; no centre panel.
 
-HUD constants (Constants.java):
+HUD constants (HudConstants.java):
 ```
 HUD_HEIGHT             = 130f
 HUD_LEFT_PANEL_WIDTH   = 420f
