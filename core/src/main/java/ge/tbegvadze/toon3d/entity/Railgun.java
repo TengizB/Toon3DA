@@ -2,8 +2,8 @@ package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
-import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
  * Charge-up infinite-pierce hitscan sniper — the longest-range weapon in the game.
@@ -34,11 +34,11 @@ public class Railgun extends Weapon {
 
     public Railgun() {
         super("RAILGUN",
-              Constants.RAILGUN_DAMAGE_BY_CHARGE[Constants.RAILGUN_MAX_CHARGE],
-              Constants.RAILGUN_CLIP_SIZE,
-              Constants.RAILGUN_RELOAD_TIME_TICKS,
-              Constants.RAILGUN_DROP_COEFF,
-              Constants.RAILGUN_RANGE_TILES,
+              WeaponConstants.RAILGUN_DAMAGE_BY_CHARGE[WeaponConstants.RAILGUN_MAX_CHARGE],
+              WeaponConstants.RAILGUN_CLIP_SIZE,
+              WeaponConstants.RAILGUN_RELOAD_TIME_TICKS,
+              WeaponConstants.RAILGUN_DROP_COEFF,
+              WeaponConstants.RAILGUN_RANGE_TILES,
               AmmoType.SLUGS);
     }
 
@@ -58,7 +58,7 @@ public class Railgun extends Weapon {
 
     /** True when the capacitor has reached maximum charge (ready to auto-fire). */
     public boolean isFullyCharged() {
-        return chargeLevel >= Constants.RAILGUN_MAX_CHARGE;
+        return chargeLevel >= WeaponConstants.RAILGUN_MAX_CHARGE;
     }
 
     /**
@@ -67,7 +67,7 @@ public class Railgun extends Weapon {
      * (chargeLevel == 0 and the player wants to begin spinning up the capacitor).
      */
     public void advanceCharge() {
-        if (chargeLevel < Constants.RAILGUN_MAX_CHARGE) {
+        if (chargeLevel < WeaponConstants.RAILGUN_MAX_CHARGE) {
             chargeLevel++;
         }
     }
@@ -128,11 +128,11 @@ public class Railgun extends Weapon {
             if (enemyHitTarget != null) {
                 Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (hitEnemy != null) {
-                    float baseForCharge = Constants.RAILGUN_DAMAGE_BY_CHARGE[firedChargeLevel];
+                    float baseForCharge = WeaponConstants.RAILGUN_DAMAGE_BY_CHARGE[firedChargeLevel];
                     int computedDamage = Math.round(baseForCharge
                             * GameMath.railgunFalloff(distanceTiles,
-                                    Constants.RAILGUN_DROP_COEFF,
-                                    Constants.RAILGUN_DAMAGE_MIN_MULTIPLIER));
+                                    WeaponConstants.RAILGUN_DROP_COEFF,
+                                    WeaponConstants.RAILGUN_DAMAGE_MIN_MULTIPLIER));
                     enemyHitTarget.applyDamageTo(hitEnemy, computedDamage);
                     hitAnyEnemy = true;
                     // Infinite pierce: do NOT return — continue marching through this enemy.
@@ -158,7 +158,7 @@ public class Railgun extends Weapon {
     @Override
     public String hudAmmoString() {
         if (visualState == WeaponVisualState.RELOADING) return "RELOAD";
-        if (chargeLevel == Constants.RAILGUN_MAX_CHARGE) return "RAIL >>";
+        if (chargeLevel == WeaponConstants.RAILGUN_MAX_CHARGE) return "RAIL >>";
         if (chargeLevel == 1) return "RAIL >";
         hudStringBuilder.setLength(0);
         hudStringBuilder.append("SLUGS ");
@@ -172,7 +172,7 @@ public class Railgun extends Weapon {
     // Texture path stubs (procedural sprite generated in WeaponHudRenderer)
     // -------------------------------------------------------------------------
 
-    @Override public String getNormalTexturePath() { return Constants.RAILGUN_NORMAL_TEXTURE_PATH; }
-    @Override public String getFireTexturePath()   { return Constants.RAILGUN_FIRE_TEXTURE_PATH;   }
-    @Override public String getReloadTexturePath() { return Constants.RAILGUN_RELOAD_TEXTURE_PATH; }
+    @Override public String getNormalTexturePath() { return WeaponConstants.RAILGUN_NORMAL_TEXTURE_PATH; }
+    @Override public String getFireTexturePath()   { return WeaponConstants.RAILGUN_FIRE_TEXTURE_PATH;   }
+    @Override public String getReloadTexturePath() { return WeaponConstants.RAILGUN_RELOAD_TEXTURE_PATH; }
 }

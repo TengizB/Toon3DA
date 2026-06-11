@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 
 /**
  * Draws screen-space rising event text entries from EventTextSystem.
@@ -46,7 +47,7 @@ public final class EventTextRenderer implements Disposable {
         batch.begin();
 
         int stackOffset = 0;
-        float lifeSeconds = Constants.EVENT_TEXT_LIFE_SECONDS;
+        float lifeSeconds = EffectConstants.EVENT_TEXT_LIFE_SECONDS;
 
         for (int slotIndex = 0; slotIndex < eventTextSystem.getPoolSize(); slotIndex++) {
             String text = eventTextSystem.getText(slotIndex);
@@ -55,8 +56,8 @@ public final class EventTextRenderer implements Disposable {
             float age      = eventTextSystem.getAge(slotIndex);
             float fraction = age / lifeSeconds;
             float alpha    = 1f - fraction;
-            float riseY    = fraction * Constants.EVENT_TEXT_RISE_PIXELS;
-            float baseY    = Constants.EVENT_TEXT_ANCHOR_Y + stackOffset * Constants.EVENT_TEXT_LINE_STEP + riseY;
+            float riseY    = fraction * EffectConstants.EVENT_TEXT_RISE_PIXELS;
+            float baseY    = EffectConstants.EVENT_TEXT_ANCHOR_Y + stackOffset * EffectConstants.EVENT_TEXT_LINE_STEP + riseY;
 
             layout.setText(font, text);
             float textX = (Constants.WORLD_WIDTH - layout.width) / 2f;

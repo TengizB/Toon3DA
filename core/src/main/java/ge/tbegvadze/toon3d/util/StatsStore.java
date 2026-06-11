@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Preferences;
 import ge.tbegvadze.toon3d.world.PersistentStats;
 import ge.tbegvadze.toon3d.world.RunStats;
+import ge.tbegvadze.toon3d.util.ProgressionConstants;
 
 /** Persistence adapter for cross-run records. Uses LibGDX Preferences — no extra dependency. */
 public final class StatsStore {
@@ -12,7 +13,7 @@ public final class StatsStore {
 
     public static PersistentStats load() {
         PersistentStats stats = new PersistentStats();
-        Preferences prefs = Gdx.app.getPreferences(Constants.STATS_PREFS_NAME);
+        Preferences prefs = Gdx.app.getPreferences(ProgressionConstants.STATS_PREFS_NAME);
         stats.bestFloor            = prefs.getInteger("bestFloor",            0);
         stats.mostKills            = prefs.getInteger("mostKills",            0);
         stats.lifetimeKills        = prefs.getInteger("lifetimeKills",        0);
@@ -24,7 +25,7 @@ public final class StatsStore {
     }
 
     public static void save(PersistentStats stats) {
-        Preferences prefs = Gdx.app.getPreferences(Constants.STATS_PREFS_NAME);
+        Preferences prefs = Gdx.app.getPreferences(ProgressionConstants.STATS_PREFS_NAME);
         prefs.putInteger("bestFloor",            stats.bestFloor);
         prefs.putInteger("mostKills",            stats.mostKills);
         prefs.putInteger("lifetimeKills",        stats.lifetimeKills);

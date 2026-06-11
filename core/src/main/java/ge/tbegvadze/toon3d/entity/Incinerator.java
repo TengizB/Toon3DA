@@ -2,7 +2,7 @@ package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
  * Short-range cone flamethrower that sprays a widening fan of fire directly ahead.
@@ -40,11 +40,11 @@ public class Incinerator extends Weapon {
 
     public Incinerator() {
         super("INCINERATOR",
-              Constants.FLAME_IMPACT_DAMAGE,
-              Constants.FLAME_CLIP_SIZE,
-              Constants.FLAME_RELOAD_TICKS,
-              Constants.FLAME_DAMAGE_DROP_COEFF,
-              Constants.FLAME_RANGE_TILES,
+              WeaponConstants.FLAME_IMPACT_DAMAGE,
+              WeaponConstants.FLAME_CLIP_SIZE,
+              WeaponConstants.FLAME_RELOAD_TICKS,
+              WeaponConstants.FLAME_DAMAGE_DROP_COEFF,
+              WeaponConstants.FLAME_RANGE_TILES,
               AmmoType.CELLS);
     }
 
@@ -55,7 +55,7 @@ public class Incinerator extends Weapon {
     @Override
     public boolean canFire() {
         return visualState == WeaponVisualState.NORMAL
-               && shotsInClip >= Constants.FUEL_PER_SHOT;
+               && shotsInClip >= WeaponConstants.FUEL_PER_SHOT;
     }
 
     /**
@@ -84,7 +84,7 @@ public class Incinerator extends Weapon {
                                    Level level, EnemyHitTarget enemyHitTarget,
                                    BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
         // Deduct the extra fuel units here; Weapon.fire() already consumed 1.
-        shotsInClip -= (Constants.FUEL_PER_SHOT - 1);
+        shotsInClip -= (WeaponConstants.FUEL_PER_SHOT - 1);
 
         // Perpendicular axis (90-degree CCW rotation of the facing cardinal direction).
         int perpColumn = -facingStepRow;
@@ -126,8 +126,8 @@ public class Incinerator extends Weapon {
                     Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                     if (hitEnemy != null) {
                         int impactDamage = (distanceTiles >= range)
-                                ? Constants.FLAME_FALLOFF
-                                : Constants.FLAME_IMPACT_DAMAGE;
+                                ? WeaponConstants.FLAME_FALLOFF
+                                : WeaponConstants.FLAME_IMPACT_DAMAGE;
                         enemyHitTarget.applyDamageTo(hitEnemy, impactDamage);
                         // Fire passes through enemies — do NOT break or return here.
                     }
@@ -154,7 +154,7 @@ public class Incinerator extends Weapon {
         return hudStringBuilder.toString();
     }
 
-    @Override public String getNormalTexturePath() { return Constants.FLAME_NORMAL_TEXTURE_PATH;  }
-    @Override public String getFireTexturePath()   { return Constants.FLAME_FIRE_TEXTURE_PATH;    }
-    @Override public String getReloadTexturePath() { return Constants.FLAME_RELOAD_TEXTURE_PATH;  }
+    @Override public String getNormalTexturePath() { return WeaponConstants.FLAME_NORMAL_TEXTURE_PATH;  }
+    @Override public String getFireTexturePath()   { return WeaponConstants.FLAME_FIRE_TEXTURE_PATH;    }
+    @Override public String getReloadTexturePath() { return WeaponConstants.FLAME_RELOAD_TEXTURE_PATH;  }
 }

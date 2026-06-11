@@ -3,7 +3,7 @@ package ge.tbegvadze.toon3d.input.touch;
 import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.viewport.Viewport;
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.TouchConstants;
 
 public final class TouchInputState extends InputAdapter {
 
@@ -30,11 +30,11 @@ public final class TouchInputState extends InputAdapter {
         this.viewport         = viewport;
         this.touchWorldCoords = new Vector2();
 
-        float size    = Constants.TOUCH_BUTTON_SIZE;
+        float size    = TouchConstants.TOUCH_BUTTON_SIZE;
         float half    = size / 2f;
-        float arm     = Constants.TOUCH_GRID_ARM_OFFSET;
-        float centerX = Constants.TOUCH_GRID_CENTER_X;
-        float baseY   = Constants.TOUCH_GRID_BASE_Y;    // center Y of row 1 (BACK)
+        float arm     = TouchConstants.TOUCH_GRID_ARM_OFFSET;
+        float centerX = TouchConstants.TOUCH_GRID_CENTER_X;
+        float baseY   = TouchConstants.TOUCH_GRID_BASE_Y;    // center Y of row 1 (BACK)
 
         buttons = new TouchButton[12];
 
@@ -80,7 +80,7 @@ public final class TouchInputState extends InputAdapter {
             size, size, TouchAction.SKIP_TURN, TouchButton.Shape.ROUNDED_SQUARE, true);
 
         // Left secondary cluster — HEAL (row 2 height) | OPEN_INVENTORY (row 3 height)
-        float leftCenterX = Constants.TOUCH_GRID_LEFT_CENTER_X;
+        float leftCenterX = TouchConstants.TOUCH_GRID_LEFT_CENTER_X;
         buttons[INDEX_HEAL] = new TouchButton(
             leftCenterX - half, (baseY + arm) - half,
             size, size, TouchAction.HEAL, TouchButton.Shape.ROUNDED_SQUARE, true);
@@ -134,7 +134,7 @@ public final class TouchInputState extends InputAdapter {
             if (touchButton.pointerId == -1 && touchButton.contains(touchWorldCoords.x, touchWorldCoords.y)) {
                 touchButton.pressed        = true;
                 touchButton.pointerId      = pointer;
-                touchButton.pressGlowTimer = Constants.TOUCH_PRESS_GLOW_DURATION;
+                touchButton.pressGlowTimer = TouchConstants.TOUCH_PRESS_GLOW_DURATION;
                 if (touchButton.tapOnly) {
                     pendingTapAction = touchButton.action;
                 }

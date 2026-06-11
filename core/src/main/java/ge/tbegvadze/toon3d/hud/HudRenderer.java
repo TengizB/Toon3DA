@@ -15,6 +15,8 @@ import ge.tbegvadze.toon3d.render.Renderable;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.world.HudState;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
+import ge.tbegvadze.toon3d.util.HudConstants;
 
 /**
  * Left-panel HUD: one semi-transparent chrome panel anchored to the bottom-left.
@@ -66,8 +68,8 @@ public class HudRenderer implements Renderable, Disposable {
     // -------------------------------------------------------------------------
     // Layout — derived from Constants
     // -------------------------------------------------------------------------
-    private static final float PANEL_HEIGHT = Constants.HUD_HEIGHT;
-    private static final float LEFT_WIDTH   = Constants.HUD_LEFT_PANEL_WIDTH;
+    private static final float PANEL_HEIGHT = HudConstants.HUD_HEIGHT;
+    private static final float LEFT_WIDTH   = HudConstants.HUD_LEFT_PANEL_WIDTH;
 
     // -------------------------------------------------------------------------
     // Resources owned by this renderer
@@ -115,7 +117,7 @@ public class HudRenderer implements Renderable, Disposable {
         animationClockSeconds += deltaTime;
         if (animationClockSeconds > 1000f) animationClockSeconds -= 1000f;
 
-        float lerpRate = Constants.HUD_BAR_LERP_RATE * deltaTime;
+        float lerpRate = HudConstants.HUD_BAR_LERP_RATE * deltaTime;
         displayedHealthFraction = approach(displayedHealthFraction, player.getHealthFraction(), lerpRate);
         displayedArmorFraction  = approach(displayedArmorFraction,  player.getArmorFraction(),  lerpRate);
         displayedXpFraction     = approach(displayedXpFraction,     hudState.xpFraction,         lerpRate);
@@ -129,8 +131,8 @@ public class HudRenderer implements Renderable, Disposable {
 
     @Override
     public void render(OrthographicCamera camera) {
-        float   pulse  = GameMath.pulseMultiplier(animationClockSeconds, Constants.HUD_PULSE_HZ, 0.6f, 1.0f);
-        boolean lowHp  = player.getHealthFraction() <= Constants.HUD_LOW_HP_THRESHOLD;
+        float   pulse  = GameMath.pulseMultiplier(animationClockSeconds, HudConstants.HUD_PULSE_HZ, 0.6f, 1.0f);
+        boolean lowHp  = player.getHealthFraction() <= HudConstants.HUD_LOW_HP_THRESHOLD;
         boolean isDead = player.isDead();
         boolean alert  = hudState.alertActive;
 
@@ -172,8 +174,8 @@ public class HudRenderer implements Renderable, Disposable {
 
     private void drawPanelChromeFilled(float panelX, float panelY, float panelW, float panelH,
                                         boolean alert, float pulse) {
-        float inset = Constants.HUD_PANEL_INSET;
-        float alpha = Constants.HUD_PANEL_ALPHA;
+        float inset = HudConstants.HUD_PANEL_INSET;
+        float alpha = HudConstants.HUD_PANEL_ALPHA;
 
         shapes.setColor(STEEL_DARK.r, STEEL_DARK.g, STEEL_DARK.b, alpha);
         shapes.rect(panelX, panelY, panelW, panelH);
@@ -181,14 +183,14 @@ public class HudRenderer implements Renderable, Disposable {
         shapes.rect(panelX + inset, panelY + inset, panelW - inset * 2f, panelH - inset * 2f);
 
         shapes.setColor(BEVEL_LIGHT);
-        float rivetRadius = Constants.HUD_RIVET_RADIUS;
+        float rivetRadius = HudConstants.HUD_RIVET_RADIUS;
         float rivetOffset = 8f;
         shapes.circle(panelX + rivetOffset,           panelY + rivetOffset,           rivetRadius, 8);
         shapes.circle(panelX + panelW - rivetOffset,  panelY + rivetOffset,           rivetRadius, 8);
         shapes.circle(panelX + rivetOffset,           panelY + panelH - rivetOffset,  rivetRadius, 8);
         shapes.circle(panelX + panelW - rivetOffset,  panelY + panelH - rivetOffset,  rivetRadius, 8);
 
-        float ledRadius = Constants.HUD_LED_RADIUS;
+        float ledRadius = HudConstants.HUD_LED_RADIUS;
         float ledX      = panelX + panelW - 14f;
         float ledY      = panelY + panelH - 14f;
         if (alert) {
@@ -201,12 +203,12 @@ public class HudRenderer implements Renderable, Disposable {
     }
 
     private void drawHpBarFilled(float pulse, boolean lowHp, boolean isDead) {
-        float barX      = Constants.HUD_BAR_START_X;
-        float barY      = Constants.HUD_HP_BAR_Y;
-        float barWidth  = Constants.HUD_BAR_FULL_WIDTH;
-        float barHeight = Constants.HUD_BAR_HEIGHT;
-        int   segments  = Constants.HUD_BAR_SEGMENT_COUNT;
-        float gap       = Constants.HUD_BAR_SEGMENT_GAP;
+        float barX      = HudConstants.HUD_BAR_START_X;
+        float barY      = HudConstants.HUD_HP_BAR_Y;
+        float barWidth  = HudConstants.HUD_BAR_FULL_WIDTH;
+        float barHeight = HudConstants.HUD_BAR_HEIGHT;
+        int   segments  = HudConstants.HUD_BAR_SEGMENT_COUNT;
+        float gap       = HudConstants.HUD_BAR_SEGMENT_GAP;
         float segWidth  = (barWidth - (segments - 1) * gap) / segments;
         int   fillCount = isDead ? 0 : GameMath.segmentFillCount(displayedHealthFraction, segments);
 
@@ -224,12 +226,12 @@ public class HudRenderer implements Renderable, Disposable {
     }
 
     private void drawArmorBarFilled(boolean isDead) {
-        float barX      = Constants.HUD_BAR_START_X;
-        float barY      = Constants.HUD_AR_BAR_Y;
-        float barWidth  = Constants.HUD_BAR_FULL_WIDTH;
-        float barHeight = Constants.HUD_BAR_HEIGHT;
-        int   segments  = Constants.HUD_BAR_SEGMENT_COUNT;
-        float gap       = Constants.HUD_BAR_SEGMENT_GAP;
+        float barX      = HudConstants.HUD_BAR_START_X;
+        float barY      = HudConstants.HUD_AR_BAR_Y;
+        float barWidth  = HudConstants.HUD_BAR_FULL_WIDTH;
+        float barHeight = HudConstants.HUD_BAR_HEIGHT;
+        int   segments  = HudConstants.HUD_BAR_SEGMENT_COUNT;
+        float gap       = HudConstants.HUD_BAR_SEGMENT_GAP;
         float segWidth  = (barWidth - (segments - 1) * gap) / segments;
         int   fillCount = isDead ? 0 : GameMath.segmentFillCount(displayedArmorFraction, segments);
 
@@ -241,12 +243,12 @@ public class HudRenderer implements Renderable, Disposable {
     }
 
     private void drawClipBarFilled(boolean isDead) {
-        float barX      = Constants.HUD_BAR_START_X;
-        float barY      = Constants.HUD_CLIP_BAR_Y;
-        float barWidth  = Constants.HUD_BAR_FULL_WIDTH;
-        float barHeight = Constants.HUD_BAR_HEIGHT;
+        float barX      = HudConstants.HUD_BAR_START_X;
+        float barY      = HudConstants.HUD_CLIP_BAR_Y;
+        float barWidth  = HudConstants.HUD_BAR_FULL_WIDTH;
+        float barHeight = HudConstants.HUD_BAR_HEIGHT;
         int   clipSize  = Math.max(1, hudState.clipSize);
-        float gap       = Constants.HUD_BAR_SEGMENT_GAP;
+        float gap       = HudConstants.HUD_BAR_SEGMENT_GAP;
         float segWidth  = (barWidth - (clipSize - 1) * gap) / clipSize;
         int   filled    = isDead ? 0 : Math.min(hudState.currentAmmo, clipSize);
 
@@ -258,12 +260,12 @@ public class HudRenderer implements Renderable, Disposable {
     }
 
     private void drawXpBarFilled(boolean isDead) {
-        float barX      = Constants.HUD_BAR_START_X;
-        float barY      = Constants.HUD_XP_BAR_Y;
-        float barWidth  = Constants.HUD_BAR_FULL_WIDTH;
-        float barHeight = Constants.HUD_BAR_HEIGHT;
-        int   segments  = Constants.HUD_BAR_SEGMENT_COUNT;
-        float gap       = Constants.HUD_BAR_SEGMENT_GAP;
+        float barX      = HudConstants.HUD_BAR_START_X;
+        float barY      = HudConstants.HUD_XP_BAR_Y;
+        float barWidth  = HudConstants.HUD_BAR_FULL_WIDTH;
+        float barHeight = HudConstants.HUD_BAR_HEIGHT;
+        int   segments  = HudConstants.HUD_BAR_SEGMENT_COUNT;
+        float gap       = HudConstants.HUD_BAR_SEGMENT_GAP;
         float segWidth  = (barWidth - (segments - 1) * gap) / segments;
         int   fillCount = isDead ? 0 : GameMath.segmentFillCount(displayedXpFraction, segments);
 
@@ -279,7 +281,7 @@ public class HudRenderer implements Renderable, Disposable {
     // =========================================================================
 
     private void drawPanelChromeLines(float panelX, float panelY, float panelW, float panelH) {
-        float inset = Constants.HUD_PANEL_INSET;
+        float inset = HudConstants.HUD_PANEL_INSET;
         shapes.setColor(BEVEL_LIGHT);
         shapes.line(panelX,          panelY + panelH, panelX + panelW, panelY + panelH);
         shapes.line(panelX,          panelY,          panelX,          panelY + panelH);
@@ -296,7 +298,7 @@ public class HudRenderer implements Renderable, Disposable {
         shapes.setColor(BEVEL_LIGHT);
         shapes.line(innerX,              innerY,               innerX + innerWidth, innerY);
         shapes.line(innerX + innerWidth, innerY,               innerX + innerWidth, innerY + innerHeight);
-        float rivetRadius = Constants.HUD_RIVET_RADIUS;
+        float rivetRadius = HudConstants.HUD_RIVET_RADIUS;
         float rivetOffset = 8f;
         shapes.setColor(BEVEL_DARK);
         shapes.circle(panelX + rivetOffset,          panelY + rivetOffset,          rivetRadius, 8);
@@ -310,8 +312,8 @@ public class HudRenderer implements Renderable, Disposable {
     // =========================================================================
 
     private void drawHpLabel(boolean lowHp, float pulse, boolean isDead) {
-        float labelX = Constants.HUD_BAR_LABEL_X;
-        float labelY = Constants.HUD_HP_BAR_Y + Constants.HUD_BAR_HEIGHT;
+        float labelX = HudConstants.HUD_BAR_LABEL_X;
+        float labelY = HudConstants.HUD_HP_BAR_Y + HudConstants.HUD_BAR_HEIGHT;
 
         font.getData().setScale(0.9f);
         font.setColor(PHOSPHOR_GREEN);
@@ -325,12 +327,12 @@ public class HudRenderer implements Renderable, Disposable {
         }
         stringBuilder.setLength(0);
         stringBuilder.append(player.getHealth());
-        font.draw(batch, stringBuilder, Constants.HUD_BAR_NUMBER_X, labelY);
+        font.draw(batch, stringBuilder, HudConstants.HUD_BAR_NUMBER_X, labelY);
     }
 
     private void drawArmorLabel(boolean isDead) {
-        float labelX = Constants.HUD_BAR_LABEL_X;
-        float labelY = Constants.HUD_AR_BAR_Y + Constants.HUD_BAR_HEIGHT;
+        float labelX = HudConstants.HUD_BAR_LABEL_X;
+        float labelY = HudConstants.HUD_AR_BAR_Y + HudConstants.HUD_BAR_HEIGHT;
 
         font.getData().setScale(0.9f);
         font.setColor(isDead ? PHOSPHOR_DIM : ARM_CYAN);
@@ -338,12 +340,12 @@ public class HudRenderer implements Renderable, Disposable {
 
         stringBuilder.setLength(0);
         stringBuilder.append(player.getArmor());
-        font.draw(batch, stringBuilder, Constants.HUD_BAR_NUMBER_X, labelY);
+        font.draw(batch, stringBuilder, HudConstants.HUD_BAR_NUMBER_X, labelY);
     }
 
     private void drawClipLabel(boolean isDead) {
-        float labelX = Constants.HUD_BAR_LABEL_X;
-        float labelY = Constants.HUD_CLIP_BAR_Y + Constants.HUD_BAR_HEIGHT;
+        float labelX = HudConstants.HUD_BAR_LABEL_X;
+        float labelY = HudConstants.HUD_CLIP_BAR_Y + HudConstants.HUD_BAR_HEIGHT;
 
         font.getData().setScale(0.9f);
         font.setColor(isDead ? PHOSPHOR_DIM : WARN_YELLOW);
@@ -358,12 +360,12 @@ public class HudRenderer implements Renderable, Disposable {
             stringBuilder.append(hudState.reserveAmmo);
             stringBuilder.append(']');
         }
-        font.draw(batch, stringBuilder, Constants.HUD_BAR_NUMBER_X, labelY);
+        font.draw(batch, stringBuilder, HudConstants.HUD_BAR_NUMBER_X, labelY);
     }
 
     private void drawXpLabel(boolean isDead) {
-        float labelX = Constants.HUD_BAR_LABEL_X;
-        float labelY = Constants.HUD_XP_BAR_Y + Constants.HUD_BAR_HEIGHT;
+        float labelX = HudConstants.HUD_BAR_LABEL_X;
+        float labelY = HudConstants.HUD_XP_BAR_Y + HudConstants.HUD_BAR_HEIGHT;
 
         font.getData().setScale(0.9f);
         font.setColor(isDead ? PHOSPHOR_DIM : XP_GOLD);
@@ -372,7 +374,7 @@ public class HudRenderer implements Renderable, Disposable {
         stringBuilder.setLength(0);
         stringBuilder.append("LV.");
         stringBuilder.append(hudState.playerLevel);
-        font.draw(batch, stringBuilder, Constants.HUD_BAR_NUMBER_X, labelY);
+        font.draw(batch, stringBuilder, HudConstants.HUD_BAR_NUMBER_X, labelY);
     }
 
     // =========================================================================
@@ -380,10 +382,10 @@ public class HudRenderer implements Renderable, Disposable {
     // =========================================================================
 
     private void drawSlotStripFilled(Loadout activeLoadout, float pulse) {
-        float sidePadding = Constants.WEAPON_SLOT_STRIP_SIDE_PADDING;
-        float originY     = Constants.WEAPON_SLOT_STRIP_ORIGIN_Y;
-        float iconHeight  = Constants.WEAPON_SLOT_ICON_SIZE;
-        float iconGap     = Constants.WEAPON_SLOT_ICON_GAP;
+        float sidePadding = WeaponConstants.WEAPON_SLOT_STRIP_SIDE_PADDING;
+        float originY     = WeaponConstants.WEAPON_SLOT_STRIP_ORIGIN_Y;
+        float iconHeight  = WeaponConstants.WEAPON_SLOT_ICON_SIZE;
+        float iconGap     = WeaponConstants.WEAPON_SLOT_ICON_GAP;
         int   slotCount   = activeLoadout.getSlotCount();
         float iconWidth   = (Constants.WORLD_WIDTH - 2f * sidePadding - (slotCount - 1) * iconGap) / slotCount;
         int   active      = activeLoadout.getActiveSlotIndex();
@@ -415,10 +417,10 @@ public class HudRenderer implements Renderable, Disposable {
     }
 
     private void drawSlotStripLines(Loadout activeLoadout) {
-        float sidePadding = Constants.WEAPON_SLOT_STRIP_SIDE_PADDING;
-        float originY     = Constants.WEAPON_SLOT_STRIP_ORIGIN_Y;
-        float iconHeight  = Constants.WEAPON_SLOT_ICON_SIZE;
-        float iconGap     = Constants.WEAPON_SLOT_ICON_GAP;
+        float sidePadding = WeaponConstants.WEAPON_SLOT_STRIP_SIDE_PADDING;
+        float originY     = WeaponConstants.WEAPON_SLOT_STRIP_ORIGIN_Y;
+        float iconHeight  = WeaponConstants.WEAPON_SLOT_ICON_SIZE;
+        float iconGap     = WeaponConstants.WEAPON_SLOT_ICON_GAP;
         int   slotCount   = activeLoadout.getSlotCount();
         float iconWidth   = (Constants.WORLD_WIDTH - 2f * sidePadding - (slotCount - 1) * iconGap) / slotCount;
         int   active      = activeLoadout.getActiveSlotIndex();
@@ -440,10 +442,10 @@ public class HudRenderer implements Renderable, Disposable {
     }
 
     private void drawSlotStripText(Loadout activeLoadout, boolean isDead) {
-        float sidePadding = Constants.WEAPON_SLOT_STRIP_SIDE_PADDING;
-        float originY     = Constants.WEAPON_SLOT_STRIP_ORIGIN_Y;
-        float iconHeight  = Constants.WEAPON_SLOT_ICON_SIZE;
-        float iconGap     = Constants.WEAPON_SLOT_ICON_GAP;
+        float sidePadding = WeaponConstants.WEAPON_SLOT_STRIP_SIDE_PADDING;
+        float originY     = WeaponConstants.WEAPON_SLOT_STRIP_ORIGIN_Y;
+        float iconHeight  = WeaponConstants.WEAPON_SLOT_ICON_SIZE;
+        float iconGap     = WeaponConstants.WEAPON_SLOT_ICON_GAP;
         int   slotCount   = activeLoadout.getSlotCount();
         float iconWidth   = (Constants.WORLD_WIDTH - 2f * sidePadding - (slotCount - 1) * iconGap) / slotCount;
         int   active      = activeLoadout.getActiveSlotIndex();

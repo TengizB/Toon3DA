@@ -32,6 +32,9 @@ import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.StatsStore;
+import ge.tbegvadze.toon3d.util.ItemConstants;
+import ge.tbegvadze.toon3d.util.RenderConstants;
+import ge.tbegvadze.toon3d.util.ProgressionConstants;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
@@ -82,7 +85,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
     private RunPhase runPhase         = RunPhase.PLAYING;
     private float    fadeTimerSeconds = 0f;
-    private int      currentDepth     = Constants.STARTING_DEPTH;
+    private int      currentDepth     = RenderConstants.STARTING_DEPTH;
 
     // -------------------------------------------------------------------------
     // Player stat system — persistent across floor transitions (Order 6)
@@ -122,7 +125,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     /** Creates a new run from a seed; generates floor 1 procedurally. */
     public World(long runSeed) {
-        this(new LevelGenerator(floorSeed(runSeed, Constants.STARTING_DEPTH)).generate(), runSeed);
+        this(new LevelGenerator(floorSeed(runSeed, RenderConstants.STARTING_DEPTH)).generate(), runSeed);
     }
 
     /** Creates a World from a pre-built level (file-loaded or test). Uses a random run seed. */
@@ -161,8 +164,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         itemInventory             = new Inventory();
         inventoryOverlayRenderer  = new InventoryOverlayRenderer(itemInventory);
         // Seed starting ammo directly into inventory slots (Order 6 design).
-        itemInventory.tryAdd(ItemType.AMMO_BULLETS, Constants.AMMO_START_BULLETS);
-        itemInventory.tryAdd(ItemType.AMMO_SHELLS,  Constants.AMMO_START_SHELLS);
+        itemInventory.tryAdd(ItemType.AMMO_BULLETS, ItemConstants.AMMO_START_BULLETS);
+        itemInventory.tryAdd(ItemType.AMMO_SHELLS,  ItemConstants.AMMO_START_SHELLS);
 
         // Permadeath — run stats and death overlay
         runStats             = new RunStats();
@@ -326,7 +329,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // DEAD phase — death beat then death screen; no game simulation
         if (runPhase == RunPhase.DEAD) {
             deathBeatTimerSeconds += deltaTime;
-            if (deathBeatTimerSeconds >= Constants.DEATH_BEAT_DURATION_SECONDS) {
+            if (deathBeatTimerSeconds >= ProgressionConstants.DEATH_BEAT_DURATION_SECONDS) {
                 deathBlinkTimerSeconds += deltaTime;
                 if (touchInputState != null && Gdx.input.justTouched()) {
                     StatsStore.updateAndSave(runStats, persistentStats);
@@ -338,7 +341,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         if (runPhase == RunPhase.FADING_OUT) {
             fadeTimerSeconds += deltaTime;
-            if (fadeTimerSeconds >= Constants.LEVEL_TRANSITION_FADE_OUT_SECONDS) {
+            if (fadeTimerSeconds >= RenderConstants.LEVEL_TRANSITION_FADE_OUT_SECONDS) {
                 currentDepth++;
                 runStats.recordFloor(currentDepth);
                 rebuildForLevel(new LevelGenerator(floorSeed(runSeed, currentDepth)).generate());
@@ -349,7 +352,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         if (runPhase == RunPhase.FADING_IN) {
             fadeTimerSeconds += deltaTime;
-            if (fadeTimerSeconds >= Constants.LEVEL_TRANSITION_FADE_IN_SECONDS) {
+            if (fadeTimerSeconds >= RenderConstants.LEVEL_TRANSITION_FADE_IN_SECONDS) {
                 fadeTimerSeconds = 0f;
                 runPhase = RunPhase.PLAYING;
             }
@@ -530,17 +533,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (runPhase == RunPhase.FADING_OUT || runPhase == RunPhase.FADING_IN) {
             float fadeAlpha;
             if (runPhase == RunPhase.FADING_OUT) {
-                fadeAlpha = Math.min(1f, fadeTimerSeconds / Constants.LEVEL_TRANSITION_FADE_OUT_SECONDS);
+                fadeAlpha = Math.min(1f, fadeTimerSeconds / RenderConstants.LEVEL_TRANSITION_FADE_OUT_SECONDS);
             } else {
-                fadeAlpha = Math.max(0f, 1f - fadeTimerSeconds / Constants.LEVEL_TRANSITION_FADE_IN_SECONDS);
+                fadeAlpha = Math.max(0f, 1f - fadeTimerSeconds / RenderConstants.LEVEL_TRANSITION_FADE_IN_SECONDS);
             }
             fadeOverlayRenderer.render(camera, fadeAlpha, currentDepth);
         }
 
         // Death beat: fade to black over DEATH_BEAT_DURATION; then show the death report.
         if (runPhase == RunPhase.DEAD) {
-            if (deathBeatTimerSeconds < Constants.DEATH_BEAT_DURATION_SECONDS) {
-                float deathFadeAlpha = deathBeatTimerSeconds / Constants.DEATH_BEAT_DURATION_SECONDS;
+            if (deathBeatTimerSeconds < ProgressionConstants.DEATH_BEAT_DURATION_SECONDS) {
+                float deathFadeAlpha = deathBeatTimerSeconds / ProgressionConstants.DEATH_BEAT_DURATION_SECONDS;
                 fadeOverlayRenderer.render(camera, deathFadeAlpha, currentDepth);
             } else {
                 boolean showPrompt = deathBlinkTimerSeconds % 1.0f < 0.5f;

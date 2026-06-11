@@ -2,7 +2,7 @@ package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
  * Single-barrel break-action grenade launcher with indirect-fire and AoE splash.
@@ -40,11 +40,11 @@ public class GrenadeLauncher extends Weapon {
 
     public GrenadeLauncher() {
         super("GRENADE LAUNCHER",
-              Constants.GRENADE_SPLASH_DAMAGE,
-              Constants.GRENADE_CLIP_SIZE,
-              Constants.GRENADE_RELOAD_TIME_TICKS,
-              Constants.GRENADE_DAMAGE_DROP_COEFF,
-              Constants.GRENADE_RANGE_TILES,
+              WeaponConstants.GRENADE_SPLASH_DAMAGE,
+              WeaponConstants.GRENADE_CLIP_SIZE,
+              WeaponConstants.GRENADE_RELOAD_TIME_TICKS,
+              WeaponConstants.GRENADE_DAMAGE_DROP_COEFF,
+              WeaponConstants.GRENADE_RANGE_TILES,
               AmmoType.ROCKETS);
     }
 
@@ -89,7 +89,7 @@ public class GrenadeLauncher extends Weapon {
                         && doorBlocksQuery.blocksShotAt(nextColumn, nextRow));
 
             if (nextBlocked) {
-                if (!hasBounced && traveledTiles >= Constants.GRENADE_ARM_TILES) {
+                if (!hasBounced && traveledTiles >= WeaponConstants.GRENADE_ARM_TILES) {
                     // Attempt a 90-degree CW bounce: (dc, dr) → (dr, -dc)
                     int bouncedDirectionColumn = directionRow;
                     int bouncedDirectionRow    = -directionColumn;
@@ -126,7 +126,7 @@ public class GrenadeLauncher extends Weapon {
             }
 
             // Check for an armed enemy at the new tile (only when grenade is armed).
-            if (traveledTiles >= Constants.GRENADE_ARM_TILES && enemyHitTarget != null) {
+            if (traveledTiles >= WeaponConstants.GRENADE_ARM_TILES && enemyHitTarget != null) {
                 Object hitEnemy = enemyHitTarget.enemyAt(currentColumn, currentRow);
                 if (hitEnemy != null) {
                     applyPlusSplash(currentColumn, currentRow, level, enemyHitTarget);
@@ -143,7 +143,7 @@ public class GrenadeLauncher extends Weapon {
     /**
      * Applies a plus-shaped splash at (impactColumn, impactRow).
      *
-     * Iterates the 5-tile plus using Constants.GRENADE_SPLASH_OFFSETS:
+     * Iterates the 5-tile plus using WeaponConstants.GRENADE_SPLASH_OFFSETS:
      *   index 0: {0,0}  — impact tile    → GRENADE_SPLASH_DAMAGE
      *   index 1–4: {±1,0},{0,±1} — neighbours → GRENADE_FALLOFF_DAMAGE
      * Wall tiles in the splash are skipped (blasts do not penetrate walls).
@@ -151,9 +151,9 @@ public class GrenadeLauncher extends Weapon {
      */
     private void applyPlusSplash(int impactColumn, int impactRow,
                                   Level level, EnemyHitTarget enemyHitTarget) {
-        for (int offsetIndex = 0; offsetIndex < Constants.GRENADE_SPLASH_OFFSETS.length; offsetIndex++) {
-            int splashColumn = impactColumn + Constants.GRENADE_SPLASH_OFFSETS[offsetIndex][0];
-            int splashRow    = impactRow    + Constants.GRENADE_SPLASH_OFFSETS[offsetIndex][1];
+        for (int offsetIndex = 0; offsetIndex < WeaponConstants.GRENADE_SPLASH_OFFSETS.length; offsetIndex++) {
+            int splashColumn = impactColumn + WeaponConstants.GRENADE_SPLASH_OFFSETS[offsetIndex][0];
+            int splashRow    = impactRow    + WeaponConstants.GRENADE_SPLASH_OFFSETS[offsetIndex][1];
             char splashCell  = level.getCell(splashColumn, splashRow);
             if (Level.isWall(splashCell)) {
                 continue; // walls absorb the blast; no damage beyond them
@@ -162,8 +162,8 @@ public class GrenadeLauncher extends Weapon {
                 Object splashEnemy = enemyHitTarget.enemyAt(splashColumn, splashRow);
                 if (splashEnemy != null) {
                     int splashDamage = (offsetIndex == 0)
-                            ? Constants.GRENADE_SPLASH_DAMAGE
-                            : Constants.GRENADE_FALLOFF_DAMAGE;
+                            ? WeaponConstants.GRENADE_SPLASH_DAMAGE
+                            : WeaponConstants.GRENADE_FALLOFF_DAMAGE;
                     enemyHitTarget.applyDamageTo(splashEnemy, splashDamage);
                 }
             }
@@ -185,7 +185,7 @@ public class GrenadeLauncher extends Weapon {
         return hudStringBuilder.toString();
     }
 
-    @Override public String getNormalTexturePath() { return Constants.GRENADE_NORMAL_TEXTURE_PATH;  }
-    @Override public String getFireTexturePath()   { return Constants.GRENADE_FIRE_TEXTURE_PATH;    }
-    @Override public String getReloadTexturePath() { return Constants.GRENADE_RELOAD_TEXTURE_PATH;  }
+    @Override public String getNormalTexturePath() { return WeaponConstants.GRENADE_NORMAL_TEXTURE_PATH;  }
+    @Override public String getFireTexturePath()   { return WeaponConstants.GRENADE_FIRE_TEXTURE_PATH;    }
+    @Override public String getReloadTexturePath() { return WeaponConstants.GRENADE_RELOAD_TEXTURE_PATH;  }
 }

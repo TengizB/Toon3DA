@@ -3,11 +3,12 @@ package ge.tbegvadze.toon3d.level;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.entity.MedicalTier;
 import ge.tbegvadze.toon3d.item.AmmoType;
-import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.Collections;
 import java.util.List;
+import ge.tbegvadze.toon3d.util.ItemConstants;
+import ge.tbegvadze.toon3d.util.RenderConstants;
 
 /**
  * Tile-based level grid. Coordinates are tile indices.
@@ -156,7 +157,7 @@ public class Level {
      * Caller must guard with isArmourPickup() first.
      */
     public static int armourRestoreOfPickup(char cell) {
-        return cell == 'a' ? Constants.ARMOUR_SHARD_VALUE : Constants.ARMOUR_VEST_VALUE;
+        return cell == 'a' ? ItemConstants.ARMOUR_SHARD_VALUE : ItemConstants.ARMOUR_VEST_VALUE;
     }
 
     /**
@@ -170,7 +171,7 @@ public class Level {
 
     /** Returns true when the cell is a stairs-down exit tile (classic roguelike '>' glyph). */
     public static boolean isStairsDown(char cell) {
-        return cell == Constants.STAIRS_DOWN_CHAR;
+        return cell == RenderConstants.STAIRS_DOWN_CHAR;
     }
 
     /**
@@ -231,12 +232,12 @@ public class Level {
      */
     public float getTileBrightness(int tileColumn, int tileRow, float timeSeconds) {
         char tile = getCell(tileColumn, tileRow);
-        if (tile == Constants.LIT_TILE_CHAR)        return Constants.LIT_TILE_BRIGHTNESS;
-        if (tile == Constants.UNLIT_TILE_CHAR)      return Constants.UNLIT_TILE_BRIGHTNESS;
-        if (tile == Constants.FLICKERING_TILE_CHAR) return GameMath.flickerMultiplier(tileColumn, tileRow, timeSeconds);
+        if (tile == RenderConstants.LIT_TILE_CHAR)        return RenderConstants.LIT_TILE_BRIGHTNESS;
+        if (tile == RenderConstants.UNLIT_TILE_CHAR)      return RenderConstants.UNLIT_TILE_BRIGHTNESS;
+        if (tile == RenderConstants.FLICKERING_TILE_CHAR) return GameMath.flickerMultiplier(tileColumn, tileRow, timeSeconds);
         // Stairs tile is always fully lit so it's never lost in dark zones.
-        if (tile == Constants.STAIRS_DOWN_CHAR)     return Constants.LIT_TILE_BRIGHTNESS;
-        return Constants.BASE_TILE_BRIGHTNESS;
+        if (tile == RenderConstants.STAIRS_DOWN_CHAR)     return RenderConstants.LIT_TILE_BRIGHTNESS;
+        return RenderConstants.BASE_TILE_BRIGHTNESS;
     }
 
     public int getWidth() {

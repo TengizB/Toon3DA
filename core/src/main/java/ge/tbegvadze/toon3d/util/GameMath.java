@@ -1,6 +1,8 @@
 package ge.tbegvadze.toon3d.util;
 
 import com.badlogic.gdx.math.MathUtils;
+import ge.tbegvadze.toon3d.util.EnemyConstants;
+import ge.tbegvadze.toon3d.util.RenderConstants;
 
 /**
  * Central repository for every mathematical formula used in the game.
@@ -634,7 +636,7 @@ public final class GameMath {
      *   At d = 10 tiles:  shade = 1 / (1 + 100 * 0.05) = 1/6 ≈ 0.167
      *   At d = 20 tiles:  shade = 1 / (1 + 400 * 0.05) = 1/21 ≈ 0.048
      *
-     *   The falloff constant (Constants.WALL_SHADING_FALLOFF = 0.05) is tuned
+     *   The falloff constant (RenderConstants.WALL_SHADING_FALLOFF = 0.05) is tuned
      *   for a maximum visible range of ~10 tiles (RAY_MAX_LENGTH_CELLS).  At the
      *   cut-off the shade is ≈0.167, giving a gradual fade rather than a hard
      *   clip.  Multiply this value by the wall's base colour components to obtain
@@ -805,7 +807,7 @@ public final class GameMath {
      *   pixelOffset = 0 → returns +Infinity (guarded by caller; don't pass 0).
      */
     public static float floorRowDistance(int pixelOffset, int screenHeight) {
-        return screenHeight * Constants.FLOOR_CAMERA_Z / pixelOffset;
+        return screenHeight * RenderConstants.FLOOR_CAMERA_Z / pixelOffset;
     }
 
     /*
@@ -1283,17 +1285,17 @@ public final class GameMath {
     public static float flickerMultiplier(int tileColumn, int tileRow, float timeSeconds) {
         long seed                      = combineHash(tileColumn, tileRow);
         float phaseOffsetRadians       = Math.abs(seed % 1000) * 0.006283185f;
-        float baseSin                  = MathUtils.sin(timeSeconds * Constants.FLICKER_NOISE_FREQUENCY
+        float baseSin                  = MathUtils.sin(timeSeconds * RenderConstants.FLICKER_NOISE_FREQUENCY
                                                         * MathUtils.PI2 + phaseOffsetRadians);
         float smoothLevel              = (baseSin + 1f) * 0.5f;
         float jitterPhaseOffsetRadians = Math.abs((seed >> 8) % 1000) * 0.006283185f;
-        float jitter                   = MathUtils.sin(timeSeconds * Constants.FLICKER_NOISE_FREQUENCY
+        float jitter                   = MathUtils.sin(timeSeconds * RenderConstants.FLICKER_NOISE_FREQUENCY
                                                         * 5.7f + jitterPhaseOffsetRadians);
         float combined                 = smoothLevel * 0.7f + (jitter + 1f) * 0.15f;
         // Instantaneous snap: no lerp — the lamp is either fully on or fully off.
-        return combined < Constants.FLICKER_FAILURE_THRESHOLD
-                ? Constants.FLICKER_MIN_BRIGHTNESS
-                : Constants.FLICKER_MAX_BRIGHTNESS;
+        return combined < RenderConstants.FLICKER_FAILURE_THRESHOLD
+                ? RenderConstants.FLICKER_MIN_BRIGHTNESS
+                : RenderConstants.FLICKER_MAX_BRIGHTNESS;
     }
 
     // =========================================================================
@@ -1554,14 +1556,14 @@ public final class GameMath {
         float clampedFraction = Math.max(0f, Math.min(1f, fillFraction));
         if (clampedFraction >= 0.5f) {
             float localInterpolationFactor = (1f - clampedFraction) / 0.5f;
-            outRgb[0] = lerp(Constants.ENEMY_HEALTH_FULL_RED,   Constants.ENEMY_HEALTH_HALF_RED,   localInterpolationFactor);
-            outRgb[1] = lerp(Constants.ENEMY_HEALTH_FULL_GREEN, Constants.ENEMY_HEALTH_HALF_GREEN, localInterpolationFactor);
-            outRgb[2] = lerp(Constants.ENEMY_HEALTH_FULL_BLUE,  Constants.ENEMY_HEALTH_HALF_BLUE,  localInterpolationFactor);
+            outRgb[0] = lerp(EnemyConstants.ENEMY_HEALTH_FULL_RED,   EnemyConstants.ENEMY_HEALTH_HALF_RED,   localInterpolationFactor);
+            outRgb[1] = lerp(EnemyConstants.ENEMY_HEALTH_FULL_GREEN, EnemyConstants.ENEMY_HEALTH_HALF_GREEN, localInterpolationFactor);
+            outRgb[2] = lerp(EnemyConstants.ENEMY_HEALTH_FULL_BLUE,  EnemyConstants.ENEMY_HEALTH_HALF_BLUE,  localInterpolationFactor);
         } else {
             float localInterpolationFactor = (0.5f - clampedFraction) / 0.5f;
-            outRgb[0] = lerp(Constants.ENEMY_HEALTH_HALF_RED,   Constants.ENEMY_HEALTH_EMPTY_RED,   localInterpolationFactor);
-            outRgb[1] = lerp(Constants.ENEMY_HEALTH_HALF_GREEN, Constants.ENEMY_HEALTH_EMPTY_GREEN, localInterpolationFactor);
-            outRgb[2] = lerp(Constants.ENEMY_HEALTH_HALF_BLUE,  Constants.ENEMY_HEALTH_EMPTY_BLUE,  localInterpolationFactor);
+            outRgb[0] = lerp(EnemyConstants.ENEMY_HEALTH_HALF_RED,   EnemyConstants.ENEMY_HEALTH_EMPTY_RED,   localInterpolationFactor);
+            outRgb[1] = lerp(EnemyConstants.ENEMY_HEALTH_HALF_GREEN, EnemyConstants.ENEMY_HEALTH_EMPTY_GREEN, localInterpolationFactor);
+            outRgb[2] = lerp(EnemyConstants.ENEMY_HEALTH_HALF_BLUE,  EnemyConstants.ENEMY_HEALTH_EMPTY_BLUE,  localInterpolationFactor);
         }
     }
 

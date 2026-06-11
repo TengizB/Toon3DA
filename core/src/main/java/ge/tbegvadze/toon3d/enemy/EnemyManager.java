@@ -8,7 +8,7 @@ import ge.tbegvadze.toon3d.level.EnemySpawnPoint;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.progression.KillEventListener;
 import ge.tbegvadze.toon3d.progression.KillXpListener;
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.EnemyConstants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 
@@ -57,7 +57,7 @@ public final class EnemyManager implements EnemyHitTarget {
 
     /**
      * @param dungeonDepth current floor number (1-based); drives enemy health and damage scaling.
-     *                     Pass {@code Constants.STARTING_DEPTH} for the first floor.
+     *                     Pass 1 for the first floor.
      */
     public EnemyManager(Level level, DoorManager doorManager, int dungeonDepth) {
         this.level       = level;
@@ -243,9 +243,9 @@ public final class EnemyManager implements EnemyHitTarget {
                     enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
 
             boolean shouldAlert = false;
-            if (chebyshev <= Constants.ALERT_RADIUS_TILES) {
+            if (chebyshev <= EnemyConstants.ALERT_RADIUS_TILES) {
                 shouldAlert = true;
-            } else if (chebyshev <= Constants.LOS_MAX_RANGE_TILES) {
+            } else if (chebyshev <= EnemyConstants.LOS_MAX_RANGE_TILES) {
                 shouldAlert = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
             }
 
@@ -266,7 +266,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 int chainDist = GameMath.chebyshevDistanceTiles(
                         candidate.tileColumn, candidate.tileRow,
                         alerter.tileColumn,   alerter.tileRow);
-                if (chainDist <= Constants.CHAIN_ALERT_RADIUS_TILES) {
+                if (chainDist <= EnemyConstants.CHAIN_ALERT_RADIUS_TILES) {
                     candidate.alert();
                     anyAlertedEver = true;
                     chainAlertQueue[chainQueueSize++] = index;
@@ -311,13 +311,13 @@ public final class EnemyManager implements EnemyHitTarget {
     private void actVortexEye(Enemy enemy, int playerColumn, int playerRow, Player player, int distanceToPlayer) {
         boolean hasLOS = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
 
-        if (distanceToPlayer < Constants.VORTEX_EYE_KITE_MIN_TILES) {
+        if (distanceToPlayer < EnemyConstants.VORTEX_EYE_KITE_MIN_TILES) {
             // Too close — flee first, then re-evaluate
             stepAway(enemy, playerColumn, playerRow);
             hasLOS = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
             distanceToPlayer = GameMath.chebyshevDistanceTiles(
                     enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
-        } else if (distanceToPlayer <= Constants.VORTEX_EYE_RANGE_TILES && hasLOS
+        } else if (distanceToPlayer <= EnemyConstants.VORTEX_EYE_RANGE_TILES && hasLOS
                 && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)) {
             // Perfect kiting range on a cardinal line — hold position and fire; no movement
         } else {
@@ -330,7 +330,7 @@ public final class EnemyManager implements EnemyHitTarget {
                     enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
         }
 
-        boolean canFire = distanceToPlayer <= Constants.VORTEX_EYE_RANGE_TILES
+        boolean canFire = distanceToPlayer <= EnemyConstants.VORTEX_EYE_RANGE_TILES
                 && hasLOS
                 && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
                 && !hasEnemyBlockingShot(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
@@ -390,8 +390,8 @@ public final class EnemyManager implements EnemyHitTarget {
             }
         }
 
-        if (!moved && Constants.ENEMY_GREEDY_WIGGLE_ENABLED
-                && enemy.stuckTurns >= Constants.STUCK_TURNS_BEFORE_WIGGLE) {
+        if (!moved && EnemyConstants.ENEMY_GREEDY_WIGGLE_ENABLED
+                && enemy.stuckTurns >= EnemyConstants.STUCK_TURNS_BEFORE_WIGGLE) {
             // Greedy is stuck — try a random legal cardinal step to escape a concave wall
             wiggleStep(enemy, playerColumn, playerRow);
             enemy.stuckTurns = 0;
@@ -483,7 +483,7 @@ public final class EnemyManager implements EnemyHitTarget {
 
     private boolean hasLineOfSight(int fromColumn, int fromRow, int toColumn, int toRow) {
         int chebyshev = GameMath.chebyshevDistanceTiles(fromColumn, fromRow, toColumn, toRow);
-        if (chebyshev > Constants.LOS_MAX_RANGE_TILES) return false;
+        if (chebyshev > EnemyConstants.LOS_MAX_RANGE_TILES) return false;
         return GameMath.tileLineOfSightClear(fromColumn, fromRow, toColumn, toRow,
                 (column, row) -> {
                     char cell = level.getCell(column, row);
@@ -517,7 +517,7 @@ public final class EnemyManager implements EnemyHitTarget {
     }
 
     private char rollEnemyDrop(EnemyType type) {
-        if (dropRandom.nextFloat() >= Constants.ENEMY_AMMO_DROP_CHANCE) {
+        if (dropRandom.nextFloat() >= EnemyConstants.ENEMY_AMMO_DROP_CHANCE) {
             return 'm'; // corpse decal, no item
         }
         // Each enemy type favours its thematic ammo, with a fallback spread

@@ -2,7 +2,7 @@ package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
  * Triple-barrel rotary chaingun — sequential burst-fire weapon for medium-range sustained damage.
@@ -46,19 +46,19 @@ public class Chaingun extends Weapon {
     private DoorBlocksQuery  burstDoorBlocksQuery;
 
     public Chaingun() {
-        super(Constants.CHAINGUN_DISPLAY_NAME,
-              Constants.CHAINGUN_DAMAGE,
-              Constants.CHAINGUN_CLIP_SIZE,
-              Constants.CHAINGUN_RELOAD_TIME_TICKS,
-              Constants.CHAINGUN_DAMAGE_DROP_COEFF,
-              Constants.CHAINGUN_RANGE_TILES,
+        super(WeaponConstants.CHAINGUN_DISPLAY_NAME,
+              WeaponConstants.CHAINGUN_DAMAGE,
+              WeaponConstants.CHAINGUN_CLIP_SIZE,
+              WeaponConstants.CHAINGUN_RELOAD_TIME_TICKS,
+              WeaponConstants.CHAINGUN_DAMAGE_DROP_COEFF,
+              WeaponConstants.CHAINGUN_RANGE_TILES,
               AmmoType.BULLETS);
     }
 
     /** Requires a full burst worth of ammo so the weapon never fires a partial volley. */
     @Override
     public boolean canFire() {
-        return visualState == WeaponVisualState.NORMAL && shotsInClip >= Constants.CHAINGUN_BURST_SIZE;
+        return visualState == WeaponVisualState.NORMAL && shotsInClip >= WeaponConstants.CHAINGUN_BURST_SIZE;
     }
 
     /**
@@ -74,7 +74,7 @@ public class Chaingun extends Weapon {
         // shotsInClip was already decremented by fire() for bullet 1; guard so pending
         // bullets never exceed what remains in the clip (defensive; canFire() normally
         // ensures shotsInClip >= BURST_SIZE before we get here).
-        pendingBurstBullets  = Math.min(Constants.CHAINGUN_BURST_SIZE - 1, shotsInClip);
+        pendingBurstBullets  = Math.min(WeaponConstants.CHAINGUN_BURST_SIZE - 1, shotsInClip);
         burstPlayerColumn    = playerTileColumn;
         burstPlayerRow       = playerTileRow;
         burstFacingColumn    = facingStepColumn;
@@ -114,7 +114,7 @@ public class Chaingun extends Weapon {
                         burstFacingColumn, burstFacingRow,
                         burstLevel, burstEnemyHitTarget, burstBarrelHitTarget, burstDoorBlocksQuery);
                 spawnEventText("BURST FIRE");
-                fireFlashTimerSeconds = Constants.FIRE_FLASH_DURATION;
+                fireFlashTimerSeconds = WeaponConstants.FIRE_FLASH_DURATION;
             }
             // Do not call super — the base class must not transition FIRING→NORMAL yet.
         } else {
@@ -145,7 +145,7 @@ public class Chaingun extends Weapon {
                 Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (hitEnemy != null) {
                     enemyHitTarget.applyDamageTo(hitEnemy, damageAtDistance(distanceTiles));
-                    if (!Constants.CHAINGUN_PENETRATION) {
+                    if (!WeaponConstants.CHAINGUN_PENETRATION) {
                         return new FireResult(false, distanceTiles);
                     }
                 }
@@ -164,7 +164,7 @@ public class Chaingun extends Weapon {
         return "ROUNDS " + shotsInClip + "/" + clipSize;
     }
 
-    @Override public String getNormalTexturePath() { return Constants.CHAINGUN_NORMAL_TEXTURE_PATH; }
-    @Override public String getFireTexturePath()   { return Constants.CHAINGUN_FIRE_TEXTURE_PATH;   }
-    @Override public String getReloadTexturePath() { return Constants.CHAINGUN_RELOAD_TEXTURE_PATH; }
+    @Override public String getNormalTexturePath() { return WeaponConstants.CHAINGUN_NORMAL_TEXTURE_PATH; }
+    @Override public String getFireTexturePath()   { return WeaponConstants.CHAINGUN_FIRE_TEXTURE_PATH;   }
+    @Override public String getReloadTexturePath() { return WeaponConstants.CHAINGUN_RELOAD_TEXTURE_PATH; }
 }

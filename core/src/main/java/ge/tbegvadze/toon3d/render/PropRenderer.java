@@ -19,6 +19,9 @@ import java.util.List;
 import java.util.Map;
 
 import static ge.tbegvadze.toon3d.util.Constants.*;
+import static ge.tbegvadze.toon3d.util.RenderConstants.*;
+import static ge.tbegvadze.toon3d.util.ItemConstants.*;
+import static ge.tbegvadze.toon3d.util.WeaponConstants.*;
 
 /**
  * Renders billboard prop sprites (barrels, terminals, lockers, etc.) after the wall pass.

@@ -15,6 +15,7 @@ import ge.tbegvadze.toon3d.item.ItemCategory;
 import ge.tbegvadze.toon3d.item.ItemStack;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.ItemConstants;
 
 /**
  * Full-screen inventory overlay drawn on top of the frozen world frame.
@@ -45,8 +46,8 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     // -------------------------------------------------------------------------
     // Palette — UAC field-terminal CRT amber on charcoal
     // -------------------------------------------------------------------------
-    private static final Color SCRIM_COLOR     = new Color(0f, 0f, 0f, Constants.INV_SCRIM_ALPHA);
-    private static final Color PANEL_BG        = new Color(0.071f, 0.071f, 0.086f, Constants.INV_PANEL_ALPHA);
+    private static final Color SCRIM_COLOR     = new Color(0f, 0f, 0f, ItemConstants.INV_SCRIM_ALPHA);
+    private static final Color PANEL_BG        = new Color(0.071f, 0.071f, 0.086f, ItemConstants.INV_PANEL_ALPHA);
     private static final Color SLOT_BG         = new Color(0.102f, 0.102f, 0.122f, 1f);
     private static final Color SLOT_BORDER     = new Color(0.220f, 0.220f, 0.255f, 1f);
     private static final Color AMBER           = new Color(0.902f, 0.667f, 0.157f, 1f);
@@ -60,14 +61,14 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     // Derived layout constants — computed once from Constants at class load time
     // -------------------------------------------------------------------------
     private static final int   GRID_ROW_COUNT     = (int) Math.ceil(
-            (double) Constants.INVENTORY_SLOT_COUNT / Constants.INVENTORY_GRID_COLUMNS);
-    private static final float SLOT_STRIDE        = Constants.INV_SLOT_SIZE + Constants.INV_SLOT_GAP;
-    private static final float GRID_PIXEL_WIDTH   = Constants.INVENTORY_GRID_COLUMNS * SLOT_STRIDE - Constants.INV_SLOT_GAP;
-    private static final float GRID_PIXEL_HEIGHT  = GRID_ROW_COUNT * SLOT_STRIDE - Constants.INV_SLOT_GAP;
+            (double) ItemConstants.INVENTORY_SLOT_COUNT / ItemConstants.INVENTORY_GRID_COLUMNS);
+    private static final float SLOT_STRIDE        = ItemConstants.INV_SLOT_SIZE + ItemConstants.INV_SLOT_GAP;
+    private static final float GRID_PIXEL_WIDTH   = ItemConstants.INVENTORY_GRID_COLUMNS * SLOT_STRIDE - ItemConstants.INV_SLOT_GAP;
+    private static final float GRID_PIXEL_HEIGHT  = GRID_ROW_COUNT * SLOT_STRIDE - ItemConstants.INV_SLOT_GAP;
 
     // Left panel chrome — 20 px padding around the slot grid
-    private static final float LEFT_PANEL_X       = Constants.INV_GRID_ORIGIN_X - 20f;
-    private static final float LEFT_PANEL_Y       = Constants.INV_GRID_ORIGIN_Y - GRID_PIXEL_HEIGHT - 20f;
+    private static final float LEFT_PANEL_X       = ItemConstants.INV_GRID_ORIGIN_X - 20f;
+    private static final float LEFT_PANEL_Y       = ItemConstants.INV_GRID_ORIGIN_Y - GRID_PIXEL_HEIGHT - 20f;
     private static final float LEFT_PANEL_WIDTH   = GRID_PIXEL_WIDTH + 40f;
     private static final float LEFT_PANEL_HEIGHT  = GRID_PIXEL_HEIGHT + 40f;
 
@@ -75,12 +76,12 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     private static final float HEADER_Y           = LEFT_PANEL_Y + LEFT_PANEL_HEIGHT;
     private static final float HEADER_HEIGHT      = 30f;
     private static final float HEADER_X           = LEFT_PANEL_X;
-    private static final float HEADER_WIDTH       = Constants.INV_DETAIL_PANEL_X
-                                                    + Constants.INV_DETAIL_PANEL_WIDTH - LEFT_PANEL_X;
+    private static final float HEADER_WIDTH       = ItemConstants.INV_DETAIL_PANEL_X
+                                                    + ItemConstants.INV_DETAIL_PANEL_WIDTH - LEFT_PANEL_X;
 
     // Footer bar — sits just below the two content panels; tall enough for touch buttons
     private static final float FOOTER_HEIGHT      = 44f;
-    private static final float FOOTER_Y           = LEFT_PANEL_Y - Constants.INV_SLOT_GAP - FOOTER_HEIGHT;
+    private static final float FOOTER_Y           = LEFT_PANEL_Y - ItemConstants.INV_SLOT_GAP - FOOTER_HEIGHT;
     private static final float FOOTER_X           = LEFT_PANEL_X;
     private static final float FOOTER_WIDTH       = HEADER_WIDTH;
 
@@ -189,13 +190,13 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         }
 
         // Slot grid
-        for (int slotIndex = 0; slotIndex < Constants.INVENTORY_SLOT_COUNT; slotIndex++) {
-            int   slotRow    = slotIndex / Constants.INVENTORY_GRID_COLUMNS;
-            int   slotColumn = slotIndex % Constants.INVENTORY_GRID_COLUMNS;
+        for (int slotIndex = 0; slotIndex < ItemConstants.INVENTORY_SLOT_COUNT; slotIndex++) {
+            int   slotRow    = slotIndex / ItemConstants.INVENTORY_GRID_COLUMNS;
+            int   slotColumn = slotIndex % ItemConstants.INVENTORY_GRID_COLUMNS;
             float slotX      = slotLeft(slotColumn);
             float slotY      = slotBottom(slotRow);
-            if (worldX >= slotX && worldX <= slotX + Constants.INV_SLOT_SIZE
-                    && worldY >= slotY && worldY <= slotY + Constants.INV_SLOT_SIZE) {
+            if (worldX >= slotX && worldX <= slotX + ItemConstants.INV_SLOT_SIZE
+                    && worldY >= slotY && worldY <= slotY + ItemConstants.INV_SLOT_SIZE) {
                 if (slotColumn == selectedSlotColumn && slotRow == selectedSlotRow) {
                     return handleUse();
                 }
@@ -273,11 +274,11 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
 
     private void showFlash(String message) {
         flashMessage      = message;
-        flashTimerSeconds = Constants.INV_FLASH_SECONDS;
+        flashTimerSeconds = ItemConstants.INV_FLASH_SECONDS;
     }
 
     private int selectedSlotIndex() {
-        return selectedSlotRow * Constants.INVENTORY_GRID_COLUMNS + selectedSlotColumn;
+        return selectedSlotRow * ItemConstants.INVENTORY_GRID_COLUMNS + selectedSlotColumn;
     }
 
     // -------------------------------------------------------------------------
@@ -303,8 +304,8 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         shapeRenderer.rect(LEFT_PANEL_X, LEFT_PANEL_Y, LEFT_PANEL_WIDTH, LEFT_PANEL_HEIGHT);
 
         // Detail panel
-        shapeRenderer.rect(Constants.INV_DETAIL_PANEL_X, LEFT_PANEL_Y,
-                           Constants.INV_DETAIL_PANEL_WIDTH, LEFT_PANEL_HEIGHT);
+        shapeRenderer.rect(ItemConstants.INV_DETAIL_PANEL_X, LEFT_PANEL_Y,
+                           ItemConstants.INV_DETAIL_PANEL_WIDTH, LEFT_PANEL_HEIGHT);
 
         // Footer bar
         shapeRenderer.rect(FOOTER_X, FOOTER_Y, FOOTER_WIDTH, FOOTER_HEIGHT);
@@ -316,13 +317,13 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         shapeRenderer.rect(BTN_CLOSE_X, BTN_Y, BTN_WIDTH, BTN_HEIGHT);
 
         // Individual slot backgrounds
-        for (int slotIndex = 0; slotIndex < Constants.INVENTORY_SLOT_COUNT; slotIndex++) {
-            int   slotRow    = slotIndex / Constants.INVENTORY_GRID_COLUMNS;
-            int   slotColumn = slotIndex % Constants.INVENTORY_GRID_COLUMNS;
+        for (int slotIndex = 0; slotIndex < ItemConstants.INVENTORY_SLOT_COUNT; slotIndex++) {
+            int   slotRow    = slotIndex / ItemConstants.INVENTORY_GRID_COLUMNS;
+            int   slotColumn = slotIndex % ItemConstants.INVENTORY_GRID_COLUMNS;
             float slotX      = slotLeft(slotColumn);
             float slotY      = slotBottom(slotRow);
             shapeRenderer.setColor(SLOT_BG);
-            shapeRenderer.rect(slotX, slotY, Constants.INV_SLOT_SIZE, Constants.INV_SLOT_SIZE);
+            shapeRenderer.rect(slotX, slotY, ItemConstants.INV_SLOT_SIZE, ItemConstants.INV_SLOT_SIZE);
         }
 
         shapeRenderer.end();
@@ -344,9 +345,9 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         shapeRenderer.line(HEADER_X, HEADER_Y, HEADER_X + HEADER_WIDTH, HEADER_Y);
 
         // Slot borders
-        for (int slotIndex = 0; slotIndex < Constants.INVENTORY_SLOT_COUNT; slotIndex++) {
-            int   slotRow    = slotIndex / Constants.INVENTORY_GRID_COLUMNS;
-            int   slotColumn = slotIndex % Constants.INVENTORY_GRID_COLUMNS;
+        for (int slotIndex = 0; slotIndex < ItemConstants.INVENTORY_SLOT_COUNT; slotIndex++) {
+            int   slotRow    = slotIndex / ItemConstants.INVENTORY_GRID_COLUMNS;
+            int   slotColumn = slotIndex % ItemConstants.INVENTORY_GRID_COLUMNS;
             float slotX      = slotLeft(slotColumn);
             float slotY      = slotBottom(slotRow);
 
@@ -356,25 +357,25 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                 temporaryColor.set(AMBER.r * pulse, AMBER.g * pulse, AMBER.b * pulse, 1f);
                 shapeRenderer.setColor(temporaryColor);
                 // Concentric rects produce a thick pulsing border (INV_SELECT_BORDER_THICKNESS pixels)
-                int borderThickness = (int) Constants.INV_SELECT_BORDER_THICKNESS;
+                int borderThickness = (int) ItemConstants.INV_SELECT_BORDER_THICKNESS;
                 for (int borderStep = 0; borderStep < borderThickness; borderStep++) {
                     shapeRenderer.rect(
                             slotX + borderStep,
                             slotY + borderStep,
-                            Constants.INV_SLOT_SIZE - borderStep * 2,
-                            Constants.INV_SLOT_SIZE - borderStep * 2);
+                            ItemConstants.INV_SLOT_SIZE - borderStep * 2,
+                            ItemConstants.INV_SLOT_SIZE - borderStep * 2);
                 }
             } else {
                 shapeRenderer.setColor(SLOT_BORDER);
-                shapeRenderer.rect(slotX, slotY, Constants.INV_SLOT_SIZE, Constants.INV_SLOT_SIZE);
+                shapeRenderer.rect(slotX, slotY, ItemConstants.INV_SLOT_SIZE, ItemConstants.INV_SLOT_SIZE);
             }
         }
 
         // Dim top-border on detail panel to separate it visually
         shapeRenderer.setColor(AMBER_DIM);
-        shapeRenderer.line(Constants.INV_DETAIL_PANEL_X,
+        shapeRenderer.line(ItemConstants.INV_DETAIL_PANEL_X,
                            LEFT_PANEL_Y + LEFT_PANEL_HEIGHT,
-                           Constants.INV_DETAIL_PANEL_X + Constants.INV_DETAIL_PANEL_WIDTH,
+                           ItemConstants.INV_DETAIL_PANEL_X + ItemConstants.INV_DETAIL_PANEL_WIDTH,
                            LEFT_PANEL_Y + LEFT_PANEL_HEIGHT);
 
         // Action button borders
@@ -419,9 +420,9 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     }
 
     private void drawSlotContents() {
-        for (int slotIndex = 0; slotIndex < Constants.INVENTORY_SLOT_COUNT; slotIndex++) {
-            int   slotRow    = slotIndex / Constants.INVENTORY_GRID_COLUMNS;
-            int   slotColumn = slotIndex % Constants.INVENTORY_GRID_COLUMNS;
+        for (int slotIndex = 0; slotIndex < ItemConstants.INVENTORY_SLOT_COUNT; slotIndex++) {
+            int   slotRow    = slotIndex / ItemConstants.INVENTORY_GRID_COLUMNS;
+            int   slotColumn = slotIndex % ItemConstants.INVENTORY_GRID_COLUMNS;
             float slotX      = slotLeft(slotColumn);
             float slotY      = slotBottom(slotRow);
 
@@ -437,8 +438,8 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
             String glyphText = textBuilder.toString();
             glyphLayout.setText(font, glyphText);
             font.draw(spriteBatch, glyphText,
-                      slotX + (Constants.INV_SLOT_SIZE - glyphLayout.width) / 2f,
-                      slotY + (Constants.INV_SLOT_SIZE + glyphLayout.height) / 2f);
+                      slotX + (ItemConstants.INV_SLOT_SIZE - glyphLayout.width) / 2f,
+                      slotY + (ItemConstants.INV_SLOT_SIZE + glyphLayout.height) / 2f);
 
             // Stack count bottom-right if quantity > 1
             if (slot.getQuantity() > 1) {
@@ -448,7 +449,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                 String quantityLabel = textBuilder.toString();
                 glyphLayout.setText(font, quantityLabel);
                 font.draw(spriteBatch, quantityLabel,
-                          slotX + Constants.INV_SLOT_SIZE - glyphLayout.width - 4f,
+                          slotX + ItemConstants.INV_SLOT_SIZE - glyphLayout.width - 4f,
                           slotY + glyphLayout.height + 4f);
             }
 
@@ -457,15 +458,15 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                     && inventory.getEquippedWeaponSlot() == slotIndex) {
                 font.setColor(GREEN_EQUIPPED);
                 font.draw(spriteBatch, "*",
-                          slotX + Constants.INV_SLOT_SIZE - 12f,
-                          slotY + Constants.INV_SLOT_SIZE - 4f);
+                          slotX + ItemConstants.INV_SLOT_SIZE - 12f,
+                          slotY + ItemConstants.INV_SLOT_SIZE - 4f);
             }
         }
     }
 
     private void drawDetailPanel() {
         ItemStack slot     = inventory.getSlot(selectedSlotIndex());
-        float     textX    = Constants.INV_DETAIL_PANEL_X + 16f;
+        float     textX    = ItemConstants.INV_DETAIL_PANEL_X + 16f;
         float     textY    = LEFT_PANEL_Y + LEFT_PANEL_HEIGHT - 20f;
         float     lineStep = 20f;
 
@@ -527,11 +528,11 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
 
         // Slot usage counter at bottom-right of footer bar
         int usedSlotCount = 0;
-        for (int slotIndex = 0; slotIndex < Constants.INVENTORY_SLOT_COUNT; slotIndex++) {
+        for (int slotIndex = 0; slotIndex < ItemConstants.INVENTORY_SLOT_COUNT; slotIndex++) {
             if (!inventory.getSlot(slotIndex).isEmpty()) usedSlotCount++;
         }
         textBuilder.setLength(0);
-        textBuilder.append("SLOTS ").append(usedSlotCount).append('/').append(Constants.INVENTORY_SLOT_COUNT);
+        textBuilder.append("SLOTS ").append(usedSlotCount).append('/').append(ItemConstants.INVENTORY_SLOT_COUNT);
         String slotsLabel = textBuilder.toString();
         glyphLayout.setText(font, slotsLabel);
         font.setColor(DIM_COLOR);
@@ -554,11 +555,11 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     // -------------------------------------------------------------------------
 
     private static float slotLeft(int slotColumn) {
-        return Constants.INV_GRID_ORIGIN_X + slotColumn * SLOT_STRIDE;
+        return ItemConstants.INV_GRID_ORIGIN_X + slotColumn * SLOT_STRIDE;
     }
 
     private static float slotBottom(int slotRow) {
-        return Constants.INV_GRID_ORIGIN_Y - slotRow * SLOT_STRIDE - Constants.INV_SLOT_SIZE;
+        return ItemConstants.INV_GRID_ORIGIN_Y - slotRow * SLOT_STRIDE - ItemConstants.INV_SLOT_SIZE;
     }
 
     // -------------------------------------------------------------------------

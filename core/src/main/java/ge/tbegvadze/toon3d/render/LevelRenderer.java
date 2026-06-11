@@ -11,6 +11,7 @@ import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import static ge.tbegvadze.toon3d.util.Constants.*;
+import static ge.tbegvadze.toon3d.util.RenderConstants.*;
 
 public class LevelRenderer implements Renderable, Disposable {
 

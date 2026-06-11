@@ -10,6 +10,8 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.EffectConstants;
+import ge.tbegvadze.toon3d.util.RenderConstants;
 
 /**
  * Draws all impact effects owned by ImpactEffectSystem:
@@ -196,14 +198,14 @@ public final class ImpactEffectRenderer implements Disposable {
 
             int amount = system.numberAmount[numberIndex];
             float fontScale;
-            if (amount < Constants.DAMAGE_NUMBER_SCALE_THRESHOLD) {
-                fontScale = Constants.DAMAGE_NUMBER_FONT_SCALE;
+            if (amount < EffectConstants.DAMAGE_NUMBER_SCALE_THRESHOLD) {
+                fontScale = EffectConstants.DAMAGE_NUMBER_FONT_SCALE;
             } else {
                 fontScale = Math.min(
-                    Constants.DAMAGE_NUMBER_FONT_SCALE
-                        + (amount - Constants.DAMAGE_NUMBER_SCALE_THRESHOLD + 1)
-                          * Constants.DAMAGE_NUMBER_SCALE_PER_POINT,
-                    Constants.DAMAGE_NUMBER_MAX_FONT_SCALE
+                    EffectConstants.DAMAGE_NUMBER_FONT_SCALE
+                        + (amount - EffectConstants.DAMAGE_NUMBER_SCALE_THRESHOLD + 1)
+                          * EffectConstants.DAMAGE_NUMBER_SCALE_PER_POINT,
+                    EffectConstants.DAMAGE_NUMBER_MAX_FONT_SCALE
                 );
             }
             font.getData().setScale(fontScale);
@@ -229,16 +231,16 @@ public final class ImpactEffectRenderer implements Disposable {
             float tileOffsetX = (worldX - playerX) / Constants.CELL_SIZE;
             float tileOffsetY = (worldY - playerY) / Constants.CELL_SIZE;
             float depth       = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
-            if (depth <= Constants.PROP_BEHIND_PLAYER_EPSILON_TILES) continue;
+            if (depth <= RenderConstants.PROP_BEHIND_PLAYER_EPSILON_TILES) continue;
 
             float screenColumn = GameMath.spriteScreenColumnCenter(
                     tileOffsetX, tileOffsetY, directionX, directionY,
-                    planeX, planeY, Constants.WALL_PROJECTION_SCREEN_WIDTH);
+                    planeX, planeY, RenderConstants.WALL_PROJECTION_SCREEN_WIDTH);
 
             // Y anchor: top of the enemy sprite + rising offset
-            float halfSpriteHeight = Constants.WALL_PROJECTION_SCREEN_HEIGHT / (2f * depth);
-            float spriteTop        = Constants.WALL_PROJECTION_SCREEN_HEIGHT / 2f + halfSpriteHeight;
-            float riseOffset       = Constants.DAMAGE_NUMBER_RISE_SPEED * age;
+            float halfSpriteHeight = RenderConstants.WALL_PROJECTION_SCREEN_HEIGHT / (2f * depth);
+            float spriteTop        = RenderConstants.WALL_PROJECTION_SCREEN_HEIGHT / 2f + halfSpriteHeight;
+            float riseOffset       = EffectConstants.DAMAGE_NUMBER_RISE_SPEED * age;
             float screenY          = spriteTop + riseOffset + 10f;
 
             // Colour: kill = bold gold, hit = orange-red
@@ -272,7 +274,7 @@ public final class ImpactEffectRenderer implements Disposable {
 
         float width  = Constants.WORLD_WIDTH;
         float height = Constants.WORLD_HEIGHT;
-        float edgeThickness = Constants.KILL_FLASH_EDGE_THICKNESS;
+        float edgeThickness = EffectConstants.KILL_FLASH_EDGE_THICKNESS;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         // Additive blend: the edge rectangles add light to whatever is already rendered,

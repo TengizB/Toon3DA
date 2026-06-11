@@ -5,6 +5,8 @@ import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.Random;
+import ge.tbegvadze.toon3d.util.EffectConstants;
+import ge.tbegvadze.toon3d.util.RenderConstants;
 
 /**
  * Simulation-only: owns all live impact-effect state and the pre-allocated
@@ -34,10 +36,10 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     }
 
     // Pool sizes derived from constants
-    static final int MAX_PARTICLES     = Constants.IMPACT_MAX_SIMULTANEOUS_HITS
-                                          * Constants.HIT_PARTICLE_COUNT * 2; // ×2 for kill debris
-    static final int MAX_DEATH_BURSTS  = Constants.IMPACT_MAX_SIMULTANEOUS_HITS;
-    static final int MAX_DAMAGE_NUMBERS = Constants.IMPACT_MAX_SIMULTANEOUS_HITS;
+    static final int MAX_PARTICLES     = EffectConstants.IMPACT_MAX_SIMULTANEOUS_HITS
+                                          * EffectConstants.HIT_PARTICLE_COUNT * 2; // ×2 for kill debris
+    static final int MAX_DEATH_BURSTS  = EffectConstants.IMPACT_MAX_SIMULTANEOUS_HITS;
+    static final int MAX_DAMAGE_NUMBERS = EffectConstants.IMPACT_MAX_SIMULTANEOUS_HITS;
 
     // -------------------------------------------------------------------------
     // Screen shake — single accumulator
@@ -127,25 +129,25 @@ public final class ImpactEffectSystem implements ImpactEventListener {
 
     @Override
     public void onEnemyHit(float worldX, float worldY, float heightMultiplier, int damageDealt) {
-        triggerShake(Constants.HIT_SHAKE_MAGNITUDE, Constants.HIT_SHAKE_DURATION_SECONDS);
+        triggerShake(EffectConstants.HIT_SHAKE_MAGNITUDE, EffectConstants.HIT_SHAKE_DURATION_SECONDS);
 
         float screenX = projectToScreenX(worldX, worldY);
         float screenY = projectToScreenY(worldX, worldY, heightMultiplier);
 
-        spawnHitParticles(screenX, screenY, Constants.HIT_PARTICLE_COUNT, false);
+        spawnHitParticles(screenX, screenY, EffectConstants.HIT_PARTICLE_COUNT, false);
         spawnDamageNumber(worldX, worldY, damageDealt, false);
     }
 
     @Override
     public void onEnemyKilled(float worldX, float worldY, float heightMultiplier, int killingBlowDamage) {
-        triggerShake(Constants.KILL_SHAKE_MAGNITUDE, Constants.KILL_SHAKE_DURATION_SECONDS);
-        killFlashTimeRemaining = Constants.KILL_FLASH_DURATION_SECONDS;
+        triggerShake(EffectConstants.KILL_SHAKE_MAGNITUDE, EffectConstants.KILL_SHAKE_DURATION_SECONDS);
+        killFlashTimeRemaining = EffectConstants.KILL_FLASH_DURATION_SECONDS;
 
         float screenX = projectToScreenX(worldX, worldY);
         float screenY = projectToScreenY(worldX, worldY, heightMultiplier);
 
         // Kill debris: twice the particle count, hot white-orange colour
-        spawnHitParticles(screenX, screenY, Constants.HIT_PARTICLE_COUNT * 2, true);
+        spawnHitParticles(screenX, screenY, EffectConstants.HIT_PARTICLE_COUNT * 2, true);
         spawnDeathBurst(screenX, screenY, heightMultiplier);
         spawnDamageNumber(worldX, worldY, killingBlowDamage, true);
     }
@@ -195,7 +197,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
                 continue;
             }
             // Gravity arc: pull downward in screen space (Y-up → subtract to fall)
-            particleVelocityY[particleIndex] -= Constants.HIT_PARTICLE_GRAVITY * deltaTime;
+            particleVelocityY[particleIndex] -= EffectConstants.HIT_PARTICLE_GRAVITY * deltaTime;
             particleScreenX[particleIndex]   += particleVelocityX[particleIndex] * deltaTime;
             particleScreenY[particleIndex]   += particleVelocityY[particleIndex] * deltaTime;
         }
@@ -239,8 +241,8 @@ public final class ImpactEffectSystem implements ImpactEventListener {
      */
     public float getKillFlashAlpha() {
         if (killFlashTimeRemaining <= 0f) return 0f;
-        float fraction = killFlashTimeRemaining / Constants.KILL_FLASH_DURATION_SECONDS;
-        return Constants.KILL_FLASH_MAX_ALPHA * (float) Math.sin(fraction * Math.PI);
+        float fraction = killFlashTimeRemaining / EffectConstants.KILL_FLASH_DURATION_SECONDS;
+        return EffectConstants.KILL_FLASH_MAX_ALPHA * (float) Math.sin(fraction * Math.PI);
     }
 
     // Player state accessors for the renderer's per-frame damage-number projection
@@ -274,13 +276,13 @@ public final class ImpactEffectSystem implements ImpactEventListener {
             particleScreenY[slot] = screenY;
 
             float angleRadians = random.nextFloat() * MathUtils_PI2;
-            float speed        = Constants.HIT_PARTICLE_SPEED_MIN
-                    + random.nextFloat() * (Constants.HIT_PARTICLE_SPEED_MAX - Constants.HIT_PARTICLE_SPEED_MIN);
+            float speed        = EffectConstants.HIT_PARTICLE_SPEED_MIN
+                    + random.nextFloat() * (EffectConstants.HIT_PARTICLE_SPEED_MAX - EffectConstants.HIT_PARTICLE_SPEED_MIN);
             particleVelocityX[slot] = (float) Math.cos(angleRadians) * speed;
             particleVelocityY[slot] = (float) Math.sin(angleRadians) * speed;
             particleAge[slot]       = 0f;
-            particleLife[slot]      = Constants.HIT_PARTICLE_DURATION_SECONDS;
-            particleSize[slot]      = Constants.HIT_PARTICLE_SIZE;
+            particleLife[slot]      = EffectConstants.HIT_PARTICLE_DURATION_SECONDS;
+            particleSize[slot]      = EffectConstants.HIT_PARTICLE_SIZE;
             particleActive[slot]    = true;
 
             if (isKill) {
@@ -304,9 +306,9 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         burstScreenX[slot]   = screenX;
         burstScreenY[slot]   = screenY;
         burstAge[slot]       = 0f;
-        burstLife[slot]      = Constants.DEATH_BURST_LIFE_SECONDS;
-        burstMaxRadius[slot] = Constants.DEATH_BURST_BASE_RADIUS
-                               + Constants.DEATH_BURST_SCALE_PER_HEIGHT * heightMultiplier;
+        burstLife[slot]      = EffectConstants.DEATH_BURST_LIFE_SECONDS;
+        burstMaxRadius[slot] = EffectConstants.DEATH_BURST_BASE_RADIUS
+                               + EffectConstants.DEATH_BURST_SCALE_PER_HEIGHT * heightMultiplier;
         burstActive[slot]    = true;
     }
 
@@ -317,7 +319,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         numberWorldX[slot]  = worldX;
         numberWorldY[slot]  = worldY;
         numberAge[slot]     = 0f;
-        numberLife[slot]    = Constants.DAMAGE_NUMBER_DURATION_SECONDS;
+        numberLife[slot]    = EffectConstants.DAMAGE_NUMBER_DURATION_SECONDS;
         numberAmount[slot]  = amount;
         numberIsKill[slot]  = isKill;
         numberActive[slot]  = true;
@@ -359,10 +361,10 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         float tileOffsetX = (worldX - playerWorldX) / Constants.CELL_SIZE;
         float tileOffsetY = (worldY - playerWorldY) / Constants.CELL_SIZE;
         float depth = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
-        if (depth <= Constants.PROP_BEHIND_PLAYER_EPSILON_TILES) return -1000f;
+        if (depth <= RenderConstants.PROP_BEHIND_PLAYER_EPSILON_TILES) return -1000f;
         return GameMath.spriteScreenColumnCenter(tileOffsetX, tileOffsetY,
                 directionX, directionY, planeX, planeY,
-                Constants.WALL_PROJECTION_SCREEN_WIDTH);
+                RenderConstants.WALL_PROJECTION_SCREEN_WIDTH);
     }
 
     /*
@@ -380,11 +382,11 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         float tileOffsetX = (worldX - playerWorldX) / Constants.CELL_SIZE;
         float tileOffsetY = (worldY - playerWorldY) / Constants.CELL_SIZE;
         float depth = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
-        if (depth <= Constants.PROP_BEHIND_PLAYER_EPSILON_TILES) {
-            return Constants.WALL_PROJECTION_SCREEN_HEIGHT / 2f;
+        if (depth <= RenderConstants.PROP_BEHIND_PLAYER_EPSILON_TILES) {
+            return RenderConstants.WALL_PROJECTION_SCREEN_HEIGHT / 2f;
         }
-        float halfSpriteHeight = (Constants.WALL_PROJECTION_SCREEN_HEIGHT / depth) * heightMultiplier / 2f;
-        float horizon = Constants.WALL_PROJECTION_SCREEN_HEIGHT / 2f;
+        float halfSpriteHeight = (RenderConstants.WALL_PROJECTION_SCREEN_HEIGHT / depth) * heightMultiplier / 2f;
+        float horizon = RenderConstants.WALL_PROJECTION_SCREEN_HEIGHT / 2f;
         // Anchor at centre + 40% up the sprite so effects originate from the torso
         return horizon + halfSpriteHeight * 0.4f;
     }

@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.item;
 
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
+import ge.tbegvadze.toon3d.util.ItemConstants;
 
 /**
  * The four ammo types carried in the marine's reserve pool.
@@ -18,41 +19,41 @@ public enum AmmoType {
 
     BULLETS(
             "Bullets",
-            Constants.AMMO_RESERVE_CAP_BULLETS,
+            ItemConstants.AMMO_RESERVE_CAP_BULLETS,
             '6',
-            Constants.AMMO_BOX_BULLETS,
+            ItemConstants.AMMO_BOX_BULLETS,
             0.72f, 0.48f, 0.18f   // copper
     ),
 
     SHELLS(
             "Shells",
-            Constants.AMMO_RESERVE_CAP_SHELLS,
+            ItemConstants.AMMO_RESERVE_CAP_SHELLS,
             '7',
-            Constants.AMMO_BOX_SHELLS,
+            ItemConstants.AMMO_BOX_SHELLS,
             0.78f, 0.68f, 0.12f   // brass/yellow
     ),
 
     CELLS(
             "Plasma Cells",
-            Constants.AMMO_RESERVE_CAP_CELLS,
+            ItemConstants.AMMO_RESERVE_CAP_CELLS,
             '8',
-            Constants.AMMO_BOX_CELLS,
+            ItemConstants.AMMO_BOX_CELLS,
             0.10f, 0.80f, 0.90f   // cyan
     ),
 
     ROCKETS(
             "Rockets",
-            Constants.AMMO_RESERVE_CAP_ROCKETS,
+            ItemConstants.AMMO_RESERVE_CAP_ROCKETS,
             '9',
-            Constants.AMMO_BOX_ROCKETS,
+            ItemConstants.AMMO_BOX_ROCKETS,
             0.45f, 0.55f, 0.20f   // olive
     ),
 
     SLUGS(
             "Slugs",
-            Constants.RAILGUN_MAX_SLUGS,
+            WeaponConstants.RAILGUN_MAX_SLUGS,
             '0',
-            Constants.RAILGUN_PICKUP_SLUGS,
+            WeaponConstants.RAILGUN_PICKUP_SLUGS,
             0.85f, 0.90f, 0.95f   // silver/white
     );
 

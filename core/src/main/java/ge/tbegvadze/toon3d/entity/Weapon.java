@@ -4,8 +4,8 @@ import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
-import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
  * Abstract base for every weapon in the game.
@@ -147,7 +147,7 @@ public abstract class Weapon {
             if (fireFlashTimerSeconds <= 0f) {
                 visualState = WeaponVisualState.NORMAL;
                 if (shotsInClip == 0) {
-                    normalToReloadTimerSeconds = Constants.NORMAL_TO_RELOAD_DELAY_SECONDS;
+                    normalToReloadTimerSeconds = WeaponConstants.NORMAL_TO_RELOAD_DELAY_SECONDS;
                 }
             }
         } else if (visualState == WeaponVisualState.NORMAL && normalToReloadTimerSeconds > 0f) {
@@ -211,7 +211,7 @@ public abstract class Weapon {
                                  BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
         shotsInClip--;
         visualState           = WeaponVisualState.FIRING;
-        fireFlashTimerSeconds = Constants.FIRE_FLASH_DURATION;
+        fireFlashTimerSeconds = WeaponConstants.FIRE_FLASH_DURATION;
         flashCycleCount++;
         return marchShot(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
                          level, enemyHitTarget, barrelHitTarget, doorBlocksQuery);
@@ -243,7 +243,7 @@ public abstract class Weapon {
      */
     public int damageAtDistance(int distanceTiles) {
         float multiplier = GameMath.damageDropMultiplier(damageDropCoefficient,
-                distanceTiles, Constants.DAMAGE_MIN_MULTIPLIER);
+                distanceTiles, WeaponConstants.DAMAGE_MIN_MULTIPLIER);
         return Math.round(damage * multiplier);
     }
 

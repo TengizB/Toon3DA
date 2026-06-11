@@ -15,6 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Phaser;
 
 import static ge.tbegvadze.toon3d.util.Constants.*;
+import static ge.tbegvadze.toon3d.util.RenderConstants.*;
 
 /**
  * Renders the textured floor and ceiling as a full-screen backdrop using

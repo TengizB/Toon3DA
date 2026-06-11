@@ -1,0 +1,61 @@
+# docs/ — Reference Index
+
+Quick lookup: find the right doc before starting any feature or fix.
+
+## Architecture & Math
+
+| File | When to read |
+|---|---|
+| `dda-raycasting-math.txt` | Touching RayCaster, WallRenderer, or any DDA variable. Contains all math proofs. |
+| `wall-renderer-guide.txt` | Modifying WallRenderer pipeline, texture mapping, or shade calculation. |
+| `tick-system.txt` | Adding a new turn-based subscriber, modifying game loop, or touching TickEventBus. |
+
+## Level & World
+
+| File | When to read |
+|---|---|
+| `tile-symbols.txt` | Adding a new tile type, writing a level file, or touching Level.java. **Single source of truth.** |
+| `procedural-level-generation.txt` | Modifying LevelGenerator, adding room types, or changing wall distribution. |
+| `level-design-context.txt` | Designing a new hand-crafted level or deciding on visual theme. |
+
+## Weapons
+
+| File | When to read |
+|---|---|
+| `weapon-creation-guide.txt` | Implementing any weapon end-to-end. Read fully before writing a single line. |
+
+## Enemies
+
+| File | When to read |
+|---|---|
+| `enemy-system.txt` | Adding/modifying enemy types, AI behaviour, attack resolution. |
+| `enemy-health-bars.txt` | Touching EnemyRenderer health bar geometry, colors, or HP text. |
+
+## Player Progression
+
+| File | When to read |
+|---|---|
+| `xp-level-progression.txt` | Touching XP gain, level-up rewards, attribute scaling, or PlayerStats. |
+
+## UI & HUD
+
+| File | When to read |
+|---|---|
+| `procedural-vitals-hud.txt` | Modifying HudRenderer panels, bars, face box, or any HUD element. |
+
+## Design Context
+
+| File | When to read |
+|---|---|
+| `doom-rpg-reference.txt` | Any question about movement feel, UI style, or design decisions. |
+| `roguelike-design-pillars.txt` | Any question about progression, permadeath, or game loop philosophy. |
+
+## Ideas Backlog
+
+All feature design documents live in `.claude/agents/ideas/` (64 files).
+
+**Before implementing any gameplay feature**, check if a design doc exists there.
+If none exists, invoke `creative-game-designer` first.
+
+Numbered `roguelike_order_N_*.txt` files define the implementation roadmap (1–19).
+Check their `STATUS:` header line to know if a feature is IMPLEMENTED, IN PROGRESS, or NOT IMPLEMENTED.

@@ -1,6 +1,6 @@
 package ge.tbegvadze.toon3d.render;
 
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 
 /**
  * Manages a fixed pool of screen-space event text entries (e.g. "Turn skipped", "-12 HP").
@@ -33,7 +33,7 @@ public final class EventTextSystem {
     private int            nextSlot;
 
     public EventTextSystem() {
-        poolSize   = Constants.EVENT_TEXT_MAX;
+        poolSize   = EffectConstants.EVENT_TEXT_MAX;
         texts      = new String[poolSize];
         ageSeconds = new float[poolSize];
         colorTypes = new byte[poolSize];
@@ -45,7 +45,7 @@ public final class EventTextSystem {
         for (int slotIndex = 0; slotIndex < poolSize; slotIndex++) {
             if (texts[slotIndex] == null) continue;
             ageSeconds[slotIndex] += deltaTime;
-            if (ageSeconds[slotIndex] >= Constants.EVENT_TEXT_LIFE_SECONDS) {
+            if (ageSeconds[slotIndex] >= EffectConstants.EVENT_TEXT_LIFE_SECONDS) {
                 texts[slotIndex] = null;
             }
         }

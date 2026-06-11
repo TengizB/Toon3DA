@@ -2,7 +2,7 @@ package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
  * Break-open double-barrel shotgun — fires one barrel per shot, two shots before reload.
@@ -25,12 +25,12 @@ import ge.tbegvadze.toon3d.util.Constants;
 public class DoubleBarrelShotgun extends Weapon {
 
     public DoubleBarrelShotgun() {
-        super(Constants.DBL_SHOTGUN_DISPLAY_NAME,
-              Constants.DBL_SHOTGUN_DAMAGE,
-              Constants.DBL_SHOTGUN_CLIP_SIZE,
-              Constants.DBL_SHOTGUN_RELOAD_TIME_TICKS,
-              Constants.DBL_SHOTGUN_DAMAGE_DROP_COEFF,
-              Constants.DBL_SHOTGUN_RANGE_TILES,
+        super(WeaponConstants.DBL_SHOTGUN_DISPLAY_NAME,
+              WeaponConstants.DBL_SHOTGUN_DAMAGE,
+              WeaponConstants.DBL_SHOTGUN_CLIP_SIZE,
+              WeaponConstants.DBL_SHOTGUN_RELOAD_TIME_TICKS,
+              WeaponConstants.DBL_SHOTGUN_DAMAGE_DROP_COEFF,
+              WeaponConstants.DBL_SHOTGUN_RANGE_TILES,
               AmmoType.SHELLS);
     }
 
@@ -58,7 +58,7 @@ public class DoubleBarrelShotgun extends Weapon {
                 Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (hitEnemy != null) {
                     enemyHitTarget.applyDamageTo(hitEnemy, damageAtDistance(distanceTiles));
-                    if (!Constants.DBL_SHOTGUN_PENETRATION) {
+                    if (!WeaponConstants.DBL_SHOTGUN_PENETRATION) {
                         return new FireResult(false, distanceTiles);
                     }
                 }
@@ -67,7 +67,7 @@ public class DoubleBarrelShotgun extends Weapon {
         return FireResult.MISSED;
     }
 
-    @Override public String getNormalTexturePath() { return Constants.DBL_SHOTGUN_NORMAL_TEXTURE_PATH; }
-    @Override public String getFireTexturePath()   { return Constants.DBL_SHOTGUN_FIRE_TEXTURE_PATH;   }
-    @Override public String getReloadTexturePath() { return Constants.DBL_SHOTGUN_RELOAD_TEXTURE_PATH; }
+    @Override public String getNormalTexturePath() { return WeaponConstants.DBL_SHOTGUN_NORMAL_TEXTURE_PATH; }
+    @Override public String getFireTexturePath()   { return WeaponConstants.DBL_SHOTGUN_FIRE_TEXTURE_PATH;   }
+    @Override public String getReloadTexturePath() { return WeaponConstants.DBL_SHOTGUN_RELOAD_TEXTURE_PATH; }
 }

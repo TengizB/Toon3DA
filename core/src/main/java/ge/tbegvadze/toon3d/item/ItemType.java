@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.item;
 
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
+import ge.tbegvadze.toon3d.util.ItemConstants;
 
 /**
  * Catalog of every item the marine can carry in the slotted inventory.
@@ -37,7 +38,7 @@ public enum ItemType {
             "Pistol",
             ItemCategory.WEAPON,
             false,
-            Constants.ITEM_STACK_MAX_WEAPON,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
             'P',
             1.00f, 0.75f, 0.10f
     ),
@@ -46,7 +47,7 @@ public enum ItemType {
             "Shotgun",
             ItemCategory.WEAPON,
             false,
-            Constants.ITEM_STACK_MAX_WEAPON,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
             'S',
             1.00f, 0.75f, 0.10f
     ),
@@ -55,7 +56,7 @@ public enum ItemType {
             "Plasma Rifle",
             ItemCategory.WEAPON,
             false,
-            Constants.ITEM_STACK_MAX_WEAPON,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
             'L',
             1.00f, 0.75f, 0.10f
     ),
@@ -64,7 +65,7 @@ public enum ItemType {
             "Rocket Launcher",
             ItemCategory.WEAPON,
             false,
-            Constants.ITEM_STACK_MAX_WEAPON,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
             'R',
             1.00f, 0.75f, 0.10f
     ),
@@ -77,7 +78,7 @@ public enum ItemType {
             "Medkit (Small)",
             ItemCategory.CONSUMABLE,
             true,
-            Constants.ITEM_STACK_MAX_MEDKIT_SMALL,
+            ItemConstants.ITEM_STACK_MAX_MEDKIT_SMALL,
             '+',
             0.20f, 0.90f, 0.20f
     ),
@@ -86,7 +87,7 @@ public enum ItemType {
             "Medkit (Large)",
             ItemCategory.CONSUMABLE,
             true,
-            Constants.ITEM_STACK_MAX_MEDKIT_LARGE,
+            ItemConstants.ITEM_STACK_MAX_MEDKIT_LARGE,
             'H',
             0.20f, 0.90f, 0.20f
     ),
@@ -95,7 +96,7 @@ public enum ItemType {
             "Stimpack",
             ItemCategory.CONSUMABLE,
             true,
-            Constants.ITEM_STACK_MAX_STIMPACK,
+            ItemConstants.ITEM_STACK_MAX_STIMPACK,
             's',
             1.00f, 0.55f, 0.10f
     ),
@@ -140,7 +141,7 @@ public enum ItemType {
             "Credits",
             ItemCategory.MISC,
             true,
-            Constants.ITEM_STACK_MAX_CREDITS,
+            ItemConstants.ITEM_STACK_MAX_CREDITS,
             '$',
             1.00f, 0.85f, 0.10f
     ),
@@ -155,7 +156,7 @@ public enum ItemType {
             "Bullets",
             ItemCategory.AMMO,
             true,
-            Constants.AMMO_RESERVE_CAP_BULLETS,
+            ItemConstants.AMMO_RESERVE_CAP_BULLETS,
             'b',
             0.72f, 0.48f, 0.18f
     ),
@@ -164,7 +165,7 @@ public enum ItemType {
             "Shells",
             ItemCategory.AMMO,
             true,
-            Constants.AMMO_RESERVE_CAP_SHELLS,
+            ItemConstants.AMMO_RESERVE_CAP_SHELLS,
             'h',
             0.78f, 0.68f, 0.12f
     ),
@@ -173,7 +174,7 @@ public enum ItemType {
             "Plasma Cells",
             ItemCategory.AMMO,
             true,
-            Constants.AMMO_RESERVE_CAP_CELLS,
+            ItemConstants.AMMO_RESERVE_CAP_CELLS,
             'c',
             0.10f, 0.80f, 0.90f
     ),
@@ -182,7 +183,7 @@ public enum ItemType {
             "Rockets",
             ItemCategory.AMMO,
             true,
-            Constants.AMMO_RESERVE_CAP_ROCKETS,
+            ItemConstants.AMMO_RESERVE_CAP_ROCKETS,
             'r',
             0.45f, 0.55f, 0.20f
     ),
@@ -191,7 +192,7 @@ public enum ItemType {
             "Slugs",
             ItemCategory.AMMO,
             true,
-            Constants.RAILGUN_MAX_SLUGS,
+            WeaponConstants.RAILGUN_MAX_SLUGS,
             'g',
             0.85f, 0.90f, 0.95f
     );

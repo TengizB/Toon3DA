@@ -1,12 +1,12 @@
 package ge.tbegvadze.toon3d.entity;
 
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
  * Manages a fixed-size array of weapon slots for the player's active loadout.
  *
  * Invariants:
- *   - Slot count is always Constants.WEAPON_SLOT_COUNT (currently 2; future expansions increase it).
+ *   - Slot count is always WeaponConstants.WEAPON_SLOT_COUNT (currently 2; future expansions increase it).
  *   - activeSlotIndex always refers to a slot that is either filled, or the only
  *     candidate when all slots are empty (index 0 in that case).
  *   - No slot can hold two weapons; each weapon occupies exactly one slot.
@@ -22,7 +22,7 @@ public final class Loadout {
     private int activeSlotIndex;
 
     public Loadout() {
-        this.slots           = new Weapon[Constants.WEAPON_SLOT_COUNT];
+        this.slots           = new Weapon[WeaponConstants.WEAPON_SLOT_COUNT];
         this.activeSlotIndex = 0;
     }
 
