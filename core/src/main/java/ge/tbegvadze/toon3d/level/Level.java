@@ -14,17 +14,25 @@ import java.util.List;
  * matrix[row][col] — row 0 is the bottom row, matching world Y-up semantics: (0,0) = bottom-left tile.
  */
 public class Level {
-    protected final char[][]              matrix;
-    private final   List<EnemySpawnPoint> enemySpawnPoints;
+    protected final char[][]               matrix;
+    private final   List<EnemySpawnPoint>  enemySpawnPoints;
+    private final   List<WeaponSpawnPoint> weaponSpawnPoints;
 
-    Level(char[][] matrix, List<EnemySpawnPoint> enemySpawnPoints) {
-        this.matrix           = matrix;
-        this.enemySpawnPoints = Collections.unmodifiableList(enemySpawnPoints);
+    Level(char[][] matrix, List<EnemySpawnPoint> enemySpawnPoints,
+          List<WeaponSpawnPoint> weaponSpawnPoints) {
+        this.matrix            = matrix;
+        this.enemySpawnPoints  = Collections.unmodifiableList(enemySpawnPoints);
+        this.weaponSpawnPoints = Collections.unmodifiableList(weaponSpawnPoints);
     }
 
     /** Returns the read-only list of enemy spawn points extracted by LevelLoader. */
     public List<EnemySpawnPoint> getEnemySpawnPoints() {
         return enemySpawnPoints;
+    }
+
+    /** Returns the read-only list of weapon pickup spawn points placed by LevelGenerator. */
+    public List<WeaponSpawnPoint> getWeaponSpawnPoints() {
+        return weaponSpawnPoints;
     }
 
     /**

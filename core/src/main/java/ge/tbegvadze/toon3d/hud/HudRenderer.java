@@ -353,6 +353,11 @@ public class HudRenderer implements Renderable, Disposable {
         stringBuilder.append(isDead ? 0 : hudState.currentAmmo);
         stringBuilder.append('/');
         stringBuilder.append(hudState.clipSize);
+        if (!isDead && hudState.reserveAmmo >= 0) {
+            stringBuilder.append('[');
+            stringBuilder.append(hudState.reserveAmmo);
+            stringBuilder.append(']');
+        }
         font.draw(batch, stringBuilder, Constants.HUD_BAR_NUMBER_X, labelY);
     }
 

@@ -1,4 +1,4 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Ammo as Inventory Slot Items (Fix Infinite Ammo)
 ---

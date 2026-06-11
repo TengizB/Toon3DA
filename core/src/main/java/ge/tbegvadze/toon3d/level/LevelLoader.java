@@ -65,6 +65,6 @@ public class LevelLoader {
             }
         }
 
-        return new Level(matrix, spawnPoints);
+        return new Level(matrix, spawnPoints, new ArrayList<>());
     }
 }

@@ -16,14 +16,17 @@ import ge.tbegvadze.toon3d.input.PlayerController;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
 import ge.tbegvadze.toon3d.input.touch.TouchControllerRenderer;
 import ge.tbegvadze.toon3d.input.touch.TouchInputState;
+import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
 import ge.tbegvadze.toon3d.level.LevelLoader;
+import ge.tbegvadze.toon3d.level.WeaponSpawnPoint;
 import ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer;
 import ge.tbegvadze.toon3d.progression.LevelUpReward;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
+import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameBalance;
@@ -82,10 +85,20 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private int      currentDepth     = Constants.STARTING_DEPTH;
 
     // -------------------------------------------------------------------------
+    // Player stat system — persistent across floor transitions (Order 6)
+    // -------------------------------------------------------------------------
+    private final PlayerStats playerStats;
+
+    // -------------------------------------------------------------------------
     // Slot-based item inventory — holds items AND ammo reserve stacks (Order 6)
     // -------------------------------------------------------------------------
     private final Inventory                itemInventory;
     private final InventoryOverlayRenderer inventoryOverlayRenderer;
+
+    // -------------------------------------------------------------------------
+    // Ground items — weapon pickups placed by LevelGenerator; rebuilt per floor
+    // -------------------------------------------------------------------------
+    private java.util.List<GroundItem> groundItems;
 
     // -------------------------------------------------------------------------
     // Permadeath — run stats, death beat animation, and reset handshake
@@ -140,6 +153,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         eventTextRenderer  = new EventTextRenderer(eventTextSystem);
         hitVignetteRenderer = new HitVignetteRenderer();
 
+        // Player stat system — seeded from MARINE difficulty for now; difficulty selection
+        // will be wired when the run-setup screen (order_18) is implemented.
+        playerStats = new PlayerStats(PlayerStats.Difficulty.MARINE);
+        player.setPlayerStats(playerStats);
+
         itemInventory             = new Inventory();
         inventoryOverlayRenderer  = new InventoryOverlayRenderer(itemInventory);
         // Seed starting ammo directly into inventory slots (Order 6 design).
@@ -166,9 +184,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         Railgun              railgun          = new Railgun();
         Incinerator          incinerator      = new Incinerator();
         GrenadeLauncher      grenadeLauncher  = new GrenadeLauncher();
+        float rangedMultiplier = playerStats.getRangedDamageMultiplier();
         for (Weapon weapon : new Weapon[]{shotgun, dblShotgun, plasmaRifle, chaingun, railgun, incinerator, grenadeLauncher}) {
             weapon.setEventTextSystem(eventTextSystem);
             weapon.setAmmoInventory(itemInventory);
+            weapon.setRangedDamageMultiplier(rangedMultiplier);
         }
         inventory.setArsenal(java.util.List.of(chaingun, shotgun, dblShotgun, plasmaRifle, railgun, incinerator, grenadeLauncher));
         weaponHudRenderer    = new WeaponHudRenderer(inventory.getArsenal());
@@ -244,6 +264,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         tickEventBus.subscribe(new WeaponReloadSubscriber(inventory));
         tickEventBus.subscribe(new EnemyTurnSubscriber(enemyManager, gameState));
 
+        // Build ground items from weapon spawn points placed by the level generator.
+        groundItems = new java.util.ArrayList<>();
+        for (WeaponSpawnPoint spawnPoint : targetLevel.getWeaponSpawnPoints()) {
+            groundItems.add(new GroundItem(spawnPoint.tileColumn, spawnPoint.tileRow,
+                                           spawnPoint.weaponItemType, 1));
+        }
+        propRenderer.setGroundItems(groundItems);
+
         playerController = new PlayerController(player, targetLevel, doorManager, inventory);
         playerController.setEnemyManager(enemyManager);
         playerController.setBarrelHitTarget(explosiveBarrelManager);
@@ -252,6 +280,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setEventTextSystem(eventTextSystem);
         playerController.setItemInventory(itemInventory);
         playerController.setLoadout(inventory.getLoadout());
+        playerController.setPlayerStats(playerStats);
+        playerController.setGroundItems(groundItems);
         playerController.setWeaponSwitchCallback(
             () -> weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon()));
         playerController.setInventoryToggleCallback(this::openInventory);
@@ -465,9 +495,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (hudWeapon != null) {
             hudState.currentAmmo = hudWeapon.getShotsInClip();
             hudState.clipSize    = hudWeapon.getClipSize();
+            hudState.reserveAmmo = hudWeapon.getReserveAmmo();
         } else {
             hudState.currentAmmo = 0;
             hudState.clipSize    = 1;
+            hudState.reserveAmmo = -1;
         }
         float deltaTime = Gdx.graphics.getDeltaTime();
         hudRenderer.update(deltaTime);

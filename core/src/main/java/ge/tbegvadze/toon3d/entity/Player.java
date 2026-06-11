@@ -3,9 +3,12 @@ package ge.tbegvadze.toon3d.entity;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.render.Renderable;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 public class Player implements Renderable, Disposable {
@@ -24,6 +27,13 @@ public class Player implements Renderable, Disposable {
     private final ShapeRenderer shapes;
     private PlayerDamageListener damageListener;
 
+    /**
+     * Stat system — injected by World after construction.
+     * Null until wired; all stat checks guard for null and treat a missing stats
+     * object as if every effective stat value is zero (no bonuses, no dodge).
+     */
+    private PlayerStats playerStats;
+
     public Player(float positionX, float positionY, float directionX, float directionY) {
         this.positionX          = positionX;
         this.positionY          = positionY;
@@ -41,14 +51,66 @@ public class Player implements Renderable, Disposable {
         this.damageListener = listener;
     }
 
+    /**
+     * Injects the stat system so damage resolution can consult dodge chance and
+     * flat damage reduction.  Call once from World after both objects are created.
+     * Applies the initial TOUGHNESS max-health bonus immediately so the player's
+     * HP pool reflects the difficulty-seeded stat from turn one.
+     * Persistent across level rebuilds — do not re-inject on every floor.
+     */
+    public void setPlayerStats(PlayerStats stats) {
+        this.playerStats = stats;
+        if (stats != null) {
+            int bonus = stats.getMaxHealthBonus();
+            if (bonus > 0) {
+                // Raise the pool without auto-healing (matches spec: "does NOT auto-heal").
+                maxHealth += bonus;
+            }
+        }
+    }
+
+    /** Returns the injected stat system, or null if not yet wired. */
+    public PlayerStats getPlayerStats() {
+        return playerStats;
+    }
+
+    /**
+     * Applies incoming damage through the full resolution pipeline:
+     *   (a) AGILITY dodge roll  — on success damage = 0, pipeline ends.
+     *   (b) Armour absorption   — fraction soaked by AR pool.
+     *   (c) TOUGHNESS flat reduction — shaves N off the HP-bound remainder,
+     *       floored at TGH_MIN_DAMAGE so chip damage still threatens turtles.
+     *   (d) Subtract from health.
+     *
+     * Strict pipeline order matches the spec in roguelike_order_6_player_stats_and_attributes.txt.
+     */
     public void applyDamage(int amount) {
         if (Constants.debug) return;
+
+        // (a) AGILITY dodge roll — checked before armour or toughness.
+        if (playerStats != null) {
+            float dodgeChance = playerStats.getDodgeChance();
+            if (dodgeChance > 0f && MathUtils.random() < dodgeChance) {
+                // Dodge: entire hit negated; listener not called (no HP change).
+                return;
+            }
+        }
+
+        // (b) Armour absorption.
         int armorAbsorbed = GameMath.armorAbsorb(amount, armor, Constants.ARMOUR_ABSORB_FRACTION);
-        armor  = Math.max(0, armor  - armorAbsorbed);
-        int netDamage = amount - armorAbsorbed;
-        health = Math.max(0, health - netDamage);
-        if (damageListener != null && netDamage > 0) {
-            damageListener.onPlayerDamaged(netDamage);
+        armor = Math.max(0, armor - armorAbsorbed);
+        int hpBoundDamage = amount - armorAbsorbed;
+
+        // (c) TOUGHNESS flat reduction applied to the HP-bound remainder.
+        if (playerStats != null) {
+            int flatReduction = playerStats.getFlatDamageReduction();
+            hpBoundDamage = Math.max(GameBalance.TGH_MIN_DAMAGE, hpBoundDamage - flatReduction);
+        }
+
+        // (d) Apply to health.
+        health = Math.max(0, health - hpBoundDamage);
+        if (damageListener != null && hpBoundDamage > 0) {
+            damageListener.onPlayerDamaged(hpBoundDamage);
         }
     }
 

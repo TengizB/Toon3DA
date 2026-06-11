@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.level;
 
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.Constants;
 
 import java.util.ArrayList;
@@ -68,6 +69,9 @@ public class LevelGenerator {
     // placeWideHallwayColumns() can walk them in order and space columns evenly.
     private List<int[]> wideHallwaySpineTiles;
 
+    // Weapon spawn points collected during phase 3; consumed by World to create GroundItems.
+    private List<WeaponSpawnPoint> weaponSpawnPoints;
+
     public LevelGenerator(long seed) {
         this(seed, new LevelGenConfig());
     }
@@ -86,6 +90,7 @@ public class LevelGenerator {
         fillAll(grid, 'x');
         mstEdgeRooms          = new ArrayList<>();
         wideHallwaySpineTiles = new ArrayList<>();
+        weaponSpawnPoints     = new ArrayList<>();
 
         List<Room> rooms = placeRooms();
         if (rooms.size() < 2) return buildFallbackLevel();
@@ -125,6 +130,7 @@ public class LevelGenerator {
         placeContainmentBlockProps(grid, rooms);
         placeResearchLabProps(grid, rooms);
         placePickups(grid, rooms);
+        placeWeaponSpawns(grid, rooms);
 
         // Phase 4 — enemies (after props so spawns land on walkable tiles only)
         List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
@@ -143,7 +149,7 @@ public class LevelGenerator {
         // Phase 6 — stamp exactly one stairs-down exit
         stampStairsDown(grid, rooms);
 
-        return new Level(grid, spawnPoints);
+        return new Level(grid, spawnPoints, weaponSpawnPoints);
     }
 
     // -------------------------------------------------------------------------
@@ -1818,6 +1824,66 @@ public class LevelGenerator {
         }
     }
 
+    /**
+     * Places exactly one weapon pickup per level as a WeaponSpawnPoint (no grid tile written).
+     *
+     * Priority:
+     *   1. ARMORY room — guaranteed placement; picks a random weapon from the four base types.
+     *   2. LARGE room  — 30% chance to place a weapon if no ARMORY spawn was placed yet.
+     *
+     * Only one weapon spawn per level total (enforced by the weaponPlaced flag).
+     * The spawn is recorded in weaponSpawnPoints; World instantiates a GroundItem from it.
+     * The grid tile itself is NOT modified — weapon ground items are entity-side only.
+     */
+    private void placeWeaponSpawns(char[][] grid, List<Room> rooms) {
+        boolean weaponPlaced = false;
+
+        // Priority 1: ARMORY rooms get a guaranteed weapon pickup.
+        for (Room room : rooms) {
+            if (weaponPlaced) break;
+            if (room.type != RoomType.ARMORY) continue;
+            weaponPlaced = tryPlaceWeaponSpawn(grid, room);
+        }
+
+        // Priority 2: LARGE rooms get a 30% chance if no weapon was placed yet.
+        for (Room room : rooms) {
+            if (weaponPlaced) break;
+            if (room.type != RoomType.LARGE) continue;
+            if (random.nextFloat() < Constants.LEVEL_GEN_LARGE_WEAPON_CHANCE) {
+                weaponPlaced = tryPlaceWeaponSpawn(grid, room);
+            }
+        }
+    }
+
+    /**
+     * Attempts up to 20 times to find a walkable floor tile in the room that holds no
+     * prop or pickup, then records a WeaponSpawnPoint there.
+     * Returns true when a spawn was successfully placed; false when no eligible tile was found.
+     */
+    private boolean tryPlaceWeaponSpawn(char[][] grid, Room room) {
+        for (int attempt = 0; attempt < 20; attempt++) {
+            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
+            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
+            char cell = grid[tileRow][tileColumn];
+            // Only place on plain walkable floor — not on a prop, pickup, door axis, etc.
+            if (cell != ' ' && cell != 'l') continue;
+            if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+            weaponSpawnPoints.add(new WeaponSpawnPoint(tileColumn, tileRow, randomWeaponItemType()));
+            return true;
+        }
+        return false;
+    }
+
+    /** Returns one of the four base weapon ItemTypes at equal probability. */
+    private ItemType randomWeaponItemType() {
+        switch (random.nextInt(4)) {
+            case 0:  return ItemType.WEAPON_PISTOL;
+            case 1:  return ItemType.WEAPON_SHOTGUN;
+            case 2:  return ItemType.WEAPON_PLASMA;
+            default: return ItemType.WEAPON_ROCKET;
+        }
+    }
+
     private void tryPlacePickup(char[][] grid, Room room, char pickupChar) {
         for (int attempt = 0; attempt < 20; attempt++) {
             int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
@@ -2167,6 +2233,6 @@ public class LevelGenerator {
             }
         }
         grid[22][40] = 'p';
-        return new Level(grid, new ArrayList<>());
+        return new Level(grid, new ArrayList<>(), new ArrayList<>());
     }
 }
