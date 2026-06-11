@@ -348,6 +348,12 @@ public final class Constants {
     public static final float   ENEMY_HEALTH_EMPTY_GREEN            = 0.10f;
     public static final float   ENEMY_HEALTH_EMPTY_BLUE             = 0.10f;
 
+    // HP text drawn inside the health bar: "current/max" in near-black for contrast on any fill colour
+    public static final float   ENEMY_HP_TEXT_FONT_SCALE         = 0.45f;
+    public static final float   ENEMY_HP_TEXT_RED                = 0.05f;
+    public static final float   ENEMY_HP_TEXT_GREEN              = 0.05f;
+    public static final float   ENEMY_HP_TEXT_BLUE               = 0.05f;
+
     // HUD geometry — left panel anchored to bottom-left, y 0..HUD_HEIGHT.
     // Panel height increased from 168 to 206 to fit the weapon slot strip below the XP bar.
     public static final float HUD_HEIGHT                      = 206f;
@@ -617,6 +623,8 @@ public final class Constants {
     public static final int   LEVEL_GEN_ARMORY_MAX               = 1;
     // Probability that a LARGE room (when no ARMORY weapon was placed) gets a weapon pickup
     public static final float LEVEL_GEN_LARGE_WEAPON_CHANCE      = 0.30f;
+    // Probability that any non-ENTRANCE room gets a random weapon spawn (independent of armory)
+    public static final float LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE = 0.20f;
 
     // CRYO_CHAMBER — ~25% of levels, at most 2
     public static final float LEVEL_GEN_CRYO_CHANCE              = 0.25f;
@@ -947,11 +955,13 @@ public final class Constants {
     // -------------------------------------------------------------------------
     // Weapon Loadout (Order 5) — slot management and HUD strip
     // -------------------------------------------------------------------------
-    public static final int   WEAPON_SLOT_COUNT             = 4;
+    // Only 2 slots available initially; the system supports more via WEAPON_SLOT_COUNT.
+    public static final int   WEAPON_SLOT_COUNT             = 2;
     public static final float WEAPON_PICKUP_HEIGHT_FRACTION = 0.30f; // weapon floor pickups sit a bit higher than ammo
-    public static final float WEAPON_SLOT_ICON_SIZE         = 44f;
+    public static final float WEAPON_SLOT_ICON_SIZE         = 44f;   // slot height; width is computed from full HUD width
     public static final float WEAPON_SLOT_ICON_GAP          = 8f;
-    public static final float WEAPON_SLOT_STRIP_ORIGIN_X    = 24f;
+    // Slots span the full HUD width; SIDE_PADDING is the horizontal margin on each edge.
+    public static final float WEAPON_SLOT_STRIP_SIDE_PADDING = 20f;
     public static final float WEAPON_SLOT_STRIP_ORIGIN_Y    = 8f;
     public static final float WEAPON_SWITCH_RAISE_SECONDS   = 0.10f;
     // Slot selection keys — free action, no turn consumed

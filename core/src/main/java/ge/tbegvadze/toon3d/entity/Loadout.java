@@ -6,7 +6,7 @@ import ge.tbegvadze.toon3d.util.Constants;
  * Manages a fixed-size array of weapon slots for the player's active loadout.
  *
  * Invariants:
- *   - Slot count is always Constants.WEAPON_SLOT_COUNT (4).
+ *   - Slot count is always Constants.WEAPON_SLOT_COUNT (currently 2; future expansions increase it).
  *   - activeSlotIndex always refers to a slot that is either filled, or the only
  *     candidate when all slots are empty (index 0 in that case).
  *   - No slot can hold two weapons; each weapon occupies exactly one slot.
