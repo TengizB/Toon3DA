@@ -24,4 +24,7 @@ public class HudState {
 
     /** XP required for the next level-up. Used for the numeric readout. */
     public int     xpForNextLevel = 100;
+
+    /** Reserve ammo in inventory for the equipped weapon's ammo type. -1 when not tracked. */
+    public int     reserveAmmo    = -1;
 }

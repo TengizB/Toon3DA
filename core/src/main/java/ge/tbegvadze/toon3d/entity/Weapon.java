@@ -60,6 +60,14 @@ public abstract class Weapon {
 
     private EventTextSystem eventTextSystem;
 
+    /**
+     * Ranged damage multiplier sourced from the player's MARKSMANSHIP stat.
+     * Defaults to 1.0 (no bonus) until World injects a non-trivial value via
+     * {@link #setRangedDamageMultiplier}.  Updated whenever PlayerStats changes
+     * (perk award, equipment change) — never queried per frame, only at fire time.
+     */
+    private float rangedDamageMultiplier = 1.0f;
+
     protected Weapon(String displayName, int damage, int clipSize, int reloadTime,
                      float damageDropCoefficient, int range, AmmoType ammoType) {
         this.displayName           = displayName;
@@ -86,6 +94,26 @@ public abstract class Weapon {
         if (eventTextSystem != null) {
             eventTextSystem.spawn(text);
         }
+    }
+
+    /**
+     * Sets the ranged damage multiplier derived from the player's MARKSMANSHIP stat.
+     * Called by World whenever PlayerStats change (run start, perk award, equipment swap).
+     * Must not be called per frame — only on discrete stat-change events.
+     *
+     * @param multiplier value from {@code PlayerStats.getRangedDamageMultiplier()};
+     *                   pass 1.0f to disable the bonus (default).
+     */
+    public void setRangedDamageMultiplier(float multiplier) {
+        this.rangedDamageMultiplier = multiplier;
+    }
+
+    /**
+     * Returns the currently stored ranged damage multiplier.
+     * Subclasses may read this in custom {@code marchShot} implementations.
+     */
+    protected float getRangedDamageMultiplier() {
+        return rangedDamageMultiplier;
     }
 
     /** True only when the weapon can accept a fire command right now. */

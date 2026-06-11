@@ -8,10 +8,12 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,7 +78,12 @@ public class PropRenderer implements Renderable, Disposable {
     private final WallRenderer            wallRenderer;
     private final List<PropPlacement>     propPlacements;
     private final Map<Character, Texture> textures;
+    private final Texture                 weaponPickupTexture;
     private final SpriteBatch             batch;
+
+    // Weapon ground items (placed by LevelGenerator, consumed on player pickup).
+    // Injected by World after level build; never null — starts empty.
+    private List<GroundItem> groundItems = Collections.emptyList();
 
     // Pre-allocated scratch buffers for depth-sorting — sized to total prop count.
     private final int[]   sortedIndices;
@@ -99,12 +106,18 @@ public class PropRenderer implements Renderable, Disposable {
         this.wallRenderer   = wallRenderer;
         this.propPlacements = buildPropPlacements(level);
         int propCount       = propPlacements.size();
-        this.sortedIndices    = new int[propCount];
-        this.sortedDepths     = new float[propCount];
-        this.propSpriteZBuffer = new float[WALL_PROJECTION_SCREEN_WIDTH];
+        this.sortedIndices      = new int[propCount];
+        this.sortedDepths       = new float[propCount];
+        this.propSpriteZBuffer  = new float[WALL_PROJECTION_SCREEN_WIDTH];
         // SpriteBatch capacity = one sprite per screen column (1-pixel-wide column draws).
-        this.batch    = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
-        this.textures = buildTextures();
+        this.batch              = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
+        this.textures           = buildTextures();
+        this.weaponPickupTexture = generateWeaponPickupTexture();
+    }
+
+    /** Replaces the ground item list; called by World after each level build. */
+    public void setGroundItems(List<GroundItem> items) {
+        this.groundItems = (items != null) ? items : Collections.emptyList();
     }
 
     /** Scans the level grid once at startup and records every prop tile's position. */
@@ -273,6 +286,71 @@ public class PropRenderer implements Renderable, Disposable {
             }
         }
 
+        // Ground items: weapon pickups spawned by the level generator. These are entity-side
+        // objects (not tile chars) so they need a separate render pass. Typically at most one
+        // per level — no depth sort needed; wall z-buffer still provides correct occlusion.
+        for (GroundItem groundItem : groundItems) {
+            float itemWorldCenterX = groundItem.tileColumn * CELL_SIZE + CELL_SIZE / 2f;
+            float itemWorldCenterY = groundItem.tileRow    * CELL_SIZE + CELL_SIZE / 2f;
+            float tileOffsetX = (itemWorldCenterX - playerWorldX) / CELL_SIZE;
+            float tileOffsetY = (itemWorldCenterY - playerWorldY) / CELL_SIZE;
+            float depth = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
+            if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES) continue;
+            if (depth > MAX_PROP_DRAW_DISTANCE_TILES)      continue;
+
+            float screenCenterColumn = GameMath.spriteScreenColumnCenter(
+                    tileOffsetX, tileOffsetY, directionX, directionY,
+                    planeX, planeY, WALL_PROJECTION_SCREEN_WIDTH);
+
+            float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
+            float spriteScreenHeight = fullWallLineHeight * WEAPON_PICKUP_HEIGHT_FRACTION;
+            float spriteScreenWidth  = spriteScreenHeight; // square procedural texture
+
+            int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / 2f);
+            int rightScreenColumn = (int)(screenCenterColumn + spriteScreenWidth / 2f);
+            int columnSpan        = rightScreenColumn - leftScreenColumn;
+            if (columnSpan <= 0) continue;
+
+            float drawBottom    = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
+            float drawTop       = drawBottom + spriteScreenHeight;
+            float clampedBottom = Math.max(0f, drawBottom);
+            float clampedTop    = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, drawTop);
+            if (clampedTop <= clampedBottom) continue;
+
+            int textureWidth  = weaponPickupTexture.getWidth();
+            int textureHeight = weaponPickupTexture.getHeight();
+            int texSrcY       = GameMath.wallTextureClipSrcY(
+                                    drawTop, WALL_PROJECTION_SCREEN_HEIGHT,
+                                    spriteScreenHeight, textureHeight);
+            int texSrcHeight  = GameMath.wallTextureClipSrcHeight(
+                                    clampedTop, clampedBottom,
+                                    spriteScreenHeight, textureHeight);
+            texSrcHeight = Math.min(texSrcHeight, textureHeight - texSrcY);
+            texSrcHeight = Math.max(1, texSrcHeight);
+
+            float tileBrightness = level.getTileBrightness(groundItem.tileColumn, groundItem.tileRow, lightingTimeSeconds);
+            float shade          = Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * tileBrightness,
+                                            MAX_LIGHTING_SHADE);
+            float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+            float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
+
+            int firstColumn = Math.max(0, leftScreenColumn);
+            int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightScreenColumn);
+            for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+                if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                if (depth >= propSpriteZBuffer[screenColumn]) continue;
+                int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
+                texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
+                batch.draw(weaponPickupTexture,
+                           screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
+                           WALL_COLUMN_WIDTH, clampedTop - clampedBottom,
+                           texSrcX, texSrcY, 1, texSrcHeight,
+                           false, false);
+            }
+        }
+
         batch.setColor(Color.WHITE);
         batch.end();
     }
@@ -280,6 +358,7 @@ public class PropRenderer implements Renderable, Disposable {
     @Override
     public void dispose() {
         batch.dispose();
+        weaponPickupTexture.dispose();
         for (Texture texture : textures.values()) {
             texture.dispose();
         }
@@ -1191,6 +1270,23 @@ public class PropRenderer implements Renderable, Disposable {
             pixmap.fillRectangle(8,  slabTop + 8, 4, 4);
             pixmap.fillRectangle(36, slabTop + 8, 4, 4);
         }
+        return finalize(pixmap);
+    }
+
+    /** Gold star silhouette — marks a weapon pickup placed by the level generator. */
+    private static Texture generateWeaponPickupTexture() {
+        Pixmap pixmap = new Pixmap(32, 32, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Outer gold ring
+        pixmap.setColor(0.92f, 0.75f, 0.10f, 1f);
+        pixmap.fillCircle(16, 16, 14);
+        // Inner dark recess
+        pixmap.setColor(0.50f, 0.35f, 0.05f, 1f);
+        pixmap.fillCircle(16, 16, 9);
+        // Bright centre highlight
+        pixmap.setColor(1.00f, 0.95f, 0.60f, 1f);
+        pixmap.fillCircle(16, 16, 5);
         return finalize(pixmap);
     }
 

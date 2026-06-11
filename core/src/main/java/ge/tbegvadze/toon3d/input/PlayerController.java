@@ -6,9 +6,12 @@ import ge.tbegvadze.toon3d.door.DoorState;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.*;
 import ge.tbegvadze.toon3d.item.AmmoType;
+import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.item.Inventory;
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.KeycardColor;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -17,6 +20,9 @@ import ge.tbegvadze.toon3d.input.touch.TouchInputState;
 import ge.tbegvadze.toon3d.world.LevelTransitionListener;
 import ge.tbegvadze.toon3d.world.TickCause;
 import ge.tbegvadze.toon3d.world.TickEventBus;
+
+import java.util.Collections;
+import java.util.List;
 
 public class PlayerController {
 
@@ -37,6 +43,8 @@ public class PlayerController {
     private Runnable                inventoryToggleCallback   = null;
     private Inventory               itemInventory             = null;
     private Loadout                 loadout                   = null;
+    private PlayerStats             playerStats               = null;
+    private List<GroundItem>        groundItems               = Collections.emptyList();
 
     private ActionState actionState = ActionState.IDLE;
     private float actionProgress = 0f;
@@ -97,6 +105,16 @@ public class PlayerController {
         this.loadout = loadoutReference;
     }
 
+    /** Injects the player stat system so AGILITY can scale action durations. */
+    public void setPlayerStats(PlayerStats stats) {
+        this.playerStats = stats;
+    }
+
+    /** Replaces the ground item list; called by World after each level build. */
+    public void setGroundItems(List<GroundItem> items) {
+        this.groundItems = (items != null) ? items : Collections.emptyList();
+    }
+
     public boolean isIdle() { return actionState == ActionState.IDLE; }
 
     public void update(float deltaTime) {
@@ -112,7 +130,8 @@ public class PlayerController {
     }
 
     private void advanceMove(float deltaTime) {
-        actionProgress = Math.min(1f, actionProgress + deltaTime / Constants.PLAYER_MOVE_DURATION);
+        float durationMultiplier = (playerStats != null) ? playerStats.getActionDurationMultiplier() : 1.0f;
+        actionProgress = Math.min(1f, actionProgress + deltaTime / (Constants.PLAYER_MOVE_DURATION * durationMultiplier));
         player.positionX = GameMath.lerp(sourcePositionX, targetPositionX, actionProgress);
         player.positionY = GameMath.lerp(sourcePositionY, targetPositionY, actionProgress);
         if (actionProgress >= 1f) {
@@ -125,6 +144,7 @@ public class PlayerController {
             pickUpArmourIfPresent(settledTileColumn, settledTileRow);
             pickUpKeycardIfPresent(settledTileColumn, settledTileRow);
             pickUpAmmoIfPresent(settledTileColumn, settledTileRow);
+            pickUpWeaponGroundItemIfPresent(settledTileColumn, settledTileRow);
             checkStairsDescentIfPresent(settledTileColumn, settledTileRow);
             finishAction(true, TickCause.MOVE);
         }
@@ -207,12 +227,14 @@ public class PlayerController {
         if (itemInventory == null) return;
         AmmoType type   = Level.ammoTypeOfPickup(cell);
         int      amount = type.getAmountPerBox();
-        if (itemInventory.tryAdd(type.getItemType(), amount)) {
-            level.consumePickupAt(tileColumn, tileRow);
-            if (eventTextSystem != null) {
-                eventTextSystem.spawnWithColor("+" + amount + " " + type.getDisplayName().toUpperCase(),
-                                               EventTextSystem.COLOR_GREEN);
-            }
+        // Always consume the floor tile — anti-hoarding: overflow is silently discarded.
+        level.consumePickupAt(tileColumn, tileRow);
+        int amountBefore = itemInventory.countOf(type.getItemType());
+        itemInventory.tryAdd(type.getItemType(), amount);
+        int amountAdded  = itemInventory.countOf(type.getItemType()) - amountBefore;
+        if (eventTextSystem != null && amountAdded > 0) {
+            eventTextSystem.spawnWithColor("+" + amountAdded + " " + type.getDisplayName().toUpperCase(),
+                                           EventTextSystem.COLOR_GREEN);
         }
     }
 
@@ -230,7 +252,8 @@ public class PlayerController {
     }
 
     private void advanceRotate(float deltaTime) {
-        actionProgress = Math.min(1f, actionProgress + deltaTime / Constants.PLAYER_ROTATE_DURATION);
+        float durationMultiplier = (playerStats != null) ? playerStats.getActionDurationMultiplier() : 1.0f;
+        actionProgress = Math.min(1f, actionProgress + deltaTime / (Constants.PLAYER_ROTATE_DURATION * durationMultiplier));
         float currentAngle = GameMath.lerp(sourceDirectionAngleRadians, targetDirectionAngleRadians, actionProgress);
         player.directionX = MathUtils.cos(currentAngle);
         player.directionY = MathUtils.sin(currentAngle);
@@ -239,6 +262,40 @@ public class PlayerController {
             player.directionX = (float) Math.round(player.directionX);
             player.directionY = (float) Math.round(player.directionY);
             finishAction(false, null);
+        }
+    }
+
+    private void pickUpWeaponGroundItemIfPresent(int tileColumn, int tileRow) {
+        if (groundItems.isEmpty() || itemInventory == null) return;
+        GroundItem found = null;
+        for (GroundItem item : groundItems) {
+            if (item.tileColumn == tileColumn && item.tileRow == tileRow) {
+                found = item;
+                break;
+            }
+        }
+        if (found == null) return;
+        groundItems.remove(found);
+        // Player starts with the full arsenal, so a weapon pickup converts to its ammo type.
+        AmmoType ammoType = weaponItemTypeToAmmoType(found.stack.getType());
+        if (ammoType == null) return;
+        int amountBefore = itemInventory.countOf(ammoType.getItemType());
+        itemInventory.tryAdd(ammoType.getItemType(), ammoType.getAmountPerBox());
+        int added = itemInventory.countOf(ammoType.getItemType()) - amountBefore;
+        if (eventTextSystem != null && added > 0) {
+            eventTextSystem.spawnWithColor("ARMORY +" + added + " " + ammoType.getDisplayName().toUpperCase(),
+                                           EventTextSystem.COLOR_GREEN);
+        }
+    }
+
+    private static AmmoType weaponItemTypeToAmmoType(ItemType weaponType) {
+        if (weaponType == null) return null;
+        switch (weaponType) {
+            case WEAPON_PISTOL:  return AmmoType.BULLETS;
+            case WEAPON_SHOTGUN: return AmmoType.SHELLS;
+            case WEAPON_PLASMA:  return AmmoType.CELLS;
+            case WEAPON_ROCKET:  return AmmoType.ROCKETS;
+            default:             return null;
         }
     }
 

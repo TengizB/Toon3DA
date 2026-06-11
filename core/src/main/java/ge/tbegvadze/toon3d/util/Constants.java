@@ -615,6 +615,8 @@ public final class Constants {
     public static final float LEVEL_GEN_ARMORY_PROP_CHANCE       = 0.22f;
     public static final int   LEVEL_GEN_ARMORY_MIN_WEAPON_RACKS  = 2;
     public static final int   LEVEL_GEN_ARMORY_MAX               = 1;
+    // Probability that a LARGE room (when no ARMORY weapon was placed) gets a weapon pickup
+    public static final float LEVEL_GEN_LARGE_WEAPON_CHANCE      = 0.30f;
 
     // CRYO_CHAMBER — ~25% of levels, at most 2
     public static final float LEVEL_GEN_CRYO_CHANCE              = 0.25f;
@@ -946,6 +948,7 @@ public final class Constants {
     // Weapon Loadout (Order 5) — slot management and HUD strip
     // -------------------------------------------------------------------------
     public static final int   WEAPON_SLOT_COUNT             = 4;
+    public static final float WEAPON_PICKUP_HEIGHT_FRACTION = 0.30f; // weapon floor pickups sit a bit higher than ammo
     public static final float WEAPON_SLOT_ICON_SIZE         = 44f;
     public static final float WEAPON_SLOT_ICON_GAP          = 8f;
     public static final float WEAPON_SLOT_STRIP_ORIGIN_X    = 24f;

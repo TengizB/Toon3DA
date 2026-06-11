@@ -1603,6 +1603,137 @@ public final class GameMath {
     }
 
     // =========================================================================
+    // STAT SYSTEM — derived multiplier formulas (one per attribute effect)
+    // All formulas use a linear per-point model anchored at STAT_REFERENCE.
+    // STAT_REFERENCE = 0 means a fresh marine with STR 2 already gets +10% melee
+    // (chosen to match the user spec "STR 5 = +25% melee").
+    // =========================================================================
+
+    /*
+     * Formula: meleeDamageMultiplier
+     * Derivation:
+     *   multiplier = 1.0 + (strengthEffective - reference) × perPoint
+     *   STR 0, reference 0, perPoint 0.05 → 1.0  (no bonus at zero)
+     *   STR 5, reference 0, perPoint 0.05 → 1.0 + 5 × 0.05 = 1.25  (+25% melee, per spec)
+     *   STR 12 (cap)                       → 1.0 + 12 × 0.05 = 1.60  (+60% melee ceiling)
+     * Edge cases:
+     *   strengthEffective = 0, reference = 0 → multiplier = 1.0 (identity, no bonus).
+     *   strengthEffective < reference (debuff) → multiplier < 1.0 (penalty).
+     *   perPoint = 0 → multiplier always 1.0 (disabled, safe).
+     */
+    public static float meleeDamageMultiplier(int strengthEffective, int reference, float perPoint) {
+        return 1.0f + (strengthEffective - reference) * perPoint;
+    }
+
+    /*
+     * Formula: rangedDamageMultiplier
+     * Derivation:
+     *   multiplier = 1.0 + (marksmanshipEffective - reference) × perPoint
+     *   MRK 0, reference 0, perPoint 0.04 → 1.0  (no bonus at zero)
+     *   MRK 5                              → 1.0 + 5 × 0.04 = 1.20  (+20% ranged)
+     *   Scales slower than melee (0.04 vs 0.05) — ranged is the safe-distance option;
+     *   melee carries higher risk so its reward is proportionally higher.
+     * Edge cases:
+     *   Same as meleeDamageMultiplier.
+     */
+    public static float rangedDamageMultiplier(int marksmanshipEffective, int reference, float perPoint) {
+        return 1.0f + (marksmanshipEffective - reference) * perPoint;
+    }
+
+    /*
+     * Formula: accuracyMultiplier
+     * Derivation:
+     *   multiplier = 1.0 + (marksmanshipEffective - reference) × perPoint
+     *   MRK 0, reference 0, perPoint 0.03 → 1.0  (no bonus at zero)
+     *   MRK 5                              → 1.0 + 5 × 0.03 = 1.15  (+15% accuracy)
+     *   Used to tighten shotgun pellet spread or reduce future hit-chance rolls.
+     *   Dormant for hitscan weapons that always hit; getter exists for future use.
+     * Edge cases:
+     *   Same as meleeDamageMultiplier.
+     */
+    public static float accuracyMultiplier(int marksmanshipEffective, int reference, float perPoint) {
+        return 1.0f + (marksmanshipEffective - reference) * perPoint;
+    }
+
+    /*
+     * Formula: actionDurationMultiplier
+     * Derivation:
+     *   raw = 1.0 - (agilityEffective - reference) × perPoint
+     *   result = clamp(raw, minDurationMultiplier, 1.0)
+     *   AGI 0, reference 0, perPoint 0.03 → 1.0  (normal duration)
+     *   AGI 5                              → 1.0 - 5 × 0.03 = 0.85  (15% faster animation)
+     *   AGI 10 (cap)                       → max(0.55, 1.0 - 0.30) = 0.70 → clamped at 0.55
+     *   minDurationMultiplier = 0.55 prevents animation becoming unreadably fast.
+     *   IMPORTANT: this changes ANIMATION speed only, not turn order — one player action
+     *   is still exactly one world turn.
+     * Edge cases:
+     *   agilityEffective < reference → raw > 1.0 → clamped to 1.0 (never slower than base).
+     *   perPoint = 0 → always 1.0 (disabled).
+     *   minDurationMultiplier ≥ 1.0 → degenerates to constant 1.0 (safe no-op).
+     */
+    public static float actionDurationMultiplier(int agilityEffective, int reference,
+                                                  float perPoint, float minDurationMultiplier) {
+        float raw = 1.0f - (agilityEffective - reference) * perPoint;
+        return Math.max(minDurationMultiplier, Math.min(1.0f, raw));
+    }
+
+    /*
+     * Formula: dodgeChance
+     * Derivation:
+     *   raw = (agilityEffective - reference) × perPoint
+     *   result = clamp(raw, 0.0, dodgeCap)
+     *   AGI 0, reference 0, perPoint 0.02, cap 0.35 → 0.0  (no dodge at zero)
+     *   AGI 10 (cap)                                → min(0.35, 10 × 0.02) = 0.20  (20%)
+     *   AGI would need to be 17.5 to naturally hit the 35% cap — cap provides hard ceiling.
+     *   Rolled in Player.applyDamage BEFORE armour; on success damage = 0.
+     *   dodgeCap = 0.35 keeps high-AGI builds slippery but never immune.
+     * Edge cases:
+     *   agilityEffective = 0, reference = 0 → 0.0 (no dodge).
+     *   agilityEffective < reference → raw < 0 → clamped to 0.
+     *   perPoint = 0 → always 0.0 (disabled).
+     */
+    public static float dodgeChance(int agilityEffective, int reference,
+                                     float perPoint, float dodgeCap) {
+        float raw = (agilityEffective - reference) * perPoint;
+        return Math.max(0.0f, Math.min(dodgeCap, raw));
+    }
+
+    /*
+     * Formula: maxHealthBonus
+     * Derivation:
+     *   bonus = (toughnessEffective - reference) × hpPerPoint
+     *   TGH 0, reference 0, hpPerPoint 5 → 0   (no bonus at zero)
+     *   TGH 5                             → 5 × 5 = 25  (+25 max HP)
+     *   TGH 12 (cap)                      → 12 × 5 = 60  (+60 max HP ceiling)
+     *   Added to Player.maxHealth on TOUGHNESS change; does NOT auto-heal.
+     * Edge cases:
+     *   toughnessEffective = 0, reference = 0 → 0 (no bonus).
+     *   toughnessEffective < reference → negative bonus (debuff); caller may clamp to 0.
+     *   hpPerPoint = 0 → always 0 (disabled).
+     */
+    public static int maxHealthBonus(int toughnessEffective, int reference, int hpPerPoint) {
+        return (toughnessEffective - reference) * hpPerPoint;
+    }
+
+    /*
+     * Formula: flatDamageReduction
+     * Derivation:
+     *   reduction = (toughnessEffective - reference) × reductionPerPoint
+     *   TGH 0, reference 0, reductionPerPoint 1 → 0   (no reduction at zero)
+     *   TGH 5                                    → 5 × 1 = 5  (shaves 5 off every HP-bound hit)
+     *   TGH 12 (cap)                             → 12   (shaves 12 per hit)
+     *   Applied AFTER armour absorption. Caller floors the remaining HP damage at
+     *   TGH_MIN_DAMAGE (1) so chip damage (poison ticks etc.) still threatens turtles.
+     * Edge cases:
+     *   toughnessEffective = 0, reference = 0 → 0 (no reduction).
+     *   toughnessEffective < reference → negative reduction (increases damage); caller guards.
+     *   reductionPerPoint = 0 → always 0 (disabled).
+     */
+    public static int flatDamageReduction(int toughnessEffective, int reference, int reductionPerPoint) {
+        return (toughnessEffective - reference) * reductionPerPoint;
+    }
+
+    // =========================================================================
     // PLAY TIME FORMATTER
     // =========================================================================
     /*
