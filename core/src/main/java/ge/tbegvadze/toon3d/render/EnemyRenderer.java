@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Map;
 
 import static ge.tbegvadze.toon3d.util.Constants.*;
+import static ge.tbegvadze.toon3d.util.EnemyConstants.*;
+import static ge.tbegvadze.toon3d.util.RenderConstants.*;
 
 /**
  * Renders living enemies as distance-sorted, z-buffer-occluded billboard sprites.
