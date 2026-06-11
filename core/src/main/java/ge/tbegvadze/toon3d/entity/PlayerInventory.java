@@ -1,12 +1,13 @@
 package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.level.KeycardColor;
-import ge.tbegvadze.toon3d.util.Constants;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
+import ge.tbegvadze.toon3d.util.ItemConstants;
 
 /**
  * Tracks items the player is carrying during a level.
@@ -48,7 +49,7 @@ public class PlayerInventory {
         arsenal.addAll(weapons);
         equippedWeaponIndex = 0;
         loadout = new Loadout();
-        for (int slotIndex = 0; slotIndex < Math.min(weapons.size(), Constants.WEAPON_SLOT_COUNT); slotIndex++) {
+        for (int slotIndex = 0; slotIndex < Math.min(weapons.size(), WeaponConstants.WEAPON_SLOT_COUNT); slotIndex++) {
             loadout.tryEquip(weapons.get(slotIndex));
         }
     }
@@ -92,8 +93,8 @@ public class PlayerInventory {
     }
 
     public boolean canAcceptMedical(MedicalTier tier) {
-        if (getTotalMedicalCharges() >= Constants.MEDKIT_TOTAL_CARRY_CAP) return false;
-        if (tier == MedicalTier.FIELD_MEDKIT && medkitCharges >= Constants.MEDKIT_FULL_CARRY_CAP) return false;
+        if (getTotalMedicalCharges() >= ItemConstants.MEDKIT_TOTAL_CARRY_CAP) return false;
+        if (tier == MedicalTier.FIELD_MEDKIT && medkitCharges >= ItemConstants.MEDKIT_FULL_CARRY_CAP) return false;
         return true;
     }
 
@@ -112,7 +113,7 @@ public class PlayerInventory {
      */
     public MedicalTier chooseHealTier(int currentHealth, int maxHealth) {
         if (stimCharges > 0) {
-            int healthAfterStim = currentHealth + Constants.MEDKIT_STIM_HEAL;
+            int healthAfterStim = currentHealth + ItemConstants.MEDKIT_STIM_HEAL;
             if (healthAfterStim >= maxHealth || medkitCharges == 0) return MedicalTier.STIM;
         }
         return MedicalTier.FIELD_MEDKIT;
@@ -122,11 +123,11 @@ public class PlayerInventory {
     public int spendHeal(MedicalTier tier) {
         if (tier == MedicalTier.STIM && stimCharges > 0) {
             stimCharges--;
-            return Constants.MEDKIT_STIM_HEAL;
+            return ItemConstants.MEDKIT_STIM_HEAL;
         }
         if (tier == MedicalTier.FIELD_MEDKIT && medkitCharges > 0) {
             medkitCharges--;
-            return Constants.MEDKIT_FULL_HEAL;
+            return ItemConstants.MEDKIT_FULL_HEAL;
         }
         return 0;
     }

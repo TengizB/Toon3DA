@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.enemy;
 
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.EnemyConstants;
 
 /** Runtime state for a single enemy instance. Pure data + lightweight behavior helpers. */
 public final class Enemy {
@@ -65,7 +66,7 @@ public final class Enemy {
 
     /** Resets the hit-flash timer to full duration. Calling again before it expires re-triggers cleanly. */
     public void triggerHitFlash() {
-        hitFlashTimerSeconds = Constants.ENEMY_HIT_FLASH_DURATION_SECONDS;
+        hitFlashTimerSeconds = EnemyConstants.ENEMY_HIT_FLASH_DURATION_SECONDS;
     }
 
     /** Decrements the hit-flash timer by deltaTime, clamping at zero. Call once per frame from World.update(). */
@@ -78,8 +79,8 @@ public final class Enemy {
 
     /** Returns flash strength in [0, 1]: 1 = freshly hit (full white), 0 = expired (normal shade). */
     public float getHitFlashStrength() {
-        if (Constants.ENEMY_HIT_FLASH_DURATION_SECONDS <= 0f) return 0f;
-        return hitFlashTimerSeconds / Constants.ENEMY_HIT_FLASH_DURATION_SECONDS;
+        if (EnemyConstants.ENEMY_HIT_FLASH_DURATION_SECONDS <= 0f) return 0f;
+        return hitFlashTimerSeconds / EnemyConstants.ENEMY_HIT_FLASH_DURATION_SECONDS;
     }
 
     /** True when this enemy's move cooldown allows it to step on the current turn. */

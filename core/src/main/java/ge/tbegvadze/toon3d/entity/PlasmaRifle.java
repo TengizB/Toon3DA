@@ -2,7 +2,7 @@ package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
  * Four-shot plasma rifle with full line penetration.
@@ -20,11 +20,11 @@ public class PlasmaRifle extends Weapon {
 
     public PlasmaRifle() {
         super("PLASMA RIFLE",
-              Constants.PLASMA_RIFLE_DAMAGE,
-              Constants.PLASMA_RIFLE_CLIP_SIZE,
-              Constants.PLASMA_RIFLE_RELOAD_TIME_TICKS,
-              Constants.PLASMA_RIFLE_DAMAGE_DROP_COEFF,
-              Constants.PLASMA_RIFLE_RANGE_TILES,
+              WeaponConstants.PLASMA_RIFLE_DAMAGE,
+              WeaponConstants.PLASMA_RIFLE_CLIP_SIZE,
+              WeaponConstants.PLASMA_RIFLE_RELOAD_TIME_TICKS,
+              WeaponConstants.PLASMA_RIFLE_DAMAGE_DROP_COEFF,
+              WeaponConstants.PLASMA_RIFLE_RANGE_TILES,
               AmmoType.CELLS);
     }
 
@@ -56,7 +56,7 @@ public class PlasmaRifle extends Weapon {
                     enemyHitTarget.applyDamageTo(enemy, damageAtDistance(distanceTiles));
                     hitEnemy = true;
                     // Penetration: continue the bolt through this enemy into the next tile.
-                    if (!Constants.PLASMA_RIFLE_PENETRATION) {
+                    if (!WeaponConstants.PLASMA_RIFLE_PENETRATION) {
                         return new FireResult(false, distanceTiles);
                     }
                 }
@@ -71,7 +71,7 @@ public class PlasmaRifle extends Weapon {
         return "PLASMA " + shotsInClip + "/" + clipSize;
     }
 
-    @Override public String getNormalTexturePath() { return Constants.PLASMA_RIFLE_NORMAL_TEXTURE_PATH; }
-    @Override public String getFireTexturePath()   { return Constants.PLASMA_RIFLE_FIRE_TEXTURE_PATH;   }
-    @Override public String getReloadTexturePath() { return Constants.PLASMA_RIFLE_RELOAD_TEXTURE_PATH; }
+    @Override public String getNormalTexturePath() { return WeaponConstants.PLASMA_RIFLE_NORMAL_TEXTURE_PATH; }
+    @Override public String getFireTexturePath()   { return WeaponConstants.PLASMA_RIFLE_FIRE_TEXTURE_PATH;   }
+    @Override public String getReloadTexturePath() { return WeaponConstants.PLASMA_RIFLE_RELOAD_TEXTURE_PATH; }
 }

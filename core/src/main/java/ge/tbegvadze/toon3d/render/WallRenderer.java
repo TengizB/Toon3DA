@@ -19,6 +19,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Phaser;
 
 import static ge.tbegvadze.toon3d.util.Constants.*;
+import static ge.tbegvadze.toon3d.util.RenderConstants.*;
 
 /**
  * Renders the Doom-style 3D wall projection for one frame.

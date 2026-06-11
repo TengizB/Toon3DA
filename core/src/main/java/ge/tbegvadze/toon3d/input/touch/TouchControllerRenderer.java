@@ -7,7 +7,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.render.Renderable;
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.TouchConstants;
 
 public final class TouchControllerRenderer implements Renderable, Disposable {
 
@@ -67,13 +67,13 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
     // -------------------------------------------------------------------------
 
     private void drawBody(TouchButton button) {
-        float alpha = button.pressed ? Constants.TOUCH_FILL_ALPHA_PRESSED : Constants.TOUCH_FILL_ALPHA_IDLE;
+        float alpha = button.pressed ? TouchConstants.TOUCH_FILL_ALPHA_PRESSED : TouchConstants.TOUCH_FILL_ALPHA_IDLE;
         shapeRenderer.setColor(STEEL_DARK_R, STEEL_DARK_G, STEEL_DARK_B, alpha);
         if (button.shape == TouchButton.Shape.CAPSULE) {
             drawCapsule(button.rectX, button.rectY, button.rectWidth, button.rectHeight);
         } else {
             drawRoundedRect(button.rectX, button.rectY, button.rectWidth, button.rectHeight,
-                            Constants.TOUCH_BUTTON_CORNER_RADIUS);
+                            TouchConstants.TOUCH_BUTTON_CORNER_RADIUS);
         }
     }
 
@@ -101,14 +101,14 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
 
     private void drawBevel(TouchButton button) {
         boolean pressed   = button.pressed;
-        float   rimAlpha  = Constants.TOUCH_RIM_ALPHA;
-        float   thickness = Constants.TOUCH_RIM_THICKNESS;
+        float   rimAlpha  = TouchConstants.TOUCH_RIM_ALPHA;
+        float   thickness = TouchConstants.TOUCH_RIM_THICKNESS;
         float   x = button.rectX, y = button.rectY;
         float   w = button.rectWidth, h = button.rectHeight;
 
         // Yellow glow pulse on first press, fades over TOUCH_PRESS_GLOW_DURATION
-        float glowFraction = Constants.TOUCH_PRESS_GLOW_DURATION > 0f
-            ? button.pressGlowTimer / Constants.TOUCH_PRESS_GLOW_DURATION
+        float glowFraction = TouchConstants.TOUCH_PRESS_GLOW_DURATION > 0f
+            ? button.pressGlowTimer / TouchConstants.TOUCH_PRESS_GLOW_DURATION
             : 0f;
 
         float rimLightR = MathUtils.lerp(BEVEL_LIGHT_R, WARN_R, glowFraction);
@@ -145,10 +145,10 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
         float cy = button.rectY + button.rectHeight / 2f;
 
         float iconAlpha = actionLocked
-            ? Constants.TOUCH_ICON_ALPHA_LOCKED
-            : (button.pressed ? Constants.TOUCH_ICON_ALPHA_PRESSED : Constants.TOUCH_ICON_ALPHA_IDLE);
+            ? TouchConstants.TOUCH_ICON_ALPHA_LOCKED
+            : (button.pressed ? TouchConstants.TOUCH_ICON_ALPHA_PRESSED : TouchConstants.TOUCH_ICON_ALPHA_IDLE);
 
-        float extent = Constants.TOUCH_ICON_EXTENT;
+        float extent = TouchConstants.TOUCH_ICON_EXTENT;
 
         // Soft halo: redraw slightly larger in dim phosphor to keep glyphs readable over bright walls
         shapeRenderer.setColor(PHOSPHOR_DIM_R, PHOSPHOR_DIM_G, PHOSPHOR_DIM_B, iconAlpha * 0.55f);

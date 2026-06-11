@@ -1,11 +1,11 @@
 package ge.tbegvadze.toon3d.item;
 
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.ItemConstants;
 
 /**
  * Fixed-size slot-based inventory for the marine's carried items.
  *
- * Capacity: Constants.INVENTORY_SLOT_COUNT slots (10).
+ * Capacity: ItemConstants.INVENTORY_SLOT_COUNT slots (10).
  * The slot array is pre-allocated once; ItemStack objects are mutated in place —
  * zero new allocations occur on any add/remove/use/query path.
  *
@@ -32,8 +32,8 @@ public final class Inventory {
 
     /** Constructs an empty inventory with all slots pre-allocated. */
     public Inventory() {
-        slots = new ItemStack[Constants.INVENTORY_SLOT_COUNT];
-        for (int slotIndex = 0; slotIndex < Constants.INVENTORY_SLOT_COUNT; slotIndex++) {
+        slots = new ItemStack[ItemConstants.INVENTORY_SLOT_COUNT];
+        for (int slotIndex = 0; slotIndex < ItemConstants.INVENTORY_SLOT_COUNT; slotIndex++) {
             slots[slotIndex] = new ItemStack();
         }
     }
@@ -269,7 +269,7 @@ public final class Inventory {
         return slots[slotIndex];
     }
 
-    /** Returns the number of slots in this inventory. Always Constants.INVENTORY_SLOT_COUNT. */
+    /** Returns the number of slots in this inventory. Always ItemConstants.INVENTORY_SLOT_COUNT. */
     public int getSlotCount() {
         return slots.length;
     }

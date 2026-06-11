@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 
 /**
  * Draws a radial-gradient vignette over the full screen.
@@ -43,10 +44,10 @@ public final class HitVignetteRenderer implements Disposable {
     /** Call once per frame in World.update() to decay both intensities. */
     public void update(float deltaTime) {
         if (damageIntensity > 0f) {
-            damageIntensity = Math.max(0f, damageIntensity - deltaTime / Constants.HIT_VIGNETTE_FADE_SECONDS);
+            damageIntensity = Math.max(0f, damageIntensity - deltaTime / EffectConstants.HIT_VIGNETTE_FADE_SECONDS);
         }
         if (levelUpIntensity > 0f) {
-            levelUpIntensity = Math.max(0f, levelUpIntensity - deltaTime / Constants.LEVEL_UP_VIGNETTE_FADE_SECONDS);
+            levelUpIntensity = Math.max(0f, levelUpIntensity - deltaTime / EffectConstants.LEVEL_UP_VIGNETTE_FADE_SECONDS);
         }
     }
 
@@ -55,12 +56,12 @@ public final class HitVignetteRenderer implements Disposable {
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
         if (damageIntensity > 0f) {
-            float alpha = damageIntensity * Constants.HIT_VIGNETTE_MAX_ALPHA;
+            float alpha = damageIntensity * EffectConstants.HIT_VIGNETTE_MAX_ALPHA;
             batch.setColor(1f, 0f, 0f, alpha);
             batch.draw(vignetteTexture, 0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
         }
         if (levelUpIntensity > 0f) {
-            float alpha = levelUpIntensity * Constants.LEVEL_UP_VIGNETTE_MAX_ALPHA;
+            float alpha = levelUpIntensity * EffectConstants.LEVEL_UP_VIGNETTE_MAX_ALPHA;
             batch.setColor(0f, 0.85f, 1f, alpha);
             batch.draw(vignetteTexture, 0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
         }

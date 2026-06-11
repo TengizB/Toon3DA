@@ -1,7 +1,8 @@
 package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.item.ItemType;
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.LevelGenConstants;
+import ge.tbegvadze.toon3d.util.RenderConstants;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -86,7 +87,7 @@ public class LevelGenerator {
     // -------------------------------------------------------------------------
 
     public Level generate() {
-        char[][] grid = new char[Constants.LEVEL_GEN_GRID_HEIGHT][Constants.LEVEL_GEN_GRID_WIDTH];
+        char[][] grid = new char[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT][LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
         fillAll(grid, 'x');
         mstEdgeRooms          = new ArrayList<>();
         wideHallwaySpineTiles = new ArrayList<>();
@@ -174,7 +175,7 @@ public class LevelGenerator {
         int interiorHeight() { return topRow      - bottomRow  - 1; }
 
         boolean overlaps(Room other) {
-            int margin = Constants.LEVEL_GEN_ROOM_MARGIN;
+            int margin = LevelGenConstants.LEVEL_GEN_ROOM_MARGIN;
             return leftColumn   < other.rightColumn  + margin
                 && rightColumn  > other.leftColumn   - margin
                 && bottomRow    < other.topRow       + margin
@@ -190,19 +191,19 @@ public class LevelGenerator {
         List<Room> rooms    = new ArrayList<>();
         int        attempts = 0;
 
-        while (rooms.size() < Constants.LEVEL_GEN_TARGET_ROOMS
-                && attempts < Constants.LEVEL_GEN_PLACEMENT_TRIES) {
+        while (rooms.size() < LevelGenConstants.LEVEL_GEN_TARGET_ROOMS
+                && attempts < LevelGenConstants.LEVEL_GEN_PLACEMENT_TRIES) {
             attempts++;
 
-            int interiorWidth  = randomBetween(Constants.LEVEL_GEN_ROOM_MIN_WIDTH,
-                                               Constants.LEVEL_GEN_ROOM_MAX_WIDTH);
-            int interiorHeight = randomBetween(Constants.LEVEL_GEN_ROOM_MIN_HEIGHT,
-                                               Constants.LEVEL_GEN_ROOM_MAX_HEIGHT);
+            int interiorWidth  = randomBetween(LevelGenConstants.LEVEL_GEN_ROOM_MIN_WIDTH,
+                                               LevelGenConstants.LEVEL_GEN_ROOM_MAX_WIDTH);
+            int interiorHeight = randomBetween(LevelGenConstants.LEVEL_GEN_ROOM_MIN_HEIGHT,
+                                               LevelGenConstants.LEVEL_GEN_ROOM_MAX_HEIGHT);
             int totalWidth     = interiorWidth  + 2;
             int totalHeight    = interiorHeight + 2;
 
-            int maxLeftColumn = Constants.LEVEL_GEN_GRID_WIDTH  - totalWidth  - 1;
-            int maxBottomRow  = Constants.LEVEL_GEN_GRID_HEIGHT - totalHeight - 1;
+            int maxLeftColumn = LevelGenConstants.LEVEL_GEN_GRID_WIDTH  - totalWidth  - 1;
+            int maxBottomRow  = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT - totalHeight - 1;
             if (maxLeftColumn < 1 || maxBottomRow < 1) continue;
 
             int leftColumn = 1 + random.nextInt(maxLeftColumn);
@@ -267,7 +268,7 @@ public class LevelGenerator {
         }
 
         // Step A — Command Center: deepest eligible LARGE-class room at 50% chance
-        if (!commandCenterPlaced && random.nextFloat() < Constants.LEVEL_GEN_COMMAND_CHANCE) {
+        if (!commandCenterPlaced && random.nextFloat() < LevelGenConstants.LEVEL_GEN_COMMAND_CHANCE) {
             Room commandCandidate = findCommandCenterCandidate(rooms);
             if (commandCandidate != null) {
                 commandCandidate.type = RoomType.COMMAND_CENTER;
@@ -276,7 +277,7 @@ public class LevelGenerator {
         }
 
         // Step A — Armory: random eligible room at 80% chance
-        if (!armoryPlaced && random.nextFloat() < Constants.LEVEL_GEN_ARMORY_CHANCE) {
+        if (!armoryPlaced && random.nextFloat() < LevelGenConstants.LEVEL_GEN_ARMORY_CHANCE) {
             Room armoryCandidate = findArmoryCandidate(rooms);
             if (armoryCandidate != null) {
                 armoryCandidate.type = RoomType.ARMORY;
@@ -289,13 +290,13 @@ public class LevelGenerator {
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
             if (room.type != RoomType.STANDARD) continue;
-            boolean largeEligible = room.interiorWidth()  >= Constants.LEVEL_GEN_LARGE_MIN_DIM
-                                 && room.interiorHeight() >= Constants.LEVEL_GEN_LARGE_MIN_DIM;
+            boolean largeEligible = room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM
+                                 && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM;
             if (!largeEligible) continue;
             if (config.enableLargeRooms
-                    && largeRoomCount < Constants.LEVEL_GEN_LARGE_ROOM_MAX_PER_LEVEL) {
+                    && largeRoomCount < LevelGenConstants.LEVEL_GEN_LARGE_ROOM_MAX_PER_LEVEL) {
                 if (!powerPlantPlaced
-                        && random.nextFloat() < Constants.LEVEL_GEN_POWERPLANT_CHANCE) {
+                        && random.nextFloat() < LevelGenConstants.LEVEL_GEN_POWERPLANT_CHANCE) {
                     room.type = RoomType.POWER_PLANT;
                     powerPlantPlaced = true;
                 } else {
@@ -310,36 +311,36 @@ public class LevelGenerator {
             Room room = rooms.get(roomIndex);
             if (room.type != RoomType.STANDARD) continue;
 
-            boolean cryoEligible        = room.interiorWidth()  >= Constants.LEVEL_GEN_CRYO_MIN_WIDTH
-                                       && room.interiorHeight() >= Constants.LEVEL_GEN_CRYO_MIN_HEIGHT;
-            boolean containmentEligible = room.interiorWidth()  >= Constants.LEVEL_GEN_CONTAINMENT_MIN_WIDTH
-                                       && room.interiorHeight() >= Constants.LEVEL_GEN_CONTAINMENT_MIN_HEIGHT;
+            boolean cryoEligible        = room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_CRYO_MIN_WIDTH
+                                       && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_CRYO_MIN_HEIGHT;
+            boolean containmentEligible = room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_CONTAINMENT_MIN_WIDTH
+                                       && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_CONTAINMENT_MIN_HEIGHT;
 
             float roll = random.nextFloat();
             if (cryoEligible
-                    && cryoChamberCount < Constants.LEVEL_GEN_CRYO_MAX
-                    && roll < Constants.LEVEL_GEN_CRYO_CHANCE) {
+                    && cryoChamberCount < LevelGenConstants.LEVEL_GEN_CRYO_MAX
+                    && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE) {
                 room.type = RoomType.CRYO_CHAMBER;
                 cryoChamberCount++;
             } else if (containmentEligible
-                    && containmentCount < Constants.LEVEL_GEN_CONTAINMENT_MAX
-                    && roll < Constants.LEVEL_GEN_CRYO_CHANCE + Constants.LEVEL_GEN_CONTAINMENT_CHANCE) {
+                    && containmentCount < LevelGenConstants.LEVEL_GEN_CONTAINMENT_MAX
+                    && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE + LevelGenConstants.LEVEL_GEN_CONTAINMENT_CHANCE) {
                 room.type = RoomType.CONTAINMENT_BLOCK;
                 containmentCount++;
             } else if (config.enableServerRooms
-                    && serverRoomCount < Constants.LEVEL_GEN_SERVER_ROOM_MAX_PER_LEVEL
-                    && roll < Constants.LEVEL_GEN_CRYO_CHANCE
-                              + Constants.LEVEL_GEN_CONTAINMENT_CHANCE
-                              + Constants.LEVEL_GEN_SERVER_ROOM_CHANCE) {
+                    && serverRoomCount < LevelGenConstants.LEVEL_GEN_SERVER_ROOM_MAX_PER_LEVEL
+                    && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE
+                              + LevelGenConstants.LEVEL_GEN_CONTAINMENT_CHANCE
+                              + LevelGenConstants.LEVEL_GEN_SERVER_ROOM_CHANCE) {
                 room.type = RoomType.SERVER_ROOM;
                 serverRoomCount++;
             } else if (!researchLabPlaced
-                    && room.interiorWidth()  >= Constants.LEVEL_GEN_RESEARCH_LAB_MIN_WIDTH
-                    && room.interiorHeight() >= Constants.LEVEL_GEN_RESEARCH_LAB_MIN_HEIGHT
-                    && roll < Constants.LEVEL_GEN_CRYO_CHANCE
-                              + Constants.LEVEL_GEN_CONTAINMENT_CHANCE
-                              + Constants.LEVEL_GEN_SERVER_ROOM_CHANCE
-                              + Constants.LEVEL_GEN_RESEARCH_LAB_CHANCE) {
+                    && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_MIN_WIDTH
+                    && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_MIN_HEIGHT
+                    && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE
+                              + LevelGenConstants.LEVEL_GEN_CONTAINMENT_CHANCE
+                              + LevelGenConstants.LEVEL_GEN_SERVER_ROOM_CHANCE
+                              + LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_CHANCE) {
                 room.type = RoomType.RESEARCH_LAB;
                 researchLabPlaced = true;
             }
@@ -360,16 +361,16 @@ public class LevelGenerator {
             if (forwardIndex < rooms.size()) {
                 Room candidate = rooms.get(forwardIndex);
                 if (candidate.type == RoomType.STANDARD
-                        && candidate.interiorWidth()  >= Constants.LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH
-                        && candidate.interiorHeight() >= Constants.LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT) {
+                        && candidate.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH
+                        && candidate.interiorHeight() >= LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT) {
                     return candidate;
                 }
             }
             if (backwardIndex > 0 && backwardIndex != forwardIndex) {
                 Room candidate = rooms.get(backwardIndex);
                 if (candidate.type == RoomType.STANDARD
-                        && candidate.interiorWidth()  >= Constants.LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH
-                        && candidate.interiorHeight() >= Constants.LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT) {
+                        && candidate.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH
+                        && candidate.interiorHeight() >= LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT) {
                     return candidate;
                 }
             }
@@ -385,8 +386,8 @@ public class LevelGenerator {
         for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
             Room candidate = rooms.get(roomIndex);
             if (candidate.type == RoomType.STANDARD
-                    && candidate.interiorWidth()  >= Constants.LEVEL_GEN_COMMAND_MIN_WIDTH
-                    && candidate.interiorHeight() >= Constants.LEVEL_GEN_COMMAND_MIN_HEIGHT) {
+                    && candidate.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_COMMAND_MIN_WIDTH
+                    && candidate.interiorHeight() >= LevelGenConstants.LEVEL_GEN_COMMAND_MIN_HEIGHT) {
                 return candidate;
             }
         }
@@ -402,8 +403,8 @@ public class LevelGenerator {
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room candidate = rooms.get(roomIndex);
             if (candidate.type == RoomType.STANDARD
-                    && candidate.interiorWidth()  >= Constants.LEVEL_GEN_ARMORY_MIN_WIDTH
-                    && candidate.interiorHeight() >= Constants.LEVEL_GEN_ARMORY_MIN_HEIGHT) {
+                    && candidate.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_ARMORY_MIN_WIDTH
+                    && candidate.interiorHeight() >= LevelGenConstants.LEVEL_GEN_ARMORY_MIN_HEIGHT) {
                 eligible.add(candidate);
             }
         }
@@ -473,7 +474,7 @@ public class LevelGenerator {
             if (indexA == indexB) continue;
             Room roomA = rooms.get(indexA);
             Room roomB = rooms.get(indexB);
-            if (manhattanDistance(roomA, roomB) <= Constants.LEVEL_GEN_LOOP_MAX_DISTANCE) {
+            if (manhattanDistance(roomA, roomB) <= LevelGenConstants.LEVEL_GEN_LOOP_MAX_DISTANCE) {
                 carveLShapedCorridor(grid, roomA, roomB);
                 loopsAdded++;
             }
@@ -514,7 +515,7 @@ public class LevelGenerator {
 
         int hallwaysWidened = 0;
         for (Room[] edge : candidates) {
-            if (hallwaysWidened >= Constants.LEVEL_GEN_WIDE_HALLWAY_COUNT) break;
+            if (hallwaysWidened >= LevelGenConstants.LEVEL_GEN_WIDE_HALLWAY_COUNT) break;
             carveWideLShapedCorridor(grid, edge[0], edge[1]);
             hallwaysWidened++;
         }
@@ -635,13 +636,13 @@ public class LevelGenerator {
      * feel more open and unobstructed.
      */
     private void placeDoors(char[][] grid) {
-        for (int tileRow = 1; tileRow < Constants.LEVEL_GEN_GRID_HEIGHT - 1; tileRow++) {
-            for (int tileColumn = 1; tileColumn < Constants.LEVEL_GEN_GRID_WIDTH - 1; tileColumn++) {
+        for (int tileRow = 1; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT - 1; tileRow++) {
+            for (int tileColumn = 1; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH - 1; tileColumn++) {
                 if (grid[tileRow][tileColumn] != 'l') continue;
                 if (!isAdjacentToRoomFloor(grid, tileColumn, tileRow)) continue;
                 if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
                 if (!isDoorwayAligned(grid, tileColumn, tileRow)) continue;
-                if (random.nextFloat() < Constants.LEVEL_GEN_DOOR_CHANCE) {
+                if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_DOOR_CHANCE) {
                     grid[tileRow][tileColumn] = 'd';
                 }
             }
@@ -726,7 +727,7 @@ public class LevelGenerator {
             for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
                 if (grid[tileRow][tileColumn] != ' ') continue;
                 float roll = random.nextFloat();
-                if (roll < Constants.LEVEL_GEN_SERVER_FLICKER_CHANCE && flickerBudget > 0) {
+                if (roll < LevelGenConstants.LEVEL_GEN_SERVER_FLICKER_CHANCE && flickerBudget > 0) {
                     grid[tileRow][tileColumn] = 'f';
                     flickerBudget--;
                 } else if (roll < 0.55f) {
@@ -877,8 +878,8 @@ public class LevelGenerator {
      *   INTERIOR  walls: left as 'x' (deep solid mass, never visible)
      */
     private void assignWallVariety(char[][] grid) {
-        for (int tileRow = 0; tileRow < Constants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
-            for (int tileColumn = 0; tileColumn < Constants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
+        for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
+            for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
                 if (grid[tileRow][tileColumn] != 'x') continue;
                 WallContext context = classifyWallContext(grid, tileColumn, tileRow);
                 if (context == WallContext.INTERIOR) continue;
@@ -943,7 +944,7 @@ public class LevelGenerator {
                     if (!isInBounds(tileColumn, tileRow)) continue;
                     if (!Level.isWall(grid[tileRow][tileColumn])) continue;
                     if (!facesRoomInterior(grid, tileColumn, tileRow, room)) continue;
-                    if (random.nextFloat() < Constants.LEVEL_GEN_SERVER_WALL_TERMINAL_CHANCE) {
+                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SERVER_WALL_TERMINAL_CHANCE) {
                         grid[tileRow][tileColumn] = 't';
                     }
                 }
@@ -973,52 +974,52 @@ public class LevelGenerator {
                     float roll = random.nextFloat();
                     switch (room.type) {
                         case MEDICAL_BAY:
-                            if (roll < Constants.LEVEL_GEN_MEDICAL_WALL_CHANCE) {
+                            if (roll < LevelGenConstants.LEVEL_GEN_MEDICAL_WALL_CHANCE) {
                                 grid[tileRow][tileColumn] = 'M';
-                            } else if (roll < Constants.LEVEL_GEN_MEDICAL_WALL_CHANCE
-                                             + Constants.LEVEL_GEN_MEDICAL_BIO_WALL_CHANCE) {
+                            } else if (roll < LevelGenConstants.LEVEL_GEN_MEDICAL_WALL_CHANCE
+                                             + LevelGenConstants.LEVEL_GEN_MEDICAL_BIO_WALL_CHANCE) {
                                 grid[tileRow][tileColumn] = 'Q';
                             }
                             break;
                         case ARMORY:
-                            if (roll < Constants.LEVEL_GEN_ARMORY_BLAST_WALL_CHANCE) {
+                            if (roll < LevelGenConstants.LEVEL_GEN_ARMORY_BLAST_WALL_CHANCE) {
                                 grid[tileRow][tileColumn] = 'X';
                             }
                             break;
                         case CRYO_CHAMBER:
-                            if (roll < Constants.LEVEL_GEN_CRYO_WALL_CHANCE) {
+                            if (roll < LevelGenConstants.LEVEL_GEN_CRYO_WALL_CHANCE) {
                                 grid[tileRow][tileColumn] = 'Z';
-                            } else if (roll < Constants.LEVEL_GEN_CRYO_WALL_CHANCE
-                                             + Constants.LEVEL_GEN_CRYO_GLASS_WALL_CHANCE) {
+                            } else if (roll < LevelGenConstants.LEVEL_GEN_CRYO_WALL_CHANCE
+                                             + LevelGenConstants.LEVEL_GEN_CRYO_GLASS_WALL_CHANCE) {
                                 grid[tileRow][tileColumn] = 'N';
                             }
                             break;
                         case POWER_PLANT:
-                            if (roll < Constants.LEVEL_GEN_POWERPLANT_RAD_WALL_CHANCE) {
+                            if (roll < LevelGenConstants.LEVEL_GEN_POWERPLANT_RAD_WALL_CHANCE) {
                                 grid[tileRow][tileColumn] = 'U';
-                            } else if (roll < Constants.LEVEL_GEN_POWERPLANT_RAD_WALL_CHANCE
-                                             + Constants.LEVEL_GEN_POWERPLANT_EMERG_WALL_CHANCE) {
+                            } else if (roll < LevelGenConstants.LEVEL_GEN_POWERPLANT_RAD_WALL_CHANCE
+                                             + LevelGenConstants.LEVEL_GEN_POWERPLANT_EMERG_WALL_CHANCE) {
                                 grid[tileRow][tileColumn] = 'S';
                             }
                             break;
                         case COMMAND_CENTER:
-                            if (roll < Constants.LEVEL_GEN_COMMAND_GLASS_WALL_CHANCE) {
+                            if (roll < LevelGenConstants.LEVEL_GEN_COMMAND_GLASS_WALL_CHANCE) {
                                 grid[tileRow][tileColumn] = 'N';
-                            } else if (roll < Constants.LEVEL_GEN_COMMAND_GLASS_WALL_CHANCE
-                                             + Constants.LEVEL_GEN_COMMAND_EMERG_WALL_CHANCE) {
+                            } else if (roll < LevelGenConstants.LEVEL_GEN_COMMAND_GLASS_WALL_CHANCE
+                                             + LevelGenConstants.LEVEL_GEN_COMMAND_EMERG_WALL_CHANCE) {
                                 grid[tileRow][tileColumn] = 'S';
                             }
                             break;
                         case CONTAINMENT_BLOCK:
-                            if (roll < Constants.LEVEL_GEN_CONTAINMENT_GLASS_CHANCE) {
+                            if (roll < LevelGenConstants.LEVEL_GEN_CONTAINMENT_GLASS_CHANCE) {
                                 grid[tileRow][tileColumn] = 'N';
-                            } else if (roll < Constants.LEVEL_GEN_CONTAINMENT_GLASS_CHANCE
-                                             + Constants.LEVEL_GEN_CONTAINMENT_BIO_CHANCE) {
+                            } else if (roll < LevelGenConstants.LEVEL_GEN_CONTAINMENT_GLASS_CHANCE
+                                             + LevelGenConstants.LEVEL_GEN_CONTAINMENT_BIO_CHANCE) {
                                 grid[tileRow][tileColumn] = 'Q';
                             }
                             break;
                         case RESEARCH_LAB:
-                            if (roll < Constants.LEVEL_GEN_RESEARCH_LAB_HOLO_WALL_CHANCE) {
+                            if (roll < LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_HOLO_WALL_CHANCE) {
                                 grid[tileRow][tileColumn] = 'D';
                             }
                             break;
@@ -1168,7 +1169,7 @@ public class LevelGenerator {
      * axes must have walkable tiles on both sides so the column never seals the corridor.
      */
     private void placeWideHallwayColumns(char[][] grid) {
-        int spacing       = Constants.LEVEL_GEN_WIDE_HALLWAY_COLUMN_SPACING;
+        int spacing       = LevelGenConstants.LEVEL_GEN_WIDE_HALLWAY_COLUMN_SPACING;
         int eligibleCount = 0;
         for (int[] spinePoint : wideHallwaySpineTiles) {
             int tileColumn = spinePoint[0];
@@ -1213,7 +1214,7 @@ public class LevelGenerator {
                 for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
                     if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
-                    if (random.nextFloat() < Constants.LEVEL_GEN_PROP_CHANCE) {
+                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_PROP_CHANCE) {
                         char propChar = randomPropChar();
                         if (Level.isPropSolid(propChar) && isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
                         if (propChar != '\0') grid[tileRow][tileColumn] = propChar;
@@ -1247,7 +1248,7 @@ public class LevelGenerator {
                     if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
-                    char prop = random.nextFloat() < Constants.LEVEL_GEN_SERVER_LOCKER_RATIO ? 'L' : 'T';
+                    char prop = random.nextFloat() < LevelGenConstants.LEVEL_GEN_SERVER_LOCKER_RATIO ? 'L' : 'T';
                     grid[tileRow][tileColumn] = prop;
                 }
             }
@@ -1259,7 +1260,7 @@ public class LevelGenerator {
                     if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
-                    char prop = random.nextFloat() < Constants.LEVEL_GEN_SERVER_LOCKER_RATIO ? 'L' : 'T';
+                    char prop = random.nextFloat() < LevelGenConstants.LEVEL_GEN_SERVER_LOCKER_RATIO ? 'L' : 'T';
                     grid[tileRow][tileColumn] = prop;
                 }
             }
@@ -1278,7 +1279,7 @@ public class LevelGenerator {
                     if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
-                    if (random.nextFloat() < Constants.LEVEL_GEN_LARGE_PROP_CHANCE) {
+                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_LARGE_PROP_CHANCE) {
                         char prop = random.nextFloat() < 0.70f ? 'C' : 'g';
                         grid[tileRow][tileColumn] = prop;
                     }
@@ -1306,7 +1307,7 @@ public class LevelGenerator {
                 for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
                     if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
-                    if (random.nextFloat() < Constants.LEVEL_GEN_MEDICAL_PROP_CHANCE) {
+                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_MEDICAL_PROP_CHANCE) {
                         char prop = randomMedicalPropChar();
                         if (prop != '\0' && !(Level.isPropSolid(prop)
                                 && isAdjacentToDoorAxis(grid, tileColumn, tileRow))) {
@@ -1352,7 +1353,7 @@ public class LevelGenerator {
 
     private void placeArmoryWeaponRacks(char[][] grid, Room room) {
         int racksPlaced = 0;
-        int maxRacks    = Constants.LEVEL_GEN_ARMORY_MIN_WEAPON_RACKS + random.nextInt(3);
+        int maxRacks    = LevelGenConstants.LEVEL_GEN_ARMORY_MIN_WEAPON_RACKS + random.nextInt(3);
         for (int attempt = 0; attempt < 40 && racksPlaced < maxRacks; attempt++) {
             int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
             int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
@@ -1433,9 +1434,9 @@ public class LevelGenerator {
         for (Room room : rooms) {
             if (room.type != RoomType.POWER_PLANT) continue;
             // Cluster of generators near centre
-            int generatorCount = Constants.LEVEL_GEN_POWERPLANT_MIN_GENERATORS
-                    + random.nextInt(Constants.LEVEL_GEN_POWERPLANT_MAX_GENERATORS
-                                     - Constants.LEVEL_GEN_POWERPLANT_MIN_GENERATORS + 1);
+            int generatorCount = LevelGenConstants.LEVEL_GEN_POWERPLANT_MIN_GENERATORS
+                    + random.nextInt(LevelGenConstants.LEVEL_GEN_POWERPLANT_MAX_GENERATORS
+                                     - LevelGenConstants.LEVEL_GEN_POWERPLANT_MIN_GENERATORS + 1);
             placeGeneratorCluster(grid, room, generatorCount);
             // Atmosphere props
             tryPlaceAtmosphericPropNearWall(grid, room, '#');
@@ -1490,9 +1491,9 @@ public class LevelGenerator {
     }
 
     private void placeCommandTerminalRow(char[][] grid, Room room) {
-        int terminalCount  = Constants.LEVEL_GEN_COMMAND_MIN_TERMINALS
-                + random.nextInt(Constants.LEVEL_GEN_COMMAND_MAX_TERMINALS
-                                 - Constants.LEVEL_GEN_COMMAND_MIN_TERMINALS + 1);
+        int terminalCount  = LevelGenConstants.LEVEL_GEN_COMMAND_MIN_TERMINALS
+                + random.nextInt(LevelGenConstants.LEVEL_GEN_COMMAND_MAX_TERMINALS
+                                 - LevelGenConstants.LEVEL_GEN_COMMAND_MIN_TERMINALS + 1);
         // Place terminals along the back wall (top row of interior)
         int backRow   = room.topRow - 2;
         int placed    = 0;
@@ -1524,7 +1525,7 @@ public class LevelGenerator {
                 int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
                 if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
                 if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
-                if (random.nextFloat() < Constants.LEVEL_GEN_CONTAINMENT_PROP_CHANCE) {
+                if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_CONTAINMENT_PROP_CHANCE) {
                     char prop = randomContainmentPropChar();
                     if (prop != '\0' && !(Level.isPropSolid(prop)
                             && isAdjacentToDoorAxis(grid, tileColumn, tileRow))) {
@@ -1560,9 +1561,9 @@ public class LevelGenerator {
 
             // --- Specimen tank row along one interior wall ---
             boolean tankRowHorizontal = room.interiorWidth() >= room.interiorHeight();
-            int tankTarget = Constants.LEVEL_GEN_RESEARCH_LAB_MIN_TANKS
-                           + random.nextInt(Constants.LEVEL_GEN_RESEARCH_LAB_MAX_TANKS
-                                           - Constants.LEVEL_GEN_RESEARCH_LAB_MIN_TANKS + 1);
+            int tankTarget = LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_MIN_TANKS
+                           + random.nextInt(LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_MAX_TANKS
+                                           - LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_MIN_TANKS + 1);
             int tanksPlaced = 0;
             if (tankRowHorizontal) {
                 for (int tileColumn = room.leftColumn + 2;
@@ -1573,7 +1574,7 @@ public class LevelGenerator {
                     if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
                     grid[tileRow][tileColumn] = 'I';
                     tanksPlaced++;
-                    if (random.nextFloat() < Constants.LEVEL_GEN_RESEARCH_LAB_CRACKED_CHANCE) {
+                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_CRACKED_CHANCE) {
                         int scorchRow = tileRow + 1;
                         if (isWalkableFloor(grid, tileColumn, scorchRow)) {
                             grid[scorchRow][tileColumn] = 'e';
@@ -1589,7 +1590,7 @@ public class LevelGenerator {
                     if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
                     grid[tileRow][tileColumn] = 'I';
                     tanksPlaced++;
-                    if (random.nextFloat() < Constants.LEVEL_GEN_RESEARCH_LAB_CRACKED_CHANCE) {
+                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_CRACKED_CHANCE) {
                         int scorchColumn = tileColumn + 1;
                         if (isWalkableFloor(grid, scorchColumn, tileRow)) {
                             grid[tileRow][scorchColumn] = 'e';
@@ -1633,9 +1634,9 @@ public class LevelGenerator {
             }
 
             // --- Additional energy scorch decals ---
-            int scorchTarget = Constants.LEVEL_GEN_RESEARCH_LAB_SCORCH_MIN
-                             + random.nextInt(Constants.LEVEL_GEN_RESEARCH_LAB_SCORCH_MAX
-                                             - Constants.LEVEL_GEN_RESEARCH_LAB_SCORCH_MIN + 1);
+            int scorchTarget = LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_SCORCH_MIN
+                             + random.nextInt(LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_SCORCH_MAX
+                                             - LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_SCORCH_MIN + 1);
             int scorchPlaced = 0;
             for (int attempt = 0; attempt < 40 && scorchPlaced < scorchTarget; attempt++) {
                 int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
@@ -1766,17 +1767,17 @@ public class LevelGenerator {
             Room  room         = rooms.get(roomIndex);
             float medkitChance = config.medkitChancePerRoom;
             float armourChance = config.armourChancePerRoom;
-            float ammoChance   = Constants.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
+            float ammoChance   = LevelGenConstants.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
 
             switch (room.type) {
                 case SERVER_ROOM:
-                    medkitChance = Constants.LEVEL_GEN_SERVER_MEDKIT_CHANCE;
-                    armourChance = Constants.LEVEL_GEN_SERVER_ARMOUR_CHANCE;
+                    medkitChance = LevelGenConstants.LEVEL_GEN_SERVER_MEDKIT_CHANCE;
+                    armourChance = LevelGenConstants.LEVEL_GEN_SERVER_ARMOUR_CHANCE;
                     ammoChance   = 0.45f;
                     break;
                 case LARGE:
-                    medkitChance = Constants.LEVEL_GEN_LARGE_MEDKIT_CHANCE;
-                    armourChance = Constants.LEVEL_GEN_LARGE_ARMOUR_CHANCE;
+                    medkitChance = LevelGenConstants.LEVEL_GEN_LARGE_MEDKIT_CHANCE;
+                    armourChance = LevelGenConstants.LEVEL_GEN_LARGE_ARMOUR_CHANCE;
                     ammoChance   = 0.55f;
                     break;
                 case MEDICAL_BAY:
@@ -1849,7 +1850,7 @@ public class LevelGenerator {
         for (Room room : rooms) {
             if (room.type == RoomType.ENTRANCE) continue;
             if (room.type == RoomType.ARMORY)   continue;
-            if (random.nextFloat() < Constants.LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE) {
+            if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE) {
                 tryPlaceWeaponSpawn(grid, room);
             }
         }
@@ -1898,8 +1899,8 @@ public class LevelGenerator {
     private void placeRustWallsNearUnlit(char[][] grid) {
         int[] deltaColumns = { 0,  0,  1, -1 };
         int[] deltaRows    = { 1, -1,  0,  0 };
-        for (int tileRow = 0; tileRow < Constants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
-            for (int tileColumn = 0; tileColumn < Constants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
+        for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
+            for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
                 if (grid[tileRow][tileColumn] != 'x') continue;
                 boolean nearUnlit = false;
                 boolean nearDecal = false;
@@ -1911,9 +1912,9 @@ public class LevelGenerator {
                     if (neighbor == 'u')                    nearUnlit = true;
                     if (neighbor == 'O' || neighbor == '.') nearDecal = true;
                 }
-                if (nearUnlit && random.nextFloat() < Constants.LEVEL_GEN_RUST_WALL_CHANCE) {
+                if (nearUnlit && random.nextFloat() < LevelGenConstants.LEVEL_GEN_RUST_WALL_CHANCE) {
                     grid[tileRow][tileColumn] = 'j';
-                } else if (nearDecal && random.nextFloat() < Constants.LEVEL_GEN_RUST_OIL_CHANCE) {
+                } else if (nearDecal && random.nextFloat() < LevelGenConstants.LEVEL_GEN_RUST_OIL_CHANCE) {
                     grid[tileRow][tileColumn] = 'j';
                 }
             }
@@ -1923,8 +1924,8 @@ public class LevelGenerator {
     private void placeGoreWallsNearCorpses(char[][] grid) {
         int[] deltaColumns = { 0,  0,  1, -1 };
         int[] deltaRows    = { 1, -1,  0,  0 };
-        for (int tileRow = 0; tileRow < Constants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
-            for (int tileColumn = 0; tileColumn < Constants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
+        for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
+            for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
                 if (grid[tileRow][tileColumn] != 'x') continue;
                 boolean nearGore = false;
                 for (int direction = 0; direction < 4; direction++) {
@@ -1934,7 +1935,7 @@ public class LevelGenerator {
                     char neighbor = grid[neighborRow][neighborColumn];
                     if (neighbor == 'm' || neighbor == '.') nearGore = true;
                 }
-                if (nearGore && random.nextFloat() < Constants.LEVEL_GEN_GORE_WALL_CHANCE) {
+                if (nearGore && random.nextFloat() < LevelGenConstants.LEVEL_GEN_GORE_WALL_CHANCE) {
                     grid[tileRow][tileColumn] = 'G';
                 }
             }
@@ -1944,11 +1945,11 @@ public class LevelGenerator {
     private void placeBulkheadWallsAtDeadEnds(char[][] grid) {
         int[] deltaColumns = { 0,  0,  1, -1 };
         int[] deltaRows    = { 1, -1,  0,  0 };
-        for (int tileRow = 0; tileRow < Constants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
-            for (int tileColumn = 0; tileColumn < Constants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
+        for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
+            for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
                 char cell        = grid[tileRow][tileColumn];
                 boolean isDeadEnd = false;
-                boolean isStairs  = (cell == Constants.STAIRS_DOWN_CHAR);
+                boolean isStairs  = (cell == RenderConstants.STAIRS_DOWN_CHAR);
                 if (cell == 'l' || cell == ' ' || cell == 'u') {
                     int walkableCount = 0;
                     int wallCount     = 0;
@@ -1981,7 +1982,7 @@ public class LevelGenerator {
 
     private void spawnEnemiesInRoom(char[][] grid, Room room, List<EnemySpawnPoint> spawnPoints) {
         int area       = room.interiorWidth() * room.interiorHeight();
-        int enemyCount = Math.min(Constants.LEVEL_GEN_MAX_ENEMIES_PER_ROOM,
+        int enemyCount = Math.min(LevelGenConstants.LEVEL_GEN_MAX_ENEMIES_PER_ROOM,
                                   1 + random.nextInt(Math.max(1, area / 6)));
         int[] placedColumns = new int[enemyCount];
         int[] placedRows    = new int[enemyCount];
@@ -2011,10 +2012,10 @@ public class LevelGenerator {
 
     private char randomEnemySpawnChar() {
         float roll = random.nextFloat();
-        if (roll < Constants.LEVEL_GEN_CORRUPTOR_THRESHOLD)  return '1';
-        if (roll < Constants.LEVEL_GEN_VORTEX_EYE_THRESHOLD) return '2';
-        if (roll < Constants.LEVEL_GEN_GHOUL_THRESHOLD)       return '3';
-        if (roll < Constants.LEVEL_GEN_CRAWLER_THRESHOLD)     return '4';
+        if (roll < LevelGenConstants.LEVEL_GEN_CORRUPTOR_THRESHOLD)  return '1';
+        if (roll < LevelGenConstants.LEVEL_GEN_VORTEX_EYE_THRESHOLD) return '2';
+        if (roll < LevelGenConstants.LEVEL_GEN_GHOUL_THRESHOLD)       return '3';
+        if (roll < LevelGenConstants.LEVEL_GEN_CRAWLER_THRESHOLD)     return '4';
         return '5';
     }
 
@@ -2036,8 +2037,8 @@ public class LevelGenerator {
 
     private boolean isTileReachable(char[][] grid, int startColumn, int startRow,
                                     int targetColumn, int targetRow) {
-        int gridWidth  = Constants.LEVEL_GEN_GRID_WIDTH;
-        int gridHeight = Constants.LEVEL_GEN_GRID_HEIGHT;
+        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
+        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
         boolean[][] visited = new boolean[gridHeight][gridWidth];
 
         int capacity       = gridWidth * gridHeight;
@@ -2149,7 +2150,7 @@ public class LevelGenerator {
         int centerColumn = room.centerColumn();
         int centerRow    = room.centerRow();
         if (isWalkableFloor(grid, centerColumn, centerRow)) {
-            grid[centerRow][centerColumn] = Constants.STAIRS_DOWN_CHAR;
+            grid[centerRow][centerColumn] = RenderConstants.STAIRS_DOWN_CHAR;
             lightSurroundingFloor(grid, centerColumn, centerRow);
             return true;
         }
@@ -2158,7 +2159,7 @@ public class LevelGenerator {
             int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
             int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
             if (isWalkableFloor(grid, tileColumn, tileRow)) {
-                grid[tileRow][tileColumn] = Constants.STAIRS_DOWN_CHAR;
+                grid[tileRow][tileColumn] = RenderConstants.STAIRS_DOWN_CHAR;
                 lightSurroundingFloor(grid, tileColumn, tileRow);
                 return true;
             }
@@ -2203,8 +2204,8 @@ public class LevelGenerator {
     }
 
     private boolean isInBounds(int tileColumn, int tileRow) {
-        return tileColumn >= 0 && tileColumn < Constants.LEVEL_GEN_GRID_WIDTH
-            && tileRow    >= 0 && tileRow    < Constants.LEVEL_GEN_GRID_HEIGHT;
+        return tileColumn >= 0 && tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH
+            && tileRow    >= 0 && tileRow    < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
     }
 
     private int manhattanDistance(Room roomA, Room roomB) {
@@ -2217,15 +2218,15 @@ public class LevelGenerator {
     }
 
     private void fillAll(char[][] grid, char fillChar) {
-        for (int tileRow = 0; tileRow < Constants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
-            for (int tileColumn = 0; tileColumn < Constants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
+        for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
+            for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
                 grid[tileRow][tileColumn] = fillChar;
             }
         }
     }
 
     private Level buildFallbackLevel() {
-        char[][] grid = new char[Constants.LEVEL_GEN_GRID_HEIGHT][Constants.LEVEL_GEN_GRID_WIDTH];
+        char[][] grid = new char[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT][LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
         fillAll(grid, 'x');
         for (int tileRow = 20; tileRow <= 24; tileRow++) {
             for (int tileColumn = 36; tileColumn <= 43; tileColumn++) {

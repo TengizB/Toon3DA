@@ -23,6 +23,8 @@ import ge.tbegvadze.toon3d.world.TickEventBus;
 
 import java.util.Collections;
 import java.util.List;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
+import ge.tbegvadze.toon3d.util.ItemConstants;
 
 public class PlayerController {
 
@@ -151,7 +153,7 @@ public class PlayerController {
     }
 
     private void advanceHealing(float deltaTime) {
-        actionProgress = Math.min(1f, actionProgress + deltaTime / Constants.PLAYER_HEAL_DURATION);
+        actionProgress = Math.min(1f, actionProgress + deltaTime / ItemConstants.PLAYER_HEAL_DURATION);
         if (actionProgress >= 1f) {
             MedicalTier tier   = inventory.chooseHealTier(player.getHealth(), player.getMaxHealth());
             int         amount = inventory.spendHeal(tier);
@@ -164,7 +166,7 @@ public class PlayerController {
     }
 
     private void advanceFiring(float deltaTime) {
-        actionProgress = Math.min(1f, actionProgress + deltaTime / Constants.PLAYER_FIRE_DURATION);
+        actionProgress = Math.min(1f, actionProgress + deltaTime / WeaponConstants.PLAYER_FIRE_DURATION);
         if (actionProgress >= 1f) {
             finishAction(true, TickCause.FIRE);
         }
@@ -182,8 +184,8 @@ public class PlayerController {
         if (!Level.isMedicalPickup(cell)) return;
         MedicalTier tier       = Level.medicalTierOfPickup(cell);
         int         healAmount = (tier == MedicalTier.STIM)
-                                     ? Constants.MEDKIT_STIM_HEAL
-                                     : Constants.MEDKIT_FULL_HEAL;
+                                     ? ItemConstants.MEDKIT_STIM_HEAL
+                                     : ItemConstants.MEDKIT_FULL_HEAL;
         if (player.getHealth() < player.getMaxHealth()) {
             // Apply healing immediately — player expects health to restore on contact.
             level.consumePickupAt(tileColumn, tileRow);

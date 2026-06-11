@@ -23,6 +23,7 @@ import ge.tbegvadze.toon3d.util.Constants;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
  * Draws the equipped weapon sprite as a bottom-centre HUD element.
@@ -48,7 +49,7 @@ public class WeaponHudRenderer implements Renderable, Disposable {
 
     private WeaponVisualState previousState       = WeaponVisualState.NORMAL;
     private float             animationTimer      = 0f;
-    private float             currentOffsetY      = Constants.WEAPON_HUD_BASE_Y;
+    private float             currentOffsetY      = WeaponConstants.WEAPON_HUD_BASE_Y;
     private int               lastFlashCycleCount = 0;
 
     // Chaingun spark positions — static to avoid per-frame heap allocation.
@@ -77,7 +78,7 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         this.normalTexture  = weaponTextureCache.get(equippedWeapon.getClass());
         this.batch          = new SpriteBatch();
         this.shapeRenderer  = new ShapeRenderer();
-        this.drawX          = (Constants.WORLD_WIDTH - Constants.WEAPON_HUD_WIDTH) / 2f;
+        this.drawX          = (Constants.WORLD_WIDTH - WeaponConstants.WEAPON_HUD_WIDTH) / 2f;
     }
 
     /**
@@ -90,7 +91,7 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         previousState       = WeaponVisualState.NORMAL;
         animationTimer      = 0f;
         lastFlashCycleCount = weapon.getFlashCycleCount();
-        currentOffsetY      = Constants.WEAPON_HUD_BASE_Y - Constants.WEAPON_RELOAD_SLIDE_Y;
+        currentOffsetY      = WeaponConstants.WEAPON_HUD_BASE_Y - WeaponConstants.WEAPON_RELOAD_SLIDE_Y;
     }
 
     /**
@@ -153,8 +154,8 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      *   8. Muzzle emitter     — layered concentric ellipses, blue → white
      */
     private static Texture generatePlasmaRifleTexture() {
-        int canvasWidth  = Constants.PLASMA_RIFLE_CANVAS_WIDTH;
-        int canvasHeight = Constants.PLASMA_RIFLE_CANVAS_HEIGHT;
+        int canvasWidth  = WeaponConstants.PLASMA_RIFLE_CANVAS_WIDTH;
+        int canvasHeight = WeaponConstants.PLASMA_RIFLE_CANVAS_HEIGHT;
 
         FrameBuffer   frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
         ShapeRenderer temporaryShapeRenderer = new ShapeRenderer();
@@ -334,8 +335,8 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      *   8. Right bore         — mirror of left bore
      */
     private static Texture generateDoubleBarrelShotgunTexture() {
-        int canvasWidth  = Constants.DBL_SHOTGUN_CANVAS_WIDTH;
-        int canvasHeight = Constants.DBL_SHOTGUN_CANVAS_HEIGHT;
+        int canvasWidth  = WeaponConstants.DBL_SHOTGUN_CANVAS_WIDTH;
+        int canvasHeight = WeaponConstants.DBL_SHOTGUN_CANVAS_HEIGHT;
 
         FrameBuffer   frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
         ShapeRenderer temporaryShapeRenderer = new ShapeRenderer();
@@ -563,8 +564,8 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      *   8. Bore openings    — nearly circular (16×14) ellipses + rim-shine; Y=114..128
      */
     private static Texture generateShotgunTexture() {
-        int canvasWidth  = Constants.SHOTGUN_CANVAS_WIDTH;
-        int canvasHeight = Constants.SHOTGUN_CANVAS_HEIGHT;
+        int canvasWidth  = WeaponConstants.SHOTGUN_CANVAS_WIDTH;
+        int canvasHeight = WeaponConstants.SHOTGUN_CANVAS_HEIGHT;
 
         FrameBuffer   frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
         ShapeRenderer temporaryShapeRenderer = new ShapeRenderer();
@@ -840,8 +841,8 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      *   7. Muzzle caps      — thin bright steel lip at barrel tips
      */
     private static Texture generateChaingunTexture() {
-        int canvasWidth  = Constants.CHAINGUN_CANVAS_WIDTH;
-        int canvasHeight = Constants.CHAINGUN_CANVAS_HEIGHT;
+        int canvasWidth  = WeaponConstants.CHAINGUN_CANVAS_WIDTH;
+        int canvasHeight = WeaponConstants.CHAINGUN_CANVAS_HEIGHT;
 
         FrameBuffer        frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
         ShapeRenderer      temporaryShapeRenderer = new ShapeRenderer();
@@ -1065,8 +1066,8 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      * View mode: TOP-DOWN, convergence ~0.65, muzzle cap (no bore ellipse).
      */
     private static Texture generateRailgunTexture() {
-        int canvasWidth  = Constants.RAILGUN_CANVAS_WIDTH;
-        int canvasHeight = Constants.RAILGUN_CANVAS_HEIGHT;
+        int canvasWidth  = WeaponConstants.RAILGUN_CANVAS_WIDTH;
+        int canvasHeight = WeaponConstants.RAILGUN_CANVAS_HEIGHT;
 
         FrameBuffer        frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
         ShapeRenderer      temporaryShapeRenderer = new ShapeRenderer();
@@ -1276,8 +1277,8 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      * View mode: TOP-DOWN, convergence ~0.65, muzzle CAP (no bore ellipse).
      */
     private static Texture generateIncineratorTexture() {
-        int canvasWidth  = Constants.FLAME_CANVAS_WIDTH;
-        int canvasHeight = Constants.FLAME_CANVAS_HEIGHT;
+        int canvasWidth  = WeaponConstants.FLAME_CANVAS_WIDTH;
+        int canvasHeight = WeaponConstants.FLAME_CANVAS_HEIGHT;
 
         FrameBuffer        frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
         ShapeRenderer      temporaryShapeRenderer = new ShapeRenderer();
@@ -1485,8 +1486,8 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      * View mode: TOP-DOWN, convergence factor ~0.65, muzzle cap (no bore ellipse).
      */
     private static Texture generateGrenadeLauncherTexture() {
-        int canvasWidth  = Constants.GRENADE_CANVAS_WIDTH;
-        int canvasHeight = Constants.GRENADE_CANVAS_HEIGHT;
+        int canvasWidth  = WeaponConstants.GRENADE_CANVAS_WIDTH;
+        int canvasHeight = WeaponConstants.GRENADE_CANVAS_HEIGHT;
 
         FrameBuffer        frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
         ShapeRenderer      temporaryShapeRenderer = new ShapeRenderer();
@@ -1689,11 +1690,11 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
         batch.draw(normalTexture, drawX, currentOffsetY,
-                   Constants.WEAPON_HUD_WIDTH, Constants.WEAPON_HUD_HEIGHT);
+                   WeaponConstants.WEAPON_HUD_WIDTH, WeaponConstants.WEAPON_HUD_HEIGHT);
         batch.end();
 
         if (state == WeaponVisualState.FIRING) {
-            float normalizedTime = Math.min(animationTimer / Constants.FIRE_FLASH_DURATION, 1f);
+            float normalizedTime = Math.min(animationTimer / WeaponConstants.FIRE_FLASH_DURATION, 1f);
             if (normalizedTime < 1f) {
                 if (equippedWeapon instanceof PlasmaRifle) {
                     renderPlasmaEffect(camera, normalizedTime);
@@ -1718,15 +1719,15 @@ public class WeaponHudRenderer implements Renderable, Disposable {
 
     private void advanceOffsetY(WeaponVisualState state, float deltaTime) {
         if (state == WeaponVisualState.FIRING) {
-            float normalizedTime = Math.min(animationTimer / Constants.FIRE_FLASH_DURATION, 1f);
-            currentOffsetY = Constants.WEAPON_HUD_BASE_Y
-                             - Constants.WEAPON_RECOIL_OFFSET_Y * (1f - normalizedTime);
+            float normalizedTime = Math.min(animationTimer / WeaponConstants.FIRE_FLASH_DURATION, 1f);
+            currentOffsetY = WeaponConstants.WEAPON_HUD_BASE_Y
+                             - WeaponConstants.WEAPON_RECOIL_OFFSET_Y * (1f - normalizedTime);
         } else {
             float targetOffsetY = (state == WeaponVisualState.RELOADING)
-                                  ? Constants.WEAPON_HUD_BASE_Y - Constants.WEAPON_RELOAD_SLIDE_Y
-                                  : Constants.WEAPON_HUD_BASE_Y;
+                                  ? WeaponConstants.WEAPON_HUD_BASE_Y - WeaponConstants.WEAPON_RELOAD_SLIDE_Y
+                                  : WeaponConstants.WEAPON_HUD_BASE_Y;
             currentOffsetY += (targetOffsetY - currentOffsetY)
-                              * Math.min(deltaTime * Constants.WEAPON_OFFSET_LERP_SPEED, 1f);
+                              * Math.min(deltaTime * WeaponConstants.WEAPON_OFFSET_LERP_SPEED, 1f);
         }
     }
 
@@ -1739,9 +1740,9 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         float alpha   = 1f - normalizedTime;
         float scale   = 1f - normalizedTime * 0.60f;
         float barrelX = Constants.WORLD_WIDTH / 2f;
-        float barrelY = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
-                        * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
-        float radius  = Constants.PLASMA_BLAST_RADIUS * scale;
+        float barrelY = currentOffsetY + WeaponConstants.WEAPON_HUD_HEIGHT
+                        * WeaponConstants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float radius  = WeaponConstants.PLASMA_BLAST_RADIUS * scale;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -1810,12 +1811,12 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         float alpha          = 1f - normalizedTime;
         float scale          = 1f - normalizedTime * 0.55f;
         float barrelX        = Constants.WORLD_WIDTH / 2f;
-        float barrelY        = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
-                               * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
-        float height         = Constants.SHOTGUN_EFFECT_FLAME_HEIGHT * scale;
-        float halfBase       = Constants.SHOTGUN_EFFECT_FLAME_BASE_WIDTH / 2f * scale;
-        float discHalfWidth  = Constants.SHOTGUN_EFFECT_DISC_HALF_WIDTH  * scale;
-        float discHalfHeight = Constants.SHOTGUN_EFFECT_DISC_HALF_HEIGHT * scale;
+        float barrelY        = currentOffsetY + WeaponConstants.WEAPON_HUD_HEIGHT
+                               * WeaponConstants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float height         = WeaponConstants.SHOTGUN_EFFECT_FLAME_HEIGHT * scale;
+        float halfBase       = WeaponConstants.SHOTGUN_EFFECT_FLAME_BASE_WIDTH / 2f * scale;
+        float discHalfWidth  = WeaponConstants.SHOTGUN_EFFECT_DISC_HALF_WIDTH  * scale;
+        float discHalfHeight = WeaponConstants.SHOTGUN_EFFECT_DISC_HALF_HEIGHT * scale;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -1884,11 +1885,11 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         float alpha          = 1f - normalizedTime;
         float scale          = 1f - normalizedTime * 0.55f;
         float barrelX        = Constants.WORLD_WIDTH / 2f;
-        float barrelY        = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
-                               * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
-        float tongueHeight   = Constants.DBL_SHOTGUN_EFFECT_FLAME_HEIGHT * scale;
-        float tongueHalfBase = Constants.DBL_SHOTGUN_EFFECT_TONGUE_BASE_WIDTH / 2f * scale;
-        float tongueOffsetX  = Constants.DBL_SHOTGUN_EFFECT_TONGUE_OFFSET_X * scale;
+        float barrelY        = currentOffsetY + WeaponConstants.WEAPON_HUD_HEIGHT
+                               * WeaponConstants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float tongueHeight   = WeaponConstants.DBL_SHOTGUN_EFFECT_FLAME_HEIGHT * scale;
+        float tongueHalfBase = WeaponConstants.DBL_SHOTGUN_EFFECT_TONGUE_BASE_WIDTH / 2f * scale;
+        float tongueOffsetX  = WeaponConstants.DBL_SHOTGUN_EFFECT_TONGUE_OFFSET_X * scale;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -1964,13 +1965,13 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         float alpha        = 1f - normalizedTime;
         float scale        = 1f - normalizedTime * 0.55f;
         float barrelX      = Constants.WORLD_WIDTH / 2f;
-        float barrelY      = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
-                             * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
-        float coneHeight   = Constants.CHAINGUN_EFFECT_CONE_HEIGHT * scale;
-        float coneHalfBase = Constants.CHAINGUN_EFFECT_CONE_BASE_WIDTH / 2f * scale;
-        float sparkSpreadX = Constants.CHAINGUN_EFFECT_SPARK_SPREAD_X * scale;
-        float sparkSpreadY = Constants.CHAINGUN_EFFECT_SPARK_SPREAD_Y * scale;
-        float sparkSize    = Constants.CHAINGUN_EFFECT_SPARK_SIZE * scale;
+        float barrelY      = currentOffsetY + WeaponConstants.WEAPON_HUD_HEIGHT
+                             * WeaponConstants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float coneHeight   = WeaponConstants.CHAINGUN_EFFECT_CONE_HEIGHT * scale;
+        float coneHalfBase = WeaponConstants.CHAINGUN_EFFECT_CONE_BASE_WIDTH / 2f * scale;
+        float sparkSpreadX = WeaponConstants.CHAINGUN_EFFECT_SPARK_SPREAD_X * scale;
+        float sparkSpreadY = WeaponConstants.CHAINGUN_EFFECT_SPARK_SPREAD_Y * scale;
+        float sparkSize    = WeaponConstants.CHAINGUN_EFFECT_SPARK_SIZE * scale;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -2013,7 +2014,7 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         // CHAINGUN_SPARK_FRACTIONS_X / _Y (no per-frame allocation).
         // Ten fixed positions spread around the barrel tip; each drawn as a small square.
         shapeRenderer.setColor(1.00f, 0.95f, 0.30f, alpha * 0.85f);
-        for (int sparkIndex = 0; sparkIndex < Constants.CHAINGUN_EFFECT_SPARK_COUNT; sparkIndex++) {
+        for (int sparkIndex = 0; sparkIndex < WeaponConstants.CHAINGUN_EFFECT_SPARK_COUNT; sparkIndex++) {
             float sparkX = barrelX + CHAINGUN_SPARK_FRACTIONS_X[sparkIndex] * sparkSpreadX - sparkSize * 0.5f;
             float sparkY = barrelY + CHAINGUN_SPARK_FRACTIONS_Y[sparkIndex] * sparkSpreadY;
             shapeRenderer.rect(sparkX, sparkY, sparkSize, sparkSize);
@@ -2034,12 +2035,12 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         float alpha         = 1f - normalizedTime;
         float scale         = 1f - normalizedTime * 0.55f;
         float barrelX       = Constants.WORLD_WIDTH / 2f;
-        float barrelY       = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
-                              * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
-        float lanceHeight   = Constants.RAILGUN_EFFECT_LANCE_HEIGHT * scale;
-        float lanceHalfBase = Constants.RAILGUN_EFFECT_LANCE_BASE_WIDTH / 2f * scale;
-        float arcSpread     = Constants.RAILGUN_EFFECT_ARC_SPREAD * scale;
-        float arcHeight     = Constants.RAILGUN_EFFECT_ARC_HEIGHT * scale;
+        float barrelY       = currentOffsetY + WeaponConstants.WEAPON_HUD_HEIGHT
+                              * WeaponConstants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float lanceHeight   = WeaponConstants.RAILGUN_EFFECT_LANCE_HEIGHT * scale;
+        float lanceHalfBase = WeaponConstants.RAILGUN_EFFECT_LANCE_BASE_WIDTH / 2f * scale;
+        float arcSpread     = WeaponConstants.RAILGUN_EFFECT_ARC_SPREAD * scale;
+        float arcHeight     = WeaponConstants.RAILGUN_EFFECT_ARC_HEIGHT * scale;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -2122,12 +2123,12 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      */
     private void renderIncineratorEffect(OrthographicCamera camera, float normalizedTime) {
         float alpha    = 1f - normalizedTime;
-        float scale    = 1f - normalizedTime * Constants.INCINERATOR_EFFECT_SHRINK_RATE;
+        float scale    = 1f - normalizedTime * WeaponConstants.INCINERATOR_EFFECT_SHRINK_RATE;
         float barrelX  = Constants.WORLD_WIDTH / 2f;
-        float barrelY  = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
-                         * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
-        float height   = Constants.INCINERATOR_EFFECT_FLAME_HEIGHT * scale;
-        float halfBase = Constants.INCINERATOR_EFFECT_FLAME_BASE_WIDTH / 2f * scale;
+        float barrelY  = currentOffsetY + WeaponConstants.WEAPON_HUD_HEIGHT
+                         * WeaponConstants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float height   = WeaponConstants.INCINERATOR_EFFECT_FLAME_HEIGHT * scale;
+        float halfBase = WeaponConstants.INCINERATOR_EFFECT_FLAME_BASE_WIDTH / 2f * scale;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -2211,12 +2212,12 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         float alpha        = 1f - normalizedTime;
         float scale        = 1f - normalizedTime * 0.55f;
         float barrelX      = Constants.WORLD_WIDTH / 2f;
-        float barrelY      = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
-                             * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
-        float puffRadius   = Constants.GRENADE_EFFECT_PUFF_RADIUS * scale;
-        float coreRadius   = Constants.GRENADE_EFFECT_CORE_RADIUS * scale;
-        float wispHeight   = Constants.GRENADE_EFFECT_WISP_HEIGHT * scale;
-        float wispHalfBase = Constants.GRENADE_EFFECT_WISP_BASE_WIDTH / 2f * scale;
+        float barrelY      = currentOffsetY + WeaponConstants.WEAPON_HUD_HEIGHT
+                             * WeaponConstants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float puffRadius   = WeaponConstants.GRENADE_EFFECT_PUFF_RADIUS * scale;
+        float coreRadius   = WeaponConstants.GRENADE_EFFECT_CORE_RADIUS * scale;
+        float wispHeight   = WeaponConstants.GRENADE_EFFECT_WISP_HEIGHT * scale;
+        float wispHalfBase = WeaponConstants.GRENADE_EFFECT_WISP_BASE_WIDTH / 2f * scale;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -2285,10 +2286,10 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         float alpha    = 1f - normalizedTime;
         float scale    = 1f - normalizedTime * 0.55f;
         float barrelX  = Constants.WORLD_WIDTH / 2f;
-        float barrelY  = currentOffsetY + Constants.WEAPON_HUD_HEIGHT
-                         * Constants.WEAPON_BARREL_TIP_Y_FRACTION;
-        float height   = Constants.WEAPON_FLAME_HEIGHT * scale;
-        float halfBase = Constants.WEAPON_FLAME_BASE_WIDTH * scale;
+        float barrelY  = currentOffsetY + WeaponConstants.WEAPON_HUD_HEIGHT
+                         * WeaponConstants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float height   = WeaponConstants.WEAPON_FLAME_HEIGHT * scale;
+        float halfBase = WeaponConstants.WEAPON_FLAME_BASE_WIDTH * scale;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);

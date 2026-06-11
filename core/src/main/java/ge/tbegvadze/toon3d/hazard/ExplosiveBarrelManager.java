@@ -7,6 +7,7 @@ import ge.tbegvadze.toon3d.entity.ImpactEventListener;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 
 /**
  * Handles explosive barrel ('E') detonation.
@@ -39,8 +40,8 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
         this.level          = level;
         this.enemyHitTarget = enemyHitTarget;
         this.player         = player;
-        this.chainColumns   = new int[Constants.EXPLOSION_CHAIN_MAX];
-        this.chainRows      = new int[Constants.EXPLOSION_CHAIN_MAX];
+        this.chainColumns   = new int[EffectConstants.EXPLOSION_CHAIN_MAX];
+        this.chainRows      = new int[EffectConstants.EXPLOSION_CHAIN_MAX];
     }
 
     public void setImpactEventListener(ImpactEventListener listener) {
@@ -73,7 +74,7 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
         if (impactEventListener != null) {
             float worldX = tileColumn * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
             float worldY = tileRow    * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
-            impactEventListener.onEnemyKilled(worldX, worldY, 0.65f, Constants.EXPLOSION_DAMAGE);
+            impactEventListener.onEnemyKilled(worldX, worldY, 0.65f, EffectConstants.EXPLOSION_DAMAGE);
         }
 
         int playerTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
@@ -87,19 +88,19 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
             if (Level.isWall(blastCell)) continue;
 
             if (blastColumn == playerTileColumn && blastRow == playerTileRow) {
-                player.applyDamage(Constants.EXPLOSION_DAMAGE);
+                player.applyDamage(EffectConstants.EXPLOSION_DAMAGE);
             }
 
             if (enemyHitTarget != null) {
                 Object enemy = enemyHitTarget.enemyAt(blastColumn, blastRow);
                 if (enemy != null) {
-                    enemyHitTarget.applyDamageTo(enemy, Constants.EXPLOSION_DAMAGE);
+                    enemyHitTarget.applyDamageTo(enemy, EffectConstants.EXPLOSION_DAMAGE);
                 }
             }
 
             // Queue adjacent explosive/toxic barrels for chain detonation.
             // blastCell was read before setCell above, so barrel tiles still read correctly here.
-            if ((blastCell == 'E' || blastCell == 'g') && chainCount < Constants.EXPLOSION_CHAIN_MAX) {
+            if ((blastCell == 'E' || blastCell == 'g') && chainCount < EffectConstants.EXPLOSION_CHAIN_MAX) {
                 boolean alreadyQueued = false;
                 for (int checkIndex = 0; checkIndex < chainCount; checkIndex++) {
                     if (chainColumns[checkIndex] == blastColumn && chainRows[checkIndex] == blastRow) {

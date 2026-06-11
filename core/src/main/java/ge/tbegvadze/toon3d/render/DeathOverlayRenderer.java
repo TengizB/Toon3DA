@@ -13,6 +13,7 @@ import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.world.PersistentStats;
 import ge.tbegvadze.toon3d.world.RunStats;
+import ge.tbegvadze.toon3d.util.HudConstants;
 
 /**
  * Full-screen death report overlay rendered when the player's HP reaches zero.
@@ -26,7 +27,7 @@ import ge.tbegvadze.toon3d.world.RunStats;
  */
 public final class DeathOverlayRenderer implements Disposable {
 
-    private static final float PANEL_TOP    = Constants.DEATH_OVERLAY_PANEL_Y + Constants.DEATH_OVERLAY_PANEL_HEIGHT;
+    private static final float PANEL_TOP    = HudConstants.DEATH_OVERLAY_PANEL_Y + HudConstants.DEATH_OVERLAY_PANEL_HEIGHT;
     private static final float CENTER_X     = Constants.WORLD_WIDTH / 2f;
 
     // ---- Palette -----------------------------------------------------------
@@ -109,35 +110,35 @@ public final class DeathOverlayRenderer implements Disposable {
         flavorLine = FLAVOR_POOL[flavorIndex];
 
         // Pre-compute centered X positions — must match the scale used in render()
-        font.getData().setScale(Constants.DEATH_OVERLAY_HEADER_SCALE);
+        font.getData().setScale(HudConstants.DEATH_OVERLAY_HEADER_SCALE);
         layout.setText(font, HEADER_TEXT);
         headerX = CENTER_X - layout.width / 2f;
 
-        font.getData().setScale(Constants.DEATH_OVERLAY_SUBHEAD_SCALE);
+        font.getData().setScale(HudConstants.DEATH_OVERLAY_SUBHEAD_SCALE);
         layout.setText(font, SUBHEAD_TEXT);
         subheadX = CENTER_X - layout.width / 2f;
 
-        font.getData().setScale(Constants.DEATH_OVERLAY_FLAVOR_SCALE);
+        font.getData().setScale(HudConstants.DEATH_OVERLAY_FLAVOR_SCALE);
         layout.setText(font, flavorLine);
         flavorX = CENTER_X - layout.width / 2f;
 
-        font.getData().setScale(Constants.DEATH_OVERLAY_PROMPT_SCALE);
+        font.getData().setScale(HudConstants.DEATH_OVERLAY_PROMPT_SCALE);
         layout.setText(font, PROMPT_TEXT);
         promptX = CENTER_X - layout.width / 2f;
 
         // Pre-compute right-aligned X positions for stat values
-        font.getData().setScale(Constants.DEATH_OVERLAY_STAT_SCALE);
+        font.getData().setScale(HudConstants.DEATH_OVERLAY_STAT_SCALE);
         layout.setText(font, floorValue);
-        floorValueX = Constants.DEATH_OVERLAY_VALUE_X_MAX - layout.width;
+        floorValueX = HudConstants.DEATH_OVERLAY_VALUE_X_MAX - layout.width;
 
         layout.setText(font, killsValue);
-        killsValueX = Constants.DEATH_OVERLAY_VALUE_X_MAX - layout.width;
+        killsValueX = HudConstants.DEATH_OVERLAY_VALUE_X_MAX - layout.width;
 
         layout.setText(font, damageTakenValue);
-        damageTakenValueX = Constants.DEATH_OVERLAY_VALUE_X_MAX - layout.width;
+        damageTakenValueX = HudConstants.DEATH_OVERLAY_VALUE_X_MAX - layout.width;
 
         layout.setText(font, timeValue);
-        timeValueX = Constants.DEATH_OVERLAY_VALUE_X_MAX - layout.width;
+        timeValueX = HudConstants.DEATH_OVERLAY_VALUE_X_MAX - layout.width;
     }
 
     /**
@@ -156,15 +157,15 @@ public final class DeathOverlayRenderer implements Disposable {
         shapes.setColor(BACKGROUND);
         shapes.rect(0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
         shapes.setColor(PANEL_BG);
-        shapes.rect(Constants.DEATH_OVERLAY_PANEL_X, Constants.DEATH_OVERLAY_PANEL_Y,
-                    Constants.DEATH_OVERLAY_PANEL_WIDTH, Constants.DEATH_OVERLAY_PANEL_HEIGHT);
+        shapes.rect(HudConstants.DEATH_OVERLAY_PANEL_X, HudConstants.DEATH_OVERLAY_PANEL_Y,
+                    HudConstants.DEATH_OVERLAY_PANEL_WIDTH, HudConstants.DEATH_OVERLAY_PANEL_HEIGHT);
         shapes.end();
 
         shapes.begin(ShapeRenderer.ShapeType.Line);
         Gdx.gl.glLineWidth(3f);
         shapes.setColor(PANEL_BORDER);
-        shapes.rect(Constants.DEATH_OVERLAY_PANEL_X, Constants.DEATH_OVERLAY_PANEL_Y,
-                    Constants.DEATH_OVERLAY_PANEL_WIDTH, Constants.DEATH_OVERLAY_PANEL_HEIGHT);
+        shapes.rect(HudConstants.DEATH_OVERLAY_PANEL_X, HudConstants.DEATH_OVERLAY_PANEL_Y,
+                    HudConstants.DEATH_OVERLAY_PANEL_WIDTH, HudConstants.DEATH_OVERLAY_PANEL_HEIGHT);
         Gdx.gl.glLineWidth(1f);
         shapes.end();
 
@@ -172,34 +173,34 @@ public final class DeathOverlayRenderer implements Disposable {
 
         batch.begin();
 
-        font.getData().setScale(Constants.DEATH_OVERLAY_HEADER_SCALE);
+        font.getData().setScale(HudConstants.DEATH_OVERLAY_HEADER_SCALE);
         font.setColor(HEADER_COLOR);
-        font.draw(batch, HEADER_TEXT, headerX, PANEL_TOP - Constants.DEATH_OVERLAY_HEADER_Y_BELOW_TOP);
+        font.draw(batch, HEADER_TEXT, headerX, PANEL_TOP - HudConstants.DEATH_OVERLAY_HEADER_Y_BELOW_TOP);
 
-        font.getData().setScale(Constants.DEATH_OVERLAY_SUBHEAD_SCALE);
+        font.getData().setScale(HudConstants.DEATH_OVERLAY_SUBHEAD_SCALE);
         font.setColor(SUBHEAD);
-        font.draw(batch, SUBHEAD_TEXT, subheadX, PANEL_TOP - Constants.DEATH_OVERLAY_SUBHEAD_Y_BELOW_TOP);
+        font.draw(batch, SUBHEAD_TEXT, subheadX, PANEL_TOP - HudConstants.DEATH_OVERLAY_SUBHEAD_Y_BELOW_TOP);
 
-        font.getData().setScale(Constants.DEATH_OVERLAY_STAT_SCALE);
-        float statY = PANEL_TOP - Constants.DEATH_OVERLAY_FIRST_STAT_Y_BELOW_TOP;
+        font.getData().setScale(HudConstants.DEATH_OVERLAY_STAT_SCALE);
+        float statY = PANEL_TOP - HudConstants.DEATH_OVERLAY_FIRST_STAT_Y_BELOW_TOP;
         drawStatLine(LABEL_FLOOR,  floorValue,       floorValueX,       newBestFloor, statY);
-        statY -= Constants.DEATH_OVERLAY_STAT_LINE_STEP;
+        statY -= HudConstants.DEATH_OVERLAY_STAT_LINE_STEP;
         drawStatLine(LABEL_KILLS,  killsValue,        killsValueX,       newBestKills, statY);
-        statY -= Constants.DEATH_OVERLAY_STAT_LINE_STEP;
+        statY -= HudConstants.DEATH_OVERLAY_STAT_LINE_STEP;
         drawStatLine(LABEL_DAMAGE, damageTakenValue,  damageTakenValueX, false,        statY);
-        statY -= Constants.DEATH_OVERLAY_STAT_LINE_STEP;
+        statY -= HudConstants.DEATH_OVERLAY_STAT_LINE_STEP;
         drawStatLine(LABEL_TIME,   timeValue,         timeValueX,        false,        statY);
 
-        font.getData().setScale(Constants.DEATH_OVERLAY_FLAVOR_SCALE);
+        font.getData().setScale(HudConstants.DEATH_OVERLAY_FLAVOR_SCALE);
         font.setColor(FLAVOR_COLOR);
         font.draw(batch, flavorLine, flavorX,
-                  Constants.DEATH_OVERLAY_PANEL_Y + Constants.DEATH_OVERLAY_FLAVOR_Y_ABOVE_BOTTOM);
+                  HudConstants.DEATH_OVERLAY_PANEL_Y + HudConstants.DEATH_OVERLAY_FLAVOR_Y_ABOVE_BOTTOM);
 
         if (showPrompt) {
-            font.getData().setScale(Constants.DEATH_OVERLAY_PROMPT_SCALE);
+            font.getData().setScale(HudConstants.DEATH_OVERLAY_PROMPT_SCALE);
             font.setColor(PROMPT_COLOR);
             font.draw(batch, PROMPT_TEXT, promptX,
-                      Constants.DEATH_OVERLAY_PANEL_Y + Constants.DEATH_OVERLAY_PROMPT_Y_ABOVE_BOTTOM);
+                      HudConstants.DEATH_OVERLAY_PANEL_Y + HudConstants.DEATH_OVERLAY_PROMPT_Y_ABOVE_BOTTOM);
         }
 
         batch.end();
@@ -208,17 +209,17 @@ public final class DeathOverlayRenderer implements Disposable {
     private void drawStatLine(String label, String value, float valueX,
                               boolean isNewBest, float y) {
         font.setColor(LABEL_COLOR);
-        font.draw(batch, label, Constants.DEATH_OVERLAY_LABEL_X, y);
+        font.draw(batch, label, HudConstants.DEATH_OVERLAY_LABEL_X, y);
 
         font.setColor(VALUE_COLOR);
         font.draw(batch, value, valueX, y);
 
         if (isNewBest) {
-            font.getData().setScale(Constants.DEATH_OVERLAY_NEWBEST_SCALE);
+            font.getData().setScale(HudConstants.DEATH_OVERLAY_NEWBEST_SCALE);
             font.setColor(NEW_BEST);
             font.draw(batch, TAG_NEW_BEST,
-                      Constants.DEATH_OVERLAY_VALUE_X_MAX + Constants.DEATH_OVERLAY_NEWBEST_GAP, y);
-            font.getData().setScale(Constants.DEATH_OVERLAY_STAT_SCALE);
+                      HudConstants.DEATH_OVERLAY_VALUE_X_MAX + HudConstants.DEATH_OVERLAY_NEWBEST_GAP, y);
+            font.getData().setScale(HudConstants.DEATH_OVERLAY_STAT_SCALE);
         }
     }
 

@@ -10,6 +10,8 @@ import ge.tbegvadze.toon3d.render.Renderable;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.ItemConstants;
+import ge.tbegvadze.toon3d.util.ProgressionConstants;
 
 public class Player implements Renderable, Disposable {
 
@@ -41,9 +43,9 @@ public class Player implements Renderable, Disposable {
         this.directionY         = directionY;
         this.fieldOfViewRadians = Constants.PLAYER_FIELD_OF_VIEW_RADIANS;
         this.shapes             = new ShapeRenderer();
-        this.maxHealth          = Constants.PLAYER_MAX_HEALTH;
+        this.maxHealth          = ItemConstants.PLAYER_MAX_HEALTH;
         this.health             = this.maxHealth;
-        this.maxArmor           = Constants.PLAYER_MAX_ARMOR;
+        this.maxArmor           = ItemConstants.PLAYER_MAX_ARMOR;
         this.armor              = 0;
     }
 
@@ -85,7 +87,7 @@ public class Player implements Renderable, Disposable {
      * Strict pipeline order matches the spec in roguelike_order_6_player_stats_and_attributes.txt.
      */
     public void applyDamage(int amount) {
-        if (Constants.debug) return;
+        if (ProgressionConstants.debug) return;
 
         // (a) AGILITY dodge roll — checked before armour or toughness.
         if (playerStats != null) {
@@ -97,7 +99,7 @@ public class Player implements Renderable, Disposable {
         }
 
         // (b) Armour absorption.
-        int armorAbsorbed = GameMath.armorAbsorb(amount, armor, Constants.ARMOUR_ABSORB_FRACTION);
+        int armorAbsorbed = GameMath.armorAbsorb(amount, armor, ItemConstants.ARMOUR_ABSORB_FRACTION);
         armor = Math.max(0, armor - armorAbsorbed);
         int hpBoundDamage = amount - armorAbsorbed;
 

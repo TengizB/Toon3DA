@@ -2,7 +2,7 @@ package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.Level;
-import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
  * Single-shell, one-step-reload shotgun.
@@ -25,11 +25,11 @@ public class Shotgun extends Weapon {
 
     public Shotgun() {
         super("SHOTGUN",
-              Constants.SHOTGUN_DAMAGE,
-              Constants.SHOTGUN_CLIP_SIZE,
-              Constants.SHOTGUN_RELOAD_TIME_TICKS,
-              Constants.SHOTGUN_DAMAGE_DROP_COEFF,
-              Constants.SHOTGUN_RANGE_TILES,
+              WeaponConstants.SHOTGUN_DAMAGE,
+              WeaponConstants.SHOTGUN_CLIP_SIZE,
+              WeaponConstants.SHOTGUN_RELOAD_TIME_TICKS,
+              WeaponConstants.SHOTGUN_DAMAGE_DROP_COEFF,
+              WeaponConstants.SHOTGUN_RANGE_TILES,
               AmmoType.SHELLS);
     }
 
@@ -57,7 +57,7 @@ public class Shotgun extends Weapon {
                 Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (hitEnemy != null) {
                     enemyHitTarget.applyDamageTo(hitEnemy, damageAtDistance(distanceTiles));
-                    if (!Constants.SHOTGUN_PENETRATION) {
+                    if (!WeaponConstants.SHOTGUN_PENETRATION) {
                         return new FireResult(false, distanceTiles);
                     }
                 }
@@ -66,7 +66,7 @@ public class Shotgun extends Weapon {
         return FireResult.MISSED;
     }
 
-    @Override public String getNormalTexturePath() { return Constants.SHOTGUN_NORMAL_TEXTURE_PATH; }
-    @Override public String getFireTexturePath()   { return Constants.SHOTGUN_FIRE_TEXTURE_PATH;   }
-    @Override public String getReloadTexturePath() { return Constants.SHOTGUN_RELOAD_TEXTURE_PATH; }
+    @Override public String getNormalTexturePath() { return WeaponConstants.SHOTGUN_NORMAL_TEXTURE_PATH; }
+    @Override public String getFireTexturePath()   { return WeaponConstants.SHOTGUN_FIRE_TEXTURE_PATH;   }
+    @Override public String getReloadTexturePath() { return WeaponConstants.SHOTGUN_RELOAD_TEXTURE_PATH; }
 }
