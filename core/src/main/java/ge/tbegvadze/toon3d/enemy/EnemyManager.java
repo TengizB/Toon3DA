@@ -29,12 +29,18 @@ import java.util.Random;
  */
 public final class EnemyManager implements EnemyHitTarget {
 
+    /** Notified whenever a drop tile is stamped onto the level grid after an enemy dies. */
+    public interface DropPlacedListener {
+        void onDropPlaced(int tileColumn, int tileRow, char dropChar);
+    }
+
     private final List<Enemy> enemies;
     private final Level       level;
     private final DoorManager doorManager;
     private ImpactEventListener impactEventListener;
     private KillXpListener      killXpListener;
     private KillEventListener   killEventListener;
+    private DropPlacedListener  dropPlacedListener;
 
     /** Flat damage bonus from player level-up DAMAGE_BOOST choices; added to every hit. */
     private int playerFlatDamageBonus = 0;
@@ -119,6 +125,11 @@ public final class EnemyManager implements EnemyHitTarget {
     /** Wires the kill-message system so every kill fires a display notification with name + XP. */
     public void setKillEventListener(KillEventListener listener) {
         this.killEventListener = listener;
+    }
+
+    /** Notified when a drop tile is stamped on the grid so renderers can display it immediately. */
+    public void setDropPlacedListener(DropPlacedListener listener) {
+        this.dropPlacedListener = listener;
     }
 
     /**
@@ -498,6 +509,9 @@ public final class EnemyManager implements EnemyHitTarget {
                 && !Level.isAmmoPickup(currentCell)) {
             char drop = rollEnemyDrop(enemy.type);
             level.setCell(enemy.tileColumn, enemy.tileRow, drop);
+            if (dropPlacedListener != null) {
+                dropPlacedListener.onDropPlaced(enemy.tileColumn, enemy.tileRow, drop);
+            }
         }
         enemies.remove(enemy);
     }

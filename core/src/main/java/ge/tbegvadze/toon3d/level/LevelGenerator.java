@@ -1825,32 +1825,32 @@ public class LevelGenerator {
     }
 
     /**
-     * Places exactly one weapon pickup per level as a WeaponSpawnPoint (no grid tile written).
+     * Places weapon pickups across the level as WeaponSpawnPoints (no grid tile written).
      *
-     * Priority:
-     *   1. ARMORY room — guaranteed placement; picks a random weapon from the four base types.
-     *   2. LARGE room  — 30% chance to place a weapon if no ARMORY spawn was placed yet.
+     * Two independent passes:
+     *   1. ARMORY room — guaranteed placement so the player always finds at least one weapon.
+     *   2. All non-ENTRANCE rooms — each has a LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE (20%)
+     *      independent chance, giving random weapon distribution throughout the level.
      *
-     * Only one weapon spawn per level total (enforced by the weaponPlaced flag).
-     * The spawn is recorded in weaponSpawnPoints; World instantiates a GroundItem from it.
+     * The LARGE-room fallback (Priority 2 from the old logic) is replaced by the random pass,
+     * which covers LARGE rooms as well.
+     * Spawns are recorded in weaponSpawnPoints; World instantiates a GroundItem from each.
      * The grid tile itself is NOT modified — weapon ground items are entity-side only.
      */
     private void placeWeaponSpawns(char[][] grid, List<Room> rooms) {
-        boolean weaponPlaced = false;
-
-        // Priority 1: ARMORY rooms get a guaranteed weapon pickup.
+        // Pass 1: ARMORY room — guaranteed at least one weapon per level.
         for (Room room : rooms) {
-            if (weaponPlaced) break;
             if (room.type != RoomType.ARMORY) continue;
-            weaponPlaced = tryPlaceWeaponSpawn(grid, room);
+            tryPlaceWeaponSpawn(grid, room);
         }
 
-        // Priority 2: LARGE rooms get a 30% chance if no weapon was placed yet.
+        // Pass 2: Random chance for every non-ENTRANCE, non-ARMORY room.
+        // ARMORY is excluded because it already received a guaranteed weapon in Pass 1.
         for (Room room : rooms) {
-            if (weaponPlaced) break;
-            if (room.type != RoomType.LARGE) continue;
-            if (random.nextFloat() < Constants.LEVEL_GEN_LARGE_WEAPON_CHANCE) {
-                weaponPlaced = tryPlaceWeaponSpawn(grid, room);
+            if (room.type == RoomType.ENTRANCE) continue;
+            if (room.type == RoomType.ARMORY)   continue;
+            if (random.nextFloat() < Constants.LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE) {
+                tryPlaceWeaponSpawn(grid, room);
             }
         }
     }

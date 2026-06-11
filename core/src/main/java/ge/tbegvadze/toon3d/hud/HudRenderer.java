@@ -380,15 +380,17 @@ public class HudRenderer implements Renderable, Disposable {
     // =========================================================================
 
     private void drawSlotStripFilled(Loadout activeLoadout, float pulse) {
-        float originX  = Constants.WEAPON_SLOT_STRIP_ORIGIN_X;
-        float originY  = Constants.WEAPON_SLOT_STRIP_ORIGIN_Y;
-        float iconSize = Constants.WEAPON_SLOT_ICON_SIZE;
-        float iconGap  = Constants.WEAPON_SLOT_ICON_GAP;
-        int   active   = activeLoadout.getActiveSlotIndex();
+        float sidePadding = Constants.WEAPON_SLOT_STRIP_SIDE_PADDING;
+        float originY     = Constants.WEAPON_SLOT_STRIP_ORIGIN_Y;
+        float iconHeight  = Constants.WEAPON_SLOT_ICON_SIZE;
+        float iconGap     = Constants.WEAPON_SLOT_ICON_GAP;
+        int   slotCount   = activeLoadout.getSlotCount();
+        float iconWidth   = (Constants.WORLD_WIDTH - 2f * sidePadding - (slotCount - 1) * iconGap) / slotCount;
+        int   active      = activeLoadout.getActiveSlotIndex();
 
-        for (int slotIndex = 0; slotIndex < activeLoadout.getSlotCount(); slotIndex++) {
-            float   slotX  = originX + slotIndex * (iconSize + iconGap);
-            boolean filled = activeLoadout.getSlot(slotIndex) != null;
+        for (int slotIndex = 0; slotIndex < slotCount; slotIndex++) {
+            float   slotX    = sidePadding + slotIndex * (iconWidth + iconGap);
+            boolean filled   = activeLoadout.getSlot(slotIndex) != null;
             boolean isActive = slotIndex == active && filled;
 
             if (filled) {
@@ -398,14 +400,14 @@ public class HudRenderer implements Renderable, Disposable {
             } else {
                 shapes.setColor(SLOT_EMPTY_DARK);
             }
-            shapes.rect(slotX, originY, iconSize, iconSize);
+            shapes.rect(slotX, originY, iconWidth, iconHeight);
 
             if (filled) {
-                float indicatorW = iconSize * 0.65f;
-                float indicatorH = iconSize * 0.18f;
-                float indicatorX = slotX + (iconSize - indicatorW) / 2f;
-                float indicatorY = originY + iconSize * 0.55f;
-                float bright = isActive ? pulse : 0.85f;
+                float indicatorW = iconWidth * 0.85f;
+                float indicatorH = iconHeight * 0.18f;
+                float indicatorX = slotX + (iconWidth - indicatorW) / 2f;
+                float indicatorY = originY + iconHeight * 0.55f;
+                float bright     = isActive ? pulse : 0.85f;
                 shapes.setColor(SLOT_ACTIVE_AMBER.r * bright, SLOT_ACTIVE_AMBER.g * bright, 0f, 1f);
                 shapes.rect(indicatorX, indicatorY, indicatorW, indicatorH);
             }
@@ -413,15 +415,17 @@ public class HudRenderer implements Renderable, Disposable {
     }
 
     private void drawSlotStripLines(Loadout activeLoadout) {
-        float originX  = Constants.WEAPON_SLOT_STRIP_ORIGIN_X;
-        float originY  = Constants.WEAPON_SLOT_STRIP_ORIGIN_Y;
-        float iconSize = Constants.WEAPON_SLOT_ICON_SIZE;
-        float iconGap  = Constants.WEAPON_SLOT_ICON_GAP;
-        int   active   = activeLoadout.getActiveSlotIndex();
+        float sidePadding = Constants.WEAPON_SLOT_STRIP_SIDE_PADDING;
+        float originY     = Constants.WEAPON_SLOT_STRIP_ORIGIN_Y;
+        float iconHeight  = Constants.WEAPON_SLOT_ICON_SIZE;
+        float iconGap     = Constants.WEAPON_SLOT_ICON_GAP;
+        int   slotCount   = activeLoadout.getSlotCount();
+        float iconWidth   = (Constants.WORLD_WIDTH - 2f * sidePadding - (slotCount - 1) * iconGap) / slotCount;
+        int   active      = activeLoadout.getActiveSlotIndex();
 
-        for (int slotIndex = 0; slotIndex < activeLoadout.getSlotCount(); slotIndex++) {
-            float   slotX  = originX + slotIndex * (iconSize + iconGap);
-            boolean filled = activeLoadout.getSlot(slotIndex) != null;
+        for (int slotIndex = 0; slotIndex < slotCount; slotIndex++) {
+            float   slotX    = sidePadding + slotIndex * (iconWidth + iconGap);
+            boolean filled   = activeLoadout.getSlot(slotIndex) != null;
             boolean isActive = slotIndex == active && filled;
 
             if (isActive) {
@@ -431,38 +435,39 @@ public class HudRenderer implements Renderable, Disposable {
             } else {
                 shapes.setColor(SLOT_EMPTY_BORDER);
             }
-            shapes.rect(slotX, originY, iconSize, iconSize);
+            shapes.rect(slotX, originY, iconWidth, iconHeight);
         }
     }
 
     private void drawSlotStripText(Loadout activeLoadout, boolean isDead) {
-        float originX  = Constants.WEAPON_SLOT_STRIP_ORIGIN_X;
-        float originY  = Constants.WEAPON_SLOT_STRIP_ORIGIN_Y;
-        float iconSize = Constants.WEAPON_SLOT_ICON_SIZE;
-        float iconGap  = Constants.WEAPON_SLOT_ICON_GAP;
-        int   active   = activeLoadout.getActiveSlotIndex();
+        float sidePadding = Constants.WEAPON_SLOT_STRIP_SIDE_PADDING;
+        float originY     = Constants.WEAPON_SLOT_STRIP_ORIGIN_Y;
+        float iconHeight  = Constants.WEAPON_SLOT_ICON_SIZE;
+        float iconGap     = Constants.WEAPON_SLOT_ICON_GAP;
+        int   slotCount   = activeLoadout.getSlotCount();
+        float iconWidth   = (Constants.WORLD_WIDTH - 2f * sidePadding - (slotCount - 1) * iconGap) / slotCount;
+        int   active      = activeLoadout.getActiveSlotIndex();
 
-        for (int slotIndex = 0; slotIndex < activeLoadout.getSlotCount(); slotIndex++) {
-            float   slotX    = originX + slotIndex * (iconSize + iconGap);
+        for (int slotIndex = 0; slotIndex < slotCount; slotIndex++) {
+            float   slotX    = sidePadding + slotIndex * (iconWidth + iconGap);
             boolean filled   = activeLoadout.getSlot(slotIndex) != null;
             boolean isActive = slotIndex == active && filled;
 
+            // Slot number at top-left corner
             font.getData().setScale(0.75f);
-            if (isDead) {
-                font.setColor(PHOSPHOR_DIM);
-            } else {
-                font.setColor(isActive ? SLOT_ACTIVE_AMBER : SLOT_NUMBER_DIM);
-            }
+            font.setColor(isDead ? PHOSPHOR_DIM : (isActive ? SLOT_ACTIVE_AMBER : SLOT_NUMBER_DIM));
             stringBuilder.setLength(0);
             stringBuilder.append(slotIndex + 1);
-            font.draw(batch, stringBuilder, slotX + 3f, originY + iconSize - 2f);
+            font.draw(batch, stringBuilder, slotX + 6f, originY + iconHeight - 2f);
 
+            // Full weapon name centred in the slot
             if (filled && !isDead) {
                 String weaponName = activeLoadout.getSlot(slotIndex).getDisplayName();
-                String abbreviation = weaponName.length() > 4 ? weaponName.substring(0, 4) : weaponName;
-                font.getData().setScale(0.55f);
+                font.getData().setScale(0.75f);
                 font.setColor(isActive ? SLOT_ACTIVE_AMBER : SLOT_NUMBER_DIM);
-                font.draw(batch, abbreviation, slotX + 3f, originY + 16f);
+                // Use GlyphLayout-free draw; centre by estimating half-width from scale
+                float nameX = slotX + iconWidth / 2f - weaponName.length() * 3.5f;
+                font.draw(batch, weaponName, nameX, originY + iconHeight * 0.40f + font.getLineHeight() / 2f);
                 font.getData().setScale(0.75f);
             }
         }

@@ -47,14 +47,18 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final float[]   barWidths;
     private final float[]   barHeights;
     private final float[]   barFillFractions;
+    private final int[]     barHealthCurrents;
+    private final int[]     barHealthMaxes;
     private final boolean[] drawBarFlags;
 
     // Reused per-frame colour buffer written by GameMath.healthBarColor — no allocation
     private final float[]   barColorRgb = new float[3];
 
-    // Name tag rendering — font and layout pre-allocated to avoid render-loop allocation
+    // Name tag and HP text rendering — font and layouts pre-allocated to avoid render-loop allocation
     private final BitmapFont  nameTagFont;
     private final GlyphLayout nameTagLayout;
+    private final GlyphLayout hpTextLayout;
+    private final StringBuilder hpTextBuilder = new StringBuilder(8);
     // Reusable scratch color for name tag tinting — never allocated inside render()
     private final Color       nameTagColor = new Color();
 
@@ -78,6 +82,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.barWidths          = new float[scratchSize];
         this.barHeights         = new float[scratchSize];
         this.barFillFractions   = new float[scratchSize];
+        this.barHealthCurrents  = new int[scratchSize];
+        this.barHealthMaxes     = new int[scratchSize];
         this.drawBarFlags       = new boolean[scratchSize];
         this.batch              = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
         this.textures           = buildTextures();
@@ -85,6 +91,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.nameTagFont        = new BitmapFont();
         this.nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
         this.nameTagLayout      = new GlyphLayout();
+        this.hpTextLayout       = new GlyphLayout();
     }
 
     public void setPlayerState(float worldX, float worldY,
@@ -258,6 +265,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 barWidths[sortedPosition]          = barWidth;
                 barHeights[sortedPosition]         = barHeight;
                 barFillFractions[sortedPosition]   = fillFraction;
+                barHealthCurrents[sortedPosition]  = enemy.health;
+                barHealthMaxes[sortedPosition]     = enemy.maxHealth;
                 drawBarFlags[sortedPosition]       = true;
             }
         }
@@ -320,7 +329,20 @@ public final class EnemyRenderer implements Renderable, Disposable {
                                0, 0, 1, 1, false, false);
                 }
 
-                // Layer 4: Name tag — level-coloured text above the health bar when close enough
+                // Layer 4: HP text — "current/max" centred inside the health bar
+                hpTextBuilder.setLength(0);
+                hpTextBuilder.append(barHealthCurrents[sortedPosition]);
+                hpTextBuilder.append('/');
+                hpTextBuilder.append(barHealthMaxes[sortedPosition]);
+                nameTagFont.getData().setScale(ENEMY_HP_TEXT_FONT_SCALE);
+                hpTextLayout.setText(nameTagFont, hpTextBuilder);
+                float hpTextX = barLeft + (barWidth  - hpTextLayout.width)  / 2f;
+                float hpTextY = barBottom + barHeight / 2f + hpTextLayout.height / 2f;
+                nameTagFont.setColor(ENEMY_HP_TEXT_RED, ENEMY_HP_TEXT_GREEN, ENEMY_HP_TEXT_BLUE, 1f);
+                nameTagFont.draw(batch, hpTextLayout, hpTextX, hpTextY);
+                nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
+
+                // Layer 5: Name tag — level-coloured text above the health bar when close enough
                 Enemy tagEnemy = enemies.get(sortedIndices[sortedPosition]);
                 if (depth <= ENEMY_NAME_TAG_MAX_DISTANCE_TILES && !tagEnemy.nameTag.isEmpty()) {
                     nameTagLayout.setText(nameTagFont, tagEnemy.nameTag);

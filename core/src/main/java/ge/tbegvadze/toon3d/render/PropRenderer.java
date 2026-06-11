@@ -85,6 +85,10 @@ public class PropRenderer implements Renderable, Disposable {
     // Injected by World after level build; never null — starts empty.
     private List<GroundItem> groundItems = Collections.emptyList();
 
+    // Dynamically-added prop placements (enemy ammo/corpse drops placed after level load).
+    // Each entry is valid until the level tile no longer matches the stored propChar.
+    private final List<PropPlacement> dynamicPropPlacements = new ArrayList<>();
+
     // Pre-allocated scratch buffers for depth-sorting — sized to total prop count.
     private final int[]   sortedIndices;
     private final float[] sortedDepths;
@@ -118,6 +122,23 @@ public class PropRenderer implements Renderable, Disposable {
     /** Replaces the ground item list; called by World after each level build. */
     public void setGroundItems(List<GroundItem> items) {
         this.groundItems = (items != null) ? items : Collections.emptyList();
+    }
+
+    /**
+     * Registers a dynamically-placed prop (e.g. an enemy ammo drop or corpse decal)
+     * that was not present in the level grid at construction time.
+     * The entry becomes invisible as soon as the tile is consumed or overwritten.
+     */
+    public void addDynamicProp(int tileColumn, int tileRow, char propChar) {
+        float worldCenterX = tileColumn * CELL_SIZE + CELL_SIZE / 2f;
+        float worldCenterY = tileRow    * CELL_SIZE + CELL_SIZE / 2f;
+        dynamicPropPlacements.add(new PropPlacement(tileColumn, tileRow, propChar,
+                                                     worldCenterX, worldCenterY));
+    }
+
+    /** Clears all dynamic prop placements (called when loading a new level). */
+    public void clearDynamicProps() {
+        dynamicPropPlacements.clear();
     }
 
     /** Scans the level grid once at startup and records every prop tile's position. */
@@ -344,6 +365,77 @@ public class PropRenderer implements Renderable, Disposable {
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
                 batch.draw(weaponPickupTexture,
+                           screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
+                           WALL_COLUMN_WIDTH, clampedTop - clampedBottom,
+                           texSrcX, texSrcY, 1, texSrcHeight,
+                           false, false);
+            }
+        }
+
+        // Dynamic props: enemy drops placed after level load (ammo boxes, corpse decals).
+        // Rendered in a separate unsorted pass — wall z-buffer still provides correct occlusion.
+        for (int dynamicIndex = 0; dynamicIndex < dynamicPropPlacements.size(); dynamicIndex++) {
+            PropPlacement prop = dynamicPropPlacements.get(dynamicIndex);
+            // Skip once the tile has been consumed (player picked up the drop).
+            if (level.getCell(prop.tileColumn, prop.tileRow) != prop.propChar) continue;
+
+            float tileOffsetX = (prop.worldCenterX - playerWorldX) / CELL_SIZE;
+            float tileOffsetY = (prop.worldCenterY - playerWorldY) / CELL_SIZE;
+            float depth = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
+            if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES) continue;
+            if (depth > MAX_PROP_DRAW_DISTANCE_TILES)      continue;
+
+            Texture texture = textures.get(prop.propChar);
+            if (texture == null) continue;
+
+            float screenCenterColumn = GameMath.spriteScreenColumnCenter(
+                    tileOffsetX, tileOffsetY, directionX, directionY,
+                    planeX, planeY, WALL_PROJECTION_SCREEN_WIDTH);
+
+            float heightMultiplier   = propHeightMultiplier(prop.propChar);
+            float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
+            float spriteScreenHeight = fullWallLineHeight * heightMultiplier;
+            float aspectRatio        = (float) texture.getWidth() / texture.getHeight();
+            float spriteScreenWidth  = spriteScreenHeight * aspectRatio;
+
+            int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / 2f);
+            int rightScreenColumn = (int)(screenCenterColumn + spriteScreenWidth / 2f);
+            int columnSpan        = rightScreenColumn - leftScreenColumn;
+            if (columnSpan <= 0) continue;
+
+            float drawBottom    = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
+            float drawTop       = drawBottom + spriteScreenHeight;
+            float clampedBottom = Math.max(0f, drawBottom);
+            float clampedTop    = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, drawTop);
+            if (clampedTop <= clampedBottom) continue;
+
+            int textureWidth  = texture.getWidth();
+            int textureHeight = texture.getHeight();
+            int texSrcY       = GameMath.wallTextureClipSrcY(
+                                    drawTop, WALL_PROJECTION_SCREEN_HEIGHT,
+                                    spriteScreenHeight, textureHeight);
+            int texSrcHeight  = GameMath.wallTextureClipSrcHeight(
+                                    clampedTop, clampedBottom,
+                                    spriteScreenHeight, textureHeight);
+            texSrcHeight = Math.min(texSrcHeight, textureHeight - texSrcY);
+            texSrcHeight = Math.max(1, texSrcHeight);
+
+            float tileBrightness = level.getTileBrightness(prop.tileColumn, prop.tileRow, lightingTimeSeconds);
+            float shade          = Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * tileBrightness,
+                                            MAX_LIGHTING_SHADE);
+            float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+            float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
+
+            int firstColumn = Math.max(0, leftScreenColumn);
+            int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightScreenColumn);
+            for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+                if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                if (depth >= propSpriteZBuffer[screenColumn]) continue;
+                int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
+                texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
+                batch.draw(texture,
                            screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
                            WALL_COLUMN_WIDTH, clampedTop - clampedBottom,
                            texSrcX, texSrcY, 1, texSrcHeight,
