@@ -1,63 +1,111 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Enemies
-TITLE: Enemy Variety — Six Demonic Archetypes (Floors 1-10+)
+TITLE: Enemy Variety — Eight Original Archetypes (Floors 1-10+)
 ---
 
 OVERVIEW
 ========
-Six distinct enemy archetypes that fill out the bestiary the turn-based combat
+Eight distinct enemy archetypes that fill out the bestiary the turn-based combat
 core (enemy_system.txt) was built to run. Each is a different ANSWER to a
 different question the player asks the tile grid: "can I outrun it? can I out-
 range it? does the wall protect me? is it worth the ammo?" Together they cover
-the role wheel — tank, ranged poke, charger, swarm/flyer, area-denial floater,
-and elite bruiser — so any floor's monster mix poses a layered tactical problem
-rather than one repeated threat.
+the role wheel — tank, ranged poke, light skirmisher, straight-line charger,
+hovering area-denial floater, armored elite, mechanical gunner, and stealth
+ambusher — so any floor's monster mix poses a layered tactical problem rather
+than one repeated threat.
 
-This document OWNS: the six archetype stat blocks, their AI behavior, XP rewards
-(mirrored into order_11's GameBalance), drop tables, and floor-appearance bands.
+These eight map onto eight new enemy sprite-sheet regions (two 2x2 sheets) and
+replace the old placeholder roster. This document OWNS: the eight archetype stat
+blocks, their AI behavior, XP rewards (mirrored into order_11's GameBalance),
+drop tables, floor-appearance bands, and the sprite-sheet TextureRegion mapping.
 It does NOT re-define the turn engine, the perception/chain-alert phases, the
 DDA LOS check, or Player.applyDamage — those are owned by enemy_system.txt
 (IMPLEMENTED). Each archetype is a parameterization of that existing Enemy model
 plus, where noted, one new behavior flag.
 
+SETTING / LORE
+==============
+The run is a descent through a research-and-containment complex whose lower
+levels have been overrun by an encroaching organic corruption — part biological
+infection, part dimensional bleed. The corporation that ran the facility is gone;
+what remains are the things its containment failed to hold and the salvage drones
+that were repurposed by the spread. Every archetype is a different stage or limb
+of that corruption: reanimated bulk, sensory horrors, ambush predators, and
+machines turned hostile. No two answer the same tactical question, so the player
+reads the silhouette and immediately knows the threat.
+
 DEDUPLICATION / RELATIONSHIP TO EXISTING DOCS
 =============================================
 - enemy_system.txt (IMPLEMENTED) defines Enemy, EnemyManager, the two-phase turn
   (perception/chain-alert + action), DORMANT/ALERTED/CHASING/ATTACKING states,
-  greedy chase, hitscan ranged, corpse-decal-on-death, and the spawn map
-  1=Corruptor 2=VortexEye 3=Ghoul 4=Crawler 5=Revenant. THIS doc RE-SKINS that
-  roster to the six classic-Doom archetypes the user requested and maps them onto
-  the SAME five spawn digits plus the new optional spawn '6'. Where this doc and
-  enemy_system.txt disagree on FLAVOR/NAME, treat the canonical roster as: keep
-  enemy_system's class plumbing, adopt the names/behaviors below.
+  greedy chase, hitscan ranged, corpse-decal-on-death, and the spawn map on
+  digits 1-5. THIS doc REPLACES that placeholder roster with the eight original
+  archetypes below and maps them onto the SAME five spawn digits PLUS three new
+  enemy spawn chars ('!', '$', '^'). Keep enemy_system's class plumbing; adopt the
+  names/behaviors/stats below.
 - enemy-health-bars-and-hit-reactions.txt / enemy-hit-impact-effects.txt: provide
   the on-hit feedback these archetypes use. No conflict.
 - roguelike_order_11 (XP): owns the xpReward CONSTANT names; this doc supplies the
   per-type values. roguelike_order_14 (status): owns resist/immunity wiring; this
   doc lists each archetype's resistances. roguelike_order_12 (stats): the player
   stats that scale damage DEALT to these enemies.
-- boss-encounter-facility-overseer.txt: the boss is separate; these six are the
-  rank-and-file plus one elite (Hell Knight).
+- boss-encounter-facility-overseer.txt: the boss is separate; these eight are the
+  rank-and-file plus one elite (IRON_STALKER).
 
-SPAWN-SYMBOL MAPPING  (NO new wall/prop symbol needed; one new ENEMY digit)
-===========================================================================
-Enemy spawn digits are extracted and replaced with floor by LevelLoader, so
-adding '6' is LOW-RISK but STILL requires the tile-symbols.txt update per the
-strict rule. Plan:
-  1 -> ZOMBIE (was Corruptor)        slow melee tank
-  2 -> IMP    (was Vortex Eye)       fast ranged fireblast
-  3 -> PINKY  (was Ghoul)            straight-line charger
-  4 -> LOST SOUL (was Crawler)       flying swarm
-  5 -> CACODEMON (was Revenant)      hovering acid floater
-  6 -> HELL KNIGHT                   armored melee+ranged elite  (NEW SPAWN DIGIT)
+SPRITE-SHEET / TEXTURE MAPPING  (no PNG-per-enemy; two shared 2x2 sheets)
+=========================================================================
+Each archetype's billboard sprite is a TextureRegion sliced from one of two 2x2
+sprite sheets. EnemyConstants.java holds the texture paths; EnemyRenderer slices
+the region per enemy type. Each sheet is split into four equal quadrants
+(Q1=top-left, Q2=top-right, Q3=bottom-left, Q4=bottom-right). For a sheet of
+pixel size W x H, the region for a quadrant is:
+  Q1: (0,        0,        W/2, H/2)
+  Q2: (W/2,      0,        W/2, H/2)
+  Q3: (0,        H/2,      W/2, H/2)
+  Q4: (W/2,      H/2,      W/2, H/2)
+(TextureRegion origin is top-left in LibGDX region coordinates; confirm against
+the actual sheet dimensions when wiring EnemyRenderer.)
 
-  REQUIRES NEW SYMBOL — '6' as an enemy spawn marker. Before implementing:
-  add '6  Hell Knight spawn' to the ENEMY SPAWN MARKERS section of
-  docs/tile-symbols.txt, decrement the free-digit list (6 7 8 9 -> 7 8 9), and
-  add the mapping in LevelLoader's spawn-extraction switch. No isWall/PropRenderer
-  change (spawn digits become floor). Update SYMBOL BUDGET count.
-  (If preferred, re-use an existing digit by placing Hell Knights via the level
-  generator's elite-placement pass instead of a dedicated symbol — see OPEN Q.)
+  textures/enemies/enemy_sheet_blight.png   (2x2)
+    Q1 top-left     -> PLAGUE_HULK
+    Q2 top-right    -> EYE_TYRANT
+    Q3 bottom-left  -> IRON_STALKER
+    Q4 bottom-right -> MIRE_WRAITH
+
+  textures/enemies/enemy_sheet_infernal.png (2x2)
+    Q1 top-left     -> GORE_BITER
+    Q2 top-right    -> SHELL_BRUTE
+    Q3 bottom-left  -> ACID_DRONE
+    Q4 bottom-right -> VOID_SHROUD
+
+SPAWN-SYMBOL MAPPING  (5 reused digits + 3 NEW enemy spawn chars)
+=================================================================
+Enemy spawn chars are extracted and replaced with floor by LevelLoader, so adding
+new spawn markers is LOW-RISK rendering-wise but STILL requires the
+tile-symbols.txt update per the strict rule. Plan:
+  1 -> PLAGUE_HULK    slow melee tank
+  2 -> EYE_TYRANT     fast ranged poke
+  3 -> GORE_BITER     fast light melee skirmisher
+  4 -> SHELL_BRUTE    straight-line charger
+  5 -> MIRE_WRAITH    slow hovering acid floater
+  ! -> IRON_STALKER   armored elite, melee + ranged          (NEW SPAWN CHAR)
+  $ -> ACID_DRONE     mechanical ranged gunner                (NEW SPAWN CHAR)
+  ^ -> VOID_SHROUD    fast stealth melee ambusher             (NEW SPAWN CHAR)
+
+  REQUIRES NEW SYMBOLS — '!', '$', '^' as enemy spawn markers. Before
+  implementing, in a single commit:
+    1. Add three entries to the ENEMY SPAWN MARKERS section of
+       docs/tile-symbols.txt:
+         !  IRON_STALKER spawn (elite)
+         $  ACID_DRONE spawn (mechanical ranged)
+         ^  VOID_SHROUD spawn (stealth melee)
+    2. Add the three mappings in LevelLoader's spawn-extraction switch (each
+       becomes floor after extraction, like 1-5).
+    3. Confirm none of '!', '$', '^' are already used in tile-symbols.txt for any
+       other category (they are not in the current Walls/Doors/Floors/Props/
+       Pickups lists — verify before committing).
+    4. Update the SYMBOL BUDGET / ENEMY SPAWNS count in tile-symbols.txt (5 -> 8).
+  No isWall/PropRenderer change needed (spawn chars become floor at load time).
 
 SHARED MODEL RECAP (from enemy_system.txt — every archetype uses these knobs)
 =============================================================================
@@ -67,25 +115,22 @@ SHARED MODEL RECAP (from enemy_system.txt — every archetype uses these knobs)
   - rangedRange (tiles) for ranged/both; hitscan in tile space, needs clear LOS
   - states DORMANT/ALERTED/CHASING/ATTACKING
 NEW FLAGS introduced by this doc (small additions to Enemy):
-  - boolean ignoresWalls           (Lost Soul: flies; pathing + minimap special)
-  - boolean chargeAttacker         (Pinky: locks a cardinal line and rushes)
+  - boolean chargeAttacker         (SHELL_BRUTE: locks a cardinal line and rushes)
   - boolean canBeKnockedBack       (order_15 melee knockback gate; default true)
+  - boolean hoverOffset            (EYE_TYRANT / MIRE_WRAITH: billboard drawn
+                                     raised off the floor to read as airborne)
+  - boolean silentWake             (VOID_SHROUD: wakes without firing the
+                                     chain-alert scream that wakes its neighbors)
   - MovementPattern {CHASE, PATROL, AMBUSH, CHARGE, FLOAT} (perception/idle flavor)
 
 =============================================================================
-ARCHETYPE 1 — ZOMBIE  (spawn '1')   ROLE: slow attrition wall
+ARCHETYPE 1 — PLAGUE_HULK  (spawn '1')   ROLE: slow attrition wall
 =============================================================================
-VISUAL: shambling reanimated UAC security guard in tattered armor, exposed ribs,
-  one dragging leg. Desaturated green-grey skin, dim flashlight still clipped to
-  the chest. Sprite sways slightly when dormant; lurches forward one tile per two
-  turns when chasing.
-  PROCEDURAL SPRITE: drawn once into a FrameBuffer via ShapeRenderer (same
-  pipeline as WeaponHudRenderer). A humanoid silhouette: rounded rectangular head
-  (desaturated green-grey #8C9F73), wider rectangular torso with a small yellow
-  square "flashlight" patch on the chest, stubby arm rectangles, thick dark
-  outlines. Head tilts 5° to sell the shambling pose.
+SPRITE: enemy_sheet_blight.png, Q1 (top-left). A bloated pink/fleshy spiked blob
+  of fused, swollen tissue — a mound of corrupted bulk that lurches forward. Slow
+  sway when dormant; lurches one tile per two turns when chasing.
 HP: 60        DAMAGE: 14 (melee)      ATTACK TYPE: MELEE, range 1 (Chebyshev==1)
-MOVEMENT: CHASE, moveEveryNTurns = 2 (slow — Corruptor cadence).
+MOVEMENT: CHASE, moveEveryNTurns = 2 (slow tank).
 XP REWARD: 8
 AI BEHAVIOR: dormant until proximity/LOS wake. Once alerted, never loses interest;
   greedy-steps toward the player every OTHER turn but SWINGS every turn it is
@@ -97,230 +142,262 @@ DROPS: 25% Stim pack '+', 10% Armor shard 'a'. (Roll on death.)
 FLOORS: 1-6 (the bread-and-butter early threat; thins out by mid-game).
 
 =============================================================================
-ARCHETYPE 2 — IMP  (spawn '2')   ROLE: ranged poke / sightline punisher
+ARCHETYPE 2 — EYE_TYRANT  (spawn '2')   ROLE: ranged poke / sightline punisher
 =============================================================================
-VISUAL: hunched leathery brown demon, glowing orange palms it cocks back before
-  hurling a fireball. Spindly limbs, white eyes. Telegraph: palms flare bright one
-  turn before the shot (readable tell).
-  PROCEDURAL SPRITE: hunched narrow torso (brown #7A4F2A), thin arm lines tapering
-  to bright orange circles at the palms (fireball glow), small angular head with
-  two white dot eyes on a dark face. On FIRE state, palm circles brighten to white-
-  orange. ShapeRenderer lines + filled circles into a FrameBuffer.
-HP: 18        DAMAGE: 8 (ranged fireblast)   ATTACK TYPE: RANGED, range 5
-MOVEMENT: CHASE/KITE, moveEveryNTurns = 1 (fast — Vortex Eye cadence).
+SPRITE: enemy_sheet_blight.png, Q2 (top-right). A floating red sphere with a
+  single huge central eye and a fringe of writhing tentacles. hoverOffset = true
+  (drawn raised off the floor). Telegraph: the eye constricts/pupil flares one
+  turn before it fires (readable tell).
+HP: 18        DAMAGE: 8 (ranged)   ATTACK TYPE: RANGED, range 5
+MOVEMENT: CHASE/KITE, moveEveryNTurns = 1 (fast), hoverOffset = true.
 XP REWARD: 6
 AI BEHAVIOR: wakes on LOS at long range (it sees you first). If LOS clear and
   within range -> FIRE (hitscan in tile space, can be dodged via AGILITY, blocked
   by walls/columns). If too close it KITES one tile away to restore range; if too
-  far it closes. The "break LOS behind a corner" trainer. A fireball can apply
-  Burning (order_14) at a low chance — see RESISTANCES note.
-RESISTANCES: takes HALF fire damage; immune to Burning self-inflict. Normal to
-  everything else.
-DROPS: 15% Stim pack '+'. Low drop rate (they are common chaff).
+  far it closes. The "break LOS behind a corner" trainer. Its bolt can apply a low
+  chance of a status tick — see RESISTANCES note.
+RESISTANCES: normal to everything (common chaff with reach, not durability).
+DROPS: 15% Stim pack '+'. Low drop rate (common chaff).
 FLOORS: 1-8 (the persistent ranged annoyance throughout).
 
 =============================================================================
-ARCHETYPE 3 — PINKY DEMON  (spawn '3')   ROLE: straight-line charger
+ARCHETYPE 3 — GORE_BITER  (spawn '3')   ROLE: fast light-melee skirmisher
 =============================================================================
-VISUAL: bulky pink hairless bull-demon, enormous jaw, tiny legs, no ranged
-  capacity. Lowers its head and snorts (telegraph) one turn before it charges.
-  PROCEDURAL SPRITE: a low, wide shape dominated by a massive lower jaw rectangle
-  (pale pink #E8A0A0) with a dark gap for the maw and four white rectangle teeth.
-  A small rounded head above, tiny vestigial arm nubs at the sides. On WIND-UP
-  state, the head tilts forward (head rect translated downward). ShapeRenderer
-  filled rects + circles into a FrameBuffer.
+SPRITE: enemy_sheet_infernal.png, Q1 (top-left). An orange-red flesh-maw creature
+  — a gaping mouth on a low body with claw/tentacle limbs that scuttles fast and
+  low. Twitchy idle; rapid forward lunges when chasing.
+HP: 20        DAMAGE: 10 (melee)   ATTACK TYPE: MELEE, range 1
+MOVEMENT: CHASE, moveEveryNTurns = 1 (fast).
+XP REWARD: 6
+AI BEHAVIOR: a fast, fragile pressure unit. Closes every turn and bites the moment
+  it is adjacent. Individually trivial, but the level generator places them in
+  small packs (2-3 per cluster) and they wake together on the chain-alert scream,
+  so they overwhelm a player who back-pedals into a corner. The counter is to thin
+  them with a wide weapon (shotgun cone, blast) before they stack onto you, OR
+  funnel them into a one-tile choke. Teaches positioning under swarm pressure
+  without the wall-ignoring trick.
+RESISTANCES: none. Dies to a single shell. Pure tempo threat.
+DROPS: 10% Stim '+'. Chaff.
+FLOORS: 1-8 (escalating pack sizes deeper in).
+
+=============================================================================
+ARCHETYPE 4 — SHELL_BRUTE  (spawn '4')   ROLE: straight-line charger
+=============================================================================
+SPRITE: enemy_sheet_infernal.png, Q2 (top-right). A brown armored spider/crab
+  hybrid — a low, wide, plated body on heavy legs built to rush. Lowers and braces
+  (telegraph) one turn before it charges.
 HP: 45        DAMAGE: 18 (melee, +knockback on charge hit)   ATTACK TYPE: MELEE 1
 MOVEMENT: CHARGE, moveEveryNTurns = 1 normally; CHARGE special below.
 XP REWARD: 10
 AI BEHAVIOR (chargeAttacker = true): when alerted and the player lies on a clear
-  CARDINAL line (same row or column, unobstructed by wall/door/enemy), the Pinky
-  enters a one-turn WIND-UP (snort telegraph, no move), then on the next turn
-  RUSHES in a straight line covering up to PINKY_CHARGE_TILES (default 4) tiles in
-  a single turn, stopping on the tile adjacent to the player (or the first wall)
-  and dealing damage + knockback if it reaches melee range. If NOT on a clean
-  line, it behaves as an ordinary moveEveryNTurns=1 chaser, repositioning to line
-  itself up. The "don't stand in its lane; round a corner to cancel the charge"
-  enemy. Charge cancels if the lane is broken during wind-up (door closes,
-  another enemy steps in, player strafes out of the row/column).
-RESISTANCES: resists knockback (canBeKnockedBack = false — it's too heavy);
+  CARDINAL line (same row or column, unobstructed by wall/door/enemy), the
+  SHELL_BRUTE enters a one-turn WIND-UP (brace telegraph, no move), then on the
+  next turn RUSHES in a straight line covering up to SHELL_BRUTE_CHARGE_TILES
+  (default 4) tiles in a single turn, stopping on the tile adjacent to the player
+  (or the first wall) and dealing damage + knockback if it reaches melee range. If
+  NOT on a clean line, it behaves as an ordinary moveEveryNTurns=1 chaser,
+  repositioning to line itself up. The "don't stand in its lane; round a corner to
+  cancel the charge" enemy. Charge cancels if the lane is broken during wind-up
+  (door closes, another enemy steps in, player strafes out of the row/column).
+RESISTANCES: resists knockback (canBeKnockedBack = false — too heavy);
   normal to all damage/status.
 DROPS: 20% Stim '+', 15% Armor shard 'a'.
 FLOORS: 2-9.
 
 =============================================================================
-ARCHETYPE 4 — LOST SOUL  (spawn '4')   ROLE: flying swarm / wall-ignoring harasser
+ARCHETYPE 5 — MIRE_WRAITH  (spawn '5')   ROLE: hovering area-denial acid floater
 =============================================================================
-VISUAL: a flaming flying skull, no body, trailing embers, mouth agape. Bobs in
-  place when dormant.
-  PROCEDURAL SPRITE: an ivory oval skull (color #ECDCB8) with two dark filled-
-  circle eye sockets, a jagged maw of 6 small triangle teeth, and a bright
-  orange-yellow flame corona behind/around the skull (4-6 radiating filled
-  triangles in orange #FF8C00 fading to yellow at tips). Flame triangles shift
-  slightly each frame via a sin-wave offset seeded per enemy for organic bob.
-  ShapeRenderer into a FrameBuffer.
-HP: 12        DAMAGE: 6 (melee bite on contact)   ATTACK TYPE: MELEE 1
-MOVEMENT: FLOAT, ignoresWalls = true, moveEveryNTurns = 1 (fast).
-XP REWARD: 5
-AI BEHAVIOR: the ONLY archetype that pathfinds THROUGH walls — it flies, so its
-  greedy step ignores Level.isWall for MOVEMENT (still cannot occupy the player's
-  tile; still cannot pass the OUTER world boundary). This breaks the "hide behind
-  a wall" instinct the Imp teaches: a Lost Soul comes straight at you through
-  geometry. Low HP makes it a one-shot for most weapons, but it spawns in PACKS
-  (level generator places 2-4 per spawn cluster) and the chain-alert scream wakes
-  them together. Tactically it forces the player to actually KILL rather than
-  evade. MINIMAP: rendered with a distinct "flying" marker (see VISUAL) and is
-  NOT hidden by fog-of-war walls between it and the player at close range,
-  reflecting that it ignores walls (consistent with fog-of-war-minimap.txt rules
-  — flyers reveal through one wall thickness within alertRadius).
-RESISTANCES: immune to knockback while flying (canBeKnockedBack = false). Takes
-  +25% fire? No — it IS fire; immune to Burning, normal to everything else.
-DROPS: none (chaff). Rare 5% Stim from a pack.
-FLOORS: 3-10 (escalating swarm pressure deeper in).
-
-=============================================================================
-ARCHETYPE 5 — CACODEMON  (spawn '5')   ROLE: hovering area-denial acid floater
-=============================================================================
-VISUAL: a giant floating spherical red demon, one huge central eye, a maw of
-  jagged teeth, tiny horns. Hovers, drifts. Cheeks puff before an acid spit
-  (telegraph).
-  PROCEDURAL SPRITE: a large filled circle (deep red #BF1A1A) taking most of the
-  FrameBuffer. A single large white circle with a dark filled-circle pupil as the
-  eye, centered slightly above mid. Six white triangle teeth along the lower arc
-  of the mouth. Two small filled-triangle horn stubs at the top. A faint outer
-  ring (slightly lighter red, line only) as an aura. On TELEGRAPH state, cheeks
-  puff: the main circle radius grows by ~10% briefly. ShapeRenderer into a
-  FrameBuffer.
+SPRITE: enemy_sheet_blight.png, Q4 (bottom-right). A dark yellow/toxic hovering
+  blob trailing dripping tentacles. hoverOffset = true. Bulges/swells before an
+  acid spit (telegraph).
 HP: 70        DAMAGE: 12 (ranged acid spit, applies Poisoned)   ATTACK TYPE: RANGED 4
-MOVEMENT: FLOAT (slow drift), moveEveryNTurns = 2. Does NOT ignore walls (too big
-  to phase — it's a hovering blob, not an incorporeal skull). ignoresWalls=false.
+MOVEMENT: FLOAT (slow drift), moveEveryNTurns = 2, hoverOffset = true. Does NOT
+  ignore walls (it's a hovering blob, not incorporeal).
 XP REWARD: 16
 AI BEHAVIOR: a slow, tanky ranged threat. Wakes on LOS, drifts to maintain a
   medium range, and spits acid (hitscan, needs LOS) that deals direct damage AND
   applies the Poisoned status (order_14, stacks) — so even after you break LOS the
   poison ticks. It does not kite aggressively (slow), so the counter is to close
   the gap fast (it is bad in melee) OR break LOS and out-wait the poison. Punishes
-  ranged-only, sit-back play; rewards aggression — the inverse of the Imp.
+  ranged-only, sit-back play; rewards aggression — the inverse of the EYE_TYRANT.
 RESISTANCES: immune to its own Poison; resists poison damage by 50% (it's made of
   the stuff). Normal to fire/physical.
 DROPS: 25% Stim '+', 20% Armor shard 'a', 5% Field medkit 'H'.
 FLOORS: 4-10.
 
 =============================================================================
-ARCHETYPE 6 — HELL KNIGHT  (spawn '6' — NEW)   ROLE: armored elite, melee + ranged
+ARCHETYPE 6 — IRON_STALKER  (spawn '!' — NEW)   ROLE: armored elite, melee + ranged
 =============================================================================
-VISUAL: tall muscular grey-brown humanoid demon, goat legs, armored shoulders,
-  glowing green fists it can cock back for a ranged plasma-like bolt OR swing in
-  melee. The "you are in trouble now" silhouette.
-  PROCEDURAL SPRITE: a tall rectangular torso (grey-brown #8C7355) with wide
-  shoulder-plate rectangles extending past the torso width. Triangular horn stubs
-  at the head top. A narrow dark visor-slit for eyes. Two bright green filled
-  circles (fists, #22FF44) at the ends of short arm rectangles. On FIRE state,
-  fist circles elongate into a green bolt streak. Larger overall than other enemy
-  sprites to convey bulk. ShapeRenderer filled rects + circles into a FrameBuffer.
-HP: 120       DAMAGE: 22 melee / 16 ranged bolt   ATTACK TYPE: BOTH
-MOVEMENT: CHASE, moveEveryNTurns = 1 (it is fast for its size — relentless).
+SPRITE: enemy_sheet_blight.png, Q3 (bottom-left). A dark armored spider with a
+  massive toothy maw filling its front — heavy plating, eight braced legs, a
+  cavernous mouth that both bites and spits. The "you are in trouble now"
+  silhouette. Larger billboard scale than the rank-and-file to convey bulk.
+HP: 120       DAMAGE: 22 melee / 16 ranged   ATTACK TYPE: BOTH
+MOVEMENT: CHASE, moveEveryNTurns = 1 (fast for its size — relentless).
 XP REWARD: 35
-AI BEHAVIOR (attackType BOTH): the elite. If adjacent -> heavy melee swing
-  (22, knockback-resistant). If not adjacent but within HELL_KNIGHT_RANGE_TILES
-  (default 4) with LOS -> green-fist ranged bolt (16). Otherwise closes
-  aggressively every turn. There is no safe range: kiting eats bolts, closing eats
-  swings. The intended counter is BURST + cover dance + using the floor geometry,
-  not raw evasion. Spawns sparingly (1, occasionally 2 per floor) as a mini-elite;
-  the level generator should treat it as a "budget spike" placement, often
-  guarding a keycard or the exit.
+AI BEHAVIOR (attackType BOTH): the elite. If adjacent -> heavy maw bite (22,
+  knockback-resistant). If not adjacent but within IRON_STALKER_RANGE_TILES
+  (default 4) with LOS -> ranged spit (16). Otherwise closes aggressively every
+  turn. There is no safe range: kiting eats spits, closing eats bites. The intended
+  counter is BURST + cover dance + using floor geometry, not raw evasion. Spawns
+  sparingly (1, occasionally 2 per floor) as a mini-elite; the level generator
+  should treat it as a "budget spike" placement, often guarding a keycard or the
+  exit.
 RESISTANCES: 25% physical damage reduction (armored); knockback-resistant
   (canBeKnockedBack = false); normal to fire/poison. NOT immune to Stun, but
   Stun duration on it is halved (heavy frame).
 DROPS: 60% Armor shard 'a' OR Security vest 'A', 30% Field medkit 'H', plus a
   guaranteed XP lump (already in xpReward). Often gates a pickup behind itself.
-FLOORS: 5-10+ (and as the standard non-boss elite thereafter).
+FLOORS: 5-10+ (the standard non-boss elite thereafter).
+
+=============================================================================
+ARCHETYPE 7 — ACID_DRONE  (spawn '$' — NEW)   ROLE: mechanical ranged gunner
+=============================================================================
+SPRITE: enemy_sheet_infernal.png, Q3 (bottom-left). A green cybernetic centipede,
+  segmented chassis with a gun barrel mounted on the head segment — a salvage
+  machine turned hostile by the corruption. Skitters between cover, levels the
+  barrel (telegraph) before firing.
+HP: 25        DAMAGE: 10 (ranged)   ATTACK TYPE: RANGED, range 4
+MOVEMENT: CHASE/KITE, moveEveryNTurns = 1 (fast).
+XP REWARD: 8
+AI BEHAVIOR: a mechanical ranged unit that behaves like a disciplined skirmisher:
+  it prefers to fire from medium range with clean LOS and repositions to keep the
+  player in its sightline, KITING when the player closes. Distinct from EYE_TYRANT
+  in that it is tougher and tends to relocate to flank corners rather than retreat
+  straight back, punishing players who camp a single corner. Because it is a
+  machine, it is a candidate for EMP/Stun synergy (order_14) — flag it as
+  isMechanical = true if that doc wants a tag.
+RESISTANCES: normal to fire/physical; if order_14 implements an EMP/shock status,
+  ACID_DRONE takes extended Stun from it (mechanical). Otherwise no resistances.
+DROPS: 15% Stim '+', 10% Cell ammo (mechanical salvage).
+FLOORS: 3-10.
+
+=============================================================================
+ARCHETYPE 8 — VOID_SHROUD  (spawn '^' — NEW)   ROLE: fast stealth melee ambusher
+=============================================================================
+SPRITE: enemy_sheet_infernal.png, Q4 (bottom-right). A dark, shadowy amorphous
+  blob with two glowing eyes — a low-visibility shape that blends into unlit tiles
+  until it is almost on top of you.
+HP: 30        DAMAGE: 12 (melee)   ATTACK TYPE: MELEE, range 1
+MOVEMENT: AMBUSH/CHASE, moveEveryNTurns = 1 (fast), silentWake = true.
+XP REWARD: 12
+AI BEHAVIOR (silentWake = true): the only archetype that wakes WITHOUT firing the
+  chain-alert scream — it stirs silently and does NOT wake its neighbors, so it can
+  peel off from a group and reach you while the rest stay dormant. It closes fast
+  and bites in melee. Reads dim on the billboard (dark sprite, faint eye glow) so
+  it is easy to lose against unlit walls until close — the player should learn to
+  watch the minimap and unlit corners. Pairs viciously with a loud threat: while
+  you're trading shots with an EYE_TYRANT down the hall, a VOID_SHROUD closes the
+  gap unannounced. The counter is awareness and keeping your back to a known-clear
+  wall.
+RESISTANCES: normal to all damage. No durability gimmick — its edge is the silent
+  wake and low visibility, not toughness.
+DROPS: 10% Stim '+'. Occasionally drops alongside a loud enemy's loot.
+FLOORS: 3-10 (the ambush layer that escalates with depth).
 
 XP REWARD TABLE  (mirror into roguelike_order_11 GameBalance)
 =============================================================
-  ZOMBIE      8      IMP        6      PINKY       10
-  LOST SOUL   5      CACODEMON  16     HELL KNIGHT 35
+  PLAGUE_HULK   8     EYE_TYRANT    6     GORE_BITER    6
+  SHELL_BRUTE  10     MIRE_WRAITH  16     IRON_STALKER 35
+  ACID_DRONE    8     VOID_SHROUD  12
   Constants (reconcile names with order_11):
-    XP_REWARD_ZOMBIE=8  XP_REWARD_IMP=6  XP_REWARD_PINKY=10
-    XP_REWARD_LOST_SOUL=5  XP_REWARD_CACODEMON=16  XP_REWARD_HELL_KNIGHT=35
-  (order_11 currently lists Corruptor/VortexEye/etc. names; on adopting this
-  roster, rename those constants to match. Values are intentionally close so the
-  curve still holds.)
+    XP_REWARD_PLAGUE_HULK=8   XP_REWARD_EYE_TYRANT=6   XP_REWARD_GORE_BITER=6
+    XP_REWARD_SHELL_BRUTE=10  XP_REWARD_MIRE_WRAITH=16 XP_REWARD_IRON_STALKER=35
+    XP_REWARD_ACID_DRONE=8    XP_REWARD_VOID_SHROUD=12
+  (order_11 currently lists placeholder type names; on adopting this roster, rename
+  those constants to match. Values are tuned so the leveling curve still holds.)
 
 FLOOR-APPEARANCE BANDS  (level-generator monster budget)
 ========================================================
   Floor   Roster (weighted)
-  1       Zombie, Imp
-  2-3     Zombie, Imp, Pinky
-  4       Zombie, Imp, Pinky, Lost Soul, Cacodemon
-  5       + Hell Knight (rare, 0-1)
-  6-7     Imp, Pinky, Lost Soul, Cacodemon, Hell Knight (Zombie thins out)
-  8-10    Cacodemon, Hell Knight, Lost Soul swarms, occasional Pinky
+  1       PLAGUE_HULK, EYE_TYRANT, GORE_BITER
+  2-3     PLAGUE_HULK, EYE_TYRANT, GORE_BITER, SHELL_BRUTE
+  3       + ACID_DRONE, VOID_SHROUD (introduced)
+  4       + MIRE_WRAITH
+  5       + IRON_STALKER (rare, 0-1)
+  6-7     EYE_TYRANT, SHELL_BRUTE, MIRE_WRAITH, ACID_DRONE, VOID_SHROUD,
+          IRON_STALKER (PLAGUE_HULK thins out)
+  8-10    MIRE_WRAITH, IRON_STALKER, GORE_BITER swarms, ACID_DRONE,
+          VOID_SHROUD, occasional SHELL_BRUTE
   The generator should spend a per-floor "threat budget" (sum of enemy costs) that
-  rises with depth; Hell Knight = a large budget chunk so only 1-2 fit.
+  rises with depth; IRON_STALKER = a large budget chunk so only 1-2 fit.
 
 BALANCE NOTES (all numbers placeholder)
 =======================================
 - HP/damage chosen against the existing shotgun (coeff 0.18, ~20 point-blank):
-  Imp/Lost Soul die in one shell, Zombie ~3, Pinky ~3, Caco ~4, Hell Knight ~6
-  (before perks/stats). This keeps the elite genuinely threatening.
-- Each archetype must answer a DIFFERENT question, so no two share a counter:
-  Zombie = distance, Imp = cover, Pinky = lane-break, Lost Soul = must-kill,
-  Caco = aggression, Hell Knight = burst+geometry. Mixing two creates a real
-  puzzle (kite the Zombie while a corner blocks the Imp, etc.).
-- Telegraphs (palm flare, snort, cheek puff) are the readability contract: every
-  hit the player takes should be one the telegraph warned about. Critical for the
-  "I understand why I died" pillar.
+  EYE_TYRANT/GORE_BITER die in one shell, PLAGUE_HULK ~3, SHELL_BRUTE ~3,
+  ACID_DRONE ~2, VOID_SHROUD ~2, MIRE_WRAITH ~4, IRON_STALKER ~6 (before
+  perks/stats). This keeps the elite genuinely threatening.
+- Each archetype answers a DIFFERENT question, so no two share a single counter:
+  PLAGUE_HULK = distance, EYE_TYRANT = cover, GORE_BITER = thin-the-swarm,
+  SHELL_BRUTE = lane-break, MIRE_WRAITH = aggression, IRON_STALKER = burst+geometry,
+  ACID_DRONE = don't-camp-one-corner, VOID_SHROUD = awareness. Mixing two creates a
+  real puzzle (kite the PLAGUE_HULK while a corner blocks the EYE_TYRANT, etc.).
+- Telegraphs (eye flare, brace, bulge, barrel-level) are the readability contract:
+  every hit the player takes should be one the telegraph warned about. Critical for
+  the "I understand why I died" pillar. VOID_SHROUD intentionally bends this — its
+  threat is the silent approach, so its readability moves to the minimap and the
+  unlit-corner cue, not a wind-up animation.
 
 INTERACTIONS
 ============
-1. TURN ENGINE (enemy_system.txt): all six are parameterizations of the existing
-   Enemy + a few new flags (ignoresWalls, chargeAttacker, canBeKnockedBack,
-   MovementPattern). The two-phase turn, chain-alert, and red-alert pulse are
-   unchanged.
+1. TURN ENGINE (enemy_system.txt): all eight are parameterizations of the existing
+   Enemy + a few new flags (chargeAttacker, canBeKnockedBack, hoverOffset,
+   silentWake, MovementPattern). The two-phase turn, chain-alert, and red-alert
+   pulse are unchanged — except VOID_SHROUD's silentWake suppresses the chain-alert
+   broadcast for itself only.
 2. STATUS EFFECTS (order_14): each archetype's RESISTANCES block maps directly to
-   that doc's resist/immunity table (Imp half-fire, Caco half-poison, Lost
-   Soul/Hell Knight knockback-immune, etc.). order_14 owns the mechanism.
+   that doc's resist/immunity table (MIRE_WRAITH half-poison, SHELL_BRUTE/
+   IRON_STALKER knockback-immune, ACID_DRONE extended-Stun-from-EMP, etc.).
+   order_14 owns the mechanism.
 3. XP/PERKS (order_11): xpReward feeds awardExperience on death; the table above
    replaces the placeholder values.
 4. STATS (order_12): player STRENGTH/MARKSMANSHIP scale damage DEALT to these
-   enemies; Hell Knight's 25% physical reduction and Pinky knockback-immunity are
-   read by the damage/knockback pipeline.
+   enemies; IRON_STALKER's 25% physical reduction and SHELL_BRUTE knockback-
+   immunity are read by the damage/knockback pipeline.
 5. MELEE (order_15): knockback pushes only canBeKnockedBack==true enemies one
-   tile; Pinky/Lost Soul/Hell Knight ignore it. Chainsaw vs Hell Knight is the
+   tile; SHELL_BRUTE/IRON_STALKER ignore it. Chainsaw vs IRON_STALKER is the
    high-risk melee payoff.
-6. FOG OF WAR / MINIMAP (fog-of-war-minimap.txt): Lost Soul's ignoresWalls grants
-   it the through-wall minimap reveal at close range.
-7. LEVEL GENERATION: floor bands + threat budget drive spawn placement; Hell
-   Knight as a keycard/exit guard.
+6. MINIMAP / VISIBILITY: VOID_SHROUD's silent wake and dark sprite make minimap
+   awareness the primary counter; EYE_TYRANT and MIRE_WRAITH hoverOffset must read
+   as airborne on the billboard without breaking z-buffer occlusion.
+7. LEVEL GENERATION: floor bands + threat budget drive spawn placement; IRON_STALKER
+   as a keycard/exit guard; GORE_BITER and VOID_SHROUD placed in small clusters.
 
 DEPENDENCIES (must exist first)
 ===============================
 1. enemy_system.txt (IMPLEMENTED) — the entire turn/combat core.
 2. enemy hit-reaction/health-bar docs (for readable feedback) — recommended.
-3. roguelike_order_14 (status effects) — REQUIRED for Imp Burning, Caco Poison,
-   knockback-immunity flags to mean anything; ship archetypes' resist data with it.
-4. tile-symbols.txt + LevelLoader update for the new '6' spawn digit (or use the
-   generator's elite pass instead — OPEN Q).
-5. Procedural enemy FrameBuffer sprites: each archetype's billboard is drawn once
-   into a FrameBuffer at enemy instantiation using ShapeRenderer geometric shapes
-   following the WeaponHudRenderer procedural-sprite pipeline. EnemyRenderer
-   already billboards the resulting textures. No PNG assets required.
+3. roguelike_order_14 (status effects) — REQUIRED for MIRE_WRAITH Poison,
+   knockback-immunity flags, and any EMP/Stun synergy to mean anything; ship
+   archetypes' resist data with it.
+4. tile-symbols.txt + LevelLoader update for the three new spawn chars '!', '$',
+   '^' (see SPAWN-SYMBOL MAPPING — single commit).
+5. Sprite-sheet textures: textures/enemies/enemy_sheet_blight.png and
+   textures/enemies/enemy_sheet_infernal.png (each a 2x2 sheet). EnemyConstants
+   holds the paths; EnemyRenderer slices the per-type TextureRegion quadrant.
+   EnemyRenderer already billboards textures.
 
 OPEN QUESTIONS
 ==============
-1. New spawn digit '6' for Hell Knight, or place elites via a generator pass on an
-   existing digit? Recommend the generator pass (avoids a symbol commit) unless
-   hand-authored levels need to place Hell Knights explicitly.
-2. Lost Soul through-wall movement vs raycasting: the BILLBOARD must not render
-   through solid walls (z-buffer handles occlusion) even though its LOGIC ignores
-   walls — confirm EnemyRenderer occludes it correctly when it is mid-wall. Likely
-   render it only when its tile is in player LOS; it "phases out" while inside a
-   wall, "phases in" when it emerges.
-3. Pinky charge through a closing door / other enemy mid-rush: cancel and snort
-   again, or barrel through? Recommend cancel (lane broken) — keeps it readable.
-4. Does the Cacodemon's poison stack with multiple Cacos? Per order_14 Poisoned
-   stacks; two Cacos could stack-poison fast. Cap stacks (order_14 owns the cap).
-5. Should the existing implemented names (Corruptor/Vortex Eye/Ghoul/Crawler/
-   Revenant) be kept as alternate-skin variants of these archetypes for variety,
-   or fully replaced? Recommend keep them as RESKINS sharing the same AI (a
-   Corruptor IS a Zombie skin) so existing levels still work.
+1. Confirm '!', '$', '^' are free in docs/tile-symbols.txt across ALL categories
+   (walls, doors, floors, props, pickups, specials) before the symbol commit. If
+   any collides, pick a different free char and update this doc.
+2. hoverOffset rendering (EYE_TYRANT, MIRE_WRAITH): how many tile-units does the
+   billboard raise off the floor, and does the raise break z-buffer occlusion when
+   the hover sprite sits behind a low wall edge? Confirm in EnemyRenderer.
+3. VOID_SHROUD silent wake vs chain-alert: when a VOID_SHROUD wakes silently, does
+   the player get ANY cue (a faint audio sting, a brief minimap blip) or is the
+   only warning the sprite appearing in LOS? Recommend a subtle minimap-only cue so
+   the death still feels readable.
+4. SHELL_BRUTE charge through a closing door / other enemy mid-rush: cancel and
+   brace again, or barrel through? Recommend cancel (lane broken) — keeps it
+   readable.
+5. Does MIRE_WRAITH poison stack with multiple MIRE_WRAITHs? Per order_14 Poisoned
+   stacks; two could stack-poison fast. Cap stacks (order_14 owns the cap).
+6. ACID_DRONE "isMechanical" tag: does order_14 want a formal mechanical flag for
+   EMP/Stun synergy and Cell-ammo drops, or is the resistance note enough? Decide
+   before wiring ACID_DRONE's drop table and resist block.
+7. Sprite-sheet region origin: confirm whether enemy_sheet_*.png quadrant slicing
+   uses top-left or bottom-left origin in the actual EnemyRenderer TextureRegion
+   call, and adjust the Q1-Q4 pixel rectangles accordingly.

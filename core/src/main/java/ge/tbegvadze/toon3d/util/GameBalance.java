@@ -22,20 +22,29 @@ public final class GameBalance {
     // XP REWARDS — XP dropped by each enemy archetype on death
     // =========================================================================
 
-    /** CORRUPTOR (tile '1') — heavyweight melee; scarce but high XP. */
-    public static final int XP_REWARD_CORRUPTOR  = 50;
+    /** PLAGUE_HULK (tile '1') — slow tank melee; tanky so yields solid XP. */
+    public static final int XP_REWARD_PLAGUE_HULK   = 8;
 
-    /** VORTEX_EYE (tile '2') — ranged kiter; medium XP for tricky targeting. */
-    public static final int XP_REWARD_VORTEX_EYE = 35;
+    /** EYE_TYRANT (tile '2') — fast ranged kiter; low XP, common annoyance. */
+    public static final int XP_REWARD_EYE_TYRANT    = 6;
 
-    /** GHOUL (tile '3') — fast light-melee; low XP but spawns in packs. */
-    public static final int XP_REWARD_GHOUL      = 20;
+    /** GORE_BITER (tile '3') — fast light melee; low XP, spawns in packs. */
+    public static final int XP_REWARD_GORE_BITER    = 6;
 
-    /** CRAWLER (tile '4') — light-melee variant; same XP tier as Ghoul. */
-    public static final int XP_REWARD_CRAWLER    = 20;
+    /** SHELL_BRUTE (tile '4') — heavy charger melee; more XP for the threat. */
+    public static final int XP_REWARD_SHELL_BRUTE   = 10;
 
-    /** REVENANT (tile '5') — light-melee with armour; slightly more XP. */
-    public static final int XP_REWARD_REVENANT   = 25;
+    /** MIRE_WRAITH (tile '5') — slow hovering acid ranged; high XP, tanky. */
+    public static final int XP_REWARD_MIRE_WRAITH   = 16;
+
+    /** IRON_STALKER (tile '!') — armored elite melee+ranged; the big reward. */
+    public static final int XP_REWARD_IRON_STALKER  = 35;
+
+    /** ACID_DRONE (tile '$') — ranged mechanical; medium XP. */
+    public static final int XP_REWARD_ACID_DRONE    = 8;
+
+    /** VOID_SHROUD (tile '^') — fast stealth melee; medium XP. */
+    public static final int XP_REWARD_VOID_SHROUD   = 12;
 
     // =========================================================================
     // XP CURVE — how much XP is needed to reach each next player level

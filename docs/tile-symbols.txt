@@ -96,22 +96,25 @@ A   Security vest       Large armor restoration.
 
 ENEMY SPAWN MARKERS (temporary — extracted by LevelLoader, then replaced with floor ' ')
 ----------------------------------------------------------------------------------------
-1   Corruptor spawn
-2   Vortex Eye spawn
-3   Ghoul spawn
-4   Crawler spawn
-5   Revenant spawn
+1   Plague Hulk spawn     Slow tank melee. Floors 1-6.
+2   Eye Tyrant spawn      Fast ranged kiter. Floors 1-8.
+3   Gore Biter spawn      Fast light melee. Floors 1-8.
+4   Shell Brute spawn     Heavy charger melee. Floors 2-9.
+5   Mire Wraith spawn     Slow hovering acid ranged. Floors 4-10.
+!   Iron Stalker spawn    Armored elite melee. Floors 5-10+. Use sparingly — 1-2 per level.
+$   Acid Drone spawn      Ranged mechanical. Floors 3-9.
+^   Void Shroud spawn     Fast stealth melee. Floors 3-10.
 
 ---
 
 SYMBOL BUDGET
 -------------
 Total printable ASCII characters: 95  (codes 32-126)
-Currently assigned:               64
-Remaining:                        31
+Currently assigned:               67
+Remaining:                        28
 
 Free characters (not yet assigned):
-! " $ ^ _ ` ~ | { } [ ] \ / < > ( ) * - + (some already used — check above)
+" _ ` ~ | { } [ ] \ / < > ( ) * - + (some already used — check above)
 Uppercase: K V  (D F I J W taken; Z taken as cryo; check walls/doors above)
 Lowercase: i n o q z  (e j taken)
 
