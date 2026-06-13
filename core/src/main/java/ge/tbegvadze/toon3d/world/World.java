@@ -28,6 +28,7 @@ import ge.tbegvadze.toon3d.progression.LevelUpReward;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.render.*;
+import ge.tbegvadze.toon3d.status.StatusEffectController;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -91,6 +92,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // Player stat system — persistent across floor transitions (Order 6)
     // -------------------------------------------------------------------------
     private final PlayerStats playerStats;
+
+    // -------------------------------------------------------------------------
+    // Status effect system — run-persistent; player effects cleared on floor change
+    // -------------------------------------------------------------------------
+    private final StatusEffectController       statusEffectController;
+    private final StatusEffectVignetteRenderer statusEffectVignetteRenderer;
 
     // -------------------------------------------------------------------------
     // Slot-based item inventory — holds items AND ammo reserve stacks (Order 6)
@@ -200,6 +207,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);
         fadeOverlayRenderer  = new FadeOverlayRenderer();
 
+        // Status effect system — run-persistent; controller keeps player state across floors
+        statusEffectController       = new StatusEffectController();
+        statusEffectController.setEventTextSystem(eventTextSystem);
+        statusEffectVignetteRenderer = new StatusEffectVignetteRenderer();
+
         // Build level-dependent resources for the first floor
         level = initialLevel;
         buildLevelDependentResources(initialLevel);
@@ -238,6 +250,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         player.directionX = 1f;
         player.directionY = 0f;
 
+        // Clear player status effects on floor transition (fresh floor = clean slate).
+        statusEffectController.clearPlayerEffects(player);
+
         buildLevelDependentResources(newLevel);
 
         alertTimeSeconds   = 0f;
@@ -265,8 +280,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         explosiveBarrelManager.setImpactEventListener(impactEffectSystem);
         enemyRenderer.setPropRenderer(propRenderer);
 
+        enemyManager.setStatusEffectController(statusEffectController);
+
         tickEventBus = new TickEventBus();
         tickEventBus.subscribe(new WeaponReloadSubscriber(inventory));
+        tickEventBus.subscribe(new StatusEffectSubscriber(statusEffectController, player, enemyManager));
         tickEventBus.subscribe(new EnemyTurnSubscriber(enemyManager, gameState));
 
         // Build ground items from weapon spawn points placed by the level generator.
@@ -416,6 +434,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             equippedWeapon.update(deltaTime);
         }
         enemyManager.advanceHitFlash(deltaTime);
+        statusEffectVignetteRenderer.update(deltaTime, player);
         impactEffectSystem.setPlayerState(player.positionX, player.positionY,
                 player.directionX, player.directionY, player.fieldOfViewRadians);
         impactEffectSystem.update(deltaTime);
@@ -454,22 +473,25 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             camera.update();
         }
 
+        // Use effective FOV so BLINDED status clamps the visible cone to 30°.
+        float effectiveFovRadians = player.getEffectiveFovRadians();
+
         floorCeilingRenderer.setPlayerState(player.positionX, player.positionY,
-                player.directionX, player.directionY, player.fieldOfViewRadians);
+                player.directionX, player.directionY, effectiveFovRadians);
         floorCeilingRenderer.setAlertPulse(currentAlertPulse);
         floorCeilingRenderer.render(camera);
 
         wallRenderer.setPlayerState(player.positionX, player.positionY,
-                player.directionX, player.directionY, player.fieldOfViewRadians);
+                player.directionX, player.directionY, effectiveFovRadians);
         wallRenderer.render(camera);
 
         propRenderer.setPlayerState(player.positionX, player.positionY,
-                player.directionX, player.directionY, player.fieldOfViewRadians);
+                player.directionX, player.directionY, effectiveFovRadians);
         propRenderer.setAlertPulse(currentAlertPulse);
         propRenderer.render(camera);
 
         enemyRenderer.setPlayerState(player.positionX, player.positionY,
-                player.directionX, player.directionY, player.fieldOfViewRadians);
+                player.directionX, player.directionY, effectiveFovRadians);
         enemyRenderer.setAlertPulse(currentAlertPulse);
         enemyRenderer.render(camera);
 
@@ -485,6 +507,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // Hit vignette: red edge glow drawn under the minimap and HUD panels.
         hitVignetteRenderer.render(camera);
+        // Status effect vignettes: per-effect colored edge tints (burn orange, poison green, etc.)
+        statusEffectVignetteRenderer.render(camera);
 
         levelRenderer.setPlayerWorldPosition(player.positionX, player.positionY);
         levelRenderer.render(camera);
@@ -571,6 +595,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hitVignetteRenderer.dispose();
         levelUpOverlayRenderer.dispose();
         inventoryOverlayRenderer.dispose();
+        statusEffectVignetteRenderer.dispose();
         if (touchControllerRenderer != null) touchControllerRenderer.dispose();
         deathOverlayRenderer.dispose();
         player.dispose();

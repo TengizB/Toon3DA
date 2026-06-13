@@ -121,9 +121,47 @@ public final class EnemyManager implements EnemyHitTarget {
             enemy.attackDamageMultiplier = damageScale;
             enemy.dungeonLevel           = effectiveDepth;
             enemy.nameTag                = type.displayName() + " LVL " + effectiveDepth;
+            enemy.setStatusResistance(buildArchetypeResistance(type));
             list.add(enemy);
         }
         return list;
+    }
+
+    /*
+     * Builds the per-archetype StatusResistance table.
+     * Values sourced from roguelike_order_8 and roguelike_order_13 design docs:
+     *   VOID_SHROUD  — fire-immune (shadow entity; fire slides off)
+     *   MIRE_WRAITH  — poison-immune (saturated in acid; own toxin does nothing)
+     *   ACID_DRONE   — poison-immune (mechanical; impervious to biological agents)
+     *   SHELL_BRUTE  — stun duration halved (heavy armoured frame resists concussive effects)
+     *   EYE_TYRANT   — half fire damage (demon-origin; partially acclimated to heat)
+     */
+    private static StatusResistance buildArchetypeResistance(EnemyType type) {
+        switch (type) {
+            case VOID_SHROUD:
+                return StatusResistance.builder()
+                        .immune(StatusType.BURNING)
+                        .build();
+            case MIRE_WRAITH:
+                return StatusResistance.builder()
+                        .immune(StatusType.POISONED)
+                        .build();
+            case ACID_DRONE:
+                return StatusResistance.builder()
+                        .immune(StatusType.POISONED)
+                        .damageMultiplier(StatusType.BURNING, 0.5f)
+                        .build();
+            case SHELL_BRUTE:
+                return StatusResistance.builder()
+                        .durationMultiplier(StatusType.STUNNED, 0.5f)
+                        .build();
+            case EYE_TYRANT:
+                return StatusResistance.builder()
+                        .damageMultiplier(StatusType.BURNING, 0.5f)
+                        .build();
+            default:
+                return StatusResistance.defaultResistance();
+        }
     }
 
     /** Wires the visual-effect system so every hit/kill fires cosmetic events. */
@@ -286,11 +324,16 @@ public final class EnemyManager implements EnemyHitTarget {
         }
     }
 
-    // Phase B: every alerted enemy acts once
+    // Phase B: every alerted enemy acts once (stunned enemies skip their action this turn)
     private void phaseB(int playerColumn, int playerRow, Player player) {
         for (int index = 0; index < enemies.size(); index++) {
             Enemy enemy = enemies.get(index);
             if (!enemy.isAlive() || !enemy.isAlerted()) continue;
+            if (enemy.skipNextAction) {
+                enemy.skipNextAction = false;
+                enemy.turnCounter++;
+                continue;
+            }
             enemy.turnCounter++;
             actEnemy(enemy, playerColumn, playerRow, player);
         }
@@ -349,8 +392,25 @@ public final class EnemyManager implements EnemyHitTarget {
         if (canFire) {
             player.applyDamage(enemy.scaledAttackDamage());
             enemy.state = EnemyState.ATTACKING;
+            applyRangedAttackStatusEffect(enemy, player);
         } else {
             enemy.state = EnemyState.CHASING;
+        }
+    }
+
+    private void applyRangedAttackStatusEffect(Enemy enemy, Player player) {
+        if (statusEffectController == null) return;
+        float poisonChance;
+        switch (enemy.type) {
+            case MIRE_WRAITH: poisonChance = EffectConstants.MIRE_WRAITH_POISON_CHANCE; break;
+            case ACID_DRONE:  poisonChance = EffectConstants.ACID_DRONE_POISON_CHANCE;  break;
+            default: return;
+        }
+        if (effectRandom.nextFloat() < poisonChance) {
+            statusEffectController.apply(player, StatusType.POISONED,
+                    EffectConstants.POISON_DURATION,
+                    EffectConstants.POISON_DAMAGE_PER_STACK,
+                    enemy);
         }
     }
 
@@ -506,6 +566,19 @@ public final class EnemyManager implements EnemyHitTarget {
     // -------------------------------------------------------------------------
     // Enemy death
     // -------------------------------------------------------------------------
+
+    /**
+     * Handles an enemy death delivered by a status effect DoT tick (Burning / Poison).
+     * Awards XP to the player and stamps the corpse decal / drop, same as a weapon kill.
+     * Called by StatusEffectController after it finishes iterating enemies for the turn,
+     * so the enemy list is safe to modify (no ConcurrentModificationException risk).
+     */
+    public void processDoTKill(Enemy enemy) {
+        int xpAwarded = enemy.type.baseXpReward();
+        if (killXpListener   != null) killXpListener.onEnemyKilledForXp(xpAwarded);
+        if (killEventListener != null) killEventListener.onEnemyKilled(enemy.nameTag, xpAwarded);
+        killEnemy(enemy);
+    }
 
     private void killEnemy(Enemy enemy) {
         occupancy[enemy.tileColumn][enemy.tileRow] = false;
