@@ -57,4 +57,10 @@ public final class HudConstants {
     public static final float DEATH_OVERLAY_PROMPT_Y_ABOVE_BOTTOM = 50f;
     // Horizontal gap between right-edge of value text and "NEW BEST" tag
     public static final float DEATH_OVERLAY_NEWBEST_GAP            = 18f;
+
+    // Status icon row — small procedural icons at the bottom-left of the left panel
+    public static final float HUD_STATUS_ICON_SIZE      = 14f;
+    public static final float HUD_STATUS_ICON_GAP       = 4f;
+    public static final float HUD_STATUS_ROW_LOCAL_X    = 24f;
+    public static final float HUD_STATUS_ROW_LOCAL_Y    = 4f;
 }

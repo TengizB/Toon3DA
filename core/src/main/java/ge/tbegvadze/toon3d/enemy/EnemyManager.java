@@ -8,6 +8,10 @@ import ge.tbegvadze.toon3d.level.EnemySpawnPoint;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.progression.KillEventListener;
 import ge.tbegvadze.toon3d.progression.KillXpListener;
+import ge.tbegvadze.toon3d.status.StatusEffectController;
+import ge.tbegvadze.toon3d.status.StatusResistance;
+import ge.tbegvadze.toon3d.status.StatusType;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -55,6 +59,9 @@ public final class EnemyManager implements EnemyHitTarget {
 
     private boolean anyAlertedEver = false;
 
+    private StatusEffectController statusEffectController = null;
+    private final Random effectRandom = new Random();
+
     /**
      * @param dungeonDepth current floor number (1-based); drives enemy health and damage scaling.
      *                     Pass 1 for the first floor.
@@ -72,6 +79,11 @@ public final class EnemyManager implements EnemyHitTarget {
         this.wiggleLegalRows    = new int[4];
         this.wiggleRandom       = new Random(12345L);
         this.dropRandom         = new Random();
+    }
+
+    /** Injects the status effect controller so ranged enemies can inflict DoT on the player. */
+    public void setStatusEffectController(StatusEffectController controller) {
+        this.statusEffectController = controller;
     }
 
     private static List<Enemy> buildInitialEnemies(List<EnemySpawnPoint> spawnPoints,

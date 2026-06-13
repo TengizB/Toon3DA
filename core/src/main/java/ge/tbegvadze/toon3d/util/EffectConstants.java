@@ -55,4 +55,31 @@ public final class EffectConstants {
     // Level-up Vignette — cyan screen-edge burst played after choosing a level-up card
     public static final float LEVEL_UP_VIGNETTE_FADE_SECONDS = 0.8f;
     public static final float LEVEL_UP_VIGNETTE_MAX_ALPHA    = 0.55f;
+
+    // Status effects — gameplay constants (balance numbers live in GameBalance)
+    public static final int   BURN_DAMAGE_PER_TURN           = 4;
+    public static final int   BURN_DURATION_MIN              = 3;
+    public static final int   BURN_DURATION_MAX              = 5;
+    public static final int   POISON_DAMAGE_PER_STACK        = 2;
+    public static final int   POISON_MAX_STACKS              = 5;
+    public static final int   POISON_DURATION               = 4;
+    public static final int   STUN_DURATION_DEFAULT         = 1;
+    public static final int   STUN_DURATION_HEAVY           = 2;
+    public static final int   BLIND_FOV_DEGREES             = 30;
+    public static final int   BLIND_DURATION               = 2;
+    public static final float SLOW_FACTOR                   = 2.0f;
+    public static final int   SLOW_DURATION                = 3;
+    public static final int   EMPOWERED_DAMAGE_PERCENT      = 50;
+    public static final int   EMPOWERED_DURATION            = 5;
+
+    // Status effect visual — player screen-edge vignettes and enemy billboard tints
+    public static final float STATUS_VIGNETTE_MAX_ALPHA     = 0.22f;
+    public static final float STATUS_BLIND_VIGNETTE_ALPHA   = 0.65f;
+    public static final float STATUS_VIGNETTE_FADE_IN_SECONDS  = 0.25f;
+    public static final float STATUS_VIGNETTE_FADE_OUT_SECONDS = 0.60f;
+    public static final float ENEMY_STATUS_TINT_STRENGTH    = 0.35f;
+
+    // Enemy attack status-effect application chances (0..1)
+    public static final float MIRE_WRAITH_POISON_CHANCE     = 0.60f;
+    public static final float ACID_DRONE_POISON_CHANCE      = 0.75f;
 }

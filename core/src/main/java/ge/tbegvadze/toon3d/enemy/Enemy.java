@@ -1,10 +1,16 @@
 package ge.tbegvadze.toon3d.enemy;
 
+import ge.tbegvadze.toon3d.status.StatusEffect;
+import ge.tbegvadze.toon3d.status.StatusHost;
+import ge.tbegvadze.toon3d.status.StatusResistance;
+import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
 
+import java.util.EnumMap;
+
 /** Runtime state for a single enemy instance. Pure data + lightweight behavior helpers. */
-public final class Enemy {
+public final class Enemy implements StatusHost {
 
     public final EnemyType type;
 
@@ -33,12 +39,45 @@ public final class Enemy {
     /** Pre-built display string shown above the health bar, e.g. "Corruptor LVL 2". Set at spawn time. */
     public String     nameTag = "";
 
+    /** Set by StatusEffectController when STUNNED ticks; cleared and acted on by EnemyManager.phaseB(). */
+    public boolean skipNextAction = false;
+
+    // Status effect storage — pre-allocated at construction, never replaced
+    private final EnumMap<StatusType, StatusEffect> activeEffects;
+    private StatusResistance statusResistance = StatusResistance.defaultResistance();
+
     public Enemy(EnemyType type, int tileColumn, int tileRow) {
-        this.type       = type;
-        this.tileColumn = tileColumn;
-        this.tileRow    = tileRow;
-        this.maxHealth  = type.maxHealth();
-        this.health     = this.maxHealth;
+        this.type          = type;
+        this.tileColumn    = tileColumn;
+        this.tileRow       = tileRow;
+        this.maxHealth     = type.maxHealth();
+        this.health        = this.maxHealth;
+        this.activeEffects = buildEffectsMap();
+    }
+
+    private static EnumMap<StatusType, StatusEffect> buildEffectsMap() {
+        EnumMap<StatusType, StatusEffect> map = new EnumMap<>(StatusType.class);
+        for (StatusType type : StatusType.values()) {
+            map.put(type, new StatusEffect(type));
+        }
+        return map;
+    }
+
+    /** Assigns the archetype-specific resist/immunity table. Call once after construction at spawn time. */
+    public void setStatusResistance(StatusResistance resistance) {
+        this.statusResistance = resistance;
+    }
+
+    @Override
+    public EnumMap<StatusType, StatusEffect> getActiveEffects() { return activeEffects; }
+
+    @Override
+    public StatusResistance getStatusResistance() { return statusResistance; }
+
+    @Override
+    public void applyDoTDamage(int amount) {
+        // Enemies have no dodge or toughness reduction — DoT damage applies directly.
+        health = Math.max(0, health - amount);
     }
 
     /** Returns this enemy's attack damage scaled by the depth multiplier, minimum 1. */
