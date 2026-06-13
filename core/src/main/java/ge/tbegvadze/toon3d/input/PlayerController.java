@@ -1,10 +1,15 @@
 package ge.tbegvadze.toon3d.input;
 
+import java.util.Collections;
+import java.util.List;
+
 import com.badlogic.gdx.math.MathUtils;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.door.DoorState;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.*;
+import ge.tbegvadze.toon3d.input.touch.TouchAction;
+import ge.tbegvadze.toon3d.input.touch.TouchInputState;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.item.Inventory;
@@ -13,18 +18,14 @@ import ge.tbegvadze.toon3d.level.KeycardColor;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
+import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
-import ge.tbegvadze.toon3d.input.touch.TouchAction;
-import ge.tbegvadze.toon3d.input.touch.TouchInputState;
+import ge.tbegvadze.toon3d.util.ItemConstants;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 import ge.tbegvadze.toon3d.world.LevelTransitionListener;
 import ge.tbegvadze.toon3d.world.TickCause;
 import ge.tbegvadze.toon3d.world.TickEventBus;
-
-import java.util.Collections;
-import java.util.List;
-import ge.tbegvadze.toon3d.util.WeaponConstants;
-import ge.tbegvadze.toon3d.util.ItemConstants;
 
 public class PlayerController {
 
@@ -133,7 +134,8 @@ public class PlayerController {
 
     private void advanceMove(float deltaTime) {
         float durationMultiplier = (playerStats != null) ? playerStats.getActionDurationMultiplier() : 1.0f;
-        actionProgress = Math.min(1f, actionProgress + deltaTime / (Constants.PLAYER_MOVE_DURATION * durationMultiplier));
+        float slowMultiplier     = player.getSlowMultiplier();
+        actionProgress = Math.min(1f, actionProgress + deltaTime / (Constants.PLAYER_MOVE_DURATION * durationMultiplier * slowMultiplier));
         player.positionX = GameMath.lerp(sourcePositionX, targetPositionX, actionProgress);
         player.positionY = GameMath.lerp(sourcePositionY, targetPositionY, actionProgress);
         if (actionProgress >= 1f) {
@@ -227,8 +229,9 @@ public class PlayerController {
         char cell = level.getCell(tileColumn, tileRow);
         if (!Level.isAmmoPickup(cell)) return;
         if (itemInventory == null) return;
-        AmmoType type   = Level.ammoTypeOfPickup(cell);
-        int      amount = type.getAmountPerBox();
+        AmmoType type = Level.ammoTypeOfPickup(cell);
+        if (type == null) return;
+        int amount = type.getAmountPerBox();
         // Always consume the floor tile — anti-hoarding: overflow is silently discarded.
         level.consumePickupAt(tileColumn, tileRow);
         int amountBefore = itemInventory.countOf(type.getItemType());
@@ -255,7 +258,8 @@ public class PlayerController {
 
     private void advanceRotate(float deltaTime) {
         float durationMultiplier = (playerStats != null) ? playerStats.getActionDurationMultiplier() : 1.0f;
-        actionProgress = Math.min(1f, actionProgress + deltaTime / (Constants.PLAYER_ROTATE_DURATION * durationMultiplier));
+        float slowMultiplier     = player.getSlowMultiplier();
+        actionProgress = Math.min(1f, actionProgress + deltaTime / (Constants.PLAYER_ROTATE_DURATION * durationMultiplier * slowMultiplier));
         float currentAngle = GameMath.lerp(sourceDirectionAngleRadians, targetDirectionAngleRadians, actionProgress);
         player.directionX = MathUtils.cos(currentAngle);
         player.directionY = MathUtils.sin(currentAngle);
@@ -323,6 +327,16 @@ public class PlayerController {
 
         TouchAction heldAction = touchInputState.getHeldAction();
         TouchAction tapAction  = touchInputState.consumeTapAction();
+
+        // If the player is stunned, any input attempt wastes the turn.
+        if (player.hasActiveStun()) {
+            if (heldAction != TouchAction.NONE || tapAction != TouchAction.NONE) {
+                player.clearStunFlag();
+                if (eventTextSystem != null) eventTextSystem.spawn("STUNNED!");
+                trySkipTurn();
+            }
+            return;
+        }
 
         if (tapAction == TouchAction.OPEN_INVENTORY) {
             if (inventoryToggleCallback != null) inventoryToggleCallback.run();

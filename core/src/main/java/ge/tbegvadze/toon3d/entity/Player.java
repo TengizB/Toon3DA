@@ -7,13 +7,20 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.render.Renderable;
+import ge.tbegvadze.toon3d.status.StatusEffect;
+import ge.tbegvadze.toon3d.status.StatusHost;
+import ge.tbegvadze.toon3d.status.StatusResistance;
+import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.util.ProgressionConstants;
 
-public class Player implements Renderable, Disposable {
+import java.util.EnumMap;
+
+public class Player implements Renderable, Disposable, StatusHost {
 
     public float positionX;
     public float positionY;
@@ -36,6 +43,16 @@ public class Player implements Renderable, Disposable {
      */
     private PlayerStats playerStats;
 
+    // Status effect storage — pre-allocated at construction, never replaced
+    private final EnumMap<StatusType, StatusEffect> activeStatusEffects;
+    private final StatusResistance statusResistance = StatusResistance.defaultResistance();
+
+    /**
+     * Set true by StatusEffectController when STUNNED ticks.
+     * PlayerController reads and clears this on the next pollInput() call with any input.
+     */
+    private boolean isNextActionStunned = false;
+
     public Player(float positionX, float positionY, float directionX, float directionY) {
         this.positionX          = positionX;
         this.positionY          = positionY;
@@ -47,6 +64,98 @@ public class Player implements Renderable, Disposable {
         this.health             = this.maxHealth;
         this.maxArmor           = ItemConstants.PLAYER_MAX_ARMOR;
         this.armor              = 0;
+        this.activeStatusEffects = buildEffectsMap();
+    }
+
+    private static EnumMap<StatusType, StatusEffect> buildEffectsMap() {
+        EnumMap<StatusType, StatusEffect> map = new EnumMap<>(StatusType.class);
+        for (StatusType type : StatusType.values()) {
+            map.put(type, new StatusEffect(type));
+        }
+        return map;
+    }
+
+    // -------------------------------------------------------------------------
+    // StatusHost implementation
+    // -------------------------------------------------------------------------
+
+    @Override
+    public EnumMap<StatusType, StatusEffect> getActiveEffects() { return activeStatusEffects; }
+
+    @Override
+    public StatusResistance getStatusResistance() { return statusResistance; }
+
+    /**
+     * Damage-over-time bypass: skips the AGILITY dodge roll but still applies
+     * armour absorption and TOUGHNESS flat reduction.
+     * Used exclusively by StatusEffectController for Burning / Poison tick damage.
+     */
+    @Override
+    public void applyDoTDamage(int amount) {
+        if (ProgressionConstants.debug) return;
+
+        int armorAbsorbed  = GameMath.armorAbsorb(amount, armor, ItemConstants.ARMOUR_ABSORB_FRACTION);
+        armor              = Math.max(0, armor - armorAbsorbed);
+        int hpBoundDamage  = amount - armorAbsorbed;
+        if (playerStats != null) {
+            int flatReduction = playerStats.getFlatDamageReduction();
+            hpBoundDamage = Math.max(GameBalance.TGH_MIN_DAMAGE, hpBoundDamage - flatReduction);
+        }
+        health = Math.max(0, health - hpBoundDamage);
+        if (damageListener != null && hpBoundDamage > 0) {
+            damageListener.onPlayerDamaged(hpBoundDamage);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Status effect helpers — read by PlayerController and renderers
+    // -------------------------------------------------------------------------
+
+    /** Called by StatusEffectController each turn the STUNNED effect is active. */
+    public void setNextActionStunned(boolean stunned) { this.isNextActionStunned = stunned; }
+
+    /**
+     * Returns true when the player's next action should be blocked by a stun.
+     * PlayerController calls this and clears it when any input is consumed.
+     */
+    public boolean hasActiveStun() { return isNextActionStunned; }
+
+    /** Clears the stun flag after it has been consumed by PlayerController. */
+    public void clearStunFlag() { isNextActionStunned = false; }
+
+    /**
+     * Returns the effective field-of-view radians, accounting for BLINDED override.
+     * World.render() uses this instead of fieldOfViewRadians directly so the BLINDED
+     * FOV clamp takes effect immediately without mutating the base field.
+     */
+    public float getEffectiveFovRadians() {
+        StatusEffect blindEffect = activeStatusEffects.get(StatusType.BLINDED);
+        if (blindEffect != null && blindEffect.isActive()) {
+            return EffectConstants.BLIND_FOV_DEGREES * MathUtils.degreesToRadians;
+        }
+        return fieldOfViewRadians;
+    }
+
+    /**
+     * Returns the action-duration slow multiplier.
+     * 1.0 normally; SLOW_FACTOR (2.0) while SLOWED is active.
+     * PlayerController multiplies its move/rotate duration by this value.
+     */
+    public float getSlowMultiplier() {
+        StatusEffect slowEffect = activeStatusEffects.get(StatusType.SLOWED);
+        return (slowEffect != null && slowEffect.isActive()) ? EffectConstants.SLOW_FACTOR : 1.0f;
+    }
+
+    /**
+     * Returns the empowered outgoing-damage multiplier.
+     * 1.0 normally; scales with EMPOWERED_DAMAGE_PERCENT while the buff is active.
+     */
+    public float getEmpoweredDamageMultiplier() {
+        StatusEffect empoweredEffect = activeStatusEffects.get(StatusType.EMPOWERED);
+        if (empoweredEffect != null && empoweredEffect.isActive()) {
+            return 1.0f + empoweredEffect.getMagnitude() / 100.0f;
+        }
+        return 1.0f;
     }
 
     public void setPlayerDamageListener(PlayerDamageListener listener) {
@@ -140,9 +249,10 @@ public class Player implements Renderable, Disposable {
         armor     = Math.min(maxArmor, armor + amount);
     }
 
-    public boolean isDead() {
-        return health <= 0;
-    }
+    public boolean isDead()  { return health <= 0; }
+
+    @Override
+    public boolean isAlive() { return health > 0; }
 
     public int getHealth()    { return health; }
     public int getMaxHealth() { return maxHealth; }

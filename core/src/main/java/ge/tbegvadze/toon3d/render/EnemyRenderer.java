@@ -15,6 +15,9 @@ import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.enemy.EnemyState;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
+import ge.tbegvadze.toon3d.status.StatusEffect;
+import ge.tbegvadze.toon3d.status.StatusType;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.HashMap;
@@ -246,6 +249,23 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float spriteRed   = GameMath.lerpTowardWhite(baseRed,   hitFlashStrength);
             float spriteGreen = GameMath.lerpTowardWhite(baseGreen, hitFlashStrength);
             float spriteBlue  = GameMath.lerpTowardWhite(baseBlue,  hitFlashStrength);
+
+            // Status tint: blend the dominant active effect color over the sprite.
+            float tintStrength = EffectConstants.ENEMY_STATUS_TINT_STRENGTH;
+            StatusEffect burnEffect   = enemy.getActiveEffects().get(StatusType.BURNING);
+            StatusEffect poisonEffect = enemy.getActiveEffects().get(StatusType.POISONED);
+            if (burnEffect != null && burnEffect.isActive()) {
+                // Orange (1.0, 0.45, 0.0)
+                spriteRed   = GameMath.lerp(spriteRed,   1.00f, tintStrength);
+                spriteGreen = GameMath.lerp(spriteGreen, 0.45f, tintStrength);
+                spriteBlue  = GameMath.lerp(spriteBlue,  0.00f, tintStrength);
+            } else if (poisonEffect != null && poisonEffect.isActive()) {
+                // Green (0.0, 0.80, 0.15)
+                spriteRed   = GameMath.lerp(spriteRed,   0.00f, tintStrength);
+                spriteGreen = GameMath.lerp(spriteGreen, 0.80f, tintStrength);
+                spriteBlue  = GameMath.lerp(spriteBlue,  0.15f, tintStrength);
+            }
+
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             float[] propZBuffer = (propRenderer != null) ? propRenderer.getPropSpriteZBuffer() : null;
