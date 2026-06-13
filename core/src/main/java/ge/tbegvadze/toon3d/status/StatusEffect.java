@@ -21,7 +21,7 @@ public final class StatusEffect {
     /** Who or what applied the effect — used for kill attribution / XP routing on DoT kills. */
     Object source;
 
-    StatusEffect(StatusType type) {
+    public StatusEffect(StatusType type) {
         this.type = type;
     }
 
