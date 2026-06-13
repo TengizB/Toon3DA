@@ -12,11 +12,13 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.Loadout;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.render.Renderable;
+import ge.tbegvadze.toon3d.status.StatusEffect;
+import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
-import ge.tbegvadze.toon3d.world.HudState;
-import ge.tbegvadze.toon3d.util.WeaponConstants;
 import ge.tbegvadze.toon3d.util.HudConstants;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
+import ge.tbegvadze.toon3d.world.HudState;
 
 /**
  * Left-panel HUD: one semi-transparent chrome panel anchored to the bottom-left.
@@ -54,6 +56,19 @@ public class HudRenderer implements Renderable, Disposable {
     private static final Color XP_DARK_GOLD    = new Color(0.220f, 0.160f, 0.010f, 1f);
     private static final Color XP_GOLD         = new Color(1.000f, 0.780f, 0.050f, 1f);
     private static final Color XP_BRIGHT_GOLD  = new Color(1.000f, 0.960f, 0.400f, 1f);
+
+    // Status icon colors — indexed by StatusType ordinal (BURNING=0 POISONED=1 STUNNED=2 BLINDED=3 SLOWED=4 EMPOWERED=5)
+    // BLINDED uses purple instead of black so the icon is visible on the dark HUD panel.
+    private static final float[] STATUS_ICON_RED   = { 1.00f, 0.00f, 1.00f, 0.30f, 0.25f, 0.85f };
+    private static final float[] STATUS_ICON_GREEN = { 0.45f, 0.80f, 1.00f, 0.00f, 0.40f, 0.10f };
+    private static final float[] STATUS_ICON_BLUE  = { 0.00f, 0.15f, 1.00f, 0.50f, 0.70f, 0.00f };
+    private static final StatusType[] STATUS_TYPES = StatusType.values();
+    static {
+        // Fail fast if a new StatusType was added without updating the icon color arrays above.
+        if (STATUS_ICON_RED.length != STATUS_TYPES.length) {
+            throw new IllegalStateException("STATUS_ICON color arrays must match StatusType count");
+        }
+    }
 
     // Weapon slot strip — four icons at bottom-left of left panel
     private static final Color SLOT_ACTIVE_AMBER = new Color(1.000f, 0.720f, 0.000f, 1f);
@@ -149,6 +164,7 @@ public class HudRenderer implements Renderable, Disposable {
         drawClipBarFilled(isDead);
         drawXpBarFilled(isDead);
         if (loadout != null) drawSlotStripFilled(loadout, pulse);
+        if (!isDead) drawStatusIconsFilled();
         shapes.end();
 
         // ---- Pass B: Line ----
@@ -165,6 +181,7 @@ public class HudRenderer implements Renderable, Disposable {
         drawClipLabel(isDead);
         drawXpLabel(isDead);
         if (loadout != null) drawSlotStripText(loadout, isDead);
+        if (!isDead) drawStatusIconsText();
         batch.end();
     }
 
@@ -462,17 +479,16 @@ public class HudRenderer implements Renderable, Disposable {
             stringBuilder.append(slotIndex + 1);
             font.draw(batch, stringBuilder, slotX + 6f, originY + iconHeight - 2f);
 
-            // Full weapon name centred in the slot
+            // Full weapon name centred in the slot — use pre-allocated stringBuilder to avoid allocation
             if (filled && !isDead) {
-                String weaponName = activeLoadout.getSlot(slotIndex).getDisplayName();
-                font.getData().setScale(0.75f);
+                stringBuilder.setLength(0);
+                stringBuilder.append(activeLoadout.getSlot(slotIndex).getDisplayName());
                 font.setColor(isActive ? SLOT_ACTIVE_AMBER : SLOT_NUMBER_DIM);
-                // Use GlyphLayout-free draw; centre by estimating half-width from scale
-                float nameX = slotX + iconWidth / 2f - weaponName.length() * 3.5f;
-                font.draw(batch, weaponName, nameX, originY + iconHeight * 0.40f + font.getLineHeight() / 2f);
-                font.getData().setScale(0.75f);
+                float nameX = slotX + iconWidth / 2f - stringBuilder.length() * 3.5f;
+                font.draw(batch, stringBuilder, nameX, originY + iconHeight * 0.40f + font.getLineHeight() / 2f);
             }
         }
+        font.getData().setScale(0.9f);
     }
 
     // =========================================================================
@@ -494,6 +510,45 @@ public class HudRenderer implements Renderable, Disposable {
     private static Color xpSegmentColor(int segmentIndex) {
         if (segmentIndex <= 9)  return XP_GOLD;
         return XP_BRIGHT_GOLD;
+    }
+
+    // =========================================================================
+    // Status icon row — Pass A (filled squares) and Pass C (turns text)
+    // =========================================================================
+
+    private void drawStatusIconsFilled() {
+        float iconY = HudConstants.HUD_STATUS_ROW_LOCAL_Y;
+        float size  = HudConstants.HUD_STATUS_ICON_SIZE;
+        float gap   = HudConstants.HUD_STATUS_ICON_GAP;
+        int activeCount = 0;
+        for (int typeIndex = 0; typeIndex < STATUS_TYPES.length; typeIndex++) {
+            StatusEffect effect = player.getActiveEffects().get(STATUS_TYPES[typeIndex]);
+            if (effect == null || !effect.isActive()) continue;
+            float drawX = HudConstants.HUD_STATUS_ROW_LOCAL_X + activeCount * (size + gap);
+            shapes.setColor(STATUS_ICON_RED[typeIndex], STATUS_ICON_GREEN[typeIndex],
+                            STATUS_ICON_BLUE[typeIndex], 1f);
+            shapes.rect(drawX, iconY, size, size);
+            activeCount++;
+        }
+    }
+
+    private void drawStatusIconsText() {
+        float iconY = HudConstants.HUD_STATUS_ROW_LOCAL_Y;
+        float size  = HudConstants.HUD_STATUS_ICON_SIZE;
+        float gap   = HudConstants.HUD_STATUS_ICON_GAP;
+        int activeCount = 0;
+        font.getData().setScale(0.6f);
+        font.setColor(Color.WHITE);
+        for (int typeIndex = 0; typeIndex < STATUS_TYPES.length; typeIndex++) {
+            StatusEffect effect = player.getActiveEffects().get(STATUS_TYPES[typeIndex]);
+            if (effect == null || !effect.isActive()) continue;
+            float drawX = HudConstants.HUD_STATUS_ROW_LOCAL_X + activeCount * (size + gap);
+            stringBuilder.setLength(0);
+            stringBuilder.append(effect.getRemainingTurns());
+            font.draw(batch, stringBuilder, drawX + 1f, iconY + size - 1f);
+            activeCount++;
+        }
+        font.getData().setScale(0.9f);
     }
 
     @Override
