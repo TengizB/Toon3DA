@@ -8,7 +8,8 @@ package ge.tbegvadze.toon3d.level;
  */
 public final class EnemySpawnPoint {
 
-    /** '1'=Corruptor, '2'=Vortex Eye, '3'=Ghoul, '4'=Crawler, '5'=Revenant. */
+    /** '1'=Plague Hulk, '2'=Eye Tyrant, '3'=Gore Biter, '4'=Shell Brute, '5'=Mire Wraith,
+     *  '!'=Iron Stalker, '$'=Acid Drone, '^'=Void Shroud. */
     public final char spawnChar;
     public final int  tileColumn;
     public final int  tileRow;

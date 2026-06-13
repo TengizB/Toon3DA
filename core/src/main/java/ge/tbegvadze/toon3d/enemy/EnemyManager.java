@@ -80,15 +80,17 @@ public final class EnemyManager implements EnemyHitTarget {
         for (EnemySpawnPoint spawnPoint : spawnPoints) {
             EnemyType type;
             switch (spawnPoint.spawnChar) {
-                case '1': type = EnemyType.CORRUPTOR;  break;
-                case '2': type = EnemyType.VORTEX_EYE; break;
-                case '3': type = EnemyType.GHOUL;       break;
-                case '4': type = EnemyType.CRAWLER;     break;
-                case '5': type = EnemyType.REVENANT;    break;
-                default:  type = EnemyType.CORRUPTOR;  break;
+                case '1': type = EnemyType.PLAGUE_HULK;   break;
+                case '2': type = EnemyType.EYE_TYRANT;    break;
+                case '3': type = EnemyType.GORE_BITER;    break;
+                case '4': type = EnemyType.SHELL_BRUTE;   break;
+                case '5': type = EnemyType.MIRE_WRAITH;   break;
+                case '!': type = EnemyType.IRON_STALKER;  break;
+                case '$': type = EnemyType.ACID_DRONE;    break;
+                case '^': type = EnemyType.VOID_SHROUD;   break;
+                default:  type = EnemyType.PLAGUE_HULK;   break;
             }
             // Small chance to spawn a lower-level enemy for variety at higher depths.
-            // Gives the player occasional easier encounters so deeper floors feel manageable.
             int effectiveDepth = dungeonDepth;
             if (dungeonDepth > 2) {
                 float roll = spawnVariance.nextFloat();
@@ -168,7 +170,6 @@ public final class EnemyManager implements EnemyHitTarget {
     @Override
     public void applyDamageTo(Object enemyObject, int amount) {
         Enemy enemy = (Enemy) enemyObject;
-        // Snapshot world position before killEnemy() removes the enemy from the list
         float worldX           = enemy.worldCenterX();
         float worldY           = enemy.worldCenterY();
         float heightMultiplier = enemy.type.heightMultiplier();
@@ -186,8 +187,6 @@ public final class EnemyManager implements EnemyHitTarget {
                 killEventListener.onEnemyKilled(enemy.nameTag, xpAwarded);
             }
             killEnemy(enemy);
-            // Fire after killEnemy: enemy position/type are still valid (killEnemy only
-            // mutates the manager's list and occupancy grid, not the Enemy object itself)
             if (impactEventListener != null) {
                 impactEventListener.onEnemyKilled(worldX, worldY, heightMultiplier, totalDamage);
             }
@@ -303,21 +302,22 @@ public final class EnemyManager implements EnemyHitTarget {
                 enemy.state = EnemyState.CHASING;
             }
         } else {
-            // VORTEX EYE — ranged kiting
-            actVortexEye(enemy, playerColumn, playerRow, player, chebyshev);
+            // Ranged kiting — used by EYE_TYRANT, MIRE_WRAITH, ACID_DRONE
+            actRangedEnemy(enemy, playerColumn, playerRow, player, chebyshev);
         }
     }
 
-    private void actVortexEye(Enemy enemy, int playerColumn, int playerRow, Player player, int distanceToPlayer) {
+    private void actRangedEnemy(Enemy enemy, int playerColumn, int playerRow, Player player, int distanceToPlayer) {
+        int rangeLimit = enemy.type.attackRangeTiles();
         boolean hasLOS = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
 
-        if (distanceToPlayer < EnemyConstants.VORTEX_EYE_KITE_MIN_TILES) {
+        if (distanceToPlayer < EnemyConstants.RANGED_KITE_MIN_TILES) {
             // Too close — flee first, then re-evaluate
             stepAway(enemy, playerColumn, playerRow);
             hasLOS = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
             distanceToPlayer = GameMath.chebyshevDistanceTiles(
                     enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
-        } else if (distanceToPlayer <= EnemyConstants.VORTEX_EYE_RANGE_TILES && hasLOS
+        } else if (distanceToPlayer <= rangeLimit && hasLOS
                 && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)) {
             // Perfect kiting range on a cardinal line — hold position and fire; no movement
         } else {
@@ -330,7 +330,7 @@ public final class EnemyManager implements EnemyHitTarget {
                     enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
         }
 
-        boolean canFire = distanceToPlayer <= EnemyConstants.VORTEX_EYE_RANGE_TILES
+        boolean canFire = distanceToPlayer <= rangeLimit
                 && hasLOS
                 && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
                 && !hasEnemyBlockingShot(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
@@ -392,7 +392,6 @@ public final class EnemyManager implements EnemyHitTarget {
 
         if (!moved && EnemyConstants.ENEMY_GREEDY_WIGGLE_ENABLED
                 && enemy.stuckTurns >= EnemyConstants.STUCK_TURNS_BEFORE_WIGGLE) {
-            // Greedy is stuck — try a random legal cardinal step to escape a concave wall
             wiggleStep(enemy, playerColumn, playerRow);
             enemy.stuckTurns = 0;
             return;
@@ -437,7 +436,6 @@ public final class EnemyManager implements EnemyHitTarget {
     }
 
     private void wiggleStep(Enemy enemy, int playerColumn, int playerRow) {
-        // Collect all legal cardinal steps into pre-allocated arrays, pick one at random
         int legalCount = 0;
         for (int directionIndex = 0; directionIndex < 4; directionIndex++) {
             int targetColumn = enemy.tileColumn + STEP_COLUMNS[directionIndex];
@@ -499,8 +497,6 @@ public final class EnemyManager implements EnemyHitTarget {
 
     private void killEnemy(Enemy enemy) {
         occupancy[enemy.tileColumn][enemy.tileRow] = false;
-        // Stamp a drop or corpse decal only on floor tiles and non-critical decals.
-        // Never overwrite stairs, pickups, or keycards — those would be permanently destroyed.
         char currentCell = level.getCell(enemy.tileColumn, enemy.tileRow);
         if (!Level.isStairsDown(currentCell)
                 && !Level.isMedicalPickup(currentCell)
@@ -520,14 +516,16 @@ public final class EnemyManager implements EnemyHitTarget {
         if (dropRandom.nextFloat() >= EnemyConstants.ENEMY_AMMO_DROP_CHANCE) {
             return 'm'; // corpse decal, no item
         }
-        // Each enemy type favours its thematic ammo, with a fallback spread
         switch (type) {
-            case CORRUPTOR:  return '6'; // bullets
-            case VORTEX_EYE: return '8'; // cells  — ranged energy attacker
-            case GHOUL:      return '7'; // shells — brawler
-            case CRAWLER:    return '6'; // bullets — basic
-            case REVENANT:   return '9'; // rockets — heavy
-            default:         return '6';
+            case PLAGUE_HULK:  return '6'; // bullets — basic melee tank
+            case EYE_TYRANT:   return '8'; // cells   — energy-based ranged
+            case GORE_BITER:   return '7'; // shells  — brawler
+            case SHELL_BRUTE:  return '6'; // bullets — heavy charger
+            case MIRE_WRAITH:  return '8'; // cells   — acid ranged
+            case IRON_STALKER: return '6'; // bullets — armored elite
+            case ACID_DRONE:   return '8'; // cells   — mechanical ranged
+            case VOID_SHROUD:  return '6'; // bullets — stealth melee
+            default:           return '6';
         }
     }
 }

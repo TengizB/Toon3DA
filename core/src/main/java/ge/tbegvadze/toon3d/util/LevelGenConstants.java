@@ -20,13 +20,12 @@ public final class LevelGenConstants {
     // Probability that any interior floor tile in a non-entrance room receives a prop.
     public static final float LEVEL_GEN_PROP_CHANCE           = 0.13f;
     public static final int   LEVEL_GEN_MAX_ENEMIES_PER_ROOM  = 3;
-    // Probability that a spawn point produces a Corruptor ('1') vs Vortex Eye ('2').
-    // Cumulative thresholds for enemy type selection (each range maps to one type):
-    //   [0.00, 0.25) → CORRUPTOR   25 % heavy melee
-    //   [0.25, 0.40) → VORTEX_EYE  15 % ranged
-    //   [0.40, 0.60) → GHOUL        20 % light melee
-    //   [0.60, 0.80) → CRAWLER      20 % light melee
-    //   [0.80, 1.00) → REVENANT     20 % light melee
+    // Cumulative thresholds for enemy type selection (each range maps to a spawn digit):
+    //   [0.00, 0.25) → '1' PLAGUE_HULK   25 % slow tank melee
+    //   [0.25, 0.40) → '2' EYE_TYRANT    15 % fast ranged kiter
+    //   [0.40, 0.60) → '3' GORE_BITER    20 % fast light melee
+    //   [0.60, 0.80) → '4' SHELL_BRUTE   20 % heavy charger melee
+    //   [0.80, 1.00) → '5' MIRE_WRAITH   20 % slow hovering ranged
     public static final float LEVEL_GEN_CORRUPTOR_THRESHOLD   = 0.25f;
     public static final float LEVEL_GEN_VORTEX_EYE_THRESHOLD  = 0.40f;
     public static final float LEVEL_GEN_GHOUL_THRESHOLD        = 0.60f;

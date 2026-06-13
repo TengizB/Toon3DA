@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.enemy.Enemy;
@@ -29,15 +30,20 @@ import static ge.tbegvadze.toon3d.util.RenderConstants.*;
  * Two-pass design: pass 1 draws enemy sprites (with hit-flash tint); pass 2 draws
  * health bars (white-pixel texture only, collapses to ~3 texture switches regardless
  * of enemy count). Zero per-frame allocations — all scratch arrays pre-allocated.
+ *
+ * Sprites are sourced from two 2×2 sprite sheets (blight and infernal). Each sheet
+ * is split into four equal TextureRegions at load time; EnemyType maps to its region.
  */
 public final class EnemyRenderer implements Renderable, Disposable {
 
-    private final EnemyManager            enemyManager;
-    private final WallRenderer            wallRenderer;
-    private       PropRenderer            propRenderer  = null;
-    private final Map<EnemyType, Texture> textures;
-    private final Texture                 whitePixelTexture;
-    private final SpriteBatch             batch;
+    private final EnemyManager                  enemyManager;
+    private final WallRenderer                  wallRenderer;
+    private       PropRenderer                  propRenderer  = null;
+    private final Map<EnemyType, TextureRegion> textureRegions;
+    private final Texture                       blightSheetTexture;
+    private final Texture                       infernalSheetTexture;
+    private final Texture                       whitePixelTexture;
+    private final SpriteBatch                   batch;
 
     // Pre-allocated depth-sort scratch arrays — sized at construction to initial enemy count
     private final int[]     sortedIndices;
@@ -73,27 +79,32 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private float alertPulse   = 0f;
 
     public EnemyRenderer(EnemyManager enemyManager, WallRenderer wallRenderer) {
-        this.enemyManager       = enemyManager;
-        this.wallRenderer       = wallRenderer;
-        int initialCount        = enemyManager.getEnemies().size();
-        int scratchSize         = Math.max(1, initialCount);
-        this.sortedIndices      = new int[scratchSize];
-        this.sortedDepths       = new float[scratchSize];
-        this.barLeftPositions   = new float[scratchSize];
-        this.barBottomPositions = new float[scratchSize];
-        this.barWidths          = new float[scratchSize];
-        this.barHeights         = new float[scratchSize];
-        this.barFillFractions   = new float[scratchSize];
-        this.barHealthCurrents  = new int[scratchSize];
-        this.barHealthMaxes     = new int[scratchSize];
-        this.drawBarFlags       = new boolean[scratchSize];
-        this.batch              = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
-        this.textures           = buildTextures();
-        this.whitePixelTexture  = buildWhitePixelTexture();
-        this.nameTagFont        = new BitmapFont();
+        this.enemyManager        = enemyManager;
+        this.wallRenderer        = wallRenderer;
+        int initialCount         = enemyManager.getEnemies().size();
+        int scratchSize          = Math.max(1, initialCount);
+        this.sortedIndices       = new int[scratchSize];
+        this.sortedDepths        = new float[scratchSize];
+        this.barLeftPositions    = new float[scratchSize];
+        this.barBottomPositions  = new float[scratchSize];
+        this.barWidths           = new float[scratchSize];
+        this.barHeights          = new float[scratchSize];
+        this.barFillFractions    = new float[scratchSize];
+        this.barHealthCurrents   = new int[scratchSize];
+        this.barHealthMaxes      = new int[scratchSize];
+        this.drawBarFlags        = new boolean[scratchSize];
+        this.batch               = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
+
+        // Load sprite sheets; fall back to a solid-colour placeholder when the file is absent
+        this.blightSheetTexture   = loadSheetOrFallback(ENEMY_SHEET_BLIGHT_PATH,   0.60f, 0.20f, 0.60f);
+        this.infernalSheetTexture = loadSheetOrFallback(ENEMY_SHEET_INFERNAL_PATH, 0.70f, 0.25f, 0.10f);
+        this.textureRegions       = buildTextureRegions(blightSheetTexture, infernalSheetTexture);
+
+        this.whitePixelTexture    = buildWhitePixelTexture();
+        this.nameTagFont          = new BitmapFont();
         this.nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
-        this.nameTagLayout      = new GlyphLayout();
-        this.hpTextLayout       = new GlyphLayout();
+        this.nameTagLayout        = new GlyphLayout();
+        this.hpTextLayout         = new GlyphLayout();
     }
 
     public void setPlayerState(float worldX, float worldY,
@@ -175,8 +186,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
             drawBarFlags[sortedPosition] = false;
 
-            Texture texture = textures.get(enemy.type);
-            if (texture == null) continue;
+            TextureRegion region = textureRegions.get(enemy.type);
+            if (region == null) continue;
 
             float tileOffsetX = (enemy.worldCenterX() - playerWorldX) / CELL_SIZE;
             float tileOffsetY = (enemy.worldCenterY() - playerWorldY) / CELL_SIZE;
@@ -188,7 +199,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float heightMultiplier   = enemy.type.heightMultiplier();
             float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
             float spriteScreenHeight = fullWallLineHeight * heightMultiplier;
-            float aspectRatio        = (float) texture.getWidth() / texture.getHeight();
+            int   regionWidth        = region.getRegionWidth();
+            int   regionHeight       = region.getRegionHeight();
+            float aspectRatio        = (float) regionWidth / regionHeight;
             float spriteScreenWidth  = spriteScreenHeight * aspectRatio;
 
             int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / 2f);
@@ -197,8 +210,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
             if (columnSpan <= 0) continue;
 
             float drawBottom = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
-            if (enemy.type == EnemyType.VORTEX_EYE) {
-                drawBottom += fullWallLineHeight * VORTEX_EYE_HOVER_OFFSET_FRACTION;
+            // Hovering enemies are shifted upward so they appear to float above the floor
+            if (enemy.type == EnemyType.EYE_TYRANT) {
+                drawBottom += fullWallLineHeight * EYE_TYRANT_HOVER_OFFSET_FRACTION;
+            } else if (enemy.type == EnemyType.MIRE_WRAITH) {
+                drawBottom += fullWallLineHeight * MIRE_WRAITH_HOVER_OFFSET_FRACTION;
             }
             float drawTop = drawBottom + spriteScreenHeight;
 
@@ -206,15 +222,15 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float clampedTop    = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, drawTop);
             if (clampedTop <= clampedBottom) continue;
 
-            int textureWidth  = texture.getWidth();
-            int textureHeight = texture.getHeight();
-            int texSrcY       = GameMath.wallTextureClipSrcY(
+            // Compute vertical clip within the region (srcY = 0 is top of region)
+            int localSrcY    = GameMath.wallTextureClipSrcY(
                                     drawTop, WALL_PROJECTION_SCREEN_HEIGHT,
-                                    spriteScreenHeight, textureHeight);
-            int texSrcHeight  = GameMath.wallTextureClipSrcHeight(
+                                    spriteScreenHeight, regionHeight);
+            int texSrcY      = region.getRegionY() + localSrcY;
+            int texSrcHeight = GameMath.wallTextureClipSrcHeight(
                                     clampedTop, clampedBottom,
-                                    spriteScreenHeight, textureHeight);
-            texSrcHeight = Math.min(texSrcHeight, textureHeight - texSrcY);
+                                    spriteScreenHeight, regionHeight);
+            texSrcHeight = Math.min(texSrcHeight, regionHeight - localSrcY);
             texSrcHeight = Math.max(1, texSrcHeight);
 
             // Base shade: dormant enemies are darker so they visibly "light up" when alerted
@@ -226,8 +242,6 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float baseGreen = baseShade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             float baseBlue  = baseShade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
 
-            // Hit flash: lerp the shade toward white — flashes the sprite silhouette
-            // (SpriteBatch tinting respects per-texel alpha, so only opaque pixels whiten)
             float hitFlashStrength = enemy.getHitFlashStrength();
             float spriteRed   = GameMath.lerpTowardWhite(baseRed,   hitFlashStrength);
             float spriteGreen = GameMath.lerpTowardWhite(baseGreen, hitFlashStrength);
@@ -242,10 +256,12 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                 if (propZBuffer != null && depth >= propZBuffer[screenColumn]) continue;
 
-                int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
-                texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
+                // Map screen column to a pixel x within the region, then offset to sheet coords
+                int localSrcX = (screenColumn - leftScreenColumn) * regionWidth / columnSpan;
+                localSrcX = MathUtils.clamp(localSrcX, 0, regionWidth - 1);
+                int texSrcX = region.getRegionX() + localSrcX;
 
-                batch.draw(texture,
+                batch.draw(region.getTexture(),
                            screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
                            WALL_COLUMN_WIDTH, clampedTop - clampedBottom,
                            texSrcX, texSrcY, 1, texSrcHeight,
@@ -278,8 +294,6 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
         // =====================================================================
         // Pass 2: Health bars (white-pixel texture; single batch, ~3 flushes total)
-        // Drawn over all sprites so near-enemy bars are never hidden by far-enemy bodies.
-        // Per-enemy z-test at the bar's horizontal center keeps bars behind walls.
         // =====================================================================
         boolean anyBarsToRender = false;
         for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
@@ -301,14 +315,12 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 float barHeight    = barHeights[sortedPosition];
                 float fillFraction = barFillFractions[sortedPosition];
 
-                // Single centre-column z-test: bar appears/disappears as enemy rounds a corner
                 int barCenterColumn = (int)(barLeft + barWidth / 2f);
                 if (barCenterColumn < 0 || barCenterColumn >= WALL_PROJECTION_SCREEN_WIDTH) continue;
                 if (depth >= wallRenderer.getZBufferUnchecked(barCenterColumn)) continue;
 
                 float borderPixels = ENEMY_HEALTH_BAR_BORDER_PIXELS;
 
-                // Layer 1: Border/backdrop — semi-transparent dark frame so the bar reads on bright walls
                 batch.setColor(ENEMY_HEALTH_BAR_BORDER_RED, ENEMY_HEALTH_BAR_BORDER_GREEN,
                                ENEMY_HEALTH_BAR_BORDER_BLUE, ENEMY_HEALTH_BAR_BORDER_ALPHA);
                 batch.draw(whitePixelTexture,
@@ -316,13 +328,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
                            barWidth + 2f * borderPixels, barHeight + 2f * borderPixels,
                            0, 0, 1, 1, false, false);
 
-                // Layer 2: Empty track — full-width dark red-gray shows missing health
                 batch.setColor(ENEMY_HEALTH_BAR_TRACK_RED, ENEMY_HEALTH_BAR_TRACK_GREEN,
                                ENEMY_HEALTH_BAR_TRACK_BLUE, 1f);
                 batch.draw(whitePixelTexture, barLeft, barBottom, barWidth, barHeight,
                            0, 0, 1, 1, false, false);
 
-                // Layer 3: Health fill — green→yellow→red gradient, grows from the left
                 float fillWidth = barWidth * fillFraction;
                 if (fillWidth > 0.5f) {
                     GameMath.healthBarColor(fillFraction, barColorRgb);
@@ -331,7 +341,6 @@ public final class EnemyRenderer implements Renderable, Disposable {
                                0, 0, 1, 1, false, false);
                 }
 
-                // Layer 4: HP text — "current/max" centred inside the health bar
                 hpTextBuilder.setLength(0);
                 hpTextBuilder.append(barHealthCurrents[sortedPosition]);
                 hpTextBuilder.append('/');
@@ -344,7 +353,6 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 nameTagFont.draw(batch, hpTextLayout, hpTextX, hpTextY);
                 nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
 
-                // Layer 5: Name tag — level-coloured text above the health bar when close enough
                 Enemy tagEnemy = enemies.get(sortedIndices[sortedPosition]);
                 if (depth <= ENEMY_NAME_TAG_MAX_DISTANCE_TILES && !tagEnemy.nameTag.isEmpty()) {
                     nameTagLayout.setText(nameTagFont, tagEnemy.nameTag);
@@ -378,48 +386,77 @@ public final class EnemyRenderer implements Renderable, Disposable {
     @Override
     public void dispose() {
         batch.dispose();
+        blightSheetTexture.dispose();
+        infernalSheetTexture.dispose();
         whitePixelTexture.dispose();
         nameTagFont.dispose();
-        for (Texture texture : textures.values()) {
-            texture.dispose();
-        }
     }
 
     // -------------------------------------------------------------------------
-    // Texture loading
+    // Texture loading — sprite sheet regions
     // -------------------------------------------------------------------------
 
-    private static Map<EnemyType, Texture> buildTextures() {
-        Map<EnemyType, Texture> map = new HashMap<>();
-        map.put(EnemyType.CORRUPTOR,  loadOrGenerateFallback(ENEMY_CORRUPTOR_PATH,  generateFallback(0.15f, 0.55f, 0.15f)));
-        map.put(EnemyType.VORTEX_EYE, loadOrGenerateFallback(ENEMY_VORTEX_EYE_PATH, generateFallback(0.50f, 0.10f, 0.70f)));
-        map.put(EnemyType.GHOUL,      loadOrGenerateFallback(ENEMY_GHOUL_PATH,       generateFallback(0.65f, 0.60f, 0.40f)));
-        map.put(EnemyType.CRAWLER,    loadOrGenerateFallback(ENEMY_CRAWLER_PATH,     generateFallback(0.40f, 0.25f, 0.15f)));
-        map.put(EnemyType.REVENANT,   loadOrGenerateFallback(ENEMY_REVENANT_PATH,    generateFallback(0.70f, 0.70f, 0.70f)));
+    /**
+     * Splits each 2×2 sprite sheet into four equal TextureRegions and maps them to
+     * the eight EnemyTypes. Regions use pixel (srcX, srcY) coordinates where srcY=0
+     * is the top of the image, matching LibGDX's batch.draw() source convention.
+     */
+    private static Map<EnemyType, TextureRegion> buildTextureRegions(Texture blightSheet,
+                                                                      Texture infernalSheet) {
+        Map<EnemyType, TextureRegion> map = new HashMap<>();
+
+        // Blight sheet (Q1=top-left, Q2=top-right, Q3=bottom-left, Q4=bottom-right)
+        int blightHalfW = blightSheet.getWidth()  / 2;
+        int blightHalfH = blightSheet.getHeight() / 2;
+        map.put(EnemyType.PLAGUE_HULK,  new TextureRegion(blightSheet, 0,          0,          blightHalfW, blightHalfH));
+        map.put(EnemyType.EYE_TYRANT,   new TextureRegion(blightSheet, blightHalfW, 0,          blightHalfW, blightHalfH));
+        map.put(EnemyType.IRON_STALKER, new TextureRegion(blightSheet, 0,          blightHalfH, blightHalfW, blightHalfH));
+        map.put(EnemyType.MIRE_WRAITH,  new TextureRegion(blightSheet, blightHalfW, blightHalfH, blightHalfW, blightHalfH));
+
+        // Infernal sheet
+        int infernalHalfW = infernalSheet.getWidth()  / 2;
+        int infernalHalfH = infernalSheet.getHeight() / 2;
+        map.put(EnemyType.GORE_BITER,   new TextureRegion(infernalSheet, 0,            0,            infernalHalfW, infernalHalfH));
+        map.put(EnemyType.SHELL_BRUTE,  new TextureRegion(infernalSheet, infernalHalfW, 0,            infernalHalfW, infernalHalfH));
+        map.put(EnemyType.ACID_DRONE,   new TextureRegion(infernalSheet, 0,            infernalHalfH, infernalHalfW, infernalHalfH));
+        map.put(EnemyType.VOID_SHROUD,  new TextureRegion(infernalSheet, infernalHalfW, infernalHalfH, infernalHalfW, infernalHalfH));
+
         return map;
     }
 
-    private static Texture loadOrGenerateFallback(String assetPath, Texture fallback) {
+    private static Texture loadSheetOrFallback(String assetPath, float red, float green, float blue) {
         if (Gdx.files.internal(assetPath).exists()) {
-            fallback.dispose();
             Texture loaded = new Texture(Gdx.files.internal(assetPath));
             loaded.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
             return loaded;
         }
-        return fallback;
+        return generateFallbackSheet(red, green, blue);
     }
 
-    private static Texture generateFallback(float red, float green, float blue) {
-        Pixmap pixmap = new Pixmap(64, 96, Pixmap.Format.RGBA8888);
+    private static Texture generateFallbackSheet(float red, float green, float blue) {
+        // 2×2 grid fallback: 128×128 total, each quadrant 64×64 with simple eye pattern
+        Pixmap pixmap = new Pixmap(128, 128, Pixmap.Format.RGBA8888);
         pixmap.setColor(red, green, blue, 1f);
         pixmap.fill();
-        // Simple eyes pattern
         pixmap.setColor(1f, 1f, 0f, 1f);
-        pixmap.fillRectangle(12, 28, 14, 14);
-        pixmap.fillRectangle(38, 28, 14, 14);
+        // Simple eye dots in each quadrant
+        for (int quadrantRow = 0; quadrantRow < 2; quadrantRow++) {
+            for (int quadrantColumn = 0; quadrantColumn < 2; quadrantColumn++) {
+                int offsetX = quadrantColumn * 64;
+                int offsetY = quadrantRow    * 64;
+                pixmap.fillRectangle(offsetX + 12, offsetY + 20, 12, 12);
+                pixmap.fillRectangle(offsetX + 40, offsetY + 20, 12, 12);
+            }
+        }
         pixmap.setColor(0f, 0f, 0f, 1f);
-        pixmap.fillRectangle(16, 32, 6, 6);
-        pixmap.fillRectangle(42, 32, 6, 6);
+        for (int quadrantRow = 0; quadrantRow < 2; quadrantRow++) {
+            for (int quadrantColumn = 0; quadrantColumn < 2; quadrantColumn++) {
+                int offsetX = quadrantColumn * 64;
+                int offsetY = quadrantRow    * 64;
+                pixmap.fillRectangle(offsetX + 15, offsetY + 23, 6, 6);
+                pixmap.fillRectangle(offsetX + 43, offsetY + 23, 6, 6);
+            }
+        }
         Texture texture = new Texture(pixmap);
         texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         pixmap.dispose();

@@ -5,12 +5,14 @@ public final class EnemyConstants {
 
     private EnemyConstants() {}
 
-    // Enemy textures
-    public static final String  ENEMY_CORRUPTOR_PATH             = "textures/enemies/enemy_corruptor.png";
-    public static final String  ENEMY_VORTEX_EYE_PATH            = "textures/enemies/enemy_vortex_eye.png";
-    public static final String  ENEMY_GHOUL_PATH                 = "textures/enemies/enemy_ghoul.png";
-    public static final String  ENEMY_CRAWLER_PATH               = "textures/enemies/enemy_crawler.png";
-    public static final String  ENEMY_REVENANT_PATH              = "textures/enemies/enemy_revenant.png";
+    // Enemy sprite sheet textures — two 2x2 grid sheets, each holding 4 enemy types.
+    // Blight sheet Q1=PLAGUE_HULK, Q2=EYE_TYRANT, Q3=IRON_STALKER, Q4=MIRE_WRAITH.
+    // Infernal sheet Q1=GORE_BITER, Q2=SHELL_BRUTE, Q3=ACID_DRONE, Q4=VOID_SHROUD.
+    public static final String  ENEMY_SHEET_BLIGHT_PATH          = "textures/enemies/enemy_sheet_blight.png";
+    public static final String  ENEMY_SHEET_INFERNAL_PATH        = "textures/enemies/enemy_sheet_infernal.png";
+
+    // Boss texture — not used in regular combat; reserved for the boss encounter.
+    public static final String  ENEMY_BOSS_OVERSEER_PATH         = "textures/enemies/enemy_boss_overseer.png";
 
     // Enemy system — AI and combat
     // Probability (0–1) that a killed enemy drops an ammo pickup on its tile.
@@ -18,20 +20,65 @@ public final class EnemyConstants {
     public static final int     ALERT_RADIUS_TILES               = 4;
     public static final int     CHAIN_ALERT_RADIUS_TILES         = 5;
     public static final int     LOS_MAX_RANGE_TILES              = 16;
-    public static final int     CORRUPTOR_MAX_HEALTH             = 60;
-    public static final int     CORRUPTOR_ATTACK_DAMAGE          = 14;
-    public static final int     CORRUPTOR_MOVE_EVERY_N_TURNS     = 2;
-    public static final float   CORRUPTOR_HEIGHT_MULTIPLIER      = 0.95f;
-    public static final int     VORTEX_EYE_MAX_HEALTH            = 18;
-    public static final int     VORTEX_EYE_ATTACK_DAMAGE         = 8;
-    public static final int     VORTEX_EYE_RANGE_TILES           = 2;
-    public static final int     VORTEX_EYE_KITE_MIN_TILES        = 2;
-    public static final float   VORTEX_EYE_HEIGHT_MULTIPLIER     = 0.55f;
-    public static final float   VORTEX_EYE_HOVER_OFFSET_FRACTION = 0.25f;
-    public static final int     LIGHT_MELEE_MAX_HEALTH           = 18;
-    public static final int     LIGHT_MELEE_ATTACK_DAMAGE        = 10;
-    public static final int     LIGHT_MELEE_MOVE_EVERY_N_TURNS   = 1;
-    public static final float   LIGHT_MELEE_HEIGHT_MULTIPLIER    = 0.85f;
+
+    // PLAGUE_HULK — slow tank melee (spawn '1')
+    public static final int     PLAGUE_HULK_MAX_HEALTH           = 60;
+    public static final int     PLAGUE_HULK_ATTACK_DAMAGE        = 14;
+    public static final int     PLAGUE_HULK_MOVE_EVERY_N_TURNS   = 2;
+    public static final float   PLAGUE_HULK_HEIGHT_MULTIPLIER    = 0.95f;
+
+    // EYE_TYRANT — fast ranged kiter (spawn '2'); hover offset keeps it floating
+    public static final int     EYE_TYRANT_MAX_HEALTH            = 18;
+    public static final int     EYE_TYRANT_ATTACK_DAMAGE         = 8;
+    public static final int     EYE_TYRANT_RANGE_TILES           = 5;
+    public static final int     EYE_TYRANT_KITE_MIN_TILES        = 2;
+    public static final float   EYE_TYRANT_HEIGHT_MULTIPLIER     = 0.55f;
+    public static final float   EYE_TYRANT_HOVER_OFFSET_FRACTION = 0.25f;
+
+    // GORE_BITER — fast light melee (spawn '3')
+    public static final int     GORE_BITER_MAX_HEALTH            = 20;
+    public static final int     GORE_BITER_ATTACK_DAMAGE         = 10;
+    public static final int     GORE_BITER_MOVE_EVERY_N_TURNS    = 1;
+    public static final float   GORE_BITER_HEIGHT_MULTIPLIER     = 0.85f;
+
+    // SHELL_BRUTE — heavy charger melee (spawn '4')
+    public static final int     SHELL_BRUTE_MAX_HEALTH           = 45;
+    public static final int     SHELL_BRUTE_ATTACK_DAMAGE        = 18;
+    public static final int     SHELL_BRUTE_MOVE_EVERY_N_TURNS   = 1;
+    public static final float   SHELL_BRUTE_HEIGHT_MULTIPLIER    = 1.05f;
+
+    // MIRE_WRAITH — slow hovering ranged acid (spawn '5')
+    public static final int     MIRE_WRAITH_MAX_HEALTH           = 70;
+    public static final int     MIRE_WRAITH_ATTACK_DAMAGE        = 12;
+    public static final int     MIRE_WRAITH_RANGE_TILES          = 4;
+    public static final int     MIRE_WRAITH_MOVE_EVERY_N_TURNS   = 2;
+    public static final float   MIRE_WRAITH_HEIGHT_MULTIPLIER    = 0.80f;
+    public static final float   MIRE_WRAITH_HOVER_OFFSET_FRACTION = 0.15f;
+
+    // IRON_STALKER — armored elite, melee + ranged (spawn '!')
+    public static final int     IRON_STALKER_MAX_HEALTH          = 120;
+    public static final int     IRON_STALKER_MELEE_DAMAGE        = 22;
+    public static final int     IRON_STALKER_RANGED_DAMAGE       = 16;
+    public static final int     IRON_STALKER_RANGE_TILES         = 4;
+    public static final int     IRON_STALKER_MOVE_EVERY_N_TURNS  = 1;
+    public static final float   IRON_STALKER_HEIGHT_MULTIPLIER   = 1.10f;
+
+    // ACID_DRONE — ranged mechanical (spawn '$')
+    public static final int     ACID_DRONE_MAX_HEALTH            = 25;
+    public static final int     ACID_DRONE_ATTACK_DAMAGE         = 10;
+    public static final int     ACID_DRONE_RANGE_TILES           = 4;
+    public static final int     ACID_DRONE_MOVE_EVERY_N_TURNS    = 1;
+    public static final float   ACID_DRONE_HEIGHT_MULTIPLIER     = 0.70f;
+
+    // VOID_SHROUD — fast stealth melee (spawn '^')
+    public static final int     VOID_SHROUD_MAX_HEALTH           = 30;
+    public static final int     VOID_SHROUD_ATTACK_DAMAGE        = 12;
+    public static final int     VOID_SHROUD_MOVE_EVERY_N_TURNS   = 1;
+    public static final float   VOID_SHROUD_HEIGHT_MULTIPLIER    = 0.80f;
+
+    // Shared ranged AI — kiting constants reused across ranged types
+    public static final int     RANGED_KITE_MIN_TILES            = 2;
+
     public static final float   DORMANT_SHADE_DAMPEN             = 0.7f;
     public static final int     STUCK_TURNS_BEFORE_WIGGLE        = 2;
     public static final boolean ENEMY_GREEDY_WIGGLE_ENABLED      = true;
