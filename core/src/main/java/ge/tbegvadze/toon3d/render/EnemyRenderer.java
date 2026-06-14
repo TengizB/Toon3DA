@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.render;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
@@ -9,6 +10,7 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.enemy.Enemy;
@@ -47,6 +49,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final Texture                       infernalSheetTexture;
     private final Texture                       whitePixelTexture;
     private final SpriteBatch                   batch;
+    private final ShapeRenderer                 shapeRenderer;
 
     // Pre-allocated depth-sort scratch arrays — sized at construction to initial enemy count
     private final int[]     sortedIndices;
@@ -61,6 +64,12 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final int[]     barHealthCurrents;
     private final int[]     barHealthMaxes;
     private final boolean[] drawBarFlags;
+
+    // Pre-allocated EYE_TYRANT beam cache — parallel to sortedIndices, populated in pass 1
+    private final float[]   beamScreenXs;
+    private final float[]   beamScreenYs;
+    private final float[]   beamStrengths;
+    private final boolean[] drawBeamFlags;
 
     // Reused per-frame colour buffer written by GameMath.healthBarColor — no allocation
     private final float[]   barColorRgb = new float[3];
@@ -96,6 +105,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.barHealthCurrents   = new int[scratchSize];
         this.barHealthMaxes      = new int[scratchSize];
         this.drawBarFlags        = new boolean[scratchSize];
+        this.beamScreenXs        = new float[scratchSize];
+        this.beamScreenYs        = new float[scratchSize];
+        this.beamStrengths       = new float[scratchSize];
+        this.drawBeamFlags       = new boolean[scratchSize];
+        this.shapeRenderer       = new ShapeRenderer();
         this.batch               = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
 
         // Load sprite sheets; fall back to a solid-colour placeholder when the file is absent
@@ -187,7 +201,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float depth      = sortedDepths[sortedPosition];
             Enemy enemy      = enemies.get(enemyIndex);
 
-            drawBarFlags[sortedPosition] = false;
+            drawBarFlags[sortedPosition]  = false;
+            drawBeamFlags[sortedPosition] = false;
+            float attackAnimStrength      = enemy.getAttackAnimStrength();
 
             TextureRegion region = textureRegions.get(enemy.type);
             if (region == null) continue;
@@ -207,6 +223,15 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float aspectRatio        = (float) regionWidth / regionHeight;
             float spriteScreenWidth  = spriteScreenHeight * aspectRatio;
 
+            // Melee lunge: scale sprite up during attack animation
+            float lungeCurve = 0f;
+            if (!enemy.type.isRanged() && attackAnimStrength > 0f) {
+                lungeCurve         = GameMath.attackLungeCurve(attackAnimStrength);
+                float scaleBonus   = 1f + lungeCurve * EffectConstants.ENEMY_LUNGE_SCALE_BONUS;
+                spriteScreenHeight *= scaleBonus;
+                spriteScreenWidth  *= scaleBonus;
+            }
+
             int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / 2f);
             int rightScreenColumn = (int)(screenCenterColumn + spriteScreenWidth / 2f);
             int columnSpan        = rightScreenColumn - leftScreenColumn;
@@ -218,6 +243,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 drawBottom += fullWallLineHeight * EYE_TYRANT_HOVER_OFFSET_FRACTION;
             } else if (enemy.type == EnemyType.MIRE_WRAITH) {
                 drawBottom += fullWallLineHeight * MIRE_WRAITH_HOVER_OFFSET_FRACTION;
+            }
+            // Melee lunge: nudge sprite downward to sell the forward surge
+            if (lungeCurve > 0f) {
+                drawBottom -= fullWallLineHeight * EffectConstants.ENEMY_LUNGE_DROP_FRACTION * lungeCurve;
             }
             float drawTop = drawBottom + spriteScreenHeight;
 
@@ -264,6 +293,22 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 spriteRed   = GameMath.lerp(spriteRed,   0.00f, tintStrength);
                 spriteGreen = GameMath.lerp(spriteGreen, 0.80f, tintStrength);
                 spriteBlue  = GameMath.lerp(spriteBlue,  0.15f, tintStrength);
+            }
+
+            // Telegraph tint: brief danger flash at the instant of attack
+            float telegraphStrength = enemy.getTelegraphStrength();
+            if (telegraphStrength > 0f) {
+                spriteRed   = GameMath.lerp(spriteRed,   EffectConstants.MELEE_TELEGRAPH_R, telegraphStrength);
+                spriteGreen = GameMath.lerp(spriteGreen, EffectConstants.MELEE_TELEGRAPH_G, telegraphStrength);
+                spriteBlue  = GameMath.lerp(spriteBlue,  EffectConstants.MELEE_TELEGRAPH_B, telegraphStrength);
+            }
+
+            // EYE_TYRANT instant beam: cache screen position for pass 3
+            if (enemy.type == EnemyType.EYE_TYRANT && attackAnimStrength > 0f) {
+                beamScreenXs[sortedPosition]  = screenCenterColumn;
+                beamScreenYs[sortedPosition]  = drawBottom + spriteScreenHeight / 2f;
+                beamStrengths[sortedPosition] = attackAnimStrength;
+                drawBeamFlags[sortedPosition] = true;
             }
 
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
@@ -387,6 +432,34 @@ public final class EnemyRenderer implements Renderable, Disposable {
             nameTagFont.setColor(Color.WHITE);
             batch.end();
         }
+
+        // =====================================================================
+        // Pass 3: EYE_TYRANT instant beams (ShapeRenderer, drawn over all sprites)
+        // =====================================================================
+        boolean anyBeams = false;
+        for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+            if (drawBeamFlags[sortedPosition]) { anyBeams = true; break; }
+        }
+        if (anyBeams) {
+            Gdx.gl.glEnable(GL20.GL_BLEND);
+            Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+            shapeRenderer.setProjectionMatrix(camera.combined);
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+            float playerScreenX = WALL_PROJECTION_SCREEN_WIDTH  / 2f;
+            float playerScreenY = WALL_PROJECTION_SCREEN_HEIGHT / 2f;
+            for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+                if (!drawBeamFlags[sortedPosition]) continue;
+                shapeRenderer.setColor(EffectConstants.EYE_TYRANT_BEAM_R,
+                                       EffectConstants.EYE_TYRANT_BEAM_G,
+                                       EffectConstants.EYE_TYRANT_BEAM_B,
+                                       beamStrengths[sortedPosition]);
+                shapeRenderer.rectLine(beamScreenXs[sortedPosition], beamScreenYs[sortedPosition],
+                                       playerScreenX, playerScreenY,
+                                       EffectConstants.ENEMY_PROJECTILE_BEAM_THICKNESS);
+            }
+            shapeRenderer.end();
+            Gdx.gl.glDisable(GL20.GL_BLEND);
+        }
     }
 
     private static void resolveNameTagColor(int dungeonLevel, Color out) {
@@ -406,6 +479,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
     @Override
     public void dispose() {
         batch.dispose();
+        shapeRenderer.dispose();
         blightSheetTexture.dispose();
         infernalSheetTexture.dispose();
         whitePixelTexture.dispose();
