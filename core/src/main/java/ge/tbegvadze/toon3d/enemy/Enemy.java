@@ -5,6 +5,7 @@ import ge.tbegvadze.toon3d.status.StatusHost;
 import ge.tbegvadze.toon3d.status.StatusResistance;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
 
 import java.util.EnumMap;
@@ -32,6 +33,10 @@ public final class Enemy implements StatusHost {
     public int        stuckTurns         = 0;
     /** Wall-clock seconds remaining in the white hit-flash. Purely cosmetic — does not affect simulation. */
     public float      hitFlashTimerSeconds = 0f;
+    /** Wall-clock seconds remaining in the attack animation. Cosmetic only — never affects simulation. */
+    public float      attackAnimTimerSeconds = 0f;
+    /** Wall-clock seconds remaining in the pre-hit telegraph (same-turn flinch). Cosmetic only. */
+    public float      telegraphTimerSeconds = 0f;
 
     /** Dungeon floor on which this enemy spawned (1-based). Used for the name-tag display "Type LVL N". */
     public int        dungeonLevel = 1;
@@ -120,6 +125,36 @@ public final class Enemy implements StatusHost {
     public float getHitFlashStrength() {
         if (EnemyConstants.ENEMY_HIT_FLASH_DURATION_SECONDS <= 0f) return 0f;
         return hitFlashTimerSeconds / EnemyConstants.ENEMY_HIT_FLASH_DURATION_SECONDS;
+    }
+
+    /** Resets the attack animation timer to full duration. Mirrors triggerHitFlash(). */
+    public void triggerAttackAnim() {
+        attackAnimTimerSeconds = EffectConstants.ENEMY_ATTACK_ANIM_DURATION_SECONDS;
+        telegraphTimerSeconds  = EffectConstants.ENEMY_TELEGRAPH_DURATION_SECONDS;
+    }
+
+    /** Advances both attack animation and telegraph timers by deltaTime, clamping at zero. */
+    public void advanceAttackAnim(float deltaTime) {
+        if (attackAnimTimerSeconds > 0f) {
+            attackAnimTimerSeconds -= deltaTime;
+            if (attackAnimTimerSeconds < 0f) attackAnimTimerSeconds = 0f;
+        }
+        if (telegraphTimerSeconds > 0f) {
+            telegraphTimerSeconds -= deltaTime;
+            if (telegraphTimerSeconds < 0f) telegraphTimerSeconds = 0f;
+        }
+    }
+
+    /** Returns attack animation strength in [0, 1]: 1 at trigger, 0 when expired. */
+    public float getAttackAnimStrength() {
+        if (EffectConstants.ENEMY_ATTACK_ANIM_DURATION_SECONDS <= 0f) return 0f;
+        return attackAnimTimerSeconds / EffectConstants.ENEMY_ATTACK_ANIM_DURATION_SECONDS;
+    }
+
+    /** Returns telegraph strength in [0, 1]: 1 at trigger, 0 when expired. */
+    public float getTelegraphStrength() {
+        if (EffectConstants.ENEMY_TELEGRAPH_DURATION_SECONDS <= 0f) return 0f;
+        return telegraphTimerSeconds / EffectConstants.ENEMY_TELEGRAPH_DURATION_SECONDS;
     }
 
     /** True when this enemy's move cooldown allows it to step on the current turn. */
