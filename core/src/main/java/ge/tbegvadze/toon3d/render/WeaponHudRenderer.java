@@ -68,25 +68,31 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     /**
      * Pre-generates normal textures for every weapon in the arsenal.
      * All FrameBuffer work happens here, at startup, before the game loop begins.
+     * Arsenal may be empty when the player starts unarmed (start room); renderer handles null weapon.
      */
     public WeaponHudRenderer(List<Weapon> arsenal) {
         weaponTextureCache = new HashMap<>();
         for (Weapon weapon : arsenal) {
             weaponTextureCache.put(weapon.getClass(), loadOrGenerateNormalTexture(weapon));
         }
-        this.equippedWeapon = arsenal.get(0);
-        this.normalTexture  = weaponTextureCache.get(equippedWeapon.getClass());
+        this.equippedWeapon = arsenal.isEmpty() ? null : arsenal.get(0);
+        this.normalTexture  = (equippedWeapon != null) ? weaponTextureCache.get(equippedWeapon.getClass()) : null;
         this.batch          = new SpriteBatch();
         this.shapeRenderer  = new ShapeRenderer();
         this.drawX          = (Constants.WORLD_WIDTH - WeaponConstants.WEAPON_HUD_WIDTH) / 2f;
     }
 
     /**
-     * Swaps to a different weapon. Looks up the pre-generated texture — no GL operations.
+     * Swaps to a different weapon. Passing null clears the equipped weapon (player is unarmed).
+     * Looks up the pre-generated texture — no GL operations.
      * The weapon sprite slides in from below to signal the switch.
      */
     public void setEquippedWeapon(Weapon weapon) {
-        equippedWeapon      = weapon;
+        equippedWeapon = weapon;
+        if (weapon == null) {
+            normalTexture = null;
+            return;
+        }
         normalTexture       = weaponTextureCache.get(weapon.getClass());
         previousState       = WeaponVisualState.NORMAL;
         animationTimer      = 0f;
@@ -1667,6 +1673,7 @@ public class WeaponHudRenderer implements Renderable, Disposable {
 
     @Override
     public void render(OrthographicCamera camera) {
+        if (equippedWeapon == null) return;
         float deltaTime = Gdx.graphics.getDeltaTime();
         WeaponVisualState state = equippedWeapon.getVisualState();
 

@@ -61,6 +61,13 @@ public final class ItemConstants {
 
     public static final float AMMO_PICKUP_HEIGHT_FRACTION = 0.20f;
 
+    // Start room — starter ammo granted on weapon selection (sufficient for first dungeon floor)
+    public static final int START_ROOM_AMMO_BULLETS  = 120;
+    public static final int START_ROOM_AMMO_SHELLS   = 16;
+    public static final int START_ROOM_AMMO_CELLS    = 60;
+    public static final int START_ROOM_AMMO_SLUGS    = 6;
+    public static final int START_ROOM_AMMO_ROCKETS  = 4;
+
     // Inventory UI overlay — all values in world units; placeholders
     public static final int   INVENTORY_GRID_COLUMNS        = 4;
     public static final float INV_SLOT_SIZE                  = 96f;

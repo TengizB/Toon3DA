@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.input;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 import com.badlogic.gdx.math.MathUtils;
 import ge.tbegvadze.toon3d.door.DoorManager;
@@ -36,18 +37,19 @@ public class PlayerController {
     private final DoorManager doorManager;
     private final PlayerInventory inventory;
 
-    private TickEventBus            tickEventBus          = null;
-    private EnemyManager            enemyManager          = null;
-    private BarrelHitTarget         barrelHitTarget       = null;
-    private LevelTransitionListener transitionListener    = null;
-    private TouchInputState         touchInputState       = null;
-    private EventTextSystem         eventTextSystem       = null;
-    private Runnable                weaponSwitchCallback      = null;
-    private Runnable                inventoryToggleCallback   = null;
-    private Inventory               itemInventory             = null;
-    private Loadout                 loadout                   = null;
-    private PlayerStats             playerStats               = null;
-    private List<GroundItem>        groundItems               = Collections.emptyList();
+    private TickEventBus            tickEventBus                      = null;
+    private EnemyManager            enemyManager                      = null;
+    private BarrelHitTarget         barrelHitTarget                   = null;
+    private LevelTransitionListener transitionListener                = null;
+    private TouchInputState         touchInputState                   = null;
+    private EventTextSystem         eventTextSystem                   = null;
+    private Runnable                weaponSwitchCallback              = null;
+    private Runnable                inventoryToggleCallback           = null;
+    private Inventory               itemInventory                     = null;
+    private Loadout                 loadout                           = null;
+    private PlayerStats             playerStats                       = null;
+    private List<GroundItem>        groundItems                       = Collections.emptyList();
+    private Consumer<GroundItem> weaponGroundItemPickedUpCallback = null;
 
     private ActionState actionState = ActionState.IDLE;
     private float actionProgress = 0f;
@@ -115,7 +117,17 @@ public class PlayerController {
 
     /** Replaces the ground item list; called by World after each level build. */
     public void setGroundItems(List<GroundItem> items) {
-        this.groundItems = (items != null) ? items : Collections.emptyList();
+        this.groundItems = (items != null) ? items : new java.util.ArrayList<>();
+    }
+
+    /**
+     * Registers a callback invoked when a weapon GroundItem is picked up.
+     * When set, the callback receives the removed item and is responsible for
+     * all equip/ammo logic (default ammo-conversion path is skipped).
+     * Pass null to restore default behaviour (ammo conversion).
+     */
+    public void setWeaponGroundItemPickedUpCallback(java.util.function.Consumer<GroundItem> callback) {
+        this.weaponGroundItemPickedUpCallback = callback;
     }
 
     public boolean isIdle() { return actionState == ActionState.IDLE; }
@@ -282,7 +294,15 @@ public class PlayerController {
         }
         if (found == null) return;
         groundItems.remove(found);
-        // Player starts with the full arsenal, so a weapon pickup converts to its ammo type.
+
+        // When a custom handler is registered (e.g. start-room weapon selection), delegate
+        // entirely to that handler — it owns equip, ammo, and despawn-of-unchosen logic.
+        if (weaponGroundItemPickedUpCallback != null) {
+            weaponGroundItemPickedUpCallback.accept(found);
+            return;
+        }
+
+        // Default: player already has the full arsenal, so convert the pickup to its ammo type.
         AmmoType ammoType = weaponItemTypeToAmmoType(found.stack.getType());
         if (ammoType == null) return;
         int amountBefore = itemInventory.countOf(ammoType.getItemType());
