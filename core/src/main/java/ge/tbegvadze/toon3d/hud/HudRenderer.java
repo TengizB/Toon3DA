@@ -14,7 +14,6 @@ import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.render.Renderable;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
-import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
@@ -404,7 +403,7 @@ public class HudRenderer implements Renderable, Disposable {
         float iconHeight  = WeaponConstants.WEAPON_SLOT_ICON_SIZE;
         float iconGap     = WeaponConstants.WEAPON_SLOT_ICON_GAP;
         int   slotCount   = activeLoadout.getSlotCount();
-        float iconWidth   = (Constants.WORLD_WIDTH - 2f * sidePadding - (slotCount - 1) * iconGap) / slotCount;
+        float iconWidth   = (HudConstants.HUD_LEFT_PANEL_WIDTH - 2f * sidePadding - (slotCount - 1) * iconGap) / slotCount;
         int   active      = activeLoadout.getActiveSlotIndex();
 
         for (int slotIndex = 0; slotIndex < slotCount; slotIndex++) {
@@ -439,7 +438,7 @@ public class HudRenderer implements Renderable, Disposable {
         float iconHeight  = WeaponConstants.WEAPON_SLOT_ICON_SIZE;
         float iconGap     = WeaponConstants.WEAPON_SLOT_ICON_GAP;
         int   slotCount   = activeLoadout.getSlotCount();
-        float iconWidth   = (Constants.WORLD_WIDTH - 2f * sidePadding - (slotCount - 1) * iconGap) / slotCount;
+        float iconWidth   = (HudConstants.HUD_LEFT_PANEL_WIDTH - 2f * sidePadding - (slotCount - 1) * iconGap) / slotCount;
         int   active      = activeLoadout.getActiveSlotIndex();
 
         for (int slotIndex = 0; slotIndex < slotCount; slotIndex++) {
@@ -464,7 +463,7 @@ public class HudRenderer implements Renderable, Disposable {
         float iconHeight  = WeaponConstants.WEAPON_SLOT_ICON_SIZE;
         float iconGap     = WeaponConstants.WEAPON_SLOT_ICON_GAP;
         int   slotCount   = activeLoadout.getSlotCount();
-        float iconWidth   = (Constants.WORLD_WIDTH - 2f * sidePadding - (slotCount - 1) * iconGap) / slotCount;
+        float iconWidth   = (HudConstants.HUD_LEFT_PANEL_WIDTH - 2f * sidePadding - (slotCount - 1) * iconGap) / slotCount;
         int   active      = activeLoadout.getActiveSlotIndex();
 
         for (int slotIndex = 0; slotIndex < slotCount; slotIndex++) {

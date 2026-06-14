@@ -173,9 +173,10 @@ public abstract class Weapon {
             ticksRemaining--;
             if (ticksRemaining <= 0) {
                 if (ammoInventory != null && ammoType != null) {
-                    int roundsLoaded = ammoInventory.spend(ammoType.getItemType(), clipSize);
-                    shotsInClip = roundsLoaded;
-                    if (roundsLoaded == 0) {
+                    int bulletsNeeded = clipSize - shotsInClip;
+                    int roundsLoaded  = ammoInventory.spend(ammoType.getItemType(), bulletsNeeded);
+                    shotsInClip += roundsLoaded;
+                    if (shotsInClip == 0) {
                         if (eventTextSystem != null) eventTextSystem.spawn("OUT OF AMMO!");
                     } else {
                         if (eventTextSystem != null) eventTextSystem.spawn("Ready!");

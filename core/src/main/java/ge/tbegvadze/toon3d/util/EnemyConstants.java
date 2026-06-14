@@ -114,16 +114,16 @@ public final class EnemyConstants {
     public static final float   ENEMY_HEALTH_EMPTY_GREEN            = 0.10f;
     public static final float   ENEMY_HEALTH_EMPTY_BLUE             = 0.10f;
 
-    // HP text drawn inside the health bar: "current/max" in near-black for contrast on any fill colour
-    public static final float   ENEMY_HP_TEXT_FONT_SCALE         = 0.45f;
-    public static final float   ENEMY_HP_TEXT_RED                = 0.05f;
-    public static final float   ENEMY_HP_TEXT_GREEN              = 0.05f;
-    public static final float   ENEMY_HP_TEXT_BLUE               = 0.05f;
+    // HP text drawn inside the health bar: "current/max" in white for legibility
+    public static final float   ENEMY_HP_TEXT_FONT_SCALE         = 0.65f;
+    public static final float   ENEMY_HP_TEXT_RED                = 1.00f;
+    public static final float   ENEMY_HP_TEXT_GREEN              = 1.00f;
+    public static final float   ENEMY_HP_TEXT_BLUE               = 1.00f;
 
     // Enemy name tag — shown above health bar only when close enough
     public static final float ENEMY_NAME_TAG_MAX_DISTANCE_TILES = 8f;
     // Name tag font scale applied to the default BitmapFont
-    public static final float ENEMY_NAME_TAG_FONT_SCALE         = 0.65f;
+    public static final float ENEMY_NAME_TAG_FONT_SCALE         = 0.90f;
     // Vertical gap between name tag baseline and top of health bar (screen pixels)
     public static final float ENEMY_NAME_TAG_BAR_GAP            = 4f;
     // Level-tier colors for the name tag text (determined by dungeonLevel at spawn)

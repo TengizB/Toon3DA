@@ -171,6 +171,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // will be wired when the run-setup screen (order_18) is implemented.
         playerStats = new PlayerStats(PlayerStats.Difficulty.MARINE);
         player.setPlayerStats(playerStats);
+        // TOUGHNESS increases maxHealth without auto-healing; heal to full once at run
+        // start so the player always begins with a full HP bar.
+        player.applyHealing(player.getMaxHealth());
 
         itemInventory             = new Inventory();
         inventoryOverlayRenderer  = new InventoryOverlayRenderer(itemInventory);
@@ -302,6 +305,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                                            spawnPoint.weaponItemType, 1));
         }
         propRenderer.setGroundItems(groundItems);
+        levelRenderer.setGroundItems(groundItems);
 
         playerController = new PlayerController(player, targetLevel, doorManager, inventory);
         playerController.setEnemyManager(enemyManager);
