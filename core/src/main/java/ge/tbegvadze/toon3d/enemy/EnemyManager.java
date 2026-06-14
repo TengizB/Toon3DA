@@ -45,7 +45,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private KillXpListener      killXpListener;
     private KillEventListener   killEventListener;
     private DropPlacedListener  dropPlacedListener;
-    private ge.tbegvadze.toon3d.render.EnemyAttackEffectSystem enemyAttackEffects;
+    private EnemyAttackListener enemyAttackListener;
 
     /** Flat damage bonus from player level-up DAMAGE_BOOST choices; added to every hit. */
     private int playerFlatDamageBonus = 0;
@@ -185,9 +185,9 @@ public final class EnemyManager implements EnemyHitTarget {
         this.dropPlacedListener = listener;
     }
 
-    /** Injects the attack effect system so enemy attacks spawn projectile/lunge visuals. */
-    public void setEnemyAttackEffects(ge.tbegvadze.toon3d.render.EnemyAttackEffectSystem system) {
-        this.enemyAttackEffects = system;
+    /** Injects the attack effect listener so enemy attacks spawn projectile/lunge visuals. */
+    public void setEnemyAttackListener(EnemyAttackListener listener) {
+        this.enemyAttackListener = listener;
     }
 
     /**
@@ -253,10 +253,12 @@ public final class EnemyManager implements EnemyHitTarget {
         }
     }
 
-    /** Advances hit-flash timers for all living enemies. Call once per frame from World.update(). */
+    /** Advances hit-flash and attack animation timers for all enemies. Call once per frame from World.update(). */
     public void advanceHitFlash(float deltaTime) {
         for (int index = 0; index < enemies.size(); index++) {
-            enemies.get(index).advanceHitFlash(deltaTime);
+            Enemy enemy = enemies.get(index);
+            enemy.advanceHitFlash(deltaTime);
+            enemy.advanceAttackAnim(deltaTime);
         }
     }
 
@@ -356,6 +358,8 @@ public final class EnemyManager implements EnemyHitTarget {
             if (cardinalAdjacent) {
                 player.applyDamage(enemy.scaledAttackDamage());
                 enemy.state = EnemyState.ATTACKING;
+                enemy.triggerAttackAnim();
+                if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
             } else {
                 if (enemy.shouldMoveThisTurn()) {
                     stepToward(enemy, playerColumn, playerRow);
@@ -398,6 +402,8 @@ public final class EnemyManager implements EnemyHitTarget {
         if (canFire) {
             player.applyDamage(enemy.scaledAttackDamage());
             enemy.state = EnemyState.ATTACKING;
+            enemy.triggerAttackAnim();
+            if (enemyAttackListener != null) enemyAttackListener.onRangedAttack(enemy, playerColumn, playerRow);
             applyRangedAttackStatusEffect(enemy, player);
         } else {
             enemy.state = EnemyState.CHASING;

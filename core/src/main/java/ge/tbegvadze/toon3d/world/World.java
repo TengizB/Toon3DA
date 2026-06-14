@@ -80,6 +80,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private EnemyRenderer          enemyRenderer;
     private LevelRenderer          levelRenderer;
     private EnemyManager           enemyManager;
+    private EnemyAttackEffectSystem enemyAttackEffectSystem;
     private ExplosiveBarrelManager explosiveBarrelManager;
     private TickEventBus           tickEventBus;
     private PlayerController       playerController;
@@ -243,6 +244,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         wallRenderer.dispose();
         propRenderer.dispose();
         enemyRenderer.dispose();
+        enemyAttackEffectSystem.dispose();
         levelRenderer.dispose();
 
         // Reposition player at the new spawn point before rebuilding systems so
@@ -282,6 +284,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 propRenderer.addDynamicProp(tileColumn, tileRow, dropChar));
         explosiveBarrelManager.setImpactEventListener(impactEffectSystem);
         enemyRenderer.setPropRenderer(propRenderer);
+
+        enemyAttackEffectSystem = new EnemyAttackEffectSystem(wallRenderer);
+        enemyManager.setEnemyAttackListener(enemyAttackEffectSystem);
 
         enemyManager.setStatusEffectController(statusEffectController);
 
@@ -437,6 +442,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             equippedWeapon.update(deltaTime);
         }
         enemyManager.advanceHitFlash(deltaTime);
+        enemyAttackEffectSystem.update(deltaTime);
         statusEffectVignetteRenderer.update(deltaTime, player);
         impactEffectSystem.setPlayerState(player.positionX, player.positionY,
                 player.directionX, player.directionY, player.fieldOfViewRadians);
@@ -497,6 +503,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 player.directionX, player.directionY, effectiveFovRadians);
         enemyRenderer.setAlertPulse(currentAlertPulse);
         enemyRenderer.render(camera);
+
+        enemyAttackEffectSystem.setPlayerState(player.positionX, player.positionY,
+                player.directionX, player.directionY, effectiveFovRadians);
+        enemyAttackEffectSystem.render(camera);
 
         impactEffectRenderer.renderWorldEffects(camera);
         weaponHudRenderer.render(camera);
@@ -589,6 +599,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         wallRenderer.dispose();
         propRenderer.dispose();
         enemyRenderer.dispose();
+        enemyAttackEffectSystem.dispose();
         levelRenderer.dispose();
         weaponHudRenderer.dispose();
         hudRenderer.dispose();
