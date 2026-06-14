@@ -1736,6 +1736,49 @@ public final class GameMath {
     }
 
     // =========================================================================
+    // ENEMY ATTACK ANIMATIONS — lunge curve and recoil offset
+    // =========================================================================
+    /*
+     * Formula: attackLungeCurve
+     * Derivation:
+     *   strength decays from 1.0 (instant of attack) to 0.0 (animation complete).
+     *   We want full extension IMMEDIATELY and a smooth ease-back to zero:
+     *     phase = clamp(strength, 0, 1)   (strength IS the linear decay)
+     *   So when strength = 1 (just triggered): phase = 1.0 (full lunge).
+     *   As strength decays toward 0: the lunge eases back out.
+     *   A simple easeOut applied to the strength itself:
+     *     phase = 1 - (1 - strength)^2   gives a fast initial extension and slow ease-back.
+     *   At strength = 1: phase = 1 - 0 = 1.0  (full extension immediately).
+     *   At strength = 0: phase = 1 - 1 = 0.0  (back to neutral).
+     *   At strength = 0.5: phase = 1 - 0.25 = 0.75  (mostly extended mid-way).
+     * Edge cases:
+     *   strength clamped to [0, 1]; output is always in [0, 1].
+     */
+    public static float attackLungeCurve(float strength) {
+        float clampedStrength = Math.max(0f, Math.min(1f, strength));
+        float inverseFraction = 1f - clampedStrength;
+        return 1f - inverseFraction * inverseFraction;
+    }
+
+    /*
+     * Formula: attackRecoilOffset
+     * Derivation:
+     *   The sprite nudges away from the player on fire with a quadratic ease-out:
+     *     offset = strength^2 × maxPixels
+     *   At strength = 1 (just fired): offset = maxPixels.
+     *   As strength decays toward 0: offset reduces quadratically.
+     *   Quadratic gives a strong initial kick that settles back quickly.
+     *   Caller multiplies by a sign to push the sprite in the correct direction.
+     * Edge cases:
+     *   strength clamped to [0, 1]; output is always in [0, maxPixels].
+     *   maxPixels should be positive; negative value reverses direction.
+     */
+    public static float attackRecoilOffset(float strength, float maxPixels) {
+        float clampedStrength = Math.max(0f, Math.min(1f, strength));
+        return clampedStrength * clampedStrength * maxPixels;
+    }
+
+    // =========================================================================
     // PLAY TIME FORMATTER
     // =========================================================================
     /*

@@ -1,0 +1,327 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat / Visual
+TITLE: Enemy Attack Visual Effects & Animations
+CREATED: 2026-06-14
+---
+
+OVERVIEW
+========
+A purely-cosmetic layer that makes every enemy attack legible on the enemy itself.
+Today an enemy attack produces only player-side feedback (red hit vignette + screen
+shake) and the EnemyState.ATTACKING flag is set for exactly one turn — but the enemy
+sprite gives zero sign it just struck you. This feature adds three readable visuals
+driven entirely off that existing ATTACKING flag: a melee LUNGE/SLAM that shoves the
+sprite toward the camera, a ranged PROJECTILE/BEAM that travels from the firing enemy
+to the player, and an optional pre-hit TELEGRAPH (windup glow + scale-up) so a
+prepared player can read the threat. Nothing here touches turn logic, pathfinding,
+LOS, collision, damage, or input. All visuals are real-time wall-clock overlays that
+live and die in under 0.5 seconds, rendered through the existing EnemyRenderer
+billboard pipeline and a small new effect system. No new textures — ShapeRenderer
+geometry, the white-pixel texture EnemyRenderer already owns, and the existing
+BitmapFont only.
+
+This belongs here because combat is mechanically complete but one-sided in its
+feedback: the player sees their own hits land beautifully (enemy-hit-impact-effects)
+and feels their own damage (HitVignetteRenderer), but the demon that bit them looks
+inert. Readability is a core roguelike pillar — "the player should always understand
+why they died." Right now they can't see which enemy hit them, or that two enemies
+hit at once. This closes that gap.
+
+
+GAMEPLAY LOOP
+=============
+This is reactive and cosmetic — the player does not press anything. The trigger is
+the game logic already in EnemyManager.
+
+Per-turn (one player action = one world turn):
+
+1. Player acts (move / rotate / fire / skip) -> World advances one turn ->
+   EnemyManager.phaseB runs every alerted enemy's action.
+
+2. For each enemy that lands an attack this turn, EnemyManager already does:
+       player.applyDamage(enemy.scaledAttackDamage());
+       enemy.state = EnemyState.ATTACKING;
+   (melee ~line 351-352, ranged ~line 393-394).
+
+   ADD, immediately after each of those two ATTACKING assignments:
+       enemy.triggerAttackAnim();                       // melee + ranged
+   and for RANGED only, also spawn the travelling projectile:
+       enemyAttackEffects.spawnProjectile(enemy, playerColumn, playerRow);
+
+3. enemy.triggerAttackAnim() sets enemy.attackAnimTimerSeconds = full duration.
+   The enemy sprite now plays its archetype animation for the next ~0.30s of
+   wall-clock time, independent of turns:
+       - MELEE archetypes  -> LUNGE: sprite scales up + slides toward camera-bottom,
+                              then snaps back (a "shove into your face" slam).
+       - RANGED archetypes -> RECOIL: small backward kick + muzzle flash quad at the
+                              enemy, while the projectile (step 4) flies to the player.
+
+4. RANGED only: spawnProjectile() pushes one EnemyProjectile into a pre-allocated
+   pool. Each frame it lerps its world position from the enemy tile center toward
+   the player position over PROJECTILE_TRAVEL_SECONDS, is billboard-projected to
+   screen by the same math EnemyRenderer uses for sprites, and is drawn as a glowing
+   quad (ACID_DRONE/MIRE_WRAITH) or a single-frame beam line (EYE_TYRANT). On arrival
+   it spawns a tiny impact spark at screen-center-ish and frees itself. It deals NO
+   damage — damage already happened in step 2; this is pure cosmetics catching up.
+
+5. TELEGRAPH (optional, see OPEN QUESTIONS for the gating choice): on the turn an
+   enemy *enters* a state where it will attack next turn, EnemyManager sets
+   enemy.telegraphTimerSeconds. The sprite shows a brief windup (rim glow + 1.08x
+   scale pulse) so the player reads "this thing is about to hit me." Because the sim
+   is turn-based and damage is instant, the honest, non-misleading version of this
+   telegraphs on the SAME turn the attack lands (a "flinch before the slam" within the
+   0.30s window) rather than predicting a future turn. The future-turn version is
+   listed as an open question because it requires a one-turn "winding up, won't hit
+   this turn" behavior change, which crosses out of pure-cosmetic territory.
+
+6. Every frame World.update(deltaTime) calls:
+       for each enemy: enemy.advanceAttackAnim(deltaTime);   // mirrors advanceHitFlash
+       enemyAttackEffects.update(deltaTime);                 // advances projectiles
+   Timers clamp at zero; when attackAnimTimerSeconds hits 0 the sprite renders normally
+   again. The ATTACKING *game state* may already have been overwritten (enemy moves to
+   CHASING next turn) — the animation is driven by the TIMER, not the enum, so it
+   completes smoothly regardless of what the sim does on the following turn.
+
+
+PLAYER EXPERIENCE
+=================
+- Instant readability of "what just hit me." Two PLAGUE_HULKs flanking you now produce
+  two distinct lunges; an EYE_TYRANT across the room now visibly fires a beam down the
+  corridor. The red vignette stops being an anonymous "you got hit somewhere" pulse.
+- The melee LUNGE sells weight and aggression — the Doom-RPG demon literally shoves
+  into your face on the slam. This is the "brutal, immediately readable" voice.
+- The ranged PROJECTILE creates a half-second of dread as the acid glob crosses the
+  room toward you, even though the damage is already locked in. It also teaches the
+  player ranged enemies exist and where they are, encouraging them to break LOS.
+- Decision created (with telegraph): when a sprite winds up, the player learns the
+  rhythm of an archetype and can choose to retreat, strafe to break a cardinal line
+  (defeating ranged fire), or pop a medkit pre-emptively. Even the same-turn flinch
+  version builds a Pavlovian "lunge = I just lost HP, react now" loop.
+- Nothing here punishes the player or changes difficulty — it only makes existing
+  difficulty fair by making it visible.
+
+
+TECHNICAL NOTES
+===============
+No new tile symbols required. No new textures. No turn-logic changes (except two
+one-line trigger calls and optional telegraph flag — all cosmetic side effects).
+
+--- Files to MODIFY ---
+
+1) entity-side state lives on the enemy, mirroring the existing hit-flash fields.
+   FILE: enemy/Enemy.java
+   ADD fields:
+       /** Wall-clock seconds remaining in the attack animation. Cosmetic only. */
+       public float attackAnimTimerSeconds  = 0f;
+       /** Wall-clock seconds remaining in the pre-hit telegraph. Cosmetic only. */
+       public float telegraphTimerSeconds   = 0f;
+   ADD methods (copy the shape of triggerHitFlash / advanceHitFlash / getHitFlashStrength):
+       public void  triggerAttackAnim();        // = EffectConstants.ENEMY_ATTACK_ANIM_DURATION_SECONDS
+       public void  advanceAttackAnim(float deltaTime);   // decrement both timers, clamp >= 0
+       public float getAttackAnimStrength();    // timer / duration, in [0,1]; 0 when idle
+       public void  triggerTelegraph();         // = EffectConstants.ENEMY_TELEGRAPH_DURATION_SECONDS
+       public float getTelegraphStrength();     // timer / duration, in [0,1]
+   getAttackAnimStrength() returns 1 at the instant of attack and decays to 0 — feed it
+   straight into the curve helpers below.
+
+2) FILE: enemy/EnemyManager.java
+   - actEnemy() melee branch (~line 352): after `enemy.state = EnemyState.ATTACKING;`
+     add `enemy.triggerAttackAnim();`
+   - actRangedEnemy() (~line 394): after `enemy.state = EnemyState.ATTACKING;` add
+       `enemy.triggerAttackAnim();`
+       `if (enemyAttackEffects != null)
+            enemyAttackEffects.spawnProjectile(enemy, playerColumn, playerRow);`
+   - ADD a non-owning field `private EnemyAttackEffectSystem enemyAttackEffects;` plus a
+     setter `setEnemyAttackEffects(...)` (World wires it, same pattern as how renderers
+     are injected elsewhere). Keep null-guarded so headless tests pass.
+   - (Telegraph, optional) where an enemy is determined to be in attack position, call
+     `enemy.triggerTelegraph();` — see OPEN QUESTIONS for which version.
+
+3) FILE: render/EnemyRenderer.java  (the LUNGE / RECOIL / telegraph sprite warp)
+   In pass 1, after computing screenCenterColumn / spriteScreenHeight / drawBottom and
+   BEFORE the column draw loop, fold in the animation transforms:
+       float attackStrength = enemy.getAttackAnimStrength();   // [0,1], 0 = idle
+       float telegraphStrength = enemy.getTelegraphStrength();
+   For MELEE types (!enemy.type.isRanged()):
+       float lungePhase = GameMath.attackLungeCurve(attackStrength);          // 0..1..0 arc
+       float scaleBoost = 1f + lungePhase * EffectConstants.ENEMY_LUNGE_SCALE_BONUS;
+       float verticalDrop = lungePhase * fullWallLineHeight
+                            * EffectConstants.ENEMY_LUNGE_DROP_FRACTION;       // slide toward bottom
+       // apply: spriteScreenHeight *= scaleBoost; spriteScreenWidth *= scaleBoost;
+       //        drawBottom -= verticalDrop;  (recompute leftScreenColumn/rightScreenColumn/drawTop)
+   For RANGED types: apply a small RECOIL using GameMath.attackRecoilOffset(attackStrength)
+       — nudge screenCenterColumn away from the player a few px and add a brief muzzle-flash
+       quad (white-pixel, additive-ish tint) at the sprite center for the first
+       MUZZLE_FLASH_FRACTION of the window.
+   For TELEGRAPH on any type: scale by (1f + telegraphStrength * ENEMY_TELEGRAPH_SCALE_BONUS)
+       and additively brighten the sprite tint toward the archetype warning color
+       (reuse the existing spriteRed/Green/Blue tint pipeline — add a telegraph term right
+       after the status-tint block, before batch.setColor).
+   IMPORTANT: all of this is per-frame arithmetic on already-pre-allocated locals — no new
+   allocations. The muzzle flash uses the existing whitePixelTexture and the existing batch.
+
+4) NEW FILE: render/EnemyAttackEffectSystem.java   (package ...toon3d.render)
+   Owns the projectile pool and (optionally) muzzle/impact sparks. Mirrors
+   ImpactEffectSystem's pooled, zero-alloc design.
+       - Pre-allocate EnemyProjectile[] pool of size ENEMY_PROJECTILE_POOL_SIZE in ctor.
+       - spawnProjectile(Enemy enemy, int playerColumn, int playerRow): find a free slot,
+         set fromWorldX/Y = enemy.worldCenterX/Y(), toWorldX/Y = player tile center,
+         lifeSeconds = PROJECTILE_TRAVEL_SECONDS, type = enemy.type, active = true.
+         If pool is full, overwrite the oldest (graceful, never allocates).
+       - update(float deltaTime): advance each active projectile's elapsed; deactivate
+         when elapsed >= lifeSeconds.
+       - render(...) (implements Renderable + Disposable): needs the same player/plane
+         state EnemyRenderer has, so add a setPlayerState(...) identical in signature to
+         EnemyRenderer.setPlayerState. For each active projectile compute current world
+         pos = lerp(from, to, elapsed/life), convert to tileOffset, call
+         GameMath.spriteScreenColumnCenter / spriteScreenHeight for the on-screen point,
+         and draw a glowing quad (EnemyRenderer's whitePixelTexture is private — give this
+         class its OWN 1x1 white-pixel texture built in ctor and disposed in dispose()).
+         Z-occlude against WallRenderer.getZBufferUnchecked(column) using the projectile's
+         current depth so it disappears behind walls correctly.
+       - NEW data class (nested or sibling) EnemyProjectile: floats fromX,fromY,toX,toY,
+         elapsed, lifeSeconds; EnemyType type; boolean active. Plain mutable struct, reused.
+
+5) FILE: world/World.java
+   - Construct EnemyAttackEffectSystem (after WallRenderer exists), inject into EnemyManager
+     via setEnemyAttackEffects(...), and call its setPlayerState(...) each frame next to the
+     existing EnemyRenderer.setPlayerState call.
+   - In update(deltaTime): call enemyAttackEffects.update(deltaTime) and, in the existing
+     per-enemy loop that calls advanceHitFlash, also call enemy.advanceAttackAnim(deltaTime).
+   - In render order: draw EnemyAttackEffectSystem AFTER EnemyRenderer (step 4 in the render
+     list) and BEFORE WeaponHudRenderer, so projectiles draw over enemies but under the
+     weapon/HUD. The LUNGE/RECOIL warp itself is inside EnemyRenderer so needs no new slot.
+   - dispose() the new system.
+
+--- GameMath additions (each with the mandatory comment block) ---
+
+   attackLungeCurve(float strength) -> float in [0,1]
+       Formula: symmetric lunge arc. The slam should ramp OUT fast and settle BACK.
+       Derivation: phase = sin(pi * strength) gives 0 at strength=0, 1 at strength=0.5,
+       0 at strength=1 — but strength DECAYS from 1->0, so as the timer winds down the
+       sprite goes 0 (just hit, full) ... wait: we want full extension at the START.
+       Use phase = sin(pi/2 * clamp01(strength*2 ... )). Simpler honest version:
+       phase = (strength >= 0.5f) ? (2f*(1f-strength)) : 1f  -> snaps to full extension
+       immediately at trigger (strength=1 -> 0), holds near full early, eases back to 0.
+       Choose the easing the implementer prefers; document whichever you ship.
+       Edge cases: clamp input to [0,1]; output never exceeds 1.
+
+   attackRecoilOffset(float strength) -> float (signed pixel magnitude in [0, MAX])
+       Formula: recoil = strength * strength * MAX_RECOIL_PIXELS (quadratic ease-out as
+       timer decays). Caller multiplies by the away-from-player screen direction sign.
+       Edge cases: clamp strength to [0,1].
+
+   lerp(...) and clamp already exist — reuse for projectile position and strength clamps.
+
+--- EffectConstants.java additions (placeholder values — TUNE) ---
+   ENEMY_ATTACK_ANIM_DURATION_SECONDS   = 0.30f
+   ENEMY_LUNGE_SCALE_BONUS              = 0.35f   // melee sprite grows up to +35%
+   ENEMY_LUNGE_DROP_FRACTION            = 0.18f   // slides down 18% of wall height toward camera
+   ENEMY_RECOIL_MAX_PIXELS              = 14f     // ranged backward kick
+   ENEMY_MUZZLE_FLASH_FRACTION          = 0.45f   // first 45% of window shows the flash
+   ENEMY_MUZZLE_FLASH_SIZE_FRACTION     = 0.30f   // flash quad size vs sprite width
+   ENEMY_PROJECTILE_POOL_SIZE           = 16
+   ENEMY_PROJECTILE_TRAVEL_SECONDS      = 0.22f
+   ENEMY_PROJECTILE_SIZE_PIXELS         = 22f     // glowing quad base size at 1-tile depth
+   ENEMY_PROJECTILE_BEAM_THICKNESS_PX   = 6f      // EYE_TYRANT beam line thickness
+   ENEMY_TELEGRAPH_DURATION_SECONDS     = 0.25f
+   ENEMY_TELEGRAPH_SCALE_BONUS          = 0.08f
+   ENEMY_TELEGRAPH_RIM_ALPHA            = 0.55f
+   // archetype projectile colors (r,g,b) — see VISUAL DESIGN table
+   ACID_DRONE_PROJECTILE_R/G/B, MIRE_WRAITH_PROJECTILE_R/G/B, EYE_TYRANT_BEAM_R/G/B
+
+
+VISUAL DESIGN
+=============
+Melee LUNGE (PLAGUE_HULK, GORE_BITER, SHELL_BRUTE, IRON_STALKER, VOID_SHROUD):
+   - Sprite scales up to +35% and slides ~18% of wall-height downward (toward the
+     camera's lower edge) on trigger, then eases back over 0.30s. Reads as a forward
+     shove. The existing white hit-flash on the enemy is unrelated (that's when YOU
+     hit IT); the lunge has no white flash — instead a brief dark-red rim is acceptable
+     via the tint pipeline if extra punch is wanted (optional, gate behind a constant).
+   - VOID_SHROUD variant: lower scale bonus (it's a phasing wraith) — give it a slightly
+     translucent flicker by dipping alpha during the lunge (optional polish).
+
+Ranged PROJECTILE / BEAM:
+   - ACID_DRONE:  bright acid-green glowing quad (~1.0, 0.85, 0.1 core fading to
+     0.2,0.8,0.15 edge). Travels in 0.22s. Small green splat spark on arrival.
+   - MIRE_WRAITH: sickly purple-green glob (0.55, 0.25, 0.6). Same travel. Pairs
+     thematically with its POISONED application.
+   - EYE_TYRANT:  hovering tyrant fires a BEAM, not a glob — a single-frame thick red
+     line (1.0, 0.15, 0.1) from enemy screen-point to player screen-point that fades
+     over the 0.30s anim window (alpha = getAttackAnimStrength()). No travel lerp; it's
+     an instant lance. Add a brief white core down the beam center for heat.
+   - All ranged enemies also get the RECOIL kick + a yellow-white muzzle-flash quad at
+     the sprite for the first 45% of the window.
+
+Muzzle flash: whitePixelTexture quad, size = spriteScreenWidth * 0.30, centered on the
+sprite, color = warm white (1, 0.9, 0.6) with alpha = lunge-window envelope. Additive
+look achieved by drawing bright over the sprite (no blend-mode change needed; keep it
+simple and opaque-bright, or set batch additive only around this draw if desired).
+
+Telegraph: a rim-glow ring is not feasible cheaply per-pixel; instead brighten the whole
+sprite toward the archetype warning color (melee = deep red 0.9,0.2,0.15; ranged = the
+projectile color) at ENEMY_TELEGRAPH_RIM_ALPHA, plus the small +8% scale pulse. Reads as
+"charging up."
+
+Depth/occlusion: projectiles and beams MUST respect WallRenderer.getZBufferUnchecked so a
+glob vanishes when it passes behind a pillar. The lunge warp inherits EnemyRenderer's
+existing per-column z-test for free.
+
+
+BALANCE NOTES
+=============
+- Everything is cosmetic; "balance" = readability vs. visual noise. All numbers above
+  are PLACEHOLDERS.
+- Durations deliberately < 0.5s so visuals never bleed into the next turn's animation
+  budget (player move/rotate = 0.12s; a 0.30s attack anim spans ~2-3 quick actions and
+  that's fine because it's timer-driven, not turn-driven).
+- LUNGE_SCALE_BONUS above ~0.5 starts clipping the sprite off-screen at point-blank;
+  cap at 0.4 unless playtesting wants more menace.
+- With many enemies attacking the same turn (a swarm), multiple lunges + projectiles
+  fire at once. Pool size 16 covers worst case; overflow overwrites oldest gracefully.
+- PROJECTILE_TRAVEL_SECONDS shorter than ATTACK_ANIM keeps the muzzle flash and arrival
+  spark overlapping nicely. Keep travel <= anim duration.
+- Telegraph duration should be short; a long windup on a turn-based game feels laggy.
+
+
+INTERACTIONS
+============
+1. HitVignetteRenderer (player damage): fires the SAME turn as the enemy lunge/beam.
+   Tune timings so the red vignette pulse peaks as the melee lunge reaches full extension
+   / as the beam lands — they should read as one combined "I got hit by THAT" moment.
+2. enemy-hit-impact-effects (ImpactEffectSystem): independent and non-conflicting — that
+   system fires when the PLAYER hits an enemy (white flash, damage numbers). This new
+   system fires when an ENEMY hits the player. They can co-occur (you shoot a Hulk the
+   same turn it bites you) and must not fight over batch/color state — each owns its own
+   batch begin/end, exactly like the existing renderers.
+3. status-effects system: MIRE_WRAITH/ACID_DRONE already roll POISONED on a ranged hit
+   (applyRangedAttackStatusEffect). The projectile's arrival visually justifies the green
+   status tint that then appears on the player — wire the poison-applied moment to the
+   projectile ARRIVAL if you want the cause/effect to line up (cosmetic only).
+4. EnemyState.DORMANT shading: dormant enemies are dimmed; they never attack, so they
+   never lunge — no conflict. ALERTED/CHASING enemies that DON'T attack a given turn show
+   no animation, which keeps the lunge meaningful (only attackers move).
+5. sentry-turret idea (if built): a stationary turret is ranged — it would reuse
+   spawnProjectile/beam directly with zero extra work.
+
+
+OPEN QUESTIONS
+==============
+1. TELEGRAPH gating: same-turn flinch (pure cosmetic, honest but reactive) vs. true
+   one-turn-ahead windup (enemy "charges" on turn N, hits on turn N+1). The latter
+   changes enemy behavior (a turn where it could have hit but doesn't) — that's a
+   game-feel/difficulty change, not pure cosmetics. RECOMMEND shipping the same-turn
+   flinch first; promote to true windup only via a deliberate design+balance pass.
+2. EYE_TYRANT beam: single-frame instant lance (recommended, cheap, reads as a hitscan)
+   vs. a fast travelling bolt. Lance fits the "tyrant eye laser" fantasy better.
+3. Should the melee lunge also nudge the player's HitVignette intensity per-attacker
+   (bigger enemy = stronger vignette), or keep vignette purely damage-driven? Likely
+   keep separate to avoid coupling.
+4. Muzzle flash blend mode: plain bright-opaque (simplest, zero state change) vs. true
+   additive (prettier, needs setBlendFunction toggle + restore). Start plain.
+5. Do we want a faint directional indicator when the attacker is OFF-SCREEN (you got hit
+   from behind)? Out of scope here — a separate "directional damage indicator" idea —
+   but flag it because off-screen attackers currently produce no enemy-side visual at all.
+6. Pool overflow policy: overwrite-oldest (recommended) vs. drop-new. Overwrite-oldest
+   guarantees the most recent attack is always shown.

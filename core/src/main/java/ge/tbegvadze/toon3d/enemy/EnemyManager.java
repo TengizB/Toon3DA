@@ -45,6 +45,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private KillXpListener      killXpListener;
     private KillEventListener   killEventListener;
     private DropPlacedListener  dropPlacedListener;
+    private ge.tbegvadze.toon3d.render.EnemyAttackEffectSystem enemyAttackEffects;
 
     /** Flat damage bonus from player level-up DAMAGE_BOOST choices; added to every hit. */
     private int playerFlatDamageBonus = 0;
@@ -182,6 +183,11 @@ public final class EnemyManager implements EnemyHitTarget {
     /** Notified when a drop tile is stamped on the grid so renderers can display it immediately. */
     public void setDropPlacedListener(DropPlacedListener listener) {
         this.dropPlacedListener = listener;
+    }
+
+    /** Injects the attack effect system so enemy attacks spawn projectile/lunge visuals. */
+    public void setEnemyAttackEffects(ge.tbegvadze.toon3d.render.EnemyAttackEffectSystem system) {
+        this.enemyAttackEffects = system;
     }
 
     /**

@@ -82,4 +82,40 @@ public final class EffectConstants {
     // Enemy attack status-effect application chances (0..1)
     public static final float MIRE_WRAITH_POISON_CHANCE     = 0.60f;
     public static final float ACID_DRONE_POISON_CHANCE      = 0.75f;
+
+    // Enemy attack animations — purely cosmetic, timer-driven (wall-clock, not turn-driven)
+    public static final float ENEMY_ATTACK_ANIM_DURATION_SECONDS  = 0.30f;
+    // Melee lunge: sprite grows and slides toward the camera bottom
+    public static final float ENEMY_LUNGE_SCALE_BONUS             = 0.35f;   // +35% sprite size at peak
+    public static final float ENEMY_LUNGE_DROP_FRACTION           = 0.18f;   // slide down 18% of wall height
+    // Ranged recoil kick: sprite nudges away from the player on fire
+    public static final float ENEMY_RECOIL_MAX_PIXELS             = 14f;
+    // Muzzle flash quad: warm-white overlay at the firing sprite center
+    public static final float ENEMY_MUZZLE_FLASH_FRACTION         = 0.45f;   // shown for first 45% of anim
+    public static final float ENEMY_MUZZLE_FLASH_SIZE_FRACTION    = 0.30f;   // flash quad is 30% of sprite width
+    // Pre-hit telegraph: brief scale+tint pulse on the turn the attack lands
+    public static final float ENEMY_TELEGRAPH_DURATION_SECONDS    = 0.25f;
+    public static final float ENEMY_TELEGRAPH_SCALE_BONUS         = 0.08f;
+    public static final float ENEMY_TELEGRAPH_RIM_ALPHA           = 0.55f;
+    // Ranged projectile pool
+    public static final int   ENEMY_PROJECTILE_POOL_SIZE          = 16;
+    public static final float ENEMY_PROJECTILE_TRAVEL_SECONDS     = 0.22f;
+    public static final float ENEMY_PROJECTILE_BASE_SIZE          = 22f;     // world units at 1-tile depth
+    public static final float ENEMY_PROJECTILE_BEAM_THICKNESS     = 6f;      // EYE_TYRANT beam
+    // ACID_DRONE projectile color (bright acid green)
+    public static final float ACID_DRONE_PROJECTILE_R             = 1.0f;
+    public static final float ACID_DRONE_PROJECTILE_G             = 0.85f;
+    public static final float ACID_DRONE_PROJECTILE_B             = 0.10f;
+    // MIRE_WRAITH projectile color (sickly purple-green)
+    public static final float MIRE_WRAITH_PROJECTILE_R            = 0.55f;
+    public static final float MIRE_WRAITH_PROJECTILE_G            = 0.25f;
+    public static final float MIRE_WRAITH_PROJECTILE_B            = 0.60f;
+    // EYE_TYRANT beam color (hot red lance)
+    public static final float EYE_TYRANT_BEAM_R                   = 1.0f;
+    public static final float EYE_TYRANT_BEAM_G                   = 0.15f;
+    public static final float EYE_TYRANT_BEAM_B                   = 0.10f;
+    // Melee telegraph warning color (deep red)
+    public static final float MELEE_TELEGRAPH_R                   = 0.90f;
+    public static final float MELEE_TELEGRAPH_G                   = 0.20f;
+    public static final float MELEE_TELEGRAPH_B                   = 0.15f;
 }
