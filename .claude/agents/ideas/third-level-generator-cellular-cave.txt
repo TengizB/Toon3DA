@@ -1,0 +1,439 @@
+STATUS: IMPLEMENTED
+CATEGORY: Level Design / Systems
+TITLE: Third Level Generator — Cellular Automata Cave (Breach Caverns)
+---
+
+## OVERVIEW
+
+A third procedural generator, `CavernGenerator`, that abandons rectangular rooms and
+straight corridors entirely. It seeds the grid with random noise and runs cellular-
+automata smoothing passes to grow organic, blobby cave systems — the demonic breach
+has eaten through the UAC facility, fusing flesh and rock into a writhing burrow.
+Where `LevelGenerator` reads as a sterile lab and `LinearCorridorGenerator` reads as a
+military spine, `CavernGenerator` reads as a wound: no right angles, no symmetry, walls
+that bulge and pinch. The player can tell which generator they are in within one second
+of looking at the mini-map.
+
+It implements the shared `ILevelGenerator` interface (single `Level generate()`), so
+`World.pickGenerator()` only needs one new branch. It reuses the existing Room type
+system by carving a small number of rectangular "chamber" rooms INTO the cave after the
+caves are grown — these chambers are the only places where the lab still has structure,
+which makes the contrast (organic cave -> man-made room) a deliberate narrative beat.
+
+---
+
+## WHY THIS IS SPATIALLY DISTINCT (the one-glance test)
+
+| Marker | Scatter (gen 1) | Linear Spine (gen 2) | Cavern (gen 3) |
+|--------|-----------------|----------------------|----------------|
+| Wall outlines | rectangles | one long rectangle + ribs | irregular blobs, no straight runs |
+| Corridors | thin L-shaped | one wide central hall | none — open winding caverns |
+| Symmetry | none, but boxy | bilateral about spine | fully organic |
+| Dead ends | rare | rib rooms | many pockets and alcoves |
+| Open floor shape | tiled rectangles | grid hall | amoeba-like connected mass |
+| Wall texture feel | clean lab walls | emergency-strip corridors | gore 'G' / rust 'j' heavy |
+
+On the mini-map the difference is unmistakable: caverns have no straight wall segments
+longer than a few tiles, while both other generators are dominated by long straight lines.
+
+---
+
+## COMMON INTERFACE (already defined by gen 2)
+
+`CavernGenerator` implements `ge.tbegvadze.toon3d.level.ILevelGenerator`:
+
+    public class CavernGenerator implements ILevelGenerator {
+        public CavernGenerator(long seed) { ... }
+        public CavernGenerator(long seed, LevelGenConfig config) { ... }
+        public Level generate() { ... }
+    }
+
+### Selection wiring in World.pickGenerator()
+
+Extend the existing 2-way roll to 3-way (equal weight). Use the seed-derived RNG already
+established by gen 2 so selection stays reproducible and does not consume generator entropy:
+
+    private static ILevelGenerator pickGenerator(long seed) {
+        Random selectionRandom = new Random(seed ^ 0xDEADBEEFL);
+        int choice = selectionRandom.nextInt(3);   // 0,1,2 equal weight
+        switch (choice) {
+            case 0:  return new LevelGenerator(seed);
+            case 1:  return new LinearCorridorGenerator(seed);
+            default: return new CavernGenerator(seed);
+        }
+    }
+
+---
+
+## ALGORITHM — PHASE BY PHASE
+
+Grid is 80 columns x 45 rows. (0,0) = bottom-left, Y-up. Wall char default 'x', floor ' '.
+Naming follows project conventions (tileColumn / tileRow, no single letters).
+
+### Phase 0 — Noise Seed
+
+1. Allocate `boolean[ROW][COLUMN] solid` (true = wall).
+2. Force the outer border (column 0, column 79, row 0, row 44) to solid = true. The
+   border stays solid through every pass so the cave can never open onto the map edge.
+3. For every interior cell, set solid = true with probability
+   `LEVEL_GEN_CAVE_FILL_PROBABILITY` (default 0.45). Otherwise floor.
+
+   Rationale: 0.45 is the classic CA cave seed density. Below ~0.40 you get one giant
+   open blob; above ~0.50 you get disconnected specks. 0.45 gives chunky islands that
+   merge into a connected cavern after smoothing.
+
+### Phase 1 — Cellular Automata Smoothing
+
+Run `LEVEL_GEN_CAVE_SMOOTH_PASSES` passes (default 5). Each pass writes to a SECOND
+buffer then swaps (never mutate the buffer you are reading — that biases growth).
+
+For each interior cell count `wallNeighbourCount` = number of solid cells in the 8-cell
+Moore neighbourhood (treat out-of-bounds as solid). Apply the 4-5 rule:
+
+    if (wallNeighbourCount >= LEVEL_GEN_CAVE_BIRTH_LIMIT)  next = solid   // default >= 5
+    else if (wallNeighbourCount < LEVEL_GEN_CAVE_DEATH_LIMIT) next = floor // default < 4
+    else next = current                                                    // 4 = stable
+
+After all passes, optionally run `LEVEL_GEN_CAVE_FINAL_FILL_PASSES` (default 1) extra
+passes using ONLY the birth limit (no death rule) to round off jagged single-tile spurs:
+
+    next = (wallNeighbourCount >= LEVEL_GEN_CAVE_BIRTH_LIMIT) ? solid : current
+
+This is the standard two-stage smoothing (Jim Babcock / RogueBasin "Cellular Automata
+Method for Generating Random Cave-Like Levels").
+
+### Phase 2 — Connectivity (flood fill + region stitching)
+
+CA produces multiple disconnected caverns. We must guarantee one connected play space.
+
+1. Flood-fill (4-connected, BFS) every floor region. Tag each floor cell with its region id.
+2. Find the LARGEST region by cell count. This is the "main cavern".
+3. For every OTHER region:
+   - If region size < `LEVEL_GEN_CAVE_MIN_REGION_SIZE` (default 14 tiles): erase it
+     (set every cell solid). Tiny pockets become wall mass — they would be unreachable
+     dead specks otherwise.
+   - Else: carve a tunnel connecting it to the main cavern. Pick the closest cell pair
+     (region centroid -> nearest main-region cell, Euclidean) and carve a 1-tile-wide
+     wandering tunnel between them (see Phase 2b). After carving, the region merges into
+     the main region (re-run a cheap flood fill or just union the ids).
+4. Re-flood-fill once at the end and assert a single region. If by some edge case more
+   than one region remains, repeat step 3 until one remains or attempts exceed
+   `LEVEL_GEN_CAVE_MAX_STITCH_ATTEMPTS` (default 12); on exhaustion fall back to
+   `buildFallbackLevel()` semantics (reuse gen 1's fallback or a 3-room safe box).
+
+### Phase 2b — Drunkard-walk tunnel carve
+
+To keep tunnels organic (no straight L-corridors that would look like gen 1/2), connect
+two points with a biased random walk:
+
+1. Start at the source cell. Each step, compute the cardinal direction that reduces
+   Manhattan distance to the target most; choose that direction with probability
+   `LEVEL_GEN_CAVE_TUNNEL_STRAIGHTNESS` (default 0.7), else pick a random cardinal.
+2. Carve the current cell to floor; also carve with probability 0.5 one perpendicular
+   neighbour to give the tunnel slight width variation (avoids a perfectly thin worm).
+3. Never carve a border tile. Stop when the walk reaches (or is adjacent to) the target,
+   or after `levelWidth * levelHeight` steps as a safety cap.
+
+### Phase 3 — Chamber Carving (the Room-type bridge)
+
+This is how caverns reuse the existing Room type system without looking like the other
+generators. We stamp 2-4 rectangular "chambers" into the cave: places where UAC concrete
+still holds against the breach.
+
+1. Determine chamber count = `randomBetween(LEVEL_GEN_CAVE_CHAMBER_MIN, _MAX)` (default 2-4).
+2. For each chamber, try up to `LEVEL_GEN_CAVE_CHAMBER_TRIES` (default 40) times:
+   - Pick a random rectangle, interior size 4..7 wide by 4..6 tall (reuse existing
+     ROOM_MIN/MAX-style bounds via new cave constants).
+   - Accept it only if a strong majority (>= `LEVEL_GEN_CAVE_CHAMBER_FLOOR_OVERLAP`,
+     default 0.65) of its footprint is currently floor (i.e. it overlaps real cavern, so
+     it is reachable) AND it does not overlap an already-placed chamber (+1 margin).
+   - On accept: stamp a clean rectangular wall ring ('x') around it and clear ' ' floor
+     inside. The ring punches a man-made box into the organic cave.
+3. Record each chamber as a `Room` object (reuse the existing Room data structure;
+   leftColumn/bottomRow/rightColumn/topRow). The first chamber becomes ENTRANCE-eligible
+   (see Phase 4). Chambers are the ONLY Room objects in this generator.
+4. Doorways: every chamber wall tile that is adjacent on its outside to cavern floor is a
+   candidate. Knock exactly 1-2 openings per chamber (set the ring tile to 'd' plain door,
+   or to floor for a ragged "breached" opening with probability
+   `LEVEL_GEN_CAVE_CHAMBER_BREACH_CHANCE`, default 0.4) so each chamber is enterable from
+   the cave. If a chamber ends up with zero candidate openings, drunkard-walk a tunnel
+   from its centre to the nearest cavern floor and open the wall there.
+
+### Phase 4 — Player Spawn + Room Typing
+
+1. ENTRANCE: choose one chamber as the start room (prefer the chamber whose centroid is
+   nearest a map corner so the player starts at an "edge" of the breach and pushes inward).
+   Place 'p' at its centre. Mark that Room.type = ENTRANCE.
+2. Type the remaining chambers using a SUBSET of the existing room-type logic that fits
+   the cave fiction. Reuse gen 1's assignRoomTypes-style guarantees but restricted to
+   thematically appropriate types (organic/abandoned, not pristine command rooms):
+   - Guarantee one MEDICAL_BAY if any chamber is >= 6x5 (a triage point survived).
+   - 60% chance one ARMORY among remaining chambers (a barricaded last-stand cache).
+   - Remaining chambers roll: CONTAINMENT_BLOCK (the breach origin, high enemy den) >
+     CRYO_CHAMBER > RESEARCH_LAB > STANDARD, using the existing cumulative-band approach.
+   - Do NOT assign LARGE / POWER_PLANT / COMMAND_CENTER here — those read as clean
+     facility set-pieces and would dilute the cave identity. (Implementation note: this
+     restriction is just which branches we call; the enum values are unchanged.)
+3. Apply the existing per-type wall theming and floor lighting helpers TO THE CHAMBERS
+   ONLY (themeNewRoomWalls-equivalent). The cavern body gets its own theming in Phase 5.
+
+### Phase 5 — Cavern Body Decoration (organic theming)
+
+The open cave (everything that is floor and not inside a chamber) gets atmosphere that
+sells "demonic burrow". All of this uses ONLY existing symbols.
+
+1. Cave wall theming pass — for every wall tile ('x') that borders cave floor (not a
+   chamber ring), reroll its character with a cave distribution:
+   - 'G' gore wall          (default 0.18) — flesh-infested demonic surface
+   - 'j' rust wall          (default 0.22) — corroded steel where the facility melted
+   - 'k' bulkhead wall      (default 0.06) — surviving armour plate, rare
+   - 'x' plain (remainder)  — bare rock
+   Chamber rings are SKIPPED so the man-made boxes keep clean lab walls (contrast).
+2. Cave floor lighting — caves are dark and patchy:
+   - 'u' unlit floor        (default 0.45 of cave floor) — deep dark
+   - 'l' normal floor       (default 0.35) — dim
+   - 'f' flickering floor    (default 0.04, capped at ~6 per level) — failing emergency light
+   - ' ' lit floor          (remainder) — rare bright pockets
+   Keep a small lit radius (1-tile) around the player spawn so the start is readable.
+3. Cave decals (walkable, atmospheric) sprinkled on cave floor:
+   - 'O' oil/fluid pool, '.' blood stain, 's' alt blood, 'm' corpse, 'e' energy scorch.
+   Total decal density `LEVEL_GEN_CAVE_DECAL_CHANCE` (default 0.05 per cave floor tile),
+   with weights favouring 'O' and '.' (the cave is wet and bloody).
+4. Stalagmite columns — scatter 'P' columns in OPEN cave areas to act as natural rock
+   pillars and break sightlines. Place where a floor tile has >= 6 floor neighbours in its
+   3x3 (i.e. genuinely open space, not a tunnel), at density
+   `LEVEL_GEN_CAVE_STALAGMITE_CHANCE` (default 0.03), never adjacent to another 'P' or a
+   door, and never if it would seal a 1-tile pinch (require >= 3 of 4 cardinal neighbours
+   to remain floor after placement). 'P' renders as a 3D cylinder, perfect for rock spires.
+5. Hazard clusters — with `LEVEL_GEN_CAVE_BARREL_CLUSTER_CHANCE` (default 0.5) place one
+   small cluster of 'g' radioactive barrels (2-3) in an open cave pocket; reuse gen 1's
+   near-wall placement helper. These read as leaked UAC drums in the burrow.
+
+### Phase 6 — Pickups
+
+Reuse the existing pickup logic conceptually but bias for caves:
+- Keycards (r/y/b) ONLY if a chamber door of the matching colour exists. By default
+  chambers use plain 'd' doors, so keycards are rare here; if a chamber is upgraded to a
+  keycard door (see INTERACTIONS), drop the matching card in a DIFFERENT, reachable
+  chamber or open cave.
+- Scatter stim 'H'/'+' and armour 'a'/'A' and ammo boxes (6/7/8/9/0) at the existing
+  per-level budgets, preferring open cave pockets and chamber interiors. Reuse gen 1's
+  placePickups budget constants so loot economy matches the other generators.
+- Weapon spawns: reuse `weaponSpawnPoints` + `placeWeaponSpawns`-equivalent; prefer
+  placing the level's weapon spawn inside the ARMORY chamber if one exists.
+
+### Phase 7 — Enemies
+
+Reuse `spawnEnemiesInRoom`-style spawning for chambers (CONTAINMENT_BLOCK = high density),
+PLUS a cave-body pass that scatters spawns in open cavern pockets (away from the player
+spawn by a minimum Chebyshev distance `LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS`, default 6 tiles).
+Cave-appropriate enemy markers: favour fast melee ('3' Gore Biter) and stealth/ambush
+types in the warren, with tank/charger types ('1','4') guarding chambers. Respect the
+floor-scaling rules the other generators already use (do not invent new enemy symbols).
+
+### Phase 8 — Exit Stairs
+
+Reuse the existing `stampStairsDown`-equivalent: place exactly one '>' in the chamber or
+cave pocket FARTHEST (BFS distance, not Euclidean) from the player spawn, so the exit is a
+real journey through the burrow. Verify the '>' tile is reachable via the final flood fill.
+
+### Phase 9 — Final Connectivity Audit
+
+Run the same BFS-from-spawn audit gen 1 uses (`verifyAndRepairConnectivity`-equivalent):
+flood from 'p', and for any chamber interior or required tile (exit, weapon spawn) not
+reached, drunkard-walk an emergency tunnel to it. This is a safety net; Phases 2-3 should
+already guarantee connectivity.
+
+---
+
+## VISUAL IDENTITY MARKERS (summary for implementer)
+
+1. No straight wall run longer than ~4 tiles anywhere except chamber rings.
+2. Wall palette is gore 'G' + rust 'j' dominant in the cave body; chambers stay clean 'x'/
+   lab-themed — the contrast is the signature.
+3. Floors are mostly dark ('u'/'l'); bright ' ' only near spawn and inside chambers.
+4. 'P' columns used as scattered organic rock spires, not as architectural grids.
+5. Mini-map silhouette is a single connected amoeba with a few rectangular boxes embedded.
+
+---
+
+## CONSTANTS TO ADD (LevelGenConstants.java)
+
+    // --- Cellular automata cave generator ---
+    LEVEL_GEN_CAVE_FILL_PROBABILITY        = 0.45f   // initial wall noise density
+    LEVEL_GEN_CAVE_SMOOTH_PASSES           = 5       // 4-5 rule passes
+    LEVEL_GEN_CAVE_FINAL_FILL_PASSES       = 1       // birth-only rounding passes
+    LEVEL_GEN_CAVE_BIRTH_LIMIT             = 5       // >= this many wall neighbours -> wall
+    LEVEL_GEN_CAVE_DEATH_LIMIT             = 4       // < this many wall neighbours -> floor
+    LEVEL_GEN_CAVE_MIN_REGION_SIZE         = 14      // floor regions smaller than this are erased
+    LEVEL_GEN_CAVE_MAX_STITCH_ATTEMPTS     = 12      // region-merge safety cap
+    LEVEL_GEN_CAVE_TUNNEL_STRAIGHTNESS     = 0.70f   // drunkard-walk bias toward target
+
+    // chambers (the Room-type bridge)
+    LEVEL_GEN_CAVE_CHAMBER_MIN             = 2
+    LEVEL_GEN_CAVE_CHAMBER_MAX             = 4
+    LEVEL_GEN_CAVE_CHAMBER_TRIES          = 40
+    LEVEL_GEN_CAVE_CHAMBER_MIN_WIDTH       = 4
+    LEVEL_GEN_CAVE_CHAMBER_MAX_WIDTH       = 7
+    LEVEL_GEN_CAVE_CHAMBER_MIN_HEIGHT      = 4
+    LEVEL_GEN_CAVE_CHAMBER_MAX_HEIGHT      = 6
+    LEVEL_GEN_CAVE_CHAMBER_FLOOR_OVERLAP   = 0.65f   // min cave-floor fraction under a chamber
+    LEVEL_GEN_CAVE_CHAMBER_BREACH_CHANCE   = 0.40f   // ragged opening vs plain door
+
+    // cave-body theming
+    LEVEL_GEN_CAVE_GORE_WALL_CHANCE        = 0.18f
+    LEVEL_GEN_CAVE_RUST_WALL_CHANCE        = 0.22f
+    LEVEL_GEN_CAVE_BULKHEAD_WALL_CHANCE    = 0.06f
+    LEVEL_GEN_CAVE_FLOOR_UNLIT_CHANCE      = 0.45f
+    LEVEL_GEN_CAVE_FLOOR_NORMAL_CHANCE     = 0.35f
+    LEVEL_GEN_CAVE_FLOOR_FLICKER_CHANCE    = 0.04f
+    LEVEL_GEN_CAVE_FLICKER_BUDGET          = 6
+    LEVEL_GEN_CAVE_DECAL_CHANCE            = 0.05f
+    LEVEL_GEN_CAVE_STALAGMITE_CHANCE       = 0.03f
+    LEVEL_GEN_CAVE_BARREL_CLUSTER_CHANCE   = 0.50f
+    LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS       = 6        // tiles; no enemies within this of 'p'
+
+ALL VALUES ARE PLACEHOLDERS — flag for play-test tuning. Reuse existing
+LEVEL_GEN_GRID_WIDTH / LEVEL_GEN_GRID_HEIGHT for dimensions; do not redefine 80x45.
+
+---
+
+## TILE SYMBOL CHECK (verified against docs/tile-symbols.txt)
+
+Every symbol this generator emits already exists. NO new symbols required:
+  Walls:   x, G (gore), j (rust), k (bulkhead) + chamber theming reuses M/X/Z/N/Q/D.
+  Doors:   d (and optionally R/Y/B if keycard upgrade is enabled).
+  Floors:  ' ', l, u, f.
+  Special: p, P, >.
+  Props:   g (barrels), plus chamber props via existing per-type placers.
+  Decals:  O, ., s, m, e.
+  Pickups: r, y, b, +, H, a, A, 6, 7, 8, 9, 0.
+  Enemies: 1,2,3,4,5 (+ existing ! $ ^ for elites, used sparingly per floor scaling).
+
+No TECHNICAL NOTE about new symbols is needed — nothing new is introduced.
+
+---
+
+## TECHNICAL NOTES
+
+Affected / new classes:
+  NEW  level/CavernGenerator.java         — full generator, implements ILevelGenerator.
+  EDIT world/World.java                    — extend pickGenerator() to 3-way.
+  EDIT util/LevelGenConstants.java         — add the LEVEL_GEN_CAVE_* constants above.
+  REUSE level/Room (data structure), level/EnemySpawnPoint, level/WeaponSpawnPoint,
+        level/LevelGenDecorators (shared decoration helpers extracted for gen 2) — call
+        the same per-type wall/floor/prop helpers for chambers.
+
+Data structures inside CavernGenerator:
+  boolean[][] solid           — primary CA buffer (true = wall). [row][column], Y-up.
+  boolean[][] solidNext        — double buffer for each smoothing pass (swap, never alias).
+  int[][]     regionId         — flood-fill labels, -1 for walls.
+  List<Room>  chambers         — the only Room objects; first is ENTRANCE.
+  List<int[]> caveFloorTiles   — cached open cave-floor coords for decoration passes.
+
+Buffer note: pre-allocate both CA buffers ONCE in generate() (this is not render-time, so
+allocation is fine, but double-buffering correctness matters more than allocation here).
+This generator does pure Java logic with NO LibGDX imports — unit-testable headless, like
+the other two. Output is `new Level(grid, enemySpawnPoints, weaponSpawnPoints)` using the
+package-private constructor (CavernGenerator lives in the `level` package).
+
+Char grid conversion: after all boolean/decoration passes, write the final char[][] grid:
+solid -> wall char chosen by the cave theming pass; floor -> lighting/decal/prop char.
+Border tiles always 'x'.
+
+Algorithm references: RogueBasin "Cellular Automata Method for Generating Random Cave-Like
+Levels"; the 4-5 rule (B5678/S45678-style smoothing); drunkard-walk tunneling.
+
+---
+
+## PLAYER EXPERIENCE
+
+The player steps out of a cramped concrete chamber into a dark, irregular burrow. There
+are no corridors to follow — sightlines curve and pinch, rock spires ('P') block clean
+shots, and gore walls pulse in the gloom. Decision created: caves reward cautious, hugging-
+the-wall exploration and punish the player who expects the clean tactical lanes of the lab
+generator. Finding a clean rectangular chamber feels like relief and danger at once: it is
+readable and lootable, but it is also where the densest enemy dens (CONTAINMENT_BLOCK) live.
+The dark floors mean the player constantly weighs "push into the unlit pocket for loot" vs
+"stay near the rare flickering light I can see by". This is the most claustrophobic, most
+dread-forward of the three generators.
+
+---
+
+## BALANCE NOTES
+
+- Fill 0.45 + 5 smoothing passes is the sweet spot; if levels come out too open, raise fill
+  to 0.47 or smoothing to 6. Too closed/disconnected -> lower fill to 0.43.
+- MIN_REGION_SIZE 14 prevents annoying unreachable specks; raise if the map feels noisy.
+- Dark-floor budget (0.45 unlit) is intentionally heavy for atmosphere — verify the player
+  can still NAVIGATE. If too dark, shift weight from 'u' to 'l'. Keep the spawn-light radius.
+- Enemy SAFE_RADIUS 6 prevents spawn-camping in the open cave; tune with the cave-body
+  spawn density so the player is not swarmed on arrival.
+- Chamber count 2-4 keeps the cave-dominant feel; >4 chambers starts to look like gen 1.
+- Stalagmite density 0.03 with the pinch-guard prevents over-cluttering tunnels; cap total
+  'P' if levels feel like a forest.
+- ALL numbers are placeholders pending play-test.
+
+---
+
+## INTERACTIONS (with existing / planned systems)
+
+1. Room type system: chambers ARE Rooms, so existing per-type wall theming, floor lighting,
+   and prop placers all apply unchanged inside chambers — the contrast (clean chamber vs
+   organic cave) is produced by deliberately NOT theming the cave body with those helpers.
+2. Doors / keycards (uac-keycard-doors-security-tiers): a chamber door can be upgraded from
+   'd' to R/Y/B; if so, the matching keycard MUST drop in a reachable chamber/cave pocket.
+   The connectivity audit already runs after pickups, so verify the keycard is reachable
+   BEFORE the locked chamber in BFS order, or leave a 'd' bypass.
+3. Secret rooms / hidden passages (secret-rooms-hidden-passages): caves are the ideal host
+   for a tiny hidden pocket — a sub-MIN_REGION_SIZE region that, instead of being erased, is
+   linked by a single drunkard-walk tunnel hidden behind a gore wall. Optional extension.
+4. Fog-of-war mini-map (fog-of-war-minimap): organic outlines make fog reveal especially
+   satisfying — the amoeba shape unfurls. No code interaction needed; just looks great.
+5. Explosive/hazard chains (hazard-chain-reactions): the 'g' barrel clusters in tight cave
+   pockets create high-value chain-reaction kill setups; 'h' hazard walls are NOT used here
+   (they read as lab caution stripes), so chains rely on barrel proximity instead.
+6. Enemy AI pathfinding: AI already runs in 2D tile space, so organic floor shapes need no
+   special handling — but expect longer, curvier pursuit paths; verify the existing
+   pathfinder handles open blobs without performance issues (it BFS/A*'s the grid either way).
+
+---
+
+## FILE PLAN
+
+| File | Action |
+|------|--------|
+| level/CavernGenerator.java        | NEW — full CA cave generator implementing ILevelGenerator |
+| util/LevelGenConstants.java       | EDIT — add LEVEL_GEN_CAVE_* constants |
+| world/World.java                  | EDIT — pickGenerator() 3-way selection |
+| level/LevelGenDecorators.java     | REUSE — call shared chamber decoration helpers (extracted by gen 2; if gen 2 not yet landed, temporarily duplicate the needed per-type helpers and refactor later) |
+| docs/procedural-level-generation.txt | EDIT (optional) — document the third algorithm |
+
+---
+
+## IMPLEMENTATION ORDER
+
+1. Confirm ILevelGenerator exists (from gen 2). If not, create it first.
+2. Add LEVEL_GEN_CAVE_* constants.
+3. Implement Phases 0-2 (noise + smoothing + flood-fill connectivity). Dump the char grid
+   to console / a test .txt and eyeball that you get ONE connected organic blob.
+4. Implement Phase 3 chambers + Phase 4 spawn/typing. Verify 'p' is inside a chamber and
+   every chamber is enterable.
+5. Implement Phases 5-7 (cave theming, pickups, enemies). Tune palettes.
+6. Implement Phases 8-9 (exit + audit).
+7. Wire pickGenerator() 3-way.
+8. Play-test all three generators back to back; confirm the one-glance test passes.
+
+---
+
+## OPEN QUESTIONS
+
+1. Should chambers use plain 'd' doors by default, or lean into keycard chambers to make
+   caves a "find the card" puzzle? (Default spec: plain doors; keycard is an opt-in upgrade.)
+2. Should the hidden-pocket secret-room extension (Interaction 3) ship in v1 or be deferred?
+3. Cave-body enemy density: scatter-in-open vs only-in-chambers? Spec does both; confirm the
+   open-cave scatter does not make caves harder than the other two generators at equal floor.
+4. Do we want a rare "fully organic" variant with ZERO chambers (pure cave, spawn on a cave
+   floor tile, all loot in the open)? Could be a low-probability sub-mode for variety.
+5. Should 'P' stalagmites use a distinct future symbol for a rock texture, or is reusing the
+   cylinder column 'P' acceptable visually? (Spec reuses 'P' — no new symbol needed.)

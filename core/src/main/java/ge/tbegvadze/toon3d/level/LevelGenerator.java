@@ -48,7 +48,7 @@ import java.util.Random;
  * No LibGDX imports — pure Java logic, fully unit-testable without an OpenGL context.
  * Lives in the level package to access the package-private Level(char[][], List) constructor.
  */
-public class LevelGenerator {
+public class LevelGenerator implements ILevelGenerator {
 
     private enum WallContext { CORRIDOR, ROOM, MIXED, INTERIOR }
 

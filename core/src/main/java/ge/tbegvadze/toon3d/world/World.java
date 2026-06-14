@@ -19,8 +19,11 @@ import ge.tbegvadze.toon3d.input.touch.TouchInputState;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemType;
+import ge.tbegvadze.toon3d.level.CavernGenerator;
+import ge.tbegvadze.toon3d.level.ILevelGenerator;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
+import ge.tbegvadze.toon3d.level.LinearCorridorGenerator;
 import ge.tbegvadze.toon3d.level.LevelLoader;
 import ge.tbegvadze.toon3d.level.WeaponSpawnPoint;
 import ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer;
@@ -132,7 +135,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     /** Creates a new run from a seed; generates floor 1 procedurally. */
     public World(long runSeed) {
-        this(new LevelGenerator(floorSeed(runSeed, RenderConstants.STARTING_DEPTH)).generate(), runSeed);
+        this(pickGenerator(floorSeed(runSeed, RenderConstants.STARTING_DEPTH)).generate(), runSeed);
     }
 
     /** Creates a World from a pre-built level (file-loaded or test). Uses a random run seed. */
@@ -362,7 +365,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (fadeTimerSeconds >= RenderConstants.LEVEL_TRANSITION_FADE_OUT_SECONDS) {
                 currentDepth++;
                 runStats.recordFloor(currentDepth);
-                rebuildForLevel(new LevelGenerator(floorSeed(runSeed, currentDepth)).generate());
+                rebuildForLevel(pickGenerator(floorSeed(runSeed, currentDepth)).generate());
                 fadeTimerSeconds = 0f;
                 runPhase = RunPhase.FADING_IN;
             }
@@ -658,6 +661,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      */
     private static long floorSeed(long runSeed, int depth) {
         return runSeed * 0x9E3779B97F4A7C15L + depth;
+    }
+
+    private static ILevelGenerator pickGenerator(long seed) {
+        // XOR with a constant so the generator selection is independent of the floor layout seed.
+        java.util.Random selectionRandom = new java.util.Random(seed ^ 0xDEADBEEFL);
+        switch (selectionRandom.nextInt(3)) {
+            case 0:  return new LevelGenerator(seed);
+            case 1:  return new LinearCorridorGenerator(seed);
+            default: return new CavernGenerator(seed);
+        }
     }
 
     private static float findPlayerStartX(Level level) {

@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Level Design / Systems
 TITLE: Second Level Generator — Linear Corridor Layout
 ---

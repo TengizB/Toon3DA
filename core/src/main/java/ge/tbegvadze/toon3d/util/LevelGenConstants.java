@@ -159,4 +159,116 @@ public final class LevelGenConstants {
     // Global accent wall chances (post-pass, any room type)
     public static final float LEVEL_GEN_EMERG_STRIP_CORRIDOR_CHANCE = 0.25f; // 'S' near keycard doors
     public static final float LEVEL_GEN_BLAST_NEAR_CORPSE_CHANCE    = 0.10f; // 'X' near corpse clusters
+
+    // -------------------------------------------------------------------------
+    // LINEAR CORRIDOR generator (generator 2) — spine constants
+    // -------------------------------------------------------------------------
+
+    // Probability that the spine runs horizontally (east-west) vs vertically.
+    public static final float LEVEL_GEN_SPINE_HORIZONTAL_CHANCE  = 0.70f;
+    // Spine width in tiles (grand corridor — always odd so there is a clear centre spine).
+    public static final int   LEVEL_GEN_SPINE_WIDTH               = 3;
+    // Fraction of the grid's long dimension that the spine occupies.
+    public static final float LEVEL_GEN_SPINE_LENGTH_MIN_FRAC     = 0.75f;
+    public static final float LEVEL_GEN_SPINE_LENGTH_MAX_FRAC     = 0.90f;
+    // Tile spacing between successive side-room slot positions along the spine.
+    public static final int   LEVEL_GEN_SPINE_SIDE_STEP_MIN       = 6;
+    public static final int   LEVEL_GEN_SPINE_SIDE_STEP_MAX       = 10;
+    // Probability per slot of attempting to place a room on one side of the spine.
+    public static final float LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE    = 0.70f;
+
+    // --- Spine wall character cumulative distribution (checked in order; remainder → 'x') ---
+    public static final float LEVEL_GEN_SPINE_WALL_CONDUIT_CHANCE          = 0.30f; // 'c'
+    public static final float LEVEL_GEN_SPINE_WALL_VENT_CUMULATIVE         = 0.50f; // 'v'
+    public static final float LEVEL_GEN_SPINE_WALL_DAMAGED_CUMULATIVE      = 0.62f; // 'w'
+    public static final float LEVEL_GEN_SPINE_WALL_HAZARD_CUMULATIVE       = 0.70f; // 'h'
+    public static final float LEVEL_GEN_SPINE_WALL_TECH_CUMULATIVE         = 0.75f; // 't'
+
+    // --- Shared per-room-type floor lighting probabilities ---
+    // Standard room lighting — cumulative thresholds (checked in order; remainder = ' ').
+    // Probabilities: flicker 5 %, unlit 10 %, dim 25 %, lit 60 %.
+    public static final float LEVEL_GEN_ROOM_STANDARD_FLICKER_CUMULATIVE   = 0.05f;
+    public static final float LEVEL_GEN_ROOM_STANDARD_UNLIT_CUMULATIVE     = 0.15f;
+    public static final float LEVEL_GEN_ROOM_STANDARD_NORMAL_CUMULATIVE    = 0.40f;
+    // SERVER_ROOM lighting — after flicker budget, remainder split unlit / dim
+    public static final float LEVEL_GEN_ROOM_SERVER_UNLIT_THRESHOLD        = 0.55f;
+    // ARMORY lighting
+    public static final float LEVEL_GEN_ROOM_ARMORY_CORNER_DARK_CHANCE     = 0.60f;
+    public static final float LEVEL_GEN_ROOM_ARMORY_DIM_CHANCE             = 0.12f;
+    // CRYO_CHAMBER lighting
+    public static final float LEVEL_GEN_ROOM_CRYO_UNLIT_CHANCE             = 0.15f;
+    // POWER_PLANT lighting
+    public static final float LEVEL_GEN_ROOM_POWERPLANT_NEAR_FLICKER_CHANCE = 0.40f;
+    // COMMAND_CENTER lighting
+    public static final float LEVEL_GEN_ROOM_COMMAND_EDGE_DIM_CHANCE       = 0.35f;
+    // CONTAINMENT_BLOCK lighting
+    public static final float LEVEL_GEN_ROOM_CONTAINMENT_FLICKER_CHANCE    = 0.08f;
+
+    // --- Shared per-room-type pickup chances ---
+    public static final float LEVEL_GEN_ARMORY_MEDKIT_CHANCE               = 0.40f;
+    public static final float LEVEL_GEN_ARMORY_ARMOUR_CHANCE               = 0.80f;
+    public static final float LEVEL_GEN_COMMAND_MEDKIT_CHANCE              = 0.50f;
+    public static final float LEVEL_GEN_COMMAND_ARMOUR_CHANCE              = 0.50f;
+    public static final float LEVEL_GEN_COMMAND_AMMO_CHANCE                = 0.60f;
+    // POWER_PLANT / CRYO_CHAMBER / CONTAINMENT_BLOCK — hazardous/dark rooms (reduced loot)
+    public static final float LEVEL_GEN_HAZARD_ROOM_MEDKIT_CHANCE          = 0.25f;
+    public static final float LEVEL_GEN_HAZARD_ROOM_ARMOUR_CHANCE          = 0.20f;
+    public static final float LEVEL_GEN_HAZARD_ROOM_AMMO_CHANCE            = 0.30f;
+
+    // -------------------------------------------------------------------------
+    // CAVERN generator (generator 3) — cellular automata constants
+    // -------------------------------------------------------------------------
+
+    // Initial probability that any interior cell is solid (wall) before smoothing.
+    public static final float LEVEL_GEN_CAVE_FILL_PROBABILITY     = 0.45f;
+    // Number of 4-5-rule CA smoothing passes.
+    public static final int   LEVEL_GEN_CAVE_SMOOTH_PASSES        = 5;
+    // Extra birth-only rounding passes after main smoothing to remove jagged spurs.
+    public static final int   LEVEL_GEN_CAVE_FINAL_FILL_PASSES    = 1;
+    // A cell with >= this many solid Moore neighbours becomes solid.
+    public static final int   LEVEL_GEN_CAVE_BIRTH_LIMIT          = 5;
+    // A cell with < this many solid Moore neighbours becomes floor.
+    public static final int   LEVEL_GEN_CAVE_DEATH_LIMIT          = 4;
+    // Floor regions smaller than this tile count are erased to wall mass.
+    public static final int   LEVEL_GEN_CAVE_MIN_REGION_SIZE      = 14;
+    // Safety cap on region-merge stitch attempts.
+    public static final int   LEVEL_GEN_CAVE_MAX_STITCH_ATTEMPTS  = 12;
+    // Probability per drunkard-walk step that the step moves toward the target.
+    public static final float LEVEL_GEN_CAVE_TUNNEL_STRAIGHTNESS  = 0.70f;
+
+    // Rectangular chambers stamped into the cave (the Room-type bridge).
+    public static final int   LEVEL_GEN_CAVE_CHAMBER_MIN          = 2;
+    public static final int   LEVEL_GEN_CAVE_CHAMBER_MAX          = 4;
+    public static final int   LEVEL_GEN_CAVE_CHAMBER_TRIES        = 40;
+    public static final int   LEVEL_GEN_CAVE_CHAMBER_MIN_WIDTH    = 4;
+    public static final int   LEVEL_GEN_CAVE_CHAMBER_MAX_WIDTH    = 7;
+    public static final int   LEVEL_GEN_CAVE_CHAMBER_MIN_HEIGHT   = 4;
+    public static final int   LEVEL_GEN_CAVE_CHAMBER_MAX_HEIGHT   = 6;
+    // Minimum fraction of the chamber footprint that must already be cave floor.
+    public static final float LEVEL_GEN_CAVE_CHAMBER_FLOOR_OVERLAP  = 0.65f;
+    // Probability a chamber opening is ragged floor instead of a door.
+    public static final float LEVEL_GEN_CAVE_CHAMBER_BREACH_CHANCE  = 0.40f;
+
+    // Cave body wall distribution (applied to walls bordering cave floor, evaluated in order;
+    // the remaining ~0.54 fraction stays plain 'x' rock).
+    public static final float LEVEL_GEN_CAVE_GORE_WALL_CHANCE       = 0.18f; // 'G' flesh-wall
+    public static final float LEVEL_GEN_CAVE_RUST_WALL_CHANCE       = 0.22f; // 'j' corroded
+    public static final float LEVEL_GEN_CAVE_BULKHEAD_WALL_CHANCE   = 0.06f; // 'k' armour plate
+
+    // Cave floor lighting — individual proportions (sum to 0.84; remainder ~0.16 stays lit ' ').
+    // Implementation computes running cumulative thresholds: unlit → unlit+normal → +flicker.
+    public static final float LEVEL_GEN_CAVE_FLOOR_UNLIT_CHANCE     = 0.45f; // 'u' deep dark
+    public static final float LEVEL_GEN_CAVE_FLOOR_NORMAL_CHANCE    = 0.35f; // 'l' dim
+    public static final float LEVEL_GEN_CAVE_FLOOR_FLICKER_CHANCE   = 0.04f; // 'f' failing light
+    // Total budget of flickering floor tiles in the entire cave.
+    public static final int   LEVEL_GEN_CAVE_FLICKER_BUDGET         = 6;
+
+    // Probability per cave floor tile of receiving a decal (blood, oil, scorch, corpse).
+    public static final float LEVEL_GEN_CAVE_DECAL_CHANCE           = 0.05f;
+    // Probability per eligible open-cave tile of receiving a stalagmite column 'P'.
+    public static final float LEVEL_GEN_CAVE_STALAGMITE_CHANCE      = 0.03f;
+    // Probability per level of placing a small radioactive barrel cluster.
+    public static final float LEVEL_GEN_CAVE_BARREL_CLUSTER_CHANCE  = 0.50f;
+    // Minimum Chebyshev distance from player spawn at which cave-body enemies may appear.
+    public static final int   LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS      = 6;
 }
