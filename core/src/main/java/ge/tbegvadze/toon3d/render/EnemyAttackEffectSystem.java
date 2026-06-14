@@ -14,8 +14,8 @@ import ge.tbegvadze.toon3d.util.GameMath;
 
 import static ge.tbegvadze.toon3d.util.Constants.CELL_SIZE;
 import static ge.tbegvadze.toon3d.util.RenderConstants.PROP_BEHIND_PLAYER_EPSILON_TILES;
-import static ge.tbegvadze.toon3d.util.Constants.WALL_PROJECTION_SCREEN_HEIGHT;
-import static ge.tbegvadze.toon3d.util.Constants.WALL_PROJECTION_SCREEN_WIDTH;
+import static ge.tbegvadze.toon3d.util.RenderConstants.WALL_PROJECTION_SCREEN_HEIGHT;
+import static ge.tbegvadze.toon3d.util.RenderConstants.WALL_PROJECTION_SCREEN_WIDTH;
 
 /**
  * Manages and renders traveling projectiles for ranged enemy attacks.
