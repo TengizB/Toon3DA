@@ -216,6 +216,19 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_HAZARD_ROOM_AMMO_CHANCE            = 0.30f;
 
     // -------------------------------------------------------------------------
+    // START ROOM generator — staging room for weapon selection at run start
+    // -------------------------------------------------------------------------
+
+    // Walkable interior tile count in each dimension (odd so there is a clear centre tile).
+    public static final int     START_ROOM_INTERIOR_SIZE        = 13;
+    // Number of weapon offers presented to the player side-by-side near the portal.
+    public static final int     START_ROOM_WEAPON_OFFER_COUNT   = 3;
+    // When true, four decorative 'P' columns frame the portal like an armory altar.
+    public static final boolean START_ROOM_USE_COLUMNS          = true;
+    // Tile distance from the room centre at which the four framing columns are placed.
+    public static final int     START_ROOM_COLUMN_OFFSET        = 4;
+
+    // -------------------------------------------------------------------------
     // CAVERN generator (generator 3) — cellular automata constants
     // -------------------------------------------------------------------------
 

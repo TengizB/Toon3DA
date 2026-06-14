@@ -19,12 +19,14 @@ import ge.tbegvadze.toon3d.input.touch.TouchInputState;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemType;
+import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.CavernGenerator;
 import ge.tbegvadze.toon3d.level.ILevelGenerator;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
 import ge.tbegvadze.toon3d.level.LinearCorridorGenerator;
 import ge.tbegvadze.toon3d.level.LevelLoader;
+import ge.tbegvadze.toon3d.level.StartGameLevelGenerator;
 import ge.tbegvadze.toon3d.level.WeaponSpawnPoint;
 import ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer;
 import ge.tbegvadze.toon3d.progression.LevelUpReward;
@@ -115,6 +117,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private java.util.List<GroundItem> groundItems;
 
     // -------------------------------------------------------------------------
+    // Start room — weapon-selection staging state; null after the room is left
+    // -------------------------------------------------------------------------
+    private boolean                    isStartingRoom          = false;
+    private boolean                    startRoomChoiceResolved = false;
+    private java.util.List<Weapon>     startRoomWeapons        = null;
+    private java.util.List<GroundItem> startRoomGroundItems    = null;
+
+    // -------------------------------------------------------------------------
     // Permadeath — run stats, death beat animation, and reset handshake
     // -------------------------------------------------------------------------
     private final RunStats             runStats;
@@ -134,25 +144,33 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // Constructors
     // -------------------------------------------------------------------------
 
-    /** Creates a new run from a seed; generates floor 1 procedurally. */
+    /** Creates a new run from a seed; starts in the weapon-selection staging room. */
     public World(long runSeed) {
-        this(pickGenerator(floorSeed(runSeed, RenderConstants.STARTING_DEPTH)).generate(), runSeed);
+        this(new StartGameLevelGenerator(), runSeed);
     }
 
     /** Creates a World from a pre-built level (file-loaded or test). Uses a random run seed. */
     public World(Level level) {
-        this(level, System.currentTimeMillis());
+        this(level, System.currentTimeMillis(), false, null);
     }
 
     public World(String levelFile) {
-        this(new LevelLoader().load(levelFile));
+        this(new LevelLoader().load(levelFile), System.currentTimeMillis(), false, null);
     }
 
-    private World(Level initialLevel, long runSeed) {
-        this.runSeed = runSeed;
+    private World(StartGameLevelGenerator startGen, long runSeed) {
+        this(startGen.generate(), runSeed, true, startGen);
+    }
 
-        // Run-persistent state
-        player             = new Player(findPlayerStartX(initialLevel), findPlayerStartY(initialLevel), 1f, 0f);
+    private World(Level initialLevel, long runSeed, boolean startRoom, StartGameLevelGenerator startRoomGen) {
+        this.runSeed        = runSeed;
+        this.isStartingRoom = startRoom;
+
+        // Player faces north (toward the portal) in the start room; east otherwise.
+        float initialDirectionX = startRoom ? 0f : 1f;
+        float initialDirectionY = startRoom ? 1f : 0f;
+        player             = new Player(findPlayerStartX(initialLevel), findPlayerStartY(initialLevel),
+                                        initialDirectionX, initialDirectionY);
         inventory          = new PlayerInventory();
         gameState          = new GameState();
         hudState           = new HudState();
@@ -163,8 +181,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         levelUpOverlayRenderer = new LevelUpOverlayRenderer(playerProgress);
 
         // Event text and hit vignette — run-persistent feedback systems
-        eventTextSystem    = new EventTextSystem();
-        eventTextRenderer  = new EventTextRenderer(eventTextSystem);
+        eventTextSystem     = new EventTextSystem();
+        eventTextRenderer   = new EventTextRenderer(eventTextSystem);
         hitVignetteRenderer = new HitVignetteRenderer();
 
         // Player stat system — seeded from MARINE difficulty for now; difficulty selection
@@ -175,11 +193,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // start so the player always begins with a full HP bar.
         player.applyHealing(player.getMaxHealth());
 
-        itemInventory             = new Inventory();
-        inventoryOverlayRenderer  = new InventoryOverlayRenderer(itemInventory);
-        // Seed starting ammo directly into inventory slots (Order 6 design).
-        itemInventory.tryAdd(ItemType.AMMO_BULLETS, ItemConstants.AMMO_START_BULLETS);
-        itemInventory.tryAdd(ItemType.AMMO_SHELLS,  ItemConstants.AMMO_START_SHELLS);
+        itemInventory            = new Inventory();
+        inventoryOverlayRenderer = new InventoryOverlayRenderer(itemInventory);
 
         // Permadeath — run stats and death overlay
         runStats             = new RunStats();
@@ -193,22 +208,41 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             runStats.recordDamageTaken(netDamage);
         });
 
-        // Build the full weapon arsenal — player starts with all weapons equipped in order.
-        Shotgun              shotgun          = new Shotgun();
-        DoubleBarrelShotgun  dblShotgun       = new DoubleBarrelShotgun();
-        PlasmaRifle          plasmaRifle      = new PlasmaRifle();
-        Chaingun             chaingun         = new Chaingun();
-        Railgun              railgun          = new Railgun();
-        Incinerator          incinerator      = new Incinerator();
-        GrenadeLauncher      grenadeLauncher  = new GrenadeLauncher();
+        // Build all weapon instances and wire them to the shared systems.
+        Shotgun             shotgun         = new Shotgun();
+        DoubleBarrelShotgun dblShotgun      = new DoubleBarrelShotgun();
+        PlasmaRifle         plasmaRifle     = new PlasmaRifle();
+        Chaingun            chaingun        = new Chaingun();
+        Railgun             railgun         = new Railgun();
+        Incinerator         incinerator     = new Incinerator();
+        GrenadeLauncher     grenadeLauncher = new GrenadeLauncher();
         float rangedMultiplier = playerStats.getRangedDamageMultiplier();
         for (Weapon weapon : new Weapon[]{shotgun, dblShotgun, plasmaRifle, chaingun, railgun, incinerator, grenadeLauncher}) {
             weapon.setEventTextSystem(eventTextSystem);
             weapon.setAmmoInventory(itemInventory);
             weapon.setRangedDamageMultiplier(rangedMultiplier);
         }
-        inventory.setArsenal(java.util.List.of(chaingun, shotgun, dblShotgun, plasmaRifle, railgun, incinerator, grenadeLauncher));
+
+        if (startRoom) {
+            // Start room: full arsenal registered for the HUD renderer, but loadout is empty
+            // so the player is unarmed until they walk onto a weapon offer.
+            inventory.setArsenal(java.util.List.of(shotgun, dblShotgun, plasmaRifle, chaingun,
+                                                   railgun, incinerator, grenadeLauncher));
+            inventory.clearLoadout();
+            // No starting ammo — starter reserve comes bundled with the chosen weapon.
+        } else {
+            // Normal floor entry: equip Chaingun + Shotgun with starting ammo reserves.
+            inventory.setArsenal(java.util.List.of(chaingun, shotgun, dblShotgun, plasmaRifle,
+                                                   railgun, incinerator, grenadeLauncher));
+            itemInventory.tryAdd(ItemType.AMMO_BULLETS, ItemConstants.AMMO_START_BULLETS);
+            itemInventory.tryAdd(ItemType.AMMO_SHELLS,  ItemConstants.AMMO_START_SHELLS);
+        }
+
         weaponHudRenderer    = new WeaponHudRenderer(inventory.getArsenal());
+        if (startRoom) {
+            // Player starts unarmed; clear the initially-selected weapon in the renderer.
+            weaponHudRenderer.setEquippedWeapon(null);
+        }
         hudRenderer          = new HudRenderer(player, hudState);
         hudRenderer.setLoadout(inventory.getLoadout());
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);
@@ -222,6 +256,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Build level-dependent resources for the first floor
         level = initialLevel;
         buildLevelDependentResources(initialLevel);
+
+        if (startRoom) {
+            setupStartRoomWeaponOffers(startRoomGen, runSeed);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -230,6 +268,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     @Override
     public void onDescentRequested() {
+        if (isStartingRoom && !startRoomChoiceResolved) {
+            if (eventTextSystem != null) eventTextSystem.spawn("ARM YOURSELF FIRST");
+            return;
+        }
         if (runPhase == RunPhase.PLAYING) {
             fadeTimerSeconds = 0f;
             runPhase = RunPhase.FADING_OUT;
@@ -372,9 +414,19 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (runPhase == RunPhase.FADING_OUT) {
             fadeTimerSeconds += deltaTime;
             if (fadeTimerSeconds >= RenderConstants.LEVEL_TRANSITION_FADE_OUT_SECONDS) {
-                currentDepth++;
-                runStats.recordFloor(currentDepth);
-                rebuildForLevel(pickGenerator(floorSeed(runSeed, currentDepth)).generate());
+                if (isStartingRoom) {
+                    // Leaving the staging room: generate the real first dungeon floor.
+                    // currentDepth stays at STARTING_DEPTH so floor 1 is the first dungeon floor.
+                    isStartingRoom       = false;
+                    startRoomWeapons     = null;
+                    startRoomGroundItems = null;
+                    runStats.recordFloor(currentDepth);
+                    rebuildForLevel(pickGenerator(floorSeed(runSeed, currentDepth)).generate());
+                } else {
+                    currentDepth++;
+                    runStats.recordFloor(currentDepth);
+                    rebuildForLevel(pickGenerator(floorSeed(runSeed, currentDepth)).generate());
+                }
                 fadeTimerSeconds = 0f;
                 runPhase = RunPhase.FADING_IN;
             }
@@ -704,5 +756,110 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             }
         }
         return Constants.WORLD_HEIGHT / 2f;
+    }
+
+    // -------------------------------------------------------------------------
+    // Start room — weapon offer setup and selection logic
+    // -------------------------------------------------------------------------
+
+    /**
+     * Spawns three randomly chosen weapon GroundItems at the pre-computed offer tiles,
+     * adds them to the live ground-item list, and registers the weapon-selection callback
+     * on the PlayerController.
+     *
+     * Must be called after buildLevelDependentResources() so that groundItems and
+     * playerController both exist.
+     */
+    private void setupStartRoomWeaponOffers(StartGameLevelGenerator startGen, long runSeed) {
+        java.util.List<Weapon> shuffled = new java.util.ArrayList<>(inventory.getArsenal());
+        java.util.Collections.shuffle(shuffled, new java.util.Random(floorSeed(runSeed, 0)));
+
+        int offerCount = Math.min(
+                ge.tbegvadze.toon3d.util.LevelGenConstants.START_ROOM_WEAPON_OFFER_COUNT,
+                shuffled.size());
+
+        startRoomWeapons     = new java.util.ArrayList<>();
+        startRoomGroundItems = new java.util.ArrayList<>();
+
+        for (int offerIndex = 0; offerIndex < offerCount; offerIndex++) {
+            Weapon    offeredWeapon = shuffled.get(offerIndex);
+            ItemType  itemType      = weaponClassToItemType(offeredWeapon);
+            GroundItem groundItem   = new GroundItem(
+                    startGen.getWeaponTileColumn(offerIndex),
+                    startGen.getWeaponTileRow(offerIndex),
+                    itemType, 1);
+            groundItems.add(groundItem);
+            startRoomWeapons.add(offeredWeapon);
+            startRoomGroundItems.add(groundItem);
+        }
+
+        playerController.setWeaponGroundItemPickedUpCallback(this::handleStartRoomWeaponPickup);
+    }
+
+    /**
+     * Invoked by PlayerController when the player steps onto one of the three weapon offer tiles.
+     * Equips the chosen weapon, grants starter ammo, and despawns the unchosen offers.
+     */
+    private void handleStartRoomWeaponPickup(GroundItem pickedItem) {
+        if (startRoomChoiceResolved || startRoomWeapons == null || startRoomGroundItems == null) return;
+
+        int pickedIndex = startRoomGroundItems.indexOf(pickedItem);
+        if (pickedIndex < 0) return;
+
+        Weapon chosenWeapon = startRoomWeapons.get(pickedIndex);
+        inventory.getLoadout().tryEquip(chosenWeapon);
+        weaponHudRenderer.setEquippedWeapon(chosenWeapon);
+        addStarterAmmoForWeapon(chosenWeapon);
+
+        // Despawn the unchosen offers from the live ground-item list.
+        for (int otherIndex = 0; otherIndex < startRoomGroundItems.size(); otherIndex++) {
+            if (otherIndex != pickedIndex) {
+                groundItems.remove(startRoomGroundItems.get(otherIndex));
+            }
+        }
+
+        startRoomChoiceResolved = true;
+
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor(
+                    "EQUIPPED: " + chosenWeapon.getDisplayName(), EventTextSystem.COLOR_GREEN);
+        }
+    }
+
+    /** Grants the starter ammo reserve appropriate for the weapon class just chosen. */
+    private void addStarterAmmoForWeapon(Weapon weapon) {
+        AmmoType ammoType = null;
+        int      amount   = 0;
+        if (weapon instanceof Shotgun || weapon instanceof DoubleBarrelShotgun) {
+            ammoType = AmmoType.SHELLS;
+            amount   = ItemConstants.START_ROOM_AMMO_SHELLS;
+        } else if (weapon instanceof PlasmaRifle || weapon instanceof Incinerator) {
+            ammoType = AmmoType.CELLS;
+            amount   = ItemConstants.START_ROOM_AMMO_CELLS;
+        } else if (weapon instanceof Chaingun) {
+            ammoType = AmmoType.BULLETS;
+            amount   = ItemConstants.START_ROOM_AMMO_BULLETS;
+        } else if (weapon instanceof Railgun) {
+            ammoType = AmmoType.SLUGS;
+            amount   = ItemConstants.START_ROOM_AMMO_SLUGS;
+        } else if (weapon instanceof GrenadeLauncher) {
+            ammoType = AmmoType.ROCKETS;
+            amount   = ItemConstants.START_ROOM_AMMO_ROCKETS;
+        }
+        if (ammoType != null) {
+            itemInventory.tryAdd(ammoType.getItemType(), amount);
+        }
+    }
+
+    /**
+     * Maps a weapon instance to the closest matching ItemType for GroundItem rendering.
+     * This is used only for billboard appearance — the actual weapon equipped is tracked
+     * separately in startRoomWeapons.
+     */
+    private static ItemType weaponClassToItemType(Weapon weapon) {
+        if (weapon instanceof Shotgun || weapon instanceof DoubleBarrelShotgun) return ItemType.WEAPON_SHOTGUN;
+        if (weapon instanceof PlasmaRifle || weapon instanceof Incinerator)      return ItemType.WEAPON_PLASMA;
+        if (weapon instanceof GrenadeLauncher)                                   return ItemType.WEAPON_ROCKET;
+        return ItemType.WEAPON_PISTOL;
     }
 }

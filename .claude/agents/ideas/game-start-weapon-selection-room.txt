@@ -1,0 +1,357 @@
+STATUS: IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Game Start Level / Weapon Selection Room
+CREATED: 2026-06-14
+---
+
+OVERVIEW
+========
+Every new run begins not in the procedural dungeon but in a dedicated, hand-shaped
+"staging" room: a clean, spacious square chamber built by a separate
+StartGameLevelGenerator. The marine drops in UNARMED. Three weapons (randomly drawn
+from the full arsenal) sit on the floor in a row beside a central portal. Picking up
+ANY one of them locks in the choice — the other two vanish — and the marine steps
+into the portal to descend into the first procedural floor. It is the run's opening
+decision and the only safe, enemy-free moment the player gets.
+
+This belongs in the game for three reasons: (1) it gives the run a deliberate
+"sign the waiver" beat that the roguelike pillars want (a chosen one-way drop);
+(2) it makes the starting loadout a meaningful RNG-flavored decision instead of a
+fixed pistol, seeding build variety from turn one; (3) it is a controlled tutorial
+surface — the player learns move / rotate / pick up / portal with zero threat.
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING DOCS
+=============================================
+- roguelike_order_18_main_menu_and_new_run_setup.txt (NOT IMPLEMENTED): owns the
+  menu -> "BEGIN DESCENT" -> world-build flow. THIS doc owns what the world IS at
+  the moment of that build: the first Level handed to the player is the staging
+  room, NOT a LevelGenerator floor. The menu's descent fade lands the player here.
+- roguelike_order_5_weapon_pickup_and_switching.txt (IMPLEMENTED): weapons are
+  entity-side GroundItems with WEAPON_* ItemTypes resolved through the Loadout. This
+  doc REUSES that exact pickup path; it does not invent a new weapon-pickup system.
+  The only addition is the "pick one of three -> remove the other two" rule.
+- second-level-generator-linear-corridor.txt (IMPLEMENTED): established the
+  ILevelGenerator interface and World.pickGenerator(). THIS doc adds a generator
+  that is NOT in pickGenerator()'s random pool — it is selected explicitly for the
+  first floor only.
+- level-transitions-stairs-down.txt: the portal/exit transition reuses the existing
+  '>' tile and the existing descent transition; this doc does not redefine it.
+
+NO NEW TILE SYMBOL IS REQUIRED. The portal uses the existing '>' (portal/exit) tile.
+Weapons are entity-side GroundItems (per order 5), not map glyphs. Floor/walls use
+existing symbols. See TECHNICAL NOTES.
+
+GAMEPLAY LOOP
+=============
+1. Player selects NEW INCURSION (order 18). At the moment the world is built for
+   floor index 0, World detects "this is the first floor of a fresh run" and uses
+   StartGameLevelGenerator instead of pickGenerator(). The descent fade reveals the
+   staging room.
+2. The marine spawns at the 'p' start tile, facing the portal, with an EMPTY
+   Loadout (no pistol, no weapon sprite — see EDGE CASES for the unarmed state).
+3. Three weapon GroundItems are spawned by the generator (or by World right after
+   generate(), see TECHNICAL NOTES) in a row of three adjacent floor tiles just in
+   front of / beside the portal. The chosen three are a random sample (without
+   replacement) of all WEAPON_* ItemTypes.
+4. Player taps Forward / Rotate / Strafe to walk the room. There are no enemies, no
+   doors, no hazards. Every step still advances one turn (the tick fires), but
+   nothing reacts.
+5. Player steps onto one of the three weapon tiles. The standard order-5 pickup hook
+   resolves: the weapon is equipped into the (empty) Loadout slot 1, becomes active,
+   the WeaponHudRenderer swaps to its sprite, and an event banner flashes
+   "EQUIPPED: <WEAPON NAME>".
+6. CHOICE LOCK: on that pickup, World removes the OTHER TWO weapon GroundItems from
+   the GroundItemManager (they despawn — no "grab me" shimmer remains). The selection
+   is final for the room. A second banner flashes "LOADOUT SET — DESCEND."
+7. Player walks onto the central portal tile '>'. The existing portal/exit handler
+   fires the descent transition and World rebuilds the world for floor index 1 using
+   the normal pickGenerator() path. From here on it is the regular roguelike.
+8. The staging room is never revisited this run. (It is a one-time opening; the
+   exit on dungeon floors leads deeper, never back to staging.)
+
+ROOM LAYOUT SKETCH
+==================
+A spacious, symmetric square. Target interior ~13x13 walkable tiles inside a solid
+wall ring, centered in the 80x45 world grid (exact placement is generator math, see
+TECHNICAL NOTES). Bright, calm, clearly readable — the opposite of the dungeon's
+dread. Below, '#'/symbols are illustrative; final symbols listed under each marker.
+
+    x x x x x x x x x x x x x x x
+    x                           x
+    x                           x
+    x         P       P         x      P = decorative columns (existing 'P')
+    x                           x
+    x                           x
+    x            >              x      > = portal / exit (existing tile)
+    x          W1 W2 W3         x      W1 W2 W3 = three weapon GroundItems
+    x                           x               (row of 3 adjacent floor tiles,
+    x         P       P         x                one tile below the portal)
+    x                           x
+    x                           x
+    x             p             x      p = player start (faces NORTH toward portal)
+    x                           x
+    x x x x x x x x x x x x x x x
+
+Key facts about the layout:
+- WALL RING: solid 'x' (plain wall) border, one tile thick. Interior is open floor.
+- FLOOR: use lit floor ' ' (1.55x brightness) for the whole interior so the room
+  reads as a safe, well-lit staging bay — deliberately brighter than dungeon floors.
+- PORTAL: exactly one '>' tile, dead center of the room.
+- WEAPON ROW: three contiguous floor tiles in a straight cardinal line (the sketch
+  shows them one row south of the portal). They are GroundItems placed at those tile
+  centers, NOT map characters. The row is positioned so the player, spawning at 'p'
+  and walking forward (north), reaches the three weapons BEFORE the portal — they
+  cannot accidentally reach the portal without passing the weapons line of sight.
+- COLUMNS: four optional decorative 'P' columns frame the portal for a "shrine /
+  armory altar" silhouette. Cosmetic only; can be cut if they crowd the space.
+- START: one 'p' tile on the room's south-center, facing north so the very first
+  thing the camera frames is the portal with the three weapons glowing in front
+  of it. No rotation needed to understand the choice.
+
+HOW THE WEAPON CHOICE WORKS
+===========================
+SELECTION OF THE THREE OFFERED WEAPONS
+- Source pool: every WEAPON_* ItemType that represents a real, pickable weapon
+  (Shotgun, DoubleBarrelShotgun, PlasmaRifle, Chaingun, Railgun, Incinerator,
+  GrenadeLauncher, and the Pistol if it is a normal pickable). See OPEN QUESTIONS
+  on whether the Pistol should be in the pool or guaranteed/excluded.
+- Draw 3 distinct types via a seeded shuffle (reproducible from the run seed): pick
+  the first three of a Fisher-Yates shuffle of the pool. No duplicates in the row.
+- Each chosen weapon spawns as a GroundItem at its assigned tile center, using the
+  same procedural ground silhouette + white "grab me" shimmer order 5 defines.
+- Each spawned weapon carries a small starter ammo bundle (its starting magazine +
+  a modest reserve) so the choice is immediately usable on floor 1. Values in
+  BALANCE NOTES.
+
+THE PICKUP + DISAPPEAR RULE
+- The three weapons are tracked together as a "selection set" (a small list of the
+  three GroundItem references / their tile coordinates) held by World (or a tiny
+  StartRoomState helper) while the staging room is active.
+- When the order-5 settled-tile pickup hook equips ANY weapon whose GroundItem is in
+  the selection set:
+    a. That weapon is equipped normally (Loadout slot 1, becomes active).
+    b. World iterates the selection set and removes the OTHER members from the
+       GroundItemManager (despawn immediately — gone from world + minimap + render).
+    c. The selection set is cleared / marked resolved so the rule never fires twice.
+- After resolution there is exactly one weapon in the Loadout and zero weapon
+  GroundItems on the floor. The choice cannot be undone within the room.
+
+PORTAL TRANSITION MECHANIC
+==========================
+- The portal is the existing '>' tile with its existing transition behavior: stepping
+  onto it ends the staging phase and triggers the descent fade -> world rebuild for
+  the next floor (order 18 / level-transitions fade pattern).
+- The ONLY difference from a normal floor exit: when leaving the staging room, the
+  NEXT floor is built with pickGenerator() (the real dungeon). World must clear the
+  "first floor / staging" flag so subsequent exits behave normally.
+- Turn cost: stepping onto the portal is the move turn that triggers the transition,
+  identical to a normal exit. No new turn semantics.
+- The portal is reachable even if the player ignores the weapons (see EDGE CASES) —
+  the room geometry must never trap a weaponless player away from the portal.
+
+PLAYER EXPERIENCE
+=================
+The first thing the run shows is a bright, quiet bay and three guns laid out like an
+offering, with the portal humming behind them. After a menu full of cynical UAC
+briefing, this is the held breath before the drop: no demons, no clock, just a
+choice. The player learns the controls by walking to the guns, feels the weight of
+"pick one, lose the rest," and steps through knowing the run's opening identity is
+theirs. Because the three are random each run, the staging room re-rolls the
+fantasy every time — this run is a shotgun run, the next is a plasma run — which is
+exactly the variety the roguelike pillars ask for, delivered in the first ten
+seconds. The despawn of the unchosen two is a small, sharp commitment beat: the door
+to "what if I'd taken the railgun" closes audibly.
+
+TECHNICAL NOTES
+===============
+DEPENDENCIES
+- order 5 (weapon pickup / Loadout / GroundItem path): HARD. This doc layers the
+  "three-then-one" rule on top of the existing pickup hook.
+- order 18 (menu -> world build): SOFT. If 18 is not built, World can simply build
+  the staging room on its current "new game" entry instead of the menu's. The
+  staging room logic is independent of where the build is triggered.
+- ILevelGenerator interface + World.pickGenerator() (second-level-generator doc,
+  IMPLEMENTED): the staging generator implements ILevelGenerator but is selected
+  explicitly, not added to the random pool.
+
+NEW CLASSES
+- level/StartGameLevelGenerator.java (NEW, ...toon3d.level):
+    implements ILevelGenerator. public Level generate().
+    Responsibilities:
+      * Allocate the 80x45 tile grid filled with solid 'x'.
+      * Carve the centered square interior as lit floor ' '.
+      * Stamp the wall ring 'x', the four decorative 'P' columns, the central '>'
+        portal, and the 'p' start tile (south-center, facing handled by spawn).
+      * Compute and expose the three WEAPON ROW tile coordinates (the tiles just
+        south of the portal) so World can spawn GroundItems there. Either return
+        them via a small accessor (e.g. int[][] getWeaponSpawnTiles()) or via a
+        StartRoomLayout struct, because weapons are entity-side, not map glyphs.
+    No enemies, no doors, no hazards, no pickups other than the weapons (which World
+    spawns as entities). Connectivity audit trivially passes (single open room).
+- world/StartRoomState.java (NEW, ...toon3d.world) OR a few fields on World:
+    Holds: the three offered ItemTypes, the three GroundItem references / tiles,
+    boolean isStagingFloor, boolean choiceResolved. Provides resolveSelection(picked)
+    that despawns the other two via GroundItemManager and flips choiceResolved.
+    Keeping this in its own tiny class keeps World tidy; folding into World is
+    acceptable if preferred.
+
+MODIFIED CLASSES
+- world/World.java:
+    * First-floor branch: when building the world for a brand-new run (floor index 0
+      / a "freshRun" flag), call StartGameLevelGenerator instead of pickGenerator().
+      Set isStagingFloor = true.
+    * After generate(): read getWeaponSpawnTiles(), draw 3 distinct WEAPON_*
+      ItemTypes via a seeded Fisher-Yates shuffle, and spawn each as a GroundItem at
+      its tile center through GroundItemManager. Record them in StartRoomState.
+    * Empty the Loadout for the staging spawn (no default pistol) — see EDGE CASES.
+    * Hook the order-5 pickup resolution: if isStagingFloor && the picked GroundItem
+      is in the selection set, call StartRoomState.resolveSelection(picked) to
+      despawn the other two.
+    * Portal/exit handler: on leaving the staging room, clear isStagingFloor and
+      build the NEXT floor with the normal pickGenerator() path.
+- input/PlayerController.java: NO change required if the order-5 settled-tile pickup
+  hook already routes weapon GroundItems through World. The "despawn the other two"
+  is a World-side reaction to the existing pickup event, not new controller logic.
+- entity/Loadout.java: must tolerate an EMPTY state (zero weapons, active() returns
+  null / a no-weapon sentinel). If order-5 assumed the pistol always occupies slot 1,
+  relax that for the staging room (the marine is briefly unarmed). See EDGE CASES.
+
+DATA FLOW (one paragraph)
+  Menu/new-run -> World.buildFirstFloor() -> StartGameLevelGenerator.generate()
+  returns Level + weapon spawn tiles -> World shuffles arsenal, spawns 3 GroundItems,
+  records StartRoomState, empties Loadout -> player walks -> order-5 pickup hook
+  equips one -> World.resolveSelection despawns the other two -> player steps on '>'
+  -> World clears staging flag, builds floor 1 via pickGenerator().
+
+CONSTANTS TO ADD (PLACEHOLDER; pick the right file per the split-constants rule)
+- LevelGenConstants.java:
+    START_ROOM_INTERIOR_SIZE        = 13     (walkable interior, odd so it centers)
+    START_ROOM_WEAPON_OFFER_COUNT   = 3
+    START_ROOM_USE_COLUMNS          = true   (decorative 'P' framing on/off)
+- ItemConstants.java (or GameBalance.java):
+    START_ROOM_WEAPON_START_AMMO_*  per-weapon starter reserve (see BALANCE NOTES)
+- GameBalance.java:
+    START_ROOM_WEAPON_POOL_INCLUDES_PISTOL = true/false (OPEN QUESTION)
+
+TILE SYMBOLS: none new. Uses 'x', ' ', 'P', '>', 'p' — all already in
+docs/tile-symbols.txt. Weapons are GroundItems (entity-side), not glyphs, so they
+need no symbol. If a level designer ever wants to HAND-PLACE the staging weapons on
+a .txt map, that would require a new pickup glyph — flag it then; not needed here
+because the generator places them as entities.
+
+VISUAL DESIGN
+=============
+- ROOM TONE: bright lit floor ' ' everywhere; plain 'x' walls. Deliberately the
+  most well-lit, least threatening space in the game — a contrast that makes the
+  first dungeon floor feel darker by comparison. Optionally tint ambient light a
+  cool clean blue-white (EffectConstants ambient) to read as "UAC staging bay."
+- PORTAL: the existing full-height interdimensional rift '>' sprite, humming at room
+  center, framed by the four 'P' columns like an altar. It is the visual focal point
+  the start camera frames.
+- WEAPON OFFER: three ground weapon silhouettes (order-5 procedural ground sprites)
+  in a neat row beneath the portal, each with the white "grab me" shimmer so they
+  read as interactive. Consider a faint floor decal / light pool under each (reuse
+  an existing decal) to say "place your hand here."
+- BANNERS (EventTextSystem): "EQUIPPED: <WEAPON NAME>" on pickup; "LOADOUT SET —
+  DESCEND" immediately after the other two despawn; an idle hint after a few seconds
+  of inactivity: "CHOOSE A WEAPON, THEN ENTER THE PORTAL."
+- HUD: while unarmed, the WeaponHudRenderer shows no weapon sprite and the ammo
+  digits read "--"; the moment a weapon is equipped the HUD snaps to it. This is a
+  clean visual teaching moment for what the HUD means.
+
+BALANCE NOTES (all PLACEHOLDER — tune in playtest)
+=============
+- OFFER COUNT: 3 is the sweet spot — enough variety to feel like a real choice,
+  few enough to read instantly. Do not exceed 3 without re-checking the row layout.
+- STARTER AMMO per offered weapon (full mag + small reserve so floor 1 is playable):
+    Shotgun           : 1 full tube + ~12 shells reserve
+    DoubleBarrel      : 2 loaded + ~10 shells reserve
+    PlasmaRifle       : 1 full cell pack + ~40 cells reserve
+    Chaingun          : 1 belt + ~120 bullets reserve
+    Railgun           : ~6 slugs total
+    Incinerator       : 1 tank + ~60 fuel reserve
+    GrenadeLauncher   : ~4 grenades total
+  These are intentionally generous-but-finite: the staging weapon should carry the
+  player through floor 1 and into finding their first ammo box, not the whole run.
+- POOL FAIRNESS: every weapon should be equally likely to appear (uniform shuffle).
+  If certain weapons feel terrible as a SOLE starter (e.g. Railgun's low ammo /
+  single-target nature on a crowd floor), either bump their starter ammo or
+  weight them down in the draw — flag during playtest, do not pre-nerf.
+- NO ENEMIES, NO DAMAGE in the staging room — it must be 100% safe. Any tick that
+  fires here resolves to nothing.
+
+INTERACTIONS
+============
+1. order 5 (Loadout / GroundItem pickup): the staging room is the FIRST and cleanest
+   exercise of the pickup path. The "despawn the other two" rule is the only new
+   behavior; everything else (equip, HUD swap, ammo add) is reused verbatim.
+2. order 18 (menu / new-run): the descent transition lands the player in the staging
+   room; "BEGIN DESCENT" -> staging, not dungeon. Win/death -> menu -> a NEW run
+   gets a NEW staging room with a fresh weapon re-roll.
+3. pickGenerator() (second-level doc): explicitly bypassed for floor 0 and restored
+   for floor 1+. The staging generator must NOT be added to the random pool, or
+   dungeon floors could spawn as empty safe rooms.
+4. XP / PlayerStats (xp-level-progression): a fresh run resets stats to level 1 / 0
+   XP BEFORE the staging room is entered, so the marine truly starts from scratch.
+   No XP is earnable in the staging room (no enemies).
+5. EnemyManager / DoorManager / ExplosiveBarrelManager: all present but idle in the
+   staging room (zero spawns, zero doors, zero barrels). Confirm they no-op cleanly
+   on a floor with no relevant tiles.
+6. Minimap (LevelRenderer): renders the small square room and the despawning weapons
+   correctly — a good readability check that GroundItem despawn updates the minimap.
+
+EDGE CASES
+==========
+- PLAYER IGNORES THE WEAPONS AND ENTERS THE PORTAL UNARMED:
+  Allowed. The marine descends with an EMPTY Loadout. This is a (brutal, on-brand)
+  player choice. Two design options, pick one:
+    (A) Permit it fully — the player must find a weapon on floor 1 or fight unarmed
+        (melee/fists if order 9 melee exists). Hardcore, roguelike-honest.
+    (B) Soft-guard — if the player steps on the portal while the selection is
+        UNRESOLVED, flash "ARM YOURSELF FIRST" and block the transition (the step is
+        a no-op like walking into a wall) until a weapon is taken.
+  RECOMMENDATION: (B) for v1 (prevents an accidental unwinnable start), with (A) as
+  a possible Nightmare-difficulty rule. Document whichever is chosen in the loop.
+- NEW-GAME STATE RESET: starting a run must reset Loadout (empty), Inventory, ammo
+  pouch, HP/armor (full), PlayerStats (level 1), and clear any prior StartRoomState.
+  The staging room must NEVER inherit leftover weapons/ammo from a previous run.
+- PLAYER LEAVES, THEN... there is no "back": the portal is one-way (descent). The
+  staging room cannot be re-entered; floor exits go deeper. No need to persist it.
+- ARSENAL POOL SMALLER THAN 3: if the pool of pickable weapons ever drops below the
+  offer count (e.g. only 2 weapons exist), offer all available and shrink the row;
+  never crash on an under-sized shuffle. Guard with min(OFFER_COUNT, poolSize).
+- DUPLICATE PREVENTION: the three offers must be DISTINCT (shuffle-without-
+  replacement). Never offer the same weapon twice in one row.
+- DOUBLE-PICKUP RACE: because movement is turn-locked and one tile at a time, the
+  player can only stand on one weapon tile per turn; resolveSelection() flips
+  choiceResolved so even an unusual re-entry cannot grab a second weapon. The other
+  two are already despawned, so there is nothing to grab.
+- WEAPONLESS HUD / FIRE: while unarmed, the Fire button must safely no-op (or use
+  fists if melee exists), and the WeaponHudRenderer must handle a null active weapon
+  without NPE. Confirm Loadout.active() == null is handled everywhere it is read.
+- SEED REPRODUCIBILITY: derive the weapon shuffle from the run seed (e.g.
+  seed ^ STAGING_SALT) so the same seed yields the same three offers — supports
+  daily-challenge / seeded runs without consuming dungeon-generation entropy.
+
+OPEN QUESTIONS
+==============
+1. Is the PISTOL in the offer pool, guaranteed, or excluded? Options: (a) exclude it
+   (the player always starts with a "real" weapon — more exciting); (b) include it
+   uniformly (the gambler's bad-beat); (c) always grant a pistol as a permanent
+   slot-1 sidearm AND offer 3 OTHER weapons (matches order-5's "locked sidearm"
+   recommendation, removes the unarmed edge case). RECOMMENDATION: (c) is the
+   cleanest — never unarmed, the three offers are pure upside. If (c), the "enter
+   unarmed" edge case disappears.
+2. Should picking a weapon also let the player REROLL or PREVIEW the three (e.g. read
+   a one-line stat blurb by standing adjacent)? A small "weapon name + role" banner
+   on approach would help new players; defer the reroll (a reroll undermines the
+   commitment beat).
+3. Exact room size and weapon-row placement — is 13x13 with the row one tile south of
+   the portal the best framing, or should the weapons flank the portal (one west,
+   one center-south, one east)? Settle with game-level-designer once the generator
+   exists; the row-of-three is the spec, the arrangement is tunable.
+4. Should the staging room theme/flavor (bay name, ambient color) vary per run for
+   texture, or stay a fixed neutral bay? Recommend fixed neutral for v1 (it is the
+   stable "home base" frame); flavor-vary later if desired.
+5. If order 9 melee exists, does the unarmed-descent path (edge case A) start the
+   player with fists, or truly empty-handed? Coordinate with the melee doc.

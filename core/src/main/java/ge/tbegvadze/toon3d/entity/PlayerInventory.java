@@ -81,6 +81,14 @@ public class PlayerInventory {
         return loadout.active();
     }
 
+    /**
+     * Clears all loadout slots without changing the arsenal or weapon configuration.
+     * Used by the start room so the player begins completely unarmed.
+     */
+    public void clearLoadout() {
+        loadout = new Loadout();
+    }
+
     /** Provides direct access to the loadout for slot-selection UI and input handling. */
     public Loadout getLoadout() { return loadout; }
 
