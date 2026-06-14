@@ -46,6 +46,28 @@ public final class GameMath {
     }
 
     // =========================================================================
+    // WEAPON PICKUP BOB OFFSET
+    // =========================================================================
+    /*
+     * Formula: Pickup float bob screen offset
+     * Derivation:
+     *   offset = sin(timeSeconds * speed + phaseOffset) * amplitudeFraction * spriteHeight
+     *   The sin wave oscillates between -1 and +1, producing a smooth hover.
+     *   Multiplying by amplitudeFraction (0–1) and spriteHeight converts to screen pixels.
+     *   The phaseOffset desyncs multiple pickups so they don't bob in lockstep.
+     * Edge cases:
+     *   amplitudeFraction must be < WEAPON_PICKUP_HEIGHT_FRACTION so the sprite never
+     *   dips below floor level at the bottom of its bob cycle.
+     *   Returns 0 when spriteHeight is non-positive.
+     */
+    public static float pickupBobOffset(float timeSeconds, float speed,
+                                        float amplitudeFraction, float phaseOffset,
+                                        float spriteHeight) {
+        if (spriteHeight <= 0f) return 0f;
+        return MathUtils.sin(timeSeconds * speed + phaseOffset) * amplitudeFraction * spriteHeight;
+    }
+
+    // =========================================================================
     // ANGLE BETWEEN TWO POINTS
     // =========================================================================
     /*

@@ -1,0 +1,298 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Per-Weapon Ground Pickup Sprites (floating gun silhouettes)
+CREATED: 2026-06-14
+---
+
+OVERVIEW
+========
+Every weapon dropped or seeded in the world should read, at a glance and from
+down a corridor, as the specific gun it is — a brown-stocked shotgun, a cyan
+plasma rifle, an olive grenade tube — instead of the current single generic gold
+star used for ALL weapon pickups. This doc replaces that one shared
+`weaponPickupTexture` in PropRenderer with a per-weapon procedural billboard
+cache, gives each gun a recognisable floating top-down/three-quarter silhouette
+in its own HUD palette, and adds a gentle sin-wave bob so the pickup "hovers" and
+catches the eye. NO new tile symbol is introduced — weapons remain entity-side
+GroundItems (already implemented), keyed by ItemType.
+
+This is a pure-visual upgrade layered on top of the already-IMPLEMENTED weapon
+pickup/loadout system (see roguelike_order_5_weapon_pickup_and_switching.txt).
+It changes how weapon pickups LOOK, not how they are placed, picked up, or
+carried. It belongs here because the genre lives on the weapon ladder, and a
+ladder you can only identify by walking onto it is a worse ladder.
+
+
+GAMEPLAY LOOP
+=============
+This feature is cosmetic; the gameplay loop it rides on already exists. The only
+NEW player-facing behaviour is the float animation and the readable silhouette.
+
+1. LevelGenerator (or StartGameLevelGenerator, or an enemy drop) places a weapon
+   as a GroundItem: `new GroundItem(tileColumn, tileRow, ItemType.WEAPON_X, 1)`.
+   It is added to the World's ground-item list and pushed to PropRenderer via the
+   already-existing `PropRenderer.setGroundItems(list)`. NO tile char is written.
+2. Each frame, in PropRenderer's ground-item pass, for every GroundItem whose
+   stack ItemType is in the WEAPON category:
+     - look up that weapon's cached procedural texture from a
+       Map<ItemType, Texture> (built once at construction);
+     - compute a float Y offset = sin(lightingTimeSeconds * BOB_SPEED) * BOB_AMP
+       added to the sprite's vertical screen position so the gun hovers and bobs;
+     - draw it as a billboard exactly like the existing weapon-pickup pass
+       (depth cull, screen projection, per-column z-buffer occlusion against
+       walls and nearer props).
+3. Player steps onto the weapon's tile. The EXISTING settled-tile pickup hook
+   (PlayerController + Loadout, from order 5) resolves equip / convert-to-ammo /
+   full-slots-swap. On a successful grab the GroundItem is removed from the
+   World's ground-item list -> PropRenderer no longer sees it -> the floating
+   sprite vanishes that same frame. A pickup banner flashes (already specced in
+   order 5).
+4. If the player declines a full-slots swap, the GroundItem stays in the list and
+   keeps floating/bobbing on its tile, untouched.
+
+No turn-cost or input change is introduced by this doc. The bob is driven by the
+already-plumbed `lightingTimeSeconds` clock PropRenderer already receives via
+`setLightingTime()`, so it advances in real time for cosmetic smoothness while
+the SIMULATION stays strictly turn-based (the float is decoration on a static
+tile, exactly like the flickering-floor animation — it never affects logic).
+
+
+PLAYER EXPERIENCE
+=================
+The corridor now answers a question it currently can't: "what is that on the
+floor ahead?" A glint of cyan two rooms down means a plasma rifle is worth the
+detour; a dull olive tube means a grenade launcher; a twin-barrel grey
+silhouette means a double-barrel shotgun is sitting there. The bob and faint
+hover sell "loot, grab me" the way Doom's spinning pickups did, without breaking
+the chunky tile aesthetic. Identification-at-range turns a blind grab into a
+real navigation decision — the DCSS/Hades feeling of reading the room before you
+commit to it. Crucially, the silhouette MATCHES the first-person sprite the
+player will then hold, so picking up the cyan thing and seeing the cyan plasma
+rifle raise into view closes the loop and teaches the icon language for free.
+
+
+TECHNICAL NOTES
+===============
+NO NEW TILE SYMBOL. Weapons are GroundItems (entity-side), keyed by ItemType, not
+by a tile char. This is consistent with the already-implemented loadout doc which
+states weapons "never need a '.txt' map character." Confirmed against
+docs/tile-symbols.txt — nothing to add there.
+
+DATA STRUCTURE (already exists — reuse, do not reinvent):
+  item/GroundItem.java  — public final int tileColumn, tileRow; public final
+  ItemStack stack (stack.getType() yields the ItemType). This IS the
+  (tileColumn, tileRow) -> WeaponType mapping the renderer and pickup logic read.
+  The World owns the List<GroundItem>; PropRenderer holds a reference via
+  setGroundItems(). No new class is required for storage.
+  - If a stronger type is wanted, an OPTIONAL convenience accessor
+    `ItemType GroundItem.weaponType()` (returns stack type if category==WEAPON,
+    else null) keeps the renderer switch readable. Not mandatory.
+
+MISSING ItemType WEAPON ENTRIES (must be added before their sprites can be keyed):
+  item/ItemType.java currently has only WEAPON_PISTOL, WEAPON_SHOTGUN,
+  WEAPON_PLASMA, WEAPON_ROCKET. The game has 8 weapon classes. Add the gaps so
+  every weapon class has a pickup ItemType:
+    WEAPON_DOUBLE_BARREL, WEAPON_CHAINGUN, WEAPON_RAILGUN, WEAPON_INCINERATOR,
+    WEAPON_GRENADE  (and rename/confirm WEAPON_ROCKET vs WEAPON_GRENADE intent).
+  Each follows the existing weapon-entry pattern (amber glyph colour). This is a
+  prerequisite owned jointly with order 5; flag it to the implementer.
+
+RENDERING APPROACH (modify render/PropRenderer.java):
+  Replace the single `private final Texture weaponPickupTexture;` with:
+    private final Map<ItemType, Texture> weaponPickupTextures;  // built once
+    private Texture genericWeaponFallbackTexture;               // keep the star
+  - Build the map in the constructor, one entry per WEAPON-category ItemType, via
+    new private static generateWeapon<Name>GroundTexture() methods (one per gun,
+    spec below). Cache at startup; ZERO per-frame allocation — same rule as the
+    existing prop textures.
+  - In the ground-item pass, resolve the texture by ItemType:
+        Texture texture = weaponPickupTextures.getOrDefault(type,
+                                                genericWeaponFallbackTexture);
+    and use it in the existing projection/clipping/z-buffer loop verbatim.
+  - Dispose all map textures + the fallback in dispose().
+  This reuses the entire existing weapon-pickup draw block (lines ~316-376 of the
+  current PropRenderer) — only the texture lookup and the bob offset change.
+
+FLOAT ANIMATION (in the ground-item draw block):
+  float bobScreenOffset = MathUtils.sin(lightingTimeSeconds * WEAPON_PICKUP_BOB_SPEED)
+                          * WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION * spriteScreenHeight;
+  Apply it to BOTH clampedBottom and clampedTop (shift the whole stripe up/down)
+  AFTER clamping bounds, or fold it into drawBottom before clamping. Because the
+  sprite already sits ABOVE the floor (WEAPON_PICKUP_HEIGHT_FRACTION lifts it),
+  bobbing it a small fraction of its own height keeps it clearly airborne and
+  never clips into the floor. Per-weapon phase offset (e.g. + ordinal * 0.7f)
+  desynchronises multiple pickups so they don't bob in lockstep. Put the math in
+  GameMath as a pure helper:
+    GameMath.pickupBobOffset(timeSeconds, speed, amplitude, phase) -> float.
+
+CONSTANTS TO ADD (WeaponConstants.java; PLACEHOLDER values):
+  WEAPON_PICKUP_HEIGHT_FRACTION        = 0.30f   (already exists per order 5 —
+                                                  reuse; do not duplicate)
+  WEAPON_PICKUP_BOB_SPEED              = 2.2f    (radians/sec of the sin clock)
+  WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION = 0.10f   (10% of sprite height)
+  WEAPON_PICKUP_TEXTURE_SIZE           = 64      (square pixmap edge, px)
+  WEAPON_PICKUP_PHASE_STEP             = 0.7f    (per-weapon bob phase offset)
+
+CLASSES TOUCHED:
+  - render/PropRenderer.java      — texture map, fallback, bob, dispose.
+  - item/ItemType.java            — add missing WEAPON_* entries.
+  - util/WeaponConstants.java     — bob + texture-size constants.
+  - util/GameMath.java            — pickupBobOffset() pure helper.
+  - world/World.java              — no change beyond already wiring
+                                    setGroundItems() + setLightingTime(); confirm
+                                    the generator seeds weapon GroundItems.
+  - level/LevelGenerator.java / StartGameLevelGenerator — emit weapon GroundItems
+    (placement is order 5's concern; this doc only consumes them).
+
+TURN-BASED FIT: the bob is cosmetic real-time decoration on a static tile (same
+class as flickering floors); it never touches simulation state. Pickup resolution
+is the existing one-turn settled-tile event. No constraint is violated.
+
+
+VISUAL DESIGN
+=============
+General rules for every weapon ground sprite (all drawn with Pixmap fillRectangle/
+fillCircle, Nearest filtering, transparent background, WEAPON_PICKUP_TEXTURE_SIZE
+square unless noted):
+  - View: a three-quarter top-down "lying tilted in the air" silhouette — barrel
+    pointing up-left, stock down-right, so the gun reads as a recognisable shape
+    rather than a thin side-on line that vanishes at distance.
+  - Each sprite gets a faint 2-3px COOL-WHITE rim/edge highlight on its top-left
+    so it pops against dark floors and signals "interactable" (matches the order-5
+    "cool white shimmer marks an uncollected weapon" note).
+  - Colours are taken DIRECTLY from each weapon's WeaponHudRenderer palette so the
+    ground icon and the held weapon share an identity. RGB values below are 0-1.
+  - Keep shapes blocky and few (4-7 rects each) — chunky pixel aesthetic, cheap to
+    generate, readable when shrunk to a few screen columns at range.
+
+Per-weapon shape recipes (origin = pixmap bottom-left in description; sizes scale
+with WEAPON_PICKUP_TEXTURE_SIZE = 64):
+
+  PISTOL (generateWeaponPistolGroundTexture)
+    - Slide/barrel: dark-grey rect (0.30,0.30,0.32), thin, upper-left diagonal.
+    - Grip: near-black rect (0.10,0.10,0.11) angled down-right.
+    - Muzzle dot: 2x2 light-grey (0.55,0.55,0.58) at barrel tip.
+    - Smallest silhouette of the set (it's the sidearm) — fits in ~60% of the box.
+
+  SHOTGUN (generateWeaponShotgunGroundTexture)  [matches Shotgun HUD: brown+grey]
+    - Stock: warm brown wood rect (0.40,0.26,0.12), down-right, wide.
+    - Barrel: single grey tube rect (0.24,0.24,0.26), up-left, long.
+    - Pump fore-grip: darker brown 6x6 block (0.30,0.18,0.08) mid-barrel.
+    - Trigger guard: 4x4 dark-grey notch (0.18,0.18,0.20) at stock/barrel join.
+
+  DOUBLE-BARREL (generateWeaponDoubleBarrelGroundTexture)  [dark brown + 2 barrels]
+    - Stock: dark brown rect (0.32,0.20,0.10), short and stubby, down-right.
+    - TWO grey barrels side by side (0.22,0.22,0.24 and 0.28,0.28,0.30 for the
+      second so they read as two), up-left, parallel, slight gap between.
+    - Break-action hinge: 3x3 bright-grey pin (0.50,0.50,0.54) at the join.
+
+  CHAINGUN (generateWeaponChaingunGroundTexture)  [silver barrels + dark body]
+    - Dark body block: charcoal rect (0.16,0.17,0.19), centre-right, chunky.
+    - Rotating barrel cluster: 3-4 thin SILVER rects (0.62,0.64,0.70) up-left,
+      stacked/fanned so they read as multiple spinning barrels.
+    - Muzzle ring: silver 4x4 square (0.70,0.72,0.78) at the barrel ends.
+    - Ammo-feed nub: small olive 4x4 (0.40,0.42,0.22) on the body side.
+
+  PLASMA RIFLE (generateWeaponPlasmaGroundTexture)  [bright cyan emitter + dk blue]
+    - Body: dark blue-grey rect (0.14,0.18,0.26), down-right.
+    - Emitter head: BRIGHT CYAN block (0.20,0.85,0.95) at the up-left muzzle, the
+      glow-y focal point of the icon.
+    - Cyan energy seam: 2px cyan line (0.30,0.90,1.00) along the body top edge.
+    - Coil dots: two 2x2 cyan flecks (0.40,0.95,1.00) near the emitter (the
+      "uncollected shimmer" doubles as the plasma glow here).
+
+  RAILGUN (generateWeaponRailgunGroundTexture)  [electric blue rails + metal grey]
+    - Body: metallic grey rect (0.34,0.36,0.40), down-right, long and thin.
+    - TWO parallel ELECTRIC-BLUE rail lines (0.25,0.55,1.00), up-left, running the
+      length — the defining feature; keep them bright and distinct.
+    - Coil block: darker grey 8x8 (0.22,0.24,0.28) mid-body between the rails.
+    - Arc fleck: single white 2x2 (0.85,0.95,1.00) sparking between the rails.
+
+  INCINERATOR (generateWeaponIncineratorGroundTexture)  [orange/red flame + dk gry]
+    - Body: dark grey rect (0.18,0.18,0.20), down-right.
+    - Nozzle head: ORANGE block (0.95,0.45,0.10) at the up-left muzzle.
+    - Flame lick: red->orange gradient 3-4px (0.90,0.20,0.05 fading to
+      0.98,0.60,0.15) flaring off the nozzle tip.
+    - Fuel canister: stubby dark-red cylinder (0.45,0.12,0.08) slung under the body.
+
+  GRENADE LAUNCHER (generateWeaponGrenadeGroundTexture)  [olive tube + grey body]
+    - Launch tube: thick OLIVE/dark-green rect (0.30,0.36,0.16), up-left, the fat
+      defining barrel — wider than every other weapon's barrel.
+    - Body/receiver: grey rect (0.30,0.32,0.36), down-right.
+    - Muzzle bore: black 6x6 circle (0.04,0.04,0.05) at the tube mouth (reads as a
+      big open bore — the grenade-launcher tell).
+    - Grip: dark olive 6x10 (0.20,0.24,0.10) down from the receiver.
+
+FALLBACK: keep the existing gold-star generateWeaponPickupTexture as
+genericWeaponFallbackTexture for any WEAPON ItemType without a dedicated recipe
+(future-proofing) so the renderer never draws nothing.
+
+HUD/EVENT: pickup banner already handled by order 5 ("PICKED UP: <name> [slot]").
+No new HUD element here.
+
+
+BALANCE NOTES
+=============
+All placeholder — tune in playtest:
+  - WEAPON_PICKUP_BOB_SPEED 2.2 rad/s, amplitude 10% of sprite height: a slow,
+    readable hover, not a jitter. If it looks frantic, drop speed to ~1.6.
+  - WEAPON_PICKUP_HEIGHT_FRACTION 0.30 lifts the gun clearly off the floor; the
+    bob amplitude (0.10 * height) must stay well below the lift so the sprite
+    never dips into the floor at the bottom of its bob. Constraint:
+    bob_amplitude_fraction < height_fraction (0.10 < 0.30 — satisfied).
+  - Per-weapon phase step 0.7 rad desyncs ~9 weapons across the 2*PI cycle so a
+    room with several drops looks alive, not robotic.
+  - Texture size 64x64 matches the existing prop textures; no perf concern (8-9
+    extra small textures, ~600KB-class, negligible, same order as current props).
+  - Spawn DENSITY is order 5/order 10's concern, not this doc. This doc only makes
+    whatever is spawned legible.
+
+
+INTERACTIONS
+============
+1. ORDER 5 — Weapon Pickup & Loadout (IMPLEMENTED): this doc is the visual layer
+   for the GroundItems that order 5 creates and consumes. The (tile)->WeaponType
+   mapping is order 5's GroundItem list; pickup removal is order 5's settled-tile
+   hook. Hard dependency: the missing WEAPON_* ItemTypes must be added (shared
+   task). This doc must NOT change pickup logic or turn costs.
+2. PropRenderer / Billboard pipeline (IMPLEMENTED): reuses the exact depth-cull,
+   spriteScreenColumnCenter projection, wall z-buffer occlusion, and tile-
+   brightness shading already in the ground-item pass. The only deltas are the
+   texture map and the bob offset. Distance shading + red-alert tint apply to
+   weapon sprites for free, exactly as they do now.
+3. WeaponHudRenderer (IMPLEMENTED): the ground sprite palettes are lifted from
+   each weapon's HUD draw method so the floor icon and the raised first-person
+   weapon share colours. If a weapon's HUD palette is ever retuned, update the
+   matching ground recipe in the same commit to keep them in sync (note this in
+   the weapon-creation-guide checklist).
+4. Lighting / flickering floors (IMPLEMENTED): the bob reuses the same
+   lightingTimeSeconds clock the renderer already gets; a weapon on a flickering
+   or unlit tile dims/brightens with the tile via the existing getTileBrightness
+   path — a plasma rifle in a dark room reads as a faint cyan glow, which is the
+   desired mood.
+5. Enemy drops (enemy-system / order 5): an enemy that drops a weapon adds a
+   GroundItem; it floats and is identifiable immediately, same path as generator-
+   placed weapons. No extra work.
+
+
+OPEN QUESTIONS
+==============
+1. Should the bob be a pure vertical sin, or add a slow Y-axis "spin" illusion by
+   horizontally squashing the sprite width over time (Doom-pickup style)? Pure
+   sin is cheapest and on-aesthetic; recommend vertical-only for v1, flag spin as
+   a stretch.
+2. Three-quarter top-down vs flat side-on silhouette: the recipes above assume
+   three-quarter (more readable at range). Confirm with the implementer that the
+   simple rect-based shapes read clearly when shrunk — may need a quick visual
+   pass to thicken defining features (railgun rails, grenade bore).
+3. Does WEAPON_ROCKET stay, or is it really the GrenadeLauncher (the class roster
+   lists GrenadeLauncher, not RocketLauncher)? Reconcile the ItemType name with
+   the actual Weapon class before keying the sprite. Recommend renaming to
+   WEAPON_GRENADE to match entity/GrenadeLauncher.java.
+4. Should picked-up-but-full-slots weapons that the player declined get a subtle
+   visual "seen/declined" change (e.g. dimmer shimmer)? Probably overkill;
+   recommend OUT for v1.
+5. Optional GroundItem.weaponType() convenience accessor vs inline category check
+   in the renderer — implementer's call; both are fine.
+6. Should the generic gold-star fallback be kept at all once every weapon has a
+   recipe? Keep it as a safety net for future weapons added without a sprite.

@@ -70,6 +70,42 @@ public enum ItemType {
             1.00f, 0.75f, 0.10f
     ),
 
+    WEAPON_DOUBLE_BARREL(
+            "Double-Barrel Shotgun",
+            ItemCategory.WEAPON,
+            false,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
+            'D',
+            1.00f, 0.75f, 0.10f
+    ),
+
+    WEAPON_CHAINGUN(
+            "Chaingun",
+            ItemCategory.WEAPON,
+            false,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
+            'G',
+            1.00f, 0.75f, 0.10f
+    ),
+
+    WEAPON_RAILGUN(
+            "Railgun",
+            ItemCategory.WEAPON,
+            false,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
+            'N',
+            1.00f, 0.75f, 0.10f
+    ),
+
+    WEAPON_INCINERATOR(
+            "Incinerator",
+            ItemCategory.WEAPON,
+            false,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
+            'F',
+            1.00f, 0.75f, 0.10f
+    ),
+
     // -------------------------------------------------------------------------
     // CONSUMABLES — stackable; quantities bounded by per-type caps in Constants
     // -------------------------------------------------------------------------

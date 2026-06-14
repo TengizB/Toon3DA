@@ -317,11 +317,15 @@ public class PlayerController {
     private static AmmoType weaponItemTypeToAmmoType(ItemType weaponType) {
         if (weaponType == null) return null;
         switch (weaponType) {
-            case WEAPON_PISTOL:  return AmmoType.BULLETS;
-            case WEAPON_SHOTGUN: return AmmoType.SHELLS;
-            case WEAPON_PLASMA:  return AmmoType.CELLS;
-            case WEAPON_ROCKET:  return AmmoType.ROCKETS;
-            default:             return null;
+            case WEAPON_PISTOL:        return AmmoType.BULLETS;
+            case WEAPON_SHOTGUN:       return AmmoType.SHELLS;
+            case WEAPON_DOUBLE_BARREL: return AmmoType.SHELLS;
+            case WEAPON_CHAINGUN:      return AmmoType.BULLETS;
+            case WEAPON_PLASMA:        return AmmoType.CELLS;
+            case WEAPON_INCINERATOR:   return AmmoType.CELLS;
+            case WEAPON_RAILGUN:       return AmmoType.SLUGS;
+            case WEAPON_ROCKET:        return AmmoType.ROCKETS;
+            default:                   return null;
         }
     }
 

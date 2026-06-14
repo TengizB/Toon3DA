@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.item.GroundItem;
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.GameMath;
 
@@ -81,7 +82,9 @@ public class PropRenderer implements Renderable, Disposable {
     private final WallRenderer            wallRenderer;
     private final List<PropPlacement>     propPlacements;
     private final Map<Character, Texture> textures;
-    private final Texture                 weaponPickupTexture;
+    // Per-weapon ground billboard textures — keyed by ItemType, built once at startup.
+    private final Map<ItemType, Texture>  weaponPickupTextures;
+    private final Texture                 genericWeaponFallbackTexture;
     private final SpriteBatch             batch;
 
     // Weapon ground items (placed by LevelGenerator, consumed on player pickup).
@@ -117,9 +120,10 @@ public class PropRenderer implements Renderable, Disposable {
         this.sortedDepths       = new float[propCount];
         this.propSpriteZBuffer  = new float[WALL_PROJECTION_SCREEN_WIDTH];
         // SpriteBatch capacity = one sprite per screen column (1-pixel-wide column draws).
-        this.batch              = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
-        this.textures           = buildTextures();
-        this.weaponPickupTexture = generateWeaponPickupTexture();
+        this.batch                        = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
+        this.textures                     = buildTextures();
+        this.weaponPickupTextures         = buildWeaponPickupTextures();
+        this.genericWeaponFallbackTexture = generateWeaponPickupTexture();
     }
 
     /** Replaces the ground item list; called by World after each level build. */
@@ -311,8 +315,9 @@ public class PropRenderer implements Renderable, Disposable {
         }
 
         // Ground items: weapon pickups spawned by the level generator. These are entity-side
-        // objects (not tile chars) so they need a separate render pass. Typically at most one
-        // per level — no depth sort needed; wall z-buffer still provides correct occlusion.
+        // objects (not tile chars) so they need a separate render pass. Each weapon type gets
+        // a unique procedural billboard texture looked up from weaponPickupTextures by ItemType.
+        // A sin-wave bob offset lifts the sprite to hover mid-air and animates it smoothly.
         for (GroundItem groundItem : groundItems) {
             float itemWorldCenterX = groundItem.tileColumn * CELL_SIZE + CELL_SIZE / 2f;
             float itemWorldCenterY = groundItem.tileRow    * CELL_SIZE + CELL_SIZE / 2f;
@@ -335,14 +340,23 @@ public class PropRenderer implements Renderable, Disposable {
             int columnSpan        = rightScreenColumn - leftScreenColumn;
             if (columnSpan <= 0) continue;
 
-            float drawBottom    = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
+            // Bob offset: per-weapon phase desynchronises multiple pickups in the same room.
+            ItemType itemType   = groundItem.stack.getType();
+            float    bobPhase   = itemType.ordinal() * WEAPON_PICKUP_PHASE_STEP;
+            float    bobOffset  = GameMath.pickupBobOffset(
+                                      lightingTimeSeconds, WEAPON_PICKUP_BOB_SPEED,
+                                      WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION, bobPhase,
+                                      spriteScreenHeight);
+            float drawBottom    = GameMath.wallStripeDrawBottom(
+                                      WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight) + bobOffset;
             float drawTop       = drawBottom + spriteScreenHeight;
             float clampedBottom = Math.max(0f, drawBottom);
             float clampedTop    = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, drawTop);
             if (clampedTop <= clampedBottom) continue;
 
-            int textureWidth  = weaponPickupTexture.getWidth();
-            int textureHeight = weaponPickupTexture.getHeight();
+            Texture pickupTexture = weaponPickupTextures.getOrDefault(itemType, genericWeaponFallbackTexture);
+            int textureWidth  = pickupTexture.getWidth();
+            int textureHeight = pickupTexture.getHeight();
             int texSrcY       = GameMath.wallTextureClipSrcY(
                                     drawTop, WALL_PROJECTION_SCREEN_HEIGHT,
                                     spriteScreenHeight, textureHeight);
@@ -367,7 +381,7 @@ public class PropRenderer implements Renderable, Disposable {
                 if (depth >= propSpriteZBuffer[screenColumn]) continue;
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
-                batch.draw(weaponPickupTexture,
+                batch.draw(pickupTexture,
                            screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
                            WALL_COLUMN_WIDTH, clampedTop - clampedBottom,
                            texSrcX, texSrcY, 1, texSrcHeight,
@@ -453,7 +467,10 @@ public class PropRenderer implements Renderable, Disposable {
     @Override
     public void dispose() {
         batch.dispose();
-        weaponPickupTexture.dispose();
+        genericWeaponFallbackTexture.dispose();
+        for (Texture texture : weaponPickupTextures.values()) {
+            texture.dispose();
+        }
         for (Texture texture : textures.values()) {
             texture.dispose();
         }
@@ -1433,6 +1450,266 @@ public class PropRenderer implements Renderable, Disposable {
         // Latch dot — bright accent at centre
         pixmap.setColor(Math.min(1f, red + 0.30f), Math.min(1f, green + 0.30f), Math.min(1f, blue + 0.30f), 1f);
         pixmap.fillRectangle(22, 14, 4, 4);
+        return finalize(pixmap);
+    }
+
+    // -------------------------------------------------------------------------
+    // Per-weapon ground pickup sprite generators
+    //
+    // All sprites are 64×64 RGBA8888 with a transparent background. The layout
+    // convention is: barrel on the left (small X), stock/body on the right (large X),
+    // weapon centred vertically at Y≈28 (Pixmap Y=0 is top). Colours match each
+    // weapon's WeaponHudRenderer palette so the floor icon and the first-person
+    // sprite share the same identity.
+    // -------------------------------------------------------------------------
+
+    private static Map<ItemType, Texture> buildWeaponPickupTextures() {
+        Map<ItemType, Texture> map = new HashMap<>();
+        map.put(ItemType.WEAPON_PISTOL,        generateWeaponPistolGroundTexture());
+        map.put(ItemType.WEAPON_SHOTGUN,       generateWeaponShotgunGroundTexture());
+        map.put(ItemType.WEAPON_DOUBLE_BARREL, generateWeaponDoubleBarrelGroundTexture());
+        map.put(ItemType.WEAPON_CHAINGUN,      generateWeaponChaingunGroundTexture());
+        map.put(ItemType.WEAPON_PLASMA,        generateWeaponPlasmaGroundTexture());
+        map.put(ItemType.WEAPON_RAILGUN,       generateWeaponRailgunGroundTexture());
+        map.put(ItemType.WEAPON_INCINERATOR,   generateWeaponIncineratorGroundTexture());
+        map.put(ItemType.WEAPON_ROCKET,        generateWeaponRocketGroundTexture());
+        return map;
+    }
+
+    /** Pistol — compact dark-grey sidearm, short barrel, visible black grip below body. */
+    private static Texture generateWeaponPistolGroundTexture() {
+        int size = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Barrel: thin dark-grey rect extending left
+        pixmap.setColor(0.30f, 0.30f, 0.32f, 1f);
+        pixmap.fillRectangle(4, 27, 26, 8);
+        // Slide/body: slightly wider, overlapping barrel right end
+        pixmap.setColor(0.20f, 0.20f, 0.22f, 1f);
+        pixmap.fillRectangle(24, 23, 20, 16);
+        // Grip: near-black rect extending below body
+        pixmap.setColor(0.10f, 0.10f, 0.11f, 1f);
+        pixmap.fillRectangle(36, 37, 12, 20);
+        // Muzzle light-grey 2x2 at barrel tip
+        pixmap.setColor(0.55f, 0.55f, 0.58f, 1f);
+        pixmap.fillRectangle(4, 27, 2, 2);
+        // Cool-white rim highlight: top edge of barrel + left muzzle edge
+        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
+        pixmap.fillRectangle(4, 27, 26, 1);
+        pixmap.fillRectangle(4, 27, 1, 8);
+        return finalize(pixmap);
+    }
+
+    /**
+     * Shotgun — long grey barrel extending left, warm-brown stock block on the right,
+     * darker-brown pump fore-grip mid-barrel. Classic silhouette.
+     */
+    private static Texture generateWeaponShotgunGroundTexture() {
+        int size = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Long barrel: neutral grey
+        pixmap.setColor(0.24f, 0.24f, 0.26f, 1f);
+        pixmap.fillRectangle(4, 27, 44, 8);
+        // Stock: warm brown, wider and taller
+        pixmap.setColor(0.40f, 0.26f, 0.12f, 1f);
+        pixmap.fillRectangle(40, 23, 22, 18);
+        // Pump fore-grip: darker brown block on mid-barrel
+        pixmap.setColor(0.30f, 0.18f, 0.08f, 1f);
+        pixmap.fillRectangle(22, 25, 10, 12);
+        // Trigger guard notch: small dark-grey rect at stock/barrel join
+        pixmap.setColor(0.18f, 0.18f, 0.20f, 1f);
+        pixmap.fillRectangle(42, 33, 8, 8);
+        // Cool-white rim: top edge of barrel
+        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
+        pixmap.fillRectangle(4, 27, 44, 1);
+        pixmap.fillRectangle(4, 27, 1, 8);
+        return finalize(pixmap);
+    }
+
+    /**
+     * Double-Barrel Shotgun — two parallel grey barrel tubes (split by a dark gap),
+     * short dark-brown stock on the right, bright-grey break-action hinge pin at join.
+     */
+    private static Texture generateWeaponDoubleBarrelGroundTexture() {
+        int size = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Upper barrel tube
+        pixmap.setColor(0.28f, 0.28f, 0.30f, 1f);
+        pixmap.fillRectangle(4, 20, 40, 9);
+        // Gap between barrels
+        pixmap.setColor(0.06f, 0.06f, 0.07f, 1f);
+        pixmap.fillRectangle(4, 29, 40, 4);
+        // Lower barrel tube (slightly different grey to distinguish the two)
+        pixmap.setColor(0.22f, 0.22f, 0.24f, 1f);
+        pixmap.fillRectangle(4, 33, 40, 9);
+        // Stock: dark brown, right side
+        pixmap.setColor(0.32f, 0.20f, 0.10f, 1f);
+        pixmap.fillRectangle(40, 18, 22, 26);
+        // Break-action hinge pin: bright grey
+        pixmap.setColor(0.52f, 0.52f, 0.56f, 1f);
+        pixmap.fillRectangle(38, 27, 5, 8);
+        // Cool-white rim: top edge of upper barrel
+        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
+        pixmap.fillRectangle(4, 20, 40, 1);
+        pixmap.fillRectangle(4, 20, 1, 9);
+        return finalize(pixmap);
+    }
+
+    /**
+     * Chaingun — three stacked thin silver barrel tubes on the left, dark charcoal
+     * body block on the right, small olive ammo-feed nub on body top-right.
+     */
+    private static Texture generateWeaponChaingunGroundTexture() {
+        int size = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Dark charcoal body block (right side)
+        pixmap.setColor(0.16f, 0.17f, 0.19f, 1f);
+        pixmap.fillRectangle(30, 18, 30, 28);
+        // Barrel tube 1 (top): silver
+        pixmap.setColor(0.64f, 0.66f, 0.72f, 1f);
+        pixmap.fillRectangle(4, 20, 32, 6);
+        // Barrel tube 2 (middle): slightly lighter
+        pixmap.setColor(0.70f, 0.72f, 0.78f, 1f);
+        pixmap.fillRectangle(4, 28, 32, 6);
+        // Barrel tube 3 (bottom): silver
+        pixmap.setColor(0.62f, 0.64f, 0.70f, 1f);
+        pixmap.fillRectangle(4, 36, 32, 6);
+        // Muzzle ring: solid silver square at barrel ends
+        pixmap.setColor(0.72f, 0.74f, 0.80f, 1f);
+        pixmap.fillRectangle(2, 19, 4, 25);
+        // Ammo-feed nub: small olive block on body top-right
+        pixmap.setColor(0.40f, 0.42f, 0.22f, 1f);
+        pixmap.fillRectangle(52, 18, 8, 6);
+        // Cool-white rim: top edge of top barrel
+        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
+        pixmap.fillRectangle(4, 20, 32, 1);
+        return finalize(pixmap);
+    }
+
+    /**
+     * Plasma Rifle — bright-cyan emitter block on the left, dark blue-grey body on the right,
+     * cyan energy seam along the body top edge, two cyan coil dots near the emitter.
+     */
+    private static Texture generateWeaponPlasmaGroundTexture() {
+        int size = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Body: dark blue-grey
+        pixmap.setColor(0.14f, 0.18f, 0.26f, 1f);
+        pixmap.fillRectangle(18, 22, 42, 22);
+        // Emitter head: bright CYAN block at muzzle (left side)
+        pixmap.setColor(0.20f, 0.85f, 0.95f, 1f);
+        pixmap.fillRectangle(4, 20, 18, 26);
+        // Cyan energy seam: 2px line along body top edge
+        pixmap.setColor(0.30f, 0.90f, 1.00f, 1f);
+        pixmap.fillRectangle(18, 22, 42, 2);
+        // Coil dots: two 4x4 cyan flecks on body near emitter join
+        pixmap.setColor(0.40f, 0.95f, 1.00f, 1f);
+        pixmap.fillRectangle(24, 27, 4, 4);
+        pixmap.fillRectangle(24, 34, 4, 4);
+        // Bright cool-white rim: left edge + top edge of emitter
+        pixmap.setColor(0.90f, 0.98f, 1.00f, 1f);
+        pixmap.fillRectangle(4, 20, 1, 26);
+        pixmap.fillRectangle(4, 20, 18, 1);
+        return finalize(pixmap);
+    }
+
+    /**
+     * Railgun — long metallic-grey body spanning the full width, two parallel ELECTRIC-BLUE
+     * rail lines running along it, dark coil block between the rails at mid-body,
+     * white arc fleck sparking between the rails.
+     */
+    private static Texture generateWeaponRailgunGroundTexture() {
+        int size = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Body: metallic grey, long
+        pixmap.setColor(0.34f, 0.36f, 0.40f, 1f);
+        pixmap.fillRectangle(4, 22, 56, 22);
+        // Rail 1 (upper): ELECTRIC BLUE line along body
+        pixmap.setColor(0.25f, 0.55f, 1.00f, 1f);
+        pixmap.fillRectangle(4, 24, 56, 3);
+        // Rail 2 (lower): ELECTRIC BLUE line along body
+        pixmap.fillRectangle(4, 38, 56, 3);
+        // Coil block: darker grey rectangle between rails at mid-body
+        pixmap.setColor(0.22f, 0.24f, 0.28f, 1f);
+        pixmap.fillRectangle(22, 27, 18, 11);
+        // Arc fleck: white 2x6 spark between the rails at coil
+        pixmap.setColor(0.88f, 0.96f, 1.00f, 1f);
+        pixmap.fillRectangle(30, 27, 2, 11);
+        // Cool-white rim: top and left edges
+        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
+        pixmap.fillRectangle(4, 22, 56, 1);
+        pixmap.fillRectangle(4, 22, 1, 22);
+        return finalize(pixmap);
+    }
+
+    /**
+     * Incinerator — ORANGE nozzle block on the left, dark-grey body on the right,
+     * dark-red fuel canister slung below the body, red flame tint at nozzle tip.
+     */
+    private static Texture generateWeaponIncineratorGroundTexture() {
+        int size = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Body: dark grey
+        pixmap.setColor(0.18f, 0.18f, 0.20f, 1f);
+        pixmap.fillRectangle(20, 22, 40, 20);
+        // Nozzle head: ORANGE at muzzle (left)
+        pixmap.setColor(0.95f, 0.45f, 0.10f, 1f);
+        pixmap.fillRectangle(4, 20, 20, 24);
+        // Flame lick at nozzle tip: red edges, orange centre
+        pixmap.setColor(0.90f, 0.20f, 0.05f, 1f);
+        pixmap.fillRectangle(4, 20, 5, 8);
+        pixmap.fillRectangle(4, 36, 5, 8);
+        pixmap.setColor(0.98f, 0.62f, 0.15f, 1f);
+        pixmap.fillRectangle(4, 28, 5, 8);
+        // Fuel canister: dark-red rect slung below the body
+        pixmap.setColor(0.45f, 0.12f, 0.08f, 1f);
+        pixmap.fillRectangle(28, 40, 24, 12);
+        // Cool-white rim: top edge of nozzle
+        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
+        pixmap.fillRectangle(4, 20, 20, 1);
+        pixmap.fillRectangle(4, 20, 1, 24);
+        return finalize(pixmap);
+    }
+
+    /**
+     * Grenade Launcher (WEAPON_ROCKET) — fat OLIVE/dark-green launch tube on the left
+     * (the defining wide-bore barrel), grey receiver block on the right, near-black
+     * filled circle at the tube mouth showing the large bore opening.
+     */
+    private static Texture generateWeaponRocketGroundTexture() {
+        int size = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        // Launch tube: thick OLIVE/dark-green rect (wide barrel is the tell)
+        pixmap.setColor(0.30f, 0.36f, 0.16f, 1f);
+        pixmap.fillRectangle(4, 18, 38, 24);
+        // Receiver block: grey, right side
+        pixmap.setColor(0.30f, 0.32f, 0.36f, 1f);
+        pixmap.fillRectangle(38, 22, 22, 18);
+        // Bore opening: near-black filled circle at tube muzzle
+        pixmap.setColor(0.04f, 0.04f, 0.05f, 1f);
+        pixmap.fillCircle(10, 30, 6);
+        // Grip: dark olive, below receiver
+        pixmap.setColor(0.20f, 0.24f, 0.10f, 1f);
+        pixmap.fillRectangle(46, 38, 10, 18);
+        // Cool-white rim: top edge of tube (offset to avoid the bore circle)
+        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
+        pixmap.fillRectangle(16, 18, 26, 1);
+        pixmap.fillRectangle(4, 18, 1, 24);
         return finalize(pixmap);
     }
 
