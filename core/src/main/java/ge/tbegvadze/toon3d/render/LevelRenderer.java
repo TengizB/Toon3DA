@@ -7,17 +7,22 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.door.DoorState;
+import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.GameMath;
+
+import java.util.Collections;
+import java.util.List;
 
 import static ge.tbegvadze.toon3d.util.Constants.*;
 import static ge.tbegvadze.toon3d.util.RenderConstants.*;
 
 public class LevelRenderer implements Renderable, Disposable {
 
-    private static final Color GRID_COLOR      = new Color(0.2f, 0.2f, 0.2f, 1f);
-    private static final Color WALL_COLOR      = Color.WHITE;
-    private static final Color BORDER_COLOR    = new Color(0.6f, 0.6f, 0.6f, 1f);
+    private static final Color GRID_COLOR        = new Color(0.2f, 0.2f, 0.2f, 1f);
+    private static final Color WALL_COLOR        = Color.WHITE;
+    private static final Color BORDER_COLOR      = new Color(0.6f, 0.6f, 0.6f, 1f);
+    private static final Color WEAPON_DOT_COLOR  = new Color(1.0f, 0.75f, 0.1f, 1f);
 
     // One extra ring of tiles beyond the visible radius to fill partial cells at edges
     private static final int RENDER_TILE_RADIUS = MINI_MAP_TILE_RADIUS + 1;
@@ -28,6 +33,7 @@ public class LevelRenderer implements Renderable, Disposable {
 
     private float playerWorldX = 0f;
     private float playerWorldY = 0f;
+    private List<GroundItem> groundItems = Collections.emptyList();
 
     public LevelRenderer(Level level, DoorManager doorManager) {
         this.level       = level;
@@ -38,6 +44,10 @@ public class LevelRenderer implements Renderable, Disposable {
     public void setPlayerWorldPosition(float worldX, float worldY) {
         this.playerWorldX = worldX;
         this.playerWorldY = worldY;
+    }
+
+    public void setGroundItems(List<GroundItem> items) {
+        this.groundItems = (items != null) ? items : Collections.emptyList();
     }
 
     @Override
@@ -57,7 +67,7 @@ public class LevelRenderer implements Renderable, Disposable {
         float miniMapRight   = MINI_MAP_ORIGIN_X + MINI_MAP_WORLD_SIZE;
         float miniMapTop     = MINI_MAP_ORIGIN_Y + MINI_MAP_WORLD_SIZE;
 
-        // Filled pass — walls and doors clipped to mini-map bounds
+        // Filled pass — walls, doors, and weapon pickup dots clipped to mini-map bounds
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         for (int deltaRow = -RENDER_TILE_RADIUS; deltaRow <= RENDER_TILE_RADIUS; deltaRow++) {
             for (int deltaColumn = -RENDER_TILE_RADIUS; deltaColumn <= RENDER_TILE_RADIUS; deltaColumn++) {
@@ -93,6 +103,31 @@ public class LevelRenderer implements Renderable, Disposable {
                 }
             }
         }
+
+        // Weapon pickup dots — gold dot centred in each tile that holds a ground item
+        shapes.setColor(WEAPON_DOT_COLOR);
+        float dotSize = MINI_MAP_CELL_SIZE * 0.45f;
+        for (int itemIndex = 0; itemIndex < groundItems.size(); itemIndex++) {
+            GroundItem item = groundItems.get(itemIndex);
+            int deltaColumn = item.tileColumn - baseTileColumn;
+            int deltaRow    = item.tileRow    - baseTileRow;
+            float tileLeft   = miniMapCenterX - subTileOffsetX + deltaColumn * MINI_MAP_CELL_SIZE;
+            float tileBottom = miniMapCenterY - subTileOffsetY + deltaRow    * MINI_MAP_CELL_SIZE;
+            float dotLeft    = tileLeft   + (MINI_MAP_CELL_SIZE - dotSize) / 2f;
+            float dotBottom  = tileBottom + (MINI_MAP_CELL_SIZE - dotSize) / 2f;
+            float dotRight   = dotLeft   + dotSize;
+            float dotTop     = dotBottom + dotSize;
+            if (dotRight > miniMapLeft && dotLeft < miniMapRight
+                    && dotTop > miniMapBottom && dotBottom < miniMapTop) {
+                float clippedLeft   = Math.max(miniMapLeft,   dotLeft);
+                float clippedBottom = Math.max(miniMapBottom, dotBottom);
+                float clippedRight  = Math.min(miniMapRight,  dotRight);
+                float clippedTop    = Math.min(miniMapTop,    dotTop);
+                shapes.rect(clippedLeft, clippedBottom,
+                            clippedRight - clippedLeft, clippedTop - clippedBottom);
+            }
+        }
+
         shapes.end();
 
         // Line pass — scrolling grid clipped to mini-map bounds, then border
