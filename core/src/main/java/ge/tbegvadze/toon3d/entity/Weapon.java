@@ -206,7 +206,7 @@ public abstract class Weapon {
      * @param doorBlocksQuery   door state query; null disables door blocking (shots pass through)
      * @return outcome of the shot
      */
-    public final FireResult fire(int playerTileColumn, int playerTileRow,
+    public FireResult fire(int playerTileColumn, int playerTileRow,
                                  int facingStepColumn, int facingStepRow,
                                  Level level, EnemyHitTarget enemyHitTarget,
                                  BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {

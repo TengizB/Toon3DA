@@ -23,6 +23,11 @@ public class PlayerInventory {
     private int equippedWeaponIndex = 0;
     private Loadout loadout = new Loadout();
 
+    // Melee slot — separate from the ranged loadout; always holds at least a Fist.
+    // meleeSelected == true means the active weapon is meleeWeapon, not loadout.active().
+    private MeleeWeapon meleeWeapon  = null;
+    private boolean     meleeSelected = false;
+
     // Medical stash — combined cap across both tiers.
     private int stimCharges   = 0;
     private int medkitCharges = 0;
@@ -48,6 +53,7 @@ public class PlayerInventory {
         arsenal.clear();
         arsenal.addAll(weapons);
         equippedWeaponIndex = 0;
+        meleeSelected = false;
         loadout = new Loadout();
         for (int slotIndex = 0; slotIndex < Math.min(weapons.size(), WeaponConstants.WEAPON_SLOT_COUNT); slotIndex++) {
             loadout.tryEquip(weapons.get(slotIndex));
@@ -58,11 +64,37 @@ public class PlayerInventory {
         return Collections.unmodifiableList(arsenal);
     }
 
+    // -------------------------------------------------------------------------
+    // Melee slot — always present, never occupies a ranged loadout slot
+    // -------------------------------------------------------------------------
+
+    /** Sets the melee weapon. The Fist (default) should be set at run start and never removed. */
+    public void setMeleeWeapon(MeleeWeapon weapon) {
+        if (weapon != null) {
+            this.meleeWeapon = weapon;
+        }
+    }
+
+    /** Returns the melee weapon (always non-null after run start once Fist is set). */
+    public MeleeWeapon getMeleeWeapon() {
+        return meleeWeapon;
+    }
+
+    /** True when the player has the melee slot selected instead of a ranged slot. */
+    public boolean isMeleeSelected() {
+        return meleeSelected;
+    }
+
+    // -------------------------------------------------------------------------
+    // Equipped weapon — returns melee or ranged depending on current selection
+    // -------------------------------------------------------------------------
+
     /**
-     * Returns the currently equipped weapon from the loadout, or null if the player is unarmed.
-     * Delegates entirely to the loadout so all callers share the same selection state.
+     * Returns the currently equipped weapon: either the melee weapon (when melee is selected
+     * and a melee weapon is present) or the active ranged loadout slot.
      */
     public Weapon getEquippedWeapon() {
+        if (meleeSelected && meleeWeapon != null) return meleeWeapon;
         return loadout.active();
     }
 
@@ -72,21 +104,48 @@ public class PlayerInventory {
     }
 
     /**
-     * Advances to the next filled loadout slot (wraps around).
-     * Returns the newly equipped weapon, or the current weapon if only one slot is filled.
+     * Cycles weapon selection: ranged slot 0 → ranged slot 1 → … → melee → ranged slot 0.
+     * If the melee slot is currently selected, wraps back to the first filled ranged slot.
+     * Returns the newly active weapon.
      */
     public Weapon switchToNextWeapon() {
-        int nextSlotIndex = loadout.nextFilledSlot(loadout.getActiveSlotIndex());
-        loadout.selectSlot(nextSlotIndex);
+        if (meleeSelected) {
+            // Melee → first filled ranged slot (search forward from the last slot so index 0 is found first)
+            int firstFilled = loadout.nextFilledSlot(loadout.getSlotCount() - 1);
+            if (loadout.getSlot(firstFilled) != null) {
+                meleeSelected = false;
+                loadout.selectSlot(firstFilled);
+                return loadout.active();
+            }
+            // No ranged weapon available — stay on melee
+            return meleeWeapon;
+        }
+
+        // Ranged → next ranged slot, or melee if no other ranged slot exists
+        int currentIndex  = loadout.getActiveSlotIndex();
+        int nextRangedIdx = loadout.nextFilledSlot(currentIndex);
+        if (nextRangedIdx != currentIndex) {
+            loadout.selectSlot(nextRangedIdx);
+            return loadout.active();
+        }
+
+        // Single filled ranged slot (or empty loadout) — switch to melee if available
+        if (meleeWeapon != null) {
+            meleeSelected = true;
+            return meleeWeapon;
+        }
+
         return loadout.active();
     }
 
     /**
      * Clears all loadout slots without changing the arsenal or weapon configuration.
      * Used by the start room so the player begins completely unarmed.
+     * Melee selection is cleared; the player starts without an active weapon.
      */
     public void clearLoadout() {
-        loadout = new Loadout();
+        loadout        = new Loadout();
+        meleeSelected  = false;
     }
 
     /** Provides direct access to the loadout for slot-selection UI and input handling. */

@@ -254,6 +254,10 @@ public final class WeaponConstants {
     public static final String  GRENADE_FIRE_TEXTURE_PATH    = "textures/guns/grenade/grenade_fire.png";
     public static final String  GRENADE_RELOAD_TEXTURE_PATH  = "textures/guns/grenade/grenade_reload.png";
 
+    // Melee weapon procedural canvas — same dimensions as ranged weapons for consistent HUD framing
+    public static final int MELEE_CANVAS_WIDTH  = 192;
+    public static final int MELEE_CANVAS_HEIGHT = 134;
+
     // Weapon Loadout — slot management and HUD strip
     // Only 2 slots available initially; the system supports more via WEAPON_SLOT_COUNT.
     public static final int   WEAPON_SLOT_COUNT             = 2;
