@@ -148,8 +148,9 @@ public class PlayerController {
         float durationMultiplier = (playerStats != null) ? playerStats.getActionDurationMultiplier() : 1.0f;
         float slowMultiplier     = player.getSlowMultiplier();
         actionProgress = Math.min(1f, actionProgress + deltaTime / (Constants.PLAYER_MOVE_DURATION * durationMultiplier * slowMultiplier));
-        player.positionX = GameMath.lerp(sourcePositionX, targetPositionX, actionProgress);
-        player.positionY = GameMath.lerp(sourcePositionY, targetPositionY, actionProgress);
+        float easedProgress = GameMath.smoothstep01(actionProgress);
+        player.positionX = GameMath.lerp(sourcePositionX, targetPositionX, easedProgress);
+        player.positionY = GameMath.lerp(sourcePositionY, targetPositionY, easedProgress);
         if (actionProgress >= 1f) {
             player.positionX = targetPositionX;
             player.positionY = targetPositionY;
@@ -272,7 +273,7 @@ public class PlayerController {
         float durationMultiplier = (playerStats != null) ? playerStats.getActionDurationMultiplier() : 1.0f;
         float slowMultiplier     = player.getSlowMultiplier();
         actionProgress = Math.min(1f, actionProgress + deltaTime / (Constants.PLAYER_ROTATE_DURATION * durationMultiplier * slowMultiplier));
-        float currentAngle = GameMath.lerp(sourceDirectionAngleRadians, targetDirectionAngleRadians, actionProgress);
+        float currentAngle = GameMath.lerp(sourceDirectionAngleRadians, targetDirectionAngleRadians, GameMath.smoothstep01(actionProgress));
         player.directionX = MathUtils.cos(currentAngle);
         player.directionY = MathUtils.sin(currentAngle);
         if (actionProgress >= 1f) {

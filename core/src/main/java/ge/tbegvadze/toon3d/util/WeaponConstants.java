@@ -7,14 +7,22 @@ public final class WeaponConstants {
 
     // Weapon system — timing
     // PLAYER_FIRE_DURATION: how long the fire action locks input (slightly heavier than a step)
-    public static final float PLAYER_FIRE_DURATION              = 0.14f;
+    public static final float PLAYER_FIRE_DURATION              = 0.16f;
     // FIRE_FLASH_DURATION: real-time muzzle-flash pose duration; cosmetic only
     public static final float FIRE_FLASH_DURATION               = 0.22f;
     // NORMAL_TO_RELOAD_DELAY: how long the normal pose is held after the fire flash
     // before the reload pose begins; lets the player see the weapon lower to idle first
-    public static final float NORMAL_TO_RELOAD_DELAY_SECONDS    = 0.18f;
+    public static final float NORMAL_TO_RELOAD_DELAY_SECONDS    = 0.10f;
     // DAMAGE_MIN_MULTIPLIER: damage floor at extreme range; prevents a dead zone
     public static final float DAMAGE_MIN_MULTIPLIER             = 0.15f;
+
+    // Per-weapon fire shake magnitudes — triggered via ImpactEffectSystem.triggerShake on fire.
+    // Small for rapid weapons to avoid nausea on sustained fire; large for slow heavy ones.
+    public static final float SHOTGUN_FIRE_SHAKE_MAGNITUDE      = 6f;
+    public static final float DBL_SHOTGUN_FIRE_SHAKE_MAGNITUDE  = 9f;
+    public static final float PLASMA_FIRE_SHAKE_MAGNITUDE       = 3f;
+    public static final float CHAINGUN_FIRE_SHAKE_MAGNITUDE     = 2f;
+    public static final float GRENADE_FIRE_SHAKE_MAGNITUDE      = 7f;
 
     // Shotgun stats
     public static final int     SHOTGUN_DAMAGE             = 50;

@@ -24,7 +24,11 @@ public final class TouchInputState extends InputAdapter {
     private final TouchButton[]  buttons;
     private final Viewport       viewport;
     private final Vector2        touchWorldCoords; // pre-allocated; never recreated in event handlers
-    private       TouchAction    pendingTapAction = TouchAction.NONE;
+    private       TouchAction    pendingTapAction  = TouchAction.NONE;
+    // Tap buffer: latch the most recent tap action for TOUCH_TAP_BUFFER_SECONDS so a tap
+    // during a mid-action animation is not silently dropped. Newest tap always wins.
+    private       TouchAction    bufferedTapAction = TouchAction.NONE;
+    private       float          bufferedTapTimer  = 0f;
 
     public TouchInputState(Viewport viewport) {
         this.viewport         = viewport;
@@ -98,31 +102,52 @@ public final class TouchInputState extends InputAdapter {
     }
 
     /**
-     * Returns and clears the pending tap action (FIRE, RELOAD, SKIP_TURN).
-     * Returns NONE if no tap is pending.
+     * Returns and clears the pending tap action (FIRE, RELOAD, etc.).
+     * First checks the immediate pending slot (same-frame tap); falls through to the
+     * cross-frame buffer if valid. Returns NONE when nothing is waiting.
      */
     public TouchAction consumeTapAction() {
-        TouchAction tap   = pendingTapAction;
-        pendingTapAction  = TouchAction.NONE;
-        return tap;
+        if (pendingTapAction != TouchAction.NONE) {
+            TouchAction tap   = pendingTapAction;
+            pendingTapAction  = TouchAction.NONE;
+            bufferedTapAction = TouchAction.NONE;
+            bufferedTapTimer  = 0f;
+            return tap;
+        }
+        if (bufferedTapTimer > 0f) {
+            TouchAction tap   = bufferedTapAction;
+            bufferedTapAction = TouchAction.NONE;
+            bufferedTapTimer  = 0f;
+            return tap;
+        }
+        return TouchAction.NONE;
     }
 
     public TouchButton[] getButtons() { return buttons; }
 
-    /** Releases all held buttons and clears any pending tap action. */
+    /** Releases all held buttons and clears any pending or buffered tap action. */
     public void resetAllButtonStates() {
         for (TouchButton button : buttons) {
             button.pressed        = false;
             button.pointerId      = -1;
             button.pressGlowTimer = 0f;
         }
-        pendingTapAction = TouchAction.NONE;
+        pendingTapAction  = TouchAction.NONE;
+        bufferedTapAction = TouchAction.NONE;
+        bufferedTapTimer  = 0f;
     }
 
     public void update(float deltaTime) {
         for (TouchButton button : buttons) {
             if (button.pressGlowTimer > 0f) {
                 button.pressGlowTimer = Math.max(0f, button.pressGlowTimer - deltaTime);
+            }
+        }
+        if (bufferedTapTimer > 0f) {
+            bufferedTapTimer -= deltaTime;
+            if (bufferedTapTimer <= 0f) {
+                bufferedTapTimer  = 0f;
+                bufferedTapAction = TouchAction.NONE;
             }
         }
     }
@@ -136,7 +161,10 @@ public final class TouchInputState extends InputAdapter {
                 touchButton.pointerId      = pointer;
                 touchButton.pressGlowTimer = TouchConstants.TOUCH_PRESS_GLOW_DURATION;
                 if (touchButton.tapOnly) {
-                    pendingTapAction = touchButton.action;
+                    // Newest tap always wins for both the immediate slot and the cross-frame buffer.
+                    pendingTapAction  = touchButton.action;
+                    bufferedTapAction = touchButton.action;
+                    bufferedTapTimer  = TouchConstants.TOUCH_TAP_BUFFER_SECONDS;
                 }
                 return true;
             }

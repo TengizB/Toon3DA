@@ -1678,10 +1678,12 @@ public class WallRenderer implements Renderable, Disposable {
                 float cylindricalShade = COLUMN_SHADE_MIN + (1f - COLUMN_SHADE_MIN) * lambertian;
 
                 float columnTileBrightness = level.getTileBrightness(tileColumn, tileRow, lightingTimeSeconds);
-                float shade = Math.min(
-                        GameMath.wallShade(perpWallDistance, WALL_SHADING_FALLOFF)
-                        * cylindricalShade * columnTileBrightness,
-                        MAX_LIGHTING_SHADE);
+                float shade = Math.max(
+                        Math.min(
+                            GameMath.wallShade(perpWallDistance, WALL_SHADING_FALLOFF)
+                                * cylindricalShade * columnTileBrightness,
+                            MAX_LIGHTING_SHADE),
+                        WALL_SHADE_MIN_BRIGHTNESS);
 
                 int texSrcY      = GameMath.wallTextureClipSrcY(
                                        unclampedTop, WALL_PROJECTION_SCREEN_HEIGHT,
@@ -1724,7 +1726,7 @@ public class WallRenderer implements Renderable, Disposable {
 
                 float shade = GameMath.wallShade(perpWallDistance, WALL_SHADING_FALLOFF);
                 if (!crossedVerticalLine) shade *= HORIZONTAL_FACE_SHADE_MULTIPLIER;
-                shade = Math.min(shade * wallTileBrightness, MAX_LIGHTING_SHADE);
+                shade = Math.max(Math.min(shade * wallTileBrightness, MAX_LIGHTING_SHADE), WALL_SHADE_MIN_BRIGHTNESS);
 
                 int texSrcY      = GameMath.wallTextureClipSrcY(
                                        unclampedTop, WALL_PROJECTION_SCREEN_HEIGHT,
@@ -1794,7 +1796,7 @@ public class WallRenderer implements Renderable, Disposable {
                     int     doorTexColumn       = GameMath.textureColumn(doorWallHitFractionMirrored, doorTextureWidth);
                     float shade = GameMath.wallShade(doorPerpWallDistance, WALL_SHADING_FALLOFF);
                     if (!doorHitCrossedVerticalLine) shade *= HORIZONTAL_FACE_SHADE_MULTIPLIER;
-                    shade = Math.min(shade * doorTileBrightness, MAX_LIGHTING_SHADE);
+                    shade = Math.max(Math.min(shade * doorTileBrightness, MAX_LIGHTING_SHADE), WALL_SHADE_MIN_BRIGHTNESS);
 
                     result.drawDoorPanel          = true;
                     result.doorPanelTexture       = selectedDoorTexture;

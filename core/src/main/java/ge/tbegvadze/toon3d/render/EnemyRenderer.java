@@ -263,8 +263,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
             texSrcHeight = Math.min(texSrcHeight, regionHeight - localSrcY);
             texSrcHeight = Math.max(1, texSrcHeight);
 
-            // Base shade: dormant enemies are darker so they visibly "light up" when alerted
-            float baseShade = GameMath.wallShade(depth, WALL_SHADING_FALLOFF);
+            // Base shade: apply distance falloff then clamp to min so sprites sit in the world.
+            // Active enemies use ENEMY_SPRITE_SHADE_MIN_BRIGHTNESS; dormant enemies are additionally
+            // darkened so they visibly "light up" when alerted.
+            float baseShade = Math.max(GameMath.wallShade(depth, WALL_SHADING_FALLOFF),
+                                       ENEMY_SPRITE_SHADE_MIN_BRIGHTNESS);
             if (enemy.state == EnemyState.DORMANT) {
                 baseShade *= DORMANT_SHADE_DAMPEN;
             }
@@ -404,17 +407,19 @@ public final class EnemyRenderer implements Renderable, Disposable {
                                0, 0, 1, 1, false, false);
                 }
 
-                hpTextBuilder.setLength(0);
-                hpTextBuilder.append(barHealthCurrents[sortedPosition]);
-                hpTextBuilder.append('/');
-                hpTextBuilder.append(barHealthMaxes[sortedPosition]);
-                nameTagFont.getData().setScale(ENEMY_HP_TEXT_FONT_SCALE);
-                hpTextLayout.setText(nameTagFont, hpTextBuilder);
-                float hpTextX = barLeft + (barWidth  - hpTextLayout.width)  / 2f;
-                float hpTextY = barBottom + barHeight / 2f + hpTextLayout.height / 2f;
-                nameTagFont.setColor(ENEMY_HP_TEXT_RED, ENEMY_HP_TEXT_GREEN, ENEMY_HP_TEXT_BLUE, 1f);
-                nameTagFont.draw(batch, hpTextLayout, hpTextX, hpTextY);
-                nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
+                if (depth <= ENEMY_HP_TEXT_MAX_DISTANCE_TILES) {
+                    hpTextBuilder.setLength(0);
+                    hpTextBuilder.append(barHealthCurrents[sortedPosition]);
+                    hpTextBuilder.append('/');
+                    hpTextBuilder.append(barHealthMaxes[sortedPosition]);
+                    nameTagFont.getData().setScale(ENEMY_HP_TEXT_FONT_SCALE);
+                    hpTextLayout.setText(nameTagFont, hpTextBuilder);
+                    float hpTextX = barLeft + (barWidth  - hpTextLayout.width)  / 2f;
+                    float hpTextY = barBottom + barHeight / 2f + hpTextLayout.height / 2f;
+                    nameTagFont.setColor(ENEMY_HP_TEXT_RED, ENEMY_HP_TEXT_GREEN, ENEMY_HP_TEXT_BLUE, 1f);
+                    nameTagFont.draw(batch, hpTextLayout, hpTextX, hpTextY);
+                    nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
+                }
 
                 Enemy tagEnemy = enemies.get(sortedIndices[sortedPosition]);
                 if (depth <= ENEMY_NAME_TAG_MAX_DISTANCE_TILES && !tagEnemy.nameTag.isEmpty()) {

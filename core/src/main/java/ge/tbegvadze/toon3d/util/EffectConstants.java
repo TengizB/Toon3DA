@@ -9,12 +9,15 @@ public final class EffectConstants {
     // Hit shake: small jolt confirming contact; duration matches the weapon fire lock
     public static final float HIT_SHAKE_MAGNITUDE           = 4f;
     public static final float HIT_SHAKE_DURATION_SECONDS    = 0.12f;
+    // Reference damage for shake scaling: a hit equal to this value delivers HIT_SHAKE_MAGNITUDE.
+    // Smaller hits produce less shake (min 0.4×); critical hits can exceed 1.0× up to 1.5×.
+    public static final float HIT_SHAKE_REFERENCE_DAMAGE    = 20f;
     // Kill shake: twice as strong and lasting — rewards the kill decisively
     public static final float KILL_SHAKE_MAGNITUDE          = 10f;
     public static final float KILL_SHAKE_DURATION_SECONDS   = 0.25f;
     // Kill flash: bright warm-white rects along all four screen edges; sin-curve fade
     public static final float KILL_FLASH_DURATION_SECONDS   = 0.35f;
-    public static final float KILL_FLASH_MAX_ALPHA          = 0.70f;
+    public static final float KILL_FLASH_MAX_ALPHA          = 0.55f;
     public static final float KILL_FLASH_EDGE_THICKNESS     = 110f;  // rect depth from each edge
     // Hit particles: square fragments ejecting from the enemy's screen-space position
     public static final int   HIT_PARTICLE_COUNT            = 8;
@@ -29,7 +32,7 @@ public final class EffectConstants {
     public static final float DEATH_BURST_BASE_RADIUS       = 30f;   // minimum ring radius
     public static final float DEATH_BURST_SCALE_PER_HEIGHT  = 50f;   // radius += heightMultiplier×this
     // Floating damage numbers: "-N" text rising above the enemy on contact
-    public static final float DAMAGE_NUMBER_DURATION_SECONDS = 0.80f;
+    public static final float DAMAGE_NUMBER_DURATION_SECONDS = 0.65f;
     public static final float DAMAGE_NUMBER_RISE_SPEED       = 55f;  // world units/s upward
     public static final float DAMAGE_NUMBER_FONT_SCALE       = 1.4f;
     // Damage numbers grow above this threshold: scale = base + (amount - threshold + 1) * perPoint
@@ -51,6 +54,8 @@ public final class EffectConstants {
     // Hit Vignette — red screen-edge flash when player takes damage
     public static final float HIT_VIGNETTE_FADE_SECONDS  = 0.6f;
     public static final float HIT_VIGNETTE_MAX_ALPHA     = 0.55f;
+    // Persistent low-HP vignette floor: below 25% HP this baseline intensity is always visible
+    public static final float LOW_HP_VIGNETTE_FLOOR      = 0.18f;
 
     // Level-up Vignette — cyan screen-edge burst played after choosing a level-up card
     public static final float LEVEL_UP_VIGNETTE_FADE_SECONDS = 0.8f;
@@ -94,8 +99,8 @@ public final class EffectConstants {
     public static final float ENEMY_MUZZLE_FLASH_FRACTION         = 0.45f;   // shown for first 45% of anim
     public static final float ENEMY_MUZZLE_FLASH_SIZE_FRACTION    = 0.30f;   // flash quad is 30% of sprite width
     // Pre-hit telegraph: brief scale+tint pulse on the turn the attack lands
-    public static final float ENEMY_TELEGRAPH_DURATION_SECONDS    = 0.25f;
-    public static final float ENEMY_TELEGRAPH_SCALE_BONUS         = 0.08f;
+    public static final float ENEMY_TELEGRAPH_DURATION_SECONDS    = 0.30f;
+    public static final float ENEMY_TELEGRAPH_SCALE_BONUS         = 0.15f;
     public static final float ENEMY_TELEGRAPH_RIM_ALPHA           = 0.55f;
     // Ranged projectile pool
     public static final int   ENEMY_PROJECTILE_POOL_SIZE          = 16;

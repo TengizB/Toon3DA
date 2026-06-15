@@ -40,8 +40,12 @@ public final class RenderConstants {
     public static final int   WALL_PROJECTION_SCREEN_WIDTH    = Constants.WORLD_WIDTH;
     public static final int   WALL_PROJECTION_SCREEN_HEIGHT   = Constants.WORLD_HEIGHT;
     public static final float WALL_COLUMN_WIDTH               = (float) Constants.WORLD_WIDTH / WALL_PROJECTION_SCREEN_WIDTH;
-    // shade = 1 / (1 + d² × FALLOFF). At d=10, falloff=0.05 → shade≈0.167
-    public static final float WALL_SHADING_FALLOFF            = 0.05f;
+    // shade = max(MIN, 1 / (1 + d² × FALLOFF)). Steeper falloff increases near/far contrast.
+    // At d=5: shade≈0.29  At d=10: shade≈0.091  MIN_BRIGHTNESS prevents full-black silhouettes.
+    public static final float WALL_SHADING_FALLOFF            = 0.10f;
+    public static final float WALL_SHADE_MIN_BRIGHTNESS       = 0.12f;
+    // Enemy sprites use a higher min so distant enemies never read as wall-coloured blobs.
+    public static final float ENEMY_SPRITE_SHADE_MIN_BRIGHTNESS = 0.35f;
     // N/S faces darkened by this factor vs E/W faces to simulate directional lighting
     public static final float HORIZONTAL_FACE_SHADE_MULTIPLIER = 0.7f;
 
