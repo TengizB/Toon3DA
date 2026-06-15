@@ -33,6 +33,7 @@ import ge.tbegvadze.toon3d.progression.LevelUpReward;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.render.*;
+import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameBalance;
@@ -44,7 +45,7 @@ import ge.tbegvadze.toon3d.util.ProgressionConstants;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
-    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN }
+    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT }
 
     // -------------------------------------------------------------------------
     // Run-persistent resources — kept alive across all floor transitions
@@ -110,6 +111,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
     private final Inventory                itemInventory;
     private final InventoryOverlayRenderer inventoryOverlayRenderer;
+
+    // -------------------------------------------------------------------------
+    // Weapon inspect overlay — shown when player taps INSPECT on a ground weapon
+    // -------------------------------------------------------------------------
+    private final WeaponInspectOverlayRenderer weaponInspectOverlayRenderer;
 
     // -------------------------------------------------------------------------
     // Ground items — weapon pickups placed by LevelGenerator; rebuilt per floor
@@ -198,6 +204,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         itemInventory            = new Inventory();
         inventoryOverlayRenderer = new InventoryOverlayRenderer(itemInventory);
+
+        weaponInspectOverlayRenderer = new WeaponInspectOverlayRenderer();
+        weaponInspectOverlayRenderer.setOnTake(this::resolveWeaponTake);
+        weaponInspectOverlayRenderer.setOnConvertToAmmo(this::resolveWeaponConvert);
+        weaponInspectOverlayRenderer.setOnEvictSlot(this::resolveWeaponEvict);
+        weaponInspectOverlayRenderer.setOnClose(this::closeWeaponInspect);
 
         // Permadeath — run stats and death overlay
         runStats             = new RunStats();
@@ -375,6 +387,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setWeaponSwitchCallback(
             () -> weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon()));
         playerController.setInventoryToggleCallback(this::openInventory);
+        playerController.setInspectWeaponCallback(this::openWeaponInspectOverlay);
         if (touchInputState != null) {
             playerController.setTouchInputState(touchInputState);
         }
@@ -477,6 +490,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
+        // WEAPON_INSPECT — world paused while player examines a ground weapon
+        if (runPhase == RunPhase.WEAPON_INSPECT) {
+            weaponInspectOverlayRenderer.setFacilityTime(facilityTimeSeconds);
+            if (gameViewport != null && Gdx.input.justTouched()) {
+                if (touchInputState != null) touchInputState.consumeTapAction();
+                cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+                gameViewport.unproject(cardTouchPosition);
+                weaponInspectOverlayRenderer.handleTap(cardTouchPosition.x, cardTouchPosition.y);
+            }
+            return;
+        }
+
         // LEVEL_UP_OVERLAY — game paused while player picks a stat upgrade
         if (runPhase == RunPhase.LEVEL_UP_OVERLAY) {
             if (gameViewport != null && Gdx.input.justTouched()) {
@@ -503,6 +528,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             deathBeatTimerSeconds = 0f;
             deathBlinkTimerSeconds = 0f;
             return;
+        }
+
+        // Update contextual INSPECT button and HUD label based on the tile the player occupies
+        if (touchInputState != null) {
+            GroundItem standingOnWeapon = playerController.getStandingOnWeapon();
+            boolean standingOnGroundWeapon = standingOnWeapon != null
+                    && groundItems.contains(standingOnWeapon);
+            touchInputState.setInspectButtonVisible(standingOnGroundWeapon);
+            hudRenderer.setGroundWeaponLabel(standingOnGroundWeapon
+                    ? standingOnWeapon.stack.getType().getDisplayName() : null);
         }
 
         if (touchInputState != null) {
@@ -622,7 +657,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // hide touch buttons so they don't obscure cards or inventory slots.
         if (runPhase == RunPhase.LEVEL_UP_OVERLAY) {
             levelUpOverlayRenderer.render(camera);
-        } else if (touchControllerRenderer != null && runPhase != RunPhase.INVENTORY_OPEN) {
+        } else if (runPhase != RunPhase.WEAPON_INSPECT
+                && touchControllerRenderer != null
+                && runPhase != RunPhase.INVENTORY_OPEN) {
             touchControllerRenderer.setActionLocked(!playerController.isIdle());
             touchControllerRenderer.render(camera);
         }
@@ -635,6 +672,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             inventoryOverlayRenderer.setTime(facilityTimeSeconds);
             inventoryOverlayRenderer.setCurrentDepth(currentDepth);
             inventoryOverlayRenderer.render(camera);
+        }
+
+        // Weapon inspect overlay — modal stat card drawn above HUD and event text.
+        if (runPhase == RunPhase.WEAPON_INSPECT) {
+            weaponInspectOverlayRenderer.render(camera);
         }
 
         // Fade overlay drawn last — covers every other layer including the HUD.
@@ -680,6 +722,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hitVignetteRenderer.dispose();
         levelUpOverlayRenderer.dispose();
         inventoryOverlayRenderer.dispose();
+        weaponInspectOverlayRenderer.dispose();
         statusEffectVignetteRenderer.dispose();
         if (touchControllerRenderer != null) touchControllerRenderer.dispose();
         deathOverlayRenderer.dispose();
@@ -712,6 +755,118 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             int playerTileRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
             tickEventBus.fireTick(playerTileColumn, playerTileRow, player, TickCause.SKIP_TURN);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Weapon inspect overlay — open/close and resolution callbacks
+    // -------------------------------------------------------------------------
+
+    /** Opens the weapon inspect overlay for the weapon the player is currently standing on. */
+    private void openWeaponInspectOverlay() {
+        if (runPhase != RunPhase.PLAYING || playerController == null) return;
+        GroundItem standingOn = playerController.getStandingOnWeapon();
+        if (standingOn == null || !groundItems.contains(standingOn)) return;
+        if (touchInputState != null) touchInputState.resetAllButtonStates();
+        Weapon groundWeapon = playerController.findWeaponInArsenalForType(standingOn.stack.getType());
+        Weapon activeWeapon = inventory.getEquippedWeapon();
+        weaponInspectOverlayRenderer.setFacilityTime(facilityTimeSeconds);
+        weaponInspectOverlayRenderer.show(standingOn, groundWeapon, activeWeapon, inventory.getLoadout());
+        runPhase = RunPhase.WEAPON_INSPECT;
+    }
+
+    /** Closes the weapon inspect overlay and returns to PLAYING. */
+    private void closeWeaponInspect() {
+        weaponInspectOverlayRenderer.hide();
+        if (touchInputState != null) touchInputState.resetAllButtonStates();
+        runPhase = RunPhase.PLAYING;
+    }
+
+    /**
+     * TAKE resolution: equip the ground weapon into a free loadout slot and fire one tick.
+     * The ground item is removed from the floor and the player is armed immediately.
+     */
+    private void resolveWeaponTake() {
+        if (playerController == null) { closeWeaponInspect(); return; }
+        GroundItem standingOn = playerController.getStandingOnWeapon();
+        if (standingOn == null || !groundItems.contains(standingOn)) { closeWeaponInspect(); return; }
+        Weapon weapon = playerController.findWeaponInArsenalForType(standingOn.stack.getType());
+        if (weapon == null) { closeWeaponInspect(); return; }
+        groundItems.remove(standingOn);
+        inventory.getLoadout().tryEquip(weapon);
+        weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
+        playerController.clearStandingOnWeapon();
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("EQUIPPED: " + weapon.getDisplayName(), EventTextSystem.COLOR_GREEN);
+        }
+        fireTurnTick();
+        closeWeaponInspect();
+    }
+
+    /**
+     * EVICT resolution: remove the weapon in the given loadout slot, drop it on the player's
+     * current tile, equip the ground weapon in its place, and fire one tick.
+     */
+    private void resolveWeaponEvict(int slotIndex) {
+        if (playerController == null) { closeWeaponInspect(); return; }
+        GroundItem standingOn = playerController.getStandingOnWeapon();
+        if (standingOn == null || !groundItems.contains(standingOn)) { closeWeaponInspect(); return; }
+        Weapon newWeapon = playerController.findWeaponInArsenalForType(standingOn.stack.getType());
+        if (newWeapon == null) { closeWeaponInspect(); return; }
+        Weapon evicted = inventory.getLoadout().removeSlot(slotIndex);
+        if (evicted != null) {
+            int playerTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
+            int playerTileRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
+            spawnGroundItem(new GroundItem(playerTileColumn, playerTileRow, weaponClassToItemType(evicted), 1));
+            if (eventTextSystem != null) eventTextSystem.spawn("DROPPED: " + evicted.getDisplayName());
+        }
+        inventory.getLoadout().tryEquip(newWeapon);
+        weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
+        groundItems.remove(standingOn);
+        playerController.clearStandingOnWeapon();
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("EQUIPPED: " + newWeapon.getDisplayName(), EventTextSystem.COLOR_GREEN);
+        }
+        fireTurnTick();
+        closeWeaponInspect();
+    }
+
+    /**
+     * CONVERT resolution: exchange the ground weapon for ammo of the matching type and fire
+     * one tick. Used when the player already carries this weapon in their loadout.
+     */
+    private void resolveWeaponConvert() {
+        if (playerController == null) { closeWeaponInspect(); return; }
+        GroundItem standingOn = playerController.getStandingOnWeapon();
+        if (standingOn == null || !groundItems.contains(standingOn)) { closeWeaponInspect(); return; }
+        AmmoType ammoType = PlayerController.weaponItemTypeToAmmoType(standingOn.stack.getType());
+        if (ammoType != null) {
+            int ammoAmount = ammoType.getAmountPerBox();
+            itemInventory.tryAdd(ammoType.getItemType(), ammoAmount);
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor(
+                        "+" + ammoAmount + " " + ammoType.getDisplayName().toUpperCase(),
+                        EventTextSystem.COLOR_GREEN);
+            }
+        } else {
+            if (eventTextSystem != null) eventTextSystem.spawn("Discarded");
+        }
+        groundItems.remove(standingOn);
+        playerController.clearStandingOnWeapon();
+        fireTurnTick();
+        closeWeaponInspect();
+    }
+
+    /** Adds a GroundItem to the live list; PropRenderer and LevelRenderer share the reference. */
+    private void spawnGroundItem(GroundItem item) {
+        groundItems.add(item);
+    }
+
+    /** Fires one world tick from the player's current tile (SKIP_TURN cause). */
+    private void fireTurnTick() {
+        if (tickEventBus == null) return;
+        int playerTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
+        int playerTileRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
+        tickEventBus.fireTick(playerTileColumn, playerTileRow, player, TickCause.SKIP_TURN);
     }
 
     // -------------------------------------------------------------------------
