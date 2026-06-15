@@ -221,8 +221,12 @@ public final class LevelGenConstants {
 
     // Walkable interior tile count in each dimension (odd so there is a clear centre tile).
     public static final int     START_ROOM_INTERIOR_SIZE        = 13;
-    // Number of weapon offers presented to the player side-by-side near the portal.
+    // Number of ranged weapon offers presented to the player side-by-side near the portal.
     public static final int     START_ROOM_WEAPON_OFFER_COUNT   = 3;
+    // Number of melee weapon offers shown south of the ranged row.
+    public static final int     START_ROOM_MELEE_OFFER_COUNT    = 3;
+    // Rows south of the ranged weapon row where the melee offer row is placed.
+    public static final int     START_ROOM_MELEE_ROW_OFFSET     = 2;
     // When true, four decorative 'P' columns frame the portal like an armory altar.
     public static final boolean START_ROOM_USE_COLUMNS          = true;
     // Tile distance from the room centre at which the four framing columns are placed.
