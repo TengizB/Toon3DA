@@ -49,6 +49,21 @@ public abstract class MeleeWeapon extends Weapon {
     }
 
     /**
+     * Advances only the muzzle-flash timer; never triggers reload.
+     * Overrides Weapon.update() to skip the shotsInClip==0 auto-reload path
+     * that would otherwise fire after every swing (melee has no ammo to reload).
+     */
+    @Override
+    public void update(float deltaTime) {
+        if (visualState == WeaponVisualState.FIRING) {
+            fireFlashTimerSeconds -= deltaTime;
+            if (fireFlashTimerSeconds <= 0f) {
+                visualState = WeaponVisualState.NORMAL;
+            }
+        }
+    }
+
+    /**
      * Instant adjacent-tile hit resolution.
      * Queries the single tile directly ahead of the player.
      * A miss still costs a turn (enemies retaliate) — see design doc.
@@ -71,6 +86,7 @@ public abstract class MeleeWeapon extends Weapon {
             return FireResult.MISSED;
         }
 
+        enemyHitTarget.notifyMeleeAttack();
         enemyHitTarget.applyDamageTo(target, computeDamage());
         onHit(target, enemyHitTarget, targetColumn, targetRow, facingStepColumn, facingStepRow, level);
         return new FireResult(false, 1);

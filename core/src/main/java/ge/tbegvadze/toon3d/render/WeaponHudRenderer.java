@@ -2360,8 +2360,14 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     private void advanceOffsetY(WeaponVisualState state, float deltaTime) {
         if (state == WeaponVisualState.FIRING) {
             float normalizedTime = Math.min(animationTimer / WeaponConstants.FIRE_FLASH_DURATION, 1f);
-            currentOffsetY = WeaponConstants.WEAPON_HUD_BASE_Y
-                             - WeaponConstants.WEAPON_RECOIL_OFFSET_Y * (1f - normalizedTime);
+            if (equippedWeapon instanceof MeleeWeapon) {
+                // Lunge forward (rise upward) on a melee hit, return to base as swing completes.
+                currentOffsetY = WeaponConstants.WEAPON_HUD_BASE_Y
+                                 + WeaponConstants.WEAPON_MELEE_LUNGE_Y * (1f - normalizedTime);
+            } else {
+                currentOffsetY = WeaponConstants.WEAPON_HUD_BASE_Y
+                                 - WeaponConstants.WEAPON_RECOIL_OFFSET_Y * (1f - normalizedTime);
+            }
         } else {
             float targetOffsetY = (state == WeaponVisualState.RELOADING)
                                   ? WeaponConstants.WEAPON_HUD_BASE_Y - WeaponConstants.WEAPON_RELOAD_SLIDE_Y

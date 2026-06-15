@@ -3,7 +3,11 @@ package ge.tbegvadze.toon3d.enemy;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.entity.EnemyHitTarget;
 import ge.tbegvadze.toon3d.entity.ImpactEventListener;
+import ge.tbegvadze.toon3d.entity.Loadout;
+import ge.tbegvadze.toon3d.entity.MeleeWeapon;
 import ge.tbegvadze.toon3d.entity.Player;
+import ge.tbegvadze.toon3d.entity.Weapon;
+import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.EnemySpawnPoint;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.progression.KillEventListener;
@@ -57,11 +61,16 @@ public final class EnemyManager implements EnemyHitTarget {
     private final int[]        wiggleLegalRows;
     private final Random       wiggleRandom;
     private final Random       dropRandom;
+    private final Random       effectRandom;
 
     private boolean anyAlertedEver = false;
 
+    // Set to true by notifyMeleeAttack() before applyDamageTo(); consumed and reset inside killEnemy().
+    private boolean pendingMeleeKill = false;
+    // Injected by World so melee kills can drop ammo matching the player's equipped ranged weapons.
+    private Loadout loadout = null;
+
     private StatusEffectController statusEffectController = null;
-    private final Random effectRandom = new Random();
 
     /**
      * @param dungeonDepth current floor number (1-based); drives enemy health and damage scaling.
@@ -80,11 +89,25 @@ public final class EnemyManager implements EnemyHitTarget {
         this.wiggleLegalRows    = new int[4];
         this.wiggleRandom       = new Random(12345L);
         this.dropRandom         = new Random();
+        this.effectRandom       = new Random();
     }
 
     /** Injects the status effect controller so ranged enemies can inflict DoT on the player. */
     public void setStatusEffectController(StatusEffectController controller) {
         this.statusEffectController = controller;
+    }
+
+    /**
+     * Injects the player's loadout so melee kills can drop ammo that matches
+     * one of the player's equipped ranged weapons instead of a fixed enemy-type drop.
+     */
+    public void setLoadout(Loadout playerLoadout) {
+        this.loadout = playerLoadout;
+    }
+
+    @Override
+    public void notifyMeleeAttack() {
+        pendingMeleeKill = true;
     }
 
     private static List<Enemy> buildInitialEnemies(List<EnemySpawnPoint> spawnPoints,
@@ -226,6 +249,11 @@ public final class EnemyManager implements EnemyHitTarget {
     @Override
     public void applyDamageTo(Object enemyObject, int amount) {
         Enemy enemy = (Enemy) enemyObject;
+        // Consume and reset the melee flag unconditionally — a non-lethal melee hit
+        // must not carry the flag forward to the next (possibly ranged) killing blow.
+        boolean thisKillWasMelee = pendingMeleeKill;
+        pendingMeleeKill = false;
+
         float worldX           = enemy.worldCenterX();
         float worldY           = enemy.worldCenterY();
         float heightMultiplier = enemy.type.heightMultiplier();
@@ -242,7 +270,7 @@ public final class EnemyManager implements EnemyHitTarget {
             if (killEventListener != null) {
                 killEventListener.onEnemyKilled(enemy.nameTag, xpAwarded);
             }
-            killEnemy(enemy);
+            killEnemy(enemy, thisKillWasMelee);
             if (impactEventListener != null) {
                 impactEventListener.onEnemyKilled(worldX, worldY, heightMultiplier, totalDamage);
             }
@@ -609,10 +637,10 @@ public final class EnemyManager implements EnemyHitTarget {
         int xpAwarded = enemy.type.baseXpReward();
         if (killXpListener   != null) killXpListener.onEnemyKilledForXp(xpAwarded);
         if (killEventListener != null) killEventListener.onEnemyKilled(enemy.nameTag, xpAwarded);
-        killEnemy(enemy);
+        killEnemy(enemy, false);
     }
 
-    private void killEnemy(Enemy enemy) {
+    private void killEnemy(Enemy enemy, boolean isMeleeKill) {
         occupancy[enemy.tileColumn][enemy.tileRow] = false;
         char currentCell = level.getCell(enemy.tileColumn, enemy.tileRow);
         if (!Level.isStairsDown(currentCell)
@@ -620,7 +648,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 && !Level.isArmourPickup(currentCell)
                 && !Level.isKeycardPickup(currentCell)
                 && !Level.isAmmoPickup(currentCell)) {
-            char drop = rollEnemyDrop(enemy.type);
+            char drop = rollEnemyDrop(enemy.type, isMeleeKill);
             level.setCell(enemy.tileColumn, enemy.tileRow, drop);
             if (dropPlacedListener != null) {
                 dropPlacedListener.onDropPlaced(enemy.tileColumn, enemy.tileRow, drop);
@@ -629,9 +657,16 @@ public final class EnemyManager implements EnemyHitTarget {
         enemies.remove(enemy);
     }
 
-    private char rollEnemyDrop(EnemyType type) {
-        if (dropRandom.nextFloat() >= EnemyConstants.ENEMY_AMMO_DROP_CHANCE) {
+    private char rollEnemyDrop(EnemyType type, boolean isMeleeKill) {
+        float dropChance = isMeleeKill
+                ? GameBalance.MELEE_KILL_AMMO_DROP_CHANCE
+                : EnemyConstants.ENEMY_AMMO_DROP_CHANCE;
+        if (dropRandom.nextFloat() >= dropChance) {
             return 'm'; // corpse decal, no item
+        }
+        if (isMeleeKill && loadout != null) {
+            char meleeAmmo = rollLoadoutAmmoDrop();
+            if (meleeAmmo != 0) return meleeAmmo;
         }
         switch (type) {
             case PLAGUE_HULK:  return '6'; // bullets — basic melee tank
@@ -644,5 +679,26 @@ public final class EnemyManager implements EnemyHitTarget {
             case VOID_SHROUD:  return '6'; // bullets — stealth melee
             default:           return '6';
         }
+    }
+
+    /**
+     * Picks an ammo pickup character matching one of the player's equipped ranged weapons.
+     * Returns 0 if no ranged weapon is currently equipped (melee-only loadout).
+     */
+    private char rollLoadoutAmmoDrop() {
+        // Collect pickup chars for every equipped ranged weapon slot.
+        int count = 0;
+        char[] candidates = new char[loadout.getSlotCount()];
+        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+            Weapon weapon = loadout.getSlot(slotIndex);
+            if (weapon != null && !(weapon instanceof MeleeWeapon)) {
+                AmmoType ammoType = weapon.getAmmoType();
+                if (ammoType != null) {
+                    candidates[count++] = ammoType.getPickupTileChar();
+                }
+            }
+        }
+        if (count == 0) return 0;
+        return candidates[dropRandom.nextInt(count)];
     }
 }

@@ -25,4 +25,11 @@ public interface EnemyHitTarget {
     default boolean tryPushEnemy(Object enemy, int targetColumn, int targetRow) {
         return false;
     }
+
+    /**
+     * Signals that the next applyDamageTo() call originates from a melee weapon.
+     * Must be called immediately before applyDamageTo() on a confirmed hit.
+     * Default: no-op; EnemyManager overrides to set an internal flag used in killEnemy().
+     */
+    default void notifyMeleeAttack() {}
 }

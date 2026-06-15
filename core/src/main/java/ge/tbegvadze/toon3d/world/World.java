@@ -350,6 +350,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             runStats.recordKill();
         });
         enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
+        enemyManager.setLoadout(inventory.getLoadout());
         enemyManager.setDropPlacedListener((tileColumn, tileRow, dropChar) ->
                 propRenderer.addDynamicProp(tileColumn, tileRow, dropChar));
         explosiveBarrelManager.setImpactEventListener(impactEffectSystem);

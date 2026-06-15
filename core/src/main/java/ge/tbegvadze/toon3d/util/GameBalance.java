@@ -137,10 +137,15 @@ public final class GameBalance {
     public static final int MELEE_HAMMER_DAMAGE          = 14;
 
     /** How many tiles a knockback-eligible enemy is pushed on a Hammer hit. */
-    public static final int MELEE_HAMMER_KNOCKBACK_TILES = 1;
+    public static final int   MELEE_HAMMER_KNOCKBACK_TILES  = 1;
+    /** Probability (0–1) that a Hammer hit triggers knockback; 50% per swing. */
+    public static final float MELEE_HAMMER_KNOCKBACK_CHANCE = 0.50f;
 
     /** CHAINSAW — high sustained damage; no knockback (grinds in place). */
     public static final int MELEE_CHAINSAW_DAMAGE      = 12;
+
+    /** Probability (0–1) that a melee kill drops an ammo pickup; higher than the ranged baseline. */
+    public static final float MELEE_KILL_AMMO_DROP_CHANCE = 0.60f;
 
     // =========================================================================
     // STAT SYSTEM — per-difficulty base values, caps, and per-point effect rates
