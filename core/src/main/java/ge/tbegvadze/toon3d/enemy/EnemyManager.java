@@ -543,6 +543,26 @@ public final class EnemyManager implements EnemyHitTarget {
         occupancy[targetColumn][targetRow] = true;
     }
 
+    /**
+     * Attempts to push the given enemy to (targetColumn, targetRow) — used by SteelPipe knockback.
+     * Checks bounds, walls/props, door state, and other-enemy occupancy before moving.
+     * Returns true if the push succeeded; false if anything blocked it.
+     */
+    @Override
+    public boolean tryPushEnemy(Object enemyObject, int targetColumn, int targetRow) {
+        Enemy enemy = (Enemy) enemyObject;
+        if (!enemy.isAlive()) return false;
+        if (targetColumn < 0 || targetColumn >= level.getWidth())  return false;
+        if (targetRow    < 0 || targetRow    >= level.getHeight()) return false;
+        if (level.isBlockedAt(targetColumn, targetRow, doorManager)) return false;
+        if (isTileOccupiedByEnemy(targetColumn, targetRow)) return false;
+        occupancy[enemy.tileColumn][enemy.tileRow] = false;
+        enemy.tileColumn = targetColumn;
+        enemy.tileRow    = targetRow;
+        occupancy[targetColumn][targetRow] = true;
+        return true;
+    }
+
     /** Returns true if any live enemy currently occupies the given tile. Safe to call at any time. */
     public boolean isTileOccupiedByEnemy(int tileColumn, int tileRow) {
         for (int enemyIndex = 0; enemyIndex < enemies.size(); enemyIndex++) {

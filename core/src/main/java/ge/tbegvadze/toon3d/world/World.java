@@ -223,12 +223,19 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             weapon.setRangedDamageMultiplier(rangedMultiplier);
         }
 
+        // Melee slot — the Fist is the always-available fallback; wired at run start and never removed.
+        Fist fist = new Fist();
+        fist.setEventTextSystem(eventTextSystem);
+        inventory.setMeleeWeapon(fist);
+
         if (startRoom) {
             // Start room: full arsenal registered for the HUD renderer, but loadout is empty
             // so the player is unarmed until they walk onto a weapon offer.
             inventory.setArsenal(java.util.List.of(shotgun, dblShotgun, plasmaRifle, chaingun,
                                                    railgun, incinerator, grenadeLauncher));
             inventory.clearLoadout();
+            // Re-set melee weapon after clearLoadout (which resets meleeSelected but not the weapon itself).
+            inventory.setMeleeWeapon(fist);
             // No starting ammo — starter reserve comes bundled with the chosen weapon.
         } else {
             // Normal floor entry: equip Chaingun + Shotgun with starting ammo reserves.
@@ -239,6 +246,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
 
         weaponHudRenderer    = new WeaponHudRenderer(inventory.getArsenal());
+        // Register the Fist so the renderer can look up its texture by class.
+        // Other melee weapons are registered via registerAdditionalWeapon() when acquired.
+        weaponHudRenderer.registerAdditionalWeapon(fist);
         if (startRoom) {
             // Player starts unarmed; clear the initially-selected weapon in the renderer.
             weaponHudRenderer.setEquippedWeapon(null);

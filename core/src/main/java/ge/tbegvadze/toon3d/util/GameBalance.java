@@ -80,9 +80,12 @@ public final class GameBalance {
     // ENEMY DEPTH SCALING — enemies grow stronger on each new dungeon floor
     //
     // Health formula:  baseHP * HEALTH_SCALE ^ (depth − 1)
-    // Damage formula:  baseDmg * DAMAGE_SCALE ^ (depth − 1)
     //   depth 1: ×1.00   depth 2: ×1.12   depth 3: ×1.25
     //   depth 4: ×1.40   depth 5: ×1.57   depth 10: ×2.77
+    //
+    // Damage formula:  baseDmg * DAMAGE_SCALE ^ (depth − 1)
+    //   depth 1: ×1.00   depth 2: ×1.10   depth 3: ×1.21
+    //   depth 4: ×1.33   depth 5: ×1.46   depth 10: ×2.36
     // =========================================================================
 
     /** Per-floor HP multiplier applied as a compound factor. */
@@ -118,6 +121,26 @@ public final class GameBalance {
     public static float enemyDamageScaleForDepth(int dungeonDepth) {
         return GameMath.compoundScaleForDepth(ENEMY_DAMAGE_SCALE_PER_DEPTH, dungeonDepth);
     }
+
+    // =========================================================================
+    // MELEE WEAPON STAT BLOCKS — base damage per weapon type
+    // All four v1 melee weapons have turnsPerAttack=1 (one swing = one world turn).
+    // =========================================================================
+
+    /** FIST — always-equipped fallback; chip damage only, never dropped. */
+    public static final int MELEE_FIST_DAMAGE          = 4;
+
+    /** COMBAT KNIFE — fast light melee, good vs low-HP chaff. */
+    public static final int MELEE_KNIFE_DAMAGE         = 8;
+
+    /** STEEL PIPE — crowd-control melee; knockback eligible targets by PIPE_KNOCKBACK_TILES. */
+    public static final int MELEE_PIPE_DAMAGE          = 14;
+
+    /** How many tiles a knockback-eligible enemy is pushed on a Steel Pipe hit. */
+    public static final int MELEE_PIPE_KNOCKBACK_TILES = 1;
+
+    /** CHAINSAW — high sustained damage; no knockback (grinds in place). */
+    public static final int MELEE_CHAINSAW_DAMAGE      = 12;
 
     // =========================================================================
     // STAT SYSTEM — per-difficulty base values, caps, and per-point effect rates

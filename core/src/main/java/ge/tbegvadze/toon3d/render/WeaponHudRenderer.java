@@ -10,12 +10,16 @@ import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.Chaingun;
+import ge.tbegvadze.toon3d.entity.CombatKnife;
 import ge.tbegvadze.toon3d.entity.DoubleBarrelShotgun;
+import ge.tbegvadze.toon3d.entity.Fist;
 import ge.tbegvadze.toon3d.entity.GrenadeLauncher;
 import ge.tbegvadze.toon3d.entity.Incinerator;
+import ge.tbegvadze.toon3d.entity.MeleeChainsaw;
 import ge.tbegvadze.toon3d.entity.PlasmaRifle;
 import ge.tbegvadze.toon3d.entity.Railgun;
 import ge.tbegvadze.toon3d.entity.Shotgun;
+import ge.tbegvadze.toon3d.entity.SteelPipe;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.entity.WeaponVisualState;
 import ge.tbegvadze.toon3d.util.Constants;
@@ -129,6 +133,18 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         }
         if (weapon instanceof GrenadeLauncher) {
             return generateGrenadeLauncherTexture();
+        }
+        if (weapon instanceof Fist) {
+            return generateFistTexture();
+        }
+        if (weapon instanceof CombatKnife) {
+            return generateCombatKnifeTexture();
+        }
+        if (weapon instanceof SteelPipe) {
+            return generateSteelPipeTexture();
+        }
+        if (weapon instanceof MeleeChainsaw) {
+            return generateMeleeChainsawTexture();
         }
         return generateFallbackWeaponTexture();
     }
@@ -1652,6 +1668,609 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         shapeRenderer.rect(centerX - 1f, 120f, 2f, 1f);      // post tip highlight
     }
 
+    // -------------------------------------------------------------------------
+    // MELEE WEAPON SPRITES
+    // -------------------------------------------------------------------------
+
+    /**
+     * Generates an armored fist sprite using ShapeRenderer into an offscreen FrameBuffer.
+     *
+     * Two gauntlets side-by-side, knuckles pointing away (top of canvas).
+     * Top-down first-person perspective: grip is off-screen below Y=14.
+     *
+     * Layout zones (Y-up):
+     *   Y  0..14  transparent — grip cut off below screen
+     *   Y 14..50  wrist/forearm blocks — gunmetal grey, symmetric pair
+     *   Y 48..70  knuckle ridge — slightly narrower, 4 finger bumps per hand
+     *   Y 68..90  finger tubes — four tapered tubes per hand pointing away
+     *   Y 88..98  fingertips — 2px bright metal cap at Y=96
+     *   Centre gap (CX-4..CX+4) is near-black — crack between the two fists
+     */
+    private static Texture generateFistTexture() {
+        int canvasWidth  = WeaponConstants.MELEE_CANVAS_WIDTH;
+        int canvasHeight = WeaponConstants.MELEE_CANVAS_HEIGHT;
+
+        FrameBuffer        frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
+        ShapeRenderer      temporaryShapeRenderer = new ShapeRenderer();
+        OrthographicCamera camera                 = new OrthographicCamera(canvasWidth, canvasHeight);
+        camera.position.set(canvasWidth / 2f, canvasHeight / 2f, 0f);
+        camera.update();
+
+        frameBuffer.begin();
+        Gdx.gl.glClearColor(0f, 0f, 0f, 0f);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        temporaryShapeRenderer.setProjectionMatrix(camera.combined);
+        temporaryShapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        drawFistShape(temporaryShapeRenderer, canvasWidth / 2f);
+        temporaryShapeRenderer.end();
+
+        Pixmap rawPixmap = new Pixmap(canvasWidth, canvasHeight, Pixmap.Format.RGBA8888);
+        Gdx.gl.glReadPixels(0, 0, canvasWidth, canvasHeight,
+                            GL20.GL_RGBA, GL20.GL_UNSIGNED_BYTE, rawPixmap.getPixels());
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+        frameBuffer.end();
+        frameBuffer.dispose();
+        temporaryShapeRenderer.dispose();
+
+        Pixmap flippedPixmap = flipPixmapVertically(rawPixmap);
+        rawPixmap.dispose();
+
+        Texture texture = new Texture(flippedPixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        flippedPixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Draws two armored gauntlets in Quake-1 top-down first-person perspective.
+     *
+     * Both fists are symmetric about centerX=96. The centre gap (CX-4..CX+4) is
+     * near-black to visually separate the two hands. Finger tubes taper slightly
+     * from Y=68 (6px wide) to Y=90 (4px wide) to suggest perspective recession.
+     * Fingertip caps at Y=96 are the muzzle-cap equivalent for melee weapons.
+     */
+    private static void drawFistShape(ShapeRenderer shapeRenderer, float centerX) {
+
+        // 1. Wrist/forearm blocks — gunmetal base colour, symmetric pair
+        //    Left:  CX-36..CX-4  (32px wide)   Right: CX+4..CX+36  (32px wide)
+        shapeRenderer.setColor(0.30f, 0.32f, 0.36f, 1f);
+        shapeRenderer.rect(centerX - 36f, 14f, 32f, 36f);   // left forearm
+        shapeRenderer.rect(centerX +  4f, 14f, 32f, 36f);   // right forearm
+
+        // Far-edge highlight — top surface faces camera
+        shapeRenderer.setColor(0.48f, 0.52f, 0.58f, 1f);
+        shapeRenderer.rect(centerX - 36f, 46f, 32f, 3f);    // left far edge highlight
+        shapeRenderer.rect(centerX +  4f, 46f, 32f, 3f);    // right far edge highlight
+
+        // Near-edge shadow — underside curves away from camera
+        shapeRenderer.setColor(0.12f, 0.13f, 0.16f, 1f);
+        shapeRenderer.rect(centerX - 36f, 14f, 32f, 3f);    // left near shadow
+        shapeRenderer.rect(centerX +  4f, 14f, 32f, 3f);    // right near shadow
+
+        // Centre gap — near-black crack between the two fists
+        shapeRenderer.setColor(0.06f, 0.06f, 0.08f, 1f);
+        shapeRenderer.rect(centerX - 4f, 14f, 8f, 84f);     // gap column (full height)
+
+        // 2. Knuckle ridge — slightly narrower block above forearms (Y=48..70)
+        //    Left:  CX-30..CX-4  (26px wide)   Right: CX+4..CX+30  (26px wide)
+        shapeRenderer.setColor(0.30f, 0.32f, 0.36f, 1f);
+        shapeRenderer.rect(centerX - 30f, 48f, 26f, 22f);   // left knuckle ridge
+        shapeRenderer.rect(centerX +  4f, 48f, 26f, 22f);   // right knuckle ridge
+
+        // Knuckle bumps — 4 finger knuckle protrusions on each hand
+        //    Left hand bumps at X: CX-29, CX-22, CX-15, CX-8  each 5px wide, 3px tall at Y=65
+        shapeRenderer.setColor(0.38f, 0.40f, 0.44f, 1f);
+        shapeRenderer.rect(centerX - 29f, 65f, 5f, 3f);     // left knuckle 1
+        shapeRenderer.rect(centerX - 22f, 65f, 5f, 3f);     // left knuckle 2
+        shapeRenderer.rect(centerX - 15f, 65f, 5f, 3f);     // left knuckle 3
+        shapeRenderer.rect(centerX -  8f, 65f, 5f, 3f);     // left knuckle 4
+        shapeRenderer.rect(centerX +  4f, 65f, 5f, 3f);     // right knuckle 1
+        shapeRenderer.rect(centerX + 11f, 65f, 5f, 3f);     // right knuckle 2
+        shapeRenderer.rect(centerX + 18f, 65f, 5f, 3f);     // right knuckle 3
+        shapeRenderer.rect(centerX + 25f, 65f, 5f, 3f);     // right knuckle 4
+
+        // Knuckle ridge far-edge highlight
+        shapeRenderer.setColor(0.48f, 0.52f, 0.58f, 1f);
+        shapeRenderer.rect(centerX - 30f, 67f, 26f, 3f);    // left knuckle ridge top
+        shapeRenderer.rect(centerX +  4f, 67f, 26f, 3f);    // right knuckle ridge top
+
+        // 3. Finger tubes — four tapered tubes per hand pointing away (Y=68..90)
+        //    Left hand tube centres at CX-28, CX-20, CX-12, CX-4  (each 6px wide at base)
+        //    Right hand tube centres at CX+4, CX+12, CX+20, CX+28
+        //    Taper: 6px at Y=68 down to 4px at Y=90 (convergence factor ≈ 0.67)
+        shapeRenderer.setColor(0.26f, 0.28f, 0.32f, 1f);
+
+        // Left hand — tubes drawn as general trapezoids (taper toward far end)
+        // Tube 1: left CX-31..CX-25 at base, CX-30..CX-26 at muzzle (centred at CX-28)
+        drawGeneralTrapezoid(shapeRenderer,
+            centerX - 31f, centerX - 25f, 68f,
+            centerX - 30f, centerX - 26f, 90f);
+        // Tube 2: centre at CX-20 (left CX-23, right CX-17 at base → CX-22..CX-18 at muzzle)
+        drawGeneralTrapezoid(shapeRenderer,
+            centerX - 23f, centerX - 17f, 68f,
+            centerX - 22f, centerX - 18f, 90f);
+        // Tube 3: centre at CX-12 (left CX-15, right CX-9 → CX-14..CX-10)
+        drawGeneralTrapezoid(shapeRenderer,
+            centerX - 15f, centerX - 9f, 68f,
+            centerX - 14f, centerX - 10f, 90f);
+        // Tube 4: centre at CX-4 (left CX-7, right CX-4 → CX-6..CX-4)
+        //   Note: right edge of tube 4 is the gap boundary; stop at CX-5 to avoid gap overlap
+        drawGeneralTrapezoid(shapeRenderer,
+            centerX - 7f, centerX - 5f, 68f,
+            centerX - 6f, centerX - 5f, 90f);
+
+        // Right hand — mirror of left hand tubes
+        // Tube 1: centre at CX+4 (CX+5..CX+7 at base → CX+5..CX+6 at muzzle)
+        drawGeneralTrapezoid(shapeRenderer,
+            centerX + 5f, centerX + 7f, 68f,
+            centerX + 5f, centerX + 6f, 90f);
+        // Tube 2: centre at CX+12 (CX+9..CX+15 at base → CX+10..CX+14 at muzzle)
+        drawGeneralTrapezoid(shapeRenderer,
+            centerX +  9f, centerX + 15f, 68f,
+            centerX + 10f, centerX + 14f, 90f);
+        // Tube 3: centre at CX+20 (CX+17..CX+23 at base → CX+18..CX+22 at muzzle)
+        drawGeneralTrapezoid(shapeRenderer,
+            centerX + 17f, centerX + 23f, 68f,
+            centerX + 18f, centerX + 22f, 90f);
+        // Tube 4: centre at CX+28 (CX+25..CX+31 at base → CX+26..CX+30 at muzzle)
+        drawGeneralTrapezoid(shapeRenderer,
+            centerX + 25f, centerX + 31f, 68f,
+            centerX + 26f, centerX + 30f, 90f);
+
+        // 4. Fingertip caps — 2px bright metal strip at Y=96 (muzzle-cap equivalent)
+        //    One cap per hand spanning the full finger bundle width
+        shapeRenderer.setColor(0.50f, 0.54f, 0.62f, 1f);
+        shapeRenderer.rect(centerX - 31f, 96f, 26f, 2f);    // left hand fingertip cap
+        shapeRenderer.rect(centerX +  5f, 96f, 26f, 2f);    // right hand fingertip cap
+    }
+
+    // -------------------------------------------------------------------------
+
+    /**
+     * Generates a combat knife sprite using ShapeRenderer into an offscreen FrameBuffer.
+     *
+     * A combat knife held right-of-centre with the blade pointing away (upward on canvas).
+     * Top-down first-person perspective: grip is off-screen below Y=14.
+     *
+     * Layout zones (Y-up):
+     *   Y  0..14  transparent — grip cut off below screen
+     *   Y 14..44  handle — dark leather wrap with grooves, right-of-centre
+     *   Y 42..50  guard — gunmetal cross-guard block
+     *   Y 50..110 blade body — polished steel, tapers from 20px to 8px
+     *   Y 104..122 blade tip — triangular convergence to a point
+     */
+    private static Texture generateCombatKnifeTexture() {
+        int canvasWidth  = WeaponConstants.MELEE_CANVAS_WIDTH;
+        int canvasHeight = WeaponConstants.MELEE_CANVAS_HEIGHT;
+
+        FrameBuffer        frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
+        ShapeRenderer      temporaryShapeRenderer = new ShapeRenderer();
+        OrthographicCamera camera                 = new OrthographicCamera(canvasWidth, canvasHeight);
+        camera.position.set(canvasWidth / 2f, canvasHeight / 2f, 0f);
+        camera.update();
+
+        frameBuffer.begin();
+        Gdx.gl.glClearColor(0f, 0f, 0f, 0f);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        temporaryShapeRenderer.setProjectionMatrix(camera.combined);
+        temporaryShapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        drawCombatKnifeShape(temporaryShapeRenderer, canvasWidth / 2f);
+        temporaryShapeRenderer.end();
+
+        Pixmap rawPixmap = new Pixmap(canvasWidth, canvasHeight, Pixmap.Format.RGBA8888);
+        Gdx.gl.glReadPixels(0, 0, canvasWidth, canvasHeight,
+                            GL20.GL_RGBA, GL20.GL_UNSIGNED_BYTE, rawPixmap.getPixels());
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+        frameBuffer.end();
+        frameBuffer.dispose();
+        temporaryShapeRenderer.dispose();
+
+        Pixmap flippedPixmap = flipPixmapVertically(rawPixmap);
+        rawPixmap.dispose();
+
+        Texture texture = new Texture(flippedPixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        flippedPixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Draws a combat knife in Quake-1 top-down first-person perspective.
+     *
+     * The knife is held right-of-centre so it reads as a weapon held in the right hand.
+     * Handle occupies CX+4..CX+24; blade tapers from 20px wide at guard to a point at Y=122.
+     * The sharpened left bevel is brighter than the flat right spine.
+     *
+     * Blade shaping:
+     *   Y 50..110  flat body: left edge CX+2, right edge CX+22 (20px wide)
+     *              bevel strip: 2px along left edge (CX+2..CX+4)
+     *              spine strip: 3px along right edge (CX+19..CX+22)
+     *   Y 104..122 tip: left edge converges from CX+2 to CX+14 (point), right from CX+22 to CX+14
+     */
+    private static void drawCombatKnifeShape(ShapeRenderer shapeRenderer, float centerX) {
+
+        // 1. Handle — dark leather wrap, right of centre (CX+4..CX+24), Y=14..44
+        shapeRenderer.setColor(0.22f, 0.12f, 0.05f, 1f);
+        shapeRenderer.rect(centerX + 4f, 14f, 20f, 30f);
+
+        // Wrap grooves — darker horizontal bands to suggest cord wrapping
+        shapeRenderer.setColor(0.14f, 0.07f, 0.02f, 1f);
+        shapeRenderer.rect(centerX + 4f, 18f, 20f, 2f);     // groove 1
+        shapeRenderer.rect(centerX + 4f, 25f, 20f, 2f);     // groove 2
+        shapeRenderer.rect(centerX + 4f, 32f, 20f, 2f);     // groove 3
+        shapeRenderer.rect(centerX + 4f, 39f, 20f, 2f);     // groove 4
+
+        // Handle top highlight (far edge visible from above)
+        shapeRenderer.setColor(0.34f, 0.18f, 0.08f, 1f);
+        shapeRenderer.rect(centerX + 4f, 41f, 20f, 3f);
+
+        // 2. Guard — gunmetal cross-guard block (CX-6..CX+28, Y=42..50)
+        shapeRenderer.setColor(0.28f, 0.30f, 0.36f, 1f);
+        shapeRenderer.rect(centerX - 6f, 42f, 34f, 8f);
+
+        // Guard far-edge highlight
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 6f, 48f, 34f, 2f);
+
+        // Guard near-edge shadow
+        shapeRenderer.setColor(0.18f, 0.19f, 0.23f, 1f);
+        shapeRenderer.rect(centerX - 6f, 42f, 34f, 2f);
+
+        // 3. Blade body — polished steel flat (CX+2..CX+22, Y=50..110)
+        shapeRenderer.setColor(0.58f, 0.62f, 0.68f, 1f);
+        shapeRenderer.rect(centerX + 2f, 50f, 20f, 60f);
+
+        // Left bevel edge — sharpened ground edge, brightest (CX+2..CX+4)
+        shapeRenderer.setColor(0.82f, 0.86f, 0.90f, 1f);
+        shapeRenderer.rect(centerX + 2f, 50f, 2f, 60f);
+
+        // Right spine — darker heavy spine (CX+19..CX+22)
+        shapeRenderer.setColor(0.34f, 0.36f, 0.42f, 1f);
+        shapeRenderer.rect(centerX + 19f, 50f, 3f, 60f);
+
+        // Mid blade shadow groove — subtle central fullers line at Y=80
+        shapeRenderer.setColor(0.48f, 0.52f, 0.58f, 1f);
+        shapeRenderer.rect(centerX + 8f, 80f, 6f, 2f);
+
+        // 4. Blade tip — triangular convergence from Y=104 to point at Y=122, CX+14
+        //    Left side: left edge goes from CX+2 at Y=104 to CX+14 at Y=122
+        //    Right side: right edge goes from CX+22 at Y=104 to CX+14 at Y=122
+        shapeRenderer.setColor(0.58f, 0.62f, 0.68f, 1f);
+        shapeRenderer.triangle(
+            centerX +  2f, 104f,    // bottom-left
+            centerX + 22f, 104f,    // bottom-right
+            centerX + 14f, 122f     // tip point
+        );
+
+        // Tip bevel highlight — left edge of tip
+        shapeRenderer.setColor(0.82f, 0.86f, 0.90f, 1f);
+        shapeRenderer.triangle(
+            centerX +  2f, 104f,
+            centerX +  4f, 104f,
+            centerX + 14f, 122f
+        );
+
+        // Tip spine — right edge of tip
+        shapeRenderer.setColor(0.34f, 0.36f, 0.42f, 1f);
+        shapeRenderer.triangle(
+            centerX + 19f, 104f,
+            centerX + 22f, 104f,
+            centerX + 14f, 122f
+        );
+
+        // Tip glint — bright highlight at the very point
+        shapeRenderer.setColor(0.92f, 0.95f, 0.98f, 1f);
+        shapeRenderer.rect(centerX + 13f, 120f, 2f, 2f);
+    }
+
+    // -------------------------------------------------------------------------
+
+    /**
+     * Generates a steel pipe sprite using ShapeRenderer into an offscreen FrameBuffer.
+     *
+     * A thick metal pipe held horizontally across the screen, spanning left-to-right.
+     * Two gloved hands grip the pipe near its ends. The pipe body runs full width.
+     * This is a lateral weapon rather than an axial one — the pipe extends side-to-side.
+     *
+     * Layout zones (Y-up):
+     *   Y  0..14  transparent — grip cut off below screen
+     *   Y 14..50  gloved hands — dark tactical green, one on each side of pipe
+     *   Y 40..90  pipe body — rusted iron spanning CX-70..CX+70
+     *   Y 86..90  crown highlight — top surface of cylinder
+     *   Y 40..44  near shadow — underside of cylinder
+     *   Y 88..100 pipe end caps — brighter steel ends
+     */
+    private static Texture generateSteelPipeTexture() {
+        int canvasWidth  = WeaponConstants.MELEE_CANVAS_WIDTH;
+        int canvasHeight = WeaponConstants.MELEE_CANVAS_HEIGHT;
+
+        FrameBuffer        frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
+        ShapeRenderer      temporaryShapeRenderer = new ShapeRenderer();
+        OrthographicCamera camera                 = new OrthographicCamera(canvasWidth, canvasHeight);
+        camera.position.set(canvasWidth / 2f, canvasHeight / 2f, 0f);
+        camera.update();
+
+        frameBuffer.begin();
+        Gdx.gl.glClearColor(0f, 0f, 0f, 0f);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        temporaryShapeRenderer.setProjectionMatrix(camera.combined);
+        temporaryShapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        drawSteelPipeShape(temporaryShapeRenderer, canvasWidth / 2f);
+        temporaryShapeRenderer.end();
+
+        Pixmap rawPixmap = new Pixmap(canvasWidth, canvasHeight, Pixmap.Format.RGBA8888);
+        Gdx.gl.glReadPixels(0, 0, canvasWidth, canvasHeight,
+                            GL20.GL_RGBA, GL20.GL_UNSIGNED_BYTE, rawPixmap.getPixels());
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+        frameBuffer.end();
+        frameBuffer.dispose();
+        temporaryShapeRenderer.dispose();
+
+        Pixmap flippedPixmap = flipPixmapVertically(rawPixmap);
+        rawPixmap.dispose();
+
+        Texture texture = new Texture(flippedPixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        flippedPixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Draws a steel pipe in Quake-1 first-person perspective.
+     *
+     * The pipe is a horizontal cylinder — unlike axial weapons it spans left-to-right.
+     * Top surface is the crown highlight; underside is darker. Weld seams run vertically
+     * across the pipe at equal intervals. Two tactical-gloved hands grip the pipe.
+     *
+     * Pipe body: CX-70..CX+70 (140px wide), Y=40..90 (50px tall)
+     * Crown highlight: Y=86..90 (top surface facing camera)
+     * Near shadow: Y=40..44 (bottom surface curving away)
+     * Weld seams: 2px wide vertical bands at CX-23, CX, CX+23
+     * Left glove: CX-58..CX-26, Y=14..50   Right glove: CX+26..CX+58, Y=14..50
+     */
+    private static void drawSteelPipeShape(ShapeRenderer shapeRenderer, float centerX) {
+
+        // 1. Left gloved hand — dark tactical green, overlaps pipe (drawn first, pipe covers mid)
+        shapeRenderer.setColor(0.14f, 0.20f, 0.12f, 1f);
+        shapeRenderer.rect(centerX - 58f, 14f, 32f, 36f);   // left glove body
+
+        // Left glove knuckle ridges — darker finger detail at top
+        shapeRenderer.setColor(0.10f, 0.14f, 0.08f, 1f);
+        shapeRenderer.rect(centerX - 58f, 44f, 32f, 3f);    // left knuckle band 1
+        shapeRenderer.rect(centerX - 52f, 38f, 4f, 4f);     // left finger gap 1
+        shapeRenderer.rect(centerX - 44f, 38f, 4f, 4f);     // left finger gap 2
+        shapeRenderer.rect(centerX - 36f, 38f, 4f, 4f);     // left finger gap 3
+
+        // 2. Right gloved hand — dark tactical green (mirror of left)
+        shapeRenderer.setColor(0.14f, 0.20f, 0.12f, 1f);
+        shapeRenderer.rect(centerX + 26f, 14f, 32f, 36f);   // right glove body
+
+        // Right glove knuckle ridges
+        shapeRenderer.setColor(0.10f, 0.14f, 0.08f, 1f);
+        shapeRenderer.rect(centerX + 26f, 44f, 32f, 3f);    // right knuckle band 1
+        shapeRenderer.rect(centerX + 30f, 38f, 4f, 4f);     // right finger gap 1
+        shapeRenderer.rect(centerX + 38f, 38f, 4f, 4f);     // right finger gap 2
+        shapeRenderer.rect(centerX + 46f, 38f, 4f, 4f);     // right finger gap 3
+
+        // 3. Main pipe body — rusted iron, full width (CX-70..CX+70, Y=40..90)
+        shapeRenderer.setColor(0.34f, 0.28f, 0.22f, 1f);
+        shapeRenderer.rect(centerX - 70f, 40f, 140f, 50f);
+
+        // Near-edge shadow — underside of pipe cylinder (Y=40..44)
+        shapeRenderer.setColor(0.20f, 0.16f, 0.12f, 1f);
+        shapeRenderer.rect(centerX - 70f, 40f, 140f, 4f);
+
+        // Crown highlight — top surface of pipe cylinder (Y=86..90)
+        shapeRenderer.setColor(0.48f, 0.42f, 0.34f, 1f);
+        shapeRenderer.rect(centerX - 70f, 86f, 140f, 4f);
+
+        // Sub-crown secondary highlight band (Y=82..86) — slightly brighter than body
+        shapeRenderer.setColor(0.40f, 0.34f, 0.28f, 1f);
+        shapeRenderer.rect(centerX - 70f, 82f, 140f, 4f);
+
+        // 4. Weld seams — 3 dark vertical bands evenly spaced across pipe
+        shapeRenderer.setColor(0.24f, 0.20f, 0.16f, 1f);
+        shapeRenderer.rect(centerX - 24f, 40f, 2f, 50f);    // left weld seam (CX-24)
+        shapeRenderer.rect(centerX -  1f, 40f, 2f, 50f);    // centre weld seam (CX)
+        shapeRenderer.rect(centerX + 22f, 40f, 2f, 50f);    // right weld seam (CX+22)
+
+        // 5. Pipe end caps — brighter steel at each end (left: CX-72..CX-68, right: CX+68..CX+72)
+        shapeRenderer.setColor(0.54f, 0.48f, 0.40f, 1f);
+        shapeRenderer.rect(centerX - 72f, 40f, 4f, 50f);    // left cap
+        shapeRenderer.rect(centerX + 68f, 40f, 4f, 50f);    // right cap
+
+        // End cap highlight edges
+        shapeRenderer.setColor(0.62f, 0.56f, 0.48f, 1f);
+        shapeRenderer.rect(centerX - 72f, 86f, 4f, 4f);     // left cap crown
+        shapeRenderer.rect(centerX + 68f, 86f, 4f, 4f);     // right cap crown
+    }
+
+    // -------------------------------------------------------------------------
+
+    /**
+     * Generates a melee chainsaw sprite using ShapeRenderer into an offscreen FrameBuffer.
+     *
+     * A chainsaw body held centre with the guide bar pointing away (upward on canvas).
+     * Top-down first-person perspective: grip/stock is off-screen below Y=14.
+     *
+     * Layout zones (Y-up):
+     *   Y  0..14  transparent — grip cut off below screen
+     *   Y 14..54  engine body housing — wide gunmetal with orange hazard stripe
+     *   Y 40..60  side grip handles — extend from body on both sides
+     *   Y 54..70  chain drive sprocket area — housing + chain detail
+     *   Y 68..124 guide bar — narrow gunmetal bar with chain teeth along edges
+     *   Y 122..124 nose sprocket tip — bright steel muzzle cap
+     */
+    private static Texture generateMeleeChainsawTexture() {
+        int canvasWidth  = WeaponConstants.MELEE_CANVAS_WIDTH;
+        int canvasHeight = WeaponConstants.MELEE_CANVAS_HEIGHT;
+
+        FrameBuffer        frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
+        ShapeRenderer      temporaryShapeRenderer = new ShapeRenderer();
+        OrthographicCamera camera                 = new OrthographicCamera(canvasWidth, canvasHeight);
+        camera.position.set(canvasWidth / 2f, canvasHeight / 2f, 0f);
+        camera.update();
+
+        frameBuffer.begin();
+        Gdx.gl.glClearColor(0f, 0f, 0f, 0f);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        temporaryShapeRenderer.setProjectionMatrix(camera.combined);
+        temporaryShapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        drawMeleeChainsawShape(temporaryShapeRenderer, canvasWidth / 2f);
+        temporaryShapeRenderer.end();
+
+        Pixmap rawPixmap = new Pixmap(canvasWidth, canvasHeight, Pixmap.Format.RGBA8888);
+        Gdx.gl.glReadPixels(0, 0, canvasWidth, canvasHeight,
+                            GL20.GL_RGBA, GL20.GL_UNSIGNED_BYTE, rawPixmap.getPixels());
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+        frameBuffer.end();
+        frameBuffer.dispose();
+        temporaryShapeRenderer.dispose();
+
+        Pixmap flippedPixmap = flipPixmapVertically(rawPixmap);
+        rawPixmap.dispose();
+
+        Texture texture = new Texture(flippedPixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        flippedPixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Draws a chainsaw in Quake-1 top-down first-person perspective.
+     *
+     * The guide bar (CX-8..CX+8, Y=68..124) tapers slightly to CX-5..CX+5 at the tip.
+     * Chain teeth appear as alternating dark slots along each edge of the guide bar every 8px.
+     * The engine body is symmetric (CX-44..CX+44, Y=14..54) with an orange hazard stripe.
+     * Air vents are dark slots on each side of the engine housing.
+     *
+     * Guide bar taper: 8px half-width at Y=68 to 5px at Y=124 (convergence factor ≈ 0.625).
+     * Chain teeth: 3px dark slots at each edge, spaced every 8px from Y=70 to Y=120.
+     * Bright chain link segments fill the gaps between slots.
+     */
+    private static void drawMeleeChainsawShape(ShapeRenderer shapeRenderer, float centerX) {
+
+        // 1. Engine body housing — wide gunmetal block (CX-44..CX+44, Y=14..54)
+        shapeRenderer.setColor(0.24f, 0.26f, 0.30f, 1f);
+        shapeRenderer.rect(centerX - 44f, 14f, 88f, 40f);
+
+        // Body top-edge highlight — far surface faces camera
+        shapeRenderer.setColor(0.40f, 0.44f, 0.50f, 1f);
+        shapeRenderer.rect(centerX - 44f, 50f, 88f, 4f);
+
+        // Body near-edge shadow
+        shapeRenderer.setColor(0.14f, 0.15f, 0.18f, 1f);
+        shapeRenderer.rect(centerX - 44f, 14f, 88f, 4f);
+
+        // 2. Orange hazard stripe — safety marking across engine body (Y=36..42)
+        shapeRenderer.setColor(0.88f, 0.48f, 0.04f, 1f);
+        shapeRenderer.rect(centerX - 44f, 36f, 88f, 6f);
+
+        // Hazard stripe top highlight
+        shapeRenderer.setColor(0.98f, 0.62f, 0.10f, 1f);
+        shapeRenderer.rect(centerX - 44f, 40f, 88f, 2f);
+
+        // 3. Engine air vents — 3 dark slots on each side of housing (Y=18..34)
+        //    Left vents: CX-42..CX-34 (3 slots each 4px tall, spaced 2px apart)
+        //    Right vents: CX+34..CX+42 (mirror)
+        shapeRenderer.setColor(0.10f, 0.11f, 0.14f, 1f);
+        shapeRenderer.rect(centerX - 42f, 18f, 8f, 4f);     // left vent 1
+        shapeRenderer.rect(centerX - 42f, 24f, 8f, 4f);     // left vent 2
+        shapeRenderer.rect(centerX - 42f, 30f, 8f, 4f);     // left vent 3
+        shapeRenderer.rect(centerX + 34f, 18f, 8f, 4f);     // right vent 1
+        shapeRenderer.rect(centerX + 34f, 24f, 8f, 4f);     // right vent 2
+        shapeRenderer.rect(centerX + 34f, 30f, 8f, 4f);     // right vent 3
+
+        // 4. Side grip handles — black rubber, extend from body (Y=40..60)
+        //    Left grip:  CX-54..CX-38   Right grip: CX+38..CX+54
+        shapeRenderer.setColor(0.14f, 0.14f, 0.16f, 1f);
+        shapeRenderer.rect(centerX - 54f, 40f, 16f, 20f);   // left grip
+        shapeRenderer.rect(centerX + 38f, 40f, 16f, 20f);   // right grip
+
+        // Grip top highlights
+        shapeRenderer.setColor(0.22f, 0.22f, 0.26f, 1f);
+        shapeRenderer.rect(centerX - 54f, 56f, 16f, 4f);    // left grip top
+        shapeRenderer.rect(centerX + 38f, 56f, 16f, 4f);    // right grip top
+
+        // 5. Chain drive sprocket housing — dark ring centered on body (Y=54..70)
+        //    Outer housing: CX-14..CX+14, inner opening: CX-8..CX+8
+        shapeRenderer.setColor(0.18f, 0.20f, 0.24f, 1f);
+        shapeRenderer.rect(centerX - 14f, 54f, 28f, 16f);   // sprocket housing block
+
+        // Sprocket housing highlight arc (top edge visible from above)
+        shapeRenderer.setColor(0.32f, 0.36f, 0.44f, 1f);
+        shapeRenderer.rect(centerX - 14f, 66f, 28f, 4f);
+
+        // Chain teeth around sprocket rim — alternating bright links visible at edges
+        shapeRenderer.setColor(0.52f, 0.56f, 0.62f, 1f);
+        shapeRenderer.rect(centerX - 14f, 56f, 4f, 3f);     // left teeth 1
+        shapeRenderer.rect(centerX - 14f, 62f, 4f, 3f);     // left teeth 2
+        shapeRenderer.rect(centerX + 10f, 56f, 4f, 3f);     // right teeth 1
+        shapeRenderer.rect(centerX + 10f, 62f, 4f, 3f);     // right teeth 2
+
+        // 6. Guide bar — narrow gunmetal bar pointing away, tapered (Y=68..124)
+        //    Base: CX-8..CX+8 (16px wide)   Tip: CX-5..CX+5 (10px wide)
+        shapeRenderer.setColor(0.30f, 0.32f, 0.38f, 1f);
+        drawGeneralTrapezoid(shapeRenderer,
+            centerX - 8f, centerX + 8f, 68f,
+            centerX - 5f, centerX + 5f, 124f);
+
+        // Guide bar far-edge highlight (top surface, narrow strip at far end)
+        shapeRenderer.setColor(0.44f, 0.48f, 0.56f, 1f);
+        drawGeneralTrapezoid(shapeRenderer,
+            centerX - 8f, centerX - 6f, 68f,
+            centerX - 5f, centerX - 4f, 124f);   // left rail highlight
+        drawGeneralTrapezoid(shapeRenderer,
+            centerX + 6f, centerX + 8f, 68f,
+            centerX + 4f, centerX + 5f, 124f);   // right rail highlight
+
+        // 7. Chain teeth along guide bar edges — dark slots every 8px, Y=70..120
+        //    Left edge slots: x = CX-8..CX-5 (3px), spaced 8px apart
+        //    Right edge slots: x = CX+5..CX+8 (3px), spaced 8px apart
+        shapeRenderer.setColor(0.18f, 0.20f, 0.24f, 1f);
+        for (int toothRow = 0; toothRow < 7; toothRow++) {
+            float toothY = 70f + toothRow * 8f;
+            // Interpolate guide bar width at this Y to keep teeth on the bar edges
+            float interpolationFactor = (toothY - 68f) / (124f - 68f);
+            float leftEdge  = (centerX - 8f) + interpolationFactor * ((centerX - 5f) - (centerX - 8f));
+            float rightEdge = (centerX + 8f) + interpolationFactor * ((centerX + 5f) - (centerX + 8f));
+            shapeRenderer.rect(leftEdge,       toothY, 3f, 4f);   // left chain tooth
+            shapeRenderer.rect(rightEdge - 3f, toothY, 3f, 4f);  // right chain tooth
+        }
+
+        // Bright chain link segments between teeth (half-brightness contrast against slots)
+        shapeRenderer.setColor(0.52f, 0.56f, 0.62f, 1f);
+        for (int linkRow = 0; linkRow < 6; linkRow++) {
+            float linkY = 74f + linkRow * 8f;
+            float interpolationFactor = (linkY - 68f) / (124f - 68f);
+            float leftEdge  = (centerX - 8f) + interpolationFactor * ((centerX - 5f) - (centerX - 8f));
+            float rightEdge = (centerX + 8f) + interpolationFactor * ((centerX + 5f) - (centerX + 8f));
+            shapeRenderer.rect(leftEdge,       linkY, 3f, 3f);    // left link segment
+            shapeRenderer.rect(rightEdge - 3f, linkY, 3f, 3f);   // right link segment
+        }
+
+        // 8. Nose sprocket tip — bright steel muzzle cap at guide bar end (Y=122..124)
+        //    Width = muzzle guide bar width: CX-5..CX+5 (10px)
+        shapeRenderer.setColor(0.52f, 0.56f, 0.62f, 1f);
+        shapeRenderer.rect(centerX - 5f, 122f, 10f, 2f);    // nose cap (muzzle-cap equivalent)
+    }
+
     /**
      * Minimal grey silhouette shown when a weapon has no asset file and no specific
      * procedural generator. Prevents a crash; replace with a real sprite later.
@@ -1669,6 +2288,17 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         pixmap.dispose();
         return texture;
+    }
+
+    /**
+     * Registers a weapon that was not part of the initial arsenal list.
+     * Generates its normal texture on first call; subsequent calls for the same class are no-ops.
+     * Must be called before {@link #setEquippedWeapon(Weapon)} switches to this weapon.
+     */
+    public void registerAdditionalWeapon(Weapon weapon) {
+        if (weapon != null && !weaponTextureCache.containsKey(weapon.getClass())) {
+            weaponTextureCache.put(weapon.getClass(), loadOrGenerateNormalTexture(weapon));
+        }
     }
 
     @Override

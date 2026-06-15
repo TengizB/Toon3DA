@@ -15,4 +15,14 @@ public interface EnemyHitTarget {
 
     /** Applies the given damage amount to the enemy returned by enemyAt(). */
     void applyDamageTo(Object enemy, int amount);
+
+    /**
+     * Attempts to move the given enemy to (targetColumn, targetRow).
+     * Implementations should check wall collision, prop collision, other-enemy occupancy,
+     * and bounds before moving. Returns true if the push succeeded.
+     * Default: no-op (returns false); override in EnemyManager.
+     */
+    default boolean tryPushEnemy(Object enemy, int targetColumn, int targetRow) {
+        return false;
+    }
 }
