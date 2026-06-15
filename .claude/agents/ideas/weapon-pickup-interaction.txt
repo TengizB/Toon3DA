@@ -1,0 +1,378 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI / Systems
+TITLE: Weapon Pickup Interaction — Inspect & Swap
+CREATED: 2026-06-15
+---
+
+OVERVIEW
+========
+Replaces the current "step on a weapon tile and it auto-equips / auto-converts to
+ammo" behaviour (the IMPLEMENTED flow in roguelike_order_5_weapon_pickup_and_
+switching.txt and PlayerController.pickUpWeaponGroundItemIfPresent) with a
+deliberate INSPECT -> DECIDE -> PICK-UP / SWAP loop driven entirely by on-screen
+touch buttons. Standing on a weapon shows its name; an "Inspect" button opens a
+procedural stats card; from the card the marine equips it (free slot), evicts a
+chosen slot (slots full), or walks away leaving it on the floor. The weapon that
+gets swapped out is dropped back onto the tile as a GroundItem so nothing is ever
+silently destroyed.
+
+This belongs here because the loadout is the player's identity for the run (only
+WEAPON_SLOT_COUNT = 2 ranged slots today) and blind auto-grabs throw away that
+decision — a DCSS/Hades player wants to READ the gun and choose, not have the
+floor choose for them. It is the touch-native, mobile-only realisation of the
+"full-capacity swap prompt" the order-5 doc flagged as an OPEN QUESTION (pick-
+which-slot-to-evict).
+
+
+GAMEPLAY LOOP
+=============
+Precondition: a weapon GroundItem (ItemCategory.WEAPON) rests on the marine's
+current tile (player settled onto it via a move turn). The OLD auto-equip path in
+pickUpWeaponGroundItemIfPresent is REMOVED for the normal (non-start-room) case —
+settling on a weapon no longer equips or converts anything by itself.
+
+1. GROUND NOTIFICATION (passive, no turn). The instant the player settles on a
+   tile that holds a weapon GroundItem, a small name label appears in the HUD
+   centre gap (X 420..860, just above HUD_HEIGHT). Text: weapon display name, e.g.
+   "COMBAT SHOTGUN" with a sub-line "[ INSPECT ]". The label is purely a readout;
+   it costs nothing and clears the moment the player steps off the tile.
+
+2. INSPECT BUTTON appears (touch). While (and only while) the player stands on a
+   weapon tile AND no dialog is open, the TouchControllerRenderer shows a single
+   contextual button labelled "INSPECT" in the contextual-action position (see
+   VISUAL DESIGN — same slot the future LOOT/USE verb would occupy). Tapping it
+   fires TouchAction.INSPECT_WEAPON (new). Inspecting opens the dialog and does
+   NOT advance a turn (menu-class action, like OPEN_INVENTORY).
+
+3. WEAPON STATS DIALOG (modal overlay). A new WeaponInspectOverlayRenderer draws a
+   centred procedural card showing the ground weapon's stats (DAMAGE, FIRE/CLIP,
+   RELOAD, RANGE, AMMO TYPE, current loaded ammo, a one-line type description) and
+   a comparison column against the player's ACTIVE weapon (deltas coloured green/
+   red). The card has two touch buttons:
+     - "TAKE"  -> proceed to pick-up / swap resolution (step 4).
+     - "CLOSE" -> dismiss, weapon stays on the floor, nothing changes, no turn.
+   While the dialog is open, world simulation is paused (GameState set to a modal
+   state, same as the inventory overlay): movement/fire/rotate input is ignored,
+   enemies do not act, the tick clock does not advance.
+
+4. PICK-UP / SWAP RESOLUTION (one turn on success).
+   a. FREE SLOT (loadout.isFull() == false): the weapon is equipped into the
+      lowest free slot via loadout.tryEquip(weaponInstance). The GroundItem is
+      removed from the world list. Dialog closes. A pickup banner flashes
+      ("<NAME> ACQUIRED"). This counts as ONE turn (the world advances once).
+   b. ALL SLOTS FULL (loadout.isFull() == true): the dialog transitions to a
+      SLOT-SELECTION PANEL listing each current ranged slot (slot 1..N) with that
+      weapon's name and a compact stat line, plus a "CANCEL" button. The player
+      taps the slot to evict. On tap:
+         - the evicted weapon is removed: loadout.removeSlot(chosenIndex);
+         - the evicted weapon is dropped on the current tile as a NEW GroundItem
+           (step 5);
+         - the new weapon is equipped: loadout.tryEquip(newWeapon) (now succeeds,
+           a slot is free) and then loadout.selectSlot(chosenIndex) so the new gun
+           lands in the freed slot and becomes active;
+         - the ground weapon's GroundItem is removed from the world list;
+         - dialog closes; banners flash ("<OLD> DROPPED", "<NEW> ACQUIRED").
+      The whole swap is ONE turn.
+   c. CANCEL at the slot-selection panel -> back to the stats card (no turn). CLOSE
+      from the stats card -> dismiss entirely (no turn).
+
+5. OLD WEAPON DROP. The evicted weapon must reappear on the floor. Map the evicted
+   Weapon instance back to its ItemType (reuse the existing World.weaponToItemType
+   mapping at World.java ~line 865), then
+   world.spawnGroundItem(new GroundItem(tileColumn, tileRow, evictedType, 1)). If a
+   weapon GroundItem already sits on this exact tile it is the one being taken, so
+   the tile is free for the evicted gun — no stacking conflict in the normal case
+   (see EDGE CASES for the rare exception). PropRenderer picks the new floating gun
+   up automatically via the already-wired setGroundItems list.
+
+6. WALK AWAY. If the player never taps INSPECT, or taps CLOSE/CANCEL, the weapon
+   stays untouched on the floor. Stepping off the tile clears the name label and
+   hides the INSPECT button. The weapon can be inspected again any time the player
+   returns to the tile.
+
+
+PLAYER EXPERIENCE
+=================
+The floor stops making decisions for you. Seeing "RAILGUN" under your reticle and
+a glowing INSPECT prompt is an invitation, not an ambush. Opening the card and
+reading "+18 DAMAGE, -2 CLIP vs your PLASMA RIFLE" turns a blind grab into a real
+trade-off you understand BEFORE you commit — exactly the readable, earned decision
+the design pillars ask for. With only two ranged slots, the slot-selection panel
+is a sharp little gamble made explicit: which of my two guns do I trust less than
+this new thing, and do I want to leave my old one right here in case I regret it
+two rooms down? Because the dropped weapon stays on the tile, the choice is
+reversible if you survive the trip back — that safety net is what lets the player
+gamble boldly instead of hoarding. The whole flow is thumb-only, large-target, and
+pausing-modal, so it never demands twitch input on a phone mid-fight.
+
+
+TECHNICAL NOTES
+===============
+NO NEW TILE SYMBOL. Weapons are entity-side GroundItems keyed by ItemType, not
+tile chars (confirmed against docs/tile-symbols.txt and the order-5 doc). Nothing
+to add there.
+
+REMOVED / CHANGED BEHAVIOUR:
+- input/PlayerController.java :: pickUpWeaponGroundItemIfPresent(...) — REMOVE the
+  auto-equip and auto-convert-to-ammo branches for the normal case. The settled-
+  tile hook must NO LONGER mutate the loadout or inventory. Instead it records
+  "the player is standing on weapon GroundItem X" into a small piece of state
+  (e.g. GroundItem standingOnWeapon) and notifies the World/HUD so the name label
+  and INSPECT button appear. The start-room weaponGroundItemPickedUpCallback path
+  (World.handleStartRoomWeaponPickup) is a SEPARATE flow and must keep working —
+  guard it: if a start-room callback is registered, keep the old immediate-pick
+  behaviour (the start room is a curated "pick one of three" room, not the
+  inspect flow). Recommend: the inspect flow is active only when
+  weaponGroundItemPickedUpCallback == null.
+- The "convert duplicate weapon to ammo" rule (weaponItemTypeToAmmoType) moves
+  INTO the dialog: if the player already carries this weapon type, the stats card
+  shows a "CONVERT TO AMMO (+N <AMMOTYPE>)" button instead of "TAKE" (see OPEN
+  QUESTIONS — could also be left as a plain TAKE that the resolver routes to ammo).
+
+NEW CLASSES:
+- render/WeaponInspectOverlayRenderer.java (package ...toon3d.render)
+    Modal overlay, modelled on InventoryOverlayRenderer. Implements Renderable +
+    Disposable. Holds a ShapeRenderer for panels/bars and a BitmapFont (or the
+    shared HUD font) for text. Pre-allocates everything in the constructor — NO
+    allocation in render(). Public surface:
+      void show(GroundItem groundWeapon, Weapon groundWeaponInstance,
+                Weapon activeWeapon, Loadout loadout)
+      void hide()
+      boolean isVisible()
+      enum Phase { STATS_CARD, SLOT_SELECT }      // internal screen of the modal
+      void handleTap(float worldX, float worldY)  // hit-tests the modal buttons
+      // result callbacks injected by World:
+      void setOnTake(Runnable)        // free-slot equip OR opens slot-select
+      void setOnConvertToAmmo(Runnable)            // duplicate case (optional)
+      void setOnEvictSlot(IntConsumer)             // slot index chosen to swap out
+      void setOnClose(Runnable)
+    The renderer is pure UI: it never mutates the loadout. It reports the chosen
+    action via the callbacks; World performs the mutation (single source of truth,
+    consistent with "never mutate Player/Loadout outside the controller path").
+- world/WeaponPickupController.java (OPTIONAL, package ...toon3d.world) — a small
+  coordinator that owns standingOnWeapon state, opens/closes the overlay, and runs
+  the resolve(equip/swap/drop) logic + turn advance. Keeps World.java from growing.
+  If not split out, this logic lives in World directly. Recommend splitting it.
+
+MODIFIED CLASSES:
+- input/touch/TouchAction.java — add INSPECT_WEAPON. (One new contextual action.)
+- input/touch/TouchControllerRenderer.java — render a contextual INSPECT button
+  when World reports "player on weapon tile && no modal open". Hide it otherwise.
+- input/touch/TouchInputState.java — carry the new tapped action through to the
+  poll, exactly like the existing OPEN_INVENTORY tap.
+- input/PlayerController.java — (a) gut the auto-pickup branches as above;
+  (b) record standingOnWeapon; (c) when a modal is open, treat the controller as
+  locked (ignore movement/fire just like during an action animation); (d) route
+  the INSPECT_WEAPON tap to open the overlay (or expose standingOnWeapon so World
+  opens it). Keep PlayerController free of UI — it should just signal intent.
+- world/World.java — own the WeaponInspectOverlayRenderer; wire its callbacks to
+  resolveTake/resolveEvict/dropEvictedWeapon; add spawnGroundItem(GroundItem)
+  helper that appends to the groundItems list AND keeps PropRenderer/LevelRenderer/
+  PlayerController views consistent (they already share the same list reference, so
+  a plain list.add is enough — verify no defensive copy is made). Reuse the
+  existing weaponToItemType(...) and the arsenal->Weapon-instance lookup. Add the
+  overlay to the render order AFTER HudRenderer (drawn on top) and BEFORE the touch
+  controller, mirroring InventoryOverlayRenderer's slot in the order.
+- world/GameState.java (or HudState) — add a modal flag/state WEAPON_INSPECT (or
+  reuse the existing inventory-open modal mechanism) so the tick loop pauses and
+  the touch controller hides movement buttons while the card is up.
+- render/HudRenderer.java — draw the ground-weapon NAME LABEL in the centre gap
+  when World reports a weapon underfoot and no modal is open. Small, procedural,
+  no new texture.
+
+DATA FLOW (per the existing wiring):
+  groundItems : List<GroundItem> is created in World.buildLevelDependentResources
+  (~line 354) and shared by reference with PropRenderer.setGroundItems,
+  LevelRenderer.setGroundItems, PlayerController.setGroundItems. Add/remove on this
+  one list and every view updates next frame. The ground-weapon -> Weapon-instance
+  resolution reuses PlayerController.findWeaponInArsenalForType (move it to a shared
+  util or duplicate into the controller) so the SAME Weapon object is equipped that
+  the arsenal already holds — never construct a fresh Weapon on pickup.
+
+CONSTANTS TO ADD (HudConstants.java unless noted; all PLACEHOLDER):
+  WEAPON_INSPECT_CARD_WIDTH        = 640f
+  WEAPON_INSPECT_CARD_HEIGHT       = 460f
+  WEAPON_INSPECT_CARD_ORIGIN_X     = (1280 - 640) / 2   // centred
+  WEAPON_INSPECT_CARD_ORIGIN_Y     = (720  - 460) / 2
+  WEAPON_INSPECT_PANEL_ALPHA       = 0.92f
+  WEAPON_INSPECT_BUTTON_WIDTH      = 200f
+  WEAPON_INSPECT_BUTTON_HEIGHT     = 64f
+  WEAPON_NAME_LABEL_Y              = HUD_HEIGHT + 18f    // just above HUD chrome
+  WEAPON_STAT_BAR_MAX_DAMAGE       = 60   // normaliser for the damage bar fill
+  WEAPON_STAT_BAR_MAX_RANGE        = 20   // tiles, matches RAY_MAX_LENGTH_CELLS
+  (TouchConstants.java) INSPECT_BUTTON_X / _Y / _SIZE for the contextual button.
+
+TURN-BASED FIT:
+  - Inspecting (opening/closing the card, paging to slot-select, CANCEL) = ZERO
+    turns, world paused. Same class as opening the inventory.
+  - A successful TAKE / SWAP / CONVERT = exactly ONE turn: after the loadout
+    mutation, World fires one tick (TickEventBus / advanceWorldOneTurn) so enemies
+    get their move, matching every other world-advancing action. Picking up your
+    gun in a hot room is a real cost — the enemy gets a step while you holster.
+  All resolution is integer tile lookups + reference swaps; no allocation in the
+  hot path beyond the single new GroundItem on a swap.
+
+
+VISUAL DESIGN
+=============
+GROUND NAME LABEL (HudRenderer): centred in the HUD gap (X ~640), at
+WEAPON_NAME_LABEL_Y. Amber text (reuse HUD amber), e.g. "COMBAT SHOTGUN", with a
+dim sub-line "[ INSPECT ]" pulsing gently (reuse a sin clock already in HudRenderer
+for the red-alert pulse). Never overlaps the weapon sprite (sits above the chrome).
+
+INSPECT TOUCH BUTTON (TouchControllerRenderer): a chunky thumb-sized square in the
+contextual-action position (recommend bottom-centre-right, clear of the movement
+d-pad and the FIRE button). Amber outline, "INSPECT" label, faint pulse so it reads
+as "new thing available". Appears only on a weapon tile with no modal open; hidden
+otherwise. Large tap target (>= 110 world units) per the mobile button rule.
+
+STATS CARD (WeaponInspectOverlayRenderer, Phase.STATS_CARD): centred dark panel
+(alpha 0.92) with a thin amber border, drawn with ShapeRenderer + font, all
+procedural (NO new texture asset).
+  - Header row: weapon display name (big), and its ItemType glyph colour swatch.
+  - Stat rows, each a label + a horizontal bar (filled fraction = stat / max) +
+    numeric value:
+      DAMAGE   bar = damage / WEAPON_STAT_BAR_MAX_DAMAGE
+      CLIP     "N shots"        (clipSize)
+      RELOAD   "N ticks"        (reloadTime)
+      RANGE    bar = range / WEAPON_STAT_BAR_MAX_RANGE   "N tiles"
+      DROPOFF  damageDropCoefficient as "x.xx /tile"
+      AMMO     ammoType display name + current loaded count
+  - COMPARISON: a right-hand column showing the same stats for the player's ACTIVE
+    weapon, with the delta coloured (green = ground weapon better, red = worse,
+    grey = equal). This is the heart of the "informed trade" experience.
+  - One-line type description (from a new ItemType.getDescription() or a switch in
+    the renderer): e.g. "RAILGUN — single-target slug, pierces, slow reload."
+  - Footer buttons: "TAKE" (green) and "CLOSE" (grey). If the player already owns
+    this weapon type, "TAKE" is replaced by "CONVERT (+N <AMMO>)".
+
+SLOT-SELECTION PANEL (Phase.SLOT_SELECT): same card frame, title "SWAP OUT WHICH?".
+A vertical list of WEAPON_SLOT_COUNT rows, one per filled slot:
+  [ SLOT 1 ]  PLASMA RIFLE   DMG 22  RNG 12   (active marker if active)
+  [ SLOT 2 ]  CHAINGUN       DMG 8   RNG 16
+Each row is a full-width touch button. A "CANCEL" button returns to STATS_CARD.
+Tapping a row evicts that slot. The active slot gets a bright amber left-edge so
+the player sees which gun is currently in hand before deciding.
+
+BANNERS: reuse EventTextSystem.spawnWithColor for "<NAME> ACQUIRED" (green),
+"<OLD> DROPPED" (amber/red), "+N <AMMO>" (green) — already the convention in
+pickUpWeaponGroundItemIfPresent.
+
+
+BALANCE NOTES
+=============
+All PLACEHOLDER — tune in playtest:
+- Turn cost of TAKE/SWAP = 1 turn is deliberate friction in combat; inspecting is
+  free so the player is never punished for merely LOOKING. If 1-turn swaps feel too
+  punishing in firefights, consider letting a swap done while no enemy is in LOS be
+  free (flag — adds a LOS check).
+- Stat-bar normalisers (MAX_DAMAGE 60, MAX_RANGE 20) only affect bar FILL, not
+  logic; pick values that keep the strongest real weapon near (not at) full bar so
+  upgrades still read as "more".
+- The dropped-weapon safety net (evicted gun stays on the tile) is the key balance
+  lever: it makes bold swaps low-regret, which is intended. If hoarding/return-
+  trips become tedious, a future "weapons left behind despawn on floor descent"
+  rule (they do not carry down) is the natural pressure valve — already implied by
+  the order-9 multi-floor rule that only CARRIED weapons descend.
+- With WEAPON_SLOT_COUNT = 2 the slot-select panel is tiny (two rows). If slot
+  count grows later the panel scales vertically; cap the card height and scroll if
+  it ever exceeds the screen (not needed at 2).
+
+
+INTERACTIONS
+============
+1. order 5 (roguelike_order_5_weapon_pickup_and_switching — IMPLEMENTED): this doc
+   REPLACES that doc's "walk-over auto-equip / auto-swap-active / convert-to-ammo"
+   resolution with the inspect flow. The Loadout API (tryEquip, removeSlot,
+   selectSlot, isFull, getSlot, getSlotCount) is reused verbatim — no Loadout
+   change needed. Update order 5's STATUS note / cross-reference once this ships so
+   the two docs don't contradict. The start-room "pick one of three" flow
+   (World.handleStartRoomWeaponPickup) is explicitly EXEMPT and keeps its immediate
+   pick behaviour.
+2. weapon-ground-sprites.txt (Per-Weapon Ground Pickup Sprites): fully compatible
+   and complementary — that doc makes the floating gun READABLE at range, this doc
+   makes standing on it ACTIONABLE. The bobbing sprite vanishes the frame its
+   GroundItem is removed (on TAKE) and a freshly bobbing sprite appears the frame
+   the evicted weapon's GroundItem is added (on SWAP). No conflict.
+3. Inventory overlay (InventoryOverlayRenderer / OPEN_INVENTORY): the inspect card
+   is a sibling modal using the same pause-the-world + touch-hit-test pattern.
+   Only ONE modal may be open at a time — opening the inspect card must be blocked
+   while the inventory is open and vice-versa (share the modal-state flag). The
+   inventory's existing weapon EQUIP/DROP verbs should route through the SAME
+   World.resolveEvict/dropEvictedWeapon helpers for consistency.
+4. Tick system (TickEventBus): a successful TAKE/SWAP advances exactly one turn via
+   the existing advance path so enemies act once — identical to firing or stepping.
+   Inspecting/cancelling fires no tick.
+5. Ammo economy (Inventory / AmmoType): the "already own this weapon -> convert to
+   ammo" rule is preserved but moved into the dialog (CONVERT button), reusing
+   weaponItemTypeToAmmoType + inventory.tryAdd from the old hook.
+
+
+OPEN QUESTIONS
+==============
+1. Duplicate-weapon handling: show an explicit "CONVERT TO AMMO (+N)" button on the
+   card, or keep a single "TAKE" that the resolver silently routes to ammo when the
+   weapon is already owned? Recommend the explicit CONVERT button — it keeps the
+   card honest about what the marine actually gets.
+2. Does INSPECT auto-open the moment the player settles on a weapon tile, or only
+   on the explicit button tap? Recommend explicit tap (an auto-modal that pauses
+   the world every time you walk over a gun would be intrusive mid-fight). The name
+   label is the always-on hint; the tap is the opt-in.
+3. Should a TAKE/SWAP cost a turn at all? Recommend YES (consistency with every
+   other world-advancing action) but flag a "free if no enemy in LOS" softening
+   if playtest finds combat swaps too punishing.
+4. Where exactly does the contextual INSPECT button sit so it never overlaps FIRE
+   or the d-pad on small phones? Needs a real device layout pass; TouchConstants
+   placeholders above are a starting guess.
+5. Comparison column: compare against the ACTIVE weapon only, or against the
+   specific slot the player is hovering in the slot-select panel? Recommend active-
+   weapon on the stats card, and per-slot stat lines on the slot-select panel
+   (covered above) so both questions are answered without a third screen.
+6. Player dies while the card is open (covered in EDGE CASES) — confirm the death
+   overlay takes precedence and force-hides the inspect modal; no half-resolved
+   swap may persist.
+7. Should weapons left on the floor persist across floor descent or despawn? Out of
+   scope here; defer to the multi-floor doc, but the safety-net balance note
+   assumes same-floor persistence at minimum.
+
+
+EDGE CASES
+==========
+- WEAPON ON THE EXIT TILE ('>'/stairs): the stairs-descent check
+  (checkStairsDescentIfPresent) currently runs in the same settled-tile block.
+  ORDER MATTERS: if a weapon GroundItem and the exit share a tile, descending
+  would skip the inspect entirely. Recommend the exit prompt and the inspect prompt
+  are mutually exclusive on a shared tile, with EXIT taking priority OR (cleaner)
+  the generator must never place a weapon GroundItem on the exit tile. Add that
+  exclusion to the generator/seeder; flag for the level-gen owner.
+- EVICTED WEAPON DROPPED ON AN ALREADY-OCCUPIED TILE: in the normal swap the tile's
+  only weapon GroundItem is the one being TAKEN (removed first), so the tile is
+  free for the evicted gun. But the tile could also hold a NON-weapon GroundItem
+  (ammo/armour the player hasn't auto-collected, or that auto-collect was full).
+  GroundItem has no stacking, and the renderers iterate the flat list, so TWO
+  GroundItems on one tile both render (overlapping bob) and the next settle would
+  try to collect/inspect them in list order. Recommend: (a) drop the evicted weapon
+  on the player's CURRENT tile as specced (simplest, two sprites briefly overlap —
+  acceptable), and define a deterministic "first weapon GroundItem on the tile" rule
+  for the inspect lookup so re-inspecting picks the nearer one; OR (b) if a weapon
+  GroundItem already occupies the tile after the take, search the 4 cardinal
+  neighbours for the first walkable, non-wall, weapon-free floor tile and drop there
+  (never into a wall, never off-grid). Recommend (a) for v1, (b) as polish.
+- PLAYER DIES WHILE THE DIALOG IS OPEN: a successful TAKE advances a turn and the
+  retaliating enemy strike could be lethal. Resolve mutation-then-tick atomically:
+  apply the loadout swap, fire the tick, then if the player is now dead, force-hide
+  the inspect overlay and let the death overlay take over (death state outranks all
+  modals). If the player dies from a hazard/DoT WHILE the card is merely open (no
+  TAKE), force-hide the card on death; no swap was pending so nothing to roll back.
+  Never leave a half-applied swap (e.g. evicted removed but new not equipped) — do
+  removeSlot + tryEquip + drop in one synchronous block before firing the tick.
+- LOADOUT EMPTY (no ranged weapon, e.g. just after start room with only fists):
+  isFull() is false, so TAKE always hits the free-slot path and equips — never the
+  slot-select panel. Good; no special case.
+- WEAPON TYPE WITH NO BACKING Weapon CLASS (e.g. WEAPON_PISTOL has no Pistol class):
+  findWeaponInArsenalForType returns null. The card should still SHOW (read the
+  stats from the ItemType / a stub), but TAKE must fall back to CONVERT-TO-AMMO
+  since there is no instance to equip — exactly the old hook's pistol fallthrough.
+- MODAL OPEN + LEVEL TRANSITION / WORLD REBUILD: hide and dispose-safe the overlay
+  on world teardown; the groundItems list is rebuilt per floor, so a dangling
+  GroundItem reference in a still-open card must be cleared on hide().
