@@ -248,13 +248,17 @@ public abstract class Weapon {
         return Math.round(damage * multiplier);
     }
 
-    public WeaponVisualState getVisualState()      { return visualState; }
-    public int               getShotsInClip()     { return shotsInClip; }
-    public int               getClipSize()        { return clipSize; }
-    public String            getDisplayName()     { return displayName; }
-    public int               getFlashCycleCount() { return flashCycleCount; }
+    public WeaponVisualState getVisualState()             { return visualState; }
+    public int               getShotsInClip()            { return shotsInClip; }
+    public int               getClipSize()               { return clipSize; }
+    public String            getDisplayName()            { return displayName; }
+    public int               getFlashCycleCount()        { return flashCycleCount; }
+    public int               getDamage()                 { return damage; }
+    public int               getReloadTime()             { return reloadTime; }
+    public float             getDamageDropCoefficient()  { return damageDropCoefficient; }
+    public int               getRange()                  { return range; }
     /** The ammo type this weapon draws from; null if ammo is infinite. */
-    public AmmoType          getAmmoType()        { return ammoType; }
+    public AmmoType          getAmmoType()               { return ammoType; }
     /** Current reserve for this weapon's ammo type; -1 if no reserve is tracked. */
     public int               getReserveAmmo() {
         if (ammoInventory == null || ammoType == null) return -1;

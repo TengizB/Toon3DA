@@ -63,4 +63,18 @@ public final class HudConstants {
     public static final float HUD_STATUS_ICON_GAP       = 4f;
     public static final float HUD_STATUS_ROW_LOCAL_X    = 24f;
     public static final float HUD_STATUS_ROW_LOCAL_Y    = 4f;
+
+    // Weapon inspect overlay — centred modal card
+    public static final float WEAPON_INSPECT_CARD_WIDTH      = 640f;
+    public static final float WEAPON_INSPECT_CARD_HEIGHT     = 460f;
+    public static final float WEAPON_INSPECT_CARD_ORIGIN_X   = 320f;  // (1280 - 640) / 2
+    public static final float WEAPON_INSPECT_CARD_ORIGIN_Y   = 130f;  // (720 - 460) / 2
+    public static final float WEAPON_INSPECT_PANEL_ALPHA     = 0.92f;
+    public static final float WEAPON_INSPECT_BUTTON_WIDTH    = 200f;
+    public static final float WEAPON_INSPECT_BUTTON_HEIGHT   = 54f;
+    // Ground-weapon name label — centred in the HUD gap, just above the chrome
+    public static final float WEAPON_NAME_LABEL_Y            = 224f;  // HUD_HEIGHT + 18
+    // Stat bar normalisers — only affect visual fill, not game logic
+    public static final int   WEAPON_STAT_BAR_MAX_DAMAGE     = 60;
+    public static final int   WEAPON_STAT_BAR_MAX_RANGE      = 20;
 }

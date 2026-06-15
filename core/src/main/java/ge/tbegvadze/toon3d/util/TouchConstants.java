@@ -28,4 +28,9 @@ public final class TouchConstants {
     public static final float TOUCH_ICON_EXTENT          = 22f;
     public static final float TOUCH_RIM_THICKNESS        = 3f;
     public static final int   TOUCH_ARC_SEGMENTS         = 8;
+
+    // Contextual INSPECT button — left secondary cluster, row 1 (base Y), starts hidden
+    public static final float INSPECT_BUTTON_CENTER_X   = 180f;
+    public static final float INSPECT_BUTTON_CENTER_Y   = 200f;
+    public static final float INSPECT_BUTTON_SIZE       = 96f;
 }

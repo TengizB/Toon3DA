@@ -45,11 +45,15 @@ public class PlayerController {
     private EventTextSystem         eventTextSystem                   = null;
     private Runnable                weaponSwitchCallback              = null;
     private Runnable                inventoryToggleCallback           = null;
+    private Runnable                inspectWeaponCallback             = null;
     private Inventory               itemInventory                     = null;
     private Loadout                 loadout                           = null;
     private PlayerStats             playerStats                       = null;
     private List<GroundItem>        groundItems                       = Collections.emptyList();
-    private Consumer<GroundItem> weaponGroundItemPickedUpCallback = null;
+    private Consumer<GroundItem>    weaponGroundItemPickedUpCallback  = null;
+
+    /** The weapon GroundItem the player is currently standing on, or null. */
+    private GroundItem standingOnWeapon = null;
 
     private ActionState actionState = ActionState.IDLE;
     private float actionProgress = 0f;
@@ -101,6 +105,17 @@ public class PlayerController {
     public void setInventoryToggleCallback(Runnable callback) {
         this.inventoryToggleCallback = callback;
     }
+
+    /** Called by World when the player taps INSPECT while standing on a weapon GroundItem. */
+    public void setInspectWeaponCallback(Runnable callback) {
+        this.inspectWeaponCallback = callback;
+    }
+
+    /** Returns the weapon GroundItem the player is currently standing on, or null. */
+    public GroundItem getStandingOnWeapon() { return standingOnWeapon; }
+
+    /** Clears the standing-on-weapon record; called by World after the weapon is taken or dropped. */
+    public void clearStandingOnWeapon() { standingOnWeapon = null; }
 
     public void setItemInventory(Inventory inventory) {
         this.itemInventory = inventory;
@@ -285,7 +300,7 @@ public class PlayerController {
     }
 
     private void pickUpWeaponGroundItemIfPresent(int tileColumn, int tileRow) {
-        if (groundItems.isEmpty() || itemInventory == null) return;
+        // Always update the standing-on-weapon record for this tile (may become null).
         GroundItem found = null;
         for (GroundItem item : groundItems) {
             if (item.tileColumn == tileColumn && item.tileRow == tileRow) {
@@ -293,46 +308,22 @@ public class PlayerController {
                 break;
             }
         }
+        standingOnWeapon = found;
+
         if (found == null) return;
-        groundItems.remove(found);
 
-        // When a custom handler is registered (e.g. start-room weapon selection), delegate
-        // entirely to that handler — it owns equip, ammo, and despawn-of-unchosen logic.
+        // When a custom handler is registered (start-room weapon selection), delegate
+        // entirely — immediate auto-pick behaviour is preserved for that flow only.
         if (weaponGroundItemPickedUpCallback != null) {
+            groundItems.remove(found);
+            standingOnWeapon = null;
             weaponGroundItemPickedUpCallback.accept(found);
-            return;
         }
-
-        // If the loadout has a free slot and the player doesn't already carry this weapon,
-        // equip it from the arsenal. Otherwise convert to ammo (duplicate or loadout full).
-        if (loadout != null && !loadout.isFull()) {
-            Weapon weaponToEquip = findWeaponInArsenalForType(found.stack.getType());
-            if (weaponToEquip != null && !isWeaponInLoadout(weaponToEquip)) {
-                if (loadout.tryEquip(weaponToEquip)) {
-                    if (weaponSwitchCallback != null) weaponSwitchCallback.run();
-                    if (eventTextSystem != null) {
-                        eventTextSystem.spawnWithColor(
-                            found.stack.getType().getDisplayName().toUpperCase() + " ACQUIRED",
-                            EventTextSystem.COLOR_GREEN);
-                    }
-                    return;
-                }
-            }
-        }
-
-        // Loadout full or already carrying this weapon — convert pickup to its ammo type.
-        AmmoType ammoType = weaponItemTypeToAmmoType(found.stack.getType());
-        if (ammoType == null) return;
-        int amountBefore = itemInventory.countOf(ammoType.getItemType());
-        itemInventory.tryAdd(ammoType.getItemType(), ammoType.getAmountPerBox());
-        int added = itemInventory.countOf(ammoType.getItemType()) - amountBefore;
-        if (eventTextSystem != null && added > 0) {
-            eventTextSystem.spawnWithColor("ARMORY +" + added + " " + ammoType.getDisplayName().toUpperCase(),
-                                           EventTextSystem.COLOR_GREEN);
-        }
+        // Normal case: weapon stays on the floor; the INSPECT flow (handled by World)
+        // owns all equip/swap/ammo decisions from here.
     }
 
-    private Weapon findWeaponInArsenalForType(ItemType itemType) {
+    public Weapon findWeaponInArsenalForType(ItemType itemType) {
         if (inventory == null || itemType == null) return null;
         for (Weapon weapon : inventory.getArsenal()) {
             if (weaponMatchesItemType(weapon, itemType)) return weapon;
@@ -366,7 +357,7 @@ public class PlayerController {
         return false;
     }
 
-    private static AmmoType weaponItemTypeToAmmoType(ItemType weaponType) {
+    public static AmmoType weaponItemTypeToAmmoType(ItemType weaponType) {
         if (weaponType == null) return null;
         switch (weaponType) {
             case WEAPON_PISTOL:        return AmmoType.BULLETS;
@@ -420,6 +411,16 @@ public class PlayerController {
 
         if (tapAction == TouchAction.OPEN_INVENTORY) {
             if (inventoryToggleCallback != null) inventoryToggleCallback.run();
+            return;
+        }
+
+        if (tapAction == TouchAction.INSPECT_WEAPON) {
+            // groundItems.contains() guards against a stale standingOnWeapon reference
+            // in case World removed the item from the list before clearStandingOnWeapon() ran.
+            if (standingOnWeapon != null && groundItems.contains(standingOnWeapon)
+                    && inspectWeaponCallback != null) {
+                inspectWeaponCallback.run();
+            }
             return;
         }
 
