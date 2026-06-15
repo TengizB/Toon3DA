@@ -571,10 +571,14 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
             case MEDKIT_SMALL:     return "+25 HP";
             case MEDKIT_LARGE:     return "+75 HP";
             case STIMPACK:         return "+15 HP";
-            case WEAPON_PISTOL:    return "Sidearm. Reliable.";
-            case WEAPON_SHOTGUN:   return "Close-range spread.";
-            case WEAPON_PLASMA:    return "Energy weapon.";
-            case WEAPON_ROCKET:    return "High explosive.";
+            case WEAPON_PISTOL:        return "Sidearm. Reliable.";
+            case WEAPON_SHOTGUN:       return "Close-range spread.";
+            case WEAPON_DOUBLE_BARREL: return "Double burst.";
+            case WEAPON_CHAINGUN:      return "Sustained fire.";
+            case WEAPON_PLASMA:        return "Energy weapon.";
+            case WEAPON_RAILGUN:       return "Armour-piercing.";
+            case WEAPON_INCINERATOR:   return "Burns everything.";
+            case WEAPON_ROCKET:        return "High explosive.";
             case KEYCARD_RED:      return "Unlocks red security doors.";
             case KEYCARD_YELLOW:   return "Unlocks yellow security doors.";
             case KEYCARD_BLUE:     return "Unlocks blue security doors.";

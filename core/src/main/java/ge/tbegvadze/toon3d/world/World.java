@@ -857,9 +857,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * separately in startRoomWeapons.
      */
     private static ItemType weaponClassToItemType(Weapon weapon) {
-        if (weapon instanceof Shotgun || weapon instanceof DoubleBarrelShotgun) return ItemType.WEAPON_SHOTGUN;
-        if (weapon instanceof PlasmaRifle || weapon instanceof Incinerator)      return ItemType.WEAPON_PLASMA;
-        if (weapon instanceof GrenadeLauncher)                                   return ItemType.WEAPON_ROCKET;
+        if (weapon instanceof DoubleBarrelShotgun) return ItemType.WEAPON_DOUBLE_BARREL;
+        if (weapon instanceof Shotgun)             return ItemType.WEAPON_SHOTGUN;
+        if (weapon instanceof Chaingun)            return ItemType.WEAPON_CHAINGUN;
+        if (weapon instanceof Railgun)             return ItemType.WEAPON_RAILGUN;
+        if (weapon instanceof Incinerator)         return ItemType.WEAPON_INCINERATOR;
+        if (weapon instanceof PlasmaRifle)         return ItemType.WEAPON_PLASMA;
+        if (weapon instanceof GrenadeLauncher)     return ItemType.WEAPON_ROCKET;
         return ItemType.WEAPON_PISTOL;
     }
 }

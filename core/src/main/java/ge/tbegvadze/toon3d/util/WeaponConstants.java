@@ -256,4 +256,10 @@ public final class WeaponConstants {
     public static final float WEAPON_SLOT_STRIP_SIDE_PADDING = 20f;
     public static final float WEAPON_SLOT_STRIP_ORIGIN_Y    = 8f;
     public static final float WEAPON_SWITCH_RAISE_SECONDS   = 0.10f;
+
+    // Weapon ground pickup billboard — bob animation and sprite sheet
+    public static final float WEAPON_PICKUP_BOB_SPEED              = 2.2f;   // radians/sec of the sin clock
+    public static final float WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION = 0.10f;  // fraction of sprite height
+    public static final int   WEAPON_PICKUP_TEXTURE_SIZE           = 64;     // square pixmap edge, px
+    public static final float WEAPON_PICKUP_PHASE_STEP             = 0.7f;   // per-weapon phase offset (rad)
 }
