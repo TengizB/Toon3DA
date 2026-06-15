@@ -157,6 +157,8 @@ public final class WeaponConstants {
     public static final float WEAPON_HUD_BASE_Y = -28f;
     // Recoil: weapon drops instantly by RECOIL_OFFSET_Y on fire, eases back over FIRE_FLASH_DURATION
     public static final float WEAPON_RECOIL_OFFSET_Y         = 55f;
+    // Melee hit lunge: weapon rises MELEE_LUNGE_Y above base on swing, returns over FIRE_FLASH_DURATION
+    public static final float WEAPON_MELEE_LUNGE_Y           = 30f;
     // Reload slide: weapon lerps this many world-units downward (mostly off screen) while reloading
     public static final float WEAPON_RELOAD_SLIDE_Y          = 200f;
     // Lerp speed for slide/return animations (higher = snappier)
