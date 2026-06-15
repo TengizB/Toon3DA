@@ -42,17 +42,30 @@ The first wakeup sets World.gameState.redAlert = true (drives the red wall pulse
 ### Phase B — Action
 Every ALERTED/CHASING/ATTACKING enemy acts once:
 
-  CORRUPTOR (melee):
-    - Chebyshev distance == 1 → swing, deal CORRUPTOR_ATTACK_DAMAGE (14) to player.
+  MELEE enemies (PLAGUE_HULK, GORE_BITER, SHELL_BRUTE, IRON_STALKER, VOID_SHROUD):
+    - Manhattan distance == 1 (cardinal adjacent only, never diagonal) → swing.
     - Else → step toward player via greedy Manhattan minimizer.
-    - Moves every 2 turns (CORRUPTOR_MOVE_EVERY_N_TURNS = 2), attacks every turn.
+    - Move cooldown governed by moveEveryNTurns() per type.
 
-  VORTEX EYE (ranged kiter):
-    - Distance < VORTEX_EYE_KITE_MIN_TILES (2) → flee (step away), then fire if LOS.
-    - Distance in [2, VORTEX_EYE_RANGE_TILES=5] AND has LOS → fire in place (no move).
-    - Distance > range OR no LOS → step toward player.
-    - Deals VORTEX_EYE_ATTACK_DAMAGE (8) on a successful ranged shot.
-    - Moves every turn (fast).
+  RANGED enemies (EYE_TYRANT, MIRE_WRAITH, ACID_DRONE):
+    - Distance < RANGED_KITE_MIN_TILES (2) → flee first, then re-evaluate.
+    - In range AND has LOS AND on same cardinal line → fire in place (no move).
+    - Out of range OR no LOS OR not on cardinal line → step toward player.
+
+## CRITICAL — Ranged Attack Cardinal Line Rule
+
+Ranged enemies can ONLY fire at the player when they share the same tile column
+(same vertical line) or the same tile row (same horizontal line):
+
+    isSameCardinalLine(enemyCol, enemyRow, playerCol, playerRow)
+    = (enemyCol == playerCol) OR (enemyRow == playerRow)
+
+Diagonal attacks are NEVER allowed. This is enforced in EnemyManager.java by
+isSameCardinalLine() called before every ranged attack attempt.
+
+When designing or implementing any new ranged enemy archetype, this constraint
+is mandatory. The AI movement steers ranged enemies toward cardinal alignment so
+they can fire — but the fire check itself always verifies cardinal alignment first.
 
 ## Enemy AI State Machine
 

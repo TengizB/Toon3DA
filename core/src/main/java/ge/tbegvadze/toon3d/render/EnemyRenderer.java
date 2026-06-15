@@ -238,11 +238,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
             if (columnSpan <= 0) continue;
 
             float drawBottom = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
-            // Hovering enemies are shifted upward so they appear to float above the floor
+            // EYE_TYRANT hovers; all other enemies (including MIRE_WRAITH) stand on the floor.
             if (enemy.type == EnemyType.EYE_TYRANT) {
                 drawBottom += fullWallLineHeight * EYE_TYRANT_HOVER_OFFSET_FRACTION;
-            } else if (enemy.type == EnemyType.MIRE_WRAITH) {
-                drawBottom += fullWallLineHeight * MIRE_WRAITH_HOVER_OFFSET_FRACTION;
             }
             // Melee lunge: nudge sprite downward to sell the forward surge
             if (lungeCurve > 0f) {

@@ -61,6 +61,12 @@ public final class ItemConstants {
 
     public static final float AMMO_PICKUP_HEIGHT_FRACTION = 0.20f;
 
+    // Floor pickup bob animation — ammo, medkits, and armour hover with the same sin-wave
+    // as weapon ground items so all collectibles feel consistently animated.
+    public static final float PICKUP_ITEM_BOB_SPEED              = 2.2f;   // radians/sec
+    public static final float PICKUP_ITEM_BOB_AMPLITUDE_FRACTION = 0.10f;  // 10% of sprite height
+    public static final float PICKUP_ITEM_BOB_PHASE_STEP         = 0.5f;   // per-char phase offset (rad)
+
     // Start room — starter ammo granted on weapon selection (sufficient for first dungeon floor)
     public static final int START_ROOM_AMMO_BULLETS  = 120;
     public static final int START_ROOM_AMMO_SHELLS   = 16;

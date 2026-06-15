@@ -1018,8 +1018,8 @@ public class LinearCorridorGenerator implements ILevelGenerator {
 
     private ItemType randomWeaponItemType() {
         switch (random.nextInt(4)) {
-            case 0:  return ItemType.WEAPON_PISTOL;
-            case 1:  return ItemType.WEAPON_SHOTGUN;
+            case 0:  return ItemType.WEAPON_SHOTGUN;
+            case 1:  return ItemType.WEAPON_CHAINGUN;
             case 2:  return ItemType.WEAPON_PLASMA;
             default: return ItemType.WEAPON_ROCKET;
         }

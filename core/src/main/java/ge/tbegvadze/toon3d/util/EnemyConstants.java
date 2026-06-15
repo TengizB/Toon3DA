@@ -47,13 +47,12 @@ public final class EnemyConstants {
     public static final int     SHELL_BRUTE_MOVE_EVERY_N_TURNS   = 1;
     public static final float   SHELL_BRUTE_HEIGHT_MULTIPLIER    = 1.05f;
 
-    // MIRE_WRAITH — slow hovering ranged acid (spawn '5')
-    public static final int     MIRE_WRAITH_MAX_HEALTH           = 70;
-    public static final int     MIRE_WRAITH_ATTACK_DAMAGE        = 12;
-    public static final int     MIRE_WRAITH_RANGE_TILES          = 4;
+    // MIRE_WRAITH — slow ground-based ranged acid (spawn '5')
+    public static final int     MIRE_WRAITH_MAX_HEALTH           = 45;
+    public static final int     MIRE_WRAITH_ATTACK_DAMAGE        = 8;
+    public static final int     MIRE_WRAITH_RANGE_TILES          = 3;
     public static final int     MIRE_WRAITH_MOVE_EVERY_N_TURNS   = 2;
     public static final float   MIRE_WRAITH_HEIGHT_MULTIPLIER    = 0.80f;
-    public static final float   MIRE_WRAITH_HOVER_OFFSET_FRACTION = 0.15f;
 
     // IRON_STALKER — armored elite, melee + ranged (spawn '!')
     public static final int     IRON_STALKER_MAX_HEALTH          = 120;

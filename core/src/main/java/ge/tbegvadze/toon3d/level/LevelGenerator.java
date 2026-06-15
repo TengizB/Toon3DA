@@ -1875,11 +1875,11 @@ public class LevelGenerator implements ILevelGenerator {
         return false;
     }
 
-    /** Returns one of the four base weapon ItemTypes at equal probability. */
+    /** Returns one of the implemented weapon ItemTypes at equal probability. */
     private ItemType randomWeaponItemType() {
         switch (random.nextInt(4)) {
-            case 0:  return ItemType.WEAPON_PISTOL;
-            case 1:  return ItemType.WEAPON_SHOTGUN;
+            case 0:  return ItemType.WEAPON_SHOTGUN;
+            case 1:  return ItemType.WEAPON_CHAINGUN;
             case 2:  return ItemType.WEAPON_PLASMA;
             default: return ItemType.WEAPON_ROCKET;
         }

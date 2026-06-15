@@ -91,6 +91,7 @@ On completion: snap each component to `Math.round()` → always exactly `(1,0)`,
 - Level format: tile grids; full symbol list in `docs/tile-symbols.txt`. Roguelike generator must use only symbols defined there.
 - 3D view is purely cosmetic — all game logic (pathfinding, collision, LOS) operates in 2D tile space.
 - No free-aiming; player always attacks in current facing direction.
+- **Ranged enemies can only attack the player when on the same cardinal line** — the enemy's tile column must equal the player's tile column (same vertical line) OR the enemy's tile row must equal the player's tile row (same horizontal line). Diagonal attacks are never allowed. Enforced by `isSameCardinalLine()` in `EnemyManager.java`. Any new ranged enemy archetype **must** respect this constraint.
 
 ## Project Structure
 
