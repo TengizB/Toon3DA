@@ -811,7 +811,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // --- Melee offers: 3 non-fist melee weapons (Fist is already the default) ---
         java.util.List<Weapon> meleePool = new java.util.ArrayList<>(
-                java.util.Arrays.asList(new CombatKnife(), new SteelPipe(), new MeleeChainsaw()));
+                java.util.Arrays.asList(new CombatKnife(), new Hammer(), new MeleeChainsaw()));
         java.util.Collections.shuffle(meleePool, new java.util.Random(floorSeed(runSeed, 0) + 1));
 
         int meleeOfferCount = Math.min(
@@ -932,7 +932,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (weapon instanceof PlasmaRifle)         return ItemType.WEAPON_PLASMA;
         if (weapon instanceof GrenadeLauncher)     return ItemType.WEAPON_ROCKET;
         if (weapon instanceof MeleeChainsaw)       return ItemType.WEAPON_CHAINSAW;
-        if (weapon instanceof SteelPipe)           return ItemType.WEAPON_PIPE;
+        if (weapon instanceof Hammer)               return ItemType.WEAPON_HAMMER;
         if (weapon instanceof CombatKnife)         return ItemType.WEAPON_KNIFE;
         if (weapon instanceof Fist)                return ItemType.WEAPON_FIST;
         return ItemType.WEAPON_PISTOL;

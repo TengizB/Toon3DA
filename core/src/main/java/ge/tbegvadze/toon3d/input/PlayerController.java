@@ -352,7 +352,7 @@ public class PlayerController {
             case WEAPON_PISTOL:        return false; // no Pistol class; falls through to ammo
             case WEAPON_FIST:          return weapon instanceof Fist;
             case WEAPON_KNIFE:         return weapon instanceof CombatKnife;
-            case WEAPON_PIPE:          return weapon instanceof SteelPipe;
+            case WEAPON_HAMMER:         return weapon instanceof Hammer;
             case WEAPON_CHAINSAW:      return weapon instanceof MeleeChainsaw;
             default:                   return false;
         }
@@ -379,7 +379,7 @@ public class PlayerController {
             case WEAPON_ROCKET:        return AmmoType.ROCKETS;
             case WEAPON_FIST:
             case WEAPON_KNIFE:
-            case WEAPON_PIPE:
+            case WEAPON_HAMMER:
             case WEAPON_CHAINSAW:      return null; // melee weapons have no ammo
             default:                   return null;
         }

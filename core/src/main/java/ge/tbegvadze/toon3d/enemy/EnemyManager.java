@@ -544,7 +544,7 @@ public final class EnemyManager implements EnemyHitTarget {
     }
 
     /**
-     * Attempts to push the given enemy to (targetColumn, targetRow) — used by SteelPipe knockback.
+     * Attempts to push the given enemy to (targetColumn, targetRow) — used by Hammer knockback.
      * Checks bounds, walls/props, door state, and other-enemy occupancy before moving.
      * Returns true if the push succeeded; false if anything blocked it.
      */
