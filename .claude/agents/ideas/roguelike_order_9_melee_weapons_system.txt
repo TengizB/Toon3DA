@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Combat
 TITLE: Melee Weapons — Fist / Knife / Pipe / Chainsaw (No-Ammo Fallback)
 ---
