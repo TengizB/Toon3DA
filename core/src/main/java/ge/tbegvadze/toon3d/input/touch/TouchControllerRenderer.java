@@ -52,6 +52,7 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
         for (TouchButton button : buttons) {
+            if (!button.visible) continue;
             drawBody(button);
             drawBevel(button);
             drawIcon(button);
