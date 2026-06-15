@@ -1476,241 +1476,334 @@ public class PropRenderer implements Renderable, Disposable {
         return map;
     }
 
-    /** Pistol — compact dark-grey sidearm, short barrel, visible black grip below body. */
+    /**
+     * Pistol — compact 9mm sidearm.
+     * Barrel: thin grey x=4..30, y=27..34. Slide: darker grey x=28..50, y=22..34.
+     * Ejection port cutout on slide. Frame below slide. Trigger guard loop.
+     * Grip: near-black dropping to y=58.
+     */
     private static Texture generateWeaponPistolGroundTexture() {
-        int size = WEAPON_PICKUP_TEXTURE_SIZE;
-        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-        // Barrel: thin dark-grey rect extending left
-        pixmap.setColor(0.30f, 0.30f, 0.32f, 1f);
-        pixmap.fillRectangle(4, 27, 26, 8);
-        // Slide/body: slightly wider, overlapping barrel right end
-        pixmap.setColor(0.20f, 0.20f, 0.22f, 1f);
-        pixmap.fillRectangle(24, 23, 20, 16);
-        // Grip: near-black rect extending below body
-        pixmap.setColor(0.10f, 0.10f, 0.11f, 1f);
-        pixmap.fillRectangle(36, 37, 12, 20);
-        // Muzzle light-grey 2x2 at barrel tip
-        pixmap.setColor(0.55f, 0.55f, 0.58f, 1f);
-        pixmap.fillRectangle(4, 27, 2, 2);
-        // Cool-white rim highlight: top edge of barrel + left muzzle edge
-        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
-        pixmap.fillRectangle(4, 27, 26, 1);
-        pixmap.fillRectangle(4, 27, 1, 8);
-        return finalize(pixmap);
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // BARREL
+        p.setColor(0.32f, 0.32f, 0.34f, 1f); p.fillRectangle(4, 27, 26, 8);
+        p.setColor(0.44f, 0.44f, 0.46f, 1f); p.fillRectangle(4, 27, 26, 1);  // top highlight
+        p.setColor(0.20f, 0.20f, 0.22f, 1f); p.fillRectangle(4, 34, 26, 1);  // bottom shadow
+        p.setColor(0.52f, 0.52f, 0.55f, 1f); p.fillRectangle(4, 27, 2, 8);   // muzzle face
+        // SLIDE / UPPER RECEIVER
+        p.setColor(0.24f, 0.24f, 0.26f, 1f); p.fillRectangle(28, 22, 22, 14);
+        p.setColor(0.36f, 0.36f, 0.38f, 1f); p.fillRectangle(28, 22, 22, 1); // top highlight
+        p.setColor(0.14f, 0.14f, 0.16f, 1f); p.fillRectangle(28, 35, 22, 1); // bottom shadow
+        p.setColor(0.08f, 0.08f, 0.09f, 1f); p.fillRectangle(34, 24, 10, 7); // ejection port
+        // FRAME / LOWER RECEIVER
+        p.setColor(0.18f, 0.18f, 0.20f, 1f); p.fillRectangle(28, 36, 24, 5);
+        // TRIGGER GUARD (rectangular loop)
+        p.setColor(0.22f, 0.22f, 0.24f, 1f);
+        p.fillRectangle(28, 41, 2, 10); // front post
+        p.fillRectangle(28, 50, 14, 2); // bottom bar
+        p.fillRectangle(40, 41, 2,  9); // rear post
+        // GRIP
+        p.setColor(0.11f, 0.11f, 0.12f, 1f); p.fillRectangle(40, 36, 12, 22);
+        p.setColor(0.08f, 0.08f, 0.09f, 1f); // checkering
+        p.fillRectangle(41, 41, 10, 1); p.fillRectangle(41, 46, 10, 1); p.fillRectangle(41, 51, 10, 1);
+        p.setColor(0.16f, 0.16f, 0.18f, 1f); p.fillRectangle(40, 57, 12, 2); // mag base
+        // Cool-white interactable shimmer
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(4, 27, 2, 2);
+        return finalize(p);
     }
 
     /**
-     * Shotgun — long grey barrel extending left, warm-brown stock block on the right,
-     * darker-brown pump fore-grip mid-barrel. Classic silhouette.
+     * Shotgun — pump-action long gun.
+     * Long thin barrel x=4..50. Pump fore-grip mid-barrel. Warm brown wood stock at right.
+     * Pistol grip drops below receiver. Trigger guard loop.
      */
     private static Texture generateWeaponShotgunGroundTexture() {
-        int size = WEAPON_PICKUP_TEXTURE_SIZE;
-        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-        // Long barrel: neutral grey
-        pixmap.setColor(0.24f, 0.24f, 0.26f, 1f);
-        pixmap.fillRectangle(4, 27, 44, 8);
-        // Stock: warm brown, wider and taller
-        pixmap.setColor(0.40f, 0.26f, 0.12f, 1f);
-        pixmap.fillRectangle(40, 23, 22, 18);
-        // Pump fore-grip: darker brown block on mid-barrel
-        pixmap.setColor(0.30f, 0.18f, 0.08f, 1f);
-        pixmap.fillRectangle(22, 25, 10, 12);
-        // Trigger guard notch: small dark-grey rect at stock/barrel join
-        pixmap.setColor(0.18f, 0.18f, 0.20f, 1f);
-        pixmap.fillRectangle(42, 33, 8, 8);
-        // Cool-white rim: top edge of barrel
-        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
-        pixmap.fillRectangle(4, 27, 44, 1);
-        pixmap.fillRectangle(4, 27, 1, 8);
-        return finalize(pixmap);
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // BARREL (long, thin)
+        p.setColor(0.28f, 0.28f, 0.30f, 1f); p.fillRectangle(4, 28, 46, 6);
+        p.setColor(0.40f, 0.40f, 0.42f, 1f); p.fillRectangle(4, 28, 46, 1); // top highlight
+        p.setColor(0.16f, 0.16f, 0.18f, 1f); p.fillRectangle(4, 33, 46, 1); // bottom shadow
+        p.setColor(0.46f, 0.46f, 0.48f, 1f); p.fillRectangle(4, 28, 2, 6);  // muzzle face
+        // PUMP FORE-GRIP (wraps barrel)
+        p.setColor(0.28f, 0.18f, 0.08f, 1f); p.fillRectangle(20, 25, 14, 12);
+        p.setColor(0.38f, 0.26f, 0.12f, 1f); p.fillRectangle(20, 25, 14, 1); // top highlight
+        p.setColor(0.18f, 0.10f, 0.04f, 1f); p.fillRectangle(20, 36, 14, 1); // bottom shadow
+        // RECEIVER
+        p.setColor(0.22f, 0.22f, 0.24f, 1f); p.fillRectangle(46, 23, 14, 16);
+        p.setColor(0.32f, 0.32f, 0.34f, 1f); p.fillRectangle(46, 23, 14, 1); // top highlight
+        p.setColor(0.12f, 0.12f, 0.14f, 1f); p.fillRectangle(46, 38, 14, 1); // bottom shadow
+        // WOOD STOCK (warm brown)
+        p.setColor(0.44f, 0.28f, 0.12f, 1f); p.fillRectangle(56, 21, 8, 20);
+        p.setColor(0.56f, 0.38f, 0.18f, 1f); p.fillRectangle(56, 21, 8, 1);  // top highlight
+        p.setColor(0.36f, 0.22f, 0.09f, 1f); // wood grain lines
+        p.fillRectangle(57, 25, 6, 1); p.fillRectangle(57, 29, 6, 1);
+        p.fillRectangle(57, 33, 6, 1); p.fillRectangle(57, 37, 6, 1);
+        // PISTOL GRIP (drops below receiver)
+        p.setColor(0.30f, 0.20f, 0.08f, 1f); p.fillRectangle(48, 39, 12, 18);
+        p.setColor(0.20f, 0.12f, 0.04f, 1f); p.fillRectangle(48, 55, 12, 2); // bottom shadow
+        // TRIGGER GUARD
+        p.setColor(0.20f, 0.20f, 0.22f, 1f);
+        p.fillRectangle(46, 39, 2, 10); p.fillRectangle(46, 48, 14, 2); p.fillRectangle(58, 39, 2, 9);
+        // Cool-white shimmer
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(4, 28, 2, 2);
+        return finalize(p);
     }
 
     /**
-     * Double-Barrel Shotgun — two parallel grey barrel tubes (split by a dark gap),
-     * short dark-brown stock on the right, bright-grey break-action hinge pin at join.
+     * Double-Barrel Shotgun — break-action.
+     * Two parallel barrel tubes separated by dark gap (the identity). Break-action hinge.
+     * Short dark-brown stock. Pistol grip drops below receiver.
      */
     private static Texture generateWeaponDoubleBarrelGroundTexture() {
-        int size = WEAPON_PICKUP_TEXTURE_SIZE;
-        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-        // Upper barrel tube
-        pixmap.setColor(0.28f, 0.28f, 0.30f, 1f);
-        pixmap.fillRectangle(4, 20, 40, 9);
-        // Gap between barrels
-        pixmap.setColor(0.06f, 0.06f, 0.07f, 1f);
-        pixmap.fillRectangle(4, 29, 40, 4);
-        // Lower barrel tube (slightly different grey to distinguish the two)
-        pixmap.setColor(0.22f, 0.22f, 0.24f, 1f);
-        pixmap.fillRectangle(4, 33, 40, 9);
-        // Stock: dark brown, right side
-        pixmap.setColor(0.32f, 0.20f, 0.10f, 1f);
-        pixmap.fillRectangle(40, 18, 22, 26);
-        // Break-action hinge pin: bright grey
-        pixmap.setColor(0.52f, 0.52f, 0.56f, 1f);
-        pixmap.fillRectangle(38, 27, 5, 8);
-        // Cool-white rim: top edge of upper barrel
-        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
-        pixmap.fillRectangle(4, 20, 40, 1);
-        pixmap.fillRectangle(4, 20, 1, 9);
-        return finalize(pixmap);
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // UPPER BARREL TUBE
+        p.setColor(0.30f, 0.30f, 0.32f, 1f); p.fillRectangle(4, 18, 42, 9);
+        p.setColor(0.42f, 0.42f, 0.44f, 1f); p.fillRectangle(4, 18, 42, 1); // top highlight
+        p.setColor(0.48f, 0.48f, 0.50f, 1f); p.fillRectangle(4, 18, 2, 9);  // upper muzzle face
+        // GAP BETWEEN BARRELS
+        p.setColor(0.05f, 0.05f, 0.06f, 1f); p.fillRectangle(4, 27, 42, 5);
+        // LOWER BARREL TUBE
+        p.setColor(0.24f, 0.24f, 0.26f, 1f); p.fillRectangle(4, 32, 42, 9);
+        p.setColor(0.14f, 0.14f, 0.16f, 1f); p.fillRectangle(4, 40, 42, 1); // bottom shadow
+        p.setColor(0.40f, 0.40f, 0.42f, 1f); p.fillRectangle(4, 32, 2, 9);  // lower muzzle face
+        // RECEIVER BLOCK
+        p.setColor(0.20f, 0.20f, 0.22f, 1f); p.fillRectangle(42, 16, 16, 27);
+        p.setColor(0.30f, 0.30f, 0.32f, 1f); p.fillRectangle(42, 16, 16, 1); // top highlight
+        p.setColor(0.12f, 0.12f, 0.14f, 1f); p.fillRectangle(42, 42, 16, 1); // bottom shadow
+        // BREAK-ACTION HINGE PIN (bright silver)
+        p.setColor(0.60f, 0.62f, 0.66f, 1f); p.fillRectangle(40, 25, 6, 9);
+        // WALNUT STOCK
+        p.setColor(0.32f, 0.20f, 0.10f, 1f); p.fillRectangle(54, 16, 8, 28);
+        p.setColor(0.42f, 0.28f, 0.14f, 1f); p.fillRectangle(54, 16, 8, 1); // top highlight
+        p.setColor(0.26f, 0.16f, 0.07f, 1f); // wood grain
+        p.fillRectangle(55, 21, 6, 1); p.fillRectangle(55, 27, 6, 1);
+        p.fillRectangle(55, 33, 6, 1); p.fillRectangle(55, 39, 6, 1);
+        // PISTOL GRIP
+        p.setColor(0.26f, 0.16f, 0.08f, 1f); p.fillRectangle(48, 43, 10, 16);
+        p.setColor(0.18f, 0.10f, 0.04f, 1f); p.fillRectangle(48, 57, 10, 2); // bottom shadow
+        // TRIGGER GUARD
+        p.setColor(0.18f, 0.18f, 0.20f, 1f);
+        p.fillRectangle(42, 43, 2, 10); p.fillRectangle(42, 52, 12, 2); p.fillRectangle(52, 43, 2, 9);
+        // Cool-white shimmer
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(4, 18, 2, 2);
+        return finalize(p);
     }
 
     /**
-     * Chaingun — three stacked thin silver barrel tubes on the left, dark charcoal
-     * body block on the right, small olive ammo-feed nub on body top-right.
+     * Chaingun — rotary cannon.
+     * Four stacked silver barrel tubes with dark gaps + vertical muzzle plate + charcoal body.
+     * Olive ammo-feed nub top-right. Pistol grip drops below body.
      */
     private static Texture generateWeaponChaingunGroundTexture() {
-        int size = WEAPON_PICKUP_TEXTURE_SIZE;
-        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-        // Dark charcoal body block (right side)
-        pixmap.setColor(0.16f, 0.17f, 0.19f, 1f);
-        pixmap.fillRectangle(30, 18, 30, 28);
-        // Barrel tube 1 (top): silver
-        pixmap.setColor(0.64f, 0.66f, 0.72f, 1f);
-        pixmap.fillRectangle(4, 20, 32, 6);
-        // Barrel tube 2 (middle): slightly lighter
-        pixmap.setColor(0.70f, 0.72f, 0.78f, 1f);
-        pixmap.fillRectangle(4, 28, 32, 6);
-        // Barrel tube 3 (bottom): silver
-        pixmap.setColor(0.62f, 0.64f, 0.70f, 1f);
-        pixmap.fillRectangle(4, 36, 32, 6);
-        // Muzzle ring: solid silver square at barrel ends
-        pixmap.setColor(0.72f, 0.74f, 0.80f, 1f);
-        pixmap.fillRectangle(2, 19, 4, 25);
-        // Ammo-feed nub: small olive block on body top-right
-        pixmap.setColor(0.40f, 0.42f, 0.22f, 1f);
-        pixmap.fillRectangle(52, 18, 8, 6);
-        // Cool-white rim: top edge of top barrel
-        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
-        pixmap.fillRectangle(4, 20, 32, 1);
-        return finalize(pixmap);
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // ROTARY MOTOR HOUSING (center)
+        p.setColor(0.18f, 0.19f, 0.22f, 1f); p.fillRectangle(32, 14, 14, 34);
+        p.setColor(0.26f, 0.28f, 0.32f, 1f); p.fillRectangle(32, 14, 14, 1); // top highlight
+        // BARREL TUBE 1 (top): brightest silver
+        p.setColor(0.70f, 0.72f, 0.78f, 1f); p.fillRectangle(4, 16, 32, 7);
+        p.setColor(0.82f, 0.84f, 0.90f, 1f); p.fillRectangle(4, 16, 32, 1);  // top highlight
+        p.setColor(0.54f, 0.56f, 0.62f, 1f); p.fillRectangle(4, 22, 32, 1);  // bottom shadow
+        // GAP 1
+        p.setColor(0.08f, 0.08f, 0.09f, 1f); p.fillRectangle(4, 23, 32, 2);
+        // BARREL TUBE 2: silver
+        p.setColor(0.66f, 0.68f, 0.74f, 1f); p.fillRectangle(4, 25, 32, 7);
+        p.setColor(0.78f, 0.80f, 0.86f, 1f); p.fillRectangle(4, 25, 32, 1);
+        p.setColor(0.52f, 0.54f, 0.60f, 1f); p.fillRectangle(4, 31, 32, 1);
+        // GAP 2
+        p.setColor(0.08f, 0.08f, 0.09f, 1f); p.fillRectangle(4, 32, 32, 2);
+        // BARREL TUBE 3: silver
+        p.setColor(0.64f, 0.66f, 0.72f, 1f); p.fillRectangle(4, 34, 32, 7);
+        p.setColor(0.76f, 0.78f, 0.84f, 1f); p.fillRectangle(4, 34, 32, 1);
+        p.setColor(0.50f, 0.52f, 0.58f, 1f); p.fillRectangle(4, 40, 32, 1);
+        // GAP 3
+        p.setColor(0.08f, 0.08f, 0.09f, 1f); p.fillRectangle(4, 41, 32, 2);
+        // BARREL TUBE 4 (bottom): slightly darker
+        p.setColor(0.62f, 0.64f, 0.70f, 1f); p.fillRectangle(4, 43, 32, 7);
+        p.setColor(0.50f, 0.52f, 0.58f, 1f); p.fillRectangle(4, 49, 32, 1); // bottom shadow
+        // MUZZLE PLATE (vertical plate linking all four barrel ends)
+        p.setColor(0.74f, 0.76f, 0.82f, 1f); p.fillRectangle(2, 14, 4, 38);
+        p.setColor(0.86f, 0.88f, 0.94f, 1f); p.fillRectangle(2, 14, 1, 38); // face highlight
+        // MAIN BODY / RECEIVER
+        p.setColor(0.16f, 0.17f, 0.19f, 1f); p.fillRectangle(44, 14, 18, 34);
+        p.setColor(0.24f, 0.26f, 0.30f, 1f); p.fillRectangle(44, 14, 18, 1); // top highlight
+        p.setColor(0.10f, 0.11f, 0.13f, 1f); p.fillRectangle(44, 47, 18, 1); // bottom shadow
+        // AMMO-FEED NUB (olive)
+        p.setColor(0.38f, 0.40f, 0.20f, 1f); p.fillRectangle(52, 14, 10, 8);
+        p.setColor(0.48f, 0.52f, 0.26f, 1f); p.fillRectangle(52, 14, 10, 1); // top highlight
+        // PISTOL GRIP
+        p.setColor(0.12f, 0.12f, 0.14f, 1f); p.fillRectangle(50, 48, 12, 14);
+        p.setColor(0.09f, 0.09f, 0.10f, 1f); // checkering
+        p.fillRectangle(51, 52, 10, 1); p.fillRectangle(51, 57, 10, 1);
+        // Cool-white shimmer
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(2, 16, 2, 2);
+        return finalize(p);
     }
 
     /**
-     * Plasma Rifle — bright-cyan emitter block on the left, dark blue-grey body on the right,
-     * cyan energy seam along the body top edge, two cyan coil dots near the emitter.
+     * Plasma Rifle — energy weapon.
+     * BRIGHT CYAN layered emitter at muzzle (identity). Dark blue-grey body with 3 cyan coil lines.
+     * Green targeting scope on upper receiver. Pistol grip drops below body.
      */
     private static Texture generateWeaponPlasmaGroundTexture() {
-        int size = WEAPON_PICKUP_TEXTURE_SIZE;
-        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-        // Body: dark blue-grey
-        pixmap.setColor(0.14f, 0.18f, 0.26f, 1f);
-        pixmap.fillRectangle(18, 22, 42, 22);
-        // Emitter head: bright CYAN block at muzzle (left side)
-        pixmap.setColor(0.20f, 0.85f, 0.95f, 1f);
-        pixmap.fillRectangle(4, 20, 18, 26);
-        // Cyan energy seam: 2px line along body top edge
-        pixmap.setColor(0.30f, 0.90f, 1.00f, 1f);
-        pixmap.fillRectangle(18, 22, 42, 2);
-        // Coil dots: two 4x4 cyan flecks on body near emitter join
-        pixmap.setColor(0.40f, 0.95f, 1.00f, 1f);
-        pixmap.fillRectangle(24, 27, 4, 4);
-        pixmap.fillRectangle(24, 34, 4, 4);
-        // Bright cool-white rim: left edge + top edge of emitter
-        pixmap.setColor(0.90f, 0.98f, 1.00f, 1f);
-        pixmap.fillRectangle(4, 20, 1, 26);
-        pixmap.fillRectangle(4, 20, 18, 1);
-        return finalize(pixmap);
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // BODY (dark blue-grey)
+        p.setColor(0.14f, 0.18f, 0.26f, 1f); p.fillRectangle(20, 20, 40, 22);
+        p.setColor(0.22f, 0.28f, 0.38f, 1f); p.fillRectangle(20, 20, 40, 1); // top highlight
+        p.setColor(0.10f, 0.13f, 0.19f, 1f); p.fillRectangle(20, 41, 40, 1); // bottom shadow
+        // ENERGY COILS (3 bright cyan lines across body)
+        p.setColor(0.00f, 0.84f, 0.96f, 1f);
+        p.fillRectangle(20, 26, 40, 2); p.fillRectangle(20, 31, 40, 2); p.fillRectangle(20, 36, 40, 2);
+        // TARGETING SCOPE (small housing with green lens)
+        p.setColor(0.10f, 0.13f, 0.20f, 1f); p.fillRectangle(34, 17, 16, 5);
+        p.setColor(0.10f, 0.75f, 0.50f, 0.90f); p.fillRectangle(36, 18, 12, 3);
+        // EMITTER HEAD (layered CYAN — outermost housing -> mid glow -> hot core -> near-white spot)
+        p.setColor(0.10f, 0.70f, 0.82f, 1f); p.fillRectangle(4, 17, 20, 28); // housing
+        p.setColor(0.20f, 0.86f, 0.96f, 1f); p.fillRectangle(6, 19, 16, 24); // mid glow
+        p.setColor(0.50f, 0.96f, 1.00f, 1f); p.fillRectangle(8, 22, 12, 18); // bright core
+        p.setColor(0.90f, 0.99f, 1.00f, 1f); p.fillRectangle(11, 27, 6, 8);  // near-white hot spot
+        p.setColor(0.30f, 0.92f, 1.00f, 1f); // emitter top + left face highlights
+        p.fillRectangle(4, 17, 20, 1); p.fillRectangle(4, 17, 1, 28);
+        // LEFT FLANK PANEL
+        p.setColor(0.10f, 0.14f, 0.22f, 1f); p.fillRectangle(20, 20, 4, 22);
+        // PISTOL GRIP
+        p.setColor(0.10f, 0.13f, 0.20f, 1f); p.fillRectangle(50, 42, 12, 20);
+        p.setColor(0.07f, 0.09f, 0.14f, 1f); // checkering
+        p.fillRectangle(51, 47, 10, 1); p.fillRectangle(51, 52, 10, 1); p.fillRectangle(51, 57, 10, 1);
+        // TRIGGER GUARD
+        p.setColor(0.14f, 0.18f, 0.26f, 1f);
+        p.fillRectangle(44, 42, 2, 10); p.fillRectangle(44, 51, 14, 2); p.fillRectangle(56, 42, 2, 9);
+        // Cool-white shimmer (also reads as plasma glow)
+        p.setColor(0.92f, 0.98f, 1.00f, 1f); p.fillRectangle(4, 17, 2, 2);
+        return finalize(p);
     }
 
     /**
-     * Railgun — long metallic-grey body spanning the full width, two parallel ELECTRIC-BLUE
-     * rail lines running along it, dark coil block between the rails at mid-body,
-     * white arc fleck sparking between the rails.
+     * Railgun — magnetic accelerator.
+     * Two ELECTRIC BLUE rails spanning full body length (identity). Three coil accelerators
+     * with white arc sparks between rails. Metallic grey body. Pistol grip.
      */
     private static Texture generateWeaponRailgunGroundTexture() {
-        int size = WEAPON_PICKUP_TEXTURE_SIZE;
-        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-        // Body: metallic grey, long
-        pixmap.setColor(0.34f, 0.36f, 0.40f, 1f);
-        pixmap.fillRectangle(4, 22, 56, 22);
-        // Rail 1 (upper): ELECTRIC BLUE line along body
-        pixmap.setColor(0.25f, 0.55f, 1.00f, 1f);
-        pixmap.fillRectangle(4, 24, 56, 3);
-        // Rail 2 (lower): ELECTRIC BLUE line along body
-        pixmap.fillRectangle(4, 38, 56, 3);
-        // Coil block: darker grey rectangle between rails at mid-body
-        pixmap.setColor(0.22f, 0.24f, 0.28f, 1f);
-        pixmap.fillRectangle(22, 27, 18, 11);
-        // Arc fleck: white 2x6 spark between the rails at coil
-        pixmap.setColor(0.88f, 0.96f, 1.00f, 1f);
-        pixmap.fillRectangle(30, 27, 2, 11);
-        // Cool-white rim: top and left edges
-        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
-        pixmap.fillRectangle(4, 22, 56, 1);
-        pixmap.fillRectangle(4, 22, 1, 22);
-        return finalize(pixmap);
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // BODY (metallic grey, long)
+        p.setColor(0.34f, 0.36f, 0.40f, 1f); p.fillRectangle(4, 22, 56, 20);
+        p.setColor(0.46f, 0.48f, 0.54f, 1f); p.fillRectangle(4, 22, 56, 1); // top highlight
+        p.setColor(0.22f, 0.24f, 0.28f, 1f); p.fillRectangle(4, 41, 56, 1); // bottom shadow
+        // RAIL 1 (upper ELECTRIC BLUE)
+        p.setColor(0.20f, 0.50f, 1.00f, 1f); p.fillRectangle(4, 24, 56, 3);
+        p.setColor(0.40f, 0.70f, 1.00f, 1f); p.fillRectangle(4, 24, 56, 1); // rail top glint
+        // RAIL 2 (lower ELECTRIC BLUE)
+        p.setColor(0.20f, 0.50f, 1.00f, 1f); p.fillRectangle(4, 37, 56, 3);
+        p.setColor(0.14f, 0.36f, 0.80f, 1f); p.fillRectangle(4, 39, 56, 1); // rail bottom shadow
+        // COIL ACCELERATORS (3 dark blocks between rails)
+        p.setColor(0.18f, 0.20f, 0.24f, 1f);
+        p.fillRectangle(10, 27, 10, 10); p.fillRectangle(27, 27, 10, 10); p.fillRectangle(44, 27, 10, 10);
+        // ARC SPARKS between rails at each coil (white)
+        p.setColor(0.90f, 0.96f, 1.00f, 1f);
+        p.fillRectangle(14, 27, 2, 10); p.fillRectangle(31, 27, 2, 10); p.fillRectangle(48, 27, 2, 10);
+        // MUZZLE CAP
+        p.setColor(0.50f, 0.52f, 0.58f, 1f); p.fillRectangle(2, 22, 3, 20);
+        p.setColor(0.62f, 0.64f, 0.70f, 1f); p.fillRectangle(2, 22, 1, 20); // face highlight
+        // PISTOL GRIP
+        p.setColor(0.20f, 0.22f, 0.26f, 1f); p.fillRectangle(52, 42, 12, 18);
+        p.setColor(0.14f, 0.16f, 0.20f, 1f); p.fillRectangle(52, 58, 12, 2); // bottom shadow
+        p.setColor(0.15f, 0.17f, 0.20f, 1f); // checkering
+        p.fillRectangle(53, 47, 10, 1); p.fillRectangle(53, 52, 10, 1);
+        // TRIGGER GUARD
+        p.setColor(0.28f, 0.30f, 0.34f, 1f);
+        p.fillRectangle(46, 42, 2, 10); p.fillRectangle(46, 51, 14, 2); p.fillRectangle(58, 42, 2, 9);
+        // Cool-white shimmer
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(2, 22, 2, 2);
+        return finalize(p);
     }
 
     /**
-     * Incinerator — ORANGE nozzle block on the left, dark-grey body on the right,
-     * dark-red fuel canister slung below the body, red flame tint at nozzle tip.
+     * Incinerator — short-range flamethrower.
+     * ORANGE layered nozzle assembly at muzzle (identity). Red flame lick at tip.
+     * Dark-red fuel tank slung below body. Pistol grip.
      */
     private static Texture generateWeaponIncineratorGroundTexture() {
-        int size = WEAPON_PICKUP_TEXTURE_SIZE;
-        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-        // Body: dark grey
-        pixmap.setColor(0.18f, 0.18f, 0.20f, 1f);
-        pixmap.fillRectangle(20, 22, 40, 20);
-        // Nozzle head: ORANGE at muzzle (left)
-        pixmap.setColor(0.95f, 0.45f, 0.10f, 1f);
-        pixmap.fillRectangle(4, 20, 20, 24);
-        // Flame lick at nozzle tip: red edges, orange centre
-        pixmap.setColor(0.90f, 0.20f, 0.05f, 1f);
-        pixmap.fillRectangle(4, 20, 5, 8);
-        pixmap.fillRectangle(4, 36, 5, 8);
-        pixmap.setColor(0.98f, 0.62f, 0.15f, 1f);
-        pixmap.fillRectangle(4, 28, 5, 8);
-        // Fuel canister: dark-red rect slung below the body
-        pixmap.setColor(0.45f, 0.12f, 0.08f, 1f);
-        pixmap.fillRectangle(28, 40, 24, 12);
-        // Cool-white rim: top edge of nozzle
-        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
-        pixmap.fillRectangle(4, 20, 20, 1);
-        pixmap.fillRectangle(4, 20, 1, 24);
-        return finalize(pixmap);
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // BODY TUBE
+        p.setColor(0.20f, 0.20f, 0.22f, 1f); p.fillRectangle(20, 23, 40, 16);
+        p.setColor(0.30f, 0.30f, 0.32f, 1f); p.fillRectangle(20, 23, 40, 1); // top highlight
+        p.setColor(0.12f, 0.12f, 0.14f, 1f); p.fillRectangle(20, 38, 40, 1); // bottom shadow
+        // NOZZLE ASSEMBLY (layered ORANGE — dark outer -> mid orange -> bright core)
+        p.setColor(0.80f, 0.35f, 0.06f, 1f); p.fillRectangle(4, 18, 22, 28); // outer housing
+        p.setColor(0.95f, 0.46f, 0.10f, 1f); p.fillRectangle(6, 20, 18, 24); // mid orange
+        p.setColor(1.00f, 0.60f, 0.20f, 1f); p.fillRectangle(8, 23, 14, 18); // bright core
+        p.setColor(1.00f, 0.68f, 0.28f, 1f); p.fillRectangle(4, 18, 22, 1);  // top highlight
+        // FLAME LICK at nozzle tip
+        p.setColor(1.00f, 0.82f, 0.20f, 1f); p.fillRectangle(4, 24, 3, 16);  // orange-yellow center
+        p.setColor(0.96f, 0.22f, 0.05f, 1f); // red flame edges
+        p.fillRectangle(4, 18, 3, 7); p.fillRectangle(4, 39, 3, 7);
+        // FUEL TANK (dark red-brown, slung below body)
+        p.setColor(0.42f, 0.12f, 0.07f, 1f); p.fillRectangle(24, 39, 28, 16);
+        p.setColor(0.32f, 0.08f, 0.04f, 1f); p.fillRectangle(24, 54, 28, 1); // bottom shadow
+        p.setColor(0.28f, 0.08f, 0.04f, 1f); p.fillRectangle(24, 47, 28, 2); // tank seam band
+        // PISTOL GRIP
+        p.setColor(0.12f, 0.12f, 0.14f, 1f); p.fillRectangle(50, 39, 12, 20);
+        p.setColor(0.09f, 0.09f, 0.10f, 1f); // checkering
+        p.fillRectangle(51, 44, 10, 1); p.fillRectangle(51, 49, 10, 1); p.fillRectangle(51, 54, 10, 1);
+        // TRIGGER GUARD
+        p.setColor(0.18f, 0.18f, 0.20f, 1f);
+        p.fillRectangle(44, 39, 2, 10); p.fillRectangle(44, 48, 12, 2); p.fillRectangle(54, 39, 2, 9);
+        // Cool-white shimmer
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(4, 18, 2, 2);
+        return finalize(p);
     }
 
     /**
-     * Grenade Launcher (WEAPON_ROCKET) — fat OLIVE/dark-green launch tube on the left
-     * (the defining wide-bore barrel), grey receiver block on the right, near-black
-     * filled circle at the tube mouth showing the large bore opening.
+     * Grenade Launcher — single-shot tube launcher.
+     * FAT OLIVE tube barrel — widest bore of any weapon (identity). Large dark bore circle
+     * at muzzle. Grey receiver with loading port. Dark olive pistol grip.
      */
     private static Texture generateWeaponRocketGroundTexture() {
-        int size = WEAPON_PICKUP_TEXTURE_SIZE;
-        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-        // Launch tube: thick OLIVE/dark-green rect (wide barrel is the tell)
-        pixmap.setColor(0.30f, 0.36f, 0.16f, 1f);
-        pixmap.fillRectangle(4, 18, 38, 24);
-        // Receiver block: grey, right side
-        pixmap.setColor(0.30f, 0.32f, 0.36f, 1f);
-        pixmap.fillRectangle(38, 22, 22, 18);
-        // Bore opening: near-black filled circle at tube muzzle
-        pixmap.setColor(0.04f, 0.04f, 0.05f, 1f);
-        pixmap.fillCircle(10, 30, 6);
-        // Grip: dark olive, below receiver
-        pixmap.setColor(0.20f, 0.24f, 0.10f, 1f);
-        pixmap.fillRectangle(46, 38, 10, 18);
-        // Cool-white rim: top edge of tube (offset to avoid the bore circle)
-        pixmap.setColor(0.88f, 0.94f, 1.00f, 1f);
-        pixmap.fillRectangle(16, 18, 26, 1);
-        pixmap.fillRectangle(4, 18, 1, 24);
-        return finalize(pixmap);
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // LAUNCH TUBE (FAT OLIVE — the defining wide barrel)
+        p.setColor(0.28f, 0.34f, 0.14f, 1f); p.fillRectangle(4, 14, 42, 32);
+        p.setColor(0.38f, 0.46f, 0.20f, 1f); p.fillRectangle(4, 14, 42, 1);  // top highlight
+        p.setColor(0.18f, 0.22f, 0.08f, 1f); p.fillRectangle(4, 45, 42, 1);  // bottom shadow
+        // BORE OPENING (large dark circles — shows the big calibre)
+        p.setColor(0.04f, 0.04f, 0.05f, 1f); p.fillCircle(14, 30, 10); // outer bore rim
+        p.setColor(0.01f, 0.01f, 0.02f, 1f); p.fillCircle(14, 30,  7); // inner bore
+        // RECEIVER BLOCK
+        p.setColor(0.28f, 0.30f, 0.34f, 1f); p.fillRectangle(42, 19, 18, 24);
+        p.setColor(0.38f, 0.40f, 0.46f, 1f); p.fillRectangle(42, 19, 18, 1); // top highlight
+        p.setColor(0.18f, 0.20f, 0.24f, 1f); p.fillRectangle(42, 42, 18, 1); // bottom shadow
+        p.setColor(0.14f, 0.15f, 0.17f, 1f); p.fillRectangle(44, 22, 10, 10);// loading port
+        // PISTOL GRIP (dark olive)
+        p.setColor(0.18f, 0.22f, 0.10f, 1f); p.fillRectangle(50, 43, 10, 18);
+        p.setColor(0.13f, 0.16f, 0.07f, 1f); // checkering
+        p.fillRectangle(51, 48, 8, 1); p.fillRectangle(51, 53, 8, 1); p.fillRectangle(51, 58, 8, 1);
+        // TRIGGER GUARD
+        p.setColor(0.24f, 0.26f, 0.30f, 1f);
+        p.fillRectangle(42, 43, 2, 10); p.fillRectangle(42, 52, 14, 2); p.fillRectangle(54, 43, 2, 9);
+        // Cool-white shimmer
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(4, 14, 2, 2);
+        return finalize(p);
     }
 
 }
