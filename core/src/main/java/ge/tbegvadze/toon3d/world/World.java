@@ -119,10 +119,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
     // Start room — weapon-selection staging state; null after the room is left
     // -------------------------------------------------------------------------
-    private boolean                    isStartingRoom          = false;
-    private boolean                    startRoomChoiceResolved = false;
-    private java.util.List<Weapon>     startRoomWeapons        = null;
-    private java.util.List<GroundItem> startRoomGroundItems    = null;
+    private boolean                    isStartingRoom               = false;
+    private boolean                    startRoomChoiceResolved      = false;
+    private java.util.List<Weapon>     startRoomWeapons             = null;
+    private java.util.List<GroundItem> startRoomGroundItems         = null;
+    private boolean                    startRoomMeleeChoiceResolved = false;
+    private java.util.List<Weapon>     startRoomMeleeWeapons        = null;
+    private java.util.List<GroundItem> startRoomMeleeGroundItems    = null;
 
     // -------------------------------------------------------------------------
     // Permadeath — run stats, death beat animation, and reset handshake
@@ -427,9 +430,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 if (isStartingRoom) {
                     // Leaving the staging room: generate the real first dungeon floor.
                     // currentDepth stays at STARTING_DEPTH so floor 1 is the first dungeon floor.
-                    isStartingRoom       = false;
-                    startRoomWeapons     = null;
-                    startRoomGroundItems = null;
+                    isStartingRoom               = false;
+                    startRoomWeapons             = null;
+                    startRoomGroundItems         = null;
+                    startRoomMeleeWeapons        = null;
+                    startRoomMeleeGroundItems    = null;
                     runStats.recordFloor(currentDepth);
                     rebuildForLevel(pickGenerator(floorSeed(runSeed, currentDepth)).generate());
                 } else {
@@ -781,20 +786,21 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * playerController both exist.
      */
     private void setupStartRoomWeaponOffers(StartGameLevelGenerator startGen, long runSeed) {
-        java.util.List<Weapon> shuffled = new java.util.ArrayList<>(inventory.getArsenal());
-        java.util.Collections.shuffle(shuffled, new java.util.Random(floorSeed(runSeed, 0)));
+        // --- Ranged offers: pick 3 from the shuffled ranged arsenal ---
+        java.util.List<Weapon> shuffledRanged = new java.util.ArrayList<>(inventory.getArsenal());
+        java.util.Collections.shuffle(shuffledRanged, new java.util.Random(floorSeed(runSeed, 0)));
 
-        int offerCount = Math.min(
+        int rangedOfferCount = Math.min(
                 ge.tbegvadze.toon3d.util.LevelGenConstants.START_ROOM_WEAPON_OFFER_COUNT,
-                shuffled.size());
+                shuffledRanged.size());
 
         startRoomWeapons     = new java.util.ArrayList<>();
         startRoomGroundItems = new java.util.ArrayList<>();
 
-        for (int offerIndex = 0; offerIndex < offerCount; offerIndex++) {
-            Weapon    offeredWeapon = shuffled.get(offerIndex);
-            ItemType  itemType      = weaponClassToItemType(offeredWeapon);
-            GroundItem groundItem   = new GroundItem(
+        for (int offerIndex = 0; offerIndex < rangedOfferCount; offerIndex++) {
+            Weapon     offeredWeapon = shuffledRanged.get(offerIndex);
+            ItemType   itemType      = weaponClassToItemType(offeredWeapon);
+            GroundItem groundItem    = new GroundItem(
                     startGen.getWeaponTileColumn(offerIndex),
                     startGen.getWeaponTileRow(offerIndex),
                     itemType, 1);
@@ -803,36 +809,87 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             startRoomGroundItems.add(groundItem);
         }
 
+        // --- Melee offers: 3 non-fist melee weapons (Fist is already the default) ---
+        java.util.List<Weapon> meleePool = new java.util.ArrayList<>(
+                java.util.Arrays.asList(new CombatKnife(), new SteelPipe(), new MeleeChainsaw()));
+        java.util.Collections.shuffle(meleePool, new java.util.Random(floorSeed(runSeed, 0) + 1));
+
+        int meleeOfferCount = Math.min(
+                ge.tbegvadze.toon3d.util.LevelGenConstants.START_ROOM_MELEE_OFFER_COUNT,
+                meleePool.size());
+
+        startRoomMeleeWeapons     = new java.util.ArrayList<>();
+        startRoomMeleeGroundItems = new java.util.ArrayList<>();
+
+        for (int offerIndex = 0; offerIndex < meleeOfferCount; offerIndex++) {
+            Weapon     offeredWeapon = meleePool.get(offerIndex);
+            ItemType   itemType      = weaponClassToItemType(offeredWeapon);
+            GroundItem groundItem    = new GroundItem(
+                    startGen.getMeleeTileColumn(offerIndex),
+                    startGen.getMeleeTileRow(offerIndex),
+                    itemType, 1);
+            groundItems.add(groundItem);
+            startRoomMeleeWeapons.add(offeredWeapon);
+            startRoomMeleeGroundItems.add(groundItem);
+        }
+
         playerController.setWeaponGroundItemPickedUpCallback(this::handleStartRoomWeaponPickup);
     }
 
     /**
-     * Invoked by PlayerController when the player steps onto one of the three weapon offer tiles.
-     * Equips the chosen weapon, grants starter ammo, and despawns the unchosen offers.
+     * Invoked by PlayerController when the player steps onto any start-room offer tile.
+     * Dispatches to the ranged or melee branch depending on which list contains the item.
      */
     private void handleStartRoomWeaponPickup(GroundItem pickedItem) {
-        if (startRoomChoiceResolved || startRoomWeapons == null || startRoomGroundItems == null) return;
-
-        int pickedIndex = startRoomGroundItems.indexOf(pickedItem);
-        if (pickedIndex < 0) return;
-
-        Weapon chosenWeapon = startRoomWeapons.get(pickedIndex);
-        inventory.getLoadout().tryEquip(chosenWeapon);
-        weaponHudRenderer.setEquippedWeapon(chosenWeapon);
-        addStarterAmmoForWeapon(chosenWeapon);
-
-        // Despawn the unchosen offers from the live ground-item list.
-        for (int otherIndex = 0; otherIndex < startRoomGroundItems.size(); otherIndex++) {
-            if (otherIndex != pickedIndex) {
-                groundItems.remove(startRoomGroundItems.get(otherIndex));
+        // --- Ranged branch ---
+        if (!startRoomChoiceResolved && startRoomWeapons != null && startRoomGroundItems != null) {
+            int pickedIndex = startRoomGroundItems.indexOf(pickedItem);
+            if (pickedIndex >= 0) {
+                Weapon chosenWeapon = startRoomWeapons.get(pickedIndex);
+                inventory.getLoadout().tryEquip(chosenWeapon);
+                weaponHudRenderer.setEquippedWeapon(chosenWeapon);
+                addStarterAmmoForWeapon(chosenWeapon);
+                for (int otherIndex = 0; otherIndex < startRoomGroundItems.size(); otherIndex++) {
+                    if (otherIndex != pickedIndex) {
+                        groundItems.remove(startRoomGroundItems.get(otherIndex));
+                    }
+                }
+                startRoomChoiceResolved = true;
+                if (eventTextSystem != null) {
+                    eventTextSystem.spawnWithColor(
+                            "EQUIPPED: " + chosenWeapon.getDisplayName(), EventTextSystem.COLOR_GREEN);
+                }
+                clearStartRoomCallbackIfComplete();
+                return;
             }
         }
 
-        startRoomChoiceResolved = true;
+        // --- Melee branch ---
+        if (!startRoomMeleeChoiceResolved && startRoomMeleeWeapons != null && startRoomMeleeGroundItems != null) {
+            int pickedIndex = startRoomMeleeGroundItems.indexOf(pickedItem);
+            if (pickedIndex >= 0) {
+                MeleeWeapon chosenMelee = (MeleeWeapon) startRoomMeleeWeapons.get(pickedIndex);
+                inventory.setMeleeWeapon(chosenMelee);
+                weaponHudRenderer.registerAdditionalWeapon(chosenMelee);
+                for (int otherIndex = 0; otherIndex < startRoomMeleeGroundItems.size(); otherIndex++) {
+                    if (otherIndex != pickedIndex) {
+                        groundItems.remove(startRoomMeleeGroundItems.get(otherIndex));
+                    }
+                }
+                startRoomMeleeChoiceResolved = true;
+                if (eventTextSystem != null) {
+                    eventTextSystem.spawnWithColor(
+                            "MELEE: " + chosenMelee.getDisplayName(), EventTextSystem.COLOR_GREEN);
+                }
+                clearStartRoomCallbackIfComplete();
+            }
+        }
+    }
 
-        if (eventTextSystem != null) {
-            eventTextSystem.spawnWithColor(
-                    "EQUIPPED: " + chosenWeapon.getDisplayName(), EventTextSystem.COLOR_GREEN);
+    /** Clears the start-room pickup callback once both ranged and melee choices are made. */
+    private void clearStartRoomCallbackIfComplete() {
+        if (startRoomChoiceResolved && startRoomMeleeChoiceResolved) {
+            playerController.setWeaponGroundItemPickedUpCallback(null);
         }
     }
 
@@ -874,6 +931,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (weapon instanceof Incinerator)         return ItemType.WEAPON_INCINERATOR;
         if (weapon instanceof PlasmaRifle)         return ItemType.WEAPON_PLASMA;
         if (weapon instanceof GrenadeLauncher)     return ItemType.WEAPON_ROCKET;
+        if (weapon instanceof MeleeChainsaw)       return ItemType.WEAPON_CHAINSAW;
+        if (weapon instanceof SteelPipe)           return ItemType.WEAPON_PIPE;
+        if (weapon instanceof CombatKnife)         return ItemType.WEAPON_KNIFE;
+        if (weapon instanceof Fist)                return ItemType.WEAPON_FIST;
         return ItemType.WEAPON_PISTOL;
     }
 }

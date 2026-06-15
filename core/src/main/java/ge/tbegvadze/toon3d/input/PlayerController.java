@@ -349,7 +349,11 @@ public class PlayerController {
             case WEAPON_RAILGUN:       return weapon instanceof Railgun;
             case WEAPON_INCINERATOR:   return weapon instanceof Incinerator;
             case WEAPON_ROCKET:        return weapon instanceof GrenadeLauncher;
-            case WEAPON_PISTOL:        return false; // no Pistol weapon class implemented; falls through to ammo
+            case WEAPON_PISTOL:        return false; // no Pistol class; falls through to ammo
+            case WEAPON_FIST:          return weapon instanceof Fist;
+            case WEAPON_KNIFE:         return weapon instanceof CombatKnife;
+            case WEAPON_PIPE:          return weapon instanceof SteelPipe;
+            case WEAPON_CHAINSAW:      return weapon instanceof MeleeChainsaw;
             default:                   return false;
         }
     }
@@ -373,6 +377,10 @@ public class PlayerController {
             case WEAPON_INCINERATOR:   return AmmoType.CELLS;
             case WEAPON_RAILGUN:       return AmmoType.SLUGS;
             case WEAPON_ROCKET:        return AmmoType.ROCKETS;
+            case WEAPON_FIST:
+            case WEAPON_KNIFE:
+            case WEAPON_PIPE:
+            case WEAPON_CHAINSAW:      return null; // melee weapons have no ammo
             default:                   return null;
         }
     }

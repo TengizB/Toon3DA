@@ -106,6 +106,42 @@ public enum ItemType {
             1.00f, 0.75f, 0.10f
     ),
 
+    WEAPON_FIST(
+            "Fist",
+            ItemCategory.WEAPON,
+            false,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
+            'X',
+            1.00f, 0.75f, 0.10f
+    ),
+
+    WEAPON_KNIFE(
+            "Combat Knife",
+            ItemCategory.WEAPON,
+            false,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
+            'K',
+            1.00f, 0.75f, 0.10f
+    ),
+
+    WEAPON_PIPE(
+            "Steel Pipe",
+            ItemCategory.WEAPON,
+            false,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
+            '/',
+            1.00f, 0.75f, 0.10f
+    ),
+
+    WEAPON_CHAINSAW(
+            "Chainsaw",
+            ItemCategory.WEAPON,
+            false,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
+            'Z',
+            1.00f, 0.75f, 0.10f
+    ),
+
     // -------------------------------------------------------------------------
     // CONSUMABLES — stackable; quantities bounded by per-type caps in Constants
     // -------------------------------------------------------------------------

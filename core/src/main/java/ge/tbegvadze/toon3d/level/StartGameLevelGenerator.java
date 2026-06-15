@@ -19,12 +19,16 @@ import java.util.Collections;
  */
 public class StartGameLevelGenerator implements ILevelGenerator {
 
-    private static final int OFFER_COUNT    = LevelGenConstants.START_ROOM_WEAPON_OFFER_COUNT;
-    private static final int INTERIOR_SIZE  = LevelGenConstants.START_ROOM_INTERIOR_SIZE;
-    private static final int COLUMN_OFFSET  = LevelGenConstants.START_ROOM_COLUMN_OFFSET;
+    private static final int OFFER_COUNT        = LevelGenConstants.START_ROOM_WEAPON_OFFER_COUNT;
+    private static final int MELEE_OFFER_COUNT  = LevelGenConstants.START_ROOM_MELEE_OFFER_COUNT;
+    private static final int MELEE_ROW_OFFSET   = LevelGenConstants.START_ROOM_MELEE_ROW_OFFSET;
+    private static final int INTERIOR_SIZE      = LevelGenConstants.START_ROOM_INTERIOR_SIZE;
+    private static final int COLUMN_OFFSET      = LevelGenConstants.START_ROOM_COLUMN_OFFSET;
 
     private final int[] weaponTileColumns = new int[OFFER_COUNT];
     private final int[] weaponTileRows    = new int[OFFER_COUNT];
+    private final int[] meleeTileColumns  = new int[MELEE_OFFER_COUNT];
+    private final int[] meleeTileRows     = new int[MELEE_OFFER_COUNT];
 
     @Override
     public Level generate() {
@@ -62,13 +66,22 @@ public class StartGameLevelGenerator implements ILevelGenerator {
         int portalRow    = centerRow + 1;  // 23
         matrix[portalRow][portalColumn] = '>';
 
-        // Weapon-offer row at the room centre (one tile south of the portal).
+        // Ranged weapon-offer row at the room centre (one tile south of the portal).
         // The three offers are arranged symmetrically: left, centre, right.
         int weaponRow = centerRow;  // 22
         int halfOffers = OFFER_COUNT / 2;
         for (int offerIndex = 0; offerIndex < OFFER_COUNT; offerIndex++) {
             weaponTileColumns[offerIndex] = centerColumn - halfOffers + offerIndex;
             weaponTileRows[offerIndex]    = weaponRow;
+        }
+
+        // Melee weapon-offer row, MELEE_ROW_OFFSET tiles south of the ranged row.
+        // Same symmetric spread so the two rows mirror each other visually.
+        int meleeRow = weaponRow - MELEE_ROW_OFFSET;  // 20
+        int halfMeleeOffers = MELEE_OFFER_COUNT / 2;
+        for (int offerIndex = 0; offerIndex < MELEE_OFFER_COUNT; offerIndex++) {
+            meleeTileColumns[offerIndex] = centerColumn - halfMeleeOffers + offerIndex;
+            meleeTileRows[offerIndex]    = meleeRow;
         }
 
         // Player spawn at south-centre of the interior, one tile from the south wall.
@@ -101,6 +114,18 @@ public class StartGameLevelGenerator implements ILevelGenerator {
     public int getWeaponTileRow(int index) {
         if (index < 0 || index >= OFFER_COUNT) throw new IndexOutOfBoundsException("offer index " + index);
         return weaponTileRows[index];
+    }
+
+    /** Returns the tile column for the melee offer at the given index (0 to MELEE_OFFER_COUNT-1). */
+    public int getMeleeTileColumn(int index) {
+        if (index < 0 || index >= MELEE_OFFER_COUNT) throw new IndexOutOfBoundsException("melee offer index " + index);
+        return meleeTileColumns[index];
+    }
+
+    /** Returns the tile row for the melee offer at the given index (0 to MELEE_OFFER_COUNT-1). */
+    public int getMeleeTileRow(int index) {
+        if (index < 0 || index >= MELEE_OFFER_COUNT) throw new IndexOutOfBoundsException("melee offer index " + index);
+        return meleeTileRows[index];
     }
 
     private static void placeColumnIfInterior(char[][] matrix,
