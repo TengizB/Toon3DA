@@ -22,6 +22,9 @@ public final class TouchConstants {
     public static final float TOUCH_ICON_ALPHA_PRESSED   = 1.00f;
     public static final float TOUCH_ICON_ALPHA_LOCKED    = 0.35f;
     public static final float TOUCH_PRESS_GLOW_DURATION  = 0.12f;
+    // Tap-input buffer window: a tap registered while the player is mid-action is kept
+    // alive for this many seconds so it is consumed on the first IDLE frame after completion.
+    public static final float TOUCH_TAP_BUFFER_SECONDS   = 0.15f;
     public static final float TOUCH_ICON_EXTENT          = 22f;
     public static final float TOUCH_RIM_THICKNESS        = 3f;
     public static final int   TOUCH_ARC_SEGMENTS         = 8;

@@ -24,7 +24,7 @@ public final class Constants {
     public static final float PLAYER_RADIUS = CELL_SIZE / 4f;
     // Seconds per cell step or 90° rotation. Lower = snappier animation.
     public static final float PLAYER_MOVE_DURATION   = 0.12f;
-    public static final float PLAYER_ROTATE_DURATION = 0.12f;
+    public static final float PLAYER_ROTATE_DURATION = 0.09f;
     // FOV stored as degrees for readability; radians derived from it.
     public static final float PLAYER_FIELD_OF_VIEW_DEGREES = 90f;
     public static final float PLAYER_FIELD_OF_VIEW_RADIANS = PLAYER_FIELD_OF_VIEW_DEGREES * ((float) Math.PI / 180f);

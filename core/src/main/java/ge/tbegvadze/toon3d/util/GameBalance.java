@@ -50,15 +50,15 @@ public final class GameBalance {
     // XP CURVE — how much XP is needed to reach each next player level
     //
     // Formula:  xpRequired(level) = XP_BASE * level ^ XP_CURVE_EXPONENT
-    //   level 1 → 2:   100 * 1^1.5  =  100 XP   (~2 Corruptors)
-    //   level 2 → 3:   100 * 2^1.5  =  283 XP   (~5-6 Corruptors)
-    //   level 3 → 4:   100 * 3^1.5  =  520 XP   (~10 Corruptors)
-    //   level 4 → 5:   100 * 4^1.5  =  800 XP
-    //   level 5 → 6:   100 * 5^1.5  = 1118 XP
+    //   level 1 → 2:    80 * 1^1.5  =   80 XP   (~2-3 stalkers)
+    //   level 2 → 3:    80 * 2^1.5  =  226 XP   (~6-7 stalkers)
+    //   level 3 → 4:    80 * 3^1.5  =  416 XP
+    //   level 4 → 5:    80 * 4^1.5  =  640 XP
+    //   level 5 → 6:    80 * 5^1.5  =  894 XP
     // =========================================================================
 
     /** Base XP needed to advance from level 1 to level 2. */
-    public static final int   XP_BASE_REQUIREMENT = 100;
+    public static final int   XP_BASE_REQUIREMENT = 80;
 
     /** Exponent in the power curve.  1.5 = moderate acceleration (not linear, not exponential). */
     public static final float XP_CURVE_EXPONENT   = 1.5f;
@@ -81,12 +81,12 @@ public final class GameBalance {
     //
     // Health formula:  baseHP * HEALTH_SCALE ^ (depth − 1)
     // Damage formula:  baseDmg * DAMAGE_SCALE ^ (depth − 1)
-    //   depth 1: ×1.00   depth 2: ×1.15   depth 3: ×1.32
-    //   depth 4: ×1.52   depth 5: ×1.75   depth 10: ×3.52
+    //   depth 1: ×1.00   depth 2: ×1.12   depth 3: ×1.25
+    //   depth 4: ×1.40   depth 5: ×1.57   depth 10: ×2.77
     // =========================================================================
 
     /** Per-floor HP multiplier applied as a compound factor. */
-    public static final float ENEMY_HEALTH_SCALE_PER_DEPTH = 1.15f;
+    public static final float ENEMY_HEALTH_SCALE_PER_DEPTH = 1.12f;
 
     /** Per-floor damage multiplier applied as a compound factor. */
     public static final float ENEMY_DAMAGE_SCALE_PER_DEPTH = 1.10f;

@@ -46,6 +46,28 @@ public final class GameMath {
     }
 
     // =========================================================================
+    // SMOOTHSTEP EASING
+    // =========================================================================
+    /*
+     * Formula: smoothstep01
+     * Derivation:
+     *   smoothstep(t) = t² × (3 − 2t)
+     *   This is the Hermite cubic that passes through (0,0) and (1,1) with zero
+     *   first-derivative at both endpoints, producing an ease-in/ease-out curve.
+     *   Applied to the raw action timer (not the wall-clock duration) so the
+     *   animation takes the same total time but accelerates from rest and decelerates
+     *   into the final position — giving tile movement a sense of mass.
+     * Edge cases:
+     *   Input clamped to [0,1] — values outside that range would overshoot and are
+     *   meaningless for animation interpolation. Caller should clamp before passing.
+     *   At t=0: output 0. At t=0.5: output 0.5. At t=1: output 1.
+     */
+    public static float smoothstep01(float progress) {
+        float clamped = Math.max(0f, Math.min(1f, progress));
+        return clamped * clamped * (3f - 2f * clamped);
+    }
+
+    // =========================================================================
     // WEAPON PICKUP BOB OFFSET
     // =========================================================================
     /*

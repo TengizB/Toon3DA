@@ -16,7 +16,7 @@ public final class EnemyConstants {
 
     // Enemy system — AI and combat
     // Probability (0–1) that a killed enemy drops an ammo pickup on its tile.
-    public static final float   ENEMY_AMMO_DROP_CHANCE           = 0.25f;
+    public static final float   ENEMY_AMMO_DROP_CHANCE           = 0.30f;
     public static final int     ALERT_RADIUS_TILES               = 4;
     public static final int     CHAIN_ALERT_RADIUS_TILES         = 5;
     public static final int     LOS_MAX_RANGE_TILES              = 16;
@@ -114,6 +114,8 @@ public final class EnemyConstants {
     public static final float   ENEMY_HEALTH_EMPTY_BLUE             = 0.10f;
 
     // HP text drawn inside the health bar: "current/max" in white for legibility
+    // Text is hidden beyond this distance to de-clutter; rely on color gradient at range.
+    public static final float   ENEMY_HP_TEXT_MAX_DISTANCE_TILES = 5f;
     public static final float   ENEMY_HP_TEXT_FONT_SCALE         = 0.65f;
     public static final float   ENEMY_HP_TEXT_RED                = 1.00f;
     public static final float   ENEMY_HP_TEXT_GREEN              = 1.00f;
