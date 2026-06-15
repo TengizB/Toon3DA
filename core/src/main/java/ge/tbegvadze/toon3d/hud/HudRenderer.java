@@ -50,6 +50,8 @@ public class HudRenderer implements Renderable, Disposable {
     private static final Color ARM_EMPTY        = new Color(0.039f, 0.102f, 0.133f, 1f);
     private static final Color WARN_YELLOW      = new Color(1.000f, 0.878f, 0.000f, 1f);
     private static final Color CLIP_DARK_YELLOW = new Color(0.200f, 0.150f, 0.000f, 1f);
+    private static final Color MELEE_GREEN      = new Color(0.200f, 0.900f, 0.300f, 1f);
+    private static final Color MELEE_DARK_GREEN = new Color(0.020f, 0.150f, 0.030f, 1f);
     private static final Color ALERT_RED        = new Color(1.000f, 0.165f, 0.165f, 1f);
     private static final Color LED_GREEN        = new Color(0.188f, 1.000f, 0.376f, 1f);
     private static final Color XP_DARK_GOLD    = new Color(0.220f, 0.160f, 0.010f, 1f);
@@ -263,10 +265,18 @@ public class HudRenderer implements Renderable, Disposable {
         float barY      = HudConstants.HUD_CLIP_BAR_Y;
         float barWidth  = HudConstants.HUD_BAR_FULL_WIDTH;
         float barHeight = HudConstants.HUD_BAR_HEIGHT;
-        int   clipSize  = Math.max(1, hudState.clipSize);
-        float gap       = HudConstants.HUD_BAR_SEGMENT_GAP;
-        float segWidth  = (barWidth - (clipSize - 1) * gap) / clipSize;
-        int   filled    = isDead ? 0 : Math.min(hudState.currentAmmo, clipSize);
+
+        // clipSize == 0 is the sentinel for "melee selected — no ammo concept".
+        if (hudState.clipSize <= 0) {
+            shapes.setColor(isDead ? MELEE_DARK_GREEN : MELEE_GREEN);
+            shapes.rect(barX, barY, barWidth, barHeight);
+            return;
+        }
+
+        int   clipSize = Math.max(1, hudState.clipSize);
+        float gap      = HudConstants.HUD_BAR_SEGMENT_GAP;
+        float segWidth = (barWidth - (clipSize - 1) * gap) / clipSize;
+        int   filled   = isDead ? 0 : Math.min(hudState.currentAmmo, clipSize);
 
         for (int segmentIndex = 0; segmentIndex < clipSize; segmentIndex++) {
             float segX = barX + segmentIndex * (segWidth + gap);
@@ -364,6 +374,15 @@ public class HudRenderer implements Renderable, Disposable {
         float labelY = HudConstants.HUD_CLIP_BAR_Y + HudConstants.HUD_BAR_HEIGHT;
 
         font.getData().setScale(0.9f);
+
+        // clipSize == 0 is the sentinel for "melee selected".
+        if (hudState.clipSize <= 0) {
+            font.setColor(isDead ? PHOSPHOR_DIM : MELEE_GREEN);
+            font.draw(batch, "ML", labelX, labelY);
+            font.draw(batch, "MELEE", HudConstants.HUD_BAR_NUMBER_X, labelY);
+            return;
+        }
+
         font.setColor(isDead ? PHOSPHOR_DIM : WARN_YELLOW);
         font.draw(batch, "CL", labelX, labelY);
 
