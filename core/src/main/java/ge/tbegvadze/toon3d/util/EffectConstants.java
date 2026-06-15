@@ -80,7 +80,7 @@ public final class EffectConstants {
     public static final float ENEMY_STATUS_TINT_STRENGTH    = 0.35f;
 
     // Enemy attack status-effect application chances (0..1)
-    public static final float MIRE_WRAITH_POISON_CHANCE     = 0.60f;
+    public static final float MIRE_WRAITH_POISON_CHANCE     = 0.30f;
     public static final float ACID_DRONE_POISON_CHANCE      = 0.75f;
 
     // Enemy attack animations — purely cosmetic, timer-driven (wall-clock, not turn-driven)

@@ -302,7 +302,24 @@ public class PlayerController {
             return;
         }
 
-        // Default: player already has the full arsenal, so convert the pickup to its ammo type.
+        // If the loadout has a free slot and the player doesn't already carry this weapon,
+        // equip it from the arsenal. Otherwise convert to ammo (duplicate or loadout full).
+        if (loadout != null && !loadout.isFull()) {
+            Weapon weaponToEquip = findWeaponInArsenalForType(found.stack.getType());
+            if (weaponToEquip != null && !isWeaponInLoadout(weaponToEquip)) {
+                if (loadout.tryEquip(weaponToEquip)) {
+                    if (weaponSwitchCallback != null) weaponSwitchCallback.run();
+                    if (eventTextSystem != null) {
+                        eventTextSystem.spawnWithColor(
+                            found.stack.getType().getDisplayName().toUpperCase() + " ACQUIRED",
+                            EventTextSystem.COLOR_GREEN);
+                    }
+                    return;
+                }
+            }
+        }
+
+        // Loadout full or already carrying this weapon — convert pickup to its ammo type.
         AmmoType ammoType = weaponItemTypeToAmmoType(found.stack.getType());
         if (ammoType == null) return;
         int amountBefore = itemInventory.countOf(ammoType.getItemType());
@@ -312,6 +329,36 @@ public class PlayerController {
             eventTextSystem.spawnWithColor("ARMORY +" + added + " " + ammoType.getDisplayName().toUpperCase(),
                                            EventTextSystem.COLOR_GREEN);
         }
+    }
+
+    private Weapon findWeaponInArsenalForType(ItemType itemType) {
+        if (inventory == null || itemType == null) return null;
+        for (Weapon weapon : inventory.getArsenal()) {
+            if (weaponMatchesItemType(weapon, itemType)) return weapon;
+        }
+        return null;
+    }
+
+    private static boolean weaponMatchesItemType(Weapon weapon, ItemType itemType) {
+        switch (itemType) {
+            case WEAPON_SHOTGUN:       return weapon instanceof Shotgun && !(weapon instanceof DoubleBarrelShotgun);
+            case WEAPON_DOUBLE_BARREL: return weapon instanceof DoubleBarrelShotgun;
+            case WEAPON_PLASMA:        return weapon instanceof PlasmaRifle;
+            case WEAPON_CHAINGUN:      return weapon instanceof Chaingun;
+            case WEAPON_RAILGUN:       return weapon instanceof Railgun;
+            case WEAPON_INCINERATOR:   return weapon instanceof Incinerator;
+            case WEAPON_ROCKET:        return weapon instanceof GrenadeLauncher;
+            case WEAPON_PISTOL:        return false; // no Pistol weapon class implemented; falls through to ammo
+            default:                   return false;
+        }
+    }
+
+    private boolean isWeaponInLoadout(Weapon weapon) {
+        if (loadout == null) return false;
+        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+            if (loadout.getSlot(slotIndex) == weapon) return true;
+        }
+        return false;
     }
 
     private static AmmoType weaponItemTypeToAmmoType(ItemType weaponType) {
