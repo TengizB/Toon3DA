@@ -19,7 +19,8 @@ import ge.tbegvadze.toon3d.entity.MeleeChainsaw;
 import ge.tbegvadze.toon3d.entity.PlasmaRifle;
 import ge.tbegvadze.toon3d.entity.Railgun;
 import ge.tbegvadze.toon3d.entity.Shotgun;
-import ge.tbegvadze.toon3d.entity.SteelPipe;
+import ge.tbegvadze.toon3d.entity.Hammer;
+import ge.tbegvadze.toon3d.entity.MeleeWeapon;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.entity.WeaponVisualState;
 import ge.tbegvadze.toon3d.util.Constants;
@@ -140,8 +141,8 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         if (weapon instanceof CombatKnife) {
             return generateCombatKnifeTexture();
         }
-        if (weapon instanceof SteelPipe) {
-            return generateSteelPipeTexture();
+        if (weapon instanceof Hammer) {
+            return generateHammerTexture();
         }
         if (weapon instanceof MeleeChainsaw) {
             return generateMeleeChainsawTexture();
@@ -1974,21 +1975,22 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     // -------------------------------------------------------------------------
 
     /**
-     * Generates a steel pipe sprite using ShapeRenderer into an offscreen FrameBuffer.
+     * Generates a hammer sprite using ShapeRenderer into an offscreen FrameBuffer.
      *
-     * A thick metal pipe held horizontally across the screen, spanning left-to-right.
-     * Two gloved hands grip the pipe near its ends. The pipe body runs full width.
-     * This is a lateral weapon rather than an axial one — the pipe extends side-to-side.
+     * A heavy hammer held centre with the head pointing away (upward on canvas).
+     * Top-down first-person perspective: grip is off-screen below Y=14.
      *
      * Layout zones (Y-up):
      *   Y  0..14  transparent — grip cut off below screen
-     *   Y 14..50  gloved hands — dark tactical green, one on each side of pipe
-     *   Y 40..90  pipe body — rusted iron spanning CX-70..CX+70
-     *   Y 86..90  crown highlight — top surface of cylinder
-     *   Y 40..44  near shadow — underside of cylinder
-     *   Y 88..100 pipe end caps — brighter steel ends
+     *   Y 14..74  handle — mahogany wooden shaft, narrow, centered
+     *   Y 68..84  head socket — dark steel collar joining handle to head
+     *   Y 80..116 hammer head body — wide gunmetal steel block
+     *   Y 116..122 poll face — bright chrome striking surface (muzzle equivalent)
+     *
+     * Handle: CX-6..CX+6 (12px wide)
+     * Head: CX-58..CX+58 (116px wide), end caps CX-64..CX-58 and CX+58..CX+64
      */
-    private static Texture generateSteelPipeTexture() {
+    private static Texture generateHammerTexture() {
         int canvasWidth  = WeaponConstants.MELEE_CANVAS_WIDTH;
         int canvasHeight = WeaponConstants.MELEE_CANVAS_HEIGHT;
 
@@ -2006,7 +2008,7 @@ public class WeaponHudRenderer implements Renderable, Disposable {
 
         temporaryShapeRenderer.setProjectionMatrix(camera.combined);
         temporaryShapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        drawSteelPipeShape(temporaryShapeRenderer, canvasWidth / 2f);
+        drawHammerShape(temporaryShapeRenderer, canvasWidth / 2f);
         temporaryShapeRenderer.end();
 
         Pixmap rawPixmap = new Pixmap(canvasWidth, canvasHeight, Pixmap.Format.RGBA8888);
@@ -2028,73 +2030,72 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     }
 
     /**
-     * Draws a steel pipe in Quake-1 first-person perspective.
+     * Draws a hammer in Quake-1 top-down first-person perspective.
      *
-     * The pipe is a horizontal cylinder — unlike axial weapons it spans left-to-right.
-     * Top surface is the crown highlight; underside is darker. Weld seams run vertically
-     * across the pipe at equal intervals. Two tactical-gloved hands grip the pipe.
+     * Vertical orientation: narrow wooden handle at centre, wide steel head at far end (top).
+     * The striking faces (end caps) are the muzzle-cap equivalent for this weapon.
      *
-     * Pipe body: CX-70..CX+70 (140px wide), Y=40..90 (50px tall)
-     * Crown highlight: Y=86..90 (top surface facing camera)
-     * Near shadow: Y=40..44 (bottom surface curving away)
-     * Weld seams: 2px wide vertical bands at CX-23, CX, CX+23
-     * Left glove: CX-58..CX-26, Y=14..50   Right glove: CX+26..CX+58, Y=14..50
+     * Handle: CX-6..CX+6 (12px), Y=14..74     — mahogany wood with grain lines
+     * Socket: CX-10..CX+10 (20px), Y=68..84   — dark steel collar
+     * Head:   CX-58..CX+58 (116px), Y=80..116 — gunmetal body
+     * Caps:   CX-64..CX-58 and CX+58..CX+64   — bright striking faces
+     * Poll:   CX-64..CX+64 (128px), Y=116..122 — top chrome face (muzzle equivalent)
      */
-    private static void drawSteelPipeShape(ShapeRenderer shapeRenderer, float centerX) {
+    private static void drawHammerShape(ShapeRenderer shapeRenderer, float centerX) {
 
-        // 1. Left gloved hand — dark tactical green, overlaps pipe (drawn first, pipe covers mid)
-        shapeRenderer.setColor(0.14f, 0.20f, 0.12f, 1f);
-        shapeRenderer.rect(centerX - 58f, 14f, 32f, 36f);   // left glove body
+        // 1. Handle — mahogany wooden shaft, Y=14..74
+        shapeRenderer.setColor(0.40f, 0.22f, 0.08f, 1f);
+        shapeRenderer.rect(centerX - 6f, 14f, 12f, 60f);    // shaft body
 
-        // Left glove knuckle ridges — darker finger detail at top
-        shapeRenderer.setColor(0.10f, 0.14f, 0.08f, 1f);
-        shapeRenderer.rect(centerX - 58f, 44f, 32f, 3f);    // left knuckle band 1
-        shapeRenderer.rect(centerX - 52f, 38f, 4f, 4f);     // left finger gap 1
-        shapeRenderer.rect(centerX - 44f, 38f, 4f, 4f);     // left finger gap 2
-        shapeRenderer.rect(centerX - 36f, 38f, 4f, 4f);     // left finger gap 3
+        // Wood grain lines — darker horizontal bands suggesting grain texture
+        shapeRenderer.setColor(0.28f, 0.14f, 0.05f, 1f);
+        shapeRenderer.rect(centerX - 6f, 26f, 12f, 1f);     // grain 1
+        shapeRenderer.rect(centerX - 6f, 40f, 12f, 1f);     // grain 2
+        shapeRenderer.rect(centerX - 6f, 54f, 12f, 1f);     // grain 3
 
-        // 2. Right gloved hand — dark tactical green (mirror of left)
-        shapeRenderer.setColor(0.14f, 0.20f, 0.12f, 1f);
-        shapeRenderer.rect(centerX + 26f, 14f, 32f, 36f);   // right glove body
+        // Handle top edge highlight — light wood surface facing camera
+        shapeRenderer.setColor(0.58f, 0.36f, 0.14f, 1f);
+        shapeRenderer.rect(centerX - 6f, 71f, 12f, 3f);
 
-        // Right glove knuckle ridges
-        shapeRenderer.setColor(0.10f, 0.14f, 0.08f, 1f);
-        shapeRenderer.rect(centerX + 26f, 44f, 32f, 3f);    // right knuckle band 1
-        shapeRenderer.rect(centerX + 30f, 38f, 4f, 4f);     // right finger gap 1
-        shapeRenderer.rect(centerX + 38f, 38f, 4f, 4f);     // right finger gap 2
-        shapeRenderer.rect(centerX + 46f, 38f, 4f, 4f);     // right finger gap 3
+        // Handle butt cap — dark steel ring at the very base
+        shapeRenderer.setColor(0.20f, 0.22f, 0.26f, 1f);
+        shapeRenderer.rect(centerX - 8f, 14f, 16f, 4f);
 
-        // 3. Main pipe body — rusted iron, full width (CX-70..CX+70, Y=40..90)
-        shapeRenderer.setColor(0.34f, 0.28f, 0.22f, 1f);
-        shapeRenderer.rect(centerX - 70f, 40f, 140f, 50f);
+        // 2. Head socket — dark steel collar where handle meets head, Y=68..84
+        shapeRenderer.setColor(0.20f, 0.22f, 0.26f, 1f);
+        shapeRenderer.rect(centerX - 10f, 68f, 20f, 16f);   // socket body
+        shapeRenderer.setColor(0.28f, 0.30f, 0.36f, 1f);
+        shapeRenderer.rect(centerX - 10f, 80f, 20f, 4f);    // socket top face
 
-        // Near-edge shadow — underside of pipe cylinder (Y=40..44)
-        shapeRenderer.setColor(0.20f, 0.16f, 0.12f, 1f);
-        shapeRenderer.rect(centerX - 70f, 40f, 140f, 4f);
+        // 3. Hammer head body — wide gunmetal block, Y=80..116
+        shapeRenderer.setColor(0.30f, 0.32f, 0.36f, 1f);
+        shapeRenderer.rect(centerX - 58f, 80f, 116f, 36f);  // main head body
 
-        // Crown highlight — top surface of pipe cylinder (Y=86..90)
-        shapeRenderer.setColor(0.48f, 0.42f, 0.34f, 1f);
-        shapeRenderer.rect(centerX - 70f, 86f, 140f, 4f);
+        // Near-edge shadow — bottom of head facing away from camera
+        shapeRenderer.setColor(0.18f, 0.20f, 0.22f, 1f);
+        shapeRenderer.rect(centerX - 58f, 80f, 116f, 4f);
 
-        // Sub-crown secondary highlight band (Y=82..86) — slightly brighter than body
-        shapeRenderer.setColor(0.40f, 0.34f, 0.28f, 1f);
-        shapeRenderer.rect(centerX - 70f, 82f, 140f, 4f);
+        // Far-edge highlight — top surface of head facing camera
+        shapeRenderer.setColor(0.44f, 0.46f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 58f, 112f, 116f, 4f);
 
-        // 4. Weld seams — 3 dark vertical bands evenly spaced across pipe
-        shapeRenderer.setColor(0.24f, 0.20f, 0.16f, 1f);
-        shapeRenderer.rect(centerX - 24f, 40f, 2f, 50f);    // left weld seam (CX-24)
-        shapeRenderer.rect(centerX -  1f, 40f, 2f, 50f);    // centre weld seam (CX)
-        shapeRenderer.rect(centerX + 22f, 40f, 2f, 50f);    // right weld seam (CX+22)
+        // Longitudinal centre groove on top surface
+        shapeRenderer.setColor(0.22f, 0.24f, 0.28f, 1f);
+        shapeRenderer.rect(centerX - 54f, 96f, 108f, 2f);
 
-        // 5. Pipe end caps — brighter steel at each end (left: CX-72..CX-68, right: CX+68..CX+72)
-        shapeRenderer.setColor(0.54f, 0.48f, 0.40f, 1f);
-        shapeRenderer.rect(centerX - 72f, 40f, 4f, 50f);    // left cap
-        shapeRenderer.rect(centerX + 68f, 40f, 4f, 50f);    // right cap
+        // 4. Striking face end caps — bright steel on both sides of head
+        shapeRenderer.setColor(0.52f, 0.54f, 0.60f, 1f);
+        shapeRenderer.rect(centerX - 64f, 80f, 6f, 36f);    // left striking face
+        shapeRenderer.rect(centerX + 58f, 80f, 6f, 36f);    // right striking face
 
-        // End cap highlight edges
-        shapeRenderer.setColor(0.62f, 0.56f, 0.48f, 1f);
-        shapeRenderer.rect(centerX - 72f, 86f, 4f, 4f);     // left cap crown
-        shapeRenderer.rect(centerX + 68f, 86f, 4f, 4f);     // right cap crown
+        // End cap top highlights
+        shapeRenderer.setColor(0.64f, 0.66f, 0.72f, 1f);
+        shapeRenderer.rect(centerX - 64f, 112f, 6f, 4f);    // left cap crown
+        shapeRenderer.rect(centerX + 58f, 112f, 6f, 4f);    // right cap crown
+
+        // 5. Poll face — bright chrome top striking surface (muzzle equivalent), Y=116..122
+        shapeRenderer.setColor(0.60f, 0.62f, 0.68f, 1f);
+        shapeRenderer.rect(centerX - 64f, 116f, 128f, 6f);
     }
 
     // -------------------------------------------------------------------------
@@ -2347,6 +2348,8 @@ public class WeaponHudRenderer implements Renderable, Disposable {
                     renderIncineratorEffect(camera, normalizedTime);
                 } else if (equippedWeapon instanceof GrenadeLauncher) {
                     renderGrenadeLauncherEffect(camera, normalizedTime);
+                } else if (equippedWeapon instanceof MeleeWeapon) {
+                    renderMeleeSwingEffect(camera, normalizedTime);
                 } else {
                     renderFlameEffect(camera, normalizedTime);
                 }
@@ -2366,6 +2369,40 @@ public class WeaponHudRenderer implements Renderable, Disposable {
             currentOffsetY += (targetOffsetY - currentOffsetY)
                               * Math.min(deltaTime * WeaponConstants.WEAPON_OFFSET_LERP_SPEED, 1f);
         }
+    }
+
+    /**
+     * Draws a brief impact flash at the weapon tip for melee attacks.
+     * A white-yellow starburst ring fades and contracts over FIRE_FLASH_DURATION.
+     * No flame or muzzle cone — melee contact is represented as a blunt impact burst.
+     */
+    private void renderMeleeSwingEffect(OrthographicCamera camera, float normalizedTime) {
+        float alpha  = 1f - normalizedTime;
+        float scale  = 1f - normalizedTime * 0.50f;
+        float strikeX = Constants.WORLD_WIDTH / 2f;
+        float strikeY = currentOffsetY + WeaponConstants.WEAPON_HUD_HEIGHT
+                        * WeaponConstants.WEAPON_BARREL_TIP_Y_FRACTION;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        float outerRadius = 48f * scale;
+        float innerRadius = 22f * scale;
+
+        // Outer diffuse ring — warm yellow
+        shapeRenderer.setColor(1.00f, 0.88f, 0.30f, alpha * 0.40f);
+        shapeRenderer.ellipse(strikeX - outerRadius, strikeY - outerRadius * 0.55f,
+                              outerRadius * 2f, outerRadius * 1.10f);
+
+        // Inner hot core — bright white
+        shapeRenderer.setColor(1.00f, 1.00f, 0.92f, alpha * 0.80f);
+        shapeRenderer.ellipse(strikeX - innerRadius, strikeY - innerRadius * 0.55f,
+                              innerRadius * 2f, innerRadius * 1.10f);
+
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
     /**

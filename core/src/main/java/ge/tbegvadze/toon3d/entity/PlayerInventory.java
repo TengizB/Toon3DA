@@ -105,6 +105,8 @@ public class PlayerInventory {
 
     /**
      * Cycles weapon selection: ranged slot 0 → ranged slot 1 → … → melee → ranged slot 0.
+     * Visits each filled ranged slot in order (no wrap), then melee, then back to slot 0.
+     * This ensures melee is always reachable regardless of how many ranged slots are full.
      * If the melee slot is currently selected, wraps back to the first filled ranged slot.
      * Returns the newly active weapon.
      */
@@ -121,18 +123,28 @@ public class PlayerInventory {
             return meleeWeapon;
         }
 
-        // Ranged → next ranged slot, or melee if no other ranged slot exists
-        int currentIndex  = loadout.getActiveSlotIndex();
-        int nextRangedIdx = loadout.nextFilledSlot(currentIndex);
-        if (nextRangedIdx != currentIndex) {
-            loadout.selectSlot(nextRangedIdx);
-            return loadout.active();
+        // Ranged → find the first filled slot strictly after the current index (no wrap).
+        // Not wrapping ensures that once we exhaust all later slots we fall through to melee,
+        // rather than cycling back to slot 0 and skipping melee entirely.
+        int currentIndex = loadout.getActiveSlotIndex();
+        for (int slotIndex = currentIndex + 1; slotIndex < loadout.getSlotCount(); slotIndex++) {
+            if (loadout.getSlot(slotIndex) != null) {
+                loadout.selectSlot(slotIndex);
+                return loadout.active();
+            }
         }
 
-        // Single filled ranged slot (or empty loadout) — switch to melee if available
+        // No filled slots after current — switch to melee if available
         if (meleeWeapon != null) {
             meleeSelected = true;
             return meleeWeapon;
+        }
+
+        // No melee — wrap back to the first filled ranged slot
+        int firstFilled = loadout.nextFilledSlot(loadout.getSlotCount() - 1);
+        if (loadout.getSlot(firstFilled) != null) {
+            loadout.selectSlot(firstFilled);
+            return loadout.active();
         }
 
         return loadout.active();

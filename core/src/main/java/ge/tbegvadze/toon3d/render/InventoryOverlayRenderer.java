@@ -581,7 +581,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
             case WEAPON_ROCKET:        return "High explosive.";
             case WEAPON_FIST:          return "Bare-handed. Always available.";
             case WEAPON_KNIFE:         return "Fast light melee.";
-            case WEAPON_PIPE:          return "Knockback on hit.";
+            case WEAPON_HAMMER:         return "Knockback on hit.";
             case WEAPON_CHAINSAW:      return "High sustained damage.";
             case KEYCARD_RED:      return "Unlocks red security doors.";
             case KEYCARD_YELLOW:   return "Unlocks yellow security doors.";

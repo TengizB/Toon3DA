@@ -4,7 +4,7 @@ import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
- * Abstract base for all melee weapons (Fist, CombatKnife, SteelPipe, Chainsaw).
+ * Abstract base for all melee weapons (Fist, CombatKnife, Hammer, MeleeChainsaw).
  *
  * Instant adjacent-tile resolution — no projectile march:
  *   targetColumn = playerTileColumn + facingStepColumn

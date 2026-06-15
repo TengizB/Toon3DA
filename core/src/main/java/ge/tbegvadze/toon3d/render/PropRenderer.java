@@ -1482,6 +1482,10 @@ public class PropRenderer implements Renderable, Disposable {
         map.put(ItemType.WEAPON_RAILGUN,       generateWeaponRailgunGroundTexture());
         map.put(ItemType.WEAPON_INCINERATOR,   generateWeaponIncineratorGroundTexture());
         map.put(ItemType.WEAPON_ROCKET,        generateWeaponRocketGroundTexture());
+        map.put(ItemType.WEAPON_FIST,          generateWeaponFistGroundTexture());
+        map.put(ItemType.WEAPON_KNIFE,         generateWeaponKnifeGroundTexture());
+        map.put(ItemType.WEAPON_HAMMER,        generateWeaponHammerGroundTexture());
+        map.put(ItemType.WEAPON_CHAINSAW,      generateWeaponChainsawGroundTexture());
         return map;
     }
 
@@ -1812,6 +1816,138 @@ public class PropRenderer implements Renderable, Disposable {
         p.fillRectangle(42, 43, 2, 10); p.fillRectangle(42, 52, 14, 2); p.fillRectangle(54, 43, 2, 9);
         // Cool-white shimmer
         p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(4, 14, 2, 2);
+        return finalize(p);
+    }
+
+    /**
+     * Fist — two armoured gauntlets side-by-side.
+     * Left gauntlet: x=8..26, y=20..44. Right gauntlet: x=30..48, y=20..44.
+     * Knuckle highlights on far edge (top in Pixmap = near edge of each block).
+     */
+    private static Texture generateWeaponFistGroundTexture() {
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // LEFT GAUNTLET body
+        p.setColor(0.30f, 0.32f, 0.36f, 1f); p.fillRectangle(8, 20, 18, 24);
+        p.setColor(0.44f, 0.46f, 0.52f, 1f); p.fillRectangle(8, 20, 18, 2);  // far-edge highlight
+        p.setColor(0.18f, 0.20f, 0.22f, 1f); p.fillRectangle(8, 42, 18, 2);  // near-edge shadow
+        // Left knuckle ridge bumps
+        p.setColor(0.38f, 0.40f, 0.44f, 1f);
+        p.fillRectangle(9,  22, 3, 2); p.fillRectangle(13, 22, 3, 2);
+        p.fillRectangle(17, 22, 3, 2); p.fillRectangle(21, 22, 3, 2);
+        // RIGHT GAUNTLET body (mirror)
+        p.setColor(0.30f, 0.32f, 0.36f, 1f); p.fillRectangle(30, 20, 18, 24);
+        p.setColor(0.44f, 0.46f, 0.52f, 1f); p.fillRectangle(30, 20, 18, 2);
+        p.setColor(0.18f, 0.20f, 0.22f, 1f); p.fillRectangle(30, 42, 18, 2);
+        p.setColor(0.38f, 0.40f, 0.44f, 1f);
+        p.fillRectangle(31, 22, 3, 2); p.fillRectangle(35, 22, 3, 2);
+        p.fillRectangle(39, 22, 3, 2); p.fillRectangle(43, 22, 3, 2);
+        // GAP between fists — near-black
+        p.setColor(0.06f, 0.06f, 0.08f, 1f); p.fillRectangle(26, 20, 4, 24);
+        // Cool-white shimmer
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(8, 20, 2, 2);
+        return finalize(p);
+    }
+
+    /**
+     * Combat Knife — horizontal blade pointing left, handle right.
+     * Blade: x=4..38, y=26..32. Guard: x=36..40, y=22..38. Handle wrap: x=40..58, y=25..33.
+     */
+    private static Texture generateWeaponKnifeGroundTexture() {
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // BLADE
+        p.setColor(0.70f, 0.72f, 0.78f, 1f); p.fillRectangle(4, 26, 34, 8);  // silver steel
+        p.setColor(0.86f, 0.88f, 0.94f, 1f); p.fillRectangle(4, 26, 34, 1);  // top edge highlight
+        p.setColor(0.48f, 0.50f, 0.56f, 1f); p.fillRectangle(4, 33, 34, 1);  // bottom edge shadow
+        // Blade taper — blade narrows toward tip at far left
+        p.setColor(0f, 0f, 0f, 0f); p.fillRectangle(4, 26, 1, 1); // clip corner
+        p.setColor(0f, 0f, 0f, 0f); p.fillRectangle(4, 33, 1, 1);
+        // Tip shimmer
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(4, 28, 2, 2);
+        // CROSS GUARD
+        p.setColor(0.24f, 0.26f, 0.30f, 1f); p.fillRectangle(36, 22, 4, 18);
+        p.setColor(0.36f, 0.38f, 0.44f, 1f); p.fillRectangle(36, 22, 4, 1);
+        p.setColor(0.14f, 0.16f, 0.18f, 1f); p.fillRectangle(36, 39, 4, 1);
+        // HANDLE WRAP (dark leather)
+        p.setColor(0.18f, 0.12f, 0.08f, 1f); p.fillRectangle(40, 25, 18, 10);
+        p.setColor(0.12f, 0.08f, 0.05f, 1f); // wrap grooves
+        p.fillRectangle(44, 25, 1, 10); p.fillRectangle(48, 25, 1, 10); p.fillRectangle(52, 25, 1, 10);
+        // POMMEL
+        p.setColor(0.34f, 0.36f, 0.40f, 1f); p.fillRectangle(57, 26, 5, 8);
+        p.setColor(0.46f, 0.48f, 0.54f, 1f); p.fillRectangle(57, 26, 5, 1);
+        return finalize(p);
+    }
+
+    /**
+     * Hammer — head at left, wooden handle at right.
+     * Head block: x=4..20, y=16..46. Handle: x=20..56, y=28..36.
+     * Striking faces on left and right edges of head; wooden shaft extends right.
+     */
+    private static Texture generateWeaponHammerGroundTexture() {
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // HANDLE — mahogany wood
+        p.setColor(0.40f, 0.22f, 0.08f, 1f); p.fillRectangle(20, 28, 36, 8);
+        p.setColor(0.52f, 0.30f, 0.12f, 1f); p.fillRectangle(20, 28, 36, 1);  // top highlight
+        p.setColor(0.26f, 0.13f, 0.04f, 1f); p.fillRectangle(20, 35, 36, 1);  // bottom shadow
+        p.setColor(0.28f, 0.14f, 0.05f, 1f); // grain lines
+        p.fillRectangle(28, 29, 1, 6); p.fillRectangle(38, 29, 1, 6); p.fillRectangle(48, 29, 1, 6);
+        // HAMMER HEAD body
+        p.setColor(0.30f, 0.32f, 0.36f, 1f); p.fillRectangle(6, 16, 14, 30);
+        p.setColor(0.42f, 0.44f, 0.50f, 1f); p.fillRectangle(6, 16, 14, 2);   // far-edge highlight
+        p.setColor(0.18f, 0.20f, 0.22f, 1f); p.fillRectangle(6, 44, 14, 2);   // near-edge shadow
+        // Centre groove on head top face
+        p.setColor(0.22f, 0.24f, 0.28f, 1f); p.fillRectangle(7, 31, 12, 1);
+        // STRIKING FACES — bright steel on left and right edges of head
+        p.setColor(0.58f, 0.60f, 0.66f, 1f);
+        p.fillRectangle(4,  16, 3, 30);   // left striking face
+        p.fillRectangle(19, 16, 3, 30);   // right (handle-side) face
+        // Cool-white shimmer on striking face tip
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(4, 16, 2, 2);
+        return finalize(p);
+    }
+
+    /**
+     * Chainsaw — guide bar at left, motor body at right.
+     * Guide bar: x=4..34, y=27..37. Motor: x=32..58, y=17..47.
+     * Chain teeth as small marks on top/bottom edges of guide bar. Orange hazard stripe on motor.
+     */
+    private static Texture generateWeaponChainsawGroundTexture() {
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // MOTOR BODY
+        p.setColor(0.28f, 0.30f, 0.34f, 1f); p.fillRectangle(32, 17, 26, 30);
+        p.setColor(0.40f, 0.42f, 0.48f, 1f); p.fillRectangle(32, 17, 26, 2);  // top highlight
+        p.setColor(0.16f, 0.18f, 0.20f, 1f); p.fillRectangle(32, 45, 26, 2);  // bottom shadow
+        // Orange hazard stripe on motor
+        p.setColor(0.88f, 0.52f, 0.04f, 1f); p.fillRectangle(34, 20, 22, 5);
+        p.setColor(0.60f, 0.34f, 0.02f, 1f); p.fillRectangle(34, 20, 22, 1);  // stripe shadow
+        // Air-slot vents on motor body
+        p.setColor(0.14f, 0.15f, 0.17f, 1f);
+        p.fillRectangle(34, 28, 22, 2); p.fillRectangle(34, 33, 22, 2); p.fillRectangle(34, 38, 22, 2);
+        // GUIDE BAR
+        p.setColor(0.34f, 0.36f, 0.40f, 1f); p.fillRectangle(4, 27, 30, 10);
+        p.setColor(0.46f, 0.48f, 0.54f, 1f); p.fillRectangle(4, 27, 30, 1);   // top highlight
+        p.setColor(0.20f, 0.22f, 0.26f, 1f); p.fillRectangle(4, 36, 30, 1);   // bottom shadow
+        // Chain teeth — 1×2 dark marks along top and bottom of guide bar
+        p.setColor(0.14f, 0.15f, 0.17f, 1f);
+        for (int toothX = 6; toothX < 32; toothX += 5) {
+            p.fillRectangle(toothX, 27, 2, 2);  // top chain
+            p.fillRectangle(toothX, 35, 2, 2);  // bottom chain
+        }
+        // Guide bar nose cap (tip at far left)
+        p.setColor(0.52f, 0.54f, 0.60f, 1f); p.fillRectangle(4, 27, 2, 10);
+        // Cool-white shimmer on nose tip
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(4, 27, 2, 2);
         return finalize(p);
     }
 

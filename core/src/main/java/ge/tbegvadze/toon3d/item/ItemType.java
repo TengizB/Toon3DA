@@ -124,8 +124,8 @@ public enum ItemType {
             1.00f, 0.75f, 0.10f
     ),
 
-    WEAPON_PIPE(
-            "Steel Pipe",
+    WEAPON_HAMMER(
+            "Hammer",
             ItemCategory.WEAPON,
             false,
             ItemConstants.ITEM_STACK_MAX_WEAPON,

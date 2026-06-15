@@ -133,11 +133,11 @@ public final class GameBalance {
     /** COMBAT KNIFE — fast light melee, good vs low-HP chaff. */
     public static final int MELEE_KNIFE_DAMAGE         = 8;
 
-    /** STEEL PIPE — crowd-control melee; knockback eligible targets by PIPE_KNOCKBACK_TILES. */
-    public static final int MELEE_PIPE_DAMAGE          = 14;
+    /** HAMMER — heavy crowd-control melee; knockback eligible targets by HAMMER_KNOCKBACK_TILES. */
+    public static final int MELEE_HAMMER_DAMAGE          = 14;
 
-    /** How many tiles a knockback-eligible enemy is pushed on a Steel Pipe hit. */
-    public static final int MELEE_PIPE_KNOCKBACK_TILES = 1;
+    /** How many tiles a knockback-eligible enemy is pushed on a Hammer hit. */
+    public static final int MELEE_HAMMER_KNOCKBACK_TILES = 1;
 
     /** CHAINSAW — high sustained damage; no knockback (grinds in place). */
     public static final int MELEE_CHAINSAW_DAMAGE      = 12;
