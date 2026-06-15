@@ -6,8 +6,10 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.Loadout;
 import ge.tbegvadze.toon3d.entity.Player;
@@ -109,8 +111,12 @@ public class HudRenderer implements Renderable, Disposable {
     private float displayedXpFraction     = 0f;
     private float animationClockSeconds   = 0f;
 
+    // Ground-weapon name label — set by World when the player stands on a weapon tile
+    private String groundWeaponLabel = null;
+
     // Reusable — no String allocations inside render()
     private final StringBuilder stringBuilder = new StringBuilder(16);
+    private final GlyphLayout   glyphLayout   = new GlyphLayout();
 
     public HudRenderer(Player player, HudState hudState) {
         this.player   = player;
@@ -127,6 +133,14 @@ public class HudRenderer implements Renderable, Disposable {
     /** Provides the loadout whose slots are drawn in the left-panel strip. */
     public void setLoadout(Loadout newLoadout) {
         this.loadout = newLoadout;
+    }
+
+    /**
+     * Sets the weapon name shown in the HUD centre gap when the player stands on a weapon tile.
+     * Pass null to hide the label (player stepped off or weapon was taken).
+     */
+    public void setGroundWeaponLabel(String label) {
+        this.groundWeaponLabel = label;
     }
 
     public void update(float deltaTime) {
@@ -183,6 +197,7 @@ public class HudRenderer implements Renderable, Disposable {
         drawXpLabel(isDead);
         if (loadout != null) drawSlotStripText(loadout, isDead);
         if (!isDead) drawStatusIconsText();
+        if (groundWeaponLabel != null && !isDead) drawGroundWeaponLabel(groundWeaponLabel);
         batch.end();
     }
 
@@ -528,6 +543,32 @@ public class HudRenderer implements Renderable, Disposable {
     private static Color xpSegmentColor(int segmentIndex) {
         if (segmentIndex <= 9)  return XP_GOLD;
         return XP_BRIGHT_GOLD;
+    }
+
+    // =========================================================================
+    // Ground-weapon name label — drawn centred in the HUD gap above the chrome
+    // =========================================================================
+
+    private void drawGroundWeaponLabel(String label) {
+        float centreX = 640f; // world centre — HUD gap spans X 420..860
+
+        font.getData().setScale(1.0f);
+        font.setColor(HP_ORANGE);
+        glyphLayout.setText(font, label);
+        font.draw(batch, label, centreX - glyphLayout.width / 2f,
+                  HudConstants.WEAPON_NAME_LABEL_Y + glyphLayout.height + font.getLineHeight() * 0.3f);
+
+        // Pulsing "[ INSPECT ]" sub-line
+        float subPulse = 0.5f + 0.5f * MathUtils.sin(animationClockSeconds * MathUtils.PI2 * 1.5f);
+        temporaryColor.set(HP_ORANGE.r * subPulse, HP_ORANGE.g * subPulse, HP_ORANGE.b * subPulse, 1f);
+        font.setColor(temporaryColor);
+        font.getData().setScale(0.85f);
+        String subLabel = "[ INSPECT ]";
+        glyphLayout.setText(font, subLabel);
+        font.draw(batch, subLabel, centreX - glyphLayout.width / 2f,
+                  HudConstants.WEAPON_NAME_LABEL_Y + glyphLayout.height);
+
+        font.getData().setScale(0.9f);
     }
 
     // =========================================================================

@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI / Systems
 TITLE: Weapon Pickup Interaction — Inspect & Swap
 CREATED: 2026-06-15

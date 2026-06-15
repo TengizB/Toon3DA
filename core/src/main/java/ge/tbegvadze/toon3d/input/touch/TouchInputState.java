@@ -20,6 +20,7 @@ public final class TouchInputState extends InputAdapter {
     private static final int INDEX_SWITCH_WEAPON   = 9;
     private static final int INDEX_HEAL            = 10;
     private static final int INDEX_OPEN_INVENTORY  = 11;
+    private static final int INDEX_INSPECT_WEAPON  = 12;
 
     private final TouchButton[]  buttons;
     private final Viewport       viewport;
@@ -40,7 +41,7 @@ public final class TouchInputState extends InputAdapter {
         float centerX = TouchConstants.TOUCH_GRID_CENTER_X;
         float baseY   = TouchConstants.TOUCH_GRID_BASE_Y;    // center Y of row 1 (BACK)
 
-        buttons = new TouchButton[12];
+        buttons = new TouchButton[13];
 
         // Row 1 (bottom) — center column only
         buttons[INDEX_BACK] = new TouchButton(
@@ -91,6 +92,19 @@ public final class TouchInputState extends InputAdapter {
         buttons[INDEX_OPEN_INVENTORY] = new TouchButton(
             leftCenterX - half, (baseY + 2 * arm) - half,
             size, size, TouchAction.OPEN_INVENTORY, TouchButton.Shape.ROUNDED_SQUARE, true);
+
+        // Contextual INSPECT button — left cluster row 1; hidden until player stands on a weapon
+        float inspectHalf = TouchConstants.INSPECT_BUTTON_SIZE / 2f;
+        TouchButton inspectButton = new TouchButton(
+            TouchConstants.INSPECT_BUTTON_CENTER_X - inspectHalf,
+            TouchConstants.INSPECT_BUTTON_CENTER_Y - inspectHalf,
+            TouchConstants.INSPECT_BUTTON_SIZE,
+            TouchConstants.INSPECT_BUTTON_SIZE,
+            TouchAction.INSPECT_WEAPON,
+            TouchButton.Shape.ROUNDED_SQUARE,
+            true);
+        inspectButton.visible = false;
+        buttons[INDEX_INSPECT_WEAPON] = inspectButton;
     }
 
     /** Returns the highest-priority currently-pressed held action (movement), or NONE. */
@@ -124,6 +138,27 @@ public final class TouchInputState extends InputAdapter {
     }
 
     public TouchButton[] getButtons() { return buttons; }
+
+    /**
+     * Shows or hides the contextual INSPECT_WEAPON button.
+     * Hiding also clears any pressed / buffered state on that button so a tap
+     * queued while the button was visible is not replayed after it disappears.
+     */
+    public void setInspectButtonVisible(boolean visible) {
+        TouchButton button = buttons[INDEX_INSPECT_WEAPON];
+        if (button.visible == visible) return;
+        button.visible = visible;
+        if (!visible) {
+            button.pressed        = false;
+            button.pointerId      = -1;
+            button.pressGlowTimer = 0f;
+            if (pendingTapAction  == TouchAction.INSPECT_WEAPON) pendingTapAction  = TouchAction.NONE;
+            if (bufferedTapAction == TouchAction.INSPECT_WEAPON) {
+                bufferedTapAction = TouchAction.NONE;
+                bufferedTapTimer  = 0f;
+            }
+        }
+    }
 
     /** Releases all held buttons and clears any pending or buffered tap action. */
     public void resetAllButtonStates() {

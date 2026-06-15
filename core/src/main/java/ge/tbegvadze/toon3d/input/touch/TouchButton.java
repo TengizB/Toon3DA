@@ -13,6 +13,7 @@ public final class TouchButton {
     boolean pressed;
     int     pointerId;       // -1 = no finger bound to this button
     float   pressGlowTimer;  // counts down from TOUCH_PRESS_GLOW_DURATION → 0
+    boolean visible = true;  // when false, button is not rendered and does not accept touches
 
     TouchButton(float rectX, float rectY, float rectWidth, float rectHeight,
                 TouchAction action, Shape shape) {
@@ -32,6 +33,7 @@ public final class TouchButton {
     }
 
     boolean contains(float worldX, float worldY) {
+        if (!visible) return false;
         return worldX >= rectX && worldX <= rectX + rectWidth
             && worldY >= rectY && worldY <= rectY + rectHeight;
     }

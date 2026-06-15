@@ -52,6 +52,7 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
         for (TouchButton button : buttons) {
+            if (!button.visible) continue;
             drawBody(button);
             drawBevel(button);
             drawIcon(button);
@@ -173,8 +174,34 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
             case SWITCH_WEAPON:   drawSwitchWeaponIcon(cx, cy, extent);        break;
             case HEAL:            drawHealIcon(cx, cy, extent);                break;
             case OPEN_INVENTORY:  drawInventoryIcon(cx, cy, extent);           break;
+            case INSPECT_WEAPON:  drawInspectIcon(cx, cy, extent);             break;
             default: break;
         }
+    }
+
+    /** Magnifying-glass icon: circle outline + handle line at bottom-right. */
+    private void drawInspectIcon(float cx, float cy, float extent) {
+        float radius    = extent * 0.45f;
+        float lineWidth = Math.max(2f, extent * 0.13f);
+        float handleLen = extent * 0.40f;
+        int   segments  = 10;
+        // Circle
+        for (int segmentIndex = 0; segmentIndex < segments; segmentIndex++) {
+            float angle1 = 360f / segments * segmentIndex;
+            float angle2 = 360f / segments * (segmentIndex + 1);
+            float x1 = cx - extent * 0.10f + radius * MathUtils.cosDeg(angle1);
+            float y1 = cy + extent * 0.10f + radius * MathUtils.sinDeg(angle1);
+            float x2 = cx - extent * 0.10f + radius * MathUtils.cosDeg(angle2);
+            float y2 = cy + extent * 0.10f + radius * MathUtils.sinDeg(angle2);
+            shapeRenderer.rectLine(x1, y1, x2, y2, lineWidth);
+        }
+        // Handle
+        float handleStartX = cx - extent * 0.10f + radius * MathUtils.cosDeg(315f);
+        float handleStartY = cy + extent * 0.10f + radius * MathUtils.sinDeg(315f);
+        shapeRenderer.rectLine(handleStartX, handleStartY,
+                               handleStartX + handleLen * MathUtils.cosDeg(315f),
+                               handleStartY + handleLen * MathUtils.sinDeg(315f),
+                               lineWidth * 1.5f);
     }
 
     /**
