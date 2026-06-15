@@ -1,0 +1,582 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Game Feel & Polish Pass — Refining What Exists
+---
+
+OVERVIEW
+--------
+The game already has the right systems (raycaster, tile movement, impact effects,
+vignette, event text, enemy telegraphs, weapon recoil, screen shake, scaling
+difficulty). It feels "raw and off" because those systems are individually
+under-tuned and not coordinated — timings collide, feedback under- or over-fires,
+contrast is flat, and combat lacks a clear "snap" on the turn boundary. This is a
+NO-NEW-CONTENT pass: it only retunes constants and tightens existing behaviour so
+what is already there reads as deliberate, crunchy, and fair. Nothing here adds an
+enemy, weapon, item, tile, or mechanic.
+
+How to use this doc: each item is self-contained. Implement in priority order (see
+the PRIORITY ORDER section at the bottom). Every value is a placeholder unless
+marked "keep" — treat them as starting points to feel out in a playtest, not gospel.
+
+GAMEPLAY LOOP (what the polish changes feel like, end to end)
+------------------------------------------------------------
+1. Player taps Forward -> step animation plays -> on arrival the world ticks ->
+   enemies act -> any hit fires vignette + "-N" + shake on the SAME frame as the
+   enemy attack animation peak. Currently these can drift apart; this pass aligns
+   the visual peak with the damage application so cause and effect read as one beat.
+2. Player taps Fire -> instant recoil drop + muzzle flash + shake -> shot resolves
+   -> if a kill, the kill flash and death burst fire together, not staggered.
+3. Player walks a corridor -> distance shading and ambient tint make near walls
+   pop and far walls recede, so depth reads instantly instead of as a flat wash.
+
+PLAYER EXPERIENCE
+-----------------
+The target sensation is "every turn lands like a punch and I always know why."
+Movement should feel snappy but not twitchy; combat should feel weighty; the
+screen should communicate threat (red rim, telegraphs) before damage, and reward
+(kill flash, burst) on the beat of the kill. The player should never squint to
+read the HUD or the enemy in front of them, and should never feel a hit came "out
+of nowhere."
+
+================================================================================
+AREA 1 — GAME FEEL: MOVEMENT, ROTATION, COMBAT TIMING
+================================================================================
+
+1.1 Decouple rotation duration from move duration
+  - OFF: PLAYER_MOVE_DURATION and PLAYER_ROTATE_DURATION are both 0.12s
+    (Constants.java). A 90-degree turn covers the same wall-clock as a full tile
+    step, but a turn moves the camera through a much larger visual arc, so turning
+    feels sluggish and disorienting relative to stepping.
+  - CHANGE: Set PLAYER_ROTATE_DURATION = 0.09f (keep PLAYER_MOVE_DURATION = 0.12f).
+  - WHY: Faster rotation makes scanning a room feel responsive without making the
+    whole game feel like it's on fast-forward. Rotation has no collision stakes, so
+    it can afford to be snappier than translation.
+
+1.2 Add a tiny ease to movement/rotation lerp (it is currently linear)
+  - OFF: advanceMove/advanceRotate in PlayerController lerp actionProgress linearly
+    (GameMath.lerp at raw actionProgress). Linear motion starts and stops abruptly,
+    which reads as "robotic / cheap" on a phone screen.
+  - CHANGE: Apply a smoothstep to actionProgress before the position/angle lerp:
+    eased = progress*progress*(3 - 2*progress). Add GameMath.smoothstep01(float)
+    with the standard derivation comment block, and call it in advanceMove and
+    advanceRotate when computing the interpolation factor (NOT when advancing the
+    raw timer — keep timing linear so turn duration is unchanged).
+  - WHY: Ease-in/ease-out gives motion a sense of mass. The step still takes 0.12s
+    but it accelerates and settles instead of teleporting along a line. This is the
+    single biggest "cheap vs. polished" tell for tile movement.
+
+1.3 Buffer the next held input during the last frames of an action
+  - OFF: pollInput only runs in IDLE. If the player is holding Forward and the step
+    completes, the next step starts the same frame — good. But tapped actions (Fire,
+    Heal) consumed during MOVING are lost because consumeTapAction is only read in
+    IDLE. On a phone, a Fire tap during the 0.12s move animation silently vanishes.
+  - CHANGE: In TouchInputState, latch the most recent tap action and keep it valid
+    for a short buffer window (e.g. 0.15s) so PlayerController.pollInput can consume
+    it on the first IDLE frame after the current action finishes. Do NOT queue more
+    than one; newest tap wins. (No new turn semantics — it still resolves on the
+    next IDLE.)
+  - WHY: Dropped inputs are the number-one "feels off" complaint for tile games on
+    touch. A one-action buffer makes the game feel like it's listening.
+
+1.4 Make the fire lock match the visual recoil window
+  - OFF: PLAYER_FIRE_DURATION = 0.14f (input lock) but FIRE_FLASH_DURATION = 0.22f
+    (recoil/flash visual). The input unlocks 0.08s before the weapon visually
+    settles, so a fast tapper can fire again while the gun is still kicked down —
+    the recoil animation gets cut off and re-triggered, looking jittery.
+  - CHANGE: Either raise PLAYER_FIRE_DURATION to 0.16f, OR (better) keep the lock
+    short but have the recoil offset return be driven so a re-fire mid-recoil
+    restarts cleanly. Simplest first step: PLAYER_FIRE_DURATION = 0.16f.
+  - WHY: Aligns the "can act again" moment closer to the "weapon looks ready"
+    moment, so rapid fire reads as a rhythm instead of a stutter.
+
+================================================================================
+AREA 2 — VISUAL POLISH: RENDERING, SHADING, COLOR, CONTRAST
+================================================================================
+
+2.1 Strengthen distance shading falloff (depth currently reads flat)
+  - OFF: The "raw" look is largely flat lighting — near and far walls are too
+    similar in brightness, so the corridor reads as a 2D wallpaper instead of a
+    receding 3D space. Shade is computed in WallRenderer/GameMath from
+    perpWallDistance.
+  - CHANGE: Increase the contrast of the shade curve. In the shade formula, darken
+    far walls more aggressively (e.g. a steeper exponential falloff) and add a small
+    minimum-brightness floor so distant walls never go fully black (keep them ~0.12
+    brightness so silhouettes of far enemies still read). Expose the falloff
+    strength and the floor as RenderConstants (e.g. WALL_SHADE_FALLOFF_STRENGTH,
+    WALL_SHADE_MIN_BRIGHTNESS) so it can be tuned without touching GameMath.
+  - WHY: Strong near/far contrast is what makes a raycaster feel like Doom. It
+    instantly adds depth and atmosphere for one constant change.
+
+2.2 Add directional wall shading (N/S walls vs E/W walls)
+  - OFF: All wall faces get the same brightness for a given distance, so corners
+    are invisible — a wall and the perpendicular wall meeting it blend into one
+    flat surface.
+  - CHANGE: In WallRenderer, when the DDA hit was a vertical grid line (a "side"
+    hit, X-step) vs a horizontal grid line (Y-step), multiply shade by a small
+    factor (e.g. side walls 1.0, the other orientation 0.75). The DDA already knows
+    which axis it crossed (stepColumn vs stepRow / the side flag). Add
+    RenderConstants.WALL_SIDE_SHADE_FACTOR = 0.75f.
+  - WHY: This is the classic Wolfenstein/Doom trick. It makes every corner pop and
+    gives the geometry readable form for almost zero cost. Probably the highest
+    "feels 3D" payoff in this entire doc.
+
+2.3 Warm/cool the ambient tint per area instead of neutral grey
+  - OFF: The scene lighting is neutral, so every room feels the same and the UAC
+    facility has no mood. EffectConstants already has ambient-light language in its
+    header comment but the world is visually monochrome.
+  - CHANGE: Apply a subtle global color multiply to the wall/floor/ceiling draws
+    (e.g. a slightly cool steel-blue tint baseline). Keep it gentle (multiply by
+    ~(0.92, 0.95, 1.0)) so it reads as "cold sterile facility" not "blue filter."
+    Drive it from existing ambient constants in EffectConstants; do not add a new
+    system.
+  - WHY: A consistent cool baseline makes the warm combat effects (muzzle flash,
+    explosions, blood) pop by contrast, and gives the facility an identity.
+
+2.4 Fix flat ceiling/floor contrast so the horizon line reads
+  - OFF: FloorCeilingRenderer draws the backdrop first; if floor and ceiling are
+    too close in value the horizon disappears and the player loses orientation when
+    rotating.
+  - CHANGE: Ensure ceiling is distinctly darker than floor (ceiling is "up, away
+    from the light"). Tune the ceiling tint multiplier in RenderConstants down
+    (~0.6 of floor brightness). No structural change.
+  - WHY: A clear horizon is a free orientation aid and reinforces the 3D illusion.
+
+2.5 Enemy sprite distance shading should match wall shading
+  - OFF: If enemy billboards are drawn at full brightness regardless of distance
+    while walls darken with distance, far enemies "float" too bright and look
+    pasted on; near enemies don't pop.
+  - CHANGE: In EnemyRenderer, tint the enemy sprite by the SAME distance-shade
+    function used for walls (reuse the GameMath shade method with the enemy's
+    perpendicular depth). Keep a higher minimum brightness than walls (enemies must
+    stay readable — e.g. floor at 0.35) so a distant enemy is dim but never lost.
+    DORMANT_SHADE_DAMPEN already exists for dormant enemies; this is the live-enemy
+    distance tint, layered on top.
+  - WHY: Unifying enemy and wall shading is what makes sprites sit IN the world
+    rather than ON the screen. Currently the mismatch is a big "raw" tell.
+
+================================================================================
+AREA 3 — AUDIO-VISUAL FEEDBACK: SHAKE, FLASH, VIGNETTE, HIT INDICATORS
+================================================================================
+
+3.1 Calm the hit shake on the player's own shots; reserve big shake for kills
+  - OFF: HIT_SHAKE_MAGNITUDE = 4 fires on every enemy hit (onEnemyHit). In a swarm,
+    multiple hits in one turn re-trigger shake repeatedly and the screen never
+    settles — it reads as "broken" rather than "impactful." triggerShake already
+    only escalates, which helps, but the per-hit baseline is too high for chip hits.
+  - CHANGE: Scale hit shake by damage dealt: shakeMagnitude =
+    HIT_SHAKE_MAGNITUDE * clamp(damage / referenceDamage, 0.4, 1.5). Small hits
+    barely nudge; big hits jolt. Keep KILL_SHAKE_MAGNITUDE = 10 as the decisive
+    payoff. Add EffectConstants.HIT_SHAKE_REFERENCE_DAMAGE = 20.
+  - WHY: A flat shake on every pellet feels noisy. Scaling it makes the feedback
+    proportional and keeps the screen readable during sustained fire (chaingun).
+
+3.2 Differentiate the "I hit them" cue from the "I got hurt" cue
+  - OFF: KILL_FLASH is a warm-white edge flash (player killed something). The hit
+    vignette is red (player got hurt). Both are edge effects; if they fire on the
+    same frame they can wash the rim and confuse "did I win or lose that exchange?"
+  - CHANGE: Ensure draw order is kill-flash (white) FIRST, then hit vignette (red)
+    ON TOP (the game-feedback-bundle already flags this; verify it shipped). Also
+    reduce KILL_FLASH_MAX_ALPHA from 0.70 to ~0.55 so the white edge is a "pop" not
+    a "whiteout," and keep HIT_VIGNETTE_MAX_ALPHA = 0.55 so red always reads through
+    a simultaneous kill flash.
+  - WHY: The two most important combat outcomes must never be ambiguous. Red on top
+    guarantees "I got hurt" always wins the frame, which serves the fairness pillar.
+
+3.3 Scale the hit vignette with damage (partly specified already)
+  - OFF: HIT_VIGNETTE_MAX_ALPHA = 0.55 is a flat spike per hit. Chip damage flashes
+    as hard as a big hit, so the rim cries wolf and the player tunes it out.
+  - CHANGE: Intensity = clamp(0.45 + damage/40, 0, 1) at the damage seam, then the
+    renderer multiplies by HIT_VIGNETTE_MAX_ALPHA. Small hits a faint blush, big
+    hits a hard red rim.
+  - WHY: Proportional dread. The rim becoming solid red over the last few hits
+    before death is the clearest possible "you are about to die" signal — exactly
+    the "I understand why I died" pillar.
+
+3.4 Add a low-HP persistent vignette floor (no new system)
+  - OFF: Below HUD_LOW_HP_THRESHOLD (0.25) the HUD bar pulses, but the play area
+    itself gives no peripheral warning — the player can be one hit from death and
+    not feel it while looking at the center of the screen.
+  - CHANGE: When health fraction < 0.25, hold a faint red vignette baseline
+    (intensity floor ~0.18) that the per-hit spike rides on top of. Reuse
+    HitVignetteRenderer; just clamp intensity to a floor while low-HP. Add
+    EffectConstants.LOW_HP_VIGNETTE_FLOOR = 0.18f.
+  - WHY: Persistent peripheral danger is pre-attentive; the player FEELS critical
+    HP without reading a number. Standard FPS convention, fits turn-based fine.
+
+3.5 Tighten damage-number readability
+  - OFF: DAMAGE_NUMBER_DURATION_SECONDS = 0.80 with rise + scale; in a swarm,
+    many numbers overlap and linger, cluttering the view. They also use the same
+    color for normal vs kill (only numberIsKill flag distinguishes spawn).
+  - CHANGE: (a) Drop duration to ~0.65s so they clear faster. (b) Make kill numbers
+    visually distinct: hot white-orange and slightly larger; normal hits a flatter
+    yellow. (c) Verify the existing scale-by-amount (DAMAGE_NUMBER_SCALE_PER_POINT)
+    is wired so a 50-damage shotgun blast reads BIG and a 2-damage tick reads small.
+  - WHY: Faster, color-coded numbers keep the combat read clean and make big hits
+    feel big — feedback proportional to outcome.
+
+3.6 Death burst should fire on the SAME frame as the kill flash
+  - OFF: onEnemyKilled spawns shake + kill flash + debris + burst + number all at
+    once (good), but verify nothing in EnemyManager delays the killed callback to a
+    later sub-phase than the hit. If the visual kill lags the actual death by a
+    frame or two it reads as mushy.
+  - CHANGE: Audit EnemyManager kill path: the onEnemyKilled callback must fire in
+    the same tick resolution as the damage that killed, before the enemy is culled
+    from rendering, so the burst originates from where the body was.
+  - WHY: Co-timed kill feedback is the "crunch" payoff; any lag makes kills feel
+    weightless.
+
+================================================================================
+AREA 4 — HUD READABILITY & CLARITY
+================================================================================
+
+4.1 Verify HUD constants match the actual layout (doc/code drift)
+  - OFF: CLAUDE.md's HUD section quotes HUD_HEIGHT = 130 and a centre-gap weapon
+    layout, but HudConstants.java has HUD_HEIGHT = 206 with a single left panel and
+    a full-width bar layout. The doc and code disagree, which means the layout was
+    reworked and may not be internally consistent (e.g. the weapon sprite at
+    WEAPON_HUD_BASE_Y = -28 vs a 206-tall HUD strip).
+  - CHANGE: Reconcile: confirm the weapon sprite's visible bottom is not occluded by
+    the 206px HUD strip, and confirm bar Y positions (HUD_HP_BAR_Y=166 etc.) all sit
+    within 0..206. Update CLAUDE.md's HUD section to match the shipped layout. This
+    is a correctness/clarity fix, not a redesign.
+  - WHY: A HUD that disagrees with its own spec is the root of a lot of "off"
+    feeling — overlaps, clipped sprites, mis-centered text.
+
+4.2 Make the low-HP HUD pulse actually alarming
+  - OFF: HUD_PULSE_HZ = 4 and HUD_LOW_HP_THRESHOLD = 0.25 exist, but if the pulse
+    is a subtle alpha wobble it doesn't register in the heat of combat.
+  - CHANGE: At low HP, pulse the HP bar between its normal red and a bright
+    near-white-red, and pulse the face box border too, not just the bar fill. Keep
+    4Hz. Pair with 3.4 (the vignette floor) so the warning is both central (HUD) and
+    peripheral (vignette).
+  - WHY: The single most important HUD state (about to die) must be impossible to
+    miss.
+
+4.3 Ammo readout should warn at empty/low
+  - OFF: The right-panel ammo digits are static color. The player firing into an
+    empty clip with no visible warning feels like the game "didn't fire" for no
+    reason.
+  - CHANGE: When the equipped weapon's clip is 0 (needs reload), tint the ammo
+    digits amber and flash them; when reserve ammo for the weapon's type is also 0,
+    tint red. Reuse the event-text "RELOADING..."/"READY!" channel that already
+    exists for the textual cue.
+  - WHY: "Why didn't my gun fire?" is a fairness failure. A colored ammo state
+    answers it before the player asks.
+
+4.4 Enemy name-tag / health-bar legibility pass
+  - OFF: Health bars draw with HP text inside at ENEMY_HP_TEXT_FONT_SCALE = 0.65,
+    and name tags only show within 8 tiles. At distance the tiny HP text inside a
+    thin bar (ENEMY_HEALTH_BAR_HEIGHT_FRACTION = 0.06) is unreadable and just adds
+    noise.
+  - CHANGE: Hide the in-bar HP TEXT beyond a short distance (e.g. 5 tiles) and keep
+    only the colored bar (green->yellow->red gradient already conveys the state).
+    Add EnemyConstants.ENEMY_HP_TEXT_MAX_DISTANCE_TILES = 5f. Keep the bar itself to
+    the existing 12-tile range.
+  - WHY: Show precise info only when it's readable; rely on the color gradient at
+    range. Less clutter, clearer reads.
+
+================================================================================
+AREA 5 — ENEMY BEHAVIOR CLARITY: TELEGRAPHING & RESPONSIVENESS
+================================================================================
+
+5.1 Make the pre-hit telegraph longer and more visible
+  - OFF: ENEMY_TELEGRAPH_DURATION_SECONDS = 0.25 with ENEMY_TELEGRAPH_SCALE_BONUS
+    = 0.08 (an 8% scale bump) and a rim alpha of 0.55. On a moving phone screen an
+    8% scale pulse over 0.25s is nearly subliminal — the player gets hit "without
+    warning," which violates the fairness pillar.
+  - CHANGE: Raise ENEMY_TELEGRAPH_SCALE_BONUS to ~0.15 and consider lengthening to
+    0.30s. Make the rim flash the attack-type color (melee = MELEE_TELEGRAPH red,
+    ranged = the projectile color) so the player can read WHAT is coming, not just
+    THAT something is.
+  - WHY: A readable telegraph is the contract that makes turn-based combat fair —
+    the player must have the information to react (step away, raise guard, kill it
+    first) before the hit lands.
+
+5.2 Telegraph must occur the turn BEFORE the hit, not the turn OF the hit
+  - OFF: The comment on ENEMY_TELEGRAPH says it's a "brief scale+tint pulse on the
+    turn the attack lands." If the telegraph and the damage happen on the same turn,
+    it is not a warning — it's a label on an unavoidable hit.
+  - CHANGE: Split enemy attack into a wind-up turn and a strike turn for at least
+    the heavy hitters (SHELL_BRUTE charger, PLAGUE_HULK, IRON_STALKER): turn N the
+    enemy telegraphs ("winding up"), turn N+1 it strikes. Fast/light enemies
+    (GORE_BITER) can stay single-turn since their damage is low. This is a behavior
+    refinement to existing EnemyManager attack resolution, not a new mechanic; gate
+    it behind which EnemyType it applies to.
+  - WHY: This is the difference between "brutal but fair" and "feels cheap." The
+    player who reads a wind-up and chooses to tank it or retreat is making the
+    meaningful-choice-under-pressure decision the pillars demand.
+
+5.3 Clarify the alert moment (enemy waking up)
+  - OFF: ALERT_RADIUS_TILES = 4 and DORMANT_SHADE_DAMPEN = 0.7 mean dormant enemies
+    are dimmer, then snap to active. The transition is invisible, so the player
+    can't tell a fight just started or which enemy noticed them.
+  - CHANGE: On the alert frame, give the enemy a brief one-time "wake" flash (reuse
+    the hit-flash blanch, ENEMY_HIT_FLASH_DURATION_SECONDS) and optionally an event-
+    text "CONTACT" cue. Use the existing systems; no new ones.
+  - WHY: Knowing the exact moment and source of aggro lets the player position and
+    prioritize — information management pillar.
+
+5.4 Make enemy attack animation peak coincide with damage application
+  - OFF: ENEMY_ATTACK_ANIM_DURATION_SECONDS = 0.30 is wall-clock timed and runs
+    independently of the turn resolution. If the lunge/recoil animation peaks at a
+    different moment than player.applyDamage fires, the "-N" + vignette + shake land
+    out of sync with the visual, reading as mushy.
+  - CHANGE: Fire the player-damage seam (and thus vignette/text/shake) at the
+    animation's strike peak (e.g. at ~40% through the lunge), not at turn-start.
+    Coordinate the cosmetic anim timer with the damage event.
+  - WHY: Synchronized cause (visible blow) and effect (HP loss + red flash) is the
+    core of readable combat. This single alignment fixes a lot of the "raw" feel.
+
+================================================================================
+AREA 6 — WEAPON FEEL: SHOT TIMING, RECOIL, VISUAL KICK
+================================================================================
+
+6.1 Make recoil snap down hard and ease back (asymmetric)
+  - OFF: WEAPON_RECOIL_OFFSET_Y = 55 with WEAPON_OFFSET_LERP_SPEED = 14 for the
+    return. If the drop also uses the lerp it's symmetric and feels soft. Recoil
+    should be an instant drop, then a smooth recovery.
+  - CHANGE: Confirm the recoil DROP is instantaneous (snap currentOffsetY down by
+    RECOIL_OFFSET_Y on fire) and only the RETURN is lerped. If already so, keep it;
+    otherwise enforce the asymmetry. Consider a slightly higher kick (60) for the
+    heavy weapons (railgun already has its own shake) by scaling recoil per weapon.
+  - WHY: Asymmetric kick (instant out, eased in) is the universal language of "this
+    gun has power." Symmetric easing feels like the gun is on a spring.
+
+6.2 Tie a small camera kick / shake to firing, scaled by weapon
+  - OFF: Only railgun (RAILGUN_SHAKE_INTENSITY = 10) and incinerator
+    (FLAME_SHAKE_INTENSITY = 4) shake on fire. The shotgun/chaingun/plasma fire
+    with no camera response, so they feel weaker than they read on paper.
+  - CHANGE: Add a per-weapon fire-shake magnitude to WeaponConstants (e.g. shotgun
+    6, double-barrel 9, chaingun 2 per burst, plasma 3) and trigger it through the
+    existing ImpactEffectSystem.triggerShake on fire. Small for rapid weapons (so
+    sustained fire doesn't nauseate), big for slow heavy ones.
+  - WHY: A bit of self-shake on fire is what makes a gun feel connected to the
+    world. Scaling by weapon also reinforces each weapon's identity (the whole point
+    of build diversity).
+
+6.3 Reconsider the reload slide so it doesn't fully hide the weapon
+  - OFF: WEAPON_RELOAD_SLIDE_Y = 200 drops the weapon "mostly off screen" during
+    reload. For 1-tick reloads (shotgun, plasma) the weapon yanks almost entirely
+    off-screen and snaps back in a fraction of a second — a violent flicker.
+  - CHANGE: Scale the slide distance by reload duration: a 1-tick reload should
+    barely dip (~60), a 2-tick reload (railgun, grenade) can slide further (~160).
+    Add WEAPON_RELOAD_SLIDE_Y_PER_TICK and compute slide = base + perTick*ticks, or
+    simply use a smaller flat value for 1-tick weapons.
+  - WHY: The reload animation should be proportional to how long the reload takes.
+    A near-instant reload that throws the gun off-screen looks broken.
+
+6.4 Verify NORMAL_TO_RELOAD_DELAY doesn't stack awkwardly with the fire flash
+  - OFF: FIRE_FLASH_DURATION (0.22) + NORMAL_TO_RELOAD_DELAY (0.18) = 0.40s of
+    cosmetic state after firing before reload visuals begin. For a single-shell
+    shotgun that auto-reloads each shot, this chain of poses may feel laggy between
+    shots.
+  - CHANGE: Playtest the shotgun fire->reload->ready cadence specifically. If it
+    feels gated, trim NORMAL_TO_RELOAD_DELAY to ~0.10 so the reload pose starts
+    sooner and the weapon feels ready faster.
+  - WHY: The single-shell shotgun is likely the most-fired weapon; its rhythm sets
+    the felt pace of the whole game.
+
+================================================================================
+AREA 7 — DIFFICULTY TUNING & BALANCE
+================================================================================
+
+7.1 Early-floor lethality check on heavy melee
+  - OFF: On floor 1 (no depth scaling), PLAGUE_HULK hits for 14 and SHELL_BRUTE for
+    18 against a fresh MARINE. With low starting TOUGHNESS (base 2 -> ~-2 flat
+    reduction) a SHELL_BRUTE deals ~16 per hit; two hits is a big chunk. If the
+    telegraph isn't readable (see 5.1/5.2), this feels unfair early.
+  - CHANGE: Don't nerf the numbers first — fix the telegraph (Area 5) so the damage
+    is dodgeable, THEN re-evaluate. If still too swingy on floor 1, shave
+    SHELL_BRUTE_ATTACK_DAMAGE to 15. Flag as placeholder pending playtest.
+  - WHY: Difficulty should come from readable threats the player can outplay, not
+    from un-telegraphed burst. Fix readability before touching damage.
+
+7.2 Ammo-drop generosity vs. weapon-switch friction
+  - OFF: ENEMY_AMMO_DROP_CHANCE = 0.25. With finite ammo and 2 weapon slots, a
+    25% drop can starve the player, forcing constant weapon switching, which on
+    touch (SWITCH_WEAPON is a tap) is friction-heavy. Could read as "the game won't
+    let me play the weapon I want."
+  - CHANGE: Consider raising to 0.30-0.35 for early floors and tapering with depth
+    via GameBalance (an ammo-drop curve), so scarcity escalates as a deliberate
+    pacing tool rather than being flatly punishing from floor 1. Placeholder values;
+    validate with run-length data.
+  - WHY: Resource pressure is a pillar, but it should ramp (pacing/escalation
+    pillar), not gate the player out of their build on floor 1.
+
+7.3 XP curve vs. enemy XP yields sanity check
+  - OFF: XP_BASE_REQUIREMENT = 100, exponent 1.5; a GORE_BITER yields 6, an
+    IRON_STALKER 35. Level 1->2 needs ~2 stalkers or ~17 biters. If early floors
+    are mostly low-XP fodder, the first level-up (the first meaningful choice) may
+    come too late to feel rewarding within a run.
+  - CHANGE: Verify time-to-first-level-up in a real run. If it's > ~2 rooms,
+    consider lowering XP_BASE_REQUIREMENT to ~80 so the first build decision lands
+    early and hooks the player. Placeholder; measure first.
+  - WHY: The first level-up is the first taste of run identity. It should arrive
+    while the player is still forming their plan, not as an afterthought.
+
+7.4 Confirm depth scaling doesn't outpace player power
+  - OFF: ENEMY_HEALTH_SCALE_PER_DEPTH = 1.15 compounding means depth 10 enemies have
+    ~3.5x HP. If player damage growth (LEVEL_UP_DAMAGE_BONUS = 5/level) and ammo
+    economy don't keep pace, deep floors become bullet-sponge slogs (anti-feel).
+  - CHANGE: Model expected player damage-per-floor vs enemy HP-per-floor. If enemies
+    outscale, either reduce health scale to ~1.12 or ensure damage boosts/weapon
+    upgrades are available often enough. Placeholder pending the model.
+  - WHY: Bullet-sponge enemies are the opposite of crunchy; every hit should feel
+    like it matters. Scaling must preserve the "few hits to kill" feel.
+
+================================================================================
+AREA 8 — AMBIENT ATMOSPHERE: LIGHTING & MOOD
+================================================================================
+
+8.1 Use the existing floor-lighting tiles to vary brightness
+  - OFF: Tile symbols include floor lighting variants (space / l / u / f). If the
+    renderer treats them all the same, the level reads as uniformly lit and the
+    facility has no light/dark rhythm.
+  - CHANGE: Ensure FloorCeilingRenderer (and the wall shade) actually vary
+    brightness by the floor-lighting tile under/near the player or per-tile: lit
+    tiles brighter, unlit ('u') tiles noticeably darker. This is wiring existing
+    tiles to existing shading, not new tiles.
+  - WHY: Light/dark contrast across a level creates dread and guides the eye toward
+    lit (safe-ish) and away from dark (unknown) — atmosphere AND navigation.
+
+8.2 Subtle ambient flicker on lit areas (cheap, no new system)
+  - OFF: Lighting is static. A sterile-but-failing UAC facility should have a faint
+    instability.
+  - CHANGE: Apply a very small global brightness oscillation (e.g. +/-3% at a slow,
+    slightly irregular rate) to the ambient multiply from EffectConstants. Keep it
+    subtle enough to feel atmospheric, not strobe-y. Drive from a single time-based
+    value in World, applied as a uniform tint factor — no per-pixel work.
+  - WHY: A hair of flicker reads as "this place is barely holding together," which
+    is exactly the UAC-incursion mood, for almost no cost.
+
+8.3 Tie the red-alert pulse to actual threat, and don't let it fight the vignette
+  - OFF: There's an emergency-red-alert-pulse system (RenderConstants red-alert,
+    emergency-red-alert-pulse.txt). If it pulses walls red while the hit vignette
+    also reddens the rim, the whole frame can go red and combat becomes unreadable.
+  - CHANGE: When the hit vignette is active (player taking damage), dampen the
+    red-alert wall pulse so the two don't peak together. One source of red at a time:
+    rim-red = "I'm hurt" beats ambient-red = "alert state."
+  - WHY: Red is the game's most loaded color; overusing it muddies its meaning.
+    Reserving rim-red for damage keeps the fairness signal crisp.
+
+TECHNICAL NOTES
+---------------
+Affected files (all changes are constant tweaks or small behavior edits to existing
+classes — NO new classes, NO new tiles, NO new mechanics):
+  - util/Constants.java          : PLAYER_ROTATE_DURATION (1.1), PLAYER_FIRE_DURATION
+                                   (1.4). Possible input-buffer constant (1.3).
+  - util/GameMath.java           : add smoothstep01() (1.2) with the required
+                                   Formula/Derivation/Edge-cases comment block.
+  - input/PlayerController.java   : apply smoothstep to interpolation factor in
+                                   advanceMove/advanceRotate (1.2). Consume buffered
+                                   tap on first IDLE frame (1.3).
+  - input/touch/TouchInputState.java : latch + time-window the last tap (1.3).
+  - util/RenderConstants.java     : WALL_SHADE_FALLOFF_STRENGTH, WALL_SHADE_MIN_
+                                   BRIGHTNESS (2.1), WALL_SIDE_SHADE_FACTOR (2.2),
+                                   ceiling tint (2.4), enemy shade floor (2.5),
+                                   floor-light brightness mapping (8.1).
+  - render/WallRenderer.java      : steeper shade curve + min floor (2.1), side-hit
+                                   shade multiply using the existing DDA side flag
+                                   (2.2). Directional shading is the marquee change.
+  - render/FloorCeilingRenderer.java : ceiling/floor contrast (2.4), per-tile light
+                                   brightness (8.1), ambient flicker tint (8.2).
+  - render/EnemyRenderer.java     : distance-shade enemy sprites (2.5), hide in-bar
+                                   HP text past ENEMY_HP_TEXT_MAX_DISTANCE_TILES (4.4),
+                                   wake flash on alert (5.3).
+  - util/EffectConstants.java     : HIT_SHAKE_REFERENCE_DAMAGE (3.1), KILL_FLASH_MAX_
+                                   ALPHA down (3.2), LOW_HP_VIGNETTE_FLOOR (3.4),
+                                   shorter DAMAGE_NUMBER_DURATION (3.5), bigger
+                                   ENEMY_TELEGRAPH_SCALE_BONUS / DURATION (5.1).
+  - render/ImpactEffectSystem.java: damage-scaled hit shake (3.1), damage-scaled
+                                   vignette intensity at the seam (3.3), kill-number
+                                   color/scale (3.5).
+  - render/HitVignetteRenderer.java + World damage seam : low-HP floor (3.4),
+                                   damage-scaled spike (3.3), red-alert dampen (8.3).
+  - util/HudConstants.java + render/HudRenderer.java : reconcile layout (4.1),
+                                   stronger low-HP pulse (4.2), ammo state color
+                                   (4.3).
+  - util/WeaponConstants.java     : per-weapon fire-shake magnitudes (6.2), reload
+                                   slide scaling (6.3), trim NORMAL_TO_RELOAD_DELAY
+                                   (6.4).
+  - render/WeaponHudRenderer.java : enforce asymmetric recoil (6.1), per-weapon
+                                   reload slide (6.3).
+  - enemy/EnemyManager.java       : wind-up vs strike turn split for heavies (5.2),
+                                   damage seam at anim peak (5.4), wake flash hook
+                                   (5.3), ammo-drop curve (7.2).
+  - util/GameBalance.java         : ammo-drop-by-depth curve (7.2), XP base (7.3),
+                                   health scale (7.4), SHELL_BRUTE damage (7.1).
+  - util/EnemyConstants.java      : ENEMY_HP_TEXT_MAX_DISTANCE_TILES (4.4),
+                                   per-type telegraph applicability flags (5.2).
+  - docs / CLAUDE.md              : update the HUD section to match shipped layout
+                                   (4.1).
+
+No new tile symbols are required. No new docs/tile-symbols.txt entries. Confirmed
+against the existing symbol set — this is purely a tuning/behavior pass.
+
+VISUAL DESIGN
+-------------
+Direction summary: cold, sterile, high-contrast facility punctuated by hot,
+proportional combat bursts.
+  - Walls: strong near/far value contrast (2.1) + directional shading (2.2) so
+    geometry has form; subtle cool tint baseline (2.3).
+  - Floor brighter than ceiling, clear horizon (2.4); per-tile light variance (8.1)
+    + faint flicker (8.2) for mood.
+  - Enemies: distance-shaded to sit in the world (2.5), readable color-coded
+    telegraphs (5.1), wake flash (5.3).
+  - Combat effects: white kill-flash UNDER red hit-vignette (3.2); both damage-
+    scaled (3.1/3.3); color-coded damage numbers (3.5); asymmetric weapon recoil
+    + per-weapon kick (6.1/6.2).
+  - HUD: unmistakable low-HP state (4.2) + ammo-empty color (4.3), de-cluttered
+    enemy bars at range (4.4).
+
+BALANCE NOTES
+-------------
+Every number in this doc is a PLACEHOLDER starting point unless marked "keep."
+The intended workflow is: ship the readability/feel changes (Areas 1-6, 8) FIRST,
+play several runs, THEN tune the balance numbers (Area 7) against what now feels
+fair. Specifically do NOT nerf enemy damage (7.1) before the telegraph fixes
+(5.1/5.2) land — the damage may be fine once it's dodgeable. Recommended
+playtest metrics to capture: time-to-first-level-up, average run length in floors,
+deaths-by-untelegraphed-hit (should approach zero after Area 5), and frames where
+the rim is fully red (should only be near-death or single big hits).
+
+INTERACTIONS
+------------
+  - Telegraph fix (5.1/5.2) <-> damage tuning (7.1): readability is the prerequisite
+    for fair difficulty; tune damage only after telegraphs are visible.
+  - Damage-scaled shake (3.1) <-> damage-scaled vignette (3.3) <-> damage numbers
+    (3.5): all three should derive from the same hit-damage value at the same seam
+    so a big hit shakes hard, flashes red hard, and shows a big number — one
+    coherent "ow."
+  - Anim-peak damage seam (5.4) <-> vignette/text/shake (Area 3): firing the seam at
+    the strike peak makes ALL player-hit feedback land on the visible blow, fixing
+    sync for the whole feedback stack at once.
+  - Wall shading (2.1/2.2) <-> enemy shading (2.5): they must share the GameMath
+    shade function so sprites and walls darken together; otherwise enemies float.
+  - Red-alert pulse (8.3) <-> hit vignette (3.3/3.4): mutually dampen so the frame
+    never goes uniformly red and "red = danger to me" stays meaningful.
+  - Input buffer (1.3) <-> fire lock (1.4): a buffered Fire tap during a move should
+    fire on the first IDLE frame; ensure the buffer window and the fire lock don't
+    let a single tap fire twice.
+  - Floor-light tiles (8.1) <-> distance shading (2.1): per-tile light is multiplied
+    onto the distance shade, not replacing it — a far lit tile is still dimmed by
+    distance, a near unlit tile is dark up close.
+
+OPEN QUESTIONS
+--------------
+  - Smoothstep on movement (1.2): full smoothstep, or ease-out only (snappier feel
+    on the start)? Try both; ease-out may feel more responsive on touch.
+  - Input buffer (1.3): only buffer Fire, or all tapped actions (Heal, Skip,
+    Switch)? Buffering Switch/Inventory might cause accidental double-toggles.
+  - Wind-up/strike split (5.2): which exact EnemyTypes get the two-turn attack?
+    Proposed: PLAGUE_HULK, SHELL_BRUTE, IRON_STALKER (heavies). Confirm GORE_BITER /
+    EYE_TYRANT stay single-turn so fast enemies remain pressure.
+  - Directional wall shading (2.2): is the side flag already exposed from the DDA in
+    WallRenderer, or does it need to be surfaced? (Almost certainly already known
+    internally for texture-column selection.)
+  - HUD reconciliation (4.1): is the 130-tall centre-gap layout in CLAUDE.md the
+    intended target and the 206 single-panel the regression, or vice versa? Need the
+    developer to confirm the intended HUD before tuning it.
+  - Ambient cool tint (2.3): single global tint, or per-area (different facility
+    wings have different tints)? Per-area is more atmospheric but needs an area tag;
+    keep global for this pass.
