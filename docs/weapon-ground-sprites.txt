@@ -1,0 +1,241 @@
+WEAPON GROUND PICKUP SPRITES
+==============================
+Toon3D — technical reference for per-weapon ground pickup sprite implementation.
+
+Implemented in: PropRenderer.java, WeaponConstants.java, item/ItemType.java,
+                world/World.java, input/PlayerController.java,
+                render/InventoryOverlayRenderer.java, util/GameMath.java
+
+
+OVERVIEW
+--------
+When a weapon drops to the floor (enemy death loot or level spawn) it becomes a
+GroundItem entity.  PropRenderer renders it as a distance-sorted billboard, the
+same pipeline as barrels and crates.  Each weapon type has its own 64x64 RGBA8888
+Pixmap-based texture generated once at startup.  A gold-star fallback texture
+(genericWeaponFallbackTexture) is used whenever ItemType has no registered entry.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 1 — ARCHITECTURE
+═══════════════════════════════════════════════════════════════════════════════
+
+TEXTURE GENERATION
+------------------
+PropRenderer.buildWeaponPickupTextures() runs once in create().  It calls each
+per-weapon generator method and stores the result in a Map<ItemType, Texture>.
+
+  Map<ItemType, Texture> weaponPickupTextures = buildWeaponPickupTextures();
+
+Each generator follows this pattern:
+
+  private Texture generateWeaponXxxGroundTexture() {
+      Pixmap pixmap = new Pixmap(WEAPON_PICKUP_TEXTURE_SIZE,
+                                 WEAPON_PICKUP_TEXTURE_SIZE,
+                                 Pixmap.Format.RGBA8888);
+      pixmap.setBlending(Pixmap.Blending.None);
+      // ... draw commands ...
+      Texture texture = new Texture(pixmap);
+      pixmap.dispose();
+      return texture;
+  }
+
+The Pixmap is disposed immediately after uploading to GPU.  The Texture is owned
+by PropRenderer and disposed in PropRenderer.dispose().
+
+RENDER LOOKUP
+-------------
+During PropRenderer.render(), each GroundItem holding a weapon ItemType is looked
+up in weaponPickupTextures.  If the key is absent, genericWeaponFallbackTexture
+is used instead.  The billboard is then drawn using PropRenderer's standard
+distance-sorted SpriteBatch pass.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 2 — BOB ANIMATION
+═══════════════════════════════════════════════════════════════════════════════
+
+Pickup sprites float up and down using a sine wave driven by world time and an
+ItemType-specific phase offset so nearby pickups do not move in lockstep.
+
+  GameMath.pickupBobOffset(elapsedTime, itemTypeOrdinal)
+
+  Formula:
+    phase  = itemTypeOrdinal * WEAPON_PICKUP_PHASE_STEP
+    offset = sin(elapsedTime * WEAPON_PICKUP_BOB_SPEED + phase)
+             * WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION * billboardHeight
+
+  Key constants (WeaponConstants.java):
+    WEAPON_PICKUP_BOB_SPEED              = 2.2f  (radians per second)
+    WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION = 0.10f (fraction of billboard height)
+    WEAPON_PICKUP_PHASE_STEP             = 0.7f  (radians per ItemType.ordinal())
+
+The result is added to the billboard's world-space Y before projection.  No
+changes to game-logic tile position — purely visual.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 3 — PIXMAP COORDINATE SYSTEM
+═══════════════════════════════════════════════════════════════════════════════
+
+Pixmap origin (0,0) is the TOP-LEFT corner.  Y increases DOWNWARD.
+
+  "Barrel points left"  means small X values.
+  "Grip drops down"     means large Y values (toward Y=64).
+
+The rendered billboard has Pixmap row 0 at visual top, so orientation in the
+Pixmap matches what the player sees on screen — no flip needed.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 4 — LAYOUT CONVENTION
+═══════════════════════════════════════════════════════════════════════════════
+
+All gun sprites share a consistent silhouette within the 64x64 canvas.  Keeping
+the layout consistent lets the player identify weapons at a glance.
+
+  BARREL  — thin rectangle (5-8 px tall), extends LEFT from the body.
+             Horizontal range roughly X=2..22.  Vertical center near Y=30.
+
+  BODY / SLIDE — wider rectangle (12-22 px tall), center-right of canvas.
+             Horizontal range roughly X=20..60.  Vertical center near Y=26..34.
+
+  GRIP  — near-black or dark rectangle (20-22 px tall), below the body,
+             on the right side.  Vertical range roughly Y=36..58.  X=38..56.
+
+  TRIGGER GUARD — three narrow rectangles forming a U-shape below the body:
+      front post  : 1-2 px wide, drops 6-8 px from body bottom, left side
+      bottom bar  : horizontal bar connecting the two posts
+      rear post   : 1-2 px wide, rises to body bottom, right of front post
+
+  SIGNATURE FEATURE — the one unmistakable element that differentiates the
+             weapon type (see Part 6 for per-weapon details).
+
+Every element is drawn with the shading rules in Part 5.  Transparency (alpha=0)
+is used for the background — no solid fill behind the sprite.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 5 — SHADING RULES
+═══════════════════════════════════════════════════════════════════════════════
+
+Each rectangular component gets four color values derived from its base color.
+
+  MAIN FILL      : base color — fills the interior of the rectangle.
+  TOP EDGE (1px) : base + 0.12 on R,G,B — lighter highlight, simulates top light.
+  BOTTOM EDGE (1px): base - 0.08 on R,G,B — darker shadow.
+  LEFT/MUZZLE FACE (2px): base + 0.20 on R,G,B — bright face, catches forward light.
+
+Clamp all channel values to [0.0, 1.0] before passing to Pixmap.setColor().
+
+When a component is too thin for separate edge rows (e.g. a 3 px barrel tube),
+use the bright face color for the entire component instead.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 6 — WEAPON COLOR PALETTE AND SIGNATURE FEATURES
+═══════════════════════════════════════════════════════════════════════════════
+
+Colors must visually match the weapon's first-person palette in WeaponHudRenderer.
+
+  Weapon class         ItemType              Primary (R,G,B)       Secondary
+  -----------------------------------------------------------------------
+  Pistol               WEAPON_PISTOL         0.28,0.28,0.30        Near-black grip
+  Shotgun              WEAPON_SHOTGUN        0.28,0.28,0.30        Brown 0.44,0.28,0.12
+  DoubleBarrelShotgun  WEAPON_DOUBLE_BARREL  0.30,0.30,0.32        Dark brown 0.32,0.20,0.10
+  Chaingun             WEAPON_CHAINGUN       Silver 0.66-0.70,     Charcoal 0.16,0.17,0.19
+                                             0.68-0.72,0.72-0.78
+  PlasmaRifle          WEAPON_PLASMA         Dark blue-grey        Bright cyan 0.20,0.86,0.96
+                                             0.14,0.18,0.26
+  Railgun              WEAPON_RAILGUN        Metallic grey         Electric blue 0.20,0.50,1.00
+                                             0.34,0.36,0.40
+  Incinerator          WEAPON_INCINERATOR    Dark grey 0.20,0.20,  Orange 0.95,0.46,0.10
+                                             0.22
+  GrenadeLauncher      WEAPON_ROCKET         Olive 0.28,0.34,0.14  Grey 0.28,0.30,0.34
+
+Signature features:
+  WEAPON_PISTOL         — ejection port: 6x3 px cutout on top-right of slide.
+  WEAPON_SHOTGUN        — long barrel (extends further left) + brown pump grip below barrel.
+  WEAPON_DOUBLE_BARREL  — two parallel 4 px tubes with a 2 px dark gap between them.
+  WEAPON_CHAINGUN       — four stacked 3 px barrel tubes (silver with shade variation).
+  WEAPON_PLASMA         — layered cyan emitter block: 3-4 stacked horizontal bands.
+  WEAPON_RAILGUN        — two blue horizontal rails + 2-3 small arc/spark pixels.
+  WEAPON_INCINERATOR    — orange nozzle rectangle at muzzle + red-brown tank behind body.
+  WEAPON_ROCKET         — wide tube (large bore) + filled circle at muzzle for bore opening.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 7 — CONSTANTS REFERENCE
+═══════════════════════════════════════════════════════════════════════════════
+
+All constants live in WeaponConstants.java unless noted.
+
+  WEAPON_PICKUP_TEXTURE_SIZE           = 64    Pixmap width and height in pixels.
+  WEAPON_PICKUP_HEIGHT_FRACTION        = 0.30f Billboard height as fraction of wall height.
+  WEAPON_PICKUP_BOB_SPEED              = 2.2f  Sine frequency in radians per second.
+  WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION = 0.10f Sine amplitude as fraction of billboard height.
+  WEAPON_PICKUP_PHASE_STEP             = 0.7f  Phase shift per ItemType.ordinal() (radians).
+
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 8 — STEP-BY-STEP: ADDING A NEW WEAPON GROUND SPRITE
+═══════════════════════════════════════════════════════════════════════════════
+
+Follow these steps in order.  Each step is required; skipping any causes either
+a compile error or a silent fallback to the gold-star texture.
+
+  1. ADD ITEM TYPE
+     Add WEAPON_XXX to item/ItemType.java following the existing WEAPON entry
+     pattern.  Set display name, category (WEAPON), and any stack metadata.
+
+  2. WIRE WEAPON CLASS -> ITEM TYPE
+     In World.weaponClassToItemType(), add:
+       case YourWeaponClass weaponInstance -> ItemType.WEAPON_XXX;
+
+  3. WIRE AMMO TYPE
+     In PlayerController.weaponItemTypeToAmmoType(), add a switch case mapping
+     ItemType.WEAPON_XXX to the correct AmmoType (BULLETS, SHELLS, CELLS, etc.).
+
+  4. ADD INVENTORY DESCRIPTION
+     In InventoryOverlayRenderer, add a case for ItemType.WEAPON_XXX in the
+     description switch with a short flavour string (max ~40 chars).
+
+  5. WRITE THE GENERATOR METHOD
+     In PropRenderer.java, add:
+
+       private Texture generateWeaponXxxGroundTexture() {
+           Pixmap pixmap = new Pixmap(WEAPON_PICKUP_TEXTURE_SIZE,
+                                      WEAPON_PICKUP_TEXTURE_SIZE,
+                                      Pixmap.Format.RGBA8888);
+           pixmap.setBlending(Pixmap.Blending.None);
+           // Draw barrel, body, grip, trigger guard, signature feature.
+           // Follow Part 4 layout and Part 5 shading rules.
+           // Use colors from Part 6 for WEAPON_XXX.
+           Texture texture = new Texture(pixmap);
+           pixmap.dispose();
+           return texture;
+       }
+
+  6. REGISTER IN BUILD METHOD
+     In PropRenderer.buildWeaponPickupTextures(), add:
+       map.put(ItemType.WEAPON_XXX, generateWeaponXxxGroundTexture());
+
+  7. VERIFY
+     - Run on desktop launcher (lwjgl3): confirm sprite appears on the ground.
+     - Walk toward it: confirm billboard scales with distance correctly.
+     - Stand still: confirm sine-wave bob is visible and not in sync with
+       nearby pickups (different phase due to ordinal offset).
+     - Colors should match the first-person weapon sprite in WeaponHudRenderer.
+     - Pick it up: confirm it disappears from ground and appears in inventory.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 9 — FALLBACK TEXTURE
+═══════════════════════════════════════════════════════════════════════════════
+
+If ItemType.WEAPON_XXX is not registered in weaponPickupTextures, PropRenderer
+uses genericWeaponFallbackTexture — a gold four-pointed star on a transparent
+background, also generated at startup via Pixmap.
+
+The fallback is intentionally obvious so missing registrations are caught during
+development rather than silently rendering an invisible or wrong sprite.
