@@ -92,6 +92,45 @@ public enum EnemyType {
         @Override public float  heightMultiplier()   { return EnemyConstants.VOID_SHROUD_HEIGHT_MULTIPLIER; }
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_VOID_SHROUD; }
         @Override public String displayName()        { return "Void Shroud"; }
+    },
+
+    // -------------------------------------------------------------------------
+    // Boss archetypes — BossFloorController sets actual scaled HP/damage at spawn;
+    // values here are used for initial Enemy construction and XP budget.
+    // AI is driven by BossAttackPattern, not moveEveryNTurns() / isRanged().
+    // -------------------------------------------------------------------------
+
+    OVERSEER {
+        @Override public int    maxHealth()         { return EnemyConstants.OVERSEER_MAX_HP; }
+        @Override public int    attackDamage()       { return EnemyConstants.OVERSEER_LASER_DAMAGE; }
+        @Override public int    attackRangeTiles()   { return 8; }
+        @Override public int    moveEveryNTurns()    { return 1; }
+        @Override public boolean isRanged()          { return true; }
+        @Override public float  heightMultiplier()   { return 1.80f; }
+        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_BOSS_BASE; }
+        @Override public String displayName()        { return "The Overseer"; }
+    },
+
+    CORRUPTOR {
+        @Override public int    maxHealth()         { return EnemyConstants.CORRUPTOR_MAX_HP; }
+        @Override public int    attackDamage()       { return EnemyConstants.CORRUPTOR_ACID_DAMAGE; }
+        @Override public int    attackRangeTiles()   { return 6; }
+        @Override public int    moveEveryNTurns()    { return 1; }
+        @Override public boolean isRanged()          { return true; }
+        @Override public float  heightMultiplier()   { return 1.60f; }
+        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_BOSS_BASE; }
+        @Override public String displayName()        { return "The Corruptor"; }
+    },
+
+    HELL_BARON {
+        @Override public int    maxHealth()         { return EnemyConstants.HELL_BARON_MAX_HP; }
+        @Override public int    attackDamage()       { return EnemyConstants.HELL_BARON_CLEAVE_DAMAGE_P1; }
+        @Override public int    attackRangeTiles()   { return 3; }
+        @Override public int    moveEveryNTurns()    { return 1; }
+        @Override public boolean isRanged()          { return false; }
+        @Override public float  heightMultiplier()   { return 2.00f; }
+        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_BOSS_BASE; }
+        @Override public String displayName()        { return "Hell Baron"; }
     };
 
     public abstract int     maxHealth();

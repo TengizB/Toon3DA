@@ -148,4 +148,45 @@ public final class EnemyConstants {
     public static final float ENEMY_NAME_TAG_TIER5_R = 1.00f;
     public static final float ENEMY_NAME_TAG_TIER5_G = 0.18f;
     public static final float ENEMY_NAME_TAG_TIER5_B = 0.18f;
+
+    // -------------------------------------------------------------------------
+    // Boss encounter stats
+    // -------------------------------------------------------------------------
+
+    // The Overseer (depth 5) — security core robot; laser lanes + melee charge
+    public static final int OVERSEER_MAX_HP        = 300;
+    public static final int OVERSEER_DEPTH         = 5;
+    public static final int OVERSEER_LASER_DAMAGE  = 20;
+    public static final int OVERSEER_CHARGE_DAMAGE = 30;
+    public static final int OVERSEER_RAM_COOLDOWN  = 3;
+    // Accent color (cyan-white)
+    public static final float OVERSEER_ACCENT_R = 0.60f;
+    public static final float OVERSEER_ACCENT_G = 0.90f;
+    public static final float OVERSEER_ACCENT_B = 1.00f;
+
+    // The Corruptor (depth 10) — mutated scientist; summoner + acid burst
+    public static final int CORRUPTOR_MAX_HP             = 450;
+    public static final int CORRUPTOR_DEPTH              = 10;
+    public static final int CORRUPTOR_SUMMON_COOLDOWN    = 3;
+    public static final int CORRUPTOR_MINION_CAP         = 5;
+    public static final int CORRUPTOR_ACID_DAMAGE        = 15;
+    public static final int CORRUPTOR_ACID_POOL_DURATION = 3;
+    // Accent color (toxic green)
+    public static final float CORRUPTOR_ACCENT_R = 0.40f;
+    public static final float CORRUPTOR_ACCENT_G = 1.00f;
+    public static final float CORRUPTOR_ACCENT_B = 0.10f;
+
+    // Hell Baron (depth 15) — armored greater demon; firewall + enrage
+    public static final int HELL_BARON_MAX_HP               = 700;
+    public static final int HELL_BARON_DEPTH                = 15;
+    public static final int HELL_BARON_FIREWALL_COOLDOWN_P1 = 4;
+    public static final int HELL_BARON_FIREWALL_COOLDOWN_P2 = 2;
+    public static final int HELL_BARON_FIREWALL_DURATION    = 4;
+    public static final int HELL_BARON_FIRE_DAMAGE          = 12;
+    public static final int HELL_BARON_CLEAVE_DAMAGE_P1     = 35;
+    public static final int HELL_BARON_CLEAVE_DAMAGE_P2     = 52;
+    // Accent color (ember orange-red)
+    public static final float HELL_BARON_ACCENT_R = 1.00f;
+    public static final float HELL_BARON_ACCENT_G = 0.30f;
+    public static final float HELL_BARON_ACCENT_B = 0.05f;
 }

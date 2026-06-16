@@ -60,7 +60,7 @@ public class LevelLoader {
             for (int tileColumn = 0; tileColumn < levelWidth; tileColumn++) {
                 char cell = matrix[tileRow][tileColumn];
                 if (cell == '1' || cell == '2' || cell == '3' || cell == '4' || cell == '5'
-                        || cell == '!' || cell == '$' || cell == '^') {
+                        || cell == '!' || cell == '$' || cell == '^' || cell == 'n') {
                     spawnPoints.add(new EnemySpawnPoint(cell, tileColumn, tileRow));
                     matrix[tileRow][tileColumn] = ' ';
                 }
