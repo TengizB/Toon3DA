@@ -882,12 +882,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (standingOn == null || !groundItems.contains(standingOn)) { closeWeaponInspect(); return; }
         AmmoType ammoType = PlayerController.weaponItemTypeToAmmoType(standingOn.stack.getType());
         if (ammoType != null) {
-            int ammoAmount = ammoType.getAmountPerBox();
+            int ammoAmount  = ammoType.getAmountPerBox();
+            int countBefore = itemInventory.countOf(ammoType.getItemType());
             itemInventory.tryAdd(ammoType.getItemType(), ammoAmount);
+            int ammoAdded   = itemInventory.countOf(ammoType.getItemType()) - countBefore;
             if (eventTextSystem != null) {
-                eventTextSystem.spawnWithColor(
-                        "+" + ammoAmount + " " + ammoType.getDisplayName().toUpperCase(),
-                        EventTextSystem.COLOR_GREEN);
+                if (ammoAdded > 0) {
+                    String msg = "+" + ammoAdded + " " + ammoType.getDisplayName().toUpperCase();
+                    if (ammoAdded < ammoAmount) msg += " (INV FULL)";
+                    eventTextSystem.spawnWithColor(msg, EventTextSystem.COLOR_GREEN);
+                } else {
+                    eventTextSystem.spawn("INVENTORY FULL");
+                }
             }
         } else {
             if (eventTextSystem != null) eventTextSystem.spawn("Discarded");

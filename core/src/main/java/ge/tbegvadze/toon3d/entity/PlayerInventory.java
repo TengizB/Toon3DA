@@ -147,7 +147,10 @@ public class PlayerInventory {
             return loadout.active();
         }
 
-        return loadout.active();
+        // Completely empty (no ranged, no melee) — return melee as last resort.
+        // May be null if the melee slot was never initialised (edge-case / test scenario);
+        // callers must guard against null.
+        return meleeWeapon;
     }
 
     /**

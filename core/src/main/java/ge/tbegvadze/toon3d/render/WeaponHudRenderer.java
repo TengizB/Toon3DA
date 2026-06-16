@@ -98,7 +98,14 @@ public class WeaponHudRenderer implements Renderable, Disposable {
             normalTexture = null;
             return;
         }
-        normalTexture       = weaponTextureCache.get(weapon.getClass());
+        normalTexture = weaponTextureCache.get(weapon.getClass());
+        if (normalTexture == null) {
+            // Weapon class not pre-registered — generate and cache its texture now so
+            // the HUD never passes null to batch.draw(). Callers should ideally call
+            // registerAdditionalWeapon() before setEquippedWeapon() for new weapon types.
+            registerAdditionalWeapon(weapon);
+            normalTexture = weaponTextureCache.get(weapon.getClass());
+        }
         previousState       = WeaponVisualState.NORMAL;
         animationTimer      = 0f;
         lastFlashCycleCount = weapon.getFlashCycleCount();

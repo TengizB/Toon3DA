@@ -31,7 +31,6 @@ public final class EnemyConstants {
     public static final int     EYE_TYRANT_MAX_HEALTH            = 18;
     public static final int     EYE_TYRANT_ATTACK_DAMAGE         = 8;
     public static final int     EYE_TYRANT_RANGE_TILES           = 5;
-    public static final int     EYE_TYRANT_KITE_MIN_TILES        = 2;
     public static final float   EYE_TYRANT_HEIGHT_MULTIPLIER     = 0.55f;
     public static final float   EYE_TYRANT_HOVER_OFFSET_FRACTION = 0.25f;
 
