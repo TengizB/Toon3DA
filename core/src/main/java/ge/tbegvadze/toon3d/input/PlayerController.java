@@ -15,6 +15,7 @@ import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemType;
+import ge.tbegvadze.toon3d.level.FogOfWarMap;
 import ge.tbegvadze.toon3d.level.KeycardColor;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
@@ -43,6 +44,7 @@ public class PlayerController {
     private LevelTransitionListener transitionListener                = null;
     private TouchInputState         touchInputState                   = null;
     private EventTextSystem         eventTextSystem                   = null;
+    private FogOfWarMap             fogOfWarMap                       = null;
     private Runnable                weaponSwitchCallback              = null;
     private Runnable                inventoryToggleCallback           = null;
     private Runnable                inspectWeaponCallback             = null;
@@ -92,6 +94,10 @@ public class PlayerController {
 
     public void setEventTextSystem(EventTextSystem system) {
         this.eventTextSystem = system;
+    }
+
+    public void setFogOfWarMap(FogOfWarMap map) {
+        this.fogOfWarMap = map;
     }
 
     public void setTouchInputState(TouchInputState state) {
@@ -178,6 +184,7 @@ public class PlayerController {
             pickUpAmmoIfPresent(settledTileColumn, settledTileRow);
             pickUpWeaponGroundItemIfPresent(settledTileColumn, settledTileRow);
             checkStairsDescentIfPresent(settledTileColumn, settledTileRow);
+            if (fogOfWarMap != null) fogOfWarMap.revealRoom(settledTileColumn, settledTileRow, level);
             finishAction(true, TickCause.MOVE);
         }
     }

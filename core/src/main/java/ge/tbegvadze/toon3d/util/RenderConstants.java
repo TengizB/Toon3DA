@@ -28,6 +28,11 @@ public final class RenderConstants {
     public static final float DOOR_MINIMAP_OPEN_G   = 0.80f;
     public static final float DOOR_MINIMAP_OPEN_B   = 0.85f;
 
+    // Fog of war — unexplored tile colour on the mini-map
+    public static final float FOG_MINIMAP_UNEXPLORED_R = 0.08f;
+    public static final float FOG_MINIMAP_UNEXPLORED_G = 0.08f;
+    public static final float FOG_MINIMAP_UNEXPLORED_B = 0.08f;
+
     // Keycard door glow — ambient colour tint for walls near locked doors
     public static final int   KEYCARD_DOOR_GLOW_RADIUS_TILES = 3;
     public static final float KEYCARD_DOOR_GLOW_INTENSITY    = 0.25f;

@@ -8,6 +8,7 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.door.DoorState;
 import ge.tbegvadze.toon3d.item.GroundItem;
+import ge.tbegvadze.toon3d.level.FogOfWarMap;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.GameMath;
 
@@ -34,11 +35,16 @@ public class LevelRenderer implements Renderable, Disposable {
     private float playerWorldX = 0f;
     private float playerWorldY = 0f;
     private List<GroundItem> groundItems = Collections.emptyList();
+    private FogOfWarMap fogOfWarMap = null;
 
     public LevelRenderer(Level level, DoorManager doorManager) {
         this.level       = level;
         this.doorManager = doorManager;
         this.shapes      = new ShapeRenderer();
+    }
+
+    public void setFogOfWarMap(FogOfWarMap map) {
+        this.fogOfWarMap = map;
     }
 
     public void setPlayerWorldPosition(float worldX, float worldY) {
@@ -67,21 +73,36 @@ public class LevelRenderer implements Renderable, Disposable {
         float miniMapRight   = MINI_MAP_ORIGIN_X + MINI_MAP_WORLD_SIZE;
         float miniMapTop     = MINI_MAP_ORIGIN_Y + MINI_MAP_WORLD_SIZE;
 
-        // Filled pass — walls, doors, and weapon pickup dots clipped to mini-map bounds
+        // Filled pass — fog of war, walls, doors, and weapon pickup dots clipped to mini-map bounds
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         for (int deltaRow = -RENDER_TILE_RADIUS; deltaRow <= RENDER_TILE_RADIUS; deltaRow++) {
             for (int deltaColumn = -RENDER_TILE_RADIUS; deltaColumn <= RENDER_TILE_RADIUS; deltaColumn++) {
                 int levelColumn = baseTileColumn + deltaColumn;
                 int levelRow    = baseTileRow    + deltaRow;
-                char cell = level.getCell(levelColumn, levelRow);
 
+                float tileLeft   = miniMapCenterX - subTileOffsetX + deltaColumn * MINI_MAP_CELL_SIZE;
+                float tileBottom = miniMapCenterY - subTileOffsetY + deltaRow    * MINI_MAP_CELL_SIZE;
+                float clippedLeft   = Math.max(miniMapLeft,   tileLeft);
+                float clippedBottom = Math.max(miniMapBottom, tileBottom);
+                float clippedRight  = Math.min(miniMapRight,  tileLeft   + MINI_MAP_CELL_SIZE);
+                float clippedTop    = Math.min(miniMapTop,    tileBottom + MINI_MAP_CELL_SIZE);
+                if (clippedRight <= clippedLeft || clippedTop <= clippedBottom) continue;
+
+                if (fogOfWarMap != null && !fogOfWarMap.isRevealed(levelColumn, levelRow)) {
+                    shapes.setColor(FOG_MINIMAP_UNEXPLORED_R, FOG_MINIMAP_UNEXPLORED_G,
+                                    FOG_MINIMAP_UNEXPLORED_B, 1f);
+                    shapes.rect(clippedLeft, clippedBottom,
+                                clippedRight - clippedLeft, clippedTop - clippedBottom);
+                    continue;
+                }
+
+                char cell = level.getCell(levelColumn, levelRow);
                 if (Level.isWall(cell)) {
                     shapes.setColor(WALL_COLOR);
                 } else if (Level.isDoor(cell)) {
                     DoorState doorState = doorManager.getStateAt(levelColumn, levelRow);
                     if (doorState == DoorState.OPEN) continue; // Open doorway shows as floor
                     float openFraction = doorManager.getOpenFractionAt(levelColumn, levelRow);
-                    // Lerp between closed steel and open cyan colour based on open fraction.
                     shapes.setColor(
                             GameMath.lerp(DOOR_MINIMAP_CLOSED_R, DOOR_MINIMAP_OPEN_R, openFraction),
                             GameMath.lerp(DOOR_MINIMAP_CLOSED_G, DOOR_MINIMAP_OPEN_G, openFraction),
@@ -90,25 +111,17 @@ public class LevelRenderer implements Renderable, Disposable {
                 } else {
                     continue;
                 }
-
-                float tileLeft   = miniMapCenterX - subTileOffsetX + deltaColumn * MINI_MAP_CELL_SIZE;
-                float tileBottom = miniMapCenterY - subTileOffsetY + deltaRow    * MINI_MAP_CELL_SIZE;
-                float clippedLeft   = Math.max(miniMapLeft,   tileLeft);
-                float clippedBottom = Math.max(miniMapBottom, tileBottom);
-                float clippedRight  = Math.min(miniMapRight,  tileLeft   + MINI_MAP_CELL_SIZE);
-                float clippedTop    = Math.min(miniMapTop,    tileBottom + MINI_MAP_CELL_SIZE);
-                if (clippedRight > clippedLeft && clippedTop > clippedBottom) {
-                    shapes.rect(clippedLeft, clippedBottom,
-                                clippedRight - clippedLeft, clippedTop - clippedBottom);
-                }
+                shapes.rect(clippedLeft, clippedBottom,
+                            clippedRight - clippedLeft, clippedTop - clippedBottom);
             }
         }
 
-        // Weapon pickup dots — gold dot centred in each tile that holds a ground item
+        // Weapon pickup dots — gold dot centred in each revealed tile that holds a ground item
         shapes.setColor(WEAPON_DOT_COLOR);
         float dotSize = MINI_MAP_CELL_SIZE * 0.45f;
         for (int itemIndex = 0; itemIndex < groundItems.size(); itemIndex++) {
             GroundItem item = groundItems.get(itemIndex);
+            if (fogOfWarMap != null && !fogOfWarMap.isRevealed(item.tileColumn, item.tileRow)) continue;
             int deltaColumn = item.tileColumn - baseTileColumn;
             int deltaRow    = item.tileRow    - baseTileRow;
             float tileLeft   = miniMapCenterX - subTileOffsetX + deltaColumn * MINI_MAP_CELL_SIZE;

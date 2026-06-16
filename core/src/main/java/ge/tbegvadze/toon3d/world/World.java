@@ -30,6 +30,7 @@ import ge.tbegvadze.toon3d.entity.boss.OverseerPhase1Pattern;
 import ge.tbegvadze.toon3d.entity.boss.OverseerPhase2Pattern;
 import ge.tbegvadze.toon3d.level.BossArenaGenerator;
 import ge.tbegvadze.toon3d.level.CavernGenerator;
+import ge.tbegvadze.toon3d.level.FogOfWarMap;
 import ge.tbegvadze.toon3d.level.ILevelGenerator;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
@@ -408,7 +409,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         propRenderer.setGroundItems(groundItems);
         levelRenderer.setGroundItems(groundItems);
 
+        FogOfWarMap fogOfWarMap = new FogOfWarMap(targetLevel.getWidth(), targetLevel.getHeight());
+        int startTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
+        int startTileRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
+        fogOfWarMap.revealRoom(startTileColumn, startTileRow, targetLevel);
+        levelRenderer.setFogOfWarMap(fogOfWarMap);
+
         playerController = new PlayerController(player, targetLevel, doorManager, inventory);
+        playerController.setFogOfWarMap(fogOfWarMap);
         playerController.setEnemyManager(enemyManager);
         playerController.setBarrelHitTarget(explosiveBarrelManager);
         playerController.setTickEventBus(tickEventBus);
