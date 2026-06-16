@@ -429,7 +429,16 @@ public class PropRenderer implements Renderable, Disposable {
             int columnSpan        = rightScreenColumn - leftScreenColumn;
             if (columnSpan <= 0) continue;
 
-            float drawBottom    = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
+            float dynamicBobOffset = 0f;
+            if (Level.isMedicalPickup(prop.propChar)
+                    || Level.isArmourPickup(prop.propChar)
+                    || Level.isAmmoPickup(prop.propChar)) {
+                float bobPhase = prop.propChar * PICKUP_ITEM_BOB_PHASE_STEP;
+                dynamicBobOffset = GameMath.pickupBobOffset(lightingTimeSeconds,
+                        PICKUP_ITEM_BOB_SPEED, PICKUP_ITEM_BOB_AMPLITUDE_FRACTION,
+                        bobPhase, spriteScreenHeight);
+            }
+            float drawBottom    = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight) + dynamicBobOffset;
             float drawTop       = drawBottom + spriteScreenHeight;
             float clampedBottom = Math.max(0f, drawBottom);
             float clampedTop    = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, drawTop);

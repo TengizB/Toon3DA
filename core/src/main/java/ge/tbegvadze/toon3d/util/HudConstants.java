@@ -72,6 +72,7 @@ public final class HudConstants {
     public static final float WEAPON_INSPECT_PANEL_ALPHA     = 0.92f;
     public static final float WEAPON_INSPECT_BUTTON_WIDTH    = 200f;
     public static final float WEAPON_INSPECT_BUTTON_HEIGHT   = 54f;
+    public static final float WEAPON_INSPECT_FONT_SCALE      = 1.8f;
     // Ground-weapon name label — centred in the HUD gap, just above the chrome
     public static final float WEAPON_NAME_LABEL_Y            = 224f;  // HUD_HEIGHT + 18
     // Stat bar normalisers — only affect visual fill, not game logic

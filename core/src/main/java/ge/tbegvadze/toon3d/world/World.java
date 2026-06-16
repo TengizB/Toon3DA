@@ -805,7 +805,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (standingOn == null || !groundItems.contains(standingOn)) return;
         if (touchInputState != null) touchInputState.resetAllButtonStates();
         Weapon groundWeapon = playerController.findWeaponInArsenalForType(standingOn.stack.getType());
-        Weapon activeWeapon = inventory.getEquippedWeapon();
+        // Use the active ranged slot, not getEquippedWeapon(), so that when the player
+        // has melee selected the ACTIVE column shows their ranged weapon (or "none") rather
+        // than confusing melee stats that are incomparable to a ranged gun.
+        Weapon activeWeapon = inventory.getLoadout().active();
         weaponInspectOverlayRenderer.setFacilityTime(facilityTimeSeconds);
         weaponInspectOverlayRenderer.show(standingOn, groundWeapon, activeWeapon, inventory.getLoadout());
         runPhase = RunPhase.WEAPON_INSPECT;
@@ -830,6 +833,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (weapon == null) { closeWeaponInspect(); return; }
         groundItems.remove(standingOn);
         inventory.getLoadout().tryEquip(weapon);
+        inventory.selectRangedActive();
         weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
         playerController.clearStandingOnWeapon();
         if (eventTextSystem != null) {
@@ -857,6 +861,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (eventTextSystem != null) eventTextSystem.spawn("DROPPED: " + evicted.getDisplayName());
         }
         inventory.getLoadout().tryEquip(newWeapon);
+        inventory.selectRangedActive();
         weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
         groundItems.remove(standingOn);
         playerController.clearStandingOnWeapon();

@@ -160,6 +160,15 @@ public class PlayerInventory {
         meleeSelected  = false;
     }
 
+    /**
+     * Switches away from melee selection so the active ranged loadout slot becomes the
+     * equipped weapon. Called after the player takes or swaps in a new ranged weapon so
+     * the HUD and fire action reflect the newly equipped gun immediately.
+     */
+    public void selectRangedActive() {
+        meleeSelected = false;
+    }
+
     /** Provides direct access to the loadout for slot-selection UI and input handling. */
     public Loadout getLoadout() { return loadout; }
 

@@ -122,6 +122,7 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         shapeRenderer = new ShapeRenderer();
         spriteBatch   = new SpriteBatch();
         font          = new BitmapFont();
+        font.getData().setScale(HudConstants.WEAPON_INSPECT_FONT_SCALE);
         glyphLayout   = new GlyphLayout();
     }
 
