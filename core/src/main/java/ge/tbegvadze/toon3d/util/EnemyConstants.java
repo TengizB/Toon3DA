@@ -19,7 +19,7 @@ public final class EnemyConstants {
     public static final float   ENEMY_AMMO_DROP_CHANCE           = 0.30f;
     public static final int     ALERT_RADIUS_TILES               = 4;
     public static final int     CHAIN_ALERT_RADIUS_TILES         = 5;
-    public static final int     LOS_MAX_RANGE_TILES              = 16;
+    public static final int     LOS_MAX_RANGE_TILES              = 8;
 
     // PLAGUE_HULK — slow tank melee (spawn '1')
     public static final int     PLAGUE_HULK_MAX_HEALTH           = 60;

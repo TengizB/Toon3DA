@@ -31,7 +31,7 @@ See docs/tick-system.txt for the full tick architecture.
 ### Phase A — Perception
 For every DORMANT enemy:
   - Chebyshev distance to player <= ALERT_RADIUS_TILES (4) → alert immediately.
-  - OR Chebyshev <= LOS_MAX_RANGE_TILES (16) AND hasLineOfSight → alert.
+  - OR Chebyshev <= LOS_MAX_RANGE_TILES (8) AND hasLineOfSight → alert.
 
 ### Phase A2 — Chain Alert (BFS)
 Newly alerted enemies propagate wakeup to DORMANT enemies within
@@ -99,7 +99,7 @@ GameMath.tileLineOfSightClear(fromColumn, fromRow, toColumn, toRow, solidTest):
     - Level.isPropSolid(cell) (lockers, terminals, barrels, crates).
   Decals and floor-light tiles are transparent.
 
-Pre-check: if Chebyshev > LOS_MAX_RANGE_TILES (16), return false without walking.
+Pre-check: if Chebyshev > LOS_MAX_RANGE_TILES (8), return false without walking.
 
 ## Level Placement
 
@@ -175,7 +175,7 @@ EnemyRenderer (render/EnemyRenderer.java):
 
   ENEMY_CORRUPTOR_PATH / ENEMY_VORTEX_EYE_PATH
   ALERT_RADIUS_TILES (4)         CHAIN_ALERT_RADIUS_TILES (5)
-  LOS_MAX_RANGE_TILES (16)       PLAYER_MAX_HEALTH (100)
+  LOS_MAX_RANGE_TILES (8)        PLAYER_MAX_HEALTH (100)
   CORRUPTOR_MAX_HEALTH (60)      CORRUPTOR_ATTACK_DAMAGE (14)
   CORRUPTOR_MOVE_EVERY_N_TURNS (2)  CORRUPTOR_HEIGHT_MULTIPLIER (0.95)
   VORTEX_EYE_MAX_HEALTH (18)    VORTEX_EYE_ATTACK_DAMAGE (8)
