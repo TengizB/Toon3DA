@@ -57,4 +57,14 @@ public final class Constants {
 
     // Tick event bus — fixed subscriber capacity; generous ceiling for future systems
     public static final int MAX_TICK_SUBSCRIBERS = 16;
+
+    // Boss floor system — every BOSS_FLOOR_INTERVAL-th floor is a boss arena
+    public static final int   BOSS_FLOOR_INTERVAL         = 5;
+    public static final float BOSS_PHASE2_HP_THRESHOLD    = 0.50f;
+    public static final int   BOSS_PHASE_TRANSITION_TURNS = 1;
+    public static final float BOSS_INTRO_DURATION_SECONDS = 2.5f;
+    public static final float BOSS_DEPTH_HP_SCALE         = 0.20f;
+    public static final float BOSS_DEPTH_DAMAGE_SCALE     = 0.12f;
+    // Proximity distance (Chebyshev) at which the player triggers the boss to awaken
+    public static final int   BOSS_AWAKEN_RADIUS_TILES    = 12;
 }

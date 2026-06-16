@@ -104,19 +104,20 @@ ENEMY SPAWN MARKERS (temporary — extracted by LevelLoader, then replaced with 
 !   Iron Stalker spawn    Armored elite melee. Floors 5-10+. Use sparingly — 1-2 per level.
 $   Acid Drone spawn      Ranged mechanical. Floors 3-9.
 ^   Void Shroud spawn     Fast stealth melee. Floors 3-10.
+n   Boss spawn (depth-keyed)  Replaced at load time with floor ' '; BossFloorController seeds the correct boss based on World.currentDepth. Exactly one per boss-floor arena.
 
 ---
 
 SYMBOL BUDGET
 -------------
 Total printable ASCII characters: 95  (codes 32-126)
-Currently assigned:               67
-Remaining:                        28
+Currently assigned:               68
+Remaining:                        27
 
 Free characters (not yet assigned):
 " _ ` ~ | { } [ ] \ / < > ( ) * - + (some already used — check above)
 Uppercase: K V  (D F I J W taken; Z taken as cryo; check walls/doors above)
-Lowercase: i n o q z  (e j taken)
+Lowercase: i o q z  (e j n taken)
 
 PREFERRED SYMBOLS FOR NEW ADDITIONS
 ------------------------------------

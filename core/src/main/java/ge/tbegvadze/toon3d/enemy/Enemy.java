@@ -11,7 +11,7 @@ import ge.tbegvadze.toon3d.util.EnemyConstants;
 import java.util.EnumMap;
 
 /** Runtime state for a single enemy instance. Pure data + lightweight behavior helpers. */
-public final class Enemy implements StatusHost {
+public class Enemy implements StatusHost {
 
     public final EnemyType type;
 

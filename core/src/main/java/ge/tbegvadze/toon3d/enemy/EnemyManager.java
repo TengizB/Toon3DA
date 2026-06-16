@@ -124,6 +124,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 case '!': type = EnemyType.IRON_STALKER;  break;
                 case '$': type = EnemyType.ACID_DRONE;    break;
                 case '^': type = EnemyType.VOID_SHROUD;   break;
+                case 'n': continue; // Boss spawn — BossFloorController seeds the correct boss by depth
                 default:  type = EnemyType.PLAGUE_HULK;   break;
             }
             // Small chance to spawn a lower-level enemy for variety at higher depths.
@@ -224,6 +225,32 @@ public final class EnemyManager implements EnemyHitTarget {
     /** Read-only view of the live enemy list; used by EnemyRenderer each frame. */
     public List<Enemy> getEnemies() {
         return enemies;
+    }
+
+    /**
+     * Spawns a new enemy of the given type at the specified tile.
+     * Used by BossFloorController to summon minions during boss encounters.
+     * Stats are scaled using the supplied dungeonDepth.
+     * No-op if the tile is out of bounds, already occupied, or blocked.
+     */
+    public void spawnEnemy(EnemyType type, int tileColumn, int tileRow, int dungeonDepth) {
+        if (tileColumn < 0 || tileColumn >= level.getWidth())  return;
+        if (tileRow    < 0 || tileRow    >= level.getHeight()) return;
+        if (level.isBlockedAt(tileColumn, tileRow, doorManager)) return;
+        if (isTileOccupiedByEnemy(tileColumn, tileRow)) return;
+        float healthScale = GameBalance.enemyHealthScaleForDepth(dungeonDepth);
+        float damageScale = GameBalance.enemyDamageScaleForDepth(dungeonDepth);
+        Enemy enemy = new Enemy(type, tileColumn, tileRow);
+        int scaledHealth = Math.max(1, Math.round(type.maxHealth() * healthScale));
+        enemy.maxHealth              = scaledHealth;
+        enemy.health                 = scaledHealth;
+        enemy.attackDamageMultiplier = damageScale;
+        enemy.dungeonLevel           = dungeonDepth;
+        enemy.nameTag                = type.displayName() + " LVL " + dungeonDepth;
+        enemy.setStatusResistance(buildArchetypeResistance(type));
+        enemy.alert();
+        enemies.add(enemy);
+        occupancy[tileColumn][tileRow] = true;
     }
 
     /** True as soon as any enemy has been alerted; drives World.gameState.redAlert. */

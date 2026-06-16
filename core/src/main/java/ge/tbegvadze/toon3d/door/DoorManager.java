@@ -25,6 +25,8 @@ public class DoorManager {
     private final Map<Long, KeycardColor> lockedDoorColors;
     // Set of locked-door keys that the player has permanently unlocked this level.
     private final Set<Long>               unlockedDoors;
+    // Doors locked by BossFloorController for the arena-lock mechanic.
+    private final Set<Long>               arenaLockedDoors;
 
     // Flat per-cell arrays for the render hot path — indexed by (row * snapshotWidth + column).
     // Refreshed in update() after advancing animations; WallRenderer reads these directly.
@@ -36,6 +38,7 @@ public class DoorManager {
         doorsByPackedKey = new HashMap<>();
         lockedDoorColors = new HashMap<>();
         unlockedDoors    = new HashSet<>();
+        arenaLockedDoors = new HashSet<>();
         int levelWidth  = level.getWidth();
         int levelHeight = level.getHeight();
         snapshotWidth        = levelWidth;
@@ -183,13 +186,44 @@ public class DoorManager {
     /**
      * Returns true if the door is OPEN or CLOSING (panel retracted enough to pass through).
      * Locked doors that have not been unlocked are never passable.
+     * Arena-locked doors (locked by BossFloorController) are also impassable.
      */
     public boolean isPassable(int tileColumn, int tileRow) {
         long key = packKey(tileColumn, tileRow);
         if (lockedDoorColors.containsKey(key) && !unlockedDoors.contains(key)) return false;
+        if (arenaLockedDoors.contains(key)) return false;
         Door door = doorsByPackedKey.get(key);
         if (door == null) return false;
         return door.state == DoorState.OPEN || door.state == DoorState.CLOSING;
+    }
+
+    /**
+     * Locks the arena door — forces it CLOSED and prevents the player from opening it.
+     * Called by BossFloorController when the boss awakens.
+     * No-op if no door exists at the given position.
+     */
+    public void lockArenaDoor(int tileColumn, int tileRow) {
+        long key = packKey(tileColumn, tileRow);
+        Door door = doorsByPackedKey.get(key);
+        if (door == null) return;
+        door.state             = DoorState.CLOSED;
+        door.animationProgress = 0f;
+        arenaLockedDoors.add(key);
+        refreshSnapshot();
+    }
+
+    /**
+     * Unlocks the arena door — removes the arena lock so the player can open it normally.
+     * Called by BossFloorController when the boss dies.
+     * No-op if door does not exist or was not arena-locked.
+     */
+    public void unlockArenaDoor(int tileColumn, int tileRow) {
+        arenaLockedDoors.remove(packKey(tileColumn, tileRow));
+    }
+
+    /** Returns true if the door at this position is currently arena-locked by BossFloorController. */
+    public boolean isArenaLocked(int tileColumn, int tileRow) {
+        return arenaLockedDoors.contains(packKey(tileColumn, tileRow));
     }
 
     /**

@@ -46,6 +46,9 @@ public final class GameBalance {
     /** VOID_SHROUD (tile '^') — fast stealth melee; medium XP. */
     public static final int XP_REWARD_VOID_SHROUD   = 12;
 
+    /** Base XP reward for killing any boss (before depth scaling applied by BossFloorController). */
+    public static final int XP_REWARD_BOSS_BASE     = 500;
+
     // =========================================================================
     // XP CURVE — how much XP is needed to reach each next player level
     //

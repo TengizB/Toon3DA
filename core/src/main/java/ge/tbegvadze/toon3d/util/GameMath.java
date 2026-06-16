@@ -1841,4 +1841,57 @@ public final class GameMath {
         int seconds = safeTotalSeconds % 60;
         return minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
     }
+
+    // =========================================================================
+    // WORLD-TO-TILE CONVERSION
+    // =========================================================================
+    /*
+     * Formula: worldToTile
+     * Derivation:
+     *   tileIndex = floor(worldCoord / CELL_SIZE)
+     *   Integer-divides a world-space coordinate by the cell size to get the tile index.
+     *   Uses floor() so negative coordinates give the correct negative tile index.
+     * Edge cases:
+     *   Negative worldCoord produces a negative tile index (typically out of bounds).
+     *   Callers that need in-bounds tiles must clamp the result themselves.
+     */
+    public static int worldToTile(float worldCoord) {
+        return (int) Math.floor(worldCoord / Constants.CELL_SIZE);
+    }
+
+    // =========================================================================
+    // BOSS FLOOR CHECK
+    // =========================================================================
+    /*
+     * Formula: isBossFloor
+     * Derivation:
+     *   depth > 0 AND (depth % BOSS_FLOOR_INTERVAL == 0)
+     *   Depth 0 is the start room — never a boss floor.
+     *   Every BOSS_FLOOR_INTERVAL-th positive floor triggers a boss encounter.
+     * Edge cases:
+     *   depth <= 0 always returns false (start room, pre-game).
+     *   BOSS_FLOOR_INTERVAL must not be zero; Constants guarantees it is 5.
+     */
+    public static boolean isBossFloor(int depth) {
+        return depth > 0 && (depth % Constants.BOSS_FLOOR_INTERVAL == 0);
+    }
+
+    // =========================================================================
+    // BOSS DEPTH-SCALED STAT
+    // =========================================================================
+    /*
+     * Formula: bossDepthScaledStat
+     * Derivation:
+     *   scaledStat = baseStat * (1 + scalePerStep * (depth - firstAppearanceDepth))
+     *   At depth == firstAppearanceDepth the multiplier is 1.0 (base stats unchanged).
+     *   Each floor beyond firstAppearanceDepth adds scalePerStep fraction of baseStat.
+     * Edge cases:
+     *   depth < firstAppearanceDepth returns baseStat unchanged (no negative scaling).
+     *   Returns float — caller uses Math.round() for integer stats.
+     */
+    public static float bossDepthScaledStat(float baseStat, int depth,
+                                            int firstAppearanceDepth, float scalePerStep) {
+        if (depth <= firstAppearanceDepth) return baseStat;
+        return baseStat * (1f + scalePerStep * (depth - firstAppearanceDepth));
+    }
 }

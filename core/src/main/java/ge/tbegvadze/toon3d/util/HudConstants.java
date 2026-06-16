@@ -77,4 +77,26 @@ public final class HudConstants {
     // Stat bar normalisers — only affect visual fill, not game logic
     public static final int   WEAPON_STAT_BAR_MAX_DAMAGE     = 60;
     public static final int   WEAPON_STAT_BAR_MAX_RANGE      = 20;
+
+    // Boss HP bar — rendered across the top of the screen during boss encounters
+    public static final float BOSS_HP_BAR_MARGIN            = 80f;
+    public static final float BOSS_HP_BAR_HEIGHT            = 24f;
+    public static final float BOSS_HP_BAR_ABOVE_GAP         = 4f;   // gap between letterbox base and HP bar top
+    public static final float BOSS_HP_BAR_NAME_GAP          = 4f;   // gap between HP bar top and name baseline
+    public static final float BOSS_LETTERBOX_HEIGHT         = 120f;
+    public static final float BOSS_BANNER_DURATION_SECONDS  = 1.2f;
+    public static final float BOSS_BANNER_FADE_IN_FRACTION  = 0.20f; // first 20% of banner duration fades in
+    public static final float BOSS_BANNER_FADE_OUT_START    = 0.70f; // last 30% fades out
+    // Font scales used by BossHudRenderer
+    public static final float BOSS_INTRO_NAME_FONT_SCALE    = 2.0f;
+    public static final float BOSS_INTRO_EPITHET_FONT_SCALE = 1.2f;
+    public static final float BOSS_HP_NAME_FONT_SCALE       = 0.80f;
+    public static final float BOSS_BANNER_FONT_SCALE        = 1.6f;
+    // Intro letterbox slide-in occupies the first 40% of the total intro duration
+    public static final float BOSS_INTRO_SLIDE_FRACTION     = 0.40f;
+    // Alpha ramp for name text: fully visible after this fraction of the slide duration
+    public static final float BOSS_INTRO_TEXT_RAMP_FRACTION = 0.50f;
+    // Vertical centering offsets inside the letterbox for name/epithet text
+    public static final float BOSS_INTRO_NAME_Y_OFFSET      = 10f;
+    public static final float BOSS_INTRO_EPITHET_Y_GAP      = 6f;
 }
