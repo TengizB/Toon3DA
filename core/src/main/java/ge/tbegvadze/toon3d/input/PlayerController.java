@@ -387,8 +387,14 @@ public class PlayerController {
     }
 
     private void tryHeal() {
-        if (!inventory.hasAnyMedical()) return;
-        if (player.getHealth() >= player.getMaxHealth()) return;
+        if (!inventory.hasAnyMedical()) {
+            if (eventTextSystem != null) eventTextSystem.spawn("NO MEDKITS");
+            return;
+        }
+        if (player.getHealth() >= player.getMaxHealth()) {
+            if (eventTextSystem != null) eventTextSystem.spawn("ALREADY FULL");
+            return;
+        }
         actionState    = ActionState.HEALING;
         actionProgress = 0f;
     }
@@ -553,10 +559,9 @@ public class PlayerController {
             ((Railgun) currentWeapon).resetCharge();
         }
         Weapon nextWeapon = inventory.switchToNextWeapon();
+        if (nextWeapon == null) return;  // no weapon available — do nothing
         if (weaponSwitchCallback != null) weaponSwitchCallback.run();
-        if (eventTextSystem != null && nextWeapon != null) {
-            eventTextSystem.spawn(nextWeapon.getDisplayName());
-        }
+        if (eventTextSystem != null) eventTextSystem.spawn(nextWeapon.getDisplayName());
     }
 
     /**
@@ -608,7 +613,12 @@ public class PlayerController {
 
     private void tryReload() {
         Weapon weapon = inventory.getEquippedWeapon();
-        if (weapon == null || !weapon.requestManualReload()) return;
+        if (weapon == null || weapon.getClipSize() == 0) return;  // null or melee — no reload
+        if (weapon.getShotsInClip() >= weapon.getClipSize()) {
+            if (eventTextSystem != null) eventTextSystem.spawn("CLIP FULL");
+            return;
+        }
+        if (!weapon.requestManualReload()) return;  // already reloading or firing — silent
         actionState    = ActionState.SKIPPING;
         actionProgress = 0f;
     }
