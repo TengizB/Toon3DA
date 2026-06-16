@@ -1,0 +1,245 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Codebase Bug Audit — June 2026
+---
+
+Full codebase audit conducted June 2026. Five subsystems inspected: player
+input/controller, enemy AI, weapon fire/HUD, level/progression/items,
+rendering pipeline. Rendering was clean. Six real bugs found below.
+
+================================================================================
+BUG #1 — HEAL and RELOAD give no feedback when action is unavailable
+FILES:  core/…/input/PlayerController.java  (tryHeal ~line 389, tryReload ~line 609)
+SEV:    HIGH  (confusing UX; player taps button, nothing happens, no explanation)
+================================================================================
+
+PROBLEM:
+  tryHeal() returns early in two cases with zero feedback:
+    a) player has no medkits  (hasAnyMedical() == false)
+    b) player is already at max health
+  tryReload() returns early with zero feedback when:
+    c) weapon is null
+    d) requestManualReload() returns false (clip already full, or already reloading)
+  In all four cases the tap is consumed, no turn is taken, and the player
+  sees nothing. On mobile this feels broken.
+
+FIX:
+  In each early-return path, spawn an EventText message before returning.
+  Use EventTextSystem with a dimmed/grey colour so it doesn't look like a
+  reward, just info.
+
+  tryHeal early-return messages:
+    a) no medkits:     "NO MEDKITS"
+    b) already full:   "ALREADY FULL"
+
+  tryReload early-return messages:
+    d) clip full:      "CLIP FULL"
+       (already reloading is handled by requestManualReload returning false
+        while RELOADING state is active — same message is fine)
+
+  Implementation note: PlayerController already holds a reference to
+  eventTextSystem (set via setEventTextSystem()). Use
+  eventTextSystem.spawn("NO MEDKITS") — the plain white variant is fine.
+  No new fields needed.
+
+ACCEPTANCE CRITERIA:
+  - Tapping HEAL with empty medkit stash shows "NO MEDKITS" in event text.
+  - Tapping HEAL at full health shows "ALREADY FULL".
+  - Tapping RELOAD with a full clip shows "CLIP FULL".
+  - None of these consume a turn.
+  - All messages disappear naturally via EventTextSystem's own timer.
+
+================================================================================
+BUG #2 — switchToNextWeapon() returns null when loadout is empty
+FILES:  core/…/entity/PlayerInventory.java  (switchToNextWeapon lines 113-151)
+        core/…/input/PlayerController.java  (trySwitchWeapon ~line 550)
+SEV:    MEDIUM  (null weapon passed to HUD renderer; downstream NPE risk)
+================================================================================
+
+PROBLEM:
+  switchToNextWeapon() has a fallthrough path that returns loadout.active()
+  when:
+    - meleeSelected == false
+    - all ranged loadout slots are empty
+    - meleeWeapon == null
+  loadout.active() returns null when the active slot is empty, so this
+  method returns null. trySwitchWeapon() in PlayerController calls
+  weaponSwitchCallback, which calls
+  weaponHudRenderer.setEquippedWeapon(null). This sets normalTexture to
+  the result of weaponTextureCache.get(null), which is null, and the next
+  render() call to batch.draw(normalTexture, ...) will crash.
+
+  The null path is rare in normal play (player always has at least a Fist),
+  but it can occur during start-room setup before both weapon choices are
+  made, or in edge-case test scenarios.
+
+FIX:
+  Add a guard at the top of trySwitchWeapon() in PlayerController:
+    if (inventory.getEquippedWeapon() == null
+            && inventory.getMeleeWeapon() == null) return;
+  This prevents the switch action entirely when the player has no weapons
+  at all, rather than propagating null downstream.
+
+  Alternatively (deeper fix): add a null guard in PlayerInventory before
+  the final `return loadout.active()` fallthrough:
+    Weapon fallback = loadout.active();
+    return (fallback != null) ? fallback : meleeWeapon;
+
+ACCEPTANCE CRITERIA:
+  - Tapping SWITCH_WEAPON when loadout is completely empty (no ranged, no
+    melee) does nothing and does not crash.
+  - Tapping SWITCH_WEAPON with only a Fist and no ranged weapon stays on
+    Fist without crashing.
+
+================================================================================
+BUG #3 — WeaponHudRenderer crashes if weapon is not registered in texture cache
+FILES:  core/…/render/WeaponHudRenderer.java  (setEquippedWeapon ~line 101,
+                                                render ~line 2330)
+SEV:    HIGH  (NullPointerException during render; game crashes)
+================================================================================
+
+PROBLEM:
+  setEquippedWeapon(weapon) does:
+    normalTexture = weaponTextureCache.get(weapon.getClass());
+  If weapon.getClass() is not a key in weaponTextureCache (e.g. a melee
+  weapon class, or any new weapon class added without a matching texture
+  registration), normalTexture becomes null.
+
+  render() then calls:
+    batch.draw(normalTexture, drawX, currentOffsetY, ...);
+  LibGDX's SpriteBatch.draw() does not null-check its Texture argument
+  and will throw a NullPointerException.
+
+  Currently the only call sites for setEquippedWeapon() pass values from
+  inventory.getEquippedWeapon(), which after the June 2026 melee-fix
+  should always be a ranged weapon. However the renderer has no internal
+  protection, so any future caller passing a melee weapon or unregistered
+  class will cause a silent crash.
+
+FIX:
+  In setEquippedWeapon(), after the cache lookup, add a null guard:
+    normalTexture = weaponTextureCache.get(weapon.getClass());
+    if (normalTexture == null) {
+        // weapon not registered — use generic fallback texture
+        normalTexture = genericWeaponFallbackTexture;
+    }
+  genericWeaponFallbackTexture already exists in PropRenderer for ground
+  items. WeaponHudRenderer should either share it or maintain its own.
+  Check if WeaponHudRenderer already has a fallback field — if so, use it.
+
+ACCEPTANCE CRITERIA:
+  - Passing any weapon (including melee or unregistered) to
+    setEquippedWeapon() never causes a NullPointerException.
+  - If the texture is missing, the fallback procedural sprite is shown
+    rather than crashing.
+
+================================================================================
+BUG #4 — resolveWeaponConvert() ignores tryAdd() return value; ammo silently lost
+FILES:  core/…/world/World.java  (resolveWeaponConvert ~line 886)
+        core/…/item/Inventory.java  (tryAdd)
+SEV:    MEDIUM  (player loses ammo silently when inventory is full)
+================================================================================
+
+PROBLEM:
+  resolveWeaponConvert() converts a duplicate ground weapon into ammo:
+    itemInventory.tryAdd(ammoType.getItemType(), ammoAmount);
+  The return value (boolean) is ignored. When the item inventory is at cap,
+  tryAdd() fills what space remains and returns false. The overflow ammo is
+  silently discarded and the player sees the event text "+N <AMMO>" even
+  though fewer than N were actually added. The ground item is still removed.
+
+FIX:
+  Capture the return value and show different event text when the add
+  fails or partially fails. Two options:
+
+  Option A (simple): Check return value and show "INVENTORY FULL" suffix.
+    boolean added = itemInventory.tryAdd(ammoType.getItemType(), ammoAmount);
+    String msg = "+" + ammoAmount + " " + ...;
+    if (!added) msg += " (FULL)";
+    eventTextSystem.spawnWithColor(msg, ...);
+
+  Option B (accurate): Count how much was actually added by comparing
+  inventory totals before and after, then show the true amount.
+
+  Option A is simpler and sufficient for player clarity.
+
+ACCEPTANCE CRITERIA:
+  - When inventory is full and the player converts a duplicate weapon,
+    the event text shows the ammo could not be fully added.
+  - No silent item loss; player knows their inventory was full.
+
+================================================================================
+BUG #5 — Dead code: EYE_TYRANT_KITE_MIN_TILES defined but never used
+FILES:  core/…/util/EnemyConstants.java  (line 34)
+        core/…/enemy/EnemyManager.java   (uses RANGED_KITE_MIN_TILES instead)
+SEV:    LOW  (dead code; no functional impact but causes confusion)
+================================================================================
+
+PROBLEM:
+  EnemyConstants defines:
+    public static final int EYE_TYRANT_KITE_MIN_TILES = 2;
+  EnemyManager.java's kiting logic uses RANGED_KITE_MIN_TILES (value also 2)
+  instead. EYE_TYRANT_KITE_MIN_TILES is never referenced anywhere in the
+  codebase. It appears to be a leftover from an early version before the
+  kite constant was generalised.
+
+FIX:
+  Remove EYE_TYRANT_KITE_MIN_TILES from EnemyConstants.java.
+  No other change needed — the kiting logic already uses the correct
+  generalised constant.
+
+ACCEPTANCE CRITERIA:
+  - EYE_TYRANT_KITE_MIN_TILES no longer exists in EnemyConstants.
+  - No other file references it (verify with grep before deleting).
+  - EnemyManager kiting behaviour is unchanged.
+
+================================================================================
+BUGS RULED OUT (audited and found safe)
+================================================================================
+
+The following were investigated and confirmed NOT bugs:
+
+- advanceHealing() health overflow: Player.applyHealing() clamps to maxHealth
+  with Math.min(maxHealth, health + amount). Safe.
+
+- Double-fire tap buffer race: pollInput() only runs in IDLE state; buffered
+  taps are deferred to the next IDLE frame. Safe.
+
+- Enemies attacking through walls: hasLineOfSight() is checked before ranged
+  attack; melee uses Manhattan==1 adjacent-tile check. Safe.
+
+- Dead enemies taking turns: killed enemies checked at start of AI turn loop.
+  Safe.
+
+- Chain alert BFS infinite loop: guarded by isAlerted() check before adding
+  to BFS frontier; already-alerted enemies never re-added. Safe.
+
+- Enemy drops on wall tiles: enemies can only occupy passable tiles, so drops
+  land on passable tiles. Staircase/pickup tiles also guarded before dropping.
+  Safe.
+
+- All SpriteBatch/ShapeRenderer begin()/end() pairs: verified matched across
+  all renderers. Safe.
+
+- All Disposable resources: every Texture, SpriteBatch, ShapeRenderer, and
+  BitmapFont is disposed in the appropriate dispose() method. Safe.
+
+- propSpriteZBuffer reset: reset to Float.MAX_VALUE each frame before prop
+  pass. Safe.
+
+- Inventory tryAdd() silent drop: correctly returns false; callers in the
+  pickup path (not convert path) check the return value. Partial bug only in
+  resolveWeaponConvert (Bug #4 above).
+
+- XP integer overflow: theoretical only; requires millions of kills.
+  Not a practical bug.
+
+================================================================================
+PRIORITY ORDER FOR FIXING
+================================================================================
+
+1. BUG #3 — WeaponHudRenderer null texture crash          (HIGH, defensive fix)
+2. BUG #1 — Heal/Reload silent fail, no feedback          (HIGH, UX)
+3. BUG #4 — resolveWeaponConvert silent ammo loss         (MEDIUM)
+4. BUG #2 — switchToNextWeapon null on empty loadout      (MEDIUM, defensive)
+5. BUG #5 — Dead code EYE_TYRANT_KITE_MIN_TILES          (LOW, cleanup)
