@@ -2,7 +2,7 @@ package ge.tbegvadze.toon3d.entity.boss;
 
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.entity.Player;
-<br>import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
 
 /**
