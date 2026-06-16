@@ -20,6 +20,15 @@ import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.item.AmmoType;
+import ge.tbegvadze.toon3d.entity.boss.Boss;
+import ge.tbegvadze.toon3d.entity.boss.BossAttackPattern;
+import ge.tbegvadze.toon3d.entity.boss.CorruptorPhase1Pattern;
+import ge.tbegvadze.toon3d.entity.boss.CorruptorPhase2Pattern;
+import ge.tbegvadze.toon3d.entity.boss.HellBaronPhase1Pattern;
+import ge.tbegvadze.toon3d.entity.boss.HellBaronPhase2Pattern;
+import ge.tbegvadze.toon3d.entity.boss.OverseerPhase1Pattern;
+import ge.tbegvadze.toon3d.entity.boss.OverseerPhase2Pattern;
+import ge.tbegvadze.toon3d.level.BossArenaGenerator;
 import ge.tbegvadze.toon3d.level.CavernGenerator;
 import ge.tbegvadze.toon3d.level.ILevelGenerator;
 import ge.tbegvadze.toon3d.level.Level;
@@ -28,6 +37,7 @@ import ge.tbegvadze.toon3d.level.LinearCorridorGenerator;
 import ge.tbegvadze.toon3d.level.LevelLoader;
 import ge.tbegvadze.toon3d.level.StartGameLevelGenerator;
 import ge.tbegvadze.toon3d.level.WeaponSpawnPoint;
+import ge.tbegvadze.toon3d.render.BossHudRenderer;
 import ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer;
 import ge.tbegvadze.toon3d.progression.LevelUpReward;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
@@ -42,6 +52,8 @@ import ge.tbegvadze.toon3d.util.StatsStore;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
 import ge.tbegvadze.toon3d.util.ProgressionConstants;
+import ge.tbegvadze.toon3d.enemy.EnemyType;
+import ge.tbegvadze.toon3d.util.EnemyConstants;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
@@ -87,6 +99,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private ExplosiveBarrelManager explosiveBarrelManager;
     private TickEventBus           tickEventBus;
     private PlayerController       playerController;
+    // Boss encounter — null on non-boss floors
+    private BossFloorController    bossFloorController;
+    private BossHudRenderer        bossHudRenderer;
 
     // -------------------------------------------------------------------------
     // Transition state
@@ -316,6 +331,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyRenderer.dispose();
         enemyAttackEffectSystem.dispose();
         levelRenderer.dispose();
+        if (bossHudRenderer != null) { bossHudRenderer.dispose(); bossHudRenderer = null; }
+        bossFloorController = null;
 
         // Reposition player at the new spawn point before rebuilding systems so
         // any system that reads player position during init sees the correct tile.
@@ -364,6 +381,22 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         tickEventBus = new TickEventBus();
         tickEventBus.subscribe(new WeaponReloadSubscriber(inventory));
         tickEventBus.subscribe(new StatusEffectSubscriber(statusEffectController, player, enemyManager));
+
+        // Boss encounter — wired before EnemyTurnSubscriber so the boss acts first each turn.
+        bossFloorController = null;
+        bossHudRenderer     = null;
+        if (GameMath.isBossFloor(currentDepth)) {
+            Boss boss = createBossForDepth(currentDepth);
+            if (boss != null) {
+                enemyManager.addBoss(boss);
+                bossHudRenderer     = new BossHudRenderer();
+                bossHudRenderer.setBoss(boss);
+                bossFloorController = new BossFloorController(boss, targetLevel, doorManager,
+                        enemyManager, bossHudRenderer, eventTextSystem);
+                tickEventBus.subscribe(bossFloorController);
+            }
+        }
+
         tickEventBus.subscribe(new EnemyTurnSubscriber(enemyManager, gameState));
 
         // Build ground items from weapon spawn points placed by the level generator.
@@ -450,11 +483,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     startRoomMeleeWeapons        = null;
                     startRoomMeleeGroundItems    = null;
                     runStats.recordFloor(currentDepth);
-                    rebuildForLevel(pickGenerator(floorSeed(runSeed, currentDepth)).generate());
+                    rebuildForLevel(pickLevelGenerator(currentDepth, floorSeed(runSeed, currentDepth)).generate());
                 } else {
                     currentDepth++;
                     runStats.recordFloor(currentDepth);
-                    rebuildForLevel(pickGenerator(floorSeed(runSeed, currentDepth)).generate());
+                    rebuildForLevel(pickLevelGenerator(currentDepth, floorSeed(runSeed, currentDepth)).generate());
                 }
                 fadeTimerSeconds = 0f;
                 runPhase = RunPhase.FADING_IN;
@@ -556,6 +589,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         impactEffectSystem.update(deltaTime);
         eventTextSystem.update(deltaTime);
         hitVignetteRenderer.update(deltaTime);
+        if (bossHudRenderer != null) bossHudRenderer.update(deltaTime);
 
         // Transition to level-up overlay as soon as XP threshold is crossed
         if (playerProgress.hasPendingLevelUp() && !player.isDead()) {
@@ -667,6 +701,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // Event text: rising screen-space text drawn above HUD but below the fade overlay.
         eventTextRenderer.render(camera);
+        if (bossHudRenderer != null) bossHudRenderer.render(camera);
 
         // Inventory overlay — drawn above HUD and event text, below fade/death overlays.
         if (runPhase == RunPhase.INVENTORY_OPEN) {
@@ -727,6 +762,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         statusEffectVignetteRenderer.dispose();
         if (touchControllerRenderer != null) touchControllerRenderer.dispose();
         deathOverlayRenderer.dispose();
+        if (bossHudRenderer != null) { bossHudRenderer.dispose(); bossHudRenderer = null; }
         player.dispose();
     }
 
@@ -908,6 +944,64 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             case 0:  return new LevelGenerator(seed);
             case 1:  return new LinearCorridorGenerator(seed);
             default: return new CavernGenerator(seed);
+        }
+    }
+
+    private static ILevelGenerator pickLevelGenerator(int depth, long seed) {
+        if (GameMath.isBossFloor(depth)) return new BossArenaGenerator();
+        return pickGenerator(seed);
+    }
+
+    private static Boss createBossForDepth(int depth) {
+        int bossIndex   = ((depth / Constants.BOSS_FLOOR_INTERVAL) - 1) % 3;
+        int spawnColumn = BossArenaGenerator.getBossSpawnColumn();
+        int spawnRow    = BossArenaGenerator.getBossSpawnRow();
+        switch (bossIndex) {
+            case 0: {
+                int scaledHp = Math.round(GameMath.bossDepthScaledStat(
+                        EnemyConstants.OVERSEER_MAX_HP, depth,
+                        EnemyConstants.OVERSEER_DEPTH, Constants.BOSS_DEPTH_HP_SCALE));
+                Boss overseer = new Boss(EnemyType.OVERSEER, spawnColumn, spawnRow,
+                        "The Overseer", "Eye of the Abyss", "OVERSEER DESTROYED",
+                        EnemyConstants.OVERSEER_ACCENT_R, EnemyConstants.OVERSEER_ACCENT_G,
+                        EnemyConstants.OVERSEER_ACCENT_B, 1.80f,
+                        new OverseerPhase1Pattern(), new OverseerPhase2Pattern());
+                overseer.maxHealth    = scaledHp;
+                overseer.health       = scaledHp;
+                overseer.dungeonLevel = depth;
+                overseer.nameTag      = "The Overseer LVL " + depth;
+                return overseer;
+            }
+            case 1: {
+                int scaledHp = Math.round(GameMath.bossDepthScaledStat(
+                        EnemyConstants.CORRUPTOR_MAX_HP, depth,
+                        EnemyConstants.CORRUPTOR_DEPTH, Constants.BOSS_DEPTH_HP_SCALE));
+                Boss corruptor = new Boss(EnemyType.CORRUPTOR, spawnColumn, spawnRow,
+                        "The Corruptor", "Herald of Decay", "CORRUPTOR PURGED",
+                        EnemyConstants.CORRUPTOR_ACCENT_R, EnemyConstants.CORRUPTOR_ACCENT_G,
+                        EnemyConstants.CORRUPTOR_ACCENT_B, 1.60f,
+                        new CorruptorPhase1Pattern(), new CorruptorPhase2Pattern());
+                corruptor.maxHealth    = scaledHp;
+                corruptor.health       = scaledHp;
+                corruptor.dungeonLevel = depth;
+                corruptor.nameTag      = "The Corruptor LVL " + depth;
+                return corruptor;
+            }
+            default: {
+                int scaledHp = Math.round(GameMath.bossDepthScaledStat(
+                        EnemyConstants.HELL_BARON_MAX_HP, depth,
+                        EnemyConstants.HELL_BARON_DEPTH, Constants.BOSS_DEPTH_HP_SCALE));
+                Boss hellBaron = new Boss(EnemyType.HELL_BARON, spawnColumn, spawnRow,
+                        "Hell Baron", "Lord of Flame", "HELL BARON FALLS",
+                        EnemyConstants.HELL_BARON_ACCENT_R, EnemyConstants.HELL_BARON_ACCENT_G,
+                        EnemyConstants.HELL_BARON_ACCENT_B, 2.00f,
+                        new HellBaronPhase1Pattern(), new HellBaronPhase2Pattern());
+                hellBaron.maxHealth    = scaledHp;
+                hellBaron.health       = scaledHp;
+                hellBaron.dungeonLevel = depth;
+                hellBaron.nameTag      = "Hell Baron LVL " + depth;
+                return hellBaron;
+            }
         }
     }
 

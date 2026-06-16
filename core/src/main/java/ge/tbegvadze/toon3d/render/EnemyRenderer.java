@@ -94,7 +94,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.enemyManager        = enemyManager;
         this.wallRenderer        = wallRenderer;
         int initialCount         = enemyManager.getEnemies().size();
-        int scratchSize          = Math.max(1, initialCount);
+        // Allocate at least CORRUPTOR_MINION_CAP + 2 slots so boss fights (boss + minions)
+        // never overflow the sort/bar scratch arrays when enemies are added mid-floor.
+        int scratchSize          = Math.max(CORRUPTOR_MINION_CAP + 2, initialCount);
         this.sortedIndices       = new int[scratchSize];
         this.sortedDepths        = new float[scratchSize];
         this.barLeftPositions    = new float[scratchSize];
@@ -517,6 +519,13 @@ public final class EnemyRenderer implements Renderable, Disposable {
         map.put(EnemyType.SHELL_BRUTE,  new TextureRegion(infernalSheet, infernalHalfW, 0,            infernalHalfW, infernalHalfH));
         map.put(EnemyType.ACID_DRONE,   new TextureRegion(infernalSheet, 0,            infernalHalfH, infernalHalfW, infernalHalfH));
         map.put(EnemyType.VOID_SHROUD,  new TextureRegion(infernalSheet, infernalHalfW, infernalHalfH, infernalHalfW, infernalHalfH));
+
+        // Boss types — reuse the blight sheet PLAGUE_HULK region as a placeholder until
+        // dedicated boss texture assets are available.
+        TextureRegion bossPlaceholder = new TextureRegion(blightSheet, 0, 0, blightHalfW, blightHalfH);
+        map.put(EnemyType.OVERSEER,    bossPlaceholder);
+        map.put(EnemyType.CORRUPTOR,   bossPlaceholder);
+        map.put(EnemyType.HELL_BARON,  bossPlaceholder);
 
         return map;
     }

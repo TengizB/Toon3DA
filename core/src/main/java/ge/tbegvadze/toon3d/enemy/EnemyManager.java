@@ -4,6 +4,7 @@ import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.entity.EnemyHitTarget;
 import ge.tbegvadze.toon3d.entity.ImpactEventListener;
 import ge.tbegvadze.toon3d.entity.Loadout;
+import ge.tbegvadze.toon3d.entity.boss.Boss;
 import ge.tbegvadze.toon3d.entity.MeleeWeapon;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.entity.Weapon;
@@ -137,19 +138,24 @@ public final class EnemyManager implements EnemyHitTarget {
                     effectiveDepth = Math.max(1, dungeonDepth - 1);
                 }
             }
-            float healthScale = GameBalance.enemyHealthScaleForDepth(effectiveDepth);
-            float damageScale = GameBalance.enemyDamageScaleForDepth(effectiveDepth);
-            Enemy enemy = new Enemy(type, spawnPoint.tileColumn, spawnPoint.tileRow);
-            int scaledHealth = Math.max(1, Math.round(type.maxHealth() * healthScale));
-            enemy.maxHealth              = scaledHealth;
-            enemy.health                 = scaledHealth;
-            enemy.attackDamageMultiplier = damageScale;
-            enemy.dungeonLevel           = effectiveDepth;
-            enemy.nameTag                = type.displayName() + " LVL " + effectiveDepth;
-            enemy.setStatusResistance(buildArchetypeResistance(type));
-            list.add(enemy);
+            list.add(initScaledEnemy(type, spawnPoint.tileColumn, spawnPoint.tileRow, effectiveDepth));
         }
         return list;
+    }
+
+    /** Creates and fully initialises a depth-scaled Enemy instance. */
+    private static Enemy initScaledEnemy(EnemyType type, int tileColumn, int tileRow, int effectiveDepth) {
+        float healthScale = GameBalance.enemyHealthScaleForDepth(effectiveDepth);
+        float damageScale = GameBalance.enemyDamageScaleForDepth(effectiveDepth);
+        Enemy enemy = new Enemy(type, tileColumn, tileRow);
+        int scaledHealth = Math.max(1, Math.round(type.maxHealth() * healthScale));
+        enemy.maxHealth              = scaledHealth;
+        enemy.health                 = scaledHealth;
+        enemy.attackDamageMultiplier = damageScale;
+        enemy.dungeonLevel           = effectiveDepth;
+        enemy.nameTag                = type.displayName() + " LVL " + effectiveDepth;
+        enemy.setStatusResistance(buildArchetypeResistance(type));
+        return enemy;
     }
 
     /*
@@ -238,16 +244,7 @@ public final class EnemyManager implements EnemyHitTarget {
         if (tileRow    < 0 || tileRow    >= level.getHeight()) return;
         if (level.isBlockedAt(tileColumn, tileRow, doorManager)) return;
         if (isTileOccupiedByEnemy(tileColumn, tileRow)) return;
-        float healthScale = GameBalance.enemyHealthScaleForDepth(dungeonDepth);
-        float damageScale = GameBalance.enemyDamageScaleForDepth(dungeonDepth);
-        Enemy enemy = new Enemy(type, tileColumn, tileRow);
-        int scaledHealth = Math.max(1, Math.round(type.maxHealth() * healthScale));
-        enemy.maxHealth              = scaledHealth;
-        enemy.health                 = scaledHealth;
-        enemy.attackDamageMultiplier = damageScale;
-        enemy.dungeonLevel           = dungeonDepth;
-        enemy.nameTag                = type.displayName() + " LVL " + dungeonDepth;
-        enemy.setStatusResistance(buildArchetypeResistance(type));
+        Enemy enemy = initScaledEnemy(type, tileColumn, tileRow, dungeonDepth);
         enemy.alert();
         enemies.add(enemy);
         occupancy[tileColumn][tileRow] = true;
@@ -392,6 +389,8 @@ public final class EnemyManager implements EnemyHitTarget {
         for (int index = 0; index < enemies.size(); index++) {
             Enemy enemy = enemies.get(index);
             if (!enemy.isAlive() || !enemy.isAlerted()) continue;
+            // Boss AI is driven entirely by BossFloorController; skip it here.
+            if (enemy instanceof Boss) continue;
             if (enemy.skipNextAction) {
                 enemy.skipNextAction = false;
                 enemy.turnCounter++;
@@ -400,6 +399,31 @@ public final class EnemyManager implements EnemyHitTarget {
             enemy.turnCounter++;
             actEnemy(enemy, playerColumn, playerRow, player);
         }
+    }
+
+    /** Returns the total count of live (non-dead) enemies, including the boss if present. */
+    public int countLiveEnemies() {
+        int count = 0;
+        for (int index = 0; index < enemies.size(); index++) {
+            if (enemies.get(index).isAlive()) count++;
+        }
+        return count;
+    }
+
+    /**
+     * Registers an already-constructed Boss into the live enemy list.
+     * Stats (maxHealth, attackDamageMultiplier, nameTag) must be set on the Boss before calling.
+     * Called by World.buildLevelDependentResources() for boss floors; the Boss is then
+     * managed by BossFloorController while EnemyManager handles the regular enemy roster.
+     * No-op if the tile is out of bounds or already occupied.
+     */
+    public void addBoss(Boss boss) {
+        if (boss.tileColumn < 0 || boss.tileColumn >= level.getWidth())  return;
+        if (boss.tileRow    < 0 || boss.tileRow    >= level.getHeight()) return;
+        if (level.isBlockedAt(boss.tileColumn, boss.tileRow, doorManager)) return;
+        if (isTileOccupiedByEnemy(boss.tileColumn, boss.tileRow)) return;
+        enemies.add(boss);
+        occupancy[boss.tileColumn][boss.tileRow] = true;
     }
 
     private void actEnemy(Enemy enemy, int playerColumn, int playerRow, Player player) {
