@@ -172,6 +172,15 @@ public class PlayerInventory {
         meleeSelected = false;
     }
 
+    /**
+     * Switches to melee selection so the melee weapon becomes the equipped weapon.
+     * Called after the player picks up a melee weapon in the start room so the HUD
+     * and fire action reflect the newly equipped melee weapon immediately.
+     */
+    public void selectMeleeActive() {
+        meleeSelected = true;
+    }
+
     /** Provides direct access to the loadout for slot-selection UI and input handling. */
     public Loadout getLoadout() { return loadout; }
 

@@ -1108,6 +1108,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (pickedIndex >= 0) {
                 Weapon chosenWeapon = startRoomWeapons.get(pickedIndex);
                 inventory.getLoadout().tryEquip(chosenWeapon);
+                inventory.selectRangedActive();
                 weaponHudRenderer.setEquippedWeapon(chosenWeapon);
                 addStarterAmmoForWeapon(chosenWeapon);
                 for (int otherIndex = 0; otherIndex < startRoomGroundItems.size(); otherIndex++) {
@@ -1131,7 +1132,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (pickedIndex >= 0) {
                 MeleeWeapon chosenMelee = (MeleeWeapon) startRoomMeleeWeapons.get(pickedIndex);
                 inventory.setMeleeWeapon(chosenMelee);
-                weaponHudRenderer.registerAdditionalWeapon(chosenMelee);
+                inventory.selectMeleeActive();
+                weaponHudRenderer.setEquippedWeapon(chosenMelee);
                 for (int otherIndex = 0; otherIndex < startRoomMeleeGroundItems.size(); otherIndex++) {
                     if (otherIndex != pickedIndex) {
                         groundItems.remove(startRoomMeleeGroundItems.get(otherIndex));
