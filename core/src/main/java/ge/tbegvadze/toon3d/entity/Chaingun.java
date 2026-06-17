@@ -58,6 +58,15 @@ public class Chaingun extends Weapon {
 
     @Override public boolean isMelee() { return false; }
 
+    /**
+     * Chaingun rolls accuracy independently for each bullet in the burst rather than once
+     * for the whole activation, so the pre-march check in Weapon.fire() must be suppressed.
+     */
+    @Override
+    protected boolean isPerPelletAccuracy() {
+        return true;
+    }
+
     /** Requires a full burst worth of ammo so the weapon never fires a partial volley. */
     @Override
     public boolean canFire() {
@@ -129,6 +138,10 @@ public class Chaingun extends Weapon {
                                          int facingStepColumn, int facingStepRow,
                                          Level level, EnemyHitTarget enemyHitTarget,
                                          BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
+        if (!rollHitChance()) {
+            spawnMissText();
+            return FireResult.MISSED;
+        }
         for (int distanceTiles = 1; distanceTiles <= range; distanceTiles++) {
             int targetColumn = playerTileColumn + facingStepColumn * distanceTiles;
             int targetRow    = playerTileRow    + facingStepRow    * distanceTiles;

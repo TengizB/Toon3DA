@@ -1989,6 +1989,23 @@ public final class GameMath {
     }
 
     /*
+     * Formula: Hit chance resolution
+     * Derivation: hitChance = weaponAccuracy * playerAccuracyMultiplier
+     *             clamped to [0, 1].
+     *             Returns true if the shot hits (random() <= hitChance).
+     * Edge cases: accuracy >= 1.0 short-circuits to true (never allocates a random call).
+     *             accuracy <= 0.0 always misses.
+     */
+    public static boolean resolveHitChance(float weaponAccuracy,
+                                           float playerAccuracyMultiplier,
+                                           java.util.Random rng) {
+        float hitChance = MathUtils.clamp(weaponAccuracy * playerAccuracyMultiplier, 0f, 1f);
+        if (hitChance >= 1.0f) return true;
+        if (hitChance <= 0.0f) return false;
+        return rng.nextFloat() <= hitChance;
+    }
+
+    /*
      * Formula: Ability magnitude linear scaling
      * Derivation:
      *   scaled = clamp(baseMagnitude + perLevel * (level - 1), 0, maxMagnitude)

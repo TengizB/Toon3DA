@@ -81,6 +81,17 @@ public abstract class Weapon implements WeaponProfile {
      */
     private float rangedDamageMultiplier = 1.0f;
 
+    /**
+     * Player accuracy multiplier sourced from the player's accuracy stat.
+     * Defaults to 1.0 (no modification) until World injects a value via
+     * {@link #setPlayerAccuracyMultiplier}.
+     */
+    private float playerAccuracyMultiplier = 1.0f;
+
+    // Per-weapon RNG for hit-chance rolls — not seeded from run seed, which is acceptable
+    // because miss results are cosmetic feedback and do not affect long-term balance.
+    private final java.util.Random random = new java.util.Random();
+
     protected Weapon(String displayName, int damage, int clipSize, int reloadTime,
                      float damageDropCoefficient, int range, AmmoType ammoType) {
         this.displayName           = displayName;
@@ -188,6 +199,13 @@ public abstract class Weapon implements WeaponProfile {
         }
     }
 
+    /** Spawns a grey "MISS" event text. Used by subclasses for per-pellet miss feedback. */
+    protected void spawnMissText() {
+        if (eventTextSystem != null) {
+            eventTextSystem.showMiss();
+        }
+    }
+
     /**
      * Sets the ranged damage multiplier derived from the player's MARKSMANSHIP stat.
      * Called by World whenever PlayerStats change (run start, perk award, equipment swap).
@@ -206,6 +224,37 @@ public abstract class Weapon implements WeaponProfile {
      */
     protected float getRangedDamageMultiplier() {
         return rangedDamageMultiplier;
+    }
+
+    /**
+     * Sets the player accuracy multiplier derived from the player's accuracy stat.
+     * Called by World whenever PlayerStats change (run start, perk award, equipment swap).
+     * Must not be called per frame — only on discrete stat-change events.
+     *
+     * @param multiplier value from {@code PlayerStats.getAccuracyMultiplier()};
+     *                   pass 1.0f to disable any bonus or penalty (default).
+     */
+    public void setPlayerAccuracyMultiplier(float multiplier) {
+        this.playerAccuracyMultiplier = multiplier;
+    }
+
+    /**
+     * Rolls the hit chance for a single shot using the weapon's effective accuracy and the
+     * player's accuracy multiplier. Returns true if the shot hits.
+     * Melee weapons (baseAccuracy = 1.0) always short-circuit to true via GameMath.
+     * Protected so per-pellet weapons (Chaingun) can call it from their own fire logic.
+     */
+    protected boolean rollHitChance() {
+        return GameMath.resolveHitChance(getEffectiveAccuracy(), playerAccuracyMultiplier, random);
+    }
+
+    /**
+     * Returns true for weapons that roll accuracy independently per pellet/bullet rather than
+     * once for the whole activation. Defaults to false (single roll per fire() call).
+     * Override in Chaingun (burst fire: each bullet rolls independently).
+     */
+    protected boolean isPerPelletAccuracy() {
+        return false;
     }
 
     /** True only when the weapon can accept a fire command right now. */
@@ -306,6 +355,10 @@ public abstract class Weapon implements WeaponProfile {
         visualState           = WeaponVisualState.FIRING;
         fireFlashTimerSeconds = WeaponConstants.FIRE_FLASH_DURATION;
         flashCycleCount++;
+        if (!isPerPelletAccuracy() && !rollHitChance()) {
+            if (eventTextSystem != null) eventTextSystem.showMiss();
+            return FireResult.MISSED;
+        }
         return marchShot(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
                          level, enemyHitTarget, barrelHitTarget, doorBlocksQuery);
     }

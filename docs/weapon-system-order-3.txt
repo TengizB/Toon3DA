@@ -1,0 +1,68 @@
+WEAPON SYSTEM ORDER 3 — Accuracy & Miss System
+================================================
+Implemented in branch: claude/weapon-system-order-3-9cdrrh
+
+WHAT WAS BUILT
+--------------
+Every weapon fire attempt now rolls an accuracy check before the shot marches
+through tiles. A miss costs the turn, plays the muzzle flash, spends ammo, and
+shows a grey "MISS" event text — but deals zero damage (marchShot is skipped).
+
+FILES CHANGED
+-------------
+GameMath.java
+  - Added resolveHitChance(weaponAccuracy, playerAccuracyMultiplier, rng).
+  - hitChance = clamp(weaponAccuracy * playerAccuracyMultiplier, 0, 1).
+  - accuracy >= 1.0 short-circuits to true (melee never misses).
+  - accuracy <= 0.0 always misses.
+
+EventTextSystem.java
+  - Added COLOR_GREY = 3 constant.
+  - Added showMiss() helper — spawns "MISS" in grey.
+
+EventTextRenderer.java
+  - Added BASE_GREY color (0.8, 0.8, 0.8) and wired COLOR_GREY case in switch.
+
+Weapon.java
+  - Added playerAccuracyMultiplier field (default 1.0f, injected by World).
+  - Added setPlayerAccuracyMultiplier(float) setter.
+  - Added private Random field per weapon instance for miss rolls.
+  - Added rollHitChance() protected helper (calls GameMath.resolveHitChance).
+  - Added isPerPelletAccuracy() protected hook (default false).
+  - Added spawnMissText() protected helper (calls eventTextSystem.showMiss()).
+  - fire() now rolls accuracy once before marchShot() when !isPerPelletAccuracy().
+    On miss: shows grey "MISS" text, returns FireResult.MISSED immediately.
+
+Chaingun.java
+  - Overrides isPerPelletAccuracy() → true (suppresses the single-roll in fire()).
+  - fireSingleBullet() rolls accuracy per bullet at the top of the method.
+    Each bullet in the 3-shot burst independently hits or misses.
+
+World.java
+  - Reads playerStats.getAccuracyMultiplier() at weapon wiring time.
+  - Calls weapon.setPlayerAccuracyMultiplier(accuracyMultiplier) for all ranged weapons.
+  - Also sets it on the Fist (melee base accuracy 1.0 means the roll always passes).
+
+ACCURACY ROLLING RULES
+-----------------------
+Single-shot weapons (Shotgun, DBL Shotgun, PlasmaRifle, Railgun, Incinerator,
+  GrenadeLauncher, melee): one roll per fire() call. Miss skips marchShot entirely.
+Multi-pellet weapon (Chaingun 3-shot burst): one roll per bullet in fireSingleBullet().
+  Low accuracy → some bullets hit, some miss (spray feel).
+Penetrating weapons (PlasmaRifle, Railgun): single roll per activation (not per tile).
+Melee weapons: baseAccuracy = 1.0 → always short-circuits to true in resolveHitChance.
+
+MISS BEHAVIOR
+-------------
+  ✓ Costs the turn (one enemy AI step fires)
+  ✓ Plays the muzzle flash visual
+  ✓ Decrements shotsInClip (ammo is spent)
+  ✓ Shows grey "MISS" event text
+  ✗ No damage
+  ✗ No ON_HIT abilities (marchShot never called)
+  ✗ No screen shake or kill flash
+
+DEPENDENCY
+----------
+Requires weapon-system-order-2 (getEffectiveAccuracy, weaponScaledAccuracy in GameMath).
+Next: weapon-system-order-4 (AbilityResolver + Offensive Abilities).
