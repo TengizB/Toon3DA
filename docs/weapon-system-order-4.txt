@@ -1,0 +1,58 @@
+Weapon System Order 4 — AbilityResolver & Offensive Abilities
+==============================================================
+
+WHAT WAS BUILT
+--------------
+Introduced AbilityResolver: a stateless dispatcher that hooks into Weapon.fire() at four
+moments (onFire, onHit, onCrit, onKill, onReload) and applies ability effects.
+
+Six offensive abilities are now active end-to-end:
+
+  CRITICAL_STRIKE (ON_HIT)   — rolls critChance; on crit deals bonus = (2x - 1) * base damage
+                                via a second applyDamageTo() call; emits "CRIT!" red text.
+  BURST_FIRE      (ON_FIRE)  — sets pendingBurstExtra = abilityCount - 1; Weapon.fire() fires
+                                that many extra shots after the base shot, each with its own
+                                accuracy roll.
+  EXECUTIONER     (ON_HIT)   — if target HP% <= 25%, applies bonus damage scaled by magnitude;
+                                emits "EXECUTE!" red text.
+  STAGGER_ROUNDS  (ON_HIT)   — rolls staggerChance; on success sets enemy.skipNextAction = true;
+                                emits "STAGGER!" white text.
+  ARMOR_PIERCE    (PASSIVE)  — GameMath.armorPierceDamage() added; Enemy.armor field added (0
+                                default). Applied inline in marchShot() by each weapon subclass
+                                when hasAbility(ARMOR_PIERCE) — NOT via AbilityResolver.
+  OVERPENETRATION (PASSIVE)  — constants added to GameBalance; applied inline in marchShot().
+
+ON_CRIT, ON_KILL, ON_RELOAD hooks are stubs — wired in weapon-system-order-5.
+
+FILES CHANGED
+-------------
+  entity/AbilityResolver.java        NEW — stateless dispatcher; seeded java.util.Random
+  entity/Weapon.java                 fire() now calls onFire→marchShot→dispatchHitCallbacks;
+                                     pendingBurstExtra, lastHitEnemy, lastHitDamage fields added;
+                                     setAbilityResolver() / setLastHit() / setPendingBurstExtra()
+  enemy/Enemy.java                   armor field added (int, default 0)
+  util/GameMath.java                 armorPierceDamage(rawDamage, armor, pierceFraction) added
+  util/GameBalance.java              ABILITY CATALOGUE section: CRIT, ARMOR_PIERCE, EXECUTIONER,
+                                     STAGGER_ROUNDS, OVERPENETRATION constants (BASE/PER_LEVEL/CAP)
+  util/WeaponConstants.java          CRIT_DAMAGE_MULTIPLIER = 2.0f
+  world/World.java                   buildLevelDependentResources() creates AbilityResolver after
+                                     EnemyManager and injects into all arsenal + melee weapons
+
+KEY DESIGN DECISIONS
+--------------------
+- AbilityResolver accepts Object (not Enemy) in onHit/onCrit/onKill to avoid circular package
+  dependency between entity and enemy packages; casts to Enemy internally.
+- Crit applies only the BONUS portion (CRIT_MULTIPLIER - 1) * base as a second takeDamage call
+  so total = base + bonus = 2x base. Never re-deals the full crit amount.
+- Executioner checks HP fraction AFTER crit bonus has been applied (uses freshest HP state).
+- AbilityResolver is rebuilt each floor (level-dependent resource) so it always holds the
+  current EnemyManager reference after a floor transition.
+
+DEPENDENCY CHAIN
+----------------
+  order-1: weapon stats / WeaponProfile
+  order-2: level scaling / effective stats
+  order-3: miss system / accuracy roll     ← must be complete before this
+  order-4: AbilityResolver (THIS FILE)
+  order-5: sustain abilities (next)        ← stubs onCrit/onKill/onReload ready
+  order-11: WeaponRoller uses BASE/PER_LEVEL/CAP constants to pre-scale magnitudes at spawn
