@@ -25,6 +25,7 @@ public final class EventTextRenderer implements Disposable {
     private static final Color BASE_WHITE  = new Color(1f,    1f,    1f,    1f);
     private static final Color BASE_GREEN  = new Color(0.25f, 1f,    0.25f, 1f);
     private static final Color BASE_RED    = new Color(1f,    0.18f, 0.18f, 1f);
+    private static final Color BASE_GREY   = new Color(0.8f,  0.8f,  0.8f,  1f);
 
     private final EventTextSystem eventTextSystem;
     private final SpriteBatch     batch;
@@ -82,6 +83,7 @@ public final class EventTextRenderer implements Disposable {
         switch (colorType) {
             case EventTextSystem.COLOR_GREEN: return BASE_GREEN;
             case EventTextSystem.COLOR_RED:   return BASE_RED;
+            case EventTextSystem.COLOR_GREY:  return BASE_GREY;
             default:                          return BASE_WHITE;
         }
     }

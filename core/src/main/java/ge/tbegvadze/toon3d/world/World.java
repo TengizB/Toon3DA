@@ -246,16 +246,19 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         Railgun             railgun         = new Railgun();
         Incinerator         incinerator     = new Incinerator();
         GrenadeLauncher     grenadeLauncher = new GrenadeLauncher();
-        float rangedMultiplier = playerStats.getRangedDamageMultiplier();
+        float rangedMultiplier   = playerStats.getRangedDamageMultiplier();
+        float accuracyMultiplier = playerStats.getAccuracyMultiplier();
         for (Weapon weapon : new Weapon[]{shotgun, dblShotgun, plasmaRifle, chaingun, railgun, incinerator, grenadeLauncher}) {
             weapon.setEventTextSystem(eventTextSystem);
             weapon.setAmmoInventory(itemInventory);
             weapon.setRangedDamageMultiplier(rangedMultiplier);
+            weapon.setPlayerAccuracyMultiplier(accuracyMultiplier);
         }
 
         // Melee slot — the Fist is the always-available fallback; wired at run start and never removed.
         Fist fist = new Fist();
         fist.setEventTextSystem(eventTextSystem);
+        fist.setPlayerAccuracyMultiplier(accuracyMultiplier);
         inventory.setMeleeWeapon(fist);
 
         if (startRoom) {
