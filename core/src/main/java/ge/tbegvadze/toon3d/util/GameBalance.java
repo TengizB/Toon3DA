@@ -270,4 +270,58 @@ public final class GameBalance {
      * Chip damage (poison ticks, explosions) always deals at least 1 HP.
      */
     public static final int   TGH_MIN_DAMAGE          = 1;
+
+    // =========================================================================
+    // ABILITY CATALOGUE — BASE / PER_LEVEL / CAP
+    // All values are PLACEHOLDERS — flag for playtesting.
+    // AbilityResolver reads pre-scaled magnitudes from AbilityInstance at runtime;
+    // these constants are used by WeaponRoller at weapon-spawn time (order-11).
+    // =========================================================================
+
+    // ── Critical Strike ────────────────────────────────────────────────────
+    /** Level-1 crit chance for CRITICAL_STRIKE ability (5%). */
+    public static final float CRIT_CHANCE_BASE            = 0.05f;
+    /** Crit chance added per weapon level above 1. */
+    public static final float CRIT_CHANCE_PER_LEVEL       = 0.015f;
+    /** Maximum crit chance regardless of weapon level (30%). */
+    public static final float CRIT_CHANCE_CAP             = 0.30f;
+
+    // ── Armor Pierce ────────────────────────────────────────────────────────
+    /** Level-1 pierce fraction for ARMOR_PIERCE ability (20%). */
+    public static final float ARMOR_PIERCE_BASE           = 0.20f;
+    /** Pierce fraction added per weapon level above 1. */
+    public static final float ARMOR_PIERCE_PER_LEVEL      = 0.05f;
+    /** Maximum pierce fraction regardless of weapon level (60%). */
+    public static final float ARMOR_PIERCE_CAP            = 0.60f;
+
+    // ── Executioner ─────────────────────────────────────────────────────────
+    /** HP-fraction threshold below which EXECUTIONER fires (targets at 25% HP or lower). Fixed value. */
+    public static final float EXECUTIONER_THRESHOLD       = 0.25f;
+    /** Level-1 bonus multiplier for EXECUTIONER (30% of base damage added as bonus). */
+    public static final float EXECUTIONER_BONUS_BASE      = 0.30f;
+    /** Bonus multiplier added per weapon level above 1. */
+    public static final float EXECUTIONER_BONUS_PER_LEVEL = 0.06f;
+    /** Maximum EXECUTIONER bonus multiplier regardless of weapon level (80%). */
+    public static final float EXECUTIONER_BONUS_CAP       = 0.80f;
+
+    // ── Stagger Rounds ──────────────────────────────────────────────────────
+    /** Level-1 stagger chance for STAGGER_ROUNDS ability (8%). */
+    public static final float STAGGER_CHANCE_BASE         = 0.08f;
+    /** Stagger chance added per weapon level above 1. */
+    public static final float STAGGER_CHANCE_PER_LEVEL    = 0.02f;
+    /** Maximum stagger chance regardless of weapon level (35%). */
+    public static final float STAGGER_CHANCE_CAP          = 0.35f;
+
+    // ── Overpenetration ─────────────────────────────────────────────────────
+    /** Base number of additional enemies the shot can pierce (1). */
+    public static final int   OVERPENETRATION_BASE_COUNT                = 1;
+    /** Weapon levels needed to gain each additional pierce count (+1 per 3 levels). */
+    public static final int   OVERPENETRATION_LEVELS_PER_STEP          = 3;
+    /** Maximum extra-pierce count regardless of weapon level (3 additional enemies). */
+    public static final int   OVERPENETRATION_MAX_COUNT                 = 3;
+    /**
+     * For already-piercing weapons (PlasmaRifle, Railgun): fraction of getEffectiveDamage()
+     * applied as a bonus for each enemy hit beyond the first (25% bonus per extra pierce).
+     */
+    public static final float OVERPENETRATION_ALREADY_PIERCING_BONUS   = 0.25f;
 }
