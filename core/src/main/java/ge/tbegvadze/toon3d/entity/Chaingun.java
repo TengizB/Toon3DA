@@ -53,7 +53,10 @@ public class Chaingun extends Weapon {
               WeaponConstants.CHAINGUN_DAMAGE_DROP_COEFF,
               WeaponConstants.CHAINGUN_RANGE_TILES,
               AmmoType.BULLETS);
+        setBaseAccuracy(WeaponConstants.CHAINGUN_BASE_ACCURACY);
     }
+
+    @Override public boolean isMelee() { return false; }
 
     /** Requires a full burst worth of ammo so the weapon never fires a partial volley. */
     @Override
