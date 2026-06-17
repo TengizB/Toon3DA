@@ -131,6 +131,14 @@ public abstract class Weapon implements WeaponProfile {
      */
     private float fireCycleMultiplier = 1.0f;
 
+    // Facing direction stored at fire() entry; forwarded to onHit() for melee AoE abilities.
+    private int lastFacingStepColumn = 0;
+    private int lastFacingStepRow    = 0;
+
+    // Berserker's Oath kill-streak state — per-weapon, persists across levels.
+    private int     berserkerStacks         = 0;
+    private boolean berserkerKilledThisFire = false;
+
     // Per-weapon RNG for hit-chance rolls — not seeded from run seed, which is acceptable
     // because miss results are cosmetic feedback and do not affect long-term balance.
     private final java.util.Random random = new java.util.Random();
@@ -468,6 +476,8 @@ public abstract class Weapon implements WeaponProfile {
         lastHitEnemy       = null;
         lastHitDamage      = 0;
         fireCycleMultiplier = 1.0f;
+        this.lastFacingStepColumn = facingStepColumn;
+        this.lastFacingStepRow    = facingStepRow;
 
         // ON_FIRE abilities (e.g. BURST_FIRE, SECOND_WIND, ADRENAL_SURGE) run before the
         // accuracy roll so they can set fireCycleMultiplier and pendingBurstExtra first.

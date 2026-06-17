@@ -387,4 +387,36 @@ public final class GameBalance {
     public static final float SECOND_WIND_BONUS_PER_LEVEL = 0.05f;
     /** Maximum Second Wind damage bonus regardless of weapon level (75%). */
     public static final float SECOND_WIND_BONUS_CAP       = 0.75f;
+
+    // =========================================================================
+    // MELEE-SPECIFIC ABILITIES — weapon-system-order-6
+    // All values are PLACEHOLDERS — flag for playtesting.
+    // =========================================================================
+
+    // ── Kinetic Slam (ON_HIT, melee only) ────────────────────────────────────
+    public static final float KINETIC_SLAM_CHANCE_BASE       = 0.20f;
+    public static final float KINETIC_SLAM_CHANCE_PER_LEVEL  = 0.04f;
+    public static final float KINETIC_SLAM_CHANCE_CAP        = 0.60f;
+    public static final int   KINETIC_SLAM_WALL_BONUS_DAMAGE = 3;
+
+    // ── Cleave (ON_HIT, melee only) ───────────────────────────────────────────
+    public static final float CLEAVE_FRACTION_BASE      = 0.40f;
+    public static final float CLEAVE_FRACTION_PER_LEVEL = 0.05f;
+    public static final float CLEAVE_FRACTION_CAP       = 0.80f;
+
+    // ── Salvage Strike (ON_KILL, melee only) ─────────────────────────────────
+    public static final float SALVAGE_CHANCE_BASE      = 0.50f;
+    public static final float SALVAGE_CHANCE_PER_LEVEL = 0.06f;
+    public static final float SALVAGE_CHANCE_CAP       = 1.00f;
+    public static final char  SALVAGE_AMMO_DROP_CHAR   = '6';
+
+    // ── Scholar's Edge (ON_KILL, melee only) ─────────────────────────────────
+    public static final float SCHOLARS_XP_BONUS_BASE      = 0.15f;
+    public static final float SCHOLARS_XP_BONUS_PER_LEVEL = 0.05f;
+    public static final float SCHOLARS_XP_BONUS_CAP       = 0.75f;
+
+    // ── Berserker's Oath (PASSIVE/ON_KILL, legendary, melee only) ────────────
+    public static final float BERSERKER_DAMAGE_PER_STACK  = 0.10f;
+    public static final int   BERSERKER_HP_TICK_PER_STACK = 1;
+    public static final int   BERSERKER_MAX_STACKS        = 5;
 }
