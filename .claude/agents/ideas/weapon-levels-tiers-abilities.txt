@@ -1,0 +1,600 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon Levels, Tiers & Abilities System
+---
+
+OVERVIEW
+========
+Every weapon — guns AND melee — gains a numeric LEVEL and a rarity TIER. Level scales
+the weapon's base stats (damage, accuracy, magazine, reload, range); tier determines how
+many SPECIAL ABILITIES the weapon carries and is shown to the player as a distinct color.
+A single shared WeaponProfile interface unifies how all weapon code reads stats, fires,
+reloads, and exposes abilities — so a Chainsaw and a Plasma Rifle answer the same questions
+the same way. This turns the current fixed-stat arsenal into a roguelike loot treadmill:
+"a Rare Level-4 Chaingun with Burst+3, Crit, and Lifesteal" is now a meaningfully different
+object from "a Common Level-2 Chaingun," and the player's run is shaped by what they find.
+
+This belongs here because the project is an explicitly roguelike Doom RPG (see
+docs/roguelike-design-pillars.txt): loot variety, build identity, and "every run is a
+different incursion" are core pillars. Right now weapons are static. This is the system that
+makes weapon pickups exciting instead of binary.
+
+This document OWNS: weapon level math, the tier table, the full ability catalogue, ability
+scaling, the WeaponProfile interface contract, spawn-roll logic, and the HUD card redesign.
+It EXTENDS the existing abstract Weapon (entity/Weapon.java) and the MeleeWeapon tree
+(roguelike_order_9_melee_weapons_system.txt). It does NOT redefine the turn engine, ammo
+economy, or the FrameBuffer sprite pipeline.
+
+NO NEW TILE SYMBOL IS REQUIRED. Weapon pickups already exist on the ground (GroundItem +
+WeaponSpawnPoint, wired in World.java). This system attaches level/tier/ability metadata to
+those existing weapon instances at spawn time; it adds no new level-file characters.
+
+
+RELATIONSHIP TO EXISTING SYSTEMS (deduplication)
+================================================
+- entity/Weapon.java: today holds FINAL stat fields (damage, clipSize, reloadTime,
+  damageDropCoefficient, range) set in each subclass constructor. THIS DOC makes those the
+  BASE stats and layers a level/tier/ability modifier on top, read through new accessors.
+  The abstract class keeps its fire()/onTick()/update() lifecycle unchanged.
+- entity/MeleeWeapon (order_9, IMPLEMENTED): melee weapons get the same profile. Several
+  abilities are melee-only (knockback chance, guaranteed ammo drop, bonus XP per kill).
+- progression/PlayerStats.java: existing per-player multipliers (getRangedDamageMultiplier,
+  getMeleeDamageMultiplier, getAccuracyMultiplier, getDodgeChance) STILL apply. Weapon-level
+  scaling and abilities stack ON TOP of player stats — they are a separate, per-weapon layer.
+  Crit, lifesteal, etc. are weapon-sourced, not stat-sourced.
+- util/WeaponConstants.java: existing per-weapon BASE constants (SHOTGUN_DAMAGE, etc.) become
+  the "level-1 Common" reference values. New scaling constants live in a new WeaponMod block.
+- item/ItemType.java: weapon enum entries unchanged. Tier/level live on the runtime Weapon
+  instance and its GroundItem, NOT on the static ItemType.
+- render/WeaponInspectOverlayRenderer + HudRenderer: the inspect card and the HUD weapon-name
+  area are repurposed to show tier color + level + ability list (replacing description text).
+- xp-level-progression-system.txt: "gameLevel" used for spawn clamping = the current FLOOR /
+  dungeon depth (PlayerProgress floor number), NOT the player XP level. See SPAWN LOGIC.
+
+
+CORE CONCEPTS
+=============
+
+WEAPON LEVEL (integer, 1..MAX_WEAPON_LEVEL=10)
+  Scales the numeric BASE stats. Higher level = strictly better raw numbers. Level is rolled
+  on spawn and clamped to [gameLevel-1, gameLevel+1] (gameLevel = current floor depth).
+  Level also gates how strong each ability rolls (ability magnitude scales with level).
+
+WEAPON TIER (rarity enum, 5 tiers)
+  Determines the NUMBER of ability slots the weapon has, and a distinct display color.
+  Tier does NOT directly change base stats — it changes how many abilities ride along.
+  (Indirect power: more abilities = stronger, so tier is the "special-sauce" axis and level
+  is the "raw-numbers" axis. Keeping them orthogonal makes loot reads clean: color = how many
+  tricks, number = how hard it hits.)
+
+ABILITIES (0..5 per weapon, drawn from the catalogue)
+  Passive or on-event effects (crit, lifesteal, burst, HP-on-kill, ...). Each rolled ability
+  also has an internal magnitude that scales with the weapon's LEVEL. Abilities are filtered
+  by weapon family (gun-only / melee-only / universal) so a Fist never rolls "Burst Fire."
+
+
+TIER TABLE
+==========
+Five tiers. Colors chosen to be instantly distinct on the dark UAC HUD and to follow the
+loot-color convention players already expect (grey -> green -> blue -> purple -> orange/gold).
+
+  TIER         ABILITY SLOTS   COLOR NAME       HEX        RGB (0-1 for ShapeRenderer)
+  ----------------------------------------------------------------------------------------
+  COMMON       0               Steel Grey       #9AA0A6    (0.604, 0.627, 0.651)
+  UNCOMMON     1               Hazard Green     #4CC74C    (0.298, 0.780, 0.298)
+  RARE         2               Plasma Blue      #3AA0FF    (0.227, 0.627, 1.000)
+  EPIC         3               Demon Violet     #B14CFF    (0.694, 0.298, 1.000)
+  LEGENDARY    4 (+1 unique)   Hellfire Gold    #FFB020    (1.000, 0.690, 0.125)
+
+Notes:
+- COMMON has ZERO abilities — base stats only (damage + accuracy). This is the explicit
+  request: common weapons are "just a gun." Their only variability is LEVEL.
+- LEGENDARY rolls 4 standard abilities AND is the only tier eligible for the small pool of
+  UNIQUE/SIGNATURE abilities (flagged isLegendaryOnly in the catalogue) — its 5th slot. This
+  gives legendaries a build-defining "wow" line on top of four normal lines.
+- A weapon never rolls the same ability twice (sample without replacement from the eligible
+  pool for its family).
+- If a family has fewer eligible abilities than the tier's slot count (shouldn't happen with
+  this catalogue, but guard it), fill remaining slots with nothing — never duplicate.
+
+
+WEAPON LEVEL — BASE STAT SCALING
+================================
+Level 1 = the weapon's current hand-tuned WeaponConstants values (the reference). Each level
+above 1 multiplies/steps the base stats. All formulas go in GameMath (pure functions); all
+coefficients go in WeaponConstants (a new WeaponModConstants block or section).
+
+Let L = weapon level, with growth applied as (L - 1) steps from the level-1 reference.
+
+  DAMAGE         scaledDamage   = round( baseDamage * (1 + WEAPON_LEVEL_DAMAGE_PER_LEVEL * (L-1)) )
+                 WEAPON_LEVEL_DAMAGE_PER_LEVEL = 0.10f   (PLACEHOLDER: +10% per level; L10 = +90%)
+
+  ACCURACY       scaledAccuracy = clamp( baseAccuracy + WEAPON_LEVEL_ACCURACY_PER_LEVEL * (L-1),
+                                         ACCURACY_MIN, 1.0f )
+                 baseAccuracy is a NEW per-weapon stat in [0,1]; 1.0 = never misses.
+                 WEAPON_LEVEL_ACCURACY_PER_LEVEL = 0.02f  (PLACEHOLDER: +2% per level)
+                 ACCURACY_MIN = 0.50f                      (a fresh low-level weapon still hits half the time)
+
+  FIRE RATE / RELOAD  scaledReloadTicks = max( WEAPON_RELOAD_MIN_TICKS,
+                                               round( baseReloadTicks - WEAPON_LEVEL_RELOAD_STEP * (L-1) ) )
+                 Most weapons reload in 1-2 ticks already, so this floors fast. The intent is
+                 that high level can shave a slow weapon (Railgun 2 -> 1). For weapons already
+                 at 1 tick, this is a no-op. WEAPON_LEVEL_RELOAD_STEP = 0.15 ticks/level,
+                 WEAPON_RELOAD_MIN_TICKS = 1. (Turn-based: never sub-1; reload is in TICKS.)
+
+  MAGAZINE / CLIP   scaledClip = baseClip + floor( WEAPON_LEVEL_CLIP_PER_LEVEL * (L-1) * baseClip )
+                 WEAPON_LEVEL_CLIP_PER_LEVEL = 0.08f (PLACEHOLDER). Single-shell weapons
+                 (Shotgun clip 1, Railgun clip 1) stay 1 until the accumulated bonus reaches a
+                 full round — keeps the single-barrel identity at low levels but a Level-10
+                 Shotgun can hold 2. Melee weapons have clip 0/irrelevant: skip this scaling.
+
+  RANGE          scaledRange = baseRange + floor( WEAPON_LEVEL_RANGE_PER_2_LEVELS * (L-1) )
+                 WEAPON_LEVEL_RANGE_PER_2_LEVELS = 0.5 tiles/level => +1 tile every 2 levels,
+                 capped at +3 tiles. Melee stays range 1 ALWAYS (never scales — cardinal-grid
+                 invariant; a melee weapon must stay an adjacent-tile attack).
+
+ACCURACY / MISS RESOLUTION (turn-based, no free aim):
+  On fire, before marching the shot, roll hitChance = scaledAccuracy * player.getAccuracyMultiplier()
+  (PlayerStats). If random() > hitChance => MISS: the shot still costs the turn, plays the
+  muzzle flash, decrements clip/ammo, but applies ZERO damage (the march is skipped or marked
+  no-hit). Emit event text "MISS" and a soft feedback (no kill flash). This keeps the
+  one-action-one-turn invariant: a miss is still a committed turn the enemies answer.
+  - Multi-projectile weapons (Chaingun burst, shotgun pellets-as-one-tile): roll PER bullet so
+    accuracy reads naturally as "spray." For single-shot weapons it's a clean hit/miss.
+  - Penetrating weapons (Plasma, Railgun): one accuracy roll for the whole beam.
+  IMPORTANT vs existing code: the current marchShot always hits. The miss roll is added in
+  Weapon.fire() (shared), guarded so accuracy >= 1.0 short-circuits (never rolls) to preserve
+  the behavior of any weapon set to perfect accuracy.
+
+
+ABILITY MAGNITUDE SCALING
+=========================
+Each ability stores a baseMagnitude and scales with weapon LEVEL via one shared formula
+(GameMath.abilityMagnitude). Magnitude meaning depends on the ability (percent, flat, tiles,
+count) but the curve is uniform so balancing is one knob.
+
+  magnitude(L) = baseMagnitude + perLevel * (L - 1)         [LINEAR — default]
+  capped at maxMagnitude.
+
+  For COUNT-style abilities (Burst Fire) use a stepped integer form:
+  count(L) = clamp( baseCount + floor((L-1) / levelsPerStep), minCount, maxCount )
+
+  For PERCENT-CHANCE abilities (Crit, HP-on-crit, Knockback, Ammo-drop) magnitude is a
+  probability in [0,1], capped well below 1 so no ability becomes guaranteed
+  (ABILITY_CHANCE_HARD_CAP = 0.60f) — preserves tension; nothing is a sure thing.
+
+  Each catalogue entry below lists: baseMagnitude @ L1, perLevel, and the L10 value, so the
+  implementing agent can sanity-check the curve. ALL ARE PLACEHOLDERS — flag for playtest.
+
+
+ABILITY CATALOGUE
+=================
+Family tags:  [G] gun-only   [M] melee-only   [U] universal
+Trigger tags: PASSIVE (always on) / ON_HIT / ON_KILL / ON_CRIT / ON_FIRE / ON_RELOAD
+isLegendaryOnly entries are eligible ONLY for the Legendary 5th slot.
+
+--- OFFENSIVE ---
+
+1.  BURST FIRE                     [G] ON_FIRE   (count-style)
+    Fires extra projectiles per trigger using the Chaingun's existing per-flash-cycle queue.
+    count(L): base 2 @ L1, +1 every 2 levels, cap 5.  L1=2, L4=3, L6=4, L10=5.
+    On non-burst-native guns this layers onto marchShot via the same pendingBurst mechanism
+    Chaingun already uses (generalize it into the shared base — see TECHNICAL NOTES).
+
+2.  CRITICAL STRIKE                [U] ON_HIT    (chance)
+    On hit, roll critChance; on success deal damage * CRIT_DAMAGE_MULTIPLIER (2.0x default).
+    critChance(L): base 0.05 @ L1, +0.015/level, cap 0.30.  L10 = 0.185.
+    Emits a distinct "CRIT!" event text + bigger hit flash. Crits feed ON_CRIT abilities.
+
+3.  ARMOR PIERCE                   [U] PASSIVE   (percent)
+    Ignores a fraction of the target's physical reduction (Hell Knight's 25%, armor enemies).
+    pierce(L): base 0.20 @ L1, +0.05/level, cap 0.60.
+
+4.  EXECUTIONER                    [U] ON_HIT    (percent threshold)
+    Bonus damage vs low-HP targets: if target HP% <= EXECUTE_THRESHOLD, deal +bonus%.
+    threshold fixed 0.25; bonus(L): base 0.30 @ L1, +0.06/level, cap 0.80. Cleans up chaff.
+
+5.  REND (BLEED)                   [U] ON_HIT    (DoT)
+    Applies a stacking bleed: bleedPerTurn damage for BLEED_TURNS (4) turns. Uses the status
+    system from roguelike_order_8_status_effects_system.txt.
+    bleedPerTurn(L): base 2 @ L1, +0.5/level, cap 6.
+
+6.  OVERPENETRATION                [G] PASSIVE   (flag + count)
+    Shot pierces up to N enemies in the cardinal line (overrides the weapon's stop-at-first).
+    N(L): base 1 extra @ L1, +1 every 3 levels, cap 3 extra. (On already-piercing Plasma/Rail
+    this instead adds +flat damage per pierced target, so it's never a dead roll.)
+
+7.  STAGGER ROUNDS                 [G] ON_HIT    (chance)
+    Chance to inflict STUN (1 turn) on a hit — the enemy loses its next turn.
+    chance(L): base 0.08 @ L1, +0.02/level, cap 0.35. Respects canBeStunned enemy flags.
+
+8.  KINETIC SLAM                   [M] ON_HIT    (chance)  -- the "hammer"
+    Knockback chance: on a melee hit, chance to push the target 1 tile away (uses
+    EnemyHitTarget.tryPushEnemy). Steel-Pipe-style but as a rollable ability on any melee.
+    chance(L): base 0.20 @ L1, +0.04/level, cap 0.60. Wall-slam = +small bonus damage.
+
+9.  CLEAVE                         [M] ON_HIT    (flag)
+    Melee hit also damages enemies in the two tiles flanking the target (the tiles 90deg left
+    and right of the facing direction, adjacent to the target). cleaveFraction(L): base 0.40
+    @ L1, +0.05/level, cap 0.80 of the main hit. Turns a knife into a crowd tool.
+
+10. INCENDIARY                     [U] ON_HIT    (DoT)
+    Applies BURN (reuses Incinerator burn DoT). burnPerTurn(L): base 3 @ L1, +0.5/level,
+    cap 7; BURN_TURNS 3. On the Incinerator itself, instead extends burn duration +1 turn.
+
+--- DEFENSIVE / SUSTAIN ---
+
+11. LIFESTEAL                      [U] ON_HIT    (percent)
+    Heal the player for a fraction of damage DEALT on every hit.
+    steal(L): base 0.06 @ L1, +0.015/level, cap 0.20. Overheal is wasted (clamped to maxHP).
+
+12. HEMORRHAGE HARVEST             [U] ON_KILL   (flat HP)
+    "HP on kill": gain flat HP each time this weapon lands the killing blow.
+    heal(L): base 3 @ L1, +0.7/level (rounded), cap 12. The aggression-rewarding line.
+
+13. VAMPIRIC CRIT                  [U] ON_CRIT   (flat HP)
+    "Chance to gain HP on crit" — every crit (see ability 2) heals a flat amount. Best paired
+    with Critical Strike on the same weapon.
+    heal(L): base 4 @ L1, +1/level, cap 14. (If the weapon lacks Crit, this only fires when
+    crit comes from a player-stat source — still valid, just rarer.)
+
+14. ADRENAL SURGE                  [U] ON_KILL   (chance + buff)
+    Chance on kill to grant the player a 1-turn "Empowered" buff (+EMPOWER_DAMAGE% next attack)
+    or a small dodge buff. chance(L): base 0.10 @ L1, +0.03/level, cap 0.40.
+
+15. BULWARK ROUNDS                 [G] ON_RELOAD (flat armor)
+    Completing a reload grants a few points of temporary armor (decays over N turns).
+    armor(L): base 2 @ L1, +0.5/level, cap 8. Rewards disciplined reloading between fights.
+
+16. SECOND WIND                    [U] PASSIVE   (threshold buff)  -- LEGENDARY-ONLY candidate
+    While player HP <= 30%, this weapon deals +bonus% damage (the berserker fantasy as a
+    weapon roll). bonus(L): base 0.25 @ L1, +0.05/level, cap 0.75.
+
+--- UTILITY / ECONOMY ---
+
+17. SCAVENGER ROUNDS               [G] ON_KILL   (chance ammo)
+    Chance on kill to refund ammo to the reserve for THIS weapon's ammo type.
+    chance(L): base 0.15 @ L1, +0.03/level, cap 0.50; refund = 1 round (2 at L>=7).
+
+18. SALVAGE STRIKE                 [M] ON_KILL   (chance/guaranteed drop)
+    "Melee: guarantee ammo drop" — kills with this weapon force an ammo pickup to drop.
+    chance(L): base 0.50 @ L1, +0.06/level, cap 1.0 (so a high-level melee GUARANTEES drops).
+    This is the canonical "melee feeds your guns" line — explicitly requested.
+
+19. SCHOLAR'S EDGE                 [M] ON_KILL   (percent XP)  -- explicitly requested
+    "Melee: bonus XP per kill." Kills with this weapon grant +bonus% XP.
+    bonus(L): base 0.15 @ L1, +0.05/level, cap 0.75. Encourages risky melee for faster levels.
+
+20. QUICK HANDS                    [U] PASSIVE   (reload reduction)
+    Reduces this weapon's reload by extraTicks (stacks with level reload scaling, floored at
+    WEAPON_RELOAD_MIN_TICKS). reduction(L): -1 tick @ L1 if base>=2, additional -1 at L>=6.
+    On melee (no reload) this instead reduces a heavy weapon's wind-up (no-op for 1-turn melee).
+
+21. EXTENDED MAG                   [G] PASSIVE   (flat clip)
+    +clip capacity beyond level scaling. addClip(L): base +1 @ L1, +1 every 3 levels, cap +4.
+    On clip-1 weapons (Shotgun/Railgun) this is the only way to reliably break past 1 round.
+
+22. FIELD MEDIC ROUNDS             [U] ON_KILL   (chance medkit)
+    Small chance on kill to spawn a Small Medkit pickup at the corpse tile.
+    chance(L): base 0.05 @ L1, +0.02/level, cap 0.25. Pairs with medkit-field-medicine system.
+
+23. CREDIT FANG                    [U] ON_KILL   (flat credits)
+    Kills grant bonus Credits (for the shop/merchant rooms, roguelike_order_11).
+    credits(L): base 2 @ L1, +1/level, cap 12. The "money gun" loot fantasy.
+
+--- HYBRID / SITUATIONAL ---
+
+24. POINT BLANK                    [G] PASSIVE   (percent, distance)
+    +damage% when the target is in the ADJACENT tile (distance 1), 0 otherwise.
+    bonus(L): base 0.20 @ L1, +0.05/level, cap 0.70. Rewards aggressive shotgun positioning.
+
+25. MARKSMAN'S PATIENCE            [G] PASSIVE   (percent, distance)
+    +damage% scaling with distance (the inverse of Point Blank): bonus per tile beyond 2.
+    perTile(L): base 0.05 @ L1, +0.01/level, cap 0.12; total capped at +0.60. Sniper line —
+    great on Railgun/Plasma, useless point-blank. Mutually thematic opposite of #24.
+
+26. OPENING SALVO                  [U] PASSIVE   (percent, state)
+    First hit on a FULL-HP target deals +bonus% (the alpha-strike line).
+    bonus(L): base 0.30 @ L1, +0.07/level, cap 0.90. Rewards target-switching discipline.
+
+27. RHYTHM (HEAT-UP)               [G] PASSIVE   (ramping)
+    Consecutive hits on the SAME enemy ramp damage: +rampPerHit% per consecutive hit, resets
+    on miss or target switch. rampPerHit(L): base 0.06 @ L1, +0.01/level, cap 0.15; stack cap 5.
+    Chaingun/Plasma sustained-fire fantasy.
+
+28. STATIC DISCHARGE               [U] ON_KILL   (chain AoE)
+    On kill, deal AoE damage to enemies orthogonally adjacent to the corpse (a "chain").
+    splash(L): base 4 @ L1, +1/level, cap 14. Great for packed corridors; reuses the
+    grenade plus-splash offset pattern.
+
+29. RESONANT ROUNDS                [U] ON_HIT    (anti-tank scaling)
+    +flat damage scaled to the target's MAX HP (anti-elite): bonus = round(maxHP * pct).
+    pct(L): base 0.04 @ L1, +0.008/level, cap 0.10. Makes a low-base weapon threaten bosses.
+
+--- SIGNATURE / LEGENDARY-ONLY (5th slot pool) ---
+
+30. SOULFORGE                      [U] ON_KILL   isLegendaryOnly
+    Every kill PERMANENTLY adds +1 to this weapon's level (up to MAX_WEAPON_LEVEL), making the
+    weapon grow during the run. A true "grow your relic" legendary. Cap at L10; logs "ASCENDS".
+
+31. JUDGMENT                       [G] ON_FIRE   isLegendaryOnly
+    Railgun-like: fires a full-line, full-pierce, ignore-cover lance regardless of base weapon,
+    once every N fires (cooldown counted in FIRES, not seconds). Devastating signature shot.
+
+32. HELLFIRE NOVA                  [U] ON_CRIT   isLegendaryOnly
+    Crits detonate a large plus-shaped explosion (grenade-scale) centered on the target.
+    Turns Crit-stacked legendaries into room-clearers.
+
+33. BERSERKER'S OATH               [M] PASSIVE   isLegendaryOnly
+    Melee: each consecutive turn you kill at least one enemy, gain a stacking +damage and a
+    flat HP tick (the Doom-chainsaw power fantasy as a relic). Resets on a turn with no kill.
+
+(Catalogue total: 33 abilities. 29 standard + 4 legendary-signature. Families: gun-only ~10,
+melee-only ~5, universal ~18 — comfortably more than enough for sample-without-replacement at
+every tier and family.)
+
+
+SHARED WEAPON INTERFACE — WeaponProfile (CRITICAL)
+==================================================
+The explicit, non-negotiable requirement: ALL guns and ALL melee weapons must answer the same
+questions through one type, so every consumer (HUD, fire handler, inspect overlay, EnemyManager
+hit pipeline, AI) treats any weapon identically. Implement as an INTERFACE on the abstract
+Weapon base (entity/Weapon already is the base for both guns and MeleeWeapon), so no consumer
+ever needs an instanceof check.
+
+Design decision: do NOT make abilities polymorphic Java subclasses (33 classes is unwieldy and
+allocates). Model an ability as a small VALUE object: an enum identity + a scaled magnitude.
+The weapon owns an int[]/Ability[] array of its rolled abilities. Effect resolution is a
+switch over the enum in a shared resolver (see AbilityResolver). This is data-driven, allocation
+-free after spawn, and trivial to balance.
+
+Package: entity/ (alongside Weapon). New types:
+
+  // entity/WeaponTier.java
+  public enum WeaponTier {
+      COMMON(0, 0.604f, 0.627f, 0.651f),
+      UNCOMMON(1, 0.298f, 0.780f, 0.298f),
+      RARE(2, 0.227f, 0.627f, 1.000f),
+      EPIC(3, 0.694f, 0.298f, 1.000f),
+      LEGENDARY(5, 1.000f, 0.690f, 0.125f);   // 4 standard + 1 signature slot
+      public final int abilitySlots;
+      public final float colorRed, colorGreen, colorBlue;
+      // getters; isLegendary(); standardSlotCount() = (this==LEGENDARY?4:abilitySlots)
+  }
+
+  // entity/WeaponAbility.java — the catalogue identity + family/trigger metadata
+  public enum WeaponAbility {
+      BURST_FIRE(Family.GUN, Trigger.ON_FIRE, false),
+      CRITICAL_STRIKE(Family.UNIVERSAL, Trigger.ON_HIT, false),
+      // ... all 33 entries ...
+      SOULFORGE(Family.UNIVERSAL, Trigger.ON_KILL, true /*legendaryOnly*/);
+      public enum Family { GUN, MELEE, UNIVERSAL }
+      public enum Trigger { PASSIVE, ON_HIT, ON_KILL, ON_CRIT, ON_FIRE, ON_RELOAD }
+      public final Family family; public final Trigger trigger; public final boolean legendaryOnly;
+      public boolean eligibleFor(WeaponProfile w) {
+          // family match (GUN ability only on guns, MELEE only on melee, UNIVERSAL on both)
+          // AND (!legendaryOnly || w.getTier()==LEGENDARY)
+      }
+      public String displayName(); public char hudGlyph();  // short tag for the HUD list
+  }
+
+  // entity/AbilityInstance.java — a rolled ability bound to a level (value object)
+  public final class AbilityInstance {
+      public final WeaponAbility ability;
+      public final float magnitude;   // pre-scaled at spawn from weapon level
+      public final int   countValue;  // for count-style (burst count, pierce count)
+  }
+
+  // entity/WeaponProfile.java — THE shared contract (implemented by abstract Weapon)
+  public interface WeaponProfile {
+      // identity / loot
+      String       getDisplayName();
+      WeaponTier   getTier();
+      int          getWeaponLevel();          // 1..MAX_WEAPON_LEVEL
+      boolean      isMelee();
+
+      // EFFECTIVE stats (base * level scaling), the ONLY numbers gameplay should read
+      int   getEffectiveDamage();             // pre-distance; damageAtDistance still applies drop
+      float getEffectiveAccuracy();           // [0,1]
+      int   getEffectiveClipSize();
+      int   getEffectiveReloadTicks();
+      int   getEffectiveRange();
+
+      // abilities
+      int             getAbilityCount();
+      AbilityInstance getAbility(int index);
+      boolean         hasAbility(WeaponAbility ability);
+      float           abilityMagnitude(WeaponAbility ability); // 0 if absent
+      int             abilityCount(WeaponAbility ability);      // 0 if absent
+
+      // unified actions (already exist on Weapon; declared here so consumers use the interface)
+      boolean    canFire();
+      boolean    requestManualReload();
+      FireResult fire(int playerTileColumn, int playerTileRow,
+                      int facingStepColumn, int facingStepRow,
+                      Level level, EnemyHitTarget enemyHitTarget,
+                      BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery);
+
+      // HUD readouts
+      int    getShotsInClip();
+      int    getReserveAmmo();
+      String hudAmmoString();
+  }
+
+  abstract class Weapon implements WeaponProfile { ... }   // melee inherits via MeleeWeapon
+
+Stat layering inside Weapon (replaces today's "final base stats are the answer"):
+  - Keep the existing final fields as baseDamage/baseClipSize/... (rename in javadoc; the
+    constructor still seeds them from WeaponConstants = the Level-1 Common reference).
+  - Add fields: weaponLevel (int), tier (WeaponTier), AbilityInstance[] abilities, baseAccuracy.
+  - getEffectiveX() = GameMath.weaponLevelX(base, weaponLevel). Cache the effective values at
+    spawn / when level changes (Soulforge) into final-ish int fields so getters are O(1) and
+    allocation-free — recompute only on the rare level-up event.
+  - shotsInClip is initialized to getEffectiveClipSize() instead of base clipSize.
+  - fire() does the accuracy roll, then marchShot, then runs AbilityResolver hooks.
+
+  // entity/AbilityResolver.java — central, stateless effect application
+  Holds the switch(ability) logic for each trigger. Called from Weapon.fire (ON_FIRE/ON_HIT/
+  ON_CRIT) and from the kill path (ON_KILL) and reload completion (ON_RELOAD). Needs handles to
+  Player (heal/armor/credits/XP), EnemyManager (push/aoe/status), Inventory (ammo refund), and
+  the GroundItem spawner — injected once by World, NOT created per call. This keeps Weapon free
+  of god-object dependencies: the weapon exposes WHAT abilities it has; the resolver applies them.
+
+A SETTER for spawn-time configuration (called by the spawn roller, once):
+  void configureRoll(int weaponLevel, WeaponTier tier, AbilityInstance[] abilities);
+This is the ONLY mutator for level/tier/abilities outside Soulforge's controlled level-up.
+
+
+SPAWN LOGIC SPEC
+================
+gameLevel := current dungeon FLOOR depth (PlayerProgress floor index, 1-based). NOT player XP.
+
+LEVEL ROLL:
+  rolledLevel = clamp( gameLevel + randomInt(-1, +1), 1, MAX_WEAPON_LEVEL )
+  // uniform over {gameLevel-1, gameLevel, gameLevel+1}, clamped to [1,10].
+  (The start-room offer weapons may force rolledLevel = max(1, gameLevel) for a fair start —
+   OPEN QUESTION.)
+
+TIER ROLL (weighted; weights shift toward rarity as floors deepen so late loot feels better):
+  Base weights at floor 1, and a per-floor drift. Use a weight table in WeaponConstants:
+
+    TIER        floor1 weight    drift/floor
+    COMMON      60               -4   (floored at 10)
+    UNCOMMON    25               +0
+    RARE        10               +2
+    EPIC        4                +1.5
+    LEGENDARY   1                +0.5  (capped, see below)
+
+  effectiveWeight(tier, floor) = max(0, base + drift*(floor-1)), with LEGENDARY hard-capped at
+  LEGENDARY_WEIGHT_CAP (e.g. 6) so legendaries stay special even deep. Normalize, then sample.
+  PLACEHOLDER numbers — tune so roughly: floor 1 ~60% common, by floor 8 commons are rare and
+  rare/epic dominate, legendaries are a genuine event (<8%).
+
+ABILITY ROLL:
+  slots = tier.abilitySlots (Common=0 -> skip).
+  standard = tier.standardSlotCount() abilities sampled WITHOUT replacement from the eligible
+    pool = { all WeaponAbility a : a.eligibleFor(thisWeapon) AND !a.legendaryOnly }.
+  if tier == LEGENDARY: additionally sample 1 from the eligible legendaryOnly pool for the 5th slot.
+  For each chosen ability: magnitude = GameMath.abilityMagnitude(catalogueBase, perLevel,
+    rolledLevel, maxMagnitude) (or the stepped count form). Build AbilityInstance.
+  Guard: never duplicate; if pool too small, leave slot empty.
+
+DETERMINISM: all rolls draw from the run's seeded RNG (the same seed source World already uses
+for level gen / start-room offers — runSeed). Same seed => same loot, a roguelike expectation.
+
+WHERE IT HOOKS: World already iterates targetLevel.getWeaponSpawnPoints() and constructs weapon
+instances + GroundItems (World.java ~line 404). The roller runs there: build the Weapon, call
+configureRoll(...), attach to the GroundItem. The start weapons given at run start
+(Shotgun/Chaingun/etc. constructed ~line 242) should be configured as COMMON Level-1 (the honest
+baseline) OR via the start-room offer at a low roll — OPEN QUESTION.
+
+
+HUD / DISPLAY SPEC
+==================
+Remove the static weapon DESCRIPTION text everywhere it appears. Replace with tier color + level
++ ability list, in two surfaces:
+
+A) IN-COMBAT HUD (HudRenderer right panel, X 860..1280):
+   - The weapon NAME text is drawn TINTED in the tier color (Common name = steel grey, Legendary
+     = gold). Instant rarity read without extra chrome.
+   - Prefix the name with its level as a compact tag, e.g. "Lv4  CHAINGUN". Use the existing
+     name font; tint = tier RGB.
+   - Under the name, a single-line ability glyph strip: one small colored glyph per ability
+     (each WeaponAbility has a 1-char hudGlyph + uses the tier color or its own category color).
+     Max 5 glyphs; fits the right panel. No description text — the player learns glyphs over a run
+     (roguelike literacy) and reads full names in the inspect card.
+   - A thin tier-color underline bar beneath the ammo digits as a redundant rarity cue (color-
+     blind safety: shape/position + text level + color).
+
+B) WEAPON INSPECT CARD (WeaponInspectOverlayRenderer — shown on a ground weapon, and on the
+   weapon-switch overlay):
+   - Header: tier-colored name + "LEVEL n / TIER NAME".
+   - Stat block: effective Damage, Accuracy %, Clip, Reload (ticks), Range — show as
+     "value (base->effective)" so the player sees the level bonus (e.g. "DMG 13 (10 base)").
+   - Ability list: one ROW per ability: glyph + ability display name + the scaled magnitude in
+     human terms ("CRIT 18.5%", "LIFESTEAL 9%", "BURST x3", "BLEED 4/turn"). This row list is
+     what REPLACES the old description paragraph.
+   - For Legendary, render the signature (5th) ability row in gold with a small "SIGNATURE" tag.
+   - Comparison aid (nice-to-have): when inspecting a ground weapon while one is equipped, show
+     green/red deltas on the shared stats. OPEN QUESTION / stretch.
+
+C) GROUND PICKUP BILLBOARD (PropRenderer / weapon pickup sprite):
+   - Tint the weapon pickup billboard glow / outline in the tier color so the player can spot a
+     Legendary from across the room before inspecting. A small floating "Lv n" is optional
+     (stretch — billboard text is fiddly; the color glow is the priority).
+
+All tier colors come from WeaponTier RGB fields (single source). HUD never hardcodes a hex.
+
+
+BALANCE NOTES & CONSTRAINTS
+===========================
+- ORTHOGONALITY: Level = raw numbers, Tier = number of tricks. A Common Lv10 can out-damage a
+  Legendary Lv3 in pure DPS but the Legendary's abilities give it identity. This keeps both axes
+  meaningful and loot reads simple.
+- NOTHING BECOMES GUARANTEED: all chance abilities are capped (ABILITY_CHANCE_HARD_CAP=0.60),
+  EXCEPT Salvage Strike (melee ammo drop) which is INTENDED to reach 100% at high level as its
+  whole identity. That single exception is deliberate and documented.
+- MISS CHANCE FLOOR: accuracy floored at 0.50 so even a fresh Common is usable; player
+  Marksmanship can push effective accuracy back up. A miss must always feel like variance, never
+  like the weapon being broken.
+- CLAMP RESPECT: weapon-level clamp keeps loot relevant to the floor (no Lv1 junk on floor 8, no
+  Lv10 monster on floor 1). This is the core anti-frustration / anti-trivialization lever.
+- MELEE RANGE NEVER SCALES: cardinal-grid invariant. Range scaling and Burst/Overpenetration are
+  gun-only or no-op on melee by family filtering.
+- CRIT STACKING: Crit + Vampiric Crit + Hellfire Nova on one Legendary is a build payoff, not a
+  bug — but verify the combined DPS+sustain isn't degenerate vs the boss (boss-encounter doc).
+- SOULFORGE: the only ability that mutates weapon level mid-run; cap at MAX_WEAPON_LEVEL and
+  recompute cached effective stats on each level-up. Watch for it trivializing a long floor —
+  consider a kill-count requirement per level-up (e.g. every 5 kills) if +1/kill is too fast.
+- ALL NUMBERS IN THIS DOC ARE PLACEHOLDERS. Put scaling coefficients in WeaponConstants and
+  ability base/perLevel/cap tables in GameBalance so a designer tunes without touching mechanics.
+- PERFORMANCE: abilities are an enum + small value array per weapon; resolution is a switch in
+  AbilityResolver. No per-frame allocation; effective stats cached. Fire-time rolls use the
+  existing seeded RNG. Fully compatible with "no allocations in render()".
+
+
+INTERACTIONS (with existing / planned systems)
+==============================================
+1. PLAYER STATS (PlayerStats.java): weapon accuracy roll multiplies by getAccuracyMultiplier();
+   ranged/melee damage multipliers still apply on top of effective damage. Crit/lifesteal are
+   weapon-sourced and stack with any stat/perk crit — define the stacking order in GameMath
+   (recommend additive crit chance, multiplicative crit damage).
+2. MELEE SYSTEM (order_9, IMPLEMENTED): Kinetic Slam reuses tryPushEnemy; Salvage Strike /
+   Scholar's Edge / Berserker's Oath are the melee identity abilities. The Steel Pipe's innate
+   knockback and Chainsaw's continuous mode coexist with rolled abilities (innate + rolled stack).
+3. STATUS EFFECTS (order_8): Rend(bleed), Stagger(stun), Incendiary(burn) all route through the
+   status system; respect per-enemy immunity flags (canBeStunned, etc.).
+4. AMMO ECONOMY (order_2): Scavenger Rounds / Salvage Strike / Extended Mag all feed the
+   finite-ammo loop — turning loot quality into ammo sustainability, a key roguelike tension.
+5. XP / LEVELING (xp-level-progression): Scholar's Edge boosts kill XP; Soulforge is a parallel
+   weapon-progression track. gameLevel for spawn clamp reads the floor index from PlayerProgress.
+6. SHOP / CREDITS (order_11): Credit Fang feeds merchant rooms; the merchant can SELL weapons
+   rolled by this same system (great content reuse) — a Legendary at the shop is a real decision.
+7. ENEMY ARCHETYPES (order_7/13): Armor Pierce / Resonant Rounds / Executioner are the answers to
+   tanky elites and bosses; Static Discharge / Hellfire Nova answer corridor swarms.
+8. BOSS ENCOUNTER (boss-encounter-facility-overseer): Resonant Rounds and Marksman's Patience are
+   tuned to make a found weapon's tier matter in the boss fight without being mandatory.
+9. INSPECT / SWITCH UI (WeaponInspectOverlayRenderer): becomes the primary surface for the new
+   data; the old description field is removed here first.
+
+
+OPEN QUESTIONS
+==============
+1. Start weapons (run-start Shotgun/Chaingun and start-room offers): force COMMON Lv1, or roll at
+   floor 1 like everything else? Recommend COMMON Lv1 for the run-start kit; let the start-ROOM
+   offer roll low (Common/Uncommon, Lv1) so the first choice already teases the system.
+2. Should the merchant sell weapons of a chosen/higher tier (paying for rarity)? Recommend yes —
+   reuses the roller with a min-tier floor; great credit sink (depends on order_11).
+3. Soulforge growth rate: +1 level per kill (fast, swingy) vs +1 per N kills (controlled)?
+   Recommend per-N-kills (e.g. 5) to avoid a snowball on a long floor.
+4. Does player crit (from stats/perks) and weapon Crit share one roll or roll independently?
+   Recommend additive chance, single roll, multiplicative damage — simplest to reason about.
+5. Comparison deltas in the inspect card (equipped vs ground) — ship in v1 or defer? Recommend
+   defer to v1.1; the base card is the must-have.
+6. Color-blind mode: are the level tag + glyph strip + tier underline enough redundancy, or do we
+   add a tier ICON shape (circle/diamond/star) per tier? Recommend adding the shape in v1.1.
+7. Re-roll / upgrade station as a room type (spend credits to re-roll a weapon's abilities)?
+   Strong roguelike hook but out of scope here — flag as a follow-up design doc.
+8. Do abilities stack across the player's TWO loadout slots passively, or only the active weapon?
+   Recommend only the ACTIVE weapon's abilities are live (no stat-stacking from a holstered gun),
+   to keep evaluation simple and reads honest.
