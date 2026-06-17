@@ -1,0 +1,53 @@
+TITLE: Weapon System Order 2 — Base Class Extension & Level Scaling
+IMPLEMENTED: 2026-06-17
+DEPENDS ON: weapon-system-order-1 (WeaponTier, WeaponAbility, AbilityInstance, WeaponProfile)
+NEXT: weapon-system-order-3 (Accuracy & Miss System in fire())
+
+OVERVIEW
+========
+Weapon now implements WeaponProfile. Every weapon carries a level (1–10), tier (COMMON–LEGENDARY),
+baseAccuracy, and an abilities array. Effective stats (damage, accuracy, clipSize, reloadTicks, range)
+are cached and recomputed only on spawn or Soulforge level-up — never per frame.
+
+KEY CHANGES
+===========
+
+WeaponConstants.java
+  - WEAPON LEVEL SCALING block: MAX_WEAPON_LEVEL=10, per-stat growth rates, WEAPON_CLIP_HARD_CAP=99
+  - Per-weapon BASE ACCURACY constants (SHOTGUN_BASE_ACCURACY=0.85f … MELEE_BASE_ACCURACY=1.0f)
+
+GameMath.java  (6 new pure static methods)
+  - weaponScaledDamage(baseDamage, level)         +10%/level
+  - weaponScaledAccuracy(baseAccuracy, level)     +2%/level, floor 0.50
+  - weaponScaledReloadTicks(baseReloadTicks, level) −0.15 ticks/level, min 1 (0 passthrough for melee)
+  - weaponScaledClipSize(baseClipSize, level)     +8%/level accumulative floor
+  - weaponScaledRange(baseRange, level, isMelee)  +1 tile/2 levels, cap +3 (melee always returns 1)
+  - abilityMagnitudeScaled / abilityCountScaled    linear/stepped scaling helpers for ability values
+
+Weapon.java
+  - implements WeaponProfile
+  - Fields: weaponLevel, tier, baseAccuracy, abilities[], effectiveDamage/Accuracy/ClipSize/ReloadTicks/Range
+  - setBaseAccuracy(float)       — called by each subclass constructor; triggers recomputeEffectiveStats()
+  - configureRoll(level, tier, abilities[]) — called at spawn by WeaponRoller (order-11); resets clip
+  - incrementWeaponLevel()       — package-private; used by Soulforge ability only
+  - recomputeEffectiveStats()    — private; applies level scaling then EXTENDED_MAG / QUICK_HANDS bonuses
+  - isMelee() declared abstract  — ranged subclasses return false, MeleeWeapon returns true
+  - All WeaponProfile getters implemented (getTier, getWeaponLevel, getEffective*, getAbility*, hasAbility…)
+
+Weapon subclasses (ranged: Shotgun, DoubleBarrelShotgun, Chaingun, PlasmaRifle, Railgun,
+                            Incinerator, GrenadeLauncher)
+  - Each constructor calls setBaseAccuracy(WeaponConstants.<WEAPON>_BASE_ACCURACY)
+  - Each implements isMelee() { return false; }
+
+MeleeWeapon.java
+  - Constructor calls setBaseAccuracy(WeaponConstants.MELEE_BASE_ACCURACY)  // 1.0 — never misses
+  - Implements isMelee() { return true; }  — inherited by Fist, Hammer, CombatKnife, MeleeChainsaw
+
+INVARIANTS
+==========
+- Base fields (damage, clipSize, reloadTime, range) are NEVER mutated; they are level-1 references.
+- effective* fields are the ONLY numbers gameplay reads; bypassing them with base fields is a bug.
+- recomputeEffectiveStats() is called only at: construction, setBaseAccuracy, configureRoll, incrementWeaponLevel.
+- QUICK_HANDS ability is guarded with !isMelee() so melee reloadTicks stays at 0.
+- EXTENDED_MAG is a GUN-family ability so the roller never places it on melee; guard is implicit.
+- fire() / marchShot() bodies still read base fields (damage, range) — that changes in order-3.
