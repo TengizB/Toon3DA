@@ -1,0 +1,262 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System — Positional & Situational Abilities
+---
+
+OVERVIEW
+========
+Implement six positional and situational abilities: Point Blank (bonus damage
+up close), Marksman's Patience (bonus at range), Opening Salvo (bonus on
+full-HP targets), Rhythm/Heat-Up (ramping consecutive-hit damage), Static
+Discharge (chain AoE on kill), and Resonant Rounds (anti-elite scaling).
+
+DEPENDENCY: weapon-system-order-4 (AbilityResolver with onHit/onKill hooks).
+DEPENDENCY: weapon-system-order-8 (Static Discharge uses the same plus-shaped
+  splash pattern as GrenadeLauncher — verify marchBlast or grenade AoE exists).
+NEXT STEP: weapon-system-order-10 (Legendary Signature Abilities).
+
+FILES TO MODIFY
+===============
+- entity/AbilityResolver.java    (add positional ability implementations)
+- entity/Weapon.java             (rhythmConsecutiveHits counter, rhythmTargetId)
+- util/GameBalance.java          (positional ability numbers)
+- util/GameMath.java             (distance helper if absent)
+
+
+──────────────────────────────────────────────
+A. GameBalance.java — positional ability numbers
+──────────────────────────────────────────────
+All PLACEHOLDERS:
+
+    // Point Blank
+    public static final float POINT_BLANK_BONUS_BASE      = 0.20f;
+    public static final float POINT_BLANK_BONUS_PER_LEVEL = 0.05f;
+    public static final float POINT_BLANK_BONUS_CAP       = 0.70f;
+    public static final int   POINT_BLANK_MAX_DISTANCE    = 1;    // only fires at tile distance 1
+
+    // Marksman's Patience
+    public static final float MARKSMAN_PER_TILE_BASE      = 0.05f;
+    public static final float MARKSMAN_PER_TILE_PER_LEVEL = 0.01f;
+    public static final float MARKSMAN_PER_TILE_CAP       = 0.12f;
+    public static final int   MARKSMAN_MIN_DISTANCE       = 2;    // starts at tile 2+
+    public static final float MARKSMAN_TOTAL_BONUS_CAP    = 0.60f;
+
+    // Opening Salvo (bonus vs full-HP target)
+    public static final float OPENING_SALVO_BONUS_BASE      = 0.30f;
+    public static final float OPENING_SALVO_BONUS_PER_LEVEL = 0.07f;
+    public static final float OPENING_SALVO_BONUS_CAP       = 0.90f;
+
+    // Rhythm (Heat-Up ramp)
+    public static final float RHYTHM_RAMP_PER_HIT_BASE      = 0.06f;
+    public static final float RHYTHM_RAMP_PER_HIT_PER_LEVEL = 0.01f;
+    public static final float RHYTHM_RAMP_PER_HIT_CAP       = 0.15f;
+    public static final int   RHYTHM_MAX_STACKS              = 5;
+
+    // Static Discharge (chain AoE on kill)
+    public static final float STATIC_SPLASH_BASE      = 4f;
+    public static final float STATIC_SPLASH_PER_LEVEL = 1f;
+    public static final int   STATIC_SPLASH_CAP       = 14;
+
+    // Resonant Rounds (anti-elite % of maxHP)
+    public static final float RESONANT_PCT_BASE      = 0.04f;
+    public static final float RESONANT_PCT_PER_LEVEL = 0.008f;
+    public static final float RESONANT_PCT_CAP       = 0.10f;
+
+
+──────────────────────────────────────────────
+B. Distance helper — GameMath
+──────────────────────────────────────────────
+    /*
+     * Formula: Tile-space Manhattan combat distance
+     * Derivation: |playerTileCol - enemyTileCol| + |playerTileRow - enemyTileRow|
+     *             For cardinal-line combat (same row or column), this equals the
+     *             number of tiles between player and target.
+     * Edge cases: distance=0 means same tile (should not happen in normal combat).
+     */
+    public static int tileDistance(int fromColumn, int fromRow,
+                                   int toColumn,   int toRow) {
+        return Math.abs(fromColumn - toColumn) + Math.abs(fromRow - toRow);
+    }
+
+
+──────────────────────────────────────────────
+C. Point Blank — PASSIVE (applied in onHit)
+──────────────────────────────────────────────
+Bonus damage only when the enemy is exactly 1 tile away (adjacent).
+
+In AbilityResolver.onHit():
+
+    if (weapon.hasAbility(WeaponAbility.POINT_BLANK)) {
+        int distance = GameMath.tileDistance(playerTileColumn, playerTileRow,
+                                             hitEnemy.tileColumn, hitEnemy.tileRow);
+        if (distance <= GameBalance.POINT_BLANK_MAX_DISTANCE) {
+            float bonus = weapon.abilityMagnitude(WeaponAbility.POINT_BLANK);
+            int bonusDamage = Math.round(damageDealt * bonus);
+            hitEnemy.takeDamage(bonusDamage);
+            // No separate event text — the damage total already shows the bonus.
+        }
+    }
+
+
+──────────────────────────────────────────────
+D. Marksman's Patience — PASSIVE (applied in onHit)
+──────────────────────────────────────────────
+Bonus damage scaling with distance beyond 2 tiles. Bonus per tile × distance.
+
+In AbilityResolver.onHit():
+
+    if (weapon.hasAbility(WeaponAbility.MARKSMANS_PATIENCE)) {
+        int distance = GameMath.tileDistance(playerTileColumn, playerTileRow,
+                                             hitEnemy.tileColumn, hitEnemy.tileRow);
+        int bonusTiles = Math.max(0, distance - GameBalance.MARKSMAN_MIN_DISTANCE);
+        if (bonusTiles > 0) {
+            float perTileBonus = weapon.abilityMagnitude(WeaponAbility.MARKSMANS_PATIENCE);
+            float totalBonus = Math.min(perTileBonus * bonusTiles,
+                                        GameBalance.MARKSMAN_TOTAL_BONUS_CAP);
+            int bonusDamage = Math.round(damageDealt * totalBonus);
+            hitEnemy.takeDamage(bonusDamage);
+        }
+    }
+
+NOTE: Point Blank and Marksman's Patience are thematic opposites. A weapon can
+technically have both — they simply never both trigger (distance either is 1 or
+is >2, never both). This is fine; the roller should not prevent it.
+
+
+──────────────────────────────────────────────
+E. Opening Salvo — PASSIVE (applied in onHit)
+──────────────────────────────────────────────
+Bonus damage only on the FIRST hit to a full-HP target (currentHp == maxHp).
+The check must happen BEFORE the weapon's primary damage is applied, so either:
+  - Pass a "targetWasFullHp" flag into onHit(), computed before takeDamage() in marchShot.
+  - Or read currentHp BEFORE calling takeDamage in onHit (currentHp is still full).
+
+In marchShot, before calling enemy.takeDamage(damage):
+    boolean targetWasFullHp = hitEnemy.getCurrentHp() >= hitEnemy.getMaxHp();
+
+Pass targetWasFullHp into abilityResolver.onHit() as an additional parameter.
+
+In AbilityResolver.onHit():
+
+    if (weapon.hasAbility(WeaponAbility.OPENING_SALVO) && targetWasFullHp) {
+        float bonus = weapon.abilityMagnitude(WeaponAbility.OPENING_SALVO);
+        int bonusDamage = Math.round(damageDealt * bonus);
+        hitEnemy.takeDamage(bonusDamage);
+        eventTextSystem.showText("OPENING!", EventTextSystem.OPENING_COLOR);
+    }
+
+
+──────────────────────────────────────────────
+F. Rhythm (Heat-Up) — PASSIVE ramp (tracked on Weapon)
+──────────────────────────────────────────────
+Consecutive hits on the SAME enemy ramp damage. Resets on miss, target switch,
+or turn with no attack.
+
+State on Weapon.java:
+    private int  rhythmStacks      = 0;
+    private int  rhythmTargetId    = -1;   // EnemyManager-assigned ID or hashCode
+    public  void resetRhythm()             { rhythmStacks = 0; rhythmTargetId = -1; }
+    public  void updateRhythm(int enemyId) {
+        if (enemyId == rhythmTargetId) {
+            rhythmStacks = Math.min(rhythmStacks + 1, GameBalance.RHYTHM_MAX_STACKS);
+        } else {
+            rhythmStacks = 1;
+            rhythmTargetId = enemyId;
+        }
+    }
+    public int getRhythmStacks() { return rhythmStacks; }
+
+Reset rhythm: call weapon.resetRhythm() when:
+  - The miss path fires (miss in order-3).
+  - The weapon is switched / holstered.
+
+In AbilityResolver.onHit() (before other ability checks):
+
+    if (weapon.hasAbility(WeaponAbility.RHYTHM)) {
+        weapon.updateRhythm(hitEnemy.getId());
+        int stacks = weapon.getRhythmStacks();
+        if (stacks > 1) {
+            float rampPerHit = weapon.abilityMagnitude(WeaponAbility.RHYTHM);
+            float totalRamp  = rampPerHit * (stacks - 1);  // 0 bonus on first hit
+            int rampDamage   = Math.round(damageDealt * totalRamp);
+            if (rampDamage > 0) hitEnemy.takeDamage(rampDamage);
+        }
+    }
+
+Enemy.getId(): each enemy needs a stable integer ID for the lifetime of the run.
+  Add `private static int nextId = 0;` and `private final int id = nextId++;`
+  in Enemy.java if not present. Reset nextId at run start.
+
+
+──────────────────────────────────────────────
+G. Static Discharge — ON_KILL
+──────────────────────────────────────────────
+On kill, deals AoE splash damage to all enemies orthogonally adjacent to the
+dead enemy's tile (plus-shaped: up, down, left, right — exactly 4 checks).
+
+In AbilityResolver.onKill():
+
+    if (weapon.hasAbility(WeaponAbility.STATIC_DISCHARGE)) {
+        int splashDamage = Math.round(weapon.abilityMagnitude(WeaponAbility.STATIC_DISCHARGE));
+        int deadCol = killedEnemy.tileColumn;
+        int deadRow = killedEnemy.tileRow;
+        int[][] offsets = { {0,1}, {0,-1}, {1,0}, {-1,0} };
+        boolean anyHit = false;
+        for (int[] offset : offsets) {
+            Enemy adjacent = enemyManager.getEnemyAt(deadCol + offset[0],
+                                                      deadRow + offset[1]);
+            if (adjacent != null) {
+                adjacent.takeDamage(splashDamage);
+                anyHit = true;
+            }
+        }
+        if (anyHit) {
+            eventTextSystem.showText("DISCHARGE!", EventTextSystem.DISCHARGE_COLOR);
+        }
+    }
+
+The splash does not chain (a Static Discharge kill does not trigger another
+Static Discharge from the secondary deaths). Add a resolving-discharge flag to
+AbilityResolver to prevent recursion if onKill is called from within onKill:
+    private boolean resolvingDischarge = false;
+    // In onKill, guard: if (resolvingDischarge) skip STATIC_DISCHARGE.
+    // Set to true before the loop; restore to false after.
+
+
+──────────────────────────────────────────────
+H. Resonant Rounds — ON_HIT
+──────────────────────────────────────────────
+Adds flat bonus damage scaled to the TARGET's max HP. Makes a weak weapon
+threatening against high-HP elite enemies.
+
+In AbilityResolver.onHit():
+
+    if (weapon.hasAbility(WeaponAbility.RESONANT_ROUNDS)) {
+        float pct = weapon.abilityMagnitude(WeaponAbility.RESONANT_ROUNDS);
+        int resonantBonus = Math.max(1, Math.round(hitEnemy.getMaxHp() * pct));
+        hitEnemy.takeDamage(resonantBonus);
+    }
+
+No event text — this is a subtle passive. The damage total just reads slightly
+higher and the player discovers it experientially.
+
+
+IMPLEMENTATION NOTES
+====================
+- Point Blank and Marksman's Patience both call hitEnemy.takeDamage() as bonus
+  hits AFTER the primary damage. If the bonus damage kills the enemy, onKill()
+  fires. This is intentional — the kill credit goes to the weapon.
+- Opening Salvo requires `targetWasFullHp` as a new parameter on AbilityResolver.
+  onHit(). Update the method signature and all call sites in Weapon.java.
+- Rhythm's rhythmTargetId should be reset when the enemy DIES too (in onKill),
+  so the next-target starts fresh. Call weapon.resetRhythm() at the top of onKill
+  if the killed enemy matches rhythmTargetId.
+- Static Discharge's no-chain guard (resolvingDischarge flag) prevents a rare but
+  possible situation where a secondary death triggers a tertiary discharge. The
+  flag is a simple boolean reset in a try/finally block.
+- All bonus damage from abilities (Resonant, Point Blank, Marksman, Opening Salvo)
+  can themselves kill the enemy. Ensure the kill path in marchShot checks
+  hitEnemy.isDead() AFTER all ability damage is resolved, not after the primary
+  damage only. The current pattern "if (hitEnemy.isDead()) call onKill()" must
+  move to AFTER AbilityResolver.onHit() returns.
+- Run `./gradlew build` after implementation.

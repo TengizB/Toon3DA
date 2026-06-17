@@ -1,0 +1,197 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System — Utility & Economy Abilities
+---
+
+OVERVIEW
+========
+Implement five utility and economy abilities in AbilityResolver:
+Scavenger Rounds (ammo refund on kill), Extended Mag (extra clip capacity —
+already wired passively in order-2, but confirm here), Quick Hands (reload
+speed — also passive from order-2), Field Medic Rounds (medkit drop on kill),
+and Credit Fang (bonus credits on kill).
+
+DEPENDENCY: weapon-system-order-6 (AbilityResolver onKill/onReload hooks,
+  groundItemSpawner injected).
+NEXT STEP: weapon-system-order-8 (DoT / Status Abilities).
+
+FILES TO MODIFY
+===============
+- entity/AbilityResolver.java    (add economy ability implementations)
+- util/GameBalance.java          (economy ability numbers)
+- item/Inventory.java            (addAmmo — verify it exists)
+- world/World.java               (credits field / addCredits method, if needed)
+
+
+──────────────────────────────────────────────
+A. GameBalance.java — economy ability numbers
+──────────────────────────────────────────────
+All PLACEHOLDERS:
+
+    // Scavenger Rounds
+    public static final float SCAVENGER_CHANCE_BASE      = 0.15f;
+    public static final float SCAVENGER_CHANCE_PER_LEVEL = 0.03f;
+    public static final float SCAVENGER_CHANCE_CAP       = 0.50f;
+    public static final int   SCAVENGER_REFUND_BASE      = 1;    // 1 round refunded
+    public static final int   SCAVENGER_REFUND_HIGH_LEVEL = 2;   // 2 rounds at L>=7
+    public static final int   SCAVENGER_HIGH_LEVEL_THRESHOLD = 7;
+
+    // Extended Mag (count-style — abilityCount used in recomputeEffectiveStats, order-2)
+    // (No new GameBalance entry needed; base/perLevel/cap for count were specified in order-2)
+
+    // Field Medic Rounds
+    public static final float FIELD_MEDIC_CHANCE_BASE      = 0.05f;
+    public static final float FIELD_MEDIC_CHANCE_PER_LEVEL = 0.02f;
+    public static final float FIELD_MEDIC_CHANCE_CAP       = 0.25f;
+    public static final int   FIELD_MEDIC_HEAL_AMOUNT      = 15;  // Small Medkit heals this much
+
+    // Credit Fang
+    public static final float CREDIT_FANG_BASE      = 2f;
+    public static final float CREDIT_FANG_PER_LEVEL = 1f;
+    public static final int   CREDIT_FANG_CAP       = 12;   // max credits per kill
+
+
+──────────────────────────────────────────────
+B. Scavenger Rounds — ON_KILL (gun only)
+──────────────────────────────────────────────
+On kill, chance to refund ammo to the player's reserve for THIS weapon's
+ammo type. Never refunds above the ammo capacity cap.
+
+In AbilityResolver.onKill():
+
+    if (weapon.hasAbility(WeaponAbility.SCAVENGER_ROUNDS) && !weapon.isMelee()) {
+        float refundChance = weapon.abilityMagnitude(WeaponAbility.SCAVENGER_ROUNDS);
+        if (rng.nextFloat() <= refundChance) {
+            int refundAmount = (weapon.getWeaponLevel() >= GameBalance.SCAVENGER_HIGH_LEVEL_THRESHOLD)
+                               ? GameBalance.SCAVENGER_REFUND_HIGH_LEVEL
+                               : GameBalance.SCAVENGER_REFUND_BASE;
+            AmmoType ammoType = getAmmoTypeForWeapon(weapon);
+            inventory.addAmmo(ammoType, refundAmount);
+            eventTextSystem.showText("+" + refundAmount + " AMMO", EventTextSystem.AMMO_COLOR);
+        }
+    }
+
+getAmmoTypeForWeapon(WeaponProfile weapon) — a private helper in AbilityResolver
+that maps weapon display name (or a weapon type enum) to AmmoType:
+  - Shotgun, DoubleBarrel → AmmoType.SHELLS
+  - Chaingun, Railgun     → AmmoType.BULLETS
+  - PlasmaRifle           → AmmoType.CELLS
+  - GrenadeLauncher       → AmmoType.ROCKETS
+  - Incinerator           → AmmoType.CELLS  (or a FUEL type if it exists)
+
+A cleaner approach: add getAmmoType() to the WeaponProfile interface and have
+each gun subclass return its AmmoType. Then AbilityResolver calls
+weapon.getAmmoType() without needing a switch.
+
+Inventory.addAmmo(AmmoType ammoType, int amount): verify it exists and respects
+the ammo cap (ItemConstants.AMMO_CAP_*). If the method is named differently
+(e.g., addItem, giveAmmo), use the existing name.
+
+
+──────────────────────────────────────────────
+C. Extended Mag — PASSIVE (already handled in order-2)
+──────────────────────────────────────────────
+Extended Mag's extra clip capacity is applied in Weapon.recomputeEffectiveStats()
+(order-2). No AbilityResolver callback is needed.
+
+VERIFY in this order that:
+  1. recomputeEffectiveStats() reads abilityCount(EXTENDED_MAG) and adds it to effectiveClipSize.
+  2. shotsInClip is reset to effectiveClipSize in configureRoll() (not to baseClipSize).
+  3. After a reload, shotsInClip is refilled to effectiveClipSize (not baseClipSize).
+     Find the reload completion code in Weapon.java and update it:
+       this.shotsInClip = getEffectiveClipSize();  // was: baseClipSize
+
+No additional implementation needed here. Mark EXTENDED_MAG as verified.
+
+
+──────────────────────────────────────────────
+D. Quick Hands — PASSIVE (already handled in order-2)
+──────────────────────────────────────────────
+Quick Hands' reload reduction is applied in Weapon.recomputeEffectiveStats().
+Same pattern as Extended Mag.
+
+VERIFY that:
+  1. recomputeEffectiveStats() subtracts 1 tick when QUICK_HANDS is present.
+  2. The reload countdown in Weapon's tick handler uses getEffectiveReloadTicks()
+     (not a stored baseReloadTicks variable captured at construction).
+
+No additional implementation needed. Mark QUICK_HANDS as verified.
+
+
+──────────────────────────────────────────────
+E. Field Medic Rounds — ON_KILL (universal)
+──────────────────────────────────────────────
+Chance on kill to spawn a Small Medkit pickup at the dead enemy's tile.
+
+In AbilityResolver.onKill():
+
+    if (weapon.hasAbility(WeaponAbility.FIELD_MEDIC_ROUNDS)) {
+        float dropChance = weapon.abilityMagnitude(WeaponAbility.FIELD_MEDIC_ROUNDS);
+        if (rng.nextFloat() <= dropChance) {
+            groundItemSpawner.spawnItem(killedEnemy.tileColumn, killedEnemy.tileRow,
+                                        ItemType.MEDKIT_SMALL);
+            eventTextSystem.showText("MEDKIT DROP!", EventTextSystem.MEDKIT_COLOR);
+        }
+    }
+
+groundItemSpawner.spawnItem(int tileColumn, int tileRow, ItemType itemType):
+  - Creates a GroundItem at the specified tile.
+  - If ItemType.MEDKIT_SMALL does not exist, use the closest equivalent medkit type.
+  - If the tile is occupied (wall, another item), try the player's adjacent tile as
+    a fallback; if that too is occupied, skip the drop silently.
+
+GameBalance.FIELD_MEDIC_HEAL_AMOUNT is not used here — it specifies how much the
+medkit itself heals when the player picks it up. That value should already be part
+of the medkit's ItemType definition. If not, add it to ItemConstants.java.
+
+
+──────────────────────────────────────────────
+F. Credit Fang — ON_KILL (universal)
+──────────────────────────────────────────────
+Kills grant bonus credits toward the shop/merchant system
+(roguelike_order_11_shop_and_merchant_room.txt).
+
+In AbilityResolver.onKill():
+
+    if (weapon.hasAbility(WeaponAbility.CREDIT_FANG)) {
+        int credits = Math.round(weapon.abilityMagnitude(WeaponAbility.CREDIT_FANG));
+        playerStats.addCredits(credits);
+        eventTextSystem.showText("+" + credits + " CR", EventTextSystem.CREDITS_COLOR);
+    }
+
+PlayerStats.addCredits(int amount) / PlayerStats.getCredits():
+  - If the shop system (order-11) is not implemented yet, add a stub:
+      private int credits = 0;
+      public void addCredits(int amount) { credits += amount; }
+      public int  getCredits()           { return credits; }
+  - When order-11 is implemented, this getter/setter will be wired into the shop UI.
+
+
+──────────────────────────────────────────────
+G. WeaponProfile.getAmmoType() — interface addition
+──────────────────────────────────────────────
+Add to WeaponProfile interface (if not already present):
+
+    /** Returns the ammo type this weapon consumes, or null for melee. */
+    AmmoType getAmmoType();
+
+Implement in each gun subclass:
+    @Override public AmmoType getAmmoType() { return AmmoType.BULLETS; }  // per weapon
+
+Implement in MeleeWeapon:
+    @Override public AmmoType getAmmoType() { return null; }
+
+
+IMPLEMENTATION NOTES
+====================
+- Scavenger Rounds refunds to the RESERVE (not the clip). It does not refill
+  the current clip; the player must reload manually. This keeps reload decisions
+  meaningful.
+- Field Medic Rounds and Salvage Strike (order-6) can both fire on the same kill
+  if the weapon has both. They are independent rolls and both can succeed.
+- Credit Fang does not display credits during combat in the main HUD (the right
+  panel is for ammo). Show credits total only in the shop/inventory screen (order-11).
+  The event text "+N CR" is the only in-combat feedback.
+- If the shop system is not yet implemented, Credit Fang still accumulates credits
+  in PlayerStats. No functionality is lost; the credits just aren't spendable yet.
+- Run `./gradlew build` after implementation.

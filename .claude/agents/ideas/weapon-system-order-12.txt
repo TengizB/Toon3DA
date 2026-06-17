@@ -1,0 +1,235 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Weapon System — HUD Display Redesign
+---
+
+OVERVIEW
+========
+Replace weapon description text everywhere it appears with tier color, level
+badge, and ability glyphs. Three surfaces to update: the in-combat HUD right
+panel (HudRenderer), the weapon inspect/switch card (WeaponInspectOverlayRenderer),
+and the ground-pickup billboard tint (PropRenderer or EnemyRenderer — wherever
+weapon ground sprites are drawn).
+
+DEPENDENCY: weapon-system-order-11 (all weapons now have tier/level/abilities set;
+  WeaponProfile.getTier(), getWeaponLevel(), getAbility() all return real values).
+NEXT STEP: None — this is the final order in the weapon system chain.
+
+FILES TO MODIFY
+===============
+- render/HudRenderer.java                  (weapon name → tier-tinted, Lv badge, glyph strip)
+- render/WeaponInspectOverlayRenderer.java (new inspect card replacing description)
+- render/PropRenderer.java                 (tier color tint on ground weapon sprites)
+- util/HudConstants.java                   (new layout constants for ability strip)
+
+
+──────────────────────────────────────────────
+A. HudConstants.java — new layout constants
+──────────────────────────────────────────────
+    // Ability glyph strip (right panel, below weapon name)
+    public static final float HUD_ABILITY_STRIP_Y_OFFSET     = -18f;  // below weapon name baseline
+    public static final float HUD_ABILITY_GLYPH_SIZE          = 14f;  // font size for glyph chars
+    public static final float HUD_ABILITY_GLYPH_SPACING       = 18f;  // pixels between glyphs
+    public static final float HUD_TIER_UNDERLINE_HEIGHT        = 3f;   // px; bar below ammo digits
+    public static final float HUD_TIER_UNDERLINE_Y_OFFSET      = 2f;   // from bottom of ammo area
+
+    // Weapon level badge prefix
+    public static final String HUD_LEVEL_BADGE_PREFIX = "Lv";   // e.g. "Lv4  CHAINGUN"
+    public static final float  HUD_LEVEL_BADGE_FONT_SCALE = 0.85f;
+
+
+──────────────────────────────────────────────
+B. HudRenderer.java — weapon name area redesign
+──────────────────────────────────────────────
+Current state: draws weapon name as plain white text + description text below it.
+After this change: draws "[Lv N]  WEAPON NAME" tinted in tier color + glyph strip.
+
+Locate the section in HudRenderer that draws the weapon name and description in
+the right panel (X: 860..1280). Replace it with:
+
+1. LEVEL + NAME (single line, tier-tinted):
+    String levelBadge = HudConstants.HUD_LEVEL_BADGE_PREFIX + weapon.getWeaponLevel();
+    String fullName   = levelBadge + "  " + weapon.getDisplayName().toUpperCase();
+    WeaponTier tier   = weapon.getTier();
+
+    batch.setColor(tier.colorRed, tier.colorGreen, tier.colorBlue, 1f);
+    font.draw(batch, fullName, nameX, nameY);
+    batch.setColor(Color.WHITE);  // restore
+
+2. ABILITY GLYPH STRIP (row below the name):
+    float glyphX = nameX;
+    float glyphY = nameY + HudConstants.HUD_ABILITY_STRIP_Y_OFFSET;
+    for (int abilityIndex = 0; abilityIndex < weapon.getAbilityCount(); abilityIndex++) {
+        WeaponAbility ability = weapon.getAbility(abilityIndex).ability;
+        char glyph = ability.hudGlyph();
+        batch.setColor(tier.colorRed, tier.colorGreen, tier.colorBlue, 0.85f);
+        font.draw(batch, String.valueOf(glyph),
+                  glyphX + abilityIndex * HudConstants.HUD_ABILITY_GLYPH_SPACING, glyphY);
+    }
+    batch.setColor(Color.WHITE);
+
+3. TIER UNDERLINE BAR (thin colored bar under the ammo digit area):
+    Use ShapeRenderer (or the white-pixel batch technique). Draw a filled rectangle:
+      x = 860 + padding
+      y = HUD_TIER_UNDERLINE_Y_OFFSET
+      width = right panel width - 2*padding
+      height = HUD_TIER_UNDERLINE_HEIGHT
+      color = tier color at alpha 0.7f
+
+    IMPORTANT: HudRenderer likely uses SpriteBatch. If it does not already
+    switch to ShapeRenderer for the HUD bars, use the white-pixel technique:
+      batch.setColor(tier.colorRed, tier.colorGreen, tier.colorBlue, 0.7f);
+      batch.draw(whitePixelTexture, underlineX, underlineY, underlineWidth,
+                 HudConstants.HUD_TIER_UNDERLINE_HEIGHT);
+      batch.setColor(Color.WHITE);
+
+4. REMOVE the old description text draw call entirely.
+
+IMPORTANT — no allocations in render():
+  - The `fullName` string concatenation WILL allocate. Pre-allocate a StringBuilder
+    or use a cached string field updated only when the weapon changes (on weapon switch).
+  - Add to HudRenderer:
+      private String cachedWeaponHudLine = "";
+      private int    cachedWeaponLevel   = -1;
+      private WeaponTier cachedTier      = null;
+
+    In render(), before drawing:
+      if (weapon.getWeaponLevel() != cachedWeaponLevel || weapon.getTier() != cachedTier) {
+          cachedWeaponHudLine = HudConstants.HUD_LEVEL_BADGE_PREFIX
+              + weapon.getWeaponLevel() + "  " + weapon.getDisplayName().toUpperCase();
+          cachedWeaponLevel = weapon.getWeaponLevel();
+          cachedTier        = weapon.getTier();
+      }
+    Use cachedWeaponHudLine for the draw call.
+
+
+──────────────────────────────────────────────
+C. WeaponInspectOverlayRenderer.java — new card
+──────────────────────────────────────────────
+The inspect card appears when the player stands on a ground weapon or opens the
+weapon-switch overlay. It currently shows a description paragraph.
+
+Replace the card content with:
+
+CARD HEADER:
+    "[TIER NAME]  LEVEL N"
+    Drawn in tier color, bold if possible, centered at card top.
+    e.g. "EPIC  LEVEL 7" in Demon Violet color.
+
+WEAPON NAME (large):
+    weapon.getDisplayName().toUpperCase()
+    Also drawn in tier color, below the header.
+
+STAT BLOCK (white text, two columns):
+    Left column:                    Right column:
+      DMG:   N (base: B)             ACC:   N%
+      CLIP:  N (base: B)             RNG:   N tiles
+      RELOAD: N ticks (base: B)
+    Format: "DMG  13  (10 base)" — show the base in grey/dim to indicate the bonus.
+    "base" is the Level-1 Common value from the subclass's base constant.
+    To get the base: weapon.getBaseDamage() — add this getter to WeaponProfile if absent.
+
+ABILITY LIST (one row per ability):
+    For each ability slot (0..getAbilityCount()-1):
+      AbilityInstance inst = weapon.getAbility(index);
+      String abilityLine = formatAbilityLine(inst);
+      Draw in tier color (standard abilities) or gold (signature / legendaryOnly).
+      Mark the signature slot with a "★" prefix or "SIGNATURE" tag.
+
+    formatAbilityLine(AbilityInstance inst) private helper — returns human-readable:
+      CRITICAL_STRIKE       → "CRIT  18.5%"
+      BURST_FIRE            → "BURST  ×3"
+      LIFESTEAL             → "LIFESTEAL  9.0%"
+      HEMORRHAGE_HARVEST    → "HP/KILL  +7"
+      VAMPIRIC_CRIT         → "CRIT HEAL  +9"
+      KINETIC_SLAM          → "KNOCKBACK  45%"
+      CLEAVE                → "CLEAVE  60%"
+      SALVAGE_STRIKE        → "AMMO DROP  80%"   (or "AMMO DROP  100%" if magnitude=1)
+      SCHOLARS_EDGE         → "XP/KILL  +35%"
+      EXTENDED_MAG          → "MAG +3"
+      REND                  → "BLEED  4/turn"
+      INCENDIARY            → "BURN  5/turn"
+      STAGGER_ROUNDS        → "STUN  28%"
+      SOULFORGE             → "★ ASCENDS ON KILL"
+      JUDGMENT              → "★ LANCE every 5 fires"
+      HELLFIRE_NOVA         → "★ CRIT NOVA  75%"
+      BERSERKERS_OATH       → "★ BERSERK STREAK"
+      ... etc.
+
+    Use inst.magnitude and inst.countValue to build the value part.
+    Round floats to 1 decimal for percents; round to int for flat values.
+
+NO DESCRIPTION TEXT: the old description paragraph is removed entirely.
+
+COMPARISON ROW (optional stretch — defer if complex):
+    If the player already has a weapon in the matching slot, show green/red delta
+    arrows on each stat. E.g., if ground weapon has DMG 13 vs equipped DMG 10,
+    show "▲3" in green. Defer to v1.1.
+
+
+──────────────────────────────────────────────
+D. PropRenderer.java — ground weapon billboard tint
+──────────────────────────────────────────────
+Weapon pickups on the ground are rendered as billboard sprites. Apply a tier-color
+tint to the weapon's ground sprite so a Legendary weapon glows gold on the floor.
+
+Locate where PropRenderer (or whatever class renders ground weapon sprites) draws
+weapon pickups. Apply the tint:
+
+    if (groundItem.isWeapon()) {
+        WeaponProfile weapon = groundItem.getWeapon();
+        WeaponTier tier = weapon.getTier();
+        batch.setColor(tier.colorRed, tier.colorGreen, tier.colorBlue, 1f);
+    }
+    // ... draw sprite ...
+    batch.setColor(Color.WHITE);  // restore after draw
+
+For COMMON weapons (Steel Grey), the tint makes the sprite slightly desaturated,
+which is fine — it reinforces the "plain" feel.
+
+OPTIONAL: Draw a small "Lv N" text above the weapon pickup billboard when the
+player is within 3 tiles. This is a stretch goal; the color tint is the priority.
+
+No allocations: the tint is a setColor call with pre-computed floats from the
+WeaponTier enum — no String, no Color objects created in render().
+
+
+──────────────────────────────────────────────
+E. WeaponProfile additions for inspect card
+──────────────────────────────────────────────
+Add to WeaponProfile interface (if not already present):
+
+    int   getBaseDamage();       // the Level-1 reference value (before level scaling)
+    int   getBaseClipSize();
+    int   getBaseReloadTicks();
+    int   getBaseRange();
+    float getBaseAccuracy();
+
+Implement in Weapon.java by exposing the existing base fields via these getters.
+These are read-only — the base fields themselves are never modified after construction.
+
+
+IMPLEMENTATION NOTES
+====================
+- The glyph strip in HudRenderer may not have room for all 5 glyphs if the font
+  size is large. At HUD_ABILITY_GLYPH_SPACING=18px and 5 glyphs, the strip is 90px
+  wide. The right panel is 420px wide — ample room. Adjust spacing if glyphs overlap.
+- The tier underline bar behind the ammo digits adds visual noise. If playtesting
+  finds it distracting, reduce alpha from 0.7f to 0.4f (GameBalance constant).
+- formatAbilityLine() will be called every frame it is visible. It allocates a String.
+  Cache the formatted lines on WeaponInspectOverlayRenderer (they only change when
+  the inspected weapon changes). Invalidate the cache when a new weapon is set.
+  Store as String[] abilityLines = new String[5]; filled on setInspectedWeapon().
+- Judgment's fire counter: In HudRenderer, show a small cooldown indicator next to
+  the JUDGMENT glyph (e.g., "! 3/5" meaning 3 fires until ready). Access via a
+  new WeaponProfile method: int getJudgmentFiresRemaining(). Returns 0 if the
+  ability is absent or ready. Display only when the weapon is equipped and
+  JUDGMENT is present.
+- After PropRenderer changes, run a full visual check in the game to confirm:
+  - Common weapon on floor = steel grey tint (subtle)
+  - Uncommon = green tint (visible)
+  - Rare = blue glow
+  - Epic = purple glow
+  - Legendary = gold glow (very obvious from a distance)
+- Run `./gradlew build` after implementation. Then manually test the HUD and
+  inspect card with weapons of each tier.
