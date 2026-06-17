@@ -88,6 +88,17 @@ public class LevelRenderer implements Renderable, Disposable {
                 float clippedTop    = Math.min(miniMapTop,    tileBottom + MINI_MAP_CELL_SIZE);
                 if (clippedRight <= clippedLeft || clippedTop <= clippedBottom) continue;
 
+                char cell = level.getCell(levelColumn, levelRow);
+
+                if (Level.isWall(cell)) {
+                    // Walls are always drawn regardless of exploration state so
+                    // the dungeon structure is visible even before rooms are entered.
+                    shapes.setColor(WALL_COLOR);
+                    shapes.rect(clippedLeft, clippedBottom,
+                                clippedRight - clippedLeft, clippedTop - clippedBottom);
+                    continue;
+                }
+
                 if (fogOfWarMap != null && !fogOfWarMap.isRevealed(levelColumn, levelRow)) {
                     shapes.setColor(FOG_MINIMAP_UNEXPLORED_R, FOG_MINIMAP_UNEXPLORED_G,
                                     FOG_MINIMAP_UNEXPLORED_B, 1f);
@@ -96,10 +107,7 @@ public class LevelRenderer implements Renderable, Disposable {
                     continue;
                 }
 
-                char cell = level.getCell(levelColumn, levelRow);
-                if (Level.isWall(cell)) {
-                    shapes.setColor(WALL_COLOR);
-                } else if (Level.isDoor(cell)) {
+                if (Level.isDoor(cell)) {
                     DoorState doorState = doorManager.getStateAt(levelColumn, levelRow);
                     if (doorState == DoorState.OPEN) continue; // Open doorway shows as floor
                     float openFraction = doorManager.getOpenFractionAt(levelColumn, levelRow);
@@ -108,11 +116,10 @@ public class LevelRenderer implements Renderable, Disposable {
                             GameMath.lerp(DOOR_MINIMAP_CLOSED_G, DOOR_MINIMAP_OPEN_G, openFraction),
                             GameMath.lerp(DOOR_MINIMAP_CLOSED_B, DOOR_MINIMAP_OPEN_B, openFraction),
                             1f);
-                } else {
-                    continue;
+                    shapes.rect(clippedLeft, clippedBottom,
+                                clippedRight - clippedLeft, clippedTop - clippedBottom);
                 }
-                shapes.rect(clippedLeft, clippedBottom,
-                            clippedRight - clippedLeft, clippedTop - clippedBottom);
+                // Explored floor tile — transparent, 3D view shows through (no rect drawn)
             }
         }
 

@@ -24,9 +24,10 @@ public class FogOfWarMap {
     }
 
     /**
-     * BFS flood-fill from the player's settled tile to reveal the entire contiguous room.
-     * Expansion stops when a wall or solid-prop tile is reached, but that boundary tile
-     * is still marked revealed so the room walls appear on the mini-map.
+     * BFS flood-fill from the player's settled tile to reveal the entire contiguous area.
+     * Expansion stops only at solid wall tiles; doors, props, and decorations are treated
+     * as passable so corridors and rooms with objects are fully uncovered.
+     * Boundary wall tiles are still marked revealed so room outlines appear on the mini-map.
      */
     public void revealRoom(int startColumn, int startRow, Level level) {
         if (startColumn < 0 || startColumn >= columnCount || startRow < 0 || startRow >= rowCount) return;
@@ -44,7 +45,7 @@ public class FogOfWarMap {
             revealed[tileRow][tileColumn] = true;
 
             char cell = level.getCell(tileColumn, tileRow);
-            if (Level.isWall(cell) || Level.isPropSolid(cell)) continue;
+            if (Level.isWall(cell)) continue;
 
             expandIfUnvisited(tileColumn + 1, tileRow,    visited, queue);
             expandIfUnvisited(tileColumn - 1, tileRow,    visited, queue);
