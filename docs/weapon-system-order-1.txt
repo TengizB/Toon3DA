@@ -1,0 +1,46 @@
+Weapon System Order 1 — Foundation Data Types
+==============================================
+
+IMPLEMENTED: 2026-06-17
+BRANCH: claude/weapon-system-order-1-0cojzm
+
+FILES CREATED (all in ge.tbegvadze.toon3d.entity)
+--------------------------------------------------
+1. WeaponTier.java
+   Enum: COMMON / UNCOMMON / RARE / EPIC / LEGENDARY
+   Each carries abilitySlots, RGB color floats (for HUD tier tinting), and displayName.
+   Legendary has 5 abilitySlots but standardSlotCount() returns 4 (the 5th is the signature).
+
+2. WeaponAbility.java
+   Enum of 33 abilities organized in 4 categories:
+     - Offensive (BURST_FIRE … INCENDIARY)
+     - Defensive/Sustain (LIFESTEAL … SECOND_WIND)
+     - Utility/Economy (SCAVENGER_ROUNDS … CREDIT_FANG)
+     - Hybrid/Situational (POINT_BLANK … RESONANT_ROUNDS)
+     - Legendary signatures (SOULFORGE, JUDGMENT, HELLFIRE_NOVA, BERSERKERS_OATH)
+   Each entry: Family (GUN/MELEE/UNIVERSAL), Trigger (PASSIVE/ON_HIT/ON_KILL/ON_CRIT/ON_FIRE/ON_RELOAD),
+   legendaryOnly flag, displayName, hudGlyph (char).
+   eligibleFor(boolean isMeleeWeapon) filters abilities by weapon type.
+   Duplicate glyph conflicts resolved: VAMPIRIC_CRIT='J', SECOND_WIND='2'.
+
+3. AbilityInstance.java
+   Immutable value object: WeaponAbility + float magnitude + int countValue.
+   Created once at weapon spawn; magnitudePercent() rounds to int for display.
+
+4. WeaponProfile.java
+   Interface that all weapons must implement (Weapon declares it in order-2).
+   Sections: Identity/loot, Effective stats (base * level scaling),
+   Abilities (getAbilityCount / getAbility / hasAbility / abilityMagnitude / abilityCount),
+   Unified actions (canFire / requestManualReload), HUD readouts.
+
+DESIGN NOTES
+------------
+- These are pure data/contract types — no LibGDX imports.
+- No existing file was modified. Weapon.java adds "implements WeaponProfile" in order-2.
+- WeaponProfile is the single gateway for HUD, fire handler, inspect overlay, and
+  EnemyManager hit pipeline — callers must never cast to concrete weapon subclasses.
+
+NEXT STEP
+---------
+weapon-system-order-2: Extend Weapon base class with tier/level fields, implement
+WeaponProfile, and add ability slot storage.
