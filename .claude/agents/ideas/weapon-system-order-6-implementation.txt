@@ -1,0 +1,82 @@
+TITLE: Weapon System Order 6 — Melee Abilities Implementation
+DATE: 2026-06-17
+BRANCH: claude/weapon-system-order-6-15buts
+
+WHAT WAS BUILT
+==============
+Five melee-only abilities fully integrated into the AbilityResolver pipeline.
+MeleeWeapon.fire() was completely refactored to flow through the same
+onFire/onHit/onKill callback chain that ranged weapons use.
+
+ABILITIES IMPLEMENTED
+=====================
+KINETIC_SLAM (ON_HIT)
+  Rolls a chance to push the hit enemy one tile in the player's facing direction.
+  If the push is wall-blocked, deals KINETIC_SLAM_WALL_BONUS_DAMAGE extra damage.
+  Magnitude = knock-back chance (0–1).
+
+CLEAVE (ON_HIT)
+  Deals cleaveFraction of the hit damage to enemies on the two tiles flanking the
+  primary target (90° left and right from the facing direction).
+  Uses cleaveInProgress boolean to prevent recursive sweep on secondary hits.
+  Wrapped in try-finally so the guard always resets even on exceptions.
+
+SALVAGE_STRIKE (ON_KILL)
+  Overrides the drop tile at the killed enemy's cell with a bullets pickup ('6').
+  Calls EnemyManager.overrideDropAt() which stamps the level cell and fires
+  dropPlacedListener so PropRenderer shows the new item immediately.
+
+SCHOLARS_EDGE (ON_KILL)
+  Awards bonus XP equal to (killedEnemy.type.baseXpReward() × xpBonus).
+  Delivered via KillXpListener injected into AbilityResolver by World.java
+  (separate from EnemyManager's own XP listener — both fire per kill).
+
+BERSERKERS_OATH (PASSIVE / ON_FIRE / ON_KILL)
+  Kill-streak tracker: each kill this activation increments berserkerStacks (cap 5).
+  If the next swing has no kill, stacks reset to 0 at onFire().
+  Per-activation damage bonus = stacks × BERSERKER_DAMAGE_PER_STACK applied in onFire().
+  Per-kill HP regen = stacks × BERSERKER_HP_TICK_PER_STACK.
+  "BERSERK!" event text fires when stacks reach max.
+
+KEY ARCHITECTURE CHANGES
+========================
+Weapon.java
+  Added protected helpers: clearLastHit(), resetFireCycleMultiplier(),
+  setFacingStep(), invokeAbilityOnFire().
+  Added public berserker accessors: getBerserkerStacks(), incrementBerserkerStacks(),
+  resetBerserkerStacks(), wasBerserkerKilledThisFire(), setBerserkerKilledThisFire().
+  Fields: lastFacingStepColumn/Row, berserkerStacks, berserkerKilledThisFire.
+
+MeleeWeapon.java
+  fire() now calls clearLastHit() + resetFireCycleMultiplier() + setFacingStep() +
+  invokeAbilityOnFire() before swing, then dispatchHitCallbacks() after marchShot().
+  marchShot() stores damage via setLastHitEnemy() before applyDamageTo().
+  computeDamage() now returns Math.round(damage × getFireCycleMultiplier()).
+  Internal onHit() hook (used by Hammer) still fires; AbilityResolver fires separately.
+
+AbilityResolver.java
+  onHit() extended from 3 to 5 params (added facingStepColumn, facingStepRow).
+  Handles KINETIC_SLAM and CLEAVE in onHit().
+  Handles BERSERKERS_OATH stack-reset + multiplier in onFire().
+  Handles SALVAGE_STRIKE + SCHOLARS_EDGE + BERSERKERS_OATH kill-side in onKill().
+  killXpListener field + setKillXpListener() setter for Scholar's Edge XP grant.
+
+EnemyManager.java
+  Added overrideDropAt(tileColumn, tileRow, dropChar): stamps level cell and fires
+  dropPlacedListener. Used by SALVAGE_STRIKE.
+
+World.java
+  Added abilityResolver.setKillXpListener(xpAwarded -> playerProgress.addXp(xpAwarded))
+  after AbilityResolver construction in buildLevelDependentResources().
+
+BALANCE CONSTANTS (GameBalance.java)
+=====================================
+KINETIC_SLAM_CHANCE_BASE/PER_LEVEL/CAP   0.20 / 0.04 / 0.60
+KINETIC_SLAM_WALL_BONUS_DAMAGE           3
+CLEAVE_FRACTION_BASE/PER_LEVEL/CAP       0.40 / 0.05 / 0.80
+SALVAGE_CHANCE_BASE/PER_LEVEL/CAP        0.50 / 0.06 / 1.00
+SALVAGE_AMMO_DROP_CHAR                   '6'
+SCHOLARS_XP_BONUS_BASE/PER_LEVEL/CAP    0.15 / 0.05 / 0.75
+BERSERKER_DAMAGE_PER_STACK               0.10
+BERSERKER_HP_TICK_PER_STACK             1
+BERSERKER_MAX_STACKS                    5

@@ -5,6 +5,7 @@ import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
+import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
@@ -313,6 +314,40 @@ public abstract class Weapon implements WeaponProfile {
         return fireCycleMultiplier;
     }
 
+    /** Resets fireCycleMultiplier to 1.0f. Called by MeleeWeapon.fire() at activation start. */
+    protected void resetFireCycleMultiplier() {
+        this.fireCycleMultiplier = 1.0f;
+    }
+
+    /** Clears the stale hit record so a miss never fires ability callbacks on a previous target. */
+    protected void clearLastHit() {
+        this.lastHitEnemy  = null;
+        this.lastHitDamage = 0;
+    }
+
+    /** Stores the facing direction for this fire activation; forwarded to onHit() for melee AoE. */
+    protected void setFacingStep(int facingStepColumn, int facingStepRow) {
+        this.lastFacingStepColumn = facingStepColumn;
+        this.lastFacingStepRow    = facingStepRow;
+    }
+
+    /** Triggers AbilityResolver.onFire() for this weapon. No-op when resolver is null. */
+    protected void invokeAbilityOnFire() {
+        if (abilityResolver != null) {
+            abilityResolver.onFire(this);
+        }
+    }
+
+    // ── Berserker's Oath accessors ────────────────────────────────────────────
+    public int     getBerserkerStacks()         { return berserkerStacks; }
+    public boolean wasBerserkerKilledThisFire() { return berserkerKilledThisFire; }
+    public void    setBerserkerKilledThisFire(boolean value) { berserkerKilledThisFire = value; }
+    public void    resetBerserkerStacks()       { berserkerStacks = 0; }
+
+    public void incrementBerserkerStacks() {
+        berserkerStacks = Math.min(berserkerStacks + 1, GameBalance.BERSERKER_MAX_STACKS);
+    }
+
     /**
      * Sets the ranged damage multiplier derived from the player's MARKSMANSHIP stat.
      * Called by World whenever PlayerStats change (run start, perk award, equipment swap).
@@ -531,12 +566,13 @@ public abstract class Weapon implements WeaponProfile {
      * No-op when abilityResolver is null, lastHitEnemy is null, or the result was not a hit.
      * Called once for the base shot and once for each extra burst shot.
      */
-    private void dispatchHitCallbacks(FireResult result) {
+    protected void dispatchHitCallbacks(FireResult result) {
         if (abilityResolver == null || lastHitEnemy == null) return;
         // Only dispatch for actual enemy hits (distanceTiles >= 0 and not a wall stop).
         if (result.stoppedByWall || result.distanceTiles < 0) return;
 
-        boolean wasCrit = abilityResolver.onHit(this, lastHitEnemy, lastHitDamage);
+        boolean wasCrit = abilityResolver.onHit(this, lastHitEnemy, lastHitDamage,
+                lastFacingStepColumn, lastFacingStepRow);
         int critBonusDamage = wasCrit
                 ? Math.round(lastHitDamage * (WeaponConstants.CRIT_DAMAGE_MULTIPLIER - 1f))
                 : 0;

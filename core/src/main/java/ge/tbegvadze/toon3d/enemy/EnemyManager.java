@@ -642,6 +642,21 @@ public final class EnemyManager implements EnemyHitTarget {
         return true;
     }
 
+    /**
+     * Overwrites the level cell at (tileColumn, tileRow) with dropChar and notifies the
+     * DropPlacedListener. Used by SALVAGE_STRIKE to guarantee an ammo pickup after a kill,
+     * replacing whatever drop (or empty floor) the enemy's death would have left there.
+     * No-op for out-of-bounds coordinates.
+     */
+    public void overrideDropAt(int tileColumn, int tileRow, char dropChar) {
+        if (tileColumn < 0 || tileColumn >= level.getWidth())  return;
+        if (tileRow    < 0 || tileRow    >= level.getHeight()) return;
+        level.setCell(tileColumn, tileRow, dropChar);
+        if (dropPlacedListener != null) {
+            dropPlacedListener.onDropPlaced(tileColumn, tileRow, dropChar);
+        }
+    }
+
     /** Returns true if any live enemy currently occupies the given tile. Safe to call at any time. */
     public boolean isTileOccupiedByEnemy(int tileColumn, int tileRow) {
         for (int enemyIndex = 0; enemyIndex < enemies.size(); enemyIndex++) {

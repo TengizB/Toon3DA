@@ -363,6 +363,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         levelRenderer          = new LevelRenderer(targetLevel, doorManager);
         enemyManager           = new EnemyManager(targetLevel, doorManager, currentDepth);
         abilityResolver        = new AbilityResolver(enemyManager, eventTextSystem, player, runSeed);
+        abilityResolver.setKillXpListener(xpAwarded -> playerProgress.addXp(xpAwarded));
         for (Weapon weapon : inventory.getArsenal()) {
             weapon.setAbilityResolver(abilityResolver);
         }

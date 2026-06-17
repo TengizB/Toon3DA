@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.progression.KillXpListener;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
@@ -20,13 +21,18 @@ import java.util.Random;
  *   CRITICAL_STRIKE    (ON_HIT)    — rolls a crit and deals bonus damage.
  *   EXECUTIONER        (ON_HIT)    — bonus damage when target is below EXECUTIONER_THRESHOLD HP%.
  *   STAGGER_ROUNDS     (ON_HIT)    — rolls a chance to set enemy.skipNextAction = true.
+ *   KINETIC_SLAM       (ON_HIT)    — melee: chance to knock enemy back; wall bonus damage on block.
+ *   CLEAVE             (ON_HIT)    — melee: deals fraction of damage to both flanking tiles.
  *   BURST_FIRE         (ON_FIRE)   — signals Weapon to fire extra shots via pendingBurstExtra.
  *   LIFESTEAL          (ON_HIT)    — heals player for a fraction of damage dealt.
  *   HEMORRHAGE_HARVEST (ON_KILL)   — heals player for a fixed amount on each kill.
  *   VAMPIRIC_CRIT      (ON_CRIT)   — heals player when a critical hit lands.
  *   ADRENAL_SURGE      (ON_KILL)   — chance to buff next attack's damage on kill.
+ *   SALVAGE_STRIKE     (ON_KILL)   — melee: chance to override drop tile with ammo pickup.
+ *   SCHOLARS_EDGE      (ON_KILL)   — melee: awards bonus XP equal to a fraction of base reward.
  *   BULWARK_ROUNDS     (ON_RELOAD) — grants temporary armor after reloading.
  *   SECOND_WIND        (PASSIVE)   — boosts damage when player HP is critically low.
+ *   BERSERKERS_OATH    (PASSIVE)   — melee legendary: kill-streak stacks for damage/HP regen.
  *
  * Passive abilities (ARMOR_PIERCE, OVERPENETRATION) are NOT handled here; they are
  * applied inline inside each weapon's marchShot() implementation.
@@ -44,12 +50,32 @@ public final class AbilityResolver {
      */
     private final Random abilityRandom;
 
+    /**
+     * Injected by World so Scholar's Edge can award bonus XP directly to PlayerProgress
+     * without AbilityResolver holding a direct reference to the progression layer.
+     */
+    private KillXpListener killXpListener = null;
+
+    /**
+     * Re-entrancy guard for CLEAVE: prevents the recursive onHit() calls for flanking
+     * targets from re-triggering another Cleave sweep (infinite recursion prevention).
+     */
+    private boolean cleaveInProgress = false;
+
     public AbilityResolver(EnemyManager enemyManager, EventTextSystem eventTextSystem,
                            Player player, long runSeed) {
         this.enemyManager    = enemyManager;
         this.eventTextSystem = eventTextSystem;
         this.player          = player;
         this.abilityRandom   = new Random(runSeed);
+    }
+
+    /**
+     * Injects the XP listener so Scholar's Edge can award bonus XP on melee kills.
+     * Called once by World after AbilityResolver is constructed.
+     */
+    public void setKillXpListener(KillXpListener listener) {
+        this.killXpListener = listener;
     }
 
     // ── Entry points called from Weapon.fire() / Weapon.onTick() ─────────────
@@ -91,6 +117,21 @@ public final class AbilityResolver {
         if (fireCycleMultiplier != 1.0f) {
             weapon.setFireCycleMultiplier(fireCycleMultiplier);
         }
+
+        // ── BERSERKERS_OATH (melee only) ──────────────────────────────────────
+        // Resets stacks if the previous activation had no kill; then applies the current
+        // stack bonus on top of whatever fireCycleMultiplier was already set above.
+        if (weapon.hasAbility(WeaponAbility.BERSERKERS_OATH) && weapon.isMelee()) {
+            if (!weapon.wasBerserkerKilledThisFire() && weapon.getBerserkerStacks() > 0) {
+                weapon.resetBerserkerStacks();
+            }
+            weapon.setBerserkerKilledThisFire(false);
+            int stacks = weapon.getBerserkerStacks();
+            if (stacks > 0) {
+                float stackBonus = stacks * GameBalance.BERSERKER_DAMAGE_PER_STACK;
+                weapon.setFireCycleMultiplier(weapon.getFireCycleMultiplier() * (1.0f + stackBonus));
+            }
+        }
     }
 
     /**
@@ -98,14 +139,18 @@ public final class AbilityResolver {
      * damage has already been applied via {@code EnemyManager.applyDamageTo()}.
      *
      * Evaluates ON_HIT abilities in order: CRITICAL_STRIKE → EXECUTIONER →
-     * STAGGER_ROUNDS → LIFESTEAL.  Returns true if a critical hit was rolled.
+     * STAGGER_ROUNDS → LIFESTEAL → KINETIC_SLAM → CLEAVE.
+     * Returns true if a critical hit was rolled.
      *
-     * @param weapon         the weapon that fired the shot
-     * @param hitEnemyObject the Object returned by EnemyHitTarget.enemyAt() (non-null)
-     * @param damageDealt    the base damage amount that was applied before this call
+     * @param weapon           the weapon that fired the shot
+     * @param hitEnemyObject   the Object returned by EnemyHitTarget.enemyAt() (non-null)
+     * @param damageDealt      the base damage amount that was applied before this call
+     * @param facingStepColumn player facing direction X (−1, 0, or 1); used for melee AoE
+     * @param facingStepRow    player facing direction Y (−1, 0, or 1); used for melee AoE
      * @return true if CRITICAL_STRIKE triggered a crit this hit; false otherwise
      */
-    public boolean onHit(Weapon weapon, Object hitEnemyObject, int damageDealt) {
+    public boolean onHit(Weapon weapon, Object hitEnemyObject, int damageDealt,
+                         int facingStepColumn, int facingStepRow) {
         Enemy hitEnemy = (Enemy) hitEnemyObject;
         boolean wasCrit = false;
 
@@ -160,6 +205,63 @@ public final class AbilityResolver {
             player.applyHealing(healAmount);
             if (healAmount >= GameBalance.LIFESTEAL_TEXT_THRESHOLD && eventTextSystem != null) {
                 eventTextSystem.spawnWithColor("+" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
+            }
+        }
+
+        // ── KINETIC_SLAM ────────────────────────────────────────────────────
+        // Melee only: rolls a chance to knock the enemy one tile away from the player.
+        // If the push is blocked by a wall, deals bonus wall-impact damage instead.
+        if (weapon.hasAbility(WeaponAbility.KINETIC_SLAM) && weapon.isMelee()
+                && hitEnemy.isAlive()) {
+            float knockbackChance = weapon.abilityMagnitude(WeaponAbility.KINETIC_SLAM);
+            if (abilityRandom.nextFloat() <= knockbackChance) {
+                int     targetColumn = hitEnemy.tileColumn + facingStepColumn;
+                int     targetRow    = hitEnemy.tileRow    + facingStepRow;
+                boolean pushed       = enemyManager.tryPushEnemy(hitEnemyObject, targetColumn, targetRow);
+                if (!pushed && GameBalance.KINETIC_SLAM_WALL_BONUS_DAMAGE > 0) {
+                    enemyManager.applyDamageTo(hitEnemyObject, GameBalance.KINETIC_SLAM_WALL_BONUS_DAMAGE);
+                }
+                if (eventTextSystem != null) {
+                    eventTextSystem.spawnWithColor("SLAM!", EventTextSystem.COLOR_WHITE);
+                }
+            }
+        }
+
+        // ── CLEAVE ──────────────────────────────────────────────────────────
+        // Melee only: deals a fraction of hit damage to enemies flanking the target
+        // (the two tiles 90° from the facing direction adjacent to the target tile).
+        // cleaveInProgress prevents the recursive onHit() calls from triggering another sweep.
+        if (weapon.hasAbility(WeaponAbility.CLEAVE) && weapon.isMelee() && !cleaveInProgress) {
+            float cleaveFraction  = weapon.abilityMagnitude(WeaponAbility.CLEAVE);
+            int   cleaveDamage    = Math.max(1, Math.round(damageDealt * cleaveFraction));
+            int   leftFlankColumn  = hitEnemy.tileColumn + (-facingStepRow);
+            int   leftFlankRow     = hitEnemy.tileRow    + facingStepColumn;
+            int   rightFlankColumn = hitEnemy.tileColumn + facingStepRow;
+            int   rightFlankRow    = hitEnemy.tileRow    + (-facingStepColumn);
+            Object leftEnemyObj  = enemyManager.enemyAt(leftFlankColumn, leftFlankRow);
+            Object rightEnemyObj = enemyManager.enemyAt(rightFlankColumn, rightFlankRow);
+            boolean cleaved = leftEnemyObj != null || rightEnemyObj != null;
+            cleaveInProgress = true;
+            try {
+                if (leftEnemyObj instanceof Enemy) {
+                    enemyManager.applyDamageTo(leftEnemyObj, cleaveDamage);
+                    onHit(weapon, leftEnemyObj, cleaveDamage, facingStepColumn, facingStepRow);
+                    if (!((Enemy) leftEnemyObj).isAlive()) {
+                        onKill(weapon, leftEnemyObj);
+                    }
+                }
+                if (rightEnemyObj instanceof Enemy) {
+                    enemyManager.applyDamageTo(rightEnemyObj, cleaveDamage);
+                    onHit(weapon, rightEnemyObj, cleaveDamage, facingStepColumn, facingStepRow);
+                    if (!((Enemy) rightEnemyObj).isAlive()) {
+                        onKill(weapon, rightEnemyObj);
+                    }
+                }
+            } finally {
+                cleaveInProgress = false;
+            }
+            if (cleaved && eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("CLEAVE!", EventTextSystem.COLOR_WHITE);
             }
         }
 
@@ -218,6 +320,52 @@ public final class AbilityResolver {
                 if (eventTextSystem != null) {
                     eventTextSystem.spawnWithColor("SURGE!", EventTextSystem.COLOR_WHITE);
                 }
+            }
+        }
+
+        // ── SALVAGE_STRIKE (melee only) ────────────────────────────────────
+        // Overrides the drop tile on the killed enemy's cell with an ammo pickup.
+        if (weapon.hasAbility(WeaponAbility.SALVAGE_STRIKE) && weapon.isMelee()
+                && killedEnemyObject instanceof Enemy) {
+            Enemy killedEnemy = (Enemy) killedEnemyObject;
+            float dropChance  = weapon.abilityMagnitude(WeaponAbility.SALVAGE_STRIKE);
+            if (dropChance >= 1.0f || abilityRandom.nextFloat() <= dropChance) {
+                enemyManager.overrideDropAt(killedEnemy.tileColumn, killedEnemy.tileRow,
+                        GameBalance.SALVAGE_AMMO_DROP_CHAR);
+                if (eventTextSystem != null) {
+                    eventTextSystem.spawnWithColor("SALVAGE!", EventTextSystem.COLOR_GREEN);
+                }
+            }
+        }
+
+        // ── SCHOLARS_EDGE (melee only) ─────────────────────────────────────
+        // Awards bonus XP equal to a fraction of the killed enemy's base XP reward.
+        if (weapon.hasAbility(WeaponAbility.SCHOLARS_EDGE) && weapon.isMelee()
+                && killedEnemyObject instanceof Enemy) {
+            Enemy killedEnemy = (Enemy) killedEnemyObject;
+            float xpBonus     = weapon.abilityMagnitude(WeaponAbility.SCHOLARS_EDGE);
+            int   bonusXp     = Math.max(1, Math.round(killedEnemy.type.baseXpReward() * xpBonus));
+            if (killXpListener != null) {
+                killXpListener.onEnemyKilledForXp(bonusXp);
+            }
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("+" + bonusXp + "XP", EventTextSystem.COLOR_GREEN);
+            }
+        }
+
+        // ── BERSERKERS_OATH (melee only) ────────────────────────────────────
+        // Records the kill flag and increments the streak counter. HP regen scales with stacks.
+        // The stack damage bonus is applied in onFire() on the next activation.
+        if (weapon.hasAbility(WeaponAbility.BERSERKERS_OATH) && weapon.isMelee()) {
+            weapon.setBerserkerKilledThisFire(true);
+            weapon.incrementBerserkerStacks();
+            int stacks = weapon.getBerserkerStacks();
+            int hpTick = stacks * GameBalance.BERSERKER_HP_TICK_PER_STACK;
+            if (player != null && hpTick > 0) {
+                player.applyHealing(hpTick);
+            }
+            if (stacks == GameBalance.BERSERKER_MAX_STACKS && eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("BERSERK!", EventTextSystem.COLOR_RED);
             }
         }
     }

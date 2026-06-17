@@ -36,19 +36,25 @@ public abstract class MeleeWeapon extends Weapon {
     }
 
     /**
-     * Melee fire: sets FIRING state and calls instant melee resolution.
-     * Does NOT decrement shotsInClip (melee has no ammo).
+     * Melee fire: hooks into AbilityResolver for ON_FIRE abilities and dispatches hit
+     * callbacks after marchShot() resolves. Does NOT decrement shotsInClip (melee has no ammo).
      */
     @Override
     public FireResult fire(int playerTileColumn, int playerTileRow,
                            int facingStepColumn, int facingStepRow,
                            Level level, EnemyHitTarget enemyHitTarget,
                            BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
+        clearLastHit();
+        resetFireCycleMultiplier();
+        setFacingStep(facingStepColumn, facingStepRow);
+        invokeAbilityOnFire();
         visualState           = WeaponVisualState.FIRING;
         fireFlashTimerSeconds = WeaponConstants.FIRE_FLASH_DURATION;
         flashCycleCount++;
-        return marchShot(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
-                         level, enemyHitTarget, barrelHitTarget, doorBlocksQuery);
+        FireResult result = marchShot(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
+                                      level, enemyHitTarget, barrelHitTarget, doorBlocksQuery);
+        dispatchHitCallbacks(result);
+        return result;
     }
 
     /**
@@ -89,15 +95,17 @@ public abstract class MeleeWeapon extends Weapon {
             return FireResult.MISSED;
         }
 
+        int baseDamage = computeDamage();
+        setLastHitEnemy(target, baseDamage);
         enemyHitTarget.notifyMeleeAttack();
-        enemyHitTarget.applyDamageTo(target, computeDamage());
+        enemyHitTarget.applyDamageTo(target, baseDamage);
         onHit(target, enemyHitTarget, targetColumn, targetRow, facingStepColumn, facingStepRow, level);
         return new FireResult(false, 1);
     }
 
-    /** Returns the final damage to deal. Subclasses may apply multipliers here. */
+    /** Returns the final damage to deal, scaled by any active fire-cycle multiplier. */
     protected int computeDamage() {
-        return damage;
+        return Math.round(damage * getFireCycleMultiplier());
     }
 
     /**
