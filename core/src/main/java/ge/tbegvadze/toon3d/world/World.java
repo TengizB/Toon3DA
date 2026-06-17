@@ -362,7 +362,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         propRenderer           = new PropRenderer(targetLevel, wallRenderer);
         levelRenderer          = new LevelRenderer(targetLevel, doorManager);
         enemyManager           = new EnemyManager(targetLevel, doorManager, currentDepth);
-        abilityResolver        = new AbilityResolver(enemyManager, eventTextSystem, runSeed);
+        abilityResolver        = new AbilityResolver(enemyManager, eventTextSystem, player, runSeed);
         for (Weapon weapon : inventory.getArsenal()) {
             weapon.setAbilityResolver(abilityResolver);
         }
@@ -393,6 +393,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         tickEventBus = new TickEventBus();
         tickEventBus.subscribe(new WeaponReloadSubscriber(inventory));
         tickEventBus.subscribe(new StatusEffectSubscriber(statusEffectController, player, enemyManager));
+        // Decrement Bulwark Rounds temp-armor turn counters each player action.
+        tickEventBus.subscribe(context -> playerStats.tickTempArmor());
 
         // Boss encounter — wired before EnemyTurnSubscriber so the boss acts first each turn.
         bossFloorController = null;

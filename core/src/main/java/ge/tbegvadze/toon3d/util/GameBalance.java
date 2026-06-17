@@ -324,4 +324,67 @@ public final class GameBalance {
      * applied as a bonus for each enemy hit beyond the first (25% bonus per extra pierce).
      */
     public static final float OVERPENETRATION_ALREADY_PIERCING_BONUS   = 0.25f;
+
+    // =========================================================================
+    // SUSTAIN ABILITIES — weapon-system-order-5
+    // All values are PLACEHOLDERS — flag for playtesting.
+    // =========================================================================
+
+    // ── Lifesteal (ON_HIT) ──────────────────────────────────────────────────
+    /** Level-1 lifesteal fraction: 6% of damage dealt returned as HP. */
+    public static final float LIFESTEAL_BASE              = 0.06f;
+    /** Lifesteal fraction added per weapon level above 1. */
+    public static final float LIFESTEAL_PER_LEVEL         = 0.015f;
+    /** Maximum lifesteal fraction regardless of weapon level (20%). */
+    public static final float LIFESTEAL_CAP               = 0.20f;
+    /** Minimum heal from lifesteal to show event text (avoids single-point spam). */
+    public static final int   LIFESTEAL_TEXT_THRESHOLD    = 5;
+
+    // ── Hemorrhage Harvest (ON_KILL) ─────────────────────────────────────────
+    /** HP restored on kill at level 1. */
+    public static final float HEMORRHAGE_HP_BASE          = 3f;
+    /** HP per level scaling for Hemorrhage Harvest. */
+    public static final float HEMORRHAGE_HP_PER_LEVEL     = 0.7f;
+    /** Maximum HP per kill for Hemorrhage Harvest. */
+    public static final int   HEMORRHAGE_HP_CAP           = 12;
+
+    // ── Vampiric Crit (ON_CRIT) ──────────────────────────────────────────────
+    /** HP restored on crit at level 1. */
+    public static final float VAMPIRIC_CRIT_HP_BASE       = 4f;
+    /** HP per level scaling for Vampiric Crit. */
+    public static final float VAMPIRIC_CRIT_HP_PER_LEVEL  = 1.0f;
+    /** Maximum HP per crit for Vampiric Crit. */
+    public static final int   VAMPIRIC_CRIT_HP_CAP        = 14;
+
+    // ── Adrenal Surge (ON_KILL) ───────────────────────────────────────────────
+    /** Level-1 proc chance for Adrenal Surge (10%). */
+    public static final float ADRENAL_SURGE_CHANCE_BASE      = 0.10f;
+    /** Proc chance added per weapon level above 1. */
+    public static final float ADRENAL_SURGE_CHANCE_PER_LEVEL = 0.03f;
+    /** Maximum proc chance for Adrenal Surge regardless of weapon level (40%). */
+    public static final float ADRENAL_SURGE_CHANCE_CAP       = 0.40f;
+    /** Outgoing damage bonus multiplier applied to the next attack after Surge procs (+30%). */
+    public static final float ADRENAL_SURGE_DAMAGE_BONUS     = 0.30f;
+
+    // ── Bulwark Rounds (ON_RELOAD) ────────────────────────────────────────────
+    /** Number of fixed temp-armor slots in PlayerStats (determines max concurrent Bulwark stacks). */
+    public static final int   BULWARK_TEMP_ARMOR_SLOTS    = 4;
+    /** Temporary armor points granted on reload completion at level 1. */
+    public static final float BULWARK_ARMOR_BASE          = 2f;
+    /** Temp armor added per weapon level above 1. */
+    public static final float BULWARK_ARMOR_PER_LEVEL     = 0.5f;
+    /** Maximum temp armor per reload for Bulwark Rounds. */
+    public static final int   BULWARK_ARMOR_CAP           = 8;
+    /** Number of player-action turns the Bulwark temp armor persists. */
+    public static final int   BULWARK_ARMOR_DURATION      = 3;
+
+    // ── Second Wind (PASSIVE) ─────────────────────────────────────────────────
+    /** HP fraction at or below which Second Wind activates (30% HP = critically low). */
+    public static final float SECOND_WIND_HP_THRESHOLD    = 0.30f;
+    /** Level-1 outgoing damage bonus while Second Wind is active (+25%). */
+    public static final float SECOND_WIND_BONUS_BASE      = 0.25f;
+    /** Damage bonus multiplier added per weapon level above 1. */
+    public static final float SECOND_WIND_BONUS_PER_LEVEL = 0.05f;
+    /** Maximum Second Wind damage bonus regardless of weapon level (75%). */
+    public static final float SECOND_WIND_BONUS_CAP       = 0.75f;
 }
