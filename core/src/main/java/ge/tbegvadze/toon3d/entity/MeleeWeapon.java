@@ -20,7 +20,10 @@ public abstract class MeleeWeapon extends Weapon {
     protected MeleeWeapon(String displayName, int baseDamage) {
         // clipSize=0 → no ammo, no auto-reload; reloadTime=0; no ammoType.
         super(displayName, baseDamage, 0, 0, 0f, 1, null);
+        setBaseAccuracy(WeaponConstants.MELEE_BASE_ACCURACY);
     }
+
+    @Override public boolean isMelee() { return true; }
 
     @Override
     public boolean canFire() {

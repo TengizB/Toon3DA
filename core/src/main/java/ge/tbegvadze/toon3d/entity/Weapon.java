@@ -35,7 +35,7 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
  *   When both are non-null, onTick() calls ammoInventory.spend(ammoType.getItemType(), clipSize)
  *   when a reload completes. If the stack is empty the clip stays at 0 and canFire() returns false.
  */
-public abstract class Weapon {
+public abstract class Weapon implements WeaponProfile {
 
     protected final String displayName;
     protected final int    damage;
@@ -60,6 +60,19 @@ public abstract class Weapon {
 
     private EventTextSystem eventTextSystem;
 
+    // ── Weapon level / tier / ability fields ─────────────────────────────────
+    private int              weaponLevel  = 1;
+    private WeaponTier       tier         = WeaponTier.COMMON;
+    private float            baseAccuracy = 1.0f;
+    private AbilityInstance[] abilities   = new AbilityInstance[0];
+
+    // Cached effective stats — recomputed by recomputeEffectiveStats().
+    private int   effectiveDamage;
+    private float effectiveAccuracy;
+    private int   effectiveClipSize;
+    private int   effectiveReloadTicks;
+    private int   effectiveRange;
+
     /**
      * Ranged damage multiplier sourced from the player's MARKSMANSHIP stat.
      * Defaults to 1.0 (no bonus) until World injects a non-trivial value via
@@ -78,6 +91,85 @@ public abstract class Weapon {
         this.range                 = range;
         this.ammoType              = ammoType;
         this.shotsInClip           = clipSize;
+        // Subclass constructors call setBaseAccuracy() after super(); recomputeEffectiveStats()
+        // is called there so effective stats are valid before any call to fire(). When no
+        // subclass calls setBaseAccuracy() (e.g. in tests), this ensures non-zero defaults.
+        recomputeEffectiveStats();
+    }
+
+    /** Sets the level-1 accuracy for this weapon type. Call from subclass constructors. */
+    protected void setBaseAccuracy(float accuracy) {
+        this.baseAccuracy = accuracy;
+        recomputeEffectiveStats();
+    }
+
+    /**
+     * Applies a rolled weapon profile (level, tier, abilities) and resets the clip.
+     * Called once at spawn time by WeaponRoller. Must not be called per frame.
+     */
+    public void configureRoll(int level, WeaponTier weaponTier, AbilityInstance[] weaponAbilities) {
+        this.weaponLevel = level;
+        this.tier        = weaponTier;
+        this.abilities   = weaponAbilities;
+        recomputeEffectiveStats();
+        this.shotsInClip = effectiveClipSize;
+    }
+
+    /** Increments weapon level by 1 (Soulforge ability use only). No-op at max level. */
+    void incrementWeaponLevel() {
+        if (weaponLevel < WeaponConstants.MAX_WEAPON_LEVEL) {
+            weaponLevel++;
+            recomputeEffectiveStats();
+        }
+    }
+
+    private void recomputeEffectiveStats() {
+        effectiveDamage      = GameMath.weaponScaledDamage(damage, weaponLevel);
+        effectiveAccuracy    = GameMath.weaponScaledAccuracy(baseAccuracy, weaponLevel);
+        effectiveClipSize    = GameMath.weaponScaledClipSize(clipSize, weaponLevel);
+        effectiveReloadTicks = GameMath.weaponScaledReloadTicks(reloadTime, weaponLevel);
+        effectiveRange       = GameMath.weaponScaledRange(range, weaponLevel, isMelee());
+        if (hasAbility(WeaponAbility.EXTENDED_MAG)) {
+            int bonus = abilityCount(WeaponAbility.EXTENDED_MAG);
+            effectiveClipSize = Math.min(effectiveClipSize + bonus, WeaponConstants.WEAPON_CLIP_HARD_CAP);
+        }
+        if (!isMelee() && hasAbility(WeaponAbility.QUICK_HANDS)) {
+            effectiveReloadTicks = Math.max(WeaponConstants.WEAPON_RELOAD_MIN_TICKS,
+                                            effectiveReloadTicks - 1);
+        }
+    }
+
+    // ── WeaponProfile — identity ──────────────────────────────────────────────
+    @Override public WeaponTier getTier()        { return tier; }
+    @Override public int        getWeaponLevel() { return weaponLevel; }
+
+    // ── WeaponProfile — effective stats ──────────────────────────────────────
+    @Override public int   getEffectiveDamage()      { return effectiveDamage; }
+    @Override public float getEffectiveAccuracy()    { return effectiveAccuracy; }
+    @Override public int   getEffectiveClipSize()    { return effectiveClipSize; }
+    @Override public int   getEffectiveReloadTicks() { return effectiveReloadTicks; }
+    @Override public int   getEffectiveRange()       { return effectiveRange; }
+
+    // ── WeaponProfile — abilities ─────────────────────────────────────────────
+    @Override public int             getAbilityCount()              { return abilities.length; }
+    @Override public AbilityInstance getAbility(int index)          { return abilities[index]; }
+    @Override public boolean         hasAbility(WeaponAbility ability) {
+        for (AbilityInstance instance : abilities) {
+            if (instance.ability == ability) return true;
+        }
+        return false;
+    }
+    @Override public float abilityMagnitude(WeaponAbility ability) {
+        for (AbilityInstance instance : abilities) {
+            if (instance.ability == ability) return instance.magnitude;
+        }
+        return 0f;
+    }
+    @Override public int abilityCount(WeaponAbility ability) {
+        for (AbilityInstance instance : abilities) {
+            if (instance.ability == ability) return instance.countValue;
+        }
+        return 0;
     }
 
     public void setEventTextSystem(EventTextSystem system) {
@@ -229,6 +321,10 @@ public abstract class Weapon {
                                              Level level, EnemyHitTarget enemyHitTarget,
                                              BarrelHitTarget barrelHitTarget,
                                              DoorBlocksQuery doorBlocksQuery);
+
+    /** Returns true for melee weapons; false for all ranged weapons. */
+    @Override
+    public abstract boolean isMelee();
 
     /** Path to the texture shown when the weapon is idle and ready. */
     public abstract String getNormalTexturePath();

@@ -40,7 +40,10 @@ public class Railgun extends Weapon {
               WeaponConstants.RAILGUN_DROP_COEFF,
               WeaponConstants.RAILGUN_RANGE_TILES,
               AmmoType.SLUGS);
+        setBaseAccuracy(WeaponConstants.RAILGUN_BASE_ACCURACY);
     }
+
+    @Override public boolean isMelee() { return false; }
 
     // -------------------------------------------------------------------------
     // Charge-state accessors

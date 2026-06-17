@@ -46,7 +46,10 @@ public class GrenadeLauncher extends Weapon {
               WeaponConstants.GRENADE_DAMAGE_DROP_COEFF,
               WeaponConstants.GRENADE_RANGE_TILES,
               AmmoType.ROCKETS);
+        setBaseAccuracy(WeaponConstants.GRENADE_LAUNCHER_BASE_ACCURACY);
     }
+
+    @Override public boolean isMelee() { return false; }
 
     /**
      * Marches the grenade forward, handles a single 90-degree CW bounce at the

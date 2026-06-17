@@ -1894,4 +1894,133 @@ public final class GameMath {
         if (depth <= firstAppearanceDepth) return baseStat;
         return baseStat * (1f + scalePerStep * (depth - firstAppearanceDepth));
     }
+
+    // =========================================================================
+    // WEAPON LEVEL SCALING — damage, accuracy, reload, clip, range
+    // =========================================================================
+    /*
+     * Formula: Weapon level damage scaling
+     * Derivation:
+     *   scaledDamage = round(baseDamage * (1 + DAMAGE_PER_LEVEL * (level - 1)))
+     *   Level 1 returns baseDamage unchanged (multiplier = 1.0).
+     *   Each additional level adds WEAPON_LEVEL_DAMAGE_PER_LEVEL (10%) of baseDamage.
+     *   Level is clamped to [1, MAX_WEAPON_LEVEL] before computation.
+     * Edge cases:
+     *   level = 1 → multiplier = 1.0, returns baseDamage unchanged.
+     *   baseDamage = 0 → returns 0 at any level (melee with 0 base).
+     */
+    public static int weaponScaledDamage(int baseDamage, int weaponLevel) {
+        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
+        float multiplier = 1f + WeaponConstants.WEAPON_LEVEL_DAMAGE_PER_LEVEL * (clampedLevel - 1);
+        return Math.round(baseDamage * multiplier);
+    }
+
+    /*
+     * Formula: Weapon level accuracy scaling
+     * Derivation:
+     *   scaled = clamp(baseAccuracy + ACCURACY_PER_LEVEL * (level - 1), ACCURACY_MINIMUM, 1.0)
+     *   Level 1 returns baseAccuracy unchanged.
+     *   Each additional level adds WEAPON_LEVEL_ACCURACY_PER_LEVEL (2%) accuracy.
+     *   Clamped so accuracy never drops below WEAPON_LEVEL_ACCURACY_MINIMUM or exceeds 1.0.
+     * Edge cases:
+     *   melee passes baseAccuracy = 1.0 and always returns 1.0 (never misses).
+     *   If baseAccuracy < ACCURACY_MINIMUM even at level 1, the minimum floor is applied.
+     */
+    public static float weaponScaledAccuracy(float baseAccuracy, int weaponLevel) {
+        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
+        float scaled = baseAccuracy + WeaponConstants.WEAPON_LEVEL_ACCURACY_PER_LEVEL * (clampedLevel - 1);
+        return Math.max(WeaponConstants.WEAPON_LEVEL_ACCURACY_MINIMUM, Math.min(1f, scaled));
+    }
+
+    /*
+     * Formula: Weapon level reload scaling
+     * Derivation:
+     *   scaled = max(WEAPON_RELOAD_MIN_TICKS, round(baseReloadTicks - RELOAD_STEP * (level - 1)))
+     *   Level 1 returns baseReloadTicks unchanged.
+     *   Each additional level subtracts WEAPON_LEVEL_RELOAD_STEP (0.15) ticks.
+     *   Floored at WEAPON_RELOAD_MIN_TICKS (1) to prevent instant reloads.
+     * Edge cases:
+     *   Weapons already at 1 tick (Shotgun, DBL Shotgun) remain at 1 at every level.
+     *   baseReloadTicks = 0 (melee has no reload) returns 0 immediately via early return, bypassing the min() floor.
+     */
+    public static int weaponScaledReloadTicks(int baseReloadTicks, int weaponLevel) {
+        if (baseReloadTicks == 0) return 0;
+        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
+        float scaled = baseReloadTicks - WeaponConstants.WEAPON_LEVEL_RELOAD_STEP * (clampedLevel - 1);
+        return Math.max(WeaponConstants.WEAPON_RELOAD_MIN_TICKS, Math.round(scaled));
+    }
+
+    /*
+     * Formula: Weapon level clip scaling
+     * Derivation:
+     *   scaled = baseClipSize + floor(CLIP_PER_LEVEL * (level - 1) * baseClipSize)
+     *   Level 1 returns baseClipSize unchanged (floor(0) = 0 bonus).
+     *   Each additional level adds WEAPON_LEVEL_CLIP_PER_LEVEL (8%) of baseClipSize.
+     *   Accumulated bonus uses floor() so clip-1 weapons stay at 1 until bonus >= 1.
+     * Edge cases:
+     *   baseClipSize = 0 (melee) → always returns 0 (no ammo system).
+     *   clip-1 weapons (Shotgun, Railgun) remain at 1 up to MAX_WEAPON_LEVEL (10),
+     *   since 8% × 9 levels ≈ 72% bonus, which floors to 0 (< 100% needed for +1).
+     */
+    public static int weaponScaledClipSize(int baseClipSize, int weaponLevel) {
+        if (baseClipSize == 0) return 0;
+        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
+        int bonus = (int)(WeaponConstants.WEAPON_LEVEL_CLIP_PER_LEVEL * (clampedLevel - 1) * baseClipSize);
+        return baseClipSize + bonus;
+    }
+
+    /*
+     * Formula: Weapon level range scaling
+     * Derivation:
+     *   bonus = min(floor((level - 1) * RANGE_PER_2_LEVELS / 2), RANGE_MAX_BONUS)
+     *   Simplified: +1 tile for every 2 weapon levels gained, capped at +3 tiles.
+     *   Level 1 → +0, level 3 → +1, level 5 → +2, level 7+ → +3 (capped).
+     * Edge cases:
+     *   Melee weapons always return 1 regardless of level (melee range is invariant).
+     *   baseRange = 0 returns 0 (no range weapon with 0 base would exist in practice).
+     */
+    public static int weaponScaledRange(int baseRange, int weaponLevel, boolean isMelee) {
+        if (isMelee) return 1;
+        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
+        int bonus = Math.min(
+                (int)((clampedLevel - 1) * WeaponConstants.WEAPON_LEVEL_RANGE_PER_2_LEVELS / 2f),
+                WeaponConstants.WEAPON_LEVEL_RANGE_MAX_BONUS);
+        return baseRange + bonus;
+    }
+
+    /*
+     * Formula: Ability magnitude linear scaling
+     * Derivation:
+     *   scaled = clamp(baseMagnitude + perLevel * (level - 1), 0, maxMagnitude)
+     *   Level 1 returns baseMagnitude unchanged.
+     *   Each additional level adds perLevel to the magnitude.
+     * Edge cases:
+     *   level = 1 → returns baseMagnitude.
+     *   maxMagnitude = 0 → always returns 0 (ability disabled by caller).
+     */
+    public static float abilityMagnitudeScaled(float baseMagnitude, float perLevel,
+                                               int weaponLevel, float maxMagnitude) {
+        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
+        float scaled = baseMagnitude + perLevel * (clampedLevel - 1);
+        return Math.max(0f, Math.min(maxMagnitude, scaled));
+    }
+
+    /*
+     * Formula: Ability count stepped scaling
+     * Derivation:
+     *   scaled = clamp(baseCount + floor((level - 1) / levelsPerStep), minCount, maxCount)
+     *   Level 1 returns baseCount.
+     *   Every levelsPerStep additional levels add +1 to the count.
+     * Edge cases:
+     *   level = 1 → floor(0 / levelsPerStep) = 0, returns baseCount.
+     *   levelsPerStep = 0 → would divide by zero; treated as levelsPerStep = 1.
+     *   maxCount < minCount: result is clamped to minCount (degenerate but safe).
+     */
+    public static int abilityCountScaled(int baseCount, int levelsPerStep,
+                                         int weaponLevel, int minCount, int maxCount) {
+        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
+        int safeStep = Math.max(1, levelsPerStep);
+        int scaled = baseCount + (clampedLevel - 1) / safeStep;
+        return Math.max(minCount, Math.min(maxCount, scaled));
+    }
 }

@@ -31,7 +31,10 @@ public class Shotgun extends Weapon {
               WeaponConstants.SHOTGUN_DAMAGE_DROP_COEFF,
               WeaponConstants.SHOTGUN_RANGE_TILES,
               AmmoType.SHELLS);
+        setBaseAccuracy(WeaponConstants.SHOTGUN_BASE_ACCURACY);
     }
+
+    @Override public boolean isMelee() { return false; }
 
     @Override
     protected FireResult marchShot(int playerTileColumn, int playerTileRow,

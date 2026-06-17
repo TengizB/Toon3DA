@@ -276,4 +276,28 @@ public final class WeaponConstants {
     public static final float WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION = 0.10f;  // fraction of sprite height
     public static final int   WEAPON_PICKUP_TEXTURE_SIZE           = 64;     // square pixmap edge, px
     public static final float WEAPON_PICKUP_PHASE_STEP             = 0.7f;   // per-weapon phase offset (rad)
+
+    // ── Weapon level scaling ────────────────────────────────────────────────
+    public static final int   MAX_WEAPON_LEVEL                      = 10;
+    public static final float WEAPON_LEVEL_DAMAGE_PER_LEVEL         = 0.10f;  // +10% per level
+    public static final float WEAPON_LEVEL_ACCURACY_PER_LEVEL       = 0.02f;  // +2% per level
+    public static final float WEAPON_LEVEL_ACCURACY_MINIMUM         = 0.50f;  // accuracy floor
+    public static final float WEAPON_LEVEL_RELOAD_STEP              = 0.15f;  // ticks reduced per level
+    public static final int   WEAPON_RELOAD_MIN_TICKS               = 1;
+    public static final float WEAPON_LEVEL_CLIP_PER_LEVEL           = 0.08f;  // fraction of base clip per level
+    public static final int   WEAPON_LEVEL_RANGE_PER_2_LEVELS       = 1;      // +1 tile every 2 levels
+    public static final int   WEAPON_LEVEL_RANGE_MAX_BONUS          = 3;      // cap at +3 tiles
+
+    // Ability clip and reload caps
+    public static final int   WEAPON_CLIP_HARD_CAP                  = 99;
+
+    // Per-weapon base accuracy (level-1, COMMON reference values)
+    public static final float SHOTGUN_BASE_ACCURACY               = 0.85f;
+    public static final float DOUBLE_BARREL_SHOTGUN_BASE_ACCURACY = 0.80f;
+    public static final float CHAINGUN_BASE_ACCURACY              = 0.75f;
+    public static final float PLASMA_RIFLE_BASE_ACCURACY          = 0.90f;
+    public static final float RAILGUN_BASE_ACCURACY               = 0.95f;
+    public static final float INCINERATOR_BASE_ACCURACY           = 0.70f;
+    public static final float GRENADE_LAUNCHER_BASE_ACCURACY      = 0.80f;
+    public static final float MELEE_BASE_ACCURACY                 = 1.00f;
 }

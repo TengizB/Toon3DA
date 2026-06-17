@@ -26,7 +26,10 @@ public class PlasmaRifle extends Weapon {
               WeaponConstants.PLASMA_RIFLE_DAMAGE_DROP_COEFF,
               WeaponConstants.PLASMA_RIFLE_RANGE_TILES,
               AmmoType.CELLS);
+        setBaseAccuracy(WeaponConstants.PLASMA_RIFLE_BASE_ACCURACY);
     }
+
+    @Override public boolean isMelee() { return false; }
 
     @Override
     protected FireResult marchShot(int playerTileColumn, int playerTileRow,

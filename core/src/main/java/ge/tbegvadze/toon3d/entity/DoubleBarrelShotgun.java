@@ -32,7 +32,10 @@ public class DoubleBarrelShotgun extends Weapon {
               WeaponConstants.DBL_SHOTGUN_DAMAGE_DROP_COEFF,
               WeaponConstants.DBL_SHOTGUN_RANGE_TILES,
               AmmoType.SHELLS);
+        setBaseAccuracy(WeaponConstants.DOUBLE_BARREL_SHOTGUN_BASE_ACCURACY);
     }
+
+    @Override public boolean isMelee() { return false; }
 
     @Override
     protected FireResult marchShot(int playerTileColumn, int playerTileRow,

@@ -46,7 +46,10 @@ public class Incinerator extends Weapon {
               WeaponConstants.FLAME_DAMAGE_DROP_COEFF,
               WeaponConstants.FLAME_RANGE_TILES,
               AmmoType.CELLS);
+        setBaseAccuracy(WeaponConstants.INCINERATOR_BASE_ACCURACY);
     }
+
+    @Override public boolean isMelee() { return false; }
 
     /**
      * The incinerator requires at least FUEL_PER_SHOT fuel to fire (not just > 0).
