@@ -1,0 +1,195 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System — Sustain Abilities
+---
+
+OVERVIEW
+========
+Implement the six sustain and defensive abilities in AbilityResolver:
+Lifesteal, Hemorrhage Harvest (HP on kill), Vampiric Crit (HP on crit),
+Adrenal Surge (kill buff), Bulwark Rounds (reload → temp armor),
+and Second Wind (low-HP damage bonus).
+
+DEPENDENCY: weapon-system-order-4 (AbilityResolver skeleton + onHit/onKill/onCrit/onReload
+  hooks exist and are wired into Weapon.fire()).
+NEXT STEP: weapon-system-order-6 (Melee-specific Abilities).
+
+FILES TO MODIFY
+===============
+- entity/AbilityResolver.java   (add sustain implementations)
+- util/GameBalance.java         (sustain ability numbers)
+- progression/PlayerStats.java  (addTempArmor / addTempDamageBuff methods, if absent)
+- entity/Player.java            (heal() method, if absent)
+
+
+──────────────────────────────────────────────
+A. GameBalance.java — sustain ability numbers
+──────────────────────────────────────────────
+All PLACEHOLDERS — tune during playtesting:
+
+    // Lifesteal
+    public static final float LIFESTEAL_BASE       = 0.06f;
+    public static final float LIFESTEAL_PER_LEVEL  = 0.015f;
+    public static final float LIFESTEAL_CAP        = 0.20f;
+
+    // Hemorrhage Harvest (HP on kill)
+    public static final float HEMORRHAGE_HP_BASE      = 3f;
+    public static final float HEMORRHAGE_HP_PER_LEVEL = 0.7f;
+    public static final int   HEMORRHAGE_HP_CAP        = 12;
+
+    // Vampiric Crit (HP on crit)
+    public static final float VAMPIRIC_CRIT_HP_BASE      = 4f;
+    public static final float VAMPIRIC_CRIT_HP_PER_LEVEL = 1.0f;
+    public static final int   VAMPIRIC_CRIT_HP_CAP        = 14;
+
+    // Adrenal Surge
+    public static final float ADRENAL_SURGE_CHANCE_BASE      = 0.10f;
+    public static final float ADRENAL_SURGE_CHANCE_PER_LEVEL = 0.03f;
+    public static final float ADRENAL_SURGE_CHANCE_CAP       = 0.40f;
+    public static final float ADRENAL_SURGE_DAMAGE_BONUS     = 0.30f;  // +30% next attack
+
+    // Bulwark Rounds
+    public static final float BULWARK_ARMOR_BASE      = 2f;
+    public static final float BULWARK_ARMOR_PER_LEVEL = 0.5f;
+    public static final int   BULWARK_ARMOR_CAP        = 8;
+    public static final int   BULWARK_ARMOR_DURATION   = 3;  // turns
+
+    // Second Wind (PASSIVE threshold)
+    public static final float SECOND_WIND_HP_THRESHOLD     = 0.30f;  // triggers at <= 30% HP
+    public static final float SECOND_WIND_BONUS_BASE       = 0.25f;
+    public static final float SECOND_WIND_BONUS_PER_LEVEL  = 0.05f;
+    public static final float SECOND_WIND_BONUS_CAP        = 0.75f;
+
+
+──────────────────────────────────────────────
+B. AbilityResolver — sustain implementations
+──────────────────────────────────────────────
+
+── LIFESTEAL (ON_HIT) ────────────────────────
+In onHit(), after damageDealt is confirmed:
+
+    if (weapon.hasAbility(WeaponAbility.LIFESTEAL)) {
+        float stealFraction = weapon.abilityMagnitude(WeaponAbility.LIFESTEAL);
+        int healAmount = Math.max(1, Math.round(damageDealt * stealFraction));
+        player.heal(healAmount);
+        // No event text for small heals — keep the screen uncluttered.
+        // Show event text only if heal >= 5:
+        if (healAmount >= 5) eventTextSystem.showHeal(healAmount);
+    }
+
+── HEMORRHAGE HARVEST (ON_KILL) ──────────────
+In onKill():
+
+    if (weapon.hasAbility(WeaponAbility.HEMORRHAGE_HARVEST)) {
+        int healAmount = Math.round(weapon.abilityMagnitude(WeaponAbility.HEMORRHAGE_HARVEST));
+        player.heal(healAmount);
+        eventTextSystem.showText("+" + healAmount + " HP", EventTextSystem.HEAL_COLOR);
+    }
+
+── VAMPIRIC CRIT (ON_CRIT) ───────────────────
+In onCrit():
+
+    if (weapon.hasAbility(WeaponAbility.VAMPIRIC_CRIT)) {
+        int healAmount = Math.round(weapon.abilityMagnitude(WeaponAbility.VAMPIRIC_CRIT));
+        player.heal(healAmount);
+        eventTextSystem.showText("CRIT HEAL +" + healAmount, EventTextSystem.CRIT_HEAL_COLOR);
+    }
+
+Vampiric Crit fires whenever the hit is marked as a crit. The crit can come from:
+  - The Critical Strike ability (order-4)
+  - Player stat crit source (from PlayerStats, if implemented)
+Both paths call onCrit() so Vampiric Crit works regardless of crit source.
+
+── ADRENAL SURGE (ON_KILL) ───────────────────
+In onKill(), roll the chance:
+
+    if (weapon.hasAbility(WeaponAbility.ADRENAL_SURGE)) {
+        float surgeChance = weapon.abilityMagnitude(WeaponAbility.ADRENAL_SURGE);
+        if (rng.nextFloat() <= surgeChance) {
+            playerStats.applyTempDamageBuff(GameBalance.ADRENAL_SURGE_DAMAGE_BONUS, 1);
+            eventTextSystem.showText("SURGE!", EventTextSystem.SURGE_COLOR);
+        }
+    }
+
+The buff lasts 1 turn (next attack only). applyTempDamageBuff(float bonus, int turns)
+on PlayerStats:
+  - Stores a tempDamageBonusFlat or tempDamageMultiplier with a turns-remaining counter.
+  - Decrements every player action tick via the TickSubscriber mechanism.
+  - Applied multiplicatively on top of existing multipliers in getDamageMultiplier().
+
+── BULWARK ROUNDS (ON_RELOAD) ────────────────
+In onReload():
+
+    if (weapon.hasAbility(WeaponAbility.BULWARK_ROUNDS)) {
+        int armorGain = Math.round(weapon.abilityMagnitude(WeaponAbility.BULWARK_ROUNDS));
+        playerStats.addTempArmor(armorGain, GameBalance.BULWARK_ARMOR_DURATION);
+        eventTextSystem.showText("BULWARK +" + armorGain, EventTextSystem.BULWARK_COLOR);
+    }
+
+addTempArmor(int amount, int turns) on PlayerStats:
+  - Adds to a tempArmorPool that expires after `turns` turns.
+  - tempArmorPool is consumed before permanent armor when taking damage.
+  - Decrement via TickSubscriber each player action.
+
+── SECOND WIND (PASSIVE — applied at fire time) ────
+Second Wind checks the player's current HP fraction in onFire() and stores a
+flag for the current fire cycle. The flag is used in marchShot to boost damage.
+
+In onFire():
+
+    if (weapon.hasAbility(WeaponAbility.SECOND_WIND)) {
+        float hpFraction = (float) player.getCurrentHp() / player.getMaxHp();
+        if (hpFraction <= GameBalance.SECOND_WIND_HP_THRESHOLD) {
+            float bonus = weapon.abilityMagnitude(WeaponAbility.SECOND_WIND);
+            weapon.setFireCycleMultiplier(1f + bonus);  // applied to this fire only
+        } else {
+            weapon.setFireCycleMultiplier(1f);
+        }
+    }
+
+setFireCycleMultiplier(float) is a transient field on Weapon, reset to 1f at
+the start of each fire() call, and multiplied into the damage in marchShot
+before dealing damage.
+
+Alternatively: pass the multiplier as a parameter into marchShot rather than
+storing state on the weapon, to avoid stale values.
+
+
+──────────────────────────────────────────────
+C. Player / PlayerStats helper methods
+──────────────────────────────────────────────
+Ensure these exist:
+
+  player.heal(int amount):
+    Adds HP up to maxHp. Does NOT trigger death logic.
+    If player already has a heal() method (for medkits), reuse it.
+
+  player.getCurrentHp() / player.getMaxHp():
+    Already expected to exist. Verify and add if absent.
+
+  playerStats.applyTempDamageBuff(float bonus, int turns):
+    Stores { float bonus, int turnsRemaining } in a list.
+    Each turn, subtract 1 from all entries; remove expired ones.
+    getDamageMultiplier() (or getRangedDamageMultiplier / getMeleeDamageMultiplier)
+    sums all active temp buffs and adds to the base multiplier.
+
+  playerStats.addTempArmor(int amount, int turns):
+    Stores { int amount, int turnsRemaining }.
+    When player takes damage: consume tempArmorPool first, then permanent armor.
+
+
+IMPLEMENTATION NOTES
+====================
+- Lifesteal, Hemorrhage Harvest, and Vampiric Crit can all trigger on the same hit
+  if the weapon has multiple of them. They resolve independently and sum healing.
+  This is intentional — a triple-sustain build is a high-rarity reward.
+- Second Wind's fire-cycle multiplier is a one-frame transient: reset to 1f at the
+  top of fire(), set in onFire(), consumed in marchShot. If fire() calls marchShot
+  internally on the same stack frame this is safe; if marchShot is deferred across
+  frames (unlikely in turn-based), revisit.
+- Bulwark Rounds and Adrenal Surge require the tick/turn system to decrement their
+  duration. Both should register as TickSubscribers (or PlayerStats itself subscribes
+  to ticks and decrements its temp-buff lists there).
+- All event text colors (HEAL_COLOR, CRIT_HEAL_COLOR, SURGE_COLOR, BULWARK_COLOR)
+  should be defined as Color constants on EventTextSystem or in EffectConstants.
+- Run `./gradlew build` after implementation.

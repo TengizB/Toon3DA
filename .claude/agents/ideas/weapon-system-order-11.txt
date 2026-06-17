@@ -1,0 +1,306 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System — Spawn Roller & World Wiring
+---
+
+OVERVIEW
+========
+Create the WeaponRoller class that assigns a level, tier, and abilities to any
+weapon instance at spawn time. Wire it into World.java at the two places where
+weapons are created: level weapon spawn points (ground pickups) and run-start
+default weapons.
+
+DEPENDENCY: All weapon-system orders 1–10 must be complete. Specifically:
+  - WeaponTier, WeaponAbility, AbilityInstance (order-1)
+  - Weapon.configureRoll() (order-2)
+  - GameMath.abilityMagnitude() and abilityCountScaled() (order-2)
+  - GameBalance ability numbers (orders 4–10)
+NEXT STEP: weapon-system-order-12 (HUD Display Redesign).
+
+FILES TO CREATE
+===============
+- entity/WeaponRoller.java
+
+FILES TO MODIFY
+===============
+- world/World.java              (wire WeaponRoller at weapon spawn points)
+- util/WeaponConstants.java     (tier weight tables)
+- util/GameBalance.java         (tier weight drift, legendary cap)
+- progression/PlayerProgress.java (expose currentFloor / getFloorDepth())
+
+
+──────────────────────────────────────────────
+A. WeaponConstants.java — tier weight tables
+──────────────────────────────────────────────
+    // Tier spawn weight base values (at floor 1). Values are relative weights, not percents.
+    public static final float TIER_WEIGHT_COMMON_BASE    = 60f;
+    public static final float TIER_WEIGHT_UNCOMMON_BASE  = 25f;
+    public static final float TIER_WEIGHT_RARE_BASE      = 10f;
+    public static final float TIER_WEIGHT_EPIC_BASE      = 4f;
+    public static final float TIER_WEIGHT_LEGENDARY_BASE = 1f;
+
+    // Weight drift per floor (applied as: weight + drift * (floor - 1), floored at minimum)
+    public static final float TIER_WEIGHT_COMMON_DRIFT    = -4f;
+    public static final float TIER_WEIGHT_UNCOMMON_DRIFT  =  0f;
+    public static final float TIER_WEIGHT_RARE_DRIFT      =  2f;
+    public static final float TIER_WEIGHT_EPIC_DRIFT      =  1.5f;
+    public static final float TIER_WEIGHT_LEGENDARY_DRIFT =  0.5f;
+
+    // Hard floors and caps on computed weights
+    public static final float TIER_WEIGHT_COMMON_MINIMUM   = 10f;   // never disappears entirely
+    public static final float TIER_WEIGHT_LEGENDARY_CAP    = 6f;    // legendaries stay rare
+
+
+──────────────────────────────────────────────
+B. GameBalance.java — roller balance numbers
+──────────────────────────────────────────────
+    // Run-start weapons tier/level
+    public static final WeaponTier  RUN_START_WEAPON_TIER  = WeaponTier.COMMON;
+    public static final int         RUN_START_WEAPON_LEVEL = 1;
+
+    // Start-room offer weapons (the first choice room)
+    public static final WeaponTier  START_ROOM_OFFER_MIN_TIER  = WeaponTier.COMMON;
+    public static final WeaponTier  START_ROOM_OFFER_MAX_TIER  = WeaponTier.UNCOMMON;
+
+    // Ability catalogue: base / perLevel / cap for count-style abilities (Extended Mag)
+    public static final int   EXTENDED_MAG_BASE_COUNT      = 1;
+    public static final int   EXTENDED_MAG_LEVELS_PER_STEP = 3;
+    public static final int   EXTENDED_MAG_MAX_COUNT       = 4;
+
+
+──────────────────────────────────────────────
+C. WeaponRoller.java — class
+──────────────────────────────────────────────
+package ge.tbegvadze.toon3d.entity;
+
+import java.util.Random;
+
+/**
+ * Rolls weapon level, tier, and abilities at spawn time.
+ * Stateless after construction; call rollWeapon() for each new pickup.
+ */
+public class WeaponRoller {
+
+    private final Random rng;  // seeded from World.runSeed for reproducibility
+
+    public WeaponRoller(long runSeed) {
+        this.rng = new Random(runSeed);
+    }
+
+    /**
+     * Configures a weapon with a rolled level, tier, and abilities appropriate
+     * for the given floor depth.
+     *
+     * @param weapon      The weapon instance to configure (must be a concrete Weapon subclass).
+     * @param floorDepth  Current dungeon floor (1-based). Used for level clamping + tier weights.
+     */
+    public void rollWeapon(Weapon weapon, int floorDepth) {
+        int        rolledLevel  = rollLevel(floorDepth);
+        WeaponTier rolledTier   = rollTier(floorDepth);
+        AbilityInstance[] abilities = rollAbilities(weapon, rolledTier, rolledLevel);
+        weapon.configureRoll(rolledLevel, rolledTier, abilities);
+    }
+
+    /**
+     * Configures a weapon as a fixed Common Level-1 run-start weapon (no randomness).
+     */
+    public void configureRunStart(Weapon weapon) {
+        weapon.configureRoll(GameBalance.RUN_START_WEAPON_LEVEL,
+                             GameBalance.RUN_START_WEAPON_TIER,
+                             new AbilityInstance[0]);
+    }
+
+    // ── Private helpers ────────────────────────────────────────────────────
+
+    private int rollLevel(int floorDepth) {
+        int offset = rng.nextInt(3) - 1;  // -1, 0, or +1 uniformly
+        int level  = floorDepth + offset;
+        return Math.max(1, Math.min(WeaponConstants.MAX_WEAPON_LEVEL, level));
+    }
+
+    private WeaponTier rollTier(int floorDepth) {
+        WeaponTier[] tiers = WeaponTier.values();
+        float[] weights = new float[tiers.length];
+        float totalWeight = 0f;
+
+        for (int tierIndex = 0; tierIndex < tiers.length; tierIndex++) {
+            float baseWeight  = getTierBaseWeight(tiers[tierIndex]);
+            float drift       = getTierDrift(tiers[tierIndex]);
+            float minFloor    = getTierMinFloor(tiers[tierIndex]);
+            float cap         = getTierCap(tiers[tierIndex]);
+            float computed    = baseWeight + drift * (floorDepth - 1);
+            computed = Math.max(minFloor, computed);
+            if (cap > 0) computed = Math.min(cap, computed);
+            weights[tierIndex] = Math.max(0f, computed);
+            totalWeight += weights[tierIndex];
+        }
+
+        float roll = rng.nextFloat() * totalWeight;
+        float cumulative = 0f;
+        for (int tierIndex = 0; tierIndex < tiers.length; tierIndex++) {
+            cumulative += weights[tierIndex];
+            if (roll < cumulative) return tiers[tierIndex];
+        }
+        return WeaponTier.COMMON;  // fallback
+    }
+
+    private float getTierBaseWeight(WeaponTier tier) {
+        switch (tier) {
+            case COMMON:    return WeaponConstants.TIER_WEIGHT_COMMON_BASE;
+            case UNCOMMON:  return WeaponConstants.TIER_WEIGHT_UNCOMMON_BASE;
+            case RARE:      return WeaponConstants.TIER_WEIGHT_RARE_BASE;
+            case EPIC:      return WeaponConstants.TIER_WEIGHT_EPIC_BASE;
+            case LEGENDARY: return WeaponConstants.TIER_WEIGHT_LEGENDARY_BASE;
+            default:        return 0f;
+        }
+    }
+    // ... getTierDrift, getTierMinFloor, getTierCap follow the same switch pattern ...
+
+    private AbilityInstance[] rollAbilities(Weapon weapon, WeaponTier tier, int level) {
+        if (tier.abilitySlots == 0) return new AbilityInstance[0];  // COMMON: no abilities
+
+        // Collect eligible standard pool (legendaryOnly=false, eligibleFor this weapon)
+        java.util.List<WeaponAbility> standardPool = new java.util.ArrayList<>();
+        for (WeaponAbility ability : WeaponAbility.values()) {
+            if (!ability.legendaryOnly && ability.eligibleFor(weapon.isMelee())) {
+                standardPool.add(ability);
+            }
+        }
+
+        int standardCount = tier.standardSlotCount();
+        java.util.List<AbilityInstance> result = new java.util.ArrayList<>();
+
+        // Sample without replacement from standard pool
+        java.util.Collections.shuffle(standardPool, rng);
+        for (int slotIndex = 0; slotIndex < Math.min(standardCount, standardPool.size()); slotIndex++) {
+            result.add(buildInstance(standardPool.get(slotIndex), level));
+        }
+
+        // For Legendary: add one signature ability (legendaryOnly=true, eligible family)
+        if (tier.isLegendary()) {
+            java.util.List<WeaponAbility> legendaryPool = new java.util.ArrayList<>();
+            for (WeaponAbility ability : WeaponAbility.values()) {
+                if (ability.legendaryOnly && ability.eligibleFor(weapon.isMelee())) {
+                    legendaryPool.add(ability);
+                }
+            }
+            if (!legendaryPool.isEmpty()) {
+                WeaponAbility signature = legendaryPool.get(rng.nextInt(legendaryPool.size()));
+                result.add(buildInstance(signature, level));
+            }
+        }
+
+        return result.toArray(new AbilityInstance[0]);
+    }
+
+    private AbilityInstance buildInstance(WeaponAbility ability, int weaponLevel) {
+        float magnitude = 0f;
+        int   countVal  = 0;
+
+        switch (ability) {
+            case CRITICAL_STRIKE:
+                magnitude = GameMath.abilityMagnitude(GameBalance.CRIT_CHANCE_BASE,
+                    GameBalance.CRIT_CHANCE_PER_LEVEL, weaponLevel, GameBalance.CRIT_CHANCE_CAP);
+                break;
+            case BURST_FIRE:
+                countVal = GameMath.abilityCountScaled(2, 2, weaponLevel, 2, 5);
+                magnitude = countVal;
+                break;
+            case LIFESTEAL:
+                magnitude = GameMath.abilityMagnitude(GameBalance.LIFESTEAL_BASE,
+                    GameBalance.LIFESTEAL_PER_LEVEL, weaponLevel, GameBalance.LIFESTEAL_CAP);
+                break;
+            case HEMORRHAGE_HARVEST:
+                magnitude = GameMath.abilityMagnitude(GameBalance.HEMORRHAGE_HP_BASE,
+                    GameBalance.HEMORRHAGE_HP_PER_LEVEL, weaponLevel, GameBalance.HEMORRHAGE_HP_CAP);
+                break;
+            // ... one case per ability using the matching GameBalance constants ...
+            // Abilities with no numeric scaling (ARMOR_PIERCE base is PASSIVE magnitude):
+            case ARMOR_PIERCE:
+                magnitude = GameMath.abilityMagnitude(GameBalance.ARMOR_PIERCE_BASE,
+                    GameBalance.ARMOR_PIERCE_PER_LEVEL, weaponLevel, GameBalance.ARMOR_PIERCE_CAP);
+                break;
+            case EXTENDED_MAG:
+                countVal  = GameMath.abilityCountScaled(GameBalance.EXTENDED_MAG_BASE_COUNT,
+                    GameBalance.EXTENDED_MAG_LEVELS_PER_STEP, weaponLevel,
+                    GameBalance.EXTENDED_MAG_BASE_COUNT, GameBalance.EXTENDED_MAG_MAX_COUNT);
+                magnitude = countVal;
+                break;
+            // Default: magnitude 0 (ability has no numeric parameter; it's boolean on/off)
+            default:
+                magnitude = 1f;  // "present" flag; each resolver case handles semantics
+                break;
+        }
+
+        return new AbilityInstance(ability, magnitude, countVal);
+    }
+}
+
+
+──────────────────────────────────────────────
+D. World.java — wiring
+──────────────────────────────────────────────
+In World.java, add a WeaponRoller field:
+
+    private WeaponRoller weaponRoller;
+
+Initialize in World constructor / create():
+    this.weaponRoller = new WeaponRoller(runSeed);
+
+SPAWN POINT WEAPONS (existing loop ~line 404):
+  Find the loop that creates weapon instances from level weapon spawn points and
+  attaches them to GroundItems. After constructing each Weapon:
+
+    // Before this order:
+    //   Weapon weapon = new Shotgun(...);
+    //   groundItems.add(new GroundItem(weapon, spawnCol, spawnRow));
+
+    // After this order, add:
+    int floorDepth = playerProgress.getFloorDepth();  // 1-based floor index
+    weaponRoller.rollWeapon(weapon, floorDepth);
+    // Then add to groundItems as before.
+
+RUN-START WEAPONS (the default Shotgun/Chaingun given at run start, ~line 242):
+    // After constructing each starting weapon:
+    weaponRoller.configureRunStart(startWeapon);
+
+START-ROOM OFFER WEAPONS (roguelike_order_5_weapon_pickup_and_switching,
+  or wherever the initial weapon choice is created):
+    // Roll each offer weapon at floor 1 with a forced tier floor:
+    weaponRoller.rollWeaponWithMinTier(offerWeapon, 1,
+        GameBalance.START_ROOM_OFFER_MIN_TIER, GameBalance.START_ROOM_OFFER_MAX_TIER);
+    // Add rollWeaponWithMinTier() to WeaponRoller — same as rollWeapon but clamps
+    // the rolled tier to [minTier, maxTier].
+
+
+──────────────────────────────────────────────
+E. PlayerProgress.getFloorDepth()
+──────────────────────────────────────────────
+WeaponRoller needs the current floor depth (1-based integer). If PlayerProgress
+does not already expose this:
+
+    public int getFloorDepth() { return currentFloor; }   // or floorIndex, floorNumber
+
+where currentFloor is incremented each time the player descends (level transition).
+If the field is named differently, expose a getter with this name for consistency
+across the weapon system files.
+
+
+IMPLEMENTATION NOTES
+====================
+- The WeaponRoller's RNG is seeded ONCE from runSeed. Every subsequent call to
+  rollWeapon() advances the RNG sequence. This is intentional: same runSeed →
+  same sequence of weapon rolls → reproducible run (roguelike seed-share convention).
+  Ensure runSeed is set before the first rollWeapon() call and is not changed mid-run.
+- buildInstance() must have a case for EVERY ability in WeaponAbility enum. A
+  default case handles any future abilities that have no magnitude. Consider using
+  a compile-time check (IDE will warn on incomplete switch) to catch new abilities.
+- The shuffle(standardPool, rng) consumes RNG state. Order of operations matters
+  for reproducibility: always process pools in enum declaration order before
+  shuffling so the shuffle is the only non-deterministic step.
+- rollWeaponWithMinTier() for start-room offers: clamp the tier roll by re-rolling
+  if the result is below minTier, or by zeroing out weights below minTier before
+  normalizing. The re-roll approach is simpler but biases high; the weight-zeroing
+  approach is cleaner for balance.
+- Run `./gradlew build` after implementation. This is the last "logic" order;
+  order-12 is purely display.

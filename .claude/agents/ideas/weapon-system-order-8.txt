@@ -1,0 +1,208 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System — DoT & Status Abilities
+---
+
+OVERVIEW
+========
+Implement the three damage-over-time and status abilities: Rend (bleed DoT),
+Incendiary (burn DoT / burn extension), and Stagger Rounds (stun — originally
+listed in order-4 but requires the status effects infrastructure described here
+and in roguelike_order_8_status_effects_system.txt, so it is finalized here).
+
+DEPENDENCY: weapon-system-order-4 (AbilityResolver with onHit hook).
+DEPENDENCY: roguelike_order_8_status_effects_system.txt (status effects system
+  — MUST be implemented before this order. Bleed, Burn, and Stun must be valid
+  status effect types with per-turn damage / skip-turn behavior).
+NEXT STEP: weapon-system-order-9 (Positional & Situational Abilities).
+
+NOTE: If roguelike_order_8 is NOT yet implemented, implement a minimal status
+  effect stub first (see section E below) so this order can proceed independently.
+
+FILES TO MODIFY
+===============
+- entity/AbilityResolver.java    (add DoT + stun implementations)
+- util/GameBalance.java          (DoT numbers)
+- enemy/Enemy.java               (statusEffects list, if not added by order-8)
+- enemy/EnemyManager.java        (applyStatusEffect / tickStatusEffects, if absent)
+
+
+──────────────────────────────────────────────
+A. GameBalance.java — DoT ability numbers
+──────────────────────────────────────────────
+All PLACEHOLDERS:
+
+    // Rend (Bleed DoT)
+    public static final float REND_DAMAGE_PER_TURN_BASE      = 2f;
+    public static final float REND_DAMAGE_PER_TURN_PER_LEVEL = 0.5f;
+    public static final float REND_DAMAGE_PER_TURN_CAP       = 6f;
+    public static final int   REND_DURATION_TURNS             = 4;
+
+    // Incendiary (Burn DoT; reuses Incinerator burn)
+    public static final float INCENDIARY_BURN_PER_TURN_BASE      = 3f;
+    public static final float INCENDIARY_BURN_PER_TURN_PER_LEVEL = 0.5f;
+    public static final float INCENDIARY_BURN_PER_TURN_CAP       = 7f;
+    public static final int   INCENDIARY_BURN_DURATION            = 3;
+    public static final int   INCENDIARY_INCINERATOR_EXTRA_TURNS  = 1;  // bonus turns on Incinerator
+
+    // Stagger Rounds (stun duration — always 1 turn)
+    public static final int   STAGGER_STUN_DURATION = 1;
+
+
+──────────────────────────────────────────────
+B. Rend (BLEED) — ON_HIT
+──────────────────────────────────────────────
+Applies or refreshes a Bleed status effect on the hit enemy.
+If the enemy already has Bleed, REFRESH the duration (do not stack damage separately).
+
+In AbilityResolver.onHit():
+
+    if (weapon.hasAbility(WeaponAbility.REND)) {
+        float bleedPerTurn = weapon.abilityMagnitude(WeaponAbility.REND);
+        int bleedDamage = Math.max(1, Math.round(bleedPerTurn));
+        enemyManager.applyStatusEffect(hitEnemy,
+            StatusEffectType.BLEED, bleedDamage, GameBalance.REND_DURATION_TURNS);
+        eventTextSystem.showText("BLEED!", EventTextSystem.BLEED_COLOR);
+    }
+
+StatusEffectType.BLEED behavior (in the status effects system):
+  - Each player turn, all bleeding enemies take `bleedDamage` (stored on the effect).
+  - Duration counts down; on expiry the bleed clears.
+  - Bleed does not respect armor (it is internal bleeding).
+  - Bleed CAN kill an enemy.
+  - Visual: enemy tint shifts toward red while bleeding (optional, if EnemyRenderer
+    supports a status tint — check roguelike_order_8).
+
+
+──────────────────────────────────────────────
+C. Incendiary (BURN) — ON_HIT
+──────────────────────────────────────────────
+Applies a Burn status effect. For the Incinerator specifically, Incendiary
+instead extends an existing burn's duration by INCENDIARY_INCINERATOR_EXTRA_TURNS.
+
+In AbilityResolver.onHit():
+
+    if (weapon.hasAbility(WeaponAbility.INCENDIARY)) {
+        float burnPerTurn = weapon.abilityMagnitude(WeaponAbility.INCENDIARY);
+        int burnDamage = Math.max(1, Math.round(burnPerTurn));
+
+        boolean isIncinerator = "Incinerator".equals(weapon.getDisplayName());
+        if (isIncinerator && hitEnemy.hasStatusEffect(StatusEffectType.BURN)) {
+            // Extend existing burn duration
+            hitEnemy.extendStatusEffect(StatusEffectType.BURN,
+                                         GameBalance.INCENDIARY_INCINERATOR_EXTRA_TURNS);
+        } else {
+            enemyManager.applyStatusEffect(hitEnemy,
+                StatusEffectType.BURN, burnDamage, GameBalance.INCENDIARY_BURN_DURATION);
+        }
+        eventTextSystem.showText("BURN!", EventTextSystem.BURN_COLOR);
+    }
+
+BETTER APPROACH than string-matching the display name: add a WeaponTag enum or
+a boolean isIncinerator() method to the Incinerator subclass, and expose it through
+WeaponProfile as getWeaponTag(). Alternatively, the Incinerator's base burn
+effect (applied in its own marchShot, not via this ability) already extends
+duration; the Incendiary ability on a non-Incinerator simply applies a fresh burn.
+The distinction can be removed if complexity isn't worth it.
+
+StatusEffectType.BURN behavior:
+  - Same as BLEED but deals fire damage (may respect fire immunity on some enemies).
+  - Incinerator enemies and fire-type enemies may be immune (check enemy flags).
+  - Visual: enemy tint orange/yellow while burning.
+
+
+──────────────────────────────────────────────
+D. Stagger Rounds (STUN) — ON_HIT (finalized here)
+──────────────────────────────────────────────
+Stagger Rounds was sketched in order-4 using a stub. Finalize it via the status
+effects system:
+
+In AbilityResolver.onHit():
+
+    if (weapon.hasAbility(WeaponAbility.STAGGER_ROUNDS)) {
+        if (hitEnemy.canBeStunned()) {
+            float stunChance = weapon.abilityMagnitude(WeaponAbility.STAGGER_ROUNDS);
+            if (rng.nextFloat() <= stunChance) {
+                enemyManager.applyStatusEffect(hitEnemy,
+                    StatusEffectType.STUN, 0, GameBalance.STAGGER_STUN_DURATION);
+                eventTextSystem.showText("STUN!", EventTextSystem.STUN_COLOR);
+            }
+        }
+    }
+
+StatusEffectType.STUN behavior:
+  - Enemy skips its next `duration` AI turns.
+  - `damage` parameter is 0 (stun deals no per-turn damage).
+  - canBeStunned() is a flag on Enemy / EnemyType. Boss enemies are not stunable.
+  - Replace any stub EnemyManager.applyStun() added in order-4 with this call.
+
+
+──────────────────────────────────────────────
+E. Minimal status effect stub (if order-8 not implemented)
+──────────────────────────────────────────────
+If roguelike_order_8_status_effects_system has NOT been implemented, add this
+minimal infrastructure to unblock this order:
+
+  // In enemy/StatusEffectType.java (new file):
+  public enum StatusEffectType { BLEED, BURN, STUN, POISON }
+
+  // In enemy/StatusEffect.java (new file):
+  public class StatusEffect {
+      public final StatusEffectType type;
+      public int damagePerTurn;
+      public int turnsRemaining;
+      public StatusEffect(StatusEffectType type, int damagePerTurn, int turns) { ... }
+  }
+
+  // In enemy/Enemy.java — add:
+  private List<StatusEffect> statusEffects = new ArrayList<>();
+  public boolean hasStatusEffect(StatusEffectType type) { ... }
+  public void    extendStatusEffect(StatusEffectType type, int extraTurns) { ... }
+
+  // In enemy/EnemyManager.java — add:
+  public void applyStatusEffect(Enemy enemy, StatusEffectType type,
+                                  int damagePerTurn, int turns) {
+      // If enemy already has this type, refresh duration:
+      for (StatusEffect e : enemy.statusEffects) {
+          if (e.type == type) { e.turnsRemaining = turns; return; }
+      }
+      enemy.statusEffects.add(new StatusEffect(type, damagePerTurn, turns));
+  }
+
+  // In EnemyManager's per-turn tick handler — add after all enemy actions:
+  for (Enemy enemy : livingEnemies) {
+      Iterator<StatusEffect> iterator = enemy.statusEffects.iterator();
+      while (iterator.hasNext()) {
+          StatusEffect effect = iterator.next();
+          if (effect.type != StatusEffectType.STUN && effect.damagePerTurn > 0) {
+              enemy.takeDamage(effect.damagePerTurn);
+          }
+          effect.turnsRemaining--;
+          if (effect.turnsRemaining <= 0) iterator.remove();
+      }
+  }
+
+  // STUN is handled in the AI turn: skip enemy action if any STUN effect is active.
+
+When roguelike_order_8 is properly implemented, replace this stub with the
+full system without changing AbilityResolver's call sites.
+
+
+IMPLEMENTATION NOTES
+====================
+- Bleed and Burn can coexist on the same enemy (they are separate effect types).
+- A burning enemy that receives Incendiary again refreshes the burn if not the
+  Incinerator. This is consistent with roguelike_order_8's "refresh on reapply" rule.
+- Stun from Stagger Rounds stacks in duration if applied to an already-stunned
+  enemy: if (existing stun) extend turnsRemaining by STAGGER_STUN_DURATION.
+  Capped at 3 turns total to prevent chain-stun locks.
+  Add to EnemyManager.applyStatusEffect:
+    if (effect.type == StatusEffectType.STUN) {
+        effect.turnsRemaining = Math.min(effect.turnsRemaining + turns, 3);
+        return;
+    }
+- If the Incinerator already applies burn natively (in its marchShot), the
+  INCENDIARY ability on an Incinerator is an upgrade — extension behavior is
+  the bonus. The marchShot burn and the ability burn are the SAME StatusEffect
+  type (BURN) so they merge/refresh, never duplicate.
+- Run `./gradlew build` after implementation.

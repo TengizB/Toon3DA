@@ -1,0 +1,270 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System — AbilityResolver & Offensive Abilities
+---
+
+OVERVIEW
+========
+Create the central AbilityResolver class and implement the first batch of
+offensive abilities: Critical Strike, Burst Fire, Armor Pierce, Executioner,
+Overpenetration, and Stagger Rounds.
+
+The AbilityResolver is stateless (no mutable fields). It receives a context
+object per call and switches on WeaponAbility enum values. All state lives either
+on the weapon (AbilityInstance magnitudes) or on the passed-in managers.
+
+DEPENDENCY: weapon-system-order-3 (miss system, fire() structure in place).
+NEXT STEP: weapon-system-order-5 (Sustain Abilities).
+
+FILES TO CREATE
+===============
+- entity/AbilityResolver.java
+
+FILES TO MODIFY
+===============
+- entity/Weapon.java        (wire AbilityResolver into fire())
+- util/GameBalance.java     (ability base/perLevel/cap numbers)
+- util/WeaponConstants.java (CRIT_DAMAGE_MULTIPLIER constant)
+
+
+──────────────────────────────────────────────
+A. AbilityResolver.java — class skeleton
+──────────────────────────────────────────────
+package ge.tbegvadze.toon3d.entity;
+
+import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.progression.PlayerStats;
+import ge.tbegvadze.toon3d.item.Inventory;
+import ge.tbegvadze.toon3d.render.EventTextSystem;
+import ge.tbegvadze.toon3d.world.GroundItemSpawner;  // or World — however ground items are spawned
+
+/**
+ * Stateless ability effect dispatcher. Injected once by World and reused across all ticks.
+ * Call the appropriate onX() method from Weapon.fire() at the right moment.
+ */
+public class AbilityResolver {
+
+    private final PlayerStats      playerStats;
+    private final EnemyManager     enemyManager;
+    private final Inventory        inventory;
+    private final EventTextSystem  eventTextSystem;
+    // Add GroundItemSpawner / World reference for abilities that drop items (order-7).
+
+    public AbilityResolver(PlayerStats playerStats,
+                           EnemyManager enemyManager,
+                           Inventory inventory,
+                           EventTextSystem eventTextSystem) { ... }
+
+    // ── Entry points called from Weapon.fire() ──────────────────────────────
+
+    /** Called once per fire activation, BEFORE the accuracy roll. */
+    public void onFire(WeaponProfile weapon) { ... }
+
+    /**
+     * Called once per enemy hit (after marchShot confirms a hit).
+     * hitEnemyId: the ID or reference of the enemy that was hit.
+     * damageDealt: the raw damage applied (after armor etc.).
+     * Returns true if the hit was a crit (so ON_CRIT can be chained).
+     */
+    public boolean onHit(WeaponProfile weapon, Enemy hitEnemy, int damageDealt,
+                         int playerTileColumn, int playerTileRow) { ... }
+
+    /** Called when onHit returns true (crit was rolled). */
+    public void onCrit(WeaponProfile weapon, Enemy hitEnemy, int critDamage) { ... }
+
+    /** Called when the enemy hit by this weapon dies (kill confirmed). */
+    public void onKill(WeaponProfile weapon, Enemy killedEnemy,
+                       int playerTileColumn, int playerTileRow) { ... }
+
+    /** Called when the weapon's reload completes (shotsInClip refilled). */
+    public void onReload(WeaponProfile weapon) { ... }
+}
+
+
+──────────────────────────────────────────────
+B. GameBalance.java — ability catalogue numbers
+──────────────────────────────────────────────
+Add a clearly marked "ABILITY CATALOGUE — BASE / PER_LEVEL / CAP" section.
+All values are PLACEHOLDERS — flag for playtesting.
+
+    // Critical Strike
+    public static final float CRIT_CHANCE_BASE       = 0.05f;
+    public static final float CRIT_CHANCE_PER_LEVEL  = 0.015f;
+    public static final float CRIT_CHANCE_CAP        = 0.30f;
+
+    // Armor Pierce
+    public static final float ARMOR_PIERCE_BASE      = 0.20f;
+    public static final float ARMOR_PIERCE_PER_LEVEL = 0.05f;
+    public static final float ARMOR_PIERCE_CAP       = 0.60f;
+
+    // Executioner
+    public static final float EXECUTIONER_THRESHOLD  = 0.25f;   // fixed; targets below 25% HP
+    public static final float EXECUTIONER_BONUS_BASE = 0.30f;
+    public static final float EXECUTIONER_BONUS_PER_LEVEL = 0.06f;
+    public static final float EXECUTIONER_BONUS_CAP  = 0.80f;
+
+    // Stagger Rounds
+    public static final float STAGGER_CHANCE_BASE      = 0.08f;
+    public static final float STAGGER_CHANCE_PER_LEVEL = 0.02f;
+    public static final float STAGGER_CHANCE_CAP       = 0.35f;
+
+    // Overpenetration (count-style)
+    public static final int   OVERPENETRATION_BASE_COUNT     = 1;   // +1 extra enemy
+    public static final int   OVERPENETRATION_LEVELS_PER_STEP = 3;
+    public static final int   OVERPENETRATION_MAX_COUNT       = 3;   // +3 extra enemies max
+
+Add to WeaponConstants.java:
+    public static final float CRIT_DAMAGE_MULTIPLIER = 2.0f;  // crits deal 2× damage
+
+
+──────────────────────────────────────────────
+C. AbilityResolver — ability implementations
+──────────────────────────────────────────────
+
+── CRITICAL STRIKE (ON_HIT) ──────────────────
+In onHit(), after the hit is confirmed and before returning:
+
+    if (weapon.hasAbility(WeaponAbility.CRITICAL_STRIKE)) {
+        float critChance = weapon.abilityMagnitude(WeaponAbility.CRITICAL_STRIKE);
+        // critChance is pre-scaled at spawn: GameMath.abilityMagnitude(BASE, PER_LEVEL, L, CAP)
+        if (rng.nextFloat() <= critChance) {
+            int critBonus = Math.round(damageDealt * (WeaponConstants.CRIT_DAMAGE_MULTIPLIER - 1f));
+            hitEnemy.takeDamage(critBonus);     // apply the bonus portion
+            eventTextSystem.showCrit(critBonus);
+            return true;  // isCrit = true
+        }
+    }
+    return false;
+
+NOTE: The AbilityResolver needs its own Random instance (seeded from the world
+seed so crit rolls are reproducible). Do NOT use LibGDX MathUtils.random —
+use java.util.Random seeded at construction.
+
+── BURST FIRE (ON_FIRE) ──────────────────────
+Burst Fire fires additional projectiles beyond the single base shot.
+countValue = burst count (pre-scaled at spawn, e.g., 2..5).
+
+In onFire():
+    if (weapon.hasAbility(WeaponAbility.BURST_FIRE)) {
+        int burstCount = weapon.abilityCount(WeaponAbility.BURST_FIRE);
+        // Signal to fire() that it should march burstCount extra shots.
+        // Use a pendingBurstExtra field on the weapon, similar to Chaingun's existing
+        // burst queue mechanism — generalize that into the Weapon base class.
+        weapon.setPendingBurstExtra(burstCount - 1);  // -1 because base shot fires anyway
+    }
+
+The pendingBurstExtra queue in Weapon.fire() fires one extra shot per
+remaining burst count, each with its own accuracy roll (so low-accuracy Burst
+guns spray unpredictably — intended).
+
+── ARMOR PIERCE (PASSIVE) ────────────────────
+ARMOR_PIERCE magnitude is pre-computed at spawn. Apply in marchShot before
+damage is dealt to an enemy:
+
+    float pierceFraction = weapon.abilityMagnitude(WeaponAbility.ARMOR_PIERCE);
+    int effectiveDamage = DamageCalculator.applyArmorPierce(rawDamage, enemy.getArmor(), pierceFraction);
+
+If no DamageCalculator exists, add a GameMath method:
+    /*
+     * Formula: Armor-pierce damage
+     * Derivation: unpiercedReduction = armor * (1 - pierceFraction)
+     *             effectiveDamage = max(1, rawDamage - unpiercedReduction)
+     * Edge cases: pierceFraction=0 is standard armor; pierceFraction=1 ignores all armor.
+     */
+    public static int armorPierceDamage(int rawDamage, int armor, float pierceFraction) { ... }
+
+Armor Pierce is PASSIVE so it is applied inline in marchShot, not via an onHit callback.
+Check weapon.hasAbility(ARMOR_PIERCE) in the hit-resolution path.
+
+── EXECUTIONER (ON_HIT) ──────────────────────
+In onHit(), after normal damage has landed:
+
+    if (weapon.hasAbility(WeaponAbility.EXECUTIONER)) {
+        float hpFraction = (float) hitEnemy.getCurrentHp() / hitEnemy.getMaxHp();
+        if (hpFraction <= GameBalance.EXECUTIONER_THRESHOLD) {
+            float bonus = weapon.abilityMagnitude(WeaponAbility.EXECUTIONER);
+            int bonusDamage = Math.round(damageDealt * bonus);
+            hitEnemy.takeDamage(bonusDamage);
+            eventTextSystem.showText("EXECUTE!", EventTextSystem.EXECUTE_COLOR);
+        }
+    }
+
+── OVERPENETRATION (PASSIVE) ─────────────────
+Already-piercing weapons (PlasmaRifle, Railgun) instead gain flat bonus damage
+per additional enemy pierced. For non-piercing guns, the shot continues to the
+next enemy on the cardinal line.
+
+In marchShot: after the first hit, check weapon.hasAbility(OVERPENETRATION).
+    If present, allow the march to continue for up to abilityCount(OVERPENETRATION) more enemies.
+    Each additional hit deals normal damage (no extra multiplier).
+
+For Plasma/Railgun (already piercing): add
+    int bonusPerPierced = Math.round(weapon.getEffectiveDamage() * 0.25f);  // 25% extra per pierced
+    // Apply bonusPerPierced for each enemy after the first.
+
+The 0.25f "per-pierced bonus" constant should go in GameBalance:
+    public static final float OVERPENETRATION_ALREADY_PIERCING_BONUS = 0.25f;
+
+── STAGGER ROUNDS (ON_HIT) ───────────────────
+In onHit():
+
+    if (weapon.hasAbility(WeaponAbility.STAGGER_ROUNDS)) {
+        if (hitEnemy.canBeStunned() && rng.nextFloat() <= weapon.abilityMagnitude(WeaponAbility.STAGGER_ROUNDS)) {
+            enemyManager.applyStun(hitEnemy, 1);   // 1 turn stun — skip next action
+            eventTextSystem.showText("STUN!", EventTextSystem.STUN_COLOR);
+        }
+    }
+
+EnemyManager.applyStun(enemy, turns): if EnemyManager does not already have this,
+add a stunned-turns counter to Enemy.java. During the AI turn, an enemy with
+stunnedTurns > 0 skips its action and decrements the counter.
+
+
+──────────────────────────────────────────────
+D. Wire AbilityResolver into Weapon.fire()
+──────────────────────────────────────────────
+World creates one AbilityResolver and injects it into every weapon via a setter
+(or passes it in the fire() call context):
+
+    weapon.setAbilityResolver(abilityResolver);
+
+Inside Weapon.fire() / marchShot:
+
+    // 1. Before accuracy roll:
+    if (abilityResolver != null) abilityResolver.onFire(this);
+
+    // 2. After accuracy roll succeeds, after marchShot confirms enemy hit:
+    boolean wasCrit = false;
+    if (abilityResolver != null) {
+        wasCrit = abilityResolver.onHit(this, hitEnemy, damageDealt, playerTileCol, playerTileRow);
+    }
+
+    // 3. If crit:
+    if (wasCrit && abilityResolver != null) {
+        abilityResolver.onCrit(this, hitEnemy, critDamage);
+    }
+
+    // 4. On enemy death (inside the kill-confirmation block):
+    if (hitEnemy.isDead() && abilityResolver != null) {
+        abilityResolver.onKill(this, hitEnemy, playerTileCol, playerTileRow);
+    }
+
+    // 5. On reload complete (in the reload tick handler):
+    if (abilityResolver != null) abilityResolver.onReload(this);
+
+
+IMPLEMENTATION NOTES
+====================
+- The AbilityResolver's Random should be seeded with the world run seed
+  (World.runSeed or equivalent) so ability rolls are reproducible on the same seed.
+- ARMOR_PIERCE and OVERPENETRATION are PASSIVE — they are applied inline in marchShot,
+  not via AbilityResolver callbacks. Check weapon.hasAbility() directly in marchShot.
+- Crit bonus damage is the EXTRA portion (CRIT_MULTIPLIER - 1) × base, applied as a
+  second takeDamage() call. This makes the total = base + crit bonus. Do NOT re-deal
+  the full crit damage; only the bonus delta.
+- The EXECUTE event text color (EXECUTE_COLOR) and STUN_COLOR should be defined as
+  constants on EventTextSystem or in a HudConstants/EffectConstants block.
+- All GameBalance numbers (BASE, PER_LEVEL, CAP) are pre-scaled into AbilityInstance
+  magnitudes at spawn time (order-11 WeaponRoller). AbilityResolver only reads
+  weapon.abilityMagnitude() — it never re-runs the scaling formula at runtime.
+- Run `./gradlew build` after implementation.

@@ -1,0 +1,227 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System — Legendary Signature Abilities
+---
+
+OVERVIEW
+========
+Implement the four Legendary-only signature abilities: Soulforge (weapon levels
+up on kills, growing permanently), Judgment (one-shot full-pierce lance on a
+cooldown), Hellfire Nova (crits explode in an AoE), and Berserker's Oath
+(melee kill-streak — already implemented in order-6; verify here and finalize).
+
+These abilities are only eligible for the Legendary tier's 5th (signature) slot
+and are what makes a Legendary weapon feel categorically different from other tiers.
+
+DEPENDENCY: weapon-system-order-9 (all standard abilities implemented).
+DEPENDENCY: order-6 for Berserker's Oath skeleton.
+NEXT STEP: weapon-system-order-11 (Spawn Roller).
+
+FILES TO MODIFY
+===============
+- entity/AbilityResolver.java    (Soulforge, Judgment, Hellfire Nova)
+- entity/Weapon.java             (Soulforge level-up, Judgment cooldown counter)
+- util/GameBalance.java          (legendary ability numbers)
+- util/WeaponConstants.java      (JUDGMENT_COOLDOWN_FIRES constant)
+
+
+──────────────────────────────────────────────
+A. GameBalance.java — legendary numbers
+──────────────────────────────────────────────
+All PLACEHOLDERS:
+
+    // Soulforge
+    public static final int   SOULFORGE_KILLS_PER_LEVEL_UP = 5;  // kills needed per +1 level
+
+    // Judgment
+    public static final int   JUDGMENT_COOLDOWN_FIRES = 5;    // fires between lance shots
+    public static final float JUDGMENT_DAMAGE_MULTIPLIER = 3.0f; // 3× weapon damage
+
+    // Hellfire Nova
+    public static final int   HELLFIRE_NOVA_RADIUS     = 2;    // tiles from crit target
+    public static final float HELLFIRE_NOVA_DAMAGE_FRACTION = 0.75f; // % of crit damage
+
+Add to WeaponConstants:
+    public static final int   JUDGMENT_COOLDOWN_FIRES = 5;  // mirror in WeaponConstants for HUD display
+
+
+──────────────────────────────────────────────
+B. Soulforge — ON_KILL (legendary, universal)
+──────────────────────────────────────────────
+Every SOULFORGE_KILLS_PER_LEVEL_UP kills with this weapon permanently increase
+its weapon level by 1, capped at MAX_WEAPON_LEVEL. Recalculates all effective
+stats and resets the kill counter.
+
+State on Weapon.java:
+    private int soulforgeKillCount = 0;
+
+In AbilityResolver.onKill() (checked LAST, after all other ON_KILL abilities):
+
+    if (weapon.hasAbility(WeaponAbility.SOULFORGE)) {
+        // weapon must be castable to Weapon (not just WeaponProfile) for incrementWeaponLevel
+        if (weapon instanceof Weapon concreteWeapon) {
+            concreteWeapon.incrementSoulforgeKill();
+        }
+    }
+
+Add to Weapon.java:
+    public void incrementSoulforgeKill() {
+        if (!hasAbility(WeaponAbility.SOULFORGE)) return;
+        soulforgeKillCount++;
+        if (soulforgeKillCount >= GameBalance.SOULFORGE_KILLS_PER_LEVEL_UP) {
+            soulforgeKillCount = 0;
+            if (weaponLevel < WeaponConstants.MAX_WEAPON_LEVEL) {
+                weaponLevel++;
+                recomputeEffectiveStats();
+                // notify the event system with a special ascend message
+                // (eventTextSystem is NOT available here — surface the level-up via a flag
+                //  that World or AbilityResolver checks on the next frame)
+                soulforgeJustLeveledUp = true;
+            }
+        }
+    }
+    private boolean soulforgeJustLeveledUp = false;
+    public boolean consumeSoulforgeAscend() {
+        boolean fired = soulforgeJustLeveledUp;
+        soulforgeJustLeveledUp = false;
+        return fired;
+    }
+
+In AbilityResolver.onKill(), after calling incrementSoulforgeKill():
+    if (((Weapon)weapon).consumeSoulforgeAscend()) {
+        eventTextSystem.showText(weapon.getDisplayName() + " ASCENDS! Lv"
+                                 + weapon.getWeaponLevel(),
+                                 EventTextSystem.SOULFORGE_COLOR);
+    }
+
+SOULFORGE_COLOR: bright gold, same as LEGENDARY tier color (1f, 0.69f, 0.125f).
+
+
+──────────────────────────────────────────────
+C. Judgment — ON_FIRE (legendary, gun only)
+──────────────────────────────────────────────
+Every JUDGMENT_COOLDOWN_FIRES fires, the NEXT activation is a full-pierce
+lance: it fires a Railgun-style ray down the full cardinal line, deals
+JUDGMENT_DAMAGE_MULTIPLIER × effectiveDamage to every enemy on the line
+regardless of the weapon's normal range or pierce behavior, then the cooldown
+resets.
+
+State on Weapon.java:
+    private int judgmentFiresUntilReady = 0;  // 0 means ready NOW on first fire
+    public boolean isJudgmentReady() { return judgmentFiresReady; }
+    private boolean judgmentFiresReady = false;
+
+Better approach — a simple counter:
+    private int judgmentFireCounter = 0;  // counts fires since last Judgment shot
+    public boolean consumeJudgment() {
+        if (!hasAbility(WeaponAbility.JUDGMENT)) return false;
+        judgmentFireCounter++;
+        if (judgmentFireCounter >= WeaponConstants.JUDGMENT_COOLDOWN_FIRES) {
+            judgmentFireCounter = 0;
+            return true;  // THIS fire is the Judgment shot
+        }
+        return false;
+    }
+
+In AbilityResolver.onFire() (called before the accuracy roll):
+
+    if (weapon.hasAbility(WeaponAbility.JUDGMENT) && !weapon.isMelee()) {
+        if (((Weapon)weapon).consumeJudgment()) {
+            // Fire the judgment lance — replace the normal marchShot this turn.
+            // Signal to Weapon.fire() to use the judgment path:
+            ((Weapon)weapon).setJudgmentActive(true);
+            eventTextSystem.showText("JUDGMENT!", EventTextSystem.JUDGMENT_COLOR);
+        }
+    }
+
+In Weapon.fire(), after onFire():
+    if (judgmentActive) {
+        judgmentActive = false;
+        marchJudgmentLance(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
+                           level, enemyHitTarget, barrelHitTarget);
+        return;  // skip normal marchShot
+    }
+
+marchJudgmentLance():
+  - Marches from the player's tile in the facing direction to the world boundary (or
+    RAY_MAX_LENGTH_CELLS tiles, whichever comes first).
+  - Hits EVERY enemy on the line (does not stop at the first hit).
+  - Damages each for Math.round(getEffectiveDamage() * JUDGMENT_DAMAGE_MULTIPLIER).
+  - Passes through doors (they don't block the lance).
+  - Stops at walls (a wall cannot be pierced).
+  - Calls onHit() and onKill() via abilityResolver for each enemy hit (so Critical
+    Strike, Lifesteal, etc. apply to each enemy on the line).
+  - Screen effect: optional brief white flash or red vignette pulse to signal the
+    Judgment shot fired (if ImpactEffectSystem supports it).
+
+HUD: When Judgment is NOT ready, show a small grey "JDG x/5" counter in the
+ability glyph strip area (or append to the weapon name row). When ready, it pulses
+gold. This HUD detail can be deferred to order-12.
+
+
+──────────────────────────────────────────────
+D. Hellfire Nova — ON_CRIT (legendary, universal)
+──────────────────────────────────────────────
+When a crit lands, deal explosion damage to all enemies within HELLFIRE_NOVA_RADIUS
+tiles of the crit target (using Chebyshev / "box" distance so diagonals are included
+for the visual explosion feel, even though combat is cardinal — the AoE still hits
+enemies reachable from the epicenter tile).
+
+In AbilityResolver.onCrit():
+
+    if (weapon.hasAbility(WeaponAbility.HELLFIRE_NOVA)) {
+        int novaDamage = Math.round(critDamage * GameBalance.HELLFIRE_NOVA_DAMAGE_FRACTION);
+        int epicenterCol = hitEnemy.tileColumn;
+        int epicenterRow = hitEnemy.tileRow;
+        int radius = GameBalance.HELLFIRE_NOVA_RADIUS;
+
+        for (Enemy candidate : enemyManager.getLivingEnemies()) {
+            if (candidate == hitEnemy) continue;  // skip the crit target itself
+            int distanceCol = Math.abs(candidate.tileColumn - epicenterCol);
+            int distanceRow = Math.abs(candidate.tileRow - epicenterRow);
+            if (distanceCol <= radius && distanceRow <= radius) {  // Chebyshev
+                candidate.takeDamage(novaDamage);
+                // Note: nova hits do NOT chain crit/nova again (no recursive onCrit calls).
+            }
+        }
+        eventTextSystem.showText("NOVA!", EventTextSystem.NOVA_COLOR);
+        // Optional: trigger a brief screen shake or explosion visual at epicenter.
+    }
+
+EnemyManager.getLivingEnemies(): returns a list/array of alive enemies. This likely
+already exists internally — expose it (or use an iteration visitor pattern).
+
+The nova damage is a fraction of critDamage (the crit's extra damage, not the total
+hit damage). This keeps the nova scaled to how hard the crit hit.
+
+
+──────────────────────────────────────────────
+E. Berserker's Oath — verify completeness
+──────────────────────────────────────────────
+Berserker's Oath was implemented in order-6. Verify:
+  - berserkerStacks resets on a turn with no kill (not just weapon switch).
+  - The damage buff from berserkerStacks × BERSERKER_DAMAGE_PER_STACK is applied as
+    a temp buff for the NEXT fire (not this fire — the kill already happened).
+  - The HP regen fires immediately on kill (same turn as the kill).
+  - Stack count is shown in the HUD (order-12) or event text when it changes.
+
+If any of these are incorrect, fix them here.
+
+
+IMPLEMENTATION NOTES
+====================
+- Soulforge's soulforgeKillCount and judgmentFireCounter are per-instance state on
+  the weapon — they survive across levels (the weapon persists). Reset them only if
+  the weapon is dropped or replaced, not on floor transition.
+- Judgment's marchJudgmentLance is effectively a generalised version of Railgun's
+  marchShot. Consider extracting a shared marchPiercingShot(... boolean unlimited)
+  helper on Weapon base so Railgun and Judgment both use it.
+- Hellfire Nova's Chebyshev radius means a radius-2 nova can hit up to 24 tiles in
+  a 5×5 box. In a crowded corridor this is devastating — intentional for a Legendary
+  signature. Balance via HELLFIRE_NOVA_DAMAGE_FRACTION in GameBalance.
+- If critDamage in onCrit() is 0 (weapon has no crit ability but player stats
+  triggered the crit), Hellfire Nova still fires but deals 0 damage. Clamp novaDamage
+  to max(1, ...) so it always has impact when triggered.
+- Judgment's visual: add EventTextSystem.showText with JUDGMENT_COLOR and optionally
+  a 1-frame ImpactEffectSystem.triggerFlash(). The flash must not allocate.
+- Run `./gradlew build` after implementation.

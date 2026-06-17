@@ -1,0 +1,226 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System — Foundation Data Types
+---
+
+OVERVIEW
+========
+Create the four pure data types that every subsequent weapon-system order file
+depends on. No behavior changes to existing classes in this step. No existing
+file is modified — only new files are created.
+
+DEPENDENCY: None. This is the root of the weapon-system implementation chain.
+NEXT STEP: weapon-system-order-2 (Weapon base class extension).
+
+FILES TO CREATE
+===============
+All in package: ge.tbegvadze.toon3d.entity
+
+1. entity/WeaponTier.java
+2. entity/WeaponAbility.java
+3. entity/AbilityInstance.java
+4. entity/WeaponProfile.java
+
+
+──────────────────────────────────────────────
+1. WeaponTier.java
+──────────────────────────────────────────────
+public enum WeaponTier {
+
+    COMMON   (0, 0.604f, 0.627f, 0.651f, "Common"),
+    UNCOMMON (1, 0.298f, 0.780f, 0.298f, "Uncommon"),
+    RARE     (2, 0.227f, 0.627f, 1.000f, "Rare"),
+    EPIC     (3, 0.694f, 0.298f, 1.000f, "Epic"),
+    LEGENDARY(5, 1.000f, 0.690f, 0.125f, "Legendary");
+
+    public final int   abilitySlots;
+    public final float colorRed;
+    public final float colorGreen;
+    public final float colorBlue;
+    public final String displayName;
+
+    WeaponTier(int abilitySlots, float colorRed, float colorGreen,
+               float colorBlue, String displayName) { ... }
+
+    /** Standard (non-signature) slot count. Legendary uses 4 standard + 1 signature. */
+    public int standardSlotCount() {
+        return this == LEGENDARY ? 4 : abilitySlots;
+    }
+
+    public boolean isLegendary() { return this == LEGENDARY; }
+}
+
+Color rationale (distinct on a dark HUD):
+  COMMON    = Steel Grey    #9AA0A6
+  UNCOMMON  = Hazard Green  #4CC74C
+  RARE      = Plasma Blue   #3AA0FF
+  EPIC      = Demon Violet  #B14CFF
+  LEGENDARY = Hellfire Gold #FFB020
+
+
+──────────────────────────────────────────────
+2. WeaponAbility.java
+──────────────────────────────────────────────
+Full enum of all 33 abilities. Each entry declares:
+  - family  (GUN / MELEE / UNIVERSAL)
+  - trigger (PASSIVE / ON_HIT / ON_KILL / ON_CRIT / ON_FIRE / ON_RELOAD)
+  - legendaryOnly boolean (true = eligible for Legendary 5th-slot signature only)
+  - displayName  (shown on inspect card)
+  - hudGlyph     (single char shown in the HUD ability strip)
+
+public enum WeaponAbility {
+
+    // ── OFFENSIVE ──────────────────────────────────────────────────────────
+    BURST_FIRE         (Family.GUN,       Trigger.ON_FIRE,   false, "Burst Fire",          'B'),
+    CRITICAL_STRIKE    (Family.UNIVERSAL, Trigger.ON_HIT,    false, "Critical Strike",     'C'),
+    ARMOR_PIERCE       (Family.UNIVERSAL, Trigger.PASSIVE,   false, "Armor Pierce",        'A'),
+    EXECUTIONER        (Family.UNIVERSAL, Trigger.ON_HIT,    false, "Executioner",         'X'),
+    REND               (Family.UNIVERSAL, Trigger.ON_HIT,    false, "Rend",                'R'),
+    OVERPENETRATION    (Family.GUN,       Trigger.PASSIVE,   false, "Overpenetration",     'O'),
+    STAGGER_ROUNDS     (Family.GUN,       Trigger.ON_HIT,    false, "Stagger Rounds",      'S'),
+    KINETIC_SLAM       (Family.MELEE,     Trigger.ON_HIT,    false, "Kinetic Slam",        'K'),
+    CLEAVE             (Family.MELEE,     Trigger.ON_HIT,    false, "Cleave",              'V'),
+    INCENDIARY         (Family.UNIVERSAL, Trigger.ON_HIT,    false, "Incendiary",          'I'),
+
+    // ── DEFENSIVE / SUSTAIN ────────────────────────────────────────────────
+    LIFESTEAL          (Family.UNIVERSAL, Trigger.ON_HIT,    false, "Lifesteal",           'L'),
+    HEMORRHAGE_HARVEST (Family.UNIVERSAL, Trigger.ON_KILL,   false, "Hemorrhage Harvest",  'H'),
+    VAMPIRIC_CRIT      (Family.UNIVERSAL, Trigger.ON_CRIT,   false, "Vampiric Crit",       'V'),
+    ADRENAL_SURGE      (Family.UNIVERSAL, Trigger.ON_KILL,   false, "Adrenal Surge",       'D'),
+    BULWARK_ROUNDS     (Family.GUN,       Trigger.ON_RELOAD, false, "Bulwark Rounds",      'W'),
+    SECOND_WIND        (Family.UNIVERSAL, Trigger.PASSIVE,   false, "Second Wind",         'W'),
+
+    // ── UTILITY / ECONOMY ─────────────────────────────────────────────────
+    SCAVENGER_ROUNDS   (Family.GUN,       Trigger.ON_KILL,   false, "Scavenger Rounds",    'Z'),
+    SALVAGE_STRIKE     (Family.MELEE,     Trigger.ON_KILL,   false, "Salvage Strike",      'T'),
+    SCHOLARS_EDGE      (Family.MELEE,     Trigger.ON_KILL,   false, "Scholar's Edge",      'E'),
+    QUICK_HANDS        (Family.UNIVERSAL, Trigger.PASSIVE,   false, "Quick Hands",         'Q'),
+    EXTENDED_MAG       (Family.GUN,       Trigger.PASSIVE,   false, "Extended Mag",        'M'),
+    FIELD_MEDIC_ROUNDS (Family.UNIVERSAL, Trigger.ON_KILL,   false, "Field Medic Rounds",  'F'),
+    CREDIT_FANG        (Family.UNIVERSAL, Trigger.ON_KILL,   false, "Credit Fang",         'G'),
+
+    // ── HYBRID / SITUATIONAL ──────────────────────────────────────────────
+    POINT_BLANK        (Family.GUN,       Trigger.PASSIVE,   false, "Point Blank",         'P'),
+    MARKSMANS_PATIENCE (Family.GUN,       Trigger.PASSIVE,   false, "Marksman's Patience", 'N'),
+    OPENING_SALVO      (Family.UNIVERSAL, Trigger.PASSIVE,   false, "Opening Salvo",       'U'),
+    RHYTHM             (Family.GUN,       Trigger.PASSIVE,   false, "Rhythm",              'Y'),
+    STATIC_DISCHARGE   (Family.UNIVERSAL, Trigger.ON_KILL,   false, "Static Discharge",    '~'),
+    RESONANT_ROUNDS    (Family.UNIVERSAL, Trigger.ON_HIT,    false, "Resonant Rounds",     '#'),
+
+    // ── LEGENDARY SIGNATURES (legendaryOnly = true) ───────────────────────
+    SOULFORGE          (Family.UNIVERSAL, Trigger.ON_KILL,   true,  "Soulforge",           '*'),
+    JUDGMENT           (Family.GUN,       Trigger.ON_FIRE,   true,  "Judgment",            '!'),
+    HELLFIRE_NOVA      (Family.UNIVERSAL, Trigger.ON_CRIT,   true,  "Hellfire Nova",       '@'),
+    BERSERKERS_OATH    (Family.MELEE,     Trigger.PASSIVE,   true,  "Berserker's Oath",    '^');
+
+    public enum Family   { GUN, MELEE, UNIVERSAL }
+    public enum Trigger  { PASSIVE, ON_HIT, ON_KILL, ON_CRIT, ON_FIRE, ON_RELOAD }
+
+    public final Family  family;
+    public final Trigger trigger;
+    public final boolean legendaryOnly;
+    public final String  displayName;
+    public final char    hudGlyph;
+
+    WeaponAbility(Family family, Trigger trigger, boolean legendaryOnly,
+                  String displayName, char hudGlyph) { ... }
+
+    /**
+     * Whether this ability may be rolled onto a given weapon.
+     * GUN abilities require !isMelee; MELEE abilities require isMelee;
+     * UNIVERSAL match both. LegendaryOnly abilities only roll into the
+     * Legendary signature slot (caller enforces this separately).
+     */
+    public boolean eligibleFor(boolean isMeleeWeapon) {
+        if (family == Family.GUN   && isMeleeWeapon)  return false;
+        if (family == Family.MELEE && !isMeleeWeapon) return false;
+        return true;
+    }
+}
+
+NOTE on duplicate glyph chars: two abilities share 'V' and 'W' in the sketch
+above — resolve by picking distinct chars during implementation. The glyph
+is display-only; uniqueness is cosmetic, not mechanical.
+
+
+──────────────────────────────────────────────
+3. AbilityInstance.java
+──────────────────────────────────────────────
+Immutable value object created once at weapon spawn. Carries:
+  - which ability
+  - the pre-scaled magnitude (float; meaning depends on ability: %, flat, tiles)
+  - the pre-scaled countValue (int; for count-style abilities like Burst Fire)
+
+public final class AbilityInstance {
+
+    public final WeaponAbility ability;
+    public final float         magnitude;   // e.g. 0.185 for 18.5% crit chance
+    public final int           countValue;  // e.g. 3 for Burst×3; 0 for non-count abilities
+
+    public AbilityInstance(WeaponAbility ability, float magnitude, int countValue) { ... }
+
+    /** Convenience: magnitude as an integer percent (for display). */
+    public int magnitudePercent() { return Math.round(magnitude * 100f); }
+}
+
+
+──────────────────────────────────────────────
+4. WeaponProfile.java
+──────────────────────────────────────────────
+The shared contract. Every consumer of weapon data (HUD, fire handler, inspect
+overlay, AbilityResolver, EnemyManager hit pipeline) must operate through this
+interface — never cast to a concrete subclass.
+
+package ge.tbegvadze.toon3d.entity;
+
+import ge.tbegvadze.toon3d.level.Level;
+
+public interface WeaponProfile {
+
+    // ── Identity / loot ────────────────────────────────────────────────────
+    String     getDisplayName();
+    WeaponTier getTier();
+    int        getWeaponLevel();          // 1..WeaponConstants.MAX_WEAPON_LEVEL (10)
+    boolean    isMelee();
+
+    // ── Effective stats (base * level scaling) ─────────────────────────────
+    // These are the ONLY numbers gameplay logic should read; never bypass with base fields.
+    int   getEffectiveDamage();
+    float getEffectiveAccuracy();         // [0..1]; 1.0 = never misses
+    int   getEffectiveClipSize();
+    int   getEffectiveReloadTicks();
+    int   getEffectiveRange();            // tiles; melee always returns 1
+
+    // ── Abilities ──────────────────────────────────────────────────────────
+    int             getAbilityCount();
+    AbilityInstance getAbility(int index);
+    boolean         hasAbility(WeaponAbility ability);
+    float           abilityMagnitude(WeaponAbility ability);  // 0f if absent
+    int             abilityCount(WeaponAbility ability);       // 0 if absent
+
+    // ── Unified actions ────────────────────────────────────────────────────
+    // These already exist on Weapon; declared here so callers use the interface.
+    boolean canFire();
+    boolean requestManualReload();
+
+    // ── HUD readouts ───────────────────────────────────────────────────────
+    int    getShotsInClip();
+    int    getReserveAmmo();
+    String hudAmmoString();
+}
+
+IMPORTANT: The abstract class Weapon must declare `implements WeaponProfile`.
+That single change makes every existing subclass (Shotgun, Chaingun, etc.) and
+every MeleeWeapon subclass automatically satisfy the interface after the methods
+are added in weapon-system-order-2.
+
+
+IMPLEMENTATION NOTES
+====================
+- All four files go in `core/src/main/java/ge/tbegvadze/toon3d/entity/`.
+- No existing file is modified in this order.
+- These are pure data/contract types — no LibGDX imports needed except in
+  WeaponProfile (Level import for fire signature, if desired).
+- The fire() method signature on WeaponProfile is optional in this order;
+  it can be added in order-2 once the method shape is confirmed.
+- Run `./gradlew build` after creating to verify compilation before proceeding.

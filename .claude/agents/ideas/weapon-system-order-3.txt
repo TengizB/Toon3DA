@@ -1,0 +1,153 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System — Accuracy & Miss System
+---
+
+OVERVIEW
+========
+Add an accuracy roll to every weapon fire attempt. A miss costs the turn, fires
+the muzzle flash, and spends ammo, but deals zero damage (the shot march is
+skipped or no-ops). Emits "MISS" event text. Works for guns and melee alike
+(melee base accuracy = 1.0 so they never miss unless a future debuff applies).
+
+DEPENDENCY: weapon-system-order-2 must be complete (effectiveAccuracy available
+  on every weapon via getEffectiveAccuracy(), GameMath.weaponScaledAccuracy() exists).
+NEXT STEP: weapon-system-order-4 (AbilityResolver + Offensive Abilities).
+
+FILES TO MODIFY
+===============
+- entity/Weapon.java          (add miss roll before marchShot)
+- util/GameMath.java          (add resolveHitChance helper)
+- util/WeaponConstants.java   (no new constants needed — uses existing miss text)
+- render/EventTextSystem.java (add MISS event text color constant, if not present)
+
+
+──────────────────────────────────────────────
+A. GameMath.java — miss resolution helper
+──────────────────────────────────────────────
+
+    /*
+     * Formula: Hit chance resolution
+     * Derivation: hitChance = weaponAccuracy * playerAccuracyMultiplier
+     *             clamped to [0, 1].
+     *             Returns true if the shot hits (random() <= hitChance).
+     * Edge cases: accuracy >= 1.0 short-circuits to true (never allocates a random call).
+     *             accuracy <= 0.0 always misses.
+     */
+    public static boolean resolveHitChance(float weaponAccuracy,
+                                           float playerAccuracyMultiplier,
+                                           java.util.Random rng) {
+        float hitChance = MathUtils.clamp(weaponAccuracy * playerAccuracyMultiplier, 0f, 1f);
+        if (hitChance >= 1.0f) return true;
+        if (hitChance <= 0.0f) return false;
+        return rng.nextFloat() <= hitChance;
+    }
+
+Use the weapon's existing Random instance (or the World-level seeded RNG if available)
+so the miss roll participates in deterministic seed replay.
+
+
+──────────────────────────────────────────────
+B. Weapon.java — integrate miss roll into fire()
+──────────────────────────────────────────────
+The exact location varies by how fire() is structured, but the pattern is:
+
+BEFORE the call to marchShot() (or the melee attack tile check), add:
+
+    boolean shotHits = GameMath.resolveHitChance(
+        getEffectiveAccuracy(),
+        playerStats.getAccuracyMultiplier(),   // from PlayerStats
+        random                                 // weapon's existing RNG
+    );
+
+    if (!shotHits) {
+        // Consume ammo + tick (already done by the surrounding fire logic).
+        // Fire the muzzle flash animation if applicable (visual feedback).
+        eventTextSystem.showMiss();            // see section C
+        return;  // skip marchShot entirely
+    }
+    // ... existing marchShot call ...
+
+How to get playerStats and eventTextSystem into Weapon:
+- Option A (preferred): pass them as parameters to fire() and update the
+  WeaponProfile.fire() signature to include them.
+- Option B: inject once at World construction via setter, same as other injected
+  dependencies (barrelHitTarget, doorBlocksQuery, etc.).
+
+If Weapon.fire() already receives a context object (TickContext or similar),
+add playerStats + eventTextSystem to that context rather than changing the signature.
+
+IMPORTANT — multi-pellet weapons (Chaingun burst, DoubleBarrel):
+  Roll accuracy PER PELLET/BULLET so low accuracy reads as a spread/spray.
+  Single-shot weapons (Railgun, Shotgun-as-one-hit, melee) roll once for the
+  whole attack.
+
+IMPORTANT — penetrating weapons (PlasmaRifle, Railgun):
+  Roll once per activation (not per tile pierced).
+
+IMPORTANT — Accuracy >= 1.0 short-circuit:
+  Because GameMath.resolveHitChance short-circuits on accuracy >= 1.0f, melee
+  weapons (baseAccuracy=1.0) and fully-upgraded guns never pay the random cost.
+  This is not just an optimization — it is the documented contract: accuracy=1.0
+  means guaranteed hit.
+
+
+──────────────────────────────────────────────
+C. EventTextSystem / EventTextRenderer — MISS text
+──────────────────────────────────────────────
+If EventTextSystem does not already have a method for showing a MISS event:
+
+  1. Add a constant in the appropriate Constants file (or EventTextSystem itself):
+       public static final com.badlogic.gdx.graphics.Color MISS_TEXT_COLOR =
+           new Color(0.8f, 0.8f, 0.8f, 1f);  // light grey, unalarming
+
+  2. Add a helper on EventTextSystem:
+       public void showMiss() {
+           spawnText("MISS", MISS_TEXT_COLOR, /* screen position */ ...);
+       }
+     Position: center-screen, same vertical slot as damage numbers, so it is
+     clearly visible without cluttering the HP display.
+
+  3. The MISS text should NOT trigger the red hit-vignette or screen shake —
+     it is a neutral miss, not damage received.
+
+
+──────────────────────────────────────────────
+D. PlayerStats integration
+──────────────────────────────────────────────
+PlayerStats.java already has getAccuracyMultiplier(). Verify it exists and
+returns a float (1.0 baseline = no modification). If it doesn't exist yet,
+add it as:
+
+    public float getAccuracyMultiplier() {
+        return 1.0f + (accuracyBonus * ACCURACY_BONUS_PER_POINT);
+    }
+
+Where ACCURACY_BONUS_PER_POINT lives in ProgressionConstants.java.
+
+
+──────────────────────────────────────────────
+E. Behavior summary
+──────────────────────────────────────────────
+A miss:
+  ✓ Costs the turn (one enemy AI step fires)
+  ✓ Plays the muzzle flash visual (weapon still "fires")
+  ✓ Decrements shotsInClip (ammo is spent)
+  ✓ Shows "MISS" event text in grey
+  ✗ Does NOT deal damage
+  ✗ Does NOT trigger ON_HIT abilities
+  ✗ Does NOT trigger screen shake or kill flash
+  ✗ Does NOT trigger ON_CRIT abilities
+
+IMPLEMENTATION NOTES
+====================
+- A miss must NOT trigger any ON_HIT or ON_CRIT ability in AbilityResolver
+  (order-4+). The guard is already satisfied because marchShot is skipped, so
+  AbilityResolver is never called for a missed shot.
+- For weapons that have ON_FIRE abilities (e.g., Burst Fire, Judgment): the
+  ON_FIRE hook fires BEFORE the accuracy roll — it modifies how the shot is
+  structured, not whether it hits. Burst Fire fires extra shots each with their
+  own accuracy roll. This means Burst Fire on a low-accuracy gun can scatter
+  (some pellets hit, some miss) which is the intended feel.
+- Run `./gradlew build` after this change; the miss path must compile cleanly
+  with no warnings about unchecked return values or missing eventTextSystem.

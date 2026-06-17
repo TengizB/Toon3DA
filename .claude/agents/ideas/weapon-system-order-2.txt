@@ -1,0 +1,267 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System — Base Class Extension & Level Scaling
+---
+
+OVERVIEW
+========
+Extend the abstract Weapon base class (and the WeaponProfile interface declared in
+weapon-system-order-1) with weapon level, tier, accuracy, and ability fields.
+Add the level-scaling math to GameMath and the scaling constants to WeaponConstants.
+Update all existing weapon subclasses to supply a baseAccuracy value and to
+implement the two new WeaponProfile identity methods (isMelee, getDisplayName).
+
+DEPENDENCY: weapon-system-order-1 must be complete (WeaponTier, WeaponAbility,
+  AbilityInstance, WeaponProfile must compile).
+NEXT STEP: weapon-system-order-3 (Accuracy & Miss System in fire()).
+
+FILES TO MODIFY
+===============
+- entity/Weapon.java                    (primary — major extension)
+- util/WeaponConstants.java             (new scaling constants block)
+- util/GameMath.java                    (new scaling formula methods)
+- entity/Shotgun.java                   (add baseAccuracy, isMelee, getDisplayName)
+- entity/DoubleBarrelShotgun.java       (same)
+- entity/Chaingun.java                  (same)
+- entity/PlasmaRifle.java               (same)
+- entity/Railgun.java                   (same)
+- entity/Incinerator.java               (same)
+- entity/GrenadeLauncher.java           (same)
+- entity/MeleeWeapon.java (if exists)   (same, isMelee() returns true)
+  and all melee subclasses (Fist, Knife, Chainsaw, SteelPipe, Hammer, etc.)
+
+
+──────────────────────────────────────────────
+A. WeaponConstants.java — new block
+──────────────────────────────────────────────
+Add a clearly delimited "WEAPON LEVEL SCALING" section:
+
+    // ── Weapon level scaling ────────────────────────────────────────────
+    public static final int   MAX_WEAPON_LEVEL             = 10;
+    public static final float WEAPON_LEVEL_DAMAGE_PER_LEVEL    = 0.10f;  // +10%/level
+    public static final float WEAPON_LEVEL_ACCURACY_PER_LEVEL  = 0.02f;  // +2%/level
+    public static final float WEAPON_LEVEL_ACCURACY_MINIMUM    = 0.50f;  // floor
+    public static final float WEAPON_LEVEL_RELOAD_STEP          = 0.15f;  // ticks/level
+    public static final int   WEAPON_RELOAD_MIN_TICKS           = 1;
+    public static final float WEAPON_LEVEL_CLIP_PER_LEVEL       = 0.08f;  // fraction of base
+    public static final int   WEAPON_LEVEL_RANGE_PER_2_LEVELS   = 1;      // +1 tile / 2 levels
+    public static final int   WEAPON_LEVEL_RANGE_MAX_BONUS       = 3;      // cap +3 tiles
+
+Add per-weapon BASE ACCURACY constants (these are the level-1 Common reference values).
+Tune these values during playtesting — they are PLACEHOLDERS:
+
+    public static final float SHOTGUN_BASE_ACCURACY              = 0.85f;
+    public static final float DOUBLE_BARREL_SHOTGUN_BASE_ACCURACY= 0.80f;
+    public static final float CHAINGUN_BASE_ACCURACY             = 0.75f;
+    public static final float PLASMA_RIFLE_BASE_ACCURACY         = 0.90f;
+    public static final float RAILGUN_BASE_ACCURACY              = 0.95f;
+    public static final float INCINERATOR_BASE_ACCURACY          = 0.70f;
+    public static final float GRENADE_LAUNCHER_BASE_ACCURACY     = 0.80f;
+    // Melee always hits — accuracy 1.0 (never miss-rolls)
+    public static final float MELEE_BASE_ACCURACY                = 1.00f;
+
+
+──────────────────────────────────────────────
+B. GameMath.java — new methods
+──────────────────────────────────────────────
+Add these pure static methods. Follow the required comment block convention.
+
+    /*
+     * Formula: Weapon level damage scaling
+     * Derivation: scaledDamage = round(baseDamage * (1 + DAMAGE_PER_LEVEL * (level - 1)))
+     * Edge cases: level=1 returns baseDamage unchanged; clamp level to [1, MAX].
+     */
+    public static int weaponScaledDamage(int baseDamage, int weaponLevel) { ... }
+
+    /*
+     * Formula: Weapon level accuracy scaling
+     * Derivation: clamp(baseAccuracy + ACCURACY_PER_LEVEL * (level - 1), MINIMUM, 1.0)
+     * Edge cases: melee passes 1.0 base and always returns 1.0.
+     */
+    public static float weaponScaledAccuracy(float baseAccuracy, int weaponLevel) { ... }
+
+    /*
+     * Formula: Weapon level reload scaling
+     * Derivation: max(RELOAD_MIN_TICKS, round(baseReloadTicks - RELOAD_STEP * (level - 1)))
+     * Edge cases: weapons already at 1 tick return 1.
+     */
+    public static int weaponScaledReloadTicks(int baseReloadTicks, int weaponLevel) { ... }
+
+    /*
+     * Formula: Weapon level clip scaling
+     * Derivation: baseClip + floor(CLIP_PER_LEVEL * (level - 1) * baseClip)
+     * Edge cases: clip-1 weapons (Shotgun/Railgun) stay 1 until accumulated bonus >= 1.
+     *             Melee weapons pass 0 and return 0.
+     */
+    public static int weaponScaledClipSize(int baseClipSize, int weaponLevel) { ... }
+
+    /*
+     * Formula: Weapon level range scaling
+     * Derivation: baseRange + min(floor((level-1) * RANGE_PER_2_LEVELS / 2), RANGE_MAX_BONUS)
+     *             Simplified: +1 tile every 2 levels, max +3.
+     * Edge cases: melee range is ALWAYS 1 — caller must guard: if(isMelee) return 1.
+     */
+    public static int weaponScaledRange(int baseRange, int weaponLevel, boolean isMelee) { ... }
+
+    /*
+     * Formula: Ability magnitude linear scaling
+     * Derivation: clamp(baseMagnitude + perLevel * (level - 1), 0, maxMagnitude)
+     * Edge cases: level=1 returns baseMagnitude.
+     */
+    public static float abilityMagnitude(float baseMagnitude, float perLevel,
+                                         int weaponLevel, float maxMagnitude) { ... }
+
+    /*
+     * Formula: Ability count stepped scaling
+     * Derivation: clamp(baseCount + floor((level-1) / levelsPerStep), minCount, maxCount)
+     * Edge cases: level=1 returns baseCount.
+     */
+    public static int abilityCountScaled(int baseCount, int levelsPerStep,
+                                         int weaponLevel, int minCount, int maxCount) { ... }
+
+
+──────────────────────────────────────────────
+C. Weapon.java — field additions + WeaponProfile impl
+──────────────────────────────────────────────
+
+1. Add `implements WeaponProfile` to the class declaration.
+
+2. Add new fields:
+    private int           weaponLevel  = 1;
+    private WeaponTier    tier         = WeaponTier.COMMON;
+    private float         baseAccuracy = 1.0f;   // set by each subclass constructor
+    private AbilityInstance[] abilities = new AbilityInstance[0];
+
+    // Cached effective stats — recomputed by recomputeEffectiveStats()
+    private int   effectiveDamage;
+    private float effectiveAccuracy;
+    private int   effectiveClipSize;
+    private int   effectiveReloadTicks;
+    private int   effectiveRange;
+
+3. Add protected setter for baseAccuracy (called from subclass constructors):
+    protected void setBaseAccuracy(float baseAccuracy) { this.baseAccuracy = baseAccuracy; }
+
+4. Add configureRoll() — called once at spawn time by WeaponRoller (order-11):
+    public void configureRoll(int weaponLevel, WeaponTier tier, AbilityInstance[] abilities) {
+        this.weaponLevel = weaponLevel;
+        this.tier = tier;
+        this.abilities = abilities;
+        recomputeEffectiveStats();
+        // Reset clip to new effective size
+        this.shotsInClip = effectiveClipSize;
+    }
+
+5. Add recomputeEffectiveStats() — called from configureRoll and Soulforge level-up:
+    private void recomputeEffectiveStats() {
+        effectiveDamage      = GameMath.weaponScaledDamage(baseDamage, weaponLevel);
+        effectiveAccuracy    = GameMath.weaponScaledAccuracy(baseAccuracy, weaponLevel);
+        effectiveClipSize    = GameMath.weaponScaledClipSize(baseClipSize, weaponLevel);
+        effectiveReloadTicks = GameMath.weaponScaledReloadTicks(baseReloadTicks, weaponLevel);
+        effectiveRange       = GameMath.weaponScaledRange(baseRange, weaponLevel, isMelee());
+        // Apply EXTENDED_MAG ability bonus on top of level scaling
+        if (hasAbility(WeaponAbility.EXTENDED_MAG)) {
+            int bonus = abilityCount(WeaponAbility.EXTENDED_MAG);
+            effectiveClipSize = Math.min(effectiveClipSize + bonus,
+                                         WeaponConstants.WEAPON_CLIP_HARD_CAP);
+        }
+        // Apply QUICK_HANDS ability bonus on top of level scaling
+        if (hasAbility(WeaponAbility.QUICK_HANDS)) {
+            effectiveReloadTicks = Math.max(WeaponConstants.WEAPON_RELOAD_MIN_TICKS,
+                                            effectiveReloadTicks - 1);
+        }
+    }
+
+6. Implement all WeaponProfile getters:
+    @Override public WeaponTier getTier()              { return tier; }
+    @Override public int        getWeaponLevel()       { return weaponLevel; }
+    @Override public int        getEffectiveDamage()   { return effectiveDamage; }
+    @Override public float      getEffectiveAccuracy() { return effectiveAccuracy; }
+    @Override public int        getEffectiveClipSize() { return effectiveClipSize; }
+    @Override public int        getEffectiveReloadTicks() { return effectiveReloadTicks; }
+    @Override public int        getEffectiveRange()    { return effectiveRange; }
+    @Override public int        getAbilityCount()      { return abilities.length; }
+    @Override public AbilityInstance getAbility(int index) { return abilities[index]; }
+    @Override public boolean    hasAbility(WeaponAbility a) {
+        for (AbilityInstance inst : abilities) if (inst.ability == a) return true;
+        return false;
+    }
+    @Override public float      abilityMagnitude(WeaponAbility a) {
+        for (AbilityInstance inst : abilities) if (inst.ability == a) return inst.magnitude;
+        return 0f;
+    }
+    @Override public int        abilityCount(WeaponAbility a) {
+        for (AbilityInstance inst : abilities) if (inst.ability == a) return inst.countValue;
+        return 0;
+    }
+
+7. IMPORTANT — existing subclasses call `this.damageAmount` or `this.clipSize` directly
+   in their marchShot implementations. After this change, replace those with
+   getEffectiveDamage() and getEffectiveClipSize() respectively. Do NOT change the
+   base fields (baseDamage, baseClipSize) — those stay as level-1 reference values.
+
+8. Add package-private method for Soulforge ability use only:
+    void incrementWeaponLevel() {
+        if (weaponLevel < WeaponConstants.MAX_WEAPON_LEVEL) {
+            weaponLevel++;
+            recomputeEffectiveStats();
+        }
+    }
+
+9. Initialize effectiveStats in the Weapon constructor (after base fields are set):
+    Call recomputeEffectiveStats() at the END of the Weapon abstract constructor body,
+    or after setBaseAccuracy is called in subclass constructors — ensure it runs once
+    with the default level=1, tier=COMMON, abilities=empty so all effective fields
+    are valid before any call to fire().
+
+
+──────────────────────────────────────────────
+D. Each gun subclass — minimal changes
+──────────────────────────────────────────────
+For Shotgun, DoubleBarrelShotgun, Chaingun, PlasmaRifle, Railgun,
+Incinerator, GrenadeLauncher:
+
+  1. Add in constructor:
+       setBaseAccuracy(WeaponConstants.SHOTGUN_BASE_ACCURACY);  // use matching constant
+
+  2. Implement WeaponProfile identity methods:
+       @Override public boolean isMelee()        { return false; }
+       @Override public String  getDisplayName() { return "Shotgun"; } // actual name
+
+  3. In marchShot/fire: replace direct field references to damage with getEffectiveDamage().
+     Replace direct clipSize references with getEffectiveClipSize() where relevant.
+
+For MeleeWeapon (base) and all melee subclasses:
+  1. In MeleeWeapon base (or each subclass if no common base):
+       setBaseAccuracy(WeaponConstants.MELEE_BASE_ACCURACY);  // 1.0 — never misses
+       @Override public boolean isMelee() { return true; }
+       @Override public String  getDisplayName() { return "Fist"; } // per subclass
+
+
+──────────────────────────────────────────────
+E. Constants for ability passive scaling (add to WeaponConstants)
+──────────────────────────────────────────────
+These are referenced by recomputeEffectiveStats for EXTENDED_MAG and QUICK_HANDS:
+
+    public static final int WEAPON_CLIP_HARD_CAP = 99;  // safety ceiling
+
+EXTENDED_MAG countValue formula (pre-scaled at spawn in WeaponRoller, order-11):
+    base +1 @ L1, +1 every 3 levels, cap +4.
+    Implemented as abilityCountScaled(1, 3, weaponLevel, 1, 4) in the roller.
+
+
+IMPLEMENTATION NOTES
+====================
+- Keep the existing final fields (baseDamage, baseClipSize, baseReloadTicks,
+  damageDropCoefficient, baseRange) exactly as they are — they are the L1 reference.
+  Only ADD new fields. Rename only if the field was previously named "damage"
+  without a "base" prefix — in that case rename to baseDamage consistently.
+- recomputeEffectiveStats() is called only on: spawn (configureRoll), Soulforge level-up,
+  and once during construction. It is NEVER called in render() or per-tick — it is safe
+  to keep small array iterations in hasAbility/abilityMagnitude since abilities.length <= 5.
+- Do NOT change the fire() / marchShot() body yet — that is weapon-system-order-3.
+- After all subclasses are updated, run `./gradlew build` to verify no compilation errors
+  before proceeding to order-3.
+- The shotsInClip field is reset to effectiveClipSize inside configureRoll(). Before
+  configureRoll() is called on a fresh weapon (e.g., start weapons), shotsInClip is still
+  initialized to baseClipSize in the constructor — that's correct for the default L1 path.

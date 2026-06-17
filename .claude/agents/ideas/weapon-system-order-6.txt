@@ -1,0 +1,235 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System — Melee-Specific Abilities
+---
+
+OVERVIEW
+========
+Implement the four melee-only abilities: Kinetic Slam (knockback), Cleave
+(adjacent AoE), Salvage Strike (guaranteed ammo drop on kill), and Scholar's
+Edge (bonus XP per kill). Also implement the Berserker's Oath legendary
+signature (melee kill-streak regen).
+
+DEPENDENCY: weapon-system-order-5 (AbilityResolver onHit/onKill hooks, player
+  heal() available, PlayerStats temp buff infrastructure).
+DEPENDENCY: roguelike_order_9_melee_weapons_system.txt (MeleeWeapon class,
+  tryPushEnemy/knockback infrastructure must exist).
+NEXT STEP: weapon-system-order-7 (Utility & Economy Abilities).
+
+FILES TO MODIFY
+===============
+- entity/AbilityResolver.java    (add melee ability implementations)
+- util/GameBalance.java          (melee ability numbers)
+- enemy/EnemyManager.java        (tryPushEnemy — ensure it exists; expose if private)
+- item/Inventory.java            (dropAmmoAtTile — or use existing loot-drop path)
+- progression/PlayerStats.java   (grantBonusXp method, if absent)
+
+
+──────────────────────────────────────────────
+A. GameBalance.java — melee ability numbers
+──────────────────────────────────────────────
+All PLACEHOLDERS:
+
+    // Kinetic Slam (knockback chance)
+    public static final float KINETIC_SLAM_CHANCE_BASE      = 0.20f;
+    public static final float KINETIC_SLAM_CHANCE_PER_LEVEL = 0.04f;
+    public static final float KINETIC_SLAM_CHANCE_CAP       = 0.60f;
+    public static final int   KINETIC_SLAM_WALL_BONUS_DAMAGE = 3;   // flat bonus if slammed into wall
+
+    // Cleave
+    public static final float CLEAVE_FRACTION_BASE      = 0.40f;   // % of main hit
+    public static final float CLEAVE_FRACTION_PER_LEVEL = 0.05f;
+    public static final float CLEAVE_FRACTION_CAP       = 0.80f;
+
+    // Salvage Strike (ammo drop chance on kill; scales to 1.0)
+    public static final float SALVAGE_CHANCE_BASE      = 0.50f;
+    public static final float SALVAGE_CHANCE_PER_LEVEL = 0.06f;
+    public static final float SALVAGE_CHANCE_CAP       = 1.00f;   // intentionally reaches 100%
+
+    // Scholar's Edge (bonus XP %)
+    public static final float SCHOLARS_XP_BONUS_BASE      = 0.15f;
+    public static final float SCHOLARS_XP_BONUS_PER_LEVEL = 0.05f;
+    public static final float SCHOLARS_XP_BONUS_CAP       = 0.75f;
+
+    // Berserker's Oath (legendary; kill-streak sustain)
+    public static final float BERSERKER_DAMAGE_PER_STACK  = 0.10f;  // +10% per kill streak
+    public static final int   BERSERKER_HP_TICK_PER_STACK = 1;       // +1 HP per kill streak
+    public static final int   BERSERKER_MAX_STACKS        = 5;
+
+
+──────────────────────────────────────────────
+B. Kinetic Slam — ON_HIT (melee only)
+──────────────────────────────────────────────
+In AbilityResolver.onHit(), add:
+
+    if (weapon.hasAbility(WeaponAbility.KINETIC_SLAM) && weapon.isMelee()) {
+        float knockbackChance = weapon.abilityMagnitude(WeaponAbility.KINETIC_SLAM);
+        if (rng.nextFloat() <= knockbackChance) {
+            // tryPushEnemy pushes the enemy 1 tile in the player's facing direction.
+            // It returns true if the push succeeded, false if the tile behind is a wall.
+            boolean pushedIntoWall = !enemyManager.tryPushEnemy(hitEnemy,
+                                         facingStepColumn, facingStepRow);
+            int bonusDamage = pushedIntoWall ? GameBalance.KINETIC_SLAM_WALL_BONUS_DAMAGE : 0;
+            if (bonusDamage > 0) hitEnemy.takeDamage(bonusDamage);
+            eventTextSystem.showText("SLAM!", EventTextSystem.SLAM_COLOR);
+        }
+    }
+
+EnemyManager.tryPushEnemy(Enemy enemy, int stepColumn, int stepRow):
+  - Target tile = enemy.tileColumn + stepColumn, enemy.tileRow + stepRow.
+  - If target tile is not a wall, not occupied by another enemy: move enemy there, return true.
+  - If target tile is a wall: enemy stays, return false (wall bonus applies).
+  - Reuse existing push logic from Steel Pipe knockback (roguelike_order_9) if present.
+
+The facingStepColumn / facingStepRow parameters must be passed down from
+Weapon.fire() → AbilityResolver.onHit(). They are the player's current
+facing direction as a unit integer step (e.g., (1,0) facing east).
+
+
+──────────────────────────────────────────────
+C. Cleave — ON_HIT (melee only)
+──────────────────────────────────────────────
+Cleave damages enemies in the two tiles flanking the primary target:
+  - Flanking tiles are 90° left and right of the player's facing direction,
+    adjacent to the primary target (not adjacent to the player).
+
+In AbilityResolver.onHit():
+
+    if (weapon.hasAbility(WeaponAbility.CLEAVE) && weapon.isMelee()) {
+        float cleaveFraction = weapon.abilityMagnitude(WeaponAbility.CLEAVE);
+        int cleaveDamage = Math.max(1, Math.round(damageDealt * cleaveFraction));
+
+        // Left flank = facing rotated 90° CCW; Right flank = 90° CW
+        // Left flank tile adjacent to target:
+        int leftFlankCol  = hitEnemy.tileColumn + (-facingStepRow);
+        int leftFlankRow  = hitEnemy.tileRow    + facingStepColumn;
+        int rightFlankCol = hitEnemy.tileColumn + facingStepRow;
+        int rightFlankRow = hitEnemy.tileRow    + (-facingStepColumn);
+
+        Enemy leftEnemy  = enemyManager.getEnemyAt(leftFlankCol,  leftFlankRow);
+        Enemy rightEnemy = enemyManager.getEnemyAt(rightFlankCol, rightFlankRow);
+
+        if (leftEnemy  != null) leftEnemy.takeDamage(cleaveDamage);
+        if (rightEnemy != null) rightEnemy.takeDamage(cleaveDamage);
+
+        if (leftEnemy != null || rightEnemy != null) {
+            eventTextSystem.showText("CLEAVE!", EventTextSystem.CLEAVE_COLOR);
+        }
+    }
+
+EnemyManager.getEnemyAt(int tileColumn, int tileRow): returns the living enemy at
+that tile or null. Add this method if it doesn't exist.
+
+Rotation math for flanks: if facing is (dx, dy):
+  Left perpendicular  = (-dy, dx)   — 90° CCW
+  Right perpendicular = (dy, -dx)   — 90° CW
+Applied to hit enemy tile (not player tile), so it correctly finds the tiles
+beside the target.
+
+
+──────────────────────────────────────────────
+D. Salvage Strike — ON_KILL (melee only)
+──────────────────────────────────────────────
+On kill, chance to drop an ammo pickup at the enemy's tile. At high level the
+chance reaches 100% (guaranteed drop) — this is the intentional "melee feeds
+your guns" fantasy.
+
+In AbilityResolver.onKill():
+
+    if (weapon.hasAbility(WeaponAbility.SALVAGE_STRIKE) && weapon.isMelee()) {
+        float dropChance = weapon.abilityMagnitude(WeaponAbility.SALVAGE_STRIKE);
+        if (dropChance >= 1.0f || rng.nextFloat() <= dropChance) {
+            // Drop a small ammo pack at the killed enemy's last tile.
+            // Ammo type = a common type (bullets or shells) — not specific to player loadout.
+            groundItemSpawner.spawnAmmo(killedEnemy.tileColumn, killedEnemy.tileRow,
+                                        AmmoType.BULLETS, GameBalance.SALVAGE_AMMO_DROP_AMOUNT);
+            eventTextSystem.showText("SALVAGE", EventTextSystem.SALVAGE_COLOR);
+        }
+    }
+
+Add to GameBalance:
+    public static final int SALVAGE_AMMO_DROP_AMOUNT = 4;  // PLACEHOLDER
+
+groundItemSpawner is a reference to whatever mechanism World uses to create
+ground items at runtime (not from level files). Inject into AbilityResolver
+alongside the other managers.
+
+
+──────────────────────────────────────────────
+E. Scholar's Edge — ON_KILL (melee only)
+──────────────────────────────────────────────
+Kills with this weapon grant bonus XP as a fraction of the base kill XP.
+
+In AbilityResolver.onKill():
+
+    if (weapon.hasAbility(WeaponAbility.SCHOLARS_EDGE) && weapon.isMelee()) {
+        float xpBonus = weapon.abilityMagnitude(WeaponAbility.SCHOLARS_EDGE);
+        int bonusXp = Math.round(killedEnemy.getXpReward() * xpBonus);
+        if (bonusXp > 0) {
+            playerStats.grantXp(bonusXp);
+            eventTextSystem.showText("+" + bonusXp + " XP", EventTextSystem.XP_COLOR);
+        }
+    }
+
+PlayerStats.grantXp(int amount): already expected to exist (from
+xp-level-progression-system.txt). If it doesn't exist yet, add it.
+Enemy.getXpReward(): each EnemyType has an XP value — expose via getter.
+
+
+──────────────────────────────────────────────
+F. Berserker's Oath — PASSIVE/ON_KILL (legendary, melee only)
+──────────────────────────────────────────────
+Kill-streak mechanic: each consecutive turn where the player kills at least one
+enemy with this weapon adds a stack. On a turn with no kill, reset to 0.
+Each stack gives +BERSERKER_DAMAGE_PER_STACK% damage and +BERSERKER_HP_TICK HP.
+
+State: berserkerStacks (int) lives on the weapon or on AbilityResolver
+  (prefer weapon to keep state co-located).
+
+In Weapon.java, add:
+    private int berserkerStacks = 0;
+    public int  getBerserkerStacks() { return berserkerStacks; }
+    public void incrementBerserkerStacks() { berserkerStacks = Math.min(berserkerStacks + 1, GameBalance.BERSERKER_MAX_STACKS); }
+    public void resetBerserkerStacks()    { berserkerStacks = 0; }
+
+In AbilityResolver.onKill() (only if BERSERKERS_OATH present):
+    if (weapon.hasAbility(WeaponAbility.BERSERKERS_OATH) && weapon.isMelee()) {
+        weapon.incrementBerserkerStacks();
+        int stacks = weapon.getBerserkerStacks();
+        int hpTick = stacks * GameBalance.BERSERKER_HP_TICK_PER_STACK;
+        player.heal(hpTick);
+        // Damage bonus is applied as a temp buff valid for the next fire:
+        float damageBuff = stacks * GameBalance.BERSERKER_DAMAGE_PER_STACK;
+        playerStats.applyTempDamageBuff(damageBuff, 1);
+        if (stacks == GameBalance.BERSERKER_MAX_STACKS) {
+            eventTextSystem.showText("BERSERK!", EventTextSystem.BERSERK_COLOR);
+        }
+    }
+
+Stack reset: on a player turn where no kill occurred with this weapon,
+resetBerserkerStacks(). The cleanest place to trigger this is at the START of
+each fire() call: save "hadKillThisFire = false", then after fire completes,
+if !hadKillThisFire && hasBerserkersOath → reset.
+Alternatively, use the TickEventBus: subscribe to each tick and check a
+"killedThisTurn" flag that is set by onKill.
+
+
+IMPLEMENTATION NOTES
+====================
+- Cleave uses integer perpendicular rotation: left = (-dy, dx), right = (dy, -dx).
+  This is exact for cardinal directions — no trig needed.
+- Cleave damage bypasses Armor Pierce (it is a secondary splash, not a primary hit).
+  However, it DOES benefit from Executioner if the flanked enemy is low HP.
+  AbilityResolver.onHit() is called recursively for each cleave target: call
+  onHit(weapon, leftEnemy, cleaveDamage, ...) so all ON_HIT abilities chain.
+  Guard against infinite recursion: Cleave should not re-trigger on the recursive
+  onHit calls (use a boolean cleaveInProgress flag in the resolver or a depth counter).
+- Salvage Strike drops at the KILLED enemy's tile, not at the player's tile.
+  Use the enemy's last position before removing it from EnemyManager.
+- Scholar's Edge stacks with any existing XP bonuses from PlayerStats attributes
+  (additive). The bonus XP counts toward level-up progress.
+- Berserker's Oath is legendary-only and melee-only, so it will only appear
+  together with BERSERKERS_OATH in the WeaponAbility enum (legendaryOnly=true).
+  The stack counter persists for the whole run (across levels) since the weapon
+  persists; it resets on weapon switch or weapon drop.
+- Run `./gradlew build` after implementation.
