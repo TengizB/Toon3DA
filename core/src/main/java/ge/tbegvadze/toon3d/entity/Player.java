@@ -86,21 +86,38 @@ public class Player implements Renderable, Disposable, StatusHost {
     public StatusResistance getStatusResistance() { return statusResistance; }
 
     /**
-     * Damage-over-time bypass: skips the AGILITY dodge roll but still applies
-     * armour absorption and TOUGHNESS flat reduction.
+     * Damage-over-time entry point: skips the AGILITY dodge roll (DoT is unavoidable)
+     * but otherwise runs the same pipeline as {@link #applyDamage}:
+     *   (a) Bulwark temp armor consumed first (armor protects against all damage types).
+     *   (b) Regular armour absorption.
+     *   (c) TOUGHNESS flat reduction, floored at TGH_MIN_DAMAGE.
+     *   (d) Subtract from health.
      * Used exclusively by StatusEffectController for Burning / Poison tick damage.
      */
     @Override
     public void applyDoTDamage(int amount) {
         if (ProgressionConstants.debug) return;
 
-        int armorAbsorbed  = GameMath.armorAbsorb(amount, armor, ItemConstants.ARMOUR_ABSORB_FRACTION);
+        // (a) Bulwark Rounds temp armor — armor protects against DoT the same as direct hits.
+        int remainingDamage = amount;
+        if (playerStats != null) {
+            int tempAbsorbed = playerStats.consumeTempArmor(remainingDamage);
+            remainingDamage -= tempAbsorbed;
+        }
+        if (remainingDamage <= 0) return;
+
+        // (b) Regular armour absorption.
+        int armorAbsorbed  = GameMath.armorAbsorb(remainingDamage, armor, ItemConstants.ARMOUR_ABSORB_FRACTION);
         armor              = Math.max(0, armor - armorAbsorbed);
-        int hpBoundDamage  = amount - armorAbsorbed;
+        int hpBoundDamage  = remainingDamage - armorAbsorbed;
+
+        // (c) TOUGHNESS flat reduction.
         if (playerStats != null) {
             int flatReduction = playerStats.getFlatDamageReduction();
             hpBoundDamage = Math.max(GameBalance.TGH_MIN_DAMAGE, hpBoundDamage - flatReduction);
         }
+
+        // (d) Apply to health.
         health = Math.max(0, health - hpBoundDamage);
         if (damageListener != null && hpBoundDamage > 0) {
             damageListener.onPlayerDamaged(hpBoundDamage);
@@ -187,11 +204,12 @@ public class Player implements Renderable, Disposable, StatusHost {
 
     /**
      * Applies incoming damage through the full resolution pipeline:
-     *   (a) AGILITY dodge roll  — on success damage = 0, pipeline ends.
-     *   (b) Armour absorption   — fraction soaked by AR pool.
-     *   (c) TOUGHNESS flat reduction — shaves N off the HP-bound remainder,
+     *   (a) AGILITY dodge roll     — on success damage = 0, pipeline ends.
+     *   (b) Bulwark temp armor     — consumed before regular armor; early-exit if absorbed all.
+     *   (c) Regular armour pool    — fraction soaked by AR pool.
+     *   (d) TOUGHNESS flat reduction — shaves N off the HP-bound remainder,
      *       floored at TGH_MIN_DAMAGE so chip damage still threatens turtles.
-     *   (d) Subtract from health.
+     *   (e) Subtract from health.
      *
      * Strict pipeline order matches the spec in roguelike_order_6_player_stats_and_attributes.txt.
      */
@@ -207,18 +225,27 @@ public class Player implements Renderable, Disposable, StatusHost {
             }
         }
 
-        // (b) Armour absorption.
-        int armorAbsorbed = GameMath.armorAbsorb(amount, armor, ItemConstants.ARMOUR_ABSORB_FRACTION);
-        armor = Math.max(0, armor - armorAbsorbed);
-        int hpBoundDamage = amount - armorAbsorbed;
+        // (b) Bulwark Rounds temp armor — consumed before the regular armor pool.
+        int remainingDamage = amount;
+        if (playerStats != null) {
+            int tempAbsorbed = playerStats.consumeTempArmor(remainingDamage);
+            remainingDamage -= tempAbsorbed;
+        }
+        // Temp armor absorbed everything — no HP impact, no regular armor drain.
+        if (remainingDamage <= 0) return;
 
-        // (c) TOUGHNESS flat reduction applied to the HP-bound remainder.
+        // (c) Regular armour absorption.
+        int armorAbsorbed = GameMath.armorAbsorb(remainingDamage, armor, ItemConstants.ARMOUR_ABSORB_FRACTION);
+        armor = Math.max(0, armor - armorAbsorbed);
+        int hpBoundDamage = remainingDamage - armorAbsorbed;
+
+        // (d) TOUGHNESS flat reduction applied to the HP-bound remainder.
         if (playerStats != null) {
             int flatReduction = playerStats.getFlatDamageReduction();
             hpBoundDamage = Math.max(GameBalance.TGH_MIN_DAMAGE, hpBoundDamage - flatReduction);
         }
 
-        // (d) Apply to health.
+        // (e) Apply to health.
         health = Math.max(0, health - hpBoundDamage);
         if (damageListener != null && hpBoundDamage > 0) {
             damageListener.onPlayerDamaged(hpBoundDamage);

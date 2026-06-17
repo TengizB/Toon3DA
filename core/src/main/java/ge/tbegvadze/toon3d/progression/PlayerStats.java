@@ -58,6 +58,26 @@ public final class PlayerStats {
     private static final int ATTRIBUTE_COUNT = Attribute.values().length;
 
     // =========================================================================
+    // Temp armor pool — Bulwark Rounds (ON_RELOAD) grants turn-limited armor
+    // Fixed-size slots; no allocation after construction.
+    // =========================================================================
+
+    /** Remaining armor points in each temp-armor slot. */
+    private final int[] tempArmorAmounts   = new int[GameBalance.BULWARK_TEMP_ARMOR_SLOTS];
+    /** Turns left before each temp-armor slot expires; 0 = slot inactive. */
+    private final int[] tempArmorTurnsLeft = new int[GameBalance.BULWARK_TEMP_ARMOR_SLOTS];
+
+    // =========================================================================
+    // Adrenal Surge pending buff — consumed on the very next fire activation
+    // Not turn-counted; "next attack only" semantics via consume-on-read.
+    // =========================================================================
+
+    /** True when an Adrenal Surge bonus is waiting to be applied. */
+    private boolean adrenalSurgePending    = false;
+    /** The multiplier bonus stored by the most recent Adrenal Surge proc (e.g. 0.30). */
+    private float   adrenalSurgeBonus      = 0f;
+
+    // =========================================================================
     // Storage — three layers, indexed by Attribute.ordinal()
     // =========================================================================
 
@@ -264,5 +284,109 @@ public final class PlayerStats {
                 getEffective(Attribute.TOUGHNESS),
                 GameBalance.STAT_REFERENCE,
                 GameBalance.TGH_REDUCTION_PER_POINT);
+    }
+
+    // =========================================================================
+    // Temp armor — Bulwark Rounds (ON_RELOAD)
+    // Consumed before regular armor when the player takes damage.
+    // =========================================================================
+
+    /**
+     * Adds a block of temporary armor that expires after {@code turns} player-action ticks.
+     * If all slots are occupied, overwrites the slot with the fewest turns remaining.
+     * No allocation — operates on the pre-sized arrays from construction.
+     *
+     * @param amount amount of temporary armor points to add
+     * @param turns  number of player-action ticks before this block expires
+     */
+    public void addTempArmor(int amount, int turns) {
+        for (int slotIndex = 0; slotIndex < GameBalance.BULWARK_TEMP_ARMOR_SLOTS; slotIndex++) {
+            if (tempArmorTurnsLeft[slotIndex] <= 0) {
+                tempArmorAmounts[slotIndex]   = amount;
+                tempArmorTurnsLeft[slotIndex] = turns;
+                return;
+            }
+        }
+        // All slots occupied — overwrite the one expiring soonest.
+        int shortestSlot = 0;
+        for (int slotIndex = 1; slotIndex < GameBalance.BULWARK_TEMP_ARMOR_SLOTS; slotIndex++) {
+            if (tempArmorTurnsLeft[slotIndex] < tempArmorTurnsLeft[shortestSlot]) {
+                shortestSlot = slotIndex;
+            }
+        }
+        tempArmorAmounts[shortestSlot]   = amount;
+        tempArmorTurnsLeft[shortestSlot] = turns;
+    }
+
+    /**
+     * Consumes temp armor to absorb incoming damage, slot by slot until the damage is
+     * fully absorbed or all slots are exhausted. Returns the total amount absorbed.
+     * Partial slot absorption is tracked — a slot is only zeroed once its pool hits 0.
+     * Called from {@code Player.applyDamage()} before regular armor absorption.
+     *
+     * @param incomingDamage the damage about to be applied
+     * @return               the amount absorbed by temp armor (≤ incomingDamage)
+     */
+    public int consumeTempArmor(int incomingDamage) {
+        int totalAbsorbed   = 0;
+        int remainingDamage = incomingDamage;
+        for (int slotIndex = 0; slotIndex < GameBalance.BULWARK_TEMP_ARMOR_SLOTS; slotIndex++) {
+            if (tempArmorTurnsLeft[slotIndex] > 0 && tempArmorAmounts[slotIndex] > 0 && remainingDamage > 0) {
+                int absorbed = Math.min(remainingDamage, tempArmorAmounts[slotIndex]);
+                tempArmorAmounts[slotIndex] -= absorbed;
+                remainingDamage             -= absorbed;
+                totalAbsorbed               += absorbed;
+            }
+        }
+        return totalAbsorbed;
+    }
+
+    /**
+     * Decrements the turn counter for all active temp-armor slots.
+     * Slots that reach 0 turns are marked inactive (their remaining amount is zeroed).
+     * Call once per player-action tick from a TickSubscriber registered in World.
+     */
+    public void tickTempArmor() {
+        for (int slotIndex = 0; slotIndex < GameBalance.BULWARK_TEMP_ARMOR_SLOTS; slotIndex++) {
+            if (tempArmorTurnsLeft[slotIndex] > 0) {
+                tempArmorTurnsLeft[slotIndex]--;
+                if (tempArmorTurnsLeft[slotIndex] == 0) {
+                    tempArmorAmounts[slotIndex] = 0;
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // Adrenal Surge pending buff — consumed on the very next weapon fire
+    // "Next attack only" semantics: stored on kill, read-and-clear on fire.
+    // =========================================================================
+
+    /**
+     * Stores an Adrenal Surge damage bonus to apply on the player's next attack.
+     * Overwrites any existing pending surge (only one surge is active at a time).
+     *
+     * @param bonusMultiplier the fractional bonus, e.g. 0.30 for +30% damage
+     */
+    public void applyAdrenalSurge(float bonusMultiplier) {
+        adrenalSurgePending = true;
+        adrenalSurgeBonus   = bonusMultiplier;
+    }
+
+    /**
+     * Returns the pending Adrenal Surge multiplier (1.0 + bonus) and clears the buff.
+     * Returns 1.0 if no surge is pending.
+     * Must be called exactly once per fire activation (from AbilityResolver.onFire).
+     *
+     * @return multiplier to apply to the next attack's damage (e.g. 1.30); 1.0 if inactive
+     */
+    public float pollAdrenalSurgeMultiplier() {
+        if (adrenalSurgePending) {
+            adrenalSurgePending = false;
+            float multiplier    = 1.0f + adrenalSurgeBonus;
+            adrenalSurgeBonus   = 0f;
+            return multiplier;
+        }
+        return 1.0f;
     }
 }

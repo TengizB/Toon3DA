@@ -17,21 +17,25 @@ import java.util.Random;
  * recomputes the BASE/PER_LEVEL/CAP formula at runtime.
  *
  * Abilities handled here:
- *   CRITICAL_STRIKE (ON_HIT)   — rolls a crit and deals bonus damage.
- *   EXECUTIONER     (ON_HIT)   — bonus damage when target is below EXECUTIONER_THRESHOLD HP%.
- *   STAGGER_ROUNDS  (ON_HIT)   — rolls a chance to set enemy.skipNextAction = true.
- *   BURST_FIRE      (ON_FIRE)  — signals Weapon to fire extra shots via pendingBurstExtra.
+ *   CRITICAL_STRIKE    (ON_HIT)    — rolls a crit and deals bonus damage.
+ *   EXECUTIONER        (ON_HIT)    — bonus damage when target is below EXECUTIONER_THRESHOLD HP%.
+ *   STAGGER_ROUNDS     (ON_HIT)    — rolls a chance to set enemy.skipNextAction = true.
+ *   BURST_FIRE         (ON_FIRE)   — signals Weapon to fire extra shots via pendingBurstExtra.
+ *   LIFESTEAL          (ON_HIT)    — heals player for a fraction of damage dealt.
+ *   HEMORRHAGE_HARVEST (ON_KILL)   — heals player for a fixed amount on each kill.
+ *   VAMPIRIC_CRIT      (ON_CRIT)   — heals player when a critical hit lands.
+ *   ADRENAL_SURGE      (ON_KILL)   — chance to buff next attack's damage on kill.
+ *   BULWARK_ROUNDS     (ON_RELOAD) — grants temporary armor after reloading.
+ *   SECOND_WIND        (PASSIVE)   — boosts damage when player HP is critically low.
  *
  * Passive abilities (ARMOR_PIERCE, OVERPENETRATION) are NOT handled here; they are
  * applied inline inside each weapon's marchShot() implementation.
- *
- * Sustain abilities (LIFESTEAL, HEMORRHAGE_HARVEST, ADRENAL_SURGE, etc.) are stubs
- * in this order; they will be wired in weapon-system-order-5.
  */
 public final class AbilityResolver {
 
     private final EnemyManager    enemyManager;
     private final EventTextSystem eventTextSystem;
+    private final Player          player;
 
     /**
      * Own RNG — seeded at construction from the world run seed so ability rolls are
@@ -40,27 +44,52 @@ public final class AbilityResolver {
      */
     private final Random abilityRandom;
 
-    public AbilityResolver(EnemyManager enemyManager, EventTextSystem eventTextSystem, long runSeed) {
+    public AbilityResolver(EnemyManager enemyManager, EventTextSystem eventTextSystem,
+                           Player player, long runSeed) {
         this.enemyManager    = enemyManager;
         this.eventTextSystem = eventTextSystem;
+        this.player          = player;
         this.abilityRandom   = new Random(runSeed);
     }
 
-    // ── Entry points called from Weapon.fire() ────────────────────────────────
+    // ── Entry points called from Weapon.fire() / Weapon.onTick() ─────────────
 
     /**
      * Called once per fire activation, BEFORE the accuracy roll.
-     * Handles ON_FIRE abilities such as BURST_FIRE.
+     * Handles ON_FIRE abilities (BURST_FIRE) and builds the fire-cycle damage multiplier
+     * from PASSIVE (SECOND_WIND) and pending buff (ADRENAL_SURGE) sources.
      *
-     * @param weapon the weapon being fired (read-only for ability queries; mutable for setPendingBurstExtra)
+     * @param weapon the weapon being fired
      */
     public void onFire(Weapon weapon) {
+        // ── BURST_FIRE ────────────────────────────────────────────────────
         if (weapon.hasAbility(WeaponAbility.BURST_FIRE)) {
             int burstCount = weapon.abilityCount(WeaponAbility.BURST_FIRE);
-            // The base shot fires unconditionally; only the extra shots are queued here.
-            // burstCount - 1 so total shots = 1 (base) + pendingBurstExtra.
+            // burstCount − 1: the base shot fires unconditionally, only extras are queued.
             int extraShots = Math.max(0, burstCount - 1);
             weapon.setPendingBurstExtra(extraShots);
+        }
+
+        // Build the combined fire-cycle multiplier from passive / pending buff sources.
+        float fireCycleMultiplier = 1.0f;
+
+        // ── SECOND_WIND (PASSIVE) ─────────────────────────────────────────
+        // Damage bonus active whenever HP is at or below the threshold — no state required.
+        if (weapon.hasAbility(WeaponAbility.SECOND_WIND) && player != null) {
+            if (player.getHealthFraction() <= GameBalance.SECOND_WIND_HP_THRESHOLD) {
+                float bonus = weapon.abilityMagnitude(WeaponAbility.SECOND_WIND);
+                fireCycleMultiplier *= (1.0f + bonus);
+            }
+        }
+
+        // ── ADRENAL_SURGE pending buff ────────────────────────────────────
+        // Consume the pending kill-proc buff (returns 1.0 if none is active).
+        if (player != null && player.getPlayerStats() != null) {
+            fireCycleMultiplier *= player.getPlayerStats().pollAdrenalSurgeMultiplier();
+        }
+
+        if (fireCycleMultiplier != 1.0f) {
+            weapon.setFireCycleMultiplier(fireCycleMultiplier);
         }
     }
 
@@ -68,14 +97,8 @@ public final class AbilityResolver {
      * Called once per enemy hit, after marchShot() confirms a hit and after the base
      * damage has already been applied via {@code EnemyManager.applyDamageTo()}.
      *
-     * Accepts the hit enemy as {@code Object} to avoid a circular package dependency
-     * (Weapon.java in {@code entity} must not import {@code enemy.Enemy}).  The cast to
-     * {@code Enemy} is safe because EnemyManager.applyDamageTo() already performs the
-     * same cast internally, and only Enemy instances are ever returned by enemyAt().
-     *
-     * Evaluates ON_HIT abilities in order: CRITICAL_STRIKE first, then EXECUTIONER,
-     * then STAGGER_ROUNDS.  Returns true if a critical hit was rolled (so the caller
-     * can chain to {@link #onCrit}).
+     * Evaluates ON_HIT abilities in order: CRITICAL_STRIKE → EXECUTIONER →
+     * STAGGER_ROUNDS → LIFESTEAL.  Returns true if a critical hit was rolled.
      *
      * @param weapon         the weapon that fired the shot
      * @param hitEnemyObject the Object returned by EnemyHitTarget.enemyAt() (non-null)
@@ -90,8 +113,6 @@ public final class AbilityResolver {
         if (weapon.hasAbility(WeaponAbility.CRITICAL_STRIKE)) {
             float critChance = weapon.abilityMagnitude(WeaponAbility.CRITICAL_STRIKE);
             if (abilityRandom.nextFloat() <= critChance) {
-                // Bonus portion only: total crit damage = base + bonus.
-                // bonus = (CRIT_MULTIPLIER - 1) * base, so total = CRIT_MULTIPLIER * base.
                 int critBonus = Math.round(damageDealt * (WeaponConstants.CRIT_DAMAGE_MULTIPLIER - 1f));
                 if (critBonus > 0) {
                     enemyManager.applyDamageTo(hitEnemy, critBonus);
@@ -104,8 +125,7 @@ public final class AbilityResolver {
         }
 
         // ── EXECUTIONER ────────────────────────────────────────────────────
-        // Check AFTER the crit bonus has been applied so the HP fraction reflects
-        // the most up-to-date state (crit may have already pushed enemy below threshold).
+        // Check AFTER crit bonus so HP fraction reflects the post-crit state.
         if (weapon.hasAbility(WeaponAbility.EXECUTIONER) && hitEnemy.isAlive()) {
             float hpFraction = (float) hitEnemy.health / hitEnemy.maxHealth;
             if (hpFraction <= GameBalance.EXECUTIONER_THRESHOLD) {
@@ -131,43 +151,96 @@ public final class AbilityResolver {
             }
         }
 
+        // ── LIFESTEAL ──────────────────────────────────────────────────────
+        // Heals player for a fraction of the base damage dealt this hit.
+        // Only shows event text when the heal is large enough to matter.
+        if (weapon.hasAbility(WeaponAbility.LIFESTEAL) && player != null) {
+            float stealFraction = weapon.abilityMagnitude(WeaponAbility.LIFESTEAL);
+            int   healAmount    = Math.max(1, Math.round(damageDealt * stealFraction));
+            player.applyHealing(healAmount);
+            if (healAmount >= GameBalance.LIFESTEAL_TEXT_THRESHOLD && eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("+" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
+            }
+        }
+
         return wasCrit;
     }
 
     /**
      * Called when {@link #onHit} returned true (a critical hit was rolled).
-     * Handles ON_CRIT abilities such as VAMPIRIC_CRIT and HELLFIRE_NOVA.
-     * Stub in this order — wired in weapon-system-order-5.
+     * Handles ON_CRIT abilities: VAMPIRIC_CRIT heals the player on each crit.
      *
      * @param weapon         the weapon that scored the crit
      * @param hitEnemyObject the enemy that was critically hit (Object to avoid circular import)
      * @param critDamage     total crit damage delivered (base + bonus)
      */
     public void onCrit(Weapon weapon, Object hitEnemyObject, int critDamage) {
-        // Stub — ON_CRIT sustain abilities wired in weapon-system-order-5.
+        // ── VAMPIRIC_CRIT ─────────────────────────────────────────────────
+        if (weapon.hasAbility(WeaponAbility.VAMPIRIC_CRIT) && player != null) {
+            int healAmount = Math.round(weapon.abilityMagnitude(WeaponAbility.VAMPIRIC_CRIT));
+            if (healAmount > 0) {
+                player.applyHealing(healAmount);
+                if (eventTextSystem != null) {
+                    eventTextSystem.spawnWithColor("CRIT HEAL +" + healAmount, EventTextSystem.COLOR_GREEN);
+                }
+            }
+        }
     }
 
     /**
-     * Called when the enemy hit by this weapon dies (kill confirmed).
-     * Handles ON_KILL abilities such as HEMORRHAGE_HARVEST, ADRENAL_SURGE, SOULFORGE, etc.
-     * Stub in this order — wired in weapon-system-order-5.
+     * Called when the enemy hit by this weapon dies (kill confirmed after all hit callbacks).
+     * Handles ON_KILL abilities: HEMORRHAGE_HARVEST heals the player; ADRENAL_SURGE
+     * rolls a proc chance and stores a pending damage buff for the next fire activation.
      *
      * @param weapon            the weapon that scored the kill
      * @param killedEnemyObject the enemy instance that just died (Object to avoid circular import)
      */
     public void onKill(Weapon weapon, Object killedEnemyObject) {
-        // Stub — ON_KILL sustain abilities wired in weapon-system-order-5.
+        // ── HEMORRHAGE_HARVEST ─────────────────────────────────────────────
+        if (weapon.hasAbility(WeaponAbility.HEMORRHAGE_HARVEST) && player != null) {
+            int healAmount = Math.round(weapon.abilityMagnitude(WeaponAbility.HEMORRHAGE_HARVEST));
+            if (healAmount > 0) {
+                player.applyHealing(healAmount);
+                if (eventTextSystem != null) {
+                    eventTextSystem.spawnWithColor("+" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
+                }
+            }
+        }
+
+        // ── ADRENAL_SURGE ─────────────────────────────────────────────────
+        // Rolls against the pre-scaled chance; on success stores a one-shot damage buff
+        // in PlayerStats that onFire() will consume on the next fire activation.
+        if (weapon.hasAbility(WeaponAbility.ADRENAL_SURGE) && player != null
+                && player.getPlayerStats() != null) {
+            float surgeChance = weapon.abilityMagnitude(WeaponAbility.ADRENAL_SURGE);
+            if (abilityRandom.nextFloat() <= surgeChance) {
+                player.getPlayerStats().applyAdrenalSurge(GameBalance.ADRENAL_SURGE_DAMAGE_BONUS);
+                if (eventTextSystem != null) {
+                    eventTextSystem.spawnWithColor("SURGE!", EventTextSystem.COLOR_WHITE);
+                }
+            }
+        }
     }
 
     /**
-     * Called when the weapon's reload completes (shotsInClip refilled).
-     * Handles ON_RELOAD abilities such as BULWARK_ROUNDS.
-     * Stub in this order — wired in weapon-system-order-5.
+     * Called when the weapon's reload completes and at least one round was chambered.
+     * Handles ON_RELOAD abilities: BULWARK_ROUNDS grants temporary armor for
+     * {@link GameBalance#BULWARK_ARMOR_DURATION} player-action turns.
      *
      * @param weapon the weapon that just finished reloading
      */
     public void onReload(Weapon weapon) {
-        // Stub — ON_RELOAD abilities wired in weapon-system-order-5.
+        // ── BULWARK_ROUNDS ─────────────────────────────────────────────────
+        if (weapon.hasAbility(WeaponAbility.BULWARK_ROUNDS) && player != null
+                && player.getPlayerStats() != null) {
+            int armorGain = Math.round(weapon.abilityMagnitude(WeaponAbility.BULWARK_ROUNDS));
+            if (armorGain > 0) {
+                player.getPlayerStats().addTempArmor(armorGain, GameBalance.BULWARK_ARMOR_DURATION);
+                if (eventTextSystem != null) {
+                    eventTextSystem.spawnWithColor("BULWARK +" + armorGain, EventTextSystem.COLOR_WHITE);
+                }
+            }
+        }
     }
 
     /**

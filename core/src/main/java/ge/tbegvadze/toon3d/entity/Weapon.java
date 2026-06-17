@@ -123,6 +123,14 @@ public abstract class Weapon implements WeaponProfile {
      */
     private float playerAccuracyMultiplier = 1.0f;
 
+    /**
+     * Transient per-fire-activation damage multiplier set by AbilityResolver.onFire().
+     * Reset to 1.0f at the start of every fire() call so stale values never bleed forward.
+     * Used by SECOND_WIND (passive HP-threshold boost) and ADRENAL_SURGE (kill-proc buff).
+     * Applied inside damageAtDistance() so all weapon subclasses pick it up without changes.
+     */
+    private float fireCycleMultiplier = 1.0f;
+
     // Per-weapon RNG for hit-chance rolls — not seeded from run seed, which is acceptable
     // because miss results are cosmetic feedback and do not affect long-term balance.
     private final java.util.Random random = new java.util.Random();
@@ -278,6 +286,26 @@ public abstract class Weapon implements WeaponProfile {
     }
 
     /**
+     * Sets the fire-cycle damage multiplier for the current fire activation.
+     * Called by AbilityResolver.onFire() for SECOND_WIND and ADRENAL_SURGE.
+     * The value is applied inside {@link #damageAtDistance} and reset to 1.0f at the
+     * start of the next {@link #fire} call, so it cannot bleed across activations.
+     *
+     * @param multiplier the combined multiplier, e.g. 1.30f for +30% damage this activation
+     */
+    public void setFireCycleMultiplier(float multiplier) {
+        this.fireCycleMultiplier = multiplier;
+    }
+
+    /**
+     * Returns the current fire-cycle damage multiplier.
+     * 1.0f when no sustain ability is active this activation.
+     */
+    public float getFireCycleMultiplier() {
+        return fireCycleMultiplier;
+    }
+
+    /**
      * Sets the ranged damage multiplier derived from the player's MARKSMANSHIP stat.
      * Called by World whenever PlayerStats change (run start, perk award, equipment swap).
      * Must not be called per frame — only on discrete stat-change events.
@@ -398,6 +426,11 @@ public abstract class Weapon implements WeaponProfile {
                     shotsInClip = clipSize;
                     if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
                 }
+                // Notify resolver so ON_RELOAD abilities (BULWARK_ROUNDS) can fire.
+                // Only triggers when rounds were actually chambered (shotsInClip > 0).
+                if (abilityResolver != null && shotsInClip > 0) {
+                    abilityResolver.onReload(this);
+                }
                 visualState = WeaponVisualState.NORMAL;
             }
         }
@@ -431,11 +464,13 @@ public abstract class Weapon implements WeaponProfile {
                                  int facingStepColumn, int facingStepRow,
                                  Level level, EnemyHitTarget enemyHitTarget,
                                  BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
-        // Clear hit tracking from any previous invocation so stale data cannot bleed forward.
-        lastHitEnemy  = null;
-        lastHitDamage = 0;
+        // Clear per-activation state so stale data cannot bleed forward.
+        lastHitEnemy       = null;
+        lastHitDamage      = 0;
+        fireCycleMultiplier = 1.0f;
 
-        // ON_FIRE abilities (e.g. BURST_FIRE) set pendingBurstExtra before the base shot fires.
+        // ON_FIRE abilities (e.g. BURST_FIRE, SECOND_WIND, ADRENAL_SURGE) run before the
+        // accuracy roll so they can set fireCycleMultiplier and pendingBurstExtra first.
         if (abilityResolver != null) {
             abilityResolver.onFire(this);
         }
@@ -527,14 +562,15 @@ public abstract class Weapon implements WeaponProfile {
     public abstract String getReloadTexturePath();
 
     /**
-     * Effective damage at a given tile distance.
-     * Uses the linear drop formula from GameMath and rounds to the nearest integer
-     * so displayed and applied damage is always a whole number.
+     * Effective damage at a given tile distance, scaled by the current fire-cycle multiplier.
+     * The distance-drop formula is applied first, then fireCycleMultiplier is multiplied in.
+     * fireCycleMultiplier is set by AbilityResolver.onFire() for SECOND_WIND and ADRENAL_SURGE;
+     * it defaults to 1.0f and is reset at the start of each fire() call.
      */
     public int damageAtDistance(int distanceTiles) {
-        float multiplier = GameMath.damageDropMultiplier(damageDropCoefficient,
+        float dropMultiplier = GameMath.damageDropMultiplier(damageDropCoefficient,
                 distanceTiles, WeaponConstants.DAMAGE_MIN_MULTIPLIER);
-        return Math.round(damage * multiplier);
+        return Math.round(damage * dropMultiplier * fireCycleMultiplier);
     }
 
     public WeaponVisualState getVisualState()             { return visualState; }

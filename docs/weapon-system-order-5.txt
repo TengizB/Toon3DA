@@ -1,0 +1,90 @@
+IMPLEMENTED: weapon-system-order-5 — Weapon Sustain Abilities
+==============================================================
+
+Adds six sustain and defensive weapon abilities to the fire pipeline.
+All resolve through AbilityResolver hooks already wired in Weapon.fire().
+
+ABILITIES
+---------
+LIFESTEAL (ON_HIT)
+  Heals player for a fraction of base damage dealt each hit.
+  Shows event text only when heal >= LIFESTEAL_TEXT_THRESHOLD (5 HP) to avoid spam.
+  Magnitude pre-scaled by WeaponRoller; resolver reads it via weapon.abilityMagnitude().
+
+HEMORRHAGE_HARVEST (ON_KILL)
+  Heals player for a fixed HP amount on confirmed kill.
+  Always shows green "+N HP" event text.
+
+VAMPIRIC_CRIT (ON_CRIT)
+  Heals player for a fixed HP amount whenever a critical hit lands.
+  Shows green "CRIT HEAL +N" event text.
+  Fires only after CRITICAL_STRIKE already confirmed the crit in onHit().
+
+ADRENAL_SURGE (ON_KILL)
+  Rolls the pre-scaled proc chance on kill.
+  On success: stores a one-shot damage bonus in PlayerStats via applyAdrenalSurge().
+  AbilityResolver.onFire() polls and consumes the buff (pollAdrenalSurgeMultiplier()).
+  "Next attack only" semantics — consume-on-read, no tick countdown needed.
+  Shows white "SURGE!" event text when proc fires.
+
+BULWARK_ROUNDS (ON_RELOAD)
+  Grants temporary armor on reload completion (only when rounds were chambered).
+  Stored in PlayerStats as a turn-limited pool (up to BULWARK_TEMP_ARMOR_SLOTS = 4 stacks).
+  Consumed before regular armor in Player.applyDamage() and Player.applyDoTDamage().
+  Decremented each player-action turn via a TickSubscriber registered in World.buildLevelDependentResources().
+  Shows white "BULWARK +N" event text.
+
+SECOND_WIND (PASSIVE)
+  Checked in onFire() each activation — no stored state.
+  If player HP fraction <= SECOND_WIND_HP_THRESHOLD (30%), multiplies fireCycleMultiplier.
+  Stacks multiplicatively with ADRENAL_SURGE if both are active.
+
+FILES MODIFIED
+--------------
+util/GameBalance.java
+  Added balance constants for all 6 abilities (BASE, PER_LEVEL, CAP values).
+  Added BULWARK_TEMP_ARMOR_SLOTS = 4 (pool size for temp armor).
+
+progression/PlayerStats.java
+  tempArmorAmounts[] + tempArmorTurnsLeft[] arrays (size = BULWARK_TEMP_ARMOR_SLOTS).
+  addTempArmor(int amount, int turns) — adds a slot; overwrites shortest-lived if full.
+  consumeTempArmor(int incomingDamage) — consumes slots in order, returns amount absorbed.
+  tickTempArmor() — decrements turn counters; zeroes expired slots.
+  adrenalSurgePending / adrenalSurgeBonus fields.
+  applyAdrenalSurge(float bonus) — stores the one-shot buff.
+  pollAdrenalSurgeMultiplier() — reads (1.0+bonus) and clears (returns 1.0 if none active).
+
+entity/Player.java
+  applyDamage(): added temp armor consumption step (b) before regular armor (c).
+  applyDoTDamage(): same temp armor integration (DoT does not bypass armor).
+  Early-exit added when temp armor absorbs all incoming damage.
+
+entity/Weapon.java
+  fireCycleMultiplier field (default 1.0f, reset in fire(), applied in damageAtDistance()).
+  setFireCycleMultiplier() / getFireCycleMultiplier() accessors.
+  onTick(): calls abilityResolver.onReload(this) when reload completes and shotsInClip > 0.
+
+entity/AbilityResolver.java
+  Constructor extended: added Player player parameter.
+  onFire(): SECOND_WIND passive check + ADRENAL_SURGE poll → sets weapon.fireCycleMultiplier.
+  onHit(): added LIFESTEAL after STAGGER_ROUNDS.
+  onCrit(): implemented VAMPIRIC_CRIT.
+  onKill(): implemented HEMORRHAGE_HARVEST + ADRENAL_SURGE proc.
+  onReload(): implemented BULWARK_ROUNDS.
+
+world/World.java
+  AbilityResolver constructor call updated to pass player.
+  TickSubscriber lambda registered to call playerStats.tickTempArmor() each turn.
+
+ARCHITECTURE NOTES
+------------------
+- fireCycleMultiplier is a transient Weapon field reset at fire() start and applied in
+  damageAtDistance(). All weapon subclasses using damageAtDistance() pick it up automatically.
+- Adrenal Surge uses consume-on-read instead of tick countdown to avoid timing issues
+  (kill and tick fire in the same action turn, which would expire a duration=1 buff immediately).
+- Bulwark temp armor uses tick countdown (duration=3) so the off-by-one is not significant.
+- String concatenation in event text ("+N HP") happens at action time, not render time — safe.
+- NOTE: Weapon subclasses that do NOT call setLastHitEnemy() in marchShot() (e.g. Shotgun
+  in its current state) will not trigger onHit/onCrit/onKill callbacks, so LIFESTEAL,
+  VAMPIRIC_CRIT, HEMORRHAGE_HARVEST, and ADRENAL_SURGE won't fire for those weapons until
+  setLastHitEnemy() is wired in. SECOND_WIND and BULWARK_ROUNDS are unaffected.
