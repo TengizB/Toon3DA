@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.entity;
 
+import ge.tbegvadze.toon3d.entity.AbilityResolver;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.level.Level;
@@ -65,6 +66,40 @@ public abstract class Weapon implements WeaponProfile {
     private WeaponTier       tier         = WeaponTier.COMMON;
     private float            baseAccuracy = 1.0f;
     private AbilityInstance[] abilities   = new AbilityInstance[0];
+
+    // ── AbilityResolver wiring ───────────────────────────────────────────────
+    /**
+     * Injected by World after construction via {@link #setAbilityResolver}.
+     * Null until World provides a resolver; all resolver calls are guarded with null-checks
+     * so weapons remain functional before injection (unit tests, start room, etc.).
+     */
+    private AbilityResolver abilityResolver = null;
+
+    /**
+     * Number of extra burst shots still pending for this fire activation.
+     * Set to (burstCount - 1) by AbilityResolver.onFire() for BURST_FIRE weapons before
+     * the base shot fires; decremented by fire() until zero.
+     * Zero at all times for non-BURST_FIRE weapons.
+     */
+    private int pendingBurstExtra = 0;
+
+    /**
+     * The enemy Object returned by EnemyHitTarget.enemyAt() for the most recent hit
+     * confirmed by marchShot().  Cleared to null at the start of each fire() invocation.
+     * Subclasses set this via {@link #setLastHitEnemy} inside marchShot() when they
+     * confirm an enemy hit.
+     *
+     * Stored as Object (not Enemy) to avoid importing enemy.Enemy in this class, which
+     * would create a circular package dependency (entity → enemy → entity via EnemyHitTarget).
+     */
+    private Object lastHitEnemy = null;
+
+    /**
+     * The raw damage amount passed to EnemyHitTarget.applyDamageTo() for the most recent
+     * confirmed enemy hit.  Cleared to zero at the start of each fire() invocation.
+     * Subclasses set this via {@link #setLastHitEnemy} alongside the enemy reference.
+     */
+    private int lastHitDamage = 0;
 
     // Cached effective stats — recomputed by recomputeEffectiveStats().
     private int   effectiveDamage;
@@ -181,6 +216,42 @@ public abstract class Weapon implements WeaponProfile {
             if (instance.ability == ability) return instance.countValue;
         }
         return 0;
+    }
+
+    /**
+     * Injects the AbilityResolver so this weapon can trigger ability effects on fire and hit.
+     * Called once by World after EnemyManager and EventTextSystem are both ready.
+     * Safe to call with null (disables ability resolution without changing game logic).
+     */
+    public void setAbilityResolver(AbilityResolver resolver) {
+        this.abilityResolver = resolver;
+    }
+
+    /**
+     * Sets the number of extra burst shots to fire after the base shot completes.
+     * Called by AbilityResolver.onFire() when BURST_FIRE is active.
+     * A value of 0 means no extra shots (normal single-shot behaviour).
+     */
+    public void setPendingBurstExtra(int count) {
+        this.pendingBurstExtra = Math.max(0, count);
+    }
+
+    /**
+     * Reports the enemy hit and damage dealt by the most recent marchShot() pass.
+     * Subclasses must call this inside marchShot() immediately before each
+     * EnemyHitTarget.applyDamageTo() call to keep fire() informed.
+     *
+     * Only the LAST call within a single marchShot() invocation is retained.  For
+     * penetrating weapons (PlasmaRifle, Railgun) that hit multiple enemies per shot,
+     * only the final hit is forwarded to the resolver — per-hit callbacks require
+     * subclasses to call the resolver directly (future order).
+     *
+     * @param hitEnemyObject  the Object returned by EnemyHitTarget.enemyAt()
+     * @param damageApplied   the amount passed to EnemyHitTarget.applyDamageTo()
+     */
+    protected void setLastHitEnemy(Object hitEnemyObject, int damageApplied) {
+        this.lastHitEnemy  = hitEnemyObject;
+        this.lastHitDamage = damageApplied;
     }
 
     public void setEventTextSystem(EventTextSystem system) {
@@ -337,6 +408,15 @@ public abstract class Weapon implements WeaponProfile {
      * clip, and delegates tile-space marching to marchShot().
      * Callers MUST check canFire() before calling; this method does not re-check.
      *
+     * Ability integration:
+     *   1. AbilityResolver.onFire() is called BEFORE the accuracy roll so ON_FIRE
+     *      abilities (e.g. BURST_FIRE) can set pendingBurstExtra before the base shot.
+     *   2. After marchShot(), if lastHitEnemy was set by the subclass, onHit() is called.
+     *      If onHit() returns true (crit), onCrit() is chained.
+     *      If the enemy died after ability damage, onKill() is chained.
+     *   3. pendingBurstExtra extra shots are fired sequentially after the base shot,
+     *      each with its own accuracy roll (BURST_FIRE weapons spray unpredictably).
+     *
      * @param playerTileColumn  column of the tile the player occupies
      * @param playerTileRow     row    of the tile the player occupies
      * @param facingStepColumn  facing direction in X: Math.round(directionX), ∈ {-1, 0, 1}
@@ -345,22 +425,82 @@ public abstract class Weapon implements WeaponProfile {
      * @param enemyHitTarget    enemy query interface; null if no enemies exist yet
      * @param barrelHitTarget   barrel detonation interface; null disables barrel hits
      * @param doorBlocksQuery   door state query; null disables door blocking (shots pass through)
-     * @return outcome of the shot
+     * @return outcome of the base shot (burst extra outcomes are discarded)
      */
     public FireResult fire(int playerTileColumn, int playerTileRow,
                                  int facingStepColumn, int facingStepRow,
                                  Level level, EnemyHitTarget enemyHitTarget,
                                  BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
+        // Clear hit tracking from any previous invocation so stale data cannot bleed forward.
+        lastHitEnemy  = null;
+        lastHitDamage = 0;
+
+        // ON_FIRE abilities (e.g. BURST_FIRE) set pendingBurstExtra before the base shot fires.
+        if (abilityResolver != null) {
+            abilityResolver.onFire(this);
+        }
+
         shotsInClip--;
         visualState           = WeaponVisualState.FIRING;
         fireFlashTimerSeconds = WeaponConstants.FIRE_FLASH_DURATION;
         flashCycleCount++;
+
+        FireResult baseResult;
         if (!isPerPelletAccuracy() && !rollHitChance()) {
             if (eventTextSystem != null) eventTextSystem.showMiss();
-            return FireResult.MISSED;
+            baseResult = FireResult.MISSED;
+        } else {
+            baseResult = marchShot(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
+                                   level, enemyHitTarget, barrelHitTarget, doorBlocksQuery);
+            // Notify resolver of the hit (and chain crit/kill if applicable).
+            dispatchHitCallbacks(baseResult);
         }
-        return marchShot(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
-                         level, enemyHitTarget, barrelHitTarget, doorBlocksQuery);
+
+        // BURST_FIRE: fire extra shots, each with its own accuracy roll.
+        // Shots are capped by remaining clip; pendingBurstExtra is reset to 0 after use.
+        while (pendingBurstExtra > 0 && shotsInClip > 0) {
+            pendingBurstExtra--;
+            lastHitEnemy  = null;
+            lastHitDamage = 0;
+            shotsInClip--;
+            flashCycleCount++;
+            if (!isPerPelletAccuracy() && !rollHitChance()) {
+                if (eventTextSystem != null) eventTextSystem.showMiss();
+            } else {
+                // Extra burst shots also trigger hit/crit/kill callbacks.
+                FireResult burstResult = marchShot(playerTileColumn, playerTileRow,
+                                                   facingStepColumn, facingStepRow,
+                                                   level, enemyHitTarget, barrelHitTarget,
+                                                   doorBlocksQuery);
+                dispatchHitCallbacks(burstResult);
+            }
+        }
+        // Reset any remaining burst count (e.g. clip ran out mid-burst).
+        pendingBurstExtra = 0;
+
+        return baseResult;
+    }
+
+    /**
+     * Chains onHit → onCrit → onKill resolver callbacks for the last marchShot() pass.
+     * No-op when abilityResolver is null, lastHitEnemy is null, or the result was not a hit.
+     * Called once for the base shot and once for each extra burst shot.
+     */
+    private void dispatchHitCallbacks(FireResult result) {
+        if (abilityResolver == null || lastHitEnemy == null) return;
+        // Only dispatch for actual enemy hits (distanceTiles >= 0 and not a wall stop).
+        if (result.stoppedByWall || result.distanceTiles < 0) return;
+
+        boolean wasCrit = abilityResolver.onHit(this, lastHitEnemy, lastHitDamage);
+        int critBonusDamage = wasCrit
+                ? Math.round(lastHitDamage * (WeaponConstants.CRIT_DAMAGE_MULTIPLIER - 1f))
+                : 0;
+        if (wasCrit) {
+            abilityResolver.onCrit(this, lastHitEnemy, lastHitDamage + critBonusDamage);
+        }
+        if (!abilityResolver.isEnemyAlive(lastHitEnemy)) {
+            abilityResolver.onKill(this, lastHitEnemy);
+        }
     }
 
     /**

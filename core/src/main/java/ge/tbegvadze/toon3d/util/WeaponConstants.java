@@ -291,6 +291,12 @@ public final class WeaponConstants {
     // Ability clip and reload caps
     public static final int   WEAPON_CLIP_HARD_CAP                  = 99;
 
+    // ── Ability system constants ────────────────────────────────────────────
+    /** Critical hit total damage multiplier: crits deal 2× base damage.
+     *  Only the bonus portion (CRIT_DAMAGE_MULTIPLIER - 1) * base is applied
+     *  as a second applyDamageTo() call inside AbilityResolver. */
+    public static final float CRIT_DAMAGE_MULTIPLIER = 2.0f;
+
     // Per-weapon base accuracy (level-1, COMMON reference values)
     public static final float SHOTGUN_BASE_ACCURACY               = 0.85f;
     public static final float DOUBLE_BARREL_SHOTGUN_BASE_ACCURACY = 0.80f;
