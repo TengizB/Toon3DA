@@ -23,6 +23,12 @@ public class Enemy implements StatusHost {
     /** Effective max HP for this instance — may exceed type.maxHealth() on deeper floors. */
     public int        maxHealth;
     /**
+     * Flat damage reduction from physical armour (0 = unarmoured).
+     * Used by GameMath.armorPierceDamage() when a weapon has the ARMOR_PIERCE ability.
+     * Default 0; depth-scaled enemies may receive a non-zero value at spawn time.
+     */
+    public int        armor = 0;
+    /**
      * Depth-scaling multiplier applied to type.attackDamage() on each turn.
      * Set to {@code GameBalance.enemyDamageScaleForDepth(depth)} at spawn time.
      * Floor 1 = 1.0 (no scaling).

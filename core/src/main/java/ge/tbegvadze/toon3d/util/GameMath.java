@@ -2040,4 +2040,27 @@ public final class GameMath {
         int scaled = baseCount + (clampedLevel - 1) / safeStep;
         return Math.max(minCount, Math.min(maxCount, scaled));
     }
+
+    /*
+     * Formula: Armor-pierce damage
+     * Derivation:
+     *   Normally all of the enemy's armor reduces damage:
+     *     normalDamage = max(1, rawDamage - armor)
+     *   With pierceFraction in [0, 1], a portion of the armor is bypassed.
+     *   Only the un-pierced fraction of armor still applies:
+     *     unpiercedReduction = armor * (1 - pierceFraction)
+     *     effectiveDamage = max(1, rawDamage - unpiercedReduction)
+     *   pierceFraction = 0.0 → full armor reduction (same as normal).
+     *   pierceFraction = 1.0 → armor completely ignored; raw damage applied.
+     *   pierceFraction = 0.5 → only half the armor reduces damage.
+     * Edge cases:
+     *   pierceFraction clamped to [0, 1] — negative pierce or over-1 pierce have no meaning.
+     *   rawDamage <= 0: result clamped to 1 (always deal at least 1 damage).
+     *   armor = 0: unpiercedReduction is 0; result equals max(1, rawDamage).
+     */
+    public static int armorPierceDamage(int rawDamage, int armor, float pierceFraction) {
+        float clampedPierce      = Math.max(0f, Math.min(1f, pierceFraction));
+        int   unpiercedReduction = Math.round(armor * (1f - clampedPierce));
+        return Math.max(1, rawDamage - unpiercedReduction);
+    }
 }

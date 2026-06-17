@@ -95,6 +95,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private EnemyRenderer          enemyRenderer;
     private LevelRenderer          levelRenderer;
     private EnemyManager           enemyManager;
+    private AbilityResolver        abilityResolver;
     private EnemyAttackEffectSystem enemyAttackEffectSystem;
     private ExplosiveBarrelManager explosiveBarrelManager;
     private TickEventBus           tickEventBus;
@@ -361,6 +362,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         propRenderer           = new PropRenderer(targetLevel, wallRenderer);
         levelRenderer          = new LevelRenderer(targetLevel, doorManager);
         enemyManager           = new EnemyManager(targetLevel, doorManager, currentDepth);
+        abilityResolver        = new AbilityResolver(enemyManager, eventTextSystem, runSeed);
+        for (Weapon weapon : inventory.getArsenal()) {
+            weapon.setAbilityResolver(abilityResolver);
+        }
+        MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
+        if (meleeWeapon != null) {
+            meleeWeapon.setAbilityResolver(abilityResolver);
+        }
         explosiveBarrelManager = new ExplosiveBarrelManager(targetLevel, enemyManager, player);
         enemyRenderer          = new EnemyRenderer(enemyManager, wallRenderer);
         enemyManager.setImpactEventListener(impactEffectSystem);
