@@ -29,9 +29,11 @@ import java.util.Random;
  *   KINETIC_SLAM       (ON_HIT)    — melee: chance to knock enemy back; wall bonus damage on block.
  *   CLEAVE             (ON_HIT)    — melee: deals fraction of damage to both flanking tiles.
  *   BURST_FIRE         (ON_FIRE)   — signals Weapon to fire extra shots via pendingBurstExtra.
+ *   JUDGMENT           (ON_FIRE)   — every JUDGMENT_COOLDOWN_FIRES activations, fires a full-pierce lance.
  *   LIFESTEAL          (ON_HIT)    — heals player for a fraction of damage dealt.
  *   HEMORRHAGE_HARVEST (ON_KILL)   — heals player for a fixed amount on each kill.
  *   VAMPIRIC_CRIT      (ON_CRIT)   — heals player when a critical hit lands.
+ *   HELLFIRE_NOVA      (ON_CRIT)   — Chebyshev-radius AoE explosion on every crit.
  *   ADRENAL_SURGE      (ON_KILL)   — chance to buff next attack's damage on kill.
  *   SALVAGE_STRIKE     (ON_KILL)   — melee: chance to override drop tile with ammo pickup.
  *   SCHOLARS_EDGE      (ON_KILL)   — melee: awards bonus XP equal to a fraction of base reward.
@@ -47,6 +49,7 @@ import java.util.Random;
  *   BULWARK_ROUNDS     (ON_RELOAD) — grants temporary armor after reloading.
  *   SECOND_WIND        (PASSIVE)   — boosts damage when player HP is critically low.
  *   BERSERKERS_OATH    (PASSIVE)   — melee legendary: kill-streak stacks for damage/HP regen.
+ *   SOULFORGE          (ON_KILL)   — gun/melee legendary: weapon levels up every N kills.
  *
  * Passive abilities (ARMOR_PIERCE, OVERPENETRATION) are NOT handled here; they are
  * applied inline inside each weapon's marchShot() implementation.
@@ -181,6 +184,19 @@ public final class AbilityResolver {
             if (stacks > 0) {
                 float stackBonus = stacks * GameBalance.BERSERKER_DAMAGE_PER_STACK;
                 weapon.setFireCycleMultiplier(weapon.getFireCycleMultiplier() * (1.0f + stackBonus));
+            }
+        }
+
+        // ── JUDGMENT (gun only, legendary) ────────────────────────────────────
+        // Every JUDGMENT_COOLDOWN_FIRES activations, the shot becomes a full-pierce lance.
+        // Signals Weapon.fire() via setJudgmentActive(true) to use marchJudgmentLance instead
+        // of marchShot. The lance bypasses the accuracy roll and hits every enemy in the line.
+        if (weapon.hasAbility(WeaponAbility.JUDGMENT) && !weapon.isMelee()) {
+            if (weapon.consumeJudgment()) {
+                weapon.setJudgmentActive(true);
+                if (eventTextSystem != null) {
+                    eventTextSystem.spawnWithColor("JUDGMENT!", EventTextSystem.COLOR_GOLD);
+                }
             }
         }
     }
@@ -422,7 +438,8 @@ public final class AbilityResolver {
 
     /**
      * Called when {@link #onHit} returned true (a critical hit was rolled).
-     * Handles ON_CRIT abilities: VAMPIRIC_CRIT heals the player on each crit.
+     * Handles ON_CRIT abilities: VAMPIRIC_CRIT heals the player on each crit;
+     * HELLFIRE_NOVA deals Chebyshev-radius AoE damage around the crit target.
      *
      * @param weapon         the weapon that scored the crit
      * @param hitEnemyObject the enemy that was critically hit (Object to avoid circular import)
@@ -437,6 +454,32 @@ public final class AbilityResolver {
                 if (eventTextSystem != null) {
                     eventTextSystem.spawnWithColor("CRIT HEAL +" + healAmount, EventTextSystem.COLOR_GREEN);
                 }
+            }
+        }
+
+        // ── HELLFIRE_NOVA ─────────────────────────────────────────────────
+        // On a crit, deal AoE damage to all enemies within a Chebyshev radius of the
+        // crit target. Nova hits do NOT chain into further onCrit() calls to prevent
+        // infinite recursion. novaDamage is clamped to at least 1 so it always has impact.
+        if (weapon.hasAbility(WeaponAbility.HELLFIRE_NOVA) && hitEnemyObject instanceof Enemy) {
+            Enemy hitEnemy      = (Enemy) hitEnemyObject;
+            int   novaDamage    = Math.max(1, Math.round(critDamage * GameBalance.HELLFIRE_NOVA_DAMAGE_FRACTION));
+            int   epicenterColumn = hitEnemy.tileColumn;
+            int   epicenterRow    = hitEnemy.tileRow;
+            int   radius          = GameBalance.HELLFIRE_NOVA_RADIUS;
+            boolean anyNovaHit    = false;
+
+            for (Enemy candidate : enemyManager.getEnemies()) {
+                if (candidate == hitEnemy || !candidate.isAlive()) continue;
+                int distanceColumn = Math.abs(candidate.tileColumn - epicenterColumn);
+                int distanceRow    = Math.abs(candidate.tileRow    - epicenterRow);
+                if (distanceColumn <= radius && distanceRow <= radius) {
+                    enemyManager.applyDamageTo(candidate, novaDamage);
+                    anyNovaHit = true;
+                }
+            }
+            if (anyNovaHit && eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("NOVA!", EventTextSystem.COLOR_GOLD);
             }
         }
     }
@@ -604,6 +647,19 @@ public final class AbilityResolver {
             }
             if (anyHit && eventTextSystem != null) {
                 eventTextSystem.spawnWithColor("DISCHARGE!", EventTextSystem.COLOR_WHITE);
+            }
+        }
+
+        // ── SOULFORGE (legendary, universal) ──────────────────────────────
+        // Checked last so all other ON_KILL effects resolve before the weapon levels up.
+        // The level-up flag is surfaced via consumeSoulforgeAscend() to avoid storing a
+        // reference to EventTextSystem inside Weapon (which has no render dependency).
+        if (weapon.hasAbility(WeaponAbility.SOULFORGE)) {
+            weapon.incrementSoulforgeKill();
+            if (weapon.consumeSoulforgeAscend() && eventTextSystem != null) {
+                eventTextSystem.spawnWithColor(
+                        weapon.getDisplayName() + " ASCENDS! Lv" + weapon.getWeaponLevel(),
+                        EventTextSystem.COLOR_GOLD);
             }
         }
     }
