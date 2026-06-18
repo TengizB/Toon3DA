@@ -59,7 +59,7 @@ public class Shotgun extends Weapon {
                 Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (hitEnemy != null) {
                     int damageThisHit = damageAtDistance(distanceTiles);
-                    setLastHitEnemy(hitEnemy, damageThisHit);
+                    setLastHitEnemy(hitEnemy, damageThisHit, enemyHitTarget.isAtFullHp(hitEnemy));
                     enemyHitTarget.applyDamageTo(hitEnemy, damageThisHit);
                     dispatchHitCallbacks(new FireResult(false, distanceTiles));
                     clearLastHit();

@@ -96,7 +96,7 @@ public abstract class MeleeWeapon extends Weapon {
         }
 
         int baseDamage = computeDamage();
-        setLastHitEnemy(target, baseDamage);
+        setLastHitEnemy(target, baseDamage, enemyHitTarget.isAtFullHp(target));
         enemyHitTarget.notifyMeleeAttack();
         enemyHitTarget.applyDamageTo(target, baseDamage);
         onHit(target, enemyHitTarget, targetColumn, targetRow, facingStepColumn, facingStepRow, level);

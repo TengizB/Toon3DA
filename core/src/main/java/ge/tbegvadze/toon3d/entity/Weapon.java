@@ -594,6 +594,7 @@ public abstract class Weapon implements WeaponProfile {
         FireResult baseResult;
         if (!isPerPelletAccuracy() && !rollHitChance()) {
             if (eventTextSystem != null) eventTextSystem.showMiss();
+            if (hasAbility(WeaponAbility.RHYTHM)) resetRhythm();
             baseResult = FireResult.MISSED;
         } else {
             baseResult = marchShot(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
@@ -606,12 +607,14 @@ public abstract class Weapon implements WeaponProfile {
         // Shots are capped by remaining clip; pendingBurstExtra is reset to 0 after use.
         while (pendingBurstExtra > 0 && shotsInClip > 0) {
             pendingBurstExtra--;
-            lastHitEnemy  = null;
-            lastHitDamage = 0;
+            lastHitEnemy        = null;
+            lastHitDamage       = 0;
+            lastTargetWasFullHp = false;
             shotsInClip--;
             flashCycleCount++;
             if (!isPerPelletAccuracy() && !rollHitChance()) {
                 if (eventTextSystem != null) eventTextSystem.showMiss();
+                if (hasAbility(WeaponAbility.RHYTHM)) resetRhythm();
             } else {
                 // Extra burst shots also trigger hit/crit/kill callbacks.
                 FireResult burstResult = marchShot(playerTileColumn, playerTileRow,
@@ -638,7 +641,8 @@ public abstract class Weapon implements WeaponProfile {
         if (result.stoppedByWall || result.distanceTiles < 0) return;
 
         boolean wasCrit = abilityResolver.onHit(this, lastHitEnemy, lastHitDamage,
-                lastFacingStepColumn, lastFacingStepRow);
+                lastFacingStepColumn, lastFacingStepRow,
+                lastTargetWasFullHp, result.distanceTiles);
         int critBonusDamage = wasCrit
                 ? Math.round(lastHitDamage * (WeaponConstants.CRIT_DAMAGE_MULTIPLIER - 1f))
                 : 0;

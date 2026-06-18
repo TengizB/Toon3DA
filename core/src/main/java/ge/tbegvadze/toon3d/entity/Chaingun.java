@@ -141,6 +141,7 @@ public class Chaingun extends Weapon {
                                          BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
         if (!rollHitChance()) {
             spawnMissText();
+            if (hasAbility(WeaponAbility.RHYTHM)) resetRhythm();
             return FireResult.MISSED;
         }
         for (int distanceTiles = 1; distanceTiles <= range; distanceTiles++) {
@@ -162,7 +163,7 @@ public class Chaingun extends Weapon {
                 Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (hitEnemy != null) {
                     int damageThisHit = damageAtDistance(distanceTiles);
-                    setLastHitEnemy(hitEnemy, damageThisHit);
+                    setLastHitEnemy(hitEnemy, damageThisHit, enemyHitTarget.isAtFullHp(hitEnemy));
                     enemyHitTarget.applyDamageTo(hitEnemy, damageThisHit);
                     if (!WeaponConstants.CHAINGUN_PENETRATION) {
                         return new FireResult(false, distanceTiles);

@@ -1,0 +1,88 @@
+STATUS: IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System Order 9 — Positional & Situational Abilities
+---
+
+WHAT WAS BUILT
+==============
+Six new ON_HIT/ON_KILL weapon abilities covering positional bonuses, first-hit
+bonuses, consecutive-hit ramp, AoE kill splash, and percentage max-HP damage.
+
+ABILITIES
+=========
+POINT_BLANK       (ON_HIT)  — bonus damage % when target is within 1 tile.
+MARKSMANS_PATIENCE(ON_HIT)  — per-tile bonus % beyond MARKSMAN_MIN_DISTANCE (2),
+                              capped by MARKSMAN_TOTAL_BONUS_CAP.
+OPENING_SALVO     (ON_HIT)  — bonus % damage on the first hit against a full-HP
+                              target (targetWasFullHp captured before applyDamageTo).
+RHYTHM            (ON_HIT)  — consecutive hits on the SAME enemy ramp damage
+                              (rhythmStacks, rhythmTargetId on Weapon). Resets on
+                              miss, target-switch, and when the target dies.
+STATIC_DISCHARGE  (ON_KILL) — AoE splash to 4 orthogonal adjacent enemies on kill.
+                              resolvingDischarge guard prevents infinite chains.
+RESONANT_ROUNDS   (ON_HIT)  — flat bonus = pct × target.maxHealth (scales with elites).
+
+FILES CHANGED
+=============
+util/GameBalance.java
+  - Added 6 constant blocks (POINT_BLANK, MARKSMAN, OPENING_SALVO, RHYTHM,
+    STATIC_DISCHARGE, RESONANT_ROUNDS) with BASE/PER_LEVEL/CAP values.
+
+util/GameMath.java
+  - Added tileDistance(fromColumn, fromRow, toColumn, toRow) — Manhattan distance.
+
+enemy/Enemy.java
+  - Added stable int id (static counter nextId), getId(), resetIdCounter().
+    Used by RHYTHM to track consecutive-hit target identity.
+
+entity/EnemyHitTarget.java
+  - Added default method isAtFullHp(Object enemyObject) returning false.
+    Needed so marchShot callers can pass full-HP flag to setLastHitEnemy.
+
+enemy/EnemyManager.java
+  - Added @Override isAtFullHp(): returns enemy.health >= enemy.maxHealth.
+
+entity/Weapon.java
+  - Added fields: rhythmStacks, rhythmTargetId, lastTargetWasFullHp.
+  - Added 3-arg setLastHitEnemy(enemy, damage, wasFullHp) overload.
+  - Added rhythm API: updateRhythm(id), resetRhythm(), resetRhythmIfTarget(id),
+    getRhythmStacks().
+  - clearLastHit() now resets lastTargetWasFullHp = false.
+  - fire() resets rhythm on miss; isPerPelletAccuracy weapons reset per bullet.
+  - dispatchHitCallbacks() passes targetWasFullHp and result.distanceTiles to
+    onHit() for OPENING_SALVO, POINT_BLANK, MARKSMANS_PATIENCE.
+
+entity/AbilityResolver.java
+  - Added resolvingDischarge boolean field (STATIC_DISCHARGE chain guard).
+  - onHit() signature: added boolean targetWasFullHp, int hitDistance params.
+  - CLEAVE block: captures leftWasFullHp/rightWasFullHp before applyDamageTo
+    for correct OPENING_SALVO behaviour on flanking targets.
+  - Added RHYTHM, POINT_BLANK, MARKSMANS_PATIENCE, OPENING_SALVO, RESONANT_ROUNDS
+    blocks in onHit().
+  - onKill(): added RHYTHM target reset at top (resetRhythmIfTarget on kill).
+  - onKill(): added STATIC_DISCHARGE block at bottom with try/finally guard.
+  - Updated class javadoc to list all 6 new abilities.
+
+entity/Shotgun.java / DoubleBarrelShotgun.java / PlasmaRifle.java
+entity/Chaingun.java / MeleeWeapon.java
+  - All setLastHitEnemy() calls updated to 3-arg form passing
+    enemyHitTarget.isAtFullHp(hitEnemy).
+
+ARCHITECTURE NOTES
+==================
+- hitDistance comes from FireResult.distanceTiles (already computed by
+  marchShot), passed through dispatchHitCallbacks() — no extra player-tile
+  state storage needed.
+- RHYTHM resets on miss (Weapon.fire()), target-switch (updateRhythm detects
+  id mismatch), and kill (AbilityResolver.onKill → resetRhythmIfTarget).
+- STATIC_DISCHARGE secondary kills call onKill() recursively but the
+  resolvingDischarge flag (try/finally) prevents further splash chains.
+- OPENING_SALVO requires pre-damage HP check: solved via isAtFullHp() added
+  to EnemyHitTarget interface with EnemyManager override.
+
+WHAT IS NOT IMPLEMENTED
+=======================
+- WeaponRoller (order-11) must assign these abilities when generating loot.
+  Until then, abilities can only be set via hardcoded WeaponProfile entries.
+- RHYTHM and STATIC_DISCHARGE have no HUD indicator for current stack count.
+  A future HUD pass (order-12 or later) could add a small counter.

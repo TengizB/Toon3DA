@@ -38,6 +38,12 @@ import java.util.Random;
  *   SCAVENGER_ROUNDS   (ON_KILL)   — gun: chance to refund ammo to reserve on kill.
  *   FIELD_MEDIC_ROUNDS (ON_KILL)   — universal: chance to drop a medkit on the killed enemy's tile.
  *   CREDIT_FANG        (ON_KILL)   — universal: awards bonus credits to PlayerStats on kill.
+ *   RHYTHM             (ON_HIT)    — consecutive hits on the same target ramp damage per stack.
+ *   STATIC_DISCHARGE   (ON_KILL)   — AoE splash to all four orthogonally adjacent enemies on kill.
+ *   POINT_BLANK        (ON_HIT)    — bonus damage when target is within POINT_BLANK_MAX_DISTANCE tiles.
+ *   MARKSMANS_PATIENCE (ON_HIT)    — bonus damage scaling with tile distance beyond minimum range.
+ *   OPENING_SALVO      (ON_HIT)    — bonus damage on the first hit against a full-HP target.
+ *   RESONANT_ROUNDS    (ON_HIT)    — bonus flat damage as a fraction of the target's max HP.
  *   BULWARK_ROUNDS     (ON_RELOAD) — grants temporary armor after reloading.
  *   SECOND_WIND        (PASSIVE)   — boosts damage when player HP is critically low.
  *   BERSERKERS_OATH    (PASSIVE)   — melee legendary: kill-streak stacks for damage/HP regen.
@@ -82,6 +88,12 @@ public final class AbilityResolver {
      * targets from re-triggering another Cleave sweep (infinite recursion prevention).
      */
     private boolean cleaveInProgress = false;
+
+    /**
+     * Re-entrancy guard for STATIC_DISCHARGE: prevents secondary kill procs from
+     * chaining another discharge (infinite recursion prevention).
+     */
+    private boolean resolvingDischarge = false;
 
     public AbilityResolver(EnemyManager enemyManager, EventTextSystem eventTextSystem,
                            Player player, long runSeed) {
@@ -178,7 +190,8 @@ public final class AbilityResolver {
      * damage has already been applied via {@code EnemyManager.applyDamageTo()}.
      *
      * Evaluates ON_HIT abilities in order: CRITICAL_STRIKE → EXECUTIONER →
-     * STAGGER_ROUNDS → LIFESTEAL → KINETIC_SLAM → CLEAVE → REND → INCENDIARY.
+     * STAGGER_ROUNDS → LIFESTEAL → KINETIC_SLAM → CLEAVE → REND → INCENDIARY →
+     * RHYTHM → POINT_BLANK → MARKSMANS_PATIENCE → OPENING_SALVO → RESONANT_ROUNDS.
      * Returns true if a critical hit was rolled.
      *
      * @param weapon           the weapon that fired the shot
@@ -186,10 +199,15 @@ public final class AbilityResolver {
      * @param damageDealt      the base damage amount that was applied before this call
      * @param facingStepColumn player facing direction X (−1, 0, or 1); used for melee AoE
      * @param facingStepRow    player facing direction Y (−1, 0, or 1); used for melee AoE
+     * @param targetWasFullHp  true if the target was at full HP before primary damage was applied;
+     *                         captured by the caller before applyDamageTo() for OPENING_SALVO
+     * @param hitDistance      tile distance from the player to the hit enemy; used by
+     *                         POINT_BLANK and MARKSMANS_PATIENCE
      * @return true if CRITICAL_STRIKE triggered a crit this hit; false otherwise
      */
     public boolean onHit(Weapon weapon, Object hitEnemyObject, int damageDealt,
-                         int facingStepColumn, int facingStepRow) {
+                         int facingStepColumn, int facingStepRow,
+                         boolean targetWasFullHp, int hitDistance) {
         Enemy hitEnemy = (Enemy) hitEnemyObject;
         boolean wasCrit = false;
 
@@ -273,8 +291,8 @@ public final class AbilityResolver {
         // (the two tiles 90° from the facing direction adjacent to the target tile).
         // cleaveInProgress prevents the recursive onHit() calls from triggering another sweep.
         if (weapon.hasAbility(WeaponAbility.CLEAVE) && weapon.isMelee() && !cleaveInProgress) {
-            float cleaveFraction  = weapon.abilityMagnitude(WeaponAbility.CLEAVE);
-            int   cleaveDamage    = Math.max(1, Math.round(damageDealt * cleaveFraction));
+            float cleaveFraction   = weapon.abilityMagnitude(WeaponAbility.CLEAVE);
+            int   cleaveDamage     = Math.max(1, Math.round(damageDealt * cleaveFraction));
             int   leftFlankColumn  = hitEnemy.tileColumn + (-facingStepRow);
             int   leftFlankRow     = hitEnemy.tileRow    + facingStepColumn;
             int   rightFlankColumn = hitEnemy.tileColumn + facingStepRow;
@@ -285,16 +303,22 @@ public final class AbilityResolver {
             cleaveInProgress = true;
             try {
                 if (leftEnemyObj instanceof Enemy) {
+                    Enemy leftEnemy         = (Enemy) leftEnemyObj;
+                    boolean leftWasFullHp   = leftEnemy.health >= leftEnemy.maxHealth;
                     enemyManager.applyDamageTo(leftEnemyObj, cleaveDamage);
-                    onHit(weapon, leftEnemyObj, cleaveDamage, facingStepColumn, facingStepRow);
-                    if (!((Enemy) leftEnemyObj).isAlive()) {
+                    onHit(weapon, leftEnemyObj, cleaveDamage, facingStepColumn, facingStepRow,
+                            leftWasFullHp, hitDistance);
+                    if (!leftEnemy.isAlive()) {
                         onKill(weapon, leftEnemyObj);
                     }
                 }
                 if (rightEnemyObj instanceof Enemy) {
+                    Enemy rightEnemy        = (Enemy) rightEnemyObj;
+                    boolean rightWasFullHp  = rightEnemy.health >= rightEnemy.maxHealth;
                     enemyManager.applyDamageTo(rightEnemyObj, cleaveDamage);
-                    onHit(weapon, rightEnemyObj, cleaveDamage, facingStepColumn, facingStepRow);
-                    if (!((Enemy) rightEnemyObj).isAlive()) {
+                    onHit(weapon, rightEnemyObj, cleaveDamage, facingStepColumn, facingStepRow,
+                            rightWasFullHp, hitDistance);
+                    if (!rightEnemy.isAlive()) {
                         onKill(weapon, rightEnemyObj);
                     }
                 }
@@ -326,6 +350,71 @@ public final class AbilityResolver {
             if (eventTextSystem != null) {
                 eventTextSystem.spawnWithColor("BURN!", EventTextSystem.COLOR_RED);
             }
+        }
+
+        // ── RHYTHM (Heat-Up ramp) ────────────────────────────────────────────
+        // Consecutive hits on the SAME enemy ramp damage. updateRhythm handles target
+        // switch detection: if the enemy ID differs from last, stacks reset to 1.
+        if (weapon.hasAbility(WeaponAbility.RHYTHM) && hitEnemy.isAlive()) {
+            weapon.updateRhythm(hitEnemy.getId());
+            int stacks = weapon.getRhythmStacks();
+            if (stacks > 1) {
+                float rampPerHit = weapon.abilityMagnitude(WeaponAbility.RHYTHM);
+                float totalRamp  = rampPerHit * (stacks - 1);
+                int   rampDamage = Math.round(damageDealt * totalRamp);
+                if (rampDamage > 0) {
+                    enemyManager.applyDamageTo(hitEnemy, rampDamage);
+                }
+            }
+        }
+
+        // ── POINT_BLANK ────────────────────────────────────────────────────
+        // Bonus damage only when the enemy is at or within POINT_BLANK_MAX_DISTANCE tiles.
+        if (weapon.hasAbility(WeaponAbility.POINT_BLANK) && hitEnemy.isAlive()
+                && hitDistance <= GameBalance.POINT_BLANK_MAX_DISTANCE) {
+            float bonus     = weapon.abilityMagnitude(WeaponAbility.POINT_BLANK);
+            int bonusDamage = Math.round(damageDealt * bonus);
+            if (bonusDamage > 0) {
+                enemyManager.applyDamageTo(hitEnemy, bonusDamage);
+            }
+        }
+
+        // ── MARKSMAN'S PATIENCE ───────────────────────────────────────────
+        // Bonus damage scaling with tile distance beyond MARKSMAN_MIN_DISTANCE.
+        if (weapon.hasAbility(WeaponAbility.MARKSMANS_PATIENCE) && hitEnemy.isAlive()) {
+            int bonusTiles = Math.max(0, hitDistance - GameBalance.MARKSMAN_MIN_DISTANCE);
+            if (bonusTiles > 0) {
+                float perTileBonus = weapon.abilityMagnitude(WeaponAbility.MARKSMANS_PATIENCE);
+                float totalBonus   = Math.min(perTileBonus * bonusTiles,
+                                              GameBalance.MARKSMAN_TOTAL_BONUS_CAP);
+                int bonusDamage    = Math.round(damageDealt * totalBonus);
+                if (bonusDamage > 0) {
+                    enemyManager.applyDamageTo(hitEnemy, bonusDamage);
+                }
+            }
+        }
+
+        // ── OPENING SALVO ────────────────────────────────────────────────
+        // Bonus damage on the first hit against a full-HP target.
+        // targetWasFullHp was captured BEFORE primary damage was applied.
+        if (weapon.hasAbility(WeaponAbility.OPENING_SALVO) && hitEnemy.isAlive()
+                && targetWasFullHp) {
+            float bonus     = weapon.abilityMagnitude(WeaponAbility.OPENING_SALVO);
+            int bonusDamage = Math.round(damageDealt * bonus);
+            if (bonusDamage > 0) {
+                enemyManager.applyDamageTo(hitEnemy, bonusDamage);
+            }
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("OPENING!", EventTextSystem.COLOR_WHITE);
+            }
+        }
+
+        // ── RESONANT ROUNDS ───────────────────────────────────────────────
+        // Bonus flat damage as a fraction of the TARGET's max HP — scales against elites.
+        if (weapon.hasAbility(WeaponAbility.RESONANT_ROUNDS) && hitEnemy.isAlive()) {
+            float pct          = weapon.abilityMagnitude(WeaponAbility.RESONANT_ROUNDS);
+            int resonantDamage = Math.max(1, Math.round(hitEnemy.maxHealth * pct));
+            enemyManager.applyDamageTo(hitEnemy, resonantDamage);
         }
 
         return wasCrit;
@@ -361,6 +450,12 @@ public final class AbilityResolver {
      * @param killedEnemyObject the enemy instance that just died (Object to avoid circular import)
      */
     public void onKill(Weapon weapon, Object killedEnemyObject) {
+        // ── RHYTHM target reset ────────────────────────────────────────────
+        // When the current Rhythm target dies, reset so the next target starts fresh.
+        if (weapon.hasAbility(WeaponAbility.RHYTHM) && killedEnemyObject instanceof Enemy) {
+            weapon.resetRhythmIfTarget(((Enemy) killedEnemyObject).getId());
+        }
+
         // ── HEMORRHAGE_HARVEST ─────────────────────────────────────────────
         if (weapon.hasAbility(WeaponAbility.HEMORRHAGE_HARVEST) && player != null) {
             int healAmount = Math.round(weapon.abilityMagnitude(WeaponAbility.HEMORRHAGE_HARVEST));
@@ -476,6 +571,39 @@ public final class AbilityResolver {
                 if (eventTextSystem != null) {
                     eventTextSystem.spawnWithColor("+" + creditsEarned + " CR", EventTextSystem.COLOR_GREEN);
                 }
+            }
+        }
+
+        // ── STATIC DISCHARGE ──────────────────────────────────────────────
+        // On kill, deals AoE splash to all four orthogonally adjacent enemies.
+        // resolvingDischarge prevents secondary kills from triggering another chain.
+        if (weapon.hasAbility(WeaponAbility.STATIC_DISCHARGE) && !resolvingDischarge
+                && killedEnemyObject instanceof Enemy) {
+            Enemy killedEnemy = (Enemy) killedEnemyObject;
+            int splashDamage  = Math.round(weapon.abilityMagnitude(WeaponAbility.STATIC_DISCHARGE));
+            int deadColumn    = killedEnemy.tileColumn;
+            int deadRow       = killedEnemy.tileRow;
+            int[][] offsets   = { {0, 1}, {0, -1}, {1, 0}, {-1, 0} };
+            boolean anyHit    = false;
+            resolvingDischarge = true;
+            try {
+                for (int[] offset : offsets) {
+                    Object adjacentObj = enemyManager.enemyAt(deadColumn + offset[0],
+                                                               deadRow    + offset[1]);
+                    if (adjacentObj instanceof Enemy) {
+                        Enemy adjacent = (Enemy) adjacentObj;
+                        enemyManager.applyDamageTo(adjacentObj, splashDamage);
+                        anyHit = true;
+                        if (!adjacent.isAlive()) {
+                            onKill(weapon, adjacentObj);
+                        }
+                    }
+                }
+            } finally {
+                resolvingDischarge = false;
+            }
+            if (anyHit && eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("DISCHARGE!", EventTextSystem.COLOR_WHITE);
             }
         }
     }
