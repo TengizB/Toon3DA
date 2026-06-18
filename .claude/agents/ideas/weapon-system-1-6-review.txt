@@ -1,0 +1,159 @@
+STATUS: REVIEW
+CATEGORY: Combat
+TITLE: Weapon System Orders 1–6 — Implementation Review
+DATE: 2026-06-18
+---
+
+SUMMARY
+=======
+Orders 1–6 are largely implemented correctly — all data types compile, all
+scaling math is present, and melee abilities work end-to-end. However there is
+one critical bug that silently disables every hit-triggered ability for all
+ranged weapons, plus one minor documentation error in Shotgun.java.
+
+
+════════════════════════════════════════════════════════════════════════════════
+CRITICAL — Hit-callback pipeline broken for all gun weapons
+════════════════════════════════════════════════════════════════════════════════
+
+AFFECTED FILES
+  Shotgun.java          line 62
+  DoubleBarrelShotgun.java  line 63
+  Chaingun.java         line 163
+  PlasmaRifle.java      line 59
+  Railgun.java          line 139
+  Incinerator.java      line 134
+  GrenadeLauncher.java  line 170
+
+ROOT CAUSE
+  Every gun subclass calls:
+    enemyHitTarget.applyDamageTo(hitEnemy, damage);
+  but never calls:
+    setLastHitEnemy(hitEnemy, damage);
+
+  Weapon.dispatchHitCallbacks() (Weapon.java line 570) immediately returns when
+  lastHitEnemy == null:
+    if (abilityResolver == null || lastHitEnemy == null) return;
+
+  Because no gun ever populates lastHitEnemy, dispatchHitCallbacks() is a no-op
+  for every ranged shot regardless of which abilities are equipped.
+
+CONSEQUENCE — abilities that never trigger for guns:
+  ON_HIT:    CRITICAL_STRIKE, EXECUTIONER, STAGGER_ROUNDS, LIFESTEAL,
+             KINETIC_SLAM (guarded by isMelee anyway), CLEAVE (same)
+  ON_CRIT:   VAMPIRIC_CRIT
+  ON_KILL:   HEMORRHAGE_HARVEST, ADRENAL_SURGE, SALVAGE_STRIKE (guarded),
+             SCHOLARS_EDGE (guarded), BERSERKERS_OATH (guarded)
+
+  In practice this means the entire ability system is silently inoperative for
+  every gun in the game. Melee works correctly because MeleeWeapon.java line 99
+  calls setLastHitEnemy() before applyDamageTo().
+
+FIX (same pattern for every gun)
+  Immediately before the applyDamageTo() call in each gun's marchShot(),
+  add a call to setLastHitEnemy(). For example, Shotgun.java line 62 becomes:
+
+    setLastHitEnemy(hitEnemy, damageAtDistance(distanceTiles));
+    enemyHitTarget.applyDamageTo(hitEnemy, damageAtDistance(distanceTiles));
+
+  Note: damageAtDistance() should be computed once into a local variable to
+  avoid calling it twice:
+
+    int damageThisHit = damageAtDistance(distanceTiles);
+    setLastHitEnemy(hitEnemy, damageThisHit);
+    enemyHitTarget.applyDamageTo(hitEnemy, damageThisHit);
+
+  The same pattern applies to every hit site in the remaining six gun classes.
+  GrenadeLauncher's splash loop and Incinerator's burn tick each have their own
+  applyDamageTo() call that also needs the setLastHitEnemy() prefix.
+
+  IMPORTANT: After adding setLastHitEnemy(), the base class clears lastHitEnemy
+  in fire() at line 511 (start of fire) and line 543 (after each burst shot),
+  so there is no risk of stale state carrying across separate fire events.
+
+
+════════════════════════════════════════════════════════════════════════════════
+MINOR — Shotgun.java class-header damage table is stale
+════════════════════════════════════════════════════════════════════════════════
+
+FILE
+  Shotgun.java lines 10 and 17–22
+
+PROBLEM
+  The class-level Javadoc comment was written when SHOTGUN_DAMAGE was 24.
+  WeaponConstants.SHOTGUN_DAMAGE is now 50. The damage table in the comment
+  shows the old numbers:
+    "distance 1: 24 × 0.82 = 20"   (actual: 50 × 0.82 = 41)
+    "distance 5: 24 × 0.15 =  4"   (actual: 50 × 0.15 =  8)
+  Also "Stats: damage 24" on line 10 is wrong.
+
+  The constant and the gameplay math are correct; only the comment is wrong.
+
+FIX
+  Update the Javadoc to reflect damage = 50 and recompute the table, or delete
+  the worked table and just reference WeaponConstants.SHOTGUN_DAMAGE.
+
+
+════════════════════════════════════════════════════════════════════════════════
+VERIFIED PASSING
+════════════════════════════════════════════════════════════════════════════════
+
+Order 1 — Foundation data types
+  WeaponTier: 5 tiers, correct abilitySlots, standardSlotCount(), isLegendary()   PASS
+  WeaponAbility: exactly 33 entries, legendaryOnly on 4 signatures, eligibleFor() PASS
+  AbilityInstance: immutable, magnitudePercent() present                           PASS
+  WeaponProfile: interface complete, Weapon implements WeaponProfile               PASS
+
+Order 2 — Base class extension & level scaling
+  WeaponConstants: all scaling constants present (MAX_WEAPON_LEVEL=10, etc.)      PASS
+  GameMath: all 6 scaling methods with Formula/Derivation/Edge-cases comments     PASS
+  Weapon.java: weaponLevel, tier, baseAccuracy, abilities[], effectiveStats,
+    configureRoll(), recomputeEffectiveStats(), incrementWeaponLevel()             PASS
+  All gun subclasses: isMelee()=false, getDisplayName(), setBaseAccuracy()        PASS
+  MeleeWeapon: isMelee()=true, baseAccuracy=1.0                                   PASS
+
+Order 3 — Accuracy & miss system
+  GameMath.resolveHitChance(): short-circuits at >=1.0 / <=0.0                    PASS
+  Weapon.fire(): accuracy roll before marchShot, miss spends ammo, shows MISS     PASS
+  EventTextSystem.showMiss(): grey text, no screen shake                           PASS
+  PlayerStats.getAccuracyMultiplier(): present, returns 1.0 baseline              PASS
+
+Order 4 — AbilityResolver & offensive abilities
+  AbilityResolver class: stateless, seeded Random, all 5 entry points             PASS
+  CRITICAL_STRIKE, ARMOR_PIERCE, EXECUTIONER, OVERPENETRATION, STAGGER_ROUNDS:
+    logic correct in AbilityResolver                                               PASS
+  BURST_FIRE: pendingBurstExtra queue wired in Weapon.fire()                       PASS
+  GameBalance: all BASE/PER_LEVEL/CAP constants for order-4 abilities              PASS
+  WeaponConstants.CRIT_DAMAGE_MULTIPLIER = 2.0                                    PASS
+  EnemyManager.applyStun() + Enemy.stunnedTurns                                   PASS
+  NOTE: above abilities will not fire for guns until the critical bug is fixed.
+
+Order 5 — Sustain abilities
+  LIFESTEAL, HEMORRHAGE_HARVEST, VAMPIRIC_CRIT, ADRENAL_SURGE, BULWARK_ROUNDS,
+    SECOND_WIND: all implemented in AbilityResolver                                PASS
+  Player.heal() present                                                            PASS
+  PlayerStats.applyTempDamageBuff() + addTempArmor(): present, decremented
+    via TickSubscriber                                                              PASS
+  Temp armor consumed before permanent armor on damage                             PASS
+  fireCycleMultiplier: reset at start of fire(), applied in marchShot             PASS
+  GameBalance: all sustain ability constants                                       PASS
+  NOTE: same caveat — won't fire for guns until critical bug is fixed.
+
+Order 6 — Melee-specific abilities
+  KINETIC_SLAM: knockback, wall-bonus, facingStep passed through                  PASS
+  CLEAVE: correct perpendicular math, cleaveInProgress guard, recursive onHit     PASS
+  SALVAGE_STRIKE: drops at killed tile, guaranteed at magnitude>=1.0              PASS
+  SCHOLARS_EDGE: bonus XP via KillXpListener                                      PASS
+  BERSERKERS_OATH: stack counter, reset on no-kill fire, HP regen + damage buff   PASS
+  MeleeWeapon.fire() refactor: clearLastHit, setFacingStep, invokeAbilityOnFire,
+    dispatchHitCallbacks — all present and correct                                 PASS
+  EnemyManager.tryPushEnemy() + getEnemyAt(): present                             PASS
+  GameBalance: all melee ability constants                                         PASS
+
+
+════════════════════════════════════════════════════════════════════════════════
+ACTION ITEMS
+════════════════════════════════════════════════════════════════════════════════
+
+  [CRITICAL] Add setLastHitEnemy() before applyDamageTo() in all 7 gun subclasses
+  [MINOR]    Update Shotgun.java class-header Javadoc damage table to 50
