@@ -7,19 +7,18 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
 /**
  * Single-shell, one-step-reload shotgun.
  *
- * Stats: damage 24, clipSize 1, reloadTime 1 tick, dropCoeff 0.18, range 5.
+ * Stats: damage 50, clipSize 1, reloadTime 1 tick, dropCoeff 0.18, range 5.
  * One shot depletes the clip; one completed tile-step reloads it.
  *
  * marchShot() walks the facing direction tile by tile up to SHOTGUN_RANGE_TILES.
- * Stops at the first wall. Enemy application is stubbed — wire in when
- * EnemyManager is available (see inline comment).
+ * Stops at the first wall.
  *
  * Worked damage table (coefficient 0.18, floor 0.15):
- *   distance 1: 24 × 0.82 = 20   (bread-and-butter adjacent shot)
- *   distance 2: 24 × 0.64 = 15
- *   distance 3: 24 × 0.46 = 11
- *   distance 4: 24 × 0.28 =  7
- *   distance 5: 24 × 0.15 =  4   (clamped by floor; edge of range)
+ *   distance 1: 50 × 0.82 = 41   (bread-and-butter adjacent shot)
+ *   distance 2: 50 × 0.64 = 32
+ *   distance 3: 50 × 0.46 = 23
+ *   distance 4: 50 × 0.28 = 14
+ *   distance 5: 50 × 0.15 =  8   (clamped by floor; edge of range)
  */
 public class Shotgun extends Weapon {
 
@@ -59,7 +58,11 @@ public class Shotgun extends Weapon {
             if (enemyHitTarget != null) {
                 Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (hitEnemy != null) {
-                    enemyHitTarget.applyDamageTo(hitEnemy, damageAtDistance(distanceTiles));
+                    int damageThisHit = damageAtDistance(distanceTiles);
+                    setLastHitEnemy(hitEnemy, damageThisHit);
+                    enemyHitTarget.applyDamageTo(hitEnemy, damageThisHit);
+                    dispatchHitCallbacks(new FireResult(false, distanceTiles));
+                    clearLastHit();
                     if (!WeaponConstants.SHOTGUN_PENETRATION) {
                         return new FireResult(false, distanceTiles);
                     }

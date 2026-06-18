@@ -56,7 +56,11 @@ public class PlasmaRifle extends Weapon {
             if (enemyHitTarget != null) {
                 Object enemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (enemy != null) {
-                    enemyHitTarget.applyDamageTo(enemy, damageAtDistance(distanceTiles));
+                    int damageThisHit = damageAtDistance(distanceTiles);
+                    setLastHitEnemy(enemy, damageThisHit);
+                    enemyHitTarget.applyDamageTo(enemy, damageThisHit);
+                    dispatchHitCallbacks(new FireResult(false, distanceTiles));
+                    setLastHitEnemy(null, 0);
                     hitEnemy = true;
                     // Penetration: continue the bolt through this enemy into the next tile.
                     if (!WeaponConstants.PLASMA_RIFLE_PENETRATION) {
