@@ -1374,6 +1374,19 @@ public final class GameMath {
         return Math.abs(toColumn - fromColumn) + Math.abs(toRow - fromRow);
     }
 
+    /*
+     * Formula: Tile-space Manhattan combat distance
+     * Derivation: |fromColumn - toColumn| + |fromRow - toRow|
+     *             For cardinal-line combat (same row or column), this equals the
+     *             number of tiles between player and target.
+     *             Delegates to manhattanDistanceTiles() — named separately for clarity
+     *             at call sites that compute shot distances in the ability pipeline.
+     * Edge cases: distance=0 means same tile (should not happen in normal combat).
+     */
+    public static int tileDistance(int fromColumn, int fromRow, int toColumn, int toRow) {
+        return manhattanDistanceTiles(fromColumn, fromRow, toColumn, toRow);
+    }
+
     // =========================================================================
     // TILE LINE-OF-SIGHT — supercover walk in tile space
     // =========================================================================
