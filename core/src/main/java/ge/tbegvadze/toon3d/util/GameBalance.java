@@ -548,4 +548,27 @@ public final class GameBalance {
     public static final float RESONANT_PCT_PER_LEVEL = 0.008f;
     /** Maximum Resonant Rounds PCT fraction regardless of weapon level. */
     public static final float RESONANT_PCT_CAP       = 0.10f;
+
+    // =========================================================================
+    // LEGENDARY SIGNATURE ABILITIES — weapon-system-order-10
+    // All values are PLACEHOLDERS — flag for playtesting.
+    // =========================================================================
+
+    // ── Soulforge (ON_KILL, legendary, universal) ─────────────────────────────
+    /** Kills with this weapon needed to permanently raise its weapon level by 1. */
+    public static final int   SOULFORGE_KILLS_PER_LEVEL_UP  = 5;
+
+    // ── Judgment (ON_FIRE, legendary, gun only) ───────────────────────────────
+    /** Number of fires between consecutive Judgment lance shots. */
+    public static final int   JUDGMENT_COOLDOWN_FIRES        = 5;
+    /** Maximum tiles the Judgment lance travels before stopping. */
+    public static final int   JUDGMENT_LANCE_RANGE           = 20;
+    /** Effective-damage multiplier applied to the Judgment lance hit. */
+    public static final float JUDGMENT_DAMAGE_MULTIPLIER     = 3.0f;
+
+    // ── Hellfire Nova (ON_CRIT, legendary, universal) ─────────────────────────
+    /** Chebyshev tile radius of the AoE explosion triggered by a crit. */
+    public static final int   HELLFIRE_NOVA_RADIUS           = 2;
+    /** Fraction of critDamage dealt as AoE damage to enemies within the nova radius. */
+    public static final float HELLFIRE_NOVA_DAMAGE_FRACTION  = 0.75f;
 }

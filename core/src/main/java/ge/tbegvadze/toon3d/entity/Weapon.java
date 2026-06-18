@@ -151,6 +151,16 @@ public abstract class Weapon implements WeaponProfile {
     private int     berserkerStacks         = 0;
     private boolean berserkerKilledThisFire = false;
 
+    // ── Soulforge state (legendary ON_KILL) ───────────────────────────────────
+    // Kill counter and level-up flag per weapon instance; survives floor transitions.
+    private int     soulforgeKillCount     = 0;
+    private boolean soulforgeJustLeveledUp = false;
+
+    // ── Judgment state (legendary ON_FIRE, gun only) ──────────────────────────
+    // Counts fires since the last Judgment shot; signals the lance path for this fire.
+    private int     judgmentFireCounter    = 0;
+    private boolean judgmentActive         = false;
+
     // Per-weapon RNG for hit-chance rolls — not seeded from run seed, which is acceptable
     // because miss results are cosmetic feedback and do not affect long-term balance.
     private final java.util.Random random = new java.util.Random();
@@ -411,6 +421,59 @@ public abstract class Weapon implements WeaponProfile {
         berserkerStacks = Math.min(berserkerStacks + 1, GameBalance.BERSERKER_MAX_STACKS);
     }
 
+    // ── Soulforge accessors ───────────────────────────────────────────────────
+
+    /**
+     * Increments the Soulforge kill counter and levels up the weapon when the threshold
+     * is reached. No-op when this weapon lacks SOULFORGE or is already at max level.
+     */
+    public void incrementSoulforgeKill() {
+        if (!hasAbility(WeaponAbility.SOULFORGE)) return;
+        soulforgeKillCount++;
+        if (soulforgeKillCount >= GameBalance.SOULFORGE_KILLS_PER_LEVEL_UP) {
+            soulforgeKillCount = 0;
+            if (weaponLevel < WeaponConstants.MAX_WEAPON_LEVEL) {
+                incrementWeaponLevel();
+                soulforgeJustLeveledUp = true;
+            }
+        }
+    }
+
+    /**
+     * Returns true (once) immediately after a Soulforge level-up occurred, then resets
+     * the flag to false. The caller must display the ascension text on a true return.
+     */
+    public boolean consumeSoulforgeAscend() {
+        boolean ascended       = soulforgeJustLeveledUp;
+        soulforgeJustLeveledUp = false;
+        return ascended;
+    }
+
+    // ── Judgment accessors ────────────────────────────────────────────────────
+
+    /**
+     * Increments the Judgment fire counter and returns true when the counter reaches
+     * {@link GameBalance#JUDGMENT_COOLDOWN_FIRES}, resetting it to zero on that fire.
+     * Always returns false for non-JUDGMENT weapons.
+     */
+    public boolean consumeJudgment() {
+        if (!hasAbility(WeaponAbility.JUDGMENT)) return false;
+        judgmentFireCounter++;
+        if (judgmentFireCounter >= GameBalance.JUDGMENT_COOLDOWN_FIRES) {
+            judgmentFireCounter = 0;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Signals that the current fire activation should use the Judgment lance path.
+     * Set to true by AbilityResolver.onFire(); consumed and reset inside fire().
+     */
+    public void setJudgmentActive(boolean active) {
+        this.judgmentActive = active;
+    }
+
     /**
      * Sets the ranged damage multiplier derived from the player's MARKSMANSHIP stat.
      * Called by World whenever PlayerStats change (run start, perk award, equipment swap).
@@ -592,7 +655,15 @@ public abstract class Weapon implements WeaponProfile {
         flashCycleCount++;
 
         FireResult baseResult;
-        if (!isPerPelletAccuracy() && !rollHitChance()) {
+        if (judgmentActive) {
+            // Judgment: guaranteed hit, pierces the full facing line, no burst extras.
+            judgmentActive    = false;
+            pendingBurstExtra = 0;
+            baseResult = marchJudgmentLance(playerTileColumn, playerTileRow,
+                    facingStepColumn, facingStepRow, level, enemyHitTarget,
+                    barrelHitTarget, doorBlocksQuery);
+            // Callbacks dispatched inline inside marchJudgmentLance — skip dispatchHitCallbacks.
+        } else if (!isPerPelletAccuracy() && !rollHitChance()) {
             if (eventTextSystem != null) eventTextSystem.showMiss();
             if (hasAbility(WeaponAbility.RHYTHM)) resetRhythm();
             baseResult = FireResult.MISSED;
@@ -665,6 +736,69 @@ public abstract class Weapon implements WeaponProfile {
                                              Level level, EnemyHitTarget enemyHitTarget,
                                              BarrelHitTarget barrelHitTarget,
                                              DoorBlocksQuery doorBlocksQuery);
+
+    /**
+     * Fires the Judgment lance: a full-pierce hitscan that marches the entire facing line
+     * up to {@link GameBalance#JUDGMENT_LANCE_RANGE} tiles, hitting every enemy on the line.
+     * Doors do not block the lance; walls and explosive barrels stop it.
+     * Ability callbacks (onHit → onCrit → onKill) are dispatched inline per enemy hit
+     * so abilities like Critical Strike and Lifesteal apply to each target.
+     *
+     * Called by fire() when judgmentActive is true; replaces marchShot for that activation.
+     */
+    private FireResult marchJudgmentLance(int playerTileColumn, int playerTileRow,
+                                           int facingStepColumn, int facingStepRow,
+                                           Level level, EnemyHitTarget enemyHitTarget,
+                                           BarrelHitTarget barrelHitTarget,
+                                           DoorBlocksQuery doorBlocksQuery) {
+        int     lanceDamage          = Math.round(getEffectiveDamage() * GameBalance.JUDGMENT_DAMAGE_MULTIPLIER);
+        boolean hitAnyEnemy          = false;
+        int     lastHitDistanceTiles = 0;
+
+        for (int distanceTiles = 1; distanceTiles <= GameBalance.JUDGMENT_LANCE_RANGE; distanceTiles++) {
+            int  targetColumn = playerTileColumn + facingStepColumn * distanceTiles;
+            int  targetRow    = playerTileRow    + facingStepRow    * distanceTiles;
+            char targetCell   = level.getCell(targetColumn, targetRow);
+
+            if (Level.isWall(targetCell)) {
+                // clearLastHit() ensures dispatchHitCallbacks() in fire() is a no-op —
+                // callbacks were already dispatched inline per hit above.
+                clearLastHit();
+                return hitAnyEnemy ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
+            }
+            // Doors do not block the lance — pass through them silently.
+            if (barrelHitTarget != null && barrelHitTarget.isExplosiveBarrel(targetColumn, targetRow)) {
+                barrelHitTarget.onExplosiveBarrelHit(targetColumn, targetRow);
+                clearLastHit();
+                return hitAnyEnemy ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
+            }
+            if (enemyHitTarget == null) continue;
+
+            Object hitEnemyObject = enemyHitTarget.enemyAt(targetColumn, targetRow);
+            if (hitEnemyObject == null) continue;
+
+            boolean targetWasFullHp  = enemyHitTarget.isAtFullHp(hitEnemyObject);
+            enemyHitTarget.applyDamageTo(hitEnemyObject, lanceDamage);
+            hitAnyEnemy          = true;
+            lastHitDistanceTiles = distanceTiles;
+
+            if (abilityResolver != null) {
+                boolean wasCrit = abilityResolver.onHit(this, hitEnemyObject, lanceDamage,
+                        facingStepColumn, facingStepRow, targetWasFullHp, distanceTiles);
+                if (wasCrit) {
+                    int critBonus = Math.round(lanceDamage * (WeaponConstants.CRIT_DAMAGE_MULTIPLIER - 1f));
+                    abilityResolver.onCrit(this, hitEnemyObject, lanceDamage + critBonus);
+                }
+                if (!abilityResolver.isEnemyAlive(hitEnemyObject)) {
+                    abilityResolver.onKill(this, hitEnemyObject);
+                }
+            }
+        }
+        clearLastHit();
+        return hitAnyEnemy
+                ? new FireResult(false, lastHitDistanceTiles)
+                : FireResult.MISSED;
+    }
 
     /** Returns true for melee weapons; false for all ranged weapons. */
     @Override

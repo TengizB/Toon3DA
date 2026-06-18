@@ -1,0 +1,87 @@
+STATUS: IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System Order 10 — Legendary Signature Abilities
+---
+
+WHAT WAS BUILT
+==============
+Four Legendary-only signature abilities: Soulforge (weapon levels up on kills),
+Judgment (full-pierce lance every N fires), Hellfire Nova (crits explode in AoE),
+and Berserker's Oath (verified already correct from order-6).
+
+ABILITIES
+=========
+SOULFORGE   (ON_KILL, legendary, universal)
+  Every SOULFORGE_KILLS_PER_LEVEL_UP (5) kills with this weapon permanently
+  raise its weapon level by 1, capped at MAX_WEAPON_LEVEL. Level-up triggers
+  recomputeEffectiveStats() and emits a gold "WEAPON ASCENDS! LvN" event text.
+  Kill counter and level-up flag live on Weapon; AbilityResolver surfaces the
+  text via consumeSoulforgeAscend() to avoid a render dependency in Weapon.
+
+JUDGMENT    (ON_FIRE, legendary, gun only)
+  Every JUDGMENT_COOLDOWN_FIRES (5) activations, the next shot becomes a
+  full-pierce lance. AbilityResolver.onFire() calls consumeJudgment(); on true
+  it sets judgmentActive=true and emits "JUDGMENT!" in gold. Weapon.fire()
+  detects judgmentActive, cancels burst extras, and calls marchJudgmentLance()
+  instead of marchShot(). The lance: marches JUDGMENT_LANCE_RANGE (20) tiles,
+  stops at walls/barrels but NOT doors, hits every enemy on the line for
+  JUDGMENT_DAMAGE_MULTIPLIER (3×) effective damage, dispatches onHit→onCrit→
+  onKill callbacks inline per enemy with the correct tile distance, calls
+  clearLastHit() before every return to prevent double-dispatch in fire().
+
+HELLFIRE_NOVA (ON_CRIT, legendary, universal)
+  When a crit lands, deal novaDamage to every enemy within HELLFIRE_NOVA_RADIUS
+  (2) tiles (Chebyshev/box distance) of the crit target. novaDamage =
+  max(1, critDamage × HELLFIRE_NOVA_DAMAGE_FRACTION (0.75)). Nova hits do NOT
+  chain into further onCrit() calls. Emits "NOVA!" in gold when any enemy is hit.
+
+BERSERKERS_OATH (verified, no changes needed)
+  Stacks reset in onFire() when the previous activation had no kill; damage buff
+  applies to the NEXT fire; HP regen fires immediately on kill; max stacks 5.
+  All verified correct from order-6 implementation.
+
+FILES CHANGED
+=============
+render/EventTextSystem.java
+  - Added COLOR_GOLD (byte 4) for bright gold legendary event text.
+
+render/EventTextRenderer.java
+  - Added BASE_GOLD Color (1f, 0.69f, 0.125f) and wired into resolveBaseColor().
+
+util/GameBalance.java
+  - Added SOULFORGE_KILLS_PER_LEVEL_UP = 5.
+  - Added JUDGMENT_COOLDOWN_FIRES = 5, JUDGMENT_LANCE_RANGE = 20,
+    JUDGMENT_DAMAGE_MULTIPLIER = 3.0f.
+  - Added HELLFIRE_NOVA_RADIUS = 2, HELLFIRE_NOVA_DAMAGE_FRACTION = 0.75f.
+
+entity/Weapon.java
+  - Added soulforgeKillCount, soulforgeJustLeveledUp fields + incrementSoulforgeKill(),
+    consumeSoulforgeAscend() accessors.
+  - Added judgmentFireCounter, judgmentActive fields + consumeJudgment(),
+    setJudgmentActive() accessors.
+  - Added marchJudgmentLance() private method (full-pierce lance).
+  - fire(): added judgmentActive branch before accuracy roll; resets pendingBurstExtra.
+
+entity/AbilityResolver.java
+  - onFire(): added JUDGMENT block (consumeJudgment → setJudgmentActive + gold text).
+  - onCrit(): added HELLFIRE_NOVA block (Chebyshev AoE + gold text).
+  - onKill(): added SOULFORGE block at the very end (after STATIC_DISCHARGE).
+  - Updated class javadoc to list all three new abilities.
+
+ARCHITECTURE NOTES
+==================
+- Judgment lance tracks lastHitDistanceTiles (not the full range ceiling) so
+  FireResult.distanceTiles is accurate for visual impact effects.
+- clearLastHit() is called on every exit path of marchJudgmentLance so that
+  dispatchHitCallbacks() in fire() is always a no-op for the judgment path.
+- Hellfire Nova uses enemyManager.getEnemies() (already public) and filters by
+  isAlive() — no new EnemyManager API needed.
+- Soulforge state (kill counter, level-up flag) survives floor transitions since
+  Weapon instances persist; they reset only if the weapon is dropped/replaced.
+
+WHAT IS NOT IMPLEMENTED
+=======================
+- HUD indicators for Judgment cooldown counter ("JDG x/5") and Soulforge kill
+  progress — deferred to order-12 per the design spec.
+- WeaponRoller (order-11) must assign these abilities when generating loot.
+  Until then, abilities can only be set via hardcoded WeaponProfile entries.
