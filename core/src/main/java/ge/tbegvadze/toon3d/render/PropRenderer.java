@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.entity.WeaponTier;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
@@ -91,6 +92,10 @@ public class PropRenderer implements Renderable, Disposable {
     // Injected by World after level build; never null — starts empty.
     private List<GroundItem> groundItems = Collections.emptyList();
 
+    // Tier tinting map — maps weapon ItemType to its WeaponTier for billboard tinting.
+    // Injected by World after arsenal setup; defaults to empty (no tint).
+    private Map<ItemType, WeaponTier> weaponTierMap = Collections.emptyMap();
+
     // Dynamically-added prop placements (enemy ammo/corpse drops placed after level load).
     // Each entry is valid until the level tile no longer matches the stored propChar.
     private final List<PropPlacement> dynamicPropPlacements = new ArrayList<>();
@@ -129,6 +134,11 @@ public class PropRenderer implements Renderable, Disposable {
     /** Replaces the ground item list; called by World after each level build. */
     public void setGroundItems(List<GroundItem> items) {
         this.groundItems = (items != null) ? items : Collections.emptyList();
+    }
+
+    /** Supplies the weapon tier lookup; called by World after arsenal setup. */
+    public void setWeaponTierMap(Map<ItemType, WeaponTier> tierMap) {
+        this.weaponTierMap = (tierMap != null) ? tierMap : Collections.emptyMap();
     }
 
     /**
@@ -378,9 +388,13 @@ public class PropRenderer implements Renderable, Disposable {
             float tileBrightness = level.getTileBrightness(groundItem.tileColumn, groundItem.tileRow, lightingTimeSeconds);
             float shade          = Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * tileBrightness,
                                             MAX_LIGHTING_SHADE);
-            float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-            float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-            float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            WeaponTier weaponTier    = weaponTierMap.get(itemType);
+            float tierColorRed       = (weaponTier != null) ? weaponTier.colorRed   : 1f;
+            float tierColorGreen     = (weaponTier != null) ? weaponTier.colorGreen : 1f;
+            float tierColorBlue      = (weaponTier != null) ? weaponTier.colorBlue  : 1f;
+            float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST) * tierColorRed);
+            float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN) * tierColorGreen;
+            float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN) * tierColorBlue;
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             int firstColumn = Math.max(0, leftScreenColumn);

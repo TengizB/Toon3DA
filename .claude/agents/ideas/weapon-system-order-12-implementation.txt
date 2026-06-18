@@ -1,0 +1,45 @@
+TITLE: Weapon System — HUD Display Redesign (Implementation Notes)
+IMPLEMENTED: 2026-06-18
+IDEA FILE: weapon-system-order-12.txt
+
+WHAT WAS BUILT
+==============
+Three surfaces now display weapon tier color, level badge, and ability glyphs
+instead of plain weapon-name text.
+
+1. HUD Right Panel (HudRenderer)
+   - Added right panel chrome (x=860..1280) with tier-colored underline below
+     weapon name, level badge ("Lv N"), and a row of ability glyphs.
+   - Call: hudRenderer.setActiveWeaponProfile(hudWeapon) each frame in World.render()
+     before hudRenderer.render(). Already wired.
+
+2. Weapon Inspect Card (WeaponInspectOverlayRenderer)
+   - Header now shows "[TIER NAME]  Lv N" in tier color instead of plain name.
+   - Header underline uses tier color.
+   - Ability glyph strip ("B C A X") added at ABILITY_GLYPH_Y inside stats area.
+   - Strings built once in show() (buildHeaderCache, buildAbilityGlyphCache) —
+     no per-frame allocations.
+
+3. Ground Weapon Prop Tinting (PropRenderer)
+   - Ground weapon billboard sprites are tinted by their WeaponTier color.
+   - World.buildWeaponTierMap() builds a Map<ItemType, WeaponTier> snapshot and
+     passes it to propRenderer.setWeaponTierMap() after each PropRenderer creation.
+
+KEY FILES CHANGED
+=================
+- HudConstants.java           — added right panel, ability strip, tier underline,
+                                level badge, weapon inspect constants
+- HudRenderer.java            — full right panel implementation + setActiveWeaponProfile()
+- WeaponProfile.java          — added base stat getters (getBaseDamage etc.)
+- Weapon.java                 — implements WeaponProfile base stat getters
+- WeaponInspectOverlayRenderer.java — tier-colored header, ability glyph strip,
+                                      cachedHeaderLine/cachedAbilityGlyphLine
+- PropRenderer.java           — weaponTierMap field + setWeaponTierMap() + tint logic
+- World.java                  — wires setActiveWeaponProfile() and buildWeaponTierMap()
+
+DESIGN NOTES
+============
+- WeaponTier (enum) carries colorRed/Green/Blue + displayName + abilitySlots.
+- WeaponAbility (enum) carries hudGlyph (char) + displayName.
+- AbilityInstance.getAbility(index) can return null — always null-check before use.
+- Map<ItemType, WeaponTier> avoids circular dependency between item and entity packages.

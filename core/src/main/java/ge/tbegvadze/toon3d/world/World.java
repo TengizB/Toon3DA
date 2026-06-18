@@ -364,6 +364,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         floorCeilingRenderer   = new FloorCeilingRenderer(targetLevel);
         wallRenderer           = new WallRenderer(targetLevel, doorManager);
         propRenderer           = new PropRenderer(targetLevel, wallRenderer);
+        propRenderer.setWeaponTierMap(buildWeaponTierMap());
         levelRenderer          = new LevelRenderer(targetLevel, doorManager);
         enemyManager           = new EnemyManager(targetLevel, doorManager, currentDepth);
         abilityResolver        = new AbilityResolver(enemyManager, eventTextSystem, player, runSeed);
@@ -708,6 +709,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             hudState.reserveAmmo = -1;
         }
         float deltaTime = Gdx.graphics.getDeltaTime();
+        hudRenderer.setActiveWeaponProfile(hudWeapon);
         hudRenderer.update(deltaTime);
         hudRenderer.render(camera);
 
@@ -1226,5 +1228,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (weapon instanceof CombatKnife)         return ItemType.WEAPON_KNIFE;
         if (weapon instanceof Fist)                return ItemType.WEAPON_FIST;
         return ItemType.WEAPON_PISTOL;
+    }
+
+    /** Builds a snapshot map of ItemType → WeaponTier for all weapons currently in the arsenal. */
+    private java.util.Map<ItemType, WeaponTier> buildWeaponTierMap() {
+        java.util.Map<ItemType, WeaponTier> tierMap = new java.util.HashMap<>();
+        for (Weapon weapon : inventory.getArsenal()) {
+            tierMap.put(weaponClassToItemType(weapon), weapon.getTier());
+        }
+        MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
+        if (meleeWeapon != null) {
+            tierMap.put(weaponClassToItemType(meleeWeapon), meleeWeapon.getTier());
+        }
+        return tierMap;
     }
 }

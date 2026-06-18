@@ -10,8 +10,10 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.entity.AbilityInstance;
 import ge.tbegvadze.toon3d.entity.Loadout;
 import ge.tbegvadze.toon3d.entity.Weapon;
+import ge.tbegvadze.toon3d.entity.WeaponTier;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.HudConstants;
@@ -22,12 +24,14 @@ import java.util.function.IntConsumer;
  * Modal overlay shown when the player taps INSPECT while standing on a weapon GroundItem.
  *
  * Two phases:
- *   STATS_CARD  — side-by-side stat comparison (ground weapon vs active weapon).
+ *   STATS_CARD  — stat comparison (ground weapon vs active weapon) with tier-colored header,
+ *                 level badge, and ability glyph strip.
  *                 Footer buttons: primary action (TAKE / SWAP SLOT / CONVERT AMMO) + CLOSE.
  *   SLOT_SELECT — tap a loadout slot to evict it and place the ground weapon there.
  *                 Footer buttons: CANCEL (returns to STATS_CARD).
  *
  * No allocations in render() — all scratch objects are pre-allocated in the constructor.
+ * The header and ability glyph strings are cached in show() and reused every frame.
  * Callers must set the four callbacks via setOn*() before calling show().
  */
 public final class WeaponInspectOverlayRenderer implements Renderable, Disposable {
@@ -89,6 +93,10 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private static final float SLOT_ROW_H   = 64f;
     private static final float SLOT_ROW_PAD = 8f;
 
+    // Y position for the ability glyph strip — fixed offset above content area bottom
+    private static final float ABILITY_GLYPH_Y =
+            CONTENT_Y + HudConstants.WEAPON_INSPECT_ABILITY_ROW_Y_ABOVE_CONTENT;
+
     // ── Owned resources ───────────────────────────────────────────────────────
     private final ShapeRenderer shapeRenderer;
     private final SpriteBatch   spriteBatch;
@@ -106,6 +114,13 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private boolean    loadoutFull   = false; // loadout full AND ground weapon not owned
     private float      facilityTime  = 0f;
 
+    // ── Cached strings (built in show(), read in render() without allocation) ─
+    private String cachedHeaderLine      = "";
+    private float  cachedTierRed         = AMBER.r;
+    private float  cachedTierGreen       = AMBER.g;
+    private float  cachedTierBlue        = AMBER.b;
+    private String cachedAbilityGlyphLine = "";
+
     // ── Callbacks (wired by World before show()) ──────────────────────────────
     private Runnable    onTake          = null; // free-slot equip
     private Runnable    onConvertToAmmo = null; // weapon already owned → convert to ammo
@@ -113,7 +128,7 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private Runnable    onClose         = null; // close without any action
 
     // ── Scratch — pre-allocated to avoid allocs in render() ───────────────────
-    private final StringBuilder textBuilder    = new StringBuilder(32);
+    private final StringBuilder textBuilder    = new StringBuilder(64);
     private final Color         temporaryColor = new Color();
 
     // ── Constructor ───────────────────────────────────────────────────────────
@@ -159,14 +174,61 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         this.loadoutFull = (loadoutParam != null) && loadoutParam.isFull() && !alreadyOwned;
         this.phase       = Phase.STATS_CARD;
         this.visible     = true;
+
+        buildHeaderCache(groundItemParam, groundWeaponParam);
+        buildAbilityGlyphCache(groundWeaponParam);
+    }
+
+    /** Builds the cached header string and tier color from the ground weapon's tier and level. */
+    private void buildHeaderCache(GroundItem groundItemParam, Weapon groundWeaponParam) {
+        WeaponTier tier = (groundWeaponParam != null) ? groundWeaponParam.getTier() : null;
+        if (tier != null) {
+            StringBuilder headerBuilder = new StringBuilder(32);
+            headerBuilder.append(tier.displayName.toUpperCase())
+                         .append("  Lv ")
+                         .append(groundWeaponParam.getWeaponLevel());
+            cachedHeaderLine  = headerBuilder.toString();
+            cachedTierRed     = tier.colorRed;
+            cachedTierGreen   = tier.colorGreen;
+            cachedTierBlue    = tier.colorBlue;
+        } else {
+            cachedHeaderLine  = (groundItemParam != null)
+                                ? groundItemParam.stack.getType().getDisplayName()
+                                : "WEAPON";
+            cachedTierRed     = AMBER.r;
+            cachedTierGreen   = AMBER.g;
+            cachedTierBlue    = AMBER.b;
+        }
+    }
+
+    /** Builds the cached ability glyph line (e.g. "B C A X") from the ground weapon's abilities. */
+    private void buildAbilityGlyphCache(Weapon groundWeaponParam) {
+        if (groundWeaponParam == null || groundWeaponParam.getAbilityCount() == 0) {
+            cachedAbilityGlyphLine = "";
+            return;
+        }
+        StringBuilder glyphBuilder = new StringBuilder(16);
+        int abilityCount = groundWeaponParam.getAbilityCount();
+        for (int abilityIndex = 0; abilityIndex < abilityCount; abilityIndex++) {
+            AbilityInstance inst = groundWeaponParam.getAbility(abilityIndex);
+            if (inst == null) continue;
+            if (glyphBuilder.length() > 0) glyphBuilder.append(' ');
+            glyphBuilder.append(inst.ability.hudGlyph);
+        }
+        cachedAbilityGlyphLine = glyphBuilder.toString();
     }
 
     public void hide() {
-        visible      = false;
-        groundItem   = null;
-        groundWeapon = null;
-        activeWeapon = null;
-        loadout      = null;
+        visible                = false;
+        groundItem             = null;
+        groundWeapon           = null;
+        activeWeapon           = null;
+        loadout                = null;
+        cachedHeaderLine       = "";
+        cachedAbilityGlyphLine = "";
+        cachedTierRed          = AMBER.r;
+        cachedTierGreen        = AMBER.g;
+        cachedTierBlue         = AMBER.b;
     }
 
     public boolean isVisible() { return visible; }
@@ -298,8 +360,8 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         }
         shapeRenderer.rect(BTN_CLOSE_X, BTN_Y_BOTTOM, BTN_W, BTN_H);
 
-        // Header underline
-        shapeRenderer.setColor(AMBER);
+        // Header underline in tier color
+        shapeRenderer.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
         shapeRenderer.line(CARD_X, HEADER_Y, CARD_RIGHT, HEADER_Y);
 
         if (phase == Phase.STATS_CARD) {
@@ -341,13 +403,20 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
 
     private void drawHeader() {
         String title;
+        float headerRed, headerGreen, headerBlue;
         if (phase == Phase.STATS_CARD) {
-            title = (groundItem != null) ? groundItem.stack.getType().getDisplayName() : "WEAPON";
+            title       = cachedHeaderLine;
+            headerRed   = cachedTierRed;
+            headerGreen = cachedTierGreen;
+            headerBlue  = cachedTierBlue;
         } else {
-            title = "SWAP OUT WHICH?";
+            title       = "SWAP OUT WHICH?";
+            headerRed   = AMBER.r;
+            headerGreen = AMBER.g;
+            headerBlue  = AMBER.b;
         }
         glyphLayout.setText(font, title);
-        font.setColor(AMBER);
+        font.setColor(headerRed, headerGreen, headerBlue, 1f);
         font.draw(spriteBatch, title,
                   CARD_X + (CARD_W - glyphLayout.width) / 2f,
                   HEADER_Y + HEADER_H - 10f);
@@ -379,6 +448,15 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         drawDropRow(rowY);
         rowY -= STAT_STEP;
         drawAmmoRow(rowY);
+
+        // Ability glyph strip — tier-colored compact strip at the bottom of the content area
+        if (!cachedAbilityGlyphLine.isEmpty()) {
+            glyphLayout.setText(font, "ABIL");
+            font.setColor(DIM_COLOR);
+            font.draw(spriteBatch, "ABIL", CENTER_X - glyphLayout.width / 2f, ABILITY_GLYPH_Y);
+            font.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
+            font.draw(spriteBatch, cachedAbilityGlyphLine, GROUND_COL_X, ABILITY_GLYPH_Y);
+        }
     }
 
     private int statValue(Weapon weapon, StatKind kind) {
