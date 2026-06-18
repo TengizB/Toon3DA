@@ -60,11 +60,13 @@ public class HudRenderer implements Renderable, Disposable {
     private static final Color XP_GOLD         = new Color(1.000f, 0.780f, 0.050f, 1f);
     private static final Color XP_BRIGHT_GOLD  = new Color(1.000f, 0.960f, 0.400f, 1f);
 
-    // Status icon colors — indexed by StatusType ordinal (BURNING=0 POISONED=1 STUNNED=2 BLINDED=3 SLOWED=4 EMPOWERED=5)
+    // Status icon colors — indexed by StatusType ordinal
+    // BURNING=0 POISONED=1 BLEED=2 STUNNED=3 BLINDED=4 SLOWED=5 EMPOWERED=6
     // BLINDED uses purple instead of black so the icon is visible on the dark HUD panel.
-    private static final float[] STATUS_ICON_RED   = { 1.00f, 0.00f, 1.00f, 0.30f, 0.25f, 0.85f };
-    private static final float[] STATUS_ICON_GREEN = { 0.45f, 0.80f, 1.00f, 0.00f, 0.40f, 0.10f };
-    private static final float[] STATUS_ICON_BLUE  = { 0.00f, 0.15f, 1.00f, 0.50f, 0.70f, 0.00f };
+    // BLEED uses deep crimson distinct from BURNING orange-red.
+    private static final float[] STATUS_ICON_RED   = { 1.00f, 0.00f, 0.85f, 1.00f, 0.30f, 0.25f, 0.85f };
+    private static final float[] STATUS_ICON_GREEN = { 0.45f, 0.80f, 0.05f, 1.00f, 0.00f, 0.40f, 0.10f };
+    private static final float[] STATUS_ICON_BLUE  = { 0.00f, 0.15f, 0.10f, 1.00f, 0.50f, 0.70f, 0.00f };
     private static final StatusType[] STATUS_TYPES = StatusType.values();
     static {
         // Fail fast if a new StatusType was added without updating the icon color arrays above.
