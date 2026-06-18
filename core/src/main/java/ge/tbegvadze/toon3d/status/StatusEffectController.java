@@ -169,6 +169,9 @@ public final class StatusEffectController {
             case POISONED:
                 player.applyDoTDamage(effect.magnitude * effect.stacks);
                 break;
+            case BLEED:
+                player.applyDoTDamage(effect.magnitude);
+                break;
             case STUNNED:
                 player.setNextActionStunned(true);
                 break;
@@ -188,6 +191,9 @@ public final class StatusEffectController {
                 break;
             case POISONED:
                 enemy.applyDoTDamage(effect.magnitude * effect.stacks);
+                break;
+            case BLEED:
+                enemy.applyDoTDamage(effect.magnitude);
                 break;
             case STUNNED:
                 enemy.skipNextAction = true;
@@ -217,6 +223,7 @@ public final class StatusEffectController {
     private static StackMode stackModeFor(StatusType type) {
         switch (type) {
             case POISONED:   return StackMode.STACK_MAGNITUDE;
+            case BLEED:
             case BURNING:
             case EMPOWERED:  return StackMode.REFRESH_DURATION;
             case STUNNED:

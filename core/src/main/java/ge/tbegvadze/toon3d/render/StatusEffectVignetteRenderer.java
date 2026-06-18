@@ -17,6 +17,7 @@ import ge.tbegvadze.toon3d.util.EffectConstants;
  *
  *   BURNING   → orange (1.0, 0.45, 0.0)   gentle flicker tint on fire edges
  *   POISONED  → green  (0.0, 0.80, 0.15)  intensity scales with stack count
+ *   BLEED     → crimson(0.85,0.05, 0.10)  deep red edge pulse, distinct from BURNING
  *   STUNNED   → white  (1.0, 1.0,  1.0)   brief flash (handled via event text)
  *   BLINDED   → black  (0.0, 0.0,  0.0)   heavy tunnel-vision overlay
  *   SLOWED    → blue   (0.25,0.40, 0.70)  cold sluggish edge tint
@@ -34,10 +35,11 @@ public final class StatusEffectVignetteRenderer implements Disposable {
     private static final int TYPE_COUNT = STATUS_TYPES.length;
 
     // Per-effect RGB color values (matched to StatusType ordinals)
-    private static final float[] EFFECT_RED   = { 1.00f, 0.00f, 1.00f, 0.00f, 0.25f, 0.85f };
-    private static final float[] EFFECT_GREEN = { 0.45f, 0.80f, 1.00f, 0.00f, 0.40f, 0.10f };
-    private static final float[] EFFECT_BLUE  = { 0.00f, 0.15f, 1.00f, 0.00f, 0.70f, 0.00f };
-    // BURNING=0 POISONED=1 STUNNED=2 BLINDED=3 SLOWED=4 EMPOWERED=5
+    // BURNING=0 POISONED=1 BLEED=2 STUNNED=3 BLINDED=4 SLOWED=5 EMPOWERED=6
+    // BLEED uses deep crimson screen-edge tint distinct from BURNING orange.
+    private static final float[] EFFECT_RED   = { 1.00f, 0.00f, 0.85f, 1.00f, 0.00f, 0.25f, 0.85f };
+    private static final float[] EFFECT_GREEN = { 0.45f, 0.80f, 0.05f, 1.00f, 0.00f, 0.40f, 0.10f };
+    private static final float[] EFFECT_BLUE  = { 0.00f, 0.15f, 0.10f, 1.00f, 0.00f, 0.70f, 0.00f };
 
     private final SpriteBatch batch;
     private final Texture     vignetteTexture;

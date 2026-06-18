@@ -5,6 +5,8 @@ import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.progression.KillXpListener;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
+import ge.tbegvadze.toon3d.status.StatusEffectController;
+import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
@@ -21,7 +23,9 @@ import java.util.Random;
  * Abilities handled here:
  *   CRITICAL_STRIKE    (ON_HIT)    — rolls a crit and deals bonus damage.
  *   EXECUTIONER        (ON_HIT)    — bonus damage when target is below EXECUTIONER_THRESHOLD HP%.
- *   STAGGER_ROUNDS     (ON_HIT)    — rolls a chance to set enemy.skipNextAction = true.
+ *   STAGGER_ROUNDS     (ON_HIT)    — applies STUNNED via StatusEffectController on proc.
+ *   REND               (ON_HIT)    — applies BLEED DoT; refreshes duration on repeat hits.
+ *   INCENDIARY         (ON_HIT)    — applies BURNING DoT; refreshes if already burning.
  *   KINETIC_SLAM       (ON_HIT)    — melee: chance to knock enemy back; wall bonus damage on block.
  *   CLEAVE             (ON_HIT)    — melee: deals fraction of damage to both flanking tiles.
  *   BURST_FIRE         (ON_FIRE)   — signals Weapon to fire extra shots via pendingBurstExtra.
@@ -67,6 +71,13 @@ public final class AbilityResolver {
     private Inventory playerInventory = null;
 
     /**
+     * Injected by World so STAGGER_ROUNDS, REND, and INCENDIARY abilities can apply
+     * status effects through the shared controller.  Null until World calls
+     * setStatusEffectController().
+     */
+    private StatusEffectController statusEffectController = null;
+
+    /**
      * Re-entrancy guard for CLEAVE: prevents the recursive onHit() calls for flanking
      * targets from re-triggering another Cleave sweep (infinite recursion prevention).
      */
@@ -95,6 +106,15 @@ public final class AbilityResolver {
      */
     public void setPlayerInventory(Inventory inventory) {
         this.playerInventory = inventory;
+    }
+
+    /**
+     * Injects the status effect controller so STAGGER_ROUNDS, REND, and INCENDIARY
+     * can apply STUNNED, BLEED, and BURNING through the shared lifecycle manager.
+     * Called once by World after both the controller and resolver are constructed.
+     */
+    public void setStatusEffectController(StatusEffectController controller) {
+        this.statusEffectController = controller;
     }
 
     // ── Entry points called from Weapon.fire() / Weapon.onTick() ─────────────
@@ -158,7 +178,7 @@ public final class AbilityResolver {
      * damage has already been applied via {@code EnemyManager.applyDamageTo()}.
      *
      * Evaluates ON_HIT abilities in order: CRITICAL_STRIKE → EXECUTIONER →
-     * STAGGER_ROUNDS → LIFESTEAL → KINETIC_SLAM → CLEAVE.
+     * STAGGER_ROUNDS → LIFESTEAL → KINETIC_SLAM → CLEAVE → REND → INCENDIARY.
      * Returns true if a critical hit was rolled.
      *
      * @param weapon           the weapon that fired the shot
@@ -205,10 +225,12 @@ public final class AbilityResolver {
         }
 
         // ── STAGGER_ROUNDS ─────────────────────────────────────────────────
-        if (weapon.hasAbility(WeaponAbility.STAGGER_ROUNDS) && hitEnemy.isAlive()) {
+        if (weapon.hasAbility(WeaponAbility.STAGGER_ROUNDS) && hitEnemy.isAlive()
+                && statusEffectController != null) {
             float staggerChance = weapon.abilityMagnitude(WeaponAbility.STAGGER_ROUNDS);
             if (abilityRandom.nextFloat() <= staggerChance) {
-                hitEnemy.skipNextAction = true;
+                statusEffectController.apply(hitEnemy, StatusType.STUNNED,
+                        GameBalance.STAGGER_STUN_DURATION, 0, null);
                 if (eventTextSystem != null) {
                     eventTextSystem.spawnWithColor("STAGGER!", EventTextSystem.COLOR_WHITE);
                 }
@@ -281,6 +303,28 @@ public final class AbilityResolver {
             }
             if (cleaved && eventTextSystem != null) {
                 eventTextSystem.spawnWithColor("CLEAVE!", EventTextSystem.COLOR_WHITE);
+            }
+        }
+
+        // ── REND (BLEED DoT) ───────────────────────────────────────────────
+        if (weapon.hasAbility(WeaponAbility.REND) && hitEnemy.isAlive()
+                && statusEffectController != null) {
+            int bleedDamage = Math.max(1, Math.round(weapon.abilityMagnitude(WeaponAbility.REND)));
+            statusEffectController.apply(hitEnemy, StatusType.BLEED,
+                    GameBalance.REND_DURATION_TURNS, bleedDamage, null);
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("BLEED!", EventTextSystem.COLOR_RED);
+            }
+        }
+
+        // ── INCENDIARY (BURN DoT) ──────────────────────────────────────────
+        if (weapon.hasAbility(WeaponAbility.INCENDIARY) && hitEnemy.isAlive()
+                && statusEffectController != null) {
+            int burnDamage = Math.max(1, Math.round(weapon.abilityMagnitude(WeaponAbility.INCENDIARY)));
+            statusEffectController.apply(hitEnemy, StatusType.BURNING,
+                    GameBalance.INCENDIARY_BURN_DURATION, burnDamage, null);
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("BURN!", EventTextSystem.COLOR_RED);
             }
         }
 

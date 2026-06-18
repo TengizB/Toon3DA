@@ -166,6 +166,7 @@ public final class EnemyManager implements EnemyHitTarget {
      *   ACID_DRONE   — poison-immune (mechanical; impervious to biological agents)
      *   SHELL_BRUTE  — stun duration halved (heavy armoured frame resists concussive effects)
      *   EYE_TYRANT   — half fire damage (demon-origin; partially acclimated to heat)
+     *   OVERSEER / CORRUPTOR / HELL_BARON — bosses are stun-immune; too powerful to chain-lock
      */
     private static StatusResistance buildArchetypeResistance(EnemyType type) {
         switch (type) {
@@ -189,6 +190,12 @@ public final class EnemyManager implements EnemyHitTarget {
             case EYE_TYRANT:
                 return StatusResistance.builder()
                         .damageMultiplier(StatusType.BURNING, 0.5f)
+                        .build();
+            case OVERSEER:
+            case CORRUPTOR:
+            case HELL_BARON:
+                return StatusResistance.builder()
+                        .immune(StatusType.STUNNED)
                         .build();
             default:
                 return StatusResistance.defaultResistance();
