@@ -1,0 +1,215 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Inventory Menu Redesign — Part 1: Layout & Architecture
+---
+
+OVERVIEW
+========
+Complete rework of InventoryOverlayRenderer into a layered window system.
+The old single-panel modal is replaced with a structured two-panel inventory
+screen plus a stack of dismissible popup windows on top.
+
+This document covers: screen layout, panel geometry, window system rules,
+class responsibilities, and render order. Parts 2–6 spec each sub-component.
+
+
+SCREEN LAYOUT (world coordinates 1280×720)
+==========================================
+
+  ┌──────────────────────────── HEADER BAR ──────────────────────────────┐  y=650–720
+  │  INVENTORY                                              [EXIT ×]     │
+  ├──────────────────────────────────────────────────────────────────────┤
+  │                                                                      │
+  │   LEFT PANEL                   RIGHT PANEL                          │
+  │   Weapon Slots                 Item Grid                            │
+  │   x=20–520                     x=540–1260                           │
+  │   (500px wide)                 (720px wide)                         │
+  │   y=110–645                    y=110–645                            │
+  │   (535px tall)                 (535px tall)                         │
+  │                                                                      │
+  ├──────────────────────────────────────────────────────────────────────┤  y=0–110
+  │  FOOTER (optional status line — dim text, no action buttons)        │
+  └──────────────────────────────────────────────────────────────────────┘
+
+Key dimensions:
+  HEADER_HEIGHT           = 70f
+  PANEL_Y_BOTTOM          = 110f
+  PANEL_Y_TOP             = 645f
+  PANEL_HEIGHT            = 535f
+  LEFT_PANEL_X            = 20f
+  LEFT_PANEL_WIDTH        = 500f
+  RIGHT_PANEL_X           = 540f
+  RIGHT_PANEL_WIDTH       = 720f
+  PANEL_GAP               = 20f    (x=520–540)
+  PANEL_PADDING           = 15f    (inner padding on all sides)
+
+
+WINDOW SYSTEM
+=============
+The inventory renders in a strict layer stack, bottom to top:
+
+  Layer 0 — Scrim
+    Full-screen black rect, 60% alpha, blocks 3D view.
+
+  Layer 1 — Base Inventory Screen
+    Header bar + left weapon panel + right item grid panel.
+    Always visible when inventory is open.
+
+  Layer 2 — ItemWindow (optional)
+    Popup shown when a weapon slot or item slot is tapped.
+    Covers the center of the screen (centered at 640,380).
+    Behind this layer: base inventory is still visible but dimmed to 40%.
+    See Part 4.
+
+  Layer 3 — AbilityWindow (optional)
+    Popup shown when an ability row in ItemWindow is tapped.
+    Overlays ItemWindow (ItemWindow dims to 50% but stays open).
+    See Part 5.
+
+Rules:
+  - Only one ItemWindow can be open at a time.
+  - Only one AbilityWindow can be open at a time.
+  - Opening a new ItemWindow closes any existing ItemWindow + AbilityWindow.
+  - AbilityWindow cannot exist without an open ItemWindow.
+  - The EXIT button in any window closes that window and all above it.
+  - The base screen EXIT button closes the entire inventory.
+  - Tapping the scrim area outside an open window closes that window.
+
+
+VISUAL STYLE — UAC MILITARY CRT
+================================
+Continue the existing amber-on-steel palette:
+
+  SCRIM_ALPHA             = 0.60f          (black 60%)
+  PANEL_BACKGROUND        = (0.071, 0.071, 0.086, 0.95)  steel dark
+  PANEL_BORDER_COLOR      = (0.22, 0.22, 0.30, 1.0)      steel blue-gray
+  PANEL_BORDER_THICKNESS  = 2f
+  HEADER_COLOR            = (0.06, 0.06, 0.08, 1.0)      slightly lighter
+  HEADER_ACCENT_COLOR     = (1.0, 0.72, 0.0, 1.0)        amber
+  TEXT_PRIMARY            = (1.0, 0.75, 0.1, 1.0)        amber
+  TEXT_SECONDARY          = (0.50, 0.50, 0.55, 1.0)      dim steel
+  TEXT_DISABLED           = (0.30, 0.30, 0.32, 1.0)      very dim
+  SLOT_BG_NORMAL          = (0.10, 0.10, 0.12, 1.0)
+  SLOT_BG_SELECTED        = (0.14, 0.14, 0.18, 1.0)
+  SLOT_BORDER_SELECTED    = (1.0, 0.72, 0.0, 1.0)        pulsing amber
+  SLOT_BORDER_DISABLED    = (0.20, 0.20, 0.22, 1.0)
+  EXIT_BUTTON_COLOR       = (0.70, 0.20, 0.15, 1.0)      blood red
+  EXIT_BUTTON_TEXT        = (1.0, 0.85, 0.85, 1.0)       pale red text
+
+  WINDOW_OVERLAY_DIM      = 0.40f          layer 1 dims when layer 2 open
+  WINDOW_SUBDIM           = 0.50f          layer 2 dims when layer 3 open
+
+
+CONSTANTS FILE
+==============
+Add a new constants section to ItemConstants.java (or create InventoryUIConstants.java):
+
+  // Screen structure
+  INV_HEADER_HEIGHT           = 70f
+  INV_PANEL_Y_BOTTOM          = 110f
+  INV_PANEL_Y_TOP             = 645f
+  INV_PANEL_HEIGHT            = 535f
+  INV_LEFT_PANEL_X            = 20f
+  INV_LEFT_PANEL_WIDTH        = 500f
+  INV_RIGHT_PANEL_X           = 540f
+  INV_RIGHT_PANEL_WIDTH       = 720f
+  INV_PANEL_GAP               = 20f
+  INV_PANEL_PADDING           = 15f
+
+  // Header
+  INV_HEADER_TITLE_X          = 40f
+  INV_HEADER_EXIT_BUTTON_SIZE = 50f
+  INV_HEADER_EXIT_MARGIN      = 10f
+
+  // Window system dim factors
+  INV_BASE_DIM_FACTOR         = 0.40f
+  INV_ITEM_WIN_DIM_FACTOR     = 0.50f
+
+  // All slot/grid constants → Part 2 and Part 3
+  // All window size constants → Part 4 and Part 5
+
+
+CLASS STRUCTURE
+===============
+Break InventoryOverlayRenderer into smaller, focused classes:
+
+  InventoryOverlayRenderer (coordinator)
+    Owns layer stack, dispatches touch events, calls sub-renderers in order.
+    Fields:
+      WeaponSlotsPanel  weaponSlotsPanel
+      ItemGridPanel     itemGridPanel
+      ItemWindow        itemWindow        (null when closed)
+      AbilityWindow     abilityWindow     (null when closed)
+      float             animationClock
+
+  WeaponSlotsPanel (new class)
+    Renders the left panel with 4 weapon slot rectangles.
+    See Part 2.
+
+  ItemGridPanel (new class)
+    Renders the right panel with 4×3 item slot squares.
+    See Part 3.
+
+  ItemWindow (new class)
+    Popup for item/weapon detail + action buttons.
+    See Part 4.
+
+  AbilityWindow (new class)
+    Popup for weapon ability detail.
+    See Part 5.
+
+Each class receives the SpriteBatch and ShapeRenderer from the coordinator
+(no per-class batch creation). All classes implement:
+  void render(OrthographicCamera camera, float animationClock)
+  boolean handleTouch(float worldX, float worldY)   → true if consumed
+  void dispose()
+
+
+RENDER ORDER EACH FRAME
+========================
+  1. Draw scrim (ShapeRenderer.Filled, full screen)
+  2. Draw left panel background + border
+  3. Draw right panel background + border
+  4. Draw header bar
+  5. weaponSlotsPanel.render()
+  6. itemGridPanel.render()
+  7. Draw header text + exit button
+  8. If itemWindow != null:
+       a. Dim layer-1 content (multiply alpha by INV_BASE_DIM_FACTOR)
+       b. itemWindow.render()
+  9. If abilityWindow != null:
+       a. Dim itemWindow (multiply alpha by INV_ITEM_WIN_DIM_FACTOR)
+       b. abilityWindow.render()
+
+NOTE: Alpha dimming of lower layers is achieved by drawing a semi-transparent
+black rect over the entire screen (except for the active top window) rather
+than modifying SpriteBatch colors mid-frame.
+
+
+TOUCH ROUTING
+=============
+handleTouch(worldX, worldY) — called by Main/World on touch event:
+  if abilityWindow != null:
+    if abilityWindow.handleTouch(worldX, worldY): return consumed
+    if touched outside abilityWindow rect: close abilityWindow; return consumed
+  if itemWindow != null:
+    if itemWindow.handleTouch(worldX, worldY): return consumed
+    if touched outside itemWindow rect: close itemWindow; return consumed
+  if header exit button hit: close entire inventory; return consumed
+  if weaponSlotsPanel.handleTouch(worldX, worldY): return consumed
+  if itemGridPanel.handleTouch(worldX, worldY): return consumed
+  return not-consumed
+
+
+MIGRATION FROM OLD RENDERER
+============================
+Old InventoryOverlayRenderer (604 lines) is replaced entirely.
+All constants that were inline strings/values are migrated to ItemConstants.java.
+The public API surface stays the same (World.java calls are unchanged):
+  inventoryOverlayRenderer.setInventory(inventory)
+  inventoryOverlayRenderer.setPlayerInventory(playerInventory)
+  inventoryOverlayRenderer.render(camera)
+  inventoryOverlayRenderer.handleTouch(worldX, worldY)
+  inventoryOverlayRenderer.isOpen()
+  inventoryOverlayRenderer.open()
+  inventoryOverlayRenderer.close()

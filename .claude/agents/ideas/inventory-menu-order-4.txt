@@ -1,0 +1,292 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Inventory Menu Redesign — Part 4: ItemWindow (Item Detail Popup)
+---
+
+PREREQUISITE: inventory-menu-order-1.txt (layout & architecture)
+PREREQUISITE: inventory-menu-order-2.txt (weapon slots — trigger source)
+PREREQUISITE: inventory-menu-order-3.txt (item grid — trigger source)
+
+
+OVERVIEW
+========
+ItemWindow is a modal popup that appears when the player taps any filled slot
+(weapon slot or item grid slot). It shows the item's name, detailed description,
+stats, and context-sensitive action buttons. For weapons it also lists abilities
+as tappable rows — tapping one opens AbilityWindow (Part 5).
+
+ItemWindow lives on Layer 2 of the window stack (see Part 1). It has its own
+X exit button. The base inventory screen dims behind it.
+
+
+WINDOW GEOMETRY
+===============
+  Window size:    640×420px
+  Window center:  (640, 370)   — slightly below screen center to keep header visible
+  Window x range: 320f to 960f
+  Window y range: 160f to 580f
+
+  Inner padding:  18px on all sides
+
+Constants:
+  INV_ITEM_WIN_WIDTH           = 640f
+  INV_ITEM_WIN_HEIGHT          = 420f
+  INV_ITEM_WIN_CENTER_X        = 640f
+  INV_ITEM_WIN_CENTER_Y        = 370f
+  INV_ITEM_WIN_X               = 320f    (center - width/2)
+  INV_ITEM_WIN_Y               = 160f    (center - height/2)
+  INV_ITEM_WIN_PADDING         = 18f
+  INV_ITEM_WIN_BORDER_THICK    = 2f
+  INV_ITEM_WIN_BACKGROUND      = (0.07, 0.07, 0.09, 0.97)
+  INV_ITEM_WIN_BORDER_COLOR    = (1.0, 0.72, 0.0, 0.85)   amber
+  INV_ITEM_WIN_HEADER_H        = 52f
+  INV_ITEM_WIN_EXIT_BTN_SIZE   = 40f
+
+
+WINDOW STRUCTURE
+================
+Divided into three horizontal zones:
+
+  ┌──── HEADER (y=540–580) ───────────────────────────────────────┐
+  │  [GLYPH 60×60]  Item Name (large amber)   Category   [× EXIT] │
+  ├──── BODY (y=220–536) ─────────────────────────────────────────┤
+  │  Left column (280px): description text + stat block           │
+  │  Right column (310px): abilities list (weapons) OR extra info  │
+  ├──── FOOTER (y=160–216) ───────────────────────────────────────┤
+  │  [ACTION BUTTON 1]    [ACTION BUTTON 2]    (centered)         │
+  └───────────────────────────────────────────────────────────────┘
+
+All y values are in world coordinates.
+
+HEADER zone (y = 540–580, height 40px internal + 12px from padding):
+  Glyph box:     60×60 px, x=338, y=528 (extends below header into body)
+                 Background: SLOT_BG_NORMAL; glyph drawn large (48px)
+                 Border: item category color, 1px
+  Item name:     x=412, y=565, TEXT_PRIMARY (amber), large font (~20px)
+  Category:      x=412, y=548, TEXT_SECONDARY (dim), small font (~12px)
+                 e.g. "WEAPON · SHOTGUN CLASS" or "CONSUMABLE · MEDKIT"
+  Exit button:   x=910, y=544, 40×40px red button with "×" white text
+                 Background: EXIT_BUTTON_COLOR (0.70, 0.20, 0.15)
+  Amber rule:    1px amber line at y=540 (separates header from body)
+
+BODY zone (y = 220–536, height 316px):
+  Left column:  x=338–618 (width 280px)
+  Divider:      x=622, y=220–536, 1px PANEL_BORDER_COLOR
+  Right column: x=630–942 (width 312px)
+
+FOOTER zone (y=160–216, height 56px):
+  Amber rule:   1px amber line at y=216 (separates footer from body)
+  Buttons:      centered within footer (see ACTION BUTTONS below)
+
+
+BODY — LEFT COLUMN: DESCRIPTION + STATS
+=========================================
+Stacked from top to bottom within left column:
+
+  DESCRIPTION BLOCK (y=500–536)
+    Multi-line text block, max 4 lines, word-wrapped to 260px
+    Font: small (~12px); color: (0.80, 0.80, 0.85)  off-white
+    Content: ItemType-specific description strings (new field needed, see below)
+
+  STAT BLOCK (y varies, immediately below description)
+    A table of key–value pairs, each row 22px tall:
+      Left label: dim amber TEXT_SECONDARY
+      Right value: TEXT_PRIMARY (amber) or colored
+    Separator: 1px dim line between each pair
+
+    For WEAPON items:
+      "Damage"   → weapon base damage value
+      "Range"    → "Short" / "Medium" / "Long" (derived from weapon type)
+      "Ammo"     → ammo type name + reserve count (e.g. "Shells  (24 left)")
+      "Clip"     → "N / M" (current / max)
+      "Fire Mode" → "Semi" / "Full-Auto" / "Burst"
+
+    For CONSUMABLE items:
+      "Heals"    → HP amount (e.g. "+25 HP")
+      "Quantity" → "N in inventory"
+      "Effect"   → secondary effect if any (e.g. "Clears bleeding")
+
+    For AMMO items:
+      "Type"     → ammo type name
+      "Reserve"  → "N / M (current / max)"
+      "Per Box"  → how many rounds per pickup
+
+    For KEY_ITEM items:
+      "Type"     → "ACCESS KEYCARD"
+      "Color"    → keycard color name
+      "Status"   → "Carried" or "Not carried"
+
+    For MISC items:
+      "Value"    → credit amount
+      "Quantity" → N in inventory
+
+  EQUIPPED NOTICE (only for weapons, below stat block):
+    If this weapon is the active weapon: small green line
+      "● CURRENTLY EQUIPPED" in green (0.2, 0.9, 0.3)
+
+DATA NEEDED — ItemType description strings:
+  Add a new field to ItemType enum:
+    String description;
+  Set in each enum entry. Example for SHOTGUN:
+    "A pump-action shotgun. Fires a spread of shells in a tight cone.
+     Devastating at close range, less effective at distance."
+  This requires modifying ItemType.java enum constructor.
+
+
+BODY — RIGHT COLUMN: ABILITIES (WEAPONS) OR EXTRA INFO
+=======================================================
+Content depends on ItemType category:
+
+  WEAPON → ABILITIES LIST
+    Header:  "ABILITIES" label at top of right column
+             Amber, small font; followed by 1px amber line
+    List:    Up to 4 ability rows (most weapons have 1–3)
+    Each ability row (height 62px):
+      Background:  SLOT_BG_NORMAL (0.10, 0.10, 0.12)
+      Border:      PANEL_BORDER_COLOR 1px
+      Hover state: SLOT_BG_SELECTED (slightly brighter) when finger held
+      Ability name: amber text, top of row
+      Type badge:  "PASSIVE" (dim green) or "ACTIVE" (dim amber), small pill
+      Short hint:  1-line summary, dim off-white, small font
+      Arrow:       "›" right-aligned at end of row (indicates tappable)
+      Gap between rows: 8px
+    If no abilities defined: dim text "No special abilities."
+    See Part 5 for ability data model.
+
+  CONSUMABLE → USAGE GUIDANCE
+    Heading: "HOW TO USE"
+    Text block: explanation of when to use (e.g. "Use when HP drops below 40.
+    Stimpacks restore HP faster in combat. Medkits heal more but take longer.")
+    Below that: "QUANTITY IN BAG" label + large number centered
+
+  AMMO → AMMO TYPE INFO
+    Icon/glyph for the ammo type (large)
+    Compatible weapons list: "Used by: Shotgun, Double-Barrel"
+    Reserve bar: visual bar showing current / max
+
+  KEY_ITEM → DOOR INFO
+    "Opens doors marked with this keycard color."
+    Visual: colored rectangle matching keycard tier
+    "Persistent: keycards stay through level transitions."
+
+  MISC → FLAVOR TEXT
+    Credits flavor text: "UAC standard currency, accepted at terminals."
+    Or any category-appropriate lore text.
+
+
+ACTION BUTTONS (FOOTER)
+========================
+Two buttons, centered horizontally in footer zone, with 20px gap between.
+Button size: 180×38px each.
+Button y: 170f (centered in 56px footer)
+Button 1 left edge: 640 - 180 - 10 = 450f
+Button 2 left edge: 640 + 10 = 650f
+
+  WEAPON slot:
+    Button 1: "EQUIP" (or "UNEQUIP" if already active)
+              Action: sets weapon as loadout active slot (no turn cost)
+    Button 2: "DROP"
+              Action: drops weapon to ground at player position (1 turn cost)
+              Disabled if weapon is the ONLY weapon in loadout
+
+  CONSUMABLE item:
+    Button 1: "USE"
+              Action: consume item, heal/apply effect (1 turn cost, closes inventory)
+    Button 2: "DROP"
+              Action: drops item to ground
+
+  AMMO item:
+    Button 1: — (disabled, grayed: "Auto-Loaded")
+    Button 2: "DROP"
+              Action: drops stack to ground
+
+  KEY_ITEM:
+    Button 1: — (disabled, grayed: "Quest Item")
+    Button 2: "DROP"
+              Action: disabled, grayed: "Cannot drop"
+
+  MISC (Credits):
+    Button 1: — (disabled, grayed: "No Use")
+    Button 2: "DROP"
+              Action: drops credits to ground
+
+Button visual states:
+  ENABLED:
+    Background: SLOT_BG_NORMAL
+    Border: TEXT_SECONDARY 1px
+    Text: TEXT_PRIMARY (amber)
+  DISABLED:
+    Background: (0.07, 0.07, 0.09)
+    Border: TEXT_DISABLED 1px
+    Text: TEXT_DISABLED
+  PRESSED:
+    Background: amber (1.0, 0.72, 0.0, 0.25)
+    Border: amber 1px
+    Text: amber brighter (1.0, 0.85, 0.3)
+
+Constants:
+  INV_ACTION_BTN_WIDTH         = 180f
+  INV_ACTION_BTN_HEIGHT        = 38f
+  INV_ACTION_BTN_GAP           = 20f
+  INV_ACTION_BTN_Y             = 170f
+  INV_ACTION_BTN_1_X           = 450f
+  INV_ACTION_BTN_2_X           = 650f
+
+
+FIELDS IN ItemWindow
+=====================
+  ItemType     displayedItemType
+  int          inventorySlotIndex    (-1 if this is a weapon slot)
+  int          weaponLoadoutSlotIndex (-1 if this is an inventory item)
+  boolean      isWeaponSlot
+  float        animationClock
+  int          hoveredAbilityIndex    (-1 = no hover)
+
+  // Sub-window callback
+  AbilityWindowCallback abilityWindowCallback   (set by coordinator)
+
+interface AbilityWindowCallback:
+  void onAbilitySelected(WeaponAbility ability)
+
+
+TOUCH DETECTION IN ItemWindow
+===============================
+handleTouch(worldX, worldY):
+  if hit exit button: coordinator.closeItemWindow(); return consumed
+  if hit action button 1 (enabled): execute action 1; return consumed
+  if hit action button 2 (enabled): execute action 2; return consumed
+  if isWeaponSlot and abilities list rendered:
+    for each ability row rect:
+      if point in row: abilityWindowCallback.onAbilitySelected(ability); return consumed
+  return consumed (always consume touch inside window bounds)
+
+
+RENDER PASSES
+=============
+Pass A (ShapeRenderer.Filled):
+  - Full window background rect
+  - Header background (slightly different shade)
+  - Glyph box background
+  - Each ability row background (filled)
+  - Each action button background (state-appropriate)
+  - Stat row alternating shading (every other row: 0.105, 0.105, 0.13)
+
+Pass B (ShapeRenderer.Line):
+  - Window outer border (amber, 2px)
+  - Header bottom rule (amber, 1px)
+  - Footer top rule (amber, 1px)
+  - Glyph box border (category color, 1px)
+  - Left/right column divider (dim, 1px)
+  - Each ability row border (dim, 1px; hover: brighter)
+  - Each action button border (state-appropriate, 1px)
+
+Pass C (SpriteBatch + BitmapFont):
+  - Glyph character (large, 48px, ItemType color)
+  - Item name text (large)
+  - Category text (small, dim)
+  - Exit button "×" (white on red)
+  - Description text block (multi-line, off-white small)
+  - Stat rows: labels + values
+  - Equipped notice (green, if applicable)
+  - Abilities header + ability rows (name, badge, hint, arrow)
+  - Action button labels

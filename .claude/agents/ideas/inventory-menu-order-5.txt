@@ -1,0 +1,280 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Inventory Menu Redesign — Part 5: AbilityWindow + Weapon Abilities Data Model
+---
+
+PREREQUISITE: inventory-menu-order-4.txt (ItemWindow — trigger source)
+
+
+OVERVIEW
+========
+AbilityWindow is a sub-popup that opens when the player taps an ability row
+in the ItemWindow (Part 4). It displays a full detailed description of the
+ability: what it does, when it triggers, any numeric values, and passive/active
+distinction. This is Layer 3 in the window stack.
+
+This part ALSO covers the weapon ability data model that must be created before
+both ItemWindow and AbilityWindow can be implemented.
+
+
+PART A — WEAPON ABILITY DATA MODEL
+====================================
+
+New class: WeaponAbility (enum)
+File: core/src/main/java/ge/tbegvadze/toon3d/entity/WeaponAbility.java
+Package: ge.tbegvadze.toon3d.entity
+
+Each enum constant represents one named ability that a weapon can have.
+Fields per constant:
+  String abilityName       — display name (title case, max 24 chars)
+  String typeLabel         — "PASSIVE" or "ACTIVE"
+  String shortHint         — 1-line summary shown in ability row (max 48 chars)
+  String fullDescription   — 2–4 sentence full description shown in AbilityWindow
+
+Proposed ability definitions (expand as weapons are designed):
+
+  PUMP_ACTION
+    name: "Pump Action"
+    type: PASSIVE
+    hint: "Chambers next shell after every shot."
+    full: "After each shot the pump mechanism cycles automatically, loading
+           the next shell from the magazine into the chamber. This ensures
+           reliable firing but introduces a brief delay between shots.
+           In tight corridors, this pacing encourages careful positioning."
+
+  SPREAD_SHOT
+    name: "Spread Shot"
+    type: PASSIVE
+    hint: "Fires multiple pellets in a cone pattern."
+    full: "Each trigger pull releases a spread of pellets across a cone.
+           All pellets share the same line-of-fire check but resolve
+           damage independently. Close range is far more effective —
+           at long range most pellets miss. Ideal for crowded corridors."
+
+  DOUBLE_TRIGGER
+    name: "Double Trigger"
+    type: ACTIVE
+    hint: "Fire both barrels simultaneously for massive burst."
+    full: "Expend both loaded barrels in a single devastating blast.
+           Deals approximately double the standard shot damage, but
+           consumes two shells and leaves the weapon empty.
+           Best saved for high-priority targets or emergency situations."
+
+  PLASMA_BURN
+    name: "Plasma Burn"
+    type: PASSIVE
+    hint: "Plasma shots leave a burning residue on impact."
+    full: "Each plasma bolt that strikes an enemy applies a burning
+           status effect, dealing additional damage over the following
+           two turns. Burning damage stacks from multiple hits.
+           Effective against enemies with high melee resistance."
+
+  RAPID_FIRE
+    name: "Rapid Fire"
+    type: PASSIVE
+    hint: "Fires multiple rounds per attack action."
+    full: "The chaingun's spinning barrels reach speed before firing,
+           then deliver a multi-round burst per attack. Each round
+           is resolved individually for hit and damage. High ammo
+           consumption; pair with ample bullet reserves."
+
+  RAILGUN_PENETRATE
+    name: "Penetrating Shot"
+    type: PASSIVE
+    hint: "Rail slug passes through multiple enemies in a line."
+    full: "The electromagnetic slug fired by the railgun punches through
+           all enemies aligned on the same cardinal axis as the player.
+           Every enemy on the line-of-fire is struck in a single action.
+           Damage does not diminish per target. Devastating in corridors."
+
+  INCENDIARY_SPLASH
+    name: "Incendiary Splash"
+    type: PASSIVE
+    hint: "Burning gel spreads fire to adjacent tiles on impact."
+    full: "On contact with any surface or enemy the incinerator gel
+           ignites and spreads to immediately adjacent floor tiles.
+           Tiles remain burning for two turns, damaging any enemy
+           that steps on or through them."
+
+  GRENADE_ARC
+    name: "Grenade Arc"
+    type: PASSIVE
+    hint: "Grenade bounces off walls before detonating."
+    full: "The launched grenade follows a tile-step trajectory, bouncing
+           off solid walls up to two times before arming and detonating.
+           Explosion radius is 1-tile cardinal blast. Does not harm player.
+           Useful for clearing enemies around corners."
+
+  FIST_FURY
+    name: "Fury"
+    type: ACTIVE
+    hint: "Powered punch deals bonus damage at low HP."
+    full: "When the player's HP is below 25%, unarmed strikes deal
+           additional damage proportional to missing HP. The bonus is
+           calculated once per swing. Pairs well with a high-risk,
+           aggressive play style."
+
+  KNIFE_BLEED
+    name: "Bleed"
+    type: PASSIVE
+    hint: "Slash attacks cause bleeding for 2 turns."
+    full: "Knife strikes apply a bleeding effect on hit. The target
+           loses a small amount of HP at the start of each of the
+           next two enemy turns. Multiple bleeds do not stack but
+           the duration resets on a new hit."
+
+  HAMMER_STUN
+    name: "Concuss"
+    type: PASSIVE
+    hint: "Heavy blows have a chance to stun for 1 turn."
+    full: "Each hammer strike has a 40% chance to stun the target for
+           one turn. A stunned enemy skips its next action (no movement,
+           no attack). Stun cannot be applied to the same target
+           on consecutive turns."
+
+  CHAINSAW_REND
+    name: "Rend"
+    type: PASSIVE
+    hint: "Rending attack reduces enemy armor by 1 tier."
+    full: "Chainsaw attacks bypass a portion of enemy armour on each
+           hit, applying a stacking armour reduction. The reduction
+           persists for the duration of combat and resets when the
+           enemy fully recovers between runs."
+
+Weapon → Abilities mapping (add to ItemType.java as new field):
+  WeaponAbility[] abilities;
+
+Example:
+  SHOTGUN(      ..., new WeaponAbility[]{PUMP_ACTION, SPREAD_SHOT}  )
+  DOUBLE_BARREL(..., new WeaponAbility[]{DOUBLE_TRIGGER, SPREAD_SHOT})
+  PLASMA(       ..., new WeaponAbility[]{PLASMA_BURN}               )
+  CHAINGUN(     ..., new WeaponAbility[]{RAPID_FIRE}                )
+  RAILGUN(      ..., new WeaponAbility[]{RAILGUN_PENETRATE}         )
+  INCINERATOR(  ..., new WeaponAbility[]{INCENDIARY_SPLASH}         )
+  GRENADE(      ..., new WeaponAbility[]{GRENADE_ARC}               )
+  FIST(         ..., new WeaponAbility[]{FIST_FURY}                 )
+  KNIFE(        ..., new WeaponAbility[]{KNIFE_BLEED}               )
+  HAMMER(       ..., new WeaponAbility[]{HAMMER_STUN}               )
+  CHAINSAW(     ..., new WeaponAbility[]{CHAINSAW_REND}             )
+  PISTOL(       ..., new WeaponAbility[]{}                          )   // no specials
+
+For non-weapon ItemTypes: abilities = empty array (WeaponAbility[0])
+Use a shared constant: ItemType.NO_ABILITIES = new WeaponAbility[0]
+(allocated once as a static final, reused by all non-weapon types — zero alloc)
+
+
+PART B — ABILITY WINDOW
+========================
+
+WINDOW GEOMETRY
+  Size:           520×300px
+  Center:         same as ItemWindow center (640, 370) but offset
+                  to avoid full occlusion: shift right+up by 30px
+  Window x:       370f  (640 - 260 + 30 = 370?)
+                  → Actually: 640 - 260 = 380f (center left) ... let's use:
+  Window x range: 370f to 890f  (520px wide)
+  Window y range: 230f to 530f  (300px tall)
+  Inner padding:  16px
+
+Constants:
+  INV_ABILITY_WIN_WIDTH          = 520f
+  INV_ABILITY_WIN_HEIGHT         = 300f
+  INV_ABILITY_WIN_X              = 370f
+  INV_ABILITY_WIN_Y              = 230f
+  INV_ABILITY_WIN_PADDING        = 16f
+  INV_ABILITY_WIN_BORDER_THICK   = 2f
+  INV_ABILITY_WIN_BORDER_COLOR   = (0.60, 0.72, 1.0, 0.85)   blue-white accent
+                                   (different from ItemWindow amber — visual distinction)
+  INV_ABILITY_WIN_BACKGROUND     = (0.06, 0.07, 0.10, 0.98)  slightly bluer dark
+
+
+WINDOW STRUCTURE
+  ┌──── HEADER (y=508–530) ────────────────────────────────────────┐
+  │  Ability Name (amber, medium font)          [PASSIVE/ACTIVE]  [×] │
+  ├──── BODY (y=246–504) ──────────────────────────────────────────┤
+  │  Full description text (word-wrapped, off-white, small font)    │
+  │                                                                  │
+  │  ─────────────────── divider ────────────────────               │
+  │  "AFFECTS:" label + effect summary bullets                      │
+  └──────────────────────────────────────────────────────────────────┘
+  No footer / no action buttons (this window is read-only)
+
+
+HEADER ZONE (y=508–530, height 22px + 8px padding):
+  Ability name:   x=386, y=518, TEXT_PRIMARY (amber), medium font
+  Type badge:     pill shape, 58×18px, positioned to right of name
+    PASSIVE badge: fill=(0.1, 0.3, 0.1, 0.85), text="PASSIVE" green (0.2, 0.9, 0.3)
+    ACTIVE badge:  fill=(0.3, 0.2, 0.05, 0.85), text="ACTIVE"  amber (1.0, 0.72, 0.0)
+  Exit button:    x=854, y=514, 28×28px, EXIT_BUTTON_COLOR, "×" white small font
+  Bottom rule:    1px blue-white line at y=508
+
+
+BODY ZONE (y=246–504, height 258px):
+  Padding: 16px all sides
+  Usable: x=386–874, y=262–498
+
+  Full description text:
+    Word-wrapped to 472px width
+    Font: small (~12px); color: (0.82, 0.82, 0.87)  off-white
+    Up to 6 lines (small font); if more, the last line truncates with "…"
+
+  Divider (if there's an AFFECTS block):
+    1px dim line at y=290 (adjustable based on text height)
+    Left label "AFFECTS:" at x=386, y=280, dim amber TEXT_SECONDARY
+
+  AFFECTS block (optional, below divider):
+    Short bullet list of what the ability affects:
+    • Each bullet: "● <effect>" in off-white
+    • E.g. for SPREAD_SHOT: "● Damage per hit", "● Effective range"
+    • For PLASMA_BURN: "● Applies burning status", "● Lasts 2 turns"
+    These are stored as a String[] affectsLines field on WeaponAbility (2–3 items max)
+
+  Add affectsLines field to WeaponAbility enum:
+    String[] affectsLines;
+  Example for SPREAD_SHOT:
+    affectsLines = new String[]{"Damage per pellet hit", "Effective range (short)"}
+
+  NOTE: No action buttons. Window is informational only. Exit button closes it.
+
+
+FIELDS IN AbilityWindow
+========================
+  WeaponAbility  displayedAbility
+  float          animationClock   (for any subtle pulse effects)
+
+
+TOUCH DETECTION IN AbilityWindow
+==================================
+handleTouch(worldX, worldY):
+  if hit exit button: coordinator.closeAbilityWindow(); return consumed
+  return consumed   (all touches inside AbilityWindow are consumed silently)
+
+
+RENDER PASSES
+=============
+Pass A (ShapeRenderer.Filled):
+  - Window background rect (slightly bluer dark)
+  - Header background (same as window bg, no contrast needed — header rule divides)
+  - Type badge pill fill
+  - Exit button background
+
+Pass B (ShapeRenderer.Line):
+  - Window outer border (blue-white accent, 2px)
+  - Header bottom rule (blue-white, 1px)
+  - Divider line (if AFFECTS block present, dim, 1px)
+
+Pass C (SpriteBatch + BitmapFont):
+  - Ability name text (amber, medium)
+  - Type badge text (PASSIVE/ACTIVE, small)
+  - Exit button "×" (white on red)
+  - Full description text (word-wrapped, off-white, small)
+  - "AFFECTS:" label (dim amber, small)
+  - Bullet lines (off-white, small)
+
+
+WINDOW DISTINCTION FROM ITEMWINDOW
+=====================================
+AbilityWindow intentionally uses a different accent color (blue-white vs amber)
+and a slightly bluer background tint so the player intuitively knows they have
+drilled into a deeper level of information. The AbilityWindow's visual language
+reads "technical data" rather than "item card."

@@ -1,0 +1,159 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Inventory Menu Redesign — Part 6: HUD Right Panel Removal
+---
+
+OVERVIEW
+========
+The right HUD panel (x=860–1280, y=0–130 roughly) currently shows:
+  - Active weapon name + tier badge
+  - Weapon ability glyphs (single-char row)
+  - Ammo count (large digits)
+
+Per the design directive, this panel is removed entirely. All weapon
+information moves to the inventory menu (Parts 2–5). The left HUD panel
+(HP/AR/CL/XP bars) is unchanged. The center gap (420–860) is unchanged.
+After removal, the bottom-right screen quadrant shows the 3D world view
+unobstructed.
+
+
+WHAT CURRENTLY RENDERS IN THE RIGHT PANEL
+==========================================
+From HudRenderer.java analysis:
+
+  Right panel background rect:
+    x=860, y=0, w=420, h=HUD_HEIGHT (130f)
+    Background: same steel dark as left panel
+
+  Large ammo digits:
+    Current ammo in clip (e.g. "4") — very large font (~72px)
+    Max ammo (e.g. "/ 8") — medium font, right-aligned beneath
+    x≈870–930, vertically centered in panel
+
+  Weapon name:
+    Active weapon display name — medium font, amber
+    x≈870, y≈95
+
+  Weapon tier / level badge:
+    "Lv N" badge or tier color underline
+    x≈870, y≈78
+
+  Ability glyph strip:
+    Row of single-char glyphs for each equipped ability
+    x≈870, y≈55
+
+  Tier underline:
+    Colored horizontal bar (tier-matched) across panel bottom
+
+  Right panel border line:
+    Left edge of right panel (x=860) — vertical 1px dim line
+
+
+ALL CHANGES REQUIRED
+====================
+
+1. HudConstants.java
+   ─────────────────
+   REMOVE the following constants:
+     HUD_RIGHT_PANEL_WIDTH          = 420f
+     HUD_RIGHT_PANEL_X              = 860f     (= WORLD_WIDTH - HUD_RIGHT_PANEL_WIDTH)
+     (Any ammo display X/Y constants)
+     (Any weapon name X/Y constants)
+     (Any tier badge X/Y constants)
+     (Any ability glyph X/Y constants)
+     (Any tier underline constants)
+
+   NOTE: Do NOT remove:
+     HUD_LEFT_PANEL_WIDTH           = 420f    (unchanged)
+     HUD_HEIGHT                     = 130f    (unchanged)
+     All left panel bar constants              (unchanged)
+
+   If any constant is shared between panels (unlikely), evaluate before removal.
+
+2. HudRenderer.java
+   ─────────────────
+   REMOVE all rendering passes for right panel content:
+     a. Pass A (Filled): right panel background rect, ammo digit backgrounds,
+        tier underline fill, ability glyph badge backgrounds
+     b. Pass B (Line): right panel left-edge border line, tier underline line
+     c. Pass C (Text): ammo large digits, weapon name text, tier badge text,
+        ability glyph characters, weapon level badge
+
+   REMOVE fields related to right panel animation/state:
+     (Any animation lerp state for right-panel-specific content)
+
+   KEEP all left panel rendering passes unchanged.
+   KEEP center-gap ground-weapon label (if present — it renders in x=420–860 gap).
+
+3. HudState.java (if it exists separately from World/HudRenderer)
+   ─────────────────
+   REMOVE fields that fed right panel and are no longer needed:
+     - Active weapon tier (if only used for right panel color)
+     - Ability glyph list (if only used for right panel)
+   KEEP fields still needed by left panel:
+     - currentHealth, maxHealth
+     - currentArmor, maxArmor
+     - currentClip, maxClip
+     - currentXP, xpForNextLevel
+     - playerLevel
+     - status effects list
+     - meleeSelected flag
+     - Any field referenced by left panel logic
+
+4. World.java
+   ─────────────────
+   REMOVE any call sites that set right-panel HUD state:
+     hudState.setWeaponName(...)
+     hudState.setWeaponTier(...)
+     hudState.setAbilityGlyphs(...)
+     (etc.)
+   KEEP all calls that set left-panel HUD state.
+
+
+VISUAL RESULT AFTER REMOVAL
+============================
+Bottom of screen:
+
+  x=0──────────────420  420─────────────860  860──────────────1280
+  [  LEFT PANEL         ]  [  clear gap  ]  [  3D WORLD SHOWS  ]
+  [  HP ████████░░░░    ]  [             ]  [  through here     ]
+  [  AR ███████░░░░░    ]  [  weapon     ]  [  (no HUD element) ]
+  [  CL █████░░░░░░░    ]  [  sprite     ]  [                   ]
+  [  XP ████░░░░░░░░    ]  [             ]  [                   ]
+  └────────────────────   └─────────────   └───────────────────
+
+The right 420px of the HUD row is now transparent — the FloorCeilingRenderer
+backdrop and wall geometry show through.
+
+This increases visible play area and removes redundant info (weapons are
+checked in inventory; ammo is shown in ItemWindow). The player still has
+clip/ammo on the left panel CL bar.
+
+
+MIGRATION NOTE — AMMO COUNT
+============================
+The current CL bar (clip bar) on the left panel already shows current/max
+clip count. That is sufficient HUD feedback during combat.
+
+If the designer later wants a compact ammo indicator (reserve count) on the
+left panel, it can be added as a sub-label below the CL bar — but that is
+NOT part of this task. Keep left panel exactly as-is.
+
+
+IMPLEMENTATION ORDER
+====================
+Recommended sequence to avoid regressions:
+  1. Remove right panel rendering code from HudRenderer.java
+  2. Remove right panel constants from HudConstants.java
+  3. Remove right panel state setters from World.java / HudState.java
+  4. Verify: run the game and confirm left panel still renders correctly,
+     right area is clear, no null pointer exceptions from removed state
+  5. Proceed with inventory redesign (Parts 1–5)
+
+
+RISK ASSESSMENT
+===============
+LOW RISK: The right panel is purely cosmetic. It has no effect on game logic,
+player stats, or turn processing. Removing its rendering code cannot break
+gameplay. The main risk is a missed removal that causes a compilation error
+(unused import, reference to deleted constant) — resolved by a clean build.
