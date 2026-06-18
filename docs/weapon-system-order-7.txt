@@ -1,0 +1,48 @@
+Weapon System Order 7 — Utility & Economy Abilities
+=====================================================
+
+Implemented three ON_KILL economy abilities in AbilityResolver, plus Extended Mag and
+Quick Hands verification (both were already correct in order-2).
+
+FILES CHANGED
+-------------
+util/GameBalance.java
+  — Added SCAVENGER_ROUNDS constants (chance base/per-level/cap, refund base/high-level/threshold).
+  — Added FIELD_MEDIC_ROUNDS constants (chance base/per-level/cap, drop char '+').
+  — Added CREDIT_FANG constants (credits base/per-level/cap).
+
+entity/WeaponProfile.java
+  — Added AmmoType getAmmoType() to the interface contract (was already on Weapon; now formal).
+
+item/Inventory.java
+  — Added addAmmo(AmmoType, int) convenience method (delegates to tryAdd via ammoType.getItemType()).
+
+progression/PlayerStats.java
+  — Added credits field with addCredits(int) / getCredits() for Credit Fang accumulation.
+  — Credits are persistent per run; spendable when shop (order-11) is implemented.
+
+entity/AbilityResolver.java
+  — Added Inventory playerInventory field + setPlayerInventory() setter.
+  — SCAVENGER_ROUNDS (ON_KILL, gun only): chance to refund 1 or 2 ammo to reserve.
+  — FIELD_MEDIC_ROUNDS (ON_KILL, universal): chance to override enemy drop tile with '+' (medkit).
+  — CREDIT_FANG (ON_KILL, universal): awards scaled credits to PlayerStats.addCredits().
+
+entity/Weapon.java
+  — Fixed reload to use getEffectiveClipSize() instead of clipSize so Extended Mag bonus
+    rounds are correctly loaded after a reload (was using base clip size, causing under-fill).
+
+world/World.java
+  — Added abilityResolver.setPlayerInventory(itemInventory) wiring after resolver construction.
+
+ABILITY BEHAVIOUR NOTES
+-----------------------
+- SCAVENGER_ROUNDS refunds to reserve only; player must reload to use the recovered ammo.
+- FIELD_MEDIC_ROUNDS uses enemyManager.overrideDropAt() with '+' (same pattern as SALVAGE_STRIKE
+  with '6'). The medkit spawns on the enemy's tile for the player to walk over.
+- CREDIT_FANG shows "+N CR" event text; no HUD display until shop (order-11).
+- All three abilities use abilityMagnitude() — the pre-scaled value computed by WeaponRoller
+  at spawn time from BASE + (level-1) * PER_LEVEL, clamped at CAP.
+- Extended Mag: verified — recomputeEffectiveStats() adds EXTENDED_MAG count to effectiveClipSize;
+  configureRoll() uses effectiveClipSize; reload now also uses getEffectiveClipSize(). Fixed.
+- Quick Hands: verified — recomputeEffectiveStats() subtracts 1 tick when QUICK_HANDS present;
+  reload countdown reads ticksRemaining which is set from getEffectiveReloadTicks(). Correct.

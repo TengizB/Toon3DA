@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.entity;
 
+import ge.tbegvadze.toon3d.item.AmmoType;
+
 /**
  * The shared contract for every weapon consumer (HUD, fire handler, inspect overlay,
  * AbilityResolver, EnemyManager hit pipeline). All gameplay logic must operate through
@@ -36,6 +38,10 @@ public interface WeaponProfile {
     // These already exist on Weapon; declared here so callers use the interface.
     boolean canFire();
     boolean requestManualReload();
+
+    // ── Ammo ───────────────────────────────────────────────────────────────
+    /** Returns the ammo type this weapon consumes per shot, or null for melee weapons. */
+    AmmoType getAmmoType();
 
     // ── HUD readouts ───────────────────────────────────────────────────────
     int    getShotsInClip();
