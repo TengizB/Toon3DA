@@ -10,8 +10,10 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.entity.AbilityInstance;
 import ge.tbegvadze.toon3d.entity.Loadout;
 import ge.tbegvadze.toon3d.entity.Weapon;
+import ge.tbegvadze.toon3d.entity.WeaponTier;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.HudConstants;
@@ -22,12 +24,14 @@ import java.util.function.IntConsumer;
  * Modal overlay shown when the player taps INSPECT while standing on a weapon GroundItem.
  *
  * Two phases:
- *   STATS_CARD  — side-by-side stat comparison (ground weapon vs active weapon).
+ *   STATS_CARD  — stat comparison (ground weapon vs active weapon) with tier-colored header,
+ *                 level badge, weapon name, and per-ability description lines.
  *                 Footer buttons: primary action (TAKE / SWAP SLOT / CONVERT AMMO) + CLOSE.
  *   SLOT_SELECT — tap a loadout slot to evict it and place the ground weapon there.
  *                 Footer buttons: CANCEL (returns to STATS_CARD).
  *
  * No allocations in render() — all scratch objects are pre-allocated in the constructor.
+ * Header and ability description strings are cached in show() and reused every frame.
  * Callers must set the four callbacks via setOn*() before calling show().
  */
 public final class WeaponInspectOverlayRenderer implements Renderable, Disposable {
@@ -79,11 +83,17 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private static final float CENTER_X     = CARD_X + CARD_W / 2f; // 640
     private static final float ACTIVE_COL_X = CARD_RIGHT - 16f;     // 944
 
-    // 6 stat rows inside the content area (CONTENT_Y..CONTENT_TOP = 344px)
-    private static final int   STAT_ROW_COUNT = 6;
-    private static final float COL_HEADER_Y   = CONTENT_TOP - 8f;   // 540 — column header text
-    private static final float STAT_START_Y   = CONTENT_TOP - 32f;  // 516 — first stat row
-    private static final float STAT_STEP      = (STAT_START_Y - CONTENT_Y) / STAT_ROW_COUNT; // ~52
+    // 4 stat rows (DMG / CLIP / RELOAD / RANGE) followed by ability descriptions.
+    // STAT_STEP is fixed rather than computed so the ability section has predictable room.
+    private static final int   STAT_ROW_COUNT    = 4;
+    private static final float COL_HEADER_Y      = CONTENT_TOP - 8f;  // 540
+    private static final float STAT_START_Y      = CONTENT_TOP - 32f; // 516
+    private static final float STAT_STEP         = 46f;
+    // Ability section header baseline — 28px below the last stat row's baseline.
+    private static final float ABILITY_SECTION_Y =
+            STAT_START_Y - (STAT_ROW_COUNT - 1) * STAT_STEP - 28f;   // 350
+    private static final float ABILITY_LINE_STEP = 20f;
+    private static final int   MAX_ABILITY_LINES = 5;
 
     // Slot-select rows
     private static final float SLOT_ROW_H   = 64f;
@@ -96,24 +106,33 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private final GlyphLayout   glyphLayout;
 
     // ── State (written by show()) ─────────────────────────────────────────────
-    private boolean    visible       = false;
-    private Phase      phase         = Phase.STATS_CARD;
-    private GroundItem groundItem    = null;
-    private Weapon     groundWeapon  = null;  // null when not found in arsenal
-    private Weapon     activeWeapon  = null;
-    private Loadout    loadout       = null;
-    private boolean    alreadyOwned  = false; // ground weapon is already in a loadout slot
-    private boolean    loadoutFull   = false; // loadout full AND ground weapon not owned
-    private float      facilityTime  = 0f;
+    private boolean    visible      = false;
+    private Phase      phase        = Phase.STATS_CARD;
+    private GroundItem groundItem   = null;
+    private Weapon     groundWeapon = null;  // null when not found in arsenal
+    private Weapon     activeWeapon = null;
+    private Loadout    loadout      = null;
+    private boolean    alreadyOwned = false; // ground weapon is already in a loadout slot
+    private boolean    loadoutFull  = false; // loadout full AND ground weapon not owned
+    private float      facilityTime = 0f;
+
+    // ── Cached strings (built in show(), read in render() without allocation) ─
+    private String          cachedHeaderLine        = "";
+    private float           cachedTierRed           = AMBER.r;
+    private float           cachedTierGreen         = AMBER.g;
+    private float           cachedTierBlue          = AMBER.b;
+    private final String[]  cachedAbilityLines      = new String[MAX_ABILITY_LINES];
+    private final boolean[] cachedAbilityIsLegend   = new boolean[MAX_ABILITY_LINES];
+    private int             cachedAbilityLineCount   = 0;
 
     // ── Callbacks (wired by World before show()) ──────────────────────────────
-    private Runnable    onTake          = null; // free-slot equip
-    private Runnable    onConvertToAmmo = null; // weapon already owned → convert to ammo
-    private IntConsumer onEvictSlot     = null; // full loadout → evict slot N, equip ground weapon
-    private Runnable    onClose         = null; // close without any action
+    private Runnable    onTake          = null;
+    private Runnable    onConvertToAmmo = null;
+    private IntConsumer onEvictSlot     = null;
+    private Runnable    onClose         = null;
 
     // ── Scratch — pre-allocated to avoid allocs in render() ───────────────────
-    private final StringBuilder textBuilder    = new StringBuilder(32);
+    private final StringBuilder textBuilder    = new StringBuilder(64);
     private final Color         temporaryColor = new Color();
 
     // ── Constructor ───────────────────────────────────────────────────────────
@@ -159,6 +178,92 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         this.loadoutFull = (loadoutParam != null) && loadoutParam.isFull() && !alreadyOwned;
         this.phase       = Phase.STATS_CARD;
         this.visible     = true;
+
+        buildHeaderCache(groundItemParam, groundWeaponParam);
+        buildAbilityLineCache(groundWeaponParam);
+    }
+
+    /** Builds the cached header string (tier + level + weapon name) and tier color. */
+    private void buildHeaderCache(GroundItem groundItemParam, Weapon groundWeaponParam) {
+        WeaponTier tier = (groundWeaponParam != null) ? groundWeaponParam.getTier() : null;
+        if (tier != null) {
+            StringBuilder headerBuilder = new StringBuilder(48);
+            headerBuilder.append(tier.displayName.toUpperCase())
+                         .append("  Lv ")
+                         .append(groundWeaponParam.getWeaponLevel())
+                         .append("  ")
+                         .append(groundWeaponParam.getDisplayName().toUpperCase());
+            cachedHeaderLine = headerBuilder.toString();
+            cachedTierRed    = tier.colorRed;
+            cachedTierGreen  = tier.colorGreen;
+            cachedTierBlue   = tier.colorBlue;
+        } else {
+            cachedHeaderLine = (groundItemParam != null)
+                               ? groundItemParam.stack.getType().getDisplayName()
+                               : "WEAPON";
+            cachedTierRed    = AMBER.r;
+            cachedTierGreen  = AMBER.g;
+            cachedTierBlue   = AMBER.b;
+        }
+    }
+
+    /** Builds cached ability description lines (e.g. "CRIT  18%") from the ground weapon's abilities. */
+    private void buildAbilityLineCache(Weapon groundWeaponParam) {
+        cachedAbilityLineCount = 0;
+        if (groundWeaponParam == null) return;
+        int abilityCount = groundWeaponParam.getAbilityCount();
+        for (int abilityIndex = 0;
+             abilityIndex < abilityCount && cachedAbilityLineCount < MAX_ABILITY_LINES;
+             abilityIndex++) {
+            AbilityInstance inst = groundWeaponParam.getAbility(abilityIndex);
+            if (inst == null) continue;
+            cachedAbilityLines[cachedAbilityLineCount]    = formatAbilityLine(inst);
+            cachedAbilityIsLegend[cachedAbilityLineCount] = inst.ability.legendaryOnly;
+            cachedAbilityLineCount++;
+        }
+    }
+
+    /** Returns a human-readable description for one ability instance (called only from show()). */
+    private static String formatAbilityLine(AbilityInstance inst) {
+        StringBuilder line = new StringBuilder(32);
+        if (inst.ability.legendaryOnly) line.append("* ");
+        switch (inst.ability) {
+            case BURST_FIRE:          line.append("BURST  x").append(inst.countValue);                           break;
+            case CRITICAL_STRIKE:     line.append("CRIT  ").append(inst.magnitudePercent()).append('%');          break;
+            case ARMOR_PIERCE:        line.append("PIERCE  ").append(inst.magnitudePercent()).append('%');        break;
+            case EXECUTIONER:         line.append("EXECUTE  ").append(inst.magnitudePercent()).append('%');       break;
+            case REND:                line.append("BLEED  ").append(inst.countValue).append("/turn");             break;
+            case OVERPENETRATION:     line.append("OVERPENETRATE");                                              break;
+            case STAGGER_ROUNDS:      line.append("STUN  ").append(inst.magnitudePercent()).append('%');          break;
+            case KINETIC_SLAM:        line.append("KNOCKBACK  ").append(inst.magnitudePercent()).append('%');     break;
+            case CLEAVE:              line.append("CLEAVE  ").append(inst.magnitudePercent()).append('%');        break;
+            case INCENDIARY:          line.append("BURN  ").append(inst.countValue).append("/turn");              break;
+            case LIFESTEAL:           line.append("LIFESTEAL  ").append(inst.magnitudePercent()).append('%');     break;
+            case HEMORRHAGE_HARVEST:  line.append("HP/KILL  +").append(inst.countValue);                         break;
+            case VAMPIRIC_CRIT:       line.append("CRIT HEAL  +").append(inst.countValue);                       break;
+            case ADRENAL_SURGE:       line.append("SURGE ON KILL");                                              break;
+            case BULWARK_ROUNDS:      line.append("SHIELD  +").append(inst.countValue);                          break;
+            case SECOND_WIND:         line.append("SECOND WIND  ").append(inst.magnitudePercent()).append('%');   break;
+            case SCAVENGER_ROUNDS:    line.append("AMMO DROP  ").append(inst.magnitudePercent()).append('%');     break;
+            case SALVAGE_STRIKE:      line.append("AMMO DROP  ").append(inst.magnitudePercent()).append('%');     break;
+            case SCHOLARS_EDGE:       line.append("XP/KILL  +").append(inst.magnitudePercent()).append('%');      break;
+            case QUICK_HANDS:         line.append("QUICK RELOAD  ").append(inst.magnitudePercent()).append('%');  break;
+            case EXTENDED_MAG:        line.append("MAG +").append(inst.countValue);                               break;
+            case FIELD_MEDIC_ROUNDS:  line.append("HEAL/KILL  +").append(inst.countValue);                       break;
+            case CREDIT_FANG:         line.append("CREDITS ON KILL");                                            break;
+            case POINT_BLANK:         line.append("POINT BLANK  ").append(inst.magnitudePercent()).append('%');   break;
+            case MARKSMANS_PATIENCE:  line.append("PATIENCE  ").append(inst.magnitudePercent()).append('%');      break;
+            case OPENING_SALVO:       line.append("OPENING SALVO  ").append(inst.magnitudePercent()).append('%'); break;
+            case RHYTHM:              line.append("RHYTHM  ").append(inst.magnitudePercent()).append('%');         break;
+            case STATIC_DISCHARGE:    line.append("STATIC  ").append(inst.countValue);                           break;
+            case RESONANT_ROUNDS:     line.append("RESONANCE  ").append(inst.magnitudePercent()).append('%');     break;
+            case SOULFORGE:           line.append("ASCENDS ON KILL");                                            break;
+            case JUDGMENT:            line.append("LANCE every ").append(inst.countValue).append(" fires");       break;
+            case HELLFIRE_NOVA:       line.append("CRIT NOVA  ").append(inst.magnitudePercent()).append('%');     break;
+            case BERSERKERS_OATH:     line.append("BERSERK STREAK");                                             break;
+            default:                  line.append(inst.ability.displayName.toUpperCase());                       break;
+        }
+        return line.toString();
     }
 
     public void hide() {
@@ -167,6 +272,15 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         groundWeapon = null;
         activeWeapon = null;
         loadout      = null;
+        cachedHeaderLine     = "";
+        cachedTierRed        = AMBER.r;
+        cachedTierGreen      = AMBER.g;
+        cachedTierBlue       = AMBER.b;
+        for (int lineIndex = 0; lineIndex < MAX_ABILITY_LINES; lineIndex++) {
+            cachedAbilityLines[lineIndex]    = null;
+            cachedAbilityIsLegend[lineIndex] = false;
+        }
+        cachedAbilityLineCount = 0;
     }
 
     public boolean isVisible() { return visible; }
@@ -298,8 +412,8 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         }
         shapeRenderer.rect(BTN_CLOSE_X, BTN_Y_BOTTOM, BTN_W, BTN_H);
 
-        // Header underline
-        shapeRenderer.setColor(AMBER);
+        // Header underline in tier color
+        shapeRenderer.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
         shapeRenderer.line(CARD_X, HEADER_Y, CARD_RIGHT, HEADER_Y);
 
         if (phase == Phase.STATS_CARD) {
@@ -341,13 +455,20 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
 
     private void drawHeader() {
         String title;
+        float headerRed, headerGreen, headerBlue;
         if (phase == Phase.STATS_CARD) {
-            title = (groundItem != null) ? groundItem.stack.getType().getDisplayName() : "WEAPON";
+            title       = cachedHeaderLine;
+            headerRed   = cachedTierRed;
+            headerGreen = cachedTierGreen;
+            headerBlue  = cachedTierBlue;
         } else {
-            title = "SWAP OUT WHICH?";
+            title       = "SWAP OUT WHICH?";
+            headerRed   = AMBER.r;
+            headerGreen = AMBER.g;
+            headerBlue  = AMBER.b;
         }
         glyphLayout.setText(font, title);
-        font.setColor(AMBER);
+        font.setColor(headerRed, headerGreen, headerBlue, 1f);
         font.draw(spriteBatch, title,
                   CARD_X + (CARD_W - glyphLayout.width) / 2f,
                   HEADER_Y + HEADER_H - 10f);
@@ -366,7 +487,7 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         font.setColor(activeWeapon != null ? WHITE_COLOR : DIM_COLOR);
         font.draw(spriteBatch, "ACTIVE", ACTIVE_COL_X - glyphLayout.width, COL_HEADER_Y);
 
-        // Six stat rows
+        // Four core stat rows
         float rowY = STAT_START_Y;
         drawIntRow(rowY, "DMG",    groundWeapon, activeWeapon, StatKind.DAMAGE, false);
         rowY -= STAT_STEP;
@@ -375,10 +496,26 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         drawIntRow(rowY, "RELOAD", groundWeapon, activeWeapon, StatKind.RELOAD, true);
         rowY -= STAT_STEP;
         drawIntRow(rowY, "RANGE",  groundWeapon, activeWeapon, StatKind.RANGE,  false);
-        rowY -= STAT_STEP;
-        drawDropRow(rowY);
-        rowY -= STAT_STEP;
-        drawAmmoRow(rowY);
+
+        // Ability descriptions — one line per ability, below the stat rows
+        if (cachedAbilityLineCount > 0) {
+            glyphLayout.setText(font, "ABILITIES");
+            font.setColor(DIM_COLOR);
+            font.draw(spriteBatch, "ABILITIES",
+                      CENTER_X - glyphLayout.width / 2f, ABILITY_SECTION_Y);
+
+            for (int lineIndex = 0; lineIndex < cachedAbilityLineCount; lineIndex++) {
+                String abilityLine = cachedAbilityLines[lineIndex];
+                if (abilityLine == null) continue;
+                float lineY = ABILITY_SECTION_Y - (lineIndex + 1) * ABILITY_LINE_STEP;
+                if (cachedAbilityIsLegend[lineIndex]) {
+                    font.setColor(AMBER);
+                } else {
+                    font.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
+                }
+                font.draw(spriteBatch, abilityLine, GROUND_COL_X, lineY);
+            }
+        }
     }
 
     private int statValue(Weapon weapon, StatKind kind) {
@@ -398,7 +535,6 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
      */
     private void drawIntRow(float rowY, String label, Weapon ground, Weapon active,
                             StatKind kind, boolean lowerIsBetter) {
-        // Center label
         glyphLayout.setText(font, label);
         font.setColor(DIM_COLOR);
         font.draw(spriteBatch, label, CENTER_X - glyphLayout.width / 2f, rowY);
@@ -435,66 +571,6 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         return groundBetter ? GREEN_BETTER : RED_WORSE;
     }
 
-    private void drawDropRow(float rowY) {
-        glyphLayout.setText(font, "DROP");
-        font.setColor(DIM_COLOR);
-        font.draw(spriteBatch, "DROP", CENTER_X - glyphLayout.width / 2f, rowY);
-
-        int activePct = (activeWeapon != null)
-                ? Math.round(activeWeapon.getDamageDropCoefficient() * 100f) : -1;
-
-        if (groundWeapon != null) {
-            int groundPct = Math.round(groundWeapon.getDamageDropCoefficient() * 100f);
-            textBuilder.setLength(0);
-            textBuilder.append(groundPct).append('%');
-            font.setColor(deltaColor(groundPct, activePct, true));
-            font.draw(spriteBatch, textBuilder, GROUND_COL_X, rowY);
-        } else {
-            font.setColor(DIM_COLOR);
-            font.draw(spriteBatch, "-", GROUND_COL_X, rowY);
-        }
-
-        if (activeWeapon != null) {
-            textBuilder.setLength(0);
-            textBuilder.append(activePct).append('%');
-            glyphLayout.setText(font, textBuilder);
-            font.setColor(WHITE_COLOR);
-            font.draw(spriteBatch, textBuilder, ACTIVE_COL_X - glyphLayout.width, rowY);
-        } else {
-            font.setColor(DIM_COLOR);
-            glyphLayout.setText(font, "-");
-            font.draw(spriteBatch, "-", ACTIVE_COL_X - glyphLayout.width, rowY);
-        }
-    }
-
-    private void drawAmmoRow(float rowY) {
-        glyphLayout.setText(font, "AMMO");
-        font.setColor(DIM_COLOR);
-        font.draw(spriteBatch, "AMMO", CENTER_X - glyphLayout.width / 2f, rowY);
-
-        if (groundWeapon != null) {
-            String groundAmmo = (groundWeapon.getAmmoType() != null)
-                    ? groundWeapon.getAmmoType().getDisplayName() : "Melee";
-            font.setColor(WHITE_COLOR);
-            font.draw(spriteBatch, groundAmmo, GROUND_COL_X, rowY);
-        } else {
-            font.setColor(DIM_COLOR);
-            font.draw(spriteBatch, "-", GROUND_COL_X, rowY);
-        }
-
-        if (activeWeapon != null) {
-            String activeAmmo = (activeWeapon.getAmmoType() != null)
-                    ? activeWeapon.getAmmoType().getDisplayName() : "Melee";
-            glyphLayout.setText(font, activeAmmo);
-            font.setColor(WHITE_COLOR);
-            font.draw(spriteBatch, activeAmmo, ACTIVE_COL_X - glyphLayout.width, rowY);
-        } else {
-            font.setColor(DIM_COLOR);
-            glyphLayout.setText(font, "-");
-            font.draw(spriteBatch, "-", ACTIVE_COL_X - glyphLayout.width, rowY);
-        }
-    }
-
     private void drawSlotSelectContent() {
         if (loadout == null) return;
         float rowTop = CONTENT_TOP - SLOT_ROW_PAD;
@@ -523,7 +599,6 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     }
 
     private void drawFooterButtons() {
-        // Primary action button label (STATS_CARD only)
         if (phase == Phase.STATS_CARD) {
             String primaryLabel;
             if (alreadyOwned) {
@@ -540,7 +615,6 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
                       BTN_Y_BOTTOM + (BTN_H + glyphLayout.height) / 2f);
         }
 
-        // Close / Cancel button label
         String closeLabel = (phase == Phase.SLOT_SELECT) ? "CANCEL" : "CLOSE";
         glyphLayout.setText(font, closeLabel);
         font.setColor(AMBER);

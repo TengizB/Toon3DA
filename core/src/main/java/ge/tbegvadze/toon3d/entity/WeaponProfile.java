@@ -47,4 +47,12 @@ public interface WeaponProfile {
     int    getShotsInClip();
     int    getReserveAmmo();
     String hudAmmoString();
+
+    // ── Base stats (level-1 values, before scaling) ────────────────────────────
+    // Used by the weapon inspect overlay stat block.
+    int   getBaseDamage();
+    int   getBaseClipSize();
+    int   getBaseReloadTicks();
+    int   getBaseRange();
+    float getBaseAccuracy();
 }

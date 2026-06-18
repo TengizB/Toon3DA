@@ -234,6 +234,13 @@ public abstract class Weapon implements WeaponProfile {
     @Override public int   getEffectiveReloadTicks() { return effectiveReloadTicks; }
     @Override public int   getEffectiveRange()       { return effectiveRange; }
 
+    // ── WeaponProfile — base stats (level-1 values before scaling) ───────────
+    @Override public int   getBaseDamage()      { return damage; }
+    @Override public int   getBaseClipSize()    { return clipSize; }
+    @Override public int   getBaseReloadTicks() { return reloadTime; }
+    @Override public int   getBaseRange()       { return range; }
+    @Override public float getBaseAccuracy()    { return baseAccuracy; }
+
     // ── WeaponProfile — abilities ─────────────────────────────────────────────
     @Override public int             getAbilityCount()              { return abilities.length; }
     @Override public AbilityInstance getAbility(int index)          { return abilities[index]; }
