@@ -590,6 +590,13 @@ public final class GameBalance {
     /** Maximum tier for weapons offered in the start-room selection. */
     public static final WeaponTier START_ROOM_OFFER_MAX_TIER = WeaponTier.UNCOMMON;
 
+    /**
+     * When true, start-room weapon offers can roll any tier (COMMON through LEGENDARY).
+     * When false, only COMMON-tier weapons are offered in the start room.
+     * Set to true for testing to verify higher-tier weapon spawns work correctly.
+     */
+    public static final boolean START_ROOM_ANY_TIER_ENABLED = true;
+
     /** Level-1 clip expansion from EXTENDED_MAG ability (+1 clip slot). */
     public static final int EXTENDED_MAG_BASE_COUNT      = 1;
 

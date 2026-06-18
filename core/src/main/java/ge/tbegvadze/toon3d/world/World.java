@@ -1083,10 +1083,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         startRoomWeapons     = new java.util.ArrayList<>();
         startRoomGroundItems = new java.util.ArrayList<>();
 
+        ge.tbegvadze.toon3d.entity.WeaponTier startRoomMaxTier =
+                GameBalance.START_ROOM_ANY_TIER_ENABLED
+                        ? ge.tbegvadze.toon3d.entity.WeaponTier.LEGENDARY
+                        : ge.tbegvadze.toon3d.entity.WeaponTier.COMMON;
+
         for (int offerIndex = 0; offerIndex < rangedOfferCount; offerIndex++) {
             Weapon     offeredWeapon = shuffledRanged.get(offerIndex);
             weaponRoller.rollWeaponWithMinTier(offeredWeapon, 1,
-                    GameBalance.START_ROOM_OFFER_MIN_TIER, GameBalance.START_ROOM_OFFER_MAX_TIER);
+                    GameBalance.START_ROOM_OFFER_MIN_TIER, startRoomMaxTier);
             ItemType   itemType      = weaponClassToItemType(offeredWeapon);
             GroundItem groundItem    = new GroundItem(
                     startGen.getWeaponTileColumn(offerIndex),
@@ -1112,7 +1117,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         for (int offerIndex = 0; offerIndex < meleeOfferCount; offerIndex++) {
             Weapon     offeredWeapon = meleePool.get(offerIndex);
             weaponRoller.rollWeaponWithMinTier(offeredWeapon, 1,
-                    GameBalance.START_ROOM_OFFER_MIN_TIER, GameBalance.START_ROOM_OFFER_MAX_TIER);
+                    GameBalance.START_ROOM_OFFER_MIN_TIER, startRoomMaxTier);
             ItemType   itemType      = weaponClassToItemType(offeredWeapon);
             GroundItem groundItem    = new GroundItem(
                     startGen.getMeleeTileColumn(offerIndex),
