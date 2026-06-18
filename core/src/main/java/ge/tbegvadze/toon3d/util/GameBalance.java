@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.util;
 
+import ge.tbegvadze.toon3d.entity.WeaponTier;
+
 /**
  * Central balance configuration file for the XP progression system, enemy depth scaling,
  * and level-up stat rewards.  All numeric coefficients live here so a designer can tune
@@ -571,4 +573,29 @@ public final class GameBalance {
     public static final int   HELLFIRE_NOVA_RADIUS           = 2;
     /** Fraction of critDamage dealt as AoE damage to enemies within the nova radius. */
     public static final float HELLFIRE_NOVA_DAMAGE_FRACTION  = 0.75f;
+
+    // =========================================================================
+    // WEAPON ROLLER — weapon-system-order-11
+    // =========================================================================
+
+    /** Tier assigned to all run-start weapons (the default loadout at game start). */
+    public static final WeaponTier RUN_START_WEAPON_TIER  = WeaponTier.COMMON;
+
+    /** Level assigned to all run-start weapons. */
+    public static final int        RUN_START_WEAPON_LEVEL = 1;
+
+    /** Minimum tier for weapons offered in the start-room selection. */
+    public static final WeaponTier START_ROOM_OFFER_MIN_TIER = WeaponTier.COMMON;
+
+    /** Maximum tier for weapons offered in the start-room selection. */
+    public static final WeaponTier START_ROOM_OFFER_MAX_TIER = WeaponTier.UNCOMMON;
+
+    /** Level-1 clip expansion from EXTENDED_MAG ability (+1 clip slot). */
+    public static final int EXTENDED_MAG_BASE_COUNT      = 1;
+
+    /** Weapon levels needed to gain each additional clip slot (+1 per 3 levels). */
+    public static final int EXTENDED_MAG_LEVELS_PER_STEP = 3;
+
+    /** Maximum clip expansion from EXTENDED_MAG regardless of weapon level. */
+    public static final int EXTENDED_MAG_MAX_COUNT       = 4;
 }

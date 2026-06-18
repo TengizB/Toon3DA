@@ -63,6 +63,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // Run-persistent resources — kept alive across all floor transitions
     // -------------------------------------------------------------------------
     private final long                   runSeed;
+    private final WeaponRoller           weaponRoller;
     private final Player                 player;
     private final PlayerInventory        inventory;
     private final GameState              gameState;
@@ -189,6 +190,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     private World(Level initialLevel, long runSeed, boolean startRoom, StartGameLevelGenerator startRoomGen) {
         this.runSeed        = runSeed;
+        this.weaponRoller   = new WeaponRoller(runSeed);
         this.isStartingRoom = startRoom;
 
         // Player faces north (toward the portal) in the start room; east otherwise.
@@ -254,12 +256,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             weapon.setAmmoInventory(itemInventory);
             weapon.setRangedDamageMultiplier(rangedMultiplier);
             weapon.setPlayerAccuracyMultiplier(accuracyMultiplier);
+            weaponRoller.configureRunStart(weapon);
         }
 
         // Melee slot — the Fist is the always-available fallback; wired at run start and never removed.
         Fist fist = new Fist();
         fist.setEventTextSystem(eventTextSystem);
         fist.setPlayerAccuracyMultiplier(accuracyMultiplier);
+        weaponRoller.configureRunStart(fist);
         inventory.setMeleeWeapon(fist);
 
         if (startRoom) {
@@ -499,10 +503,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     startRoomGroundItems         = null;
                     startRoomMeleeWeapons        = null;
                     startRoomMeleeGroundItems    = null;
+                    playerProgress.setFloorDepth(currentDepth);
                     runStats.recordFloor(currentDepth);
                     rebuildForLevel(pickLevelGenerator(currentDepth, floorSeed(runSeed, currentDepth)).generate());
                 } else {
                     currentDepth++;
+                    playerProgress.setFloorDepth(currentDepth);
                     runStats.recordFloor(currentDepth);
                     rebuildForLevel(pickLevelGenerator(currentDepth, floorSeed(runSeed, currentDepth)).generate());
                 }
@@ -1077,6 +1083,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         for (int offerIndex = 0; offerIndex < rangedOfferCount; offerIndex++) {
             Weapon     offeredWeapon = shuffledRanged.get(offerIndex);
+            weaponRoller.rollWeaponWithMinTier(offeredWeapon, 1,
+                    GameBalance.START_ROOM_OFFER_MIN_TIER, GameBalance.START_ROOM_OFFER_MAX_TIER);
             ItemType   itemType      = weaponClassToItemType(offeredWeapon);
             GroundItem groundItem    = new GroundItem(
                     startGen.getWeaponTileColumn(offerIndex),
@@ -1101,6 +1109,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         for (int offerIndex = 0; offerIndex < meleeOfferCount; offerIndex++) {
             Weapon     offeredWeapon = meleePool.get(offerIndex);
+            weaponRoller.rollWeaponWithMinTier(offeredWeapon, 1,
+                    GameBalance.START_ROOM_OFFER_MIN_TIER, GameBalance.START_ROOM_OFFER_MAX_TIER);
             ItemType   itemType      = weaponClassToItemType(offeredWeapon);
             GroundItem groundItem    = new GroundItem(
                     startGen.getMeleeTileColumn(offerIndex),

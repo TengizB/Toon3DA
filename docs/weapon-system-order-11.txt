@@ -1,0 +1,56 @@
+Weapon System Order 11 — Spawn Roller & World Wiring
+======================================================
+
+STATUS: IMPLEMENTED
+DATE: 2026-06-18
+
+OVERVIEW
+--------
+WeaponRoller assigns a level, tier, and ability set to any Weapon instance at
+spawn time. World.java is wired to call it at the two places where actual Weapon
+objects exist: run-start default weapons and start-room offer weapons.
+
+FILES CREATED
+-------------
+entity/WeaponRoller.java
+  - Constructor: WeaponRoller(long runSeed) — single Random seeded from runSeed
+  - rollWeapon(Weapon, int floorDepth) — full random roll
+  - configureRunStart(Weapon) — fixed COMMON Level-1, no abilities
+  - rollWeaponWithMinTier(Weapon, int, WeaponTier min, WeaponTier max)
+    — same as rollWeapon but zeroes out weights outside [min, max] before
+      sampling (weight-zeroing approach, no bias)
+  - buildInstance(WeaponAbility, int level) — all 34 abilities handled;
+    delegates to GameMath.abilityMagnitudeScaled() / abilityCountScaled()
+
+FILES MODIFIED
+--------------
+util/WeaponConstants.java
+  - Added TIER_WEIGHT_*_BASE, TIER_WEIGHT_*_DRIFT, TIER_WEIGHT_COMMON_MINIMUM,
+    TIER_WEIGHT_LEGENDARY_CAP constants
+
+util/GameBalance.java
+  - Added import for WeaponTier
+  - Added RUN_START_WEAPON_TIER, RUN_START_WEAPON_LEVEL
+  - Added START_ROOM_OFFER_MIN_TIER, START_ROOM_OFFER_MAX_TIER
+  - Added EXTENDED_MAG_BASE_COUNT, EXTENDED_MAG_LEVELS_PER_STEP, EXTENDED_MAG_MAX_COUNT
+
+progression/PlayerProgress.java
+  - Added currentFloor field (default 1), getFloorDepth(), setFloorDepth(int)
+
+world/World.java
+  - Added WeaponRoller weaponRoller field (run-persistent, final)
+  - Initialized with new WeaponRoller(runSeed) in constructor
+  - configureRunStart called on all 7 ranged weapons + Fist after construction
+  - rollWeaponWithMinTier called for each ranged and melee start-room offer
+  - playerProgress.setFloorDepth(currentDepth) called on every floor descent
+
+ARCHITECTURE NOTE
+-----------------
+Ground weapon spawn points (WeaponSpawnPoint → GroundItem) store only ItemType,
+not Weapon instances. Rolling those weapons requires creating a Weapon instance
+at spawn-point creation time — deferred to a future order. For now only
+run-start and start-room offer weapons are rolled.
+
+NEXT ORDER
+----------
+weapon-system-order-12 (HUD Display Redesign)

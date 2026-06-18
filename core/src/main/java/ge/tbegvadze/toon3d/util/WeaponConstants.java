@@ -291,6 +291,25 @@ public final class WeaponConstants {
     // Ability clip and reload caps
     public static final int   WEAPON_CLIP_HARD_CAP                  = 99;
 
+    // ── Tier spawn weights (weapon-system-order-11) ────────────────────────
+    // Base values at floor 1. Values are relative weights, not percents.
+    public static final float TIER_WEIGHT_COMMON_BASE    = 60f;
+    public static final float TIER_WEIGHT_UNCOMMON_BASE  = 25f;
+    public static final float TIER_WEIGHT_RARE_BASE      = 10f;
+    public static final float TIER_WEIGHT_EPIC_BASE      = 4f;
+    public static final float TIER_WEIGHT_LEGENDARY_BASE = 1f;
+
+    // Weight drift per floor: weight + drift * (floor - 1), floored at minimum
+    public static final float TIER_WEIGHT_COMMON_DRIFT    = -4f;
+    public static final float TIER_WEIGHT_UNCOMMON_DRIFT  =  0f;
+    public static final float TIER_WEIGHT_RARE_DRIFT      =  2f;
+    public static final float TIER_WEIGHT_EPIC_DRIFT      =  1.5f;
+    public static final float TIER_WEIGHT_LEGENDARY_DRIFT =  0.5f;
+
+    // Hard floors and caps on computed weights
+    public static final float TIER_WEIGHT_COMMON_MINIMUM = 10f;  // never disappears entirely
+    public static final float TIER_WEIGHT_LEGENDARY_CAP  = 6f;   // legendaries stay rare
+
     // ── Ability system constants ────────────────────────────────────────────
     /** Critical hit total damage multiplier: crits deal 2× base damage.
      *  Only the bonus portion (CRIT_DAMAGE_MULTIPLIER - 1) * base is applied

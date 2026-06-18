@@ -18,6 +18,7 @@ public final class PlayerProgress {
     private int     currentXp       = 0;
     private int     xpForNextLevel;
     private boolean pendingLevelUp  = false;
+    private int     currentFloor    = 1;
 
     // Accumulated stat bonuses from all previous level-up choices
     private int flatDamageBonus = 0;
@@ -92,4 +93,10 @@ public final class PlayerProgress {
 
     /** Accumulated flat damage bonus (added to every weapon shot). */
     public int getFlatDamageBonus()    { return flatDamageBonus; }
+
+    /** Current dungeon floor (1-based). Updated by World on each floor descent. */
+    public int getFloorDepth()         { return currentFloor; }
+
+    /** Called by World each time the player descends to a new floor. */
+    public void setFloorDepth(int floor) { this.currentFloor = floor; }
 }
