@@ -1,0 +1,91 @@
+STATUS: IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon System Order 8 — DoT & Status Abilities
+---
+
+WHAT WAS BUILT
+==============
+Three ON_HIT weapon abilities that apply status effects through the unified
+StatusEffectController pipeline: REND (bleed DoT), INCENDIARY (burn DoT),
+and STAGGER_ROUNDS upgraded from a stub to proper status system integration.
+
+FILES CHANGED
+=============
+status/StatusType.java
+  - Added BLEED between POISONED and STUNNED (now 7 types total).
+  - Order determines iteration priority in tickAll() and ordinal-indexed
+    color arrays. All downstream arrays updated to match.
+
+status/StatusEffectController.java
+  - applyPlayerTickEffect() / applyEnemyTickEffect(): added BLEED case —
+    calls applyDoTDamage(effect.magnitude), same as BURNING (fixed magnitude,
+    no stacks).
+  - stackModeFor(): BLEED returns REFRESH_DURATION (re-applying refreshes
+    the longer duration; does not stack damage).
+
+hud/HudRenderer.java
+  - STATUS_ICON_RED/GREEN/BLUE expanded from 6 to 7 entries.
+  - BLEED at index 2: deep crimson (0.85, 0.05, 0.10), distinct from
+    BURNING orange. Static fail-fast guard catches array/type count mismatch.
+
+render/StatusEffectVignetteRenderer.java
+  - EFFECT_RED/GREEN/BLUE expanded to 7 entries with BLEED crimson at index 2.
+  - currentIntensity/targetIntensity sized from TYPE_COUNT so they
+    self-expand; only the color lookup arrays needed explicit update.
+
+util/GameBalance.java
+  - New section DOT & STATUS ABILITIES — weapon-system-order-8:
+      REND_DAMAGE_PER_TURN_BASE=2f, PER_LEVEL=0.5f, CAP=6f
+      REND_DURATION_TURNS=4
+      INCENDIARY_BURN_PER_TURN_BASE=3f, PER_LEVEL=0.5f, CAP=7f
+      INCENDIARY_BURN_DURATION=3
+      INCENDIARY_INCINERATOR_EXTRA_TURNS=1  (reserved for future Incinerator bonus)
+      STAGGER_STUN_DURATION=1
+
+entity/AbilityResolver.java
+  - Added StatusEffectController field + setStatusEffectController() setter.
+  - STAGGER_ROUNDS: replaced stub (skipNextAction=true) with
+    statusEffectController.apply(STUNNED, STAGGER_STUN_DURATION, 0, null).
+    Now participates in resist/immunity (bosses are STUN-immune).
+  - REND (after CLEAVE): applies StatusType.BLEED with REND_DURATION_TURNS
+    and magnitude from weapon.abilityMagnitude(REND). Shows "BLEED!" (red).
+  - INCENDIARY (after REND): applies StatusType.BURNING with
+    INCENDIARY_BURN_DURATION. Shows "BURN!" (red). REFRESH_DURATION means
+    re-applying on an already-burning enemy refreshes to the longer timer.
+
+world/World.java
+  - Added abilityResolver.setStatusEffectController(statusEffectController)
+    in buildLevelDependentResources() after setPlayerInventory.
+
+enemy/EnemyManager.java
+  - buildArchetypeResistance(): added OVERSEER, CORRUPTOR, HELL_BARON cases
+    returning immune(STUNNED). Bosses cannot be stun-locked.
+
+HOW IT CONNECTS TO THE EXISTING SYSTEM
+=======================================
+- AbilityResolver.onHit() is called by Weapon.fire() after damage is applied.
+  REND and INCENDIARY run after CLEAVE; STAGGER_ROUNDS is in the original
+  position but now calls the status controller instead of the stub.
+- StatusEffectController.tickAll() runs once per world turn (StatusEffectSubscriber,
+  before enemy AI). BLEED ticks like BURNING — deals magnitude DoT, decrements
+  duration, removes on expiry.
+- Enemy/Player EnumMaps auto-expand when BLEED was added to StatusType because
+  buildEffectsMap() iterates StatusType.values().
+- STAGGER_ROUNDS stun is now subject to enemy resistance: SHELL_BRUTE halves
+  duration (existing rule), bosses are immune (new rule).
+- INCENDIARY reuses BURNING; the REFRESH_DURATION stack mode means firing an
+  INCENDIARY weapon at a burning enemy refreshes (keeps the longer timer),
+  never duplicates the effect.
+
+WHAT IS NOT IMPLEMENTED
+=======================
+- Incinerator-specific extend-burn bonus (INCENDIARY_INCINERATOR_EXTRA_TURNS)
+  was deferred. The REFRESH_DURATION mode already refreshes burns; the extra
+  turn extension would require knowing the weapon is the Incinerator subclass,
+  which is not exposed cleanly through WeaponProfile. Implement in a dedicated
+  Incinerator pass when the weapon is revisited.
+- abilityMagnitude(REND/INCENDIARY) returns the pre-scaled value from
+  AbilityInstance. The WeaponRoller (order-11) must roll these abilities using
+  REND_DAMAGE_PER_TURN_BASE/PER_LEVEL/CAP and INCENDIARY_BURN_PER_TURN_BASE/
+  PER_LEVEL/CAP from GameBalance when generating loot. Until order-11, weapons
+  with REND/INCENDIARY won't appear in the wild.

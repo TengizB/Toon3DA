@@ -456,4 +456,35 @@ public final class GameBalance {
     public static final float CREDIT_FANG_PER_LEVEL          = 1f;
     /** Maximum credits awarded per kill regardless of weapon level. */
     public static final int   CREDIT_FANG_CAP                = 12;
+
+    // =========================================================================
+    // DOT & STATUS ABILITIES — weapon-system-order-8
+    // All values are PLACEHOLDERS — flag for playtesting.
+    // =========================================================================
+
+    // ── Rend (BLEED DoT — ON_HIT) ────────────────────────────────────────────
+    /** BLEED damage per turn at weapon level 1. */
+    public static final float REND_DAMAGE_PER_TURN_BASE      = 2f;
+    /** Additional BLEED damage per turn for each weapon level above 1. */
+    public static final float REND_DAMAGE_PER_TURN_PER_LEVEL = 0.5f;
+    /** Maximum BLEED damage per turn regardless of weapon level. */
+    public static final float REND_DAMAGE_PER_TURN_CAP       = 6f;
+    /** Number of world turns the BLEED effect persists. */
+    public static final int   REND_DURATION_TURNS            = 4;
+
+    // ── Incendiary (BURN DoT — ON_HIT) ───────────────────────────────────────
+    /** BURNING damage per turn at weapon level 1 for INCENDIARY. */
+    public static final float INCENDIARY_BURN_PER_TURN_BASE      = 3f;
+    /** Additional burn damage per turn for each weapon level above 1. */
+    public static final float INCENDIARY_BURN_PER_TURN_PER_LEVEL = 0.5f;
+    /** Maximum burn damage per turn regardless of weapon level. */
+    public static final float INCENDIARY_BURN_PER_TURN_CAP       = 7f;
+    /** Base number of world turns the burn effect persists for INCENDIARY. */
+    public static final int   INCENDIARY_BURN_DURATION           = 3;
+    /** Extra turns added to burn duration when the Incinerator weapon fires INCENDIARY. */
+    public static final int   INCENDIARY_INCINERATOR_EXTRA_TURNS = 1;
+
+    // ── Stagger Rounds (STUN — ON_HIT) ───────────────────────────────────────
+    /** Number of world turns the STUNNED effect persists when STAGGER_ROUNDS procs. */
+    public static final int   STAGGER_STUN_DURATION = 1;
 }
