@@ -111,6 +111,12 @@ public final class EnemyManager implements EnemyHitTarget {
         pendingMeleeKill = true;
     }
 
+    @Override
+    public boolean isAtFullHp(Object enemyObject) {
+        Enemy enemy = (Enemy) enemyObject;
+        return enemy.health >= enemy.maxHealth;
+    }
+
     private static List<Enemy> buildInitialEnemies(List<EnemySpawnPoint> spawnPoints,
                                                     int dungeonDepth, Random spawnVariance) {
         List<Enemy> list = new ArrayList<>(spawnPoints.size());

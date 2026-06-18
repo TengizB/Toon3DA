@@ -61,7 +61,7 @@ public class DoubleBarrelShotgun extends Weapon {
                 Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (hitEnemy != null) {
                     int damageThisHit = damageAtDistance(distanceTiles);
-                    setLastHitEnemy(hitEnemy, damageThisHit);
+                    setLastHitEnemy(hitEnemy, damageThisHit, enemyHitTarget.isAtFullHp(hitEnemy));
                     enemyHitTarget.applyDamageTo(hitEnemy, damageThisHit);
                     if (!WeaponConstants.DBL_SHOTGUN_PENETRATION) {
                         return new FireResult(false, distanceTiles);

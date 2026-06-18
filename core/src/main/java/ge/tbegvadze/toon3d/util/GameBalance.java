@@ -487,4 +487,65 @@ public final class GameBalance {
     // ── Stagger Rounds (STUN — ON_HIT) ───────────────────────────────────────
     /** Number of world turns the STUNNED effect persists when STAGGER_ROUNDS procs. */
     public static final int   STAGGER_STUN_DURATION = 1;
+
+    // =========================================================================
+    // POSITIONAL & SITUATIONAL ABILITIES — weapon-system-order-9
+    // All values are PLACEHOLDERS — flag for playtesting.
+    // =========================================================================
+
+    // ── Point Blank (ON_HIT, GUN only) ───────────────────────────────────────
+    /** Level-1 bonus damage fraction when target is at POINT_BLANK_MAX_DISTANCE or closer. */
+    public static final float POINT_BLANK_BONUS_BASE      = 0.20f;
+    /** Bonus fraction added per weapon level above 1. */
+    public static final float POINT_BLANK_BONUS_PER_LEVEL = 0.05f;
+    /** Maximum Point Blank bonus fraction regardless of weapon level. */
+    public static final float POINT_BLANK_BONUS_CAP       = 0.70f;
+    /** Maximum tile distance at which Point Blank fires (adjacent tile only). */
+    public static final int   POINT_BLANK_MAX_DISTANCE    = 1;
+
+    // ── Marksman's Patience (ON_HIT, GUN only) ────────────────────────────────
+    /** Level-1 bonus fraction per tile beyond MARKSMAN_MIN_DISTANCE. */
+    public static final float MARKSMAN_PER_TILE_BASE      = 0.05f;
+    /** Per-tile bonus fraction added per weapon level above 1. */
+    public static final float MARKSMAN_PER_TILE_PER_LEVEL = 0.01f;
+    /** Maximum per-tile bonus fraction regardless of weapon level. */
+    public static final float MARKSMAN_PER_TILE_CAP       = 0.12f;
+    /** Minimum tile distance before the per-tile bonus accumulates (distance > this). */
+    public static final int   MARKSMAN_MIN_DISTANCE       = 2;
+    /** Hard cap on total Marksman's Patience bonus regardless of distance. */
+    public static final float MARKSMAN_TOTAL_BONUS_CAP    = 0.60f;
+
+    // ── Opening Salvo (ON_HIT, UNIVERSAL) ─────────────────────────────────────
+    /** Level-1 bonus damage fraction when target is at full HP. */
+    public static final float OPENING_SALVO_BONUS_BASE      = 0.30f;
+    /** Bonus fraction added per weapon level above 1. */
+    public static final float OPENING_SALVO_BONUS_PER_LEVEL = 0.07f;
+    /** Maximum Opening Salvo bonus fraction regardless of weapon level. */
+    public static final float OPENING_SALVO_BONUS_CAP       = 0.90f;
+
+    // ── Rhythm / Heat-Up (ON_HIT, GUN only) ───────────────────────────────────
+    /** Level-1 ramp bonus per consecutive hit on the same target (added per extra stack). */
+    public static final float RHYTHM_RAMP_PER_HIT_BASE      = 0.06f;
+    /** Ramp bonus added per weapon level above 1. */
+    public static final float RHYTHM_RAMP_PER_HIT_PER_LEVEL = 0.01f;
+    /** Maximum ramp-per-hit value regardless of weapon level. */
+    public static final float RHYTHM_RAMP_PER_HIT_CAP       = 0.15f;
+    /** Maximum consecutive-hit stacks before the bonus plateaus. */
+    public static final int   RHYTHM_MAX_STACKS              = 5;
+
+    // ── Static Discharge (ON_KILL, UNIVERSAL) ────────────────────────────────
+    /** Level-1 splash damage dealt to enemies adjacent to the killed target. */
+    public static final float STATIC_SPLASH_BASE      = 4f;
+    /** Splash damage added per weapon level above 1. */
+    public static final float STATIC_SPLASH_PER_LEVEL = 1f;
+    /** Maximum splash damage regardless of weapon level. */
+    public static final int   STATIC_SPLASH_CAP       = 14;
+
+    // ── Resonant Rounds (ON_HIT, UNIVERSAL) ──────────────────────────────────
+    /** Level-1 bonus as a fraction of the target's MAX HP applied as flat bonus damage. */
+    public static final float RESONANT_PCT_BASE      = 0.04f;
+    /** PCT fraction added per weapon level above 1. */
+    public static final float RESONANT_PCT_PER_LEVEL = 0.008f;
+    /** Maximum Resonant Rounds PCT fraction regardless of weapon level. */
+    public static final float RESONANT_PCT_CAP       = 0.10f;
 }

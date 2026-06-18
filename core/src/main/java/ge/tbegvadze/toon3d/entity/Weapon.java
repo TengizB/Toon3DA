@@ -136,6 +136,17 @@ public abstract class Weapon implements WeaponProfile {
     private int lastFacingStepColumn = 0;
     private int lastFacingStepRow    = 0;
 
+    // Per-weapon Rhythm / Heat-Up ramp state — consecutive-hit counter on same target.
+    private int rhythmStacks   = 0;
+    private int rhythmTargetId = -1;
+
+    // Whether the last target reported via setLastHitEnemy() was at full HP before the hit.
+    private boolean lastTargetWasFullHp = false;
+
+    // Player tile position stored at fire() entry for distance-based ability checks.
+    private int lastPlayerTileColumn = 0;
+    private int lastPlayerTileRow    = 0;
+
     // Berserker's Oath kill-streak state — per-weapon, persists across levels.
     private int     berserkerStacks         = 0;
     private boolean berserkerKilledThisFire = false;
@@ -258,17 +269,29 @@ public abstract class Weapon implements WeaponProfile {
      * Subclasses must call this inside marchShot() immediately before each
      * EnemyHitTarget.applyDamageTo() call to keep fire() informed.
      *
-     * Only the LAST call within a single marchShot() invocation is retained.  For
-     * penetrating weapons (PlasmaRifle, Railgun) that hit multiple enemies per shot,
-     * only the final hit is forwarded to the resolver — per-hit callbacks require
-     * subclasses to call the resolver directly (future order).
+     * The {@code wasFullHp} flag must be checked BEFORE calling
+     * EnemyHitTarget.applyDamageTo() so OPENING_SALVO has accurate pre-damage state.
+     *
+     * @param hitEnemyObject  the Object returned by EnemyHitTarget.enemyAt()
+     * @param damageApplied   the amount passed to EnemyHitTarget.applyDamageTo()
+     * @param wasFullHp       true if the target was at full HP before this hit was applied
+     */
+    protected void setLastHitEnemy(Object hitEnemyObject, int damageApplied, boolean wasFullHp) {
+        this.lastHitEnemy        = hitEnemyObject;
+        this.lastHitDamage       = damageApplied;
+        this.lastTargetWasFullHp = wasFullHp;
+    }
+
+    /**
+     * Convenience overload that always clears the full-HP flag.
+     * Used when the caller does not need OPENING_SALVO tracking
+     * (e.g. clearing after a per-hit dispatch in penetrating weapons).
      *
      * @param hitEnemyObject  the Object returned by EnemyHitTarget.enemyAt()
      * @param damageApplied   the amount passed to EnemyHitTarget.applyDamageTo()
      */
     protected void setLastHitEnemy(Object hitEnemyObject, int damageApplied) {
-        this.lastHitEnemy  = hitEnemyObject;
-        this.lastHitDamage = damageApplied;
+        setLastHitEnemy(hitEnemyObject, damageApplied, false);
     }
 
     public void setEventTextSystem(EventTextSystem system) {
@@ -321,8 +344,9 @@ public abstract class Weapon implements WeaponProfile {
 
     /** Clears the stale hit record so a miss never fires ability callbacks on a previous target. */
     protected void clearLastHit() {
-        this.lastHitEnemy  = null;
-        this.lastHitDamage = 0;
+        this.lastHitEnemy        = null;
+        this.lastHitDamage       = 0;
+        this.lastTargetWasFullHp = false;
     }
 
     /** Stores the facing direction for this fire activation; forwarded to onHit() for melee AoE. */
@@ -335,6 +359,45 @@ public abstract class Weapon implements WeaponProfile {
     protected void invokeAbilityOnFire() {
         if (abilityResolver != null) {
             abilityResolver.onFire(this);
+        }
+    }
+
+    // ── Rhythm / Heat-Up accessors ────────────────────────────────────────────
+
+    /**
+     * Resets the Rhythm consecutive-hit streak to zero and clears the tracked target.
+     * Call on miss, weapon switch, or when the current Rhythm target dies.
+     */
+    public void resetRhythm() {
+        rhythmStacks   = 0;
+        rhythmTargetId = -1;
+    }
+
+    /**
+     * Updates the Rhythm streak for a hit against the given enemy ID.
+     * If the ID matches the current streak target the stack count increments (capped at
+     * {@link GameBalance#RHYTHM_MAX_STACKS}). If the ID differs the streak resets to 1
+     * and the new enemy becomes the tracked target.
+     */
+    public void updateRhythm(int enemyId) {
+        if (enemyId == rhythmTargetId) {
+            rhythmStacks = Math.min(rhythmStacks + 1, GameBalance.RHYTHM_MAX_STACKS);
+        } else {
+            rhythmStacks   = 1;
+            rhythmTargetId = enemyId;
+        }
+    }
+
+    /** Returns the current consecutive-hit stack count for the Rhythm ability. */
+    public int getRhythmStacks() { return rhythmStacks; }
+
+    /**
+     * Resets the Rhythm streak if the killed enemy was the current streak target.
+     * Called from AbilityResolver.onKill() so the next target always starts at stack 1.
+     */
+    public void resetRhythmIfTarget(int enemyId) {
+        if (enemyId == rhythmTargetId) {
+            resetRhythm();
         }
     }
 
@@ -508,11 +571,14 @@ public abstract class Weapon implements WeaponProfile {
                                  Level level, EnemyHitTarget enemyHitTarget,
                                  BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
         // Clear per-activation state so stale data cannot bleed forward.
-        lastHitEnemy       = null;
-        lastHitDamage      = 0;
-        fireCycleMultiplier = 1.0f;
-        this.lastFacingStepColumn = facingStepColumn;
-        this.lastFacingStepRow    = facingStepRow;
+        lastHitEnemy             = null;
+        lastHitDamage            = 0;
+        lastTargetWasFullHp      = false;
+        fireCycleMultiplier      = 1.0f;
+        this.lastFacingStepColumn    = facingStepColumn;
+        this.lastFacingStepRow       = facingStepRow;
+        this.lastPlayerTileColumn    = playerTileColumn;
+        this.lastPlayerTileRow       = playerTileRow;
 
         // ON_FIRE abilities (e.g. BURST_FIRE, SECOND_WIND, ADRENAL_SURGE) run before the
         // accuracy roll so they can set fireCycleMultiplier and pendingBurstExtra first.
@@ -528,6 +594,7 @@ public abstract class Weapon implements WeaponProfile {
         FireResult baseResult;
         if (!isPerPelletAccuracy() && !rollHitChance()) {
             if (eventTextSystem != null) eventTextSystem.showMiss();
+            if (hasAbility(WeaponAbility.RHYTHM)) resetRhythm();
             baseResult = FireResult.MISSED;
         } else {
             baseResult = marchShot(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
@@ -540,12 +607,14 @@ public abstract class Weapon implements WeaponProfile {
         // Shots are capped by remaining clip; pendingBurstExtra is reset to 0 after use.
         while (pendingBurstExtra > 0 && shotsInClip > 0) {
             pendingBurstExtra--;
-            lastHitEnemy  = null;
-            lastHitDamage = 0;
+            lastHitEnemy        = null;
+            lastHitDamage       = 0;
+            lastTargetWasFullHp = false;
             shotsInClip--;
             flashCycleCount++;
             if (!isPerPelletAccuracy() && !rollHitChance()) {
                 if (eventTextSystem != null) eventTextSystem.showMiss();
+                if (hasAbility(WeaponAbility.RHYTHM)) resetRhythm();
             } else {
                 // Extra burst shots also trigger hit/crit/kill callbacks.
                 FireResult burstResult = marchShot(playerTileColumn, playerTileRow,
@@ -572,7 +641,8 @@ public abstract class Weapon implements WeaponProfile {
         if (result.stoppedByWall || result.distanceTiles < 0) return;
 
         boolean wasCrit = abilityResolver.onHit(this, lastHitEnemy, lastHitDamage,
-                lastFacingStepColumn, lastFacingStepRow);
+                lastFacingStepColumn, lastFacingStepRow,
+                lastTargetWasFullHp, result.distanceTiles);
         int critBonusDamage = wasCrit
                 ? Math.round(lastHitDamage * (WeaponConstants.CRIT_DAMAGE_MULTIPLIER - 1f))
                 : 0;
