@@ -183,6 +183,21 @@ public final class Inventory {
         return quantity - remaining;
     }
 
+    /**
+     * Adds the given number of ammo units of the specified type to the reserve.
+     * Delegates to {@link #tryAdd} using the ammo type's corresponding {@link ItemType}.
+     * The cap is enforced by the ItemType's maxStackSize (see ItemConstants.AMMO_RESERVE_CAP_*).
+     *
+     * @param ammoType the ammo category to refund; must not be null
+     * @param amount   how many rounds to add; must be >= 1
+     * @return true if the full amount was absorbed; false if inventory was full
+     */
+    public boolean addAmmo(AmmoType ammoType, int amount) {
+        if (ammoType == null) throw new IllegalArgumentException("ammoType must not be null");
+        if (amount < 1)       throw new IllegalArgumentException("amount must be >= 1");
+        return tryAdd(ammoType.getItemType(), amount);
+    }
+
     // =========================================================================
     // Queries — all allocation-free
     // =========================================================================

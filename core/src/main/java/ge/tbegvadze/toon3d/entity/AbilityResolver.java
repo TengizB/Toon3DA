@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.progression.KillXpListener;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.util.GameBalance;
@@ -30,6 +31,9 @@ import java.util.Random;
  *   ADRENAL_SURGE      (ON_KILL)   — chance to buff next attack's damage on kill.
  *   SALVAGE_STRIKE     (ON_KILL)   — melee: chance to override drop tile with ammo pickup.
  *   SCHOLARS_EDGE      (ON_KILL)   — melee: awards bonus XP equal to a fraction of base reward.
+ *   SCAVENGER_ROUNDS   (ON_KILL)   — gun: chance to refund ammo to reserve on kill.
+ *   FIELD_MEDIC_ROUNDS (ON_KILL)   — universal: chance to drop a medkit on the killed enemy's tile.
+ *   CREDIT_FANG        (ON_KILL)   — universal: awards bonus credits to PlayerStats on kill.
  *   BULWARK_ROUNDS     (ON_RELOAD) — grants temporary armor after reloading.
  *   SECOND_WIND        (PASSIVE)   — boosts damage when player HP is critically low.
  *   BERSERKERS_OATH    (PASSIVE)   — melee legendary: kill-streak stacks for damage/HP regen.
@@ -57,6 +61,12 @@ public final class AbilityResolver {
     private KillXpListener killXpListener = null;
 
     /**
+     * Injected by World so Scavenger Rounds can refund ammo directly to the player's
+     * ammo reserve on a kill proc.  Null until World calls setPlayerInventory().
+     */
+    private Inventory playerInventory = null;
+
+    /**
      * Re-entrancy guard for CLEAVE: prevents the recursive onHit() calls for flanking
      * targets from re-triggering another Cleave sweep (infinite recursion prevention).
      */
@@ -76,6 +86,15 @@ public final class AbilityResolver {
      */
     public void setKillXpListener(KillXpListener listener) {
         this.killXpListener = listener;
+    }
+
+    /**
+     * Injects the player's shared item inventory so Scavenger Rounds can refund ammo
+     * directly to the reserve on a kill proc.
+     * Called once by World after both the inventory and resolver are constructed.
+     */
+    public void setPlayerInventory(Inventory inventory) {
+        this.playerInventory = inventory;
     }
 
     // ── Entry points called from Weapon.fire() / Weapon.onTick() ─────────────
@@ -366,6 +385,53 @@ public final class AbilityResolver {
             }
             if (stacks == GameBalance.BERSERKER_MAX_STACKS && eventTextSystem != null) {
                 eventTextSystem.spawnWithColor("BERSERK!", EventTextSystem.COLOR_RED);
+            }
+        }
+
+        // ── SCAVENGER_ROUNDS (gun only) ────────────────────────────────────
+        // On kill, rolls a chance to refund ammo directly to the player's reserve for this
+        // weapon's ammo type. Refund goes to reserve — never directly into the clip.
+        if (weapon.hasAbility(WeaponAbility.SCAVENGER_ROUNDS) && !weapon.isMelee()
+                && playerInventory != null && weapon.getAmmoType() != null) {
+            float refundChance = weapon.abilityMagnitude(WeaponAbility.SCAVENGER_ROUNDS);
+            if (abilityRandom.nextFloat() <= refundChance) {
+                int refundAmount = (weapon.getWeaponLevel() >= GameBalance.SCAVENGER_HIGH_LEVEL_THRESHOLD)
+                        ? GameBalance.SCAVENGER_REFUND_HIGH_LEVEL
+                        : GameBalance.SCAVENGER_REFUND_BASE;
+                playerInventory.addAmmo(weapon.getAmmoType(), refundAmount);
+                if (eventTextSystem != null) {
+                    eventTextSystem.spawnWithColor("+" + refundAmount + " AMMO", EventTextSystem.COLOR_GREEN);
+                }
+            }
+        }
+
+        // ── FIELD_MEDIC_ROUNDS (universal) ────────────────────────────────
+        // On kill, rolls a chance to override the drop at the dead enemy's tile with a
+        // small medkit pickup. Works for both melee and ranged kills.
+        if (weapon.hasAbility(WeaponAbility.FIELD_MEDIC_ROUNDS)
+                && killedEnemyObject instanceof Enemy) {
+            Enemy killedEnemy = (Enemy) killedEnemyObject;
+            float dropChance  = weapon.abilityMagnitude(WeaponAbility.FIELD_MEDIC_ROUNDS);
+            if (abilityRandom.nextFloat() <= dropChance) {
+                enemyManager.overrideDropAt(killedEnemy.tileColumn, killedEnemy.tileRow,
+                        GameBalance.FIELD_MEDIC_DROP_CHAR);
+                if (eventTextSystem != null) {
+                    eventTextSystem.spawnWithColor("MEDKIT DROP!", EventTextSystem.COLOR_GREEN);
+                }
+            }
+        }
+
+        // ── CREDIT_FANG (universal) ────────────────────────────────────────
+        // On kill, awards bonus credits to the player's credit balance (spendable in the
+        // shop when order-11 is implemented). No HUD display; only the event text "+N CR".
+        if (weapon.hasAbility(WeaponAbility.CREDIT_FANG)
+                && player != null && player.getPlayerStats() != null) {
+            int creditsEarned = Math.round(weapon.abilityMagnitude(WeaponAbility.CREDIT_FANG));
+            if (creditsEarned > 0) {
+                player.getPlayerStats().addCredits(creditsEarned);
+                if (eventTextSystem != null) {
+                    eventTextSystem.spawnWithColor("+" + creditsEarned + " CR", EventTextSystem.COLOR_GREEN);
+                }
             }
         }
     }

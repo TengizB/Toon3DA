@@ -419,4 +419,41 @@ public final class GameBalance {
     public static final float BERSERKER_DAMAGE_PER_STACK  = 0.10f;
     public static final int   BERSERKER_HP_TICK_PER_STACK = 1;
     public static final int   BERSERKER_MAX_STACKS        = 5;
+
+    // =========================================================================
+    // UTILITY & ECONOMY ABILITIES — weapon-system-order-7
+    // All values are PLACEHOLDERS — flag for playtesting.
+    // =========================================================================
+
+    // ── Scavenger Rounds (ON_KILL, gun only) ────────────────────────────────
+    /** Level-1 proc chance for Scavenger Rounds (15%). */
+    public static final float SCAVENGER_CHANCE_BASE          = 0.15f;
+    /** Proc chance added per weapon level above 1. */
+    public static final float SCAVENGER_CHANCE_PER_LEVEL     = 0.03f;
+    /** Maximum proc chance for Scavenger Rounds regardless of weapon level (50%). */
+    public static final float SCAVENGER_CHANCE_CAP           = 0.50f;
+    /** Ammo units refunded to reserve at weapon level below SCAVENGER_HIGH_LEVEL_THRESHOLD. */
+    public static final int   SCAVENGER_REFUND_BASE          = 1;
+    /** Ammo units refunded to reserve at weapon level >= SCAVENGER_HIGH_LEVEL_THRESHOLD. */
+    public static final int   SCAVENGER_REFUND_HIGH_LEVEL    = 2;
+    /** Weapon level threshold at which the refund amount increases from BASE to HIGH_LEVEL. */
+    public static final int   SCAVENGER_HIGH_LEVEL_THRESHOLD = 7;
+
+    // ── Field Medic Rounds (ON_KILL, universal) ──────────────────────────────
+    /** Level-1 proc chance for Field Medic Rounds (5%). */
+    public static final float FIELD_MEDIC_CHANCE_BASE        = 0.05f;
+    /** Proc chance added per weapon level above 1. */
+    public static final float FIELD_MEDIC_CHANCE_PER_LEVEL   = 0.02f;
+    /** Maximum proc chance for Field Medic Rounds regardless of weapon level (25%). */
+    public static final float FIELD_MEDIC_CHANCE_CAP         = 0.25f;
+    /** Tile character placed at the killed enemy's tile when Field Medic Rounds procs. '+' = MEDKIT_SMALL. */
+    public static final char  FIELD_MEDIC_DROP_CHAR          = '+';
+
+    // ── Credit Fang (ON_KILL, universal) ─────────────────────────────────────
+    /** Credits awarded at level 1 for each Credit Fang kill. */
+    public static final float CREDIT_FANG_BASE               = 2f;
+    /** Additional credits per weapon level above 1. */
+    public static final float CREDIT_FANG_PER_LEVEL          = 1f;
+    /** Maximum credits awarded per kill regardless of weapon level. */
+    public static final int   CREDIT_FANG_CAP                = 12;
 }

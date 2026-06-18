@@ -358,6 +358,28 @@ public final class PlayerStats {
     }
 
     // =========================================================================
+    // Credits — accumulated by Credit Fang ability; spendable in the shop (order-11)
+    // =========================================================================
+
+    private int credits = 0;
+
+    /**
+     * Adds the given amount to the player's credit balance.
+     * Called by AbilityResolver when Credit Fang procs on a kill.
+     * Credits are persistent across floors and spendable in the shop (order-11).
+     *
+     * @param amount credits to add; must be >= 0
+     */
+    public void addCredits(int amount) {
+        if (amount > 0) credits += amount;
+    }
+
+    /** Returns the player's current credit balance. */
+    public int getCredits() {
+        return credits;
+    }
+
+    // =========================================================================
     // Adrenal Surge pending buff — consumed on the very next weapon fire
     // "Next attack only" semantics: stored on kill, read-and-clear on fire.
     // =========================================================================

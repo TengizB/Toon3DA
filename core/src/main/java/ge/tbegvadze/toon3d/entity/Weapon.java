@@ -456,7 +456,7 @@ public abstract class Weapon implements WeaponProfile {
             ticksRemaining--;
             if (ticksRemaining <= 0) {
                 if (ammoInventory != null && ammoType != null) {
-                    int bulletsNeeded = clipSize - shotsInClip;
+                    int bulletsNeeded = getEffectiveClipSize() - shotsInClip;
                     int roundsLoaded  = ammoInventory.spend(ammoType.getItemType(), bulletsNeeded);
                     shotsInClip += roundsLoaded;
                     if (shotsInClip == 0) {
