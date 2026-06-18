@@ -151,6 +151,16 @@ public abstract class Weapon implements WeaponProfile {
     private int     berserkerStacks         = 0;
     private boolean berserkerKilledThisFire = false;
 
+    // ── Soulforge state (legendary ON_KILL) ───────────────────────────────────
+    // Kill counter and level-up flag per weapon instance; survives floor transitions.
+    private int     soulforgeKillCount     = 0;
+    private boolean soulforgeJustLeveledUp = false;
+
+    // ── Judgment state (legendary ON_FIRE, gun only) ──────────────────────────
+    // Counts fires since the last Judgment shot; signals the lance path for this fire.
+    private int     judgmentFireCounter    = 0;
+    private boolean judgmentActive         = false;
+
     // Per-weapon RNG for hit-chance rolls — not seeded from run seed, which is acceptable
     // because miss results are cosmetic feedback and do not affect long-term balance.
     private final java.util.Random random = new java.util.Random();
@@ -409,6 +419,59 @@ public abstract class Weapon implements WeaponProfile {
 
     public void incrementBerserkerStacks() {
         berserkerStacks = Math.min(berserkerStacks + 1, GameBalance.BERSERKER_MAX_STACKS);
+    }
+
+    // ── Soulforge accessors ───────────────────────────────────────────────────
+
+    /**
+     * Increments the Soulforge kill counter and levels up the weapon when the threshold
+     * is reached. No-op when this weapon lacks SOULFORGE or is already at max level.
+     */
+    public void incrementSoulforgeKill() {
+        if (!hasAbility(WeaponAbility.SOULFORGE)) return;
+        soulforgeKillCount++;
+        if (soulforgeKillCount >= GameBalance.SOULFORGE_KILLS_PER_LEVEL_UP) {
+            soulforgeKillCount = 0;
+            if (weaponLevel < WeaponConstants.MAX_WEAPON_LEVEL) {
+                incrementWeaponLevel();
+                soulforgeJustLeveledUp = true;
+            }
+        }
+    }
+
+    /**
+     * Returns true (once) immediately after a Soulforge level-up occurred, then resets
+     * the flag to false. The caller must display the ascension text on a true return.
+     */
+    public boolean consumeSoulforgeAscend() {
+        boolean ascended       = soulforgeJustLeveledUp;
+        soulforgeJustLeveledUp = false;
+        return ascended;
+    }
+
+    // ── Judgment accessors ────────────────────────────────────────────────────
+
+    /**
+     * Increments the Judgment fire counter and returns true when the counter reaches
+     * {@link GameBalance#JUDGMENT_COOLDOWN_FIRES}, resetting it to zero on that fire.
+     * Always returns false for non-JUDGMENT weapons.
+     */
+    public boolean consumeJudgment() {
+        if (!hasAbility(WeaponAbility.JUDGMENT)) return false;
+        judgmentFireCounter++;
+        if (judgmentFireCounter >= GameBalance.JUDGMENT_COOLDOWN_FIRES) {
+            judgmentFireCounter = 0;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Signals that the current fire activation should use the Judgment lance path.
+     * Set to true by AbilityResolver.onFire(); consumed and reset inside fire().
+     */
+    public void setJudgmentActive(boolean active) {
+        this.judgmentActive = active;
     }
 
     /**

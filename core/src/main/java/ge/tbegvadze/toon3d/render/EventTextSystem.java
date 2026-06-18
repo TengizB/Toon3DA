@@ -14,6 +14,8 @@ public final class EventTextSystem {
     public static final byte COLOR_GREEN = 1;
     public static final byte COLOR_RED   = 2;
     public static final byte COLOR_GREY  = 3;
+    /** Bright gold — used for legendary signature ability events (Soulforge, Judgment, Nova). */
+    public static final byte COLOR_GOLD  = 4;
 
     // Pre-built damage strings "-0".."-99" to avoid allocation on enemy hit.
     private static final String[] DAMAGE_STRINGS = buildDamageStrings();
@@ -81,7 +83,7 @@ public final class EventTextSystem {
     /** Returns age in [0, EVENT_TEXT_LIFE_SECONDS] for slot index. */
     public float getAge(int slotIndex) { return ageSeconds[slotIndex]; }
 
-    /** Returns the color type constant for the slot (COLOR_WHITE, COLOR_GREEN, COLOR_RED, or COLOR_GREY). */
+    /** Returns the color type constant for the slot (COLOR_WHITE, COLOR_GREEN, COLOR_RED, COLOR_GREY, or COLOR_GOLD). */
     public byte getColorType(int slotIndex) { return colorTypes[slotIndex]; }
 
     /** Spawns a grey "MISS" event text — neutral, does not trigger hit effects. */
