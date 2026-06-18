@@ -499,16 +499,19 @@ public class HudRenderer implements Renderable, Disposable {
         font.draw(batch, cachedWeaponHudLine, RIGHT_START_X + 12f, RIGHT_NAME_Y);
 
         if (!isDead) {
-            float glyphY     = RIGHT_NAME_Y - HudConstants.HUD_ABILITY_STRIP_Y_OFFSET;
+            float glyphY       = RIGHT_NAME_Y - HudConstants.HUD_ABILITY_STRIP_Y_OFFSET;
             int   abilityCount = activeWeaponProfile.getAbilityCount();
+            int   drawnCount   = 0;
             font.getData().setScale(HudConstants.HUD_LEVEL_BADGE_FONT_SCALE);
             for (int abilityIndex = 0; abilityIndex < abilityCount; abilityIndex++) {
-                AbilityInstance inst  = activeWeaponProfile.getAbility(abilityIndex);
-                float           glyphX = RIGHT_START_X + 12f
-                                         + abilityIndex * HudConstants.HUD_ABILITY_GLYPH_SPACING;
+                AbilityInstance inst = activeWeaponProfile.getAbility(abilityIndex);
+                if (inst == null) continue;
+                float glyphX = RIGHT_START_X + 12f
+                               + drawnCount * HudConstants.HUD_ABILITY_GLYPH_SPACING;
                 stringBuilder.setLength(0);
                 stringBuilder.append(inst.ability.hudGlyph);
                 font.draw(batch, stringBuilder, glyphX, glyphY);
+                drawnCount++;
             }
         }
         font.getData().setScale(0.9f);
