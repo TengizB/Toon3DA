@@ -32,4 +32,14 @@ public interface EnemyHitTarget {
      * Default: no-op; EnemyManager overrides to set an internal flag used in killEnemy().
      */
     default void notifyMeleeAttack() {}
+
+    /**
+     * Returns true if the given enemy is currently at maximum HP.
+     * Called before applyDamageTo() to determine whether the target was at full health
+     * before the shot's primary damage is applied (used for OPENING_SALVO ability).
+     * Default returns false; EnemyManager overrides with a real check.
+     */
+    default boolean isAtFullHp(Object enemyObject) {
+        return false;
+    }
 }

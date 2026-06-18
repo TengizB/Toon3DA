@@ -13,6 +13,17 @@ import java.util.EnumMap;
 /** Runtime state for a single enemy instance. Pure data + lightweight behavior helpers. */
 public class Enemy implements StatusHost {
 
+    // Stable integer identity for ability tracking (e.g. Rhythm target ID).
+    // Incrementing at construction time guarantees uniqueness within a JVM session.
+    private static int nextId = 0;
+    private final  int id     = nextId++;
+
+    /** Returns the stable identity integer for this enemy instance. Used by Rhythm ability. */
+    public int getId() { return id; }
+
+    /** Resets the ID counter; call when starting a completely new game run. */
+    public static void resetIdCounter() { nextId = 0; }
+
     public final EnemyType type;
 
     /** Authoritative tile position (integer grid coordinates). */
