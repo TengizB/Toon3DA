@@ -11,11 +11,8 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
-import ge.tbegvadze.toon3d.entity.AbilityInstance;
 import ge.tbegvadze.toon3d.entity.Loadout;
 import ge.tbegvadze.toon3d.entity.Player;
-import ge.tbegvadze.toon3d.entity.WeaponProfile;
-import ge.tbegvadze.toon3d.entity.WeaponTier;
 import ge.tbegvadze.toon3d.render.Renderable;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
@@ -25,12 +22,12 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
 import ge.tbegvadze.toon3d.world.HudState;
 
 /**
- * Two-panel HUD: left chrome panel (x 0..420) and right chrome panel (x 860..1280).
+ * Left chrome HUD panel only (x 0..420).
  * Left panel: HP, AR, CL, XP bars + weapon slot strip + status icons.
- * Right panel: active weapon name in tier color + ability glyph strip + tier underline.
+ * Right screen area (x 860..1280) is transparent — 3D world shows through.
  *
  * Render order per frame:
- *   Pass A — ShapeRenderer.Filled  (backgrounds, bars, tier underline — alpha-blended)
+ *   Pass A — ShapeRenderer.Filled  (backgrounds, bars — alpha-blended)
  *   Pass B — ShapeRenderer.Line    (bevels, outlines)
  *   Pass C — SpriteBatch + BitmapFont (labels and numbers)
  */
@@ -91,12 +88,8 @@ public class HudRenderer implements Renderable, Disposable {
     // -------------------------------------------------------------------------
     // Layout — derived from HudConstants
     // -------------------------------------------------------------------------
-    private static final float PANEL_HEIGHT  = HudConstants.HUD_HEIGHT;
-    private static final float LEFT_WIDTH    = HudConstants.HUD_LEFT_PANEL_WIDTH;
-    private static final float RIGHT_START_X = HudConstants.HUD_RIGHT_PANEL_START_X;
-    private static final float RIGHT_WIDTH   = HudConstants.HUD_RIGHT_PANEL_WIDTH;
-    // Weapon name baseline Y (from panel bottom), derived from named constant.
-    private static final float RIGHT_NAME_Y  = PANEL_HEIGHT - HudConstants.HUD_RIGHT_PANEL_NAME_INSET_Y;
+    private static final float PANEL_HEIGHT = HudConstants.HUD_HEIGHT;
+    private static final float LEFT_WIDTH   = HudConstants.HUD_LEFT_PANEL_WIDTH;
 
     // -------------------------------------------------------------------------
     // Resources owned by this renderer
@@ -108,15 +101,9 @@ public class HudRenderer implements Renderable, Disposable {
     // -------------------------------------------------------------------------
     // Inputs
     // -------------------------------------------------------------------------
-    private final Player        player;
-    private final HudState      hudState;
-    private       Loadout       loadout             = null;
-    private       WeaponProfile activeWeaponProfile = null;
-
-    // Right-panel weapon line cache — rebuilt only when level or tier changes.
-    private String     cachedWeaponHudLine = "";
-    private int        cachedWeaponLevel   = -1;
-    private WeaponTier cachedTier          = null;
+    private final Player   player;
+    private final HudState hudState;
+    private       Loadout  loadout = null;
 
     // -------------------------------------------------------------------------
     // Animation state
@@ -148,11 +135,6 @@ public class HudRenderer implements Renderable, Disposable {
     /** Provides the loadout whose slots are drawn in the left-panel strip. */
     public void setLoadout(Loadout newLoadout) {
         this.loadout = newLoadout;
-    }
-
-    /** Provides the active weapon whose name + abilities are shown in the right panel. */
-    public void setActiveWeaponProfile(WeaponProfile profile) {
-        this.activeWeaponProfile = profile;
     }
 
     /**
@@ -200,15 +182,12 @@ public class HudRenderer implements Renderable, Disposable {
         drawXpBarFilled(isDead);
         if (loadout != null) drawSlotStripFilled(loadout, pulse);
         if (!isDead) drawStatusIconsFilled();
-        drawPanelChromeFilled(RIGHT_START_X, 0f, RIGHT_WIDTH, PANEL_HEIGHT, alert, pulse);
-        if (activeWeaponProfile != null && !isDead) drawRightPanelTierUnderline();
         shapes.end();
 
         // ---- Pass B: Line ----
         shapes.begin(ShapeRenderer.ShapeType.Line);
         drawPanelChromeLines(0f, 0f, LEFT_WIDTH, PANEL_HEIGHT);
         if (loadout != null) drawSlotStripLines(loadout);
-        drawPanelChromeLines(RIGHT_START_X, 0f, RIGHT_WIDTH, PANEL_HEIGHT);
         shapes.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
@@ -221,7 +200,6 @@ public class HudRenderer implements Renderable, Disposable {
         if (loadout != null) drawSlotStripText(loadout, isDead);
         if (!isDead) drawStatusIconsText();
         if (groundWeaponLabel != null && !isDead) drawGroundWeaponLabel(groundWeaponLabel);
-        drawRightPanelText(isDead);
         batch.end();
     }
 
@@ -257,17 +235,6 @@ public class HudRenderer implements Renderable, Disposable {
             shapes.setColor(LED_GREEN);
         }
         shapes.circle(ledX, ledY, ledRadius, 8);
-    }
-
-    private void drawRightPanelTierUnderline() {
-        WeaponTier tier = activeWeaponProfile.getTier();
-        if (tier == null) return;
-        float underlineY = RIGHT_NAME_Y
-                - HudConstants.HUD_TIER_UNDERLINE_Y_OFFSET
-                - HudConstants.HUD_TIER_UNDERLINE_HEIGHT;
-        shapes.setColor(tier.colorRed, tier.colorGreen, tier.colorBlue, 0.85f);
-        shapes.rect(RIGHT_START_X + 12f, underlineY,
-                    RIGHT_WIDTH - 24f, HudConstants.HUD_TIER_UNDERLINE_HEIGHT);
     }
 
     private void drawHpBarFilled(float pulse, boolean lowHp, boolean isDead) {
@@ -460,61 +427,6 @@ public class HudRenderer implements Renderable, Disposable {
         stringBuilder.append("LV.");
         stringBuilder.append(hudState.playerLevel);
         font.draw(batch, stringBuilder, HudConstants.HUD_BAR_NUMBER_X, labelY);
-    }
-
-    // =========================================================================
-    // Right panel — weapon name + ability glyphs (Pass C)
-    // =========================================================================
-
-    private void drawRightPanelText(boolean isDead) {
-        if (activeWeaponProfile == null) return;
-
-        // Rebuild line cache when weapon level or tier changes (not per-frame when stable).
-        int        currentLevel = activeWeaponProfile.getWeaponLevel();
-        WeaponTier currentTier  = activeWeaponProfile.getTier();
-        if (currentLevel != cachedWeaponLevel || currentTier != cachedTier) {
-            cachedWeaponLevel = currentLevel;
-            cachedTier        = currentTier;
-            stringBuilder.setLength(0);
-            stringBuilder.append(HudConstants.HUD_LEVEL_BADGE_PREFIX)
-                         .append(currentLevel)
-                         .append("  ")
-                         .append(activeWeaponProfile.getDisplayName());
-            cachedWeaponHudLine = stringBuilder.toString();
-        }
-
-        float tierR, tierG, tierB;
-        if (isDead || cachedTier == null) {
-            tierR = PHOSPHOR_DIM.r;
-            tierG = PHOSPHOR_DIM.g;
-            tierB = PHOSPHOR_DIM.b;
-        } else {
-            tierR = cachedTier.colorRed;
-            tierG = cachedTier.colorGreen;
-            tierB = cachedTier.colorBlue;
-        }
-
-        font.getData().setScale(0.9f);
-        font.setColor(tierR, tierG, tierB, 1f);
-        font.draw(batch, cachedWeaponHudLine, RIGHT_START_X + 12f, RIGHT_NAME_Y);
-
-        if (!isDead) {
-            float glyphY       = RIGHT_NAME_Y - HudConstants.HUD_ABILITY_STRIP_Y_OFFSET;
-            int   abilityCount = activeWeaponProfile.getAbilityCount();
-            int   drawnCount   = 0;
-            font.getData().setScale(HudConstants.HUD_LEVEL_BADGE_FONT_SCALE);
-            for (int abilityIndex = 0; abilityIndex < abilityCount; abilityIndex++) {
-                AbilityInstance inst = activeWeaponProfile.getAbility(abilityIndex);
-                if (inst == null) continue;
-                float glyphX = RIGHT_START_X + 12f
-                               + drawnCount * HudConstants.HUD_ABILITY_GLYPH_SPACING;
-                stringBuilder.setLength(0);
-                stringBuilder.append(inst.ability.hudGlyph);
-                font.draw(batch, stringBuilder, glyphX, glyphY);
-                drawnCount++;
-            }
-        }
-        font.getData().setScale(0.9f);
     }
 
     // =========================================================================
