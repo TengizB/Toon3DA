@@ -8,12 +8,14 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.entity.WeaponAbility;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemCategory;
 import ge.tbegvadze.toon3d.item.ItemStack;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
+import java.util.function.Consumer;
 
 /**
  * Part 4 ItemWindow — modal popup shown when a weapon or inventory slot is tapped.
@@ -23,6 +25,10 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
  *   Body   (middle)    — left column: description + stat block;
  *                        right column: abilities (weapons) or category-specific info
  *   Footer (bottom 56px) — two action buttons (use/equip + drop)
+ *
+ * Part 5 addition: weapon right column renders tappable ability rows. Each row
+ * shows the ability's hudGlyph, displayName, shortHint, and a PASSIVE/ACTIVE badge.
+ * Tapping a row invokes the onAbilityTap callback, which opens AbilityWindow.
  *
  * Package-private — owned and driven by InventoryOverlayRenderer coordinator.
  * No allocations inside render() — all scratch objects pre-allocated.
@@ -71,6 +77,13 @@ final class ItemWindow implements Disposable {
     // Body: fixed Y at which the stat block begins (leaves ~72px for 4 description lines)
     private static final float STAT_Y        = DESC_Y - 80f;
 
+    // Ability rows in the right column — Part 5
+    private static final float ABILITY_ROW_H   = ItemConstants.INV_ITEM_WIN_ABILITY_ROW_H;
+    private static final float ABILITY_ROW_GAP = ItemConstants.INV_ITEM_WIN_ABILITY_ROW_GAP;
+    private static final float ABILITY_HDR_H   = ItemConstants.INV_ITEM_WIN_ABILITY_HDR_H;
+    private static final float BADGE_W         = ItemConstants.INV_ABILITY_BADGE_W;
+    private static final float BADGE_H         = ItemConstants.INV_ABILITY_BADGE_H;
+
     // -------------------------------------------------------------------------
     // Palette — UAC military CRT amber-on-steel
     // -------------------------------------------------------------------------
@@ -93,6 +106,11 @@ final class ItemWindow implements Disposable {
     private static final Color BTN_BORDER_ON    = new Color(0.50f,  0.50f,  0.55f,  1.00f);
     private static final Color BTN_BORDER_OFF   = new Color(0.30f,  0.30f,  0.32f,  1.00f);
     private static final Color RED_FLASH        = new Color(0.95f,  0.15f,  0.15f,  1.00f);
+    private static final Color ABILITY_ROW_BG   = new Color(0.08f,  0.08f,  0.10f,  1.00f);
+    private static final Color BADGE_PASSIVE_BG = new Color(0.10f,  0.30f,  0.10f,  0.85f);
+    private static final Color BADGE_PASSIVE_FG = new Color(0.20f,  0.90f,  0.30f,  1.00f);
+    private static final Color BADGE_ACTIVE_BG  = new Color(0.30f,  0.20f,  0.05f,  0.85f);
+    private static final Color BADGE_ACTIVE_FG  = new Color(1.00f,  0.72f,  0.00f,  1.00f);
 
     // Category glyph-box border colors
     private static final Color CAT_WEAPON       = new Color(1.00f, 0.72f, 0.00f, 1.00f);
@@ -106,10 +124,11 @@ final class ItemWindow implements Disposable {
     // Shared rendering resources (owned by coordinator, not disposed here)
     // -------------------------------------------------------------------------
 
-    private final ShapeRenderer shapeRenderer;
-    private final SpriteBatch   spriteBatch;
-    private final BitmapFont    font;
-    private final GlyphLayout   glyphLayout;
+    private final ShapeRenderer           shapeRenderer;
+    private final SpriteBatch             spriteBatch;
+    private final BitmapFont              font;
+    private final GlyphLayout             glyphLayout;
+    private final Consumer<WeaponAbility> onAbilityTap;
 
     // Pre-allocated scratch buffer for dynamic stat value strings
     private final StringBuilder valueBuilder;
@@ -118,21 +137,24 @@ final class ItemWindow implements Disposable {
     // State
     // -------------------------------------------------------------------------
 
-    private Inventory inventory;
-    private int       slotIndex         = -1;
-    private String    flashMessage      = null;
-    private float     flashTimerSeconds = 0f;
+    private Inventory       inventory;
+    private int             slotIndex         = -1;
+    private String          flashMessage      = null;
+    private float           flashTimerSeconds = 0f;
+    private WeaponAbility[] cachedAbilities   = ItemType.NO_ABILITIES;
 
     // -------------------------------------------------------------------------
     // Constructor
     // -------------------------------------------------------------------------
 
     ItemWindow(ShapeRenderer shapeRenderer, SpriteBatch spriteBatch,
-               BitmapFont font, GlyphLayout glyphLayout) {
+               BitmapFont font, GlyphLayout glyphLayout,
+               Consumer<WeaponAbility> onAbilityTap) {
         this.shapeRenderer = shapeRenderer;
         this.spriteBatch   = spriteBatch;
         this.font          = font;
         this.glyphLayout   = glyphLayout;
+        this.onAbilityTap  = onAbilityTap;
         this.valueBuilder  = new StringBuilder(32);
     }
 
@@ -145,6 +167,12 @@ final class ItemWindow implements Disposable {
         this.slotIndex         = slotIndex;
         this.flashMessage      = null;
         this.flashTimerSeconds = 0f;
+        ItemStack slot = inventory.getSlot(slotIndex);
+        if (!slot.isEmpty() && slot.getType().getCategory() == ItemCategory.WEAPON) {
+            cachedAbilities = slot.getType().getSignatureAbilities();
+        } else {
+            cachedAbilities = ItemType.NO_ABILITIES;
+        }
     }
 
     boolean isOpen() {
@@ -152,8 +180,9 @@ final class ItemWindow implements Disposable {
     }
 
     void close() {
-        slotIndex = -1;
-        inventory = null;
+        slotIndex       = -1;
+        inventory       = null;
+        cachedAbilities = ItemType.NO_ABILITIES;
     }
 
     boolean containsPoint(float worldX, float worldY) {
@@ -174,6 +203,19 @@ final class ItemWindow implements Disposable {
         if (worldX >= EXIT_X && worldX <= EXIT_X + EXIT_SIZE
                 && worldY >= EXIT_Y && worldY <= EXIT_Y + EXIT_SIZE) {
             return InventoryOverlayRenderer.CloseAction.CLOSE_WINDOW;
+        }
+        // Ability rows in right column (weapon only) — open AbilityWindow on tap
+        if (cachedAbilities.length > 0
+                && worldX >= BODY_R_X && worldX <= BODY_R_X + BODY_R_W) {
+            float abilityRowTop = DESC_Y - ABILITY_HDR_H;
+            for (int abilityIndex = 0; abilityIndex < cachedAbilities.length; abilityIndex++) {
+                float rowBottom = abilityRowTop - ABILITY_ROW_H;
+                if (worldY >= rowBottom && worldY <= abilityRowTop) {
+                    onAbilityTap.accept(cachedAbilities[abilityIndex]);
+                    return InventoryOverlayRenderer.CloseAction.NONE;
+                }
+                abilityRowTop -= (ABILITY_ROW_H + ABILITY_ROW_GAP);
+            }
         }
         // Footer button 1 (USE / EQUIP / disabled)
         if (worldX >= BTN1_X && worldX <= BTN1_X + BTN_W
@@ -287,6 +329,25 @@ final class ItemWindow implements Disposable {
                         float rowY = STAT_Y - rowIndex * STAT_ROW_H - STAT_ROW_H;
                         shapeRenderer.setColor(ALT_ROW_BG);
                         shapeRenderer.rect(BODY_L_X, rowY, BODY_L_W, STAT_ROW_H);
+                    }
+                }
+
+                // Ability row backgrounds + badge pills (weapon only)
+                if (slot.getType().getCategory() == ItemCategory.WEAPON
+                        && cachedAbilities.length > 0) {
+                    float abilityRowTop = DESC_Y - ABILITY_HDR_H;
+                    for (WeaponAbility ability : cachedAbilities) {
+                        float rowBottom = abilityRowTop - ABILITY_ROW_H;
+                        shapeRenderer.setColor(ABILITY_ROW_BG);
+                        shapeRenderer.rect(BODY_R_X, rowBottom, BODY_R_W, ABILITY_ROW_H);
+
+                        boolean isPassive = ability.trigger == WeaponAbility.Trigger.PASSIVE;
+                        shapeRenderer.setColor(isPassive ? BADGE_PASSIVE_BG : BADGE_ACTIVE_BG);
+                        float badgeX = BODY_R_X + BODY_R_W - BADGE_W - 4f;
+                        float badgeY = rowBottom + (ABILITY_ROW_H - BADGE_H) / 2f;
+                        shapeRenderer.rect(badgeX, badgeY, BADGE_W, BADGE_H);
+
+                        abilityRowTop -= (ABILITY_ROW_H + ABILITY_ROW_GAP);
                     }
                 }
             }
@@ -489,12 +550,61 @@ final class ItemWindow implements Disposable {
         font.draw(spriteBatch, rightColumnTitle(category), BODY_R_X, headerY);
         font.getData().setScale(1f);
 
-        float contentY = headerY - 26f;
+        float contentY = headerY - ABILITY_HDR_H;
         font.getData().setScale(0.80f);
 
         if (category == ItemCategory.WEAPON) {
-            font.setColor(TEXT_DIM);
-            font.draw(spriteBatch, "No special abilities.", BODY_R_X, contentY);
+            if (cachedAbilities.length == 0) {
+                font.setColor(TEXT_DIM);
+                font.draw(spriteBatch, "No special abilities.", BODY_R_X, contentY);
+            } else {
+                float abilityRowTop = contentY;
+                for (WeaponAbility ability : cachedAbilities) {
+                    float rowBottom = abilityRowTop - ABILITY_ROW_H;
+
+                    // Hud glyph (amber, scaled up, left of row)
+                    font.getData().setScale(1.4f);
+                    font.setColor(AMBER);
+                    valueBuilder.setLength(0);
+                    valueBuilder.append(ability.hudGlyph);
+                    font.draw(spriteBatch, valueBuilder,
+                              BODY_R_X + 4f,
+                              rowBottom + ABILITY_ROW_H - 10f);
+                    font.getData().setScale(1f);
+
+                    // Ability display name (amber, normal scale)
+                    float nameTextX = BODY_R_X + 28f;
+                    font.setColor(AMBER);
+                    font.draw(spriteBatch, ability.displayName,
+                              nameTextX,
+                              rowBottom + ABILITY_ROW_H - 10f);
+
+                    // Short hint (off-white, 0.75 scale, word-wrapped)
+                    font.getData().setScale(0.75f);
+                    font.setColor(OFF_WHITE);
+                    float hintWidth = BODY_R_W - 28f - BADGE_W - 8f;
+                    font.draw(spriteBatch, ability.shortHint,
+                              nameTextX,
+                              rowBottom + ABILITY_ROW_H - 26f,
+                              hintWidth, Align.left, true);
+                    font.getData().setScale(1f);
+
+                    // Type badge text (PASSIVE / ACTIVE), centered in pill
+                    boolean isPassive = ability.trigger == WeaponAbility.Trigger.PASSIVE;
+                    font.getData().setScale(0.65f);
+                    font.setColor(isPassive ? BADGE_PASSIVE_FG : BADGE_ACTIVE_FG);
+                    String badgeLabel = ability.getTypeLabel();
+                    glyphLayout.setText(font, badgeLabel);
+                    float badgeX = BODY_R_X + BODY_R_W - BADGE_W - 4f;
+                    float badgeTextY = rowBottom + (ABILITY_ROW_H + glyphLayout.height) / 2f;
+                    font.draw(spriteBatch, badgeLabel,
+                              badgeX + (BADGE_W - glyphLayout.width) / 2f,
+                              badgeTextY);
+                    font.getData().setScale(1f);
+
+                    abilityRowTop -= (ABILITY_ROW_H + ABILITY_ROW_GAP);
+                }
+            }
 
         } else if (category == ItemCategory.CONSUMABLE) {
             font.setColor(OFF_WHITE);
@@ -687,13 +797,13 @@ final class ItemWindow implements Disposable {
 
     private static String weaponFireMode(ItemType itemType) {
         switch (itemType) {
-            case WEAPON_CHAINGUN:  return "Burst";
+            case WEAPON_CHAINGUN:    return "Burst";
             case WEAPON_INCINERATOR: return "Full-Auto";
             case WEAPON_FIST:
             case WEAPON_KNIFE:
             case WEAPON_HAMMER:
-            case WEAPON_CHAINSAW:  return "Melee";
-            default:               return "Semi";
+            case WEAPON_CHAINSAW:    return "Melee";
+            default:                 return "Semi";
         }
     }
 

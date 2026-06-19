@@ -1,0 +1,44 @@
+TITLE: Inventory Menu — Part 5: AbilityWindow + Weapon Abilities Data Model
+IMPLEMENTED: 2026-06-19
+
+WHAT WAS BUILT
+==============
+
+Part A — WeaponAbility data model expanded (WeaponAbility.java):
+  All 33 ability constants gained three new fields: shortHint (one-liner for
+  ItemWindow rows), fullDescription (2-4 sentences for AbilityWindow body), and
+  affectsLines[] (2-3 bullet strings for the AFFECTS block). A getTypeLabel()
+  method returns "PASSIVE" or "ACTIVE" based on trigger.
+
+Part B — ItemType signature abilities (ItemType.java):
+  Each of the 12 weapon constants now carries a WeaponAbility[] of 2 signature
+  abilities. Non-weapon types use a 9-param constructor that stores null; the
+  getter returns the shared NO_ABILITIES constant. Weapon getters return a
+  defensive clone. Static NO_ABILITIES declared after the enum constants to
+  satisfy Java enum initialization ordering.
+
+Part C — ItemWindow ability rows (ItemWindow.java):
+  The right column for weapon items now shows tappable ability rows instead of
+  "No special abilities." Each row renders the hudGlyph, displayName, shortHint,
+  and a PASSIVE/ACTIVE badge pill. Abilities are cached on open() via
+  getSignatureAbilities(). Tapping a row invokes the onAbilityTap callback
+  (Consumer<WeaponAbility>) injected via constructor.
+
+Part D — AbilityWindow popup (AbilityWindow.java):
+  New Layer-3 popup (520×300 at x=370, y=230). Three render passes:
+  ShapeRenderer.Filled → ShapeRenderer.Line → SpriteBatch+BitmapFont.
+  Displays: ability name (amber), PASSIVE/ACTIVE badge, exit button, full
+  description (word-wrapped), and an AFFECTS bullet list. Blue-white accent
+  (BORDER_BLUE) distinguishes it visually from the amber ItemWindow.
+  Rendering resources are shared from InventoryOverlayRenderer (no-op dispose).
+
+Part E — Wiring (InventoryOverlayRenderer.java):
+  ItemWindow constructor now receives a lambda: ability -> abilityWindow.open(ability).
+  AbilityWindow constructor now receives the 4 shared render resources.
+  Layer-3 routing already existed in handleTouchAt() and render() from the stub.
+
+CONSTANTS ADDED (ItemConstants.java):
+  INV_ABILITY_BADGE_W / _H          — badge pill size shared by both windows
+  INV_ITEM_WIN_ABILITY_ROW_H/GAP/HDR_H — ability row geometry in ItemWindow
+  INV_ABILITY_WIN_WIDTH/HEIGHT/X/Y   — AbilityWindow popup position and size
+  INV_ABILITY_WIN_PADDING/HEADER_H/EXIT_BTN_SIZE/DIVIDER_Y
