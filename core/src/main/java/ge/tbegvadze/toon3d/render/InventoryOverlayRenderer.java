@@ -117,8 +117,9 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                                                   font, glyphLayout, this::openItemWindowForSlot);
         itemGridPanel     = new ItemGridPanel(inventory, shapeRenderer, spriteBatch,
                                               font, glyphLayout, this::openItemWindowForSlot);
-        itemWindow        = new ItemWindow(shapeRenderer, spriteBatch, font, glyphLayout);
-        abilityWindow     = new AbilityWindow();
+        itemWindow        = new ItemWindow(shapeRenderer, spriteBatch, font, glyphLayout,
+                                           ability -> abilityWindow.open(ability));
+        abilityWindow     = new AbilityWindow(shapeRenderer, spriteBatch, font, glyphLayout);
     }
 
     // -------------------------------------------------------------------------

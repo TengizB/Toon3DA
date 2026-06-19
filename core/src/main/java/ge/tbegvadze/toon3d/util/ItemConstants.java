@@ -224,4 +224,23 @@ public final class ItemConstants {
     public static final float INV_ACTION_BTN_Y      = 170f;
     public static final float INV_ACTION_BTN_1_X    = 450f;
     public static final float INV_ACTION_BTN_2_X    = 650f;
+
+    // Ability badge pill — shared by ItemWindow ability rows and AbilityWindow header — Part 5
+    public static final float INV_ABILITY_BADGE_W = 58f;
+    public static final float INV_ABILITY_BADGE_H = 18f;
+
+    // ItemWindow ability rows in right column — Part 5
+    public static final float INV_ITEM_WIN_ABILITY_ROW_H   = 62f;
+    public static final float INV_ITEM_WIN_ABILITY_ROW_GAP = 8f;
+    public static final float INV_ITEM_WIN_ABILITY_HDR_H   = 26f;
+
+    // AbilityWindow popup geometry — Part 5
+    public static final float INV_ABILITY_WIN_WIDTH         = 520f;
+    public static final float INV_ABILITY_WIN_HEIGHT        = 300f;
+    public static final float INV_ABILITY_WIN_X             = 370f;
+    public static final float INV_ABILITY_WIN_Y             = 230f;
+    public static final float INV_ABILITY_WIN_PADDING       = 16f;
+    public static final float INV_ABILITY_WIN_HEADER_H      = 30f;
+    public static final float INV_ABILITY_WIN_EXIT_BTN_SIZE = 28f;
+    public static final float INV_ABILITY_WIN_DIVIDER_Y     = INV_ABILITY_WIN_Y + 60f;
 }
