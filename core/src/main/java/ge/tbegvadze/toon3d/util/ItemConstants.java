@@ -74,16 +74,50 @@ public final class ItemConstants {
     public static final int START_ROOM_AMMO_SLUGS    = 6;
     public static final int START_ROOM_AMMO_ROCKETS  = 4;
 
-    // Inventory UI overlay — all values in world units; placeholders
+    // Inventory UI — slot grid constants (used by ItemGridPanel)
     public static final int   INVENTORY_GRID_COLUMNS        = 4;
     public static final float INV_SLOT_SIZE                  = 96f;
     public static final float INV_SLOT_GAP                   = 12f;
-    public static final float INV_GRID_ORIGIN_X              = 80f;
-    public static final float INV_GRID_ORIGIN_Y              = 620f;
-    public static final float INV_DETAIL_PANEL_X             = 740f;
-    public static final float INV_DETAIL_PANEL_WIDTH         = 460f;
     public static final float INV_SCRIM_ALPHA                = 0.60f;
-    public static final float INV_PANEL_ALPHA                = 0.92f;
+    public static final float INV_PANEL_ALPHA                = 0.95f;
     public static final float INV_SELECT_BORDER_THICKNESS    = 3f;
     public static final float INV_FLASH_SECONDS              = 0.45f;
+
+    // Inventory Menu — new layout (Part 1: Layout & Architecture)
+    public static final float INV_HEADER_HEIGHT           = 70f;
+    public static final float INV_HEADER_Y                = 650f;
+    public static final float INV_PANEL_Y_BOTTOM          = 110f;
+    public static final float INV_PANEL_Y_TOP             = 645f;
+    public static final float INV_PANEL_HEIGHT            = 535f;
+    public static final float INV_LEFT_PANEL_X            = 20f;
+    public static final float INV_LEFT_PANEL_WIDTH        = 500f;
+    public static final float INV_RIGHT_PANEL_X           = 540f;
+    public static final float INV_RIGHT_PANEL_WIDTH       = 720f;
+    public static final float INV_PANEL_GAP               = 20f;
+    public static final float INV_PANEL_PADDING           = 15f;
+    public static final float INV_HEADER_TITLE_X          = 40f;
+    public static final float INV_HEADER_EXIT_BUTTON_SIZE = 50f;
+    public static final float INV_HEADER_EXIT_MARGIN      = 10f;
+    public static final float INV_BASE_DIM_FACTOR         = 0.40f;
+    public static final float INV_ITEM_WIN_DIM_FACTOR     = 0.50f;
+
+    // ItemWindow popup geometry — centered at (640, 380) in world coordinates
+    public static final float INV_ITEM_WINDOW_WIDTH       = 460f;
+    public static final float INV_ITEM_WINDOW_HEIGHT      = 340f;
+    public static final float INV_ITEM_WINDOW_CENTER_X    = 640f;
+    public static final float INV_ITEM_WINDOW_CENTER_Y    = 380f;
+    public static final float INV_ITEM_WINDOW_X           = INV_ITEM_WINDOW_CENTER_X - INV_ITEM_WINDOW_WIDTH  / 2f;
+    public static final float INV_ITEM_WINDOW_Y           = INV_ITEM_WINDOW_CENTER_Y - INV_ITEM_WINDOW_HEIGHT / 2f;
+    public static final float INV_ITEM_WINDOW_HEADER_LINE_OFFSET = 50f;  // header accent line offset from top
+
+    // ItemWindow button row geometry
+    public static final float INV_ITEM_WIN_BTN_AREA_HEIGHT = 50f;
+    public static final float INV_ITEM_WIN_BTN_PADDING     = 10f;
+    public static final float INV_ITEM_WIN_BTN_GAP         = 8f;
+    public static final float INV_ITEM_WIN_BTN_HEIGHT      = INV_ITEM_WIN_BTN_AREA_HEIGHT - 2f * INV_ITEM_WIN_BTN_PADDING;
+    public static final float INV_ITEM_WIN_BTN_WIDTH       = (INV_ITEM_WINDOW_WIDTH - 2f * INV_ITEM_WIN_BTN_PADDING - 2f * INV_ITEM_WIN_BTN_GAP) / 3f;
+    public static final float INV_ITEM_WIN_BTN_Y           = INV_ITEM_WINDOW_Y + INV_ITEM_WIN_BTN_PADDING;
+    public static final float INV_ITEM_WIN_BTN_USE_X       = INV_ITEM_WINDOW_X + INV_ITEM_WIN_BTN_PADDING;
+    public static final float INV_ITEM_WIN_BTN_DROP_X      = INV_ITEM_WIN_BTN_USE_X  + INV_ITEM_WIN_BTN_WIDTH + INV_ITEM_WIN_BTN_GAP;
+    public static final float INV_ITEM_WIN_BTN_EXIT_X      = INV_ITEM_WIN_BTN_DROP_X + INV_ITEM_WIN_BTN_WIDTH + INV_ITEM_WIN_BTN_GAP;
 }
