@@ -475,6 +475,21 @@ public final class GameMath {
         return screenHeight / 2f + lineHeight / 2f;
     }
 
+    /*
+     * Formula: Pickup sprite centered draw-bottom
+     * Derivation:
+     *   Center a sprite of height spriteHeight at the vertical midpoint of the screen:
+     *     drawBottom = screenHeight / 2 - spriteHeight / 2
+     *   The screen midpoint corresponds to eye level, which maps to the exact halfway point
+     *   between floor and ceiling in the perspective projection — independent of depth.
+     *   Applying a bob offset on top of this result makes the sprite hover at mid-air height.
+     * Edge cases:
+     *   If spriteHeight >= screenHeight the result is negative (clamp at draw time).
+     */
+    public static float spriteDrawBottomCentered(float screenHeight, float spriteHeight) {
+        return screenHeight / 2f - spriteHeight / 2f;
+    }
+
     // =========================================================================
     // WALL HIT POSITION (texture U coordinate, 0..1 along the wall face)
     // =========================================================================

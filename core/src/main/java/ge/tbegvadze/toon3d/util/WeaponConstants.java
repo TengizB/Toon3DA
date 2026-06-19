@@ -279,6 +279,11 @@ public final class WeaponConstants {
     public static final int   WEAPON_PICKUP_TEXTURE_SIZE           = 64;     // square pixmap edge, px
     public static final float WEAPON_PICKUP_PHASE_STEP             = 0.7f;   // per-weapon phase offset (rad)
 
+    // Tier-based glow aura for ground weapon pickups
+    public static final int   WEAPON_PICKUP_GLOW_TEXTURE_SIZE      = 64;     // glow pixmap edge, px
+    public static final float WEAPON_PICKUP_GLOW_SIZE_MULTIPLIER   = 2.2f;   // glow diameter as multiple of sprite height
+    public static final float WEAPON_PICKUP_GLOW_ALPHA             = 0.55f;  // additive glow opacity
+
     // ── Weapon level scaling ────────────────────────────────────────────────
     public static final int   MAX_WEAPON_LEVEL                      = 10;
     public static final float WEAPON_LEVEL_DAMAGE_PER_LEVEL         = 0.10f;  // +10% per level
