@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.entity;
 
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.GameBalance;
 
 /**
@@ -12,4 +13,6 @@ public final class Fist extends MeleeWeapon {
     public Fist() {
         super("FIST", GameBalance.MELEE_FIST_DAMAGE);
     }
+
+    @Override public ItemType getItemType() { return ItemType.WEAPON_FIST; }
 }

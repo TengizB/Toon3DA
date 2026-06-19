@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.item.AmmoType;
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
@@ -56,7 +57,8 @@ public class Chaingun extends Weapon {
         setBaseAccuracy(WeaponConstants.CHAINGUN_BASE_ACCURACY);
     }
 
-    @Override public boolean isMelee() { return false; }
+    @Override public boolean isMelee()    { return false; }
+    @Override public ItemType getItemType() { return ItemType.WEAPON_CHAINGUN; }
 
     /**
      * Chaingun rolls accuracy independently for each bullet in the burst rather than once

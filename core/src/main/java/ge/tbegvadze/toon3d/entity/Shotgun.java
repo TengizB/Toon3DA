@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.item.AmmoType;
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
@@ -33,7 +34,8 @@ public class Shotgun extends Weapon {
         setBaseAccuracy(WeaponConstants.SHOTGUN_BASE_ACCURACY);
     }
 
-    @Override public boolean isMelee() { return false; }
+    @Override public boolean isMelee()    { return false; }
+    @Override public ItemType getItemType() { return ItemType.WEAPON_SHOTGUN; }
 
     @Override
     protected FireResult marchShot(int playerTileColumn, int playerTileRow,

@@ -3,6 +3,7 @@ package ge.tbegvadze.toon3d.entity;
 import ge.tbegvadze.toon3d.entity.AbilityResolver;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.Inventory;
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.util.GameBalance;
@@ -810,6 +811,9 @@ public abstract class Weapon implements WeaponProfile {
     /** Returns true for melee weapons; false for all ranged weapons. */
     @Override
     public abstract boolean isMelee();
+
+    /** The ItemType entry matching this weapon, used by the inventory UI for display. */
+    public abstract ItemType getItemType();
 
     /** Path to the texture shown when the weapon is idle and ready. */
     public abstract String getNormalTexturePath();

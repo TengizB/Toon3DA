@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.item.AmmoType;
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
@@ -35,7 +36,8 @@ public class DoubleBarrelShotgun extends Weapon {
         setBaseAccuracy(WeaponConstants.DOUBLE_BARREL_SHOTGUN_BASE_ACCURACY);
     }
 
-    @Override public boolean isMelee() { return false; }
+    @Override public boolean isMelee()    { return false; }
+    @Override public ItemType getItemType() { return ItemType.WEAPON_DOUBLE_BARREL; }
 
     @Override
     protected FireResult marchShot(int playerTileColumn, int playerTileRow,

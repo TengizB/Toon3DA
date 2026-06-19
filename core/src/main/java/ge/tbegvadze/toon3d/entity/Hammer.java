@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.entity;
 
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.GameBalance;
 
@@ -19,6 +20,8 @@ public final class Hammer extends MeleeWeapon {
     public Hammer() {
         super("HAMMER", GameBalance.MELEE_HAMMER_DAMAGE);
     }
+
+    @Override public ItemType getItemType() { return ItemType.WEAPON_HAMMER; }
 
     @Override
     protected void onHit(Object target, EnemyHitTarget enemyHitTarget,
