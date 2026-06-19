@@ -709,7 +709,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             hudState.reserveAmmo = -1;
         }
         float deltaTime = Gdx.graphics.getDeltaTime();
-        hudRenderer.setActiveWeaponProfile(hudWeapon);
         hudRenderer.update(deltaTime);
         hudRenderer.render(camera);
 

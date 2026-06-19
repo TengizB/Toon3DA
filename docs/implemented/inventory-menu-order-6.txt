@@ -1,0 +1,42 @@
+TITLE: Inventory Menu Redesign — Part 6: HUD Right Panel Removal
+IMPLEMENTED: 2026-06-19
+
+WHAT WAS DONE
+=============
+Removed the right HUD chrome panel (x=860–1280) entirely so the bottom-right
+screen quadrant shows the 3D world unobstructed. The left panel (x=0–420)
+with HP/AR/CL/XP bars, weapon slot strip, and status icons is unchanged.
+
+FILES CHANGED
+=============
+1. HudConstants.java
+   Deleted constants:
+     HUD_RIGHT_PANEL_WIDTH, HUD_RIGHT_PANEL_START_X
+     HUD_LEVEL_BADGE_FONT_SCALE, HUD_LEVEL_BADGE_PREFIX
+     HUD_RIGHT_PANEL_NAME_INSET_Y
+     HUD_ABILITY_STRIP_Y_OFFSET, HUD_ABILITY_GLYPH_SIZE, HUD_ABILITY_GLYPH_SPACING
+     HUD_TIER_UNDERLINE_HEIGHT, HUD_TIER_UNDERLINE_Y_OFFSET
+
+2. HudRenderer.java
+   - Removed RIGHT_START_X, RIGHT_WIDTH, RIGHT_NAME_Y layout fields
+   - Removed activeWeaponProfile field and setActiveWeaponProfile() method
+   - Removed cachedWeaponHudLine, cachedWeaponLevel, cachedTier cache fields
+   - Removed drawRightPanelTierUnderline() (Pass A)
+   - Removed right panel drawPanelChromeFilled() and drawPanelChromeLines() calls
+   - Removed drawRightPanelText() (Pass C) and its call site in render()
+   - Removed imports: AbilityInstance, WeaponProfile, WeaponTier
+   - Updated class javadoc to reflect single-panel design
+
+3. World.java
+   - Removed hudRenderer.setActiveWeaponProfile(hudWeapon) call
+
+RESULT
+======
+Bottom of screen now shows:
+  x=0–420   left chrome panel (HP/AR/CL/XP bars, weapon slots, status icons)
+  x=420–860 centre gap (weapon sprite + ground weapon label)
+  x=860–1280 transparent — 3D world backdrop visible through
+
+Ammo feedback is still available via the CL bar on the left panel.
+Weapon name / tier / abilities are accessed through the inventory overlay
+(implemented in Parts 1–5 of the same redesign series).

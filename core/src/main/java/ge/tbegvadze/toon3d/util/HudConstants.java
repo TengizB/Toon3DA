@@ -34,25 +34,6 @@ public final class HudConstants {
     public static final float HUD_PULSE_HZ                    = 4f;
     public static final float HUD_LOW_HP_THRESHOLD            = 0.25f;
 
-    // Right HUD panel — anchored to bottom-right, mirrors left panel width
-    public static final float HUD_RIGHT_PANEL_WIDTH        = 420f;
-    public static final float HUD_RIGHT_PANEL_START_X      = 860f;
-
-    // Weapon name + tier display in the right panel
-    public static final float  HUD_LEVEL_BADGE_FONT_SCALE  = 0.85f;
-    public static final String HUD_LEVEL_BADGE_PREFIX      = "Lv";
-    // Pixels below the panel top at which the weapon name baseline sits.
-    public static final float  HUD_RIGHT_PANEL_NAME_INSET_Y = 24f;
-
-    // Ability glyph strip — row of single-char glyphs below weapon name
-    public static final float HUD_ABILITY_STRIP_Y_OFFSET  = 32f;  // px below top of right panel content
-    public static final float HUD_ABILITY_GLYPH_SIZE      = 14f;
-    public static final float HUD_ABILITY_GLYPH_SPACING   = 18f;
-
-    // Tier underline bar — colored bar below weapon name text
-    public static final float HUD_TIER_UNDERLINE_HEIGHT   = 3f;
-    public static final float HUD_TIER_UNDERLINE_Y_OFFSET = 2f;   // gap between text baseline and bar top
-
     // Death overlay — full-screen incursion-terminated report
     public static final float DEATH_OVERLAY_PANEL_X        = 280f;
     public static final float DEATH_OVERLAY_PANEL_Y        = 80f;
