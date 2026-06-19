@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Inventory Menu Redesign — Part 4: ItemWindow (Item Detail Popup)
 ---

@@ -19,6 +19,7 @@ import ge.tbegvadze.toon3d.util.ItemConstants;
  *   glyphRed      — red   component of the glyph colour (0–1).
  *   glyphGreen    — green component of the glyph colour (0–1).
  *   glyphBlue     — blue  component of the glyph colour (0–1).
+ *   description   — short lore/usage text shown in the ItemWindow detail panel.
  *
  * Glyph colour palette intent:
  *   Weapons      — amber  (1.0, 0.75, 0.1)
@@ -40,7 +41,8 @@ public enum ItemType {
             false,
             ItemConstants.ITEM_STACK_MAX_WEAPON,
             'P',
-            1.00f, 0.75f, 0.10f
+            1.00f, 0.75f, 0.10f,
+            "Standard UAC sidearm. Reliable and accurate with limited stopping power."
     ),
 
     WEAPON_SHOTGUN(
@@ -49,7 +51,8 @@ public enum ItemType {
             false,
             ItemConstants.ITEM_STACK_MAX_WEAPON,
             'S',
-            1.00f, 0.75f, 0.10f
+            1.00f, 0.75f, 0.10f,
+            "Close-range devastation. Spreads buckshot in a wide cone."
     ),
 
     WEAPON_PLASMA(
@@ -58,7 +61,8 @@ public enum ItemType {
             false,
             ItemConstants.ITEM_STACK_MAX_WEAPON,
             'L',
-            1.00f, 0.75f, 0.10f
+            1.00f, 0.75f, 0.10f,
+            "UAC Plasma Rifle. Rapid-fire plasma bolts at high energy cost."
     ),
 
     WEAPON_ROCKET(
@@ -67,7 +71,8 @@ public enum ItemType {
             false,
             ItemConstants.ITEM_STACK_MAX_WEAPON,
             'R',
-            1.00f, 0.75f, 0.10f
+            1.00f, 0.75f, 0.10f,
+            "Devastating area-of-effect blast. Every shot counts."
     ),
 
     WEAPON_DOUBLE_BARREL(
@@ -76,7 +81,8 @@ public enum ItemType {
             false,
             ItemConstants.ITEM_STACK_MAX_WEAPON,
             'D',
-            1.00f, 0.75f, 0.10f
+            1.00f, 0.75f, 0.10f,
+            "Both barrels at once — double the carnage, double the reload."
     ),
 
     WEAPON_CHAINGUN(
@@ -85,7 +91,8 @@ public enum ItemType {
             false,
             ItemConstants.ITEM_STACK_MAX_WEAPON,
             'G',
-            1.00f, 0.75f, 0.10f
+            1.00f, 0.75f, 0.10f,
+            "UAC Chaingun. Sustained suppressing fire at high ammo consumption."
     ),
 
     WEAPON_RAILGUN(
@@ -94,7 +101,8 @@ public enum ItemType {
             false,
             ItemConstants.ITEM_STACK_MAX_WEAPON,
             'N',
-            1.00f, 0.75f, 0.10f
+            1.00f, 0.75f, 0.10f,
+            "Accelerates a ferromagnetic slug at hypersonic velocity. Punches through walls."
     ),
 
     WEAPON_INCINERATOR(
@@ -103,7 +111,8 @@ public enum ItemType {
             false,
             ItemConstants.ITEM_STACK_MAX_WEAPON,
             'F',
-            1.00f, 0.75f, 0.10f
+            1.00f, 0.75f, 0.10f,
+            "Sprays burning plasma at close range. High damage, limited reach."
     ),
 
     WEAPON_FIST(
@@ -112,7 +121,8 @@ public enum ItemType {
             false,
             ItemConstants.ITEM_STACK_MAX_WEAPON,
             'X',
-            1.00f, 0.75f, 0.10f
+            1.00f, 0.75f, 0.10f,
+            "Your bare hands. No ammo needed. Brutal at point-blank range."
     ),
 
     WEAPON_KNIFE(
@@ -121,7 +131,8 @@ public enum ItemType {
             false,
             ItemConstants.ITEM_STACK_MAX_WEAPON,
             'K',
-            1.00f, 0.75f, 0.10f
+            1.00f, 0.75f, 0.10f,
+            "Silent and efficient. Never runs dry."
     ),
 
     WEAPON_HAMMER(
@@ -130,7 +141,8 @@ public enum ItemType {
             false,
             ItemConstants.ITEM_STACK_MAX_WEAPON,
             '/',
-            1.00f, 0.75f, 0.10f
+            1.00f, 0.75f, 0.10f,
+            "Heavy industrial hammer. Slow swing, but hits like a freight train."
     ),
 
     WEAPON_CHAINSAW(
@@ -139,7 +151,8 @@ public enum ItemType {
             false,
             ItemConstants.ITEM_STACK_MAX_WEAPON,
             'Z',
-            1.00f, 0.75f, 0.10f
+            1.00f, 0.75f, 0.10f,
+            "Continuous melee damage. Needs fuel cells to keep running."
     ),
 
     // -------------------------------------------------------------------------
@@ -152,7 +165,8 @@ public enum ItemType {
             true,
             ItemConstants.ITEM_STACK_MAX_MEDKIT_SMALL,
             '+',
-            0.20f, 0.90f, 0.20f
+            0.20f, 0.90f, 0.20f,
+            "UAC field first-aid kit. Restores a moderate amount of health."
     ),
 
     MEDKIT_LARGE(
@@ -161,7 +175,8 @@ public enum ItemType {
             true,
             ItemConstants.ITEM_STACK_MAX_MEDKIT_LARGE,
             'H',
-            0.20f, 0.90f, 0.20f
+            0.20f, 0.90f, 0.20f,
+            "Full field surgery kit. Restores a large amount of health."
     ),
 
     STIMPACK(
@@ -170,7 +185,8 @@ public enum ItemType {
             true,
             ItemConstants.ITEM_STACK_MAX_STIMPACK,
             's',
-            1.00f, 0.55f, 0.10f
+            1.00f, 0.55f, 0.10f,
+            "Combat stimulant. Grants a temporary boost to speed and reflexes."
     ),
 
     // -------------------------------------------------------------------------
@@ -184,7 +200,8 @@ public enum ItemType {
             false,
             1,
             'k',
-            1.00f, 0.10f, 0.10f
+            1.00f, 0.10f, 0.10f,
+            "UAC red-level access card. Unlocks red security doors."
     ),
 
     KEYCARD_YELLOW(
@@ -193,7 +210,8 @@ public enum ItemType {
             false,
             1,
             'k',
-            1.00f, 0.90f, 0.10f
+            1.00f, 0.90f, 0.10f,
+            "UAC yellow-level access card. Unlocks yellow security doors."
     ),
 
     KEYCARD_BLUE(
@@ -202,7 +220,8 @@ public enum ItemType {
             false,
             1,
             'k',
-            0.20f, 0.55f, 1.00f
+            0.20f, 0.55f, 1.00f,
+            "UAC blue-level access card. Unlocks blue security doors."
     ),
 
     // -------------------------------------------------------------------------
@@ -215,7 +234,8 @@ public enum ItemType {
             true,
             ItemConstants.ITEM_STACK_MAX_CREDITS,
             '$',
-            1.00f, 0.85f, 0.10f
+            1.00f, 0.85f, 0.10f,
+            "UAC facility credits. Used at dispensers and trading terminals."
     ),
 
     // -------------------------------------------------------------------------
@@ -230,7 +250,8 @@ public enum ItemType {
             true,
             ItemConstants.AMMO_RESERVE_CAP_BULLETS,
             'b',
-            0.72f, 0.48f, 0.18f
+            0.72f, 0.48f, 0.18f,
+            "9mm pistol rounds. Standard sidearm ammunition."
     ),
 
     AMMO_SHELLS(
@@ -239,7 +260,8 @@ public enum ItemType {
             true,
             ItemConstants.AMMO_RESERVE_CAP_SHELLS,
             'h',
-            0.78f, 0.68f, 0.12f
+            0.78f, 0.68f, 0.12f,
+            "12-gauge buckshot shells. Used by both shotgun variants."
     ),
 
     AMMO_CELLS(
@@ -248,7 +270,8 @@ public enum ItemType {
             true,
             ItemConstants.AMMO_RESERVE_CAP_CELLS,
             'c',
-            0.10f, 0.80f, 0.90f
+            0.10f, 0.80f, 0.90f,
+            "High-energy plasma cells. Powers the Plasma Rifle and Incinerator."
     ),
 
     AMMO_ROCKETS(
@@ -257,7 +280,8 @@ public enum ItemType {
             true,
             ItemConstants.AMMO_RESERVE_CAP_ROCKETS,
             'r',
-            0.45f, 0.55f, 0.20f
+            0.45f, 0.55f, 0.20f,
+            "High-explosive warheads. Fired by the Rocket Launcher."
     ),
 
     AMMO_SLUGS(
@@ -266,7 +290,8 @@ public enum ItemType {
             true,
             WeaponConstants.RAILGUN_MAX_SLUGS,
             'g',
-            0.85f, 0.90f, 0.95f
+            0.85f, 0.90f, 0.95f,
+            "Ferromagnetic slugs. Accelerated by the Railgun to hypersonic velocity."
     );
 
     // -------------------------------------------------------------------------
@@ -281,10 +306,12 @@ public enum ItemType {
     private final float        glyphRed;
     private final float        glyphGreen;
     private final float        glyphBlue;
+    private final String       description;
 
     ItemType(String displayName, ItemCategory category,
              boolean isStackable, int maxStackSize,
-             char glyph, float glyphRed, float glyphGreen, float glyphBlue) {
+             char glyph, float glyphRed, float glyphGreen, float glyphBlue,
+             String description) {
         this.displayName  = displayName;
         this.category     = category;
         this.isStackable  = isStackable;
@@ -293,6 +320,7 @@ public enum ItemType {
         this.glyphRed     = glyphRed;
         this.glyphGreen   = glyphGreen;
         this.glyphBlue    = glyphBlue;
+        this.description  = description;
     }
 
     public String       getDisplayName()  { return displayName; }
@@ -303,4 +331,5 @@ public enum ItemType {
     public float        getGlyphRed()     { return glyphRed; }
     public float        getGlyphGreen()   { return glyphGreen; }
     public float        getGlyphBlue()    { return glyphBlue; }
+    public String       getDescription()  { return description; }
 }

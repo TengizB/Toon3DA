@@ -101,14 +101,34 @@ public final class ItemConstants {
     public static final float INV_BASE_DIM_FACTOR         = 0.40f;
     public static final float INV_ITEM_WIN_DIM_FACTOR     = 0.50f;
 
-    // ItemWindow popup geometry — centered at (640, 380) in world coordinates
-    public static final float INV_ITEM_WINDOW_WIDTH       = 460f;
-    public static final float INV_ITEM_WINDOW_HEIGHT      = 340f;
-    public static final float INV_ITEM_WINDOW_CENTER_X    = 640f;
-    public static final float INV_ITEM_WINDOW_CENTER_Y    = 380f;
-    public static final float INV_ITEM_WINDOW_X           = INV_ITEM_WINDOW_CENTER_X - INV_ITEM_WINDOW_WIDTH  / 2f;
-    public static final float INV_ITEM_WINDOW_Y           = INV_ITEM_WINDOW_CENTER_Y - INV_ITEM_WINDOW_HEIGHT / 2f;
-    public static final float INV_ITEM_WINDOW_HEADER_LINE_OFFSET = 50f;  // header accent line offset from top
+    // ItemWindow popup geometry — Part 4 redesign: 640×420 centered at (640, 370)
+    public static final float INV_ITEM_WIN_WIDTH              = 640f;
+    public static final float INV_ITEM_WIN_HEIGHT             = 420f;
+    public static final float INV_ITEM_WIN_CENTER_X           = 640f;
+    public static final float INV_ITEM_WIN_CENTER_Y           = 370f;
+    public static final float INV_ITEM_WIN_X                  = INV_ITEM_WIN_CENTER_X - INV_ITEM_WIN_WIDTH  / 2f;
+    public static final float INV_ITEM_WIN_Y                  = INV_ITEM_WIN_CENTER_Y - INV_ITEM_WIN_HEIGHT / 2f;
+    public static final float INV_ITEM_WIN_PADDING            = 18f;
+    public static final float INV_ITEM_WIN_BORDER_THICK       = 2f;
+    public static final float INV_ITEM_WIN_HEADER_H           = 52f;
+    public static final float INV_ITEM_WIN_HEADER_Y           = INV_ITEM_WIN_Y + INV_ITEM_WIN_HEIGHT - INV_ITEM_WIN_HEADER_H;
+    public static final float INV_ITEM_WIN_FOOTER_H           = 56f;
+    public static final float INV_ITEM_WIN_FOOTER_RULE_Y      = INV_ITEM_WIN_Y + INV_ITEM_WIN_FOOTER_H;
+    public static final float INV_ITEM_WIN_BODY_Y             = INV_ITEM_WIN_FOOTER_RULE_Y;
+    public static final float INV_ITEM_WIN_BODY_H             = INV_ITEM_WIN_HEADER_Y - INV_ITEM_WIN_BODY_Y;
+    public static final float INV_ITEM_WIN_EXIT_BTN_SIZE      = 40f;
+    public static final float INV_ITEM_WIN_EXIT_BTN_X         = INV_ITEM_WIN_X + INV_ITEM_WIN_WIDTH - INV_ITEM_WIN_PADDING - INV_ITEM_WIN_EXIT_BTN_SIZE;
+    public static final float INV_ITEM_WIN_EXIT_BTN_Y         = INV_ITEM_WIN_HEADER_Y + (INV_ITEM_WIN_HEADER_H - INV_ITEM_WIN_EXIT_BTN_SIZE) / 2f;
+    public static final float INV_ITEM_WIN_GLYPH_SIZE         = 60f;
+    public static final float INV_ITEM_WIN_GLYPH_X            = INV_ITEM_WIN_X + INV_ITEM_WIN_PADDING;
+    public static final float INV_ITEM_WIN_GLYPH_Y            = INV_ITEM_WIN_HEADER_Y + (INV_ITEM_WIN_HEADER_H - INV_ITEM_WIN_GLYPH_SIZE) / 2f;
+    public static final float INV_ITEM_WIN_NAME_X             = INV_ITEM_WIN_GLYPH_X + INV_ITEM_WIN_GLYPH_SIZE + 12f;
+    public static final float INV_ITEM_WIN_BODY_LEFT_X        = INV_ITEM_WIN_X + INV_ITEM_WIN_PADDING;
+    public static final float INV_ITEM_WIN_BODY_LEFT_WIDTH    = 280f;
+    public static final float INV_ITEM_WIN_DIVIDER_X          = INV_ITEM_WIN_BODY_LEFT_X + INV_ITEM_WIN_BODY_LEFT_WIDTH + 4f;
+    public static final float INV_ITEM_WIN_BODY_RIGHT_X       = INV_ITEM_WIN_DIVIDER_X + 8f;
+    public static final float INV_ITEM_WIN_BODY_RIGHT_WIDTH   = INV_ITEM_WIN_X + INV_ITEM_WIN_WIDTH - INV_ITEM_WIN_PADDING - INV_ITEM_WIN_BODY_RIGHT_X;
+    public static final float INV_ITEM_WIN_STAT_ROW_H         = 22f;
 
     // Inventory Menu — Part 2: Weapon Slots Panel geometry
     public static final float INV_WEAPON_SLOT_X                 = 35f;
@@ -197,14 +217,11 @@ public final class ItemConstants {
     public static final float INV_CAT_DOT_MISC_G        = 0.75f;
     public static final float INV_CAT_DOT_MISC_B        = 0.75f;
 
-    // ItemWindow button row geometry
-    public static final float INV_ITEM_WIN_BTN_AREA_HEIGHT = 50f;
-    public static final float INV_ITEM_WIN_BTN_PADDING     = 10f;
-    public static final float INV_ITEM_WIN_BTN_GAP         = 8f;
-    public static final float INV_ITEM_WIN_BTN_HEIGHT      = INV_ITEM_WIN_BTN_AREA_HEIGHT - 2f * INV_ITEM_WIN_BTN_PADDING;
-    public static final float INV_ITEM_WIN_BTN_WIDTH       = (INV_ITEM_WINDOW_WIDTH - 2f * INV_ITEM_WIN_BTN_PADDING - 2f * INV_ITEM_WIN_BTN_GAP) / 3f;
-    public static final float INV_ITEM_WIN_BTN_Y           = INV_ITEM_WINDOW_Y + INV_ITEM_WIN_BTN_PADDING;
-    public static final float INV_ITEM_WIN_BTN_USE_X       = INV_ITEM_WINDOW_X + INV_ITEM_WIN_BTN_PADDING;
-    public static final float INV_ITEM_WIN_BTN_DROP_X      = INV_ITEM_WIN_BTN_USE_X  + INV_ITEM_WIN_BTN_WIDTH + INV_ITEM_WIN_BTN_GAP;
-    public static final float INV_ITEM_WIN_BTN_EXIT_X      = INV_ITEM_WIN_BTN_DROP_X + INV_ITEM_WIN_BTN_WIDTH + INV_ITEM_WIN_BTN_GAP;
+    // ItemWindow footer action buttons (Part 4 redesign — two buttons in footer zone)
+    public static final float INV_ACTION_BTN_WIDTH  = 180f;
+    public static final float INV_ACTION_BTN_HEIGHT = 38f;
+    public static final float INV_ACTION_BTN_GAP    = 20f;
+    public static final float INV_ACTION_BTN_Y      = 170f;
+    public static final float INV_ACTION_BTN_1_X    = 450f;
+    public static final float INV_ACTION_BTN_2_X    = 650f;
 }
