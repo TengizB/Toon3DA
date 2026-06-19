@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.item.AmmoType;
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
@@ -29,7 +30,8 @@ public class PlasmaRifle extends Weapon {
         setBaseAccuracy(WeaponConstants.PLASMA_RIFLE_BASE_ACCURACY);
     }
 
-    @Override public boolean isMelee() { return false; }
+    @Override public boolean isMelee()    { return false; }
+    @Override public ItemType getItemType() { return ItemType.WEAPON_PLASMA; }
 
     @Override
     protected FireResult marchShot(int playerTileColumn, int playerTileRow,

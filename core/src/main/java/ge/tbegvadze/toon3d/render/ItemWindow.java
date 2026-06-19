@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.entity.WeaponAbility;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemCategory;
@@ -143,6 +144,10 @@ final class ItemWindow implements Disposable {
     private float           flashTimerSeconds = 0f;
     private WeaponAbility[] cachedAbilities   = ItemType.NO_ABILITIES;
 
+    // Weapon-mode state: set by openWeapon(), cleared by close(). Mutually exclusive with slotIndex >= 0.
+    private Weapon  currentWeapon   = null;
+    private boolean weaponIsActive  = false;
+
     // -------------------------------------------------------------------------
     // Constructor
     // -------------------------------------------------------------------------
@@ -175,14 +180,34 @@ final class ItemWindow implements Disposable {
         }
     }
 
+    void openWeapon(Weapon weapon, boolean isActive) {
+        this.currentWeapon   = weapon;
+        this.weaponIsActive  = isActive;
+        this.slotIndex       = -1;
+        this.inventory       = null;
+        this.flashMessage    = null;
+        this.flashTimerSeconds = 0f;
+        if (weapon != null) {
+            int abilityCount = weapon.getAbilityCount();
+            cachedAbilities = new WeaponAbility[abilityCount];
+            for (int abilityIndex = 0; abilityIndex < abilityCount; abilityIndex++) {
+                cachedAbilities[abilityIndex] = weapon.getAbility(abilityIndex).ability;
+            }
+        } else {
+            cachedAbilities = ItemType.NO_ABILITIES;
+        }
+    }
+
     boolean isOpen() {
-        return slotIndex >= 0;
+        return slotIndex >= 0 || currentWeapon != null;
     }
 
     void close() {
         slotIndex       = -1;
         inventory       = null;
         cachedAbilities = ItemType.NO_ABILITIES;
+        currentWeapon   = null;
+        weaponIsActive  = false;
     }
 
     boolean containsPoint(float worldX, float worldY) {
@@ -335,21 +360,20 @@ final class ItemWindow implements Disposable {
                 // Ability row backgrounds + badge pills (weapon only)
                 if (slot.getType().getCategory() == ItemCategory.WEAPON
                         && cachedAbilities.length > 0) {
-                    float abilityRowTop = DESC_Y - ABILITY_HDR_H;
-                    for (WeaponAbility ability : cachedAbilities) {
-                        float rowBottom = abilityRowTop - ABILITY_ROW_H;
-                        shapeRenderer.setColor(ABILITY_ROW_BG);
-                        shapeRenderer.rect(BODY_R_X, rowBottom, BODY_R_W, ABILITY_ROW_H);
-
-                        boolean isPassive = ability.trigger == WeaponAbility.Trigger.PASSIVE;
-                        shapeRenderer.setColor(isPassive ? BADGE_PASSIVE_BG : BADGE_ACTIVE_BG);
-                        float badgeX = BODY_R_X + BODY_R_W - BADGE_W - 4f;
-                        float badgeY = rowBottom + (ABILITY_ROW_H - BADGE_H) / 2f;
-                        shapeRenderer.rect(badgeX, badgeY, BADGE_W, BADGE_H);
-
-                        abilityRowTop -= (ABILITY_ROW_H + ABILITY_ROW_GAP);
-                    }
+                    renderAbilityRowBackgrounds();
                 }
+            }
+        } else if (currentWeapon != null && currentWeapon.getItemType() != null) {
+            int rowCount = statRowCount(currentWeapon.getItemType());
+            for (int rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+                if (rowIndex % 2 == 1) {
+                    float rowY = STAT_Y - rowIndex * STAT_ROW_H - STAT_ROW_H;
+                    shapeRenderer.setColor(ALT_ROW_BG);
+                    shapeRenderer.rect(BODY_L_X, rowY, BODY_L_W, STAT_ROW_H);
+                }
+            }
+            if (cachedAbilities.length > 0) {
+                renderAbilityRowBackgrounds();
             }
         }
 
@@ -387,6 +411,8 @@ final class ItemWindow implements Disposable {
         if (inventory != null && slotIndex >= 0) {
             ItemStack slot = inventory.getSlot(slotIndex);
             shapeRenderer.setColor(slot.isEmpty() ? PANEL_BORDER : categoryColor(slot.getType().getCategory()));
+        } else if (currentWeapon != null) {
+            shapeRenderer.setColor(CAT_WEAPON);
         } else {
             shapeRenderer.setColor(PANEL_BORDER);
         }
@@ -405,10 +431,33 @@ final class ItemWindow implements Disposable {
         shapeRenderer.end();
     }
 
+    private void renderAbilityRowBackgrounds() {
+        float abilityRowTop = DESC_Y - ABILITY_HDR_H;
+        for (WeaponAbility ability : cachedAbilities) {
+            float rowBottom = abilityRowTop - ABILITY_ROW_H;
+            shapeRenderer.setColor(ABILITY_ROW_BG);
+            shapeRenderer.rect(BODY_R_X, rowBottom, BODY_R_W, ABILITY_ROW_H);
+
+            boolean isPassive = ability.trigger == WeaponAbility.Trigger.PASSIVE;
+            shapeRenderer.setColor(isPassive ? BADGE_PASSIVE_BG : BADGE_ACTIVE_BG);
+            float badgeX = BODY_R_X + BODY_R_W - BADGE_W - 4f;
+            float badgeY = rowBottom + (ABILITY_ROW_H - BADGE_H) / 2f;
+            shapeRenderer.rect(badgeX, badgeY, BADGE_W, BADGE_H);
+
+            abilityRowTop -= (ABILITY_ROW_H + ABILITY_ROW_GAP);
+        }
+    }
+
     private void renderText(OrthographicCamera camera) {
-        if (inventory == null || slotIndex < 0) return;
+        if (currentWeapon == null && (inventory == null || slotIndex < 0)) return;
         spriteBatch.setProjectionMatrix(camera.combined);
         spriteBatch.begin();
+
+        if (currentWeapon != null) {
+            renderTextForWeapon();
+            spriteBatch.end();
+            return;
+        }
 
         ItemStack slot = inventory.getSlot(slotIndex);
 
@@ -433,6 +482,54 @@ final class ItemWindow implements Disposable {
         renderFlashMessage();
 
         spriteBatch.end();
+    }
+
+    private void renderTextForWeapon() {
+        ItemType itemType = currentWeapon.getItemType();
+        if (itemType == null) {
+            font.setColor(TEXT_DIM);
+            font.draw(spriteBatch, "— UNKNOWN WEAPON —",
+                      WINDOW_X + WINDOW_W / 2f - 60f, WINDOW_Y + WINDOW_H / 2f);
+            return;
+        }
+        renderHeader(itemType, weaponIsActive);
+        renderBodyLeftForWeapon(itemType);
+        renderBodyRight(itemType, null);
+        renderFooterButtons(itemType, weaponIsActive);
+        renderFlashMessage();
+    }
+
+    private void renderBodyLeftForWeapon(ItemType itemType) {
+        font.getData().setScale(0.85f);
+        font.setColor(OFF_WHITE);
+        font.draw(spriteBatch, itemType.getDescription(), BODY_L_X, DESC_Y, BODY_L_W, Align.left, true);
+        font.getData().setScale(1f);
+
+        font.getData().setScale(0.80f);
+        renderStatRowsForWeapon();
+        font.getData().setScale(1f);
+
+        if (weaponIsActive) {
+            font.getData().setScale(0.85f);
+            font.setColor(GREEN_EQUIPPED);
+            font.draw(spriteBatch, "● CURRENTLY ACTIVE", BODY_L_X, BODY_Y + 18f);
+            font.getData().setScale(1f);
+        }
+    }
+
+    private void renderStatRowsForWeapon() {
+        float rowY = STAT_Y;
+        valueBuilder.setLength(0);
+        valueBuilder.append(currentWeapon.getEffectiveDamage());
+        rowY = drawStatRow(rowY, "Damage",    valueBuilder);
+        rowY = drawStatRow(rowY, "Range",     weaponRange(currentWeapon.getItemType()));
+        rowY = drawStatRow(rowY, "Ammo",      weaponAmmoType(currentWeapon.getItemType()));
+        valueBuilder.setLength(0);
+        valueBuilder.append(currentWeapon.getShotsInClip())
+                    .append(" / ")
+                    .append(currentWeapon.getEffectiveClipSize());
+        rowY = drawStatRow(rowY, "Clip",      valueBuilder);
+        drawStatRow(rowY, "Fire Mode", weaponFireMode(currentWeapon.getItemType()));
     }
 
     // =========================================================================
@@ -674,6 +771,8 @@ final class ItemWindow implements Disposable {
     // =========================================================================
 
     private boolean isButton1Enabled() {
+        // Weapon-mode: equipping is handled via the main touch controls, not here.
+        if (currentWeapon != null) return false;
         if (inventory == null || slotIndex < 0) return false;
         ItemStack slot = inventory.getSlot(slotIndex);
         if (slot.isEmpty()) return false;
@@ -682,6 +781,8 @@ final class ItemWindow implements Disposable {
     }
 
     private boolean isButton2Enabled() {
+        // Weapon-mode: loadout weapons cannot be dropped from this window.
+        if (currentWeapon != null) return false;
         if (inventory == null || slotIndex < 0) return false;
         ItemStack slot = inventory.getSlot(slotIndex);
         return !slot.isEmpty() && slot.getType().getCategory() != ItemCategory.KEY_ITEM;

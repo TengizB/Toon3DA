@@ -10,9 +10,11 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.PlayerInventory;
+import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.ItemConstants;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
  * Full-screen inventory overlay drawn on top of the frozen world frame.
@@ -100,6 +102,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     private float           animationClock      = 0f;
     private float           facilityTimeSeconds = 0f;
     private int             currentDepth        = 1;
+    private PlayerInventory playerInventory     = null;
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -114,7 +117,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         textBuilder       = new StringBuilder(32);
 
         weaponSlotsPanel  = new WeaponSlotsPanel(inventory, shapeRenderer, spriteBatch,
-                                                  font, glyphLayout, this::openItemWindowForSlot);
+                                                  font, glyphLayout, this::openItemWindowForWeaponSlot);
         itemGridPanel     = new ItemGridPanel(inventory, shapeRenderer, spriteBatch,
                                               font, glyphLayout, this::openItemWindowForSlot);
         abilityWindow     = new AbilityWindow(shapeRenderer, spriteBatch, font, glyphLayout);
@@ -136,6 +139,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
 
     /** Provides the player's loadout and melee slot so WeaponSlotsPanel can read them. */
     public void setPlayerInventory(PlayerInventory playerInventory) {
+        this.playerInventory = playerInventory;
         weaponSlotsPanel.setPlayerInventory(playerInventory);
     }
 
@@ -353,11 +357,29 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     }
 
     // -------------------------------------------------------------------------
-    // Private — slot tap callback wired into sub-panels
+    // Private — slot tap callbacks wired into sub-panels
     // -------------------------------------------------------------------------
 
     private void openItemWindowForSlot(int slotIndex) {
         if (abilityWindow.isOpen()) abilityWindow.close();
         itemWindow.open(inventory, slotIndex);
+    }
+
+    private void openItemWindowForWeaponSlot(int loadoutSlotIndex) {
+        if (playerInventory == null) return;
+        if (abilityWindow.isOpen()) abilityWindow.close();
+        Weapon weapon;
+        boolean isActive;
+        if (loadoutSlotIndex >= WeaponConstants.WEAPON_SLOT_COUNT) {
+            weapon   = playerInventory.getMeleeWeapon();
+            isActive = playerInventory.isMeleeSelected();
+        } else {
+            weapon   = playerInventory.getLoadout().getSlot(loadoutSlotIndex);
+            isActive = !playerInventory.isMeleeSelected()
+                    && playerInventory.getLoadout().getActiveSlotIndex() == loadoutSlotIndex;
+        }
+        if (weapon != null) {
+            itemWindow.openWeapon(weapon, isActive);
+        }
     }
 }

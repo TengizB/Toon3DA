@@ -88,14 +88,16 @@ final class WeaponSlotsPanel implements Disposable {
     // Constructor
     // -------------------------------------------------------------------------
 
+    private final IntConsumer onSlotTapped;
+
     WeaponSlotsPanel(Inventory itemInventory, ShapeRenderer shapeRenderer, SpriteBatch spriteBatch,
                      BitmapFont font, GlyphLayout glyphLayout, IntConsumer onSlotTapped) {
         this.shapeRenderer = shapeRenderer;
         this.spriteBatch   = spriteBatch;
         this.font          = font;
         this.glyphLayout   = glyphLayout;
-        // itemInventory and onSlotTapped unused in this panel's new data model;
-        // retained in signature for constructor compatibility with InventoryOverlayRenderer.
+        this.onSlotTapped  = onSlotTapped;
+        // itemInventory unused: weapon data comes from playerInventory / Loadout set post-construction.
     }
 
     // -------------------------------------------------------------------------
@@ -139,7 +141,11 @@ final class WeaponSlotsPanel implements Disposable {
                     && worldX <= ItemConstants.INV_WEAPON_SLOT_X + ItemConstants.INV_WEAPON_SLOT_WIDTH
                     && worldY >= slotY
                     && worldY <= slotY + ItemConstants.INV_WEAPON_SLOT_HEIGHT) {
-                return true; // consumed — weapon slot taps handled in future Part 4 ItemWindow
+                SlotState state = getSlotState(slotIndex);
+                if (state != SlotState.LOCKED && state != SlotState.EMPTY) {
+                    onSlotTapped.accept(slotIndex);
+                }
+                return true;
             }
         }
         return false;

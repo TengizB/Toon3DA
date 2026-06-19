@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.entity;
 
 import ge.tbegvadze.toon3d.item.AmmoType;
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
@@ -49,7 +50,8 @@ public class Incinerator extends Weapon {
         setBaseAccuracy(WeaponConstants.INCINERATOR_BASE_ACCURACY);
     }
 
-    @Override public boolean isMelee() { return false; }
+    @Override public boolean isMelee()    { return false; }
+    @Override public ItemType getItemType() { return ItemType.WEAPON_INCINERATOR; }
 
     /**
      * The incinerator requires at least FUEL_PER_SHOT fuel to fire (not just > 0).
