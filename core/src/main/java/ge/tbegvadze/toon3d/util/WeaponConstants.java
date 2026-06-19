@@ -261,8 +261,10 @@ public final class WeaponConstants {
     public static final int MELEE_CANVAS_HEIGHT = 134;
 
     // Weapon Loadout — slot management and HUD strip
-    // Only 2 slots available initially; the system supports more via WEAPON_SLOT_COUNT.
-    public static final int   WEAPON_SLOT_COUNT             = 2;
+    // Slots 0 and 1 are active ranged slots; slot 2 is permanently locked until Level 10.
+    public static final int   WEAPON_SLOT_COUNT             = 3;
+    // Slot index 2 is the locked (future) ranged slot; tryEquip() never assigns here.
+    public static final int   WEAPON_GUN_SLOT_LOCKED_INDEX  = 2;
     public static final float WEAPON_PICKUP_HEIGHT_FRACTION = 0.30f; // weapon floor pickups sit a bit higher than ammo
     public static final float WEAPON_SLOT_ICON_SIZE         = 44f;   // slot height; width is computed from full HUD width
     public static final float WEAPON_SLOT_ICON_GAP          = 8f;

@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.entity.PlayerInventory;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.ItemConstants;
@@ -22,7 +23,7 @@ import ge.tbegvadze.toon3d.util.ItemConstants;
  *   Layer 2 — ItemWindow popup (optional); dims layer 1 by INV_BASE_DIM_FACTOR
  *   Layer 3 — AbilityWindow popup (optional, stub); dims layer 2 by INV_ITEM_WIN_DIM_FACTOR
  *
- * Public API (unchanged from the previous InventoryOverlayRenderer — World.java is unmodified):
+ * Public API (World.java calls setPlayerInventory and setWeaponHudRenderer after construction):
  *   new InventoryOverlayRenderer(Inventory)
  *   onOpen()
  *   setTime(float)
@@ -130,6 +131,16 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         itemGridPanel.clearSelection();
         if (itemWindow.isOpen())    itemWindow.close();
         if (abilityWindow.isOpen()) abilityWindow.close();
+    }
+
+    /** Provides the player's loadout and melee slot so WeaponSlotsPanel can read them. */
+    public void setPlayerInventory(PlayerInventory playerInventory) {
+        weaponSlotsPanel.setPlayerInventory(playerInventory);
+    }
+
+    /** Provides weapon textures so WeaponSlotsPanel can render thumbnails inside slots. */
+    public void setWeaponHudRenderer(WeaponHudRenderer weaponHudRenderer) {
+        weaponSlotsPanel.setWeaponHudRenderer(weaponHudRenderer);
     }
 
     /** Pass the facility clock so selection borders can pulse. */

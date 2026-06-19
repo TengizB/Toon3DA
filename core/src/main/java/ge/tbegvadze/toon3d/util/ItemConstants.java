@@ -110,6 +110,50 @@ public final class ItemConstants {
     public static final float INV_ITEM_WINDOW_Y           = INV_ITEM_WINDOW_CENTER_Y - INV_ITEM_WINDOW_HEIGHT / 2f;
     public static final float INV_ITEM_WINDOW_HEADER_LINE_OFFSET = 50f;  // header accent line offset from top
 
+    // Inventory Menu — Part 2: Weapon Slots Panel geometry
+    public static final float INV_WEAPON_SLOT_X                 = 35f;
+    public static final float INV_WEAPON_SLOT_WIDTH             = 470f;
+    public static final float INV_WEAPON_SLOT_HEIGHT            = 100f;
+    public static final float INV_WEAPON_SLOT_GAP               = 6f;
+    public static final float INV_WEAPON_SECTION_LABEL_H        = 20f;
+    public static final float INV_WEAPON_SECTION_DIVIDER_Y      = 280f;
+    public static final float INV_WEAPON_GUN_SLOT_1_Y           = 507f;
+    public static final float INV_WEAPON_GUN_SLOT_2_Y           = 401f;
+    public static final float INV_WEAPON_GUN_SLOT_3_Y           = 295f;
+    public static final float INV_WEAPON_MELEE_SLOT_Y           = 145f;
+    public static final float INV_WEAPON_RANGED_LABEL_Y         = 613f;
+    public static final float INV_WEAPON_MELEE_LABEL_Y          = 253f;
+    public static final float INV_WEAPON_SPRITE_ZONE_WIDTH      = 280f;
+    public static final float INV_WEAPON_INFO_ZONE_X_OFFSET     = 288f;
+    public static final float INV_WEAPON_ACTIVE_BADGE_WIDTH     = 60f;
+    public static final float INV_WEAPON_ACTIVE_BADGE_HEIGHT    = 18f;
+    public static final float INV_WEAPON_ACTIVE_BADGE_MARGIN    = 5f;
+    public static final float INV_WEAPON_LOCK_BODY_WIDTH        = 30f;
+    public static final float INV_WEAPON_LOCK_BODY_HEIGHT       = 22f;
+    public static final float INV_WEAPON_LOCK_SHACKLE_RADIUS    = 11f;
+    public static final float INV_WEAPON_ACTIVE_PULSE_HZ        = 4f;
+    public static final float INV_WEAPON_ACTIVE_PULSE_MIN       = 0.7f;
+    public static final int   INV_WEAPON_LOCKED_UNLOCK_LEVEL    = 10;
+    // Lock icon geometry — center offsets relative to slot origin
+    public static final float INV_WEAPON_LOCK_CENTER_X_OFFSET  = 140f;
+    public static final float INV_WEAPON_LOCK_CENTER_Y_OFFSET  = 50f;
+    // Section accent line X offsets (where the line starts after the label)
+    public static final float INV_WEAPON_RANGED_ACCENT_X_OFFSET = 68f;
+    public static final float INV_WEAPON_MELEE_ACCENT_X_OFFSET  = 54f;
+    // Label Y offset from the section accent line center
+    public static final float INV_WEAPON_ACCENT_LINE_Y_OFFSET   = 7f;
+    // Locked slot text Y positions (relative to slot bottom)
+    public static final float INV_WEAPON_LOCK_LABEL_Y_OFFSET    = 38f;
+    public static final float INV_WEAPON_LOCK_HINT_Y_OFFSET     = 22f;
+    // Info zone text layout
+    public static final float INV_WEAPON_INFO_TOP_MARGIN        = 12f;
+    public static final float INV_WEAPON_INFO_LINE_STEP         = 16f;
+    // Dashed line dash/gap lengths
+    public static final float INV_WEAPON_DIVIDER_DASH_LENGTH    = 12f;
+    public static final float INV_WEAPON_DIVIDER_GAP_LENGTH     = 6f;
+    public static final float INV_WEAPON_LOCKED_DASH_LENGTH     = 8f;
+    public static final float INV_WEAPON_LOCKED_GAP_LENGTH      = 4f;
+
     // ItemWindow button row geometry
     public static final float INV_ITEM_WIN_BTN_AREA_HEIGHT = 50f;
     public static final float INV_ITEM_WIN_BTN_PADDING     = 10f;

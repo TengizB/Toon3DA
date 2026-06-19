@@ -291,6 +291,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             // Player starts unarmed; clear the initially-selected weapon in the renderer.
             weaponHudRenderer.setEquippedWeapon(null);
         }
+        // Wire the weapon slots panel so it can read loadout state and render thumbnails.
+        inventoryOverlayRenderer.setPlayerInventory(inventory);
+        inventoryOverlayRenderer.setWeaponHudRenderer(weaponHudRenderer);
         hudRenderer          = new HudRenderer(player, hudState);
         hudRenderer.setLoadout(inventory.getLoadout());
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);

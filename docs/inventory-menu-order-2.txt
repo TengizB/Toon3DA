@@ -1,0 +1,53 @@
+Inventory Menu Part 2: Weapon Slots Panel
+==========================================
+
+Redesigns the left panel of the inventory overlay to show 4 structured weapon
+slots (3 ranged + 1 melee) instead of the old flat dynamic list.
+
+FILES CHANGED
+-------------
+WeaponConstants.java
+  - WEAPON_SLOT_COUNT increased from 2 → 3
+  - WEAPON_GUN_SLOT_LOCKED_INDEX = 2 added (slot 2 is permanently locked)
+
+Loadout.java
+  - tryEquip() skips WEAPON_GUN_SLOT_LOCKED_INDEX so slot 2 is never filled
+
+ItemConstants.java
+  - Added INV_WEAPON_* constants: slot positions, badge geometry, lock icon
+    geometry, accent line offsets, text layout, dash lengths
+
+WeaponHudRenderer.java
+  - Added getWeaponTexture(Weapon) — returns cached normal-pose texture by class
+
+InventoryOverlayRenderer.java
+  - setPlayerInventory(PlayerInventory) — wires loadout data into WeaponSlotsPanel
+  - setWeaponHudRenderer(WeaponHudRenderer) — wires thumbnail source
+
+WeaponSlotsPanel.java (full rewrite)
+  - Reads from PlayerInventory/Loadout instead of the item Inventory
+  - Fixed slot positions: gun slot 1 y=507, slot 2 y=401, slot 3 y=295 (LOCKED),
+    melee y=145
+  - Four visual states: EMPTY, FILLED, ACTIVE, LOCKED
+  - ACTIVE state: warm amber background + pulsing border (sin wave, 4 Hz, 0.7–1.0)
+    + "ACTIVE" badge pill top-right of slot
+  - LOCKED state: dark background + dashed border (8px on / 4px off) + padlock
+    shape (filled rect body + manual semi-circle shackle arc)
+  - Weapon thumbnail: scales WeaponHudRenderer texture to fit left 280px of slot,
+    guards against zero-size texture
+  - Info zone (right 185px): weapon name, ammo type, clip/max-clip, ammo reserve;
+    melee shows "Melee" / "—" / "Unlimited"
+  - Section labels "RANGED" and "MELEE" with amber accent lines
+  - Dashed section divider at y=280
+
+World.java
+  - Calls inventoryOverlayRenderer.setPlayerInventory(inventory) and
+    setWeaponHudRenderer(weaponHudRenderer) after both objects are constructed
+
+DESIGN DECISIONS
+----------------
+- Thumbnail rendering falls back gracefully: if WeaponHudRenderer or the texture
+  is null (weapon not yet registered), the slot shows just text info.
+- Touch on any weapon slot is consumed but does not open ItemWindow yet — that
+  integration is deferred to Part 4.
+- Locked slot touch is silently consumed (no flash in this part; Part 4 scope).
