@@ -2309,6 +2309,12 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         }
     }
 
+    /** Returns the cached normal-pose texture for the given weapon, or null if not registered. */
+    public Texture getWeaponTexture(Weapon weapon) {
+        if (weapon == null) return null;
+        return weaponTextureCache.get(weapon.getClass());
+    }
+
     @Override
     public void render(OrthographicCamera camera) {
         if (equippedWeapon == null) return;
