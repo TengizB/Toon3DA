@@ -1,0 +1,518 @@
+STATUS: IMPLEMENTED
+CATEGORY: UI / Systems
+TITLE: Weapon Pickup & Compare Rework — Auto-Card, Same-Type Swap
+CREATED: 2026-06-19
+---
+
+OVERVIEW
+========
+A ground-up rework of the weapon pickup / compare flow that replaces the current
+INSPECT-then-decide modal (weapon-pickup-interaction.txt, IMPLEMENTED) with a
+ZERO-TAP, single-screen "weapon card" that auto-opens the instant the marine
+settles on a weapon tile. The card adapts to context: a FREE loadout slot shows one
+big "EQUIP" button (fast lane), a FULL loadout shows inline "SWAP -> Slot X" buttons
+next to each held weapon (one screen, no second phase), and the start room shows the
+same card with "CHOOSE THIS WEAPON" wording. Crucially, weapons now carry their
+ROLLED IDENTITY (level + tier + abilities) on the GroundItem, so a Level-1 Common
+Chaingun and a Level-3 Rare Chaingun are genuinely different objects you can always
+swap between — the "same-type weapons collapse into a convert-to-ammo dead-end" bug
+is fixed. Convert-to-ammo survives as a small secondary option, never the primary CTA.
+
+This belongs here because the loadout is the player's run identity (3 ranged slots),
+and the current flow makes the single most exciting roguelike moment — finding a
+better gun — feel like paperwork: step on tile, find an INSPECT button, tap it, read
+a card, tap TAKE, navigate a SECOND slot-select screen, tap a slot. That is up to
+five taps and two modal phases for "I want the new gun in slot 2." This rework
+collapses it to: step on tile (card auto-opens) -> tap the slot you want to replace
+(or tap EQUIP if you have room). One screen, one decision tap.
+
+This document OWNS: the auto-open trigger, the single-screen card layout, the
+free-slot vs full-loadout branching, GroundItem identity storage, the start-room
+integration, and the same-type-swap fix. It REPLACES weapon-pickup-interaction.txt's
+two-phase modal. It DEPENDS ON weapon-levels-tiers-abilities.txt for the rolled
+stats it must display and store. It does NOT redefine the tier/ability catalogue,
+the tick engine, or the FrameBuffer weapon-sprite pipeline.
+
+NO NEW TILE SYMBOL IS REQUIRED. Weapons remain entity-side GroundItems keyed by
+ItemType plus a new rolled-identity payload (confirmed against docs/tile-symbols.txt).
+Nothing is added to that file.
+
+
+WHAT CHANGES vs WHAT STAYS
+==========================
+STAYS THE SAME (reused verbatim):
+- GroundItem is still the ground token; renderers still share the one groundItems
+  list by reference (PropRenderer / LevelRenderer / PlayerController).
+- Loadout API: tryEquip, removeSlot, selectSlot, isFull, getSlot, getSlotCount.
+- The evicted weapon still drops back onto the floor as a GroundItem (nothing is
+  silently destroyed).
+- Modal pauses the world (same pattern as InventoryOverlayRenderer); a successful
+  EQUIP / SWAP costs exactly ONE turn; opening/closing the card costs ZERO turns.
+- Arsenal singletons: the SAME Weapon instance the arsenal holds is what gets
+  equipped (no fresh Weapon constructed on pickup) — see TECHNICAL NOTES for the
+  one wrinkle this creates for same-type rolled weapons.
+- EventTextSystem banners for ACQUIRED / DROPPED / +AMMO.
+
+WHAT CHANGES:
+1. AUTO-OPEN replaces the INSPECT button. Settling on a weapon tile opens the card
+   immediately. TouchAction.INSPECT_WEAPON and the contextual INSPECT button are
+   REMOVED. The HUD ground-name label becomes a "no card open but weapon underfoot"
+   hint only (e.g. after the player closes the card and stays on the tile).
+2. SINGLE SCREEN replaces the two-phase STATS_CARD -> SLOT_SELECT modal. The slot
+   choices live inline on the one card. WeaponInspectOverlayRenderer's Phase enum
+   is removed; it becomes a flat layout.
+3. SAME-TYPE SWAP is always allowed. The old "if you already own this type, the only
+   option is CONVERT TO AMMO" rule is DELETED. Owning a Chaingun no longer blocks
+   equipping a different Chaingun. Convert-to-ammo becomes an always-available small
+   secondary button (useful when the ground weapon is a strict downgrade and you want
+   the rounds instead).
+4. GROUNDITEM CARRIES IDENTITY. GroundItem gains an optional rolled-identity payload
+   so the card can show real, distinct stats per ground weapon and so the equipped
+   weapon keeps that identity (fixes "same class = same stats").
+5. START ROOM USES THE CARD. The start room no longer auto-equips on contact; it
+   opens the same card with "CHOOSE THIS WEAPON" wording. The other two offers stay
+   on the floor until one is chosen (you can step off, compare, come back).
+6. FREE-SLOT FAST LANE. With a free slot, the card foregrounds one large EQUIP
+   button; no slot list is shown (there is nothing to evict).
+
+
+PLAYER EXPERIENCE — SCENARIO WALKTHROUGHS
+=========================================
+The throughline: the floor offers, it never ambushes. The card always tells you
+what you'd gain or lose BEFORE you commit, and the commit is a single tap on the
+thing you want to happen.
+
+--- SCENARIO A: FREE SLOT (the gift) ---
+You round a corner and a gun is bobbing on a tile. You step onto it. The world
+freezes and a card slides up: "Lv3 RARE CHAINGUN" in plasma-blue, its stat bars,
+its two ability rows ("CRIT 9.5%", "LIFESTEAL 7%"). Because you have an open slot,
+the bottom of the card is dominated by one fat green button: "EQUIP -> SLOT 2". You
+tap it. The gun is yours, the card closes, "CHAINGUN ACQUIRED" flashes, enemies take
+their step. Total: one step + one tap. It felt like a reward, not a menu.
+
+--- SCENARIO B: FULL LOADOUT (the trade) ---
+All three slots full. You step on a Lv5 EPIC PLASMA RIFLE. The card opens and now,
+below its stats, there's a compact column of your THREE held weapons, each a
+full-width row with a "SWAP" button on its right edge:
+  [SLOT 1 * ] Lv4 SHOTGUN      DMG 14  RNG 6    [ SWAP -> ]
+  [SLOT 2   ] Lv3 CHAINGUN     DMG 9   RNG 16   [ SWAP -> ]
+  [SLOT 3   ] Lv2 RAILGUN      DMG 30  RNG 20   [ SWAP -> ]
+Each row's stats are tinted green/red vs the ground weapon so you can read the trade
+at a glance (the Plasma out-damages your Chaingun: that row's DMG glows red = "you'd
+lose less here"). You tap "SWAP ->" on the Chaingun row. The Plasma drops into slot 2
+and becomes active; your old Chaingun thuds onto the floor where you stand. One step,
+one decision tap. No "now pick a slot" second screen — the slot choice WAS the tap.
+
+--- SCENARIO C: SAME-TYPE UPGRADE (the bug, fixed) ---
+You hold a Lv1 Common Chaingun. You find a Lv3 Rare Chaingun. Old system: dead-end,
+"CONVERT TO AMMO" only. New system: the card shows the Rare Chaingun as a clearly
+DIFFERENT weapon (blue name, "Lv3", two ability rows your grey Lv1 lacks). Your held
+Lv1 Chaingun appears in the slot list like any other weapon with a "SWAP ->" button,
+its stats tinted red against the upgrade. You tap SWAP on it: the Lv3 Rare is now in
+your hands, the Lv1 Common is on the floor. The convert-to-ammo button is still down
+in the corner if you'd rather feed your reserve — but it is no longer your ONLY move.
+
+--- SCENARIO D: START ROOM (the opening choice) ---
+You drop in unarmed. Three guns sit in a row by the portal. You step onto the first.
+The same card opens, but the loadout is empty so it shows one big button reading
+"CHOOSE THIS WEAPON" (not "EQUIP" — the start-room wording cues finality). You don't
+love it; you tap CLOSE (zero turns), step off, walk to the second gun, step on, read
+ITS card, compare in your head. You like this one. You tap "CHOOSE THIS WEAPON." It
+equips, the OTHER TWO despawn ("LOADOUT SET — DESCEND"), and you head for the portal.
+For the first time you actually compared the three before committing.
+
+--- SCENARIO E: STRICT DOWNGRADE / "I just want the bullets" ---
+You hold a great gun; the ground Chaingun is a junk Lv1 Common but you're low on
+bullets. The card opens, every slot row's stats glow green (your guns are all better).
+You ignore the SWAP buttons and tap the small "CONVERT (+20 BULLETS)" chip in the
+footer. The ground gun dissolves into reserve ammo, the card closes, "+20 BULLETS"
+flashes. The downgrade became sustain.
+
+
+UI LAYOUT SPEC
+==============
+One centred modal card, drawn procedurally (ShapeRenderer + shared HUD BitmapFont),
+NO new texture asset. All coordinates in world units (1280x720, origin bottom-left).
+All sizes below are PLACEHOLDER constants (see TECHNICAL NOTES).
+
+CARD FRAME
+  WEAPON_CARD_WIDTH  = 760f   (wider than the old 640 to fit the inline slot list)
+  WEAPON_CARD_HEIGHT = 520f
+  WEAPON_CARD_ORIGIN_X = (1280 - 760) / 2  = 260f   (centred)
+  WEAPON_CARD_ORIGIN_Y = (720 - 520) / 2   = 100f
+  Background: dark panel, WEAPON_CARD_PANEL_ALPHA = 0.94f, 18% see-through so the
+  3D view bleeds faintly behind it (keeps the dread). Border: a 3px line in the
+  ground weapon's TIER color (steel-grey..hellfire-gold), so rarity reads before any
+  text — the whole card is "framed in gold" for a Legendary.
+
+VERTICAL ZONES (top to bottom inside the frame):
+
+  ZONE 1 — HEADER (top ~70px)
+    - Big weapon name, tinted in the tier color: e.g. "CHAINGUN".
+    - Left of the name: a small tier ICON SHAPE for color-blind safety
+      (circle=Common, square=Uncommon, triangle=Rare, diamond=Epic, star=Legendary).
+    - Right of the name: "Lv3 / RARE" tag in the tier color.
+
+  ZONE 2 — STAT BLOCK (next ~150px), two columns:
+    LEFT  = the GROUND weapon's effective stats (the thing you'd gain).
+    RIGHT = a slim "vs ACTIVE" delta column (green = ground better, red = worse,
+            grey = equal) compared against the currently active held weapon.
+    Rows (label + horizontal bar + numeric value):
+      DAMAGE   bar = effDamage / WEAPON_STAT_BAR_MAX_DAMAGE (=60)
+      CLIP     "N shots"
+      RELOAD   "N ticks"
+      RANGE    bar = effRange / WEAPON_STAT_BAR_MAX_RANGE (=20)   "N tiles"
+      ACCURACY "NN%"
+      AMMO     ammoType name + loaded/reserve
+    Below the stat rows: a one-line ability glyph strip (one tier-colored glyph per
+    rolled ability; full ability names + magnitudes are NOT shown here to save space
+    — they appear on long-press tooltip, OPEN QUESTION). Common weapons show "— no
+    abilities —" in grey.
+
+  ZONE 3 — ACTION AREA (bottom ~260px) — CONTEXT-DEPENDENT:
+
+    CASE FREE SLOT (loadout NOT full) — FAST LANE:
+      One large primary button spanning most of the width:
+        WEAPON_EQUIP_BUTTON_WIDTH  = 520f
+        WEAPON_EQUIP_BUTTON_HEIGHT = 84f   (well above the 54px thumb minimum)
+        Label: "EQUIP -> SLOT n"  (n = lowest free slot), green fill, bright border.
+        Start-room variant label: "CHOOSE THIS WEAPON".
+      No slot list is drawn (nothing to evict).
+
+    CASE FULL LOADOUT — INLINE SLOT PICKER:
+      A vertical list, one row per held slot (getSlotCount rows; 3 today):
+        Row geometry: full card width minus margins, WEAPON_SLOT_ROW_HEIGHT = 64f,
+        WEAPON_SLOT_ROW_GAP = 10f. Three rows + gaps fit comfortably in 260px.
+        Each row contains, left-to-right:
+          - slot index chip "[1]" (active slot gets a bright amber left-edge + "*")
+          - held weapon tier-colored name + "Lvn"
+          - 3 compact stat values (DMG / RNG / one more), each tinted green/red vs
+            the ground weapon (this IS the comparison — per-slot, inline)
+          - a right-aligned "SWAP ->" button, WEAPON_SWAP_BUTTON_WIDTH = 150f,
+            WEAPON_SWAP_BUTTON_HEIGHT = 54f. The whole row is ALSO tappable (the
+            button is just the visual affordance) for a fat touch target.
+      The tap target per row therefore is the full row (>= 520x64) — generous.
+
+  ZONE 4 — FOOTER (a thin strip along the very bottom, ~52px):
+    - LEFT: small grey "CLOSE" button (WEAPON_CLOSE_BUTTON_WIDTH = 150f, 52f tall) —
+      dismiss, weapon stays on floor, zero turns.
+    - RIGHT (secondary, de-emphasised): a small "CONVERT (+N AMMO)" chip, same height,
+      muted color, only shown when the ground weapon has a backing AmmoType. This is
+      the demoted convert-to-ammo path. If the weapon type has no Weapon class to
+      equip (e.g. a pistol stub), CONVERT is promoted to the primary action instead.
+
+COLOR LOGIC SUMMARY
+  - Tier color drives: card border, name tint, level tag, ability glyphs, tier icon.
+  - Delta color (green/red/grey) drives: the "vs active" column and the per-slot
+    inline stat tints. Green ALWAYS means "the ground weapon is better on this stat"
+    so the player reads green = reason to take it, consistently.
+  - Primary CTA (EQUIP / CHOOSE) is green-filled and largest. SWAP buttons are
+    amber-outlined. CLOSE is grey. CONVERT is muted. The visual hierarchy enforces
+    "equip/swap is the main verb, convert is the side option."
+
+
+GAMEPLAY LOOP (precise, turn-accurate)
+======================================
+Precondition: the player settles (finishes a move turn) onto a tile holding a weapon
+GroundItem, and no other modal is open.
+
+1. AUTO-OPEN (zero turns). On settle, PlayerController detects a weapon GroundItem on
+   the new tile and signals World, which opens WeaponInspectOverlayRenderer with the
+   ground weapon's rolled identity, the active weapon, and the loadout. World enters
+   the WEAPON_CARD modal state: movement/fire/rotate input ignored, enemies do not
+   act, tick clock paused. (The settle step that moved the player onto the tile was
+   itself one normal turn — opening the card adds nothing.)
+
+   GUARD against re-open spam: the card auto-opens only on the FRAME the tile is first
+   entered. If the player CLOSEs the card and remains on the tile, it does NOT
+   re-open; instead the HUD shows a small "[ weapon underfoot ]" hint and a single
+   contextual "VIEW" button reopens it on demand (covers "I closed it, want it back").
+   Stepping off and back on re-triggers a fresh auto-open.
+
+2a. FREE SLOT -> tap EQUIP (one turn). loadout.tryEquip(groundWeaponInstance) into the
+    lowest free slot; remove the GroundItem from the world list; close card; banner
+    "<NAME> ACQUIRED"; fire exactly one tick (enemies act).
+
+2b. FULL LOADOUT -> tap a slot row's SWAP (one turn). For chosen slot index k:
+       - capture evicted = loadout.getSlot(k)
+       - loadout.removeSlot(k)
+       - drop evicted on the player's current tile as a NEW GroundItem carrying the
+         evicted weapon's rolled identity (see step 4)
+       - loadout.tryEquip(groundWeaponInstance) (now a slot is free)
+       - loadout.selectSlot(k) so the new gun lands active in the freed slot
+       - remove the ground weapon's GroundItem from the world list
+       - close card; banners "<OLD> DROPPED", "<NEW> ACQUIRED"
+       - fire exactly one tick.
+    All mutations happen in ONE synchronous block BEFORE the tick (never a
+    half-applied swap; see EDGE CASES — death mid-swap).
+
+2c. CONVERT (+N AMMO) -> tap (one turn). weaponItemTypeToAmmoType + inventory.tryAdd
+    (reusing the old hook's mapping); remove the ground GroundItem; close card; banner
+    "+N <AMMO>"; fire one tick. Available whenever the ground weapon maps to an ammo
+    type; the convert amount may scale with the ground weapon's level/tier (OPEN
+    QUESTION — flat vs scaled).
+
+3. CLOSE / step-off (zero turns). CLOSE dismisses, weapon stays on floor, no tick.
+   The card also force-closes if the player somehow leaves the tile (defensive).
+
+4. EVICTED-WEAPON DROP carries identity. The dropped GroundItem must reproduce the
+   evicted weapon's level/tier/abilities so re-picking it later shows the SAME gun.
+   Build the GroundItem with the evicted weapon's rolled-identity payload (the same
+   payload type the spawn roller produces). PropRenderer picks up the new bobbing
+   sprite automatically next frame; its tier-color glow reflects the evicted tier.
+
+5. START ROOM variant. Identical loop, but: the action button reads "CHOOSE THIS
+   WEAPON", the loadout is empty so it is always the free-slot fast lane, and on
+   EQUIP the World start-room handler ALSO despawns the other two offer GroundItems
+   and flashes "LOADOUT SET — DESCEND". CLOSE in the start room leaves all three
+   offers on the floor so the player can compare and return.
+
+
+TECHNICAL NOTES
+===============
+NO NEW TILE SYMBOL (verified against docs/tile-symbols.txt). Weapons stay entity-side.
+
+DATA ADDED TO GroundItem (item/GroundItem.java):
+  Today GroundItem stores only ItemType + a count — it is "a Chaingun is here" with
+  no stats. Add an OPTIONAL rolled-identity payload so a ground weapon is a SPECIFIC
+  weapon, not a class token:
+    - field: WeaponRoll weaponRoll  (nullable; null for non-weapon ground items and
+      for legacy/un-rolled weapons which fall back to Common Lv1 display)
+  where WeaponRoll is a small immutable value object (NEW, package item/ or entity/):
+    public final class WeaponRoll {
+        public final int weaponLevel;            // 1..MAX_WEAPON_LEVEL
+        public final WeaponTier tier;            // from weapon-levels-tiers doc
+        public final AbilityInstance[] abilities;// rolled, pre-scaled
+    }
+  Rationale: GroundItem is the only thing that persists between "weapon spawned/dropped"
+  and "weapon picked up." It must hold the identity or same-type guns collapse again.
+  WeaponRoll mirrors exactly what weapon-levels-tiers-abilities.txt's configureRoll(...)
+  consumes, so picking up = "apply this WeaponRoll to the arsenal Weapon instance."
+
+ARSENAL SINGLETON WRINKLE (important):
+  PlayerInventory owns ONE instance per weapon class. weapon-levels-tiers stores
+  level/tier/abilities ON that instance via configureRoll. That is fine while you can
+  only hold one of each class. But this rework explicitly allows a held Lv1 Chaingun
+  AND a ground Lv3 Chaingun to coexist on screen, and a SWAP that replaces the held
+  Chaingun with the ground Chaingun. Resolution rule (RECOMMENDED, simplest):
+    - The GROUND weapon's identity lives only in the GroundItem.weaponRoll (data, not
+      a live Weapon). The card reads stats from the WeaponRoll + base WeaponConstants
+      via GameMath (no live Weapon needed to DISPLAY).
+    - On EQUIP/SWAP, apply that WeaponRoll to the arsenal singleton via configureRoll
+      and equip the singleton. The PREVIOUS roll on that singleton (if it was already
+      in the loadout, i.e. a same-type swap) is what gets dropped — so before
+      overwriting, snapshot the singleton's current roll into the evicted GroundItem.
+    - SAME-TYPE SWAP SEQUENCE (held Lv1 Chaingun, ground Lv3 Chaingun, slot k holds it):
+        snapshot oldRoll = chaingun.currentRoll()        // Lv1 Common
+        drop GroundItem(WEAPON_CHAINGUN, oldRoll) on player tile
+        chaingun.configureRoll(groundRoll)               // becomes Lv3 Rare
+        loadout already references the singleton in slot k -> it now reflects Lv3
+        remove ground GroundItem
+      Because the loadout holds the singleton by reference, no removeSlot/tryEquip is
+      even needed for the same-CLASS case — just re-roll in place and drop the old
+      roll. For DIFFERENT-class swaps, use the removeSlot/tryEquip sequence in 2b.
+      The implementing agent must branch on "is the ground weapon's class already in
+      the chosen slot?" — if yes, re-roll-in-place; if no, evict+equip.
+    NOTE: this means the arsenal stays one-instance-per-class (no architectural
+    upheaval); the per-weapon ROLL is what moves around, carried by GroundItem.
+    OPEN QUESTION flags an alternative (per-loadout-slot Weapon copies) if designers
+    later want to hold two of the same class at once.
+
+REMOVED / CHANGED CLASSES:
+  - input/touch/TouchAction.java — REMOVE INSPECT_WEAPON. (Optionally add VIEW_WEAPON
+    for the "reopen after close while standing on tile" button; small, contextual.)
+  - input/touch/TouchControllerRenderer.java — REMOVE the contextual INSPECT button.
+    Add the small contextual VIEW button shown only when (weapon underfoot && no card
+    open && card was previously closed on this tile).
+  - input/PlayerController.java — on settle, if the new tile holds a weapon GroundItem
+    AND the world is not already showing this tile's card, signal World to AUTO-OPEN
+    the card (instead of merely recording standingOnWeapon for a manual INSPECT tap).
+    Keep the controller UI-free: it signals intent; World owns the overlay. While the
+    card modal is open, the controller is locked (ignores movement/fire), same as the
+    existing action-animation lock.
+  - render/WeaponInspectOverlayRenderer.java — REMOVE the Phase enum (STATS_CARD /
+    SLOT_SELECT). Becomes a single flat layout per the UI spec. New/changed surface:
+      void show(GroundItem groundWeapon, WeaponRoll groundRoll,
+                Weapon activeWeapon, Loadout loadout, boolean startRoomMode)
+      void hide(); boolean isVisible();
+      void handleTap(float worldX, float worldY)   // hit-tests all buttons on ONE screen
+      setOnEquipFreeSlot(Runnable)        // free-slot fast lane (and start-room CHOOSE)
+      setOnSwapSlot(IntConsumer)          // slot index chosen to replace
+      setOnConvertToAmmo(Runnable)
+      setOnClose(Runnable)
+    Still pure UI: never mutates the loadout; reports intent via callbacks; World
+    performs the mutation (single source of truth).
+  - world/World.java (or a split-out world/WeaponPickupController.java, RECOMMENDED) —
+    owns the overlay, wires the callbacks to the equip/swap/convert/drop resolvers
+    above, performs the arsenal re-roll-in-place vs evict+equip branch, and fires the
+    single tick on success. Reuses the existing weaponToItemType mapping and the
+    arsenal lookup (findWeaponInArsenalForType). Adds the card to the render order
+    after HudRenderer (drawn on top), before the touch controller.
+  - world/GameState.java (or HudState) — the modal flag becomes WEAPON_CARD (rename of
+    the old WEAPON_INSPECT) so the tick loop pauses and the touch controller hides
+    movement buttons while the card is up. Only ONE modal at a time (mutually exclusive
+    with the inventory overlay).
+  - render/HudRenderer.java — the ground-weapon NAME LABEL now only appears in the
+    "card closed but standing on weapon" hint state, not as the always-on pre-inspect
+    cue (auto-open replaces the need to advertise INSPECT).
+
+START-ROOM INTEGRATION (the key behavior change there):
+  Today World.handleStartRoomWeaponPickup auto-equips on contact, bypassing any card.
+  Change: in the start room, settling on a weapon GroundItem opens the SAME card with
+  startRoomMode=true (button text "CHOOSE THIS WEAPON"). The "despawn the other two
+  offers" rule fires on the EQUIP callback, NOT on tile-contact. This means the player
+  can CLOSE the card, walk to another offer, and compare before locking in — directly
+  fixing problem #4. The old immediate-equip path is removed; the start room uses the
+  unified card flow with only the wording + despawn-others behavior differing.
+  (Recommended: World passes a boolean startRoomMode into show(); the despawn-others
+  logic lives in the start-room equip resolver, gated on that flag.)
+
+CONSTANTS TO ADD (all PLACEHOLDER):
+  HudConstants.java:
+    WEAPON_CARD_WIDTH = 760f, WEAPON_CARD_HEIGHT = 520f
+    WEAPON_CARD_ORIGIN_X = 260f, WEAPON_CARD_ORIGIN_Y = 100f
+    WEAPON_CARD_PANEL_ALPHA = 0.94f, WEAPON_CARD_BORDER_THICKNESS = 3f
+    WEAPON_EQUIP_BUTTON_WIDTH = 520f, WEAPON_EQUIP_BUTTON_HEIGHT = 84f
+    WEAPON_SLOT_ROW_HEIGHT = 64f, WEAPON_SLOT_ROW_GAP = 10f
+    WEAPON_SWAP_BUTTON_WIDTH = 150f, WEAPON_SWAP_BUTTON_HEIGHT = 54f
+    WEAPON_CLOSE_BUTTON_WIDTH = 150f, WEAPON_FOOTER_HEIGHT = 52f
+    WEAPON_STAT_BAR_MAX_DAMAGE = 60, WEAPON_STAT_BAR_MAX_RANGE = 20
+    WEAPON_DELTA_GREEN_RGB / _RED_RGB / _GREY_RGB (comparison tints)
+  TouchConstants.java:
+    VIEW_BUTTON_X / _Y / _WIDTH / _HEIGHT (the reopen-after-close contextual button)
+  No allocation in render(): pre-build all button rectangles and the stat-row layout
+  in show() (or in the constructor for fixed geometry); the slot list is at most
+  getSlotCount() rows — pre-size an array to MAX loadout slots.
+
+TURN-BASED FIT:
+  - Auto-open, CLOSE, VIEW-reopen = ZERO turns (world paused, like inventory).
+  - EQUIP / SWAP / CONVERT = exactly ONE turn (mutate-then-single-tick), identical to
+    every other world-advancing action. The marine holsters; the demon gets a step.
+  All resolution is integer tile lookups + reference swaps + one WeaponRoll apply; the
+  only allocation on a swap is the single new GroundItem for the evicted weapon.
+
+
+VISUAL DESIGN
+=============
+- The card is procedural (ShapeRenderer panels/bars + shared HUD font). No texture.
+- TIER FRAMING: the entire card border and the weapon name are tinted in the ground
+  weapon's tier color (steel-grey -> hazard-green -> plasma-blue -> demon-violet ->
+  hellfire-gold), so the player feels the rarity the instant the card appears. A
+  Legendary card is unmistakably gold-framed.
+- TIER ICON SHAPE left of the name (circle/square/triangle/diamond/star) gives
+  color-blind redundancy alongside the level tag text.
+- COMPARISON GLOW: green = ground weapon better on that stat, red = worse, grey =
+  equal — consistent everywhere (the "vs active" column AND the inline per-slot stats).
+  Green is always "a reason to take it."
+- PRIMARY CTA is the largest, green-filled element (EQUIP / CHOOSE). SWAP buttons are
+  amber-outlined and live inside their rows. CLOSE is small grey. CONVERT is a small
+  muted chip. The size/color hierarchy makes the intended verb obvious at a glance.
+- ABILITY GLYPH STRIP: one small tier-colored glyph per rolled ability under the
+  stat block; "— no abilities —" in grey for Common. Full names on long-press tooltip
+  (OPEN QUESTION).
+- BANNERS reuse EventTextSystem.spawnWithColor: "<NAME> ACQUIRED" (green), "<OLD>
+  DROPPED" (amber), "+N <AMMO>" (green), "LOADOUT SET — DESCEND" (amber, start room).
+- The faint 6% transparency over the 3D view keeps the dungeon visible behind the card
+  so the modal still feels diegetic, not a full-screen menu.
+
+
+BALANCE NOTES
+=============
+All PLACEHOLDER — tune in playtest:
+- EQUIP/SWAP/CONVERT cost 1 turn (deliberate friction); auto-OPENING and CLOSING are
+  free so merely LOOKING is never punished. If 1-turn swaps feel brutal mid-firefight,
+  flag a "free swap if no enemy in LOS" softening (adds a LOS check).
+- AUTO-OPEN intrusiveness: pausing the world every time you step on a gun could annoy
+  in a hot room. Mitigations to consider: (a) auto-open only when NOT in combat (no
+  enemy in LOS), and merely show the VIEW hint when enemies are near; (b) a settings
+  toggle "auto-open weapon cards." RECOMMEND (a) as the default — it preserves the
+  zero-tap reward feel in calm rooms (the common case) without freezing you mid-fight.
+  This directly answers the old doc's OPEN QUESTION #2 ("auto-open vs explicit tap")
+  in favor of context-sensitive auto-open.
+- CONVERT amount: flat per ammo type (reuse AMMO_BOX_* values) is simplest; scaling by
+  ground-weapon level/tier rewards converting rare junk but muddies the "convert is the
+  consolation prize" read. RECOMMEND flat for v1.
+- Stat-bar normalisers (MAX_DAMAGE 60, MAX_RANGE 20) affect bar FILL only, not logic.
+- Dropped-weapon safety net (evicted gun stays on the tile, carrying its roll) keeps
+  bold swaps low-regret — intended. If return-trip hoarding gets tedious, the
+  multi-floor rule (only CARRIED weapons descend) is the natural pressure valve.
+
+
+INTERACTIONS
+============
+1. weapon-levels-tiers-abilities.txt (DEPENDENCY): this rework is the UI/flow half of
+   that system. WeaponRoll mirrors configureRoll's inputs; the card reads effective
+   stats via the same GameMath.weaponLevelX helpers; tier colors/icons and the ability
+   glyph strip come straight from WeaponTier / WeaponAbility. That doc must ship (or
+   ship alongside) for the card to show real distinct stats. Until then, the card can
+   render every weapon as Common Lv1 (graceful degrade with weaponRoll == null).
+2. weapon-pickup-interaction.txt (REPLACED): mark that doc REJECTED/SUPERSEDED by this
+   one once this ships — its two-phase modal and INSPECT button are removed. The
+   Loadout API reuse and "evicted weapon drops on the floor" principle carry over.
+3. game-start-weapon-selection-room.txt (MODIFIED): the start room's "pick one of three
+   -> remove the other two" rule now fires through the card's EQUIP callback in
+   startRoomMode, not on tile-contact. The room layout, generator, and portal flow are
+   unchanged; only the contact behavior (card instead of instant equip) changes.
+4. Inventory overlay (InventoryOverlayRenderer): a sibling modal using the same
+   pause-the-world + touch-hit-test pattern. Mutually exclusive — the weapon card may
+   not open while the inventory is open and vice-versa (shared modal flag). The
+   inventory's EQUIP/DROP verbs should route through the SAME World swap/drop resolvers
+   for consistency.
+5. weapon-ground-sprites.txt (COMPLEMENTARY): the bobbing ground sprite, tinted by tier
+   color, is the at-range "there's loot" cue; this card is the on-tile actionable read.
+   The sprite vanishes the frame its GroundItem is removed (EQUIP/SWAP) and a freshly
+   bobbing, tier-tinted sprite appears the frame the evicted weapon's GroundItem is
+   added. No conflict.
+6. Tick system (TickEventBus): EQUIP/SWAP/CONVERT advance exactly one turn via the
+   existing advance path; OPEN/CLOSE/VIEW fire no tick.
+
+
+OPEN QUESTIONS
+==============
+1. Arsenal model: keep one-instance-per-class + moving WeaponRoll (recommended,
+   minimal change), or move to per-loadout-slot Weapon copies so the player could hold
+   TWO of the same class at once as genuinely separate weapons? The re-roll-in-place
+   trick handles same-type SWAP cleanly, but if designers want "carry two distinct
+   Chainguns simultaneously," per-slot copies are required. Recommend deferring;
+   re-roll-in-place ships the requested fix without an arsenal rewrite.
+2. Auto-open in combat: always auto-open (simple, but freezes mid-fight) vs auto-open
+   only when no enemy is in LOS (recommended) vs a settings toggle. Recommend the LOS
+   gate with a VIEW button fallback when enemies are near.
+3. CONVERT amount: flat (recommended) vs scaled by the ground weapon's level/tier.
+4. Ability detail: glyph strip only on the card (recommended, compact) vs full ability
+   name+magnitude rows. If rows, the card height must grow / scroll for Legendaries
+   (5 abilities). Recommend glyphs + long-press tooltip for full text.
+5. "vs active" comparison column: compare against the ACTIVE weapon (recommended, the
+   gun in your hands) — the per-slot inline tints already cover the other slots, so a
+   single active-comparison column plus per-slot tints answers "what do I gain/lose"
+   without a third surface.
+6. VIEW reopen button: worth the extra contextual button, or should CLOSE simply step
+   the player off the tile is enough? Recommend keeping VIEW — closing to glance at the
+   room then wanting the card back is a real flow.
+7. Weapon on the EXIT tile: keep the existing exclusion (generator never places a
+   weapon GroundItem on '>') so descent never races the card. Confirm with the
+   level-gen owner; same exclusion the old doc flagged.
+
+EDGE CASES
+==========
+- PLAYER DIES ON A SWAP TICK: apply the full mutate block (snapshot old roll, drop,
+  re-roll/equip, remove ground item) synchronously, THEN fire the tick. If the
+  retaliating strike is lethal, force-hide the card; the death overlay outranks all
+  modals. Never leave a half-applied swap.
+- DIES WHILE CARD MERELY OPEN (hazard/DoT, no action taken): force-hide the card on
+  death; nothing was pending, nothing to roll back.
+- EMPTY LOADOUT (just left start room with no gun): isFull() is false -> always the
+  free-slot fast lane; SWAP list never appears. Good, no special case.
+- WEAPON TYPE WITH NO BACKING Weapon CLASS (pistol stub): no instance to equip; the
+  card still SHOWS (stats from WeaponRoll/ItemType), but the primary action becomes
+  CONVERT-TO-AMMO (promoted from the footer) since EQUIP/SWAP can't produce a real gun.
+- EVICTED DROP ON AN OCCUPIED TILE: the ground weapon being taken is removed first, so
+  the tile is free for the evicted gun in the normal case. If a non-weapon GroundItem
+  also sits there, two sprites briefly overlap (acceptable for v1); define "first
+  weapon GroundItem on the tile" as the one the next settle auto-opens. Polish option:
+  drop the evicted weapon on the first walkable, weapon-free cardinal neighbour.
+- MODAL OPEN + WORLD REBUILD / FLOOR DESCENT: hide and null the dangling GroundItem /
+  WeaponRoll references in the card on world teardown; the groundItems list is rebuilt
+  per floor, so the card must clear its held references on hide().
+- LEGACY / UN-ROLLED GROUND WEAPON (weaponRoll == null): render as Common Lv1, no
+  abilities, grey frame. Equipping applies a Common Lv1 roll. No crash path.

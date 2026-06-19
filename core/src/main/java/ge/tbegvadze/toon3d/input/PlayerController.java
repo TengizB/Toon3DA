@@ -2,7 +2,6 @@ package ge.tbegvadze.toon3d.input;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Consumer;
 
 import com.badlogic.gdx.math.MathUtils;
 import ge.tbegvadze.toon3d.door.DoorManager;
@@ -50,7 +49,6 @@ public class PlayerController {
     private Loadout                 loadout                           = null;
     private PlayerStats             playerStats                       = null;
     private List<GroundItem>        groundItems                       = Collections.emptyList();
-    private Consumer<GroundItem>    weaponGroundItemPickedUpCallback  = null;
 
     /** The weapon GroundItem the player is currently standing on, or null. */
     private GroundItem standingOnWeapon = null;
@@ -133,16 +131,6 @@ public class PlayerController {
     /** Replaces the ground item list; called by World after each level build. */
     public void setGroundItems(List<GroundItem> items) {
         this.groundItems = (items != null) ? items : new java.util.ArrayList<>();
-    }
-
-    /**
-     * Registers a callback invoked when a weapon GroundItem is picked up.
-     * When set, the callback receives the removed item and is responsible for
-     * all equip/ammo logic (default ammo-conversion path is skipped).
-     * Pass null to restore default behaviour (ammo conversion).
-     */
-    public void setWeaponGroundItemPickedUpCallback(java.util.function.Consumer<GroundItem> callback) {
-        this.weaponGroundItemPickedUpCallback = callback;
     }
 
     public boolean isIdle() { return actionState == ActionState.IDLE; }
@@ -300,7 +288,6 @@ public class PlayerController {
     }
 
     private void pickUpWeaponGroundItemIfPresent(int tileColumn, int tileRow) {
-        // Always update the standing-on-weapon record for this tile (may become null).
         GroundItem found = null;
         for (GroundItem item : groundItems) {
             if (item.tileColumn == tileColumn && item.tileRow == tileRow) {
@@ -309,18 +296,11 @@ public class PlayerController {
             }
         }
         standingOnWeapon = found;
-
         if (found == null) return;
-
-        // When a custom handler is registered (start-room weapon selection), delegate
-        // entirely — immediate auto-pick behaviour is preserved for that flow only.
-        if (weaponGroundItemPickedUpCallback != null) {
-            groundItems.remove(found);
-            standingOnWeapon = null;
-            weaponGroundItemPickedUpCallback.accept(found);
+        // Auto-open the weapon card — the overlay decides equip/swap/convert action.
+        if (inspectWeaponCallback != null) {
+            inspectWeaponCallback.run();
         }
-        // Normal case: weapon stays on the floor; the INSPECT flow (handled by World)
-        // owns all equip/swap/ammo decisions from here.
     }
 
     public Weapon findWeaponInArsenalForType(ItemType itemType) {
