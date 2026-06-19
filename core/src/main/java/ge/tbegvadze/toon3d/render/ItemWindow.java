@@ -90,14 +90,18 @@ final class ItemWindow implements Disposable {
     }
 
     InventoryOverlayRenderer.CloseAction handleTouch(float worldX, float worldY) {
-        if (worldY >= BTN_Y && worldY <= BTN_Y + BTN_HEIGHT) {
-            if (worldX >= BTN_EXIT_X && worldX <= BTN_EXIT_X + BTN_WIDTH) {
+        if (worldY >= ItemConstants.INV_ITEM_WIN_BTN_Y
+                && worldY <= ItemConstants.INV_ITEM_WIN_BTN_Y + ItemConstants.INV_ITEM_WIN_BTN_HEIGHT) {
+            if (worldX >= ItemConstants.INV_ITEM_WIN_BTN_EXIT_X
+                    && worldX <= ItemConstants.INV_ITEM_WIN_BTN_EXIT_X + ItemConstants.INV_ITEM_WIN_BTN_WIDTH) {
                 return InventoryOverlayRenderer.CloseAction.CLOSE_WINDOW;
             }
-            if (worldX >= BTN_USE_X && worldX <= BTN_USE_X + BTN_WIDTH) {
+            if (worldX >= ItemConstants.INV_ITEM_WIN_BTN_USE_X
+                    && worldX <= ItemConstants.INV_ITEM_WIN_BTN_USE_X + ItemConstants.INV_ITEM_WIN_BTN_WIDTH) {
                 return handleUse();
             }
-            if (worldX >= BTN_DROP_X && worldX <= BTN_DROP_X + BTN_WIDTH) {
+            if (worldX >= ItemConstants.INV_ITEM_WIN_BTN_DROP_X
+                    && worldX <= ItemConstants.INV_ITEM_WIN_BTN_DROP_X + ItemConstants.INV_ITEM_WIN_BTN_WIDTH) {
                 return handleDrop();
             }
         }
@@ -108,6 +112,10 @@ final class ItemWindow implements Disposable {
         renderBackground(camera);
         renderContent(camera);
     }
+
+    // -------------------------------------------------------------------------
+    // Private — action handlers
+    // -------------------------------------------------------------------------
 
     private InventoryOverlayRenderer.CloseAction handleUse() {
         if (inventory == null || slotIndex < 0) return InventoryOverlayRenderer.CloseAction.NONE;
@@ -148,28 +156,41 @@ final class ItemWindow implements Disposable {
         flashTimerSeconds = ItemConstants.INV_FLASH_SECONDS;
     }
 
+    // -------------------------------------------------------------------------
+    // Private — render passes
+    // -------------------------------------------------------------------------
+
     private void renderBackground(OrthographicCamera camera) {
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         shapeRenderer.setColor(WINDOW_BG);
-        shapeRenderer.rect(WINDOW_X, WINDOW_Y, WINDOW_WIDTH, WINDOW_HEIGHT);
+        shapeRenderer.rect(ItemConstants.INV_ITEM_WINDOW_X, ItemConstants.INV_ITEM_WINDOW_Y,
+                           ItemConstants.INV_ITEM_WINDOW_WIDTH, ItemConstants.INV_ITEM_WINDOW_HEIGHT);
         shapeRenderer.setColor(BTN_BG);
-        shapeRenderer.rect(BTN_USE_X,  BTN_Y, BTN_WIDTH, BTN_HEIGHT);
-        shapeRenderer.rect(BTN_DROP_X, BTN_Y, BTN_WIDTH, BTN_HEIGHT);
+        shapeRenderer.rect(ItemConstants.INV_ITEM_WIN_BTN_USE_X,  ItemConstants.INV_ITEM_WIN_BTN_Y,
+                           ItemConstants.INV_ITEM_WIN_BTN_WIDTH,  ItemConstants.INV_ITEM_WIN_BTN_HEIGHT);
+        shapeRenderer.rect(ItemConstants.INV_ITEM_WIN_BTN_DROP_X, ItemConstants.INV_ITEM_WIN_BTN_Y,
+                           ItemConstants.INV_ITEM_WIN_BTN_WIDTH,  ItemConstants.INV_ITEM_WIN_BTN_HEIGHT);
         shapeRenderer.setColor(EXIT_BTN_BG);
-        shapeRenderer.rect(BTN_EXIT_X, BTN_Y, BTN_WIDTH, BTN_HEIGHT);
+        shapeRenderer.rect(ItemConstants.INV_ITEM_WIN_BTN_EXIT_X, ItemConstants.INV_ITEM_WIN_BTN_Y,
+                           ItemConstants.INV_ITEM_WIN_BTN_WIDTH,  ItemConstants.INV_ITEM_WIN_BTN_HEIGHT);
         shapeRenderer.end();
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
         shapeRenderer.setColor(WINDOW_BORDER);
-        shapeRenderer.rect(WINDOW_X, WINDOW_Y, WINDOW_WIDTH, WINDOW_HEIGHT);
+        shapeRenderer.rect(ItemConstants.INV_ITEM_WINDOW_X, ItemConstants.INV_ITEM_WINDOW_Y,
+                           ItemConstants.INV_ITEM_WINDOW_WIDTH, ItemConstants.INV_ITEM_WINDOW_HEIGHT);
         shapeRenderer.setColor(HEADER_ACCENT);
-        shapeRenderer.line(WINDOW_X + 10f, HEADER_LINE_Y,
-                           WINDOW_X + WINDOW_WIDTH - 10f, HEADER_LINE_Y);
+        shapeRenderer.line(ItemConstants.INV_ITEM_WINDOW_X + 10f, HEADER_LINE_Y,
+                           ItemConstants.INV_ITEM_WINDOW_X + ItemConstants.INV_ITEM_WINDOW_WIDTH - 10f,
+                           HEADER_LINE_Y);
         shapeRenderer.setColor(BTN_BORDER);
-        shapeRenderer.rect(BTN_USE_X,  BTN_Y, BTN_WIDTH, BTN_HEIGHT);
-        shapeRenderer.rect(BTN_DROP_X, BTN_Y, BTN_WIDTH, BTN_HEIGHT);
-        shapeRenderer.rect(BTN_EXIT_X, BTN_Y, BTN_WIDTH, BTN_HEIGHT);
+        shapeRenderer.rect(ItemConstants.INV_ITEM_WIN_BTN_USE_X,  ItemConstants.INV_ITEM_WIN_BTN_Y,
+                           ItemConstants.INV_ITEM_WIN_BTN_WIDTH,  ItemConstants.INV_ITEM_WIN_BTN_HEIGHT);
+        shapeRenderer.rect(ItemConstants.INV_ITEM_WIN_BTN_DROP_X, ItemConstants.INV_ITEM_WIN_BTN_Y,
+                           ItemConstants.INV_ITEM_WIN_BTN_WIDTH,  ItemConstants.INV_ITEM_WIN_BTN_HEIGHT);
+        shapeRenderer.rect(ItemConstants.INV_ITEM_WIN_BTN_EXIT_X, ItemConstants.INV_ITEM_WIN_BTN_Y,
+                           ItemConstants.INV_ITEM_WIN_BTN_WIDTH,  ItemConstants.INV_ITEM_WIN_BTN_HEIGHT);
         shapeRenderer.end();
     }
 
@@ -179,8 +200,8 @@ final class ItemWindow implements Disposable {
         spriteBatch.setProjectionMatrix(camera.combined);
         spriteBatch.begin();
 
-        float contentX = WINDOW_X + 16f;
-        float contentY = WINDOW_Y + WINDOW_HEIGHT - 16f;
+        float contentX = ItemConstants.INV_ITEM_WINDOW_X + 16f;
+        float contentY = ItemConstants.INV_ITEM_WINDOW_Y + ItemConstants.INV_ITEM_WINDOW_HEIGHT - 16f;
         float lineStep = 22f;
         ItemStack slot = inventory.getSlot(slotIndex);
 
@@ -222,16 +243,17 @@ final class ItemWindow implements Disposable {
             }
         }
 
-        drawButtonLabel("USE / EQUIP", BTN_USE_X, AMBER);
-        drawButtonLabel("DROP",        BTN_DROP_X, AMBER);
-        drawButtonLabel("EXIT",        BTN_EXIT_X, EXIT_BTN_TEXT);
+        drawButtonLabel("USE / EQUIP", ItemConstants.INV_ITEM_WIN_BTN_USE_X,  AMBER);
+        drawButtonLabel("DROP",        ItemConstants.INV_ITEM_WIN_BTN_DROP_X, AMBER);
+        drawButtonLabel("EXIT",        ItemConstants.INV_ITEM_WIN_BTN_EXIT_X, EXIT_BTN_TEXT);
 
         if (flashTimerSeconds > 0f && flashMessage != null) {
             font.setColor(RED_FLASH);
             glyphLayout.setText(font, flashMessage);
             font.draw(spriteBatch, flashMessage,
-                      WINDOW_X + (WINDOW_WIDTH - glyphLayout.width) / 2f,
-                      BTN_Y + BTN_AREA_HEIGHT + 10f);
+                      ItemConstants.INV_ITEM_WINDOW_X
+                              + (ItemConstants.INV_ITEM_WINDOW_WIDTH - glyphLayout.width) / 2f,
+                      ItemConstants.INV_ITEM_WIN_BTN_Y + ItemConstants.INV_ITEM_WIN_BTN_AREA_HEIGHT + 10f);
         }
 
         spriteBatch.end();
@@ -241,8 +263,9 @@ final class ItemWindow implements Disposable {
         glyphLayout.setText(font, label);
         font.setColor(color);
         font.draw(spriteBatch, label,
-                  buttonX + (BTN_WIDTH  - glyphLayout.width)  / 2f,
-                  BTN_Y   + (BTN_HEIGHT + glyphLayout.height) / 2f);
+                  buttonX + (ItemConstants.INV_ITEM_WIN_BTN_WIDTH  - glyphLayout.width)  / 2f,
+                  ItemConstants.INV_ITEM_WIN_BTN_Y
+                          + (ItemConstants.INV_ITEM_WIN_BTN_HEIGHT + glyphLayout.height) / 2f);
     }
 
     private static String effectDescriptionFor(ItemType itemType) {
