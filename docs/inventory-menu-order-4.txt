@@ -1,0 +1,43 @@
+IMPLEMENTED: Inventory Menu Part 4 — ItemWindow Detail Popup
+
+Branch: claude/inventory-menu-order-4-e80f90
+Idea file: .claude/agents/ideas/inventory-menu-order-4.txt
+
+WHAT WAS BUILT
+A full ItemWindow popup (640×420px, centered at 640,370) that opens when the player taps
+any slot in the inventory grid or weapon panel. Three zones:
+
+  Header (52px)  — item glyph box (60×60), item name, EXIT button (40×40 top-right)
+  Body (312px)   — left column: description text + category stat block
+                   right column: weapon abilities (stub) or category info
+  Footer (56px)  — two action buttons: primary (EQUIP/USE/disabled) + DROP
+
+FILES CHANGED
+
+  ItemType.java (item/)
+    Added String description field + getDescription() getter + constructor param.
+    All 25 enum entries now have short lore/usage description strings.
+
+  ItemConstants.java (util/)
+    Replaced old INV_ITEM_WINDOW_* and INV_ITEM_WIN_BTN_* constants with:
+      INV_ITEM_WIN_*  — 640×420 window geometry (x, y, width, height, zones)
+      INV_ACTION_BTN_* — 2-button footer layout (width, height, gap, positions)
+
+  ItemWindow.java (render/)
+    Fully rewritten. Three-pass render: ShapeRenderer.Filled → ShapeRenderer.Line
+    → SpriteBatch+BitmapFont. Category-specific stat blocks:
+      WEAPON     — Damage, Range, Ammo, Clip, Fire Mode
+      CONSUMABLE — Effect, Heal Amount, Guidance
+      AMMO       — Per Box, Compatible Weapons
+      KEY_ITEM   — Security Level
+      MISC       — Category badge
+    Right column shows "ABILITIES" header for weapons (Part 5 stub).
+    Touch routing: exit btn → CLOSE_WINDOW, EQUIP (weapon) → no turn,
+    USE (consumable) → CLOSE_WITH_TURN, DROP key items → flash "Cannot drop quest items".
+    Pre-allocated StringBuilder (valueBuilder) — no heap in render().
+
+ARCHITECTURE NOTES
+  InventoryOverlayRenderer is the coordinator: owns ItemWindow as Layer 2.
+  ItemWindow is package-private (render package). AbilityWindow is still a stub (Part 5).
+  EQUIP reads PlayerInventory via the Inventory reference passed at open() time.
+  Weapon equip: calls inventory.use(slotIndex) → no turn cost. Consumable use → CLOSE_WITH_TURN.
