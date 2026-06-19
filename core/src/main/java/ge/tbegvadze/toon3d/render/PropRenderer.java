@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.render;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
@@ -86,6 +87,8 @@ public class PropRenderer implements Renderable, Disposable {
     // Per-weapon ground billboard textures — keyed by ItemType, built once at startup.
     private final Map<ItemType, Texture>  weaponPickupTextures;
     private final Texture                 genericWeaponFallbackTexture;
+    // Radial gradient used as the additive glow halo behind tier-colored weapon pickups.
+    private final Texture                 weaponPickupGlowTexture;
     private final SpriteBatch             batch;
 
     // Weapon ground items (placed by LevelGenerator, consumed on player pickup).
@@ -129,6 +132,7 @@ public class PropRenderer implements Renderable, Disposable {
         this.textures                     = buildTextures();
         this.weaponPickupTextures         = buildWeaponPickupTextures();
         this.genericWeaponFallbackTexture = generateWeaponPickupTexture();
+        this.weaponPickupGlowTexture      = generateGlowTexture();
     }
 
     /** Replaces the ground item list; called by World after each level build. */
@@ -278,7 +282,7 @@ public class PropRenderer implements Renderable, Disposable {
                         PICKUP_ITEM_BOB_SPEED, PICKUP_ITEM_BOB_AMPLITUDE_FRACTION,
                         bobPhase, spriteScreenHeight);
             }
-            float drawBottom = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight) + bobOffset;
+            float drawBottom = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight) + bobOffset;
             float drawTop    = drawBottom + spriteScreenHeight;
             float clampedBottom   = Math.max(0f, drawBottom);
             float clampedTop      = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, drawTop);
@@ -366,8 +370,8 @@ public class PropRenderer implements Renderable, Disposable {
                                       lightingTimeSeconds, WEAPON_PICKUP_BOB_SPEED,
                                       WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION, bobPhase,
                                       spriteScreenHeight);
-            float drawBottom    = GameMath.wallStripeDrawBottom(
-                                      WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight) + bobOffset;
+            float drawBottom    = GameMath.spriteDrawBottomCentered(
+                                      WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight) + bobOffset;
             float drawTop       = drawBottom + spriteScreenHeight;
             float clampedBottom = Math.max(0f, drawBottom);
             float clampedTop    = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, drawTop);
@@ -388,13 +392,50 @@ public class PropRenderer implements Renderable, Disposable {
             float tileBrightness = level.getTileBrightness(groundItem.tileColumn, groundItem.tileRow, lightingTimeSeconds);
             float shade          = Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * tileBrightness,
                                             MAX_LIGHTING_SHADE);
-            WeaponTier weaponTier    = weaponTierMap.get(itemType);
-            float tierColorRed       = (weaponTier != null) ? weaponTier.colorRed   : 1f;
-            float tierColorGreen     = (weaponTier != null) ? weaponTier.colorGreen : 1f;
-            float tierColorBlue      = (weaponTier != null) ? weaponTier.colorBlue  : 1f;
-            float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST) * tierColorRed);
-            float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN) * tierColorGreen;
-            float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN) * tierColorBlue;
+
+            // Tier glow aura — additive halo drawn behind the weapon so the sprite keeps its true colours.
+            WeaponTier weaponTier = weaponTierMap.get(itemType);
+            if (weaponTier != null) {
+                float glowHeight      = spriteScreenHeight * WEAPON_PICKUP_GLOW_SIZE_MULTIPLIER;
+                int   glowLeft        = (int)(screenCenterColumn - glowHeight / 2f);
+                int   glowRight       = (int)(screenCenterColumn + glowHeight / 2f);
+                int   glowColumnSpan  = glowRight - glowLeft;
+                float glowDrawBottom  = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, glowHeight) + bobOffset;
+                float glowDrawTop     = glowDrawBottom + glowHeight;
+                float glowClampBottom = Math.max(0f, glowDrawBottom);
+                float glowClampTop    = Math.min(WALL_PROJECTION_SCREEN_HEIGHT, glowDrawTop);
+                if (glowColumnSpan > 0 && glowClampTop > glowClampBottom) {
+                    int glowTexSrcY = GameMath.wallTextureClipSrcY(
+                            glowDrawTop, WALL_PROJECTION_SCREEN_HEIGHT,
+                            glowHeight, weaponPickupGlowTexture.getHeight());
+                    int glowTexSrcHeight = GameMath.wallTextureClipSrcHeight(
+                            glowClampTop, glowClampBottom,
+                            glowHeight, weaponPickupGlowTexture.getHeight());
+                    glowTexSrcHeight = Math.min(glowTexSrcHeight, weaponPickupGlowTexture.getHeight() - glowTexSrcY);
+                    glowTexSrcHeight = Math.max(1, glowTexSrcHeight);
+                    batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+                    batch.setColor(weaponTier.colorRed * shade, weaponTier.colorGreen * shade,
+                                   weaponTier.colorBlue * shade, WEAPON_PICKUP_GLOW_ALPHA);
+                    int glowFirstColumn = Math.max(0, glowLeft);
+                    int glowLastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, glowRight);
+                    for (int screenColumn = glowFirstColumn; screenColumn <= glowLastColumn; screenColumn++) {
+                        if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                        if (depth >= propSpriteZBuffer[screenColumn]) continue;
+                        int glowTexSrcX = (screenColumn - glowLeft) * weaponPickupGlowTexture.getWidth() / glowColumnSpan;
+                        glowTexSrcX = MathUtils.clamp(glowTexSrcX, 0, weaponPickupGlowTexture.getWidth() - 1);
+                        batch.draw(weaponPickupGlowTexture,
+                                   screenColumn * WALL_COLUMN_WIDTH, glowClampBottom,
+                                   WALL_COLUMN_WIDTH, glowClampTop - glowClampBottom,
+                                   glowTexSrcX, glowTexSrcY, 1, glowTexSrcHeight,
+                                   false, false);
+                    }
+                    batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+                }
+            }
+
+            float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+            float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             int firstColumn = Math.max(0, leftScreenColumn);
@@ -452,7 +493,7 @@ public class PropRenderer implements Renderable, Disposable {
                         PICKUP_ITEM_BOB_SPEED, PICKUP_ITEM_BOB_AMPLITUDE_FRACTION,
                         bobPhase, spriteScreenHeight);
             }
-            float drawBottom    = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight) + dynamicBobOffset;
+            float drawBottom    = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight) + dynamicBobOffset;
             float drawTop       = drawBottom + spriteScreenHeight;
             float clampedBottom = Math.max(0f, drawBottom);
             float clampedTop    = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, drawTop);
@@ -500,6 +541,7 @@ public class PropRenderer implements Renderable, Disposable {
     public void dispose() {
         batch.dispose();
         genericWeaponFallbackTexture.dispose();
+        weaponPickupGlowTexture.dispose();
         for (Texture texture : weaponPickupTextures.values()) {
             texture.dispose();
         }
@@ -1494,6 +1536,28 @@ public class PropRenderer implements Renderable, Disposable {
     // weapon's WeaponHudRenderer palette so the floor icon and the first-person
     // sprite share the same identity.
     // -------------------------------------------------------------------------
+
+    private static Texture generateGlowTexture() {
+        int size = WEAPON_PICKUP_GLOW_TEXTURE_SIZE;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        float centerX = size / 2f;
+        float centerY = size / 2f;
+        float radius  = size / 2f;
+        for (int pixelY = 0; pixelY < size; pixelY++) {
+            for (int pixelX = 0; pixelX < size; pixelX++) {
+                float distX = (pixelX + 0.5f - centerX) / radius;
+                float distY = (pixelY + 0.5f - centerY) / radius;
+                float normalizedDistance = MathUtils.clamp(
+                        (float) Math.sqrt(distX * distX + distY * distY), 0f, 1f);
+                float falloff = (1f - normalizedDistance) * (1f - normalizedDistance);
+                int alpha = (int)(falloff * 255f);
+                pixmap.drawPixel(pixelX, pixelY, (255 << 24) | (255 << 16) | (255 << 8) | alpha);
+            }
+        }
+        Texture texture = new Texture(pixmap);
+        pixmap.dispose();
+        return texture;
+    }
 
     private static Map<ItemType, Texture> buildWeaponPickupTextures() {
         Map<ItemType, Texture> map = new HashMap<>();
