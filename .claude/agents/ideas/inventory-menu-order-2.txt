@@ -1,0 +1,229 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Inventory Menu Redesign — Part 2: Weapon Slots Panel (Left Side)
+---
+
+PREREQUISITE: inventory-menu-order-1.txt (layout & architecture)
+
+
+OVERVIEW
+========
+The left panel (x=20–520, y=110–645) displays 4 weapon slots as large
+horizontal rectangles. Three slots hold ranged guns; one holds melee.
+One of the three gun slots is temporarily disabled (locked/grayed). Weapon
+sprites are drawn procedurally inside each rectangle using the existing
+WeaponHudRenderer FrameBuffer pipeline, scaled to fit.
+
+
+SLOT LAYOUT
+===========
+Left panel usable area (after 15px padding):
+  origin_x = 20 + 15 = 35f
+  origin_y = 110 + 15 = 125f
+  usable_w = 500 - 30 = 470f
+  usable_h = 535 - 30 = 505f
+
+Two sections: RANGED (top) and MELEE (bottom), separated by a divider line.
+
+  Section header "RANGED"     — 20px label, y=(125 + 505 - 20) = 610
+  Gun slot 1 (primary)        — y=507–607 (100px tall)
+  Gun slot 2 (secondary)      — y=401–501 (100px tall)
+  Gun slot 3 (LOCKED)         — y=295–395 (100px tall)
+  Section divider             — y=275–285 (10px divider)
+  Section header "MELEE"      — 20px label, y=250–270
+  Melee slot                  — y=145–245 (100px tall)
+
+Slot gaps between gun slots: 6px  (507-501=6)
+All slots share: x=35f, width=470f
+
+Constants:
+  INV_WEAPON_SLOT_X             = 35f
+  INV_WEAPON_SLOT_WIDTH         = 470f
+  INV_WEAPON_SLOT_HEIGHT        = 100f
+  INV_WEAPON_SLOT_GAP           = 6f
+  INV_WEAPON_SECTION_LABEL_H    = 20f
+  INV_WEAPON_SECTION_DIVIDER_H  = 10f
+  INV_WEAPON_SECTION_DIVIDER_Y  = 275f
+  INV_WEAPON_GUN_SLOT_1_Y       = 507f
+  INV_WEAPON_GUN_SLOT_2_Y       = 401f
+  INV_WEAPON_GUN_SLOT_3_Y       = 295f
+  INV_WEAPON_MELEE_SLOT_Y       = 145f
+  INV_WEAPON_RANGED_LABEL_Y     = 613f
+  INV_WEAPON_MELEE_LABEL_Y      = 253f
+
+
+SLOT VISUAL STATES
+==================
+Each slot can be in one of four visual states:
+
+  EMPTY
+    Background: SLOT_BG_NORMAL (0.10, 0.10, 0.12)
+    Border: PANEL_BORDER_COLOR (0.22, 0.22, 0.30), 1px
+    Contents: dim label "— EMPTY —" centered, TEXT_DISABLED color
+    Tappable: no (does nothing when tapped)
+
+  FILLED (weapon equipped)
+    Background: SLOT_BG_NORMAL (slightly warmer: 0.11, 0.10, 0.09)
+    Border: dim amber (0.50, 0.36, 0.0), 1px
+    Contents: weapon sprite (see below) + weapon name text
+    Tappable: yes → opens ItemWindow for that weapon
+
+  ACTIVE (currently selected / equipped weapon)
+    Background: (0.14, 0.12, 0.05) — warm dark amber tint
+    Border: pulsing amber (1.0, 0.72, 0.0), 2px, sin pulse 4Hz 0.7–1.0 alpha
+    Contents: same as FILLED + small "ACTIVE" badge top-right corner
+    Tappable: yes → opens ItemWindow for that weapon
+
+  LOCKED (slot 3, disabled)
+    Background: (0.08, 0.08, 0.09) — very dark, desaturated
+    Border: TEXT_DISABLED (0.20, 0.20, 0.22), 1px, dashed style (alternate 8px on/4px off)
+    Contents: lock icon glyph (use char '🔒' or draw a simple padlock shape with ShapeRenderer)
+              dim text "LOCKED" centered below lock icon
+              dim text "Unlock at Level 10" (or whatever threshold)
+    Tappable: no; if tapped, flash a brief locked-message in footer area
+
+ACTIVE badge:
+  Small pill shape, top-right corner of slot, 5px from edges
+  Size: 60×18px
+  Fill: amber (1.0, 0.72, 0.0, 0.90)
+  Text: "ACTIVE" in black (0.0, 0.0, 0.0, 1.0), small font
+
+
+WEAPON SPRITE RENDERING INSIDE SLOT
+=====================================
+WeaponHudRenderer already renders each weapon into a FrameBuffer at full
+HUD size (380×130px approx). To draw weapons inside inventory slots:
+
+  Option A — Cached FrameBuffer Texture (RECOMMENDED)
+    WeaponHudRenderer exposes:
+      TextureRegion getWeaponThumbnail(Weapon weapon)
+    This returns the cached FrameBuffer texture for the weapon.
+    InventoryOverlayRenderer draws it scaled into the slot's sprite area.
+
+  Sprite area within each weapon slot:
+    Left area (sprite zone): x_slot to x_slot+280, full height of slot
+    Right area (info zone):  x_slot+285 to x_slot+470 (185px wide)
+
+  Scaling logic:
+    src_w = thumbnail.getRegionWidth()   // ~380px
+    src_h = thumbnail.getRegionHeight()  // ~130px
+    dst_w = 280f
+    dst_h = 100f  (slot height)
+    scale = min(dst_w/src_w, dst_h/src_h) = min(0.736, 0.769) ≈ 0.736
+    draw_w = src_w × scale ≈ 280px
+    draw_h = src_h × scale ≈ 96px
+    draw_x = x_slot + (280 - draw_w) / 2   (center horizontally)
+    draw_y = y_slot + (100 - draw_h) / 2   (center vertically)
+
+  If weapon has no FrameBuffer thumbnail yet (e.g. melee weapons):
+    Fall back to drawing the weapon's glyph (large, 56px font) centered in
+    the left 280px of the slot, colored with the item's glyph color.
+
+  LOCKED slot: no sprite drawn; padlock glyph fills entire slot center.
+
+
+INFO ZONE (right 185px of each slot)
+======================================
+Rendered with SpriteBatch + BitmapFont, stacked vertically within the slot:
+
+  Line 1 (top):    Weapon display name
+                   Font size: medium (same as slot labels)
+                   Color: TEXT_PRIMARY (amber) when active; TEXT_SECONDARY when idle
+
+  Line 2:          Ammo type name (e.g. "Shells" / "Bullets" / "Melee")
+                   Color: TEXT_SECONDARY
+
+  Line 3:          Current clip / max clip  (e.g. "4 / 8")
+                   Color: TEXT_SECONDARY; show "—" for melee
+
+  Line 4 (bottom): Ammo reserve count       (e.g. "Ammo: 32")
+                   Color: TEXT_SECONDARY; show "Unlimited" for melee
+
+  All text left-aligned, x = x_slot + 288, y stacked from top of slot (y_slot + 85) down
+
+
+SECTION LABELS AND DIVIDER
+============================
+  "RANGED" label:
+    x = INV_WEAPON_SLOT_X, y = INV_WEAPON_RANGED_LABEL_Y
+    Color: TEXT_SECONDARY (dim), font size: small
+    Right of label: thin horizontal line to end of slot width (amber, 30% alpha)
+
+  Section divider (y=275–285):
+    ShapeRenderer.Line, x = 35 to 505, y = 280f
+    Color: PANEL_BORDER_COLOR, 1px
+    Dashed: alternate 12px on / 6px off
+
+  "MELEE" label:
+    Same style as RANGED label, at INV_WEAPON_MELEE_LABEL_Y
+
+
+TOUCH DETECTION
+================
+handleTouch(worldX, worldY):
+  For each of the 4 slot rects (gun1, gun2, gun3, melee):
+    if slot is LOCKED: show locked flash, return consumed
+    if slot is EMPTY: return consumed (no-op)
+    if point inside slot rect:
+      retrieve the Weapon instance for this slot
+      open ItemWindow with that weapon's ItemType + slot index
+      return consumed
+
+Slot rect hit test: simple AABB
+  Rect = (INV_WEAPON_SLOT_X, slot_y, INV_WEAPON_SLOT_WIDTH, INV_WEAPON_SLOT_HEIGHT)
+
+
+DATA MODEL CHANGES
+==================
+Currently Loadout has WEAPON_SLOT_COUNT=2 (ranged only).
+Melee is tracked separately in PlayerInventory (meleeWeapon field).
+
+Changes required:
+  1. Increase WEAPON_SLOT_COUNT to 3 in WeaponConstants.java
+     (slot index 0=primary, 1=secondary, 2=LOCKED/future)
+  2. Add a constant: WEAPON_GUN_SLOT_LOCKED_INDEX = 2
+  3. Loadout.tryEquip(Weapon) never assigns to slot index 2 (locked)
+  4. WeaponSlotsPanel reads:
+       gun slot 1 → loadout.getSlot(0)
+       gun slot 2 → loadout.getSlot(1)
+       gun slot 3 → null (LOCKED state rendered automatically)
+       melee slot → playerInventory.getMeleeWeapon()
+  5. "Active" state:
+       gun slots: loadout.activeSlotIndex matches slot index
+       melee slot: playerInventory.meleeSelected == true
+
+
+LOCKED SLOT LOCK ICON
+======================
+Draw with ShapeRenderer (no texture needed):
+  Center of lock body:  cx = x_slot + 140f,  cy = y_slot + 50f
+  Lock body:            filled rect 30×22px centered at (cx, cy)
+  Lock shackle:         arc (semi-circle) above body, radius=11px
+  Color:                TEXT_DISABLED (0.20, 0.20, 0.22)
+
+Or simpler: use the glyph character 'L' in a 48px font as the lock stand-in
+until a proper icon is designed.
+
+
+RENDER PASSES FOR THIS PANEL
+=============================
+Pass A (ShapeRenderer.Filled):
+  - Panel background rect (left panel)
+  - Each slot background rect (state-appropriate color)
+  - ACTIVE badge pill
+  - Lock body rect (LOCKED slot)
+
+Pass B (ShapeRenderer.Line):
+  - Panel border (left panel outline)
+  - Each slot border (state-appropriate color, pulse on ACTIVE)
+  - Section divider dashes
+  - Lock shackle arc (LOCKED slot)
+  - Section label horizontal accent lines
+
+Pass C (SpriteBatch + BitmapFont):
+  - "RANGED" / "MELEE" section labels
+  - Weapon thumbnail sprites (via SpriteBatch.draw scaled)
+  - Info zone text (name, ammo type, clip, reserve)
+  - EMPTY slot center label
+  - LOCKED slot "LOCKED" text + unlock hint
+  - "ACTIVE" badge text

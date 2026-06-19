@@ -1,0 +1,249 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Inventory Menu Redesign — Part 3: Item Grid Panel (Right Side)
+---
+
+PREREQUISITE: inventory-menu-order-1.txt (layout & architecture)
+
+
+OVERVIEW
+========
+The right panel (x=540–1260, y=110–645) shows a 4-column × 3-row grid of
+square item slots — 12 total. This replaces the old 5×2 grid (10 slots).
+Each square slot displays a colored glyph and quantity. Tapping a slot opens
+the ItemWindow (Part 4). The panel also shows a category filter tab bar at
+the top.
+
+INVENTORY SLOT COUNT CHANGE: 10 → 12 (update ItemConstants.INVENTORY_SLOT_COUNT)
+
+
+GRID GEOMETRY
+=============
+Right panel usable area (after 15px padding):
+  origin_x  = 540 + 15 = 555f
+  tab_bar_h = 36f       (category filter tabs at top of panel)
+  grid_origin_y_top = 645 - 15 - 36 = 594f   (top of grid, below tab bar)
+  usable_w  = 720 - 30 = 690f
+  usable_h  = 535 - 30 - 36 = 469f   (minus padding and tab bar)
+
+Slot size (square):  160×160px
+Slot gap (column):   10px
+Slot gap (row):      9px (slightly tighter to fit 3 rows)
+
+Grid total size:
+  width  = 4×160 + 3×10 = 670px  (fits in 690px, 10px margin each side)
+  height = 3×160 + 2×9  = 498px  (fits in 469px? — too tall by 29px)
+
+Adjust: reduce slot size to 148px square, gaps = 10px:
+  width  = 4×148 + 3×10 = 622px  (fits; 34px side margin)
+  height = 3×148 + 2×10 = 464px  (fits in 469px, 5px margin)
+
+Grid x-offset (centered in usable width):
+  grid_margin_x = (690 - 622) / 2 = 34px
+  grid_x = 555 + 34 = 589f
+
+Grid y bottom:
+  grid_y_bottom = 645 - 15 - 36 - 464 = 130f   (just above panel bottom padding)
+
+Constants:
+  INV_GRID_SLOT_SIZE        = 148f
+  INV_GRID_SLOT_GAP_COL     = 10f
+  INV_GRID_SLOT_GAP_ROW     = 10f
+  INV_GRID_COLUMNS          = 4
+  INV_GRID_ROWS             = 3
+  INV_GRID_ORIGIN_X         = 589f
+  INV_GRID_ORIGIN_Y         = 130f      (bottom-left of bottom-left slot)
+  INV_GRID_TAB_BAR_HEIGHT   = 36f
+  INV_GRID_TAB_BAR_Y        = 609f      (y of tab bar bottom edge)
+
+Slot position formula (column 0–3, row 0–2, row 0 = bottom row):
+  slot_x = INV_GRID_ORIGIN_X + column × (INV_GRID_SLOT_SIZE + INV_GRID_SLOT_GAP_COL)
+  slot_y = INV_GRID_ORIGIN_Y + row    × (INV_GRID_SLOT_SIZE + INV_GRID_SLOT_GAP_ROW)
+
+Slot index in Inventory array:
+  index = (2 - row) × INV_GRID_COLUMNS + column
+  (row 2 = visual top row = inventory slots 0–3)
+  (row 1 = middle row = inventory slots 4–7)
+  (row 0 = bottom row = inventory slots 8–11)
+
+
+CATEGORY FILTER TAB BAR
+========================
+A row of 5 slim tabs above the grid lets the player filter visible slots:
+
+  Tab 0: ALL        (show all 12 slots regardless of content)
+  Tab 1: WEAPONS    (highlight weapon slots; others dimmed)
+  Tab 2: AMMO       (highlight ammo slots; others dimmed)
+  Tab 3: MEDS       (highlight consumable slots; others dimmed)
+  Tab 4: MISC       (highlight key items + misc; others dimmed)
+
+Tab dimensions:
+  Each tab width: 690 / 5 = 138px
+  Tab height: INV_GRID_TAB_BAR_HEIGHT = 36px
+  Tab y: 609f to 645f (just below panel top)
+
+Active tab:
+  Background: amber (1.0, 0.72, 0.0, 0.20)
+  Text: TEXT_PRIMARY (amber)
+  Bottom border: 2px amber underline
+
+Inactive tab:
+  Background: transparent
+  Text: TEXT_SECONDARY (dim)
+  No underline
+
+"Filter" behavior:
+  In ALL mode: all slots render normally.
+  In a category mode: slots NOT matching the category are drawn at 40% alpha
+  (they still exist and are still tappable, just visually de-emphasized).
+  Active filter tab is stored as int activeFilterTab (0–4).
+
+Constants:
+  INV_TAB_COUNT           = 5
+  INV_TAB_WIDTH           = 138f
+  INV_TAB_ALL_LABEL       = "ALL"
+  INV_TAB_WEAPONS_LABEL   = "GUNS"
+  INV_TAB_AMMO_LABEL      = "AMMO"
+  INV_TAB_MEDS_LABEL      = "MEDS"
+  INV_TAB_MISC_LABEL      = "MISC"
+  INV_TAB_ACTIVE_ALPHA    = 0.20f
+  INV_TAB_INACTIVE_ALPHA  = 0.0f
+  INV_TAB_DIM_ALPHA       = 0.40f
+
+
+SLOT VISUAL STATES
+==================
+
+  EMPTY SLOT
+    Background:  SLOT_BG_NORMAL (0.10, 0.10, 0.12)
+    Border:      PANEL_BORDER_COLOR 1px (dim gray)
+    Contents:    nothing (no glyph, no text)
+
+  FILLED SLOT (has an item)
+    Background:  SLOT_BG_NORMAL
+    Border:      slightly brighter than panel border (0.28, 0.28, 0.35) 1px
+    Glyph:       large centered character (56px font equivalent)
+                 colored with ItemType.glyphRed/Green/Blue
+                 positioned at center of slot (x_slot+74, y_slot+74)
+    Qty label:   if stackable and quantity > 1:
+                   "×N" in small font, bottom-right corner (x_slot+125, y_slot+8)
+                   color: TEXT_SECONDARY
+    Category dot: 4×4px filled circle, top-left corner (x_slot+8, y_slot+133)
+                  color: category color (see below)
+
+  EQUIPPED SLOT (slot holds the currently active weapon)
+    Background:  warm tint (0.12, 0.10, 0.05)
+    Border:      dim amber (0.50, 0.36, 0.0) 1px
+    Glyph:       same as FILLED
+    Equipped star: green '*' small font, top-right corner (x_slot+133, y_slot+130)
+    Qty label:   same as FILLED
+
+  SELECTED SLOT (most recently tapped to open ItemWindow)
+    Border:      pulsing amber (1.0, 0.72, 0.0), 2px thick, sin pulse 4Hz
+    Background:  SLOT_BG_SELECTED (0.14, 0.14, 0.18)
+    All other contents: same as FILLED or EQUIPPED
+
+  DIMMED SLOT (category filter active, slot doesn't match)
+    All colors multiplied by INV_TAB_DIM_ALPHA = 0.40
+
+Category dot colors:
+  WEAPON:      amber      (1.0,  0.72, 0.0)
+  CONSUMABLE:  green      (0.2,  0.9,  0.2)
+  KEY_ITEM:    red/yellow/blue (matches keycard color)
+  AMMO:        copper     (0.75, 0.45, 0.1)
+  MISC:        white      (0.75, 0.75, 0.75)
+  MOD:         purple     (0.6,  0.3,  0.9)
+
+
+GLYPH DISPLAY (ItemType → character)
+=====================================
+Each ItemType already has a glyph char field. Use it directly.
+Large glyph rendering: draw with SpriteBatch using BitmapFont at ~56px.
+No texture atlas needed — pure procedural text glyph.
+
+Glyph sizing and placement:
+  The glyph is drawn centered in the 148×148 slot.
+  Use BitmapFont.getWrappedBounds() or a fixed center-offset calculated
+  once per ItemType and cached.
+  Vertical center offset: approx y_slot + 54 (for 56px cap height glyph)
+  Horizontal: measure glyph width and center. Cache per ItemType in a
+  float[] array indexed by ItemType.ordinal().
+
+
+SLOT COUNT CHANGE: 10 → 12
+============================
+Update ItemConstants:
+  INVENTORY_SLOT_COUNT     = 12   (was 10)
+  INVENTORY_GRID_COLUMNS   = 4    (unchanged)
+
+Update Inventory.java constructor: allocate ItemStack[12].
+Update any hardcoded slot-count checks.
+Grid now shows all 12 slots across 3 rows × 4 columns.
+
+
+PANEL TITLE
+===========
+Panel does NOT have a separate title label (the header bar "INVENTORY" covers
+the whole screen). Instead, the slot usage counter appears inside the tab bar
+area, right-aligned:
+
+  "8 / 12" text, right edge of tab bar, dim amber
+  Meaning: 8 slots used out of 12 total
+
+
+TOUCH DETECTION
+================
+handleTouch(worldX, worldY):
+  Check tab bar hits first:
+    tab_index = floor((worldX - INV_RIGHT_PANEL_X) / INV_TAB_WIDTH)
+    if hit in tab bar y range: set activeFilterTab = tab_index; return consumed
+
+  For column in 0..3, row in 0..2:
+    slot_x = INV_GRID_ORIGIN_X + column × (slot_size + gap_col)
+    slot_y = INV_GRID_ORIGIN_Y + row    × (slot_size + gap_row)
+    if point in [slot_x, slot_y, slot_size, slot_size]:
+      index = (2 - row) × INV_GRID_COLUMNS + column
+      if inventory.getSlot(index).type != null:
+        open ItemWindow with this inventory slot
+        set selected slot to (column, row)
+        return consumed
+      else:
+        return consumed (empty slot tap does nothing visible)
+
+Selection state fields:
+  int selectedGridColumn = -1   (-1 = nothing selected)
+  int selectedGridRow    = -1
+
+Opening a new ItemWindow clears the selection.
+Closing ItemWindow clears the selection.
+
+
+RENDER PASSES FOR THIS PANEL
+=============================
+Pass A (ShapeRenderer.Filled):
+  - Panel background rect (right panel)
+  - Tab bar slot fills (active tab highlight)
+  - Each slot background rect (state color + filter dim)
+  - Category dot circles (top-left of each filled slot)
+
+Pass B (ShapeRenderer.Line):
+  - Panel border (right panel outline)
+  - Tab bar bottom-edge amber underline for active tab
+  - Vertical tab dividers (1px, very dim)
+  - Each slot border (state color + pulsing on selected)
+
+Pass C (SpriteBatch + BitmapFont):
+  - Tab labels (ALL / GUNS / AMMO / MEDS / MISC)
+  - Slot usage counter ("8 / 12") right-aligned in tab bar
+  - Per-slot glyph (large, colored per ItemType)
+  - Per-slot quantity label (×N, bottom-right)
+  - Per-slot equipped star (*, top-right, green)
+
+
+ANIMATION
+=========
+  Selected slot border: sin pulse, frequency 4Hz, amplitude 0.7–1.0
+    shade = 0.7f + 0.3f × (sin(animationClock × 4 × 2π) * 0.5 + 0.5)
+    border color = amber × shade
+
+  All animation driven by animationClock passed from coordinator.
