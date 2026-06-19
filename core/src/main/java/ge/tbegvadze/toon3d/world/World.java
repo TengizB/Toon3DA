@@ -424,15 +424,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         tickEventBus.subscribe(new EnemyTurnSubscriber(enemyManager, gameState));
 
-        // Build ground items from weapon spawn points placed by the level generator.
-        groundItems = new java.util.ArrayList<>();
-        for (WeaponSpawnPoint spawnPoint : targetLevel.getWeaponSpawnPoints()) {
-            groundItems.add(new GroundItem(spawnPoint.tileColumn, spawnPoint.tileRow,
-                                           spawnPoint.weaponItemType, 1));
-        }
-        propRenderer.setGroundItems(groundItems);
-        levelRenderer.setGroundItems(groundItems);
-
+        // Create the controller before building ground items so weapon roll generation
+        // can look up arsenal weapons via findWeaponInArsenalForType().
         playerController = new PlayerController(player, targetLevel, doorManager, inventory);
         playerController.setEnemyManager(enemyManager);
         playerController.setBarrelHitTarget(explosiveBarrelManager);
@@ -442,7 +435,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setItemInventory(itemInventory);
         playerController.setLoadout(inventory.getLoadout());
         playerController.setPlayerStats(playerStats);
-        playerController.setGroundItems(groundItems);
         playerController.setWeaponSwitchCallback(
             () -> weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon()));
         playerController.setInventoryToggleCallback(this::openInventory);
@@ -450,6 +442,22 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (touchInputState != null) {
             playerController.setTouchInputState(touchInputState);
         }
+
+        // Build ground items from weapon spawn points. Each item gets a pre-rolled
+        // WeaponRoll so the compare card can show accurate stats before pickup.
+        groundItems = new java.util.ArrayList<>();
+        for (WeaponSpawnPoint spawnPoint : targetLevel.getWeaponSpawnPoints()) {
+            GroundItem groundItem = new GroundItem(spawnPoint.tileColumn, spawnPoint.tileRow,
+                                                   spawnPoint.weaponItemType, 1);
+            Weapon baseWeapon = playerController.findWeaponInArsenalForType(spawnPoint.weaponItemType);
+            if (baseWeapon != null) {
+                groundItem.weaponRoll = weaponRoller.rollToSnapshot(baseWeapon, currentDepth);
+            }
+            groundItems.add(groundItem);
+        }
+        propRenderer.setGroundItems(groundItems);
+        levelRenderer.setGroundItems(groundItems);
+        playerController.setGroundItems(groundItems);
     }
 
     // -------------------------------------------------------------------------
@@ -831,14 +839,34 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         GroundItem standingOn = playerController.getStandingOnWeapon();
         if (standingOn == null || !groundItems.contains(standingOn)) return;
         if (touchInputState != null) touchInputState.resetAllButtonStates();
-        Weapon groundWeapon = playerController.findWeaponInArsenalForType(standingOn.stack.getType());
-        // Use the active ranged slot, not getEquippedWeapon(), so that when the player
-        // has melee selected the ACTIVE column shows their ranged weapon (or "none") rather
-        // than confusing melee stats that are incomparable to a ranged gun.
-        Weapon activeWeapon = inventory.getLoadout().active();
+        Weapon arsenalWeapon = findWeaponForGroundItem(standingOn);
+        // Use the active ranged slot so that the ACTIVE column shows the ranged weapon
+        // rather than incomparable melee stats when melee is selected.
+        Weapon activeWeapon  = inventory.getLoadout().active();
+        int    convertAmount = computeConvertAmount(standingOn);
         weaponInspectOverlayRenderer.setFacilityTime(facilityTimeSeconds);
-        weaponInspectOverlayRenderer.show(standingOn, groundWeapon, activeWeapon, inventory.getLoadout());
+        weaponInspectOverlayRenderer.show(standingOn, standingOn.weaponRoll,
+                arsenalWeapon, activeWeapon, inventory.getLoadout(), isStartingRoom, convertAmount);
         runPhase = RunPhase.WEAPON_INSPECT;
+    }
+
+    private Weapon findWeaponForGroundItem(GroundItem groundItem) {
+        if (groundItem == null) return null;
+        if (startRoomMeleeGroundItems != null) {
+            int meleeIndex = startRoomMeleeGroundItems.indexOf(groundItem);
+            if (meleeIndex >= 0 && meleeIndex < startRoomMeleeWeapons.size()) {
+                return startRoomMeleeWeapons.get(meleeIndex);
+            }
+        }
+        return (playerController != null)
+                ? playerController.findWeaponInArsenalForType(groundItem.stack.getType())
+                : null;
+    }
+
+    private int computeConvertAmount(GroundItem groundItem) {
+        if (groundItem == null || isStartingRoom) return 0;
+        AmmoType ammoType = PlayerController.weaponItemTypeToAmmoType(groundItem.stack.getType());
+        return (ammoType != null) ? ammoType.getAmountPerBox() : 0;
     }
 
     /** Closes the weapon inspect overlay and returns to PLAYING. */
@@ -849,25 +877,100 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
-     * TAKE resolution: equip the ground weapon into a free loadout slot and fire one tick.
-     * The ground item is removed from the floor and the player is armed immediately.
+     * EQUIP resolution: called when the player taps the primary action button on the card.
+     * Handles three cases: start-room melee pick, start-room ranged pick, and normal pickup.
+     * For normal pickups the ground WeaponRoll is applied to the arsenal singleton before equipping.
      */
     private void resolveWeaponTake() {
         if (playerController == null) { closeWeaponInspect(); return; }
         GroundItem standingOn = playerController.getStandingOnWeapon();
         if (standingOn == null || !groundItems.contains(standingOn)) { closeWeaponInspect(); return; }
+
+        // Start-room melee branch
+        if (!startRoomMeleeChoiceResolved && startRoomMeleeGroundItems != null) {
+            int meleeIndex = startRoomMeleeGroundItems.indexOf(standingOn);
+            if (meleeIndex >= 0) {
+                resolveStartRoomMeleeTake(standingOn, meleeIndex);
+                closeWeaponInspect();
+                return;
+            }
+        }
+
+        // Start-room ranged branch
+        if (!startRoomChoiceResolved && startRoomGroundItems != null) {
+            int rangedIndex = startRoomGroundItems.indexOf(standingOn);
+            if (rangedIndex >= 0) {
+                resolveStartRoomRangedTake(standingOn, rangedIndex);
+                closeWeaponInspect();
+                return;
+            }
+        }
+
+        // Normal ranged pickup — apply the ground roll to the arsenal singleton then equip
         Weapon weapon = playerController.findWeaponInArsenalForType(standingOn.stack.getType());
         if (weapon == null) { closeWeaponInspect(); return; }
-        groundItems.remove(standingOn);
-        inventory.getLoadout().tryEquip(weapon);
+        WeaponRoll groundRoll = standingOn.weaponRoll;
+        if (groundRoll != null && groundRoll.tier != null) {
+            weapon.configureRoll(groundRoll.weaponLevel,
+                                 groundRoll.tier,
+                                 groundRoll.abilities != null ? groundRoll.abilities : new AbilityInstance[0]);
+        }
+        boolean alreadyInLoadout = false;
+        Loadout loadout = inventory.getLoadout();
+        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+            if (loadout.getSlot(slotIndex) == weapon) { alreadyInLoadout = true; break; }
+        }
+        if (!alreadyInLoadout) {
+            inventory.getLoadout().tryEquip(weapon);
+        }
         inventory.selectRangedActive();
         weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
+        groundItems.remove(standingOn);
         playerController.clearStandingOnWeapon();
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("EQUIPPED: " + weapon.getDisplayName(), EventTextSystem.COLOR_GREEN);
         }
         fireTurnTick();
         closeWeaponInspect();
+    }
+
+    private void resolveStartRoomRangedTake(GroundItem standingOn, int rangedIndex) {
+        Weapon chosenWeapon = startRoomWeapons.get(rangedIndex);
+        // The arsenal weapon already has the correct roll applied during setupStartRoomWeaponOffers.
+        inventory.getLoadout().tryEquip(chosenWeapon);
+        inventory.selectRangedActive();
+        weaponHudRenderer.setEquippedWeapon(chosenWeapon);
+        addStarterAmmoForWeapon(chosenWeapon);
+        // Collect unchosen offers first, then remove — avoids any confusion with concurrent mutation.
+        java.util.List<GroundItem> toRemove = new java.util.ArrayList<>();
+        for (int otherIndex = 0; otherIndex < startRoomGroundItems.size(); otherIndex++) {
+            if (otherIndex != rangedIndex) toRemove.add(startRoomGroundItems.get(otherIndex));
+        }
+        groundItems.removeAll(toRemove);
+        groundItems.remove(standingOn);
+        playerController.clearStandingOnWeapon();
+        startRoomChoiceResolved = true;
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("EQUIPPED: " + chosenWeapon.getDisplayName(), EventTextSystem.COLOR_GREEN);
+        }
+    }
+
+    private void resolveStartRoomMeleeTake(GroundItem standingOn, int meleeIndex) {
+        MeleeWeapon chosenMelee = (MeleeWeapon) startRoomMeleeWeapons.get(meleeIndex);
+        inventory.setMeleeWeapon(chosenMelee);
+        inventory.selectMeleeActive();
+        weaponHudRenderer.setEquippedWeapon(chosenMelee);
+        java.util.List<GroundItem> toRemove = new java.util.ArrayList<>();
+        for (int otherIndex = 0; otherIndex < startRoomMeleeGroundItems.size(); otherIndex++) {
+            if (otherIndex != meleeIndex) toRemove.add(startRoomMeleeGroundItems.get(otherIndex));
+        }
+        groundItems.removeAll(toRemove);
+        groundItems.remove(standingOn);
+        playerController.clearStandingOnWeapon();
+        startRoomMeleeChoiceResolved = true;
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("MELEE: " + chosenMelee.getDisplayName(), EventTextSystem.COLOR_GREEN);
+        }
     }
 
     /**
@@ -880,11 +983,28 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (standingOn == null || !groundItems.contains(standingOn)) { closeWeaponInspect(); return; }
         Weapon newWeapon = playerController.findWeaponInArsenalForType(standingOn.stack.getType());
         if (newWeapon == null) { closeWeaponInspect(); return; }
+
+        // Snapshot the slot weapon's roll BEFORE any modifications.
+        // For same-class swaps (e.g., Chaingun for Chaingun) evicted == newWeapon (same singleton),
+        // so we must capture the old roll now before applying the ground roll.
+        Weapon     slotWeapon  = inventory.getLoadout().getSlot(slotIndex);
+        WeaponRoll evictedRoll = (slotWeapon != null) ? WeaponRoll.fromWeapon(slotWeapon) : null;
+
         Weapon evicted = inventory.getLoadout().removeSlot(slotIndex);
+
+        // Apply the ground weapon's roll to the singleton that is about to be equipped.
+        WeaponRoll groundRoll = standingOn.weaponRoll;
+        if (groundRoll != null && groundRoll.tier != null) {
+            newWeapon.configureRoll(groundRoll.weaponLevel, groundRoll.tier,
+                    groundRoll.abilities != null ? groundRoll.abilities : new AbilityInstance[0]);
+        }
+
         if (evicted != null) {
             int playerTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
             int playerTileRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
-            spawnGroundItem(new GroundItem(playerTileColumn, playerTileRow, weaponClassToItemType(evicted), 1));
+            GroundItem droppedItem = new GroundItem(playerTileColumn, playerTileRow, weaponClassToItemType(evicted), 1);
+            droppedItem.weaponRoll = evictedRoll;
+            spawnGroundItem(droppedItem);
             if (eventTextSystem != null) eventTextSystem.spawn("DROPPED: " + evicted.getDisplayName());
         }
         inventory.getLoadout().tryEquip(newWeapon);
@@ -1099,6 +1219,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     startGen.getWeaponTileColumn(offerIndex),
                     startGen.getWeaponTileRow(offerIndex),
                     itemType, 1);
+            groundItem.weaponRoll = WeaponRoll.fromWeapon(offeredWeapon);
             groundItems.add(groundItem);
             startRoomWeapons.add(offeredWeapon);
             startRoomGroundItems.add(groundItem);
@@ -1125,70 +1246,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     startGen.getMeleeTileColumn(offerIndex),
                     startGen.getMeleeTileRow(offerIndex),
                     itemType, 1);
+            groundItem.weaponRoll = WeaponRoll.fromWeapon(offeredWeapon);
             groundItems.add(groundItem);
             startRoomMeleeWeapons.add(offeredWeapon);
             startRoomMeleeGroundItems.add(groundItem);
-        }
-
-        playerController.setWeaponGroundItemPickedUpCallback(this::handleStartRoomWeaponPickup);
-    }
-
-    /**
-     * Invoked by PlayerController when the player steps onto any start-room offer tile.
-     * Dispatches to the ranged or melee branch depending on which list contains the item.
-     */
-    private void handleStartRoomWeaponPickup(GroundItem pickedItem) {
-        // --- Ranged branch ---
-        if (!startRoomChoiceResolved && startRoomWeapons != null && startRoomGroundItems != null) {
-            int pickedIndex = startRoomGroundItems.indexOf(pickedItem);
-            if (pickedIndex >= 0) {
-                Weapon chosenWeapon = startRoomWeapons.get(pickedIndex);
-                inventory.getLoadout().tryEquip(chosenWeapon);
-                inventory.selectRangedActive();
-                weaponHudRenderer.setEquippedWeapon(chosenWeapon);
-                addStarterAmmoForWeapon(chosenWeapon);
-                for (int otherIndex = 0; otherIndex < startRoomGroundItems.size(); otherIndex++) {
-                    if (otherIndex != pickedIndex) {
-                        groundItems.remove(startRoomGroundItems.get(otherIndex));
-                    }
-                }
-                startRoomChoiceResolved = true;
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor(
-                            "EQUIPPED: " + chosenWeapon.getDisplayName(), EventTextSystem.COLOR_GREEN);
-                }
-                clearStartRoomCallbackIfComplete();
-                return;
-            }
-        }
-
-        // --- Melee branch ---
-        if (!startRoomMeleeChoiceResolved && startRoomMeleeWeapons != null && startRoomMeleeGroundItems != null) {
-            int pickedIndex = startRoomMeleeGroundItems.indexOf(pickedItem);
-            if (pickedIndex >= 0) {
-                MeleeWeapon chosenMelee = (MeleeWeapon) startRoomMeleeWeapons.get(pickedIndex);
-                inventory.setMeleeWeapon(chosenMelee);
-                inventory.selectMeleeActive();
-                weaponHudRenderer.setEquippedWeapon(chosenMelee);
-                for (int otherIndex = 0; otherIndex < startRoomMeleeGroundItems.size(); otherIndex++) {
-                    if (otherIndex != pickedIndex) {
-                        groundItems.remove(startRoomMeleeGroundItems.get(otherIndex));
-                    }
-                }
-                startRoomMeleeChoiceResolved = true;
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor(
-                            "MELEE: " + chosenMelee.getDisplayName(), EventTextSystem.COLOR_GREEN);
-                }
-                clearStartRoomCallbackIfComplete();
-            }
-        }
-    }
-
-    /** Clears the start-room pickup callback once both ranged and melee choices are made. */
-    private void clearStartRoomCallbackIfComplete() {
-        if (startRoomChoiceResolved && startRoomMeleeChoiceResolved) {
-            playerController.setWeaponGroundItemPickedUpCallback(null);
         }
     }
 

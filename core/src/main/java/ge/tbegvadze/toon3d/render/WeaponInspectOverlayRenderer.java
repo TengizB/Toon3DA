@@ -8,96 +8,113 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.AbilityInstance;
 import ge.tbegvadze.toon3d.entity.Loadout;
 import ge.tbegvadze.toon3d.entity.Weapon;
+import ge.tbegvadze.toon3d.entity.WeaponRoll;
 import ge.tbegvadze.toon3d.entity.WeaponTier;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.HudConstants;
 
 import java.util.function.IntConsumer;
 
 /**
- * Modal overlay shown when the player taps INSPECT while standing on a weapon GroundItem.
+ * Single-screen weapon pickup / compare card.
  *
- * Two phases:
- *   STATS_CARD  — stat comparison (ground weapon vs active weapon) with tier-colored header,
- *                 level badge, weapon name, and per-ability description lines.
- *                 Footer buttons: primary action (TAKE / SWAP SLOT / CONVERT AMMO) + CLOSE.
- *   SLOT_SELECT — tap a loadout slot to evict it and place the ground weapon there.
- *                 Footer buttons: CANCEL (returns to STATS_CARD).
+ * Auto-opens the instant the player settles on a weapon tile. Three context-driven layouts:
+ *   FREE SLOT  — one large "EQUIP" button (or "CHOOSE THIS WEAPON" in start-room mode).
+ *   FULL LOADOUT — inline "SWAP ->" rows for each held weapon, no second modal phase.
+ * CLOSE and CONVERT AMMO live in a fixed footer strip below the action area.
  *
- * No allocations in render() — all scratch objects are pre-allocated in the constructor.
- * Header and ability description strings are cached in show() and reused every frame.
- * Callers must set the four callbacks via setOn*() before calling show().
+ * No allocations in render() — all strings and hit-test rects are pre-built in show().
  */
 public final class WeaponInspectOverlayRenderer implements Renderable, Disposable {
 
-    private enum Phase { STATS_CARD, SLOT_SELECT }
-    private enum StatKind { DAMAGE, CLIP, RELOAD, RANGE }
-
     // ── Colors ────────────────────────────────────────────────────────────────
-    private static final Color SCRIM_BG     = new Color(0f,     0f,     0f,     0.68f);
-    private static final Color PANEL_BG     = new Color(0.071f, 0.071f, 0.086f,
-                                                        HudConstants.WEAPON_INSPECT_PANEL_ALPHA);
-    private static final Color HEADER_BG    = new Color(0.10f,  0.10f,  0.12f,  1f);
-    private static final Color BTN_NORMAL   = new Color(0.14f,  0.14f,  0.17f,  1f);
-    private static final Color BTN_POSITIVE = new Color(0.08f,  0.22f,  0.08f,  1f);
-    private static final Color BTN_BORDER   = new Color(0.35f,  0.35f,  0.40f,  1f);
-    private static final Color DIVIDER      = new Color(0.25f,  0.25f,  0.28f,  1f);
-    private static final Color AMBER        = new Color(0.902f, 0.667f, 0.157f, 1f);
-    private static final Color WHITE_COLOR  = new Color(1f,     1f,     1f,     1f);
-    private static final Color DIM_COLOR    = new Color(0.50f,  0.50f,  0.50f,  1f);
-    private static final Color GREEN_BETTER = new Color(0.20f,  0.90f,  0.30f,  1f);
-    private static final Color RED_WORSE    = new Color(0.95f,  0.20f,  0.20f,  1f);
-    private static final Color SLOT_ROW_BG  = new Color(0.12f,  0.18f,  0.12f,  1f);
+    private static final Color SCRIM_COLOR      = new Color(0f,     0f,     0f,     0.68f);
+    private static final Color PANEL_COLOR      = new Color(0.06f,  0.06f,  0.08f,  HudConstants.WEAPON_CARD_PANEL_ALPHA);
+    private static final Color HEADER_COLOR     = new Color(0.09f,  0.09f,  0.11f,  1f);
+    private static final Color BTN_EQUIP_COLOR  = new Color(0.06f,  0.26f,  0.06f,  1f);
+    private static final Color BTN_SWAP_COLOR   = new Color(0.18f,  0.14f,  0.06f,  1f);
+    private static final Color BTN_NEUTRAL_COLOR= new Color(0.14f,  0.14f,  0.17f,  1f);
+    private static final Color BTN_BORDER_COLOR = new Color(0.35f,  0.35f,  0.40f,  1f);
+    private static final Color DIVIDER_COLOR    = new Color(0.22f,  0.22f,  0.26f,  1f);
+    private static final Color AMBER_COLOR      = new Color(0.902f, 0.667f, 0.157f, 1f);
+    private static final Color WHITE_COLOR      = new Color(1f,     1f,     1f,     1f);
+    private static final Color DIM_COLOR        = new Color(0.50f,  0.50f,  0.50f,  1f);
+    private static final Color GREEN_COLOR      = new Color(0.20f,  0.90f,  0.30f,  1f);
+    private static final Color RED_COLOR        = new Color(0.95f,  0.20f,  0.20f,  1f);
+    private static final Color ROW_HIGHLIGHT    = new Color(0.10f,  0.16f,  0.10f,  1f);
+    private static final Color ACTIVE_SLOT_EDGE = new Color(0.902f, 0.667f, 0.157f, 0.6f);
 
-    // ── Card geometry (derived once from HudConstants) ────────────────────────
-    private static final float CARD_X     = HudConstants.WEAPON_INSPECT_CARD_ORIGIN_X;  // 320
-    private static final float CARD_Y     = HudConstants.WEAPON_INSPECT_CARD_ORIGIN_Y;  // 130
-    private static final float CARD_W     = HudConstants.WEAPON_INSPECT_CARD_WIDTH;     // 640
-    private static final float CARD_H     = HudConstants.WEAPON_INSPECT_CARD_HEIGHT;    // 460
-    private static final float CARD_RIGHT = CARD_X + CARD_W;                            // 960
-    private static final float CARD_TOP   = CARD_Y + CARD_H;                            // 590
+    // ── Card geometry (derived from HudConstants) ─────────────────────────────
+    private static final float CARD_X     = HudConstants.WEAPON_CARD_ORIGIN_X;    // 260
+    private static final float CARD_Y     = HudConstants.WEAPON_CARD_ORIGIN_Y;    // 95
+    private static final float CARD_W     = HudConstants.WEAPON_CARD_WIDTH;       // 760
+    private static final float CARD_H     = HudConstants.WEAPON_CARD_HEIGHT;      // 530
+    private static final float CARD_RIGHT = CARD_X + CARD_W;                      // 1020
+    private static final float CARD_TOP   = CARD_Y + CARD_H;                      // 625
 
-    private static final float HEADER_H   = 38f;
-    private static final float HEADER_Y   = CARD_TOP - HEADER_H;   // 552
+    // Header zone (top of card)
+    private static final float HEADER_H   = HudConstants.WEAPON_CARD_HEADER_HEIGHT; // 50
+    private static final float HEADER_Y   = CARD_TOP - HEADER_H;                  // 575
 
-    private static final float FOOTER_PAD   = 8f;
-    private static final float BTN_H        = HudConstants.WEAPON_INSPECT_BUTTON_HEIGHT; // 54
-    private static final float BTN_W        = HudConstants.WEAPON_INSPECT_BUTTON_WIDTH;  // 200
-    private static final float FOOTER_H     = BTN_H + 2f * FOOTER_PAD;                  // 70
-    private static final float BTN_Y_BOTTOM = CARD_Y + FOOTER_PAD;                      // 138
+    // Footer zone (bottom of card, above CARD_Y padding)
+    private static final float FOOTER_PAD = 10f;
+    private static final float FOOTER_H   = HudConstants.WEAPON_CARD_FOOTER_H;    // 68
+    private static final float FOOTER_Y   = CARD_Y + FOOTER_PAD;                  // 105 (bottom of footer btn)
+    private static final float FOOTER_TOP = FOOTER_Y + FOOTER_H;                  // 173
 
-    private static final float BTN_PRIMARY_X = CARD_X + 20f;              // 340
-    private static final float BTN_CLOSE_X   = CARD_RIGHT - 20f - BTN_W;  // 740
+    // Action zone sits between ability strip and footer
+    private static final float ACTION_H   = HudConstants.WEAPON_CARD_ACTION_H;    // 185
+    private static final float ACTION_Y   = FOOTER_TOP + 4f;                      // 177
+    private static final float ACTION_TOP = ACTION_Y + ACTION_H;                   // 362
 
-    private static final float CONTENT_Y   = CARD_Y + FOOTER_H + 4f;   // 204
-    private static final float CONTENT_TOP = HEADER_Y - 4f;             // 548
+    // Ability strip
+    private static final float ABILITY_H   = HudConstants.WEAPON_CARD_ABILITY_H;  // 55
+    private static final float ABILITY_Y   = ACTION_TOP;                           // 362
+    private static final float ABILITY_TOP = ABILITY_Y + ABILITY_H;               // 417
 
-    // Three-column layout: ground values | stat labels | active values
-    private static final float GROUND_COL_X = CARD_X + 16f;        // 336
-    private static final float CENTER_X     = CARD_X + CARD_W / 2f; // 640
-    private static final float ACTIVE_COL_X = CARD_RIGHT - 16f;     // 944
+    // Stats zone: 4 rows × STAT_ROW_H, growing downward from ABILITY_TOP
+    private static final float STAT_ROW_H     = HudConstants.WEAPON_CARD_STAT_ROW_H; // 40
+    private static final float STATS_TOP      = ABILITY_TOP;                          // 417 (same as ability base)
+    private static final int   STAT_ROW_COUNT = 4;
+    // Stat column X positions
+    private static final float GROUND_COL_X  = CARD_X + 16f;                     // 276  (ground value, left-align)
+    private static final float CENTER_X       = CARD_X + CARD_W / 2f;            // 640  (stat labels, centered)
+    private static final float ACTIVE_COL_X  = CARD_RIGHT - 16f;                 // 1004 (active value, right-align)
 
-    // 4 stat rows (DMG / CLIP / RELOAD / RANGE) followed by ability descriptions.
-    // STAT_STEP is fixed rather than computed so the ability section has predictable room.
-    private static final int   STAT_ROW_COUNT    = 4;
-    private static final float COL_HEADER_Y      = CONTENT_TOP - 8f;  // 540
-    private static final float STAT_START_Y      = CONTENT_TOP - 32f; // 516
-    private static final float STAT_STEP         = 46f;
-    // Ability section header baseline — 28px below the last stat row's baseline.
-    private static final float ABILITY_SECTION_Y =
-            STAT_START_Y - (STAT_ROW_COUNT - 1) * STAT_STEP - 28f;   // 350
-    private static final float ABILITY_LINE_STEP = 20f;
-    private static final int   MAX_ABILITY_LINES = 5;
+    // Equip button (free slot fast lane)
+    private static final float EQUIP_BTN_W   = HudConstants.WEAPON_EQUIP_BUTTON_WIDTH;  // 520
+    private static final float EQUIP_BTN_H   = HudConstants.WEAPON_EQUIP_BUTTON_HEIGHT; // 84
+    private static final float EQUIP_BTN_X   = CARD_X + (CARD_W - EQUIP_BTN_W) / 2f;  // 380
+    private static final float EQUIP_BTN_Y   = ACTION_Y + (ACTION_H - EQUIP_BTN_H) / 2f; // 227
 
-    // Slot-select rows
-    private static final float SLOT_ROW_H   = 64f;
-    private static final float SLOT_ROW_PAD = 8f;
+    // Slot rows (full loadout)
+    private static final float SLOT_ROW_H   = HudConstants.WEAPON_SLOT_ROW_HEIGHT; // 52
+    private static final float SLOT_ROW_GAP = HudConstants.WEAPON_SLOT_ROW_GAP;   // 8
+    private static final float SLOT_ROW_X   = CARD_X + 12f;
+    private static final float SLOT_ROW_W   = CARD_W - 24f;
+    private static final float SLOT_ROW_TOP = ACTION_TOP - 8f;                    // 354 (first row top)
+    // Swap button within each row
+    private static final float SWAP_BTN_W   = HudConstants.WEAPON_SWAP_BUTTON_WIDTH;  // 150
+    private static final float SWAP_BTN_H   = HudConstants.WEAPON_SWAP_BUTTON_HEIGHT; // 46
+
+    // Footer buttons
+    private static final float CLOSE_BTN_W = HudConstants.WEAPON_CLOSE_BUTTON_WIDTH;   // 160
+    private static final float CLOSE_BTN_H = HudConstants.WEAPON_CLOSE_BUTTON_HEIGHT;  // 52
+    private static final float CLOSE_BTN_X = CARD_X + 16f;
+    private static final float CLOSE_BTN_Y = FOOTER_Y + (FOOTER_H - CLOSE_BTN_H) / 2f;
+
+    private static final float CONV_BTN_W  = HudConstants.WEAPON_CONVERT_BUTTON_WIDTH;  // 220
+    private static final float CONV_BTN_H  = HudConstants.WEAPON_CONVERT_BUTTON_HEIGHT; // 52
+    private static final float CONV_BTN_X  = CARD_RIGHT - 16f - CONV_BTN_W;
+    private static final float CONV_BTN_Y  = FOOTER_Y + (FOOTER_H - CONV_BTN_H) / 2f;
+
+    private static final int MAX_ABILITY_LINES = 5;
 
     // ── Owned resources ───────────────────────────────────────────────────────
     private final ShapeRenderer shapeRenderer;
@@ -106,32 +123,49 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private final GlyphLayout   glyphLayout;
 
     // ── State (written by show()) ─────────────────────────────────────────────
-    private boolean    visible      = false;
-    private Phase      phase        = Phase.STATS_CARD;
-    private GroundItem groundItem   = null;
-    private Weapon     groundWeapon = null;  // null when not found in arsenal
-    private Weapon     activeWeapon = null;
-    private Loadout    loadout      = null;
-    private boolean    alreadyOwned = false; // ground weapon is already in a loadout slot
-    private boolean    loadoutFull  = false; // loadout full AND ground weapon not owned
-    private float      facilityTime = 0f;
+    private boolean  visible        = false;
+    private boolean  startRoomMode  = false;
+    private boolean  loadoutFull    = false;
+    private boolean  hasConvert     = false;
+    private int      freeSlotIndex  = -1;
+    private Loadout  loadout        = null;
+    private int      activeSlotIndex = 0;
 
-    // ── Cached strings (built in show(), read in render() without allocation) ─
-    private String          cachedHeaderLine        = "";
-    private float           cachedTierRed           = AMBER.r;
-    private float           cachedTierGreen         = AMBER.g;
-    private float           cachedTierBlue          = AMBER.b;
-    private final String[]  cachedAbilityLines      = new String[MAX_ABILITY_LINES];
-    private final boolean[] cachedAbilityIsLegend   = new boolean[MAX_ABILITY_LINES];
-    private int             cachedAbilityLineCount   = 0;
+    // ── Cached strings and stats (built in show(), read in render()) ──────────
+    private String   cachedWeaponName   = "";
+    private String   cachedLevelTier    = "";
+    private float    cachedTierRed      = AMBER_COLOR.r;
+    private float    cachedTierGreen    = AMBER_COLOR.g;
+    private float    cachedTierBlue     = AMBER_COLOR.b;
+    private WeaponTier cachedTier       = WeaponTier.COMMON;
 
-    // ── Callbacks (wired by World before show()) ──────────────────────────────
-    private Runnable    onTake          = null;
-    private Runnable    onConvertToAmmo = null;
-    private IntConsumer onEvictSlot     = null;
-    private Runnable    onClose         = null;
+    // Ground weapon effective stats (computed from WeaponRoll + base weapon)
+    private int cachedGroundDamage  = 0;
+    private int cachedGroundClip    = 0;
+    private int cachedGroundReload  = 0;
+    private int cachedGroundRange   = 0;
 
-    // ── Scratch — pre-allocated to avoid allocs in render() ───────────────────
+    // Active weapon effective stats
+    private int cachedActiveDamage  = 0;
+    private int cachedActiveClip    = 0;
+    private int cachedActiveReload  = 0;
+    private int cachedActiveRange   = 0;
+
+    // Ability lines
+    private final String[]  cachedAbilityLines    = new String[MAX_ABILITY_LINES];
+    private final boolean[] cachedAbilityLegendary = new boolean[MAX_ABILITY_LINES];
+    private int             cachedAbilityCount     = 0;
+
+    // Convert button label
+    private String cachedConvertLabel = "CONVERT AMMO";
+
+    // ── Callbacks ─────────────────────────────────────────────────────────────
+    private Runnable    onEquipFreeSlot  = null;
+    private IntConsumer onSwapSlot       = null;
+    private Runnable    onConvertToAmmo  = null;
+    private Runnable    onClose          = null;
+
+    // ── Scratch — pre-allocated ───────────────────────────────────────────────
     private final StringBuilder textBuilder    = new StringBuilder(64);
     private final Color         temporaryColor = new Color();
 
@@ -141,203 +175,133 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         shapeRenderer = new ShapeRenderer();
         spriteBatch   = new SpriteBatch();
         font          = new BitmapFont();
-        font.getData().setScale(HudConstants.WEAPON_INSPECT_FONT_SCALE);
+        font.getData().setScale(HudConstants.WEAPON_CARD_FONT_SCALE);
         glyphLayout   = new GlyphLayout();
     }
 
     // ── Callback setters ──────────────────────────────────────────────────────
 
-    public void setOnTake(Runnable callback)          { this.onTake = callback; }
-    public void setOnConvertToAmmo(Runnable callback) { this.onConvertToAmmo = callback; }
-    public void setOnEvictSlot(IntConsumer callback)  { this.onEvictSlot = callback; }
-    public void setOnClose(Runnable callback)         { this.onClose = callback; }
+    public void setOnEquipFreeSlot(Runnable callback)   { this.onEquipFreeSlot = callback; }
+    public void setOnSwapSlot(IntConsumer callback)     { this.onSwapSlot = callback; }
+    public void setOnConvertToAmmo(Runnable callback)   { this.onConvertToAmmo = callback; }
+    public void setOnClose(Runnable callback)           { this.onClose = callback; }
+
+    // Kept for backward compatibility — World wires these before fully migrating
+    public void setOnTake(Runnable callback)            { this.onEquipFreeSlot = callback; }
+    public void setOnEvictSlot(IntConsumer callback)    { this.onSwapSlot = callback; }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     /**
-     * Opens the overlay showing the ground weapon vs the currently active weapon.
-     * groundWeaponParam may be null when the weapon type is not in the arsenal.
+     * Opens the card for a ground weapon.
+     *
+     * @param groundItem    the ground item the player is standing on
+     * @param groundRoll    rolled stats for that weapon (null = Common Lv1 fallback)
+     * @param arsenalWeapon matching weapon in arsenal, used for base stats (null = convert-only mode)
+     * @param activeWeapon  currently active weapon in loadout (null = empty loadout)
+     * @param loadoutRef    the player's current loadout
+     * @param startRoom     true in the starting weapon selection room
+     * @param convertAmount how many ammo units a CONVERT yields (0 = hide CONVERT)
      */
-    public void show(GroundItem groundItemParam, Weapon groundWeaponParam,
-                     Weapon activeWeaponParam, Loadout loadoutParam) {
-        this.groundItem   = groundItemParam;
-        this.groundWeapon = groundWeaponParam;
-        this.activeWeapon = activeWeaponParam;
-        this.loadout      = loadoutParam;
+    public void show(GroundItem groundItem, WeaponRoll groundRoll,
+                     Weapon arsenalWeapon, Weapon activeWeapon,
+                     Loadout loadoutRef, boolean startRoom, int convertAmount) {
+        this.loadout       = loadoutRef;
+        this.startRoomMode = startRoom;
+        this.visible       = true;
 
-        this.alreadyOwned = false;
-        if (groundWeaponParam != null && loadoutParam != null) {
-            for (int slotIndex = 0; slotIndex < loadoutParam.getSlotCount(); slotIndex++) {
-                if (loadoutParam.getSlot(slotIndex) == groundWeaponParam) {
-                    this.alreadyOwned = true;
-                    break;
-                }
-            }
-        }
-        // loadoutFull is only meaningful when the weapon is NOT already owned
-        this.loadoutFull = (loadoutParam != null) && loadoutParam.isFull() && !alreadyOwned;
-        this.phase       = Phase.STATS_CARD;
-        this.visible     = true;
+        WeaponTier tier = (groundRoll != null) ? groundRoll.tier : WeaponTier.COMMON;
+        int        level = (groundRoll != null) ? groundRoll.weaponLevel : 1;
 
-        buildHeaderCache(groundItemParam, groundWeaponParam);
-        buildAbilityLineCache(groundWeaponParam);
-    }
+        cachedTier       = tier;
+        cachedTierRed    = tier.colorRed;
+        cachedTierGreen  = tier.colorGreen;
+        cachedTierBlue   = tier.colorBlue;
+        cachedWeaponName = (arsenalWeapon != null)
+                           ? arsenalWeapon.getDisplayName().toUpperCase()
+                           : (groundItem != null ? groundItem.stack.getType().getDisplayName().toUpperCase() : "WEAPON");
+        cachedLevelTier  = "Lv " + level + "  " + tier.displayName.toUpperCase();
 
-    /** Builds the cached header string (tier + level + weapon name) and tier color. */
-    private void buildHeaderCache(GroundItem groundItemParam, Weapon groundWeaponParam) {
-        WeaponTier tier = (groundWeaponParam != null) ? groundWeaponParam.getTier() : null;
-        if (tier != null) {
-            StringBuilder headerBuilder = new StringBuilder(48);
-            headerBuilder.append(tier.displayName.toUpperCase())
-                         .append("  Lv ")
-                         .append(groundWeaponParam.getWeaponLevel())
-                         .append("  ")
-                         .append(groundWeaponParam.getDisplayName().toUpperCase());
-            cachedHeaderLine = headerBuilder.toString();
-            cachedTierRed    = tier.colorRed;
-            cachedTierGreen  = tier.colorGreen;
-            cachedTierBlue   = tier.colorBlue;
+        buildStatCache(groundRoll, arsenalWeapon, activeWeapon);
+        buildAbilityCache(groundRoll);
+
+        hasConvert         = convertAmount > 0;
+        cachedConvertLabel = hasConvert ? ("CONVERT  +" + convertAmount + " AMMO") : "CONVERT AMMO";
+
+        // Determine loadout state for action zone layout
+        if (loadoutRef == null || !loadoutRef.isFull()) {
+            loadoutFull   = false;
+            freeSlotIndex = findFreeSlot(loadoutRef);
         } else {
-            cachedHeaderLine = (groundItemParam != null)
-                               ? groundItemParam.stack.getType().getDisplayName()
-                               : "WEAPON";
-            cachedTierRed    = AMBER.r;
-            cachedTierGreen  = AMBER.g;
-            cachedTierBlue   = AMBER.b;
+            loadoutFull   = true;
+            freeSlotIndex = -1;
         }
+        activeSlotIndex = (loadoutRef != null) ? loadoutRef.getActiveSlotIndex() : 0;
     }
 
-    /** Builds cached ability description lines (e.g. "CRIT  18%") from the ground weapon's abilities. */
-    private void buildAbilityLineCache(Weapon groundWeaponParam) {
-        cachedAbilityLineCount = 0;
-        if (groundWeaponParam == null) return;
-        int abilityCount = groundWeaponParam.getAbilityCount();
-        for (int abilityIndex = 0;
-             abilityIndex < abilityCount && cachedAbilityLineCount < MAX_ABILITY_LINES;
-             abilityIndex++) {
-            AbilityInstance inst = groundWeaponParam.getAbility(abilityIndex);
-            if (inst == null) continue;
-            cachedAbilityLines[cachedAbilityLineCount]    = formatAbilityLine(inst);
-            cachedAbilityIsLegend[cachedAbilityLineCount] = inst.ability.legendaryOnly;
-            cachedAbilityLineCount++;
-        }
-    }
-
-    /** Returns a human-readable description for one ability instance (called only from show()). */
-    private static String formatAbilityLine(AbilityInstance inst) {
-        StringBuilder line = new StringBuilder(32);
-        if (inst.ability.legendaryOnly) line.append("* ");
-        switch (inst.ability) {
-            case BURST_FIRE:          line.append("BURST  x").append(inst.countValue);                           break;
-            case CRITICAL_STRIKE:     line.append("CRIT  ").append(inst.magnitudePercent()).append('%');          break;
-            case ARMOR_PIERCE:        line.append("PIERCE  ").append(inst.magnitudePercent()).append('%');        break;
-            case EXECUTIONER:         line.append("EXECUTE  ").append(inst.magnitudePercent()).append('%');       break;
-            case REND:                line.append("BLEED  ").append(inst.countValue).append("/turn");             break;
-            case OVERPENETRATION:     line.append("OVERPENETRATE");                                              break;
-            case STAGGER_ROUNDS:      line.append("STUN  ").append(inst.magnitudePercent()).append('%');          break;
-            case KINETIC_SLAM:        line.append("KNOCKBACK  ").append(inst.magnitudePercent()).append('%');     break;
-            case CLEAVE:              line.append("CLEAVE  ").append(inst.magnitudePercent()).append('%');        break;
-            case INCENDIARY:          line.append("BURN  ").append(inst.countValue).append("/turn");              break;
-            case LIFESTEAL:           line.append("LIFESTEAL  ").append(inst.magnitudePercent()).append('%');     break;
-            case HEMORRHAGE_HARVEST:  line.append("HP/KILL  +").append(inst.countValue);                         break;
-            case VAMPIRIC_CRIT:       line.append("CRIT HEAL  +").append(inst.countValue);                       break;
-            case ADRENAL_SURGE:       line.append("SURGE ON KILL");                                              break;
-            case BULWARK_ROUNDS:      line.append("SHIELD  +").append(inst.countValue);                          break;
-            case SECOND_WIND:         line.append("SECOND WIND  ").append(inst.magnitudePercent()).append('%');   break;
-            case SCAVENGER_ROUNDS:    line.append("AMMO DROP  ").append(inst.magnitudePercent()).append('%');     break;
-            case SALVAGE_STRIKE:      line.append("AMMO DROP  ").append(inst.magnitudePercent()).append('%');     break;
-            case SCHOLARS_EDGE:       line.append("XP/KILL  +").append(inst.magnitudePercent()).append('%');      break;
-            case QUICK_HANDS:         line.append("QUICK RELOAD  ").append(inst.magnitudePercent()).append('%');  break;
-            case EXTENDED_MAG:        line.append("MAG +").append(inst.countValue);                               break;
-            case FIELD_MEDIC_ROUNDS:  line.append("HEAL/KILL  +").append(inst.countValue);                       break;
-            case CREDIT_FANG:         line.append("CREDITS ON KILL");                                            break;
-            case POINT_BLANK:         line.append("POINT BLANK  ").append(inst.magnitudePercent()).append('%');   break;
-            case MARKSMANS_PATIENCE:  line.append("PATIENCE  ").append(inst.magnitudePercent()).append('%');      break;
-            case OPENING_SALVO:       line.append("OPENING SALVO  ").append(inst.magnitudePercent()).append('%'); break;
-            case RHYTHM:              line.append("RHYTHM  ").append(inst.magnitudePercent()).append('%');         break;
-            case STATIC_DISCHARGE:    line.append("STATIC  ").append(inst.countValue);                           break;
-            case RESONANT_ROUNDS:     line.append("RESONANCE  ").append(inst.magnitudePercent()).append('%');     break;
-            case SOULFORGE:           line.append("ASCENDS ON KILL");                                            break;
-            case JUDGMENT:            line.append("LANCE every ").append(inst.countValue).append(" fires");       break;
-            case HELLFIRE_NOVA:       line.append("CRIT NOVA  ").append(inst.magnitudePercent()).append('%');     break;
-            case BERSERKERS_OATH:     line.append("BERSERK STREAK");                                             break;
-            default:                  line.append(inst.ability.displayName.toUpperCase());                       break;
-        }
-        return line.toString();
-    }
-
+    /** Closes the card and clears all held references. */
     public void hide() {
         visible      = false;
-        groundItem   = null;
-        groundWeapon = null;
-        activeWeapon = null;
         loadout      = null;
-        cachedHeaderLine     = "";
-        cachedTierRed        = AMBER.r;
-        cachedTierGreen      = AMBER.g;
-        cachedTierBlue       = AMBER.b;
         for (int lineIndex = 0; lineIndex < MAX_ABILITY_LINES; lineIndex++) {
             cachedAbilityLines[lineIndex]    = null;
-            cachedAbilityIsLegend[lineIndex] = false;
+            cachedAbilityLegendary[lineIndex] = false;
         }
-        cachedAbilityLineCount = 0;
+        cachedAbilityCount = 0;
     }
 
     public boolean isVisible() { return visible; }
 
-    /** Pass the facility clock each frame so slot rows can pulse. */
-    public void setFacilityTime(float time) { this.facilityTime = time; }
+    /** Updates the facility clock for any pulsing effects. Currently a no-op placeholder. */
+    public void setFacilityTime(float time) { /* pulsing slots can use this if added later */ }
 
     // ── Touch handling ────────────────────────────────────────────────────────
 
-    /** Routes a touch tap at world-space coordinates to the appropriate action. */
     public void handleTap(float worldX, float worldY) {
         if (!visible) return;
-        if (phase == Phase.STATS_CARD) {
-            handleStatsCardTap(worldX, worldY);
-        } else {
-            handleSlotSelectTap(worldX, worldY);
-        }
-    }
 
-    private void handleStatsCardTap(float worldX, float worldY) {
-        if (hitButton(worldX, worldY, BTN_CLOSE_X, BTN_Y_BOTTOM, BTN_W, BTN_H)) {
+        // CLOSE button (always available)
+        if (hitTest(worldX, worldY, CLOSE_BTN_X, CLOSE_BTN_Y, CLOSE_BTN_W, CLOSE_BTN_H)) {
             if (onClose != null) onClose.run();
             return;
         }
-        if (hitButton(worldX, worldY, BTN_PRIMARY_X, BTN_Y_BOTTOM, BTN_W, BTN_H)) {
-            if (alreadyOwned) {
-                if (onConvertToAmmo != null) onConvertToAmmo.run();
-            } else if (!loadoutFull) {
-                if (onTake != null) onTake.run();
-            } else {
-                phase = Phase.SLOT_SELECT;
+
+        // CONVERT button (secondary, footer)
+        if (hasConvert && hitTest(worldX, worldY, CONV_BTN_X, CONV_BTN_Y, CONV_BTN_W, CONV_BTN_H)) {
+            if (onConvertToAmmo != null) onConvertToAmmo.run();
+            return;
+        }
+
+        if (!loadoutFull) {
+            // EQUIP button (free slot fast lane)
+            if (hitTest(worldX, worldY, EQUIP_BTN_X, EQUIP_BTN_Y, EQUIP_BTN_W, EQUIP_BTN_H)) {
+                if (onEquipFreeSlot != null) onEquipFreeSlot.run();
             }
+        } else {
+            // Inline slot rows — entire row is the tap target
+            hitTestSlotRows(worldX, worldY);
         }
     }
 
-    private void handleSlotSelectTap(float worldX, float worldY) {
-        if (hitButton(worldX, worldY, BTN_CLOSE_X, BTN_Y_BOTTOM, BTN_W, BTN_H)) {
-            phase = Phase.STATS_CARD;
-            return;
-        }
+    private void hitTestSlotRows(float worldX, float worldY) {
         if (loadout == null) return;
-        float rowTop = CONTENT_TOP - SLOT_ROW_PAD;
+        float rowTop = SLOT_ROW_TOP;
         for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
             float rowBottom = rowTop - SLOT_ROW_H;
             if (loadout.getSlot(slotIndex) != null
-                    && worldX >= CARD_X + 12f && worldX <= CARD_RIGHT - 12f
-                    && worldY >= rowBottom    && worldY <= rowTop) {
-                if (onEvictSlot != null) onEvictSlot.accept(slotIndex);
+                    && worldX >= SLOT_ROW_X && worldX <= SLOT_ROW_X + SLOT_ROW_W
+                    && worldY >= rowBottom && worldY <= rowTop) {
+                if (onSwapSlot != null) onSwapSlot.accept(slotIndex);
                 return;
             }
-            rowTop = rowBottom - SLOT_ROW_PAD;
+            rowTop = rowBottom - SLOT_ROW_GAP;
         }
     }
 
-    private static boolean hitButton(float worldX, float worldY,
-                                     float bx, float by, float bw, float bh) {
-        return worldX >= bx && worldX <= bx + bw && worldY >= by && worldY <= by + bh;
+    private static boolean hitTest(float worldX, float worldY,
+                                   float rectX, float rectY, float rectW, float rectH) {
+        return worldX >= rectX && worldX <= rectX + rectW
+            && worldY >= rectY && worldY <= rectY + rectH;
     }
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -359,41 +323,91 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
         // Full-screen scrim
-        shapeRenderer.setColor(SCRIM_BG);
+        shapeRenderer.setColor(SCRIM_COLOR);
         shapeRenderer.rect(0, 0, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
 
-        // Card background and header
-        shapeRenderer.setColor(PANEL_BG);
+        // Card background
+        shapeRenderer.setColor(PANEL_COLOR);
         shapeRenderer.rect(CARD_X, CARD_Y, CARD_W, CARD_H);
-        shapeRenderer.setColor(HEADER_BG);
+
+        // Header background (tinted panel)
+        shapeRenderer.setColor(HEADER_COLOR);
         shapeRenderer.rect(CARD_X, HEADER_Y, CARD_W, HEADER_H);
 
-        // Primary action button (STATS_CARD only)
-        if (phase == Phase.STATS_CARD) {
-            shapeRenderer.setColor((!alreadyOwned && !loadoutFull) ? BTN_POSITIVE : BTN_NORMAL);
-            shapeRenderer.rect(BTN_PRIMARY_X, BTN_Y_BOTTOM, BTN_W, BTN_H);
-        }
-        // Close / Cancel button (always shown)
-        shapeRenderer.setColor(BTN_NORMAL);
-        shapeRenderer.rect(BTN_CLOSE_X, BTN_Y_BOTTOM, BTN_W, BTN_H);
+        // Tier icon shape left of weapon name
+        drawTierIconFilled(cachedTier, CARD_X + 30f, HEADER_Y + HEADER_H / 2f, 10f);
 
-        // Pulsing slot rows (SLOT_SELECT only)
-        if (phase == Phase.SLOT_SELECT && loadout != null) {
-            float rowTop = CONTENT_TOP - SLOT_ROW_PAD;
-            for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
-                float rowBottom = rowTop - SLOT_ROW_H;
-                if (loadout.getSlot(slotIndex) != null) {
-                    float pulse = 0.6f + 0.4f * MathUtils.sin(facilityTime * 2.5f + slotIndex * 1.3f);
-                    temporaryColor.set(SLOT_ROW_BG.r * pulse, SLOT_ROW_BG.g * pulse,
-                                      SLOT_ROW_BG.b * pulse, SLOT_ROW_BG.a);
-                    shapeRenderer.setColor(temporaryColor);
-                    shapeRenderer.rect(CARD_X + 12f, rowBottom, CARD_W - 24f, SLOT_ROW_H);
-                }
-                rowTop = rowBottom - SLOT_ROW_PAD;
-            }
+        // Action zone background (subtle)
+        shapeRenderer.setColor(0.08f, 0.08f, 0.10f, 0.5f);
+        shapeRenderer.rect(CARD_X, ACTION_Y, CARD_W, ACTION_H);
+
+        // Action zone content
+        if (!loadoutFull) {
+            shapeRenderer.setColor(BTN_EQUIP_COLOR);
+            shapeRenderer.rect(EQUIP_BTN_X, EQUIP_BTN_Y, EQUIP_BTN_W, EQUIP_BTN_H);
+        } else {
+            renderSlotRowsFilled();
+        }
+
+        // Footer strip
+        shapeRenderer.setColor(BTN_NEUTRAL_COLOR);
+        shapeRenderer.rect(CLOSE_BTN_X, CLOSE_BTN_Y, CLOSE_BTN_W, CLOSE_BTN_H);
+        if (hasConvert) {
+            shapeRenderer.setColor(0.12f, 0.08f, 0.04f, 1f);
+            shapeRenderer.rect(CONV_BTN_X, CONV_BTN_Y, CONV_BTN_W, CONV_BTN_H);
         }
 
         shapeRenderer.end();
+    }
+
+    private void drawTierIconFilled(WeaponTier tier, float centerX, float centerY, float size) {
+        shapeRenderer.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
+        switch (tier) {
+            case COMMON:
+                shapeRenderer.circle(centerX, centerY, size, 20);
+                break;
+            case UNCOMMON:
+                shapeRenderer.rect(centerX - size, centerY - size, size * 2f, size * 2f);
+                break;
+            case RARE:
+                shapeRenderer.triangle(
+                    centerX,         centerY + size,
+                    centerX - size,  centerY - size,
+                    centerX + size,  centerY - size);
+                break;
+            case EPIC:
+                shapeRenderer.triangle(
+                    centerX,        centerY + size,
+                    centerX - size, centerY,
+                    centerX,        centerY - size);
+                shapeRenderer.triangle(
+                    centerX,        centerY + size,
+                    centerX + size, centerY,
+                    centerX,        centerY - size);
+                break;
+            case LEGENDARY:
+            default:
+                shapeRenderer.circle(centerX, centerY, size, 5);
+                break;
+        }
+    }
+
+    private void renderSlotRowsFilled() {
+        if (loadout == null) return;
+        float rowTop = SLOT_ROW_TOP;
+        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+            float rowBottom = rowTop - SLOT_ROW_H;
+            if (loadout.getSlot(slotIndex) != null) {
+                shapeRenderer.setColor(ROW_HIGHLIGHT);
+                shapeRenderer.rect(SLOT_ROW_X, rowBottom, SLOT_ROW_W, SLOT_ROW_H);
+                // SWAP button background
+                float swapBtnX = SLOT_ROW_X + SLOT_ROW_W - SWAP_BTN_W;
+                float swapBtnY = rowBottom + (SLOT_ROW_H - SWAP_BTN_H) / 2f;
+                shapeRenderer.setColor(BTN_SWAP_COLOR);
+                shapeRenderer.rect(swapBtnX, swapBtnY, SWAP_BTN_W, SWAP_BTN_H);
+            }
+            rowTop = rowBottom - SLOT_ROW_GAP;
+        }
     }
 
     // ── Pass B: line shapes ───────────────────────────────────────────────────
@@ -404,36 +418,61 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
 
-        // Card border and button borders
-        shapeRenderer.setColor(BTN_BORDER);
-        shapeRenderer.rect(CARD_X, CARD_Y, CARD_W, CARD_H);
-        if (phase == Phase.STATS_CARD) {
-            shapeRenderer.rect(BTN_PRIMARY_X, BTN_Y_BOTTOM, BTN_W, BTN_H);
-        }
-        shapeRenderer.rect(BTN_CLOSE_X, BTN_Y_BOTTOM, BTN_W, BTN_H);
-
-        // Header underline in tier color
+        // Card border in tier color (3px effect via drawing two lines)
         shapeRenderer.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
+        shapeRenderer.rect(CARD_X, CARD_Y, CARD_W, CARD_H);
+        shapeRenderer.rect(CARD_X + 1f, CARD_Y + 1f, CARD_W - 2f, CARD_H - 2f);
+
+        // Header divider in tier color
         shapeRenderer.line(CARD_X, HEADER_Y, CARD_RIGHT, HEADER_Y);
 
-        if (phase == Phase.STATS_CARD) {
-            // Vertical divider between ground and active columns
-            shapeRenderer.setColor(DIVIDER);
-            shapeRenderer.line(CENTER_X, CONTENT_Y + 4f, CENTER_X, COL_HEADER_Y - 4f);
-        } else if (loadout != null) {
-            // Slot row outlines
-            shapeRenderer.setColor(AMBER);
-            float rowTop = CONTENT_TOP - SLOT_ROW_PAD;
-            for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
-                float rowBottom = rowTop - SLOT_ROW_H;
-                if (loadout.getSlot(slotIndex) != null) {
-                    shapeRenderer.rect(CARD_X + 12f, rowBottom, CARD_W - 24f, SLOT_ROW_H);
-                }
-                rowTop = rowBottom - SLOT_ROW_PAD;
-            }
+        // Stat zone divider lines
+        shapeRenderer.setColor(DIVIDER_COLOR);
+        shapeRenderer.line(CENTER_X, ABILITY_TOP - 4f, CENTER_X, HEADER_Y - 4f);
+        shapeRenderer.line(CARD_X, ABILITY_TOP, CARD_RIGHT, ABILITY_TOP);
+        shapeRenderer.line(CARD_X, ACTION_TOP, CARD_RIGHT, ACTION_TOP);
+        shapeRenderer.line(CARD_X, FOOTER_TOP, CARD_RIGHT, FOOTER_TOP);
+
+        // Action zone: EQUIP border or slot row borders
+        if (!loadoutFull) {
+            shapeRenderer.setColor(GREEN_COLOR);
+            shapeRenderer.rect(EQUIP_BTN_X, EQUIP_BTN_Y, EQUIP_BTN_W, EQUIP_BTN_H);
+        } else {
+            renderSlotRowsLines();
+        }
+
+        // Footer button borders
+        shapeRenderer.setColor(BTN_BORDER_COLOR);
+        shapeRenderer.rect(CLOSE_BTN_X, CLOSE_BTN_Y, CLOSE_BTN_W, CLOSE_BTN_H);
+        if (hasConvert) {
+            shapeRenderer.setColor(AMBER_COLOR.r, AMBER_COLOR.g, AMBER_COLOR.b, 0.6f);
+            shapeRenderer.rect(CONV_BTN_X, CONV_BTN_Y, CONV_BTN_W, CONV_BTN_H);
         }
 
         shapeRenderer.end();
+    }
+
+    private void renderSlotRowsLines() {
+        if (loadout == null) return;
+        float rowTop = SLOT_ROW_TOP;
+        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+            float rowBottom = rowTop - SLOT_ROW_H;
+            if (loadout.getSlot(slotIndex) != null) {
+                // Active slot gets amber edge highlight
+                if (slotIndex == activeSlotIndex) {
+                    shapeRenderer.setColor(ACTIVE_SLOT_EDGE);
+                    shapeRenderer.line(SLOT_ROW_X, rowBottom, SLOT_ROW_X, rowTop);
+                    shapeRenderer.line(SLOT_ROW_X + 2f, rowBottom, SLOT_ROW_X + 2f, rowTop);
+                }
+                shapeRenderer.setColor(BTN_BORDER_COLOR);
+                shapeRenderer.rect(SLOT_ROW_X, rowBottom, SLOT_ROW_W, SLOT_ROW_H);
+                float swapBtnX = SLOT_ROW_X + SLOT_ROW_W - SWAP_BTN_W;
+                float swapBtnY = rowBottom + (SLOT_ROW_H - SWAP_BTN_H) / 2f;
+                shapeRenderer.setColor(AMBER_COLOR.r, AMBER_COLOR.g, AMBER_COLOR.b, 0.8f);
+                shapeRenderer.rect(swapBtnX, swapBtnY, SWAP_BTN_W, SWAP_BTN_H);
+            }
+            rowTop = rowBottom - SLOT_ROW_GAP;
+        }
     }
 
     // ── Pass C: text ──────────────────────────────────────────────────────────
@@ -443,184 +482,195 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         spriteBatch.begin();
 
         drawHeader();
-        if (phase == Phase.STATS_CARD) {
-            drawStatsContent();
-        } else {
-            drawSlotSelectContent();
-        }
-        drawFooterButtons();
+        drawStatBlock();
+        drawAbilityStrip();
+        drawActionZone();
+        drawFooter();
 
         spriteBatch.end();
     }
 
     private void drawHeader() {
-        String title;
-        float headerRed, headerGreen, headerBlue;
-        if (phase == Phase.STATS_CARD) {
-            title       = cachedHeaderLine;
-            headerRed   = cachedTierRed;
-            headerGreen = cachedTierGreen;
-            headerBlue  = cachedTierBlue;
-        } else {
-            title       = "SWAP OUT WHICH?";
-            headerRed   = AMBER.r;
-            headerGreen = AMBER.g;
-            headerBlue  = AMBER.b;
-        }
-        glyphLayout.setText(font, title);
-        font.setColor(headerRed, headerGreen, headerBlue, 1f);
-        font.draw(spriteBatch, title,
-                  CARD_X + (CARD_W - glyphLayout.width) / 2f,
-                  HEADER_Y + HEADER_H - 10f);
+        // Weapon name (tier color, left-aligned after tier icon)
+        float nameX = CARD_X + 52f;
+        font.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
+        font.draw(spriteBatch, cachedWeaponName, nameX, HEADER_Y + HEADER_H - 12f);
+
+        // Level/tier tag (right-aligned in header)
+        glyphLayout.setText(font, cachedLevelTier);
+        font.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 0.85f);
+        font.draw(spriteBatch, cachedLevelTier,
+                  CARD_RIGHT - 16f - glyphLayout.width, HEADER_Y + HEADER_H - 12f);
     }
 
-    private void drawStatsContent() {
+    private void drawStatBlock() {
         // Column headers
-        font.setColor(groundWeapon != null ? WHITE_COLOR : DIM_COLOR);
-        font.draw(spriteBatch, "GROUND", GROUND_COL_X, COL_HEADER_Y);
+        float headerY = STATS_TOP - 10f;
+
+        glyphLayout.setText(font, "FOUND");
+        font.setColor(WHITE_COLOR);
+        font.draw(spriteBatch, "FOUND", GROUND_COL_X, headerY);
 
         glyphLayout.setText(font, "STAT");
         font.setColor(DIM_COLOR);
-        font.draw(spriteBatch, "STAT", CENTER_X - glyphLayout.width / 2f, COL_HEADER_Y);
+        font.draw(spriteBatch, "STAT", CENTER_X - glyphLayout.width / 2f, headerY);
 
         glyphLayout.setText(font, "ACTIVE");
-        font.setColor(activeWeapon != null ? WHITE_COLOR : DIM_COLOR);
-        font.draw(spriteBatch, "ACTIVE", ACTIVE_COL_X - glyphLayout.width, COL_HEADER_Y);
+        font.setColor(WHITE_COLOR);
+        font.draw(spriteBatch, "ACTIVE", ACTIVE_COL_X - glyphLayout.width, headerY);
 
-        // Four core stat rows
-        float rowY = STAT_START_Y;
-        drawIntRow(rowY, "DMG",    groundWeapon, activeWeapon, StatKind.DAMAGE, false);
-        rowY -= STAT_STEP;
-        drawIntRow(rowY, "CLIP",   groundWeapon, activeWeapon, StatKind.CLIP,   false);
-        rowY -= STAT_STEP;
-        drawIntRow(rowY, "RELOAD", groundWeapon, activeWeapon, StatKind.RELOAD, true);
-        rowY -= STAT_STEP;
-        drawIntRow(rowY, "RANGE",  groundWeapon, activeWeapon, StatKind.RANGE,  false);
-
-        // Ability descriptions — one line per ability, below the stat rows
-        if (cachedAbilityLineCount > 0) {
-            glyphLayout.setText(font, "ABILITIES");
-            font.setColor(DIM_COLOR);
-            font.draw(spriteBatch, "ABILITIES",
-                      CENTER_X - glyphLayout.width / 2f, ABILITY_SECTION_Y);
-
-            for (int lineIndex = 0; lineIndex < cachedAbilityLineCount; lineIndex++) {
-                String abilityLine = cachedAbilityLines[lineIndex];
-                if (abilityLine == null) continue;
-                float lineY = ABILITY_SECTION_Y - (lineIndex + 1) * ABILITY_LINE_STEP;
-                if (cachedAbilityIsLegend[lineIndex]) {
-                    font.setColor(AMBER);
-                } else {
-                    font.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
-                }
-                font.draw(spriteBatch, abilityLine, GROUND_COL_X, lineY);
-            }
-        }
+        // Four stat rows
+        float rowY = STATS_TOP - STAT_ROW_H;
+        drawStatRow(rowY, "DAMAGE", cachedGroundDamage, cachedActiveDamage, false);
+        rowY -= STAT_ROW_H;
+        drawStatRow(rowY, "CLIP",   cachedGroundClip,   cachedActiveClip,   false);
+        rowY -= STAT_ROW_H;
+        drawStatRow(rowY, "RELOAD", cachedGroundReload, cachedActiveReload, true);
+        rowY -= STAT_ROW_H;
+        drawStatRow(rowY, "RANGE",  cachedGroundRange,  cachedActiveRange,  false);
     }
 
-    private int statValue(Weapon weapon, StatKind kind) {
-        if (weapon == null) return -1;
-        switch (kind) {
-            case DAMAGE: return weapon.getDamage();
-            case CLIP:   return weapon.getClipSize();
-            case RELOAD: return weapon.getReloadTime();
-            case RANGE:  return weapon.getRange();
-            default:     return -1;
-        }
-    }
-
-    /**
-     * Draws one stat row with a center label and ground/active integer values.
-     * Ground value is color-coded green (better) or red (worse) relative to the active weapon.
-     */
-    private void drawIntRow(float rowY, String label, Weapon ground, Weapon active,
-                            StatKind kind, boolean lowerIsBetter) {
+    private void drawStatRow(float rowY, String label,
+                             int groundValue, int activeValue, boolean lowerIsBetter) {
+        // Center label
         glyphLayout.setText(font, label);
         font.setColor(DIM_COLOR);
         font.draw(spriteBatch, label, CENTER_X - glyphLayout.width / 2f, rowY);
 
-        int groundVal = statValue(ground, kind);
-        int activeVal = statValue(active, kind);
+        // Ground value (color-coded vs active)
+        textBuilder.setLength(0);
+        textBuilder.append(groundValue);
+        font.setColor(deltaColor(groundValue, activeValue, lowerIsBetter));
+        font.draw(spriteBatch, textBuilder, GROUND_COL_X, rowY);
 
-        if (groundVal >= 0) {
-            textBuilder.setLength(0);
-            textBuilder.append(groundVal);
-            font.setColor(deltaColor(groundVal, activeVal, lowerIsBetter));
-            font.draw(spriteBatch, textBuilder, GROUND_COL_X, rowY);
-        } else {
-            font.setColor(DIM_COLOR);
-            font.draw(spriteBatch, "-", GROUND_COL_X, rowY);
-        }
+        // Active value
+        textBuilder.setLength(0);
+        textBuilder.append(activeValue);
+        glyphLayout.setText(font, textBuilder);
+        font.setColor(WHITE_COLOR);
+        font.draw(spriteBatch, textBuilder, ACTIVE_COL_X - glyphLayout.width, rowY);
 
-        if (activeVal >= 0) {
-            textBuilder.setLength(0);
-            textBuilder.append(activeVal);
+        // Delta indicator between ground value and label
+        if (activeValue > 0 && groundValue > 0 && groundValue != activeValue) {
+            boolean groundBetter = lowerIsBetter ? (groundValue < activeValue) : (groundValue > activeValue);
+            String arrow = groundBetter ? " ▲" : " ▼";
+            font.setColor(groundBetter ? GREEN_COLOR : RED_COLOR);
             glyphLayout.setText(font, textBuilder);
-            font.setColor(WHITE_COLOR);
-            font.draw(spriteBatch, textBuilder, ACTIVE_COL_X - glyphLayout.width, rowY);
-        } else {
-            font.setColor(DIM_COLOR);
-            glyphLayout.setText(font, "-");
-            font.draw(spriteBatch, "-", ACTIVE_COL_X - glyphLayout.width, rowY);
+            font.draw(spriteBatch, arrow, GROUND_COL_X + glyphLayout.width + 4f, rowY);
         }
     }
 
-    private Color deltaColor(int groundVal, int activeVal, boolean lowerIsBetter) {
-        if (activeVal < 0 || groundVal == activeVal) return WHITE_COLOR;
-        boolean groundBetter = lowerIsBetter ? (groundVal < activeVal) : (groundVal > activeVal);
-        return groundBetter ? GREEN_BETTER : RED_WORSE;
+    private Color deltaColor(int groundValue, int activeValue, boolean lowerIsBetter) {
+        if (activeValue <= 0 || groundValue == activeValue) return WHITE_COLOR;
+        boolean groundBetter = lowerIsBetter ? (groundValue < activeValue) : (groundValue > activeValue);
+        return groundBetter ? GREEN_COLOR : RED_COLOR;
     }
 
-    private void drawSlotSelectContent() {
+    private void drawAbilityStrip() {
+        float abilityY = ABILITY_Y + ABILITY_H - 16f;
+        if (cachedAbilityCount == 0) {
+            glyphLayout.setText(font, "— no abilities —");
+            font.setColor(DIM_COLOR);
+            font.draw(spriteBatch, "— no abilities —",
+                      CENTER_X - glyphLayout.width / 2f, abilityY);
+            return;
+        }
+
+        // Draw abilities as a horizontal strip of short tags
+        StringBuilder abilityLine = new StringBuilder(64);
+        for (int abilityIndex = 0; abilityIndex < cachedAbilityCount; abilityIndex++) {
+            if (abilityIndex > 0) abilityLine.append("   ");
+            if (cachedAbilityLegendary[abilityIndex]) abilityLine.append("★ ");
+            abilityLine.append(cachedAbilityLines[abilityIndex]);
+        }
+        String abilityText = abilityLine.toString();
+        glyphLayout.setText(font, abilityText);
+        font.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
+        font.draw(spriteBatch, abilityText,
+                  CENTER_X - glyphLayout.width / 2f, abilityY);
+    }
+
+    private void drawActionZone() {
+        if (!loadoutFull) {
+            // Free slot: big EQUIP button label
+            String equipLabel = startRoomMode ? "CHOOSE THIS WEAPON" : "EQUIP  →  SLOT " + (freeSlotIndex + 1);
+            glyphLayout.setText(font, equipLabel);
+            font.setColor(GREEN_COLOR);
+            font.draw(spriteBatch, equipLabel,
+                      EQUIP_BTN_X + (EQUIP_BTN_W - glyphLayout.width) / 2f,
+                      EQUIP_BTN_Y + (EQUIP_BTN_H + glyphLayout.height) / 2f);
+        } else {
+            drawSlotRowsText();
+        }
+    }
+
+    private void drawSlotRowsText() {
         if (loadout == null) return;
-        float rowTop = CONTENT_TOP - SLOT_ROW_PAD;
+        float rowTop = SLOT_ROW_TOP;
         for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
             float rowBottom = rowTop - SLOT_ROW_H;
             Weapon slotWeapon = loadout.getSlot(slotIndex);
             if (slotWeapon != null) {
-                float nameY  = rowBottom + SLOT_ROW_H - 16f;
-                float statsY = nameY - 22f;
+                float nameY  = rowBottom + SLOT_ROW_H - 14f;
+                float statsY = nameY - 20f;
 
+                // Slot index + weapon name
                 textBuilder.setLength(0);
-                textBuilder.append("SLOT ").append(slotIndex + 1)
-                           .append("  ").append(slotWeapon.getDisplayName());
-                font.setColor(AMBER);
-                font.draw(spriteBatch, textBuilder, CARD_X + 24f, nameY);
+                textBuilder.append(slotIndex == activeSlotIndex ? "* " : "  ");
+                textBuilder.append("SLOT ").append(slotIndex + 1).append("  ");
+                textBuilder.append(slotWeapon.getDisplayName().toUpperCase());
+                textBuilder.append("  Lv ").append(slotWeapon.getWeaponLevel());
+                WeaponTier slotTier = slotWeapon.getTier();
+                if (slotTier != null) {
+                    temporaryColor.set(slotTier.colorRed, slotTier.colorGreen, slotTier.colorBlue, 1f);
+                    font.setColor(temporaryColor);
+                } else {
+                    font.setColor(AMBER_COLOR);
+                }
+                font.draw(spriteBatch, textBuilder, SLOT_ROW_X + 12f, nameY);
 
+                // Compact stats with comparison tinting
+                int slotDmg   = slotWeapon.getEffectiveDamage();
+                int slotRange = slotWeapon.getEffectiveRange();
+                int slotClip  = slotWeapon.getEffectiveClipSize();
                 textBuilder.setLength(0);
-                textBuilder.append("DMG ").append(slotWeapon.getDamage())
-                           .append("   RNG ").append(slotWeapon.getRange())
-                           .append("   CLIP ").append(slotWeapon.getClipSize());
+                textBuilder.append("DMG ").append(slotDmg)
+                           .append("   RNG ").append(slotRange)
+                           .append("   CLIP ").append(slotClip);
                 font.setColor(DIM_COLOR);
-                font.draw(spriteBatch, textBuilder, CARD_X + 24f, statsY);
+                font.draw(spriteBatch, textBuilder, SLOT_ROW_X + 12f, statsY);
+
+                // SWAP button label
+                float swapBtnX = SLOT_ROW_X + SLOT_ROW_W - SWAP_BTN_W;
+                float swapBtnY = rowBottom + (SLOT_ROW_H - SWAP_BTN_H) / 2f;
+                String swapLabel = "SWAP →";
+                glyphLayout.setText(font, swapLabel);
+                font.setColor(AMBER_COLOR);
+                font.draw(spriteBatch, swapLabel,
+                          swapBtnX + (SWAP_BTN_W - glyphLayout.width) / 2f,
+                          swapBtnY + (SWAP_BTN_H + glyphLayout.height) / 2f);
             }
-            rowTop = rowBottom - SLOT_ROW_PAD;
+            rowTop = rowBottom - SLOT_ROW_GAP;
         }
     }
 
-    private void drawFooterButtons() {
-        if (phase == Phase.STATS_CARD) {
-            String primaryLabel;
-            if (alreadyOwned) {
-                primaryLabel = "CONVERT AMMO";
-            } else if (loadoutFull) {
-                primaryLabel = "SWAP SLOT";
-            } else {
-                primaryLabel = "TAKE";
-            }
-            glyphLayout.setText(font, primaryLabel);
-            font.setColor(AMBER);
-            font.draw(spriteBatch, primaryLabel,
-                      BTN_PRIMARY_X + (BTN_W - glyphLayout.width) / 2f,
-                      BTN_Y_BOTTOM + (BTN_H + glyphLayout.height) / 2f);
-        }
-
-        String closeLabel = (phase == Phase.SLOT_SELECT) ? "CANCEL" : "CLOSE";
+    private void drawFooter() {
+        // CLOSE
+        String closeLabel = "CLOSE";
         glyphLayout.setText(font, closeLabel);
-        font.setColor(AMBER);
+        font.setColor(DIM_COLOR);
         font.draw(spriteBatch, closeLabel,
-                  BTN_CLOSE_X + (BTN_W - glyphLayout.width) / 2f,
-                  BTN_Y_BOTTOM + (BTN_H + glyphLayout.height) / 2f);
+                  CLOSE_BTN_X + (CLOSE_BTN_W - glyphLayout.width) / 2f,
+                  CLOSE_BTN_Y + (CLOSE_BTN_H + glyphLayout.height) / 2f);
+
+        // CONVERT AMMO
+        if (hasConvert) {
+            glyphLayout.setText(font, cachedConvertLabel);
+            font.setColor(AMBER_COLOR.r, AMBER_COLOR.g, AMBER_COLOR.b, 0.8f);
+            font.draw(spriteBatch, cachedConvertLabel,
+                      CONV_BTN_X + (CONV_BTN_W - glyphLayout.width) / 2f,
+                      CONV_BTN_Y + (CONV_BTN_H + glyphLayout.height) / 2f);
+        }
     }
 
     // ── Disposable ────────────────────────────────────────────────────────────
@@ -630,5 +680,100 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         shapeRenderer.dispose();
         spriteBatch.dispose();
         font.dispose();
+    }
+
+    // ── Helpers (called from show(), no LibGDX render state) ──────────────────
+
+    private void buildStatCache(WeaponRoll groundRoll, Weapon arsenalWeapon, Weapon activeWeapon) {
+        if (arsenalWeapon != null && groundRoll != null) {
+            int level = groundRoll.weaponLevel;
+            cachedGroundDamage = GameMath.weaponScaledDamage(arsenalWeapon.getBaseDamage(), level);
+            cachedGroundClip   = GameMath.weaponScaledClipSize(arsenalWeapon.getBaseClipSize(), level);
+            cachedGroundReload = GameMath.weaponScaledReloadTicks(arsenalWeapon.getBaseReloadTicks(), level);
+            cachedGroundRange  = GameMath.weaponScaledRange(arsenalWeapon.getBaseRange(), level, arsenalWeapon.isMelee());
+        } else if (arsenalWeapon != null) {
+            cachedGroundDamage = arsenalWeapon.getBaseDamage();
+            cachedGroundClip   = arsenalWeapon.getBaseClipSize();
+            cachedGroundReload = arsenalWeapon.getBaseReloadTicks();
+            cachedGroundRange  = arsenalWeapon.getBaseRange();
+        } else {
+            cachedGroundDamage = 0;
+            cachedGroundClip   = 0;
+            cachedGroundReload = 0;
+            cachedGroundRange  = 0;
+        }
+
+        if (activeWeapon != null) {
+            cachedActiveDamage = activeWeapon.getEffectiveDamage();
+            cachedActiveClip   = activeWeapon.getEffectiveClipSize();
+            cachedActiveReload = activeWeapon.getEffectiveReloadTicks();
+            cachedActiveRange  = activeWeapon.getEffectiveRange();
+        } else {
+            cachedActiveDamage = 0;
+            cachedActiveClip   = 0;
+            cachedActiveReload = 0;
+            cachedActiveRange  = 0;
+        }
+    }
+
+    private void buildAbilityCache(WeaponRoll groundRoll) {
+        cachedAbilityCount = 0;
+        if (groundRoll == null || groundRoll.abilities == null) return;
+        for (int abilityIndex = 0;
+             abilityIndex < groundRoll.abilities.length && cachedAbilityCount < MAX_ABILITY_LINES;
+             abilityIndex++) {
+            AbilityInstance inst = groundRoll.abilities[abilityIndex];
+            if (inst == null) continue;
+            cachedAbilityLines[cachedAbilityCount]     = formatAbilityShort(inst);
+            cachedAbilityLegendary[cachedAbilityCount] = inst.ability.legendaryOnly;
+            cachedAbilityCount++;
+        }
+    }
+
+    private static String formatAbilityShort(AbilityInstance inst) {
+        switch (inst.ability) {
+            case BURST_FIRE:         return "BURST x" + inst.countValue;
+            case CRITICAL_STRIKE:    return "CRIT " + inst.magnitudePercent() + "%";
+            case ARMOR_PIERCE:       return "PIERCE " + inst.magnitudePercent() + "%";
+            case EXECUTIONER:        return "EXECUTE " + inst.magnitudePercent() + "%";
+            case REND:               return "BLEED " + inst.countValue + "/T";
+            case OVERPENETRATION:    return "OVERPENETRATE";
+            case STAGGER_ROUNDS:     return "STUN " + inst.magnitudePercent() + "%";
+            case KINETIC_SLAM:       return "KNOCKBACK " + inst.magnitudePercent() + "%";
+            case CLEAVE:             return "CLEAVE " + inst.magnitudePercent() + "%";
+            case INCENDIARY:         return "BURN " + inst.countValue + "/T";
+            case LIFESTEAL:          return "LIFESTEAL " + inst.magnitudePercent() + "%";
+            case HEMORRHAGE_HARVEST: return "HP/KILL +" + inst.countValue;
+            case VAMPIRIC_CRIT:      return "CRIT HEAL +" + inst.countValue;
+            case ADRENAL_SURGE:      return "SURGE ON KILL";
+            case BULWARK_ROUNDS:     return "SHIELD +" + inst.countValue;
+            case SECOND_WIND:        return "SECOND WIND " + inst.magnitudePercent() + "%";
+            case SCAVENGER_ROUNDS:   return "AMMO DROP " + inst.magnitudePercent() + "%";
+            case SALVAGE_STRIKE:     return "AMMO DROP " + inst.magnitudePercent() + "%";
+            case SCHOLARS_EDGE:      return "XP/KILL +" + inst.magnitudePercent() + "%";
+            case QUICK_HANDS:        return "QUICK RELOAD";
+            case EXTENDED_MAG:       return "MAG +" + inst.countValue;
+            case FIELD_MEDIC_ROUNDS: return "HEAL/KILL +" + inst.countValue;
+            case CREDIT_FANG:        return "CREDITS/KILL";
+            case POINT_BLANK:        return "POINT BLANK " + inst.magnitudePercent() + "%";
+            case MARKSMANS_PATIENCE: return "PATIENCE " + inst.magnitudePercent() + "%";
+            case OPENING_SALVO:      return "FIRST SHOT +" + inst.magnitudePercent() + "%";
+            case RHYTHM:             return "RHYTHM " + inst.magnitudePercent() + "%";
+            case STATIC_DISCHARGE:   return "STATIC " + inst.countValue;
+            case RESONANT_ROUNDS:    return "RESONANCE " + inst.magnitudePercent() + "%";
+            case SOULFORGE:          return "SOULFORGE";
+            case JUDGMENT:           return "LANCE/" + inst.countValue;
+            case HELLFIRE_NOVA:      return "CRIT NOVA " + inst.magnitudePercent() + "%";
+            case BERSERKERS_OATH:    return "BERSERK";
+            default:                 return inst.ability.displayName.toUpperCase();
+        }
+    }
+
+    private static int findFreeSlot(Loadout loadoutRef) {
+        if (loadoutRef == null) return 0;
+        for (int slotIndex = 0; slotIndex < loadoutRef.getSlotCount(); slotIndex++) {
+            if (loadoutRef.getSlot(slotIndex) == null) return slotIndex;
+        }
+        return 0;
     }
 }

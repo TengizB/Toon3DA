@@ -63,6 +63,21 @@ public class WeaponRoller {
         weapon.configureRoll(rolledLevel, rolledTier, rolledAbilities);
     }
 
+    /**
+     * Generates a WeaponRoll snapshot without modifying the weapon instance.
+     * Advances the RNG state identically to rollWeapon() so the sequence stays consistent.
+     *
+     * @param weapon     weapon used for ability eligibility (isMelee(), etc.)
+     * @param floorDepth current dungeon floor (1-based)
+     * @return a new WeaponRoll ready to be stored on a GroundItem
+     */
+    public WeaponRoll rollToSnapshot(Weapon weapon, int floorDepth) {
+        int               rolledLevel     = rollLevel(floorDepth);
+        WeaponTier        rolledTier      = rollTierClamped(floorDepth, null, null);
+        AbilityInstance[] rolledAbilities = rollAbilities(weapon, rolledTier, rolledLevel);
+        return new WeaponRoll(rolledLevel, rolledTier, rolledAbilities);
+    }
+
     // ── Private helpers ────────────────────────────────────────────────────
 
     private int rollLevel(int floorDepth) {

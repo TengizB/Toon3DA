@@ -64,22 +64,49 @@ public final class HudConstants {
     public static final float HUD_STATUS_ROW_LOCAL_X    = 24f;
     public static final float HUD_STATUS_ROW_LOCAL_Y    = 4f;
 
-    // Weapon inspect overlay — centred modal card
+    // Legacy weapon inspect constants — kept for compilation; renderer will be replaced
     public static final float WEAPON_INSPECT_CARD_WIDTH      = 640f;
     public static final float WEAPON_INSPECT_CARD_HEIGHT     = 460f;
-    public static final float WEAPON_INSPECT_CARD_ORIGIN_X   = 320f;  // (1280 - 640) / 2
-    public static final float WEAPON_INSPECT_CARD_ORIGIN_Y   = 130f;  // (720 - 460) / 2
+    public static final float WEAPON_INSPECT_CARD_ORIGIN_X   = 320f;
+    public static final float WEAPON_INSPECT_CARD_ORIGIN_Y   = 130f;
     public static final float WEAPON_INSPECT_PANEL_ALPHA     = 0.92f;
     public static final float WEAPON_INSPECT_BUTTON_WIDTH    = 200f;
     public static final float WEAPON_INSPECT_BUTTON_HEIGHT   = 54f;
     public static final float WEAPON_INSPECT_FONT_SCALE      = 1.8f;
-    // Y offset above CONTENT_Y for the ability glyph strip in the weapon inspect card
     public static final float WEAPON_INSPECT_ABILITY_ROW_Y_ABOVE_CONTENT = 24f;
-    // Ground-weapon name label — centred in the HUD gap, just above the chrome
-    public static final float WEAPON_NAME_LABEL_Y            = 224f;  // HUD_HEIGHT + 18
+
+    // Weapon card — single-screen pickup / compare modal (replaces old two-phase inspect)
+    public static final float WEAPON_CARD_WIDTH          = 760f;
+    public static final float WEAPON_CARD_HEIGHT         = 530f;
+    public static final float WEAPON_CARD_ORIGIN_X       = 260f;   // (1280 - 760) / 2
+    public static final float WEAPON_CARD_ORIGIN_Y       = 95f;    // (720 - 530) / 2
+    public static final float WEAPON_CARD_PANEL_ALPHA    = 0.94f;
+    public static final float WEAPON_CARD_FONT_SCALE     = 1.8f;
+    // Zone heights inside the card (from top): header, stats, abilities, action, footer
+    public static final float WEAPON_CARD_HEADER_HEIGHT  = 50f;
+    public static final float WEAPON_CARD_STAT_ROW_H     = 40f;    // 4 rows × 40 = 160px
+    public static final float WEAPON_CARD_ABILITY_H      = 55f;    // ability strip below stats
+    public static final float WEAPON_CARD_ACTION_H       = 185f;   // equip button OR slot rows
+    public static final float WEAPON_CARD_FOOTER_H       = 68f;    // close + convert strip
+    // Large equip button (free-slot fast lane)
+    public static final float WEAPON_EQUIP_BUTTON_WIDTH  = 520f;
+    public static final float WEAPON_EQUIP_BUTTON_HEIGHT = 84f;
+    // Inline slot rows (full loadout)
+    public static final float WEAPON_SLOT_ROW_HEIGHT     = 52f;
+    public static final float WEAPON_SLOT_ROW_GAP        = 8f;
+    // Swap button on the right edge of each slot row
+    public static final float WEAPON_SWAP_BUTTON_WIDTH   = 150f;
+    public static final float WEAPON_SWAP_BUTTON_HEIGHT  = 46f;
+    // Footer buttons
+    public static final float WEAPON_CLOSE_BUTTON_WIDTH  = 160f;
+    public static final float WEAPON_CLOSE_BUTTON_HEIGHT = 52f;
+    public static final float WEAPON_CONVERT_BUTTON_WIDTH  = 220f;
+    public static final float WEAPON_CONVERT_BUTTON_HEIGHT = 52f;
+    // Ground-weapon name label shown in HUD when card is closed but player is on weapon tile
+    public static final float WEAPON_NAME_LABEL_Y        = 224f;   // HUD_HEIGHT + 18
     // Stat bar normalisers — only affect visual fill, not game logic
-    public static final int   WEAPON_STAT_BAR_MAX_DAMAGE     = 60;
-    public static final int   WEAPON_STAT_BAR_MAX_RANGE      = 20;
+    public static final int   WEAPON_STAT_BAR_MAX_DAMAGE = 60;
+    public static final int   WEAPON_STAT_BAR_MAX_RANGE  = 20;
 
     // Boss HP bar — rendered across the top of the screen during boss encounters
     public static final float BOSS_HP_BAR_MARGIN            = 80f;

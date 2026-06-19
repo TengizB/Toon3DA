@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.item;
 
+import ge.tbegvadze.toon3d.entity.WeaponRoll;
+
 /**
  * An item stack that has been placed or dropped on a specific floor tile.
  *
@@ -19,6 +21,13 @@ public final class GroundItem {
 
     /** The item stack sitting on this tile. The stack object is owned by this GroundItem. */
     public final ItemStack stack;
+
+    /**
+     * Rolled identity for weapon ground items: level, tier, abilities.
+     * Null for non-weapon items or legacy un-rolled weapons (treated as Common Lv1).
+     * Set by World when the item is spawned or when a loadout weapon is dropped.
+     */
+    public WeaponRoll weaponRoll = null;
 
     // Tile-bounds validation is the caller's responsibility (requires a Level reference).
     public GroundItem(int tileColumn, int tileRow, ItemType itemType, int quantity) {
