@@ -392,7 +392,7 @@ final class WeaponSlotsPanel implements Disposable {
         if (isMelee) {
             reserveLabel = "Unlimited";
         } else {
-            int reserve = weapon.getAmmoReserveCount();
+            int reserve = weapon.getReserveAmmo();
             reserveLabel = (reserve < 0) ? "—" : "Ammo: " + reserve;
         }
         font.draw(spriteBatch, reserveLabel, textX, textY);
