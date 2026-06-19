@@ -1,53 +1,102 @@
-Inventory Menu Part 2: Weapon Slots Panel
-==========================================
+inventory-menu-order-2 — Inventory Menu Redesign: Weapon Slots Panel (Left Side)
+==================================================================================
 
-Redesigns the left panel of the inventory overlay to show 4 structured weapon
-slots (3 ranged + 1 melee) instead of the old flat dynamic list.
+PREREQUISITE: inventory-menu-order-1 (layout & architecture)
 
-FILES CHANGED
--------------
+
+WHAT WAS BUILT
+--------------
+WeaponSlotsPanel (render/WeaponSlotsPanel.java) fills the left panel
+(x=20–520, y=110–645) with 4 structured weapon slots: 3 ranged gun slots +
+1 melee slot, each 470px wide × 100px tall.
+
+Data model was also extended: Loadout gained a locked third gun slot so the UI
+can always render a permanent LOCKED slot at index 2.
+
+
+SLOT LAYOUT (bottom-Y of each rect, all at x=35, width=470, height=100)
+------------------------------------------------------------------------
+  Gun slot 1  (loadout slot 0)  y = 507   INV_WEAPON_GUN_SLOT_1_Y
+  Gun slot 2  (loadout slot 1)  y = 401   INV_WEAPON_GUN_SLOT_2_Y
+  Gun slot 3  (LOCKED forever)  y = 295   INV_WEAPON_GUN_SLOT_3_Y
+  — dashed section divider —    y = 280   INV_WEAPON_SECTION_DIVIDER_Y
+  Melee slot                    y = 145   INV_WEAPON_MELEE_SLOT_Y
+  Section labels: "RANGED" at y=613, "MELEE" at y=253
+
+
+SLOT VISUAL STATES
+------------------
+EMPTY  — dark bg (0.10,0.10,0.12), plain border, "— EMPTY —" centered dim text.
+FILLED — warm bg (0.11,0.10,0.09), dim amber border (0.50,0.36,0.00).
+ACTIVE — amber-tint bg (0.14,0.12,0.05), pulsing amber border (sin 4 Hz, 0.7–1.0
+          alpha), + "ACTIVE" badge pill (60×18px) top-right corner.
+LOCKED — very dark bg (0.08,0.08,0.09), dashed border (8px on / 4px off),
+          padlock shape (ShapeRenderer rect body + semi-circle shackle arc),
+          "LOCKED" text + "Unlock at Level 10" hint.
+
+
+RENDER PASSES (3 passes per frame, no allocations inside render)
+----------------------------------------------------------------
+Pass A — ShapeRenderer.Filled: slot backgrounds, ACTIVE badge rect, lock body.
+Pass B — ShapeRenderer.Line:   slot borders (solid/dashed/pulsing), section
+                                divider dashes, shackle arc, amber accent lines.
+Pass C — SpriteBatch + BitmapFont: section labels, weapon thumbnails, info zone
+                                    text, empty/locked labels, ACTIVE badge text.
+
+
+WEAPON THUMBNAILS
+-----------------
+WeaponHudRenderer.getWeaponTexture(Weapon) returns the cached FrameBuffer Texture
+for the weapon's procedural sprite. Scaled to fit the left 280px of the slot using
+min(dst_w/src_w, dst_h/src_h). Null-safe: melee / unregistered weapons fall back
+to text-only display.
+
+
+INFO ZONE (right 185px of slot, x_offset=288 from slot left)
+-------------------------------------------------------------
+4 text lines stacked from slot top (16px step):
+  Line 1 — Weapon display name (amber if ACTIVE, dim otherwise)
+  Line 2 — Ammo type name ("Melee" for melee slots)
+  Line 3 — Clip / max clip ("—" for melee)
+  Line 4 — Ammo reserve ("Unlimited" for melee)
+
+
+DATA MODEL CHANGES
+------------------
 WeaponConstants.java
-  - WEAPON_SLOT_COUNT increased from 2 → 3
-  - WEAPON_GUN_SLOT_LOCKED_INDEX = 2 added (slot 2 is permanently locked)
+  WEAPON_SLOT_COUNT            = 3   (was 2)
+  WEAPON_GUN_SLOT_LOCKED_INDEX = 2   (new — slot 2 never receives a weapon)
 
-Loadout.java
-  - tryEquip() skips WEAPON_GUN_SLOT_LOCKED_INDEX so slot 2 is never filled
+Loadout.tryEquip() skips slot index WEAPON_GUN_SLOT_LOCKED_INDEX.
 
-ItemConstants.java
-  - Added INV_WEAPON_* constants: slot positions, badge geometry, lock icon
-    geometry, accent line offsets, text layout, dash lengths
+WeaponSlotsPanel reads from PlayerInventory (via setPlayerInventory):
+  gun slot 0/1   → loadout.getSlot(0/1)
+  gun slot 2     → always LOCKED state (no weapon lookup)
+  melee slot     → playerInventory.getMeleeWeapon()
+Active state:    loadout.getActiveSlotIndex() == slotIndex  (or isMeleeSelected())
 
-WeaponHudRenderer.java
-  - Added getWeaponTexture(Weapon) — returns cached normal-pose texture by class
 
-InventoryOverlayRenderer.java
-  - setPlayerInventory(PlayerInventory) — wires loadout data into WeaponSlotsPanel
-  - setWeaponHudRenderer(WeaponHudRenderer) — wires thumbnail source
+KEY FILES CHANGED
+-----------------
+  core/.../render/WeaponSlotsPanel.java         — new file (~500 lines)
+  core/.../util/ItemConstants.java              — INV_WEAPON_* constants added
+  core/.../util/WeaponConstants.java            — slot count + locked index
+  core/.../entity/Loadout.java                  — tryEquip skips locked slot
+  core/.../render/WeaponHudRenderer.java        — getWeaponTexture(Weapon) added
+  core/.../render/InventoryOverlayRenderer.java — setPlayerInventory /
+                                                  setWeaponHudRenderer wiring
+  core/.../world/World.java                     — calls both setters after init
 
-WeaponSlotsPanel.java (full rewrite)
-  - Reads from PlayerInventory/Loadout instead of the item Inventory
-  - Fixed slot positions: gun slot 1 y=507, slot 2 y=401, slot 3 y=295 (LOCKED),
-    melee y=145
-  - Four visual states: EMPTY, FILLED, ACTIVE, LOCKED
-  - ACTIVE state: warm amber background + pulsing border (sin wave, 4 Hz, 0.7–1.0)
-    + "ACTIVE" badge pill top-right of slot
-  - LOCKED state: dark background + dashed border (8px on / 4px off) + padlock
-    shape (filled rect body + manual semi-circle shackle arc)
-  - Weapon thumbnail: scales WeaponHudRenderer texture to fit left 280px of slot,
-    guards against zero-size texture
-  - Info zone (right 185px): weapon name, ammo type, clip/max-clip, ammo reserve;
-    melee shows "Melee" / "—" / "Unlimited"
-  - Section labels "RANGED" and "MELEE" with amber accent lines
-  - Dashed section divider at y=280
 
-World.java
-  - Calls inventoryOverlayRenderer.setPlayerInventory(inventory) and
-    setWeaponHudRenderer(weaponHudRenderer) after both objects are constructed
+TOUCH HANDLING
+--------------
+Taps on any of the 4 slot rects are consumed (AABB hit test). ItemWindow
+integration is deferred to Part 4; locked-slot flash deferred to Part 4.
 
-DESIGN DECISIONS
-----------------
-- Thumbnail rendering falls back gracefully: if WeaponHudRenderer or the texture
-  is null (weapon not yet registered), the slot shows just text info.
-- Touch on any weapon slot is consumed but does not open ItemWindow yet — that
-  integration is deferred to Part 4.
-- Locked slot touch is silently consumed (no flash in this part; Part 4 scope).
+
+WHAT PARTS 3–6 WILL ADD
+------------------------
+  Part 3 — ItemGridPanel: category filtering, slot labels, sort order
+  Part 4 — ItemWindow: refined geometry, weapon slot taps open item detail
+  Part 5 — AbilityWindow: full ability list implementation
+  Part 6 — Footer status line, slot usage counter
