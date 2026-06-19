@@ -28,10 +28,10 @@ public final class ItemConstants {
     public static final float ARMOUR_ABSORB_FRACTION          = 0.50f;
 
     // Inventory system — slot count and per-type stack caps
-    // INVENTORY_SLOT_COUNT: 10 slots (5×2 grid) gives tight but meaningful choice.
+    // INVENTORY_SLOT_COUNT: 12 slots (4×3 grid) as redesigned in inventory-menu-order-3.
     // Ammo and armour bypass slots entirely; only consumables, weapons, key items,
     // mods, and credits occupy the slotted grid.
-    public static final int INVENTORY_SLOT_COUNT          = 10;
+    public static final int INVENTORY_SLOT_COUNT          = 12;
     // ITEM_STACK_MAX_DEFAULT: generic fallback cap for any stackable not listed below.
     public static final int ITEM_STACK_MAX_DEFAULT        = 99;
     // Per-type stack caps — these are the definitive balance numbers; tune via constants only.
@@ -153,6 +153,49 @@ public final class ItemConstants {
     public static final float INV_WEAPON_DIVIDER_GAP_LENGTH     = 6f;
     public static final float INV_WEAPON_LOCKED_DASH_LENGTH     = 8f;
     public static final float INV_WEAPON_LOCKED_GAP_LENGTH      = 4f;
+
+    // Inventory Menu — Part 3: Item Grid Panel geometry (4×3 grid, 148px slots)
+    public static final float INV_GRID_SLOT_SIZE        = 148f;
+    public static final float INV_GRID_SLOT_GAP_COL     = 10f;
+    public static final float INV_GRID_SLOT_GAP_ROW     = 10f;
+    public static final int   INV_GRID_COLUMNS          = 4;
+    public static final int   INV_GRID_ROWS             = 3;
+    public static final float INV_GRID_ORIGIN_X         = 589f;
+    public static final float INV_GRID_ORIGIN_Y         = 130f;
+    public static final float INV_GRID_TAB_BAR_HEIGHT   = 36f;
+    public static final float INV_GRID_TAB_BAR_Y        = 609f;
+    public static final int   INV_TAB_COUNT             = 5;
+    public static final float INV_TAB_WIDTH             = 138f;
+    public static final float INV_TAB_ACTIVE_BG_ALPHA   = 0.20f;
+    public static final float INV_TAB_DIM_ALPHA         = 0.40f;
+    public static final float INV_GRID_CAT_DOT_SIZE       = 4f;
+    public static final float INV_GRID_CAT_DOT_MARGIN_X   = 8f;
+    // Top margin: dot bottom-left Y = slotY + SLOT_SIZE - CAT_DOT_MARGIN_TOP (Y-up = 148-15=133)
+    public static final float INV_GRID_CAT_DOT_MARGIN_TOP = 15f;
+    public static final float INV_GRID_QTY_LABEL_MARGIN   = 8f;
+    public static final float INV_GRID_STAR_MARGIN_RIGHT  = 14f;
+    public static final float INV_GRID_STAR_MARGIN_TOP    = 4f;
+    public static final float INV_GRID_ACTIVE_PULSE_HZ    = 4f;
+    public static final float INV_GRID_ACTIVE_PULSE_MIN   = 0.7f;
+    // Category dot colors
+    public static final float INV_CAT_DOT_WEAPON_R      = 1.00f;
+    public static final float INV_CAT_DOT_WEAPON_G      = 0.72f;
+    public static final float INV_CAT_DOT_WEAPON_B      = 0.00f;
+    public static final float INV_CAT_DOT_CONSUMABLE_R  = 0.20f;
+    public static final float INV_CAT_DOT_CONSUMABLE_G  = 0.90f;
+    public static final float INV_CAT_DOT_CONSUMABLE_B  = 0.20f;
+    public static final float INV_CAT_DOT_AMMO_R        = 0.75f;
+    public static final float INV_CAT_DOT_AMMO_G        = 0.45f;
+    public static final float INV_CAT_DOT_AMMO_B        = 0.10f;
+    public static final float INV_CAT_DOT_KEY_ITEM_R    = 1.00f;
+    public static final float INV_CAT_DOT_KEY_ITEM_G    = 0.10f;
+    public static final float INV_CAT_DOT_KEY_ITEM_B    = 0.10f;
+    public static final float INV_CAT_DOT_MOD_R         = 0.60f;
+    public static final float INV_CAT_DOT_MOD_G         = 0.30f;
+    public static final float INV_CAT_DOT_MOD_B         = 0.90f;
+    public static final float INV_CAT_DOT_MISC_R        = 0.75f;
+    public static final float INV_CAT_DOT_MISC_G        = 0.75f;
+    public static final float INV_CAT_DOT_MISC_B        = 0.75f;
 
     // ItemWindow button row geometry
     public static final float INV_ITEM_WIN_BTN_AREA_HEIGHT = 50f;

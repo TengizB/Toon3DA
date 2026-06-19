@@ -1,0 +1,71 @@
+Inventory Menu Part 3: Item Grid Panel (Right Side)
+=====================================================
+
+STATUS: IMPLEMENTED
+BRANCH: claude/inventory-menu-order-3-q3dgbs
+
+WHAT WAS BUILT
+--------------
+Rewrote ItemGridPanel.java to implement the new 4×3 item slot grid with a
+category filter tab bar, replacing the old 5×2 (10-slot) layout.
+
+SLOT COUNT CHANGE
+-----------------
+ItemConstants.INVENTORY_SLOT_COUNT: 10 → 12
+Inventory.java pre-allocates ItemStack[12] via the constant — no code change
+needed there.
+
+GRID GEOMETRY (all constants in ItemConstants.java)
+----------------------------------------------------
+Slot size:   148×148px  (INV_GRID_SLOT_SIZE)
+Gap col/row: 10px each  (INV_GRID_SLOT_GAP_COL / _ROW)
+Grid origin: x=589, y=130 (INV_GRID_ORIGIN_X / _Y)   bottom-left of slot[0]
+4 columns × 3 rows = 12 slots
+
+Index mapping (Y-up, row 0 = visual bottom):
+  inventoryIndex = (INV_GRID_ROWS - 1 - gridRow) × INV_GRID_COLUMNS + gridColumn
+  row 2 (visual top) → slots 0–3
+  row 1 (middle)     → slots 4–7
+  row 0 (bottom)     → slots 8–11
+
+CATEGORY FILTER TAB BAR
+------------------------
+5 tabs across the top of the right panel (y=609, height=36):
+  0=ALL  1=GUNS  2=AMMO  3=MEDS  4=MISC
+- Active tab: amber background (20% alpha) + amber underline
+- Inactive: transparent, dim text
+- Inactive-filter slots dim to 40% alpha (INV_TAB_DIM_ALPHA)
+- Slot usage counter "N / 12" right-aligned inside the tab bar
+
+SLOT VISUAL STATES
+------------------
+EMPTY    — dark bg, dim border, no content
+FILLED   — dark bg, slightly brighter border, glyph + qty + category dot
+EQUIPPED — warm amber tint bg, amber border, green '*' star top-right
+SELECTED — blue-gray bg, pulsing amber border (4Hz sin, 0.7–1.0 amplitude)
+DIMMED   — any of the above at 40% alpha when filter doesn't match
+
+CATEGORY DOTS
+-------------
+4×4px filled rect at top-left of each filled slot (x+8, y+SLOT_SIZE-15 in Y-up).
+Colors by category: WEAPON=amber, CONSUMABLE=green, AMMO=copper,
+                    KEY_ITEM=red, MOD=purple, MISC=white.
+All colors in ItemConstants as INV_CAT_DOT_*_R/G/B constants.
+
+RENDER PASSES
+-------------
+Pass A (ShapeRenderer.Filled): tab highlight, slot backgrounds, category dots
+Pass B (ShapeRenderer.Line):   tab underline, tab dividers, slot borders
+Pass C (SpriteBatch+BitmapFont): tab labels, usage counter, glyphs, qty, star
+
+TOUCH DETECTION
+---------------
+Tab bar: checks worldX >= INV_RIGHT_PANEL_X before computing tab index
+         (guards against negative relativeX producing invalid index).
+Slots: AABB test per slot; tapping filled slot calls onSlotTapped(inventoryIndex).
+
+KEY FILES CHANGED
+-----------------
+core/src/main/java/ge/tbegvadze/toon3d/render/ItemGridPanel.java  — full rewrite
+core/src/main/java/ge/tbegvadze/toon3d/util/ItemConstants.java    — added Part 3
+    constants + changed INVENTORY_SLOT_COUNT 10→12
