@@ -1,0 +1,75 @@
+inventory-menu-order-1 — Inventory Menu Redesign: Layout & Architecture
+==========================================================================
+
+WHAT WAS BUILT
+--------------
+Replaced the old monolithic InventoryOverlayRenderer (604 lines) with a
+layered window system split across five classes. The public API surface
+(World.java call sites) is unchanged.
+
+
+NEW CLASS STRUCTURE
+-------------------
+All classes live in ge.tbegvadze.toon3d.render:
+
+  InventoryOverlayRenderer   — coordinator; owns all resources; same public API
+  WeaponSlotsPanel           — left panel (x=20–520): up to 4 vertical weapon slots
+  ItemGridPanel              — right panel (x=540–1260): 4×3 item slot grid
+  ItemWindow                 — popup shown when any slot is tapped (item detail + actions)
+  AbilityWindow              — popup stub (Part 5 will implement)
+
+Sub-classes are package-private. The coordinator creates ShapeRenderer, SpriteBatch,
+BitmapFont, and GlyphLayout once and passes them into each sub-class — no per-class
+batch creation.
+
+
+SCREEN LAYOUT (world coords 1280×720, Y-up)
+--------------------------------------------
+  y=650–720  Header bar (INVENTORY title + EXIT button)
+  y=110–645  Left panel (500px wide) | gap | Right panel (720px wide)
+  y=0–110    Footer area (unused in Part 1)
+
+Key constants added to ItemConstants.java:
+  INV_HEADER_HEIGHT / INV_HEADER_Y / INV_PANEL_Y_BOTTOM / INV_PANEL_Y_TOP
+  INV_PANEL_HEIGHT / INV_LEFT_PANEL_X / INV_LEFT_PANEL_WIDTH
+  INV_RIGHT_PANEL_X / INV_RIGHT_PANEL_WIDTH / INV_PANEL_GAP / INV_PANEL_PADDING
+  INV_HEADER_TITLE_X / INV_HEADER_EXIT_BUTTON_SIZE / INV_HEADER_EXIT_MARGIN
+  INV_BASE_DIM_FACTOR (0.40) / INV_ITEM_WIN_DIM_FACTOR (0.50)
+
+Removed dead constants (only used by old renderer):
+  INV_GRID_ORIGIN_X, INV_GRID_ORIGIN_Y, INV_DETAIL_PANEL_X, INV_DETAIL_PANEL_WIDTH
+
+
+LAYER SYSTEM
+------------
+Render order each frame:
+  1. Scrim (60% black over 3D view)
+  2. Panel backgrounds + borders + header
+  3. WeaponSlotsPanel.render()  — left panel content
+  4. ItemGridPanel.render()     — right panel content
+  5. Header text + EXIT button
+  6. If ItemWindow open: dim overlay (40% black) then ItemWindow.render()
+  7. If AbilityWindow open: dim overlay (50% black) then AbilityWindow.render()
+
+Touch routing (highest layer first):
+  AbilityWindow → ItemWindow → header EXIT → WeaponSlotsPanel → ItemGridPanel
+
+
+ITEM WINDOW
+-----------
+Opened when any slot is tapped. Centered at (640, 380), 460×340px.
+Shows: item name, category, effect description, qty, equip status.
+Buttons: USE/EQUIP (equips weapon free, consumes consumable with turn),
+         DROP (removes whole stack, costs a turn),
+         EXIT (closes window, inventory stays open).
+CLOSE_WINDOW is a new CloseAction value — handled inside the coordinator,
+never seen by World.java.
+
+
+WHAT PARTS 2–6 WILL ADD
+------------------------
+  Part 2 — WeaponSlotsPanel: Loadout-aware 4-slot display, weapon stats
+  Part 3 — ItemGridPanel: category filtering, slot labels, sort order
+  Part 4 — ItemWindow: refined geometry, ability row list
+  Part 5 — AbilityWindow: full implementation
+  Part 6 — footer status line, slot usage counter
