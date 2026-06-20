@@ -225,9 +225,12 @@ public final class ItemConstants {
     public static final float INV_ACTION_BTN_WIDTH  = 180f;
     public static final float INV_ACTION_BTN_HEIGHT = 38f;
     public static final float INV_ACTION_BTN_GAP    = 20f;
-    public static final float INV_ACTION_BTN_Y      = 170f;
-    public static final float INV_ACTION_BTN_1_X    = 450f;
-    public static final float INV_ACTION_BTN_2_X    = 650f;
+    // Centered vertically within the footer zone (window bottom to footer rule).
+    public static final float INV_ACTION_BTN_Y      = INV_ITEM_WIN_Y + (INV_ITEM_WIN_FOOTER_H - INV_ACTION_BTN_HEIGHT) / 2f;
+    // Centered horizontally in the window: (960 - 2*180 - 20) / 2 = 190 → X=160+190=350, but kept
+    // symmetric around window centre (640): two 180px buttons with 20px gap → total 380px → start at 450.
+    public static final float INV_ACTION_BTN_1_X    = INV_ITEM_WIN_X + (INV_ITEM_WIN_WIDTH - 2f * INV_ACTION_BTN_WIDTH - INV_ACTION_BTN_GAP) / 2f;
+    public static final float INV_ACTION_BTN_2_X    = INV_ACTION_BTN_1_X + INV_ACTION_BTN_WIDTH + INV_ACTION_BTN_GAP;
 
     // Ability badge pill — shared by ItemWindow ability rows and AbilityWindow header — Part 5
     public static final float INV_ABILITY_BADGE_W = 58f;

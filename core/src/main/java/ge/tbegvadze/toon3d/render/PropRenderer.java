@@ -401,7 +401,11 @@ public class PropRenderer implements Renderable, Disposable {
                                             MAX_LIGHTING_SHADE);
 
             // Tier glow aura — additive halo drawn behind the weapon so the sprite keeps its true colours.
-            WeaponTier weaponTier = weaponTierMap.get(itemType);
+            // Use the ground item's own rolled tier first; fall back to the arsenal map only when the
+            // ground item has no roll (e.g. weapon type not yet in the player's arsenal).
+            WeaponTier weaponTier = (groundItem.weaponRoll != null && groundItem.weaponRoll.tier != null)
+                    ? groundItem.weaponRoll.tier
+                    : weaponTierMap.get(itemType);
             if (weaponTier != null) {
                 float glowHeight      = spriteScreenHeight * WEAPON_PICKUP_GLOW_SIZE_MULTIPLIER;
                 int   glowLeft        = (int)(screenCenterColumn - glowHeight / 2f);
