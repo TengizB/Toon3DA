@@ -103,9 +103,9 @@ public final class ItemConstants {
     public static final float INV_BASE_DIM_FACTOR         = 0.40f;
     public static final float INV_ITEM_WIN_DIM_FACTOR     = 0.50f;
 
-    // ItemWindow popup geometry — 800×520 centered at (640, 370)
-    public static final float INV_ITEM_WIN_WIDTH              = 800f;
-    public static final float INV_ITEM_WIN_HEIGHT             = 520f;
+    // ItemWindow popup geometry — 960×580 centered at (640, 370)
+    public static final float INV_ITEM_WIN_WIDTH              = 960f;
+    public static final float INV_ITEM_WIN_HEIGHT             = 580f;
     public static final float INV_ITEM_WIN_CENTER_X           = 640f;
     public static final float INV_ITEM_WIN_CENTER_Y           = 370f;
     // Font scale multiplier — all ItemWindow text is scaled by this factor for readability on mobile.
@@ -239,12 +239,14 @@ public final class ItemConstants {
     public static final float INV_ITEM_WIN_ABILITY_HDR_H   = 26f;
 
     // AbilityWindow popup geometry — Part 5
-    public static final float INV_ABILITY_WIN_WIDTH         = 520f;
-    public static final float INV_ABILITY_WIN_HEIGHT        = 300f;
-    public static final float INV_ABILITY_WIN_X             = 370f;
-    public static final float INV_ABILITY_WIN_Y             = 230f;
-    public static final float INV_ABILITY_WIN_PADDING       = 16f;
-    public static final float INV_ABILITY_WIN_HEADER_H      = 30f;
-    public static final float INV_ABILITY_WIN_EXIT_BTN_SIZE = 28f;
-    public static final float INV_ABILITY_WIN_DIVIDER_Y     = INV_ABILITY_WIN_Y + 60f;
+    public static final float INV_ABILITY_WIN_WIDTH         = 720f;
+    public static final float INV_ABILITY_WIN_HEIGHT        = 440f;
+    public static final float INV_ABILITY_WIN_X             = 280f;  // (1280 - 720) / 2
+    public static final float INV_ABILITY_WIN_Y             = 140f;  // (720 - 440) / 2
+    public static final float INV_ABILITY_WIN_PADDING       = 20f;
+    public static final float INV_ABILITY_WIN_HEADER_H      = 40f;
+    public static final float INV_ABILITY_WIN_EXIT_BTN_SIZE = 36f;
+    public static final float INV_ABILITY_WIN_DIVIDER_Y     = INV_ABILITY_WIN_Y + 80f;
+    // Font scale multiplier — all AbilityWindow text scaled for mobile readability.
+    public static final float INV_ABILITY_WIN_FONT_SCALE    = 1.3f;
 }

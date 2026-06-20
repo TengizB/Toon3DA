@@ -287,7 +287,7 @@ public class PropRenderer implements Renderable, Disposable {
             } else if (Level.isStairsDown(prop.propChar)) {
                 drawBottom = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight);
             } else {
-                drawBottom = WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight;
+                drawBottom = WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight / 2f;
             }
             float drawTop    = drawBottom + spriteScreenHeight;
             float clampedBottom   = Math.max(0f, drawBottom);
@@ -376,10 +376,9 @@ public class PropRenderer implements Renderable, Disposable {
                                       lightingTimeSeconds, WEAPON_PICKUP_BOB_SPEED,
                                       WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION, bobPhase,
                                       spriteScreenHeight);
-            float drawBottom    = GameMath.spriteDrawBottomCentered(
-                                      WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight)
-                                  + bobOffset
-                                  - PICKUP_ITEM_GROUND_OFFSET_FRACTION * spriteScreenHeight;
+            float visualFloorY  = WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight / 2f;
+            float weaponCenterY = visualFloorY + WEAPON_PICKUP_CENTER_HEIGHT_FRACTION * fullWallLineHeight;
+            float drawBottom    = weaponCenterY - spriteScreenHeight / 2f + bobOffset;
             float drawTop       = drawBottom + spriteScreenHeight;
             float clampedBottom = Math.max(0f, drawBottom);
             float clampedTop    = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, drawTop);
@@ -408,9 +407,7 @@ public class PropRenderer implements Renderable, Disposable {
                 int   glowLeft        = (int)(screenCenterColumn - glowHeight / 2f);
                 int   glowRight       = (int)(screenCenterColumn + glowHeight / 2f);
                 int   glowColumnSpan  = glowRight - glowLeft;
-                float glowDrawBottom  = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, glowHeight)
-                                        + bobOffset
-                                        - PICKUP_ITEM_GROUND_OFFSET_FRACTION * glowHeight;
+                float glowDrawBottom  = weaponCenterY - glowHeight / 2f + bobOffset;
                 float glowDrawTop     = glowDrawBottom + glowHeight;
                 float glowClampBottom = Math.max(0f, glowDrawBottom);
                 float glowClampTop    = Math.min(WALL_PROJECTION_SCREEN_HEIGHT, glowDrawTop);
@@ -508,7 +505,7 @@ public class PropRenderer implements Renderable, Disposable {
             } else if (Level.isStairsDown(prop.propChar)) {
                 drawBottom = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight);
             } else {
-                drawBottom = WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight;
+                drawBottom = WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight / 2f;
             }
             float drawTop       = drawBottom + spriteScreenHeight;
             float clampedBottom = Math.max(0f, drawBottom);

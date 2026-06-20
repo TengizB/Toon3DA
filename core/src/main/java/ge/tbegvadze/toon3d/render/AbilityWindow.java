@@ -45,6 +45,7 @@ final class AbilityWindow implements Disposable {
     private static final float BADGE_X    = EXIT_X - BADGE_W - 8f;
     private static final float BADGE_Y    = HEADER_Y + (HEADER_H - BADGE_H) / 2f;
     private static final float DIVIDER_Y  = ItemConstants.INV_ABILITY_WIN_DIVIDER_Y;
+    private static final float FONT_SCALE = ItemConstants.INV_ABILITY_WIN_FONT_SCALE;
 
     // -------------------------------------------------------------------------
     // Palette — blue-white accent distinguishes from amber ItemWindow
@@ -195,7 +196,7 @@ final class AbilityWindow implements Disposable {
 
         // Type badge text (PASSIVE / ACTIVE)
         boolean isPassive = displayedAbility.trigger == WeaponAbility.Trigger.PASSIVE;
-        font.getData().setScale(0.65f);
+        font.getData().setScale(0.65f * FONT_SCALE);
         font.setColor(isPassive ? BADGE_PASSIVE_FG : BADGE_ACTIVE_FG);
         glyphLayout.setText(font, displayedAbility.getTypeLabel());
         font.draw(spriteBatch, displayedAbility.getTypeLabel(),
@@ -214,7 +215,7 @@ final class AbilityWindow implements Disposable {
         float descX = WIN_X + PAD;
         float descY = HEADER_Y - 10f;
         float descW = WIN_W - 2f * PAD;
-        font.getData().setScale(0.80f);
+        font.getData().setScale(0.80f * FONT_SCALE);
         font.setColor(OFF_WHITE);
         font.draw(spriteBatch, displayedAbility.fullDescription,
                   descX, descY, descW, Align.left, true);
@@ -223,7 +224,7 @@ final class AbilityWindow implements Disposable {
         // AFFECTS block
         String[] affects = displayedAbility.affectsLines;
         if (affects != null && affects.length > 0) {
-            font.getData().setScale(0.75f);
+            font.getData().setScale(0.75f * FONT_SCALE);
             font.setColor(TEXT_DIM_AMBER);
             font.draw(spriteBatch, "AFFECTS:", WIN_X + PAD, DIVIDER_Y - 4f);
 
