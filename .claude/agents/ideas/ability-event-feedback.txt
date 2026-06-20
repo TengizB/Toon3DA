@@ -1,0 +1,423 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual / UI
+TITLE: Ability Event Feedback System
+CREATED: 2026-06-20
+---
+
+================================================================================
+ABILITY EVENT FEEDBACK SYSTEM
+================================================================================
+
+OVERVIEW
+--------------------------------------------------------------------------------
+Weapon ability procs currently surface as a single line of utilitarian floating
+text. The player reads "CRIT!" but does not FEEL it — there is no escalation, no
+distinction between a routine on-hit proc and a screen-clearing kill cascade.
+This system layers a tiered, color-coded, motion-distinct feedback grammar on top
+of the existing EventTextSystem + ImpactEffectSystem so that every WeaponAbility
+trigger category (ON_HIT, ON_CRIT, ON_KILL, PASSIVE, ON_RELOAD) reads instantly
+and lands with weight appropriate to its rarity and impact. It is purely cosmetic
+— no new game logic, no new tiles, no allocations in render().
+
+This belongs here because the Doom RPG pillar is "the player always understands
+what just happened and why." Right now a STATIC_DISCHARGE chain kill and a routine
+STAGGER proc look identical. They should feel worlds apart.
+
+
+GAMEPLAY LOOP
+--------------------------------------------------------------------------------
+This system reacts to events the combat code ALREADY produces. It does not change
+when abilities fire — only how they are announced. The flow:
+
+1. EnemyManager / Weapon resolves an attack and an ability procs (e.g.
+   CRITICAL_STRIKE rolls true, REND applies a bleed, STATIC_DISCHARGE fires on a
+   kill).
+2. The resolving code calls a single new entry point:
+       abilityFeedback.announce(WeaponAbility ability, float worldX, float worldY,
+                                float heightMultiplier, int magnitude)
+   (magnitude = damage dealt / hp healed / armor gained, or 0 if not applicable.)
+3. announce() looks up the ability's FEEDBACK TIER (see tables below) and dispatches
+   to the correct sub-effect:
+       - Banner text (extended EventTextSystem) with the ability's color + tier.
+       - Optional world-anchored accent (extended ImpactEffectSystem): ring pulse,
+         color-shifted particles, screen-edge band, or chromatic flash.
+4. For DoT abilities (REND, INCENDIARY) announce() also registers the enemy in a
+   persistent "affliction marker" list keyed by enemy reference, so a small icon
+   floats over that enemy on EVERY turn until the DoT expires (not just on apply).
+5. Each turn, EnemyManager calls abilityFeedback.tickAfflictions() which spawns the
+   per-turn bleed/burn tick visuals (drip particles + small damage number) for every
+   afflicted enemy still alive.
+6. update(deltaTime) ages all banners/accents/markers; render(camera) draws them.
+   When an enemy dies or the DoT expires, its marker is cleared.
+
+No player input is involved. Feedback duration is tuned to TURN cadence (readable
+between two player actions), never to wall-clock cooldowns.
+
+
+PLAYER EXPERIENCE
+--------------------------------------------------------------------------------
+The decision this creates is a READING decision, then a TACTICAL one. Within a
+single glance the player should answer: "Did something special just happen, how
+big was it, and should I change my plan?"
+
+Target feelings per category:
+
+  ON_HIT procs (CRITICAL_STRIKE, STAGGER_ROUNDS, REND, INCENDIARY, RESONANT_ROUNDS,
+  EXECUTIONER) — "a beat landed." Quick, crunchy, punctuation on the hit. Should
+  never overwhelm the base hit feedback; it ENRICHES it.
+
+  ON_CRIT (the crit itself, VAMPIRIC_CRIT, HELLFIRE_NOVA) — "JACKPOT." The single
+  most dramatic moment in normal play. Crits get the biggest text, a white-hot
+  flash, a punch-in scale pop, and a brighter particle burst. The player should
+  feel a small dopamine spike every time.
+
+  ON_KILL procs (STATIC_DISCHARGE, ADRENAL_SURGE, SECOND_WIND trigger, SCAVENGER,
+  HEMORRHAGE_HARVEST, SOULFORGE) — "CASCADE." A kill is already loud (death burst
+  + flash). Kill-procs ride on top in a deliberate SECOND beat ~0.15s later so the
+  player perceives "kill... THEN bonus" rather than one muddy blob. Multiple kill
+  procs stack into a rising chord.
+
+  PASSIVE confirmations (ARMOR_PIERCE, OVERPENETRATION, POINT_BLANK, RHYTHM) —
+  "I'm getting value." Subtle, non-intrusive, often a tiny tag appended to the
+  damage number rather than a full banner, so they confirm without nagging.
+
+  STAGGER / SLOW (STAGGER_ROUNDS, KINETIC_SLAM stun) — "CRUNCH." A heavy, blunt
+  impact: brief freeze-frame feel via a short shake bump + a chunky desaturated
+  banner + a stagger ring on the enemy.
+
+
+FEEDBACK TIERS
+--------------------------------------------------------------------------------
+Every WeaponAbility maps to one of four tiers. Tier controls text size, animation,
+and which accents fire. This keeps the system data-driven — adding an ability is
+one table entry, not new code.
+
+  TIER 1 — TAG (passive value confirms)
+    Visual: no banner. A short suffix appended to the existing damage number, e.g.
+    "14 PIERCE", "22 PEN". Same color as the number, slightly dimmer.
+    Motion: rides the damage number's existing rise/fade.
+    Used by: ARMOR_PIERCE, OVERPENETRATION, POINT_BLANK, MARKSMANS_PATIENCE,
+    OPENING_SALVO, RHYTHM, QUICK_HANDS(n/a-no hit), EXTENDED_MAG(n/a).
+
+  TIER 2 — PROC (routine on-hit beats)
+    Visual: small banner (font scale 1.6) at the proc band, ability color, with the
+    ability hudGlyph as a prefix bullet, e.g. "[S] STAGGER".
+    Motion: quick pop-in (scale 1.25 -> 1.0 over 0.08s) then standard rise/fade.
+    Optional world accent: small colored particle puff at the enemy.
+    Used by: STAGGER_ROUNDS, REND(apply), INCENDIARY(apply), EXECUTIONER,
+    RESONANT_ROUNDS, LIFESTEAL, KINETIC_SLAM, CLEAVE, BURST_FIRE.
+
+  TIER 3 — SLAM (crits, kill procs)
+    Visual: large banner (font scale 2.4), ability color, framed by a 1px
+    bracketed underline drawn with ShapeRenderer. Crit reads "CRITICAL  -47".
+    Motion: punch-in (scale 1.6 -> 1.0 over 0.12s with slight overshoot), holds,
+    then fades. Brief.
+    World accent: bright ring pulse + color-shifted particle burst + a short shake
+    bump. Crits additionally fire a white-hot full-screen flash (reuse killFlash
+    pipeline, white instead of red, lower alpha).
+    Used by: the crit event, STATIC_DISCHARGE, ADRENAL_SURGE, HEMORRHAGE_HARVEST,
+    VAMPIRIC_CRIT, SECOND_WIND(threshold cross), SCAVENGER_ROUNDS, FIELD_MEDIC_ROUNDS.
+
+  TIER 4 — LEGENDARY (signature abilities)
+    Visual: huge gold banner (font scale 3.0) center-screen, all caps, e.g.
+    "HELLFIRE NOVA", with a sweeping color band drawn behind it.
+    Motion: slam-in with overshoot + a held beat (~0.35s) before fade; a horizontal
+    light-bar wipes left-to-right behind the text.
+    World accent: maximal — full ring pulse, dense gold particle burst, white flash,
+    strong shake bump.
+    Used by: SOULFORGE, JUDGMENT, HELLFIRE_NOVA, BERSERKERS_OATH.
+
+Tier is stored as a field on a small lookup (see TECHNICAL NOTES); it does NOT need
+to live on the WeaponAbility enum (keep cosmetic data out of the gameplay enum).
+
+
+COLOR PALETTE (per ability family / effect)
+--------------------------------------------------------------------------------
+Reuses the 5 existing EventTextSystem colors where possible; adds a small fixed
+palette for new accent categories. All as RGBA float literals (Y-up, ShapeRenderer
+and font both take Color).
+
+  Offensive / kinetic  (STAGGER, CLEAVE, KINETIC_SLAM, BURST)   ORANGE  (1.00, 0.55, 0.12)
+  Crit / weak-point    (CRITICAL_STRIKE, the crit event)        WHITE-HOT (1.00, 0.97, 0.80)
+  Bleed / Rend / Harvest                                        CRIMSON (0.85, 0.05, 0.10)
+  Fire / Incendiary / Hellfire                                  EMBER   (1.00, 0.40, 0.05)
+  Heal / sustain (LIFESTEAL, ADRENAL, VAMPIRIC, SECOND_WIND, MEDIC) GREEN (0.25, 1.00, 0.25)  [existing COLOR_GREEN]
+  Armor / shield (ARMOR_PIERCE, BULWARK, OVERPENETRATION)       STEEL-CYAN (0.40, 0.85, 1.00)
+  Economy (SCAVENGER, CREDIT_FANG, SALVAGE, SCHOLARS_EDGE)      AMBER   (0.95, 0.78, 0.20)
+  Static / shock (STATIC_DISCHARGE, RESONANT_ROUNDS)            ELECTRIC (0.55, 0.80, 1.00)
+  Legendary signatures                                          GOLD    (1.00, 0.69, 0.125) [existing COLOR_GOLD]
+
+Implementation note: rather than expand the EventTextSystem byte color enum to ~9
+values, store an explicit packed RGBA int (or float r,g,b) per banner slot. This
+keeps the palette open-ended and lets accents and banners share one source of color.
+
+
+SCREEN PLACEMENT
+--------------------------------------------------------------------------------
+The 1280x720 layout with left HUD (0-420), clear center gap (420-860), right HUD
+(860-1280), and HUD_HEIGHT=130 at the bottom drives placement. Thumbs sit at the
+bottom corners (touch cluster), so nothing important goes low-center-bottom.
+
+  PROC BAND (Tier 2 banners): horizontal strip centered at X=640, anchored around
+    Y = 470 (upper-mid, above weapon sprite, below crosshair). Stacks UPWARD like
+    the existing EventTextSystem stack. This is the "punctuation" lane.
+
+  SLAM BANNER (Tier 3): center X=640, Y = 540 (above proc band so a crit reads
+    over its own proc text). Larger; only one or two on screen at once.
+
+  LEGENDARY BANNER (Tier 4): dead center X=640, Y = 400. Owns the screen briefly.
+    Suppresses/co-exists-above lower tiers for its hold duration.
+
+  DAMAGE NUMBER TAGS (Tier 1): world-anchored at the enemy, via the existing
+    ImpactEffectSystem damage-number projection. The suffix is appended in the
+    renderer; no new placement logic.
+
+  AFFLICTION MARKERS (DoT icons): world-anchored, drawn just above each afflicted
+    enemy's head using the same world->screen projection as damage numbers. A small
+    glyph ("~" bleed drop / fire tick) pulses each turn.
+
+  WORLD ACCENTS (ring pulses, particle bursts): world-anchored at the enemy, reuse
+    ImpactEffectSystem projection + burst/particle pools.
+
+  FLASHES (crit white flash, legendary flash): full-screen edge overlay, reuse the
+    HitVignetteRenderer / killFlash overlay pipeline with a different tint.
+
+Mobile readability: banners never render below Y=300 (keeps them clear of the thumb
+cluster and weapon sprite). Minimum on-phone text height after the 1.6 scale is
+comfortably thumb-distance readable; do not go below scale 1.4 for any banner.
+
+
+PHASING (build order — most impact, least work first)
+--------------------------------------------------------------------------------
+PHASE 1 — TIERED BANNERS + CRIT DRAMA  (highest impact / lowest cost)
+  Goal: make crits feel like jackpots and give every proc a distinct, color-coded,
+  tier-sized banner. Pure extension of EventTextSystem + EventTextRenderer.
+  Work:
+    - Add per-slot packed color + tier byte to EventTextSystem (parallel arrays).
+    - Add pop-in / punch-in scale animation in EventTextRenderer keyed by tier
+      (scale curve as a function of normalized age; zero alloc).
+    - Add the AbilityFeedback lookup table (ability -> tier + color).
+    - announce() routes ON_HIT/ON_CRIT/ON_KILL banners.
+    - Crit white flash: reuse killFlash with a white tint (add CRIT_FLASH_* consts).
+  Deliverable: visually distinct CRIT (Tier 3 punch + white flash) vs STAGGER
+  (Tier 2 orange pop) vs a legendary gold slam — with NO changes to ImpactEffect
+  pools. This alone solves ~70% of the "doesn't feel visceral" problem.
+
+PHASE 2 — WORLD ACCENTS + KILL CASCADE  (visceral layer)
+  Goal: anchor procs to the enemy in the 3D view and give kill-procs the delayed
+  "cascade" second beat.
+  Work:
+    - Extend ImpactEffectSystem with a colored ring-pulse pool (reuse RING_COS/SIN)
+      and allow particle bursts to take an explicit RGB (already half-supported via
+      the isKill color branch — generalize to an (r,g,b) param).
+    - Kill-proc beat delay: announce() for ON_KILL tier-3 schedules the banner +
+      accent ~0.15s after the kill burst (small pending-event queue, fixed size).
+    - Stagger crunch: short extra shake bump + a stagger ring on STAGGER_ROUNDS /
+      KINETIC_SLAM.
+    - Tier 1 damage-number suffix tags for passives.
+
+PHASE 3 — DOT AFFLICTION MARKERS  (between-turn persistence)
+  Goal: show burning/bleeding enemies every turn, not just on apply.
+  Work:
+    - AfflictionMarkerSystem: fixed-size list keyed by enemy index, stores type
+      (bleed/burn), remaining turns, and the enemy's current world pos (refreshed
+      each frame from EnemyManager).
+    - tickAfflictions() each turn: spawn drip/ember particles + small per-turn DoT
+      damage number at each afflicted enemy.
+    - Per-frame: draw a small pulsing glyph above each afflicted enemy.
+    - Clear on enemy death or DoT expiry. HEMORRHAGE_HARVEST / RESONANT_ROUNDS read
+      the same marker list to know a target is bleeding (cosmetic only — gameplay
+      keeps its own authoritative DoT state; this list is a render mirror).
+
+
+TECHNICAL NOTES (implementation)
+--------------------------------------------------------------------------------
+Affected / new classes (package ge.tbegvadze.toon3d.render unless noted):
+
+  EventTextSystem.java (extend)
+    - Add parallel arrays: float[] colorR/G/B, byte[] tier, float[] bannerWorldX/Y
+      (worldX/Y only used for world-anchored variants; banners use NaN to mean
+      "screen-space center"). Keep existing byte color path for backward compat.
+    - New spawn overload:
+        spawnBanner(String text, float r, float g, float b, byte tier)
+    - Keep zero-alloc: callers pass interned/literal strings or the existing
+      DAMAGE_STRINGS cache. For "CRITICAL -47" build a small pre-baked crit string
+      cache the same way DAMAGE_STRINGS is built, or append via a reusable
+      StringBuilder that lives on the renderer (NOT in render loop hot path — build
+      at spawn time on the sim thread).
+
+  EventTextRenderer.java (extend)
+    - Per-tier font scale: read tier, setScale before draw, restore after. (Font
+      scale change is cheap; group draws by tier to minimize setScale churn, or
+      just accept a few setScale calls — pool is tiny.)
+    - Pop/punch animation: scaleFactor = 1 + overshoot * popCurve(age). popCurve is
+      a precomputed ease that spikes near age 0 then settles to 1; implement as a
+      branch on normalized age (no allocation). Tier 3/4 use larger overshoot.
+    - Tier 3/4 underline / color band: draw with a ShapeRenderer (filled rect)
+      BEFORE the batch.begin() text pass, or use a second pass. Keep one persistent
+      ShapeRenderer owned by the renderer; dispose it.
+    - GlyphLayout already present for centering — reuse layout.width.
+
+  AbilityFeedback.java (NEW, render package) — the facade.
+    - Holds references to EventTextSystem, ImpactEffectSystem, and (Phase 3)
+      AfflictionMarkerSystem.
+    - Static lookup: a final byte[] tierByAbility and float[][] colorByAbility,
+      both indexed by WeaponAbility.ordinal(). Built once in a static block.
+      DO NOT put this table on the WeaponAbility enum — keep cosmetic data in render.
+    - public void announce(WeaponAbility ability, float worldX, float worldY,
+                           float heightMultiplier, int magnitude)
+    - public void announceCrit(float worldX, float worldY, float heightMultiplier,
+                               int damage)  // the crit event itself (not an ability)
+    - public void tickAfflictions()  // Phase 3
+    - public void update(float deltaTime), no GPU resources (delegates to systems).
+
+  ImpactEffectSystem.java (extend, Phase 2)
+    - Generalize spawnHitParticles(...) to take (r,g,b) instead of the boolean
+      isKill color branch (keep an overload for existing callers).
+    - Add a ring-pulse pool mirroring the death-burst pool but with a per-pulse
+      color; reuse static RING_COS / RING_SIN. Expanding colored ring, alpha fades.
+    - Add CRIT_FLASH (white) sharing the killFlash math; add getCritFlashAlpha().
+    - Add a tiny pending-event ring buffer (fixed size, e.g. 8) for the kill-proc
+      delayed second beat: {ability ordinal, worldX, worldY, heightMult, magnitude,
+      delayRemaining}. Drained in update(); zero alloc.
+
+  AfflictionMarkerSystem.java (NEW, render package, Phase 3)
+    - Fixed arrays keyed by enemy slot index (parallels EnemyManager's enemy array):
+      byte[] afflictionType, int[] turnsRemaining, plus live worldX/Y refreshed from
+      EnemyManager each frame. No per-enemy object allocation.
+
+Constants — add to EffectConstants.java (NOT WeaponConstants — these are cosmetic):
+    ABILITY_BANNER_PROC_SCALE        = 1.6f
+    ABILITY_BANNER_SLAM_SCALE        = 2.4f
+    ABILITY_BANNER_LEGENDARY_SCALE   = 3.0f
+    ABILITY_BANNER_PROC_ANCHOR_Y     = 470f
+    ABILITY_BANNER_SLAM_ANCHOR_Y     = 540f
+    ABILITY_BANNER_LEGENDARY_ANCHOR_Y= 400f
+    ABILITY_BANNER_POP_DURATION_SEC  = 0.08f
+    ABILITY_BANNER_PUNCH_DURATION_SEC= 0.12f
+    ABILITY_BANNER_PUNCH_OVERSHOOT   = 0.6f   // 1.6x start scale for Tier 3
+    ABILITY_BANNER_LEGENDARY_HOLD_SEC= 0.35f
+    ABILITY_BANNER_MIN_Y             = 300f   // never draw banners below this
+    CRIT_FLASH_DURATION_SECONDS      = 0.18f  // shorter than KILL_FLASH
+    CRIT_FLASH_MAX_ALPHA             = 0.35f  // white, subtle, not blinding
+    KILL_PROC_CASCADE_DELAY_SECONDS  = 0.15f
+    RING_PULSE_LIFE_SECONDS          = 0.30f
+    RING_PULSE_MAX_RADIUS            = 60f
+    AFFLICTION_TICK_PARTICLE_COUNT   = 4
+    AFFLICTION_MARKER_PULSE_HZ       = 2.0f
+
+GameMath additions (with required derivation comment blocks):
+    bannerPopScale(normalizedAge, overshoot)   // pop-in scale curve, returns >=1
+    ringPulseRadius(normalizedAge, maxRadius)   // ease-out expansion
+    ringPulseAlpha(normalizedAge)               // 1 -> 0 fade
+
+Render order: AbilityFeedback world accents draw with ImpactEffectRenderer (step 4
+band, before weapon sprite). Banners draw in EventTextRenderer's existing slot in
+render order (after weapon, before/around HUD) so they sit above the weapon sprite.
+Crit/legendary flashes draw with the existing overlay pass (HitVignette / killFlash
+slot). Affliction markers draw with EnemyRenderer or just after it (they are world-
+anchored over enemies) — easiest is a dedicated pass right after EnemyRenderer.
+
+Zero-allocation discipline: all pools fixed-size and pre-allocated; strings interned
+or pre-baked; no new Color objects in render (reuse a temporaryColor scratch like
+EventTextRenderer already does); ShapeRenderer.begin/end batched per pass.
+
+
+VISUAL DESIGN (specifics)
+--------------------------------------------------------------------------------
+  CRIT (Tier 3): banner "CRITICAL  -47" in WHITE-HOT, punch-in to 1.0 with 1.6x
+    overshoot, 1px white bracket underline drawn under the text. Simultaneous:
+    white full-screen flash (alpha 0.35, 0.18s), a white-hot ring pulse on the
+    enemy, and a brighter-than-normal particle burst (existing kill-debris colors
+    pushed toward white). Reads as a camera-punch jackpot.
+
+  STAGGER_ROUNDS (Tier 2): banner "[S] STAGGER" in ORANGE, quick pop. World: a
+    blunt orange ring pulse on the enemy + an extra short shake bump (magnitude ~3,
+    0.06s) for the "crunch." Optionally desaturate the enemy sprite tint for one
+    frame via EnemyRenderer (stretch goal).
+
+  REND apply (Tier 2): banner "[R] BLEED" CRIMSON. Then (Phase 3) a crimson drip
+    glyph pulses over the enemy every turn; each turn a small crimson "-3" damage
+    number drips down from the enemy.
+
+  INCENDIARY apply (Tier 2): banner "[I] BURN" EMBER. Phase 3: ember tick particles
+    rise off the enemy each turn + small ember DoT numbers.
+
+  STATIC_DISCHARGE (Tier 3 kill cascade): the kill resolves (death burst + flash),
+    then ~0.15s later the ELECTRIC ring expands across adjacent tiles with a banner
+    "[~] DISCHARGE" + electric-blue particle arc. The delay makes it read as a
+    chained second explosion, not part of the kill.
+
+  ADRENAL_SURGE / SECOND_WIND / VAMPIRIC_CRIT (heal procs, Tier 3/2): GREEN banner
+    "+8 ADRENALINE" with an upward green particle wisp toward the HUD HP bar (a few
+    green particles that drift left-down toward the left HUD panel to imply "this
+    fed your health"). Reinforces the value visually.
+
+  ARMOR_PIERCE / OVERPENETRATION (Tier 1 tags): the world damage number reads
+    "22 PEN" or "22 PIERCE" in STEEL-CYAN-tinted suffix. No banner. For
+    OVERPENETRATION on a multi-enemy line, each pierced enemy shows the tag so the
+    player sees the value of hitting three in a row.
+
+  LEGENDARY (Tier 4): full-name gold banner with a left-to-right light-bar wipe
+    behind it, slam-in, ~0.35s hold, maximal accents. Rare enough to always feel
+    like an event.
+
+
+BALANCE NOTES (tuning — placeholders flagged)
+--------------------------------------------------------------------------------
+All durations below are PLACEHOLDER and must be felt-tested on a phone.
+  - Banner lifetimes should match EVENT_TEXT_LIFE_SECONDS (currently 2s) so reading
+    time spans the gap between turns. Tier 4 may extend hold but total life stays ~2s.
+  - CRIT_FLASH_MAX_ALPHA 0.35 is intentionally below KILL_FLASH so frequent crits
+    don't strobe. If crit chance builds get high (crit-stacking), consider scaling
+    flash alpha DOWN with recent crit frequency to avoid fatigue (PLACEHOLDER idea).
+  - Shake bumps from procs must be SMALL (mag <= 3) and short (<=0.06s) — the base
+    hit/kill shake already exists; proc bumps only add seasoning, never nausea.
+  - Kill cascade delay 0.15s: long enough to separate beats, short enough to feel
+    causally linked. Below ~0.10s it muddies; above ~0.25s it feels laggy.
+  - Affliction tick visuals must be cheap: <=4 particles + 1 number per afflicted
+    enemy per turn. With many burning enemies this could spike particle pool usage —
+    cap concurrent affliction ticks (e.g. only the nearest 6 afflicted enemies emit
+    visuals; the rest still tick damage silently). PLACEHOLDER cap = 6.
+  - Tier 1 suffix tags: only show for the FIRST hit of a pierce line if clutter is a
+    problem; revisit after Phase 2 playtest.
+
+
+INTERACTIONS
+--------------------------------------------------------------------------------
+  1. ImpactEffectSystem: shares the world->screen projection, particle pool, shake,
+     and flash pipelines. AbilityFeedback must ESCALATE shake (reuse triggerShake's
+     "only escalate" rule) so a proc bump never stomps a kill shake.
+  2. EventTextSystem stacking: ability banners share the upward stack logic with
+     existing turn/pickup/damage texts. Tier ordering must ensure a CRIT slam draws
+     above its own proc banner (assign higher anchor Y, not just stack order).
+  3. HitVignetteRenderer: crit/legendary white flashes use the same overlay pass.
+     Ensure a player-hit red vignette and a crit white flash in the same frame
+     blend rather than fight (draw red after white, or additively blend).
+  4. WeaponAbility enum: AbilityFeedback indexes by ordinal() and reads hudGlyph for
+     the banner bullet prefix. Adding a new ability requires one new row in the
+     tier/color tables; if omitted, default to Tier 2 + WHITE so nothing crashes.
+  5. EnemyManager (Phase 3): owns authoritative DoT state; AfflictionMarkerSystem is
+     a render-side mirror refreshed from it. HEMORRHAGE_HARVEST / RESONANT_ROUNDS
+     logic stays in gameplay; the marker list is for visuals only.
+  6. Touch cluster: ABILITY_BANNER_MIN_Y guarantees banners never render under the
+     thumb buttons, preserving readability mid-combat.
+
+
+OPEN QUESTIONS
+--------------------------------------------------------------------------------
+  - Should Tier 1 passive tags be opt-in via a settings toggle? Hardcore players may
+    want them; others may find "PEN" on every shot noisy. (Lean: on by default,
+    toggle later.)
+  - Audio is out of scope here, but each tier screams for a distinct SFX (proc tick,
+    crit chime, legendary stinger). Flag for a future audio-feedback design doc.
+  - For OVERPENETRATION hitting N enemies, do we want N separate damage numbers or a
+    single combined "x3" tag? (Lean: per-enemy numbers + one PEN banner.)
+  - Affliction marker glyphs: pure BitmapFont chars (cheap, current font has no
+    custom glyphs) vs tiny procedural ShapeRenderer icons. (Lean: font chars in
+    Phase 3; upgrade to icons only if readability suffers.)
+  - Should banner color come from the ability's family or from its EFFECT (e.g.
+    LIFESTEAL is universal but its effect is healing -> green)? This doc chooses
+    EFFECT-based color for clarity; confirm with playtest.
+  - Does the crit white flash interfere with low-brightness phone screens outdoors?
+    May need a brightness-aware alpha clamp.
