@@ -4,6 +4,7 @@ import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.progression.KillXpListener;
+import ge.tbegvadze.toon3d.render.AbilityFeedback;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
 import ge.tbegvadze.toon3d.status.StatusType;
@@ -87,6 +88,12 @@ public final class AbilityResolver {
     private StatusEffectController statusEffectController = null;
 
     /**
+     * Injected by World so ability proc events route to tiered banners and ring pulses.
+     * Null until World calls setAbilityFeedback().
+     */
+    private AbilityFeedback abilityFeedback = null;
+
+    /**
      * Re-entrancy guard for CLEAVE: prevents the recursive onHit() calls for flanking
      * targets from re-triggering another Cleave sweep (infinite recursion prevention).
      */
@@ -132,6 +139,14 @@ public final class AbilityResolver {
         this.statusEffectController = controller;
     }
 
+    /**
+     * Injects the ability feedback facade so proc events route to tiered banners and
+     * colored ring pulses.  Called once by World after both systems are constructed.
+     */
+    public void setAbilityFeedback(AbilityFeedback feedback) {
+        this.abilityFeedback = feedback;
+    }
+
     // ── Entry points called from Weapon.fire() / Weapon.onTick() ─────────────
 
     /**
@@ -148,6 +163,9 @@ public final class AbilityResolver {
             // burstCount − 1: the base shot fires unconditionally, only extras are queued.
             int extraShots = Math.max(0, burstCount - 1);
             weapon.setPendingBurstExtra(extraShots);
+            if (extraShots > 0 && abilityFeedback != null) {
+                abilityFeedback.announce(WeaponAbility.BURST_FIRE, -1, -1, 0f);
+            }
         }
 
         // Build the combined fire-cycle multiplier from passive / pending buff sources.
@@ -194,8 +212,8 @@ public final class AbilityResolver {
         if (weapon.hasAbility(WeaponAbility.JUDGMENT) && !weapon.isMelee()) {
             if (weapon.consumeJudgment()) {
                 weapon.setJudgmentActive(true);
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor("JUDGMENT!", EventTextSystem.COLOR_GOLD);
+                if (abilityFeedback != null) {
+                    abilityFeedback.announce(WeaponAbility.JUDGMENT, -1, -1, 0f);
                 }
             }
         }
@@ -235,8 +253,9 @@ public final class AbilityResolver {
                 if (critBonus > 0) {
                     enemyManager.applyDamageTo(hitEnemy, critBonus);
                 }
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor("CRIT!", EventTextSystem.COLOR_RED);
+                if (abilityFeedback != null) {
+                    abilityFeedback.announceCrit(hitEnemy.tileColumn, hitEnemy.tileRow,
+                            hitEnemy.type.heightMultiplier(), damageDealt + critBonus);
                 }
                 wasCrit = true;
             }
@@ -252,8 +271,9 @@ public final class AbilityResolver {
                 if (executionerDamage > 0) {
                     enemyManager.applyDamageTo(hitEnemy, executionerDamage);
                 }
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor("EXECUTE!", EventTextSystem.COLOR_RED);
+                if (abilityFeedback != null) {
+                    abilityFeedback.announce(WeaponAbility.EXECUTIONER,
+                            hitEnemy.tileColumn, hitEnemy.tileRow, hitEnemy.type.heightMultiplier());
                 }
             }
         }
@@ -265,21 +285,22 @@ public final class AbilityResolver {
             if (abilityRandom.nextFloat() <= staggerChance) {
                 statusEffectController.apply(hitEnemy, StatusType.STUNNED,
                         GameBalance.STAGGER_STUN_DURATION, 0, null);
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor("STAGGER!", EventTextSystem.COLOR_WHITE);
+                if (abilityFeedback != null) {
+                    abilityFeedback.announce(WeaponAbility.STAGGER_ROUNDS,
+                            hitEnemy.tileColumn, hitEnemy.tileRow, hitEnemy.type.heightMultiplier());
                 }
             }
         }
 
         // ── LIFESTEAL ──────────────────────────────────────────────────────
         // Heals player for a fraction of the base damage dealt this hit.
-        // Only shows event text when the heal is large enough to matter.
         if (weapon.hasAbility(WeaponAbility.LIFESTEAL) && player != null) {
             float stealFraction = weapon.abilityMagnitude(WeaponAbility.LIFESTEAL);
             int   healAmount    = Math.max(1, Math.round(damageDealt * stealFraction));
             player.applyHealing(healAmount);
-            if (healAmount >= GameBalance.LIFESTEAL_TEXT_THRESHOLD && eventTextSystem != null) {
-                eventTextSystem.spawnWithColor("+" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
+            if (healAmount >= GameBalance.LIFESTEAL_TEXT_THRESHOLD && abilityFeedback != null) {
+                abilityFeedback.announce(WeaponAbility.LIFESTEAL,
+                        hitEnemy.tileColumn, hitEnemy.tileRow, hitEnemy.type.heightMultiplier());
             }
         }
 
@@ -296,8 +317,9 @@ public final class AbilityResolver {
                 if (!pushed && GameBalance.KINETIC_SLAM_WALL_BONUS_DAMAGE > 0) {
                     enemyManager.applyDamageTo(hitEnemyObject, GameBalance.KINETIC_SLAM_WALL_BONUS_DAMAGE);
                 }
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor("SLAM!", EventTextSystem.COLOR_WHITE);
+                if (abilityFeedback != null) {
+                    abilityFeedback.announce(WeaponAbility.KINETIC_SLAM,
+                            hitEnemy.tileColumn, hitEnemy.tileRow, hitEnemy.type.heightMultiplier());
                 }
             }
         }
@@ -341,8 +363,9 @@ public final class AbilityResolver {
             } finally {
                 cleaveInProgress = false;
             }
-            if (cleaved && eventTextSystem != null) {
-                eventTextSystem.spawnWithColor("CLEAVE!", EventTextSystem.COLOR_WHITE);
+            if (cleaved && abilityFeedback != null) {
+                abilityFeedback.announce(WeaponAbility.CLEAVE,
+                        hitEnemy.tileColumn, hitEnemy.tileRow, hitEnemy.type.heightMultiplier());
             }
         }
 
@@ -352,8 +375,9 @@ public final class AbilityResolver {
             int bleedDamage = Math.max(1, Math.round(weapon.abilityMagnitude(WeaponAbility.REND)));
             statusEffectController.apply(hitEnemy, StatusType.BLEED,
                     GameBalance.REND_DURATION_TURNS, bleedDamage, null);
-            if (eventTextSystem != null) {
-                eventTextSystem.spawnWithColor("BLEED!", EventTextSystem.COLOR_RED);
+            if (abilityFeedback != null) {
+                abilityFeedback.announce(WeaponAbility.REND,
+                        hitEnemy.tileColumn, hitEnemy.tileRow, hitEnemy.type.heightMultiplier());
             }
         }
 
@@ -363,8 +387,9 @@ public final class AbilityResolver {
             int burnDamage = Math.max(1, Math.round(weapon.abilityMagnitude(WeaponAbility.INCENDIARY)));
             statusEffectController.apply(hitEnemy, StatusType.BURNING,
                     GameBalance.INCENDIARY_BURN_DURATION, burnDamage, null);
-            if (eventTextSystem != null) {
-                eventTextSystem.spawnWithColor("BURN!", EventTextSystem.COLOR_RED);
+            if (abilityFeedback != null) {
+                abilityFeedback.announce(WeaponAbility.INCENDIARY,
+                        hitEnemy.tileColumn, hitEnemy.tileRow, hitEnemy.type.heightMultiplier());
             }
         }
 
@@ -420,8 +445,9 @@ public final class AbilityResolver {
             if (bonusDamage > 0) {
                 enemyManager.applyDamageTo(hitEnemy, bonusDamage);
             }
-            if (eventTextSystem != null) {
-                eventTextSystem.spawnWithColor("OPENING!", EventTextSystem.COLOR_WHITE);
+            if (abilityFeedback != null) {
+                abilityFeedback.announce(WeaponAbility.OPENING_SALVO,
+                        hitEnemy.tileColumn, hitEnemy.tileRow, hitEnemy.type.heightMultiplier());
             }
         }
 
@@ -431,6 +457,10 @@ public final class AbilityResolver {
             float pct          = weapon.abilityMagnitude(WeaponAbility.RESONANT_ROUNDS);
             int resonantDamage = Math.max(1, Math.round(hitEnemy.maxHealth * pct));
             enemyManager.applyDamageTo(hitEnemy, resonantDamage);
+            if (abilityFeedback != null) {
+                abilityFeedback.announce(WeaponAbility.RESONANT_ROUNDS,
+                        hitEnemy.tileColumn, hitEnemy.tileRow, hitEnemy.type.heightMultiplier());
+            }
         }
 
         return wasCrit;
@@ -446,13 +476,16 @@ public final class AbilityResolver {
      * @param critDamage     total crit damage delivered (base + bonus)
      */
     public void onCrit(Weapon weapon, Object hitEnemyObject, int critDamage) {
+        Enemy critEnemy = (hitEnemyObject instanceof Enemy) ? (Enemy) hitEnemyObject : null;
+
         // ── VAMPIRIC_CRIT ─────────────────────────────────────────────────
         if (weapon.hasAbility(WeaponAbility.VAMPIRIC_CRIT) && player != null) {
             int healAmount = Math.round(weapon.abilityMagnitude(WeaponAbility.VAMPIRIC_CRIT));
             if (healAmount > 0) {
                 player.applyHealing(healAmount);
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor("CRIT HEAL +" + healAmount, EventTextSystem.COLOR_GREEN);
+                if (abilityFeedback != null && critEnemy != null) {
+                    abilityFeedback.announce(WeaponAbility.VAMPIRIC_CRIT,
+                            critEnemy.tileColumn, critEnemy.tileRow, critEnemy.type.heightMultiplier());
                 }
             }
         }
@@ -461,16 +494,15 @@ public final class AbilityResolver {
         // On a crit, deal AoE damage to all enemies within a Chebyshev radius of the
         // crit target. Nova hits do NOT chain into further onCrit() calls to prevent
         // infinite recursion. novaDamage is clamped to at least 1 so it always has impact.
-        if (weapon.hasAbility(WeaponAbility.HELLFIRE_NOVA) && hitEnemyObject instanceof Enemy) {
-            Enemy hitEnemy      = (Enemy) hitEnemyObject;
-            int   novaDamage    = Math.max(1, Math.round(critDamage * GameBalance.HELLFIRE_NOVA_DAMAGE_FRACTION));
-            int   epicenterColumn = hitEnemy.tileColumn;
-            int   epicenterRow    = hitEnemy.tileRow;
+        if (weapon.hasAbility(WeaponAbility.HELLFIRE_NOVA) && critEnemy != null) {
+            int   novaDamage      = Math.max(1, Math.round(critDamage * GameBalance.HELLFIRE_NOVA_DAMAGE_FRACTION));
+            int   epicenterColumn = critEnemy.tileColumn;
+            int   epicenterRow    = critEnemy.tileRow;
             int   radius          = GameBalance.HELLFIRE_NOVA_RADIUS;
             boolean anyNovaHit    = false;
 
             for (Enemy candidate : enemyManager.getEnemies()) {
-                if (candidate == hitEnemy || !candidate.isAlive()) continue;
+                if (candidate == critEnemy || !candidate.isAlive()) continue;
                 int distanceColumn = Math.abs(candidate.tileColumn - epicenterColumn);
                 int distanceRow    = Math.abs(candidate.tileRow    - epicenterRow);
                 if (distanceColumn <= radius && distanceRow <= radius) {
@@ -478,8 +510,9 @@ public final class AbilityResolver {
                     anyNovaHit = true;
                 }
             }
-            if (anyNovaHit && eventTextSystem != null) {
-                eventTextSystem.spawnWithColor("NOVA!", EventTextSystem.COLOR_GOLD);
+            if (anyNovaHit && abilityFeedback != null) {
+                abilityFeedback.announce(WeaponAbility.HELLFIRE_NOVA,
+                        critEnemy.tileColumn, critEnemy.tileRow, critEnemy.type.heightMultiplier());
             }
         }
     }
@@ -504,8 +537,11 @@ public final class AbilityResolver {
             int healAmount = Math.round(weapon.abilityMagnitude(WeaponAbility.HEMORRHAGE_HARVEST));
             if (healAmount > 0) {
                 player.applyHealing(healAmount);
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor("+" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
+                if (abilityFeedback != null && killedEnemyObject instanceof Enemy) {
+                    Enemy harvestTarget = (Enemy) killedEnemyObject;
+                    abilityFeedback.announce(WeaponAbility.HEMORRHAGE_HARVEST,
+                            harvestTarget.tileColumn, harvestTarget.tileRow,
+                            harvestTarget.type.heightMultiplier());
                 }
             }
         }
@@ -518,8 +554,11 @@ public final class AbilityResolver {
             float surgeChance = weapon.abilityMagnitude(WeaponAbility.ADRENAL_SURGE);
             if (abilityRandom.nextFloat() <= surgeChance) {
                 player.getPlayerStats().applyAdrenalSurge(GameBalance.ADRENAL_SURGE_DAMAGE_BONUS);
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor("SURGE!", EventTextSystem.COLOR_WHITE);
+                if (abilityFeedback != null && killedEnemyObject instanceof Enemy) {
+                    Enemy surgeTarget = (Enemy) killedEnemyObject;
+                    abilityFeedback.announce(WeaponAbility.ADRENAL_SURGE,
+                            surgeTarget.tileColumn, surgeTarget.tileRow,
+                            surgeTarget.type.heightMultiplier());
                 }
             }
         }
@@ -533,8 +572,10 @@ public final class AbilityResolver {
             if (dropChance >= 1.0f || abilityRandom.nextFloat() <= dropChance) {
                 enemyManager.overrideDropAt(killedEnemy.tileColumn, killedEnemy.tileRow,
                         GameBalance.SALVAGE_AMMO_DROP_CHAR);
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor("SALVAGE!", EventTextSystem.COLOR_GREEN);
+                if (abilityFeedback != null) {
+                    abilityFeedback.announce(WeaponAbility.SALVAGE_STRIKE,
+                            killedEnemy.tileColumn, killedEnemy.tileRow,
+                            killedEnemy.type.heightMultiplier());
                 }
             }
         }
@@ -549,8 +590,10 @@ public final class AbilityResolver {
             if (killXpListener != null) {
                 killXpListener.onEnemyKilledForXp(bonusXp);
             }
-            if (eventTextSystem != null) {
-                eventTextSystem.spawnWithColor("+" + bonusXp + "XP", EventTextSystem.COLOR_GREEN);
+            if (abilityFeedback != null) {
+                abilityFeedback.announce(WeaponAbility.SCHOLARS_EDGE,
+                        killedEnemy.tileColumn, killedEnemy.tileRow,
+                        killedEnemy.type.heightMultiplier());
             }
         }
 
@@ -565,8 +608,12 @@ public final class AbilityResolver {
             if (player != null && hpTick > 0) {
                 player.applyHealing(hpTick);
             }
-            if (stacks == GameBalance.BERSERKER_MAX_STACKS && eventTextSystem != null) {
-                eventTextSystem.spawnWithColor("BERSERK!", EventTextSystem.COLOR_RED);
+            if (stacks == GameBalance.BERSERKER_MAX_STACKS
+                    && abilityFeedback != null && killedEnemyObject instanceof Enemy) {
+                Enemy berserkerTarget = (Enemy) killedEnemyObject;
+                abilityFeedback.announce(WeaponAbility.BERSERKERS_OATH,
+                        berserkerTarget.tileColumn, berserkerTarget.tileRow,
+                        berserkerTarget.type.heightMultiplier());
             }
         }
 
@@ -581,8 +628,11 @@ public final class AbilityResolver {
                         ? GameBalance.SCAVENGER_REFUND_HIGH_LEVEL
                         : GameBalance.SCAVENGER_REFUND_BASE;
                 playerInventory.addAmmo(weapon.getAmmoType(), refundAmount);
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor("+" + refundAmount + " AMMO", EventTextSystem.COLOR_GREEN);
+                if (abilityFeedback != null && killedEnemyObject instanceof Enemy) {
+                    Enemy scavengerTarget = (Enemy) killedEnemyObject;
+                    abilityFeedback.announce(WeaponAbility.SCAVENGER_ROUNDS,
+                            scavengerTarget.tileColumn, scavengerTarget.tileRow,
+                            scavengerTarget.type.heightMultiplier());
                 }
             }
         }
@@ -597,8 +647,10 @@ public final class AbilityResolver {
             if (abilityRandom.nextFloat() <= dropChance) {
                 enemyManager.overrideDropAt(killedEnemy.tileColumn, killedEnemy.tileRow,
                         GameBalance.FIELD_MEDIC_DROP_CHAR);
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor("MEDKIT DROP!", EventTextSystem.COLOR_GREEN);
+                if (abilityFeedback != null) {
+                    abilityFeedback.announce(WeaponAbility.FIELD_MEDIC_ROUNDS,
+                            killedEnemy.tileColumn, killedEnemy.tileRow,
+                            killedEnemy.type.heightMultiplier());
                 }
             }
         }
@@ -611,8 +663,11 @@ public final class AbilityResolver {
             int creditsEarned = Math.round(weapon.abilityMagnitude(WeaponAbility.CREDIT_FANG));
             if (creditsEarned > 0) {
                 player.getPlayerStats().addCredits(creditsEarned);
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor("+" + creditsEarned + " CR", EventTextSystem.COLOR_GREEN);
+                if (abilityFeedback != null && killedEnemyObject instanceof Enemy) {
+                    Enemy creditTarget = (Enemy) killedEnemyObject;
+                    abilityFeedback.announce(WeaponAbility.CREDIT_FANG,
+                            creditTarget.tileColumn, creditTarget.tileRow,
+                            creditTarget.type.heightMultiplier());
                 }
             }
         }
@@ -645,8 +700,10 @@ public final class AbilityResolver {
             } finally {
                 resolvingDischarge = false;
             }
-            if (anyHit && eventTextSystem != null) {
-                eventTextSystem.spawnWithColor("DISCHARGE!", EventTextSystem.COLOR_WHITE);
+            if (anyHit && abilityFeedback != null) {
+                abilityFeedback.announce(WeaponAbility.STATIC_DISCHARGE,
+                        killedEnemy.tileColumn, killedEnemy.tileRow,
+                        killedEnemy.type.heightMultiplier());
             }
         }
 
@@ -657,9 +714,9 @@ public final class AbilityResolver {
         if (weapon.hasAbility(WeaponAbility.SOULFORGE)) {
             weapon.incrementSoulforgeKill();
             if (weapon.consumeSoulforgeAscend() && eventTextSystem != null) {
-                eventTextSystem.spawnWithColor(
+                eventTextSystem.spawnBanner(
                         weapon.getDisplayName() + " ASCENDS! Lv" + weapon.getWeaponLevel(),
-                        EventTextSystem.COLOR_GOLD);
+                        1.00f, 0.69f, 0.125f, EventTextSystem.TIER_LEGENDARY);
             }
         }
     }
@@ -678,8 +735,8 @@ public final class AbilityResolver {
             int armorGain = Math.round(weapon.abilityMagnitude(WeaponAbility.BULWARK_ROUNDS));
             if (armorGain > 0) {
                 player.getPlayerStats().addTempArmor(armorGain, GameBalance.BULWARK_ARMOR_DURATION);
-                if (eventTextSystem != null) {
-                    eventTextSystem.spawnWithColor("BULWARK +" + armorGain, EventTextSystem.COLOR_WHITE);
+                if (abilityFeedback != null) {
+                    abilityFeedback.announce(WeaponAbility.BULWARK_ROUNDS, -1, -1, 0f);
                 }
             }
         }

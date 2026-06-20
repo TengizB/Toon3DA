@@ -10,7 +10,8 @@ import ge.tbegvadze.toon3d.util.RenderConstants;
 
 /**
  * Simulation-only: owns all live impact-effect state and the pre-allocated
- * object pools for particles, death bursts, and floating damage numbers.
+ * object pools for particles, death bursts, floating damage numbers, colored
+ * ring pulses, and flash accumulators.
  * Carries no GPU resources — no dispose() needed.
  *
  * World creates this, wires it to EnemyManager as an ImpactEventListener,
@@ -40,6 +41,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
                                           * EffectConstants.HIT_PARTICLE_COUNT * 2; // ×2 for kill debris
     static final int MAX_DEATH_BURSTS  = EffectConstants.IMPACT_MAX_SIMULTANEOUS_HITS;
     static final int MAX_DAMAGE_NUMBERS = EffectConstants.IMPACT_MAX_SIMULTANEOUS_HITS;
+    static final int MAX_RING_PULSES   = EffectConstants.RING_PULSE_POOL_SIZE;
 
     // -------------------------------------------------------------------------
     // Screen shake — single accumulator
@@ -52,6 +54,9 @@ public final class ImpactEffectSystem implements ImpactEventListener {
 
     // Kill flash — single accumulator
     private float killFlashTimeRemaining = 0f;
+
+    // Crit flash — shorter, dimmer than kill flash
+    private float critFlashTimeRemaining = 0f;
 
     // -------------------------------------------------------------------------
     // Particle pool — hit sparks and death debris share this pool
@@ -89,6 +94,20 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     final int[]     numberAmount  = new int[MAX_DAMAGE_NUMBERS];
     final boolean[] numberIsKill  = new boolean[MAX_DAMAGE_NUMBERS];
     final boolean[] numberActive  = new boolean[MAX_DAMAGE_NUMBERS];
+
+    // -------------------------------------------------------------------------
+    // Colored ring pulse pool — world-anchored expanding ring on proc hits
+    // Screen position computed at spawn time from tile coords; not re-projected.
+    // -------------------------------------------------------------------------
+    final float[]   ringPulseScreenX   = new float[MAX_RING_PULSES];
+    final float[]   ringPulseScreenY   = new float[MAX_RING_PULSES];
+    final float[]   ringPulseAge       = new float[MAX_RING_PULSES];
+    final float[]   ringPulseLife      = new float[MAX_RING_PULSES];
+    final float[]   ringPulseMaxRadius = new float[MAX_RING_PULSES];
+    final float[]   ringPulseRed       = new float[MAX_RING_PULSES];
+    final float[]   ringPulseGreen     = new float[MAX_RING_PULSES];
+    final float[]   ringPulseBlue      = new float[MAX_RING_PULSES];
+    final boolean[] ringPulseActive    = new boolean[MAX_RING_PULSES];
 
     // -------------------------------------------------------------------------
     // Player state for world → screen projection (pushed by World each frame
@@ -153,15 +172,62 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     }
 
     // -------------------------------------------------------------------------
+    // Flash triggers — called from AbilityFeedback
+    // -------------------------------------------------------------------------
+
+    /** Triggers a crit edge flash (shorter and dimmer than kill flash). */
+    public void triggerCritFlash() {
+        critFlashTimeRemaining = EffectConstants.CRIT_FLASH_DURATION_SECONDS;
+    }
+
+    // -------------------------------------------------------------------------
+    // Ring pulse spawn — called from AbilityFeedback
+    // -------------------------------------------------------------------------
+
+    /**
+     * Spawns a colored ring-pulse accent at the given enemy tile.
+     * Screen position is projected from tile coords at spawn time using the
+     * current player state; callers must ensure setPlayerState() was called
+     * this frame before invoking this.
+     * If tileColumn or tileRow is negative, or the tile is behind the player,
+     * the spawn is silently skipped.
+     */
+    public void spawnColoredRingPulse(int tileColumn, int tileRow, float heightMultiplier,
+                                       float red, float green, float blue) {
+        if (tileColumn < 0 || tileRow < 0) return;
+
+        float worldX  = tileColumn * Constants.CELL_SIZE + Constants.CELL_SIZE * 0.5f;
+        float worldY  = tileRow    * Constants.CELL_SIZE + Constants.CELL_SIZE * 0.5f;
+        float screenX = projectToScreenX(worldX, worldY);
+        if (screenX <= -500f) return;
+        float screenY = projectToScreenY(worldX, worldY, heightMultiplier);
+
+        int slot = findFreeRingPulseSlot();
+        if (slot < 0) return;
+
+        ringPulseScreenX  [slot] = screenX;
+        ringPulseScreenY  [slot] = screenY;
+        ringPulseAge      [slot] = 0f;
+        ringPulseLife     [slot] = EffectConstants.RING_PULSE_LIFE_SECONDS;
+        ringPulseMaxRadius[slot] = EffectConstants.RING_PULSE_MAX_RADIUS;
+        ringPulseRed      [slot] = red;
+        ringPulseGreen    [slot] = green;
+        ringPulseBlue     [slot] = blue;
+        ringPulseActive   [slot] = true;
+    }
+
+    // -------------------------------------------------------------------------
     // Per-frame update — called by World each frame
     // -------------------------------------------------------------------------
 
     public void update(float deltaTime) {
         updateShake(deltaTime);
         updateKillFlash(deltaTime);
+        updateCritFlash(deltaTime);
         updateParticles(deltaTime);
         updateBursts(deltaTime);
         updateNumbers(deltaTime);
+        updateRingPulses(deltaTime);
     }
 
     private void updateShake(float deltaTime) {
@@ -185,6 +251,13 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         if (killFlashTimeRemaining > 0f) {
             killFlashTimeRemaining -= deltaTime;
             if (killFlashTimeRemaining < 0f) killFlashTimeRemaining = 0f;
+        }
+    }
+
+    private void updateCritFlash(float deltaTime) {
+        if (critFlashTimeRemaining > 0f) {
+            critFlashTimeRemaining -= deltaTime;
+            if (critFlashTimeRemaining < 0f) critFlashTimeRemaining = 0f;
         }
     }
 
@@ -223,6 +296,16 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         }
     }
 
+    private void updateRingPulses(float deltaTime) {
+        for (int pulseIndex = 0; pulseIndex < MAX_RING_PULSES; pulseIndex++) {
+            if (!ringPulseActive[pulseIndex]) continue;
+            ringPulseAge[pulseIndex] += deltaTime;
+            if (ringPulseAge[pulseIndex] >= ringPulseLife[pulseIndex]) {
+                ringPulseActive[pulseIndex] = false;
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Accessors for World (shake) and ImpactEffectRenderer (drawing)
     // -------------------------------------------------------------------------
@@ -243,6 +326,21 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         if (killFlashTimeRemaining <= 0f) return 0f;
         float fraction = killFlashTimeRemaining / EffectConstants.KILL_FLASH_DURATION_SECONDS;
         return EffectConstants.KILL_FLASH_MAX_ALPHA * (float) Math.sin(fraction * Math.PI);
+    }
+
+    /*
+     * Formula: critFlashAlpha
+     * Derivation:
+     *   Same sin-curve envelope as kill flash; shorter duration and dimmer cap.
+     *   fraction goes from 1 (just triggered) to 0 (expired).
+     *   sin(fraction × π) peaks at fraction = 0.5.
+     * Edge cases:
+     *   fraction = 0 (expired) → sin(0) = 0 → alpha = 0 (no flash).
+     */
+    public float getCritFlashAlpha() {
+        if (critFlashTimeRemaining <= 0f) return 0f;
+        float fraction = critFlashTimeRemaining / EffectConstants.CRIT_FLASH_DURATION_SECONDS;
+        return EffectConstants.CRIT_FLASH_MAX_ALPHA * (float) Math.sin(fraction * Math.PI);
     }
 
     // Player state accessors for the renderer's per-frame damage-number projection
@@ -342,6 +440,13 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     private int findFreeNumberSlot() {
         for (int numberIndex = 0; numberIndex < MAX_DAMAGE_NUMBERS; numberIndex++) {
             if (!numberActive[numberIndex]) return numberIndex;
+        }
+        return -1;
+    }
+
+    private int findFreeRingPulseSlot() {
+        for (int pulseIndex = 0; pulseIndex < MAX_RING_PULSES; pulseIndex++) {
+            if (!ringPulseActive[pulseIndex]) return pulseIndex;
         }
         return -1;
     }
