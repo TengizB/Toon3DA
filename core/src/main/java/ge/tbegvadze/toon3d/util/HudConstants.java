@@ -84,7 +84,7 @@ public final class HudConstants {
     public static final float WEAPON_CARD_FONT_SCALE     = 1.8f;
     // Zone heights inside the card (from top): header, stats, abilities, action, footer
     public static final float WEAPON_CARD_HEADER_HEIGHT  = 50f;
-    public static final float WEAPON_CARD_STAT_ROW_H     = 40f;    // 4 rows × 40 = 160px
+    public static final float WEAPON_CARD_STAT_ROW_H     = 36f;    // 4 rows × 36 = 144px — fits stats zone between header and ability strip
     public static final float WEAPON_CARD_ABILITY_H      = 55f;    // ability strip below stats
     public static final float WEAPON_CARD_ACTION_H       = 185f;   // equip button OR slot rows
     public static final float WEAPON_CARD_FOOTER_H       = 68f;    // close + convert strip

@@ -66,6 +66,8 @@ public final class ItemConstants {
     public static final float PICKUP_ITEM_BOB_SPEED              = 2.2f;   // radians/sec
     public static final float PICKUP_ITEM_BOB_AMPLITUDE_FRACTION = 0.10f;  // 10% of sprite height
     public static final float PICKUP_ITEM_BOB_PHASE_STEP         = 0.5f;   // per-char phase offset (rad)
+    // Downward shift applied to floating pickups so they hover slightly closer to the floor.
+    public static final float PICKUP_ITEM_GROUND_OFFSET_FRACTION = 0.10f;  // shift down 10% of sprite height
 
     // Start room — starter ammo granted on weapon selection (sufficient for first dungeon floor)
     public static final int START_ROOM_AMMO_BULLETS  = 120;
@@ -101,11 +103,13 @@ public final class ItemConstants {
     public static final float INV_BASE_DIM_FACTOR         = 0.40f;
     public static final float INV_ITEM_WIN_DIM_FACTOR     = 0.50f;
 
-    // ItemWindow popup geometry — Part 4 redesign: 640×420 centered at (640, 370)
-    public static final float INV_ITEM_WIN_WIDTH              = 640f;
-    public static final float INV_ITEM_WIN_HEIGHT             = 420f;
+    // ItemWindow popup geometry — 800×520 centered at (640, 370)
+    public static final float INV_ITEM_WIN_WIDTH              = 800f;
+    public static final float INV_ITEM_WIN_HEIGHT             = 520f;
     public static final float INV_ITEM_WIN_CENTER_X           = 640f;
     public static final float INV_ITEM_WIN_CENTER_Y           = 370f;
+    // Font scale multiplier — all ItemWindow text is scaled by this factor for readability on mobile.
+    public static final float INV_ITEM_WIN_FONT_SCALE         = 1.3f;
     public static final float INV_ITEM_WIN_X                  = INV_ITEM_WIN_CENTER_X - INV_ITEM_WIN_WIDTH  / 2f;
     public static final float INV_ITEM_WIN_Y                  = INV_ITEM_WIN_CENTER_Y - INV_ITEM_WIN_HEIGHT / 2f;
     public static final float INV_ITEM_WIN_PADDING            = 18f;
@@ -124,7 +128,7 @@ public final class ItemConstants {
     public static final float INV_ITEM_WIN_GLYPH_Y            = INV_ITEM_WIN_HEADER_Y + (INV_ITEM_WIN_HEADER_H - INV_ITEM_WIN_GLYPH_SIZE) / 2f;
     public static final float INV_ITEM_WIN_NAME_X             = INV_ITEM_WIN_GLYPH_X + INV_ITEM_WIN_GLYPH_SIZE + 12f;
     public static final float INV_ITEM_WIN_BODY_LEFT_X        = INV_ITEM_WIN_X + INV_ITEM_WIN_PADDING;
-    public static final float INV_ITEM_WIN_BODY_LEFT_WIDTH    = 280f;
+    public static final float INV_ITEM_WIN_BODY_LEFT_WIDTH    = 320f;
     public static final float INV_ITEM_WIN_DIVIDER_X          = INV_ITEM_WIN_BODY_LEFT_X + INV_ITEM_WIN_BODY_LEFT_WIDTH + 4f;
     public static final float INV_ITEM_WIN_BODY_RIGHT_X       = INV_ITEM_WIN_DIVIDER_X + 8f;
     public static final float INV_ITEM_WIN_BODY_RIGHT_WIDTH   = INV_ITEM_WIN_X + INV_ITEM_WIN_WIDTH - INV_ITEM_WIN_PADDING - INV_ITEM_WIN_BODY_RIGHT_X;

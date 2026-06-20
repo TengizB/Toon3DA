@@ -73,6 +73,9 @@ final class ItemWindow implements Disposable {
     private static final float BTN_W         = ItemConstants.INV_ACTION_BTN_WIDTH;
     private static final float BTN_H         = ItemConstants.INV_ACTION_BTN_HEIGHT;
 
+    // Font scale multiplier applied to all text drawn in this window for mobile readability.
+    private static final float FONT_SCALE    = ItemConstants.INV_ITEM_WIN_FONT_SCALE;
+
     // Body: fixed Y at which the description block begins (just below header rule)
     private static final float DESC_Y        = HEADER_Y - 10f;
     // Body: fixed Y at which the stat block begins (leaves ~72px for 4 description lines)
@@ -500,17 +503,17 @@ final class ItemWindow implements Disposable {
     }
 
     private void renderBodyLeftForWeapon(ItemType itemType) {
-        font.getData().setScale(0.85f);
+        font.getData().setScale(0.85f * FONT_SCALE);
         font.setColor(OFF_WHITE);
         font.draw(spriteBatch, itemType.getDescription(), BODY_L_X, DESC_Y, BODY_L_W, Align.left, true);
         font.getData().setScale(1f);
 
-        font.getData().setScale(0.80f);
+        font.getData().setScale(0.80f * FONT_SCALE);
         renderStatRowsForWeapon();
         font.getData().setScale(1f);
 
         if (weaponIsActive) {
-            font.getData().setScale(0.85f);
+            font.getData().setScale(0.85f * FONT_SCALE);
             font.setColor(GREEN_EQUIPPED);
             font.draw(spriteBatch, "● CURRENTLY ACTIVE", BODY_L_X, BODY_Y + 18f);
             font.getData().setScale(1f);
@@ -538,7 +541,7 @@ final class ItemWindow implements Disposable {
 
     private void renderHeader(ItemType itemType, boolean isEquipped) {
         // Glyph (large, item color)
-        font.getData().setScale(2.5f);
+        font.getData().setScale(2.5f * FONT_SCALE);
         font.setColor(itemType.getGlyphRed(), itemType.getGlyphGreen(), itemType.getGlyphBlue(), 1f);
         valueBuilder.setLength(0);
         valueBuilder.append(itemType.getGlyph());
@@ -550,13 +553,13 @@ final class ItemWindow implements Disposable {
 
         // Item name (amber, slightly scaled up)
         float nameY = HEADER_Y + HEADER_H - 10f;
-        font.getData().setScale(1.3f);
+        font.getData().setScale(1.3f * FONT_SCALE);
         font.setColor(AMBER);
         font.draw(spriteBatch, itemType.getDisplayName(), NAME_X, nameY);
         font.getData().setScale(1f);
 
         // Category badge (dim, small)
-        font.getData().setScale(0.85f);
+        font.getData().setScale(0.85f * FONT_SCALE);
         font.setColor(TEXT_DIM);
         font.draw(spriteBatch, categoryBadge(itemType), NAME_X, nameY - 22f);
         font.getData().setScale(1f);
@@ -571,19 +574,19 @@ final class ItemWindow implements Disposable {
 
     private void renderBodyLeft(ItemType itemType, ItemStack slot, boolean isEquipped) {
         // Description text (small, off-white, word-wrapped)
-        font.getData().setScale(0.85f);
+        font.getData().setScale(0.85f * FONT_SCALE);
         font.setColor(OFF_WHITE);
         font.draw(spriteBatch, itemType.getDescription(), BODY_L_X, DESC_Y, BODY_L_W, Align.left, true);
         font.getData().setScale(1f);
 
         // Stat block
-        font.getData().setScale(0.80f);
+        font.getData().setScale(0.80f * FONT_SCALE);
         renderStatRows(itemType, slot);
         font.getData().setScale(1f);
 
         // Equipped notice (weapons only)
         if (isEquipped) {
-            font.getData().setScale(0.85f);
+            font.getData().setScale(0.85f * FONT_SCALE);
             font.setColor(GREEN_EQUIPPED);
             font.draw(spriteBatch, "● CURRENTLY EQUIPPED", BODY_L_X, BODY_Y + 18f);
             font.getData().setScale(1f);
@@ -642,13 +645,13 @@ final class ItemWindow implements Disposable {
         float headerY = DESC_Y;
         ItemCategory category = itemType.getCategory();
 
-        font.getData().setScale(0.85f);
+        font.getData().setScale(0.85f * FONT_SCALE);
         font.setColor(AMBER);
         font.draw(spriteBatch, rightColumnTitle(category), BODY_R_X, headerY);
         font.getData().setScale(1f);
 
         float contentY = headerY - ABILITY_HDR_H;
-        font.getData().setScale(0.80f);
+        font.getData().setScale(0.80f * FONT_SCALE);
 
         if (category == ItemCategory.WEAPON) {
             if (cachedAbilities.length == 0) {
@@ -660,14 +663,14 @@ final class ItemWindow implements Disposable {
                     float rowBottom = abilityRowTop - ABILITY_ROW_H;
 
                     // Hud glyph (amber, scaled up, left of row)
-                    font.getData().setScale(1.4f);
+                    font.getData().setScale(1.4f * FONT_SCALE);
                     font.setColor(AMBER);
                     valueBuilder.setLength(0);
                     valueBuilder.append(ability.hudGlyph);
                     font.draw(spriteBatch, valueBuilder,
                               BODY_R_X + 4f,
                               rowBottom + ABILITY_ROW_H - 10f);
-                    font.getData().setScale(1f);
+                    font.getData().setScale(1.0f * FONT_SCALE);
 
                     // Ability display name (amber, normal scale)
                     float nameTextX = BODY_R_X + 28f;
@@ -677,7 +680,7 @@ final class ItemWindow implements Disposable {
                               rowBottom + ABILITY_ROW_H - 10f);
 
                     // Short hint (off-white, 0.75 scale, word-wrapped)
-                    font.getData().setScale(0.75f);
+                    font.getData().setScale(0.75f * FONT_SCALE);
                     font.setColor(OFF_WHITE);
                     float hintWidth = BODY_R_W - 28f - BADGE_W - 8f;
                     font.draw(spriteBatch, ability.shortHint,
@@ -688,7 +691,7 @@ final class ItemWindow implements Disposable {
 
                     // Type badge text (PASSIVE / ACTIVE), centered in pill
                     boolean isPassive = ability.trigger == WeaponAbility.Trigger.PASSIVE;
-                    font.getData().setScale(0.65f);
+                    font.getData().setScale(0.65f * FONT_SCALE);
                     font.setColor(isPassive ? BADGE_PASSIVE_FG : BADGE_ACTIVE_FG);
                     String badgeLabel = ability.getTypeLabel();
                     glyphLayout.setText(font, badgeLabel);
@@ -706,10 +709,10 @@ final class ItemWindow implements Disposable {
         } else if (category == ItemCategory.CONSUMABLE) {
             font.setColor(OFF_WHITE);
             font.draw(spriteBatch, consumableGuidance(itemType), BODY_R_X, contentY, BODY_R_W, Align.left, true);
-            font.getData().setScale(0.85f);
+            font.getData().setScale(0.85f * FONT_SCALE);
             font.setColor(TEXT_DIM);
             font.draw(spriteBatch, "QUANTITY IN BAG", BODY_R_X, BODY_Y + 70f);
-            font.getData().setScale(1.8f);
+            font.getData().setScale(1.8f * FONT_SCALE);
             font.setColor(AMBER);
             valueBuilder.setLength(0);
             valueBuilder.append(slot.getQuantity());
