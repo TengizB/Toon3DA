@@ -1829,27 +1829,26 @@ public class LevelGenerator implements ILevelGenerator {
      * Places weapon pickups across the level as WeaponSpawnPoints (no grid tile written).
      *
      * Two independent passes:
-     *   1. ARMORY room — guaranteed placement so the player always finds at least one weapon.
-     *   2. All non-ENTRANCE rooms — each has a LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE (20%)
-     *      independent chance, giving random weapon distribution throughout the level.
+     *   1. All special rooms (LARGE, SERVER_ROOM, MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
+     *      POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK, RESEARCH_LAB) — guaranteed
+     *      placement so every special room always contains a weapon.
+     *   2. STANDARD rooms — each has a LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE independent
+     *      chance, giving varied weapon distribution across ordinary rooms.
      *
-     * The LARGE-room fallback (Priority 2 from the old logic) is replaced by the random pass,
-     * which covers LARGE rooms as well.
      * Spawns are recorded in weaponSpawnPoints; World instantiates a GroundItem from each.
      * The grid tile itself is NOT modified — weapon ground items are entity-side only.
      */
     private void placeWeaponSpawns(char[][] grid, List<Room> rooms) {
-        // Pass 1: ARMORY room — guaranteed at least one weapon per level.
+        // Pass 1: All special rooms (non-ENTRANCE, non-STANDARD) get a guaranteed weapon.
         for (Room room : rooms) {
-            if (room.type != RoomType.ARMORY) continue;
+            if (room.type == RoomType.ENTRANCE) continue;
+            if (room.type == RoomType.STANDARD) continue;
             tryPlaceWeaponSpawn(grid, room);
         }
 
-        // Pass 2: Random chance for every non-ENTRANCE, non-ARMORY room.
-        // ARMORY is excluded because it already received a guaranteed weapon in Pass 1.
+        // Pass 2: STANDARD rooms each get a random chance.
         for (Room room : rooms) {
-            if (room.type == RoomType.ENTRANCE) continue;
-            if (room.type == RoomType.ARMORY)   continue;
+            if (room.type != RoomType.STANDARD) continue;
             if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE) {
                 tryPlaceWeaponSpawn(grid, room);
             }
@@ -1875,13 +1874,19 @@ public class LevelGenerator implements ILevelGenerator {
         return false;
     }
 
-    /** Returns one of the implemented weapon ItemTypes at equal probability. */
+    /** Returns one of the implemented weapon ItemTypes at equal probability (ranged and melee). */
     private ItemType randomWeaponItemType() {
-        switch (random.nextInt(4)) {
+        switch (random.nextInt(10)) {
             case 0:  return ItemType.WEAPON_SHOTGUN;
-            case 1:  return ItemType.WEAPON_CHAINGUN;
-            case 2:  return ItemType.WEAPON_PLASMA;
-            default: return ItemType.WEAPON_ROCKET;
+            case 1:  return ItemType.WEAPON_DOUBLE_BARREL;
+            case 2:  return ItemType.WEAPON_CHAINGUN;
+            case 3:  return ItemType.WEAPON_PLASMA;
+            case 4:  return ItemType.WEAPON_INCINERATOR;
+            case 5:  return ItemType.WEAPON_RAILGUN;
+            case 6:  return ItemType.WEAPON_ROCKET;
+            case 7:  return ItemType.WEAPON_KNIFE;
+            case 8:  return ItemType.WEAPON_HAMMER;
+            default: return ItemType.WEAPON_CHAINSAW;
         }
     }
 

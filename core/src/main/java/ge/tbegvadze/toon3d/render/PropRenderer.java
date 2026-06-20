@@ -273,16 +273,22 @@ public class PropRenderer implements Renderable, Disposable {
             int columnSpan        = rightScreenColumn - leftScreenColumn;
             if (columnSpan <= 0) continue;
 
-            float bobOffset = 0f;
+            float drawBottom;
             if (Level.isMedicalPickup(prop.propChar)
                     || Level.isArmourPickup(prop.propChar)
                     || Level.isAmmoPickup(prop.propChar)) {
-                float bobPhase = prop.propChar * PICKUP_ITEM_BOB_PHASE_STEP;
-                bobOffset = GameMath.pickupBobOffset(lightingTimeSeconds,
+                float bobPhase  = prop.propChar * PICKUP_ITEM_BOB_PHASE_STEP;
+                float bobOffset = GameMath.pickupBobOffset(lightingTimeSeconds,
                         PICKUP_ITEM_BOB_SPEED, PICKUP_ITEM_BOB_AMPLITUDE_FRACTION,
                         bobPhase, spriteScreenHeight);
+                drawBottom = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight)
+                        + bobOffset
+                        - PICKUP_ITEM_GROUND_OFFSET_FRACTION * spriteScreenHeight;
+            } else if (Level.isStairsDown(prop.propChar)) {
+                drawBottom = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight);
+            } else {
+                drawBottom = WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight;
             }
-            float drawBottom = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight) + bobOffset;
             float drawTop    = drawBottom + spriteScreenHeight;
             float clampedBottom   = Math.max(0f, drawBottom);
             float clampedTop      = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, drawTop);
@@ -371,7 +377,9 @@ public class PropRenderer implements Renderable, Disposable {
                                       WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION, bobPhase,
                                       spriteScreenHeight);
             float drawBottom    = GameMath.spriteDrawBottomCentered(
-                                      WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight) + bobOffset;
+                                      WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight)
+                                  + bobOffset
+                                  - PICKUP_ITEM_GROUND_OFFSET_FRACTION * spriteScreenHeight;
             float drawTop       = drawBottom + spriteScreenHeight;
             float clampedBottom = Math.max(0f, drawBottom);
             float clampedTop    = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, drawTop);
@@ -400,7 +408,9 @@ public class PropRenderer implements Renderable, Disposable {
                 int   glowLeft        = (int)(screenCenterColumn - glowHeight / 2f);
                 int   glowRight       = (int)(screenCenterColumn + glowHeight / 2f);
                 int   glowColumnSpan  = glowRight - glowLeft;
-                float glowDrawBottom  = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, glowHeight) + bobOffset;
+                float glowDrawBottom  = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, glowHeight)
+                                        + bobOffset
+                                        - PICKUP_ITEM_GROUND_OFFSET_FRACTION * glowHeight;
                 float glowDrawTop     = glowDrawBottom + glowHeight;
                 float glowClampBottom = Math.max(0f, glowDrawBottom);
                 float glowClampTop    = Math.min(WALL_PROJECTION_SCREEN_HEIGHT, glowDrawTop);
@@ -484,16 +494,22 @@ public class PropRenderer implements Renderable, Disposable {
             int columnSpan        = rightScreenColumn - leftScreenColumn;
             if (columnSpan <= 0) continue;
 
-            float dynamicBobOffset = 0f;
+            float drawBottom;
             if (Level.isMedicalPickup(prop.propChar)
                     || Level.isArmourPickup(prop.propChar)
                     || Level.isAmmoPickup(prop.propChar)) {
-                float bobPhase = prop.propChar * PICKUP_ITEM_BOB_PHASE_STEP;
-                dynamicBobOffset = GameMath.pickupBobOffset(lightingTimeSeconds,
+                float bobPhase         = prop.propChar * PICKUP_ITEM_BOB_PHASE_STEP;
+                float dynamicBobOffset = GameMath.pickupBobOffset(lightingTimeSeconds,
                         PICKUP_ITEM_BOB_SPEED, PICKUP_ITEM_BOB_AMPLITUDE_FRACTION,
                         bobPhase, spriteScreenHeight);
+                drawBottom = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight)
+                        + dynamicBobOffset
+                        - PICKUP_ITEM_GROUND_OFFSET_FRACTION * spriteScreenHeight;
+            } else if (Level.isStairsDown(prop.propChar)) {
+                drawBottom = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight);
+            } else {
+                drawBottom = WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight;
             }
-            float drawBottom    = GameMath.spriteDrawBottomCentered(WALL_PROJECTION_SCREEN_HEIGHT, spriteScreenHeight) + dynamicBobOffset;
             float drawTop       = drawBottom + spriteScreenHeight;
             float clampedBottom = Math.max(0f, drawBottom);
             float clampedTop    = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, drawTop);

@@ -102,8 +102,8 @@ public final class LevelGenConstants {
     public static final int   LEVEL_GEN_ARMORY_MAX               = 1;
     // Probability that a LARGE room (when no ARMORY weapon was placed) gets a weapon pickup
     public static final float LEVEL_GEN_LARGE_WEAPON_CHANCE      = 0.30f;
-    // Probability that any non-ENTRANCE room gets a random weapon spawn (independent of armory)
-    public static final float LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE = 0.20f;
+    // Probability that a STANDARD room gets a random weapon spawn.
+    public static final float LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE = 0.35f;
 
     // CRYO_CHAMBER — ~25% of levels, at most 2
     public static final float LEVEL_GEN_CRYO_CHANCE              = 0.25f;

@@ -78,9 +78,9 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private static final float ABILITY_Y   = ACTION_TOP;                           // 362
     private static final float ABILITY_TOP = ABILITY_Y + ABILITY_H;               // 417
 
-    // Stats zone: 4 rows × STAT_ROW_H, growing downward from ABILITY_TOP
-    private static final float STAT_ROW_H     = HudConstants.WEAPON_CARD_STAT_ROW_H; // 40
-    private static final float STATS_TOP      = ABILITY_TOP;                          // 417 (same as ability base)
+    // Stats zone: 4 rows × STAT_ROW_H occupying the space between the ability strip and the header.
+    private static final float STAT_ROW_H     = HudConstants.WEAPON_CARD_STAT_ROW_H; // 36
+    private static final float STATS_TOP      = HEADER_Y;                             // 575 — rows grow downward from here into the stats zone
     private static final int   STAT_ROW_COUNT = 4;
     // Stat column X positions
     private static final float GROUND_COL_X  = CARD_X + 16f;                     // 276  (ground value, left-align)
