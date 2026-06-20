@@ -278,6 +278,9 @@ public final class WeaponConstants {
     public static final float WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION = 0.10f;  // fraction of sprite height
     public static final int   WEAPON_PICKUP_TEXTURE_SIZE           = 64;     // square pixmap edge, px
     public static final float WEAPON_PICKUP_PHASE_STEP             = 0.7f;   // per-weapon phase offset (rad)
+    // Fraction of corridor height (floor-to-ceiling) at which the weapon sprite centre hovers.
+    // 0.40 = weapon centre is 40% of the way up from the visual floor → 40:60 split (closer to floor).
+    public static final float WEAPON_PICKUP_CENTER_HEIGHT_FRACTION = 0.40f;
 
     // Tier-based glow aura for ground weapon pickups
     public static final int   WEAPON_PICKUP_GLOW_TEXTURE_SIZE      = 64;     // glow pixmap edge, px
