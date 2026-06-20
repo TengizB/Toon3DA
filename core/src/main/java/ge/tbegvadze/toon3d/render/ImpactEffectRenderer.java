@@ -16,13 +16,15 @@ import ge.tbegvadze.toon3d.util.RenderConstants;
 /**
  * Draws all impact effects owned by ImpactEffectSystem:
  *
- *   Pass 1 (ShapeRenderer, alpha-blend): hit-spark particles + death burst ring + core.
+ *   Pass 1 (ShapeRenderer, alpha-blend): hit-spark particles + death burst ring + core
+ *                                         + colored ring pulses from ability procs.
  *   Pass 2 (SpriteBatch + BitmapFont): floating damage numbers ("-N" / "-N!").
- *   Pass 3 (ShapeRenderer, additive-blend): kill-flash edge rectangles.
+ *   Pass 3 (ShapeRenderer, additive-blend): kill-flash edge rectangles
+ *                                            + crit-flash edge rectangles.
  *
- * World calls renderWorldEffects(camera) while the camera is shaken (so sparks
- * and bursts move with the world) and renderScreenOverlays(camera) after the
- * shake is removed (so numbers and the kill flash are screen-stable).
+ * World calls renderWorldEffects(camera) while the camera is shaken (so sparks,
+ * bursts, and ring pulses move with the world) and renderScreenOverlays(camera)
+ * after the shake is removed (so numbers and flash overlays are screen-stable).
  *
  * Zero per-frame allocations: StringBuilder and font are pre-allocated; pool
  * arrays are read directly from ImpactEffectSystem.
@@ -57,7 +59,7 @@ public final class ImpactEffectRenderer implements Disposable {
     // -------------------------------------------------------------------------
 
     /**
-     * Renders particles and death bursts.
+     * Renders particles, death bursts, and colored ring pulses.
      * Call while the camera is offset by the shake translation so effects move
      * with the 3D world.
      */
@@ -70,28 +72,34 @@ public final class ImpactEffectRenderer implements Disposable {
         for (int burstIndex = 0; burstIndex < ImpactEffectSystem.MAX_DEATH_BURSTS; burstIndex++) {
             if (system.burstActive[burstIndex]) { anyBursts = true; break; }
         }
-        if (!anyParticles && !anyBursts) return;
+        boolean anyRingPulses = false;
+        for (int pulseIndex = 0; pulseIndex < ImpactEffectSystem.MAX_RING_PULSES; pulseIndex++) {
+            if (system.ringPulseActive[pulseIndex]) { anyRingPulses = true; break; }
+        }
+        if (!anyParticles && !anyBursts && !anyRingPulses) return;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapes.setProjectionMatrix(camera.combined);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
 
-        if (anyParticles) drawParticles();
-        if (anyBursts)    drawDeathBursts();
+        if (anyParticles)   drawParticles();
+        if (anyBursts)      drawDeathBursts();
+        if (anyRingPulses)  drawRingPulses();
 
         shapes.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
     /**
-     * Renders damage numbers and the kill-flash edge overlay.
+     * Renders damage numbers and the kill-flash and crit-flash edge overlays.
      * Call after the camera shake has been removed so these elements are
      * screen-stable (they feel like UI feedback, not world geometry).
      */
     public void renderScreenOverlays(OrthographicCamera camera) {
         drawDamageNumbers(camera);
         drawKillFlash(camera);
+        drawCritFlash(camera);
     }
 
     // -------------------------------------------------------------------------
@@ -167,6 +175,34 @@ public final class ImpactEffectRenderer implements Disposable {
                 float coreAlpha = 1f - fraction;
                 shapes.setColor(1f, 0.95f, 0.8f, coreAlpha);
                 shapes.circle(centerX, centerY, coreRadius, 10);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Pass 1c: colored ring pulses from ability procs
+    // -------------------------------------------------------------------------
+
+    private void drawRingPulses() {
+        for (int pulseIndex = 0; pulseIndex < ImpactEffectSystem.MAX_RING_PULSES; pulseIndex++) {
+            if (!system.ringPulseActive[pulseIndex]) continue;
+
+            float age        = system.ringPulseAge[pulseIndex];
+            float life       = system.ringPulseLife[pulseIndex];
+            float normalized = age / life;
+            float radius     = GameMath.ringPulseRadius(normalized, system.ringPulseMaxRadius[pulseIndex]);
+            float alpha      = GameMath.ringPulseAlpha(normalized);
+            float centerX    = system.ringPulseScreenX[pulseIndex];
+            float centerY    = system.ringPulseScreenY[pulseIndex];
+
+            shapes.setColor(system.ringPulseRed[pulseIndex], system.ringPulseGreen[pulseIndex],
+                            system.ringPulseBlue[pulseIndex], alpha);
+            for (int segmentIndex = 0; segmentIndex < ImpactEffectSystem.RING_SEGMENTS; segmentIndex++) {
+                float dotX = centerX + ImpactEffectSystem.RING_COS[segmentIndex] * radius
+                             - RING_DOT_SIZE / 2f;
+                float dotY = centerY + ImpactEffectSystem.RING_SIN[segmentIndex] * radius
+                             - RING_DOT_SIZE / 2f;
+                shapes.rect(dotX, dotY, RING_DOT_SIZE, RING_DOT_SIZE);
             }
         }
     }
@@ -265,7 +301,7 @@ public final class ImpactEffectRenderer implements Disposable {
     }
 
     // -------------------------------------------------------------------------
-    // Pass 3: kill-flash screen-edge overlay (additive blend for brightness burst)
+    // Pass 3a: kill-flash screen-edge overlay (additive blend for brightness burst)
     // -------------------------------------------------------------------------
 
     private void drawKillFlash(OrthographicCamera camera) {
@@ -292,6 +328,35 @@ public final class ImpactEffectRenderer implements Disposable {
 
         shapes.end();
         // Restore standard alpha-blend so subsequent renderers are not disrupted
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    // -------------------------------------------------------------------------
+    // Pass 3b: crit-flash screen-edge overlay (shorter and dimmer than kill flash)
+    // -------------------------------------------------------------------------
+
+    private void drawCritFlash(OrthographicCamera camera) {
+        float flashAlpha = system.getCritFlashAlpha();
+        if (flashAlpha <= 0f) return;
+
+        float width         = Constants.WORLD_WIDTH;
+        float height        = Constants.WORLD_HEIGHT;
+        float edgeThickness = EffectConstants.KILL_FLASH_EDGE_THICKNESS;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+        shapes.setProjectionMatrix(camera.combined);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Pure white for a clean crit snap (vs warm-orange kill flash)
+        shapes.setColor(1f, 1f, 1f, flashAlpha);
+        shapes.rect(0f,                      0f,                       width,         edgeThickness); // bottom
+        shapes.rect(0f,                      height - edgeThickness,   width,         edgeThickness); // top
+        shapes.rect(0f,                      0f,                       edgeThickness, height);        // left
+        shapes.rect(width - edgeThickness,   0f,                       edgeThickness, height);        // right
+
+        shapes.end();
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }

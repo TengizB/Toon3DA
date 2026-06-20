@@ -2091,4 +2091,60 @@ public final class GameMath {
         int   unpiercedReduction = Math.round(armor * (1f - clampedPierce));
         return Math.max(1, rawDamage - unpiercedReduction);
     }
+
+    // =========================================================================
+    // ABILITY EVENT FEEDBACK — BANNER ANIMATION AND RING PULSE
+    // =========================================================================
+
+    /*
+     * Formula: bannerPopScale
+     * Derivation:
+     *   Returns a scale multiplier ≥ 1.0 that drives the pop-in / punch-in entrance
+     *   animation for tiered ability banners.
+     *   At normalizedAge = 0 (just spawned) the scale is (1 + overshoot), the largest.
+     *   It decays linearly to 1.0 at normalizedAge = 1 (animation fully settled).
+     *   scaleFactor = 1 + overshoot × (1 − normalizedAge)
+     *   Callers pass normalizedAge = age / animationDuration; clamp to [0, 1] at call site or
+     *   let the >= 1 guard here return the settled value.
+     * Edge cases:
+     *   normalizedAge < 0 → clamped to 0 → returns maximum scale (1 + overshoot).
+     *   overshoot = 0 → returns 1.0 always (no animation).
+     *   normalizedAge ≥ 1 → settled at exactly 1.0.
+     */
+    public static float bannerPopScale(float normalizedAge, float overshoot) {
+        if (normalizedAge >= 1f) return 1f;
+        float clamped = Math.max(0f, normalizedAge);
+        return 1f + overshoot * (1f - clamped);
+    }
+
+    /*
+     * Formula: ringPulseRadius
+     * Derivation:
+     *   Expands from 0 to maxRadius using an ease-out square-root curve.
+     *   radius = maxRadius × √normalizedAge
+     *   Square root gives rapid initial expansion that decelerates toward the rim,
+     *   matching the physical feel of a shockwave or energy pulse.
+     * Edge cases:
+     *   normalizedAge ≤ 0 → radius = 0 (ring starts at the origin).
+     *   normalizedAge ≥ 1 → radius = maxRadius (fully expanded).
+     */
+    public static float ringPulseRadius(float normalizedAge, float maxRadius) {
+        float clamped = Math.max(0f, Math.min(1f, normalizedAge));
+        return maxRadius * (float) Math.sqrt(clamped);
+    }
+
+    /*
+     * Formula: ringPulseAlpha
+     * Derivation:
+     *   Fades from 1.0 (fully visible at spawn) to 0.0 (gone at expiry) linearly.
+     *   alpha = 1 − normalizedAge
+     *   Linear fade pairs with the sqrt expansion so the ring fades as it slows.
+     * Edge cases:
+     *   normalizedAge ≤ 0 → alpha = 1.0 (fully opaque).
+     *   normalizedAge ≥ 1 → alpha = 0.0 (fully transparent, ring gone).
+     */
+    public static float ringPulseAlpha(float normalizedAge) {
+        float clamped = Math.max(0f, Math.min(1f, normalizedAge));
+        return 1f - clamped;
+    }
 }

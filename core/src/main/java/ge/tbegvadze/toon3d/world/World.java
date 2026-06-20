@@ -76,6 +76,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private final EventTextSystem        eventTextSystem;
     private final EventTextRenderer      eventTextRenderer;
     private final HitVignetteRenderer    hitVignetteRenderer;
+    // Run-persistent ability visual feedback — no GPU resources, no dispose needed
+    private final AbilityFeedback        abilityFeedback;
     private final PlayerProgress         playerProgress;
     private final LevelUpOverlayRenderer levelUpOverlayRenderer;
 
@@ -211,6 +213,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         eventTextSystem     = new EventTextSystem();
         eventTextRenderer   = new EventTextRenderer(eventTextSystem);
         hitVignetteRenderer = new HitVignetteRenderer();
+        abilityFeedback     = new AbilityFeedback(eventTextSystem, impactEffectSystem);
 
         // Player stat system — seeded from MARINE difficulty for now; difficulty selection
         // will be wired when the run-setup screen (order_18) is implemented.
@@ -374,6 +377,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         abilityResolver.setKillXpListener(xpAwarded -> playerProgress.addXp(xpAwarded));
         abilityResolver.setPlayerInventory(itemInventory);
         abilityResolver.setStatusEffectController(statusEffectController);
+        abilityResolver.setAbilityFeedback(abilityFeedback);
         for (Weapon weapon : inventory.getArsenal()) {
             weapon.setAbilityResolver(abilityResolver);
         }
@@ -623,6 +627,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 player.directionX, player.directionY, player.fieldOfViewRadians);
         impactEffectSystem.update(deltaTime);
         eventTextSystem.update(deltaTime);
+        abilityFeedback.update(deltaTime);
         hitVignetteRenderer.update(deltaTime);
         if (bossHudRenderer != null) bossHudRenderer.update(deltaTime);
 

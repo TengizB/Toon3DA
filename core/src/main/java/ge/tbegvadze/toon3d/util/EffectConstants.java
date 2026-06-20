@@ -84,6 +84,39 @@ public final class EffectConstants {
     public static final float STATUS_VIGNETTE_FADE_OUT_SECONDS = 0.60f;
     public static final float ENEMY_STATUS_TINT_STRENGTH    = 0.35f;
 
+    // ─── Ability Event Feedback — banner tiers, animations, and world accents ───
+    // Banner font scales per tier (Tier 1 = no banner; tag suffix only in Phase 2)
+    public static final float ABILITY_BANNER_PROC_SCALE          = 1.6f;
+    public static final float ABILITY_BANNER_SLAM_SCALE          = 2.4f;
+    public static final float ABILITY_BANNER_LEGENDARY_SCALE     = 3.0f;
+    // Screen-space Y anchors for each tier band (world units, Y-up)
+    public static final float ABILITY_BANNER_PROC_ANCHOR_Y       = 470f;
+    public static final float ABILITY_BANNER_SLAM_ANCHOR_Y       = 540f;
+    public static final float ABILITY_BANNER_LEGENDARY_ANCHOR_Y  = 400f;
+    // Pop-in / punch-in animation durations
+    public static final float ABILITY_BANNER_POP_DURATION_SEC    = 0.08f;
+    public static final float ABILITY_BANNER_PUNCH_DURATION_SEC  = 0.12f;
+    // Overshoot: Tier 3/4 banners punch in from (1 + overshoot)× scale down to 1×
+    public static final float ABILITY_BANNER_PUNCH_OVERSHOOT     = 0.6f;
+    // Legendary hold: extra opaque dwell time before Tier 4 banners begin to fade
+    public static final float ABILITY_BANNER_LEGENDARY_HOLD_SEC  = 0.35f;
+    // Minimum screen Y for banners — keeps them above the thumb cluster
+    public static final float ABILITY_BANNER_MIN_Y               = 300f;
+    // Crit flash: white full-screen edge flash, shorter and dimmer than kill flash
+    public static final float CRIT_FLASH_DURATION_SECONDS        = 0.18f;
+    public static final float CRIT_FLASH_MAX_ALPHA               = 0.35f;
+    // Kill-proc cascade: delay between the kill burst and the proc banner/accent
+    public static final float KILL_PROC_CASCADE_DELAY_SECONDS    = 0.15f;
+    // Colored ring pulse pool — world-anchored expanding ring on proc hits
+    public static final int   RING_PULSE_POOL_SIZE               = 8;
+    public static final float RING_PULSE_LIFE_SECONDS            = 0.30f;
+    public static final float RING_PULSE_MAX_RADIUS              = 60f;
+    // Minimum projected screen X considered visible; values below this mean behind-player sentinel
+    public static final float RING_PULSE_VISIBLE_SCREEN_X_MIN   = -500f;
+    // Affliction markers (Phase 3 — constants reserved for future implementation)
+    public static final int   AFFLICTION_TICK_PARTICLE_COUNT     = 4;
+    public static final float AFFLICTION_MARKER_PULSE_HZ         = 2.0f;
+
     // Enemy attack status-effect application chances (0..1)
     public static final float MIRE_WRAITH_POISON_CHANCE     = 0.30f;
     public static final float ACID_DRONE_POISON_CHANCE      = 0.75f;
