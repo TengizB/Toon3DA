@@ -25,28 +25,28 @@ public final class GameBalance {
     // =========================================================================
 
     /** PLAGUE_HULK (tile '1') — slow tank melee; tanky so yields solid XP. */
-    public static final int XP_REWARD_PLAGUE_HULK   = 8;
+    public static final int XP_REWARD_PLAGUE_HULK   = 14;
 
     /** EYE_TYRANT (tile '2') — fast ranged kiter; low XP, common annoyance. */
-    public static final int XP_REWARD_EYE_TYRANT    = 6;
+    public static final int XP_REWARD_EYE_TYRANT    = 10;
 
     /** GORE_BITER (tile '3') — fast light melee; low XP, spawns in packs. */
-    public static final int XP_REWARD_GORE_BITER    = 6;
+    public static final int XP_REWARD_GORE_BITER    = 10;
 
     /** SHELL_BRUTE (tile '4') — heavy charger melee; more XP for the threat. */
-    public static final int XP_REWARD_SHELL_BRUTE   = 10;
+    public static final int XP_REWARD_SHELL_BRUTE   = 18;
 
     /** MIRE_WRAITH (tile '5') — slow hovering acid ranged; high XP, tanky. */
-    public static final int XP_REWARD_MIRE_WRAITH   = 16;
+    public static final int XP_REWARD_MIRE_WRAITH   = 22;
 
     /** IRON_STALKER (tile '!') — armored elite melee+ranged; the big reward. */
-    public static final int XP_REWARD_IRON_STALKER  = 35;
+    public static final int XP_REWARD_IRON_STALKER  = 55;
 
     /** ACID_DRONE (tile '$') — ranged mechanical; medium XP. */
-    public static final int XP_REWARD_ACID_DRONE    = 8;
+    public static final int XP_REWARD_ACID_DRONE    = 14;
 
     /** VOID_SHROUD (tile '^') — fast stealth melee; medium XP. */
-    public static final int XP_REWARD_VOID_SHROUD   = 12;
+    public static final int XP_REWARD_VOID_SHROUD   = 18;
 
     /** Base XP reward for killing any boss (before depth scaling applied by BossFloorController). */
     public static final int XP_REWARD_BOSS_BASE     = 500;
@@ -55,49 +55,49 @@ public final class GameBalance {
     // XP CURVE — how much XP is needed to reach each next player level
     //
     // Formula:  xpRequired(level) = XP_BASE * level ^ XP_CURVE_EXPONENT
-    //   level 1 → 2:    80 * 1^1.5  =   80 XP   (~2-3 stalkers)
-    //   level 2 → 3:    80 * 2^1.5  =  226 XP   (~6-7 stalkers)
-    //   level 3 → 4:    80 * 3^1.5  =  416 XP
-    //   level 4 → 5:    80 * 4^1.5  =  640 XP
-    //   level 5 → 6:    80 * 5^1.5  =  894 XP
+    //   level 1 → 2:    50 * 1^1.3  =   50 XP   (~5 gore-biters or 1 stalker)
+    //   level 2 → 3:    50 * 2^1.3  =  123 XP   (~floor 1 cleared + a few floor-2 kills)
+    //   level 3 → 4:    50 * 3^1.3  =  207 XP
+    //   level 4 → 5:    50 * 4^1.3  =  302 XP
+    //   level 5 → 6:    50 * 5^1.3  =  406 XP
     // =========================================================================
 
     /** Base XP needed to advance from level 1 to level 2. */
-    public static final int   XP_BASE_REQUIREMENT = 80;
+    public static final int   XP_BASE_REQUIREMENT = 50;
 
-    /** Exponent in the power curve.  1.5 = moderate acceleration (not linear, not exponential). */
-    public static final float XP_CURVE_EXPONENT   = 1.5f;
+    /** Exponent in the power curve.  1.3 = gentler acceleration so level-ups arrive before each difficulty wall. */
+    public static final float XP_CURVE_EXPONENT   = 1.3f;
 
     // =========================================================================
     // LEVEL-UP STAT BONUSES — applied once per level-up per chosen reward
     // =========================================================================
 
     /** Flat increase to the player's maximum HP when HP_BOOST is chosen. */
-    public static final int LEVEL_UP_HP_BONUS     = 15;
+    public static final int LEVEL_UP_HP_BONUS     = 25;
 
     /** Flat increase to the player's maximum armour when ARMOR_BOOST is chosen. */
-    public static final int LEVEL_UP_ARMOR_BONUS  = 10;
+    public static final int LEVEL_UP_ARMOR_BONUS  = 18;
 
     /** Flat damage bonus added to every shot when DAMAGE_BOOST is chosen. */
-    public static final int LEVEL_UP_DAMAGE_BONUS = 5;
+    public static final int LEVEL_UP_DAMAGE_BONUS = 8;
 
     // =========================================================================
     // ENEMY DEPTH SCALING — enemies grow stronger on each new dungeon floor
     //
     // Health formula:  baseHP * HEALTH_SCALE ^ (depth − 1)
-    //   depth 1: ×1.00   depth 2: ×1.12   depth 3: ×1.25
-    //   depth 4: ×1.40   depth 5: ×1.57   depth 10: ×2.77
+    //   depth 1: ×1.00   depth 2: ×1.08   depth 3: ×1.17
+    //   depth 4: ×1.26   depth 5: ×1.36   depth 10: ×2.00
     //
     // Damage formula:  baseDmg * DAMAGE_SCALE ^ (depth − 1)
-    //   depth 1: ×1.00   depth 2: ×1.10   depth 3: ×1.21
-    //   depth 4: ×1.33   depth 5: ×1.46   depth 10: ×2.36
+    //   depth 1: ×1.00   depth 2: ×1.06   depth 3: ×1.12
+    //   depth 4: ×1.19   depth 5: ×1.26   depth 10: ×1.69
     // =========================================================================
 
     /** Per-floor HP multiplier applied as a compound factor. */
-    public static final float ENEMY_HEALTH_SCALE_PER_DEPTH = 1.12f;
+    public static final float ENEMY_HEALTH_SCALE_PER_DEPTH = 1.08f;
 
     /** Per-floor damage multiplier applied as a compound factor. */
-    public static final float ENEMY_DAMAGE_SCALE_PER_DEPTH = 1.10f;
+    public static final float ENEMY_DAMAGE_SCALE_PER_DEPTH = 1.06f;
 
     // =========================================================================
     // Derived-value helpers — thin wrappers delegating math to GameMath
@@ -133,13 +133,13 @@ public final class GameBalance {
     // =========================================================================
 
     /** FIST — always-equipped fallback; chip damage only, never dropped. */
-    public static final int MELEE_FIST_DAMAGE          = 4;
+    public static final int MELEE_FIST_DAMAGE          = 6;
 
     /** COMBAT KNIFE — fast light melee, good vs low-HP chaff. */
-    public static final int MELEE_KNIFE_DAMAGE         = 8;
+    public static final int MELEE_KNIFE_DAMAGE         = 12;
 
     /** HAMMER — heavy crowd-control melee; knockback eligible targets by HAMMER_KNOCKBACK_TILES. */
-    public static final int MELEE_HAMMER_DAMAGE          = 14;
+    public static final int MELEE_HAMMER_DAMAGE          = 20;
 
     /** How many tiles a knockback-eligible enemy is pushed on a Hammer hit. */
     public static final int   MELEE_HAMMER_KNOCKBACK_TILES  = 1;
@@ -147,7 +147,7 @@ public final class GameBalance {
     public static final float MELEE_HAMMER_KNOCKBACK_CHANCE = 0.50f;
 
     /** CHAINSAW — high sustained damage; no knockback (grinds in place). */
-    public static final int MELEE_CHAINSAW_DAMAGE      = 12;
+    public static final int MELEE_CHAINSAW_DAMAGE      = 18;
 
     /** Probability (0–1) that a melee kill drops an ammo pickup; higher than the ranged baseline. */
     public static final float MELEE_KILL_AMMO_DROP_CHANCE = 0.60f;

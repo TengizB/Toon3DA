@@ -1,0 +1,335 @@
+STATUS: IMPLEMENTED
+CATEGORY: Systems
+TITLE: Game Difficulty Rebalance — Fair Hard Challenge
+CREATED: 2026-06-21
+---
+
+OVERVIEW
+========
+The game is currently "unfairly hard": even flawless tactical play cannot reliably
+reach the first boss, because the survivability budget (HP, armor, heals) is too small
+relative to enemy damage, the XP curve is too slow to deliver meaningful level-ups before
+the player is overwhelmed, and depth scaling compounds too fast. This document rebalances
+the whole survivability + threat + progression economy so that a CAREFUL player (uses
+line-of-sight cover, kites enemies one at a time, manages ammo and heals) can reach
+floor 5-7 on a good first run, while a RUSHING player who walks into two or more enemies
+at once still dies. Hardness and tactical depth are preserved — only the math is made fair.
+
+This is a pure-numbers rebalance. No new mechanics, no new tile symbols, no new classes.
+Every change is a constant edit in one of four files.
+
+DESIGN PHILOSOPHY — HARD BUT FAIR
+=================================
+1. The player should always understand WHY they died. Deaths come from positioning
+   mistakes (multiple enemies in line of sight, getting cornered, running out of ammo),
+   not from arithmetic the player could never have beaten.
+2. One-on-one fights are winnable with correct play. Two-on-one is dangerous.
+   Three-on-one is usually lethal. This is the tactical constraint we protect.
+3. Cover and kiting are the core skills. Because enemies only act once per player turn
+   and ranged enemies need a clear cardinal line, breaking LOS is always the right answer
+   when overwhelmed. The numbers must give the player enough HP to survive the 1-2 hits
+   it takes to reach a corner.
+4. Resources are tight but not starving. A heal should be worth using. Ammo should run
+   low if you spray, but not strand you with no kills.
+5. Level-ups arrive BEFORE the difficulty wall, and each one is felt.
+
+IMPORTANT CONTEXT THE PROPOSAL MISSED — CORRECTED MATH
+======================================================
+Three facts in the codebase change the combat math from the rough estimate in the
+original proposal. The numbers below are tuned around the ACTUAL systems:
+
+A. SHOTGUN HAS DISTANCE FALLOFF, not flat 50.
+   SHOTGUN_DAMAGE = 50, SHOTGUN_DAMAGE_DROP_COEFF = 0.18 (WeaponConstants.java).
+   Damage drops with range, so "one-shots everything" is only true at point-blank.
+   This is GOOD for tactics (you want enemies close to maximize damage, which is risky)
+   and we do NOT touch it. Just be aware kiting at max range trades safety for more shots.
+
+B. TOUGHNESS APPLIES A SECOND DAMAGE-REDUCTION LAYER after armor.
+   GameBalance.TGH_REDUCTION_PER_POINT = 1 HP shaved per TOUGHNESS point, floor of
+   TGH_MIN_DAMAGE = 1. A MARINE starts at TGH 2 → -2 HP off every hit that reaches HP.
+   TGH also adds HP: TGH_HP_PER_POINT = 5, so a MARINE's effective max HP is base+10.
+   The rebalance leaves TOUGHNESS alone; it is already a fair mitigation layer. The
+   survival math below assumes a MARINE (TGH 2) for realism, i.e. -2 per HP-bound hit.
+
+C. ACTUAL CURRENT HP VALUES differ from the proposal in two enemies:
+   - MIRE_WRAITH_MAX_HEALTH is 45 (proposal said 60). We reduce 45 -> 38.
+   - EYE_TYRANT_MAX_HEALTH is 18 (proposal said 20). We leave it at 18.
+   All other current values match the proposal.
+
+ARMOR + TOUGHNESS DAMAGE PIPELINE (how a hit resolves)
+======================================================
+For an incoming raw hit of D against a player WITH armor remaining:
+   armorAbsorb   = round(D * ARMOUR_ABSORB_FRACTION)   // 0.50
+   hpPortion     = D - armorAbsorb
+   hpDamage      = max(TGH_MIN_DAMAGE, hpPortion - TGH_REDUCTION_PER_POINT * TGH)
+   armor        -= armorAbsorb   (clamped at 0)
+Once armor is depleted, the full D goes to the hpPortion path (no 50% absorb), still
+reduced by TOUGHNESS. This pipeline is unchanged by this rebalance — we only retune
+the pool sizes and the raw D values.
+
+=======================================================================
+ALL NUMBER CHANGES (grouped by file)
+=======================================================================
+
+--- ItemConstants.java -------------------------------------------------
+PLAYER_MAX_HEALTH              100 -> 130
+PLAYER_MAX_ARMOR                50 -> 75
+MEDKIT_STIM_HEAL                 8 -> 18
+MEDKIT_FULL_HEAL                25 -> 50
+MEDKIT_TOTAL_CARRY_CAP           4 -> 6
+MEDKIT_FULL_CARRY_CAP            2 -> 3
+ARMOUR_SHARD_VALUE               5 -> 8
+ARMOUR_VEST_VALUE               25 -> 35
+AMMO_BOX_SHELLS                  8 -> 12
+AMMO_BOX_BULLETS                20 -> 30
+AMMO_BOX_CELLS                  20 -> 25
+START_ROOM_AMMO_SHELLS          16 -> 24
+START_ROOM_AMMO_BULLETS        120 -> 150
+ARMOUR_ABSORB_FRACTION         0.50 -> 0.50  (UNCHANGED — keep 50% absorb)
+NOTE: ITEM_STACK_MAX_MEDKIT_SMALL is currently 5 and ITEM_STACK_MAX_MEDKIT_LARGE is 2.
+  Raise ITEM_STACK_MAX_MEDKIT_LARGE 2 -> 3 so the new MEDKIT_FULL_CARRY_CAP of 3 can
+  actually be held in a single stack. Leave small at 5 (already > 3 small portion of cap).
+
+--- EnemyConstants.java ------------------------------------------------
+DAMAGE (raw D, before armor/TOUGHNESS):
+  GORE_BITER_ATTACK_DAMAGE         10 -> 7
+  SHELL_BRUTE_ATTACK_DAMAGE        18 -> 13
+  PLAGUE_HULK_ATTACK_DAMAGE        14 -> 10
+  IRON_STALKER_MELEE_DAMAGE        22 -> 16
+  IRON_STALKER_RANGED_DAMAGE       16 -> 11
+  EYE_TYRANT_ATTACK_DAMAGE          8 -> 7
+  MIRE_WRAITH_ATTACK_DAMAGE         8 -> 7
+  ACID_DRONE_ATTACK_DAMAGE         10 -> 8
+  VOID_SHROUD_ATTACK_DAMAGE        12 -> 9
+
+HEALTH:
+  GORE_BITER_MAX_HEALTH            20 -> 18
+  PLAGUE_HULK_MAX_HEALTH           60 -> 50
+  SHELL_BRUTE_MAX_HEALTH           45 -> 38
+  IRON_STALKER_MAX_HEALTH         120 -> 95
+  VOID_SHROUD_MAX_HEALTH           30 -> 25
+  ACID_DRONE_MAX_HEALTH            25 -> 22
+  MIRE_WRAITH_MAX_HEALTH           45 -> 38   (corrected: current is 45, NOT 60)
+  EYE_TYRANT_MAX_HEALTH            18 -> 18   (UNCHANGED — already low)
+
+AMMO + BOSS:
+  ENEMY_AMMO_DROP_CHANCE         0.30 -> 0.40
+  OVERSEER_MAX_HP                 300 -> 250
+
+--- GameBalance.java ---------------------------------------------------
+XP CURVE:
+  XP_BASE_REQUIREMENT              80 -> 50
+  XP_CURVE_EXPONENT              1.5f -> 1.3f
+XP REWARDS:
+  XP_REWARD_GORE_BITER             6 -> 10
+  XP_REWARD_PLAGUE_HULK            8 -> 14
+  XP_REWARD_EYE_TYRANT             6 -> 10
+  XP_REWARD_SHELL_BRUTE           10 -> 18
+  XP_REWARD_MIRE_WRAITH           16 -> 22
+  XP_REWARD_IRON_STALKER          35 -> 55
+  XP_REWARD_ACID_DRONE             8 -> 14
+  XP_REWARD_VOID_SHROUD           12 -> 18
+LEVEL-UP BONUSES:
+  LEVEL_UP_HP_BONUS               15 -> 25
+  LEVEL_UP_ARMOR_BONUS            10 -> 18
+  LEVEL_UP_DAMAGE_BONUS            5 -> 8
+DEPTH SCALING:
+  ENEMY_HEALTH_SCALE_PER_DEPTH  1.12 -> 1.08
+  ENEMY_DAMAGE_SCALE_PER_DEPTH  1.10 -> 1.06
+MELEE WEAPONS:
+  MELEE_FIST_DAMAGE                4 -> 6
+  MELEE_KNIFE_DAMAGE               8 -> 12
+  MELEE_HAMMER_DAMAGE             14 -> 20
+  MELEE_CHAINSAW_DAMAGE          12 -> 18
+
+--- WeaponConstants.java -----------------------------------------------
+No changes required for this rebalance. Shotgun damage/falloff stay as-is; they are
+already well-tuned. (Listed here only to confirm the file was reviewed and intentionally
+left untouched.)
+
+=======================================================================
+VERIFICATION MATH
+=======================================================================
+All player-side math below assumes a fresh MARINE on floor 1:
+  effective max HP = 130 + TGH(2)*5 = 140 HP
+  max armor        = 75
+  TOUGHNESS flat reduction = -2 per HP-bound hit (floor 1)
+Floor 1 = no depth scaling (multiplier 1.0).
+
+(1) GORE_BITER encounter at floor 1, with 1 stim medkit.
+    GORE_BITER raw D = 7. With armor up:
+      armorAbsorb = round(7*0.5) = 4 ; hpPortion = 3 ; hpDamage = max(1, 3-2) = 1 HP
+      (armor drains 4 per hit; 75 armor lasts ~18 hits)
+    GORE_BITER has 18 HP, moves every turn. Shotgun at range 1-2 deals ~40-50 -> ONE-SHOT.
+    A careful player who waits in a corridor and fires as the biter steps adjacent kills
+    it on turn 1, taking 0 damage. Even if the biter gets one bite in first:
+      worst case while armored: 1 HP. While unarmored: max(1, 7-2) = 5 HP.
+    A single biter is never a threat. A stim heal (18) trivially covers any chip taken.
+    PASS. A pack of 3 biters reaching melee simultaneously = 3-15 HP/turn — survivable
+    long enough to retreat and funnel them into a corridor one at a time. RUSHING into
+    the open with 3 biters and reloading a 1-shell shotgun is still deadly. Tactical
+    constraint preserved.
+
+(2) Can a careful player KITE an IRON_STALKER at floor 1? (the stress test)
+    IRON_STALKER: 95 HP, melee 16, ranged 11, range 4, moves every turn.
+    Shotgun at point-blank ~50, with falloff ~38-44 at range 2-3.
+    Kite pattern in a corridor: shoot, step back (breaking the cardinal line denies the
+    ranged shot whenever the player rounds a corner), shoot again.
+    Shots to kill: ceil(95 / 44) = 3 shots (at modest range) or 2 at point-blank (~50+50).
+    Worst realistic case — open corridor, no corner, stalker melees every other turn:
+      turn 1: shoot (stalker ~95->~51), reload — stalker melee 16:
+        armorAbsorb 8, hpPortion 8, hpDamage max(1,8-2)=6 HP ; armor 75->67
+      turn 2: shoot (~51->~7), reload — stalker melee 16: 6 HP ; armor 67->59
+      turn 3: shoot -> dead.
+    Total taken: ~12 HP and ~16 armor out of 140/75. Comfortable.
+    If the player uses a corner to break LOS during reload turns, they take 0-6 HP total.
+    PASS — an Iron Stalker is a tense but clearly winnable elite, not a wall.
+    Under OLD numbers this same fight cost ~33 HP out of 100 with worse RNG, which is why
+    stacking it with any second enemy was lethal. Now there is headroom for a mistake.
+
+(3) Floor 5 SHELL_BRUTE sanity check (the old "dies in 7 hits" problem).
+    Depth-5 damage multiplier = 1.06^4 = 1.262.
+    SHELL_BRUTE raw D at floor 5 = round(13 * 1.262) = 16.
+    With armor: armorAbsorb 8, hpPortion 8, hpDamage max(1,8-2) = 6 HP per hit (armored).
+    Unarmored: max(1, 16-2) = 14 HP per hit.
+    A level-4ish player at floor 5 (see XP math) has ~140 base HP + ~50-75 from level-ups
+    = ~190-215 effective HP and a refreshed armor pool from vests. Even unarmored that is
+    13+ brute hits to die, and the brute has only 38 * 1.08^4 = ~52 HP -> 1-2 shotgun
+    shots to kill. The "7 hits to death" cliff is gone; the fight is now a fair trade.
+    OLD floor-5 brute did 29 raw -> 14.5 HP/hit on a 100 HP pool = the unfair wall. FIXED.
+
+(4) XP MATH — kills to reach each level.
+    Formula: xpRequired(level) = XP_BASE * level ^ XP_CURVE_EXPONENT
+    New constants: XP_BASE = 50, exponent = 1.3.
+      level 1 -> 2: 50 * 1^1.3 =  50 XP
+      level 2 -> 3: 50 * 2^1.3 = 123 XP
+      level 3 -> 4: 50 * 3^1.3 = 207 XP
+      level 4 -> 5: 50 * 4^1.3 = 302 XP
+      level 5 -> 6: 50 * 5^1.3 = 406 XP
+    Kills to reach each level (mixed floor-1/2 fodder; GORE_BITER=10, SHELL_BRUTE=18,
+    EYE_TYRANT=10, plus the occasional MIRE_WRAITH=22 / IRON_STALKER=55):
+      Reach LVL 2: 50 XP  = 5 gore biters, OR 1 stalker. ~half of floor 1. FAST — the
+        first level-up lands while the player is still learning the floor. GOOD.
+      Reach LVL 3: +123 XP cumulative 173 = ~floor 1 fully cleared + a few floor-2 kills.
+      Reach LVL 4: +207 XP cumulative 380 = clearing floor 2 (a typical floor yields
+        150-250 XP with brutes and an elite). Player hits ~LVL 4 entering floor 3.
+      Reach LVL 5: +302 XP cumulative 682 = by end of floor 3 / into floor 4.
+    Result: the player is roughly (floor + 1) in level through the early game, so each new
+    floor is met with a fresh level-up's worth of HP/armor/damage. This is exactly the
+    "level-ups arrive before the wall" goal.
+    COMPARISON: old curve needed ~14 gore-biter kills just for LVL 2 (80 XP / 6 each) and
+    ~38 more for LVL 3 — the player was perpetually under-leveled. FIXED.
+
+(5) Level-up payoff feel.
+    LEVEL_UP_HP_BONUS 25 on a 130 base = +19% max HP per HP pick (was +15 on 100 = +15%,
+    but on the NEW larger pools the old +15 would have felt smaller). +25 is a clearly
+    felt jump: by LVL 5 an HP-focused player is near 240 effective HP. ARMOR +18 and
+    DAMAGE +8 are similarly meaningful (the +8 flat damage helps shotgun reach lethal
+    breakpoints against scaled HP at depth).
+
+(6) Medkit worthwhileness.
+    Stim 18 on 130 max = 13.8% — a real mid-fight top-off, not the old 8 (6.2%) that was
+    rounding error against 10-damage hits. Full 50 = 38.5% of max — a genuine recovery
+    between fights. Carry cap 6 total (up to 3 large) gives a careful hoarder ~150-204 HP
+    of banked healing across a run without trivializing damage.
+
+=======================================================================
+PLAYER EXPERIENCE
+=======================================================================
+Before: every encounter felt like a coin flip the player would eventually lose; deaths
+felt arbitrary because the HP pool was too thin to absorb even a single tactical mistake,
+and the player was always under-leveled.
+After: the player feels like a competent marine who CAN win fights they play well, and who
+dies when they get greedy — pull two patrols at once, fight in the open instead of a
+doorway, or burn all their shells before clearing a room. The decision the rebalance
+creates: "Do I push for the next kill (XP, ammo drop at 40%) or retreat to heal and
+reset LOS?" That risk/reward tension is the game. Hardness is preserved; arbitrariness
+is removed.
+
+=======================================================================
+TECHNICAL NOTES
+=======================================================================
+- Affected files (constant edits only, no logic changes):
+    util/ItemConstants.java    — player pools, medkits, armor pickups, ammo boxes, start ammo
+    util/EnemyConstants.java   — enemy damage, enemy HP, ammo drop chance, OVERSEER_MAX_HP
+    util/GameBalance.java      — XP curve/rewards, level-up bonuses, depth scaling, melee dmg
+    util/WeaponConstants.java  — REVIEWED, intentionally unchanged
+- No new classes, no new packages, no new tile symbols, no docs/tile-symbols.txt change.
+- No GameMath formula changes — XP and depth-scale formulas are reused as-is with new
+  coefficients (xpRequiredForLevel, compoundScaleForDepth).
+- ITEM_STACK_MAX_MEDKIT_LARGE must rise 2 -> 3 alongside MEDKIT_FULL_CARRY_CAP so the
+  cap is actually reachable in inventory. Verify no other code hardcodes the old 2.
+- Rounding: enemy depth-scaled damage is computed at runtime via
+  GameBalance.enemyDamageScaleForDepth(); confirm the existing call rounds to int the
+  same way before and after (no behavior change, only the multiplier shrinks).
+- After editing, re-derive any tooltip/HUD text that prints max HP or max armor (HUD bars
+  scale automatically, but check HudConstants/HudRenderer for any hardcoded "100"/"50").
+
+=======================================================================
+VISUAL DESIGN
+=======================================================================
+No new art. HUD HP/AR bars already scale to PLAYER_MAX_HEALTH / PLAYER_MAX_ARMOR, so the
+larger pools render correctly with no change. Confirm the right-panel ammo digits still
+fit the higher start-ammo counts (150 bullets is 3 digits — already supported). The level-
+up card overlay should display the new bonus magnitudes (+25 HP / +18 AR / +8 DMG) pulled
+from GameBalance, so no text is hardcoded.
+
+=======================================================================
+BALANCE NOTES (tuning guidance / placeholders)
+=======================================================================
+- These are first-pass tuned values, not final. The intended target is: a SKILLED first-
+  good-run reaches floor 5-7. If playtests show the player reaching the boss too easily,
+  the cheapest lever to re-tighten is ENEMY_DAMAGE_SCALE_PER_DEPTH (1.06 -> 1.07) and
+  MEDKIT_TOTAL_CARRY_CAP (6 -> 5), NOT raising base enemy damage (that re-breaks floor 1).
+- If the player still dies on floor 1-2, the safest buffer is MEDKIT_STIM_HEAL (18 -> 22)
+  and ARMOUR_ABSORB_FRACTION (0.50 -> 0.55), since both help the careful player most.
+- Do NOT lower enemy HP further than listed — fights are already snappy (1-3 shots); going
+  lower removes the kiting requirement and collapses the tactical layer.
+- XP exponent 1.3 is the key "leveling feels good" lever. If late floors feel like the
+  player out-levels the danger, raise exponent to 1.35 (steeper) rather than cutting
+  rewards.
+- All ULTRA/NIGHTMARE difficulty stat bases (STAT_BASE_*) are UNCHANGED; this rebalance
+  targets the MARINE baseline. Verify that NIGHTMARE (TGH 1, -1 reduction, +5 HP) is still
+  hard-but-fair under the new enemy damage — it should be, since the raw D cut helps every
+  difficulty proportionally.
+
+=======================================================================
+INTERACTIONS
+=======================================================================
+1. TOUGHNESS stat system (GameBalance TGH_*): the -2 flat reduction at MARINE stacks on top
+   of the lowered raw damage, so low-damage hits (GORE_BITER 7) become near-chip while
+   armored. This is intended — fodder should be trivial 1-on-1; the danger is volume.
+   Re-confirm TGH_MIN_DAMAGE=1 floor still applies so nothing becomes fully immune.
+2. Armor pickups (ARMOUR_SHARD/VEST) + the larger PLAYER_MAX_ARMOR=75: vests (now +35) and
+   shards (+8) refill a bigger pool, making armor a meaningful between-fight resource to
+   seek out. Pairs with the 40% ammo drop to make exploration worthwhile.
+3. Weapon-level abilities (Lifesteal, Hemorrhage Harvest, Second Wind, Bulwark) all read
+   off the new HP/armor pools and unchanged ability constants. Larger pools mean Lifesteal
+   % returns slightly more raw HP; Second Wind's 30%-HP threshold now triggers at 42 HP
+   instead of 30 — a touch more generous, which is fine and on-theme.
+4. Boss (Overseer 250 HP, laser 20, charge 30): against the new ~190-215 HP / 75-armor
+   level-4+ player, a charge (30 raw -> ~13 HP armored / ~28 unarmored) is a serious but
+   survivable hit. The 250 HP (from 300) keeps the DPS check reachable with the larger
+   start/box ammo so the player doesn't run dry mid-boss. Re-verify boss ammo economy in
+   playtest; if the player runs out, raise AMMO_BOX_SHELLS again before lowering boss HP.
+5. Procedural level generation (LevelGenConstants): enemy COUNT per floor is unchanged, so
+   the survivability buffer assumes current spawn density. If a future change increases
+   enemies-per-room, revisit MEDKIT carry cap and start ammo.
+
+=======================================================================
+OPEN QUESTIONS
+=======================================================================
+- Should PLAYER_MAX_ARMOR scale or stay flat at 75? Currently flat + LEVEL_UP_ARMOR_BONUS
+  raises the cap on pick. Confirm LEVEL_UP_ARMOR_BONUS raises the CAP (not just current),
+  otherwise the +18 is wasted once near full.
+- MIRE_WRAITH and SHELL_BRUTE now share 38 HP. Intentional? They play differently (ranged
+  vs charger) so identical HP is fine, but flag if a designer wants visual/threat
+  distinction via HP.
+- Does the start-room ammo selection let the player pick BOTH shells and bullets, or one?
+  If one, 24 shells may be tight for a pure-shotgun run before the first ammo box; consider
+  START_ROOM_AMMO_SHELLS 24 -> 28 if shotgun is the dominant pick in playtests.
+- Should EYE_TYRANT keep 18 HP given its 7 damage is now low? It may become pure nuisance;
+  consider leaving HP but watching whether players ignore it (acceptable) vs it never
+  threatening (then nudge its damage back to 8 at depth).
+- Confirm whether any achievement/score code in StatsStore keys off old max-HP (100) for
+  "no-damage" style tracking; update if so.
