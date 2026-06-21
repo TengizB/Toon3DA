@@ -183,7 +183,7 @@ public class Chaingun extends Weapon {
     @Override
     public String hudAmmoString() {
         if (visualState == WeaponVisualState.RELOADING) return "RELOAD";
-        return "ROUNDS " + shotsInClip + "/" + clipSize;
+        return "ROUNDS " + shotsInClip + "/" + getEffectiveClipSize();
     }
 
     @Override public String getNormalTexturePath() { return WeaponConstants.CHAINGUN_NORMAL_TEXTURE_PATH; }

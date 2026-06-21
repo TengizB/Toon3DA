@@ -468,21 +468,6 @@ public class PlayerController {
         actionProgress = 0f;
     }
 
-    /**
-     * Attempts to interact with the tile directly in front of the player.
-     * Currently handles keycard-locked doors only; routes to tryMove for plain doors.
-     */
-    private void tryInteract() {
-        int facingTileColumn = MathUtils.floor(
-                (player.positionX + player.directionX * Constants.CELL_SIZE) / Constants.CELL_SIZE);
-        int facingTileRow    = MathUtils.floor(
-                (player.positionY + player.directionY * Constants.CELL_SIZE) / Constants.CELL_SIZE);
-        char targetCell = level.getCell(facingTileColumn, facingTileRow);
-        if (Level.isDoor(targetCell)) {
-            tryMove(player.directionX, player.directionY);
-        }
-    }
-
     private void tryMove(float moveDirectionX, float moveDirectionY) {
         float newPositionX   = player.positionX + moveDirectionX * Constants.CELL_SIZE;
         float newPositionY   = player.positionY + moveDirectionY * Constants.CELL_SIZE;
@@ -594,7 +579,7 @@ public class PlayerController {
     private void tryReload() {
         Weapon weapon = inventory.getEquippedWeapon();
         if (weapon == null || weapon.getClipSize() == 0) return;  // null or melee — no reload
-        if (weapon.getShotsInClip() >= weapon.getClipSize()) {
+        if (weapon.getShotsInClip() >= weapon.getEffectiveClipSize()) {
             if (eventTextSystem != null) eventTextSystem.spawn("CLIP FULL");
             return;
         }

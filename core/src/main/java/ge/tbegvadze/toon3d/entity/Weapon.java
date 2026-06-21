@@ -544,7 +544,7 @@ public abstract class Weapon implements WeaponProfile {
      */
     public boolean requestManualReload() {
         if (visualState != WeaponVisualState.NORMAL) return false;
-        if (shotsInClip >= clipSize) return false;
+        if (shotsInClip >= effectiveClipSize) return false;
         if (ammoInventory != null && ammoType != null
                 && ammoInventory.countOf(ammoType.getItemType()) == 0) return false;
         visualState    = WeaponVisualState.RELOADING;
@@ -600,7 +600,7 @@ public abstract class Weapon implements WeaponProfile {
                     }
                 } else {
                     // ammoInventory not yet injected — infinite ammo fallback for tests.
-                    shotsInClip = clipSize;
+                    shotsInClip = effectiveClipSize;
                     if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
                 }
                 // Notify resolver so ON_RELOAD abilities (BULWARK_ROUNDS) can fire.
@@ -854,6 +854,6 @@ public abstract class Weapon implements WeaponProfile {
     /** Short ammo string for the HUD readout, e.g. "SHELLS 1/1" or "RELOAD". */
     public String hudAmmoString() {
         if (visualState == WeaponVisualState.RELOADING) return "RELOAD";
-        return "SHELLS " + shotsInClip + "/" + clipSize;
+        return "SHELLS " + shotsInClip + "/" + effectiveClipSize;
     }
 }

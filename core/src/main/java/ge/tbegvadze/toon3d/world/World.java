@@ -719,7 +719,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         Weapon hudWeapon = inventory.getEquippedWeapon();
         if (hudWeapon != null) {
             hudState.currentAmmo = hudWeapon.getShotsInClip();
-            hudState.clipSize    = hudWeapon.getClipSize();
+            hudState.clipSize    = hudWeapon.getEffectiveClipSize();
             hudState.reserveAmmo = hudWeapon.getReserveAmmo();
         } else {
             hudState.currentAmmo = 0;

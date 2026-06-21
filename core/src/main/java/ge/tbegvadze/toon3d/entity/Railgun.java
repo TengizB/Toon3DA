@@ -138,7 +138,11 @@ public class Railgun extends Weapon {
                             * GameMath.railgunFalloff(distanceTiles,
                                     WeaponConstants.RAILGUN_DROP_COEFF,
                                     WeaponConstants.RAILGUN_DAMAGE_MIN_MULTIPLIER));
+                    boolean targetWasFullHp = enemyHitTarget.isAtFullHp(hitEnemy);
+                    setLastHitEnemy(hitEnemy, computedDamage, targetWasFullHp);
                     enemyHitTarget.applyDamageTo(hitEnemy, computedDamage);
+                    dispatchHitCallbacks(new FireResult(false, distanceTiles));
+                    clearLastHit();
                     hitAnyEnemy = true;
                     // Infinite pierce: do NOT return — continue marching through this enemy.
                 }
@@ -169,7 +173,7 @@ public class Railgun extends Weapon {
         hudStringBuilder.append("SLUGS ");
         hudStringBuilder.append(shotsInClip);
         hudStringBuilder.append('/');
-        hudStringBuilder.append(clipSize);
+        hudStringBuilder.append(getEffectiveClipSize());
         return hudStringBuilder.toString();
     }
 
