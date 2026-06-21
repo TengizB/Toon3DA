@@ -453,7 +453,7 @@ public class PropRenderer implements Renderable, Disposable {
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                 if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
-                propSpriteZBuffer[screenColumn] = depth;
+                propSpriteZBuffer[screenColumn] = renderDepth;
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
                 batch.draw(pickupTexture,

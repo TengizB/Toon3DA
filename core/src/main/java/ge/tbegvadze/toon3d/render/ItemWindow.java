@@ -23,7 +23,7 @@ import java.util.function.Consumer;
  * Part 4 ItemWindow — modal popup shown when a weapon or inventory slot is tapped.
  *
  * Three-zone layout:
- *   Header (top 52px)  — glyph box, item name, category badge, amber exit button
+ *   Header (top 68px)  — glyph box, item name, category badge, amber exit button
  *   Body   (middle)    — left column: description + stat block;
  *                        right column: abilities (weapons) or category-specific info
  *   Footer (bottom 56px) — two action buttons (use/equip + drop)
@@ -579,7 +579,7 @@ final class ItemWindow implements Disposable {
         // Category badge (dim, small)
         font.getData().setScale(0.85f * FONT_SCALE);
         font.setColor(TEXT_DIM);
-        font.draw(spriteBatch, categoryBadge(itemType), NAME_X, nameY - 22f);
+        font.draw(spriteBatch, categoryBadge(itemType), NAME_X, nameY - ItemConstants.INV_ITEM_WIN_HEADER_NAME_GAP);
         font.getData().setScale(1f);
 
         // Exit button "X"
