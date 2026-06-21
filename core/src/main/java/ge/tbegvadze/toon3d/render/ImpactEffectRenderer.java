@@ -98,6 +98,7 @@ public final class ImpactEffectRenderer implements Disposable {
      */
     public void renderScreenOverlays(OrthographicCamera camera) {
         drawDamageNumbers(camera);
+        drawHealParticles(camera);
         drawKillFlash(camera);
         drawCritFlash(camera);
     }
@@ -295,6 +296,45 @@ public final class ImpactEffectRenderer implements Disposable {
         }
 
         // Restore font state so other renderers using BitmapFont are not affected
+        font.getData().setScale(1f);
+        font.setColor(1f, 1f, 1f, 1f);
+        batch.end();
+    }
+
+    // -------------------------------------------------------------------------
+    // Pass 2b: floating heal particles ('+' glyphs rising from center-screen)
+    // -------------------------------------------------------------------------
+
+    private void drawHealParticles(OrthographicCamera camera) {
+        boolean anyHealParticles = false;
+        for (int index = 0; index < ImpactEffectSystem.MAX_HEAL_PARTICLES; index++) {
+            if (system.healParticleActive[index]) { anyHealParticles = true; break; }
+        }
+        if (!anyHealParticles) return;
+
+        font.getData().setScale(EffectConstants.HEAL_PARTICLE_FONT_SCALE);
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+
+        for (int index = 0; index < ImpactEffectSystem.MAX_HEAL_PARTICLES; index++) {
+            if (!system.healParticleActive[index]) continue;
+
+            float age      = system.healParticleAge[index];
+            float fraction = age / EffectConstants.HEAL_PARTICLE_LIFE_SECONDS;
+
+            // Quick fade-in over first 10%, then linear fade-out over remainder
+            float alpha;
+            if (fraction < 0.1f) {
+                alpha = fraction / 0.1f;
+            } else {
+                alpha = 1f - (fraction - 0.1f) / 0.9f;
+            }
+            alpha = Math.max(0f, Math.min(1f, alpha)) * 0.85f;
+
+            font.setColor(0.25f, 1f, 0.25f, alpha);
+            font.draw(batch, "+", system.healParticleX[index], system.healParticleY[index]);
+        }
+
         font.getData().setScale(1f);
         font.setColor(1f, 1f, 1f, 1f);
         batch.end();

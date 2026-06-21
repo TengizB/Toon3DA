@@ -1,0 +1,165 @@
+STATUS: IMPLEMENTED
+CATEGORY: Visual / UI
+TITLE: Enhanced Ability Visual Feedback — Heal Particles & Text Scale
+---
+
+================================================================================
+ENHANCED ABILITY EVENT FEEDBACK VISUALS
+================================================================================
+
+OVERVIEW
+--------------------------------------------------------------------------------
+The existing ability event feedback system (ability-event-feedback.txt) lands
+banners and ring pulses correctly, but two problems remain visible in play:
+
+1. ABILITY BANNERS ARE SMALLER THAN REGULAR EVENT TEXT
+   ABILITY_BANNER_PROC_SCALE = 1.6f is less than LEGACY_FONT_SCALE = 1.8f,
+   meaning a "LIFESTEAL" proc banner looks smaller than "Turn skipped." That is
+   the opposite of intended hierarchy. All ability tier scales must be larger
+   than the legacy baseline.
+
+2. HEALING ABILITIES FEEL LIKE OFFENSIVE PROCS
+   LIFESTEAL, VAMPIRIC_CRIT, ADRENAL_SURGE, HEMORRHAGE_HARVEST, and SOULFORGE
+   all restore HP but receive the same visual treatment as offensive procs —
+   a colored banner. They need the same sensory signature as taking damage
+   (hit vignette + rising text), but in green, so the player instantly reads
+   "I just gained HP."
+
+This document specifies the two complementary fixes.
+
+
+FEATURE A — CORRECTED ABILITY BANNER SCALE HIERARCHY
+--------------------------------------------------------------------------------
+The EventTextRenderer uses a LEGACY_FONT_SCALE baseline of 1.8f for regular
+game events (turn feedback, pickup notices). Ability banners must be visibly
+larger so the player's eye is pulled to them during combat.
+
+New scale table (EffectConstants):
+  ABILITY_BANNER_PROC_SCALE      = 2.0f   (was 1.6f) — larger than legacy 1.8f
+  ABILITY_BANNER_SLAM_SCALE      = 2.6f   (was 2.4f) — clear size jump from PROC
+  ABILITY_BANNER_LEGENDARY_SCALE = 3.2f   (was 3.0f) — unmistakable dominance
+
+Visual result:
+  Regular text "KILL +25 XP"  → drawn at 1.8× baseline
+  PROC banner  "LIFESTEAL"    → drawn at 2.0× (10% larger than regular text)
+  SLAM banner  "CRITICAL -47" → drawn at 2.6× (44% larger)
+  LEGENDARY    "HELLFIRE NOVA"→ drawn at 3.2× (78% larger)
+
+No other changes needed — the renderer already reads ABILITY_BANNER_*_SCALE
+from EffectConstants and applies it; only the constants change.
+
+
+FEATURE B — HEAL ABILITY VISUAL FEEDBACK (GREEN PARTICLES + VIGNETTE)
+--------------------------------------------------------------------------------
+Target feeling: "I took HP back." The moment a healing ability procs, the
+player should see green confirm exactly as they see red when hit. The delta
+must feel good — not just informational.
+
+Healing abilities that trigger this system:
+  LIFESTEAL           ON_HIT — heals a % of damage dealt
+  VAMPIRIC_CRIT       ON_CRIT — heals on critical strikes
+  ADRENAL_SURGE       ON_KILL — chance to restore HP on kill
+  HEMORRHAGE_HARVEST  ON_KILL — heals when killing bleeding enemy
+  SOULFORGE           ON_KILL (legendary) — restores HP on kill
+
+Non-heal green abilities (NOT triggered):
+  SECOND_WIND    — boosts damage, does not restore HP
+  FIELD_MEDIC_ROUNDS — drops a medkit item; heal happens at pickup, not proc
+
+Two independent effects fire simultaneously on a heal proc:
+
+B1 — FLOATING '+' HEAL PARTICLES
+  A cluster of HEAL_PARTICLE_COUNT (5) '+' glyphs spawns in screen space
+  centred at x=640 (screen centre), y=170 (just above the HUD weapon area),
+  with random horizontal spread of ±HEAL_PARTICLE_SPREAD_X (32px).
+  Each particle rises at HEAL_PARTICLE_RISE_SPEED (65 world-units/s) with a
+  slight random horizontal velocity (±11 world-units/s drift).
+  Life: HEAL_PARTICLE_LIFE_SECONDS (0.85s). Alpha fades in over the first 10%
+  then linearly fades out over the remaining 90%. Font scale 1.6× (same as
+  legacy ability text for clean readability). Color: bright green (0.25, 1, 0.25).
+
+  The particles are screen-space (no world→screen projection needed) and live in
+  a pre-allocated pool of HEAL_PARTICLE_POOL_SIZE (20) slots — enough for 4
+  simultaneous heal procs without pool starvation.
+
+B2 — GREEN EDGE VIGNETTE FLASH
+  HitVignetteRenderer gains a third intensity channel: healIntensity.
+  On heal proc: healIntensity = 1.0f.
+  Decays over HEAL_VIGNETTE_FADE_SECONDS (0.45s) — shorter than the red damage
+  vignette (0.6s) because a heal is good news and should clear quickly.
+  Max alpha: HEAL_VIGNETTE_MAX_ALPHA (0.38f) — slightly dimmer than damage
+  (0.55f) so it never feels alarming. Reuses the existing vignetteTexture at
+  tint (0.25, 1, 0.25) — same draw call path, zero new textures.
+
+Combined result: green '+' signs float upward from the weapon area while the
+screen edges briefly pulse green. On mobile, this reads clearly in peripheral
+vision even during rapid combat. The green palette matches the existing damage
+feedback palette (COLOR_GREEN = 0.25, 1, 0.25) so it is consistent with XP
+pickup text and existing heal banners.
+
+
+SCREEN PLACEMENT
+--------------------------------------------------------------------------------
+Heal particles spawn at HEAL_PARTICLE_SPAWN_CENTER_X=640, HEAL_PARTICLE_SPAWN_BASE_Y=170.
+This is above the HUD_HEIGHT=130 bottom panel, in the weapon sprite overlap zone.
+Particles rise upward into the lower game view (y=170→400 over 0.85s), passing
+through the PROC banner area. This gives the impression that healing "rises up"
+toward the HP bar in the left HUD panel.
+
+The green vignette flash sits underneath event text and banners (same layer as
+the red hit vignette, rendered before the HUD).
+
+
+IMPLEMENTATION NOTES
+--------------------------------------------------------------------------------
+Affected files:
+
+  EffectConstants.java — only constant changes (A + B pool sizes/values)
+
+  ImpactEffectSystem.java — add heal particle pool arrays (parallel to the
+    existing damage number arrays), spawnHealParticles(), updateHealParticles(),
+    findFreeHealParticleSlot(). No GPU resources — no dispose() needed.
+
+  ImpactEffectRenderer.java — add drawHealParticles(camera) called in
+    renderScreenOverlays() after drawDamageNumbers(). Reuses existing batch
+    and font; sets font scale to HEAL_PARTICLE_FONT_SCALE before drawing.
+
+  HitVignetteRenderer.java — add healIntensity field, triggerHeal() method,
+    decay in update(), draw in render(). Reuses vignetteTexture.
+
+  AbilityFeedback.java — add ABILITY_IS_HEAL[] boolean lookup table initialized
+    in the existing static block. In fireImmediate(), after spawning the banner:
+    if (ABILITY_IS_HEAL[ordinal]) { impactEffectSystem.spawnHealParticles();
+                                     if (healVignetteRenderer != null) healVignetteRenderer.triggerHeal(); }
+    Add HitVignetteRenderer healVignetteRenderer field and setter.
+    Note: ON_KILL heal procs (ADRENAL_SURGE, HEMORRHAGE_HARVEST, SOULFORGE)
+    already cascade through the pending queue (0.15s delay) via schedulePending(),
+    so the heal particles fire after the kill burst — correct visual order.
+
+  World.java — after constructing abilityFeedback, call:
+    abilityFeedback.setHealVignetteRenderer(hitVignetteRenderer);
+
+Zero new textures, zero new SpriteBatch/ShapeRenderer instances, zero new
+Disposable objects. All pools pre-allocated in constructors.
+
+
+CONSTANTS SUMMARY (EffectConstants.java additions / changes)
+--------------------------------------------------------------------------------
+  // Scale fixes
+  ABILITY_BANNER_PROC_SCALE          = 2.0f   (was 1.6f)
+  ABILITY_BANNER_SLAM_SCALE          = 2.6f   (was 2.4f)
+  ABILITY_BANNER_LEGENDARY_SCALE     = 3.2f   (was 3.0f)
+
+  // Heal particle feedback
+  HEAL_PARTICLE_POOL_SIZE            = 20
+  HEAL_PARTICLE_COUNT                = 5
+  HEAL_PARTICLE_LIFE_SECONDS         = 0.85f
+  HEAL_PARTICLE_RISE_SPEED           = 65f
+  HEAL_PARTICLE_SPREAD_X             = 32f
+  HEAL_PARTICLE_FONT_SCALE           = 1.6f
+  HEAL_PARTICLE_SPAWN_CENTER_X       = 640f
+  HEAL_PARTICLE_SPAWN_BASE_Y         = 170f
+
+  // Heal vignette
+  HEAL_VIGNETTE_FADE_SECONDS         = 0.45f
+  HEAL_VIGNETTE_MAX_ALPHA            = 0.38f

@@ -23,12 +23,14 @@ public final class HitVignetteRenderer implements Disposable {
     private final Texture     vignetteTexture;
     private float             damageIntensity;
     private float             levelUpIntensity;
+    private float             healIntensity;
 
     public HitVignetteRenderer() {
         batch            = new SpriteBatch();
         vignetteTexture  = buildVignetteTexture();
         damageIntensity  = 0f;
         levelUpIntensity = 0f;
+        healIntensity    = 0f;
     }
 
     /** Triggers the red damage vignette at full intensity. */
@@ -41,7 +43,12 @@ public final class HitVignetteRenderer implements Disposable {
         levelUpIntensity = newIntensity;
     }
 
-    /** Call once per frame in World.update() to decay both intensities. */
+    /** Triggers the green heal vignette at full intensity (call on any heal ability proc). */
+    public void triggerHeal() {
+        healIntensity = 1f;
+    }
+
+    /** Call once per frame in World.update() to decay all intensities. */
     public void update(float deltaTime) {
         if (damageIntensity > 0f) {
             damageIntensity = Math.max(0f, damageIntensity - deltaTime / EffectConstants.HIT_VIGNETTE_FADE_SECONDS);
@@ -49,10 +56,13 @@ public final class HitVignetteRenderer implements Disposable {
         if (levelUpIntensity > 0f) {
             levelUpIntensity = Math.max(0f, levelUpIntensity - deltaTime / EffectConstants.LEVEL_UP_VIGNETTE_FADE_SECONDS);
         }
+        if (healIntensity > 0f) {
+            healIntensity = Math.max(0f, healIntensity - deltaTime / EffectConstants.HEAL_VIGNETTE_FADE_SECONDS);
+        }
     }
 
     public void render(OrthographicCamera camera) {
-        if (damageIntensity <= 0f && levelUpIntensity <= 0f) return;
+        if (damageIntensity <= 0f && levelUpIntensity <= 0f && healIntensity <= 0f) return;
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
         if (damageIntensity > 0f) {
@@ -63,6 +73,11 @@ public final class HitVignetteRenderer implements Disposable {
         if (levelUpIntensity > 0f) {
             float alpha = levelUpIntensity * EffectConstants.LEVEL_UP_VIGNETTE_MAX_ALPHA;
             batch.setColor(0f, 0.85f, 1f, alpha);
+            batch.draw(vignetteTexture, 0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
+        }
+        if (healIntensity > 0f) {
+            float alpha = healIntensity * EffectConstants.HEAL_VIGNETTE_MAX_ALPHA;
+            batch.setColor(0.25f, 1f, 0.25f, alpha);
             batch.draw(vignetteTexture, 0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
         }
         batch.setColor(1f, 1f, 1f, 1f);
