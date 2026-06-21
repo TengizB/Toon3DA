@@ -86,9 +86,10 @@ public final class EffectConstants {
 
     // ─── Ability Event Feedback — banner tiers, animations, and world accents ───
     // Banner font scales per tier (Tier 1 = no banner; tag suffix only in Phase 2)
-    public static final float ABILITY_BANNER_PROC_SCALE          = 1.6f;
-    public static final float ABILITY_BANNER_SLAM_SCALE          = 2.4f;
-    public static final float ABILITY_BANNER_LEGENDARY_SCALE     = 3.0f;
+    // PROC must exceed LEGACY_FONT_SCALE (1.8f) so ability banners read larger than info text.
+    public static final float ABILITY_BANNER_PROC_SCALE          = 2.0f;
+    public static final float ABILITY_BANNER_SLAM_SCALE          = 2.6f;
+    public static final float ABILITY_BANNER_LEGENDARY_SCALE     = 3.2f;
     // Screen-space Y anchors for each tier band (world units, Y-up)
     public static final float ABILITY_BANNER_PROC_ANCHOR_Y       = 470f;
     public static final float ABILITY_BANNER_SLAM_ANCHOR_Y       = 540f;
@@ -116,6 +117,21 @@ public final class EffectConstants {
     // Affliction markers (Phase 3 — constants reserved for future implementation)
     public static final int   AFFLICTION_TICK_PARTICLE_COUNT     = 4;
     public static final float AFFLICTION_MARKER_PULSE_HZ         = 2.0f;
+
+    // Heal proc particle feedback — green '+' symbols floating upward when HP is restored
+    public static final int   HEAL_PARTICLE_POOL_SIZE            = 20;
+    public static final int   HEAL_PARTICLE_COUNT                = 5;
+    public static final float HEAL_PARTICLE_LIFE_SECONDS         = 0.85f;
+    public static final float HEAL_PARTICLE_RISE_SPEED           = 65f;
+    public static final float HEAL_PARTICLE_SPREAD_X             = 32f;
+    public static final float HEAL_PARTICLE_FONT_SCALE           = 1.6f;
+    public static final float HEAL_PARTICLE_SPAWN_CENTER_X       = 640f;
+    public static final float HEAL_PARTICLE_SPAWN_BASE_Y         = 170f;
+    public static final float HEAL_PARTICLE_SPAWN_Y_VARIANCE     = 20f;
+    public static final float HEAL_PARTICLE_DRIFT_SPEED          = 22f;
+    // Green edge vignette flash on heal proc (mirrors red HIT_VIGNETTE for damage)
+    public static final float HEAL_VIGNETTE_FADE_SECONDS         = 0.45f;
+    public static final float HEAL_VIGNETTE_MAX_ALPHA            = 0.38f;
 
     // Enemy attack status-effect application chances (0..1)
     public static final float MIRE_WRAITH_POISON_CHANCE     = 0.30f;

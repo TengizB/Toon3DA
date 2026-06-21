@@ -31,18 +31,21 @@ public final class AbilityFeedback {
 
     // ── Lookup tables indexed by WeaponAbility.ordinal() ─────────────────────
     private static final int ABILITY_COUNT = WeaponAbility.values().length;
-    private static final byte[]   ABILITY_TIER;
-    private static final float[]  ABILITY_RED;
-    private static final float[]  ABILITY_GREEN;
-    private static final float[]  ABILITY_BLUE;
-    private static final String[] ABILITY_TEXT;
+    private static final byte[]    ABILITY_TIER;
+    private static final float[]   ABILITY_RED;
+    private static final float[]   ABILITY_GREEN;
+    private static final float[]   ABILITY_BLUE;
+    private static final String[]  ABILITY_TEXT;
+    /** True for abilities whose effect is restoring player HP — triggers heal vignette and particles. */
+    private static final boolean[] ABILITY_IS_HEAL;
 
     static {
-        ABILITY_TIER  = new byte  [ABILITY_COUNT];
-        ABILITY_RED   = new float [ABILITY_COUNT];
-        ABILITY_GREEN = new float [ABILITY_COUNT];
-        ABILITY_BLUE  = new float [ABILITY_COUNT];
-        ABILITY_TEXT  = new String[ABILITY_COUNT];
+        ABILITY_TIER    = new byte   [ABILITY_COUNT];
+        ABILITY_RED     = new float  [ABILITY_COUNT];
+        ABILITY_GREEN   = new float  [ABILITY_COUNT];
+        ABILITY_BLUE    = new float  [ABILITY_COUNT];
+        ABILITY_TEXT    = new String [ABILITY_COUNT];
+        ABILITY_IS_HEAL = new boolean[ABILITY_COUNT];
 
         set(WeaponAbility.BURST_FIRE,         EventTextSystem.TIER_PROC,      ORANGE_R,    ORANGE_G,    ORANGE_B,    "BURST");
         set(WeaponAbility.CRITICAL_STRIKE,    EventTextSystem.TIER_SLAM,      WHITE_HOT_R, WHITE_HOT_G, WHITE_HOT_B, "CRITICAL");
@@ -77,6 +80,14 @@ public final class AbilityFeedback {
         set(WeaponAbility.JUDGMENT,           EventTextSystem.TIER_LEGENDARY, GOLD_R,      GOLD_G,      GOLD_B,      "JUDGMENT!");
         set(WeaponAbility.HELLFIRE_NOVA,      EventTextSystem.TIER_LEGENDARY, EMBER_R,     EMBER_G,     EMBER_B,     "HELLFIRE NOVA");
         set(WeaponAbility.BERSERKERS_OATH,    EventTextSystem.TIER_LEGENDARY, CRIMSON_R,   CRIMSON_G,   CRIMSON_B,   "BERSERKER'S OATH");
+
+        // Abilities that directly restore player HP — spawn green particles + vignette.
+        // SECOND_WIND boosts damage but does not heal. FIELD_MEDIC_ROUNDS drops a pickup.
+        ABILITY_IS_HEAL[WeaponAbility.LIFESTEAL.ordinal()]           = true;
+        ABILITY_IS_HEAL[WeaponAbility.VAMPIRIC_CRIT.ordinal()]       = true;
+        ABILITY_IS_HEAL[WeaponAbility.ADRENAL_SURGE.ordinal()]       = true;
+        ABILITY_IS_HEAL[WeaponAbility.HEMORRHAGE_HARVEST.ordinal()]  = true;
+        ABILITY_IS_HEAL[WeaponAbility.SOULFORGE.ordinal()]           = true;
     }
 
     private static void set(WeaponAbility ability, byte tier,
@@ -92,6 +103,13 @@ public final class AbilityFeedback {
     // ── Instance fields ───────────────────────────────────────────────────────
     private final EventTextSystem    eventTextSystem;
     private final ImpactEffectSystem impactEffectSystem;
+    // Nullable — wired by World after construction; null-checked before use.
+    private HitVignetteRenderer healVignetteRenderer = null;
+
+    /** Wires the green vignette renderer so heal procs can flash the screen edges. */
+    public void setHealVignetteRenderer(HitVignetteRenderer renderer) {
+        this.healVignetteRenderer = renderer;
+    }
 
     // Pending kill-cascade ring buffer — ON_KILL TIER_SLAM+ events delayed briefly
     private static final int PENDING_POOL_SIZE   = 8;
@@ -200,6 +218,13 @@ public final class AbilityFeedback {
         String text  = ABILITY_TEXT [ordinal];
 
         eventTextSystem.spawnBanner(text, red, green, blue, tier);
+
+        if (ABILITY_IS_HEAL[ordinal]) {
+            impactEffectSystem.spawnHealParticles();
+            if (healVignetteRenderer != null) {
+                healVignetteRenderer.triggerHeal();
+            }
+        }
 
         if (tier >= EventTextSystem.TIER_SLAM && tileColumn >= 0 && tileRow >= 0) {
             impactEffectSystem.spawnColoredRingPulse(tileColumn, tileRow, heightMult,

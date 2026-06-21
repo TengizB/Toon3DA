@@ -41,7 +41,8 @@ public final class ImpactEffectSystem implements ImpactEventListener {
                                           * EffectConstants.HIT_PARTICLE_COUNT * 2; // ×2 for kill debris
     static final int MAX_DEATH_BURSTS  = EffectConstants.IMPACT_MAX_SIMULTANEOUS_HITS;
     static final int MAX_DAMAGE_NUMBERS = EffectConstants.IMPACT_MAX_SIMULTANEOUS_HITS;
-    static final int MAX_RING_PULSES   = EffectConstants.RING_PULSE_POOL_SIZE;
+    static final int MAX_RING_PULSES    = EffectConstants.RING_PULSE_POOL_SIZE;
+    static final int MAX_HEAL_PARTICLES = EffectConstants.HEAL_PARTICLE_POOL_SIZE;
 
     // -------------------------------------------------------------------------
     // Screen shake — single accumulator
@@ -108,6 +109,17 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     final float[]   ringPulseGreen     = new float[MAX_RING_PULSES];
     final float[]   ringPulseBlue      = new float[MAX_RING_PULSES];
     final boolean[] ringPulseActive    = new boolean[MAX_RING_PULSES];
+
+    // -------------------------------------------------------------------------
+    // Heal particle pool — screen-space '+' glyphs rising upward on heal procs
+    // Positions are in world-unit screen space (origin bottom-left, Y-up).
+    // No world→screen projection needed: heal is a player-self effect.
+    // -------------------------------------------------------------------------
+    final float[]   healParticleX      = new float[MAX_HEAL_PARTICLES];
+    final float[]   healParticleY      = new float[MAX_HEAL_PARTICLES];
+    final float[]   healParticleVelX   = new float[MAX_HEAL_PARTICLES];
+    final float[]   healParticleAge    = new float[MAX_HEAL_PARTICLES];
+    final boolean[] healParticleActive = new boolean[MAX_HEAL_PARTICLES];
 
     // -------------------------------------------------------------------------
     // Player state for world → screen projection (pushed by World each frame
@@ -228,6 +240,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         updateBursts(deltaTime);
         updateNumbers(deltaTime);
         updateRingPulses(deltaTime);
+        updateHealParticles(deltaTime);
     }
 
     private void updateShake(float deltaTime) {
@@ -304,6 +317,45 @@ public final class ImpactEffectSystem implements ImpactEventListener {
                 ringPulseActive[pulseIndex] = false;
             }
         }
+    }
+
+    private void updateHealParticles(float deltaTime) {
+        for (int index = 0; index < MAX_HEAL_PARTICLES; index++) {
+            if (!healParticleActive[index]) continue;
+            healParticleAge[index] += deltaTime;
+            if (healParticleAge[index] >= EffectConstants.HEAL_PARTICLE_LIFE_SECONDS) {
+                healParticleActive[index] = false;
+                continue;
+            }
+            healParticleX[index] += healParticleVelX[index] * deltaTime;
+            healParticleY[index] += EffectConstants.HEAL_PARTICLE_RISE_SPEED * deltaTime;
+        }
+    }
+
+    /**
+     * Spawns a cluster of green '+' heal particles at center-screen, rising upward.
+     * Particles are in world-unit screen space — no world→screen projection required.
+     * Call from AbilityFeedback when a healing ability proc fires.
+     */
+    public void spawnHealParticles() {
+        for (int count = 0; count < EffectConstants.HEAL_PARTICLE_COUNT; count++) {
+            int slot = findFreeHealParticleSlot();
+            if (slot < 0) break;
+            healParticleX[slot]      = EffectConstants.HEAL_PARTICLE_SPAWN_CENTER_X
+                                       + (random.nextFloat() - 0.5f) * 2f * EffectConstants.HEAL_PARTICLE_SPREAD_X;
+            healParticleY[slot]      = EffectConstants.HEAL_PARTICLE_SPAWN_BASE_Y
+                                       + random.nextFloat() * EffectConstants.HEAL_PARTICLE_SPAWN_Y_VARIANCE;
+            healParticleVelX[slot]   = (random.nextFloat() - 0.5f) * EffectConstants.HEAL_PARTICLE_DRIFT_SPEED;
+            healParticleAge[slot]    = 0f;
+            healParticleActive[slot] = true;
+        }
+    }
+
+    private int findFreeHealParticleSlot() {
+        for (int index = 0; index < MAX_HEAL_PARTICLES; index++) {
+            if (!healParticleActive[index]) return index;
+        }
+        return -1;
     }
 
     // -------------------------------------------------------------------------
