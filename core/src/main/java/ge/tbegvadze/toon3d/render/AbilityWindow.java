@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.entity.AbilityInstance;
 import ge.tbegvadze.toon3d.entity.WeaponAbility;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 
@@ -20,6 +21,7 @@ import ge.tbegvadze.toon3d.util.ItemConstants;
  *
  * Three render passes: Filled shapes → Line shapes → SpriteBatch text.
  * No allocations inside render() — all scratch objects pre-allocated.
+ * Dynamic description strings are built once in open() and cached.
  *
  * Package-private — owned and driven by InventoryOverlayRenderer coordinator.
  */
@@ -75,10 +77,12 @@ final class AbilityWindow implements Disposable {
     private final StringBuilder textBuilder;
 
     // -------------------------------------------------------------------------
-    // State
+    // State — set in open(), cleared in close(), read-only during render()
     // -------------------------------------------------------------------------
 
-    private WeaponAbility displayedAbility = null;
+    private AbilityInstance displayedInstance  = null;
+    private String          cachedDescription  = null;
+    private String[]        cachedAffects      = null;
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -97,16 +101,20 @@ final class AbilityWindow implements Disposable {
     // Lifecycle
     // -------------------------------------------------------------------------
 
-    void open(WeaponAbility ability) {
-        this.displayedAbility = ability;
+    void open(AbilityInstance instance) {
+        this.displayedInstance = instance;
+        this.cachedDescription = instance.ability.buildDescription(instance);
+        this.cachedAffects     = instance.ability.buildAffectsLines(instance);
     }
 
     boolean isOpen() {
-        return displayedAbility != null;
+        return displayedInstance != null;
     }
 
     void close() {
-        displayedAbility = null;
+        displayedInstance = null;
+        cachedDescription = null;
+        cachedAffects     = null;
     }
 
     // -------------------------------------------------------------------------
@@ -133,7 +141,7 @@ final class AbilityWindow implements Disposable {
     // -------------------------------------------------------------------------
 
     void render(OrthographicCamera camera, float animationClock) {
-        if (displayedAbility == null) return;
+        if (displayedInstance == null) return;
         renderFilled(camera);
         renderLines(camera);
         renderText(camera);
@@ -157,7 +165,7 @@ final class AbilityWindow implements Disposable {
         shapeRenderer.setColor(WIN_BG);
         shapeRenderer.rect(WIN_X, WIN_Y, WIN_W, WIN_H);
 
-        boolean isPassive = displayedAbility.trigger == WeaponAbility.Trigger.PASSIVE;
+        boolean isPassive = displayedInstance.ability.trigger == WeaponAbility.Trigger.PASSIVE;
         shapeRenderer.setColor(isPassive ? BADGE_PASSIVE_BG : BADGE_ACTIVE_BG);
         shapeRenderer.rect(BADGE_X, BADGE_Y, BADGE_W, BADGE_H);
 
@@ -175,8 +183,7 @@ final class AbilityWindow implements Disposable {
         shapeRenderer.rect(WIN_X, WIN_Y, WIN_W, WIN_H);
         shapeRenderer.line(WIN_X + PAD, HEADER_Y, WIN_X + WIN_W - PAD, HEADER_Y);
 
-        String[] affects = displayedAbility.affectsLines;
-        if (affects != null && affects.length > 0) {
+        if (cachedAffects != null && cachedAffects.length > 0) {
             shapeRenderer.setColor(DIVIDER_DIM);
             shapeRenderer.line(WIN_X + PAD, DIVIDER_Y, WIN_X + WIN_W - PAD, DIVIDER_Y);
         }
@@ -190,16 +197,17 @@ final class AbilityWindow implements Disposable {
 
         // Ability name (amber, left-aligned in header)
         font.setColor(AMBER);
-        font.draw(spriteBatch, displayedAbility.displayName,
+        font.draw(spriteBatch, displayedInstance.ability.displayName,
                   WIN_X + PAD,
                   HEADER_Y + (HEADER_H + font.getLineHeight()) / 2f);
 
         // Type badge text (PASSIVE / ACTIVE)
-        boolean isPassive = displayedAbility.trigger == WeaponAbility.Trigger.PASSIVE;
+        boolean isPassive = displayedInstance.ability.trigger == WeaponAbility.Trigger.PASSIVE;
         font.getData().setScale(0.65f * FONT_SCALE);
         font.setColor(isPassive ? BADGE_PASSIVE_FG : BADGE_ACTIVE_FG);
-        glyphLayout.setText(font, displayedAbility.getTypeLabel());
-        font.draw(spriteBatch, displayedAbility.getTypeLabel(),
+        String typeLabel = displayedInstance.ability.getTypeLabel();
+        glyphLayout.setText(font, typeLabel);
+        font.draw(spriteBatch, typeLabel,
                   BADGE_X + (BADGE_W - glyphLayout.width)  / 2f,
                   BADGE_Y + (BADGE_H + glyphLayout.height) / 2f);
         font.getData().setScale(1f);
@@ -211,26 +219,24 @@ final class AbilityWindow implements Disposable {
                   EXIT_X + (EXIT_SIZE - glyphLayout.width)  / 2f,
                   EXIT_Y + (EXIT_SIZE + glyphLayout.height) / 2f);
 
-        // Full description text (word-wrapped body)
+        // Full description text — pre-built with exact numbers in open()
         float descX = WIN_X + PAD;
         float descY = HEADER_Y - 10f;
         float descW = WIN_W - 2f * PAD;
         font.getData().setScale(0.80f * FONT_SCALE);
         font.setColor(OFF_WHITE);
-        font.draw(spriteBatch, displayedAbility.fullDescription,
-                  descX, descY, descW, Align.left, true);
+        font.draw(spriteBatch, cachedDescription, descX, descY, descW, Align.left, true);
         font.getData().setScale(1f);
 
-        // AFFECTS block
-        String[] affects = displayedAbility.affectsLines;
-        if (affects != null && affects.length > 0) {
+        // AFFECTS block — pre-built with exact numbers in open()
+        if (cachedAffects != null && cachedAffects.length > 0) {
             font.getData().setScale(0.75f * FONT_SCALE);
             font.setColor(TEXT_DIM_AMBER);
             font.draw(spriteBatch, "AFFECTS:", WIN_X + PAD, DIVIDER_Y - 4f);
 
             font.setColor(OFF_WHITE);
             float bulletY = DIVIDER_Y - 20f;
-            for (String line : affects) {
+            for (String line : cachedAffects) {
                 textBuilder.setLength(0);
                 textBuilder.append('●').append(' ').append(line);
                 font.draw(spriteBatch, textBuilder, WIN_X + PAD + 8f, bulletY);

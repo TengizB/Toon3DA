@@ -122,7 +122,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                                               font, glyphLayout, this::openItemWindowForSlot);
         abilityWindow     = new AbilityWindow(shapeRenderer, spriteBatch, font, glyphLayout);
         itemWindow        = new ItemWindow(shapeRenderer, spriteBatch, font, glyphLayout,
-                                           ability -> abilityWindow.open(ability));
+                                           instance -> abilityWindow.open(instance));
     }
 
     // -------------------------------------------------------------------------
