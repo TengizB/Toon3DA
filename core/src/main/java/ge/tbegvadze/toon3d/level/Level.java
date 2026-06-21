@@ -204,6 +204,24 @@ public class Level {
     }
 
     /**
+     * Returns true for props whose billboard sprite should write to the z-buffer, so that
+     * EnemyRenderer correctly occludes enemies that stand behind them.
+     *
+     * Excludes the five flat floor stains/decals that enemies visually walk over:
+     * corpse ('m'), dropped-shotgun decal ('s'), blood ('.'), oil ('O'), energy scorch ('e').
+     * All other props — solid equipment, pickup items, keycards, stairs — are elevated
+     * billboards that should block sprites drawn later in the render order.
+     */
+    public static boolean isPropOccluder(char cell) {
+        return isPropSolid(cell)
+            || isKeycardPickup(cell)
+            || isMedicalPickup(cell)
+            || isArmourPickup(cell)
+            || isAmmoPickup(cell)
+            || isStairsDown(cell);
+    }
+
+    /**
      * Unified movement-blocking check. Returns true if the player cannot step into this cell.
      * Combines static wall and solid-prop solidity with dynamic door state.
      *

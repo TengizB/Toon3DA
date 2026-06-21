@@ -136,7 +136,7 @@ public enum WeaponAbility {
         new String[]{"Bonus XP per melee kill", "Scales with weapon level"}
     ),
     QUICK_HANDS(
-        Family.UNIVERSAL, Trigger.PASSIVE, false, "Quick Hands", 'Q',
+        Family.GUN, Trigger.PASSIVE, false, "Quick Hands", 'Q',
         "Reduces this weapon's reload tick count.",
         "The operator has drilled rapid field reloads, cutting the reload tick count significantly. Does not affect clip size or damage output. Reduces exposed windows between shots.",
         new String[]{"Reload ticks reduced", "Return-to-fire speed"}

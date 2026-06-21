@@ -209,7 +209,6 @@ public class PropRenderer implements Renderable, Disposable {
         int propCount = propPlacements.size();
         // Reset z-buffer every frame so stale depths from the previous frame don't occlude.
         java.util.Arrays.fill(propSpriteZBuffer, Float.MAX_VALUE);
-        if (propCount == 0) return;
 
         // --- Cull and collect visible props, computing depth for each. ---
         int visibleCount = 0;
@@ -227,8 +226,6 @@ public class PropRenderer implements Renderable, Disposable {
             sortedDepths[visibleCount]  = depth;
             visibleCount++;
         }
-
-        if (visibleCount == 0) return;
 
         // --- Insertion-sort farthest first (painters algorithm, no allocations). ---
         for (int sortPass = 1; sortPass < visibleCount; sortPass++) {
@@ -325,10 +322,11 @@ public class PropRenderer implements Renderable, Disposable {
                 // Skip columns where a nearer prop was already drawn (painter's order, far→near,
                 // so a shallower depth here means a previous iteration already wrote it).
                 if (depth >= propSpriteZBuffer[screenColumn]) continue;
-                // Only solid props (barrels, terminals, lockers, crates) write to the z-buffer.
-                // Decal props (medkits, corpses, blood, oil, keycards, stairs) are flat floor items;
-                // an enemy standing on the same tile must render in front of them.
-                if (Level.isPropSolid(prop.propChar)) {
+                // Elevated billboards (solid props + pickup items + stairs) write to the z-buffer
+                // so EnemyRenderer knows to draw enemies behind them when they are farther away.
+                // Pure floor stains (corpse, blood, oil, energy scorch, dropped-shotgun decal)
+                // are excluded — enemies visually walk over those flat decals.
+                if (Level.isPropOccluder(prop.propChar)) {
                     propSpriteZBuffer[screenColumn] = depth;
                 }
 
@@ -454,6 +452,7 @@ public class PropRenderer implements Renderable, Disposable {
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                 if (depth >= propSpriteZBuffer[screenColumn]) continue;
+                propSpriteZBuffer[screenColumn] = depth;
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
                 batch.draw(pickupTexture,
@@ -540,6 +539,9 @@ public class PropRenderer implements Renderable, Disposable {
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                 if (depth >= propSpriteZBuffer[screenColumn]) continue;
+                if (Level.isPropOccluder(prop.propChar)) {
+                    propSpriteZBuffer[screenColumn] = depth;
+                }
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
                 batch.draw(texture,
