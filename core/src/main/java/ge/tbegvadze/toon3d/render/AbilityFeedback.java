@@ -104,11 +104,17 @@ public final class AbilityFeedback {
     private final EventTextSystem    eventTextSystem;
     private final ImpactEffectSystem impactEffectSystem;
     // Nullable — wired by World after construction; null-checked before use.
-    private HitVignetteRenderer healVignetteRenderer = null;
+    private HitVignetteRenderer healVignetteRenderer      = null;
+    private HitVignetteRenderer legendaryVignetteRenderer = null;
 
-    /** Wires the green vignette renderer so heal procs can flash the screen edges. */
+    /** Wires the vignette renderer so heal procs can flash the screen edges green. */
     public void setHealVignetteRenderer(HitVignetteRenderer renderer) {
         this.healVignetteRenderer = renderer;
+    }
+
+    /** Wires the vignette renderer so legendary procs can breathe in the ability color. */
+    public void setLegendaryVignetteRenderer(HitVignetteRenderer renderer) {
+        this.legendaryVignetteRenderer = renderer;
     }
 
     // Pending kill-cascade ring buffer — ON_KILL TIER_SLAM+ events delayed briefly
@@ -142,7 +148,13 @@ public final class AbilityFeedback {
         int  ordinal = ability.ordinal();
         byte tier    = ABILITY_TIER[ordinal];
 
-        if (tier == 0 || tier == EventTextSystem.TIER_TAG) return;
+        if (tier == 0) return;
+
+        if (tier == EventTextSystem.TIER_TAG) {
+            impactEffectSystem.triggerTagEdgeTick(
+                    ABILITY_RED[ordinal], ABILITY_GREEN[ordinal], ABILITY_BLUE[ordinal]);
+            return;
+        }
 
         if (ability.trigger == WeaponAbility.Trigger.ON_KILL
                 && tier >= EventTextSystem.TIER_SLAM) {
@@ -226,9 +238,46 @@ public final class AbilityFeedback {
             }
         }
 
-        if (tier >= EventTextSystem.TIER_SLAM && tileColumn >= 0 && tileRow >= 0) {
-            impactEffectSystem.spawnColoredRingPulse(tileColumn, tileRow, heightMult,
-                    red, green, blue);
+        if (tier == EventTextSystem.TIER_LEGENDARY) {
+            if (tileColumn >= 0 && tileRow >= 0) {
+                impactEffectSystem.spawnColoredRingPulse(tileColumn, tileRow, heightMult,
+                        red, green, blue, EffectConstants.LEGENDARY_RING_INNER_RADIUS);
+                impactEffectSystem.spawnColoredRingPulse(tileColumn, tileRow, heightMult,
+                        red, green, blue, EffectConstants.LEGENDARY_RING_OUTER_RADIUS);
+                impactEffectSystem.spawnColoredSparks(tileColumn, tileRow, heightMult,
+                        red, green, blue,
+                        EffectConstants.LEGENDARY_NOVA_SPARK_COUNT,
+                        EffectConstants.LEGENDARY_NOVA_SPEED_MIN,
+                        EffectConstants.LEGENDARY_NOVA_SPEED_MAX,
+                        EffectConstants.LEGENDARY_NOVA_LIFE_SECONDS);
+            }
+            impactEffectSystem.triggerShake(
+                    EffectConstants.LEGENDARY_SHAKE_MAGNITUDE,
+                    EffectConstants.LEGENDARY_SHAKE_DURATION_SECONDS);
+            impactEffectSystem.triggerColoredFlash(red, green, blue,
+                    EffectConstants.LEGENDARY_FLASH_DURATION_SECONDS,
+                    EffectConstants.LEGENDARY_FLASH_MAX_ALPHA);
+            if (legendaryVignetteRenderer != null) {
+                legendaryVignetteRenderer.triggerLegendary(red, green, blue);
+            }
+        } else if (tier == EventTextSystem.TIER_SLAM) {
+            if (tileColumn >= 0 && tileRow >= 0) {
+                impactEffectSystem.spawnColoredRingPulse(tileColumn, tileRow, heightMult,
+                        red, green, blue, EffectConstants.SLAM_RING_PULSE_MAX_RADIUS);
+            }
+            impactEffectSystem.triggerShake(
+                    EffectConstants.SLAM_SHAKE_MAGNITUDE,
+                    EffectConstants.SLAM_SHAKE_DURATION_SECONDS);
+            impactEffectSystem.triggerColoredFlash(red, green, blue,
+                    EffectConstants.SLAM_FLASH_DURATION_SECONDS,
+                    EffectConstants.SLAM_FLASH_MAX_ALPHA);
+        } else if (tier == EventTextSystem.TIER_PROC && tileColumn >= 0 && tileRow >= 0) {
+            impactEffectSystem.spawnColoredSparks(tileColumn, tileRow, heightMult,
+                    red, green, blue,
+                    EffectConstants.PROC_SPARK_COUNT,
+                    EffectConstants.PROC_SPARK_SPEED_MIN,
+                    EffectConstants.PROC_SPARK_SPEED_MAX,
+                    EffectConstants.PROC_SPARK_LIFE_SECONDS);
         }
     }
 }

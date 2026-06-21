@@ -24,13 +24,21 @@ public final class HitVignetteRenderer implements Disposable {
     private float             damageIntensity;
     private float             levelUpIntensity;
     private float             healIntensity;
+    private float             legendaryIntensity;
+    private float             legendaryRed;
+    private float             legendaryGreen;
+    private float             legendaryBlue;
 
     public HitVignetteRenderer() {
-        batch            = new SpriteBatch();
-        vignetteTexture  = buildVignetteTexture();
-        damageIntensity  = 0f;
-        levelUpIntensity = 0f;
-        healIntensity    = 0f;
+        batch              = new SpriteBatch();
+        vignetteTexture    = buildVignetteTexture();
+        damageIntensity    = 0f;
+        levelUpIntensity   = 0f;
+        healIntensity      = 0f;
+        legendaryIntensity = 0f;
+        legendaryRed       = 1f;
+        legendaryGreen     = 1f;
+        legendaryBlue      = 1f;
     }
 
     /** Triggers the red damage vignette at full intensity. */
@@ -48,6 +56,17 @@ public final class HitVignetteRenderer implements Disposable {
         healIntensity = 1f;
     }
 
+    /**
+     * Triggers a slow colored vignette breath for legendary ability procs.
+     * Color is set per-trigger so SOULFORGE breathes gold, HELLFIRE_NOVA breathes ember, etc.
+     */
+    public void triggerLegendary(float red, float green, float blue) {
+        legendaryIntensity = 1f;
+        legendaryRed       = red;
+        legendaryGreen     = green;
+        legendaryBlue      = blue;
+    }
+
     /** Call once per frame in World.update() to decay all intensities. */
     public void update(float deltaTime) {
         if (damageIntensity > 0f) {
@@ -59,10 +78,14 @@ public final class HitVignetteRenderer implements Disposable {
         if (healIntensity > 0f) {
             healIntensity = Math.max(0f, healIntensity - deltaTime / EffectConstants.HEAL_VIGNETTE_FADE_SECONDS);
         }
+        if (legendaryIntensity > 0f) {
+            legendaryIntensity = Math.max(0f, legendaryIntensity - deltaTime / EffectConstants.LEGENDARY_VIGNETTE_FADE_SECONDS);
+        }
     }
 
     public void render(OrthographicCamera camera) {
-        if (damageIntensity <= 0f && levelUpIntensity <= 0f && healIntensity <= 0f) return;
+        if (damageIntensity <= 0f && levelUpIntensity <= 0f
+                && healIntensity <= 0f && legendaryIntensity <= 0f) return;
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
         if (damageIntensity > 0f) {
@@ -78,6 +101,11 @@ public final class HitVignetteRenderer implements Disposable {
         if (healIntensity > 0f) {
             float alpha = healIntensity * EffectConstants.HEAL_VIGNETTE_MAX_ALPHA;
             batch.setColor(0.25f, 1f, 0.25f, alpha);
+            batch.draw(vignetteTexture, 0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
+        }
+        if (legendaryIntensity > 0f) {
+            float alpha = legendaryIntensity * EffectConstants.LEGENDARY_VIGNETTE_MAX_ALPHA;
+            batch.setColor(legendaryRed, legendaryGreen, legendaryBlue, alpha);
             batch.draw(vignetteTexture, 0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
         }
         batch.setColor(1f, 1f, 1f, 1f);
@@ -107,8 +135,8 @@ public final class HitVignetteRenderer implements Disposable {
                 float distanceSquared = normalX * normalX + normalY * normalY;
                 float edgeAlpha      = Math.min(1f, distanceSquared);
                 int   alphaInt       = (int) (edgeAlpha * 255f);
-                // RGBA: red=255, green=0, blue=0, alpha=edgeAlpha
-                pixmap.drawPixel(pixelX, pixelY, (255 << 24) | (0 << 16) | (0 << 8) | alphaInt);
+                // White-with-radial-alpha so batch.setColor() tints faithfully in any hue
+                pixmap.drawPixel(pixelX, pixelY, (255 << 24) | (255 << 16) | (255 << 8) | alphaInt);
             }
         }
         Texture texture = new Texture(pixmap);

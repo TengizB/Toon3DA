@@ -56,8 +56,20 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     // Kill flash — single accumulator
     private float killFlashTimeRemaining = 0f;
 
-    // Crit flash — shorter, dimmer than kill flash
-    private float critFlashTimeRemaining = 0f;
+    // TAG edge tick — single colored bottom-edge bar; replaces every frame on new proc
+    private float tagEdgeTickTimeRemaining = 0f;
+    private float tagEdgeTickDuration      = 0f;
+    private float tagEdgeTickRed           = 1f;
+    private float tagEdgeTickGreen         = 1f;
+    private float tagEdgeTickBlue          = 1f;
+
+    // Ability colored flash — generalized crit flash; last-writer-wins on color
+    private float abilityFlashTimeRemaining = 0f;
+    private float abilityFlashDuration      = 0f;
+    private float abilityFlashMaxAlpha      = 0f;
+    private float abilityFlashRed           = 1f;
+    private float abilityFlashGreen         = 1f;
+    private float abilityFlashBlue          = 1f;
 
     // -------------------------------------------------------------------------
     // Particle pool — hit sparks and death debris share this pool
@@ -187,9 +199,30 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     // Flash triggers — called from AbilityFeedback
     // -------------------------------------------------------------------------
 
-    /** Triggers a crit edge flash (shorter and dimmer than kill flash). */
+    /** Triggers a white-hot crit edge flash; routes through the general colored flash slot. */
     public void triggerCritFlash() {
-        critFlashTimeRemaining = EffectConstants.CRIT_FLASH_DURATION_SECONDS;
+        triggerColoredFlash(1.00f, 0.95f, 0.90f,
+                EffectConstants.CRIT_FLASH_DURATION_SECONDS, EffectConstants.CRIT_FLASH_MAX_ALPHA);
+    }
+
+    /** Triggers a colored four-edge flash in the given ability color. Last-write-wins. */
+    public void triggerColoredFlash(float red, float green, float blue,
+                                     float duration, float maxAlpha) {
+        abilityFlashTimeRemaining = duration;
+        abilityFlashDuration      = duration;
+        abilityFlashMaxAlpha      = maxAlpha;
+        abilityFlashRed           = red;
+        abilityFlashGreen         = green;
+        abilityFlashBlue          = blue;
+    }
+
+    /** Triggers the soft colored bottom-edge tick for TAG passive proc confirmation. */
+    public void triggerTagEdgeTick(float red, float green, float blue) {
+        tagEdgeTickTimeRemaining = EffectConstants.TAG_EDGE_TICK_DURATION_SECONDS;
+        tagEdgeTickDuration      = EffectConstants.TAG_EDGE_TICK_DURATION_SECONDS;
+        tagEdgeTickRed           = red;
+        tagEdgeTickGreen         = green;
+        tagEdgeTickBlue          = blue;
     }
 
     // -------------------------------------------------------------------------
@@ -197,21 +230,19 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     // -------------------------------------------------------------------------
 
     /**
-     * Spawns a colored ring-pulse accent at the given enemy tile.
-     * Screen position is projected from tile coords at spawn time using the
-     * current player state; callers must ensure setPlayerState() was called
-     * this frame before invoking this.
-     * If tileColumn or tileRow is negative, or the tile is behind the player,
-     * the spawn is silently skipped.
+     * Spawns a colored ring-pulse accent at the given enemy tile with an explicit max radius.
+     * Screen position is projected from tile coords at spawn time using the current player state;
+     * callers must ensure setPlayerState() was called this frame before invoking this.
+     * If tileColumn or tileRow is negative, or the tile is behind the player, the spawn is skipped.
      */
     public void spawnColoredRingPulse(int tileColumn, int tileRow, float heightMultiplier,
-                                       float red, float green, float blue) {
+                                       float red, float green, float blue, float maxRadius) {
         if (tileColumn < 0 || tileRow < 0) return;
 
         float worldX  = tileColumn * Constants.CELL_SIZE + Constants.CELL_SIZE * 0.5f;
         float worldY  = tileRow    * Constants.CELL_SIZE + Constants.CELL_SIZE * 0.5f;
         float screenX = projectToScreenX(worldX, worldY);
-        if (screenX <= -500f) return;
+        if (screenX <= EffectConstants.RING_PULSE_VISIBLE_SCREEN_X_MIN) return;
         float screenY = projectToScreenY(worldX, worldY, heightMultiplier);
 
         int slot = findFreeRingPulseSlot();
@@ -221,11 +252,55 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         ringPulseScreenY  [slot] = screenY;
         ringPulseAge      [slot] = 0f;
         ringPulseLife     [slot] = EffectConstants.RING_PULSE_LIFE_SECONDS;
-        ringPulseMaxRadius[slot] = EffectConstants.RING_PULSE_MAX_RADIUS;
+        ringPulseMaxRadius[slot] = maxRadius;
         ringPulseRed      [slot] = red;
         ringPulseGreen    [slot] = green;
         ringPulseBlue     [slot] = blue;
         ringPulseActive   [slot] = true;
+    }
+
+    /** Convenience overload using the default ring-pulse max radius. */
+    public void spawnColoredRingPulse(int tileColumn, int tileRow, float heightMultiplier,
+                                       float red, float green, float blue) {
+        spawnColoredRingPulse(tileColumn, tileRow, heightMultiplier,
+                red, green, blue, EffectConstants.RING_PULSE_MAX_RADIUS);
+    }
+
+    /**
+     * Spawns a colored radial spark burst at the given enemy tile.
+     * Reuses the existing particle pool; each spark ejects in a random direction and falls with gravity.
+     * Skipped silently if the tile is behind the player or the pool is full.
+     */
+    public void spawnColoredSparks(int tileColumn, int tileRow, float heightMultiplier,
+                                    float red, float green, float blue,
+                                    int count, float speedMin, float speedMax, float life) {
+        if (tileColumn < 0 || tileRow < 0) return;
+
+        float worldX  = tileColumn * Constants.CELL_SIZE + Constants.CELL_SIZE * 0.5f;
+        float worldY  = tileRow    * Constants.CELL_SIZE + Constants.CELL_SIZE * 0.5f;
+        float screenX = projectToScreenX(worldX, worldY);
+        if (screenX <= EffectConstants.RING_PULSE_VISIBLE_SCREEN_X_MIN) return;
+        float screenY = projectToScreenY(worldX, worldY, heightMultiplier);
+
+        for (int spawnCount = 0; spawnCount < count; spawnCount++) {
+            int slot = findFreeParticleSlot();
+            if (slot < 0) break;
+
+            float angleRadians = random.nextFloat() * MathUtils_PI2;
+            float speed        = speedMin + random.nextFloat() * (speedMax - speedMin);
+
+            particleScreenX  [slot] = screenX;
+            particleScreenY  [slot] = screenY;
+            particleVelocityX[slot] = (float) Math.cos(angleRadians) * speed;
+            particleVelocityY[slot] = (float) Math.sin(angleRadians) * speed;
+            particleAge      [slot] = 0f;
+            particleLife     [slot] = life;
+            particleSize     [slot] = EffectConstants.HIT_PARTICLE_SIZE;
+            particleRed      [slot] = red;
+            particleGreen    [slot] = green;
+            particleBlue     [slot] = blue;
+            particleActive   [slot] = true;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -235,7 +310,8 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     public void update(float deltaTime) {
         updateShake(deltaTime);
         updateKillFlash(deltaTime);
-        updateCritFlash(deltaTime);
+        updateAbilityFlash(deltaTime);
+        updateTagEdgeTick(deltaTime);
         updateParticles(deltaTime);
         updateBursts(deltaTime);
         updateNumbers(deltaTime);
@@ -267,10 +343,17 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         }
     }
 
-    private void updateCritFlash(float deltaTime) {
-        if (critFlashTimeRemaining > 0f) {
-            critFlashTimeRemaining -= deltaTime;
-            if (critFlashTimeRemaining < 0f) critFlashTimeRemaining = 0f;
+    private void updateAbilityFlash(float deltaTime) {
+        if (abilityFlashTimeRemaining > 0f) {
+            abilityFlashTimeRemaining -= deltaTime;
+            if (abilityFlashTimeRemaining < 0f) abilityFlashTimeRemaining = 0f;
+        }
+    }
+
+    private void updateTagEdgeTick(float deltaTime) {
+        if (tagEdgeTickTimeRemaining > 0f) {
+            tagEdgeTickTimeRemaining -= deltaTime;
+            if (tagEdgeTickTimeRemaining < 0f) tagEdgeTickTimeRemaining = 0f;
         }
     }
 
@@ -381,19 +464,39 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     }
 
     /*
-     * Formula: critFlashAlpha
+     * Formula: abilityFlashAlpha
      * Derivation:
-     *   Same sin-curve envelope as kill flash; shorter duration and dimmer cap.
      *   fraction goes from 1 (just triggered) to 0 (expired).
-     *   sin(fraction × π) peaks at fraction = 0.5.
+     *   sin(fraction × π) maps that to 0 → 1 → 0, peaking at midpoint.
+     *   Multiplied by abilityFlashMaxAlpha to cap intensity per tier.
      * Edge cases:
-     *   fraction = 0 (expired) → sin(0) = 0 → alpha = 0 (no flash).
+     *   fraction = 0 (expired) → sin(0) = 0 → alpha = 0.
+     *   abilityFlashDuration = 0 (never triggered) → guard returns 0.
      */
-    public float getCritFlashAlpha() {
-        if (critFlashTimeRemaining <= 0f) return 0f;
-        float fraction = critFlashTimeRemaining / EffectConstants.CRIT_FLASH_DURATION_SECONDS;
-        return EffectConstants.CRIT_FLASH_MAX_ALPHA * (float) Math.sin(fraction * Math.PI);
+    public float getAbilityFlashAlpha() {
+        if (abilityFlashTimeRemaining <= 0f || abilityFlashDuration <= 0f) return 0f;
+        float fraction = abilityFlashTimeRemaining / abilityFlashDuration;
+        return abilityFlashMaxAlpha * (float) Math.sin(fraction * Math.PI);
     }
+
+    public float getAbilityFlashRed()   { return abilityFlashRed; }
+    public float getAbilityFlashGreen() { return abilityFlashGreen; }
+    public float getAbilityFlashBlue()  { return abilityFlashBlue; }
+
+    /*
+     * Formula: tagEdgeTickAlpha
+     * Derivation: identical sin-curve envelope; short 0.14s tick at low max alpha.
+     * Edge cases: tagEdgeTickDuration = 0 → guard returns 0.
+     */
+    public float getTagEdgeTickAlpha() {
+        if (tagEdgeTickTimeRemaining <= 0f || tagEdgeTickDuration <= 0f) return 0f;
+        float fraction = tagEdgeTickTimeRemaining / tagEdgeTickDuration;
+        return EffectConstants.TAG_EDGE_TICK_MAX_ALPHA * (float) Math.sin(fraction * Math.PI);
+    }
+
+    public float getTagEdgeTickRed()   { return tagEdgeTickRed; }
+    public float getTagEdgeTickGreen() { return tagEdgeTickGreen; }
+    public float getTagEdgeTickBlue()  { return tagEdgeTickBlue; }
 
     // Player state accessors for the renderer's per-frame damage-number projection
     float getPlayerWorldX() { return playerWorldX; }
@@ -407,7 +510,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     // Private helpers
     // -------------------------------------------------------------------------
 
-    private void triggerShake(float magnitude, float duration) {
+    void triggerShake(float magnitude, float duration) {
         // Only escalate — a kill shake (magnitude 10) should not be overridden by a
         // simultaneous hit shake (magnitude 4) from a second enemy in the same turn
         if (magnitude > shakeMagnitude || shakeTimeRemaining <= 0f) {

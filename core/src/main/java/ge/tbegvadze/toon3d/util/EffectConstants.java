@@ -133,6 +133,39 @@ public final class EffectConstants {
     public static final float HEAL_VIGNETTE_FADE_SECONDS         = 0.45f;
     public static final float HEAL_VIGNETTE_MAX_ALPHA            = 0.38f;
 
+    // ── Per-tier ability visual feedback ─────────────────────────────────────────
+    // TIER_TAG: soft bottom-edge color tick on every passive proc
+    public static final float TAG_EDGE_TICK_DURATION_SECONDS    = 0.14f;
+    public static final float TAG_EDGE_TICK_MAX_ALPHA           = 0.22f;
+    public static final float TAG_EDGE_TICK_THICKNESS           = 70f;
+    // TIER_PROC: small colored spark puff at the enemy target
+    public static final int   PROC_SPARK_COUNT                  = 6;
+    public static final float PROC_SPARK_SPEED_MIN              = 40f;
+    public static final float PROC_SPARK_SPEED_MAX              = 95f;
+    public static final float PROC_SPARK_LIFE_SECONDS           = 0.30f;
+    // TIER_SLAM: micro shake + colored four-edge flash + thicker ring
+    // Keep SLAM_SHAKE_MAGNITUDE below HIT_SHAKE_MAGNITUDE (4f) so proc never drowns combat
+    public static final float SLAM_SHAKE_MAGNITUDE              = 3.5f;
+    public static final float SLAM_SHAKE_DURATION_SECONDS       = 0.10f;
+    public static final float SLAM_FLASH_DURATION_SECONDS       = 0.16f;
+    public static final float SLAM_FLASH_MAX_ALPHA              = 0.28f;
+    public static final float SLAM_RING_PULSE_MAX_RADIUS        = 75f;
+    // TIER_LEGENDARY: double rings + spark nova + hard shake + full flash + vignette
+    // Keep LEGENDARY_SHAKE_MAGNITUDE just below KILL_SHAKE (10f); LEGENDARY_VIGNETTE_MAX_ALPHA
+    // below damage (0.55f) so a gold breath never reads as "I'm hurt"
+    public static final float LEGENDARY_RING_INNER_RADIUS       = 70f;
+    public static final float LEGENDARY_RING_OUTER_RADIUS       = 130f;
+    public static final int   LEGENDARY_NOVA_SPARK_COUNT        = 18;
+    public static final float LEGENDARY_NOVA_SPEED_MIN          = 90f;
+    public static final float LEGENDARY_NOVA_SPEED_MAX          = 220f;
+    public static final float LEGENDARY_NOVA_LIFE_SECONDS       = 0.55f;
+    public static final float LEGENDARY_FLASH_DURATION_SECONDS  = 0.22f;
+    public static final float LEGENDARY_FLASH_MAX_ALPHA         = 0.45f;
+    public static final float LEGENDARY_SHAKE_MAGNITUDE         = 9f;
+    public static final float LEGENDARY_SHAKE_DURATION_SECONDS  = 0.22f;
+    public static final float LEGENDARY_VIGNETTE_FADE_SECONDS   = 0.9f;
+    public static final float LEGENDARY_VIGNETTE_MAX_ALPHA      = 0.40f;
+
     // Enemy attack status-effect application chances (0..1)
     public static final float MIRE_WRAITH_POISON_CHANCE     = 0.30f;
     public static final float ACID_DRONE_POISON_CHANCE      = 0.75f;
