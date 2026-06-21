@@ -653,8 +653,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         wallRenderer.setLightingTime(facilityTimeSeconds);
         propRenderer.setLightingTime(facilityTimeSeconds);
 
-        alertTimeSeconds  = 0f;
-        float currentAlertPulse = 0f;
+        if (gameState.redAlert) {
+            alertTimeSeconds += Gdx.graphics.getDeltaTime();
+        } else {
+            alertTimeSeconds = 0f;
+        }
+        float currentAlertPulse = gameState.redAlert
+                ? Math.max(0f, (float) Math.sin(
+                        alertTimeSeconds * RenderConstants.ALERT_PULSE_SPEED_RADIANS_PER_SECOND))
+                : 0f;
         wallRenderer.setAlertPulse(currentAlertPulse);
 
         float shakeOffsetX = impactEffectSystem.getShakeOffsetX();

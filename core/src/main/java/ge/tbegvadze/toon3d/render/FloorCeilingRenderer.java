@@ -318,8 +318,11 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
 
         @Override
         public void run() {
-            fillRows(startRow, endRow);
-            phaser.arrive();
+            try {
+                fillRows(startRow, endRow);
+            } finally {
+                phaser.arrive();
+            }
         }
     }
 
