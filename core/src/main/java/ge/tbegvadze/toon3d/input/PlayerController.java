@@ -539,7 +539,7 @@ public class PlayerController {
             ((Railgun) currentWeapon).resetCharge();
         }
         Weapon nextWeapon = inventory.switchToNextWeapon();
-        if (nextWeapon == null) return;  // no weapon available — do nothing
+        if (nextWeapon == null || nextWeapon == currentWeapon) return;
         if (weaponSwitchCallback != null) weaponSwitchCallback.run();
         if (eventTextSystem != null) eventTextSystem.spawn(nextWeapon.getDisplayName());
     }
