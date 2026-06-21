@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.entity.AbilityInstance;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.entity.WeaponAbility;
 import ge.tbegvadze.toon3d.item.Inventory;
@@ -128,11 +129,14 @@ final class ItemWindow implements Disposable {
     // Shared rendering resources (owned by coordinator, not disposed here)
     // -------------------------------------------------------------------------
 
-    private final ShapeRenderer           shapeRenderer;
-    private final SpriteBatch             spriteBatch;
-    private final BitmapFont              font;
-    private final GlyphLayout             glyphLayout;
-    private final Consumer<WeaponAbility> onAbilityTap;
+    private static final AbilityInstance[] NO_ABILITY_INSTANCES = new AbilityInstance[0];
+    private static final String[]         NO_SHORT_HINTS        = new String[0];
+
+    private final ShapeRenderer            shapeRenderer;
+    private final SpriteBatch              spriteBatch;
+    private final BitmapFont               font;
+    private final GlyphLayout              glyphLayout;
+    private final Consumer<AbilityInstance> onAbilityTap;
 
     // Pre-allocated scratch buffer for dynamic stat value strings
     private final StringBuilder valueBuilder;
@@ -141,11 +145,12 @@ final class ItemWindow implements Disposable {
     // State
     // -------------------------------------------------------------------------
 
-    private Inventory       inventory;
-    private int             slotIndex         = -1;
-    private String          flashMessage      = null;
-    private float           flashTimerSeconds = 0f;
-    private WeaponAbility[] cachedAbilities   = ItemType.NO_ABILITIES;
+    private Inventory         inventory;
+    private int               slotIndex          = -1;
+    private String            flashMessage       = null;
+    private float             flashTimerSeconds  = 0f;
+    private AbilityInstance[] cachedAbilities    = NO_ABILITY_INSTANCES;
+    private String[]          cachedShortHints   = NO_SHORT_HINTS;
 
     // Weapon-mode state: set by openWeapon(), cleared by close(). Mutually exclusive with slotIndex >= 0.
     private Weapon  currentWeapon   = null;
@@ -157,7 +162,7 @@ final class ItemWindow implements Disposable {
 
     ItemWindow(ShapeRenderer shapeRenderer, SpriteBatch spriteBatch,
                BitmapFont font, GlyphLayout glyphLayout,
-               Consumer<WeaponAbility> onAbilityTap) {
+               Consumer<AbilityInstance> onAbilityTap) {
         this.shapeRenderer = shapeRenderer;
         this.spriteBatch   = spriteBatch;
         this.font          = font;
@@ -177,9 +182,17 @@ final class ItemWindow implements Disposable {
         this.flashTimerSeconds = 0f;
         ItemStack slot = inventory.getSlot(slotIndex);
         if (!slot.isEmpty() && slot.getType().getCategory() == ItemCategory.WEAPON) {
-            cachedAbilities = slot.getType().getSignatureAbilities();
+            WeaponAbility[] signatureAbilities = slot.getType().getSignatureAbilities();
+            cachedAbilities  = new AbilityInstance[signatureAbilities.length];
+            cachedShortHints = new String[signatureAbilities.length];
+            for (int abilityIndex = 0; abilityIndex < signatureAbilities.length; abilityIndex++) {
+                AbilityInstance levelOneInst    = signatureAbilities[abilityIndex].levelOneInstance();
+                cachedAbilities[abilityIndex]  = levelOneInst;
+                cachedShortHints[abilityIndex] = levelOneInst.ability.buildShortHint(levelOneInst);
+            }
         } else {
-            cachedAbilities = ItemType.NO_ABILITIES;
+            cachedAbilities  = NO_ABILITY_INSTANCES;
+            cachedShortHints = NO_SHORT_HINTS;
         }
     }
 
@@ -192,12 +205,16 @@ final class ItemWindow implements Disposable {
         this.flashTimerSeconds = 0f;
         if (weapon != null) {
             int abilityCount = weapon.getAbilityCount();
-            cachedAbilities = new WeaponAbility[abilityCount];
+            cachedAbilities  = new AbilityInstance[abilityCount];
+            cachedShortHints = new String[abilityCount];
             for (int abilityIndex = 0; abilityIndex < abilityCount; abilityIndex++) {
-                cachedAbilities[abilityIndex] = weapon.getAbility(abilityIndex).ability;
+                AbilityInstance instance        = weapon.getAbility(abilityIndex);
+                cachedAbilities[abilityIndex]  = instance;
+                cachedShortHints[abilityIndex] = instance.ability.buildShortHint(instance);
             }
         } else {
-            cachedAbilities = ItemType.NO_ABILITIES;
+            cachedAbilities  = NO_ABILITY_INSTANCES;
+            cachedShortHints = NO_SHORT_HINTS;
         }
     }
 
@@ -206,11 +223,12 @@ final class ItemWindow implements Disposable {
     }
 
     void close() {
-        slotIndex       = -1;
-        inventory       = null;
-        cachedAbilities = ItemType.NO_ABILITIES;
-        currentWeapon   = null;
-        weaponIsActive  = false;
+        slotIndex        = -1;
+        inventory        = null;
+        cachedAbilities  = NO_ABILITY_INSTANCES;
+        cachedShortHints = NO_SHORT_HINTS;
+        currentWeapon    = null;
+        weaponIsActive   = false;
     }
 
     boolean containsPoint(float worldX, float worldY) {
@@ -436,12 +454,12 @@ final class ItemWindow implements Disposable {
 
     private void renderAbilityRowBackgrounds() {
         float abilityRowTop = DESC_Y - ABILITY_HDR_H;
-        for (WeaponAbility ability : cachedAbilities) {
+        for (AbilityInstance instance : cachedAbilities) {
             float rowBottom = abilityRowTop - ABILITY_ROW_H;
             shapeRenderer.setColor(ABILITY_ROW_BG);
             shapeRenderer.rect(BODY_R_X, rowBottom, BODY_R_W, ABILITY_ROW_H);
 
-            boolean isPassive = ability.trigger == WeaponAbility.Trigger.PASSIVE;
+            boolean isPassive = instance.ability.trigger == WeaponAbility.Trigger.PASSIVE;
             shapeRenderer.setColor(isPassive ? BADGE_PASSIVE_BG : BADGE_ACTIVE_BG);
             float badgeX = BODY_R_X + BODY_R_W - BADGE_W - 4f;
             float badgeY = rowBottom + (ABILITY_ROW_H - BADGE_H) / 2f;
@@ -659,14 +677,15 @@ final class ItemWindow implements Disposable {
                 font.draw(spriteBatch, "No special abilities.", BODY_R_X, contentY);
             } else {
                 float abilityRowTop = contentY;
-                for (WeaponAbility ability : cachedAbilities) {
+                for (int abilityIndex = 0; abilityIndex < cachedAbilities.length; abilityIndex++) {
+                    AbilityInstance instance = cachedAbilities[abilityIndex];
                     float rowBottom = abilityRowTop - ABILITY_ROW_H;
 
                     // Hud glyph (amber, scaled up, left of row)
                     font.getData().setScale(1.4f * FONT_SCALE);
                     font.setColor(AMBER);
                     valueBuilder.setLength(0);
-                    valueBuilder.append(ability.hudGlyph);
+                    valueBuilder.append(instance.ability.hudGlyph);
                     font.draw(spriteBatch, valueBuilder,
                               BODY_R_X + 4f,
                               rowBottom + ABILITY_ROW_H - 10f);
@@ -675,25 +694,25 @@ final class ItemWindow implements Disposable {
                     // Ability display name (amber, normal scale)
                     float nameTextX = BODY_R_X + 28f;
                     font.setColor(AMBER);
-                    font.draw(spriteBatch, ability.displayName,
+                    font.draw(spriteBatch, instance.ability.displayName,
                               nameTextX,
                               rowBottom + ABILITY_ROW_H - 10f);
 
-                    // Short hint (off-white, 0.75 scale, word-wrapped)
+                    // Short hint — pre-built with exact numbers in open() / openWeapon()
                     font.getData().setScale(0.75f * FONT_SCALE);
                     font.setColor(OFF_WHITE);
                     float hintWidth = BODY_R_W - 28f - BADGE_W - 8f;
-                    font.draw(spriteBatch, ability.shortHint,
+                    font.draw(spriteBatch, cachedShortHints[abilityIndex],
                               nameTextX,
                               rowBottom + ABILITY_ROW_H - 26f,
                               hintWidth, Align.left, true);
                     font.getData().setScale(1f);
 
                     // Type badge text (PASSIVE / ACTIVE), centered in pill
-                    boolean isPassive = ability.trigger == WeaponAbility.Trigger.PASSIVE;
+                    boolean isPassive = instance.ability.trigger == WeaponAbility.Trigger.PASSIVE;
                     font.getData().setScale(0.65f * FONT_SCALE);
                     font.setColor(isPassive ? BADGE_PASSIVE_FG : BADGE_ACTIVE_FG);
-                    String badgeLabel = ability.getTypeLabel();
+                    String badgeLabel = instance.ability.getTypeLabel();
                     glyphLayout.setText(font, badgeLabel);
                     float badgeX = BODY_R_X + BODY_R_W - BADGE_W - 4f;
                     float badgeTextY = rowBottom + (ABILITY_ROW_H + glyphLayout.height) / 2f;
