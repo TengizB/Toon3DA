@@ -316,24 +316,62 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
-            float[] propZBuffer = (propRenderer != null) ? propRenderer.getPropSpriteZBuffer() : null;
+            float[] propZBuffer      = (propRenderer != null) ? propRenderer.getPropSpriteZBuffer()      : null;
+            float[] propColumnBottom = (propRenderer != null) ? propRenderer.getPropSpriteColumnBottom() : null;
+            float[] propColumnTop    = (propRenderer != null) ? propRenderer.getPropSpriteColumnTop()    : null;
+            float   columnHeightSpan = clampedTop - clampedBottom;
 
             int firstColumn = Math.max(0, leftScreenColumn);
             int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
-                if (propZBuffer != null && depth >= propZBuffer[screenColumn]) continue;
 
                 // Map screen column to a pixel x within the region, then offset to sheet coords
                 int localSrcX = (screenColumn - leftScreenColumn) * regionWidth / columnSpan;
                 localSrcX = MathUtils.clamp(localSrcX, 0, regionWidth - 1);
                 int texSrcX = region.getRegionX() + localSrcX;
 
-                batch.draw(region.getTexture(),
-                           screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
-                           WALL_COLUMN_WIDTH, clampedTop - clampedBottom,
-                           texSrcX, texSrcY, 1, texSrcHeight,
-                           false, false);
+                if (propZBuffer != null && depth >= propZBuffer[screenColumn]) {
+                    // A closer prop blocks this column. Draw the enemy in two segments around
+                    // the prop's vertical extent so the enemy stays visible above and below
+                    // small props (e.g. ammo pickups) that don't fill the full column height.
+                    float propBottom = propColumnBottom[screenColumn];
+                    float propTop    = propColumnTop[screenColumn];
+
+                    // Above-prop segment: screen rows [max(propTop, clampedBottom), clampedTop]
+                    float aboveSegBottom = Math.max(propTop, clampedBottom);
+                    if (aboveSegBottom < clampedTop && columnHeightSpan > 0f) {
+                        int aboveSrcHeight = Math.max(1,
+                                (int)(texSrcHeight * (clampedTop - aboveSegBottom) / columnHeightSpan));
+                        aboveSrcHeight = Math.min(aboveSrcHeight, texSrcHeight);
+                        batch.draw(region.getTexture(),
+                                   screenColumn * WALL_COLUMN_WIDTH, aboveSegBottom,
+                                   WALL_COLUMN_WIDTH, clampedTop - aboveSegBottom,
+                                   texSrcX, texSrcY, 1, aboveSrcHeight,
+                                   false, false);
+                    }
+
+                    // Below-prop segment: screen rows [clampedBottom, min(propBottom, clampedTop)]
+                    float belowSegTop = Math.min(propBottom, clampedTop);
+                    if (clampedBottom < belowSegTop && columnHeightSpan > 0f) {
+                        int belowSrcYOffset = (int)(texSrcHeight * (clampedTop - belowSegTop) / columnHeightSpan);
+                        int belowSrcY       = texSrcY + belowSrcYOffset;
+                        int belowSrcHeight  = texSrcHeight - belowSrcYOffset;
+                        if (belowSrcHeight > 0) {
+                            batch.draw(region.getTexture(),
+                                       screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
+                                       WALL_COLUMN_WIDTH, belowSegTop - clampedBottom,
+                                       texSrcX, belowSrcY, 1, belowSrcHeight,
+                                       false, false);
+                        }
+                    }
+                } else {
+                    batch.draw(region.getTexture(),
+                               screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
+                               WALL_COLUMN_WIDTH, clampedTop - clampedBottom,
+                               texSrcX, texSrcY, 1, texSrcHeight,
+                               false, false);
+                }
             }
 
             // Cache bar geometry for pass 2; only for alerted enemies within bar draw distance

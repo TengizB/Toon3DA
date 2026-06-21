@@ -109,6 +109,11 @@ public class PropRenderer implements Renderable, Disposable {
 
     // Per-column depth written during render — lets EnemyRenderer occlude against props.
     private final float[] propSpriteZBuffer;
+    // Per-column vertical bounds of the nearest occluding prop — used by EnemyRenderer to
+    // draw enemy segments above and below a small prop (e.g. ammo) rather than skipping the
+    // entire column height when only the center is blocked.
+    private final float[] propSpriteColumnBottom;
+    private final float[] propSpriteColumnTop;
 
     private float playerWorldX      = 0f;
     private float playerWorldY      = 0f;
@@ -124,9 +129,11 @@ public class PropRenderer implements Renderable, Disposable {
         this.wallRenderer   = wallRenderer;
         this.propPlacements = buildPropPlacements(level);
         int propCount       = propPlacements.size();
-        this.sortedIndices      = new int[propCount];
-        this.sortedDepths       = new float[propCount];
-        this.propSpriteZBuffer  = new float[WALL_PROJECTION_SCREEN_WIDTH];
+        this.sortedIndices          = new int[propCount];
+        this.sortedDepths           = new float[propCount];
+        this.propSpriteZBuffer      = new float[WALL_PROJECTION_SCREEN_WIDTH];
+        this.propSpriteColumnBottom = new float[WALL_PROJECTION_SCREEN_WIDTH];
+        this.propSpriteColumnTop    = new float[WALL_PROJECTION_SCREEN_WIDTH];
         // SpriteBatch capacity = one sprite per screen column (1-pixel-wide column draws).
         this.batch                        = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
         this.textures                     = buildTextures();
@@ -204,11 +211,23 @@ public class PropRenderer implements Renderable, Disposable {
         return propSpriteZBuffer;
     }
 
+    /** Returns the per-column screen-bottom of the nearest occluding prop, parallel to {@link #getPropSpriteZBuffer()}. */
+    public float[] getPropSpriteColumnBottom() {
+        return propSpriteColumnBottom;
+    }
+
+    /** Returns the per-column screen-top of the nearest occluding prop, parallel to {@link #getPropSpriteZBuffer()}. */
+    public float[] getPropSpriteColumnTop() {
+        return propSpriteColumnTop;
+    }
+
     @Override
     public void render(OrthographicCamera camera) {
         int propCount = propPlacements.size();
         // Reset z-buffer every frame so stale depths from the previous frame don't occlude.
         java.util.Arrays.fill(propSpriteZBuffer, Float.MAX_VALUE);
+        java.util.Arrays.fill(propSpriteColumnBottom, 0f);
+        java.util.Arrays.fill(propSpriteColumnTop,    0f);
 
         // --- Cull and collect visible props, computing depth for each. ---
         int visibleCount = 0;
@@ -327,7 +346,9 @@ public class PropRenderer implements Renderable, Disposable {
                 // Pure floor stains (corpse, blood, oil, energy scorch, dropped-shotgun decal)
                 // are excluded — enemies visually walk over those flat decals.
                 if (Level.isPropOccluder(prop.propChar)) {
-                    propSpriteZBuffer[screenColumn] = depth;
+                    propSpriteZBuffer[screenColumn]      = depth;
+                    propSpriteColumnBottom[screenColumn] = clampedBottom;
+                    propSpriteColumnTop[screenColumn]    = clampedTop;
                 }
 
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
@@ -453,7 +474,9 @@ public class PropRenderer implements Renderable, Disposable {
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                 if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
-                propSpriteZBuffer[screenColumn] = renderDepth;
+                propSpriteZBuffer[screenColumn]      = renderDepth;
+                propSpriteColumnBottom[screenColumn] = clampedBottom;
+                propSpriteColumnTop[screenColumn]    = clampedTop;
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
                 batch.draw(pickupTexture,
@@ -541,7 +564,9 @@ public class PropRenderer implements Renderable, Disposable {
                 if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                 if (depth >= propSpriteZBuffer[screenColumn]) continue;
                 if (Level.isPropOccluder(prop.propChar)) {
-                    propSpriteZBuffer[screenColumn] = depth;
+                    propSpriteZBuffer[screenColumn]      = depth;
+                    propSpriteColumnBottom[screenColumn] = clampedBottom;
+                    propSpriteColumnTop[screenColumn]    = clampedTop;
                 }
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
