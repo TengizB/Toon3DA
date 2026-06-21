@@ -6,22 +6,22 @@ public final class ItemConstants {
     private ItemConstants() {}
 
     // Medical pickup system — stim-packs ('+') and field medkits ('H')
-    public static final int   MEDKIT_STIM_HEAL                = 8;
-    public static final int   MEDKIT_FULL_HEAL                = 25;
-    public static final int   MEDKIT_TOTAL_CARRY_CAP          = 4;
-    public static final int   MEDKIT_FULL_CARRY_CAP           = 2;
+    public static final int   MEDKIT_STIM_HEAL                = 18;
+    public static final int   MEDKIT_FULL_HEAL                = 50;
+    public static final int   MEDKIT_TOTAL_CARRY_CAP          = 6;
+    public static final int   MEDKIT_FULL_CARRY_CAP           = 3;
     public static final float PLAYER_HEAL_DURATION            = 0.18f;
     public static final float MEDKIT_STIM_SPRITE_HEIGHT       = 0.20f;
     public static final float MEDKIT_FULL_SPRITE_HEIGHT       = 0.30f;
 
     // Player stats
-    public static final int   PLAYER_MAX_HEALTH               = 100;
-    // Player armor — pool capped at 50; armour pickups feed directly into this pool
-    public static final int   PLAYER_MAX_ARMOR                = 50;
+    public static final int   PLAYER_MAX_HEALTH               = 130;
+    // Player armor — pool capped at 75; armour pickups feed directly into this pool
+    public static final int   PLAYER_MAX_ARMOR                = 75;
 
     // Armour pickup system — shards ('a') and security vests ('A')
-    public static final int   ARMOUR_SHARD_VALUE              = 5;
-    public static final int   ARMOUR_VEST_VALUE               = 25;
+    public static final int   ARMOUR_SHARD_VALUE              = 8;
+    public static final int   ARMOUR_VEST_VALUE               = 35;
     public static final float ARMOUR_SHARD_SPRITE_HEIGHT      = 0.25f;
     public static final float ARMOUR_VEST_SPRITE_HEIGHT       = 0.35f;
     // Fraction of each incoming hit that is absorbed by armour (depleting it instead of HP).
@@ -36,7 +36,7 @@ public final class ItemConstants {
     public static final int ITEM_STACK_MAX_DEFAULT        = 99;
     // Per-type stack caps — these are the definitive balance numbers; tune via constants only.
     public static final int ITEM_STACK_MAX_MEDKIT_SMALL   = 5;
-    public static final int ITEM_STACK_MAX_MEDKIT_LARGE   = 2;
+    public static final int ITEM_STACK_MAX_MEDKIT_LARGE   = 3;
     public static final int ITEM_STACK_MAX_STIMPACK       = 5;
     // Weapons never stack — each weapon occupies exactly one slot.
     public static final int ITEM_STACK_MAX_WEAPON         = 1;
@@ -49,9 +49,9 @@ public final class ItemConstants {
     public static final int   AMMO_RESERVE_CAP_CELLS      = 120;
     public static final int   AMMO_RESERVE_CAP_ROCKETS    = 20;
 
-    public static final int   AMMO_BOX_BULLETS            = 20;
-    public static final int   AMMO_BOX_SHELLS             = 8;
-    public static final int   AMMO_BOX_CELLS              = 20;
+    public static final int   AMMO_BOX_BULLETS            = 30;
+    public static final int   AMMO_BOX_SHELLS             = 12;
+    public static final int   AMMO_BOX_CELLS              = 25;
     public static final int   AMMO_BOX_ROCKETS            = 2;
 
     public static final int   AMMO_START_BULLETS          = 50;
@@ -70,8 +70,8 @@ public final class ItemConstants {
     public static final float PICKUP_ITEM_GROUND_OFFSET_FRACTION = 0.10f;  // shift down 10% of sprite height
 
     // Start room — starter ammo granted on weapon selection (sufficient for first dungeon floor)
-    public static final int START_ROOM_AMMO_BULLETS  = 120;
-    public static final int START_ROOM_AMMO_SHELLS   = 16;
+    public static final int START_ROOM_AMMO_BULLETS  = 150;
+    public static final int START_ROOM_AMMO_SHELLS   = 24;
     public static final int START_ROOM_AMMO_CELLS    = 60;
     public static final int START_ROOM_AMMO_SLUGS    = 6;
     public static final int START_ROOM_AMMO_ROCKETS  = 4;
