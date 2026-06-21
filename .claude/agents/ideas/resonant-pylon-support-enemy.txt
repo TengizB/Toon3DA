@@ -1,0 +1,187 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Resonant Pylon — Stationary Shield/Buff Support (priority target)
+CREATED: 2026-06-21
+---
+
+OVERVIEW
+========
+The RESONANT PYLON is a stationary demonic-tech organ — a fleshy spire fused to a
+UAC power node — that does NO direct damage but radiates a SHIELD AURA: every
+enemy on the same cardinal line as the pylon, within range, gains a damage-soaking
+overshield each turn. Kill the pylon and the whole pack loses its protection at
+once. It is the roster's first SUPPORT enemy: it doesn't threaten you, it forces a
+target-priority decision under fire. The current roster has tanks, kiters,
+flankers, and a stationary turret, but nothing that makes "who do I shoot FIRST?"
+the central question. The Pylon fills that gap and creates the classic roguelike
+"break the totem before you fight the room" tactic.
+
+This document OWNS: the Pylon enemy archetype, its aura mechanic, the overshield
+layer it grants, its spawn rules, and its readability. It REQUIRES a new enemy
+spawn symbol. It LEANS ON the status-effect layer (roguelike_order_8) for the
+overshield representation but defines its own simpler shield-pool if that layer is
+absent.
+
+TILE SYMBOL — REQUIRES NEW SYMBOL
+=================================
+Needs one new ENEMY SPAWN MARKER. From docs/tile-symbols.txt the free spawn-capable
+punctuation/letters include K and V (uppercase, currently free) and the spawn
+section already uses ! $ ^ n for elites/specials.
+
+PROPOSED: 'K' (Resonant pylon spawn). Replaced with floor ' ' at load time like all
+spawn markers, with the Pylon entity seeded at that tile.
+
+>>> REQUIRES NEW SYMBOL — before implementing, add 'K' to docs/tile-symbols.txt
+    (ENEMY SPAWN MARKERS section), register it in LevelLoader's spawn extraction +
+    EnemyManager spawn switch, and update the SYMBOL BUDGET count. Do NOT use 'K'
+    in any level file until that commit lands. If 'K' is later claimed, fall back
+    to 'V'.
+
+GAMEPLAY LOOP
+=============
+1. The Pylon is placed by the level/generator (often near a defended objective:
+   keycard, weapon rack, stairs). It is STATIONARY (never moves, never pathfinds)
+   and has no attack.
+2. On EVERY enemy turn, the Pylon "pulses": for each living enemy that is on the
+   same cardinal line as the Pylon (same column OR same row — reusing
+   isSameCardinalLine) AND within PYLON_AURA_RANGE_TILES AND with clear LOS along
+   that line, that enemy gains/refreshes an OVERSHIELD of PYLON_SHIELD_AMOUNT.
+   -> The overshield is a separate hit-point pool drawn ON TOP of the enemy's HP.
+      Incoming damage depletes overshield first, then HP.
+   -> The overshield does NOT stack beyond PYLON_SHIELD_AMOUNT (refresh-to-cap, not
+      accumulate). One pylon = one shield cap per beneficiary.
+3. The Pylon itself can be shot. It has modest HP (PYLON_HEALTH) and NO shield of
+   its own (it cannot shield itself — it is the obvious weak point).
+4. When the Pylon dies: every overshield it was sustaining instantly drops to 0
+   (the shields were projected, not owned). A visible "aura collapse" pulse plays.
+   The protected pack is now fully vulnerable.
+5. If the player ignores the Pylon, every turn the shielded enemies effectively gain
+   PYLON_SHIELD_AMOUNT extra durability — the fight becomes a war of attrition the
+   player loses. The intended counter is: reposition to break LOS to the pylon, or
+   focus-fire the pylon down first.
+
+PLAYER EXPERIENCE
+=================
+You round into a containment bay and three Shell Brutes are lit with a sickly cyan
+glow — every shotgun blast barely dents them. You scan, spot the pulsing spire
+wired into the back wall, and now the room has a PUZZLE: do you push through the
+brutes to reach the pylon, or do you back off, break the corridor's sightline so the
+aura can't reach, and pick the brutes off in the dark? It teaches target priority
+without a tutorial — the cyan glow IS the lesson. Veterans learn to lead with a
+piercing weapon (Railgun/Plasma) to kill the pylon through the pack, turning the
+Pylon into a satisfying "snipe the support" skill check.
+
+TECHNICAL NOTES
+===============
+Affected classes:
+- enemy/EnemyType.java: add RESONANT_PYLON with isStationary=true, attackDamage=0,
+  a flag isSupport=true (or a behavior enum SUPPORT/AURA).
+- enemy/Enemy.java: add an overshield field (int overshield, int overshieldCap) for
+  ALL enemies — the pool that absorbs damage before HP. Default 0/0 for non-buffed
+  enemies. Damage application (in EnemyManager/Enemy.applyDamage) subtracts from
+  overshield first, then HP.
+- enemy/EnemyManager.java:
+    * spawn: handle 'K' -> spawn a Pylon at that tile.
+    * AI turn: Pylons take their turn like any enemy but their "action" is the aura
+      pulse, not movement/attack. Iterate Pylons; for each, find beneficiaries via
+      the existing isSameCardinalLine + range + a 1-D LOS walk; set each
+      beneficiary's overshield = max(current, PYLON_SHIELD_AMOUNT), cap at
+      overshieldCap = PYLON_SHIELD_AMOUNT.
+    * on Pylon death: iterate all enemies and zero any overshield whose source was
+      this pylon (track source pylon id on the overshield, or — simpler v1 — on ANY
+      pylon death, recompute all overshields from surviving pylons next pulse and
+      zero everything now; with usually 1 pylon per room this is equivalent).
+- render/EnemyRenderer.java: draw the overshield as a thin cyan bar above the HP bar
+  (ties into enemy-health-bars docs) and a faint cyan rim-tint on shielded
+  billboards. The Pylon billboard itself pulses.
+
+New class (optional): enemy/PylonAuraResolver.java to keep EnemyManager lean — owns
+beneficiary selection + LOS walk. Mirror the OverwatchResolver structure if that
+exists.
+
+Math notes (1-D LOS walk, same as brace): step tile-by-tile from the pylon toward
+each candidate along the shared axis; block on wall / closed door / solid prop.
+Range = |column diff| or |row diff| <= PYLON_AURA_RANGE_TILES.
+
+Constants to add (EnemyConstants.java + GameBalance.java):
+    PYLON_HEALTH              = 40    // placeholder; killable in ~2-3 strong shots
+    PYLON_SHIELD_AMOUNT       = 12    // overshield granted per beneficiary
+    PYLON_AURA_RANGE_TILES    = 6     // cardinal reach of the aura
+    PYLON_FLOOR_MIN           = 4     // appears from floor 4+ (mid-run threat)
+    PYLON_MAX_PER_LEVEL       = 1     // rare; 1 per level, escort/objective rooms
+    PYLON_TEXTURE path, PYLON billboard height multiplier (~0.95x), aura tint color.
+
+Spawn/scaling: register in the difficulty/floor-scaling tables (roguelike_order_16)
+as a low-frequency mid-to-late spawn. NEVER spawn a Pylon alone (it has no attack —
+a lone pylon is a free kill); the generator must pair it with >=2 combat enemies on
+its lines, or it adds nothing.
+
+VISUAL DESIGN
+=============
+- PYLON BILLBOARD: a tall fleshy-tech spire — charcoal UAC node base, demonic
+  sinew wrapping upward, a glowing cyan resonator crystal at the top that pulses
+  once per turn (the pulse frame = "it just shielded the pack"). 0.95x wall height,
+  stationary, no walk animation needed.
+- AURA BEAMS: on each pulse, draw faint cyan beam segments from the pylon along its
+  active cardinal lines to each beneficiary (reuse the wall-stripe/overlay batch;
+  short-lived, fades over the turn). This makes the "who is protected" relationship
+  legible at a glance — critical for the priority-target read.
+- SHIELDED ENEMIES: faint cyan rim tint on the billboard + a thin cyan overshield
+  bar above the standard health bar. When overshield is depleting, the bar drains
+  cyan before the red HP bar moves.
+- DEATH: a bright cyan shockwave ring from the pylon's tile + all rim-tints snap off
+  simultaneously + EventText "AURA COLLAPSE." Very satisfying payoff for the snipe.
+
+BALANCE NOTES (placeholders — flag for playtest)
+================================================
+- PYLON_SHIELD_AMOUNT (12) should feel like "one extra solid hit per enemy per
+  turn," not invulnerability. If it makes packs feel spongy/unfun, lower to 8.
+- PYLON_HEALTH (40) is intentionally low so the pylon is a PRIORITY, not a second
+  tank. The challenge is REACHING/SIGHTING it through the pack, not its raw HP.
+- Refresh-to-cap (not stacking) prevents runaway shield growth over a long fight.
+- Because the aura is cardinal + LOS-gated, the player has a positional counter:
+  step out of the lane or behind cover and the shields stop refreshing. This is the
+  intended "skill expression" — reward map reading, don't make it a pure DPS check.
+- Piercing weapons (Railgun infinite pierce, Plasma) are the designed hard counter:
+  shoot through the front-line enemy and pop the pylon behind it. This gives those
+  weapons a clear situational niche — good build-diversity payoff (pillar 5).
+- Keep PYLON_MAX_PER_LEVEL = 1 early; two pylons cross-shielding each other's packs
+  is a fun ELITE/boss-floor escalation but brutal as a baseline — gate it to deep
+  floors or a mini-boss room.
+
+INTERACTIONS
+============
+1. ENEMY ARCHETYPES (roguelike_order_7): the Pylon transforms existing archetypes —
+   a shielded Gore Biter swarm or shielded Shell Brutes become a genuinely new
+   encounter without new combat enemies. Strong reuse value.
+2. STATUS EFFECTS (roguelike_order_8): does the overshield block DoT (Burning/
+   Poison) ticks? Recommend YES — ticks deplete overshield first too, so a burning
+   shielded enemy slowly loses shield rather than HP until the pylon dies or the
+   shield is gone. Confirm in playtest (see OPEN Q).
+3. PIERCING/SPLASH WEAPONS (railgun, plasma-rifle, grenade-launcher): pierce lets
+   you hit the pylon through the pack; splash near the pylon can clear shield + pack
+   together. Defines a clear weapon-choice incentive.
+4. NOISE/STEALTH (noise-propagation): a stationary pylon is a navigational landmark;
+   sniping it from outside its room (down a long lane) is a stealth-friendly opener.
+5. BOSS FLOORS (roguelike_order_10): a boss arena seeding 1-2 pylons turns the boss
+   into a "destroy the supports, then the boss" multi-phase fight — strong synergy.
+6. DIFFICULTY SCALING (roguelike_order_16): a clean knob — higher floors raise
+   PYLON_SHIELD_AMOUNT or allow a second pylon, escalating without new art.
+
+OPEN QUESTIONS
+==============
+1. Does overshield absorb status DoT ticks, or do ticks bypass it to HP?
+   Recommend ticks deplete shield first (consistent), but this slows DoT builds vs.
+   pylon packs — playtest whether that's the intended counter or too punishing.
+2. Pylon-death shield handling: track source-id per overshield (precise, supports
+   multi-pylon) vs. "recompute next pulse + zero now" (simpler, fine for 1 pylon).
+   Recommend the simple path for v1, upgrade to source-id when multi-pylon ships.
+3. Should the Pylon block movement/LOS like a solid prop (it's a spire), or be a
+   shootable-but-walk-through hazard? Recommend SOLID (blocks the tile) so it also
+   shapes the room's pathing and can't be body-blocked into uselessness.
+4. Can the Pylon shield ITSELF if another pylon is in range (multi-pylon cross-
+   cover)? Recommend NO self/peer-shield in v1 to keep the weak point honest; revisit
+   for an elite "twin pylon" deep-floor encounter.
+5. Visual beam cost on low-end phones: if per-pulse beams are too heavy, fall back
+   to just the rim-tint + a single pylon pulse flash. Keep the rim-tint as the
+   non-negotiable readability element.
