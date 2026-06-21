@@ -251,5 +251,5 @@ public final class ItemConstants {
     public static final float INV_ABILITY_WIN_EXIT_BTN_SIZE = 36f;
     public static final float INV_ABILITY_WIN_DIVIDER_Y     = INV_ABILITY_WIN_Y + 80f;
     // Font scale multiplier — all AbilityWindow text scaled for mobile readability.
-    public static final float INV_ABILITY_WIN_FONT_SCALE    = 1.3f;
+    public static final float INV_ABILITY_WIN_FONT_SCALE    = 2.2f;
 }

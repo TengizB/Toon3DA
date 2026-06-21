@@ -40,6 +40,24 @@ public class DoubleBarrelShotgun extends Weapon {
     @Override public ItemType getItemType() { return ItemType.WEAPON_DOUBLE_BARREL; }
 
     @Override
+    public void configureRoll(int level, WeaponTier weaponTier, AbilityInstance[] weaponAbilities) {
+        boolean hasBurstFire = false;
+        for (AbilityInstance instance : weaponAbilities) {
+            if (instance.ability == WeaponAbility.BURST_FIRE) {
+                hasBurstFire = true;
+                break;
+            }
+        }
+        if (!hasBurstFire) {
+            AbilityInstance[] extended = new AbilityInstance[weaponAbilities.length + 1];
+            System.arraycopy(weaponAbilities, 0, extended, 0, weaponAbilities.length);
+            extended[weaponAbilities.length] = new AbilityInstance(WeaponAbility.BURST_FIRE, 2f, 2);
+            weaponAbilities = extended;
+        }
+        super.configureRoll(level, weaponTier, weaponAbilities);
+    }
+
+    @Override
     protected FireResult marchShot(int playerTileColumn, int playerTileRow,
                                    int facingStepColumn, int facingStepRow,
                                    Level level, EnemyHitTarget enemyHitTarget,

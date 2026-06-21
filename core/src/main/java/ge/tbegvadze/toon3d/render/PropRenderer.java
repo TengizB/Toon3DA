@@ -351,14 +351,15 @@ public class PropRenderer implements Renderable, Disposable {
             float tileOffsetX = (itemWorldCenterX - playerWorldX) / CELL_SIZE;
             float tileOffsetY = (itemWorldCenterY - playerWorldY) / CELL_SIZE;
             float depth = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
-            if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES) continue;
-            if (depth > MAX_PROP_DRAW_DISTANCE_TILES)      continue;
+            if (depth <= 0f) continue;
+            if (depth > MAX_PROP_DRAW_DISTANCE_TILES) continue;
+            float renderDepth = Math.max(depth, PROP_BEHIND_PLAYER_EPSILON_TILES);
 
             float screenCenterColumn = GameMath.spriteScreenColumnCenter(
                     tileOffsetX, tileOffsetY, directionX, directionY,
                     planeX, planeY, WALL_PROJECTION_SCREEN_WIDTH);
 
-            float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
+            float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, renderDepth);
             float spriteScreenHeight = fullWallLineHeight * WEAPON_PICKUP_HEIGHT_FRACTION;
             float spriteScreenWidth  = spriteScreenHeight; // square procedural texture
 
@@ -395,7 +396,7 @@ public class PropRenderer implements Renderable, Disposable {
             texSrcHeight = Math.max(1, texSrcHeight);
 
             float tileBrightness = level.getTileBrightness(groundItem.tileColumn, groundItem.tileRow, lightingTimeSeconds);
-            float shade          = Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * tileBrightness,
+            float shade          = Math.min(GameMath.wallShade(renderDepth, WALL_SHADING_FALLOFF) * tileBrightness,
                                             MAX_LIGHTING_SHADE);
 
             // Tier glow aura — additive halo drawn behind the weapon so the sprite keeps its true colours.
@@ -428,8 +429,8 @@ public class PropRenderer implements Renderable, Disposable {
                     int glowFirstColumn = Math.max(0, glowLeft);
                     int glowLastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, glowRight);
                     for (int screenColumn = glowFirstColumn; screenColumn <= glowLastColumn; screenColumn++) {
-                        if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
-                        if (depth >= propSpriteZBuffer[screenColumn]) continue;
+                        if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                        if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
                         int glowTexSrcX = (screenColumn - glowLeft) * weaponPickupGlowTexture.getWidth() / glowColumnSpan;
                         glowTexSrcX = MathUtils.clamp(glowTexSrcX, 0, weaponPickupGlowTexture.getWidth() - 1);
                         batch.draw(weaponPickupGlowTexture,
@@ -450,8 +451,8 @@ public class PropRenderer implements Renderable, Disposable {
             int firstColumn = Math.max(0, leftScreenColumn);
             int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
-                if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
-                if (depth >= propSpriteZBuffer[screenColumn]) continue;
+                if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
                 propSpriteZBuffer[screenColumn] = depth;
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
