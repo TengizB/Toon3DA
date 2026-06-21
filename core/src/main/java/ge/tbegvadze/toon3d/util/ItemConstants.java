@@ -114,7 +114,11 @@ public final class ItemConstants {
     public static final float INV_ITEM_WIN_Y                  = INV_ITEM_WIN_CENTER_Y - INV_ITEM_WIN_HEIGHT / 2f;
     public static final float INV_ITEM_WIN_PADDING            = 18f;
     public static final float INV_ITEM_WIN_BORDER_THICK       = 2f;
-    public static final float INV_ITEM_WIN_HEADER_H           = 52f;
+    // Header tall enough to contain item name (1.3×FONT_SCALE ~34px) + gap + category badge (~16px).
+    public static final float INV_ITEM_WIN_HEADER_H           = 68f;
+    // Vertical distance from name draw-Y to category badge draw-Y in the header.
+    // Default font line height × 1.3 × FONT_SCALE ≈ 20 × 1.69 ≈ 34px; 36px gives 2px clearance.
+    public static final float INV_ITEM_WIN_HEADER_NAME_GAP    = 36f;
     public static final float INV_ITEM_WIN_HEADER_Y           = INV_ITEM_WIN_Y + INV_ITEM_WIN_HEIGHT - INV_ITEM_WIN_HEADER_H;
     public static final float INV_ITEM_WIN_FOOTER_H           = 56f;
     public static final float INV_ITEM_WIN_FOOTER_RULE_Y      = INV_ITEM_WIN_Y + INV_ITEM_WIN_FOOTER_H;
@@ -251,5 +255,8 @@ public final class ItemConstants {
     public static final float INV_ABILITY_WIN_EXIT_BTN_SIZE = 36f;
     public static final float INV_ABILITY_WIN_DIVIDER_Y     = INV_ABILITY_WIN_Y + 80f;
     // Font scale multiplier — all AbilityWindow text scaled for mobile readability.
-    public static final float INV_ABILITY_WIN_FONT_SCALE    = 2.2f;
+    // At 2.2 the badge pill (18px tall) overflowed and bullet-line spacing (16px) was
+    // smaller than the scaled line height (~24px), causing text overlap. 1.4 is the
+    // maximum where badge text (~11px) and bullet lines (~13px) both fit their containers.
+    public static final float INV_ABILITY_WIN_FONT_SCALE    = 1.4f;
 }
