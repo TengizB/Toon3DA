@@ -215,6 +215,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hitVignetteRenderer = new HitVignetteRenderer();
         abilityFeedback     = new AbilityFeedback(eventTextSystem, impactEffectSystem);
         abilityFeedback.setHealVignetteRenderer(hitVignetteRenderer);
+        abilityFeedback.setLegendaryVignetteRenderer(hitVignetteRenderer);
 
         // Player stat system — seeded from MARINE difficulty for now; difficulty selection
         // will be wired when the run-setup screen (order_18) is implemented.

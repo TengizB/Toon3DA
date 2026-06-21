@@ -100,7 +100,8 @@ public final class ImpactEffectRenderer implements Disposable {
         drawDamageNumbers(camera);
         drawHealParticles(camera);
         drawKillFlash(camera);
-        drawCritFlash(camera);
+        drawAbilityFlash(camera);
+        drawTagEdgeTick(camera);
     }
 
     // -------------------------------------------------------------------------
@@ -373,11 +374,11 @@ public final class ImpactEffectRenderer implements Disposable {
     }
 
     // -------------------------------------------------------------------------
-    // Pass 3b: crit-flash screen-edge overlay (shorter and dimmer than kill flash)
+    // Pass 3b: ability colored four-edge flash (crit = white-hot; slam/legendary = ability color)
     // -------------------------------------------------------------------------
 
-    private void drawCritFlash(OrthographicCamera camera) {
-        float flashAlpha = system.getCritFlashAlpha();
+    private void drawAbilityFlash(OrthographicCamera camera) {
+        float flashAlpha = system.getAbilityFlashAlpha();
         if (flashAlpha <= 0f) return;
 
         float width         = Constants.WORLD_WIDTH;
@@ -389,12 +390,34 @@ public final class ImpactEffectRenderer implements Disposable {
         shapes.setProjectionMatrix(camera.combined);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Pure white for a clean crit snap (vs warm-orange kill flash)
-        shapes.setColor(1f, 1f, 1f, flashAlpha);
-        shapes.rect(0f,                      0f,                       width,         edgeThickness); // bottom
-        shapes.rect(0f,                      height - edgeThickness,   width,         edgeThickness); // top
-        shapes.rect(0f,                      0f,                       edgeThickness, height);        // left
-        shapes.rect(width - edgeThickness,   0f,                       edgeThickness, height);        // right
+        shapes.setColor(system.getAbilityFlashRed(), system.getAbilityFlashGreen(),
+                        system.getAbilityFlashBlue(), flashAlpha);
+        shapes.rect(0f,                    0f,                     width,         edgeThickness);
+        shapes.rect(0f,                    height - edgeThickness, width,         edgeThickness);
+        shapes.rect(0f,                    0f,                     edgeThickness, height);
+        shapes.rect(width - edgeThickness, 0f,                     edgeThickness, height);
+
+        shapes.end();
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    // -------------------------------------------------------------------------
+    // Pass 3c: TAG passive edge tick — soft colored bar along the bottom edge only
+    // -------------------------------------------------------------------------
+
+    private void drawTagEdgeTick(OrthographicCamera camera) {
+        float tickAlpha = system.getTagEdgeTickAlpha();
+        if (tickAlpha <= 0f) return;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+        shapes.setProjectionMatrix(camera.combined);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+
+        shapes.setColor(system.getTagEdgeTickRed(), system.getTagEdgeTickGreen(),
+                        system.getTagEdgeTickBlue(), tickAlpha);
+        shapes.rect(0f, 0f, Constants.WORLD_WIDTH, EffectConstants.TAG_EDGE_TICK_THICKNESS);
 
         shapes.end();
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);

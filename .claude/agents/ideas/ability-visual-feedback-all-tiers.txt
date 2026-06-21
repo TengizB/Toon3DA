@@ -1,0 +1,493 @@
+STATUS: IMPLEMENTED
+CATEGORY: Visual / UI
+TITLE: Per-Tier Ability Visual Feedback — All Abilities
+---
+
+================================================================================
+PER-TIER ABILITY VISUAL FEEDBACK — ALL ABILITIES
+================================================================================
+
+
+OVERVIEW
+--------------------------------------------------------------------------------
+Every weapon ability proc should produce visible feedback proportional to its
+tier, in the ability's own color. Today TIER_TAG passives are completely silent,
+TIER_PROC is banner-only (except heals), and SLAM/LEGENDARY share an identical
+ring pulse. This spec adds a distinct, escalating visual signature to each of
+the four tiers so the player always reads "something good just happened" and can
+tell roughly how big it was — without any effect obscuring the gameplay view for
+more than a fraction of a second.
+
+The whole system reuses the existing ImpactEffectSystem pools, ImpactEffectRenderer
+draw passes, and HitVignetteRenderer channel pattern. It adds exactly ONE new pool
+type (a screen-space colored spark burst) plus one new vignette channel. Everything
+else is parameter tuning and new spawn calls wired through AbilityFeedback.
+
+Design philosophy — the four-rung ladder:
+  TIER_TAG (passive)  → a whisper. One quick edge tick, no banner. "It's working."
+  TIER_PROC (moderate)→ a tap. Banner + a small colored spark puff at the target.
+  TIER_SLAM (heavy)   → a punch. Banner + ring pulse + micro shake + colored flash.
+  TIER_LEGENDARY (epic)→ a slam. Banner + double ring + shake + full colored flash
+                         + radial spark nova + colored vignette breath.
+
+Color is never hardcoded per effect: every new effect reads the ability's color
+from the existing ABILITY_RED / ABILITY_GREEN / ABILITY_BLUE lookup tables, so a
+cyan ARMOR_PIERCE tick is cyan and an ember HELLFIRE_NOVA nova is ember — for free.
+
+
+--------------------------------------------------------------------------------
+1. WHAT NEW VISUAL EFFECTS TO ADD, PER TIER
+--------------------------------------------------------------------------------
+
+================================================================================
+TIER_TAG (passives) — "the whisper"
+ARMOR_PIERCE (cyan), OVERPENETRATION (cyan), QUICK_HANDS (white),
+EXTENDED_MAG (white), POINT_BLANK (orange), MARKSMANS_PATIENCE (white),
+RHYTHM (white)
+================================================================================
+Currently: completely silent (early-return in announce()).
+
+Problem: these passives fire constantly (often every shot/reload). A banner per
+shot would be spam, and a world ring pulse would be misleading. They need an
+ambient, peripheral "tick" that confirms the modifier is live without ever
+pulling the eye off the enemy.
+
+NEW EFFECT — TAG EDGE TICK (colored, very short, bottom-edge only):
+  A single thin colored bar flashes along the BOTTOM screen edge only (above the
+  thumb cluster), in the ability's color, for one quick sin-curve pulse.
+  - Bottom edge only (not all four) so it reads as "status, peripheral" not
+    "impact, central." It lives in the player's lower peripheral vision near the
+    weapon, where passive-modifier confirmation belongs.
+  - Duration TAG_EDGE_TICK_DURATION_SECONDS = 0.14f (about one player action frame).
+  - Max alpha TAG_EDGE_TICK_MAX_ALPHA = 0.22f — barely-there; never alarming.
+  - Thickness TAG_EDGE_TICK_THICKNESS = 70f world units along the bottom.
+  - Additive blend, same path as crit flash, so it glows softly rather than dims.
+
+NEW EFFECT — TAG MICRO TEXT (optional, debounced):
+  Instead of the full banner, spawn the ability's short text (e.g. "PIERCE",
+  "RHYTHM") as a SMALL, dim, screen-space tick at the TOP-LEFT of the play area,
+  reusing the existing heal-particle pool path but as a single static-rising
+  glyph string. To avoid spam this is DEBOUNCED per ability: a given TAG ability
+  can only spawn micro text once every TAG_TEXT_DEBOUNCE_SECONDS = 1.2f. The edge
+  tick still fires every proc; only the text is rate-limited.
+  Font scale TAG_TEXT_FONT_SCALE = 1.1f (smaller than legacy 1.8f — clearly
+  subordinate). Alpha cap 0.5f. Color = ability color.
+
+  Rationale: RHYTHM stacking or POINT_BLANK landing benefits from an occasional
+  readable confirm, but firing it every single shot would bury the combat banners.
+  The edge tick handles "every proc"; the debounced text handles "remind me what
+  passive is live."
+
+Net TAG feel: a soft colored breath at the bottom rim on every relevant shot,
+plus an occasional tiny labeled tick. Subtle, never obstructive.
+
+================================================================================
+TIER_PROC (moderate) — "the tap"
+BURST_FIRE, EXECUTIONER, REND, STAGGER_ROUNDS, KINETIC_SLAM, CLEAVE, INCENDIARY,
+LIFESTEAL, BULWARK_ROUNDS, SECOND_WIND, SALVAGE_STRIKE, SCHOLARS_EDGE,
+OPENING_SALVO, RESONANT_ROUNDS, CREDIT_FANG
+================================================================================
+Currently: colored banner only (heals additionally get green particles + vignette).
+
+NEW EFFECT — PROC SPARK PUFF (small colored spark burst at the target):
+  On a PROC proc, spawn a small puff of PROC_SPARK_COUNT = 6 colored square
+  fragments at the enemy's projected screen position (same projection the ring
+  pulse already uses). Sparks eject radially at low speed and fall with gravity,
+  reusing the EXISTING hit-particle pool and its update/draw path — but tinted to
+  the ability color instead of blood red.
+  - Speed PROC_SPARK_SPEED_MIN = 40f, PROC_SPARK_SPEED_MAX = 95f.
+  - Life PROC_SPARK_LIFE_SECONDS = 0.30f.
+  - Size = HIT_PARTICLE_SIZE (4f), reuse.
+  This gives every offensive PROC a small colored "spit" at the point of impact —
+  smaller and shorter than the kill debris, clearly a notch below SLAM's ring.
+
+NEW EFFECT — PROC MICRO BANNER PUNCH (animation, not a new pool):
+  PROC banners currently pop in flat. Give them a tiny scale punch using the
+  EXISTING ABILITY_BANNER_POP_DURATION_SEC path: scale from 1.15x down to 1.0x
+  over the pop. No new pool, just enabling overshoot for PROC (today only SLAM/
+  LEGENDARY punch). Controlled by new ABILITY_BANNER_PROC_PUNCH_OVERSHOOT = 0.15f.
+
+Heal PROCs (LIFESTEAL, etc.) keep their green particles + vignette ON TOP of the
+new spark puff — the spark puff is the ability-color confirm at the target, the
+green particles are the self-heal confirm at the player. They read as two distinct
+events and that is correct.
+
+Net PROC feel: banner punches in + a small colored spark spits off the enemy.
+A clean "tap" of confirmation, clearly weaker than SLAM.
+
+================================================================================
+TIER_SLAM (heavy) — "the punch"
+CRITICAL_STRIKE, HEMORRHAGE_HARVEST, VAMPIRIC_CRIT, ADRENAL_SURGE,
+SCAVENGER_ROUNDS, FIELD_MEDIC_ROUNDS, STATIC_DISCHARGE
+================================================================================
+Currently: banner + colored ring pulse at target. (CRITICAL_STRIKE also already
+triggers the white crit edge flash via announceCrit.)
+
+The ring pulse is good but SLAM should hit harder than "PROC + ring." Add weight:
+
+NEW EFFECT — SLAM MICRO SHAKE:
+  Trigger a small screen shake on every SLAM proc using the EXISTING triggerShake
+  path: SLAM_SHAKE_MAGNITUDE = 3.5f, SLAM_SHAKE_DURATION_SECONDS = 0.10f. This is
+  below HIT_SHAKE_MAGNITUDE (4f) so it never overpowers actual combat hits, but it
+  adds a physical "thunk" to the proc. (triggerShake already only escalates, so a
+  simultaneous kill shake correctly wins.)
+
+NEW EFFECT — SLAM COLORED EDGE FLASH (generalized crit flash):
+  Generalize the crit flash into a COLORED edge flash so all SLAM procs (not just
+  crits) get a full four-edge color snap in the ability's color.
+  - Reuse crit-flash duration/alpha but make the color a parameter.
+  - SLAM_FLASH_DURATION_SECONDS = 0.16f, SLAM_FLASH_MAX_ALPHA = 0.28f.
+  - CRITICAL_STRIKE keeps using the white-hot crit flash (its color is white-hot
+    already, so this is consistent). HEMORRHAGE_HARVEST flashes crimson,
+    STATIC_DISCHARGE electric-blue, SCAVENGER_ROUNDS amber, etc.
+
+NEW EFFECT — SLAM RING PULSE THICKENING (reuse, stronger):
+  Keep the existing single ring pulse but bump its max radius for SLAM tier so it
+  visually outranks the (new) PROC spark puff and reads bigger:
+  SLAM_RING_PULSE_MAX_RADIUS = 75f (vs current shared RING_PULSE_MAX_RADIUS 60f).
+  This is passed per-spawn, not a global change (PROC procs do not spawn rings, so
+  only SLAM/LEGENDARY are affected).
+
+Net SLAM feel: banner punches, a colored ring snaps out at the target, the screen
+edges flash that color, and the whole view gives one short shake. A real "punch."
+
+================================================================================
+TIER_LEGENDARY (epic) — "the slam"
+SOULFORGE (gold), JUDGMENT (gold), HELLFIRE_NOVA (ember), BERSERKERS_OATH (crimson)
+================================================================================
+Currently: banner + colored ring pulse (identical to SLAM — the core problem).
+
+LEGENDARY must feel categorically bigger. Build it from SLAM's parts, doubled,
+plus a signature radial nova and a slow colored vignette "breath."
+
+NEW EFFECT — LEGENDARY DOUBLE RING:
+  Spawn TWO concentric colored ring pulses at the target instead of one: an inner
+  ring at LEGENDARY_RING_INNER_RADIUS = 70f and an outer ring at
+  LEGENDARY_RING_OUTER_RADIUS = 130f, the outer spawned with a small staggered
+  delay LEGENDARY_RING_STAGGER_SECONDS = 0.06f via the existing pending-cascade
+  queue in AbilityFeedback (or simply spawn both immediately with different
+  max-radius and rely on the expansion curve to separate them — see OPEN
+  QUESTIONS). Reuses the ring-pulse pool (pool size already 8, plenty).
+
+NEW EFFECT — LEGENDARY RADIAL SPARK NOVA (the signature moment):
+  A large radial burst of LEGENDARY_NOVA_SPARK_COUNT = 18 colored sparks from the
+  target's screen position, faster and longer-lived than the PROC puff:
+  - Speed LEGENDARY_NOVA_SPEED_MIN = 90f, LEGENDARY_NOVA_SPEED_MAX = 220f.
+  - Life LEGENDARY_NOVA_LIFE_SECONDS = 0.55f.
+  - Reuses the hit-particle pool (MAX_PARTICLES is sized 12*8*2 = 192, ample).
+  This is the visual centerpiece: a colored explosion of sparks at the kill/proc
+  point, unmistakably bigger than anything SLAM produces.
+
+NEW EFFECT — LEGENDARY COLORED VIGNETTE BREATH:
+  Add a new ABILITY-COLORED vignette channel to HitVignetteRenderer that pulses
+  the screen edges in the ability's own color, slow and cinematic:
+  - LEGENDARY_VIGNETTE_FADE_SECONDS = 0.9f (long, lingering "breath").
+  - LEGENDARY_VIGNETTE_MAX_ALPHA = 0.40f.
+  - Color is set per-trigger (not baked) so SOULFORGE breathes gold, HELLFIRE_NOVA
+    breathes ember, BERSERKERS_OATH breathes crimson.
+  This is the slow envelope that makes a LEGENDARY proc feel like the room itself
+  reacted, lasting long enough to register but clearing within a second.
+
+NEW EFFECT — LEGENDARY FULL FLASH + STRONGER SHAKE (reuse SLAM parts, amped):
+  - Use the generalized colored edge flash at LEGENDARY_FLASH_MAX_ALPHA = 0.45f
+    and LEGENDARY_FLASH_DURATION_SECONDS = 0.22f.
+  - Shake at LEGENDARY_SHAKE_MAGNITUDE = 9f, LEGENDARY_SHAKE_DURATION_SECONDS =
+    0.22f (near kill-shake weight — a legendary proc deserves it).
+
+Net LEGENDARY feel: banner slams in oversized, twin colored rings burst out, a
+colored spark nova erupts, the screen edges flash and the whole view shakes hard,
+then a slow colored vignette breathes across the screen and fades. Epic — but the
+center of the screen is never covered, and everything clears inside ~0.9s.
+
+
+--------------------------------------------------------------------------------
+2. NEW POOL TYPES vs REUSE
+--------------------------------------------------------------------------------
+
+REUSED (no new pool):
+  - PROC spark puff      → existing PARTICLE pool (particleScreenX/Y/Velocity/etc.)
+                           via a new tinted spawn method spawnColoredSparks().
+  - LEGENDARY spark nova → existing PARTICLE pool, same spawnColoredSparks() with
+                           bigger count/speed/life.
+  - SLAM/LEGENDARY rings → existing RING PULSE pool (already supports color +
+                           per-spawn max radius). Double ring = two spawn calls.
+  - SLAM/LEGENDARY shake → existing single shake accumulator (triggerShake).
+  - SLAM/LEGENDARY flash → existing crit-flash accumulator, GENERALIZED to carry a
+                           color (see below) instead of hardcoded white.
+  - TAG micro text       → existing HEAL-PARTICLE pool path, drawn as a string
+                           glyph instead of "+", OR a tiny dedicated reuse (see
+                           OPEN QUESTIONS). Recommended: keep heal pool for "+"
+                           only, and route TAG text through the existing
+                           EventTextSystem at a small scale with a debounce flag.
+
+GENERALIZED (modify existing, no new pool):
+  - Crit flash accumulator → add critFlashRed/Green/Blue fields so the same single
+    accumulator can render in any color. announceCrit() sets white-hot; SLAM/
+    LEGENDARY procs set the ability color. Renderer reads the stored color instead
+    of the hardcoded white/warm constants. This converts "crit flash" into a
+    general "ability edge flash" with one shared slot. If two flashes overlap in a
+    turn, last-writer-wins on color (acceptable — procs are near-simultaneous and
+    the dominant tier writes last via the cascade ordering).
+
+NEW (one new pool + one new vignette channel):
+  - TAG EDGE TICK → a single colored bottom-edge bar. This is a SINGLE accumulator
+    (like the kill/crit flash), NOT a pool: tagTickTimeRemaining + tagTickRed/
+    Green/Blue. Zero array allocation. New field set, one draw branch.
+  - LEGENDARY COLORED VIGNETTE → new channel in HitVignetteRenderer:
+    legendaryIntensity + legendaryRed/Green/Blue, decayed in update(), drawn in
+    render() using the existing baked vignette texture tinted per-trigger. No new
+    texture (the gradient texture is color-neutral red baked, but draw-time
+    setColor overrides the tint — confirm the baked texture's RGB is ignored and
+    only alpha is used; if not, bake a white-alpha gradient instead — see TECH NOTES).
+
+So: ZERO new pool ARRAYS (the spark reuse and ring reuse cover it); TWO new SINGLE
+accumulators (tag edge tick, legendary vignette channel); ONE generalization
+(colored crit flash). This keeps the no-allocation-in-render guarantee trivially.
+
+
+--------------------------------------------------------------------------------
+3. NEW EffectConstants (suggested values — all PLACEHOLDER, tune in playtest)
+--------------------------------------------------------------------------------
+All added to EffectConstants.java.
+
+  // ── TIER_TAG: edge tick + debounced micro text ──
+  public static final float TAG_EDGE_TICK_DURATION_SECONDS   = 0.14f;
+  public static final float TAG_EDGE_TICK_MAX_ALPHA          = 0.22f;
+  public static final float TAG_EDGE_TICK_THICKNESS          = 70f;   // bottom edge depth
+  public static final float TAG_TEXT_DEBOUNCE_SECONDS        = 1.2f;  // per-ability text rate limit
+  public static final float TAG_TEXT_FONT_SCALE              = 1.1f;
+  public static final float TAG_TEXT_MAX_ALPHA               = 0.5f;
+
+  // ── TIER_PROC: spark puff + banner punch ──
+  public static final int   PROC_SPARK_COUNT                 = 6;
+  public static final float PROC_SPARK_SPEED_MIN             = 40f;
+  public static final float PROC_SPARK_SPEED_MAX             = 95f;
+  public static final float PROC_SPARK_LIFE_SECONDS          = 0.30f;
+  public static final float ABILITY_BANNER_PROC_PUNCH_OVERSHOOT = 0.15f;
+
+  // ── TIER_SLAM: micro shake + colored flash + thicker ring ──
+  public static final float SLAM_SHAKE_MAGNITUDE            = 3.5f;
+  public static final float SLAM_SHAKE_DURATION_SECONDS     = 0.10f;
+  public static final float SLAM_FLASH_DURATION_SECONDS     = 0.16f;
+  public static final float SLAM_FLASH_MAX_ALPHA            = 0.28f;
+  public static final float SLAM_RING_PULSE_MAX_RADIUS      = 75f;
+
+  // ── TIER_LEGENDARY: double ring + spark nova + flash + shake + vignette ──
+  public static final float LEGENDARY_RING_INNER_RADIUS     = 70f;
+  public static final float LEGENDARY_RING_OUTER_RADIUS     = 130f;
+  public static final float LEGENDARY_RING_STAGGER_SECONDS  = 0.06f;
+  public static final int   LEGENDARY_NOVA_SPARK_COUNT      = 18;
+  public static final float LEGENDARY_NOVA_SPEED_MIN        = 90f;
+  public static final float LEGENDARY_NOVA_SPEED_MAX        = 220f;
+  public static final float LEGENDARY_NOVA_LIFE_SECONDS     = 0.55f;
+  public static final float LEGENDARY_FLASH_DURATION_SECONDS = 0.22f;
+  public static final float LEGENDARY_FLASH_MAX_ALPHA       = 0.45f;
+  public static final float LEGENDARY_SHAKE_MAGNITUDE       = 9f;
+  public static final float LEGENDARY_SHAKE_DURATION_SECONDS = 0.22f;
+  public static final float LEGENDARY_VIGNETTE_FADE_SECONDS = 0.9f;
+  public static final float LEGENDARY_VIGNETTE_MAX_ALPHA    = 0.40f;
+
+Note: the existing RING_PULSE_MAX_RADIUS (60f) stays as the default; SLAM/
+LEGENDARY rings pass their own radius per-spawn, so 60f becomes the floor.
+
+
+--------------------------------------------------------------------------------
+4. IMPLEMENTATION NOTES — PER TIER
+--------------------------------------------------------------------------------
+
+AFFECTED FILES (all four tiers):
+  - EffectConstants.java        — add all constants above.
+  - ImpactEffectSystem.java     — new tinted spawn methods + tag-tick + colored
+                                  flash color fields; reuse existing pools.
+  - ImpactEffectRenderer.java   — generalize crit flash to use stored color; add
+                                  tag-edge-tick draw branch.
+  - HitVignetteRenderer.java    — new legendary colored vignette channel.
+  - AbilityFeedback.java        — route each tier to its new effects in
+                                  fireImmediate() (and announce() for TAG, which
+                                  currently early-returns).
+  - World.java                  — wire the legendary vignette renderer into
+                                  AbilityFeedback (mirror existing
+                                  setHealVignetteRenderer wiring).
+
+--- TIER_TAG ---
+  AbilityFeedback.announce(): REMOVE the unconditional early-return for TIER_TAG.
+  Instead, for TIER_TAG:
+    1. impactEffectSystem.triggerTagEdgeTick(red, green, blue);   // every proc
+    2. if (now - lastTagTextTime[ordinal] >= TAG_TEXT_DEBOUNCE_SECONDS) {
+           eventTextSystem.spawnTagText(text, red, green, blue);   // debounced
+           lastTagTextTime[ordinal] = now;
+       }
+  Store lastTagTextTime[] as a float[ABILITY_COUNT] in AbilityFeedback, advanced by
+  a running accumulator in update(deltaTime) (sim time, no allocation).
+  ImpactEffectSystem.triggerTagEdgeTick(): set tagTickTimeRemaining =
+  TAG_EDGE_TICK_DURATION_SECONDS and store tagTickRed/Green/Blue. Decay in update().
+  Renderer: add drawTagEdgeTick() in renderScreenOverlays() (additive blend, bottom
+  rect only) using sin-curve alpha like getCritFlashAlpha().
+  EventTextSystem: add spawnTagText() (or reuse spawnBanner with a new small tier /
+  scale flag) — small scale, low alpha, top-left-ish anchor; must not collide with
+  the combat banner band.
+
+--- TIER_PROC ---
+  AbilityFeedback.fireImmediate(): after spawnBanner, for TIER_PROC procs with a
+  valid target tile:
+    impactEffectSystem.spawnColoredSparks(tileColumn, tileRow, heightMult,
+        red, green, blue, PROC_SPARK_COUNT, PROC_SPARK_SPEED_MIN,
+        PROC_SPARK_SPEED_MAX, PROC_SPARK_LIFE_SECONDS);
+  spawnColoredSparks() projects tile→screen (reuse projectToScreenX/Y, already
+  private — expose an internal overload or inline the projection like
+  spawnColoredRingPulse does), then loops the particle pool exactly like
+  spawnHitParticles but with the passed color/count/speed/life. If target tile is
+  -1 (no-target proc like reload-based), skip the puff (banner only).
+  Banner punch: EventTextSystem reads ABILITY_BANNER_PROC_PUNCH_OVERSHOOT when the
+  tier is PROC; minimal change to the existing pop animation.
+
+--- TIER_SLAM ---
+  AbilityFeedback.fireImmediate(): for TIER_SLAM (the existing tier>=SLAM branch),
+  in addition to the ring pulse:
+    impactEffectSystem.triggerShake(SLAM_SHAKE_MAGNITUDE, SLAM_SHAKE_DURATION_SECONDS);
+    impactEffectSystem.triggerColoredFlash(red, green, blue,
+        SLAM_FLASH_DURATION_SECONDS, SLAM_FLASH_MAX_ALPHA);
+    // ring pulse spawn uses SLAM_RING_PULSE_MAX_RADIUS instead of the default
+  triggerShake is currently private — make it package-or-public, or add a thin
+  public passthrough triggerProcShake(). triggerColoredFlash() writes the
+  generalized crit-flash slot (color + duration + alpha). announceCrit() keeps
+  calling triggerCritFlash() (white-hot) — internally route it through
+  triggerColoredFlash(WHITE_HOT..., CRIT_FLASH_DURATION_SECONDS, CRIT_FLASH_MAX_ALPHA)
+  so there is one shared flash slot.
+  spawnColoredRingPulse needs a maxRadius parameter (add an overload; keep the old
+  signature delegating to the new one with RING_PULSE_MAX_RADIUS for back-compat).
+
+--- TIER_LEGENDARY ---
+  AbilityFeedback.fireImmediate(): for TIER_LEGENDARY, branch BEFORE the generic
+  SLAM ring logic and do the full stack:
+    1. Two ring pulses: spawnColoredRingPulse(...LEGENDARY_RING_INNER_RADIUS) now,
+       and the outer ring either immediately (LEGENDARY_RING_OUTER_RADIUS) or via
+       schedulePending with LEGENDARY_RING_STAGGER_SECONDS (see OPEN QUESTIONS).
+    2. spawnColoredSparks(... LEGENDARY_NOVA_SPARK_COUNT, LEGENDARY_NOVA_SPEED_MIN,
+       LEGENDARY_NOVA_SPEED_MAX, LEGENDARY_NOVA_LIFE_SECONDS).
+    3. triggerShake(LEGENDARY_SHAKE_MAGNITUDE, LEGENDARY_SHAKE_DURATION_SECONDS).
+    4. triggerColoredFlash(red, green, blue, LEGENDARY_FLASH_DURATION_SECONDS,
+       LEGENDARY_FLASH_MAX_ALPHA).
+    5. legendaryVignetteRenderer.triggerLegendary(red, green, blue);
+  HitVignetteRenderer.triggerLegendary(r,g,b): legendaryIntensity = 1f; store color;
+  decay over LEGENDARY_VIGNETTE_FADE_SECONDS; draw branch in render() tints the
+  baked vignette to (r,g,b, legendaryIntensity * LEGENDARY_VIGNETTE_MAX_ALPHA).
+  World.java: abilityFeedback.setLegendaryVignetteRenderer(hitVignetteRenderer);
+  (the same HitVignetteRenderer instance already used for heals).
+
+ORDERING / CASCADE: ON_KILL SLAM+ procs already route through schedulePending with
+KILL_PROC_CASCADE_DELAY_SECONDS (0.15s) so the proc visuals fire AFTER the kill
+burst — this remains correct and now also delays the new shake/flash/nova so they
+do not fight the kill flash. No change to the cascade needed.
+
+
+--------------------------------------------------------------------------------
+PLAYER EXPERIENCE
+--------------------------------------------------------------------------------
+The player builds an instant, pre-verbal sense of tier from the feel alone:
+  - A soft colored breath at the screen bottom = "my passive fired." (TAG)
+  - A banner pop + a little colored spit off the enemy = "a proc landed." (PROC)
+  - A ring snap + colored edge flash + a thunk of shake = "heavy proc!" (SLAM)
+  - Twin rings + a colored spark explosion + hard shake + a slow colored breath
+    across the whole screen = "LEGENDARY — that was huge." (LEGENDARY)
+Because every effect carries the ability's own color, players also learn to read
+WHICH proc fired by color (cyan = pierce/discharge, gold = soulforge/judgment,
+ember = hellfire/incendiary, crimson = bleed/berserker) without reading text. This
+is the core decision-support payoff: in a fast fight, color + intensity tells you
+what your build is doing without ever looking at the banner.
+
+DECISION CREATED: seeing tier-appropriate feedback teaches the player which
+abilities matter most, reinforcing build choices at the level-up screen. A player
+who keeps seeing big gold legendary novas learns to prioritize gold-ability synergy.
+
+
+--------------------------------------------------------------------------------
+VISUAL DESIGN SUMMARY (textures, colors, timing)
+--------------------------------------------------------------------------------
+  - No new textures. Reuses the white pixel / shape-renderer rects already used by
+    particles, rings, and flashes, plus the existing baked vignette texture.
+  - All colors come from ABILITY_RED/GREEN/BLUE — orange, crimson, ember, cyan,
+    green, amber, gold, electric, white-hot, white. Never hardcode a new color.
+  - Blend modes: edge ticks/flashes use ADDITIVE (glow, never dims center);
+    sparks/rings use ALPHA (existing); vignette uses ALPHA.
+  - Timing ladder (max on-screen dwell): TAG ~0.14s, PROC ~0.30s, SLAM ~0.16–0.30s,
+    LEGENDARY ~0.55–0.9s. Nothing covers screen center; flashes are edge-only,
+    vignette is rim-only. The 0.9s legendary vignette is the longest element and is
+    low-alpha rim glow, so the play view stays fully readable throughout.
+
+
+--------------------------------------------------------------------------------
+BALANCE / TUNING NOTES
+--------------------------------------------------------------------------------
+  - All numbers above are PLACEHOLDER. First tuning pass: verify the four tiers are
+    distinguishable at a glance on a phone screen at arm's length.
+  - SLAM_SHAKE_MAGNITUDE (3.5f) MUST stay below HIT_SHAKE_MAGNITUDE (4f) so proc
+    shake never drowns out real combat-hit shake. LEGENDARY_SHAKE (9f) is just
+    under KILL_SHAKE (10f) by design — a legendary proc should feel almost as big
+    as a kill but not bigger.
+  - TAG_EDGE_TICK_MAX_ALPHA (0.22f) is intentionally near the threshold of
+    perception. If passives fire every shot, even 0.22f can feel busy — be ready to
+    drop to ~0.15f or make the tick fire only on STATE CHANGE (e.g. RHYTHM stack up)
+    rather than every proc (see OPEN QUESTIONS).
+  - LEGENDARY_VIGNETTE_MAX_ALPHA (0.40f) should not approach the damage vignette's
+    0.55f, or a gold soulforge could read as "taking damage." Keep legendary below
+    damage so positive events never feel threatening.
+  - Heal PROCs now stack: green heal particles + green vignette (existing) + the new
+    ability-color spark puff. If the ability color IS green (LIFESTEAL), the puff
+    and heal particles blur together — acceptable, both say "good." For
+    distinctness, heal-ability spark puffs could be suppressed (banner+heal-particles
+    already cover them) — see OPEN QUESTIONS.
+
+
+--------------------------------------------------------------------------------
+INTERACTIONS WITH OTHER SYSTEMS
+--------------------------------------------------------------------------------
+  1. KILL CASCADE (AbilityFeedback.schedulePending): ON_KILL SLAM+/LEGENDARY procs
+     already delay 0.15s so their visuals land after the kill burst. The new shake/
+     flash/nova/vignette inherit this delay automatically — they will read as a
+     distinct second beat after the kill, which is the intended "kill, THEN the
+     legendary proc erupts" rhythm.
+  2. CRIT FLASH (announceCrit): becomes one instance of the generalized colored
+     flash. A crit that ALSO triggers a SLAM proc on the same shot will last-writer-
+     win on the shared flash slot — acceptable, and the dominant tier writes last.
+  3. HEAL FEEDBACK (existing green particles + vignette): unchanged and additive.
+     Heal abilities now also emit their tier's standard effect (PROC puff, SLAM ring/
+     flash/shake, or LEGENDARY full stack), layered with the green self-heal confirm.
+  4. STATUS-EFFECT VIGNETTES (planned, STATUS_VIGNETTE_*): the new legendary colored
+     vignette channel is a SEPARATE channel; ensure HitVignetteRenderer draws them
+     in a fixed order (damage → status → heal → legendary → level-up) so colors do
+     not multiply into mud. Document the channel order in HitVignetteRenderer.
+  5. LOW-HP VIGNETTE FLOOR (LOW_HP_VIGNETTE_FLOOR): at low HP the red rim is always
+     present; a legendary gold breath over it will blend to a warm tint. Acceptable,
+     but worth a glance during tuning — legendary alpha is capped below damage alpha
+     specifically so red still dominates when the player is in danger.
+
+
+--------------------------------------------------------------------------------
+OPEN QUESTIONS
+--------------------------------------------------------------------------------
+  1. TAG edge tick frequency: fire on EVERY passive proc (simple, but possibly busy
+     on rapid-fire weapons) or only on a meaningful STATE CHANGE (RHYTHM stack
+     increment, POINT_BLANK becoming active)? Recommend starting with every-proc +
+     low alpha, then gating to state-change if it feels noisy. State-change gating
+     requires the ability to report a "changed" flag to AbilityFeedback.
+  2. Legendary double ring stagger: spawn both rings immediately with different
+     max-radii (simpler, no cascade slot) vs stagger the outer ring by 0.06s via the
+     pending queue (cleaner "shockwave" read). Recommend trying immediate-both first;
+     the expansion curves already separate them visually.
+  3. Heal-ability spark puff: suppress the ability-color PROC/SLAM spark puff for
+     IS_HEAL abilities (since green heal particles already confirm), or keep both?
+     Recommend keeping for non-green heal colors and suppressing only when the
+     ability color is itself green to avoid a muddy double-green burst.
+  4. Generalized flash slot collisions: single shared accumulator means two procs in
+     one turn share one color (last writer wins). Is a single slot enough, or should
+     the flash become a tiny 2-slot pool so a crit-white and a slam-color can coexist?
+     Recommend single slot first; add a 2-slot pool only if collisions read badly.
+  5. TAG micro text routing: reuse EventTextSystem with a new small "TAG" tier, or a
+     dedicated lightweight glyph in the heal-particle pool? Recommend EventTextSystem
+     for consistency with the existing banner pipeline and its built-in rise/fade.
+  6. Vignette texture tint: confirm the baked vignette texture's RGB is overridden by
+     batch.setColor (only alpha used). The current bake writes red=255; if draw-time
+     tint multiplies, gold/cyan legendary breaths will skew. If so, rebake the
+     gradient as white (255,255,255) with the radial alpha so any setColor tint is
+     faithful. This also future-proofs status-effect colored vignettes.
