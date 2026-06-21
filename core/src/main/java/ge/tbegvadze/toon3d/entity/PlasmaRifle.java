@@ -77,7 +77,7 @@ public class PlasmaRifle extends Weapon {
     @Override
     public String hudAmmoString() {
         if (visualState == WeaponVisualState.RELOADING) return "RELOAD";
-        return "PLASMA " + shotsInClip + "/" + clipSize;
+        return "PLASMA " + shotsInClip + "/" + getEffectiveClipSize();
     }
 
     @Override public String getNormalTexturePath() { return WeaponConstants.PLASMA_RIFLE_NORMAL_TEXTURE_PATH; }

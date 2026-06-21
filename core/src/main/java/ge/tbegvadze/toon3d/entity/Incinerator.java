@@ -155,7 +155,7 @@ public class Incinerator extends Weapon {
         hudStringBuilder.append("FUEL ");
         hudStringBuilder.append(shotsInClip);
         hudStringBuilder.append('/');
-        hudStringBuilder.append(clipSize);
+        hudStringBuilder.append(getEffectiveClipSize());
         return hudStringBuilder.toString();
     }
 

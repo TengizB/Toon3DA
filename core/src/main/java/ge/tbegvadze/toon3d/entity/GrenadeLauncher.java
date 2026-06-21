@@ -186,7 +186,7 @@ public class GrenadeLauncher extends Weapon {
         hudStringBuilder.append("GRENADES ");
         hudStringBuilder.append(shotsInClip);
         hudStringBuilder.append('/');
-        hudStringBuilder.append(clipSize);
+        hudStringBuilder.append(getEffectiveClipSize());
         return hudStringBuilder.toString();
     }
 

@@ -1,0 +1,216 @@
+STATUS: IMPLEMENTED
+CATEGORY: Systems
+TITLE: v1.0.1 Polish Pass & Bug Fixes
+CREATED: 2026-06-21
+---
+
+OVERVIEW
+--------
+A targeted correctness pass fixing a cluster of bugs surfaced by code review. The
+dominant theme: the EXTENDED_MAG weapon ability raises a weapon's effective clip
+size at runtime, but large parts of the codebase still read the BASE `clipSize`
+field for state checks and HUD display. The result is wrong ammo numbers,
+impossible-to-trigger reloads, and a "CLIP FULL" lie. A second, independent bug:
+the Railgun applies penetrating damage without ever dispatching the per-hit
+ability callbacks, so no weapon ability fires when the Railgun lands a hit. This
+doc is the spec for fixing all of it; it adds no new content.
+
+This belongs here because it keeps the EXTENDED_MAG ability and the weapon-ability
+hook system (CRITICAL_STRIKE, RHYTHM, LIFESTEAL, OPENING_SALVO, etc.) honest
+across every weapon and every display surface — a roguelike where ability text
+lies to the player is a roguelike that fails the "player understands why" pillar.
+
+ROOT CAUSE SUMMARY
+------------------
+Two unrelated root causes:
+
+1. EFFECTIVE-CLIP DRIFT (Bugs 1-3, 5-8, plus the Railgun HUD minor)
+   The Weapon base class stores BOTH a base `clipSize` (per-weapon constant scaled
+   by weapon level) and an `effectiveClipSize` (base + EXTENDED_MAG bonus, hard-
+   capped). See Weapon.java:
+     - line 109  `private int effectiveClipSize;`
+     - line 214  `effectiveClipSize = GameMath.weaponScaledClipSize(clipSize, weaponLevel);`
+     - line 219  `effectiveClipSize = Math.min(effectiveClipSize + bonus, WEAPON_CLIP_HARD_CAP);`
+     - line 234  `getEffectiveClipSize()` accessor
+   Every "is the clip full?", "how many shots fit?", and "show X/Y in the HUD"
+   site must read `effectiveClipSize` / `getEffectiveClipSize()`, NOT the base
+   `clipSize` field. Several sites missed this. With EXTENDED_MAG active the player
+   sees nonsense like "2/1" and cannot reload a partially-full extended clip.
+
+2. RAILGUN CALLBACK OMISSION (Bug 4)
+   Penetrating weapons must, for EACH enemy they hit, set the last-hit context,
+   dispatch the ability callbacks, then clear it — so per-hit abilities resolve
+   against the correct target. PlasmaRifle does this (PlasmaRifle.java lines 62-65).
+   Railgun's marchShot loops and deals damage but never calls them, so abilities
+   silently no-op on every Railgun hit. This is a logic bug, not a display bug.
+
+GAMEPLAY LOOP (player-facing effect after the fix)
+--------------------------------------------------
+EXTENDED_MAG path:
+  Player picks EXTENDED_MAG (effectiveClipSize > clipSize) -> HUD CL bar shows
+  effective segment count and "shots/effective" text -> player fires down to base
+  clipSize shots -> player taps Reload -> reload STARTS (no longer falsely blocked)
+  -> clip refills to effectiveClipSize -> HUD reads "effective/effective".
+
+Railgun ability path:
+  Player equips Railgun with e.g. LIFESTEAL active -> fires through a line of
+  enemies -> for each enemy hit: damage applied AND lifesteal/crit/rhythm/etc.
+  resolves against that enemy -> player heals / sees crit numbers / rhythm stacks,
+  exactly as with PlasmaRifle.
+
+PLAYER EXPERIENCE
+-----------------
+The HUD stops lying. An EXTENDED_MAG player who reads "5/7" trusts that 7 is the
+real cap and that Reload will work. A Railgun player who chose an on-hit ability
+actually gets the payoff they built for. Both fixes convert "this feels broken /
+why didn't that work?" moments into the readable, trustworthy feedback the design
+pillars demand. No new decisions are introduced; existing decisions simply pay out
+correctly.
+
+TECHNICAL NOTES
+---------------
+No new classes, constants, tiles, or symbols. All changes are in existing methods.
+Guiding rule for category 1: wherever the BASE `clipSize` field is used in a
+weapon STATE CHECK or DISPLAY denominator, replace it with `effectiveClipSize`
+(inside Weapon) or `getEffectiveClipSize()` (in subclasses / external callers).
+Do NOT change sites that compute or scale the base value itself
+(Weapon.java:214 and :219 are correct as written — leave them).
+
+--- CATEGORY 1: EFFECTIVE-CLIP DRIFT ---
+
+Bug 1 — HudState publishes base clipSize
+  File:   world/World.java  (~line 722)
+  Now:    hudState.clipSize = hudWeapon.getClipSize();
+  Fix:    hudState.clipSize = hudWeapon.getEffectiveClipSize();
+  Impact: CL bar segment count and CL label text wrong with EXTENDED_MAG
+          (e.g. shows "2/1"). This is the most visible symptom.
+
+Bug 2 — requestManualReload blocks on base clipSize
+  File:   entity/Weapon.java  (line 547, inside requestManualReload())
+  Now:    if (shotsInClip >= clipSize) return false;
+  Fix:    if (shotsInClip >= effectiveClipSize) return false;
+  Impact: With EXTENDED_MAG, reload refused when shots == base clipSize but
+          < effectiveClipSize. Player cannot top off the extended portion.
+
+Bug 3 — PlayerController.tryReload pre-check uses base clipSize
+  File:   input/PlayerController.java  (~line 597, inside tryReload())
+  Now:    if (weapon.getShotsInClip() >= weapon.getClipSize()) ...  // "CLIP FULL"
+  Fix:    if (weapon.getShotsInClip() >= weapon.getEffectiveClipSize()) ...
+  Impact: Same false-block as Bug 2, surfaced as an incorrect "CLIP FULL" event
+          text before the weapon is even consulted. Fix BOTH Bug 2 and Bug 3 —
+          they are the controller-side and weapon-side halves of one check.
+
+Bug 5 — onTick infinite-ammo fallback refills to base clipSize
+  File:   entity/Weapon.java  (~line 603, inside onTick())
+  Now:    shotsInClip = clipSize;
+  Fix:    shotsInClip = effectiveClipSize;
+  Impact: Edge case (tests / uninjected ammo state) refills to the wrong amount,
+          masking EXTENDED_MAG in those paths. Low severity but inconsistent.
+
+Bug 6 — Incinerator / GrenadeLauncher HUD strings use base clipSize
+  File:   entity/Incinerator.java     (~line 158, hudAmmoString StringBuilder)
+  File:   entity/GrenadeLauncher.java (~line 189, hudAmmoString StringBuilder)
+  Now:    each appends the base clipSize as the denominator.
+  Fix:    append getEffectiveClipSize() instead.
+  Note:   keep the pre-allocated StringBuilder pattern (no allocation in render).
+
+Bug 7 — Weapon base-class default HUD string uses base clipSize
+  File:   entity/Weapon.java  (~line 857, default hudAmmoString())
+  Now:    "SHELLS " + shotsInClip + "/" + clipSize
+  Fix:    "SHELLS " + shotsInClip + "/" + getEffectiveClipSize()
+  Impact: Any weapon that does not override hudAmmoString() shows the wrong cap.
+
+Bug 8 — PlasmaRifle / Chaingun HUD strings use base clipSize
+  File:   entity/PlasmaRifle.java  (~line 80)  "PLASMA " + shotsInClip + "/" + clipSize
+  File:   entity/Chaingun.java     (~line 186) "ROUNDS " + shotsInClip + "/" + clipSize
+  Fix:    use getEffectiveClipSize() as the denominator in both.
+
+Minor — Railgun HUD SLUGS denominator uses base clipSize
+  File:   entity/Railgun.java  (~line 170, hudAmmoString SLUGS branch)
+  Now:    hudStringBuilder.append(clipSize);
+  Fix:    hudStringBuilder.append(getEffectiveClipSize());
+  Note:   The RELOAD / "RAIL >" / "RAIL >>" branches above it are correct;
+          only the SLUGS numeric branch needs the change.
+
+--- CATEGORY 2: RAILGUN CALLBACK OMISSION ---
+
+Bug 4 — Railgun never dispatches per-hit ability callbacks
+  File:   entity/Railgun.java  (marchShot())
+  Problem: the penetration loop applies damage to each enemy on the line but never
+           establishes the last-hit context or dispatches ability hooks, so every
+           on-hit ability (CRITICAL_STRIKE, RHYTHM, LIFESTEAL, OPENING_SALVO, etc.)
+           silently does nothing for the Railgun.
+  Fix:     follow the PlasmaRifle pattern exactly. PlasmaRifle.java (lines 62-65)
+           does, per enemy hit, in order:
+             setLastHitEnemy(enemy, damageThisHit, enemyHitTarget.isAtFullHp(enemy));
+             dispatchHitCallbacks(new FireResult(false, distanceTiles));
+             clearLastHit();
+           Insert the equivalent three calls INSIDE the Railgun's per-enemy loop,
+           immediately after damage is applied to that enemy, using the Railgun's
+           own per-hit damage value, full-HP flag for that specific enemy, and the
+           per-hit distance-in-tiles. clearLastHit() must run before the next loop
+           iteration so each enemy resolves against its own context.
+  Watch:   if the Railgun applies CRITICAL_STRIKE-style damage modifiers, decide
+           whether setLastHitEnemy receives pre- or post-modifier damage and match
+           PlasmaRifle's choice so LIFESTEAL/number popups stay consistent.
+
+--- DEAD CODE (optional cleanup, low priority) ---
+
+Dead — PlayerController.tryInteract() is never called
+  File:   input/PlayerController.java  (~line 475)
+  tryInteract() is defined but never invoked from pollInput(); door opening is
+  handled inline inside tryMove(). Either remove tryInteract() entirely, or wire
+  it in deliberately. Recommendation: remove it to avoid a misleading second code
+  path for interaction. If removal touches anything beyond a private method, leave
+  it for a separate refactor rather than expanding this fix's scope.
+
+VISUAL DESIGN
+-------------
+No new art. The visible change is correct numbers/segments on existing HUD
+elements:
+  - CL ammo bar (HudRenderer): segment count derived from hudState.clipSize must
+    now equal the effective cap; a 7-round EXTENDED_MAG clip draws 7 segments.
+  - Right-panel ammo text and per-weapon hudAmmoString denominators read the
+    effective cap.
+  - Railgun on-hit: existing crit/lifesteal/event-text visuals now actually
+    appear on Railgun hits (they were never rendering before because the callbacks
+    never fired). No new effect is added — pre-existing ones simply trigger.
+
+BALANCE NOTES
+-------------
+No numbers change by design. WEAPON_CLIP_HARD_CAP still governs the maximum
+effective clip; these fixes only make the code respect the value already produced
+at Weapon.java:219. The one real balance shift is implicit: Railgun + on-hit
+ability builds become functional for the first time. Playtest a Railgun +
+LIFESTEAL and Railgun + CRITICAL_STRIKE run after Bug 4 lands to confirm the
+sustain/burst is not now over-tuned on a multi-pierce shot. If it is, tune the
+ability values, not the dispatch logic — the dispatch is correct.
+
+INTERACTIONS
+------------
+1. EXTENDED_MAG ability x all HUD surfaces: this is the core interaction being
+   repaired. After the fix, the ability is reflected uniformly in World.hudState,
+   every weapon's hudAmmoString, and both reload checks.
+2. Reload system (Weapon.requestManualReload, PlayerController.tryReload,
+   onTick auto-reload): all three must agree on effectiveClipSize or the player
+   gets contradictory "CLIP FULL" / reload-refused behaviour. Fix them together.
+3. Weapon ability hooks (CRITICAL_STRIKE, RHYTHM, LIFESTEAL, OPENING_SALVO):
+   Bug 4 makes the Railgun a first-class participant in this system like every
+   other weapon. Any future penetrating weapon MUST replicate the per-hit
+   set/dispatch/clear pattern or it will silently break abilities the same way.
+4. Tick system: reload state transitions advance on player turns; correcting the
+   clip-full checks ensures a reload turn is not wasted being refused.
+
+OPEN QUESTIONS
+--------------
+1. Should tryInteract() be deleted now or tracked as separate tech-debt? (Default:
+   delete, since it is an unreferenced private method.)
+2. For Railgun crit, does setLastHitEnemy receive pre-crit or post-crit damage?
+   Confirm against PlasmaRifle's convention so LIFESTEAL scales identically.
+3. Are there OTHER penetrating/AoE weapons (e.g. GrenadeLauncher blast,
+   Incinerator) that hit multiple enemies but skip the per-hit dispatch the way
+   Railgun did? Worth a follow-up audit of every marchBlast/multi-hit path to
+   confirm none share Bug 4's shape.
+4. Should there be a single shared helper (e.g. a protected method on Weapon) that
+   does set/dispatch/clear for one enemy hit, so weapons cannot forget a step?
+   Out of scope for v1.0.1 but a strong candidate for a follow-up refactor.
