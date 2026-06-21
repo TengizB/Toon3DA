@@ -198,10 +198,13 @@ public class WallRenderer implements Renderable, Disposable {
 
         @Override
         public void run() {
-            for (int screenColumn = startColumn; screenColumn < endColumn; screenColumn++) {
-                computeWallColumn(screenColumn);
+            try {
+                for (int screenColumn = startColumn; screenColumn < endColumn; screenColumn++) {
+                    computeWallColumn(screenColumn);
+                }
+            } finally {
+                phaser.arrive();
             }
-            phaser.arrive();
         }
     }
 
