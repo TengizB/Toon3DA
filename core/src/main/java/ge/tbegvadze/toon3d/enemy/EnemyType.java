@@ -14,6 +14,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return EnemyConstants.PLAGUE_HULK_HEIGHT_MULTIPLIER; }
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_PLAGUE_HULK; }
+        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_PLAGUE_HULK; }
         @Override public String displayName()        { return "Plague Hulk"; }
     },
 
@@ -25,6 +26,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return EnemyConstants.EYE_TYRANT_HEIGHT_MULTIPLIER; }
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_EYE_TYRANT; }
+        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_EYE_TYRANT; }
         @Override public String displayName()        { return "Eye Tyrant"; }
     },
 
@@ -36,6 +38,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return EnemyConstants.GORE_BITER_HEIGHT_MULTIPLIER; }
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_GORE_BITER; }
+        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_GORE_BITER; }
         @Override public String displayName()        { return "Gore Biter"; }
     },
 
@@ -47,6 +50,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return EnemyConstants.SHELL_BRUTE_HEIGHT_MULTIPLIER; }
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_SHELL_BRUTE; }
+        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_SHELL_BRUTE; }
         @Override public String displayName()        { return "Shell Brute"; }
     },
 
@@ -58,6 +62,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return EnemyConstants.MIRE_WRAITH_HEIGHT_MULTIPLIER; }
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_MIRE_WRAITH; }
+        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_MIRE_WRAITH; }
         @Override public String displayName()        { return "Mire Wraith"; }
     },
 
@@ -69,6 +74,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return EnemyConstants.IRON_STALKER_HEIGHT_MULTIPLIER; }
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_IRON_STALKER; }
+        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_IRON_STALKER; }
         @Override public String displayName()        { return "Iron Stalker"; }
     },
 
@@ -80,6 +86,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return EnemyConstants.ACID_DRONE_HEIGHT_MULTIPLIER; }
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_ACID_DRONE; }
+        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_ACID_DRONE; }
         @Override public String displayName()        { return "Acid Drone"; }
     },
 
@@ -91,6 +98,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return EnemyConstants.VOID_SHROUD_HEIGHT_MULTIPLIER; }
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_VOID_SHROUD; }
+        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_VOID_SHROUD; }
         @Override public String displayName()        { return "Void Shroud"; }
     },
 
@@ -108,6 +116,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return 1.80f; }
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_BOSS_BASE; }
+        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_BOSS_BASE; }
         @Override public String displayName()        { return "The Overseer"; }
     },
 
@@ -119,6 +128,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return 1.60f; }
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_BOSS_BASE; }
+        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_BOSS_BASE; }
         @Override public String displayName()        { return "The Corruptor"; }
     },
 
@@ -130,6 +140,7 @@ public enum EnemyType {
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return 2.00f; }
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_BOSS_BASE; }
+        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_BOSS_BASE; }
         @Override public String displayName()        { return "Hell Baron"; }
     };
 
@@ -141,6 +152,8 @@ public enum EnemyType {
     public abstract float   heightMultiplier();
     /** XP awarded to the player when this enemy archetype is killed at dungeon depth 1. */
     public abstract int     baseXpReward();
+    /** Base credits awarded at dungeon depth 1; scaled by depth in EnemyManager. */
+    public abstract int     baseCreditReward();
     /** Human-readable name shown in HUD name tags (e.g. "Plague Hulk LVL 2") and kill messages. */
     public abstract String  displayName();
 }

@@ -15,12 +15,14 @@ import ge.tbegvadze.toon3d.util.EffectConstants;
  */
 public final class EventTextSystem {
 
-    public static final byte COLOR_WHITE = 0;
-    public static final byte COLOR_GREEN = 1;
-    public static final byte COLOR_RED   = 2;
-    public static final byte COLOR_GREY  = 3;
+    public static final byte COLOR_WHITE        = 0;
+    public static final byte COLOR_GREEN        = 1;
+    public static final byte COLOR_RED          = 2;
+    public static final byte COLOR_GREY         = 3;
     /** Bright gold — used for legendary signature ability events (Soulforge, Judgment, Nova). */
-    public static final byte COLOR_GOLD  = 4;
+    public static final byte COLOR_GOLD         = 4;
+    /** Cyan-gold — used for credit pickup notifications. */
+    public static final byte COLOR_CREDIT_CYAN  = 5;
 
     /**
      * Banner tier constants — controls font scale, animation style, and screen anchor.

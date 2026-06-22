@@ -299,6 +299,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Wire the weapon slots panel so it can read loadout state and render thumbnails.
         inventoryOverlayRenderer.setPlayerInventory(inventory);
         inventoryOverlayRenderer.setWeaponHudRenderer(weaponHudRenderer);
+        inventoryOverlayRenderer.setPlayerStats(playerStats);
         hudRenderer          = new HudRenderer(player, hudState);
         hudRenderer.setLoadout(inventory.getLoadout());
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);
@@ -395,6 +396,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             eventTextSystem.spawnWithColor(nameTag + " +" + xpAwarded + "XP", EventTextSystem.COLOR_GREEN);
             runStats.recordKill();
         });
+        enemyManager.setKillCreditListener((baseReward, dungeonDepth) -> {
+            int scaled = Math.round(baseReward * (1f + (dungeonDepth - 1) * GameBalance.CREDIT_DEPTH_SCALE));
+            playerStats.addCredits(scaled);
+        });
         enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
         enemyManager.setLoadout(inventory.getLoadout());
         enemyManager.setDropPlacedListener((tileColumn, tileRow, dropChar) ->
@@ -461,9 +466,56 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             }
             groundItems.add(groundItem);
         }
+        seedCreditChips(targetLevel, groundItems, currentDepth);
+
         propRenderer.setGroundItems(groundItems);
         levelRenderer.setGroundItems(groundItems);
         playerController.setGroundItems(groundItems);
+    }
+
+    private void seedCreditChips(Level targetLevel, java.util.List<GroundItem> items, int depth) {
+        java.util.Random chipRandom = new java.util.Random();
+        int chipCount = GameBalance.CREDIT_CHIPS_PER_FLOOR_MIN
+                + chipRandom.nextInt(GameBalance.CREDIT_CHIPS_PER_FLOOR_MAX
+                                     - GameBalance.CREDIT_CHIPS_PER_FLOOR_MIN + 1);
+
+        java.util.List<int[]> walkableTiles = new java.util.ArrayList<>();
+        for (int tileColumn = 0; tileColumn < targetLevel.getWidth(); tileColumn++) {
+            for (int tileRow = 0; tileRow < targetLevel.getHeight(); tileRow++) {
+                char cell = targetLevel.getCell(tileColumn, tileRow);
+                if (!Level.isWall(cell) && !Level.isPropSolid(cell) && !Level.isStairsDown(cell)) {
+                    walkableTiles.add(new int[]{tileColumn, tileRow});
+                }
+            }
+        }
+
+        int totalWeight = ItemConstants.CREDIT_SPAWN_WEIGHT_SMALL
+                + ItemConstants.CREDIT_SPAWN_WEIGHT_MEDIUM
+                + ItemConstants.CREDIT_SPAWN_WEIGHT_LARGE;
+        for (int chipIndex = 0; chipIndex < chipCount && !walkableTiles.isEmpty(); chipIndex++) {
+            int[] tile = walkableTiles.remove(chipRandom.nextInt(walkableTiles.size()));
+            int tierRoll = chipRandom.nextInt(totalWeight);
+            ItemType chipType;
+            int chipAmount;
+            if (tierRoll < ItemConstants.CREDIT_SPAWN_WEIGHT_SMALL) {
+                chipType   = ItemType.CREDIT_SMALL;
+                chipAmount = ItemConstants.CREDIT_SMALL_BASE
+                        + chipRandom.nextInt(ItemConstants.CREDIT_SMALL_JITTER * 2 + 1)
+                        - ItemConstants.CREDIT_SMALL_JITTER;
+            } else if (tierRoll < ItemConstants.CREDIT_SPAWN_WEIGHT_SMALL
+                                  + ItemConstants.CREDIT_SPAWN_WEIGHT_MEDIUM) {
+                chipType   = ItemType.CREDIT_MEDIUM;
+                chipAmount = ItemConstants.CREDIT_MEDIUM_BASE
+                        + chipRandom.nextInt(ItemConstants.CREDIT_MEDIUM_JITTER * 2 + 1)
+                        - ItemConstants.CREDIT_MEDIUM_JITTER;
+            } else {
+                chipType   = ItemType.CREDIT_LARGE;
+                chipAmount = ItemConstants.CREDIT_LARGE_BASE
+                        + chipRandom.nextInt(ItemConstants.CREDIT_LARGE_JITTER * 2 + 1)
+                        - ItemConstants.CREDIT_LARGE_JITTER;
+            }
+            items.add(new GroundItem(tile[0], tile[1], chipType, Math.max(1, chipAmount)));
+        }
     }
 
     // -------------------------------------------------------------------------

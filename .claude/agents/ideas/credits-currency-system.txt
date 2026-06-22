@@ -1,0 +1,412 @@
+STATUS: IMPLEMENTED
+CATEGORY: Systems
+TITLE: Credits — In-Run Currency (kills + 3-tier glowing pickups)
+CREATED: 2026-06-22
+---
+
+OVERVIEW
+========
+CREDITS are the marine's in-run spendable currency: UAC corporate scrip skimmed off
+dead demons and scattered as glowing chips across the facility. They are earned from
+enemy kills and from three tiers of pickable credit chips seeded on levels (small /
+medium / large), and they accumulate into a single running total shown in the
+inventory menu. Credits are the WALLET that future in-run sinks (the merchant room,
+roguelike_order_11) will draw from. This doc owns ONLY the currency itself: the
+total, how it is earned, the three pickup objects, their procedural visuals, and the
+inventory readout. It deliberately does NOT design a shop — that is order 11's job.
+
+CRITICAL DISTINCTION (do not blur these): Credits are IN-RUN and reset to zero on
+death/new run. They are NOT the SALVAGE meta-currency (salvage-cache-meta-progression
+.txt), which is PERMANENT and banked between runs via Preferences. Credits live on
+PlayerProgress/RunStats (in-memory, per-run); Salvage lives on StatsStore
+(Preferences). Keep the two visually and verbally separate — credit CHIP (cyan/gold)
+vs. salvage SCRAP-CAN. Never persist Credits to Preferences.
+
+NO NEW TILE SYMBOL REQUIRED FOR THE PREFERRED PATH. Credit chips are best implemented
+as entity-side GroundItems (item/GroundItem.java), exactly like weapon ground sprites
+(weapon-ground-sprites.txt) — keyed by ItemType, not by a map character, so no tile
+char is consumed and the procedural-billboard + bob pipeline is reused wholesale.
+A FALLBACK level-symbol path is described in TECHNICAL NOTES for hand-authored levels;
+it would require new symbols 'i' (small), 'o' (medium), 'q' (large) — currently FREE
+per docs/tile-symbols.txt (lowercase i o q z free). If that path is taken: requires
+new symbols — add to docs/tile-symbols.txt and Level.java before implementing.
+
+
+GAMEPLAY LOOP
+=============
+EARNING FROM KILLS:
+1. Player kills an enemy (any weapon, barrel, or hazard). EnemyManager already fires a
+   kill event (KillEventListener / XP award path).
+2. On that kill event, the credit system reads the dead EnemyType's credit value,
+   scales it by dungeon depth, and adds it to the run Credits total.
+3. A small floating "+N cr" event-text beat plays (EventTextSystem), tinted credit-
+   cyan, distinct from the amber XP beat so the player parses two rewards at a glance.
+   No turn is spent — this is a side effect of the kill, which already cost a turn.
+
+EARNING FROM PICKUPS:
+4. LevelGenerator (or a hand-authored level / an enemy drop) seeds credit chips as
+   GroundItems: new GroundItem(tileColumn, tileRow, ItemType.CREDIT_SMALL/MEDIUM/LARGE,
+   1). They are added to the World ground-item list and pushed to PropRenderer.
+5. Each frame PropRenderer draws the chip as a procedural billboard with a vertical
+   bob and a glowing aura (visual spec below). This is cosmetic real-time decoration on
+   a static tile — it never advances the simulation.
+6. Player steps onto the chip's tile. Credit chips are AUTO-COLLECT (like ammo/armour):
+   on the settled-tile pickup hook (PlayerController -> World pickup resolution), the
+   chip's credit value is added to the run total, the GroundItem is removed, the
+   floating sprite vanishes that frame, and a "+N cr" beat plays. NO extra turn beyond
+   the step the player already took.
+
+SPENDING (out of scope here, defined for completeness):
+7. A future sink (order 11 merchant) calls PlayerProgress.spendCredits(amount) which
+   returns true and deducts if Credits >= amount, else false. This doc only guarantees
+   the wallet API exists; it spends nothing itself.
+
+VIEWING:
+8. Player opens the inventory overlay. The Credits total is shown as a header readout
+   ("CREDITS  1 240 cr") with a small procedural chip glyph. Updates live.
+
+
+PLAYER EXPERIENCE
+=================
+Every kill now pays twice: XP (you, the marine, get stronger) and Credits (your
+wallet grows toward the next purchase). That dual feedback makes clearing a room feel
+materially rewarding the Hades way — numbers go up AND you bank toward a choice.
+Credit chips glowing two rooms down create the same "is that worth the detour?"
+navigation pull the weapon-ground-sprite bob does, but cheaper and more frequent: a
+faint gold shimmer is a small reward, a fat green glow is a jackpot worth crossing a
+guarded room for. Because Credits reset on death, they create in-run pressure — spend
+now at the merchant or gamble on finding more deeper — which is exactly the tension a
+roguelike wants, and it stays cleanly separate from the permanent Salvage progress so
+neither system muddies the other.
+
+
+CREDIT AMOUNTS PER ENEMY KILL
+=============================
+Credits roughly track threat (loosely correlated to XP, but rounder numbers so the
+running total reads cleanly). Depth scaling mirrors XP: actual award =
+round(base * (1 + (depth - 1) * CREDIT_DEPTH_SCALE)). All values PLACEHOLDER.
+
+  EnemyType      XP (ref)   CREDIT base   notes
+  GORE_BITER       10           5         trash; fast light melee
+  EYE_TYRANT       10           6         ranged kiter
+  PLAGUE_HULK      14           8         slow tank
+  ACID_DRONE       14           8         ranged mechanical
+  SHELL_BRUTE      18          12         heavy charger
+  VOID_SHROUD      18          12         stealth melee
+  MIRE_WRAITH      22          15         acid ranged
+  IRON_STALKER     55          40         armored elite (big payday)
+  BOSS (any)      500         250         OVERSEER / CORRUPTOR / HELL_BARON
+
+CREDIT_DEPTH_SCALE = 0.12 (placeholder): a Gore Biter worth 5 cr on floor 1 is worth
+round(5 * (1 + 9*0.12)) = round(10.4) = 10 cr on floor 10. Keep scaling modest so
+late-floor kills don't trivialize the merchant economy.
+
+
+CREDIT PICKUP TYPES
+===================
+Three tiers, weighted to favor small. Weights are RELATIVE (normalized at roll time).
+Amounts have a small +/- jitter so totals don't look mechanical. All PLACEHOLDER.
+
+  Tier    ItemType        amount (base)   per-tile jitter   spawn weight
+  SMALL   CREDIT_SMALL          8          +/- 2  (6-10)        70
+  MEDIUM  CREDIT_MEDIUM        25          +/- 5  (20-30)       24
+  LARGE   CREDIT_LARGE         70          +/- 15 (55-85)        6
+
+Normalized: SMALL 70%, MEDIUM 24%, LARGE 6%. A typical floor seeds
+CREDIT_CHIPS_PER_FLOOR_MIN..MAX = 3..7 chips (placeholder), rolled per chip against
+the weight table. Expect a floor to average ~4-5 small, ~1 medium, rare large —
+so a full clean floor nets roughly 60-120 chip-credits plus kill credits.
+
+In-fiction names (for tooltips / pickup beats):
+  SMALL  = "Credit Sliver"   (a single chipped scrip token)
+  MEDIUM = "Credit Stack"    (a banded bundle of tokens)
+  LARGE  = "Credit Vault Chip" (a UAC high-denomination data-chip)
+
+
+VISUAL DESIGN — PROCEDURAL CHIP BILLBOARDS
+==========================================
+Rendered the SAME WAY as weapon ground sprites: a per-ItemType Texture generated ONCE
+at PropRenderer construction via a Pixmap (fillRectangle / fillCircle), Nearest
+filtering, transparent background, cached and reused every frame (ZERO per-frame
+allocation). Square pixmap, CREDIT_PICKUP_TEXTURE_SIZE = 64 px. RGB values 0-1.
+Origin in descriptions = pixmap center; coordinates are fractions of the 64px edge.
+
+Shared rules for all three tiers:
+  - Read as a CHIP / TOKEN viewed three-quarter, never a flat coin-on-edge (a thin
+    edge vanishes at range). Use a stacked-disc / hex-chip silhouette.
+  - A 2-3 px COOL-WHITE top-left rim highlight on the chip body so it pops on dark
+    floors and signals "interactable" (same convention as weapon sprites).
+  - A tiny dark "UAC" notch / square cut in the chip center sells "corporate scrip"
+    and differentiates from medkit/armour pickups.
+  - Higher tiers are BIGGER, BRIGHTER, and add layers (more discs, more sparkle).
+
+SMALL — "Credit Sliver" (gold, humble)
+  - Single chip disc: warm GOLD circle (0.85, 0.68, 0.20), ~38% of box diameter,
+    centered.
+  - Inner ring: thin darker-gold circle outline (0.55, 0.42, 0.10) at ~28% diameter.
+  - Center notch: 4x4 dark-bronze square (0.30, 0.22, 0.06).
+  - Rim highlight: 2px pale-gold arc (0.98, 0.90, 0.55) top-left.
+  - Fills ~40% of the box (smallest footprint of the set).
+
+MEDIUM — "Credit Stack" (gold + cyan band, a bundle)
+  - TWO stacked discs offset vertically by ~6 px to read as a short stack: lower disc
+    gold (0.80, 0.62, 0.18), upper disc brighter gold (0.92, 0.74, 0.26), each ~46%
+    diameter.
+  - Banding strip: a 4px CYAN band (0.20, 0.80, 0.95) wrapped across the stack middle
+    — the "this is more than a sliver" tell, and the cyan ties it to the credit-cyan
+    UI color.
+  - Center notch: 5x5 dark square (0.25, 0.20, 0.08) on the top disc.
+  - Two 2x2 white sparkle flecks (0.98, 0.98, 1.00) at upper-left and right edge.
+  - Rim highlight: 2-3px pale-gold top-left on the top disc.
+  - Fills ~58% of the box.
+
+LARGE — "Credit Vault Chip" (emerald/green high-denomination, unmistakable jackpot)
+  - Hexagonal chip body: filled GREEN/EMERALD hexagon (0.20, 0.78, 0.42), ~64%
+    diameter — green deliberately breaks from gold so a jackpot is readable at a
+    glance from across a room (color-codes value: gold = small, green = big).
+  - Inner hex outline: bright cyan-green 2px (0.45, 0.95, 0.70) at ~50% diameter.
+  - Embossed center: small dark-emerald 8x8 square (0.06, 0.30, 0.16) with a 2x2
+    bright-cyan core dot (0.60, 1.00, 0.85) — the "data chip" core.
+  - Four corner studs: 3x3 pale-mint squares (0.75, 1.00, 0.88) at the hex points.
+  - Several (4-5) white sparkle flecks scattered around the rim.
+  - Rim highlight: 3px pale-mint top-left.
+  - Fills ~70% of the box (largest, brightest, most layered).
+
+
+AURA (glowing halo behind every chip)
+======================================
+A soft radial glow drawn BEHIND the chip billboard each frame so chips visibly emit
+light, escalating with tier. The aura is a separate additive-blended sprite, NOT baked
+into the chip texture (so it can pulse independently). Implement as ONE pre-generated
+radial-gradient Texture (white center -> transparent edge, 64px), tinted per tier and
+scaled per tier, drawn with additive blending (GL_SRC_ALPHA, GL_ONE) directly before
+the chip in the same billboard pass, then blend mode restored.
+
+  Tier     aura color (tint)        base radius (x chip)   pulse amplitude   pulse speed
+  SMALL    gold   (0.95,0.78,0.30)        1.4                 +/- 12%          2.0 rad/s
+  MEDIUM   cyan-gold(0.55,0.85,0.80)      1.8                 +/- 16%          2.4 rad/s
+  LARGE    emerald (0.35,1.00,0.60)       2.4                 +/- 22%          2.8 rad/s
+
+  - radius factor = base * (1 + pulseAmplitude * sin(lightingTimeSeconds * pulseSpeed
+    + phase)). Larger chips pulse wider, faster, brighter — a vault chip throbs;
+    a sliver gently breathes.
+  - aura alpha also pulses with the same sin (e.g. baseAlpha 0.35 small -> 0.55 large,
+    multiplied by 0.8..1.0 over the cycle) so the glow shimmers, not just scales.
+  - Per-chip phase offset (e.g. + (tileColumn*7 + tileRow*13) * 0.3) desynchronises
+    multiple chips so a credit pile shimmers organically, not in lockstep.
+  - The aura is tile-brightness aware (reuse PropRenderer getTileBrightness): a chip on
+    an unlit floor reads as a lone glowing point in the dark — desired mood.
+
+
+FLOATING ANIMATION (bob)
+========================
+Identical math model to the weapon-pickup bob (reuse GameMath.pickupBobOffset):
+  bobScreenOffset = sin(lightingTimeSeconds * CREDIT_PICKUP_BOB_SPEED + phase)
+                    * CREDIT_PICKUP_BOB_AMPLITUDE_FRACTION * spriteScreenHeight
+Applied to the chip's vertical screen position (and to the aura, so glow tracks the
+chip). The chip already sits lifted off the floor by CREDIT_PICKUP_HEIGHT_FRACTION so
+the bob never dips into the floor.
+
+  CREDIT_PICKUP_HEIGHT_FRACTION         = 0.28   (lift off floor; below weapon 0.30)
+  CREDIT_PICKUP_BOB_SPEED               = 2.4    rad/s (slightly livelier than weapons)
+  CREDIT_PICKUP_BOB_AMPLITUDE_FRACTION  = 0.12   (12% of sprite height)
+  CREDIT_PICKUP_PHASE_STEP              = 0.45   per-chip bob phase desync
+Constraint (must hold): BOB_AMPLITUDE_FRACTION < HEIGHT_FRACTION (0.12 < 0.28 — OK),
+so the chip never clips the floor at the bottom of its bob.
+Optional stretch: a slow horizontal width-squash to fake a slow spin (Doom coin feel)
+— flag OUT for v1, vertical bob only.
+
+
+INVENTORY UI PLACEMENT
+======================
+The Credits total lives in the inventory overlay (InventoryOverlayRenderer), NOT in
+the main combat HUD (the combat HUD stays HP/AR/ammo only — no clutter). Placement:
+  - A single-line HEADER readout at the TOP of the inventory overlay, right-aligned
+    in the header band, opposite any existing title: a small procedural credit-chip
+    glyph (mini version of the SMALL chip, ~24px) + "CREDITS" label + the value with
+    thousands spacing ("1 240 cr"), drawn in credit-cyan (0.55, 0.85, 0.95) so it
+    stands apart from white item text.
+  - Drawn procedurally (ShapeRenderer chip glyph + BitmapFont number), matching the
+    overlay's existing no-extra-texture style.
+  - Value reads live from PlayerProgress.getCredits() each time the overlay opens /
+    is drawn; no caching across opens.
+  - If/when the merchant (order 11) exists, the same readout appears in the shop
+    header so the player always sees their balance while spending.
+
+
+CONSTANTS TO ADD (and where)
+============================
+ItemConstants.java (pickup amounts, jitter, weights, density):
+  CREDIT_SMALL_BASE              = 8
+  CREDIT_SMALL_JITTER            = 2
+  CREDIT_MEDIUM_BASE             = 25
+  CREDIT_MEDIUM_JITTER           = 5
+  CREDIT_LARGE_BASE              = 70
+  CREDIT_LARGE_JITTER            = 15
+  CREDIT_SPAWN_WEIGHT_SMALL      = 70
+  CREDIT_SPAWN_WEIGHT_MEDIUM     = 24
+  CREDIT_SPAWN_WEIGHT_LARGE      = 6
+  CREDIT_PICKUP_TEXTURE_SIZE     = 64
+
+GameBalance.java (kill rewards + depth scaling + per-floor density — designer knobs):
+  CREDIT_REWARD_GORE_BITER       = 5
+  CREDIT_REWARD_EYE_TYRANT       = 6
+  CREDIT_REWARD_PLAGUE_HULK      = 8
+  CREDIT_REWARD_ACID_DRONE       = 8
+  CREDIT_REWARD_SHELL_BRUTE      = 12
+  CREDIT_REWARD_VOID_SHROUD      = 12
+  CREDIT_REWARD_MIRE_WRAITH      = 15
+  CREDIT_REWARD_IRON_STALKER     = 40
+  CREDIT_REWARD_BOSS_BASE        = 250
+  CREDIT_DEPTH_SCALE             = 0.12
+  CREDIT_CHIPS_PER_FLOOR_MIN     = 3
+  CREDIT_CHIPS_PER_FLOOR_MAX     = 7
+
+RenderConstants.java (aura + bob visuals):
+  CREDIT_PICKUP_HEIGHT_FRACTION          = 0.28f
+  CREDIT_PICKUP_BOB_SPEED                = 2.4f
+  CREDIT_PICKUP_BOB_AMPLITUDE_FRACTION   = 0.12f
+  CREDIT_PICKUP_PHASE_STEP               = 0.45f
+  CREDIT_AURA_RADIUS_SMALL / MEDIUM / LARGE   = 1.4f / 1.8f / 2.4f
+  CREDIT_AURA_PULSE_AMP_SMALL/MEDIUM/LARGE    = 0.12f / 0.16f / 0.22f
+  CREDIT_AURA_PULSE_SPEED_SMALL/MEDIUM/LARGE  = 2.0f / 2.4f / 2.8f
+  CREDIT_AURA_BASE_ALPHA_SMALL/MEDIUM/LARGE   = 0.35f / 0.45f / 0.55f
+  (chip body RGB triples may live here as named float[] or inline in the generator
+   methods, matching how weapon ground-sprite palettes are handled.)
+
+HudConstants.java (inventory readout layout):
+  INVENTORY_CREDITS_LABEL_X / Y, INVENTORY_CREDITS_GLYPH_SIZE = 24f,
+  INVENTORY_CREDITS_COLOR = (0.55f, 0.85f, 0.95f)
+
+EnemyType.java: add abstract int baseCreditReward() returning the matching GameBalance
+constant per archetype (mirror the existing baseXpReward() pattern exactly).
+
+ItemType.java: add CREDIT_SMALL, CREDIT_MEDIUM, CREDIT_LARGE in category MISC (per
+ItemCategory doc: "MISC — trade goods, credits..."). Mark them auto-collect.
+
+
+TECHNICAL NOTES
+===============
+PREFERRED IMPLEMENTATION — entity-side GroundItems (no tile symbol):
+  - item/ItemType.java: add the three CREDIT_* entries, category MISC, flagged
+    auto-collect (same flag ammo/armour use so the step-on hook grabs them).
+  - render/PropRenderer.java: extend the existing ground-item pass (the one
+    weapon-ground-sprites.txt extends). Build a Map<ItemType, Texture> of the three
+    chip textures + one shared aura gradient texture in the constructor; dispose all
+    in dispose(). For each credit GroundItem: draw aura (additive, pulsed) then chip
+    (bobbed), reusing the existing projection / depth-cull / z-buffer occlusion /
+    tile-brightness path verbatim. Restore blend mode after the additive aura.
+  - util/GameMath.java: reuse pickupBobOffset(); add a pure
+    creditAuraRadiusFactor(timeSeconds, baseRadius, pulseAmplitude, pulseSpeed, phase)
+    helper (with the standard formula/derivation/edge-cases comment block).
+  - progression/PlayerProgress.java: the WALLET. Add int credits; addCredits(int),
+    int getCredits(), boolean spendCredits(int) (deduct iff >= amount, else false),
+    reset to 0 on new run. This is in-memory per-run state — NEVER write to
+    Preferences (that is Salvage's job).
+  - enemy/EnemyManager.java (or the existing KillEventListener path): on kill, compute
+    round(deadType.baseCreditReward() * (1 + (depth-1)*CREDIT_DEPTH_SCALE)) and call
+    PlayerProgress.addCredits(...). Fire the "+N cr" EventTextSystem beat (credit-cyan,
+    offset from the amber XP beat).
+  - world/World.java: own the credit chip GroundItems alongside other ground items;
+    on the settled-tile auto-collect hook, resolve credit value (base +/- jitter,
+    rolled at spawn and stored on the ItemStack quantity field, OR rolled determinist
+    -ically at pickup) -> addCredits -> remove GroundItem -> "+N cr" beat.
+  - level/LevelGenerator.java: after enemy/item seeding, roll CREDIT_CHIPS_PER_FLOOR
+    chips; for each, pick a tier via weighted roll (small/medium/large weights) and
+    place a credit GroundItem on a random free floor tile (reuse existing free-tile
+    selection). Store the rolled credit amount in the GroundItem's stack quantity so
+    the value is fixed at spawn (the displayed "+N" matches what is granted).
+  - render/InventoryOverlayRenderer.java: draw the credits header readout
+    (chip glyph + label + PlayerProgress.getCredits()).
+
+JITTER STORAGE: simplest is to store the rolled credit AMOUNT directly as the
+ItemStack quantity (quantity = rolled credits, not "1"). Pickup then grants
+stack.quantity credits. This keeps the GroundItem self-describing and avoids a side
+table. (GroundItem constructor already takes a quantity >= 1.)
+
+FALLBACK — hand-authored level symbols (ONLY if level designers need to place chips by
+hand in .txt files): requires new symbols — add to docs/tile-symbols.txt and
+Level.java before implementing. Proposed FREE lowercase symbols:
+  i = small credit chip, o = medium credit chip, q = large credit chip
+  (i o q confirmed free in docs/tile-symbols.txt SYMBOL BUDGET). LevelLoader would
+  convert these tiles to credit GroundItems at load time (like enemy spawn markers are
+  extracted), then replace the tile with floor ' '. This keeps ALL runtime logic on the
+  GroundItem path — the symbols are purely an authoring convenience. If this path is
+  taken, update Level.java (new pickup check), the SYMBOL BUDGET count, and
+  PropRenderer is unaffected (it still renders GroundItems).
+
+TURN-BASED FIT: kill-credit award is a side effect of an already-turn-costing kill;
+pickup is the existing one-turn settled-tile event; bob + aura are cosmetic real-time
+decoration on static tiles (same class as flickering floors). No constraint violated.
+No allocations in render() — all chip/aura textures cached at construction.
+
+
+BALANCE NOTES (all placeholder — flag for playtest)
+===================================================
+- Kill credits are intentionally LOWER than XP numbers and rounder (5,6,8,12,15,40,
+  250) so the running total reads cleanly and a merchant can price items in tidy
+  tens/hundreds.
+- Weights 70/24/6 make LARGE chips a genuine event (~6% of seeded chips). If large
+  chips feel too rare in playtest, bump to 70/22/8; if jackpots cheapen the economy,
+  drop large to 4%.
+- Per-floor 3-7 chips + kill credits should net roughly 100-200 cr on a cleanly
+  cleared early floor — tune against order 11 merchant prices once that exists. The
+  two systems share GameBalance so a designer can rebalance both together.
+- CREDIT_DEPTH_SCALE 0.12 keeps late-floor kills ~2x early kills by floor 10 — enough
+  to matter, not enough to break the merchant.
+- Aura sizes/pulse: LARGE must be unmistakable at range (green, big, fast) while SMALL
+  must NOT spam visual noise in a chip-dense room (gold, modest, slow). If a room with
+  many smalls looks like a disco, lower SMALL base alpha to 0.28.
+- Credits reset to 0 on death by design (in-run only). Confirm RunStats records
+  "credits earned this run" for the death-screen tally even though the wallet zeroes.
+
+
+INTERACTIONS
+============
+1. SALVAGE META-PROGRESSION (salvage-cache-meta-progression.txt): explicitly DISTINCT.
+   Credits = in-run, in-memory, reset on death (PlayerProgress). Salvage = permanent,
+   Preferences (StatsStore). Different icons (cyan/gold chip vs. scrap-can), different
+   screens. This doc's "credits earned this run" can FEED Salvage payout indirectly
+   only via the existing kill/floor stats — it does NOT convert credits to salvage.
+2. MERCHANT / SHOP (roguelike_order_11): the consumer of this wallet. That doc calls
+   PlayerProgress.spendCredits(); this doc guarantees the API and the balance. Shop
+   header reuses the inventory credits readout.
+3. WEAPON GROUND SPRITES (weapon-ground-sprites.txt): credit chips reuse the SAME
+   PropRenderer ground-item billboard + bob pipeline and GameMath.pickupBobOffset.
+   Build the chip textures the same way (cached Pixmap textures). The aura layer is
+   the one new rendering element; it could later be back-ported to make rare weapon
+   drops glow too.
+4. XP / LEVEL PROGRESSION (xp-level-progression-system.txt): every kill awards BOTH XP
+   and Credits from the same kill event. The two floating beats (amber XP, cyan
+   credits) must be visually offset so they don't overlap/clobber each other in
+   EventTextSystem.
+5. EVENT TEXT (EventTextSystem / EventTextRenderer): new "+N cr" beat type, credit-cyan,
+   spawned on kill-award and on chip pickup.
+6. INVENTORY OVERLAY (roguelike_order_4 / InventoryOverlayRenderer): hosts the credits
+   header readout. No new screen — just a header line.
+7. LEVEL GENERATION (procedural-level-generation.txt): chip seeding hooks into the
+   existing free-floor-tile selection used for items/enemies; one weighted roll per
+   chip. Boss arenas may seed 0 chips (the boss credit payout covers it) — designer's
+   call.
+
+
+OPEN QUESTIONS
+==============
+1. Do bosses also drop a guaranteed LARGE credit chip on death (visual jackpot), or is
+   the 250 cr kill award enough? Recommend: kill award only for v1; a dropped chip is a
+   nice stretch but risks double-counting the payday.
+2. Jitter at SPAWN (fixed, stored in stack quantity — recommended) vs. at PICKUP
+   (rolled when grabbed)? Recommend spawn-time so the floating "+N" tooltip (if ever
+   shown) can match the grant. Defaulting to spawn-time storage above.
+3. Should the inventory show a per-run "credits earned" stat in addition to the live
+   balance (for the death screen)? Probably yes on the death screen, optional in the
+   live overlay. Defer to RunStats.
+4. Color-coding: gold(small)/gold(medium)/green(large) — is the gold->green jump at
+   LARGE clear enough, or should MEDIUM start trending green? Recommend keeping MEDIUM
+   gold-with-cyan-band so green uniquely means "jackpot." Confirm in a visual pass.
+5. Aura additive blending over the floor/wall backdrop: confirm it composites cleanly
+   in the existing PropRenderer batch (may need a brief blend-mode swap window). Flag
+   to libgdx-specialist.
+6. Hand-authored symbol path (i/o/q): build it now or defer until a level designer
+   actually needs to place chips by hand? Recommend DEFER — generator + drops cover the
+   roguelike use case; add symbols only when authoring demands it.

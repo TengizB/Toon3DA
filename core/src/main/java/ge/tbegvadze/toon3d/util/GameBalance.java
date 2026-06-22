@@ -451,6 +451,25 @@ public final class GameBalance {
     /** Tile character placed at the killed enemy's tile when Field Medic Rounds procs. '+' = MEDKIT_SMALL. */
     public static final char  FIELD_MEDIC_DROP_CHAR          = '+';
 
+    // =========================================================================
+    // CREDIT REWARDS — credits dropped by each enemy archetype on death
+    // Kill formula: round(base * (1 + (depth - 1) * CREDIT_DEPTH_SCALE))
+    //   depth 1: ×1.00   depth 2: ×1.12   depth 3: ×1.24   depth 5: ×1.48
+    // =========================================================================
+
+    public static final int   CREDIT_REWARD_GORE_BITER    = 5;
+    public static final int   CREDIT_REWARD_EYE_TYRANT    = 6;
+    public static final int   CREDIT_REWARD_PLAGUE_HULK   = 8;
+    public static final int   CREDIT_REWARD_ACID_DRONE    = 8;
+    public static final int   CREDIT_REWARD_SHELL_BRUTE   = 12;
+    public static final int   CREDIT_REWARD_VOID_SHROUD   = 12;
+    public static final int   CREDIT_REWARD_MIRE_WRAITH   = 15;
+    public static final int   CREDIT_REWARD_IRON_STALKER  = 40;
+    public static final int   CREDIT_REWARD_BOSS_BASE     = 250;
+    public static final float CREDIT_DEPTH_SCALE          = 0.12f;
+    public static final int   CREDIT_CHIPS_PER_FLOOR_MIN  = 3;
+    public static final int   CREDIT_CHIPS_PER_FLOOR_MAX  = 7;
+
     // ── Credit Fang (ON_KILL, universal) ─────────────────────────────────────
     /** Credits awarded at level 1 for each Credit Fang kill. */
     public static final float CREDIT_FANG_BASE               = 2f;

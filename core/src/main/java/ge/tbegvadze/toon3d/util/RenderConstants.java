@@ -201,6 +201,37 @@ public final class RenderConstants {
     public static final float FLICKER_FAILURE_THRESHOLD  = 0.35f;
     public static final float MAX_LIGHTING_SHADE         = 1.00f;
 
+    // Credit chip ground pickups — bob animation and per-tier aura glow
+    public static final float CREDIT_PICKUP_HEIGHT_FRACTION        = 0.28f;
+    public static final float CREDIT_PICKUP_BOB_SPEED              = 2.4f;
+    public static final float CREDIT_PICKUP_BOB_AMPLITUDE_FRACTION = 0.12f;
+    public static final float CREDIT_PICKUP_PHASE_STEP             = 0.45f;
+    public static final float CREDIT_PICKUP_CENTER_HEIGHT_FRACTION = 0.38f;
+    // Aura — SMALL tier (warm gold)
+    public static final float CREDIT_AURA_SMALL_R           = 0.95f;
+    public static final float CREDIT_AURA_SMALL_G           = 0.78f;
+    public static final float CREDIT_AURA_SMALL_B           = 0.30f;
+    public static final float CREDIT_AURA_SMALL_RADIUS      = 1.4f;
+    public static final float CREDIT_AURA_SMALL_BASE_ALPHA  = 0.35f;
+    public static final float CREDIT_AURA_SMALL_PULSE_AMP   = 0.12f;
+    public static final float CREDIT_AURA_SMALL_PULSE_SPEED = 2.0f;
+    // Aura — MEDIUM tier (cyan-gold)
+    public static final float CREDIT_AURA_MEDIUM_R           = 0.55f;
+    public static final float CREDIT_AURA_MEDIUM_G           = 0.85f;
+    public static final float CREDIT_AURA_MEDIUM_B           = 0.80f;
+    public static final float CREDIT_AURA_MEDIUM_RADIUS      = 1.8f;
+    public static final float CREDIT_AURA_MEDIUM_BASE_ALPHA  = 0.45f;
+    public static final float CREDIT_AURA_MEDIUM_PULSE_AMP   = 0.16f;
+    public static final float CREDIT_AURA_MEDIUM_PULSE_SPEED = 2.4f;
+    // Aura — LARGE tier (emerald)
+    public static final float CREDIT_AURA_LARGE_R           = 0.35f;
+    public static final float CREDIT_AURA_LARGE_G           = 1.00f;
+    public static final float CREDIT_AURA_LARGE_B           = 0.60f;
+    public static final float CREDIT_AURA_LARGE_RADIUS      = 2.4f;
+    public static final float CREDIT_AURA_LARGE_BASE_ALPHA  = 0.55f;
+    public static final float CREDIT_AURA_LARGE_PULSE_AMP   = 0.22f;
+    public static final float CREDIT_AURA_LARGE_PULSE_SPEED = 2.8f;
+
     // Level transitions — exit portal tile ('>' char)
     // STAIRS_DOWN_CHAR: classic roguelike glyph; exactly one per procedurally generated floor.
     public static final char  STAIRS_DOWN_CHAR                   = '>';

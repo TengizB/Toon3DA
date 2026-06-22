@@ -252,6 +252,36 @@ public enum ItemType {
             "UAC facility credits. Used at dispensers and trading terminals."
     ),
 
+    CREDIT_SMALL(
+            "Credit Chip",
+            ItemCategory.MISC,
+            false,
+            1,
+            '\'',
+            1.00f, 0.85f, 0.10f,
+            "A small cluster of UAC credit chips. Every bit counts."
+    ),
+
+    CREDIT_MEDIUM(
+            "Credit Bundle",
+            ItemCategory.MISC,
+            false,
+            1,
+            '\'',
+            0.55f, 0.85f, 0.80f,
+            "A bundle of UAC credit chips worth a fair sum."
+    ),
+
+    CREDIT_LARGE(
+            "Credit Cache",
+            ItemCategory.MISC,
+            false,
+            1,
+            '\'',
+            0.35f, 1.00f, 0.60f,
+            "A cache of high-value UAC credit chips."
+    ),
+
     // -------------------------------------------------------------------------
     // AMMO — reserve ammunition stacks; spent by weapons on reload.
     // Stack caps match the AMMO_RESERVE_CAP_* constants so one slot holds a full
