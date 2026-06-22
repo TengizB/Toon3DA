@@ -1709,85 +1709,83 @@ public class PropRenderer implements Renderable, Disposable {
         return map;
     }
 
+    // ─── Helper: draws one banknote stack onto a Pixmap ─────────────────────────
+    // top bill face at (left, top) with size stackWidth×billHeight; edgeCount
+    // 4-pixel-tall edge strips below it represent the stack thickness.
+    // Strips graduate from darkest (bottom) to slightly lighter (just below bill).
+    private static void drawBillStack(Pixmap p, int left, int top,
+                                      int stackWidth, int billHeight, int edgeCount) {
+        for (int edgeIndex = 0; edgeIndex < edgeCount; edgeIndex++) {
+            float brightness = 0.035f + edgeIndex * 0.008f;
+            p.setColor(brightness, brightness * 3.5f, brightness, 1f);
+            p.fillRectangle(left,
+                    top + billHeight + (edgeCount - 1 - edgeIndex) * 4,
+                    stackWidth, 4);
+        }
+        // Top bill outer border
+        p.setColor(0.04f, 0.18f, 0.04f, 1f);
+        p.fillRectangle(left, top, stackWidth, billHeight);
+        // Top bill face (dollar green)
+        p.setColor(0.13f, 0.43f, 0.13f, 1f);
+        p.fillRectangle(left + 1, top + 1, stackWidth - 2, billHeight - 2);
+        // Inner frame and engraving detail (only when the bill is large enough)
+        if (stackWidth >= 10 && billHeight >= 8) {
+            p.setColor(0.06f, 0.22f, 0.06f, 1f);
+            p.fillRectangle(left + 3, top + 3, stackWidth - 6, billHeight - 6);
+            p.setColor(0.16f, 0.50f, 0.16f, 1f);
+            p.fillRectangle(left + 4, top + 4, stackWidth - 8, billHeight - 8);
+            // Portrait oval (engraved face placeholder)
+            p.setColor(0.05f, 0.20f, 0.05f, 1f);
+            p.fillCircle(left + stackWidth / 2, top + billHeight / 2, billHeight / 5);
+            // Crinkle highlight (top-left glint)
+            p.setColor(0.35f, 0.90f, 0.35f, 1f);
+            p.fillRectangle(left + 2, top + 2, 4, 1);
+        }
+    }
+
     private static Texture generateCreditSmallTexture() {
-        // Data Shard — rectangular sci-fi credit chip, portrait orientation
+        // One flat banknote — landscape, centred in the 64×64 sprite
         int S = CREDIT_PICKUP_TEXTURE_SIZE;
         Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
         p.setColor(0f, 0f, 0f, 0f); p.fill();
-        // Chip border (steel blue-gray frame)
-        p.setColor(0.28f, 0.42f, 0.65f, 1f); p.fillRectangle(16, 10, 32, 44);
-        // Chip body (near-black navy interior)
-        p.setColor(0.05f, 0.07f, 0.16f, 1f); p.fillRectangle(18, 12, 28, 38);
-        // Top notch (alignment notch like a real IC package)
-        p.setColor(0.08f, 0.10f, 0.20f, 1f); p.fillRectangle(27, 10, 10, 4);
-        // Three electric cyan data bars
-        p.setColor(0.00f, 0.88f, 1.00f, 1f);
-        p.fillRectangle(21, 18, 22, 2);
-        p.fillRectangle(21, 25, 22, 2);
-        p.fillRectangle(21, 32, 22, 2);
-        // Gold connector pads along bottom edge
-        p.setColor(0.78f, 0.68f, 0.18f, 1f);
-        p.fillRectangle(20, 46, 5, 4);
-        p.fillRectangle(27, 46, 5, 4);
-        p.fillRectangle(34, 46, 5, 4);
-        // Status LED — glowing cyan dot, bright white hot-spot at centre
-        p.setColor(0.55f, 0.90f, 1.00f, 1f); p.fillCircle(32, 30, 3);
-        p.setColor(1.00f, 1.00f, 1.00f, 1f); p.fillCircle(32, 30, 1);
+        // Outer dark green border
+        p.setColor(0.04f, 0.18f, 0.04f, 1f); p.fillRectangle(8, 23, 48, 18);
+        // Bill face (dollar green)
+        p.setColor(0.13f, 0.43f, 0.13f, 1f); p.fillRectangle(9, 24, 46, 16);
+        // Inner frame strip
+        p.setColor(0.06f, 0.22f, 0.06f, 1f); p.fillRectangle(12, 27, 40, 10);
+        // Inner face (lighter centre panel)
+        p.setColor(0.16f, 0.50f, 0.16f, 1f); p.fillRectangle(13, 28, 38, 8);
+        // Portrait oval (engraved face placeholder)
+        p.setColor(0.05f, 0.20f, 0.05f, 1f); p.fillCircle(32, 32, 4);
+        // Left denomination block (bright green — represents printed numeral)
+        p.setColor(0.25f, 0.72f, 0.25f, 1f); p.fillRectangle(11, 27, 4, 6);
+        // Right denomination block
+        p.setColor(0.25f, 0.72f, 0.25f, 1f); p.fillRectangle(49, 27, 4, 6);
+        // Serial number strip (thin bright band)
+        p.setColor(0.20f, 0.60f, 0.20f, 1f); p.fillRectangle(18, 25, 14, 2);
+        // Crinkle highlight (top-left glint)
+        p.setColor(0.35f, 0.90f, 0.35f, 1f); p.fillRectangle(10, 24, 6, 2);
         return finalize(p);
     }
 
     private static Texture generateCreditMediumTexture() {
-        // Credit Wafer — wide horizontal card with holographic violet stripe
+        // Stack of 6 banknotes — front bill with 5 edge strips below
         int S = CREDIT_PICKUP_TEXTURE_SIZE;
         Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
         p.setColor(0f, 0f, 0f, 0f); p.fill();
-        // Card border (dark violet-gray frame)
-        p.setColor(0.30f, 0.20f, 0.55f, 1f); p.fillRectangle(8, 18, 48, 28);
-        // Card body (dark navy-purple interior)
-        p.setColor(0.06f, 0.04f, 0.18f, 1f); p.fillRectangle(10, 20, 44, 24);
-        // Top data band (bright cyan strip)
-        p.setColor(0.00f, 0.80f, 1.00f, 1f); p.fillRectangle(10, 20, 44, 4);
-        // Bottom data band (bright cyan strip)
-        p.setColor(0.00f, 0.80f, 1.00f, 1f); p.fillRectangle(10, 38, 44, 4);
-        // Holographic centre stripe (violet)
-        p.setColor(0.60f, 0.15f, 0.95f, 1f); p.fillRectangle(10, 28, 44, 6);
-        // Denomination indicators — two violet glows on the stripe
-        p.setColor(0.85f, 0.55f, 1.00f, 1f);
-        p.fillCircle(20, 31, 2);
-        p.fillCircle(30, 31, 2);
-        // Chip contact pad (right side — white square with dark recess)
-        p.setColor(1.00f, 1.00f, 1.00f, 1f); p.fillRectangle(42, 26, 8, 8);
-        p.setColor(0.06f, 0.04f, 0.18f, 1f); p.fillRectangle(44, 28, 4, 4);
-        // Sparkle flecks
-        p.setColor(1f, 1f, 1f, 1f);
-        p.fillRectangle(36, 21, 2, 2);
-        p.fillRectangle(14, 39, 2, 2);
+        drawBillStack(p, 8, 10, 48, 20, 6);
         return finalize(p);
     }
 
     private static Texture generateCreditLargeTexture() {
-        // Quantum Core — concentric-ring plasma disc with amber energy
+        // Three tall stacks of banknotes — left, centre (tallest), right
         int S = CREDIT_PICKUP_TEXTURE_SIZE;
         Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
         p.setColor(0f, 0f, 0f, 0f); p.fill();
-        // Outer amber-gold rim (r=22)
-        p.setColor(1.00f, 0.72f, 0.10f, 1f); p.fillCircle(32, 32, 22);
-        // Dark middle band — creates the thick border ring (r=17)
-        p.setColor(0.06f, 0.05f, 0.12f, 1f); p.fillCircle(32, 32, 17);
-        // Inner energy ring (warm white-gold, r=13)
-        p.setColor(1.00f, 0.88f, 0.50f, 1f); p.fillCircle(32, 32, 13);
-        // Dark centre pit (r=9)
-        p.setColor(0.04f, 0.04f, 0.10f, 1f); p.fillCircle(32, 32, 9);
-        // Core burst (bright amber, r=5)
-        p.setColor(1.00f, 0.68f, 0.15f, 1f); p.fillCircle(32, 32, 5);
-        // Hot white centre (r=2)
-        p.setColor(1f, 1f, 1f, 1f); p.fillCircle(32, 32, 2);
-        // Cardinal energy spokes crossing the dark band (neon gold 2px wide)
-        p.setColor(1.00f, 0.88f, 0.30f, 1f);
-        p.fillRectangle(31, 19, 2, 12); // top spoke
-        p.fillRectangle(31, 33, 2, 12); // bottom spoke
-        p.fillRectangle(19, 31, 12, 2); // left spoke
-        p.fillRectangle(33, 31, 12, 2); // right spoke
+        drawBillStack(p,  2, 10, 18, 12, 8);  // left stack
+        drawBillStack(p, 23,  6, 18, 12, 10); // centre stack (tallest)
+        drawBillStack(p, 44, 10, 18, 12, 8);  // right stack
         return finalize(p);
     }
 

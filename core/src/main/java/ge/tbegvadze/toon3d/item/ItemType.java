@@ -27,7 +27,7 @@ import ge.tbegvadze.toon3d.util.ItemConstants;
  *   Weapons      — amber  (1.0, 0.75, 0.1)
  *   Consumables  — green  (0.2, 0.9,  0.2) for medkits; orange (1.0, 0.55, 0.1) for stims
  *   Key items    — colour matches the keycard tier: red/yellow/blue
- *   Credits      — CREDITS (stackable) gold (1.0, 0.85, 0.1); pickups: SMALL electric blue (0.2, 0.65, 1.0), MEDIUM violet (0.65, 0.2, 1.0), LARGE amber (1.0, 0.7, 0.1)
+ *   Credits      — CREDITS (stackable) gold (1.0, 0.85, 0.1); pickups: SMALL dollar green (0.25, 0.72, 0.25), MEDIUM bright green (0.20, 0.85, 0.20), LARGE neon lime (0.35, 1.0, 0.20)
  *
  * All stack-size values reference Constants so the single source of truth is respected.
  */
@@ -253,33 +253,33 @@ public enum ItemType {
     ),
 
     CREDIT_SMALL(
-            "Credit Chip",
+            "Credit Note",
             ItemCategory.MISC,
             false,
             1,
             '\'',
-            0.20f, 0.65f, 1.00f,
-            "A small UAC data-shard credit chip. Every bit counts."
+            0.25f, 0.72f, 0.25f,
+            "A loose UAC banknote lying on the floor."
     ),
 
     CREDIT_MEDIUM(
-            "Credit Bundle",
+            "Credit Stack",
             ItemCategory.MISC,
             false,
             1,
             '\'',
-            0.65f, 0.20f, 1.00f,
-            "A holographic credit wafer worth a fair sum."
+            0.20f, 0.85f, 0.20f,
+            "A tight stack of UAC banknotes."
     ),
 
     CREDIT_LARGE(
-            "Credit Cache",
+            "Cash Bundle",
             ItemCategory.MISC,
             false,
             1,
             '\'',
-            1.00f, 0.70f, 0.10f,
-            "A high-value quantum-core credit disc."
+            0.35f, 1.00f, 0.20f,
+            "Three fat stacks of high-denomination UAC bills."
     ),
 
     // -------------------------------------------------------------------------
