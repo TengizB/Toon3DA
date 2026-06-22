@@ -1,0 +1,192 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Meta
+TITLE: UAC Salvage Cache — Between-Run Meta-Progression Unlocks
+CREATED: 2026-06-21
+---
+
+OVERVIEW
+========
+The SALVAGE CACHE is the game's missing meta-progression spine (roguelike pillar
+6). When a run ends — win or permadeath — the marine's recovered data and scrap is
+converted into SALVAGE, a permanent currency banked across runs via Preferences.
+Between runs, the player spends Salvage at the UAC Salvage Cache (a screen reached
+from the main menu) to permanently unlock new STARTING LOADOUT options, passive
+SURVIVAL UPGRADES, and LORE FRAGMENTS. Crucially, none of these break the "a fresh
+player can win without meta" rule: unlocks add SIDEWAYS options and small edges,
+not raw power creep. This turns every death into progress and gives the permadeath
+loop a reason to keep pulling you back.
+
+This document OWNS: the Salvage currency, how runs earn it, the persistent unlock
+catalog, the Salvage Cache screen, and how unlocks feed into a new run. It BUILDS ON
+the permadeath/death-screen and run-stats persistence (roguelike_order_1,
+roguelike_order_17) and the main-menu/new-run-setup (roguelike_order_18). It does
+NOT replace the in-run credits ECONOMY (roguelike_order_11 shop) — Salvage is
+PERMANENT/between-run; credits are temporary/within-run. They are distinct on
+purpose.
+
+NO NEW TILE SYMBOL REQUIRED. The Salvage Cache is a menu/screen system; it touches
+no level tiles. (An optional in-world "salvage terminal" prop is deferred — see
+OPEN QUESTIONS — and would require a symbol only if added later.)
+
+GAMEPLAY LOOP
+=============
+EARNING (end of every run):
+1. Run ends (death or extraction). The death/win screen computes a SALVAGE PAYOUT
+   from that run's stats (already tracked by RunStats / roguelike_order_17):
+     payout = floors_descended * SALVAGE_PER_FLOOR
+            + kills * SALVAGE_PER_KILL
+            + boss_kills * SALVAGE_PER_BOSS
+            + (extraction ? SALVAGE_EXTRACTION_BONUS : 0)
+2. The payout is added to a persistent SALVAGE_TOTAL (StatsStore / Preferences) and
+   shown on the death screen as a counting-up "SALVAGE RECOVERED: +N" line, so death
+   always ends on a small forward-progress beat.
+
+SPENDING (between runs, from main menu):
+3. From the main menu (roguelike_order_18) the player opens UAC SALVAGE CACHE.
+4. The Cache shows three columns of unlock cards: LOADOUT, SURVIVAL, INTEL(lore).
+   Each locked card shows its Salvage cost; affordable cards are highlighted.
+5. Player taps a card -> confirm -> Salvage is deducted, the unlock is flagged
+   permanently in Preferences, and the card flips to UNLOCKED.
+
+APPLYING (start of next run):
+6. NEW RUN SETUP (roguelike_order_18) reads the unlocked set:
+     - LOADOUT unlocks appear as selectable starting-kit options (pick one).
+     - SURVIVAL unlocks are passive and either always-on or toggled in setup
+       (e.g. "+10 starting armor," "start with 1 stim pack").
+     - INTEL unlocks add lore entries to a codex and may reveal enemy/hazard tells.
+7. The run begins with the chosen/owned modifiers applied to the Player/loadout at
+   World creation.
+
+PLAYER EXPERIENCE
+=================
+Death stops feeling purely punishing. You died on floor 6 to a shielded Brute pack,
+but you walk away with 240 Salvage — enough to finally unlock the COMBAT KNIFE
+starting option you've been eyeing, so next run opens differently. Over many runs
+the Cache becomes a personal trophy wall: each card is a small "I earned this." The
+sideways-not-upward design means a maxed-out account isn't a god-mode account — it's
+a player with more OPENING CHOICES and a fuller lore codex, which is exactly the
+Hades/meta-done-right feel the pillars call for. New players see locked cards as
+goals, not as walls keeping them from winning.
+
+TECHNICAL NOTES
+===============
+Affected classes:
+- util/StatsStore.java: add persistent reads/writes for SALVAGE_TOTAL (int) and the
+  unlocked-set (store as a comma-joined string of unlock ids, or one boolean key per
+  unlock id under a "salvage.unlock." prefix). Reuse the existing Preferences handle.
+- world/RunStats.java + the death/win flow (roguelike_order_1 /
+  DeathOverlayRenderer): compute the payout at run end and bank it; expose the
+  per-run payout for the death-screen display.
+- progression/ (new): MetaProgress.java — loads the unlocked set + Salvage total
+  on boot, exposes isUnlocked(id), getSalvage(), spend(id), and the catalog. Pure
+  data + Preferences I/O; no render state.
+- progression/ (new): SalvageUnlock.java (or an enum SalvageUnlockType) — the
+  catalog: id, displayName, category (LOADOUT/SURVIVAL/INTEL), cost, description,
+  and an apply hook (how it modifies a new run).
+- New screen: screen/SalvageCacheScreen.java (package ge.tbegvadze.toon3d.screen) —
+  the three-column unlock UI. Reached from the main menu.
+- screen/ new-run-setup (roguelike_order_18): query MetaProgress to populate
+  selectable starting kits + apply owned passives at World construction.
+- entity/Loadout.java + World.java: accept a "starting loadout id" and seed the
+  chosen weapon(s)/items accordingly at run start.
+
+Data model (Preferences keys, ProgressionConstants.java):
+    PREF_SALVAGE_TOTAL          = "salvage.total"
+    PREF_UNLOCK_PREFIX          = "salvage.unlock."   // + unlock id -> boolean
+Catalog is code-defined (an enum or a static list) so it ships with the build; only
+the OWNED flags + total are persisted.
+
+Constants to add (ProgressionConstants.java / GameBalance.java — placeholders):
+    SALVAGE_PER_FLOOR        = 20
+    SALVAGE_PER_KILL         = 2
+    SALVAGE_PER_BOSS         = 60
+    SALVAGE_EXTRACTION_BONUS = 100
+    // example card costs
+    UNLOCK_COST_LOADOUT_SMALL  = 150
+    UNLOCK_COST_SURVIVAL_SMALL = 120
+    UNLOCK_COST_INTEL          = 80
+
+STARTER CATALOG (v1 — all sideways/small-edge, never raw power creep):
+LOADOUT (pick one at run start; default kit always available, free):
+  - "Scavenger's Knife": start with the Combat Knife equipped (no-ammo opener).
+  - "Field Shells": start the Shotgun with +1 spare clip of shells.
+  - "Recon Kit": start with the mini-map fog already revealing 1 extra tile radius
+    (synergy with fog-of-war), no combat advantage.
+SURVIVAL (passive, owned-forever once bought; keep each small):
+  - "Padded Vest": +10 starting armor (one-time buffer, not regenerating).
+  - "Stim Habit": start each run with 1 stim pack in inventory.
+  - "Steady Hands": brace (brace-overwatch-stance) does not break on the FIRST hit
+    each run (a single forgiveness charge) — only if Brace ships.
+INTEL (lore + small information edges):
+  - "Bestiary: Pylon": unlocks the Resonant Pylon codex entry + makes its aura beams
+    render slightly brighter (pure readability, no power).
+  - "Facility Logs I/II/III": pure lore fragments (UAC corporate cynicism flavor)
+    — cheap, collectible, reward exploration of the meta layer.
+
+VISUAL DESIGN
+=============
+- SALVAGE CACHE SCREEN: a grimy UAC requisition terminal aesthetic — dark steel
+  panel, cracked cyan CRT header "UAC SALVAGE CACHE // CLEARANCE: SURVIVOR," a
+  Salvage counter top-right with a scrap-can icon. Three labeled columns
+  (LOADOUT / SURVIVAL / INTEL) of cards. Locked cards are desaturated with a cost
+  tag; affordable cards pulse a faint cyan edge; owned cards show a stamped "ISSUED"
+  overlay. Reuse the procedural/ShapeRenderer + BitmapFont HUD style (scanline-crt
+  doc) — zero new texture art required for v1.
+- DEATH SCREEN ADDITION: under the existing stats, a "SALVAGE RECOVERED: +N" line
+  that counts up, then "TOTAL: M." Small, satisfying, ends the run on a gain.
+- NEW-RUN SETUP: the chosen loadout card and active passives shown as small chips so
+  the player sees their build identity before descending.
+- Touch: all cards are large thumb targets; confirm is a second tap (no accidental
+  spend). Back button returns to main menu.
+
+BALANCE NOTES (placeholders — flag for playtest)
+================================================
+- THE GOLDEN RULE: a brand-new account (zero unlocks) must be able to complete a
+  full run. Every unlock is a SIDEWAYS option or a SMALL edge (a few armor, one
+  stim, an opener weapon, a lore page). No unlock may grant scaling power, raw
+  damage multipliers, or anything that compounds across floors.
+- Payout tuning: a typical floor-6 death should bank roughly one cheap unlock's
+  worth (~150-250 Salvage) so progress is felt every 1-2 runs early, slowing as the
+  catalog empties. Extraction bonus is the big carrot for finishing runs.
+- Cost curve: keep INTEL cheapest (collectible flavor), SURVIVAL mid, LOADOUT
+  similar — there is no "best buy" treadmill, just preference. Avoid a single
+  must-buy first purchase; if playtesters always buy the same card first, raise its
+  cost or weaken it.
+- Anti-grind: cap nothing artificially, but since unlocks are finite and one-time,
+  there is no infinite grind — once the catalog is bought out, Salvage becomes a
+  vestigial score. (OPEN Q: add a prestige sink.)
+
+INTERACTIONS
+============
+1. PERMADEATH / DEATH SCREEN (roguelike_order_1): the death screen is the payout
+   moment; this system gives permadeath its forward-progress payoff. Tight synergy.
+2. RUN STATS / LEADERBOARD (roguelike_order_17): payout is computed FROM the stats
+   that doc already tracks (floors, kills, bosses). No new tracking needed.
+3. MAIN MENU / NEW-RUN SETUP (roguelike_order_18): the Cache lives off the main
+   menu; new-run setup reads owned unlocks to build the starting loadout/passives.
+4. SHOP / CREDITS (roguelike_order_11): explicitly DISTINCT — credits are in-run and
+   reset on death; Salvage is permanent. Keep the two currencies visually and
+   verbally separate to avoid confusion (scrap-can vs. credit-chip icons).
+5. FOG OF WAR (fog-of-war / roguelike_order_15): the "Recon Kit" loadout unlock
+   tweaks reveal radius — a clean, non-combat meta hook.
+6. NEW ENEMIES/MECHANICS (resonant-pylon, brace-overwatch): INTEL unlocks gate codex
+   lore + small readability boosts for new systems, giving the catalog room to grow
+   alongside content.
+7. DIFFICULTY MODES (roguelike_order_16): a future "Salvage multiplier" on harder
+   modes rewards risk — easy late-game knob.
+
+OPEN QUESTIONS
+==============
+1. Single starting-loadout pick vs. mix-and-match (e.g. one weapon + one passive)?
+   Recommend: ONE loadout-weapon choice + ALL owned passives auto-apply. Keeps setup
+   fast on mobile while letting passives accumulate as the wall fills in.
+2. Should harder difficulty (roguelike_order_16) multiply Salvage payout? Recommend
+   yes (e.g. x1.25 on hard) — rewards risk without power-creeping the unlocks.
+3. Prestige/endgame sink once the catalog is bought out: a cosmetic marine skin? A
+   "Salvage donated" leaderboard stat? Defer, but note it so Salvage never becomes
+   fully worthless.
+4. In-world "salvage terminal" prop that lets you bank/preview mid-run? Deferred —
+   would need a new tile symbol and risks blurring the in-run/between-run line.
+   Recommend keeping Salvage strictly a menu/between-run system for v1.
+5. Account reset option (for players who want a fresh meta journey)? Cheap to add as
+   a settings toggle that clears the Preferences keys; confirm UX wants it.

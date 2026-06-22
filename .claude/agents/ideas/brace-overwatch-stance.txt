@@ -1,0 +1,200 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Brace — Overwatch Reaction-Fire Stance (turn-economy tactic)
+CREATED: 2026-06-21
+---
+
+OVERVIEW
+========
+BRACE is a one-tap defensive stance that converts a "wasted" Skip Turn into a
+loaded trap. When the marine braces, he plants in his current tile facing his
+current cardinal direction and goes into OVERWATCH: the next enemy that steps onto
+or crosses his facing line gets shot for free, before it can act. It is the
+turn-based, cardinal-only answer to the classic FPS "hold this corridor" moment —
+the player trades initiative for a guaranteed first strike against an approaching
+threat. Brace is a pure turn-economy decision that uses systems the game already
+has (facing line, weapon fire, the tick loop) with no new tile symbol.
+
+This document OWNS: the BRACE player state, the OVERWATCH trigger resolution
+within the enemy turn, the brace-break rules, the touch button, and the HUD/visual
+feedback. It does NOT redefine weapon damage (weapon docs), the status-effect layer
+(roguelike_order_8), or enemy AI movement (enemy_system.txt) — it hooks into them.
+
+NO NEW TILE SYMBOL REQUIRED. Brace is a player-state layer; it reuses the existing
+facing-line concept already used by ranged enemies (isSameCardinalLine) and by all
+weapon fire.
+
+GAMEPLAY LOOP
+=============
+1. Player taps the BRACE button (replaces/augments Skip Turn — see OPEN QUESTIONS).
+   -> If the equipped weapon has at least 1 round in clip and is not mid-reload,
+      the marine enters BRACED state and the turn advances by exactly one (enemies
+      act). Bracing IS the player's action for that turn.
+2. While BRACED, the player's weapon is "primed." A primed shot is reserved: it
+   will fire automatically as a REACTION during the enemy turn, not on the player's
+   own turn.
+3. On the following enemy turn (and every enemy turn the player stays braced):
+   EnemyManager moves/acts enemies in spawn-index order. Before EACH enemy resolves
+   its own action, the OVERWATCH check runs for that enemy:
+     - Is the enemy now on the player's facing cardinal line (same column if facing
+       N/S, same row if facing E/W) AND on the correct side (in front, not behind)?
+     - Is there clear line-of-sight along that line (no wall, no closed door, no
+       solid prop between the marine and the enemy)?
+     - Is the enemy within OVERWATCH_RANGE_TILES?
+   -> If YES: the primed weapon FIRES at that enemy immediately (one shot / one
+      blast / one march, exactly as a normal player shot would resolve, including
+      pellet spread, pierce, splash, status application). This happens BEFORE the
+      enemy gets to move or attack this turn. The reaction is consumed.
+4. After the reaction fires, BRACE ends (one reaction per brace by default — see
+   BALANCE for the Marksman upgrade that grants more). The marine returns to IDLE
+   and may act normally next turn.
+5. If NO enemy triggers the overwatch during an enemy turn, the marine simply stays
+   braced and the player chooses again next turn: stay braced (tap Brace again,
+   costs another turn) or break stance by taking any other action.
+
+BRACE-BREAK RULES (stance ends immediately if any of):
+- The reaction shot is fired (default: 1 shot per brace).
+- The player takes any non-brace action (move, rotate, strafe, fire manually,
+  reload, heal, switch weapon, open inventory).
+- The player is hit by an attack (getting shot/clawed shakes you off the sights) —
+  this is a deliberate counter so Brace is not a free turtle button.
+- The equipped weapon runs dry (last reaction emptied the clip).
+
+PLAYER EXPERIENCE
+=================
+Brace creates the "I know something is coming" tension that turn-based combat
+usually lacks. Heard a Gore Biter skittering toward the corridor mouth? Plant the
+shotgun on the doorway and brace — when it rounds into your lane it eats a barrel
+of buckshot before it can close. The decision is sharp and readable: bracing spends
+your turn and your initiative, so if you guess the wrong lane the enemy comes from
+your flank and you wasted a turn AND you're now adjacent to a melee threat. It
+rewards map reading, corridor control, and weapon choice (a braced Double Barrel is
+a corridor execution; a braced Chaingun overwatch is weaker per shot). It is the
+tactical mirror of the Lurker's "facing is defense" — here facing is OFFENSE.
+
+TECHNICAL NOTES
+===============
+Affected classes:
+- input/PlayerController.java: add a BRACED flag (the controller already gates input
+  in IDLE). Bracing is initiated from IDLE, advances one turn, then returns to a new
+  IDLE-but-braced sub-state. Keep the state machine readable: add boolean isBraced
+  plus the existing IDLE/MOVING/ROTATING. Any move/rotate/strafe/fire/reload/heal/
+  switch clears isBraced before executing.
+- input/touch/TouchAction.java + TouchControllerRenderer.java + TouchInputState.java:
+  add a BRACE action and an on-screen button (thumb-reachable, large target).
+- world/World.java: owns the overwatch resolution call inside the enemy-turn phase.
+- enemy/EnemyManager.java: in takeTurn(), BEFORE each enemy resolves its Phase B
+  action, call OverwatchResolver.tryReaction(enemy). EnemyManager already iterates
+  enemies in spawn-index order and already owns isSameCardinalLine() — reuse it.
+- entity/Weapon.java: the reaction reuses the SAME fire entry point a manual player
+  shot uses (marchShot / marchBlast). No new firing code — the resolver just calls
+  it pointed down the player's current facing line at the triggering enemy.
+
+New class:
+- combat/OverwatchResolver.java (new package ge.tbegvadze.toon3d.combat, or place in
+  world if a new package is unwanted — document the choice). Responsibilities:
+    boolean tryReaction(Enemy enemy, Player player, Weapon weapon, Level level)
+  Steps: confirm player isBraced + weapon ready; compute facing axis from
+  player.directionX/Y (snap-exact cardinal, already guaranteed by PlayerController);
+  check enemy tile is in front on that axis within range; run a tile-walk LOS check
+  along the line (stop at wall / closed door / solid prop); if clear, invoke the
+  weapon's fire resolution at the enemy and return true.
+
+Math / algorithm notes (give to math-expert for the LOS walk):
+- Facing axis: if directionX != 0 -> horizontal (row-locked); else vertical
+  (column-locked). PlayerController guarantees exact (±1,0)/(0,±1).
+- "In front" test: for facing +X, enemyColumn > playerColumn and enemyRow ==
+  playerRow; mirror for the other three directions.
+- LOS walk: step one tile at a time from the tile in front of the player toward the
+  enemy along the facing axis; if any stepped tile isWall / isPropSolid / closed
+  door -> blocked, no reaction. This is a 1-D walk (O(range)), no DDA needed.
+- Range clamp: |enemyColumn - playerColumn| or |enemyRow - playerRow| <=
+  OVERWATCH_RANGE_TILES.
+
+Data to store (per player):
+- isBraced (boolean), bracedReactionsRemaining (int, default 1).
+- Reset bracedReactionsRemaining when re-bracing.
+
+Constants to add:
+- WeaponConstants.java or a new GameBalance entry:
+    OVERWATCH_RANGE_TILES            = 8     // placeholder; how far the lane reaches
+    OVERWATCH_REACTIONS_PER_BRACE    = 1     // base; Marksman perk can raise to 2
+    OVERWATCH_DAMAGE_MULTIPLIER      = 1.0f  // placeholder; see BALANCE (consider 1.25)
+- TouchConstants.java: BRACE button position/size/alpha.
+
+VISUAL DESIGN
+=============
+- WEAPON HUD (WeaponHudRenderer): while braced, the weapon sprite raises slightly
+  and steadies (kill the idle bob), with a faint cyan "sighting" glint along the
+  barrel — communicates "locked and waiting." When the reaction fires, play the
+  normal muzzle flash for that weapon.
+- 3D VIEW: a thin, subtle cyan scanline / aim-bracket pair at screen center while
+  braced (the marine is sighting down the lane). Reuse the existing full-screen
+  overlay-quad pattern from the status-tint system — no per-frame allocation.
+- MINI-MAP (LevelRenderer): draw a short bright wedge/line from the player dot down
+  the braced facing axis to OVERWATCH_RANGE_TILES, so the player can see exactly
+  which lane is covered. This is the key readability element.
+- HUD STATUS LINE: show a small "OVERWATCH" pip in the left-panel status row
+  (reuse the status-icon row reserved by roguelike_order_8).
+- REACTION MOMENT: on a triggered reaction, fire the existing screen-shake / muzzle
+  flash and an EventText "OVERWATCH!" callout via EventTextSystem.
+
+BALANCE NOTES (placeholders — flag for playtest)
+================================================
+- Brace costs a full turn and your initiative; that cost is the balance anchor. The
+  payoff is a guaranteed pre-emptive hit on the FIRST enemy to enter your lane.
+- OVERWATCH_DAMAGE_MULTIPLIER: start at 1.0 (a normal shot). If brace feels too
+  weak versus just shooting on your own turn, bump to 1.25 (a braced shot is
+  "aimed"). Do NOT exceed ~1.5 or it dominates manual fire.
+- One reaction per brace by default. A Marksman/Marksmanship (MRK) attribute or a
+  perk could grant OVERWATCH_REACTIONS_PER_BRACE = 2 (hold a lane against two
+  rushers). Gate higher counts behind investment.
+- Brace-break-on-hit is essential: without it, brace + a wall at your back becomes a
+  no-risk turtle. With it, flankers and ranged enemies hard-counter a careless
+  brace, preserving meaningful choice.
+- Fast enemies (Gore Biter, Void Shroud) are the prime brace bait; slow tanks
+  (Plague Hulk) are poor brace targets since you could just keep shooting normally.
+  This naturally makes brace a SPEED counter, which is good design texture.
+- Weapon interaction: charge weapons (Railgun) and lobbed weapons (Grenade Launcher)
+  need a ruling — see OPEN QUESTIONS. Default v1: only hitscan/march weapons may
+  overwatch; charge/lob weapons cannot brace (button disabled with a tooltip).
+
+INTERACTIONS
+============
+1. ENEMY AI (enemy_system.txt / EnemyManager): the reaction resolves in the enemy
+   turn BEFORE the triggering enemy acts, using the existing iteration order. A
+   reaction kill removes the enemy before it can move/attack — clean and readable.
+   Reuses isSameCardinalLine() and existing LOS conventions.
+2. STATUS EFFECTS (roguelike_order_8): a braced shot applies the weapon's normal
+   status (a braced Incinerator reaction still applies BURNING). If the player is
+   STUNNED, brace cannot trigger that turn (you can't react while stunned) — the
+   primed shot simply doesn't fire until the stun clears or brace breaks.
+3. FACING-AS-DEFENSE / LURKER (lurker-crawler-flank-blindspot-system): brace locks
+   your facing, which means a Lurker flanking around to your blind spot directly
+   punishes a braced player from behind — the two systems create a deliberate
+   risk/reward dance (cover the front, expose the back).
+4. WEAPON SYSTEM (weapon docs): zero new firing code; brace calls the same marchShot
+   /marchBlast the manual Fire button uses. Per-weapon brace eligibility is a small
+   flag on Weapon.
+5. DOORS (DoorManager): a closed door blocks the LOS walk, so an enemy opening a door
+   into your lane only triggers overwatch once the door is actually open and the
+   enemy has stepped onto the line — encourages doorway-camping tactics.
+6. NOISE/STEALTH (noise-propagation): bracing is silent (you fire only on reaction),
+   so a braced ambush does not pre-alert enemies the way pre-emptive shooting would.
+
+OPEN QUESTIONS
+==============
+1. Does BRACE replace the Skip Turn button or sit beside it? Recommendation: keep
+   Skip Turn (pure wait, no weapon needed) AND add Brace as a distinct button;
+   they read differently (wait vs. armed wait). If button real estate is tight on
+   small phones, make Skip Turn a long-press = Brace, short-tap = wait.
+2. Charge/lob weapons (Railgun, Grenade Launcher): disabled while braced (v1), or a
+   special "release on trigger" behavior? Recommend disabled in v1 for clarity.
+3. Should a braced shot that MISSES (pellet spread, accuracy roll from
+   weapon-system-order-3) still consume the brace? Recommend yes — you took the
+   shot, the reaction is spent. Keeps it honest.
+4. Multiple enemies entering the lane on the same enemy turn: only the FIRST (by
+   spawn-index resolution order, i.e. effectively nearest-resolved) triggers the
+   single reaction. Confirm this reads fairly, or switch to "nearest tile first."
+5. Should Toughness/armor or an attribute reduce the brace-break-on-hit chance
+   (steady nerves)? Possible perk hook; leave out of v1.
