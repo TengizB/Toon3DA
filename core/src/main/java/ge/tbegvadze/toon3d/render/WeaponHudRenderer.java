@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.entity.AssaultRifle;
 import ge.tbegvadze.toon3d.entity.Chaingun;
 import ge.tbegvadze.toon3d.entity.CombatKnife;
 import ge.tbegvadze.toon3d.entity.DoubleBarrelShotgun;
@@ -68,6 +69,18 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     private static final float[] CHAINGUN_SPARK_FRACTIONS_Y = {
          0.45f,  0.72f,  0.88f,  0.38f,  0.62f,
          0.92f,  0.55f,  0.78f,  0.42f,  0.68f
+    };
+
+    // Assault-rifle casing scatter — static to avoid per-frame heap allocation.
+    // Each pair (CASING_FRACTIONS_X[i], CASING_FRACTIONS_Y[i]) is a fraction of the casing
+    // spread constants applied from the barrel origin. Casings eject to the RIGHT (positive X)
+    // and fall downward (negative Y) as normalizedTime advances, so the X fractions are all
+    // positive and the static Y fractions are the launch heights they descend from.
+    private static final float[] ASSAULT_RIFLE_CASING_FRACTIONS_X = {
+        0.45f, 0.72f, 0.95f
+    };
+    private static final float[] ASSAULT_RIFLE_CASING_FRACTIONS_Y = {
+        0.55f, 0.80f, 0.40f
     };
 
     // Railgun lightning branch jitter — static to avoid per-frame heap allocation.
@@ -137,6 +150,9 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         }
         if (weapon instanceof Shotgun) {
             return generateShotgunTexture();
+        }
+        if (weapon instanceof AssaultRifle) {
+            return generateAssaultRifleTexture();
         }
         if (weapon instanceof Chaingun) {
             return generateChaingunTexture();
@@ -885,6 +901,212 @@ public class WeaponHudRenderer implements Renderable, Disposable {
             }
         }
         return flipped;
+    }
+
+    /**
+     * Generates a symmetric service assault-rifle sprite using ShapeRenderer into an
+     * offscreen FrameBuffer.  Quake-1 top-down first-person perspective: the camera sits
+     * slightly above-and-behind the weapon, the single barrel points AWAY toward the
+     * horizon, and the grip/stock are cut off below the screen edge (Y=0..14 transparent).
+     *
+     * Canvas coordinate system (ShapeRenderer Y-up):
+     *   Y =   0 → bottom of canvas (grip region — transparent, cut off)
+     *   Y = 134 → top of canvas (muzzle tip, farthest from player)
+     *
+     * Layout zones (Y-up, centerX=96):
+     *   Y  0– 14  transparent       — grip/stock cut off below screen
+     *   Y 14– 28  curved magazine    — signature feature, dropping below the receiver
+     *   Y 14– 62  lower receiver     — flat-top gunmetal body with ejection port
+     *   Y 56– 70  upper receiver     — stepped flat-top with carry-handle sight
+     *   Y 68– 96  slotted handguard  — perspective-tapered, cooling-slot rows
+     *   Y 92–128  single barrel tube — narrow (1:3 ratio) top surface pointing away
+     *   Y 126–128 muzzle cap         — 2px bright steel rim (NO bore: barrel points away)
+     *
+     * Full layer breakdown is documented on drawAssaultRifleShape().
+     */
+    private static Texture generateAssaultRifleTexture() {
+        int canvasWidth  = WeaponConstants.ASSAULT_RIFLE_CANVAS_WIDTH;
+        int canvasHeight = WeaponConstants.ASSAULT_RIFLE_CANVAS_HEIGHT;
+
+        FrameBuffer        frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
+        ShapeRenderer      temporaryShapeRenderer = new ShapeRenderer();
+        OrthographicCamera camera                 = new OrthographicCamera(canvasWidth, canvasHeight);
+        camera.position.set(canvasWidth / 2f, canvasHeight / 2f, 0f);
+        camera.update();
+
+        frameBuffer.begin();
+        Gdx.gl.glClearColor(0f, 0f, 0f, 0f);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        temporaryShapeRenderer.setProjectionMatrix(camera.combined);
+        temporaryShapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        drawAssaultRifleShape(temporaryShapeRenderer, canvasWidth / 2f);
+        temporaryShapeRenderer.end();
+
+        // glReadPixels returns rows with GL Y=0 at bottom; must flip before Texture upload.
+        Pixmap rawPixmap = new Pixmap(canvasWidth, canvasHeight, Pixmap.Format.RGBA8888);
+        Gdx.gl.glReadPixels(0, 0, canvasWidth, canvasHeight,
+                            GL20.GL_RGBA, GL20.GL_UNSIGNED_BYTE, rawPixmap.getPixels());
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+        frameBuffer.end();
+        frameBuffer.dispose();
+        temporaryShapeRenderer.dispose();
+
+        Pixmap flippedPixmap = flipPixmapVertically(rawPixmap);
+        rawPixmap.dispose();
+
+        Texture texture = new Texture(flippedPixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        flippedPixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Draws a gunmetal service assault rifle in Quake-1 top-down first-person perspective.
+     *
+     * Single-barrel ballistic weapon, top-down view. The barrel points AWAY from the player
+     * toward the horizon, so the bore face is invisible — only a 2px bright muzzle cap is
+     * drawn at the tip, never a bore-hole ellipse. The defining silhouette elements are a
+     * narrow tall single barrel (≈1:3 ratio), a slotted handguard with cooling slots, a
+     * flat-top receiver with a carry-handle rear sight, and — the signature feature — a
+     * curved magazine dropping below the receiver near the screen-bottom cut-off.
+     *
+     * Perspective convergence factor 0.65 (top-down): every x-offset from centerX scales by
+     * 0.65 from the barrel base (Y=92) to the muzzle (Y=128). Shading strips share the same
+     * taper so the cylinder edges stay parallel in perspective.
+     *
+     * Symmetry invariant: every element is mirrored about centerX=96. The curved magazine is
+     * the only intentionally centred-but-swept element; its sweep is symmetric column pairs.
+     *
+     * Layer order (back-to-front):
+     *   1. Curved magazine        Y=14..30  — drawn first so the receiver overlaps its top
+     *   2. Lower receiver body    Y=14..62  — wide gunmetal trapezoid, top surface
+     *   3. Receiver detailing     Y=14..62  — edge shading, ejection port, fire-selector
+     *   4. Upper receiver         Y=56..70  — stepped flat-top section
+     *   5. Carry-handle sight     Y=62..72  — centred rear-sight housing
+     *   6. Slotted handguard      Y=68..96  — tapered tube with twin cooling-slot rows
+     *   7. Barrel tube            Y=92..128 — narrow tapered cylinder, top-surface shading
+     *   8. Front sight post       Y=116..124— centred bright post near the muzzle
+     *   9. Muzzle cap             Y=126..128— 2px bright steel rim (no bore, points away)
+     */
+    private static void drawAssaultRifleShape(ShapeRenderer shapeRenderer, float centerX) {
+
+        // Y=0..14 left transparent — grip/stock cut off below screen (eyes above the gun).
+
+        // 1. Curved magazine — the signature feature, sweeping down and forward (left) below the
+        //    receiver. Built from stacked rects whose left edge sweeps leftward as Y decreases,
+        //    giving the classic banana-magazine curve. Each rect pair stays mirror-consistent in
+        //    width about its own swept centre so the silhouette reads as a single curved box.
+        //    The magazine body centre drifts from centerX-2 (top, Y=28) to centerX-12 (bottom, Y=14).
+        shapeRenderer.setColor(0.20f, 0.21f, 0.24f, 1f);                       // dark charcoal magazine
+        shapeRenderer.rect(centerX - 13f, 26f, 22f, 4f);                       // top of magazine (seats into receiver)
+        shapeRenderer.rect(centerX - 16f, 22f, 22f, 4f);                       // curve segment 1
+        shapeRenderer.rect(centerX - 19f, 18f, 22f, 4f);                       // curve segment 2
+        shapeRenderer.rect(centerX - 22f, 14f, 22f, 4f);                       // bottom (runs off screen edge)
+        shapeRenderer.setColor(0.30f, 0.32f, 0.36f, 1f);                       // front-edge highlight (catches light)
+        shapeRenderer.rect(centerX +  7f, 26f, 2f, 4f);                        // mag top front rib
+        shapeRenderer.rect(centerX +  4f, 22f, 2f, 4f);                        // mag front rib 1
+        shapeRenderer.rect(centerX +  1f, 18f, 2f, 4f);                        // mag front rib 2
+        shapeRenderer.setColor(0.12f, 0.13f, 0.15f, 1f);                       // back-edge shadow
+        shapeRenderer.rect(centerX - 13f, 26f, 2f, 4f);                        // mag back rib top
+        shapeRenderer.rect(centerX - 16f, 22f, 2f, 4f);                        // mag back rib 1
+        shapeRenderer.rect(centerX - 19f, 18f, 2f, 4f);                        // mag back rib 2
+
+        // 2. Lower receiver body — wide gunmetal trapezoid, wider at the near end (closer to viewer).
+        shapeRenderer.setColor(0.30f, 0.32f, 0.36f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 40f, 14f, 34f, 62f);
+
+        // 3. Receiver detailing — edge shading, ejection port, magazine well, fire-selector.
+        shapeRenderer.setColor(0.42f, 0.46f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 34f, 59f, 68f, 3f);                       // far-edge top highlight
+        shapeRenderer.setColor(0.12f, 0.13f, 0.17f, 1f);
+        shapeRenderer.rect(centerX - 40f, 14f, 80f, 3f);                       // near-edge bottom shadow
+        shapeRenderer.setColor(0.18f, 0.20f, 0.24f, 1f);
+        shapeRenderer.rect(centerX - 36f, 38f, 72f, 2f);                       // mid-body groove
+        // Magazine well — dark recess the magazine seats into (centred above the curved mag).
+        shapeRenderer.setColor(0.10f, 0.11f, 0.13f, 1f);
+        shapeRenderer.rect(centerX - 14f, 26f, 28f, 6f);                       // magazine well mouth
+        // Ejection port — dark recessed slot on the right flank with a bright lower lip.
+        shapeRenderer.setColor(0.08f, 0.09f, 0.11f, 1f);
+        shapeRenderer.rect(centerX + 14f, 44f, 20f, 10f);                      // ejection port cavity
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        shapeRenderer.rect(centerX + 14f, 44f, 20f, 1f);                       // port lower lip shine
+        // Fire-selector — small bright detail on the left flank, mirrored from the port side.
+        shapeRenderer.setColor(0.52f, 0.56f, 0.62f, 1f);
+        shapeRenderer.rect(centerX - 32f, 46f, 6f, 6f);                        // selector knob
+        shapeRenderer.setColor(0.18f, 0.19f, 0.22f, 1f);
+        shapeRenderer.rect(centerX - 31f, 47f, 4f, 4f);                        // selector recess
+
+        // 4. Upper receiver — stepped flat-top section above the lower body (Y=56..70).
+        shapeRenderer.setColor(0.26f, 0.28f, 0.33f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 30f, 56f, 26f, 70f);
+        shapeRenderer.setColor(0.40f, 0.44f, 0.50f, 1f);
+        shapeRenderer.rect(centerX - 26f, 67f, 52f, 3f);                       // far-edge bevel highlight
+        shapeRenderer.setColor(0.16f, 0.18f, 0.22f, 1f);
+        shapeRenderer.rect(centerX - 30f, 56f, 60f, 2f);                       // near-edge step shadow
+
+        // 5. Carry-handle rear sight — centred housing on the upper receiver, seen from above.
+        shapeRenderer.setColor(0.16f, 0.18f, 0.22f, 1f);
+        shapeRenderer.rect(centerX - 12f, 62f, 24f, 10f);                      // rear-sight housing
+        shapeRenderer.setColor(0.34f, 0.38f, 0.44f, 1f);
+        shapeRenderer.rect(centerX - 12f, 70f, 24f, 2f);                       // housing top highlight
+        shapeRenderer.setColor(0.05f, 0.05f, 0.06f, 1f);
+        shapeRenderer.rect(centerX - 3f, 64f, 6f, 6f);                         // rear-sight aperture (centred)
+
+        // 6. Slotted handguard — perspective-tapered tube wrapping the barrel base (Y=68..96,
+        //    factor 0.65). Half-width 24px at base → tapered toward the far edge.
+        shapeRenderer.setColor(0.27f, 0.29f, 0.34f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 24f, 68f, 19f, 96f);
+        // Outer-edge shadows (cylinder curves away on each flank), tapered with the same factor.
+        shapeRenderer.setColor(0.13f, 0.14f, 0.18f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 24f, centerX - 19f, 68f,
+                                            centerX - 19f, centerX - 15f, 96f);  // left edge shadow
+        drawGeneralTrapezoid(shapeRenderer, centerX + 19f, centerX + 24f, 68f,
+                                            centerX + 15f, centerX + 19f, 96f);  // right edge shadow
+        // Crown highlight (top of cylinder faces the camera): 12px base → tapered.
+        shapeRenderer.setColor(0.42f, 0.46f, 0.52f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 6f, centerX + 6f, 68f,
+                                            centerX - 5f, centerX + 5f, 96f);    // crown highlight
+        // Cooling slots — twin symmetric rows of dark vents marching up both flanks.
+        //    Left x = CX-18, right x = CX+12 (width 6 → centres CX-15 / CX+15, mirrored).
+        float[] handguardSlotYPositions = {72f, 79f, 86f};
+        for (float slotY : handguardSlotYPositions) {
+            shapeRenderer.setColor(0.06f, 0.07f, 0.09f, 1f);
+            shapeRenderer.rect(centerX - 18f, slotY, 6f, 4f);                  // left cooling slot
+            shapeRenderer.rect(centerX + 12f, slotY, 6f, 4f);                  // right cooling slot
+            shapeRenderer.setColor(0.38f, 0.42f, 0.48f, 0.55f);
+            shapeRenderer.rect(centerX - 18f, slotY + 4f, 6f, 1f);             // left slot rim shine
+            shapeRenderer.rect(centerX + 12f, slotY + 4f, 6f, 1f);             // right slot rim shine
+        }
+
+        // 7. Barrel tube — single narrow tapered cylinder (base Y=92, muzzle Y=128, factor 0.65).
+        //    Half-width 9px at base → ~6px at muzzle (9 × 0.65 = 5.85 ≈ 6). Ratio ≈ 18px × 36px ≈ 1:2.
+        shapeRenderer.setColor(0.24f, 0.26f, 0.30f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 9f, 92f, 6f, 128f);
+        // Outer-edge shadow strips (cylinder curves away on each flank).
+        shapeRenderer.setColor(0.11f, 0.12f, 0.15f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 9f, centerX - 7f, 92f,
+                                            centerX - 6f, centerX - 5f, 128f);   // left edge shadow
+        drawGeneralTrapezoid(shapeRenderer, centerX + 7f, centerX + 9f, 92f,
+                                            centerX + 5f, centerX + 6f, 128f);   // right edge shadow
+        // Crown highlight (top of cylinder faces the camera): 6px base → tapered.
+        shapeRenderer.setColor(0.45f, 0.49f, 0.56f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 3f, centerX + 3f, 92f,
+                                            centerX - 2f, centerX + 2f, 128f);   // crown highlight
+
+        // 8. Front sight post — centred bright post near the muzzle (mirrored about centerX).
+        shapeRenderer.setColor(0.16f, 0.18f, 0.22f, 1f);
+        shapeRenderer.rect(centerX - 4f, 116f, 8f, 8f);                        // front-sight base
+        shapeRenderer.setColor(0.50f, 0.54f, 0.60f, 1f);
+        shapeRenderer.rect(centerX - 1f, 118f, 2f, 8f);                        // sight post blade
+
+        // 9. Muzzle cap — 2px bright steel rim at the barrel tip (NO bore: barrel points away).
+        //    At muzzle Y=128 the barrel half-width is 6px → width 12px, centred about centerX.
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 6f, 126f, 12f, 2f);                       // muzzle cap rim
     }
 
     /**
@@ -2540,6 +2762,8 @@ public class WeaponHudRenderer implements Renderable, Disposable {
                     renderShotgunEffect(camera, normalizedTime);
                 } else if (equippedWeapon instanceof DoubleBarrelShotgun) {
                     renderDoubleBarrelShotgunEffect(camera, normalizedTime);
+                } else if (equippedWeapon instanceof AssaultRifle) {
+                    renderAssaultRifleEffect(camera, normalizedTime);
                 } else if (equippedWeapon instanceof Chaingun) {
                     renderChaingunEffect(camera, normalizedTime);
                 } else if (equippedWeapon instanceof Railgun) {
@@ -2828,6 +3052,101 @@ public class WeaponHudRenderer implements Renderable, Disposable {
             rightCenterX + tongueHalfBase * 0.32f, barrelY,
             rightCenterX,                           barrelY + tongueHeight
         );
+
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    /**
+     * Draws a crisp single-shot muzzle effect for the Assault Rifle.
+     *
+     * Visually distinct from the chaingun's cone-and-sparks: this is a sharp four-point
+     * muzzle STAR (a bright central flash disc crossed by four tapering rays), with brass
+     * shell CASINGS ejecting to the RIGHT and a thin RISING SMOKE wisp above the muzzle.
+     *
+     * Timing: alpha = 1 - normalizedTime (everything fades out). The casings travel further
+     * outward (to the right) and downward as normalizedTime grows, simulating ejected brass
+     * arcing away from the port; the smoke wisp rises and thins. Casing launch positions come
+     * from the static ASSAULT_RIFLE_CASING_FRACTIONS_X/_Y tables (no per-frame allocation).
+     */
+    private void renderAssaultRifleEffect(OrthographicCamera camera, float normalizedTime) {
+        float alpha       = 1f - normalizedTime;
+        float scale       = 1f - normalizedTime * 0.45f;
+        float barrelX     = Constants.WORLD_WIDTH / 2f;
+        float barrelY     = currentOffsetY + WeaponConstants.WEAPON_HUD_HEIGHT
+                            * WeaponConstants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float starRadius  = WeaponConstants.ASSAULT_RIFLE_EFFECT_STAR_RADIUS * scale;
+        float coreRadius  = WeaponConstants.ASSAULT_RIFLE_EFFECT_STAR_CORE_RADIUS * scale;
+        float casingSize  = WeaponConstants.ASSAULT_RIFLE_EFFECT_CASING_SIZE;
+        float casingReachX = WeaponConstants.ASSAULT_RIFLE_EFFECT_CASING_SPREAD_X;
+        float casingReachY = WeaponConstants.ASSAULT_RIFLE_EFFECT_CASING_SPREAD_Y;
+        float smokeHeight = WeaponConstants.ASSAULT_RIFLE_EFFECT_SMOKE_HEIGHT;
+        float smokeWidth  = WeaponConstants.ASSAULT_RIFLE_EFFECT_SMOKE_WIDTH;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Rising smoke wisp — thin grey column drawn first so the flash sits on top of it.
+        //    Rises (and the base lifts off the muzzle) as normalizedTime advances; thins out.
+        float smokeBaseY = barrelY + smokeHeight * normalizedTime * 0.5f;
+        float smokeTipY  = smokeBaseY + smokeHeight * (0.4f + normalizedTime * 0.6f);
+        float smokeHalf  = smokeWidth * 0.5f * scale;
+        shapeRenderer.setColor(0.55f, 0.56f, 0.58f, alpha * 0.30f);
+        shapeRenderer.triangle(
+            barrelX - smokeHalf, smokeBaseY,
+            barrelX + smokeHalf, smokeBaseY,
+            barrelX,             smokeTipY
+        );
+
+        // Four-point muzzle star rays — thin tapering triangles up/down/left/right from the tip.
+        shapeRenderer.setColor(1.00f, 0.92f, 0.55f, alpha * 0.85f);
+        // Up ray (longest — fired toward the horizon).
+        shapeRenderer.triangle(
+            barrelX - coreRadius * 0.30f, barrelY,
+            barrelX + coreRadius * 0.30f, barrelY,
+            barrelX,                      barrelY + starRadius
+        );
+        // Down ray (short kick toward the muzzle base).
+        shapeRenderer.triangle(
+            barrelX - coreRadius * 0.30f, barrelY,
+            barrelX + coreRadius * 0.30f, barrelY,
+            barrelX,                      barrelY - starRadius * 0.45f
+        );
+        // Left ray.
+        shapeRenderer.triangle(
+            barrelX, barrelY - coreRadius * 0.30f,
+            barrelX, barrelY + coreRadius * 0.30f,
+            barrelX - starRadius * 0.70f, barrelY
+        );
+        // Right ray.
+        shapeRenderer.triangle(
+            barrelX, barrelY - coreRadius * 0.30f,
+            barrelX, barrelY + coreRadius * 0.30f,
+            barrelX + starRadius * 0.70f, barrelY
+        );
+
+        // Central flash disc — bright warm core, then a hot white pinpoint.
+        shapeRenderer.setColor(1.00f, 0.80f, 0.30f, alpha * 0.80f);
+        shapeRenderer.circle(barrelX, barrelY, coreRadius);
+        shapeRenderer.setColor(1.00f, 1.00f, 0.90f, alpha * 0.90f);
+        shapeRenderer.circle(barrelX, barrelY, coreRadius * 0.50f);
+
+        // Brass shell casings — eject to the RIGHT, arcing downward as normalizedTime grows.
+        //    Deterministic positions from the static fraction tables (no per-frame allocation).
+        shapeRenderer.setColor(0.82f, 0.66f, 0.24f, alpha * 0.90f);
+        for (int casingIndex = 0; casingIndex < WeaponConstants.ASSAULT_RIFLE_EFFECT_CASING_COUNT; casingIndex++) {
+            float launchHeight = ASSAULT_RIFLE_CASING_FRACTIONS_Y[casingIndex] * casingReachY;
+            float casingX = barrelX
+                            + ASSAULT_RIFLE_CASING_FRACTIONS_X[casingIndex] * casingReachX * normalizedTime;
+            float casingY = barrelY + launchHeight - casingReachY * normalizedTime;
+            shapeRenderer.rect(casingX, casingY, casingSize, casingSize * 0.55f);
+            // Tiny bright glint on each casing's upper edge.
+            shapeRenderer.setColor(0.96f, 0.86f, 0.50f, alpha * 0.80f);
+            shapeRenderer.rect(casingX, casingY + casingSize * 0.40f, casingSize, casingSize * 0.15f);
+            shapeRenderer.setColor(0.82f, 0.66f, 0.24f, alpha * 0.90f);
+        }
 
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
