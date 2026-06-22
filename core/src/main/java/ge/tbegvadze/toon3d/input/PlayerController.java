@@ -164,6 +164,7 @@ public class PlayerController {
             pickUpArmourIfPresent(settledTileColumn, settledTileRow);
             pickUpKeycardIfPresent(settledTileColumn, settledTileRow);
             pickUpAmmoIfPresent(settledTileColumn, settledTileRow);
+            pickUpCreditGroundItemIfPresent(settledTileColumn, settledTileRow);
             pickUpWeaponGroundItemIfPresent(settledTileColumn, settledTileRow);
             checkStairsDescentIfPresent(settledTileColumn, settledTileRow);
             finishAction(true, TickCause.MOVE);
@@ -284,6 +285,22 @@ public class PlayerController {
             player.directionX = (float) Math.round(player.directionX);
             player.directionY = (float) Math.round(player.directionY);
             finishAction(false, null);
+        }
+    }
+
+    private void pickUpCreditGroundItemIfPresent(int tileColumn, int tileRow) {
+        for (int index = groundItems.size() - 1; index >= 0; index--) {
+            GroundItem item = groundItems.get(index);
+            if (item.tileColumn != tileColumn || item.tileRow != tileRow) continue;
+            ItemType type = item.stack.getType();
+            if (type != ItemType.CREDIT_SMALL && type != ItemType.CREDIT_MEDIUM && type != ItemType.CREDIT_LARGE) continue;
+            int amount = item.stack.getQuantity();
+            groundItems.remove(index);
+            if (playerStats != null) playerStats.addCredits(amount);
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("+" + amount + " CREDITS", EventTextSystem.COLOR_CREDIT_CYAN);
+            }
+            return;
         }
     }
 

@@ -89,6 +89,8 @@ public class PropRenderer implements Renderable, Disposable {
     private final Texture                 genericWeaponFallbackTexture;
     // Radial gradient used as the additive glow halo behind tier-colored weapon pickups.
     private final Texture                 weaponPickupGlowTexture;
+    // Per-tier credit chip textures — procedurally generated, keyed by ItemType.
+    private final Map<ItemType, Texture>  creditChipTextures;
     private final SpriteBatch             batch;
 
     // Weapon ground items (placed by LevelGenerator, consumed on player pickup).
@@ -140,6 +142,7 @@ public class PropRenderer implements Renderable, Disposable {
         this.weaponPickupTextures         = buildWeaponPickupTextures();
         this.genericWeaponFallbackTexture = generateWeaponPickupTexture();
         this.weaponPickupGlowTexture      = generateGlowTexture();
+        this.creditChipTextures           = buildCreditChipTextures();
     }
 
     /** Replaces the ground item list; called by World after each level build. */
@@ -362,10 +365,8 @@ public class PropRenderer implements Renderable, Disposable {
             }
         }
 
-        // Ground items: weapon pickups spawned by the level generator. These are entity-side
-        // objects (not tile chars) so they need a separate render pass. Each weapon type gets
-        // a unique procedural billboard texture looked up from weaponPickupTextures by ItemType.
-        // A sin-wave bob offset lifts the sprite to hover mid-air and animates it smoothly.
+        // Ground items: weapon pickups and credit chips spawned by the level generator.
+        // These are entity-side objects (not tile chars) so they need a separate render pass.
         for (GroundItem groundItem : groundItems) {
             float itemWorldCenterX = groundItem.tileColumn * CELL_SIZE + CELL_SIZE / 2f;
             float itemWorldCenterY = groundItem.tileRow    * CELL_SIZE + CELL_SIZE / 2f;
@@ -381,6 +382,114 @@ public class PropRenderer implements Renderable, Disposable {
                     planeX, planeY, WALL_PROJECTION_SCREEN_WIDTH);
 
             float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, renderDepth);
+            ItemType itemType        = groundItem.stack.getType();
+
+            float tileBrightness = level.getTileBrightness(groundItem.tileColumn, groundItem.tileRow, lightingTimeSeconds);
+            float shade          = Math.min(GameMath.wallShade(renderDepth, WALL_SHADING_FALLOFF) * tileBrightness,
+                                            MAX_LIGHTING_SHADE);
+
+            // ── Credit chip path ──────────────────────────────────────────────────
+            if (isCreditChip(itemType)) {
+                float chipScreenHeight = fullWallLineHeight * CREDIT_PICKUP_HEIGHT_FRACTION;
+                int   chipLeft  = (int)(screenCenterColumn - chipScreenHeight / 2f);
+                int   chipRight = (int)(screenCenterColumn + chipScreenHeight / 2f);
+                int   chipSpan  = chipRight - chipLeft;
+                if (chipSpan <= 0) continue;
+
+                float chipBobPhase   = itemType.ordinal() * CREDIT_PICKUP_PHASE_STEP;
+                float chipBobOffset  = GameMath.pickupBobOffset(lightingTimeSeconds,
+                        CREDIT_PICKUP_BOB_SPEED, CREDIT_PICKUP_BOB_AMPLITUDE_FRACTION,
+                        chipBobPhase, chipScreenHeight);
+                float chipFloorY     = WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight / 2f;
+                float chipCenterY    = chipFloorY + CREDIT_PICKUP_CENTER_HEIGHT_FRACTION * fullWallLineHeight;
+                float chipDrawBottom = chipCenterY - chipScreenHeight / 2f + chipBobOffset;
+                float chipDrawTop    = chipDrawBottom + chipScreenHeight;
+                float chipClampBot   = Math.max(0f, chipDrawBottom);
+                float chipClampTop   = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, chipDrawTop);
+                if (chipClampTop <= chipClampBot) continue;
+
+                float auraR, auraG, auraB, auraRadius, auraBaseAlpha, auraPulseAmp, auraPulseSpeed;
+                if (itemType == ItemType.CREDIT_LARGE) {
+                    auraR = CREDIT_AURA_LARGE_R;   auraG = CREDIT_AURA_LARGE_G;   auraB = CREDIT_AURA_LARGE_B;
+                    auraRadius = CREDIT_AURA_LARGE_RADIUS;   auraBaseAlpha = CREDIT_AURA_LARGE_BASE_ALPHA;
+                    auraPulseAmp = CREDIT_AURA_LARGE_PULSE_AMP;   auraPulseSpeed = CREDIT_AURA_LARGE_PULSE_SPEED;
+                } else if (itemType == ItemType.CREDIT_MEDIUM) {
+                    auraR = CREDIT_AURA_MEDIUM_R;  auraG = CREDIT_AURA_MEDIUM_G;  auraB = CREDIT_AURA_MEDIUM_B;
+                    auraRadius = CREDIT_AURA_MEDIUM_RADIUS;  auraBaseAlpha = CREDIT_AURA_MEDIUM_BASE_ALPHA;
+                    auraPulseAmp = CREDIT_AURA_MEDIUM_PULSE_AMP;  auraPulseSpeed = CREDIT_AURA_MEDIUM_PULSE_SPEED;
+                } else {
+                    auraR = CREDIT_AURA_SMALL_R;   auraG = CREDIT_AURA_SMALL_G;   auraB = CREDIT_AURA_SMALL_B;
+                    auraRadius = CREDIT_AURA_SMALL_RADIUS;   auraBaseAlpha = CREDIT_AURA_SMALL_BASE_ALPHA;
+                    auraPulseAmp = CREDIT_AURA_SMALL_PULSE_AMP;   auraPulseSpeed = CREDIT_AURA_SMALL_PULSE_SPEED;
+                }
+                float auraAlpha   = auraBaseAlpha + auraPulseAmp * MathUtils.sin(lightingTimeSeconds * auraPulseSpeed + chipBobPhase);
+                float auraHeight  = chipScreenHeight * auraRadius;
+                int   auraLeft    = (int)(screenCenterColumn - auraHeight / 2f);
+                int   auraRight   = (int)(screenCenterColumn + auraHeight / 2f);
+                int   auraSpan    = auraRight - auraLeft;
+                float auraDrawBot = chipCenterY - auraHeight / 2f + chipBobOffset;
+                float auraDrawTop = auraDrawBot + auraHeight;
+                float auraClampBot = Math.max(0f, auraDrawBot);
+                float auraClampTop = Math.min(WALL_PROJECTION_SCREEN_HEIGHT, auraDrawTop);
+                if (auraSpan > 0 && auraClampTop > auraClampBot) {
+                    int auraTexSrcY = GameMath.wallTextureClipSrcY(
+                            auraDrawTop, WALL_PROJECTION_SCREEN_HEIGHT,
+                            auraHeight, weaponPickupGlowTexture.getHeight());
+                    int auraTexSrcH = GameMath.wallTextureClipSrcHeight(
+                            auraClampTop, auraClampBot, auraHeight, weaponPickupGlowTexture.getHeight());
+                    auraTexSrcH = Math.min(auraTexSrcH, weaponPickupGlowTexture.getHeight() - auraTexSrcY);
+                    auraTexSrcH = Math.max(1, auraTexSrcH);
+                    batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+                    batch.setColor(auraR * shade, auraG * shade, auraB * shade, auraAlpha);
+                    int auraFirstCol = Math.max(0, auraLeft);
+                    int auraLastCol  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, auraRight);
+                    for (int screenColumn = auraFirstCol; screenColumn <= auraLastCol; screenColumn++) {
+                        if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                        if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
+                        int auraTexSrcX = (screenColumn - auraLeft) * weaponPickupGlowTexture.getWidth() / auraSpan;
+                        auraTexSrcX = MathUtils.clamp(auraTexSrcX, 0, weaponPickupGlowTexture.getWidth() - 1);
+                        batch.draw(weaponPickupGlowTexture,
+                                   screenColumn * WALL_COLUMN_WIDTH, auraClampBot,
+                                   WALL_COLUMN_WIDTH, auraClampTop - auraClampBot,
+                                   auraTexSrcX, auraTexSrcY, 1, auraTexSrcH,
+                                   false, false);
+                    }
+                    batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+                }
+
+                Texture chipTexture = creditChipTextures.getOrDefault(itemType, genericWeaponFallbackTexture);
+                int chipTexW   = chipTexture.getWidth();
+                int chipTexH   = chipTexture.getHeight();
+                int chipTexSrcY = GameMath.wallTextureClipSrcY(
+                        chipDrawTop, WALL_PROJECTION_SCREEN_HEIGHT, chipScreenHeight, chipTexH);
+                int chipTexSrcH = GameMath.wallTextureClipSrcHeight(
+                        chipClampTop, chipClampBot, chipScreenHeight, chipTexH);
+                chipTexSrcH = Math.min(chipTexSrcH, chipTexH - chipTexSrcY);
+                chipTexSrcH = Math.max(1, chipTexSrcH);
+                float chipRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+                float chipGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                float chipBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                batch.setColor(chipRed, chipGreen, chipBlue, 1f);
+                int chipFirstCol = Math.max(0, chipLeft);
+                int chipLastCol  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, chipRight);
+                for (int screenColumn = chipFirstCol; screenColumn <= chipLastCol; screenColumn++) {
+                    if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                    if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
+                    propSpriteZBuffer[screenColumn]      = renderDepth;
+                    propSpriteColumnBottom[screenColumn] = chipClampBot;
+                    propSpriteColumnTop[screenColumn]    = chipClampTop;
+                    int chipTexSrcX = (screenColumn - chipLeft) * chipTexW / chipSpan;
+                    chipTexSrcX = MathUtils.clamp(chipTexSrcX, 0, chipTexW - 1);
+                    batch.draw(chipTexture,
+                               screenColumn * WALL_COLUMN_WIDTH, chipClampBot,
+                               WALL_COLUMN_WIDTH, chipClampTop - chipClampBot,
+                               chipTexSrcX, chipTexSrcY, 1, chipTexSrcH,
+                               false, false);
+                }
+                continue;
+            }
+
+            // ── Weapon pickup path ────────────────────────────────────────────────
             float spriteScreenHeight = fullWallLineHeight * WEAPON_PICKUP_HEIGHT_FRACTION;
             float spriteScreenWidth  = spriteScreenHeight; // square procedural texture
 
@@ -389,13 +498,11 @@ public class PropRenderer implements Renderable, Disposable {
             int columnSpan        = rightScreenColumn - leftScreenColumn;
             if (columnSpan <= 0) continue;
 
-            // Bob offset: per-weapon phase desynchronises multiple pickups in the same room.
-            ItemType itemType   = groundItem.stack.getType();
-            float    bobPhase   = itemType.ordinal() * WEAPON_PICKUP_PHASE_STEP;
-            float    bobOffset  = GameMath.pickupBobOffset(
-                                      lightingTimeSeconds, WEAPON_PICKUP_BOB_SPEED,
-                                      WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION, bobPhase,
-                                      spriteScreenHeight);
+            float bobPhase   = itemType.ordinal() * WEAPON_PICKUP_PHASE_STEP;
+            float bobOffset  = GameMath.pickupBobOffset(
+                                   lightingTimeSeconds, WEAPON_PICKUP_BOB_SPEED,
+                                   WEAPON_PICKUP_BOB_AMPLITUDE_FRACTION, bobPhase,
+                                   spriteScreenHeight);
             float visualFloorY  = WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight / 2f;
             float weaponCenterY = visualFloorY + WEAPON_PICKUP_CENTER_HEIGHT_FRACTION * fullWallLineHeight;
             float drawBottom    = weaponCenterY - spriteScreenHeight / 2f + bobOffset;
@@ -415,10 +522,6 @@ public class PropRenderer implements Renderable, Disposable {
                                     spriteScreenHeight, textureHeight);
             texSrcHeight = Math.min(texSrcHeight, textureHeight - texSrcY);
             texSrcHeight = Math.max(1, texSrcHeight);
-
-            float tileBrightness = level.getTileBrightness(groundItem.tileColumn, groundItem.tileRow, lightingTimeSeconds);
-            float shade          = Math.min(GameMath.wallShade(renderDepth, WALL_SHADING_FALLOFF) * tileBrightness,
-                                            MAX_LIGHTING_SHADE);
 
             // Tier glow aura — additive halo drawn behind the weapon so the sprite keeps its true colours.
             // Use the ground item's own rolled tier first; fall back to the arsenal map only when the
@@ -588,6 +691,9 @@ public class PropRenderer implements Renderable, Disposable {
         genericWeaponFallbackTexture.dispose();
         weaponPickupGlowTexture.dispose();
         for (Texture texture : weaponPickupTextures.values()) {
+            texture.dispose();
+        }
+        for (Texture texture : creditChipTextures.values()) {
             texture.dispose();
         }
         for (Texture texture : textures.values()) {
@@ -1581,6 +1687,96 @@ public class PropRenderer implements Renderable, Disposable {
     // weapon's WeaponHudRenderer palette so the floor icon and the first-person
     // sprite share the same identity.
     // -------------------------------------------------------------------------
+
+    // -------------------------------------------------------------------------
+    // Credit chip ground pickup sprite generators
+    //
+    // Three 64×64 RGBA8888 procedural textures — SMALL (gold disc), MEDIUM (stacked
+    // discs with cyan band), LARGE (emerald hexagon). Generated once at startup.
+    // -------------------------------------------------------------------------
+
+    private static boolean isCreditChip(ItemType type) {
+        return type == ItemType.CREDIT_SMALL
+                || type == ItemType.CREDIT_MEDIUM
+                || type == ItemType.CREDIT_LARGE;
+    }
+
+    private static Map<ItemType, Texture> buildCreditChipTextures() {
+        Map<ItemType, Texture> map = new HashMap<>();
+        map.put(ItemType.CREDIT_SMALL,  generateCreditSmallTexture());
+        map.put(ItemType.CREDIT_MEDIUM, generateCreditMediumTexture());
+        map.put(ItemType.CREDIT_LARGE,  generateCreditLargeTexture());
+        return map;
+    }
+
+    private static Texture generateCreditSmallTexture() {
+        int S = CREDIT_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f); p.fill();
+        // Outer disc — warm gold
+        p.setColor(0.85f, 0.68f, 0.20f, 1f); p.fillCircle(32, 32, 12);
+        // Inner ring — darker gold, overwrites centre leaving 3-pixel gold ring
+        p.setColor(0.62f, 0.48f, 0.10f, 1f); p.fillCircle(32, 32, 9);
+        // Centre notch — near-black pit
+        p.setColor(0.10f, 0.08f, 0.02f, 1f); p.fillRectangle(30, 30, 4, 4);
+        // Rim highlight — bright fleck at top of disc
+        p.setColor(1.00f, 0.92f, 0.55f, 1f); p.fillRectangle(31, 20, 2, 2);
+        return finalize(p);
+    }
+
+    private static Texture generateCreditMediumTexture() {
+        int S = CREDIT_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f); p.fill();
+        // Bottom disc — offset downward, slightly darker
+        p.setColor(0.80f, 0.64f, 0.18f, 1f); p.fillCircle(32, 36, 11);
+        // Top disc — offset upward, brighter, overlaps bottom
+        p.setColor(0.88f, 0.72f, 0.24f, 1f); p.fillCircle(32, 28, 11);
+        // Cyan band across the gap between discs
+        p.setColor(0.20f, 0.80f, 0.95f, 1f); p.fillRectangle(22, 30, 20, 4);
+        // Sparkle flecks — white highlights for glint
+        p.setColor(1f, 1f, 1f, 1f);
+        p.fillRectangle(38, 22, 2, 2);
+        p.fillRectangle(23, 40, 2, 2);
+        return finalize(p);
+    }
+
+    private static Texture generateCreditLargeTexture() {
+        int S = CREDIT_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f); p.fill();
+        // Hexagon fill via 6 triangles — emerald green, flat-top, outer radius 20
+        // Vertices (Pixmap Y-down): V0=(52,32), V1=(42,49), V2=(22,49),
+        //                           V3=(12,32), V4=(22,15), V5=(42,15)
+        p.setColor(0.20f, 0.78f, 0.42f, 1f);
+        p.fillTriangle(32, 32, 52, 32, 42, 49);
+        p.fillTriangle(32, 32, 42, 49, 22, 49);
+        p.fillTriangle(32, 32, 22, 49, 12, 32);
+        p.fillTriangle(32, 32, 12, 32, 22, 15);
+        p.fillTriangle(32, 32, 22, 15, 42, 15);
+        p.fillTriangle(32, 32, 42, 15, 52, 32);
+        // Inner hex outline — cyan-green, radius ~14
+        p.setColor(0.45f, 1.00f, 0.70f, 1f);
+        p.drawLine(46, 32, 39, 44);
+        p.drawLine(39, 44, 25, 44);
+        p.drawLine(25, 44, 18, 32);
+        p.drawLine(18, 32, 25, 20);
+        p.drawLine(25, 20, 39, 20);
+        p.drawLine(39, 20, 46, 32);
+        // Corner studs — bright squares at four vertices
+        p.setColor(0.80f, 1.00f, 0.85f, 1f);
+        p.fillRectangle(50, 30, 4, 4);
+        p.fillRectangle(40, 13, 4, 4);
+        p.fillRectangle(20, 13, 4, 4);
+        p.fillRectangle(20, 47, 4, 4);
+        // White sparkles
+        p.setColor(1f, 1f, 1f, 1f);
+        p.fillRectangle(46, 20, 2, 2);
+        p.fillRectangle(18, 31, 2, 2);
+        p.fillRectangle(32, 12, 2, 2);
+        p.fillRectangle(46, 43, 2, 2);
+        return finalize(p);
+    }
 
     private static Texture generateGlowTexture() {
         int size = WEAPON_PICKUP_GLOW_TEXTURE_SIZE;

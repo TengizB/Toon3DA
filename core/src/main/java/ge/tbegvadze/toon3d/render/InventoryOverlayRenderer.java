@@ -12,6 +12,7 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.PlayerInventory;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.item.Inventory;
+import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
@@ -103,6 +104,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     private float           facilityTimeSeconds = 0f;
     private int             currentDepth        = 1;
     private PlayerInventory playerInventory     = null;
+    private PlayerStats     playerStats         = null;
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -152,6 +154,11 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     public void setTime(float time) {
         this.facilityTimeSeconds = time;
         this.animationClock      = time;
+    }
+
+    /** Injects the player stat system so the header can display the current credit balance. */
+    public void setPlayerStats(PlayerStats stats) {
+        this.playerStats = stats;
     }
 
     /** Pass the current floor depth for the "SUBLEVEL N" header label. */
@@ -324,6 +331,19 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         font.draw(spriteBatch, "INVENTORY",
                   ItemConstants.INV_HEADER_TITLE_X,
                   ItemConstants.INV_HEADER_Y + ItemConstants.INV_HEADER_HEIGHT - 18f);
+
+        // Credits readout — centred in the header between the title and the sublevel label
+        if (playerStats != null) {
+            textBuilder.setLength(0);
+            textBuilder.append("$ ").append(playerStats.getCredits());
+            font.setColor(ItemConstants.INVENTORY_CREDITS_COLOR_R,
+                          ItemConstants.INVENTORY_CREDITS_COLOR_G,
+                          ItemConstants.INVENTORY_CREDITS_COLOR_B, 1f);
+            glyphLayout.setText(font, textBuilder);
+            font.draw(spriteBatch, textBuilder,
+                      (Constants.WORLD_WIDTH - glyphLayout.width) / 2f,
+                      ItemConstants.INV_HEADER_Y + ItemConstants.INV_HEADER_HEIGHT - 18f);
+        }
 
         // "SUBLEVEL N" label — just left of the EXIT button
         textBuilder.setLength(0);

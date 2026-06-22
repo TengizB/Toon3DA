@@ -225,6 +225,25 @@ public final class ItemConstants {
     public static final float INV_CAT_DOT_MISC_G        = 0.75f;
     public static final float INV_CAT_DOT_MISC_B        = 0.75f;
 
+    // Credit chip floor pickups — 3 tiers with weighted random tier selection
+    public static final int   CREDIT_SMALL_BASE            = 8;
+    public static final int   CREDIT_SMALL_JITTER          = 2;
+    public static final int   CREDIT_MEDIUM_BASE           = 25;
+    public static final int   CREDIT_MEDIUM_JITTER         = 5;
+    public static final int   CREDIT_LARGE_BASE            = 70;
+    public static final int   CREDIT_LARGE_JITTER          = 15;
+    // Spawn weights — proportional; SMALL+MEDIUM+LARGE need not sum to any specific value
+    public static final int   CREDIT_SPAWN_WEIGHT_SMALL    = 70;
+    public static final int   CREDIT_SPAWN_WEIGHT_MEDIUM   = 24;
+    public static final int   CREDIT_SPAWN_WEIGHT_LARGE    = 6;
+    public static final int   CREDIT_PICKUP_TEXTURE_SIZE   = 64;
+    // Inventory header — credits readout position and colour
+    public static final float INVENTORY_CREDITS_LABEL_X    = 40f;
+    public static final float INVENTORY_CREDITS_GLYPH_SIZE = 16f;
+    public static final float INVENTORY_CREDITS_COLOR_R    = 1.00f;
+    public static final float INVENTORY_CREDITS_COLOR_G    = 0.85f;
+    public static final float INVENTORY_CREDITS_COLOR_B    = 0.10f;
+
     // ItemWindow footer action buttons (Part 4 redesign — two buttons in footer zone)
     public static final float INV_ACTION_BTN_WIDTH  = 180f;
     public static final float INV_ACTION_BTN_HEIGHT = 38f;

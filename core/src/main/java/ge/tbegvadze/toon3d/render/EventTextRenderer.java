@@ -43,12 +43,13 @@ public final class EventTextRenderer implements Disposable {
     private static final float UNDERLINE_PADDING = 8f;
 
     // Base palette — never mutated; per-frame alpha is written into temporaryColor only.
-    private static final Color BASE_SHADOW = new Color(0f,    0f,    0f,    1f);
-    private static final Color BASE_WHITE  = new Color(1f,    1f,    1f,    1f);
-    private static final Color BASE_GREEN  = new Color(0.25f, 1f,    0.25f, 1f);
-    private static final Color BASE_RED    = new Color(1f,    0.18f, 0.18f, 1f);
-    private static final Color BASE_GREY   = new Color(0.8f,  0.8f,  0.8f,  1f);
-    private static final Color BASE_GOLD   = new Color(1f,    0.69f, 0.125f, 1f);
+    private static final Color BASE_SHADOW       = new Color(0f,    0f,    0f,    1f);
+    private static final Color BASE_WHITE        = new Color(1f,    1f,    1f,    1f);
+    private static final Color BASE_GREEN        = new Color(0.25f, 1f,    0.25f, 1f);
+    private static final Color BASE_RED          = new Color(1f,    0.18f, 0.18f, 1f);
+    private static final Color BASE_GREY         = new Color(0.8f,  0.8f,  0.8f,  1f);
+    private static final Color BASE_GOLD         = new Color(1f,    0.69f, 0.125f, 1f);
+    private static final Color BASE_CREDIT_CYAN  = new Color(0.55f, 0.85f, 0.80f, 1f);
 
     private final EventTextSystem eventTextSystem;
     private final SpriteBatch     batch;
@@ -274,11 +275,12 @@ public final class EventTextRenderer implements Disposable {
 
     private static Color resolveBaseColor(byte colorType) {
         switch (colorType) {
-            case EventTextSystem.COLOR_GREEN: return BASE_GREEN;
-            case EventTextSystem.COLOR_RED:   return BASE_RED;
-            case EventTextSystem.COLOR_GREY:  return BASE_GREY;
-            case EventTextSystem.COLOR_GOLD:  return BASE_GOLD;
-            default:                          return BASE_WHITE;
+            case EventTextSystem.COLOR_GREEN:        return BASE_GREEN;
+            case EventTextSystem.COLOR_RED:          return BASE_RED;
+            case EventTextSystem.COLOR_GREY:         return BASE_GREY;
+            case EventTextSystem.COLOR_GOLD:         return BASE_GOLD;
+            case EventTextSystem.COLOR_CREDIT_CYAN:  return BASE_CREDIT_CYAN;
+            default:                                 return BASE_WHITE;
         }
     }
 

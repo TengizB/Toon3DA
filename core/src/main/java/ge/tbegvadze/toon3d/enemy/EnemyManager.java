@@ -11,6 +11,7 @@ import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.EnemySpawnPoint;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.progression.KillCreditListener;
 import ge.tbegvadze.toon3d.progression.KillEventListener;
 import ge.tbegvadze.toon3d.progression.KillXpListener;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
@@ -49,6 +50,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private ImpactEventListener impactEventListener;
     private KillXpListener      killXpListener;
     private KillEventListener   killEventListener;
+    private KillCreditListener  killCreditListener;
     private DropPlacedListener  dropPlacedListener;
     private EnemyAttackListener enemyAttackListener;
 
@@ -66,6 +68,9 @@ public final class EnemyManager implements EnemyHitTarget {
 
     private boolean anyAlertedEver = false;
 
+    // Stored so killCreditListener can scale credit rewards by dungeon depth at kill time.
+    private final int currentDepth;
+
     // Set to true by notifyMeleeAttack() before applyDamageTo(); consumed and reset inside killEnemy().
     private boolean pendingMeleeKill = false;
     // Injected by World so melee kills can drop ammo matching the player's equipped ranged weapons.
@@ -78,9 +83,10 @@ public final class EnemyManager implements EnemyHitTarget {
      *                     Pass 1 for the first floor.
      */
     public EnemyManager(Level level, DoorManager doorManager, int dungeonDepth) {
-        this.level       = level;
-        this.doorManager = doorManager;
-        this.enemies     = buildInitialEnemies(level.getEnemySpawnPoints(), dungeonDepth, new Random());
+        this.level        = level;
+        this.doorManager  = doorManager;
+        this.currentDepth = dungeonDepth;
+        this.enemies      = buildInitialEnemies(level.getEnemySpawnPoints(), dungeonDepth, new Random());
         int levelWidth   = level.getWidth();
         int levelHeight  = level.getHeight();
         int enemyCount   = enemies.size();
@@ -223,6 +229,11 @@ public final class EnemyManager implements EnemyHitTarget {
         this.killEventListener = listener;
     }
 
+    /** Wires the credit system so every kill awards scaled credits to the player. */
+    public void setKillCreditListener(KillCreditListener listener) {
+        this.killCreditListener = listener;
+    }
+
     /** Notified when a drop tile is stamped on the grid so renderers can display it immediately. */
     public void setDropPlacedListener(DropPlacedListener listener) {
         this.dropPlacedListener = listener;
@@ -306,6 +317,9 @@ public final class EnemyManager implements EnemyHitTarget {
             }
             if (killEventListener != null) {
                 killEventListener.onEnemyKilled(enemy.nameTag, xpAwarded);
+            }
+            if (killCreditListener != null) {
+                killCreditListener.onEnemyKilledForCredits(enemy.type.baseCreditReward(), currentDepth);
             }
             killEnemy(enemy, thisKillWasMelee);
             if (impactEventListener != null) {
@@ -714,8 +728,9 @@ public final class EnemyManager implements EnemyHitTarget {
      */
     public void processDoTKill(Enemy enemy) {
         int xpAwarded = enemy.type.baseXpReward();
-        if (killXpListener   != null) killXpListener.onEnemyKilledForXp(xpAwarded);
+        if (killXpListener    != null) killXpListener.onEnemyKilledForXp(xpAwarded);
         if (killEventListener != null) killEventListener.onEnemyKilled(enemy.nameTag, xpAwarded);
+        if (killCreditListener != null) killCreditListener.onEnemyKilledForCredits(enemy.type.baseCreditReward(), currentDepth);
         killEnemy(enemy, false);
     }
 
