@@ -236,7 +236,7 @@ public final class ItemConstants {
     public static final int   CREDIT_SPAWN_WEIGHT_SMALL    = 70;
     public static final int   CREDIT_SPAWN_WEIGHT_MEDIUM   = 24;
     public static final int   CREDIT_SPAWN_WEIGHT_LARGE    = 6;
-    public static final int   CREDIT_PICKUP_TEXTURE_SIZE   = 64;
+    public static final int   CREDIT_PICKUP_TEXTURE_SIZE   = 96;
     // Inventory header — credits readout position and colour
     public static final float INVENTORY_CREDITS_LABEL_X    = 40f;
     public static final float INVENTORY_CREDITS_GLYPH_SIZE = 16f;
