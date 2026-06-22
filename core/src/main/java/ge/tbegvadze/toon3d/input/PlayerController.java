@@ -334,6 +334,7 @@ public class PlayerController {
             case WEAPON_DOUBLE_BARREL: return weapon instanceof DoubleBarrelShotgun;
             case WEAPON_PLASMA:        return weapon instanceof PlasmaRifle;
             case WEAPON_CHAINGUN:      return weapon instanceof Chaingun;
+            case WEAPON_ASSAULT_RIFLE: return weapon instanceof AssaultRifle;
             case WEAPON_RAILGUN:       return weapon instanceof Railgun;
             case WEAPON_INCINERATOR:   return weapon instanceof Incinerator;
             case WEAPON_ROCKET:        return weapon instanceof GrenadeLauncher;
@@ -361,6 +362,7 @@ public class PlayerController {
             case WEAPON_SHOTGUN:       return AmmoType.SHELLS;
             case WEAPON_DOUBLE_BARREL: return AmmoType.SHELLS;
             case WEAPON_CHAINGUN:      return AmmoType.BULLETS;
+            case WEAPON_ASSAULT_RIFLE: return AmmoType.BULLETS;
             case WEAPON_PLASMA:        return AmmoType.CELLS;
             case WEAPON_INCINERATOR:   return AmmoType.CELLS;
             case WEAPON_RAILGUN:       return AmmoType.SLUGS;
