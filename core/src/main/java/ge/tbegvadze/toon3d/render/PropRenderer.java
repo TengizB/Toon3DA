@@ -1709,83 +1709,206 @@ public class PropRenderer implements Renderable, Disposable {
         return map;
     }
 
-    // ─── Helper: draws one banknote stack onto a Pixmap ─────────────────────────
-    // top bill face at (left, top) with size stackWidth×billHeight; edgeCount
-    // 4-pixel-tall edge strips below it represent the stack thickness.
-    // Strips graduate from darkest (bottom) to slightly lighter (just below bill).
-    private static void drawBillStack(Pixmap p, int left, int top,
-                                      int stackWidth, int billHeight, int edgeCount) {
-        for (int edgeIndex = 0; edgeIndex < edgeCount; edgeIndex++) {
-            float brightness = 0.035f + edgeIndex * 0.008f;
-            p.setColor(brightness, brightness * 3.5f, brightness, 1f);
-            p.fillRectangle(left,
-                    top + billHeight + (edgeCount - 1 - edgeIndex) * 4,
-                    stackWidth, 4);
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Credit pickup pixel art — US-dollar "cash" theme. All three tiers share one
+    // green palette and a toolkit of helpers (banknote face, dollar glyph, strapped
+    // bundle, silhouette outline). Authored for a 96×96 Nearest-filtered sprite.
+    //
+    // Tiers:  SMALL  = one loose banknote
+    //         MEDIUM = one strap-banded bundle of bills
+    //         LARGE  = a pyramid of three strapped bundles
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Banknote palette (top-lit dollar green) — reused by every credit sprite.
+    private static final float MONEY_OUTLINE_R = 0.03f, MONEY_OUTLINE_G = 0.09f, MONEY_OUTLINE_B = 0.05f; // silhouette ring
+    private static final float MONEY_DARK_R    = 0.08f, MONEY_DARK_G    = 0.30f, MONEY_DARK_B    = 0.15f; // shaded / lower face
+    private static final float MONEY_MID_R     = 0.15f, MONEY_MID_G     = 0.47f, MONEY_MID_B     = 0.23f; // main face
+    private static final float MONEY_LITE_R    = 0.27f, MONEY_LITE_G    = 0.63f, MONEY_LITE_B    = 0.33f; // lit upper face
+    private static final float MONEY_GLOW_R    = 0.58f, MONEY_GLOW_G    = 0.90f, MONEY_GLOW_B    = 0.58f; // top-edge glint
+    private static final float MONEY_INK_R     = 0.05f, MONEY_INK_G     = 0.19f, MONEY_INK_B     = 0.10f; // engraving / frame
+    private static final float MONEY_NUMERAL_R = 0.85f, MONEY_NUMERAL_G = 0.92f, MONEY_NUMERAL_B = 0.72f; // pale printed ink ($)
+    private static final float STRAP_R         = 0.93f, STRAP_G         = 0.91f, STRAP_B         = 0.78f; // cream paper band
+    private static final float STRAP_SHADOW_R  = 0.66f, STRAP_SHADOW_G  = 0.64f, STRAP_SHADOW_B  = 0.52f; // band underside
+
+    // Draws a 1-pixel rectangle outline (left/right/top/bottom edges) in the current colour.
+    private static void drawRectOutline(Pixmap p, int x, int y, int w, int h) {
+        p.fillRectangle(x, y, w, 1);
+        p.fillRectangle(x, y + h - 1, w, 1);
+        p.fillRectangle(x, y, 1, h);
+        p.fillRectangle(x + w - 1, y, 1, h);
+    }
+
+    // Draws a stylised "$" — an S of three bars plus a vertical pipe through the centre.
+    private static void drawDollarGlyph(Pixmap p, int centerX, int centerY,
+                                        int glyphWidth, int glyphHeight,
+                                        float red, float green, float blue) {
+        int thickness = Math.max(2, glyphHeight / 7);
+        int left   = centerX - glyphWidth / 2;
+        int right  = centerX + glyphWidth / 2 - 1;
+        int top    = centerY - glyphHeight / 2;
+        int bottom = centerY + glyphHeight / 2 - 1;
+        p.setColor(red, green, blue, 1f);
+        p.fillRectangle(left, top, glyphWidth, thickness);                       // top bar
+        p.fillRectangle(left, top, thickness, glyphHeight / 2);                  // upper-left riser
+        p.fillRectangle(left, centerY - thickness / 2, glyphWidth, thickness);   // middle bar
+        p.fillRectangle(right - thickness + 1, centerY, thickness, glyphHeight / 2); // lower-right riser
+        p.fillRectangle(left, bottom - thickness + 1, glyphWidth, thickness);    // bottom bar
+        p.fillRectangle(centerX - thickness / 2, top - Math.max(1, thickness / 2),
+                        thickness, glyphHeight + thickness);                     // central pipe
+    }
+
+    // Draws a single banknote face filling (x, y, width, height) with top-lit shading,
+    // an engraved inner frame and — when large enough — a portrait medallion, a central
+    // "$" and corner denomination pips.
+    private static void drawBanknoteFace(Pixmap p, int x, int y, int width, int height,
+                                         boolean detailed) {
+        // Border
+        p.setColor(MONEY_DARK_R, MONEY_DARK_G, MONEY_DARK_B, 1f);
+        p.fillRectangle(x, y, width, height);
+        // Vertical shading: lit top third, mid centre, shaded bottom third
+        int innerX = x + 1, innerY = y + 1, innerW = width - 2, innerH = height - 2;
+        int third  = Math.max(1, innerH / 3);
+        p.setColor(MONEY_LITE_R, MONEY_LITE_G, MONEY_LITE_B, 1f);
+        p.fillRectangle(innerX, innerY, innerW, third);
+        p.setColor(MONEY_MID_R, MONEY_MID_G, MONEY_MID_B, 1f);
+        p.fillRectangle(innerX, innerY + third, innerW, innerH - 2 * third);
+        p.setColor(MONEY_DARK_R, MONEY_DARK_G, MONEY_DARK_B, 1f);
+        p.fillRectangle(innerX, innerY + innerH - third, innerW, third);
+        // Top-edge glint
+        p.setColor(MONEY_GLOW_R, MONEY_GLOW_G, MONEY_GLOW_B, 1f);
+        p.fillRectangle(innerX, innerY, innerW, 1);
+        // Engraved inner frame
+        if (width >= 14 && height >= 10) {
+            p.setColor(MONEY_INK_R, MONEY_INK_G, MONEY_INK_B, 1f);
+            drawRectOutline(p, x + 3, y + 3, width - 6, height - 6);
         }
-        // Top bill outer border
-        p.setColor(0.04f, 0.18f, 0.04f, 1f);
-        p.fillRectangle(left, top, stackWidth, billHeight);
-        // Top bill face (dollar green)
-        p.setColor(0.13f, 0.43f, 0.13f, 1f);
-        p.fillRectangle(left + 1, top + 1, stackWidth - 2, billHeight - 2);
-        // Inner frame and engraving detail (only when the bill is large enough)
-        if (stackWidth >= 10 && billHeight >= 8) {
-            p.setColor(0.06f, 0.22f, 0.06f, 1f);
-            p.fillRectangle(left + 3, top + 3, stackWidth - 6, billHeight - 6);
-            p.setColor(0.16f, 0.50f, 0.16f, 1f);
-            p.fillRectangle(left + 4, top + 4, stackWidth - 8, billHeight - 8);
-            // Portrait oval (engraved face placeholder)
-            p.setColor(0.05f, 0.20f, 0.05f, 1f);
-            p.fillCircle(left + stackWidth / 2, top + billHeight / 2, billHeight / 5);
-            // Crinkle highlight (top-left glint)
-            p.setColor(0.35f, 0.90f, 0.35f, 1f);
-            p.fillRectangle(left + 2, top + 2, 4, 1);
+        if (detailed && width >= 22 && height >= 14) {
+            // Portrait medallion (left)
+            int medallionX = x + width / 4;
+            int medallionY = y + height / 2;
+            int medallionR = Math.max(3, height / 5);
+            p.setColor(MONEY_INK_R, MONEY_INK_G, MONEY_INK_B, 1f);
+            p.fillCircle(medallionX, medallionY, medallionR);
+            p.setColor(MONEY_LITE_R, MONEY_LITE_G, MONEY_LITE_B, 1f);
+            p.fillCircle(medallionX, medallionY, Math.max(1, medallionR - 2));
+            // Central dollar emblem (right of medallion)
+            drawDollarGlyph(p, x + width * 3 / 5, y + height / 2,
+                    Math.max(7, width / 6), Math.max(11, height * 3 / 5),
+                    MONEY_NUMERAL_R, MONEY_NUMERAL_G, MONEY_NUMERAL_B);
+            // Corner denomination pips
+            p.setColor(MONEY_NUMERAL_R, MONEY_NUMERAL_G, MONEY_NUMERAL_B, 1f);
+            p.fillRectangle(x + 3, y + 3, 3, 3);
+            p.fillRectangle(x + width - 6, y + height - 6, 3, 3);
         }
     }
 
+    // Draws a strap-banded bundle of bills filling (x, y, width, height): the lower band
+    // shows layered bill edges (stack thickness), the upper region is the printed top
+    // bill, and a cream paper strap wraps horizontally across the middle.
+    private static void drawBundle(Pixmap p, int x, int y, int width, int height) {
+        int edgeBandHeight = Math.max(6, height / 3);
+        int faceHeight     = height - edgeBandHeight;
+        int edgeTop        = y + faceHeight;
+        // Layered bill edges — alternating shades sell the "many bills" thickness
+        int layerIndex = 0;
+        for (int layerY = edgeTop; layerY < y + height; layerY += 2) {
+            if ((layerIndex & 1) == 0) p.setColor(MONEY_MID_R, MONEY_MID_G, MONEY_MID_B, 1f);
+            else                       p.setColor(MONEY_DARK_R, MONEY_DARK_G, MONEY_DARK_B, 1f);
+            p.fillRectangle(x, layerY, width, 2);
+            layerIndex++;
+        }
+        p.setColor(MONEY_INK_R, MONEY_INK_G, MONEY_INK_B, 1f);
+        drawRectOutline(p, x, edgeTop, width, edgeBandHeight);
+        // Printed top bill
+        drawBanknoteFace(p, x, y, width, faceHeight, true);
+        // Cream paper strap, wrapping slightly past both side edges
+        int strapHeight = Math.max(5, height / 5);
+        int strapY      = y + (int) (height * 0.42f);
+        p.setColor(STRAP_R, STRAP_G, STRAP_B, 1f);
+        p.fillRectangle(x - 1, strapY, width + 2, strapHeight);
+        p.setColor(1f, 1f, 0.94f, 1f);
+        p.fillRectangle(x - 1, strapY, width + 2, 1);                        // sheen
+        p.setColor(STRAP_SHADOW_R, STRAP_SHADOW_G, STRAP_SHADOW_B, 1f);
+        p.fillRectangle(x - 1, strapY + strapHeight - 1, width + 2, 1);      // underside
+        // Strap denomination mark, only when the strap is wide enough to read
+        if (width >= 56) {
+            drawDollarGlyph(p, x + width / 2, strapY + strapHeight / 2,
+                    Math.max(5, width / 11), strapHeight + 1,
+                    MONEY_INK_R, MONEY_INK_G, MONEY_INK_B);
+        }
+    }
+
+    // Post-pass: grows a dark outline around every fully-opaque shape so the sprite
+    // reads cleanly against the 3D scene. Reads from a snapshot each pass so a 1-pixel
+    // ring is added per iteration (thickness passes → thickness-pixel border).
+    private static void addSilhouetteOutline(Pixmap target, int thickness) {
+        int width  = target.getWidth();
+        int height = target.getHeight();
+        int outline = Color.rgba8888(MONEY_OUTLINE_R, MONEY_OUTLINE_G, MONEY_OUTLINE_B, 1f);
+        for (int pass = 0; pass < thickness; pass++) {
+            Pixmap snapshot = new Pixmap(width, height, Pixmap.Format.RGBA8888);
+            snapshot.drawPixmap(target, 0, 0);
+            for (int pixelY = 0; pixelY < height; pixelY++) {
+                for (int pixelX = 0; pixelX < width; pixelX++) {
+                    if ((snapshot.getPixel(pixelX, pixelY) & 0xFF) >= 250) continue; // already solid
+                    if (isOpaquePixel(snapshot, pixelX - 1, pixelY)
+                            || isOpaquePixel(snapshot, pixelX + 1, pixelY)
+                            || isOpaquePixel(snapshot, pixelX, pixelY - 1)
+                            || isOpaquePixel(snapshot, pixelX, pixelY + 1)) {
+                        target.drawPixel(pixelX, pixelY, outline);
+                    }
+                }
+            }
+            snapshot.dispose();
+        }
+    }
+
+    private static boolean isOpaquePixel(Pixmap source, int x, int y) {
+        if (x < 0 || y < 0 || x >= source.getWidth() || y >= source.getHeight()) return false;
+        return (source.getPixel(x, y) & 0xFF) >= 250;
+    }
+
     private static Texture generateCreditSmallTexture() {
-        // One flat banknote — landscape, centred in the 64×64 sprite
-        int S = CREDIT_PICKUP_TEXTURE_SIZE;
-        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        // One loose banknote, landscape, centred in the sprite.
+        int size = CREDIT_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(size, size, Pixmap.Format.RGBA8888);
         p.setColor(0f, 0f, 0f, 0f); p.fill();
-        // Outer dark green border
-        p.setColor(0.04f, 0.18f, 0.04f, 1f); p.fillRectangle(8, 23, 48, 18);
-        // Bill face (dollar green)
-        p.setColor(0.13f, 0.43f, 0.13f, 1f); p.fillRectangle(9, 24, 46, 16);
-        // Inner frame strip
-        p.setColor(0.06f, 0.22f, 0.06f, 1f); p.fillRectangle(12, 27, 40, 10);
-        // Inner face (lighter centre panel)
-        p.setColor(0.16f, 0.50f, 0.16f, 1f); p.fillRectangle(13, 28, 38, 8);
-        // Portrait oval (engraved face placeholder)
-        p.setColor(0.05f, 0.20f, 0.05f, 1f); p.fillCircle(32, 32, 4);
-        // Left denomination block (bright green — represents printed numeral)
-        p.setColor(0.25f, 0.72f, 0.25f, 1f); p.fillRectangle(11, 27, 4, 6);
-        // Right denomination block
-        p.setColor(0.25f, 0.72f, 0.25f, 1f); p.fillRectangle(49, 27, 4, 6);
-        // Serial number strip (thin bright band)
-        p.setColor(0.20f, 0.60f, 0.20f, 1f); p.fillRectangle(18, 25, 14, 2);
-        // Crinkle highlight (top-left glint)
-        p.setColor(0.35f, 0.90f, 0.35f, 1f); p.fillRectangle(10, 24, 6, 2);
+        int billWidth  = 68;
+        int billHeight = 36;
+        int billX = (size - billWidth) / 2;
+        int billY = (size - billHeight) / 2;
+        drawBanknoteFace(p, billX, billY, billWidth, billHeight, true);
+        addSilhouetteOutline(p, 2);
         return finalize(p);
     }
 
     private static Texture generateCreditMediumTexture() {
-        // Stack of 6 banknotes — front bill with 5 edge strips below
-        int S = CREDIT_PICKUP_TEXTURE_SIZE;
-        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        // One strap-banded bundle of bills.
+        int size = CREDIT_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(size, size, Pixmap.Format.RGBA8888);
         p.setColor(0f, 0f, 0f, 0f); p.fill();
-        drawBillStack(p, 8, 10, 48, 20, 6);
+        int bundleWidth  = 70;
+        int bundleHeight = 48;
+        int bundleX = (size - bundleWidth) / 2;
+        int bundleY = (size - bundleHeight) / 2;
+        drawBundle(p, bundleX, bundleY, bundleWidth, bundleHeight);
+        addSilhouetteOutline(p, 2);
         return finalize(p);
     }
 
     private static Texture generateCreditLargeTexture() {
-        // Three tall stacks of banknotes — left, centre (tallest), right
-        int S = CREDIT_PICKUP_TEXTURE_SIZE;
-        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        // A pyramid of three strapped bundles — two on the base, one on top.
+        int size = CREDIT_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(size, size, Pixmap.Format.RGBA8888);
         p.setColor(0f, 0f, 0f, 0f); p.fill();
-        drawBillStack(p,  2, 10, 18, 12, 8);  // left stack
-        drawBillStack(p, 23,  6, 18, 12, 10); // centre stack (tallest)
-        drawBillStack(p, 44, 10, 18, 12, 8);  // right stack
+        int bundleWidth  = 46;
+        int bundleHeight = 32;
+        // Base row (drawn first so the top bundle overlaps them)
+        drawBundle(p,  2, 54, bundleWidth, bundleHeight); // base left
+        drawBundle(p, 48, 54, bundleWidth, bundleHeight); // base right
+        // Apex bundle, centred over the seam
+        drawBundle(p, 25, 22, bundleWidth, bundleHeight);
+        addSilhouetteOutline(p, 2);
         return finalize(p);
     }
 
