@@ -20,7 +20,7 @@ final class EnemyTurnSubscriber implements TickSubscriber {
     @Override
     public void onTick(TickContext context) {
         enemyManager.takeTurn(context.getPlayerTileColumn(), context.getPlayerTileRow(), context.getPlayer());
-        if (enemyManager.anyAlerted()) {
+        if (gameState.isBossFloor && enemyManager.anyAlerted()) {
             gameState.redAlert = true;
         }
     }

@@ -432,6 +432,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 tickEventBus.subscribe(bossFloorController);
             }
         }
+        gameState.isBossFloor = bossFloorController != null;
 
         tickEventBus.subscribe(new EnemyTurnSubscriber(enemyManager, gameState));
 
