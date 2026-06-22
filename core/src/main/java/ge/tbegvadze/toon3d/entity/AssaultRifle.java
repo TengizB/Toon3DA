@@ -81,4 +81,3 @@ public class AssaultRifle extends Weapon {
     @Override public String getFireTexturePath()   { return WeaponConstants.ASSAULT_RIFLE_FIRE_TEXTURE_PATH;   }
     @Override public String getReloadTexturePath() { return WeaponConstants.ASSAULT_RIFLE_RELOAD_TEXTURE_PATH; }
 }
-</content>

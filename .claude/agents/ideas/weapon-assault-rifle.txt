@@ -45,5 +45,3 @@ INTEGRATION POINTS (all wired):
   world/World (arsenal + factory + class→ItemType + starter ammo),
   input/PlayerController (match + ammo mapping), level/LevelGenerator (spawn pool),
   render/ItemWindow (stat card), render/WeaponHudRenderer + render/PropRenderer (visuals).
-</content>
-</invoke>
