@@ -10,4 +10,7 @@ public class GameState {
 
     /** When true the facility emergency lighting pulses red across ceiling, floor, and walls. */
     public boolean redAlert = false;
+
+    /** True when the current floor is a boss encounter; red alert is only allowed on boss floors. */
+    public boolean isBossFloor = false;
 }

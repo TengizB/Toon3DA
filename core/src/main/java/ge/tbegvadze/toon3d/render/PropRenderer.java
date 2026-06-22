@@ -1710,71 +1710,84 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     private static Texture generateCreditSmallTexture() {
+        // Data Shard — rectangular sci-fi credit chip, portrait orientation
         int S = CREDIT_PICKUP_TEXTURE_SIZE;
         Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
         p.setColor(0f, 0f, 0f, 0f); p.fill();
-        // Outer disc — warm gold
-        p.setColor(0.85f, 0.68f, 0.20f, 1f); p.fillCircle(32, 32, 12);
-        // Inner ring — darker gold, overwrites centre leaving 3-pixel gold ring
-        p.setColor(0.62f, 0.48f, 0.10f, 1f); p.fillCircle(32, 32, 9);
-        // Centre notch — near-black pit
-        p.setColor(0.10f, 0.08f, 0.02f, 1f); p.fillRectangle(30, 30, 4, 4);
-        // Rim highlight — bright fleck at top of disc
-        p.setColor(1.00f, 0.92f, 0.55f, 1f); p.fillRectangle(31, 20, 2, 2);
+        // Chip border (steel blue-gray frame)
+        p.setColor(0.28f, 0.42f, 0.65f, 1f); p.fillRectangle(16, 10, 32, 44);
+        // Chip body (near-black navy interior)
+        p.setColor(0.05f, 0.07f, 0.16f, 1f); p.fillRectangle(18, 12, 28, 38);
+        // Top notch (alignment notch like a real IC package)
+        p.setColor(0.08f, 0.10f, 0.20f, 1f); p.fillRectangle(27, 10, 10, 4);
+        // Three electric cyan data bars
+        p.setColor(0.00f, 0.88f, 1.00f, 1f);
+        p.fillRectangle(21, 18, 22, 2);
+        p.fillRectangle(21, 25, 22, 2);
+        p.fillRectangle(21, 32, 22, 2);
+        // Gold connector pads along bottom edge
+        p.setColor(0.78f, 0.68f, 0.18f, 1f);
+        p.fillRectangle(20, 46, 5, 4);
+        p.fillRectangle(27, 46, 5, 4);
+        p.fillRectangle(34, 46, 5, 4);
+        // Status LED — glowing cyan dot, bright white hot-spot at centre
+        p.setColor(0.55f, 0.90f, 1.00f, 1f); p.fillCircle(32, 30, 3);
+        p.setColor(1.00f, 1.00f, 1.00f, 1f); p.fillCircle(32, 30, 1);
         return finalize(p);
     }
 
     private static Texture generateCreditMediumTexture() {
+        // Credit Wafer — wide horizontal card with holographic violet stripe
         int S = CREDIT_PICKUP_TEXTURE_SIZE;
         Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
         p.setColor(0f, 0f, 0f, 0f); p.fill();
-        // Bottom disc — offset downward, slightly darker
-        p.setColor(0.80f, 0.64f, 0.18f, 1f); p.fillCircle(32, 36, 11);
-        // Top disc — offset upward, brighter, overlaps bottom
-        p.setColor(0.88f, 0.72f, 0.24f, 1f); p.fillCircle(32, 28, 11);
-        // Cyan band across the gap between discs
-        p.setColor(0.20f, 0.80f, 0.95f, 1f); p.fillRectangle(22, 30, 20, 4);
-        // Sparkle flecks — white highlights for glint
+        // Card border (dark violet-gray frame)
+        p.setColor(0.30f, 0.20f, 0.55f, 1f); p.fillRectangle(8, 18, 48, 28);
+        // Card body (dark navy-purple interior)
+        p.setColor(0.06f, 0.04f, 0.18f, 1f); p.fillRectangle(10, 20, 44, 24);
+        // Top data band (bright cyan strip)
+        p.setColor(0.00f, 0.80f, 1.00f, 1f); p.fillRectangle(10, 20, 44, 4);
+        // Bottom data band (bright cyan strip)
+        p.setColor(0.00f, 0.80f, 1.00f, 1f); p.fillRectangle(10, 38, 44, 4);
+        // Holographic centre stripe (violet)
+        p.setColor(0.60f, 0.15f, 0.95f, 1f); p.fillRectangle(10, 28, 44, 6);
+        // Denomination indicators — two violet glows on the stripe
+        p.setColor(0.85f, 0.55f, 1.00f, 1f);
+        p.fillCircle(20, 31, 2);
+        p.fillCircle(30, 31, 2);
+        // Chip contact pad (right side — white square with dark recess)
+        p.setColor(1.00f, 1.00f, 1.00f, 1f); p.fillRectangle(42, 26, 8, 8);
+        p.setColor(0.06f, 0.04f, 0.18f, 1f); p.fillRectangle(44, 28, 4, 4);
+        // Sparkle flecks
         p.setColor(1f, 1f, 1f, 1f);
-        p.fillRectangle(38, 22, 2, 2);
-        p.fillRectangle(23, 40, 2, 2);
+        p.fillRectangle(36, 21, 2, 2);
+        p.fillRectangle(14, 39, 2, 2);
         return finalize(p);
     }
 
     private static Texture generateCreditLargeTexture() {
+        // Quantum Core — concentric-ring plasma disc with amber energy
         int S = CREDIT_PICKUP_TEXTURE_SIZE;
         Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
         p.setColor(0f, 0f, 0f, 0f); p.fill();
-        // Hexagon fill via 6 triangles — emerald green, flat-top, outer radius 20
-        // Vertices (Pixmap Y-down): V0=(52,32), V1=(42,49), V2=(22,49),
-        //                           V3=(12,32), V4=(22,15), V5=(42,15)
-        p.setColor(0.20f, 0.78f, 0.42f, 1f);
-        p.fillTriangle(32, 32, 52, 32, 42, 49);
-        p.fillTriangle(32, 32, 42, 49, 22, 49);
-        p.fillTriangle(32, 32, 22, 49, 12, 32);
-        p.fillTriangle(32, 32, 12, 32, 22, 15);
-        p.fillTriangle(32, 32, 22, 15, 42, 15);
-        p.fillTriangle(32, 32, 42, 15, 52, 32);
-        // Inner hex outline — cyan-green, radius ~14
-        p.setColor(0.45f, 1.00f, 0.70f, 1f);
-        p.drawLine(46, 32, 39, 44);
-        p.drawLine(39, 44, 25, 44);
-        p.drawLine(25, 44, 18, 32);
-        p.drawLine(18, 32, 25, 20);
-        p.drawLine(25, 20, 39, 20);
-        p.drawLine(39, 20, 46, 32);
-        // Corner studs — bright squares at four vertices
-        p.setColor(0.80f, 1.00f, 0.85f, 1f);
-        p.fillRectangle(50, 30, 4, 4);
-        p.fillRectangle(40, 13, 4, 4);
-        p.fillRectangle(20, 13, 4, 4);
-        p.fillRectangle(20, 47, 4, 4);
-        // White sparkles
-        p.setColor(1f, 1f, 1f, 1f);
-        p.fillRectangle(46, 20, 2, 2);
-        p.fillRectangle(18, 31, 2, 2);
-        p.fillRectangle(32, 12, 2, 2);
-        p.fillRectangle(46, 43, 2, 2);
+        // Outer amber-gold rim (r=22)
+        p.setColor(1.00f, 0.72f, 0.10f, 1f); p.fillCircle(32, 32, 22);
+        // Dark middle band — creates the thick border ring (r=17)
+        p.setColor(0.06f, 0.05f, 0.12f, 1f); p.fillCircle(32, 32, 17);
+        // Inner energy ring (warm white-gold, r=13)
+        p.setColor(1.00f, 0.88f, 0.50f, 1f); p.fillCircle(32, 32, 13);
+        // Dark centre pit (r=9)
+        p.setColor(0.04f, 0.04f, 0.10f, 1f); p.fillCircle(32, 32, 9);
+        // Core burst (bright amber, r=5)
+        p.setColor(1.00f, 0.68f, 0.15f, 1f); p.fillCircle(32, 32, 5);
+        // Hot white centre (r=2)
+        p.setColor(1f, 1f, 1f, 1f); p.fillCircle(32, 32, 2);
+        // Cardinal energy spokes crossing the dark band (neon gold 2px wide)
+        p.setColor(1.00f, 0.88f, 0.30f, 1f);
+        p.fillRectangle(31, 19, 2, 12); // top spoke
+        p.fillRectangle(31, 33, 2, 12); // bottom spoke
+        p.fillRectangle(19, 31, 12, 2); // left spoke
+        p.fillRectangle(33, 31, 12, 2); // right spoke
         return finalize(p);
     }
 
