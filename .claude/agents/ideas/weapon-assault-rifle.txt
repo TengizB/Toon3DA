@@ -1,0 +1,49 @@
+STATUS: IN PROGRESS
+CATEGORY: Combat
+TITLE: Assault Rifle — precision automatic bullet rifle
+---
+
+CONCEPT
+A bullet-fed automatic rifle that shares ammunition with the Chaingun (AmmoType.BULLETS)
+but fills a different combat role. Where the Chaingun sprays a 3-round burst with low
+per-bullet accuracy, the Assault Rifle fires one precise, hard-hitting round per press at
+longer effective range. It is the player's reliable mid-range workhorse.
+
+GAMEPLAY LOOP
+- Single hitscan bullet per fire press (semi-auto feel), marching the facing direction
+  tile by tile up to range, stopping at the first wall/door/enemy (no penetration).
+- Larger magazine than the burst weapons so the player can stay in the fight; 1-tick reload.
+- High base accuracy rewards lining up cardinal shots at distance, contrasting the
+  Chaingun's "spray and pray" identity.
+
+STATS
+- damage              14  (per shot)
+- clipSize            30
+- reloadTimeTicks      1
+- damageDropCoeff   0.08  (retains damage well at range)
+- rangeTiles         10
+- penetration       false
+- baseAccuracy      0.88
+- ammoType        BULLETS  (shared with Chaingun)
+
+Damage table (coefficient 0.08, floor 0.15):
+  distance 1:  14 × 0.92 = 12      distance 4: 14 × 0.68 = 9
+  distance 6:  14 × 0.52 = 7       distance 8: 14 × 0.36 = 5
+  distance 10: 14 × 0.20 = 2       (floor applies at extreme range)
+
+VISUALS (TECHNICAL NOTES)
+- First-person HUD sprite: procedural gunmetal rifle in WeaponHudRenderer, Quake-1
+  top-down-angle perspective, single narrow×tall barrel with a slotted handguard and a
+  curved magazine below the receiver. Symmetric about centerX=96.
+- Special fire effect: a crisp four-point muzzle star plus brass shell casings ejecting
+  to the right and a thin rising smoke wisp — distinct from the Chaingun's cone+sparks.
+- Ground pickup sprite: 64x64 gunmetal silhouette in PropRenderer with a curved magazine
+  as its signature feature.
+
+INTEGRATION POINTS (all wired):
+  WeaponConstants, entity/AssaultRifle, item/ItemType (WEAPON_ASSAULT_RIFLE),
+  world/World (arsenal + factory + class→ItemType + starter ammo),
+  input/PlayerController (match + ammo mapping), level/LevelGenerator (spawn pool),
+  render/ItemWindow (stat card), render/WeaponHudRenderer + render/PropRenderer (visuals).
+</content>
+</invoke>

@@ -1940,6 +1940,7 @@ public class PropRenderer implements Renderable, Disposable {
         map.put(ItemType.WEAPON_SHOTGUN,       generateWeaponShotgunGroundTexture());
         map.put(ItemType.WEAPON_DOUBLE_BARREL, generateWeaponDoubleBarrelGroundTexture());
         map.put(ItemType.WEAPON_CHAINGUN,      generateWeaponChaingunGroundTexture());
+        map.put(ItemType.WEAPON_ASSAULT_RIFLE, generateWeaponAssaultRifleGroundTexture());
         map.put(ItemType.WEAPON_PLASMA,        generateWeaponPlasmaGroundTexture());
         map.put(ItemType.WEAPON_RAILGUN,       generateWeaponRailgunGroundTexture());
         map.put(ItemType.WEAPON_INCINERATOR,   generateWeaponIncineratorGroundTexture());
@@ -2149,6 +2150,60 @@ public class PropRenderer implements Renderable, Disposable {
         p.fillRectangle(51, 52, 10, 1); p.fillRectangle(51, 57, 10, 1);
         // Cool-white shimmer
         p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(2, 16, 2, 2);
+        return finalize(p);
+    }
+
+    /**
+     * Assault Rifle — gunmetal service rifle.
+     * Barrel extends LEFT from a center-right gunmetal body. Slotted handguard over the barrel.
+     * SIGNATURE feature = a CURVED MAGAZINE dropping below the body (banana mag). Charcoal pistol
+     * grip and a U-shape trigger guard below the receiver.
+     */
+    private static Texture generateWeaponAssaultRifleGroundTexture() {
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // BARREL (thin gunmetal tube extending left)
+        p.setColor(0.30f, 0.32f, 0.36f, 1f); p.fillRectangle(4, 28, 22, 6);
+        p.setColor(0.42f, 0.44f, 0.48f, 1f); p.fillRectangle(4, 28, 22, 1);  // top highlight
+        p.setColor(0.22f, 0.24f, 0.28f, 1f); p.fillRectangle(4, 33, 22, 1);  // bottom shadow
+        p.setColor(0.50f, 0.54f, 0.60f, 1f); p.fillRectangle(4, 28, 2, 6);   // muzzle face (catches light)
+        // SLOTTED HANDGUARD (over the barrel base — cooling slots)
+        p.setColor(0.27f, 0.29f, 0.34f, 1f); p.fillRectangle(18, 26, 14, 10);
+        p.setColor(0.40f, 0.42f, 0.48f, 1f); p.fillRectangle(18, 26, 14, 1);  // top highlight
+        p.setColor(0.07f, 0.08f, 0.10f, 1f);                                  // cooling slots
+        p.fillRectangle(20, 29, 2, 4); p.fillRectangle(24, 29, 2, 4); p.fillRectangle(28, 29, 2, 4);
+        // MAIN BODY / RECEIVER (center-right gunmetal)
+        p.setColor(0.30f, 0.32f, 0.36f, 1f); p.fillRectangle(30, 24, 28, 16);
+        p.setColor(0.42f, 0.44f, 0.48f, 1f); p.fillRectangle(30, 24, 28, 1);  // top highlight
+        p.setColor(0.22f, 0.24f, 0.28f, 1f); p.fillRectangle(30, 39, 28, 1);  // bottom shadow
+        // EJECTION PORT (dark cutout on top-right of receiver)
+        p.setColor(0.08f, 0.09f, 0.11f, 1f); p.fillRectangle(44, 26, 10, 5);
+        p.setColor(0.40f, 0.44f, 0.50f, 1f); p.fillRectangle(44, 30, 10, 1);  // port lower lip shine
+        // CARRY-HANDLE REAR SIGHT (small housing on top of receiver)
+        p.setColor(0.16f, 0.18f, 0.22f, 1f); p.fillRectangle(34, 20, 12, 5);
+        p.setColor(0.34f, 0.38f, 0.44f, 1f); p.fillRectangle(34, 20, 12, 1);  // housing highlight
+        // SIGNATURE: CURVED MAGAZINE (banana mag dropping/curving below the body)
+        p.setColor(0.20f, 0.21f, 0.24f, 1f);                                  // dark charcoal mag
+        p.fillRectangle(34, 40, 12, 5);   // mag top (seats into receiver)
+        p.fillRectangle(31, 44, 12, 5);   // curve segment 1
+        p.fillRectangle(28, 48, 12, 6);   // curve segment 2 (sweeps left + down)
+        p.setColor(0.30f, 0.32f, 0.36f, 1f);                                  // front-edge highlight
+        p.fillRectangle(44, 40, 2, 5); p.fillRectangle(41, 44, 2, 5); p.fillRectangle(38, 48, 2, 6);
+        p.setColor(0.12f, 0.13f, 0.15f, 1f);                                  // back-edge shadow
+        p.fillRectangle(34, 40, 1, 5); p.fillRectangle(31, 44, 1, 5); p.fillRectangle(28, 48, 1, 6);
+        // PISTOL GRIP (charcoal, drops below the receiver on the right)
+        p.setColor(0.14f, 0.15f, 0.18f, 1f); p.fillRectangle(50, 40, 10, 16);
+        p.setColor(0.10f, 0.11f, 0.13f, 1f);                                  // checkering
+        p.fillRectangle(51, 45, 8, 1); p.fillRectangle(51, 50, 8, 1);
+        // TRIGGER GUARD (U-shape below the receiver, ahead of the grip)
+        p.setColor(0.24f, 0.26f, 0.30f, 1f);
+        p.fillRectangle(46, 40, 2, 8);    // front post
+        p.fillRectangle(46, 47, 6, 2);    // bottom bar
+        p.fillRectangle(50, 40, 2, 8);    // rear post
+        // Cool-white shimmer on the muzzle face
+        p.setColor(0.90f, 0.94f, 1.00f, 1f); p.fillRectangle(4, 28, 2, 2);
         return finalize(p);
     }
 

@@ -1057,10 +1057,11 @@ public class CavernGenerator implements ILevelGenerator {
     }
 
     private ItemType randomWeaponItemType() {
-        switch (random.nextInt(4)) {
+        switch (random.nextInt(5)) {
             case 0:  return ItemType.WEAPON_SHOTGUN;
             case 1:  return ItemType.WEAPON_CHAINGUN;
-            case 2:  return ItemType.WEAPON_PLASMA;
+            case 2:  return ItemType.WEAPON_ASSAULT_RIFLE;
+            case 3:  return ItemType.WEAPON_PLASMA;
             default: return ItemType.WEAPON_ROCKET;
         }
     }

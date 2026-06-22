@@ -103,6 +103,17 @@ public enum ItemType {
             new WeaponAbility[]{WeaponAbility.BURST_FIRE, WeaponAbility.EXTENDED_MAG}
     ),
 
+    WEAPON_ASSAULT_RIFLE(
+            "Assault Rifle",
+            ItemCategory.WEAPON,
+            false,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
+            'A',
+            1.00f, 0.75f, 0.10f,
+            "UAC service rifle. Accurate single-round fire at sustained mid-range.",
+            new WeaponAbility[]{WeaponAbility.MARKSMANS_PATIENCE, WeaponAbility.EXTENDED_MAG}
+    ),
+
     WEAPON_RAILGUN(
             "Railgun",
             ItemCategory.WEAPON,

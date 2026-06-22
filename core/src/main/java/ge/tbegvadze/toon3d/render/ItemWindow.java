@@ -849,7 +849,8 @@ final class ItemWindow implements Disposable {
         switch (itemType) {
             case WEAPON_SHOTGUN:
             case WEAPON_DOUBLE_BARREL: return "SHOTGUN CLASS";
-            case WEAPON_CHAINGUN:      return "AUTOMATIC CLASS";
+            case WEAPON_CHAINGUN:
+            case WEAPON_ASSAULT_RIFLE: return "AUTOMATIC CLASS";
             case WEAPON_PLASMA:
             case WEAPON_INCINERATOR:   return "ENERGY CLASS";
             case WEAPON_RAILGUN:       return "PRECISION CLASS";
@@ -868,6 +869,7 @@ final class ItemWindow implements Disposable {
             case WEAPON_DOUBLE_BARREL: return WeaponConstants.DBL_SHOTGUN_DAMAGE + " x2";
             case WEAPON_PLASMA:        return String.valueOf(WeaponConstants.PLASMA_RIFLE_DAMAGE);
             case WEAPON_CHAINGUN:      return WeaponConstants.CHAINGUN_DAMAGE + "/bolt";
+            case WEAPON_ASSAULT_RIFLE: return WeaponConstants.ASSAULT_RIFLE_DAMAGE + "/round";
             case WEAPON_RAILGUN:       return "40-90";
             case WEAPON_INCINERATOR:   return WeaponConstants.FLAME_IMPACT_DAMAGE + "+" + WeaponConstants.FLAME_BURN_DAMAGE_PER_TURN + "/turn";
             case WEAPON_ROCKET:        return String.valueOf(WeaponConstants.GRENADE_SPLASH_DAMAGE);
@@ -896,7 +898,8 @@ final class ItemWindow implements Disposable {
         switch (itemType) {
             case WEAPON_SHOTGUN:
             case WEAPON_DOUBLE_BARREL: return "Shells";
-            case WEAPON_CHAINGUN:      return "Bullets";
+            case WEAPON_CHAINGUN:
+            case WEAPON_ASSAULT_RIFLE: return "Bullets";
             case WEAPON_PLASMA:
             case WEAPON_INCINERATOR:   return "Cells";
             case WEAPON_ROCKET:        return "Rockets";
@@ -911,6 +914,7 @@ final class ItemWindow implements Disposable {
             case WEAPON_DOUBLE_BARREL: return "— / " + WeaponConstants.DBL_SHOTGUN_CLIP_SIZE;
             case WEAPON_PLASMA:        return "— / " + WeaponConstants.PLASMA_RIFLE_CLIP_SIZE;
             case WEAPON_CHAINGUN:      return "— / " + WeaponConstants.CHAINGUN_CLIP_SIZE;
+            case WEAPON_ASSAULT_RIFLE: return "— / " + WeaponConstants.ASSAULT_RIFLE_CLIP_SIZE;
             case WEAPON_RAILGUN:       return "— / " + WeaponConstants.RAILGUN_CLIP_SIZE;
             case WEAPON_INCINERATOR:   return "— / " + WeaponConstants.FLAME_CLIP_SIZE;
             case WEAPON_ROCKET:        return "— / " + WeaponConstants.GRENADE_CLIP_SIZE;
@@ -921,6 +925,7 @@ final class ItemWindow implements Disposable {
     private static String weaponFireMode(ItemType itemType) {
         switch (itemType) {
             case WEAPON_CHAINGUN:    return "Burst";
+            case WEAPON_ASSAULT_RIFLE: return "Semi";
             case WEAPON_INCINERATOR: return "Full-Auto";
             case WEAPON_FIST:
             case WEAPON_KNIFE:
@@ -965,7 +970,7 @@ final class ItemWindow implements Disposable {
 
     private static String ammoCompatible(ItemType itemType) {
         switch (itemType) {
-            case AMMO_BULLETS: return "Used by: Chaingun";
+            case AMMO_BULLETS: return "Used by: Chaingun, Assault Rifle";
             case AMMO_SHELLS:  return "Used by: Shotgun, Double-Barrel Shotgun";
             case AMMO_CELLS:   return "Used by: Plasma Rifle, Incinerator";
             case AMMO_ROCKETS: return "Used by: Rocket Launcher";

@@ -23,6 +23,7 @@ public final class WeaponConstants {
     public static final float PLASMA_FIRE_SHAKE_MAGNITUDE       = 3f;
     public static final float CHAINGUN_FIRE_SHAKE_MAGNITUDE     = 2f;
     public static final float GRENADE_FIRE_SHAKE_MAGNITUDE      = 7f;
+    public static final float ASSAULT_RIFLE_FIRE_SHAKE_MAGNITUDE = 4f;
 
     // Shotgun stats
     public static final int     SHOTGUN_DAMAGE             = 50;
@@ -110,6 +111,29 @@ public final class WeaponConstants {
     public static final int CHAINGUN_CANVAS_WIDTH  = 192;
     public static final int CHAINGUN_CANVAS_HEIGHT = 134;
 
+    // Assault Rifle — precision automatic bullet rifle, shares BULLETS ammo with the Chaingun.
+    // Single accurate hitscan round per fire press; longer effective range, no penetration.
+    // Damage table (coefficient 0.08, floor 0.15):
+    //   distance 1:  14 × 0.92 = 12   distance 4: 14 × 0.68 = 9
+    //   distance 6:  14 × 0.52 =  7   distance 8: 14 × 0.36 = 5
+    //   distance 10: 14 × 0.20 =  2   (minimum floor applies at extreme range)
+    public static final String  ASSAULT_RIFLE_DISPLAY_NAME      = "ASSAULT RIFLE";
+    public static final int     ASSAULT_RIFLE_DAMAGE            = 14;
+    public static final int     ASSAULT_RIFLE_CLIP_SIZE         = 30;
+    public static final int     ASSAULT_RIFLE_RELOAD_TIME_TICKS = 1;
+    public static final float   ASSAULT_RIFLE_DAMAGE_DROP_COEFF = 0.08f;
+    public static final int     ASSAULT_RIFLE_RANGE_TILES       = 10;
+    // ASSAULT_RIFLE_PENETRATION: false = stops at the first enemy (single bullet, no pierce)
+    public static final boolean ASSAULT_RIFLE_PENETRATION       = false;
+
+    // Assault Rifle HUD textures — always procedural (no asset files)
+    public static final String ASSAULT_RIFLE_NORMAL_TEXTURE_PATH = "textures/guns/assault_rifle/assault_rifle.png";
+    public static final String ASSAULT_RIFLE_FIRE_TEXTURE_PATH   = "textures/guns/assault_rifle/assault_rifle_fire.png";
+    public static final String ASSAULT_RIFLE_RELOAD_TEXTURE_PATH = "textures/guns/assault_rifle/assault_rifle_reload.png";
+    // Assault Rifle procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer
+    public static final int ASSAULT_RIFLE_CANVAS_WIDTH  = 192;
+    public static final int ASSAULT_RIFLE_CANVAS_HEIGHT = 134;
+
     // Plasma muzzle blast — blue-cyan sphere burst; replaces the shotgun orange flame
     public static final float PLASMA_BLAST_RADIUS = 85f;
 
@@ -130,6 +154,15 @@ public final class WeaponConstants {
     public static final float CHAINGUN_EFFECT_SPARK_SPREAD_X  = 70f;  // half-width of spark scatter
     public static final float CHAINGUN_EFFECT_SPARK_SPREAD_Y  = 80f;  // height of spark scatter
     public static final float CHAINGUN_EFFECT_SPARK_SIZE      = 5f;   // world units per spark square side
+    // Assault Rifle — crisp four-point muzzle star + ejecting brass casings + thin rising smoke
+    public static final float ASSAULT_RIFLE_EFFECT_STAR_RADIUS      = 46f;  // outer reach of the muzzle star points
+    public static final float ASSAULT_RIFLE_EFFECT_STAR_CORE_RADIUS = 18f;  // bright central flash disc radius
+    public static final int   ASSAULT_RIFLE_EFFECT_CASING_COUNT     = 3;    // brass shells flung out to the side
+    public static final float ASSAULT_RIFLE_EFFECT_CASING_SPREAD_X  = 80f;  // horizontal reach of ejected casings (to the right)
+    public static final float ASSAULT_RIFLE_EFFECT_CASING_SPREAD_Y  = 55f;  // vertical scatter of ejected casings
+    public static final float ASSAULT_RIFLE_EFFECT_CASING_SIZE      = 7f;   // world units per casing rectangle long side
+    public static final float ASSAULT_RIFLE_EFFECT_SMOKE_HEIGHT     = 70f;  // height of the rising smoke wisp
+    public static final float ASSAULT_RIFLE_EFFECT_SMOKE_WIDTH      = 26f;  // base width of the rising smoke wisp
     // Railgun — electromagnetic discharge: crisp central lance, branching lightning, recoil ring
     public static final float RAILGUN_EFFECT_LANCE_HEIGHT     = 250f;  // taller, sharper central bolt
     public static final float RAILGUN_EFFECT_LANCE_BASE_WIDTH = 14f;   // narrower → crisper lance
@@ -343,5 +376,6 @@ public final class WeaponConstants {
     public static final float RAILGUN_BASE_ACCURACY               = 0.95f;
     public static final float INCINERATOR_BASE_ACCURACY           = 0.70f;
     public static final float GRENADE_LAUNCHER_BASE_ACCURACY      = 0.80f;
+    public static final float ASSAULT_RIFLE_BASE_ACCURACY         = 0.88f;
     public static final float MELEE_BASE_ACCURACY                 = 1.00f;
 }
