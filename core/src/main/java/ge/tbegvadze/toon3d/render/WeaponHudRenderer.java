@@ -70,6 +70,14 @@ public class WeaponHudRenderer implements Renderable, Disposable {
          0.92f,  0.55f,  0.78f,  0.42f,  0.68f
     };
 
+    // Railgun lightning branch jitter — static to avoid per-frame heap allocation.
+    // Each value is a signed fraction of RAILGUN_EFFECT_BRANCH_JITTER applied as a
+    // perpendicular kink at successive segments along a branching arc, producing a
+    // zig-zag lightning shape without using java.util.Random. Indexed by segment.
+    private static final float[] RAILGUN_BRANCH_JITTER_FRACTIONS = {
+        0.0f, 0.85f, -0.55f, 0.40f, -0.20f
+    };
+
     /**
      * Pre-generates normal textures for every weapon in the arsenal.
      * All FrameBuffer work happens here, at startup, before the game loop begins.
@@ -1131,13 +1139,21 @@ public class WeaponHudRenderer implements Renderable, Disposable {
      *   Y =   0 → bottom of canvas (grip region — transparent, cut off)
      *   Y = 134 → top of canvas (muzzle end, pointing toward horizon)
      *
+     * Concept — "Tesla Coil Lance": a high-tech electromagnetic railgun dominated by a
+     * prominent toroidal capacitor / coil bank glowing electric cyan, flanked by stepped
+     * heat-sink fins, with two PRONOUNCED parallel accelerator rails running the full
+     * length to a charged emitter. Palette is colder and whiter than the plasma rifle —
+     * steel-blue body, ice-white edges, electric cyan coil windings.
+     *
      * Layout zones:
      *   Y  0– 14  transparent — grip cut off below screen
-     *   Y 14– 58  receiver body — narrow steel-blue block (~70px wide)
-     *   Y 30– 52  capacitor block — energy cell set into receiver top
-     *   Y 58–124  twin conductor rails — two tapered rects converging 0.65 factor
-     *   Y 78, 98, 116 — cross-braces connecting the rails
-     *   Y 122     emitter point — bright energy disc between rail tips
+     *   Y 14– 64  receiver body — wide steel-blue block (~86px)
+     *   Y 18– 30  heat-sink fins — stepped dark vertical ribs along receiver flanks
+     *   Y 26– 58  coil / capacitor bank — three stacked cyan toroidal windings at center
+     *   Y 58– 70  emitter manifold — collar where the rails leave the coil bank
+     *   Y 64–124  twin accelerator rails — heavy tapered bars converging 0.65 factor
+     *   Y 80,98,114 — energized cross-braces (cyan-lit rungs) connecting the rails
+     *   Y 118–124 charged emitter — layered cyan/white energy node between rail tips
      *   Y 124     muzzle caps — 2px bright steel band (NO bore ellipse)
      *
      * View mode: TOP-DOWN, convergence ~0.65, muzzle cap (no bore ellipse).
@@ -1185,152 +1201,163 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     /**
      * Draws a railgun in Quake-1 top-down first-person perspective.
      *
-     * Identity silhouette: a long sleek rifle with twin conductor rails instead of an
-     * enclosing barrel tube, and a glowing capacitor block at the receiver. The rails
-     * ARE the barrel — there is no surrounding shroud — giving the unmistakable railgun
-     * silhouette. Energy-weapon palette (steel-blue body, electric cyan edges) but colder
-     * and whiter than the plasma rifle.
+     * Identity silhouette — "Tesla Coil Lance": a heavy electromagnetic rifle whose
+     * receiver is dominated by a glowing toroidal coil / capacitor bank (three stacked
+     * cyan windings), flanked by stepped heat-sink fins. Two PRONOUNCED parallel
+     * accelerator rails leave the coil bank and run the full length to a charged emitter
+     * node. The rails ARE the barrel — no enclosing shroud — giving the unmistakable
+     * railgun silhouette. Palette is colder and whiter than the plasma rifle: steel-blue
+     * body, ice-white edges, electric cyan windings.
      *
-     * Top-down view, convergence factor 0.65: barrels point AWAY from camera.
+     * Top-down view, convergence factor 0.65: rails point AWAY from camera.
      * Bore invisible — muzzle cap only, no bore ellipse.
      *
      * Rail layout (offsets from centerX=96, taper factor 0.65):
-     *   Left  rail: base CX-11..CX-5  (6px) → muzzle CX-7..CX-3  (factor 0.65)
-     *   Right rail: base CX+5..CX+11  (6px) → muzzle CX+3..CX+7
-     *   Gap between rails at base: 10px (CX-5 to CX+5) → muzzle 6px (CX-3 to CX+3)
+     *   Left  rail: base CX-14..CX-6  (8px) → muzzle CX-9..CX-4  (factor 0.65)
+     *   Right rail: base CX+6..CX+14  (8px) → muzzle CX+4..CX+9
+     *   Gap between rails at base: 12px (CX-6 to CX+6) → muzzle 8px (CX-4 to CX+4)
      *
      * Layer order (back-to-front):
-     *   1. Receiver body          Y=14..58   — narrow steel-blue block
-     *   2. Receiver highlights    Y=55..58   — top/bottom edge shading
-     *   3. Capacitor block        Y=30..52   — dim blue energy cell at center
-     *   4. Left conductor rail    Y=58..124  — perspective-tapered steel bar + cyan edge
-     *   5. Right conductor rail   Y=58..124  — mirror of left rail
-     *   6. Rail gap shadow        Y=58..124  — dark channel between rails
-     *   7. Cross-braces           Y=78,98,116 — thin steel rungs spanning rail-to-rail
-     *   8. Emitter point          Y=120..124 — bright energy disc between rail tips
-     *   9. Muzzle caps            Y=124..126 — 2px bright steel rim (NO bore ellipse)
+     *   1. Receiver body          Y=14..64   — wide steel-blue block
+     *   2. Receiver edge shading  Y=14..64   — far-edge highlight / near-edge shadow
+     *   3. Heat-sink fins         Y=18..30   — stepped dark vertical ribs on each flank
+     *   4. Coil / capacitor bank  Y=26..58   — three stacked cyan toroidal windings
+     *   5. Emitter manifold       Y=58..70   — collar where rails leave the coil bank
+     *   6. Left accelerator rail  Y=64..124  — heavy perspective-tapered bar + cyan edge
+     *   7. Right accelerator rail Y=64..124  — mirror of left rail
+     *   8. Rail gap shadow        Y=64..124  — dark channel between rails
+     *   9. Energized cross-braces Y=80,98,114 — cyan-lit rungs spanning rail-to-rail
+     *  10. Charged emitter node   Y=116..124 — layered cyan/white energy node
+     *  11. Muzzle caps            Y=124..126 — 2px bright steel rim (NO bore ellipse)
      */
     private static void drawRailgunShape(ShapeRenderer shapeRenderer, float centerX) {
 
         // Y=0..14 left transparent — grip cut off below screen
 
-        // 1. Receiver body — narrow steel-blue block, top-surface perspective
-        //    Narrower than other weapons (~70px) to read as sleek and precise.
+        // 1. Receiver body — wide steel-blue block, top-surface perspective (~86px base).
         shapeRenderer.setColor(0.26f, 0.30f, 0.40f, 1f);
-        drawSymmetricTrapezoid(shapeRenderer, centerX, 35f, 14f, 30f, 58f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 43f, 14f, 37f, 64f);
 
-        // 2. Receiver edge highlights — far edge brighter (top surface faces camera)
+        // 2. Receiver edge shading — far edge brighter (top surface faces camera),
+        //    near edge in shadow.
         shapeRenderer.setColor(0.44f, 0.50f, 0.62f, 1f);
-        shapeRenderer.rect(centerX - 30f, 55f, 60f, 3f);     // far-edge top highlight
+        shapeRenderer.rect(centerX - 37f, 61f, 74f, 3f);     // far-edge top highlight
         shapeRenderer.setColor(0.14f, 0.16f, 0.22f, 1f);
-        shapeRenderer.rect(centerX - 35f, 14f, 70f, 3f);     // near-edge bottom shadow
+        shapeRenderer.rect(centerX - 43f, 14f, 86f, 3f);     // near-edge bottom shadow
 
-        // 3. Capacitor block — rectangular energy cell set into the receiver top surface.
-        //    At idle the capacitor holds a DIM blue glow (charge-level colouring is done
-        //    at runtime; the static sprite always shows the idle state).
-        //    Housing: Y=30..52, ~36px wide centred.
-        shapeRenderer.setColor(0.18f, 0.22f, 0.32f, 1f);
-        shapeRenderer.rect(centerX - 18f, 30f, 36f, 22f);    // housing backing
-        shapeRenderer.setColor(0.10f, 0.35f, 0.85f, 1f);
-        shapeRenderer.rect(centerX - 15f, 32f, 30f, 18f);    // dim blue capacitor face
-        // Capacitor top edge highlight — faint bright band indicating the charged surface
-        shapeRenderer.setColor(0.22f, 0.50f, 0.95f, 0.80f);
-        shapeRenderer.rect(centerX - 15f, 48f, 30f,  2f);    // top-edge glow band
-        // Capacitor bottom shadow
-        shapeRenderer.setColor(0.06f, 0.20f, 0.55f, 1f);
-        shapeRenderer.rect(centerX - 15f, 32f, 30f,  2f);    // bottom shadow band
-
-        // 4. Left conductor rail — perspective-tapered gunmetal bar with cyan top edge.
-        //    Base Y=58: outer CX-11, inner CX-5  (6px wide)
-        //    Muzzle Y=124: outer CX-7, inner CX-3  (4px wide, 0.65 factor: 11*0.65=7.15~7, 5*0.65=3.25~3)
-        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX - 11f, centerX - 5f, 58f,
-                                            centerX -  7f, centerX - 3f, 124f);
-        // Cyan top-edge highlight strip on rail (1-2px, runs full rail length)
-        shapeRenderer.setColor(0.20f, 0.75f, 1.00f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX - 11f, centerX - 10f, 58f,
-                                            centerX -  7f, centerX -  6f, 124f);
-        // Dark bottom-edge shadow strip on rail
-        shapeRenderer.setColor(0.24f, 0.27f, 0.34f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX -  6f, centerX -  5f, 58f,
-                                            centerX -  4f, centerX -  3f, 124f);
-
-        // 5. Right conductor rail — mirror of left
-        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX + 5f, centerX + 11f, 58f,
-                                            centerX + 3f, centerX +  7f, 124f);
-        // Cyan top-edge highlight
-        shapeRenderer.setColor(0.20f, 0.75f, 1.00f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX + 10f, centerX + 11f, 58f,
-                                            centerX +  6f, centerX +  7f, 124f);
-        // Dark bottom-edge shadow
-        shapeRenderer.setColor(0.24f, 0.27f, 0.34f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX +  5f, centerX +  6f, 58f,
-                                            centerX +  3f, centerX +  4f, 124f);
-
-        // 6. Rail gap shadow — dark channel between the two rails
-        //    Base: CX-5 to CX+5 (10px), Muzzle: CX-3 to CX+3 (6px)
-        shapeRenderer.setColor(0.06f, 0.07f, 0.10f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX - 5f, centerX + 5f, 58f,
-                                            centerX - 3f, centerX + 3f, 124f);
-
-        // 7. Cross-braces — thin steel rungs connecting the two rails at three intervals.
-        //    Width at each brace Y = interpolated full rail span (outer-left to outer-right).
-        //    At Y=78: t=(78-58)/(124-58)=0.303 → outer: 11*(1-0.35*0.303)=11*0.894=9.8~10px each side
-        //    At Y=98: t=(98-58)/(124-58)=0.606 → outer: 11*(1-0.35*0.606)=11*0.788=8.7~9px each side
-        //    At Y=116: t=(116-58)/(124-58)=0.879 → outer: 11*(1-0.35*0.879)=11*0.692=7.6~8px each side
-        shapeRenderer.setColor(0.36f, 0.40f, 0.48f, 1f);
-        shapeRenderer.rect(centerX - 10f, 78f, 20f, 3f);     // lower cross-brace
-        shapeRenderer.rect(centerX -  9f, 98f, 18f, 3f);     // middle cross-brace
-        shapeRenderer.rect(centerX -  8f, 116f, 16f, 2f);    // upper cross-brace
-        // Brace highlight top edges
-        shapeRenderer.setColor(0.48f, 0.52f, 0.60f, 1f);
-        shapeRenderer.rect(centerX - 10f, 80f, 20f, 1f);
-        shapeRenderer.rect(centerX -  9f, 100f, 18f, 1f);
-        shapeRenderer.rect(centerX -  8f, 117f, 16f, 1f);
-
-        // 8. Emitter point — bright energy disc between the rail tips at muzzle.
-        //    A small concentrated circle where the slug accelerates out.
-        shapeRenderer.setColor(0.18f, 0.22f, 0.32f, 1f);
-        shapeRenderer.ellipse(centerX - 4f, 119f, 8f, 6f);   // dark housing ring
-        shapeRenderer.setColor(0.20f, 0.65f, 1.00f, 0.90f);
-        shapeRenderer.ellipse(centerX - 3f, 120f, 6f, 5f);   // outer blue glow
-        shapeRenderer.setColor(0.80f, 0.92f, 1.00f, 1f);
-        shapeRenderer.ellipse(centerX - 2f, 121f, 4f, 4f);   // bright white-blue core
-
-        // 9. Muzzle caps — 2px bright steel band at barrel tip Y=124 spanning the rail tips.
-        //    Left rail muzzle width: outer CX-7 to inner CX-3 = 4px.
-        //    Right rail muzzle width: inner CX+3 to outer CX+7 = 4px.
-        //    NO bore ellipse: top-down view, rail tips face away, bore invisible.
-        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
-        shapeRenderer.rect(centerX - 7f, 124f, 4f, 2f);      // left rail muzzle cap
-        shapeRenderer.rect(centerX + 3f, 124f, 4f, 2f);      // right rail muzzle cap
-
-        // 10. Sight rail — a flat steel mounting bar running along the top of the receiver,
-        //     centered (Y=56..64, 8px wide). The angular top surface of this rail provides
-        //     the aiming reference for the weapon's precise hitscan nature.
-        shapeRenderer.setColor(0.32f, 0.36f, 0.46f, 1f);
-        shapeRenderer.rect(centerX - 4f, 56f, 8f, 8f);       // rail body
-        shapeRenderer.setColor(0.50f, 0.56f, 0.68f, 1f);
-        shapeRenderer.rect(centerX - 4f, 62f, 8f, 2f);       // rail far-edge highlight
+        // 3. Heat-sink fins — stepped dark vertical ribs on each receiver flank (Y=18..30).
+        //    Read as cooling ridges venting the coil bank's heat. Four ribs per side.
         shapeRenderer.setColor(0.16f, 0.18f, 0.26f, 1f);
-        shapeRenderer.rect(centerX - 4f, 56f, 8f, 2f);       // rail near-edge shadow
-        // Mounting screws — two symmetric dark dots on the rail
-        shapeRenderer.setColor(0.12f, 0.14f, 0.20f, 1f);
-        shapeRenderer.rect(centerX - 3f, 58f, 2f, 2f);       // left mounting screw
-        shapeRenderer.rect(centerX + 1f, 58f, 2f, 2f);       // right mounting screw
+        for (int finIndex = 0; finIndex < 4; finIndex++) {
+            float finOffsetX = 22f + finIndex * 5f;          // 22,27,32,37 px from center
+            shapeRenderer.rect(centerX - finOffsetX, 18f, 3f, 12f);  // left rib
+            shapeRenderer.rect(centerX + finOffsetX - 3f, 18f, 3f, 12f); // right rib
+        }
+        // Fin crest highlights — thin bright top edge selling raised ridges
+        shapeRenderer.setColor(0.40f, 0.46f, 0.58f, 1f);
+        for (int finIndex = 0; finIndex < 4; finIndex++) {
+            float finOffsetX = 22f + finIndex * 5f;
+            shapeRenderer.rect(centerX - finOffsetX, 28f, 3f, 2f);
+            shapeRenderer.rect(centerX + finOffsetX - 3f, 28f, 3f, 2f);
+        }
 
-        // 11. Blue power cell indicator lights — two small bright-blue LED windows on the
-        //     receiver flanks (Y=18..24), indicating remaining charge level.
-        shapeRenderer.setColor(0.12f, 0.16f, 0.28f, 1f);
-        shapeRenderer.rect(centerX - 28f, 18f, 10f, 6f);     // left indicator housing
-        shapeRenderer.rect(centerX + 18f, 18f, 10f, 6f);     // right indicator housing
-        shapeRenderer.setColor(0.10f, 0.45f, 0.90f, 1f);
-        shapeRenderer.rect(centerX - 26f, 20f, 6f, 4f);      // left indicator glow
-        shapeRenderer.rect(centerX + 20f, 20f, 6f, 4f);      // right indicator glow
-        shapeRenderer.setColor(0.40f, 0.80f, 1.00f, 0.70f);
-        shapeRenderer.rect(centerX - 26f, 22f, 6f, 2f);      // left indicator bright band
-        shapeRenderer.rect(centerX + 20f, 22f, 6f, 2f);      // right indicator bright band
+        // 4. Coil / capacitor bank — three stacked toroidal windings glowing electric cyan,
+        //    set into the receiver center (Y=26..58, ~40px wide). This is the signature
+        //    feature. Each torus = dark housing band + cyan winding + ice-white crest.
+        //    Static sprite shows the idle (dim-charged) state; runtime charge colouring
+        //    is layered separately.
+        shapeRenderer.setColor(0.14f, 0.18f, 0.28f, 1f);
+        shapeRenderer.rect(centerX - 20f, 26f, 40f, 32f);    // coil bank housing backing
+        // Three toroidal windings drawn bottom-to-top
+        for (int coilIndex = 0; coilIndex < 3; coilIndex++) {
+            float coilBaseY = 28f + coilIndex * 10f;         // 28, 38, 48
+            // Dark separating band below each torus
+            shapeRenderer.setColor(0.08f, 0.12f, 0.20f, 1f);
+            shapeRenderer.rect(centerX - 18f, coilBaseY, 36f, 2f);
+            // Cyan winding body
+            shapeRenderer.setColor(0.10f, 0.62f, 0.92f, 1f);
+            shapeRenderer.rect(centerX - 18f, coilBaseY + 2f, 36f, 5f);
+            // Ice-white crest highlight (top of torus catching light)
+            shapeRenderer.setColor(0.78f, 0.95f, 1.00f, 1f);
+            shapeRenderer.rect(centerX - 18f, coilBaseY + 6f, 36f, 1f);
+        }
+        // Coil bank side rails — vertical cyan glow strips binding the windings together
+        shapeRenderer.setColor(0.20f, 0.78f, 1.00f, 0.85f);
+        shapeRenderer.rect(centerX - 20f, 28f, 2f, 30f);     // left binding strip
+        shapeRenderer.rect(centerX + 18f, 28f, 2f, 30f);     // right binding strip
+
+        // 5. Emitter manifold — collar where the two rails leave the coil bank (Y=58..70).
+        //    A trapezoidal step narrowing from receiver width down to the rail span.
+        shapeRenderer.setColor(0.30f, 0.34f, 0.44f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 24f, 58f, 16f, 70f);
+        shapeRenderer.setColor(0.46f, 0.52f, 0.64f, 1f);
+        shapeRenderer.rect(centerX - 16f, 68f, 32f, 2f);     // manifold far-edge highlight
+
+        // 6. Left accelerator rail — heavy perspective-tapered gunmetal bar with cyan
+        //    top edge. Base Y=64: outer CX-14, inner CX-6 (8px). Muzzle Y=124: outer
+        //    CX-9, inner CX-4 (0.65 factor: 14*0.65=9.1~9, 6*0.65=3.9~4).
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 14f, centerX - 6f, 64f,
+                                            centerX -  9f, centerX - 4f, 124f);
+        // Cyan top-edge highlight strip (runs full rail length, tapered with same factor)
+        shapeRenderer.setColor(0.20f, 0.80f, 1.00f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 14f, centerX - 12f, 64f,
+                                            centerX -  9f, centerX -  8f, 124f);
+        // Dark inner-edge shadow strip
+        shapeRenderer.setColor(0.22f, 0.25f, 0.32f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX -  7f, centerX - 6f, 64f,
+                                            centerX -  5f, centerX - 4f, 124f);
+
+        // 7. Right accelerator rail — mirror of left
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX + 6f, centerX + 14f, 64f,
+                                            centerX + 4f, centerX +  9f, 124f);
+        // Cyan top-edge highlight
+        shapeRenderer.setColor(0.20f, 0.80f, 1.00f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX + 12f, centerX + 14f, 64f,
+                                            centerX +  8f, centerX +  9f, 124f);
+        // Dark inner-edge shadow
+        shapeRenderer.setColor(0.22f, 0.25f, 0.32f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX +  6f, centerX + 7f, 64f,
+                                            centerX +  4f, centerX + 5f, 124f);
+
+        // 8. Rail gap shadow — dark channel between the two rails.
+        //    Base: CX-6 to CX+6 (12px), Muzzle: CX-4 to CX+4 (8px).
+        shapeRenderer.setColor(0.05f, 0.06f, 0.09f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 6f, centerX + 6f, 64f,
+                                            centerX - 4f, centerX + 4f, 124f);
+
+        // 9. Energized cross-braces — cyan-lit rungs connecting the two rails at three
+        //    intervals. Each = dark steel rung + bright cyan energized top edge,
+        //    width interpolated to the tapering rail span at that Y.
+        //    Span half-width at Y: 14*(1 - (Y-64)/60 * 0.357)  (14→9 over rail length).
+        //    Y=80 → 13px;  Y=98 → 11px;  Y=114 → 10px (each side).
+        shapeRenderer.setColor(0.34f, 0.38f, 0.46f, 1f);
+        shapeRenderer.rect(centerX - 13f, 80f, 26f, 3f);     // lower brace
+        shapeRenderer.rect(centerX - 11f, 98f, 22f, 3f);     // middle brace
+        shapeRenderer.rect(centerX - 10f, 114f, 20f, 2f);    // upper brace
+        // Cyan energized top edges
+        shapeRenderer.setColor(0.18f, 0.80f, 1.00f, 0.90f);
+        shapeRenderer.rect(centerX - 13f, 82f, 26f, 1f);
+        shapeRenderer.rect(centerX - 11f, 100f, 22f, 1f);
+        shapeRenderer.rect(centerX - 10f, 115f, 20f, 1f);
+
+        // 10. Charged emitter node — layered energy node between the rail tips at muzzle.
+        //     Concentric: dark housing ring → outer cyan glow → bright white-cyan core.
+        shapeRenderer.setColor(0.12f, 0.16f, 0.26f, 1f);
+        shapeRenderer.ellipse(centerX - 6f, 116f, 12f, 8f);  // dark housing ring
+        shapeRenderer.setColor(0.16f, 0.70f, 1.00f, 0.92f);
+        shapeRenderer.ellipse(centerX - 4f, 117f, 8f, 6f);   // outer cyan glow
+        shapeRenderer.setColor(0.85f, 0.97f, 1.00f, 1f);
+        shapeRenderer.ellipse(centerX - 2f, 119f, 4f, 4f);   // bright white-cyan core
+
+        // 11. Muzzle caps — 2px bright steel band at rail tips (Y=124).
+        //     Left rail muzzle width: outer CX-9 to inner CX-4 = 5px.
+        //     Right rail muzzle width: inner CX+4 to outer CX+9 = 5px.
+        //     NO bore ellipse: top-down view, rail tips face away, bore invisible.
+        shapeRenderer.setColor(0.44f, 0.49f, 0.58f, 1f);
+        shapeRenderer.rect(centerX - 9f, 124f, 5f, 2f);      // left rail muzzle cap
+        shapeRenderer.rect(centerX + 4f, 124f, 5f, 2f);      // right rail muzzle cap
     }
 
     /**
@@ -2765,11 +2792,19 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     }
 
     /**
-     * Draws an electric discharge effect for the Railgun.
+     * Draws an electromagnetic discharge effect for the Railgun.
      *
-     * No flame — this is pure energy. A bright white-blue lance (tall and very narrow)
-     * shoots upward from the muzzle. Two crackling side arcs branch outward from the base.
-     * All elements fade and narrow as normalizedTime approaches 1.
+     * No flame — pure energy. The discharge has three coordinated parts:
+     *   1. An expanding recoil ring — a thin flattened cyan halo punched out at the muzzle,
+     *      growing outward as normalizedTime advances (kick-back shock front).
+     *   2. A crisp central lance — a razor-thin white-cyan bolt fired straight up, layered
+     *      from a soft blue halo to a pure-white hot core for a sharp readable spike.
+     *   3. Branching lightning arcs — two zig-zag bolts kinking outward from the muzzle,
+     *      built segment-by-segment from the static RAILGUN_BRANCH_JITTER_FRACTIONS table
+     *      (deterministic, no per-frame allocation).
+     *
+     * All elements fade as normalizedTime approaches 1; the lance narrows while the recoil
+     * ring expands (inverse timing) to sell the discharge front leaving the weapon.
      */
     private void renderRailgunEffect(OrthographicCamera camera, float normalizedTime) {
         float alpha         = 1f - normalizedTime;
@@ -2781,76 +2816,133 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         float lanceHalfBase = WeaponConstants.RAILGUN_EFFECT_LANCE_BASE_WIDTH / 2f * scale;
         float arcSpread     = WeaponConstants.RAILGUN_EFFECT_ARC_SPREAD * scale;
         float arcHeight     = WeaponConstants.RAILGUN_EFFECT_ARC_HEIGHT * scale;
+        // Recoil ring expands with normalizedTime (0 → full radius) rather than shrinking.
+        float ringRadius    = WeaponConstants.RAILGUN_EFFECT_RING_RADIUS * (0.30f + normalizedTime * 0.70f);
+        float ringThickness = WeaponConstants.RAILGUN_EFFECT_RING_THICKNESS;
+        float ringFlatten   = WeaponConstants.RAILGUN_EFFECT_RING_FLATTEN;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Outer electric glow halo — wide translucent blue cone
-        shapeRenderer.setColor(0.20f, 0.50f, 1.00f, alpha * 0.22f);
+        // 1. Recoil ring — flattened cyan halo expanding outward at the muzzle.
+        //    ShapeRenderer has no ring primitive, so the band is built from per-segment
+        //    quads around the perimeter. Each quad spans outer/inner radius across one
+        //    angular step; the two triangles share the outer-start→inner-end diagonal so
+        //    the winding stays consistent and the band is gap-free.
+        float ringInner = ringRadius - ringThickness;
+        shapeRenderer.setColor(0.30f, 0.78f, 1.00f, alpha * 0.45f);
+        int ringSegments = WeaponConstants.RAILGUN_EFFECT_RING_SEGMENTS;
+        for (int segmentIndex = 0; segmentIndex < ringSegments; segmentIndex++) {
+            float angleStartRadians = (float) (Math.PI * 2.0 * segmentIndex / ringSegments);
+            float angleEndRadians   = (float) (Math.PI * 2.0 * (segmentIndex + 1) / ringSegments);
+            float cosStart = (float) Math.cos(angleStartRadians);
+            float sinStart = (float) Math.sin(angleStartRadians);
+            float cosEnd   = (float) Math.cos(angleEndRadians);
+            float sinEnd   = (float) Math.sin(angleEndRadians);
+            float outerStartX = barrelX + cosStart * ringRadius;
+            float outerStartY = barrelY + sinStart * ringRadius * ringFlatten;
+            float outerEndX   = barrelX + cosEnd * ringRadius;
+            float outerEndY   = barrelY + sinEnd * ringRadius * ringFlatten;
+            float innerStartX = barrelX + cosStart * ringInner;
+            float innerStartY = barrelY + sinStart * ringInner * ringFlatten;
+            float innerEndX   = barrelX + cosEnd * ringInner;
+            float innerEndY   = barrelY + sinEnd * ringInner * ringFlatten;
+            shapeRenderer.triangle(outerStartX, outerStartY, outerEndX, outerEndY, innerEndX, innerEndY);
+            shapeRenderer.triangle(outerStartX, outerStartY, innerEndX, innerEndY, innerStartX, innerStartY);
+        }
+
+        // 2. Outer electric glow halo — soft wide translucent cyan cone behind the lance.
+        shapeRenderer.setColor(0.20f, 0.55f, 1.00f, alpha * 0.22f);
         shapeRenderer.triangle(
             barrelX - lanceHalfBase * 4.0f, barrelY,
             barrelX + lanceHalfBase * 4.0f, barrelY,
             barrelX,                         barrelY + lanceHeight * 0.80f
         );
 
-        // Left crackling side arc
-        shapeRenderer.setColor(0.40f, 0.70f, 1.00f, alpha * 0.58f);
-        shapeRenderer.triangle(
-            barrelX - lanceHalfBase * 1.5f, barrelY,
-            barrelX - lanceHalfBase * 0.5f, barrelY,
-            barrelX - arcSpread,             barrelY + arcHeight
-        );
-        // Left arc inner bright branch
-        shapeRenderer.setColor(0.70f, 0.88f, 1.00f, alpha * 0.72f);
-        shapeRenderer.triangle(
-            barrelX - lanceHalfBase * 1.0f, barrelY,
-            barrelX - lanceHalfBase * 0.3f, barrelY,
-            barrelX - arcSpread * 0.55f,    barrelY + arcHeight * 0.62f
-        );
+        // 3. Branching lightning arcs — zig-zag bolts kinking outward to each side.
+        //    Each branch advances upward in segments; lateral offset = base lean toward the
+        //    arc target plus a per-segment jitter kink from the static fractions table.
+        drawRailgunLightningBranch(barrelX, barrelY, -arcSpread, arcHeight, alpha);
+        drawRailgunLightningBranch(barrelX, barrelY, +arcSpread, arcHeight, alpha);
 
-        // Right crackling side arc
-        shapeRenderer.setColor(0.40f, 0.70f, 1.00f, alpha * 0.58f);
+        // 4. Main lance — crisp white-cyan, tall and very narrow.
+        shapeRenderer.setColor(0.55f, 0.85f, 1.00f, alpha * 0.85f);
         shapeRenderer.triangle(
-            barrelX + lanceHalfBase * 0.5f, barrelY,
-            barrelX + lanceHalfBase * 1.5f, barrelY,
-            barrelX + arcSpread,             barrelY + arcHeight
-        );
-        // Right arc inner bright branch
-        shapeRenderer.setColor(0.70f, 0.88f, 1.00f, alpha * 0.72f);
-        shapeRenderer.triangle(
-            barrelX + lanceHalfBase * 0.3f, barrelY,
-            barrelX + lanceHalfBase * 1.0f, barrelY,
-            barrelX + arcSpread * 0.55f,    barrelY + arcHeight * 0.62f
-        );
-
-        // Main lance — bright white-blue, tall and narrow
-        shapeRenderer.setColor(0.60f, 0.82f, 1.00f, alpha * 0.85f);
-        shapeRenderer.triangle(
-            barrelX - lanceHalfBase * 1.6f, barrelY,
-            barrelX + lanceHalfBase * 1.6f, barrelY,
+            barrelX - lanceHalfBase * 1.4f, barrelY,
+            barrelX + lanceHalfBase * 1.4f, barrelY,
             barrelX,                         barrelY + lanceHeight * 0.90f
         );
 
-        // Lance bright core — white with blue tint
-        shapeRenderer.setColor(0.88f, 0.95f, 1.00f, alpha * 0.92f);
+        // 5. Lance bright core — near-white with a faint cyan tint.
+        shapeRenderer.setColor(0.90f, 0.97f, 1.00f, alpha * 0.92f);
         shapeRenderer.triangle(
-            barrelX - lanceHalfBase * 0.8f, barrelY,
-            barrelX + lanceHalfBase * 0.8f, barrelY,
+            barrelX - lanceHalfBase * 0.7f, barrelY,
+            barrelX + lanceHalfBase * 0.7f, barrelY,
             barrelX,                         barrelY + lanceHeight
         );
 
-        // Hottest tip — pure white
-        shapeRenderer.setColor(1.00f, 1.00f, 1.00f, alpha * 0.78f);
+        // 6. Hottest tip — pure white, razor-thin.
+        shapeRenderer.setColor(1.00f, 1.00f, 1.00f, alpha * 0.80f);
         shapeRenderer.triangle(
-            barrelX - lanceHalfBase * 0.4f, barrelY,
-            barrelX + lanceHalfBase * 0.4f, barrelY,
-            barrelX,                         barrelY + lanceHeight * 0.70f
+            barrelX - lanceHalfBase * 0.32f, barrelY,
+            barrelX + lanceHalfBase * 0.32f, barrelY,
+            barrelX,                          barrelY + lanceHeight * 0.72f
         );
 
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    /**
+     * Draws a single zig-zag lightning branch for the railgun discharge as a chain of
+     * thin quads (two triangles each). The branch climbs from the muzzle to (lateralReach,
+     * verticalReach) in RAILGUN_EFFECT_BRANCH_SEGMENTS steps; each joint is kicked sideways
+     * by a deterministic jitter read from RAILGUN_BRANCH_JITTER_FRACTIONS (no allocation).
+     *
+     * @param originX        muzzle X in world units
+     * @param originY        muzzle Y in world units
+     * @param lateralReach   signed final horizontal offset of the branch tip (sign = side)
+     * @param verticalReach  final height of the branch tip above the muzzle
+     * @param alpha          current fade alpha (1 at fire start, 0 at end)
+     */
+    private void drawRailgunLightningBranch(float originX, float originY,
+                                            float lateralReach, float verticalReach, float alpha) {
+        int   segmentCount  = WeaponConstants.RAILGUN_EFFECT_BRANCH_SEGMENTS;
+        float jitter        = WeaponConstants.RAILGUN_EFFECT_BRANCH_JITTER;
+        float boltHalfWidth = WeaponConstants.RAILGUN_EFFECT_BOLT_HALF_WIDTH;
+
+        float previousX = originX;
+        float previousY = originY;
+        for (int segmentIndex = 1; segmentIndex <= segmentCount; segmentIndex++) {
+            float progress      = (float) segmentIndex / segmentCount;
+            float jitterFraction = RAILGUN_BRANCH_JITTER_FRACTIONS[segmentIndex % RAILGUN_BRANCH_JITTER_FRACTIONS.length];
+            // Tip snaps back to the straight target (no jitter) so the branch end is clean.
+            float kink          = (segmentIndex == segmentCount) ? 0f : jitterFraction * jitter;
+            float nextX         = originX + lateralReach * progress + kink;
+            float nextY         = originY + verticalReach * progress;
+
+            // Outer dim cyan glow stroke
+            shapeRenderer.setColor(0.40f, 0.72f, 1.00f, alpha * 0.55f);
+            shapeRenderer.triangle(previousX - boltHalfWidth, previousY,
+                                   previousX + boltHalfWidth, previousY,
+                                   nextX + boltHalfWidth, nextY);
+            shapeRenderer.triangle(previousX - boltHalfWidth, previousY,
+                                   nextX + boltHalfWidth, nextY,
+                                   nextX - boltHalfWidth, nextY);
+            // Inner bright white-cyan core stroke
+            shapeRenderer.setColor(0.82f, 0.95f, 1.00f, alpha * 0.78f);
+            shapeRenderer.triangle(previousX - boltHalfWidth * 0.45f, previousY,
+                                   previousX + boltHalfWidth * 0.45f, previousY,
+                                   nextX + boltHalfWidth * 0.45f, nextY);
+            shapeRenderer.triangle(previousX - boltHalfWidth * 0.45f, previousY,
+                                   nextX + boltHalfWidth * 0.45f, nextY,
+                                   nextX - boltHalfWidth * 0.45f, nextY);
+
+            previousX = nextX;
+            previousY = nextY;
+        }
     }
 
     /**

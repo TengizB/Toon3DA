@@ -130,11 +130,20 @@ public final class WeaponConstants {
     public static final float CHAINGUN_EFFECT_SPARK_SPREAD_X  = 70f;  // half-width of spark scatter
     public static final float CHAINGUN_EFFECT_SPARK_SPREAD_Y  = 80f;  // height of spark scatter
     public static final float CHAINGUN_EFFECT_SPARK_SIZE      = 5f;   // world units per spark square side
-    // Railgun — electric lance: no flame; narrow bright-white bolt with crackling side arcs
-    public static final float RAILGUN_EFFECT_LANCE_HEIGHT    = 220f;
-    public static final float RAILGUN_EFFECT_LANCE_BASE_WIDTH = 18f;
-    public static final float RAILGUN_EFFECT_ARC_SPREAD      = 60f;   // horizontal reach of side arcs
-    public static final float RAILGUN_EFFECT_ARC_HEIGHT      = 140f;  // vertical height of side arcs
+    // Railgun — electromagnetic discharge: crisp central lance, branching lightning, recoil ring
+    public static final float RAILGUN_EFFECT_LANCE_HEIGHT     = 250f;  // taller, sharper central bolt
+    public static final float RAILGUN_EFFECT_LANCE_BASE_WIDTH = 14f;   // narrower → crisper lance
+    public static final float RAILGUN_EFFECT_ARC_SPREAD       = 70f;   // horizontal reach of branching arcs
+    public static final float RAILGUN_EFFECT_ARC_HEIGHT       = 150f;  // vertical height of branching arcs
+    // Recoil ring — a thin expanding halo ring punched out at the muzzle on discharge
+    public static final float RAILGUN_EFFECT_RING_RADIUS      = 64f;   // outer radius of the recoil ring
+    public static final float RAILGUN_EFFECT_RING_THICKNESS   = 9f;    // ring band thickness
+    public static final float RAILGUN_EFFECT_RING_FLATTEN     = 0.40f; // vertical squash (top-down ellipse)
+    // Lightning branch geometry — number of segments per branching arc and lateral jitter
+    public static final int   RAILGUN_EFFECT_BRANCH_SEGMENTS   = 4;    // zig-zag segments per branch
+    public static final float RAILGUN_EFFECT_BRANCH_JITTER     = 16f;  // lateral kink magnitude per segment
+    public static final float RAILGUN_EFFECT_BOLT_HALF_WIDTH   = 2.2f; // half-thickness of each lightning bolt stroke
+    public static final int   RAILGUN_EFFECT_RING_SEGMENTS     = 24;   // perimeter segments of the recoil ring
     // Incinerator — large wide lingering flame; slower shrink so it fills more space
     public static final float INCINERATOR_EFFECT_FLAME_HEIGHT     = 130f;
     public static final float INCINERATOR_EFFECT_FLAME_BASE_WIDTH = 220f;
