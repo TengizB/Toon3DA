@@ -1990,42 +1990,69 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     /**
-     * Shotgun — pump-action long gun.
-     * Long thin barrel x=4..50. Pump fore-grip mid-barrel. Warm brown wood stock at right.
-     * Pistol grip drops below receiver. Trigger guard loop.
+     * Shotgun — pump-action combat long gun, side profile (muzzle left, stock right).
+     *
+     * Identity (distinct from the twin-tube double-barrel): a SINGLE barrel fitted with a
+     * ventilated heat-shield (a row of dark cooling slots over the barrel), a wide ribbed
+     * pump fore-grip below the barrel, a steel receiver with an ejection port, and a warm
+     * wood butt-stock with a pistol grip and trigger guard.
+     *
+     * Horizontal bands (64-wide canvas, x grows left→right):
+     *   Barrel + heat-shield  x= 2..44   muzzle at far left, shield slots on top
+     *   Pump fore-grip        x=18..36   ribbed slide hanging below the barrel
+     *   Receiver              x=42..58   ejection port cut into the right flank
+     *   Wood stock            x=56..62   butt-stock at far right
+     *   Pistol grip + guard   x=46..60   drops below the receiver
      */
     private static Texture generateWeaponShotgunGroundTexture() {
         int S = WEAPON_PICKUP_TEXTURE_SIZE;
         Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
         p.setColor(0f, 0f, 0f, 0f);
         p.fill();
-        // BARREL (long, thin)
-        p.setColor(0.28f, 0.28f, 0.30f, 1f); p.fillRectangle(4, 28, 46, 6);
-        p.setColor(0.40f, 0.40f, 0.42f, 1f); p.fillRectangle(4, 28, 46, 1); // top highlight
-        p.setColor(0.16f, 0.16f, 0.18f, 1f); p.fillRectangle(4, 33, 46, 1); // bottom shadow
-        p.setColor(0.46f, 0.46f, 0.48f, 1f); p.fillRectangle(4, 28, 2, 6);  // muzzle face
-        // PUMP FORE-GRIP (wraps barrel)
-        p.setColor(0.28f, 0.18f, 0.08f, 1f); p.fillRectangle(20, 25, 14, 12);
-        p.setColor(0.38f, 0.26f, 0.12f, 1f); p.fillRectangle(20, 25, 14, 1); // top highlight
-        p.setColor(0.18f, 0.10f, 0.04f, 1f); p.fillRectangle(20, 36, 14, 1); // bottom shadow
+        // BARREL (single long tube)
+        p.setColor(0.27f, 0.28f, 0.31f, 1f); p.fillRectangle(2, 27, 42, 8);
+        p.setColor(0.42f, 0.44f, 0.48f, 1f); p.fillRectangle(2, 27, 42, 1); // crown highlight
+        p.setColor(0.14f, 0.15f, 0.18f, 1f); p.fillRectangle(2, 34, 42, 1); // bottom shadow
+        p.setColor(0.50f, 0.52f, 0.56f, 1f); p.fillRectangle(2, 27, 2, 8);  // muzzle rim cap
+        // VENTILATED HEAT-SHIELD (cooling slots over the barrel — the pump-gun identity)
+        p.setColor(0.30f, 0.32f, 0.36f, 1f); p.fillRectangle(8, 24, 34, 4); // shield band
+        p.setColor(0.44f, 0.46f, 0.50f, 1f); p.fillRectangle(8, 24, 34, 1); // shield top highlight
+        p.setColor(0.05f, 0.05f, 0.06f, 1f);                                // cooling slots
+        p.fillRectangle(11, 25, 3, 2); p.fillRectangle(17, 25, 3, 2);
+        p.fillRectangle(23, 25, 3, 2); p.fillRectangle(29, 25, 3, 2);
+        p.fillRectangle(35, 25, 3, 2);
+        // FRONT BEAD SIGHT (raised post near the muzzle)
+        p.setColor(0.62f, 0.64f, 0.70f, 1f); p.fillRectangle(6, 22, 2, 3);
+        // PUMP FORE-GRIP (ribbed slide hanging below the barrel)
+        p.setColor(0.24f, 0.25f, 0.28f, 1f); p.fillRectangle(18, 35, 18, 9);
+        p.setColor(0.36f, 0.38f, 0.42f, 1f); p.fillRectangle(18, 35, 18, 1); // top highlight
+        p.setColor(0.12f, 0.13f, 0.15f, 1f); p.fillRectangle(18, 43, 18, 1); // bottom shadow
+        p.setColor(0.13f, 0.14f, 0.16f, 1f);                                 // grip ribs
+        p.fillRectangle(20, 37, 1, 6); p.fillRectangle(24, 37, 1, 6);
+        p.fillRectangle(28, 37, 1, 6); p.fillRectangle(32, 37, 1, 6);
         // RECEIVER
-        p.setColor(0.22f, 0.22f, 0.24f, 1f); p.fillRectangle(46, 23, 14, 16);
-        p.setColor(0.32f, 0.32f, 0.34f, 1f); p.fillRectangle(46, 23, 14, 1); // top highlight
-        p.setColor(0.12f, 0.12f, 0.14f, 1f); p.fillRectangle(46, 38, 14, 1); // bottom shadow
-        // WOOD STOCK (warm brown)
-        p.setColor(0.44f, 0.28f, 0.12f, 1f); p.fillRectangle(56, 21, 8, 20);
-        p.setColor(0.56f, 0.38f, 0.18f, 1f); p.fillRectangle(56, 21, 8, 1);  // top highlight
-        p.setColor(0.36f, 0.22f, 0.09f, 1f); // wood grain lines
-        p.fillRectangle(57, 25, 6, 1); p.fillRectangle(57, 29, 6, 1);
-        p.fillRectangle(57, 33, 6, 1); p.fillRectangle(57, 37, 6, 1);
+        p.setColor(0.22f, 0.23f, 0.26f, 1f); p.fillRectangle(42, 24, 16, 18);
+        p.setColor(0.34f, 0.36f, 0.40f, 1f); p.fillRectangle(42, 24, 16, 1); // top highlight
+        p.setColor(0.11f, 0.12f, 0.14f, 1f); p.fillRectangle(42, 41, 16, 1); // bottom shadow
+        // EJECTION PORT (dark recessed slot on the receiver flank)
+        p.setColor(0.06f, 0.07f, 0.09f, 1f); p.fillRectangle(45, 29, 10, 6);
+        p.setColor(0.40f, 0.42f, 0.48f, 1f); p.fillRectangle(45, 34, 10, 1); // port lower lip shine
+        // WOOD BUTT-STOCK (warm brown, far right)
+        p.setColor(0.44f, 0.28f, 0.12f, 1f); p.fillRectangle(56, 22, 6, 20);
+        p.setColor(0.56f, 0.38f, 0.18f, 1f); p.fillRectangle(56, 22, 6, 1);  // top highlight
+        p.setColor(0.34f, 0.20f, 0.08f, 1f);                                 // wood grain
+        p.fillRectangle(57, 26, 4, 1); p.fillRectangle(57, 30, 4, 1);
+        p.fillRectangle(57, 34, 4, 1); p.fillRectangle(57, 38, 4, 1);
         // PISTOL GRIP (drops below receiver)
-        p.setColor(0.30f, 0.20f, 0.08f, 1f); p.fillRectangle(48, 39, 12, 18);
-        p.setColor(0.20f, 0.12f, 0.04f, 1f); p.fillRectangle(48, 55, 12, 2); // bottom shadow
-        // TRIGGER GUARD
-        p.setColor(0.20f, 0.20f, 0.22f, 1f);
-        p.fillRectangle(46, 39, 2, 10); p.fillRectangle(46, 48, 14, 2); p.fillRectangle(58, 39, 2, 9);
-        // Cool-white shimmer
-        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(4, 28, 2, 2);
+        p.setColor(0.16f, 0.17f, 0.19f, 1f); p.fillRectangle(48, 42, 12, 16);
+        p.setColor(0.11f, 0.12f, 0.14f, 1f); p.fillRectangle(48, 56, 12, 2); // grip butt shadow
+        p.setColor(0.10f, 0.11f, 0.13f, 1f);                                 // grip checkering
+        p.fillRectangle(50, 46, 8, 1); p.fillRectangle(50, 50, 8, 1);
+        // TRIGGER GUARD (loop under the receiver)
+        p.setColor(0.20f, 0.21f, 0.24f, 1f);
+        p.fillRectangle(44, 42, 2, 9); p.fillRectangle(44, 50, 12, 2); p.fillRectangle(54, 42, 2, 8);
+        // Cool-white interactable shimmer (muzzle highlight)
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(2, 27, 2, 2);
         return finalize(p);
     }
 
