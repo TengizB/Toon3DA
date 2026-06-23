@@ -126,6 +126,10 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private boolean  visible        = false;
     private boolean  startRoomMode  = false;
     private boolean  loadoutFull    = false;
+    // True when the player already carries this weapon TYPE. Because the arsenal keeps one
+    // instance per type, the only valid action is a VARIANT SWAP (replace the held roll), never
+    // a second equip — so the card shows a single REPLACE button instead of slot rows / EQUIP.
+    private boolean  alreadyHeld    = false;
     private boolean  hasConvert     = false;
     private int      freeSlotIndex  = -1;
     private Loadout  loadout        = null;
@@ -236,12 +240,20 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
             loadoutFull   = true;
             freeSlotIndex = -1;
         }
+        alreadyHeld = (loadoutRef != null && arsenalWeapon != null
+                       && loadoutRef.slotIndexOf(arsenalWeapon) >= 0);
         activeSlotIndex = (loadoutRef != null) ? loadoutRef.getActiveSlotIndex() : 0;
+    }
+
+    /** True when the action zone shows a single full-width button rather than the SWAP slot rows. */
+    private boolean singleButtonMode() {
+        return !loadoutFull || alreadyHeld;
     }
 
     /** Closes the card and clears all held references. */
     public void hide() {
         visible      = false;
+        alreadyHeld  = false;
         loadout      = null;
         for (int lineIndex = 0; lineIndex < MAX_ABILITY_LINES; lineIndex++) {
             cachedAbilityLines[lineIndex]    = null;
@@ -272,8 +284,10 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
             return;
         }
 
-        if (!loadoutFull) {
-            // EQUIP button (free slot fast lane)
+        if (singleButtonMode()) {
+            // EQUIP (free slot) or REPLACE (already-held variant swap) — single full-width button.
+            // Both route through onEquipFreeSlot; World decides equip vs variant swap by checking
+            // whether the weapon type is already in the loadout.
             if (hitTest(worldX, worldY, EQUIP_BTN_X, EQUIP_BTN_Y, EQUIP_BTN_W, EQUIP_BTN_H)) {
                 if (onEquipFreeSlot != null) onEquipFreeSlot.run();
             }
@@ -342,8 +356,8 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         shapeRenderer.rect(CARD_X, ACTION_Y, CARD_W, ACTION_H);
 
         // Action zone content
-        if (!loadoutFull) {
-            shapeRenderer.setColor(BTN_EQUIP_COLOR);
+        if (singleButtonMode()) {
+            shapeRenderer.setColor(alreadyHeld ? BTN_SWAP_COLOR : BTN_EQUIP_COLOR);
             shapeRenderer.rect(EQUIP_BTN_X, EQUIP_BTN_Y, EQUIP_BTN_W, EQUIP_BTN_H);
         } else {
             renderSlotRowsFilled();
@@ -433,9 +447,13 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         shapeRenderer.line(CARD_X, ACTION_TOP, CARD_RIGHT, ACTION_TOP);
         shapeRenderer.line(CARD_X, FOOTER_TOP, CARD_RIGHT, FOOTER_TOP);
 
-        // Action zone: EQUIP border or slot row borders
-        if (!loadoutFull) {
-            shapeRenderer.setColor(GREEN_COLOR);
+        // Action zone: EQUIP / REPLACE border or slot row borders
+        if (singleButtonMode()) {
+            if (alreadyHeld) {
+                shapeRenderer.setColor(AMBER_COLOR);
+            } else {
+                shapeRenderer.setColor(GREEN_COLOR);
+            }
             shapeRenderer.rect(EQUIP_BTN_X, EQUIP_BTN_Y, EQUIP_BTN_W, EQUIP_BTN_H);
         } else {
             renderSlotRowsLines();
@@ -591,12 +609,19 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     }
 
     private void drawActionZone() {
-        if (!loadoutFull) {
-            // Free slot: big EQUIP button label
-            String equipLabel = startRoomMode ? "CHOOSE THIS WEAPON" : "EQUIP  →  SLOT " + (freeSlotIndex + 1);
-            glyphLayout.setText(font, equipLabel);
-            font.setColor(GREEN_COLOR);
-            font.draw(spriteBatch, equipLabel,
+        if (singleButtonMode()) {
+            // Single full-width button: REPLACE when the type is already held, otherwise EQUIP.
+            String actionLabel;
+            if (alreadyHeld) {
+                actionLabel = "SWAP  →  REPLACE HELD";
+            } else if (startRoomMode) {
+                actionLabel = "CHOOSE THIS WEAPON";
+            } else {
+                actionLabel = "EQUIP  →  SLOT " + (freeSlotIndex + 1);
+            }
+            glyphLayout.setText(font, actionLabel);
+            font.setColor(alreadyHeld ? AMBER_COLOR : GREEN_COLOR);
+            font.draw(spriteBatch, actionLabel,
                       EQUIP_BTN_X + (EQUIP_BTN_W - glyphLayout.width) / 2f,
                       EQUIP_BTN_Y + (EQUIP_BTN_H + glyphLayout.height) / 2f);
         } else {

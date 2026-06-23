@@ -195,7 +195,9 @@ final class AbilityWindow implements Disposable {
         spriteBatch.setProjectionMatrix(camera.combined);
         spriteBatch.begin();
 
-        // Ability name (amber, left-aligned in header)
+        // Ability name (amber, left-aligned in header) — explicitly scaled so it does not
+        // inherit a leaked scale from a previously-rendered window sharing this font.
+        font.getData().setScale(FONT_SCALE);
         font.setColor(AMBER);
         font.draw(spriteBatch, displayedInstance.ability.displayName,
                   WIN_X + PAD,
@@ -212,12 +214,14 @@ final class AbilityWindow implements Disposable {
                   BADGE_Y + (BADGE_H + glyphLayout.height) / 2f);
         font.getData().setScale(1f);
 
-        // Exit button "X"
+        // Exit button "X" — scaled to match window (previously drawn at base 1f, too small)
+        font.getData().setScale(FONT_SCALE);
         font.setColor(EXIT_TEXT);
         glyphLayout.setText(font, "X");
         font.draw(spriteBatch, "X",
                   EXIT_X + (EXIT_SIZE - glyphLayout.width)  / 2f,
                   EXIT_Y + (EXIT_SIZE + glyphLayout.height) / 2f);
+        font.getData().setScale(1f);
 
         // Full description text — pre-built with exact numbers in open()
         float descX = WIN_X + PAD;

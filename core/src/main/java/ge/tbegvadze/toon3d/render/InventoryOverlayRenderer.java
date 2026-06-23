@@ -326,6 +326,9 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         spriteBatch.setProjectionMatrix(camera.combined);
         spriteBatch.begin();
 
+        // Header labels are scaled up for phone readability; reset to 1f before end().
+        font.getData().setScale(ItemConstants.INV_HEADER_FONT_SCALE);
+
         // "INVENTORY" title — left-aligned in header
         font.setColor(AMBER);
         font.draw(spriteBatch, "INVENTORY",
@@ -361,6 +364,8 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                   HEADER_EXIT_X + (ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE - glyphLayout.width)  / 2f,
                   HEADER_EXIT_Y + (ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE + glyphLayout.height) / 2f);
 
+        // Reset so popups (ItemWindow / AbilityWindow) sharing this font are not oversized.
+        font.getData().setScale(1f);
         spriteBatch.end();
     }
 

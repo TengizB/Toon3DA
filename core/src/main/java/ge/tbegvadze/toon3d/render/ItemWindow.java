@@ -483,10 +483,13 @@ final class ItemWindow implements Disposable {
         ItemStack slot = inventory.getSlot(slotIndex);
 
         if (slot.isEmpty()) {
+            font.getData().setScale(FONT_SCALE);
             font.setColor(TEXT_DIM);
+            glyphLayout.setText(font, "— EMPTY SLOT —");
             font.draw(spriteBatch, "— EMPTY SLOT —",
-                      WINDOW_X + WINDOW_W / 2f - 48f,
+                      WINDOW_X + (WINDOW_W - glyphLayout.width) / 2f,
                       WINDOW_Y + WINDOW_H / 2f);
+            font.getData().setScale(1f);
             renderFooterButtons(null, false);
             spriteBatch.end();
             return;
@@ -508,9 +511,12 @@ final class ItemWindow implements Disposable {
     private void renderTextForWeapon() {
         ItemType itemType = currentWeapon.getItemType();
         if (itemType == null) {
+            font.getData().setScale(FONT_SCALE);
             font.setColor(TEXT_DIM);
+            glyphLayout.setText(font, "— UNKNOWN WEAPON —");
             font.draw(spriteBatch, "— UNKNOWN WEAPON —",
-                      WINDOW_X + WINDOW_W / 2f - 60f, WINDOW_Y + WINDOW_H / 2f);
+                      WINDOW_X + (WINDOW_W - glyphLayout.width) / 2f, WINDOW_Y + WINDOW_H / 2f);
+            font.getData().setScale(1f);
             return;
         }
         renderHeader(itemType, weaponIsActive);
@@ -582,12 +588,14 @@ final class ItemWindow implements Disposable {
         font.draw(spriteBatch, categoryBadge(itemType), NAME_X, nameY - ItemConstants.INV_ITEM_WIN_HEADER_NAME_GAP);
         font.getData().setScale(1f);
 
-        // Exit button "X"
+        // Exit button "X" — scaled to match the rest of the window (was drawn at base 1f, too small)
+        font.getData().setScale(FONT_SCALE);
         font.setColor(EXIT_BTN_TEXT);
         glyphLayout.setText(font, "X");
         font.draw(spriteBatch, "X",
                   EXIT_X + (EXIT_SIZE - glyphLayout.width)  / 2f,
                   EXIT_Y + (EXIT_SIZE + glyphLayout.height) / 2f);
+        font.getData().setScale(1f);
     }
 
     private void renderBodyLeft(ItemType itemType, ItemStack slot, boolean isEquipped) {
@@ -762,6 +770,8 @@ final class ItemWindow implements Disposable {
     }
 
     private void renderFooterButtons(ItemType itemType, boolean isEquipped) {
+        // Footer labels are scaled to match the window (previously drawn at base 1f, too small).
+        font.getData().setScale(FONT_SCALE);
         boolean btn1On = isButton1Enabled();
         String  btn1Label = itemType != null ? button1Label(itemType.getCategory(), isEquipped) : "—";
 
@@ -777,15 +787,18 @@ final class ItemWindow implements Disposable {
         font.draw(spriteBatch, "DROP",
                   BTN2_X + (BTN_W - glyphLayout.width)  / 2f,
                   BTN_Y  + (BTN_H + glyphLayout.height) / 2f);
+        font.getData().setScale(1f);
     }
 
     private void renderFlashMessage() {
         if (flashTimerSeconds <= 0f || flashMessage == null) return;
+        font.getData().setScale(FONT_SCALE);
         font.setColor(RED_FLASH);
         glyphLayout.setText(font, flashMessage);
         font.draw(spriteBatch, flashMessage,
                   WINDOW_X + (WINDOW_W - glyphLayout.width) / 2f,
                   BTN_Y + BTN_H + 12f);
+        font.getData().setScale(1f);
     }
 
     // =========================================================================

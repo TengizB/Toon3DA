@@ -120,6 +120,20 @@ public final class Loadout {
         return slots[slotIndex];
     }
 
+    /**
+     * Returns the index of the slot currently holding the exact given weapon reference,
+     * or -1 when the weapon is not present in any slot. Identity comparison (==) is used
+     * because the arsenal keeps a single instance per weapon type, so a matching reference
+     * means "this weapon is already in the loadout".
+     */
+    public int slotIndexOf(Weapon weapon) {
+        if (weapon == null) return -1;
+        for (int slotIndex = 0; slotIndex < slots.length; slotIndex++) {
+            if (slots[slotIndex] == weapon) return slotIndex;
+        }
+        return -1;
+    }
+
     public int     getActiveSlotIndex() { return activeSlotIndex; }
     public int     getSlotCount()       { return slots.length; }
 
