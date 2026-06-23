@@ -1172,21 +1172,101 @@ public class PropRenderer implements Renderable, Disposable {
         return finalize(pixmap);
     }
 
+    // ── Organic decal helpers ──────────────────────────────────────────────
+    // Builds an irregular organic blob by stacking jittered filled circles, so
+    // gore / blood / oil pools get ragged natural edges instead of a hard box.
+    // The blob is squashed slightly in Y to read as a puddle on a perspective floor.
+    private static void organicBlob(Pixmap pixmap, java.util.Random random,
+                                    int centerX, int centerY, int baseRadius, int lobeCount,
+                                    float red, float green, float blue, float alpha) {
+        pixmap.setColor(red, green, blue, alpha);
+        for (int lobeIndex = 0; lobeIndex < lobeCount; lobeIndex++) {
+            int offsetX    = Math.round((random.nextFloat() - 0.5f) * baseRadius * 1.7f);
+            int offsetY    = Math.round((random.nextFloat() - 0.5f) * baseRadius * 1.0f);
+            int lobeRadius = Math.max(1, Math.round(baseRadius * (0.35f + random.nextFloat() * 0.65f)));
+            pixmap.fillCircle(centerX + offsetX, centerY + offsetY, lobeRadius);
+        }
+    }
+
+    // Scatters small round droplets in a flattened radial spray around a point —
+    // the cast-off spatter that rings a fresh wound, splash, or impact.
+    private static void scatterDroplets(Pixmap pixmap, java.util.Random random,
+                                        int centerX, int centerY, int spreadRadius, int dropletCount,
+                                        float red, float green, float blue) {
+        pixmap.setColor(red, green, blue, 1f);
+        for (int dropletIndex = 0; dropletIndex < dropletCount; dropletIndex++) {
+            float angleRadians = random.nextFloat() * MathUtils.PI2;
+            float distance     = spreadRadius * (0.45f + random.nextFloat() * 0.55f);
+            int dropletRadius  = random.nextInt(2) + 1;
+            int dropletX = centerX + Math.round(MathUtils.cos(angleRadians) * distance);
+            int dropletY = centerY + Math.round(MathUtils.sin(angleRadians) * distance * 0.55f);
+            // Keep the whole droplet inside the pixmap so spatter never clips at the tile edge.
+            dropletX = MathUtils.clamp(dropletX, dropletRadius, pixmap.getWidth()  - 1 - dropletRadius);
+            dropletY = MathUtils.clamp(dropletY, dropletRadius, pixmap.getHeight() - 1 - dropletRadius);
+            pixmap.fillCircle(dropletX, dropletY, dropletRadius);
+        }
+    }
+
+    // Corpse decal ('m') — a flattened mess of blood and torn flesh: a wide dark
+    // pool, clotted gore mass, exposed pink muscle chunks, splintered bone shards,
+    // and glossy fresh-blood specular flecks, ringed by cast-off spatter.
     private static Texture generateCorpseTexture() {
-        Pixmap pixmap = new Pixmap(96, 48, Pixmap.Format.RGBA8888);
+        Pixmap pixmap = new Pixmap(128, 64, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Crumpled body silhouette: dark reddish-brown
-        pixmap.setColor(0.22f, 0.08f, 0.08f, 1f);
-        pixmap.fillRectangle(4, 12, 88, 24);
-        // Head
-        pixmap.fillRectangle(76, 8, 16, 30);
-        // Arm suggestion
-        pixmap.setColor(0.18f, 0.06f, 0.06f, 1f);
-        pixmap.fillRectangle(4, 8, 40, 8);
-        // Blood pool
-        pixmap.setColor(0.45f, 0.02f, 0.02f, 1f);
-        pixmap.fillRectangle(2, 34, 60, 8);
+        java.util.Random random = new java.util.Random(0xB10D9011EAD7L);
+        int poolCenterX = 60;
+        int poolCenterY = 40;
+
+        // Far cast-off spatter — drawn first so the pool mass overlaps the inner drops.
+        scatterDroplets(pixmap, random, poolCenterX, 34, 58, 70, 0.30f, 0.02f, 0.02f);
+        // Wide thin blood pool spreading on the floor (darkest, broadest).
+        organicBlob(pixmap, random, poolCenterX, poolCenterY, 30, 22, 0.26f, 0.02f, 0.02f, 1f);
+        // Brighter wet pool interior.
+        organicBlob(pixmap, random, poolCenterX, poolCenterY, 22, 18, 0.40f, 0.03f, 0.03f, 1f);
+        // Clotted gore mass — the body remains, dark maroon, sitting higher (smaller Y).
+        organicBlob(pixmap, random, 58, 30, 24, 20, 0.20f, 0.04f, 0.05f, 1f);
+        organicBlob(pixmap, random, 78, 26, 14, 12, 0.17f, 0.03f, 0.04f, 1f);
+        // Torn flesh chunks — exposed pink muscle scattered across the mass.
+        pixmap.setColor(0.56f, 0.20f, 0.22f, 1f);
+        for (int chunkIndex = 0; chunkIndex < 9; chunkIndex++) {
+            int chunkX = 36 + random.nextInt(64);
+            int chunkY = 18 + random.nextInt(26);
+            pixmap.fillCircle(chunkX, chunkY, random.nextInt(3) + 2);
+        }
+        // Brighter muscle striations / fresh meat highlights.
+        pixmap.setColor(0.66f, 0.26f, 0.26f, 1f);
+        for (int striationIndex = 0; striationIndex < 7; striationIndex++) {
+            int striationX = 40 + random.nextInt(56);
+            int striationY = 20 + random.nextInt(22);
+            pixmap.fillCircle(striationX, striationY, 1 + random.nextInt(2));
+        }
+        // Darkest congealed clots pocked through the gore.
+        pixmap.setColor(0.11f, 0.02f, 0.03f, 1f);
+        for (int clotIndex = 0; clotIndex < 8; clotIndex++) {
+            int clotX = 40 + random.nextInt(56);
+            int clotY = 20 + random.nextInt(24);
+            pixmap.fillCircle(clotX, clotY, 1 + random.nextInt(3));
+        }
+        // Splintered bone shards — pale angular fragments with a dark seated edge.
+        for (int boneIndex = 0; boneIndex < 4; boneIndex++) {
+            int boneX = 46 + random.nextInt(48);
+            int boneY = 22 + random.nextInt(16);
+            int boneLength = 4 + random.nextInt(5);
+            pixmap.setColor(0.10f, 0.06f, 0.06f, 1f);
+            pixmap.fillRectangle(boneX - 1, boneY - 1, boneLength + 2, 4);
+            pixmap.setColor(0.84f, 0.79f, 0.66f, 1f);
+            pixmap.fillRectangle(boneX, boneY, boneLength, 2);
+        }
+        // Glossy fresh-blood specular flecks — the wet sheen catching light.
+        pixmap.setColor(0.72f, 0.12f, 0.12f, 1f);
+        for (int sheenIndex = 0; sheenIndex < 12; sheenIndex++) {
+            pixmap.drawPixel(38 + random.nextInt(60), 22 + random.nextInt(22));
+        }
+        pixmap.setColor(0.88f, 0.55f, 0.55f, 1f);
+        for (int glintIndex = 0; glintIndex < 5; glintIndex++) {
+            pixmap.drawPixel(44 + random.nextInt(50), 24 + random.nextInt(16));
+        }
         return finalize(pixmap);
     }
 
@@ -1206,36 +1286,85 @@ public class PropRenderer implements Renderable, Disposable {
         return finalize(pixmap);
     }
 
+    // Blood stain ('.') — an irregular pooled splatter: a dark dried rim, a wetter
+    // red body, a near-black congealed centre, glossy specular highlights, and a
+    // radial spray of cast-off droplets thrown outward from the impact.
     private static Texture generateBloodTexture() {
-        Pixmap pixmap = new Pixmap(64, 32, Pixmap.Format.RGBA8888);
+        Pixmap pixmap = new Pixmap(96, 48, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Main splatter pool
-        pixmap.setColor(0.45f, 0.02f, 0.02f, 1f);
-        pixmap.fillRectangle(8, 8, 48, 16);
-        // Splatter drops
-        pixmap.fillRectangle(2,  4,  10, 10);
-        pixmap.fillRectangle(54, 6,  8,  8);
-        pixmap.fillRectangle(20, 2,  14, 6);
-        pixmap.fillRectangle(40, 20, 16, 8);
-        // Darker centre
-        pixmap.setColor(0.30f, 0.01f, 0.01f, 1f);
-        pixmap.fillRectangle(18, 10, 28, 12);
+        java.util.Random random = new java.util.Random(0x5318DEADL);
+        int centerX = 48;
+        int centerY = 24;
+
+        // Outer cast-off droplet spray (under the pool so the body overlaps inner drops).
+        scatterDroplets(pixmap, random, centerX, centerY, 44, 46, 0.34f, 0.02f, 0.02f);
+        // Dried, darkened outer rim of the pool.
+        organicBlob(pixmap, random, centerX, centerY, 22, 18, 0.24f, 0.02f, 0.02f, 1f);
+        // Wet red body of the splatter.
+        organicBlob(pixmap, random, centerX, centerY, 17, 16, 0.44f, 0.03f, 0.03f, 1f);
+        // Congealed near-black centre where the blood pooled deepest.
+        organicBlob(pixmap, random, centerX, centerY, 9, 10, 0.18f, 0.01f, 0.01f, 1f);
+        // A couple of thin trailing smears running off the main pool.
+        pixmap.setColor(0.30f, 0.02f, 0.02f, 1f);
+        for (int smearIndex = 0; smearIndex < 3; smearIndex++) {
+            float angleRadians = random.nextFloat() * MathUtils.PI2;
+            int endX = centerX + Math.round(MathUtils.cos(angleRadians) * (24 + random.nextInt(14)));
+            int endY = centerY + Math.round(MathUtils.sin(angleRadians) * (10 + random.nextInt(6)));
+            pixmap.drawLine(centerX, centerY, endX, endY);
+        }
+        // Glossy wet-sheen specular flecks catching the light.
+        pixmap.setColor(0.66f, 0.10f, 0.10f, 1f);
+        for (int sheenIndex = 0; sheenIndex < 9; sheenIndex++) {
+            pixmap.drawPixel(centerX - 14 + random.nextInt(28), centerY - 8 + random.nextInt(16));
+        }
+        pixmap.setColor(0.82f, 0.45f, 0.45f, 1f);
+        pixmap.drawPixel(centerX - 4, centerY - 3);
+        pixmap.drawPixel(centerX + 3, centerY + 2);
         return finalize(pixmap);
     }
 
+    // Oil / fluid pool ('O') — a viscous near-black puddle with a glossy reflective
+    // surface: an iridescent rainbow sheen swirling across the body, bright specular
+    // highlights for the wet gloss, and a thin lighter meniscus around the rim.
     private static Texture generateOilTexture() {
-        Pixmap pixmap = new Pixmap(64, 32, Pixmap.Format.RGBA8888);
+        Pixmap pixmap = new Pixmap(96, 48, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Oil pool — dark teal with slight iridescent highlight bands
-        pixmap.setColor(0.04f, 0.14f, 0.14f, 1f);
-        pixmap.fillRectangle(6, 6, 52, 20);
-        // Iridescent sheen bands
-        pixmap.setColor(0.08f, 0.25f, 0.30f, 1f);
-        pixmap.fillRectangle(10, 8,  18, 4);
-        pixmap.setColor(0.12f, 0.18f, 0.35f, 1f);
-        pixmap.fillRectangle(34, 12, 16, 4);
+        java.util.Random random = new java.util.Random(0x011CAFEL);
+        int centerX = 48;
+        int centerY = 24;
+
+        // Stray flung droplets around the pool.
+        scatterDroplets(pixmap, random, centerX, centerY, 42, 28, 0.05f, 0.07f, 0.08f);
+        // Lighter meniscus / outer film of the spreading pool.
+        organicBlob(pixmap, random, centerX, centerY, 24, 18, 0.08f, 0.10f, 0.11f, 1f);
+        // Deep viscous near-black body.
+        organicBlob(pixmap, random, centerX, centerY, 19, 18, 0.03f, 0.04f, 0.05f, 1f);
+
+        // Iridescent rainbow sheen — translucent swirls of shifting hue across the surface.
+        float[][] sheenPalette = {
+                {0.45f, 0.12f, 0.55f},  // violet
+                {0.10f, 0.25f, 0.62f},  // blue
+                {0.10f, 0.55f, 0.45f},  // teal-green
+                {0.62f, 0.45f, 0.12f},  // amber
+        };
+        for (int swirlIndex = 0; swirlIndex < 16; swirlIndex++) {
+            float[] hue = sheenPalette[random.nextInt(sheenPalette.length)];
+            int swirlX = centerX - 16 + random.nextInt(32);
+            int swirlY = centerY - 8 + random.nextInt(16);
+            int swirlRadius = 2 + random.nextInt(4);
+            pixmap.setColor(hue[0], hue[1], hue[2], 0.30f);
+            pixmap.fillCircle(swirlX, swirlY, swirlRadius);
+        }
+        // Bright wet specular highlights — the gloss reflecting overhead light.
+        pixmap.setColor(0.55f, 0.70f, 0.80f, 0.55f);
+        for (int glossIndex = 0; glossIndex < 6; glossIndex++) {
+            pixmap.fillCircle(centerX - 12 + random.nextInt(24), centerY - 6 + random.nextInt(10), 1);
+        }
+        pixmap.setColor(0.85f, 0.92f, 1.0f, 0.7f);
+        pixmap.drawPixel(centerX - 8, centerY - 4);
+        pixmap.drawPixel(centerX + 6, centerY + 3);
         return finalize(pixmap);
     }
 
@@ -1988,29 +2117,69 @@ public class PropRenderer implements Renderable, Disposable {
         return finalize(pixmap);
     }
 
+    // Energy scorch ('e') — a plasma burn crater: soot streaks radiating outward, a
+    // charred blackened core, glowing ember cracks, jagged electric-blue arc filaments
+    // crawling from the impact, and a hot white-blue molten centre.
     private static Texture generateEnergyScorchTexture() {
-        Pixmap pixmap = new Pixmap(64, 64, Pixmap.Format.RGBA8888);
+        Pixmap pixmap = new Pixmap(80, 80, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Outer desaturated scorch ring
-        pixmap.setColor(0.20f, 0.18f, 0.16f, 1f);
-        pixmap.fillRectangle(6, 6, 52, 52);
-        // Blackened centre
-        pixmap.setColor(0.05f, 0.05f, 0.06f, 1f);
-        pixmap.fillRectangle(14, 14, 36, 36);
-        // Radiating electric-blue arc filaments from centre
-        pixmap.setColor(0.40f, 0.75f, 1.00f, 1f);
-        for (int step = 0; step < 20; step++) {
-            pixmap.drawPixel(32 + step,          32 - step);
-            pixmap.drawPixel(32 - step,          32 - step);
-            pixmap.drawPixel(32 + step,          32 + step / 2);
-            pixmap.drawPixel(32 - step,          32 + step / 2);
+        java.util.Random random = new java.util.Random(0x5C04C4ED1L);
+        int centerX = 40;
+        int centerY = 40;
+
+        // Radial soot streaks feathering out from the blast.
+        pixmap.setColor(0.15f, 0.13f, 0.12f, 1f);
+        for (int streakIndex = 0; streakIndex < 30; streakIndex++) {
+            float angleRadians = random.nextFloat() * MathUtils.PI2;
+            float length = 22f + random.nextFloat() * 15f;
+            int endX = centerX + Math.round(MathUtils.cos(angleRadians) * length);
+            int endY = centerY + Math.round(MathUtils.sin(angleRadians) * length);
+            pixmap.drawLine(centerX, centerY, endX, endY);
         }
-        // Hot white flecks at burn centre
-        pixmap.setColor(0.90f, 0.96f, 1.00f, 1f);
-        pixmap.fillRectangle(30, 30, 4, 4);
-        pixmap.fillRectangle(28, 28, 2, 2);
-        pixmap.fillRectangle(34, 34, 2, 2);
+        // Outer desaturated scorch ring.
+        organicBlob(pixmap, random, centerX, centerY, 27, 20, 0.19f, 0.16f, 0.15f, 1f);
+        // Mid charred ring.
+        organicBlob(pixmap, random, centerX, centerY, 18, 16, 0.09f, 0.08f, 0.09f, 1f);
+        // Blackened crater core.
+        organicBlob(pixmap, random, centerX, centerY, 11, 12, 0.03f, 0.03f, 0.05f, 1f);
+
+        // Glowing ember cracks radiating from the molten core.
+        pixmap.setColor(0.95f, 0.42f, 0.10f, 1f);
+        for (int crackIndex = 0; crackIndex < 9; crackIndex++) {
+            float angleRadians = random.nextFloat() * MathUtils.PI2;
+            float length = 9f + random.nextFloat() * 11f;
+            int endX = centerX + Math.round(MathUtils.cos(angleRadians) * length);
+            int endY = centerY + Math.round(MathUtils.sin(angleRadians) * length);
+            pixmap.drawLine(centerX, centerY, endX, endY);
+        }
+        // Soft hot ember glow over the core.
+        pixmap.setColor(1.0f, 0.62f, 0.20f, 0.75f);
+        pixmap.fillCircle(centerX, centerY, 5);
+
+        // Jagged electric-blue arc filaments crawling outward in stepped segments.
+        pixmap.setColor(0.45f, 0.78f, 1.0f, 1f);
+        for (int arcIndex = 0; arcIndex < 7; arcIndex++) {
+            float baseAngleRadians = random.nextFloat() * MathUtils.PI2;
+            int previousX = centerX;
+            int previousY = centerY;
+            for (int segment = 1; segment <= 5; segment++) {
+                float radius        = segment * (5f + random.nextFloat() * 2f);
+                float wobbleRadians  = (random.nextFloat() - 0.5f) * 0.7f;
+                float segmentAngle  = baseAngleRadians + wobbleRadians;
+                int nextX = centerX + Math.round(MathUtils.cos(segmentAngle) * radius);
+                int nextY = centerY + Math.round(MathUtils.sin(segmentAngle) * radius);
+                pixmap.drawLine(previousX, previousY, nextX, nextY);
+                previousX = nextX;
+                previousY = nextY;
+            }
+        }
+        // Hot white-blue molten flecks at the burn centre.
+        pixmap.setColor(0.90f, 0.96f, 1.0f, 1f);
+        pixmap.fillCircle(centerX, centerY, 3);
+        for (int fleckIndex = 0; fleckIndex < 5; fleckIndex++) {
+            pixmap.drawPixel(centerX - 4 + random.nextInt(9), centerY - 4 + random.nextInt(9));
+        }
         return finalize(pixmap);
     }
 
