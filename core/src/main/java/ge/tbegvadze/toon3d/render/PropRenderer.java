@@ -1463,102 +1463,145 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     // UAC Interdimensional Rift Portal ('>') — full-height gateway standing as tall as walls.
-    // Dark steel frame with bevel, swirling concentric energy rings (void-core → indigo → electric
-    // blue → cyan → near-white edge flash), corner energy nodes, vertical conduit lines on the
-    // frame sides, top energy emitters, and UAC hazard chevrons at the base. Beacon visible from
-    // the far end of any corridor.
+    // High-resolution 192×256 render: gradient-bevelled steel frame with rivets and a recessed
+    // inner channel, a swirling 3-arm energy vortex (void-core → indigo → deep blue → electric
+    // blue → cyan → near-white edge flash) carved by an event-horizon dark ring and fine
+    // concentric shimmer rings, glowing corner energy nodes, segmented vertical conduits, a row of
+    // top discharge emitters, and diagonal UAC hazard chevrons at the base. Beacon visible from the
+    // far end of any corridor; the 3:4 aspect ratio matches the previous 48×64 sprite exactly.
     private static Texture generatePortalTexture() {
-        int textureWidth  = 48;
-        int textureHeight = 64;
+        int textureWidth  = 192;
+        int textureHeight = 256;
         Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
 
-        // --- Steel frame base ---
-        pixmap.setColor(0.17f, 0.18f, 0.22f, 1f);
-        pixmap.fill();
+        // --- Steel frame base with a diagonal brushed gradient (lighter top-left) ---
+        for (int pixelRow = 0; pixelRow < textureHeight; pixelRow++) {
+            for (int pixelColumn = 0; pixelColumn < textureWidth; pixelColumn++) {
+                float diagonal = (pixelColumn + pixelRow) / (float)(textureWidth + textureHeight);
+                float brushNoise = (portalNoise(pixelColumn, pixelRow) - 0.5f) * 0.04f;
+                float shade = 0.30f - diagonal * 0.16f + brushNoise;
+                pixmap.setColor(shade * 0.92f, shade * 0.98f, shade * 1.15f, 1f);
+                pixmap.drawPixel(pixelColumn, pixelRow);
+            }
+        }
 
-        // Bevel highlight: top and left edges lighter
-        pixmap.setColor(0.32f, 0.34f, 0.40f, 1f);
-        pixmap.fillRectangle(0, 0, textureWidth, 1);
-        pixmap.fillRectangle(0, 0, 1, textureHeight);
+        // Bevel highlight: top and left edges lighter (4 px)
+        pixmap.setColor(0.34f, 0.36f, 0.42f, 1f);
+        pixmap.fillRectangle(0, 0, textureWidth, 4);
+        pixmap.fillRectangle(0, 0, 4, textureHeight);
+        // Bevel shadow: bottom and right edges darker (4 px)
+        pixmap.setColor(0.07f, 0.07f, 0.09f, 1f);
+        pixmap.fillRectangle(0, textureHeight - 4, textureWidth, 4);
+        pixmap.fillRectangle(textureWidth - 4, 0, 4, textureHeight);
 
-        // Bevel shadow: bottom and right edges darker
-        pixmap.setColor(0.08f, 0.08f, 0.10f, 1f);
-        pixmap.fillRectangle(0, textureHeight - 1, textureWidth, 1);
-        pixmap.fillRectangle(textureWidth - 1, 0, 1, textureHeight);
-
-        // --- Hazard base stripe (bottom 7 rows) — UAC yellow / black alternating 4-px columns ---
-        for (int column = 0; column < textureWidth; column++) {
-            boolean isYellow = (column / 4) % 2 == 0;
-            pixmap.setColor(isYellow ? 0.92f : 0.06f,
-                            isYellow ? 0.80f : 0.06f,
-                            isYellow ? 0.02f : 0.05f,
-                            1f);
-            pixmap.fillRectangle(column, 57, 1, 6);
+        // --- Frame rivets — bolt heads with a highlight dot, set into the visible steel bands
+        // (left edge, right edge, top lintel) so the energy field never paints over them ---
+        int[][] rivetPositions = {
+                // top lintel
+                { 8, 8 }, { 64, 8 }, { 96, 8 }, { 128, 8 }, { 184, 8 },
+                // left edge
+                { 8, 56 }, { 8, 112 }, { 8, 168 }, { 8, 218 },
+                // right edge
+                { 184, 56 }, { 184, 112 }, { 184, 168 }, { 184, 218 }
+        };
+        for (int[] rivet : rivetPositions) {
+            pixmap.setColor(0.06f, 0.06f, 0.08f, 1f);
+            pixmap.fillCircle(rivet[0], rivet[1], 4);
+            pixmap.setColor(0.40f, 0.42f, 0.48f, 1f);
+            pixmap.fillCircle(rivet[0], rivet[1], 2);
+            pixmap.setColor(0.62f, 0.64f, 0.70f, 1f);
+            pixmap.drawPixel(rivet[0] - 1, rivet[1] - 1);
         }
 
         // --- Portal opening bounds (inside the steel frame) ---
-        int portalLeft   = 4;
-        int portalTop    = 4;
-        int portalRight  = 44;  // exclusive — column 44 is the right frame pixel
-        int portalBottom = 57;  // exclusive — row 57 is the hazard base
-        int portalWidth  = portalRight  - portalLeft;   // 40
-        int portalHeight = portalBottom - portalTop;    // 53
+        int portalLeft   = 16;
+        int portalTop    = 16;
+        int portalRight  = 176;  // exclusive — columns 176..191 are the right frame
+        int portalBottom = 228;  // exclusive — rows 228..255 are the hazard base
+        int portalWidth  = portalRight  - portalLeft;   // 160
+        int portalHeight = portalBottom - portalTop;    // 212
 
-        float centerX = portalLeft + portalWidth  / 2f - 0.5f;   // 23.5
-        float centerY = portalTop  + portalHeight / 2f - 0.5f;   // 30.5
-        float halfW   = portalWidth  / 2f;                        // 20.0
-        float halfH   = portalHeight / 2f;                        // 26.5
+        // Recessed inner channel: a dark groove framing the opening
+        pixmap.setColor(0.05f, 0.05f, 0.07f, 1f);
+        pixmap.fillRectangle(portalLeft - 3, portalTop - 3, portalWidth + 6, 3);
+        pixmap.fillRectangle(portalLeft - 3, portalBottom,    portalWidth + 6, 3);
+        pixmap.fillRectangle(portalLeft - 3, portalTop - 3, 3, portalHeight + 6);
+        pixmap.fillRectangle(portalRight,    portalTop - 3, 3, portalHeight + 6);
 
-        // --- Energy field: pixel-by-pixel distance-based coloring ---
+        float centerX = portalLeft + portalWidth  / 2f - 0.5f;
+        float centerY = portalTop  + portalHeight / 2f - 0.5f;
+        float halfWidth  = portalWidth  / 2f;
+        float halfHeight = portalHeight / 2f;
+
+        // --- Energy field: pixel-by-pixel swirling vortex ---
         for (int pixelRow = portalTop; pixelRow < portalBottom; pixelRow++) {
             for (int pixelColumn = portalLeft; pixelColumn < portalRight; pixelColumn++) {
-                float normalizedX = (pixelColumn - centerX) / halfW;
-                float normalizedY = (pixelRow    - centerY) / halfH;
-                float dist = (float) Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+                float normalizedX = (pixelColumn - centerX) / halfWidth;
+                float normalizedY = (pixelRow    - centerY) / halfHeight;
+                float distanceFromCenter =
+                        (float) Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+                float angleRadians = (float) Math.atan2(normalizedY, normalizedX);
 
                 float red, green, blue;
-                if (dist < 0.12f) {
+                if (distanceFromCenter < 0.10f) {
                     // Void core
                     red = 0.01f; green = 0.005f; blue = 0.05f;
-                } else if (dist < 0.30f) {
-                    float interpolationFactor = (dist - 0.12f) / 0.18f;
-                    red   = 0.01f  + interpolationFactor * 0.19f;
-                    green = 0.005f + interpolationFactor * 0.045f;
-                    blue  = 0.05f  + interpolationFactor * 0.60f;
-                } else if (dist < 0.50f) {
-                    float interpolationFactor = (dist - 0.30f) / 0.20f;
-                    red   = 0.20f + interpolationFactor * (-0.12f);
-                    green = 0.05f + interpolationFactor * 0.10f;
-                    blue  = 0.65f + interpolationFactor * 0.25f;
-                } else if (dist < 0.70f) {
-                    float interpolationFactor = (dist - 0.50f) / 0.20f;
+                } else if (distanceFromCenter < 0.28f) {
+                    float interpolationFactor = (distanceFromCenter - 0.10f) / 0.18f;
+                    red   = 0.01f  + interpolationFactor * 0.17f;
+                    green = 0.005f + interpolationFactor * 0.035f;
+                    blue  = 0.05f  + interpolationFactor * 0.55f;
+                } else if (distanceFromCenter < 0.48f) {
+                    float interpolationFactor = (distanceFromCenter - 0.28f) / 0.20f;
+                    red   = 0.18f + interpolationFactor * (-0.10f);
+                    green = 0.04f + interpolationFactor * 0.11f;
+                    blue  = 0.60f + interpolationFactor * 0.30f;
+                } else if (distanceFromCenter < 0.66f) {
+                    float interpolationFactor = (distanceFromCenter - 0.48f) / 0.18f;
                     red   = 0.08f + interpolationFactor * (-0.03f);
                     green = 0.15f + interpolationFactor * 0.40f;
                     blue  = 0.90f + interpolationFactor * 0.08f;
-                } else if (dist < 0.85f) {
-                    float interpolationFactor = (dist - 0.70f) / 0.15f;
+                } else if (distanceFromCenter < 0.84f) {
+                    float interpolationFactor = (distanceFromCenter - 0.66f) / 0.18f;
                     red   = 0.05f + interpolationFactor * 0.35f;
                     green = 0.55f + interpolationFactor * 0.30f;
                     blue  = 0.98f + interpolationFactor * 0.02f;
-                } else if (dist <= 1.0f) {
-                    float interpolationFactor = (dist - 0.85f) / 0.15f;
-                    red   = 0.40f + interpolationFactor * 0.50f;
-                    green = 0.85f + interpolationFactor * 0.12f;
+                } else if (distanceFromCenter <= 1.0f) {
+                    float interpolationFactor = (distanceFromCenter - 0.84f) / 0.16f;
+                    red   = 0.40f + interpolationFactor * 0.55f;
+                    green = 0.85f + interpolationFactor * 0.13f;
                     blue  = 1.00f;
                 } else {
-                    // Corner pixels (outside ellipse but inside rectangle) — frame colour
-                    red = 0.17f; green = 0.18f; blue = 0.22f;
+                    // Corner pixels (outside ellipse but inside rectangle) — recessed groove
+                    red = 0.05f; green = 0.05f; blue = 0.07f;
                 }
 
-                // Concentric ring shimmer: cos modulation fades toward the edge
-                if (dist <= 1.0f) {
-                    // 4 shimmer peaks across the radius (dist 0→1 = 4 half-cycles)
-                    float ringShimmer      = (float) Math.cos(dist * Math.PI * 8) * 0.5f + 0.5f;
-                    float shimmerStrength  = 0.15f * (1.0f - dist);
-                    float factor = 1.0f - shimmerStrength + ringShimmer * shimmerStrength * 2f;
+                if (distanceFromCenter <= 1.0f) {
+                    // Swirling spiral arms: 3 arms wound by distance into a vortex
+                    float spiralPhase = angleRadians * 3f + distanceFromCenter * 11f;
+                    float spiralArm   = (float) Math.cos(spiralPhase) * 0.5f + 0.5f;
+                    float armStrength = 0.30f * (1.0f - distanceFromCenter * 0.4f);
+                    float spiralFactor = 1.0f - armStrength + spiralArm * armStrength * 2f;
+
+                    // Fine concentric shimmer rings layered on top of the swirl
+                    float ringShimmer = (float) Math.cos(distanceFromCenter * Math.PI * 16) * 0.5f + 0.5f;
+                    float ringStrength = 0.12f * (1.0f - distanceFromCenter);
+                    float ringFactor = 1.0f - ringStrength + ringShimmer * ringStrength * 2f;
+
+                    // Per-pixel plasma grain
+                    float grain = 0.94f + portalNoise(pixelColumn, pixelRow) * 0.12f;
+
+                    float factor = spiralFactor * ringFactor * grain;
                     red   = Math.min(1f, red   * factor);
                     green = Math.min(1f, green * factor);
                     blue  = Math.min(1f, blue  * factor);
+
+                    // Event-horizon dark ring: dims a thin band so the core reads as a throat
+                    float horizon = Math.abs(distanceFromCenter - 0.40f);
+                    if (horizon < 0.05f) {
+                        float dim = 0.45f + horizon / 0.05f * 0.55f;
+                        red *= dim; green *= dim; blue *= dim;
+                    }
                 }
 
                 pixmap.setColor(red, green, blue, 1f);
@@ -1566,49 +1609,86 @@ public class PropRenderer implements Renderable, Disposable {
             }
         }
 
-        // --- Bright cyan energy border around the portal opening ---
+        // --- Bright cyan energy border around the portal opening (2 px) ---
         pixmap.setColor(0.55f, 0.88f, 1.00f, 1f);
-        pixmap.fillRectangle(portalLeft - 1, portalTop - 1, portalWidth + 2, 1);   // top
-        pixmap.fillRectangle(portalLeft - 1, portalBottom,  portalWidth + 2, 1);   // bottom
-        pixmap.fillRectangle(portalLeft - 1, portalTop - 1, 1, portalHeight + 2);  // left
-        pixmap.fillRectangle(portalRight,    portalTop - 1, 1, portalHeight + 2);  // right
+        pixmap.fillRectangle(portalLeft, portalTop, portalWidth, 2);                 // top
+        pixmap.fillRectangle(portalLeft, portalBottom - 2, portalWidth, 2);          // bottom
+        pixmap.fillRectangle(portalLeft, portalTop, 2, portalHeight);                // left
+        pixmap.fillRectangle(portalRight - 2, portalTop, 2, portalHeight);           // right
 
-        // --- Corner energy nodes (bright 3×3 squares at portal mouth corners) ---
-        pixmap.setColor(0.95f, 0.98f, 1.00f, 1f);
-        pixmap.fillRectangle(portalLeft  - 2, portalTop    - 2, 3, 3);  // top-left
-        pixmap.fillRectangle(portalRight - 1, portalTop    - 2, 3, 3);  // top-right
-        pixmap.fillRectangle(portalLeft  - 2, portalBottom - 1, 3, 3);  // bottom-left
-        pixmap.fillRectangle(portalRight - 1, portalBottom - 1, 3, 3);  // bottom-right
+        // --- Corner energy nodes (bright glowing discs at portal mouth corners) ---
+        int[][] cornerNodes = {
+                { portalLeft,  portalTop    },
+                { portalRight, portalTop    },
+                { portalLeft,  portalBottom },
+                { portalRight, portalBottom }
+        };
+        for (int[] node : cornerNodes) {
+            pixmap.setColor(0.40f, 0.80f, 1.00f, 1f);
+            pixmap.fillCircle(node[0], node[1], 6);
+            pixmap.setColor(0.95f, 0.99f, 1.00f, 1f);
+            pixmap.fillCircle(node[0], node[1], 3);
+        }
 
-        // --- Vertical energy conduit lines on inner frame edges ---
-        pixmap.setColor(0.25f, 0.75f, 1.00f, 1f);
-        pixmap.fillRectangle(1,              portalTop, 1, portalHeight);  // left conduit
-        pixmap.fillRectangle(textureWidth - 2, portalTop, 1, portalHeight);  // right conduit
+        // --- Segmented vertical energy conduits on the inner frame edges ---
+        for (int conduitRow = portalTop; conduitRow < portalBottom; conduitRow += 16) {
+            boolean bright = ((conduitRow - portalTop) / 16) % 2 == 0;
+            pixmap.setColor(bright ? 0.45f : 0.20f, bright ? 0.85f : 0.55f, 1.00f, 1f);
+            pixmap.fillRectangle(7,                  conduitRow, 3, 12);  // left conduit
+            pixmap.fillRectangle(textureWidth - 10,  conduitRow, 3, 12);  // right conduit
+        }
 
-        // --- Top arch energy emitters (three discharge ports) ---
-        pixmap.setColor(0.60f, 0.90f, 1.00f, 1f);
-        pixmap.fillRectangle(12, 0, 5, 3);   // left emitter
-        pixmap.fillRectangle(31, 0, 5, 3);   // right emitter
-        pixmap.setColor(0.85f, 0.96f, 1.00f, 1f);
-        pixmap.fillRectangle(21, 0, 6, 2);   // centre emitter (brighter)
+        // --- Top arch energy emitters (row of discharge ports across the lintel) ---
+        for (int emitterIndex = 0; emitterIndex < 5; emitterIndex++) {
+            int emitterX = 28 + emitterIndex * 32;
+            boolean center = emitterIndex == 2;
+            pixmap.setColor(center ? 0.85f : 0.60f, center ? 0.96f : 0.90f, 1.00f, 1f);
+            pixmap.fillRectangle(emitterX, 0, center ? 24 : 18, center ? 10 : 8);
+            // Discharge glow bleeding down into the frame
+            pixmap.setColor(0.30f, 0.60f, 0.95f, 1f);
+            pixmap.fillRectangle(emitterX + 4, center ? 10 : 8, center ? 16 : 10, 4);
+        }
 
-        // --- Hazard divider line at the portal-base boundary ---
+        // --- Diagonal UAC hazard chevrons at the base (yellow / black) ---
+        int hazardCenterColumn = textureWidth / 2;
+        for (int hazardRow = portalBottom; hazardRow < textureHeight - 4; hazardRow++) {
+            for (int hazardColumn = 4; hazardColumn < textureWidth - 4; hazardColumn++) {
+                int mirrored = Math.abs(hazardColumn - hazardCenterColumn);
+                boolean isYellow = (((mirrored + hazardRow) / 12) % 2) == 0;
+                pixmap.setColor(isYellow ? 0.92f : 0.07f,
+                                isYellow ? 0.78f : 0.07f,
+                                isYellow ? 0.03f : 0.06f,
+                                1f);
+                pixmap.drawPixel(hazardColumn, hazardRow);
+            }
+        }
+        // Bright divider line at the portal-base boundary
         pixmap.setColor(0.55f, 0.88f, 1.00f, 1f);
-        pixmap.fillRectangle(0, 56, textureWidth, 1);
+        pixmap.fillRectangle(0, portalBottom, textureWidth, 2);
 
-        // --- Energy spark accents near the portal border ---
-        pixmap.setColor(1.00f, 1.00f, 1.00f, 1f);
-        pixmap.drawPixel(7,  8);
-        pixmap.drawPixel(40, 8);
-        pixmap.drawPixel(7,  52);
-        pixmap.drawPixel(40, 52);
-        pixmap.setColor(0.80f, 0.95f, 1.00f, 1f);
-        pixmap.drawPixel(5,  20);
-        pixmap.drawPixel(42, 20);
-        pixmap.drawPixel(5,  40);
-        pixmap.drawPixel(42, 40);
+        // --- Energy spark accents scattered near the portal border ---
+        int[][] sparks = {
+                { 28, 32 }, { 162, 32 }, { 28, 200 }, { 162, 200 },
+                { 20, 96 }, { 170, 96 }, { 20, 150 }, { 170, 150 },
+                { 96, 24 }, { 96, 214 }
+        };
+        for (int[] spark : sparks) {
+            pixmap.setColor(0.80f, 0.95f, 1.00f, 1f);
+            pixmap.fillCircle(spark[0], spark[1], 2);
+            pixmap.setColor(1.00f, 1.00f, 1.00f, 1f);
+            pixmap.drawPixel(spark[0], spark[1]);
+        }
 
         return finalize(pixmap);
+    }
+
+    // Deterministic value noise in [0,1] for procedural texture grain. Pure function of (x, y) so
+    // the portal sprite is identical on every run; uses an integer hash to avoid object allocation.
+    private static float portalNoise(int x, int y) {
+        long hash = (long)x * 374761393 + (long)y * 668265263;
+        hash = (hash ^ (hash >>> 13)) * 1274126177;
+        hash = hash ^ (hash >>> 16);
+        return ((int)(hash & 0xFFFF)) / 65535f;
     }
 
     private static Texture generateCameraTexture() {
