@@ -61,6 +61,10 @@ public class CavernGenerator implements ILevelGenerator {
     private       int    spawnRow;
     private       List<WeaponSpawnPoint> weaponSpawnPoints;
 
+    // Per-tile biome id for the open cave body; -1 = wall, chamber, or unseeded.
+    // Populated by assignBiomes() and consumed by every cave-body decoration pass.
+    private       int[][] biomeMap;
+
     public CavernGenerator(long seed) {
         this.random = new Random(seed);
     }
@@ -100,11 +104,17 @@ public class CavernGenerator implements ILevelGenerator {
         // Phase 4 — assign chamber types
         assignChamberTypes(chambers);
 
-        // Phase 5 — convert boolean map to char grid and decorate
+        // Phase 5 — convert boolean map to char grid
         char[][] grid = buildGrid(solid);
-        decorateCaveBody(grid);
-        decorateChambers(grid, chambers);
+        boolean[][] chamberMask = buildChamberMask(chambers);
+
+        // Phase 5a — player spawn first so biome props can honour a safe radius
         placePlayerSpawn(grid, chambers.get(0));
+
+        // Phase 5b — partition the open cave into sci-fi biome regions, then decorate
+        CaveBiome[] biomes = assignBiomes(grid, chamberMask);
+        decorateCaveBody(grid, chamberMask, biomes);
+        decorateChambers(grid, chambers);
 
         // Phase 6 — pickups
         placePickups(grid, chambers);
@@ -112,8 +122,8 @@ public class CavernGenerator implements ILevelGenerator {
         // Phase 7 — weapon spawns
         placeWeaponSpawns(grid, chambers);
 
-        // Phase 8 — enemies
-        List<EnemySpawnPoint> spawnPoints = placeEnemies(grid);
+        // Phase 8 — enemies (biome-weighted archetypes)
+        List<EnemySpawnPoint> spawnPoints = placeEnemies(grid, biomes);
 
         // Phase 9 — stairs
         stampStairsDown(grid, spawnPoints);
@@ -466,90 +476,375 @@ public class CavernGenerator implements ILevelGenerator {
     }
 
     // -------------------------------------------------------------------------
-    // Phase 5 — cave body decoration
+    // Phase 5b — sci-fi biome regions
     // -------------------------------------------------------------------------
 
-    private void decorateCaveBody(char[][] grid) {
+    /**
+     * One contiguous region of the open cave body. Each biome reskins its own
+     * walls, floor lighting, decals, scattered props and enemy mix so that a
+     * single organic cavern reads as several distinct sci-fi environments fused
+     * together. All symbols are existing tiles (see docs/tile-symbols.txt) — no
+     * new symbol is introduced.
+     */
+    private enum CaveBiome {
+        // Overgrown bioluminescent spore garden: flesh walls, glowing pools, bio-pods.
+        FUNGAL_HOLLOW (new char[]{'G', 'j'},      new char[]{'O', '.', 's'}, new char[]{'&'},           'I', FloorMood.GLOW),
+        // Frozen cryo-vault: frost walls, containment glass, dim blue light, cryo pods.
+        FROST_VAULT   (new char[]{'Z', 'N'},      new char[]{'s', 'O'},      new char[]{'&', 'L'},      '&', FloorMood.DIM),
+        // Radioactive reactor sump: radiation walls, leaking drums, flickering light.
+        REACTOR_SUMP  (new char[]{'U', 'h', 'k'}, new char[]{'e', 'O', '.'}, new char[]{'g', 'E'},      '%', FloorMood.FLICKER),
+        // Derelict data wreck: terminal/wire walls, dead consoles, an AI tomb.
+        DERELICT_NEST (new char[]{'t', 'w', 'c'}, new char[]{'.', 'm', 'e'}, new char[]{'T', 'L', 'C'}, 'J', FloorMood.DIM),
+        // Infested gore warren: flesh walls, corpse drifts, deep darkness, deathtrap drums.
+        GORE_WARREN   (new char[]{'G', 'j'},      new char[]{'m', '.', 's'}, new char[]{'E'},           'E', FloorMood.DARK),
+        // Bare mineral grotto: corroded rock, mining rubble, dense stalagmite forests.
+        CRYSTAL_GROTTO(new char[]{'j', 'k', 'x'}, new char[]{'O', '.'},      new char[]{'C'},           'C', FloorMood.ROCKY);
+
+        final char[]    wallChars;     // candidate reskins for walls bordering this biome
+        final char[]    decalChars;    // walkable decals scattered on the floor
+        final char[]    scatterProps;  // solid props scattered sparsely through the region
+        final char      landmarkProp;  // rare set-piece prop anchoring a feature cluster
+        final FloorMood mood;          // floor-lighting personality
+
+        CaveBiome(char[] wallChars, char[] decalChars, char[] scatterProps,
+                  char landmarkProp, FloorMood mood) {
+            this.wallChars    = wallChars;
+            this.decalChars   = decalChars;
+            this.scatterProps = scatterProps;
+            this.landmarkProp = landmarkProp;
+            this.mood         = mood;
+        }
+    }
+
+    /** Floor-lighting profile of a biome (drives the unlit/dim/lit/flicker mix). */
+    private enum FloorMood { GLOW, DIM, DARK, FLICKER, ROCKY }
+
+    /**
+     * Partitions the open cave body into LEVEL_GEN_CAVE_BIOME_MIN..MAX contiguous
+     * regions. Seeds are chosen by greedy farthest-point sampling so they spread
+     * across the cave, then a multi-source flood fill grows every region outward
+     * simultaneously, meeting along organic cave boundaries. Returns the biome
+     * assigned to each id; biomeMap holds the per-tile id.
+     */
+    private CaveBiome[] assignBiomes(char[][] grid, boolean[][] chamberMask) {
         int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
         int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+        biomeMap = new int[gridHeight][gridWidth];
+        for (int tileRow = 0; tileRow < gridHeight; tileRow++) {
+            for (int tileColumn = 0; tileColumn < gridWidth; tileColumn++) {
+                biomeMap[tileRow][tileColumn] = -1;
+            }
+        }
 
-        // Cumulative thresholds for cave floor lighting
-        float unlitThreshold   = LevelGenConstants.LEVEL_GEN_CAVE_FLOOR_UNLIT_CHANCE;
-        float normalThreshold  = unlitThreshold  + LevelGenConstants.LEVEL_GEN_CAVE_FLOOR_NORMAL_CHANCE;
-        float flickerThreshold = normalThreshold + LevelGenConstants.LEVEL_GEN_CAVE_FLOOR_FLICKER_CHANCE;
+        // Collect every open cave-body floor tile (chambers are excluded so the
+        // man-made boxes keep their own clean theming — the contrast is the point).
+        List<int[]> caveFloor = new ArrayList<>();
+        for (int tileRow = 1; tileRow < gridHeight - 1; tileRow++) {
+            for (int tileColumn = 1; tileColumn < gridWidth - 1; tileColumn++) {
+                if (chamberMask[tileRow][tileColumn]) continue;
+                if (grid[tileRow][tileColumn] == ' ') {
+                    caveFloor.add(new int[]{tileColumn, tileRow});
+                }
+            }
+        }
+        if (caveFloor.isEmpty()) return new CaveBiome[0];
 
+        // Decide how many biomes and which types (shuffled for per-level variety).
+        CaveBiome[] allBiomes = CaveBiome.values();
+        int biomeCount = randomBetween(LevelGenConstants.LEVEL_GEN_CAVE_BIOME_MIN,
+                                       LevelGenConstants.LEVEL_GEN_CAVE_BIOME_MAX);
+        biomeCount = Math.min(biomeCount, allBiomes.length);
+        biomeCount = Math.min(biomeCount, caveFloor.size());
+
+        List<CaveBiome> pool = new ArrayList<>();
+        for (CaveBiome biome : allBiomes) pool.add(biome);
+        shuffle(pool);
+        CaveBiome[] biomes = new CaveBiome[biomeCount];
+        for (int biomeIndex = 0; biomeIndex < biomeCount; biomeIndex++) {
+            biomes[biomeIndex] = pool.get(biomeIndex);
+        }
+
+        // Seed and multi-source flood the biome ids across the cave floor.
+        List<int[]> seeds = pickDistinctTiles(caveFloor, biomeCount);
+        Queue<int[]> frontier = new LinkedList<>();
+        for (int biomeIndex = 0; biomeIndex < seeds.size(); biomeIndex++) {
+            int[] seed = seeds.get(biomeIndex);
+            biomeMap[seed[1]][seed[0]] = biomeIndex;
+            frontier.add(seed);
+        }
+
+        int[] deltaColumns = {0, 0, 1, -1};
+        int[] deltaRows    = {1, -1, 0, 0};
+        while (!frontier.isEmpty()) {
+            int[] current       = frontier.poll();
+            int   currentColumn = current[0];
+            int   currentRow    = current[1];
+            int   currentBiome  = biomeMap[currentRow][currentColumn];
+            for (int direction = 0; direction < 4; direction++) {
+                int neighborColumn = currentColumn + deltaColumns[direction];
+                int neighborRow    = currentRow    + deltaRows[direction];
+                if (!isInBounds(neighborColumn, neighborRow)) continue;
+                if (chamberMask[neighborRow][neighborColumn]) continue;
+                if (biomeMap[neighborRow][neighborColumn] != -1) continue;
+                if (grid[neighborRow][neighborColumn] != ' ') continue;
+                biomeMap[neighborRow][neighborColumn] = currentBiome;
+                frontier.add(new int[]{neighborColumn, neighborRow});
+            }
+        }
+
+        // Any cave tile the flood could not reach (e.g. only linked via a chamber)
+        // adopts the nearest seed's biome so no floor is left untyped.
+        for (int[] tile : caveFloor) {
+            if (biomeMap[tile[1]][tile[0]] != -1) continue;
+            int nearestBiome    = 0;
+            int nearestDistance = Integer.MAX_VALUE;
+            for (int biomeIndex = 0; biomeIndex < seeds.size(); biomeIndex++) {
+                int[] seed = seeds.get(biomeIndex);
+                int distance = Math.abs(seed[0] - tile[0]) + Math.abs(seed[1] - tile[1]);
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearestBiome    = biomeIndex;
+                }
+            }
+            biomeMap[tile[1]][tile[0]] = nearestBiome;
+        }
+        return biomes;
+    }
+
+    /** Fisher-Yates shuffle using the generator's seeded Random. */
+    private <T> void shuffle(List<T> list) {
+        for (int index = list.size() - 1; index > 0; index--) {
+            int swapIndex = random.nextInt(index + 1);
+            T temporary = list.get(index);
+            list.set(index, list.get(swapIndex));
+            list.set(swapIndex, temporary);
+        }
+    }
+
+    /**
+     * Greedy farthest-point sampling: picks {@code count} tiles that are spread
+     * across the source set so biome seeds do not clump in one corner of the cave.
+     */
+    private List<int[]> pickDistinctTiles(List<int[]> source, int count) {
+        List<int[]> picked = new ArrayList<>();
+        if (source.isEmpty()) return picked;
+        picked.add(source.get(random.nextInt(source.size())));
+        while (picked.size() < count) {
+            int[] best         = null;
+            int   bestDistance = -1;
+            for (int sample = 0; sample < 64; sample++) {
+                int[] candidate = source.get(random.nextInt(source.size()));
+                int   nearest   = Integer.MAX_VALUE;
+                for (int[] chosen : picked) {
+                    int distance = Math.abs(chosen[0] - candidate[0])
+                                 + Math.abs(chosen[1] - candidate[1]);
+                    nearest = Math.min(nearest, distance);
+                }
+                if (nearest > bestDistance) {
+                    bestDistance = nearest;
+                    best         = candidate;
+                }
+            }
+            if (best == null) break;
+            picked.add(best);
+        }
+        return picked;
+    }
+
+    // -------------------------------------------------------------------------
+    // Phase 5b — cave body decoration (biome-driven)
+    // -------------------------------------------------------------------------
+
+    private void decorateCaveBody(char[][] grid, boolean[][] chamberMask, CaveBiome[] biomes) {
+        if (biomes.length == 0) return;
+        themeCaveFloor(grid, chamberMask, biomes);
+        themeCaveWalls(grid, chamberMask, biomes);
+        placeCaveDecals(grid, chamberMask, biomes);
+        placeStalagmites(grid, chamberMask, biomes);
+        placeBiomeProps(grid, chamberMask, biomes);
+    }
+
+    /** Reskins each cave-floor tile per its biome's lighting mood, keeping a lit halo around spawn. */
+    private void themeCaveFloor(char[][] grid, boolean[][] chamberMask, CaveBiome[] biomes) {
+        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
+        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
         int flickerRemaining = LevelGenConstants.LEVEL_GEN_CAVE_FLICKER_BUDGET;
-
         for (int tileRow = 1; tileRow < gridHeight - 1; tileRow++) {
             for (int tileColumn = 1; tileColumn < gridWidth - 1; tileColumn++) {
-                char cell = grid[tileRow][tileColumn];
-
-                if (cell == 'x') {
-                    // Only reskin walls that border open floor
-                    if (isAdjacentToFloor(grid, tileColumn, tileRow)) {
-                        grid[tileRow][tileColumn] = randomCaveWallChar();
-                    }
-                } else if (cell == ' ') {
-                    float roll = random.nextFloat();
-                    if (roll < unlitThreshold) {
-                        grid[tileRow][tileColumn] = 'u';
-                    } else if (roll < normalThreshold) {
-                        grid[tileRow][tileColumn] = 'l';
-                    } else if (roll < flickerThreshold && flickerRemaining > 0) {
-                        grid[tileRow][tileColumn] = 'f';
-                        flickerRemaining--;
-                    }
-                    // else: leave as ' ' (fully lit)
-                }
+                if (chamberMask[tileRow][tileColumn]) continue;
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                int biomeId = biomeMap[tileRow][tileColumn];
+                if (biomeId < 0) continue;
+                int chebyshev = Math.max(Math.abs(tileColumn - spawnColumn),
+                                         Math.abs(tileRow    - spawnRow));
+                if (chebyshev <= 2) continue; // readable lit halo around the player spawn
+                char floorChar = floorCharForMood(biomes[biomeId].mood, flickerRemaining > 0);
+                if (floorChar == 'f') flickerRemaining--;
+                grid[tileRow][tileColumn] = floorChar;
             }
         }
+    }
 
-        // Decals (blood, oil, corpse marks)
+    private char floorCharForMood(FloorMood mood, boolean flickerAllowed) {
+        float roll = random.nextFloat();
+        switch (mood) {
+            case GLOW:  return roll < 0.10f ? 'u' : (roll < 0.45f ? 'l' : ' ');
+            case DIM:   return roll < 0.22f ? 'u' : (roll < 0.78f ? 'l' : ' ');
+            case DARK:  return roll < 0.62f ? 'u' : (roll < 0.88f ? 'l' : ' ');
+            case ROCKY: return roll < 0.38f ? 'u' : (roll < 0.82f ? 'l' : ' ');
+            case FLICKER:
+                if (flickerAllowed && roll < 0.05f) return 'f';
+                return roll < 0.55f ? 'u' : (roll < 0.82f ? 'l' : ' ');
+            default:    return ' ';
+        }
+    }
+
+    /** Reskins cave walls that border floor using the palette of the adjacent biome. */
+    private void themeCaveWalls(char[][] grid, boolean[][] chamberMask, CaveBiome[] biomes) {
+        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
+        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
         for (int tileRow = 1; tileRow < gridHeight - 1; tileRow++) {
             for (int tileColumn = 1; tileColumn < gridWidth - 1; tileColumn++) {
-                char cell = grid[tileRow][tileColumn];
-                if ((cell == ' ' || cell == 'u' || cell == 'l')
-                        && random.nextFloat() < LevelGenConstants.LEVEL_GEN_CAVE_DECAL_CHANCE) {
-                    grid[tileRow][tileColumn] = randomDecalChar();
-                }
+                if (chamberMask[tileRow][tileColumn]) continue;
+                if (grid[tileRow][tileColumn] != 'x') continue;
+                int biomeId = adjacentBiome(tileColumn, tileRow);
+                if (biomeId < 0) continue;
+                if (random.nextFloat() >= LevelGenConstants.LEVEL_GEN_CAVE_BIOME_WALL_CHANCE) continue;
+                char[] palette = biomes[biomeId].wallChars;
+                grid[tileRow][tileColumn] = palette[random.nextInt(palette.length)];
             }
         }
+    }
 
-        // Stalagmite columns 'P' — only where open floor is surrounded by 4+ open neighbours
+    /** Returns the biome id of the first cardinal neighbour belonging to a biome, or -1. */
+    private int adjacentBiome(int tileColumn, int tileRow) {
+        int[] deltaColumns = {0, 0, 1, -1};
+        int[] deltaRows    = {1, -1, 0, 0};
+        for (int direction = 0; direction < 4; direction++) {
+            int neighborColumn = tileColumn + deltaColumns[direction];
+            int neighborRow    = tileRow    + deltaRows[direction];
+            if (!isInBounds(neighborColumn, neighborRow)) continue;
+            if (biomeMap[neighborRow][neighborColumn] >= 0) {
+                return biomeMap[neighborRow][neighborColumn];
+            }
+        }
+        return -1;
+    }
+
+    /** Scatters biome-flavoured walkable decals (blood, oil, scorch, corpses) on cave floor. */
+    private void placeCaveDecals(char[][] grid, boolean[][] chamberMask, CaveBiome[] biomes) {
+        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
+        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
         for (int tileRow = 1; tileRow < gridHeight - 1; tileRow++) {
             for (int tileColumn = 1; tileColumn < gridWidth - 1; tileColumn++) {
+                if (chamberMask[tileRow][tileColumn]) continue;
+                int biomeId = biomeMap[tileRow][tileColumn];
+                if (biomeId < 0) continue;
                 char cell = grid[tileRow][tileColumn];
-                if ((cell == ' ' || cell == 'l' || cell == 'u')
-                        && openNeighborCount(grid, tileColumn, tileRow) >= 4
-                        && random.nextFloat() < LevelGenConstants.LEVEL_GEN_CAVE_STALAGMITE_CHANCE) {
+                if (cell != ' ' && cell != 'u' && cell != 'l') continue;
+                if (random.nextFloat() >= LevelGenConstants.LEVEL_GEN_CAVE_DECAL_CHANCE) continue;
+                char[] decals = biomes[biomeId].decalChars;
+                grid[tileRow][tileColumn] = decals[random.nextInt(decals.length)];
+            }
+        }
+    }
+
+    /** Scatters stalagmite columns 'P' in open cave space; mineral grottos grow forests of them. */
+    private void placeStalagmites(char[][] grid, boolean[][] chamberMask, CaveBiome[] biomes) {
+        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
+        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+        for (int tileRow = 1; tileRow < gridHeight - 1; tileRow++) {
+            for (int tileColumn = 1; tileColumn < gridWidth - 1; tileColumn++) {
+                if (chamberMask[tileRow][tileColumn]) continue;
+                int biomeId = biomeMap[tileRow][tileColumn];
+                if (biomeId < 0) continue;
+                char cell = grid[tileRow][tileColumn];
+                if (cell != ' ' && cell != 'l' && cell != 'u') continue;
+                if (openNeighborCount(grid, tileColumn, tileRow) < 4) continue;
+                float chance = LevelGenConstants.LEVEL_GEN_CAVE_STALAGMITE_CHANCE;
+                if (biomes[biomeId].mood == FloorMood.ROCKY) chance *= 3f;
+                if (random.nextFloat() < chance) {
                     grid[tileRow][tileColumn] = 'P';
                 }
             }
         }
+    }
 
-        // Barrel cluster (optional)
-        if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_CAVE_BARREL_CLUSTER_CHANCE) {
-            placeBarrelCluster(grid);
+    /**
+     * Populates each biome with solid props: a few landmark feature clusters per
+     * region plus a sparse scatter of the biome's prop set. Every placement is
+     * pinch-guarded (see canStampSolidProp) so a prop can never seal a tunnel.
+     */
+    private void placeBiomeProps(char[][] grid, boolean[][] chamberMask, CaveBiome[] biomes) {
+        for (int biomeId = 0; biomeId < biomes.length; biomeId++) {
+            int featureCount = randomBetween(LevelGenConstants.LEVEL_GEN_CAVE_BIOME_FEATURE_MIN,
+                                             LevelGenConstants.LEVEL_GEN_CAVE_BIOME_FEATURE_MAX);
+            for (int feature = 0; feature < featureCount; feature++) {
+                placeFeatureCluster(grid, chamberMask, biomes, biomeId);
+            }
+        }
+
+        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
+        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+        for (int tileRow = 1; tileRow < gridHeight - 1; tileRow++) {
+            for (int tileColumn = 1; tileColumn < gridWidth - 1; tileColumn++) {
+                if (chamberMask[tileRow][tileColumn]) continue;
+                int biomeId = biomeMap[tileRow][tileColumn];
+                if (biomeId < 0) continue;
+                if (random.nextFloat() >= LevelGenConstants.LEVEL_GEN_CAVE_BIOME_PROP_CHANCE) continue;
+                if (!canStampSolidProp(grid, tileColumn, tileRow)) continue;
+                char[] props = biomes[biomeId].scatterProps;
+                grid[tileRow][tileColumn] = props[random.nextInt(props.length)];
+            }
         }
     }
 
-    private char randomCaveWallChar() {
-        float roll = random.nextFloat();
-        if (roll < LevelGenConstants.LEVEL_GEN_CAVE_GORE_WALL_CHANCE) return 'G';
-        if (roll < LevelGenConstants.LEVEL_GEN_CAVE_GORE_WALL_CHANCE
-                 + LevelGenConstants.LEVEL_GEN_CAVE_RUST_WALL_CHANCE) return 'j';
-        if (roll < LevelGenConstants.LEVEL_GEN_CAVE_GORE_WALL_CHANCE
-                 + LevelGenConstants.LEVEL_GEN_CAVE_RUST_WALL_CHANCE
-                 + LevelGenConstants.LEVEL_GEN_CAVE_BULKHEAD_WALL_CHANCE) return 'k';
-        return 'x';
+    /** Stamps one small landmark cluster (e.g. pod nest, barrel pile, console bank) in a biome region. */
+    private void placeFeatureCluster(char[][] grid, boolean[][] chamberMask,
+                                     CaveBiome[] biomes, int biomeId) {
+        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
+        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+        for (int attempt = 0; attempt < 60; attempt++) {
+            int tileColumn = 2 + random.nextInt(gridWidth  - 4);
+            int tileRow    = 2 + random.nextInt(gridHeight - 4);
+            if (chamberMask[tileRow][tileColumn]) continue;
+            if (biomeMap[tileRow][tileColumn] != biomeId) continue;
+            if (!canStampSolidProp(grid, tileColumn, tileRow)) continue;
+
+            char landmark = biomes[biomeId].landmarkProp;
+            char filler   = biomes[biomeId].scatterProps[0];
+            int  clusterSize = LevelGenConstants.LEVEL_GEN_CAVE_BIOME_CLUSTER_SIZE;
+            int  placed      = 0;
+            for (int stamp = 0; stamp < clusterSize * 4 && placed < clusterSize; stamp++) {
+                int offsetColumn = tileColumn + random.nextInt(3) - 1;
+                int offsetRow    = tileRow    + random.nextInt(3) - 1;
+                if (!isInBounds(offsetColumn, offsetRow)) continue;
+                if (chamberMask[offsetRow][offsetColumn]) continue;
+                if (!canStampSolidProp(grid, offsetColumn, offsetRow)) continue;
+                boolean anchorTile = placed == 0
+                        && random.nextFloat() < LevelGenConstants.LEVEL_GEN_CAVE_BIOME_LANDMARK_CHANCE;
+                grid[offsetRow][offsetColumn] = anchorTile ? landmark : filler;
+                placed++;
+            }
+            return;
+        }
     }
 
-    private char randomDecalChar() {
-        switch (random.nextInt(3)) {
-            case 0:  return 'm'; // blood
-            case 1:  return '.'; // oil
-            default: return 'O'; // scorch
-        }
+    /**
+     * A solid prop may be stamped on a tile only when it is bare cave floor, sits
+     * beyond the spawn safe radius, and keeps at least PROP_MIN_OPEN walkable
+     * cardinal neighbours — guaranteeing it can never seal a one-tile pinch. Because
+     * neighbours that already became props no longer count as walkable, the guard
+     * tightens automatically as a cluster grows.
+     */
+    private boolean canStampSolidProp(char[][] grid, int tileColumn, int tileRow) {
+        char cell = grid[tileRow][tileColumn];
+        if (cell != ' ' && cell != 'u' && cell != 'l') return false;
+        int chebyshev = Math.max(Math.abs(tileColumn - spawnColumn),
+                                 Math.abs(tileRow    - spawnRow));
+        if (chebyshev < LevelGenConstants.LEVEL_GEN_CAVE_BIOME_PROP_SAFE_RADIUS) return false;
+        return openNeighborCount(grid, tileColumn, tileRow)
+                >= LevelGenConstants.LEVEL_GEN_CAVE_BIOME_PROP_MIN_OPEN;
     }
 
     private int openNeighborCount(char[][] grid, int tileColumn, int tileRow) {
@@ -566,31 +861,18 @@ public class CavernGenerator implements ILevelGenerator {
         return count;
     }
 
-    private void placeBarrelCluster(char[][] grid) {
+    private boolean[][] buildChamberMask(List<Chamber> chambers) {
         int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
         int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
-        // Find a random open tile away from spawn
-        for (int attempt = 0; attempt < 50; attempt++) {
-            int tileColumn = 2 + random.nextInt(gridWidth  - 4);
-            int tileRow    = 2 + random.nextInt(gridHeight - 4);
-            if (!isWalkableTile(grid[tileRow][tileColumn])) continue;
-            int chebyshevDistance = Math.max(Math.abs(tileColumn - spawnColumn),
-                                             Math.abs(tileRow    - spawnRow));
-            if (chebyshevDistance < LevelGenConstants.LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS) continue;
-            // Stamp 2-3 barrels in a small cluster
-            int barrelCount = 2 + random.nextInt(2);
-            int placed      = 0;
-            for (int barrelAttempt = 0; barrelAttempt < 20 && placed < barrelCount; barrelAttempt++) {
-                int barrelColumn = tileColumn + random.nextInt(3) - 1;
-                int barrelRow    = tileRow    + random.nextInt(3) - 1;
-                if (isInBounds(barrelColumn, barrelRow)
-                        && isWalkableTile(grid[barrelRow][barrelColumn])) {
-                    grid[barrelRow][barrelColumn] = 'E';
-                    placed++;
+        boolean[][] mask = new boolean[gridHeight][gridWidth];
+        for (Chamber chamber : chambers) {
+            for (int tileRow = chamber.bottomRow; tileRow <= chamber.topRow; tileRow++) {
+                for (int tileColumn = chamber.leftColumn; tileColumn <= chamber.rightColumn; tileColumn++) {
+                    if (isInBounds(tileColumn, tileRow)) mask[tileRow][tileColumn] = true;
                 }
             }
-            return;
         }
+        return mask;
     }
 
     // -------------------------------------------------------------------------
@@ -810,7 +1092,7 @@ public class CavernGenerator implements ILevelGenerator {
     // Phase 7 — enemy placement (cave body scatter)
     // -------------------------------------------------------------------------
 
-    private List<EnemySpawnPoint> placeEnemies(char[][] grid) {
+    private List<EnemySpawnPoint> placeEnemies(char[][] grid, CaveBiome[] biomes) {
         int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
         int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
         List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
@@ -828,9 +1110,35 @@ public class CavernGenerator implements ILevelGenerator {
                                              Math.abs(tileRow    - spawnRow));
             if (chebyshevDistance < LevelGenConstants.LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS) continue;
 
-            spawnPoints.add(new EnemySpawnPoint(randomEnemySpawnChar(), tileColumn, tileRow));
+            // Bias the archetype toward the biome the tile sits in; chambers and
+            // unseeded tiles (-1) fall back to the default cave distribution.
+            int  biomeId   = biomeMap[tileRow][tileColumn];
+            char spawnChar = (biomeId >= 0 && biomeId < biomes.length)
+                    ? biomeEnemyChar(biomes[biomeId])
+                    : randomEnemySpawnChar();
+
+            spawnPoints.add(new EnemySpawnPoint(spawnChar, tileColumn, tileRow));
         }
         return spawnPoints;
+    }
+
+    /**
+     * Weights enemy archetypes to match a biome's fiction (markers 1-5; no elite
+     * symbols are introduced, preserving the generator's floor-scaling contract):
+     *   1 Plague Hulk (tank)  2 Eye Tyrant (ranged)  3 Gore Biter (fast melee)
+     *   4 Shell Brute (charger)  5 Mire Wraith (acid ranged).
+     */
+    private char biomeEnemyChar(CaveBiome biome) {
+        float roll = random.nextFloat();
+        switch (biome) {
+            case FUNGAL_HOLLOW:  return roll < 0.50f ? '3' : (roll < 0.80f ? '5' : '2');
+            case FROST_VAULT:    return roll < 0.50f ? '1' : (roll < 0.85f ? '4' : '3');
+            case REACTOR_SUMP:   return roll < 0.45f ? '5' : (roll < 0.80f ? '2' : '1');
+            case DERELICT_NEST:  return roll < 0.50f ? '2' : (roll < 0.80f ? '3' : '4');
+            case GORE_WARREN:    return roll < 0.55f ? '3' : (roll < 0.85f ? '1' : '4');
+            case CRYSTAL_GROTTO: return roll < 0.50f ? '4' : (roll < 0.80f ? '1' : '3');
+            default:             return randomEnemySpawnChar();
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -1015,20 +1323,6 @@ public class CavernGenerator implements ILevelGenerator {
 
     private boolean isDecal(char cell) {
         return cell == 'm' || cell == '.' || cell == 'O' || cell == 's' || cell == 'e';
-    }
-
-    private boolean isAdjacentToFloor(char[][] grid, int tileColumn, int tileRow) {
-        int[] deltaColumns = {0, 0, 1, -1};
-        int[] deltaRows    = {1, -1, 0, 0};
-        for (int direction = 0; direction < 4; direction++) {
-            int neighborColumn = tileColumn + deltaColumns[direction];
-            int neighborRow    = tileRow    + deltaRows[direction];
-            if (!isInBounds(neighborColumn, neighborRow)) continue;
-            char neighbor = grid[neighborRow][neighborColumn];
-            if (isWalkableTile(neighbor) || Level.isDoor(neighbor)
-                    || isDecal(neighbor)) return true;
-        }
-        return false;
     }
 
     private boolean isPassableForBFS(char cell) {

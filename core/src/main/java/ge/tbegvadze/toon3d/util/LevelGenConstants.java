@@ -288,4 +288,34 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_CAVE_BARREL_CLUSTER_CHANCE  = 0.50f;
     // Minimum Chebyshev distance from player spawn at which cave-body enemies may appear.
     public static final int   LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS      = 6;
+
+    // -------------------------------------------------------------------------
+    // CAVERN generator — sci-fi biome regions
+    // -------------------------------------------------------------------------
+    // The open cave body is partitioned into contiguous biome regions by a
+    // multi-source flood fill from farthest-point seed tiles. Each region reskins
+    // its own walls, floor lighting, decals, scattered props and enemy mix, so a
+    // single cavern reads as several distinct sci-fi environments fused together
+    // (fungal hollow, frost vault, reactor sump, derelict data nest, gore warren,
+    // mineral grotto).
+
+    // Number of distinct biome regions seeded into one cave level.
+    public static final int   LEVEL_GEN_CAVE_BIOME_MIN              = 3;
+    public static final int   LEVEL_GEN_CAVE_BIOME_MAX              = 5;
+    // Probability a cave-body wall bordering floor is reskinned with a biome wall.
+    public static final float LEVEL_GEN_CAVE_BIOME_WALL_CHANCE      = 0.55f;
+    // Probability per eligible open cave tile of receiving a scattered biome prop.
+    public static final float LEVEL_GEN_CAVE_BIOME_PROP_CHANCE      = 0.035f;
+    // Minimum walkable cardinal neighbours a tile needs before a solid biome prop
+    // may be stamped there (pinch-guard so winding tunnels never seal shut).
+    public static final int   LEVEL_GEN_CAVE_BIOME_PROP_MIN_OPEN    = 3;
+    // Feature clusters (pod nests, barrel piles, console banks) stamped per biome.
+    public static final int   LEVEL_GEN_CAVE_BIOME_FEATURE_MIN      = 1;
+    public static final int   LEVEL_GEN_CAVE_BIOME_FEATURE_MAX      = 2;
+    // Maximum props stamped per feature cluster.
+    public static final int   LEVEL_GEN_CAVE_BIOME_CLUSTER_SIZE     = 4;
+    // Probability a feature cluster upgrades its anchor to a rare set-piece prop.
+    public static final float LEVEL_GEN_CAVE_BIOME_LANDMARK_CHANCE  = 0.45f;
+    // Minimum Chebyshev distance from player spawn before any solid biome prop appears.
+    public static final int   LEVEL_GEN_CAVE_BIOME_PROP_SAFE_RADIUS = 4;
 }
