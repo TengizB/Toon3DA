@@ -10,6 +10,47 @@ Shattered Pixel Dungeon (open-source roguelike by 00-Evan):
   Phase 1 — Room Placement   (randomised collision-rejection)
   Phase 2 — Connectivity     (greedy MST + L-shaped corridors + door post-pass)
   Phase 3 — Decoration       (floor lighting, wall variety, props, enemy spawns)
+  Phase 5b— Lock-and-Key Gate (one bridge door locked; matching keycard placed reachably)
+  Phase 6 — Stairs            (single exit in the spatially deepest room / gated region)
+
+=== DEPTH GRADIENT (position carries meaning) ===
+
+After connectivity, each room is assigned a "depth" = its hop distance from the
+entrance room (room 0) over the MST room tree (computeRoomDepths). Normalised to
+[0,1], this drives a deliberate difficulty/reward curve so exploration ramps up
+rather than spreading loot/threat randomly:
+
+  - Enemy count    : deeper rooms add up to LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX enemies.
+  - Enemy toughness: deeper rooms upgrade light/ranged spawns ('3'/'2') into heavy
+                     archetypes ('1'/'4'/'5') with probability scaling with depth.
+  - Loot richness  : deeper rooms get additive medkit/ammo bonuses and a chance at a
+                     bonus ammo box.
+  - Stairs         : stamped in the spatially deepest room (landmark tie-break), so the
+                     exit always sits at the far end of the journey.
+
+=== LOCK-AND-KEY GATING (Phase 5b) ===
+
+Reuses the existing keycard system (DoorManager + 'R'/'Y'/'B' locked doors and
+'r'/'y'/'b' keycard pickups) — NO new tile symbols are introduced.
+
+Algorithm (placeLockAndKeyGate), run AFTER the connectivity audit so the gate is a
+genuine cut:
+  1. For every plain door 'd', flood-fill from spawn treating that door as solid.
+     A door qualifies as a gate only if locking it actually severs >=1 non-entrance
+     room while leaving >=1 non-entrance room reachable to host the key (loops are
+     respected — a door paralleled by a loop corridor cuts nothing and is rejected).
+  2. The candidate whose gated region reaches the greatest depth is chosen and
+     promoted to a locked door of a random colour. (Capped so no more than
+     LEVEL_GEN_GATE_MAX_GATED_FRACTION of the rooms are sealed away.)
+  3. The matching keycard is placed in the deepest room still reachable WITHOUT the
+     gate, verified against the flood mask — never stranded. If no key tile can be
+     placed, the gate is reverted to a plain door.
+  4. A bonus reward (medkit + ammo) is dropped in the deepest gated room, and the
+     level exit is steered into the gated region (Phase 6) so unlocking pays off.
+
+Because locked doors are BFS-passable (not walls/props/columns), the Phase 5
+connectivity audit and physical reachability are unaffected — the gate is a purely
+gameplay-level lock that the player opens once they hold the keycard.
 
 === KEY REFERENCES ===
 

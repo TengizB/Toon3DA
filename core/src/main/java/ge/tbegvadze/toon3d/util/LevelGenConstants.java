@@ -81,6 +81,37 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_GORE_WALL_CHANCE      = 0.35f; // 'x' near enemy dens / corpses
 
     // -------------------------------------------------------------------------
+    // DEPTH-AWARE DIFFICULTY & LOOT GRADIENT
+    // Each room's "depth" is its hop distance from the entrance over the MST room
+    // tree, normalised to [0,1]. Rooms further from the spawn ramp up in enemy
+    // count, enemy toughness, and loot richness, so exploration has a deliberate
+    // difficulty/reward curve instead of a flat random spread.
+    // -------------------------------------------------------------------------
+    // Maximum extra enemies a deepest-depth room may add on top of the base count.
+    public static final int   LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX        = 2;
+    // At full depth, the chance a light/ranged spawn ('3'/'2') is upgraded to a
+    // heavy archetype ('1' hulk / '4' brute / '5' wraith). Scales linearly with depth.
+    public static final float LEVEL_GEN_DEPTH_ENEMY_UPGRADE_CHANCE   = 0.60f;
+    // Additive bonus to a room's medkit / ammo pickup chance at full depth.
+    public static final float LEVEL_GEN_DEPTH_MEDKIT_BONUS           = 0.15f;
+    public static final float LEVEL_GEN_DEPTH_AMMO_BONUS             = 0.20f;
+    // At full depth, the chance a room receives a bonus second ammo box.
+    public static final float LEVEL_GEN_DEPTH_EXTRA_AMMO_CHANCE      = 0.50f;
+
+    // -------------------------------------------------------------------------
+    // LOCK-AND-KEY GATING
+    // After connectivity is verified, one plain door that is a true single-door cut
+    // (a "bridge") is promoted to a keycard-locked door ('R'/'Y'/'B'). The matching
+    // keycard pickup ('r'/'y'/'b') is placed in a room still reachable WITHOUT the
+    // gate, and the level exit (stairs) is steered into the gated region — creating
+    // the classic find-key → backtrack → unlock → progress loop. Reuses the existing
+    // DoorManager keycard system; no new tile symbols are introduced.
+    // -------------------------------------------------------------------------
+    // Never gate more than this fraction of the non-entrance rooms, so the player
+    // can always explore a meaningful portion of the level before needing the key.
+    public static final float LEVEL_GEN_GATE_MAX_GATED_FRACTION      = 0.60f;
+
+    // -------------------------------------------------------------------------
     // NEW ROOM TYPES — level generator configuration
     // -------------------------------------------------------------------------
 
