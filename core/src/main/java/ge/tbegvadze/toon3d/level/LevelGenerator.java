@@ -21,10 +21,21 @@ import java.util.Random;
  * Phase 3 — Decoration:         context-aware wall variety, room-type-specific floor
  *                                lighting, patterned columns, room-type prop layout,
  *                                pickups, and hazard walls.
- * Phase 4 — Enemy Placement:    enemy spawns in non-entrance rooms, after props.
+ * Phase 4 — Enemy Placement:    enemy spawns in non-entrance rooms, after props; count and
+ *                                archetype toughness scale with the room's depth from spawn.
  * Phase 5 — Connectivity Audit: BFS flood-fill from player spawn; emergency corridors for
  *                                any unreachable room.
- * Phase 6 — Stairs:             exactly one exit in the furthest / largest landmark room.
+ * Phase 5b— Lock-and-Key Gate:  one bridge door is promoted to a keycard-locked door, the
+ *                                matching keycard is placed in a still-reachable room, and a
+ *                                bonus reward is dropped behind the gate (reuses the existing
+ *                                DoorManager keycard system; no new tile symbols).
+ * Phase 6 — Stairs:             exactly one exit in the spatially deepest room — inside the
+ *                                gated region when a gate exists — so the exit is the payoff
+ *                                at the far end of the player's journey.
+ *
+ * Depth gradient: every room's depth is its hop distance from the entrance over the MST room
+ * tree. Position now carries meaning — deeper rooms are harder and richer, and the exit sits
+ * furthest in.
  *
  * Room types:
  *   ENTRANCE          — player spawn room; fully lit, no hazards.
@@ -108,6 +119,11 @@ public class LevelGenerator implements ILevelGenerator {
             widenSelectedCorridors(grid, rooms);
         }
 
+        // Spatial depth gradient: hop distance from the entrance over the MST room tree.
+        // Drives depth-aware enemy/loot scaling (phase 3-4) and deepest-room stairs (phase 6).
+        int[] roomDepths   = computeRoomDepths(rooms);
+        int   maxRoomDepth = maxValue(roomDepths);
+
         // Phase 2 — doors (single pass after ALL corridor carving is complete)
         placeDoors(grid);
 
@@ -130,13 +146,14 @@ public class LevelGenerator implements ILevelGenerator {
         placeCommandCenterProps(grid, rooms);
         placeContainmentBlockProps(grid, rooms);
         placeResearchLabProps(grid, rooms);
-        placePickups(grid, rooms);
+        placePickups(grid, rooms, roomDepths, maxRoomDepth);
         placeWeaponSpawns(grid, rooms);
 
         // Phase 4 — enemies (after props so spawns land on walkable tiles only)
         List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
-            spawnEnemiesInRoom(grid, rooms.get(roomIndex), spawnPoints);
+            float depthFraction = maxRoomDepth > 0 ? roomDepths[roomIndex] / (float) maxRoomDepth : 0f;
+            spawnEnemiesInRoom(grid, rooms.get(roomIndex), spawnPoints, depthFraction);
         }
 
         // Phase 4b — atmospheric wall theming (post-pass after enemies so corpse/den density is final)
@@ -147,8 +164,14 @@ public class LevelGenerator implements ILevelGenerator {
         // Phase 5 — connectivity audit
         verifyAndRepairConnectivity(grid, rooms);
 
-        // Phase 6 — stamp exactly one stairs-down exit
-        stampStairsDown(grid, rooms);
+        // Phase 5b — lock-and-key gating (after connectivity so the gate is a true cut)
+        boolean[] gatedRooms = null;
+        if (config.enableLockAndKey) {
+            gatedRooms = placeLockAndKeyGate(grid, rooms, roomDepths, spawnPoints);
+        }
+
+        // Phase 6 — stamp exactly one stairs-down exit in the deepest room (behind the gate if one exists)
+        stampStairsDown(grid, rooms, roomDepths, gatedRooms);
 
         return new Level(grid, spawnPoints, weaponSpawnPoints);
     }
@@ -1762,12 +1785,13 @@ public class LevelGenerator implements ILevelGenerator {
      *   COMMAND_CENTER:    moderate medkit + armour (VIP resupply).
      *   SERVER_ROOM/LARGE: existing boosted chances.
      */
-    private void placePickups(char[][] grid, List<Room> rooms) {
+    private void placePickups(char[][] grid, List<Room> rooms, int[] roomDepths, int maxRoomDepth) {
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
-            Room  room         = rooms.get(roomIndex);
-            float medkitChance = config.medkitChancePerRoom;
-            float armourChance = config.armourChancePerRoom;
-            float ammoChance   = LevelGenConstants.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
+            Room  room          = rooms.get(roomIndex);
+            float depthFraction = maxRoomDepth > 0 ? roomDepths[roomIndex] / (float) maxRoomDepth : 0f;
+            float medkitChance  = config.medkitChancePerRoom;
+            float armourChance  = config.armourChancePerRoom;
+            float ammoChance    = LevelGenConstants.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
 
             switch (room.type) {
                 case SERVER_ROOM:
@@ -1809,9 +1833,16 @@ public class LevelGenerator implements ILevelGenerator {
                     break;
             }
 
+            // Depth gradient: deeper rooms are richer to sustain the harder fights there.
+            medkitChance += depthFraction * LevelGenConstants.LEVEL_GEN_DEPTH_MEDKIT_BONUS;
+            ammoChance   += depthFraction * LevelGenConstants.LEVEL_GEN_DEPTH_AMMO_BONUS;
+
             if (config.medkits    && random.nextFloat() < medkitChance) tryPlacePickup(grid, room, 'H');
             if (config.armourKits && random.nextFloat() < armourChance)  tryPlacePickup(grid, room, 'A');
             if (random.nextFloat() < ammoChance) tryPlacePickup(grid, room, randomAmmoChar());
+            if (random.nextFloat() < depthFraction * LevelGenConstants.LEVEL_GEN_DEPTH_EXTRA_AMMO_CHANCE) {
+                tryPlacePickup(grid, room, randomAmmoChar());
+            }
         }
     }
 
@@ -1986,10 +2017,20 @@ public class LevelGenerator implements ILevelGenerator {
     // Phase 4 — Enemy placement
     // -------------------------------------------------------------------------
 
-    private void spawnEnemiesInRoom(char[][] grid, Room room, List<EnemySpawnPoint> spawnPoints) {
+    /**
+     * Spawns enemies in a room, scaled by the room's normalised depth (0 = adjacent to the
+     * entrance, 1 = deepest room over the MST tree). Deeper rooms add up to
+     * LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX extra enemies and bias the archetype mix toward
+     * heavier types via randomEnemySpawnChar(depthFraction).
+     */
+    private void spawnEnemiesInRoom(char[][] grid, Room room, List<EnemySpawnPoint> spawnPoints,
+                                    float depthFraction) {
         int area       = room.interiorWidth() * room.interiorHeight();
-        int enemyCount = Math.min(LevelGenConstants.LEVEL_GEN_MAX_ENEMIES_PER_ROOM,
-                                  1 + random.nextInt(Math.max(1, area / 6)));
+        int depthBonus = Math.round(depthFraction * LevelGenConstants.LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX);
+        int enemyCap   = LevelGenConstants.LEVEL_GEN_MAX_ENEMIES_PER_ROOM
+                       + LevelGenConstants.LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX;
+        int enemyCount = Math.min(enemyCap,
+                                  1 + random.nextInt(Math.max(1, area / 6)) + depthBonus);
         int[] placedColumns = new int[enemyCount];
         int[] placedRows    = new int[enemyCount];
         int   placed        = 0;
@@ -2010,13 +2051,32 @@ public class LevelGenerator implements ILevelGenerator {
             if (alreadyUsed) continue;
             placedColumns[placed] = tileColumn;
             placedRows[placed]    = tileRow;
-            char spawnChar = randomEnemySpawnChar();
+            char spawnChar = randomEnemySpawnChar(depthFraction);
             spawnPoints.add(new EnemySpawnPoint(spawnChar, tileColumn, tileRow));
             placed++;
         }
     }
 
-    private char randomEnemySpawnChar() {
+    /**
+     * Picks an enemy archetype, biased by normalised room depth. The base roll uses the
+     * fixed cumulative thresholds; deeper rooms then have a (depthFraction-scaled) chance to
+     * upgrade a light/ranged spawn ('3' gore-biter, '2' eye-tyrant) into a heavy archetype
+     * ('1' plague-hulk, '4' shell-brute, '5' mire-wraith) — so the difficulty ramps outward.
+     */
+    private char randomEnemySpawnChar(float depthFraction) {
+        char base = rollBaseEnemyChar();
+        if ((base == '3' || base == '2')
+                && random.nextFloat() < depthFraction * LevelGenConstants.LEVEL_GEN_DEPTH_ENEMY_UPGRADE_CHANCE) {
+            switch (random.nextInt(3)) {
+                case 0:  return '1'; // plague hulk (tank)
+                case 1:  return '4'; // shell brute (heavy charger)
+                default: return '5'; // mire wraith (ranged)
+            }
+        }
+        return base;
+    }
+
+    private char rollBaseEnemyChar() {
         float roll = random.nextFloat();
         if (roll < LevelGenConstants.LEVEL_GEN_CORRUPTOR_THRESHOLD)  return '1';
         if (roll < LevelGenConstants.LEVEL_GEN_VORTEX_EYE_THRESHOLD) return '2';
@@ -2126,30 +2186,55 @@ public class LevelGenerator implements ILevelGenerator {
     // -------------------------------------------------------------------------
 
     /**
-     * Stamps exactly one stairs-down tile. Preference order (furthest first within each tier):
-     *   1. COMMAND_CENTER — cinematic payoff for conquering the control room.
-     *   2. POWER_PLANT    — reactor shutdown = level complete.
-     *   3. LARGE          — landmark scale suits an exit landmark.
-     *   4. Any non-entrance room.
-     *   5. Entrance room  — absolute last resort.
+     * Stamps exactly one stairs-down tile in the spatially deepest room, so the exit always
+     * sits at the far end of the player's journey rather than at an arbitrary list index.
+     *
+     * Selection order:
+     *   1. If a lock-and-key gate exists, the deepest room WITHIN the gated region — the exit
+     *      becomes the payoff for finding the key and unlocking the vault.
+     *   2. Otherwise the deepest room overall (by MST hop distance from the entrance).
+     *   In both cases ties are broken toward landmark room types (command center > power plant
+     *   > large) for a more cinematic finale.
+     *   3. Legacy fallback by index, then the entrance room as an absolute last resort.
      */
-    private void stampStairsDown(char[][] grid, List<Room> rooms) {
-        for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
-            Room room = rooms.get(roomIndex);
-            if (room.type == RoomType.COMMAND_CENTER && tryStampInRoom(grid, room)) return;
-        }
-        for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
-            Room room = rooms.get(roomIndex);
-            if (room.type == RoomType.POWER_PLANT && tryStampInRoom(grid, room)) return;
-        }
-        for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
-            Room room = rooms.get(roomIndex);
-            if (room.type == RoomType.LARGE && tryStampInRoom(grid, room)) return;
-        }
+    private void stampStairsDown(char[][] grid, List<Room> rooms, int[] roomDepths, boolean[] gatedRooms) {
+        if (gatedRooms != null && stampInDeepestRoom(grid, rooms, roomDepths, gatedRooms)) return;
+        if (stampInDeepestRoom(grid, rooms, roomDepths, null)) return;
         for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
             if (tryStampInRoom(grid, rooms.get(roomIndex))) return;
         }
         tryStampInRoom(grid, rooms.get(0));
+    }
+
+    /**
+     * Attempts to stamp the stairs in the deepest eligible room. When restrictMask is non-null
+     * only rooms flagged true are considered; otherwise all non-entrance rooms are eligible.
+     * Candidates are tried in descending (depth, landmark rank) order until one accepts the stamp.
+     */
+    private boolean stampInDeepestRoom(char[][] grid, List<Room> rooms, int[] roomDepths,
+                                       boolean[] restrictMask) {
+        List<Integer> candidates = new ArrayList<>();
+        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
+            if (restrictMask != null && !restrictMask[roomIndex]) continue;
+            candidates.add(roomIndex);
+        }
+        candidates.sort((indexA, indexB) -> {
+            if (roomDepths[indexB] != roomDepths[indexA]) return roomDepths[indexB] - roomDepths[indexA];
+            return landmarkRank(rooms.get(indexB).type) - landmarkRank(rooms.get(indexA).type);
+        });
+        for (int roomIndex : candidates) {
+            if (tryStampInRoom(grid, rooms.get(roomIndex))) return true;
+        }
+        return false;
+    }
+
+    private int landmarkRank(RoomType type) {
+        switch (type) {
+            case COMMAND_CENTER: return 3;
+            case POWER_PLANT:    return 2;
+            case LARGE:          return 1;
+            default:             return 0;
+        }
     }
 
     private boolean tryStampInRoom(char[][] grid, Room room) {
@@ -2182,6 +2267,295 @@ public class LevelGenerator implements ILevelGenerator {
             if (isInBounds(neighborColumn, neighborRow) && isWalkableFloor(grid, neighborColumn, neighborRow)) {
                 grid[neighborRow][neighborColumn] = ' ';
             }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Room depth metric (spatial difficulty/loot gradient)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Computes each room's depth as its hop distance from the entrance (room 0) over the MST
+     * room tree captured in mstEdgeRooms. The MST spans every room, so every depth is defined.
+     * Returned array is parallel to the rooms list. Used to drive depth-aware enemy/loot scaling
+     * and deepest-room stairs placement — position in the level now carries meaning.
+     */
+    private int[] computeRoomDepths(List<Room> rooms) {
+        int roomCount = rooms.size();
+        int[] depth = new int[roomCount];
+        for (int roomIndex = 0; roomIndex < roomCount; roomIndex++) depth[roomIndex] = -1;
+
+        List<List<Integer>> adjacency = new ArrayList<>();
+        for (int roomIndex = 0; roomIndex < roomCount; roomIndex++) adjacency.add(new ArrayList<>());
+        for (Room[] edge : mstEdgeRooms) {
+            int indexA = indexOfRoom(rooms, edge[0]);
+            int indexB = indexOfRoom(rooms, edge[1]);
+            if (indexA < 0 || indexB < 0) continue;
+            adjacency.get(indexA).add(indexB);
+            adjacency.get(indexB).add(indexA);
+        }
+
+        int[] queue = new int[roomCount];
+        int head = 0;
+        int tail = 0;
+        depth[0]      = 0;
+        queue[tail++] = 0;
+        while (head < tail) {
+            int current = queue[head++];
+            for (int neighbor : adjacency.get(current)) {
+                if (depth[neighbor] != -1) continue;
+                depth[neighbor] = depth[current] + 1;
+                queue[tail++]   = neighbor;
+            }
+        }
+        // Any room not reached over the MST (degenerate edge data) is treated as adjacent.
+        for (int roomIndex = 0; roomIndex < roomCount; roomIndex++) {
+            if (depth[roomIndex] == -1) depth[roomIndex] = 0;
+        }
+        return depth;
+    }
+
+    /** Returns the index of a room in the list by reference identity, or -1 if absent. */
+    private int indexOfRoom(List<Room> rooms, Room target) {
+        for (int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) {
+            if (rooms.get(roomIndex) == target) return roomIndex;
+        }
+        return -1;
+    }
+
+    private int maxValue(int[] values) {
+        int max = 0;
+        for (int value : values) if (value > max) max = value;
+        return max;
+    }
+
+    // -------------------------------------------------------------------------
+    // Phase 5b — Lock-and-key gating
+    // -------------------------------------------------------------------------
+
+    /**
+     * Promotes one plain door ('d') that is a true single-door cut (a bridge) into a
+     * keycard-locked door, places the matching keycard in a room still reachable WITHOUT the
+     * gate, and drops a bonus reward in the gated region. Returns a per-room mask of the
+     * rooms sealed behind the gate (true = gated), or null when no valid gate was placed.
+     *
+     * Reachability is computed with a flood fill that treats the candidate door as solid, so a
+     * door only qualifies as a gate when locking it genuinely severs part of the level (loops
+     * are respected — a door paralleled by a loop corridor cuts nothing and is rejected). The
+     * deepest such region is preferred so the gate guards the most rewarding part of the map.
+     */
+    private boolean[] placeLockAndKeyGate(char[][] grid, List<Room> rooms, int[] roomDepths,
+                                          List<EnemySpawnPoint> spawnPoints) {
+        int spawnColumn = rooms.get(0).centerColumn();
+        int spawnRow    = rooms.get(0).centerRow();
+        int roomCount   = rooms.size();
+        int maxGated    = (int) Math.floor((roomCount - 1) * LevelGenConstants.LEVEL_GEN_GATE_MAX_GATED_FRACTION);
+
+        int       bestGateColumn = -1;
+        int       bestGateRow    = -1;
+        int       bestScore      = -1;
+        int       bestGatedCount = Integer.MAX_VALUE;
+        boolean[][] bestReachable = null;
+
+        for (int tileRow = 1; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT - 1; tileRow++) {
+            for (int tileColumn = 1; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH - 1; tileColumn++) {
+                if (grid[tileRow][tileColumn] != 'd') continue;
+                boolean[][] reachable = floodFillBlocking(grid, spawnColumn, spawnRow, tileColumn, tileRow);
+
+                int gatedCount            = 0;
+                int reachableNonEntrance  = 0;
+                int deepestGatedDepth     = -1;
+                for (int roomIndex = 1; roomIndex < roomCount; roomIndex++) {
+                    Room room = rooms.get(roomIndex);
+                    if (reachable[room.centerRow()][room.centerColumn()]) {
+                        reachableNonEntrance++;
+                    } else {
+                        gatedCount++;
+                        if (roomDepths[roomIndex] > deepestGatedDepth) deepestGatedDepth = roomDepths[roomIndex];
+                    }
+                }
+
+                // Need something behind the gate AND somewhere reachable to host the key,
+                // and the gate must not seal off too much of the level.
+                if (gatedCount == 0 || reachableNonEntrance == 0) continue;
+                if (maxGated >= 1 && gatedCount > maxGated) continue;
+
+                // Prefer gating the deepest region; on ties prefer the TIGHTEST vault (fewest
+                // gated rooms) so the lock guards a small set-piece near the end rather than
+                // sealing off a large slice of the level near the entrance.
+                boolean better = deepestGatedDepth > bestScore
+                              || (deepestGatedDepth == bestScore && gatedCount < bestGatedCount);
+                if (better) {
+                    bestScore      = deepestGatedDepth;
+                    bestGatedCount = gatedCount;
+                    bestGateColumn = tileColumn;
+                    bestGateRow    = tileRow;
+                    bestReachable  = reachable;
+                }
+            }
+        }
+
+        if (bestGateColumn < 0 || bestReachable == null) return null; // no valid gate this level
+
+        KeycardColor color    = pickGateColor();
+        grid[bestGateRow][bestGateColumn] = lockedDoorChar(color);
+
+        // Split rooms into gated vs reachable; choose the deepest reachable room to host the key.
+        boolean[] gatedRooms  = new boolean[roomCount];
+        int keyRoomIndex      = -1;
+        int keyRoomDepth      = -1;
+        for (int roomIndex = 1; roomIndex < roomCount; roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            if (bestReachable[room.centerRow()][room.centerColumn()]) {
+                if (roomDepths[roomIndex] > keyRoomDepth) {
+                    keyRoomDepth = roomDepths[roomIndex];
+                    keyRoomIndex = roomIndex;
+                }
+            } else {
+                gatedRooms[roomIndex] = true;
+            }
+        }
+
+        boolean keyPlaced = keyRoomIndex >= 0
+                && placeKeycardInReachableRoom(grid, rooms.get(keyRoomIndex), keycardChar(color), bestReachable);
+        if (!keyPlaced) {
+            // Could not give the player a way to reach the key — never strand the gate.
+            grid[bestGateRow][bestGateColumn] = 'd';
+            return null;
+        }
+
+        // Reward behind the gate so unlocking pays off beyond just reaching the exit.
+        int rewardRoomIndex = deepestGatedRoomIndex(rooms, roomDepths, gatedRooms);
+        if (rewardRoomIndex >= 0) {
+            Room rewardRoom = rooms.get(rewardRoomIndex);
+            placeRewardPickup(grid, rewardRoom, 'H', spawnPoints);
+            placeRewardPickup(grid, rewardRoom, randomAmmoChar(), spawnPoints);
+        }
+        return gatedRooms;
+    }
+
+    /** Returns the gated room with the greatest depth, or -1 when none are gated. */
+    private int deepestGatedRoomIndex(List<Room> rooms, int[] roomDepths, boolean[] gatedRooms) {
+        int bestIndex = -1;
+        int bestDepth = -1;
+        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
+            if (!gatedRooms[roomIndex]) continue;
+            if (roomDepths[roomIndex] > bestDepth) {
+                bestDepth = roomDepths[roomIndex];
+                bestIndex = roomIndex;
+            }
+        }
+        return bestIndex;
+    }
+
+    /**
+     * Flood fill over passable floor tiles from (startColumn,startRow), treating the tile at
+     * (blockColumn,blockRow) as solid. Returns a visited mask indexed [row][column]. Uses the
+     * same passability rule as the connectivity audit (walls/props/columns block; doors pass).
+     */
+    private boolean[][] floodFillBlocking(char[][] grid, int startColumn, int startRow,
+                                          int blockColumn, int blockRow) {
+        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
+        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+        boolean[][] visited = new boolean[gridHeight][gridWidth];
+
+        int[] stackColumns = new int[gridWidth * gridHeight];
+        int[] stackRows    = new int[gridWidth * gridHeight];
+        int   stackTop     = 0;
+        visited[startRow][startColumn] = true;
+        stackColumns[stackTop] = startColumn;
+        stackRows[stackTop]    = startRow;
+        stackTop++;
+
+        int[] deltaColumns = { 0,  0,  1, -1 };
+        int[] deltaRows    = { 1, -1,  0,  0 };
+        while (stackTop > 0) {
+            stackTop--;
+            int currentColumn = stackColumns[stackTop];
+            int currentRow    = stackRows[stackTop];
+            for (int direction = 0; direction < 4; direction++) {
+                int neighborColumn = currentColumn + deltaColumns[direction];
+                int neighborRow    = currentRow    + deltaRows[direction];
+                if (!isInBounds(neighborColumn, neighborRow)) continue;
+                if (visited[neighborRow][neighborColumn]) continue;
+                if (neighborColumn == blockColumn && neighborRow == blockRow) continue;
+                if (isBfsPassable(grid[neighborRow][neighborColumn])) {
+                    visited[neighborRow][neighborColumn] = true;
+                    stackColumns[stackTop] = neighborColumn;
+                    stackRows[stackTop]    = neighborRow;
+                    stackTop++;
+                }
+            }
+        }
+        return visited;
+    }
+
+    /**
+     * Places the keycard pickup on a plain walkable floor tile inside the given room that is
+     * confirmed reachable (in the supplied mask) and not adjacent to a door. Returns true on
+     * success. Only plain floor is overwritten so existing props/pickups are preserved.
+     */
+    private boolean placeKeycardInReachableRoom(char[][] grid, Room room, char keycardPickupChar,
+                                                boolean[][] reachable) {
+        for (int attempt = 0; attempt < 30; attempt++) {
+            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
+            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
+            if (!reachable[tileRow][tileColumn]) continue;
+            char cell = grid[tileRow][tileColumn];
+            if (cell != ' ' && cell != 'l' && cell != 'u' && cell != 'f') continue;
+            if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+            grid[tileRow][tileColumn] = keycardPickupChar;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Places a reward pickup on a plain walkable floor tile that is not occupied by an enemy
+     * spawn point and not adjacent to a door. No-op if no eligible tile is found.
+     */
+    private void placeRewardPickup(char[][] grid, Room room, char pickupChar,
+                                   List<EnemySpawnPoint> spawnPoints) {
+        for (int attempt = 0; attempt < 25; attempt++) {
+            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
+            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
+            char cell = grid[tileRow][tileColumn];
+            if (cell != ' ' && cell != 'l' && cell != 'u' && cell != 'f') continue;
+            if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+            if (isOccupiedBySpawn(spawnPoints, tileColumn, tileRow)) continue;
+            grid[tileRow][tileColumn] = pickupChar;
+            return;
+        }
+    }
+
+    private boolean isOccupiedBySpawn(List<EnemySpawnPoint> spawnPoints, int tileColumn, int tileRow) {
+        for (EnemySpawnPoint spawn : spawnPoints) {
+            if (spawn.tileColumn == tileColumn && spawn.tileRow == tileRow) return true;
+        }
+        return false;
+    }
+
+    private KeycardColor pickGateColor() {
+        switch (random.nextInt(3)) {
+            case 0:  return KeycardColor.RED;
+            case 1:  return KeycardColor.YELLOW;
+            default: return KeycardColor.BLUE;
+        }
+    }
+
+    private char lockedDoorChar(KeycardColor color) {
+        switch (color) {
+            case RED:    return 'R';
+            case YELLOW: return 'Y';
+            default:     return 'B';
+        }
+    }
+
+    private char keycardChar(KeycardColor color) {
+        switch (color) {
+            case RED:    return 'r';
+            case YELLOW: return 'y';
+            default:     return 'b';
         }
     }
 

@@ -72,6 +72,13 @@ public final class LevelGenConfig {
     /** Enable wide (3-tile) grand hallways with centre-line columns on 2-3 MST edges. */
     public boolean enableWideHallways = true;
 
+    /**
+     * Enable lock-and-key gating: promote one bridge door to a keycard-locked door,
+     * scatter the matching keycard in a still-reachable room, and steer the level exit
+     * behind the gate. Reuses the existing DoorManager keycard system.
+     */
+    public boolean enableLockAndKey = true;
+
     // -------------------------------------------------------------------------
     // Pickups (walkable; collected on contact)
     // -------------------------------------------------------------------------
