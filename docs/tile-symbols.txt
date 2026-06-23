@@ -58,15 +58,15 @@ P   Cylindrical column  Solid. Rendered as 3D cylinder (ray-circle intersection)
 SOLID PROPS (block player movement; rendered as billboard sprites)
 ------------------------------------------------------------------
 g   Radioactive barrel  Dark green hazard drum.                                0.65x wall height
-E   Explosive barrel    Orange-red volatile drum. Triggers hazard walls nearby. 0.65x wall height
-T   Computer terminal   Control console (charcoal-blue, cyan screen).          0.75x wall height
+E   Explosive barrel    Crimson volatile drum: hazard hoops, stamped explosion burst, hot leaking seams. 0.65x wall height
+T   Computer terminal   Control console: monitor (cyan readout/waveform), keypad deck, indicator LEDs, hazard base. 0.75x wall height
 L   Locker              Equipment storage cabinet (steel blue-gray).           0.90x wall height
-C   Crate               Supply/ammo box (warm brown wood, cross-plank).        0.50x wall height
+C   Crate               Reinforced olive-drab munitions box: steel corner brackets, ribs, hazard band, UAC stencil. 0.50x wall height
 #   Security camera     Mounted surveillance device. Near walls.
-%   Generator           Power generation unit. Clusters in power plant areas.
-&   Bio-pod             Cryogenic/specimen container. Cryo and containment.
-=   Weapon rack         Gun/equipment display stand. Armory, command rooms.
-@   Special equipment   Advanced machinery. Rare. Standard rooms only.
+%   Generator           Power unit: glowing green reactor core, cooling fins, twin gauges, breaker bank, hazard base. 0.85x wall height
+&   Bio-pod             Cryo specimen pod: green fluid tube, curled specimen, bubbles, cyan rings, base readout panel. 0.90x wall height
+=   Weapon rack         Armory rack: three standing rifles, hung pistol, grenades, magazines, ammo crate on pegboard. 0.70x wall height
+@   Special equipment   Advanced machine: violet→cyan energy aperture with core orb, side plasma canisters, keypad panel. 0.88x wall height
 I   Specimen tank       Tall glass cylinder with suspended specimen. Research Lab tank row.   0.85x wall height
 W   Holo-workstation    Low console projecting a holographic wireframe above it.              0.70x wall height
 J   AI core node        Tall stack of translucent processing slabs, glowing cyan seam.        0.95x wall height
