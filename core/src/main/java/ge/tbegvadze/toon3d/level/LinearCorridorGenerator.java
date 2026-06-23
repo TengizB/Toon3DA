@@ -29,9 +29,10 @@ import java.util.Random;
 public class LinearCorridorGenerator implements ILevelGenerator {
 
     private enum RoomType {
-        ENTRANCE, STANDARD, SERVER_ROOM,
+        ENTRANCE, STANDARD, LARGE, SERVER_ROOM,
         MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
-        POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK
+        POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK,
+        RESEARCH_LAB, STORAGE_BAY, REACTOR
     }
 
     private static final class Room {
@@ -97,12 +98,15 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         assignWallVariety(grid);
         placeSpineColumns(grid);
         placePlayerSpawn(grid, rooms.get(0));
+
+        // Doors placed before props so interior layouts can keep doorways and their swing
+        // axes clear (the prop/column guards test for adjacent doors). All corridor and room
+        // carving is already complete by this point.
+        placeDoors(grid);
+
         placeProps(grid, rooms);
         placePickups(grid, rooms);
         placeWeaponSpawns(grid, rooms);
-
-        // Doors placed after all corridor carving and room carving are done
-        placeDoors(grid);
 
         // Phase 4 — Enemies (after props so spawns land on walkable tiles)
         List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
@@ -154,6 +158,12 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                     grid[tileRow][tileColumn] = 'l';
                 }
             }
+        }
+
+        // Optional widened crossroads node so the long artery is not a monotonous straight line.
+        if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_PLAZA_CHANCE) {
+            int plazaColumn = (spineStartColumn + spineEndColumn) / 2 + randomBetween(-4, 4);
+            carveSpinePlaza(grid, plazaColumn, spineRow);
         }
 
         List<Room> rooms = new ArrayList<>();
@@ -209,8 +219,13 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     private Room tryPlaceHorizontalSideRoom(char[][] grid, List<Room> rooms,
                                              int slotColumn, int spineRow, int spineHalfWidth,
                                              boolean northSide) {
-        int interiorWidth  = randomBetween(4, 10);
-        int interiorHeight = randomBetween(4, 8);
+        boolean bigRoom    = random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_BIG_ROOM_CHANCE;
+        int interiorWidth  = bigRoom
+            ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_WIDTH)
+            : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_WIDTH, 8);
+        int interiorHeight = bigRoom
+            ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_HEIGHT)
+            : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_HEIGHT, 8);
         int totalWidth     = interiorWidth  + 2;
         int totalHeight    = interiorHeight + 2;
 
@@ -299,9 +314,45 @@ public class LinearCorridorGenerator implements ILevelGenerator {
             }
         }
 
+        if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_PLAZA_CHANCE) {
+            int plazaRow = (spineStartRow + spineEndRow) / 2 + randomBetween(-4, 4);
+            carveSpinePlaza(grid, spineColumn, plazaRow);
+        }
+
         List<Room> rooms = new ArrayList<>();
         placeVerticalSpineRooms(grid, rooms, spineColumn, spineStartRow, spineEndRow);
         return rooms;
+    }
+
+    /**
+     * Carves a square open plaza centred on a spine tile and frames it with four corner
+     * columns. Reads as a crossroads / staging node that breaks up the straight artery.
+     *
+     * Lane-safe by construction: the centre tile and all four cardinal mid-edges stay open,
+     * so the corridor is never sealed. Plaza tiles are deliberately NOT fed to the spine-column
+     * pass — the plaza carries its own corner framing and extra columns in the widened throat
+     * could pinch the narrow spine where it meets the plaza.
+     */
+    private void carveSpinePlaza(char[][] grid, int centerColumn, int centerRow) {
+        int radius = LevelGenConstants.LEVEL_GEN_SPINE_PLAZA_RADIUS;
+        for (int deltaRow = -radius; deltaRow <= radius; deltaRow++) {
+            for (int deltaColumn = -radius; deltaColumn <= radius; deltaColumn++) {
+                int tileColumn = centerColumn + deltaColumn;
+                int tileRow    = centerRow    + deltaRow;
+                if (tileColumn <= 0 || tileColumn >= LevelGenConstants.LEVEL_GEN_GRID_WIDTH  - 1) continue;
+                if (tileRow    <= 0 || tileRow    >= LevelGenConstants.LEVEL_GEN_GRID_HEIGHT - 1) continue;
+                char cell = grid[tileRow][tileColumn];
+                if (Level.isWall(cell) || cell == 'l') {
+                    grid[tileRow][tileColumn] = ' ';
+                }
+            }
+        }
+        // Frame the opening with four free-standing corner columns (centre cross stays clear).
+        int inset = Math.max(1, radius - 1);
+        tryPlaceColumnAt(grid, centerColumn - inset, centerRow - inset);
+        tryPlaceColumnAt(grid, centerColumn + inset, centerRow - inset);
+        tryPlaceColumnAt(grid, centerColumn - inset, centerRow + inset);
+        tryPlaceColumnAt(grid, centerColumn + inset, centerRow + inset);
     }
 
     private void placeVerticalSpineRooms(char[][] grid, List<Room> rooms,
@@ -343,8 +394,13 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     private Room tryPlaceVerticalSideRoom(char[][] grid, List<Room> rooms,
                                            int spineColumn, int spineHalfWidth,
                                            int slotRow, boolean eastSide) {
-        int interiorWidth  = randomBetween(4, 8);
-        int interiorHeight = randomBetween(4, 10);
+        boolean bigRoom    = random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_BIG_ROOM_CHANCE;
+        int interiorWidth  = bigRoom
+            ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_WIDTH)
+            : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_WIDTH, 8);
+        int interiorHeight = bigRoom
+            ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_HEIGHT)
+            : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_HEIGHT, 8);
         int totalWidth     = interiorWidth  + 2;
         int totalHeight    = interiorHeight + 2;
 
@@ -419,6 +475,10 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         int     cryoChamberCount    = 0;
         int     containmentCount    = 0;
         int     serverRoomCount     = 0;
+        int     largeRoomCount      = 0;
+        int     researchLabCount    = 0;
+        int     storageBayCount     = 0;
+        int     reactorCount        = 0;
 
         // Medical Bay — guaranteed; prefer the mid-list room with minimum size
         int midIndex = rooms.size() / 2;
@@ -480,12 +540,46 @@ public class LinearCorridorGenerator implements ILevelGenerator {
             }
         }
 
-        // Remaining rooms — cumulative probability bands (same as LevelGenerator)
+        // Research Lab — first eligible STANDARD room becomes a sci-fi set-piece (capped at 1).
+        for (int roomIndex = 1; roomIndex < rooms.size() && researchLabCount < LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_MAX; roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            if (room.type != RoomType.STANDARD) continue;
+            if (room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_MIN_WIDTH
+                    && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_MIN_HEIGHT
+                    && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_CHANCE) {
+                room.type = RoomType.RESEARCH_LAB;
+                researchLabCount++;
+            }
+        }
+
+        // Reactor — first large-ish STANDARD room becomes a volatile hazard field (capped at 1).
+        for (int roomIndex = 1; roomIndex < rooms.size() && reactorCount < LevelGenConstants.LEVEL_GEN_SPINE_REACTOR_MAX; roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            if (room.type != RoomType.STANDARD) continue;
+            if (room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SPINE_REACTOR_MIN_WIDTH
+                    && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SPINE_REACTOR_MIN_HEIGHT
+                    && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_REACTOR_CHANCE) {
+                room.type = RoomType.REACTOR;
+                reactorCount++;
+            }
+        }
+
+        // Remaining rooms — cumulative probability bands (LARGE / specialty / STANDARD).
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room  room = rooms.get(roomIndex);
             if (room.type != RoomType.STANDARD) continue;
-            float roll = random.nextFloat();
 
+            // LARGE landmark — only oversized rooms qualify; rolled before the specialty bands.
+            if (largeRoomCount < LevelGenConstants.LEVEL_GEN_SPINE_LARGE_MAX
+                    && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM
+                    && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM
+                    && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_LARGE_CHANCE) {
+                room.type = RoomType.LARGE;
+                largeRoomCount++;
+                continue;
+            }
+
+            float roll = random.nextFloat();
             if (cryoChamberCount < LevelGenConstants.LEVEL_GEN_CRYO_MAX
                     && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_CRYO_MIN_WIDTH
                     && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_CRYO_MIN_HEIGHT
@@ -499,9 +593,18 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                               + LevelGenConstants.LEVEL_GEN_CONTAINMENT_CHANCE) {
                 room.type = RoomType.CONTAINMENT_BLOCK;
                 containmentCount++;
+            } else if (storageBayCount < LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_MAX
+                    && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_MIN_WIDTH
+                    && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_MIN_HEIGHT
+                    && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE
+                              + LevelGenConstants.LEVEL_GEN_CONTAINMENT_CHANCE
+                              + LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_CHANCE) {
+                room.type = RoomType.STORAGE_BAY;
+                storageBayCount++;
             } else if (serverRoomCount < LevelGenConstants.LEVEL_GEN_SERVER_ROOM_MAX_PER_LEVEL
                     && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE
                               + LevelGenConstants.LEVEL_GEN_CONTAINMENT_CHANCE
+                              + LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_CHANCE
                               + LevelGenConstants.LEVEL_GEN_SERVER_ROOM_CHANCE) {
                 room.type = RoomType.SERVER_ROOM;
                 serverRoomCount++;
@@ -509,7 +612,7 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         }
 
         // Suppress "assigned but never read" warnings for future-guard boolean flags.
-        boolean unused = commandCenterPlaced || armoryPlaced;
+        boolean unused = commandCenterPlaced || armoryPlaced || powerPlantPlaced;
     }
 
     // -------------------------------------------------------------------------
@@ -527,6 +630,10 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                 case POWER_PLANT:        assignPowerPlantFloor(grid, room);        break;
                 case COMMAND_CENTER:     assignCommandCenterFloor(grid, room);     break;
                 case CONTAINMENT_BLOCK:  assignContainmentBlockFloor(grid, room);  break;
+                case LARGE:              assignLargeRoomFloor(grid, room);         break;
+                case RESEARCH_LAB:       assignResearchLabFloor(grid, room);       break;
+                case STORAGE_BAY:        assignStorageBayFloor(grid, room);        break;
+                case REACTOR:            assignReactorFloor(grid, room);           break;
                 default:                 assignStandardRoomFloor(grid, room);      break;
             }
         }
@@ -647,6 +754,63 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         }
     }
 
+    /** LARGE landmark — mostly lit open floor with a dimmer 'l' edge ring for depth. */
+    private void assignLargeRoomFloor(char[][] grid, Room room) {
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                boolean isEdgeTile = tileColumn == room.leftColumn  + 1
+                                  || tileColumn == room.rightColumn - 1
+                                  || tileRow    == room.bottomRow   + 1
+                                  || tileRow    == room.topRow      - 1;
+                if (isEdgeTile && random.nextFloat() < 0.50f) {
+                    grid[tileRow][tileColumn] = 'l';
+                }
+            }
+        }
+    }
+
+    /** RESEARCH_LAB — dim, even 'l' lab lighting; cold and clinical without going dark. */
+    private void assignResearchLabFloor(char[][] grid, Room room) {
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                grid[tileRow][tileColumn] = random.nextFloat() < 0.20f ? 'u' : 'l';
+            }
+        }
+    }
+
+    /** STORAGE_BAY — utilitarian normal 'l' floor; the cargo aisles read by their crates. */
+    private void assignStorageBayFloor(char[][] grid, Room room) {
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                grid[tileRow][tileColumn] = 'l';
+            }
+        }
+    }
+
+    /** REACTOR — dark 'u' floor with a few 'f' flickering tiles near the core (reactor hum). */
+    private void assignReactorFloor(char[][] grid, Room room) {
+        int centerColumn  = room.centerColumn();
+        int centerRow     = room.centerRow();
+        int flickerBudget = 4;
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                boolean nearCenter = Math.abs(tileColumn - centerColumn) <= 2
+                                  && Math.abs(tileRow    - centerRow)    <= 2;
+                if (nearCenter && flickerBudget > 0
+                        && random.nextFloat() < LevelGenConstants.LEVEL_GEN_ROOM_POWERPLANT_NEAR_FLICKER_CHANCE) {
+                    grid[tileRow][tileColumn] = 'f';
+                    flickerBudget--;
+                } else {
+                    grid[tileRow][tileColumn] = 'u';
+                }
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Phase 3 — Wall variety
     // -------------------------------------------------------------------------
@@ -694,7 +858,9 @@ public class LinearCorridorGenerator implements ILevelGenerator {
 
     /**
      * Places 'P' column props along the spine centre at regular intervals using the
-     * recorded spine-centre tile list. Only places where no door is immediately adjacent.
+     * recorded spine-centre tile list. A column is placed only when it cannot seal the
+     * 3-wide spine: at least one perpendicular axis must keep an open lane on both sides,
+     * and the tile must be clear of doors and other columns.
      */
     private void placeSpineColumns(char[][] grid) {
         int spacing = LevelGenConstants.LEVEL_GEN_WIDE_HALLWAY_COLUMN_SPACING;
@@ -705,7 +871,14 @@ public class LinearCorridorGenerator implements ILevelGenerator {
             int tileRow    = tile[1];
             if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
             if (isAdjacentToDoor(grid, tileColumn, tileRow))  continue;
-            grid[tileRow][tileColumn] = 'P';
+            if (isAdjacentToColumn(grid, tileColumn, tileRow)) continue;
+            boolean northClear = isWalkableFloor(grid, tileColumn, tileRow + 1);
+            boolean southClear = isWalkableFloor(grid, tileColumn, tileRow - 1);
+            boolean eastClear  = isWalkableFloor(grid, tileColumn + 1, tileRow);
+            boolean westClear  = isWalkableFloor(grid, tileColumn - 1, tileRow);
+            if ((northClear && southClear) || (eastClear && westClear)) {
+                grid[tileRow][tileColumn] = 'P';
+            }
         }
     }
 
@@ -745,16 +918,28 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                 case POWER_PLANT:        placePowerPlantProps(grid, room);        break;
                 case COMMAND_CENTER:     placeCommandCenterProps(grid, room);     break;
                 case CONTAINMENT_BLOCK:  placeContainmentBlockProps(grid, room);  break;
+                case LARGE:              placeLargeRoomProps(grid, room);         break;
+                case RESEARCH_LAB:       placeResearchLabProps(grid, room);       break;
+                case STORAGE_BAY:        placeStorageBayProps(grid, room);        break;
+                case REACTOR:            placeReactorProps(grid, room);           break;
                 default:                 placeStandardRoomProps(grid, room);      break;
             }
         }
     }
 
+    /**
+     * STANDARD room props. Qualifying rooms first attempt a structural interior layout
+     * (columns, cover, an altar) so even ordinary rooms read as designed spaces; rooms
+     * that do not roll a layout fall back to the legacy sparse hazard/crate scatter.
+     */
     private void placeStandardRoomProps(char[][] grid, Room room) {
+        if (decorateRoomInterior(grid, room)) return;
         char[] propChars = { 'g', 'E', 'C', '#' };
         for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
             for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
                 if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+                if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
                 if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_PROP_CHANCE) {
                     grid[tileRow][tileColumn] = propChars[random.nextInt(propChars.length)];
                 }
@@ -928,6 +1113,281 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         }
     }
 
+    /**
+     * LARGE landmark — a patterned column hall with deliberately sparse props so the open
+     * floor stays navigable and the pillars carry the visual rhythm.
+     */
+    private void placeLargeRoomProps(char[][] grid, Room room) {
+        switch (random.nextInt(3)) {
+            case 0:  layoutFourPillars(grid, room);      break;
+            case 1:  layoutCentreAvenue(grid, room);     break;
+            default: layoutPerimeterColumns(grid, room); break;
+        }
+        char[] sparseProps = { 'C', 'E', '#' };
+        scatterSparseProps(grid, room, LevelGenConstants.LEVEL_GEN_LARGE_PROP_CHANCE, sparseProps);
+    }
+
+    /**
+     * RESEARCH_LAB — sci-fi set-piece: holo-data 'D' back wall, a row of specimen tanks 'I',
+     * a central AI core 'J', a holo-workstation 'W' and special equipment '@', plus scattered
+     * energy-scorch 'e' decals. Solids go down lane-safe so the lab never seals.
+     */
+    private void placeResearchLabProps(char[][] grid, Room room) {
+        // Holo-data wall band along the back (top) perimeter.
+        for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
+            if (Level.isWall(grid[room.topRow][tileColumn])
+                    && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_HOLO_WALL_CHANCE) {
+                grid[room.topRow][tileColumn] = 'D';
+            }
+        }
+        // Row of specimen tanks 'I' along the back interior row.
+        int tankTarget = randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_MIN_TANKS,
+                                       LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_MAX_TANKS);
+        int tanksPlaced = 0;
+        int backRow = room.topRow - 1;
+        for (int tileColumn = room.leftColumn + 1;
+             tileColumn < room.rightColumn && tanksPlaced < tankTarget; tileColumn += 2) {
+            if (tryPlaceSolidProp(grid, tileColumn, backRow, 'I')) tanksPlaced++;
+        }
+        // AI core just off-centre, flanked by a holo-workstation and special equipment.
+        // The exact room centre is left walkable so the connectivity audit never bulldozes here.
+        int centerColumn = room.centerColumn();
+        int centerRow    = room.centerRow();
+        tryPlaceSolidProp(grid, centerColumn,     centerRow + 1, 'J');
+        tryPlaceSolidProp(grid, centerColumn - 2, centerRow,     'W');
+        tryPlaceSolidProp(grid, centerColumn + 2, centerRow,     '@');
+        // Energy-scorch decals scattered on the floor.
+        int scorchTarget = randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_SCORCH_MIN,
+                                         LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_SCORCH_MAX);
+        scatterDecals(grid, room, 'e', scorchTarget);
+    }
+
+    /**
+     * STORAGE_BAY — cargo hold of stacked crate 'C' / locker 'L' aisles. A one-tile cross-aisle
+     * is kept open through the centre so every lane stays reachable.
+     */
+    private void placeStorageBayProps(char[][] grid, Room room) {
+        int crossRow = room.centerRow();
+        for (int tileColumn = room.leftColumn + 2; tileColumn < room.rightColumn - 1; tileColumn += 2) {
+            for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+                if (tileRow == crossRow) continue; // cross-aisle keeps the bay fully connected
+                char crate = random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_LOCKER_RATIO
+                             ? 'L' : 'C';
+                tryPlaceSolidProp(grid, tileColumn, tileRow, crate);
+            }
+        }
+    }
+
+    /**
+     * REACTOR — volatile hazard field: radiation 'U' walls, a generator '%' core cluster, and
+     * scattered explosive 'E' / radioactive 'g' barrels. Barrels are placed lane-safe.
+     */
+    private void placeReactorProps(char[][] grid, Room room) {
+        // Radiation walls on the perimeter.
+        for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
+            for (int wallRow : new int[]{ room.bottomRow, room.topRow }) {
+                if (Level.isWall(grid[wallRow][tileColumn])
+                        && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_REACTOR_RAD_WALL_CHANCE) {
+                    grid[wallRow][tileColumn] = 'U';
+                }
+            }
+        }
+        // Generator core cluster off-centre. The exact room centre is left walkable so the
+        // connectivity audit never has to bulldoze a corridor through the core.
+        int centerColumn = room.centerColumn();
+        int centerRow    = room.centerRow();
+        tryPlaceSolidProp(grid, centerColumn + 1, centerRow,     '%');
+        tryPlaceSolidProp(grid, centerColumn + 2, centerRow,     '%');
+        tryPlaceSolidProp(grid, centerColumn + 1, centerRow + 1, '%');
+        // Scattered volatile barrels (centre tile kept clear).
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (tileColumn == centerColumn && tileRow == centerRow) continue;
+                if (random.nextFloat() >= LevelGenConstants.LEVEL_GEN_SPINE_REACTOR_BARREL_CHANCE) continue;
+                tryPlaceSolidProp(grid, tileColumn, tileRow, random.nextBoolean() ? 'E' : 'g');
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Phase 3 — Interior architecture (STANDARD / LARGE structural layouts)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Gives a qualifying STANDARD room an internal structure built from environment elements
+     * so it reads as a designed space rather than a bare box. Returns true when a layout was
+     * applied (caller then skips the legacy scatter). Every layout is lane-safe by
+     * construction: it never seals the room centre, a doorway, the spawn, or the stairs.
+     */
+    private boolean decorateRoomInterior(char[][] grid, Room room) {
+        if (room.interiorWidth()  < LevelGenConstants.LEVEL_GEN_INTERIOR_MIN_DIM) return false;
+        if (room.interiorHeight() < LevelGenConstants.LEVEL_GEN_INTERIOR_MIN_DIM) return false;
+        if (random.nextFloat() >= LevelGenConstants.LEVEL_GEN_INTERIOR_LAYOUT_CHANCE) return false;
+        switch (random.nextInt(4)) {
+            case 0:  layoutFourPillars(grid, room);  break;
+            case 1:  layoutCentreAvenue(grid, room); break;
+            case 2:  layoutCentralAltar(grid, room); break;
+            default: layoutCrateCover(grid, room);   break;
+        }
+        return true;
+    }
+
+    /** Four free-standing columns at the interior quadrant centres (classic pillared hall). */
+    private void layoutFourPillars(char[][] grid, Room room) {
+        int quarterWidth  = room.interiorWidth()  / 4;
+        int quarterHeight = room.interiorHeight() / 4;
+        int[] columns = { room.leftColumn + 1 + quarterWidth, room.rightColumn - 1 - quarterWidth };
+        int[] rows    = { room.bottomRow  + 1 + quarterHeight, room.topRow      - 1 - quarterHeight };
+        for (int patternColumn : columns) {
+            for (int patternRow : rows) {
+                tryPlaceColumnAt(grid, patternColumn, patternRow);
+            }
+        }
+    }
+
+    /** A single row of columns down the room's long axis, splitting it into two naves. */
+    private void layoutCentreAvenue(char[][] grid, Room room) {
+        int spacing      = LevelGenConstants.LEVEL_GEN_INTERIOR_COLUMN_SPACING + 1;
+        int centerColumn = room.centerColumn();
+        int centerRow    = room.centerRow();
+        if (room.interiorWidth() >= room.interiorHeight()) {
+            for (int tileColumn = room.leftColumn + 2; tileColumn < room.rightColumn - 1; tileColumn += spacing) {
+                if (tileColumn == centerColumn) continue; // keep the room centre clear
+                tryPlaceColumnAt(grid, tileColumn, centerRow);
+            }
+        } else {
+            for (int tileRow = room.bottomRow + 2; tileRow < room.topRow - 1; tileRow += spacing) {
+                if (tileRow == centerRow) continue; // keep the room centre clear
+                tryPlaceColumnAt(grid, centerColumn, tileRow);
+            }
+        }
+    }
+
+    /** Columns hugging the four interior mid-edges, leaving a wide open centre (mini-arena). */
+    private void layoutPerimeterColumns(char[][] grid, Room room) {
+        int midColumn = room.centerColumn();
+        int midRow    = room.centerRow();
+        tryPlaceColumnAt(grid, midColumn,            room.bottomRow + 2);
+        tryPlaceColumnAt(grid, midColumn,            room.topRow    - 2);
+        tryPlaceColumnAt(grid, room.leftColumn  + 2, midRow);
+        tryPlaceColumnAt(grid, room.rightColumn - 2, midRow);
+    }
+
+    /**
+     * Four columns framing a central reward pedestal — a small shrine. The pickup sits on the
+     * open centre tile; the columns occupy the diagonals so all four cardinal lanes stay clear.
+     */
+    private void layoutCentralAltar(char[][] grid, Room room) {
+        int centerColumn = room.centerColumn();
+        int centerRow    = room.centerRow();
+        tryPlaceColumnAt(grid, centerColumn - 1, centerRow - 1);
+        tryPlaceColumnAt(grid, centerColumn + 1, centerRow - 1);
+        tryPlaceColumnAt(grid, centerColumn - 1, centerRow + 1);
+        tryPlaceColumnAt(grid, centerColumn + 1, centerRow + 1);
+        if (isWalkableFloor(grid, centerColumn, centerRow)
+                && !isAdjacentToDoor(grid, centerColumn, centerRow)) {
+            grid[centerRow][centerColumn] = random.nextBoolean() ? 'A' : 'H';
+        }
+    }
+
+    /** A few small crate/locker cover clusters offset from the centre, for tactical cover. */
+    private void layoutCrateCover(char[][] grid, Room room) {
+        int centerColumn = room.centerColumn();
+        int centerRow    = room.centerRow();
+        for (int cluster = 0; cluster < LevelGenConstants.LEVEL_GEN_INTERIOR_CRATE_CLUSTERS; cluster++) {
+            int anchorColumn = room.leftColumn + 2 + random.nextInt(Math.max(1, room.interiorWidth()  - 2));
+            int anchorRow    = room.bottomRow  + 2 + random.nextInt(Math.max(1, room.interiorHeight() - 2));
+            if (anchorColumn == centerColumn && anchorRow == centerRow) continue; // keep centre clear
+            int crateCount = 1 + random.nextInt(LevelGenConstants.LEVEL_GEN_INTERIOR_CRATE_PER_CLUSTER);
+            for (int offset = 0; offset < crateCount; offset++) {
+                char crate = random.nextFloat() < 0.30f ? 'L' : 'C';
+                tryPlaceSolidProp(grid, anchorColumn + offset, anchorRow, crate);
+            }
+        }
+    }
+
+    /** Scatters {@code count} solid props of one type at random walkable, lane-safe interior tiles. */
+    private void scatterSparseProps(char[][] grid, Room room, float chance, char[] propChars) {
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (random.nextFloat() >= chance) continue;
+                tryPlaceSolidProp(grid, tileColumn, tileRow, propChars[random.nextInt(propChars.length)]);
+            }
+        }
+    }
+
+    /** Scatters up to {@code count} walkable decals on random interior floor tiles. */
+    private void scatterDecals(char[][] grid, Room room, char decalChar, int count) {
+        int placed = 0;
+        for (int attempt = 0; attempt < count * 6 && placed < count; attempt++) {
+            if (room.interiorWidth() <= 0 || room.interiorHeight() <= 0) break;
+            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
+            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
+            if (isWalkableFloor(grid, tileColumn, tileRow)) {
+                grid[tileRow][tileColumn] = decalChar;
+                placed++;
+            }
+        }
+    }
+
+    /**
+     * Places a 'P' column at a tile only when it is open floor and doing so cannot seal a
+     * passage: never on or beside another column, never on or beside a door or its swing axis.
+     */
+    private void tryPlaceColumnAt(char[][] grid, int tileColumn, int tileRow) {
+        if (!isInBounds(tileColumn, tileRow)) return;
+        if (!isWalkableFloor(grid, tileColumn, tileRow)) return;
+        if (isAdjacentToColumn(grid, tileColumn, tileRow)) return;
+        if (isAdjacentToDoor(grid, tileColumn, tileRow)) return;
+        if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) return;
+        grid[tileRow][tileColumn] = 'P';
+    }
+
+    /** Places a solid prop only on lane-safe open floor that is clear of any doorway. */
+    private boolean tryPlaceSolidProp(char[][] grid, int tileColumn, int tileRow, char propChar) {
+        if (!isInBounds(tileColumn, tileRow)) return false;
+        if (!isWalkableFloor(grid, tileColumn, tileRow)) return false;
+        if (isAdjacentToDoor(grid, tileColumn, tileRow)) return false;
+        if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) return false;
+        grid[tileRow][tileColumn] = propChar;
+        return true;
+    }
+
+    private boolean isAdjacentToColumn(char[][] grid, int tileColumn, int tileRow) {
+        int[] deltaColumns = { 0, 0, 1, -1 };
+        int[] deltaRows    = { 1, -1, 0, 0 };
+        for (int direction = 0; direction < 4; direction++) {
+            int neighborColumn = tileColumn + deltaColumns[direction];
+            int neighborRow    = tileRow    + deltaRows[direction];
+            if (!isInBounds(neighborColumn, neighborRow)) continue;
+            if (grid[neighborRow][neighborColumn] == 'P') return true;
+        }
+        return false;
+    }
+
+    /**
+     * Returns true when placing a solid here would sit on the swing axis of an adjacent door
+     * (the line a door opens along), which could block that door. Mirrors the same guard in
+     * {@link LevelGenerator}.
+     */
+    private boolean isAdjacentToDoorAxis(char[][] grid, int tileColumn, int tileRow) {
+        int[] deltaColumns = { 0, 0, 1, -1 };
+        int[] deltaRows    = { 1, -1, 0, 0 };
+        for (int direction = 0; direction < 4; direction++) {
+            int neighborColumn = tileColumn + deltaColumns[direction];
+            int neighborRow    = tileRow    + deltaRows[direction];
+            if (!isInBounds(neighborColumn, neighborRow)) continue;
+            if (!Level.isDoor(grid[neighborRow][neighborColumn])) continue;
+            boolean doorHasWallNorth = isWallAt(grid, neighborColumn, neighborRow + 1);
+            boolean doorHasWallSouth = isWallAt(grid, neighborColumn, neighborRow - 1);
+            boolean doorHasWallEast  = isWallAt(grid, neighborColumn + 1, neighborRow);
+            boolean doorHasWallWest  = isWallAt(grid, neighborColumn - 1, neighborRow);
+            if (doorHasWallNorth && doorHasWallSouth && tileRow == neighborRow)    return true;
+            if (doorHasWallEast  && doorHasWallWest  && tileColumn == neighborColumn) return true;
+        }
+        return false;
+    }
+
     // -------------------------------------------------------------------------
     // Phase 3 — Pickups
     // -------------------------------------------------------------------------
@@ -963,7 +1423,25 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                     armourChance = LevelGenConstants.LEVEL_GEN_COMMAND_ARMOUR_CHANCE;
                     ammoChance   = LevelGenConstants.LEVEL_GEN_COMMAND_AMMO_CHANCE;
                     break;
+                case STORAGE_BAY:
+                    // Cargo hold — loot hub: guaranteed ammo, generous armour.
+                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_COMMAND_ARMOUR_CHANCE)
+                        tryPlacePickup(grid, room, 'A');
+                    tryPlacePickup(grid, room, randomAmmoChar());
+                    if (random.nextBoolean()) tryPlacePickup(grid, room, randomAmmoChar());
+                    continue;
+                case RESEARCH_LAB:
+                    medkitChance = LevelGenConstants.LEVEL_GEN_COMMAND_MEDKIT_CHANCE;
+                    armourChance = LevelGenConstants.LEVEL_GEN_HAZARD_ROOM_ARMOUR_CHANCE;
+                    ammoChance   = LevelGenConstants.LEVEL_GEN_COMMAND_AMMO_CHANCE;
+                    break;
+                case LARGE:
+                    medkitChance = LevelGenConstants.LEVEL_GEN_LARGE_MEDKIT_CHANCE;
+                    armourChance = LevelGenConstants.LEVEL_GEN_LARGE_ARMOUR_CHANCE;
+                    ammoChance   = LevelGenConstants.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
+                    break;
                 case POWER_PLANT:
+                case REACTOR:
                 case CRYO_CHAMBER:
                 case CONTAINMENT_BLOCK:
                     medkitChance = LevelGenConstants.LEVEL_GEN_HAZARD_ROOM_MEDKIT_CHANCE;
@@ -1198,8 +1676,18 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     // -------------------------------------------------------------------------
 
     private void verifyAndRepairConnectivity(char[][] grid, List<Room> rooms) {
+        // Source the audit at the actual player spawn tile so reachability is measured from
+        // where the player really starts (room 0's geometric centre may differ from 'p').
         int startColumn = rooms.get(0).centerColumn();
         int startRow    = rooms.get(0).centerRow();
+        for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
+            for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
+                if (grid[tileRow][tileColumn] == 'p') {
+                    startColumn = tileColumn;
+                    startRow    = tileRow;
+                }
+            }
+        }
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
             if (!isTileReachable(grid, startColumn, startRow,
@@ -1207,6 +1695,35 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                 carveEmergencyCorridor(grid, startColumn, startRow,
                                        room.centerColumn(), room.centerRow());
             }
+        }
+        repairUnreachableFloorRegions(grid, startColumn, startRow);
+    }
+
+    /**
+     * Definitive connectivity backstop. The per-room audit checks only room centres, which can
+     * miss a region that is walled off yet whose centre tile lies elsewhere. This pass floods
+     * from the spawn and, while any walkable floor tile remains unreachable, carves a
+     * blocker-clearing corridor from the spawn to one such tile — connecting that whole region.
+     * It repeats until every floor tile is reachable, so the player can always reach all loot,
+     * enemies, and the exit.
+     */
+    private void repairUnreachableFloorRegions(char[][] grid, int spawnColumn, int spawnRow) {
+        int safetyCap = LevelGenConstants.LEVEL_GEN_GRID_WIDTH + LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+        for (int iteration = 0; iteration < safetyCap; iteration++) {
+            boolean[][] reachable = computeReachableFromSpawn(grid);
+            int targetColumn = -1;
+            int targetRow    = -1;
+            for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT && targetColumn < 0; tileRow++) {
+                for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
+                    if (!reachable[tileRow][tileColumn] && isWalkableFloor(grid, tileColumn, tileRow)) {
+                        targetColumn = tileColumn;
+                        targetRow    = tileRow;
+                        break;
+                    }
+                }
+            }
+            if (targetColumn < 0) return; // every floor tile is reachable
+            carveEmergencyCorridor(grid, spawnColumn, spawnRow, targetColumn, targetRow);
         }
     }
 
@@ -1249,10 +1766,15 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         return false;
     }
 
+    /**
+     * Connectivity passability — mirrors in-game movement, where only solid walls, solid
+     * props, and cylindrical columns block the player. Floor, doors (openable), walkable
+     * decals (blood, scorch, oil, corpses) and pickups are all walkable, so they must count
+     * as passable here; treating a decal or pickup as a blocker would wrongly report a region
+     * unreachable and make the repair pass loop trying to clear a tile that is not a blocker.
+     */
     private boolean isPassableForBFS(char cell) {
-        return cell == ' ' || cell == 'l' || cell == 'u' || cell == 'f'
-            || Level.isDoor(cell)
-            || cell == 'p' || cell == RenderConstants.STAIRS_DOWN_CHAR;
+        return !Level.isWall(cell) && !Level.isPropSolid(cell) && !Level.isColumn(cell);
     }
 
     private void carveEmergencyCorridor(char[][] grid,
@@ -1267,8 +1789,7 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         int maxColumn = Math.max(column1, column2);
         for (int tileColumn = minColumn; tileColumn <= maxColumn; tileColumn++) {
             if (!isInBounds(tileColumn, fixedRow)) continue;
-            char cell = grid[fixedRow][tileColumn];
-            if (Level.isWall(cell) || Level.isPropSolid(cell)) {
+            if (isEmergencyBlocker(grid[fixedRow][tileColumn])) {
                 grid[fixedRow][tileColumn] = 'l';
             }
         }
@@ -1279,49 +1800,125 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         int maxRow = Math.max(row1, row2);
         for (int tileRow = minRow; tileRow <= maxRow; tileRow++) {
             if (!isInBounds(fixedColumn, tileRow)) continue;
-            char cell = grid[tileRow][fixedColumn];
-            if (Level.isWall(cell) || Level.isPropSolid(cell)) {
+            if (isEmergencyBlocker(grid[tileRow][fixedColumn])) {
                 grid[tileRow][fixedColumn] = 'l';
             }
         }
+    }
+
+    /**
+     * A tile an emergency corridor must clear to reach a stranded room: solid walls, solid
+     * props, AND cylindrical columns 'P'. Columns are included because the audit otherwise
+     * cannot punch through a column that happens to sit on the straight repair path, which
+     * would leave the room sealed despite the repair pass running.
+     */
+    private boolean isEmergencyBlocker(char cell) {
+        return Level.isWall(cell) || Level.isPropSolid(cell) || Level.isColumn(cell);
     }
 
     // -------------------------------------------------------------------------
     // Phase 6 — Stairs
     // -------------------------------------------------------------------------
 
+    /**
+     * Stamps exactly one exit. The tile is always chosen from the set of tiles reachable
+     * from the player spawn, so the stairs can never strand in an isolated pocket — interior
+     * structures, column avenues, and the connectivity audit's center-only guarantee
+     * notwithstanding. Landmark rooms (Command Center, then Power Plant) are preferred, then
+     * the deepest reachable room, with a whole-grid reachable-tile sweep as the final guard.
+     */
     private void stampStairsDown(char[][] grid, List<Room> rooms) {
+        boolean[][] reachable = computeReachableFromSpawn(grid);
         for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
             Room room = rooms.get(roomIndex);
-            if (room.type == RoomType.COMMAND_CENTER && tryStampInRoom(grid, room)) return;
+            if (room.type == RoomType.COMMAND_CENTER && tryStampInRoom(grid, room, reachable)) return;
         }
         for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
             Room room = rooms.get(roomIndex);
-            if (room.type == RoomType.POWER_PLANT && tryStampInRoom(grid, room)) return;
+            if (room.type == RoomType.POWER_PLANT && tryStampInRoom(grid, room, reachable)) return;
         }
         for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
-            if (tryStampInRoom(grid, rooms.get(roomIndex))) return;
+            if (tryStampInRoom(grid, rooms.get(roomIndex), reachable)) return;
         }
-        if (!rooms.isEmpty()) tryStampInRoom(grid, rooms.get(0));
+        if (!rooms.isEmpty() && tryStampInRoom(grid, rooms.get(0), reachable)) return;
+        // Final guard: stamp on any reachable walkable tile anywhere on the grid.
+        for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
+            for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
+                if (reachable[tileRow][tileColumn] && isWalkableFloor(grid, tileColumn, tileRow)) {
+                    grid[tileRow][tileColumn] = RenderConstants.STAIRS_DOWN_CHAR;
+                    return;
+                }
+            }
+        }
     }
 
-    private boolean tryStampInRoom(char[][] grid, Room room) {
+    private boolean tryStampInRoom(char[][] grid, Room room, boolean[][] reachable) {
         int centerColumn = room.centerColumn();
         int centerRow    = room.centerRow();
-        if (isWalkableFloor(grid, centerColumn, centerRow)) {
+        if (isInBounds(centerColumn, centerRow) && reachable[centerRow][centerColumn]
+                && isWalkableFloor(grid, centerColumn, centerRow)) {
             grid[centerRow][centerColumn] = RenderConstants.STAIRS_DOWN_CHAR;
             return true;
         }
-        for (int attempt = 0; attempt < 12; attempt++) {
-            if (room.interiorWidth() <= 0 || room.interiorHeight() <= 0) break;
-            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
-            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
-            if (isWalkableFloor(grid, tileColumn, tileRow)) {
-                grid[tileRow][tileColumn] = RenderConstants.STAIRS_DOWN_CHAR;
-                return true;
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (reachable[tileRow][tileColumn] && isWalkableFloor(grid, tileColumn, tileRow)) {
+                    grid[tileRow][tileColumn] = RenderConstants.STAIRS_DOWN_CHAR;
+                    return true;
+                }
             }
         }
         return false;
+    }
+
+    /**
+     * Flood-fills the set of tiles reachable from the player spawn 'p' across passable tiles,
+     * matching the same passability rule the connectivity audit uses.
+     */
+    private boolean[][] computeReachableFromSpawn(char[][] grid) {
+        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
+        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+        boolean[][] visited = new boolean[gridHeight][gridWidth];
+        int spawnColumn = -1;
+        int spawnRow    = -1;
+        for (int tileRow = 0; tileRow < gridHeight && spawnColumn < 0; tileRow++) {
+            for (int tileColumn = 0; tileColumn < gridWidth; tileColumn++) {
+                if (grid[tileRow][tileColumn] == 'p') {
+                    spawnColumn = tileColumn;
+                    spawnRow    = tileRow;
+                    break;
+                }
+            }
+        }
+        if (spawnColumn < 0) return visited;
+
+        int[] stackColumns = new int[gridWidth * gridHeight];
+        int[] stackRows    = new int[gridWidth * gridHeight];
+        int   stackTop     = 0;
+        visited[spawnRow][spawnColumn] = true;
+        stackColumns[stackTop] = spawnColumn;
+        stackRows[stackTop]    = spawnRow;
+        stackTop++;
+
+        int[] deltaColumns = { 0,  0,  1, -1 };
+        int[] deltaRows    = { 1, -1,  0,  0 };
+        while (stackTop > 0) {
+            stackTop--;
+            int currentColumn = stackColumns[stackTop];
+            int currentRow    = stackRows[stackTop];
+            for (int direction = 0; direction < 4; direction++) {
+                int neighborColumn = currentColumn + deltaColumns[direction];
+                int neighborRow    = currentRow    + deltaRows[direction];
+                if (!isInBounds(neighborColumn, neighborRow)) continue;
+                if (visited[neighborRow][neighborColumn]) continue;
+                if (!isPassableForBFS(grid[neighborRow][neighborColumn])) continue;
+                visited[neighborRow][neighborColumn] = true;
+                stackColumns[stackTop] = neighborColumn;
+                stackRows[stackTop]    = neighborRow;
+                stackTop++;
+            }
+        }
+        return visited;
     }
 
     // -------------------------------------------------------------------------
