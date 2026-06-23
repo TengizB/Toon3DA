@@ -3,6 +3,46 @@ CATEGORY: Level Design / Systems
 TITLE: Third Level Generator — Cellular Automata Cave (Breach Caverns)
 ---
 
+## ADDENDUM — SCI-FI BIOME REGIONS (cave body diversity pass)
+
+The original cave body was decorated uniformly (one gore/rust wall mix, one dark
+floor mix, one optional barrel cluster) which read as empty and generic. The cave
+body is now partitioned into contiguous SCI-FI BIOME regions so a single cavern
+reads as several distinct environments fused together.
+
+How it works (CavernGenerator, all pure Java, no new tile symbols):
+- assignBiomes(): collects every open cave-body floor tile (chambers excluded),
+  picks LEVEL_GEN_CAVE_BIOME_MIN..MAX biome seeds by greedy farthest-point
+  sampling, then multi-source flood-fills biome ids outward so regions meet along
+  organic cave boundaries. A per-tile int[][] biomeMap drives every later pass.
+- Six biomes, each a palette of EXISTING symbols (CaveBiome enum):
+    FUNGAL_HOLLOW  — gore/rust walls, oil+blood pools, bio-pod '&' nests, specimen
+                     tank 'I' set-piece, bioluminescent GLOW floor.
+    FROST_VAULT    — cryo 'Z' / glass 'N' walls, cryo-pod '&' + locker 'L', DIM floor.
+    REACTOR_SUMP   — radiation 'U' / hazard 'h' / bulkhead 'k' walls, radioactive 'g'
+                     and explosive 'E' drums, generator '%' core, FLICKER floor.
+    DERELICT_NEST  — terminal 't' / wire 'w' / conduit 'c' walls, console 'T' /
+                     locker 'L' / crate 'C', AI-core 'J' tomb, DIM floor.
+    GORE_WARREN    — gore 'G' / rust 'j' walls, corpse drifts, deathtrap 'E' drums,
+                     very DARK floor; densest fast-melee enemy mix.
+    CRYSTAL_GROTTO — corroded rock walls, mining crates 'C', dense stalagmite 'P'
+                     forests, ROCKY floor.
+- Per biome the generator themes: bordering walls (themeCaveWalls), floor lighting
+  (themeCaveFloor via FloorMood), walkable decals (placeCaveDecals), scattered
+  solid props + landmark feature clusters (placeBiomeProps / placeFeatureCluster),
+  and the enemy archetype mix (biomeEnemyChar, markers 1-5 only — no new elites).
+- Safety: every solid prop is pinch-guarded (canStampSolidProp requires bare floor,
+  a spawn safe radius, and >= LEVEL_GEN_CAVE_BIOME_PROP_MIN_OPEN walkable cardinal
+  neighbours) so props never seal a tunnel. The exit is still chosen as the farthest
+  REACHABLE tile after props are placed, and the chamber connectivity audit tunnels
+  through any prop that blocks a chamber. Validated over 200 seeds: 0 unreachable
+  exits, ~75 solid props and ~100 decals per level (was ~0-3 props before), all six
+  biome wall/prop palettes present.
+
+New constants: LEVEL_GEN_CAVE_BIOME_* in LevelGenConstants.java. No new tile symbol
+was introduced — docs/tile-symbols.txt is unchanged.
+---
+
 ## OVERVIEW
 
 A third procedural generator, `CavernGenerator`, that abandons rectangular rooms and
