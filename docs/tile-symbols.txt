@@ -66,10 +66,10 @@ C   Crate               Reinforced olive-drab munitions box: steel corner bracke
 %   Generator           Power unit: glowing green reactor core, cooling fins, twin gauges, breaker bank, hazard base. 0.85x wall height
 &   Bio-pod             Cryo specimen pod: green fluid tube, curled specimen, bubbles, cyan rings, base readout panel. 0.90x wall height
 =   Weapon rack         Armory rack: three standing rifles, hung pistol, grenades, magazines, ammo crate on pegboard. 0.70x wall height
-@   Special equipment   Advanced machine: violet→cyan energy aperture with core orb, side plasma canisters, keypad panel. 0.88x wall height
-I   Specimen tank       Tall glass cylinder with suspended specimen. Research Lab tank row.   0.85x wall height
-W   Holo-workstation    Low console projecting a holographic wireframe above it.              0.70x wall height
-J   AI core node        Tall stack of translucent processing slabs, glowing cyan seam.        0.95x wall height
+@   Special equipment   Advanced machine: violet→cyan energy aperture (orbiting containment ring + core orb), twin tall plasma canisters, vented emitter housing, lower control panel (readout, keypad, gauge), hazard band. 0.88x wall height
+I   Specimen tank       Tall research cylinder: steel plinth (readout, vents), capped collar with cyan emitter ring, teal cryo-fluid with air gap + meniscus, glowing containment bands, curled bioluminescent specimen, glass sheen, rising bubbles, frost. 0.85x wall height
+W   Holo-workstation    Low console (keypad deck, live waveform screen, status LEDs) with a holo-emitter disc projecting a translucent cyan wireframe globe: scan-lined volume, lat/long arcs, fanning beams, floating data glyphs. 0.70x wall height
+J   AI core node        Tall server tower: chassis with edge cooling fins, crown cyan-white core glow orb, glowing vertical data spine threading a stack of translucent processing slabs (internal glow, bright seam, edge LEDs), base readout. 0.95x wall height
 
 WALKABLE DECALS (player walks over; rendered as flat billboard)
 --------------------------------------------------------------
