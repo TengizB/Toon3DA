@@ -123,10 +123,26 @@ public final class Loadout {
     public int     getActiveSlotIndex() { return activeSlotIndex; }
     public int     getSlotCount()       { return slots.length; }
 
-    /** True when every slot is occupied. */
+    /**
+     * True when the given slot is permanently locked and can never hold a weapon.
+     * Locked slots are skipped by tryEquip() and never count as free space.
+     * (Currently the future ranged slot at WEAPON_GUN_SLOT_LOCKED_INDEX.)
+     */
+    public boolean isSlotLocked(int slotIndex) {
+        return slotIndex == WeaponConstants.WEAPON_GUN_SLOT_LOCKED_INDEX;
+    }
+
+    /**
+     * True when every assignable (non-locked) slot is occupied.
+     * Locked slots are ignored — they can never hold a weapon, so their permanent
+     * emptiness must not make the loadout look like it still has free space.
+     * This is what drives the pickup card to show the SWAP list instead of an
+     * EQUIP button that would target a locked slot.
+     */
     public boolean isFull() {
-        for (Weapon slot : slots) {
-            if (slot == null) return false;
+        for (int slotIndex = 0; slotIndex < slots.length; slotIndex++) {
+            if (isSlotLocked(slotIndex)) continue;
+            if (slots[slotIndex] == null) return false;
         }
         return true;
     }
