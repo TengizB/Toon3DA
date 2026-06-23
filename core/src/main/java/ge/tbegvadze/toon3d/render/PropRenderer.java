@@ -783,13 +783,143 @@ public class PropRenderer implements Renderable, Disposable {
         pixmap.fillRectangle(2, yTop, pixmap.getWidth() - 4, height);
     }
 
+    // ── Shared prop-art helpers ────────────────────────────────────────────
+    // Fills a panel then adds a 1px lit bevel (top + left) and shadow bevel
+    // (bottom + right) so flat boxes read as having depth under flat lighting.
+    private static void beveledPanel(Pixmap pixmap, int x, int y, int width, int height,
+                                     float red, float green, float blue,
+                                     float litFactor, float shadowFactor) {
+        pixmap.setColor(red, green, blue, 1f);
+        pixmap.fillRectangle(x, y, width, height);
+        pixmap.setColor(Math.min(1f, red * litFactor),
+                        Math.min(1f, green * litFactor),
+                        Math.min(1f, blue * litFactor), 1f);
+        pixmap.fillRectangle(x, y, width, 1);   // top highlight
+        pixmap.fillRectangle(x, y, 1, height);  // left highlight
+        pixmap.setColor(red * shadowFactor, green * shadowFactor, blue * shadowFactor, 1f);
+        pixmap.fillRectangle(x, y + height - 1, width, 1);  // bottom shadow
+        pixmap.fillRectangle(x + width - 1, y, 1, height);  // right shadow
+    }
+
+    // Small 3×3 bolt stud: dark seat ring with a single bright specular pixel.
+    private static void boltStud(Pixmap pixmap, int centerX, int centerY) {
+        pixmap.setColor(0.08f, 0.08f, 0.10f, 1f);
+        pixmap.fillRectangle(centerX - 1, centerY - 1, 3, 3);
+        pixmap.setColor(0.58f, 0.61f, 0.67f, 1f);
+        pixmap.drawPixel(centerX, centerY);
+    }
+
+    // Diagonal hazard stripe band (caution yellow / near-black) across a region.
+    private static void hazardStripeBand(Pixmap pixmap, int x, int y, int width, int height,
+                                         float yellowRed, float yellowGreen, float yellowBlue) {
+        for (int column = x; column < x + width; column++) {
+            for (int row = y; row < y + height; row++) {
+                boolean bright = ((((column - row) % 12) + 12) % 12) < 6;
+                if (bright) pixmap.setColor(yellowRed, yellowGreen, yellowBlue, 1f);
+                else        pixmap.setColor(0.09f, 0.08f, 0.05f, 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+    }
+
+    // Small round analogue gauge with a tinted needle, used on machinery panels.
+    private static void drawGauge(Pixmap pixmap, int centerX, int centerY,
+                                  float needleRed, float needleGreen, float needleBlue) {
+        pixmap.setColor(0.10f, 0.11f, 0.13f, 1f);
+        pixmap.fillCircle(centerX, centerY, 7);
+        pixmap.setColor(0.34f, 0.36f, 0.40f, 1f);
+        pixmap.fillCircle(centerX, centerY, 6);
+        pixmap.setColor(0.06f, 0.07f, 0.09f, 1f);
+        pixmap.fillCircle(centerX, centerY, 5);
+        pixmap.setColor(0.55f, 0.58f, 0.62f, 1f);
+        pixmap.drawPixel(centerX, centerY - 4);
+        pixmap.drawPixel(centerX - 4, centerY);
+        pixmap.drawPixel(centerX + 4, centerY);
+        pixmap.setColor(needleRed, needleGreen, needleBlue, 1f);
+        pixmap.fillRectangle(centerX, centerY - 4, 1, 4);
+        pixmap.drawPixel(centerX + 1, centerY - 3);
+        pixmap.setColor(0.82f, 0.84f, 0.88f, 1f);
+        pixmap.drawPixel(centerX, centerY);
+    }
+
     private static Texture generateBarrelTexture(boolean explosive) {
         Pixmap pixmap = new Pixmap(64, 64, Pixmap.Format.RGBA8888);
         if (explosive) {
-            fillBody(pixmap, 0.75f, 0.18f, 0.05f); // dark orange-red
-            drawBand(pixmap, 10, 5, 0.90f, 0.80f, 0.05f); // yellow ring
-            drawBand(pixmap, 28, 5, 0.90f, 0.80f, 0.05f);
-            drawBand(pixmap, 46, 5, 0.90f, 0.80f, 0.05f);
+            // Volatile fuel drum — rounded crimson cylinder, hazard hoops, a stamped
+            // explosion-burst warning and hot seams where the contents leak light.
+            pixmap.setColor(0f, 0f, 0f, 0f);
+            pixmap.fill();
+
+            final int bodyLeft = 8, bodyRight = 56, bodyTop = 7, bodyBottom = 61;
+            // Cylindrical steel body: bright highlight band sits left-of-centre.
+            for (int column = bodyLeft; column < bodyRight; column++) {
+                float across = (column - bodyLeft) / (float) (bodyRight - bodyLeft - 1);
+                float curve  = 1f - Math.min(1f, Math.abs(across - 0.38f) * 2.0f);
+                float bodyRed   = 0.24f + 0.60f * curve;
+                float bodyGreen = 0.05f + 0.16f * curve;
+                float bodyBlue  = 0.04f + 0.10f * curve;
+                pixmap.setColor(bodyRed, bodyGreen, bodyBlue, 1f);
+                pixmap.fillRectangle(column, bodyTop, 1, bodyBottom - bodyTop);
+            }
+            // Rolled hoop rings — darker steel with a top highlight and spaced rivets.
+            int[] hoopRows = { 9, 20, 44, 55 };
+            for (int hoopRow : hoopRows) {
+                pixmap.setColor(0.16f, 0.05f, 0.04f, 1f);
+                pixmap.fillRectangle(bodyLeft, hoopRow, bodyRight - bodyLeft, 4);
+                pixmap.setColor(0.70f, 0.30f, 0.16f, 1f);
+                pixmap.fillRectangle(bodyLeft, hoopRow, bodyRight - bodyLeft, 1);
+                for (int rivetColumn = bodyLeft + 4; rivetColumn < bodyRight - 2; rivetColumn += 10) {
+                    pixmap.setColor(0.85f, 0.55f, 0.25f, 1f);
+                    pixmap.drawPixel(rivetColumn, hoopRow + 2);
+                }
+            }
+            // Top lid with a central bung valve.
+            pixmap.setColor(0.52f, 0.20f, 0.12f, 1f);
+            pixmap.fillRectangle(bodyLeft + 2, bodyTop - 2, bodyRight - bodyLeft - 4, 4);
+            pixmap.setColor(0.78f, 0.34f, 0.18f, 1f);
+            pixmap.fillRectangle(bodyLeft + 2, bodyTop - 2, bodyRight - bodyLeft - 4, 1);
+            pixmap.setColor(0.30f, 0.10f, 0.06f, 1f);
+            pixmap.fillCircle(32, bodyTop, 3);
+            pixmap.setColor(0.85f, 0.45f, 0.20f, 1f);
+            pixmap.fillCircle(32, bodyTop, 1);
+            // Bottom shadow lip.
+            pixmap.setColor(0.10f, 0.03f, 0.03f, 1f);
+            pixmap.fillRectangle(bodyLeft, bodyBottom - 2, bodyRight - bodyLeft, 2);
+
+            // Hot volatile seams: glowing cracks framing the warning plate.
+            int[] seamColumns = { 17, 46 };
+            for (int seamColumn : seamColumns) {
+                for (int seamRow = 23; seamRow < 42; seamRow++) {
+                    int crackColumn = seamColumn + (((seamRow / 4) % 3) - 1);
+                    pixmap.setColor(0.80f, 0.30f, 0.05f, 1f);
+                    pixmap.drawPixel(crackColumn - 1, seamRow);
+                    pixmap.drawPixel(crackColumn + 1, seamRow);
+                    pixmap.setColor(1.00f, 0.85f, 0.35f, 1f);
+                    pixmap.drawPixel(crackColumn, seamRow);
+                }
+            }
+            // Central warning plate with a stamped explosion burst.
+            pixmap.setColor(0.08f, 0.07f, 0.05f, 1f);
+            pixmap.fillRectangle(20, 24, 24, 16);
+            pixmap.setColor(0.92f, 0.78f, 0.06f, 1f);
+            drawRectOutline(pixmap, 20, 24, 24, 16);
+            int burstCenterX = 32, burstCenterY = 32;
+            pixmap.setColor(0.95f, 0.80f, 0.10f, 1f);
+            for (int spike = 0; spike < 8; spike++) {
+                double spikeAngleRadians = spike * Math.PI / 4.0;
+                int tipX = burstCenterX + (int) Math.round(Math.cos(spikeAngleRadians) * 9);
+                int tipY = burstCenterY + (int) Math.round(Math.sin(spikeAngleRadians) * 7);
+                double perpendicularRadians = spikeAngleRadians + Math.PI / 2.0;
+                int baseOffsetX = (int) Math.round(Math.cos(perpendicularRadians) * 2);
+                int baseOffsetY = (int) Math.round(Math.sin(perpendicularRadians) * 2);
+                pixmap.fillTriangle(burstCenterX + baseOffsetX, burstCenterY + baseOffsetY,
+                                    burstCenterX - baseOffsetX, burstCenterY - baseOffsetY,
+                                    tipX, tipY);
+            }
+            pixmap.setColor(0.98f, 0.45f, 0.08f, 1f);
+            pixmap.fillCircle(burstCenterX, burstCenterY, 3);
+            pixmap.setColor(1.00f, 0.92f, 0.55f, 1f);
+            pixmap.fillCircle(burstCenterX, burstCenterY, 1);
         } else {
             // Transparent background
             pixmap.setColor(0f, 0f, 0f, 0f);
@@ -845,34 +975,84 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     private static Texture generateTerminalTexture() {
-        Pixmap pixmap = new Pixmap(64, 64, Pixmap.Format.RGBA8888);
-        // Cabinet body: charcoal
-        fillBody(pixmap, 0.18f, 0.19f, 0.22f);
-        // Monitor bezel: darker frame
-        pixmap.setColor(0.12f, 0.13f, 0.16f, 1f);
-        pixmap.fillRectangle(8, 8, 48, 36);
-        // Screen fill: cyan-teal
-        pixmap.setColor(0.10f, 0.40f, 0.44f, 1f);
-        pixmap.fillRectangle(12, 12, 40, 28);
-        // Scanlines: every 3rd row within screen area
-        pixmap.setColor(0.06f, 0.30f, 0.34f, 1f);
-        for (int row = 12; row < 40; row += 3) {
-            pixmap.fillRectangle(12, row, 40, 1);
+        Pixmap pixmap = new Pixmap(96, 96, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        // ── Lower cabinet ───────────────────────────────────────────────────
+        beveledPanel(pixmap, 12, 40, 72, 54, 0.17f, 0.19f, 0.24f, 1.7f, 0.45f);
+        // Cooling vent slits.
+        pixmap.setColor(0.09f, 0.10f, 0.13f, 1f);
+        for (int ventRow = 66; ventRow <= 80; ventRow += 4) {
+            pixmap.fillRectangle(20, ventRow, 36, 2);
         }
-        // Readout glyphs: faked text bars at rows 16, 22, 28
-        pixmap.setColor(0.30f, 0.80f, 0.85f, 1f);
-        pixmap.fillRectangle(14, 16, 28, 2);
-        pixmap.fillRectangle(14, 22, 20, 2);
-        pixmap.fillRectangle(14, 28, 34, 2);
-        // Cursor block
-        pixmap.setColor(0.50f, 0.95f, 0.98f, 1f);
-        pixmap.fillRectangle(13, 32, 4, 5);
-        // Keyboard ledge
-        pixmap.setColor(0.22f, 0.24f, 0.28f, 1f);
-        pixmap.fillRectangle(8, 46, 48, 6);
-        // Status LED: green operational
-        pixmap.setColor(0.20f, 0.88f, 0.30f, 1f);
-        pixmap.fillRectangle(52, 44, 4, 4);
+        // ID label plate with fake engraved text.
+        pixmap.setColor(0.45f, 0.47f, 0.52f, 1f);
+        pixmap.fillRectangle(60, 66, 18, 14);
+        pixmap.setColor(0.16f, 0.17f, 0.20f, 1f);
+        pixmap.fillRectangle(62, 69, 14, 1);
+        pixmap.fillRectangle(62, 72, 11, 1);
+        pixmap.fillRectangle(62, 75, 14, 1);
+        // Cabinet bolts + hazard trim.
+        boltStud(pixmap, 16, 44); boltStud(pixmap, 80, 44);
+        boltStud(pixmap, 16, 86); boltStud(pixmap, 80, 86);
+        hazardStripeBand(pixmap, 12, 88, 72, 4, 0.86f, 0.72f, 0.10f);
+
+        // ── Monitor housing ─────────────────────────────────────────────────
+        beveledPanel(pixmap, 8, 6, 80, 40, 0.22f, 0.24f, 0.30f, 1.6f, 0.5f);
+        pixmap.setColor(0.07f, 0.08f, 0.10f, 1f);
+        pixmap.fillRectangle(14, 10, 68, 32);
+        // Screen — cyan-teal vertical gradient (brighter toward the top).
+        for (int screenRow = 12; screenRow < 40; screenRow++) {
+            float toBottom = (screenRow - 12) / 27f;
+            pixmap.setColor(0.06f + 0.06f * (1f - toBottom),
+                            0.34f + 0.16f * (1f - toBottom),
+                            0.40f + 0.18f * (1f - toBottom), 1f);
+            pixmap.fillRectangle(16, screenRow, 64, 1);
+        }
+        // Scanlines.
+        pixmap.setColor(0.04f, 0.20f, 0.24f, 0.5f);
+        for (int scanRow = 12; scanRow < 40; scanRow += 2) {
+            pixmap.fillRectangle(16, scanRow, 64, 1);
+        }
+        // Header bar + readout text rows of varied length.
+        pixmap.setColor(0.45f, 0.92f, 0.98f, 1f);
+        pixmap.fillRectangle(18, 13, 60, 2);
+        pixmap.setColor(0.30f, 0.80f, 0.86f, 1f);
+        int[] textRowY     = { 18, 22, 26, 30 };
+        int[] textRowWidth = { 40, 30, 52, 24 };
+        for (int textIndex = 0; textIndex < textRowY.length; textIndex++) {
+            pixmap.fillRectangle(18, textRowY[textIndex], textRowWidth[textIndex], 2);
+        }
+        // Waveform blips along the bottom of the screen.
+        pixmap.setColor(0.55f, 0.95f, 1.00f, 1f);
+        int[] waveHeight = { 2, 5, 3, 6, 2, 4, 7, 3 };
+        for (int waveIndex = 0; waveIndex < waveHeight.length; waveIndex++) {
+            pixmap.fillRectangle(18 + waveIndex * 5, 38 - waveHeight[waveIndex], 2, waveHeight[waveIndex]);
+        }
+        // Cursor block + glowing screen rim.
+        pixmap.setColor(0.60f, 1.00f, 1.00f, 1f);
+        pixmap.fillRectangle(44, 30, 5, 2);
+        pixmap.setColor(0.30f, 0.85f, 0.95f, 0.5f);
+        drawRectOutline(pixmap, 15, 11, 66, 30);
+        // Indicator LED stack on the housing's right edge.
+        pixmap.setColor(0.25f, 0.90f, 0.35f, 1f); pixmap.fillRectangle(83, 12, 3, 3);
+        pixmap.setColor(0.95f, 0.70f, 0.15f, 1f); pixmap.fillRectangle(83, 18, 3, 3);
+        pixmap.setColor(0.90f, 0.25f, 0.20f, 1f); pixmap.fillRectangle(83, 24, 3, 3);
+
+        // ── Control deck between monitor and cabinet ────────────────────────
+        pixmap.setColor(0.26f, 0.28f, 0.34f, 1f);
+        pixmap.fillRectangle(14, 48, 68, 12);
+        pixmap.setColor(0.14f, 0.15f, 0.19f, 1f);
+        for (int keyRow = 0; keyRow < 2; keyRow++) {
+            for (int keyColumn = 0; keyColumn < 10; keyColumn++) {
+                pixmap.fillRectangle(18 + keyColumn * 6, 50 + keyRow * 5, 4, 3);
+            }
+        }
+        // Function buttons (red / amber / green).
+        pixmap.setColor(0.90f, 0.25f, 0.20f, 1f); pixmap.fillRectangle(64, 50, 5, 4);
+        pixmap.setColor(0.95f, 0.70f, 0.15f, 1f); pixmap.fillRectangle(71, 50, 5, 4);
+        pixmap.setColor(0.25f, 0.90f, 0.35f, 1f); pixmap.fillRectangle(64, 55, 5, 4);
         return finalize(pixmap);
     }
 
@@ -933,52 +1113,62 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     private static Texture generateCrateTexture() {
-        Pixmap pixmap = new Pixmap(64, 64, Pixmap.Format.RGBA8888);
-        // Box base: warm brown
-        fillBody(pixmap, 0.44f, 0.30f, 0.15f);
-        // Lit top-edge plank shading
-        pixmap.setColor(0.55f, 0.40f, 0.22f, 1f);
-        pixmap.fillRectangle(2, 2, 60, 4);
-        // Shadow bottom-edge plank shading
-        pixmap.setColor(0.28f, 0.18f, 0.08f, 1f);
-        pixmap.fillRectangle(2, 57, 60, 5);
-        // Horizontal plank seams
-        pixmap.setColor(0.22f, 0.14f, 0.06f, 1f);
-        pixmap.fillRectangle(2, 20, 60, 1);
-        pixmap.fillRectangle(2, 40, 60, 1);
-        // Vertical plank seams
-        pixmap.fillRectangle(18, 2, 1, 60);
-        pixmap.fillRectangle(44, 2, 1, 60);
-        // Corner metal brackets (5×5) with 3×3 bolt inside each
-        pixmap.setColor(0.42f, 0.44f, 0.50f, 1f);
-        pixmap.fillRectangle(4,  4,  5, 5);
-        pixmap.fillRectangle(55, 4,  5, 5);
-        pixmap.fillRectangle(4,  55, 5, 5);
-        pixmap.fillRectangle(55, 55, 5, 5);
-        pixmap.setColor(0.60f, 0.62f, 0.68f, 1f);
-        pixmap.fillRectangle(5,  5,  3, 3);
-        pixmap.fillRectangle(56, 5,  3, 3);
-        pixmap.fillRectangle(5,  56, 3, 3);
-        pixmap.fillRectangle(56, 56, 3, 3);
-        // UAC stencil: dot-matrix "UAC" at centre using small rects
-        pixmap.setColor(0.60f, 0.55f, 0.30f, 1f);
-        // U: two vertical bars + bottom connector
-        pixmap.fillRectangle(22, 27, 2, 8);
-        pixmap.fillRectangle(26, 27, 2, 8);
-        pixmap.fillRectangle(22, 33, 6, 2);
-        // A: two diagonals approximated + crossbar
-        pixmap.fillRectangle(30, 27, 2, 10);
-        pixmap.fillRectangle(36, 27, 2, 10);
-        pixmap.fillRectangle(30, 30, 8, 2);
-        // C: vertical bar + top/bottom serifs
-        pixmap.fillRectangle(40, 27, 2, 10);
-        pixmap.fillRectangle(40, 27, 5, 2);
-        pixmap.fillRectangle(40, 35, 5, 2);
-        // Damage crack: seeded diagonal across right plank area
-        pixmap.setColor(0.12f, 0.08f, 0.04f, 1f);
-        for (int crackStep = 0; crackStep < 10; crackStep++) {
-            pixmap.fillRectangle(46 + crackStep, 22 + crackStep, 1, 1);
+        Pixmap pixmap = new Pixmap(96, 96, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        // Reinforced olive-drab munitions box with a bevelled shell.
+        beveledPanel(pixmap, 6, 6, 84, 84, 0.30f, 0.34f, 0.20f, 1.5f, 0.55f);
+        // Two recessed front panels split by a centre seam.
+        pixmap.setColor(0.25f, 0.28f, 0.16f, 1f);
+        pixmap.fillRectangle(12, 14, 34, 50);
+        pixmap.fillRectangle(50, 14, 34, 50);
+        pixmap.setColor(0.38f, 0.42f, 0.26f, 1f);   // panel lit inner edges
+        pixmap.fillRectangle(12, 14, 34, 1); pixmap.fillRectangle(12, 14, 1, 50);
+        pixmap.fillRectangle(50, 14, 34, 1); pixmap.fillRectangle(50, 14, 1, 50);
+        pixmap.setColor(0.16f, 0.18f, 0.10f, 1f);   // panel shadow inner edges
+        pixmap.fillRectangle(12, 63, 34, 1); pixmap.fillRectangle(45, 14, 1, 50);
+        pixmap.fillRectangle(50, 63, 34, 1); pixmap.fillRectangle(83, 14, 1, 50);
+        // Raised horizontal reinforcing ribs.
+        for (int ribRow : new int[]{ 30, 48 }) {
+            pixmap.setColor(0.36f, 0.40f, 0.24f, 1f);
+            pixmap.fillRectangle(8, ribRow, 80, 4);
+            pixmap.setColor(0.44f, 0.48f, 0.30f, 1f);
+            pixmap.fillRectangle(8, ribRow, 80, 1);
+            pixmap.setColor(0.16f, 0.18f, 0.10f, 1f);
+            pixmap.fillRectangle(8, ribRow + 3, 80, 1);
         }
+        // Steel corner brackets with bolts.
+        pixmap.setColor(0.40f, 0.42f, 0.46f, 1f);
+        pixmap.fillRectangle(6,  6,  8, 8);
+        pixmap.fillRectangle(82, 6,  8, 8);
+        pixmap.fillRectangle(6,  82, 8, 8);
+        pixmap.fillRectangle(82, 82, 8, 8);
+        boltStud(pixmap, 10, 10); boltStud(pixmap, 85, 10);
+        boltStud(pixmap, 10, 85); boltStud(pixmap, 85, 85);
+        // Hazard stripe band across the centre seam.
+        hazardStripeBand(pixmap, 8, 40, 80, 6, 0.88f, 0.74f, 0.12f);
+        // Stencil "UAC" on the upper-left panel.
+        pixmap.setColor(0.78f, 0.80f, 0.55f, 1f);
+        pixmap.fillRectangle(20, 20, 2, 8); pixmap.fillRectangle(26, 20, 2, 8); pixmap.fillRectangle(20, 26, 8, 2);
+        pixmap.fillRectangle(32, 20, 2, 8); pixmap.fillRectangle(38, 20, 2, 8); pixmap.fillRectangle(32, 20, 8, 2); pixmap.fillRectangle(32, 23, 8, 2);
+        pixmap.fillRectangle(44, 20, 2, 8); pixmap.fillRectangle(44, 20, 7, 2); pixmap.fillRectangle(44, 26, 7, 2);
+        // Cartridge icon stamped on the right panel.
+        pixmap.setColor(0.80f, 0.62f, 0.20f, 1f);
+        pixmap.fillRectangle(60, 20, 16, 6);
+        pixmap.setColor(0.92f, 0.80f, 0.40f, 1f);
+        pixmap.fillRectangle(72, 20, 4, 6);
+        // Side clasp latches.
+        pixmap.setColor(0.46f, 0.48f, 0.52f, 1f);
+        pixmap.fillRectangle(28, 70, 12, 8);
+        pixmap.fillRectangle(56, 70, 12, 8);
+        pixmap.setColor(0.20f, 0.21f, 0.24f, 1f);
+        pixmap.fillRectangle(31, 73, 6, 2);
+        pixmap.fillRectangle(59, 73, 6, 2);
+        // Surface wear — scuffs and a dented corner.
+        pixmap.setColor(0.18f, 0.20f, 0.12f, 1f);
+        pixmap.drawPixel(70, 58); pixmap.drawPixel(71, 57); pixmap.drawPixel(72, 57);
+        pixmap.drawPixel(18, 80); pixmap.drawPixel(19, 81);
         return finalize(pixmap);
     }
 
@@ -1324,179 +1514,350 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     private static Texture generateGeneratorTexture() {
-        Pixmap pixmap = new Pixmap(64, 64, Pixmap.Format.RGBA8888);
+        Pixmap pixmap = new Pixmap(96, 96, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Cabinet body
-        pixmap.setColor(0.22f, 0.24f, 0.27f, 1f);
-        pixmap.fillRectangle(8, 4, 48, 56);
-        // Side cooling fins (left)
-        pixmap.setColor(0.16f, 0.17f, 0.19f, 1f);
-        for (int finRow = 14; finRow <= 46; finRow += 10) {
-            pixmap.fillRectangle(4, finRow, 4, 3);
+
+        // Cooling-fin stacks flanking the cabinet.
+        pixmap.setColor(0.14f, 0.15f, 0.18f, 1f);
+        for (int finRow = 14; finRow <= 56; finRow += 6) {
+            pixmap.fillRectangle(2, finRow, 12, 4);
+            pixmap.fillRectangle(82, finRow, 12, 4);
         }
-        // Side cooling fins (right)
-        for (int finRow = 14; finRow <= 46; finRow += 10) {
-            pixmap.fillRectangle(56, finRow, 4, 3);
+        // Main cabinet.
+        beveledPanel(pixmap, 12, 6, 72, 84, 0.20f, 0.22f, 0.26f, 1.6f, 0.5f);
+        // Top conduit pipes with stacked ceramic insulator discs.
+        pixmap.setColor(0.30f, 0.31f, 0.35f, 1f);
+        pixmap.fillRectangle(26, 0, 8, 8);
+        pixmap.fillRectangle(62, 0, 8, 8);
+        pixmap.setColor(0.55f, 0.50f, 0.42f, 1f);
+        for (int discY = 1; discY <= 6; discY += 2) {
+            pixmap.fillRectangle(25, discY, 10, 1);
+            pixmap.fillRectangle(61, discY, 10, 1);
         }
-        // Base chevron stripe — alternating yellow/dark diagonal bands
-        for (int column = 8; column < 56; column++) {
-            for (int row = 51; row < 60; row++) {
-                boolean isYellow = ((row + column) % 8) < 4;
-                if (isYellow) {
-                    pixmap.setColor(0.85f, 0.72f, 0.18f, 1f);
+
+        // ── Glowing reactor core (radial green-hot glow) ────────────────────
+        int coreCenterX = 48, coreCenterY = 32, coreRadius = 20;
+        pixmap.setColor(0.06f, 0.07f, 0.08f, 1f);
+        pixmap.fillRectangle(coreCenterX - 22, coreCenterY - 22, 44, 44);
+        for (int pixelRow = coreCenterY - coreRadius; pixelRow <= coreCenterY + coreRadius; pixelRow++) {
+            for (int pixelColumn = coreCenterX - coreRadius; pixelColumn <= coreCenterX + coreRadius; pixelColumn++) {
+                float normalizedX = (pixelColumn - coreCenterX) / (float) coreRadius;
+                float normalizedY = (pixelRow - coreCenterY) / (float) coreRadius;
+                float distance = (float) Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+                if (distance > 1f) continue;
+                float red, green, blue;
+                if (distance < 0.25f) {
+                    red = 0.85f; green = 1.00f; blue = 0.80f;
+                } else if (distance < 0.55f) {
+                    float interpolationFactor = (distance - 0.25f) / 0.30f;
+                    red   = 0.85f - 0.55f * interpolationFactor;
+                    green = 1.00f - 0.10f * interpolationFactor;
+                    blue  = 0.80f - 0.45f * interpolationFactor;
                 } else {
-                    pixmap.setColor(0.14f, 0.15f, 0.17f, 1f);
+                    float interpolationFactor = (distance - 0.55f) / 0.45f;
+                    red   = 0.30f - 0.22f * interpolationFactor;
+                    green = 0.90f - 0.62f * interpolationFactor;
+                    blue  = 0.35f - 0.26f * interpolationFactor;
                 }
-                pixmap.drawPixel(column, row);
+                float ring   = (float) (Math.cos(distance * Math.PI * 5) * 0.5 + 0.5);
+                float factor = 0.80f + 0.20f * ring;
+                pixmap.setColor(red * factor, green * factor, blue * factor, 1f);
+                pixmap.drawPixel(pixelColumn, pixelRow);
             }
         }
-        // Core window frame
-        pixmap.setColor(0.10f, 0.11f, 0.12f, 1f);
-        pixmap.fillRectangle(16, 16, 32, 26);
-        // Core glow: green
-        pixmap.setColor(0.30f, 0.85f, 0.40f, 1f);
-        pixmap.fillRectangle(18, 18, 28, 22);
-        // Core bright hot center
-        pixmap.setColor(0.75f, 1.00f, 0.80f, 1f);
-        pixmap.fillRectangle(26, 24, 12, 10);
-        // Top conduit pipes
-        pixmap.setColor(0.30f, 0.31f, 0.34f, 1f);
-        pixmap.fillRectangle(18, 0, 8, 6);
-        pixmap.fillRectangle(38, 0, 8, 6);
+        // Core housing frame + bolts.
+        pixmap.setColor(0.32f, 0.34f, 0.38f, 1f);
+        drawRectOutline(pixmap, coreCenterX - 22, coreCenterY - 22, 44, 44);
+        boltStud(pixmap, coreCenterX - 20, coreCenterY - 20);
+        boltStud(pixmap, coreCenterX + 20, coreCenterY - 20);
+        boltStud(pixmap, coreCenterX - 20, coreCenterY + 20);
+        boltStud(pixmap, coreCenterX + 20, coreCenterY + 20);
+        // Electric arc filaments escaping the core.
+        pixmap.setColor(0.70f, 1.00f, 0.85f, 1f);
+        pixmap.drawPixel(coreCenterX + 10, coreCenterY - 14);
+        pixmap.drawPixel(coreCenterX + 12, coreCenterY - 16);
+        pixmap.drawPixel(coreCenterX - 12, coreCenterY + 12);
+        pixmap.drawPixel(coreCenterX - 14, coreCenterY + 13);
+
+        // ── Lower control panel ─────────────────────────────────────────────
+        pixmap.setColor(0.13f, 0.14f, 0.17f, 1f);
+        pixmap.fillRectangle(16, 60, 64, 26);
+        // Twin gauges flanking a breaker bank.
+        drawGauge(pixmap, 28, 72, 0.35f, 0.90f, 0.40f);
+        drawGauge(pixmap, 68, 72, 0.95f, 0.75f, 0.20f);
+        for (int breakerIndex = 0; breakerIndex < 4; breakerIndex++) {
+            boolean on = (breakerIndex % 2 == 0);
+            pixmap.setColor(on ? 0.30f : 0.20f, on ? 0.85f : 0.22f, on ? 0.40f : 0.25f, 1f);
+            pixmap.fillRectangle(40 + breakerIndex * 6, 66, 4, 12);
+        }
+        // Hazard chevron at the base.
+        hazardStripeBand(pixmap, 12, 84, 72, 6, 0.85f, 0.72f, 0.18f);
         return finalize(pixmap);
     }
 
     private static Texture generateBioPodTexture() {
-        Pixmap pixmap = new Pixmap(64, 96, Pixmap.Format.RGBA8888);
+        Pixmap pixmap = new Pixmap(96, 144, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Bottom base
-        pixmap.setColor(0.26f, 0.28f, 0.32f, 1f);
-        pixmap.fillRectangle(12, 86, 40, 9);
-        // Top dome cap
-        pixmap.fillRectangle(12, 2, 40, 9);
-        // Inner cap ring detail
+
+        final int glassLeft = 20, glassRight = 76, glassTop = 22, glassBottom = 124;
+
+        // ── Base pedestal with control panel ────────────────────────────────
+        beveledPanel(pixmap, 10, 124, 76, 20, 0.24f, 0.26f, 0.30f, 1.5f, 0.5f);
+        pixmap.setColor(0.08f, 0.20f, 0.24f, 1f);
+        pixmap.fillRectangle(16, 128, 30, 12);            // readout screen
+        pixmap.setColor(0.30f, 0.85f, 0.92f, 1f);
+        pixmap.fillRectangle(18, 130, 24, 2);
+        pixmap.fillRectangle(18, 133, 16, 2);
+        pixmap.fillRectangle(18, 136, 20, 2);
+        pixmap.setColor(0.30f, 0.95f, 0.40f, 1f); pixmap.fillRectangle(52, 129, 4, 4);
+        pixmap.setColor(0.95f, 0.70f, 0.20f, 1f); pixmap.fillRectangle(60, 129, 4, 4);
+        pixmap.setColor(0.90f, 0.25f, 0.20f, 1f); pixmap.fillRectangle(68, 129, 4, 4);
+        pixmap.setColor(0.40f, 0.42f, 0.48f, 1f); pixmap.fillRectangle(52, 135, 20, 4);
+        boltStud(pixmap, 14, 128); boltStud(pixmap, 82, 128);
+
+        // ── Top cap dome with valve + emitter strip ─────────────────────────
+        beveledPanel(pixmap, 14, 4, 68, 18, 0.26f, 0.28f, 0.32f, 1.5f, 0.5f);
         pixmap.setColor(0.36f, 0.38f, 0.44f, 1f);
-        pixmap.fillRectangle(20, 3, 24, 4);
-        // Cyan readout strip at base of cap
-        pixmap.setColor(0.30f, 0.80f, 0.85f, 1f);
-        pixmap.fillRectangle(16, 11, 32, 4);
-        // Fluid cylinder: greenish fluid
-        pixmap.setColor(0.20f, 0.55f, 0.42f, 1f);
-        pixmap.fillRectangle(16, 15, 32, 71);
-        // Glass sheen streak: diagonal 1px line
-        pixmap.setColor(0.75f, 0.92f, 0.88f, 1f);
-        for (int sheen = 0; sheen < 70; sheen++) {
-            int sheenColumn = 17 + sheen / 10;
-            int sheenRow    = 15 + sheen;
-            if (sheenColumn < 47 && sheenRow < 85) {
-                pixmap.drawPixel(sheenColumn, sheenRow);
-            }
+        pixmap.fillRectangle(22, 6, 52, 4);
+        pixmap.setColor(0.30f, 0.32f, 0.36f, 1f);
+        pixmap.fillRectangle(40, 0, 16, 6);
+        pixmap.setColor(0.55f, 0.90f, 0.95f, 1f);
+        pixmap.fillRectangle(34, 17, 28, 3);
+        boltStud(pixmap, 18, 8); boltStud(pixmap, 78, 8);
+
+        // ── Vertical frame struts joining the caps ──────────────────────────
+        pixmap.setColor(0.22f, 0.24f, 0.28f, 1f);
+        pixmap.fillRectangle(glassLeft - 4, glassTop, 4, glassBottom - glassTop);
+        pixmap.fillRectangle(glassRight,    glassTop, 4, glassBottom - glassTop);
+
+        // ── Glass tube fluid (cylindrical green shading) ────────────────────
+        for (int column = glassLeft; column < glassRight; column++) {
+            float across = (column - glassLeft) / (float) (glassRight - glassLeft - 1);
+            float curve  = 1f - Math.min(1f, Math.abs(across - 0.40f) * 1.9f);
+            pixmap.setColor(0.10f + 0.16f * curve, 0.34f + 0.34f * curve, 0.28f + 0.26f * curve, 1f);
+            pixmap.fillRectangle(column, glassTop, 1, glassBottom - glassTop);
         }
-        // Specimen silhouette: curled organic blob
-        pixmap.setColor(0.10f, 0.22f, 0.16f, 1f);
-        pixmap.fillCircle(32, 67, 10);
-        // Ascending bubbles
-        pixmap.setColor(0.70f, 0.90f, 0.82f, 1f);
-        int[] bubbleColumns = { 24, 38, 30, 20, 44 };
-        int[] bubbleRows    = { 68, 55, 40, 30, 22 };
-        for (int bubbleIndex = 0; bubbleIndex < 5; bubbleIndex++) {
-            pixmap.fillRectangle(bubbleColumns[bubbleIndex], bubbleRows[bubbleIndex], 2, 2);
+        // Cyan containment glow rings around the glass.
+        pixmap.setColor(0.40f, 0.90f, 0.95f, 0.8f);
+        for (int ringY = glassTop + 14; ringY < glassBottom - 8; ringY += 28) {
+            pixmap.fillRectangle(glassLeft, ringY, glassRight - glassLeft, 2);
         }
+        // Curled specimen silhouette with a faint internal glow.
+        int specimenX = 48, specimenY = 78;
+        pixmap.setColor(0.07f, 0.16f, 0.12f, 1f);
+        pixmap.fillCircle(specimenX, specimenY, 16);
+        pixmap.fillCircle(specimenX + 8, specimenY - 12, 8);
+        pixmap.fillTriangle(specimenX - 14, specimenY + 2, specimenX - 2, specimenY + 6, specimenX - 6, specimenY + 18);
+        pixmap.fillTriangle(specimenX + 10, specimenY + 8, specimenX + 18, specimenY + 4, specimenX + 18, specimenY + 20);
+        pixmap.setColor(0.20f, 0.45f, 0.32f, 1f);
+        pixmap.fillCircle(specimenX + 2, specimenY - 2, 6);
+        pixmap.setColor(0.85f, 0.40f, 0.45f, 1f);
+        pixmap.drawPixel(specimenX + 9, specimenY - 13);
+        // Glass highlight streaks (strong left, faint right).
+        pixmap.setColor(0.80f, 0.95f, 0.92f, 0.7f);
+        pixmap.fillRectangle(glassLeft + 3, glassTop + 2, 3, glassBottom - glassTop - 6);
+        pixmap.setColor(0.60f, 0.80f, 0.78f, 0.4f);
+        pixmap.fillRectangle(glassRight - 6, glassTop + 6, 1, glassBottom - glassTop - 14);
+        // Rising bubbles of varied size.
+        pixmap.setColor(0.80f, 0.95f, 0.90f, 1f);
+        int[] bubbleColumns = { 34, 60, 44, 30, 64, 50, 38 };
+        int[] bubbleRows    = { 110, 100, 90, 70, 64, 48, 36 };
+        int[] bubbleRadii   = { 2, 1, 2, 1, 2, 1, 2 };
+        for (int bubbleIndex = 0; bubbleIndex < bubbleColumns.length; bubbleIndex++) {
+            pixmap.fillCircle(bubbleColumns[bubbleIndex], bubbleRows[bubbleIndex], bubbleRadii[bubbleIndex]);
+        }
+        // Condensation frost patches near the top of the glass.
+        pixmap.setColor(0.70f, 0.85f, 0.88f, 0.5f);
+        pixmap.fillRectangle(glassLeft + 2, glassTop + 2, 10, 6);
+        pixmap.fillRectangle(glassRight - 14, glassTop + 4, 10, 5);
         return finalize(pixmap);
+    }
+
+    // Draws a single rifle standing vertically (barrel up) centred on slotColumn,
+    // spanning rows ~14..60. Two palettes let each rack slot hold a distinct weapon.
+    private static void drawRackRifle(Pixmap pixmap, int slotColumn,
+                                      float stockRed, float stockGreen, float stockBlue,
+                                      float metalRed, float metalGreen, float metalBlue) {
+        // Barrel (upper, thin) with an edge highlight.
+        pixmap.setColor(metalRed, metalGreen, metalBlue, 1f);
+        pixmap.fillRectangle(slotColumn - 1, 14, 3, 22);
+        pixmap.setColor(Math.min(1f, metalRed + 0.2f), Math.min(1f, metalGreen + 0.2f), Math.min(1f, metalBlue + 0.2f), 1f);
+        pixmap.fillRectangle(slotColumn - 1, 14, 1, 22);
+        // Receiver body (mid, wider).
+        pixmap.setColor(metalRed * 0.8f + 0.04f, metalGreen * 0.8f + 0.04f, metalBlue * 0.8f + 0.04f, 1f);
+        pixmap.fillRectangle(slotColumn - 3, 34, 7, 12);
+        // Stock (lower, wood/poly) with a lit edge.
+        pixmap.setColor(stockRed, stockGreen, stockBlue, 1f);
+        pixmap.fillRectangle(slotColumn - 3, 46, 6, 14);
+        pixmap.setColor(Math.min(1f, stockRed + 0.12f), Math.min(1f, stockGreen + 0.12f), Math.min(1f, stockBlue + 0.12f), 1f);
+        pixmap.fillRectangle(slotColumn - 3, 46, 1, 14);
+        // Magazine sitting in front of the receiver.
+        pixmap.setColor(0.12f, 0.13f, 0.16f, 1f);
+        pixmap.fillRectangle(slotColumn - 2, 44, 4, 9);
+        // Trigger guard.
+        pixmap.setColor(0.18f, 0.19f, 0.22f, 1f);
+        pixmap.fillRectangle(slotColumn + 1, 50, 3, 4);
     }
 
     private static Texture generateWeaponRackTexture() {
-        Pixmap pixmap = new Pixmap(64, 64, Pixmap.Format.RGBA8888);
+        Pixmap pixmap = new Pixmap(96, 96, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Rack frame: two vertical bars and two horizontal bars
-        pixmap.setColor(0.24f, 0.26f, 0.29f, 1f);
-        pixmap.fillRectangle(10, 8, 4, 44);
-        pixmap.fillRectangle(50, 8, 4, 44);
-        pixmap.fillRectangle(10, 8, 44, 3);
-        pixmap.fillRectangle(10, 49, 44, 3);
-        // Weapon slot 1 — wood stock + metal barrel
-        pixmap.setColor(0.34f, 0.22f, 0.12f, 1f);
-        pixmap.fillRectangle(16, 17, 14, 8);
-        pixmap.setColor(0.40f, 0.42f, 0.46f, 1f);
-        pixmap.fillRectangle(16, 17, 14, 1);  // top highlight
-        pixmap.setColor(0.10f, 0.11f, 0.12f, 1f);
-        pixmap.fillRectangle(30, 19, 18, 3);
-        // Weapon slot 2 — wood stock + metal barrel
-        pixmap.setColor(0.34f, 0.22f, 0.12f, 1f);
-        pixmap.fillRectangle(16, 29, 14, 8);
-        pixmap.setColor(0.40f, 0.42f, 0.46f, 1f);
-        pixmap.fillRectangle(16, 29, 14, 1);
-        pixmap.setColor(0.10f, 0.11f, 0.12f, 1f);
-        pixmap.fillRectangle(30, 31, 18, 3);
-        // Empty slot 3 — faint outline only
-        pixmap.setColor(0.18f, 0.20f, 0.23f, 1f);
-        pixmap.fillRectangle(16, 40, 30, 6);
-        // Ammo crate at base
-        pixmap.setColor(0.30f, 0.34f, 0.22f, 1f);
-        pixmap.fillRectangle(14, 52, 22, 10);
-        // Ammo stencil lettering — simple dot-rect "AMMO"
+
+        // Back pegboard panel.
+        beveledPanel(pixmap, 6, 6, 84, 84, 0.20f, 0.21f, 0.25f, 1.5f, 0.55f);
+        pixmap.setColor(0.12f, 0.13f, 0.16f, 1f);
+        for (int holeRow = 12; holeRow < 84; holeRow += 8) {
+            for (int holeColumn = 12; holeColumn < 84; holeColumn += 8) {
+                pixmap.drawPixel(holeColumn, holeRow);
+            }
+        }
+        // Top rail + bottom shelf.
+        pixmap.setColor(0.30f, 0.32f, 0.36f, 1f);
+        pixmap.fillRectangle(8, 10, 80, 4);
+        pixmap.fillRectangle(8, 62, 80, 4);
+        pixmap.setColor(0.42f, 0.44f, 0.48f, 1f);
+        pixmap.fillRectangle(8, 10, 80, 1);
+        pixmap.fillRectangle(8, 62, 80, 1);
+
+        // Three rifles standing in the upper slots.
+        drawRackRifle(pixmap, 20, 0.34f, 0.22f, 0.12f, 0.18f, 0.19f, 0.22f); // wood + steel
+        drawRackRifle(pixmap, 40, 0.16f, 0.17f, 0.20f, 0.10f, 0.45f, 0.55f); // tactical + cyan
+        drawRackRifle(pixmap, 60, 0.20f, 0.16f, 0.10f, 0.40f, 0.20f, 0.10f); // worn
+
+        // Pistol hung on the right.
+        pixmap.setColor(0.16f, 0.17f, 0.20f, 1f);
+        pixmap.fillRectangle(76, 24, 10, 5);
+        pixmap.fillRectangle(78, 29, 4, 7);
+        pixmap.setColor(0.30f, 0.32f, 0.36f, 1f);
+        pixmap.fillRectangle(76, 24, 10, 1);
+
+        // Bottom shelf: grenades, magazines, ammo crate.
+        pixmap.setColor(0.22f, 0.30f, 0.16f, 1f);
+        pixmap.fillCircle(20, 74, 5); pixmap.fillCircle(32, 74, 5);
+        pixmap.setColor(0.35f, 0.45f, 0.24f, 1f);
+        pixmap.drawPixel(18, 72); pixmap.drawPixel(30, 72);
+        pixmap.setColor(0.50f, 0.52f, 0.40f, 1f);
+        pixmap.fillRectangle(19, 68, 3, 3); pixmap.fillRectangle(31, 68, 3, 3);  // grenade spoons
+        pixmap.setColor(0.14f, 0.15f, 0.18f, 1f);
+        pixmap.fillRectangle(44, 70, 5, 14); pixmap.fillRectangle(52, 70, 5, 14);
+        pixmap.setColor(0.30f, 0.32f, 0.36f, 1f);
+        pixmap.fillRectangle(44, 70, 5, 1); pixmap.fillRectangle(52, 70, 5, 1);
+        pixmap.setColor(0.30f, 0.34f, 0.20f, 1f);
+        pixmap.fillRectangle(64, 70, 22, 14);
+        pixmap.setColor(0.40f, 0.44f, 0.28f, 1f);
+        pixmap.fillRectangle(64, 70, 22, 1);
         pixmap.setColor(0.80f, 0.78f, 0.40f, 1f);
-        pixmap.fillRectangle(16, 55, 3, 5);
-        pixmap.fillRectangle(20, 55, 3, 5);
-        pixmap.fillRectangle(24, 55, 3, 5);
-        pixmap.fillRectangle(28, 55, 3, 5);
+        pixmap.fillRectangle(67, 74, 3, 6); pixmap.fillRectangle(71, 74, 3, 6);
+        pixmap.fillRectangle(75, 74, 3, 6); pixmap.fillRectangle(79, 74, 3, 6);  // "AMMO" stencil ticks
+
+        // Corner bolts.
+        boltStud(pixmap, 10, 10); boltStud(pixmap, 86, 10);
+        boltStud(pixmap, 10, 86); boltStud(pixmap, 86, 86);
         return finalize(pixmap);
     }
 
+    // Vertical glowing energy canister (capped glass tube) for the advanced machine.
+    private static void drawEnergyCanister(Pixmap pixmap, int x,
+                                           float red, float green, float blue) {
+        pixmap.setColor(0.28f, 0.30f, 0.34f, 1f);
+        pixmap.fillRectangle(x, 14, 8, 4);   // top cap
+        pixmap.fillRectangle(x, 60, 8, 4);   // bottom cap
+        for (int row = 18; row < 60; row++) {
+            float toBottom = (row - 18) / 41f;
+            float brightness = 0.6f + 0.4f * (1f - toBottom);
+            pixmap.setColor(red * brightness, green * brightness, blue * brightness, 1f);
+            pixmap.fillRectangle(x, row, 8, 1);
+        }
+        pixmap.setColor(Math.min(1f, red + 0.3f), Math.min(1f, green + 0.3f), Math.min(1f, blue + 0.3f), 1f);
+        pixmap.fillRectangle(x + 1, 18, 1, 42);   // highlight streak
+        pixmap.setColor(1f, 1f, 1f, 0.8f);
+        pixmap.drawPixel(x + 4, 48); pixmap.drawPixel(x + 3, 38); pixmap.drawPixel(x + 5, 28);
+    }
+
     private static Texture generateVendorTexture() {
-        Pixmap pixmap = new Pixmap(64, 64, Pixmap.Format.RGBA8888);
+        Pixmap pixmap = new Pixmap(96, 96, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Cabinet body: plum-grey
-        pixmap.setColor(0.26f, 0.22f, 0.30f, 1f);
-        pixmap.fillRectangle(6, 2, 52, 60);
-        // Front glass panel: dark
-        pixmap.setColor(0.10f, 0.14f, 0.20f, 1f);
-        pixmap.fillRectangle(10, 8, 34, 40);
-        // Item rows behind glass — alternating red/blue 6×5 squares
-        for (int itemRow = 0; itemRow < 3; itemRow++) {
-            for (int itemColumn = 0; itemColumn < 3; itemColumn++) {
-                boolean isRed = (itemRow + itemColumn) % 2 == 0;
-                if (isRed) {
-                    pixmap.setColor(0.85f, 0.30f, 0.30f, 1f);
+
+        // Main chassis (dark tech violet-grey) with bevel.
+        beveledPanel(pixmap, 8, 4, 80, 88, 0.20f, 0.18f, 0.26f, 1.6f, 0.5f);
+        // Top emitter housing with a violet glow port.
+        pixmap.setColor(0.16f, 0.15f, 0.22f, 1f);
+        pixmap.fillRectangle(30, 0, 36, 6);
+        pixmap.setColor(0.65f, 0.45f, 0.95f, 1f);
+        pixmap.fillRectangle(44, 0, 8, 4);
+
+        // ── Central energy aperture (radial violet→cyan glow) ───────────────
+        int apertureCenterX = 48, apertureCenterY = 38, apertureRadius = 22;
+        pixmap.setColor(0.05f, 0.05f, 0.08f, 1f);
+        pixmap.fillRectangle(apertureCenterX - 24, apertureCenterY - 24, 48, 48);
+        for (int pixelRow = apertureCenterY - apertureRadius; pixelRow <= apertureCenterY + apertureRadius; pixelRow++) {
+            for (int pixelColumn = apertureCenterX - apertureRadius; pixelColumn <= apertureCenterX + apertureRadius; pixelColumn++) {
+                float normalizedX = (pixelColumn - apertureCenterX) / (float) apertureRadius;
+                float normalizedY = (pixelRow - apertureCenterY) / (float) apertureRadius;
+                float distance = (float) Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+                if (distance > 1f) continue;
+                float red, green, blue;
+                if (distance < 0.22f) {
+                    red = 0.95f; green = 0.98f; blue = 1.00f;
+                } else if (distance < 0.55f) {
+                    float interpolationFactor = (distance - 0.22f) / 0.33f;
+                    red   = 0.95f - 0.55f * interpolationFactor;
+                    green = 0.98f - 0.40f * interpolationFactor;
+                    blue  = 1.00f - 0.05f * interpolationFactor;
                 } else {
-                    pixmap.setColor(0.30f, 0.55f, 0.85f, 1f);
+                    float interpolationFactor = (distance - 0.55f) / 0.45f;
+                    red   = 0.40f + 0.20f * interpolationFactor;
+                    green = 0.58f - 0.40f * interpolationFactor;
+                    blue  = 0.95f - 0.10f * interpolationFactor;
                 }
-                pixmap.fillRectangle(12 + itemColumn * 10, 12 + itemRow * 10, 7, 7);
+                float ring   = (float) (Math.cos(distance * Math.PI * 6) * 0.5 + 0.5);
+                float factor = 0.82f + 0.18f * ring;
+                pixmap.setColor(red * factor, green * factor, blue * factor, 1f);
+                pixmap.drawPixel(pixelColumn, pixelRow);
             }
         }
-        // Keypad area: dark base
-        pixmap.setColor(0.10f, 0.25f, 0.14f, 1f);
-        pixmap.fillRectangle(46, 12, 10, 22);
-        // Keypad buttons: 2×3 grid of small glowing squares
-        pixmap.setColor(0.40f, 0.85f, 0.55f, 1f);
-        for (int buttonRow = 0; buttonRow < 3; buttonRow++) {
-            for (int buttonColumn = 0; buttonColumn < 2; buttonColumn++) {
-                pixmap.fillRectangle(47 + buttonColumn * 4, 14 + buttonRow * 6, 3, 3);
+        // Suspended core orb.
+        pixmap.setColor(0.85f, 0.70f, 1.00f, 1f);
+        pixmap.fillCircle(apertureCenterX, apertureCenterY, 4);
+        pixmap.setColor(1.00f, 1.00f, 1.00f, 1f);
+        pixmap.fillCircle(apertureCenterX, apertureCenterY, 2);
+        // Aperture frame + corner emitter nodes.
+        pixmap.setColor(0.34f, 0.30f, 0.42f, 1f);
+        drawRectOutline(pixmap, apertureCenterX - 24, apertureCenterY - 24, 48, 48);
+        pixmap.setColor(0.70f, 0.55f, 1.00f, 1f);
+        pixmap.fillRectangle(apertureCenterX - 25, apertureCenterY - 25, 3, 3);
+        pixmap.fillRectangle(apertureCenterX + 23, apertureCenterY - 25, 3, 3);
+        pixmap.fillRectangle(apertureCenterX - 25, apertureCenterY + 23, 3, 3);
+        pixmap.fillRectangle(apertureCenterX + 23, apertureCenterY + 23, 3, 3);
+
+        // ── Side energy canisters ───────────────────────────────────────────
+        drawEnergyCanister(pixmap, 12, 0.85f, 0.30f, 0.30f); // red plasma
+        drawEnergyCanister(pixmap, 78, 0.30f, 0.55f, 0.90f); // blue plasma
+
+        // ── Lower control panel ─────────────────────────────────────────────
+        pixmap.setColor(0.12f, 0.12f, 0.16f, 1f);
+        pixmap.fillRectangle(14, 68, 68, 18);
+        pixmap.setColor(0.10f, 0.20f, 0.26f, 1f);
+        pixmap.fillRectangle(18, 71, 26, 12);
+        pixmap.setColor(0.40f, 0.85f, 0.95f, 1f);
+        pixmap.fillRectangle(20, 73, 22, 2);
+        pixmap.fillRectangle(20, 76, 14, 2);
+        pixmap.fillRectangle(20, 79, 18, 2);
+        pixmap.setColor(0.60f, 0.50f, 0.85f, 1f);
+        for (int keyRow = 0; keyRow < 3; keyRow++) {
+            for (int keyColumn = 0; keyColumn < 3; keyColumn++) {
+                pixmap.fillRectangle(50 + keyColumn * 8, 71 + keyRow * 5, 5, 3);
             }
         }
-        // UAC stencil label strip
-        pixmap.setColor(0.22f, 0.18f, 0.26f, 1f);
-        pixmap.fillRectangle(10, 50, 34, 8);
-        pixmap.setColor(0.85f, 0.82f, 0.50f, 1f);
-        // U: two vertical bars + bottom
-        pixmap.fillRectangle(13, 52, 2, 5);
-        pixmap.fillRectangle(17, 52, 2, 5);
-        pixmap.fillRectangle(13, 56, 6, 1);
-        // A: two verticals + crossbar
-        pixmap.fillRectangle(21, 52, 2, 5);
-        pixmap.fillRectangle(25, 52, 2, 5);
-        pixmap.fillRectangle(21, 54, 6, 1);
-        // C: left bar + top/bottom serifs
-        pixmap.fillRectangle(29, 52, 2, 5);
-        pixmap.fillRectangle(29, 52, 5, 1);
-        pixmap.fillRectangle(29, 56, 5, 1);
-        // Dispenser tray at base
-        pixmap.setColor(0.14f, 0.15f, 0.17f, 1f);
-        pixmap.fillRectangle(10, 60, 46, 4);
+        // Dispenser tray + corner bolts.
+        pixmap.setColor(0.08f, 0.08f, 0.10f, 1f);
+        pixmap.fillRectangle(14, 86, 68, 4);
+        boltStud(pixmap, 12, 8); boltStud(pixmap, 84, 8);
+        boltStud(pixmap, 12, 88); boltStud(pixmap, 84, 88);
         return finalize(pixmap);
     }
 
