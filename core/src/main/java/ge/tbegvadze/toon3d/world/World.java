@@ -974,23 +974,31 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             }
         }
 
-        // Normal ranged pickup — apply the ground roll to the arsenal singleton then equip
+        // Normal ranged pickup.
         Weapon weapon = playerController.findWeaponInArsenalForType(standingOn.stack.getType());
         if (weapon == null) { closeWeaponInspect(); return; }
         WeaponRoll groundRoll = standingOn.weaponRoll;
+        Loadout    loadout    = inventory.getLoadout();
+        int        existingSlot = loadout.slotIndexOf(weapon);
+
+        if (existingSlot >= 0) {
+            // The player already carries this weapon TYPE. Because the arsenal keeps a single
+            // instance per type, the loadout can never hold two of the same type — so this is
+            // never a "second pickup" but a VARIANT SWAP: replace the held weapon's roll with
+            // the ground roll and drop the old variant so the exchange is reversible.
+            // A different level OR tier OR ability set counts as a genuinely different weapon.
+            swapVariantInSlot(existingSlot, weapon, standingOn, groundRoll);
+            closeWeaponInspect();
+            return;
+        }
+
+        // Brand-new weapon type — apply the ground roll then equip into a free slot.
         if (groundRoll != null && groundRoll.tier != null) {
             weapon.configureRoll(groundRoll.weaponLevel,
                                  groundRoll.tier,
                                  groundRoll.abilities != null ? groundRoll.abilities : new AbilityInstance[0]);
         }
-        boolean alreadyInLoadout = false;
-        Loadout loadout = inventory.getLoadout();
-        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
-            if (loadout.getSlot(slotIndex) == weapon) { alreadyInLoadout = true; break; }
-        }
-        if (!alreadyInLoadout) {
-            inventory.getLoadout().tryEquip(weapon);
-        }
+        loadout.tryEquip(weapon);
         inventory.selectRangedActive();
         weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
         groundItems.remove(standingOn);
@@ -1000,6 +1008,60 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         fireTurnTick();
         closeWeaponInspect();
+    }
+
+    /**
+     * Swaps the variant held in {@code slotIndex} for the ground weapon's variant.
+     *
+     * Same weapon type, different roll: the held singleton is reconfigured to the ground roll
+     * and the player's previous variant is dropped on their tile (old roll preserved) so the
+     * swap can be undone by stepping back onto it. If the ground roll is identical to the held
+     * one there is nothing to swap, so the duplicate is converted to ammo instead (or simply
+     * discarded in the start room where conversion is disabled).
+     */
+    private void swapVariantInSlot(int slotIndex, Weapon heldWeapon,
+                                   GroundItem standingOn, WeaponRoll groundRoll) {
+        WeaponRoll heldRoll = WeaponRoll.fromWeapon(heldWeapon);
+
+        // Identical variant — no meaningful swap. Convert to ammo (reuses the convert path)
+        // when allowed, otherwise just remove the duplicate from the floor.
+        boolean sameVariant = (groundRoll == null && heldRoll == null)
+                || (groundRoll != null && groundRoll.matches(heldRoll));
+        if (sameVariant) {
+            if (computeConvertAmount(standingOn) > 0) {
+                convertGroundWeaponToAmmo(standingOn);
+            } else if (eventTextSystem != null) {
+                eventTextSystem.spawn("ALREADY EQUIPPED");
+            }
+            groundItems.remove(standingOn);
+            playerController.clearStandingOnWeapon();
+            fireTurnTick();
+            return;
+        }
+
+        // Apply the ground variant to the held singleton.
+        if (groundRoll != null && groundRoll.tier != null) {
+            heldWeapon.configureRoll(groundRoll.weaponLevel, groundRoll.tier,
+                    groundRoll.abilities != null ? groundRoll.abilities : new AbilityInstance[0]);
+        }
+
+        // Drop the player's previous variant on their tile so the swap is reversible.
+        int playerTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
+        int playerTileRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
+        GroundItem droppedItem = new GroundItem(playerTileColumn, playerTileRow,
+                weaponClassToItemType(heldWeapon), 1);
+        droppedItem.weaponRoll = heldRoll;
+        spawnGroundItem(droppedItem);
+
+        inventory.getLoadout().selectSlot(slotIndex);
+        inventory.selectRangedActive();
+        weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
+        groundItems.remove(standingOn);
+        playerController.clearStandingOnWeapon();
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("SWAPPED: " + heldWeapon.getDisplayName(), EventTextSystem.COLOR_GREEN);
+        }
+        fireTurnTick();
     }
 
     private void resolveStartRoomRangedTake(GroundItem standingOn, int rangedIndex) {
@@ -1052,6 +1114,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         Weapon newWeapon = playerController.findWeaponInArsenalForType(standingOn.stack.getType());
         if (newWeapon == null) { closeWeaponInspect(); return; }
 
+        // If the ground weapon's TYPE already occupies a different slot, evicting the chosen slot
+        // and equipping it would place the single arsenal instance into two slots at once.
+        // Redirect to a variant swap on the slot that actually holds this type instead, leaving
+        // the tapped slot untouched.
+        int existingSlot = inventory.getLoadout().slotIndexOf(newWeapon);
+        if (existingSlot >= 0 && existingSlot != slotIndex) {
+            swapVariantInSlot(existingSlot, newWeapon, standingOn, standingOn.weaponRoll);
+            closeWeaponInspect();
+            return;
+        }
+
         // Snapshot the slot weapon's roll BEFORE any modifications.
         // For same-class swaps (e.g., Chaingun for Chaingun) evicted == newWeapon (same singleton),
         // so we must capture the old roll now before applying the ground roll.
@@ -1095,6 +1168,20 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (playerController == null) { closeWeaponInspect(); return; }
         GroundItem standingOn = playerController.getStandingOnWeapon();
         if (standingOn == null || !groundItems.contains(standingOn)) { closeWeaponInspect(); return; }
+        convertGroundWeaponToAmmo(standingOn);
+        groundItems.remove(standingOn);
+        playerController.clearStandingOnWeapon();
+        fireTurnTick();
+        closeWeaponInspect();
+    }
+
+    /**
+     * Adds ammo for the ground weapon's type to the inventory and spawns feedback text.
+     * Does NOT remove the ground item, fire a tick, or close the overlay — the caller owns
+     * that cleanup so this can be reused both by the CONVERT button and the identical-variant
+     * branch of {@link #swapVariantInSlot}.
+     */
+    private void convertGroundWeaponToAmmo(GroundItem standingOn) {
         AmmoType ammoType = PlayerController.weaponItemTypeToAmmoType(standingOn.stack.getType());
         if (ammoType != null) {
             int ammoAmount  = ammoType.getAmountPerBox();
@@ -1113,10 +1200,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         } else {
             if (eventTextSystem != null) eventTextSystem.spawn("Discarded");
         }
-        groundItems.remove(standingOn);
-        playerController.clearStandingOnWeapon();
-        fireTurnTick();
-        closeWeaponInspect();
     }
 
     /** Adds a GroundItem to the live list; PropRenderer and LevelRenderer share the reference. */

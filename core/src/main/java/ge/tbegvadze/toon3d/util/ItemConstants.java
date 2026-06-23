@@ -98,6 +98,9 @@ public final class ItemConstants {
     public static final float INV_PANEL_GAP               = 20f;
     public static final float INV_PANEL_PADDING           = 15f;
     public static final float INV_HEADER_TITLE_X          = 40f;
+    // Header text scale — the inventory header was rendered at the default 1.0 scale, too small
+    // to read on a phone. All header labels (title, credits, sublevel, EXIT) use this scale.
+    public static final float INV_HEADER_FONT_SCALE       = 1.4f;
     public static final float INV_HEADER_EXIT_BUTTON_SIZE = 50f;
     public static final float INV_HEADER_EXIT_MARGIN      = 10f;
     public static final float INV_BASE_DIM_FACTOR         = 0.40f;
