@@ -842,6 +842,60 @@ public class PropRenderer implements Renderable, Disposable {
         pixmap.drawPixel(centerX, centerY);
     }
 
+    // Soft elliptical light pool cast on the floor beneath a hovering pickup. Alpha
+    // falls off quadratically toward the rim so the pool fades smoothly into the
+    // transparent background. Draw this before the body so the sprite sits on top of it.
+    private static void glowPool(Pixmap pixmap, int centerX, int centerY,
+                                 int radiusX, int radiusY,
+                                 float red, float green, float blue, float coreAlpha) {
+        for (int offsetY = -radiusY; offsetY <= radiusY; offsetY++) {
+            for (int offsetX = -radiusX; offsetX <= radiusX; offsetX++) {
+                float normalizedDistanceSquared =
+                        (offsetX * (float) offsetX) / (float) (radiusX * radiusX)
+                      + (offsetY * (float) offsetY) / (float) (radiusY * radiusY);
+                if (normalizedDistanceSquared > 1f) continue;
+                float alpha = coreAlpha * (1f - normalizedDistanceSquared);
+                pixmap.setColor(red, green, blue, alpha);
+                pixmap.drawPixel(centerX + offsetX, centerY + offsetY);
+            }
+        }
+    }
+
+    // Fills a rectangle with a top-lit vertical gradient: brighter at the top edge,
+    // darker toward the bottom, giving flat panels a sense of volume under overhead
+    // light. baseRed/Green/Blue is the mid-tone; topBoost lightens the top row and
+    // bottomDrop darkens the bottom row (both fractions of the base tone).
+    private static void verticalGradientPanel(Pixmap pixmap, int x, int y,
+                                              int width, int height,
+                                              float baseRed, float baseGreen, float baseBlue,
+                                              float topBoost, float bottomDrop) {
+        for (int pixelRow = 0; pixelRow < height; pixelRow++) {
+            float verticalFraction = pixelRow / (float) Math.max(1, height - 1);
+            float factor = (1f + topBoost) - (topBoost + bottomDrop) * verticalFraction;
+            pixmap.setColor(Math.min(1f, baseRed * factor),
+                            Math.min(1f, baseGreen * factor),
+                            Math.min(1f, baseBlue * factor), 1f);
+            pixmap.fillRectangle(x, y + pixelRow, width, 1);
+        }
+    }
+
+    // Erases the four corners of a filled rectangle with transparent right-triangles,
+    // turning it into a chamfered (angular) plate. Each leg parameter is the length of
+    // the cut along both edges meeting at that corner. Switches Pixmap blending to None
+    // so the corner pixels become fully transparent, then restores the previous mode.
+    private static void chamferCorners(Pixmap pixmap, int left, int top, int right, int bottom,
+                                       int topLeftLeg, int topRightLeg,
+                                       int bottomRightLeg, int bottomLeftLeg) {
+        Pixmap.Blending previousBlending = pixmap.getBlending();
+        pixmap.setBlending(Pixmap.Blending.None);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fillTriangle(left,  top,    left + topLeftLeg,  top,    left,  top + topLeftLeg);
+        pixmap.fillTriangle(right, top,    right - topRightLeg, top,   right, top + topRightLeg);
+        pixmap.fillTriangle(right, bottom, right - bottomRightLeg, bottom, right, bottom - bottomRightLeg);
+        pixmap.fillTriangle(left,  bottom, left + bottomLeftLeg, bottom, left, bottom - bottomLeftLeg);
+        pixmap.setBlending(previousBlending);
+    }
+
     private static Texture generateBarrelTexture(boolean explosive) {
         Pixmap pixmap = new Pixmap(64, 64, Pixmap.Format.RGBA8888);
         if (explosive) {
@@ -1368,97 +1422,308 @@ public class PropRenderer implements Renderable, Disposable {
         return finalize(pixmap);
     }
 
-    // Stim-pack ('+') — small white injector box with a red cross, cyan UAC glow pool at base.
+    // Small first-aid kit ('+') — compact white medical case with a relief red cross,
+    // top-lit gradient shell, lid seam, recessed latch, corner rivets and a soft
+    // medical-green floor pool. 128×160 (4× the legacy 32×40, identical 0.8 aspect so
+    // the on-screen billboard size is unchanged).
     private static Texture generateStimTexture() {
-        Pixmap pixmap = new Pixmap(32, 40, Pixmap.Format.RGBA8888);
+        final int textureWidth = 128, textureHeight = 160;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Body: white box
-        pixmap.setColor(0.90f, 0.92f, 0.92f, 1f);
-        pixmap.fillRectangle(4, 8, 24, 26);
-        // Red cross — vertical bar
-        pixmap.setColor(0.85f, 0.08f, 0.08f, 1f);
-        pixmap.fillRectangle(13, 11, 6, 20);
-        // Red cross — horizontal bar
-        pixmap.fillRectangle(7, 18, 18, 6);
-        // Cyan glow pool at base
-        pixmap.setColor(0.10f, 0.80f, 0.90f, 1f);
-        pixmap.fillRectangle(2, 36, 28, 3);
+
+        // Floor light pool (medical green-cyan).
+        glowPool(pixmap, 64, 150, 56, 10, 0.20f, 0.85f, 0.70f, 0.55f);
+
+        final int bodyLeft = 22, bodyRight = 106, bodyTop = 16, bodyBottom = 140;
+        final int bodyWidth = bodyRight - bodyLeft, bodyHeight = bodyBottom - bodyTop;
+
+        // Contact shadow beneath the case.
+        pixmap.setColor(0f, 0f, 0f, 0.30f);
+        pixmap.fillRectangle(bodyLeft + 6, bodyBottom, bodyWidth - 8, 5);
+
+        // Case shell: dark outline + top-lit white gradient.
+        pixmap.setColor(0.10f, 0.11f, 0.12f, 1f);
+        pixmap.fillRectangle(bodyLeft - 2, bodyTop - 2, bodyWidth + 4, bodyHeight + 4);
+        verticalGradientPanel(pixmap, bodyLeft, bodyTop, bodyWidth, bodyHeight,
+                              0.84f, 0.87f, 0.88f, 0.12f, 0.22f);
+        // Left highlight / right shadow bevel.
+        pixmap.setColor(1f, 1f, 1f, 0.55f);
+        pixmap.fillRectangle(bodyLeft, bodyTop, 3, bodyHeight);
+        pixmap.setColor(0f, 0f, 0f, 0.28f);
+        pixmap.fillRectangle(bodyRight - 3, bodyTop, 3, bodyHeight);
+
+        // Lid seam across the upper third.
+        pixmap.setColor(0.30f, 0.32f, 0.34f, 1f);
+        pixmap.fillRectangle(bodyLeft, bodyTop + 34, bodyWidth, 3);
+        pixmap.setColor(1f, 1f, 1f, 0.40f);
+        pixmap.fillRectangle(bodyLeft, bodyTop + 37, bodyWidth, 1);
+
+        // Recessed latch at front-centre.
+        pixmap.setColor(0.18f, 0.19f, 0.21f, 1f);
+        pixmap.fillRectangle(54, bodyBottom - 22, 20, 14);
+        pixmap.setColor(0.55f, 0.58f, 0.62f, 1f);
+        pixmap.fillRectangle(57, bodyBottom - 19, 14, 4);
+
+        // Red cross — dark outline, bright fill, inner highlight for slight relief.
+        final int centerX = 64, centerY = bodyTop + 70;
+        final int armHalf = 12, armReach = 34;
+        pixmap.setColor(0.45f, 0.04f, 0.04f, 1f);
+        pixmap.fillRectangle(centerX - armHalf - 2, centerY - armReach - 2, (armHalf + 2) * 2, (armReach + 2) * 2);
+        pixmap.fillRectangle(centerX - armReach - 2, centerY - armHalf - 2, (armReach + 2) * 2, (armHalf + 2) * 2);
+        pixmap.setColor(0.86f, 0.10f, 0.10f, 1f);
+        pixmap.fillRectangle(centerX - armHalf, centerY - armReach, armHalf * 2, armReach * 2);
+        pixmap.fillRectangle(centerX - armReach, centerY - armHalf, armReach * 2, armHalf * 2);
+        pixmap.setColor(1f, 0.34f, 0.30f, 0.60f);
+        pixmap.fillRectangle(centerX - armHalf + 2, centerY - armReach + 2, 4, armReach * 2 - 4);
+        pixmap.fillRectangle(centerX - armReach + 2, centerY - armHalf + 2, armReach * 2 - 4, 4);
+
+        // Corner rivets.
+        boltStud(pixmap, bodyLeft + 6,  bodyTop + 6);
+        boltStud(pixmap, bodyRight - 6, bodyTop + 6);
+        boltStud(pixmap, bodyLeft + 6,  bodyBottom - 6);
+        boltStud(pixmap, bodyRight - 6, bodyBottom - 6);
+
         return finalize(pixmap);
     }
 
-    // Field medkit ('H') — olive/white hard case, bold red cross, green status LED.
+    // Field medkit ('H') — heavy olive-drab hard case: recessed white cross panel,
+    // carry handle, twin clasps, green status LED with bloom, hazard-stripe foot and a
+    // teal floor pool. 192×224 (4× the legacy 48×56, identical 0.857 aspect).
     private static Texture generateFieldMedkitTexture() {
-        Pixmap pixmap = new Pixmap(48, 56, Pixmap.Format.RGBA8888);
+        final int textureWidth = 192, textureHeight = 224;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Main case body: olive drab
-        pixmap.setColor(0.42f, 0.46f, 0.28f, 1f);
-        pixmap.fillRectangle(2, 4, 44, 44);
-        // White lid panel
-        pixmap.setColor(0.88f, 0.90f, 0.88f, 1f);
-        pixmap.fillRectangle(6, 8, 36, 28);
-        // Red cross on lid — vertical
-        pixmap.setColor(0.85f, 0.08f, 0.08f, 1f);
-        pixmap.fillRectangle(20, 11, 8, 22);
-        // Red cross on lid — horizontal
-        pixmap.fillRectangle(9,  19, 30, 8);
-        // Green status LED (bottom-right corner of case)
-        pixmap.setColor(0.10f, 0.95f, 0.25f, 1f);
-        pixmap.fillRectangle(36, 40, 6, 5);
-        // Handle ridge at top
-        pixmap.setColor(0.28f, 0.30f, 0.18f, 1f);
-        pixmap.fillRectangle(14, 2, 20, 4);
-        // Cyan glow pool at base
-        pixmap.setColor(0.10f, 0.80f, 0.90f, 1f);
-        pixmap.fillRectangle(2, 50, 44, 4);
+
+        glowPool(pixmap, 96, 210, 84, 12, 0.20f, 0.85f, 0.70f, 0.55f);
+
+        // Carry handle above the case (with grip cut-out).
+        pixmap.setColor(0.16f, 0.17f, 0.12f, 1f);
+        pixmap.fillRectangle(66, 6, 60, 16);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        Pixmap.Blending previousHandleBlending = pixmap.getBlending();
+        pixmap.setBlending(Pixmap.Blending.None);
+        pixmap.fillRectangle(74, 12, 44, 10);
+        pixmap.setBlending(previousHandleBlending);
+        pixmap.setColor(0.34f, 0.36f, 0.22f, 1f);
+        pixmap.fillRectangle(66, 6, 60, 3);
+
+        final int bodyLeft = 16, bodyRight = 176, bodyTop = 24, bodyBottom = 200;
+        final int bodyWidth = bodyRight - bodyLeft, bodyHeight = bodyBottom - bodyTop;
+
+        // Case: dark outline + olive vertical gradient.
+        pixmap.setColor(0.08f, 0.09f, 0.06f, 1f);
+        pixmap.fillRectangle(bodyLeft - 3, bodyTop - 3, bodyWidth + 6, bodyHeight + 6);
+        verticalGradientPanel(pixmap, bodyLeft, bodyTop, bodyWidth, bodyHeight,
+                              0.40f, 0.45f, 0.27f, 0.18f, 0.28f);
+        // Bevels.
+        pixmap.setColor(1f, 1f, 1f, 0.18f);
+        pixmap.fillRectangle(bodyLeft, bodyTop, bodyWidth, 3);
+        pixmap.fillRectangle(bodyLeft, bodyTop, 3, bodyHeight);
+        pixmap.setColor(0f, 0f, 0f, 0.30f);
+        pixmap.fillRectangle(bodyLeft, bodyBottom - 3, bodyWidth, 3);
+        pixmap.fillRectangle(bodyRight - 3, bodyTop, 3, bodyHeight);
+
+        // Lid seam + clasps.
+        pixmap.setColor(0.12f, 0.13f, 0.09f, 1f);
+        pixmap.fillRectangle(bodyLeft, bodyTop + 96, bodyWidth, 4);
+        pixmap.setColor(0.62f, 0.64f, 0.40f, 1f);
+        pixmap.fillRectangle(40, bodyTop + 90, 16, 16);
+        pixmap.fillRectangle(136, bodyTop + 90, 16, 16);
+
+        // Recessed white cross panel on the upper lid.
+        final int panelLeft = 56, panelTop = bodyTop + 14, panelSize = 80;
+        pixmap.setColor(0.10f, 0.11f, 0.10f, 1f);
+        pixmap.fillRectangle(panelLeft - 3, panelTop - 3, panelSize + 6, panelSize + 6);
+        verticalGradientPanel(pixmap, panelLeft, panelTop, panelSize, panelSize,
+                              0.86f, 0.88f, 0.86f, 0.10f, 0.18f);
+
+        // Bold red cross on the panel.
+        final int centerX = panelLeft + panelSize / 2;
+        final int centerY = panelTop + panelSize / 2;
+        final int armHalf = 12, armReach = 32;
+        pixmap.setColor(0.45f, 0.04f, 0.04f, 1f);
+        pixmap.fillRectangle(centerX - armHalf - 2, centerY - armReach - 2, (armHalf + 2) * 2, (armReach + 2) * 2);
+        pixmap.fillRectangle(centerX - armReach - 2, centerY - armHalf - 2, (armReach + 2) * 2, (armHalf + 2) * 2);
+        pixmap.setColor(0.86f, 0.10f, 0.10f, 1f);
+        pixmap.fillRectangle(centerX - armHalf, centerY - armReach, armHalf * 2, armReach * 2);
+        pixmap.fillRectangle(centerX - armReach, centerY - armHalf, armReach * 2, armHalf * 2);
+        pixmap.setColor(1f, 0.34f, 0.30f, 0.55f);
+        pixmap.fillRectangle(centerX - armHalf + 2, centerY - armReach + 2, 4, armReach * 2 - 4);
+        pixmap.fillRectangle(centerX - armReach + 2, centerY - armHalf + 2, armReach * 2 - 4, 4);
+
+        // Status LED (green) with soft bloom, lower-right.
+        pixmap.setColor(0.10f, 0.95f, 0.30f, 0.35f);
+        pixmap.fillCircle(150, bodyBottom - 28, 10);
+        pixmap.setColor(0.20f, 1f, 0.40f, 1f);
+        pixmap.fillCircle(150, bodyBottom - 28, 5);
+        pixmap.setColor(0.80f, 1f, 0.85f, 1f);
+        pixmap.fillCircle(149, bodyBottom - 29, 2);
+
+        // Hazard-stripe foot band.
+        hazardStripeBand(pixmap, bodyLeft + 6, bodyBottom - 18, bodyWidth - 12, 10,
+                         0.85f, 0.72f, 0.10f);
+
+        // Reinforced corner rivets.
+        boltStud(pixmap, bodyLeft + 8,  bodyTop + 8);
+        boltStud(pixmap, bodyRight - 8, bodyTop + 8);
+        boltStud(pixmap, bodyLeft + 8,  bodyBottom - 8);
+        boltStud(pixmap, bodyRight - 8, bodyBottom - 8);
+
         return finalize(pixmap);
     }
 
-    // Armour shard ('a') — angular cyan/steel plate fragment with bright-cyan rim.
+    // Armour shard ('a') — a fractured chamfered steel plate with a diagonal brushed
+    // gradient, gouged scratches, a charged cyan rim along the broken edges, a central
+    // power cell and a cyan floor pool. 160×160 (4× the legacy 40×40, identical aspect).
     private static Texture generateArmourShardTexture() {
-        Pixmap pixmap = new Pixmap(40, 40, Pixmap.Format.RGBA8888);
+        final int textureWidth = 160, textureHeight = 160;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Steel-grey plate body (parallelogram silhouette approximated as rectangle)
-        pixmap.setColor(0.28f, 0.34f, 0.38f, 1f);
-        pixmap.fillRectangle(6, 8, 28, 22);
-        // Diagonal scratch line (lighter band)
-        pixmap.setColor(0.45f, 0.52f, 0.56f, 1f);
-        pixmap.fillRectangle(8, 14, 24, 3);
-        // Cyan rim-light on top edge
-        pixmap.setColor(0.15f, 0.85f, 0.95f, 1f);
-        pixmap.fillRectangle(6, 8, 28, 2);
-        // Cyan glow pool at base
-        pixmap.fillRectangle(4, 32, 32, 3);
+
+        glowPool(pixmap, 80, 142, 58, 11, 0.10f, 0.80f, 0.92f, 0.60f);
+
+        final int left = 26, right = 134, top = 18, bottom = 126;
+        final int topLeftLeg = 34, topRightLeg = 16, bottomRightLeg = 26, bottomLeftLeg = 30;
+
+        // Dark backing plate (slightly larger, same chamfer) reads as a thin outline.
+        pixmap.setColor(0.05f, 0.08f, 0.09f, 1f);
+        pixmap.fillRectangle(left - 3, top - 3, (right - left) + 6, (bottom - top) + 6);
+        chamferCorners(pixmap, left - 3, top - 3, right + 3, bottom + 3,
+                       topLeftLeg + 3, topRightLeg + 3, bottomRightLeg + 3, bottomLeftLeg + 3);
+
+        // Steel face: diagonal brushed gradient (lighter toward the top-left).
+        for (int pixelRow = top; pixelRow < bottom; pixelRow++) {
+            float verticalFraction = (pixelRow - top) / (float) (bottom - top);
+            for (int pixelColumn = left; pixelColumn < right; pixelColumn++) {
+                float horizontalFraction = (pixelColumn - left) / (float) (right - left);
+                float diagonal = (horizontalFraction + verticalFraction) * 0.5f;
+                float brush = (portalNoise(pixelColumn, pixelRow) - 0.5f) * 0.06f;
+                float shade = 0.50f - diagonal * 0.24f + brush;
+                pixmap.setColor(shade * 0.74f, shade * 0.90f, shade, 1f);
+                pixmap.drawPixel(pixelColumn, pixelRow);
+            }
+        }
+        chamferCorners(pixmap, left, top, right, bottom,
+                       topLeftLeg, topRightLeg, bottomRightLeg, bottomLeftLeg);
+
+        // Brushed scratch + deep gouge across the face.
+        pixmap.setColor(0.62f, 0.74f, 0.80f, 0.50f);
+        pixmap.fillRectangle(left + 14, top + 40, (right - left) - 30, 2);
+        pixmap.setColor(0.16f, 0.22f, 0.26f, 1f);
+        pixmap.fillRectangle(left + 20, top + 64, (right - left) - 44, 3);
+
+        // Charged cyan rim along the upper chamfer edges + top.
+        pixmap.setColor(0.30f, 0.95f, 1.0f, 1f);
+        pixmap.drawLine(left + topLeftLeg, top, left, top + topLeftLeg);
+        pixmap.drawLine(left + topLeftLeg, top + 1, left + 1, top + topLeftLeg);
+        pixmap.drawLine(right - topRightLeg, top, right, top + topRightLeg);
+        pixmap.drawLine(left + topLeftLeg, top, right - topRightLeg, top);
+        // Dimmer cyan along the lower chamfers.
+        pixmap.setColor(0.12f, 0.62f, 0.74f, 1f);
+        pixmap.drawLine(right, bottom - bottomRightLeg, right - bottomRightLeg, bottom);
+        pixmap.drawLine(left, bottom - bottomLeftLeg, left + bottomLeftLeg, bottom);
+
+        // Central cyan power cell with bloom and specular pip.
+        pixmap.setColor(0.10f, 0.80f, 0.92f, 0.30f);
+        pixmap.fillCircle(80, 78, 16);
+        pixmap.setColor(0.30f, 0.95f, 1.0f, 1f);
+        pixmap.fillCircle(80, 78, 8);
+        pixmap.setColor(0.85f, 1.0f, 1.0f, 1f);
+        pixmap.fillCircle(78, 76, 3);
+
         return finalize(pixmap);
     }
 
-    // Security vest ('A') — gunmetal torso vest with cyan trim plates and UAC stencil glow.
+    // Security vest ('A') — a tactical body-armour rig: gunmetal torso with a V-collar,
+    // shoulder pads, cyan ballistic chest plates, a glowing UAC diamond emblem, tactical
+    // straps with buckles, MOLLE webbing and a cyan floor pool. 224×288 (4× the legacy
+    // 56×72, identical 0.778 aspect).
     private static Texture generateSecurityVestTexture() {
-        Pixmap pixmap = new Pixmap(56, 72, Pixmap.Format.RGBA8888);
+        final int textureWidth = 224, textureHeight = 288;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Main vest body: gunmetal grey
-        pixmap.setColor(0.22f, 0.26f, 0.28f, 1f);
-        pixmap.fillRectangle(4, 4, 48, 56);
-        // Shoulder plates (wider at top)
-        pixmap.setColor(0.18f, 0.22f, 0.24f, 1f);
-        pixmap.fillRectangle(2, 4, 52, 14);
-        // Cyan trim plate — left chest
-        pixmap.setColor(0.08f, 0.72f, 0.85f, 1f);
-        pixmap.fillRectangle(6, 22, 18, 20);
-        // Cyan trim plate — right chest
-        pixmap.fillRectangle(32, 22, 18, 20);
-        // Central UAC stencil (light cyan rectangle suggesting logo)
-        pixmap.setColor(0.50f, 0.90f, 1.00f, 1f);
-        pixmap.fillRectangle(22, 26, 12, 12);
-        // Straps / buckles (dark horizontal bands)
-        pixmap.setColor(0.12f, 0.14f, 0.15f, 1f);
-        pixmap.fillRectangle(4, 46, 48, 4);
-        // Cyan glow pool at base
-        pixmap.setColor(0.08f, 0.72f, 0.85f, 1f);
-        pixmap.fillRectangle(4, 62, 48, 5);
+
+        glowPool(pixmap, 112, 272, 92, 13, 0.10f, 0.78f, 0.90f, 0.55f);
+
+        // Shoulder pads (outline + gradient + ridge highlight).
+        pixmap.setColor(0.08f, 0.09f, 0.10f, 1f);
+        pixmap.fillRectangle(16, 24, 84, 50);
+        pixmap.fillRectangle(124, 24, 84, 50);
+        verticalGradientPanel(pixmap, 20, 28, 76, 42, 0.24f, 0.27f, 0.30f, 0.20f, 0.30f);
+        verticalGradientPanel(pixmap, 128, 28, 76, 42, 0.24f, 0.27f, 0.30f, 0.20f, 0.30f);
+        pixmap.setColor(0.42f, 0.46f, 0.50f, 1f);
+        pixmap.fillRectangle(20, 28, 76, 3);
+        pixmap.fillRectangle(128, 28, 76, 3);
+
+        final int bodyLeft = 40, bodyRight = 184, bodyTop = 52, bodyBottom = 258;
+        final int bodyWidth = bodyRight - bodyLeft, bodyHeight = bodyBottom - bodyTop;
+
+        // Torso: dark outline + gunmetal vertical gradient.
+        pixmap.setColor(0.06f, 0.07f, 0.08f, 1f);
+        pixmap.fillRectangle(bodyLeft - 4, bodyTop - 2, bodyWidth + 8, bodyHeight + 6);
+        verticalGradientPanel(pixmap, bodyLeft, bodyTop, bodyWidth, bodyHeight,
+                              0.22f, 0.25f, 0.28f, 0.22f, 0.30f);
+
+        // Collar V-notch (transparent cut at top-centre) with a lit rim.
+        Pixmap.Blending previousCollarBlending = pixmap.getBlending();
+        pixmap.setBlending(Pixmap.Blending.None);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fillTriangle(92, bodyTop - 2, 132, bodyTop - 2, 112, bodyTop + 34);
+        pixmap.setBlending(previousCollarBlending);
+        pixmap.setColor(0.40f, 0.44f, 0.48f, 1f);
+        pixmap.drawLine(92, bodyTop, 112, bodyTop + 34);
+        pixmap.drawLine(132, bodyTop, 112, bodyTop + 34);
+
+        // Side flank panels (darker recesses).
+        pixmap.setColor(0.16f, 0.18f, 0.20f, 1f);
+        pixmap.fillRectangle(bodyLeft, bodyTop + 40, 16, bodyHeight - 70);
+        pixmap.fillRectangle(bodyRight - 16, bodyTop + 40, 16, bodyHeight - 70);
+
+        // Central seam.
+        pixmap.setColor(0.10f, 0.11f, 0.12f, 1f);
+        pixmap.fillRectangle(110, bodyTop + 36, 4, bodyHeight - 60);
+
+        // Cyan ballistic chest plates with inner glow lines.
+        beveledPanel(pixmap, 56, 96, 50, 78, 0.08f, 0.62f, 0.74f, 1.4f, 0.55f);
+        beveledPanel(pixmap, 118, 96, 50, 78, 0.08f, 0.62f, 0.74f, 1.4f, 0.55f);
+        pixmap.setColor(0.30f, 0.92f, 1.0f, 0.80f);
+        pixmap.fillRectangle(62, 104, 38, 3);
+        pixmap.fillRectangle(124, 104, 38, 3);
+
+        // Tactical straps + buckles.
+        pixmap.setColor(0.10f, 0.11f, 0.12f, 1f);
+        pixmap.fillRectangle(bodyLeft + 4, 182, bodyWidth - 8, 10);
+        pixmap.fillRectangle(bodyLeft + 4, 244, bodyWidth - 8, 10);
+        pixmap.setColor(0.46f, 0.48f, 0.50f, 1f);
+        pixmap.fillRectangle(104, 180, 16, 14);
+        pixmap.fillRectangle(104, 242, 16, 14);
+
+        // MOLLE webbing ticks across the lower torso.
+        pixmap.setColor(0.13f, 0.14f, 0.16f, 1f);
+        for (int tickColumn = bodyLeft + 12; tickColumn < bodyRight - 12; tickColumn += 18) {
+            pixmap.fillRectangle(tickColumn, 204, 3, 30);
+        }
+
+        // Central UAC emblem: cyan-rimmed diamond with a bright glowing core (drawn last).
+        pixmap.setColor(0.05f, 0.40f, 0.50f, 1f);
+        pixmap.fillTriangle(112, 188, 92, 212, 112, 236);
+        pixmap.fillTriangle(112, 188, 132, 212, 112, 236);
+        pixmap.setColor(0.40f, 0.95f, 1.0f, 1f);
+        pixmap.fillTriangle(112, 196, 100, 212, 112, 228);
+        pixmap.fillTriangle(112, 196, 124, 212, 112, 228);
+        pixmap.setColor(0.85f, 1.0f, 1.0f, 1f);
+        pixmap.fillCircle(112, 212, 4);
+
+        // Rivets: shoulder pads + lower torso corners.
+        boltStud(pixmap, 26, 34);  boltStud(pixmap, 90, 34);
+        boltStud(pixmap, 134, 34); boltStud(pixmap, 198, 34);
+        boltStud(pixmap, bodyLeft + 8, bodyBottom - 10);
+        boltStud(pixmap, bodyRight - 8, bodyBottom - 10);
+
         return finalize(pixmap);
     }
 
