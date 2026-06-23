@@ -772,6 +772,9 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private static int findFreeSlot(Loadout loadoutRef) {
         if (loadoutRef == null) return 0;
         for (int slotIndex = 0; slotIndex < loadoutRef.getSlotCount(); slotIndex++) {
+            // Skip locked slots — tryEquip() never assigns there, so offering one as the
+            // "free" target would produce an EQUIP button that silently fails.
+            if (loadoutRef.isSlotLocked(slotIndex)) continue;
             if (loadoutRef.getSlot(slotIndex) == null) return slotIndex;
         }
         return 0;
