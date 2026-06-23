@@ -184,6 +184,76 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_SPINE_WALL_HAZARD_CUMULATIVE       = 0.70f; // 'h'
     public static final float LEVEL_GEN_SPINE_WALL_TECH_CUMULATIVE         = 0.75f; // 't'
 
+    // -------------------------------------------------------------------------
+    // LINEAR CORRIDOR generator — side-room size & special-room enrichment
+    // -------------------------------------------------------------------------
+    // Side rooms branching off the spine. The upper bounds are large enough that an
+    // occasional oversized room qualifies as a LARGE landmark (LEVEL_GEN_LARGE_MIN_DIM).
+    public static final int   LEVEL_GEN_SPINE_ROOM_MIN_WIDTH        = 4;
+    public static final int   LEVEL_GEN_SPINE_ROOM_MAX_WIDTH        = 12;
+    public static final int   LEVEL_GEN_SPINE_ROOM_MIN_HEIGHT       = 4;
+    public static final int   LEVEL_GEN_SPINE_ROOM_MAX_HEIGHT       = 11;
+    // Probability a side-room slot rolls for the oversized (landmark-eligible) size band.
+    public static final float LEVEL_GEN_SPINE_BIG_ROOM_CHANCE       = 0.28f;
+
+    // LARGE landmark room (open arena off the spine; patterned columns, sparse props).
+    public static final float LEVEL_GEN_SPINE_LARGE_CHANCE          = 0.60f; // large-eligible → LARGE
+    public static final int   LEVEL_GEN_SPINE_LARGE_MAX             = 2;
+
+    // RESEARCH_LAB — sci-fi set-piece: specimen tanks 'I', AI core 'J', holo-workstation 'W',
+    // special equipment '@', holo-data 'D' walls, energy-scorch 'e' decals. At most 1 per level.
+    public static final float LEVEL_GEN_SPINE_RESEARCH_CHANCE       = 0.32f;
+    public static final int   LEVEL_GEN_SPINE_RESEARCH_MAX          = 1;
+    public static final int   LEVEL_GEN_SPINE_RESEARCH_MIN_WIDTH    = 6;
+    public static final int   LEVEL_GEN_SPINE_RESEARCH_MIN_HEIGHT   = 5;
+    public static final float LEVEL_GEN_SPINE_RESEARCH_HOLO_WALL_CHANCE = 0.55f; // 'D' back wall band
+    public static final int   LEVEL_GEN_SPINE_RESEARCH_MIN_TANKS    = 2;
+    public static final int   LEVEL_GEN_SPINE_RESEARCH_MAX_TANKS    = 4;
+    public static final int   LEVEL_GEN_SPINE_RESEARCH_SCORCH_MIN   = 2;
+    public static final int   LEVEL_GEN_SPINE_RESEARCH_SCORCH_MAX   = 5;
+
+    // STORAGE_BAY — cargo hold: stacked crate 'C' aisles + locker 'L' loot racks, ammo-dense.
+    public static final float LEVEL_GEN_SPINE_STORAGE_CHANCE        = 0.24f;
+    public static final int   LEVEL_GEN_SPINE_STORAGE_MAX           = 2;
+    public static final int   LEVEL_GEN_SPINE_STORAGE_MIN_WIDTH     = 5;
+    public static final int   LEVEL_GEN_SPINE_STORAGE_MIN_HEIGHT    = 4;
+    public static final float LEVEL_GEN_SPINE_STORAGE_LOCKER_RATIO  = 0.35f; // locker vs crate per aisle tile
+
+    // REACTOR — hazard field: explosive 'E' + radioactive 'g' barrels, generator '%' core,
+    // radiation 'U' walls, dark flickering floor. Volatile risk/reward room.
+    public static final float LEVEL_GEN_SPINE_REACTOR_CHANCE        = 0.18f;
+    public static final int   LEVEL_GEN_SPINE_REACTOR_MAX           = 1;
+    public static final int   LEVEL_GEN_SPINE_REACTOR_MIN_WIDTH     = 6;
+    public static final int   LEVEL_GEN_SPINE_REACTOR_MIN_HEIGHT    = 6;
+    public static final float LEVEL_GEN_SPINE_REACTOR_RAD_WALL_CHANCE = 0.45f; // 'U'
+    public static final float LEVEL_GEN_SPINE_REACTOR_BARREL_CHANCE   = 0.16f; // per interior tile
+
+    // -------------------------------------------------------------------------
+    // LINEAR CORRIDOR generator — interior architecture
+    // Structural layouts that turn bare boxes into legible spaces using columns and
+    // props. Applied to STANDARD and LARGE rooms. Every layout is built lane-safe:
+    // it never seals the room centre, a doorway, the spawn, or the stairs.
+    // -------------------------------------------------------------------------
+    // Probability a qualifying STANDARD room receives a structural interior layout
+    // (otherwise it falls back to the legacy sparse prop scatter).
+    public static final float LEVEL_GEN_INTERIOR_LAYOUT_CHANCE      = 0.62f;
+    // Minimum interior dimension (both axes) for any structural interior layout.
+    public static final int   LEVEL_GEN_INTERIOR_MIN_DIM            = 5;
+    // Column spacing for centre-avenue / cross-spar layouts.
+    public static final int   LEVEL_GEN_INTERIOR_COLUMN_SPACING     = 2;
+    // Crate-cover layout: number of cover clusters and crates per cluster.
+    public static final int   LEVEL_GEN_INTERIOR_CRATE_CLUSTERS     = 3;
+    public static final int   LEVEL_GEN_INTERIOR_CRATE_PER_CLUSTER  = 3;
+
+    // -------------------------------------------------------------------------
+    // LINEAR CORRIDOR generator — spine junction plaza
+    // The spine is broken up by one widened open node so a long straight artery is
+    // not monotonous: it reads as a crossroads / staging area framed by columns.
+    // -------------------------------------------------------------------------
+    public static final float LEVEL_GEN_SPINE_PLAZA_CHANCE          = 0.65f;
+    // Half-extent (tiles) of the square opening carved around the plaza centre.
+    public static final int   LEVEL_GEN_SPINE_PLAZA_RADIUS          = 2;
+
     // --- Shared per-room-type floor lighting probabilities ---
     // Standard room lighting — cumulative thresholds (checked in order; remainder = ' ').
     // Probabilities: flicker 5 %, unlit 10 %, dim 25 %, lit 60 %.
