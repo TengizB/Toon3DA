@@ -1888,41 +1888,72 @@ public class PropRenderer implements Renderable, Disposable {
         return finalize(pixmap);
     }
 
-    // Vertical glowing energy canister (capped glass tube) for the advanced machine.
-    private static void drawEnergyCanister(Pixmap pixmap, int x,
-                                           float red, float green, float blue) {
+    // Tall capped plasma canister (glass tube) for the advanced machine: machined
+    // end caps, a vertical glow gradient, a left glass-sheen streak, hoop bands and
+    // a few rising bubbles. Spans rows [topRow, bottomRow) at the given column.
+    private static void drawTallPlasmaCanister(Pixmap pixmap, int x, int topRow, int bottomRow,
+                                               float red, float green, float blue) {
+        final int tubeWidth = 12;
         pixmap.setColor(0.28f, 0.30f, 0.34f, 1f);
-        pixmap.fillRectangle(x, 14, 8, 4);   // top cap
-        pixmap.fillRectangle(x, 60, 8, 4);   // bottom cap
-        for (int row = 18; row < 60; row++) {
-            float toBottom = (row - 18) / 41f;
-            float brightness = 0.6f + 0.4f * (1f - toBottom);
+        pixmap.fillRectangle(x - 1, topRow - 4, tubeWidth + 2, 5);   // top cap
+        pixmap.fillRectangle(x - 1, bottomRow,  tubeWidth + 2, 5);   // bottom cap
+        pixmap.setColor(0.40f, 0.42f, 0.47f, 1f);
+        pixmap.fillRectangle(x - 1, topRow - 4, tubeWidth + 2, 1);   // cap highlight
+        // Glowing fluid column (brighter at the top).
+        for (int row = topRow; row < bottomRow; row++) {
+            float toBottom   = (row - topRow) / (float) (bottomRow - topRow);
+            float brightness = 0.55f + 0.45f * (1f - toBottom);
             pixmap.setColor(red * brightness, green * brightness, blue * brightness, 1f);
-            pixmap.fillRectangle(x, row, 8, 1);
+            pixmap.fillRectangle(x, row, tubeWidth, 1);
         }
-        pixmap.setColor(Math.min(1f, red + 0.3f), Math.min(1f, green + 0.3f), Math.min(1f, blue + 0.3f), 1f);
-        pixmap.fillRectangle(x + 1, 18, 1, 42);   // highlight streak
+        // Bright glass sheen streak down the left edge.
+        pixmap.setColor(Math.min(1f, red + 0.35f), Math.min(1f, green + 0.35f), Math.min(1f, blue + 0.35f), 1f);
+        pixmap.fillRectangle(x + 1, topRow, 2, bottomRow - topRow);
+        // Hoop bands.
+        pixmap.setColor(0.22f, 0.24f, 0.28f, 1f);
+        for (int hoopRow = topRow + 14; hoopRow < bottomRow - 6; hoopRow += 24) {
+            pixmap.fillRectangle(x, hoopRow, tubeWidth, 2);
+        }
+        // Rising bubbles.
         pixmap.setColor(1f, 1f, 1f, 0.8f);
-        pixmap.drawPixel(x + 4, 48); pixmap.drawPixel(x + 3, 38); pixmap.drawPixel(x + 5, 28);
+        for (int bubbleIndex = 0; bubbleIndex < 5; bubbleIndex++) {
+            int bubbleRow    = bottomRow - 8 - bubbleIndex * ((bottomRow - topRow) / 6);
+            int bubbleColumn = x + 4 + (bubbleIndex % 3) * 3;
+            pixmap.drawPixel(bubbleColumn, bubbleRow);
+        }
     }
 
+    // Special equipment ('@') — an advanced UAC machine: beveled violet-grey chassis,
+    // a vented top emitter housing with a violet glow port, twin tall plasma canisters
+    // flanking a central violet→cyan energy aperture (radial glow, orbiting containment
+    // ring, suspended core orb, corner emitter nodes), and a lower control panel with a
+    // readout screen, keypad, gauge, dispenser tray and a hazard band.
     private static Texture generateVendorTexture() {
-        Pixmap pixmap = new Pixmap(96, 96, Pixmap.Format.RGBA8888);
+        final int textureWidth = 128, textureHeight = 128;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
 
-        // Main chassis (dark tech violet-grey) with bevel.
-        beveledPanel(pixmap, 8, 4, 80, 88, 0.20f, 0.18f, 0.26f, 1.6f, 0.5f);
-        // Top emitter housing with a violet glow port.
-        pixmap.setColor(0.16f, 0.15f, 0.22f, 1f);
-        pixmap.fillRectangle(30, 0, 36, 6);
-        pixmap.setColor(0.65f, 0.45f, 0.95f, 1f);
-        pixmap.fillRectangle(44, 0, 8, 4);
+        // ── Main chassis (dark tech violet-grey) ──
+        beveledPanel(pixmap, 10, 6, 108, 116, 0.19f, 0.17f, 0.25f, 1.6f, 0.5f);
+        // Top emitter housing with vents + violet glow port.
+        pixmap.setColor(0.14f, 0.13f, 0.20f, 1f);
+        pixmap.fillRectangle(38, 0, 52, 8);
+        pixmap.setColor(0.66f, 0.46f, 0.96f, 1f);
+        pixmap.fillRectangle(58, 0, 12, 5);
+        pixmap.setColor(0.30f, 0.28f, 0.38f, 1f);
+        for (int ventColumn = 42; ventColumn < 86; ventColumn += 6) {
+            pixmap.fillRectangle(ventColumn, 2, 2, 4);
+        }
 
-        // ── Central energy aperture (radial violet→cyan glow) ───────────────
-        int apertureCenterX = 48, apertureCenterY = 38, apertureRadius = 22;
+        // ── Side plasma canisters ──
+        drawTallPlasmaCanister(pixmap, 16,  26, 98, 0.88f, 0.30f, 0.34f);  // red plasma
+        drawTallPlasmaCanister(pixmap, 100, 26, 98, 0.32f, 0.56f, 0.92f);  // blue plasma
+
+        // ── Central energy aperture (radial violet→cyan glow) ──
+        int apertureCenterX = 64, apertureCenterY = 50, apertureRadius = 30;
         pixmap.setColor(0.05f, 0.05f, 0.08f, 1f);
-        pixmap.fillRectangle(apertureCenterX - 24, apertureCenterY - 24, 48, 48);
+        pixmap.fillRectangle(apertureCenterX - 32, apertureCenterY - 32, 64, 64);
         for (int pixelRow = apertureCenterY - apertureRadius; pixelRow <= apertureCenterY + apertureRadius; pixelRow++) {
             for (int pixelColumn = apertureCenterX - apertureRadius; pixelColumn <= apertureCenterX + apertureRadius; pixelColumn++) {
                 float normalizedX = (pixelColumn - apertureCenterX) / (float) apertureRadius;
@@ -1943,50 +1974,57 @@ public class PropRenderer implements Renderable, Disposable {
                     green = 0.58f - 0.40f * interpolationFactor;
                     blue  = 0.95f - 0.10f * interpolationFactor;
                 }
-                float ring   = (float) (Math.cos(distance * Math.PI * 6) * 0.5 + 0.5);
+                float ring   = (float) (Math.cos(distance * Math.PI * 7) * 0.5 + 0.5);
                 float factor = 0.82f + 0.18f * ring;
                 pixmap.setColor(red * factor, green * factor, blue * factor, 1f);
                 pixmap.drawPixel(pixelColumn, pixelRow);
             }
         }
+        // Orbiting containment ring (flattened ellipse outline).
+        pixmap.setColor(0.80f, 0.70f, 1.00f, 0.9f);
+        for (int degree = 0; degree < 360; degree += 5) {
+            double radians = Math.toRadians(degree);
+            int pointColumn = apertureCenterX + (int) Math.round(apertureRadius * 0.78f * Math.cos(radians));
+            int pointRow    = apertureCenterY + (int) Math.round(apertureRadius * 0.30f * Math.sin(radians));
+            pixmap.drawPixel(pointColumn, pointRow);
+        }
         // Suspended core orb.
-        pixmap.setColor(0.85f, 0.70f, 1.00f, 1f);
-        pixmap.fillCircle(apertureCenterX, apertureCenterY, 4);
+        pixmap.setColor(0.88f, 0.74f, 1.00f, 1f);
+        pixmap.fillCircle(apertureCenterX, apertureCenterY, 6);
         pixmap.setColor(1.00f, 1.00f, 1.00f, 1f);
-        pixmap.fillCircle(apertureCenterX, apertureCenterY, 2);
+        pixmap.fillCircle(apertureCenterX, apertureCenterY, 3);
         // Aperture frame + corner emitter nodes.
         pixmap.setColor(0.34f, 0.30f, 0.42f, 1f);
-        drawRectOutline(pixmap, apertureCenterX - 24, apertureCenterY - 24, 48, 48);
-        pixmap.setColor(0.70f, 0.55f, 1.00f, 1f);
-        pixmap.fillRectangle(apertureCenterX - 25, apertureCenterY - 25, 3, 3);
-        pixmap.fillRectangle(apertureCenterX + 23, apertureCenterY - 25, 3, 3);
-        pixmap.fillRectangle(apertureCenterX - 25, apertureCenterY + 23, 3, 3);
-        pixmap.fillRectangle(apertureCenterX + 23, apertureCenterY + 23, 3, 3);
+        drawRectOutline(pixmap, apertureCenterX - 32, apertureCenterY - 32, 64, 64);
+        pixmap.setColor(0.72f, 0.56f, 1.00f, 1f);
+        pixmap.fillRectangle(apertureCenterX - 34, apertureCenterY - 34, 4, 4);
+        pixmap.fillRectangle(apertureCenterX + 30, apertureCenterY - 34, 4, 4);
+        pixmap.fillRectangle(apertureCenterX - 34, apertureCenterY + 30, 4, 4);
+        pixmap.fillRectangle(apertureCenterX + 30, apertureCenterY + 30, 4, 4);
 
-        // ── Side energy canisters ───────────────────────────────────────────
-        drawEnergyCanister(pixmap, 12, 0.85f, 0.30f, 0.30f); // red plasma
-        drawEnergyCanister(pixmap, 78, 0.30f, 0.55f, 0.90f); // blue plasma
-
-        // ── Lower control panel ─────────────────────────────────────────────
-        pixmap.setColor(0.12f, 0.12f, 0.16f, 1f);
-        pixmap.fillRectangle(14, 68, 68, 18);
-        pixmap.setColor(0.10f, 0.20f, 0.26f, 1f);
-        pixmap.fillRectangle(18, 71, 26, 12);
-        pixmap.setColor(0.40f, 0.85f, 0.95f, 1f);
-        pixmap.fillRectangle(20, 73, 22, 2);
-        pixmap.fillRectangle(20, 76, 14, 2);
-        pixmap.fillRectangle(20, 79, 18, 2);
-        pixmap.setColor(0.60f, 0.50f, 0.85f, 1f);
+        // ── Lower control panel ──
+        pixmap.setColor(0.11f, 0.11f, 0.15f, 1f);
+        pixmap.fillRectangle(18, 92, 92, 24);
+        pixmap.setColor(0.06f, 0.18f, 0.24f, 1f);
+        pixmap.fillRectangle(22, 95, 34, 18);              // readout screen
+        pixmap.setColor(0.40f, 0.88f, 0.98f, 1f);
+        pixmap.fillRectangle(25, 98, 28, 2);
+        pixmap.fillRectangle(25, 102, 18, 2);
+        pixmap.fillRectangle(25, 106, 24, 2);
+        pixmap.fillRectangle(25, 110, 12, 2);
+        pixmap.setColor(0.62f, 0.52f, 0.88f, 1f);          // keypad
         for (int keyRow = 0; keyRow < 3; keyRow++) {
             for (int keyColumn = 0; keyColumn < 3; keyColumn++) {
-                pixmap.fillRectangle(50 + keyColumn * 8, 71 + keyRow * 5, 5, 3);
+                pixmap.fillRectangle(64 + keyColumn * 10, 96 + keyRow * 6, 7, 4);
             }
         }
-        // Dispenser tray + corner bolts.
-        pixmap.setColor(0.08f, 0.08f, 0.10f, 1f);
-        pixmap.fillRectangle(14, 86, 68, 4);
-        boltStud(pixmap, 12, 8); boltStud(pixmap, 84, 8);
-        boltStud(pixmap, 12, 88); boltStud(pixmap, 84, 88);
+        drawGauge(pixmap, 96, 100, 0.70f, 0.55f, 1.00f);   // tuning gauge
+        // Dispenser tray + hazard band + corner bolts.
+        pixmap.setColor(0.07f, 0.07f, 0.09f, 1f);
+        pixmap.fillRectangle(18, 116, 92, 5);
+        hazardStripeBand(pixmap, 12, 121, 104, 5, 0.80f, 0.68f, 0.16f);
+        boltStud(pixmap, 14, 10);  boltStud(pixmap, 114, 10);
+        boltStud(pixmap, 14, 118); boltStud(pixmap, 114, 118);
         return finalize(pixmap);
     }
 
@@ -2010,93 +2048,330 @@ public class PropRenderer implements Renderable, Disposable {
         return finalize(pixmap);
     }
 
+    // Specimen tank ('I') — a tall research cylinder: machined steel plinth with a
+    // readout panel and vents, a capped collar with a cyan emitter ring, a glass tube
+    // of teal cryo-fluid with an air gap and a meniscus line, glowing containment
+    // bands, a curled bioluminescent specimen suspended at centre, glass sheen
+    // streaks, rising bubbles, and condensation frost near the surface.
     private static Texture generateSpecimenTankTexture() {
-        Pixmap pixmap = new Pixmap(64, 128, Pixmap.Format.RGBA8888);
+        final int textureWidth = 96, textureHeight = 192;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Steel base and top caps
-        pixmap.setColor(0.20f, 0.22f, 0.26f, 1f);
-        pixmap.fillRectangle(8, 108, 48, 20);
-        pixmap.fillRectangle(8, 0,   48, 10);
-        // Fluid body — cylindrical sheen via column-by-column tinting
-        for (int column = 10; column < 54; column++) {
-            float fraction = (float)(column - 10) / 43f;
-            float rim = (fraction < 0.20f || fraction > 0.80f) ? 0f : 1f;
-            float fluidRed   = 0.12f + 0.18f * rim;
-            float fluidGreen = 0.45f + 0.20f * rim;
-            float fluidBlue  = 0.55f + 0.40f * rim;
-            pixmap.setColor(fluidRed, fluidGreen, fluidBlue, 1f);
-            pixmap.fillRectangle(column, 10, 1, 98);
-        }
-        // Specimen silhouette — dark oval centre
-        pixmap.setColor(0.06f, 0.10f, 0.08f, 1f);
-        pixmap.fillRectangle(20, 40, 24, 46);
-        // Glass highlight streak (left)
-        pixmap.setColor(0.80f, 0.92f, 0.95f, 1f);
-        pixmap.fillRectangle(11, 12, 3, 94);
-        // Rising bubble dots
-        pixmap.setColor(0.80f, 0.95f, 1.00f, 1f);
-        for (int bubbleRow = 20; bubbleRow < 100; bubbleRow += 14) {
-            pixmap.fillRectangle(32, bubbleRow,     2, 2);
-            pixmap.fillRectangle(40, bubbleRow + 7, 2, 2);
-        }
-        return finalize(pixmap);
-    }
 
-    private static Texture generateHoloWorkstationTexture() {
-        Pixmap pixmap = new Pixmap(80, 64, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-        // Console body (lower portion)
-        pixmap.setColor(0.18f, 0.20f, 0.24f, 1f);
-        pixmap.fillRectangle(4, 44, 72, 18);
-        // Cyan control strip
-        pixmap.setColor(0.35f, 0.95f, 1.00f, 1f);
-        pixmap.fillRectangle(8, 42, 64, 3);
-        // Hologram projection cone — fanning lines from console top upward
-        for (int column = 20; column <= 60; column += 5) {
-            float brightness = 1f - Math.abs(column - 40) / 25f;
-            pixmap.setColor(0.55f * brightness, 0.95f * brightness, 1.00f * brightness, 1f);
-            int topY = (int)(4 + (1f - brightness) * 18);
-            pixmap.fillRectangle(column, topY, 2, 42 - topY);
-        }
-        // Wireframe ring at hologram apex
-        pixmap.setColor(0.35f, 0.95f, 1.00f, 1f);
-        pixmap.fillRectangle(26, 6,  28, 2);
-        pixmap.fillRectangle(26, 18, 28, 2);
-        pixmap.fillRectangle(26, 6,  2,  14);
-        pixmap.fillRectangle(52, 6,  2,  14);
-        return finalize(pixmap);
-    }
+        final int glassLeft = 18, glassRight = 78;       // inner fluid column bounds
+        final int glassTop  = 28, glassBottom = 158;
+        final int fluidTop  = 38;                          // liquid surface (air gap above)
 
-    private static Texture generateAiCoreNodeTexture() {
-        Pixmap pixmap = new Pixmap(48, 128, Pixmap.Format.RGBA8888);
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-        // Heatsink frame
+        // ── Base plinth: heavy steel pedestal with readout, lamps and vents ──
+        beveledPanel(pixmap, 6, 158, 84, 34, 0.22f, 0.24f, 0.28f, 1.5f, 0.5f);
+        pixmap.setColor(0.05f, 0.16f, 0.20f, 1f);
+        pixmap.fillRectangle(12, 164, 34, 18);             // readout screen
+        pixmap.setColor(0.30f, 0.85f, 0.95f, 1f);
+        pixmap.fillRectangle(15, 167, 28, 2);
+        pixmap.fillRectangle(15, 171, 18, 2);
+        pixmap.fillRectangle(15, 175, 24, 2);
+        pixmap.fillRectangle(15, 179, 12, 2);
+        pixmap.setColor(0.30f, 0.95f, 0.40f, 1f); pixmap.fillRectangle(54, 165, 5, 5);   // status lamps
+        pixmap.setColor(0.95f, 0.72f, 0.20f, 1f); pixmap.fillRectangle(63, 165, 5, 5);
+        pixmap.setColor(0.90f, 0.26f, 0.20f, 1f); pixmap.fillRectangle(72, 165, 5, 5);
         pixmap.setColor(0.12f, 0.13f, 0.16f, 1f);
-        pixmap.fillRectangle(2, 2, 44, 124);
-        // 5 stacked processing slabs
-        int slabCount  = 5;
-        int slabHeight = 20;
-        int slabGap    = 4;
-        for (int slabIndex = 0; slabIndex < slabCount; slabIndex++) {
-            int slabTop = 6 + slabIndex * (slabHeight + slabGap);
-            // Slab body
-            pixmap.setColor(0.20f, 0.55f, 0.70f, 1f);
-            pixmap.fillRectangle(6, slabTop, 36, slabHeight);
-            // Central light seam
-            pixmap.setColor(0.60f, 0.95f, 1.00f, 1f);
-            pixmap.fillRectangle(22, slabTop, 4, slabHeight);
-            // Status LEDs — amber on slab 1, cyan elsewhere
-            if (slabIndex == 1) {
-                pixmap.setColor(1.00f, 0.65f, 0.15f, 1f);
-            } else {
-                pixmap.setColor(0.35f, 0.95f, 1.00f, 1f);
-            }
-            pixmap.fillRectangle(8,  slabTop + 8, 4, 4);
-            pixmap.fillRectangle(36, slabTop + 8, 4, 4);
+        for (int ventRow = 174; ventRow < 188; ventRow += 4) {   // ventilation louvres
+            pixmap.fillRectangle(52, ventRow, 30, 2);
         }
+        boltStud(pixmap, 10, 162); boltStud(pixmap, 86, 162);
+        boltStud(pixmap, 10, 188); boltStud(pixmap, 86, 188);
+
+        // ── Top cap: machined collar, valve stack and cyan emitter ring ──
+        beveledPanel(pixmap, 10, 4, 76, 24, 0.26f, 0.28f, 0.33f, 1.5f, 0.5f);
+        pixmap.setColor(0.34f, 0.36f, 0.42f, 1f);
+        pixmap.fillRectangle(16, 8, 64, 5);                // ribbed collar band
+        pixmap.setColor(0.16f, 0.17f, 0.20f, 1f);
+        pixmap.fillRectangle(40, 0, 16, 6);                // valve stack
+        pixmap.setColor(0.45f, 0.90f, 0.98f, 1f);
+        pixmap.fillRectangle(20, 23, 56, 4);               // cyan emitter ring under cap
+        boltStud(pixmap, 15, 9); boltStud(pixmap, 81, 9);
+
+        // ── Vertical frame struts joining the caps ──
+        pixmap.setColor(0.24f, 0.26f, 0.30f, 1f);
+        pixmap.fillRectangle(glassLeft - 6, glassTop, 6, glassBottom - glassTop);
+        pixmap.fillRectangle(glassRight,    glassTop, 6, glassBottom - glassTop);
+        pixmap.setColor(0.36f, 0.38f, 0.44f, 1f);          // strut highlights
+        pixmap.fillRectangle(glassLeft - 6, glassTop, 1, glassBottom - glassTop);
+        pixmap.fillRectangle(glassRight,    glassTop, 1, glassBottom - glassTop);
+
+        // ── Glass cylinder fluid (cylindrical teal shading) ──
+        for (int column = glassLeft; column < glassRight; column++) {
+            float across = (column - glassLeft) / (float) (glassRight - glassLeft - 1);
+            float curve  = 1f - Math.min(1f, Math.abs(across - 0.40f) * 1.9f);
+            float fluidRed   = 0.06f + 0.12f * curve;
+            float fluidGreen = 0.34f + 0.34f * curve;
+            float fluidBlue  = 0.42f + 0.40f * curve;
+            pixmap.setColor(fluidRed, fluidGreen, fluidBlue, 1f);
+            pixmap.fillRectangle(column, fluidTop, 1, glassBottom - fluidTop);
+        }
+        // Dark air gap above the liquid + bright meniscus line.
+        pixmap.setColor(0.09f, 0.15f, 0.17f, 1f);
+        pixmap.fillRectangle(glassLeft, glassTop, glassRight - glassLeft, fluidTop - glassTop);
+        pixmap.setColor(0.70f, 0.95f, 1.00f, 0.9f);
+        pixmap.fillRectangle(glassLeft, fluidTop, glassRight - glassLeft, 2);
+        // Cyan containment glow rings banding the tube.
+        pixmap.setColor(0.40f, 0.92f, 0.98f, 0.85f);
+        for (int ringRow = fluidTop + 24; ringRow < glassBottom - 10; ringRow += 34) {
+            pixmap.fillRectangle(glassLeft, ringRow, glassRight - glassLeft, 2);
+        }
+
+        // ── Suspended specimen: curled bioluminescent silhouette ──
+        int specimenCenterX = 47, specimenCenterY = 98;
+        pixmap.setColor(0.20f, 0.60f, 0.55f, 0.40f);
+        pixmap.fillCircle(specimenCenterX, specimenCenterY, 24);          // glow aura
+        pixmap.setColor(0.05f, 0.13f, 0.12f, 1f);
+        pixmap.fillCircle(specimenCenterX, specimenCenterY + 4, 16);      // torso
+        pixmap.fillCircle(specimenCenterX + 4, specimenCenterY - 14, 9);  // head
+        pixmap.fillTriangle(specimenCenterX - 16, specimenCenterY, specimenCenterX - 2, specimenCenterY + 4, specimenCenterX - 8, specimenCenterY + 22);
+        pixmap.fillTriangle(specimenCenterX + 12, specimenCenterY + 6, specimenCenterX + 22, specimenCenterY + 2, specimenCenterX + 18, specimenCenterY + 24);
+        pixmap.fillTriangle(specimenCenterX - 10, specimenCenterY - 8, specimenCenterX - 18, specimenCenterY - 2, specimenCenterX - 20, specimenCenterY + 14);
+        pixmap.setColor(0.18f, 0.48f, 0.40f, 1f);
+        pixmap.fillCircle(specimenCenterX + 2, specimenCenterY, 7);       // subdermal glow
+        pixmap.setColor(0.30f, 0.70f, 0.62f, 1f);
+        pixmap.fillRectangle(specimenCenterX, specimenCenterY - 10, 2, 22);   // spine
+        pixmap.setColor(0.95f, 0.45f, 0.55f, 1f);
+        pixmap.drawPixel(specimenCenterX + 1, specimenCenterY - 15);      // eyes
+        pixmap.drawPixel(specimenCenterX + 6, specimenCenterY - 14);
+
+        // ── Glass sheen streaks (strong left, faint right) ──
+        pixmap.setColor(0.85f, 0.97f, 1.00f, 0.65f);
+        pixmap.fillRectangle(glassLeft + 3, glassTop + 4, 4, glassBottom - glassTop - 10);
+        pixmap.setColor(0.60f, 0.82f, 0.88f, 0.35f);
+        pixmap.fillRectangle(glassRight - 7, glassTop + 8, 2, glassBottom - glassTop - 20);
+
+        // ── Rising bubbles of varied size ──
+        pixmap.setColor(0.82f, 0.96f, 1.00f, 1f);
+        int[] bubbleColumns = { 30, 62, 40, 70, 34, 58, 46, 66, 38 };
+        int[] bubbleRows    = { 150, 140, 128, 120, 108, 96, 80, 66, 52 };
+        int[] bubbleRadii   = { 2, 1, 3, 1, 2, 1, 2, 1, 2 };
+        for (int bubbleIndex = 0; bubbleIndex < bubbleColumns.length; bubbleIndex++) {
+            pixmap.fillCircle(bubbleColumns[bubbleIndex], bubbleRows[bubbleIndex], bubbleRadii[bubbleIndex]);
+        }
+
+        // ── Condensation frost patches near the liquid surface ──
+        pixmap.setColor(0.72f, 0.88f, 0.92f, 0.5f);
+        pixmap.fillRectangle(glassLeft + 2, fluidTop + 2, 12, 7);
+        pixmap.fillRectangle(glassRight - 16, fluidTop + 4, 12, 6);
+
+        return finalize(pixmap);
+    }
+
+    // Holo-workstation ('W') — a low control console (beveled body, angled desk top,
+    // keypad deck, a live waveform screen and status LEDs) topped by a holo-emitter
+    // disc that projects a translucent cyan wireframe globe: scan-lined volume fill,
+    // latitude/longitude arcs, fanning projection beams, and floating data glyphs.
+    private static Texture generateHoloWorkstationTexture() {
+        final int textureWidth = 120, textureHeight = 96;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        final int emitterCenterX = 60, emitterTopRow = 52;
+
+        // ── Console base body with angled desk top ──
+        beveledPanel(pixmap, 8, 56, 104, 36, 0.18f, 0.20f, 0.25f, 1.6f, 0.5f);
+        pixmap.setColor(0.24f, 0.27f, 0.32f, 1f);
+        pixmap.fillRectangle(8, 56, 104, 8);
+        pixmap.setColor(0.34f, 0.38f, 0.44f, 1f);
+        pixmap.fillRectangle(8, 56, 104, 1);
+
+        // ── Keypad deck (left) ──
+        pixmap.setColor(0.10f, 0.11f, 0.14f, 1f);
+        pixmap.fillRectangle(14, 66, 40, 22);
+        pixmap.setColor(0.30f, 0.55f, 0.65f, 1f);
+        for (int keyRow = 0; keyRow < 3; keyRow++) {
+            for (int keyColumn = 0; keyColumn < 5; keyColumn++) {
+                pixmap.fillRectangle(17 + keyColumn * 7, 69 + keyRow * 6, 5, 4);
+            }
+        }
+        // ── Live waveform screen (right) ──
+        pixmap.setColor(0.05f, 0.18f, 0.22f, 1f);
+        pixmap.fillRectangle(60, 66, 46, 22);
+        pixmap.setColor(0.35f, 0.92f, 1.00f, 1f);
+        int[] waveHeights = { 3, 6, 2, 8, 4, 7, 3, 5, 2, 6 };
+        for (int waveIndex = 0; waveIndex < waveHeights.length; waveIndex++) {
+            int barColumn = 63 + waveIndex * 4;
+            pixmap.fillRectangle(barColumn, 84 - waveHeights[waveIndex], 2, waveHeights[waveIndex]);
+        }
+        pixmap.setColor(0.30f, 0.95f, 0.40f, 1f); pixmap.fillRectangle(14, 89, 6, 2);   // status LEDs
+        pixmap.setColor(0.95f, 0.72f, 0.20f, 1f); pixmap.fillRectangle(24, 89, 6, 2);
+        boltStud(pixmap, 12, 60); boltStud(pixmap, 108, 60);
+
+        // ── Holo-emitter disc on the desk ──
+        pixmap.setColor(0.30f, 0.33f, 0.40f, 1f);
+        pixmap.fillRectangle(emitterCenterX - 16, emitterTopRow, 32, 5);
+        pixmap.setColor(0.45f, 0.95f, 1.00f, 1f);
+        pixmap.fillRectangle(emitterCenterX - 12, emitterTopRow + 1, 24, 2);
+
+        // ── Projection beams fanning up from the emitter ──
+        for (int beamIndex = -3; beamIndex <= 3; beamIndex++) {
+            float brightness = 1f - Math.abs(beamIndex) / 4.5f;
+            pixmap.setColor(0.30f * brightness, 0.80f * brightness, 0.95f * brightness, 0.5f);
+            for (int beamRow = 8; beamRow < emitterTopRow; beamRow++) {
+                float fraction = (beamRow - 8) / (float) (emitterTopRow - 8);
+                int beamColumn = Math.round(emitterCenterX + beamIndex * 12 * fraction);
+                pixmap.drawPixel(beamColumn, beamRow);
+            }
+        }
+
+        // ── Holographic wireframe globe ──
+        int holoCenterX = 60, holoCenterY = 28, holoRadius = 18;
+        // Faint scan-lined volume fill.
+        for (int pixelRow = holoCenterY - holoRadius; pixelRow <= holoCenterY + holoRadius; pixelRow++) {
+            for (int pixelColumn = holoCenterX - holoRadius; pixelColumn <= holoCenterX + holoRadius; pixelColumn++) {
+                float normalizedX = (pixelColumn - holoCenterX) / (float) holoRadius;
+                float normalizedY = (pixelRow - holoCenterY) / (float) holoRadius;
+                float distance = (float) Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+                if (distance > 1f) continue;
+                if ((pixelRow % 2) == 0) continue;          // scan-line gaps
+                pixmap.setColor(0.35f, 0.85f, 1.00f, 0.18f * (1f - distance));
+                pixmap.drawPixel(pixelColumn, pixelRow);
+            }
+        }
+        // Outer rim + longitude meridians (vertical ellipses).
+        pixmap.setColor(0.55f, 0.95f, 1.00f, 0.9f);
+        pixmap.drawCircle(holoCenterX, holoCenterY, holoRadius);
+        float[] meridianWidths = { holoRadius, holoRadius * 0.55f, 0f };
+        for (float meridianWidth : meridianWidths) {
+            for (int degree = 0; degree < 360; degree += 6) {
+                double radians = Math.toRadians(degree);
+                int pointColumn = holoCenterX + (int) Math.round(meridianWidth * Math.sin(radians));
+                int pointRow    = holoCenterY + (int) Math.round(holoRadius * Math.cos(radians));
+                pixmap.drawPixel(pointColumn, pointRow);
+            }
+        }
+        // Latitude rings (flattened horizontal ellipses).
+        int[] latitudeOffsets = { -9, 0, 9 };
+        for (int latitudeOffset : latitudeOffsets) {
+            float halfWidth  = (float) Math.sqrt(Math.max(0, holoRadius * holoRadius - latitudeOffset * latitudeOffset));
+            float halfHeight = halfWidth * 0.30f;
+            for (int degree = 0; degree < 360; degree += 6) {
+                double radians = Math.toRadians(degree);
+                int pointColumn = holoCenterX + (int) Math.round(halfWidth * Math.cos(radians));
+                int pointRow    = holoCenterY + latitudeOffset + (int) Math.round(halfHeight * Math.sin(radians));
+                pixmap.drawPixel(pointColumn, pointRow);
+            }
+        }
+
+        // ── Floating data glyphs flanking the projection ──
+        pixmap.setColor(0.40f, 0.90f, 1.00f, 0.85f);
+        pixmap.fillRectangle(20, 14, 10, 2);
+        pixmap.fillRectangle(20, 18, 6, 2);
+        pixmap.fillRectangle(20, 22, 8, 2);
+        pixmap.fillRectangle(92, 16, 10, 2);
+        pixmap.fillRectangle(94, 20, 6, 2);
+        pixmap.fillRectangle(90, 24, 8, 2);
+        pixmap.setColor(0.85f, 0.98f, 1.00f, 1f);
+        pixmap.fillRectangle(holoCenterX + holoRadius, holoCenterY - 2, 2, 2);
+        pixmap.fillRectangle(holoCenterX - holoRadius - 2, holoCenterY + 6, 2, 2);
+
+        return finalize(pixmap);
+    }
+
+    // AI core node ('J') — a tall server tower: beveled chassis with edge cooling
+    // fins, a radial cyan-white "core" glow orb at the crown, a glowing vertical data
+    // spine threading a stack of translucent processing slabs (each with an internal
+    // glow gradient, bright central seam and edge LEDs), and a base unit with a
+    // readout panel and vents.
+    private static Texture generateAiCoreNodeTexture() {
+        final int textureWidth = 72, textureHeight = 192;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        // ── Outer chassis frame + edge cooling fins ──
+        beveledPanel(pixmap, 6, 2, 60, 188, 0.12f, 0.13f, 0.17f, 1.6f, 0.5f);
+        pixmap.setColor(0.16f, 0.17f, 0.21f, 1f);
+        for (int finRow = 40; finRow < 168; finRow += 7) {
+            pixmap.fillRectangle(2, finRow, 6, 4);
+            pixmap.fillRectangle(64, finRow, 6, 4);
+        }
+
+        // ── Crown AI core orb (radial cyan-white glow) ──
+        int coreCenterX = 36, coreCenterY = 26, coreRadius = 18;
+        pixmap.setColor(0.05f, 0.07f, 0.10f, 1f);
+        pixmap.fillRectangle(coreCenterX - 20, 6, 40, 40);
+        for (int pixelRow = coreCenterY - coreRadius; pixelRow <= coreCenterY + coreRadius; pixelRow++) {
+            for (int pixelColumn = coreCenterX - coreRadius; pixelColumn <= coreCenterX + coreRadius; pixelColumn++) {
+                float normalizedX = (pixelColumn - coreCenterX) / (float) coreRadius;
+                float normalizedY = (pixelRow - coreCenterY) / (float) coreRadius;
+                float distance = (float) Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+                if (distance > 1f) continue;
+                float red, green, blue;
+                if (distance < 0.25f) {
+                    red = 0.92f; green = 0.99f; blue = 1.00f;
+                } else if (distance < 0.6f) {
+                    float interpolationFactor = (distance - 0.25f) / 0.35f;
+                    red   = 0.92f - 0.62f * interpolationFactor;
+                    green = 0.99f - 0.24f * interpolationFactor;
+                    blue  = 1.00f - 0.05f * interpolationFactor;
+                } else {
+                    float interpolationFactor = (distance - 0.6f) / 0.4f;
+                    red   = 0.30f - 0.20f * interpolationFactor;
+                    green = 0.75f - 0.45f * interpolationFactor;
+                    blue  = 0.95f - 0.55f * interpolationFactor;
+                }
+                float ring   = (float) (Math.cos(distance * Math.PI * 5) * 0.5 + 0.5);
+                float factor = 0.82f + 0.18f * ring;
+                pixmap.setColor(red * factor, green * factor, blue * factor, 1f);
+                pixmap.drawPixel(pixelColumn, pixelRow);
+            }
+        }
+        pixmap.setColor(0.30f, 0.34f, 0.40f, 1f);
+        drawRectOutline(pixmap, coreCenterX - 20, 6, 40, 40);
+        boltStud(pixmap, coreCenterX - 18, 8); boltStud(pixmap, coreCenterX + 17, 8);
+
+        // ── Central data spine (glowing cyan conduit through the stack) ──
+        pixmap.setColor(0.10f, 0.40f, 0.50f, 1f);
+        pixmap.fillRectangle(coreCenterX - 3, 46, 6, 122);
+        pixmap.setColor(0.55f, 0.95f, 1.00f, 1f);
+        pixmap.fillRectangle(coreCenterX - 1, 46, 2, 122);
+
+        // ── Stacked translucent processing slabs ──
+        int slabTopStart = 50, slabHeight = 18, slabGap = 6, slabCount = 5;
+        for (int slabIndex = 0; slabIndex < slabCount; slabIndex++) {
+            int slabTop = slabTopStart + slabIndex * (slabHeight + slabGap);
+            beveledPanel(pixmap, 12, slabTop, 48, slabHeight, 0.16f, 0.42f, 0.55f, 1.4f, 0.5f);
+            // Internal glow gradient — brightest toward the slab's mid-line.
+            for (int rowOffset = 2; rowOffset < slabHeight - 2; rowOffset++) {
+                float vertical = 1f - Math.abs(rowOffset - slabHeight / 2f) / (slabHeight / 2f);
+                pixmap.setColor(0.25f * vertical + 0.10f, 0.65f * vertical + 0.20f, 0.80f * vertical + 0.25f, 1f);
+                pixmap.fillRectangle(15, slabTop + rowOffset, 42, 1);
+            }
+            // Bright central seam aligned with the data spine.
+            pixmap.setColor(0.70f, 0.98f, 1.00f, 1f);
+            pixmap.fillRectangle(coreCenterX - 2, slabTop, 4, slabHeight);
+            // Edge status LEDs — amber on the second slab, cyan elsewhere.
+            if (slabIndex == 1) pixmap.setColor(1.00f, 0.66f, 0.16f, 1f);
+            else                pixmap.setColor(0.40f, 0.95f, 1.00f, 1f);
+            pixmap.fillRectangle(14, slabTop + 7, 4, 4);
+            pixmap.fillRectangle(54, slabTop + 7, 4, 4);
+        }
+
+        // ── Base unit with readout, lamps and vents ──
+        pixmap.setColor(0.14f, 0.15f, 0.19f, 1f);
+        pixmap.fillRectangle(10, 168, 52, 22);
+        pixmap.setColor(0.05f, 0.16f, 0.20f, 1f);
+        pixmap.fillRectangle(14, 172, 26, 14);
+        pixmap.setColor(0.35f, 0.90f, 1.00f, 1f);
+        pixmap.fillRectangle(16, 174, 22, 2);
+        pixmap.fillRectangle(16, 178, 14, 2);
+        pixmap.fillRectangle(16, 182, 18, 2);
+        pixmap.setColor(0.30f, 0.95f, 0.40f, 1f); pixmap.fillRectangle(44, 172, 5, 5);
+        pixmap.setColor(0.95f, 0.72f, 0.20f, 1f); pixmap.fillRectangle(52, 172, 5, 5);
+        pixmap.setColor(0.12f, 0.13f, 0.16f, 1f);
+        for (int ventRow = 180; ventRow < 188; ventRow += 3) {
+            pixmap.fillRectangle(44, ventRow, 14, 1);
+        }
+        boltStud(pixmap, 10, 170); boltStud(pixmap, 62, 170);
+        boltStud(pixmap, 10, 188); boltStud(pixmap, 62, 188);
+
         return finalize(pixmap);
     }
 
