@@ -740,11 +740,11 @@ public class PropRenderer implements Renderable, Disposable {
         map.put('a', generateArmourShardTexture());
         map.put('A', generateSecurityVestTexture());
         map.put('>', generatePortalTexture());
-        map.put('6', generateAmmoBoxTexture(0.72f, 0.48f, 0.18f));  // BULLETS — copper
-        map.put('7', generateAmmoBoxTexture(0.78f, 0.68f, 0.12f));  // SHELLS  — brass
-        map.put('8', generateAmmoBoxTexture(0.10f, 0.80f, 0.90f));  // CELLS   — cyan
-        map.put('9', generateAmmoBoxTexture(0.45f, 0.55f, 0.20f));  // ROCKETS — olive
-        map.put('0', generateAmmoBoxTexture(0.85f, 0.90f, 0.95f));  // SLUGS   — silver
+        map.put('6', generateBulletClipTexture());    // BULLETS — copper rifle cartridges in a clip
+        map.put('7', generateShotgunShellsTexture());  // SHELLS  — red-hull shells on brass bases
+        map.put('8', generatePlasmaCellTexture());     // CELLS   — glowing cyan energy canister
+        map.put('9', generateRocketTexture());         // ROCKETS — olive warhead with fins
+        map.put('0', generateRailSlugsTexture());      // SLUGS   — heavy silver rail rounds
         map.put('#', generateCameraTexture());
         map.put('%', generateGeneratorTexture());
         map.put('&', generateBioPodTexture());
@@ -2803,28 +2803,286 @@ public class PropRenderer implements Renderable, Disposable {
         return finalize(pixmap);
     }
 
-    /** Generates a flat ammo-box pickup sprite tinted with the given colour. */
-    private static Texture generateAmmoBoxTexture(float red, float green, float blue) {
-        Pixmap pixmap = new Pixmap(48, 32, Pixmap.Format.RGBA8888);
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Ammo pickup pixel art — one distinct silhouette per ammo type.
+    //
+    // Every ammo type used to share a single tinted box sprite, telling the five
+    // reserves apart by colour alone. Each now has its own readable shape so a
+    // player can identify ammo at a glance even before the colour registers:
+    //
+    //   BULLETS ('6') — a stripper clip of slim copper rifle cartridges (upright)
+    //   SHELLS  ('7') — a row of red-hulled shotgun shells on brass bases
+    //   CELLS   ('8') — a glowing cyan plasma energy canister with a bolt glyph
+    //   ROCKETS ('9') — an olive warhead with a red tip and tail fins (side-on)
+    //   SLUGS   ('0') — a stack of heavy blunt silver rail rounds (side-on)
+    //
+    // All five are authored on a 96×64 RGBA8888 canvas (same 3:2 ratio as the old
+    // 48×32 box, so the on-screen billboard footprint is unchanged) with a
+    // transparent background and Nearest filtering. Pixmap Y=0 is the top edge.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    private static final int AMMO_SPRITE_WIDTH  = 96;
+    private static final int AMMO_SPRITE_HEIGHT = 64;
+
+    // Fills a rounded vertical "cylinder" body: a flat mid tone, a bright specular
+    // strip left of centre and a shaded right flank, so a flat rectangle reads as a
+    // round metal/plastic case under the game's flat lighting.
+    private static void shadedVerticalCylinder(Pixmap pixmap, int x, int y, int width, int height,
+                                               float red, float green, float blue,
+                                               float litFactor, float shadeFactor) {
+        pixmap.setColor(red, green, blue, 1f);
+        pixmap.fillRectangle(x, y, width, height);
+        // Shaded right flank.
+        int flankWidth = Math.max(1, width / 4);
+        pixmap.setColor(red * shadeFactor, green * shadeFactor, blue * shadeFactor, 1f);
+        pixmap.fillRectangle(x + width - flankWidth, y, flankWidth, height);
+        // Dark left edge.
+        pixmap.setColor(red * shadeFactor * 0.85f, green * shadeFactor * 0.85f, blue * shadeFactor * 0.85f, 1f);
+        pixmap.fillRectangle(x, y, 1, height);
+        // Bright specular highlight strip left of centre.
+        int highlightX     = x + Math.max(1, width / 4);
+        int highlightWidth = Math.max(1, width / 6);
+        pixmap.setColor(Math.min(1f, red * litFactor), Math.min(1f, green * litFactor), Math.min(1f, blue * litFactor), 1f);
+        pixmap.fillRectangle(highlightX, y, highlightWidth, height);
+    }
+
+    // Fills a rounded horizontal "cylinder" body: lit top strip, shaded underside.
+    private static void shadedHorizontalCylinder(Pixmap pixmap, int x, int y, int width, int height,
+                                                 float red, float green, float blue,
+                                                 float litFactor, float shadeFactor) {
+        pixmap.setColor(red, green, blue, 1f);
+        pixmap.fillRectangle(x, y, width, height);
+        // Shaded underside.
+        int flankHeight = Math.max(1, height / 4);
+        pixmap.setColor(red * shadeFactor, green * shadeFactor, blue * shadeFactor, 1f);
+        pixmap.fillRectangle(x, y + height - flankHeight, width, flankHeight);
+        // Bright specular highlight strip above centre.
+        int highlightY      = y + Math.max(1, height / 5);
+        int highlightHeight = Math.max(1, height / 6);
+        pixmap.setColor(Math.min(1f, red * litFactor), Math.min(1f, green * litFactor), Math.min(1f, blue * litFactor), 1f);
+        pixmap.fillRectangle(x, highlightY, width, highlightHeight);
+    }
+
+    /** BULLETS — a stripper clip of five slim copper rifle cartridges, standing upright. */
+    private static Texture generateBulletClipTexture() {
+        Pixmap pixmap = new Pixmap(AMMO_SPRITE_WIDTH, AMMO_SPRITE_HEIGHT, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Box body — slightly darker base tint
-        pixmap.setColor(red * 0.55f, green * 0.55f, blue * 0.55f, 1f);
-        pixmap.fillRectangle(2, 6, 44, 20);
-        // Top highlight edge
-        pixmap.setColor(Math.min(1f, red + 0.25f), Math.min(1f, green + 0.25f), Math.min(1f, blue + 0.25f), 1f);
-        pixmap.fillRectangle(2, 6, 44, 3);
-        // Stencil warning stripes — dark vertical bars across the body
-        pixmap.setColor(0.05f, 0.05f, 0.05f, 1f);
-        for (int barOffset = 0; barOffset < 44; barOffset += 8) {
-            pixmap.fillRectangle(2 + barOffset, 9, 4, 14);
+
+        // Brass case palette.
+        float brassRed = 0.74f, brassGreen = 0.58f, brassBlue = 0.20f;
+        // Copper bullet-tip palette.
+        float copperRed = 0.80f, copperGreen = 0.46f, copperBlue = 0.22f;
+
+        final int cartridgeCount = 5;
+        final int cartridgeWidth = 12;
+        final int spacing        = 16;
+        final int firstLeftX     = 8;
+
+        for (int cartridgeIndex = 0; cartridgeIndex < cartridgeCount; cartridgeIndex++) {
+            int leftX   = firstLeftX + cartridgeIndex * spacing;
+            int centerX = leftX + cartridgeWidth / 2;
+
+            // Brass case body.
+            shadedVerticalCylinder(pixmap, leftX, 26, cartridgeWidth, 28,
+                    brassRed, brassGreen, brassBlue, 1.35f, 0.55f);
+            // Case rim/base ring.
+            pixmap.setColor(brassRed * 0.4f, brassGreen * 0.4f, brassBlue * 0.4f, 1f);
+            pixmap.fillRectangle(leftX, 52, cartridgeWidth, 2);
+
+            // Shoulder taper into the neck (two stepped rows narrowing toward the tip).
+            shadedVerticalCylinder(pixmap, leftX + 2, 22, cartridgeWidth - 4, 4,
+                    brassRed, brassGreen, brassBlue, 1.35f, 0.55f);
+
+            // Copper bullet ogive — a tapered tip narrowing to an apex.
+            pixmap.setColor(copperRed * 0.55f, copperGreen * 0.55f, copperBlue * 0.55f, 1f);
+            pixmap.fillTriangle(leftX + 2, 22, leftX + cartridgeWidth - 2, 22, centerX, 8);
+            // Lit copper face on the left half of the ogive.
+            pixmap.setColor(Math.min(1f, copperRed * 1.3f), Math.min(1f, copperGreen * 1.3f), Math.min(1f, copperBlue * 1.3f), 1f);
+            pixmap.fillTriangle(leftX + 3, 22, centerX, 22, centerX, 10);
         }
-        // Lid seam line
-        pixmap.setColor(0.10f, 0.10f, 0.10f, 1f);
-        pixmap.fillRectangle(2, 16, 44, 2);
-        // Latch dot — bright accent at centre
-        pixmap.setColor(Math.min(1f, red + 0.30f), Math.min(1f, green + 0.30f), Math.min(1f, blue + 0.30f), 1f);
-        pixmap.fillRectangle(22, 14, 4, 4);
+
+        // Stripper clip — a dark metal band gripping the cartridge bases.
+        pixmap.setColor(0.26f, 0.27f, 0.30f, 1f);
+        pixmap.fillRectangle(4, 44, AMMO_SPRITE_WIDTH - 8, 9);
+        // Clip top bevel highlight.
+        pixmap.setColor(0.42f, 0.44f, 0.48f, 1f);
+        pixmap.fillRectangle(4, 44, AMMO_SPRITE_WIDTH - 8, 1);
+        // Clip rivets.
+        for (int cartridgeIndex = 0; cartridgeIndex < cartridgeCount; cartridgeIndex++) {
+            boltStud(pixmap, firstLeftX + cartridgeIndex * spacing + cartridgeWidth / 2, 48);
+        }
+        return finalize(pixmap);
+    }
+
+    /** SHELLS — a row of four red-plastic shotgun shells seated on brass bases. */
+    private static Texture generateShotgunShellsTexture() {
+        Pixmap pixmap = new Pixmap(AMMO_SPRITE_WIDTH, AMMO_SPRITE_HEIGHT, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        // Red plastic hull palette.
+        float hullRed = 0.78f, hullGreen = 0.16f, hullBlue = 0.14f;
+        // Brass head palette.
+        float brassRed = 0.80f, brassGreen = 0.66f, brassBlue = 0.24f;
+
+        final int shellCount = 4;
+        final int shellWidth = 16;
+        final int spacing    = 22;
+        final int firstLeftX = 8;
+
+        for (int shellIndex = 0; shellIndex < shellCount; shellIndex++) {
+            int leftX   = firstLeftX + shellIndex * spacing;
+            int centerX = leftX + shellWidth / 2;
+
+            // Red plastic hull (upper ~60%).
+            shadedVerticalCylinder(pixmap, leftX, 16, shellWidth, 26,
+                    hullRed, hullGreen, hullBlue, 1.35f, 0.5f);
+            // Crimped rounded top — a darker domed cap with a folded-star centre.
+            pixmap.setColor(hullRed * 0.6f, hullGreen * 0.6f, hullBlue * 0.6f, 1f);
+            pixmap.fillTriangle(leftX, 18, leftX + shellWidth, 18, centerX, 9);
+            pixmap.setColor(hullRed * 0.35f, hullGreen * 0.35f, hullBlue * 0.35f, 1f);
+            pixmap.drawLine(centerX, 11, centerX, 17);
+            pixmap.drawLine(centerX - 3, 14, centerX + 3, 14);
+
+            // Brass head (lower).
+            shadedVerticalCylinder(pixmap, leftX, 42, shellWidth, 14,
+                    brassRed, brassGreen, brassBlue, 1.3f, 0.5f);
+            // Knurl/crimp seam between hull and brass.
+            pixmap.setColor(brassRed * 0.45f, brassGreen * 0.45f, brassBlue * 0.45f, 1f);
+            pixmap.fillRectangle(leftX, 42, shellWidth, 2);
+            // Primer dot at the base centre.
+            pixmap.setColor(0.30f, 0.26f, 0.12f, 1f);
+            pixmap.fillCircle(centerX, 53, 2);
+        }
+        return finalize(pixmap);
+    }
+
+    /** CELLS — a glowing cyan plasma energy canister with metal caps and a bolt glyph. */
+    private static Texture generatePlasmaCellTexture() {
+        Pixmap pixmap = new Pixmap(AMMO_SPRITE_WIDTH, AMMO_SPRITE_HEIGHT, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        final int bodyLeft   = 26;
+        final int bodyWidth  = 44;
+        final int centerX    = bodyLeft + bodyWidth / 2;
+
+        // Brushed-metal casing.
+        beveledPanel(pixmap, bodyLeft, 10, bodyWidth, 44, 0.40f, 0.43f, 0.48f, 1.4f, 0.55f);
+        // Top and bottom end caps (darker bands).
+        pixmap.setColor(0.22f, 0.24f, 0.28f, 1f);
+        pixmap.fillRectangle(bodyLeft, 10, bodyWidth, 6);
+        pixmap.fillRectangle(bodyLeft, 48, bodyWidth, 6);
+        // Two positive/negative terminal nubs poking out of the top cap.
+        pixmap.setColor(0.55f, 0.58f, 0.63f, 1f);
+        pixmap.fillRectangle(centerX - 9, 6, 5, 4);
+        pixmap.fillRectangle(centerX + 4, 6, 5, 4);
+
+        // Glowing core window — a cyan vertical gradient, brightest at the centre.
+        int windowLeft = bodyLeft + 6, windowTop = 18, windowWidth = bodyWidth - 12, windowHeight = 28;
+        for (int row = 0; row < windowHeight; row++) {
+            // Distance from the vertical centre of the window (0 at centre → 1 at edge).
+            float edgeFactor = Math.abs((row - windowHeight / 2f) / (windowHeight / 2f));
+            float glow = 1f - 0.6f * edgeFactor;
+            pixmap.setColor(0.10f * glow + 0.02f, 0.70f * glow + 0.10f, 0.85f * glow + 0.12f, 1f);
+            pixmap.fillRectangle(windowLeft, windowTop + row, windowWidth, 1);
+        }
+        // Bright vertical core filament.
+        pixmap.setColor(0.75f, 0.98f, 1f, 1f);
+        pixmap.fillRectangle(centerX - 1, windowTop + 2, 3, windowHeight - 4);
+        // Energy scanlines across the window.
+        pixmap.setColor(0.05f, 0.35f, 0.45f, 1f);
+        for (int scanRow = windowTop + 3; scanRow < windowTop + windowHeight; scanRow += 5) {
+            pixmap.fillRectangle(windowLeft, scanRow, windowWidth, 1);
+        }
+        // Lightning-bolt charge glyph over the core (bright white-cyan zig-zag).
+        pixmap.setColor(0.90f, 1f, 1f, 1f);
+        pixmap.fillTriangle(centerX + 3, windowTop + 4, centerX - 4, windowTop + 16, centerX, windowTop + 16);
+        pixmap.fillTriangle(centerX, windowTop + 12, centerX + 4, windowTop + 12, centerX - 3, windowTop + 24);
+        return finalize(pixmap);
+    }
+
+    /** ROCKETS — a side-on olive rocket: red warhead, finned tail, exhaust nozzle. */
+    private static Texture generateRocketTexture() {
+        Pixmap pixmap = new Pixmap(AMMO_SPRITE_WIDTH, AMMO_SPRITE_HEIGHT, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        // Olive body palette.
+        float oliveRed = 0.46f, oliveGreen = 0.50f, oliveBlue = 0.22f;
+
+        final int bodyTop    = 24;
+        final int bodyHeight = 16;
+        final int centerY    = bodyTop + bodyHeight / 2;
+        final int bodyLeft   = 22;
+        final int bodyRight  = 74;   // body/warhead junction
+
+        // Cylindrical olive body.
+        shadedHorizontalCylinder(pixmap, bodyLeft, bodyTop, bodyRight - bodyLeft, bodyHeight,
+                oliveRed, oliveGreen, oliveBlue, 1.4f, 0.55f);
+
+        // Red warhead nose cone (points right to an apex).
+        pixmap.setColor(0.62f, 0.16f, 0.12f, 1f);
+        pixmap.fillTriangle(bodyRight, bodyTop, bodyRight, bodyTop + bodyHeight, 92, centerY);
+        // Lit upper face of the cone.
+        pixmap.setColor(0.82f, 0.28f, 0.22f, 1f);
+        pixmap.fillTriangle(bodyRight, bodyTop, bodyRight, centerY, 90, centerY);
+        // Yellow hazard band where the warhead meets the body.
+        hazardStripeBand(pixmap, bodyRight - 8, bodyTop, 8, bodyHeight, 0.85f, 0.74f, 0.12f);
+
+        // Tail fins — triangles above and below the rear of the body.
+        pixmap.setColor(oliveRed * 0.6f, oliveGreen * 0.6f, oliveBlue * 0.6f, 1f);
+        pixmap.fillTriangle(bodyLeft + 10, bodyTop, bodyLeft - 4, bodyTop - 9, bodyLeft + 2, bodyTop);
+        pixmap.fillTriangle(bodyLeft + 10, bodyTop + bodyHeight, bodyLeft - 4, bodyTop + bodyHeight + 9, bodyLeft + 2, bodyTop + bodyHeight);
+
+        // Exhaust nozzle ring at the tail.
+        pixmap.setColor(0.20f, 0.20f, 0.22f, 1f);
+        pixmap.fillRectangle(bodyLeft - 6, bodyTop + 2, 6, bodyHeight - 4);
+        pixmap.setColor(0.08f, 0.08f, 0.09f, 1f);
+        pixmap.fillRectangle(bodyLeft - 6, centerY - 2, 4, 4);
+        return finalize(pixmap);
+    }
+
+    /** SLUGS — a stack of three heavy blunt silver rail rounds, side-on. */
+    private static Texture generateRailSlugsTexture() {
+        Pixmap pixmap = new Pixmap(AMMO_SPRITE_WIDTH, AMMO_SPRITE_HEIGHT, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        // Silver palette.
+        float silverRed = 0.80f, silverGreen = 0.84f, silverBlue = 0.90f;
+
+        final int slugCount  = 3;
+        final int slugHeight = 14;
+        final int spacing    = 18;
+        final int firstTop   = 8;
+        final int bodyLeft   = 14;
+        final int bodyRight  = 70;   // body/nose junction
+
+        for (int slugIndex = 0; slugIndex < slugCount; slugIndex++) {
+            int top     = firstTop + slugIndex * spacing;
+            int centerY = top + slugHeight / 2;
+
+            // Heavy cylindrical body.
+            shadedHorizontalCylinder(pixmap, bodyLeft, top, bodyRight - bodyLeft, slugHeight,
+                    silverRed, silverGreen, silverBlue, 1.2f, 0.6f);
+            // Flat driving-band groove near the base.
+            pixmap.setColor(silverRed * 0.55f, silverGreen * 0.55f, silverBlue * 0.6f, 1f);
+            pixmap.fillRectangle(bodyLeft + 6, top, 3, slugHeight);
+            // Base rim cap.
+            pixmap.setColor(silverRed * 0.45f, silverGreen * 0.45f, silverBlue * 0.5f, 1f);
+            pixmap.fillRectangle(bodyLeft, top, 2, slugHeight);
+
+            // Blunt rounded nose (a short trapezoid tapering toward the right).
+            pixmap.setColor(silverRed * 0.7f, silverGreen * 0.7f, silverBlue * 0.75f, 1f);
+            pixmap.fillTriangle(bodyRight, top, bodyRight, centerY, 82, centerY - 3);
+            pixmap.fillTriangle(bodyRight, top + slugHeight, bodyRight, centerY, 82, centerY + 3);
+            pixmap.fillRectangle(bodyRight, centerY - 4, 12, 8);
+            // Electric-blue rail sheen — a bright glint line along the lit top.
+            pixmap.setColor(0.55f, 0.85f, 1f, 1f);
+            pixmap.fillRectangle(bodyLeft + 10, top + 2, bodyRight - bodyLeft - 16, 1);
+        }
         return finalize(pixmap);
     }
 
