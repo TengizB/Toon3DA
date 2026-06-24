@@ -23,7 +23,9 @@ t   Terminal wall       Rare. Corner alcoves, dead-ends. Max 1-2 per level.   la
 w   Wires wall          Near server/generator areas. Sparse.                  lab_wall_wires.jpg
 h   Hazard wall         Industrial caution stripes (yellow/black). Near explosive barrels.
 j   Rust wall           Corroded steel. Near unlit floors or oil pools.
-G   Gore wall           Flesh-infested demonic surface. Near corpse clusters.
+G   Gore wall           Wet demonic flesh membrane. Near corpse clusters. High-res procedural
+                        texture: tiling metaball flesh field with bump-relief shading, wet sheen,
+                        sinew vessels, infected pustules, open gashes with blood drips, bone nodules.
 k   Bulkhead wall       Heavy armoured plates. Dead ends, stairwells.
 N   Glass wall          Reinforced containment glass. Special rooms only.
 Q   Bio/Quarantine wall Biohazard warning markings. Containment areas.
