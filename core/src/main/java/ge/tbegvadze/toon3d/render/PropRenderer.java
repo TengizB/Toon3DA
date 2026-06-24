@@ -55,9 +55,9 @@ public class PropRenderer implements Renderable, Disposable {
             case 's': return 0.22f;
             case '.': return 0.18f;
             case 'O': return 0.18f;
-            case 'r': return 0.18f;   // red keycard pickup
-            case 'y': return 0.18f;   // yellow keycard pickup
-            case 'b': return 0.18f;   // blue keycard pickup
+            case 'r': return KEYCARD_PICKUP_SPRITE_HEIGHT;   // red keycard pickup
+            case 'y': return KEYCARD_PICKUP_SPRITE_HEIGHT;   // yellow keycard pickup
+            case 'b': return KEYCARD_PICKUP_SPRITE_HEIGHT;   // blue keycard pickup
             case '+': return MEDKIT_STIM_SPRITE_HEIGHT;
             case 'H': return MEDKIT_FULL_SPRITE_HEIGHT;
             case 'a': return ARMOUR_SHARD_SPRITE_HEIGHT;
@@ -296,7 +296,8 @@ public class PropRenderer implements Renderable, Disposable {
             float drawBottom;
             if (Level.isMedicalPickup(prop.propChar)
                     || Level.isArmourPickup(prop.propChar)
-                    || Level.isAmmoPickup(prop.propChar)) {
+                    || Level.isAmmoPickup(prop.propChar)
+                    || Level.isKeycardPickup(prop.propChar)) {
                 float bobPhase  = prop.propChar * PICKUP_ITEM_BOB_PHASE_STEP;
                 float bobOffset = GameMath.pickupBobOffset(lightingTimeSeconds,
                         PICKUP_ITEM_BOB_SPEED, PICKUP_ITEM_BOB_AMPLITUDE_FRACTION,
@@ -331,6 +332,56 @@ public class PropRenderer implements Renderable, Disposable {
             float tileBrightness = level.getTileBrightness(prop.tileColumn, prop.tileRow, lightingTimeSeconds);
             float shade          = Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * tileBrightness,
                                             MAX_LIGHTING_SHADE);
+
+            // Keycards float with a pulsing additive aura tinted to the door they unlock,
+            // drawn behind the card (mirrors the weapon/credit pickup glow pipeline).
+            if (Level.isKeycardPickup(prop.propChar)) {
+                float keycardAuraRed, keycardAuraGreen, keycardAuraBlue;
+                switch (prop.propChar) {
+                    case 'r':  keycardAuraRed = KEYCARD_AURA_RED_R;    keycardAuraGreen = KEYCARD_AURA_RED_G;    keycardAuraBlue = KEYCARD_AURA_RED_B;    break;
+                    case 'y':  keycardAuraRed = KEYCARD_AURA_YELLOW_R; keycardAuraGreen = KEYCARD_AURA_YELLOW_G; keycardAuraBlue = KEYCARD_AURA_YELLOW_B; break;
+                    default:   keycardAuraRed = KEYCARD_AURA_BLUE_R;   keycardAuraGreen = KEYCARD_AURA_BLUE_G;   keycardAuraBlue = KEYCARD_AURA_BLUE_B;   break;
+                }
+                float auraPhase  = prop.propChar * PICKUP_ITEM_BOB_PHASE_STEP;
+                float auraAlpha  = Math.max(0f, KEYCARD_AURA_BASE_ALPHA
+                        + KEYCARD_AURA_PULSE_AMPLITUDE * MathUtils.sin(lightingTimeSeconds * KEYCARD_AURA_PULSE_SPEED + auraPhase));
+                float auraHeight  = spriteScreenHeight * KEYCARD_AURA_SIZE_MULTIPLIER;
+                float cardCenterY = drawBottom + spriteScreenHeight / 2f;
+                int   auraLeft    = (int)(screenCenterColumn - auraHeight / 2f);
+                int   auraRight   = (int)(screenCenterColumn + auraHeight / 2f);
+                int   auraSpan    = auraRight - auraLeft;
+                float auraDrawBottom = cardCenterY - auraHeight / 2f;
+                float auraDrawTop    = auraDrawBottom + auraHeight;
+                float auraClampBottom = Math.max(0f, auraDrawBottom);
+                float auraClampTop    = Math.min((float) WALL_PROJECTION_SCREEN_HEIGHT, auraDrawTop);
+                if (auraSpan > 0 && auraClampTop > auraClampBottom) {
+                    int auraGlowHeight   = weaponPickupGlowTexture.getHeight();
+                    int auraGlowWidth    = weaponPickupGlowTexture.getWidth();
+                    int auraTexSrcY      = GameMath.wallTextureClipSrcY(
+                            auraDrawTop, WALL_PROJECTION_SCREEN_HEIGHT, auraHeight, auraGlowHeight);
+                    int auraTexSrcHeight = GameMath.wallTextureClipSrcHeight(
+                            auraClampTop, auraClampBottom, auraHeight, auraGlowHeight);
+                    auraTexSrcHeight = Math.min(auraTexSrcHeight, auraGlowHeight - auraTexSrcY);
+                    auraTexSrcHeight = Math.max(1, auraTexSrcHeight);
+                    batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+                    batch.setColor(keycardAuraRed * shade, keycardAuraGreen * shade, keycardAuraBlue * shade, auraAlpha);
+                    int auraFirstColumn = Math.max(0, auraLeft);
+                    int auraLastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, auraRight);
+                    for (int screenColumn = auraFirstColumn; screenColumn <= auraLastColumn; screenColumn++) {
+                        if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                        if (depth >= propSpriteZBuffer[screenColumn]) continue;
+                        int auraTexSrcX = (screenColumn - auraLeft) * auraGlowWidth / auraSpan;
+                        auraTexSrcX = MathUtils.clamp(auraTexSrcX, 0, auraGlowWidth - 1);
+                        batch.draw(weaponPickupGlowTexture,
+                                   screenColumn * WALL_COLUMN_WIDTH, auraClampBottom,
+                                   WALL_COLUMN_WIDTH, auraClampTop - auraClampBottom,
+                                   auraTexSrcX, auraTexSrcY, 1, auraTexSrcHeight,
+                                   false, false);
+                    }
+                    batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+                }
+            }
+
             float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
             float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
@@ -625,7 +676,8 @@ public class PropRenderer implements Renderable, Disposable {
             float drawBottom;
             if (Level.isMedicalPickup(prop.propChar)
                     || Level.isArmourPickup(prop.propChar)
-                    || Level.isAmmoPickup(prop.propChar)) {
+                    || Level.isAmmoPickup(prop.propChar)
+                    || Level.isKeycardPickup(prop.propChar)) {
                 float bobPhase         = prop.propChar * PICKUP_ITEM_BOB_PHASE_STEP;
                 float dynamicBobOffset = GameMath.pickupBobOffset(lightingTimeSeconds,
                         PICKUP_ITEM_BOB_SPEED, PICKUP_ITEM_BOB_AMPLITUDE_FRACTION,
@@ -744,9 +796,9 @@ public class PropRenderer implements Renderable, Disposable {
         map.put('s', generateShotgunTexture());
         map.put('.', generateBloodTexture());
         map.put('O', generateOilTexture());
-        map.put('r', generateKeycardTexture(0.85f, 0.10f, 0.10f));
-        map.put('y', generateKeycardTexture(0.85f, 0.80f, 0.05f));
-        map.put('b', generateKeycardTexture(0.05f, 0.50f, 0.90f));
+        map.put('r', generateKeycardTexture(0.95f, 0.16f, 0.16f));
+        map.put('y', generateKeycardTexture(0.97f, 0.84f, 0.14f));
+        map.put('b', generateKeycardTexture(0.18f, 0.52f, 0.97f));
         map.put('+', generateStimTexture());
         map.put('H', generateFieldMedkitTexture());
         map.put('a', generateArmourShardTexture());
@@ -2464,22 +2516,77 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     /** Generates a flat keycard pickup sprite in the given tier color. */
+    // Keycard pickup ('r'/'y'/'b') — a high-resolution security access card: tinted body with a
+    // beveled metallic frame, a glowing colour-matched border, a gold smart-chip with contact
+    // grid, a dark magnetic stripe, a punched lanyard hole, and a diagonal sheen streak. The
+    // saturated colour identifies the tier and is echoed by the floating aura halo behind it.
     private static Texture generateKeycardTexture(float red, float green, float blue) {
-        Pixmap pixmap = new Pixmap(48, 32, Pixmap.Format.RGBA8888);
+        final int width = 112, height = 72;
+        Pixmap pixmap = new Pixmap(width, height, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        // Card body
-        pixmap.setColor(red * 0.6f, green * 0.6f, blue * 0.6f, 1f);
-        pixmap.fillRectangle(4, 8, 40, 16);
-        // Bright highlight stripe (top edge)
-        pixmap.setColor(Math.min(1f, red + 0.3f), Math.min(1f, green + 0.3f), Math.min(1f, blue + 0.3f), 1f);
-        pixmap.fillRectangle(4, 8, 40, 3);
-        // Magnetic strip (dark horizontal band)
-        pixmap.setColor(0.10f, 0.10f, 0.10f, 1f);
-        pixmap.fillRectangle(4, 18, 40, 4);
-        // Chip square (small bright square, left-center)
-        pixmap.setColor(Math.min(1f, red + 0.15f), Math.min(1f, green + 0.15f), Math.min(1f, blue + 0.15f), 1f);
-        pixmap.fillRectangle(8, 10, 8, 6);
+
+        final int cardX = 8, cardY = 10, cardWidth = width - 16, cardHeight = height - 20;
+        float bodyRed   = Math.min(1f, red   * 0.62f + 0.05f);
+        float bodyGreen = Math.min(1f, green * 0.62f + 0.05f);
+        float bodyBlue  = Math.min(1f, blue  * 0.62f + 0.05f);
+        float glowRed   = Math.min(1f, red   * 0.6f + 0.4f);
+        float glowGreen = Math.min(1f, green * 0.6f + 0.4f);
+        float glowBlue  = Math.min(1f, blue  * 0.6f + 0.4f);
+
+        // ── Dark outer frame, then the glowing colour-matched border and tinted body ──
+        pixmap.setColor(0.06f, 0.06f, 0.08f, 1f);
+        pixmap.fillRectangle(cardX - 2, cardY - 2, cardWidth + 4, cardHeight + 4);
+        pixmap.setColor(glowRed, glowGreen, glowBlue, 1f);                 // glowing edge
+        pixmap.fillRectangle(cardX, cardY, cardWidth, cardHeight);
+        pixmap.setColor(bodyRed, bodyGreen, bodyBlue, 1f);                 // inner body
+        pixmap.fillRectangle(cardX + 3, cardY + 3, cardWidth - 6, cardHeight - 6);
+
+        // ── Top bevel highlight / bottom bevel shadow for a metallic, embossed read ──
+        pixmap.setColor(Math.min(1f, bodyRed + 0.22f), Math.min(1f, bodyGreen + 0.22f), Math.min(1f, bodyBlue + 0.22f), 1f);
+        pixmap.fillRectangle(cardX + 3, cardY + 3, cardWidth - 6, 3);
+        pixmap.setColor(bodyRed * 0.5f, bodyGreen * 0.5f, bodyBlue * 0.5f, 1f);
+        pixmap.fillRectangle(cardX + 3, cardY + cardHeight - 6, cardWidth - 6, 3);
+
+        // ── Magnetic stripe (dark band across the lower third) ──
+        int stripeY = cardY + cardHeight - 20;
+        pixmap.setColor(0.09f, 0.09f, 0.11f, 1f);
+        pixmap.fillRectangle(cardX + 3, stripeY, cardWidth - 6, 9);
+        pixmap.setColor(0.16f, 0.16f, 0.19f, 1f);                          // stripe sheen line
+        pixmap.fillRectangle(cardX + 3, stripeY + 1, cardWidth - 6, 1);
+
+        // ── Gold smart-chip with contact grid (upper-left) ──
+        int chipX = cardX + 8, chipY = cardY + 8, chipW = 22, chipH = 16;
+        pixmap.setColor(0.78f, 0.60f, 0.16f, 1f);
+        pixmap.fillRectangle(chipX, chipY, chipW, chipH);
+        pixmap.setColor(0.95f, 0.82f, 0.34f, 1f);                          // chip highlight
+        pixmap.fillRectangle(chipX, chipY, chipW, 2);
+        pixmap.setColor(0.30f, 0.22f, 0.05f, 1f);                          // contact grid lines
+        pixmap.fillRectangle(chipX + chipW / 2 - 1, chipY, 2, chipH);
+        pixmap.fillRectangle(chipX, chipY + chipH / 2 - 1, chipW, 2);
+
+        // ── Colour-matched data lines to the right of the chip (suggesting printed text) ──
+        pixmap.setColor(glowRed, glowGreen, glowBlue, 1f);
+        for (int line = 0; line < 3; line++) {
+            pixmap.fillRectangle(chipX + chipW + 6, chipY + 1 + line * 6, cardWidth - chipW - 26, 2);
+        }
+
+        // ── Punched lanyard hole (top-right) — dark bore with a lighter rim for depth ──
+        int holeX = cardX + cardWidth - 11, holeY = cardY + 9;
+        pixmap.setColor(0.34f, 0.35f, 0.40f, 1f);   // metallic rim
+        pixmap.fillCircle(holeX, holeY, 5);
+        pixmap.setColor(0.05f, 0.05f, 0.07f, 1f);   // dark bore
+        pixmap.fillCircle(holeX, holeY, 3);
+
+        // ── Diagonal sheen streak across the body for a glossy laminate finish ──
+        pixmap.setColor(1f, 1f, 1f, 0.18f);
+        for (int offset = 0; offset < cardHeight; offset++) {
+            int sheenColumn = cardX + 6 + offset;
+            if (sheenColumn >= cardX + cardWidth - 4) break;
+            pixmap.drawPixel(sheenColumn, cardY + 4 + offset);
+            pixmap.drawPixel(sheenColumn + 1, cardY + 4 + offset);
+        }
+
         return finalize(pixmap);
     }
 

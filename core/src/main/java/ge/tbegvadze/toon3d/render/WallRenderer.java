@@ -117,8 +117,6 @@ public class WallRenderer implements Renderable, Disposable {
     private final int wallTextureHoloDataHeight;
     private final int wallTextureForceFieldWidth;
     private final int wallTextureForceFieldHeight;
-    private final int doorTextureWidth;
-    private final int doorTextureHeight;
     private final int columnTextureWidth;
     private final int columnTextureHeight;
 
@@ -278,12 +276,10 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureForceFieldHeight = wallTextureForceField.getHeight();
 
         doorTexture      = loadOrGenerateDoorTexture(LAB_DOOR_CLOSED_PATH, 0f, 0f, 0f);
-        doorTextureWidth  = doorTexture.getWidth();
-        doorTextureHeight = doorTexture.getHeight();
 
-        doorTextureRed    = loadOrGenerateDoorTexture(LAB_DOOR_RED_PATH,    0.55f, 0f,    0f);
-        doorTextureYellow = loadOrGenerateDoorTexture(LAB_DOOR_YELLOW_PATH, 0.50f, 0.40f, 0f);
-        doorTextureBlue   = loadOrGenerateDoorTexture(LAB_DOOR_BLUE_PATH,   0f,    0.20f, 0.55f);
+        doorTextureRed    = loadOrGenerateDoorTexture(LAB_DOOR_RED_PATH,    0.90f, 0.13f, 0.13f);
+        doorTextureYellow = loadOrGenerateDoorTexture(LAB_DOOR_YELLOW_PATH, 0.97f, 0.80f, 0.12f);
+        doorTextureBlue   = loadOrGenerateDoorTexture(LAB_DOOR_BLUE_PATH,   0.16f, 0.48f, 0.97f);
 
         columnTexture      = generateColumnTexture();
         columnTextureWidth  = columnTexture.getWidth();
@@ -356,54 +352,206 @@ public class WallRenderer implements Renderable, Disposable {
     }
 
     /**
-     * Tries to load a door texture from disk; generates a procedural placeholder if absent.
-     * accentRed/Green/Blue is the stripe color added to the procedural fallback (0 = plain door).
+     * Tries to load a door texture from disk; generates a procedural keycard door if absent.
+     * keycardRed/Green/Blue is the security-tier colour woven through the procedural door
+     * (hazard chevrons, reader panel, seam light strips). Pass (0, 0, 0) for a plain door.
      */
     private static Texture loadOrGenerateDoorTexture(String path,
-                                                     float accentRed,
-                                                     float accentGreen,
-                                                     float accentBlue) {
+                                                     float keycardRed,
+                                                     float keycardGreen,
+                                                     float keycardBlue) {
         if (Gdx.files.internal(path).exists()) {
             return loadWallTexture(path);
         }
-        return generateProceduralDoorTexture(accentRed, accentGreen, accentBlue);
+        return generateProceduralDoorTexture(keycardRed, keycardGreen, keycardBlue);
+    }
+
+    /** Clamps a colour channel to the [0, 1] range. */
+    private static float clampUnit(float value) {
+        return value < 0f ? 0f : (value > 1f ? 1f : value);
+    }
+
+    /** Draws a small recessed bolt stud (socket shadow, head, specular dot) at the given centre. */
+    private static void drawDoorBoltStud(Pixmap pixmap, int centerX, int centerY) {
+        pixmap.setColor(0.05f, 0.05f, 0.06f, 1f);
+        pixmap.fillCircle(centerX, centerY, 6);          // socket shadow
+        pixmap.setColor(0.34f, 0.35f, 0.40f, 1f);
+        pixmap.fillCircle(centerX, centerY, 4);          // bolt head
+        pixmap.setColor(0.55f, 0.57f, 0.62f, 1f);
+        pixmap.fillCircle(centerX - 1, centerY - 1, 2);  // specular highlight
+    }
+
+    /** Fills a recessed leaf panel with a beveled border (top/left highlight, bottom/right shadow). */
+    private static void drawRecessedDoorPanel(Pixmap pixmap, int x, int y, int width, int height) {
+        if (width <= 4 || height <= 4) return;
+        pixmap.setColor(0.165f, 0.175f, 0.205f, 1f);
+        pixmap.fillRectangle(x, y, width, height);
+        pixmap.setColor(0.30f, 0.31f, 0.35f, 1f);             // top + left highlight
+        pixmap.fillRectangle(x, y, width, 2);
+        pixmap.fillRectangle(x, y, 2, height);
+        pixmap.setColor(0.075f, 0.08f, 0.10f, 1f);            // bottom + right shadow
+        pixmap.fillRectangle(x, y + height - 2, width, 2);
+        pixmap.fillRectangle(x + width - 2, y, 2, height);
     }
 
     /**
-     * Generates a procedural door texture with an optional color-accent stripe.
-     * Plain door: pass (0, 0, 0). Keycard doors pass the tier color.
+     * Generates a high-resolution (512×512) sci-fi keycard blast door.
+     *
+     * Twin-leaf armoured panel split by a central vertical seam inside a beveled, bolted frame.
+     * The keycard tier colour ({@code keycardRed/Green/Blue}) drives every accent: diagonal
+     * hazard chevrons top and bottom, twin glowing light strips flanking the seam, and a central
+     * keycard reader (status LED, card slot, keypad). Passing (0, 0, 0) yields a neutral steel
+     * door with grey accents — the plain-door fallback when no door asset file is present.
+     *
+     * Layers are drawn back-to-front so the frame, seam and reader composite over the base.
      */
-    private static Texture generateProceduralDoorTexture(float accentRed,
-                                                         float accentGreen,
-                                                         float accentBlue) {
-        int textureSize = 128;
-        Pixmap pixmap = new Pixmap(textureSize, textureSize, Pixmap.Format.RGBA8888);
-        for (int row = 0; row < textureSize; row++) {
-            for (int column = 0; column < textureSize; column++) {
-                boolean isBorder       = row < 4 || row >= textureSize - 4
-                                      || column < 4 || column >= textureSize - 4;
-                boolean isPanelDivider = row == textureSize / 3 || row == textureSize / 3 + 1
-                                      || row == 2 * textureSize / 3 || row == 2 * textureSize / 3 + 1;
-                boolean isHandle       = column >= textureSize / 2 - 5 && column <= textureSize / 2 + 5
-                                      && row >= textureSize / 2 - 10 && row <= textureSize / 2 + 10;
-                // Vertical accent stripe: left 8 pixels carry the tier color
-                boolean isAccentStripe = column < 8;
-                float red; float green; float blue;
-                if (isAccentStripe) {
-                    red   = 0.18f + accentRed;
-                    green = 0.18f + accentGreen;
-                    blue  = 0.22f + accentBlue;
-                } else if (isBorder || isPanelDivider) {
-                    red = 0x4C / 255f; green = 0x4C / 255f; blue = 0x55 / 255f;
-                } else if (isHandle) {
-                    red = 0x55 / 255f; green = 0x55 / 255f; blue = 0x60 / 255f;
-                } else {
-                    red = 0x2E / 255f; green = 0x2E / 255f; blue = 0x36 / 255f;
-                }
-                pixmap.setColor(Math.min(1f, red), Math.min(1f, green), Math.min(1f, blue), 1f);
+    private static Texture generateProceduralDoorTexture(float keycardRed,
+                                                         float keycardGreen,
+                                                         float keycardBlue) {
+        final int size = 512;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        boolean keycardThemed = (keycardRed + keycardGreen + keycardBlue) > 0.01f;
+        // Accent palette derived from the tier colour (neutral steel-grey when un-themed).
+        float accentRed   = keycardThemed ? clampUnit(keycardRed)   : 0.46f;
+        float accentGreen = keycardThemed ? clampUnit(keycardGreen) : 0.47f;
+        float accentBlue  = keycardThemed ? clampUnit(keycardBlue)  : 0.52f;
+        float accentDarkRed   = accentRed   * 0.45f;
+        float accentDarkGreen = accentGreen * 0.45f;
+        float accentDarkBlue  = accentBlue  * 0.45f;
+        float accentGlowRed   = clampUnit(accentRed   * 0.6f + 0.4f);
+        float accentGlowGreen = clampUnit(accentGreen * 0.6f + 0.4f);
+        float accentGlowBlue  = clampUnit(accentBlue  * 0.6f + 0.4f);
+
+        final int frame      = 38;        // armoured border thickness
+        final int seamCenter = size / 2;  // central vertical seam
+        final int seamHalf   = 7;
+
+        // ── 1. Brushed-steel base: vertical streaks + fine grain ──
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                float streak = ((column * 13 + (row / 6) * 7) % 17 - 8) / 220f;
+                float grain  = ((row * 7 + column * 11) % 13 - 6) / 200f;
+                pixmap.setColor(clampUnit(0.205f + streak + grain),
+                                clampUnit(0.215f + streak + grain),
+                                clampUnit(0.245f + streak + grain), 1f);
                 pixmap.drawPixel(column, row);
             }
         }
+
+        // ── 2. Recessed leaf panels: three stacked panels per leaf ──
+        int leftLeafX  = frame + 6;
+        int leftLeafW  = (seamCenter - seamHalf - 6) - leftLeafX;
+        int rightLeafX = seamCenter + seamHalf + 6;
+        int rightLeafW = (size - frame - 6) - rightLeafX;
+        int panelRegionTop    = frame + 8;
+        int panelRegionHeight = size - 2 * frame - 16;
+        int panelGap          = 10;
+        int panelHeight       = (panelRegionHeight - 2 * panelGap) / 3;
+        for (int panelIndex = 0; panelIndex < 3; panelIndex++) {
+            int panelY = panelRegionTop + panelIndex * (panelHeight + panelGap);
+            drawRecessedDoorPanel(pixmap, leftLeafX,  panelY, leftLeafW,  panelHeight);
+            drawRecessedDoorPanel(pixmap, rightLeafX, panelY, rightLeafW, panelHeight);
+        }
+
+        // ── 3. Hazard chevron bands (tier colour vs near-black diagonals) top and bottom ──
+        int chevronHeight = 46;
+        int[] chevronBandY = { frame + 8, size - frame - 8 - chevronHeight };
+        int chevronInsetX  = frame + 4;
+        int chevronSpanW   = size - 2 * frame - 8;
+        for (int band = 0; band < 2; band++) {
+            int bandY0 = chevronBandY[band];
+            for (int row = bandY0; row < bandY0 + chevronHeight; row++) {
+                for (int column = chevronInsetX; column < chevronInsetX + chevronSpanW; column++) {
+                    int diagonal = ((column + row) % 32 + 32) % 32;
+                    if (diagonal < 16) {
+                        pixmap.setColor(accentRed, accentGreen, accentBlue, 1f);
+                    } else {
+                        pixmap.setColor(0.07f, 0.07f, 0.08f, 1f);
+                    }
+                    pixmap.drawPixel(column, row);
+                }
+            }
+            pixmap.setColor(0.05f, 0.05f, 0.06f, 1f);  // dark rails framing the band
+            pixmap.fillRectangle(chevronInsetX, bandY0, chevronSpanW, 3);
+            pixmap.fillRectangle(chevronInsetX, bandY0 + chevronHeight - 3, chevronSpanW, 3);
+        }
+
+        // ── 4. Central seam groove + twin glowing tier-colour light strips ──
+        int seamTop    = frame;
+        int seamHeight = size - 2 * frame;
+        pixmap.setColor(0.04f, 0.04f, 0.05f, 1f);
+        pixmap.fillRectangle(seamCenter - seamHalf, seamTop, 2 * seamHalf, seamHeight);
+        pixmap.setColor(0.28f, 0.29f, 0.34f, 1f);     // bright meeting line
+        pixmap.fillRectangle(seamCenter - 1, seamTop, 2, seamHeight);
+        pixmap.setColor(accentDarkRed, accentDarkGreen, accentDarkBlue, 1f);
+        pixmap.fillRectangle(seamCenter - seamHalf - 5, seamTop, 3, seamHeight);
+        pixmap.fillRectangle(seamCenter + seamHalf + 2, seamTop, 3, seamHeight);
+        pixmap.setColor(accentGlowRed, accentGlowGreen, accentGlowBlue, 1f);   // bright cores
+        pixmap.fillRectangle(seamCenter - seamHalf - 4, seamTop, 1, seamHeight);
+        pixmap.fillRectangle(seamCenter + seamHalf + 3, seamTop, 1, seamHeight);
+
+        // ── 5. Outer armoured frame with bevel and corner/edge bolts ──
+        pixmap.setColor(0.135f, 0.145f, 0.175f, 1f);
+        pixmap.fillRectangle(0, 0, size, frame);
+        pixmap.fillRectangle(0, size - frame, size, frame);
+        pixmap.fillRectangle(0, 0, frame, size);
+        pixmap.fillRectangle(size - frame, 0, frame, size);
+        pixmap.setColor(0.30f, 0.31f, 0.36f, 1f);     // outer highlight (top, left)
+        pixmap.fillRectangle(0, 0, size, 3);
+        pixmap.fillRectangle(0, 0, 3, size);
+        pixmap.setColor(0.06f, 0.06f, 0.07f, 1f);     // outer shadow (bottom, right)
+        pixmap.fillRectangle(0, size - 3, size, 3);
+        pixmap.fillRectangle(size - 3, 0, 3, size);
+        pixmap.setColor(0.07f, 0.07f, 0.085f, 1f);    // inner lip separating frame from leaves
+        pixmap.fillRectangle(frame - 3, frame - 3, size - 2 * (frame - 3), 3);
+        pixmap.fillRectangle(frame - 3, size - frame, size - 2 * (frame - 3), 3);
+        pixmap.fillRectangle(frame - 3, frame - 3, 3, size - 2 * (frame - 3));
+        pixmap.fillRectangle(size - frame, frame - 3, 3, size - 2 * (frame - 3));
+        for (int position = frame / 2; position < size; position += 72) {
+            drawDoorBoltStud(pixmap, position, frame / 2);
+            drawDoorBoltStud(pixmap, position, size - frame / 2);
+            drawDoorBoltStud(pixmap, frame / 2, position);
+            drawDoorBoltStud(pixmap, size - frame / 2, position);
+        }
+
+        // ── 6. Central keycard reader: housing, status LED, card slot, keypad ──
+        int readerWidth  = 96;
+        int readerHeight = 132;
+        int readerX = seamCenter - readerWidth / 2;
+        int readerY = size / 2 - readerHeight / 2;
+        pixmap.setColor(0.10f, 0.105f, 0.13f, 1f);
+        pixmap.fillRectangle(readerX, readerY, readerWidth, readerHeight);
+        pixmap.setColor(0.30f, 0.31f, 0.36f, 1f);     // bevel highlight
+        pixmap.fillRectangle(readerX, readerY, readerWidth, 2);
+        pixmap.fillRectangle(readerX, readerY, 2, readerHeight);
+        pixmap.setColor(0.05f, 0.05f, 0.06f, 1f);     // bevel shadow
+        pixmap.fillRectangle(readerX, readerY + readerHeight - 2, readerWidth, 2);
+        pixmap.fillRectangle(readerX + readerWidth - 2, readerY, 2, readerHeight);
+        drawDoorBoltStud(pixmap, readerX + 8, readerY + 8);
+        drawDoorBoltStud(pixmap, readerX + readerWidth - 8, readerY + 8);
+        drawDoorBoltStud(pixmap, readerX + 8, readerY + readerHeight - 8);
+        drawDoorBoltStud(pixmap, readerX + readerWidth - 8, readerY + readerHeight - 8);
+        int ledCenterY = readerY + 24;
+        pixmap.setColor(accentDarkRed, accentDarkGreen, accentDarkBlue, 1f);   // LED halo
+        pixmap.fillCircle(seamCenter, ledCenterY, 11);
+        pixmap.setColor(accentRed, accentGreen, accentBlue, 1f);
+        pixmap.fillCircle(seamCenter, ledCenterY, 7);
+        pixmap.setColor(accentGlowRed, accentGlowGreen, accentGlowBlue, 1f);
+        pixmap.fillCircle(seamCenter, ledCenterY, 3);
+        int slotY = readerY + 54;                      // card slot (bright accent slit)
+        pixmap.setColor(0.03f, 0.03f, 0.04f, 1f);
+        pixmap.fillRectangle(readerX + 14, slotY, readerWidth - 28, 12);
+        pixmap.setColor(accentGlowRed, accentGlowGreen, accentGlowBlue, 1f);
+        pixmap.fillRectangle(readerX + 16, slotY + 4, readerWidth - 32, 3);
+        pixmap.setColor(accentDarkRed, accentDarkGreen, accentDarkBlue, 1f);   // keypad dots (3×2)
+        for (int keypadRow = 0; keypadRow < 2; keypadRow++) {
+            for (int keypadColumn = 0; keypadColumn < 3; keypadColumn++) {
+                pixmap.fillCircle(readerX + 26 + keypadColumn * 22,
+                                  readerY + 92 + keypadRow * 22, 5);
+            }
+        }
+
         Texture texture = new Texture(pixmap);
         texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         pixmap.dispose();
@@ -1785,18 +1933,24 @@ public class WallRenderer implements Renderable, Disposable {
                 float clampedPanelTop      = doorDrawTop;
 
                 if (clampedPanelTop > clampedPanelBottom) {
+                    // O(1) array lookup for door texture variant (plain/red/yellow/blue).
+                    // Each variant may have its own resolution (the keycard doors are generated
+                    // independently of the file-loaded plain door), so clip against the SELECTED
+                    // texture's own dimensions rather than a shared plain-door size.
+                    Texture selectedDoorTexture   = doorTextureTable[doorHitCell & 0x7F];
+                    int     selectedDoorTexWidth  = selectedDoorTexture.getWidth();
+                    int     selectedDoorTexHeight = selectedDoorTexture.getHeight();
+
                     int doorTexSrcY      = GameMath.wallTextureClipSrcY(
                                                doorUnclampedTop, WALL_PROJECTION_SCREEN_HEIGHT,
-                                               panelHeight, doorTextureHeight);
+                                               panelHeight, selectedDoorTexHeight);
                     int doorTexSrcHeight = GameMath.wallTextureClipSrcHeight(
                                                clampedPanelTop, clampedPanelBottom,
-                                               panelHeight, doorTextureHeight);
-                    doorTexSrcHeight = Math.min(doorTexSrcHeight, doorTextureHeight - doorTexSrcY);
+                                               panelHeight, selectedDoorTexHeight);
+                    doorTexSrcHeight = Math.min(doorTexSrcHeight, selectedDoorTexHeight - doorTexSrcY);
                     doorTexSrcHeight = Math.max(1, doorTexSrcHeight);
 
-                    // O(1) array lookup for door texture variant (plain/red/yellow/blue).
-                    Texture selectedDoorTexture = doorTextureTable[doorHitCell & 0x7F];
-                    int     doorTexColumn       = GameMath.textureColumn(doorWallHitFractionMirrored, doorTextureWidth);
+                    int     doorTexColumn       = GameMath.textureColumn(doorWallHitFractionMirrored, selectedDoorTexWidth);
                     float shade = GameMath.wallShade(doorPerpWallDistance, WALL_SHADING_FALLOFF);
                     if (!doorHitCrossedVerticalLine) shade *= HORIZONTAL_FACE_SHADE_MULTIPLIER;
                     shade = Math.max(Math.min(shade * doorTileBrightness, MAX_LIGHTING_SHADE), WALL_SHADE_MIN_BRIGHTNESS);

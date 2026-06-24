@@ -69,6 +69,10 @@ public final class ItemConstants {
     // Downward shift applied to floating pickups so they hover slightly closer to the floor.
     public static final float PICKUP_ITEM_GROUND_OFFSET_FRACTION = 0.10f;  // shift down 10% of sprite height
 
+    // Keycard pickups ('r'/'y'/'b') — floating billboard height. The coloured aura halo
+    // tints live in RenderConstants alongside the other pickup-glow constants.
+    public static final float KEYCARD_PICKUP_SPRITE_HEIGHT       = 0.24f;  // billboard height as fraction of full wall stripe
+
     // Start room — starter ammo granted on weapon selection (sufficient for first dungeon floor)
     public static final int START_ROOM_AMMO_BULLETS  = 150;
     public static final int START_ROOM_AMMO_SHELLS   = 24;

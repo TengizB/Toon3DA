@@ -232,6 +232,25 @@ public final class RenderConstants {
     public static final float CREDIT_AURA_LARGE_PULSE_AMP   = 0.22f;
     public static final float CREDIT_AURA_LARGE_PULSE_SPEED = 2.8f;
 
+    // Keycard pickup aura ('r'/'y'/'b') — additive halo drawn behind the floating card so each
+    // security tier reads at a glance. Mirrors the credit-chip aura pipeline (radial glow texture,
+    // additive blend, sin-wave pulse). Tint matches the keycard colour and the door it unlocks.
+    public static final float KEYCARD_AURA_SIZE_MULTIPLIER  = 2.6f;   // aura diameter relative to card height
+    public static final float KEYCARD_AURA_BASE_ALPHA       = 0.42f;  // additive halo base opacity
+    public static final float KEYCARD_AURA_PULSE_AMPLITUDE  = 0.18f;  // sin-wave opacity swing
+    public static final float KEYCARD_AURA_PULSE_SPEED      = 3.0f;   // radians/sec pulse rate
+    public static final float KEYCARD_AURA_RED_R    = 1.00f;
+    public static final float KEYCARD_AURA_RED_G    = 0.18f;
+    public static final float KEYCARD_AURA_RED_B    = 0.16f;
+
+    public static final float KEYCARD_AURA_YELLOW_R = 1.00f;
+    public static final float KEYCARD_AURA_YELLOW_G = 0.86f;
+    public static final float KEYCARD_AURA_YELLOW_B = 0.18f;
+
+    public static final float KEYCARD_AURA_BLUE_R   = 0.22f;
+    public static final float KEYCARD_AURA_BLUE_G   = 0.58f;
+    public static final float KEYCARD_AURA_BLUE_B   = 1.00f;
+
     // Level transitions — exit portal tile ('>' char)
     // STAIRS_DOWN_CHAR: classic roguelike glyph; exactly one per procedurally generated floor.
     public static final char  STAIRS_DOWN_CHAR                   = '>';
