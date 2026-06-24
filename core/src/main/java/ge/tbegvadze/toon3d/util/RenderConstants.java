@@ -106,83 +106,110 @@ public final class RenderConstants {
     // Note: 'R' and 'Y' are reserved for red/yellow keycard doors — use 'S'/'U'.
     // -------------------------------------------------------------------------
 
+    // All procedural wall textures are authored at this resolution. Raised from the
+    // original 128 to 256 for crisper detail when a wall fills the screen up close.
+    // Each generator below derives its geometry from its own *_WALL_TEXTURE_SIZE so the
+    // designs stay proportional; point-feature counts are tuned for the 256² area.
+
     // 'N' — Reinforced Containment Glass (cracked observation window)
-    public static final int   GLASS_WALL_TEXTURE_SIZE         = 128;
+    public static final int   GLASS_WALL_TEXTURE_SIZE         = 256;
     public static final long  GLASS_WALL_SEED                 = 0x476C6173L; // "Glas"
     public static final int   GLASS_CRACK_BRANCH_COUNT        = 5;
-    public static final int   GLASS_CRACK_STEPS               = 30;
+    public static final int   GLASS_CRACK_STEPS               = 60;
     public static final int   GLASS_GHOST_BLOB_COUNT          = 3;
     public static final int   GLASS_SHEEN_STREAK_COUNT        = 2;
 
     // 'Q' — Bio-Containment / Quarantine Wall
-    public static final int   BIO_WALL_TEXTURE_SIZE           = 128;
+    public static final int   BIO_WALL_TEXTURE_SIZE           = 256;
     public static final long  BIO_WALL_SEED                   = 0x42696F57L; // "BioW"
-    public static final int   BIO_STRIPE_PITCH                = 10;
+    public static final int   BIO_STRIPE_PITCH                = 20;
 
     // 'S' — Emergency Lighting Strip Wall (static red — maps visual alarm state)
-    public static final int   EMERG_WALL_TEXTURE_SIZE         = 128;
+    public static final int   EMERG_WALL_TEXTURE_SIZE         = 256;
     public static final long  EMERG_WALL_SEED                 = 0x456D6572L; // "Emer"
     public static final int   EMERG_CAGE_COUNT                = 4;
 
     // 'M' — Medical Tile Wall (white tile + green accent + cross)
-    public static final int   MED_WALL_TEXTURE_SIZE           = 128;
+    public static final int   MED_WALL_TEXTURE_SIZE           = 256;
     public static final long  MED_WALL_SEED                   = 0x4D656469L; // "Medi"
-    public static final int   MED_TILE_SIZE                   = 16;
-    public static final int   MED_BLOOD_FLECK_COUNT           = 12;
+    public static final int   MED_TILE_SIZE                   = 32;
+    public static final int   MED_BLOOD_FLECK_COUNT           = 40;
 
     // 'Z' — Cryo / Frost-Damaged Wall (ice rime, icicles, frost fractures)
-    public static final int   CRYO_WALL_TEXTURE_SIZE          = 128;
+    public static final int   CRYO_WALL_TEXTURE_SIZE          = 256;
     public static final long  CRYO_WALL_SEED                  = 0x4372796FL; // "Cryo"
-    public static final int   CRYO_ICICLE_COUNT               = 4;
-    public static final int   CRYO_FRACTURE_COUNT             = 3;
-    public static final int   CRYO_GLINT_COUNT                = 15;
-    public static final int   CRYO_FROST_CORNER_RADIUS        = 40;
+    public static final int   CRYO_ICICLE_COUNT               = 8;
+    public static final int   CRYO_FRACTURE_COUNT             = 6;
+    public static final int   CRYO_GLINT_COUNT                = 48;
+    public static final int   CRYO_FROST_CORNER_RADIUS        = 80;
 
     // 'U' — Radiation-Burned Wall (scorched black, glowing green-yellow cracks)
-    public static final int   RAD_WALL_TEXTURE_SIZE           = 128;
+    public static final int   RAD_WALL_TEXTURE_SIZE           = 256;
     public static final long  RAD_WALL_SEED                   = 0x52616469L; // "Radi"
     public static final int   RAD_CRACK_COUNT                 = 5;
-    public static final int   RAD_CRACK_STEPS                 = 35;
-    public static final int   RAD_DUST_COUNT                  = 20;
+    public static final int   RAD_CRACK_STEPS                 = 70;
+    public static final int   RAD_DUST_COUNT                  = 64;
 
     // 'X' — Blast-Scarred Wall (bullet pocks, blast craters, through-holes)
-    public static final int   BLAST_WALL_TEXTURE_SIZE         = 128;
+    public static final int   BLAST_WALL_TEXTURE_SIZE         = 256;
     public static final long  BLAST_WALL_SEED                 = 0x426C6173L; // "Blas"
-    public static final int   BLAST_BULLET_HOLE_COUNT         = 18;
-    public static final int   BLAST_CRATER_COUNT              = 3;
-    public static final int   BLAST_THROUGH_HOLE_COUNT        = 2;
-    public static final int   BLAST_SCORCH_COUNT              = 4;
+    public static final int   BLAST_BULLET_HOLE_COUNT         = 48;
+    public static final int   BLAST_CRATER_COUNT              = 6;
+    public static final int   BLAST_THROUGH_HOLE_COUNT        = 6;
+    public static final int   BLAST_SCORCH_COUNT              = 8;
 
     // 'D' — Holo-Data Display Wall (glowing cyan UI panels, data bars, readout grid)
-    public static final int   HOLO_DATA_WALL_TEXTURE_SIZE     = 128;
+    public static final int   HOLO_DATA_WALL_TEXTURE_SIZE     = 256;
     public static final long  HOLO_DATA_WALL_SEED             = 0x44617461L; // "Data"
     public static final int   HOLO_DATA_BAR_COUNT             = 4;
     public static final int   HOLO_DATA_READOUT_COLUMNS       = 8;
     public static final int   HOLO_DATA_READOUT_ROWS          = 6;
 
     // 'F' — Force-Field Arc Wall (electric-blue lattice with emitter posts)
-    public static final int   FORCE_FIELD_WALL_TEXTURE_SIZE   = 128;
+    public static final int   FORCE_FIELD_WALL_TEXTURE_SIZE   = 256;
     public static final long  FORCE_FIELD_WALL_SEED           = 0x466F7263L; // "Forc"
     public static final int   FORCE_FIELD_ARC_COUNT           = 4;
     public static final int   FORCE_FIELD_BAND_COUNT          = 2;
 
+    // 'h' — Hazard caution-stripe wall (procedural fallback when no asset present)
+    public static final int   HAZARD_WALL_TEXTURE_SIZE        = 256;
+
     // Rust procedural wall texture generation
-    public static final int   RUST_WALL_TEXTURE_SIZE          = 128;
+    public static final int   RUST_WALL_TEXTURE_SIZE          = 256;
     public static final long  RUST_WALL_SEED                  = 0x52757374L; // "Rust"
     public static final int   RUST_BLOB_COUNT                 = 14;
-    public static final int   RUST_PIT_COUNT                  = 10;
-    // Gore procedural wall texture generation
-    public static final int   GORE_WALL_TEXTURE_SIZE          = 128;
+    public static final int   RUST_PIT_COUNT                  = 32;
+
+    // 'G' — Gore wall: wet demonic flesh membrane. Full procedural redesign:
+    // a tiling metaball flesh field with bump-relief shading, wet specular sheen,
+    // organic sinew vessels, infected pustules, open gashes with blood drips,
+    // bone nodules, pores and glistening glints.
+    public static final int   GORE_WALL_TEXTURE_SIZE          = 256;
     public static final long  GORE_WALL_SEED                  = 0x476F7265L; // "Gore"
-    public static final int   GORE_BLOB_COUNT                 = 18;
-    public static final int   GORE_VEIN_COUNT                 = 6;
-    public static final int   GORE_GLINT_COUNT                = 25;
-    public static final int   GORE_BONE_COUNT                 = 4;
-    public static final float GORE_FLESH_THRESHOLD            = 0.35f;
+    public static final int   GORE_BLOB_COUNT                 = 30;   // membrane masses
+    public static final int   GORE_BLOB_RADIUS_MIN            = 22;
+    public static final int   GORE_BLOB_RADIUS_SPAN           = 46;
+    public static final float GORE_FLESH_THRESHOLD            = 0.30f;
+    public static final float GORE_EMBOSS_STRENGTH            = 1.7f;  // bump-relief intensity
+    public static final int   GORE_SHEEN_COUNT                = 18;   // wet specular blooms
+    public static final int   GORE_SUBDERMAL_VEIN_COUNT       = 10;
+    public static final int   GORE_VEIN_COUNT                 = 26;   // sinew vessels
+    public static final int   GORE_VEIN_STEPS                 = 110;
+    public static final int   GORE_PUSTULE_COUNT              = 26;   // boils
+    public static final int   GORE_GASH_COUNT                 = 5;    // open wounds
+    public static final int   GORE_BONE_COUNT                 = 9;
+    public static final int   GORE_PORE_COUNT                 = 70;
+    public static final int   GORE_GLINT_COUNT                = 150;
+
     // Bulkhead procedural wall texture generation
-    public static final int   BULKHEAD_WALL_TEXTURE_SIZE      = 128;
-    public static final int   BULKHEAD_FRAME_WIDTH            = 14;
-    public static final int   BULKHEAD_BOLT_SPACING           = 21;
+    public static final int   BULKHEAD_WALL_TEXTURE_SIZE      = 256;
+    public static final int   BULKHEAD_FRAME_WIDTH            = 28;
+    public static final int   BULKHEAD_BOLT_SPACING           = 42;
+
+    // 'P' — Cylindrical column texture (taller than wide; mortar course lines)
+    public static final int   COLUMN_TEXTURE_WIDTH            = 128;
+    public static final int   COLUMN_TEXTURE_HEIGHT           = 256;
+    public static final int   COLUMN_MORTAR_SPACING           = 40;
 
     // Tile-Based Ambient Lighting — floor tiles ' ', 'l', 'u', 'f' carry brightness multipliers
     // finalShade = clamp(distanceShade * directionalMultiplier * tileBrightness, 0, MAX_LIGHTING_SHADE)
