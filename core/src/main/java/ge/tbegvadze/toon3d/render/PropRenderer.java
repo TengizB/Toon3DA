@@ -18,6 +18,7 @@ import ge.tbegvadze.toon3d.util.GameMath;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -336,6 +337,7 @@ public class PropRenderer implements Renderable, Disposable {
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             // Per-column draw loop with z-buffer occlusion test.
+            ColumnOpacityMask opacityMask = COLUMN_OPACITY.get(texture);
             int firstColumn = Math.max(0, leftScreenColumn);
             int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
@@ -344,18 +346,17 @@ public class PropRenderer implements Renderable, Disposable {
                 // Skip columns where a nearer prop was already drawn (painter's order, far→near,
                 // so a shallower depth here means a previous iteration already wrote it).
                 if (depth >= propSpriteZBuffer[screenColumn]) continue;
-                // Elevated billboards (solid props + pickup items + stairs) write to the z-buffer
-                // so EnemyRenderer knows to draw enemies behind them when they are farther away.
-                // Pure floor stains (corpse, blood, oil, energy scorch, dropped-shotgun decal)
-                // are excluded — enemies visually walk over those flat decals.
-                if (Level.isPropOccluder(prop.propChar)) {
-                    propSpriteZBuffer[screenColumn]      = depth;
-                    propSpriteColumnBottom[screenColumn] = clampedBottom;
-                    propSpriteColumnTop[screenColumn]    = clampedTop;
-                }
 
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
+
+                // Elevated billboards (solid props + pickup items + stairs) write to the z-buffer
+                // so EnemyRenderer knows to draw enemies behind them when they are farther away.
+                // Only opaque columns occlude; transparent sprite columns leave the enemy visible.
+                // Pure floor stains (corpse, blood, oil, energy scorch, dropped-shotgun decal)
+                // are excluded — enemies visually walk over those flat decals.
+                recordPropOccluderColumn(screenColumn, depth, prop.propChar, opacityMask,
+                        texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
 
                 batch.draw(texture,
                            screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
@@ -661,18 +662,16 @@ public class PropRenderer implements Renderable, Disposable {
             float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
+            ColumnOpacityMask opacityMask = COLUMN_OPACITY.get(texture);
             int firstColumn = Math.max(0, leftScreenColumn);
             int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                 if (depth >= propSpriteZBuffer[screenColumn]) continue;
-                if (Level.isPropOccluder(prop.propChar)) {
-                    propSpriteZBuffer[screenColumn]      = depth;
-                    propSpriteColumnBottom[screenColumn] = clampedBottom;
-                    propSpriteColumnTop[screenColumn]    = clampedTop;
-                }
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
+                recordPropOccluderColumn(screenColumn, depth, prop.propChar, opacityMask,
+                        texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
                 batch.draw(texture,
                            screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
                            WALL_COLUMN_WIDTH, clampedTop - clampedBottom,
@@ -688,17 +687,25 @@ public class PropRenderer implements Renderable, Disposable {
     @Override
     public void dispose() {
         batch.dispose();
-        genericWeaponFallbackTexture.dispose();
-        weaponPickupGlowTexture.dispose();
+        disposeProp(genericWeaponFallbackTexture);
+        disposeProp(weaponPickupGlowTexture);
         for (Texture texture : weaponPickupTextures.values()) {
-            texture.dispose();
+            disposeProp(texture);
         }
         for (Texture texture : creditChipTextures.values()) {
-            texture.dispose();
+            disposeProp(texture);
         }
         for (Texture texture : textures.values()) {
-            texture.dispose();
+            disposeProp(texture);
         }
+    }
+
+    // Disposes a prop texture and drops its opacity mask so the static COLUMN_OPACITY
+    // cache does not grow unbounded across level reloads (each reload builds a new
+    // PropRenderer with freshly generated textures).
+    private static void disposeProp(Texture texture) {
+        COLUMN_OPACITY.remove(texture);
+        texture.dispose();
     }
 
     // -------------------------------------------------------------------------
@@ -715,7 +722,12 @@ public class PropRenderer implements Renderable, Disposable {
         if (Gdx.files.internal(assetPath).exists()) {
             Texture loaded = new Texture(Gdx.files.internal(assetPath));
             loaded.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-            proceduralFallback.dispose();
+            disposeProp(proceduralFallback);
+            // A file-loaded texture has no generated opacity mask; build one so its
+            // transparent regions also stop occluding enemies behind it.
+            Pixmap loadedPixels = new Pixmap(Gdx.files.internal(assetPath));
+            COLUMN_OPACITY.put(loaded, computeColumnOpacity(loadedPixels));
+            loadedPixels.dispose();
             return loaded;
         }
         return proceduralFallback;
@@ -757,11 +769,89 @@ public class PropRenderer implements Renderable, Disposable {
         return map;
     }
 
+    // ── Per-column opacity masks ───────────────────────────────────────────
+    // Prop billboards are drawn as 1-pixel-wide column slices and record their
+    // depth into a per-column z-buffer so EnemyRenderer can carve an enemy around
+    // a nearer prop. A sprite with wide transparent margins (e.g. the ammo
+    // pickups) must NOT occlude through its see-through pixels, otherwise an enemy
+    // behind it is clipped where the prop is actually transparent. For every
+    // generated texture we therefore record, per texture column, the topmost and
+    // bottommost opaque pixel row (or -1 when the whole column is transparent).
+    // Keyed by Texture identity; populated in finalize(), pruned on dispose().
+    private static final IdentityHashMap<Texture, ColumnOpacityMask> COLUMN_OPACITY = new IdentityHashMap<>();
+
+    // A pixel counts as opaque (and therefore occluding) when its alpha clears this
+    // 0–255 threshold. Generated sprites use only fully-opaque (255) or fully
+    // transparent (0) pixels, so any modest cutoff separates art from background.
+    private static final int OPAQUE_ALPHA_THRESHOLD = 8;
+
+    private static final class ColumnOpacityMask {
+        final int[] opaqueTopRow;     // smallest opaque row index per column (0 = texture top), or -1
+        final int[] opaqueBottomRow;  // largest opaque row index per column, or -1
+        ColumnOpacityMask(int[] opaqueTopRow, int[] opaqueBottomRow) {
+            this.opaqueTopRow    = opaqueTopRow;
+            this.opaqueBottomRow  = opaqueBottomRow;
+        }
+    }
+
+    // Scans a pixmap column-by-column for its opaque vertical extent. Pixmap row 0
+    // is the top edge, matching the texture-row convention used during the draw.
+    private static ColumnOpacityMask computeColumnOpacity(Pixmap pixmap) {
+        int width  = pixmap.getWidth();
+        int height = pixmap.getHeight();
+        int[] opaqueTopRow    = new int[width];
+        int[] opaqueBottomRow = new int[width];
+        for (int column = 0; column < width; column++) {
+            int top = -1, bottom = -1;
+            for (int row = 0; row < height; row++) {
+                int alpha = pixmap.getPixel(column, row) & 0xff;
+                if (alpha >= OPAQUE_ALPHA_THRESHOLD) {
+                    if (top == -1) top = row;
+                    bottom = row;
+                }
+            }
+            opaqueTopRow[column]    = top;
+            opaqueBottomRow[column] = bottom;
+        }
+        return new ColumnOpacityMask(opaqueTopRow, opaqueBottomRow);
+    }
+
     private static Texture finalize(Pixmap pixmap) {
         Texture texture = new Texture(pixmap);
         texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        COLUMN_OPACITY.put(texture, computeColumnOpacity(pixmap));
         pixmap.dispose();
         return texture;
+    }
+
+    // Records the nearest occluding prop's depth and opaque vertical extent for one
+    // screen column, but only where the sprite column actually has opaque pixels.
+    // Columns that are transparent (margins, gaps between rounds, the empty space
+    // above/below a horizontal sprite) are skipped, so the enemy behind stays
+    // visible through them. occBottom/occTop are the screen-space (Y-up) bounds of
+    // just the opaque run, letting EnemyRenderer carve a tight gap.
+    private void recordPropOccluderColumn(int screenColumn, float depth, char propChar,
+                                          ColumnOpacityMask opacityMask, int texSrcX,
+                                          int texSrcY, int texSrcHeight,
+                                          float clampedBottom, float clampedTop) {
+        if (!Level.isPropOccluder(propChar)) return;
+        float occBottom = clampedBottom;
+        float occTop    = clampedTop;
+        if (opacityMask != null) {
+            int topRow    = opacityMask.opaqueTopRow[texSrcX];
+            if (topRow == -1) return;                              // fully transparent column
+            int bottomRow = opacityMask.opaqueBottomRow[texSrcX];
+            int visibleTop    = Math.max(topRow, texSrcY);          // clip to the drawn texture region
+            int visibleBottom = Math.min(bottomRow, texSrcY + texSrcHeight - 1);
+            if (visibleTop > visibleBottom) return;                // opaque run lies outside the visible rows
+            // Texture row → screen Y: row texSrcY maps to clampedTop, row texSrcY+texSrcHeight to clampedBottom.
+            float columnHeightSpan = clampedTop - clampedBottom;
+            occTop    = clampedTop - (visibleTop - texSrcY)        / (float) texSrcHeight * columnHeightSpan;
+            occBottom = clampedTop - (visibleBottom + 1 - texSrcY) / (float) texSrcHeight * columnHeightSpan;
+        }
+        propSpriteZBuffer[screenColumn]      = depth;
+        propSpriteColumnBottom[screenColumn] = occBottom;
+        propSpriteColumnTop[screenColumn]    = occTop;
     }
 
     // Draws a solid filled rectangle leaving a 2-pixel black border around all edges.
