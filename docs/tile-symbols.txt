@@ -38,9 +38,9 @@ F   Force-field wall    Electric-blue energy barrier. Research Lab alcove mouth.
 DOORS (solid until opened; runtime state managed by DoorManager)
 ----------------------------------------------------------------
 d   Plain door          Unlocked. Opens on player interaction.                lab_door_1.jpg
-R   Red keycard door    Locked. Requires red keycard (pickup 'r').
-Y   Yellow keycard door Locked. Requires yellow keycard (pickup 'y').
-B   Blue keycard door   Locked. Requires blue keycard (pickup 'b').
+R   Red keycard door    Locked. High-res procedural twin-leaf blast door: red hazard chevrons, seam light strips, keycard reader. Requires red keycard (pickup 'r').
+Y   Yellow keycard door Locked. High-res procedural twin-leaf blast door: yellow hazard chevrons, seam light strips, keycard reader. Requires yellow keycard (pickup 'y').
+B   Blue keycard door   Locked. High-res procedural twin-leaf blast door: blue hazard chevrons, seam light strips, keycard reader. Requires blue keycard (pickup 'b').
 
 FLOOR LIGHTING (walkable; brightness multiplier applied to wall/floor shading)
 -------------------------------------------------------------------------------
@@ -81,9 +81,9 @@ e   Energy scorch       Plasma burn with residual electric-arc filaments.       
 
 PICKUPS (walkable; collected on player step)
 -------------------------------------------
-r   Red keycard         Unlocks 'R' doors.
-y   Yellow keycard      Unlocks 'Y' doors.
-b   Blue keycard        Unlocks 'B' doors.
+r   Red keycard         Unlocks 'R' doors. Floating billboard card with a pulsing red aura halo.
+y   Yellow keycard      Unlocks 'Y' doors. Floating billboard card with a pulsing yellow aura halo.
+b   Blue keycard        Unlocks 'B' doors. Floating billboard card with a pulsing blue aura halo.
 +   Stim pack           Small health recovery.
 H   Field medkit        Large health recovery.
 a   Armor shard         Small armor restoration.
