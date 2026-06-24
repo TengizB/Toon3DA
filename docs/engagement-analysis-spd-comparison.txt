@@ -1,0 +1,267 @@
+================================================================================
+ ENGAGEMENT ANALYSIS — toon3D vs. Shattered Pixel Dungeon
+ What makes SPD engaging, what toon3D lacks, and what to build next.
+ Date: 2026-06-24
+================================================================================
+
+PURPOSE
+-------
+toon3D and Shattered Pixel Dungeon (SPD) share a skeleton: tile grid, turn-based,
+roguelike, permadeath, procedural floors. They differ in skin (first-person
+raycast shooter vs. top-down sprite crawler). The user's observation is correct:
+SPD is gripping and toon3D is not yet. The difference is NOT graphics. It is
+STRUCTURE. This document explains why, grounded in toon3D's actual code.
+
+
+================================================================================
+PART 1 — WHAT toon3D ALREADY HAS (and has done well)
+================================================================================
+
+toon3D is content-rich and polished at the moment-to-moment level:
+
+  Combat content
+    - 10+ weapons: pistol, shotgun, double-barrel, plasma, rocket, chaingun,
+      assault rifle, railgun, incinerator, + melee (fist/knife/hammer/chainsaw).
+    - 11 enemy types (PLAGUE_HULK, EYE_TYRANT, GORE_BITER, SHELL_BRUTE,
+      MIRE_WRAITH, IRON_STALKER, ACID_DRONE, VOID_SHROUD, OVERSEER, CORRUPTOR,
+      HELL_BARON) across two AI archetypes (melee bruiser / ranged kiter).
+    - Status effects: BURNING, POISONED, BLEED, STUNNED, BLINDED, SLOWED.
+
+  Systems
+    - Turn/tick engine (TickEventBus) — clean, correct, extensible.
+    - Inventory, ammo as finite resource, weapon pickup/switch.
+    - XP + level-up (3 attributes: STRENGTH/AGILITY/TOUGHNESS; 3 boons:
+      HP/ARMOR/DAMAGE).
+    - Permadeath + death screen, credits/currency, keycard doors.
+    - 3 procedural generators (rooms, linear corridor, cellular cave) + stairs.
+
+  Game feel (this is genuinely strong)
+    - Impact effects, screen shake, hit vignettes, kill flashes, enemy hit
+      reactions, health bars, red-alert pulse, ability feedback visuals.
+
+CONCLUSION: toon3D is not lacking content or polish. It is lacking the
+INTERLOCKING SYSTEMS OF MEANINGFUL CHOICE that turn content into a game you
+can't put down. SPD has roughly the same amount of "stuff" — but every piece
+of stuff feeds a decision.
+
+
+================================================================================
+PART 2 — WHY SHATTERED PIXEL DUNGEON IS ENGAGING (the 7 engines)
+================================================================================
+
+SPD's grip comes from seven engines that all feed each other. Each one is a
+loop that generates "just one more floor" tension. toon3D is missing or only
+half-has most of them.
+
+--------------------------------------------------------------------------------
+ENGINE 1 — A GOAL THAT CREATES AN ARC
+--------------------------------------------------------------------------------
+SPD: descend 26 floors, retrieve the Amulet of Yendor, climb back out. Every
+run has a beginning, middle, and end. You always know how far you've come and
+how far is left. The arc is the single biggest reason runs feel like stories
+instead of sessions.
+
+toon3D: NO WIN CONDITION EXISTS (verified — no victory/finalFloor/amulet code).
+You descend stairs forever until you die. There is no destination, so there is
+no progress, no climax, no "almost made it." A run is just play-until-death.
+THIS IS THE #1 ENGAGEMENT KILLER.
+
+--------------------------------------------------------------------------------
+ENGINE 2 — BUILD DIVERSITY / SYNERGY (runs feel different)
+--------------------------------------------------------------------------------
+SPD: 4 classes x subclasses, rings, wands, artifacts, enchantments, alchemy.
+A run "becomes" something — a frost-wand mage, a thrown-weapon rogue, a
+regen-tank warrior. Items COMBINE (Ring of Elements + Wand of Lightning;
+Horn of Plenty + hunger build). You discover synergies by experimenting. Each
+run develops a distinct identity (this is Pillar 5 in the project's own docs).
+
+toon3D: weapons are essentially a linear power ladder (pistol < shotgun <
+plasma...). Attributes are FLAT boosts (HP/ARMOR/DAMAGE — pure upgrades, no
+trade-offs). Nothing combines. There is no "build." Whatever you pick up, you
+play the same way: face enemy, shoot. The project's own pillars demand
+"interesting trade-offs, not pure upgrades" — the current level-up violates
+this directly.
+
+--------------------------------------------------------------------------------
+ENGINE 3 — ESCALATING CLIMAXES (bosses)
+--------------------------------------------------------------------------------
+SPD: a boss every 5 floors (Goo, Tengu, DM-300, Dwarf King, Yog). Each is a
+distinct puzzle with an arena, a mechanic, and a reward. They chunk the run
+into acts and give you a "checkpoint feeling" of mastery.
+
+toon3D: bosses are NOT IMPLEMENTED (boss-encounter-facility-overseer.txt and
+roguelike_order_10 both NOT IMPLEMENTED — though an OVERSEER enemy type and
+HELL_BARON exist as enum values, there is no boss-floor encounter system).
+Floors are tonally identical from floor 1 to floor N. No climax = no pacing.
+
+--------------------------------------------------------------------------------
+ENGINE 4 — MEANINGFUL CHOICE UNDER SCARCITY (the economy)
+--------------------------------------------------------------------------------
+SPD: gold is scarce; shops force agonizing choices (buy the +health potion or
+save for the upgrade scroll?). Items are scarce; you can't have everything.
+Identify-or-gamble decisions. The hunger clock forces you to keep moving and
+spend resources. Every floor poses "spend now or save?".
+
+toon3D: credits/currency exist but there is NO SHOP to spend them on (verified —
+roguelike_order_11 shop NOT IMPLEMENTED; the "shop" grep hits are unrelated).
+Ammo scarcity exists, which is good, but there is no spend/save tension, no
+economy, no opportunity cost. Currency with nothing to buy is a dead system.
+
+--------------------------------------------------------------------------------
+ENGINE 5 — DISCOVERY & THE IDENTIFICATION META-GAME
+--------------------------------------------------------------------------------
+SPD: potions/scrolls are UNIDENTIFIED. Drinking an unknown potion is a gamble
+(healing? or burning?). Over many runs you learn the system, not the layout.
+Plus secret rooms, special floor variants, locked vaults — exploration is
+always rewarded with a chance of something.
+
+toon3D: everything is known. A medkit is a medkit, ammo is ammo. No unidentified
+items, no gambles, no "what's behind the locked door" payoff. Secret rooms NOT
+IMPLEMENTED. Exploration yields nothing surprising, so there is no reason to
+explore carefully — you just walk to the stairs.
+
+--------------------------------------------------------------------------------
+ENGINE 6 — TACTICAL TERRAIN (emergent combat)
+--------------------------------------------------------------------------------
+SPD: combat is positional. Water conducts lightning and douses fire; fire
+spreads through grass; chasms drop enemies a floor; toxic gas fills rooms;
+caltrops, traps, doorways as chokepoints. Two enemies with the same HP play
+completely differently because of how they interact with terrain and each other.
+
+toon3D: combat is "stand in line, shoot, enemy walks at you." The cardinal-line
+ranged rule is a nice constraint, but there is no terrain interaction. The
+hazard-chain-reaction system (fire/toxic/explosive) is IN PROGRESS and is the
+single most promising lever toon3D already has pointed at this engine — it
+should be finished. Right now enemies are mostly HP sponges differentiated by
+stats, not by tactics.
+
+--------------------------------------------------------------------------------
+ENGINE 7 — META-PROGRESSION (the reason to come back after death)
+--------------------------------------------------------------------------------
+SPD: badges, unlockable subclasses, alchemy recipes, a growing journal. Death
+is never wasted — you always unlocked or learned something. This is what makes
+permadeath bearable and makes you hit "new run" instantly.
+
+toon3D: StatsStore only saves raw stats (load/save/update — no unlock keys).
+salvage-cache-meta-progression.txt is NOT IMPLEMENTED. Death gives you nothing
+permanent. There is no pull back into the game after a loss.
+
+
+================================================================================
+PART 3 — THE CORE DIAGNOSIS
+================================================================================
+
+SPD is engaging because of a CHAIN OF DECISIONS, not because of its art:
+
+  goal (descend to Amulet)
+    -> forces you forward, creating an arc
+  build diversity (items/classes that synergize)
+    -> makes each run a different puzzle you must solve
+  scarce economy + identification gamble
+    -> makes every pickup and every shop a real decision
+  terrain-driven tactics
+    -> makes every fight a positioning problem, not a damage race
+  boss climaxes every few floors
+    -> chunks the run into memorable acts
+  meta-progression
+    -> makes death productive and pulls you back
+
+toon3D has built the BODY (combat, rendering, enemies, weapons, feel) but not
+the NERVOUS SYSTEM (the decision chain above). The player has nothing to decide
+except "which weapon kills fastest," and no reason to care whether they reach
+floor 5 or floor 50. Engagement comes from MEANINGFUL CHOICE UNDER PRESSURE
+TOWARD A GOAL. toon3D currently has pressure (enemies, ammo) but no meaningful
+choice and no goal.
+
+
+================================================================================
+PART 4 — WHAT toon3D LACKS (ranked by engagement impact)
+================================================================================
+
+TIER 1 — RUN STRUCTURE (build these first; they create the "game")
+  1. WIN CONDITION + FINAL FLOOR. A reachable goal (e.g. "reach Sector 10 and
+     destroy the core / escape"). Without this nothing else has stakes.
+     -> roguelike_order_19_win_condition_and_final_floor.txt (NOT IMPLEMENTED)
+  2. DIFFICULTY / FLOOR SCALING. Enemies, density, and loot must escalate so
+     depth means something and creates real pressure.
+     -> roguelike_order_16_difficulty_and_floor_scaling.txt (NOT IMPLEMENTED)
+  3. BOSS FLOORS. A climax every N floors to chunk the run into acts.
+     -> boss-encounter-facility-overseer.txt, roguelike_order_10 (NOT IMPLEMENTED)
+
+TIER 2 — MEANINGFUL CHOICE (this is what makes it re-playable)
+  4. BUILD DIVERSITY. Replace flat HP/ARMOR/DAMAGE boons with branching, mutually
+     exclusive upgrades that change HOW you play and that SYNERGIZE with weapons
+     (e.g. "Overload: plasma chains to adjacent enemies" vs "Executioner: +50%
+     damage to bleeding targets"). Weapon levels/tiers/abilities are designed
+     but NOT IMPLEMENTED. This converts the linear power ladder into builds.
+     -> weapon-levels-tiers-abilities.txt, levelup-stim-boon-choice-progression.txt
+  5. SHOP / ECONOMY. Give credits a purpose: a merchant room each act with a
+     scarce, tempting inventory. Creates spend-vs-save tension.
+     -> roguelike_order_11_shop_and_merchant_room.txt (NOT IMPLEMENTED)
+  6. ARTIFACTS / RELICS. Rare, run-defining passive items with trade-offs (the
+     SPD ring/artifact slot). The single best generator of "build identity."
+     -> roguelike_order_14_artifacts_and_special_relics.txt (NOT IMPLEMENTED)
+
+TIER 3 — DISCOVERY & TACTICS (depth and texture)
+  7. FINISH HAZARD CHAIN REACTIONS (fire/toxic/explosive terrain). The highest-
+     value half-built system — turns fights into positioning puzzles.
+     -> hazard-chain-reactions-fire-toxic-explosive.txt (IN PROGRESS)
+  8. SECRET ROOMS + ENVIRONMENTAL TRAPS. Reward careful exploration.
+     -> secret-rooms, pressure-plate-trap-tiles, roguelike_order_12/13 (NOT IMPL)
+  9. UNIDENTIFIED ITEMS (sci-fi flavor: unmarked vials / salvaged tech that
+     must be used or scanned to ID). Adds the gamble meta-game. (Not yet designed
+     — would be a new idea doc; fits Pillar 7 "Information management".)
+
+TIER 4 — RETENTION (the reason to relaunch)
+  10. META-PROGRESSION / UNLOCKS. Permanent unlocks funded by salvage so death
+      is productive.
+      -> salvage-cache-meta-progression.txt (NOT IMPLEMENTED)
+  11. RUN STATISTICS / LEADERBOARD + MAIN MENU / NEW RUN SETUP. Framing that
+      makes a run feel like an attempt at something.
+      -> roguelike_order_17 / _18 (NOT IMPLEMENTED)
+
+TIER 5 — SECONDARY POLISH
+  12. ENEMY VARIETY WIRING. 11 types exist but enemy-variety-and-archetypes is
+      still IN PROGRESS; ensure each type has a DISTINCT TACTICAL ROLE (flanker,
+      summoner, exploder, support) not just different HP/damage numbers.
+      -> roguelike_order_7 (IN PROGRESS), lurker/sentry/resonant-pylon (NOT IMPL)
+  13. FOG OF WAR on the minimap (the first-person view is already a natural fog,
+      but the minimap reveals too much).
+      -> fog-of-war-minimap.txt (NOT IMPLEMENTED)
+
+
+================================================================================
+PART 5 — RECOMMENDED SEQUENCE (smallest change -> biggest engagement gain)
+================================================================================
+
+If only three things get built, build these, in order:
+
+  STEP 1 — GIVE THE RUN A GOAL AND A SHAPE.
+    Win condition + final floor (#1) + floor scaling (#2) + one boss (#3).
+    Effort: medium. Payoff: enormous. This alone converts "play until death"
+    into "a run with stakes." Nothing else matters until the run has an arc.
+
+  STEP 2 — MAKE CHOICES MATTER.
+    Branching synergistic level-up boons / weapon abilities (#4) + a shop (#5).
+    Effort: medium. Payoff: this is what creates replayability and "builds."
+    Now two runs feel different and every pickup is a decision.
+
+  STEP 3 — MAKE FIGHTS TACTICAL.
+    Finish hazard chain reactions (#7) and give 3-4 enemies distinct tactical
+    roles (#12). Effort: low-medium (much is half-built). Payoff: combat stops
+    being a damage race and becomes positioning.
+
+Everything in Tier 4 (meta-progression, leaderboard, menu) is the retention
+layer — valuable, but only after a single run is fun end-to-end. Do not build
+retention for a loop that isn't yet engaging.
+
+
+================================================================================
+ONE-SENTENCE TAKEAWAY
+================================================================================
+Shattered Pixel Dungeon is engaging because every floor forces a meaningful
+decision on the way to a clear goal; toon3D has built a great-feeling combat
+sandbox but no goal to reach, no build to shape, and no economy or terrain to
+make choices matter — so add a WIN CONDITION, SYNERGISTIC UPGRADES + A SHOP, and
+TERRAIN-DRIVEN COMBAT, in that order, before anything else.
+</content>
