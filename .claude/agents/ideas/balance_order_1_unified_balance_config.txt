@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Unified Balance Config — single source of truth for all tuning
 ---

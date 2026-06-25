@@ -6,26 +6,27 @@ public final class ItemConstants {
     private ItemConstants() {}
 
     // Medical pickup system — stim-packs ('+') and field medkits ('H')
-    public static final int   MEDKIT_STIM_HEAL                = 18;
-    public static final int   MEDKIT_FULL_HEAL                = 50;
+    // Balance values (heal amounts) live in BalanceConfig — see SINGLE SOURCE OF TRUTH.
+    public static final int   MEDKIT_STIM_HEAL                = BalanceConfig.MEDKIT_STIM_HEAL;
+    public static final int   MEDKIT_FULL_HEAL                = BalanceConfig.MEDKIT_FULL_HEAL;
     public static final int   MEDKIT_TOTAL_CARRY_CAP          = 6;
     public static final int   MEDKIT_FULL_CARRY_CAP           = 3;
     public static final float PLAYER_HEAL_DURATION            = 0.18f;
     public static final float MEDKIT_STIM_SPRITE_HEIGHT       = 0.20f;
     public static final float MEDKIT_FULL_SPRITE_HEIGHT       = 0.30f;
 
-    // Player stats
-    public static final int   PLAYER_MAX_HEALTH               = 130;
+    // Player stats — balance values live in BalanceConfig (SINGLE SOURCE OF TRUTH).
+    public static final int   PLAYER_MAX_HEALTH               = BalanceConfig.PLAYER_MAX_HEALTH;
     // Player armor — pool capped at 75; armour pickups feed directly into this pool
-    public static final int   PLAYER_MAX_ARMOR                = 75;
+    public static final int   PLAYER_MAX_ARMOR                = BalanceConfig.PLAYER_MAX_ARMOR;
 
     // Armour pickup system — shards ('a') and security vests ('A')
-    public static final int   ARMOUR_SHARD_VALUE              = 8;
-    public static final int   ARMOUR_VEST_VALUE               = 35;
+    public static final int   ARMOUR_SHARD_VALUE              = BalanceConfig.ARMOUR_SHARD_VALUE;
+    public static final int   ARMOUR_VEST_VALUE               = BalanceConfig.ARMOUR_VEST_VALUE;
     public static final float ARMOUR_SHARD_SPRITE_HEIGHT      = 0.25f;
     public static final float ARMOUR_VEST_SPRITE_HEIGHT       = 0.35f;
     // Fraction of each incoming hit that is absorbed by armour (depleting it instead of HP).
-    public static final float ARMOUR_ABSORB_FRACTION          = 0.50f;
+    public static final float ARMOUR_ABSORB_FRACTION          = BalanceConfig.ARMOUR_ABSORB_FRACTION;
 
     // Inventory system — slot count and per-type stack caps
     // INVENTORY_SLOT_COUNT: 12 slots (4×3 grid) as redesigned in inventory-menu-order-3.
@@ -44,15 +45,16 @@ public final class ItemConstants {
 
     // Ammo system — reserve caps, box grants, starting reserves
     // All values are PLACEHOLDERS pending playtest.
-    public static final int   AMMO_RESERVE_CAP_BULLETS    = 200;
-    public static final int   AMMO_RESERVE_CAP_SHELLS     = 60;
-    public static final int   AMMO_RESERVE_CAP_CELLS      = 120;
-    public static final int   AMMO_RESERVE_CAP_ROCKETS    = 20;
+    // Reserve caps and box grants are balance — see BalanceConfig (SINGLE SOURCE OF TRUTH).
+    public static final int   AMMO_RESERVE_CAP_BULLETS    = BalanceConfig.AMMO_RESERVE_CAP_BULLETS;
+    public static final int   AMMO_RESERVE_CAP_SHELLS     = BalanceConfig.AMMO_RESERVE_CAP_SHELLS;
+    public static final int   AMMO_RESERVE_CAP_CELLS      = BalanceConfig.AMMO_RESERVE_CAP_CELLS;
+    public static final int   AMMO_RESERVE_CAP_ROCKETS    = BalanceConfig.AMMO_RESERVE_CAP_ROCKETS;
 
-    public static final int   AMMO_BOX_BULLETS            = 30;
-    public static final int   AMMO_BOX_SHELLS             = 12;
-    public static final int   AMMO_BOX_CELLS              = 25;
-    public static final int   AMMO_BOX_ROCKETS            = 2;
+    public static final int   AMMO_BOX_BULLETS            = BalanceConfig.AMMO_BOX_BULLETS;
+    public static final int   AMMO_BOX_SHELLS             = BalanceConfig.AMMO_BOX_SHELLS;
+    public static final int   AMMO_BOX_CELLS              = BalanceConfig.AMMO_BOX_CELLS;
+    public static final int   AMMO_BOX_ROCKETS            = BalanceConfig.AMMO_BOX_ROCKETS;
 
     public static final int   AMMO_START_BULLETS          = 50;
     public static final int   AMMO_START_SHELLS           = 16;
@@ -239,10 +241,11 @@ public final class ItemConstants {
     public static final int   CREDIT_MEDIUM_JITTER         = 5;
     public static final int   CREDIT_LARGE_BASE            = 70;
     public static final int   CREDIT_LARGE_JITTER          = 15;
-    // Spawn weights — proportional; SMALL+MEDIUM+LARGE need not sum to any specific value
-    public static final int   CREDIT_SPAWN_WEIGHT_SMALL    = 70;
-    public static final int   CREDIT_SPAWN_WEIGHT_MEDIUM   = 24;
-    public static final int   CREDIT_SPAWN_WEIGHT_LARGE    = 6;
+    // Spawn weights — proportional; SMALL+MEDIUM+LARGE need not sum to any specific value.
+    // Balance values live in BalanceConfig (SINGLE SOURCE OF TRUTH).
+    public static final int   CREDIT_SPAWN_WEIGHT_SMALL    = BalanceConfig.CREDIT_SPAWN_WEIGHT_SMALL;
+    public static final int   CREDIT_SPAWN_WEIGHT_MEDIUM   = BalanceConfig.CREDIT_SPAWN_WEIGHT_MEDIUM;
+    public static final int   CREDIT_SPAWN_WEIGHT_LARGE    = BalanceConfig.CREDIT_SPAWN_WEIGHT_LARGE;
     public static final int   CREDIT_PICKUP_TEXTURE_SIZE   = 96;
     // Inventory header — credits readout position and colour
     public static final float INVENTORY_CREDITS_LABEL_X    = 40f;
