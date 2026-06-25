@@ -1,0 +1,139 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Progression
+TITLE: Build Diversity & Synergy — runs that feel different, within budget
+---
+
+Idea 5 of 6 in the balance series (see balance_order_1 for the full list).
+Depends on ideas 1 & 2 (especially the power-budget contract, item D). This is
+the user's explicit "build diversity / synergy" request, scoped so it does NOT
+break the balance the earlier ideas establish.
+
+=== THE PROBLEM ===
+
+Two issues, both balance problems disguised as design problems:
+
+  1. Level-up offers FLAT, mutually-redundant boons: HP_BOOST (+25 HP),
+     ARMOR_BOOST (+18), DAMAGE_BOOST (+8 flat dmg). These are PURE UPGRADES with
+     no trade-off, so the "choice" is just "which stat do I want more of." The
+     project's own roguelike pillars demand "interesting trade-offs, not pure
+     upgrades" (pillar 4) and "run identity through build diversity" (pillar 5).
+     The current system violates both.
+
+  2. There is a LARGE ability catalogue already in GameBalance (crit, armor
+     pierce, executioner, lifesteal, cleave, point-blank, marksman, rhythm,
+     static discharge, legendary signatures...) attached to weapon tiers/levels.
+     The raw material for builds EXISTS — but nothing makes the player CHOOSE
+     between synergistic paths, and nothing guarantees the choices stay on the
+     balance curve.
+
+This idea turns the existing ability pile into a CHOICE system that produces
+distinct builds while staying inside the idea-2 power budget.
+
+
+=== THE CORE PRINCIPLE — SYNERGY WITHIN A FIXED BUDGET ===
+
+Build diversity that BREAKS balance is just power creep. The trick: each
+individual upgrade costs the SAME power budget, but upgrades COMBINE
+multiplicatively, so the FUN (a build coming together) is free while the POWER
+stays bounded.
+
+  Define UPGRADE VALUE in a common currency — "power points" (PP), expressed as
+  %-increase to either effective DPT or eHP (idea 2 quantities):
+      ppOf(upgrade) = (newPower - oldPower) / oldPower * 100
+  A level-up grants a FIXED budget, e.g. LEVEL_UP_BUDGET_PP = 12.
+  RULE: every offered choice must cost ~LEVEL_UP_BUDGET_PP (within +/-15%). So no
+  choice is a no-brainer (all cost the same) — they differ in KIND, not amount.
+
+  THE INVARIANT THAT KEEPS BUILDS BALANCED (ties to idea 2 depth invariant):
+      total PP granted by level L  ==  L * LEVEL_UP_BUDGET_PP   (build-agnostic)
+  Whatever the player picks, their total power at level L is the same; only its
+  SHAPE differs. This guarantees playerPowerAtDepth stays on the 0.9-1.2 band
+  (idea 2) REGARDLESS of build. That is how you get diversity without disbalance.
+
+
+=== WHERE SYNERGY COMES FROM (without exceeding budget) ===
+
+Synergy is NOT extra raw power — it is CONDITIONAL power that only pays off if
+the player builds and plays toward the condition. Each piece is budget-priced
+for its AVERAGE proc rate; a player who engineers the condition gets above-
+average value, a player who ignores it gets below-average. The budget is set to
+the average, so the SYSTEM stays balanced while individual builds spike.
+
+  Example synergy chain (all pieces already in GameBalance):
+    BLEED-on-hit (Rend)  +  "Executioner" (bonus dmg to low-HP targets)  +
+    "Hemorrhage Harvest" (heal on kill).
+    -> A "bleed/finisher" build: apply bleed, let it tick targets low, execute
+       for burst, heal on the kill. Each piece is budget-neutral alone; together
+       they define a playstyle. A player who instead took crit/point-blank pieces
+       plays a "burst gunslinger" with the SAME total PP but a different feel.
+
+  Synergy SOURCES to exploit:
+   - status effects feeding finishers (bleed/poison -> executioner)
+   - on-kill effects feeding sustain (lifesteal/hemorrhage -> aggression)
+   - positional bonuses rewarding playstyle (point-blank shotgun vs marksman
+     long-range — these PULL the build toward a range band, which then interacts
+     with which enemies you can fight cheaply, looping back to scarcity/tactics)
+   - the four ATTRIBUTES (STR/AGI/TGH/MRK) as the passive backbone builds lean on
+
+
+=== REPLACE THE FLAT LEVEL-UP WITH A BRANCHING CARD SYSTEM ===
+
+  On level-up, offer 3 cards drawn from POOLS, each costed at LEVEL_UP_BUDGET_PP:
+    OFFENSE pool   — conditional damage (crit, executioner, point-blank, rhythm)
+    SUSTAIN pool   — lifesteal, hemorrhage, second-wind, temp-armor
+    UTILITY pool   — extended mag, scavenger (ammo refund -> feeds scarcity!),
+                     stagger/stun, mobility (AGI speed)
+    DEFENSE pool   — eHP via TGH/dodge/armor (the OLD flat boons live here, now
+                     ONE option among many, not the whole menu)
+  TRADE-OFF CARDS (pillar 4): some cards grant MORE than budget on one axis but
+  SUBTRACT on another (e.g. "+25% damage, -15% max HP"). These are net-budget-
+  neutral but high-variance — the risk/reward choices roguelikes thrive on.
+
+  Anti-redundancy: don't offer two cards that do the same thing; bias the draw
+  toward the player's emerging build to deepen identity (or AWAY from it for
+  players who want flexibility — pick one philosophy and tune).
+
+
+=== KEEPING NEW ABILITIES IN BUDGET (the contract, item D, expanded) ===
+
+When ANY new ability/upgrade is proposed:
+  1. Compute its average-case ppOf() using idea-2 formulas at a reference build.
+  2. If pp > LEVEL_UP_BUDGET_PP: either add a downside until net pp fits, or move
+     it to a rarer source (legendary weapon) that costs more to obtain.
+  3. Check for DEGENERATE SYNERGY: does it combine multiplicatively with an
+     existing ability to exceed 2x budget in a reachable build? If so, cap the
+     stack (e.g. crit-chance cap 0.30 already exists) or make them mutually
+     exclusive in the draw pool.
+  4. Add it to the living balance table (idea 2) with its pp value visible.
+
+  The crit/pierce/executioner CAPS already in GameBalance are exactly this
+  mechanism — formalize the practice so every future ability declares a cap.
+
+
+=== BUILD ARCHETYPES TO VALIDATE THE SYSTEM ===
+
+Ship the system only once at least 3 distinct, viable archetypes exist that a
+player could intentionally build toward:
+   - GUNSLINGER: crit + point-blank + rhythm + AGI. Burst, mobile, ammo-hungry.
+   - REAPER: bleed/poison + executioner + hemorrhage + STR. Damage-over-time
+     attrition with self-sustain.
+   - JUGGERNAUT: TGH/armor/second-wind + cleave + slow guns. Face-tank bruiser.
+Each must clear the golden-ratio fights (idea 2) but FEEL different and lean on
+different weapons and different scarcity trade-offs.
+
+
+=== PREREQUISITES ===
+  - Ideas 1 & 2 (the power-budget math is load-bearing here).
+  - The ability system already exists (GameBalance + WeaponAbility/AbilityResolver
+    are present), so much of the engine is built — this idea is mostly a CHOICE
+    layer (the card draw) + a re-pricing pass to a common PP budget.
+  - The level-up overlay UI exists (LevelUpOverlayRenderer); extend it from 3
+    fixed boons to 3 drawn cards.
+
+=== DEFINITION OF DONE ===
+  - Level-up offers budget-equal cards from multiple pools, including trade-off
+    cards; the old flat boons are demoted to one pool among several.
+  - LEVEL_UP_BUDGET_PP and the total-PP invariant are in BalanceConfig and
+    enforced (total power at level L is build-independent).
+  - At least 3 archetypes are viable and feel distinct; all pass the golden ratio.
+  - Every ability has a declared pp value and cap in the living balance table.
