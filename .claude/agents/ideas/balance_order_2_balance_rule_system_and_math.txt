@@ -151,7 +151,8 @@ A) NEW WEAPON must fall inside the POWER BAND for its role + tier.
       heavy/charge   : power 24-32   (railgun, grenade) - scarce ammo, slow
   RULE: a new weapon picks a role, then its numbers are tuned until weaponPower
   lands in that role's band. If it lands above the band it WILL invalidate the
-  others. (The current shotgun is slightly over its band — a known fix target.)
+  others. (The shotgun was over its band; the tuning pass trimmed it 50->44 and
+  raised the under-band guns into compliance — see docs/balance-rule-system.txt.)
   Higher RARITY does NOT raise the DPT band — it buys ABILITIES (idea 5), not
   raw damage. This keeps a legendary from being a strict numeric upgrade.
 
@@ -235,3 +236,10 @@ or unit test that prints the table keeps it honest — the numbers can't lie.)
     checklist any future weapon/enemy/item idea must pass.
   - The living table is generated and currently-out-of-band content (e.g. the
     shotgun) is flagged for a follow-up tuning pass.
+  - DONE (follow-up pass): all weapon power scores brought into band (shotgun
+    50->44, plasma 18->28, AR 14->20, chaingun 10->19, grenade splash 30->42);
+    the Railgun is left over-band on purpose (held by slug scarcity, idea 3).
+    Enemy TP is all in-band; the golden-ratio flags were proven to be a
+    band-vs-scale contract conflict (only glass-cannon stat blocks satisfy both
+    TP and golden-ratio bands), so enemies were left unchanged and the decision
+    is deferred to a dedicated balance idea. See docs/balance-rule-system.txt.

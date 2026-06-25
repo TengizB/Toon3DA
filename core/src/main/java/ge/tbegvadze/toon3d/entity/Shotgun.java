@@ -8,18 +8,18 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
 /**
  * Single-shell, one-step-reload shotgun.
  *
- * Stats: damage 50, clipSize 1, reloadTime 1 tick, dropCoeff 0.18, range 5.
+ * Stats: damage 44, clipSize 1, reloadTime 1 tick, dropCoeff 0.18, range 5.
  * One shot depletes the clip; one completed tile-step reloads it.
  *
  * marchShot() walks the facing direction tile by tile up to SHOTGUN_RANGE_TILES.
  * Stops at the first wall.
  *
  * Worked damage table (coefficient 0.18, floor 0.15):
- *   distance 1: 50 × 0.82 = 41   (bread-and-butter adjacent shot)
- *   distance 2: 50 × 0.64 = 32
- *   distance 3: 50 × 0.46 = 23
- *   distance 4: 50 × 0.28 = 14
- *   distance 5: 50 × 0.15 =  8   (clamped by floor; edge of range)
+ *   distance 1: 44 × 0.82 = 36   (bread-and-butter adjacent shot)
+ *   distance 2: 44 × 0.64 = 28
+ *   distance 3: 44 × 0.46 = 20
+ *   distance 4: 44 × 0.28 = 12
+ *   distance 5: 44 × 0.15 =  7   (clamped by floor; edge of range)
  */
 public class Shotgun extends Weapon {
 

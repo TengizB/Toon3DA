@@ -22,13 +22,13 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
  *   canFire() requires shotsInClip >= BURST_SIZE so no partial burst is ever started.
  *   The clip holds 24 rounds (8 full bursts).
  *
- * Stats: damage 10, clipSize 24, burstSize 3, reloadTime 3 ticks, dropCoeff 0.10, range 8 tiles.
+ * Stats: damage 19, clipSize 24, burstSize 3, reloadTime 1 tick, dropCoeff 0.10, range 8 tiles.
  * No penetration: the first enemy or obstacle stops the bullet.
  *
  * Damage per bullet (coefficient 0.10, floor 0.15):
- *   distance 1: 10 × 0.90 = 9    distance 2: 10 × 0.80 = 8
- *   distance 4: 10 × 0.60 = 6    distance 6: 10 × 0.40 = 4
- *   distance 8: 10 × 0.20 = 2    (floor applies at extreme range)
+ *   distance 1: 19 × 0.90 = 17   distance 2: 19 × 0.80 = 15
+ *   distance 4: 19 × 0.60 = 11   distance 6: 19 × 0.40 = 8
+ *   distance 8: 19 × 0.20 = 4    (floor applies at extreme range)
  * Total burst damage = 3× per-bullet damage at each distance (3 separate hits).
  */
 public class Chaingun extends Weapon {

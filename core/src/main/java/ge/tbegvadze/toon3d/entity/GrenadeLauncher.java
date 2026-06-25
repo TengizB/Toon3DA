@@ -8,7 +8,7 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
 /**
  * Single-barrel break-action grenade launcher with indirect-fire and AoE splash.
  *
- * Stats: center damage 30, falloff damage 16, clipSize 3, reloadTime 2 ticks,
+ * Stats: center damage 42, falloff damage 22, clipSize 3, reloadTime 2 ticks,
  * dropCoeff 0.0 (no travel falloff — splash damage is constant), range 6 tiles.
  *
  * The grenade launcher does NOT use the standard linear pierce loop. It walks a path
@@ -25,14 +25,14 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
  * harmlessly and detonates against a wall without bouncing (the turn is consumed and
  * the grenade expended — it punishes the misplay but no self-damage applies).
  *
- * Plus splash: impact tile gets GRENADE_SPLASH_DAMAGE (30);
- * the 4 orthogonal neighbours each get GRENADE_FALLOFF_DAMAGE (16);
+ * Plus splash: impact tile gets GRENADE_SPLASH_DAMAGE (42);
+ * the 4 orthogonal neighbours each get GRENADE_FALLOFF_DAMAGE (22);
  * wall tiles are skipped (blasts don't penetrate walls).
  *
  * Damage table (coefficient 0.0 — travel distance has no effect):
- *   impact tile:              30 (GRENADE_SPLASH_DAMAGE)
- *   orthogonal neighbours:   16 each (GRENADE_FALLOFF_DAMAGE)
- *   per-shot AoE ceiling:    30 + 4 × 16 = 94 distributed across 5 enemies
+ *   impact tile:              42 (GRENADE_SPLASH_DAMAGE)
+ *   orthogonal neighbours:   22 each (GRENADE_FALLOFF_DAMAGE)
+ *   per-shot AoE ceiling:    42 + 4 × 22 = 130 distributed across 5 enemies
  */
 public class GrenadeLauncher extends Weapon {
 
