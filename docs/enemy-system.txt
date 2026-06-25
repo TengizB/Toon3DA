@@ -200,3 +200,52 @@ EnemyRenderer (render/EnemyRenderer.java):
   4. Enemy doors: enemies treat closed doors as walls (player can use doors defensively).
   5. Health HUD: HEALTH readout not yet added to WeaponHudRenderer.
   6. Mini-map enemy dots: not yet added to LevelRenderer.
+
+## Tactical Roles & Verbs (balance idea 4 — Tactical Combat Depth)
+
+Every enemy archetype carries TACTICAL METADATA on EnemyType (the single source of truth):
+role(), positionalMultiplier(), attackCadenceTurns(), spawnChar(), tacticalVerb(), and the
+derived baseThreatPoints() (via GameMath.threatPoints). The VERB is the one-sentence reason the
+player must fight that archetype DIFFERENTLY — the design rule that a new enemy is NOT approved
+until you can state its verb in one sentence and that verb is DISTINCT from every existing enemy.
+"It has more HP" is not a verb. Any ranged behaviour must respect the cardinal-line constraint
+(see isSameCardinalLine in EnemyManager).
+
+  archetype     spawn  role        verb (the reason to fight it differently)
+  ----------------------------------------------------------------------------------------
+  Gore Biter     '3'   CHAFF       SWARMER: don't get surrounded — funnel the pack into a chokepoint.
+  Eye Tyrant     '2'   CHAFF       SNIPER: break its line — step off its row/column to deny the shot.
+  Acid Drone     '$'   SOLDIER     HARASSER: corner it — cut off its kite path with level geometry.
+  Void Shroud    '^'   SOLDIER     FLANKER: keep your back covered — rotate to face it.
+  Mire Wraith    '5'   SOLDIER     ARTILLERY: prioritise it — don't let its acid DOT stack.
+  Plague Hulk    '1'   SOLDIER     TANK: kill at range — don't grind it down in melee.
+  Shell Brute    '4'   BRUISER     CHARGER: sidestep its charge, then punish the recovery.
+  Iron Stalker   '!'   MINI_ELITE  MINI-ELITE: commit resources or avoid — a deliberate mid-floor spike.
+
+ENCOUNTER BUDGET (Pillar 1) — the floor generator (LevelGenerator) SPENDS a per-depth Threat-Point
+budget instead of rolling enemies at random, via EncounterBudgetPlanner:
+
+  floorThreatPointBudget(depth) = FLOOR_BASE_THREAT_POINT_BUDGET * depthThreatScale(depth)
+                                                                   (GameMath.floorThreatPointBudget)
+
+Each enemy's TP cost is scaled by the SAME depth curve (GameMath.enemyThreatAtDepth), so the enemy
+COUNT stays roughly constant across floors while each enemy gets stronger — difficulty rises through
+per-enemy power, never an exploding horde, and the depth curve is never double-counted.
+
+Composition rules the planner enforces (BalanceConfig SECTION 11 knobs):
+  - Reserve ENCOUNTER_ANCHOR_BUDGET_FRACTION_MIN..MAX (15–30%) for ONE anchor (bruiser/mini-elite)
+    that defines the floor's hardest room; the anchor is placed in the DEEPEST room and is exempt
+    from the per-room cap. Rarely (ENCOUNTER_ELITE_ANCHOR_FLOOR_CHANCE, depth-gated) a floor is a
+    deliberate elite gauntlet whose mini-elite anchor exceeds that reserve.
+  - No single non-anchor TYPE exceeds ENCOUNTER_MAX_SINGLE_TYPE_FRACTION (40%) of the budget (variety).
+  - No single non-anchor ROOM exceeds ENCOUNTER_PER_ROOM_TP_FRACTION_CAP (35%) of the budget.
+  - Every roster contains both RANGED and MELEE archetypes (the core ranged/melee tension).
+
+Verify the planned roster per depth with BalanceReport (the ENCOUNTER BUDGET section), the same
+dev-only auditor that prints the weapon/enemy/scarcity living tables.
+
+NOTE — scope of idea 4 in this implementation: Pillar 1 (encounter budget) and the role/verb
+taxonomy above are implemented. The per-enemy AI hooks that MECHANICALLY enforce each verb
+(charger wind-up telegraph, flanker behind-attack preference, on-death hazard tiles), the hazard
+chain-reaction finish (Pillar 3), and the >25%-eHP telegraph audit (Pillar 5) are deferred to
+follow-up PRs — see .claude/agents/ideas/balance_order_4_tactical_combat_depth.txt.

@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.level;
 
+import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
@@ -73,6 +74,10 @@ public class LevelGenerator implements ILevelGenerator {
     private final Random         random;
     private final LevelGenConfig config;
 
+    // Dungeon floor this generator is building for (1-based). Drives the encounter Threat-Point
+    // budget (balance idea 4). Defaults to 1; set via generate(int dungeonDepth).
+    private int dungeonDepth = 1;
+
     // MST room-pair references captured during connectivity so widenSelectedCorridors()
     // can re-carve chosen edges at width 3 without re-running the MST selection.
     private List<Room[]> mstEdgeRooms;
@@ -97,6 +102,13 @@ public class LevelGenerator implements ILevelGenerator {
     // Public API
     // -------------------------------------------------------------------------
 
+    @Override
+    public Level generate(int dungeonDepth) {
+        this.dungeonDepth = Math.max(1, dungeonDepth);
+        return generate();
+    }
+
+    @Override
     public Level generate() {
         char[][] grid = new char[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT][LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
         fillAll(grid, 'x');
@@ -149,12 +161,10 @@ public class LevelGenerator implements ILevelGenerator {
         placePickups(grid, rooms, roomDepths, maxRoomDepth);
         placeWeaponSpawns(grid, rooms);
 
-        // Phase 4 — enemies (after props so spawns land on walkable tiles only)
+        // Phase 4 — enemies: spend the floor's encounter Threat-Point budget (balance idea 4,
+        // Pillar 1) instead of rolling enemies room-by-room at random.
         List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
-        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
-            float depthFraction = maxRoomDepth > 0 ? roomDepths[roomIndex] / (float) maxRoomDepth : 0f;
-            spawnEnemiesInRoom(grid, rooms.get(roomIndex), spawnPoints, depthFraction);
-        }
+        placeBudgetedEncounter(grid, rooms, roomDepths, spawnPoints);
 
         // Phase 4b — atmospheric wall theming (post-pass after enemies so corpse/den density is final)
         placeRustWallsNearUnlit(grid);
@@ -2018,71 +2028,98 @@ public class LevelGenerator implements ILevelGenerator {
     // -------------------------------------------------------------------------
 
     /**
-     * Spawns enemies in a room, scaled by the room's normalised depth (0 = adjacent to the
-     * entrance, 1 = deepest room over the MST tree). Deeper rooms add up to
-     * LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX extra enemies and bias the archetype mix toward
-     * heavier types via randomEnemySpawnChar(depthFraction).
+     * Spends the floor's encounter Threat-Point budget (balance idea 4, Pillar 1) on a roster
+     * of enemies, then distributes that roster across the non-entrance rooms.
+     *
+     * The roster is planned by {@link EncounterBudgetPlanner} (anchor reserve, per-type cap,
+     * ranged/melee mix). Distribution rules:
+     *   - Rooms are visited DEEPEST-FIRST so the anchor lands in the floor's farthest room,
+     *     making the hardest fight the climax of the descent.
+     *   - The anchor is placed first and is EXEMPT from the per-room TP cap (it may, on an
+     *     elite-gauntlet floor, exceed it alone — the sanctioned "gauntlet climax" exception).
+     *   - Each remaining enemy goes into the first room (deepest-first) where it fits under the
+     *     per-room TP cap and an eligible tile is free; if no room fits the cap, it is placed in
+     *     any room with a free tile so budget is not wasted, otherwise dropped.
      */
-    private void spawnEnemiesInRoom(char[][] grid, Room room, List<EnemySpawnPoint> spawnPoints,
-                                    float depthFraction) {
-        int area       = room.interiorWidth() * room.interiorHeight();
-        int depthBonus = Math.round(depthFraction * LevelGenConstants.LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX);
-        int enemyCap   = LevelGenConstants.LEVEL_GEN_MAX_ENEMIES_PER_ROOM
-                       + LevelGenConstants.LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX;
-        int enemyCount = Math.min(enemyCap,
-                                  1 + random.nextInt(Math.max(1, area / 6)) + depthBonus);
-        int[] placedColumns = new int[enemyCount];
-        int[] placedRows    = new int[enemyCount];
-        int   placed        = 0;
-        int   attempts      = 0;
-        while (placed < enemyCount && attempts < 50) {
-            attempts++;
-            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
-            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
-            if (!isEnemySpawnEligible(grid, tileColumn, tileRow)) continue;
-            if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
-            boolean alreadyUsed = false;
-            for (int placedIndex = 0; placedIndex < placed; placedIndex++) {
-                if (placedColumns[placedIndex] == tileColumn && placedRows[placedIndex] == tileRow) {
-                    alreadyUsed = true;
+    private void placeBudgetedEncounter(char[][] grid, List<Room> rooms, int[] roomDepths,
+                                        List<EnemySpawnPoint> spawnPoints) {
+        if (rooms.size() < 2) return;
+
+        EncounterBudgetPlanner.Plan plan = new EncounterBudgetPlanner(dungeonDepth, random).plan();
+        List<EnemyType> roster = plan.enemies();
+        if (roster.isEmpty()) return;
+
+        // Non-entrance room indices (1..n-1) sorted deepest-first over the MST depth gradient.
+        Integer[] roomOrder = new Integer[rooms.size() - 1];
+        for (int index = 0; index < roomOrder.length; index++) {
+            roomOrder[index] = index + 1;
+        }
+        java.util.Arrays.sort(roomOrder, (left, right) -> Integer.compare(roomDepths[right], roomDepths[left]));
+
+        float[] roomSpentThreat = new float[rooms.size()];
+        boolean[][] usedTiles = new boolean[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT]
+                                            [LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
+        float perRoomCap = plan.perRoomThreatPointCap();
+
+        // --- Place the anchor first, deepest room, exempt from the per-room cap.
+        EnemyType anchor    = plan.anchor();
+        int       anchorIndexInRoster = -1;
+        if (anchor != null) {
+            for (int roomOrderIndex = 0; roomOrderIndex < roomOrder.length; roomOrderIndex++) {
+                int roomIndex = roomOrder[roomOrderIndex];
+                if (tryPlaceEnemyInRoom(grid, rooms.get(roomIndex), anchor, usedTiles, spawnPoints)) {
+                    roomSpentThreat[roomIndex] += plan.threatOf(anchor);
+                    anchorIndexInRoster = 0; // anchor is always roster element 0 (added first)
                     break;
                 }
             }
-            if (alreadyUsed) continue;
-            placedColumns[placed] = tileColumn;
-            placedRows[placed]    = tileRow;
-            char spawnChar = randomEnemySpawnChar(depthFraction);
-            spawnPoints.add(new EnemySpawnPoint(spawnChar, tileColumn, tileRow));
-            placed++;
+        }
+
+        // --- Distribute the remaining roster under the per-room cap.
+        for (int rosterIndex = 0; rosterIndex < roster.size(); rosterIndex++) {
+            if (rosterIndex == anchorIndexInRoster) continue; // already placed
+            EnemyType enemy = roster.get(rosterIndex);
+            float cost = plan.threatOf(enemy);
+
+            boolean placed = false;
+            for (int roomOrderIndex = 0; roomOrderIndex < roomOrder.length && !placed; roomOrderIndex++) {
+                int roomIndex = roomOrder[roomOrderIndex];
+                if (roomSpentThreat[roomIndex] + cost > perRoomCap) continue;
+                if (tryPlaceEnemyInRoom(grid, rooms.get(roomIndex), enemy, usedTiles, spawnPoints)) {
+                    roomSpentThreat[roomIndex] += cost;
+                    placed = true;
+                }
+            }
+            // Cap-blocked everywhere — place in any room with a free tile so budget is spent.
+            for (int roomOrderIndex = 0; roomOrderIndex < roomOrder.length && !placed; roomOrderIndex++) {
+                int roomIndex = roomOrder[roomOrderIndex];
+                if (tryPlaceEnemyInRoom(grid, rooms.get(roomIndex), enemy, usedTiles, spawnPoints)) {
+                    roomSpentThreat[roomIndex] += cost;
+                    placed = true;
+                }
+            }
         }
     }
 
     /**
-     * Picks an enemy archetype, biased by normalised room depth. The base roll uses the
-     * fixed cumulative thresholds; deeper rooms then have a (depthFraction-scaled) chance to
-     * upgrade a light/ranged spawn ('3' gore-biter, '2' eye-tyrant) into a heavy archetype
-     * ('1' plague-hulk, '4' shell-brute, '5' mire-wraith) — so the difficulty ramps outward.
+     * Finds a free, spawn-eligible tile in the room and records an enemy spawn point there.
+     * Returns true on success; false if no eligible tile was found after a bounded search.
+     * Marks the chosen tile in usedTiles so two enemies never share a tile.
      */
-    private char randomEnemySpawnChar(float depthFraction) {
-        char base = rollBaseEnemyChar();
-        if ((base == '3' || base == '2')
-                && random.nextFloat() < depthFraction * LevelGenConstants.LEVEL_GEN_DEPTH_ENEMY_UPGRADE_CHANCE) {
-            switch (random.nextInt(3)) {
-                case 0:  return '1'; // plague hulk (tank)
-                case 1:  return '4'; // shell brute (heavy charger)
-                default: return '5'; // mire wraith (ranged)
-            }
+    private boolean tryPlaceEnemyInRoom(char[][] grid, Room room, EnemyType enemy,
+                                        boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
+        for (int attempt = 0; attempt < 40; attempt++) {
+            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
+            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
+            // isEnemySpawnEligible bounds-checks first, so the usedTiles access below is safe.
+            if (!isEnemySpawnEligible(grid, tileColumn, tileRow)) continue;
+            if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+            if (usedTiles[tileRow][tileColumn]) continue;
+            usedTiles[tileRow][tileColumn] = true;
+            spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
+            return true;
         }
-        return base;
-    }
-
-    private char rollBaseEnemyChar() {
-        float roll = random.nextFloat();
-        if (roll < LevelGenConstants.LEVEL_GEN_CORRUPTOR_THRESHOLD)  return '1';
-        if (roll < LevelGenConstants.LEVEL_GEN_VORTEX_EYE_THRESHOLD) return '2';
-        if (roll < LevelGenConstants.LEVEL_GEN_GHOUL_THRESHOLD)       return '3';
-        if (roll < LevelGenConstants.LEVEL_GEN_CRAWLER_THRESHOLD)     return '4';
-        return '5';
+        return false;
     }
 
     // -------------------------------------------------------------------------

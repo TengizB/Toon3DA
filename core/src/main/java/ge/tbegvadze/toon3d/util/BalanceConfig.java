@@ -547,4 +547,44 @@ public final class BalanceConfig {
     public static final int   MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY = 2;
     /** Fraction of incoming damage a skilled player cancels via positioning/avoidance. Range 0–1. */
     public static final float MODEL_FLOOR_AVOIDANCE_FACTOR        = 0.50f;
+
+    // =====================================================================================
+    // SECTION 11 — ENCOUNTER BUDGET (idea 4, Pillar 1) — difficulty as a dial
+    // The level generator SPENDS a Threat-Point budget per floor instead of rolling enemies
+    // at random (EncounterBudgetPlanner). The base budget is the depth-1 reference; it scales
+    // per floor by GameMath.floorThreatPointBudget using the SECTION 3 depth curve, and each
+    // enemy's TP cost scales by the same curve (GameMath.enemyThreatAtDepth), so the enemy
+    // COUNT stays roughly constant across depth while each enemy gets stronger. The model
+    // floor (SECTION 10) totals ~104 TP, so a 120-TP base budget reproduces a comparable
+    // depth-1 roster. The composition fractions enforce idea 4's "spend the budget tastefully"
+    // rules: one anchor, no mono-type rooms, no single oversized room.
+    // =====================================================================================
+
+    /** Depth-1 floor Threat-Point budget the generator spends on enemies. Range: 80–180. */
+    public static final float FLOOR_BASE_THREAT_POINT_BUDGET = 120f;
+
+    /** Reserve at least this fraction of the floor budget for the single anchor enemy. Range: 0.10–0.25. */
+    public static final float ENCOUNTER_ANCHOR_BUDGET_FRACTION_MIN = 0.15f;
+    /** Reserve at most this fraction of the floor budget for the single anchor enemy. Range: 0.25–0.40. */
+    public static final float ENCOUNTER_ANCHOR_BUDGET_FRACTION_MAX = 0.30f;
+
+    /** No single enemy TYPE may consume more than this fraction of the floor budget (variety rule). Range: 0.30–0.55. */
+    public static final float ENCOUNTER_MAX_SINGLE_TYPE_FRACTION = 0.40f;
+
+    /** No single (non-anchor) room may hold more than this fraction of the floor budget. Range: 0.25–0.45. */
+    public static final float ENCOUNTER_PER_ROOM_TP_FRACTION_CAP = 0.35f;
+
+    /**
+     * Stop adding fill enemies once spent TP reaches this fraction of the budget — leaves a
+     * little headroom so a roster never overshoots the budget. Range: 0.85–1.0.
+     */
+    public static final float ENCOUNTER_BUDGET_FILL_TARGET_FRACTION = 0.95f;
+
+    /**
+     * Chance a floor is a deliberate "elite gauntlet" whose anchor is a mini-elite that exceeds
+     * the normal anchor reserve (the gauntlet-climax exception in idea 4). Range: 0.0–0.30.
+     */
+    public static final float ENCOUNTER_ELITE_ANCHOR_FLOOR_CHANCE = 0.15f;
+    /** Earliest depth an elite-gauntlet floor may appear, so floor 1 is never a mini-elite spike. Range: 2–5. */
+    public static final int   ENCOUNTER_ELITE_ANCHOR_MIN_DEPTH    = 3;
 }

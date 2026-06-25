@@ -2369,6 +2369,52 @@ public final class GameMath {
         return healthGrowth * damageGrowth;
     }
 
+    /*
+     * Formula: floorThreatPointBudget — difficulty as a DIAL (balance idea 4, Pillar 1)
+     * Derivation:
+     *   A floor's total danger is one number the generator SPENDS, instead of rolling
+     *   enemies at random. The base budget is the depth-1 reference (BASE_TP), and it
+     *   grows per floor by the SAME coupled curve that scales individual enemies:
+     *       floorThreatPointBudget = baseThreatPointBudget * depthThreatScale(d)
+     *   Because each enemy's effective Threat-Point cost is ALSO scaled by
+     *   depthThreatScale(d) at spawn time (EnemyManager health/damage scaling, mirrored
+     *   by enemyThreatAtDepth below), the budget and the per-enemy cost grow in lockstep.
+     *   The result: the enemy COUNT stays roughly constant across depth (budget / unit
+     *   cost), while each enemy gets stronger — difficulty rises through per-enemy power,
+     *   not through an exploding horde, and never double-counts the depth curve.
+     * Edge cases:
+     *   depth <= 1 -> depthThreatScale returns 1.0 -> budget == baseThreatPointBudget.
+     *   baseThreatPointBudget <= 0 -> returns 0 (no budget, no enemies).
+     */
+    public static float floorThreatPointBudget(float baseThreatPointBudget,
+                                               float healthScalePerDepth,
+                                               float damageScalePerDepth,
+                                               int depth) {
+        if (baseThreatPointBudget <= 0f) {
+            return 0f;
+        }
+        return baseThreatPointBudget * depthThreatScale(healthScalePerDepth, damageScalePerDepth, depth);
+    }
+
+    /*
+     * Formula: enemyThreatAtDepth — an archetype's Threat-Point cost on a given floor
+     * Derivation:
+     *   An enemy's depth-1 base Threat-Point value (EnemyType.baseThreatPoints) is scaled
+     *   to the floor it spawns on by the same coupled depth curve that scales its HP and
+     *   damage:
+     *       enemyThreatAtDepth = baseThreatPoints * depthThreatScale(d)
+     *   This is the per-unit cost the encounter budget (floorThreatPointBudget) is spent
+     *   against, so count = budget / unitCost is depth-stable (see derivation above).
+     * Edge cases:
+     *   depth <= 1 -> returns baseThreatPoints unchanged.
+     */
+    public static float enemyThreatAtDepth(float baseThreatPoints,
+                                           float healthScalePerDepth,
+                                           float damageScalePerDepth,
+                                           int depth) {
+        return baseThreatPoints * depthThreatScale(healthScalePerDepth, damageScalePerDepth, depth);
+    }
+
     // =========================================================================
     // RESOURCE SCARCITY MODEL — supply vs demand per floor (idea 3)
     // -------------------------------------------------------------------------
