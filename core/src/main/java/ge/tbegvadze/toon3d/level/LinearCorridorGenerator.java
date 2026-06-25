@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.level;
 
+import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
@@ -66,6 +67,10 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     private       List<int[]>            spineCenterTiles;
     private       List<WeaponSpawnPoint> weaponSpawnPoints;
 
+    // Dungeon floor this generator is building for (1-based); drives the encounter Threat-Point
+    // budget (balance idea 4, Pillar 1). Defaults to 1; set via generate(int dungeonDepth).
+    private int dungeonDepth = 1;
+
     public LinearCorridorGenerator(long seed) {
         this(seed, new LevelGenConfig());
     }
@@ -78,6 +83,12 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
+
+    @Override
+    public Level generate(int dungeonDepth) {
+        this.dungeonDepth = Math.max(1, dungeonDepth);
+        return generate();
+    }
 
     @Override
     public Level generate() {
@@ -108,11 +119,10 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         placePickups(grid, rooms);
         placeWeaponSpawns(grid, rooms);
 
-        // Phase 4 — Enemies (after props so spawns land on walkable tiles)
+        // Phase 4 — Enemies: spend the floor's encounter Threat-Point budget (balance idea 4,
+        // Pillar 1) across the side rooms instead of rolling each room independently.
         List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
-        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
-            spawnEnemiesInRoom(grid, rooms.get(roomIndex), spawnPoints);
-        }
+        placeBudgetedEncounter(grid, rooms, spawnPoints);
 
         // Atmospheric post-passes
         placeRustWallsNearUnlit(grid);
@@ -1586,44 +1596,86 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     // Phase 4 — Enemy placement
     // -------------------------------------------------------------------------
 
-    private void spawnEnemiesInRoom(char[][] grid, Room room, List<EnemySpawnPoint> spawnPoints) {
-        int area       = room.interiorWidth() * room.interiorHeight();
-        int enemyCount = Math.min(LevelGenConstants.LEVEL_GEN_MAX_ENEMIES_PER_ROOM,
-                                  1 + random.nextInt(Math.max(1, area / 6)));
-        int[] placedColumns = new int[enemyCount];
-        int[] placedRows    = new int[enemyCount];
-        int   placed        = 0;
-        int   attempts      = 0;
+    /**
+     * Spends the floor's encounter Threat-Point budget across the side rooms (balance idea 4,
+     * Pillar 1), reusing the shared EncounterBudgetPlanner. The anchor goes in the deepest room
+     * (highest spine index, exempt from the per-room cap); the rest fill under the per-room cap.
+     * Mirrors LevelGenerator.placeBudgetedEncounter, adapted to the spine's room ordering.
+     */
+    private void placeBudgetedEncounter(char[][] grid, List<Room> rooms, List<EnemySpawnPoint> spawnPoints) {
+        if (rooms.size() < 2) return;
 
-        while (placed < enemyCount && attempts < 50) {
-            attempts++;
-            if (room.interiorWidth() <= 0 || room.interiorHeight() <= 0) break;
+        EncounterBudgetPlanner.Plan plan = new EncounterBudgetPlanner(dungeonDepth, random).plan();
+        List<EnemyType> roster = plan.enemies();
+        if (roster.isEmpty()) return;
+
+        // Non-entrance rooms (1..n-1), deepest-first. Along a spine, later index = farther from
+        // the entrance, so descending index is a natural depth order.
+        Integer[] roomOrder = new Integer[rooms.size() - 1];
+        for (int index = 0; index < roomOrder.length; index++) {
+            roomOrder[index] = index + 1;
+        }
+        java.util.Arrays.sort(roomOrder, (left, right) -> Integer.compare(right, left));
+
+        float[]  roomSpentThreat = new float[rooms.size()];
+        boolean[][] usedTiles = new boolean[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT]
+                                            [LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
+        float perRoomCap = plan.perRoomThreatPointCap();
+
+        // Anchor first — deepest room, exempt from the per-room cap.
+        EnemyType anchor              = plan.anchor();
+        int       anchorIndexInRoster = -1;
+        if (anchor != null) {
+            for (int orderIndex = 0; orderIndex < roomOrder.length; orderIndex++) {
+                int roomIndex = roomOrder[orderIndex];
+                if (tryPlaceEnemyInRoom(grid, rooms.get(roomIndex), anchor, usedTiles, spawnPoints)) {
+                    roomSpentThreat[roomIndex] += plan.threatOf(anchor);
+                    anchorIndexInRoster = 0; // anchor is always roster element 0
+                    break;
+                }
+            }
+        }
+
+        // Distribute the remaining roster under the per-room cap, falling back to any free room.
+        for (int rosterIndex = 0; rosterIndex < roster.size(); rosterIndex++) {
+            if (rosterIndex == anchorIndexInRoster) continue;
+            EnemyType enemy = roster.get(rosterIndex);
+            float     cost  = plan.threatOf(enemy);
+
+            boolean placed = false;
+            for (int orderIndex = 0; orderIndex < roomOrder.length && !placed; orderIndex++) {
+                int roomIndex = roomOrder[orderIndex];
+                if (roomSpentThreat[roomIndex] + cost > perRoomCap) continue;
+                if (tryPlaceEnemyInRoom(grid, rooms.get(roomIndex), enemy, usedTiles, spawnPoints)) {
+                    roomSpentThreat[roomIndex] += cost;
+                    placed = true;
+                }
+            }
+            for (int orderIndex = 0; orderIndex < roomOrder.length && !placed; orderIndex++) {
+                int roomIndex = roomOrder[orderIndex];
+                if (tryPlaceEnemyInRoom(grid, rooms.get(roomIndex), enemy, usedTiles, spawnPoints)) {
+                    roomSpentThreat[roomIndex] += cost;
+                    placed = true;
+                }
+            }
+        }
+    }
+
+    /** Records an enemy spawn on a free, eligible, non-door-adjacent tile in the room. */
+    private boolean tryPlaceEnemyInRoom(char[][] grid, Room room, EnemyType enemy,
+                                        boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
+        if (room.interiorWidth() <= 0 || room.interiorHeight() <= 0) return false;
+        for (int attempt = 0; attempt < 40; attempt++) {
             int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
             int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
             if (!isEnemySpawnEligible(grid, tileColumn, tileRow)) continue;
             if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
-            boolean alreadyUsed = false;
-            for (int placedIndex = 0; placedIndex < placed; placedIndex++) {
-                if (placedColumns[placedIndex] == tileColumn && placedRows[placedIndex] == tileRow) {
-                    alreadyUsed = true;
-                    break;
-                }
-            }
-            if (alreadyUsed) continue;
-            placedColumns[placed] = tileColumn;
-            placedRows[placed]    = tileRow;
-            spawnPoints.add(new EnemySpawnPoint(randomEnemySpawnChar(), tileColumn, tileRow));
-            placed++;
+            if (usedTiles[tileRow][tileColumn]) continue;
+            usedTiles[tileRow][tileColumn] = true;
+            spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
+            return true;
         }
-    }
-
-    private char randomEnemySpawnChar() {
-        float roll = random.nextFloat();
-        if (roll < LevelGenConstants.LEVEL_GEN_CORRUPTOR_THRESHOLD)  return '1';
-        if (roll < LevelGenConstants.LEVEL_GEN_VORTEX_EYE_THRESHOLD) return '2';
-        if (roll < LevelGenConstants.LEVEL_GEN_GHOUL_THRESHOLD)       return '3';
-        if (roll < LevelGenConstants.LEVEL_GEN_CRAWLER_THRESHOLD)     return '4';
-        return '5';
+        return false;
     }
 
     // -------------------------------------------------------------------------
