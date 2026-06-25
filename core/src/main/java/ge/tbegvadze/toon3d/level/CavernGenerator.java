@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.level;
 
+import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
@@ -65,6 +66,10 @@ public class CavernGenerator implements ILevelGenerator {
     // Populated by assignBiomes() and consumed by every cave-body decoration pass.
     private       int[][] biomeMap;
 
+    // Dungeon floor this generator is building for (1-based); drives the encounter Threat-Point
+    // budget (balance idea 4, Pillar 1). Defaults to 1; set via generate(int dungeonDepth).
+    private int dungeonDepth = 1;
+
     public CavernGenerator(long seed) {
         this.random = new Random(seed);
     }
@@ -72,6 +77,12 @@ public class CavernGenerator implements ILevelGenerator {
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
+
+    @Override
+    public Level generate(int dungeonDepth) {
+        this.dungeonDepth = Math.max(1, dungeonDepth);
+        return generate();
+    }
 
     @Override
     public Level generate() {
@@ -122,8 +133,9 @@ public class CavernGenerator implements ILevelGenerator {
         // Phase 7 — weapon spawns
         placeWeaponSpawns(grid, chambers);
 
-        // Phase 8 — enemies (biome-weighted archetypes)
-        List<EnemySpawnPoint> spawnPoints = placeEnemies(grid, biomes);
+        // Phase 8 — enemies: spend the floor's encounter Threat-Point budget (balance idea 4,
+        // Pillar 1) instead of a flat biome-weighted spawn count.
+        List<EnemySpawnPoint> spawnPoints = placeEnemies(grid);
 
         // Phase 9 — stairs
         stampStairsDown(grid, spawnPoints);
@@ -1092,53 +1104,40 @@ public class CavernGenerator implements ILevelGenerator {
     // Phase 7 — enemy placement (cave body scatter)
     // -------------------------------------------------------------------------
 
-    private List<EnemySpawnPoint> placeEnemies(char[][] grid, CaveBiome[] biomes) {
+    /**
+     * Spends the floor's encounter Threat-Point budget (balance idea 4, Pillar 1) by scattering
+     * the planned roster across eligible cave tiles. The cave has no discrete rooms, so the
+     * EncounterBudgetPlanner roster (which already enforces the anchor / type-variety /
+     * ranged-melee-mix composition rules) is simply realised on walkable tiles beyond the spawn
+     * safe radius — replacing the old flat biome-weighted spawn count.
+     */
+    private List<EnemySpawnPoint> placeEnemies(char[][] grid) {
         int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
         int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
         List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
-        int spawnBudget = LevelGenConstants.LEVEL_GEN_TARGET_ROOMS
-                          * LevelGenConstants.LEVEL_GEN_MAX_ENEMIES_PER_ROOM / 2;
 
-        for (int attempt = 0; attempt < 400 && spawnPoints.size() < spawnBudget; attempt++) {
-            int tileColumn = 1 + random.nextInt(gridWidth  - 2);
-            int tileRow    = 1 + random.nextInt(gridHeight - 2);
-            char cell = grid[tileRow][tileColumn];
-            if (!isWalkableTile(cell) && !isDecal(cell)) continue;
-            if (grid[tileRow][tileColumn] == 'p') continue;
+        EncounterBudgetPlanner.Plan plan = new EncounterBudgetPlanner(dungeonDepth, random).plan();
+        List<EnemyType> roster = plan.enemies();
+        if (roster.isEmpty()) return spawnPoints;
 
-            int chebyshevDistance = Math.max(Math.abs(tileColumn - spawnColumn),
-                                             Math.abs(tileRow    - spawnRow));
-            if (chebyshevDistance < LevelGenConstants.LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS) continue;
-
-            // Bias the archetype toward the biome the tile sits in; chambers and
-            // unseeded tiles (-1) fall back to the default cave distribution.
-            int  biomeId   = biomeMap[tileRow][tileColumn];
-            char spawnChar = (biomeId >= 0 && biomeId < biomes.length)
-                    ? biomeEnemyChar(biomes[biomeId])
-                    : randomEnemySpawnChar();
-
-            spawnPoints.add(new EnemySpawnPoint(spawnChar, tileColumn, tileRow));
+        boolean[][] usedTiles = new boolean[gridHeight][gridWidth];
+        for (EnemyType enemy : roster) {
+            for (int attempt = 0; attempt < 80; attempt++) {
+                int tileColumn = 1 + random.nextInt(gridWidth  - 2);
+                int tileRow    = 1 + random.nextInt(gridHeight - 2);
+                char cell = grid[tileRow][tileColumn];
+                if (!isWalkableTile(cell) && !isDecal(cell)) continue;
+                if (cell == 'p') continue;
+                if (usedTiles[tileRow][tileColumn]) continue;
+                int chebyshevDistance = Math.max(Math.abs(tileColumn - spawnColumn),
+                                                 Math.abs(tileRow    - spawnRow));
+                if (chebyshevDistance < LevelGenConstants.LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS) continue;
+                usedTiles[tileRow][tileColumn] = true;
+                spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
+                break;
+            }
         }
         return spawnPoints;
-    }
-
-    /**
-     * Weights enemy archetypes to match a biome's fiction (markers 1-5; no elite
-     * symbols are introduced, preserving the generator's floor-scaling contract):
-     *   1 Plague Hulk (tank)  2 Eye Tyrant (ranged)  3 Gore Biter (fast melee)
-     *   4 Shell Brute (charger)  5 Mire Wraith (acid ranged).
-     */
-    private char biomeEnemyChar(CaveBiome biome) {
-        float roll = random.nextFloat();
-        switch (biome) {
-            case FUNGAL_HOLLOW:  return roll < 0.50f ? '3' : (roll < 0.80f ? '5' : '2');
-            case FROST_VAULT:    return roll < 0.50f ? '1' : (roll < 0.85f ? '4' : '3');
-            case REACTOR_SUMP:   return roll < 0.45f ? '5' : (roll < 0.80f ? '2' : '1');
-            case DERELICT_NEST:  return roll < 0.50f ? '2' : (roll < 0.80f ? '3' : '4');
-            case GORE_WARREN:    return roll < 0.55f ? '3' : (roll < 0.85f ? '1' : '4');
-            case CRYSTAL_GROTTO: return roll < 0.50f ? '4' : (roll < 0.80f ? '1' : '3');
-            default:             return randomEnemySpawnChar();
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -1358,14 +1357,5 @@ public class CavernGenerator implements ILevelGenerator {
             case 3:  return ItemType.WEAPON_PLASMA;
             default: return ItemType.WEAPON_ROCKET;
         }
-    }
-
-    private char randomEnemySpawnChar() {
-        float roll = random.nextFloat();
-        if (roll < LevelGenConstants.LEVEL_GEN_CORRUPTOR_THRESHOLD)  return '1';
-        if (roll < LevelGenConstants.LEVEL_GEN_VORTEX_EYE_THRESHOLD) return '2';
-        if (roll < LevelGenConstants.LEVEL_GEN_GHOUL_THRESHOLD)       return '3';
-        if (roll < LevelGenConstants.LEVEL_GEN_CRAWLER_THRESHOLD)     return '4';
-        return '5';
     }
 }

@@ -60,6 +60,10 @@ public final class BalanceReport {
         System.out.println();
         printEncounterTable();
         System.out.println();
+        printHazardTable();
+        System.out.println();
+        printTelegraphAudit();
+        System.out.println();
         printLegend();
     }
 
@@ -349,6 +353,90 @@ public final class BalanceReport {
     /** Enemy eHP with no dodge or flat reduction (the contract rule for current enemies). */
     private static float enemyEffectiveHitPoints(int rawHealth) {
         return GameMath.effectiveHitPoints(rawHealth, 0f, 0f, 0f, 0f);
+    }
+
+    // -----------------------------------------------------------------------------------
+    // HAZARDS (idea 4, Pillar 3) — fold terrain danger into the Threat-Point contract.
+    // A hazard tile has no HP, so its TP = damagePerTurn * careless-turns-stood * positional
+    // (GameMath.hazardTileThreatPoints). N such tiles raise a room's effective floor TP by ~N×
+    // this — that is how "a room full of fire raises its effective TP" (idea 4) is quantified.
+    // -----------------------------------------------------------------------------------
+    private static void printHazardTable() {
+        System.out.println("HAZARDS (idea 4, Pillar 3) — turnsStood=" + BalanceConfig.HAZARD_THREAT_TURNS_STOOD
+                + " (careless-player reference)");
+        System.out.printf("%-8s %10s %8s %10s %12s%n",
+                "hazard", "dmg/turn", "TP/tile", "lifetime", "TP per 6 tiles");
+        System.out.println("------------------------------------------------------------------------------------");
+
+        // Fire applies BURNING at a flat per-turn magnitude; toxic STACKS, so a careless stand of
+        // turnsStood turns averages ~turnsStood/2 stacks — model its damage/turn at that average.
+        float fireDamagePerTurn  = EffectConstants.BURN_DAMAGE_PER_TURN;
+        float toxicAverageStacks = Math.max(1f, BalanceConfig.HAZARD_THREAT_TURNS_STOOD / 2f);
+        float toxicDamagePerTurn = EffectConstants.POISON_DAMAGE_PER_STACK * toxicAverageStacks;
+
+        printHazardRow("Fire 'i'",  fireDamagePerTurn,  BalanceConfig.HAZARD_FIRE_LIFETIME_TURNS);
+        printHazardRow("Toxic 'q'", toxicDamagePerTurn, BalanceConfig.HAZARD_TOXIC_LIFETIME_TURNS);
+        System.out.println("  Hazards damage BOTH sides (player AND enemies) via BURNING/POISONED — two-sided by design.");
+    }
+
+    private static void printHazardRow(String hazardName, float damagePerTurn, int lifetimeTurns) {
+        float threatPerTile = GameMath.hazardTileThreatPoints(damagePerTurn,
+                BalanceConfig.HAZARD_THREAT_TURNS_STOOD, BalanceConfig.POSITIONAL_MULT_MELEE);
+        System.out.printf("%-8s %10.1f %8.1f %10d %12.1f%n",
+                hazardName, damagePerTurn, threatPerTile, lifetimeTurns, threatPerTile * 6f);
+    }
+
+    // -----------------------------------------------------------------------------------
+    // TELEGRAPH AUDIT (idea 4, Pillar 5) — the fairness contract.
+    // RULE: every attack that can deal > TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION of reference eHP
+    // in ONE hit MUST be telegraphed or avoidable. An UN-telegraphed attack whose depth-1 hit
+    // already exceeds the cap FAILS. "cap@" is the depth at which the attack first crosses the cap
+    // (informational): telegraphed/avoidable attacks are allowed to cross it.
+    // -----------------------------------------------------------------------------------
+    private static void printTelegraphAudit() {
+        float cap = BalanceConfig.REFERENCE_PLAYER_EHP * BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION;
+        System.out.printf("TELEGRAPH AUDIT (idea 4, Pillar 5) — cap = %.0f%% of %.0f eHP = %.0f dmg / un-telegraphed hit%n",
+                BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION * 100f,
+                BalanceConfig.REFERENCE_PLAYER_EHP, cap);
+        System.out.printf("%-22s %9s %-13s %6s %-7s%n",
+                "attack", "hit@d1", "readable?", "cap@", "verdict");
+        System.out.println("------------------------------------------------------------------------------------");
+
+        // Readable kinds: TELE = wind-up telegraph, LANE = ranged cardinal-line tell (you can see
+        // when you're in its lane), FACE = positional counter (rotate to deny it), NONE = burst.
+        printTelegraphRow("Gore Biter bite",   BalanceConfig.GORE_BITER_ATTACK_DAMAGE,  "NONE", cap);
+        printTelegraphRow("Plague Hulk smash",  BalanceConfig.PLAGUE_HULK_ATTACK_DAMAGE, "NONE", cap);
+        printTelegraphRow("Void Shroud strike", BalanceConfig.VOID_SHROUD_ATTACK_DAMAGE, "NONE", cap);
+        printTelegraphRow("Void Shroud flank",
+                Math.round(BalanceConfig.VOID_SHROUD_ATTACK_DAMAGE * BalanceConfig.VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER),
+                "FACE", cap);
+        printTelegraphRow("Shell Brute melee",  BalanceConfig.SHELL_BRUTE_ATTACK_DAMAGE, "NONE", cap);
+        printTelegraphRow("Shell Brute CHARGE",
+                Math.round(BalanceConfig.SHELL_BRUTE_ATTACK_DAMAGE * BalanceConfig.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER),
+                "TELE", cap);
+        printTelegraphRow("Iron Stalker melee", BalanceConfig.IRON_STALKER_MELEE_DAMAGE, "NONE", cap);
+        printTelegraphRow("Eye Tyrant beam",    BalanceConfig.EYE_TYRANT_ATTACK_DAMAGE,  "LANE", cap);
+        printTelegraphRow("Acid Drone spit",    BalanceConfig.ACID_DRONE_ATTACK_DAMAGE,  "LANE", cap);
+        printTelegraphRow("Mire Wraith acid",   BalanceConfig.MIRE_WRAITH_ATTACK_DAMAGE, "LANE", cap);
+        printTelegraphRow("Iron Stalker shot",  BalanceConfig.IRON_STALKER_RANGED_DAMAGE, "LANE", cap);
+        // Bosses telegraph through their BossAttackPattern phases.
+        printTelegraphRow("Overseer charge",    EnemyConstants.OVERSEER_CHARGE_DAMAGE,    "TELE", cap);
+        printTelegraphRow("Hell Baron cleave2", EnemyConstants.HELL_BARON_CLEAVE_DAMAGE_P2, "TELE", cap);
+    }
+
+    private static void printTelegraphRow(String attackName, int baseHit, String readable, float cap) {
+        boolean avoidable = !"NONE".equals(readable);
+        // Depth at which this hit first crosses the cap, scanning a generous depth range.
+        int crossingDepth = -1;
+        for (int depth = 1; depth <= 30; depth++) {
+            float hit = baseHit * GameBalance.enemyDamageScaleForDepth(depth);
+            if (hit > cap) { crossingDepth = depth; break; }
+        }
+        String crossText = (crossingDepth == -1) ? ">30" : Integer.toString(crossingDepth);
+        // FAIL only when an UN-telegraphed attack already exceeds the cap at depth 1.
+        boolean failsContract = !avoidable && baseHit > cap;
+        String verdict = failsContract ? "FAIL" : "OK";
+        System.out.printf("%-22s %9d %-13s %6s %-7s%n", attackName, baseHit, readable, crossText, verdict);
     }
 
     private static void printLegend() {

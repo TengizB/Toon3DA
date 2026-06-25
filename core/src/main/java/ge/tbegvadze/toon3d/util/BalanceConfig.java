@@ -88,10 +88,16 @@ public final class BalanceConfig {
     public static final int ACID_DRONE_RANGE_TILES         = 4;
     public static final int ACID_DRONE_MOVE_EVERY_N_TURNS  = 1;
 
-    // VOID_SHROUD (spawn '^') — fast stealth melee.
+    // VOID_SHROUD (spawn '^') — fast stealth melee FLANKER (Pillar 2).
     public static final int VOID_SHROUD_MAX_HEALTH         = 25;
     public static final int VOID_SHROUD_ATTACK_DAMAGE      = 9;
     public static final int VOID_SHROUD_MOVE_EVERY_N_TURNS = 1;
+    /**
+     * Flank strike bonus (Pillar 2): the Void Shroud prefers the tile behind the player's facing
+     * and hits HARDER from that blind side, so "rotate to face it" is the counterplay. The base
+     * 9 dmg becomes ~14 from behind — still well under the 25%-eHP telegraph cap (idea 4, Pillar 5).
+     */
+    public static final float VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER = 1.6f;
 
     // MIRE_WRAITH (spawn '5') — slow ground-based ranged acid; tanky.
     public static final int MIRE_WRAITH_MAX_HEALTH         = 38;
@@ -99,10 +105,21 @@ public final class BalanceConfig {
     public static final int MIRE_WRAITH_RANGE_TILES        = 3;
     public static final int MIRE_WRAITH_MOVE_EVERY_N_TURNS = 2;
 
-    // SHELL_BRUTE (spawn '4') — heavy charger melee.
+    // SHELL_BRUTE (spawn '4') — heavy CHARGER melee (Pillar 2).
     public static final int SHELL_BRUTE_MAX_HEALTH         = 38;
     public static final int SHELL_BRUTE_ATTACK_DAMAGE      = 13;
     public static final int SHELL_BRUTE_MOVE_EVERY_N_TURNS = 1;
+    /**
+     * Charge rush damage multiplier (Pillar 2). After a one-turn telegraphed wind-up the brute
+     * rushes down a cardinal lane; if it connects it hits for base * this. 13 * 2.4 ≈ 31 dmg —
+     * a meaty, READABLE hit. It is telegraphed, so it is allowed to exceed the 25%-eHP cap that
+     * un-telegraphed attacks must respect (idea 4, Pillar 5). Sidestep it to make the rush whiff.
+     */
+    public static final float SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER = 2.4f;
+    /** Nearest cardinal-lane gap (tiles) that opens a charge; closer than this it just melees. Range: 2–3. */
+    public static final int   SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES = 2;
+    /** Farthest cardinal-lane gap (tiles) the brute will start a charge from (<= LOS). Range: 3–6. */
+    public static final int   SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES = 5;
 
     // PLAGUE_HULK (spawn '1') — slow tank melee.
     public static final int PLAGUE_HULK_MAX_HEALTH         = 50;
@@ -587,4 +604,63 @@ public final class BalanceConfig {
     public static final float ENCOUNTER_ELITE_ANCHOR_FLOOR_CHANCE = 0.15f;
     /** Earliest depth an elite-gauntlet floor may appear, so floor 1 is never a mini-elite spike. Range: 2–5. */
     public static final int   ENCOUNTER_ELITE_ANCHOR_MIN_DEPTH    = 3;
+
+    // =====================================================================================
+    // SECTION 12 — TERRAIN HAZARDS (idea 4, Pillar 3) — the two-sided chain-reaction system
+    // Fire and toxic floor tiles tick damage onto ANY host standing on them — player AND
+    // enemies — by applying the existing BURNING / POISONED status effects (SECTION on status
+    // effects in EffectConstants owns the per-turn magnitudes). Fire spreads along spreadable
+    // floor/stain tiles and chain-detonates explosive barrels; toxic is a static area-denial
+    // pool. Hazards MUST hurt the player too (idea 4 balance note) — that two-sidedness is the
+    // whole tactic: a hazard can win the fight for you OR kill you if you misposition.
+    // The HazardManager drives the simulation; HazardTickSubscriber ticks it once per turn.
+    // =====================================================================================
+
+    /** Turns a fire tile burns before dying out (each turn it tries to spread). Range: 2–6. */
+    public static final int   HAZARD_FIRE_LIFETIME_TURNS   = 4;
+    /** Turns a toxic pool lingers before dissipating. Range: 3–8. */
+    public static final int   HAZARD_TOXIC_LIFETIME_TURNS  = 6;
+
+    /**
+     * BURNING duration (turns) a fire tile applies to a host on it each turn. Short: standing in
+     * fire re-applies (REFRESH_DURATION) so it persists, but leaving stops the burn quickly so
+     * the player can escape — the counterplay. Damage/turn = EffectConstants.BURN_DAMAGE_PER_TURN.
+     */
+    public static final int   HAZARD_FIRE_BURN_TURNS       = 2;
+    /**
+     * POISONED duration (turns) a toxic pool applies each turn. Toxic STACKS (STACK_MAGNITUDE), so
+     * standing in it escalates — area denial. Damage/turn = stacks * EffectConstants.POISON_DAMAGE_PER_STACK.
+     */
+    public static final int   HAZARD_TOXIC_POISON_TURNS    = 3;
+
+    /** Per-turn chance a fire tile spreads to ONE eligible cardinal-neighbour floor/stain tile. Range: 0.1–0.6. */
+    public static final float HAZARD_FIRE_SPREAD_CHANCE    = 0.35f;
+    /** Per-turn chance a toxic pool creeps to ONE eligible neighbour (low — pools are area denial). Range: 0.0–0.25. */
+    public static final float HAZARD_TOXIC_SPREAD_CHANCE   = 0.10f;
+
+    /** Chance a detonating explosive barrel ignites fire on each eligible non-wall neighbour (explosive→fire chain). Range: 0.0–1.0. */
+    public static final float HAZARD_EXPLOSION_IGNITE_CHANCE = 0.50f;
+
+    /** Cardinal radius of the toxic cloud a Plague Hulk leaves where it dies (0 = its tile only). Range: 0–2. */
+    public static final int   HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS = 1;
+
+    /**
+     * Turns a careless player is assumed to stand in one hazard tile, used ONLY by
+     * GameMath.hazardTileThreatPoints to fold hazard danger into the Threat-Point contract
+     * (a hazard room raises its effective floor TP — idea 4, Pillar 3). A skilled player leaves
+     * sooner; this is the "you mispositioned" reference, not the spread lifetime. Range: 1–3.
+     */
+    public static final int   HAZARD_THREAT_TURNS_STOOD    = 2;
+
+    // =====================================================================================
+    // SECTION 13 — TELEGRAPH & COUNTERPLAY (idea 4, Pillar 5) — fairness contract
+    // A turn-based game is only tactical if big threats are READABLE before they land. The rule:
+    // every attack that can deal more than this fraction of the reference player's eHP in ONE hit
+    // MUST be telegraphed (a wind-up the player can react to) or otherwise avoidable. Burst damage
+    // without warning is banned — a death must feel like "I made a mistake", not a dice roll.
+    // BalanceReport's TELEGRAPH AUDIT checks every attack against this cap.
+    // =====================================================================================
+
+    /** Max fraction of reference eHP an UN-telegraphed single hit may deal (~51 HP of 205). Range: 0.20–0.30. */
+    public static final float TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION = 0.25f;
 }

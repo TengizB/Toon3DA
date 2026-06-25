@@ -80,6 +80,15 @@ s   Blood stain (alt)   Variant blood decal.                                   0
 .   Blood stain         Pooled blood. Near corpses and combat zones.           0.18x wall height
 O   Oil/fluid pool      Coolant spill or fluid leak. Dark teal iridescent.     0.18x wall height
 e   Energy scorch       Plasma burn with residual electric-arc filaments.       0.18x wall height
+i   Fire hazard         Burning floor (idea 4, Pillar 3). DYNAMIC — spawned/spread/expired at
+                        runtime by HazardManager; ticks BURNING on any host standing on it
+                        (player AND enemies), spreads along spreadable floor/stain tiles, and
+                        chain-detonates explosive barrels. May also be hand-placed in a level
+                        file to seed a fire room. Walkable. 0.30x wall height.
+q   Toxic hazard        Acid/toxic pool (idea 4, Pillar 3). DYNAMIC — area-denial pool that
+                        ticks POISONED on any host standing on it; a Plague Hulk leaves one
+                        where it dies. Creeps slowly; may be hand-placed to seed a toxic room.
+                        Walkable. 0.16x wall height.
 
 PICKUPS (walkable; collected on player step)
 -------------------------------------------
@@ -113,13 +122,13 @@ n   Boss spawn (depth-keyed)  Replaced at load time with floor ' '; BossFloorCon
 SYMBOL BUDGET
 -------------
 Total printable ASCII characters: 95  (codes 32-126)
-Currently assigned:               68
-Remaining:                        27
+Currently assigned:               70
+Remaining:                        25
 
 Free characters (not yet assigned):
 " _ ` ~ | { } [ ] \ / < > ( ) * - + (some already used — check above)
 Uppercase: K V  (D F I J W taken; Z taken as cryo; check walls/doors above)
-Lowercase: i o q z  (e j n taken)
+Lowercase: o z  (e i j n q taken — 'i' fire hazard, 'q' toxic hazard)
 
 PREFERRED SYMBOLS FOR NEW ADDITIONS
 ------------------------------------

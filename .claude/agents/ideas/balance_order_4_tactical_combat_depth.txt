@@ -1,9 +1,39 @@
-STATUS: IN PROGRESS (Pillar 1 + role/verb taxonomy done; Pillars 2-hooks/3/5 deferred — split per design)
+STATUS: IMPLEMENTED (all four Definition-of-Done items pass; built across two PRs)
 CATEGORY: Systems
 TITLE: Tactical Combat Depth — make fights positioning puzzles, not damage races
 ---
 
 === IMPLEMENTATION LOG (this is a 5-pillar epic; intentionally split into PRs) ===
+
+DONE (PR 2 — mechanical verb hooks + hazard system + telegraph audit):
+  - Pillar 2 (mechanical hooks) — EnemyManager AI now ENFORCES the melee verbs:
+      * SHELL_BRUTE CHARGER: telegraphed one-turn wind-up (EnemyState.WINDING_UP) then a
+        rush down a committed cardinal lane; connects for base * charge-multiplier, whiffs
+        (and leaves a punishable recovery) if the player sidesteps. canBeginCharge/performCharge.
+      * VOID_SHROUD FLANKER: paths to the tile behind the player's facing and hits harder from
+        that blind side (isBehindPlayerFacing / stepTowardTile).
+      * PLAGUE_HULK AREA DENIAL: leaves a toxic death cloud (EnemyDeathHazardListener ->
+        HazardManager.spawnToxicCloud). The ranged archetypes' verbs (sniper/harasser/artillery)
+        were already enforced by the existing cardinal-line + kiting + poison-DOT AI.
+  - Pillar 3 — finished the hazard chain-reaction system (hazard/HazardManager, ticked by
+    world/HazardTickSubscriber before the status tick). New walkable tiles 'i' (fire) and 'q'
+    (toxic) tick BURNING/POISONED onto ANY host — player AND enemies (two-sided). Fire spreads
+    and chain-detonates explosive barrels; a detonation can ignite fire back onto neighbours.
+    GameMath.hazardTileThreatPoints folds hazard danger into the TP contract (BalanceReport
+    HAZARDS section); knobs in BalanceConfig SECTION 12. Full strict tile-symbol-rule wiring.
+  - Pillar 5 — telegraph audit. BalanceConfig SECTION 13 caps un-telegraphed single hits at 25%
+    of reference eHP (~51); BalanceReport TELEGRAPH AUDIT verifies every attack passes (the only
+    big hits — Shell Brute charge, boss slams — are telegraphed; ranged attacks tell via the
+    cardinal lane). No attack FAILS.
+  - Pillar 4 (partial) — extended the encounter budget to LinearCorridorGenerator and
+    CavernGenerator (both override generate(int depth), reuse EncounterBudgetPlanner). Further
+    generator positioning incentives (extra cover/chokepoint placement) remain optional polish;
+    the flanker hook already makes facing/rotation matter.
+
+  PLAYTESTING NOTE: the charge multiplier (2.4×), flank multiplier (1.6×), hazard spread/lifetime
+  and toxic-cloud radius are first-pass values tuned to the contract (all in BalanceConfig
+  SECTIONS for enemies/12/13) — they want live playtesting to confirm the wind-up is readable and
+  the hazards feel two-sided rather than punishing.
 
 DONE (PR 1 — encounter budget + role/verb taxonomy):
   - Pillar 1 — THE ENCOUNTER BUDGET. LevelGenerator now spends a per-depth Threat-Point
@@ -21,13 +51,11 @@ DONE (PR 1 — encounter budget + role/verb taxonomy):
     attackCadenceTurns(), spawnChar(), tacticalVerb(), baseThreatPoints(). Each archetype now
     has a documented one-sentence VERB (docs/enemy-system.txt) distinct from the others.
 
-DEFERRED (follow-up PRs):
-  - Pillar 2 (mechanical hooks) — charger wind-up telegraph, flanker behind-attack preference,
-    on-death hazard tiles. These are real EnemyManager AI changes that want playtesting.
-  - Pillar 3 — finish the half-built hazard chain-reaction system (fire/toxic/explosive) so it
-    damages both sides and counts toward the threat math. Biggest single follow-up.
-  - Pillar 4 — generator positioning incentives beyond what already exists (columns/chokepoints).
-  - Pillar 5 — telegraph/counterplay audit: no un-telegraphed attack > 25% of player eHP.
+REMAINING (optional polish, not blocking Definition-of-Done):
+  - Pillar 4 — extra generator positioning incentives (deliberate cover/chokepoint placement
+    in open rooms) beyond the existing column/chokepoint generation. The encounter budget now
+    runs in all three generators and the flanker hook already makes facing matter, so this is
+    flavour polish rather than a missing mechanic.
 
 Idea 4 of 6 in the balance series (see balance_order_1 for the full list).
 Depends on ideas 1 & 2; co-developed with idea 3 (it owns the floor TP budget

@@ -244,8 +244,38 @@ Composition rules the planner enforces (BalanceConfig SECTION 11 knobs):
 Verify the planned roster per depth with BalanceReport (the ENCOUNTER BUDGET section), the same
 dev-only auditor that prints the weapon/enemy/scarcity living tables.
 
-NOTE — scope of idea 4 in this implementation: Pillar 1 (encounter budget) and the role/verb
-taxonomy above are implemented. The per-enemy AI hooks that MECHANICALLY enforce each verb
-(charger wind-up telegraph, flanker behind-attack preference, on-death hazard tiles), the hazard
-chain-reaction finish (Pillar 3), and the >25%-eHP telegraph audit (Pillar 5) are deferred to
-follow-up PRs — see .claude/agents/ideas/balance_order_4_tactical_combat_depth.txt.
+MECHANICAL VERB HOOKS (Pillar 2) — the AI in EnemyManager now ENFORCES three of the verbs above,
+not just labels them. actEnemy() branches melee archetypes to dedicated handlers:
+
+  - SHELL_BRUTE — CHARGER (actChargerEnemy / canBeginCharge / performCharge). When a clear,
+    unobstructed cardinal lane to the player opens within
+    SHELL_BRUTE_CHARGE_TRIGGER_MIN..MAX_TILES, the brute spends ONE telegraphed wind-up turn
+    (EnemyState.WINDING_UP, triggerTelegraph(), no movement) so the player can read it. The next
+    turn it rushes straight down the committed lane (chargeDirectionColumn/Row) and, if it ends
+    cardinally adjacent, hits for base * SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER. If the player
+    sidestepped off the lane the rush whiffs and the brute is left in a punishable recovery
+    (skipNextAction). Counterplay: "sidestep the charge, then punish."
+  - VOID_SHROUD — FLANKER (actFlankerEnemy / isBehindPlayerFacing / stepTowardTile). When not
+    adjacent it paths toward the tile directly behind the player's facing rather than toward the
+    player; when it strikes from that blind side it deals base * VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER.
+    Counterplay: "rotate to face it / keep your back covered."
+  - PLAGUE_HULK — AREA DENIAL. On death (EnemyManager.EnemyDeathHazardListener, wired in World) it
+    leaves a lingering toxic cloud (HazardManager.spawnToxicCloud, radius
+    HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS). Counterplay: "kill at range — don't melee into its cloud."
+
+All hooks respect the cardinal-line constraint; the charge only fires down a true cardinal lane.
+
+TERRAIN HAZARDS (Pillar 3) — HazardManager (hazard pkg) owns a two-sided fire/toxic chain-reaction
+system, ticked once per turn by HazardTickSubscriber (before the status tick so a tile bites the
+same turn you stand in it). Tiles 'i' (fire) and 'q' (toxic) apply the existing BURNING/POISONED
+status to ANY host on them — player AND enemies. Fire spreads along spreadable floor/stain tiles
+and chain-detonates explosive barrels (and a detonation can ignite fire back onto its neighbours);
+toxic is a static area-denial pool. Knobs in BalanceConfig SECTION 12; per-tile Threat-Point cost
+(GameMath.hazardTileThreatPoints) is printed by BalanceReport's HAZARDS section so a hazard room's
+contribution to the floor TP is auditable.
+
+TELEGRAPH AUDIT (Pillar 5) — BalanceReport's TELEGRAPH AUDIT section checks every attack against
+TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION (25% of reference eHP ≈ 51 dmg): no UN-telegraphed attack
+may exceed it. The only big single hits (Shell Brute charge, boss slams) are telegraphed wind-ups;
+ranged attacks are "telegraphed" by the cardinal-line tell. See
+.claude/agents/ideas/balance_order_4_tactical_combat_depth.txt.

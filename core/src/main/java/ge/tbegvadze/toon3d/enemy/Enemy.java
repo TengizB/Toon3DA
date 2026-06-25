@@ -64,6 +64,17 @@ public class Enemy implements StatusHost {
     /** Set by StatusEffectController when STUNNED ticks; cleared and acted on by EnemyManager.phaseB(). */
     public boolean skipNextAction = false;
 
+    /**
+     * Charger wind-up counter (Pillar 2, Shell Brute). 0 = not charging; > 0 = telegraphing a
+     * rush this many turns before it lands. EnemyManager begins the wind-up when a charge lane
+     * opens, holds position for one readable turn, then rushes. Lets the player sidestep.
+     */
+    public int chargeWindUpTurns = 0;
+
+    /** Committed cardinal rush direction captured when the charger begins its wind-up (Pillar 2). */
+    public int chargeDirectionColumn = 0;
+    public int chargeDirectionRow    = 0;
+
     // Status effect storage — pre-allocated at construction, never replaced
     private final EnumMap<StatusType, StatusEffect> activeEffects;
     private StatusResistance statusResistance = StatusResistance.defaultResistance();
@@ -148,6 +159,14 @@ public class Enemy implements StatusHost {
     public void triggerAttackAnim() {
         attackAnimTimerSeconds = EffectConstants.ENEMY_ATTACK_ANIM_DURATION_SECONDS;
         telegraphTimerSeconds  = EffectConstants.ENEMY_TELEGRAPH_DURATION_SECONDS;
+    }
+
+    /**
+     * Triggers the pre-hit telegraph pulse WITHOUT the attack/lunge animation. Used for the
+     * charger wind-up (Pillar 2): a readable rim flash on the turn before the rush lands.
+     */
+    public void triggerTelegraph() {
+        telegraphTimerSeconds = EffectConstants.ENEMY_TELEGRAPH_DURATION_SECONDS;
     }
 
     /** Advances both attack animation and telegraph timers by deltaTime, clamping at zero. */
