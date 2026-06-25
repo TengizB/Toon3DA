@@ -577,12 +577,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     startRoomMeleeGroundItems    = null;
                     playerProgress.setFloorDepth(currentDepth);
                     runStats.recordFloor(currentDepth);
-                    rebuildForLevel(pickLevelGenerator(currentDepth, floorSeed(runSeed, currentDepth)).generate());
+                    rebuildForLevel(pickLevelGenerator(currentDepth, floorSeed(runSeed, currentDepth)).generate(currentDepth));
                 } else {
                     currentDepth++;
                     playerProgress.setFloorDepth(currentDepth);
                     runStats.recordFloor(currentDepth);
-                    rebuildForLevel(pickLevelGenerator(currentDepth, floorSeed(runSeed, currentDepth)).generate());
+                    rebuildForLevel(pickLevelGenerator(currentDepth, floorSeed(runSeed, currentDepth)).generate(currentDepth));
                 }
                 fadeTimerSeconds = 0f;
                 runPhase = RunPhase.FADING_IN;

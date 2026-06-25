@@ -12,4 +12,14 @@ package ge.tbegvadze.toon3d.level;
  */
 public interface ILevelGenerator {
     Level generate();
+
+    /**
+     * Generates a level for a specific dungeon depth (1-based floor number). Depth-aware
+     * generators (e.g. {@link LevelGenerator}, which spends a per-depth encounter Threat-Point
+     * budget — balance idea 4) override this; the default ignores depth and falls back to
+     * {@link #generate()} so depth-agnostic generators need no change.
+     */
+    default Level generate(int dungeonDepth) {
+        return generate();
+    }
 }

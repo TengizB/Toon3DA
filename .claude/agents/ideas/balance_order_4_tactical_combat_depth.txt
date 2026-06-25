@@ -1,7 +1,33 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS (Pillar 1 + role/verb taxonomy done; Pillars 2-hooks/3/5 deferred — split per design)
 CATEGORY: Systems
 TITLE: Tactical Combat Depth — make fights positioning puzzles, not damage races
 ---
+
+=== IMPLEMENTATION LOG (this is a 5-pillar epic; intentionally split into PRs) ===
+
+DONE (PR 1 — encounter budget + role/verb taxonomy):
+  - Pillar 1 — THE ENCOUNTER BUDGET. LevelGenerator now spends a per-depth Threat-Point
+    budget instead of rolling enemies at random:
+      * GameMath.floorThreatPointBudget(depth) and GameMath.enemyThreatAtDepth (pure formulas).
+      * BalanceConfig SECTION 11 — base budget + anchor/per-type/per-room/elite knobs.
+      * EncounterBudgetPlanner (level pkg) — pure planner enforcing the composition rules:
+        one anchor (15-30%), no type > 40%, ranged+melee mix; rare depth-gated elite gauntlet.
+      * LevelGenerator.placeBudgetedEncounter — distributes the roster deepest-first, anchor in
+        the farthest room (exempt from the per-room cap), fill under the per-room cap.
+      * ILevelGenerator.generate(int depth) (default delegates) + World passes currentDepth.
+      * Verified by BalanceReport's new ENCOUNTER BUDGET section (count stays ~11-13 across
+        depth; budget scales 120->309; all composition rules pass).
+  - Pillar 2 (taxonomy half) — every EnemyType carries role(), positionalMultiplier(),
+    attackCadenceTurns(), spawnChar(), tacticalVerb(), baseThreatPoints(). Each archetype now
+    has a documented one-sentence VERB (docs/enemy-system.txt) distinct from the others.
+
+DEFERRED (follow-up PRs):
+  - Pillar 2 (mechanical hooks) — charger wind-up telegraph, flanker behind-attack preference,
+    on-death hazard tiles. These are real EnemyManager AI changes that want playtesting.
+  - Pillar 3 — finish the half-built hazard chain-reaction system (fire/toxic/explosive) so it
+    damages both sides and counts toward the threat math. Biggest single follow-up.
+  - Pillar 4 — generator positioning incentives beyond what already exists (columns/chokepoints).
+  - Pillar 5 — telegraph/counterplay audit: no un-telegraphed attack > 25% of player eHP.
 
 Idea 4 of 6 in the balance series (see balance_order_1 for the full list).
 Depends on ideas 1 & 2; co-developed with idea 3 (it owns the floor TP budget

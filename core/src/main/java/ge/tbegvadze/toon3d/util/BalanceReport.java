@@ -58,6 +58,8 @@ public final class BalanceReport {
         System.out.println();
         printScarcityTable();
         System.out.println();
+        printEncounterTable();
+        System.out.println();
         printLegend();
     }
 
@@ -176,6 +178,64 @@ public final class BalanceReport {
             return "OK";
         }
         return value < bandMinimum ? "UNDER" : "OVER";
+    }
+
+    // -----------------------------------------------------------------------------------
+    // ENCOUNTER BUDGET — the floor TP budget and the planned roster's composition (idea 4).
+    // Plans a roster per depth via EncounterBudgetPlanner and checks idea 4's rules:
+    //   anchor present, no single TYPE over the per-type cap, both ranged AND melee present.
+    // Uses a fixed seed so the report is reproducible run-to-run.
+    // -----------------------------------------------------------------------------------
+    private static void printEncounterTable() {
+        System.out.println("ENCOUNTER BUDGET (idea 4) — base budget = "
+                + String.format("%.0f", BalanceConfig.FLOOR_BASE_THREAT_POINT_BUDGET) + " TP at depth 1");
+        System.out.printf("%-6s %8s %8s %6s %-14s %-9s %-7s %-7s%n",
+                "depth", "budget", "spent", "count", "anchor", "maxType%", "mix?", "rules?");
+        System.out.println("------------------------------------------------------------------------------------");
+        int[] depths = {1, 2, 3, 5, 8};
+        for (int depth : depths) {
+            printEncounterRow(depth);
+        }
+    }
+
+    private static void printEncounterRow(int depth) {
+        // Deterministic seed per depth so the audit is stable.
+        ge.tbegvadze.toon3d.level.EncounterBudgetPlanner planner =
+                new ge.tbegvadze.toon3d.level.EncounterBudgetPlanner(depth, new java.util.Random(1234L + depth));
+        ge.tbegvadze.toon3d.level.EncounterBudgetPlanner.Plan plan = planner.plan();
+
+        java.util.List<ge.tbegvadze.toon3d.enemy.EnemyType> roster = plan.enemies();
+
+        // Largest single-type TP fraction of budget.
+        java.util.EnumMap<ge.tbegvadze.toon3d.enemy.EnemyType, Float> byType =
+                new java.util.EnumMap<>(ge.tbegvadze.toon3d.enemy.EnemyType.class);
+        boolean hasRanged = false;
+        boolean hasMelee  = false;
+        for (ge.tbegvadze.toon3d.enemy.EnemyType type : roster) {
+            byType.merge(type, plan.threatOf(type), Float::sum);
+            if (type.isRanged()) hasRanged = true; else hasMelee = true;
+        }
+        float maxTypeFraction        = 0f;   // informational: largest single-type share
+        float maxFillTypeFraction    = 0f;    // cap check: largest NON-anchor type share
+        for (java.util.Map.Entry<ge.tbegvadze.toon3d.enemy.EnemyType, Float> entry : byType.entrySet()) {
+            float fraction = entry.getValue() / plan.floorBudget();
+            maxTypeFraction = Math.max(maxTypeFraction, fraction);
+            if (entry.getKey() != plan.anchor()) {
+                maxFillTypeFraction = Math.max(maxFillTypeFraction, fraction);
+            }
+        }
+
+        boolean anchorOk = plan.anchor() != null;
+        // Anchor is exempt from the per-type cap; fill types must respect it.
+        boolean typeOk   = maxFillTypeFraction <= BalanceConfig.ENCOUNTER_MAX_SINGLE_TYPE_FRACTION + 0.001f;
+        boolean mixOk    = hasRanged && hasMelee;
+        boolean allRules = anchorOk && typeOk && mixOk;
+
+        String anchorName = plan.anchor() == null ? "(none)" : plan.anchor().displayName();
+        System.out.printf("%-6d %8.0f %8.0f %6d %-14s %-9.0f %-7s %-7s%n",
+                depth, plan.floorBudget(), plan.spentThreatPoints(), roster.size(),
+                anchorName, maxTypeFraction * 100f,
+                mixOk ? "OK" : "NO", allRules ? "OK" : "CHECK");
     }
 
     // -----------------------------------------------------------------------------------

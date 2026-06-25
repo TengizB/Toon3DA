@@ -1,7 +1,9 @@
 package ge.tbegvadze.toon3d.enemy;
 
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
 import ge.tbegvadze.toon3d.util.GameBalance;
+import ge.tbegvadze.toon3d.util.GameMath;
 
 /** Per-type configuration for each enemy archetype. Values drawn from Constants and GameBalance. */
 public enum EnemyType {
@@ -16,6 +18,11 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_PLAGUE_HULK; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_PLAGUE_HULK; }
         @Override public String displayName()        { return "Plague Hulk"; }
+        @Override public EnemyRole role()            { return EnemyRole.SOLDIER; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
+        @Override public int    attackCadenceTurns() { return EnemyConstants.PLAGUE_HULK_MOVE_EVERY_N_TURNS; }
+        @Override public char   spawnChar()          { return '1'; }
+        @Override public String tacticalVerb()       { return "TANK: kill at range — don't grind it down in melee."; }
     },
 
     EYE_TYRANT {
@@ -28,6 +35,11 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_EYE_TYRANT; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_EYE_TYRANT; }
         @Override public String displayName()        { return "Eye Tyrant"; }
+        @Override public EnemyRole role()            { return EnemyRole.CHAFF; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
+        @Override public int    attackCadenceTurns() { return 1; }
+        @Override public char   spawnChar()          { return '2'; }
+        @Override public String tacticalVerb()       { return "SNIPER: break its line — step off its row or column to deny the shot."; }
     },
 
     GORE_BITER {
@@ -40,6 +52,11 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_GORE_BITER; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_GORE_BITER; }
         @Override public String displayName()        { return "Gore Biter"; }
+        @Override public EnemyRole role()            { return EnemyRole.CHAFF; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_FAST_MELEE; }
+        @Override public int    attackCadenceTurns() { return 1; }
+        @Override public char   spawnChar()          { return '3'; }
+        @Override public String tacticalVerb()       { return "SWARMER: don't get surrounded — funnel the pack into a chokepoint."; }
     },
 
     SHELL_BRUTE {
@@ -52,6 +69,11 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_SHELL_BRUTE; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_SHELL_BRUTE; }
         @Override public String displayName()        { return "Shell Brute"; }
+        @Override public EnemyRole role()            { return EnemyRole.BRUISER; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
+        @Override public int    attackCadenceTurns() { return 1; }
+        @Override public char   spawnChar()          { return '4'; }
+        @Override public String tacticalVerb()       { return "CHARGER: sidestep its charge, then punish the recovery."; }
     },
 
     MIRE_WRAITH {
@@ -64,6 +86,11 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_MIRE_WRAITH; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_MIRE_WRAITH; }
         @Override public String displayName()        { return "Mire Wraith"; }
+        @Override public EnemyRole role()            { return EnemyRole.SOLDIER; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
+        @Override public int    attackCadenceTurns() { return 1; }
+        @Override public char   spawnChar()          { return '5'; }
+        @Override public String tacticalVerb()       { return "ARTILLERY: prioritise it — don't let its acid DOT stack."; }
     },
 
     IRON_STALKER {
@@ -76,6 +103,11 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_IRON_STALKER; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_IRON_STALKER; }
         @Override public String displayName()        { return "Iron Stalker"; }
+        @Override public EnemyRole role()            { return EnemyRole.MINI_ELITE; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_FAST_MELEE; }
+        @Override public int    attackCadenceTurns() { return 1; }
+        @Override public char   spawnChar()          { return '!'; }
+        @Override public String tacticalVerb()       { return "MINI-ELITE: commit resources or avoid — a deliberate mid-floor spike."; }
     },
 
     ACID_DRONE {
@@ -88,6 +120,11 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_ACID_DRONE; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_ACID_DRONE; }
         @Override public String displayName()        { return "Acid Drone"; }
+        @Override public EnemyRole role()            { return EnemyRole.SOLDIER; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
+        @Override public int    attackCadenceTurns() { return 1; }
+        @Override public char   spawnChar()          { return '$'; }
+        @Override public String tacticalVerb()       { return "HARASSER: corner it — cut off its kite path with level geometry."; }
     },
 
     VOID_SHROUD {
@@ -100,6 +137,11 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_VOID_SHROUD; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_VOID_SHROUD; }
         @Override public String displayName()        { return "Void Shroud"; }
+        @Override public EnemyRole role()            { return EnemyRole.SOLDIER; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_FAST_MELEE; }
+        @Override public int    attackCadenceTurns() { return 1; }
+        @Override public char   spawnChar()          { return '^'; }
+        @Override public String tacticalVerb()       { return "FLANKER: keep your back covered — rotate to face it before it hits your blind side."; }
     },
 
     // -------------------------------------------------------------------------
@@ -118,6 +160,11 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_BOSS_BASE; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_BOSS_BASE; }
         @Override public String displayName()        { return "The Overseer"; }
+        @Override public EnemyRole role()            { return EnemyRole.BOSS; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
+        @Override public int    attackCadenceTurns() { return 1; }
+        @Override public char   spawnChar()          { return 'n'; }
+        @Override public String tacticalVerb()       { return "BOSS: learn its attack pattern — telegraphed phases."; }
     },
 
     CORRUPTOR {
@@ -130,6 +177,11 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_BOSS_BASE; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_BOSS_BASE; }
         @Override public String displayName()        { return "The Corruptor"; }
+        @Override public EnemyRole role()            { return EnemyRole.BOSS; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
+        @Override public int    attackCadenceTurns() { return 1; }
+        @Override public char   spawnChar()          { return 'n'; }
+        @Override public String tacticalVerb()       { return "BOSS: learn its attack pattern — telegraphed phases."; }
     },
 
     HELL_BARON {
@@ -142,6 +194,11 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_BOSS_BASE; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_BOSS_BASE; }
         @Override public String displayName()        { return "Hell Baron"; }
+        @Override public EnemyRole role()            { return EnemyRole.BOSS; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
+        @Override public int    attackCadenceTurns() { return 1; }
+        @Override public char   spawnChar()          { return 'n'; }
+        @Override public String tacticalVerb()       { return "BOSS: learn its attack pattern — telegraphed phases."; }
     };
 
     public abstract int     maxHealth();
@@ -156,4 +213,40 @@ public enum EnemyType {
     public abstract int     baseCreditReward();
     /** Human-readable name shown in HUD name tags (e.g. "Plague Hulk LVL 2") and kill messages. */
     public abstract String  displayName();
+
+    // -------------------------------------------------------------------------
+    // Tactical metadata (balance idea 4 — Tactical Combat Depth)
+    // role() / positionalMultiplier() / attackCadenceTurns() feed the Threat-Point
+    // formula and the encounter-budget planner (EncounterBudgetPlanner). spawnChar()
+    // is the level-file/spawn-point character LevelLoader maps back to this type.
+    // tacticalVerb() documents the one-sentence reason the player must fight this
+    // archetype DIFFERENTLY — the design rule that a new enemy is not approved until
+    // it has a distinct verb. See docs/enemy-system.txt.
+    // -------------------------------------------------------------------------
+
+    /** The encounter role (chaff / soldier / bruiser / mini-elite / boss) this archetype fills. */
+    public abstract EnemyRole role();
+    /**
+     * Designer positional multiplier for the Threat-Point formula
+     * (1.00 melee, 1.15 fast-melee, 1.30 ranged). NOT auto-derived; see
+     * GameMath.threatPoints and BalanceConfig.POSITIONAL_MULT_*.
+     */
+    public abstract float   positionalMultiplier();
+    /** Turns between this archetype's attacks (the cadence term of its Threat-Point value). */
+    public abstract int     attackCadenceTurns();
+    /** Spawn-point character this archetype is created from (LevelLoader / EnemyManager mapping). */
+    public abstract char    spawnChar();
+    /** One-sentence tactical VERB: the reason the player must fight this archetype differently. */
+    public abstract String  tacticalVerb();
+
+    /**
+     * This archetype's depth-1 Threat-Point value — the "danger number" the encounter budget
+     * spends. Computed from its own stats via the balance contract's Threat-Point primitive
+     * (GameMath.threatPoints). Enemies carry no armour/dodge, so effective HP == raw HP.
+     * Scale to a given floor with GameMath.enemyThreatAtDepth.
+     */
+    public float baseThreatPoints() {
+        return GameMath.threatPoints(attackDamage(), attackCadenceTurns(),
+                maxHealth(), BalanceConfig.REFERENCE_PLAYER_DPT, positionalMultiplier());
+    }
 }
