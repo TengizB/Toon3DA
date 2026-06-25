@@ -26,10 +26,16 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
     private static final int[] BLAST_STEP_COLUMNS = { 0,  1, -1,  0,  0 };
     private static final int[] BLAST_STEP_ROWS    = { 0,  0,  0,  1, -1 };
 
+    /** Notified when a barrel detonates so the hazard system can chain fire onto its neighbours. */
+    public interface BarrelDetonationListener {
+        void onBarrelDetonated(int tileColumn, int tileRow);
+    }
+
     private final Level               level;
     private final EnemyHitTarget      enemyHitTarget;
     private final Player              player;
     private       ImpactEventListener impactEventListener = null;
+    private       BarrelDetonationListener detonationListener = null;
 
     // Pre-allocated BFS chain queue — never reallocated after construction.
     private final int[] chainColumns;
@@ -46,6 +52,11 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
 
     public void setImpactEventListener(ImpactEventListener listener) {
         this.impactEventListener = listener;
+    }
+
+    /** Wires the hazard system so a detonation can chain fire onto the barrel's neighbours. */
+    public void setDetonationListener(BarrelDetonationListener listener) {
+        this.detonationListener = listener;
     }
 
     @Override
@@ -69,6 +80,11 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
         if (barrelCell != 'E' && barrelCell != 'g') return;
         // Remove the barrel first — prevents re-queuing the same tile as a chain target.
         level.setCell(tileColumn, tileRow, ' ');
+
+        // Chain fire onto the barrel's neighbours (explosive → fire) if a hazard system is wired.
+        if (detonationListener != null) {
+            detonationListener.onBarrelDetonated(tileColumn, tileRow);
+        }
 
         // Trigger explosion visual effect at the barrel's world-space centre.
         if (impactEventListener != null) {

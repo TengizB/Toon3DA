@@ -44,6 +44,14 @@ public final class EnemyManager implements EnemyHitTarget {
         void onDropPlaced(int tileColumn, int tileRow, char dropChar);
     }
 
+    /**
+     * Notified when an enemy dies so area-denial archetypes can leave a hazard behind
+     * (balance idea 4, Pillar 2/3 — the Plague Hulk's toxic death cloud).
+     */
+    public interface EnemyDeathHazardListener {
+        void onEnemyDied(EnemyType type, int tileColumn, int tileRow);
+    }
+
     private final List<Enemy> enemies;
     private final Level       level;
     private final DoorManager doorManager;
@@ -52,6 +60,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private KillEventListener   killEventListener;
     private KillCreditListener  killCreditListener;
     private DropPlacedListener  dropPlacedListener;
+    private EnemyDeathHazardListener enemyDeathHazardListener;
     private EnemyAttackListener enemyAttackListener;
 
     /** Flat damage bonus from player level-up DAMAGE_BOOST choices; added to every hit. */
@@ -237,6 +246,11 @@ public final class EnemyManager implements EnemyHitTarget {
     /** Notified when a drop tile is stamped on the grid so renderers can display it immediately. */
     public void setDropPlacedListener(DropPlacedListener listener) {
         this.dropPlacedListener = listener;
+    }
+
+    /** Wires the area-denial death hook so e.g. a Plague Hulk leaves a toxic cloud where it dies. */
+    public void setEnemyDeathHazardListener(EnemyDeathHazardListener listener) {
+        this.enemyDeathHazardListener = listener;
     }
 
     /** Injects the attack effect listener so enemy attacks spawn projectile/lunge visuals. */
@@ -458,24 +472,170 @@ public final class EnemyManager implements EnemyHitTarget {
                 enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
 
         if (!enemy.type.isRanged()) {
-            // Melee — attack only when player is in an adjacent cardinal tile (no diagonal)
-            boolean cardinalAdjacent = GameMath.manhattanDistanceTiles(
-                    enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
-            if (cardinalAdjacent) {
-                player.applyDamage(enemy.scaledAttackDamage());
-                enemy.state = EnemyState.ATTACKING;
-                enemy.triggerAttackAnim();
-                if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
+            // Melee archetypes branch to their tactical VERB (balance idea 4, Pillar 2):
+            //   SHELL_BRUTE — CHARGER: telegraphed rush; VOID_SHROUD — FLANKER: attack the blind
+            //   side; everything else uses the shared greedy melee behaviour.
+            if (enemy.type == EnemyType.SHELL_BRUTE) {
+                actChargerEnemy(enemy, playerColumn, playerRow, player);
+            } else if (enemy.type == EnemyType.VOID_SHROUD) {
+                actFlankerEnemy(enemy, playerColumn, playerRow, player);
             } else {
-                if (enemy.shouldMoveThisTurn()) {
-                    stepToward(enemy, playerColumn, playerRow);
-                }
-                enemy.state = EnemyState.CHASING;
+                actMeleeEnemy(enemy, playerColumn, playerRow, player);
             }
         } else {
             // Ranged kiting — used by EYE_TYRANT, MIRE_WRAITH, ACID_DRONE
             actRangedEnemy(enemy, playerColumn, playerRow, player, chebyshev);
         }
+    }
+
+    /** Shared greedy melee: hit when cardinally adjacent, otherwise close the gap. */
+    private void actMeleeEnemy(Enemy enemy, int playerColumn, int playerRow, Player player) {
+        boolean cardinalAdjacent = GameMath.manhattanDistanceTiles(
+                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
+        if (cardinalAdjacent) {
+            player.applyDamage(enemy.scaledAttackDamage());
+            enemy.state = EnemyState.ATTACKING;
+            enemy.triggerAttackAnim();
+            if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
+        } else {
+            if (enemy.shouldMoveThisTurn()) {
+                stepToward(enemy, playerColumn, playerRow);
+            }
+            enemy.state = EnemyState.CHASING;
+        }
+    }
+
+    /**
+     * CHARGER verb (Shell Brute, Pillar 2): when a clear cardinal lane opens within charge range
+     * the brute spends ONE telegraphed wind-up turn (no move, readable rim flash), then on the
+     * next turn rushes straight down that lane. A connecting rush hits for a high multiple of its
+     * base damage; if the player sidesteps off the lane the rush whiffs and the brute is left in
+     * an exposed recovery (skips its next action) — "sidestep the charge, then punish."
+     */
+    private void actChargerEnemy(Enemy enemy, int playerColumn, int playerRow, Player player) {
+        // Resolve a pending wind-up: this IS the rush turn.
+        if (enemy.chargeWindUpTurns > 0) {
+            enemy.chargeWindUpTurns = 0;
+            boolean connected = performCharge(enemy, playerColumn, playerRow, player);
+            if (!connected) {
+                enemy.skipNextAction = true; // committed rush missed — punishable recovery
+            }
+            return;
+        }
+
+        boolean cardinalAdjacent = GameMath.manhattanDistanceTiles(
+                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
+        if (cardinalAdjacent) {
+            // No room to build up a charge — just hit at normal strength.
+            player.applyDamage(enemy.scaledAttackDamage());
+            enemy.state = EnemyState.ATTACKING;
+            enemy.triggerAttackAnim();
+            if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
+            return;
+        }
+
+        if (canBeginCharge(enemy, playerColumn, playerRow)) {
+            enemy.chargeWindUpTurns      = 1;
+            enemy.chargeDirectionColumn  = Integer.signum(playerColumn - enemy.tileColumn);
+            enemy.chargeDirectionRow     = Integer.signum(playerRow - enemy.tileRow);
+            enemy.state                  = EnemyState.WINDING_UP;
+            enemy.triggerTelegraph();    // readable wind-up cue; deliberately does NOT move
+            return;
+        }
+
+        if (enemy.shouldMoveThisTurn()) {
+            stepToward(enemy, playerColumn, playerRow);
+        }
+        enemy.state = EnemyState.CHASING;
+    }
+
+    /** True when a clear, unobstructed cardinal lane to the player sits within the charge band. */
+    private boolean canBeginCharge(Enemy enemy, int playerColumn, int playerRow) {
+        if (!isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)) return false;
+        // On a shared cardinal line the Manhattan distance is the straight-line gap.
+        int gap = GameMath.manhattanDistanceTiles(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+        if (gap < EnemyConstants.SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES) return false;
+        if (gap > EnemyConstants.SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES) return false;
+        if (!hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)) return false;
+        return !hasEnemyBlockingShot(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+    }
+
+    /**
+     * Rushes the brute along its committed charge direction up to the charge range, stopping at
+     * the player, a wall, or another enemy. Returns true if it ends cardinally adjacent to the
+     * player (a connecting rush, dealt at the charge multiplier).
+     */
+    private boolean performCharge(Enemy enemy, int playerColumn, int playerRow, Player player) {
+        int stepColumn = enemy.chargeDirectionColumn;
+        int stepRow    = enemy.chargeDirectionRow;
+        enemy.state = EnemyState.ATTACKING;
+        enemy.triggerAttackAnim();
+
+        int maxRushTiles = EnemyConstants.SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES;
+        for (int step = 0; step < maxRushTiles; step++) {
+            if (GameMath.manhattanDistanceTiles(enemy.tileColumn, enemy.tileRow,
+                    playerColumn, playerRow) == 1) {
+                break; // already in melee range — stop and strike
+            }
+            int nextColumn = enemy.tileColumn + stepColumn;
+            int nextRow    = enemy.tileRow    + stepRow;
+            if (nextColumn == playerColumn && nextRow == playerRow) break; // can't share the player's tile
+            if (!isPassableForEnemy(nextColumn, nextRow, playerColumn, playerRow)) break;
+            commitMove(enemy, nextColumn, nextRow);
+        }
+
+        boolean connected = GameMath.manhattanDistanceTiles(
+                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
+        if (connected) {
+            int chargeDamage = Math.max(1, Math.round(
+                    enemy.scaledAttackDamage() * EnemyConstants.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER));
+            player.applyDamage(chargeDamage);
+            if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
+        }
+        return connected;
+    }
+
+    /**
+     * FLANKER verb (Void Shroud, Pillar 2): prefers the tile directly behind the player's facing
+     * and strikes HARDER from that blind side, so "rotate to face it / keep your back covered" is
+     * the counterplay. When not adjacent it paths toward the flank tile rather than the player.
+     */
+    private void actFlankerEnemy(Enemy enemy, int playerColumn, int playerRow, Player player) {
+        boolean cardinalAdjacent = GameMath.manhattanDistanceTiles(
+                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
+        if (cardinalAdjacent) {
+            int damage = enemy.scaledAttackDamage();
+            if (isBehindPlayerFacing(enemy, playerColumn, playerRow, player)) {
+                damage = Math.max(1, Math.round(
+                        damage * EnemyConstants.VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER));
+            }
+            player.applyDamage(damage);
+            enemy.state = EnemyState.ATTACKING;
+            enemy.triggerAttackAnim();
+            if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
+            return;
+        }
+
+        if (enemy.shouldMoveThisTurn()) {
+            int faceColumn  = Math.round(player.directionX);
+            int faceRow     = Math.round(player.directionY);
+            int flankColumn = playerColumn - faceColumn; // tile directly behind the player
+            int flankRow    = playerRow    - faceRow;
+            if (!stepTowardTile(enemy, flankColumn, flankRow, playerColumn, playerRow)) {
+                stepToward(enemy, playerColumn, playerRow); // flank route blocked — close in directly
+            }
+        }
+        enemy.state = EnemyState.CHASING;
+    }
+
+    /** True when the enemy sits on the side opposite the player's facing (the blind side). */
+    private static boolean isBehindPlayerFacing(Enemy enemy, int playerColumn, int playerRow, Player player) {
+        int faceColumn    = Math.round(player.directionX);
+        int faceRow       = Math.round(player.directionY);
+        int toEnemyColumn = enemy.tileColumn - playerColumn;
+        int toEnemyRow    = enemy.tileRow    - playerRow;
+        // Negative dot product = enemy is behind where the player looks.
+        return toEnemyColumn * faceColumn + toEnemyRow * faceRow < 0;
     }
 
     private void actRangedEnemy(Enemy enemy, int playerColumn, int playerRow, Player player, int distanceToPlayer) {
@@ -599,6 +759,37 @@ public final class EnemyManager implements EnemyHitTarget {
         } else {
             enemy.stuckTurns++;
         }
+    }
+
+    /**
+     * Greedily steps the enemy one tile toward an arbitrary goal tile (not necessarily the
+     * player) while never walking onto the player or through walls/other enemies. Returns true
+     * if a move was made. Used by the flanker to path toward the tile behind the player.
+     */
+    private boolean stepTowardTile(Enemy enemy, int goalColumn, int goalRow,
+                                   int playerColumn, int playerRow) {
+        int bestColumn   = enemy.tileColumn;
+        int bestRow      = enemy.tileRow;
+        int bestDistance = Integer.MAX_VALUE;
+        boolean moved    = false;
+
+        for (int directionIndex = 0; directionIndex < 4; directionIndex++) {
+            int targetColumn = enemy.tileColumn + STEP_COLUMNS[directionIndex];
+            int targetRow    = enemy.tileRow    + STEP_ROWS[directionIndex];
+            if (!isPassableForEnemy(targetColumn, targetRow, playerColumn, playerRow)) continue;
+            int distance = GameMath.manhattanDistanceTiles(targetColumn, targetRow, goalColumn, goalRow);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestColumn   = targetColumn;
+                bestRow      = targetRow;
+                moved        = true;
+            }
+        }
+
+        if (moved) {
+            commitMove(enemy, bestColumn, bestRow);
+        }
+        return moved;
     }
 
     private void stepAway(Enemy enemy, int playerColumn, int playerRow) {
@@ -747,6 +938,10 @@ public final class EnemyManager implements EnemyHitTarget {
             if (dropPlacedListener != null) {
                 dropPlacedListener.onDropPlaced(enemy.tileColumn, enemy.tileRow, drop);
             }
+        }
+        // Area-denial death hook (Pillar 2/3): e.g. a Plague Hulk leaves a toxic cloud here.
+        if (enemyDeathHazardListener != null) {
+            enemyDeathHazardListener.onEnemyDied(enemy.type, enemy.tileColumn, enemy.tileRow);
         }
         enemies.remove(enemy);
     }

@@ -183,9 +183,35 @@ public class Level {
             || cell == '#' || cell == '%' || cell == '&' || cell == '=' || cell == '@'
             || cell == 'I' || cell == 'J' || cell == 'W'
             || cell == 'm' || cell == 's' || cell == '.' || cell == 'O' || cell == 'e'
+            || isHazardDecal(cell)
             || isKeycardPickup(cell) || isMedicalPickup(cell) || isArmourPickup(cell)
             || isAmmoPickup(cell)
             || isStairsDown(cell);
+    }
+
+    /** Returns true for a fire hazard floor tile ('i'). Walkable; ticks BURNING via HazardManager. */
+    public static boolean isHazardFire(char cell) {
+        return cell == 'i';
+    }
+
+    /** Returns true for a toxic hazard pool tile ('q'). Walkable; ticks POISONED via HazardManager. */
+    public static boolean isHazardToxic(char cell) {
+        return cell == 'q';
+    }
+
+    /** Returns true for any dynamic hazard floor decal (fire 'i' or toxic 'q'). */
+    public static boolean isHazardDecal(char cell) {
+        return isHazardFire(cell) || isHazardToxic(cell);
+    }
+
+    /**
+     * Returns true for a plain floor or flat stain tile that fire may spread onto and that a
+     * hazard may overlay (then restore). Excludes walls, doors, solid props, columns, pickups,
+     * keycards and stairs so a hazard never destroys a meaningful tile.
+     */
+    public static boolean isHazardSpreadable(char cell) {
+        return cell == ' ' || cell == 'l' || cell == 'u' || cell == 'f'
+            || cell == 'm' || cell == 's' || cell == '.' || cell == 'O' || cell == 'e';
     }
 
     /** Returns true for solid props that block player movement (barrels, terminals, lockers, crates, new equipment). */
@@ -198,6 +224,7 @@ public class Level {
     /** Returns true for walkable decal props (corpses, dropped items, stains, keycard pickups, medical, armour, ammo pickups, stairs). */
     public static boolean isPropDecal(char cell) {
         return cell == 'm' || cell == 's' || cell == '.' || cell == 'O' || cell == 'e'
+            || isHazardDecal(cell)
             || isKeycardPickup(cell) || isMedicalPickup(cell) || isArmourPickup(cell)
             || isAmmoPickup(cell)
             || isStairsDown(cell);

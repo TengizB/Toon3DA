@@ -47,6 +47,10 @@ public final class EnemyConstants {
     public static final int     SHELL_BRUTE_ATTACK_DAMAGE        = BalanceConfig.SHELL_BRUTE_ATTACK_DAMAGE;
     public static final int     SHELL_BRUTE_MOVE_EVERY_N_TURNS   = BalanceConfig.SHELL_BRUTE_MOVE_EVERY_N_TURNS;
     public static final float   SHELL_BRUTE_HEIGHT_MULTIPLIER    = 1.05f;
+    // Charger AI (Pillar 2) — telegraphed rush after a one-turn wind-up.
+    public static final float   SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER = BalanceConfig.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER;
+    public static final int     SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES = BalanceConfig.SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES;
+    public static final int     SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES = BalanceConfig.SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES;
 
     // MIRE_WRAITH — slow ground-based ranged acid (spawn '5')
     public static final int     MIRE_WRAITH_MAX_HEALTH           = BalanceConfig.MIRE_WRAITH_MAX_HEALTH;
@@ -70,11 +74,13 @@ public final class EnemyConstants {
     public static final int     ACID_DRONE_MOVE_EVERY_N_TURNS    = BalanceConfig.ACID_DRONE_MOVE_EVERY_N_TURNS;
     public static final float   ACID_DRONE_HEIGHT_MULTIPLIER     = 0.70f;
 
-    // VOID_SHROUD — fast stealth melee (spawn '^')
+    // VOID_SHROUD — fast stealth melee FLANKER (spawn '^')
     public static final int     VOID_SHROUD_MAX_HEALTH           = BalanceConfig.VOID_SHROUD_MAX_HEALTH;
     public static final int     VOID_SHROUD_ATTACK_DAMAGE        = BalanceConfig.VOID_SHROUD_ATTACK_DAMAGE;
     public static final int     VOID_SHROUD_MOVE_EVERY_N_TURNS   = BalanceConfig.VOID_SHROUD_MOVE_EVERY_N_TURNS;
     public static final float   VOID_SHROUD_HEIGHT_MULTIPLIER    = 0.80f;
+    // Flanker AI (Pillar 2) — prefers the tile behind the player's facing and hits harder there.
+    public static final float   VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER = BalanceConfig.VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER;
 
     // Shared ranged AI — kiting constants reused across ranged types
     public static final int     RANGED_KITE_MIN_TILES            = BalanceConfig.RANGED_KITE_MIN_TILES;

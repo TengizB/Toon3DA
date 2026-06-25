@@ -11,6 +11,7 @@ import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.*;
 import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
+import ge.tbegvadze.toon3d.hazard.HazardManager;
 import ge.tbegvadze.toon3d.hud.HudRenderer;
 import ge.tbegvadze.toon3d.input.PlayerController;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
@@ -45,6 +46,7 @@ import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -101,6 +103,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private AbilityResolver        abilityResolver;
     private EnemyAttackEffectSystem enemyAttackEffectSystem;
     private ExplosiveBarrelManager explosiveBarrelManager;
+    private HazardManager          hazardManager;
     private TickEventBus           tickEventBus;
     private PlayerController       playerController;
     // Boss encounter — null on non-boss floors
@@ -413,8 +416,24 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         enemyManager.setStatusEffectController(statusEffectController);
 
+        // Terrain hazards (idea 4, Pillar 3) — two-sided fire/toxic chain-reaction system.
+        // HazardManager holds no GPU resources, so it needs no dispose; it is rebuilt per floor.
+        hazardManager = new HazardManager(targetLevel, enemyManager, statusEffectController);
+        hazardManager.setExplosiveBarrelManager(explosiveBarrelManager);
+        hazardManager.setHazardVisualListener(propRenderer::addDynamicProp);
+        explosiveBarrelManager.setDetonationListener(hazardManager::igniteFireFromExplosion);
+        enemyManager.setEnemyDeathHazardListener((deadType, tileColumn, tileRow) -> {
+            // Plague Hulk leaves a lingering toxic cloud where it dies (area-denial verb).
+            if (deadType == EnemyType.PLAGUE_HULK) {
+                hazardManager.spawnToxicCloud(tileColumn, tileRow,
+                        BalanceConfig.HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS);
+            }
+        });
+
         tickEventBus = new TickEventBus();
         tickEventBus.subscribe(new WeaponReloadSubscriber(inventory));
+        // Hazards tick BEFORE status so a tile's burn/poison lands the same turn you stand in it.
+        tickEventBus.subscribe(new HazardTickSubscriber(hazardManager));
         tickEventBus.subscribe(new StatusEffectSubscriber(statusEffectController, player, enemyManager));
         // Decrement Bulwark Rounds temp-armor turn counters each player action.
         tickEventBus.subscribe(context -> playerStats.tickTempArmor());

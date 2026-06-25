@@ -100,6 +100,10 @@ public final class RenderConstants {
     public static final float PROP_HEIGHT_HOLO_WORKSTATION     = 0.70f; // 'W' holo-workstation
     public static final float PROP_HEIGHT_AICORE_NODE          = 0.95f; // 'J' AI core node
     public static final float PROP_HEIGHT_ENERGY_SCORCH        = 0.18f; // 'e' energy scorch decal
+    // Terrain hazards (idea 4, Pillar 3) — flat floor decals like blood/scorch. Fire stands a
+    // touch taller than toxic so flames read as licking up off the floor in the 3D view.
+    public static final float PROP_HEIGHT_HAZARD_FIRE          = 0.30f; // 'i' fire hazard tile
+    public static final float PROP_HEIGHT_HAZARD_TOXIC         = 0.16f; // 'q' toxic hazard pool
 
     // -------------------------------------------------------------------------
     // NEW WALL TYPES — procedural textures ('N','Q','S','M','Z','U','X')

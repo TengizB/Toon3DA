@@ -2415,6 +2415,31 @@ public final class GameMath {
         return baseThreatPoints * depthThreatScale(healthScalePerDepth, damageScalePerDepth, depth);
     }
 
+    /*
+     * Formula: hazardTileThreatPoints — fold terrain danger into the TP contract (idea 4, Pillar 3)
+     * Derivation:
+     *   A hazard tile (fire / toxic) has no health, so the enemy Threat-Point primitive's
+     *   "survivalTurns" term (eHP / refDPT) does not apply. Instead a static hazard threatens
+     *   the player for as many turns as the player carelessly stands in it:
+     *       hazardTileThreatPoints = hazardDamagePerTurn * turnsStood * positionalMultiplier
+     *   This is the SAME shape as threatPoints (damagePerTurn * danger-window * positional) so a
+     *   hazard tile is directly comparable to an enemy's TP. A room with N such tiles raises its
+     *   effective floor TP by ~N * this value — that is how "a room full of fire raises its
+     *   effective TP" (idea 4) is made quantitative. turnsStood is a CARELESS-player reference
+     *   (BalanceConfig.HAZARD_THREAT_TURNS_STOOD), not the hazard's spread lifetime: a skilled
+     *   player leaves sooner and pays less, which is exactly the counterplay the hazard sells.
+     * Edge cases:
+     *   turnsStood <= 0 -> returns 0 (a hazard nobody ever stands in threatens nothing).
+     *   hazardDamagePerTurn <= 0 -> returns 0 (no damage, no threat).
+     */
+    public static float hazardTileThreatPoints(float hazardDamagePerTurn, int turnsStood,
+                                               float positionalMultiplier) {
+        if (turnsStood <= 0 || hazardDamagePerTurn <= 0f) {
+            return 0f;
+        }
+        return hazardDamagePerTurn * turnsStood * positionalMultiplier;
+    }
+
     // =========================================================================
     // RESOURCE SCARCITY MODEL — supply vs demand per floor (idea 3)
     // -------------------------------------------------------------------------

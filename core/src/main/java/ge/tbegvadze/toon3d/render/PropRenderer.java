@@ -77,6 +77,8 @@ public class PropRenderer implements Renderable, Disposable {
             case 'W': return PROP_HEIGHT_HOLO_WORKSTATION;
             case 'J': return PROP_HEIGHT_AICORE_NODE;
             case 'e': return PROP_HEIGHT_ENERGY_SCORCH;
+            case 'i': return PROP_HEIGHT_HAZARD_FIRE;    // fire hazard tile
+            case 'q': return PROP_HEIGHT_HAZARD_TOXIC;   // toxic hazard pool
             default:  return 0.70f;
         }
     }
@@ -818,6 +820,8 @@ public class PropRenderer implements Renderable, Disposable {
         map.put('W', generateHoloWorkstationTexture());
         map.put('J', generateAiCoreNodeTexture());
         map.put('e', generateEnergyScorchTexture());
+        map.put('i', generateHazardFireTexture());   // fire hazard floor tile
+        map.put('q', generateHazardToxicTexture());  // toxic hazard pool
         return map;
     }
 
@@ -2996,6 +3000,84 @@ public class PropRenderer implements Renderable, Disposable {
         pixmap.fillCircle(centerX, centerY, 3);
         for (int fleckIndex = 0; fleckIndex < 5; fleckIndex++) {
             pixmap.drawPixel(centerX - 4 + random.nextInt(9), centerY - 4 + random.nextInt(9));
+        }
+        return finalize(pixmap);
+    }
+
+    // Fire hazard ('i') — a flat licking flame patch: dark scorched base, orange body,
+    // yellow-white hot core, and a few upward flame tongues so it reads as fire in the 3D view.
+    private static Texture generateHazardFireTexture() {
+        Pixmap pixmap = new Pixmap(80, 80, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        java.util.Random random = new java.util.Random(0xF12EB1A2EL);
+        int centerX = 40;
+        int centerY = 44;
+
+        // Charred base ring under the flames.
+        organicBlob(pixmap, random, centerX, centerY, 26, 18, 0.10f, 0.05f, 0.03f, 0.85f);
+        // Deep red body.
+        organicBlob(pixmap, random, centerX, centerY, 21, 16, 0.75f, 0.18f, 0.05f, 1f);
+        // Orange mid.
+        organicBlob(pixmap, random, centerX, centerY, 15, 13, 0.97f, 0.45f, 0.08f, 1f);
+        // Yellow-white hot core.
+        organicBlob(pixmap, random, centerX, centerY, 8, 8, 1.0f, 0.85f, 0.30f, 1f);
+
+        // Upward flame tongues — tapering vertical licks above the body.
+        for (int tongueIndex = 0; tongueIndex < 7; tongueIndex++) {
+            int baseX = centerX - 16 + random.nextInt(33);
+            int height = 14 + random.nextInt(18);
+            for (int step = 0; step < height; step++) {
+                float fraction = step / (float) height;
+                int drawY = centerY - step;                      // pixmap row 0 = top, so flames go up
+                int wobble = Math.round((random.nextFloat() - 0.5f) * 4f * fraction);
+                int drawX = baseX + wobble;
+                // Colour shifts orange→yellow→transparent toward the tip.
+                float tipR = 1.0f;
+                float tipG = 0.45f + 0.45f * fraction;
+                float tipB = 0.08f + 0.25f * fraction;
+                float tipA = 1.0f - fraction * 0.85f;
+                pixmap.setColor(tipR, tipG, tipB, tipA);
+                pixmap.drawPixel(drawX, drawY);
+                if (fraction < 0.6f) pixmap.drawPixel(drawX + 1, drawY);
+            }
+        }
+        // Bright embers flickering off the core.
+        pixmap.setColor(1.0f, 0.92f, 0.55f, 1f);
+        for (int emberIndex = 0; emberIndex < 6; emberIndex++) {
+            pixmap.drawPixel(centerX - 6 + random.nextInt(13), centerY - 8 + random.nextInt(13));
+        }
+        return finalize(pixmap);
+    }
+
+    // Toxic hazard ('q') — a flat acid pool: dark sludge rim, sickly green body, bright
+    // acid-green highlights, and a scatter of bubbles so it reads as a corrosive puddle.
+    private static Texture generateHazardToxicTexture() {
+        Pixmap pixmap = new Pixmap(80, 80, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        java.util.Random random = new java.util.Random(0x70C1CAC1DL);
+        int centerX = 40;
+        int centerY = 40;
+
+        // Dark sludge rim.
+        organicBlob(pixmap, random, centerX, centerY, 28, 20, 0.08f, 0.14f, 0.05f, 0.85f);
+        // Murky green body.
+        organicBlob(pixmap, random, centerX, centerY, 22, 17, 0.20f, 0.45f, 0.10f, 1f);
+        // Sickly bright acid green.
+        organicBlob(pixmap, random, centerX, centerY, 14, 13, 0.40f, 0.78f, 0.12f, 1f);
+        // Hot acid highlight.
+        organicBlob(pixmap, random, centerX, centerY, 7, 7, 0.65f, 0.95f, 0.25f, 1f);
+
+        // Bubbles — small ringed circles dotted across the pool.
+        for (int bubbleIndex = 0; bubbleIndex < 9; bubbleIndex++) {
+            int bubbleX = centerX - 18 + random.nextInt(37);
+            int bubbleY = centerY - 18 + random.nextInt(37);
+            int bubbleRadius = 1 + random.nextInt(3);
+            pixmap.setColor(0.75f, 1.0f, 0.40f, 0.9f);
+            pixmap.drawCircle(bubbleX, bubbleY, bubbleRadius);
+            pixmap.setColor(0.90f, 1.0f, 0.60f, 1f);
+            pixmap.drawPixel(bubbleX, bubbleY);
         }
         return finalize(pixmap);
     }
