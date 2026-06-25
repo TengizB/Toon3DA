@@ -2368,4 +2368,195 @@ public final class GameMath {
         float damageGrowth = (float) Math.pow(damageScalePerDepth, floorsDescended);
         return healthGrowth * damageGrowth;
     }
+
+    // =========================================================================
+    // RESOURCE SCARCITY MODEL — supply vs demand per floor (idea 3)
+    // -------------------------------------------------------------------------
+    // Scarcity is what converts a shooter into a roguelike: when ammo lands just
+    // BELOW comfort, every fight becomes the recurring question "is this worth the
+    // ammo?". The whole model rests on one ratio:
+    //
+    //     DEMAND(floor) = total damage needed to clear it  = sum of enemy eHP
+    //     SUPPLY(floor) = total ranged damage the floor hands you
+    //                   = sum over ammo pickups of (boxSize * damagePerAmmoUnit)
+    //     S = SUPPLY / DEMAND          (the scarcity ratio)
+    //
+    // TARGET: S in [0.75, 0.95] floor-wide on a "fight everything" basis, and
+    // < 0.6 for any SINGLE weapon (so no one gun's ammo clears the floor — the
+    // player must diversify). The remaining 5-25% comes from melee (free but
+    // risky), avoidance, or carried reserves. See docs/balance-rule-system.txt
+    // and .claude/agents/ideas/balance_order_3_resource_scarcity_economy.txt.
+    //
+    // All methods below are pure and unit-free; BalanceReport feeds them the model
+    // floor's numbers from BalanceConfig and tabulates the whole economy.
+    // =========================================================================
+
+    /*
+     * Formula: expectedAmmoBoxesPerFloor — how many ammo pickups a floor hands you
+     * Derivation:
+     *   Two independent sources supply ammo over a floor:
+     *     roomBoxes = roomCount * ammoChancePerRoom        (generator room rolls)
+     *     killBoxes = enemyCount * ammoChancePerKill        (per-kill drops)
+     *     expectedBoxes = roomBoxes + killBoxes
+     *   This is the expectation (mean) over the floor's random rolls, so it is a
+     *   real number, not an integer. It feeds the per-type SUPPLY below.
+     *   Worked: 8 rooms * 0.20 + 12 enemies * 0.10 = 1.6 + 1.2 = 2.8 boxes.
+     * Edge cases:
+     *   Negative counts/chances are nonsensical inputs; the caller passes
+     *   non-negative tuning numbers, so no clamping is applied (the result would
+     *   simply be negative, which BalanceReport would surface as a bad config).
+     */
+    public static float expectedAmmoBoxesPerFloor(int roomCount, float ammoChancePerRoom,
+                                                  int enemyCount, float ammoChancePerKill) {
+        return roomCount * ammoChancePerRoom + enemyCount * ammoChancePerKill;
+    }
+
+    /*
+     * Formula: ammoSupplyDamage — damage potential handed to the player for one ammo type
+     * Derivation:
+     *   Each ammo box of a type grants boxSize units; each unit buys
+     *   damagePerAmmoUnit damage (= the representative weapon's per-shot damage,
+     *   since one shot costs one unit). Over expectedBoxesOfType boxes:
+     *       supply = expectedBoxesOfType * boxSize * damagePerAmmoUnit
+     *   damagePerAmmoUnit is exactly GameMath.ammoEfficiency(damagePerShot, 1) for
+     *   the weapon that consumes this ammo, so this is the "run-budget" bridge the
+     *   ammoEfficiency comment refers to.
+     *   Worked: 0.56 cell-boxes * 4 cells * 28 dmg = 62.7 damage of plasma supply.
+     * Edge cases:
+     *   Any factor <= 0 -> supply 0 (a type with no boxes / empty boxes / no damage
+     *   value contributes nothing).
+     */
+    public static float ammoSupplyDamage(float expectedBoxesOfType, int boxSize, float damagePerAmmoUnit) {
+        if (expectedBoxesOfType <= 0f || boxSize <= 0 || damagePerAmmoUnit <= 0f) {
+            return 0f;
+        }
+        return expectedBoxesOfType * boxSize * damagePerAmmoUnit;
+    }
+
+    /*
+     * Formula: scarcityRatio (S) — the central equation of the scarcity model
+     * Derivation:
+     *       S = totalRangedSupplyDamage / totalDemandDamage
+     *   S >= 1.0  -> ammo is effectively infinite, no decisions (the bug idea 3 fixes).
+     *   S in [0.75, 0.95] -> ammo covers most of the floor; the margin forces the
+     *     "shoot or save?" question every fight.
+     *   S < 0.6  -> forced melee too often; feels grindy/unfair.
+     *   demandDamage is the sum of every enemy's eHP on the floor (PRIMITIVE 1).
+     *   supplyDamage EXCLUDES melee (which is free but slow and dangerous) by design.
+     * Edge cases:
+     *   demandDamage <= 0 -> returns 0 (an empty floor has no scarcity to measure;
+     *     avoids divide-by-zero).
+     */
+    public static float scarcityRatio(float totalRangedSupplyDamage, float totalDemandDamage) {
+        if (totalDemandDamage <= 0f) {
+            return 0f;
+        }
+        return totalRangedSupplyDamage / totalDemandDamage;
+    }
+
+    /*
+     * Formula: reserveBankingFloors — how many floors of fights a full reserve banks
+     * Derivation:
+     *   A reserve cap of reserveCap units of a weapon, at damagePerAmmoUnit each,
+     *   banks (reserveCap * damagePerAmmoUnit) damage. Divided by one floor's DEMAND
+     *   that is how many floors a hoarder could pre-pay:
+     *       bankingFloors = reserveCap * damagePerAmmoUnit / floorDemandDamage
+     *   The anti-hoard target is ~1.5 floors (BalanceConfig.RESERVE_BANKING_FLOORS_TARGET):
+     *   enough to carry a small buffer, not enough to trivialise scarcity by stockpiling.
+     *   Worked: 12 shells * 44 dmg / 288 demand = 1.83 floors of banked shotgun fire.
+     * Edge cases:
+     *   floorDemandDamage <= 0 -> returns 0 (no floor to measure against).
+     */
+    public static float reserveBankingFloors(int reserveCap, float damagePerAmmoUnit, float floorDemandDamage) {
+        if (floorDemandDamage <= 0f) {
+            return 0f;
+        }
+        return reserveCap * damagePerAmmoUnit / floorDemandDamage;
+    }
+
+    // =========================================================================
+    // HEAL ECONOMY — HP is a resource too (idea 3)
+    // -------------------------------------------------------------------------
+    // Each floor should cost some HP you don't fully recover, so HP slowly becomes
+    // precious and you can't face-tank — but the run total stays survivable for a
+    // skilled player. The lever is the gap between incoming damage and heal supply.
+    // =========================================================================
+
+    /*
+     * Formula: incomingDamagePerFloor — HP a floor takes off the player
+     * Derivation:
+     *   If the player took every possible hit, each enemy would deal its DPT for
+     *   the turns it stays engaged. Skilled play (positioning, avoidance, not
+     *   waking every enemy) cancels a fraction of that:
+     *       incoming = totalEnemyDamagePerTurn * expectedTurnsEngaged * (1 - avoidanceFactor)
+     *   totalEnemyDamagePerTurn is the sum over enemies of (attackDamage / cadence).
+     *   Worked: 94 DPT * 2 turns * (1 - 0.50) = 94 HP incoming on the model floor.
+     * Edge cases:
+     *   avoidanceFactor is clamped to [0, 1): a player cannot avoid more than all
+     *     incoming damage, and avoidance >= 1 would make every floor free.
+     *   expectedTurnsEngaged <= 0 -> incoming 0 (enemies never get to act).
+     */
+    public static float incomingDamagePerFloor(float totalEnemyDamagePerTurn,
+                                               float expectedTurnsEngaged,
+                                               float avoidanceFactor) {
+        float clampedAvoidance = Math.max(0f, Math.min(0.99f, avoidanceFactor));
+        float safeTurns = Math.max(0f, expectedTurnsEngaged);
+        return totalEnemyDamagePerTurn * safeTurns * (1f - clampedAvoidance);
+    }
+
+    /*
+     * Formula: healSupplyPerFloor — HP/armour the floor hands back
+     * Derivation:
+     *   Medkits and armour pickups both restore the survivability pool, so the
+     *   floor's heal supply is the expected count of each times its average value:
+     *       healSupply = expectedMedkits * averageMedkitHeal
+     *                  + expectedArmourPickups * averageArmourValue
+     *   Armour is counted because eHP folds armour into the same pool (PRIMITIVE 1).
+     *   Worked: 1.5 * 34 + 1.0 * 21.5 = 51 + 21.5 = 72.5 HP-equivalent restored.
+     * Edge cases:
+     *   Negative inputs are nonsensical config; not clamped (BalanceReport would
+     *   surface a negative supply as a bad number).
+     */
+    public static float healSupplyPerFloor(float expectedMedkits, float averageMedkitHeal,
+                                           float expectedArmourPickups, float averageArmourValue) {
+        return expectedMedkits * averageMedkitHeal + expectedArmourPickups * averageArmourValue;
+    }
+
+    /*
+     * Formula: netHpDrainPerFloor — the HP a floor costs after heals
+     * Derivation:
+     *       netHpDrain = incomingDamagePerFloor - healSupplyPerFloor
+     *   TARGET: > 0 on most floors (a small net loss so HP stays precious), but the
+     *   cumulative drain across a run must stay under the player's eHP buffer plus
+     *   level-up HP. Expressed as a fraction of reference eHP, the per-floor loss
+     *   should sit in [5%, 15%] (BalanceConfig.HEAL_NET_DRAIN_FRACTION_*). A
+     *   non-positive value means the player out-heals the floor and never feels HP
+     *   pressure (the anti-face-tank failure mode).
+     *   Worked: 94 incoming - 72.5 heal = 21.5 HP net loss (10.5% of 205 eHP).
+     * Edge cases:
+     *   None — pure subtraction; a negative result is meaningful (net HP GAIN).
+     */
+    public static float netHpDrainPerFloor(float incomingDamagePerFloor, float healSupplyPerFloor) {
+        return incomingDamagePerFloor - healSupplyPerFloor;
+    }
+
+    /*
+     * Formula: survivalTurnsBought — the price of a heal, in turns of survival
+     * Derivation:
+     *   A heal is only meaningfully priced relative to how fast the floor hurts you:
+     *       survivalTurnsBought = healAmount / averageIncomingDamagePerTurn
+     *   A heal that buys > 10 turns on an early floor trivialises scarcity (balance
+     *   contract C). This makes "spend the medkit now or bank it for the bad room?"
+     *   a real decision rather than a flat number.
+     *   Worked: a 50 HP full medkit / 11.75 avg incoming DPT = 4.3 turns bought.
+     * Edge cases:
+     *   averageIncomingDamagePerTurn <= 0 -> returns Float.POSITIVE_INFINITY (with no
+     *     incoming damage a heal buys unlimited survival; avoids divide-by-zero).
+     */
+    public static float survivalTurnsBought(float healAmount, float averageIncomingDamagePerTurn) {
+        if (averageIncomingDamagePerTurn <= 0f) {
+            return Float.POSITIVE_INFINITY;
+        }
+        return healAmount / averageIncomingDamagePerTurn;
+    }
 }

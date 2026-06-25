@@ -56,8 +56,10 @@ public final class ItemConstants {
     public static final int   AMMO_BOX_CELLS              = BalanceConfig.AMMO_BOX_CELLS;
     public static final int   AMMO_BOX_ROCKETS            = BalanceConfig.AMMO_BOX_ROCKETS;
 
-    public static final int   AMMO_START_BULLETS          = 50;
-    public static final int   AMMO_START_SHELLS           = 16;
+    // Starter reserves. Lowered by the idea-3 scarcity pass to sit at/below the new reserve
+    // caps (BalanceConfig SECTION 5) so the starting kit no longer overflows the cap on spawn.
+    public static final int   AMMO_START_BULLETS          = 30;
+    public static final int   AMMO_START_SHELLS           = 8;
     public static final int   AMMO_START_CELLS            = 0;
     public static final int   AMMO_START_ROCKETS          = 0;
 
@@ -75,11 +77,14 @@ public final class ItemConstants {
     // tints live in RenderConstants alongside the other pickup-glow constants.
     public static final float KEYCARD_PICKUP_SPRITE_HEIGHT       = 0.24f;  // billboard height as fraction of full wall stripe
 
-    // Start room — starter ammo granted on weapon selection (sufficient for first dungeon floor)
-    public static final int START_ROOM_AMMO_BULLETS  = 150;
-    public static final int START_ROOM_AMMO_SHELLS   = 24;
-    public static final int START_ROOM_AMMO_CELLS    = 60;
-    public static final int START_ROOM_AMMO_SLUGS    = 6;
+    // Start room — starter ammo granted on weapon selection (enough to supply the first floor
+    // without trivialising it). Lowered by the idea-3 scarcity pass to sit at/below the new
+    // reserve caps (BalanceConfig SECTION 5); previously these dumped a multi-floor hoard
+    // (e.g. 150 bullets) that the cap immediately clamped and wasted.
+    public static final int START_ROOM_AMMO_BULLETS  = 30;
+    public static final int START_ROOM_AMMO_SHELLS   = 8;
+    public static final int START_ROOM_AMMO_CELLS    = 12;
+    public static final int START_ROOM_AMMO_SLUGS    = 4;
     public static final int START_ROOM_AMMO_ROCKETS  = 4;
 
     // Inventory UI — slot grid constants (used by ItemGridPanel)

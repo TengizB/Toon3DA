@@ -223,10 +223,11 @@ public final class BalanceConfig {
 
     // Railgun — charge-up infinite-pierce sniper. Index by charge level: {0, half, full}.
     // Full-charge powerScore is 45.0, OVER the 24-32 heavy band, but its 90-per-slug
-    // efficiency is held in check by slug SCARCITY (RAILGUN_MAX_SLUGS = 12) and the
-    // charge cost, not by raw damage. Per docs/balance-rule-system.txt this is left
-    // intact deliberately — reconcile against the scarcity model (idea 3) before
-    // nerfing the raw numbers, or the weapon becomes worthless once scarcity lands.
+    // efficiency is held in check by slug SCARCITY (RAILGUN_MAX_SLUGS, cut to 5 by the
+    // idea-3 scarcity pass — see SECTION 5) and the charge cost, not by raw damage. Per
+    // docs/balance-rule-system.txt the raw number is left intact deliberately: now that the
+    // idea-3 scarcity model HAS landed, the slug cap (5) is the lever holding it in check,
+    // so nerfing the raw 90 would make the weapon worthless instead of merely scarce.
     public static final int[] RAILGUN_DAMAGE_BY_CHARGE      = {0, 40, 90};
     public static final int   RAILGUN_RANGE_TILES           = 16;
     public static final float RAILGUN_DROP_COEFF            = 0.02f;
@@ -269,36 +270,60 @@ public final class BalanceConfig {
     public static final float WEAPON_LEVEL_DAMAGE_PER_LEVEL = 0.10f;
 
     // =====================================================================================
-    // SECTION 5 — RESOURCE SUPPLY (the ammo economy)
+    // SECTION 5 — RESOURCE SUPPLY (the ammo economy) — TUNED FOR SCARCITY (idea 3)
     // How much ammo a pickup grants, how much you can hoard, and how often kills/rooms
     // hand out ammo. Tighten these to create scarcity; loosen them for power-fantasy runs.
-    // =====================================================================================
+    //
+    // This section holds THREE of the four scarcity levers (idea 3): LEVER 1 DROP FREQUENCY,
+    // LEVER 2 DROP SIZE, and LEVER 3 RESERVE CAP. The fourth — LEVER 4 DEMAND (enemy
+    // density / eHP per floor) — lives in SECTION 2 (enemy threat) and is owned by the floor
+    // TP budget (idea 4); the model floor in SECTION 10 fixes a reference DEMAND so this
+    // section can be tuned against it. They are tuned so the
+    // model floor (SECTION 10) lands at scarcity ratio S ~= 0.88 floor-wide and < 0.6 per
+    // weapon — ammo alone covers ~88% of the damage needed to clear a "fight everything"
+    // floor, the rest coming from melee/avoidance. Pre-idea-3 these were ~6x too generous
+    // (S ~= 5.8: a single weapon's ammo cleared the floor six times over). Regenerate the
+    // scarcity living table with BalanceReport after any change here. See
+    // docs/balance-rule-system.txt and balance_order_3_resource_scarcity_economy.txt.
+    //
+    // NOTE ON MAGNITUDE: the cuts are large because the weapon-damage / enemy-eHP economy
+    // is high-damage / low-eHP (a single 44-dmg shell two-shots most chaff), so a whole
+    // floor's DEMAND (~288 dmg at depth 1) is only ~6-12 ammo units. Scarce ammo therefore
+    // means small boxes and low drop rates. Fully reconciling clip sizes with this economy
+    // is the deferred eHP/damage rescale flagged in docs/balance-rule-system.txt.
 
-    // Ammo box grants (rounds per pickup).
-    public static final int AMMO_BOX_BULLETS    = 30;
-    public static final int AMMO_BOX_SHELLS     = 12;
-    public static final int AMMO_BOX_CELLS      = 25;
-    public static final int AMMO_BOX_ROCKETS    = 2;
-    public static final int RAILGUN_PICKUP_SLUGS = 4;
-    public static final int FLAME_PICKUP_FUEL   = 60;
-    public static final int GRENADE_PICKUP_AMMO = 6;
+    // LEVER 2 — DROP SIZE: ammo box grants (rounds per pickup). Cut hard from the
+    // pre-scarcity values (30/12/25/4/60/6) so no single box clears a floor.
+    public static final int AMMO_BOX_BULLETS    = 6;
+    public static final int AMMO_BOX_SHELLS     = 2;
+    public static final int AMMO_BOX_CELLS      = 4;
+    public static final int AMMO_BOX_ROCKETS    = 1;
+    public static final int RAILGUN_PICKUP_SLUGS = 1;
+    public static final int FLAME_PICKUP_FUEL   = 25;
+    public static final int GRENADE_PICKUP_AMMO = 3;
 
-    // Reserve caps (maximum hoardable per ammo type).
-    public static final int AMMO_RESERVE_CAP_BULLETS = 200;
-    public static final int AMMO_RESERVE_CAP_SHELLS  = 60;
-    public static final int AMMO_RESERVE_CAP_CELLS   = 120;
-    public static final int AMMO_RESERVE_CAP_ROCKETS = 20;
-    public static final int RAILGUN_MAX_SLUGS        = 12;
-    public static final int FLAME_MAX_FUEL           = 120;
-    public static final int GRENADE_MAX_AMMO         = 18;
+    // LEVER 3 — RESERVE CAP: the hoarding ceiling, tuned to ~1.5 floors of that weapon's
+    // run-demand (see GameMath.reserveBankingFloors) so banking is limited. EXCEPTION:
+    // AMMO_RESERVE_CAP_BULLETS is floored at the largest bullet clip (Assault Rifle 30,
+    // Chaingun 24) so the weapon stays usable — it banks ~3 floors, the one cap above the
+    // 1.5-floor target, a direct symptom of the clip-vs-eHP mismatch noted above.
+    public static final int AMMO_RESERVE_CAP_BULLETS = 45;
+    public static final int AMMO_RESERVE_CAP_SHELLS  = 12;
+    public static final int AMMO_RESERVE_CAP_CELLS   = 16;
+    public static final int AMMO_RESERVE_CAP_ROCKETS = 10;
+    public static final int RAILGUN_MAX_SLUGS        = 5;
+    public static final int FLAME_MAX_FUEL           = 50;
+    public static final int GRENADE_MAX_AMMO         = 10;
 
-    // Drop rates — where ammo actually comes from in play.
-    /** Chance a ranged-weapon kill drops an ammo pickup. Range: 0.2–0.6. */
-    public static final float ENEMY_AMMO_DROP_CHANCE         = 0.40f;
-    /** Chance a melee kill drops an ammo pickup (higher than the ranged baseline). Range: 0.4–0.8. */
-    public static final float MELEE_KILL_AMMO_DROP_CHANCE    = 0.60f;
-    /** Base chance any non-entrance room contains at least one ammo box. Range: 0.2–0.6. */
-    public static final float LEVEL_GEN_AMMO_CHANCE_PER_ROOM = 0.35f;
+    // LEVER 1 — DROP FREQUENCY: how often a pickup spawns at all. Frequency adds variance
+    // (good for texture) and here carries more of the scarcity than ideal because box sizes
+    // can only shrink so far before they stop being sensible "boxes" — see the magnitude note.
+    /** Chance a ranged-weapon kill drops an ammo pickup. Range: 0.05–0.6. */
+    public static final float ENEMY_AMMO_DROP_CHANCE         = 0.10f;
+    /** Chance a melee kill drops an ammo pickup (kept above the ranged rate to reward the risky melee path). Range: 0.1–0.8. */
+    public static final float MELEE_KILL_AMMO_DROP_CHANCE    = 0.20f;
+    /** Base chance any non-entrance room contains at least one ammo box. Range: 0.1–0.6. */
+    public static final float LEVEL_GEN_AMMO_CHANCE_PER_ROOM = 0.20f;
 
     // =====================================================================================
     // SECTION 6 — LOOT / PICKUP SPAWN CHANCES (the drop economy)
@@ -473,4 +498,53 @@ public final class BalanceConfig {
     // this band or the curve drifts unfair-hard (below) or trivial-easy (above).
     public static final float DEPTH_COUPLING_RATIO_MIN = 0.9f;
     public static final float DEPTH_COUPLING_RATIO_MAX = 1.2f;
+
+    // =====================================================================================
+    // SECTION 10 — RESOURCE SCARCITY MODEL & BANDS (idea 3)
+    // The bands the scarcity contract checks against, plus the canonical MODEL FLOOR — a
+    // fixed depth-1 reference encounter whose SUPPLY/DEMAND, scarcity ratio S, and net HP
+    // drain are computed by GameMath and printed by BalanceReport. The SECTION 5 levers are
+    // tuned against this model floor. See docs/balance-rule-system.txt and
+    // .claude/agents/ideas/balance_order_3_resource_scarcity_economy.txt.
+    // =====================================================================================
+
+    // --- SCARCITY RATIO BANDS (S = ranged ammo SUPPLY / floor DEMAND, "fight everything").
+    /** Floor-wide scarcity ratio must land in [MIN, MAX]: ammo covers most but not all damage. */
+    public static final float SCARCITY_RATIO_FLOOR_MIN    = 0.75f;
+    public static final float SCARCITY_RATIO_FLOOR_MAX    = 0.95f;
+    /** The tuning target inside the band — just below 1 so every fight asks "shoot or save?". */
+    public static final float SCARCITY_RATIO_FLOOR_TARGET = 0.85f;
+    /** No SINGLE weapon's ammo economy may cover this fraction of a floor, forcing diversification. */
+    public static final float SCARCITY_PER_WEAPON_MAX     = 0.60f;
+
+    // --- ANTI-HOARD: a full reserve should bank only ~this many floors of that weapon's
+    // run-demand (GameMath.reserveBankingFloors). Caps in SECTION 5 are tuned to this.
+    public static final float RESERVE_BANKING_FLOORS_TARGET = 1.5f;
+
+    // --- HEAL ECONOMY: each floor should be a small NET HP LOSS so HP stays precious but
+    // the run stays survivable. Net drain as a fraction of reference eHP must land in band.
+    public static final float HEAL_NET_DRAIN_FRACTION_MIN = 0.05f;
+    public static final float HEAL_NET_DRAIN_FRACTION_MAX = 0.15f;
+
+    // --- THE MODEL FLOOR (depth 1) — the worked reference encounter from idea 3.
+    // Enemy composition (DEMAND = sum of these enemies' eHP). At depth 1 eHP == raw HP, so
+    // DEMAND = 6*18 + 3*18 + 2*38 + 1*50 = 288 damage; total TP ~= 104 (a ~120-TP budget).
+    public static final int MODEL_FLOOR_GORE_BITER_COUNT  = 6;
+    public static final int MODEL_FLOOR_EYE_TYRANT_COUNT  = 3;
+    public static final int MODEL_FLOOR_SHELL_BRUTE_COUNT = 2;
+    public static final int MODEL_FLOOR_PLAGUE_HULK_COUNT = 1;
+    /** Rooms on the model floor that can roll an ammo box (LEVER 1 source count). */
+    public static final int MODEL_FLOOR_ROOM_COUNT        = 8;
+    /** Floor-droppable ammo types the generator rolls uniformly (bullets/shells/cells/rockets/slugs). */
+    public static final int MODEL_FLOOR_AMMO_TYPE_COUNT   = 5;
+
+    // Heal-economy model inputs for the model floor.
+    /** Expected medkits found on the model floor (mix of stim '+' and full 'H'). */
+    public static final float MODEL_FLOOR_EXPECTED_MEDKITS        = 1.5f;
+    /** Expected armour pickups found on the model floor (mix of shard 'a' and vest 'A'). */
+    public static final float MODEL_FLOOR_EXPECTED_ARMOUR_PICKUPS = 1.0f;
+    /** Average turns each enemy stays engaged and able to hit the player. */
+    public static final int   MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY = 2;
+    /** Fraction of incoming damage a skilled player cancels via positioning/avoidance. Range 0–1. */
+    public static final float MODEL_FLOOR_AVOIDANCE_FACTOR        = 0.50f;
 }
