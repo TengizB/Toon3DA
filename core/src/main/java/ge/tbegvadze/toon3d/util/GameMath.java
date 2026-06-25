@@ -2147,4 +2147,225 @@ public final class GameMath {
         float clamped = Math.max(0f, Math.min(1f, normalizedAge));
         return 1f - clamped;
     }
+
+    // =========================================================================
+    // BALANCE RULE SYSTEM — the four primitives + derived contract math
+    // -------------------------------------------------------------------------
+    // The whole balance contract (docs/balance-rule-system.txt) rests on four
+    // primitive quantities — eHP, DPT, TTK, TP — plus a handful of derived
+    // scores. The game is strictly turn-based (one action = one world turn), so
+    // TIME is measured in TURNS, never seconds: there is no real-time DPS, only
+    // damage-per-turn. That makes every number below exact arithmetic.
+    //
+    // The reference anchors these formulas compare against (REFERENCE_PLAYER_DPT,
+    // REFERENCE_PLAYER_EHP, REFERENCE_AMMO_EFFICIENCY) and the per-role power / TP
+    // bands all live in BalanceConfig. These methods are pure and unit-free; the
+    // caller supplies the numbers (BalanceReport tabulates the whole roster).
+    // =========================================================================
+
+    /*
+     * Formula: effectiveHitPoints (eHP) — PRIMITIVE 1
+     * Derivation:
+     *   "How much raw incoming damage a thing really absorbs before dying."
+     *   Start from the raw survivability pool (hit points plus the armour pool,
+     *   which in this simplified contract model is treated as extra absorbed HP):
+     *       pool = rawHitPoints + armorPool
+     *   Dodge multiplies survivability by 1/(1 - dodgeChance): a dodged hit deals
+     *   zero, so on average it takes 1/(1 - dodgeChance) incoming hits to land the
+     *   same total damage.
+     *   Flat reduction subtracts from each incoming hit of average size
+     *   averageIncomingHit, so each landed hit of size H only removes (H - R) from
+     *   the pool — multiplying survivability by H / max(1, H - R).
+     *       eHP = pool * 1/(1 - dodgeChance) * averageIncomingHit / max(1, averageIncomingHit - flatReduction)
+     *   Worked: MARINE start (130 HP, 75 armour, 0 dodge, 0 reduction) -> 205 eHP.
+     *           Tough/Agile build (160 HP, 75 armour, 0.20 dodge, R=6, H=12)
+     *           -> 235 * 1.25 * 2 = 587 eHP.
+     *   Enemies currently have no dodge or reduction, so enemy eHP == raw HP.
+     * Edge cases:
+     *   dodgeChance >= 1 would divide by zero / go negative -> clamped to 0.99
+     *     (a 100%-dodge entity is unkillable and not a valid contract input).
+     *   averageIncomingHit - flatReduction is floored at 1 so reduction can never
+     *     make a hit deal <= 0 (that would be infinite eHP).
+     *   averageIncomingHit <= 0 (no incoming reference hit) -> the flat-reduction
+     *     term is neutralised (factor 1.0), leaving just pool and dodge.
+     */
+    public static float effectiveHitPoints(float rawHitPoints, float armorPool,
+                                           float dodgeChance, float flatReduction,
+                                           float averageIncomingHit) {
+        float survivabilityPool = rawHitPoints + armorPool;
+        float clampedDodge = Math.max(0f, Math.min(0.99f, dodgeChance));
+        float dodgeFactor = 1f / (1f - clampedDodge);
+        float reductionFactor = 1f;
+        if (averageIncomingHit > 0f) {
+            float damageAfterReduction = Math.max(1f, averageIncomingHit - flatReduction);
+            reductionFactor = averageIncomingHit / damageAfterReduction;
+        }
+        return survivabilityPool * dodgeFactor * reductionFactor;
+    }
+
+    /*
+     * Formula: sustainedDamagePerTurn (sustained DPT) — PRIMITIVE 2
+     * Derivation:
+     *   Damage output averaged over a full fire-the-whole-clip-then-reload cycle.
+     *   A clip delivers (clipSize * damagePerShot) damage and the cycle costs
+     *   clipSize turns of firing plus reloadTicks turns of reloading:
+     *       sustainedDPT = (clipSize * damagePerShot) / (clipSize + reloadTicks)
+     *   Worked: Shotgun (1*50)/(1+1)=25.0 ; Chaingun (24*10)/(24+1)=9.6 ;
+     *           Railgun full (1*90)/(1+2)=30.0.
+     *   This deliberately PENALISES tiny clips with long reloads, which is the
+     *   honest cost of burst weapons over a sustained fight.
+     * Edge cases:
+     *   clipSize + reloadTicks <= 0 -> returns 0 (degenerate weapon definition).
+     *   reloadTicks = 0 collapses to raw per-shot damage (a no-reload weapon).
+     */
+    public static float sustainedDamagePerTurn(int clipSize, float damagePerShot, int reloadTicks) {
+        int cycleTurns = clipSize + reloadTicks;
+        if (cycleTurns <= 0) {
+            return 0f;
+        }
+        return (clipSize * damagePerShot) / cycleTurns;
+    }
+
+    /*
+     * Formula: ammoEfficiency (damage per ammo unit) — PRIMITIVE 2b
+     * Derivation:
+     *   How much damage one unit of ammunition buys:
+     *       ammoEfficiency = damagePerShot / ammoPerShot
+     *   Multiplied by the ammo the economy hands you over a run, this is a
+     *   weapon's true "run budget" (the bridge to the scarcity model, idea 3).
+     * Edge cases:
+     *   ammoPerShot <= 0 -> floored at 1 (a shot must cost at least one unit).
+     */
+    public static float ammoEfficiency(float damagePerShot, int ammoPerShot) {
+        int safeAmmoPerShot = Math.max(1, ammoPerShot);
+        return damagePerShot / safeAmmoPerShot;
+    }
+
+    /*
+     * Formula: turnsToKill (TTK) — PRIMITIVE 3
+     * Derivation:
+     *   Turns of fire needed to drop a target, rounded UP because a partial turn
+     *   still costs a whole turn:
+     *       turnsToKill = ceil(targetEffectiveHitPoints / attackerDamagePerTurn)
+     *   Worked: Iron Stalker 95 eHP / 50 burst -> ceil(1.9) = 2 turns.
+     *   Symmetric use: feeding the ENEMY's DPT and the PLAYER's eHP yields the
+     *   player's Turns-To-Die (TTD) against that enemy.
+     * Edge cases:
+     *   attackerDamagePerTurn <= 0 -> returns Integer.MAX_VALUE (target is
+     *     effectively unkillable by this attacker; avoids divide-by-zero).
+     *   targetEffectiveHitPoints <= 0 -> returns 0 (already dead).
+     */
+    public static int turnsToKill(float targetEffectiveHitPoints, float attackerDamagePerTurn) {
+        if (targetEffectiveHitPoints <= 0f) {
+            return 0;
+        }
+        if (attackerDamagePerTurn <= 0f) {
+            return Integer.MAX_VALUE;
+        }
+        return (int) Math.ceil(targetEffectiveHitPoints / attackerDamagePerTurn);
+    }
+
+    /*
+     * Formula: threatPoints (TP) — PRIMITIVE 4
+     * Derivation:
+     *   One comparable "danger number" per enemy. An enemy is dangerous in
+     *   proportion to (a) how hard it hits per turn, (b) how many turns it
+     *   survives your fire (= how long it keeps hitting you), and (c) whether it
+     *   can hurt you without being adjacent.
+     *       enemyDamagePerTurn = attackDamage / max(1, attackCadenceTurns)
+     *       survivalTurns      = enemyEffectiveHitPoints / referencePlayerDamagePerTurn
+     *       threatPoints       = enemyDamagePerTurn * survivalTurns * positionalMultiplier
+     *   referencePlayerDamagePerTurn anchors survival on a fixed yardstick
+     *   (BalanceConfig.REFERENCE_PLAYER_DPT = 25, the shotgun) so every enemy is
+     *   measured against the same player. positionalMultiplier is a designer
+     *   classification (1.0 melee, 1.30 ranged, 1.15 fast-melee, +0.25 if it
+     *   applies a status effect), NOT auto-derived from move cadence.
+     *   Worked: Iron Stalker (16/1) * (95/25) * 1.15 = 69.9 TP (mini-elite).
+     * Edge cases:
+     *   attackCadenceTurns < 1 -> floored at 1 (an enemy attacks at most once per
+     *     turn, the game's atomic unit).
+     *   referencePlayerDamagePerTurn <= 0 -> returns 0 (no yardstick, no
+     *     comparable threat; avoids divide-by-zero).
+     */
+    public static float threatPoints(float attackDamage, int attackCadenceTurns,
+                                     float enemyEffectiveHitPoints,
+                                     float referencePlayerDamagePerTurn,
+                                     float positionalMultiplier) {
+        if (referencePlayerDamagePerTurn <= 0f) {
+            return 0f;
+        }
+        int safeCadence = Math.max(1, attackCadenceTurns);
+        float enemyDamagePerTurn = attackDamage / safeCadence;
+        float survivalTurns = enemyEffectiveHitPoints / referencePlayerDamagePerTurn;
+        return enemyDamagePerTurn * survivalTurns * positionalMultiplier;
+    }
+
+    /*
+     * Formula: weaponPowerScore — the weapon contract's single comparable number
+     * Derivation:
+     *   A weapon's power is its sustained output scaled by how ammo-cheap that
+     *   output is, so a high-DPT but ammo-hungry weapon does not out-score a
+     *   leaner one purely on muzzle damage:
+     *       weaponPowerScore = sustainedEffectiveDamagePerTurn * sqrt(ammoEfficiencyNormalized)
+     *   The square root DAMPENS the ammo-efficiency term: doubling efficiency
+     *   only multiplies power by ~1.41, not 2, so per-shot damage cannot dominate
+     *   the score. ammoEfficiencyNormalized is the weapon's raw ammoEfficiency
+     *   divided by BalanceConfig.REFERENCE_AMMO_EFFICIENCY, so a reference-class
+     *   weapon contributes a factor of 1.0.
+     *   A new weapon picks a ROLE, then is tuned until its score lands in that
+     *   role's band (BalanceConfig power-band constants). Higher rarity does NOT
+     *   raise the band — it buys abilities, not raw damage.
+     * Edge cases:
+     *   ammoEfficiencyNormalized <= 0 -> the sqrt term is 0, so the score is 0
+     *     (a weapon with no ammo value scores nothing on the run-budget axis).
+     */
+    public static float weaponPowerScore(float sustainedEffectiveDamagePerTurn,
+                                         float ammoEfficiencyNormalized) {
+        float safeEfficiency = Math.max(0f, ammoEfficiencyNormalized);
+        return sustainedEffectiveDamagePerTurn * (float) Math.sqrt(safeEfficiency);
+    }
+
+    /*
+     * Formula: goldenRatio — the "tense but winnable" knob (TTD / TTK)
+     * Derivation:
+     *   For a fair 1-on-1 the player should win, but not trivially. Compare how
+     *   long the player survives (turnsToDie) against how long the player needs
+     *   to kill (turnsToKill):
+     *       goldenRatio = turnsToDie / turnsToKill
+     *   Target band: [3, 8] for trash mobs (you could kill 3-8 of this enemy
+     *   back-to-back if you took every hit — but you WON'T if you play well),
+     *   [2, 4] for bruisers (they are supposed to be scary 1v1). Below the band =
+     *   unfair/swingy; above it = harmless damage sponges.
+     * Edge cases:
+     *   turnsToKill <= 0 -> returns Float.POSITIVE_INFINITY (the player kills
+     *     instantly and is in no danger; avoids divide-by-zero).
+     */
+    public static float goldenRatio(int turnsToDie, int turnsToKill) {
+        if (turnsToKill <= 0) {
+            return Float.POSITIVE_INFINITY;
+        }
+        return (float) turnsToDie / (float) turnsToKill;
+    }
+
+    /*
+     * Formula: depthThreatScale — keep player and enemy curves coupled by depth
+     * Derivation:
+     *   Enemy threat compounds per floor through two independent multipliers,
+     *   one on health and one on damage. Because threat points are roughly
+     *   (damage * survival) and survival scales with health, the per-floor threat
+     *   multiplier is the PRODUCT of both compound curves:
+     *       depthThreatScale = healthScalePerDepth^(depth-1) * damageScalePerDepth^(depth-1)
+     *   so enemyThreatAtDepth(d) = baseThreatPoints * depthThreatScale(d).
+     *   With current values (1.08 health, 1.06 damage) a depth-5 enemy is
+     *   1.08^4 * 1.06^4 = 1.360 * 1.262 = 1.717x its depth-1 threat. The player
+     *   power curve must stay coupled: 0.9 <= playerPower/enemyThreat <= 1.2.
+     * Edge cases:
+     *   depth <= 1 -> exponent 0 -> returns 1.0 (floor 1 is the un-scaled base).
+     */
+    public static float depthThreatScale(float healthScalePerDepth, float damageScalePerDepth, int depth) {
+        int floorsDescended = Math.max(0, depth - 1);
+        float healthGrowth = (float) Math.pow(healthScalePerDepth, floorsDescended);
+        float damageGrowth = (float) Math.pow(damageScalePerDepth, floorsDescended);
+        return healthGrowth * damageGrowth;
+    }
 }

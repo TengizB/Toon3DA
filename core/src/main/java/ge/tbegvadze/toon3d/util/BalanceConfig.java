@@ -383,4 +383,72 @@ public final class BalanceConfig {
 
     // Stagger Rounds (STUN — on hit).
     public static final int STAGGER_STUN_DURATION = 1;
+
+    // =====================================================================================
+    // SECTION 9 — BALANCE RULE SYSTEM ANCHORS & BANDS (the math contract, idea 2)
+    // The reference yardsticks every contract formula in GameMath compares against, plus
+    // the per-role POWER and THREAT-POINT bands a new weapon / enemy must land inside.
+    // See docs/balance-rule-system.txt for the full contract and the living table
+    // (regenerate the table with BalanceReport whenever any number above changes).
+    // =====================================================================================
+
+    /**
+     * Reference player Damage-Per-Turn — the fixed yardstick every enemy's survival and
+     * Threat-Point value is measured against. Equals the start shotgun's sustained DPT
+     * ((1*50)/(1+1) = 25). If the shotgun is retuned, update this so TP stays anchored.
+     */
+    public static final float REFERENCE_PLAYER_DPT = 25f;
+    /**
+     * Reference player effective HP — the MARINE start survivability (130 HP + 75 armour,
+     * no dodge, no flat reduction). Used as the denominator for the player's Turns-To-Die
+     * in golden-ratio checks.
+     */
+    public static final float REFERENCE_PLAYER_EHP = 205f;
+    /**
+     * Reference ammo efficiency (damage per ammo unit) the weapon power score normalises
+     * against, so a reference-class weapon contributes a sqrt-factor of 1.0. Chosen so a
+     * sustained-DPT-25 shotgun-class weapon scores near the top of the burst band, which
+     * surfaces the shotgun as slightly over-band (a known follow-up tuning target).
+     */
+    public static final float REFERENCE_AMMO_EFFICIENCY = 40f;
+
+    // --- WEAPON POWER BANDS (weaponPowerScore must land in the band for the chosen role).
+    // Higher rarity does NOT raise these bands — it buys abilities (idea 5), not raw damage.
+    public static final float WEAPON_POWER_SIDEARM_MIN    = 8f;
+    public static final float WEAPON_POWER_SIDEARM_MAX    = 14f;
+    public static final float WEAPON_POWER_WORKHORSE_MIN  = 12f;
+    public static final float WEAPON_POWER_WORKHORSE_MAX  = 18f;
+    public static final float WEAPON_POWER_BURST_MIN      = 18f;
+    public static final float WEAPON_POWER_BURST_MAX      = 26f;
+    public static final float WEAPON_POWER_HEAVY_MIN      = 24f;
+    public static final float WEAPON_POWER_HEAVY_MAX      = 32f;
+
+    // --- ENEMY THREAT-POINT BANDS (threatPoints must land in the band for the chosen role).
+    public static final float ENEMY_TP_CHAFF_MIN      = 4f;
+    public static final float ENEMY_TP_CHAFF_MAX      = 8f;
+    public static final float ENEMY_TP_SOLDIER_MIN    = 9f;
+    public static final float ENEMY_TP_SOLDIER_MAX    = 16f;
+    public static final float ENEMY_TP_BRUISER_MIN    = 17f;
+    public static final float ENEMY_TP_BRUISER_MAX    = 28f;
+    public static final float ENEMY_TP_MINI_ELITE_MIN = 40f;
+    public static final float ENEMY_TP_MINI_ELITE_MAX = 75f;
+
+    // --- POSITIONAL MULTIPLIERS for the Threat-Point formula (designer classification).
+    public static final float POSITIONAL_MULT_MELEE       = 1.00f;
+    public static final float POSITIONAL_MULT_FAST_MELEE  = 1.15f;
+    public static final float POSITIONAL_MULT_RANGED      = 1.30f;
+    /** Added on top of the base positional multiplier when the enemy applies a DOT/stun/slow. */
+    public static final float POSITIONAL_MULT_STATUS_BONUS = 0.25f;
+
+    // --- GOLDEN-RATIO bands (turnsToDie / turnsToKill) per enemy role. Below = unfair/swingy;
+    // above = harmless damage sponge. Bruisers are SUPPOSED to be scary 1v1, so their band is tighter.
+    public static final float GOLDEN_RATIO_TRASH_MIN   = 3f;
+    public static final float GOLDEN_RATIO_TRASH_MAX   = 8f;
+    public static final float GOLDEN_RATIO_BRUISER_MIN = 2f;
+    public static final float GOLDEN_RATIO_BRUISER_MAX = 4f;
+
+    // --- DEPTH-COUPLING INVARIANT: playerPowerAtDepth / enemyThreatAtDepth must stay in
+    // this band or the curve drifts unfair-hard (below) or trivial-easy (above).
+    public static final float DEPTH_COUPLING_RATIO_MIN = 0.9f;
+    public static final float DEPTH_COUPLING_RATIO_MAX = 1.2f;
 }
