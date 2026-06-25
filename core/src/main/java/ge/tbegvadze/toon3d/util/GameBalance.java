@@ -24,29 +24,32 @@ public final class GameBalance {
     // XP REWARDS — XP dropped by each enemy archetype on death
     // =========================================================================
 
+    // Per-enemy XP rewards are balance values — they live in BalanceConfig
+    // (SINGLE SOURCE OF TRUTH). Boss XP (XP_REWARD_BOSS_BASE) stays here pending idea 6.
+
     /** PLAGUE_HULK (tile '1') — slow tank melee; tanky so yields solid XP. */
-    public static final int XP_REWARD_PLAGUE_HULK   = 14;
+    public static final int XP_REWARD_PLAGUE_HULK   = BalanceConfig.XP_REWARD_PLAGUE_HULK;
 
     /** EYE_TYRANT (tile '2') — fast ranged kiter; low XP, common annoyance. */
-    public static final int XP_REWARD_EYE_TYRANT    = 10;
+    public static final int XP_REWARD_EYE_TYRANT    = BalanceConfig.XP_REWARD_EYE_TYRANT;
 
     /** GORE_BITER (tile '3') — fast light melee; low XP, spawns in packs. */
-    public static final int XP_REWARD_GORE_BITER    = 10;
+    public static final int XP_REWARD_GORE_BITER    = BalanceConfig.XP_REWARD_GORE_BITER;
 
     /** SHELL_BRUTE (tile '4') — heavy charger melee; more XP for the threat. */
-    public static final int XP_REWARD_SHELL_BRUTE   = 18;
+    public static final int XP_REWARD_SHELL_BRUTE   = BalanceConfig.XP_REWARD_SHELL_BRUTE;
 
     /** MIRE_WRAITH (tile '5') — slow hovering acid ranged; high XP, tanky. */
-    public static final int XP_REWARD_MIRE_WRAITH   = 22;
+    public static final int XP_REWARD_MIRE_WRAITH   = BalanceConfig.XP_REWARD_MIRE_WRAITH;
 
     /** IRON_STALKER (tile '!') — armored elite melee+ranged; the big reward. */
-    public static final int XP_REWARD_IRON_STALKER  = 55;
+    public static final int XP_REWARD_IRON_STALKER  = BalanceConfig.XP_REWARD_IRON_STALKER;
 
     /** ACID_DRONE (tile '$') — ranged mechanical; medium XP. */
-    public static final int XP_REWARD_ACID_DRONE    = 14;
+    public static final int XP_REWARD_ACID_DRONE    = BalanceConfig.XP_REWARD_ACID_DRONE;
 
     /** VOID_SHROUD (tile '^') — fast stealth melee; medium XP. */
-    public static final int XP_REWARD_VOID_SHROUD   = 18;
+    public static final int XP_REWARD_VOID_SHROUD   = BalanceConfig.XP_REWARD_VOID_SHROUD;
 
     /** Base XP reward for killing any boss (before depth scaling applied by BossFloorController). */
     public static final int XP_REWARD_BOSS_BASE     = 500;
@@ -62,24 +65,25 @@ public final class GameBalance {
     //   level 5 → 6:    50 * 5^1.3  =  406 XP
     // =========================================================================
 
-    /** Base XP needed to advance from level 1 to level 2. */
-    public static final int   XP_BASE_REQUIREMENT = 50;
+    /** Base XP needed to advance from level 1 to level 2. (Balance: BalanceConfig.) */
+    public static final int   XP_BASE_REQUIREMENT = BalanceConfig.XP_BASE_REQUIREMENT;
 
-    /** Exponent in the power curve.  1.3 = gentler acceleration so level-ups arrive before each difficulty wall. */
-    public static final float XP_CURVE_EXPONENT   = 1.3f;
+    /** Exponent in the power curve.  1.3 = gentler acceleration so level-ups arrive before each difficulty wall. (Balance: BalanceConfig.) */
+    public static final float XP_CURVE_EXPONENT   = BalanceConfig.XP_CURVE_EXPONENT;
 
     // =========================================================================
     // LEVEL-UP STAT BONUSES — applied once per level-up per chosen reward
     // =========================================================================
 
+    // Level-up reward magnitudes are balance values — see BalanceConfig.
     /** Flat increase to the player's maximum HP when HP_BOOST is chosen. */
-    public static final int LEVEL_UP_HP_BONUS     = 25;
+    public static final int LEVEL_UP_HP_BONUS     = BalanceConfig.LEVEL_UP_HP_BONUS;
 
     /** Flat increase to the player's maximum armour when ARMOR_BOOST is chosen. */
-    public static final int LEVEL_UP_ARMOR_BONUS  = 18;
+    public static final int LEVEL_UP_ARMOR_BONUS  = BalanceConfig.LEVEL_UP_ARMOR_BONUS;
 
     /** Flat damage bonus added to every shot when DAMAGE_BOOST is chosen. */
-    public static final int LEVEL_UP_DAMAGE_BONUS = 8;
+    public static final int LEVEL_UP_DAMAGE_BONUS = BalanceConfig.LEVEL_UP_DAMAGE_BONUS;
 
     // =========================================================================
     // ENEMY DEPTH SCALING — enemies grow stronger on each new dungeon floor
@@ -93,11 +97,12 @@ public final class GameBalance {
     //   depth 4: ×1.19   depth 5: ×1.26   depth 10: ×1.69
     // =========================================================================
 
+    // Depth scaling factors are balance values — see BalanceConfig.
     /** Per-floor HP multiplier applied as a compound factor. */
-    public static final float ENEMY_HEALTH_SCALE_PER_DEPTH = 1.08f;
+    public static final float ENEMY_HEALTH_SCALE_PER_DEPTH = BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH;
 
     /** Per-floor damage multiplier applied as a compound factor. */
-    public static final float ENEMY_DAMAGE_SCALE_PER_DEPTH = 1.06f;
+    public static final float ENEMY_DAMAGE_SCALE_PER_DEPTH = BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH;
 
     // =========================================================================
     // Derived-value helpers — thin wrappers delegating math to GameMath
@@ -132,14 +137,15 @@ public final class GameBalance {
     // All four v1 melee weapons have turnsPerAttack=1 (one swing = one world turn).
     // =========================================================================
 
+    // Melee base damage values are balance — see BalanceConfig.
     /** FIST — always-equipped fallback; chip damage only, never dropped. */
-    public static final int MELEE_FIST_DAMAGE          = 6;
+    public static final int MELEE_FIST_DAMAGE          = BalanceConfig.MELEE_FIST_DAMAGE;
 
     /** COMBAT KNIFE — fast light melee, good vs low-HP chaff. */
-    public static final int MELEE_KNIFE_DAMAGE         = 12;
+    public static final int MELEE_KNIFE_DAMAGE         = BalanceConfig.MELEE_KNIFE_DAMAGE;
 
     /** HAMMER — heavy crowd-control melee; knockback eligible targets by HAMMER_KNOCKBACK_TILES. */
-    public static final int MELEE_HAMMER_DAMAGE          = 20;
+    public static final int MELEE_HAMMER_DAMAGE          = BalanceConfig.MELEE_HAMMER_DAMAGE;
 
     /** How many tiles a knockback-eligible enemy is pushed on a Hammer hit. */
     public static final int   MELEE_HAMMER_KNOCKBACK_TILES  = 1;
@@ -147,10 +153,10 @@ public final class GameBalance {
     public static final float MELEE_HAMMER_KNOCKBACK_CHANCE = 0.50f;
 
     /** CHAINSAW — high sustained damage; no knockback (grinds in place). */
-    public static final int MELEE_CHAINSAW_DAMAGE      = 18;
+    public static final int MELEE_CHAINSAW_DAMAGE      = BalanceConfig.MELEE_CHAINSAW_DAMAGE;
 
-    /** Probability (0–1) that a melee kill drops an ammo pickup; higher than the ranged baseline. */
-    public static final float MELEE_KILL_AMMO_DROP_CHANCE = 0.60f;
+    /** Probability (0–1) that a melee kill drops an ammo pickup; higher than the ranged baseline. (Balance: BalanceConfig.) */
+    public static final float MELEE_KILL_AMMO_DROP_CHANCE = BalanceConfig.MELEE_KILL_AMMO_DROP_CHANCE;
 
     // =========================================================================
     // STAT SYSTEM — per-difficulty base values, caps, and per-point effect rates
@@ -227,11 +233,13 @@ public final class GameBalance {
 
     // ---- Per-point effect rates ----
 
+    // Per-point stat rates are balance values — see BalanceConfig (SINGLE SOURCE OF TRUTH).
+
     /** Each STRENGTH point adds this fraction to the melee damage multiplier. */
-    public static final float STR_MELEE_PER_POINT     = 0.05f;
+    public static final float STR_MELEE_PER_POINT     = BalanceConfig.STR_MELEE_PER_POINT;
 
     /** Each MARKSMANSHIP point adds this fraction to the ranged damage multiplier. */
-    public static final float MRK_DAMAGE_PER_POINT    = 0.04f;
+    public static final float MRK_DAMAGE_PER_POINT    = BalanceConfig.MRK_DAMAGE_PER_POINT;
 
     /**
      * Each MARKSMANSHIP point adds this fraction to the accuracy multiplier.
@@ -244,7 +252,7 @@ public final class GameBalance {
      * Duration multiplier = 1.0 − (AGI − STAT_REFERENCE) × AGI_SPEED_PER_POINT,
      * clamped to [AGI_MIN_DURATION_MULT, 1.0].
      */
-    public static final float AGI_SPEED_PER_POINT     = 0.03f;
+    public static final float AGI_SPEED_PER_POINT     = BalanceConfig.AGI_SPEED_PER_POINT;
 
     /**
      * Hard floor for the action duration multiplier (55% of base duration).
@@ -253,19 +261,19 @@ public final class GameBalance {
     public static final float AGI_MIN_DURATION_MULT   = 0.55f;
 
     /** Each AGILITY point adds this fraction to the raw dodge chance before capping. */
-    public static final float AGI_DODGE_PER_POINT     = 0.02f;
+    public static final float AGI_DODGE_PER_POINT     = BalanceConfig.AGI_DODGE_PER_POINT;
 
     /**
      * Maximum dodge probability regardless of AGILITY.
      * 35% cap keeps high-AGI builds slippery without becoming immune to hits.
      */
-    public static final float DODGE_CAP               = 0.35f;
+    public static final float DODGE_CAP               = BalanceConfig.DODGE_CAP;
 
     /** Each TOUGHNESS point adds this many HP to the player's maximum HP pool. */
-    public static final int   TGH_HP_PER_POINT        = 5;
+    public static final int   TGH_HP_PER_POINT        = BalanceConfig.TGH_HP_PER_POINT;
 
     /** Each TOUGHNESS point shaves this many points off every HP-bound incoming hit. */
-    public static final int   TGH_REDUCTION_PER_POINT = 1;
+    public static final int   TGH_REDUCTION_PER_POINT = BalanceConfig.TGH_REDUCTION_PER_POINT;
 
     /**
      * Minimum HP damage after TOUGHNESS flat reduction.
@@ -457,18 +465,20 @@ public final class GameBalance {
     //   depth 1: ×1.00   depth 2: ×1.12   depth 3: ×1.24   depth 5: ×1.48
     // =========================================================================
 
-    public static final int   CREDIT_REWARD_GORE_BITER    = 5;
-    public static final int   CREDIT_REWARD_EYE_TYRANT    = 6;
-    public static final int   CREDIT_REWARD_PLAGUE_HULK   = 8;
-    public static final int   CREDIT_REWARD_ACID_DRONE    = 8;
-    public static final int   CREDIT_REWARD_SHELL_BRUTE   = 12;
-    public static final int   CREDIT_REWARD_VOID_SHROUD   = 12;
-    public static final int   CREDIT_REWARD_MIRE_WRAITH   = 15;
-    public static final int   CREDIT_REWARD_IRON_STALKER  = 40;
+    // Per-enemy credit rewards, depth scale, and chips-per-floor are balance values —
+    // see BalanceConfig. Boss credit (CREDIT_REWARD_BOSS_BASE) stays here pending idea 6.
+    public static final int   CREDIT_REWARD_GORE_BITER    = BalanceConfig.CREDIT_REWARD_GORE_BITER;
+    public static final int   CREDIT_REWARD_EYE_TYRANT    = BalanceConfig.CREDIT_REWARD_EYE_TYRANT;
+    public static final int   CREDIT_REWARD_PLAGUE_HULK   = BalanceConfig.CREDIT_REWARD_PLAGUE_HULK;
+    public static final int   CREDIT_REWARD_ACID_DRONE    = BalanceConfig.CREDIT_REWARD_ACID_DRONE;
+    public static final int   CREDIT_REWARD_SHELL_BRUTE   = BalanceConfig.CREDIT_REWARD_SHELL_BRUTE;
+    public static final int   CREDIT_REWARD_VOID_SHROUD   = BalanceConfig.CREDIT_REWARD_VOID_SHROUD;
+    public static final int   CREDIT_REWARD_MIRE_WRAITH   = BalanceConfig.CREDIT_REWARD_MIRE_WRAITH;
+    public static final int   CREDIT_REWARD_IRON_STALKER  = BalanceConfig.CREDIT_REWARD_IRON_STALKER;
     public static final int   CREDIT_REWARD_BOSS_BASE     = 250;
-    public static final float CREDIT_DEPTH_SCALE          = 0.12f;
-    public static final int   CREDIT_CHIPS_PER_FLOOR_MIN  = 3;
-    public static final int   CREDIT_CHIPS_PER_FLOOR_MAX  = 7;
+    public static final float CREDIT_DEPTH_SCALE          = BalanceConfig.CREDIT_DEPTH_SCALE;
+    public static final int   CREDIT_CHIPS_PER_FLOOR_MIN  = BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MIN;
+    public static final int   CREDIT_CHIPS_PER_FLOOR_MAX  = BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MAX;
 
     // ── Credit Fang (ON_KILL, universal) ─────────────────────────────────────
     /** Credits awarded at level 1 for each Credit Fang kill. */
@@ -484,30 +494,31 @@ public final class GameBalance {
     // =========================================================================
 
     // ── Rend (BLEED DoT — ON_HIT) ────────────────────────────────────────────
+    // DoT magnitudes are balance values (DoT damage counts toward TTK) — see BalanceConfig.
     /** BLEED damage per turn at weapon level 1. */
-    public static final float REND_DAMAGE_PER_TURN_BASE      = 2f;
+    public static final float REND_DAMAGE_PER_TURN_BASE      = BalanceConfig.REND_DAMAGE_PER_TURN_BASE;
     /** Additional BLEED damage per turn for each weapon level above 1. */
-    public static final float REND_DAMAGE_PER_TURN_PER_LEVEL = 0.5f;
+    public static final float REND_DAMAGE_PER_TURN_PER_LEVEL = BalanceConfig.REND_DAMAGE_PER_TURN_PER_LEVEL;
     /** Maximum BLEED damage per turn regardless of weapon level. */
-    public static final float REND_DAMAGE_PER_TURN_CAP       = 6f;
+    public static final float REND_DAMAGE_PER_TURN_CAP       = BalanceConfig.REND_DAMAGE_PER_TURN_CAP;
     /** Number of world turns the BLEED effect persists. */
-    public static final int   REND_DURATION_TURNS            = 4;
+    public static final int   REND_DURATION_TURNS            = BalanceConfig.REND_DURATION_TURNS;
 
     // ── Incendiary (BURN DoT — ON_HIT) ───────────────────────────────────────
     /** BURNING damage per turn at weapon level 1 for INCENDIARY. */
-    public static final float INCENDIARY_BURN_PER_TURN_BASE      = 3f;
+    public static final float INCENDIARY_BURN_PER_TURN_BASE      = BalanceConfig.INCENDIARY_BURN_PER_TURN_BASE;
     /** Additional burn damage per turn for each weapon level above 1. */
-    public static final float INCENDIARY_BURN_PER_TURN_PER_LEVEL = 0.5f;
+    public static final float INCENDIARY_BURN_PER_TURN_PER_LEVEL = BalanceConfig.INCENDIARY_BURN_PER_TURN_PER_LEVEL;
     /** Maximum burn damage per turn regardless of weapon level. */
-    public static final float INCENDIARY_BURN_PER_TURN_CAP       = 7f;
+    public static final float INCENDIARY_BURN_PER_TURN_CAP       = BalanceConfig.INCENDIARY_BURN_PER_TURN_CAP;
     /** Base number of world turns the burn effect persists for INCENDIARY. */
-    public static final int   INCENDIARY_BURN_DURATION           = 3;
+    public static final int   INCENDIARY_BURN_DURATION           = BalanceConfig.INCENDIARY_BURN_DURATION;
     /** Extra turns added to burn duration when the Incinerator weapon fires INCENDIARY. */
-    public static final int   INCENDIARY_INCINERATOR_EXTRA_TURNS = 1;
+    public static final int   INCENDIARY_INCINERATOR_EXTRA_TURNS = BalanceConfig.INCENDIARY_INCINERATOR_EXTRA_TURNS;
 
     // ── Stagger Rounds (STUN — ON_HIT) ───────────────────────────────────────
-    /** Number of world turns the STUNNED effect persists when STAGGER_ROUNDS procs. */
-    public static final int   STAGGER_STUN_DURATION = 1;
+    /** Number of world turns the STUNNED effect persists when STAGGER_ROUNDS procs. (Balance: BalanceConfig.) */
+    public static final int   STAGGER_STUN_DURATION = BalanceConfig.STAGGER_STUN_DURATION;
 
     // =========================================================================
     // POSITIONAL & SITUATIONAL ABILITIES — weapon-system-order-9

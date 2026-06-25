@@ -18,8 +18,9 @@ public final class LevelGenConstants {
     public static final int   LEVEL_GEN_TARGET_ROOMS          = 16;
     public static final int   LEVEL_GEN_PLACEMENT_TRIES       = 600;
     // Probability that any interior floor tile in a non-entrance room receives a prop.
-    public static final float LEVEL_GEN_PROP_CHANCE           = 0.13f;
-    public static final int   LEVEL_GEN_MAX_ENEMIES_PER_ROOM  = 3;
+    // Balance values (loot/enemy density) live in BalanceConfig (SINGLE SOURCE OF TRUTH).
+    public static final float LEVEL_GEN_PROP_CHANCE           = BalanceConfig.LEVEL_GEN_PROP_CHANCE;
+    public static final int   LEVEL_GEN_MAX_ENEMIES_PER_ROOM  = BalanceConfig.LEVEL_GEN_MAX_ENEMIES_PER_ROOM;
     // Cumulative thresholds for enemy type selection (each range maps to a spawn digit):
     //   [0.00, 0.25) → '1' PLAGUE_HULK   25 % slow tank melee
     //   [0.25, 0.40) → '2' EYE_TYRANT    15 % fast ranged kiter
@@ -62,12 +63,14 @@ public final class LevelGenConstants {
     // Ratio of rack props that are lockers vs terminals in a server room.
     public static final float LEVEL_GEN_SERVER_LOCKER_RATIO        = 0.30f;
     // Boosted pickup chances for special rooms (loot hubs / set-piece arenas).
-    public static final float LEVEL_GEN_SERVER_MEDKIT_CHANCE       = 0.55f;
-    public static final float LEVEL_GEN_SERVER_ARMOUR_CHANCE       = 0.35f;
-    public static final float LEVEL_GEN_LARGE_MEDKIT_CHANCE        = 0.50f;
-    public static final float LEVEL_GEN_LARGE_ARMOUR_CHANCE        = 0.30f;
+    // Loot room budgets are balance values — see BalanceConfig (SINGLE SOURCE OF TRUTH).
+    public static final float LEVEL_GEN_SERVER_MEDKIT_CHANCE       = BalanceConfig.LEVEL_GEN_SERVER_MEDKIT_CHANCE;
+    public static final float LEVEL_GEN_SERVER_ARMOUR_CHANCE       = BalanceConfig.LEVEL_GEN_SERVER_ARMOUR_CHANCE;
+    public static final float LEVEL_GEN_LARGE_MEDKIT_CHANCE        = BalanceConfig.LEVEL_GEN_LARGE_MEDKIT_CHANCE;
+    public static final float LEVEL_GEN_LARGE_ARMOUR_CHANCE        = BalanceConfig.LEVEL_GEN_LARGE_ARMOUR_CHANCE;
     // Base probability that any non-entrance room contains at least one ammo box pickup.
-    public static final float LEVEL_GEN_AMMO_CHANCE_PER_ROOM       = 0.35f;
+    // Balance value — see BalanceConfig (SINGLE SOURCE OF TRUTH).
+    public static final float LEVEL_GEN_AMMO_CHANCE_PER_ROOM       = BalanceConfig.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
 
     // --- Wide hallway generation ---
     // Number of MST edges widened to 3-tile grand corridors per level.
@@ -87,16 +90,17 @@ public final class LevelGenConstants {
     // count, enemy toughness, and loot richness, so exploration has a deliberate
     // difficulty/reward curve instead of a flat random spread.
     // -------------------------------------------------------------------------
+    // Depth-aware difficulty/loot gradient — balance values live in BalanceConfig.
     // Maximum extra enemies a deepest-depth room may add on top of the base count.
-    public static final int   LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX        = 2;
+    public static final int   LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX        = BalanceConfig.LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX;
     // At full depth, the chance a light/ranged spawn ('3'/'2') is upgraded to a
     // heavy archetype ('1' hulk / '4' brute / '5' wraith). Scales linearly with depth.
-    public static final float LEVEL_GEN_DEPTH_ENEMY_UPGRADE_CHANCE   = 0.60f;
+    public static final float LEVEL_GEN_DEPTH_ENEMY_UPGRADE_CHANCE   = BalanceConfig.LEVEL_GEN_DEPTH_ENEMY_UPGRADE_CHANCE;
     // Additive bonus to a room's medkit / ammo pickup chance at full depth.
-    public static final float LEVEL_GEN_DEPTH_MEDKIT_BONUS           = 0.15f;
-    public static final float LEVEL_GEN_DEPTH_AMMO_BONUS             = 0.20f;
+    public static final float LEVEL_GEN_DEPTH_MEDKIT_BONUS           = BalanceConfig.LEVEL_GEN_DEPTH_MEDKIT_BONUS;
+    public static final float LEVEL_GEN_DEPTH_AMMO_BONUS             = BalanceConfig.LEVEL_GEN_DEPTH_AMMO_BONUS;
     // At full depth, the chance a room receives a bonus second ammo box.
-    public static final float LEVEL_GEN_DEPTH_EXTRA_AMMO_CHANCE      = 0.50f;
+    public static final float LEVEL_GEN_DEPTH_EXTRA_AMMO_CHANCE      = BalanceConfig.LEVEL_GEN_DEPTH_EXTRA_AMMO_CHANCE;
 
     // -------------------------------------------------------------------------
     // LOCK-AND-KEY GATING
@@ -132,9 +136,9 @@ public final class LevelGenConstants {
     public static final int   LEVEL_GEN_ARMORY_MIN_WEAPON_RACKS  = 2;
     public static final int   LEVEL_GEN_ARMORY_MAX               = 1;
     // Probability that a LARGE room (when no ARMORY weapon was placed) gets a weapon pickup
-    public static final float LEVEL_GEN_LARGE_WEAPON_CHANCE      = 0.30f;
+    public static final float LEVEL_GEN_LARGE_WEAPON_CHANCE      = BalanceConfig.LEVEL_GEN_LARGE_WEAPON_CHANCE;
     // Probability that a STANDARD room gets a random weapon spawn.
-    public static final float LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE = 0.35f;
+    public static final float LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE = BalanceConfig.LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE;
 
     // CRYO_CHAMBER — ~25% of levels, at most 2
     public static final float LEVEL_GEN_CRYO_CHANCE              = 0.25f;
@@ -305,16 +309,16 @@ public final class LevelGenConstants {
     // CONTAINMENT_BLOCK lighting
     public static final float LEVEL_GEN_ROOM_CONTAINMENT_FLICKER_CHANCE    = 0.08f;
 
-    // --- Shared per-room-type pickup chances ---
-    public static final float LEVEL_GEN_ARMORY_MEDKIT_CHANCE               = 0.40f;
-    public static final float LEVEL_GEN_ARMORY_ARMOUR_CHANCE               = 0.80f;
-    public static final float LEVEL_GEN_COMMAND_MEDKIT_CHANCE              = 0.50f;
-    public static final float LEVEL_GEN_COMMAND_ARMOUR_CHANCE              = 0.50f;
-    public static final float LEVEL_GEN_COMMAND_AMMO_CHANCE                = 0.60f;
+    // --- Shared per-room-type pickup chances (LOOT ROOM BUDGETS — see BalanceConfig) ---
+    public static final float LEVEL_GEN_ARMORY_MEDKIT_CHANCE               = BalanceConfig.LEVEL_GEN_ARMORY_MEDKIT_CHANCE;
+    public static final float LEVEL_GEN_ARMORY_ARMOUR_CHANCE               = BalanceConfig.LEVEL_GEN_ARMORY_ARMOUR_CHANCE;
+    public static final float LEVEL_GEN_COMMAND_MEDKIT_CHANCE              = BalanceConfig.LEVEL_GEN_COMMAND_MEDKIT_CHANCE;
+    public static final float LEVEL_GEN_COMMAND_ARMOUR_CHANCE              = BalanceConfig.LEVEL_GEN_COMMAND_ARMOUR_CHANCE;
+    public static final float LEVEL_GEN_COMMAND_AMMO_CHANCE                = BalanceConfig.LEVEL_GEN_COMMAND_AMMO_CHANCE;
     // POWER_PLANT / CRYO_CHAMBER / CONTAINMENT_BLOCK — hazardous/dark rooms (reduced loot)
-    public static final float LEVEL_GEN_HAZARD_ROOM_MEDKIT_CHANCE          = 0.25f;
-    public static final float LEVEL_GEN_HAZARD_ROOM_ARMOUR_CHANCE          = 0.20f;
-    public static final float LEVEL_GEN_HAZARD_ROOM_AMMO_CHANCE            = 0.30f;
+    public static final float LEVEL_GEN_HAZARD_ROOM_MEDKIT_CHANCE          = BalanceConfig.LEVEL_GEN_HAZARD_ROOM_MEDKIT_CHANCE;
+    public static final float LEVEL_GEN_HAZARD_ROOM_ARMOUR_CHANCE          = BalanceConfig.LEVEL_GEN_HAZARD_ROOM_ARMOUR_CHANCE;
+    public static final float LEVEL_GEN_HAZARD_ROOM_AMMO_CHANCE            = BalanceConfig.LEVEL_GEN_HAZARD_ROOM_AMMO_CHANCE;
 
     // -------------------------------------------------------------------------
     // START ROOM generator — staging room for weapon selection at run start

@@ -13,8 +13,9 @@ public final class WeaponConstants {
     // NORMAL_TO_RELOAD_DELAY: how long the normal pose is held after the fire flash
     // before the reload pose begins; lets the player see the weapon lower to idle first
     public static final float NORMAL_TO_RELOAD_DELAY_SECONDS    = 0.10f;
-    // DAMAGE_MIN_MULTIPLIER: damage floor at extreme range; prevents a dead zone
-    public static final float DAMAGE_MIN_MULTIPLIER             = 0.15f;
+    // DAMAGE_MIN_MULTIPLIER: damage floor at extreme range; prevents a dead zone.
+    // Balance value — lives in BalanceConfig (SINGLE SOURCE OF TRUTH).
+    public static final float DAMAGE_MIN_MULTIPLIER             = BalanceConfig.DAMAGE_MIN_MULTIPLIER;
 
     // Per-weapon fire shake magnitudes — triggered via ImpactEffectSystem.triggerShake on fire.
     // Small for rapid weapons to avoid nausea on sustained fire; large for slow heavy ones.
@@ -25,12 +26,12 @@ public final class WeaponConstants {
     public static final float GRENADE_FIRE_SHAKE_MAGNITUDE      = 7f;
     public static final float ASSAULT_RIFLE_FIRE_SHAKE_MAGNITUDE = 4f;
 
-    // Shotgun stats
-    public static final int     SHOTGUN_DAMAGE             = 50;
-    public static final int     SHOTGUN_CLIP_SIZE          = 1;
-    public static final int     SHOTGUN_RELOAD_TIME_TICKS  = 1;
-    public static final float   SHOTGUN_DAMAGE_DROP_COEFF  = 0.18f;
-    public static final int     SHOTGUN_RANGE_TILES        = 5;
+    // Shotgun stats — balance values live in BalanceConfig (SINGLE SOURCE OF TRUTH).
+    public static final int     SHOTGUN_DAMAGE             = BalanceConfig.SHOTGUN_DAMAGE;
+    public static final int     SHOTGUN_CLIP_SIZE          = BalanceConfig.SHOTGUN_CLIP_SIZE;
+    public static final int     SHOTGUN_RELOAD_TIME_TICKS  = BalanceConfig.SHOTGUN_RELOAD_TIME_TICKS;
+    public static final float   SHOTGUN_DAMAGE_DROP_COEFF  = BalanceConfig.SHOTGUN_DAMAGE_DROP_COEFF;
+    public static final int     SHOTGUN_RANGE_TILES        = BalanceConfig.SHOTGUN_RANGE_TILES;
     // SHOTGUN_PENETRATION: false = stops at first enemy (v1); true = pierces (future)
     public static final boolean SHOTGUN_PENETRATION        = false;
 
@@ -46,11 +47,11 @@ public final class WeaponConstants {
     // Damage table (coefficient 0.22, floor 0.15):
     //   distance 1: 32 × 0.78 = 25   distance 2: 32 × 0.56 = 18
     //   distance 3: 32 × 0.34 = 11   distance 4: 32 × 0.15 =  5   (clamped by floor)
-    public static final int     DBL_SHOTGUN_DAMAGE             = 32;
-    public static final int     DBL_SHOTGUN_CLIP_SIZE          = 2;
-    public static final int     DBL_SHOTGUN_RELOAD_TIME_TICKS  = 1;
-    public static final float   DBL_SHOTGUN_DAMAGE_DROP_COEFF  = 0.22f;
-    public static final int     DBL_SHOTGUN_RANGE_TILES        = 4;
+    public static final int     DBL_SHOTGUN_DAMAGE             = BalanceConfig.DBL_SHOTGUN_DAMAGE;
+    public static final int     DBL_SHOTGUN_CLIP_SIZE          = BalanceConfig.DBL_SHOTGUN_CLIP_SIZE;
+    public static final int     DBL_SHOTGUN_RELOAD_TIME_TICKS  = BalanceConfig.DBL_SHOTGUN_RELOAD_TIME_TICKS;
+    public static final float   DBL_SHOTGUN_DAMAGE_DROP_COEFF  = BalanceConfig.DBL_SHOTGUN_DAMAGE_DROP_COEFF;
+    public static final int     DBL_SHOTGUN_RANGE_TILES        = BalanceConfig.DBL_SHOTGUN_RANGE_TILES;
     // DBL_SHOTGUN_PENETRATION: false = stops at first enemy (spread dissipates on first target)
     public static final boolean DBL_SHOTGUN_PENETRATION        = false;
 
@@ -68,11 +69,11 @@ public final class WeaponConstants {
     // Damage table (coefficient 0.10, floor 0.15):
     //   distance 1: 18 × 0.90 = 16   distance 4: 18 × 0.60 = 11
     //   distance 6: 18 × 0.40 =  7   distance 8: 18 × 0.20 =  4
-    public static final int   PLASMA_RIFLE_DAMAGE             = 18;
-    public static final int   PLASMA_RIFLE_CLIP_SIZE          = 4;
-    public static final int   PLASMA_RIFLE_RELOAD_TIME_TICKS  = 1;
-    public static final float PLASMA_RIFLE_DAMAGE_DROP_COEFF  = 0.10f;
-    public static final int   PLASMA_RIFLE_RANGE_TILES        = 8;
+    public static final int   PLASMA_RIFLE_DAMAGE             = BalanceConfig.PLASMA_RIFLE_DAMAGE;
+    public static final int   PLASMA_RIFLE_CLIP_SIZE          = BalanceConfig.PLASMA_RIFLE_CLIP_SIZE;
+    public static final int   PLASMA_RIFLE_RELOAD_TIME_TICKS  = BalanceConfig.PLASMA_RIFLE_RELOAD_TIME_TICKS;
+    public static final float PLASMA_RIFLE_DAMAGE_DROP_COEFF  = BalanceConfig.PLASMA_RIFLE_DAMAGE_DROP_COEFF;
+    public static final int   PLASMA_RIFLE_RANGE_TILES        = BalanceConfig.PLASMA_RIFLE_RANGE_TILES;
     // PLASMA_RIFLE_PENETRATION: true = shot pierces all enemies in a line
     public static final boolean PLASMA_RIFLE_PENETRATION      = true;
 
@@ -92,14 +93,14 @@ public final class WeaponConstants {
     //   distance 1: 10 × 0.90 = 9    distance 2: 10 × 0.80 = 8
     //   distance 4: 10 × 0.60 = 6    distance 6: 10 × 0.40 = 4
     //   distance 8: 10 × 0.20 = 2    (minimum floor applies at extreme range)
-    public static final int     CHAINGUN_DAMAGE             = 10;
+    public static final int     CHAINGUN_DAMAGE             = BalanceConfig.CHAINGUN_DAMAGE;
     // 8 bursts × 3 shots = 24 total rounds per clip
-    public static final int     CHAINGUN_CLIP_SIZE          = 24;
+    public static final int     CHAINGUN_CLIP_SIZE          = BalanceConfig.CHAINGUN_CLIP_SIZE;
     // Each press of fire launches CHAINGUN_BURST_SIZE simultaneous bullets in one volley
     public static final int     CHAINGUN_BURST_SIZE         = 3;
-    public static final int     CHAINGUN_RELOAD_TIME_TICKS  = 1;
-    public static final float   CHAINGUN_DAMAGE_DROP_COEFF  = 0.10f;
-    public static final int     CHAINGUN_RANGE_TILES        = 8;
+    public static final int     CHAINGUN_RELOAD_TIME_TICKS  = BalanceConfig.CHAINGUN_RELOAD_TIME_TICKS;
+    public static final float   CHAINGUN_DAMAGE_DROP_COEFF  = BalanceConfig.CHAINGUN_DAMAGE_DROP_COEFF;
+    public static final int     CHAINGUN_RANGE_TILES        = BalanceConfig.CHAINGUN_RANGE_TILES;
     // CHAINGUN_PENETRATION: false = stops at first enemy (bullets are stopped by armour)
     public static final boolean CHAINGUN_PENETRATION        = false;
 
@@ -118,11 +119,11 @@ public final class WeaponConstants {
     //   distance 6:  14 × 0.52 =  7   distance 8: 14 × 0.36 = 5
     //   distance 10: 14 × 0.20 =  2   (minimum floor applies at extreme range)
     public static final String  ASSAULT_RIFLE_DISPLAY_NAME      = "ASSAULT RIFLE";
-    public static final int     ASSAULT_RIFLE_DAMAGE            = 14;
-    public static final int     ASSAULT_RIFLE_CLIP_SIZE         = 30;
-    public static final int     ASSAULT_RIFLE_RELOAD_TIME_TICKS = 1;
-    public static final float   ASSAULT_RIFLE_DAMAGE_DROP_COEFF = 0.08f;
-    public static final int     ASSAULT_RIFLE_RANGE_TILES       = 10;
+    public static final int     ASSAULT_RIFLE_DAMAGE            = BalanceConfig.ASSAULT_RIFLE_DAMAGE;
+    public static final int     ASSAULT_RIFLE_CLIP_SIZE         = BalanceConfig.ASSAULT_RIFLE_CLIP_SIZE;
+    public static final int     ASSAULT_RIFLE_RELOAD_TIME_TICKS = BalanceConfig.ASSAULT_RIFLE_RELOAD_TIME_TICKS;
+    public static final float   ASSAULT_RIFLE_DAMAGE_DROP_COEFF = BalanceConfig.ASSAULT_RIFLE_DAMAGE_DROP_COEFF;
+    public static final int     ASSAULT_RIFLE_RANGE_TILES       = BalanceConfig.ASSAULT_RIFLE_RANGE_TILES;
     // ASSAULT_RIFLE_PENETRATION: false = stops at the first enemy (single bullet, no pierce)
     public static final boolean ASSAULT_RIFLE_PENETRATION       = false;
 
@@ -218,15 +219,16 @@ public final class WeaponConstants {
     //   charge 1 (half), distance 16: 40 × max(0.70, 1 - 0.02×15) = 40 × 0.70 = 28
     //   charge 2 (full), distance 1: 90 × 1.00 = 90
     //   charge 2 (full), distance 16: 90 × 0.70 = 63
-    public static final int[]   RAILGUN_DAMAGE_BY_CHARGE          = {0, 40, 90};
+    // Balance values (damage, range, falloff, clip, reload, ammo) live in BalanceConfig.
+    public static final int[]   RAILGUN_DAMAGE_BY_CHARGE          = BalanceConfig.RAILGUN_DAMAGE_BY_CHARGE;
     public static final int     RAILGUN_MAX_CHARGE                = 2;
-    public static final float   RAILGUN_DROP_COEFF                = 0.02f;
-    public static final float   RAILGUN_DAMAGE_MIN_MULTIPLIER     = 0.70f;
-    public static final int     RAILGUN_RANGE_TILES               = 16;
-    public static final int     RAILGUN_CLIP_SIZE                 = 1;
-    public static final int     RAILGUN_RELOAD_TIME_TICKS         = 2;
-    public static final int     RAILGUN_PICKUP_SLUGS              = 4;
-    public static final int     RAILGUN_MAX_SLUGS                 = 12;
+    public static final float   RAILGUN_DROP_COEFF                = BalanceConfig.RAILGUN_DROP_COEFF;
+    public static final float   RAILGUN_DAMAGE_MIN_MULTIPLIER     = BalanceConfig.RAILGUN_DAMAGE_MIN_MULTIPLIER;
+    public static final int     RAILGUN_RANGE_TILES               = BalanceConfig.RAILGUN_RANGE_TILES;
+    public static final int     RAILGUN_CLIP_SIZE                 = BalanceConfig.RAILGUN_CLIP_SIZE;
+    public static final int     RAILGUN_RELOAD_TIME_TICKS         = BalanceConfig.RAILGUN_RELOAD_TIME_TICKS;
+    public static final int     RAILGUN_PICKUP_SLUGS              = BalanceConfig.RAILGUN_PICKUP_SLUGS;
+    public static final int     RAILGUN_MAX_SLUGS                 = BalanceConfig.RAILGUN_MAX_SLUGS;
     public static final boolean RAILGUN_PENETRATION               = true;
     public static final float   RAILGUN_BEAM_DURATION             = 0.14f;
     public static final float   RAILGUN_SHAKE_INTENSITY           = 10f;
@@ -242,17 +244,18 @@ public final class WeaponConstants {
     // Depth-3 (far-edge) tiles use FLAME_FALLOFF instead of FLAME_IMPACT_DAMAGE.
     // FLAME_DAMAGE_DROP_COEFF = 0.0: depth falloff is handled explicitly, not by the drop curve.
     // Burn DoT constants (FLAME_BURN_*) are reserved for the enemy system when implemented.
-    public static final int     FLAME_IMPACT_DAMAGE        = 8;
-    public static final int     FLAME_FALLOFF              = 5;
-    public static final int     FLAME_BURN_DAMAGE_PER_TURN = 6;
-    public static final int     FLAME_BURN_TURNS           = 4;
-    public static final float   FLAME_DAMAGE_DROP_COEFF    = 0.0f;
-    public static final int     FLAME_RANGE_TILES          = 3;
-    public static final int     FLAME_CLIP_SIZE            = 30;
+    // Balance values (impact/falloff/burn/range/clip/ammo) live in BalanceConfig.
+    public static final int     FLAME_IMPACT_DAMAGE        = BalanceConfig.FLAME_IMPACT_DAMAGE;
+    public static final int     FLAME_FALLOFF              = BalanceConfig.FLAME_FALLOFF;
+    public static final int     FLAME_BURN_DAMAGE_PER_TURN = BalanceConfig.FLAME_BURN_DAMAGE_PER_TURN;
+    public static final int     FLAME_BURN_TURNS           = BalanceConfig.FLAME_BURN_TURNS;
+    public static final float   FLAME_DAMAGE_DROP_COEFF    = BalanceConfig.FLAME_DAMAGE_DROP_COEFF;
+    public static final int     FLAME_RANGE_TILES          = BalanceConfig.FLAME_RANGE_TILES;
+    public static final int     FLAME_CLIP_SIZE            = BalanceConfig.FLAME_CLIP_SIZE;
     public static final int     FUEL_PER_SHOT              = 3;
-    public static final int     FLAME_RELOAD_TICKS         = 1;
-    public static final int     FLAME_PICKUP_FUEL          = 60;
-    public static final int     FLAME_MAX_FUEL             = 120;
+    public static final int     FLAME_RELOAD_TICKS         = BalanceConfig.FLAME_RELOAD_TICKS;
+    public static final int     FLAME_PICKUP_FUEL          = BalanceConfig.FLAME_PICKUP_FUEL;
+    public static final int     FLAME_MAX_FUEL             = BalanceConfig.FLAME_MAX_FUEL;
     public static final float   FLAME_SHAKE_INTENSITY      = 4f;
     public static final float   FLAME_SCREEN_GLOW_ALPHA    = 0.30f;
     // Incinerator procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer
@@ -269,18 +272,19 @@ public final class WeaponConstants {
     //   4 orthogonal neighbours: GRENADE_FALLOFF_DAMAGE = 16 (edge of plus)
     //   player self-damage:    GRENADE_SELF_DAMAGE    = 20 (if caught in blast)
     // Per-shot ceiling: 5 enemies in plus = 30 + 4×16 = 94 distributed damage.
-    public static final int     GRENADE_SPLASH_DAMAGE      = 30;
-    public static final int     GRENADE_FALLOFF_DAMAGE     = 16;
-    public static final int     GRENADE_SELF_DAMAGE        = 20;
-    public static final float   GRENADE_DAMAGE_DROP_COEFF  = 0.0f;
-    public static final int     GRENADE_RANGE_TILES        = 6;
+    // Balance values (splash/falloff/self damage, range, clip, ammo) live in BalanceConfig.
+    public static final int     GRENADE_SPLASH_DAMAGE      = BalanceConfig.GRENADE_SPLASH_DAMAGE;
+    public static final int     GRENADE_FALLOFF_DAMAGE     = BalanceConfig.GRENADE_FALLOFF_DAMAGE;
+    public static final int     GRENADE_SELF_DAMAGE        = BalanceConfig.GRENADE_SELF_DAMAGE;
+    public static final float   GRENADE_DAMAGE_DROP_COEFF  = BalanceConfig.GRENADE_DAMAGE_DROP_COEFF;
+    public static final int     GRENADE_RANGE_TILES        = BalanceConfig.GRENADE_RANGE_TILES;
     // GRENADE_ARM_TILES: grenade must travel this many tiles before it can detonate.
     // Prevents point-blank abuse; unarmed grenade passes through enemies harmlessly.
     public static final int     GRENADE_ARM_TILES          = 2;
-    public static final int     GRENADE_CLIP_SIZE          = 3;
-    public static final int     GRENADE_RELOAD_TIME_TICKS  = 2;
-    public static final int     GRENADE_PICKUP_AMMO        = 6;
-    public static final int     GRENADE_MAX_AMMO           = 18;
+    public static final int     GRENADE_CLIP_SIZE          = BalanceConfig.GRENADE_CLIP_SIZE;
+    public static final int     GRENADE_RELOAD_TIME_TICKS  = BalanceConfig.GRENADE_RELOAD_TIME_TICKS;
+    public static final int     GRENADE_PICKUP_AMMO        = BalanceConfig.GRENADE_PICKUP_AMMO;
+    public static final int     GRENADE_MAX_AMMO           = BalanceConfig.GRENADE_MAX_AMMO;
     // GRENADE_PENETRATION is not used by the custom marchShot, kept for API completeness.
     public static final boolean GRENADE_PENETRATION        = false;
     // 5-tile plus splash offsets: {forwardDelta, lateralDelta} relative to impact tile.
@@ -331,7 +335,7 @@ public final class WeaponConstants {
 
     // ── Weapon level scaling ────────────────────────────────────────────────
     public static final int   MAX_WEAPON_LEVEL                      = 10;
-    public static final float WEAPON_LEVEL_DAMAGE_PER_LEVEL         = 0.10f;  // +10% per level
+    public static final float WEAPON_LEVEL_DAMAGE_PER_LEVEL         = BalanceConfig.WEAPON_LEVEL_DAMAGE_PER_LEVEL;  // +10% per level (balance: BalanceConfig)
     public static final float WEAPON_LEVEL_ACCURACY_PER_LEVEL       = 0.02f;  // +2% per level
     public static final float WEAPON_LEVEL_ACCURACY_MINIMUM         = 0.50f;  // accuracy floor
     public static final float WEAPON_LEVEL_RELOAD_STEP              = 0.15f;  // ticks reduced per level
@@ -366,7 +370,7 @@ public final class WeaponConstants {
     /** Critical hit total damage multiplier: crits deal 2× base damage.
      *  Only the bonus portion (CRIT_DAMAGE_MULTIPLIER - 1) * base is applied
      *  as a second applyDamageTo() call inside AbilityResolver. */
-    public static final float CRIT_DAMAGE_MULTIPLIER = 2.0f;
+    public static final float CRIT_DAMAGE_MULTIPLIER = BalanceConfig.CRIT_DAMAGE_MULTIPLIER;
 
     // Per-weapon base accuracy (level-1, COMMON reference values)
     public static final float SHOTGUN_BASE_ACCURACY               = 0.85f;
