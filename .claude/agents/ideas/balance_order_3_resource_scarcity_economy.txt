@@ -1,7 +1,23 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Resource Scarcity Model — make every bullet and medkit a decision
 ---
+
+IMPLEMENTATION NOTES (ammo + HP half done; credit half BLOCKED on a shop sink):
+  - SUPPLY/DEMAND, scarcity ratio S, per-weapon S, reserve-banking-floors, and the
+    heal economy (INCOMING / HEAL_SUPPLY / netHpDrain / survivalTurnsBought) are
+    formalized as pure methods in util/GameMath.java and printed by util/BalanceReport
+    (new SCARCITY + HEAL ECONOMY living table).
+  - The four levers + scarcity bands + the canonical MODEL FLOOR live in
+    util/BalanceConfig.java (SECTION 5 levers, SECTION 10 bands/model). Tuned so the
+    depth-1 model floor lands at S=0.88 floor-wide and < 0.6 per weapon, reserve caps
+    bank ~1.5 floors, and the average floor is a ~10.5% net eHP loss. Pre-idea-3 S was
+    ~5.8 (effectively infinite ammo).
+  - Bullets reserve cap is floored at the largest bullet clip (AR 30) so the weapon
+    stays usable; it is the one cap above the 1.5-floor target.
+  - CREDIT SINK remains a hard blocker for the credit economy (no shop exists yet);
+    documented in docs/balance-rule-system.txt. Full reconciliation of clip sizes with
+    the high-damage/low-eHP economy is the deferred eHP/damage rescale (see same doc).
 
 Idea 3 of 6 in the balance series (see balance_order_1 for the full list).
 Depends on ideas 1 and 2 (config + the four primitives, especially ammo
