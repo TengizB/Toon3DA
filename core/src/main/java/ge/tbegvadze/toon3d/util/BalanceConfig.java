@@ -651,4 +651,16 @@ public final class BalanceConfig {
      * sooner; this is the "you mispositioned" reference, not the spread lifetime. Range: 1–3.
      */
     public static final int   HAZARD_THREAT_TURNS_STOOD    = 2;
+
+    // =====================================================================================
+    // SECTION 13 — TELEGRAPH & COUNTERPLAY (idea 4, Pillar 5) — fairness contract
+    // A turn-based game is only tactical if big threats are READABLE before they land. The rule:
+    // every attack that can deal more than this fraction of the reference player's eHP in ONE hit
+    // MUST be telegraphed (a wind-up the player can react to) or otherwise avoidable. Burst damage
+    // without warning is banned — a death must feel like "I made a mistake", not a dice roll.
+    // BalanceReport's TELEGRAPH AUDIT checks every attack against this cap.
+    // =====================================================================================
+
+    /** Max fraction of reference eHP an UN-telegraphed single hit may deal (~51 HP of 205). Range: 0.20–0.30. */
+    public static final float TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION = 0.25f;
 }
