@@ -1,0 +1,217 @@
+================================================================================
+BALANCE RULE SYSTEM — the math contract for adding content safely
+================================================================================
+Companion to: .claude/agents/ideas/balance_order_2_balance_rule_system_and_math.txt
+Formulas live in: util/GameMath.java   (the four primitives + derived scores)
+Anchors & bands live in: util/BalanceConfig.java   (SECTION 9)
+Living table generator: util/BalanceReport.java   (dev-only main, no LibGDX state)
+
+This is the "balance contract." When a NEW weapon, enemy, item, or upgrade is
+added, check it against the fixed formulas below and know IN ADVANCE whether it
+breaks balance — instead of finding out by feel after the fact. Every piece of
+content must pass it.
+
+
+--------------------------------------------------------------------------------
+WHY TURNS, NOT SECONDS
+--------------------------------------------------------------------------------
+The game is strictly turn-based: one player action = exactly one world turn, and
+enemies act once per player turn. So TIME is measured in TURNS, never seconds.
+There is no real-time DPS — only damage-per-turn. This makes the whole balance
+model exact arithmetic instead of physics. Use it.
+
+
+================================================================================
+THE FOUR PRIMITIVES  (everything else is derived)
+================================================================================
+All four are pure static methods in util/GameMath.java with full
+Formula/Derivation/Edge-case comment blocks (project rule: no inline formulas).
+
+1. eHP — EFFECTIVE HIT POINTS                  GameMath.effectiveHitPoints(...)
+   How much raw incoming damage a thing really absorbs.
+       eHP = (rawHP + armor) * 1/(1 - dodge) * H/max(1, H - R)
+   where H = average incoming hit, R = flat reduction.
+   - Dodge: a dodged hit deals 0, so survivability scales by 1/(1 - dodge).
+   - Flat reduction: each landed hit of size H only removes (H - R).
+   MARINE start (130 HP, 75 armor, 0 dodge, 0 R)            -> 205 eHP.
+   Tough/Agile (160 HP, 75 armor, 0.20 dodge, R=6, H=12)    -> 587 eHP.
+   RULE: enemies currently have NO dodge or reduction, so enemy eHP == raw HP.
+   If an armored enemy archetype is ever added, store its RAW hp in BalanceConfig
+   and declare the reduction separately so eHP stays derivable.
+
+2. DPT — DAMAGE PER TURN
+   BURST DPT = damage in a single fire action (one turn): Shotgun 50, Railgun 90.
+   SUSTAINED DPT = damage averaged over a full clip + reload cycle:
+       sustainedDPT = (clipSize * damagePerShot) / (clipSize + reloadTicks)
+                                                   GameMath.sustainedDamagePerTurn(...)
+   Falloff: real DPT decays with range. Where falloff matters, credit a weapon
+   its EFFECTIVE DPT at its intended engagement band, not its point-blank muzzle
+   number. (The living table below uses muzzle sustained DPT; refining each
+   weapon to its engagement band is a follow-up.)
+
+2b. AMMO EFFICIENCY — damage per ammo unit       GameMath.ammoEfficiency(...)
+       ammoEfficiency = damagePerShot / ammoPerShot
+   Run-budget = ammoEfficiency * (total ammo the economy hands you). This is the
+   bridge to the scarcity model (idea 3) — note it is governed by what the
+   economy supplies, NOT by the reserve cap.
+
+3. TTK — TURNS TO KILL                           GameMath.turnsToKill(...)
+       turnsToKill = ceil(target.eHP / attacker.effectiveDPT)
+   Feed ENEMY DPT + PLAYER eHP to get the player's Turns-To-Die (TTD).
+
+4. TP — THREAT POINTS (one danger number per enemy)  GameMath.threatPoints(...)
+       enemyDPT      = attackDamage / max(1, attackCadenceTurns)
+       survivalTurns = enemy.eHP / REFERENCE_PLAYER_DPT        (= 25, the shotgun)
+       TP            = enemyDPT * survivalTurns * positionalMultiplier
+   positionalMultiplier (a DESIGNER classification, not auto-derived):
+       1.00 melee   1.15 fast-melee   1.30 ranged   (+0.25 if it applies a
+       DOT/stun/slow status). Constants: BalanceConfig.POSITIONAL_MULT_*.
+   TP is the currency the encounter budget (ideas 3/4) spends: "this floor may
+   contain up to N total TP" makes difficulty a dial, not an accident.
+
+DERIVED SCORES
+   weaponPowerScore = sustainedEffectiveDPT * sqrt(ammoEfficiencyNormalized)
+                                                   GameMath.weaponPowerScore(...)
+     ammoEfficiencyNormalized = ammoEfficiency / REFERENCE_AMMO_EFFICIENCY (= 40).
+     The sqrt dampens the ammo term so per-shot damage can't dominate the score.
+   goldenRatio = turnsToDie / turnsToKill          GameMath.goldenRatio(...)
+   depthThreatScale = healthScale^(d-1) * damageScale^(d-1)
+                                                   GameMath.depthThreatScale(...)
+
+REFERENCE ANCHORS (BalanceConfig, SECTION 9)
+   REFERENCE_PLAYER_DPT       = 25   (start shotgun sustained DPT)
+   REFERENCE_PLAYER_EHP       = 205  (MARINE start eHP)
+   REFERENCE_AMMO_EFFICIENCY  = 40   (power-score normaliser)
+
+
+================================================================================
+THE CONTRACT — checklist every new piece of content MUST pass
+================================================================================
+
+[A] NEW WEAPON — must land inside the POWER BAND for its role.
+    weaponPower = sustainedEffectiveDPT * sqrt(ammoEfficiency / 40)
+        sidearm            power  8-14   (pistol-tier, ammo-cheap, always usable)
+        workhorse          power 12-18   (assault rifle, chaingun)
+        burst/specialist   power 18-26   (shotgun, plasma — high DPT, ammo-hungry)
+        heavy/charge       power 24-32   (railgun, grenade — scarce ammo, slow)
+    [ ] Pick a role, then tune numbers until weaponPower lands in that band.
+    [ ] If it lands ABOVE the band it WILL invalidate the others — reject it.
+    [ ] Higher RARITY does NOT raise the band. Rarity buys ABILITIES (idea 5),
+        never raw DPT, so a legendary is never a strict numeric upgrade.
+
+[B] NEW ENEMY — must declare a ROLE and land in that role's TP band.
+        chaff       TP  4-8    (dies in 1 hit, comes in packs)
+        soldier     TP  9-16   (the standard threat unit)
+        bruiser     TP 17-28   (forces a weapon swap / repositioning)
+        mini-elite  TP 40-75   (a mid-floor spike; rare)
+        boss        see idea 6 (own ruleset)
+    [ ] Choose role -> set HP, damage, cadence, range so TP lands in band.
+    [ ] THEN verify the golden ratio TTD/TTK:
+            chaff / soldier -> [3, 8]      bruiser -> [2, 4]
+        An enemy that violates the golden ratio is REJECTED even if its TP is in
+        band. (Chaff is balanced around PACKS, so a single chaff's ratio may read
+        high; budget chaff by pack TP, not by the lone unit.)
+
+[C] NEW CONSUMABLE / HEAL — priced in "turns of survival bought."
+        survivalTurnsBought = healAmount / averageIncomingDPT(floor)
+    [ ] A heal that buys > 10 turns on an early floor trivializes scarcity.
+        Price heals against the floor's average incoming DPT, not a flat number.
+
+[D] NEW UPGRADE / ABILITY — must cost POWER BUDGET (full math in idea 5).
+    [ ] An upgrade's value = (DPT or eHP gain) expressed in TP-equivalent. A
+        level-up grants a fixed budget; every offered choice must cost ~the same
+        budget so no choice is a no-brainer. Detailed in balance_order_5.
+
+
+================================================================================
+DEPTH SCALING — keep the player and enemy curves COUPLED
+================================================================================
+Define the two curves relative to each other, never independently:
+
+    enemyThreatAtDepth(d) = baseTP * healthScale^(d-1) * damageScale^(d-1)
+                          = baseTP * 1.08^(d-1) * 1.06^(d-1)   (current values)
+                          = baseTP * GameMath.depthThreatScale(1.08, 1.06, d)
+    playerPowerAtDepth(d) = f(expected level-ups, found weapon upgrades, found
+                              armor eHP by depth d)
+
+THE INVARIANT (must hold, or the game goes unfair-hard or trivial-easy):
+        0.9  <=  playerPowerAtDepth(d) / enemyThreatAtDepth(d)  <=  1.2
+Stay roughly even-to-slightly-ahead: no more than +20% ahead or -10% behind. If
+found-loot and XP let the player outscale this, lower the loot/XP rate; if they
+fall behind, raise it. Bounds: BalanceConfig.DEPTH_COUPLING_RATIO_MIN/MAX.
+
+
+================================================================================
+THE LIVING TABLE  (regenerate with BalanceReport whenever BalanceConfig changes)
+================================================================================
+Generated from the CURRENT BalanceConfig numbers through GameMath. "in?"/"gr?"
+report whether the row sits inside its role band (OK / UNDER / OVER). These
+numbers come straight from the game constants, so they cannot lie.
+
+WEAPONS                                          (powerScore = sustDPT*sqrt(ammoEff/40))
+weapon          role        sustDPT  ammoEff  powerScore   band    in?
+-----------------------------------------------------------------------------
+Shotgun         BURST          25.0     50.0        28.0   18-26   OVER
+Dbl Shotgun     BURST          21.3     32.0        19.1   18-26   OK
+Plasma Rifle    BURST          14.4     18.0         9.7   18-26   UNDER
+Assault Rifle   WORKHORSE      13.5     14.0         8.0   12-18   UNDER
+Chaingun        WORKHORSE       9.6     10.0         4.8   12-18   UNDER
+Railgun(full)   HEAVY          30.0     90.0        45.0   24-32   OVER
+Grenade Lchr    HEAVY          18.0     30.0        15.6   24-32   UNDER
+
+ENEMIES                            (TP = (atkDmg/cad)*(eHP/25)*posMult ; gr = TTD/TTK)
+enemy         role         eHP  atkDmg  cad  posMult       TP   in?   TTD/TTK  gr?
+-----------------------------------------------------------------------------------
+Gore Biter    CHAFF         18       7    1     1.15      5.8   OK       30.0  OVER
+Eye Tyrant    CHAFF         18       7    1     1.30      6.6   OK       30.0  OVER
+Acid Drone    SOLDIER       22       8    1     1.30      9.2   OK       26.0  OVER
+Void Shroud   SOLDIER       25       9    1     1.15     10.3   OK       23.0  OVER
+Mire Wraith   SOLDIER       38       7    1     1.30     13.8   OK       30.0  OVER
+Shell Brute   BRUISER       38      13    1     1.00     19.8   OK       16.0  OVER
+Plague Hulk   SOLDIER       50      10    2     1.00     10.0   OK       41.0  OVER
+Iron Stalker  MINI_ELITE    95      16    1     1.15     69.9   OK        6.5  OVER
+
+Golden ratio uses the player's best burst (shotgun, 50) for TTK and reference
+eHP (205) for TTD. Iron Stalker scored on its melee line; Grenade on centre
+splash; Railgun at full charge.
+
+
+================================================================================
+OUT-OF-BAND CONTENT — flagged for a follow-up tuning pass
+================================================================================
+The table surfaces real imbalances the contract exists to catch. None is fixed
+here (this idea ships the SYSTEM, not the rebalance); each is a tuning target.
+
+WEAPONS
+  * Shotgun (power 28.0, band 18-26) — OVER. It has both the best sustained DPT
+    of the non-charge guns AND the best ammo efficiency: a genuine imbalance.
+    The known fix target the idea calls out.
+  * Railgun full charge (power 45.0, band 24-32) — OVER on the power axis because
+    its 90/slug efficiency is enormous; slug scarcity (cap 12) is what actually
+    holds it in check. Reconcile against the scarcity model (idea 3) before
+    nerfing raw numbers.
+  * Plasma Rifle / Assault Rifle / Chaingun / Grenade — UNDER their bands. The
+    standard guns are weak relative to the shotgun yardstick; raising them is the
+    other half of the shotgun fix.
+
+ENEMIES
+  * Every enemy's TP is IN band — the role assignments are healthy.
+  * Every golden ratio reads OVER: the player kills almost everything in 1 burst
+    while enemies need 16-41 turns to kill the player 1v1. This is exactly the
+    "harmless damage sponge" problem the idea names — enemies are individually
+    too survivable-for-the-player / too slow-to-kill-the-player. Pressure comes
+    from packs and depth, not single units. Closing the golden ratio (lower
+    player burst dominance and/or raise enemy DPT) is the headline rebalance for
+    a later idea. Iron Stalker (6.5) is closest to fair — correct for an elite.
+
+
+================================================================================
+HOW TO REGENERATE THIS TABLE
+================================================================================
+Run the dev-only auditor (touches no render state; pure GameMath + BalanceConfig):
+
+    ./gradlew core:run -PmainClass=ge.tbegvadze.toon3d.util.BalanceReport
+
+or run BalanceReport.main(...) from an IDE. Paste its WEAPONS/ENEMIES tables
+over the "LIVING TABLE" section above whenever any BalanceConfig number changes.
+The numbers can't drift from the game because they ARE the game's constants.
