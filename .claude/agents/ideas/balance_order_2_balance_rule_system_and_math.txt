@@ -1,0 +1,237 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Balance Rule System — the math contract for adding content safely
+---
+
+Idea 2 of 6 in the balance series (see balance_order_1 for the full list).
+Depends on idea 1 (Unified Balance Config) being done first.
+
+=== PURPOSE ===
+
+A rule system + the math behind it, so that when a NEW weapon, enemy, item, or
+upgrade is added, the designer can check it against fixed formulas and know in
+advance whether it breaks balance — instead of finding out by feel after the
+fact. This is the "balance contract." Every piece of content must pass it.
+
+The whole system rests on FOUR primitive quantities. Everything else is derived.
+All four become pure functions in util/GameMath.java (project rule: every
+formula is a documented static method, never inline).
+
+
+=== THE FOUR PRIMITIVES ===
+
+  1. eHP   — Effective Hit Points (how much raw damage a thing really absorbs)
+  2. DPT   — Damage Per Turn (output, the turn being the game's atomic unit)
+  3. TTK   — Turns To Kill (= target eHP / attacker DPT)
+  4. TP    — Threat Points (a single comparable "danger number" per enemy)
+
+Because the game is strictly turn-based (one action = one world turn), TIME is
+measured in TURNS, not seconds. This makes the math clean and exact: there is no
+real-time DPS, only damage-per-turn. This is a huge advantage SPD-style games
+have over action games — balance is arithmetic, not physics.
+
+
+=== PRIMITIVE 1 — EFFECTIVE HP (eHP) ===
+
+  Formula: effectiveHitPoints
+  Derivation:
+    Dodge multiplies survivability by 1/(1-dodge) because a dodged hit deals 0.
+    Flat reduction R subtracts from each incoming hit of average size H, so it
+    multiplies survivability by H/(H-R) for HP-bound damage.
+      eHP = (rawHP + armorPool) * 1/(1 - dodgeChance) * H/max(1, H-R)
+  Player example (MARINE start, no stat investment):
+      rawHP 130, armor 75, dodge 0, R 0  ->  eHP = 205
+  Player example (TOUGHNESS 6: +30 HP, R=6; AGI for 0.20 dodge), avg hit H=12:
+      eHP = (160 + 75) * 1/0.80 * 12/6 = 235 * 1.25 * 2 = 587 eHP
+  Enemy example (no dodge/armor): eHP == rawHP. Plague Hulk eHP = 50.
+
+  RULE: enemies currently have NO dodge or flat reduction, so enemy eHP = HP.
+  If an armored enemy archetype is ever added, its HP entry in BalanceConfig
+  must be its RAW hp and its reduction declared separately so eHP stays derivable.
+
+
+=== PRIMITIVE 2 — DAMAGE PER TURN (DPT) ===
+
+Two flavors. Both are needed.
+
+  BURST DPT = damage delivered in a single fire action (one turn).
+      Shotgun 50, Railgun(full) 90, Grenade 30, Chaingun 10.
+
+  SUSTAINED DPT = damage averaged over a full clip + reload cycle:
+      sustainedDPT = (clipSize * damagePerShot) / (clipSize + reloadTicks)
+  Worked from current numbers:
+      SHOTGUN       (1*50)/(1+1)  = 25.0   <-- highest non-charge
+      DBL_SHOTGUN   (2*32)/(2+1)  = 21.3
+      PLASMA_RIFLE  (4*18)/(4+1)  = 14.4
+      ASSAULT_RIFLE (30*14)/(30+1)= 13.5
+      CHAINGUN      (24*10)/(24+1)=  9.6
+      RAILGUN full  (1*90)/(1+2)  = 30.0
+      RAILGUN min   (1*40)/(1+2)  = 13.3
+
+  >>> BALANCE SIGNAL ALREADY VISIBLE: the SHOTGUN has both the best sustained
+      DPT (25) of the non-charge guns AND (see primitive below) the best ammo
+      efficiency. That is a real imbalance the current game has, surfaced purely
+      by the formula. This is what the contract is for.
+
+  Falloff: actual DPT decays with range via damageAtDistance(). Define
+  EFFECTIVE DPT at the weapon's INTENDED engagement band (see weapon-role table)
+  rather than at muzzle, so a 5-tile shotgun isn't credited with point-blank
+  numbers it rarely achieves.
+
+
+=== PRIMITIVE 2b — AMMO EFFICIENCY (damage per ammo unit) ===
+
+  Formula: damagePerAmmoUnit = damagePerShot / ammoPerShot   (usually /1)
+  Run-total potential = damagePerAmmoUnit * reserveCap:
+      SHOTGUN   50/shell * 60 shells  = 3000 potential damage
+      ASSAULT   14/bullet * 200       = 2800   (shares bullets w/ chaingun)
+      CHAINGUN  10/bullet * 200       = 2000
+      PLASMA    18/cell  * 120        = 2160
+  This is the bridge to the scarcity model (idea 3): a weapon's "run budget" is
+  damagePerAmmoUnit * total ammo the economy hands you, NOT its reserve cap.
+
+
+=== PRIMITIVE 3 — TURNS TO KILL (TTK) ===
+
+  Formula: turnsToKill = ceil(target.eHP / attacker.effectiveDPT)
+  Player-killing-enemy examples (start shotgun, burst, point blank):
+      Gore Biter 18 / 50  -> 1 turn
+      Plague Hulk 50 / 50 -> 1 turn
+      Iron Stalker 95 /50 -> 2 turns
+  Enemy-killing-player (TTD, Turns To Die) examples vs 205 eHP start player:
+      Shell Brute 13/turn -> 16 turns of continuous adjacency
+      Eye Tyrant  7/turn  -> 30 turns
+
+  THE GOLDEN RATIO (the single most important design target):
+      For a FAIR 1-on-1 fight the player should win, but not trivially.
+      Target:  TTK_player  <  TTD_player   (player kills enemy before dying)
+      and      TTD_player / TTK_player  in [3, 8] for trash mobs
+               (you can kill ~3-8 of this enemy back-to-back before dying if you
+                take every hit — but you WON'T take every hit if you play well).
+  This ratio is the knob that makes fights "tense but winnable." Below 3 = unfair
+  / swingy. Above 8 = enemies are harmless damage sponges (the current problem).
+
+
+=== PRIMITIVE 4 — THREAT POINTS (TP): one number per enemy ===
+
+  Formula: threatPoints
+  Derivation: an enemy is dangerous in proportion to (a) how much it hurts you
+  per turn, (b) how long it survives your fire (= how many turns it keeps
+  hurting you), and (c) whether it can hurt you without being adjacent.
+      TP = enemyDPT * survivalTurns * positionalMultiplier
+  where
+      enemyDPT       = attackDamage / max(1, attackCadenceTurns)
+      survivalTurns  = enemy.eHP / REFERENCE_PLAYER_DPT   (use 25, the shotgun)
+      positionalMult = 1.0 melee, 1.30 ranged, 1.15 fast-melee(moveEvery1),
+                       +0.25 if it applies a status effect (DOT/stun/slow)
+  Worked (REFERENCE_PLAYER_DPT = 25, attack cadence: melee = moveEveryN, ranged=1):
+      Gore Biter   (7/1) * (18/25) * 1.15 = 5.8 TP
+      Eye Tyrant   (7/1) * (18/25) * 1.30 = 6.6 TP
+      Shell Brute  (13/1)* (38/25) * 1.0  = 19.8 TP
+      Plague Hulk  (10/2)* (50/25) * 1.0  = 10.0 TP
+      Mire Wraith  (7/1) * (38/25) * 1.30 = 13.8 TP  (ranged+DOT could add 0.25)
+      Iron Stalker (16/1)* (95/25) * 1.15 = 69.9 TP  (mini-elite — correct!)
+
+  TP is the currency the encounter budget (idea 3/4) spends. It lets the level
+  generator say "this floor's rooms may contain up to N total TP" so difficulty
+  is a dial, not an accident of which enemies happened to roll.
+
+
+=== THE CONTRACT — what every new piece of content must satisfy ===
+
+------------------------------------------------------------------
+A) NEW WEAPON must fall inside the POWER BAND for its role + tier.
+------------------------------------------------------------------
+  Define POWER SCORE:
+      weaponPower = sustainedEffectiveDPT * sqrt(ammoEfficiencyNormalized)
+  Each ROLE has a target band (so a new weapon can't quietly out-DPS the class):
+      sidearm        : power 8-14    (pistol-tier, ammo-cheap, always usable)
+      workhorse      : power 12-18   (assault rifle, chaingun)
+      burst/specialist: power 18-26  (shotgun, plasma) - high DPT, ammo-hungry
+      heavy/charge   : power 24-32   (railgun, grenade) - scarce ammo, slow
+  RULE: a new weapon picks a role, then its numbers are tuned until weaponPower
+  lands in that role's band. If it lands above the band it WILL invalidate the
+  others. (The current shotgun is slightly over its band — a known fix target.)
+  Higher RARITY does NOT raise the DPT band — it buys ABILITIES (idea 5), not
+  raw damage. This keeps a legendary from being a strict numeric upgrade.
+
+------------------------------------------------------------------
+B) NEW ENEMY must declare a ROLE and land in that role's TP band.
+------------------------------------------------------------------
+      chaff       : TP  4-8    (dies in 1 hit, comes in packs)
+      soldier     : TP  9-16   (the standard threat unit)
+      bruiser     : TP 17-28   (forces a weapon swap / repositioning)
+      mini-elite  : TP 40-75   (a mid-floor spike; rare)
+      boss        : see idea 6 (own ruleset)
+  RULE: choose role -> set HP, damage, cadence, range so TP lands in band ->
+  THEN verify the golden ratio (TTD/TTK in [3,8] for chaff/soldier; [2,4] for
+  bruiser; bruisers are SUPPOSED to be scary 1v1). An enemy that violates the
+  golden ratio is rejected even if its TP is in band.
+
+------------------------------------------------------------------
+C) NEW CONSUMABLE/HEAL must be priced in "turns of survival bought."
+------------------------------------------------------------------
+      survivalTurnsBought = healAmount / averageIncomingDPT(floor)
+  A medkit that buys >10 turns on an early floor trivializes scarcity. Heals are
+  priced against the floor's average incoming DPT, not a flat number.
+
+------------------------------------------------------------------
+D) NEW UPGRADE/ABILITY must cost POWER BUDGET (full math in idea 5).
+------------------------------------------------------------------
+  Short version: an upgrade's value = (DPT or eHP gain) expressed in TP-equiv;
+  a level-up grants a fixed budget; every offered choice must cost ~the same
+  budget so no choice is a no-brainer. Detailed in balance_order_5.
+
+
+=== DEPTH SCALING — keep the player/enemy curves coupled ===
+
+The danger of depth scaling is the two curves drifting apart. Define them
+relative to each other, never independently:
+
+  enemyThreatAtDepth(d)  = baseTP * HEALTH_SCALE^(d-1) * DAMAGE_SCALE^(d-1)
+                         = baseTP * 1.08^(d-1) * 1.06^(d-1)   (current values)
+  playerPowerAtDepth(d)  = f(expected level-ups by depth d, expected weapon
+                             upgrades found, expected eHP from found armor)
+
+  THE INVARIANT (must hold or the game gets unfair-hard or trivial-easy):
+      0.9  <=  playerPowerAtDepth(d) / enemyThreatAtDepth(d)  <=  1.2
+  i.e. the player should stay roughly even-to-slightly-ahead of the curve,
+  drifting NO more than +20% ahead or -10% behind. If found-loot and XP let the
+  player outscale this, lower the loot/XP rate; if they fall behind, raise it.
+  This is the formula that makes "add floor scaling later" (deferred) safe to do.
+
+
+=== PROPOSED util/GameMath ADDITIONS ===
+
+  effectiveHitPoints(rawHp, armor, dodgeChance, flatReduction, avgIncomingHit)
+  sustainedDamagePerTurn(clipSize, damagePerShot, reloadTicks)
+  ammoEfficiency(damagePerShot, ammoPerShot)
+  turnsToKill(targetEffectiveHp, attackerDpt)
+  threatPoints(attackDamage, attackCadenceTurns, enemyEffectiveHp,
+               referencePlayerDpt, positionalMultiplier)
+  weaponPowerScore(sustainedEffectiveDpt, ammoEfficiencyNormalized)
+  goldenRatio(turnsToDie, turnsToKill)            // returns TTD/TTK
+  depthThreatScale(healthScale, damageScale, depth)
+All pure, all with the mandatory Formula/Derivation/Edge-cases comment block.
+
+
+=== A LIVING SPREADSHEET (docs/balance-rule-system.txt) ===
+
+Ship a companion doc that TABULATES every current weapon and enemy with its
+computed power/TP, so the bands are visible and "out of band" content is obvious
+at a glance. Regenerate it whenever BalanceConfig changes. (A tiny dev-only main
+or unit test that prints the table keeps it honest — the numbers can't lie.)
+
+
+=== PREREQUISITES ===
+  - Idea 1 (Unified Balance Config) MUST be done — the formulas read its fields.
+  - A "reference player DPT" and "reference player eHP" must be agreed (proposal:
+    REFERENCE_PLAYER_DPT = 25 = shotgun sustained; REFERENCE_PLAYER_EHP = 205 =
+    MARINE start). These become BalanceConfig constants the formulas anchor on.
+
+=== DEFINITION OF DONE ===
+  - The four primitive formulas exist in GameMath with derivations.
+  - The contract (A-D) is written into docs/balance-rule-system.txt as a
+    checklist any future weapon/enemy/item idea must pass.
+  - The living table is generated and currently-out-of-band content (e.g. the
+    shotgun) is flagged for a follow-up tuning pass.

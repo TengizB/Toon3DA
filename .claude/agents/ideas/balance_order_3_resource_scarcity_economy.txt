@@ -1,0 +1,162 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Resource Scarcity Model — make every bullet and medkit a decision
+---
+
+Idea 3 of 6 in the balance series (see balance_order_1 for the full list).
+Depends on ideas 1 and 2 (config + the four primitives, especially ammo
+efficiency and TP).
+
+=== THE PROBLEM IN ONE LINE ===
+
+Right now resources are not scarce, so there are no resource DECISIONS. The
+player fires the best weapon at everything, never runs dry, never has to choose
+"shoot or save / fight or flee." Scarcity is what converts a shooter into a
+roguelike. The goal is NOT to starve the player — it is to make supply land just
+below comfort so that CLEVER spending is rewarded and careless spending is
+punished.
+
+
+=== THE CENTRAL EQUATION — SUPPLY vs DEMAND PER FLOOR ===
+
+  DEMAND(floor) = total damage the player must output to clear it
+                = sum over enemies of enemy.eHP            (idea 2)
+  SUPPLY(floor) = total damage potential the floor HANDS the player
+                = sum over ammo pickups of (boxSize * damagePerAmmoUnit)
+                  + carry-over from previous floor
+                + free melee damage (unlimited but slow & dangerous)
+
+  THE SCARCITY RATIO:
+      S = (SUPPLY excluding melee) / DEMAND
+
+  TARGET:  S in [0.75, 0.95]  on a "fight everything" basis.
+  Meaning: ranged ammo alone covers 75-95% of the damage needed to clear the
+  floor IF you fight every enemy. The remaining 5-25% must come from melee
+  (free but risky), avoidance (don't wake every enemy), or carried reserves.
+  S >= 1.0  ->  ammo is effectively infinite, no decisions (current state).
+  S < 0.6   ->  forced melee too often, feels unfair/grindy.
+
+  WHY just-below-1: it forces the player to ASK "is this fight worth ammo?" on
+  the margin. That single recurring question is the entire engagement loop of
+  scarcity. It also makes avoidance and positioning (idea 4) valuable, because
+  every fight you skip is ammo banked for one you can't skip.
+
+
+=== WORKED MODEL FLOOR (using current numbers) ===
+
+  A model early floor with a 120-TP budget might hold, e.g.:
+      6x Gore Biter (18hp) + 3x Eye Tyrant (18) + 2x Shell Brute (38)
+                            + 1x Plague Hulk (50)
+  DEMAND = 6*18 + 3*18 + 2*38 + 1*50 = 108+54+76+50 = 288 damage.
+
+  To hit S = 0.85, SUPPLY(ranged) should be ~245 damage.
+  Current generator: LEVEL_GEN_AMMO_CHANCE_PER_ROOM 0.35, shells box = 12.
+      If the floor has ~8 rooms -> ~2.8 ammo drops. If they roll shells:
+      2.8 * 12 shells * 50 dmg/shell = 1680 potential damage  ->  S = 5.8 (!!)
+  This is the bug, quantified: a SINGLE weapon's ammo on the floor provides ~6x
+  the damage needed to clear it. There is zero scarcity. Reserve caps make it
+  worse: 60 shells * 50 = 3000 banked damage ceiling.
+
+  FIX DIRECTION (do the real tuning in implementation):
+   - Cut per-room ammo drop frequency AND box sizes so per-weapon SUPPLY <
+     DEMAND for that weapon alone (no single gun clears the floor).
+   - Spread ammo across types so the player is pushed to use 2-3 weapons.
+   - Lower reserve caps so banking is limited (can't hoard 50 floors of ammo).
+
+
+=== THE FOUR LEVERS OF SCARCITY (all live in BalanceConfig) ===
+
+  LEVER 1 — DROP FREQUENCY:  how often a pickup spawns at all.
+      (LEVEL_GEN_AMMO_CHANCE_PER_ROOM and friends)
+  LEVER 2 — DROP SIZE:       how much each pickup gives (ammo box sizes).
+  LEVER 3 — RESERVE CAP:     the hoarding ceiling (AMMO_RESERVE_CAP_*).
+  LEVER 4 — DEMAND:          enemy density/eHP per floor (the TP budget).
+
+  RULE OF THUMB for ordering changes: tune LEVER 4 (demand) and LEVER 2 (drop
+  size) first; they have the biggest, most predictable effect. Frequency
+  (LEVER 1) adds variance — good for texture, bad as a primary dial. Caps
+  (LEVER 3) only matter once supply is low enough that hoarding is possible.
+
+
+=== PER-WEAPON SCARCITY: force diversification ===
+
+  DESIGN RULE: no single weapon's ammo economy should cover a whole floor.
+      perWeaponSupply(w) / DEMAND  <  0.6   for every weapon w.
+  When every weapon is individually insufficient but the SUM is ~0.85, the
+  player MUST switch weapons during a floor — which is exactly where build
+  identity (idea 5) and tactical weapon-vs-enemy matchups (idea 4) come alive.
+  Example intent: "shells handle bruisers, bullets handle chaff, save cells for
+  the room you can't avoid." That sentence is the game being fun.
+
+
+=== THE HEAL ECONOMY (HP is a resource too) ===
+
+  Incoming damage per floor (if the player takes a realistic fraction of hits):
+      INCOMING(floor) = sum over enemies of (enemyDPT * expectedTurnsEngaged)
+                        * (1 - avoidanceFactor)
+  HEAL SUPPLY(floor) = medkits found * heal value (STIM 18 / FULL 50)
+                       + armour found (SHARD 8 / VEST 35)
+
+  TARGET:  netHpDrain(floor) = INCOMING - HEAL_SUPPLY  >  0 on most floors,
+           but  cumulativeDrain across a run  <  player eHP buffer + level-up HP.
+  i.e. each floor should cost you some HP you don't fully recover, so HP slowly
+  becomes precious and you can't face-tank — but the run total stays survivable
+  for a skilled player. A medkit should be a "spend now or bank for the bad
+  room?" decision (idea 2 contract C: price heals in survival-turns-bought).
+
+  ANTI-FACE-TANK: if HEAL_SUPPLY >= INCOMING the player never feels HP pressure.
+  Keep medkit drop chances (currently 0.50-0.70 in loot rooms) low enough that
+  the average floor is a small net HP loss.
+
+
+=== ANTI-HOARD MECHANISMS (so banking doesn't defeat scarcity) ===
+
+  A player who hoards 5 floors of ammo has no scarcity. Counter with ANY of:
+   1. LOW RESERVE CAPS (already exist — tune them down). Hard ceiling on banking.
+   2. DIMINISHING PICKUPS: a pickup gives less if you're already near cap
+      (overflow is wasted -> picking up at full is a non-choice, reinforcing
+      "spend before you top up").
+   3. DEPTH-INDEXED DEMAND OUTPACING SUPPLY SLOWLY: enemy eHP scales 1.08/depth
+      (idea 1); if SUPPLY scales slower (e.g. LEVEL_GEN_DEPTH_AMMO_BONUS 0.20 is
+      linear and gentler), S naturally tightens as you descend -> hoards get
+      spent. This is the cleanest anti-hoard: the math erodes the stockpile.
+  Recommendation: lean on #1 and #3; #2 is optional polish.
+
+
+=== THE CREDIT SINK PROBLEM (prerequisite flag) ===
+
+  Credits are awarded (5-40/kill, 3-7 chips/floor) but THERE IS NO SHOP to spend
+  them (verified: roguelike_order_11 shop NOT IMPLEMENTED). Currency with no sink
+  is not a resource — it is a meaningless counter. Until a sink exists, credits
+  cannot participate in the scarcity economy.
+  -> PREREQUISITE: a shop / vending / fabricator sink must exist before the
+     credit economy can be balanced. This idea models ammo + HP scarcity (which
+     CAN be done now); the credit half is BLOCKED on that sink. Note it loudly so
+     it isn't forgotten. When the shop lands, prices follow the same method:
+     price an item at (its TP-equiv or survival-turns-bought) * a scarcity markup.
+
+
+=== TUNING PROCEDURE (how to actually set the numbers) ===
+
+  1. Fix the floor TP budget per depth (idea 4 owns the encounter budget).
+  2. Compute DEMAND = sum of enemy eHP for that budget.
+  3. Set ammo SUPPLY so S = 0.85 floor-wide and < 0.6 per individual weapon.
+  4. Set reserve caps to ~1.5 floors of that weapon's supply (limited banking).
+  5. Set heal supply so the average floor is a 5-15% net eHP loss.
+  6. Print the living table (idea 2) and read S and netHpDrain directly.
+  7. Playtest; adjust LEVER 4 and LEVER 2 first.
+
+
+=== PREREQUISITES ===
+  - Ideas 1 & 2 (config + ammo-efficiency/eHP/TP formulas).
+  - Idea 4's floor TP budget (they co-depend: scarcity is defined PER floor
+    budget). Build idea 3 and idea 4 together if possible.
+  - BLOCKED (credit half only): a shop/sink must exist. Ammo+HP half is unblocked.
+
+=== DEFINITION OF DONE ===
+  - SUPPLY/DEMAND, scarcity ratio S, and netHpDrain are formalized in GameMath
+    and printed in the living balance table.
+  - BalanceConfig's four levers are tuned so S in [0.75,0.95] floor-wide and
+    < 0.6 per weapon, with average floor a small net HP loss, at depth 1.
+  - Reserve caps limit banking to ~1.5 floors.
+  - The credit-sink prerequisite is documented as a blocker for the credit half.

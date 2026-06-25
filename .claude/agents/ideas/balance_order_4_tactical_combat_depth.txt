@@ -1,0 +1,163 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Tactical Combat Depth — make fights positioning puzzles, not damage races
+---
+
+Idea 4 of 6 in the balance series (see balance_order_1 for the full list).
+Depends on ideas 1 & 2; co-developed with idea 3 (it owns the floor TP budget
+that scarcity is measured against).
+
+=== THE PROBLEM ===
+
+Combat is currently "stand still, fire best weapon, enemy walks into you, repeat
+until one of you is dead." Enemies differ only by HP/damage NUMBERS, not by how
+you must FIGHT them. A Shell Brute and a Plague Hulk play identically — walk-and-
+hit sponges. There is one correct action every turn (shoot), so there is no
+tactic. Tactical depth = the BEST action changes turn-to-turn based on position,
+terrain, and which enemies are present. This idea creates that.
+
+Turn-based + tile-based is a GIFT here: every fight is a chess position. The job
+is to give the player meaningful moves other than "fire."
+
+
+=== PILLAR 1 — THE ENCOUNTER BUDGET (difficulty as a dial) ===
+
+The level generator must spend a TP budget (idea 2 primitive 4), not roll
+enemies at random. This is what makes difficulty controllable instead of
+accidental.
+
+  floorTpBudget(depth) = BASE_TP * depthThreatScale(depth)
+  e.g. BASE_TP = 120 at depth 1, scaling 1.08*1.06 per depth (idea 2 invariant).
+
+  COMPOSITION RULES (spend the budget tastefully, not on 20 chaff):
+   - Reserve 15-30% of budget for ONE "anchor" enemy (bruiser/mini-elite) that
+     defines the floor's hardest room.
+   - No more than ~40% of budget in a single enemy TYPE (variety forces the
+     player to adapt mid-floor; mono-type rooms are solved once and boring).
+   - Per-room TP cap so no single room exceeds ~35% of floor budget unless it is
+     a deliberate "gauntlet" climax room.
+   - Ranged + melee MIX in the same room creates the core tactical tension:
+     close the gap on the ranged enemy while the melee enemy closes on you.
+
+  This budget is ALSO the DEMAND term in the scarcity equation (idea 3). The two
+  ideas share this number; that is why they are co-developed.
+
+
+=== PILLAR 2 — ENEMY ROLE DIFFERENTIATION (stop shipping stat-clones) ===
+
+11 enemy types exist but most are interchangeable. Give each a TACTICAL VERB —
+a reason the player must do something DIFFERENT against it. Roles (not numbers)
+are the unit of design. Examples mapped onto existing types:
+
+  GORE_BITER   — SWARMER: weak, fast, packs. Verb: "don't get surrounded."
+                 Punishes standing still; rewards funneling into a chokepoint.
+  EYE_TYRANT   — SNIPER: ranged, cardinal-line only (existing rule). Verb:
+                 "break line of sight / step off its column or row." Rewards use
+                 of cover and the rotate/strafe moves.
+  SHELL_BRUTE  — CHARGER: telegraphs a high-damage rush. Verb: "sidestep the
+                 charge, then punish." Rewards the strafe action specifically.
+  PLAGUE_HULK  — TANK + AREA DENIAL: slow (moveEvery2) but leaves a hazard
+                 (toxic tile) on death/where it stands. Verb: "kill at range,
+                 don't melee into its cloud." Ties into the hazard system.
+  MIRE_WRAITH  — ARTILLERY/DOT: ranged acid that applies POISON. Verb: "prioritise
+                 it; don't let DOT stack." Rewards target prioritisation.
+  VOID_SHROUD  — FLANKER: fast, prefers attacking from your blind side (the tile
+                 behind your facing). Verb: "keep your back covered / rotate to
+                 face it." Rewards spatial awareness.
+  IRON_STALKER — MINI-ELITE: hybrid melee+ranged, armored. Verb: "commit
+                 resources or avoid." A deliberate spike, not common.
+  ACID_DRONE   — HARASSER: ranged, kites (existing). Verb: "corner it / cut the
+                 kite path." Rewards using level geometry.
+
+  DESIGN RULE: a new enemy is not approved until you can state its VERB in one
+  sentence and that verb is DISTINCT from existing enemies. "It has more HP" is
+  not a verb. (Each verb must also respect the cardinal-line constraint for any
+  ranged behavior — project invariant.)
+
+  Cheap mechanical hooks that create verbs without new systems:
+   - attack-from-behind preference (flanker)
+   - telegraph-then-strike (charger): one turn of wind-up the player can read
+   - on-death hazard tile (area denial)
+   - applies a status effect on hit (DOT/slow/stun — already in StatusType)
+   - moves toward cardinal alignment aggressively (sniper)
+
+
+=== PILLAR 3 — TERRAIN INTERACTION (the emergent-complexity engine) ===
+
+This is the single highest-value lever the game already has half-built. The
+hazard chain-reaction system (fire/toxic/explosive) is IN PROGRESS. FINISH IT.
+It converts flat rooms into tactical terrain:
+
+  - FIRE tiles: spread along flammable decals; damage anything standing in them
+    (player AND enemies). Verb: "lure enemies through fire / don't get cornered
+    into it."
+  - TOXIC/ACID pools: DOT zones; area denial. Pairs with Plague Hulk / Mire
+    Wraith. Verb: "control space, don't path through it."
+  - EXPLOSIVE BARRELS (ExplosiveBarrelManager exists): chain detonations. Verb:
+    "shoot the barrel, not the enemy — let the room kill the pack."
+
+  BALANCE NOTE: hazards must damage the PLAYER too, or they are just free DPS and
+  add no tactics. The tension is "this hazard can win the fight for me OR kill me
+  if I misposition." That two-sidedness is the whole point. Put hazard tick
+  damage and spread chance in BalanceConfig and count hazard damage in the threat
+  math (idea 2): a room full of fire raises its effective TP.
+
+
+=== PILLAR 4 — POSITIONING INCENTIVES (give "move" a payoff) ===
+
+For repositioning to be worth a turn (and a turn is precious — enemies act every
+turn), the geometry must reward it:
+
+  - COVER vs ranged: walls/columns ('P') break line of sight. The cardinal-line
+    ranged rule already means stepping off an enemy's row/column denies its shot.
+    Make sure levels actually provide cover (generator should place columns in
+    open rooms — partly exists via LEVEL_GEN_LARGE_COLUMN_*).
+  - CHOKEPOINTS vs swarms: doorways let you fight a pack one-at-a-time. The
+    greedy-stepper AI already funnels; ensure layouts offer 1-wide pinch points.
+  - FLANK PUNISHMENT: flankers (Void Shroud) make "where am I facing" matter, so
+    rotate/strafe become tactical, not just navigational.
+  - TURN-COST AWARENESS: each reposition step = one enemy turn of incoming
+    damage. The decision "spend a turn moving to safety vs spend it shooting" is
+    the core tactical loop. PLAYER_MOVE_DURATION is therefore a BALANCE value
+    (faster = you can reposition more freely), not cosmetic — flagged in idea 1.
+
+
+=== PILLAR 5 — TELEGRAPHS & COUNTERPLAY (fairness) ===
+
+A turn-based game is only tactical if threats are READABLE before they land.
+  - Heavy enemy attacks (charger rush, elite slam) should telegraph one turn
+    ahead (a wind-up state + visual cue) so the player can react. Damage without
+    counterplay is just a dice roll (violates roguelike pillar 1: deaths must
+    feel fair, "I made a mistake").
+  - Ranged enemies already telegraph via the cardinal-line requirement (you can
+    SEE when you're in their lane). Lean into that — it is good design already.
+  - RULE: every attack that can deal >25% of player eHP in one hit MUST be
+    telegraphed or avoidable. Burst damage without warning is banned.
+
+
+=== HOW THIS MAKES THE GAME BALANCED *AND* FUN ===
+
+Tactics and balance are the same thing here: when enemies have distinct verbs,
+terrain is two-sided, and the budget mixes threats, the "one correct action"
+collapses into a real decision tree. That decision tree is BOTH the fun (player
+expresses skill) and the balance (skilled play beats the golden-ratio fights of
+idea 2; careless play loses them). Scarcity (idea 3) is what makes the decisions
+cost something.
+
+
+=== PREREQUISITES ===
+  - Ideas 1 & 2.
+  - Finish the IN-PROGRESS hazard chain-reaction system (Pillar 3) — it is the
+    biggest single multiplier and is already half-built.
+  - Enemy AI hooks for: telegraph/wind-up state, flank preference, on-death
+    hazard. These are small additions to EnemyManager, but they ARE new code,
+    so flag them as engineering prerequisites for the role differentiation.
+  - The encounter-budget generator step is new generator code (LevelGenerator).
+
+=== DEFINITION OF DONE ===
+  - LevelGenerator spends a per-depth TP budget with the composition rules.
+  - Each enemy type has a documented one-sentence VERB and a mechanical hook
+    that enforces it.
+  - Hazard chain reactions are finished and damage both sides; hazard damage is
+    counted in the threat math.
+  - No un-telegraphed attack exceeds 25% of player eHP.

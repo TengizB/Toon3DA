@@ -1,0 +1,122 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Boss Balance Ruleset — math for tuning bosses (rules now, fights later)
+---
+
+Idea 6 of 6 in the balance series (see balance_order_1 for the full list).
+Depends on ideas 1, 2, 3. SCOPE: per the user, boss IMPLEMENTATION is deferred
+(needs story/plot). This idea defines only the RULESET + MATH so that when bosses
+are built/improved later, they are balanced by formula instead of guesswork. It
+is a contract, not a feature.
+
+=== WHY BOSSES NEED THEIR OWN RULES ===
+
+Bosses break the normal threat math: they are a single entity meant to survive
+many turns and threaten a prepared player. The trash-mob golden ratio (idea 2)
+does NOT apply. A boss tuned like a big trash mob is either a 2-shot anticlimax
+or an un-counterable HP wall. Bosses need a fight-LENGTH target and a
+phase-structured threat curve. Current bosses (OVERSEER 250hp, CORRUPTOR 450hp,
+HELL_BARON) are flat HP bars with placeholder numbers — exactly what this ruleset
+replaces.
+
+=== RULE 1 — TUNE HP TO FIGHT LENGTH, NEVER TO A FLAT NUMBER ===
+
+A boss's HP should be derived from how LONG you want the fight to last and how
+much damage the EXPECTED player can output at that depth — not picked arbitrarily.
+
+  bossEffectiveHp = expectedPlayerSustainedDpt(depth) * TARGET_FIGHT_TURNS
+                    * MULTI_PHASE_FACTOR
+  Targets:
+    TARGET_FIGHT_TURNS     = 18-40 (act boss); 40-60 (run-final boss, future)
+    MULTI_PHASE_FACTOR     = 1.0 per phase the player effectively re-fights
+  expectedPlayerSustainedDpt(depth) comes from idea 2 (the reference DPT lifted
+  by expected upgrades/weapon level by that depth — NOT the depth-1 reference).
+
+  Worked sanity check with CURRENT numbers (reference sustained DPT ~25):
+    Corruptor 450 hp / 25 = 18 turns  -> at the LOW end of target. OK-ish, but
+    only if the player is still on the start shotgun; a leveled player kills it
+    far faster. LESSON: flat 450 is fragile — it must be expressed as
+    DPT*turns and RE-DERIVED per depth, or it trivializes as builds scale.
+
+  RULE: a boss must NEVER be balanced by a literal HP constant. Its HP field in
+  BalanceConfig is computed from expectedPlayerSustainedDpt(depth)*fightTurns.
+
+=== RULE 2 — CAP THE FIGHT LENGTH FROM ABOVE TOO (no sponges) ===
+
+  Long fight is fine; BORING long fight is not. Enforce:
+    upperFightTurns <= 1.5 * TARGET_FIGHT_TURNS for a player who plays well.
+  If the only way to hit the HP target is a fight that drags past this, the boss
+  is over-HP'd — add a PHASE or a damage-window mechanic instead of more HP.
+  HP is the worst difficulty lever; mechanics are the best.
+
+=== RULE 3 — DAMAGE OUTPUT: lethal-but-counterable ===
+
+  A boss must be able to KILL a careless player but never a one-shot a careful
+  one. Express boss output as a survival check:
+    bossDpt(depth)  set so  playerEffectiveHp / bossDpt  ≈  0.4-0.7 * fightTurns
+  i.e. an un-healing player who eats most attacks dies BEFORE the fight ends
+  (so they must dodge/use cover/heal), but a player who avoids ~half the damage
+  and uses available heals (idea 3 heal economy) survives with margin.
+  HARD FAIRNESS CAP (inherits idea 4 pillar 5):
+    no single boss attack may exceed 35% of player eHP, and ANY attack above
+    25% MUST be telegraphed one full turn ahead with a readable cue and an
+    avoidable tile pattern. Unavoidable burst = banned.
+
+=== RULE 4 — PHASES STRUCTURE THE THREAT CURVE ===
+
+  Split bossEffectiveHp into N phases (2-3 for act bosses). Each phase:
+    - triggers at an HP threshold (e.g. 66%, 33%),
+    - introduces or escalates ONE mechanic (new attack pattern, adds, hazard),
+    - keeps total per-phase TP rising but within the fairness cap.
+  Phases are how you make a long fight feel like an arc instead of a slog, and
+  they let you gate difficulty: phase 1 teaches the pattern, phase 3 tests it.
+  Boss AI is pattern-driven (BossAttackPattern already referenced in code), NOT
+  the trash-mob greedy stepper — so phases are an AI-state concern, balanced by
+  the per-phase TP and the fairness cap above.
+
+=== RULE 5 — THE BOSS IS A BUILD CHECK (the arena gates progress) ===
+
+  A boss should verify the player actually built enough power to continue. Tie
+  its HP target to expectedPlayerSustainedDpt so an UNDER-powered player (skipped
+  upgrades, hoarded nothing useful) physically cannot out-DPS the enrage window,
+  while an on-curve player can. This makes the boss the natural enforcer of the
+  idea-2 depth invariant: it's the checkpoint where "are you on the power curve?"
+  gets answered. OPTIONAL enrage: after upperFightTurns, ramp boss damage so a
+  stall-out player loses — prevents infinite kiting cheese.
+
+=== RULE 6 — REWARD SCALED TO COST (closes the economy loop) ===
+
+  Boss XP/credits/loot must be priced by the resources the fight CONSUMES
+  (ammo + heals spent over fightTurns), plus a premium for the risk:
+    bossReward ≈ (ammoSpent*ammoValue + healsSpent*healValue) * RISK_PREMIUM
+  Current placeholders: XP_REWARD_BOSS_BASE 500, CREDIT_REWARD_BOSS_BASE 250.
+  Re-derive these from expected consumption once the scarcity model (idea 3) is
+  tuned, so a boss roughly REFUNDS the fight plus a profit — never a net resource
+  loss (which would punish the player for progressing) and never a jackpot that
+  breaks the economy.
+
+=== THE BOSS CHECKLIST (apply when a boss is built/retuned) ===
+  [ ] HP = expectedPlayerSustainedDpt(depth) * fightTurns * phases  (NOT a literal)
+  [ ] fightTurns in target band; worst-case <= 1.5x (else add a phase, not HP)
+  [ ] bossDpt set by the survival-check ratio; heals available make it winnable
+  [ ] no un-telegraphed attack > 25% eHP; none > 35% at all
+  [ ] N phases, each adds ONE mechanic, each within the fairness cap
+  [ ] reward refunds expected ammo+heal spend * risk premium
+  [ ] all numbers live in BalanceConfig, derived not literal
+  [ ] entry added to the living balance table
+
+=== PREREQUISITES (why this is rules-only for now) ===
+  - Ideas 1, 2, 3 must exist (HP/DPT formulas + scarcity to price rewards).
+  - BLOCKED for IMPLEMENTATION: bosses need story/plot/setting (user's call) and
+    a run goal/final-floor structure (deferred). Until then this ruleset is a
+    spec the future boss work must satisfy — it costs nothing to honor now and
+    prevents shipping placeholder HP walls.
+  - BossAttackPattern / BossFloorController scaffolding already exists in code;
+    this ruleset tells those systems what NUMBERS to use.
+
+=== DEFINITION OF DONE (for the RULESET) ===
+  - The six rules + checklist are written into docs/balance-rule-system.txt as
+    the "Boss" appendix to the content contract.
+  - Boss HP/damage/reward formulas are added to GameMath (derived, not literal).
+  - The existing placeholder boss constants are flagged as "to be re-derived via
+    this ruleset when boss fights are implemented."
