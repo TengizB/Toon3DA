@@ -8,14 +8,14 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
 /**
  * Four-shot plasma rifle with full line penetration.
  *
- * Stats: damage 18, clipSize 4, reloadTime 3 ticks, dropCoeff 0.10, range 8.
+ * Stats: damage 28, clipSize 4, reloadTime 1 tick, dropCoeff 0.10, range 8.
  * Each shot costs one clip charge; after four shots the weapon reloads over
- * three tile-steps. Plasma bolts pierce every enemy in the facing line —
+ * one tile-step. Plasma bolts pierce every enemy in the facing line —
  * unlike the shotgun which stops at the first target.
  *
  * Damage table (coefficient 0.10, floor 0.15):
- *   distance 1: 18 × 0.90 = 16   distance 4: 18 × 0.60 = 11
- *   distance 6: 18 × 0.40 =  7   distance 8: 18 × 0.20 =  4
+ *   distance 1: 28 × 0.90 = 25   distance 4: 28 × 0.60 = 17
+ *   distance 6: 28 × 0.40 = 11   distance 8: 28 × 0.20 =  6
  */
 public class PlasmaRifle extends Weapon {
 

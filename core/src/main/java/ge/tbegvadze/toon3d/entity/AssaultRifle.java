@@ -17,12 +17,12 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
  *   ASSAULT_RIFLE_RANGE_TILES. It stops at the first wall, blocking door, explosive
  *   barrel, or enemy. No penetration — the first solid target stops the bullet.
  *
- * Stats: damage 14, clipSize 30, reloadTime 1 tick, dropCoeff 0.08, range 10 tiles.
+ * Stats: damage 20, clipSize 30, reloadTime 1 tick, dropCoeff 0.08, range 10 tiles.
  *
  * Damage table (coefficient 0.08, floor 0.15):
- *   distance 1:  14 × 0.92 = 12   distance 4: 14 × 0.68 = 9
- *   distance 6:  14 × 0.52 =  7   distance 8: 14 × 0.36 = 5
- *   distance 10: 14 × 0.20 =  2   (minimum floor applies at extreme range)
+ *   distance 1:  20 × 0.92 = 18   distance 4: 20 × 0.68 = 14
+ *   distance 6:  20 × 0.52 = 10   distance 8: 20 × 0.36 = 7
+ *   distance 10: 20 × 0.20 =  4   (minimum floor applies at extreme range)
  */
 public class AssaultRifle extends Weapon {
 

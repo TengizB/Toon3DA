@@ -178,7 +178,10 @@ public final class BalanceConfig {
     // =====================================================================================
 
     // Shotgun — high single-shot burst, 1-shell clip.
-    public static final int   SHOTGUN_DAMAGE             = 50;
+    // Was 50 (powerScore 28.0, OVER the 18-26 burst band — best sustained DPT AND best
+    // ammo efficiency of the non-charge guns). Trimmed to 44 (powerScore 23.1, in band)
+    // so it no longer invalidates the other guns. See docs/balance-rule-system.txt.
+    public static final int   SHOTGUN_DAMAGE             = 44;
     public static final int   SHOTGUN_CLIP_SIZE          = 1;
     public static final int   SHOTGUN_RANGE_TILES        = 5;
     public static final float SHOTGUN_DAMAGE_DROP_COEFF  = 0.18f;
@@ -192,27 +195,38 @@ public final class BalanceConfig {
     public static final int   DBL_SHOTGUN_RELOAD_TIME_TICKS  = 1;
 
     // Plasma Rifle — piercing, long range, lower per-shot damage.
-    public static final int   PLASMA_RIFLE_DAMAGE             = 18;
+    // Was 18 (powerScore 9.7, UNDER the 18-26 burst band). Raised to 28 (powerScore 18.7,
+    // in band) — still the lowest per-shot of the burst class, but now worth its slot.
+    public static final int   PLASMA_RIFLE_DAMAGE             = 28;
     public static final int   PLASMA_RIFLE_CLIP_SIZE          = 4;
     public static final int   PLASMA_RIFLE_RANGE_TILES        = 8;
     public static final float PLASMA_RIFLE_DAMAGE_DROP_COEFF  = 0.10f;
     public static final int   PLASMA_RIFLE_RELOAD_TIME_TICKS  = 1;
 
     // Chaingun — sustained fire, 24-round clip (8 bursts × 3).
-    public static final int   CHAINGUN_DAMAGE             = 10;
+    // Was 10 (powerScore 4.8, far UNDER the 12-18 workhorse band). Raised to 19
+    // (powerScore 12.6, in band) so sustained fire is a real workhorse option.
+    public static final int   CHAINGUN_DAMAGE             = 19;
     public static final int   CHAINGUN_CLIP_SIZE          = 24;
     public static final int   CHAINGUN_RANGE_TILES        = 8;
     public static final float CHAINGUN_DAMAGE_DROP_COEFF  = 0.10f;
     public static final int   CHAINGUN_RELOAD_TIME_TICKS  = 1;
 
     // Assault Rifle — precision automatic, long range, no pierce.
-    public static final int   ASSAULT_RIFLE_DAMAGE            = 14;
+    // Was 14 (powerScore 8.0, UNDER the 12-18 workhorse band). Raised to 20
+    // (powerScore 13.7, in band) — the reliable mid-band workhorse it should be.
+    public static final int   ASSAULT_RIFLE_DAMAGE            = 20;
     public static final int   ASSAULT_RIFLE_CLIP_SIZE         = 30;
     public static final int   ASSAULT_RIFLE_RANGE_TILES       = 10;
     public static final float ASSAULT_RIFLE_DAMAGE_DROP_COEFF = 0.08f;
     public static final int   ASSAULT_RIFLE_RELOAD_TIME_TICKS = 1;
 
     // Railgun — charge-up infinite-pierce sniper. Index by charge level: {0, half, full}.
+    // Full-charge powerScore is 45.0, OVER the 24-32 heavy band, but its 90-per-slug
+    // efficiency is held in check by slug SCARCITY (RAILGUN_MAX_SLUGS = 12) and the
+    // charge cost, not by raw damage. Per docs/balance-rule-system.txt this is left
+    // intact deliberately — reconcile against the scarcity model (idea 3) before
+    // nerfing the raw numbers, or the weapon becomes worthless once scarcity lands.
     public static final int[] RAILGUN_DAMAGE_BY_CHARGE      = {0, 40, 90};
     public static final int   RAILGUN_RANGE_TILES           = 16;
     public static final float RAILGUN_DROP_COEFF            = 0.02f;
@@ -229,9 +243,12 @@ public final class BalanceConfig {
     public static final int   FLAME_RELOAD_TICKS      = 1;
 
     // Grenade Launcher — bouncing AoE splash. Centre / orthogonal-neighbour / self damage.
-    public static final int   GRENADE_SPLASH_DAMAGE     = 30;
-    public static final int   GRENADE_FALLOFF_DAMAGE    = 16;
-    public static final int   GRENADE_SELF_DAMAGE       = 20;
+    // Centre splash was 30 (powerScore 15.6, UNDER the 24-32 heavy band). Raised to 42
+    // (powerScore 25.8, in band); falloff/self raised proportionally to keep the blast
+    // profile, with self kept modest so the player's own risk does not balloon.
+    public static final int   GRENADE_SPLASH_DAMAGE     = 42;
+    public static final int   GRENADE_FALLOFF_DAMAGE    = 22;
+    public static final int   GRENADE_SELF_DAMAGE       = 24;
     public static final float GRENADE_DAMAGE_DROP_COEFF = 0.0f;
     public static final int   GRENADE_RANGE_TILES       = 6;
     public static final int   GRENADE_CLIP_SIZE         = 3;
@@ -393,9 +410,14 @@ public final class BalanceConfig {
     // =====================================================================================
 
     /**
-     * Reference player Damage-Per-Turn — the fixed yardstick every enemy's survival and
-     * Threat-Point value is measured against. Equals the start shotgun's sustained DPT
-     * ((1*50)/(1+1) = 25). If the shotgun is retuned, update this so TP stays anchored.
+     * Reference player Damage-Per-Turn — the FIXED yardstick every enemy's survival and
+     * Threat-Point value is measured against. Originally set to the start shotgun's
+     * sustained DPT ((1*50)/(1+1) = 25). The shotgun was since trimmed to 44/shot
+     * (sustained DPT now 22) to pull its power score into the burst band, but this anchor
+     * is deliberately HELD at 25: it is a stable reference for the whole enemy TP table,
+     * not a live mirror of the current shotgun. Moving it would rescale every enemy's TP
+     * at once (all eight currently sit in-band) for no balance gain. Keep it at 25 unless
+     * you intend to re-tune the entire enemy roster.
      */
     public static final float REFERENCE_PLAYER_DPT = 25f;
     /**

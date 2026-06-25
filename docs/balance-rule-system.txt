@@ -151,13 +151,13 @@ numbers come straight from the game constants, so they cannot lie.
 WEAPONS                                          (powerScore = sustDPT*sqrt(ammoEff/40))
 weapon          role        sustDPT  ammoEff  powerScore   band    in?
 -----------------------------------------------------------------------------
-Shotgun         BURST          25.0     50.0        28.0   18-26   OVER
+Shotgun         BURST          22.0     44.0        23.1   18-26   OK
 Dbl Shotgun     BURST          21.3     32.0        19.1   18-26   OK
-Plasma Rifle    BURST          14.4     18.0         9.7   18-26   UNDER
-Assault Rifle   WORKHORSE      13.5     14.0         8.0   12-18   UNDER
-Chaingun        WORKHORSE       9.6     10.0         4.8   12-18   UNDER
+Plasma Rifle    BURST          22.4     28.0        18.7   18-26   OK
+Assault Rifle   WORKHORSE      19.4     20.0        13.7   12-18   OK
+Chaingun        WORKHORSE      18.2     19.0        12.6   12-18   OK
 Railgun(full)   HEAVY          30.0     90.0        45.0   24-32   OVER
-Grenade Lchr    HEAVY          18.0     30.0        15.6   24-32   UNDER
+Grenade Lchr    HEAVY          25.2     42.0        25.8   24-32   OK
 
 ENEMIES                            (TP = (atkDmg/cad)*(eHP/25)*posMult ; gr = TTD/TTK)
 enemy         role         eHP  atkDmg  cad  posMult       TP   in?   TTD/TTK  gr?
@@ -168,41 +168,66 @@ Acid Drone    SOLDIER       22       8    1     1.30      9.2   OK       26.0  O
 Void Shroud   SOLDIER       25       9    1     1.15     10.3   OK       23.0  OVER
 Mire Wraith   SOLDIER       38       7    1     1.30     13.8   OK       30.0  OVER
 Shell Brute   BRUISER       38      13    1     1.00     19.8   OK       16.0  OVER
-Plague Hulk   SOLDIER       50      10    2     1.00     10.0   OK       41.0  OVER
-Iron Stalker  MINI_ELITE    95      16    1     1.15     69.9   OK        6.5  OVER
+Plague Hulk   SOLDIER       50      10    2     1.00     10.0   OK       20.5  OVER
+Iron Stalker  MINI_ELITE    95      16    1     1.15     69.9   OK        4.3  OVER
 
-Golden ratio uses the player's best burst (shotgun, 50) for TTK and reference
+Golden ratio uses the player's best burst (shotgun, now 44) for TTK and reference
 eHP (205) for TTD. Iron Stalker scored on its melee line; Grenade on centre
-splash; Railgun at full charge.
+splash; Railgun at full charge. Enemy TP is unchanged by the weapon pass because
+TP is anchored to REFERENCE_PLAYER_DPT (held at 25), not to the live shotgun; the
+lower shotgun only raises TTK on 45+ eHP enemies, which is why Plague Hulk (41.0
+-> 20.5) and Iron Stalker (6.5 -> 4.3) improved while the 1-shot chaff/soldiers
+did not.
 
 
 ================================================================================
-OUT-OF-BAND CONTENT — flagged for a follow-up tuning pass
+TUNING PASS — what the contract flagged and what was done
 ================================================================================
-The table surfaces real imbalances the contract exists to catch. None is fixed
-here (this idea ships the SYSTEM, not the rebalance); each is a tuning target.
+The weapon power bands have been brought into compliance. The enemy golden-ratio
+flags were investigated and proven to be a band-vs-scale conflict that cannot be
+closed by tuning enemy stats; they are documented below as a contract decision,
+not a content bug.
 
-WEAPONS
-  * Shotgun (power 28.0, band 18-26) — OVER. It has both the best sustained DPT
-    of the non-charge guns AND the best ammo efficiency: a genuine imbalance.
-    The known fix target the idea calls out.
-  * Railgun full charge (power 45.0, band 24-32) — OVER on the power axis because
-    its 90/slug efficiency is enormous; slug scarcity (cap 12) is what actually
-    holds it in check. Reconcile against the scarcity model (idea 3) before
-    nerfing raw numbers.
-  * Plasma Rifle / Assault Rifle / Chaingun / Grenade — UNDER their bands. The
-    standard guns are weak relative to the shotgun yardstick; raising them is the
-    other half of the shotgun fix.
+WEAPONS — REBALANCED (all now in band except the Railgun, intentionally)
+  * Shotgun 50 -> 44/shot (power 28.0 -> 23.1). Was OVER: best sustained DPT AND
+    best ammo efficiency of the non-charge guns. Trimmed into the burst band so it
+    no longer invalidates the others; keeps its 1-shell identity.
+  * Plasma Rifle 18 -> 28/shot (power 9.7 -> 18.7). Was far UNDER; now a real
+    burst option, still the lowest per-shot of the class.
+  * Assault Rifle 14 -> 20/shot (power 8.0 -> 13.7). Was UNDER; now the reliable
+    mid-band workhorse.
+  * Chaingun 10 -> 19/shot (power 4.8 -> 12.6). Was far UNDER; sustained fire is
+    now worth its slot.
+  * Grenade Launcher centre splash 30 -> 42 (power 15.6 -> 25.8); falloff 16 -> 22,
+    self 20 -> 24 (self kept modest). Was UNDER; now in the heavy band.
+  * Railgun full charge (power 45.0) — LEFT OVER on purpose. Its 90/slug efficiency
+    is held in check by slug scarcity (RAILGUN_MAX_SLUGS = 12) and charge cost, not
+    raw damage. Per the depth/scarcity model (idea 3, not yet built) nerfing the raw
+    number would make it worthless once scarcity lands. Revisit with idea 3.
 
-ENEMIES
-  * Every enemy's TP is IN band — the role assignments are healthy.
-  * Every golden ratio reads OVER: the player kills almost everything in 1 burst
-    while enemies need 16-41 turns to kill the player 1v1. This is exactly the
-    "harmless damage sponge" problem the idea names — enemies are individually
-    too survivable-for-the-player / too slow-to-kill-the-player. Pressure comes
-    from packs and depth, not single units. Closing the golden ratio (lower
-    player burst dominance and/or raise enemy DPT) is the headline rebalance for
-    a later idea. Iron Stalker (6.5) is closest to fair — correct for an elite.
+ENEMIES — TP IN BAND; GOLDEN RATIO IS A CONTRACT CONFLICT, NOT A CONTENT BUG
+  * Every enemy's TP is IN band — the role assignments are healthy and were left
+    untouched. TP is anchored to REFERENCE_PLAYER_DPT (held at 25), so the weapon
+    pass did not move it.
+  * Every golden ratio still reads OVER. This was investigated with a brute-force
+    feasibility scan (BalanceReport-equivalent over hp 5..200, atk 1..40, cad 1..2):
+    the ONLY soldier stat-blocks that satisfy BOTH the TP band [9-16] AND the
+    golden-ratio band [3-8] are GLASS CANNONS — e.g. 5-6 HP hitting for 33-40. No
+    normal-shaped enemy (meaningful HP + moderate hit) can satisfy both bands at the
+    game's current eHP/damage scale, because the player one-shots anything <= ~44 eHP
+    with the shotgun, pinning TTK at 1 and the ratio sky-high.
+    => Forcing the golden ratio into band would require turning every enemy into a
+       paper-HP one-shotter, which destroys the horde identity the design relies on
+       (chaff is balanced around PACKS, per the contract's own caveat).
+    => This is a CONTRACT decision, not a content tune. The real levers are: (a) widen
+       the golden-ratio bands to match the actual eHP economy, (b) redefine the metric
+       to use sustained reference DPT (25) instead of best-burst, and/or budget chaff
+       by PACK TP, or (c) rescale the whole eHP/damage economy down so bursts no longer
+       one-shot. All three change the contract, so they are deferred to a dedicated
+       balance idea rather than decided here.
+    * Plague Hulk (41.0 -> 20.5) and Iron Stalker (6.5 -> 4.3) improved purely from
+      the shotgun trim (higher TTK on 45+ eHP targets); Iron Stalker is now closest
+      to fair, correct for an elite.
 
 
 ================================================================================

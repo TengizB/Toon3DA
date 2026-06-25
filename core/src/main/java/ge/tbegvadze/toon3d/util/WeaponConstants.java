@@ -268,10 +268,10 @@ public final class WeaponConstants {
 
     // Grenade Launcher — bouncing indirect-fire AoE splash weapon (GRENADES ammo)
     // Damage table (coefficient 0.0 — no travel falloff; splash is splash):
-    //   impact tile:           GRENADE_SPLASH_DAMAGE  = 30 (full blast)
-    //   4 orthogonal neighbours: GRENADE_FALLOFF_DAMAGE = 16 (edge of plus)
-    //   player self-damage:    GRENADE_SELF_DAMAGE    = 20 (if caught in blast)
-    // Per-shot ceiling: 5 enemies in plus = 30 + 4×16 = 94 distributed damage.
+    //   impact tile:           GRENADE_SPLASH_DAMAGE  = 42 (full blast)
+    //   4 orthogonal neighbours: GRENADE_FALLOFF_DAMAGE = 22 (edge of plus)
+    //   player self-damage:    GRENADE_SELF_DAMAGE    = 24 (if caught in blast)
+    // Per-shot ceiling: 5 enemies in plus = 42 + 4×22 = 130 distributed damage.
     // Balance values (splash/falloff/self damage, range, clip, ammo) live in BalanceConfig.
     public static final int     GRENADE_SPLASH_DAMAGE      = BalanceConfig.GRENADE_SPLASH_DAMAGE;
     public static final int     GRENADE_FALLOFF_DAMAGE     = BalanceConfig.GRENADE_FALLOFF_DAMAGE;
