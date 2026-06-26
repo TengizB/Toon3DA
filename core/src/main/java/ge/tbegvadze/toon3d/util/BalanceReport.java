@@ -62,6 +62,8 @@ public final class BalanceReport {
         System.out.println();
         printEncounterTable();
         System.out.println();
+        printDepthCouplingTable();
+        System.out.println();
         printHazardTable();
         System.out.println();
         printTelegraphAudit();
@@ -279,6 +281,39 @@ public final class BalanceReport {
                 depth, plan.floorBudget(), plan.spentThreatPoints(), roster.size(),
                 anchorName, maxTypeFraction * 100f,
                 mixOk ? "OK" : "NO", allRules ? "OK" : "CHECK");
+    }
+
+    // -----------------------------------------------------------------------------------
+    // DEPTH COUPLING — the fairness-over-depth invariant (balance contract, DEPTH SCALING).
+    // The player's power curve (LINEAR: level-up power points accumulate per floor,
+    // GameMath.playerPowerAtDepth) must stay coupled to the enemy threat curve (COMPOUND:
+    // GameMath.depthThreatScale). Their ratio must hold in [DEPTH_COUPLING_RATIO_MIN, MAX]:
+    // below = unfair-hard (player fell behind), above = trivial-easy (player outscaled it).
+    // This table is what the SECTION 3 enemy depth-scale tune is verified against.
+    // -----------------------------------------------------------------------------------
+    private static void printDepthCouplingTable() {
+        System.out.println("DEPTH COUPLING — player power vs enemy threat (band "
+                + String.format("%.2f-%.2f", BalanceConfig.DEPTH_COUPLING_RATIO_MIN,
+                        BalanceConfig.DEPTH_COUPLING_RATIO_MAX) + ")");
+        System.out.println("  enemy scale = " + BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH + " HP * "
+                + BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH + " dmg / floor (compound) ; player = "
+                + String.format("%.0f", GameBalance.LEVEL_UP_BUDGET_PP) + " PP * "
+                + BalanceConfig.EXPECTED_LEVELS_PER_DEPTH + " level/floor (linear)");
+        System.out.printf("%-6s %10s %10s %8s %-12s%n", "depth", "player", "enemy", "ratio", "in band?");
+        System.out.println("------------------------------------------------------------------------------------");
+        int[] depths = {1, 2, 3, 4, 5, 8, 10, 12, 15};
+        for (int depth : depths) {
+            float playerPower = GameMath.playerPowerAtDepth(GameBalance.LEVEL_UP_BUDGET_PP,
+                    BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, depth);
+            float enemyThreat = GameMath.depthThreatScale(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH,
+                    BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
+            float ratio = GameMath.depthCouplingRatio(playerPower, enemyThreat);
+            boolean inBand = ratio >= BalanceConfig.DEPTH_COUPLING_RATIO_MIN
+                    && ratio <= BalanceConfig.DEPTH_COUPLING_RATIO_MAX;
+            String verdict = inBand ? "OK"
+                    : (ratio < BalanceConfig.DEPTH_COUPLING_RATIO_MIN ? "UNDER(hard)" : "OVER(easy)");
+            System.out.printf("%-6d %10.3f %10.3f %8.3f %-12s%n", depth, playerPower, enemyThreat, ratio, verdict);
+        }
     }
 
     // -----------------------------------------------------------------------------------

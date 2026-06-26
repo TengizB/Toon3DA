@@ -170,12 +170,30 @@ public final class BalanceConfig {
     // Compound HP/damage growth and linear credit growth applied as you descend.
     // =====================================================================================
 
-    /** Per-floor compound HP multiplier: baseHP * scale^(depth-1). Range: 1.04–1.15. */
-    public static final float ENEMY_HEALTH_SCALE_PER_DEPTH = 1.08f;
-    /** Per-floor compound damage multiplier: baseDmg * scale^(depth-1). Range: 1.03–1.12. */
-    public static final float ENEMY_DAMAGE_SCALE_PER_DEPTH = 1.06f;
+    // DEPTH-COUPLING TUNED (see SECTION 9 invariant + GameMath.depthCouplingRatio).
+    // These were 1.08 / 1.06. Enemy threat scales by the PRODUCT of both as a COMPOUND curve
+    // (depthThreatScale), while the player's level-up power grows LINEARLY (1 + levels*budget/100,
+    // GameMath.playerPowerAtDepth). At 1.08/1.06 the compound enemy curve outran the linear player
+    // curve from depth 5 on (coupling ratio fell to 0.86 at d5 and ~0.40 by d15 — the game became
+    // unwinnable at depth). Trimmed to 1.045/1.035 so the coupled ratio stays in the [0.9, 1.2]
+    // invariant band through ~depth 14 (the Hell Baron's depth-15 floor lands at the band edge).
+    // Each floor's enemies still get meaningfully stronger (~8% threat/floor); they just no longer
+    // outpace the player's expected upgrades. Regenerate BalanceReport's DEPTH COUPLING table after
+    // changing either of these. Range: 1.03–1.08.
+    /** Per-floor compound HP multiplier: baseHP * scale^(depth-1). Range: 1.03–1.08. */
+    public static final float ENEMY_HEALTH_SCALE_PER_DEPTH = 1.045f;
+    /** Per-floor compound damage multiplier: baseDmg * scale^(depth-1). Range: 1.02–1.06. */
+    public static final float ENEMY_DAMAGE_SCALE_PER_DEPTH = 1.035f;
     /** Per-floor linear credit bonus: base * (1 + (depth-1) * scale). Range: 0.05–0.25. */
     public static final float CREDIT_DEPTH_SCALE           = 0.12f;
+
+    /**
+     * Levels the average player is expected to gain per floor descended (~1 level/floor). This is the
+     * player-side input to the depth-coupling invariant (SECTION 9): GameMath.playerPowerAtDepth lifts
+     * the player's power multiplier by LEVEL_UP_BUDGET_PP power points per level gained. The boss
+     * ruleset (SECTION 14) mirrors this as BOSS_EXPECTED_LEVELS_PER_DEPTH. Range: 0.7–1.3.
+     */
+    public static final float EXPECTED_LEVELS_PER_DEPTH    = 1.0f;
 
     /** Extra enemies a deepest-depth room may add over the base count. Range: 0–4. */
     public static final int   LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX      = 2;
@@ -321,10 +339,12 @@ public final class BalanceConfig {
 
     // LEVER 3 — RESERVE CAP: the hoarding ceiling, tuned to ~1.5 floors of that weapon's
     // run-demand (see GameMath.reserveBankingFloors) so banking is limited. EXCEPTION:
-    // AMMO_RESERVE_CAP_BULLETS is floored at the largest bullet clip (Assault Rifle 30,
-    // Chaingun 24) so the weapon stays usable — it banks ~3 floors, the one cap above the
-    // 1.5-floor target, a direct symptom of the clip-vs-eHP mismatch noted above.
-    public static final int AMMO_RESERVE_CAP_BULLETS = 45;
+    // AMMO_RESERVE_CAP_BULLETS is floored at the largest bullet clip (Assault Rifle 30, Chaingun 24)
+    // so the weapon stays usable. It was 45 (banked ~3.1 floors, far above the 1.5 target); pulled
+    // DOWN to that 30-round clip floor (banks ~2.1 floors at the model-floor demand) — as close to
+    // the anti-hoard target as the clip-vs-eHP mismatch allows without leaving the weapon unable to
+    // hold a full spare clip. Still the one cap above target, a direct symptom of that mismatch.
+    public static final int AMMO_RESERVE_CAP_BULLETS = 30;
     public static final int AMMO_RESERVE_CAP_SHELLS  = 12;
     public static final int AMMO_RESERVE_CAP_CELLS   = 16;
     public static final int AMMO_RESERVE_CAP_ROCKETS = 10;
@@ -568,8 +588,11 @@ public final class BalanceConfig {
     public static final float GOLDEN_RATIO_BRUISER_MIN = 2f;
     public static final float GOLDEN_RATIO_BRUISER_MAX = 4f;
 
-    // --- DEPTH-COUPLING INVARIANT: playerPowerAtDepth / enemyThreatAtDepth must stay in
-    // this band or the curve drifts unfair-hard (below) or trivial-easy (above).
+    // --- DEPTH-COUPLING INVARIANT: playerPowerAtDepth / enemyThreatScale must stay in this band or
+    // the curve drifts unfair-hard (below) or trivial-easy (above). Now COMPUTED and verified:
+    // GameMath.playerPowerAtDepth (linear level-up power curve) over GameMath.depthThreatScale
+    // (compound enemy curve) via GameMath.depthCouplingRatio; BalanceReport prints the DEPTH COUPLING
+    // table across depths. This invariant is what the SECTION 3 enemy depth-scale tune defends.
     public static final float DEPTH_COUPLING_RATIO_MIN = 0.9f;
     public static final float DEPTH_COUPLING_RATIO_MAX = 1.2f;
 
@@ -774,8 +797,9 @@ public final class BalanceConfig {
     // tied to expectedPlayerSustainedDamagePerTurn(depth) so an under-powered player cannot out-DPS
     // the fight window. Expected OFFENCE power points by a boss depth =
     //   BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION * LEVEL_UP_BUDGET_PP * (BOSS_EXPECTED_LEVELS_PER_DEPTH * depth).
-    /** Levels the average player is expected to gain per floor descended (~1 level/floor). Range: 0.7–1.3. */
-    public static final float BOSS_EXPECTED_LEVELS_PER_DEPTH        = 1.0f;
+    /** Levels the average player is expected to gain per floor descended (~1 level/floor). Mirrors the
+     *  depth-coupling input EXPECTED_LEVELS_PER_DEPTH (SECTION 3) — single source of truth. Range: 0.7–1.3. */
+    public static final float BOSS_EXPECTED_LEVELS_PER_DEPTH        = EXPECTED_LEVELS_PER_DEPTH;
     /** Fraction of the level-up power budget the average player invests in OFFENCE (the rest is survival/utility). Range: 0.3–0.6. */
     public static final float BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION = 0.50f;
 
