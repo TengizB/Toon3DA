@@ -395,12 +395,69 @@ public final class BalanceConfig {
     /** Exponent of the XP power curve; higher = steeper. Range: 1.1–1.6. */
     public static final float XP_CURVE_EXPONENT   = 1.3f;
 
-    /** Flat max-HP gained when HP_BOOST level-up reward is chosen. Range: 15–40. */
+    // ---------------------------------------------------------------------------------
+    // LEVEL-UP CARD SYSTEM — power budget & re-priced boons (idea 5: build diversity)
+    //
+    // Every level-up offers LEVEL_UP_CARDS_OFFERED cards drawn from four pools. Each card
+    // costs the SAME power budget (LEVEL_UP_BUDGET_PP, in "power points" = %-gain to the
+    // reference DPT or eHP from SECTION 9), so no card is a strict upgrade over another —
+    // they differ in KIND, not amount. Because each pick is budget-equal, the player's
+    // TOTAL power at level L is L * LEVEL_UP_BUDGET_PP regardless of which cards were taken;
+    // only its SHAPE differs. That is how build diversity stays inside the depth-coupling
+    // band (SECTION 9) for every build. See docs/balance-rule-system.txt (section [D]).
+    //
+    // The three OLD flat boons (HP / armour / damage) survive as ONE card each, RE-PRICED
+    // from their legacy magnitudes to ~LEVEL_UP_BUDGET_PP so they sit on the same curve as
+    // every attribute card. Run BalanceReport to see each card's computed PP and band verdict.
+    // ---------------------------------------------------------------------------------
+
+    /** The fixed power budget every level-up card costs, in power points (% of reference DPT/eHP). Range: 8–16. */
+    public static final float LEVEL_UP_BUDGET_PP        = 12f;
+    /** Allowed fractional spread around the budget a single card may cost (±15%). A card outside this is rejected. */
+    public static final float LEVEL_UP_BUDGET_TOLERANCE = 0.15f;
+    /** How many cards are drawn and shown on each level-up. The overlay renders exactly this many. Range: 2–4. */
+    public static final int   LEVEL_UP_CARDS_OFFERED    = 3;
+    /** Per-prior-pick draw-weight bonus that biases new offers toward the player's emerging build. Range: 0.0–1.0. */
+    public static final float LEVEL_UP_DRAW_BIAS_PER_PICK = 0.6f;
+
+    // --- PP-PRICING REFERENCES (used only to COMPUTE each card's power-point value; see GameMath).
+    /** Fraction of a flat per-shot damage bonus that lands as sustained DPT at the reference weapon (shotgun, clip 1 / reload 1 → 0.5). */
+    public static final float CARD_FLAT_DAMAGE_DPT_FRACTION = 0.5f;
+    /** Average fraction of attacks made with a MELEE weapon — discounts STRENGTH cards, whose damage only applies to melee. Range: 0.5–1.0. */
+    public static final float CARD_MELEE_UTILIZATION        = 0.8f;
+    /** Reference incoming hit (HP-bound) used when pricing TOUGHNESS flat-reduction into eHP. Matches the doc's tough-build example. */
+    public static final int   CARD_PRICING_AVERAGE_HIT      = 12;
+
+    // --- CARD MAGNITUDES (sized so each card's PP lands inside the budget band). Attribute steps:
+    /** STRENGTH points granted by the Brutal Strength card (+15% melee dmg before the melee-utilization discount). */
+    public static final int CARD_STRENGTH_STEP     = 3;
+    /** MARKSMANSHIP points granted by the Marksman Training card (+12% ranged dmg, +9% accuracy). */
+    public static final int CARD_MARKSMANSHIP_STEP = 3;
+    /** AGILITY points granted by the Evasion Training card (+10% dodge, +15% faster actions). */
+    public static final int CARD_AGILITY_STEP      = 5;
+    /** TOUGHNESS points granted by the Toughened Hide card (+5 Max HP, +1 flat damage reduction). One point is potent. */
+    public static final int CARD_TOUGHNESS_STEP    = 1;
+
+    // --- TRADE-OFF CARD MAGNITUDES (net PP ≈ budget, but high variance: a big gain on one axis paid for on another).
+    /** Glass Cannon: flat per-shot damage gained. Paired with a Max-HP cost. */
+    public static final int CARD_GLASS_CANNON_DAMAGE      = 10;
+    /** Glass Cannon: Max-HP sacrificed for the damage. */
+    public static final int CARD_GLASS_CANNON_HP_COST     = 18;
+    /** Iron Constitution: Max-HP gained. Paired with a Max-armour cost. */
+    public static final int CARD_IRON_CONSTITUTION_HP     = 45;
+    /** Iron Constitution: Max-armour sacrificed for the health. */
+    public static final int CARD_IRON_CONSTITUTION_ARMOR  = 22;
+    /** Reckless Charge: AGILITY gained (dodge + speed). Paired with a Max-armour cost. */
+    public static final int CARD_RECKLESS_CHARGE_AGILITY  = 8;
+    /** Reckless Charge: Max-armour sacrificed for the mobility. */
+    public static final int CARD_RECKLESS_CHARGE_ARMOR    = 12;
+
+    /** Flat max-HP gained when the Vitality (legacy HP_BOOST) card is chosen. Re-priced to ~budget PP. Range: 15–40. */
     public static final int LEVEL_UP_HP_BONUS     = 25;
-    /** Flat max-armour gained when ARMOR_BOOST reward is chosen. Range: 10–30. */
-    public static final int LEVEL_UP_ARMOR_BONUS  = 18;
-    /** Flat per-shot damage gained when DAMAGE_BOOST reward is chosen. Range: 4–15. */
-    public static final int LEVEL_UP_DAMAGE_BONUS = 8;
+    /** Flat max-armour gained when the Combat Armour (legacy ARMOR_BOOST) card is chosen. Re-priced 18→24 to ~budget PP. Range: 10–30. */
+    public static final int LEVEL_UP_ARMOR_BONUS  = 24;
+    /** Flat per-shot damage gained when the Hollow Points (legacy DAMAGE_BOOST) card is chosen. Re-priced 8→6 to ~budget PP. Range: 4–15. */
+    public static final int LEVEL_UP_DAMAGE_BONUS = 6;
 
     // Per-point stat rates (attribute system). Each point of a stat applies this effect.
     /** Melee damage fraction added per STRENGTH point. Range: 0.03–0.08. */

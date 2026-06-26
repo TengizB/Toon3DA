@@ -76,14 +76,67 @@ public final class GameBalance {
     // =========================================================================
 
     // Level-up reward magnitudes are balance values — see BalanceConfig.
-    /** Flat increase to the player's maximum HP when HP_BOOST is chosen. */
+    /** Flat max-HP gained from the Vitality card (legacy HP boon, re-priced to budget). */
     public static final int LEVEL_UP_HP_BONUS     = BalanceConfig.LEVEL_UP_HP_BONUS;
 
-    /** Flat increase to the player's maximum armour when ARMOR_BOOST is chosen. */
+    /** Flat max-armour gained from the Combat Armour card (legacy armour boon, re-priced to budget). */
     public static final int LEVEL_UP_ARMOR_BONUS  = BalanceConfig.LEVEL_UP_ARMOR_BONUS;
 
-    /** Flat damage bonus added to every shot when DAMAGE_BOOST is chosen. */
+    /** Flat per-shot damage gained from the Hollow Points card (legacy damage boon, re-priced to budget). */
     public static final int LEVEL_UP_DAMAGE_BONUS = BalanceConfig.LEVEL_UP_DAMAGE_BONUS;
+
+    // =========================================================================
+    // LEVEL-UP CARD SYSTEM — power budget & card magnitudes (idea 5)
+    // Each card costs the same budget; the total-PP invariant keeps every build
+    // on the depth-coupling curve. See BalanceConfig for the full contract.
+    // =========================================================================
+
+    /** Fixed power budget (power points) every level-up card costs. (Balance: BalanceConfig.) */
+    public static final float LEVEL_UP_BUDGET_PP          = BalanceConfig.LEVEL_UP_BUDGET_PP;
+    /** Allowed ±fraction a single card's PP may stray from the budget. (Balance: BalanceConfig.) */
+    public static final float LEVEL_UP_BUDGET_TOLERANCE   = BalanceConfig.LEVEL_UP_BUDGET_TOLERANCE;
+    /** Number of cards drawn and offered per level-up. (Balance: BalanceConfig.) */
+    public static final int   LEVEL_UP_CARDS_OFFERED      = BalanceConfig.LEVEL_UP_CARDS_OFFERED;
+    /** Draw-weight bonus per prior pick that biases offers toward the emerging build. (Balance: BalanceConfig.) */
+    public static final float LEVEL_UP_DRAW_BIAS_PER_PICK = BalanceConfig.LEVEL_UP_DRAW_BIAS_PER_PICK;
+
+    /** Fraction of a flat per-shot damage bonus that lands as sustained DPT at the reference weapon. (Balance: BalanceConfig.) */
+    public static final float CARD_FLAT_DAMAGE_DPT_FRACTION = BalanceConfig.CARD_FLAT_DAMAGE_DPT_FRACTION;
+    /** Average fraction of attacks made with a melee weapon — discounts STRENGTH-card pricing. (Balance: BalanceConfig.) */
+    public static final float CARD_MELEE_UTILIZATION        = BalanceConfig.CARD_MELEE_UTILIZATION;
+    /** Reference incoming hit used when pricing TOUGHNESS flat reduction into eHP. (Balance: BalanceConfig.) */
+    public static final int   CARD_PRICING_AVERAGE_HIT      = BalanceConfig.CARD_PRICING_AVERAGE_HIT;
+
+    /** STRENGTH points granted by the Brutal Strength card. (Balance: BalanceConfig.) */
+    public static final int CARD_STRENGTH_STEP     = BalanceConfig.CARD_STRENGTH_STEP;
+    /** MARKSMANSHIP points granted by the Marksman Training card. (Balance: BalanceConfig.) */
+    public static final int CARD_MARKSMANSHIP_STEP = BalanceConfig.CARD_MARKSMANSHIP_STEP;
+    /** AGILITY points granted by the Evasion Training card. (Balance: BalanceConfig.) */
+    public static final int CARD_AGILITY_STEP      = BalanceConfig.CARD_AGILITY_STEP;
+    /** TOUGHNESS points granted by the Toughened Hide card. (Balance: BalanceConfig.) */
+    public static final int CARD_TOUGHNESS_STEP    = BalanceConfig.CARD_TOUGHNESS_STEP;
+
+    /** Glass Cannon trade-off: flat per-shot damage gained. (Balance: BalanceConfig.) */
+    public static final int CARD_GLASS_CANNON_DAMAGE      = BalanceConfig.CARD_GLASS_CANNON_DAMAGE;
+    /** Glass Cannon trade-off: Max-HP sacrificed. (Balance: BalanceConfig.) */
+    public static final int CARD_GLASS_CANNON_HP_COST     = BalanceConfig.CARD_GLASS_CANNON_HP_COST;
+    /** Iron Constitution trade-off: Max-HP gained. (Balance: BalanceConfig.) */
+    public static final int CARD_IRON_CONSTITUTION_HP     = BalanceConfig.CARD_IRON_CONSTITUTION_HP;
+    /** Iron Constitution trade-off: Max-armour sacrificed. (Balance: BalanceConfig.) */
+    public static final int CARD_IRON_CONSTITUTION_ARMOR  = BalanceConfig.CARD_IRON_CONSTITUTION_ARMOR;
+    /** Reckless Charge trade-off: AGILITY gained. (Balance: BalanceConfig.) */
+    public static final int CARD_RECKLESS_CHARGE_AGILITY  = BalanceConfig.CARD_RECKLESS_CHARGE_AGILITY;
+    /** Reckless Charge trade-off: Max-armour sacrificed. (Balance: BalanceConfig.) */
+    public static final int CARD_RECKLESS_CHARGE_ARMOR    = BalanceConfig.CARD_RECKLESS_CHARGE_ARMOR;
+
+    /** Reference player DPT — denominator for damage-based card power points. (Balance: BalanceConfig.) */
+    public static final float REFERENCE_PLAYER_DPT = BalanceConfig.REFERENCE_PLAYER_DPT;
+    /** Reference player eHP — denominator for survivability-based card power points. (Balance: BalanceConfig.) */
+    public static final float REFERENCE_PLAYER_EHP = BalanceConfig.REFERENCE_PLAYER_EHP;
+    /** Reference player Max-HP — base for pricing TOUGHNESS reduction into eHP. (Balance: BalanceConfig.) */
+    public static final int   PLAYER_MAX_HEALTH    = BalanceConfig.PLAYER_MAX_HEALTH;
+    /** Reference player Max-armour — base for pricing TOUGHNESS reduction into eHP. (Balance: BalanceConfig.) */
+    public static final int   PLAYER_MAX_ARMOR     = BalanceConfig.PLAYER_MAX_ARMOR;
 
     // =========================================================================
     // ENEMY DEPTH SCALING — enemies grow stronger on each new dungeon floor

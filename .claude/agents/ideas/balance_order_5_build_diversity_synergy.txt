@@ -1,7 +1,41 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Progression
 TITLE: Build Diversity & Synergy — runs that feel different, within budget
 ---
+
+IMPLEMENTATION NOTES (what shipped)
+  - Power budget + invariant live in BalanceConfig (LEVEL_UP_BUDGET_PP=12,
+    LEVEL_UP_BUDGET_TOLERANCE=0.15, LEVEL_UP_CARDS_OFFERED=3) and are surfaced
+    through GameBalance. PP is computed in GameMath.damagePerTurnPowerPoints /
+    effectiveHitPointPowerPoints (offence in reference DPT, survivability in
+    reference eHP via GameMath.effectiveHitPoints).
+  - The flat 3-boon level-up is replaced by a branching CARD system:
+      progression/UpgradeCardPool  — OFFENSE / DEFENSE / SUSTAIN / UTILITY
+      progression/UpgradeCard      — 10 cards (incl. 3 trade-off cards), each a
+                                     pure-data bundle of stat deltas + its own
+                                     estimatedPowerPoints() priced to ~budget.
+      progression/UpgradeCardDeck  — draws 3 distinct, distinct-LEVER cards,
+                                     biased toward the player's emerging build.
+    The old flat boons survive as VITALITY / COMBAT ARMOR / HOLLOW POINTS (one
+    pool option each), re-priced to budget (armour 18->24, damage 8->6, HP=25).
+  - LevelUpOverlayRenderer now renders the drawn cards generically (per-pool
+    accent colours, a TRADE-OFF tag) and reports the tapped index. World draws a
+    fresh hand when the overlay opens and applies the chosen card's deltas, then
+    advances the level and records the pick (deck bias).
+  - STRENGTH/MARKSMANSHIP damage multipliers were wired into the central damage
+    point (EnemyManager.applyDamageTo, which already knows melee vs ranged) so
+    those attribute cards actually change damage. Dodge / action-speed / flat
+    reduction / max-HP / max-armour / flat-damage levers were already live.
+  - Living table: BalanceReport.printUpgradeCardTable() prints every card's PP and
+    flags any out-of-band card; mirrored into docs/balance-rule-system.txt.
+  - DESIGN DEVIATION: the catalogue of conditional WEAPON abilities (bleed/
+    executioner/hemorrhage/crit/point-blank/…) was NOT folded into the level-up
+    deck. Those are per-weapon roll effects (WeaponAbility/AbilityResolver) and
+    re-homing them into player-level cards would have been a much larger change
+    than the "choice layer + re-pricing" this idea scopes. The level-up deck is
+    built on the four ATTRIBUTES + the three flat boons (the "passive backbone"
+    the idea names), which already deliver the three required archetypes. Folding
+    the weapon-ability pile into the card pools is a clean follow-up.
 
 Idea 5 of 6 in the balance series (see balance_order_1 for the full list).
 Depends on ideas 1 & 2 (especially the power-budget contract, item D). This is

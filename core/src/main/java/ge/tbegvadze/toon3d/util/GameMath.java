@@ -2301,6 +2301,51 @@ public final class GameMath {
     }
 
     /*
+     * Formula: damagePerTurnPowerPoints — UPGRADE PRICING (idea 5)
+     * Derivation:
+     *   The level-up card system prices every upgrade in a common currency, "power
+     *   points" (PP) = the %-gain it grants to the player's reference offence. An
+     *   upgrade that raises the player's effective Damage-Per-Turn by D, against a
+     *   fixed reference DPT, is worth:
+     *       powerPoints = (D / referenceDamagePerTurn) * 100
+     *   So an upgrade that adds 3 DPT on a reference DPT of 25 costs 12 PP. This is
+     *   the offence half of the budget; survivability uses the eHP variant below.
+     *   Pricing OFFENCE and DEFENCE in the same %-of-reference unit is what lets a
+     *   single fixed budget make a damage card and an armour card cost the same.
+     * Edge cases:
+     *   referenceDamagePerTurn <= 0 -> returns 0 (no yardstick; avoids divide-by-zero).
+     *   damagePerTurnGain may be negative (a trade-off card's downside) -> negative PP.
+     */
+    public static float damagePerTurnPowerPoints(float damagePerTurnGain, float referenceDamagePerTurn) {
+        if (referenceDamagePerTurn <= 0f) {
+            return 0f;
+        }
+        return (damagePerTurnGain / referenceDamagePerTurn) * 100f;
+    }
+
+    /*
+     * Formula: effectiveHitPointPowerPoints — UPGRADE PRICING (idea 5)
+     * Derivation:
+     *   The survivability half of the upgrade-pricing currency. An upgrade that raises
+     *   the player's effective HP by E, against a fixed reference eHP, is worth:
+     *       powerPoints = (E / referenceEffectiveHitPoints) * 100
+     *   so +25 eHP on a reference eHP of 205 costs ~12.2 PP — the same budget a +3-DPT
+     *   damage card costs. The eHP GAIN itself is computed by the caller through
+     *   GameMath.effectiveHitPoints (armour adds directly to the survivability pool;
+     *   dodge multiplies it by 1/(1-dodge); flat reduction by H/(H-R)), so all the
+     *   real survivability math stays in one place and only the %-conversion lives here.
+     * Edge cases:
+     *   referenceEffectiveHitPoints <= 0 -> returns 0 (no yardstick; avoids divide-by-zero).
+     *   effectiveHitPointGain may be negative (a trade-off card's downside) -> negative PP.
+     */
+    public static float effectiveHitPointPowerPoints(float effectiveHitPointGain, float referenceEffectiveHitPoints) {
+        if (referenceEffectiveHitPoints <= 0f) {
+            return 0f;
+        }
+        return (effectiveHitPointGain / referenceEffectiveHitPoints) * 100f;
+    }
+
+    /*
      * Formula: weaponPowerScore — the weapon contract's single comparable number
      * Derivation:
      *   A weapon's power is its sustained output scaled by how ammo-cheap that

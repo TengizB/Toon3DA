@@ -56,6 +56,8 @@ public final class BalanceReport {
         System.out.println();
         printEnemyTable();
         System.out.println();
+        printUpgradeCardTable();
+        System.out.println();
         printScarcityTable();
         System.out.println();
         printEncounterTable();
@@ -175,6 +177,41 @@ public final class BalanceReport {
                 enemyName, enemyRole.name(), enemyEffectiveHitPoints, attackDamage, attackCadenceTurns,
                 positionalMultiplier, threatPoints, bandVerdict(insideBand, threatPoints, enemyRole.bandMinimum),
                 goldenRatio, bandVerdict(goldenInside, goldenRatio, goldenMinimum));
+    }
+
+    // -----------------------------------------------------------------------------------
+    // UPGRADE CARDS (idea 5) — every level-up card priced in power points (PP) vs the budget.
+    // PP = %-gain to reference DPT (offence) or reference eHP (survivability), computed straight
+    // from the card's stat deltas through GameMath. Each card MUST land in the budget band, so the
+    // total PP at level L is build-independent (= L * budget). Trade-off cards net to ~budget.
+    // -----------------------------------------------------------------------------------
+    private static void printUpgradeCardTable() {
+        float budget    = GameBalance.LEVEL_UP_BUDGET_PP;
+        float tolerance = GameBalance.LEVEL_UP_BUDGET_TOLERANCE;
+        float bandMinimum = budget * (1f - tolerance);
+        float bandMaximum = budget * (1f + tolerance);
+
+        System.out.println("UPGRADE CARDS (idea 5) — budget = " + String.format("%.0f", budget)
+                + " PP   band = " + String.format("%.1f-%.1f", bandMinimum, bandMaximum)
+                + " PP   (offered " + GameBalance.LEVEL_UP_CARDS_OFFERED + "/level)");
+        System.out.printf("%-20s %-9s %-13s %8s %-8s %-6s%n",
+                "card", "pool", "lever", "PP", "tradeoff", "in?");
+        System.out.println("------------------------------------------------------------------------------------");
+
+        boolean allInBand = true;
+        for (ge.tbegvadze.toon3d.progression.UpgradeCard card
+                : ge.tbegvadze.toon3d.progression.UpgradeCard.values()) {
+            float powerPoints = card.estimatedPowerPoints();
+            boolean inBand = powerPoints >= bandMinimum && powerPoints <= bandMaximum;
+            allInBand &= inBand;
+            System.out.printf("%-20s %-9s %-13s %8.1f %-8s %-6s%n",
+                    card.displayName, card.pool.name(), card.lever.name(), powerPoints,
+                    card.isTradeOff() ? "YES" : "no",
+                    bandVerdict(inBand, powerPoints, bandMinimum));
+        }
+        System.out.println("------------------------------------------------------------------------------------");
+        System.out.println("INVARIANT: every card in band => total PP at level L = L * budget (build-independent).  "
+                + (allInBand ? "ALL CARDS IN BAND" : "*** OUT-OF-BAND CARD(S) — RE-PRICE ***"));
     }
 
     private static String bandVerdict(boolean insideBand, float value, float bandMinimum) {

@@ -8,8 +8,8 @@ import ge.tbegvadze.toon3d.util.GameBalance;
  * (via {@code HudState}) and consulted by the level-up overlay.
  *
  * <p>Calling {@link #addXp(int)} may set {@link #hasPendingLevelUp()} to {@code true}.
- * When that flag is set, World pauses the game and presents the reward overlay.
- * After the player picks a reward, World calls {@link #applyLevelUpReward(LevelUpReward)}
+ * When that flag is set, World pauses the game and presents the level-up card overlay.
+ * After the player picks a card, World applies its stat deltas and calls {@link #advanceLevel()}
  * to advance the level and clear the flag.</p>
  */
 public final class PlayerProgress {
@@ -49,22 +49,27 @@ public final class PlayerProgress {
     // =========================================================================
 
     /**
-     * Applies the player's chosen reward, advances the player level, recalculates
-     * the next XP threshold, and clears {@link #hasPendingLevelUp()}.
+     * Advances the player level, recalculates the next XP threshold, and clears
+     * {@link #hasPendingLevelUp()}. Call once after the chosen upgrade card's stat deltas
+     * have been applied (World owns applying the deltas to the Player and stats).
      *
      * <p>Excess XP (beyond the threshold) carries over so fast killers are not
      * penalised for overkill XP.</p>
      */
-    public void applyLevelUpReward(LevelUpReward reward) {
+    public void advanceLevel() {
         currentXp      = Math.max(0, currentXp - xpForNextLevel);
         playerLevel++;
         xpForNextLevel  = GameBalance.xpRequiredForLevel(playerLevel);
         pendingLevelUp  = false;
+    }
 
-        if (reward == LevelUpReward.DAMAGE_BOOST) {
-            flatDamageBonus += GameBalance.LEVEL_UP_DAMAGE_BONUS;
-        }
-        // HP_BOOST and ARMOR_BOOST are applied directly to the Player by World.
+    /**
+     * Accumulates a flat per-shot damage bonus from an upgrade card (e.g. Hollow Points,
+     * Glass Cannon). The running total is pushed to the EnemyManager by World so every shot
+     * reflects it. Negative deltas are permitted for symmetry but no current card subtracts here.
+     */
+    public void addFlatDamageBonus(int amount) {
+        flatDamageBonus += amount;
     }
 
     // =========================================================================
