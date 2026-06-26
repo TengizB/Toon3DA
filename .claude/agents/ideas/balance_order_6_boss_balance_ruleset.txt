@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED (ruleset + math only; boss FIGHTS still deferred by design)
 CATEGORY: Systems
 TITLE: Boss Balance Ruleset — math for tuning bosses (rules now, fights later)
 ---

@@ -720,4 +720,66 @@ public final class BalanceConfig {
 
     /** Max fraction of reference eHP an UN-telegraphed single hit may deal (~51 HP of 205). Range: 0.20–0.30. */
     public static final float TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION = 0.25f;
+
+    // =====================================================================================
+    // SECTION 14 — BOSS BALANCE RULESET (idea 6) — RULES & MATH, fights deferred
+    // Bosses break the trash-mob threat math (a single entity meant to survive many turns
+    // and threaten a PREPARED player), so the SECTION 9 golden-ratio / TP bands do NOT apply
+    // to them. A boss is tuned to a fight-LENGTH target and a phase-structured threat curve
+    // instead — see GameMath's BOSS BALANCE RULESET block and docs/balance-rule-system.txt
+    // (Boss appendix). Boss FIGHTS are deferred (they need story/run structure), so these are
+    // a CONTRACT the future boss work must satisfy: the targets/bands below feed the boss
+    // formulas to RE-DERIVE boss HP/damage/reward, never to bless a literal HP constant. The
+    // current placeholder boss stats (OVERSEER/CORRUPTOR/HELL_BARON in EnemyConstants, and
+    // XP/CREDIT_REWARD_BOSS_BASE in GameBalance) are flagged "to be re-derived via this ruleset".
+    // =====================================================================================
+
+    // --- RULE 1: HP from fight length. Target fight-length BANDS (turns), never a flat HP.
+    /** Act-boss target fight length (turns): lower bound of the band. Range: 14–22. */
+    public static final float BOSS_TARGET_FIGHT_TURNS_ACT_MIN       = 18f;
+    /** Act-boss target fight length (turns): upper bound of the band. Range: 32–48. */
+    public static final float BOSS_TARGET_FIGHT_TURNS_ACT_MAX       = 40f;
+    /** Run-final boss target fight length (turns): lower bound (FUTURE; no run-final boss yet). Range: 36–48. */
+    public static final float BOSS_TARGET_FIGHT_TURNS_RUN_FINAL_MIN = 40f;
+    /** Run-final boss target fight length (turns): upper bound (FUTURE). Range: 52–70. */
+    public static final float BOSS_TARGET_FIGHT_TURNS_RUN_FINAL_MAX = 60f;
+
+    /** Multi-phase factor ADDED to bossEffectiveHitPoints per phase the player effectively re-fights (RULE 1/4). */
+    public static final float BOSS_MULTI_PHASE_FACTOR_PER_PHASE     = 1.0f;
+
+    // --- RULE 2: cap the fight from above too (no sponges).
+    /** Worst-case fight length for a player who plays well must stay <= this * target (RULE 2). Range: 1.3–1.7. */
+    public static final float BOSS_UPPER_FIGHT_TURNS_MULTIPLIER     = 1.5f;
+
+    // --- RULE 3: lethal-but-counterable. survivalCheckRatio = (playerEHP/bossDPT)/fightTurns band.
+    /** A no-heal player should die no SOONER than this fraction of the fight (below = coin-flip). Range: 0.35–0.45. */
+    public static final float BOSS_SURVIVAL_CHECK_RATIO_MIN         = 0.40f;
+    /** ...and no LATER than this (above = the boss can't threaten a careless player). Range: 0.65–0.75. */
+    public static final float BOSS_SURVIVAL_CHECK_RATIO_MAX         = 0.70f;
+    /** The tuning target inside the band: a no-heal player dies at half the fight, skill/heals buy the rest. */
+    public static final float BOSS_SURVIVAL_CHECK_RATIO_TARGET      = 0.50f;
+
+    // --- RULE 3 (fairness caps): single-hit limits as a fraction of reference eHP.
+    /** Hard cap: NO single boss attack may exceed this fraction of player eHP, telegraphed or not. Range: 0.30–0.40. */
+    public static final float BOSS_HARD_SINGLE_HIT_FRACTION         = 0.35f;
+    // The "must be telegraphed above this" cap reuses TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION (0.25), SECTION 13.
+
+    // --- RULE 4: phases structure the threat curve. Act bosses use 2–3 equal HP phases.
+    /** Minimum phase count for an act boss (each phase escalates ONE mechanic at an HP threshold). Range: 2–2. */
+    public static final int   BOSS_ACT_PHASE_COUNT_MIN              = 2;
+    /** Maximum phase count for an act boss. Range: 3–4. */
+    public static final int   BOSS_ACT_PHASE_COUNT_MAX              = 3;
+
+    // --- RULE 1/5 (build check): expected-player-DPT-at-depth inputs. bossEffectiveHitPoints is
+    // tied to expectedPlayerSustainedDamagePerTurn(depth) so an under-powered player cannot out-DPS
+    // the fight window. Expected OFFENCE power points by a boss depth =
+    //   BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION * LEVEL_UP_BUDGET_PP * (BOSS_EXPECTED_LEVELS_PER_DEPTH * depth).
+    /** Levels the average player is expected to gain per floor descended (~1 level/floor). Range: 0.7–1.3. */
+    public static final float BOSS_EXPECTED_LEVELS_PER_DEPTH        = 1.0f;
+    /** Fraction of the level-up power budget the average player invests in OFFENCE (the rest is survival/utility). Range: 0.3–0.6. */
+    public static final float BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION = 0.50f;
+
+    // --- RULE 6: reward priced by consumption * a risk premium (so a boss REFUNDS the fight + profit).
+    /** Profit margin a boss pays over the ammo+heal resources its fight consumes (> 1, never a net loss). Range: 1.2–1.6. */
+    public static final float BOSS_REWARD_RISK_PREMIUM             = 1.3f;
 }
