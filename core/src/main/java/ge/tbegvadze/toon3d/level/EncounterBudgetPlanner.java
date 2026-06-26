@@ -39,12 +39,18 @@ public final class EncounterBudgetPlanner {
 
     /** Non-anchor archetypes (chaff + soldiers) the budget is filled with. */
     private static final EnemyType[] FILL_TYPES = {
-            EnemyType.GORE_BITER,    // swarmer  (fast melee)
-            EnemyType.EYE_TYRANT,    // sniper   (ranged)
-            EnemyType.ACID_DRONE,    // harasser (ranged)
-            EnemyType.VOID_SHROUD,   // flanker  (fast melee)
-            EnemyType.MIRE_WRAITH,   // artillery(ranged)
-            EnemyType.PLAGUE_HULK    // tank     (melee)
+            EnemyType.GORE_BITER,       // swarmer   (fast melee)
+            EnemyType.EYE_TYRANT,       // sniper    (ranged)
+            EnemyType.ACID_DRONE,       // harasser  (ranged)
+            EnemyType.VOID_SHROUD,      // flanker   (fast melee)
+            EnemyType.MIRE_WRAITH,      // artillery (ranged)
+            EnemyType.PLAGUE_HULK,      // tank      (melee)
+            // Necrotic faction — chaff + soldiers reusing the legacy individual sprites.
+            EnemyType.GHOUL,            // shambler  (slow melee chaff)
+            EnemyType.CRAWLER,          // scuttler  (fast melee chaff)
+            EnemyType.VORTEX_EYE,       // eye       (short-range ranged chaff)
+            EnemyType.REVENANT,         // reanimator(fast melee soldier)
+            EnemyType.BLIGHT_CORRUPTOR  // carrier   (durable melee soldier)
     };
 
     /** Divergence guard: every added enemy raises spent TP by a positive cost, but cap roster size anyway. */

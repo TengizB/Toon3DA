@@ -115,6 +115,11 @@ ENEMY SPAWN MARKERS (temporary — extracted by LevelLoader, then replaced with 
 !   Iron Stalker spawn    Armored elite melee. Floors 5-10+. Use sparingly — 1-2 per level.
 $   Acid Drone spawn      Ranged mechanical. Floors 3-9.
 ^   Void Shroud spawn     Fast stealth melee. Floors 3-10.
+~   Ghoul spawn           Necrotic faction. Slow shambling melee chaff. Relentless but easily outpaced.
+z   Crawler spawn         Necrotic faction. Fast, fragile low melee chaff; rushes the player.
+K   Revenant spawn        Necrotic faction. Fast, hard-hitting undead soldier melee.
+V   Vortex Eye spawn      Necrotic faction. Short-range ranged chaff caster (weaker, closer kiter than Eye Tyrant).
+*   Blight Corruptor spawn Necrotic faction. Durable slow infected brute soldier melee.
 n   Boss spawn (depth-keyed)  Replaced at load time with floor ' '; BossFloorController seeds the correct boss based on World.currentDepth. Exactly one per boss-floor arena.
 
 ---
@@ -122,13 +127,16 @@ n   Boss spawn (depth-keyed)  Replaced at load time with floor ' '; BossFloorCon
 SYMBOL BUDGET
 -------------
 Total printable ASCII characters: 95  (codes 32-126)
-Currently assigned:               70
-Remaining:                        25
+Currently assigned:               75
+Remaining:                        20
 
 Free characters (not yet assigned):
-" _ ` ~ | { } [ ] \ / < > ( ) * - + (some already used — check above)
-Uppercase: K V  (D F I J W taken; Z taken as cryo; check walls/doors above)
-Lowercase: o z  (e i j n q taken — 'i' fire hazard, 'q' toxic hazard)
+" _ ` | { } [ ] \ / < > ( ) - + (some already used — check above)
+  ('~' and '*' now taken as Ghoul / Blight Corruptor enemy-spawn markers)
+Uppercase: (K V now taken as Revenant / Vortex Eye enemy-spawn markers;
+           D F I J W taken; Z taken as cryo; check walls/doors above)
+Lowercase: o  ('z' now taken as Crawler enemy-spawn marker; e i j n q taken —
+           'i' fire hazard, 'q' toxic hazard)
 
 PREFERRED SYMBOLS FOR NEW ADDITIONS
 ------------------------------------

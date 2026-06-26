@@ -154,6 +154,11 @@ public final class EnemyManager implements EnemyHitTarget {
                 case '!': type = EnemyType.IRON_STALKER;  break;
                 case '$': type = EnemyType.ACID_DRONE;    break;
                 case '^': type = EnemyType.VOID_SHROUD;   break;
+                case '~': type = EnemyType.GHOUL;            break;
+                case 'z': type = EnemyType.CRAWLER;          break;
+                case 'K': type = EnemyType.REVENANT;         break;
+                case 'V': type = EnemyType.VORTEX_EYE;       break;
+                case '*': type = EnemyType.BLIGHT_CORRUPTOR; break;
                 case 'n': continue; // Boss spawn — BossFloorController seeds the correct boss by depth
                 default:  type = EnemyType.PLAGUE_HULK;   break;
             }
@@ -994,6 +999,11 @@ public final class EnemyManager implements EnemyHitTarget {
             case IRON_STALKER: return '6'; // bullets — armored elite
             case ACID_DRONE:   return '8'; // cells   — mechanical ranged
             case VOID_SHROUD:  return '6'; // bullets — stealth melee
+            case GHOUL:        return '6'; // bullets — shambling chaff
+            case CRAWLER:      return '6'; // bullets — fast chaff
+            case REVENANT:     return '7'; // shells  — heavy undead brawler
+            case VORTEX_EYE:   return '8'; // cells   — energy caster (ranged)
+            case BLIGHT_CORRUPTOR: return '7'; // shells — infected brute
             default:           return '6';
         }
     }

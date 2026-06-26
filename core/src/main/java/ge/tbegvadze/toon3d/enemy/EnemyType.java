@@ -145,6 +145,98 @@ public enum EnemyType {
     },
 
     // -------------------------------------------------------------------------
+    // Necrotic faction — five archetypes reusing the legacy individual-sprite PNGs
+    // (corruptor / vortex_eye / ghoul / crawler / revenant). Distinct stat niches and
+    // tactical verbs keep them from duplicating the blight/infernal roster above. They
+    // reuse the shared melee/ranged AI in EnemyManager (no bespoke behaviour branch).
+    // -------------------------------------------------------------------------
+
+    GHOUL {
+        @Override public int    maxHealth()          { return EnemyConstants.GHOUL_MAX_HEALTH; }
+        @Override public int    attackDamage()        { return EnemyConstants.GHOUL_ATTACK_DAMAGE; }
+        @Override public int    attackRangeTiles()    { return 1; }
+        @Override public int    moveEveryNTurns()     { return EnemyConstants.GHOUL_MOVE_EVERY_N_TURNS; }
+        @Override public boolean isRanged()           { return false; }
+        @Override public float  heightMultiplier()    { return EnemyConstants.GHOUL_HEIGHT_MULTIPLIER; }
+        @Override public int    baseXpReward()        { return GameBalance.XP_REWARD_GHOUL; }
+        @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_GHOUL; }
+        @Override public String displayName()         { return "Ghoul"; }
+        @Override public EnemyRole role()             { return EnemyRole.CHAFF; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
+        @Override public int    attackCadenceTurns()  { return 1; }
+        @Override public char   spawnChar()           { return '~'; }
+        @Override public String tacticalVerb()        { return "SHAMBLER: slow but relentless — keep moving and never let it corner you."; }
+    },
+
+    CRAWLER {
+        @Override public int    maxHealth()          { return EnemyConstants.CRAWLER_MAX_HEALTH; }
+        @Override public int    attackDamage()        { return EnemyConstants.CRAWLER_ATTACK_DAMAGE; }
+        @Override public int    attackRangeTiles()    { return 1; }
+        @Override public int    moveEveryNTurns()     { return EnemyConstants.CRAWLER_MOVE_EVERY_N_TURNS; }
+        @Override public boolean isRanged()           { return false; }
+        @Override public float  heightMultiplier()    { return EnemyConstants.CRAWLER_HEIGHT_MULTIPLIER; }
+        @Override public int    baseXpReward()        { return GameBalance.XP_REWARD_CRAWLER; }
+        @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_CRAWLER; }
+        @Override public String displayName()         { return "Crawler"; }
+        @Override public EnemyRole role()             { return EnemyRole.CHAFF; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_FAST_MELEE; }
+        @Override public int    attackCadenceTurns()  { return 1; }
+        @Override public char   spawnChar()           { return 'z'; }
+        @Override public String tacticalVerb()        { return "SCUTTLER: fast and fragile — it closes the gap quickly, so drop it before the pack piles in."; }
+    },
+
+    REVENANT {
+        @Override public int    maxHealth()          { return EnemyConstants.REVENANT_MAX_HEALTH; }
+        @Override public int    attackDamage()        { return EnemyConstants.REVENANT_ATTACK_DAMAGE; }
+        @Override public int    attackRangeTiles()    { return 1; }
+        @Override public int    moveEveryNTurns()     { return EnemyConstants.REVENANT_MOVE_EVERY_N_TURNS; }
+        @Override public boolean isRanged()           { return false; }
+        @Override public float  heightMultiplier()    { return EnemyConstants.REVENANT_HEIGHT_MULTIPLIER; }
+        @Override public int    baseXpReward()        { return GameBalance.XP_REWARD_REVENANT; }
+        @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_REVENANT; }
+        @Override public String displayName()         { return "Revenant"; }
+        @Override public EnemyRole role()             { return EnemyRole.SOLDIER; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
+        @Override public int    attackCadenceTurns()  { return 1; }
+        @Override public char   spawnChar()           { return 'K'; }
+        @Override public String tacticalVerb()        { return "REVENANT: a fast, heavy hitter — stagger or kill it before it reaches melee."; }
+    },
+
+    VORTEX_EYE {
+        @Override public int    maxHealth()          { return EnemyConstants.VORTEX_EYE_MAX_HEALTH; }
+        @Override public int    attackDamage()        { return EnemyConstants.VORTEX_EYE_ATTACK_DAMAGE; }
+        @Override public int    attackRangeTiles()    { return EnemyConstants.VORTEX_EYE_RANGE_TILES; }
+        @Override public int    moveEveryNTurns()     { return EnemyConstants.VORTEX_EYE_MOVE_EVERY_N_TURNS; }
+        @Override public boolean isRanged()           { return true; }
+        @Override public float  heightMultiplier()    { return EnemyConstants.VORTEX_EYE_HEIGHT_MULTIPLIER; }
+        @Override public int    baseXpReward()        { return GameBalance.XP_REWARD_VORTEX_EYE; }
+        @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_VORTEX_EYE; }
+        @Override public String displayName()         { return "Vortex Eye"; }
+        @Override public EnemyRole role()             { return EnemyRole.CHAFF; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
+        @Override public int    attackCadenceTurns()  { return 1; }
+        @Override public char   spawnChar()           { return 'V'; }
+        @Override public String tacticalVerb()        { return "EYE: a short-range caster — break its line or close the gap to shut it down."; }
+    },
+
+    BLIGHT_CORRUPTOR {
+        @Override public int    maxHealth()          { return EnemyConstants.BLIGHT_CORRUPTOR_MAX_HEALTH; }
+        @Override public int    attackDamage()        { return EnemyConstants.BLIGHT_CORRUPTOR_ATTACK_DAMAGE; }
+        @Override public int    attackRangeTiles()    { return 1; }
+        @Override public int    moveEveryNTurns()     { return EnemyConstants.BLIGHT_CORRUPTOR_MOVE_EVERY_N_TURNS; }
+        @Override public boolean isRanged()           { return false; }
+        @Override public float  heightMultiplier()    { return EnemyConstants.BLIGHT_CORRUPTOR_HEIGHT_MULTIPLIER; }
+        @Override public int    baseXpReward()        { return GameBalance.XP_REWARD_BLIGHT_CORRUPTOR; }
+        @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_BLIGHT_CORRUPTOR; }
+        @Override public String displayName()         { return "Blight Corruptor"; }
+        @Override public EnemyRole role()             { return EnemyRole.SOLDIER; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
+        @Override public int    attackCadenceTurns()  { return 1; }
+        @Override public char   spawnChar()           { return '*'; }
+        @Override public String tacticalVerb()        { return "CARRIER: a durable infected brute — grind it down from range; don't trade blows."; }
+    },
+
+    // -------------------------------------------------------------------------
     // Boss archetypes — BossFloorController sets actual scaled HP/damage at spawn;
     // values here are used for initial Enemy construction and XP budget.
     // AI is driven by BossAttackPattern, not moveEveryNTurns() / isRanged().
