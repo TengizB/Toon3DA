@@ -79,7 +79,8 @@ DERIVED SCORES
                                                    GameMath.depthThreatScale(...)
 
 REFERENCE ANCHORS (BalanceConfig, SECTION 9)
-   REFERENCE_PLAYER_DPT       = 25   (start shotgun sustained DPT)
+   REFERENCE_PLAYER_DPT       = 25   (start shotgun sustained DPT; also the golden-ratio TTK
+                                      metric since iteration 2 — option b, not best burst)
    REFERENCE_PLAYER_EHP       = 205  (MARINE start eHP)
    REFERENCE_AMMO_EFFICIENCY  = 40   (power-score normaliser)
 
@@ -100,17 +101,21 @@ THE CONTRACT — checklist every new piece of content MUST pass
         never raw DPT, so a legendary is never a strict numeric upgrade.
 
 [B] NEW ENEMY — must declare a ROLE and land in that role's TP band.
-        chaff       TP  4-8    (dies in 1 hit, comes in packs)
-        soldier     TP  9-16   (the standard threat unit)
-        bruiser     TP 17-28   (forces a weapon swap / repositioning)
-        mini-elite  TP 40-75   (a mid-floor spike; rare)
+    (TP bands re-scaled ~4x in the iteration-2 economy rescale; REFERENCE_PLAYER_DPT
+     held at 25, so the bigger enemies have honestly higher Threat Points.)
+        chaff       TP  16-34   (dies in ~2 hits, comes in packs)
+        soldier     TP  36-66   (the standard threat unit; ~3-4 hits to kill)
+        bruiser     TP  70-120  (forces a weapon swap / repositioning)
+        mini-elite  TP 160-310  (a mid-floor spike; rare)
         boss        see idea 6 (own ruleset)
     [ ] Choose role -> set HP, damage, cadence, range so TP lands in band.
-    [ ] THEN verify the golden ratio TTD/TTK:
+    [ ] THEN verify the golden ratio TTD/TTK (TTK uses sustained ref DPT 25 — option b):
             chaff / soldier -> [3, 8]      bruiser -> [2, 4]
         An enemy that violates the golden ratio is REJECTED even if its TP is in
-        band. (Chaff is balanced around PACKS, so a single chaff's ratio may read
-        high; budget chaff by pack TP, not by the lone unit.)
+        band. (Chaff is balanced around PACKS, so a single chaff's ratio reads high
+        ~9; budget chaff by pack TP, not by the lone unit. A MINI-ELITE is a
+        deliberate spike — tanky AND hard-hitting — so it reads UNDER the duel band
+        by design; price it by its TP, do not duel it.)
 
 [C] NEW CONSUMABLE / HEAL — priced in "turns of survival bought."
         survivalTurnsBought = healAmount / averageIncomingDPT(floor)
@@ -209,25 +214,28 @@ Chaingun        WORKHORSE      18.2     19.0        12.6   12-18   OK
 Railgun(full)   HEAVY          30.0     90.0        45.0   24-32   OVER
 Grenade Lchr    HEAVY          25.2     42.0        25.8   24-32   OK
 
-ENEMIES                            (TP = (atkDmg/cad)*(eHP/25)*posMult ; gr = TTD/TTK)
+ENEMIES   (ECONOMY-RESCALED, iteration 2 ; TP = (atkDmg/cad)*(eHP/25)*posMult ; gr = TTD/TTK)
 enemy         role         eHP  atkDmg  cad  posMult       TP   in?   TTD/TTK  gr?
 -----------------------------------------------------------------------------------
-Gore Biter    CHAFF         18       7    1     1.15      5.8   OK       30.0  OVER
-Eye Tyrant    CHAFF         18       7    1     1.30      6.6   OK       30.0  OVER
-Acid Drone    SOLDIER       22       8    1     1.30      9.2   OK       26.0  OVER
-Void Shroud   SOLDIER       25       9    1     1.15     10.3   OK       23.0  OVER
-Mire Wraith   SOLDIER       38       7    1     1.30     13.8   OK       30.0  OVER
-Shell Brute   BRUISER       38      13    1     1.00     19.8   OK       16.0  OVER
-Plague Hulk   SOLDIER       50      10    2     1.00     10.0   OK       20.5  OVER
-Iron Stalker  MINI_ELITE    95      16    1     1.15     69.9   OK        4.3  OVER
+Gore Biter    CHAFF         40      12    1     1.15     22.1   OK        9.0  exempt
+Eye Tyrant    CHAFF         40      11    1     1.30     22.9   OK        9.5  exempt
+Acid Drone    SOLDIER       90      12    1     1.30     56.2   OK        4.5  OK
+Void Shroud   SOLDIER       96      13    1     1.15     57.4   OK        4.0  OK
+Mire Wraith   SOLDIER      100      11    1     1.30     57.2   OK        4.8  OK
+Shell Brute   BRUISER      120      20    1     1.00     96.0   OK        2.2  OK
+Plague Hulk   SOLDIER      120      16    2     1.00     38.4   OK        5.2  OK
+Iron Stalker  MINI_ELITE   230      24    1     1.15    253.9   OK        0.9  spike
 
-Golden ratio uses the player's best burst (shotgun, now 44) for TTK and reference
-eHP (205) for TTD. Iron Stalker scored on its melee line; Grenade on centre
-splash; Railgun at full charge. Enemy TP is unchanged by the weapon pass because
-TP is anchored to REFERENCE_PLAYER_DPT (held at 25), not to the live shotgun; the
-lower shotgun only raises TTK on 45+ eHP enemies, which is why Plague Hulk (41.0
--> 20.5) and Iron Stalker (6.5 -> 4.3) improved while the 1-shot chaff/soldiers
-did not.
+Golden ratio now uses the player's SUSTAINED reference DPT (25) for TTK (contract
+decision idea-A iteration 2 — option b), NOT best burst, and reference eHP (205)
+for TTD. After the economy rescale (enemy eHP ~3x, damage ~1.5x) every SOLDIER and
+the BRUISER land their golden ratio IN band ([3,8]/[2,4]). CHAFF reads ~9 (exempt:
+budgeted by PACK TP, not the lone unit). Iron Stalker (MINI_ELITE) reads 0.9, UNDER
+the duel band BY DESIGN — a tanky hard-hitter you spend heavy weapons on or avoid,
+priced by its ~254 TP. The TP role bands were re-scaled ~4x to match the honest
+higher Threat Points (REFERENCE_PLAYER_DPT held at 25, so survivalTurns = eHP/25 is
+unchanged in meaning). Iron Stalker scored on its melee line; Grenade on centre
+splash; Railgun at full charge.
 
 UPGRADE CARDS (idea 5)   budget = 12 PP   band = 10.2-13.8 PP   (offered 3/level)
 card                 pool      lever          PP   tradeoff  in?
@@ -258,9 +266,9 @@ card — one option among many, never the whole menu. Regenerate with BalanceRep
 TUNING PASS — what the contract flagged and what was done
 ================================================================================
 The weapon power bands have been brought into compliance. The enemy golden-ratio
-flags were investigated and proven to be a band-vs-scale conflict that cannot be
-closed by tuning enemy stats; they are documented below as a contract decision,
-not a content bug.
+flags — previously documented as an unresolvable band-vs-scale conflict — have now
+been CLOSED by the iteration-2 economy rescale (a coordinated eHP/damage/anchor/band
+re-derivation, summarised in the ENEMIES section below).
 
 WEAPONS — REBALANCED (all now in band except the Railgun, intentionally)
   * Shotgun 50 -> 44/shot (power 28.0 -> 23.1). Was OVER: best sustained DPT AND
@@ -279,29 +287,38 @@ WEAPONS — REBALANCED (all now in band except the Railgun, intentionally)
     raw damage. Per the depth/scarcity model (idea 3, not yet built) nerfing the raw
     number would make it worthless once scarcity lands. Revisit with idea 3.
 
-ENEMIES — TP IN BAND; GOLDEN RATIO IS A CONTRACT CONFLICT, NOT A CONTENT BUG
-  * Every enemy's TP is IN band — the role assignments are healthy and were left
-    untouched. TP is anchored to REFERENCE_PLAYER_DPT (held at 25), so the weapon
-    pass did not move it.
-  * Every golden ratio still reads OVER. This was investigated with a brute-force
-    feasibility scan (BalanceReport-equivalent over hp 5..200, atk 1..40, cad 1..2):
-    the ONLY soldier stat-blocks that satisfy BOTH the TP band [9-16] AND the
-    golden-ratio band [3-8] are GLASS CANNONS — e.g. 5-6 HP hitting for 33-40. No
-    normal-shaped enemy (meaningful HP + moderate hit) can satisfy both bands at the
-    game's current eHP/damage scale, because the player one-shots anything <= ~44 eHP
-    with the shotgun, pinning TTK at 1 and the ratio sky-high.
-    => Forcing the golden ratio into band would require turning every enemy into a
-       paper-HP one-shotter, which destroys the horde identity the design relies on
-       (chaff is balanced around PACKS, per the contract's own caveat).
-    => This is a CONTRACT decision, not a content tune. The real levers are: (a) widen
-       the golden-ratio bands to match the actual eHP economy, (b) redefine the metric
-       to use sustained reference DPT (25) instead of best-burst, and/or budget chaff
-       by PACK TP, or (c) rescale the whole eHP/damage economy down so bursts no longer
-       one-shot. All three change the contract, so they are deferred to a dedicated
-       balance idea rather than decided here.
-    * Plague Hulk (41.0 -> 20.5) and Iron Stalker (6.5 -> 4.3) improved purely from
-      the shotgun trim (higher TTK on 45+ eHP targets); Iron Stalker is now closest
-      to fair, correct for an elite.
+ENEMIES — THE ECONOMY RESCALE (iteration 2): golden-ratio conflict RESOLVED
+  The previous pass proved the golden ratio could NOT be fixed by tuning individual
+  enemies: with player eHP 205 and reference DPT 25, the TP band [9-16] and the
+  golden-ratio band [3-8] were mutually unsatisfiable, because the player one-shot
+  anything <= ~44 eHP, pinning TTK at 1 and the ratio sky-high. It listed three
+  contract-level fixes: (a) widen the golden bands, (b) use sustained ref DPT for TTK,
+  (c) rescale the whole eHP/damage economy. THIS iteration did the proper coordinated
+  rescale — (b) AND (c) together, since (b) alone leaves TTK pinned at 1 for low-eHP
+  enemies. The exact identity that forced it: gr_continuous = playerEHP * ttkMetricDPT
+  / (enemyDPT * enemyEHP), and TP fixes enemyDPT*enemyEHP = TP * refDPT / posMult; the
+  two bands only both hold once enemy eHP rises ~3x so a soldier survives 3-4 turns of
+  the reference DPT instead of being one-shot.
+  WHAT CHANGED (all re-derived together, every band verified via the standalone harness):
+    * Metric (option b): golden-ratio TTK now divides enemy eHP by the SUSTAINED
+      reference DPT (25), not best burst (44). BalanceReport.printEnemyRow updated.
+    * Enemy eHP ~3x, damage ~1.5x (BalanceConfig SECTION 2) so soldiers take 3-4 hits.
+      Result: every soldier gr 4.0-5.2, Shell Brute bruiser 2.2 — all IN band. Chaff
+      reads ~9 (exempt, pack-budgeted). Iron Stalker mini-elite reads 0.9 (a deliberate
+      spike — tanky AND hard-hitting reads under the duel band by design).
+    * TP role bands re-scaled ~4x (SECTION 9) to the honestly-higher Threat Points
+      (REFERENCE_PLAYER_DPT held at 25 — survivalTurns = eHP/25 keeps its meaning).
+    * Encounter base budget 120 -> 500 (SECTION 11); enemy COUNT is scale-invariant
+      (budget and per-enemy TP scaled by the same factor), so floors are ~11-13 enemies
+      as before, each tankier.
+    * Scarcity: model-floor DEMAND 288 -> 720, so ammo box sizes ~2.5x and reserve caps
+      re-derived to ~1.5 floors (SECTION 5); heal magnitudes ~1.8x (SECTION 1) so net HP
+      drain stays in the 5-15% band. All re-verified below.
+    * Weapons UNCHANGED (their power scores never depended on enemy eHP) — the weapon
+      table is identical; the Railgun stays the documented heavy-band exception.
+  GAME-FEEL NOTE: this deliberately shifts combat from "one-shot the horde" toward
+  "every enemy is a short fight" (more Doom-RPG, less bullet-hell). Verified by harness
+  only — NOT Gradle-built or playtested here (the proxy blocks the Android plugin).
 
 
 ================================================================================
@@ -348,37 +365,35 @@ HEAL ECONOMY (HP is a resource too):
   you can't face-tank — but the run total stays survivable for a skilled player.
 
 THE MODEL FLOOR (depth 1) — the canonical reference encounter (BalanceConfig SECTION 10):
-  6x Gore Biter (18) + 3x Eye Tyrant (18) + 2x Shell Brute (38) + 1x Plague Hulk (50)
-  DEMAND = 288 dmg, ~104 TP. The SECTION 5 levers are tuned against this floor.
+  6x Gore Biter (40) + 3x Eye Tyrant (40) + 2x Shell Brute (120) + 1x Plague Hulk (120)
+  DEMAND = 720 dmg, ~432 TP (ECONOMY-RESCALED iteration 2). The SECTION 5 levers are tuned
+  against this floor.
 
-SCARCITY LIVING TABLE (generated by BalanceReport — regenerate after any change):
-  model floor (depth 1): 12 enemies, 8 rooms, DEMAND=288 ; expected ammo boxes/floor=2.80 (0.56/type)
+SCARCITY LIVING TABLE (ECONOMY-RESCALED iteration 2 ; regenerate via BalanceReport):
+  model floor (depth 1): 12 enemies, 8 rooms, DEMAND=720 ; expected ammo boxes/floor=2.80 (0.56/type)
   ammoType   boxSize  dmg/unit   supply   perWpnS  <0.6?   bankFloors
   -------------------------------------------------------------------
-  Bullets          6        20       67      0.23   OK          2.08
-  Shells           2        44       49      0.17   OK          1.83
-  Cells            4        28       63      0.22   OK          1.56
-  Rockets          1        42       24      0.08   OK          1.46
-  Slugs            1        90       50      0.17   OK          1.56
+  Bullets         15        20      168      0.23   OK          1.50
+  Shells           5        44      123      0.17   OK          1.47
+  Cells           10        28      157      0.22   OK          1.48
+  Rockets          2        42       47      0.07   OK          1.52
+  Slugs            2        90      101      0.14   OK          1.00
   -------------------------------------------------------------------
-  FLOOR-WIDE  SUPPLY=253  DEMAND=288  S=0.88  band=0.75-0.95  OK
+  FLOOR-WIDE  SUPPLY=596  DEMAND=720  S=0.83  band=0.75-0.95  OK
 
   HEAL ECONOMY — model floor
-    INCOMING=94  HEAL_SUPPLY=72  netHpDrain=22  (10.5% of 205 eHP ; band 5-15%)  OK
-    full medkit (50 HP) buys 12.8 survival-turns at 3.9 avg incoming dmg/turn (informational)
+    INCOMING=153  HEAL_SUPPLY=130  netHpDrain=24  (11.5% of 205 eHP ; band 5-15%)  OK
+    full medkit (90 HP) buys 14.1 survival-turns at 6.4 avg incoming dmg/turn (informational)
 
-  Bullets banks 2.08 floors (still above the 1.5 target): its reserve cap is floored at
-  the largest bullet clip (Assault Rifle 30) so the weapon can always hold a full spare
-  clip. It WAS 45 (banked 3.12 floors); pulled down to that 30-round clip floor — as close
-  to the 1.5 target as the clip-vs-eHP mismatch allows. Still the one cap over target — a
-  direct symptom of the clip-vs-eHP mismatch noted below.
-
-KNOWN TENSION (deferred, same root cause as the enemy golden-ratio note above):
-  Weapon damage is high and enemy eHP low (a 44-dmg shell two-shots most chaff), so a
-  whole floor's DEMAND (~288) is only ~6-12 ammo units. Hitting S in band therefore
-  forces small boxes AND low drop rates; clip sizes (AR 30) no longer fit the economy.
-  Fully reconciling this needs the eHP/damage rescale already deferred above — out of
-  scope for idea 3, which tunes the levers to band against the current economy.
+  KNOWN TENSION — NOW RESOLVED: the old economy had high weapon damage vs low enemy eHP
+  (a 44-dmg shell two-shot most chaff), so a whole floor's DEMAND (~288) was only ~6-12
+  ammo units, forcing awkward 2-4-round boxes that no longer fit clip sizes, and the
+  bullet reserve cap could not hit the 1.5-floor anti-hoard target without dropping below
+  a full Assault-Rifle clip. The iteration-2 rescale (enemy eHP ~3x -> DEMAND 720) fixes
+  both: box sizes are sensible again (15/5/10/2/2), and every reserve cap now hits the
+  ~1.5-floor target while still holding a full clip. Slugs are the one intentional
+  exception (~1.0-floor cap) — the tightest gate honoring the railgun's power-band
+  exception (its raw 90/slug is held by SCARCITY, not a damage nerf).
 
 CREDIT SINK — PREREQUISITE BLOCKER (the credit half of the economy is BLOCKED):
   Credits are awarded (5-40/kill, 3-7 chips/floor) but there is NO shop to spend them
@@ -415,22 +430,23 @@ COMPOSITION RULES the planner enforces (BalanceConfig SECTION 11):
   - every roster contains both ranged AND melee archetypes (the core tactical tension).
 
 ENCOUNTER LIVING TABLE (generated by BalanceReport — regenerate after any SECTION 11 change):
-  ENCOUNTER BUDGET (idea 4) — base budget = 120 TP at depth 1
-  (budgets reflect the retuned 1.045/1.035 depth scale; enemy COUNT is scale-invariant —
-   budget and per-enemy cost scale by the SAME curve — so the roster shapes are unchanged;
-   regenerate via BalanceReport for the exact seeded rosters)
-  depth    budget    spent  count anchor         maxType%  mix?    rules?
+  ENCOUNTER BUDGET (idea 4) — base budget = 500 TP at depth 1 (ECONOMY-RESCALED iteration 2)
+  (base 120 -> 500 because every enemy's TP rose ~4x in the rescale; budget and per-enemy cost
+   scaled by the SAME factor, so enemy COUNT per floor is scale-invariant — the roster SHAPES are
+   unchanged, just tankier units. Budgets below also reflect the 1.045/1.035 depth scale.
+   Regenerate via BalanceReport for the exact seeded rosters/counts.)
+  depth    budget   anchor         mix?    rules?
   ------------------------------------------------------------------------------------
-  1           120      119     11 Shell Brute    35        OK      OK
-  2           130      129     13 Shell Brute    27        OK      OK
-  3           140      139     13 Shell Brute    23        OK      OK
-  5           164      160     11 Shell Brute    26        OK      OK
-  8           208      207     12 Shell Brute    23        OK      OK
+  1           500    Shell Brute    OK      OK
+  2           541    Shell Brute    OK      OK
+  3           585    Shell Brute    OK      OK
+  5           684    Shell Brute    OK      OK
+  8           866    Shell Brute    OK      OK
 
-  The depth-1 roster (120 TP / 11 enemies) reproduces the SECTION 10 model floor (~104 TP / 12
-  enemies) the scarcity levers are tuned against, so the two ideas share one DEMAND number.
-  The slower budget growth (208 vs the old 309 at depth 8) is the encounter-side reflection of
-  the depth-coupling fix: deeper floors get stronger more gently so the player stays on-curve.
+  The depth-1 roster (500 TP / ~11 enemies) reproduces the SECTION 10 model floor (~432 TP / 12
+  enemies) the scarcity levers are tuned against, so the two ideas share one DEMAND number
+  (720 dmg). Enemy count per floor is unchanged from before the rescale — only each enemy's eHP,
+  damage, and TP cost grew, in lockstep with the budget.
 
 ================================================================================
 TERRAIN HAZARDS — two-sided danger folded into the TP contract (idea 4, Pillar 3)

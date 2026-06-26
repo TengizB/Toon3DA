@@ -128,7 +128,8 @@ public final class BalanceReport {
 
     // -----------------------------------------------------------------------------------
     // ENEMIES — threat points vs role band, plus the golden-ratio (TTD/TTK) sanity check.
-    // Golden ratio uses the player's best burst (shotgun) for TTK and reference eHP for TTD.
+    // Golden ratio uses the player's SUSTAINED reference DPT (REFERENCE_PLAYER_DPT, contract
+    // decision idea-A iteration 2 — option b) for TTK and reference eHP for TTD.
     // -----------------------------------------------------------------------------------
     private static void printEnemyTable() {
         System.out.println("ENEMIES");
@@ -167,8 +168,11 @@ public final class BalanceReport {
         boolean insideBand = threatPoints >= enemyRole.bandMinimum && threatPoints <= enemyRole.bandMaximum;
         String bandText = String.format("%.0f-%.0f", enemyRole.bandMinimum, enemyRole.bandMaximum);
 
-        // Golden ratio: TTK by the player's best burst (shotgun), TTD by enemy DPT into reference eHP.
-        int turnsToKill = GameMath.turnsToKill(enemyEffectiveHitPoints, BalanceConfig.SHOTGUN_DAMAGE);
+        // Golden ratio (CONTRACT DECISION idea-A, iteration 2): TTK by the player's SUSTAINED
+        // reference DPT (option b), NOT best burst. Best burst pinned TTK at 1 for anything the
+        // shotgun one-shot; sustained DPT is the player's realistic kill rate and the same yardstick
+        // the TP normaliser uses. TTD by enemy DPT into reference eHP (unchanged).
+        int turnsToKill = GameMath.turnsToKill(enemyEffectiveHitPoints, BalanceConfig.REFERENCE_PLAYER_DPT);
         float enemyDamagePerTurn = (float) attackDamage / Math.max(1, attackCadenceTurns);
         int turnsToDie = GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP, enemyDamagePerTurn);
         float goldenRatio = GameMath.goldenRatio(turnsToDie, turnsToKill);

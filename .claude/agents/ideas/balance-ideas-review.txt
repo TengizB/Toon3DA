@@ -407,9 +407,80 @@ STILL DEFERRED (NOT safely auto-tunable — need a dedicated balance idea + play
      coordinated rescale of enemy eHP, player DPT/eHP, the reference anchors AND every band at once
      (it cascades through the whole contract) — exactly the "changes the contract" work idea 2 defers.
      Localized tuning cannot fix it; every single lever cascades out of some other band.
+       => RESOLVED in iteration 2 — see ADDENDUM 2 below.
   B. RAILGUN over the heavy power band (45 vs 24-32) — LEFT as-is: a deliberate, documented
      scarcity-gated exception (held by RAILGUN_MAX_SLUGS=5, not raw damage). Nerfing the raw 90 is
      explicitly argued against in BalanceConfig/docs (would make it worthless, not merely scarce).
+       => RE-EVALUATED in iteration 2 (secondary target): KEEP as the documented exception. Now
+          MORE justified — tankier enemies make the big-burst slug a real elite-buster niche, and
+          the slug supply/cap (8) remains the true gate. See ADDENDUM 2.
   C. CREDIT ECONOMY / SHOP — out of scope (no shop in game; user direction: skip).
   D. WEAPON-ABILITY CARDS in the level-up deck — documented intentional deviation (idea 5).
   E. BOSS FIGHTS — out of scope for idea 6 (ruleset-only; needs story/run structure).
+
+
+===========================================================================================
+ADDENDUM 2 — THE eHP/DAMAGE ECONOMY RESCALE (2026-06-26, iteration 2)
+===========================================================================================
+Branch: claude/toon3d-economy-rescale-iter2-dznqu7. Build still UNVERIFIABLE via Gradle
+(dl.google.com 403, env-only). Every number below was re-derived and verified with the standalone
+harness (scratchpad/Bal.java — compile with javac, run with java) that mirrors GameMath + the
+new BalanceConfig exactly, so it reproduces what BalanceReport will print once buildable.
+
+WHY: this addressed STILL-DEFERRED item A — the root cause of every enemy's golden ratio reading
+OVER. The structural identity is gr_continuous = playerEHP * ttkMetricDPT / (enemyDPT * enemyEHP),
+while TP fixes enemyDPT*enemyEHP = TP * refDPT / posMult. With player eHP 205 and refDPT 25 the
+golden-ratio band [3-8] and the TP band [9-16] were mutually unsatisfiable, because the player
+one-shot anything <= ~44 eHP (TTK pinned at 1). The ONLY fix is to raise enemy eHP ~3x so a soldier
+survives 3-4 turns of the reference DPT — a coordinated rescale, since the lever cascades through
+TP bands, encounter budget, scarcity DEMAND, ammo, and the heal economy.
+
+GAME-FEEL DECISION: this is gameplay-altering — it shifts combat from "one-shot the horde" toward
+"every enemy is a short fight" (more Doom-RPG, less bullet-hell). It was surfaced as a plan with the
+full proposed numbers and resulting harness tables BEFORE committing; it is verified by harness only,
+NOT playtested. The lower-risk alternative (contract-only: adopt the option-b metric + formally widen
+the golden bands, change no game numbers) was the explicit fallback if the feel shift is unwanted.
+
+WHAT CHANGED (all re-derived TOGETHER; every band re-verified in the harness):
+  1. METRIC (contract option b): golden-ratio TTK now divides enemy eHP by the SUSTAINED reference
+     DPT (25), not best burst (44). BalanceReport.printEnemyRow updated. Rationale: the player's
+     realistic sustained kill rate is the fair denominator, and it is the same yardstick the TP
+     normaliser uses. (Option b alone is insufficient — it leaves TTK pinned at 1 for low-eHP enemies
+     — which is why the eHP rescale was also required.)
+  2. ENEMY eHP ~3x, damage ~1.5x (BalanceConfig SECTION 2): Gore/Eye 18/7 -> 40/11-12 ;
+     Acid 22/8 -> 90/12 ; Void 25/9 -> 96/13 ; Mire 38/7 -> 100/11 ; Shell 38/13 -> 120/20 ;
+     Plague 50/10 -> 120/16 ; Iron 95/16 -> 230/24 (ranged 11 -> 17). Result: every SOLDIER gr
+     4.0-5.2 and Shell Brute (bruiser) 2.2 are IN band. CHAFF ~9 (exempt, pack-budgeted). Iron
+     Stalker mini-elite 0.9 (a deliberate tanky-hard-hitter spike, under the duel band by design).
+  3. TP ROLE BANDS re-scaled ~4x (SECTION 9): chaff 4-8 -> 16-34 ; soldier 9-16 -> 36-66 ;
+     bruiser 17-28 -> 70-120 ; mini-elite 40-75 -> 160-310. REFERENCE_PLAYER_DPT held at 25, so the
+     beefier enemies have honestly higher Threat Points (survivalTurns = eHP/25 keeps its meaning);
+     the bands rise to match, not as an artificial renormalisation.
+  4. ENCOUNTER base budget 120 -> 500 (SECTION 11): both budget and per-enemy TP scaled by the same
+     ~4x, so enemy COUNT per floor is scale-invariant (~11-13, as before — each just tankier).
+  5. SCARCITY (SECTION 5 + 10): model-floor DEMAND 288 -> 720. Ammo box sizes 6/2/4/1/1 -> 15/5/10/2/2
+     so floor-wide S = 0.83 (band 0.75-0.95), every per-weapon S < 0.6. Reserve caps re-derived to
+     ~1.5 floors: bullets 30 -> 54, shells 12 -> 24, cells 16 -> 38, rockets 10 -> 26; RAILGUN_MAX_SLUGS
+     5 -> 8 (kept the tightest ~1.0-floor gate, honoring the railgun exception). The old clip-vs-eHP
+     mismatch (the one cap stuck over target) is now GONE — every cap hits target and holds a full clip.
+  6. HEAL ECONOMY (SECTION 1): heal magnitudes ~1.8x (stim 18 -> 32, full 50 -> 90, shard 8 -> 14,
+     vest 35 -> 62) so the floor net HP drain is 11.5% of eHP (band 5-15%) against the higher incoming.
+  7. WEAPONS UNCHANGED — their power scores never depended on enemy eHP, so the weapon living table is
+     identical and every weapon stays in band (Railgun the documented heavy-band exception, item B).
+  8. DEPTH COUPLING UNCHANGED — the depth scales (1.045/1.035) and the player power curve are absolute-
+     value-independent, so the coupling ratio table is identical and still in band through ~depth 14.
+
+VERIFICATION: harness output shows ALL bands green — weapons in band, every enemy TP in band, every
+soldier/bruiser golden ratio in band, scarcity S=0.83 with all per-weapon < 0.6, heal drain 11.5%,
+depth coupling unchanged. Docs (docs/balance-rule-system.txt) regenerated: enemy table, TP bands,
+scarcity table, heal economy, encounter budgets, model-floor DEMAND, reference-anchor metric note,
+and the TUNING-PASS narrative (golden-ratio conflict marked RESOLVED).
+
+STILL DEFERRED after iteration 2:
+  C. CREDIT ECONOMY / SHOP — out of scope (no shop; user direction: skip).
+  D. WEAPON-ABILITY CARDS in the level-up deck — documented intentional deviation (idea 5).
+  E. BOSS FIGHTS — out of scope for idea 6 (ruleset-only; needs story/run structure). The boss
+     RULESET table is unchanged by this rescale (boss HP is derived from expected player DPT, which
+     is unchanged), so the placeholder bosses still read "re-derive when fights ship" as before.
+  NOTE: the rescale is verified by HARNESS ONLY — it has not been Gradle-built or playtested in this
+  environment. The numbers are internally consistent and band-compliant; the FEEL needs a playtest.
