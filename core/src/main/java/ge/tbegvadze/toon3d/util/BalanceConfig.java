@@ -52,14 +52,17 @@ public final class BalanceConfig {
     /** Fraction of each incoming hit absorbed by armour (depleting armour instead of HP). Range: 0.25–0.75. */
     public static final float ARMOUR_ABSORB_FRACTION  = 0.50f;
 
-    /** HP restored by a stim-pack ('+'). Range: 10–30. */
-    public static final int   MEDKIT_STIM_HEAL        = 18;
-    /** HP restored by a full medkit ('H'). Range: 30–80. */
-    public static final int   MEDKIT_FULL_HEAL        = 50;
-    /** Armour restored by an armour shard ('a'). Range: 4–15. */
-    public static final int   ARMOUR_SHARD_VALUE      = 8;
-    /** Armour restored by a security vest ('A'). Range: 20–50. */
-    public static final int   ARMOUR_VEST_VALUE       = 35;
+    // Heal magnitudes scaled ~1.8x in the economy rescale (idea-A, iteration 2): enemy damage
+    // rose, so a floor's INCOMING damage rose, and the heals had to rise with it to keep the
+    // per-floor net HP drain in the 5-15% band (SECTION 10). Player eHP itself is UNCHANGED.
+    /** HP restored by a stim-pack ('+'). Was 18; scaled with the damage economy. Range: 20–50. */
+    public static final int   MEDKIT_STIM_HEAL        = 32;
+    /** HP restored by a full medkit ('H'). Was 50; scaled with the damage economy. Range: 50–110. */
+    public static final int   MEDKIT_FULL_HEAL        = 90;
+    /** Armour restored by an armour shard ('a'). Was 8; scaled with the damage economy. Range: 8–25. */
+    public static final int   ARMOUR_SHARD_VALUE      = 14;
+    /** Armour restored by a security vest ('A'). Was 35; scaled with the damage economy. Range: 40–90. */
+    public static final int   ARMOUR_VEST_VALUE       = 62;
 
     /** Seconds per one-tile step. Lower = snappier, and you eat fewer enemy turns while repositioning. Range: 0.08–0.20. */
     public static final float PLAYER_MOVE_DURATION    = 0.12f;
@@ -70,48 +73,59 @@ public final class BalanceConfig {
     // SECTION 2 — ENEMY THREAT (HP / damage / range / cadence) — the numerator
     // The raw power of each enemy archetype at depth 1, plus the per-kill payouts.
     // moveEveryN = 1 means the enemy acts every player turn; 2 means every other turn.
-    // =====================================================================================
+    //
+    // ECONOMY-RESCALE (idea-A, iteration 2): enemy eHP was raised ~3x and damage ~1.5x in a
+    // COORDINATED pass so a standard soldier survives ~3-4 turns of the reference player DPT
+    // (25) instead of being one-shot. This is the root-cause fix for the golden ratio (TTD/TTK)
+    // reading structurally OVER on every enemy: at the old scale the player one/two-shot
+    // everything (enemy eHP 18-50 vs player burst 44), pinning TTK at 1 while TTD was 20-30.
+    // With the bigger eHP, soldiers/bruisers now land their golden ratio in band ([3,8]/[2,4])
+    // under the sustained-DPT TTK metric (SECTION 9). It cascades by design — the TP role bands
+    // (SECTION 9), encounter budget (SECTION 11), the scarcity DEMAND / ammo box sizes / reserve
+    // caps (SECTION 5), and the heal magnitudes (SECTION 1) were ALL re-derived together so every
+    // band still holds (verified via the standalone harness; not Gradle-built — proxy blocks the
+    // Android plugin). See docs/balance-rule-system.txt and balance-ideas-review.txt.
 
-    // GORE_BITER (spawn '3') — fast light melee; spawns in packs.
-    public static final int GORE_BITER_MAX_HEALTH          = 18;
-    public static final int GORE_BITER_ATTACK_DAMAGE       = 7;
+    // GORE_BITER (spawn '3') — fast light melee; spawns in packs. (was 18 HP / 7 dmg)
+    public static final int GORE_BITER_MAX_HEALTH          = 40;
+    public static final int GORE_BITER_ATTACK_DAMAGE       = 12;
     public static final int GORE_BITER_MOVE_EVERY_N_TURNS  = 1;
 
-    // EYE_TYRANT (spawn '2') — fast ranged kiter.
-    public static final int EYE_TYRANT_MAX_HEALTH          = 18;
-    public static final int EYE_TYRANT_ATTACK_DAMAGE       = 7;
+    // EYE_TYRANT (spawn '2') — fast ranged kiter. (was 18 HP / 7 dmg)
+    public static final int EYE_TYRANT_MAX_HEALTH          = 40;
+    public static final int EYE_TYRANT_ATTACK_DAMAGE       = 11;
     public static final int EYE_TYRANT_RANGE_TILES         = 5;
 
-    // ACID_DRONE (spawn '$') — ranged mechanical.
-    public static final int ACID_DRONE_MAX_HEALTH          = 22;
-    public static final int ACID_DRONE_ATTACK_DAMAGE       = 8;
+    // ACID_DRONE (spawn '$') — ranged mechanical. (was 22 HP / 8 dmg)
+    public static final int ACID_DRONE_MAX_HEALTH          = 90;
+    public static final int ACID_DRONE_ATTACK_DAMAGE       = 12;
     public static final int ACID_DRONE_RANGE_TILES         = 4;
     public static final int ACID_DRONE_MOVE_EVERY_N_TURNS  = 1;
 
-    // VOID_SHROUD (spawn '^') — fast stealth melee FLANKER (Pillar 2).
-    public static final int VOID_SHROUD_MAX_HEALTH         = 25;
-    public static final int VOID_SHROUD_ATTACK_DAMAGE      = 9;
+    // VOID_SHROUD (spawn '^') — fast stealth melee FLANKER (Pillar 2). (was 25 HP / 9 dmg)
+    public static final int VOID_SHROUD_MAX_HEALTH         = 96;
+    public static final int VOID_SHROUD_ATTACK_DAMAGE      = 13;
     public static final int VOID_SHROUD_MOVE_EVERY_N_TURNS = 1;
     /**
      * Flank strike bonus (Pillar 2): the Void Shroud prefers the tile behind the player's facing
      * and hits HARDER from that blind side, so "rotate to face it" is the counterplay. The base
-     * 9 dmg becomes ~14 from behind — still well under the 25%-eHP telegraph cap (idea 4, Pillar 5).
+     * 13 dmg becomes ~21 from behind — still well under the 25%-eHP telegraph cap (~51, idea 4, Pillar 5).
      */
     public static final float VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER = 1.6f;
 
-    // MIRE_WRAITH (spawn '5') — slow ground-based ranged acid; tanky.
-    public static final int MIRE_WRAITH_MAX_HEALTH         = 38;
-    public static final int MIRE_WRAITH_ATTACK_DAMAGE      = 7;
+    // MIRE_WRAITH (spawn '5') — slow ground-based ranged acid; tanky. (was 38 HP / 7 dmg)
+    public static final int MIRE_WRAITH_MAX_HEALTH         = 100;
+    public static final int MIRE_WRAITH_ATTACK_DAMAGE      = 11;
     public static final int MIRE_WRAITH_RANGE_TILES        = 3;
     public static final int MIRE_WRAITH_MOVE_EVERY_N_TURNS = 2;
 
-    // SHELL_BRUTE (spawn '4') — heavy CHARGER melee (Pillar 2).
-    public static final int SHELL_BRUTE_MAX_HEALTH         = 38;
-    public static final int SHELL_BRUTE_ATTACK_DAMAGE      = 13;
+    // SHELL_BRUTE (spawn '4') — heavy CHARGER melee (Pillar 2). (was 38 HP / 13 dmg)
+    public static final int SHELL_BRUTE_MAX_HEALTH         = 120;
+    public static final int SHELL_BRUTE_ATTACK_DAMAGE      = 20;
     public static final int SHELL_BRUTE_MOVE_EVERY_N_TURNS = 1;
     /**
      * Charge rush damage multiplier (Pillar 2). After a one-turn telegraphed wind-up the brute
-     * rushes down a cardinal lane; if it connects it hits for base * this. 13 * 2.4 ≈ 31 dmg —
+     * rushes down a cardinal lane; if it connects it hits for base * this. 20 * 2.4 = 48 dmg —
      * a meaty, READABLE hit. It is telegraphed, so it is allowed to exceed the 25%-eHP cap that
      * un-telegraphed attacks must respect (idea 4, Pillar 5). Sidestep it to make the rush whiff.
      */
@@ -121,15 +135,18 @@ public final class BalanceConfig {
     /** Farthest cardinal-lane gap (tiles) the brute will start a charge from (<= LOS). Range: 3–6. */
     public static final int   SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES = 5;
 
-    // PLAGUE_HULK (spawn '1') — slow tank melee.
-    public static final int PLAGUE_HULK_MAX_HEALTH         = 50;
-    public static final int PLAGUE_HULK_ATTACK_DAMAGE      = 10;
+    // PLAGUE_HULK (spawn '1') — slow tank melee. (was 50 HP / 10 dmg)
+    public static final int PLAGUE_HULK_MAX_HEALTH         = 120;
+    public static final int PLAGUE_HULK_ATTACK_DAMAGE      = 16;
     public static final int PLAGUE_HULK_MOVE_EVERY_N_TURNS = 2;
 
-    // IRON_STALKER (spawn '!') — armoured elite, melee + ranged; the big threat.
-    public static final int IRON_STALKER_MAX_HEALTH        = 95;
-    public static final int IRON_STALKER_MELEE_DAMAGE      = 16;
-    public static final int IRON_STALKER_RANGED_DAMAGE     = 11;
+    // IRON_STALKER (spawn '!') — armoured elite, melee + ranged; the big threat. (was 95 HP /
+    // 16 melee / 11 ranged). A mini-elite is a deliberate spike: tanky AND hard-hitting, so its
+    // golden ratio reads UNDER the duel band by design — you spend heavy weapons or avoid it, you
+    // do not trade blows. Its TP (now ~254) prices that on the encounter budget.
+    public static final int IRON_STALKER_MAX_HEALTH        = 230;
+    public static final int IRON_STALKER_MELEE_DAMAGE      = 24;
+    public static final int IRON_STALKER_RANGED_DAMAGE     = 17;
     public static final int IRON_STALKER_RANGE_TILES       = 4;
     public static final int IRON_STALKER_MOVE_EVERY_N_TURNS = 1;
 
@@ -257,12 +274,15 @@ public final class BalanceConfig {
     public static final int   ASSAULT_RIFLE_RELOAD_TIME_TICKS = 1;
 
     // Railgun — charge-up infinite-pierce sniper. Index by charge level: {0, half, full}.
-    // Full-charge powerScore is 45.0, OVER the 24-32 heavy band, but its 90-per-slug
-    // efficiency is held in check by slug SCARCITY (RAILGUN_MAX_SLUGS, cut to 5 by the
-    // idea-3 scarcity pass — see SECTION 5) and the charge cost, not by raw damage. Per
-    // docs/balance-rule-system.txt the raw number is left intact deliberately: now that the
-    // idea-3 scarcity model HAS landed, the slug cap (5) is the lever holding it in check,
-    // so nerfing the raw 90 would make the weapon worthless instead of merely scarce.
+    // Full-charge powerScore is 45.0, OVER the 24-32 heavy band. RE-EVALUATED in the economy
+    // rescale (idea-A, iteration 2, secondary target): DECISION = KEEP as a documented
+    // scarcity-gated exception, do NOT fold into the band. Two reasons reinforce this now:
+    //   (1) its 90-per-slug efficiency is gated by slug SCARCITY (supply ~1.1 slugs/floor, plus the
+    //       tightest reserve cap RAILGUN_MAX_SLUGS=8 — see SECTION 5), not by raw damage; and
+    //   (2) the rescale made enemies far tankier (mini-elite 230 eHP), so a single big-burst slug
+    //       is a genuine elite-buster niche — exactly what the heavy/charge role should own.
+    // Per docs/balance-rule-system.txt, nerfing the raw 90 would make it worthless rather than
+    // merely scarce, so the raw number is left intact deliberately.
     public static final int[] RAILGUN_DAMAGE_BY_CHARGE      = {0, 40, 90};
     public static final int   RAILGUN_RANGE_TILES           = 16;
     public static final float RAILGUN_DROP_COEFF            = 0.02f;
@@ -327,28 +347,36 @@ public final class BalanceConfig {
     // means small boxes and low drop rates. Fully reconciling clip sizes with this economy
     // is the deferred eHP/damage rescale flagged in docs/balance-rule-system.txt.
 
-    // LEVER 2 — DROP SIZE: ammo box grants (rounds per pickup). Cut hard from the
-    // pre-scarcity values (30/12/25/4/60/6) so no single box clears a floor.
-    public static final int AMMO_BOX_BULLETS    = 6;
-    public static final int AMMO_BOX_SHELLS     = 2;
-    public static final int AMMO_BOX_CELLS      = 4;
-    public static final int AMMO_BOX_ROCKETS    = 1;
-    public static final int RAILGUN_PICKUP_SLUGS = 1;
+    // LEVER 2 — DROP SIZE: ammo box grants (rounds per pickup). RE-SCALED ~2.5x in the economy
+    // rescale (idea-A, iteration 2): the model-floor DEMAND rose from 288 to 720 dmg (enemy eHP
+    // ~3x), so SUPPLY had to rise proportionally to hold the floor-wide scarcity ratio S in
+    // [0.75, 0.95]. With these sizes S = 0.83 floor-wide and < 0.6 per weapon (verified via the
+    // harness). The bigger boxes are no longer the awkward 2-4 rounds the old low-eHP economy
+    // forced — they fit clip sizes again (the clip-vs-eHP mismatch the old scale created is gone).
+    public static final int AMMO_BOX_BULLETS    = 15;
+    public static final int AMMO_BOX_SHELLS     = 5;
+    public static final int AMMO_BOX_CELLS      = 10;
+    public static final int AMMO_BOX_ROCKETS    = 2;
+    public static final int RAILGUN_PICKUP_SLUGS = 2;
     public static final int FLAME_PICKUP_FUEL   = 25;
     public static final int GRENADE_PICKUP_AMMO = 3;
 
     // LEVER 3 — RESERVE CAP: the hoarding ceiling, tuned to ~1.5 floors of that weapon's
-    // run-demand (see GameMath.reserveBankingFloors) so banking is limited. EXCEPTION:
-    // AMMO_RESERVE_CAP_BULLETS is floored at the largest bullet clip (Assault Rifle 30, Chaingun 24)
-    // so the weapon stays usable. It was 45 (banked ~3.1 floors, far above the 1.5 target); pulled
-    // DOWN to that 30-round clip floor (banks ~2.1 floors at the model-floor demand) — as close to
-    // the anti-hoard target as the clip-vs-eHP mismatch allows without leaving the weapon unable to
-    // hold a full spare clip. Still the one cap above target, a direct symptom of that mismatch.
-    public static final int AMMO_RESERVE_CAP_BULLETS = 30;
-    public static final int AMMO_RESERVE_CAP_SHELLS  = 12;
-    public static final int AMMO_RESERVE_CAP_CELLS   = 16;
-    public static final int AMMO_RESERVE_CAP_ROCKETS = 10;
-    public static final int RAILGUN_MAX_SLUGS        = 5;
+    // run-demand (see GameMath.reserveBankingFloors) so banking is limited. RE-DERIVED against the
+    // rescaled model-floor DEMAND (720): cap = ~1.5 * DEMAND / damagePerUnit. The bigger enemy eHP
+    // also RESOLVES the old clip-vs-eHP mismatch — the bullet cap (now 54) banks exactly 1.5 floors
+    // and still comfortably holds a full 30-round Assault Rifle / 24-round Chaingun clip, so the
+    // "one cap over target" exception the old scale forced is gone; every cap now hits the target.
+    public static final int AMMO_RESERVE_CAP_BULLETS = 54;
+    public static final int AMMO_RESERVE_CAP_SHELLS  = 24;
+    public static final int AMMO_RESERVE_CAP_CELLS   = 38;
+    public static final int AMMO_RESERVE_CAP_ROCKETS = 26;
+    // RAILGUN_MAX_SLUGS kept the TIGHTEST banking (~1.0 floor, not 1.5) to honor the railgun's
+    // documented power-band exception (powerScore 45 > heavy band 24-32): slug SCARCITY, not raw
+    // damage, is what holds it in check. The slug SUPPLY (~1.1 slugs/floor) is the true gate; the
+    // tight cap reinforces it. The elite-busting niche of a 90-per-slug hit is MORE valuable now
+    // that enemies are tankier, so the raw 90 is kept (see SECTION 4 + docs).
+    public static final int RAILGUN_MAX_SLUGS        = 8;
     public static final int FLAME_MAX_FUEL           = 50;
     public static final int GRENADE_MAX_AMMO         = 10;
 
@@ -538,6 +566,13 @@ public final class BalanceConfig {
      * at once (all eight currently sit in-band) for no balance gain. Keep it at 25 unless
      * you intend to re-tune the entire enemy roster.
      */
+    // CONTRACT DECISION (idea-A, iteration 2): held at 25 and now ALSO the golden-ratio TTK metric.
+    // The golden ratio (TTD/TTK) previously divided enemy eHP by the player's BEST BURST (shotgun
+    // 44) for TTK, which pinned TTK at 1 for any enemy the shotgun one-shot. The doc listed using
+    // the SUSTAINED reference DPT instead as a legitimate contract option (b); this iteration ADOPTS
+    // it — BalanceReport now computes TTK as ceil(enemyEHP / REFERENCE_PLAYER_DPT). It is the
+    // player's realistic sustained kill rate, not a one-shot spike, so it is the fair denominator,
+    // and it keeps the metric semantically identical to the TP normaliser below (one yardstick).
     public static final float REFERENCE_PLAYER_DPT = 25f;
     /**
      * Reference player effective HP — the MARINE start survivability (130 HP + 75 armour,
@@ -565,14 +600,20 @@ public final class BalanceConfig {
     public static final float WEAPON_POWER_HEAVY_MAX      = 32f;
 
     // --- ENEMY THREAT-POINT BANDS (threatPoints must land in the band for the chosen role).
-    public static final float ENEMY_TP_CHAFF_MIN      = 4f;
-    public static final float ENEMY_TP_CHAFF_MAX      = 8f;
-    public static final float ENEMY_TP_SOLDIER_MIN    = 9f;
-    public static final float ENEMY_TP_SOLDIER_MAX    = 16f;
-    public static final float ENEMY_TP_BRUISER_MIN    = 17f;
-    public static final float ENEMY_TP_BRUISER_MAX    = 28f;
-    public static final float ENEMY_TP_MINI_ELITE_MIN = 40f;
-    public static final float ENEMY_TP_MINI_ELITE_MAX = 75f;
+    // RE-SCALED ~4x in the economy rescale (idea-A, iteration 2). REFERENCE_PLAYER_DPT is held at
+    // 25 (semantically honest: survivalTurns = eHP/25 = the turns the enemy survives the player's
+    // sustained fire), so the beefier enemies genuinely have ~4x the Threat Points — they survive
+    // ~3x longer while hitting ~1.5x harder. The bands rise to match that honest TP; they are NOT
+    // an artificial renormalisation. Enemy COUNT per floor stays constant because the encounter
+    // budget (SECTION 11) was scaled by the same factor. Verified via the harness.
+    public static final float ENEMY_TP_CHAFF_MIN      = 16f;
+    public static final float ENEMY_TP_CHAFF_MAX      = 34f;
+    public static final float ENEMY_TP_SOLDIER_MIN    = 36f;
+    public static final float ENEMY_TP_SOLDIER_MAX    = 66f;
+    public static final float ENEMY_TP_BRUISER_MIN    = 70f;
+    public static final float ENEMY_TP_BRUISER_MAX    = 120f;
+    public static final float ENEMY_TP_MINI_ELITE_MIN = 160f;
+    public static final float ENEMY_TP_MINI_ELITE_MAX = 310f;
 
     // --- POSITIONAL MULTIPLIERS for the Threat-Point formula (designer classification).
     public static final float POSITIONAL_MULT_MELEE       = 1.00f;
@@ -583,6 +624,11 @@ public final class BalanceConfig {
 
     // --- GOLDEN-RATIO bands (turnsToDie / turnsToKill) per enemy role. Below = unfair/swingy;
     // above = harmless damage sponge. Bruisers are SUPPOSED to be scary 1v1, so their band is tighter.
+    // These bands are UNCHANGED, but the economy rescale (idea-A, iteration 2) finally makes them
+    // SATISFIABLE and SATISFIED: every soldier now reads 4.0-5.2 and the Shell Brute bruiser 2.2,
+    // all in band. CHAFF is exempt (balanced by PACK TP, not the lone unit's ratio) and reads ~9.
+    // MINI-ELITE is a deliberate spike (tanky AND hard-hitting) and reads UNDER the duel band by
+    // design — the player spends heavy weapons or avoids it rather than trading blows.
     public static final float GOLDEN_RATIO_TRASH_MIN   = 3f;
     public static final float GOLDEN_RATIO_TRASH_MAX   = 8f;
     public static final float GOLDEN_RATIO_BRUISER_MIN = 2f;
@@ -624,8 +670,10 @@ public final class BalanceConfig {
     public static final float HEAL_NET_DRAIN_FRACTION_MAX = 0.15f;
 
     // --- THE MODEL FLOOR (depth 1) — the worked reference encounter from idea 3.
-    // Enemy composition (DEMAND = sum of these enemies' eHP). At depth 1 eHP == raw HP, so
-    // DEMAND = 6*18 + 3*18 + 2*38 + 1*50 = 288 damage; total TP ~= 104 (a ~120-TP budget).
+    // Enemy composition (DEMAND = sum of these enemies' eHP). At depth 1 eHP == raw HP. After the
+    // economy rescale (idea-A, iteration 2) the enemy eHP is ~3x higher, so:
+    // DEMAND = 6*40 + 3*40 + 2*120 + 1*120 = 720 damage; total TP ~= 432 (a ~500-TP budget).
+    // The SECTION 5 ammo levers and the heal inputs below are tuned against THIS rescaled floor.
     public static final int MODEL_FLOOR_GORE_BITER_COUNT  = 6;
     public static final int MODEL_FLOOR_EYE_TYRANT_COUNT  = 3;
     public static final int MODEL_FLOOR_SHELL_BRUTE_COUNT = 2;
@@ -652,13 +700,16 @@ public final class BalanceConfig {
     // per floor by GameMath.floorThreatPointBudget using the SECTION 3 depth curve, and each
     // enemy's TP cost scales by the same curve (GameMath.enemyThreatAtDepth), so the enemy
     // COUNT stays roughly constant across depth while each enemy gets stronger. The model
-    // floor (SECTION 10) totals ~104 TP, so a 120-TP base budget reproduces a comparable
-    // depth-1 roster. The composition fractions enforce idea 4's "spend the budget tastefully"
-    // rules: one anchor, no mono-type rooms, no single oversized room.
+    // floor (SECTION 10) totals ~432 TP after the economy rescale, so a 500-TP base budget
+    // reproduces a comparable depth-1 roster. The composition fractions enforce idea 4's "spend the
+    // budget tastefully" rules: one anchor, no mono-type rooms, no single oversized room.
     // =====================================================================================
 
-    /** Depth-1 floor Threat-Point budget the generator spends on enemies. Range: 80–180. */
-    public static final float FLOOR_BASE_THREAT_POINT_BUDGET = 120f;
+    // RE-SCALED 120 -> 500 in the economy rescale (idea-A, iteration 2). Both the budget AND each
+    // enemy's TP cost rose by the same ~4x (REFERENCE_PLAYER_DPT held at 25), so the enemy COUNT
+    // per floor is scale-invariant — the depth-1 roster is still ~11-13 enemies, just each tankier.
+    /** Depth-1 floor Threat-Point budget the generator spends on enemies. Range: 350–650. */
+    public static final float FLOOR_BASE_THREAT_POINT_BUDGET = 500f;
 
     /** Reserve at least this fraction of the floor budget for the single anchor enemy. Range: 0.10–0.25. */
     public static final float ENCOUNTER_ANCHOR_BUDGET_FRACTION_MIN = 0.15f;
