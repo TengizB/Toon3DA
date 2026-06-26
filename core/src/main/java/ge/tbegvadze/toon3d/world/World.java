@@ -40,9 +40,11 @@ import ge.tbegvadze.toon3d.level.StartGameLevelGenerator;
 import ge.tbegvadze.toon3d.level.WeaponSpawnPoint;
 import ge.tbegvadze.toon3d.render.BossHudRenderer;
 import ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer;
-import ge.tbegvadze.toon3d.progression.LevelUpReward;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
+import ge.tbegvadze.toon3d.progression.UpgradeCard;
+import ge.tbegvadze.toon3d.progression.UpgradeCardDeck;
+import ge.tbegvadze.toon3d.progression.Attribute;
 import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
@@ -82,6 +84,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private final AbilityFeedback        abilityFeedback;
     private final PlayerProgress         playerProgress;
     private final LevelUpOverlayRenderer levelUpOverlayRenderer;
+    /** Draws the budget-equal upgrade cards offered on each level-up (idea 5: build diversity). */
+    private final UpgradeCardDeck        upgradeCardDeck;
+    /** The cards currently on offer; refilled by the deck when a level-up begins. */
+    private final UpgradeCard[]          offeredCards = new UpgradeCard[GameBalance.LEVEL_UP_CARDS_OFFERED];
+    private int                          offeredCardCount = 0;
 
     // Touch controller — null on desktop (platform-gated to touch screens)
     private TouchInputState         touchInputState;
@@ -211,6 +218,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Progression — lives for the entire run; not reset between floors
         playerProgress         = new PlayerProgress();
         levelUpOverlayRenderer = new LevelUpOverlayRenderer(playerProgress);
+        // Card deck seeded off the run seed so a given run's level-up offers are reproducible.
+        upgradeCardDeck        = new UpgradeCardDeck(runSeed ^ 0xCA12D00D5EED1234L);
 
         // Event text and hit vignette — run-persistent feedback systems
         eventTextSystem     = new EventTextSystem();
@@ -405,6 +414,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             playerStats.addCredits(scaled);
         });
         enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
+        // Carry the run's accumulated STRENGTH/MARKSMANSHIP damage multipliers onto the fresh manager.
+        refreshPlayerDamageMultipliers();
         enemyManager.setLoadout(inventory.getLoadout());
         enemyManager.setDropPlacedListener((tileColumn, tileRow, dropChar) ->
                 propRenderer.addDynamicProp(tileColumn, tileRow, dropChar));
@@ -650,14 +661,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
-        // LEVEL_UP_OVERLAY — game paused while player picks a stat upgrade
+        // LEVEL_UP_OVERLAY — game paused while player picks an upgrade card
         if (runPhase == RunPhase.LEVEL_UP_OVERLAY) {
             if (gameViewport != null && Gdx.input.justTouched()) {
                 cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
                 gameViewport.unproject(cardTouchPosition);
-                LevelUpReward tapped = levelUpOverlayRenderer.getTappedReward(cardTouchPosition.x, cardTouchPosition.y);
-                if (tapped != null) {
-                    applyLevelUpReward(tapped);
+                int tappedIndex = levelUpOverlayRenderer.getTappedCardIndex(cardTouchPosition.x, cardTouchPosition.y);
+                UpgradeCard tappedCard = levelUpOverlayRenderer.getOfferedCard(tappedIndex);
+                if (tappedCard != null) {
+                    applyUpgradeCard(tappedCard);
                 }
             }
             return;
@@ -711,6 +723,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (touchInputState != null) {
                 touchInputState.resetAllButtonStates();
             }
+            // Draw a fresh set of budget-equal cards ONCE as the overlay opens.
+            offeredCardCount = upgradeCardDeck.draw(offeredCards, GameBalance.LEVEL_UP_CARDS_OFFERED);
+            levelUpOverlayRenderer.setOfferedCards(offeredCards, offeredCardCount);
             runPhase = RunPhase.LEVEL_UP_OVERLAY;
         }
     }
@@ -1238,20 +1253,56 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // Helpers
     // -------------------------------------------------------------------------
 
-    /** Applies the chosen level-up reward and returns the game to PLAYING state. */
-    private void applyLevelUpReward(LevelUpReward reward) {
-        playerProgress.applyLevelUpReward(reward);
-        if (reward == LevelUpReward.HP_BOOST) {
-            player.increaseMaxHealth(GameBalance.LEVEL_UP_HP_BONUS);
-        } else if (reward == LevelUpReward.ARMOR_BOOST) {
-            player.increaseMaxArmor(GameBalance.LEVEL_UP_ARMOR_BONUS);
-        } else if (reward == LevelUpReward.DAMAGE_BOOST) {
+    /**
+     * Applies the chosen upgrade card's stat deltas, advances the level, refreshes every derived
+     * combat value, and returns the game to PLAYING state (idea 5: build diversity).
+     *
+     * <p>Each card is budget-equal, so whichever card the player picks their TOTAL power advances
+     * by the same amount — only its SHAPE changes. Attribute deltas flow into {@link PlayerStats}
+     * (read live for dodge / speed / reduction / accuracy); HP / armour / flat-damage deltas are
+     * pushed to the Player and EnemyManager so they take effect immediately.</p>
+     */
+    private void applyUpgradeCard(UpgradeCard card) {
+        // 1. Permanent attribute deltas — read live by PlayerStats-backed systems.
+        if (card.strengthDelta != 0)     playerStats.addPermanent(Attribute.STRENGTH,     card.strengthDelta);
+        if (card.agilityDelta != 0)      playerStats.addPermanent(Attribute.AGILITY,      card.agilityDelta);
+        if (card.toughnessDelta != 0)    playerStats.addPermanent(Attribute.TOUGHNESS,    card.toughnessDelta);
+        if (card.marksmanshipDelta != 0) playerStats.addPermanent(Attribute.MARKSMANSHIP, card.marksmanshipDelta);
+
+        // 2. Health: a TOUGHNESS point also raises the max-HP pool (its flat reduction is read live).
+        int maxHealthDelta = card.maxHealthDelta + card.toughnessDelta * GameBalance.TGH_HP_PER_POINT;
+        if (maxHealthDelta != 0) player.adjustMaxHealth(maxHealthDelta);
+
+        // 3. Armour.
+        if (card.maxArmorDelta != 0) player.adjustMaxArmor(card.maxArmorDelta);
+
+        // 4. Flat per-shot damage — accumulated in progression, pushed to the damage pipeline.
+        if (card.flatDamageDelta != 0) {
+            playerProgress.addFlatDamageBonus(card.flatDamageDelta);
             enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
         }
+
+        // 5. Re-push the STRENGTH/MARKSMANSHIP damage multipliers so they take effect immediately.
+        refreshPlayerDamageMultipliers();
+
+        // 6. Advance the level and record the pick so future offers lean into this build.
+        playerProgress.advanceLevel();
+        upgradeCardDeck.registerPick(card);
+
         if (touchInputState != null) {
             touchInputState.resetAllButtonStates();
         }
         runPhase = RunPhase.PLAYING;
+    }
+
+    /**
+     * Pushes the player's current melee/ranged damage multipliers (from STRENGTH / MARKSMANSHIP)
+     * to the EnemyManager, which applies them centrally. Call after any attribute change and after
+     * each floor rebuild so a fresh EnemyManager inherits the run's accumulated stats.
+     */
+    private void refreshPlayerDamageMultipliers() {
+        enemyManager.setPlayerMeleeDamageMultiplier(playerStats.getMeleeDamageMultiplier());
+        enemyManager.setPlayerRangedDamageMultiplier(playerStats.getRangedDamageMultiplier());
     }
 
     /*

@@ -257,23 +257,32 @@ public class Player implements Renderable, Disposable, StatusHost {
     }
 
     /**
-     * Permanently increases the player's maximum HP by the given amount and immediately
-     * heals the player by the same amount so the bonus HP is not wasted.
-     * Called when the player picks the HP_BOOST level-up reward.
+     * Permanently adjusts the player's maximum HP by a signed delta (level-up upgrade cards).
+     * A positive delta also heals the player by that amount so the bonus HP is not wasted; a
+     * negative delta (a trade-off card's cost) lowers the cap and clamps current HP down to it,
+     * never below 1 — a max-HP cut must never directly kill the player.
      */
-    public void increaseMaxHealth(int amount) {
-        maxHealth += amount;
-        health     = Math.min(maxHealth, health + amount);
+    public void adjustMaxHealth(int delta) {
+        maxHealth = Math.max(1, maxHealth + delta);
+        if (delta > 0) {
+            health = Math.min(maxHealth, health + delta);
+        } else {
+            health = Math.max(1, Math.min(health, maxHealth));
+        }
     }
 
     /**
-     * Permanently increases the player's maximum armour pool by the given amount and
-     * immediately grants the bonus armour.
-     * Called when the player picks the ARMOR_BOOST level-up reward.
+     * Permanently adjusts the player's maximum armour pool by a signed delta (upgrade cards).
+     * A positive delta also grants that much armour immediately; a negative delta (a trade-off
+     * card's cost) lowers the cap and clamps the current armour pool down to it (floored at 0).
      */
-    public void increaseMaxArmor(int amount) {
-        maxArmor += amount;
-        armor     = Math.min(maxArmor, armor + amount);
+    public void adjustMaxArmor(int delta) {
+        maxArmor = Math.max(0, maxArmor + delta);
+        if (delta > 0) {
+            armor = Math.min(maxArmor, armor + delta);
+        } else {
+            armor = Math.min(armor, maxArmor);
+        }
     }
 
     public boolean isDead()  { return health <= 0; }

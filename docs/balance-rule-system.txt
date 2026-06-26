@@ -117,10 +117,29 @@ THE CONTRACT — checklist every new piece of content MUST pass
     [ ] A heal that buys > 10 turns on an early floor trivializes scarcity.
         Price heals against the floor's average incoming DPT, not a flat number.
 
-[D] NEW UPGRADE / ABILITY — must cost POWER BUDGET (full math in idea 5).
-    [ ] An upgrade's value = (DPT or eHP gain) expressed in TP-equivalent. A
-        level-up grants a fixed budget; every offered choice must cost ~the same
-        budget so no choice is a no-brainer. Detailed in balance_order_5.
+[D] NEW UPGRADE / LEVEL-UP CARD — must cost the POWER BUDGET (idea 5, IMPLEMENTED).
+    Power points (PP) are the common currency: a card's value = its %-gain to the
+    reference DPT (offence) or reference eHP (survivability).
+        offence PP    = GameMath.damagePerTurnPowerPoints(dptGain, REFERENCE_PLAYER_DPT)
+        survival PP   = GameMath.effectiveHitPointPowerPoints(eHpGain, REFERENCE_PLAYER_EHP)
+    eHpGain itself comes from GameMath.effectiveHitPoints, so armour, dodge and flat
+    reduction are all priced in the same eHP unit. A card's net PP is the sum of both
+    halves (UpgradeCard.estimatedPowerPoints()); a trade-off card's downside enters as
+    negative PP, so its NET still lands in band.
+    [ ] Price the card. It MUST land in the budget band
+        [BUDGET*(1-TOL), BUDGET*(1+TOL)] = [10.2, 13.8] PP at the current
+        LEVEL_UP_BUDGET_PP=12, LEVEL_UP_BUDGET_TOLERANCE=0.15 (BalanceConfig).
+    [ ] Give it a distinct UpgradeCard.Lever so the deck never offers it alongside a
+        card that moves the same stat (anti-redundancy).
+    [ ] If it's above band, add a downside (make it a trade-off) until the NET fits,
+        or move it to a rarer source. Caps (crit 0.30, dodge 0.35, …) are this same
+        mechanism — every conditional value must declare a cap so a build can't stack
+        it past ~budget.
+    [ ] Add it to the UPGRADE CARDS living table below and rerun BalanceReport.
+    THE TOTAL-PP INVARIANT: because every card is budget-equal, the player's total
+    power at level L is L * LEVEL_UP_BUDGET_PP regardless of WHICH cards were taken —
+    only its SHAPE differs. That is what keeps every build inside the depth-coupling
+    band [0.9, 1.2] (below), so build diversity never becomes power creep.
 
 
 ================================================================================
@@ -178,6 +197,30 @@ TP is anchored to REFERENCE_PLAYER_DPT (held at 25), not to the live shotgun; th
 lower shotgun only raises TTK on 45+ eHP enemies, which is why Plague Hulk (41.0
 -> 20.5) and Iron Stalker (6.5 -> 4.3) improved while the 1-shot chaff/soldiers
 did not.
+
+UPGRADE CARDS (idea 5)   budget = 12 PP   band = 10.2-13.8 PP   (offered 3/level)
+card                 pool      lever          PP   tradeoff  in?
+-----------------------------------------------------------------------------------
+HOLLOW POINTS        OFFENSE   DAMAGE       12.0   no        OK
+MARKSMAN TRAINING    OFFENSE   MARKSMANSHIP 12.0   no        OK
+BRUTAL STRENGTH      OFFENSE   STRENGTH     12.0   no        OK
+GLASS CANNON         OFFENSE   DAMAGE       11.2   YES       OK
+COMBAT ARMOR         DEFENSE   ARMOR        11.7   no        OK
+TOUGHENED HIDE       DEFENSE   TOUGHNESS    11.8   no        OK
+VITALITY             SUSTAIN   HEALTH       12.2   no        OK
+IRON CONSTITUTION    SUSTAIN   HEALTH       11.2   YES       OK
+EVASION TRAINING     UTILITY   AGILITY      11.1   no        OK
+RECKLESS CHARGE      UTILITY   AGILITY      12.1   YES       OK
+-----------------------------------------------------------------------------------
+PP comes straight from each card's stat deltas through GameMath, so it can't lie.
+Every card is in band, so total PP at level L = L*12 for EVERY build (only the SHAPE
+differs). Three archetypes the pools support, all on the same total-PP curve:
+  GUNSLINGER  — MARKSMAN + EVASION/RECKLESS (AGI) + HOLLOW/GLASS: mobile ranged burst.
+  REAPER      — BRUTAL STRENGTH + VITALITY + GLASS CANNON: melee aggression w/ HP buffer.
+  JUGGERNAUT  — TOUGHENED HIDE + COMBAT ARMOR + IRON CONSTITUTION: face-tank eHP wall.
+The three OLD flat boons survive as VITALITY / COMBAT ARMOR / HOLLOW POINTS, re-priced
+(armour 18->24, damage 8->6, HP unchanged at 25) so each costs ~budget like every other
+card — one option among many, never the whole menu. Regenerate with BalanceReport.
 
 
 ================================================================================

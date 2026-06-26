@@ -63,8 +63,16 @@ public final class EnemyManager implements EnemyHitTarget {
     private EnemyDeathHazardListener enemyDeathHazardListener;
     private EnemyAttackListener enemyAttackListener;
 
-    /** Flat damage bonus from player level-up DAMAGE_BOOST choices; added to every hit. */
+    /** Flat damage bonus from player level-up damage cards (Hollow Points / Glass Cannon); added to every hit. */
     private int playerFlatDamageBonus = 0;
+
+    /**
+     * Player ranged/melee damage multipliers derived from MARKSMANSHIP/STRENGTH (attribute system
+     * + level-up cards). Applied centrally here — the single point that knows whether the hit was
+     * melee ({@code pendingMeleeKill}) or ranged — so no weapon double-counts them. Default 1.0.
+     */
+    private float playerRangedDamageMultiplier = 1.0f;
+    private float playerMeleeDamageMultiplier  = 1.0f;
 
     // Pre-allocated scratch state — never re-allocated after construction
     private final boolean[][]  occupancy;           // [column][row] — true if an enemy is there this turn
@@ -266,6 +274,22 @@ public final class EnemyManager implements EnemyHitTarget {
         this.playerFlatDamageBonus = bonus;
     }
 
+    /**
+     * Sets the player's ranged damage multiplier (from MARKSMANSHIP + level-up cards). Applied to
+     * non-melee hits in {@link #applyDamageTo}. Call after each level-up and after each floor rebuild.
+     */
+    public void setPlayerRangedDamageMultiplier(float multiplier) {
+        this.playerRangedDamageMultiplier = multiplier;
+    }
+
+    /**
+     * Sets the player's melee damage multiplier (from STRENGTH + level-up cards). Applied to melee
+     * hits in {@link #applyDamageTo}. Call after each level-up and after each floor rebuild.
+     */
+    public void setPlayerMeleeDamageMultiplier(float multiplier) {
+        this.playerMeleeDamageMultiplier = multiplier;
+    }
+
     /** Read-only view of the live enemy list; used by EnemyRenderer each frame. */
     public List<Enemy> getEnemies() {
         return enemies;
@@ -320,7 +344,11 @@ public final class EnemyManager implements EnemyHitTarget {
         float worldY           = enemy.worldCenterY();
         float heightMultiplier = enemy.type.heightMultiplier();
 
-        int totalDamage = amount + playerFlatDamageBonus;
+        // Scale the weapon's base damage by the player's melee/ranged multiplier (STRENGTH /
+        // MARKSMANSHIP + level-up cards), then add the flat per-shot bonus. This is the single
+        // application point, so no weapon double-counts these multipliers.
+        float damageMultiplier = thisKillWasMelee ? playerMeleeDamageMultiplier : playerRangedDamageMultiplier;
+        int totalDamage = Math.round(amount * damageMultiplier) + playerFlatDamageBonus;
         enemy.applyDamage(totalDamage);
         enemy.triggerHitFlash();
 
