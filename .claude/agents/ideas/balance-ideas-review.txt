@@ -374,3 +374,42 @@ ITEMS VERIFIED CLEAN (no regressions detected):
   - No allocations introduced inside render() methods in the new renderers
   - Card pool colors, budget values, and PP formulas are all consistently referenced via
     BalanceConfig and GameBalance, not hardcoded in rendering code
+
+
+===========================================================================================
+ADDENDUM — FINE-TUNING PASS (2026-06-26, post-review)
+===========================================================================================
+The review above audited that the SIX ideas were structurally implemented. This pass did the
+actual NUMERIC fine-tuning the ideas deferred. Build still UNVERIFIABLE via Gradle (dl.google.com
+403, env-only); numbers were regenerated with a standalone harness that mirrors GameMath +
+BalanceConfig exactly, so they match what BalanceReport will print.
+
+FIXED:
+  1. DEPTH-COUPLING INVARIANT was DEFINED but never computed or enforced — and was VIOLATED.
+     Idea 2 defines 0.9 <= playerPowerAtDepth/enemyThreat <= 1.2 as an invariant that "must hold",
+     but nothing computed playerPowerAtDepth. Modelling it (linear level-up power curve) against the
+     compound enemy curve showed the old 1.08/1.06 enemy depth scale broke the invariant from depth 5
+     (ratio 0.86) and collapsed to ~0.40 by depth 15 — the game became unwinnable at depth.
+       * Added GameMath.playerPowerAtDepth() + GameMath.depthCouplingRatio() (full formula blocks).
+       * Added a DEPTH COUPLING living table to BalanceReport.
+       * Retuned ENEMY_HEALTH_SCALE_PER_DEPTH 1.08->1.045 and ENEMY_DAMAGE_SCALE_PER_DEPTH 1.06->1.035
+         (BalanceConfig SECTION 3). Ratio now in band through depth 14 (depth 15 at the 0.89 edge).
+       * Added EXPECTED_LEVELS_PER_DEPTH (SECTION 3); BOSS_EXPECTED_LEVELS_PER_DEPTH now mirrors it.
+  2. AMMO_RESERVE_CAP_BULLETS 45 -> 30 (the 30-round AR clip floor). It banked 3.12 floors, far over
+     the 1.5 anti-hoard target; now banks 2.08 — as close as the clip-vs-eHP mismatch allows.
+  Docs (docs/balance-rule-system.txt) regenerated: depth-scaling section, depth-coupling table,
+  encounter budgets (slower growth), scarcity bullets row.
+
+STILL DEFERRED (NOT safely auto-tunable — need a dedicated balance idea + playtest/design sign-off):
+  A. eHP/DAMAGE ECONOMY RESCALE — the root cause of every enemy's golden ratio reading OVER. The
+     player one/two-shots most enemies (eHP 18-50 vs player burst 44), pinning TTK at 1 while TTD is
+     20-30, so TTD/TTK is structurally 10-30x the [3,8]/[2,4] bands. Bringing it into band needs a
+     coordinated rescale of enemy eHP, player DPT/eHP, the reference anchors AND every band at once
+     (it cascades through the whole contract) — exactly the "changes the contract" work idea 2 defers.
+     Localized tuning cannot fix it; every single lever cascades out of some other band.
+  B. RAILGUN over the heavy power band (45 vs 24-32) — LEFT as-is: a deliberate, documented
+     scarcity-gated exception (held by RAILGUN_MAX_SLUGS=5, not raw damage). Nerfing the raw 90 is
+     explicitly argued against in BalanceConfig/docs (would make it worthless, not merely scarce).
+  C. CREDIT ECONOMY / SHOP — out of scope (no shop in game; user direction: skip).
+  D. WEAPON-ABILITY CARDS in the level-up deck — documented intentional deviation (idea 5).
+  E. BOSS FIGHTS — out of scope for idea 6 (ruleset-only; needs story/run structure).

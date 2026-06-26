@@ -2461,6 +2461,61 @@ public final class GameMath {
     }
 
     /*
+     * Formula: playerPowerAtDepth — the player's expected power multiplier on a given floor
+     * Derivation:
+     *   The depth-coupling invariant (docs/balance-rule-system.txt, DEPTH SCALING) compares the
+     *   player's power curve against the enemy threat curve and demands they stay coupled. The
+     *   enemy side is depthThreatScale (a COMPOUND curve). The player side is set by the level-up
+     *   power budget: every level grants a fixed LEVEL_UP_BUDGET_PP power points (idea 5), and the
+     *   total-PP invariant guarantees a player's total power at level L is L * budget regardless of
+     *   WHICH cards were taken. Modelling the player as gaining levelsPerDepth levels per floor
+     *   descended, the accumulated power points by depth d are:
+     *       accumulatedPowerPoints = budgetPowerPointsPerLevel * levelsPerDepth * (depth - 1)
+     *   Power points are a %-gain to the player's reference output (damagePerTurnPowerPoints is the
+     *   forward direction), so the player's power MULTIPLIER relative to the depth-1 baseline is:
+     *       playerPowerAtDepth = 1 + accumulatedPowerPoints / 100
+     *   This is deliberately ADDITIVE (linear in depth): the contract prices every upgrade as a flat
+     *   %-of-reference, so the player curve is linear while the enemy curve compounds. Keeping the
+     *   ratio in band over the run's depth range is therefore a matter of choosing an enemy compound
+     *   rate (ENEMY_*_SCALE_PER_DEPTH) gentle enough that the compound curve does not outrun the
+     *   linear one before the deepest floor. The conservative model ignores found weapons/armour,
+     *   which only HELP the player, so the real ratio is at least this favourable.
+     *   Worked: budget 12, 1 level/floor, depth 5 -> 1 + 12*1*4/100 = 1.48.
+     * Edge cases:
+     *   depth <= 1 -> floorsDescended is 0 -> returns 1.0 (floor 1 is the un-scaled baseline).
+     *   Negative inputs are nonsensical config; the result simply tracks them (BalanceReport would
+     *     surface a sub-1.0 floor-1 power as a bad number rather than being silently clamped).
+     */
+    public static float playerPowerAtDepth(float budgetPowerPointsPerLevel,
+                                           float levelsPerDepth, int depth) {
+        int floorsDescended = Math.max(0, depth - 1);
+        float accumulatedPowerPoints = budgetPowerPointsPerLevel * levelsPerDepth * floorsDescended;
+        return 1f + accumulatedPowerPoints / 100f;
+    }
+
+    /*
+     * Formula: depthCouplingRatio — the depth-coupling invariant (balance contract, DEPTH SCALING)
+     * Derivation:
+     *   The single number that says whether a floor is fair: how the player's expected power
+     *   compares to the floor's scaled enemy threat —
+     *       depthCouplingRatio = playerPowerAtDepth / enemyThreatScale
+     *   The invariant requires DEPTH_COUPLING_RATIO_MIN <= ratio <= DEPTH_COUPLING_RATIO_MAX
+     *   ([0.9, 1.2]): below the min the floor is unfair-hard (the player fell behind the curve),
+     *   above the max it is trivial-easy (the player outscaled it). Both inputs are multipliers
+     *   relative to the depth-1 baseline (playerPowerAtDepth and depthThreatScale), so at depth 1
+     *   both are 1.0 and the ratio is exactly 1.0 by construction.
+     *   Worked: player 1.48 / enemy 1.718 at depth 5 (old 1.08/1.06 scales) = 0.86 -> UNDER (hard).
+     * Edge cases:
+     *   enemyThreatScale <= 0 -> returns 0 (no threat to measure against; avoids divide-by-zero).
+     */
+    public static float depthCouplingRatio(float playerPowerAtDepth, float enemyThreatScale) {
+        if (enemyThreatScale <= 0f) {
+            return 0f;
+        }
+        return playerPowerAtDepth / enemyThreatScale;
+    }
+
+    /*
      * Formula: hazardTileThreatPoints — fold terrain danger into the TP contract (idea 4, Pillar 3)
      * Derivation:
      *   A hazard tile (fire / toxic) has no health, so the enemy Threat-Point primitive's
