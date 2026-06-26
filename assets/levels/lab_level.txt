@@ -2,11 +2,11 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 x              x                                           x                  x
 x              x                                           x                  x
 x              x     xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx     x                  x
-x              x     x                               x     x                  x
-x              x     x                               x     x                  x
+x              x     x                               x     x          !       x
+x              x     x        4                      x     x                  x
 x   t          x     x                               x     x  L   L  t        x
 x              x     x   T              C             x     x                  x
-x              x     x                               x     x                  x
+x              x     x             5                 x     x        ^         x
 x              c     x                               x     c                  x
 x              x     x          MAIN LAB             x     x                  x
 x              x     x          P          P         x     x                  x
@@ -16,7 +16,7 @@ x              x     x          tttttt   t           x     x                  x
 x              x     v                   t           v     x                  x
 x              x     x          tttttt   t           x     x                  x
 x        ENTRY x     x                               x     x  STORAGE         x
-x              x     x                               x     x                  x
+x              x     x                  $            x     x                  x
 xxxxxxxxxxxxxxxx     x                               x     xxxxxxxxx  xxxxxxx x
 x                    x                               x                        x
 x                    x     t                   t     x                        x
@@ -38,7 +38,7 @@ x              x     v                               v     x                  x
 x              x     x                               x     x                  x
 x       P      c     x        LOWER LAB              c     c                  x
 x              c     x   1         .       2         x     x                  x
-x              c     x                               x     x                  x
+x              c     x             3                 x     x                  x
 x   t          d     xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx     x         t        x
 x       p      c                                           x                  x
 x              x                                           x                  x
