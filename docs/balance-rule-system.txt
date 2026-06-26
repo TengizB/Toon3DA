@@ -432,6 +432,104 @@ flanker hook; further generator positioning work remains optional follow-up.
 
 
 ================================================================================
+BOSS APPENDIX — the boss balance ruleset (idea 6)   RULES NOW, FIGHTS LATER
+================================================================================
+Companion to: .claude/agents/ideas/balance_order_6_boss_balance_ruleset.txt
+Formulas: util/GameMath.java (BOSS BALANCE RULESET block, after the TP primitives + hazards)
+Anchors & bands: util/BalanceConfig.java SECTION 14
+Living table: util/BalanceReport.java (BOSS RULESET section)
+
+Bosses break the normal threat math: a SINGLE entity meant to survive many turns and
+threaten a PREPARED player. The trash-mob golden ratio (idea 2) and the TP role bands do
+NOT apply — a boss tuned like a big trash mob is either a 2-shot anticlimax or an
+un-counterable HP wall. So a boss is tuned to a fight-LENGTH target and a phase-structured
+threat curve instead. This is a CONTRACT, not a feature: boss FIGHTS are deferred (they
+need story/plot and a run/final-floor structure — the user's call), so this appendix only
+defines the ruleset + math the future boss work must satisfy. It costs nothing to honor now
+and prevents shipping placeholder HP walls. The current bosses (OVERSEER 250hp, CORRUPTOR
+450hp, HELL_BARON 700hp) are flat placeholders flagged "to be re-derived via this ruleset".
+
+THE SIX RULES (apply when a boss is built/retuned):
+
+RULE 1 — TUNE HP TO FIGHT LENGTH, NEVER TO A FLAT NUMBER.
+    bossEffectiveHp = expectedPlayerSustainedDpt(depth) * targetFightTurns * multiPhaseFactor
+      targetFightTurns  = 18-40 (act boss); 40-60 (run-final boss, FUTURE)
+      multiPhaseFactor  = 1.0 per phase the player effectively RE-fights (1.0 for a boss
+                          that just splits one HP bar across phases)
+      expectedPlayerSustainedDpt(depth) = the reference DPT (25) LIFTED by the offence
+        power points the player is expected to have by that depth — NOT the depth-1 ref.
+        GameMath.expectedPlayerSustainedDamagePerTurn(refDPT, expectedOffencePowerPoints).
+    A boss must NEVER be a literal HP constant. (GameMath.bossEffectiveHitPoints)
+
+RULE 2 — CAP THE FIGHT LENGTH FROM ABOVE TOO (no sponges).
+    upperFightTurnsCap = targetFightTurns * 1.5  for a player who plays well.
+    Check the actual length with GameMath.bossFightTurnsForPlayerDamagePerTurn(eHP, playerDpt).
+    If the only way to hit the HP target drags past the cap, the boss is over-HP'd — add a
+    PHASE or a damage-window mechanic, NOT more HP. HP is the worst difficulty lever.
+
+RULE 3 — DAMAGE OUTPUT: lethal-but-counterable.
+    Set boss DPT by the SURVIVAL CHECK: playerEHP / bossDpt ~= survivalCheckRatio * fightTurns,
+    survivalCheckRatio in [0.4, 0.7] (target 0.5). So a no-heal player who eats most attacks
+    dies BEFORE the fight ends (must dodge/cover/heal), but a player who avoids ~half and uses
+    heals survives with margin. GameMath.bossDamagePerTurnForSurvivalCheck / bossSurvivalCheckRatio.
+    HARD FAIRNESS CAP (inherits idea 4 pillar 5): no single boss attack may exceed 35% of
+    player eHP, and ANY attack above 25% MUST be telegraphed one full turn ahead with a
+    readable, avoidable cue. Unavoidable burst = banned.
+    GameMath.bossSingleHitFractionOfEffectiveHitPoints vs BOSS_HARD_SINGLE_HIT_FRACTION (0.35)
+    and TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION (0.25).
+
+RULE 4 — PHASES STRUCTURE THE THREAT CURVE.
+    Split the bar into N equal phases (2-3 for act bosses); each triggers at an HP threshold,
+    escalates ONE mechanic, and keeps per-phase TP rising but within the fairness cap. Phase 1
+    teaches the pattern, the last phase tests it. Boss AI is pattern-driven (BossAttackPattern),
+    NOT the trash-mob greedy stepper. GameMath.bossPhaseHealthThreshold(i, n) fixes the seams.
+
+RULE 5 — THE BOSS IS A BUILD CHECK (the arena gates progress).
+    Because the HP target is tied to expectedPlayerSustainedDpt(depth), an UNDER-powered player
+    physically cannot out-DPS the fight window while an on-curve player can. The boss is the
+    checkpoint where "are you on the idea-2 power curve?" gets answered. OPTIONAL enrage: after
+    upperFightTurns, ramp boss damage so a stall-out/kiting player loses.
+
+RULE 6 — REWARD SCALED TO COST (closes the economy loop).
+    bossReward ~= (ammoSpent*ammoValue + healsSpent*healValue) * RISK_PREMIUM (>1).
+    Priced by what the fight CONSUMES plus a risk premium, so a boss REFUNDS the fight plus a
+    profit — never a net resource loss (punishes progress) and never a jackpot (breaks the
+    economy). GameMath.bossReward / BOSS_REWARD_RISK_PREMIUM. Re-derive the current placeholders
+    (XP_REWARD_BOSS_BASE 500, CREDIT_REWARD_BOSS_BASE 250) once the scarcity model (idea 3) is tuned.
+
+THE BOSS CHECKLIST (apply when a boss is built/retuned):
+  [ ] HP = expectedPlayerSustainedDpt(depth) * fightTurns * phases  (NOT a literal)
+  [ ] fightTurns in target band; worst-case <= 1.5x (else add a phase, not HP)
+  [ ] bossDpt set by the survival-check ratio; heals available make it winnable
+  [ ] no un-telegraphed attack > 25% eHP; none > 35% at all
+  [ ] N phases, each adds ONE mechanic, each within the fairness cap
+  [ ] reward refunds expected ammo+heal spend * risk premium
+  [ ] all numbers live in BalanceConfig, derived not literal
+  [ ] entry added to the living balance table below
+
+BOSS LIVING TABLE (generated by BalanceReport — regenerate after any SECTION 14 change):
+  BOSS RULESET (idea 6) — act-boss target fight = 18-40 turns ; survivalRatio band 0.40-0.70 ;
+  single-hit caps: telegraph >25% eHP, hard 35% eHP
+  boss         depth  expDPT      derivedHP     litHP  HP?       fairDPT  bigHit%eHP  hitVerdict
+  ------------------------------------------------------------------------------------
+  Overseer         5    32.5        585-1300      250  UNDER        14.1        14.6  OK
+  Corruptor       10    40.0        720-1600      450  UNDER         7.3         7.3  OK
+  Hell Baron      15    47.5        855-1900      700  UNDER        25.4        25.4  TELE-OK
+  ------------------------------------------------------------------------------------
+    phase seams (3-phase act boss): 67% -> 33% -> 0% (death)  [GameMath.bossPhaseHealthThreshold]
+    litHP are PLACEHOLDERS: HP? flags the literal vs the derived band. Re-derive when boss fights ship.
+
+  READING IT: every placeholder HP reads UNDER its derived band — expected, since the current
+  bosses are flat placeholders set before this ruleset existed, and the expected player DPT at
+  their depth (the idea-2 lift) is far above the depth-1 reference they were eyeballed against.
+  This is the "re-derive me" signal, not a bug to patch now: the fights are deferred. The
+  fairness caps already PASS — Overseer/Corruptor sit well under 25%, and the Hell Baron's 25.4%
+  cleave is over the telegraph cap but under the hard cap and IS telegraphed (TELE-OK). expDPT is
+  derived from BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION (0.5) * LEVEL_UP_BUDGET_PP (12) *
+  (BOSS_EXPECTED_LEVELS_PER_DEPTH (1.0) * depth); tune those SECTION 14 inputs to move the band.
+
+
+================================================================================
 HOW TO REGENERATE THIS TABLE
 ================================================================================
 Run the dev-only auditor (touches no render state; pure GameMath + BalanceConfig):

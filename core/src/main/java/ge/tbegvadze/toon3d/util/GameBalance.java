@@ -51,7 +51,13 @@ public final class GameBalance {
     /** VOID_SHROUD (tile '^') — fast stealth melee; medium XP. */
     public static final int XP_REWARD_VOID_SHROUD   = BalanceConfig.XP_REWARD_VOID_SHROUD;
 
-    /** Base XP reward for killing any boss (before depth scaling applied by BossFloorController). */
+    /**
+     * Base XP reward for killing any boss (before depth scaling applied by BossFloorController).
+     * PLACEHOLDER — TO BE RE-DERIVED VIA THE BOSS BALANCE RULESET (idea 6, RULE 6): a boss reward
+     * must be priced by the ammo+heal the fight CONSUMES times a risk premium
+     * (GameMath.bossReward / BalanceConfig.BOSS_REWARD_RISK_PREMIUM), so it refunds the fight plus a
+     * profit — never a flat 500. Re-derive once the scarcity model (idea 3) is fully tuned.
+     */
     public static final int XP_REWARD_BOSS_BASE     = 500;
 
     // =========================================================================
@@ -528,6 +534,11 @@ public final class GameBalance {
     public static final int   CREDIT_REWARD_VOID_SHROUD   = BalanceConfig.CREDIT_REWARD_VOID_SHROUD;
     public static final int   CREDIT_REWARD_MIRE_WRAITH   = BalanceConfig.CREDIT_REWARD_MIRE_WRAITH;
     public static final int   CREDIT_REWARD_IRON_STALKER  = BalanceConfig.CREDIT_REWARD_IRON_STALKER;
+    /**
+     * PLACEHOLDER — TO BE RE-DERIVED VIA THE BOSS BALANCE RULESET (idea 6, RULE 6), the same as
+     * XP_REWARD_BOSS_BASE above: price it by consumption * BalanceConfig.BOSS_REWARD_RISK_PREMIUM
+     * (GameMath.bossReward) once the scarcity/credit economy is tuned, not a flat 250.
+     */
     public static final int   CREDIT_REWARD_BOSS_BASE     = 250;
     public static final float CREDIT_DEPTH_SCALE          = BalanceConfig.CREDIT_DEPTH_SCALE;
     public static final int   CREDIT_CHIPS_PER_FLOOR_MIN  = BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MIN;

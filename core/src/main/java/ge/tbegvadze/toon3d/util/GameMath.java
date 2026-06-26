@@ -2486,6 +2486,256 @@ public final class GameMath {
     }
 
     // =========================================================================
+    // BOSS BALANCE RULESET — bosses are tuned by formula, not by flat HP (idea 6)
+    // -------------------------------------------------------------------------
+    // Bosses break the trash-mob threat math: a single entity meant to survive
+    // many turns and threaten a PREPARED player. The golden-ratio / TP bands above
+    // do NOT apply. A boss tuned like a big trash mob is either a 2-shot anticlimax
+    // or an un-counterable HP wall. So a boss is tuned to a fight-LENGTH target and a
+    // phase-structured threat curve instead. These methods are the contract idea 6
+    // defines; boss FIGHTS themselves are deferred (they need story/run structure),
+    // so for now these formulas exist to re-derive the placeholder boss numbers when
+    // boss work lands, NEVER to bless a literal HP constant. Anchors and bands live
+    // in BalanceConfig SECTION 14; see docs/balance-rule-system.txt (Boss appendix).
+    //
+    // The six rules, mapped to the methods below:
+    //   RULE 1  HP from fight length, never a flat number  -> bossEffectiveHitPoints
+    //   RULE 2  cap the fight length from above (no sponges) -> bossFightTurnsForPlayerDamagePerTurn
+    //                                                          + bossUpperFightTurnsCap
+    //   RULE 3  lethal-but-counterable damage              -> bossDamagePerTurnForSurvivalCheck
+    //                                                          + bossSurvivalCheckRatio
+    //                                                          + bossSingleHitFractionOfEffectiveHitPoints
+    //   RULE 4  phases structure the threat curve          -> bossPhaseHealthThreshold
+    //   RULE 5  the boss is a build check                  -> (it IS the HP target tied to
+    //                                                          expectedPlayerSustainedDamagePerTurn)
+    //   RULE 6  reward scaled to cost                      -> bossReward
+    // =========================================================================
+
+    /*
+     * Formula: expectedPlayerSustainedDamagePerTurn — the player's likely DPT by a given depth
+     * Derivation:
+     *   A boss's HP must be tuned to what the EXPECTED player can output at the boss's
+     *   depth, NOT to the fixed depth-1 reference shotgun. A leveled player with found
+     *   upgrades out-DPSes the reference, so anchoring a boss to the reference makes it
+     *   trivialise as builds scale (idea 6, RULE 1; the worked Corruptor lesson).
+     *   Power points (idea 5) are the bridge: PP is a %-gain to the reference DPT
+     *   (damagePerTurnPowerPoints is the forward direction). The accumulated OFFENCE
+     *   power points a player is expected to have invested by this depth therefore lift
+     *   the reference DPT by that percentage — this is exactly the inverse of
+     *   damagePerTurnPowerPoints:
+     *       expectedDPT = referenceDamagePerTurn * (1 + expectedOffencePowerPoints / 100)
+     *   The caller supplies expectedOffencePowerPoints (the offence fraction of the
+     *   level-up budget accumulated over the floors descended — see BalanceConfig
+     *   SECTION 14), so the depth-dependence stays a tunable input, not a hidden constant.
+     *   Worked: reference DPT 25, +96 offence PP by depth 5 -> 25 * 1.96 = 49 DPT.
+     * Edge cases:
+     *   expectedOffencePowerPoints = 0 -> returns referenceDamagePerTurn unchanged (a
+     *     player who skipped every offence upgrade still has the start weapon).
+     *   Negative expectedOffencePowerPoints is floored at -100% so DPT can never go
+     *     negative (a strictly de-powered player still deals >= 0).
+     */
+    public static float expectedPlayerSustainedDamagePerTurn(float referenceDamagePerTurn,
+                                                             float expectedOffencePowerPoints) {
+        float liftFraction = Math.max(-1f, expectedOffencePowerPoints / 100f);
+        return referenceDamagePerTurn * (1f + liftFraction);
+    }
+
+    /*
+     * Formula: bossEffectiveHitPoints — boss HP derived from fight length (idea 6, RULE 1)
+     * Derivation:
+     *   A boss's HP is NEVER a literal constant. It is derived from how LONG the fight
+     *   should last against the EXPECTED player's sustained output at that depth, times
+     *   one factor per phase the player effectively re-fights:
+     *       bossEffectiveHitPoints = expectedPlayerSustainedDamagePerTurn
+     *                              * targetFightTurns
+     *                              * multiPhaseFactor
+     *   targetFightTurns is the design target band (18-40 for an act boss, 40-60 for a
+     *   future run-final boss; BalanceConfig SECTION 14). multiPhaseFactor is 1.0 per
+     *   phase (RULE 4): a 3-phase boss the player must "kill three times" carries 3.0.
+     *   Because expectedPlayerSustainedDamagePerTurn rises with depth, the same target
+     *   fight-length re-derives a larger HP pool deeper down — that is the build check
+     *   (RULE 5): an under-powered player physically cannot out-DPS the fight window.
+     *   Worked: expected DPT 49 * 24 target turns * 1.0 phase = 1176 eHP.
+     * Edge cases:
+     *   Any factor <= 0 -> returns 0 (a degenerate target produces no boss; the caller's
+     *     BalanceReport would surface that as a bad config rather than a silent 1-HP boss).
+     */
+    public static float bossEffectiveHitPoints(float expectedPlayerSustainedDamagePerTurn,
+                                               float targetFightTurns, float multiPhaseFactor) {
+        if (expectedPlayerSustainedDamagePerTurn <= 0f || targetFightTurns <= 0f || multiPhaseFactor <= 0f) {
+            return 0f;
+        }
+        return expectedPlayerSustainedDamagePerTurn * targetFightTurns * multiPhaseFactor;
+    }
+
+    /*
+     * Formula: bossFightTurnsForPlayerDamagePerTurn — how long the fight ACTUALLY lasts (idea 6, RULE 2)
+     * Derivation:
+     *   The inverse of bossEffectiveHitPoints: given a boss's eHP and a particular
+     *   player's sustained DPT, how many turns the fight takes (un-rounded, so the
+     *   upper-cap check below is continuous):
+     *       fightTurns = bossEffectiveHitPoints / playerSustainedDamagePerTurn
+     *   Feed an ON-CURVE player's DPT to confirm the fight lands in the target band;
+     *   feed a WELL-PLAYING (slightly higher) DPT to confirm the worst case stays under
+     *   the upper cap (RULE 2: a boring long fight is as bad as a 2-shot). If only an
+     *   over-cap fight hits the HP target, the boss is over-HP'd — add a PHASE or a
+     *   damage-window mechanic instead of more HP (HP is the worst difficulty lever).
+     *   Worked: 1176 eHP / 49 DPT = 24.0 turns (in the 18-40 act band).
+     * Edge cases:
+     *   playerSustainedDamagePerTurn <= 0 -> returns Float.POSITIVE_INFINITY (a player
+     *     who cannot damage the boss never finishes; avoids divide-by-zero).
+     */
+    public static float bossFightTurnsForPlayerDamagePerTurn(float bossEffectiveHitPoints,
+                                                             float playerSustainedDamagePerTurn) {
+        if (playerSustainedDamagePerTurn <= 0f) {
+            return Float.POSITIVE_INFINITY;
+        }
+        return bossEffectiveHitPoints / playerSustainedDamagePerTurn;
+    }
+
+    /*
+     * Formula: bossUpperFightTurnsCap — the no-sponge ceiling (idea 6, RULE 2)
+     * Derivation:
+     *   A long fight is fine; a BORING long fight is not. The worst-case fight length
+     *   for a player who plays well must stay under a fixed multiple of the target:
+     *       upperFightTurnsCap = targetFightTurns * upperFightTurnsMultiplier
+     *   with upperFightTurnsMultiplier = 1.5 (BalanceConfig.BOSS_UPPER_FIGHT_TURNS_MULTIPLIER).
+     *   If the only way to hit the HP target is a fight that drags past this, add a phase
+     *   or a damage window — not more HP.
+     *   Worked: 24 target * 1.5 = 36 turns hard ceiling.
+     * Edge cases:
+     *   None — pure product; a non-positive target simply yields a non-positive cap,
+     *     which the caller treats as "no valid boss".
+     */
+    public static float bossUpperFightTurnsCap(float targetFightTurns, float upperFightTurnsMultiplier) {
+        return targetFightTurns * upperFightTurnsMultiplier;
+    }
+
+    /*
+     * Formula: bossDamagePerTurnForSurvivalCheck — lethal-but-counterable output (idea 6, RULE 3)
+     * Derivation:
+     *   A boss must KILL a careless player but never one-shot a careful one. Express the
+     *   boss's output as a SURVIVAL CHECK: an un-healing player who eats most attacks
+     *   should die BEFORE the fight ends (so they must dodge / use cover / heal), but a
+     *   player who avoids ~half the damage and uses heals survives with margin. The knob:
+     *       playerEffectiveHitPoints / bossDamagePerTurn  ~=  survivalCheckRatio * fightTurns
+     *   solved for the boss DPT to AIM for:
+     *       bossDamagePerTurn = playerEffectiveHitPoints / (survivalCheckRatio * fightTurns)
+     *   survivalCheckRatio in [0.4, 0.7] (BalanceConfig SECTION 14): at 0.5 a no-heal,
+     *   no-dodge player dies at half the fight length, leaving the other half to be bought
+     *   back by skill and the heal economy (idea 3).
+     *   Worked: 205 eHP / (0.5 * 24 turns) = 205 / 12 = ~17 boss DPT.
+     * Edge cases:
+     *   survivalCheckRatio * fightTurns <= 0 -> returns 0 (no meaningful survival window;
+     *     avoids divide-by-zero).
+     */
+    public static float bossDamagePerTurnForSurvivalCheck(float playerEffectiveHitPoints,
+                                                          float fightTurns, float survivalCheckRatio) {
+        float survivalWindowTurns = survivalCheckRatio * fightTurns;
+        if (survivalWindowTurns <= 0f) {
+            return 0f;
+        }
+        return playerEffectiveHitPoints / survivalWindowTurns;
+    }
+
+    /*
+     * Formula: bossSurvivalCheckRatio — verify a boss's DPT is in the fair window (idea 6, RULE 3)
+     * Derivation:
+     *   The inverse of bossDamagePerTurnForSurvivalCheck: given a boss's DPT, what
+     *   fraction of the fight a no-heal player survives —
+     *       survivalCheckRatio = (playerEffectiveHitPoints / bossDamagePerTurn) / fightTurns
+     *   Must land in [0.4, 0.7]. Below 0.4 the boss is a coin-flip (you die before you
+     *   can react); above 0.7 it cannot threaten a careless player and the fight is a
+     *   stat-check instead of a tactics-check.
+     *   Worked: (205 / 17) / 24 = 12.06 / 24 = 0.50 -> in band.
+     * Edge cases:
+     *   bossDamagePerTurn <= 0 or fightTurns <= 0 -> returns Float.POSITIVE_INFINITY
+     *     (a boss that deals no damage or a zero-length fight never kills; avoids
+     *     divide-by-zero).
+     */
+    public static float bossSurvivalCheckRatio(float playerEffectiveHitPoints,
+                                               float bossDamagePerTurn, float fightTurns) {
+        if (bossDamagePerTurn <= 0f || fightTurns <= 0f) {
+            return Float.POSITIVE_INFINITY;
+        }
+        return (playerEffectiveHitPoints / bossDamagePerTurn) / fightTurns;
+    }
+
+    /*
+     * Formula: bossSingleHitFractionOfEffectiveHitPoints — the hard fairness cap (idea 6, RULE 3)
+     * Derivation:
+     *   Inherits idea 4's telegraph pillar. No SINGLE boss attack may exceed 35% of the
+     *   player's eHP, and ANY attack above 25% must be telegraphed one full turn ahead
+     *   with a readable, avoidable cue. This method expresses one attack as that fraction
+     *   so the caller can check it against both caps:
+     *       fraction = singleHitDamage / playerEffectiveHitPoints
+     *     fraction >  BOSS_HARD_SINGLE_HIT_FRACTION (0.35)        -> BANNED outright.
+     *     fraction >  TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION (0.25) -> MUST be telegraphed.
+     *   Unavoidable burst above the cap is banned: a death must read as "I mispositioned",
+     *   never as a dice roll.
+     *   Worked: a 52-damage Hell Baron cleave / 205 eHP = 0.254 -> over 25%, so it MUST be
+     *     telegraphed (it is, via the BossAttackPattern wind-up), and is under 35% -> legal.
+     * Edge cases:
+     *   playerEffectiveHitPoints <= 0 -> returns Float.POSITIVE_INFINITY (any hit is fatal
+     *     against a zero-eHP reference; avoids divide-by-zero and reads as "always over cap").
+     */
+    public static float bossSingleHitFractionOfEffectiveHitPoints(float singleHitDamage,
+                                                                  float playerEffectiveHitPoints) {
+        if (playerEffectiveHitPoints <= 0f) {
+            return Float.POSITIVE_INFINITY;
+        }
+        return singleHitDamage / playerEffectiveHitPoints;
+    }
+
+    /*
+     * Formula: bossPhaseHealthThreshold — the HP fraction where one phase hands off to the next (idea 6, RULE 4)
+     * Derivation:
+     *   A boss's eHP is split into N equal phases, each of which escalates ONE mechanic at
+     *   an HP threshold (RULE 4: phase 1 teaches the pattern, the last phase tests it). For
+     *   equal phases the boundary AFTER completing phaseIndex (1-based) of phaseCount is:
+     *       threshold = 1 - phaseIndex / phaseCount
+     *   so a 3-phase boss transitions at 0.66 and 0.33 (the third phase ends at 0.0 = death):
+     *       phaseIndex 1 of 3 -> 0.6667   phaseIndex 2 of 3 -> 0.3333   phaseIndex 3 of 3 -> 0.0
+     *   Phases are an AI-state concern (BossAttackPattern), balanced by the per-phase threat
+     *   staying within the fairness cap above; this method only fixes WHERE the seams are.
+     * Edge cases:
+     *   phaseCount <= 0 -> returns 0 (no phases; the whole bar is one undivided fight).
+     *   phaseIndex clamped to [0, phaseCount] so the result stays in [0, 1] (index 0 -> 1.0
+     *     = full health start; index = phaseCount -> 0.0 = death).
+     */
+    public static float bossPhaseHealthThreshold(int phaseIndex, int phaseCount) {
+        if (phaseCount <= 0) {
+            return 0f;
+        }
+        int clampedIndex = Math.max(0, Math.min(phaseCount, phaseIndex));
+        return 1f - (float) clampedIndex / (float) phaseCount;
+    }
+
+    /*
+     * Formula: bossReward — reward priced by what the fight CONSUMES (idea 6, RULE 6)
+     * Derivation:
+     *   A boss's XP/credit/loot must be priced by the resources the fight burns (ammo and
+     *   heals spent over the fight), plus a premium for the risk, so the boss roughly
+     *   REFUNDS the fight plus a profit — never a net resource LOSS (which would punish the
+     *   player for progressing) and never a jackpot that breaks the economy (idea 3):
+     *       bossReward = (ammoSpent * ammoValue + healsSpent * healValue) * riskPremium
+     *   ammoValue and healValue are the same scarcity units the economy is priced in
+     *   (damage-per-ammo-unit, HP-per-heal); riskPremium (> 1) is the profit margin
+     *   (BalanceConfig.BOSS_REWARD_RISK_PREMIUM). This closes the economy loop opened in
+     *   idea 3; the actual numbers are re-derived once the scarcity model is fully tuned.
+     *   Worked: (18 shells * 44 + 2 medkits * 50) * 1.3 = (792 + 100) * 1.3 = ~1160 reward units.
+     * Edge cases:
+     *   Any negative input is nonsensical config; not clamped here so BalanceReport surfaces
+     *     a negative reward as a bad number rather than silently flooring it.
+     *   riskPremium < 1 would make the boss a net resource LOSS — allowed by the math but a
+     *     contract violation the caller is expected to catch (the premium must exceed 1).
+     */
+    public static float bossReward(float ammoSpent, float ammoValue,
+                                   float healsSpent, float healValue, float riskPremium) {
+        return (ammoSpent * ammoValue + healsSpent * healValue) * riskPremium;
+    }
+
+    // =========================================================================
     // RESOURCE SCARCITY MODEL — supply vs demand per floor (idea 3)
     // -------------------------------------------------------------------------
     // Scarcity is what converts a shooter into a roguelike: when ammo lands just

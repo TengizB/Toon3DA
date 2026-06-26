@@ -158,6 +158,21 @@ public final class EnemyConstants {
 
     // -------------------------------------------------------------------------
     // Boss encounter stats
+    //
+    // PLACEHOLDER NUMBERS — TO BE RE-DERIVED VIA THE BOSS BALANCE RULESET (idea 6).
+    // Every HP / damage / phase number below is a flat placeholder, exactly the "big
+    // trash mob with arbitrary HP" the boss ruleset replaces. When boss FIGHTS are
+    // actually built/retuned (deferred — they need story/run structure), re-derive these
+    // by formula, NOT by guesswork:
+    //   * HP   = GameMath.bossEffectiveHitPoints(expectedPlayerSustainedDamagePerTurn(depth),
+    //            targetFightTurns, multiPhaseFactor)   — never a literal (RULE 1).
+    //   * DPT  = GameMath.bossDamagePerTurnForSurvivalCheck(playerEHP, fightTurns, ratio) (RULE 3),
+    //            with NO single hit over BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION of eHP,
+    //            and any hit over 25% telegraphed one turn ahead (RULE 3 fairness caps).
+    //   * phases at GameMath.bossPhaseHealthThreshold(i, n) (RULE 4).
+    // Targets/bands live in BalanceConfig SECTION 14; see docs/balance-rule-system.txt
+    // (Boss appendix). BalanceReport's BOSS RULESET section prints the derived HP each
+    // current boss SHOULD have at its depth next to the placeholder literals below.
     // -------------------------------------------------------------------------
 
     // The Overseer (depth 5) — security core robot; laser lanes + melee charge
