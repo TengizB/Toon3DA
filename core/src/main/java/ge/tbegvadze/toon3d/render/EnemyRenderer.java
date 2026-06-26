@@ -47,6 +47,12 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final Map<EnemyType, TextureRegion> textureRegions;
     private final Texture                       blightSheetTexture;
     private final Texture                       infernalSheetTexture;
+    // Necrotic faction — one standalone Texture per archetype (drawn full-frame).
+    private final Texture                       blightCorruptorTexture;
+    private final Texture                       vortexEyeTexture;
+    private final Texture                       ghoulTexture;
+    private final Texture                       crawlerTexture;
+    private final Texture                       revenantTexture;
     private final Texture                       whitePixelTexture;
     private final SpriteBatch                   batch;
     private final ShapeRenderer                 shapeRenderer;
@@ -117,7 +123,19 @@ public final class EnemyRenderer implements Renderable, Disposable {
         // Load sprite sheets; fall back to a solid-colour placeholder when the file is absent
         this.blightSheetTexture   = loadSheetOrFallback(ENEMY_SHEET_BLIGHT_PATH,   0.60f, 0.20f, 0.60f);
         this.infernalSheetTexture = loadSheetOrFallback(ENEMY_SHEET_INFERNAL_PATH, 0.70f, 0.25f, 0.10f);
+        // Necrotic faction — each archetype is a single standalone PNG drawn full-frame.
+        this.blightCorruptorTexture = loadSheetOrFallback(ENEMY_BLIGHT_CORRUPTOR_PATH, 0.40f, 0.60f, 0.20f);
+        this.vortexEyeTexture       = loadSheetOrFallback(ENEMY_VORTEX_EYE_PATH,       0.55f, 0.25f, 0.70f);
+        this.ghoulTexture           = loadSheetOrFallback(ENEMY_GHOUL_PATH,            0.45f, 0.55f, 0.35f);
+        this.crawlerTexture         = loadSheetOrFallback(ENEMY_CRAWLER_PATH,          0.55f, 0.45f, 0.30f);
+        this.revenantTexture        = loadSheetOrFallback(ENEMY_REVENANT_PATH,         0.50f, 0.50f, 0.55f);
         this.textureRegions       = buildTextureRegions(blightSheetTexture, infernalSheetTexture);
+        // Map the standalone PNGs as full-frame regions (one whole image per archetype).
+        textureRegions.put(EnemyType.BLIGHT_CORRUPTOR, new TextureRegion(blightCorruptorTexture));
+        textureRegions.put(EnemyType.VORTEX_EYE,       new TextureRegion(vortexEyeTexture));
+        textureRegions.put(EnemyType.GHOUL,            new TextureRegion(ghoulTexture));
+        textureRegions.put(EnemyType.CRAWLER,          new TextureRegion(crawlerTexture));
+        textureRegions.put(EnemyType.REVENANT,         new TextureRegion(revenantTexture));
 
         this.whitePixelTexture    = buildWhitePixelTexture();
         this.nameTagFont          = new BitmapFont();
@@ -525,6 +543,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
         shapeRenderer.dispose();
         blightSheetTexture.dispose();
         infernalSheetTexture.dispose();
+        blightCorruptorTexture.dispose();
+        vortexEyeTexture.dispose();
+        ghoulTexture.dispose();
+        crawlerTexture.dispose();
+        revenantTexture.dispose();
         whitePixelTexture.dispose();
         nameTagFont.dispose();
     }

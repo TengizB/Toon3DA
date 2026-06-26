@@ -51,6 +51,21 @@ public final class GameBalance {
     /** VOID_SHROUD (tile '^') — fast stealth melee; medium XP. */
     public static final int XP_REWARD_VOID_SHROUD   = BalanceConfig.XP_REWARD_VOID_SHROUD;
 
+    /** GHOUL (tile '~') — slow shambling chaff; low XP. */
+    public static final int XP_REWARD_GHOUL            = BalanceConfig.XP_REWARD_GHOUL;
+
+    /** CRAWLER (tile 'z') — fast fragile chaff; low XP. */
+    public static final int XP_REWARD_CRAWLER          = BalanceConfig.XP_REWARD_CRAWLER;
+
+    /** REVENANT (tile 'K') — fast hard-hitting undead soldier; solid XP. */
+    public static final int XP_REWARD_REVENANT         = BalanceConfig.XP_REWARD_REVENANT;
+
+    /** VORTEX_EYE (tile 'V') — short-range ranged chaff caster; low XP. */
+    public static final int XP_REWARD_VORTEX_EYE       = BalanceConfig.XP_REWARD_VORTEX_EYE;
+
+    /** BLIGHT_CORRUPTOR (tile '*') — durable infected brute soldier; solid XP. */
+    public static final int XP_REWARD_BLIGHT_CORRUPTOR = BalanceConfig.XP_REWARD_BLIGHT_CORRUPTOR;
+
     /**
      * Base XP reward for killing any boss (before depth scaling applied by BossFloorController).
      * PLACEHOLDER — TO BE RE-DERIVED VIA THE BOSS BALANCE RULESET (idea 6, RULE 6): a boss reward
@@ -534,6 +549,11 @@ public final class GameBalance {
     public static final int   CREDIT_REWARD_VOID_SHROUD   = BalanceConfig.CREDIT_REWARD_VOID_SHROUD;
     public static final int   CREDIT_REWARD_MIRE_WRAITH   = BalanceConfig.CREDIT_REWARD_MIRE_WRAITH;
     public static final int   CREDIT_REWARD_IRON_STALKER  = BalanceConfig.CREDIT_REWARD_IRON_STALKER;
+    public static final int   CREDIT_REWARD_GHOUL            = BalanceConfig.CREDIT_REWARD_GHOUL;
+    public static final int   CREDIT_REWARD_CRAWLER          = BalanceConfig.CREDIT_REWARD_CRAWLER;
+    public static final int   CREDIT_REWARD_REVENANT         = BalanceConfig.CREDIT_REWARD_REVENANT;
+    public static final int   CREDIT_REWARD_VORTEX_EYE       = BalanceConfig.CREDIT_REWARD_VORTEX_EYE;
+    public static final int   CREDIT_REWARD_BLIGHT_CORRUPTOR = BalanceConfig.CREDIT_REWARD_BLIGHT_CORRUPTOR;
     /**
      * PLACEHOLDER — TO BE RE-DERIVED VIA THE BOSS BALANCE RULESET (idea 6, RULE 6), the same as
      * XP_REWARD_BOSS_BASE above: price it by consumption * BalanceConfig.BOSS_REWARD_RISK_PREMIUM

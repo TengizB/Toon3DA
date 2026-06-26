@@ -11,6 +11,15 @@ public final class EnemyConstants {
     public static final String  ENEMY_SHEET_BLIGHT_PATH          = "textures/enemies/enemy_sheet_blight.png";
     public static final String  ENEMY_SHEET_INFERNAL_PATH        = "textures/enemies/enemy_sheet_infernal.png";
 
+    // Necrotic faction — individual single-sprite PNGs (one texture per archetype, drawn
+    // full-frame rather than sliced from a 2x2 sheet). EnemyRenderer loads each as its own
+    // Texture and maps the whole image as the enemy's TextureRegion.
+    public static final String  ENEMY_BLIGHT_CORRUPTOR_PATH      = "textures/enemies/enemy_corruptor.png";
+    public static final String  ENEMY_VORTEX_EYE_PATH            = "textures/enemies/enemy_vortex_eye.png";
+    public static final String  ENEMY_GHOUL_PATH                 = "textures/enemies/enemy_ghoul.png";
+    public static final String  ENEMY_CRAWLER_PATH               = "textures/enemies/enemy_crawler.png";
+    public static final String  ENEMY_REVENANT_PATH              = "textures/enemies/enemy_revenant.png";
+
     // Boss texture — not used in regular combat; reserved for the boss encounter.
     public static final String  ENEMY_BOSS_OVERSEER_PATH         = "textures/enemies/enemy_boss_overseer.png";
 
@@ -81,6 +90,37 @@ public final class EnemyConstants {
     public static final float   VOID_SHROUD_HEIGHT_MULTIPLIER    = 0.80f;
     // Flanker AI (Pillar 2) — prefers the tile behind the player's facing and hits harder there.
     public static final float   VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER = BalanceConfig.VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER;
+
+    // GHOUL — slow shambling melee chaff (spawn '~')
+    public static final int     GHOUL_MAX_HEALTH                 = BalanceConfig.GHOUL_MAX_HEALTH;
+    public static final int     GHOUL_ATTACK_DAMAGE              = BalanceConfig.GHOUL_ATTACK_DAMAGE;
+    public static final int     GHOUL_MOVE_EVERY_N_TURNS         = BalanceConfig.GHOUL_MOVE_EVERY_N_TURNS;
+    public static final float   GHOUL_HEIGHT_MULTIPLIER          = 0.90f;
+
+    // CRAWLER — fast, fragile low melee chaff (spawn 'z')
+    public static final int     CRAWLER_MAX_HEALTH               = BalanceConfig.CRAWLER_MAX_HEALTH;
+    public static final int     CRAWLER_ATTACK_DAMAGE            = BalanceConfig.CRAWLER_ATTACK_DAMAGE;
+    public static final int     CRAWLER_MOVE_EVERY_N_TURNS       = BalanceConfig.CRAWLER_MOVE_EVERY_N_TURNS;
+    public static final float   CRAWLER_HEIGHT_MULTIPLIER        = 0.55f;
+
+    // REVENANT — fast, hard-hitting undead soldier melee (spawn 'K')
+    public static final int     REVENANT_MAX_HEALTH              = BalanceConfig.REVENANT_MAX_HEALTH;
+    public static final int     REVENANT_ATTACK_DAMAGE           = BalanceConfig.REVENANT_ATTACK_DAMAGE;
+    public static final int     REVENANT_MOVE_EVERY_N_TURNS      = BalanceConfig.REVENANT_MOVE_EVERY_N_TURNS;
+    public static final float   REVENANT_HEIGHT_MULTIPLIER       = 1.05f;
+
+    // VORTEX_EYE — short-range ranged chaff caster (spawn 'V'); hovers like the Eye Tyrant
+    public static final int     VORTEX_EYE_MAX_HEALTH            = BalanceConfig.VORTEX_EYE_MAX_HEALTH;
+    public static final int     VORTEX_EYE_ATTACK_DAMAGE         = BalanceConfig.VORTEX_EYE_ATTACK_DAMAGE;
+    public static final int     VORTEX_EYE_RANGE_TILES           = BalanceConfig.VORTEX_EYE_RANGE_TILES;
+    public static final int     VORTEX_EYE_MOVE_EVERY_N_TURNS    = BalanceConfig.VORTEX_EYE_MOVE_EVERY_N_TURNS;
+    public static final float   VORTEX_EYE_HEIGHT_MULTIPLIER     = 0.55f;
+
+    // BLIGHT_CORRUPTOR — durable slow infected brute soldier melee (spawn '*')
+    public static final int     BLIGHT_CORRUPTOR_MAX_HEALTH         = BalanceConfig.BLIGHT_CORRUPTOR_MAX_HEALTH;
+    public static final int     BLIGHT_CORRUPTOR_ATTACK_DAMAGE      = BalanceConfig.BLIGHT_CORRUPTOR_ATTACK_DAMAGE;
+    public static final int     BLIGHT_CORRUPTOR_MOVE_EVERY_N_TURNS = BalanceConfig.BLIGHT_CORRUPTOR_MOVE_EVERY_N_TURNS;
+    public static final float   BLIGHT_CORRUPTOR_HEIGHT_MULTIPLIER  = 1.00f;
 
     // Shared ranged AI — kiting constants reused across ranged types
     public static final int     RANGED_KITE_MIN_TILES            = BalanceConfig.RANGED_KITE_MIN_TILES;

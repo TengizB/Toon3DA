@@ -150,6 +150,38 @@ public final class BalanceConfig {
     public static final int IRON_STALKER_RANGE_TILES       = 4;
     public static final int IRON_STALKER_MOVE_EVERY_N_TURNS = 1;
 
+    // -------------------------------------------------------------------------
+    // Necrotic faction — five archetypes reusing the legacy individual-PNG sprites
+    // (corruptor / vortex_eye / ghoul / crawler / revenant). Distinct stat niches and
+    // tactical verbs keep them from duplicating the blight/infernal roster above.
+    // -------------------------------------------------------------------------
+
+    // GHOUL (spawn '~') — slow shambling melee CHAFF; relentless but easily outpaced.
+    public static final int GHOUL_MAX_HEALTH          = 30;
+    public static final int GHOUL_ATTACK_DAMAGE       = 9;
+    public static final int GHOUL_MOVE_EVERY_N_TURNS  = 2;
+
+    // CRAWLER (spawn 'z') — fast, fragile low-to-the-ground melee CHAFF; rushes in.
+    public static final int CRAWLER_MAX_HEALTH         = 22;
+    public static final int CRAWLER_ATTACK_DAMAGE      = 8;
+    public static final int CRAWLER_MOVE_EVERY_N_TURNS = 1;
+
+    // REVENANT (spawn 'K') — fast, hard-hitting undead SOLDIER melee; punishes a slow kill.
+    public static final int REVENANT_MAX_HEALTH         = 110;
+    public static final int REVENANT_ATTACK_DAMAGE      = 18;
+    public static final int REVENANT_MOVE_EVERY_N_TURNS = 1;
+
+    // VORTEX_EYE (spawn 'V') — short-range ranged CHAFF caster; weaker, closer kiter than Eye Tyrant.
+    public static final int VORTEX_EYE_MAX_HEALTH         = 35;
+    public static final int VORTEX_EYE_ATTACK_DAMAGE      = 9;
+    public static final int VORTEX_EYE_RANGE_TILES        = 4;
+    public static final int VORTEX_EYE_MOVE_EVERY_N_TURNS = 1;
+
+    // BLIGHT_CORRUPTOR (spawn '*') — durable slow infected brute SOLDIER melee; grind it from range.
+    public static final int BLIGHT_CORRUPTOR_MAX_HEALTH         = 130;
+    public static final int BLIGHT_CORRUPTOR_ATTACK_DAMAGE      = 14;
+    public static final int BLIGHT_CORRUPTOR_MOVE_EVERY_N_TURNS = 2;
+
     // Global enemy AI knobs — perception and kiting tuning shared across types.
     /** Tiles within which an enemy notices the player and wakes. Range: 3–6. */
     public static final int ALERT_RADIUS_TILES        = 4;
@@ -171,6 +203,11 @@ public final class BalanceConfig {
     public static final int XP_REWARD_SHELL_BRUTE  = 18;
     public static final int XP_REWARD_PLAGUE_HULK  = 14;
     public static final int XP_REWARD_IRON_STALKER = 55;
+    public static final int XP_REWARD_GHOUL            = 8;
+    public static final int XP_REWARD_CRAWLER          = 7;
+    public static final int XP_REWARD_REVENANT         = 16;
+    public static final int XP_REWARD_VORTEX_EYE       = 9;
+    public static final int XP_REWARD_BLIGHT_CORRUPTOR = 18;
 
     // Per-kill credit rewards (the currency payout for each archetype).
     public static final int CREDIT_REWARD_GORE_BITER   = 5;
@@ -181,6 +218,11 @@ public final class BalanceConfig {
     public static final int CREDIT_REWARD_SHELL_BRUTE  = 12;
     public static final int CREDIT_REWARD_PLAGUE_HULK  = 8;
     public static final int CREDIT_REWARD_IRON_STALKER = 40;
+    public static final int CREDIT_REWARD_GHOUL            = 4;
+    public static final int CREDIT_REWARD_CRAWLER          = 4;
+    public static final int CREDIT_REWARD_REVENANT         = 11;
+    public static final int CREDIT_REWARD_VORTEX_EYE       = 5;
+    public static final int CREDIT_REWARD_BLIGHT_CORRUPTOR = 13;
 
     // =====================================================================================
     // SECTION 3 — DEPTH SCALING (how threat and reward grow per floor)
