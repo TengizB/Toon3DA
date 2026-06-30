@@ -55,6 +55,10 @@ public class PlasmaRifle extends Weapon {
                 barrelHitTarget.onExplosiveBarrelHit(targetColumn, targetRow);
                 return hitEnemy ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
+            if (isShotBlockingCover(targetCell)) {
+                // Column / solid prop is physical cover — the bolt cannot pierce through it.
+                return hitEnemy ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
+            }
             if (enemyHitTarget != null) {
                 Object enemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (enemy != null) {

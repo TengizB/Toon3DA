@@ -85,6 +85,9 @@ public class HudRenderer implements Renderable, Disposable {
     // Reusable mutable color for pulse calculations — never allocated inside render()
     private final Color temporaryColor = new Color();
 
+    // Static literal so the low-HP medkit reminder never allocates a String inside render().
+    private static final String MEDKIT_WARN_TEXT = "LOW HP! TAP HEAL TO USE MEDKIT";
+
     // -------------------------------------------------------------------------
     // Layout — derived from HudConstants
     // -------------------------------------------------------------------------
@@ -200,6 +203,11 @@ public class HudRenderer implements Renderable, Disposable {
         if (loadout != null) drawSlotStripText(loadout, isDead);
         if (!isDead) drawStatusIconsText();
         if (groundWeaponLabel != null && !isDead) drawGroundWeaponLabel(groundWeaponLabel);
+        // Low-HP medkit reminder: only when the player still holds a usable charge.
+        boolean medkitWarn = !isDead
+                && hudState.medicalCharges > 0
+                && player.getHealthFraction() <= HudConstants.HUD_MEDKIT_WARN_HP_THRESHOLD;
+        if (medkitWarn) drawMedkitWarning(pulse);
         batch.end();
     }
 
@@ -570,6 +578,22 @@ public class HudRenderer implements Renderable, Disposable {
         font.draw(batch, subLabel, centreX - glyphLayout.width / 2f,
                   HudConstants.WEAPON_NAME_LABEL_Y + glyphLayout.height);
 
+        font.getData().setScale(0.9f);
+    }
+
+    /**
+     * Flashing centred reminder shown when the player is at/below the low-HP threshold and still
+     * holds a usable medical charge. Pulses between danger-red and warning-yellow so it reads even
+     * over the busy 3D view, and points the player at the on-screen Heal button. Uses the shared
+     * glyphLayout / temporaryColor / stringBuilder-free literal so render() stays allocation-free.
+     */
+    private void drawMedkitWarning(float pulse) {
+        float centreX = 640f; // world centre — HUD gap spans X 420..860
+        font.getData().setScale(1.1f);
+        temporaryColor.set(HP_RED).lerp(WARN_YELLOW, pulse);
+        font.setColor(temporaryColor);
+        glyphLayout.setText(font, MEDKIT_WARN_TEXT);
+        font.draw(batch, MEDKIT_WARN_TEXT, centreX - glyphLayout.width / 2f, HudConstants.HUD_MEDKIT_WARN_Y);
         font.getData().setScale(0.9f);
     }
 

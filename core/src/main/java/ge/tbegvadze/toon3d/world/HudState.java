@@ -27,4 +27,11 @@ public class HudState {
 
     /** Reserve ammo in inventory for the equipped weapon's ammo type. -1 when not tracked. */
     public int     reserveAmmo    = -1;
+
+    /**
+     * Total stashed medical charges (stims + medkits) the player can still use. Drives the
+     * low-HP "use a medkit" reminder in HudRenderer: the warning only fires when this is > 0,
+     * so the player is never nagged to heal with an empty stash.
+     */
+    public int     medicalCharges = 0;
 }

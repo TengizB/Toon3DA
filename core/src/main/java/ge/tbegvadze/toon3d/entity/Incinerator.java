@@ -73,7 +73,7 @@ public class Incinerator extends Weapon {
      *   For each lateral offset in {-1, 0, +1}:
      *     Walk distanceTiles from 1..range along the facing + perpendicular axes.
      *     Skip tiles not in the cone shape (lateral +-1 are blocked at distanceTiles < 2).
-     *     Stop the ray at the first wall or closed door on this lateral ray.
+     *     Stop the ray at the first wall, closed door, column, or solid prop on this lateral ray.
      *     Apply FLAME_IMPACT_DAMAGE (or FLAME_FALLOFF at max depth) to each enemy hit.
      *     Detonate explosive barrels and stop the ray.
      *     Fire passes through enemies (no early return on enemy hit).
@@ -125,6 +125,10 @@ public class Incinerator extends Weapon {
                         && barrelHitTarget.isExplosiveBarrel(targetColumn, targetRow)) {
                     barrelHitTarget.onExplosiveBarrelHit(targetColumn, targetRow);
                     break; // barrel detonated; stop this lateral ray
+                }
+
+                if (isShotBlockingCover(targetCell)) {
+                    break; // column / solid prop blocks this lateral flame ray
                 }
 
                 if (enemyHitTarget != null) {

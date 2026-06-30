@@ -811,6 +811,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hudState.playerLevel    = playerProgress.getPlayerLevel();
         hudState.xpFraction     = playerProgress.getXpFraction();
         hudState.xpForNextLevel = playerProgress.getXpForNextLevel();
+        hudState.medicalCharges = inventory.getTotalMedicalCharges();
         Weapon hudWeapon = inventory.getEquippedWeapon();
         if (hudWeapon != null) {
             hudState.currentAmmo = hudWeapon.getShotsInClip();

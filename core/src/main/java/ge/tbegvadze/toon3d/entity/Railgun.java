@@ -130,6 +130,10 @@ public class Railgun extends Weapon {
                 barrelHitTarget.onExplosiveBarrelHit(targetColumn, targetRow);
                 return hitAnyEnemy ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
+            if (isShotBlockingCover(targetCell)) {
+                // Column / solid prop is physical cover — even the infinite-pierce slug stops here.
+                return hitAnyEnemy ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
+            }
             if (enemyHitTarget != null) {
                 Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (hitEnemy != null) {

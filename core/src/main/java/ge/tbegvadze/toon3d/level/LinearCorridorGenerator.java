@@ -1636,27 +1636,55 @@ public class LinearCorridorGenerator implements ILevelGenerator {
             }
         }
 
-        // Distribute the remaining roster under the per-room cap, falling back to any free room.
+        // Distribute the remaining roster by load-balancing across the side rooms instead of packing
+        // the deepest few up to the per-room cap (balance fix: the old deepest-first fill left most
+        // rooms empty while stuffing 2-3 rooms into a low-level death trap). Each enemy drops into the
+        // eligible room with the lowest depth-weighted load; along a spine the room index doubles as
+        // the depth, so deeper rooms (higher index) still trend denser.
+        boolean[] roomTilesExhausted = new boolean[rooms.size()];
         for (int rosterIndex = 0; rosterIndex < roster.size(); rosterIndex++) {
             if (rosterIndex == anchorIndexInRoster) continue;
             EnemyType enemy = roster.get(rosterIndex);
             float     cost  = plan.threatOf(enemy);
+            placeEnemyLoadBalanced(grid, rooms, roomOrder, enemy, cost, perRoomCap,
+                    roomSpentThreat, roomTilesExhausted, usedTiles, spawnPoints);
+        }
+    }
 
-            boolean placed = false;
-            for (int orderIndex = 0; orderIndex < roomOrder.length && !placed; orderIndex++) {
-                int roomIndex = roomOrder[orderIndex];
-                if (roomSpentThreat[roomIndex] + cost > perRoomCap) continue;
-                if (tryPlaceEnemyInRoom(grid, rooms.get(roomIndex), enemy, usedTiles, spawnPoints)) {
-                    roomSpentThreat[roomIndex] += cost;
-                    placed = true;
+    /**
+     * Places one enemy into the least-loaded eligible room, spreading the roster across the spine
+     * (balance fix: no empty rooms, no over-stuffed death-trap room). "Load" is a room's spent Threat
+     * Points divided by its depth weight (1 + room index, since later spine rooms are deeper), so
+     * deeper rooms absorb proportionally more while enemies still fan out. First pass honours the
+     * per-room cap; a second pass falls back to any room with a free tile so the budget is spent.
+     */
+    private void placeEnemyLoadBalanced(char[][] grid, List<Room> rooms, Integer[] roomOrder,
+                                        EnemyType enemy, float cost, float perRoomCap,
+                                        float[] roomSpentThreat, boolean[] roomTilesExhausted,
+                                        boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
+        for (int phase = 0; phase < 2; phase++) {
+            boolean capPhase = (phase == 0);
+            while (true) {
+                int   bestRoom  = -1;
+                float bestLoad  = Float.MAX_VALUE;
+                int   bestDepth = -1;
+                for (Integer roomIndex : roomOrder) {
+                    if (roomTilesExhausted[roomIndex]) continue;
+                    if (capPhase && roomSpentThreat[roomIndex] + cost > perRoomCap) continue;
+                    float weight = 1f + roomIndex;
+                    float load   = roomSpentThreat[roomIndex] / weight;
+                    if (load < bestLoad || (load == bestLoad && roomIndex > bestDepth)) {
+                        bestLoad  = load;
+                        bestDepth = roomIndex;
+                        bestRoom  = roomIndex;
+                    }
                 }
-            }
-            for (int orderIndex = 0; orderIndex < roomOrder.length && !placed; orderIndex++) {
-                int roomIndex = roomOrder[orderIndex];
-                if (tryPlaceEnemyInRoom(grid, rooms.get(roomIndex), enemy, usedTiles, spawnPoints)) {
-                    roomSpentThreat[roomIndex] += cost;
-                    placed = true;
+                if (bestRoom < 0) break;
+                if (tryPlaceEnemyInRoom(grid, rooms.get(bestRoom), enemy, usedTiles, spawnPoints)) {
+                    roomSpentThreat[bestRoom] += cost;
+                    return;
                 }
+                roomTilesExhausted[bestRoom] = true;
             }
         }
     }

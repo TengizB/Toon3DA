@@ -761,8 +761,14 @@ public final class BalanceConfig {
     /** No single enemy TYPE may consume more than this fraction of the floor budget (variety rule). Range: 0.30–0.55. */
     public static final float ENCOUNTER_MAX_SINGLE_TYPE_FRACTION = 0.40f;
 
-    /** No single (non-anchor) room may hold more than this fraction of the floor budget. Range: 0.25–0.45. */
-    public static final float ENCOUNTER_PER_ROOM_TP_FRACTION_CAP = 0.35f;
+    /**
+     * No single (non-anchor) room may hold more than this fraction of the floor budget. Lowered
+     * 0.35 -> 0.25 alongside the load-balanced room distribution (LevelGenerator /
+     * LinearCorridorGenerator placeEnemyLoadBalanced): with enemies now fanned out across the whole
+     * floor this is a safety ceiling that stops a single room from becoming an un-winnable pile-up
+     * for a low-level player, rather than the primary distribution driver. Range: 0.25–0.45.
+     */
+    public static final float ENCOUNTER_PER_ROOM_TP_FRACTION_CAP = 0.25f;
 
     /**
      * Stop adding fill enemies once spent TP reaches this fraction of the budget — leaves a
