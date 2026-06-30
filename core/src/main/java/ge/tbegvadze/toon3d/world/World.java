@@ -493,6 +493,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             GroundItem groundItem = new GroundItem(spawnPoint.tileColumn, spawnPoint.tileRow,
                                                    spawnPoint.weaponItemType, 1);
             Weapon baseWeapon = playerController.findWeaponInArsenalForType(spawnPoint.weaponItemType);
+            if (baseWeapon == null) {
+                // Melee weapons aren't in the ranged arsenal — build a transient instance to roll from.
+                baseWeapon = createMeleeWeaponForType(spawnPoint.weaponItemType);
+            }
             if (baseWeapon != null) {
                 groundItem.weaponRoll = weaponRoller.rollToSnapshot(baseWeapon, currentDepth);
             }
@@ -943,13 +947,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (standingOn == null || !groundItems.contains(standingOn)) return;
         if (touchInputState != null) touchInputState.resetAllButtonStates();
         Weapon arsenalWeapon = findWeaponForGroundItem(standingOn);
-        // Use the active ranged slot so that the ACTIVE column shows the ranged weapon
-        // rather than incomparable melee stats when melee is selected.
-        Weapon activeWeapon  = inventory.getLoadout().active();
+        boolean meleeGround  = arsenalWeapon instanceof MeleeWeapon;
+        // For a melee ground weapon compare against the held melee; otherwise use the active ranged
+        // slot so the ACTIVE column shows comparable stats rather than mismatched weapon classes.
+        Weapon activeWeapon  = meleeGround ? inventory.getMeleeWeapon() : inventory.getLoadout().active();
         int    convertAmount = computeConvertAmount(standingOn);
         weaponInspectOverlayRenderer.setFacilityTime(facilityTimeSeconds);
         weaponInspectOverlayRenderer.show(standingOn, standingOn.weaponRoll,
-                arsenalWeapon, activeWeapon, inventory.getLoadout(), isStartingRoom, convertAmount);
+                arsenalWeapon, activeWeapon, inventory.getLoadout(), isStartingRoom, convertAmount, meleeGround);
         runPhase = RunPhase.WEAPON_INSPECT;
     }
 
@@ -961,9 +966,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 return startRoomMeleeWeapons.get(meleeIndex);
             }
         }
-        return (playerController != null)
+        Weapon arsenalWeapon = (playerController != null)
                 ? playerController.findWeaponInArsenalForType(groundItem.stack.getType())
                 : null;
+        if (arsenalWeapon == null) {
+            // Melee weapons aren't kept in the ranged arsenal — build a transient instance so the
+            // inspect card can show accurate melee base stats.
+            arsenalWeapon = createMeleeWeaponForType(groundItem.stack.getType());
+        }
+        return arsenalWeapon;
     }
 
     private int computeConvertAmount(GroundItem groundItem) {
@@ -1009,8 +1020,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             }
         }
 
+        // Melee pickup — route to the dedicated melee (first) slot, never a gun slot. Melee weapons
+        // are not stored in the ranged arsenal, so this must be handled before the ranged path below
+        // (which would otherwise find nothing and silently drop the pickup).
+        ItemType groundType = standingOn.stack.getType();
+        if (isMeleeWeaponType(groundType)) {
+            resolveMeleeTake(standingOn, groundType);
+            closeWeaponInspect();
+            return;
+        }
+
         // Normal ranged pickup.
-        Weapon weapon = playerController.findWeaponInArsenalForType(standingOn.stack.getType());
+        Weapon weapon = playerController.findWeaponInArsenalForType(groundType);
         if (weapon == null) { closeWeaponInspect(); return; }
         WeaponRoll groundRoll = standingOn.weaponRoll;
         Loadout    loadout    = inventory.getLoadout();
@@ -1519,6 +1540,69 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (weapon instanceof CombatKnife)         return ItemType.WEAPON_KNIFE;
         if (weapon instanceof Fist)                return ItemType.WEAPON_FIST;
         return ItemType.WEAPON_PISTOL;
+    }
+
+    /** True when the ground item type is a melee weapon (belongs in the melee/first slot, never a gun slot). */
+    private static boolean isMeleeWeaponType(ItemType type) {
+        return type == ItemType.WEAPON_KNIFE
+            || type == ItemType.WEAPON_HAMMER
+            || type == ItemType.WEAPON_CHAINSAW;
+    }
+
+    /**
+     * Builds and configures a fresh melee weapon instance for the given item type, or returns null
+     * for non-melee types. Melee weapons are not kept in the ranged arsenal (the way guns are), so
+     * they are constructed on demand both for the inspect card's base stats and for actual pickup.
+     */
+    private MeleeWeapon createMeleeWeaponForType(ItemType type) {
+        MeleeWeapon melee;
+        if (type == ItemType.WEAPON_KNIFE)         melee = new CombatKnife();
+        else if (type == ItemType.WEAPON_HAMMER)   melee = new Hammer();
+        else if (type == ItemType.WEAPON_CHAINSAW) melee = new MeleeChainsaw();
+        else return null;
+        melee.setEventTextSystem(eventTextSystem);
+        melee.setPlayerAccuracyMultiplier(playerStats.getAccuracyMultiplier());
+        weaponRoller.configureRunStart(melee);
+        return melee;
+    }
+
+    /**
+     * Equips a melee ground weapon into the dedicated melee (first) slot — melee weapons can only ever
+     * go here, never into a gun slot. The previously held melee weapon (unless it is the default Fist)
+     * is dropped on the player's tile so the swap is reversible. Applies the ground roll, selects melee
+     * as the active weapon, and advances the world one turn.
+     */
+    private void resolveMeleeTake(GroundItem standingOn, ItemType groundType) {
+        MeleeWeapon newMelee = createMeleeWeaponForType(groundType);
+        if (newMelee == null) return;
+
+        WeaponRoll groundRoll = standingOn.weaponRoll;
+        if (groundRoll != null && groundRoll.tier != null) {
+            newMelee.configureRoll(groundRoll.weaponLevel, groundRoll.tier,
+                    groundRoll.abilities != null ? groundRoll.abilities : new AbilityInstance[0]);
+        }
+
+        // Drop the previous melee weapon (except the permanent Fist fallback) so the swap can be undone.
+        MeleeWeapon previousMelee = inventory.getMeleeWeapon();
+        if (previousMelee != null && !(previousMelee instanceof Fist)) {
+            int playerTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
+            int playerTileRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
+            GroundItem droppedItem = new GroundItem(playerTileColumn, playerTileRow,
+                    weaponClassToItemType(previousMelee), 1);
+            droppedItem.weaponRoll = WeaponRoll.fromWeapon(previousMelee);
+            spawnGroundItem(droppedItem);
+            if (eventTextSystem != null) eventTextSystem.spawn("DROPPED: " + previousMelee.getDisplayName());
+        }
+
+        inventory.setMeleeWeapon(newMelee);
+        inventory.selectMeleeActive();
+        weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
+        groundItems.remove(standingOn);
+        playerController.clearStandingOnWeapon();
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("MELEE: " + newMelee.getDisplayName(), EventTextSystem.COLOR_GREEN);
+        }
+        fireTurnTick();
     }
 
     /** Builds a snapshot map of ItemType → WeaponTier for all weapons currently in the arsenal. */

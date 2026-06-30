@@ -125,6 +125,9 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     // ── State (written by show()) ─────────────────────────────────────────────
     private boolean  visible        = false;
     private boolean  startRoomMode  = false;
+    // True when the inspected ground weapon is melee. Melee weapons live in the dedicated melee (first)
+    // slot, never a gun slot, so the card always shows a single EQUIP→MELEE button (never gun-slot SWAP rows).
+    private boolean  meleeMode      = false;
     private boolean  loadoutFull    = false;
     // True when the player already carries this weapon TYPE. Because the arsenal keeps one
     // instance per type, the only valid action is a VARIANT SWAP (replace the held roll), never
@@ -206,12 +209,14 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
      * @param loadoutRef    the player's current loadout
      * @param startRoom     true in the starting weapon selection room
      * @param convertAmount how many ammo units a CONVERT yields (0 = hide CONVERT)
+     * @param melee         true when the ground weapon is melee (forces the single EQUIP→MELEE button)
      */
     public void show(GroundItem groundItem, WeaponRoll groundRoll,
                      Weapon arsenalWeapon, Weapon activeWeapon,
-                     Loadout loadoutRef, boolean startRoom, int convertAmount) {
+                     Loadout loadoutRef, boolean startRoom, int convertAmount, boolean melee) {
         this.loadout       = loadoutRef;
         this.startRoomMode = startRoom;
+        this.meleeMode     = melee;
         this.visible       = true;
 
         WeaponTier tier = (groundRoll != null) ? groundRoll.tier : WeaponTier.COMMON;
@@ -247,13 +252,16 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
 
     /** True when the action zone shows a single full-width button rather than the SWAP slot rows. */
     private boolean singleButtonMode() {
-        return !loadoutFull || alreadyHeld;
+        // Melee always uses the single button: it targets the melee slot, never the gun slots, so the
+        // gun-slot SWAP rows (which would evict a gun) must never appear for a melee ground weapon.
+        return !loadoutFull || alreadyHeld || meleeMode;
     }
 
     /** Closes the card and clears all held references. */
     public void hide() {
         visible      = false;
         alreadyHeld  = false;
+        meleeMode    = false;
         loadout      = null;
         for (int lineIndex = 0; lineIndex < MAX_ABILITY_LINES; lineIndex++) {
             cachedAbilityLines[lineIndex]    = null;
@@ -612,10 +620,12 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         if (singleButtonMode()) {
             // Single full-width button: REPLACE when the type is already held, otherwise EQUIP.
             String actionLabel;
-            if (alreadyHeld) {
-                actionLabel = "SWAP  →  REPLACE HELD";
-            } else if (startRoomMode) {
+            if (startRoomMode) {
                 actionLabel = "CHOOSE THIS WEAPON";
+            } else if (meleeMode) {
+                actionLabel = "EQUIP  →  MELEE";
+            } else if (alreadyHeld) {
+                actionLabel = "SWAP  →  REPLACE HELD";
             } else {
                 actionLabel = "EQUIP  →  SLOT " + (freeSlotIndex + 1);
             }
