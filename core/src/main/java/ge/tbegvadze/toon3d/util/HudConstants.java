@@ -33,6 +33,12 @@ public final class HudConstants {
     // HUD animation
     public static final float HUD_PULSE_HZ                    = 4f;
     public static final float HUD_LOW_HP_THRESHOLD            = 0.25f;
+    // Medkit reminder: when HP is at/below this fraction AND the player still holds a medical
+    // charge, HudRenderer flashes a "USE MEDKIT" prompt centred in the HUD gap. Set slightly above
+    // the low-HP pulse threshold so the warning appears a little before the situation is critical.
+    public static final float HUD_MEDKIT_WARN_HP_THRESHOLD    = 0.40f;
+    // Baseline Y (world units) for the centred medkit-reminder text, just above the HUD chrome.
+    public static final float HUD_MEDKIT_WARN_Y               = HUD_HEIGHT + 70f;
 
     // Death overlay — full-screen incursion-terminated report
     public static final float DEATH_OVERLAY_PANEL_X        = 280f;

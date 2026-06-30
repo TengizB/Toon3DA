@@ -780,6 +780,11 @@ public abstract class Weapon implements WeaponProfile {
                 clearLastHit();
                 return hitAnyEnemy ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
+            // Columns and solid props are physical cover — even the lance cannot pierce them.
+            if (isShotBlockingCover(targetCell)) {
+                clearLastHit();
+                return hitAnyEnemy ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
+            }
             if (enemyHitTarget == null) continue;
 
             Object hitEnemyObject = enemyHitTarget.enemyAt(targetColumn, targetRow);
@@ -806,6 +811,18 @@ public abstract class Weapon implements WeaponProfile {
         return hitAnyEnemy
                 ? new FireResult(false, lastHitDistanceTiles)
                 : FireResult.MISSED;
+    }
+
+    /**
+     * True for solid terrain that physically stops a hitscan shot or projectile beyond a wall:
+     * solid props (barrels, crates, terminals, equipment) and sub-cell columns. Walls and closed
+     * doors are checked separately by each weapon BEFORE this call. Centralises the rule that a
+     * shot can never pass through a column or solid environment piece — explosive barrels are
+     * handled by the per-weapon barrel hook first, so by the time this runs a propSolid cell is
+     * an inert solid (radioactive barrel, crate, terminal, …) that simply blocks the shot.
+     */
+    protected static boolean isShotBlockingCover(char cell) {
+        return Level.isPropSolid(cell) || Level.isColumn(cell);
     }
 
     /** Returns true for melee weapons; false for all ranged weapons. */

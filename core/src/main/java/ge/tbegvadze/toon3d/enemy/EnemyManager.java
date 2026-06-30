@@ -675,8 +675,16 @@ public final class EnemyManager implements EnemyHitTarget {
         int rangeLimit = enemy.type.attackRangeTiles();
         boolean hasLOS = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
 
-        if (distanceToPlayer < EnemyConstants.RANGED_KITE_MIN_TILES) {
-            // Too close — flee first, then re-evaluate
+        // Melee-pin: once the player is cardinally adjacent (one tile away, in the player's own
+        // melee reach) the kiter can no longer simply back-pedal out of every swing — otherwise a
+        // melee build can NEVER connect with a ranged enemy in open space (the enemy flees on its
+        // turn every time the player steps in). When pinned it holds its ground and fires point-blank
+        // instead, so the player trades blows turn-for-turn: a fair, winnable melee duel.
+        boolean meleePinned = GameMath.manhattanDistanceTiles(
+                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
+
+        if (distanceToPlayer < EnemyConstants.RANGED_KITE_MIN_TILES && !meleePinned) {
+            // Too close (but not melee-pinned) — flee first, then re-evaluate
             stepAway(enemy, playerColumn, playerRow);
             hasLOS = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
             distanceToPlayer = GameMath.chebyshevDistanceTiles(
@@ -936,7 +944,8 @@ public final class EnemyManager implements EnemyHitTarget {
                     char cell = level.getCell(column, row);
                     return Level.isWall(cell)
                             || doorManager.blocksSight(column, row)
-                            || Level.isPropSolid(cell);
+                            || Level.isPropSolid(cell)
+                            || Level.isColumn(cell);
                 });
     }
 

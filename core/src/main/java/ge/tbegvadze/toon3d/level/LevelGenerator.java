@@ -2075,28 +2075,59 @@ public class LevelGenerator implements ILevelGenerator {
             }
         }
 
-        // --- Distribute the remaining roster under the per-room cap.
+        // --- Distribute the remaining roster, load-balancing across rooms instead of packing the
+        // deepest few. The old algorithm filled deepest-first up to the per-room cap, so on a typical
+        // floor only the 2-3 deepest rooms held every enemy (a death-trap for a low-level player)
+        // while the rest stayed empty (the player struggled to find a fight). We now drop each enemy
+        // into the eligible room with the LOWEST depth-weighted load, so enemies fan out across the
+        // whole floor; deeper rooms still end up denser because their weight lets them absorb more.
+        boolean[] roomTilesExhausted = new boolean[rooms.size()];
         for (int rosterIndex = 0; rosterIndex < roster.size(); rosterIndex++) {
             if (rosterIndex == anchorIndexInRoster) continue; // already placed
             EnemyType enemy = roster.get(rosterIndex);
             float cost = plan.threatOf(enemy);
+            placeEnemyLoadBalanced(grid, rooms, roomOrder, roomDepths, enemy, cost, perRoomCap,
+                    roomSpentThreat, roomTilesExhausted, usedTiles, spawnPoints);
+        }
+    }
 
-            boolean placed = false;
-            for (int roomOrderIndex = 0; roomOrderIndex < roomOrder.length && !placed; roomOrderIndex++) {
-                int roomIndex = roomOrder[roomOrderIndex];
-                if (roomSpentThreat[roomIndex] + cost > perRoomCap) continue;
-                if (tryPlaceEnemyInRoom(grid, rooms.get(roomIndex), enemy, usedTiles, spawnPoints)) {
-                    roomSpentThreat[roomIndex] += cost;
-                    placed = true;
+    /**
+     * Places one enemy into the least-loaded eligible room, spreading the roster across the whole
+     * floor (balance fix: no empty rooms, no over-stuffed death-trap room). "Load" is the room's
+     * spent Threat Points divided by its depth weight (1 + room depth), so deeper rooms tolerate
+     * proportionally more before they look full — preserving the deeper-is-harder gradient while
+     * still fanning enemies out. Two passes: first only rooms under the per-room cap, then (if the
+     * cap blocked every room) any room with a free tile so the budget is still spent.
+     */
+    private void placeEnemyLoadBalanced(char[][] grid, List<Room> rooms, Integer[] roomOrder,
+                                        int[] roomDepths, EnemyType enemy, float cost, float perRoomCap,
+                                        float[] roomSpentThreat, boolean[] roomTilesExhausted,
+                                        boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
+        for (int phase = 0; phase < 2; phase++) {
+            boolean capPhase = (phase == 0);
+            while (true) {
+                int   bestRoom  = -1;
+                float bestLoad  = Float.MAX_VALUE;
+                int   bestDepth = -1;
+                for (Integer roomIndex : roomOrder) {
+                    if (roomTilesExhausted[roomIndex]) continue;
+                    if (capPhase && roomSpentThreat[roomIndex] + cost > perRoomCap) continue;
+                    float weight = 1f + roomDepths[roomIndex];
+                    float load   = roomSpentThreat[roomIndex] / weight;
+                    if (load < bestLoad
+                            || (load == bestLoad && roomDepths[roomIndex] > bestDepth)) {
+                        bestLoad  = load;
+                        bestDepth = roomDepths[roomIndex];
+                        bestRoom  = roomIndex;
+                    }
                 }
-            }
-            // Cap-blocked everywhere — place in any room with a free tile so budget is spent.
-            for (int roomOrderIndex = 0; roomOrderIndex < roomOrder.length && !placed; roomOrderIndex++) {
-                int roomIndex = roomOrder[roomOrderIndex];
-                if (tryPlaceEnemyInRoom(grid, rooms.get(roomIndex), enemy, usedTiles, spawnPoints)) {
-                    roomSpentThreat[roomIndex] += cost;
-                    placed = true;
+                if (bestRoom < 0) break; // no eligible room this phase
+                if (tryPlaceEnemyInRoom(grid, rooms.get(bestRoom), enemy, usedTiles, spawnPoints)) {
+                    roomSpentThreat[bestRoom] += cost;
+                    return;
                 }
+                // Chosen room had no free tile after a bounded search — exclude it and retry.
+                roomTilesExhausted[bestRoom] = true;
             }
         }
     }

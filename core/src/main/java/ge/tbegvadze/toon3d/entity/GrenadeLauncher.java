@@ -61,7 +61,7 @@ public class GrenadeLauncher extends Weapon {
      * Algorithm:
      *   Start at (playerTileColumn, playerTileRow); advance step-by-step.
      *   At each step, peek the next tile before moving:
-     *     - If next tile is blocked (wall or closed door):
+     *     - If next tile is blocked (wall, closed door, column, or a non-barrel solid prop):
      *         If armed (traveledTiles >= GRENADE_ARM_TILES) and not yet bounced:
      *           Try a 90-degree CW turn. If the turned next tile is open, redirect and continue.
      *           Otherwise detonate at current position.
@@ -88,7 +88,13 @@ public class GrenadeLauncher extends Weapon {
             int  nextRow    = currentRow    + directionRow;
             char nextCell   = level.getCell(nextColumn, nextRow);
 
+            // Explosive barrels stay passable so the grenade lands on them and chain-detonates;
+            // every other column / solid prop is physical cover that stops the grenade.
+            boolean nextIsBarrel = barrelHitTarget != null
+                    && barrelHitTarget.isExplosiveBarrel(nextColumn, nextRow);
             boolean nextBlocked = Level.isWall(nextCell)
+                    || Level.isColumn(nextCell)
+                    || (Level.isPropSolid(nextCell) && !nextIsBarrel)
                     || (Level.isDoor(nextCell)
                         && doorBlocksQuery != null
                         && doorBlocksQuery.blocksShotAt(nextColumn, nextRow));
@@ -101,7 +107,11 @@ public class GrenadeLauncher extends Weapon {
                     int bouncedNextColumn      = currentColumn + bouncedDirectionColumn;
                     int bouncedNextRow         = currentRow    + bouncedDirectionRow;
                     char bouncedCell = level.getCell(bouncedNextColumn, bouncedNextRow);
+                    boolean bouncedIsBarrel = barrelHitTarget != null
+                            && barrelHitTarget.isExplosiveBarrel(bouncedNextColumn, bouncedNextRow);
                     if (!Level.isWall(bouncedCell)
+                            && !Level.isColumn(bouncedCell)
+                            && !(Level.isPropSolid(bouncedCell) && !bouncedIsBarrel)
                             && !(Level.isDoor(bouncedCell)
                                  && doorBlocksQuery != null
                                  && doorBlocksQuery.blocksShotAt(bouncedNextColumn, bouncedNextRow))) {
@@ -114,7 +124,7 @@ public class GrenadeLauncher extends Weapon {
                     }
                 }
                 // Cannot bounce (unarmed, already bounced, or bounce also blocked): detonate here.
-                applyPlusSplash(currentColumn, currentRow, level, enemyHitTarget);
+                applyPlusSplash(currentColumn, currentRow, level, enemyHitTarget, barrelHitTarget);
                 return new FireResult(true, traveledTiles);
             }
 
@@ -126,7 +136,7 @@ public class GrenadeLauncher extends Weapon {
             if (barrelHitTarget != null
                     && barrelHitTarget.isExplosiveBarrel(currentColumn, currentRow)) {
                 barrelHitTarget.onExplosiveBarrelHit(currentColumn, currentRow);
-                applyPlusSplash(currentColumn, currentRow, level, enemyHitTarget);
+                applyPlusSplash(currentColumn, currentRow, level, enemyHitTarget, barrelHitTarget);
                 return new FireResult(true, traveledTiles);
             }
 
@@ -134,14 +144,14 @@ public class GrenadeLauncher extends Weapon {
             if (traveledTiles >= WeaponConstants.GRENADE_ARM_TILES && enemyHitTarget != null) {
                 Object hitEnemy = enemyHitTarget.enemyAt(currentColumn, currentRow);
                 if (hitEnemy != null) {
-                    applyPlusSplash(currentColumn, currentRow, level, enemyHitTarget);
+                    applyPlusSplash(currentColumn, currentRow, level, enemyHitTarget, barrelHitTarget);
                     return new FireResult(true, traveledTiles);
                 }
             }
         }
 
         // Air-burst: grenade reached maximum range without hitting anything.
-        applyPlusSplash(currentColumn, currentRow, level, enemyHitTarget);
+        applyPlusSplash(currentColumn, currentRow, level, enemyHitTarget, barrelHitTarget);
         return new FireResult(true, range);
     }
 
@@ -151,17 +161,24 @@ public class GrenadeLauncher extends Weapon {
      * Iterates the 5-tile plus using WeaponConstants.GRENADE_SPLASH_OFFSETS:
      *   index 0: {0,0}  — impact tile    → GRENADE_SPLASH_DAMAGE
      *   index 1–4: {±1,0},{0,±1} — neighbours → GRENADE_FALLOFF_DAMAGE
-     * Wall tiles in the splash are skipped (blasts do not penetrate walls).
+     * Wall, column and (non-barrel) solid-prop tiles in the splash are skipped — solid cover
+     * absorbs the blast. Explosive barrels are NOT treated as cover here: the tile that holds the
+     * grenade impact is detonated by the caller, and a barrel merely caught in the plus carries no
+     * enemy, so letting it fall through is a no-op that keeps this consistent with the march loop.
      * No new int[] allocations — offsets are read directly from the constant table.
      */
     private void applyPlusSplash(int impactColumn, int impactRow,
-                                  Level level, EnemyHitTarget enemyHitTarget) {
+                                  Level level, EnemyHitTarget enemyHitTarget,
+                                  BarrelHitTarget barrelHitTarget) {
         for (int offsetIndex = 0; offsetIndex < WeaponConstants.GRENADE_SPLASH_OFFSETS.length; offsetIndex++) {
             int splashColumn = impactColumn + WeaponConstants.GRENADE_SPLASH_OFFSETS[offsetIndex][0];
             int splashRow    = impactRow    + WeaponConstants.GRENADE_SPLASH_OFFSETS[offsetIndex][1];
             char splashCell  = level.getCell(splashColumn, splashRow);
-            if (Level.isWall(splashCell)) {
-                continue; // walls absorb the blast; no damage beyond them
+            boolean splashIsBarrel = barrelHitTarget != null
+                    && barrelHitTarget.isExplosiveBarrel(splashColumn, splashRow);
+            if (Level.isWall(splashCell) || Level.isColumn(splashCell)
+                    || (Level.isPropSolid(splashCell) && !splashIsBarrel)) {
+                continue; // walls, columns and (non-barrel) solid props absorb the blast
             }
             if (enemyHitTarget != null) {
                 Object splashEnemy = enemyHitTarget.enemyAt(splashColumn, splashRow);

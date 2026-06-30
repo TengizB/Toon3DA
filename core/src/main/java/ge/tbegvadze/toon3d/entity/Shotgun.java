@@ -57,6 +57,9 @@ public class Shotgun extends Weapon {
                 barrelHitTarget.onExplosiveBarrelHit(targetColumn, targetRow);
                 return FireResult.HIT_WALL;
             }
+            if (isShotBlockingCover(targetCell)) {
+                return FireResult.HIT_WALL; // column / solid prop blocks the shot
+            }
             if (enemyHitTarget != null) {
                 Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (hitEnemy != null) {
