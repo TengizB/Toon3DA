@@ -3,6 +3,29 @@ PROCEDURAL VITALS HUD — Implementation Reference
 Package: ge.tbegvadze.toon3d.hud
 Status:  IMPLEMENTED (branch claude/procedural-vitals-hud-5IQfh)
 
+LEFT-HUD REWORK (current)
+-------------------------
+The HUD is now a single LEFT panel anchored to the bottom-left corner
+(x 0..420, y 0..206) — the old centre/right strip panels are gone. It is a
+vertical stack of four "vital rows" (HP, AR, AMMO, XP), each one:
+  [2-letter label]  [smooth gradient bar]  [right-aligned value]
+Label sits LEFT of the bar and value sits RIGHT of the bar, so text is never
+drawn on top of a bar — bars and numbers cannot overlap. Below the bars are a
+numbered weapon-slot strip (weapon names are auto-truncated to their slot
+width, so they can never overflow) and a thin status-effect icon row in its own
+clear band.
+
+Bars are drawn as smooth per-vertex ShapeRenderer gradients (no chunky
+segments), with a top-to-bottom gloss. The HP bar is a true GREEN→RED gradient:
+a faint full-width red→green "scale" track with a bright filled slice on top,
+so health reads by both length and hue (green = healthy, red = critical). The HP
+number is tinted by the same red→yellow→green ramp.
+
+All text is drawn at scale >= 0.9 (never shrunk) with a dark drop-shadow behind
+every glyph for legibility over the busy 3D view. Layout/scale/colour values
+live in HudConstants.java (HUD_BAR_*, HUD_*_BAR_Y, HUD_SLOT_*, HUD_*_SCALE).
+The notes below describe the earlier 3-panel design and are kept for history.
+
 
 OVERVIEW
 --------
