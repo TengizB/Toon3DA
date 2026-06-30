@@ -87,6 +87,10 @@ public class PropRenderer implements Renderable, Disposable {
     private final WallRenderer            wallRenderer;
     private final List<PropPlacement>     propPlacements;
     private final Map<Character, Texture> textures;
+    // Animated hazard frames — fire ('i') and toxic ('q') cycle through these instead of using a
+    // single static entry in {@link #textures}. Built once at construction, disposed in dispose().
+    private final Texture[]               hazardFireFrames;
+    private final Texture[]               hazardToxicFrames;
     // Per-weapon ground billboard textures — keyed by ItemType, built once at startup.
     private final Map<ItemType, Texture>  weaponPickupTextures;
     private final Texture                 genericWeaponFallbackTexture;
@@ -146,6 +150,50 @@ public class PropRenderer implements Renderable, Disposable {
         this.genericWeaponFallbackTexture = generateWeaponPickupTexture();
         this.weaponPickupGlowTexture      = generateGlowTexture();
         this.creditChipTextures           = buildCreditChipTextures();
+        this.hazardFireFrames             = buildHazardFireFrames();
+        this.hazardToxicFrames            = buildHazardToxicFrames();
+    }
+
+    private static Texture[] buildHazardFireFrames() {
+        Texture[] frames = new Texture[HAZARD_ANIMATION_FRAME_COUNT];
+        for (int frameIndex = 0; frameIndex < frames.length; frameIndex++) {
+            frames[frameIndex] = generateHazardFireFrame(frameIndex, frames.length);
+        }
+        return frames;
+    }
+
+    private static Texture[] buildHazardToxicFrames() {
+        Texture[] frames = new Texture[HAZARD_ANIMATION_FRAME_COUNT];
+        for (int frameIndex = 0; frameIndex < frames.length; frameIndex++) {
+            frames[frameIndex] = generateHazardToxicFrame(frameIndex, frames.length);
+        }
+        return frames;
+    }
+
+    /**
+     * Resolves the texture to draw for a prop tile. Animated hazards ('i' fire, 'q' toxic) return
+     * the current cycling frame (with a per-tile phase offset); every other prop returns its single
+     * static texture. Returns null when the char has no texture.
+     */
+    private Texture resolvePropTexture(char propChar, int tileColumn, int tileRow) {
+        if (propChar == 'i') {
+            return hazardFireFrames[hazardFrameIndex(tileColumn, tileRow, hazardFireFrames.length)];
+        }
+        if (propChar == 'q') {
+            return hazardToxicFrames[hazardFrameIndex(tileColumn, tileRow, hazardToxicFrames.length)];
+        }
+        return textures.get(propChar);
+    }
+
+    /**
+     * Frame index for an animated hazard tile at the current animation time. A per-tile phase
+     * offset (from the tile coordinates) desynchronises neighbouring tiles so a field of fire does
+     * not pulse in lockstep. Uses {@link Math#floorMod} so the result is always in [0, frameCount).
+     */
+    private int hazardFrameIndex(int tileColumn, int tileRow, int frameCount) {
+        int phaseOffset = tileColumn * 5 + tileRow * 11;
+        int baseFrame   = (int) (lightingTimeSeconds * HAZARD_ANIMATION_FPS);
+        return Math.floorMod(baseFrame + phaseOffset, frameCount);
     }
 
     /** Replaces the ground item list; called by World after each level build. */
@@ -274,7 +322,7 @@ public class PropRenderer implements Renderable, Disposable {
             float         depth     = sortedDepths[sortedPosition];
             PropPlacement prop      = propPlacements.get(propIndex);
 
-            Texture texture = textures.get(prop.propChar);
+            Texture texture = resolvePropTexture(prop.propChar, prop.tileColumn, prop.tileRow);
             if (texture == null) continue;
 
             float tileOffsetX = (prop.worldCenterX - playerWorldX) / CELL_SIZE;
@@ -287,8 +335,14 @@ public class PropRenderer implements Renderable, Disposable {
             float heightMultiplier   = propHeightMultiplier(prop.propChar);
             float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
             float spriteScreenHeight = fullWallLineHeight * heightMultiplier;
-            float aspectRatio        = (float) texture.getWidth() / texture.getHeight();
-            float spriteScreenWidth  = spriteScreenHeight * aspectRatio;
+            float spriteScreenWidth;
+            if (Level.isHazardDecal(prop.propChar)) {
+                // Hazards span the full tile footprint, decoupled from the source texture aspect.
+                spriteScreenWidth = fullWallLineHeight * HAZARD_CELL_WIDTH_FILL;
+            } else {
+                float aspectRatio = (float) texture.getWidth() / texture.getHeight();
+                spriteScreenWidth = spriteScreenHeight * aspectRatio;
+            }
 
             int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / 2f);
             int rightScreenColumn = (int)(screenCenterColumn + spriteScreenWidth / 2f);
@@ -657,7 +711,7 @@ public class PropRenderer implements Renderable, Disposable {
             if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES) continue;
             if (depth > MAX_PROP_DRAW_DISTANCE_TILES)      continue;
 
-            Texture texture = textures.get(prop.propChar);
+            Texture texture = resolvePropTexture(prop.propChar, prop.tileColumn, prop.tileRow);
             if (texture == null) continue;
 
             float screenCenterColumn = GameMath.spriteScreenColumnCenter(
@@ -667,8 +721,14 @@ public class PropRenderer implements Renderable, Disposable {
             float heightMultiplier   = propHeightMultiplier(prop.propChar);
             float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
             float spriteScreenHeight = fullWallLineHeight * heightMultiplier;
-            float aspectRatio        = (float) texture.getWidth() / texture.getHeight();
-            float spriteScreenWidth  = spriteScreenHeight * aspectRatio;
+            float spriteScreenWidth;
+            if (Level.isHazardDecal(prop.propChar)) {
+                // Hazards span the full tile footprint, decoupled from the source texture aspect.
+                spriteScreenWidth = fullWallLineHeight * HAZARD_CELL_WIDTH_FILL;
+            } else {
+                float aspectRatio = (float) texture.getWidth() / texture.getHeight();
+                spriteScreenWidth = spriteScreenHeight * aspectRatio;
+            }
 
             int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / 2f);
             int rightScreenColumn = (int)(screenCenterColumn + spriteScreenWidth / 2f);
@@ -752,6 +812,12 @@ public class PropRenderer implements Renderable, Disposable {
         for (Texture texture : textures.values()) {
             disposeProp(texture);
         }
+        for (Texture frame : hazardFireFrames) {
+            disposeProp(frame);
+        }
+        for (Texture frame : hazardToxicFrames) {
+            disposeProp(frame);
+        }
     }
 
     // Disposes a prop texture and drops its opacity mask so the static COLUMN_OPACITY
@@ -820,8 +886,8 @@ public class PropRenderer implements Renderable, Disposable {
         map.put('W', generateHoloWorkstationTexture());
         map.put('J', generateAiCoreNodeTexture());
         map.put('e', generateEnergyScorchTexture());
-        map.put('i', generateHazardFireTexture());   // fire hazard floor tile
-        map.put('q', generateHazardToxicTexture());  // toxic hazard pool
+        // 'i' (fire) and 'q' (toxic) are NOT static entries — they are animated and resolved
+        // per-frame from hazardFireFrames / hazardToxicFrames via resolvePropTexture().
         return map;
     }
 
@@ -3004,82 +3070,202 @@ public class PropRenderer implements Renderable, Disposable {
         return finalize(pixmap);
     }
 
-    // Fire hazard ('i') — a flat licking flame patch: dark scorched base, orange body,
-    // yellow-white hot core, and a few upward flame tongues so it reads as fire in the 3D view.
-    private static Texture generateHazardFireTexture() {
-        Pixmap pixmap = new Pixmap(80, 80, Pixmap.Format.RGBA8888);
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Animated terrain hazards — fire ('i') and toxic ('q').
+    //
+    // Both are authored as a short loop of procedurally-generated frames (built once at
+    // construction, cycled by PropRenderer at HAZARD_ANIMATION_FPS). Each frame is high
+    // resolution and authored to span the full tile footprint when billboarded.
+    //
+    // Pixmap convention: row 0 = top edge, so the tile floor is the LAST row (height-1) and
+    // anything that rises (flames, gas) moves toward row 0.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Fire frame canvas — wider than tall so a full-width bed of spiky tongues fits.
+    private static final int HAZARD_FIRE_FRAME_WIDTH  = 128;
+    private static final int HAZARD_FIRE_FRAME_HEIGHT = 112;
+    // Toxic frame canvas — wide and shallow so the gas cloud reads as a low hanging billow.
+    private static final int HAZARD_TOXIC_FRAME_WIDTH  = 160;
+    private static final int HAZARD_TOXIC_FRAME_HEIGHT = 96;
+
+    // Fire hazard ('i') — one animation frame. A full-width glowing ember bed topped by many
+    // sharply-tapered (spiky) flame tongues that lick upward, plus drifting embers. Tongue
+    // heights and sway are driven by the frame phase so the loop reads as living, flickering fire.
+    private static Texture generateHazardFireFrame(int frameIndex, int frameCount) {
+        int width  = HAZARD_FIRE_FRAME_WIDTH;
+        int height = HAZARD_FIRE_FRAME_HEIGHT;
+        Pixmap pixmap = new Pixmap(width, height, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        java.util.Random random = new java.util.Random(0xF12EB1A2EL);
-        int centerX = 40;
-        int centerY = 44;
+        java.util.Random random = new java.util.Random(0xF12EB1A2EL + frameIndex * 0x9E3779B9L);
+        int   floorY = height - 1;
+        float phase  = frameIndex / (float) frameCount * MathUtils.PI2;
 
-        // Charred base ring under the flames.
-        organicBlob(pixmap, random, centerX, centerY, 26, 18, 0.10f, 0.05f, 0.03f, 0.85f);
-        // Deep red body.
-        organicBlob(pixmap, random, centerX, centerY, 21, 16, 0.75f, 0.18f, 0.05f, 1f);
-        // Orange mid.
-        organicBlob(pixmap, random, centerX, centerY, 15, 13, 0.97f, 0.45f, 0.08f, 1f);
-        // Yellow-white hot core.
-        organicBlob(pixmap, random, centerX, centerY, 8, 8, 1.0f, 0.85f, 0.30f, 1f);
-
-        // Upward flame tongues — tapering vertical licks above the body.
-        for (int tongueIndex = 0; tongueIndex < 7; tongueIndex++) {
-            int baseX = centerX - 16 + random.nextInt(33);
-            int height = 14 + random.nextInt(18);
-            for (int step = 0; step < height; step++) {
-                float fraction = step / (float) height;
-                int drawY = centerY - step;                      // pixmap row 0 = top, so flames go up
-                int wobble = Math.round((random.nextFloat() - 0.5f) * 4f * fraction);
-                int drawX = baseX + wobble;
-                // Colour shifts orange→yellow→transparent toward the tip.
-                float tipR = 1.0f;
-                float tipG = 0.45f + 0.45f * fraction;
-                float tipB = 0.08f + 0.25f * fraction;
-                float tipA = 1.0f - fraction * 0.85f;
-                pixmap.setColor(tipR, tipG, tipB, tipA);
-                pixmap.drawPixel(drawX, drawY);
-                if (fraction < 0.6f) pixmap.drawPixel(drawX + 1, drawY);
+        // Glowing ember bed across the full width — hottest (yellow-white) at the floor, fading to
+        // deep red as it rises, with a wavy animated top edge.
+        int bedHeight = 30;
+        for (int column = 0; column < width; column++) {
+            float wave = MathUtils.sin(phase + column * 0.20f) * 3f
+                       + MathUtils.sin(phase * 1.7f + column * 0.07f) * 2f;
+            int bedTop = floorY - bedHeight - Math.round(wave);
+            for (int row = floorY; row >= bedTop && row >= 0; row--) {
+                float fraction = (floorY - row) / (float) Math.max(1, floorY - bedTop);
+                float red   = 1f;
+                float green = 0.62f - 0.48f * fraction;
+                float blue  = 0.14f * (1f - fraction);
+                float alpha = 1f - fraction * 0.45f;
+                pixmap.setColor(red, green, blue, alpha);
+                pixmap.drawPixel(column, row);
             }
         }
-        // Bright embers flickering off the core.
-        pixmap.setColor(1.0f, 0.92f, 0.55f, 1f);
-        for (int emberIndex = 0; emberIndex < 6; emberIndex++) {
-            pixmap.drawPixel(centerX - 6 + random.nextInt(13), centerY - 8 + random.nextInt(13));
+
+        // Primary tongues — one per evenly-spaced slot so flames cover the whole tile width.
+        int tongueCount = 13;
+        for (int tongueIndex = 0; tongueIndex < tongueCount; tongueIndex++) {
+            float slot      = (tongueIndex + 0.5f) / tongueCount;
+            int   baseX     = Math.round(slot * width
+                              + (random.nextFloat() - 0.5f) * (width / (float) tongueCount));
+            float seed      = tongueIndex * 1.3f;
+            // Animated height: rises and falls with the frame phase; a mild centre bell keeps the
+            // middle of the fire taller than the edges for a natural flame silhouette.
+            float pulse     = 0.5f + 0.5f * MathUtils.sin(phase + seed);
+            float bell      = 0.70f + 0.30f * MathUtils.sin(slot * MathUtils.PI);
+            int   tongueHeight   = Math.round(height * (0.40f + 0.48f * pulse) * bell);
+            float baseHalfWidth  = width / (float) tongueCount * (0.55f + random.nextFloat() * 0.35f);
+            float swayAmplitude  = 6f + random.nextFloat() * 6f;
+            drawFlameTongue(pixmap, baseX, floorY, tongueHeight, baseHalfWidth, swayAmplitude,
+                            phase + seed);
+        }
+
+        // Secondary spikes — thin tall licks scattered on top for extra spikiness.
+        for (int spikeIndex = 0; spikeIndex < 8; spikeIndex++) {
+            int   baseX        = random.nextInt(width);
+            float pulse        = 0.5f + 0.5f * MathUtils.sin(phase * 1.3f + spikeIndex);
+            int   tongueHeight = Math.round(height * (0.55f + 0.40f * pulse));
+            drawFlameTongue(pixmap, baseX, floorY, tongueHeight, 3f + random.nextFloat() * 2f,
+                            9f, phase + spikeIndex);
+        }
+
+        // Drifting embers rising off the fire.
+        for (int emberIndex = 0; emberIndex < 16; emberIndex++) {
+            float emberFraction = random.nextFloat();
+            int   emberX = random.nextInt(width);
+            int   emberY = floorY - Math.round((0.20f + 0.75f * emberFraction) * height)
+                           - Math.round(MathUtils.sin(phase + emberIndex) * 4f);
+            if (emberY < 0 || emberY >= height) continue;
+            pixmap.setColor(1f, 0.85f + 0.10f * random.nextFloat(), 0.40f, 1f - emberFraction);
+            pixmap.drawPixel(emberX, emberY);
         }
         return finalize(pixmap);
     }
 
-    // Toxic hazard ('q') — a flat acid pool: dark sludge rim, sickly green body, bright
-    // acid-green highlights, and a scatter of bubbles so it reads as a corrosive puddle.
-    private static Texture generateHazardToxicTexture() {
-        Pixmap pixmap = new Pixmap(80, 80, Pixmap.Format.RGBA8888);
+    // Draws a single spiky flame tongue rising from (baseX, floorY). The tongue tapers sharply to a
+    // point (spiky) and sways sideways more toward the tip; colour runs white-yellow hot at the
+    // base through orange to deep red at the fading tip.
+    private static void drawFlameTongue(Pixmap pixmap, int baseX, int floorY, int tongueHeight,
+                                        float baseHalfWidth, float swayAmplitude, float swayPhase) {
+        if (tongueHeight <= 0) return;
+        for (int step = 0; step <= tongueHeight; step++) {
+            float fraction = step / (float) tongueHeight;          // 0 at base, 1 at the tip
+            int   drawY    = floorY - step;                        // rise toward the top of the image
+            if (drawY < 0) break;
+            // Sharp power-law taper collapses the width fast near the tip → a pointed, spiky flame.
+            float taper      = (float) Math.pow(1f - fraction, 1.6f);
+            int   halfPixels = Math.max(0, Math.round(baseHalfWidth * taper));
+            float sway       = swayAmplitude * fraction * MathUtils.sin(swayPhase + fraction * 3.1f);
+            int   centerX    = Math.round(baseX + sway);
+            float red, green, blue;
+            if (fraction < 0.45f) {
+                float localFraction = fraction / 0.45f;            // white-yellow → orange
+                red   = 1f;
+                green = 0.95f - 0.35f * localFraction;
+                blue  = 0.55f - 0.45f * localFraction;
+            } else {
+                float localFraction = (fraction - 0.45f) / 0.55f;  // orange → deep red
+                red   = 1f - 0.15f * localFraction;
+                green = 0.60f - 0.50f * localFraction;
+                blue  = 0.10f * (1f - localFraction);
+            }
+            float alpha = 1f - fraction * fraction * 0.70f;         // soft fade toward the tip
+            pixmap.setColor(red, green, blue, alpha);
+            pixmap.fillRectangle(centerX - halfPixels, drawY, halfPixels * 2 + 1, 1);
+            // Brighter inner core on the lower half of the tongue.
+            if (fraction < 0.60f && halfPixels > 1) {
+                int coreHalf = halfPixels / 2;
+                pixmap.setColor(1f, 0.98f, 0.78f, alpha);
+                pixmap.fillRectangle(centerX - coreHalf, drawY, coreHalf * 2 + 1, 1);
+            }
+        }
+    }
+
+    // Toxic hazard ('q') — one animation frame. A billowing, full-width gas cloud built from many
+    // overlapping soft puffs (denser near the floor, wispier up top), brighter acid-green
+    // highlights, and rising bubbles. Puff positions drift with the frame phase so the cloud rolls.
+    private static Texture generateHazardToxicFrame(int frameIndex, int frameCount) {
+        int width  = HAZARD_TOXIC_FRAME_WIDTH;
+        int height = HAZARD_TOXIC_FRAME_HEIGHT;
+        Pixmap pixmap = new Pixmap(width, height, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
-        java.util.Random random = new java.util.Random(0x70C1CAC1DL);
-        int centerX = 40;
-        int centerY = 40;
+        java.util.Random random = new java.util.Random(0x70C1CAC1DL + frameIndex * 0x9E3779B9L);
+        int   floorY = height - 1;
+        float phase  = frameIndex / (float) frameCount * MathUtils.PI2;
 
-        // Dark sludge rim.
-        organicBlob(pixmap, random, centerX, centerY, 28, 20, 0.08f, 0.14f, 0.05f, 0.85f);
-        // Murky green body.
-        organicBlob(pixmap, random, centerX, centerY, 22, 17, 0.20f, 0.45f, 0.10f, 1f);
-        // Sickly bright acid green.
-        organicBlob(pixmap, random, centerX, centerY, 14, 13, 0.40f, 0.78f, 0.12f, 1f);
-        // Hot acid highlight.
-        organicBlob(pixmap, random, centerX, centerY, 7, 7, 0.65f, 0.95f, 0.25f, 1f);
+        // Main body — many large soft puffs, biased toward the floor so the cloud is densest low
+        // and thins out as it billows upward.
+        int puffCount = 44;
+        for (int puffIndex = 0; puffIndex < puffCount; puffIndex++) {
+            float slotX      = random.nextFloat();
+            float heightBias = random.nextFloat() * random.nextFloat();   // skewed toward 0 → low
+            float drift      = MathUtils.sin(phase + slotX * MathUtils.PI2) * 6f;
+            float bob        = MathUtils.sin(phase * 1.3f + puffIndex) * 3f;
+            int   centerX    = Math.round(slotX * width + drift);
+            int   centerY    = floorY - Math.round(heightBias * height + bob);
+            int   radius     = 10 + random.nextInt(16);
+            float red        = 0.20f + 0.16f * random.nextFloat();
+            float green      = 0.52f + 0.30f * random.nextFloat();
+            float blue       = 0.08f + 0.10f * random.nextFloat();
+            float coreAlpha  = 0.18f + 0.16f * random.nextFloat();
+            softPuff(pixmap, centerX, centerY, radius, red, green, blue, coreAlpha);
+        }
 
-        // Bubbles — small ringed circles dotted across the pool.
-        for (int bubbleIndex = 0; bubbleIndex < 9; bubbleIndex++) {
-            int bubbleX = centerX - 18 + random.nextInt(37);
-            int bubbleY = centerY - 18 + random.nextInt(37);
+        // Bright acid-green highlight puffs — smaller, near the dense lower mass.
+        for (int highlightIndex = 0; highlightIndex < 16; highlightIndex++) {
+            float slotX   = random.nextFloat();
+            float drift   = MathUtils.sin(phase + slotX * MathUtils.PI2) * 5f;
+            int   centerX = Math.round(slotX * width + drift);
+            int   centerY = floorY - Math.round(random.nextFloat() * height * 0.55f);
+            int   radius  = 5 + random.nextInt(8);
+            softPuff(pixmap, centerX, centerY, radius, 0.52f, 0.92f, 0.26f, 0.22f);
+        }
+
+        // Rising bubbles — small bright ringed dots drifting up through the cloud.
+        for (int bubbleIndex = 0; bubbleIndex < 11; bubbleIndex++) {
+            int bubbleX = random.nextInt(width);
+            int bubbleY = floorY - Math.round(random.nextFloat() * height * 0.7f)
+                          - Math.round(MathUtils.sin(phase + bubbleIndex) * 4f);
+            if (bubbleY < 0 || bubbleY >= height) continue;
             int bubbleRadius = 1 + random.nextInt(3);
-            pixmap.setColor(0.75f, 1.0f, 0.40f, 0.9f);
+            pixmap.setColor(0.80f, 1.0f, 0.45f, 0.85f);
             pixmap.drawCircle(bubbleX, bubbleY, bubbleRadius);
-            pixmap.setColor(0.90f, 1.0f, 0.60f, 1f);
+            pixmap.setColor(0.92f, 1.0f, 0.60f, 1f);
             pixmap.drawPixel(bubbleX, bubbleY);
         }
         return finalize(pixmap);
+    }
+
+    // Draws a soft round gas puff: concentric filled discs from the outer radius inward, each with a
+    // quadratic alpha falloff. Relies on the Pixmap's default SourceOver blending so the overlaps
+    // accumulate into a dense core with a feathered, cloudy edge.
+    private static void softPuff(Pixmap pixmap, int centerX, int centerY, int radius,
+                                 float red, float green, float blue, float coreAlpha) {
+        for (int ring = radius; ring >= 1; ring--) {
+            float edgeFraction = ring / (float) radius;            // 1 at the edge → 0 at the centre
+            float alpha        = coreAlpha * (1f - edgeFraction) * (1f - edgeFraction);
+            if (alpha <= 0.003f) continue;
+            pixmap.setColor(red, green, blue, alpha);
+            pixmap.fillCircle(centerX, centerY, ring);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

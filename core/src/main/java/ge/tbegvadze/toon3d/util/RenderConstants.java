@@ -100,10 +100,23 @@ public final class RenderConstants {
     public static final float PROP_HEIGHT_HOLO_WORKSTATION     = 0.70f; // 'W' holo-workstation
     public static final float PROP_HEIGHT_AICORE_NODE          = 0.95f; // 'J' AI core node
     public static final float PROP_HEIGHT_ENERGY_SCORCH        = 0.18f; // 'e' energy scorch decal
-    // Terrain hazards (idea 4, Pillar 3) — flat floor decals like blood/scorch. Fire stands a
-    // touch taller than toxic so flames read as licking up off the floor in the 3D view.
-    public static final float PROP_HEIGHT_HAZARD_FIRE          = 0.30f; // 'i' fire hazard tile
-    public static final float PROP_HEIGHT_HAZARD_TOXIC         = 0.16f; // 'q' toxic hazard pool
+    // Terrain hazards (idea 4, Pillar 3) — animated volumetric effects, NOT flat decals. Both
+    // fill the full tile footprint (see HAZARD_CELL_WIDTH_FILL) instead of a small centred patch.
+    // Fire stands tall so spiky flames lick up toward the ceiling; the toxic cloud billows to a
+    // medium height so it reads as a hanging gas cloud rather than a puddle.
+    public static final float PROP_HEIGHT_HAZARD_FIRE          = 0.92f; // 'i' fire hazard tile
+    public static final float PROP_HEIGHT_HAZARD_TOXIC         = 0.60f; // 'q' toxic hazard pool
+
+    // Hazards are billboarded at this fraction of a full wall stripe's on-screen width so the
+    // effect spans the whole cell footprint (1.0 = exactly one tile wide), decoupled from the
+    // source texture's aspect ratio.
+    public static final float HAZARD_CELL_WIDTH_FILL           = 1.0f;
+
+    // Animated hazard sprites: each hazard cycles through this many procedurally-generated frames
+    // at this rate. A per-tile phase offset (derived from tile coordinates) keeps neighbouring
+    // tiles from flickering in lockstep.
+    public static final int   HAZARD_ANIMATION_FRAME_COUNT     = 8;
+    public static final float HAZARD_ANIMATION_FPS             = 12f;
 
     // -------------------------------------------------------------------------
     // NEW WALL TYPES — procedural textures ('N','Q','S','M','Z','U','X')
