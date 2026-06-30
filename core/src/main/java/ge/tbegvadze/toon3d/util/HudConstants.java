@@ -5,31 +5,52 @@ public final class HudConstants {
 
     private HudConstants() {}
 
-    // HUD geometry — left panel anchored to bottom-left, y 0..HUD_HEIGHT.
-    // Panel height increased from 168 to 206 to fit the weapon slot strip below the XP bar.
+    // =====================================================================
+    // Left vitals panel — anchored to the bottom-left corner (x 0..WIDTH, y 0..HEIGHT).
+    // A vertical stack of "vital rows": each row is [label] [gradient bar] [value] where the
+    // label sits to the LEFT of the bar and the value to the RIGHT — text is never drawn on top
+    // of a bar, so bars and numbers can never overlap. Bars are smooth per-vertex gradients
+    // (no chunky segments) so they read crisply at any device resolution. Below the bars sit the
+    // numbered weapon-slot strip and a thin status-effect icon row.
+    // =====================================================================
     public static final float HUD_HEIGHT                      = 206f;
     public static final float HUD_LEFT_PANEL_WIDTH            = 420f;
-    public static final float HUD_PANEL_GUTTER                = 4f;
     public static final float HUD_PANEL_INSET                 = 6f;
     public static final float HUD_RIVET_RADIUS                = 2.5f;
     public static final float HUD_LED_RADIUS                  = 3f;
-    public static final float HUD_PANEL_ALPHA                 = 0.82f;
-    // Full-width bar layout: [label x=10] [bar x=36..374] [number x=380]
-    public static final float HUD_BAR_LABEL_X                 = 10f;
-    public static final float HUD_BAR_START_X                 = 36f;
-    public static final float HUD_BAR_FULL_WIDTH              = 338f;
-    public static final float HUD_BAR_NUMBER_X                = 380f;
-    public static final float HUD_BAR_HEIGHT                  = 18f;
-    public static final int   HUD_BAR_SEGMENT_COUNT           = 20;
-    public static final float HUD_BAR_SEGMENT_GAP             = 2f;
-    public static final float HUD_BAR_LERP_RATE               = 3.5f;
-    // Bar Y positions (bottom edge); bars span y: barY .. barY+HUD_BAR_HEIGHT
-    // All bars shifted up by 38 vs the previous layout to make room for the weapon slot strip.
-    public static final float HUD_HP_BAR_Y                    = 166f;
-    public static final float HUD_AR_BAR_Y                    = 128f;
-    public static final float HUD_CLIP_BAR_Y                  = 90f;
-    // XP bar — gold/amber segmented bar showing progress toward next player level
-    public static final float HUD_XP_BAR_Y                    = 52f;
+    // Slightly more opaque than the old 0.82 so text reads cleanly over the busy 3D view.
+    public static final float HUD_PANEL_ALPHA                 = 0.88f;
+
+    // Vital row columns (panel-local X)
+    public static final float HUD_ROW_LABEL_X                 = 14f;    // left-aligned 2-letter label
+    public static final float HUD_BAR_X                       = 56f;    // gradient bar left edge
+    public static final float HUD_BAR_WIDTH                   = 232f;   // gradient bar width (ends at x=288)
+    public static final float HUD_BAR_HEIGHT                  = 20f;
+    public static final float HUD_VALUE_RIGHT_X               = 406f;   // right edge for right-aligned value text
+    public static final float HUD_BAR_LERP_RATE              = 3.5f;    // bar fill glide speed (fraction units/sec)
+
+    // Vital row bar Y (bottom edge); bars span y: barY .. barY + HUD_BAR_HEIGHT. Row pitch = 28px.
+    public static final float HUD_HP_BAR_Y                    = 172f;
+    public static final float HUD_AR_BAR_Y                    = 144f;
+    public static final float HUD_CLIP_BAR_Y                  = 116f;
+    public static final float HUD_XP_BAR_Y                    = 88f;
+
+    // Weapon-slot strip — numbered slots with active highlight, below the XP row
+    public static final float HUD_SLOT_STRIP_Y                = 42f;
+    public static final float HUD_SLOT_STRIP_HEIGHT           = 38f;
+    public static final float HUD_SLOT_SIDE_PADDING           = 14f;
+    public static final float HUD_SLOT_GAP                    = 6f;
+
+    // Text scales — the default BitmapFont is 15px; we never shrink the hero numbers below ~0.9 so
+    // glyphs stay legible, and every glyph gets a dark drop-shadow for contrast.
+    public static final float HUD_LABEL_SCALE                 = 0.95f;
+    public static final float HUD_VALUE_SCALE                 = 1.05f;
+    public static final float HUD_HP_VALUE_SCALE              = 1.20f;
+    public static final float HUD_CLIP_VALUE_SCALE            = 0.90f;
+    public static final float HUD_SLOT_NUMBER_SCALE           = 0.80f;
+    public static final float HUD_SLOT_NAME_SCALE             = 0.78f;
+    public static final float HUD_TEXT_SHADOW_OFFSET          = 1.5f;
+
     // HUD animation
     public static final float HUD_PULSE_HZ                    = 4f;
     public static final float HUD_LOW_HP_THRESHOLD            = 0.25f;
@@ -64,11 +85,12 @@ public final class HudConstants {
     // Horizontal gap between right-edge of value text and "NEW BEST" tag
     public static final float DEATH_OVERLAY_NEWBEST_GAP            = 18f;
 
-    // Status icon row — small procedural icons at the bottom-left of the left panel
-    public static final float HUD_STATUS_ICON_SIZE      = 14f;
-    public static final float HUD_STATUS_ICON_GAP       = 4f;
-    public static final float HUD_STATUS_ROW_LOCAL_X    = 24f;
-    public static final float HUD_STATUS_ROW_LOCAL_Y    = 4f;
+    // Status-effect icon row — small procedural squares along the bottom of the left panel,
+    // in the clear band beneath the weapon-slot strip (no overlap with the slots).
+    public static final float HUD_STATUS_ICON_SIZE      = 16f;
+    public static final float HUD_STATUS_ICON_GAP       = 5f;
+    public static final float HUD_STATUS_ROW_LOCAL_X    = 16f;
+    public static final float HUD_STATUS_ROW_LOCAL_Y    = 14f;
 
     // Legacy weapon inspect constants — kept for compilation; renderer will be replaced
     public static final float WEAPON_INSPECT_CARD_WIDTH      = 640f;
