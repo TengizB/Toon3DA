@@ -66,6 +66,11 @@ public final class HazardManager {
     private final byte[][] hazardType;
     private final short[][] remainingTurns;
     private final char[][] savedUnderChar;
+    // True once a tile's fire has burned out. Spread can never re-ignite a burned-out tile, which is
+    // what stops a dense fire from sustaining itself forever (cleared tiles being relit by their still-
+    // burning neighbours). A tile becomes eligible again only via a DELIBERATE ignition (barrel blast,
+    // enemy death, level seed) — ignite() clears the flag when it places fresh fire there.
+    private final boolean[][] fireBurnedOut;
 
     // Per-turn snapshot of active tiles (rebuilt each tick; spread/decay read this, never the live
     // arrays, so chain ignitions added mid-tick are not re-processed in the same turn).
@@ -89,6 +94,7 @@ public final class HazardManager {
         this.hazardType            = new byte[gridHeight][gridWidth];
         this.remainingTurns        = new short[gridHeight][gridWidth];
         this.savedUnderChar        = new char[gridHeight][gridWidth];
+        this.fireBurnedOut         = new boolean[gridHeight][gridWidth];
         int capacity               = Math.max(1, gridWidth * gridHeight);
         this.snapshotColumns       = new int[capacity];
         this.snapshotRows          = new int[capacity];
@@ -231,6 +237,9 @@ public final class HazardManager {
                     explosiveBarrelManager.onExplosiveBarrelHit(neighborColumn, neighborRow);
                     break;
                 }
+                // Fire never spreads back onto a tile that has already burned out — that mutual
+                // re-ignition between neighbours is what made a dense fire immortal. Toxic is unaffected.
+                if (type == FIRE && fireBurnedOut[neighborRow][neighborColumn]) continue;
                 if (hazardType[neighborRow][neighborColumn] == NONE
                         && Level.isHazardSpreadable(neighborCell)) {
                     ignite(neighborColumn, neighborRow, type,
@@ -274,6 +283,9 @@ public final class HazardManager {
         hazardType[tileRow][tileColumn]     = type;
         remainingTurns[tileRow][tileColumn] = (short) lifetimeTurns;
         savedUnderChar[tileRow][tileColumn] = cell;
+        // Fresh fire clears the burned-out mark so this tile burns normally again. Spread is gated
+        // upstream (spreadPhase), so reaching here for fire means a deliberate ignition was allowed.
+        if (type == FIRE) fireBurnedOut[tileRow][tileColumn] = false;
         char hazardChar = (type == FIRE) ? FIRE_CHAR : TOXIC_CHAR;
         level.setCell(tileColumn, tileRow, hazardChar);
         if (visualListener != null) {
@@ -286,6 +298,9 @@ public final class HazardManager {
         if (type == NONE) return;
         hazardType[tileRow][tileColumn]     = NONE;
         remainingTurns[tileRow][tileColumn] = 0;
+        // A fire that burns out can't be relit by spread (only by a deliberate ignition). This is the
+        // hard stop that makes fire die within a few turns instead of self-sustaining across the level.
+        if (type == FIRE) fireBurnedOut[tileRow][tileColumn] = true;
         char hazardChar = (type == FIRE) ? FIRE_CHAR : TOXIC_CHAR;
         // Only restore the saved floor tile if the cell still shows our decal; if something else
         // (a corpse/ammo drop) overwrote it, leave that in place.

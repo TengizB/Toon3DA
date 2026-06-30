@@ -796,7 +796,7 @@ public final class BalanceConfig {
     // =====================================================================================
 
     /** Turns a fire tile burns before dying out (each turn it tries to spread). Range: 2–6. */
-    public static final int   HAZARD_FIRE_LIFETIME_TURNS   = 4;
+    public static final int   HAZARD_FIRE_LIFETIME_TURNS   = 3;
     /** Turns a toxic pool lingers before dissipating. Range: 3–8. */
     public static final int   HAZARD_TOXIC_LIFETIME_TURNS  = 6;
 
@@ -812,8 +812,14 @@ public final class BalanceConfig {
      */
     public static final int   HAZARD_TOXIC_POISON_TURNS    = 3;
 
-    /** Per-turn chance a fire tile spreads to ONE eligible cardinal-neighbour floor/stain tile. Range: 0.1–0.6. */
-    public static final float HAZARD_FIRE_SPREAD_CHANCE    = 0.35f;
+    /**
+     * Per-turn chance a fire tile spreads to ONE eligible cardinal-neighbour floor/stain tile. Range: 0.1–0.6.
+     * Kept sub-critical: lifetime (3) × spread (0.18) = 0.54 < 1, so the expected number of new tiles each
+     * fire spawns over its life is below one. That guarantees the blaze shrinks instead of growing — combined
+     * with the "burned-out tile can't be re-ignited by spread" rule in HazardManager, a fire sweeps a small
+     * patch and then dies out within a few turns rather than engulfing the whole level.
+     */
+    public static final float HAZARD_FIRE_SPREAD_CHANCE    = 0.18f;
     /** Per-turn chance a toxic pool creeps to ONE eligible neighbour (low — pools are area denial). Range: 0.0–0.25. */
     public static final float HAZARD_TOXIC_SPREAD_CHANCE   = 0.10f;
 
