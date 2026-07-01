@@ -528,9 +528,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         for (int tileColumn = 0; tileColumn < targetLevel.getWidth(); tileColumn++) {
             for (int tileRow = 0; tileRow < targetLevel.getHeight(); tileRow++) {
                 char cell = targetLevel.getCell(tileColumn, tileRow);
-                if (!Level.isWall(cell) && !Level.isPropSolid(cell) && !Level.isStairsDown(cell)) {
-                    walkableTiles.add(new int[]{tileColumn, tileRow});
-                }
+                if (Level.isWall(cell) || Level.isPropSolid(cell) || Level.isStairsDown(cell)) continue;
+                // Never stack a credit chip onto another grid-encoded pickup (keycard, medical,
+                // armour, ammo) or onto a weapon ground item already seeded into items.
+                if (Level.isKeycardPickup(cell) || Level.isMedicalPickup(cell)
+                        || Level.isArmourPickup(cell) || Level.isAmmoPickup(cell)) continue;
+                if (isOccupiedByGroundItem(items, tileColumn, tileRow)) continue;
+                walkableTiles.add(new int[]{tileColumn, tileRow});
             }
         }
 
@@ -561,6 +565,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             }
             items.add(new GroundItem(tile[0], tile[1], chipType, Math.max(1, chipAmount)));
         }
+    }
+
+    /** True if any ground item (e.g. a weapon spawn) already occupies this tile. */
+    private boolean isOccupiedByGroundItem(java.util.List<GroundItem> items, int tileColumn, int tileRow) {
+        for (int itemIndex = 0; itemIndex < items.size(); itemIndex++) {
+            GroundItem item = items.get(itemIndex);
+            if (item.tileColumn == tileColumn && item.tileRow == tileRow) return true;
+        }
+        return false;
     }
 
     // -------------------------------------------------------------------------
@@ -825,7 +838,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hudState.playerLevel    = playerProgress.getPlayerLevel();
         hudState.xpFraction     = playerProgress.getXpFraction();
         hudState.xpForNextLevel = playerProgress.getXpForNextLevel();
-        hudState.medicalCharges = inventory.getTotalMedicalCharges();
+        hudState.medicalCharges = itemInventory.countOf(ItemType.MEDKIT_SMALL) + itemInventory.countOf(ItemType.MEDKIT_LARGE);
         Weapon hudWeapon = inventory.getEquippedWeapon();
         if (hudWeapon != null) {
             hudState.currentAmmo = hudWeapon.getShotsInClip();

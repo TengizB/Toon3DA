@@ -9,8 +9,6 @@ public final class ItemConstants {
     // Balance values (heal amounts) live in BalanceConfig — see SINGLE SOURCE OF TRUTH.
     public static final int   MEDKIT_STIM_HEAL                = BalanceConfig.MEDKIT_STIM_HEAL;
     public static final int   MEDKIT_FULL_HEAL                = BalanceConfig.MEDKIT_FULL_HEAL;
-    public static final int   MEDKIT_TOTAL_CARRY_CAP          = 6;
-    public static final int   MEDKIT_FULL_CARRY_CAP           = 3;
     public static final float PLAYER_HEAL_DURATION            = 0.18f;
     public static final float MEDKIT_STIM_SPRITE_HEIGHT       = 0.20f;
     public static final float MEDKIT_FULL_SPRITE_HEIGHT       = 0.30f;

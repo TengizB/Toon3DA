@@ -68,6 +68,20 @@ public class Incinerator extends Weapon {
     @Override public ItemType getItemType() { return ItemType.WEAPON_INCINERATOR; }
 
     /**
+     * The cone is a short-range area spray, not an aimed shot — it always connects.
+     * Overriding this to true makes Weapon.fire() skip the single upstream rollHitChance()
+     * gate entirely (see Weapon.fire()'s "!isPerPelletAccuracy() && !rollHitChance()" check),
+     * so marchShot() always runs and every reachable cone tile is always bathed in fire,
+     * immune to weapon-level scaling or any player accuracy debuff. Unlike Chaingun (which
+     * also overrides this to true), the Incinerator does not roll per-pellet internally —
+     * there is no roll at all, guaranteeing literal 100% accuracy.
+     */
+    @Override
+    protected boolean isPerPelletAccuracy() {
+        return true;
+    }
+
+    /**
      * Wires the sink that ignites floor tiles in the cone (HazardManager.igniteFire).
      * World re-wires this whenever the per-floor HazardManager is rebuilt. Passing null
      * disables tile ignition (used in tests / no-World construction).
