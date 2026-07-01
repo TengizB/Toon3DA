@@ -952,10 +952,31 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      */
     private void closeInventory(boolean spendTurn) {
         runPhase = RunPhase.PLAYING;
-        if (spendTurn && tickEventBus != null) {
-            int playerTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
-            int playerTileRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
-            tickEventBus.fireTick(playerTileColumn, playerTileRow, player, TickCause.SKIP_TURN);
+        if (spendTurn) {
+            applyInventoryConsumableEffect();
+            if (tickEventBus != null) {
+                int playerTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
+                int playerTileRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
+                tickEventBus.fireTick(playerTileColumn, playerTileRow, player, TickCause.SKIP_TURN);
+            }
+        }
+    }
+
+    private void applyInventoryConsumableEffect() {
+        if (inventoryOverlayRenderer == null) return;
+        ItemType consumed = inventoryOverlayRenderer.getLastConsumedItemType();
+        if (consumed == null) return;
+        int healAmount = 0;
+        if (consumed == ItemType.MEDKIT_SMALL) {
+            healAmount = ItemConstants.MEDKIT_STIM_HEAL;
+        } else if (consumed == ItemType.MEDKIT_LARGE) {
+            healAmount = ItemConstants.MEDKIT_FULL_HEAL;
+        }
+        if (healAmount > 0) {
+            player.applyHealing(healAmount);
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("+" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
+            }
         }
     }
 

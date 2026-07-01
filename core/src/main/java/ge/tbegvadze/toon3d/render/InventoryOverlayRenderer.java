@@ -12,6 +12,7 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.PlayerInventory;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.item.Inventory;
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.ItemConstants;
@@ -105,6 +106,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     private int             currentDepth        = 1;
     private PlayerInventory playerInventory     = null;
     private PlayerStats     playerStats         = null;
+    private ItemType        lastConsumedItemType = null;
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -166,6 +168,11 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         this.currentDepth = depth;
     }
 
+    /** Returns the ItemType last consumed via the inventory overlay, or null if none. */
+    public ItemType getLastConsumedItemType() {
+        return lastConsumedItemType;
+    }
+
     // -------------------------------------------------------------------------
     // Input
     // -------------------------------------------------------------------------
@@ -203,6 +210,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                 }
                 if (windowAction == CloseAction.CLOSE_FREE
                         || windowAction == CloseAction.CLOSE_WITH_TURN) {
+                    lastConsumedItemType = itemWindow.getLastConsumedType();
                     itemWindow.close();
                     return windowAction;
                 }

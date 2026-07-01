@@ -151,6 +151,7 @@ final class ItemWindow implements Disposable {
     private float             flashTimerSeconds  = 0f;
     private AbilityInstance[] cachedAbilities    = NO_ABILITY_INSTANCES;
     private String[]          cachedShortHints   = NO_SHORT_HINTS;
+    private ItemType          lastConsumedType   = null;
 
     // Weapon-mode state: set by openWeapon(), cleared by close(). Mutually exclusive with slotIndex >= 0.
     private Weapon  currentWeapon   = null;
@@ -180,6 +181,7 @@ final class ItemWindow implements Disposable {
         this.slotIndex         = slotIndex;
         this.flashMessage      = null;
         this.flashTimerSeconds = 0f;
+        this.lastConsumedType  = null;
         ItemStack slot = inventory.getSlot(slotIndex);
         if (!slot.isEmpty() && slot.getType().getCategory() == ItemCategory.WEAPON) {
             WeaponAbility[] signatureAbilities = slot.getType().getSignatureAbilities();
@@ -197,12 +199,13 @@ final class ItemWindow implements Disposable {
     }
 
     void openWeapon(Weapon weapon, boolean isActive) {
-        this.currentWeapon   = weapon;
-        this.weaponIsActive  = isActive;
-        this.slotIndex       = -1;
-        this.inventory       = null;
-        this.flashMessage    = null;
+        this.currentWeapon    = weapon;
+        this.weaponIsActive   = isActive;
+        this.slotIndex        = -1;
+        this.inventory        = null;
+        this.flashMessage     = null;
         this.flashTimerSeconds = 0f;
+        this.lastConsumedType = null;
         if (weapon != null) {
             int abilityCount = weapon.getAbilityCount();
             cachedAbilities  = new AbilityInstance[abilityCount];
@@ -223,12 +226,17 @@ final class ItemWindow implements Disposable {
     }
 
     void close() {
-        slotIndex        = -1;
-        inventory        = null;
-        cachedAbilities  = NO_ABILITY_INSTANCES;
-        cachedShortHints = NO_SHORT_HINTS;
-        currentWeapon    = null;
-        weaponIsActive   = false;
+        slotIndex         = -1;
+        inventory         = null;
+        cachedAbilities   = NO_ABILITY_INSTANCES;
+        cachedShortHints  = NO_SHORT_HINTS;
+        currentWeapon     = null;
+        weaponIsActive    = false;
+        lastConsumedType  = null;
+    }
+
+    ItemType getLastConsumedType() {
+        return lastConsumedType;
     }
 
     boolean containsPoint(float worldX, float worldY) {
@@ -318,6 +326,7 @@ final class ItemWindow implements Disposable {
             return InventoryOverlayRenderer.CloseAction.CLOSE_WINDOW;
         }
         if (category == ItemCategory.CONSUMABLE) {
+            lastConsumedType = slot.getType();
             inventory.use(slotIndex);
             return InventoryOverlayRenderer.CloseAction.CLOSE_WITH_TURN;
         }
