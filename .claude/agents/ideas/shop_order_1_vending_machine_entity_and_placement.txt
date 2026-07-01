@@ -1,6 +1,27 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Shop 1 — UAC Fabricator Vending Machine: Entity, Placement & Interaction
+
+IMPLEMENTATION NOTES (shop_order_1 done):
+  - shop/VendingMachine.java — stationary entity (tile, facing, anim clock, depleted flag).
+  - Placement in World.seedVendingMachines(): 1-2 machines per non-boss/non-staging floor
+    (guaranteed presence; SHOP_SECOND_MACHINE_CHANCE for the 2nd), seeded off the floor seed.
+    Eligible tile = plain floor, wall-mounted (>=1 orthogonal wall), reachable (>=1 open
+    neighbor), not enemy/weapon-spawn/start occupied, and a local 8-connectivity articulation
+    check prevents corridor softlocks. A 2nd machine is spread >= SHOP_TWO_MACHINE_MIN_SPACING.
+  - Solid + rendered via the EXISTING '@' UAC vendor prop (isPropSolid blocks player+enemies;
+    PropRenderer draws it as a dynamic prop; LevelRenderer shows it on the minimap). This is the
+    PREFERRED no-new-symbol path — the dedicated animated sprite is shop_order_6's job.
+  - Interaction: contextual USE_MACHINE touch button (TouchAction/TouchInputState/
+    TouchControllerRenderer + TouchConstants) shown only when the player faces a machine;
+    PlayerController routes the tap to World.openShop via setShopOpenCallback.
+  - Turn-pause: new World RunPhase.SHOP_OPEN — opening/closing spends NO turn, enemies frozen,
+    player tile/facing unchanged (matches inventory pause). render/ShopOverlayRenderer.java is a
+    PLACEHOLDER modal (frame + header + live credits + CLOSE) that shop_order_5 fleshes out with
+    the card grid; credits read from PlayerStats.getCredits() (that is where the wallet lives in
+    this codebase, not PlayerProgress).
+  - Constants: GameBalance (SHOP_MIN/MAX_PER_FLOOR, SHOP_SECOND_MACHINE_CHANCE,
+    SHOP_TWO_MACHINE_MIN_SPACING), TouchConstants (USE_BUTTON_*), HudConstants (SHOP_OVERLAY_*).
 ---
 
 READ ORDER

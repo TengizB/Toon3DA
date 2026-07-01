@@ -564,6 +564,52 @@ public final class GameBalance {
     public static final int   CREDIT_CHIPS_PER_FLOOR_MIN  = BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MIN;
     public static final int   CREDIT_CHIPS_PER_FLOOR_MAX  = BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MAX;
 
+    // =========================================================================
+    // SHOP — UAC Fabricator vending machine placement (shop_order_1)
+    // Every non-boss floor gets 1 or 2 machines (guaranteed presence, not a chance),
+    // so credits always have a sink. Stock/pricing/effects are shop parts 2-4.
+    // =========================================================================
+    public static final int   SHOP_MIN_PER_FLOOR            = 1;
+    public static final int   SHOP_MAX_PER_FLOOR            = 2;
+    /** Probability a floor rolls the SECOND machine (a two-shop floor is a small treat). */
+    public static final float SHOP_SECOND_MACHINE_CHANCE    = 0.40f;
+    /** When two machines are placed, keep them at least this many tiles apart (Manhattan). */
+    public static final int   SHOP_TWO_MACHINE_MIN_SPACING  = 8;
+
+    // ── Shop stock roll (shop_order_2) — how many entries and which categories ────────────────
+    /** Each machine stocks a fixed 4-6 offers, rolled once at floor generation. */
+    public static final int   SHOP_ENTRY_MIN                 = 4;
+    public static final int   SHOP_ENTRY_MAX                 = 6;
+    // Weighted category pool for the "remainder" slots (after the guaranteed supply + upgrade slot).
+    public static final int   SHOP_CAT_WEIGHT_WEAPON_LEVELUP = 26;
+    public static final int   SHOP_CAT_WEIGHT_AMMO           = 24;
+    public static final int   SHOP_CAT_WEIGHT_MEDKIT         = 18;
+    public static final int   SHOP_CAT_WEIGHT_ABILITY        = 16;
+    public static final int   SHOP_CAT_WEIGHT_TIER_UPGRADE   = 16;
+    /** Two-shop floors: lean one machine toward upgrades and the other toward supplies. */
+    public static final boolean SHOP_TWO_MACHINE_BIAS        = true;
+    /** Weight multiplier applied to the favoured category group when a machine is biased. */
+    public static final float SHOP_BIAS_WEIGHT_MULTIPLIER    = 2.0f;
+
+    // ── Shop pricing (shop_order_2) — price = round(base * depthFactor * rarityFactor) ────────
+    /** Depth price scaling: +10% per floor beyond the first (mirrors credit depth scaling). */
+    public static final float SHOP_DEPTH_PRICE_SCALE         = 0.10f;
+    public static final float SHOP_RARITY_PRICE_MULT_COMMON  = 1.0f;
+    public static final float SHOP_RARITY_PRICE_MULT_RARE    = 1.6f;
+    public static final float SHOP_RARITY_PRICE_MULT_EPIC    = 2.4f;
+    /** Optional escalating surcharge for repeat level-ups of the same weapon (deferred; see part 2). */
+    public static final float SHOP_REPEAT_LEVELUP_SURCHARGE  = 0.35f;
+    // Base prices (Credits) per offer variant — the category value floor before depth/rarity scaling.
+    public static final int   SHOP_BASE_PRICE_MEDKIT_STIM     = 35;
+    public static final int   SHOP_BASE_PRICE_MEDKIT_FIELD    = 80;
+    public static final int   SHOP_BASE_PRICE_AMMO_SMALL      = 40;
+    public static final int   SHOP_BASE_PRICE_AMMO_LARGE      = 90;
+    public static final int   SHOP_BASE_PRICE_WEAPON_LEVELUP  = 110;
+    public static final int   SHOP_BASE_PRICE_PLAYER_ABILITY  = 150;
+    public static final int   SHOP_BASE_PRICE_TIER_UPGRADE    = 240;
+    /** Ammo "large box" multiplier over the standard box size (price already reflected in base). */
+    public static final int   SHOP_AMMO_LARGE_BOX_MULTIPLIER  = 2;
+
     // ── Credit Fang (ON_KILL, universal) ─────────────────────────────────────
     /** Credits awarded at level 1 for each Credit Fang kill. */
     public static final float CREDIT_FANG_BASE               = 2f;

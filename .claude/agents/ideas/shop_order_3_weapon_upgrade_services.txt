@@ -18,8 +18,20 @@ weapon the player ALREADY OWNS. If the player owns nothing upgradeable, these of
 do not appear (part 2's roll returns null for the category).
 
 
-HARD DEPENDENCY (BLOCKER)
-=========================
+DEPENDENCY STATUS UPDATE (verified during shop_order_2)
+=======================================================
+The weapon tier/level/ability system IS ALREADY IMPLEMENTED — entity/WeaponProfile exposes
+getTier(), getWeaponLevel(), getEffective*(), getAbility*(); entity/WeaponTier, WeaponRoll,
+WeaponRoller, AbilityInstance, WeaponAbility all exist. So this part is NOT blocked. shop_order_2
+already builds the tier-upgrade / level-up OFFERS (read-only, in DefaultShopOfferSource) with
+payload = the target WeaponProfile. What remains for shop_order_3 is the EFFECT application:
+add reusable controlled mutators (applyTierUpgrade / applyLevelUp) that share the WeaponRoller's
+ability-roll + effective-stat-recompute path, and a ShopEffectApplier that resolves the payload
+and calls them. NOTE: the credit wallet is PlayerStats (getCredits/spendCredits), not PlayerProgress.
+
+HARD DEPENDENCY (was flagged as a blocker — now satisfied, see above)
+=====================================================================
+The weapon tier/level system it references is implemented. Original note retained below for context.
 This part is BLOCKED until weapon-levels-tiers-abilities.txt is IMPLEMENTED. That
 system defines the WeaponTier enum, weaponLevel field, AbilityInstance[] rolled
 abilities, the getEffectiveX() level-scaled stats, and configureRoll(). This shop

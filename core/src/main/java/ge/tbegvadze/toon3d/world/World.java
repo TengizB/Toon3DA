@@ -47,6 +47,9 @@ import ge.tbegvadze.toon3d.progression.UpgradeCardDeck;
 import ge.tbegvadze.toon3d.progression.Attribute;
 import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
+import ge.tbegvadze.toon3d.shop.DefaultShopOfferSource;
+import ge.tbegvadze.toon3d.shop.ShopContext;
+import ge.tbegvadze.toon3d.shop.ShopRoller;
 import ge.tbegvadze.toon3d.shop.VendingMachine;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
@@ -154,6 +157,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // (one renderer reused every floor); the machine list is level-dependent (1-2 per floor).
     // -------------------------------------------------------------------------
     private final ShopOverlayRenderer  shopOverlayRenderer;
+    private final ShopRoller           shopRoller = new ShopRoller(new DefaultShopOfferSource());
     private java.util.List<VendingMachine> vendingMachines = new java.util.ArrayList<>();
     /** Machine the player currently faces (drives the contextual USE button); null when none. */
     private VendingMachine machineInFront = null;
@@ -647,6 +651,44 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (tooClose) continue;
             placeMachine(targetLevel, candidate);
         }
+
+        rollMachineStock(depth);
+    }
+
+    /**
+     * Rolls each placed machine's ShopStock (shop_order_2). On a two-machine floor with bias
+     * enabled, machine 0 leans toward upgrades and machine 1 toward supplies so visiting both is
+     * worthwhile. Each machine gets its own seed derived from the floor seed for reproducibility.
+     */
+    private void rollMachineStock(int depth) {
+        if (vendingMachines.isEmpty()) return;
+        ShopContext context = buildShopContext(depth);
+        long baseSeed       = floorSeed(runSeed, depth);
+        boolean twoMachineBias = GameBalance.SHOP_TWO_MACHINE_BIAS && vendingMachines.size() > 1;
+        for (int index = 0; index < vendingMachines.size(); index++) {
+            VendingMachine machine = vendingMachines.get(index);
+            ShopRoller.RollBias bias = ShopRoller.RollBias.NONE;
+            if (twoMachineBias) {
+                bias = (index == 0) ? ShopRoller.RollBias.UPGRADE : ShopRoller.RollBias.SUPPLY;
+            }
+            long machineSeed = baseSeed ^ (0x9E3779B97F4A7C15L * (index + 1));
+            machine.stock = shopRoller.roll(context, machineSeed, bias);
+        }
+    }
+
+    /** Builds the player snapshot the shop roller reads: owned weapons (loadout + melee) and depth. */
+    private ShopContext buildShopContext(int depth) {
+        java.util.List<WeaponProfile> ownedWeapons = new java.util.ArrayList<>();
+        Loadout loadout = inventory.getLoadout();
+        if (loadout != null) {
+            for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+                Weapon weapon = loadout.getSlot(slotIndex);
+                if (weapon != null) ownedWeapons.add(weapon);
+            }
+        }
+        MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
+        if (meleeWeapon != null) ownedWeapons.add(meleeWeapon);
+        return new ShopContext(depth, ownedWeapons);
     }
 
     /** Stamps the machine's tile solid ('@'), registers its billboard, and records the entity. */

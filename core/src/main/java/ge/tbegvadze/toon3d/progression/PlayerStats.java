@@ -379,6 +379,22 @@ public final class PlayerStats {
         return credits;
     }
 
+    /**
+     * Spends credits at the shop (shop_order_2). Deducts the amount only when the balance can
+     * cover it, so callers never drive the balance negative.
+     *
+     * @param amount credits to spend; must be >= 0
+     * @return true and deducts when affordable; false and leaves the balance unchanged otherwise.
+     *         A zero amount is a no-op success; a negative amount is rejected (returns false).
+     */
+    public boolean spendCredits(int amount) {
+        if (amount < 0) return false;   // programming error — never mutate the balance
+        if (amount == 0) return true;   // nothing to deduct
+        if (credits < amount) return false;
+        credits -= amount;
+        return true;
+    }
+
     // =========================================================================
     // Adrenal Surge pending buff — consumed on the very next weapon fire
     // "Next attack only" semantics: stored on kill, read-and-clear on fire.

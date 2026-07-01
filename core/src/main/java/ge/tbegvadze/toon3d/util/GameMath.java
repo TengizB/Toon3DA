@@ -3035,4 +3035,22 @@ public final class GameMath {
                                                float wedgeBack, float wedgeHalfWidth) {
         return centerY - facingY * wedgeBack - facingX * wedgeHalfWidth;
     }
+
+    /*
+     * Formula: shopEntryPrice — credit price of one shop offer (shop_order_2)
+     * Derivation:
+     *   depthFactor  = 1 + depthScale * (depth - 1)   // linear +depthScale per floor beyond the first
+     *   price        = round( basePrice * depthFactor * rarityMultiplier )
+     *   Base price is the offer variant's value floor; depthFactor keeps prices meaningful as kill
+     *   bounties grow with depth; rarityMultiplier bumps fancier (rarer) offers.
+     * Edge cases:
+     *   - depth < 1 is clamped to 1 so a bad depth never yields a below-base price.
+     *   - basePrice / multipliers are assumed >= 0; a 0 base yields 0 (a free offer).
+     *   - Math.round returns a long; cast to int — prices are far within int range.
+     */
+    public static int shopEntryPrice(int basePrice, int depth, float depthScale, float rarityMultiplier) {
+        int clampedDepth  = Math.max(1, depth);
+        float depthFactor = 1f + depthScale * (clampedDepth - 1);
+        return (int) Math.round(basePrice * depthFactor * rarityMultiplier);
+    }
 }

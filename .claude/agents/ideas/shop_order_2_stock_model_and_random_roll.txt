@@ -1,6 +1,30 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Shop 2 — Stock Model, Random Per-Floor Roll & Credit Pricing
+
+IMPLEMENTATION NOTES (shop_order_2 done):
+  - Data model in shop/: OfferCategory, OfferRarity (COMMON/RARE/EPIC w/ price mult + UI color),
+    ShopEntry (category, rarity, name, desc, price, quantity, payload, dedupKey, soldOut),
+    ShopStock (fixed array + isDepleted()).
+  - shop/ShopRoller — weighted per-floor roll: 4-6 entries, GUARANTEED >=1 supply + >=1 upgrade
+    slot, weighted remainder, de-dup by dedupKey, seeded Random (reproducible; per-machine seed),
+    optional two-machine UPGRADE/SUPPLY bias. Delegates concrete offers to a ShopOfferSource.
+  - shop/ShopOfferSource (seam) + shop/DefaultShopOfferSource — builds AMMO, MEDKIT,
+    WEAPON_LEVEL_UP, WEAPON_TIER_UPGRADE offers from live systems NOW (read-only; the weapon
+    tier/level system IS already implemented — WeaponProfile.getTier/getWeaponLevel). Weapon
+    upgrade EFFECTS are still shop_order_3. PLAYER_ABILITY returns null (no boon system yet →
+    shop_order_4); the roller falls back to supply.
+  - Pricing: GameMath.shopEntryPrice(base, depth, depthScale, rarityMult) + GameBalance
+    SHOP_* constants (entry min/max, category weights, depth/rarity price mults, base prices).
+  - shop/ShopTransaction + shop/ShopEffectApplier seam — buy() guards sold-out/credits/canApply,
+    then spends + applies + marks sold (no turn). PlayerStats.spendCredits added (the wallet lives
+    on PlayerStats in this codebase, NOT PlayerProgress — correct parts 3-5 docs accordingly).
+  - Integration: VendingMachine.stock rolled at placement (World.rollMachineStock, per-machine
+    seed, owned weapons = loadout slots + melee). Part-1 placeholder overlay now LISTS the rolled
+    stock (name + price, rarity-tinted, [SOLD]); the touchable card grid + buy flow is shop_order_5.
+  - Verified: pricing values, roller guarantees over 500 seeds (size range, unique keys,
+    guaranteed supply+upgrade), determinism, and full ShopTransaction semantics (via throwaway
+    harnesses; project has no JUnit setup). Full :core:build green.
 ---
 
 READ ORDER

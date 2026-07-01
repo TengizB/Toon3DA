@@ -177,7 +177,14 @@ public final class HudConstants {
     public static final float SHOP_OVERLAY_CREDITS_SCALE     = 1.1f;
     public static final float SHOP_OVERLAY_HEADER_Y_BELOW_TOP = 46f;    // header baseline below panel top
     public static final float SHOP_OVERLAY_CREDITS_Y_BELOW_TOP = 92f;   // credits baseline below panel top
-    public static final float SHOP_OVERLAY_BODY_Y_BELOW_TOP  = 210f;    // placeholder body baseline below panel top
+    public static final float SHOP_OVERLAY_BODY_Y_BELOW_TOP  = 210f;    // fallback "NO STOCK" baseline below panel top
+    // Stock list (shop_order_2): one row per rolled offer — name (left) + price (right).
+    // shop_order_5 replaces this simple list with the full touchable card grid.
+    public static final float SHOP_OVERLAY_ENTRY_FIRST_Y_BELOW_TOP = 150f;
+    public static final float SHOP_OVERLAY_ENTRY_ROW_STEP          = 44f;
+    public static final float SHOP_OVERLAY_ENTRY_NAME_INSET_X      = 40f;   // from panel left
+    public static final float SHOP_OVERLAY_ENTRY_PRICE_INSET_X     = 40f;   // from panel right
+    public static final float SHOP_OVERLAY_ENTRY_SCALE             = 0.95f;
     // CLOSE button — large thumb target, bottom-right of the panel
     public static final float SHOP_OVERLAY_CLOSE_WIDTH       = 220f;
     public static final float SHOP_OVERLAY_CLOSE_HEIGHT      = 74f;
