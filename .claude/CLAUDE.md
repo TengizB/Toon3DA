@@ -212,6 +212,7 @@ A `PostToolUse` hook runs `code-reviewer` automatically after every Write/Edit t
 | `creative-game-designer` | New mechanics, enemies, items, progression, level concepts, creative direction. **Consult before implementing any new gameplay feature.** |
 | `game-level-designer` | Creating or modifying level `.txt` files. **Always use when a new level file is needed.** |
 | `weapon-creator` | Implementing any weapon end-to-end: constants, Weapon subclass, marchShot logic, FrameBuffer procedural sprite in WeaponHudRenderer, World wiring. Also use to add/improve a procedural sprite for an existing weapon. See `docs/weapon-creation-guide.txt`. |
+| `weapon-creator-fable` | Identical to `weapon-creator`, but runs on the Fable model. **Never invoke on your own judgement** — use it only when the user explicitly asks for Fable (or names this agent) by name. Default to `weapon-creator` for all other weapon work. |
 | `math-expert` | Any equation, geometry, physics, interpolation, Bezier, collision math |
 | `libgdx-specialist` | Rendering, cameras, SpriteBatch, shaders, AssetManager, Screen lifecycle |
 | `java-architect` | Class design, patterns (ECS/State/Observer), Gradle, major refactors |
