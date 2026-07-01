@@ -1,0 +1,271 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Shop 2 — Stock Model, Random Per-Floor Roll & Credit Pricing
+---
+
+READ ORDER
+==========
+Part 2 of the 6-part SHOP series (see shop_order_1 for the full list and the golden
+constraint). Part 1 built the machine + placement + interaction. THIS FILE builds
+the machine's BRAIN: the data model for what it stocks, the RANDOM per-floor roll,
+and the credit PRICING. Parts 3-4 define the actual purchase EFFECTS; part 5 draws
+it; part 6 is the sprite.
+
+GOLDEN CONSTRAINT (repeat): the shop sells weapon TIER upgrades, weapon LEVEL-UPS,
+player ABILITIES, AMMO, and MEDKITS — NEVER a weapon itself.
+
+
+OVERVIEW
+========
+Each VendingMachine (part 1) carries a ShopStock: a fixed, per-floor-rolled list of
+4-6 offers the player can buy with Credits. The stock is ROLLED ONCE at floor
+generation from a weighted pool and is FIXED for that floor — what's on the shelf is
+all there is, no restock (Hades "spend on the way down"). The five offer categories
+map exactly to the golden constraint:
+  WEAPON_TIER_UPGRADE   — raise one owned weapon's rarity tier by 1 (part 3)
+  WEAPON_LEVEL_UP       — raise one owned weapon's level by 1 (part 3)
+  PLAYER_ABILITY        — grant a player boon/perk from the stim pool (part 4)
+  AMMO                  — refill/box of one ammo type the player can use (part 4)
+  MEDKIT                — a stim/field medkit into inventory (part 4)
+
+"The abilities and updates the shop offers must be RANDOM for each level" — so the
+weapon-upgrade targets, which abilities appear, and which supplies appear are all
+re-rolled per floor from the run's seeded RNG. Two floors' machines look different;
+two machines on the SAME floor roll independently (so a two-shop floor offers
+variety, not duplicates).
+
+THIS FILE OWNS: ShopStock / ShopEntry data model, the OfferCategory enum, the
+weighted per-floor roll algorithm, the pricing formula, and the generic
+buy-transaction flow (credit check + deduct + mark sold). It does NOT own each
+category's concrete EFFECT (parts 3-4) or the UI (part 5).
+
+
+DATA MODEL
+==========
+Package: shop/
+
+  // shop/OfferCategory.java
+  public enum OfferCategory {
+      WEAPON_TIER_UPGRADE, WEAPON_LEVEL_UP, PLAYER_ABILITY, AMMO, MEDKIT
+  }
+  // NOTE: there is deliberately NO "WEAPON" category. Do not add one.
+
+  // shop/ShopEntry.java — one purchasable line
+  public final class ShopEntry {
+      OfferCategory category;
+      String        displayName;     // e.g. "TIER UP: Chaingun", "Adrenal Pump", "Shells x12"
+      String        description;     // one line for the UI
+      int           price;           // in Credits, fixed at roll time
+      boolean       soldOut;         // set true after purchase (no restock)
+      // --- category-specific payload (only the relevant one is set) ---
+      // WEAPON_TIER_UPGRADE / WEAPON_LEVEL_UP: an identifier for the target weapon
+      //   slot/roster index the upgrade applies to (resolved at purchase, part 3).
+      Object        payload;         // typed handle: weapon ref, WeaponAbility/Boon id,
+                                     // AmmoType + amount, or ItemType (medkit). Part 3/4
+                                     // define the concrete payload types they consume.
+      // rarity of the offer (drives price multiplier + UI color), see PRICING
+      OfferRarity   rarity;          // COMMON / RARE / EPIC (reuse boon rarity palette)
+  }
+
+  // shop/ShopStock.java — the machine's fixed shelf
+  public final class ShopStock {
+      ShopEntry[] entries;           // 4-6, rolled at floor gen, never resized
+      boolean isDepleted();          // all soldOut
+  }
+
+  // shop/OfferRarity.java  (or reuse an existing rarity enum if one exists)
+  //   COMMON, RARE, EPIC — only for pricing weight + UI tint.
+
+All arrays are fixed-size at roll time — no per-frame or per-open allocation. Part 5
+reads ShopStock directly.
+
+
+THE PER-FLOOR RANDOM ROLL (ShopRoller)
+======================================
+Class shop/ShopRoller.java. Rolls a ShopStock for ONE machine, given: dungeon depth,
+a snapshot of the player's state (which weapons owned + their tier/level, which ammo
+types are useful, current HP), and the run seed. Runs at floor gen, once per machine.
+
+STEP 1 — ENTRY COUNT:
+  entryCount = randomInt(SHOP_ENTRY_MIN, SHOP_ENTRY_MAX)   // 4..6
+
+STEP 2 — CATEGORY SLOTS (guarantee a useful spread, then fill randomly):
+  The roll GUARANTEES the shop is useful without being a fixed menu:
+    - >= 1 SUPPLY slot: AMMO or MEDKIT (the player can always top up).
+    - >= 1 UPGRADE slot: WEAPON_TIER_UPGRADE or WEAPON_LEVEL_UP (the marquee — the
+      shop's identity is "make your gear better").
+    - The remaining (entryCount - 2) slots are drawn from the full weighted category
+      pool below.
+  Weighted category pool (per remaining slot; PLACEHOLDER weights in GameBalance):
+      WEAPON_LEVEL_UP        weight 26   (common; cheap incremental power)
+      AMMO                   weight 24
+      MEDKIT                 weight 18
+      PLAYER_ABILITY         weight 16   (the exciting, pricier line)
+      WEAPON_TIER_UPGRADE    weight 16   (rarer, expensive, build-defining)
+  De-dup RULE: never stock the SAME concrete offer twice on one machine (e.g. not two
+  "TIER UP: Chaingun", not two identical ability cards). Different categories or
+  different targets are fine. Sample the concrete offer (STEP 3) and reject exact
+  duplicates, re-rolling that slot.
+
+STEP 3 — CONCRETE OFFER PER SLOT (delegates to parts 3/4 for validity + payload):
+  For each chosen category, ask the owning system to produce a valid concrete offer
+  for THIS player, or return null if none is possible (then re-roll the category):
+    WEAPON_TIER_UPGRADE: pick a random OWNED weapon whose tier < LEGENDARY (part 3
+      builds the payload + validity). If the player owns no upgradeable weapon,
+      this category yields null.
+    WEAPON_LEVEL_UP: pick a random OWNED weapon whose level < MAX_WEAPON_LEVEL.
+    PLAYER_ABILITY: draw one boon/ability from the stim pool the player does NOT
+      already own at max stacks (part 4). Randomised per floor — this is the
+      "abilities are random each level" requirement.
+    AMMO: pick a random ammo type the player can actually USE (owns a weapon for it),
+      preferring types the player is low on (part 4).
+    MEDKIT: a stim or field medkit (part 4), if inventory has room.
+  If a category returns null repeatedly (player state can't support it), fall back to
+  a SUPPLY offer (AMMO/MEDKIT) so the slot is never wasted. Guarantee at least the two
+  slots from STEP 2 always resolve (supply always can).
+
+STEP 4 — RARITY + PRICE per entry (see PRICING).
+
+DETERMINISM: all rolls use the run's seeded RNG (the same seed source LevelGenerator
+already uses), advanced per machine so each machine on a floor rolls independently
+but reproducibly. Same seed -> same shops (roguelike expectation).
+
+TWO-MACHINE FLOORS: if a floor has 2 machines (part 1), optionally bias them apart —
+e.g. machine A leans UPGRADE-heavy, machine B leans SUPPLY-heavy (SHOP_TWO_MACHINE_
+BIAS flag). Recommended so visiting both is worthwhile. Otherwise they simply roll
+independently.
+
+
+PRICING FORMULA
+===============
+Prices are in Credits and FIXED at roll time. They scale with dungeon depth (so
+credits stay meaningful as kill bounties grow — mirrors the credit depth-scaling in
+credits-currency-system.txt) and with the offer's rarity. Follow the method
+balance_order_3 prescribes: price ~ (value delivered) * scarcity markup.
+
+  basePrice(category, rarity) = SHOP_BASE_PRICE table lookup (GameBalance)
+  depthFactor  = 1 + SHOP_DEPTH_PRICE_SCALE * (depth - 1)      // ~0.10
+  rarityFactor = SHOP_RARITY_PRICE_MULT[rarity]                // COMMON 1.0, RARE 1.6, EPIC 2.4
+  price = round( basePrice * depthFactor * rarityFactor )
+
+SUGGESTED BASE PRICES (Credits; PLACEHOLDER — tune against credit income of
+~100-200 cr per cleanly cleared early floor from credits-currency-system.txt):
+  MEDKIT (stim)             35
+  MEDKIT (field)            80
+  AMMO (small box)          40
+  AMMO (large box)          90
+  WEAPON_LEVEL_UP           110   (per +1 level; cheap-ish incremental power)
+  PLAYER_ABILITY            150   (a run-shaping perk)
+  WEAPON_TIER_UPGRADE       240   (marquee; ~1.5-2 floors of credits — a real save-up)
+
+GOAL: a typical single-shop visit lets the player afford ~ONE marquee item (a tier
+upgrade OR an ability) OR a couple of supplies — a genuine choice, never a
+clear-the-shelf. Deeper floors: pricier but the offers are stronger (higher-tier
+weapons to upgrade, better abilities), so SAVING credits across floors is a valid
+Hades-style strategy. Tune SHOP_DEPTH_PRICE_SCALE so hoarding is rewarded but not
+mandatory.
+
+Escalating cost for repeat WEAPON_LEVEL_UP on the same weapon (optional, prevents
+buying a weapon straight to L10 at one machine if multiple level-up entries appear):
+  each subsequent level-up of the SAME weapon within a run costs
+  * (1 + SHOP_REPEAT_LEVELUP_SURCHARGE * timesAlreadyBought). OPEN QUESTION — only
+  needed if repeat level-ups feel too cheap in playtest.
+
+
+BUY TRANSACTION (generic flow; effects in parts 3-4)
+====================================================
+shop/ShopTransaction.java (or a method on World): buy(ShopEntry entry) ->
+  1. Guard: if entry.soldOut -> reject ("SOLD OUT" blip).
+  2. Guard: PlayerProgress.getCredits() >= entry.price ? else reject ("INSUFFICIENT
+     CREDITS" blip; nothing changes).
+  3. Guard: category-specific applicability re-check at purchase time (part 3/4) —
+     e.g. inventory full for a MEDKIT, weapon already MAX for a LEVEL_UP (should not
+     happen if validity held, but re-check to be safe). If invalid -> reject with a
+     reason blip, no credit spent.
+  4. PlayerProgress.spendCredits(entry.price) (the IMPLEMENTED wallet API; returns
+     true and deducts).
+  5. Apply the effect (dispatch on category to part 3 / part 4 handler).
+  6. Mark entry.soldOut = true (no restock). Fire a purchase feedback beat (part 5:
+     "cha-chunk" + credit counter ticks down + item flies to HUD/inventory).
+NO turn is spent (the shop is a menu pause — part 1). Multiple buys allowed per visit
+until credits/stock run out.
+
+
+CONSTANTS TO ADD
+================
+GameBalance.java (designer knobs — all PLACEHOLDER):
+  SHOP_ENTRY_MIN                 = 4
+  SHOP_ENTRY_MAX                 = 6
+  SHOP_CAT_WEIGHT_WEAPON_LEVELUP = 26
+  SHOP_CAT_WEIGHT_AMMO           = 24
+  SHOP_CAT_WEIGHT_MEDKIT         = 18
+  SHOP_CAT_WEIGHT_ABILITY        = 16
+  SHOP_CAT_WEIGHT_TIER_UPGRADE   = 16
+  SHOP_DEPTH_PRICE_SCALE         = 0.10f
+  SHOP_RARITY_PRICE_MULT_COMMON  = 1.0f
+  SHOP_RARITY_PRICE_MULT_RARE    = 1.6f
+  SHOP_RARITY_PRICE_MULT_EPIC    = 2.4f
+  SHOP_REPEAT_LEVELUP_SURCHARGE  = 0.35f   // optional; see PRICING
+  SHOP_TWO_MACHINE_BIAS          = true    // opposite category leans on 2-shop floors
+  // base price table:
+  SHOP_BASE_PRICE_MEDKIT_STIM    = 35
+  SHOP_BASE_PRICE_MEDKIT_FIELD   = 80
+  SHOP_BASE_PRICE_AMMO_SMALL     = 40
+  SHOP_BASE_PRICE_AMMO_LARGE     = 90
+  SHOP_BASE_PRICE_WEAPON_LEVELUP = 110
+  SHOP_BASE_PRICE_PLAYER_ABILITY = 150
+  SHOP_BASE_PRICE_TIER_UPGRADE   = 240
+
+GameMath.java (pure functions, with the mandatory formula/derivation/edge-case
+comment block each):
+  shopEntryPrice(basePrice, depth, depthScale, rarityMultiplier) -> int
+  // weighted category + concrete-offer selection lives in ShopRoller, NOT GameMath.
+
+
+TURN-BASED / PLATFORM COMPLIANCE
+================================
+  - Roll happens at floor gen (not in render, not per turn). ShopStock arrays are
+    fixed-size; no allocation while browsing/buying.
+  - Buying spends credits, never a turn (menu pause from part 1).
+  - Seeded RNG keeps shops reproducible per run seed.
+
+
+BALANCE NOTES
+=============
+  - The guaranteed 1 SUPPLY + 1 UPGRADE slot makes every machine useful even on an
+    unlucky roll, while the weighted remainder keeps stock varied and surprising.
+  - Never selling weapons keeps the shop a pure "improve + resupply" sink, which is
+    exactly what the scarcity economy (balance_order_3) needs: credits convert into
+    ammo/HP (resource relief) or into upgrades (permanent-for-run power), both priced
+    so one visit is a choice.
+  - Depth scaling on BOTH offer quality and price means late shops are exciting but
+    expensive — the save-vs-spend tension the roguelike pillars want.
+  - De-dup + independent per-machine rolls guarantee a two-shop floor feels like two
+    different shops, honoring "offers are random each level."
+
+
+INTERACTIONS
+============
+  - PART 1 (machine): ShopStock is a field on VendingMachine, rolled at floor gen.
+  - PART 3 (weapon upgrades): supplies validity + payload + effect for the two weapon
+    categories; ShopRoller asks it for concrete offers.
+  - PART 4 (supplies + abilities): supplies validity + payload + effect for AMMO,
+    MEDKIT, PLAYER_ABILITY.
+  - PART 5 (UI): renders ShopStock entries + prices + rarity colors; calls buy().
+  - CREDITS (IMPLEMENTED): buy() calls PlayerProgress.spendCredits().
+  - SCARCITY (balance_order_3): pricing follows its value*markup method; this is the
+    sink it flagged as required.
+
+
+OPEN QUESTIONS
+==============
+1. Escalating repeat-level-up surcharge (SHOP_REPEAT_LEVELUP_SURCHARGE) — ship in v1
+   or only if playtest shows cheap L10 rushes? Recommend defer, keep the knob.
+2. Two-machine opposite-bias (upgrade shop vs supply shop) — implement now
+   (recommended, more interesting) or roll both fully independently?
+3. Should PLAYER_ABILITY and WEAPON_TIER_UPGRADE ever both appear on the SAME small
+   4-entry machine (double marquee, likely unaffordable together)? Fine — it's a
+   good "which do I want more?" tension. Confirm in playtest.
+4. Rarity assignment per entry: derive rarity from the concrete offer (e.g. an EPIC
+   boon is an EPIC entry) vs roll rarity independently? Recommend derive from the
+   offer where it has a natural rarity (abilities, weapon tiers), else COMMON.

@@ -1,0 +1,200 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Shop 3 — Weapon Upgrade Services: Tier Boost + Level-Up Purchases
+---
+
+READ ORDER
+==========
+Part 3 of the 6-part SHOP series (see shop_order_1 for the list + golden constraint).
+Parts 1-2 built the machine, placement, interaction, stock model, random roll, and
+pricing. THIS FILE defines the two WEAPON-improvement purchases the machine sells:
+  WEAPON_TIER_UPGRADE — raise an owned weapon's rarity TIER by 1 (adds an ability)
+  WEAPON_LEVEL_UP     — raise an owned weapon's LEVEL by 1 (raises its stats)
+These are the "weapon updates that increase weapon tier" and "weapon levelups that
+increase weapon stats" the design calls for.
+
+GOLDEN CONSTRAINT: the shop NEVER sells a weapon. These services ONLY improve a
+weapon the player ALREADY OWNS. If the player owns nothing upgradeable, these offers
+do not appear (part 2's roll returns null for the category).
+
+
+HARD DEPENDENCY (BLOCKER)
+=========================
+This part is BLOCKED until weapon-levels-tiers-abilities.txt is IMPLEMENTED. That
+system defines the WeaponTier enum, weaponLevel field, AbilityInstance[] rolled
+abilities, the getEffectiveX() level-scaled stats, and configureRoll(). This shop
+service is a THIN layer that drives that system's existing mutation paths — it must
+not reinvent tier/level math. If that system is not yet built when this part is
+scheduled, implement it first (or implement this part's UI/roll stubs against a
+mocked WeaponProfile and wire the effects once it lands).
+
+Concretely this part needs, from the weapon system:
+  - WeaponProfile.getTier() : WeaponTier            (COMMON<UNCOMMON<RARE<EPIC<LEGENDARY)
+  - WeaponProfile.getWeaponLevel() : int            (1..MAX_WEAPON_LEVEL)
+  - a controlled mutator to RAISE tier by 1 and RAISE level by 1 (see below)
+  - the ability roll (sample-without-replacement from the eligible pool) so a tier
+    bump can grant the new ability slot
+  - recompute of cached effective stats after a level/tier change
+
+
+WHAT THE PLAYER OWNS
+====================
+"Owned weapons" = the weapons in the player's Loadout / roster (entity/Loadout.java,
+PlayerInventory.java) — the guns/melee they currently carry, NOT ground drops. Both
+active and holstered loadout slots are upgradeable (you can improve the gun in your
+back pocket). The shop enumerates these via a query on PlayerInventory:
+  List<WeaponProfile> getUpgradeableWeapons()  // roster weapons the player holds
+
+
+SERVICE A — WEAPON_TIER_UPGRADE ("increase weapon tier")
+========================================================
+Effect: raise the target weapon's rarity tier by exactly one step
+(COMMON->UNCOMMON->RARE->EPIC->LEGENDARY) and ADD the new ability slot that tier
+grants, rolled from the weapon's eligible ability pool.
+
+VALIDITY (part 2 asks before offering):
+  - target weapon exists AND target.getTier() != LEGENDARY (can't go past the top).
+  - If every owned weapon is already LEGENDARY, the category yields null.
+
+PAYLOAD: a stable handle to the target weapon (roster slot index, resolved at
+purchase to the live WeaponProfile — do not cache a stale reference if loadout can
+change between roll and purchase; resolve by slot id at buy time).
+
+APPLY (on purchase, delegates to the weapon system's mutator):
+  1. newTier = next tier above current.
+  2. Call the weapon system's controlled tier mutator, e.g.
+       weapon.applyTierUpgrade(newTier, seededRng)
+     which: sets tier = newTier; rolls the additional standard ability slots the new
+     tier grants (sample-without-replacement from eligibleFor(weapon) & !legendaryOnly,
+     excluding abilities already on the weapon — never duplicate); if newTier ==
+     LEGENDARY, also roll the 1 signature (legendaryOnly) 5th-slot ability; scales the
+     new AbilityInstance magnitudes from the weapon's CURRENT level; recomputes cached
+     effective stats. (This is the SAME logic configureRoll uses at spawn — expose it
+     as a reusable applyTierUpgrade so the shop and the spawn roller share one code
+     path; do NOT duplicate the ability-roll logic in the shop package.)
+  3. UI shows the newly gained ability so the purchase feels tangible.
+
+PRICE: SHOP_BASE_PRICE_TIER_UPGRADE, scaled by depth + the TARGET's resulting rarity
+(a bump INTO Epic/Legendary costs more — use the destination tier as the rarity
+factor in part 2's pricing). Tier upgrades are the marquee, most expensive line.
+
+NOTE (orthogonality, from the weapon system doc): tier adds ABILITIES, not raw
+stats. So a tier upgrade makes the weapon do MORE THINGS (crit, lifesteal, burst…),
+while level-up (Service B) makes its raw numbers bigger. Keep them distinct in the
+UI copy so the player understands what each purchase does.
+
+
+SERVICE B — WEAPON_LEVEL_UP ("increase weapon stats")
+=====================================================
+Effect: raise the target weapon's LEVEL by exactly one (up to MAX_WEAPON_LEVEL),
+which scales its base stats (damage, accuracy, clip, reload, range) via the weapon
+system's existing GameMath.weaponLevelX() formulas, and re-scales the magnitudes of
+any abilities the weapon already carries (ability magnitude scales with level).
+
+VALIDITY:
+  - target weapon exists AND target.getWeaponLevel() < MAX_WEAPON_LEVEL.
+  - If every owned weapon is at MAX level, the category yields null.
+
+APPLY (on purchase):
+  1. Call the weapon system's controlled level mutator, e.g.
+       weapon.applyLevelUp()   // level += 1 (clamped to MAX_WEAPON_LEVEL);
+                               // recompute cached effective stats; rescale ability
+                               // magnitudes at the new level.
+     This is the SAME path the SOULFORGE legendary ability uses to grow a weapon
+     mid-run — reuse it, do not fork the level-up logic.
+  2. UI shows the stat deltas ("DMG 13 -> 15, CLIP 6 -> 7") so the gain is legible.
+
+PRICE: SHOP_BASE_PRICE_WEAPON_LEVEL_UP, scaled by depth. Cheaper than a tier upgrade
+(incremental power). Optional repeat surcharge (part 2 SHOP_REPEAT_LEVELUP_SURCHARGE)
+if a machine happens to offer multiple level-ups for the same weapon and cheap L10
+rushes prove degenerate.
+
+
+HOW PART 2's ROLL PICKS THE TARGET
+==================================
+When ShopRoller (part 2) draws a WEAPON_TIER_UPGRADE or WEAPON_LEVEL_UP slot, it asks
+this part for a concrete offer:
+  ShopWeaponService.rollTierUpgradeOffer(playerInventory, seededRng) -> ShopEntry|null
+  ShopWeaponService.rollLevelUpOffer(playerInventory, seededRng)     -> ShopEntry|null
+Each: filters getUpgradeableWeapons() to valid targets (tier<LEGENDARY / level<MAX),
+picks one at random (bias toward the player's ACTIVE weapon or their lowest-tier
+weapon is an OPEN QUESTION — see below), builds the ShopEntry (displayName like
+"TIER UP - Chaingun (RARE -> EPIC)" or "LEVEL UP - Shotgun (Lv4 -> Lv5)", description,
+rarity, payload = roster slot id), and returns it. Returns null if no valid target.
+
+RANDOMNESS: the TARGET weapon and (for tier) the ability that WILL be rolled are
+chosen from the run-seeded RNG at floor gen, so "the updates the shop offers are
+random for each level" — a floor might offer to upgrade your Chaingun, the next your
+Shotgun, and the abilities gained differ.
+
+
+PACKAGE / CLASSES
+=================
+  shop/ShopWeaponService.java — the bridge between the shop and the weapon system.
+    Static/stateless helpers: rollTierUpgradeOffer(), rollLevelUpOffer(),
+    applyTierUpgrade(ShopEntry, playerInventory), applyLevelUp(ShopEntry,
+    playerInventory). Resolves the payload slot id -> live WeaponProfile at APPLY
+    time. Contains NO tier/level math — it only calls the weapon system's mutators.
+  entity/Weapon.java (weapon system) — add/confirm the reusable controlled mutators:
+    applyTierUpgrade(WeaponTier newTier, Rng), applyLevelUp(). These already exist in
+    spirit (configureRoll at spawn, Soulforge at runtime); factor the shared logic so
+    the shop reuses it rather than duplicating.
+
+
+TURN-BASED / PLATFORM COMPLIANCE
+================================
+  - Purchase + apply happen inside the paused shop overlay: no turn spent, no world
+    advance (part 1 semantics).
+  - Mutating tier/level recomputes CACHED effective stats once, at purchase — not per
+    frame. No render() allocation. Ability arrays are fixed value objects.
+  - If the upgraded weapon is the ACTIVE weapon, the HUD weapon readout (tier color +
+    level tag + ability glyphs, from the weapon system doc) refreshes on next draw —
+    no special handling beyond reading the live WeaponProfile.
+
+
+BALANCE NOTES
+=============
+  - TIER vs LEVEL keeps the two purchases meaningfully different: tier = "more
+    tricks" (abilities), level = "bigger numbers" (stats). A player low on damage
+    buys level-ups; a player wanting a build-defining crit/lifesteal buys a tier bump.
+  - Tier upgrades are the priciest, rarest offer — a legendary-making purchase should
+    be a whole-floor(s) credit save. Never let the shop cheaply mass-produce
+    Legendaries; the weapon system's tier spawn weights should still make found
+    Legendaries special, and the shop is a controlled, expensive alternate path.
+  - Level-ups are the cheap, reliable power drip — the "steady progress" purchase.
+  - Because you can only upgrade what you already own, the shop rewards committing to
+    a weapon (build identity, roguelike pillar) rather than swapping constantly.
+  - All numbers are placeholders; scaling lives in the weapon system's constants +
+    part 2's price table so a designer tunes without touching this bridge code.
+
+
+INTERACTIONS
+============
+  - WEAPON LEVELS/TIERS/ABILITIES (weapon-levels-tiers-abilities.txt): the OWNER of
+    all tier/level/ability logic. This part only drives its mutators. HARD DEPENDENCY.
+  - PART 2 (roll + price): asks this part for concrete tier/level offers; prices them
+    with the destination-tier rarity factor.
+  - LOADOUT / PlayerInventory (entity/): source of "owned weapons"; both active and
+    holstered slots are eligible.
+  - CREDITS (IMPLEMENTED): part 2's buy() spends credits before calling apply here.
+  - SCARCITY (balance_order_3): weapon upgrades are the "permanent-for-run power"
+    half of the credit sink (vs supplies as the "resource relief" half).
+
+
+OPEN QUESTIONS
+==============
+1. Target bias: random among owned weapons (max variety) vs bias toward the ACTIVE
+   weapon (most useful) vs bias toward the LOWEST-tier/level weapon (catch-up)?
+   Recommend a light bias toward the active weapon so the offer is usually relevant,
+   but keep some randomness.
+2. Should a single machine ever offer BOTH a tier upgrade AND a level-up for the SAME
+   weapon? Allowed (they're different services) but de-dup should prevent two
+   identical entries. Fine as-is.
+3. When buying a TIER upgrade, does the player get to SEE/choose the ability, or is
+   it revealed-on-purchase (slot-machine surprise)? Recommend revealed-on-purchase
+   for excitement; a pricier "choose the ability" variant is a stretch/OPEN follow-up.
+4. Reuse configureRoll's ability-roll code for applyTierUpgrade (recommended) vs a
+   separate incremental single-ability roll? Recommend the shared path so ability
+   eligibility/de-dup stays in one place.
+5. Cap on how many upgrades one weapon can receive per run? Natural caps already
+   exist (LEGENDARY tier, MAX_WEAPON_LEVEL); no extra cap needed. Confirm in playtest.

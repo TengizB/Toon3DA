@@ -1,0 +1,212 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Shop 6 — Procedural Animated Robotic Vending-Machine Sprite
+---
+
+READ ORDER
+==========
+Part 6 (final) of the 6-part SHOP series (see shop_order_1 for the list + golden
+constraint). Parts 1-5 built the machine entity, stock, upgrade/supply/ability
+purchases, and the buy UI. THIS FILE is the machine's LOOK: a unique, high-detail,
+ANIMATED procedural billboard sprite — a robotic UAC vending machine — with idle,
+depleted, and dispense states. No PNG art; everything is drawn procedurally, cached,
+and animated, in the spirit of the weapon FrameBuffer sprites and credit-chip
+billboards (credits-currency-system.txt, weapon-ground-sprites.txt).
+
+
+DESIGN BRIEF (from the request)
+===============================
+"A unique sprite must be generated with animations and high-resolution details... the
+shop must look like a ROBOTIC VENDING MACHINE." So: not a humanoid merchant — a
+chest-to-head-height automated dispenser bolted to a wall, clearly a MACHINE, with
+enough detail and motion to read as alive/robotic at distance and up close. It should
+feel like a cold UAC appliance: brushed steel body, a glowing product window, a
+status light, a dispenser tray, small animated servos/arms, and an idle hum shimmer.
+
+
+RENDERING APPROACH — HIGH-RES CACHED SPRITE + REAL-TIME ANIMATED LAYERS
+======================================================================
+Two-tier approach so we get both HIGH-RESOLUTION DETAIL and cheap ANIMATION with NO
+per-frame allocation:
+
+  TIER A — STATIC BODY (baked once, high detail):
+    Draw the machine's detailed, non-moving chassis ONCE into a high-resolution
+    Texture at machine creation (FrameBuffer + ShapeRenderer, or a large Pixmap),
+    e.g. SHOP_SPRITE_TEXTURE_SIZE = 512 px tall (portrait, ~256 wide) with Nearest
+    filtering, transparent background, cached and reused every frame. This holds all
+    the fine detail (panel seams, rivets, bezel, brand plate, grille, tray) that would
+    be wasteful to redraw per frame.
+    (Mirror the WeaponHudRenderer FrameBuffer pipeline: draw with ShapeRenderer into an
+    FBO, read into a Texture, cache; see docs/weapon-creation-guide.txt for the
+    pixel-readback pattern.)
+
+  TIER B — ANIMATED OVERLAYS (drawn per frame, allocation-free):
+    A small set of MOVING elements drawn each frame ON TOP of the cached body as
+    simple additive/alpha billboard quads whose position/alpha/scale come from
+    sin/lerp of machine.animationTimeSeconds. These are cheap (a handful of draws, no
+    allocation — reuse pre-generated small glow/segment textures):
+      - STATUS LIGHT: a pulsing colored dot/halo (green = open/in-stock, amber =
+        low/partly-sold, red-dim = DEPLETED). Pulse alpha via sin.
+      - PRODUCT WINDOW GLOW: the glass display panel emits a soft cyan glow that
+        breathes (sin alpha), suggesting fabrication energy inside.
+      - HOLOGRAM SIGN: a flickering "VEND" / "REQUISITION" holo-glyph floating above
+        the unit (BitmapFont or a cached glyph, pulsing alpha — the flicker sells
+        "robotic" and marks it as interactable from across the room, like the credit
+        chips' aura marks value).
+      - SERVO ARM / TRAY: a small dispenser arm or tray element with a subtle idle
+        twitch (tiny lerp offset), and a full DISPENSE motion on purchase (part 5).
+      - AMBIENT AURA: a faint radial glow behind the whole unit (additive, tile-
+        brightness aware via PropRenderer.getTileBrightness) so it reads as an emitter
+        in a dark hall — reuse the credit-chip aura technique.
+
+The machine does NOT bob/float (it is wall-bolted, unlike floating pickups). Motion is
+in its lights, glow, sign, and servo only — reinforcing "heavy machine," not "hovering
+loot."
+
+
+ANIMATION STATES
+================
+Driven by machine.animationTimeSeconds (advanced by deltaTime) + machine.state:
+  IDLE / IN-STOCK   : green status light slow-pulse; cyan window breathe; holo "VEND"
+                      flicker; occasional servo twitch. The default alive-machine loop.
+  LOW-STOCK         : status light amber; slightly faster/dimmer pulse (some entries
+                      sold). Optional; can fold into IDLE if not worth the branch.
+  DEPLETED          : status light dim RED, no pulse; window glow fades to near-dark;
+                      holo sign reads "EMPTY" / flickers out; servo idle. Signals "no
+                      more here" at a glance (part 5 also shows OUT OF STOCK).
+  DISPENSE (one-shot, on purchase): triggered by part 5 on a successful buy — the
+                      servo/tray extends and retracts, the window flashes bright, a
+                      "product" glyph drops into the tray, status light blinks. ~0.5s
+                      real-time; returns to IDLE/LOW/DEPLETED after.
+State transitions are set by the shop logic (stock sold count from part 2); the
+renderer only reads state + time. All timing constants in RenderConstants.
+
+
+VISUAL DETAIL SPEC (Tier A body — high-res, procedural)
+=======================================================
+Portrait unit, read three-quarter/front like other billboards. Palette: cold UAC —
+brushed steel greys, a warm UAC-orange accent stripe, cyan tech glow. Coordinates as
+fractions of the 512px-tall box; origin = box center.
+  - CHASSIS: a tall rounded-rectangle steel cabinet (mid-grey 0.42,0.44,0.47) with a
+    darker base plinth and a slightly lighter top cap; 2-3 px cool-white top-left rim
+    highlight down the left edge + top (the "interactable/lit" convention shared with
+    weapon/credit sprites).
+  - PANEL SEAMS & RIVETS: horizontal seam lines dividing top display / mid tray /
+    lower plinth; small rivet dots along the edges (fine detail that justifies the
+    high-res bake).
+  - PRODUCT WINDOW: an upper inset "glass" rectangle (dark cyan-tinted 0.10,0.16,0.20)
+    with a thin bright bezel; behind it, faint silhouettes of stock (ammo box / stim
+    cross / chip) hinting at goods. The Tier-B window glow overlays this.
+  - BRAND PLATE: a small UAC wordmark / logo plate (orange 0.80,0.45,0.15) — the
+    corporate stamp.
+  - STATUS LIGHT HOUSING: a recessed circular housing (dark rim) where the Tier-B
+    pulsing light sits.
+  - DISPENSER TRAY: a lower recessed slot (dark) with a lip — where DISPENSE drops the
+    product; the Tier-B servo/tray animates here.
+  - ACCENT STRIPE: a diagonal or horizontal UAC-orange hazard stripe across the mid
+    body for readability and brand identity.
+  - GRILLE / VENTS: a set of dark horizontal slits (the "hum" vent) low on the body.
+Keep it unmistakably a VENDING MACHINE (window + tray + brand) and unmistakably
+ROBOTIC/UAC (steel, rivets, status light, cyan tech glow, hazard stripe).
+
+
+RENDER INTEGRATION
+==================
+  render/PropRenderer.java (or a dedicated render/ShopMachineRenderer.java if the prop
+  pass is crowded — recommended dedicated renderer for clarity):
+    - Constructor: bake the Tier-A body Texture once (FBO/Pixmap), build the small
+      Tier-B glow/light/aura textures once, cache all. Dispose all in dispose().
+    - Per frame, for each VendingMachine on the floor:
+        project its tile to screen using WallRenderer's Z-buffer (same billboard
+        projection + depth-cull + occlusion path props/enemies already use), then:
+          1. draw ambient aura (additive, tile-brightness aware) behind,
+          2. draw the cached Tier-A body billboard (bobless, ground-anchored),
+          3. draw Tier-B animated overlays (window glow, status light, holo sign,
+             servo/tray) using animationTimeSeconds + state,
+        then restore blend mode after any additive layers.
+    - The machine is SOLID (part 1), so it occupies its tile like a wall-mounted unit;
+      ensure the billboard sits flush to its wall and is depth-sorted correctly
+      against the player's view (reuse the prop Z-buffer occlusion so walls hide it
+      properly).
+  Render ORDER: draw machines in the PROP pass (step 3 of World.render, before enemies
+  and the weapon HUD) so enemies/weapon draw over it correctly.
+
+
+CONSTANTS TO ADD
+================
+RenderConstants.java:
+  SHOP_SPRITE_TEXTURE_SIZE            = 512     // tall high-res bake
+  SHOP_SPRITE_ASPECT                  = 0.5f    // width/height (portrait cabinet)
+  SHOP_SPRITE_HEIGHT_FRACTION         = 0.0f    // ground-anchored, no float lift
+  SHOP_STATUS_PULSE_SPEED             = 2.0f    // rad/s
+  SHOP_WINDOW_GLOW_PULSE_SPEED        = 1.4f
+  SHOP_HOLO_FLICKER_SPEED             = 8.0f    // fast flicker for the sign
+  SHOP_AURA_RADIUS                    = 1.6f    // x sprite width
+  SHOP_AURA_BASE_ALPHA                = 0.30f
+  SHOP_DISPENSE_DURATION_SECONDS      = 0.5f
+  SHOP_STATUS_COLOR_INSTOCK  / LOW / DEPLETED   // green / amber / dim-red RGB
+  (body palette RGB triples may live here as named float[] or inline in the bake
+   method, matching how weapon ground-sprite palettes are handled.)
+
+
+TURN-BASED / PLATFORM / PERF COMPLIANCE
+=======================================
+  - The idle/dispense animation is COSMETIC real-time decoration on a static tile —
+    same class as flickering floor lights or credit-chip auras; it advances no world
+    tick and violates no turn invariant.
+  - NO allocations in render(): Tier-A body + all Tier-B glow textures are baked/cached
+    at construction; per-frame work is a fixed handful of draws driven by sin/lerp.
+  - All Textures/FrameBuffers/ShapeRenderer/SpriteBatch owned here are disposed in
+    dispose() (Disposable rule).
+  - FrameBuffer bake happens on the render thread at floor gen / renderer construction,
+    not mid-frame during play (weapon-HUD FBO pattern).
+  - Coordinate/viewport rules: billboard projects through the existing camera; no new
+    camera/viewport; origin stays bottom-left.
+
+
+BALANCE / UX NOTES
+==================
+  - The status light + holo sign are the machine's READABILITY: a player should spot a
+    fabricator (and whether it still has stock) from across a room — green glow = "go
+    spend," dim red = "already looted." This is the same value-at-a-glance principle
+    the credit-chip auras use.
+  - Warm UAC-orange accent + cyan tech glow visually distinguish the shop from cold
+    grey walls and from the gold/green credit chips, so the player never confuses "a
+    place to spend" with "currency to pick up."
+  - Keep the DISPENSE animation short and punchy (~0.5s) so buying multiple items in
+    one visit stays snappy (part 5 buy flow).
+  - High-res bake (512px) gives crisp detail up close (the machine fills a chunk of
+    screen when adjacent) without per-frame cost — the whole point of Tier A.
+
+
+INTERACTIONS
+============
+  - PART 1 (machine entity): supplies tileColumn/row, facing, state (in-stock / low /
+    depleted from stock sold-count), and animationTimeSeconds.
+  - PART 2 (stock): sold-count drives the LOW / DEPLETED state.
+  - PART 5 (UI): a successful purchase triggers the one-shot DISPENSE animation +
+    "cha-chunk" sound cue.
+  - PROP / ENEMY RENDER (PropRenderer / EnemyRenderer + WallRenderer Z-buffer): reuses
+    the billboard projection, depth-cull, occlusion, and tile-brightness paths.
+  - CREDIT CHIP AURA (credits-currency-system): reuses the additive tile-brightness-
+    aware aura technique for the machine's ambient glow.
+  - WEAPON HUD SPRITE (weapon-creation-guide): reuses the FrameBuffer bake +
+    pixel-readback + cached-texture pipeline for the Tier-A body.
+
+
+OPEN QUESTIONS
+==============
+1. Dedicated ShopMachineRenderer vs extend PropRenderer? Recommend a dedicated
+   renderer — the machine has more animated layers than a simple prop, and it keeps
+   PropRenderer lean.
+2. Tier-A bake resolution: 512px tall enough for crisp adjacent viewing, or go 768?
+   Recommend 512 for v1 (memory-friendly on phones); bump if it looks soft up close.
+3. Should the machine have a subtle IDLE sound (hum) in addition to the DISPENSE
+   sound? Nice ambiance; gate behind an audio-budget check (mobile). Defer if audio
+   isn't wired.
+4. Distinct body accent color per machine when a floor has 2 (e.g. one orange, one
+   teal) to tell them apart on the minimap/view? Minor; recommend same look for v1,
+   differentiate via minimap marker instead.
+5. Minimap representation: add a small "$"/machine icon on the mini-map so the player
+   can navigate back to spend accrued credits? Strong QoL — flag as a small follow-up
+   (LevelRenderer minimap marker), out of scope for this sprite doc.

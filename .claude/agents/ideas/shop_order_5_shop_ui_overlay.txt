@@ -1,0 +1,189 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Shop 5 — Fabricator Shop UI Overlay (touch, full-screen, paused)
+---
+
+READ ORDER
+==========
+Part 5 of the 6-part SHOP series (see shop_order_1 for the list + golden constraint).
+Parts 1-4 built the machine, the stock/roll/pricing, and every purchase category +
+effect. THIS FILE is the full-screen touch UI the player sees when they USE the
+fabricator: it renders the rolled ShopStock, shows their credits, and drives the buy
+flow. It owns NO game logic — it only displays ShopStock (part 2) and calls
+ShopTransaction.buy() (part 2), which dispatches to parts 3/4.
+
+PLATFORM: mobile, TOUCH ONLY. No keyboard, no hotkeys (project platform rule). Every
+control is a large thumb-tappable on-screen element.
+
+
+OVERVIEW
+========
+When the player taps USE FABRICATOR (part 1), the world pauses (menu semantics, no
+tick) and this overlay slides in over a darkened 3D view — the same pause model as
+the inventory overlay. It presents the machine's 4-6 offers as cards, the player's
+live credit balance, and a buy/close flow. Aesthetic: a UAC vending-machine
+touchscreen — dark steel bezel, cyan CRT/scanline styling, chunky industrial buttons
+— matching the procedural no-texture HUD language (procedural-vitals-hud.txt) and the
+salvage/stim overlays. Zero new PNG art: procedural ShapeRenderer + BitmapFont, all
+buffers pre-allocated.
+
+
+CLASS / PACKAGE
+===============
+render/ShopOverlayRenderer.java  (render package, implements Renderable + Disposable)
+  - setStock(ShopStock stock, VendingMachine machine) — called by World when the
+    overlay opens; binds the machine being browsed.
+  - render(OrthographicCamera camera) — draws the overlay. NO allocations in render()
+    (pre-allocate all ShapeRenderer/SpriteBatch/GlyphLayout/label buffers in the
+    constructor; reuse them).
+  - handleTouch(worldX, worldY, justTouched) — hit-tests the cards + buttons
+    (unproject through the camera first — coordinate rule), triggers buy/close.
+  - Owns its SpriteBatch/ShapeRenderer/BitmapFont (or shares World's if that is the
+    pattern) and disposes them.
+World routes touch to this renderer while the shop is open and suppresses the turn
+engine / TouchController combat input during that time (part 1).
+
+
+LAYOUT (world units, 1280x720, origin bottom-left — coordinate rule)
+====================================================================
+Full-screen overlay. Darken the 3D view behind with a semi-transparent black quad
+(alpha ~0.72) so the shop reads clearly.
+
+  +------------------------------------------------------------------+
+  |  UAC FABRICATOR // AUTHORIZED REQUISITION          CREDITS 142   |  header band (top ~90px)
+  +------------------------------------------------------------------+
+  |                                                                  |
+  |   [ CARD 1 ]   [ CARD 2 ]   [ CARD 3 ]                           |  card grid
+  |   [ CARD 4 ]   [ CARD 5 ]   [ CARD 6 ]                           |  (2 rows x 3, up to 6)
+  |                                                                  |
+  +------------------------------------------------------------------+
+  |  flavor line: "Fabricating your poor decisions since 2145."      |  footer
+  |                                         [ CLOSE ]                 |  large close button
+  +------------------------------------------------------------------+
+
+HEADER BAND:
+  - Left: title "UAC FABRICATOR" in cyan CRT font + a small procedural machine glyph.
+  - Right: live CREDITS readout ("CREDITS 142") in credit-cyan (reuse the inventory
+    credits color/glyph from credits-currency-system.txt). Reads
+    PlayerProgress.getCredits() each frame; ticks/pulses on a purchase.
+
+CARD GRID (one card per ShopEntry, 4-6 cards, 2x3 max):
+  Each card (large touch target, ~360x220 world units, generous padding) shows:
+  - CATEGORY ICON (procedural): a small glyph per OfferCategory —
+      WEAPON_TIER_UPGRADE : an up-chevron over a weapon silhouette / rarity pip stack
+      WEAPON_LEVEL_UP     : an up-arrow + "Lv" tag
+      PLAYER_ABILITY      : a stim/perk rune (reuse the boon card icon style)
+      AMMO                : an ammo-box / magazine glyph
+      MEDKIT              : a red cross
+  - RARITY BORDER: card edge tinted by entry.rarity (COMMON grey, RARE blue, EPIC
+    gold/purple — reuse the boon/weapon-tier palette; single source, no hardcoded hex).
+  - NAME (entry.displayName), e.g. "TIER UP - Chaingun (RARE -> EPIC)".
+  - ONE-LINE DESCRIPTION (entry.description), e.g. "Adds an ability slot" / "+1 level:
+    DMG 13->15" / "Adrenal Pump: free action after a kill" / "Shells x12".
+  - PRICE tag (bottom-right): "142 cr". Colored GREEN if affordable, RED if not.
+  - STATE:
+      affordable + unsold : full color, a pulsing "BUY" affordance.
+      unaffordable        : price in red, card slightly desaturated, tap -> denial blip.
+      sold out            : greyed with a red "SOLD" stamp; not tappable.
+  - If the machine is fully DEPLETED, all cards are SOLD and a center banner reads
+    "OUT OF STOCK".
+
+FOOTER:
+  - A rotating flavor line (cold-corporate machine humor: "Cash only. The afterlife
+    doesn't take cards." / "Restocking is above my pay grade." / "Warranty void in
+    Hell."). Pick one at open from a small pre-defined array (no per-frame alloc).
+  - A large CLOSE button (thumb-friendly), bottom-right. Also closeable by the USE /
+    back touch affordance.
+
+
+BUY FLOW (touch)
+================
+1. Player taps an unsold, affordable card.
+2. CONFIRM step (prevents accidental spend on mobile): the card expands / a small
+   "BUY for N cr?  [CONFIRM] [CANCEL]" appears on the card. (A double-tap-to-confirm
+   is an acceptable simpler variant — OPEN QUESTION.)
+3. On CONFIRM, call ShopTransaction.buy(entry) (part 2):
+   - success: credits tick down (animated count), card stamps "SOLD", a "cha-chunk"
+     dispenser sound + a brief dispense animation on the machine sprite (part 6), and
+     a small "+item" fly-to-HUD/inventory flourish. For a weapon upgrade, show the
+     gained ability / stat delta on the card for ~1s before it stamps SOLD.
+   - failure (shouldn't reach here if guards passed): a red denial blip + reason.
+4. Tapping an unaffordable card -> immediate "INSUFFICIENT CREDITS" denial blip (no
+   confirm step).
+5. Player may keep buying until credits/stock run out, then taps CLOSE.
+6. CLOSE: overlay slides out (~0.2s real time), world resumes IDLE, no turn spent,
+   player unchanged in tile/facing (part 1).
+
+The player can REOPEN the same machine later (credits accrue from kills between
+visits) — unsold cards persist; sold cards stay SOLD (no restock, part 2).
+
+
+VISUAL / STYLE NOTES
+====================
+  - Match procedural-vitals-hud.txt: ShapeRenderer panels + BitmapFont, cyan CRT
+    scanline accent, chunky industrial bezel. No texture atlas.
+  - Reuse rarity colors from the weapon-tier / boon-rarity palettes (single source).
+  - Credits readout reuses the exact color + chip glyph from the inventory credits
+    header (credits-currency-system.txt) so the currency reads consistently.
+  - Slide-in/out is a real-time cosmetic tween (~0.2s) — allowed even though the world
+    is paused (it's UI animation, not a world tick).
+  - Keep it SNAPPY and legible on a phone: big fonts, high contrast, few words per
+    card, price always visible.
+
+
+TURN-BASED / PLATFORM / PERF COMPLIANCE
+=======================================
+  - Overlay open = menu pause, no tick (part 1). Enemies do not act.
+  - TOUCH ONLY: cards + confirm + close are on-screen targets; unproject touch through
+    the camera before hit-testing (coordinate rule).
+  - NO allocations in render(): pre-allocate ShapeRenderer, SpriteBatch, BitmapFont,
+    GlyphLayout, card-rect array, and the flavor-line array in the constructor. The
+    card list comes straight from ShopStock (fixed size).
+  - All Disposables (batch, shapes, font if owned) disposed in dispose().
+  - Viewport: the overlay draws in world units under the same FitViewport; call
+    viewport.apply() path already handled by Main.render() (do not add a second
+    camera that moves the origin).
+
+
+CONSTANTS TO ADD
+================
+HudConstants.java (or a new ShopUiConstants block):
+  SHOP_OVERLAY_DIM_ALPHA            = 0.72f
+  SHOP_CARD_WIDTH / HEIGHT          = 360f / 220f
+  SHOP_CARD_GAP                     = 28f
+  SHOP_HEADER_HEIGHT                = 90f
+  SHOP_CLOSE_BUTTON_* (pos/size)
+  SHOP_CONFIRM_BUTTON_* (pos/size)
+  SHOP_PRICE_AFFORD_COLOR / DENY_COLOR
+  (rarity + credit colors are REFERENCED from their existing sources, not redefined.)
+
+
+INTERACTIONS
+============
+  - PART 1 (machine + pause): World opens/closes this overlay; suppresses combat input
+    while open.
+  - PART 2 (stock + buy): renders ShopStock; calls ShopTransaction.buy(); reads prices,
+    rarity, sold-out state.
+  - PARTS 3/4 (effects): the buy dispatch applies weapon/ability/supply effects; this
+    UI shows the result (gained ability, stat delta, item flourish).
+  - PART 6 (sprite): a purchase triggers the machine's dispense animation.
+  - CREDITS (IMPLEMENTED): header + card affordability read the live balance.
+  - HUD / VITALS STYLE (procedural-vitals-hud): shared procedural visual language.
+  - INVENTORY OVERLAY: shares pause semantics + credit-readout styling; keep the two
+    overlays visually consistent.
+
+
+OPEN QUESTIONS
+==============
+1. Confirm step: expand-card "[CONFIRM]/[CANCEL]" (safer, recommended) vs
+   double-tap-to-buy (faster, fewer taps)? Recommend the explicit confirm on mobile to
+   avoid mis-spends.
+2. Card grid layout for exactly 4 vs 5 vs 6 entries — 2x3 with empty slots, or reflow
+   (2x2 / centered)? Recommend reflow so small shops don't look empty.
+3. Show a compact "what you own" strip (current weapons + their tier/level) so weapon-
+   upgrade cards have context? Nice for readability; stretch for v1.1.
+4. Should closing while a card is mid-confirm cancel the confirm (recommended) or buy?
+   Recommend cancel — never spend on close.
+5. Comparison preview for weapon upgrades (before/after stats) shown inline on the
+   card vs only after purchase? Recommend a small inline "-> new value" preview so the
+   player buys informed; align with part 3 OPEN Q about revealed-vs-chosen ability.

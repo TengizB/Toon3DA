@@ -1,0 +1,197 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Shop 4 — Consumables (Ammo, Medkits) & Player Ability Purchases
+---
+
+READ ORDER
+==========
+Part 4 of the 6-part SHOP series (see shop_order_1 for the list + golden constraint).
+Parts 1-3 built the machine, stock/roll/pricing, and the two weapon-upgrade services.
+THIS FILE defines the remaining three purchase categories:
+  AMMO           — buy ammo for a weapon the player can use
+  MEDKIT         — buy a stim / field medkit into inventory
+  PLAYER_ABILITY — buy a player boon/perk ("player abilities" the design calls for),
+                   RANDOM per floor
+
+GOLDEN CONSTRAINT: still no weapons for sale. Ammo/medkits are consumables; player
+abilities are permanent-for-run character upgrades. None of these is a gun.
+
+
+DEPENDENCIES
+============
+HARD (usable now):
+  - Item system: item/ItemType.java, item/AmmoType.java, item/Inventory.java,
+    item/ItemStack.java, ItemConstants.java. Ammo + medkits already exist as item
+    types with caps and add/remove logic. AMMO/MEDKIT purchases just call the
+    existing "add to inventory / add to reserve" paths — no new item model.
+  - Credits (IMPLEMENTED): part 2's buy() spends before applying these effects.
+HARD (BLOCKER for the PLAYER_ABILITY category only):
+  - levelup-stim-boon-choice-progression.txt (NOT IMPLEMENTED) owns the Boon /
+    BoonPool / BoonRarity / PlayerStats / applyBoon path. The shop's PLAYER_ABILITY
+    purchase is a THIN alternate acquisition path for those SAME boons — it must
+    reuse BoonPool + Boon.apply(), not invent a parallel ability system. If the boon
+    system is not yet implemented when this part is scheduled, the AMMO + MEDKIT
+    categories can ship first (they have no such dependency); PLAYER_ABILITY is
+    BLOCKED until the boon system lands.
+
+
+CATEGORY — AMMO
+===============
+Effect: add a box of one ammo type to the player's reserve (the same effect as
+picking up an ammo box from the ground).
+
+VALIDITY (part 2 asks before offering):
+  - offer an ammo type ONLY if the player OWNS a weapon that consumes it (never sell
+    cells if you have no energy weapon — matches the deleted merchant doc's rule and
+    common sense). Query PlayerInventory / Loadout for the ammo types in use.
+  - prefer ammo types the player is LOW on (reserve well below cap) so the offer is
+    relevant to the scarcity the player actually feels; if the player is capped on
+    every usable type, this category may yield null (part 2 falls back).
+
+OFFER SHAPES (two price points, from part 2's price table):
+  AMMO (small box) — a modest refill of one type (e.g. the type's standard box size).
+  AMMO (large box) — ~2x the small box, priced ~2.25x (bulk discount is mild — see
+                     balance).
+Amount is drawn from ItemConstants box sizes for that AmmoType (reuse the existing
+box constants; do NOT hardcode). Overflow past the reserve cap is wasted (same rule
+as ground pickups) — the UI should warn "AMMO NEAR CAP" if a purchase would overflow,
+but still allow it (player's choice). RANDOM element: WHICH usable ammo type is
+offered is rolled per machine, so different floors push different guns' ammo.
+
+APPLY: PlayerInventory.addAmmo(ammoType, amount) (or the existing reserve-add path),
+clamped to the reserve cap. Fire the purchase feedback (part 5).
+
+
+CATEGORY — MEDKIT
+=================
+Effect: add a healing item to the inventory (NOT auto-used — it goes to inventory so
+the player heals on their own terms via the Heal button, matching the existing medkit
+flow; medkit-field-medicine-system.txt / the Heal touch action).
+
+VALIDITY:
+  - offer only if the inventory has room for the medkit item (Inventory stack caps).
+    If medkits are capped, this category may yield null (part 2 falls back to AMMO).
+
+OFFER SHAPES:
+  MEDKIT (stim)  — the small heal item (cheap, the common supply line).
+  MEDKIT (field) — the large heal item (pricier, the "bank it for the bad room" buy).
+Use the EXISTING ItemType medkit entries + their heal values (ItemConstants) — the
+shop does not define new healing amounts.
+
+APPLY: Inventory.add(medkitItemType, 1) via the existing add path. Fire feedback.
+
+
+CATEGORY — PLAYER_ABILITY (the "player abilities" the design requires)
+=====================================================================
+Effect: grant the player ONE boon/perk — a permanent-for-run character upgrade —
+drawn from the stim/boon pool (levelup-stim-boon-choice-progression.txt). This is the
+shop's alternate, PAID path to the same boons the level-up screen hands out for free
+on XP thresholds. Buying an ability at the shop lets a credit-rich player deliberately
+shape their build instead of waiting for a level-up.
+
+RANDOM PER FLOOR (hard requirement): the specific abilities a machine offers are
+rolled per floor from BoonPool, so "the abilities the shop offers must be random for
+each level." Two floors offer different abilities; two machines on a floor roll
+independently (de-dup so they don't both offer the same boon).
+
+VALIDITY (part 2 asks BoonPool via this part):
+  - draw a boon the player does NOT already own at max stacks (BoonPool already
+    tracks unique-vs-repeatable boons and unlocked-set eligibility). Core stat boons
+    (+Strength/+Vitality/+Agility) are repeatable and always eligible; unique perks
+    are offered only if not already taken.
+  - if BoonPool has no eligible boon (unlikely — stat boons are always eligible),
+    yield null and part 2 falls back.
+
+OFFER: one boon per PLAYER_ABILITY slot. displayName = boon name; description = its
+one-line effect; rarity = the boon's BoonRarity (COMMON/RARE/EPIC) which also drives
+the price rarity factor (part 2) and the UI card color. payload = the Boon id.
+
+APPLY (on purchase): call the SAME path the level-up screen uses —
+BoonPool.resolve(id) -> Boon.apply(Player, RunState) / ProgressionManager.applyBoon().
+Do NOT duplicate stat-mutation logic in the shop. A VITALITY buy heals-to-full exactly
+as the level-up VITALITY pick does (reuse the effect). Fire feedback (part 5),
+including the boon's own flash if it has one (e.g. green heal flash for Vitality).
+
+PRICE: SHOP_BASE_PRICE_PLAYER_ABILITY scaled by depth + the boon's rarity factor, so
+an EPIC perk costs meaningfully more than a COMMON stat bump. Abilities are a premium
+line — roughly a full early floor's credits for a good perk.
+
+
+PACKAGE / CLASSES
+=================
+  shop/ShopSupplyService.java — bridge for AMMO + MEDKIT:
+    rollAmmoOffer(playerInventory, seededRng) -> ShopEntry|null
+    rollMedkitOffer(inventory, seededRng)     -> ShopEntry|null
+    applyAmmo(ShopEntry, playerInventory); applyMedkit(ShopEntry, inventory)
+    Reuses existing item/ammo add paths; contains no new healing/ammo math.
+  shop/ShopAbilityService.java — bridge for PLAYER_ABILITY:
+    rollAbilityOffer(boonPool, player, seededRng) -> ShopEntry|null
+    applyAbility(ShopEntry, boonPool, player, runState)
+    Reuses BoonPool draw-eligibility + Boon.apply(); contains no new stat logic.
+All three services are stateless helpers called by ShopRoller (part 2) at floor gen
+(roll*) and by ShopTransaction (part 2) at purchase (apply*).
+
+
+TURN-BASED / PLATFORM COMPLIANCE
+================================
+  - All purchases/effects happen inside the paused shop overlay: no turn spent.
+  - Ammo/medkit add and boon apply are one-shot state mutations at purchase, not
+    per-frame — no render() allocation.
+  - Touch-only buy flow (part 5). No keyboard.
+
+
+BALANCE NOTES
+=============
+  - Ammo + medkits are the "RESOURCE RELIEF" half of the credit sink: they let the
+    player convert credits into the exact resource scarcity is squeezing
+    (balance_order_3). Price them so a resupply is a real spend, not trivial —
+    otherwise scarcity collapses (S ratio climbs back above comfort). Recommended:
+    an ammo/medkit buy should cost enough that the player can't fully resupply AND
+    buy an upgrade in one visit.
+  - Mild bulk discount on large boxes (2x ammo for ~2.25x price) — enough to reward
+    committing, not so much it makes small boxes pointless.
+  - Player abilities are the PREMIUM, exciting line — buying a build-defining perk
+    should feel like a big decision (save several kills' worth of credits). It also
+    gives the credit economy a "power" outlet distinct from the "safety" of supplies,
+    so a skilled player low on danger can invest credits into offense instead.
+  - Overflow-wasted ammo (buying past cap) is the player's mistake to make; warn but
+    allow — preserves the anti-hoard intent (reserve caps still bind).
+  - All amounts/heal values come from existing item constants + the boon system;
+    the shop introduces only PRICES (part 2), keeping one source of truth per system.
+
+
+INTERACTIONS
+============
+  - ITEM / AMMO / INVENTORY (item/*, ItemConstants): ammo + medkit purchases reuse
+    existing add paths, box sizes, heal values, and stack caps. No new item types.
+  - MEDKIT FIELD MEDICINE (medkit-field-medicine-system): bought medkits behave
+    exactly like found ones (inventory, manual Heal action).
+  - BOON / STIM PROGRESSION (levelup-stim-boon-choice-progression): PLAYER_ABILITY is
+    a paid alternate acquisition of those boons; reuses BoonPool + Boon.apply().
+    HARD DEPENDENCY for that category only.
+  - PLAYER STATS (PlayerStats): stat boons bought here feed the same modifiers the
+    level-up picks do (single source of truth).
+  - CREDITS (IMPLEMENTED) + SCARCITY (balance_order_3): supplies = resource-relief
+    sink; abilities = power sink. Together they make credits meaningful.
+  - PART 2 (roll + price): asks these services for concrete offers and prices them by
+    rarity + depth.
+
+
+OPEN QUESTIONS
+==============
+1. Should bought medkits ever be AUTO-USED (instant heal) as a pricier "emergency"
+   variant, or always go to inventory? Recommend always-to-inventory for v1 (matches
+   found medkits, keeps the Heal action meaningful); an "emergency instant heal"
+   premium offer is a nice stretch.
+2. Can the player buy the SAME repeatable stat boon multiple times across a run's
+   shops (stacking +Vitality)? Yes — stat boons are repeatable in the boon system;
+   pricing already scales with depth so late stacks self-limit. Confirm it doesn't
+   trivialize; if it does, add a per-run purchase cap per boon.
+3. Ammo offer targeting: purely random among usable types vs weighted toward the type
+   the player is lowest on? Recommend weighting toward the lowest — most relevant to
+   felt scarcity, still has variety.
+4. Do player abilities bought at the shop count toward any "boons taken this run" stat
+   / death-screen tally? Recommend yes for readability; defer to RunStats.
+5. Should PLAYER_ABILITY offers be gated by a minimum floor depth (so the first floors
+   are supply/level-up focused and abilities enter deeper)? Recommend a soft gate
+   (e.g. abilities weight 0 on floor 1) so early shops teach supplies/upgrades first.
