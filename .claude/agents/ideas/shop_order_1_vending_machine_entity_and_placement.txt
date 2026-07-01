@@ -1,0 +1,242 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Shop 1 — UAC Fabricator Vending Machine: Entity, Placement & Interaction
+---
+
+READ ORDER
+==========
+This is part 1 of a 6-part SHOP series that replaces the old, deleted
+"roguelike_order_11 merchant room" design. Implement in order; each part depends
+on the ones before it:
+  1. shop_order_1_vending_machine_entity_and_placement   (THIS FILE)  — the machine, where it spawns, how you open it
+  2. shop_order_2_stock_model_and_random_roll            — what it stocks (random per floor) + pricing + credit spend
+  3. shop_order_3_weapon_upgrade_services                — "increase weapon tier" + "weapon level-up" purchases
+  4. shop_order_4_consumables_and_player_abilities        — ammo, medkits, and player ability (boon) purchases
+  5. shop_order_5_shop_ui_overlay                        — the full-screen buy UI
+  6. shop_order_6_procedural_animated_machine_sprite     — the high-res animated robotic-vending-machine sprite
+
+GOLDEN CONSTRAINT (applies to the whole series):
+  THE SHOP NEVER SELLS WEAPONS. It sells: weapon TIER upgrades, weapon LEVEL-UPS,
+  player ABILITIES, AMMO, and MEDKITS. Nothing else. Getting a new gun is the job
+  of ground drops / start room — the shop only makes what you ALREADY carry better,
+  plus tops up ammo/heals. This is a deliberate design pillar, not a placeholder.
+
+
+OVERVIEW
+========
+The shop is a UAC FABRICATOR — a chest-high robotic VENDING MACHINE bolted to a
+wall, not a humanoid merchant. It is a stationary, non-hostile world object the
+player walks up to and interacts with. Fiction: an automated UAC requisition
+dispenser that survived the incursion and still takes corporate scrip (Credits).
+It hums, its status light pulses, and a little dispenser arm twitches — a cold
+machine indifferent to the apocalypse, cheerfully upselling you a stim while
+demons claw the door. It fabricates UPGRADES and SUPPLIES on demand from your
+credit balance; it does not hand out guns.
+
+THIS FILE OWNS: the machine entity, its per-floor PLACEMENT (1 or 2 per floor),
+enemy-spawn suppression around it, and the INTERACTION that opens the shop
+(turn-pause semantics). It does NOT own the stock, the prices, the purchase
+effects, the UI, or the sprite (parts 2-6).
+
+
+DEPENDENCIES
+============
+HARD (must exist / be usable now):
+  - Credits currency — IMPLEMENTED (credits-currency-system.txt). The wallet lives
+    on progression/PlayerProgress with addCredits/getCredits/spendCredits. The shop
+    is the SINK that idea consumes; parts 2-4 call spendCredits().
+  - Turn/tick system (docs/tick-system.txt, world/TickEventBus) — opening/closing
+    the shop must NOT advance the world (see INTERACTION below).
+  - Procedural level generation (docs/procedural-level-generation.txt,
+    level/LevelGenerator) — must be able to designate machine positions on a floor.
+  - Billboard rendering (render/PropRenderer or EnemyRenderer path) — the machine is
+    drawn as a stationary billboard; its actual sprite is part 6.
+SOFT (consumed by later parts, not by this file):
+  - weapon-levels-tiers-abilities.txt (NOT IMPLEMENTED) — part 3 sells tier/level
+    upgrades against that system. If it is not yet implemented when part 3 lands,
+    part 3 is BLOCKED on it (flagged there).
+  - levelup-stim-boon-choice-progression.txt (NOT IMPLEMENTED) — part 4 sells player
+    abilities drawn from that boon pool. Same blocking note lives in part 4.
+  - Interaction routing: if an InteractionDispatcher / "use tile in front" system
+    exists, reuse it; if not, this file specifies a minimal adjacency-interact hook
+    on PlayerController (see INTERACTION).
+
+
+THE MACHINE ENTITY
+==================
+Package: world/ or a new shop/ package (recommended: new package shop/ to keep the
+whole feature cohesive). Class shop/VendingMachine.java.
+
+A VendingMachine is a STATIONARY, NON-HOSTILE object (NOT an Enemy — no AI, no HP,
+no turn behaviour). Fields:
+  - int tileColumn, tileRow        // the FLOOR tile the machine occupies/faces from
+  - int facingStepColumn, facingStepRow  // which way it faces (toward the open tile
+                                            the player stands on to use it)
+  - ShopStock stock                // rolled once at floor gen (part 2 owns ShopStock)
+  - boolean depleted               // true when every entry is sold out / used up
+  - float animationTimeSeconds     // drives the idle animation (part 6)
+
+The machine is SOLID (blocks movement / blocks the ray like a wall-mounted unit) so
+the player cannot stand on its tile — they interact from the ADJACENT open tile it
+faces. Add its tile to the solid set the same way a solid prop is (see TILE SYMBOL).
+
+Lifecycle: created by LevelGenerator at floor generation, owned by World alongside
+the other managers, disposed with the floor. Credits (the wallet) persist across
+floors on PlayerProgress; the MACHINE and its stock do NOT — each floor rolls fresh
+machines (part 2).
+
+
+PLACEMENT — 1 OR 2 SHOPS PER FLOOR (hard requirement)
+=====================================================
+EVERY non-boss floor gets 1 or 2 machines (the design requirement: "each level must
+have 1 or 2 shops"). This is NOT a spawn CHANCE — it is guaranteed presence, count
+rolled per floor:
+  machineCount = randomInt(SHOP_MIN_PER_FLOOR, SHOP_MAX_PER_FLOOR)  // = 1..2
+  (weighted toward 1; e.g. 60% one machine, 40% two — SHOP_SECOND_MACHINE_CHANCE.)
+
+Placement rules (LevelGenerator, after rooms + enemies + items are seeded):
+  - Choose machineCount distinct eligible tiles. An eligible tile is a WALL-ADJACENT
+    floor edge (the machine mounts against a wall) that has at least one open
+    orthogonally-adjacent floor tile for the player to stand on, and is NOT: the
+    start tile, the exit tile, inside a boss arena, or blocking the only path
+    through a 1-wide corridor (must not softlock).
+  - Prefer placing in DIFFERENT rooms when count == 2 (spread the two machines so
+    they are not redundant; two machines in one room is wasteful).
+  - Set facingStep* toward the chosen adjacent open tile.
+  - Enemy-spawn suppression: no enemy may spawn ON the machine's stand-tile or the
+    machine's own tile. The machine's immediate area is a small safe pocket (a
+    breather), but the ROOM is not forced safe — a shop can sit in a contested room,
+    which is good tension (fight to reach the fabricator).
+BOSS FLOORS: 0 machines inside the boss arena. If floors before a boss are known
+(BossFloorController / difficulty scaling), bias the pre-boss floor toward 2 machines
+so the player can gear up — OPEN QUESTION, nice-to-have.
+
+
+TILE SYMBOL — DECISION
+======================
+PREFERRED (no new symbol): place machines PROGRAMMATICALLY from LevelGenerator
+metadata, exactly as the deleted order_11 doc recommended for its merchant. The
+generator picks eligible tiles and constructs VendingMachine objects directly; no
+level-file character is consumed. This is the path to implement first — it keeps the
+SYMBOL BUDGET untouched and needs no docs/tile-symbols.txt change.
+
+FALLBACK (only if hand-authored levels must place a machine): a new SOLID PROP
+symbol is required. Per docs/tile-symbols.txt SYMBOL BUDGET, prefer a free UPPERCASE
+letter for a solid/blocking prop (uppercase is the convention for solid things).
+If this path is taken it MUST follow the STRICT RULE in .claude/CLAUDE.md / the
+tile-symbols checklist IN ONE COMMIT: add the symbol to docs/tile-symbols.txt
+(new "SHOP / FABRICATOR" prop note), add it to Level.isPropSolid() (machine blocks
+movement), wire its billboard in PropRenderer, add any Constants, and bump the
+SYMBOL BUDGET count. LevelLoader would extract the marker into a VendingMachine and
+replace the tile with floor ' ' (like enemy spawn markers), so ALL runtime logic
+stays on the programmatic path — the symbol is only an authoring convenience.
+RECOMMENDATION: ship the programmatic path; defer the symbol until a level designer
+actually needs to hand-place a machine.
+
+
+INTERACTION — OPENING THE SHOP
+==============================
+Turn-based, mobile, touch-only. No keyboard (platform rule).
+
+1. The player stands on the machine's stand-tile (or any tile orthogonally adjacent
+   to the machine) and FACES the machine.
+2. A context touch button appears (reuse the existing interact/"use" affordance if
+   the door/keycard interact system exists; otherwise add a USE action to
+   TouchInputState / TouchControllerRenderer that is only shown when the tile the
+   player faces holds a VendingMachine). The button label: "USE FABRICATOR".
+3. On tap, the shop UI overlay opens (part 5). CRITICAL SEMANTICS:
+   - Opening the shop DOES NOT fire a tick / does NOT advance the world — identical
+     to the inventory overlay pause. Enemies do not act while the shop is open.
+   - The player's tile and facing are unchanged on close.
+   - Input to the turn engine is suppressed while the overlay is open; only the shop
+     UI consumes touch.
+4. The player buys 0+ items (parts 2-5), then closes the overlay. World resumes in
+   IDLE with no turn spent.
+5. The player may reopen the SAME machine any number of times while on the floor —
+   useful because credits accrue from kills between visits, so an item unaffordable
+   on first visit may become affordable later (parts 2-3 keep unsold entries alive
+   until bought). A machine whose every entry is sold shows as DEPLETED (part 6
+   dims its light) and its USE button still opens the UI to show "OUT OF STOCK".
+
+WIRING:
+  - world/World.java owns the List<VendingMachine> for the current floor, exposes
+    machineFacingPlayer(playerTileColumn, playerTileRow, facingStep...) -> nullable
+    VendingMachine (front-tile lookup, mirrors how doors/interactables are found).
+  - input/PlayerController.java: in IDLE, when the USE action is consumed and a
+    machine faces the player, call World.openShop(machine) instead of moving. This
+    routes to the overlay (part 5) and does NOT transition to MOVING/ROTATING.
+  - The overlay pause reuses the same "menu open -> tick engine frozen" mechanism the
+    inventory overlay already uses (do not invent a second pause path).
+
+
+CONSTANTS TO ADD
+================
+GameBalance.java (designer knobs):
+  SHOP_MIN_PER_FLOOR            = 1
+  SHOP_MAX_PER_FLOOR            = 2
+  SHOP_SECOND_MACHINE_CHANCE    = 0.40f   // P(a floor rolls 2 machines vs 1)
+  SHOP_BOSS_FLOOR_MACHINES      = 0       // machines inside a boss arena
+  SHOP_PREBOSS_FORCE_TWO        = true    // bias pre-boss floor toward 2 (OPEN Q)
+
+TouchConstants.java (only if a new USE button is needed):
+  USE_BUTTON_* (position/size/alpha) matching the existing action-button layout.
+
+No Constants for prices/stock here — those live in part 2.
+
+
+TURN-BASED / PLATFORM COMPLIANCE
+================================
+  - Opening/closing the shop costs NO turn (menu pause), matching inventory.
+  - The machine is a static solid object; its idle animation (part 6) is cosmetic
+    real-time decoration on a static tile — same class as flickering floor lights,
+    violates no turn invariant.
+  - Touch-only: the USE affordance is an on-screen button, never a key.
+  - No allocations in render(): the VendingMachine list is built at floor gen; the
+    front-tile lookup is O(machineCount) with no allocation.
+
+
+BALANCE / DESIGN NOTES
+======================
+  - GUARANTEED 1-2 machines per floor (not a chance) makes the credit economy a
+    RELIABLE loop: the player always has somewhere to spend, so credits are never a
+    dead counter (this directly unblocks the credit half of
+    balance_order_3_resource_scarcity_economy.txt, which flagged "no sink exists").
+  - Two machines on a floor should feel like a small jackpot, not the norm — keep
+    SHOP_SECOND_MACHINE_CHANCE modest so a two-shop floor is a treat.
+  - Machines mount on walls in contested rooms on purpose: reaching the fabricator
+    can cost ammo/HP, so "is the upgrade worth the fight to get to it?" is itself a
+    decision, echoing the scarcity model.
+
+
+INTERACTIONS
+============
+  - CREDITS (credits-currency-system, IMPLEMENTED): the machine is the sink; parts
+    2-4 call PlayerProgress.spendCredits(). Confirms the wallet API is exercised.
+  - SCARCITY ECONOMY (balance_order_3): this system is the "credit sink" that doc
+    lists as a hard prerequisite. Prices (part 2) follow that doc's method:
+    price ~ (TP-equiv or survival-turns-bought) * scarcity markup.
+  - TICK SYSTEM (docs/tick-system.txt): shop open = menu pause, no tick, mirrors
+    inventory overlay.
+  - LEVEL GEN (procedural-level-generation): machine placement hooks the existing
+    free-tile / room selection, with the wall-adjacency + no-softlock guard.
+  - SALVAGE META (salvage-cache-meta-progression): explicitly DISTINCT — Salvage is
+    permanent/between-run (menu), Credits are in-run and spent HERE at the machine.
+    Never blur the two.
+
+
+OPEN QUESTIONS
+==============
+1. Programmatic placement only for v1 (recommended) vs also shipping a fallback
+   solid-prop symbol now? Recommend programmatic only; add a symbol when authoring
+   demands it.
+2. Reuse an existing InteractionDispatcher (if keycard-doors shipped one) vs add a
+   minimal USE action to TouchInputState? Reuse if present; otherwise the minimal
+   USE hook here is enough.
+3. Should a two-machine floor stock the two machines from DIFFERENT category biases
+   (e.g. one "upgrade" machine, one "supply" machine) so visiting both is
+   worthwhile? Strong idea — flag for part 2's roll design.
+4. Pre-boss floors forced to 2 machines (SHOP_PREBOSS_FORCE_TWO)? Recommend yes if
+   boss-floor detection exists; harmless default otherwise.
+5. Does the machine need any HP / can it be destroyed (e.g. by a barrel chain)?
+   Recommend NO for v1 — indestructible, to avoid accidentally denying the player
+   their only sink on a floor.
