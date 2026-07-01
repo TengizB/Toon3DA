@@ -538,6 +538,10 @@ public abstract class Weapon implements WeaponProfile {
         return visualState == WeaponVisualState.NORMAL && shotsInClip > 0;
     }
 
+    public boolean isReloading() {
+        return visualState == WeaponVisualState.RELOADING;
+    }
+
     /**
      * Manually starts a reload when the weapon is idle, the clip is not full, and the reserve
      * (if tracked) is not empty. Returns true if a reload was started.

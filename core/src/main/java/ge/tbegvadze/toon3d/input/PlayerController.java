@@ -487,7 +487,11 @@ public class PlayerController {
 
     private void tryFire() {
         Weapon weapon = inventory.getEquippedWeapon();
-        if (weapon == null || !weapon.canFire()) return;
+        if (weapon == null) return;
+        if (!weapon.canFire()) {
+            if (weapon.isReloading()) trySkipTurn();
+            return;
+        }
 
         // Railgun requires a charge turn before the slug is released.
         if (weapon instanceof Railgun) {
