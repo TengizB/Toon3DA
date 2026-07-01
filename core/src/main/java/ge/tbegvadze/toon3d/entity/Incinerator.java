@@ -31,13 +31,27 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
  *   depth 2: FLAME_IMPACT_DAMAGE = 8
  *   depth 3: FLAME_FALLOFF       = 5   (edge of range, reduced)
  *
- * Burn DoT (FLAME_BURN_DAMAGE_PER_TURN, FLAME_BURN_TURNS) is reserved for
- * the enemy system; wire in applyBurn when enemies carry a burnTurnsRemaining field.
+ * Burn DoT: each enemy struck by the cone is set on fire via
+ * EnemyHitTarget.applyBurningStatus(), routing into the shared StatusEffectController
+ * as a BURNING status (FLAME_BURN_DAMAGE_PER_TURN over FLAME_BURN_TURNS turns). The
+ * burn keeps ticking after the player stops firing — the weapon's signature mechanic.
+ *
+ * Tile ignition: every reachable cone tile is also passed to a HazardIgniteTarget
+ * (HazardManager.igniteFire), bathing the floor area in spreading fire so the cone
+ * lights oil pools, chains into explosive barrels, and leaves a lingering hazard. The
+ * target is null in unit-test / no-World construction, in which case ignition no-ops.
  */
 public class Incinerator extends Weapon {
 
     /** Pre-allocated buffer for hudAmmoString() — avoids per-call allocation. */
     private final StringBuilder hudStringBuilder = new StringBuilder(20);
+
+    /**
+     * Sink that turns a reached cone tile into a spreading FIRE hazard.
+     * Null until World wires it per floor (HazardManager is rebuilt each floor);
+     * every use is null-guarded so no-World construction stays safe.
+     */
+    private HazardIgniteTarget hazardIgniteTarget = null;
 
     public Incinerator() {
         super("INCINERATOR",
@@ -52,6 +66,15 @@ public class Incinerator extends Weapon {
 
     @Override public boolean isMelee()    { return false; }
     @Override public ItemType getItemType() { return ItemType.WEAPON_INCINERATOR; }
+
+    /**
+     * Wires the sink that ignites floor tiles in the cone (HazardManager.igniteFire).
+     * World re-wires this whenever the per-floor HazardManager is rebuilt. Passing null
+     * disables tile ignition (used in tests / no-World construction).
+     */
+    public void setHazardIgniteTarget(HazardIgniteTarget target) {
+        this.hazardIgniteTarget = target;
+    }
 
     /**
      * The incinerator requires at least FUEL_PER_SHOT fuel to fire (not just > 0).
@@ -131,6 +154,15 @@ public class Incinerator extends Weapon {
                     break; // column / solid prop blocks this lateral flame ray
                 }
 
+                // The flame actually reaches this tile (it passed every blocking check):
+                // bathe it in spreading fire. This ignites oil pools and chains into the
+                // hazard system regardless of whether an enemy stands here. Null-guarded
+                // for no-World construction; HazardManager.igniteFire no-ops on walls /
+                // non-spreadable cells on its own.
+                if (hazardIgniteTarget != null) {
+                    hazardIgniteTarget.igniteFire(targetColumn, targetRow);
+                }
+
                 if (enemyHitTarget != null) {
                     Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                     if (hitEnemy != null) {
@@ -138,6 +170,10 @@ public class Incinerator extends Weapon {
                                 ? WeaponConstants.FLAME_FALLOFF
                                 : WeaponConstants.FLAME_IMPACT_DAMAGE;
                         enemyHitTarget.applyDamageTo(hitEnemy, impactDamage);
+                        // Set the enemy on fire — the DoT keeps ticking after the spray ends.
+                        enemyHitTarget.applyBurningStatus(hitEnemy,
+                                WeaponConstants.FLAME_BURN_TURNS,
+                                WeaponConstants.FLAME_BURN_DAMAGE_PER_TURN);
                         // Fire passes through enemies — do NOT break or return here.
                     }
                 }

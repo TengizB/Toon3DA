@@ -379,6 +379,19 @@ public final class EnemyManager implements EnemyHitTarget {
         }
     }
 
+    /**
+     * Applies (or refreshes) a BURNING damage-over-time status on the given enemy.
+     * Routed through the shared StatusEffectController so the burn ticks each world
+     * turn, obeys per-enemy fire resistance/immunity, and attributes any DoT kill
+     * back to the player (source = this manager). Used by the Incinerator cone.
+     */
+    @Override
+    public void applyBurningStatus(Object enemyObject, int turns, int magnitudePerTurn) {
+        if (statusEffectController == null) return;
+        statusEffectController.apply((Enemy) enemyObject, StatusType.BURNING,
+                turns, magnitudePerTurn, this);
+    }
+
     /** Advances hit-flash and attack animation timers for all enemies. Call once per frame from World.update(). */
     public void advanceHitFlash(float deltaTime) {
         for (int index = 0; index < enemies.size(); index++) {

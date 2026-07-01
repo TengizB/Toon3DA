@@ -111,6 +111,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private EnemyAttackEffectSystem enemyAttackEffectSystem;
     private ExplosiveBarrelManager explosiveBarrelManager;
     private HazardManager          hazardManager;
+    // Held so the per-floor HazardManager rebuild can re-wire the incinerator's tile-ignition sink.
+    private Incinerator            incinerator;
     private TickEventBus           tickEventBus;
     private PlayerController       playerController;
     // Boss encounter — null on non-boss floors
@@ -266,6 +268,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         AssaultRifle        assaultRifle    = new AssaultRifle();
         Railgun             railgun         = new Railgun();
         Incinerator         incinerator     = new Incinerator();
+        this.incinerator    = incinerator; // kept so per-floor hazard wiring can reach it
         GrenadeLauncher     grenadeLauncher = new GrenadeLauncher();
         float rangedMultiplier   = playerStats.getRangedDamageMultiplier();
         float accuracyMultiplier = playerStats.getAccuracyMultiplier();
@@ -433,6 +436,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hazardManager.setExplosiveBarrelManager(explosiveBarrelManager);
         hazardManager.setHazardVisualListener(propRenderer::addDynamicProp);
         explosiveBarrelManager.setDetonationListener(hazardManager::igniteFireFromExplosion);
+        // Re-wire the incinerator's tile-ignition sink to THIS floor's HazardManager (rebuilt
+        // per floor). Done alongside the other per-floor hazard wiring so it survives transitions.
+        if (incinerator != null) {
+            incinerator.setHazardIgniteTarget(hazardManager::igniteFire);
+        }
         enemyManager.setEnemyDeathHazardListener((deadType, tileColumn, tileRow) -> {
             // Plague Hulk leaves a lingering toxic cloud where it dies (area-denial verb).
             if (deadType == EnemyType.PLAGUE_HULK) {

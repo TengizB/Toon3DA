@@ -4165,40 +4165,73 @@ public class PropRenderer implements Renderable, Disposable {
 
     /**
      * Incinerator — short-range flamethrower.
-     * ORANGE layered nozzle assembly at muzzle (identity). Red flame lick at tip.
-     * Dark-red fuel tank slung below body. Pistol grip.
+     *
+     * Refined to match the reworked first-person sprite: a wide nozzle assembly with a
+     * layered ORANGE muzzle (dark outer housing → mid orange → bright core) and a small
+     * pilot flame lick at the tip (the signature "always live" read), a dark gunmetal body
+     * tube with a venting heat slat, an off-axis RUST-RED fuel tank behind/below the body
+     * carrying a yellow/black hazard band, two steel retaining hoops and a fuel gauge, plus
+     * the conventional dark grip and trigger guard. Palette mirrors WeaponHudRenderer:
+     * body 0.20,0.22,0.26 / orange 0.95,0.46,0.10 / tank 0.55,0.20,0.12 / hazard 0.88,0.72,0.10.
      */
     private static Texture generateWeaponIncineratorGroundTexture() {
         int S = WEAPON_PICKUP_TEXTURE_SIZE;
         Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
         p.setColor(0f, 0f, 0f, 0f);
         p.fill();
-        // BODY TUBE
-        p.setColor(0.20f, 0.20f, 0.22f, 1f); p.fillRectangle(20, 23, 40, 16);
-        p.setColor(0.30f, 0.30f, 0.32f, 1f); p.fillRectangle(20, 23, 40, 1); // top highlight
-        p.setColor(0.12f, 0.12f, 0.14f, 1f); p.fillRectangle(20, 38, 40, 1); // bottom shadow
-        // NOZZLE ASSEMBLY (layered ORANGE — dark outer -> mid orange -> bright core)
-        p.setColor(0.80f, 0.35f, 0.06f, 1f); p.fillRectangle(4, 18, 22, 28); // outer housing
-        p.setColor(0.95f, 0.46f, 0.10f, 1f); p.fillRectangle(6, 20, 18, 24); // mid orange
-        p.setColor(1.00f, 0.60f, 0.20f, 1f); p.fillRectangle(8, 23, 14, 18); // bright core
-        p.setColor(1.00f, 0.68f, 0.28f, 1f); p.fillRectangle(4, 18, 22, 1);  // top highlight
-        // FLAME LICK at nozzle tip
-        p.setColor(1.00f, 0.82f, 0.20f, 1f); p.fillRectangle(4, 24, 3, 16);  // orange-yellow center
-        p.setColor(0.96f, 0.22f, 0.05f, 1f); // red flame edges
-        p.fillRectangle(4, 18, 3, 7); p.fillRectangle(4, 39, 3, 7);
-        // FUEL TANK (dark red-brown, slung below body)
-        p.setColor(0.42f, 0.12f, 0.07f, 1f); p.fillRectangle(24, 39, 28, 16);
-        p.setColor(0.32f, 0.08f, 0.04f, 1f); p.fillRectangle(24, 54, 28, 1); // bottom shadow
-        p.setColor(0.28f, 0.08f, 0.04f, 1f); p.fillRectangle(24, 47, 28, 2); // tank seam band
-        // PISTOL GRIP
-        p.setColor(0.12f, 0.12f, 0.14f, 1f); p.fillRectangle(50, 39, 12, 20);
-        p.setColor(0.09f, 0.09f, 0.10f, 1f); // checkering
-        p.fillRectangle(51, 44, 10, 1); p.fillRectangle(51, 49, 10, 1); p.fillRectangle(51, 54, 10, 1);
-        // TRIGGER GUARD
-        p.setColor(0.18f, 0.18f, 0.20f, 1f);
-        p.fillRectangle(44, 39, 2, 10); p.fillRectangle(44, 48, 12, 2); p.fillRectangle(54, 39, 2, 9);
-        // Cool-white shimmer
-        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(4, 18, 2, 2);
+
+        // BODY TUBE — dark gunmetal, center-right, with crown highlight and base shadow.
+        p.setColor(0.20f, 0.22f, 0.26f, 1f); p.fillRectangle(22, 23, 38, 16);
+        p.setColor(0.34f, 0.37f, 0.41f, 1f); p.fillRectangle(22, 23, 38, 2);  // top crown highlight
+        p.setColor(0.11f, 0.12f, 0.14f, 1f); p.fillRectangle(22, 37, 38, 2);  // bottom shadow
+        // Heat-vent slats on the body top (industrial read, mirrors FP shoulder vents).
+        p.setColor(0.09f, 0.10f, 0.11f, 1f);
+        p.fillRectangle(38, 26, 16, 1); p.fillRectangle(38, 29, 16, 1); p.fillRectangle(38, 32, 16, 1);
+        p.setColor(0.70f, 0.32f, 0.06f, 1f); // faint heat glow leaking between slats
+        p.fillRectangle(38, 27, 16, 1); p.fillRectangle(38, 30, 16, 1);
+
+        // NOZZLE ASSEMBLY (layered ORANGE — dark outer housing → mid orange → bright core).
+        p.setColor(0.80f, 0.35f, 0.06f, 1f); p.fillRectangle(6, 18, 22, 28);  // outer housing
+        p.setColor(0.95f, 0.46f, 0.10f, 1f); p.fillRectangle(8, 20, 18, 24);  // mid orange
+        p.setColor(1.00f, 0.60f, 0.20f, 1f); p.fillRectangle(10, 23, 14, 18); // bright core
+        p.setColor(1.00f, 0.70f, 0.30f, 1f); p.fillRectangle(6, 18, 22, 2);   // top highlight
+        // Steel retaining hoops banding the nozzle (two vertical bright bands).
+        p.setColor(0.42f, 0.45f, 0.50f, 1f);
+        p.fillRectangle(15, 18, 2, 28); p.fillRectangle(22, 18, 2, 28);
+        // Igniter collar at the muzzle face (bright steel rim where the pilot light sits).
+        p.setColor(0.50f, 0.53f, 0.58f, 1f); p.fillRectangle(4, 22, 3, 20);
+        p.setColor(0.62f, 0.65f, 0.70f, 1f); p.fillRectangle(4, 22, 1, 20);  // face highlight
+
+        // PILOT FLAME lick at the nozzle tip — layered orange→yellow→white (always live).
+        p.setColor(0.96f, 0.22f, 0.05f, 1f); p.fillRectangle(1, 26, 4, 12);  // red outer
+        p.setColor(1.00f, 0.55f, 0.12f, 1f); p.fillRectangle(1, 28, 3, 8);   // orange mid
+        p.setColor(1.00f, 0.85f, 0.30f, 1f); p.fillRectangle(1, 30, 2, 4);   // yellow-white core
+
+        // FUEL TANK — rust-red, off-axis behind/below the body, with cylindrical shading.
+        p.setColor(0.55f, 0.20f, 0.12f, 1f); p.fillRectangle(26, 39, 28, 17);
+        p.setColor(0.72f, 0.30f, 0.18f, 1f); p.fillRectangle(26, 39, 28, 2);  // top sheen
+        p.setColor(0.34f, 0.11f, 0.06f, 1f); p.fillRectangle(26, 54, 28, 2);  // bottom shadow
+        p.setColor(0.34f, 0.11f, 0.06f, 1f); p.fillRectangle(26, 39, 2, 17);  // left-edge shadow
+        // Hazard band — yellow base with black diagonal ticks.
+        p.setColor(0.88f, 0.72f, 0.10f, 1f); p.fillRectangle(28, 45, 24, 5);
+        p.setColor(0.10f, 0.09f, 0.07f, 1f);
+        p.fillRectangle(30, 45, 2, 5); p.fillRectangle(36, 45, 2, 5);
+        p.fillRectangle(42, 45, 2, 5); p.fillRectangle(48, 45, 2, 5);
+        // Steel retaining hoop + fuel gauge window on the tank.
+        p.setColor(0.40f, 0.42f, 0.46f, 1f); p.fillRectangle(28, 51, 24, 1);  // hoop
+        p.setColor(0.12f, 0.05f, 0.03f, 1f); p.fillRectangle(30, 40, 8, 3);   // gauge recess
+        p.setColor(0.95f, 0.42f, 0.12f, 1f); p.fillRectangle(30, 40, 4, 3);   // gauge fill (half)
+
+        // GRIP — dark charcoal, below the body on the right.
+        p.setColor(0.16f, 0.17f, 0.20f, 1f); p.fillRectangle(54, 39, 10, 18);
+        p.setColor(0.10f, 0.11f, 0.13f, 1f); // checkering grooves
+        p.fillRectangle(55, 44, 8, 1); p.fillRectangle(55, 49, 8, 1); p.fillRectangle(55, 54, 8, 1);
+        // TRIGGER GUARD.
+        p.setColor(0.24f, 0.26f, 0.30f, 1f);
+        p.fillRectangle(48, 39, 2, 10); p.fillRectangle(48, 48, 12, 2); p.fillRectangle(58, 39, 2, 9);
+
+        // Cool-white shimmer at the muzzle face.
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(4, 22, 2, 2);
         return finalize(p);
     }
 
