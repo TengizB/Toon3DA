@@ -806,6 +806,16 @@ public final class BalanceConfig {
      * the player can escape — the counterplay. Damage/turn = EffectConstants.BURN_DAMAGE_PER_TURN.
      */
     public static final int   HAZARD_FIRE_BURN_TURNS       = 2;
+
+    /**
+     * Multiplier applied to EffectConstants.BURN_DAMAGE_PER_TURN when the host standing in a fire
+     * tile is an enemy rather than the player. Fire still hurts the player at the base rate (the
+     * misposition risk stays real), but enemies caught in the flamethrower's spreading fire burn
+     * faster — rewarding the player for herding a swarm into the flame instead of just tagging
+     * them directly. Range: 1.0 (symmetric) – 2.0.
+     */
+    public static final float HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER = 1.5f;
+
     /**
      * POISONED duration (turns) a toxic pool applies each turn. Toxic STACKS (STACK_MAGNITUDE), so
      * standing in it escalates — area denial. Damage/turn = stacks * EffectConstants.POISON_DAMAGE_PER_STACK.

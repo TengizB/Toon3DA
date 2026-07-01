@@ -174,8 +174,8 @@ public class PlayerController {
     private void advanceHealing(float deltaTime) {
         actionProgress = Math.min(1f, actionProgress + deltaTime / ItemConstants.PLAYER_HEAL_DURATION);
         if (actionProgress >= 1f) {
-            MedicalTier tier   = inventory.chooseHealTier(player.getHealth(), player.getMaxHealth());
-            int         amount = inventory.spendHeal(tier);
+            MedicalTier tier   = chooseHealTier(player.getHealth(), player.getMaxHealth());
+            int         amount = spendHeal(tier);
             player.applyHealing(amount);
             if (amount > 0 && eventTextSystem != null) {
                 eventTextSystem.spawnWithColor("+" + amount + " HP", EventTextSystem.COLOR_GREEN);
@@ -201,23 +201,51 @@ public class PlayerController {
     private void pickUpMedicalIfPresent(int tileColumn, int tileRow) {
         char cell = level.getCell(tileColumn, tileRow);
         if (!Level.isMedicalPickup(cell)) return;
-        MedicalTier tier       = Level.medicalTierOfPickup(cell);
-        int         healAmount = (tier == MedicalTier.STIM)
-                                     ? ItemConstants.MEDKIT_STIM_HEAL
-                                     : ItemConstants.MEDKIT_FULL_HEAL;
-        if (player.getHealth() < player.getMaxHealth()) {
-            // Apply healing immediately — player expects health to restore on contact.
-            level.consumePickupAt(tileColumn, tileRow);
-            player.applyHealing(healAmount);
-            if (eventTextSystem != null)
-                eventTextSystem.spawnWithColor("+" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
-        } else if (inventory.canAcceptMedical(tier)) {
-            // Already full — stash for later use with R key.
-            inventory.addMedical(tier);
+        if (itemInventory == null) return;
+        MedicalTier tier = Level.medicalTierOfPickup(cell);
+        ItemType    type = tier.getItemType();
+        // Stepping onto the tile is the whole interaction — the medkit is stashed as a
+        // slotted inventory item (one stack occupies one cell), never applied instantly.
+        if (itemInventory.tryAdd(type, 1)) {
             level.consumePickupAt(tileColumn, tileRow);
             if (eventTextSystem != null)
-                eventTextSystem.spawnWithColor("MEDKIT STASHED", EventTextSystem.COLOR_GREEN);
+                eventTextSystem.spawnWithColor(type.getDisplayName().toUpperCase() + " +1", EventTextSystem.COLOR_GREEN);
+        } else if (eventTextSystem != null) {
+            // Inventory full — anti-waste: leave the pickup on the floor for later.
+            eventTextSystem.spawn("MED STASH FULL");
         }
+    }
+
+    /** True if the marine is carrying at least one stim-pack or field medkit. */
+    private boolean hasAnyMedical() {
+        return itemInventory != null
+                && (itemInventory.countOf(ItemType.MEDKIT_SMALL) > 0
+                    || itemInventory.countOf(ItemType.MEDKIT_LARGE) > 0);
+    }
+
+    /**
+     * Selects the tier to spend, preferring the smallest charge that brings the marine to or
+     * above maxHealth. Spends a stim if it alone tops the player off; otherwise spends a
+     * medkit. Always returns non-null when hasAnyMedical() is true.
+     */
+    private MedicalTier chooseHealTier(int currentHealth, int maxHealth) {
+        if (itemInventory == null) return MedicalTier.FIELD_MEDKIT;
+        int stimCount = itemInventory.countOf(ItemType.MEDKIT_SMALL);
+        if (stimCount > 0) {
+            int medkitCount     = itemInventory.countOf(ItemType.MEDKIT_LARGE);
+            int healthAfterStim = currentHealth + ItemConstants.MEDKIT_STIM_HEAL;
+            if (healthAfterStim >= maxHealth || medkitCount == 0) return MedicalTier.STIM;
+        }
+        return MedicalTier.FIELD_MEDKIT;
+    }
+
+    /** Spends one unit of the given tier from the slotted inventory and returns the HP value to restore. */
+    private int spendHeal(MedicalTier tier) {
+        if (itemInventory == null) return 0;
+        ItemType type = tier.getItemType();
+        if (itemInventory.countOf(type) <= 0) return 0;
+        itemInventory.spend(type, 1);
+        return tier.getHealAmount();
     }
 
     private void pickUpArmourIfPresent(int tileColumn, int tileRow) {
@@ -386,7 +414,7 @@ public class PlayerController {
     }
 
     private void tryHeal() {
-        if (!inventory.hasAnyMedical()) {
+        if (!hasAnyMedical()) {
             if (eventTextSystem != null) eventTextSystem.spawn("NO MEDKITS");
             return;
         }

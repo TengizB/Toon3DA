@@ -380,7 +380,8 @@ public final class WeaponConstants {
     public static final float CHAINGUN_BASE_ACCURACY              = 0.75f;
     public static final float PLASMA_RIFLE_BASE_ACCURACY          = 0.90f;
     public static final float RAILGUN_BASE_ACCURACY               = 0.95f;
-    public static final float INCINERATOR_BASE_ACCURACY           = 0.70f;
+    // Short-range cone spray always connects — no aimed accuracy roll (see Incinerator.isPerPelletAccuracy()).
+    public static final float INCINERATOR_BASE_ACCURACY           = 1.00f;
     public static final float GRENADE_LAUNCHER_BASE_ACCURACY      = 0.80f;
     public static final float ASSAULT_RIFLE_BASE_ACCURACY         = 0.88f;
     public static final float MELEE_BASE_ACCURACY                 = 1.00f;

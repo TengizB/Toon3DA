@@ -19,7 +19,10 @@ import java.util.Random;
  * Owns the per-tile FIRE / TOXIC hazard state and advances it once per world turn. A hazard tile
  * ticks the existing BURNING (fire) or POISONED (toxic) status effect onto ANY host standing on
  * it — the player AND enemies — so a hazard can win the fight for you OR kill you if you
- * misposition. That two-sidedness is the whole tactic (idea 4 balance note).
+ * misposition. That two-sidedness is the whole tactic (idea 4 balance note). Fire damage is not
+ * perfectly symmetric, though: enemies take HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER extra burn damage
+ * per turn compared to the player in the same tile (see BalanceConfig), so herding enemies into
+ * flame is rewarded without changing the player's own misposition risk.
  *
  * Behaviour:
  *   - FIRE spreads each turn (chance) to one eligible cardinal-neighbour floor/stain tile, and
@@ -202,8 +205,13 @@ public final class HazardManager {
     private void applyHazardStatus(StatusHost host, byte type) {
         if (statusEffectController == null) return;
         if (type == FIRE) {
+            // Enemies burn faster than the player in the same fire tile — rewards herding a
+            // swarm into the flame instead of just tagging them directly (see BalanceConfig).
+            int fireDamagePerTurn = (host instanceof Enemy)
+                    ? Math.round(EffectConstants.BURN_DAMAGE_PER_TURN * BalanceConfig.HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER)
+                    : EffectConstants.BURN_DAMAGE_PER_TURN;
             statusEffectController.apply(host, StatusType.BURNING,
-                    BalanceConfig.HAZARD_FIRE_BURN_TURNS, EffectConstants.BURN_DAMAGE_PER_TURN, null);
+                    BalanceConfig.HAZARD_FIRE_BURN_TURNS, fireDamagePerTurn, null);
         } else if (type == TOXIC) {
             statusEffectController.apply(host, StatusType.POISONED,
                     BalanceConfig.HAZARD_TOXIC_POISON_TURNS, EffectConstants.POISON_DAMAGE_PER_STACK, null);

@@ -1909,8 +1909,17 @@ public class LevelGenerator implements ILevelGenerator {
             // Only place on plain walkable floor — not on a prop, pickup, door axis, etc.
             if (cell != ' ' && cell != 'l') continue;
             if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+            if (isOccupiedByWeaponSpawn(tileColumn, tileRow)) continue;
             weaponSpawnPoints.add(new WeaponSpawnPoint(tileColumn, tileRow, randomWeaponItemType()));
             return true;
+        }
+        return false;
+    }
+
+    /** True if a weapon ground item was already recorded at this tile (weapon spawns are entity-side, not grid-encoded). */
+    private boolean isOccupiedByWeaponSpawn(int tileColumn, int tileRow) {
+        for (WeaponSpawnPoint spawnPoint : weaponSpawnPoints) {
+            if (spawnPoint.tileColumn == tileColumn && spawnPoint.tileRow == tileRow) return true;
         }
         return false;
     }

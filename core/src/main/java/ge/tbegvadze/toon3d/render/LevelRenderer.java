@@ -108,7 +108,7 @@ public class LevelRenderer implements Renderable, Disposable {
                 float tileLeft   = miniMapCenterX - subTileOffsetX + deltaColumn * MINI_MAP_CELL_SIZE;
                 float tileBottom = miniMapCenterY - subTileOffsetY + deltaRow    * MINI_MAP_CELL_SIZE;
 
-                if (Level.isWall(cell)) {
+                if (Level.isWall(cell) || Level.isColumn(cell)) {
                     shapes.setColor(WALL_COLOR);
                     drawClippedRect(tileLeft, tileBottom, MINI_MAP_CELL_SIZE, MINI_MAP_CELL_SIZE,
                             miniMapLeft, miniMapBottom, miniMapRight, miniMapTop);
