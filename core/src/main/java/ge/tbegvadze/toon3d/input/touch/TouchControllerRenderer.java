@@ -175,8 +175,42 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
             case HEAL:            drawHealIcon(cx, cy, extent);                break;
             case OPEN_INVENTORY:  drawInventoryIcon(cx, cy, extent);           break;
             case INSPECT_WEAPON:  drawInspectIcon(cx, cy, extent);             break;
+            case USE_MACHINE:     drawUseMachineIcon(cx, cy, extent);          break;
             default: break;
         }
+    }
+
+    /**
+     * Vending-machine icon: a tall cabinet outline with a product window near the top and a
+     * dispenser-tray slot near the bottom — reads as "use the fabricator".
+     */
+    private void drawUseMachineIcon(float cx, float cy, float extent) {
+        float lineWidth   = Math.max(2f, extent * 0.12f);
+        float halfWidth   = extent * 0.48f;
+        float halfHeight  = extent * 0.72f;
+        float left        = cx - halfWidth;
+        float right       = cx + halfWidth;
+        float bottom      = cy - halfHeight;
+        float top         = cy + halfHeight;
+
+        // Cabinet outline
+        shapeRenderer.rectLine(left,  bottom, right, bottom, lineWidth);
+        shapeRenderer.rectLine(right, bottom, right, top,    lineWidth);
+        shapeRenderer.rectLine(right, top,    left,  top,    lineWidth);
+        shapeRenderer.rectLine(left,  top,    left,  bottom, lineWidth);
+
+        // Product window (upper inset rectangle)
+        float windowInset  = extent * 0.18f;
+        float windowTop    = top - windowInset;
+        float windowBottom = cy + extent * 0.06f;
+        shapeRenderer.rectLine(left + windowInset,  windowTop,    right - windowInset, windowTop,    lineWidth);
+        shapeRenderer.rectLine(right - windowInset, windowTop,    right - windowInset, windowBottom, lineWidth);
+        shapeRenderer.rectLine(right - windowInset, windowBottom, left + windowInset,  windowBottom, lineWidth);
+        shapeRenderer.rectLine(left + windowInset,  windowBottom, left + windowInset,  windowTop,    lineWidth);
+
+        // Dispenser-tray slot (lower horizontal bar)
+        float trayY = bottom + extent * 0.24f;
+        shapeRenderer.rectLine(left + windowInset, trayY, right - windowInset, trayY, lineWidth * 1.3f);
     }
 
     /** Magnifying-glass icon: circle outline + handle line at bottom-right. */

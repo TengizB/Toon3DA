@@ -47,6 +47,7 @@ import ge.tbegvadze.toon3d.progression.UpgradeCardDeck;
 import ge.tbegvadze.toon3d.progression.Attribute;
 import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
+import ge.tbegvadze.toon3d.shop.VendingMachine;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.Constants;
@@ -61,7 +62,7 @@ import ge.tbegvadze.toon3d.util.EnemyConstants;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
-    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT }
+    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN }
 
     // -------------------------------------------------------------------------
     // Run-persistent resources — kept alive across all floor transitions
@@ -147,6 +148,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // Weapon inspect overlay — shown when player taps INSPECT on a ground weapon
     // -------------------------------------------------------------------------
     private final WeaponInspectOverlayRenderer weaponInspectOverlayRenderer;
+
+    // -------------------------------------------------------------------------
+    // Shop — UAC Fabricator vending machines (shop_order_1). The overlay is run-persistent
+    // (one renderer reused every floor); the machine list is level-dependent (1-2 per floor).
+    // -------------------------------------------------------------------------
+    private final ShopOverlayRenderer  shopOverlayRenderer;
+    private java.util.List<VendingMachine> vendingMachines = new java.util.ArrayList<>();
+    /** Machine the player currently faces (drives the contextual USE button); null when none. */
+    private VendingMachine machineInFront = null;
+    /** Machine whose shop is currently open; null unless runPhase == SHOP_OPEN. */
+    private VendingMachine openMachine    = null;
 
     // -------------------------------------------------------------------------
     // Ground items — weapon pickups placed by LevelGenerator; rebuilt per floor
@@ -241,6 +253,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         itemInventory            = new Inventory();
         inventoryOverlayRenderer = new InventoryOverlayRenderer(itemInventory);
+
+        shopOverlayRenderer = new ShopOverlayRenderer();
 
         weaponInspectOverlayRenderer = new WeaponInspectOverlayRenderer();
         weaponInspectOverlayRenderer.setOnTake(this::resolveWeaponTake);
@@ -491,9 +505,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             () -> weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon()));
         playerController.setInventoryToggleCallback(this::openInventory);
         playerController.setInspectWeaponCallback(this::openWeaponInspectOverlay);
+        playerController.setShopOpenCallback(this::openShop);
         if (touchInputState != null) {
             playerController.setTouchInputState(touchInputState);
         }
+
+        // Shop machines — placed before ground items / credit chips so those seeders see the
+        // '@' solid tiles and skip them. 1-2 per non-boss floor (guaranteed presence).
+        seedVendingMachines(targetLevel, currentDepth);
 
         // Build ground items from weapon spawn points. Each item gets a pre-rolled
         // WeaponRoll so the compare card can show accurate stats before pickup.
@@ -574,6 +593,198 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (item.tileColumn == tileColumn && item.tileRow == tileRow) return true;
         }
         return false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Shop — UAC Fabricator vending machine placement (shop_order_1)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Places 1-2 vending machines on the floor (guaranteed presence on every non-boss dungeon
+     * floor). Each machine occupies a wall-mounted, reachable, non-softlocking floor tile that is
+     * stamped solid ('@') and registered as a billboard. Runs after enemies exist (so machine tiles
+     * dodge enemies) and before ground-item/credit-chip seeding (so those seeders skip the solid tile).
+     */
+    private void seedVendingMachines(Level targetLevel, int depth) {
+        vendingMachines = new java.util.ArrayList<>();
+        machineInFront  = null;
+        // No shops in the weapon-selection staging room or inside boss arenas.
+        if (isStartingRoom || GameMath.isBossFloor(depth)) return;
+
+        java.util.Random random = new java.util.Random(floorSeed(runSeed, depth) ^ 0x5309CAFED00DL);
+        int machineCount = GameBalance.SHOP_MIN_PER_FLOOR;
+        if (GameBalance.SHOP_MAX_PER_FLOOR > GameBalance.SHOP_MIN_PER_FLOOR
+                && random.nextFloat() < GameBalance.SHOP_SECOND_MACHINE_CHANCE) {
+            machineCount = GameBalance.SHOP_MAX_PER_FLOOR;
+        }
+
+        int startColumn = MathUtils.floor(findPlayerStartX(targetLevel) / Constants.CELL_SIZE);
+        int startRow    = MathUtils.floor(findPlayerStartY(targetLevel) / Constants.CELL_SIZE);
+
+        java.util.List<VendingMachine> candidates = new java.util.ArrayList<>();
+        for (int tileColumn = 0; tileColumn < targetLevel.getWidth(); tileColumn++) {
+            for (int tileRow = 0; tileRow < targetLevel.getHeight(); tileRow++) {
+                if (tileColumn == startColumn && tileRow == startRow) continue;
+                VendingMachine candidate = tryMakeMachineCandidate(targetLevel, tileColumn, tileRow);
+                if (candidate != null) candidates.add(candidate);
+            }
+        }
+        if (candidates.isEmpty()) return;
+
+        // Shuffle for variety, then place up to machineCount, keeping a second machine spread out.
+        // The first shuffled candidate always places (no prior machine to be "too close" to), so a
+        // floor with any eligible tile is never shop-less.
+        java.util.Collections.shuffle(candidates, random);
+        for (int index = 0; index < candidates.size() && vendingMachines.size() < machineCount; index++) {
+            VendingMachine candidate = candidates.get(index);
+            boolean tooClose = false;
+            for (int placedIndex = 0; placedIndex < vendingMachines.size(); placedIndex++) {
+                VendingMachine placed = vendingMachines.get(placedIndex);
+                int manhattan = Math.abs(placed.tileColumn - candidate.tileColumn)
+                              + Math.abs(placed.tileRow - candidate.tileRow);
+                if (manhattan < GameBalance.SHOP_TWO_MACHINE_MIN_SPACING) { tooClose = true; break; }
+            }
+            if (tooClose) continue;
+            placeMachine(targetLevel, candidate);
+        }
+    }
+
+    /** Stamps the machine's tile solid ('@'), registers its billboard, and records the entity. */
+    private void placeMachine(Level targetLevel, VendingMachine machine) {
+        targetLevel.setCell(machine.tileColumn, machine.tileRow, '@');
+        if (propRenderer != null) {
+            propRenderer.addDynamicProp(machine.tileColumn, machine.tileRow, '@');
+        }
+        vendingMachines.add(machine);
+    }
+
+    /**
+     * Returns a machine candidate for the tile, or null if it is ineligible. Eligible = plain floor,
+     * not enemy/weapon-spawn occupied, with at least one orthogonal wall (mount) and one orthogonal
+     * open floor (stand tile), and making the tile solid does not locally disconnect its neighbors.
+     */
+    private VendingMachine tryMakeMachineCandidate(Level targetLevel, int tileColumn, int tileRow) {
+        if (!isPlainFloorTile(targetLevel, tileColumn, tileRow)) return null;
+        if (isTileOccupiedForMachine(targetLevel, tileColumn, tileRow)) return null;
+
+        int wallCount    = 0;
+        int firstOpenCol = 0, firstOpenRow = 0;
+        boolean hasOpen  = false;
+        int[][] orthogonalSteps = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
+        for (int[] step : orthogonalSteps) {
+            int neighborColumn = tileColumn + step[0];
+            int neighborRow    = tileRow + step[1];
+            if (isSolidForMachine(targetLevel, neighborColumn, neighborRow)) {
+                wallCount++;
+            } else if (!hasOpen) {
+                firstOpenCol = neighborColumn;
+                firstOpenRow = neighborRow;
+                hasOpen      = true;
+            }
+        }
+        if (wallCount < 1 || !hasOpen) return null;
+        if (!orthOpenNeighborsLocallyConnected(targetLevel, tileColumn, tileRow)) return null;
+
+        // Face toward the stand tile (first open orthogonal neighbor).
+        return new VendingMachine(tileColumn, tileRow, firstOpenCol - tileColumn, firstOpenRow - tileRow);
+    }
+
+    private boolean isPlainFloorTile(Level targetLevel, int tileColumn, int tileRow) {
+        char cell = targetLevel.getCell(tileColumn, tileRow);
+        return cell == ' ' || cell == 'l' || cell == 'u' || cell == 'f';
+    }
+
+    /** Out-of-bounds and wall/solid-prop/column tiles block movement — treated as "wall" for mounting. */
+    private boolean isSolidForMachine(Level targetLevel, int tileColumn, int tileRow) {
+        if (tileColumn < 0 || tileColumn >= targetLevel.getWidth()
+                || tileRow < 0 || tileRow >= targetLevel.getHeight()) return true;
+        char cell = targetLevel.getCell(tileColumn, tileRow);
+        return Level.isWall(cell) || Level.isPropSolid(cell) || Level.isColumn(cell);
+    }
+
+    private boolean isTileOccupiedForMachine(Level targetLevel, int tileColumn, int tileRow) {
+        if (enemyManager != null && enemyManager.isTileOccupiedByEnemy(tileColumn, tileRow)) return true;
+        for (WeaponSpawnPoint spawnPoint : targetLevel.getWeaponSpawnPoints()) {
+            if (spawnPoint.tileColumn == tileColumn && spawnPoint.tileRow == tileRow) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Local articulation test: making (tileColumn,tileRow) solid must not disconnect its open
+     * orthogonal neighbors. They are safe if they all belong to one 8-connected component of open
+     * tiles within the 3x3 block around the tile (excluding the tile itself). One (or zero) open
+     * orthogonal neighbor is trivially safe (blocking a dead-end never disconnects anything).
+     */
+    private boolean orthOpenNeighborsLocallyConnected(Level targetLevel, int tileColumn, int tileRow) {
+        int[][] orthogonalSteps = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
+        java.util.List<int[]> openNeighbors = new java.util.ArrayList<>();
+        for (int[] step : orthogonalSteps) {
+            int neighborColumn = tileColumn + step[0];
+            int neighborRow    = tileRow + step[1];
+            if (!isSolidForMachine(targetLevel, neighborColumn, neighborRow)) {
+                openNeighbors.add(new int[]{neighborColumn, neighborRow});
+            }
+        }
+        if (openNeighbors.size() <= 1) return true;
+
+        // Flood-fill 8-connected through open tiles inside the 3x3 block, excluding the center tile.
+        boolean[][] visited = new boolean[3][3];
+        java.util.ArrayDeque<int[]> frontier = new java.util.ArrayDeque<>();
+        int[] start = openNeighbors.get(0);
+        visited[start[0] - tileColumn + 1][start[1] - tileRow + 1] = true;
+        frontier.push(start);
+        while (!frontier.isEmpty()) {
+            int[] current = frontier.pop();
+            for (int deltaColumn = -1; deltaColumn <= 1; deltaColumn++) {
+                for (int deltaRow = -1; deltaRow <= 1; deltaRow++) {
+                    if (deltaColumn == 0 && deltaRow == 0) continue;
+                    int nextColumn = current[0] + deltaColumn;
+                    int nextRow    = current[1] + deltaRow;
+                    if (nextColumn < tileColumn - 1 || nextColumn > tileColumn + 1
+                            || nextRow < tileRow - 1 || nextRow > tileRow + 1) continue;
+                    if (nextColumn == tileColumn && nextRow == tileRow) continue; // the tile being blocked
+                    int localColumn = nextColumn - tileColumn + 1;
+                    int localRow    = nextRow - tileRow + 1;
+                    if (visited[localColumn][localRow]) continue;
+                    if (isSolidForMachine(targetLevel, nextColumn, nextRow)) continue;
+                    visited[localColumn][localRow] = true;
+                    frontier.push(new int[]{nextColumn, nextRow});
+                }
+            }
+        }
+        for (int index = 0; index < openNeighbors.size(); index++) {
+            int[] neighbor = openNeighbors.get(index);
+            if (!visited[neighbor[0] - tileColumn + 1][neighbor[1] - tileRow + 1]) return false;
+        }
+        return true;
+    }
+
+    /** Returns the machine the player is directly facing (front tile), or null. */
+    private VendingMachine findMachineFacingPlayer() {
+        if (vendingMachines.isEmpty()) return null;
+        int frontColumn = getPlayerTileColumn() + Math.round(player.directionX);
+        int frontRow    = getPlayerTileRow()    + Math.round(player.directionY);
+        for (int index = 0; index < vendingMachines.size(); index++) {
+            VendingMachine machine = vendingMachines.get(index);
+            if (machine.isAtTile(frontColumn, frontRow)) return machine;
+        }
+        return null;
+    }
+
+    /** Opens the fabricator shop overlay for the machine in front of the player. No turn is spent. */
+    private void openShop() {
+        if (runPhase != RunPhase.PLAYING || machineInFront == null) return;
+        if (touchInputState != null) touchInputState.resetAllButtonStates();
+        openMachine = machineInFront;
+        shopOverlayRenderer.open(openMachine, playerStats.getCredits());
+        runPhase = RunPhase.SHOP_OPEN;
+    }
+
+    /** Closes the shop overlay and returns to PLAYING. Menu pause — no world tick fires. */
+    private void closeShop() {
+        openMachine = null;
+        runPhase = RunPhase.PLAYING;
     }
 
     // -------------------------------------------------------------------------
@@ -687,6 +898,21 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
+        // SHOP_OPEN — world paused while the player browses a vending machine. No turn passes;
+        // a tap on the CLOSE button dismisses the overlay (matches inventory pause semantics).
+        if (runPhase == RunPhase.SHOP_OPEN) {
+            shopOverlayRenderer.setCredits(playerStats.getCredits());
+            if (touchInputState != null && gameViewport != null && Gdx.input.justTouched()) {
+                touchInputState.consumeTapAction();
+                cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+                gameViewport.unproject(cardTouchPosition);
+                if (shopOverlayRenderer.isCloseTapped(cardTouchPosition.x, cardTouchPosition.y)) {
+                    closeShop();
+                }
+            }
+            return;
+        }
+
         // LEVEL_UP_OVERLAY — game paused while player picks an upgrade card
         if (runPhase == RunPhase.LEVEL_UP_OVERLAY) {
             if (gameViewport != null && Gdx.input.justTouched()) {
@@ -724,6 +950,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             touchInputState.setInspectButtonVisible(standingOnGroundWeapon);
             hudRenderer.setGroundWeaponLabel(standingOnGroundWeapon
                     ? standingOnWeapon.stack.getType().getDisplayName() : null);
+
+            // Contextual USE button — visible only while the player faces a vending machine.
+            machineInFront = findMachineFacingPlayer();
+            touchInputState.setUseMachineButtonVisible(machineInFront != null);
         }
 
         if (touchInputState != null) {
@@ -859,7 +1089,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             levelUpOverlayRenderer.render(camera);
         } else if (runPhase != RunPhase.WEAPON_INSPECT
                 && touchControllerRenderer != null
-                && runPhase != RunPhase.INVENTORY_OPEN) {
+                && runPhase != RunPhase.INVENTORY_OPEN
+                && runPhase != RunPhase.SHOP_OPEN) {
             touchControllerRenderer.setActionLocked(!playerController.isIdle());
             touchControllerRenderer.render(camera);
         }
@@ -878,6 +1109,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Weapon inspect overlay — modal stat card drawn above HUD and event text.
         if (runPhase == RunPhase.WEAPON_INSPECT) {
             weaponInspectOverlayRenderer.render(camera);
+        }
+
+        // Shop overlay — paused fabricator UI drawn above HUD and event text, below fade/death overlays.
+        if (runPhase == RunPhase.SHOP_OPEN) {
+            shopOverlayRenderer.render(camera);
         }
 
         // Fade overlay drawn last — covers every other layer including the HUD.
@@ -924,6 +1160,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         levelUpOverlayRenderer.dispose();
         inventoryOverlayRenderer.dispose();
         weaponInspectOverlayRenderer.dispose();
+        shopOverlayRenderer.dispose();
         statusEffectVignetteRenderer.dispose();
         if (touchControllerRenderer != null) touchControllerRenderer.dispose();
         deathOverlayRenderer.dispose();

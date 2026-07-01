@@ -21,6 +21,7 @@ public final class TouchInputState extends InputAdapter {
     private static final int INDEX_HEAL            = 10;
     private static final int INDEX_OPEN_INVENTORY  = 11;
     private static final int INDEX_INSPECT_WEAPON  = 12;
+    private static final int INDEX_USE_MACHINE     = 13;
 
     private final TouchButton[]  buttons;
     private final Viewport       viewport;
@@ -41,7 +42,7 @@ public final class TouchInputState extends InputAdapter {
         float centerX = TouchConstants.TOUCH_GRID_CENTER_X;
         float baseY   = TouchConstants.TOUCH_GRID_BASE_Y;    // center Y of row 1 (BACK)
 
-        buttons = new TouchButton[13];
+        buttons = new TouchButton[14];
 
         // Row 1 (bottom) — center column only
         buttons[INDEX_BACK] = new TouchButton(
@@ -105,6 +106,19 @@ public final class TouchInputState extends InputAdapter {
             true);
         inspectButton.visible = false;
         buttons[INDEX_INSPECT_WEAPON] = inspectButton;
+
+        // Contextual USE button — left cluster, top row; hidden until player faces a vending machine
+        float useHalf = TouchConstants.USE_BUTTON_SIZE / 2f;
+        TouchButton useButton = new TouchButton(
+            TouchConstants.USE_BUTTON_CENTER_X - useHalf,
+            TouchConstants.USE_BUTTON_CENTER_Y - useHalf,
+            TouchConstants.USE_BUTTON_SIZE,
+            TouchConstants.USE_BUTTON_SIZE,
+            TouchAction.USE_MACHINE,
+            TouchButton.Shape.ROUNDED_SQUARE,
+            true);
+        useButton.visible = false;
+        buttons[INDEX_USE_MACHINE] = useButton;
     }
 
     /** Returns the highest-priority currently-pressed held action (movement), or NONE. */
@@ -154,6 +168,27 @@ public final class TouchInputState extends InputAdapter {
             button.pressGlowTimer = 0f;
             if (pendingTapAction  == TouchAction.INSPECT_WEAPON) pendingTapAction  = TouchAction.NONE;
             if (bufferedTapAction == TouchAction.INSPECT_WEAPON) {
+                bufferedTapAction = TouchAction.NONE;
+                bufferedTapTimer  = 0f;
+            }
+        }
+    }
+
+    /**
+     * Shows or hides the contextual USE_MACHINE button.
+     * Hiding also clears any pressed / buffered state so a tap queued while the button was
+     * visible is not replayed after it disappears (same contract as the INSPECT button).
+     */
+    public void setUseMachineButtonVisible(boolean visible) {
+        TouchButton button = buttons[INDEX_USE_MACHINE];
+        if (button.visible == visible) return;
+        button.visible = visible;
+        if (!visible) {
+            button.pressed        = false;
+            button.pointerId      = -1;
+            button.pressGlowTimer = 0f;
+            if (pendingTapAction  == TouchAction.USE_MACHINE) pendingTapAction  = TouchAction.NONE;
+            if (bufferedTapAction == TouchAction.USE_MACHINE) {
                 bufferedTapAction = TouchAction.NONE;
                 bufferedTapTimer  = 0f;
             }

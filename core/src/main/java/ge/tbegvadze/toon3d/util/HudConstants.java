@@ -161,4 +161,26 @@ public final class HudConstants {
     // Vertical centering offsets inside the letterbox for name/epithet text
     public static final float BOSS_INTRO_NAME_Y_OFFSET      = 10f;
     public static final float BOSS_INTRO_EPITHET_Y_GAP      = 6f;
+
+    // =====================================================================
+    // Shop / UAC Fabricator overlay (shop_order_1 foundation; part 5 extends with the card grid).
+    // Full-screen modal drawn in world units (origin bottom-left, 1280×720). Only the frame,
+    // header, credits readout, and CLOSE button live here for the foundation.
+    // =====================================================================
+    public static final float SHOP_OVERLAY_DIM_ALPHA         = 0.72f;   // darken quad over the paused 3D view
+    public static final float SHOP_OVERLAY_PANEL_X           = 190f;
+    public static final float SHOP_OVERLAY_PANEL_Y           = 120f;
+    public static final float SHOP_OVERLAY_PANEL_WIDTH       = 900f;
+    public static final float SHOP_OVERLAY_PANEL_HEIGHT      = 480f;
+    public static final float SHOP_OVERLAY_HEADER_SCALE      = 1.6f;
+    public static final float SHOP_OVERLAY_BODY_SCALE        = 1.0f;
+    public static final float SHOP_OVERLAY_CREDITS_SCALE     = 1.1f;
+    public static final float SHOP_OVERLAY_HEADER_Y_BELOW_TOP = 46f;    // header baseline below panel top
+    public static final float SHOP_OVERLAY_CREDITS_Y_BELOW_TOP = 92f;   // credits baseline below panel top
+    public static final float SHOP_OVERLAY_BODY_Y_BELOW_TOP  = 210f;    // placeholder body baseline below panel top
+    // CLOSE button — large thumb target, bottom-right of the panel
+    public static final float SHOP_OVERLAY_CLOSE_WIDTH       = 220f;
+    public static final float SHOP_OVERLAY_CLOSE_HEIGHT      = 74f;
+    public static final float SHOP_OVERLAY_CLOSE_MARGIN      = 30f;     // inset from panel bottom-right corner
+    public static final float SHOP_OVERLAY_CLOSE_LABEL_SCALE = 1.1f;
 }

@@ -45,6 +45,7 @@ public class PlayerController {
     private Runnable                weaponSwitchCallback              = null;
     private Runnable                inventoryToggleCallback           = null;
     private Runnable                inspectWeaponCallback             = null;
+    private Runnable                shopOpenCallback                  = null;
     private Inventory               itemInventory                     = null;
     private Loadout                 loadout                           = null;
     private PlayerStats             playerStats                       = null;
@@ -107,6 +108,11 @@ public class PlayerController {
     /** Called by World when the player taps INSPECT while standing on a weapon GroundItem. */
     public void setInspectWeaponCallback(Runnable callback) {
         this.inspectWeaponCallback = callback;
+    }
+
+    /** Called by World when the player taps USE while facing a vending machine (shop_order_1). */
+    public void setShopOpenCallback(Runnable callback) {
+        this.shopOpenCallback = callback;
     }
 
     /** Returns the weapon GroundItem the player is currently standing on, or null. */
@@ -454,6 +460,12 @@ public class PlayerController {
                     && inspectWeaponCallback != null) {
                 inspectWeaponCallback.run();
             }
+            return;
+        }
+
+        if (tapAction == TouchAction.USE_MACHINE) {
+            // World only shows the USE button when a machine faces the player, so just route it.
+            if (shopOpenCallback != null) shopOpenCallback.run();
             return;
         }
 
