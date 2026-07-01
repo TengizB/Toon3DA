@@ -91,6 +91,16 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         0.0f, 0.85f, -0.55f, 0.40f, -0.20f
     };
 
+    // Incinerator flame-tongue jitter — static to avoid per-frame heap allocation.
+    // The flame effect animates by stepping through these signed fractions as the fire
+    // flickers, applied to tongue heights and lateral tip offsets so each frame's flame
+    // looks alive without java.util.Random. The animation cursor is animationTimer, so the
+    // sample index advances continuously while firing. Prime-length (7) avoids visible
+    // repetition lining up with the layer count.
+    private static final float[] INCINERATOR_FLAME_JITTER = {
+        0.18f, -0.42f, 0.30f, -0.10f, 0.46f, -0.28f, 0.08f
+    };
+
     /**
      * Pre-generates normal textures for every weapon in the arsenal.
      * All FrameBuffer work happens here, at startup, before the game loop begins.
@@ -1785,123 +1795,235 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     private static void drawIncineratorShape(ShapeRenderer shapeRenderer, float centerX) {
 
         // Y=0..14 transparent — grip cut off below screen (first-person: eyes above gun)
+        //
+        // This is the most layer-dense weapon sprite in the game. Read top to bottom as:
+        // housing slab → multi-band housing shading → twin shoulder vents → off-axis fuel
+        // canister (rounded, banded, hazard-striped, gauge) → curved feed hose → nozzle tube
+        // with five-band cylinder shading → stacked retaining rings → glowing igniter ring →
+        // muzzle cap → layered pilot flame. Strict symmetry is kept about centerX EXCEPT the
+        // fuel canister + hose, which sit off-axis on the left (the weapon's signature break,
+        // sanctioned by the idea doc's OPEN QUESTION #1 recommendation (a)).
 
-        // 1. Housing body — wide industrial dark gunmetal block, top-surface perspective
-        //    Wider at near end (Y=14) than far end (Y=60, nozzle base join).
-        shapeRenderer.setColor(0.24f, 0.26f, 0.28f, 1f);
+        // ----------------------------------------------------------------------------------
+        // 1. HOUSING SLAB — wide industrial body, top-surface perspective (wider near player).
+        //    Drawn as a vertical gradient of stacked trapezoid bands so the metal reads as a
+        //    curved top surface catching light at the far edge and falling into shadow near.
+        // ----------------------------------------------------------------------------------
+        shapeRenderer.setColor(0.13f, 0.14f, 0.16f, 1f);                 // darkest base (near edge)
         drawSymmetricTrapezoid(shapeRenderer, centerX, 50f, 14f, 42f, 60f);
+        shapeRenderer.setColor(0.19f, 0.21f, 0.24f, 1f);                 // lower-mid band
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 47f, 22f, 42f, 60f);
+        shapeRenderer.setColor(0.24f, 0.26f, 0.29f, 1f);                 // mid band
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 45f, 34f, 42f, 60f);
+        shapeRenderer.setColor(0.29f, 0.31f, 0.35f, 1f);                 // upper-mid band (top lit)
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 43f, 48f, 42f, 60f);
 
-        // 2. Body edge highlights — far edge brighter (top surface faces camera), near darker
-        shapeRenderer.setColor(0.42f, 0.46f, 0.50f, 1f);
-        shapeRenderer.rect(centerX - 42f, 57f, 84f, 3f);    // far-edge top highlight
-        shapeRenderer.setColor(0.12f, 0.13f, 0.15f, 1f);
-        shapeRenderer.rect(centerX - 50f, 14f, 100f, 3f);   // near-edge bottom shadow
-        // Mid-body groove — lateral slot visible from above
-        shapeRenderer.setColor(0.18f, 0.19f, 0.22f, 1f);
-        shapeRenderer.rect(centerX - 44f, 38f, 88f, 2f);
-
-        // 3. Fuel canister body — centered rust-red tank, visible from above as wide rect.
-        //    Centered on the housing top surface, so the nozzle centerX reads as symmetric.
-        //    Tank: Y=20..50, 44px wide centered → left CX-22, right CX+22.
-        shapeRenderer.setColor(0.55f, 0.20f, 0.12f, 1f);
-        shapeRenderer.rect(centerX - 22f, 20f, 44f, 30f);
-        // Canister near-edge shadow (bottom)
-        shapeRenderer.setColor(0.34f, 0.11f, 0.06f, 1f);
-        shapeRenderer.rect(centerX - 22f, 20f, 44f,  3f);
-        // Canister far-edge highlight (top)
-        shapeRenderer.setColor(0.68f, 0.28f, 0.17f, 1f);
-        shapeRenderer.rect(centerX - 22f, 47f, 44f,  3f);
-
-        // 4. Hazard band — yellow warning stripe across the canister center
-        shapeRenderer.setColor(0.85f, 0.70f, 0.10f, 1f);
-        shapeRenderer.rect(centerX - 22f, 32f, 44f, 6f);
-        // Hazard band dividers — dark vertical breaks in the stripe (industrial read)
-        shapeRenderer.setColor(0.55f, 0.20f, 0.12f, 1f);
-        shapeRenderer.rect(centerX - 10f, 32f, 3f, 6f);
-        shapeRenderer.rect(centerX +  7f, 32f, 3f, 6f);
-
-        // 5. Canister details — fuel-gauge recessed groove + rivet dots
-        //    Fuel gauge: a narrow dark slot indicating remaining fuel (purely cosmetic)
-        shapeRenderer.setColor(0.20f, 0.08f, 0.04f, 1f);
-        shapeRenderer.rect(centerX - 19f, 24f, 6f, 5f);    // fuel gauge dark track
-        shapeRenderer.setColor(0.85f, 0.40f, 0.15f, 1f);
-        shapeRenderer.rect(centerX - 19f, 24f, 4f, 5f);    // fuel gauge fill (shows half-full)
-        // Rivet dots at canister corners
-        shapeRenderer.setColor(0.36f, 0.38f, 0.42f, 1f);
-        shapeRenderer.rect(centerX - 22f, 46f, 3f, 3f);    // top-left rivet
-        shapeRenderer.rect(centerX + 19f, 46f, 3f, 3f);    // top-right rivet
-        shapeRenderer.rect(centerX - 22f, 21f, 3f, 3f);    // bottom-left rivet
-        shapeRenderer.rect(centerX + 19f, 21f, 3f, 3f);    // bottom-right rivet
-
-        // 6. Feed connection — short dark rubber connector bar between canister and nozzle
-        //    A pair of rect segments bridging the canister top to the nozzle base, centered.
-        shapeRenderer.setColor(0.16f, 0.16f, 0.18f, 1f);
-        shapeRenderer.rect(centerX - 8f, 55f, 16f, 8f);    // connector bar
-
-        // 7. Nozzle tube — perspective-tapered sprayer tube pointing away from the player.
-        //    A flamethrower nozzle is wider than a rifle barrel (readability) but narrower
-        //    than a grenade launcher.
-        //    Base Y=60: half-width 16px → left CX-16, right CX+16.
-        //    Muzzle Y=120: half-width 10px (16 × 0.65 = 10.4 ≈ 10).
-        shapeRenderer.setColor(0.22f, 0.24f, 0.28f, 1f);
-        drawSymmetricTrapezoid(shapeRenderer, centerX, 16f, 60f, 10f, 120f);
-
-        // 8. Nozzle cylinder shading — the curved top surface of the nozzle tube.
-        //    Viewed from slightly above: outer edges curve away (dark), crown faces camera (bright).
-        //    All shading strips use the same taper so they stay parallel in perspective.
-        //    Base outer edge: CX-16 / CX+16; muzzle: CX-10 / CX+10.
-
-        // Outer-edge shadow strips (3px at base → 2px at muzzle, both sides)
+        // 2. Housing edge accents — bright far-edge crown, black near-edge shadow, side bevels.
+        shapeRenderer.setColor(0.46f, 0.50f, 0.55f, 1f);
+        shapeRenderer.rect(centerX - 42f, 57f, 84f, 3f);                 // far-edge crown highlight
+        shapeRenderer.setColor(0.34f, 0.37f, 0.41f, 1f);
+        shapeRenderer.rect(centerX - 43f, 54f, 86f, 2f);                 // secondary crown sheen
         shapeRenderer.setColor(0.10f, 0.11f, 0.13f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX - 16f, centerX - 13f, 60f,
-                                            centerX - 10f, centerX -  8f, 120f);  // left outer shadow
-        drawGeneralTrapezoid(shapeRenderer, centerX + 13f, centerX + 16f, 60f,
-                                            centerX +  8f, centerX + 10f, 120f);  // right outer shadow
+        shapeRenderer.rect(centerX - 50f, 14f, 100f, 3f);               // near-edge bottom shadow
+        // Left/right bevel shadows (the slab's side walls curving away from the camera).
+        shapeRenderer.setColor(0.11f, 0.12f, 0.14f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 50f, centerX - 46f, 14f,
+                                            centerX - 42f, centerX - 39f, 60f);   // left bevel
+        drawGeneralTrapezoid(shapeRenderer, centerX + 46f, centerX + 50f, 14f,
+                                            centerX + 39f, centerX + 42f, 60f);   // right bevel
 
-        // Crown highlight (6px at base → 4px at muzzle, centered on top of the cylinder)
-        shapeRenderer.setColor(0.45f, 0.49f, 0.54f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX -  3f, centerX +  3f, 60f,
-                                            centerX -  2f, centerX +  2f, 120f);  // center crown highlight
+        // 3. Mid-body grooves — two lateral machined slots visible from above (depth lines).
+        shapeRenderer.setColor(0.16f, 0.17f, 0.20f, 1f);
+        shapeRenderer.rect(centerX - 44f, 38f, 88f, 2f);                 // upper groove
+        shapeRenderer.rect(centerX - 47f, 26f, 94f, 2f);                 // lower groove
+        shapeRenderer.setColor(0.33f, 0.36f, 0.40f, 1f);
+        shapeRenderer.rect(centerX - 44f, 40f, 88f, 1f);                 // upper groove lip highlight
+        shapeRenderer.rect(centerX - 47f, 28f, 94f, 1f);                 // lower groove lip highlight
 
-        // Inner-edge shadow strips (3px at base → 2px at muzzle, just inside outer shadow)
-        shapeRenderer.setColor(0.14f, 0.15f, 0.18f, 1f);
-        drawGeneralTrapezoid(shapeRenderer, centerX - 13f, centerX - 10f, 60f,
-                                            centerX -  8f, centerX -  6f, 120f);  // left inner shadow
-        drawGeneralTrapezoid(shapeRenderer, centerX + 10f, centerX + 13f, 60f,
-                                            centerX +  6f, centerX +  8f, 120f);  // right inner shadow
+        // 4. Shoulder vents — symmetric twin heat-vent louvres flanking the nozzle base join.
+        //    Three dark slats each side, with a warm orange glow leaking between them (the
+        //    pilot light's heat venting). Symmetric about centerX so the body stays balanced.
+        for (int ventIndex = 0; ventIndex < 3; ventIndex++) {
+            float ventY = 50f + ventIndex * 3f;
+            shapeRenderer.setColor(0.08f, 0.09f, 0.10f, 1f);
+            shapeRenderer.rect(centerX - 40f, ventY, 14f, 2f);          // left vent slat
+            shapeRenderer.rect(centerX + 26f, ventY, 14f, 2f);          // right vent slat (mirror)
+            shapeRenderer.setColor(0.70f, 0.32f, 0.06f, 0.55f);
+            shapeRenderer.rect(centerX - 40f, ventY + 2f, 14f, 1f);     // left vent heat glow
+            shapeRenderer.rect(centerX + 26f, ventY + 2f, 14f, 1f);     // right vent heat glow
+        }
 
-        // 9. Igniter ring — small bright steel collar at the nozzle muzzle end
-        //    At muzzle scale (Y=114..120), width = 10px half-width → 20px total.
-        shapeRenderer.setColor(0.40f, 0.44f, 0.50f, 1f);
-        shapeRenderer.rect(centerX - 12f, 114f, 24f, 6f);  // igniter ring body
+        // 5. Rivet studs — symmetric pairs of bright bolt heads around the housing perimeter.
+        shapeRenderer.setColor(0.40f, 0.42f, 0.46f, 1f);
+        float[] rivetXOffsets = { 44f, 30f, 16f };
+        float[] rivetYRows    = { 18f, 45f };
+        for (int rowIndex = 0; rowIndex < rivetYRows.length; rowIndex++) {
+            for (int offsetIndex = 0; offsetIndex < rivetXOffsets.length; offsetIndex++) {
+                float rivetOffset = rivetXOffsets[offsetIndex];
+                shapeRenderer.rect(centerX - rivetOffset - 1f, rivetYRows[rowIndex], 3f, 3f); // left
+                shapeRenderer.rect(centerX + rivetOffset - 2f, rivetYRows[rowIndex], 3f, 3f); // right
+            }
+        }
+        // Rivet top-light pips for a domed read.
+        shapeRenderer.setColor(0.58f, 0.61f, 0.66f, 1f);
+        for (int rowIndex = 0; rowIndex < rivetYRows.length; rowIndex++) {
+            for (int offsetIndex = 0; offsetIndex < rivetXOffsets.length; offsetIndex++) {
+                float rivetOffset = rivetXOffsets[offsetIndex];
+                shapeRenderer.rect(centerX - rivetOffset, rivetYRows[rowIndex] + 2f, 1f, 1f); // left
+                shapeRenderer.rect(centerX + rivetOffset - 1f, rivetYRows[rowIndex] + 2f, 1f, 1f); // right
+            }
+        }
+
+        // ----------------------------------------------------------------------------------
+        // 6. FUEL CANISTER — off-axis rust-red cylinder on the LEFT-back of the housing.
+        //    Signature asymmetric detail. Drawn as a rounded body (rect + corner circles) with
+        //    a horizontal cylinder gradient, two retaining bands, a hazard stripe, and a gauge.
+        //    Tank spans Y=16..52, centered around tankCenterX = centerX-30, 30px wide.
+        // ----------------------------------------------------------------------------------
+        float tankCenterX = centerX - 30f;
+        float tankLeft    = tankCenterX - 15f;   // CX-45
+        float tankRight   = tankCenterX + 15f;   // CX-15
+        // Rounded end caps (top and bottom) via circles so the tank reads cylindrical.
+        shapeRenderer.setColor(0.50f, 0.18f, 0.11f, 1f);
+        shapeRenderer.circle(tankCenterX, 19f, 6f);                      // bottom cap
+        shapeRenderer.circle(tankCenterX, 49f, 6f);                      // top cap
+        // Tank barrel body.
+        shapeRenderer.rect(tankLeft, 19f, 30f, 30f);
+        // Horizontal cylinder shading: dark left edge → bright vertical sheen → dark right edge.
+        shapeRenderer.setColor(0.34f, 0.11f, 0.06f, 1f);
+        shapeRenderer.rect(tankLeft, 19f, 5f, 30f);                      // left-edge shadow
+        shapeRenderer.rect(tankRight - 5f, 19f, 5f, 30f);               // right-edge shadow
+        shapeRenderer.setColor(0.72f, 0.30f, 0.18f, 1f);
+        shapeRenderer.rect(tankCenterX - 5f, 19f, 6f, 30f);            // broad sheen band
+        shapeRenderer.setColor(0.92f, 0.46f, 0.28f, 1f);
+        shapeRenderer.rect(tankCenterX - 2f, 19f, 2f, 30f);            // hot specular line
+
+        // 7. Canister retaining bands — two dark steel hoops around the cylinder.
+        shapeRenderer.setColor(0.16f, 0.17f, 0.19f, 1f);
+        shapeRenderer.rect(tankLeft, 25f, 30f, 3f);                      // lower band
+        shapeRenderer.rect(tankLeft, 42f, 30f, 3f);                      // upper band
+        shapeRenderer.setColor(0.40f, 0.42f, 0.46f, 1f);
+        shapeRenderer.rect(tankLeft, 27f, 30f, 1f);                      // lower band lip
+        shapeRenderer.rect(tankLeft, 44f, 30f, 1f);                      // upper band lip
+
+        // 8. Hazard stripe — yellow/black warning band across the canister mid-section.
+        shapeRenderer.setColor(0.88f, 0.72f, 0.10f, 1f);
+        shapeRenderer.rect(tankLeft, 32f, 30f, 8f);                      // yellow base
+        shapeRenderer.setColor(0.10f, 0.09f, 0.07f, 1f);                // black diagonal ticks
+        shapeRenderer.rect(tankLeft + 2f,  32f, 3f, 8f);
+        shapeRenderer.rect(tankLeft + 9f,  32f, 3f, 8f);
+        shapeRenderer.rect(tankLeft + 16f, 32f, 3f, 8f);
+        shapeRenderer.rect(tankLeft + 23f, 32f, 3f, 8f);
+        shapeRenderer.setColor(1.00f, 0.88f, 0.30f, 1f);               // stripe top highlight
+        shapeRenderer.rect(tankLeft, 39f, 30f, 1f);
+
+        // 9. Fuel gauge — a small recessed window near the tank base showing a half-full read.
+        shapeRenderer.setColor(0.12f, 0.05f, 0.03f, 1f);
+        shapeRenderer.rect(tankCenterX - 5f, 20f, 10f, 4f);             // gauge dark recess
+        shapeRenderer.setColor(0.95f, 0.42f, 0.12f, 1f);
+        shapeRenderer.rect(tankCenterX - 5f, 20f, 5f, 4f);             // gauge fill (half)
         shapeRenderer.setColor(0.55f, 0.58f, 0.62f, 1f);
-        shapeRenderer.rect(centerX - 12f, 118f, 24f, 2f);  // ring top highlight
+        shapeRenderer.rect(tankCenterX - 5f, 23f, 10f, 1f);            // gauge frame lip
+
+        // ----------------------------------------------------------------------------------
+        // 10. FEED HOSE — curved dark rubber hose from the canister top to the nozzle base.
+        //     Approximated by a chain of short rects stepping right-and-up, with a highlight
+        //     ridge on top of each segment so it reads as a ribbed flexible hose.
+        // ----------------------------------------------------------------------------------
+        float[] hoseSegmentX = { tankCenterX - 3f, tankCenterX + 4f, tankCenterX + 12f, centerX - 12f };
+        float[] hoseSegmentY = { 49f,              53f,              57f,               59f };
+        shapeRenderer.setColor(0.13f, 0.13f, 0.15f, 1f);
+        for (int hoseIndex = 0; hoseIndex < hoseSegmentX.length; hoseIndex++) {
+            shapeRenderer.rect(hoseSegmentX[hoseIndex], hoseSegmentY[hoseIndex], 9f, 6f);
+        }
+        shapeRenderer.setColor(0.26f, 0.26f, 0.30f, 1f);                // hose top-ridge highlight
+        for (int hoseIndex = 0; hoseIndex < hoseSegmentX.length; hoseIndex++) {
+            shapeRenderer.rect(hoseSegmentX[hoseIndex], hoseSegmentY[hoseIndex] + 5f, 9f, 1f);
+        }
+        // Hose-to-nozzle coupling clamp (centered where the hose meets the tube base).
+        shapeRenderer.setColor(0.36f, 0.38f, 0.42f, 1f);
+        shapeRenderer.rect(centerX - 10f, 56f, 20f, 6f);
         shapeRenderer.setColor(0.18f, 0.19f, 0.22f, 1f);
-        shapeRenderer.rect(centerX - 12f, 114f, 24f, 2f);  // ring bottom shadow
+        shapeRenderer.rect(centerX - 10f, 56f, 20f, 2f);               // clamp underside shadow
 
-        // 10. Muzzle cap — 2px bright steel rim at barrel tip Y=120.
-        //     Width = muzzle nozzle half-width 10px → 20px total.
-        //     Top-down view: bore faces away, invisible. Muzzle cap only (no bore ellipse).
-        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
-        shapeRenderer.rect(centerX - 10f, 120f, 20f, 2f);  // muzzle cap
+        // ----------------------------------------------------------------------------------
+        // 11. NOZZLE TUBE — wide perspective-tapered sprayer pointing away from the player.
+        //     Top-down view, convergence 0.65: base half-width 17px → muzzle half-width 11px.
+        //     Wider than a rifle barrel (it is a sprayer), narrower than the grenade tube.
+        // ----------------------------------------------------------------------------------
+        shapeRenderer.setColor(0.20f, 0.22f, 0.26f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 17f, 60f, 11f, 120f);
 
-        // 11. Pilot flame — a small ever-present orange-yellow flicker at the nozzle tip.
-        //     Signals the weapon is always live and ready. A small triangle pointing upward
-        //     (away from player) at Y=120..128. Core is yellow-white; outer fringe is orange.
-        //     The flame is narrower than the nozzle — it reads as a focused pilot light.
-        shapeRenderer.setColor(0.95f, 0.55f, 0.15f, 0.90f);
-        shapeRenderer.triangle(
-            centerX - 5f, 120f,
-            centerX + 5f, 120f,
-            centerX,      128f
-        );
-        // Yellow-white hot core of the pilot flame
-        shapeRenderer.setColor(1.00f, 0.85f, 0.30f, 0.85f);
-        shapeRenderer.triangle(
-            centerX - 2f, 120f,
-            centerX + 2f, 120f,
-            centerX,      126f
-        );
+        // 12. Nozzle cylinder shading — FIVE bands for a smooth curved top surface, all tapered
+        //     with the same 0.65 convergence so edges stay parallel toward the muzzle.
+        //     Base outer edge CX-17/CX+17 → muzzle CX-11/CX+11.
+        // Outer-edge shadow (darkest — the cylinder sides curving away).
+        shapeRenderer.setColor(0.09f, 0.10f, 0.12f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 17f, centerX - 13f, 60f,
+                                            centerX - 11f, centerX -  8f, 120f);  // left outer shadow
+        drawGeneralTrapezoid(shapeRenderer, centerX + 13f, centerX + 17f, 60f,
+                                            centerX +  8f, centerX + 11f, 120f);  // right outer shadow
+        // Inner-edge shadow (mid-dark, between outer shadow and the lit crown).
+        shapeRenderer.setColor(0.14f, 0.15f, 0.18f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 13f, centerX -  8f, 60f,
+                                            centerX -  8f, centerX -  5f, 120f);  // left inner shadow
+        drawGeneralTrapezoid(shapeRenderer, centerX +  8f, centerX + 13f, 60f,
+                                            centerX +  5f, centerX +  8f, 120f);  // right inner shadow
+        // Mid-tone shoulder (the transition into the crown).
+        shapeRenderer.setColor(0.30f, 0.33f, 0.38f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX -  8f, centerX -  3f, 60f,
+                                            centerX -  5f, centerX -  2f, 120f);  // left shoulder
+        drawGeneralTrapezoid(shapeRenderer, centerX +  3f, centerX +  8f, 60f,
+                                            centerX +  2f, centerX +  5f, 120f);  // right shoulder
+        // Crown highlight (brightest — top of the cylinder facing the camera).
+        shapeRenderer.setColor(0.48f, 0.52f, 0.58f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX -  3f, centerX +  3f, 60f,
+                                            centerX -  2f, centerX +  2f, 120f);  // center crown
+        // Hot specular pin-line along the very top of the crown.
+        shapeRenderer.setColor(0.62f, 0.66f, 0.72f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 1f, centerX + 1f, 60f,
+                                            centerX - 0.6f, centerX + 0.6f, 120f);
+
+        // 13. Retaining rings — two stacked steel hoops banding the nozzle (tapered widths).
+        //     Lower ring at Y≈80 (interp half-width ≈14.5), upper ring at Y≈100 (≈12.5).
+        shapeRenderer.setColor(0.34f, 0.37f, 0.42f, 1f);
+        shapeRenderer.rect(centerX - 15f, 79f, 30f, 4f);               // lower ring
+        shapeRenderer.rect(centerX - 13f, 99f, 26f, 4f);               // upper ring
+        shapeRenderer.setColor(0.52f, 0.56f, 0.62f, 1f);
+        shapeRenderer.rect(centerX - 15f, 82f, 30f, 1f);               // lower ring lip
+        shapeRenderer.rect(centerX - 13f, 102f, 26f, 1f);             // upper ring lip
+        shapeRenderer.setColor(0.10f, 0.11f, 0.13f, 1f);
+        shapeRenderer.rect(centerX - 15f, 79f, 30f, 1f);               // lower ring underside
+        shapeRenderer.rect(centerX - 13f, 99f, 26f, 1f);             // upper ring underside
+
+        // 14. Igniter ring — bright steel collar at the nozzle tip with an inner orange glow
+        //     where the pilot light sits. Muzzle scale (Y=112..120), half-width ≈12px.
+        shapeRenderer.setColor(0.40f, 0.44f, 0.50f, 1f);
+        shapeRenderer.rect(centerX - 13f, 112f, 26f, 8f);             // collar body
+        shapeRenderer.setColor(0.57f, 0.60f, 0.66f, 1f);
+        shapeRenderer.rect(centerX - 13f, 118f, 26f, 2f);             // collar top highlight
+        shapeRenderer.setColor(0.16f, 0.17f, 0.20f, 1f);
+        shapeRenderer.rect(centerX - 13f, 112f, 26f, 2f);             // collar underside shadow
+        shapeRenderer.setColor(0.95f, 0.45f, 0.10f, 0.65f);          // inner heat glow ring
+        shapeRenderer.rect(centerX - 8f, 115f, 16f, 4f);
+
+        // 15. Muzzle cap — 2px bright steel rim at the tip Y=120 (top-down: NO bore ellipse).
+        shapeRenderer.setColor(0.42f, 0.46f, 0.54f, 1f);
+        shapeRenderer.rect(centerX - 11f, 120f, 22f, 2f);
+
+        // ----------------------------------------------------------------------------------
+        // 16. PILOT FLAME — ever-present layered flicker at the nozzle tip (idle frame look).
+        //     Four nested teardrops: deep-orange outer → orange → yellow → white-hot core.
+        //     Signals the gun is always live and ready to burn.
+        // ----------------------------------------------------------------------------------
+        shapeRenderer.setColor(0.85f, 0.30f, 0.05f, 0.80f);            // deep-orange outer
+        shapeRenderer.triangle(centerX - 7f, 120f, centerX + 7f, 120f, centerX, 132f);
+        shapeRenderer.setColor(0.98f, 0.50f, 0.12f, 0.88f);            // orange mid
+        shapeRenderer.triangle(centerX - 5f, 120f, centerX + 5f, 120f, centerX, 130f);
+        shapeRenderer.setColor(1.00f, 0.78f, 0.22f, 0.92f);            // yellow inner
+        shapeRenderer.triangle(centerX - 3f, 120f, centerX + 3f, 120f, centerX, 128f);
+        shapeRenderer.setColor(1.00f, 0.97f, 0.78f, 0.95f);            // white-hot core
+        shapeRenderer.triangle(centerX - 1.5f, 120f, centerX + 1.5f, 120f, centerX, 126f);
     }
 
     /**
@@ -3378,12 +3500,15 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     }
 
     /**
-     * Draws a large lingering wide flame for the Incinerator.
+     * Draws a large lingering, animated three-band flame cone for the Incinerator.
      *
-     * Wider base, more intense orange-red saturation, and a slower shrink rate
-     * (INCINERATOR_EFFECT_SHRINK_RATE = 0.25) so the flame fills more screen space
-     * for longer. Wide outer tongues sell the cone shape of a flamethrower stream.
-     * All layers fade as normalizedTime approaches 1.
+     * Three layered colour bands per the idea doc — deep orange-red outer, orange mid,
+     * yellow-white core — built from stacked triangles, plus a translucent heat-shimmer
+     * disc at the base and a white-hot superheated tip. Outer flame tongues are JITTERED
+     * each frame (lateral tip offset + height wobble) from the static INCINERATOR_FLAME_JITTER
+     * table so the fire flickers alive without per-frame allocation. A slow shrink rate
+     * (INCINERATOR_EFFECT_SHRINK_RATE = 0.25) keeps the flame filling the lower screen for
+     * longer than any other muzzle effect. All layers fade as normalizedTime approaches 1.
      */
     private void renderIncineratorEffect(OrthographicCamera camera, float normalizedTime) {
         float alpha    = 1f - normalizedTime;
@@ -3394,70 +3519,76 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         float height   = WeaponConstants.INCINERATOR_EFFECT_FLAME_HEIGHT * scale;
         float halfBase = WeaponConstants.INCINERATOR_EFFECT_FLAME_BASE_WIDTH / 2f * scale;
 
+        // Animated flicker: advance an index through the static jitter table over time so the
+        // tongues wobble while firing. animationTimer drives it (no allocation, no Random).
+        int   jitterCursor   = (int) (animationTimer * 60f);
+        float jitterAmount   = halfBase * 0.30f;
+        float jitterLeft     = INCINERATOR_FLAME_JITTER[(jitterCursor)     % INCINERATOR_FLAME_JITTER.length] * jitterAmount;
+        float jitterRight    = INCINERATOR_FLAME_JITTER[(jitterCursor + 3) % INCINERATOR_FLAME_JITTER.length] * jitterAmount;
+        float jitterCoreTip  = INCINERATOR_FLAME_JITTER[(jitterCursor + 5) % INCINERATOR_FLAME_JITTER.length] * jitterAmount * 0.5f;
+        float heightWobble   = 1f + INCINERATOR_FLAME_JITTER[(jitterCursor + 1) % INCINERATOR_FLAME_JITTER.length] * 0.12f;
+        float wobbledHeight  = height * heightWobble;
+
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Outer translucent heat shimmer disc — very wide and flat
-        shapeRenderer.setColor(1.00f, 0.55f, 0.08f, alpha * 0.30f);
-        shapeRenderer.ellipse(barrelX - halfBase * 1.10f, barrelY - halfBase * 0.22f,
-                              halfBase * 2.20f, halfBase * 0.44f);
+        // --- Heat-shimmer disc at the base — very wide and flat, warm translucent wash ---
+        shapeRenderer.setColor(1.00f, 0.55f, 0.08f, alpha * 0.28f);
+        shapeRenderer.ellipse(barrelX - halfBase * 1.15f, barrelY - halfBase * 0.22f,
+                              halfBase * 2.30f, halfBase * 0.44f);
 
-        // Wide deep-red outer cone — fullest spread of the flame stream
-        shapeRenderer.setColor(0.80f, 0.06f, 0.00f, alpha * 0.68f);
+        // ================= BAND 1 — OUTER deep orange-red (widest spread) =================
+        // Broad fan plus two jittered side tongues that flicker frame to frame.
+        shapeRenderer.setColor(0.85f, 0.30f, 0.05f, alpha * 0.70f);
         shapeRenderer.triangle(
             barrelX - halfBase, barrelY,
             barrelX + halfBase, barrelY,
-            barrelX,            barrelY + height * 0.42f
+            barrelX + jitterCoreTip, barrelY + wobbledHeight * 0.46f
         );
-
-        // Left spreading tongue
-        shapeRenderer.setColor(0.92f, 0.18f, 0.00f, alpha * 0.72f);
+        // Left flickering tongue
+        shapeRenderer.setColor(0.80f, 0.16f, 0.02f, alpha * 0.66f);
         shapeRenderer.triangle(
-            barrelX - halfBase,         barrelY,
-            barrelX - halfBase * 0.10f, barrelY,
-            barrelX - halfBase * 0.70f, barrelY + height * 0.55f
+            barrelX - halfBase,          barrelY,
+            barrelX - halfBase * 0.12f,  barrelY,
+            barrelX - halfBase * 0.66f + jitterLeft, barrelY + wobbledHeight * 0.58f
         );
-
-        // Right spreading tongue
-        shapeRenderer.setColor(0.92f, 0.18f, 0.00f, alpha * 0.72f);
+        // Right flickering tongue
         shapeRenderer.triangle(
-            barrelX + halfBase * 0.10f, barrelY,
-            barrelX + halfBase,         barrelY,
-            barrelX + halfBase * 0.70f, barrelY + height * 0.55f
+            barrelX + halfBase * 0.12f,  barrelY,
+            barrelX + halfBase,          barrelY,
+            barrelX + halfBase * 0.66f + jitterRight, barrelY + wobbledHeight * 0.58f
         );
 
-        // Main orange flame body
-        shapeRenderer.setColor(1.00f, 0.46f, 0.00f, alpha * 0.82f);
+        // ================= BAND 2 — MID orange (main flame body) =================
+        shapeRenderer.setColor(0.98f, 0.55f, 0.12f, alpha * 0.85f);
         shapeRenderer.triangle(
-            barrelX - halfBase * 0.72f, barrelY,
-            barrelX + halfBase * 0.72f, barrelY,
-            barrelX,                    barrelY + height * 0.78f
+            barrelX - halfBase * 0.74f, barrelY,
+            barrelX + halfBase * 0.74f, barrelY,
+            barrelX + jitterCoreTip * 0.6f, barrelY + wobbledHeight * 0.80f
         );
-
-        // Bright orange-yellow mid cone
-        shapeRenderer.setColor(1.00f, 0.68f, 0.04f, alpha * 0.88f);
+        // Mid inner orange spire — taller, slightly narrower
+        shapeRenderer.setColor(1.00f, 0.66f, 0.10f, alpha * 0.88f);
         shapeRenderer.triangle(
-            barrelX - halfBase * 0.45f, barrelY,
-            barrelX + halfBase * 0.45f, barrelY,
-            barrelX,                    barrelY + height * 0.92f
+            barrelX - halfBase * 0.46f, barrelY,
+            barrelX + halfBase * 0.46f, barrelY,
+            barrelX + jitterCoreTip * 0.4f, barrelY + wobbledHeight * 0.92f
         );
 
-        // Yellow hot core
-        shapeRenderer.setColor(1.00f, 0.90f, 0.12f, alpha * 0.90f);
+        // ================= BAND 3 — CORE yellow-white (hottest center) =================
+        shapeRenderer.setColor(1.00f, 0.85f, 0.30f, alpha * 0.92f);
         shapeRenderer.triangle(
             barrelX - halfBase * 0.24f, barrelY,
             barrelX + halfBase * 0.24f, barrelY,
-            barrelX,                    barrelY + height
+            barrelX + jitterCoreTip * 0.3f, barrelY + wobbledHeight
         );
-
-        // White-yellow superheated tip
-        shapeRenderer.setColor(1.00f, 0.98f, 0.70f, alpha * 0.72f);
+        // White-hot superheated tip — narrow and bright, slightly shorter than the core spire.
+        shapeRenderer.setColor(1.00f, 0.98f, 0.78f, alpha * 0.78f);
         shapeRenderer.triangle(
-            barrelX - halfBase * 0.12f, barrelY,
-            barrelX + halfBase * 0.12f, barrelY,
-            barrelX,                    barrelY + height * 0.68f
+            barrelX - halfBase * 0.11f, barrelY,
+            barrelX + halfBase * 0.11f, barrelY,
+            barrelX + jitterCoreTip * 0.3f, barrelY + wobbledHeight * 0.70f
         );
 
         shapeRenderer.end();

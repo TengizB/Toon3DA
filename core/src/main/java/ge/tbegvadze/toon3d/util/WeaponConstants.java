@@ -243,7 +243,9 @@ public final class WeaponConstants {
     // Impact damage applied to every enemy in the cone on each spray.
     // Depth-3 (far-edge) tiles use FLAME_FALLOFF instead of FLAME_IMPACT_DAMAGE.
     // FLAME_DAMAGE_DROP_COEFF = 0.0: depth falloff is handled explicitly, not by the drop curve.
-    // Burn DoT constants (FLAME_BURN_*) are reserved for the enemy system when implemented.
+    // Burn DoT constants (FLAME_BURN_*) drive the BURNING status applied to every enemy
+    // the cone hits — Incinerator.marchShot() calls EnemyHitTarget.applyBurningStatus(),
+    // which routes into StatusEffectController (StatusType.BURNING).
     // Balance values (impact/falloff/burn/range/clip/ammo) live in BalanceConfig.
     public static final int     FLAME_IMPACT_DAMAGE        = BalanceConfig.FLAME_IMPACT_DAMAGE;
     public static final int     FLAME_FALLOFF              = BalanceConfig.FLAME_FALLOFF;

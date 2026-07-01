@@ -281,18 +281,31 @@ NEW CLASS
             if (!coneTileExists(depth, lateralOffset)) continue;
             char coneCell = level.getCell(coneColumn, coneRow);
             if (Level.isWall(coneCell)) break; // wall stops this lateral ray
+            // ... (closed-door, explosive-barrel, solid-prop blocks also break the ray)
+            // Tile reached: bathe it in spreading fire (ignites oil, chains barrels).
+            if (hazardIgniteTarget != null)
+                hazardIgniteTarget.igniteFire(coneColumn, coneRow);
             if (enemyHitTarget != null) {
                 Object hitEnemy = enemyHitTarget.enemyAt(coneColumn, coneRow);
                 if (hitEnemy != null) {
                     int damage = (depth >= range)
-                        ? Constants.FLAME_FALLOFF
-                        : Constants.FLAME_IMPACT_DAMAGE;
+                        ? WeaponConstants.FLAME_FALLOFF
+                        : WeaponConstants.FLAME_IMPACT_DAMAGE;
                     enemyHitTarget.applyDamageTo(hitEnemy, damage);
-                    enemyHitTarget.applyBurn(hitEnemy, Constants.FLAME_BURN_TURNS);
+                    enemyHitTarget.applyBurningStatus(hitEnemy,
+                        WeaponConstants.FLAME_BURN_TURNS,
+                        WeaponConstants.FLAME_BURN_DAMAGE_PER_TURN);
                 }
             }
         }
     return FireResult.MISSED; // or a hit result; cone has no single "stop" tile
+
+    // TILE IGNITION (IMPLEMENTED): hazardIgniteTarget is a weapon-scoped functional
+    // interface (entity/HazardIgniteTarget) set per floor by World to
+    // HazardManager.igniteFire. Null-guarded for no-World/test construction.
+    // HazardManager.ignite() no-ops on walls / non-spreadable tiles on its own, so the
+    // whole cone footprint can be passed in safely. This is what lets the flamethrower
+    // ignite oil pools, chain explosive barrels, and leave a lingering damaging fire.
 
   - coneTileExists / FLAME_CONE_OFFSETS: define the fan shape as a static offset
     table so it is data, not branches. Suggested 7-tile fan:
@@ -301,27 +314,30 @@ NEW CLASS
       depth3: (3,-1) (3,0) (3,+1)
     where each entry is (forwardDepth, lateralOffset). The reachability/wall-block
     above is computed per lateral ray; the offset table defines membership.
-  - enemyHitTarget.applyBurn(enemy, turns): NEW method on the EnemyHitTarget /
-    enemy-damage interface — sets enemy.burnTurnsRemaining = max(existing, turns)
-    (refresh, not stack). The enemy system owns the burn field and ticking.
+  - enemyHitTarget.applyBurningStatus(enemy, turns, magnitudePerTurn): IMPLEMENTED on
+    the EnemyHitTarget interface as an additive default no-op (every other weapon
+    ignores it). EnemyManager overrides it to route into the shared status engine:
+    statusEffectController.apply((Enemy) enemy, StatusType.BURNING, turns,
+    magnitudePerTurn, this). BURNING uses StackMode.REFRESH_DURATION, so re-spraying
+    a burning enemy resets to the longer timer (refresh, NOT stack) — exactly the
+    intended behaviour. There is NO bespoke burnTurnsRemaining field; the generic
+    StatusEffect EnumMap on each host owns the state.
 
   hudAmmoString() override: "FUEL " + fuelInClip + "/" + clipSize, built into the
   preallocated StringBuilder.
 
-BURN TICK (enemy system + global tick)
-  - Add int burnTurnsRemaining to the Enemy (or a Burn status component if ECS).
-  - In the world/enemy turn-advance (the same place enemies take their turn —
-    see enemy_system.txt and global-tick-event-system.txt), BEFORE or AFTER enemy
-    actions, process burns:
-      if (enemy.burnTurnsRemaining > 0) {
-          enemy.takeDamage(Constants.FLAME_BURN_DAMAGE_PER_TURN);
-          enemy.burnTurnsRemaining -= 1;
-      }
-    Order relative to enemy movement is a tuning choice (recommend burn FIRST so a
-    burning enemy can die before acting). A killed-by-burn enemy drops loot/corpse
-    normally.
-  - This hooks the global-tick-event-system: a "burn tick" can post an event for
-    the flame overlay / crackle audio.
+BURN TICK (status system + global tick) — IMPLEMENTED via the generic status engine.
+  - There is NO per-enemy burnTurnsRemaining int. status/StatusEffectController owns
+    the BURNING StatusEffect (status/StatusType.BURNING). Every host (Player and
+    Enemy) holds a pre-allocated EnumMap of StatusEffect; apply()/tickAll() mutate
+    fields only (zero allocation per turn).
+  - StatusEffectSubscriber ticks the controller once per world turn (subscribed in
+    World BEFORE EnemyTurnSubscriber) so a burning enemy can die before it acts.
+    applyEnemyTickEffect() deals effect.magnitude DoT each turn; a DoT-lethal enemy
+    is queued and resolved via EnemyManager.processDoTKill (XP/loot attributed to the
+    source passed to apply()). Per-enemy StatusResistance honours fire resist/immunity
+    (a "fireproof" enemy can be made immune to BURNING — the resistance hook already
+    exists in EnemyManager).
 
 CONSTANTS TO ADD (util/Constants.java)
   FLAME_IMPACT_DAMAGE            = 8
@@ -452,12 +468,16 @@ OPEN QUESTIONS
 2. BURN STACK VS REFRESH: confirmed REFRESH (re-spray resets to FLAME_BURN_TURNS,
    does not add). If playtest wants more reward for sustained spraying, allow up
    to 2 stacks. Recommendation: refresh-only for v1.
-3. FLOOR FIRE SPREAD: should a burning enemy or an ignited oil pool leave a
-   damaging fire tile that the hazard system spreads/ticks, hitting the player
-   too? This is powerful but couples tightly to the hazard system. Recommendation:
-   defer floor-fire to the hazard-chain-reactions feature; v1 incinerator only
-   burns ENEMIES directly, with oil/barrel ignition delegated to that system if
-   present.
+3. FLOOR FIRE SPREAD: RESOLVED — the hazard-chain-reaction system now exists
+   (hazard/HazardManager) and the incinerator is wired into it. Every reachable cone
+   tile is passed to HazardManager.igniteFire (via the entity/HazardIgniteTarget
+   interface, set per floor in World), turning eligible floor/decal tiles into
+   spreading, ticking FIRE hazards. That fire is two-sided: it damages enemies AND the
+   player if they stand in it (HazardManager.damagePhase applies BURNING to any host on
+   the tile), it spreads to neighbours, ignites oil, and chain-detonates explosive
+   barrels — exactly the "retreat behind a wall of flame, but don't stand in it"
+   fantasy. The weapon also still directly burns enemies it hits (applyBurningStatus).
+   No longer deferred.
 4. BURN TICK ORDER: process burn BEFORE enemy movement (a burning enemy can die
    before acting) or AFTER (it always gets one action)? Recommendation: BEFORE —
    the player who lit them up should be rewarded with potential pre-action kills.

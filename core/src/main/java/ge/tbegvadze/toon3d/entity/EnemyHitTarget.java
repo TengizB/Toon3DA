@@ -42,4 +42,17 @@ public interface EnemyHitTarget {
     default boolean isAtFullHp(Object enemyObject) {
         return false;
     }
+
+    /**
+     * Applies (or refreshes) a BURNING damage-over-time status on the given enemy.
+     * Used by the Incinerator so its cone leaves enemies on fire for several turns
+     * after the trigger pull. Routes into the shared StatusEffectController so the
+     * burn ticks, respects fire resistance/immunity, and attributes DoT kills.
+     * Default: no-op; EnemyManager overrides with the real status application.
+     *
+     * @param enemy            the token returned by enemyAt()
+     * @param turns            burn duration in world turns
+     * @param magnitudePerTurn burn damage applied each turn
+     */
+    default void applyBurningStatus(Object enemy, int turns, int magnitudePerTurn) {}
 }
