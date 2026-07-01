@@ -2980,4 +2980,59 @@ public final class GameMath {
         }
         return healAmount / averageIncomingDamagePerTurn;
     }
+
+    // =========================================================================
+    // MINI-MAP — FACING WEDGE GEOMETRY (replaces the unreadable facing line)
+    // =========================================================================
+    /*
+     * Formula: facingWedgeTip — the pointed vertex of the direction wedge
+     * Derivation:
+     *   The wedge is an isosceles triangle built from the player's unit facing
+     *   vector (directionX, directionY). Its tip sits one wedge-length ahead of
+     *   the player dot along the facing vector:
+     *       tip = center + facing * wedgeLength
+     * Edge cases:
+     *   facingX/facingY is always a unit vector supplied by Player, so no
+     *   normalization is needed here.
+     */
+    public static float facingWedgeTipX(float centerX, float facingX, float wedgeLength) {
+        return centerX + facingX * wedgeLength;
+    }
+
+    public static float facingWedgeTipY(float centerY, float facingY, float wedgeLength) {
+        return centerY + facingY * wedgeLength;
+    }
+
+    /*
+     * Formula: facingWedgeBase — the two base vertices of the direction wedge
+     * Derivation:
+     *   The base sits behind the player dot (opposite the facing vector) and is
+     *   offset sideways along the perpendicular of facing, (-facingY, facingX)
+     *   (90 degrees CCW of facing, same rotation used for strafe-left):
+     *       baseLeft  = center - facing * wedgeBack + perpendicular * wedgeHalfWidth
+     *       baseRight = center - facing * wedgeBack - perpendicular * wedgeHalfWidth
+     *   Together with the tip this forms a triangle pointing exactly where the
+     *   player is looking, readable at a glance on a small procedural mini-map.
+     * Edge cases:
+     *   None — pure vector arithmetic on an always-unit facing vector.
+     */
+    public static float facingWedgeBaseLeftX(float centerX, float facingX, float facingY,
+                                              float wedgeBack, float wedgeHalfWidth) {
+        return centerX - facingX * wedgeBack + (-facingY) * wedgeHalfWidth;
+    }
+
+    public static float facingWedgeBaseLeftY(float centerY, float facingX, float facingY,
+                                              float wedgeBack, float wedgeHalfWidth) {
+        return centerY - facingY * wedgeBack + facingX * wedgeHalfWidth;
+    }
+
+    public static float facingWedgeBaseRightX(float centerX, float facingX, float facingY,
+                                               float wedgeBack, float wedgeHalfWidth) {
+        return centerX - facingX * wedgeBack - (-facingY) * wedgeHalfWidth;
+    }
+
+    public static float facingWedgeBaseRightY(float centerY, float facingX, float facingY,
+                                               float wedgeBack, float wedgeHalfWidth) {
+        return centerY - facingY * wedgeBack - facingX * wedgeHalfWidth;
+    }
 }

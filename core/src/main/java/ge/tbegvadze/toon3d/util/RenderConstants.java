@@ -27,6 +27,36 @@ public final class RenderConstants {
     public static final float DOOR_MINIMAP_OPEN_R   = 0.20f;
     public static final float DOOR_MINIMAP_OPEN_G   = 0.80f;
     public static final float DOOR_MINIMAP_OPEN_B   = 0.85f;
+    // Locked-door minimap tint strength — how far the base door colour lerps toward
+    // the required keycard colour (0 = no tint, 1 = pure keycard colour).
+    public static final float DOOR_MINIMAP_LOCK_TINT_FRACTION = 0.55f;
+
+    // Mini-map overlay marker palette — props, hazards, pickups, exit, and enemy threat chevrons.
+    // Keycard pickups and locked-door tinting reuse KEYCARD_AURA_RED/YELLOW/BLUE below.
+    public static final float MINIMAP_EXIT_R           = 0.10f;
+    public static final float MINIMAP_EXIT_G           = 1.00f;
+    public static final float MINIMAP_EXIT_B           = 0.55f;
+    public static final float MINIMAP_PROP_R           = 0.42f;
+    public static final float MINIMAP_PROP_G           = 0.42f;
+    public static final float MINIMAP_PROP_B           = 0.46f;
+    public static final float MINIMAP_BARREL_R         = 1.00f;
+    public static final float MINIMAP_BARREL_G         = 0.48f;
+    public static final float MINIMAP_BARREL_B         = 0.09f;
+    public static final float MINIMAP_HEALTH_PICKUP_R  = 0.20f;
+    public static final float MINIMAP_HEALTH_PICKUP_G  = 0.90f;
+    public static final float MINIMAP_HEALTH_PICKUP_B  = 0.20f;
+    public static final float MINIMAP_ARMOR_PICKUP_R   = 0.09f;
+    public static final float MINIMAP_ARMOR_PICKUP_G   = 0.75f;
+    public static final float MINIMAP_ARMOR_PICKUP_B   = 0.88f;
+    public static final float MINIMAP_AMMO_PICKUP_R    = 0.75f;
+    public static final float MINIMAP_AMMO_PICKUP_G    = 0.45f;
+    public static final float MINIMAP_AMMO_PICKUP_B    = 0.10f;
+    public static final float MINIMAP_ENEMY_THREAT_R   = 1.00f;
+    public static final float MINIMAP_ENEMY_THREAT_G   = 0.16f;
+    public static final float MINIMAP_ENEMY_THREAT_B   = 0.16f;
+    // Pulse brightness range for the exit marker and enemy threat chevrons (see GameMath.pulseMultiplier)
+    public static final float MINIMAP_PULSE_MIN_BRIGHTNESS = 0.65f;
+    public static final float MINIMAP_PULSE_MAX_BRIGHTNESS = 1.00f;
 
     // Keycard door glow — ambient colour tint for walls near locked doors
     public static final int   KEYCARD_DOOR_GLOW_RADIUS_TILES = 3;
