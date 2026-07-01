@@ -24,17 +24,17 @@ import ge.tbegvadze.toon3d.world.HudState;
  * Left chrome HUD panel only (x 0..420, y 0..206 — bottom-left corner).
  *
  * Reworked vitals layout: four "vital rows" (HP, AR, AMMO, XP) stacked top-to-bottom, each one a
- * left-aligned label, a smooth per-vertex gradient bar, and a right-aligned numeric value. Labels
- * sit to the LEFT of every bar and values to the RIGHT, so text is never drawn over a bar and the
- * elements can never overlap. The HP bar is a true green→red gradient: a full-width red→green
- * "scale" track with a bright filled slice on top, so the player reads health by both length and
- * hue (green = healthy, red = critical). Below the bars sit a numbered weapon-slot strip and a thin
- * status-effect icon row in its own clear band.
+ * left-aligned label, a segmented bar (split into small rectangles), and a right-aligned numeric
+ * value. Labels sit to the LEFT of every bar and values to the RIGHT, so text is never drawn over a
+ * bar and the elements can never overlap. Each filled HP tick is coloured by its position on a
+ * red→green ramp, so the row of rectangles reads as a green→red gradient (green ticks appear only
+ * near full health). The ammo bar draws one tick per round in the clip. Below the bars sit a
+ * numbered weapon-slot strip and a thin status-effect icon row in its own clear band.
  *
  * Every glyph is drawn with a dark drop-shadow for contrast against the busy 3D view behind it.
  *
  * Render order per frame:
- *   Pass A — ShapeRenderer.Filled  (panel chrome, gradient bars, slots — alpha-blended)
+ *   Pass A — ShapeRenderer.Filled  (panel chrome, segmented bars, slots — alpha-blended)
  *   Pass B — ShapeRenderer.Line    (bevels, bar/slot outlines)
  *   Pass C — SpriteBatch + BitmapFont (labels, values, slot text, status counts)
  */
@@ -53,10 +53,9 @@ public class HudRenderer implements Renderable, Disposable {
     private static final Color TEXT_DIM       = new Color(0.45f, 0.48f, 0.52f, 1f);
     private static final Color TEXT_SHADOW    = new Color(0.00f, 0.00f, 0.00f, 0.80f);
 
-    // HP green→red ramp endpoints (sampled by healthRampColor)
+    // HP green→red ramp: filled ticks are sampled from healthRampColor; empty ticks use HP_TRACK_LOW.
     private static final Color HP_LABEL       = new Color(0.55f, 0.95f, 0.60f, 1f);
     private static final Color HP_TRACK_LOW   = new Color(0.18f, 0.03f, 0.03f, 1f);
-    private static final Color HP_TRACK_HIGH  = new Color(0.04f, 0.16f, 0.05f, 1f);
 
     // Armor (blue), ammo (amber), XP (gold) — single-hue glossy gradients
     private static final Color AR_LABEL       = new Color(0.55f, 0.85f, 1.00f, 1f);
@@ -132,11 +131,6 @@ public class HudRenderer implements Renderable, Disposable {
     // Reusable scratch — no allocations inside render()
     private final StringBuilder stringBuilder = new StringBuilder(64);
     private final GlyphLayout   glyphLayout   = new GlyphLayout();
-    private final Color cornerBottomLeft  = new Color();
-    private final Color cornerBottomRight = new Color();
-    private final Color cornerTopRight    = new Color();
-    private final Color cornerTopLeft     = new Color();
-    private final Color rampColor         = new Color();
     private final Color temporaryColor    = new Color();
 
     public HudRenderer(Player player, HudState hudState) {
@@ -286,85 +280,104 @@ public class HudRenderer implements Renderable, Disposable {
     }
 
     // =========================================================================
-    // PASS A: Gradient vital bars
+    // PASS A: Segmented vital bars — each bar is split into small rectangles
     // =========================================================================
 
     /**
-     * Draws one vital bar: a full-width dim "track" (the green→red scale, or a single dim hue),
-     * then a bright filled slice from the left edge up to {@code fraction} of the width. Both layers
-     * carry a top-to-bottom gloss (top lighter than bottom). All four corner colors come from the
-     * pre-allocated scratch Colors so render() never allocates.
+     * Draws one segment rectangle of a vital bar. The caller sets the fill color first; this only
+     * computes the segment geometry. Segment width divides the bar width evenly, minus the gaps.
      */
-    private void drawGradientBar(float barY, float fraction,
-                                 Color trackLow, Color trackHigh,
-                                 Color fillLeft, Color fillRight) {
-        float barX      = HudConstants.HUD_BAR_X;
-        float barWidth  = HudConstants.HUD_BAR_WIDTH;
-        float barHeight = HudConstants.HUD_BAR_HEIGHT;
-        float clamped   = MathUtils.clamp(fraction, 0f, 1f);
-
-        // Track (full width). Bottom corners are darkened for a recessed look.
-        setCorners(trackLow, trackHigh, 0.55f);
-        shapes.rect(barX, barY, barWidth, barHeight,
-                cornerBottomLeft, cornerBottomRight, cornerTopRight, cornerTopLeft);
-
-        // Bright filled slice.
-        float fillWidth = barWidth * clamped;
-        if (fillWidth > 0.5f) {
-            setCorners(fillLeft, fillRight, 0.62f);
-            shapes.rect(barX, barY, fillWidth, barHeight,
-                    cornerBottomLeft, cornerBottomRight, cornerTopRight, cornerTopLeft);
-        }
-    }
-
-    /**
-     * Loads the four corner scratch colors for a glossy left→right gradient: top corners use the
-     * left/right hue at full brightness, bottom corners the same hue multiplied by {@code bottomMul}.
-     * rect() corner order is (bottom-left, bottom-right, top-right, top-left).
-     */
-    private void setCorners(Color left, Color right, float bottomMul) {
-        cornerTopLeft.set(left);
-        cornerTopRight.set(right);
-        cornerBottomLeft.set(left.r * bottomMul, left.g * bottomMul, left.b * bottomMul, left.a);
-        cornerBottomRight.set(right.r * bottomMul, right.g * bottomMul, right.b * bottomMul, right.a);
+    private void drawBarSegment(float barY, int index, int segmentCount, float gap) {
+        float segmentWidth = (HudConstants.HUD_BAR_WIDTH - (segmentCount - 1) * gap) / segmentCount;
+        float x            = HudConstants.HUD_BAR_X + index * (segmentWidth + gap);
+        shapes.rect(x, barY, segmentWidth, HudConstants.HUD_BAR_HEIGHT);
     }
 
     private void drawHpBarFilled(float pulse, boolean lowHp, boolean isDead) {
-        float fraction = isDead ? 0f : displayedHealthFraction;
-        // Bright slice runs red (left edge) → the ramp color at the current fill edge (right), so the
-        // player only sees green when near full health — a literal green→red gradient. temporaryColor
-        // holds the left (red) end, rampColor the right end; both are reusable scratch Colors.
-        healthRampColor(0f, temporaryColor);
-        healthRampColor(fraction, rampColor);
-        if (lowHp && !isDead) {
-            temporaryColor.mul(pulse, pulse, pulse, 1f);
-            rampColor.mul(pulse, pulse, pulse, 1f);
+        float fraction     = isDead ? 0f : displayedHealthFraction;
+        int   segmentCount = HudConstants.HUD_BAR_SEGMENT_COUNT;
+        float gap          = HudConstants.HUD_BAR_SEGMENT_GAP;
+        int   fillCount    = GameMath.segmentFillCount(fraction, segmentCount);
+
+        for (int index = 0; index < segmentCount; index++) {
+            if (index < fillCount) {
+                // Colour each filled segment by its position along the red→green ramp, so the row of
+                // rectangles reads as a green→red gradient (green ticks appear only near full health).
+                healthRampColor(index / (float) (segmentCount - 1), temporaryColor);
+                if (lowHp && !isDead) temporaryColor.mul(pulse, pulse, pulse, 1f);
+                shapes.setColor(temporaryColor);
+            } else {
+                shapes.setColor(HP_TRACK_LOW);
+            }
+            drawBarSegment(HudConstants.HUD_HP_BAR_Y, index, segmentCount, gap);
         }
-        drawGradientBar(HudConstants.HUD_HP_BAR_Y, fraction,
-                HP_TRACK_LOW, HP_TRACK_HIGH, temporaryColor, rampColor);
     }
 
     private void drawArmorBarFilled(boolean isDead) {
-        float fraction = isDead ? 0f : displayedArmorFraction;
-        drawGradientBar(HudConstants.HUD_AR_BAR_Y, fraction, AR_TRACK, AR_TRACK, AR_BRIGHT, AR_BRIGHT);
+        float fraction     = isDead ? 0f : displayedArmorFraction;
+        int   segmentCount = HudConstants.HUD_BAR_SEGMENT_COUNT;
+        float gap          = HudConstants.HUD_BAR_SEGMENT_GAP;
+        int   fillCount    = GameMath.segmentFillCount(fraction, segmentCount);
+
+        for (int index = 0; index < segmentCount; index++) {
+            if (index < fillCount) {
+                temporaryColor.set(AR_BRIGHT).lerp(AR_LABEL, index / (float) (segmentCount - 1));
+                shapes.setColor(temporaryColor);
+            } else {
+                shapes.setColor(AR_TRACK);
+            }
+            drawBarSegment(HudConstants.HUD_AR_BAR_Y, index, segmentCount, gap);
+        }
     }
 
     private void drawClipBarFilled(boolean isDead) {
-        // clipSize <= 0 is the sentinel for "melee selected — no ammo concept": show a full green bar.
+        float gap         = HudConstants.HUD_BAR_SEGMENT_GAP;
+        int   maxSegments = HudConstants.HUD_BAR_SEGMENT_COUNT;
+
+        // clipSize <= 0 is the sentinel for "melee selected — no ammo concept": fill every tick green.
         if (hudState.clipSize <= 0) {
-            float meleeFraction = isDead ? 0f : 1f;
-            drawGradientBar(HudConstants.HUD_CLIP_BAR_Y, meleeFraction,
-                    MELEE_TRACK, MELEE_TRACK, MELEE_BRIGHT, MELEE_BRIGHT);
+            for (int index = 0; index < maxSegments; index++) {
+                shapes.setColor(isDead ? MELEE_TRACK : MELEE_BRIGHT);
+                drawBarSegment(HudConstants.HUD_CLIP_BAR_Y, index, maxSegments, gap);
+            }
             return;
         }
-        int   clipSize = Math.max(1, hudState.clipSize);
-        float fraction = isDead ? 0f : MathUtils.clamp(hudState.currentAmmo / (float) clipSize, 0f, 1f);
-        drawGradientBar(HudConstants.HUD_CLIP_BAR_Y, fraction, CLIP_TRACK, CLIP_TRACK, CLIP_BRIGHT, CLIP_BRIGHT);
+
+        int clipSize = Math.max(1, hudState.clipSize);
+        int segmentCount;
+        int fillCount;
+        if (clipSize <= maxSegments) {
+            // One tick per round in the clip.
+            segmentCount = clipSize;
+            fillCount    = isDead ? 0 : Math.min(hudState.currentAmmo, clipSize);
+        } else {
+            // Oversized magazine: fall back to the fixed tick count so segments stay legible.
+            segmentCount   = maxSegments;
+            float fraction = isDead ? 0f : hudState.currentAmmo / (float) clipSize;
+            fillCount      = GameMath.segmentFillCount(fraction, segmentCount);
+        }
+
+        for (int index = 0; index < segmentCount; index++) {
+            shapes.setColor(index < fillCount ? CLIP_BRIGHT : CLIP_TRACK);
+            drawBarSegment(HudConstants.HUD_CLIP_BAR_Y, index, segmentCount, gap);
+        }
     }
 
     private void drawXpBarFilled(boolean isDead) {
-        float fraction = isDead ? 0f : displayedXpFraction;
-        drawGradientBar(HudConstants.HUD_XP_BAR_Y, fraction, XP_TRACK, XP_TRACK, XP_BRIGHT, XP_BRIGHT);
+        float fraction     = isDead ? 0f : displayedXpFraction;
+        int   segmentCount = HudConstants.HUD_BAR_SEGMENT_COUNT;
+        float gap          = HudConstants.HUD_BAR_SEGMENT_GAP;
+        int   fillCount    = GameMath.segmentFillCount(fraction, segmentCount);
+
+        for (int index = 0; index < segmentCount; index++) {
+            if (index < fillCount) {
+                temporaryColor.set(XP_BRIGHT).lerp(XP_LABEL, index / (float) (segmentCount - 1));
+                shapes.setColor(temporaryColor);
+            } else {
+                shapes.setColor(XP_TRACK);
+            }
+            drawBarSegment(HudConstants.HUD_XP_BAR_Y, index, segmentCount, gap);
+        }
     }
 
     /** Thin dark outline around every vital bar so each reads as a distinct, crisp element. */
