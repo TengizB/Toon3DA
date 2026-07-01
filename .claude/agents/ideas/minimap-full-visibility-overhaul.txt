@@ -1,0 +1,340 @@
+STATUS: IMPLEMENTED
+CATEGORY: UI
+TITLE: Mini-Map Overhaul — Full Visibility, Threat Markers, Facing Wedge
+---
+
+## OVERVIEW
+
+The mini-map (top-left overlay, drawn by render/LevelRenderer.java + entity/Player.render())
+currently shows only walls, doors, and gold weapon-pickup dots — it is blind to enemies,
+props, hazards, the level exit, and most pickups, and its facing indicator is a ~3px red
+stub that no one can read. This overhaul makes the mini-map a trustworthy tactical readout:
+it draws every relevant thing on the visible level window, marks ONLY enemies that are
+actively engaging the player (never dormant ones), and replaces the facing stub with a
+large, unmistakable direction wedge. It stays 100% ShapeRenderer-drawn (no textures),
+matching the procedural Doom-RPG HUD aesthetic in docs/procedural-vitals-hud.txt.
+
+This is one PR-sized feature focused on three deliverables the design brief demands:
+(1) full visibility of relevant level content, (2) threat-only enemy markers,
+(3) a readable facing indicator. Everything under STRETCH is explicitly optional.
+
+---
+
+## GAMEPLAY LOOP
+
+The mini-map is passive readout, not an action, so the "loop" is per-frame render logic
+inside the existing turn-based sim. No new turns, no new input, no tick changes.
+
+Every frame, LevelRenderer.render() walks the tile window
+(baseTileColumn/baseTileRow +/- RENDER_TILE_RADIUS) exactly as today. For each tile it
+now classifies and colours in this PRIORITY ORDER (first match wins per tile):
+
+1. Wall (Level.isWall(cell))                 -> WALL_COLOR (unchanged)
+2. Door (Level.isDoor(cell))                 -> door lerp colour (unchanged); for locked
+   doors R/Y/B, tint toward the matching keycard colour so the player reads the lock.
+3. Exit '>' (Level.isExit / cell == '>')     -> EXIT marker (pulsing green diamond).
+4. otherwise floor -> no fill (unchanged); overlays below draw on top.
+
+Then, in ordered overlay passes (each a small filled marker centred in the tile, using the
+SAME deltaColumn/deltaRow -> tileLeft/tileBottom mapping already in the file):
+
+A. Solid props (Level.isPropSolid(cell))     -> small grey square (generic obstacle).
+   Explosive barrel 'E' and radioactive barrel 'g' -> hazard-orange square instead
+   (they read as "danger you can shoot to detonate").
+B. Pickups                                    -> colour-coded dots (see VISUAL DESIGN):
+   keycards r/y/b (red/yellow/blue), health +/H (green), armor a/A (cyan),
+   ammo boxes 6/7/8/9/0 (amber). Weapon GroundItems keep the existing gold dot.
+C. Active enemies                             -> THREAT MARKER (red triangle/chevron,
+   pulsing) for every enemy where enemy.isAlerted() == true. DORMANT enemies draw
+   NOTHING. See "THREAT-ONLY ENEMY MARKERS".
+
+Finally Player.render() draws, in this order at the map centre:
+- the player dot (green filled circle, enlarged), then
+- the FACING WEDGE (a filled triangle fanning out in directionX/directionY).
+
+Result: the player glances at the map and instantly reads where they are, which way they
+face, where the exit is, what loot/hazards sit nearby, and which enemies are hunting them —
+without gaining free intel on enemies that haven't noticed them yet.
+
+---
+
+## PLAYER EXPERIENCE
+
+- "Which way am I facing?" is answered in a single glance instead of squinting for a 3px
+  line. The wedge doubles as a FOV cue — it points where the 3D view looks.
+- Map awareness becomes a real tactical tool in a roguelike where it matters: the player
+  can route toward the exit, spot a medkit two rooms over, and decide whether to peek a
+  corridor before committing.
+- The threat markers create the core decision: "Three chevrons converging from the east —
+  do I fight in this doorway or fall back to the corridor I just cleared?" Because dormant
+  enemies are invisible, the player still gets AMBUSHED by rooms they haven't provoked —
+  preserving the dread and the "did I make noise?" tension the game already builds with
+  chain-alert (docs/enemy-system.txt Phase A2). The map rewards awareness without
+  removing surprise.
+
+---
+
+## THREAT-ONLY ENEMY MARKERS — the design tension, addressed
+
+The brief flags this as a real tension: showing enemies on the map is a potential
+"wallhack" that trivialises exploration. The resolution is to gate the marker on the
+enemy's engagement state, which the sim already tracks.
+
+RULE: an enemy appears on the mini-map IF AND ONLY IF enemy.isAlerted() == true
+(i.e. state != EnemyState.DORMANT — see enemy/Enemy.java:125 and enemy/EnemyState.java).
+
+Why this is the correct signal:
+- DORMANT enemies "ignore the player" and, per docs/enemy-system.txt, an enemy never
+  returns to DORMANT once it wakes. So the marker only ever appears for something that is
+  ALREADY hunting you — it reveals a threat you provoked, not a secret.
+- It gives the player NO free information about unaware enemies: you cannot scout a room's
+  contents through walls by watching the map. The map lights up only once the fight has
+  effectively begun (proximity/LOS alert or chain-alert scream).
+- It is thematically consistent with the existing red-alert wall pulse
+  (gameState.redAlert) — both fire off the same "the facility knows you're here" beat.
+- Once alerted, the marker legitimately helps the player track a chasing enemy that has
+  rounded a corner out of the 3D view — which is exactly the tactical readout a mini-map
+  should provide, and mirrors the enemy AI already knowing where the player is.
+
+Corner cases:
+- An alerted enemy that walks outside the RENDER_TILE_RADIUS window simply isn't drawn
+  (off-map), consistent with how the map already clips. No off-edge arrow in v1 (STRETCH).
+- WINDING_UP (telegraphing) enemies (e.g. Shell Brute charge) count as alerted and MUST
+  show — the player needs to see the charger coming. Consider a brighter/larger pulse for
+  WINDING_UP as optional polish (STRETCH), but the base rule (any non-DORMANT shows) is
+  sufficient.
+- Corpses ('m' stamped on death) are decals, not enemies, and are never in the enemy list,
+  so they never draw a threat marker.
+
+---
+
+## READABLE FACING INDICATOR — the wedge
+
+Replace the current line (Player.java ~lines 320-324) with a FILLED ISOSCELES TRIANGLE
+("wedge") drawn with ShapeRenderer.ShapeType.Filled. This is the strongest readable shape
+for a chunky pixel/procedural HUD: it has an unambiguous point (facing) and a wide base
+(the player's location), reads at a glance, and needs no texture.
+
+Geometry (all in world units, map-space; player is always axis-aligned to a cardinal, so
+directionX/directionY is one of (1,0),(0,1),(-1,0),(0,-1)):
+
+  Let centerX/centerY = the player dot centre (existing dotX/dotY).
+  Let facingX = directionX, facingY = directionY.
+  Let perpX = -directionY, perpY = directionX   (90 deg CCW of facing — the base axis).
+
+  tipX  = centerX + facingX * MINI_MAP_FACING_WEDGE_LENGTH
+  tipY  = centerY + facingY * MINI_MAP_FACING_WEDGE_LENGTH
+  baseLeftX  = centerX - facingX * MINI_MAP_FACING_WEDGE_BACK + perpX * MINI_MAP_FACING_WEDGE_HALF_WIDTH
+  baseLeftY  = centerY - facingY * MINI_MAP_FACING_WEDGE_BACK + perpY * MINI_MAP_FACING_WEDGE_HALF_WIDTH
+  baseRightX = centerX - facingX * MINI_MAP_FACING_WEDGE_BACK - perpX * MINI_MAP_FACING_WEDGE_HALF_WIDTH
+  baseRightY = centerY - facingY * MINI_MAP_FACING_WEDGE_BACK - perpY * MINI_MAP_FACING_WEDGE_HALF_WIDTH
+
+  shapes.triangle(tipX, tipY, baseLeftX, baseLeftY, baseRightX, baseRightY);
+
+The wedge is drawn OVER the dot. Suggested sizing: tip length ~= 1.4 tiles of map cell,
+half-width ~= 0.55 tiles, back offset ~= 0.35 tiles — big enough to dominate the centre.
+During ROTATING (PlayerController lerps direction), directionX/directionY are already
+mid-lerp, so the wedge animates the turn smoothly for free — a nice bonus. No allocation:
+the six floats are locals, triangle() takes primitives.
+
+Because the wedge is a rotated triangle built from directionX/directionY (never from a
+sprite), it is 100% procedural and consistent with docs/procedural-vitals-hud.txt.
+
+Rejected alternatives:
+- Rotated icon sprite: violates "no textures for UI" and needs an atlas + rotation batch.
+- Longer line: still thin, still hard to read against the busy grid.
+- Cone/arc (many segments): heavier to draw and no clearer than a solid triangle at this
+  size; a filled triangle already reads as a "facing cone."
+
+---
+
+## TECHNICAL NOTES
+
+Affected classes (no new gameplay classes required):
+- render/LevelRenderer.java — main change. Add the overlay passes. It already receives the
+  Level and DoorManager, walks the tile window, and maps deltaColumn/deltaRow ->
+  tileLeft/tileBottom with clipping. Reuse that exact mapping for every new marker so
+  everything lines up with the walls.
+- entity/Player.java render() — replace the facing line with the wedge triangle; enlarge
+  the player dot (MINI_MAP_PLAYER_RADIUS is currently MINI_MAP_CELL_SIZE/4 ~= 3px, too
+  small; introduce a dedicated larger radius constant rather than changing the shared one).
+- world/World.java — wire the enemy list into LevelRenderer, mirroring the existing
+  setGroundItems() wiring. Add LevelRenderer.setEnemies(enemyManager.getEnemies())
+  (EnemyManager.getEnemies() exists at EnemyManager.java:299) once per frame before render,
+  exactly like setGroundItems()/setPlayerWorldPosition() are already called.
+
+Data flow / references:
+- Enemies: LevelRenderer gets List<Enemy> via a new setEnemies(List<Enemy>) setter (default
+  Collections.emptyList(), same pattern as groundItems). Each Enemy exposes public
+  tileColumn/tileRow (Enemy.java:30-31) and isAlerted() (Enemy.java:125). Draw a marker
+  only when enemy.isAlive() && enemy.isAlerted().
+- Tiles: Level.getCell(column,row) (Level.java:48) is the read accessor. Classifiers:
+  Level.isWall, Level.isDoor, Level.isPropSolid (Level.java:218), Level.isPropDecal
+  (Level.java:225). For the exit, test cell == '>' directly, or add Level.isExit(char) as a
+  one-line helper for cleanliness (preferred; it centralises the symbol). Barrels are the
+  'E' and 'g' chars within isPropSolid.
+- Pickups: classify by char in LevelRenderer (r y b + H a A and ammo 6 7 8 9 0). The
+  canonical semantics live in item/ItemType.java and docs/tile-symbols.txt; the mini-map
+  only needs the char->colour mapping, so a small switch in LevelRenderer keyed on the tile
+  char is sufficient and avoids coupling to ItemType. Weapon pickups remain GroundItems
+  (render/LevelRenderer already draws these gold via the groundItems list) — pickups baked
+  into the tile grid (keycards/health/armor/ammo) are read from getCell instead.
+- Explosive barrels: hazard/ExplosiveBarrelManager owns runtime barrel state, but the
+  barrel tile chars 'E'/'g' are in the grid and already classified by isPropSolid, so the
+  mini-map can colour them from getCell without querying the manager. (If a barrel has been
+  destroyed and the grid char cleared, it correctly stops drawing.)
+
+Render passes (respect the existing begin/end discipline — Filled and Line never share a
+begin block, per procedural-vitals-hud.txt):
+  1. Filled pass (existing): walls, doors, exit fill, prop squares, pickup dots, weapon
+     dots, enemy threat markers. All can live in the ONE existing Filled begin/end block
+     since they are all rects/triangles.
+  2. Line pass (existing): grid + border unchanged.
+  3. Player.render(): its own Filled begin/end block (already separate) — dot then wedge.
+Order within the Filled pass matters for overdraw: draw tile fills first, then props, then
+pickups, then enemy markers last so a threat marker is never hidden under a prop square.
+
+Pulsing: reuse GameMath.pulseMultiplier(clockSeconds, hertz, minMul, maxMul) (already
+exists per procedural-vitals-hud.txt) for the exit diamond and enemy markers. LevelRenderer
+will need an animationClockSeconds float advanced in an update(deltaTime) method (add one,
+mirroring HudRenderer) OR pass the world clock in. Prefer adding update(deltaTime) called
+from World before render(), consistent with HudRenderer. Keep it allocation-free.
+
+No-allocation compliance: all marker colours are pre-allocated static final Color fields
+(as GRID_COLOR/WALL_COLOR/WEAPON_DOT_COLOR already are). All per-tile geometry uses local
+floats. shapes.triangle() and shapes.rect() take primitives — no garbage.
+
+Constants to ADD (util/Constants.java, the MINI_MAP_* block, keep names spelled out):
+  MINI_MAP_PLAYER_DOT_RADIUS        = MINI_MAP_CELL_SIZE * 0.42f   // bigger, readable dot
+  MINI_MAP_FACING_WEDGE_LENGTH      = MINI_MAP_CELL_SIZE * 1.40f
+  MINI_MAP_FACING_WEDGE_HALF_WIDTH  = MINI_MAP_CELL_SIZE * 0.55f
+  MINI_MAP_FACING_WEDGE_BACK        = MINI_MAP_CELL_SIZE * 0.35f
+  MINI_MAP_MARKER_SIZE              = MINI_MAP_CELL_SIZE * 0.55f   // enemy/pickup marker
+  MINI_MAP_PROP_SIZE                = MINI_MAP_CELL_SIZE * 0.60f   // prop square
+  MINI_MAP_PULSE_HERTZ              = 2.5f
+Colours can live as static final Color fields in LevelRenderer (like the existing ones), or
+in RenderConstants as float R/G/B triples if you prefer them tunable — match whatever the
+door colours (DOOR_MINIMAP_*) already do (those are in RenderConstants). Keep consistent.
+
+No new tile symbols are required. This feature only READS existing symbols already defined
+in docs/tile-symbols.txt (walls, doors, '>', props E/g/etc., pickups r/y/b/+/H/a/A/6-0).
+Therefore no docs/tile-symbols.txt or Level.java symbol-budget change is needed.
+
+---
+
+## VISUAL DESIGN
+
+Palette (align with the HUD palette in procedural-vitals-hud.txt for cohesion):
+  Walls           WHITE                         (unchanged)
+  Doors           steel->cyan lerp              (unchanged); locked R/Y/B tinted red/yellow/blue
+  Exit '>'        pulsing GREEN diamond (PHOSPHOR_GREEN #00FF88), the "objective" colour
+  Solid prop      muted grey square #6A6A72     (generic obstacle, low salience)
+  Barrel E/g      hazard ORANGE square #FF7A18  (shootable danger)
+  Keycard r/y/b   red / yellow / blue dot, small halo ring in the Line pass (optional)
+  Health +/H      GREEN dot #30FF60  (H slightly larger than +)
+  Armor a/A       CYAN dot  #18C0E0  (A slightly larger than a)
+  Ammo 6/7/8/9/0  AMBER dot #FFB020
+  Weapon pickup   GOLD dot (existing WEAPON_DOT_COLOR)  (unchanged)
+  Enemy (alerted) RED chevron/triangle #FF2A2A, pulsing brightness via pulseMultiplier
+  Player dot      GREEN filled circle (enlarged)
+  Facing wedge    bright GREEN filled triangle, drawn over the dot
+
+Shapes:
+- Pickups/keycards: filled squares or small circles centred in-tile (circle reads as "loot",
+  square as "structure" — pick circles for pickups to separate them from prop squares).
+- Enemy marker: a filled triangle (chevron) is more legible than a dot and signals "threat";
+  orient it upward (constant) — it does not need to point anywhere, it just needs to read as
+  a hostile marker distinct from round pickups.
+- Exit: a diamond (rotated square) via shapes.triangle x2, or simply a pulsing filled square
+  in objective-green if a diamond is too fiddly for v1.
+- Salience hierarchy (most eye-catching -> least): player wedge > enemy chevrons > exit >
+  pickups > barrels > generic props > walls/grid. Achieved via colour brightness + pulsing
+  on the top three only.
+
+Everything is drawn with the same clipping the file already applies (clampedLeft/Bottom/
+Right/Top against miniMapLeft..miniMapTop) so markers at the map edge are cut cleanly and
+never spill outside the 300x300 overlay.
+
+---
+
+## BALANCE NOTES
+
+All numbers below are PLACEHOLDERS — tune on device.
+- Wedge length 1.40 * cell, half-width 0.55 * cell: sized to clearly dominate the centre
+  tile without covering adjacent-tile markers. If it obscures a directly-ahead enemy marker,
+  reduce length to ~1.2 or draw enemy markers after the wedge... no — draw wedge last so the
+  player always sees their own facing; the ahead enemy is only 1 tile away and also visible
+  in the 3D view, so occlusion there is acceptable.
+- Pulse rate 2.5 Hz: fast enough to catch the eye for threats/exit, slow enough not to
+  strobe. Reuse HUD_PULSE_HZ (4) if you want it to match the low-HP HUD pulse; 2.5 is
+  calmer for a persistent readout.
+- Marker size 0.55 * cell (~6-7px at current 12px cells): the smallest legible filled
+  marker on a phone. If phones read it as too small, bump to 0.65.
+- Threat-marker gate is binary (alerted or not) — no tuning knob; that is intentional and
+  should NOT be softened into "show dim dormant markers," which would break the design.
+
+---
+
+## INTERACTIONS
+
+1. Enemy AI / alert system (docs/enemy-system.txt): the marker is a pure read of
+   enemy.isAlerted(). It naturally lights up in lockstep with Phase A perception, Phase A2
+   chain-alert, and the red-alert wall pulse — one coherent "you've been noticed" beat
+   across map, walls, and AI. Shell Brute WINDING_UP and Void Shroud flanking both show
+   (they are non-DORMANT), so the map supports reading those telegraphs positionally.
+
+2. Doors + keycards (door/DoorManager, tiles R/Y/B): locked doors tinting toward their
+   keycard colour, combined with keycard pickups (r/y/b) now showing on the map, lets the
+   player connect "blue door here, blue card two rooms north" — a routing puzzle the map
+   currently hides entirely. Open doors still render as floor (existing behaviour retained).
+
+3. Explosive barrels + hazards (hazard/ExplosiveBarrelManager, chars E/g; HazardManager
+   fire 'i'/toxic 'q'): barrels drawn in hazard-orange let the player plan chain-detonations
+   spatially ("lure the alerted pack past that barrel cluster"). STRETCH: also draw dynamic
+   fire 'i' / toxic 'q' tiles as translucent hazard tints so area-denial is visible on the
+   map — optional, since those are runtime tiles read the same way via getCell.
+
+4. Fog of War (.claude/agents/ideas/fog-of-war-minimap.txt, NOT IMPLEMENTED): these two are
+   COMPLEMENTARY, not conflicting. If fog is built later, this overhaul's per-tile
+   classification simply gates behind fogMap.isRevealed(): unrevealed tiles draw nothing
+   (no walls, no props, no pickups) and alerted-enemy markers only show if the enemy's tile
+   is revealed. Note the natural synergy in the implementation so fog can layer on cleanly:
+   keep all marker draws inside the same per-tile loop guard where a fog check would slot in.
+
+5. Level exit / progression (tile '>'): surfacing the exit turns the map into a navigation
+   aid toward the floor objective, supporting Pillar 8 pacing (find the climax/exit) without
+   handing out the whole layout (still radius-clipped, and fog-compatible).
+
+---
+
+## OPEN QUESTIONS
+
+1. Should the exit marker only appear once the exit tile has been seen/revealed? If Fog of
+   War lands, yes (gate on isRevealed). Without fog, showing it whenever it enters the
+   radius window is fine and helpful. Decide alongside the fog feature.
+2. Pickup marker density: in a loot-rich room the map could get busy. Do we cap or cluster
+   markers, or is per-tile fine? Recommendation: per-tile is fine at radius 12; revisit only
+   if it reads as noise.
+3. Keycard halo ring (Line pass) — worth the extra pass, or is a coloured dot enough?
+   Recommendation: coloured dot for v1; halo is STRETCH.
+4. Should WINDING_UP enemies get a distinct (brighter/larger) marker than plain CHASING?
+   Nice tell, but base rule (any non-DORMANT shows red chevron) ships first. STRETCH.
+5. Off-map threat direction indicator (edge arrow when an alerted enemy is outside the
+   radius window) — useful but scope creep. Explicitly STRETCH / separate feature.
+6. Do we want the generic prop square at all, or is it map noise? Argument to keep: props
+   block movement and LOS, so seeing them helps route planning. Argument to drop: clutter.
+   Recommendation: keep, but muted grey/low salience so it never competes with threats.
+
+---
+
+## STRETCH (explicitly optional — do NOT block the core PR on these)
+
+- Fog-of-war integration (own feature; keep this loop fog-ready per INTERACTION 4).
+- Dynamic hazard tiles ('i' fire, 'q' toxic) drawn as translucent tints.
+- Distinct WINDING_UP telegraph marker.
+- Off-map edge arrows for alerted enemies outside the window.
+- Keycard halo rings.
+- A tiny corner legend / colour key (probably better as a separate one-time tutorial overlay
+  than permanent map clutter).
+- Map zoom toggle (touch button to cycle MINI_MAP_TILE_RADIUS). Needs a TouchAction + button
+  in TouchConstants; out of scope for this PR.

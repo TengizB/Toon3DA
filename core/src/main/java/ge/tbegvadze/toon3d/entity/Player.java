@@ -312,17 +312,22 @@ public class Player implements Renderable, Disposable, StatusHost {
 
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         shapes.setColor(Color.GREEN);
-        shapes.circle(dotX, dotY, Constants.MINI_MAP_PLAYER_RADIUS);
-        shapes.end();
+        shapes.circle(dotX, dotY, Constants.MINI_MAP_PLAYER_DOT_RADIUS);
 
-        shapes.begin(ShapeRenderer.ShapeType.Line);
-        shapes.setColor(Color.RED);
-        shapes.line(
-            dotX,
-            dotY,
-            dotX + directionX * Constants.MINI_MAP_PLAYER_RADIUS,
-            dotY + directionY * Constants.MINI_MAP_PLAYER_RADIUS
-        );
+        // Facing wedge — a large filled triangle pointing in directionX/directionY.
+        // Replaces the old ~3px facing line, which was unreadable on a phone screen.
+        float wedgeTipX = GameMath.facingWedgeTipX(dotX, directionX, Constants.MINI_MAP_FACING_WEDGE_LENGTH);
+        float wedgeTipY = GameMath.facingWedgeTipY(dotY, directionY, Constants.MINI_MAP_FACING_WEDGE_LENGTH);
+        float wedgeBaseLeftX = GameMath.facingWedgeBaseLeftX(dotX, directionX, directionY,
+                Constants.MINI_MAP_FACING_WEDGE_BACK, Constants.MINI_MAP_FACING_WEDGE_HALF_WIDTH);
+        float wedgeBaseLeftY = GameMath.facingWedgeBaseLeftY(dotY, directionX, directionY,
+                Constants.MINI_MAP_FACING_WEDGE_BACK, Constants.MINI_MAP_FACING_WEDGE_HALF_WIDTH);
+        float wedgeBaseRightX = GameMath.facingWedgeBaseRightX(dotX, directionX, directionY,
+                Constants.MINI_MAP_FACING_WEDGE_BACK, Constants.MINI_MAP_FACING_WEDGE_HALF_WIDTH);
+        float wedgeBaseRightY = GameMath.facingWedgeBaseRightY(dotY, directionX, directionY,
+                Constants.MINI_MAP_FACING_WEDGE_BACK, Constants.MINI_MAP_FACING_WEDGE_HALF_WIDTH);
+        shapes.setColor(Color.GREEN);
+        shapes.triangle(wedgeTipX, wedgeTipY, wedgeBaseLeftX, wedgeBaseLeftY, wedgeBaseRightX, wedgeBaseRightY);
         shapes.end();
     }
 

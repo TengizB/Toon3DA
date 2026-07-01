@@ -39,12 +39,21 @@ public final class Constants {
     public static final int   MINI_MAP_TILE_COUNT   = MINI_MAP_TILE_RADIUS * 2 + 1;
     public static final float MINI_MAP_WORLD_SIZE   = 300f;
     public static final float MINI_MAP_CELL_SIZE     = MINI_MAP_WORLD_SIZE / MINI_MAP_TILE_COUNT;
-    public static final float MINI_MAP_PLAYER_RADIUS = MINI_MAP_CELL_SIZE / 4f;
     public static final float MINI_MAP_CENTER_X      = MINI_MAP_TILE_RADIUS * MINI_MAP_CELL_SIZE + MINI_MAP_CELL_SIZE / 2f;
     public static final float MINI_MAP_CENTER_Y      = MINI_MAP_TILE_RADIUS * MINI_MAP_CELL_SIZE + MINI_MAP_CELL_SIZE / 2f;
     // Mini-map relocated to top-left so it clears the HUD strip
     public static final float MINI_MAP_ORIGIN_X               = 8f;
     public static final float MINI_MAP_ORIGIN_Y               = WORLD_HEIGHT - 8f - MINI_MAP_WORLD_SIZE;
+
+    // Mini-map player marker — enlarged dot + facing wedge (replaces the old unreadable facing line)
+    public static final float MINI_MAP_PLAYER_DOT_RADIUS        = MINI_MAP_CELL_SIZE * 0.42f;
+    public static final float MINI_MAP_FACING_WEDGE_LENGTH      = MINI_MAP_CELL_SIZE * 1.40f;
+    public static final float MINI_MAP_FACING_WEDGE_HALF_WIDTH  = MINI_MAP_CELL_SIZE * 0.55f;
+    public static final float MINI_MAP_FACING_WEDGE_BACK        = MINI_MAP_CELL_SIZE * 0.35f;
+    // Mini-map overlay markers — props, pickups, exit, and alerted-enemy threat chevrons
+    public static final float MINI_MAP_MARKER_SIZE              = MINI_MAP_CELL_SIZE * 0.55f;
+    public static final float MINI_MAP_PROP_SIZE                = MINI_MAP_CELL_SIZE * 0.60f;
+    public static final float MINI_MAP_PULSE_HZ                 = 2.5f;
 
     // Raycasting (DDA)
     public static final int   RAY_COUNT             = 60;

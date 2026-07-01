@@ -392,6 +392,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         propRenderer.setWeaponTierMap(buildWeaponTierMap());
         levelRenderer          = new LevelRenderer(targetLevel, doorManager);
         enemyManager           = new EnemyManager(targetLevel, doorManager, currentDepth);
+        levelRenderer.setEnemies(enemyManager.getEnemies());
         abilityResolver        = new AbilityResolver(enemyManager, eventTextSystem, player, runSeed);
         abilityResolver.setKillXpListener(xpAwarded -> playerProgress.addXp(xpAwarded));
         abilityResolver.setPlayerInventory(itemInventory);
@@ -814,6 +815,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         statusEffectVignetteRenderer.render(camera);
 
         levelRenderer.setPlayerWorldPosition(player.positionX, player.positionY);
+        levelRenderer.setAnimationClock(facilityTimeSeconds);
         levelRenderer.render(camera);
 
         player.render(camera);
