@@ -8,18 +8,19 @@ LEFT-HUD REWORK (current)
 The HUD is now a single LEFT panel anchored to the bottom-left corner
 (x 0..420, y 0..206) — the old centre/right strip panels are gone. It is a
 vertical stack of four "vital rows" (HP, AR, AMMO, XP), each one:
-  [2-letter label]  [smooth gradient bar]  [right-aligned value]
+  [2-letter label]  [segmented bar]  [right-aligned value]
 Label sits LEFT of the bar and value sits RIGHT of the bar, so text is never
 drawn on top of a bar — bars and numbers cannot overlap. Below the bars are a
 numbered weapon-slot strip (weapon names are auto-truncated to their slot
 width, so they can never overflow) and a thin status-effect icon row in its own
 clear band.
 
-Bars are drawn as smooth per-vertex ShapeRenderer gradients (no chunky
-segments), with a top-to-bottom gloss. The HP bar is a true GREEN→RED gradient:
-a faint full-width red→green "scale" track with a bright filled slice on top,
-so health reads by both length and hue (green = healthy, red = critical). The HP
-number is tinted by the same red→yellow→green ramp.
+Bars are split into small rectangles (segments). HP, AR and XP use a fixed tick
+count (HUD_BAR_SEGMENT_COUNT); the AMMO bar draws one tick per round in the clip
+(falling back to the fixed count for oversized magazines). The HP bar still reads
+as a GREEN→RED gradient: each filled tick is coloured by its position on a
+red→yellow→green ramp, so green ticks appear only near full health (green =
+healthy, red = critical). The HP number is tinted by the same ramp.
 
 All text is drawn at scale >= 0.9 (never shrunk) with a dark drop-shadow behind
 every glyph for legibility over the busy 3D view. Layout/scale/colour values

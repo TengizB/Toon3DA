@@ -23,11 +23,15 @@ public final class HudConstants {
 
     // Vital row columns (panel-local X)
     public static final float HUD_ROW_LABEL_X                 = 14f;    // left-aligned 2-letter label
-    public static final float HUD_BAR_X                       = 56f;    // gradient bar left edge
-    public static final float HUD_BAR_WIDTH                   = 232f;   // gradient bar width (ends at x=288)
+    public static final float HUD_BAR_X                       = 56f;    // bar left edge
+    public static final float HUD_BAR_WIDTH                   = 232f;   // bar width (ends at x=288)
     public static final float HUD_BAR_HEIGHT                  = 20f;
     public static final float HUD_VALUE_RIGHT_X               = 406f;   // right edge for right-aligned value text
     public static final float HUD_BAR_LERP_RATE              = 3.5f;    // bar fill glide speed (fraction units/sec)
+    // Bars are split into small rectangles (segments). HP/AR/XP use a fixed tick count; the ammo
+    // bar draws one tick per round (falling back to the fixed count for oversized magazines).
+    public static final int   HUD_BAR_SEGMENT_COUNT           = 20;
+    public static final float HUD_BAR_SEGMENT_GAP             = 2f;
 
     // Vital row bar Y (bottom edge); bars span y: barY .. barY + HUD_BAR_HEIGHT. Row pitch = 28px.
     public static final float HUD_HP_BAR_Y                    = 172f;
