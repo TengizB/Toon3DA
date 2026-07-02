@@ -160,12 +160,7 @@ public class WeaponRoller {
     private AbilityInstance[] rollAbilities(Weapon weapon, WeaponTier tier, int level) {
         if (tier.abilitySlots == 0) return new AbilityInstance[0];
 
-        List<WeaponAbility> standardPool = new ArrayList<>();
-        for (WeaponAbility ability : WeaponAbility.values()) {
-            if (!ability.legendaryOnly && ability.eligibleFor(weapon.isMelee())) {
-                standardPool.add(ability);
-            }
-        }
+        List<WeaponAbility> standardPool = buildStandardPool(weapon);
 
         int standardCount = tier.standardSlotCount();
         List<AbilityInstance> result = new ArrayList<>();
@@ -176,12 +171,7 @@ public class WeaponRoller {
         }
 
         if (tier.isLegendary()) {
-            List<WeaponAbility> legendaryPool = new ArrayList<>();
-            for (WeaponAbility ability : WeaponAbility.values()) {
-                if (ability.legendaryOnly && ability.eligibleFor(weapon.isMelee())) {
-                    legendaryPool.add(ability);
-                }
-            }
+            List<WeaponAbility> legendaryPool = buildLegendaryPool(weapon);
             if (!legendaryPool.isEmpty()) {
                 WeaponAbility signature = legendaryPool.get(rng.nextInt(legendaryPool.size()));
                 result.add(buildInstance(signature, level));
@@ -189,6 +179,101 @@ public class WeaponRoller {
         }
 
         return result.toArray(new AbilityInstance[0]);
+    }
+
+    /** Eligible non-signature abilities for this weapon (shared by spawn roll + shop tier upgrade). */
+    private List<WeaponAbility> buildStandardPool(Weapon weapon) {
+        List<WeaponAbility> pool = new ArrayList<>();
+        for (WeaponAbility ability : WeaponAbility.values()) {
+            if (!ability.legendaryOnly && ability.eligibleFor(weapon.isMelee())) {
+                pool.add(ability);
+            }
+        }
+        return pool;
+    }
+
+    /** Eligible signature (legendary-only) abilities for this weapon. */
+    private List<WeaponAbility> buildLegendaryPool(Weapon weapon) {
+        List<WeaponAbility> pool = new ArrayList<>();
+        for (WeaponAbility ability : WeaponAbility.values()) {
+            if (ability.legendaryOnly && ability.eligibleFor(weapon.isMelee())) {
+                pool.add(ability);
+            }
+        }
+        return pool;
+    }
+
+    // ── Shop upgrade mutators (shop_order_3) ─────────────────────────────────
+    // The shop's WEAPON_LEVEL_UP / WEAPON_TIER_UPGRADE services delegate here so the
+    // ability-roll + magnitude-scaling logic stays in one place (this class), shared with
+    // the spawn roll. The shop package never reimplements any of this.
+
+    /**
+     * Shop level-up: raises the weapon's level by one and rescales its existing abilities'
+     * magnitudes to the new level (ability magnitude scales with level), then installs them.
+     * Reuses {@link #buildInstance} — the same magnitude math the spawn roll uses.
+     *
+     * @return false with no change if the weapon is already at max level.
+     */
+    public boolean applyLevelUp(Weapon weapon) {
+        if (!weapon.canLevelUp()) return false;
+        int newLevel = weapon.getWeaponLevel() + 1;
+        int abilityCount = weapon.getAbilityCount();
+        AbilityInstance[] rescaled = new AbilityInstance[abilityCount];
+        for (int index = 0; index < abilityCount; index++) {
+            rescaled[index] = buildInstance(weapon.getAbility(index).ability, newLevel);
+        }
+        weapon.applyShopLevelUp(rescaled);
+        return true;
+    }
+
+    /**
+     * Shop tier upgrade: raises the weapon's tier to {@code newTier} and grants the extra
+     * ability slot(s) the destination tier adds — sampled without replacement from the eligible
+     * pool, never duplicating an ability already on the weapon, magnitudes scaled to the weapon's
+     * CURRENT level. Into LEGENDARY it also rolls the single signature ability when the weapon
+     * lacks one. Existing abilities carry over unchanged (tier adds tricks; level scales numbers).
+     *
+     * @return false with no change if the weapon is already Legendary.
+     */
+    public boolean applyTierUpgrade(Weapon weapon, WeaponTier newTier) {
+        if (!weapon.canUpgradeTier()) return false;
+        int currentLevel = weapon.getWeaponLevel();
+
+        List<AbilityInstance> combined     = new ArrayList<>();
+        List<WeaponAbility>   alreadyOwned = new ArrayList<>();
+        int currentStandardCount = 0;
+        boolean hasSignature     = false;
+        for (int index = 0; index < weapon.getAbilityCount(); index++) {
+            AbilityInstance instance = weapon.getAbility(index);
+            combined.add(instance);
+            alreadyOwned.add(instance.ability);
+            if (instance.ability.legendaryOnly) hasSignature = true;
+            else                                currentStandardCount++;
+        }
+
+        // Fill the standard slots the destination tier grants beyond what the weapon holds.
+        int newStandardNeeded = Math.max(0, newTier.standardSlotCount() - currentStandardCount);
+        if (newStandardNeeded > 0) {
+            List<WeaponAbility> pool = buildStandardPool(weapon);
+            pool.removeAll(alreadyOwned);
+            Collections.shuffle(pool, rng);
+            for (int slotIndex = 0; slotIndex < Math.min(newStandardNeeded, pool.size()); slotIndex++) {
+                combined.add(buildInstance(pool.get(slotIndex), currentLevel));
+            }
+        }
+
+        // Into Legendary: add the signature (legendary-only) ability if the weapon has none.
+        if (newTier.isLegendary() && !hasSignature) {
+            List<WeaponAbility> legendaryPool = buildLegendaryPool(weapon);
+            if (!legendaryPool.isEmpty()) {
+                WeaponAbility signature = legendaryPool.get(rng.nextInt(legendaryPool.size()));
+                combined.add(buildInstance(signature, currentLevel));
+            }
+        }
+
+        weapon.applyShopTierUpgrade(newTier, combined.toArray(new AbilityInstance[0]));
+        return true;
     }
 
     private AbilityInstance buildInstance(WeaponAbility ability, int weaponLevel) {

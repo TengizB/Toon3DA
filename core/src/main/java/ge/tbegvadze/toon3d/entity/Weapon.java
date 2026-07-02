@@ -208,6 +208,42 @@ public abstract class Weapon implements WeaponProfile {
         }
     }
 
+    // ── Shop upgrade mutators (shop_order_3) ─────────────────────────────────
+    // The shop's tier/level services drive these; the ability rolling + magnitude math
+    // lives in WeaponRoller (the owner of that math), which computes the ability arrays
+    // and calls the setters below. The shop package contains no tier/level math.
+
+    /** True when a shop level-up can still raise this weapon (below the max level cap). */
+    public boolean canLevelUp() { return weaponLevel < WeaponConstants.MAX_WEAPON_LEVEL; }
+
+    /** True when a shop tier upgrade can still raise this weapon (below Legendary). */
+    public boolean canUpgradeTier() { return tier != WeaponTier.LEGENDARY; }
+
+    /**
+     * Shop level-up (shop_order_3): raises the level by one and installs the caller's
+     * level-rescaled ability set. Unlike {@link #configureRoll}, does NOT refill the clip —
+     * a purchased upgrade must never hand the player a free reload. No-op at max level.
+     * The rescaled abilities are computed by {@code WeaponRoller}; this setter rolls nothing.
+     */
+    public void applyShopLevelUp(AbilityInstance[] rescaledAbilities) {
+        if (weaponLevel >= WeaponConstants.MAX_WEAPON_LEVEL) return;
+        weaponLevel++;
+        this.abilities = rescaledAbilities;
+        recomputeEffectiveStats();
+    }
+
+    /**
+     * Shop tier upgrade (shop_order_3): sets the rarity tier and installs the combined
+     * ability set (the weapon's existing abilities plus the new slot(s) the tier grants).
+     * Leaves level untouched (tier adds abilities; level scales stats) and does not refill
+     * the clip. The ability array is built by {@code WeaponRoller}; this setter rolls nothing.
+     */
+    public void applyShopTierUpgrade(WeaponTier newTier, AbilityInstance[] combinedAbilities) {
+        this.tier      = newTier;
+        this.abilities = combinedAbilities;
+        recomputeEffectiveStats();
+    }
+
     private void recomputeEffectiveStats() {
         effectiveDamage      = GameMath.weaponScaledDamage(damage, weaponLevel);
         effectiveAccuracy    = GameMath.weaponScaledAccuracy(baseAccuracy, weaponLevel);

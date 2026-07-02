@@ -1,7 +1,29 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Combat
 TITLE: Shop 3 — Weapon Upgrade Services: Tier Boost + Level-Up Purchases
 ---
+
+IMPLEMENTATION NOTES (2026-07-02)
+=================================
+Delivered the EFFECT application (roll offers already built in shop_order_2's
+DefaultShopOfferSource):
+  - entity/Weapon.java: canLevelUp(), canUpgradeTier(), applyShopLevelUp(rescaledAbilities),
+    applyShopTierUpgrade(newTier, combinedAbilities). Setters only — no clip refill (a
+    purchase must not hand a free reload), no ability math here.
+  - entity/WeaponRoller.java: applyLevelUp(weapon) and applyTierUpgrade(weapon, newTier).
+    Extracted buildStandardPool()/buildLegendaryPool() so the shop mutators SHARE the spawn
+    roll's ability-pool + buildInstance() magnitude math (no duplication). Level-up rescales
+    existing abilities to the new level; tier-up adds only the new slot(s), excludes owned
+    abilities, and rolls the signature into LEGENDARY. Both return false (no-op) at the cap.
+  - shop/ShopWeaponService.java: implements the ShopEffectApplier seam for the two weapon
+    categories; resolves the entry payload (the live Weapon) and delegates to the roller.
+    Also owns the shared static nextTier() (DefaultShopOfferSource now reuses it).
+Payload is the live WeaponProfile reference (matches shop_order_2), not a slot id.
+Ability granted on tier-up is revealed on purchase (surprise), per OPEN QUESTION 3.
+NOT wired: the buy-tap UI (ShopTransaction.buy invocation) — that is shop_order_5's job;
+part 5 constructs `new ShopWeaponService(worldWeaponRoller)` as the applier.
+Verified with a throwaway harness: level scales stats + caps at L10; tier adds one distinct
+ability per step, 4 standard + 1 signature at LEGENDARY, caps at LEGENDARY.
 
 READ ORDER
 ==========

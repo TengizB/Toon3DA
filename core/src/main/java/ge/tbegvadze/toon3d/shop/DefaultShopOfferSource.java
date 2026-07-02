@@ -31,7 +31,7 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
         if (upgradeable.isEmpty()) return null;
 
         WeaponProfile target      = upgradeable.get(random.nextInt(upgradeable.size()));
-        WeaponTier    destination = nextTier(target.getTier());
+        WeaponTier    destination = ShopWeaponService.nextTier(target.getTier());
         OfferRarity   rarity      = tierUpgradeRarity(destination);
         int price = GameMath.shopEntryPrice(GameBalance.SHOP_BASE_PRICE_TIER_UPGRADE,
                 context.depth, GameBalance.SHOP_DEPTH_PRICE_SCALE, rarity.priceMultiplier);
@@ -110,12 +110,6 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
-
-    private static WeaponTier nextTier(WeaponTier current) {
-        WeaponTier[] tiers = WeaponTier.values();
-        int nextIndex = Math.min(current.ordinal() + 1, tiers.length - 1);
-        return tiers[nextIndex];
-    }
 
     private static OfferRarity tierUpgradeRarity(WeaponTier destination) {
         switch (destination) {
