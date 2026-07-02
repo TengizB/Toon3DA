@@ -48,8 +48,13 @@ import ge.tbegvadze.toon3d.progression.Attribute;
 import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
 import ge.tbegvadze.toon3d.shop.DefaultShopOfferSource;
+import ge.tbegvadze.toon3d.shop.ShopAbilityService;
 import ge.tbegvadze.toon3d.shop.ShopContext;
+import ge.tbegvadze.toon3d.shop.ShopEffectApplier;
+import ge.tbegvadze.toon3d.shop.ShopEffectRouter;
 import ge.tbegvadze.toon3d.shop.ShopRoller;
+import ge.tbegvadze.toon3d.shop.ShopSupplyService;
+import ge.tbegvadze.toon3d.shop.ShopWeaponService;
 import ge.tbegvadze.toon3d.shop.VendingMachine;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
@@ -158,6 +163,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
     private final ShopOverlayRenderer  shopOverlayRenderer;
     private final ShopRoller           shopRoller = new ShopRoller(new DefaultShopOfferSource());
+    /** Delivers a shop purchase's effect (weapons/supplies/abilities); consumed by the buy tap (shop_order_5). */
+    private final ShopEffectApplier    shopEffectApplier;
     private java.util.List<VendingMachine> vendingMachines = new java.util.ArrayList<>();
     /** Machine the player currently faces (drives the contextual USE button); null when none. */
     private VendingMachine machineInFront = null;
@@ -257,6 +264,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         itemInventory            = new Inventory();
         inventoryOverlayRenderer = new InventoryOverlayRenderer(itemInventory);
+
+        // Single applier that delivers every shop purchase (shop_order_3 weapons + shop_order_4
+        // supplies/abilities). The buy-tap that consumes it is wired by shop_order_5.
+        shopEffectApplier = new ShopEffectRouter(
+                new ShopWeaponService(weaponRoller),
+                new ShopSupplyService(itemInventory),
+                new ShopAbilityService(this::grantShopAbility));
 
         shopOverlayRenderer = new ShopOverlayRenderer();
 
@@ -812,6 +826,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (machine.isAtTile(frontColumn, frontRow)) return machine;
         }
         return null;
+    }
+
+    /**
+     * The single applier that delivers any shop purchase's effect (weapons, supplies, abilities).
+     * shop_order_5's buy-tap passes it to {@link ge.tbegvadze.toon3d.shop.ShopTransaction#buy}.
+     */
+    public ShopEffectApplier getShopEffectApplier() {
+        return shopEffectApplier;
     }
 
     /** Opens the fabricator shop overlay for the machine in front of the player. No turn is spent. */
@@ -1608,6 +1630,31 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * pushed to the Player and EnemyManager so they take effect immediately.</p>
      */
     private void applyUpgradeCard(UpgradeCard card) {
+        // The boon's stat effects (shared with the shop's paid path, shop_order_4).
+        applyUpgradeCardEffects(card);
+
+        // Level-up ceremony: advance the level and record the pick so future offers lean into this
+        // build. (The shop path deliberately does NOT do this — a purchase is not a level-up.)
+        playerProgress.advanceLevel();
+        upgradeCardDeck.registerPick(card);
+
+        if (touchInputState != null) {
+            touchInputState.resetAllButtonStates();
+        }
+        runPhase = RunPhase.PLAYING;
+    }
+
+    /**
+     * Applies one boon's permanent-for-run stat effects and refreshes every derived combat value —
+     * the single source of truth for "what a boon does". Shared by the level-up screen
+     * ({@link #applyUpgradeCard}) and the UAC Fabricator's paid PLAYER_ABILITY path
+     * ({@link #grantShopAbility}, shop_order_4), so a bought boon is identical to a level-up pick.
+     *
+     * <p>Attribute deltas flow into {@link PlayerStats} (read live for dodge / speed / reduction /
+     * accuracy); HP / armour / flat-damage deltas are pushed to the Player and EnemyManager so they
+     * take effect immediately. This method changes NO run/level/UI state — only the boon's effects.
+     */
+    private void applyUpgradeCardEffects(UpgradeCard card) {
         // 1. Permanent attribute deltas — read live by PlayerStats-backed systems.
         if (card.strengthDelta != 0)     playerStats.addPermanent(Attribute.STRENGTH,     card.strengthDelta);
         if (card.agilityDelta != 0)      playerStats.addPermanent(Attribute.AGILITY,      card.agilityDelta);
@@ -1629,15 +1676,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // 5. Re-push the STRENGTH/MARKSMANSHIP damage multipliers so they take effect immediately.
         refreshPlayerDamageMultipliers();
+    }
 
-        // 6. Advance the level and record the pick so future offers lean into this build.
-        playerProgress.advanceLevel();
-        upgradeCardDeck.registerPick(card);
-
-        if (touchInputState != null) {
-            touchInputState.resetAllButtonStates();
-        }
-        runPhase = RunPhase.PLAYING;
+    /**
+     * Grants a boon bought at a UAC Fabricator (shop_order_4). Reuses the level-up effect path
+     * ({@link #applyUpgradeCardEffects}) so a paid boon matches the free one exactly, but spends NO
+     * XP level and records no level-up pick — buying is not levelling. This is the
+     * {@link ge.tbegvadze.toon3d.shop.ShopAbilityGrantor} the shop's ability service calls on purchase.
+     */
+    private void grantShopAbility(UpgradeCard boon) {
+        applyUpgradeCardEffects(boon);
     }
 
     /**

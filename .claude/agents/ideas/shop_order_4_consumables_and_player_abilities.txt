@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Shop 4 — Consumables (Ammo, Medkits) & Player Ability Purchases
 ---
@@ -195,3 +195,36 @@ OPEN QUESTIONS
 5. Should PLAYER_ABILITY offers be gated by a minimum floor depth (so the first floors
    are supply/level-up focused and abilities enter deeper)? Recommend a soft gate
    (e.g. abilities weight 0 on floor 1) so early shops teach supplies/upgrades first.
+
+
+IMPLEMENTATION NOTES (2026-07-02) — what actually shipped vs this doc
+====================================================================
+The doc predates parts 1-3 landing; the codebase diverged, so part 4 followed the
+ACTUAL seams rather than the PACKAGE/CLASSES sketch above:
+
+- The "boon system" is the level-up UpgradeCard system (progression/UpgradeCard,
+  UpgradeCardDeck, UpgradeCardPool) — there is no separate Boon/BoonPool. UpgradeCards
+  are the budget-equal boons; ALL are repeatable stat picks, so every one is always
+  eligible (no unique/max-stack rejection needed). PLAYER_ABILITY payload = an UpgradeCard.
+- OFFER ROLLING already lived in DefaultShopOfferSource (part 2), not in the proposed
+  ShopSupplyService/ShopAbilityService. So part 4 implemented DefaultShopOfferSource.
+  rollAbilityOffer (draws a random UpgradeCard; rarity EPIC if isTradeOff else RARE;
+  price = SHOP_BASE_PRICE_PLAYER_ABILITY × depth × rarity). Ammo/medkit rolls were
+  already done in part 2 and left as-is (ammo targeting is still purely-random among
+  usable types — open question 3's "weight toward lowest" was NOT done).
+- EFFECT APPLIERS (the ShopEffectApplier seam) are what part 4 added:
+    shop/ShopSupplyService  — AMMO + MEDKIT over the player's Inventory. Reuses
+      Inventory.addAmmo / tryAdd (no new heal/ammo math). canApply rejects AMMO only when
+      the reserve is ALREADY at cap (100% waste); partial overflow past cap is allowed and
+      wasted, matching ground pickups. MEDKIT canApply checks for a free slot / stack room.
+    shop/ShopAbilityService — PLAYER_ABILITY; resolves the UpgradeCard and calls a
+      shop/ShopAbilityGrantor (World::grantShopAbility).
+    shop/ShopEffectRouter   — composes ShopWeaponService (part 3) + the two new services
+      into ONE ShopEffectApplier that ShopTransaction.buy takes; dispatches by category.
+- World: extracted applyUpgradeCardEffects() (the shared boon-effect core) out of
+  applyUpgradeCard(); grantShopAbility() reuses it but does NOT advanceLevel/registerPick
+  (a purchase is not a level-up — so open question 4's "count toward tally" was NOT done).
+  World builds the router and exposes getShopEffectApplier() for shop_order_5's buy-tap.
+- Open question 5 (depth-gating abilities) NOT done — abilities can roll from floor 1.
+- Verified with a throwaway harness (15/15) against core/build/classes/java/main; no
+  buy-tap UI yet — that is shop_order_5's job (it consumes getShopEffectApplier()).

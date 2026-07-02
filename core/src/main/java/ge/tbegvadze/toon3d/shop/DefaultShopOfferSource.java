@@ -4,6 +4,7 @@ import ge.tbegvadze.toon3d.entity.WeaponProfile;
 import ge.tbegvadze.toon3d.entity.WeaponTier;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemType;
+import ge.tbegvadze.toon3d.progression.UpgradeCard;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
@@ -64,8 +65,22 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
 
     @Override
     public ShopEntry rollAbilityOffer(ShopContext context, Random random) {
-        // Player abilities are drawn from the boon system that shop_order_4 owns; none exists yet.
-        return null;
+        // shop_order_4: a PLAYER_ABILITY is a paid, alternate acquisition of the SAME boons the
+        // level-up screen hands out — the budget-equal UpgradeCards (progression package). Every
+        // card is a repeatable stat boon, so all are always eligible; draw one at random. WHICH card
+        // a machine offers is rolled from the machine's seeded RNG, so abilities are random per floor
+        // (the roller de-dups by dedupKey so two machines never offer the same one).
+        UpgradeCard[] boons = UpgradeCard.values();
+        if (boons.length == 0) return null;
+        UpgradeCard boon = boons[random.nextInt(boons.length)];
+
+        // Trade-off boons (a big gain paid for with a downside) are the premium, high-variance line
+        // and read as EPIC; the plain budget boons read as RARE. Rarity drives price + UI card tint.
+        OfferRarity rarity = boon.isTradeOff() ? OfferRarity.EPIC : OfferRarity.RARE;
+        int price = GameMath.shopEntryPrice(GameBalance.SHOP_BASE_PRICE_PLAYER_ABILITY,
+                context.depth, GameBalance.SHOP_DEPTH_PRICE_SCALE, rarity.priceMultiplier);
+        return new ShopEntry(OfferCategory.PLAYER_ABILITY, rarity, "Boon: " + boon.displayName,
+                boon.description, price, 0, boon, "ABILITY:" + boon.name());
     }
 
     @Override
