@@ -26,4 +26,13 @@ public final class ShopStock {
         }
         return true;
     }
+
+    /** Number of entries already bought — drives the machine's IN-STOCK / LOW visual state (shop_order_6). */
+    public int soldCount() {
+        int count = 0;
+        for (ShopEntry entry : entries) {
+            if (entry.isSoldOut()) count++;
+        }
+        return count;
+    }
 }

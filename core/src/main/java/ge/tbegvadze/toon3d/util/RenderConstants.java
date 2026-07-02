@@ -333,4 +333,66 @@ public final class RenderConstants {
     public static final float LEVEL_TRANSITION_FADE_OUT_SECONDS  = 0.30f;
     public static final float LEVEL_TRANSITION_FADE_IN_SECONDS   = 0.30f;
     public static final int   STARTING_DEPTH                     = 1;
+
+    // -------------------------------------------------------------------------
+    // Shop — UAC Fabricator vending machine animated billboard (shop_order_6)
+    // -------------------------------------------------------------------------
+    // Tier-A high-resolution body baked ONCE into a Pixmap→Texture (portrait cabinet, width = 0.5×height).
+    public static final int   SHOP_SPRITE_TEXTURE_HEIGHT         = 512;
+    public static final int   SHOP_SPRITE_TEXTURE_WIDTH          = 256;
+    // Billboard body height as a fraction of a full wall stripe (ground-anchored, no float lift).
+    public static final float SHOP_SPRITE_HEIGHT_FRACTION        = 0.92f;
+
+    // Tier-B animated overlay pulse rates (radians/second).
+    public static final float SHOP_STATUS_PULSE_SPEED            = 2.0f;
+    public static final float SHOP_WINDOW_GLOW_PULSE_SPEED       = 1.4f;
+    public static final float SHOP_HOLO_FLICKER_SPEED            = 8.0f;
+    public static final float SHOP_AURA_PULSE_SPEED              = 1.2f;
+
+    // Ambient aura behind the whole unit (additive, tile-brightness aware).
+    public static final float SHOP_AURA_RADIUS_MULTIPLIER        = 1.6f;   // diameter vs sprite width
+    public static final float SHOP_AURA_BASE_ALPHA               = 0.24f;
+    public static final float SHOP_AURA_PULSE_AMPLITUDE          = 0.06f;
+
+    // Product-window breathing glow (cyan fabrication energy behind the glass).
+    public static final float SHOP_WINDOW_GLOW_SIZE_FRACTION     = 0.44f;  // diameter vs sprite height
+    public static final float SHOP_WINDOW_GLOW_BASE_ALPHA        = 0.34f;
+    public static final float SHOP_WINDOW_GLOW_PULSE_AMPLITUDE   = 0.16f;
+
+    // Status light halo — colour set by machine state (in-stock / low / depleted).
+    public static final float SHOP_STATUS_SIZE_FRACTION          = 0.12f;  // diameter vs sprite height
+    public static final float SHOP_STATUS_BASE_ALPHA             = 0.55f;
+    public static final float SHOP_STATUS_PULSE_AMPLITUDE        = 0.40f;
+
+    // Flickering holographic sign floating above the unit (marks it interactable across a room).
+    public static final float SHOP_HOLO_HEIGHT_FRACTION          = 0.16f;  // sign height vs sprite height
+    public static final float SHOP_HOLO_LIFT_FRACTION            = 0.12f;  // gap above sprite top
+    public static final float SHOP_HOLO_BASE_ALPHA               = 0.42f;
+    public static final float SHOP_HOLO_PULSE_AMPLITUDE          = 0.30f;
+
+    // One-shot DISPENSE animation on a successful purchase (shop_order_5 trigger).
+    public static final float SHOP_DISPENSE_DURATION_SECONDS     = 0.5f;
+    public static final float SHOP_DISPENSE_FLASH_ALPHA          = 0.85f;  // peak window flash opacity
+
+    // Pre-generated Tier-B texture sizes.
+    public static final int   SHOP_GLOW_TEXTURE_SIZE             = 64;     // radial glow (aura/window/status)
+    public static final int   SHOP_HOLO_TEXTURE_WIDTH           = 128;
+    public static final int   SHOP_HOLO_TEXTURE_HEIGHT          = 64;
+
+    // Sprite layout — overlay anchor points expressed as fractions of the baked body so Tier-B
+    // layers register onto the Tier-A detail. FROM_TOP because the bake uses Pixmap y-down coords.
+    public static final float SHOP_WINDOW_CENTER_FRACTION_FROM_TOP  = 0.30f;
+    public static final float SHOP_STATUS_CENTER_FRACTION_FROM_TOP  = 0.47f;
+    public static final float SHOP_STATUS_CENTER_FRACTION_FROM_LEFT = 0.74f;
+
+    // Status light colours by machine state.
+    public static final float SHOP_STATUS_INSTOCK_R  = 0.30f, SHOP_STATUS_INSTOCK_G  = 1.00f, SHOP_STATUS_INSTOCK_B  = 0.42f;
+    public static final float SHOP_STATUS_LOW_R      = 1.00f, SHOP_STATUS_LOW_G      = 0.72f, SHOP_STATUS_LOW_B      = 0.14f;
+    public static final float SHOP_STATUS_DEPLETED_R = 0.55f, SHOP_STATUS_DEPLETED_G = 0.10f, SHOP_STATUS_DEPLETED_B = 0.10f;
+
+    // Cyan window glow + holographic sign tint.
+    public static final float SHOP_WINDOW_GLOW_R = 0.35f, SHOP_WINDOW_GLOW_G = 0.85f, SHOP_WINDOW_GLOW_B = 1.00f;
+    public static final float SHOP_HOLO_R        = 0.45f, SHOP_HOLO_G        = 0.95f, SHOP_HOLO_B        = 1.00f;
+    // Ambient aura tint (warm UAC amber so the fabricator reads apart from cold walls / green chips).
+    public static final float SHOP_AURA_R = 1.00f, SHOP_AURA_G = 0.66f, SHOP_AURA_B = 0.28f;
 }

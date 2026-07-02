@@ -164,6 +164,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // (one renderer reused every floor); the machine list is level-dependent (1-2 per floor).
     // -------------------------------------------------------------------------
     private final ShopOverlayRenderer  shopOverlayRenderer;
+    /** Animated procedural billboard for the floor's machines (shop_order_6); rebuilt per floor. */
+    private ShopMachineRenderer        shopMachineRenderer;
     private final ShopRoller           shopRoller = new ShopRoller(new DefaultShopOfferSource());
     /** Delivers a shop purchase's effect (weapons/supplies/abilities); consumed by the buy tap (shop_order_5). */
     private final ShopEffectApplier    shopEffectApplier;
@@ -395,6 +397,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         floorCeilingRenderer.dispose();
         wallRenderer.dispose();
         propRenderer.dispose();
+        if (shopMachineRenderer != null) shopMachineRenderer.dispose();
         enemyRenderer.dispose();
         enemyAttackEffectSystem.dispose();
         levelRenderer.dispose();
@@ -424,6 +427,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         wallRenderer           = new WallRenderer(targetLevel, doorManager);
         propRenderer           = new PropRenderer(targetLevel, wallRenderer);
         propRenderer.setWeaponTierMap(buildWeaponTierMap());
+        shopMachineRenderer    = new ShopMachineRenderer(targetLevel, wallRenderer);
+        shopMachineRenderer.setPropRenderer(propRenderer);
         levelRenderer          = new LevelRenderer(targetLevel, doorManager);
         enemyManager           = new EnemyManager(targetLevel, doorManager, currentDepth);
         levelRenderer.setEnemies(enemyManager.getEnemies());
@@ -533,6 +538,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Shop machines — placed before ground items / credit chips so those seeders see the
         // '@' solid tiles and skip them. 1-2 per non-boss floor (guaranteed presence).
         seedVendingMachines(targetLevel, currentDepth);
+        shopMachineRenderer.setMachines(vendingMachines);
 
         // Build ground items from weapon spawn points. Each item gets a pre-rolled
         // WeaponRoll so the compare card can show accurate stats before pickup.
@@ -707,12 +713,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         return new ShopContext(depth, ownedWeapons);
     }
 
-    /** Stamps the machine's tile solid ('@'), registers its billboard, and records the entity. */
+    /**
+     * Stamps the machine's tile solid ('@') for collision and records the entity. The '@' tile is
+     * NOT registered as a PropRenderer billboard — {@link ShopMachineRenderer} draws the animated
+     * fabricator sprite for these tiles instead (shop_order_6), so a static vendor prop here would
+     * double-draw over it.
+     */
     private void placeMachine(Level targetLevel, VendingMachine machine) {
         targetLevel.setCell(machine.tileColumn, machine.tileRow, '@');
-        if (propRenderer != null) {
-            propRenderer.addDynamicProp(machine.tileColumn, machine.tileRow, '@');
-        }
         vendingMachines.add(machine);
     }
 
@@ -865,7 +873,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         ShopTransaction.Result result =
                 ShopTransaction.buy(entry, playerStats, shopEffectApplier);
         boolean purchased = result == ShopTransaction.Result.PURCHASED;
-        if (purchased) shopOverlayRenderer.setCredits(playerStats.getCredits());
+        if (purchased) {
+            shopOverlayRenderer.setCredits(playerStats.getCredits());
+            // Kick off the machine's one-shot DISPENSE animation (shop_order_6): window flash,
+            // status blink, product drop into the tray. Cosmetic only — no world tick.
+            openMachine.triggerDispense(facilityTimeSeconds);
+        }
         shopOverlayRenderer.onPurchaseResult(entryIndex, purchased);
     }
 
@@ -1119,6 +1132,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         propRenderer.setAlertPulse(currentAlertPulse);
         propRenderer.render(camera);
 
+        // Shop machines (shop_order_6) — animated fabricator billboards, drawn in the prop pass so
+        // they write into the prop z-buffer and enemies/weapon HUD draw over them correctly.
+        shopMachineRenderer.setPlayerState(player.positionX, player.positionY,
+                player.directionX, player.directionY, effectiveFovRadians);
+        shopMachineRenderer.setLightingTime(facilityTimeSeconds);
+        shopMachineRenderer.setAlertPulse(currentAlertPulse);
+        shopMachineRenderer.render(camera);
+
         enemyRenderer.setPlayerState(player.positionX, player.positionY,
                 player.directionX, player.directionY, effectiveFovRadians);
         enemyRenderer.setAlertPulse(currentAlertPulse);
@@ -1234,6 +1255,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         floorCeilingRenderer.dispose();
         wallRenderer.dispose();
         propRenderer.dispose();
+        if (shopMachineRenderer != null) shopMachineRenderer.dispose();
         enemyRenderer.dispose();
         enemyAttackEffectSystem.dispose();
         levelRenderer.dispose();
