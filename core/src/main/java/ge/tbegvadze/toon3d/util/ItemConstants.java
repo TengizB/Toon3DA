@@ -142,6 +142,8 @@ public final class ItemConstants {
     public static final float INV_ITEM_WIN_GLYPH_SIZE         = 60f;
     public static final float INV_ITEM_WIN_GLYPH_X            = INV_ITEM_WIN_X + INV_ITEM_WIN_PADDING;
     public static final float INV_ITEM_WIN_GLYPH_Y            = INV_ITEM_WIN_HEADER_Y + (INV_ITEM_WIN_HEADER_H - INV_ITEM_WIN_GLYPH_SIZE) / 2f;
+    // Margin kept clear around a reused ground-pickup icon inside the glyph box
+    public static final float INV_ITEM_WIN_ICON_MARGIN        = 6f;
     public static final float INV_ITEM_WIN_NAME_X             = INV_ITEM_WIN_GLYPH_X + INV_ITEM_WIN_GLYPH_SIZE + 12f;
     public static final float INV_ITEM_WIN_BODY_LEFT_X        = INV_ITEM_WIN_X + INV_ITEM_WIN_PADDING;
     public static final float INV_ITEM_WIN_BODY_LEFT_WIDTH    = 320f;
@@ -217,6 +219,8 @@ public final class ItemConstants {
     public static final float INV_GRID_STAR_MARGIN_TOP    = 4f;
     public static final float INV_GRID_ACTIVE_PULSE_HZ    = 4f;
     public static final float INV_GRID_ACTIVE_PULSE_MIN   = 0.7f;
+    // Margin kept clear around a reused ground-pickup icon so it never touches the slot border
+    public static final float INV_GRID_ICON_MARGIN        = 20f;
     // Category dot colors
     public static final float INV_CAT_DOT_WEAPON_R      = 1.00f;
     public static final float INV_CAT_DOT_WEAPON_G      = 0.72f;
