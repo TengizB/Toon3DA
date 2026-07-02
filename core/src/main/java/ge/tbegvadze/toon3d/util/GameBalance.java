@@ -577,9 +577,13 @@ public final class GameBalance {
     public static final int   SHOP_TWO_MACHINE_MIN_SPACING  = 8;
 
     // ── Shop stock roll (shop_order_2) — how many entries and which categories ────────────────
-    /** Each machine stocks a fixed 4-6 offers, rolled once at floor generation. */
-    public static final int   SHOP_ENTRY_MIN                 = 4;
-    public static final int   SHOP_ENTRY_MAX                 = 6;
+    /**
+     * Each machine stocks a fixed 9 offers, rolled once at floor generation. MIN == MAX so every
+     * shop is a full 9-item shelf (the roller fills to this many distinct offers whenever the pool
+     * of distinct offers allows — abilities alone provide enough to reach 9 on any floor).
+     */
+    public static final int   SHOP_ENTRY_MIN                 = 9;
+    public static final int   SHOP_ENTRY_MAX                 = 9;
     // Weighted category pool for the "remainder" slots (after the guaranteed supply + upgrade slot).
     public static final int   SHOP_CAT_WEIGHT_WEAPON_LEVELUP = 26;
     public static final int   SHOP_CAT_WEIGHT_AMMO           = 24;

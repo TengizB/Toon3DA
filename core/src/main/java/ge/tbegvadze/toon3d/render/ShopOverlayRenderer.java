@@ -45,7 +45,7 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         PURCHASE_CONFIRMED
     }
 
-    private static final int MAX_CARDS = 6;
+    private static final int MAX_CARDS = 9;
 
     private static final String HEADER_TEXT = "UAC FABRICATOR";
     private static final String CLOSE_TEXT  = "CLOSE";
@@ -127,6 +127,12 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
     private int   denyIndex       = -1;   // card blipping after a denied tap
     private float denyTimer       = 0f;
 
+    // Receipt toast (under the header): confirms what a buy delivered, or why it was rejected.
+    private String  receiptText    = "";
+    private float   receiptTimer   = 0f;
+    private boolean receiptSuccess = false;
+    private float   receiptX       = 0f;   // centred baseline X, recomputed when the text changes
+
     private float openFade        = 0f;   // 0→1 cosmetic fade-in
     private float animationTime   = 0f;   // drives the BUY affordance pulse
     private float fade            = 1f;   // current draw alpha multiplier (openFade snapshot per frame)
@@ -170,6 +176,7 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         pendingBuyIndex = -1;
         flashIndex = -1; flashTimer = 0f;
         denyIndex  = -1; denyTimer  = 0f;
+        receiptText = ""; receiptTimer = 0f;
         openFade   = 0f;
         flavorText = FLAVOR_LINES[MathUtils.random(FLAVOR_LINES.length - 1)];
 
@@ -177,27 +184,35 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         precomputeCardText();
     }
 
-    /** Reflows the entries into a centred grid (≤3 per row) and stores each card's bottom-left corner. */
+    /**
+     * Reflows the entries into a centred grid of up to three rows (≤3 cards per row) and stores each
+     * card's bottom-left corner. Rows are balanced — the entries are spread as evenly as possible
+     * across {@code ceil(count / columns)} rows so a 9-item shelf reads as a clean 3×3, a 4-item
+     * shelf as 2×2, a 5-item shelf as 3+2, etc. The grid is vertically centred in the region between
+     * the header and footer bands, and each row is horizontally centred on screen.
+     */
     private void layoutCards() {
         if (entryCount == 0) return;
-        int rowCount = (entryCount <= HudConstants.SHOP_CARD_MAX_COLUMNS) ? 1 : 2;
-        int topRowCount    = (rowCount == 1) ? entryCount : Math.min(entryCount, HudConstants.SHOP_CARD_MAX_COLUMNS);
-        // Four entries look best as a balanced 2×2 rather than 3 + 1.
-        if (entryCount == 4) topRowCount = 2;
-        int bottomRowCount = entryCount - topRowCount;
+        int maxColumns = HudConstants.SHOP_CARD_MAX_COLUMNS;
+        int rowCount   = (entryCount + maxColumns - 1) / maxColumns;   // ceil(count / columns)
+
+        // Balanced row sizes: base per row, with the remainder pushed onto the top rows so any
+        // short row is the last one (a full row never sits below a partial row).
+        int baseColumns = entryCount / rowCount;
+        int remainder   = entryCount % rowCount;
 
         float cardWidth  = HudConstants.SHOP_CARD_WIDTH;
         float cardHeight = HudConstants.SHOP_CARD_HEIGHT;
         float gap        = HudConstants.SHOP_CARD_GAP;
 
-        float gridHeight = rowCount * cardHeight + (rowCount - 1) * gap;
+        float gridHeight   = rowCount * cardHeight + (rowCount - 1) * gap;
         float regionBottom = HudConstants.SHOP_FOOTER_HEIGHT;
         float regionTop    = Constants.WORLD_HEIGHT - HudConstants.SHOP_HEADER_HEIGHT;
         float gridTopY     = (regionBottom + regionTop) / 2f + gridHeight / 2f;
 
         int entryIndex = 0;
         for (int rowIndex = 0; rowIndex < rowCount; rowIndex++) {
-            int columnsInRow = (rowIndex == 0) ? topRowCount : bottomRowCount;
+            int columnsInRow = baseColumns + (rowIndex < remainder ? 1 : 0);
             float rowWidth  = columnsInRow * cardWidth + (columnsInRow - 1) * gap;
             float rowLeftX  = (Constants.WORLD_WIDTH - rowWidth) / 2f;
             float rowBottomY = gridTopY - rowIndex * (cardHeight + gap) - cardHeight;
@@ -288,6 +303,22 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         return TouchOutcome.NONE;
     }
 
+    /**
+     * Shows a one-line receipt under the header for {@link HudConstants#SHOP_RECEIPT_SECONDS}. World
+     * calls this after every buy tap so the player has a clear textual confirmation of what a
+     * purchase delivered (green) or why it was rejected (red). An empty message clears the receipt.
+     */
+    public void setReceipt(String message, boolean success) {
+        receiptText    = (message != null) ? message : "";
+        receiptSuccess = success;
+        receiptTimer   = receiptText.isEmpty() ? 0f : HudConstants.SHOP_RECEIPT_SECONDS;
+        if (!receiptText.isEmpty()) {
+            font.getData().setScale(HudConstants.SHOP_RECEIPT_SCALE);
+            layout.setText(font, receiptText);
+            receiptX = Constants.WORLD_WIDTH / 2f - layout.width / 2f;
+        }
+    }
+
     /** World reports the transaction result so the card can flash (success) or blip (failure). */
     public void onPurchaseResult(int index, boolean success) {
         if (index < 0 || index >= entryCount) return;
@@ -332,8 +363,9 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         animationTime += deltaTime;
         if (openFade < 1f) openFade = Math.min(1f, openFade + deltaTime / HudConstants.SHOP_OVERLAY_OPEN_FADE_SECONDS);
         fade = openFade;
-        if (flashTimer > 0f) flashTimer -= deltaTime;
-        if (denyTimer  > 0f) denyTimer  -= deltaTime;
+        if (flashTimer > 0f)   flashTimer   -= deltaTime;
+        if (denyTimer  > 0f)   denyTimer    -= deltaTime;
+        if (receiptTimer > 0f) receiptTimer -= deltaTime;
 
         shapes.setProjectionMatrix(camera.combined);
         batch.setProjectionMatrix(camera.combined);
@@ -503,6 +535,15 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
             font.getData().setScale(HudConstants.SHOP_HEADER_TITLE_SCALE);
             setFont(DEPLETED_COLOR);
             font.draw(batch, DEPLETED_TEXT, depletedX, depletedY);
+        }
+
+        if (receiptTimer > 0f && !receiptText.isEmpty()) {
+            // Fade out over the last portion of the receipt's lifetime so it dismisses gently.
+            float receiptAlpha = Math.min(1f, receiptTimer / HudConstants.SHOP_RECEIPT_SECONDS + 0.35f);
+            Color receiptColor = receiptSuccess ? PRICE_AFFORD : PRICE_DENY;
+            font.getData().setScale(HudConstants.SHOP_RECEIPT_SCALE);
+            font.setColor(receiptColor.r, receiptColor.g, receiptColor.b, receiptAlpha * fade);
+            font.draw(batch, receiptText, receiptX, HudConstants.SHOP_RECEIPT_Y_ABOVE_BOTTOM);
         }
 
         font.getData().setScale(HudConstants.SHOP_FOOTER_FLAVOR_SCALE);

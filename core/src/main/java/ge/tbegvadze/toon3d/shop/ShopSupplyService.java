@@ -28,12 +28,16 @@ public final class ShopSupplyService implements ShopEffectApplier {
         if (entry == null || inventory == null) return false;
         switch (entry.category) {
             case AMMO:
-                // Reject only when the reserve is ALREADY full for this type, so the credits would
-                // be 100% wasted. A purchase that merely overflows the cap is still allowed (the UI
-                // warns) — the excess is wasted, the player's choice, matching ground pickups.
+                // Reject when the credits would be 100% wasted: either the reserve is ALREADY full
+                // for this type, OR the inventory has no room to hold a stack of it (all slots taken
+                // and no existing stack of this ammo with headroom). Without the room check a paid
+                // ammo box could be charged-for but silently dropped by tryAdd — the "bought ammo but
+                // never received it" bug. A purchase that merely overflows the reserve cap is still
+                // allowed (the excess is wasted, the player's choice, matching ground pickups).
                 if (!(entry.payload instanceof AmmoType)) return false;
                 AmmoType ammoType = (AmmoType) entry.payload;
-                return inventory.countOf(ammoType.getItemType()) < ammoType.getReserveCap();
+                if (inventory.countOf(ammoType.getItemType()) >= ammoType.getReserveCap()) return false;
+                return hasRoomFor(ammoType.getItemType());
             case MEDKIT:
                 // Offer only if the inventory can hold at least one more of this medkit item.
                 if (!(entry.payload instanceof ItemType)) return false;

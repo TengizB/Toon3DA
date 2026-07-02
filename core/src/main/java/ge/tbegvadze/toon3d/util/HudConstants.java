@@ -173,7 +173,7 @@ public final class HudConstants {
     public static final float SHOP_OVERLAY_OPEN_FADE_SECONDS = 0.18f;   // cosmetic fade-in on open (world stays paused)
 
     // Header band (top of screen): title (left) + live credits readout (right).
-    public static final float SHOP_HEADER_HEIGHT             = 92f;
+    public static final float SHOP_HEADER_HEIGHT             = 76f;
     public static final float SHOP_HEADER_TITLE_SCALE        = 1.35f;
     public static final float SHOP_HEADER_CREDITS_SCALE      = 1.25f;
     public static final float SHOP_HEADER_SIDE_INSET_X       = 44f;     // title left / credits right inset from screen edge
@@ -185,28 +185,30 @@ public final class HudConstants {
     public static final float SHOP_FOOTER_FLAVOR_INSET_X     = 44f;
     public static final float SHOP_FOOTER_FLAVOR_Y_ABOVE_BOTTOM = 44f;
 
-    // Card grid — up to six cards, reflowed to at most three per row.
+    // Card grid — up to nine cards, reflowed to at most three per row (a full 3×3 shelf).
+    // Card size is tuned so nine cards fit between the header and footer while the on-card text is
+    // rendered large enough to read comfortably on a phone (see the *_SCALE values below).
     public static final int   SHOP_CARD_MAX_COLUMNS          = 3;
-    public static final float SHOP_CARD_WIDTH                = 360f;
-    public static final float SHOP_CARD_HEIGHT               = 214f;
-    public static final float SHOP_CARD_GAP                  = 26f;
+    public static final float SHOP_CARD_WIDTH                = 386f;
+    public static final float SHOP_CARD_HEIGHT               = 164f;
+    public static final float SHOP_CARD_GAP                  = 16f;
     public static final float SHOP_CARD_BORDER_WIDTH         = 3f;
-    public static final float SHOP_CARD_PAD                  = 20f;     // inner padding for card content
-    public static final float SHOP_CARD_ICON_SIZE           = 34f;     // category glyph box (top-left)
-    public static final float SHOP_CARD_NAME_SCALE          = 0.82f;
-    public static final float SHOP_CARD_DESC_SCALE          = 0.70f;
-    public static final float SHOP_CARD_PRICE_SCALE         = 0.95f;
-    public static final float SHOP_CARD_TAG_SCALE           = 0.85f;   // BUY affordance / SOLD stamp
-    public static final float SHOP_CARD_NAME_Y_BELOW_TOP    = 30f;     // name baseline below card top
-    public static final float SHOP_CARD_DESC_Y_BELOW_TOP    = 82f;     // description baseline below card top
-    public static final float SHOP_CARD_PRICE_Y_ABOVE_BOTTOM = 22f;    // price baseline above card bottom
+    public static final float SHOP_CARD_PAD                  = 18f;     // inner padding for card content
+    public static final float SHOP_CARD_ICON_SIZE           = 32f;     // category glyph box (top-left)
+    public static final float SHOP_CARD_NAME_SCALE          = 0.92f;   // larger, more readable item name
+    public static final float SHOP_CARD_DESC_SCALE          = 0.80f;   // larger, more readable description
+    public static final float SHOP_CARD_PRICE_SCALE         = 1.05f;
+    public static final float SHOP_CARD_TAG_SCALE           = 0.92f;   // BUY affordance / SOLD stamp
+    public static final float SHOP_CARD_NAME_Y_BELOW_TOP    = 28f;     // name baseline below card top
+    public static final float SHOP_CARD_DESC_Y_BELOW_TOP    = 70f;     // description baseline below card top
+    public static final float SHOP_CARD_PRICE_Y_ABOVE_BOTTOM = 20f;    // price baseline above card bottom
 
     // On-card CONFIRM step (bottom of the tapped card): "BUY N cr?" + CONFIRM / CANCEL.
-    public static final float SHOP_CONFIRM_PROMPT_SCALE      = 0.78f;
-    public static final float SHOP_CONFIRM_LABEL_SCALE       = 0.82f;
-    public static final float SHOP_CONFIRM_BUTTON_HEIGHT     = 58f;
+    public static final float SHOP_CONFIRM_PROMPT_SCALE      = 0.84f;
+    public static final float SHOP_CONFIRM_LABEL_SCALE       = 0.86f;
+    public static final float SHOP_CONFIRM_BUTTON_HEIGHT     = 52f;
     public static final float SHOP_CONFIRM_BUTTON_GAP        = 12f;
-    public static final float SHOP_CONFIRM_PROMPT_Y_BELOW_TOP = 46f;
+    public static final float SHOP_CONFIRM_PROMPT_Y_BELOW_TOP = 40f;
 
     // CLOSE button — large thumb target, bottom-right of the footer.
     public static final float SHOP_OVERLAY_CLOSE_WIDTH       = 240f;
@@ -218,4 +220,11 @@ public final class HudConstants {
     public static final float SHOP_PURCHASE_FLASH_SECONDS    = 0.55f;
     public static final float SHOP_DENY_BLIP_SECONDS         = 0.32f;
     public static final float SHOP_BUY_PULSE_SPEED           = 6.0f;    // radians/sec for the BUY affordance pulse
+
+    // Receipt toast — one centred line shown in the footer band after a buy tap ("ACQUIRED: …" / a
+    // rejection reason), so the player has a clear textual confirmation the goods were delivered.
+    // Placed in the footer (clear of the card grid and the right-hand CLOSE button).
+    public static final float SHOP_RECEIPT_SECONDS           = 2.4f;    // how long the receipt stays up
+    public static final float SHOP_RECEIPT_SCALE             = 1.0f;    // large, readable confirmation text
+    public static final float SHOP_RECEIPT_Y_ABOVE_BOTTOM    = 72f;     // baseline above screen bottom (in footer)
 }

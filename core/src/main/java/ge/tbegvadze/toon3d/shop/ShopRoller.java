@@ -25,6 +25,8 @@ public final class ShopRoller {
     private static final int WEIGHTED_SLOT_ATTEMPTS = 12;
     private static final int SUPPLY_RETRIES         = 8;
     private static final int UPGRADE_RETRIES        = 8;
+    /** Per-category retries in the exhaustive last-resort sweep that fills the shelf toward 9. */
+    private static final int ANY_CATEGORY_RETRIES   = 24;
 
     private final ShopOfferSource source;
 
@@ -49,14 +51,41 @@ public final class ShopRoller {
         if (upgrade == null) upgrade = rollSupply(context, random, usedKeys);
         if (upgrade != null) addEntry(entries, usedKeys, upgrade);
 
-        // Remaining slots from the weighted category pool; stop early if no distinct offer remains.
+        // Remaining slots from the weighted category pool. If the weighted pick can't produce a
+        // distinct offer, fall back to an exhaustive sweep over every category so the shelf reaches
+        // the target count whenever ANY distinct offer still exists. Only stop early when the pool of
+        // distinct offers is genuinely exhausted (no category can yield a new dedupKey).
         while (entries.size() < entryCount) {
             ShopEntry entry = rollWeightedSlot(context, random, usedKeys, bias);
+            if (entry == null) entry = rollAnyDistinct(context, random, usedKeys);
             if (entry == null) break;
             addEntry(entries, usedKeys, entry);
         }
 
         return new ShopStock(entries.toArray(new ShopEntry[0]));
+    }
+
+    /**
+     * Last-resort fill: sweeps every offer category (retrying each, since ability/ammo/medkit rolls
+     * are randomised per call) and returns the first offer whose dedupKey is not already stocked, or
+     * null only when no category can produce a new distinct offer. Abilities alone cover enough
+     * distinct offers to fill a 9-slot shelf on any floor, so this reliably tops the shelf off.
+     */
+    private ShopEntry rollAnyDistinct(ShopContext context, Random random, Set<String> usedKeys) {
+        OfferCategory[] allCategories = {
+                OfferCategory.PLAYER_ABILITY,
+                OfferCategory.WEAPON_LEVEL_UP,
+                OfferCategory.WEAPON_TIER_UPGRADE,
+                OfferCategory.AMMO,
+                OfferCategory.MEDKIT
+        };
+        for (int retry = 0; retry < ANY_CATEGORY_RETRIES; retry++) {
+            for (OfferCategory category : allCategories) {
+                ShopEntry entry = rollConcrete(category, context, random);
+                if (entry != null && !usedKeys.contains(entry.dedupKey)) return entry;
+            }
+        }
+        return null;
     }
 
     // ── slot rollers ───────────────────────────────────────────────────────────
