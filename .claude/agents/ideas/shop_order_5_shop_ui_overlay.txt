@@ -1,7 +1,34 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Shop 5 — Fabricator Shop UI Overlay (touch, full-screen, paused)
 ---
+
+IMPLEMENTATION NOTES (2026-07-02)
+================================
+- render/ShopOverlayRenderer.java rewritten from the part-1 placeholder into the full
+  full-screen card grid: header band (title + live CREDITS), reflowed 1-6 card grid
+  (<=3/row; 4 -> 2x2), footer flavor line + large CLOSE button, "OUT OF STOCK" banner
+  when depleted. Per-card: procedural category icon, rarity border/name tint, wrapped
+  description, price (green if affordable / red if not / grey if sold), pulsing BUY tag
+  or SOLD stamp. Cosmetic fade-in on open. All strings/positions precomputed in
+  open()/setCredits(); render() allocation-free.
+- Buy flow: handleTouch() returns TouchOutcome {NONE, CLOSED, PURCHASE_CONFIRMED}. First
+  tap on an affordable unsold card opens an on-card CONFIRM/CANCEL step; CONFIRM ->
+  PURCHASE_CONFIRMED; CANCEL / tap-elsewhere / CLOSE never spends. World.resolveShopPurchase()
+  runs ShopTransaction.buy(entry, playerStats, shopEffectApplier) then reports back via
+  onPurchaseResult(index, success) -> card flash (buy) / blip (deny/unaffordable).
+- Constants added to HudConstants.java (SHOP_HEADER_*, SHOP_CARD_*, SHOP_CONFIRM_*,
+  SHOP_FOOTER_*, SHOP_OVERLAY_CLOSE_*, feedback timers). Old panel/entry-list constants
+  removed.
+
+OPEN QUESTION RESOLUTIONS
+========================
+1. Confirm step: explicit on-card CONFIRM/CANCEL (chosen — safer on mobile).
+2. Grid layout: reflow (chosen — 4 -> 2x2, 5 -> 3+2, small shops stay centred).
+3. "What you own" strip: deferred (stretch).
+4. Close while mid-confirm: cancels the confirm, never buys (chosen).
+5. Weapon upgrade before/after preview: relies on entry.description from parts 2-3;
+   no extra inline preview yet (stretch).
 
 READ ORDER
 ==========

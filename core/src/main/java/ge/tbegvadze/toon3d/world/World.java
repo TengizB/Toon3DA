@@ -53,7 +53,9 @@ import ge.tbegvadze.toon3d.shop.ShopContext;
 import ge.tbegvadze.toon3d.shop.ShopEffectApplier;
 import ge.tbegvadze.toon3d.shop.ShopEffectRouter;
 import ge.tbegvadze.toon3d.shop.ShopRoller;
+import ge.tbegvadze.toon3d.shop.ShopEntry;
 import ge.tbegvadze.toon3d.shop.ShopSupplyService;
+import ge.tbegvadze.toon3d.shop.ShopTransaction;
 import ge.tbegvadze.toon3d.shop.ShopWeaponService;
 import ge.tbegvadze.toon3d.shop.VendingMachine;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
@@ -851,6 +853,22 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         runPhase = RunPhase.PLAYING;
     }
 
+    /**
+     * Settles a confirmed shop purchase (shop_order_5). Runs the transaction against the player's
+     * wallet and the shared effect router, then reports the outcome back to the overlay so the card
+     * flashes on success (or blips on failure). No turn is spent — the shop is a menu pause (part 1).
+     */
+    private void resolveShopPurchase(int entryIndex) {
+        if (openMachine == null || openMachine.stock == null) return;
+        if (entryIndex < 0 || entryIndex >= openMachine.stock.size()) return;
+        ShopEntry entry = openMachine.stock.get(entryIndex);
+        ShopTransaction.Result result =
+                ShopTransaction.buy(entry, playerStats, shopEffectApplier);
+        boolean purchased = result == ShopTransaction.Result.PURCHASED;
+        if (purchased) shopOverlayRenderer.setCredits(playerStats.getCredits());
+        shopOverlayRenderer.onPurchaseResult(entryIndex, purchased);
+    }
+
     // -------------------------------------------------------------------------
     // Public accessors
     // -------------------------------------------------------------------------
@@ -963,15 +981,19 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
 
         // SHOP_OPEN — world paused while the player browses a vending machine. No turn passes;
-        // a tap on the CLOSE button dismisses the overlay (matches inventory pause semantics).
+        // taps drive the card grid's buy flow (confirm step) or dismiss the overlay (part 5).
         if (runPhase == RunPhase.SHOP_OPEN) {
             shopOverlayRenderer.setCredits(playerStats.getCredits());
             if (touchInputState != null && gameViewport != null && Gdx.input.justTouched()) {
                 touchInputState.consumeTapAction();
                 cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
                 gameViewport.unproject(cardTouchPosition);
-                if (shopOverlayRenderer.isCloseTapped(cardTouchPosition.x, cardTouchPosition.y)) {
+                ShopOverlayRenderer.TouchOutcome outcome =
+                        shopOverlayRenderer.handleTouch(cardTouchPosition.x, cardTouchPosition.y);
+                if (outcome == ShopOverlayRenderer.TouchOutcome.CLOSED) {
                     closeShop();
+                } else if (outcome == ShopOverlayRenderer.TouchOutcome.PURCHASE_CONFIRMED) {
+                    resolveShopPurchase(shopOverlayRenderer.getPendingBuyIndex());
                 }
             }
             return;

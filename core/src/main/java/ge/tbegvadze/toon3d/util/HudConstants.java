@@ -163,31 +163,59 @@ public final class HudConstants {
     public static final float BOSS_INTRO_EPITHET_Y_GAP      = 6f;
 
     // =====================================================================
-    // Shop / UAC Fabricator overlay (shop_order_1 foundation; part 5 extends with the card grid).
-    // Full-screen modal drawn in world units (origin bottom-left, 1280×720). Only the frame,
-    // header, credits readout, and CLOSE button live here for the foundation.
+    // Shop / UAC Fabricator overlay (shop_order_5 — full-screen touch card grid).
+    // Drawn in world units (origin bottom-left, 1280×720) over a darkened, paused 3D view.
+    // The stock is presented as up to six touchable cards; a tap opens an on-card CONFIRM
+    // step before any credits are spent. Layout: header band on top, card grid in the
+    // middle (reflowed so small shops stay centred), flavor + CLOSE button in the footer.
     // =====================================================================
     public static final float SHOP_OVERLAY_DIM_ALPHA         = 0.72f;   // darken quad over the paused 3D view
-    public static final float SHOP_OVERLAY_PANEL_X           = 190f;
-    public static final float SHOP_OVERLAY_PANEL_Y           = 120f;
-    public static final float SHOP_OVERLAY_PANEL_WIDTH       = 900f;
-    public static final float SHOP_OVERLAY_PANEL_HEIGHT      = 480f;
-    public static final float SHOP_OVERLAY_HEADER_SCALE      = 1.6f;
-    public static final float SHOP_OVERLAY_BODY_SCALE        = 1.0f;
-    public static final float SHOP_OVERLAY_CREDITS_SCALE     = 1.1f;
-    public static final float SHOP_OVERLAY_HEADER_Y_BELOW_TOP = 46f;    // header baseline below panel top
-    public static final float SHOP_OVERLAY_CREDITS_Y_BELOW_TOP = 92f;   // credits baseline below panel top
-    public static final float SHOP_OVERLAY_BODY_Y_BELOW_TOP  = 210f;    // fallback "NO STOCK" baseline below panel top
-    // Stock list (shop_order_2): one row per rolled offer — name (left) + price (right).
-    // shop_order_5 replaces this simple list with the full touchable card grid.
-    public static final float SHOP_OVERLAY_ENTRY_FIRST_Y_BELOW_TOP = 150f;
-    public static final float SHOP_OVERLAY_ENTRY_ROW_STEP          = 44f;
-    public static final float SHOP_OVERLAY_ENTRY_NAME_INSET_X      = 40f;   // from panel left
-    public static final float SHOP_OVERLAY_ENTRY_PRICE_INSET_X     = 40f;   // from panel right
-    public static final float SHOP_OVERLAY_ENTRY_SCALE             = 0.95f;
-    // CLOSE button — large thumb target, bottom-right of the panel
-    public static final float SHOP_OVERLAY_CLOSE_WIDTH       = 220f;
-    public static final float SHOP_OVERLAY_CLOSE_HEIGHT      = 74f;
-    public static final float SHOP_OVERLAY_CLOSE_MARGIN      = 30f;     // inset from panel bottom-right corner
-    public static final float SHOP_OVERLAY_CLOSE_LABEL_SCALE = 1.1f;
+    public static final float SHOP_OVERLAY_OPEN_FADE_SECONDS = 0.18f;   // cosmetic fade-in on open (world stays paused)
+
+    // Header band (top of screen): title (left) + live credits readout (right).
+    public static final float SHOP_HEADER_HEIGHT             = 92f;
+    public static final float SHOP_HEADER_TITLE_SCALE        = 1.35f;
+    public static final float SHOP_HEADER_CREDITS_SCALE      = 1.25f;
+    public static final float SHOP_HEADER_SIDE_INSET_X       = 44f;     // title left / credits right inset from screen edge
+    public static final float SHOP_HEADER_TEXT_Y_BELOW_TOP   = 40f;     // baseline below screen top
+
+    // Footer band (bottom of screen): rotating flavor line (left) + CLOSE button (right).
+    public static final float SHOP_FOOTER_HEIGHT             = 96f;
+    public static final float SHOP_FOOTER_FLAVOR_SCALE       = 0.85f;
+    public static final float SHOP_FOOTER_FLAVOR_INSET_X     = 44f;
+    public static final float SHOP_FOOTER_FLAVOR_Y_ABOVE_BOTTOM = 44f;
+
+    // Card grid — up to six cards, reflowed to at most three per row.
+    public static final int   SHOP_CARD_MAX_COLUMNS          = 3;
+    public static final float SHOP_CARD_WIDTH                = 360f;
+    public static final float SHOP_CARD_HEIGHT               = 214f;
+    public static final float SHOP_CARD_GAP                  = 26f;
+    public static final float SHOP_CARD_BORDER_WIDTH         = 3f;
+    public static final float SHOP_CARD_PAD                  = 20f;     // inner padding for card content
+    public static final float SHOP_CARD_ICON_SIZE           = 34f;     // category glyph box (top-left)
+    public static final float SHOP_CARD_NAME_SCALE          = 0.82f;
+    public static final float SHOP_CARD_DESC_SCALE          = 0.70f;
+    public static final float SHOP_CARD_PRICE_SCALE         = 0.95f;
+    public static final float SHOP_CARD_TAG_SCALE           = 0.85f;   // BUY affordance / SOLD stamp
+    public static final float SHOP_CARD_NAME_Y_BELOW_TOP    = 30f;     // name baseline below card top
+    public static final float SHOP_CARD_DESC_Y_BELOW_TOP    = 82f;     // description baseline below card top
+    public static final float SHOP_CARD_PRICE_Y_ABOVE_BOTTOM = 22f;    // price baseline above card bottom
+
+    // On-card CONFIRM step (bottom of the tapped card): "BUY N cr?" + CONFIRM / CANCEL.
+    public static final float SHOP_CONFIRM_PROMPT_SCALE      = 0.78f;
+    public static final float SHOP_CONFIRM_LABEL_SCALE       = 0.82f;
+    public static final float SHOP_CONFIRM_BUTTON_HEIGHT     = 58f;
+    public static final float SHOP_CONFIRM_BUTTON_GAP        = 12f;
+    public static final float SHOP_CONFIRM_PROMPT_Y_BELOW_TOP = 46f;
+
+    // CLOSE button — large thumb target, bottom-right of the footer.
+    public static final float SHOP_OVERLAY_CLOSE_WIDTH       = 240f;
+    public static final float SHOP_OVERLAY_CLOSE_HEIGHT      = 70f;
+    public static final float SHOP_OVERLAY_CLOSE_MARGIN      = 26f;     // inset from screen bottom-right corner
+    public static final float SHOP_OVERLAY_CLOSE_LABEL_SCALE = 1.05f;
+
+    // Purchase / denial feedback timers (cosmetic, real-time while paused).
+    public static final float SHOP_PURCHASE_FLASH_SECONDS    = 0.55f;
+    public static final float SHOP_DENY_BLIP_SECONDS         = 0.32f;
+    public static final float SHOP_BUY_PULSE_SPEED           = 6.0f;    // radians/sec for the BUY affordance pulse
 }
