@@ -626,16 +626,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
 
     /**
-     * Places 1-2 vending machines on the floor (guaranteed presence on every non-boss dungeon
-     * floor). Each machine occupies a wall-mounted, reachable, non-softlocking floor tile that is
-     * stamped solid ('@') and registered as a billboard. Runs after enemies exist (so machine tiles
-     * dodge enemies) and before ground-item/credit-chip seeding (so those seeders skip the solid tile).
+     * Places 1-2 vending machines on the floor (guaranteed presence on EVERY floor, including the
+     * weapon-selection starting room and boss arenas). Each machine occupies a wall-mounted,
+     * reachable, non-softlocking floor tile that is stamped solid ('@') and registered as a
+     * billboard. Runs after enemies exist (so machine tiles dodge enemies) and before
+     * ground-item/credit-chip seeding (so those seeders skip the solid tile).
      */
     private void seedVendingMachines(Level targetLevel, int depth) {
         vendingMachines = new java.util.ArrayList<>();
         machineInFront  = null;
-        // No shops in the weapon-selection staging room or inside boss arenas.
-        if (isStartingRoom || GameMath.isBossFloor(depth)) return;
+        // Shops appear on every floor now — the starting room and boss arenas included. Placement
+        // still requires an eligible wall-mounted tile; if a floor has none, no machine is placed.
 
         java.util.Random random = new java.util.Random(floorSeed(runSeed, depth) ^ 0x5309CAFED00DL);
         int machineCount = GameBalance.SHOP_MIN_PER_FLOOR;
@@ -879,7 +880,28 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             // status blink, product drop into the tray. Cosmetic only — no world tick.
             openMachine.triggerDispense(facilityTimeSeconds);
         }
+        // Push a short receipt line to the overlay so the player SEES what the purchase delivered
+        // (or why it failed). This is rendered inside the shop overlay — event text would be hidden
+        // behind the overlay's dim quad — so it is the only on-screen confirmation of receipt.
+        shopOverlayRenderer.setReceipt(shopReceiptText(entry, result), purchased);
         shopOverlayRenderer.onPurchaseResult(entryIndex, purchased);
+    }
+
+    /**
+     * Builds the one-line receipt shown in the shop overlay after a buy tap. A success names the
+     * exact item received (ammo offers already carry their count in {@code displayName}), which makes
+     * it obvious the goods actually landed — previously a bought item gave no on-screen receipt.
+     * A rejection states the reason so a failed tap never looks like a silent loss of credits.
+     */
+    private static String shopReceiptText(ShopEntry entry, ShopTransaction.Result result) {
+        if (entry == null) return "";
+        switch (result) {
+            case PURCHASED:            return "ACQUIRED: " + entry.displayName.toUpperCase();
+            case INSUFFICIENT_CREDITS: return "NOT ENOUGH CREDITS";
+            case CANNOT_APPLY:         return "NO ROOM FOR THAT";
+            case SOLD_OUT:             return "SOLD OUT";
+            default:                   return "";
+        }
     }
 
     // -------------------------------------------------------------------------
