@@ -1638,7 +1638,9 @@ public class PropRenderer implements Renderable, Disposable {
     // top-lit gradient shell, lid seam, recessed latch, corner rivets and a soft
     // medical-green floor pool. 128×160 (4× the legacy 32×40, identical 0.8 aspect so
     // the on-screen billboard size is unchanged).
-    private static Texture generateStimTexture() {
+    // Package-private (not private): reused by ItemIconTextures to show the
+    // same ground-pickup sprite inside the inventory menu.
+    static Texture generateStimTexture() {
         final int textureWidth = 128, textureHeight = 160;
         Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
@@ -1702,7 +1704,8 @@ public class PropRenderer implements Renderable, Disposable {
     // Field medkit ('H') — heavy olive-drab hard case: recessed white cross panel,
     // carry handle, twin clasps, green status LED with bloom, hazard-stripe foot and a
     // teal floor pool. 192×224 (4× the legacy 48×56, identical 0.857 aspect).
-    private static Texture generateFieldMedkitTexture() {
+    // Package-private (not private): reused by ItemIconTextures.
+    static Texture generateFieldMedkitTexture() {
         final int textureWidth = 192, textureHeight = 224;
         Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
@@ -3329,7 +3332,8 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     /** BULLETS — a stripper clip of five slim copper rifle cartridges, standing upright. */
-    private static Texture generateBulletClipTexture() {
+    // Package-private (not private): reused by ItemIconTextures.
+    static Texture generateBulletClipTexture() {
         Pixmap pixmap = new Pixmap(AMMO_SPRITE_WIDTH, AMMO_SPRITE_HEIGHT, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
@@ -3381,7 +3385,8 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     /** SHELLS — a row of four red-plastic shotgun shells seated on brass bases. */
-    private static Texture generateShotgunShellsTexture() {
+    // Package-private (not private): reused by ItemIconTextures.
+    static Texture generateShotgunShellsTexture() {
         Pixmap pixmap = new Pixmap(AMMO_SPRITE_WIDTH, AMMO_SPRITE_HEIGHT, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
@@ -3424,7 +3429,8 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     /** CELLS — a glowing cyan plasma energy canister with metal caps and a bolt glyph. */
-    private static Texture generatePlasmaCellTexture() {
+    // Package-private (not private): reused by ItemIconTextures.
+    static Texture generatePlasmaCellTexture() {
         Pixmap pixmap = new Pixmap(AMMO_SPRITE_WIDTH, AMMO_SPRITE_HEIGHT, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
@@ -3469,7 +3475,8 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     /** ROCKETS — a side-on olive rocket: red warhead, finned tail, exhaust nozzle. */
-    private static Texture generateRocketTexture() {
+    // Package-private (not private): reused by ItemIconTextures.
+    static Texture generateRocketTexture() {
         Pixmap pixmap = new Pixmap(AMMO_SPRITE_WIDTH, AMMO_SPRITE_HEIGHT, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
@@ -3510,7 +3517,8 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     /** SLUGS — a stack of three heavy blunt silver rail rounds, side-on. */
-    private static Texture generateRailSlugsTexture() {
+    // Package-private (not private): reused by ItemIconTextures.
+    static Texture generateRailSlugsTexture() {
         Pixmap pixmap = new Pixmap(AMMO_SPRITE_WIDTH, AMMO_SPRITE_HEIGHT, Pixmap.Format.RGBA8888);
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();

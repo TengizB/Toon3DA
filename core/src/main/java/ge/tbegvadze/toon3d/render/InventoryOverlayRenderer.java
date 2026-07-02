@@ -96,6 +96,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     private final ItemGridPanel    itemGridPanel;
     private final ItemWindow       itemWindow;
     private final AbilityWindow    abilityWindow;
+    private final ItemIconTextures iconTextures;
 
     // -------------------------------------------------------------------------
     // Runtime state
@@ -120,13 +121,15 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         glyphLayout       = new GlyphLayout();
         textBuilder       = new StringBuilder(32);
 
+        iconTextures      = new ItemIconTextures();
+
         weaponSlotsPanel  = new WeaponSlotsPanel(inventory, shapeRenderer, spriteBatch,
                                                   font, glyphLayout, this::openItemWindowForWeaponSlot);
         itemGridPanel     = new ItemGridPanel(inventory, shapeRenderer, spriteBatch,
-                                              font, glyphLayout, this::openItemWindowForSlot);
+                                              font, glyphLayout, this::openItemWindowForSlot, iconTextures);
         abilityWindow     = new AbilityWindow(shapeRenderer, spriteBatch, font, glyphLayout);
         itemWindow        = new ItemWindow(shapeRenderer, spriteBatch, font, glyphLayout,
-                                           instance -> abilityWindow.open(instance));
+                                           instance -> abilityWindow.open(instance), iconTextures);
     }
 
     // -------------------------------------------------------------------------
@@ -274,6 +277,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         shapeRenderer.dispose();
         spriteBatch.dispose();
         font.dispose();
+        iconTextures.dispose();
         // Sub-panels and windows share resources from coordinator; dispose() is a no-op for them
         weaponSlotsPanel.dispose();
         itemGridPanel.dispose();

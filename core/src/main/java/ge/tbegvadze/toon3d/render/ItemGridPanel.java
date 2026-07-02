@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.render;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -71,11 +72,12 @@ final class ItemGridPanel implements Disposable {
     // Dependencies (shared, not owned)
     // -------------------------------------------------------------------------
     private final Inventory     inventory;
-    private final ShapeRenderer shapeRenderer;
-    private final SpriteBatch   spriteBatch;
-    private final BitmapFont    font;
-    private final GlyphLayout   glyphLayout;
-    private final IntConsumer   onSlotTapped;
+    private final ShapeRenderer     shapeRenderer;
+    private final SpriteBatch       spriteBatch;
+    private final BitmapFont        font;
+    private final GlyphLayout       glyphLayout;
+    private final IntConsumer       onSlotTapped;
+    private final ItemIconTextures  iconTextures;
 
     // -------------------------------------------------------------------------
     // Pre-allocated scratch objects
@@ -96,13 +98,15 @@ final class ItemGridPanel implements Disposable {
     // -------------------------------------------------------------------------
 
     ItemGridPanel(Inventory inventory, ShapeRenderer shapeRenderer, SpriteBatch spriteBatch,
-                  BitmapFont font, GlyphLayout glyphLayout, IntConsumer onSlotTapped) {
+                  BitmapFont font, GlyphLayout glyphLayout, IntConsumer onSlotTapped,
+                  ItemIconTextures iconTextures) {
         this.inventory     = inventory;
         this.shapeRenderer = shapeRenderer;
         this.spriteBatch   = spriteBatch;
         this.font          = font;
         this.glyphLayout   = glyphLayout;
         this.onSlotTapped  = onSlotTapped;
+        this.iconTextures  = iconTextures;
         this.textBuilder   = new StringBuilder(32);
         this.temporaryColor = new Color();
     }
@@ -337,17 +341,23 @@ final class ItemGridPanel implements Disposable {
                 float slotY      = slotBottom(gridRow);
                 float alphaScale = slotAlphaScale(slot);
 
-                // Large centered glyph
-                font.setColor(slot.getType().getGlyphRed(),
-                              slot.getType().getGlyphGreen(),
-                              slot.getType().getGlyphBlue(),
-                              alphaScale);
-                textBuilder.setLength(0);
-                textBuilder.append(slot.getType().getGlyph());
-                glyphLayout.setText(font, textBuilder);
-                font.draw(spriteBatch, textBuilder,
-                          slotX + (ItemConstants.INV_GRID_SLOT_SIZE - glyphLayout.width) / 2f,
-                          slotY + (ItemConstants.INV_GRID_SLOT_SIZE + glyphLayout.height) / 2f);
+                // Large centered icon — reuses the ground-pickup sprite when one exists
+                // (medkits, ammo); falls back to the ASCII glyph for everything else.
+                Texture iconTexture = iconTextures.get(slot.getType());
+                if (iconTexture != null) {
+                    drawSlotIcon(iconTexture, slotX, slotY, alphaScale);
+                } else {
+                    font.setColor(slot.getType().getGlyphRed(),
+                                  slot.getType().getGlyphGreen(),
+                                  slot.getType().getGlyphBlue(),
+                                  alphaScale);
+                    textBuilder.setLength(0);
+                    textBuilder.append(slot.getType().getGlyph());
+                    glyphLayout.setText(font, textBuilder);
+                    font.draw(spriteBatch, textBuilder,
+                              slotX + (ItemConstants.INV_GRID_SLOT_SIZE - glyphLayout.width) / 2f,
+                              slotY + (ItemConstants.INV_GRID_SLOT_SIZE + glyphLayout.height) / 2f);
+                }
 
                 // Quantity label — bottom-right corner
                 if (slot.getQuantity() > 1) {
@@ -375,6 +385,25 @@ final class ItemGridPanel implements Disposable {
         }
 
         spriteBatch.end();
+    }
+
+    // Draws a ground-pickup icon centered and aspect-fit inside a slot, leaving
+    // a fixed margin so it never touches the slot border.
+    private void drawSlotIcon(Texture iconTexture, float slotX, float slotY, float alphaScale) {
+        float srcWidth  = iconTexture.getWidth();
+        float srcHeight = iconTexture.getHeight();
+        if (srcWidth <= 0f || srcHeight <= 0f) return;
+
+        float availableSize = ItemConstants.INV_GRID_SLOT_SIZE - 2f * ItemConstants.INV_GRID_ICON_MARGIN;
+        float scale          = Math.min(availableSize / srcWidth, availableSize / srcHeight);
+        float drawWidth      = srcWidth  * scale;
+        float drawHeight     = srcHeight * scale;
+        float drawX          = slotX + (ItemConstants.INV_GRID_SLOT_SIZE - drawWidth)  / 2f;
+        float drawY          = slotY + (ItemConstants.INV_GRID_SLOT_SIZE - drawHeight) / 2f;
+
+        spriteBatch.setColor(1f, 1f, 1f, alphaScale);
+        spriteBatch.draw(iconTexture, drawX, drawY, drawWidth, drawHeight);
+        spriteBatch.setColor(Color.WHITE);
     }
 
     // -------------------------------------------------------------------------

@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.render;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -137,6 +138,7 @@ final class ItemWindow implements Disposable {
     private final BitmapFont               font;
     private final GlyphLayout              glyphLayout;
     private final Consumer<AbilityInstance> onAbilityTap;
+    private final ItemIconTextures         iconTextures;
 
     // Pre-allocated scratch buffer for dynamic stat value strings
     private final StringBuilder valueBuilder;
@@ -163,12 +165,14 @@ final class ItemWindow implements Disposable {
 
     ItemWindow(ShapeRenderer shapeRenderer, SpriteBatch spriteBatch,
                BitmapFont font, GlyphLayout glyphLayout,
-               Consumer<AbilityInstance> onAbilityTap) {
+               Consumer<AbilityInstance> onAbilityTap,
+               ItemIconTextures iconTextures) {
         this.shapeRenderer = shapeRenderer;
         this.spriteBatch   = spriteBatch;
         this.font          = font;
         this.glyphLayout   = glyphLayout;
         this.onAbilityTap  = onAbilityTap;
+        this.iconTextures  = iconTextures;
         this.valueBuilder  = new StringBuilder(32);
     }
 
@@ -573,16 +577,21 @@ final class ItemWindow implements Disposable {
     // =========================================================================
 
     private void renderHeader(ItemType itemType, boolean isEquipped) {
-        // Glyph (large, item color)
-        font.getData().setScale(2.5f * FONT_SCALE);
-        font.setColor(itemType.getGlyphRed(), itemType.getGlyphGreen(), itemType.getGlyphBlue(), 1f);
-        valueBuilder.setLength(0);
-        valueBuilder.append(itemType.getGlyph());
-        glyphLayout.setText(font, valueBuilder);
-        font.draw(spriteBatch, valueBuilder,
-                  GLYPH_X + (GLYPH_SIZE - glyphLayout.width)  / 2f,
-                  GLYPH_Y + (GLYPH_SIZE + glyphLayout.height) / 2f);
-        font.getData().setScale(1f);
+        // Icon (reused ground-pickup sprite) when available; otherwise the ASCII glyph.
+        Texture iconTexture = iconTextures.get(itemType);
+        if (iconTexture != null) {
+            drawGlyphBoxIcon(iconTexture);
+        } else {
+            font.getData().setScale(2.5f * FONT_SCALE);
+            font.setColor(itemType.getGlyphRed(), itemType.getGlyphGreen(), itemType.getGlyphBlue(), 1f);
+            valueBuilder.setLength(0);
+            valueBuilder.append(itemType.getGlyph());
+            glyphLayout.setText(font, valueBuilder);
+            font.draw(spriteBatch, valueBuilder,
+                      GLYPH_X + (GLYPH_SIZE - glyphLayout.width)  / 2f,
+                      GLYPH_Y + (GLYPH_SIZE + glyphLayout.height) / 2f);
+            font.getData().setScale(1f);
+        }
 
         // Item name (amber, slightly scaled up)
         float nameY = HEADER_Y + HEADER_H - 10f;
@@ -605,6 +614,22 @@ final class ItemWindow implements Disposable {
                   EXIT_X + (EXIT_SIZE - glyphLayout.width)  / 2f,
                   EXIT_Y + (EXIT_SIZE + glyphLayout.height) / 2f);
         font.getData().setScale(1f);
+    }
+
+    // Draws a ground-pickup icon centered and aspect-fit inside the header glyph box.
+    private void drawGlyphBoxIcon(Texture iconTexture) {
+        float srcWidth  = iconTexture.getWidth();
+        float srcHeight = iconTexture.getHeight();
+        if (srcWidth <= 0f || srcHeight <= 0f) return;
+
+        float availableSize = GLYPH_SIZE - 2f * ItemConstants.INV_ITEM_WIN_ICON_MARGIN;
+        float scale          = Math.min(availableSize / srcWidth, availableSize / srcHeight);
+        float drawWidth      = srcWidth  * scale;
+        float drawHeight     = srcHeight * scale;
+        float drawX          = GLYPH_X + (GLYPH_SIZE - drawWidth)  / 2f;
+        float drawY          = GLYPH_Y + (GLYPH_SIZE - drawHeight) / 2f;
+
+        spriteBatch.draw(iconTexture, drawX, drawY, drawWidth, drawHeight);
     }
 
     private void renderBodyLeft(ItemType itemType, ItemStack slot, boolean isEquipped) {
