@@ -107,33 +107,35 @@ public final class HudConstants {
     public static final float WEAPON_INSPECT_FONT_SCALE      = 1.8f;
     public static final float WEAPON_INSPECT_ABILITY_ROW_Y_ABOVE_CONTENT = 24f;
 
-    // Weapon card — single-screen pickup / compare modal (replaces old two-phase inspect)
-    public static final float WEAPON_CARD_WIDTH          = 760f;
-    public static final float WEAPON_CARD_HEIGHT         = 530f;
-    public static final float WEAPON_CARD_ORIGIN_X       = 260f;   // (1280 - 760) / 2
-    public static final float WEAPON_CARD_ORIGIN_Y       = 95f;    // (720 - 530) / 2
-    public static final float WEAPON_CARD_PANEL_ALPHA    = 0.94f;
-    public static final float WEAPON_CARD_FONT_SCALE     = 1.8f;
-    // Zone heights inside the card (from top): header, stats, abilities, action, footer
-    public static final float WEAPON_CARD_HEADER_HEIGHT  = 50f;
-    public static final float WEAPON_CARD_STAT_ROW_H     = 36f;    // 4 rows × 36 = 144px — fits stats zone between header and ability strip
-    public static final float WEAPON_CARD_ABILITY_H      = 55f;    // ability strip below stats
-    public static final float WEAPON_CARD_ACTION_H       = 185f;   // equip button OR slot rows
-    public static final float WEAPON_CARD_FOOTER_H       = 68f;    // close + convert strip
+    // Weapon card — single-screen pickup / compare modal (redesigned: large card, high-res text)
+    public static final float WEAPON_CARD_WIDTH          = 900f;
+    public static final float WEAPON_CARD_HEIGHT         = 620f;
+    public static final float WEAPON_CARD_ORIGIN_X       = 190f;   // (1280 - 900) / 2
+    public static final float WEAPON_CARD_ORIGIN_Y       = 50f;    // (720 - 620) / 2
+    public static final float WEAPON_CARD_PANEL_ALPHA    = 0.96f;
+    // Base body font scale; individual text elements scale relative to this (see renderer).
+    public static final float WEAPON_CARD_FONT_SCALE     = 1.5f;
+    // Zone heights inside the card (from top): header, abilities, action, footer.
+    // The stats table fills whatever remains between the header and the ability strip.
+    public static final float WEAPON_CARD_HEADER_HEIGHT  = 78f;
+    public static final float WEAPON_CARD_STAT_ROW_H     = 34f;    // nominal — renderer computes exact bands
+    public static final float WEAPON_CARD_ABILITY_H      = 66f;    // ability strip below stats
+    public static final float WEAPON_CARD_ACTION_H       = 176f;   // equip button OR slot rows
+    public static final float WEAPON_CARD_FOOTER_H       = 92f;    // close + convert strip
     // Large equip button (free-slot fast lane)
-    public static final float WEAPON_EQUIP_BUTTON_WIDTH  = 520f;
-    public static final float WEAPON_EQUIP_BUTTON_HEIGHT = 84f;
+    public static final float WEAPON_EQUIP_BUTTON_WIDTH  = 640f;
+    public static final float WEAPON_EQUIP_BUTTON_HEIGHT = 104f;
     // Inline slot rows (full loadout)
-    public static final float WEAPON_SLOT_ROW_HEIGHT     = 52f;
-    public static final float WEAPON_SLOT_ROW_GAP        = 8f;
+    public static final float WEAPON_SLOT_ROW_HEIGHT     = 74f;
+    public static final float WEAPON_SLOT_ROW_GAP        = 14f;
     // Swap button on the right edge of each slot row
-    public static final float WEAPON_SWAP_BUTTON_WIDTH   = 150f;
-    public static final float WEAPON_SWAP_BUTTON_HEIGHT  = 46f;
+    public static final float WEAPON_SWAP_BUTTON_WIDTH   = 176f;
+    public static final float WEAPON_SWAP_BUTTON_HEIGHT  = 56f;
     // Footer buttons
-    public static final float WEAPON_CLOSE_BUTTON_WIDTH  = 160f;
-    public static final float WEAPON_CLOSE_BUTTON_HEIGHT = 52f;
-    public static final float WEAPON_CONVERT_BUTTON_WIDTH  = 220f;
-    public static final float WEAPON_CONVERT_BUTTON_HEIGHT = 52f;
+    public static final float WEAPON_CLOSE_BUTTON_WIDTH  = 190f;
+    public static final float WEAPON_CLOSE_BUTTON_HEIGHT = 64f;
+    public static final float WEAPON_CONVERT_BUTTON_WIDTH  = 300f;
+    public static final float WEAPON_CONVERT_BUTTON_HEIGHT = 64f;
     // Ground-weapon name label shown in HUD when card is closed but player is on weapon tile
     public static final float WEAPON_NAME_LABEL_Y        = 224f;   // HUD_HEIGHT + 18
     // Stat bar normalisers — only affect visual fill, not game logic

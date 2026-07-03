@@ -4,10 +4,12 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.AbilityInstance;
 import ge.tbegvadze.toon3d.entity.Loadout;
@@ -22,97 +24,126 @@ import ge.tbegvadze.toon3d.util.HudConstants;
 import java.util.function.IntConsumer;
 
 /**
- * Single-screen weapon pickup / compare card.
+ * Single-screen weapon pickup / compare card — redesigned for a high-resolution,
+ * large-text, non-overlapping layout.
  *
- * Auto-opens the instant the player settles on a weapon tile. Three context-driven layouts:
- *   FREE SLOT  — one large "EQUIP" button (or "CHOOSE THIS WEAPON" in start-room mode).
- *   FULL LOADOUT — inline "SWAP ->" rows for each held weapon, no second modal phase.
- * CLOSE and CONVERT AMMO live in a fixed footer strip below the action area.
+ * Vertical zone stack (top → bottom), each a fixed non-overlapping band:
+ *   HEADER   — tier badge + weapon name + level/tier tag.
+ *   STATS    — FOUND / STAT / ACTIVE comparison table, 4 rows, numeric deltas.
+ *   ABILITY  — wrapped strip of the found weapon's ability tags.
+ *   ACTION   — one large EQUIP/REPLACE/CHOOSE button, or inline SWAP rows when the loadout is full.
+ *   FOOTER   — CLOSE (left) and optional CONVERT AMMO (right).
+ *
+ * Text quality: the built-in {@link BitmapFont} glyph atlas is switched to linear
+ * filtering so it stays crisp when scaled up (the default Nearest filter is what made
+ * the old card look blocky). Every text element is drawn through {@link #drawCentered}
+ * / {@link #drawAligned} which measure the glyphs and place them inside their band, so
+ * elements can never overlap regardless of string length.
  *
  * No allocations in render() — all strings and hit-test rects are pre-built in show().
  */
 public final class WeaponInspectOverlayRenderer implements Renderable, Disposable {
 
     // ── Colors ────────────────────────────────────────────────────────────────
-    private static final Color SCRIM_COLOR      = new Color(0f,     0f,     0f,     0.68f);
-    private static final Color PANEL_COLOR      = new Color(0.06f,  0.06f,  0.08f,  HudConstants.WEAPON_CARD_PANEL_ALPHA);
-    private static final Color HEADER_COLOR     = new Color(0.09f,  0.09f,  0.11f,  1f);
-    private static final Color BTN_EQUIP_COLOR  = new Color(0.06f,  0.26f,  0.06f,  1f);
-    private static final Color BTN_SWAP_COLOR   = new Color(0.18f,  0.14f,  0.06f,  1f);
-    private static final Color BTN_NEUTRAL_COLOR= new Color(0.14f,  0.14f,  0.17f,  1f);
-    private static final Color BTN_BORDER_COLOR = new Color(0.35f,  0.35f,  0.40f,  1f);
-    private static final Color DIVIDER_COLOR    = new Color(0.22f,  0.22f,  0.26f,  1f);
-    private static final Color AMBER_COLOR      = new Color(0.902f, 0.667f, 0.157f, 1f);
-    private static final Color WHITE_COLOR      = new Color(1f,     1f,     1f,     1f);
-    private static final Color DIM_COLOR        = new Color(0.50f,  0.50f,  0.50f,  1f);
-    private static final Color GREEN_COLOR      = new Color(0.20f,  0.90f,  0.30f,  1f);
-    private static final Color RED_COLOR        = new Color(0.95f,  0.20f,  0.20f,  1f);
-    private static final Color ROW_HIGHLIGHT    = new Color(0.10f,  0.16f,  0.10f,  1f);
-    private static final Color ACTIVE_SLOT_EDGE = new Color(0.902f, 0.667f, 0.157f, 0.6f);
+    private static final Color SCRIM_COLOR      = new Color(0f,     0f,     0f,     0.72f);
+    private static final Color PANEL_COLOR       = new Color(0.055f, 0.058f, 0.072f, HudConstants.WEAPON_CARD_PANEL_ALPHA);
+    private static final Color HEADER_COLOR      = new Color(0.10f,  0.10f,  0.13f,  1f);
+    private static final Color ZONE_BG_COLOR     = new Color(0.075f, 0.078f, 0.095f, 1f);
+    private static final Color ACTION_BG_COLOR   = new Color(0.09f,  0.09f,  0.11f,  1f);
+    private static final Color BTN_EQUIP_COLOR   = new Color(0.07f,  0.30f,  0.09f,  1f);
+    private static final Color BTN_SWAP_COLOR    = new Color(0.24f,  0.17f,  0.05f,  1f);
+    private static final Color BTN_NEUTRAL_COLOR = new Color(0.16f,  0.16f,  0.19f,  1f);
+    private static final Color BTN_CONVERT_COLOR = new Color(0.16f,  0.11f,  0.04f,  1f);
+    private static final Color BTN_BORDER_COLOR  = new Color(0.42f,  0.42f,  0.48f,  1f);
+    private static final Color DIVIDER_COLOR     = new Color(0.24f,  0.24f,  0.29f,  1f);
+    private static final Color ROW_BG_COLOR      = new Color(0.11f,  0.115f, 0.135f, 1f);
+    private static final Color AMBER_COLOR       = new Color(0.95f,  0.72f,  0.20f,  1f);
+    private static final Color WHITE_COLOR       = new Color(0.96f,  0.96f,  0.98f,  1f);
+    private static final Color DIM_COLOR         = new Color(0.62f,  0.62f,  0.68f,  1f);
+    private static final Color GREEN_COLOR       = new Color(0.34f,  0.86f,  0.38f,  1f);
+    private static final Color RED_COLOR         = new Color(0.95f,  0.34f,  0.34f,  1f);
+    private static final Color ACTIVE_SLOT_EDGE  = new Color(0.95f,  0.72f,  0.20f,  0.85f);
 
-    // ── Card geometry (derived from HudConstants) ─────────────────────────────
-    private static final float CARD_X     = HudConstants.WEAPON_CARD_ORIGIN_X;    // 260
-    private static final float CARD_Y     = HudConstants.WEAPON_CARD_ORIGIN_Y;    // 95
-    private static final float CARD_W     = HudConstants.WEAPON_CARD_WIDTH;       // 760
-    private static final float CARD_H     = HudConstants.WEAPON_CARD_HEIGHT;      // 530
-    private static final float CARD_RIGHT = CARD_X + CARD_W;                      // 1020
-    private static final float CARD_TOP   = CARD_Y + CARD_H;                      // 625
+    // ── Font scales (relative sizes for each text element) ────────────────────
+    private static final float FS_TITLE    = 2.0f;
+    private static final float FS_TIER_TAG = 1.25f;
+    private static final float FS_COL_HEAD = 1.15f;
+    private static final float FS_STAT     = 1.55f;
+    private static final float FS_DELTA    = 1.0f;
+    private static final float FS_ABILITY  = 1.2f;
+    private static final float FS_ZONE_TAG = 0.95f;
+    private static final float FS_BUTTON   = 1.8f;
+    private static final float FS_SLOT_NAME= 1.35f;
+    private static final float FS_SLOT_STAT= 1.05f;
+    private static final float FS_SWAP     = 1.3f;
+    private static final float FS_FOOTER   = 1.45f;
 
-    // Header zone (top of card)
-    private static final float HEADER_H   = HudConstants.WEAPON_CARD_HEADER_HEIGHT; // 50
-    private static final float HEADER_Y   = CARD_TOP - HEADER_H;                  // 575
+    // ── Card box (from HudConstants) ──────────────────────────────────────────
+    private static final float CARD_X     = HudConstants.WEAPON_CARD_ORIGIN_X;   // 190
+    private static final float CARD_Y     = HudConstants.WEAPON_CARD_ORIGIN_Y;   // 50
+    private static final float CARD_W     = HudConstants.WEAPON_CARD_WIDTH;      // 900
+    private static final float CARD_H     = HudConstants.WEAPON_CARD_HEIGHT;     // 620
+    private static final float CARD_RIGHT = CARD_X + CARD_W;                     // 1090
+    private static final float CARD_TOP   = CARD_Y + CARD_H;                     // 670
+    private static final float CENTER_X   = CARD_X + CARD_W / 2f;               // 640
+    private static final float INNER_PAD  = 26f;
 
-    // Footer zone (bottom of card, above CARD_Y padding)
-    private static final float FOOTER_PAD = 10f;
-    private static final float FOOTER_H   = HudConstants.WEAPON_CARD_FOOTER_H;    // 68
-    private static final float FOOTER_Y   = CARD_Y + FOOTER_PAD;                  // 105 (bottom of footer btn)
-    private static final float FOOTER_TOP = FOOTER_Y + FOOTER_H;                  // 173
+    // ── Zone bands (Y-up; each band is [bottom, top]) ─────────────────────────
+    // Header
+    private static final float HEADER_H = HudConstants.WEAPON_CARD_HEADER_HEIGHT; // 78
+    private static final float HEADER_Y = CARD_TOP - HEADER_H;                    // 592
 
-    // Action zone sits between ability strip and footer
-    private static final float ACTION_H   = HudConstants.WEAPON_CARD_ACTION_H;    // 185
-    private static final float ACTION_Y   = FOOTER_TOP + 4f;                      // 177
-    private static final float ACTION_TOP = ACTION_Y + ACTION_H;                   // 362
+    // Footer (bottom of card)
+    private static final float FOOTER_MARGIN = 8f;
+    private static final float FOOTER_H   = HudConstants.WEAPON_CARD_FOOTER_H;    // 92
+    private static final float FOOTER_Y   = CARD_Y + FOOTER_MARGIN;              // 58
+    private static final float FOOTER_TOP = FOOTER_Y + FOOTER_H;                 // 150
+
+    // Action zone
+    private static final float ACTION_H   = HudConstants.WEAPON_CARD_ACTION_H;    // 176
+    private static final float ACTION_Y   = FOOTER_TOP + 8f;                     // 158
+    private static final float ACTION_TOP = ACTION_Y + ACTION_H;                 // 334
 
     // Ability strip
-    private static final float ABILITY_H   = HudConstants.WEAPON_CARD_ABILITY_H;  // 55
-    private static final float ABILITY_Y   = ACTION_TOP;                           // 362
-    private static final float ABILITY_TOP = ABILITY_Y + ABILITY_H;               // 417
+    private static final float ABILITY_H   = HudConstants.WEAPON_CARD_ABILITY_H; // 66
+    private static final float ABILITY_Y   = ACTION_TOP + 4f;                    // 338
+    private static final float ABILITY_TOP = ABILITY_Y + ABILITY_H;             // 404
 
-    // Stats zone: 4 rows × STAT_ROW_H occupying the space between the ability strip and the header.
-    private static final float STAT_ROW_H     = HudConstants.WEAPON_CARD_STAT_ROW_H; // 36
-    private static final float STATS_TOP      = HEADER_Y;                             // 575 — rows grow downward from here into the stats zone
-    private static final int   STAT_ROW_COUNT = 4;
-    // Stat column X positions
-    private static final float GROUND_COL_X  = CARD_X + 16f;                     // 276  (ground value, left-align)
-    private static final float CENTER_X       = CARD_X + CARD_W / 2f;            // 640  (stat labels, centered)
-    private static final float ACTIVE_COL_X  = CARD_RIGHT - 16f;                 // 1004 (active value, right-align)
+    // Stats table fills the gap between the ability strip top and the header.
+    private static final float STATS_TOP    = HEADER_Y;                          // 592
+    private static final float STATS_BOTTOM = ABILITY_TOP;                       // 404
+    private static final float COL_HEAD_BAND_H = 44f;                            // column-header row
+    private static final int   STAT_ROW_COUNT  = 4;
+    // Stat column centres
+    private static final float FOUND_COL_X  = CARD_X + 150f;                     // 340
+    private static final float ACTIVE_COL_X = CARD_RIGHT - 150f;                 // 940
 
-    // Equip button (free slot fast lane)
-    private static final float EQUIP_BTN_W   = HudConstants.WEAPON_EQUIP_BUTTON_WIDTH;  // 520
-    private static final float EQUIP_BTN_H   = HudConstants.WEAPON_EQUIP_BUTTON_HEIGHT; // 84
-    private static final float EQUIP_BTN_X   = CARD_X + (CARD_W - EQUIP_BTN_W) / 2f;  // 380
-    private static final float EQUIP_BTN_Y   = ACTION_Y + (ACTION_H - EQUIP_BTN_H) / 2f; // 227
+    // Equip button (free-slot fast lane)
+    private static final float EQUIP_BTN_W = HudConstants.WEAPON_EQUIP_BUTTON_WIDTH;  // 640
+    private static final float EQUIP_BTN_H = HudConstants.WEAPON_EQUIP_BUTTON_HEIGHT; // 104
+    private static final float EQUIP_BTN_X = CARD_X + (CARD_W - EQUIP_BTN_W) / 2f;    // 320
+    private static final float EQUIP_BTN_Y = ACTION_Y + (ACTION_H - EQUIP_BTN_H) / 2f;// 194
 
     // Slot rows (full loadout)
-    private static final float SLOT_ROW_H   = HudConstants.WEAPON_SLOT_ROW_HEIGHT; // 52
-    private static final float SLOT_ROW_GAP = HudConstants.WEAPON_SLOT_ROW_GAP;   // 8
-    private static final float SLOT_ROW_X   = CARD_X + 12f;
-    private static final float SLOT_ROW_W   = CARD_W - 24f;
-    private static final float SLOT_ROW_TOP = ACTION_TOP - 8f;                    // 354 (first row top)
-    // Swap button within each row
-    private static final float SWAP_BTN_W   = HudConstants.WEAPON_SWAP_BUTTON_WIDTH;  // 150
-    private static final float SWAP_BTN_H   = HudConstants.WEAPON_SWAP_BUTTON_HEIGHT; // 46
+    private static final float SLOT_ROW_H   = HudConstants.WEAPON_SLOT_ROW_HEIGHT; // 74
+    private static final float SLOT_ROW_GAP = HudConstants.WEAPON_SLOT_ROW_GAP;   // 14
+    private static final float SLOT_ROW_X   = CARD_X + 16f;                       // 206
+    private static final float SLOT_ROW_W   = CARD_W - 32f;                       // 868
+    private static final float SLOT_ROW_TOP = ACTION_TOP - 8f;                    // 326 (top of first row)
+    private static final float SWAP_BTN_W   = HudConstants.WEAPON_SWAP_BUTTON_WIDTH;  // 176
+    private static final float SWAP_BTN_H   = HudConstants.WEAPON_SWAP_BUTTON_HEIGHT; // 56
+    private static final float SWAP_BTN_PAD = 14f; // inset of the SWAP button from the slot row's right edge
 
     // Footer buttons
-    private static final float CLOSE_BTN_W = HudConstants.WEAPON_CLOSE_BUTTON_WIDTH;   // 160
-    private static final float CLOSE_BTN_H = HudConstants.WEAPON_CLOSE_BUTTON_HEIGHT;  // 52
-    private static final float CLOSE_BTN_X = CARD_X + 16f;
-    private static final float CLOSE_BTN_Y = FOOTER_Y + (FOOTER_H - CLOSE_BTN_H) / 2f;
+    private static final float CLOSE_BTN_W = HudConstants.WEAPON_CLOSE_BUTTON_WIDTH;   // 190
+    private static final float CLOSE_BTN_H = HudConstants.WEAPON_CLOSE_BUTTON_HEIGHT;  // 64
+    private static final float CLOSE_BTN_X = CARD_X + INNER_PAD;                       // 216
+    private static final float CLOSE_BTN_Y = FOOTER_Y + (FOOTER_H - CLOSE_BTN_H) / 2f; // 72
 
-    private static final float CONV_BTN_W  = HudConstants.WEAPON_CONVERT_BUTTON_WIDTH;  // 220
-    private static final float CONV_BTN_H  = HudConstants.WEAPON_CONVERT_BUTTON_HEIGHT; // 52
-    private static final float CONV_BTN_X  = CARD_RIGHT - 16f - CONV_BTN_W;
-    private static final float CONV_BTN_Y  = FOOTER_Y + (FOOTER_H - CONV_BTN_H) / 2f;
+    private static final float CONV_BTN_W = HudConstants.WEAPON_CONVERT_BUTTON_WIDTH;  // 300
+    private static final float CONV_BTN_H = HudConstants.WEAPON_CONVERT_BUTTON_HEIGHT; // 64
+    private static final float CONV_BTN_X = CARD_RIGHT - INNER_PAD - CONV_BTN_W;       // 764
+    private static final float CONV_BTN_Y = FOOTER_Y + (FOOTER_H - CONV_BTN_H) / 2f;   // 72
 
     private static final int MAX_ABILITY_LINES = 5;
 
@@ -125,18 +156,17 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     // ── State (written by show()) ─────────────────────────────────────────────
     private boolean  visible        = false;
     private boolean  startRoomMode  = false;
-    // True when the inspected ground weapon is melee. Melee weapons live in the dedicated melee (first)
-    // slot, never a gun slot, so the card always shows a single EQUIP→MELEE button (never gun-slot SWAP rows).
     private boolean  meleeMode      = false;
     private boolean  loadoutFull    = false;
-    // True when the player already carries this weapon TYPE. Because the arsenal keeps one
-    // instance per type, the only valid action is a VARIANT SWAP (replace the held roll), never
-    // a second equip — so the card shows a single REPLACE button instead of slot rows / EQUIP.
     private boolean  alreadyHeld    = false;
     private boolean  hasConvert     = false;
     private int      freeSlotIndex  = -1;
     private Loadout  loadout        = null;
     private int      activeSlotIndex = 0;
+
+    // Displayed (non-null) slot indices, packed so render + hit-test agree exactly.
+    private final int[] displayedSlotIndices = new int[8];
+    private int         displayedSlotCount   = 0;
 
     // ── Cached strings and stats (built in show(), read in render()) ──────────
     private String   cachedWeaponName   = "";
@@ -146,24 +176,18 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private float    cachedTierBlue     = AMBER_COLOR.b;
     private WeaponTier cachedTier       = WeaponTier.COMMON;
 
-    // Ground weapon effective stats (computed from WeaponRoll + base weapon)
     private int cachedGroundDamage  = 0;
     private int cachedGroundClip    = 0;
     private int cachedGroundReload  = 0;
     private int cachedGroundRange   = 0;
 
-    // Active weapon effective stats
     private int cachedActiveDamage  = 0;
     private int cachedActiveClip    = 0;
     private int cachedActiveReload  = 0;
     private int cachedActiveRange   = 0;
 
-    // Ability lines
-    private final String[]  cachedAbilityLines    = new String[MAX_ABILITY_LINES];
-    private final boolean[] cachedAbilityLegendary = new boolean[MAX_ABILITY_LINES];
-    private int             cachedAbilityCount     = 0;
+    private String cachedAbilityStrip = "";
 
-    // Convert button label
     private String cachedConvertLabel = "CONVERT AMMO";
 
     // ── Callbacks ─────────────────────────────────────────────────────────────
@@ -173,7 +197,7 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private Runnable    onClose          = null;
 
     // ── Scratch — pre-allocated ───────────────────────────────────────────────
-    private final StringBuilder textBuilder    = new StringBuilder(64);
+    private final StringBuilder textBuilder    = new StringBuilder(96);
     private final Color         temporaryColor = new Color();
 
     // ── Constructor ───────────────────────────────────────────────────────────
@@ -182,7 +206,10 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         shapeRenderer = new ShapeRenderer();
         spriteBatch   = new SpriteBatch();
         font          = new BitmapFont();
-        font.getData().setScale(HudConstants.WEAPON_CARD_FONT_SCALE);
+        // Linear filtering keeps the bitmap glyphs smooth when scaled up — this is the
+        // single biggest fix for the old "low resolution" look.
+        font.getRegion().getTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        font.setUseIntegerPositions(false);
         glyphLayout   = new GlyphLayout();
     }
 
@@ -229,15 +256,15 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         cachedWeaponName = (arsenalWeapon != null)
                            ? arsenalWeapon.getDisplayName().toUpperCase()
                            : (groundItem != null ? groundItem.stack.getType().getDisplayName().toUpperCase() : "WEAPON");
-        cachedLevelTier  = "Lv " + level + "  " + tier.displayName.toUpperCase();
+        cachedLevelTier  = "LV " + level + "  •  " + tier.displayName.toUpperCase();
 
         buildStatCache(groundRoll, arsenalWeapon, activeWeapon);
-        buildAbilityCache(groundRoll);
+        buildAbilityStrip(groundRoll);
 
         hasConvert         = convertAmount > 0;
         cachedConvertLabel = hasConvert ? ("CONVERT  +" + convertAmount + " AMMO") : "CONVERT AMMO";
 
-        // Determine loadout state for action zone layout
+        // Determine loadout state for action-zone layout.
         if (loadoutRef == null || !loadoutRef.isFull()) {
             loadoutFull   = false;
             freeSlotIndex = findFreeSlot(loadoutRef);
@@ -248,12 +275,22 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         alreadyHeld = (loadoutRef != null && arsenalWeapon != null
                        && loadoutRef.slotIndexOf(arsenalWeapon) >= 0);
         activeSlotIndex = (loadoutRef != null) ? loadoutRef.getActiveSlotIndex() : 0;
+
+        // Pack the non-null slot indices so rows are drawn contiguously (no gap for locked slots).
+        displayedSlotCount = 0;
+        if (loadoutRef != null && !singleButtonMode()) {
+            for (int slotIndex = 0;
+                 slotIndex < loadoutRef.getSlotCount() && displayedSlotCount < displayedSlotIndices.length;
+                 slotIndex++) {
+                if (loadoutRef.getSlot(slotIndex) != null) {
+                    displayedSlotIndices[displayedSlotCount++] = slotIndex;
+                }
+            }
+        }
     }
 
     /** True when the action zone shows a single full-width button rather than the SWAP slot rows. */
     private boolean singleButtonMode() {
-        // Melee always uses the single button: it targets the melee slot, never the gun slots, so the
-        // gun-slot SWAP rows (which would evict a gun) must never appear for a melee ground weapon.
         return !loadoutFull || alreadyHeld || meleeMode;
     }
 
@@ -263,17 +300,14 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         alreadyHeld  = false;
         meleeMode    = false;
         loadout      = null;
-        for (int lineIndex = 0; lineIndex < MAX_ABILITY_LINES; lineIndex++) {
-            cachedAbilityLines[lineIndex]    = null;
-            cachedAbilityLegendary[lineIndex] = false;
-        }
-        cachedAbilityCount = 0;
+        displayedSlotCount = 0;
+        cachedAbilityStrip = "";
     }
 
     public boolean isVisible() { return visible; }
 
     /** Updates the facility clock for any pulsing effects. Currently a no-op placeholder. */
-    public void setFacilityTime(float time) { /* pulsing slots can use this if added later */ }
+    public void setFacilityTime(float time) { /* reserved for future pulsing effects */ }
 
     // ── Touch handling ────────────────────────────────────────────────────────
 
@@ -293,31 +327,28 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         }
 
         if (singleButtonMode()) {
-            // EQUIP (free slot) or REPLACE (already-held variant swap) — single full-width button.
-            // Both route through onEquipFreeSlot; World decides equip vs variant swap by checking
-            // whether the weapon type is already in the loadout.
             if (hitTest(worldX, worldY, EQUIP_BTN_X, EQUIP_BTN_Y, EQUIP_BTN_W, EQUIP_BTN_H)) {
                 if (onEquipFreeSlot != null) onEquipFreeSlot.run();
             }
         } else {
-            // Inline slot rows — entire row is the tap target
             hitTestSlotRows(worldX, worldY);
         }
     }
 
     private void hitTestSlotRows(float worldX, float worldY) {
-        if (loadout == null) return;
-        float rowTop = SLOT_ROW_TOP;
-        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+        for (int rowPosition = 0; rowPosition < displayedSlotCount; rowPosition++) {
+            float rowTop    = slotRowTop(rowPosition);
             float rowBottom = rowTop - SLOT_ROW_H;
-            if (loadout.getSlot(slotIndex) != null
-                    && worldX >= SLOT_ROW_X && worldX <= SLOT_ROW_X + SLOT_ROW_W
+            if (worldX >= SLOT_ROW_X && worldX <= SLOT_ROW_X + SLOT_ROW_W
                     && worldY >= rowBottom && worldY <= rowTop) {
-                if (onSwapSlot != null) onSwapSlot.accept(slotIndex);
+                if (onSwapSlot != null) onSwapSlot.accept(displayedSlotIndices[rowPosition]);
                 return;
             }
-            rowTop = rowBottom - SLOT_ROW_GAP;
         }
+    }
+
+    private static float slotRowTop(int rowPosition) {
+        return SLOT_ROW_TOP - rowPosition * (SLOT_ROW_H + SLOT_ROW_GAP);
     }
 
     private static boolean hitTest(float worldX, float worldY,
@@ -352,18 +383,22 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         shapeRenderer.setColor(PANEL_COLOR);
         shapeRenderer.rect(CARD_X, CARD_Y, CARD_W, CARD_H);
 
-        // Header background (tinted panel)
+        // Header background + tier accent band
         shapeRenderer.setColor(HEADER_COLOR);
         shapeRenderer.rect(CARD_X, HEADER_Y, CARD_W, HEADER_H);
+        shapeRenderer.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 0.9f);
+        shapeRenderer.rect(CARD_X, CARD_TOP - 5f, CARD_W, 5f); // slim tier stripe along the very top
+        drawTierIconFilled(cachedTier, CARD_X + 40f, HEADER_Y + HEADER_H / 2f, 15f);
 
-        // Tier icon shape left of weapon name
-        drawTierIconFilled(cachedTier, CARD_X + 30f, HEADER_Y + HEADER_H / 2f, 10f);
+        // Ability strip background
+        shapeRenderer.setColor(ZONE_BG_COLOR);
+        shapeRenderer.rect(CARD_X, ABILITY_Y, CARD_W, ABILITY_H);
 
-        // Action zone background (subtle)
-        shapeRenderer.setColor(0.08f, 0.08f, 0.10f, 0.5f);
+        // Action zone background
+        shapeRenderer.setColor(ACTION_BG_COLOR);
         shapeRenderer.rect(CARD_X, ACTION_Y, CARD_W, ACTION_H);
 
-        // Action zone content
+        // Action content
         if (singleButtonMode()) {
             shapeRenderer.setColor(alreadyHeld ? BTN_SWAP_COLOR : BTN_EQUIP_COLOR);
             shapeRenderer.rect(EQUIP_BTN_X, EQUIP_BTN_Y, EQUIP_BTN_W, EQUIP_BTN_H);
@@ -371,11 +406,13 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
             renderSlotRowsFilled();
         }
 
-        // Footer strip
+        // Footer strip background + buttons
+        shapeRenderer.setColor(ZONE_BG_COLOR);
+        shapeRenderer.rect(CARD_X, FOOTER_Y - FOOTER_MARGIN, CARD_W, FOOTER_H + FOOTER_MARGIN);
         shapeRenderer.setColor(BTN_NEUTRAL_COLOR);
         shapeRenderer.rect(CLOSE_BTN_X, CLOSE_BTN_Y, CLOSE_BTN_W, CLOSE_BTN_H);
         if (hasConvert) {
-            shapeRenderer.setColor(0.12f, 0.08f, 0.04f, 1f);
+            shapeRenderer.setColor(BTN_CONVERT_COLOR);
             shapeRenderer.rect(CONV_BTN_X, CONV_BTN_Y, CONV_BTN_W, CONV_BTN_H);
         }
 
@@ -386,7 +423,7 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         shapeRenderer.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
         switch (tier) {
             case COMMON:
-                shapeRenderer.circle(centerX, centerY, size, 20);
+                shapeRenderer.circle(centerX, centerY, size, 24);
                 break;
             case UNCOMMON:
                 shapeRenderer.rect(centerX - size, centerY - size, size * 2f, size * 2f);
@@ -409,26 +446,21 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
                 break;
             case LEGENDARY:
             default:
-                shapeRenderer.circle(centerX, centerY, size, 5);
+                shapeRenderer.circle(centerX, centerY, size, 6);
                 break;
         }
     }
 
     private void renderSlotRowsFilled() {
-        if (loadout == null) return;
-        float rowTop = SLOT_ROW_TOP;
-        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+        for (int rowPosition = 0; rowPosition < displayedSlotCount; rowPosition++) {
+            float rowTop    = slotRowTop(rowPosition);
             float rowBottom = rowTop - SLOT_ROW_H;
-            if (loadout.getSlot(slotIndex) != null) {
-                shapeRenderer.setColor(ROW_HIGHLIGHT);
-                shapeRenderer.rect(SLOT_ROW_X, rowBottom, SLOT_ROW_W, SLOT_ROW_H);
-                // SWAP button background
-                float swapBtnX = SLOT_ROW_X + SLOT_ROW_W - SWAP_BTN_W;
-                float swapBtnY = rowBottom + (SLOT_ROW_H - SWAP_BTN_H) / 2f;
-                shapeRenderer.setColor(BTN_SWAP_COLOR);
-                shapeRenderer.rect(swapBtnX, swapBtnY, SWAP_BTN_W, SWAP_BTN_H);
-            }
-            rowTop = rowBottom - SLOT_ROW_GAP;
+            shapeRenderer.setColor(ROW_BG_COLOR);
+            shapeRenderer.rect(SLOT_ROW_X, rowBottom, SLOT_ROW_W, SLOT_ROW_H);
+            float swapBtnX = SLOT_ROW_X + SLOT_ROW_W - SWAP_BTN_PAD - SWAP_BTN_W;
+            float swapBtnY = rowBottom + (SLOT_ROW_H - SWAP_BTN_H) / 2f;
+            shapeRenderer.setColor(BTN_SWAP_COLOR);
+            shapeRenderer.rect(swapBtnX, swapBtnY, SWAP_BTN_W, SWAP_BTN_H);
         }
     }
 
@@ -440,29 +472,26 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
 
-        // Card border in tier color (3px effect via drawing two lines)
+        // Card border in tier color (double line for a 2px effect)
         shapeRenderer.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
         shapeRenderer.rect(CARD_X, CARD_Y, CARD_W, CARD_H);
         shapeRenderer.rect(CARD_X + 1f, CARD_Y + 1f, CARD_W - 2f, CARD_H - 2f);
 
-        // Header divider in tier color
-        shapeRenderer.line(CARD_X, HEADER_Y, CARD_RIGHT, HEADER_Y);
-
-        // Stat zone divider lines
+        // Zone dividers
         shapeRenderer.setColor(DIVIDER_COLOR);
-        shapeRenderer.line(CENTER_X, ABILITY_TOP - 4f, CENTER_X, HEADER_Y - 4f);
+        shapeRenderer.line(CARD_X, HEADER_Y,    CARD_RIGHT, HEADER_Y);
         shapeRenderer.line(CARD_X, ABILITY_TOP, CARD_RIGHT, ABILITY_TOP);
-        shapeRenderer.line(CARD_X, ACTION_TOP, CARD_RIGHT, ACTION_TOP);
-        shapeRenderer.line(CARD_X, FOOTER_TOP, CARD_RIGHT, FOOTER_TOP);
+        shapeRenderer.line(CARD_X, ACTION_TOP,  CARD_RIGHT, ACTION_TOP);
+        shapeRenderer.line(CARD_X, FOOTER_TOP,  CARD_RIGHT, FOOTER_TOP);
+        // Vertical rules separating the three stat columns
+        shapeRenderer.line(CARD_X + 300f, STATS_BOTTOM + 6f, CARD_X + 300f, STATS_TOP - COL_HEAD_BAND_H + 6f);
+        shapeRenderer.line(CARD_X + 600f, STATS_BOTTOM + 6f, CARD_X + 600f, STATS_TOP - COL_HEAD_BAND_H + 6f);
 
-        // Action zone: EQUIP / REPLACE border or slot row borders
+        // Action zone borders
         if (singleButtonMode()) {
-            if (alreadyHeld) {
-                shapeRenderer.setColor(AMBER_COLOR);
-            } else {
-                shapeRenderer.setColor(GREEN_COLOR);
-            }
+            shapeRenderer.setColor(alreadyHeld ? AMBER_COLOR : GREEN_COLOR);
             shapeRenderer.rect(EQUIP_BTN_X, EQUIP_BTN_Y, EQUIP_BTN_W, EQUIP_BTN_H);
+            shapeRenderer.rect(EQUIP_BTN_X + 1f, EQUIP_BTN_Y + 1f, EQUIP_BTN_W - 2f, EQUIP_BTN_H - 2f);
         } else {
             renderSlotRowsLines();
         }
@@ -471,7 +500,7 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         shapeRenderer.setColor(BTN_BORDER_COLOR);
         shapeRenderer.rect(CLOSE_BTN_X, CLOSE_BTN_Y, CLOSE_BTN_W, CLOSE_BTN_H);
         if (hasConvert) {
-            shapeRenderer.setColor(AMBER_COLOR.r, AMBER_COLOR.g, AMBER_COLOR.b, 0.6f);
+            shapeRenderer.setColor(AMBER_COLOR.r, AMBER_COLOR.g, AMBER_COLOR.b, 0.7f);
             shapeRenderer.rect(CONV_BTN_X, CONV_BTN_Y, CONV_BTN_W, CONV_BTN_H);
         }
 
@@ -479,25 +508,23 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     }
 
     private void renderSlotRowsLines() {
-        if (loadout == null) return;
-        float rowTop = SLOT_ROW_TOP;
-        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+        for (int rowPosition = 0; rowPosition < displayedSlotCount; rowPosition++) {
+            int   slotIndex = displayedSlotIndices[rowPosition];
+            float rowTop    = slotRowTop(rowPosition);
             float rowBottom = rowTop - SLOT_ROW_H;
-            if (loadout.getSlot(slotIndex) != null) {
-                // Active slot gets amber edge highlight
-                if (slotIndex == activeSlotIndex) {
-                    shapeRenderer.setColor(ACTIVE_SLOT_EDGE);
-                    shapeRenderer.line(SLOT_ROW_X, rowBottom, SLOT_ROW_X, rowTop);
-                    shapeRenderer.line(SLOT_ROW_X + 2f, rowBottom, SLOT_ROW_X + 2f, rowTop);
-                }
-                shapeRenderer.setColor(BTN_BORDER_COLOR);
-                shapeRenderer.rect(SLOT_ROW_X, rowBottom, SLOT_ROW_W, SLOT_ROW_H);
-                float swapBtnX = SLOT_ROW_X + SLOT_ROW_W - SWAP_BTN_W;
-                float swapBtnY = rowBottom + (SLOT_ROW_H - SWAP_BTN_H) / 2f;
-                shapeRenderer.setColor(AMBER_COLOR.r, AMBER_COLOR.g, AMBER_COLOR.b, 0.8f);
-                shapeRenderer.rect(swapBtnX, swapBtnY, SWAP_BTN_W, SWAP_BTN_H);
+
+            if (slotIndex == activeSlotIndex) {
+                shapeRenderer.setColor(ACTIVE_SLOT_EDGE);
+                shapeRenderer.line(SLOT_ROW_X, rowBottom, SLOT_ROW_X, rowTop);
+                shapeRenderer.line(SLOT_ROW_X + 2f, rowBottom, SLOT_ROW_X + 2f, rowTop);
+                shapeRenderer.line(SLOT_ROW_X + 4f, rowBottom, SLOT_ROW_X + 4f, rowTop);
             }
-            rowTop = rowBottom - SLOT_ROW_GAP;
+            shapeRenderer.setColor(BTN_BORDER_COLOR);
+            shapeRenderer.rect(SLOT_ROW_X, rowBottom, SLOT_ROW_W, SLOT_ROW_H);
+            float swapBtnX = SLOT_ROW_X + SLOT_ROW_W - SWAP_BTN_PAD - SWAP_BTN_W;
+            float swapBtnY = rowBottom + (SLOT_ROW_H - SWAP_BTN_H) / 2f;
+            shapeRenderer.setColor(AMBER_COLOR);
+            shapeRenderer.rect(swapBtnX, swapBtnY, SWAP_BTN_W, SWAP_BTN_H);
         }
     }
 
@@ -514,75 +541,57 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         drawFooter();
 
         spriteBatch.end();
+        font.getData().setScale(1f);
     }
 
     private void drawHeader() {
-        // Weapon name (tier color, left-aligned after tier icon)
-        float nameX = CARD_X + 52f;
-        font.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
-        font.draw(spriteBatch, cachedWeaponName, nameX, HEADER_Y + HEADER_H - 12f);
-
-        // Level/tier tag (right-aligned in header)
-        glyphLayout.setText(font, cachedLevelTier);
-        font.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 0.85f);
-        font.draw(spriteBatch, cachedLevelTier,
-                  CARD_RIGHT - 16f - glyphLayout.width, HEADER_Y + HEADER_H - 12f);
+        float baseline = HEADER_Y + HEADER_H / 2f;
+        temporaryColor.set(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
+        drawAligned(cachedWeaponName, CARD_X + 68f, baseline, FS_TITLE, temporaryColor, Align.left);
+        temporaryColor.set(cachedTierRed, cachedTierGreen, cachedTierBlue, 0.9f);
+        drawAligned(cachedLevelTier, CARD_RIGHT - INNER_PAD, baseline, FS_TIER_TAG, temporaryColor, Align.right);
     }
 
     private void drawStatBlock() {
-        // Column headers
-        float headerY = STATS_TOP - 10f;
+        // Column headers, vertically centred in their band.
+        float colHeadCenter = STATS_TOP - COL_HEAD_BAND_H / 2f;
+        drawCentered("FOUND",  FOUND_COL_X,  colHeadCenter, FS_COL_HEAD, WHITE_COLOR);
+        drawCentered("STAT",   CENTER_X,     colHeadCenter, FS_COL_HEAD, DIM_COLOR);
+        drawCentered("ACTIVE", ACTIVE_COL_X, colHeadCenter, FS_COL_HEAD, WHITE_COLOR);
 
-        glyphLayout.setText(font, "FOUND");
-        font.setColor(WHITE_COLOR);
-        font.draw(spriteBatch, "FOUND", GROUND_COL_X, headerY);
-
-        glyphLayout.setText(font, "STAT");
-        font.setColor(DIM_COLOR);
-        font.draw(spriteBatch, "STAT", CENTER_X - glyphLayout.width / 2f, headerY);
-
-        glyphLayout.setText(font, "ACTIVE");
-        font.setColor(WHITE_COLOR);
-        font.draw(spriteBatch, "ACTIVE", ACTIVE_COL_X - glyphLayout.width, headerY);
-
-        // Four stat rows
-        float rowY = STATS_TOP - STAT_ROW_H;
-        drawStatRow(rowY, "DAMAGE", cachedGroundDamage, cachedActiveDamage, false);
-        rowY -= STAT_ROW_H;
-        drawStatRow(rowY, "CLIP",   cachedGroundClip,   cachedActiveClip,   false);
-        rowY -= STAT_ROW_H;
-        drawStatRow(rowY, "RELOAD", cachedGroundReload, cachedActiveReload, true);
-        rowY -= STAT_ROW_H;
-        drawStatRow(rowY, "RANGE",  cachedGroundRange,  cachedActiveRange,  false);
+        // Four stat rows, each vertically centred in its own band (bands never overlap).
+        float rowsTop    = STATS_TOP - COL_HEAD_BAND_H;
+        float rowBandH   = (rowsTop - STATS_BOTTOM) / STAT_ROW_COUNT;
+        drawStatRow(rowsTop, rowBandH, 0, "DAMAGE", cachedGroundDamage, cachedActiveDamage, false);
+        drawStatRow(rowsTop, rowBandH, 1, "CLIP",   cachedGroundClip,   cachedActiveClip,   false);
+        drawStatRow(rowsTop, rowBandH, 2, "RELOAD", cachedGroundReload, cachedActiveReload, true);
+        drawStatRow(rowsTop, rowBandH, 3, "RANGE",  cachedGroundRange,  cachedActiveRange,  false);
     }
 
-    private void drawStatRow(float rowY, String label,
-                             int groundValue, int activeValue, boolean lowerIsBetter) {
-        // Center label
-        glyphLayout.setText(font, label);
-        font.setColor(DIM_COLOR);
-        font.draw(spriteBatch, label, CENTER_X - glyphLayout.width / 2f, rowY);
+    private void drawStatRow(float rowsTop, float rowBandH, int rowIndex,
+                             String label, int groundValue, int activeValue, boolean lowerIsBetter) {
+        float bandCenter = rowsTop - rowIndex * rowBandH - rowBandH / 2f;
 
-        // Ground value (color-coded vs active)
+        drawCentered(label, CENTER_X, bandCenter, FS_STAT, DIM_COLOR);
+
+        // FOUND value, color-coded against the active weapon.
         textBuilder.setLength(0);
         textBuilder.append(groundValue);
-        font.setColor(deltaColor(groundValue, activeValue, lowerIsBetter));
-        font.draw(spriteBatch, textBuilder, GROUND_COL_X, rowY);
+        drawCentered(textBuilder, FOUND_COL_X, bandCenter, FS_STAT, deltaColor(groundValue, activeValue, lowerIsBetter));
 
-        // Active value
+        // ACTIVE value, always neutral white.
         textBuilder.setLength(0);
         textBuilder.append(activeValue);
-        glyphLayout.setText(font, textBuilder);
-        font.setColor(WHITE_COLOR);
-        font.draw(spriteBatch, textBuilder, ACTIVE_COL_X - glyphLayout.width, rowY);
+        drawCentered(textBuilder, ACTIVE_COL_X, bandCenter, FS_STAT, WHITE_COLOR);
 
-        // Delta indicator between ground value and label
+        // Numeric delta tag beside the FOUND value (font-safe, no arrow glyphs).
         if (activeValue > 0 && groundValue > 0 && groundValue != activeValue) {
             boolean groundBetter = lowerIsBetter ? (groundValue < activeValue) : (groundValue > activeValue);
-            String arrow = groundBetter ? " ▲" : " ▼";
-            font.setColor(groundBetter ? GREEN_COLOR : RED_COLOR);
-            glyphLayout.setText(font, textBuilder);
-            font.draw(spriteBatch, arrow, GROUND_COL_X + glyphLayout.width + 4f, rowY);
+            int difference = Math.abs(groundValue - activeValue);
+            textBuilder.setLength(0);
+            textBuilder.append(groundBetter ? "+" : "-").append(difference);
+            drawAligned(textBuilder, FOUND_COL_X + 58f, bandCenter, FS_DELTA,
+                        groundBetter ? GREEN_COLOR : RED_COLOR, Align.left);
         }
     }
 
@@ -593,47 +602,36 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     }
 
     private void drawAbilityStrip() {
-        float abilityY = ABILITY_Y + ABILITY_H - 16f;
-        if (cachedAbilityCount == 0) {
-            glyphLayout.setText(font, "— no abilities —");
-            font.setColor(DIM_COLOR);
-            font.draw(spriteBatch, "— no abilities —",
-                      CENTER_X - glyphLayout.width / 2f, abilityY);
+        float bandCenter = ABILITY_Y + ABILITY_H / 2f;
+        if (cachedAbilityStrip.isEmpty()) {
+            drawCentered("— NO SPECIAL ABILITIES —", CENTER_X, bandCenter, FS_ABILITY, DIM_COLOR);
             return;
         }
-
-        // Draw abilities as a horizontal strip of short tags
-        StringBuilder abilityLine = new StringBuilder(64);
-        for (int abilityIndex = 0; abilityIndex < cachedAbilityCount; abilityIndex++) {
-            if (abilityIndex > 0) abilityLine.append("   ");
-            if (cachedAbilityLegendary[abilityIndex]) abilityLine.append("★ ");
-            abilityLine.append(cachedAbilityLines[abilityIndex]);
-        }
-        String abilityText = abilityLine.toString();
-        glyphLayout.setText(font, abilityText);
-        font.setColor(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
-        font.draw(spriteBatch, abilityText,
-                  CENTER_X - glyphLayout.width / 2f, abilityY);
+        // Wrap the ability tags to the card width and centre the block vertically so a long
+        // list flows onto a second line instead of overrunning the card edges.
+        font.getData().setScale(FS_ABILITY);
+        temporaryColor.set(cachedTierRed, cachedTierGreen, cachedTierBlue, 1f);
+        font.setColor(temporaryColor);
+        float wrapWidth = CARD_W - 2f * INNER_PAD;
+        glyphLayout.setText(font, cachedAbilityStrip, temporaryColor, wrapWidth, Align.center, true);
+        float baseline = bandCenter + glyphLayout.height / 2f;
+        font.draw(spriteBatch, glyphLayout, CARD_X + INNER_PAD, baseline);
     }
 
     private void drawActionZone() {
         if (singleButtonMode()) {
-            // Single full-width button: REPLACE when the type is already held, otherwise EQUIP.
             String actionLabel;
             if (startRoomMode) {
                 actionLabel = "CHOOSE THIS WEAPON";
             } else if (meleeMode) {
                 actionLabel = "EQUIP  →  MELEE";
             } else if (alreadyHeld) {
-                actionLabel = "SWAP  →  REPLACE HELD";
+                actionLabel = "REPLACE HELD WEAPON";
             } else {
                 actionLabel = "EQUIP  →  SLOT " + (freeSlotIndex + 1);
             }
-            glyphLayout.setText(font, actionLabel);
-            font.setColor(alreadyHeld ? AMBER_COLOR : GREEN_COLOR);
-            font.draw(spriteBatch, actionLabel,
-                      EQUIP_BTN_X + (EQUIP_BTN_W - glyphLayout.width) / 2f,
-                      EQUIP_BTN_Y + (EQUIP_BTN_H + glyphLayout.height) / 2f);
+            drawInRect(actionLabel, EQUIP_BTN_X, EQUIP_BTN_Y, EQUIP_BTN_W, EQUIP_BTN_H,
+                       FS_BUTTON, alreadyHeld ? AMBER_COLOR : WHITE_COLOR);
         } else {
             drawSlotRowsText();
         }
@@ -641,71 +639,80 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
 
     private void drawSlotRowsText() {
         if (loadout == null) return;
-        float rowTop = SLOT_ROW_TOP;
-        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
-            float rowBottom = rowTop - SLOT_ROW_H;
+        for (int rowPosition = 0; rowPosition < displayedSlotCount; rowPosition++) {
+            int    slotIndex  = displayedSlotIndices[rowPosition];
             Weapon slotWeapon = loadout.getSlot(slotIndex);
-            if (slotWeapon != null) {
-                float nameY  = rowBottom + SLOT_ROW_H - 14f;
-                float statsY = nameY - 20f;
+            if (slotWeapon == null) continue;
 
-                // Slot index + weapon name
-                textBuilder.setLength(0);
-                textBuilder.append(slotIndex == activeSlotIndex ? "* " : "  ");
-                textBuilder.append("SLOT ").append(slotIndex + 1).append("  ");
-                textBuilder.append(slotWeapon.getDisplayName().toUpperCase());
-                textBuilder.append("  Lv ").append(slotWeapon.getWeaponLevel());
-                WeaponTier slotTier = slotWeapon.getTier();
-                if (slotTier != null) {
-                    temporaryColor.set(slotTier.colorRed, slotTier.colorGreen, slotTier.colorBlue, 1f);
-                    font.setColor(temporaryColor);
-                } else {
-                    font.setColor(AMBER_COLOR);
-                }
-                font.draw(spriteBatch, textBuilder, SLOT_ROW_X + 12f, nameY);
+            float rowTop    = slotRowTop(rowPosition);
+            float rowBottom = rowTop - SLOT_ROW_H;
+            float nameBaseline  = rowBottom + SLOT_ROW_H - 24f;
+            float statsBaseline = rowBottom + 22f;
 
-                // Compact stats with comparison tinting
-                int slotDmg   = slotWeapon.getEffectiveDamage();
-                int slotRange = slotWeapon.getEffectiveRange();
-                int slotClip  = slotWeapon.getEffectiveClipSize();
-                textBuilder.setLength(0);
-                textBuilder.append("DMG ").append(slotDmg)
-                           .append("   RNG ").append(slotRange)
-                           .append("   CLIP ").append(slotClip);
-                font.setColor(DIM_COLOR);
-                font.draw(spriteBatch, textBuilder, SLOT_ROW_X + 12f, statsY);
-
-                // SWAP button label
-                float swapBtnX = SLOT_ROW_X + SLOT_ROW_W - SWAP_BTN_W;
-                float swapBtnY = rowBottom + (SLOT_ROW_H - SWAP_BTN_H) / 2f;
-                String swapLabel = "SWAP →";
-                glyphLayout.setText(font, swapLabel);
-                font.setColor(AMBER_COLOR);
-                font.draw(spriteBatch, swapLabel,
-                          swapBtnX + (SWAP_BTN_W - glyphLayout.width) / 2f,
-                          swapBtnY + (SWAP_BTN_H + glyphLayout.height) / 2f);
+            // Slot label + weapon name (tier-colored).
+            textBuilder.setLength(0);
+            if (slotIndex == activeSlotIndex) textBuilder.append("[ACTIVE] ");
+            textBuilder.append("SLOT ").append(slotIndex + 1).append("   ");
+            textBuilder.append(slotWeapon.getDisplayName().toUpperCase());
+            textBuilder.append("  LV ").append(slotWeapon.getWeaponLevel());
+            WeaponTier slotTier = slotWeapon.getTier();
+            if (slotTier != null) {
+                temporaryColor.set(slotTier.colorRed, slotTier.colorGreen, slotTier.colorBlue, 1f);
+            } else {
+                temporaryColor.set(AMBER_COLOR);
             }
-            rowTop = rowBottom - SLOT_ROW_GAP;
+            drawAligned(textBuilder, SLOT_ROW_X + 18f, nameBaseline, FS_SLOT_NAME, temporaryColor, Align.left);
+
+            // Compact stat line.
+            textBuilder.setLength(0);
+            textBuilder.append("DMG ").append(slotWeapon.getEffectiveDamage())
+                       .append("     RNG ").append(slotWeapon.getEffectiveRange())
+                       .append("     CLIP ").append(slotWeapon.getEffectiveClipSize());
+            drawAligned(textBuilder, SLOT_ROW_X + 18f, statsBaseline, FS_SLOT_STAT, DIM_COLOR, Align.left);
+
+            // SWAP button label.
+            float swapBtnX = SLOT_ROW_X + SLOT_ROW_W - SWAP_BTN_PAD - SWAP_BTN_W;
+            float swapBtnY = rowBottom + (SLOT_ROW_H - SWAP_BTN_H) / 2f;
+            drawInRect("SWAP", swapBtnX, swapBtnY, SWAP_BTN_W, SWAP_BTN_H, FS_SWAP, AMBER_COLOR);
         }
     }
 
     private void drawFooter() {
-        // CLOSE
-        String closeLabel = "CLOSE";
-        glyphLayout.setText(font, closeLabel);
-        font.setColor(DIM_COLOR);
-        font.draw(spriteBatch, closeLabel,
-                  CLOSE_BTN_X + (CLOSE_BTN_W - glyphLayout.width) / 2f,
-                  CLOSE_BTN_Y + (CLOSE_BTN_H + glyphLayout.height) / 2f);
-
-        // CONVERT AMMO
+        drawInRect("CLOSE", CLOSE_BTN_X, CLOSE_BTN_Y, CLOSE_BTN_W, CLOSE_BTN_H, FS_FOOTER, WHITE_COLOR);
         if (hasConvert) {
-            glyphLayout.setText(font, cachedConvertLabel);
-            font.setColor(AMBER_COLOR.r, AMBER_COLOR.g, AMBER_COLOR.b, 0.8f);
-            font.draw(spriteBatch, cachedConvertLabel,
-                      CONV_BTN_X + (CONV_BTN_W - glyphLayout.width) / 2f,
-                      CONV_BTN_Y + (CONV_BTN_H + glyphLayout.height) / 2f);
+            temporaryColor.set(AMBER_COLOR.r, AMBER_COLOR.g, AMBER_COLOR.b, 0.95f);
+            drawInRect(cachedConvertLabel, CONV_BTN_X, CONV_BTN_Y, CONV_BTN_W, CONV_BTN_H, FS_FOOTER, temporaryColor);
         }
+    }
+
+    // ── Text helpers — measure then place so elements never overlap ────────────
+
+    /** Draws text with its baseline at {@code baselineY}, aligned left/center/right against {@code anchorX}. */
+    private void drawAligned(CharSequence text, float anchorX, float baselineY,
+                             float scale, Color color, int align) {
+        font.getData().setScale(scale);
+        font.setColor(color);
+        glyphLayout.setText(font, text);
+        float drawX = anchorX;
+        if (align == Align.center) drawX = anchorX - glyphLayout.width / 2f;
+        else if (align == Align.right) drawX = anchorX - glyphLayout.width;
+        font.draw(spriteBatch, glyphLayout, drawX, baselineY);
+    }
+
+    /** Draws text horizontally centred on {@code centerX} and vertically centred on {@code centerY}. */
+    private void drawCentered(CharSequence text, float centerX, float centerY, float scale, Color color) {
+        font.getData().setScale(scale);
+        font.setColor(color);
+        glyphLayout.setText(font, text);
+        font.draw(spriteBatch, glyphLayout,
+                  centerX - glyphLayout.width / 2f,
+                  centerY + glyphLayout.height / 2f);
+    }
+
+    /** Draws text centred inside the given rectangle (used for buttons). */
+    private void drawInRect(CharSequence text, float rectX, float rectY, float rectW, float rectH,
+                            float scale, Color color) {
+        drawCentered(text, rectX + rectW / 2f, rectY + rectH / 2f, scale, color);
     }
 
     // ── Disposable ────────────────────────────────────────────────────────────
@@ -751,18 +758,24 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         }
     }
 
-    private void buildAbilityCache(WeaponRoll groundRoll) {
-        cachedAbilityCount = 0;
-        if (groundRoll == null || groundRoll.abilities == null) return;
+    private void buildAbilityStrip(WeaponRoll groundRoll) {
+        textBuilder.setLength(0);
+        if (groundRoll == null || groundRoll.abilities == null) {
+            cachedAbilityStrip = "";
+            return;
+        }
+        int shown = 0;
         for (int abilityIndex = 0;
-             abilityIndex < groundRoll.abilities.length && cachedAbilityCount < MAX_ABILITY_LINES;
+             abilityIndex < groundRoll.abilities.length && shown < MAX_ABILITY_LINES;
              abilityIndex++) {
             AbilityInstance inst = groundRoll.abilities[abilityIndex];
             if (inst == null) continue;
-            cachedAbilityLines[cachedAbilityCount]     = formatAbilityShort(inst);
-            cachedAbilityLegendary[cachedAbilityCount] = inst.ability.legendaryOnly;
-            cachedAbilityCount++;
+            if (shown > 0) textBuilder.append("      ");
+            if (inst.ability.legendaryOnly) textBuilder.append("* ");
+            textBuilder.append(formatAbilityShort(inst));
+            shown++;
         }
+        cachedAbilityStrip = textBuilder.toString();
     }
 
     private static String formatAbilityShort(AbilityInstance inst) {
@@ -807,8 +820,6 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private static int findFreeSlot(Loadout loadoutRef) {
         if (loadoutRef == null) return 0;
         for (int slotIndex = 0; slotIndex < loadoutRef.getSlotCount(); slotIndex++) {
-            // Skip locked slots — tryEquip() never assigns there, so offering one as the
-            // "free" target would produce an EQUIP button that silently fails.
             if (loadoutRef.isSlotLocked(slotIndex)) continue;
             if (loadoutRef.getSlot(slotIndex) == null) return slotIndex;
         }
