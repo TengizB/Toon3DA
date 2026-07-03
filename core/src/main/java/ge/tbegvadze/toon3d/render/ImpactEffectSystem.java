@@ -56,6 +56,15 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     // Kill flash — single accumulator
     private float killFlashTimeRemaining = 0f;
 
+    // Wall bump — directional view lurch on a blocked move (single accumulator).
+    // Contributes to the same view offset the screen shake uses, so World needs no new render path.
+    private float bumpTimeRemaining = 0f;
+    private float bumpDuration      = 0f;
+    private float bumpDirectionX    = 0f;
+    private float bumpDirectionY    = 0f;
+    private float bumpOffsetX       = 0f;
+    private float bumpOffsetY       = 0f;
+
     // TAG edge tick — single colored bottom-edge bar; replaces every frame on new proc
     private float tagEdgeTickTimeRemaining = 0f;
     private float tagEdgeTickDuration      = 0f;
@@ -309,6 +318,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
 
     public void update(float deltaTime) {
         updateShake(deltaTime);
+        updateBump(deltaTime);
         updateKillFlash(deltaTime);
         updateAbilityFlash(deltaTime);
         updateTagEdgeTick(deltaTime);
@@ -334,6 +344,23 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         float angleRadians  = random.nextFloat() * MathUtils_PI2;
         shakeOffsetX = (float) Math.cos(angleRadians) * magnitude;
         shakeOffsetY = (float) Math.sin(angleRadians) * magnitude;
+    }
+
+    private void updateBump(float deltaTime) {
+        if (bumpTimeRemaining <= 0f) {
+            bumpOffsetX = 0f;
+            bumpOffsetY = 0f;
+            return;
+        }
+        bumpTimeRemaining -= deltaTime;
+        if (bumpTimeRemaining < 0f) bumpTimeRemaining = 0f;
+
+        // progress runs 0 → 1 over the bump; envelope lurches toward the wall then springs back.
+        float progress   = bumpDuration > 0f ? 1f - bumpTimeRemaining / bumpDuration : 1f;
+        float envelope   = GameMath.bumpNudgeEnvelope(progress);
+        float magnitude  = EffectConstants.BUMP_NUDGE_MAGNITUDE_PIXELS * envelope;
+        bumpOffsetX = bumpDirectionX * magnitude;
+        bumpOffsetY = bumpDirectionY * magnitude;
     }
 
     private void updateKillFlash(float deltaTime) {
@@ -445,8 +472,25 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     // Accessors for World (shake) and ImpactEffectRenderer (drawing)
     // -------------------------------------------------------------------------
 
-    public float getShakeOffsetX() { return shakeOffsetX; }
-    public float getShakeOffsetY() { return shakeOffsetY; }
+    // Bump folds into the same view offset the shake uses, so World applies both with one translate.
+    public float getShakeOffsetX() { return shakeOffsetX + bumpOffsetX; }
+    public float getShakeOffsetY() { return shakeOffsetY + bumpOffsetY; }
+
+    /**
+     * Triggers a directional view lurch toward a blocked move (wall / solid prop / occupied tile).
+     * The direction is the attempted move vector (need not be normalized — cardinal steps are unit).
+     * Last-writer-wins; a fresh bump replaces any in-flight one. Purely cosmetic — no turn is consumed.
+     * Also fires a dull gray "thud" bottom-edge tick so the blocked step reads on a phone with no key feel.
+     */
+    public void triggerBump(float directionX, float directionY) {
+        bumpDirectionX    = directionX;
+        bumpDirectionY    = directionY;
+        bumpDuration      = EffectConstants.BUMP_NUDGE_DURATION_SECONDS;
+        bumpTimeRemaining = EffectConstants.BUMP_NUDGE_DURATION_SECONDS;
+        triggerTagEdgeTick(EffectConstants.BUMP_THUD_TICK_R,
+                EffectConstants.BUMP_THUD_TICK_G,
+                EffectConstants.BUMP_THUD_TICK_B);
+    }
 
     /*
      * Formula: killFlashAlpha

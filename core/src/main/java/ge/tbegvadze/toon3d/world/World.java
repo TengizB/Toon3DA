@@ -524,6 +524,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setTickEventBus(tickEventBus);
         playerController.setTransitionListener(this);
         playerController.setEventTextSystem(eventTextSystem);
+        playerController.setMoveBlockedListener(impactEffectSystem::triggerBump);
         playerController.setItemInventory(itemInventory);
         playerController.setLoadout(inventory.getLoadout());
         playerController.setPlayerStats(playerStats);

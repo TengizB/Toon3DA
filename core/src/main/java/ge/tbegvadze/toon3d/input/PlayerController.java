@@ -42,6 +42,7 @@ public class PlayerController {
     private LevelTransitionListener transitionListener                = null;
     private TouchInputState         touchInputState                   = null;
     private EventTextSystem         eventTextSystem                   = null;
+    private MoveBlockedListener     moveBlockedListener               = null;
     private Runnable                weaponSwitchCallback              = null;
     private Runnable                inventoryToggleCallback           = null;
     private Runnable                inspectWeaponCallback             = null;
@@ -91,6 +92,11 @@ public class PlayerController {
 
     public void setEventTextSystem(EventTextSystem system) {
         this.eventTextSystem = system;
+    }
+
+    /** Wires the cosmetic "wall bump" feedback fired when a step is rejected by a solid/occupied tile. */
+    public void setMoveBlockedListener(MoveBlockedListener listener) {
+        this.moveBlockedListener = listener;
     }
 
     public void setTouchInputState(TouchInputState state) {
@@ -571,14 +577,27 @@ public class PlayerController {
             // OPEN or CLOSING: fall through to normal move below.
         }
 
-        if (level.isBlockedAt(targetTileColumn, targetTileRow, doorManager)) return;
-        if (enemyManager != null && enemyManager.isTileOccupiedByEnemy(targetTileColumn, targetTileRow)) return;
+        if (level.isBlockedAt(targetTileColumn, targetTileRow, doorManager)) {
+            notifyMoveBlocked(moveDirectionX, moveDirectionY);
+            return;
+        }
+        if (enemyManager != null && enemyManager.isTileOccupiedByEnemy(targetTileColumn, targetTileRow)) {
+            notifyMoveBlocked(moveDirectionX, moveDirectionY);
+            return;
+        }
         sourcePositionX = player.positionX;
         sourcePositionY = player.positionY;
         targetPositionX = newPositionX;
         targetPositionY = newPositionY;
         actionState     = ActionState.MOVING;
         actionProgress  = 0f;
+    }
+
+    /** Fires the cosmetic wall-bump feedback for a rejected step. No turn is consumed. */
+    private void notifyMoveBlocked(float moveDirectionX, float moveDirectionY) {
+        if (moveBlockedListener != null) {
+            moveBlockedListener.onMoveBlocked(moveDirectionX, moveDirectionY);
+        }
     }
 
     private void trySwitchWeapon() {

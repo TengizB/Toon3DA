@@ -61,6 +61,36 @@ public final class EffectConstants {
     public static final float LEVEL_UP_VIGNETTE_FADE_SECONDS = 0.8f;
     public static final float LEVEL_UP_VIGNETTE_MAX_ALPHA    = 0.55f;
 
+    // ─── Low-HP heartbeat (1A) — persistent red "breathing" edges + tunnel-vision darkening ───
+    // Below WOUNDED the screen begins to breathe red; at/below CRITICAL the breathing accelerates
+    // and the edges darken toward a tunnel-vision look. Both scale continuously with how low HP is.
+    public static final float LOW_HP_WOUNDED_FRACTION       = 0.50f;  // heartbeat begins at/below this
+    public static final float LOW_HP_CRITICAL_FRACTION      = 0.25f;  // full-severity acceleration point
+    public static final float LOW_HP_PERIOD_WOUNDED_SECONDS  = 1.10f; // heartbeat period at WOUNDED
+    public static final float LOW_HP_PERIOD_CRITICAL_SECONDS = 0.70f; // faster period at/below CRITICAL
+    public static final float LOW_HP_THUMP_WIDTH_SECONDS     = 0.18f; // width of each lub/dub bump
+    public static final float LOW_HP_ECHO_GAP_SECONDS        = 0.20f; // gap from lub to dub
+    public static final float LOW_HP_ECHO_STRENGTH           = 0.55f; // dub amplitude vs lub
+    public static final float LOW_HP_BREATH_MAX_ALPHA        = 0.42f; // peak red breathing edge alpha
+    public static final float LOW_HP_DARKEN_MAX_ALPHA        = 0.40f; // peak tunnel-vision edge darkening
+    public static final float LOW_HP_DARKEN_MIN_SCALE        = 0.40f; // darkening scale at WOUNDED (grows to 1 at near-death)
+    public static final float LOW_HP_FADE_SECONDS            = 0.40f; // smoothing when entering/leaving low-HP
+    public static final float LOW_HP_RED   = 0.80f;
+    public static final float LOW_HP_GREEN = 0.00f;
+    public static final float LOW_HP_BLUE  = 0.00f;
+    // Tunnel-vision darkening color — near-black edges (no shader; radial multiply quad)
+    public static final float LOW_HP_DARKEN_R = 0.04f;
+    public static final float LOW_HP_DARKEN_G = 0.02f;
+    public static final float LOW_HP_DARKEN_B = 0.02f;
+
+    // ─── Wall bump / blocked move (1E) — directional view lurch so a no-op reads ───
+    public static final float BUMP_NUDGE_MAGNITUDE_PIXELS = 7f;    // peak view offset toward the wall
+    public static final float BUMP_NUDGE_DURATION_SECONDS = 0.15f; // lurch-and-settle time
+    // Dull gray "thud" bottom-edge tick fired with the bump (reuses the TAG edge-tick channel)
+    public static final float BUMP_THUD_TICK_R = 0.38f;
+    public static final float BUMP_THUD_TICK_G = 0.34f;
+    public static final float BUMP_THUD_TICK_B = 0.30f;
+
     // Status effects — gameplay constants (balance numbers live in GameBalance)
     public static final int   BURN_DAMAGE_PER_TURN           = 4;
     public static final int   BURN_DURATION_MIN              = 3;

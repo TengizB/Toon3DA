@@ -1,8 +1,23 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Visual
 TITLE: Combat & Event Visual Feedback — Under-Served Events
 CREATED: 2026-07-03
 ---
+
+IMPLEMENTED SO FAR (2026-07-03):
+  1A Low-HP heartbeat + tunnel-vision darkening — StatusEffectVignetteRenderer gained a
+     persistent low-HP layer: red lub-dub "breathing" edges (period accelerates 1.1s→0.7s as
+     HP drops from 50%→25%) plus near-black radial edge darkening that deepens toward death.
+     Uses a new tintable WHITE vignette texture (the existing status texture is red-only).
+     Math: GameMath.heartbeatPulse() + halfSineBump(). Constants: EffectConstants LOW_HP_* block.
+  1E Wall-bump nudge — a blocked step (solid tile / solid prop / enemy-occupied tile) now fires
+     ImpactEffectSystem.triggerBump(direction): a directional view lurch that springs back over
+     0.15s (folded into the existing camera-shake offset, no new render path) + a dull gray "thud"
+     bottom-edge tick. PlayerController.notifyMoveBlocked → World wires the listener. Consumes NO turn.
+     Math: GameMath.bumpNudgeEnvelope(). Constants: EffectConstants BUMP_* block.
+
+  STILL TODO: 1B directional damage, 1C armor absorb/shatter, 1D empty/low ammo, and all of
+     Groups 2 (enemy state), 3 (world & items), 4 (actions). See sections below.
 
 ================================================================================
 COMBAT & GAME-EVENT VISUAL FEEDBACK — FILLING THE GAPS

@@ -3053,4 +3053,63 @@ public final class GameMath {
         float depthFactor = 1f + depthScale * (clampedDepth - 1);
         return (int) Math.round(basePrice * depthFactor * rarityMultiplier);
     }
+
+    /*
+     * Formula: heartbeatPulse — a two-thump (lub-dub) cardiac rhythm envelope in [0, 1]
+     * Derivation / explanation:
+     *   The low-HP breathing vignette pulses like a heartbeat: a strong "lub" followed a
+     *   short gap later by a weaker "dub", then a rest until the next period.
+     *   phase = elapsedSeconds mod periodSeconds        // position within one heartbeat cycle
+     *   Each thump is a raised half-sine bump of width thumpWidthSeconds:
+     *     bump(offset) = (0 <= offset < width) ? sin(pi * offset / width) : 0
+     *   The strong thump is centred at phase 0; the echo ("dub") begins echoGapSeconds later
+     *   and is scaled by echoStrength (0..1). We take the max of the two so the envelope
+     *   never sums past 1 where the tails of lub and dub overlap.
+     * Edge cases:
+     *   - periodSeconds <= 0 → return 0 (no rhythm; avoids modulo-by-zero).
+     *   - thumpWidthSeconds <= 0 → thumps have no width → return 0.
+     *   - echoStrength is not clamped here; callers pass 0..1.
+     *   - Result is clamped to [0, 1] for safety against float error at the seams.
+     */
+    public static float heartbeatPulse(float elapsedSeconds, float periodSeconds,
+                                        float thumpWidthSeconds, float echoGapSeconds,
+                                        float echoStrength) {
+        if (periodSeconds <= 0f || thumpWidthSeconds <= 0f) return 0f;
+        float phase = elapsedSeconds - periodSeconds * (float) Math.floor(elapsedSeconds / periodSeconds);
+        float strong = halfSineBump(phase, thumpWidthSeconds);
+        float echo   = echoStrength * halfSineBump(phase - echoGapSeconds, thumpWidthSeconds);
+        float value  = Math.max(strong, echo);
+        return MathUtils.clamp(value, 0f, 1f);
+    }
+
+    /*
+     * Formula: halfSineBump — a single smooth 0→1→0 bump of the given width
+     * Derivation / explanation:
+     *   For an offset in [0, width) the bump is sin(pi * offset / width), which rises from 0
+     *   at offset 0 to 1 at the midpoint and back to 0 at width. Outside [0, width) it is 0.
+     *   Used as the per-thump shape of heartbeatPulse.
+     * Edge cases:
+     *   - width <= 0 → return 0 (degenerate, avoids divide-by-zero).
+     *   - offset < 0 or offset >= width → return 0 (the bump is inactive).
+     */
+    public static float halfSineBump(float offsetSeconds, float widthSeconds) {
+        if (widthSeconds <= 0f) return 0f;
+        if (offsetSeconds < 0f || offsetSeconds >= widthSeconds) return 0f;
+        return (float) Math.sin(Math.PI * offsetSeconds / widthSeconds);
+    }
+
+    /*
+     * Formula: bumpNudgeEnvelope — a lurch-and-spring-back displacement factor in [0, 1]
+     * Derivation / explanation:
+     *   When a move is blocked (a wall bump), the view lurches toward the blocked direction
+     *   and springs back. progress runs 0→1 over the bump duration; the displacement follows
+     *   sin(pi * progress): 0 at the start, peaks at progress 0.5 (fully lurched into the wall),
+     *   and returns to 0 at progress 1 (settled). Multiply by the peak magnitude at the call site.
+     * Edge cases:
+     *   - progress is clamped to [0, 1] so a caller passing a slightly-over value still settles at 0.
+     */
+    public static float bumpNudgeEnvelope(float progress) {
+        float clamped = MathUtils.clamp(progress, 0f, 1f);
+        return (float) Math.sin(Math.PI * clamped);
+    }
 }

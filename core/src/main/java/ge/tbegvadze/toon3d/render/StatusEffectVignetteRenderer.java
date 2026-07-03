@@ -10,6 +10,7 @@ import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
+import ge.tbegvadze.toon3d.util.GameMath;
 
 /**
  * Draws colored screen-edge vignettes to communicate which status effects are
@@ -43,13 +44,23 @@ public final class StatusEffectVignetteRenderer implements Disposable {
 
     private final SpriteBatch batch;
     private final Texture     vignetteTexture;
+    // White (tintable-to-any-hue) radial gradient used by the low-HP layers; the red
+    // vignetteTexture above can only draw red, so low-HP darkening needs a neutral texture.
+    private final Texture     lowHpVignetteTexture;
 
     private final float[] currentIntensity = new float[TYPE_COUNT];
     private final float[] targetIntensity  = new float[TYPE_COUNT];
 
+    // ── Low-HP heartbeat state (1A) — a persistent condition re-evaluated from HP each frame ──
+    private float   lowHpPresence     = 0f;  // smoothed 0..1 presence of the low-HP state
+    private float   lowHpCriticalT    = 0f;  // 0 at the WOUNDED fraction, 1 at/below the CRITICAL fraction
+    private float   lowHpClockSeconds = 0f;  // wall-clock accumulator driving the heartbeat phase
+    private boolean lowHpWasActive    = false;
+
     public StatusEffectVignetteRenderer() {
-        batch           = new SpriteBatch();
-        vignetteTexture = buildVignetteTexture();
+        batch                = new SpriteBatch();
+        vignetteTexture      = buildVignetteTexture();
+        lowHpVignetteTexture = buildWhiteVignetteTexture();
     }
 
     /**
@@ -78,17 +89,60 @@ public final class StatusEffectVignetteRenderer implements Disposable {
                         currentIntensity[typeIndex] - deltaTime / EffectConstants.STATUS_VIGNETTE_FADE_OUT_SECONDS);
             }
         }
+
+        updateLowHp(deltaTime, player);
+    }
+
+    /**
+     * Recomputes the persistent low-HP heartbeat state from the player's current HP fraction.
+     * Below LOW_HP_WOUNDED_FRACTION the screen breathes red and the edges darken; both scale
+     * continuously toward LOW_HP_CRITICAL_FRACTION (and below) via {@code lowHpCriticalT}.
+     * A short fade smooths entering/leaving the state so nothing snaps when HP crosses a threshold
+     * or a heal lifts the player back out of danger. Dropping fresh into low-HP restarts the
+     * rhythm so the first heartbeat lands immediately as a strong "lub".
+     */
+    private void updateLowHp(float deltaTime, Player player) {
+        lowHpClockSeconds += deltaTime;
+
+        float healthFraction = player.getHealthFraction();
+        boolean lowActive = player.isAlive()
+                && healthFraction <= EffectConstants.LOW_HP_WOUNDED_FRACTION;
+        if (lowActive && !lowHpWasActive) {
+            lowHpClockSeconds = 0f;
+        }
+        lowHpWasActive = lowActive;
+
+        float presenceTarget = lowActive ? 1f : 0f;
+        if (lowHpPresence < presenceTarget) {
+            lowHpPresence = Math.min(presenceTarget,
+                    lowHpPresence + deltaTime / EffectConstants.LOW_HP_FADE_SECONDS);
+        } else if (lowHpPresence > presenceTarget) {
+            lowHpPresence = Math.max(presenceTarget,
+                    lowHpPresence - deltaTime / EffectConstants.LOW_HP_FADE_SECONDS);
+        }
+
+        float woundedToCritical = EffectConstants.LOW_HP_WOUNDED_FRACTION
+                - EffectConstants.LOW_HP_CRITICAL_FRACTION;
+        float rawCritical = woundedToCritical <= 0f ? 1f
+                : (EffectConstants.LOW_HP_WOUNDED_FRACTION - healthFraction) / woundedToCritical;
+        lowHpCriticalT = Math.max(0f, Math.min(1f, rawCritical));
     }
 
     public void render(OrthographicCamera camera) {
-        boolean anyVisible = false;
+        boolean lowHpVisible = lowHpPresence > 0.001f;
+        boolean anyStatus = false;
         for (int typeIndex = 0; typeIndex < TYPE_COUNT; typeIndex++) {
-            if (currentIntensity[typeIndex] > 0.001f) { anyVisible = true; break; }
+            if (currentIntensity[typeIndex] > 0.001f) { anyStatus = true; break; }
         }
-        if (!anyVisible) return;
+        if (!lowHpVisible && !anyStatus) return;
 
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
+
+        // Low-HP layers draw FIRST so status tints (burn/poison/etc.) still read on top of them.
+        if (lowHpVisible) {
+            renderLowHp();
+        }
 
         for (int typeIndex = 0; typeIndex < TYPE_COUNT; typeIndex++) {
             float intensity = currentIntensity[typeIndex];
@@ -107,10 +161,39 @@ public final class StatusEffectVignetteRenderer implements Disposable {
         batch.end();
     }
 
+    /**
+     * Draws the two low-HP layers inside an already-open batch:
+     *   1. Tunnel-vision darkening — near-black radial edges that deepen as HP nears zero.
+     *   2. Red "breathing" — a heartbeat-driven red edge pulse whose period shortens with severity.
+     * Both scale with the smoothed presence so they fade in/out rather than snapping.
+     */
+    private void renderLowHp() {
+        // 1) Darkening — steady tunnel vision, deepening from LOW_HP_DARKEN_MIN_SCALE up to full.
+        float darkenScale = lowHpPresence
+                * GameMath.lerp(EffectConstants.LOW_HP_DARKEN_MIN_SCALE, 1f, lowHpCriticalT);
+        float darkenAlpha = darkenScale * EffectConstants.LOW_HP_DARKEN_MAX_ALPHA;
+        batch.setColor(EffectConstants.LOW_HP_DARKEN_R, EffectConstants.LOW_HP_DARKEN_G,
+                EffectConstants.LOW_HP_DARKEN_B, darkenAlpha);
+        batch.draw(lowHpVignetteTexture, 0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
+
+        // 2) Breathing — heartbeat envelope; faster (shorter period) the closer to death.
+        float period = GameMath.lerp(EffectConstants.LOW_HP_PERIOD_WOUNDED_SECONDS,
+                EffectConstants.LOW_HP_PERIOD_CRITICAL_SECONDS, lowHpCriticalT);
+        float beat = GameMath.heartbeatPulse(lowHpClockSeconds, period,
+                EffectConstants.LOW_HP_THUMP_WIDTH_SECONDS,
+                EffectConstants.LOW_HP_ECHO_GAP_SECONDS,
+                EffectConstants.LOW_HP_ECHO_STRENGTH);
+        float breathAlpha = lowHpPresence * beat * EffectConstants.LOW_HP_BREATH_MAX_ALPHA;
+        batch.setColor(EffectConstants.LOW_HP_RED, EffectConstants.LOW_HP_GREEN,
+                EffectConstants.LOW_HP_BLUE, breathAlpha);
+        batch.draw(lowHpVignetteTexture, 0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
+    }
+
     @Override
     public void dispose() {
         batch.dispose();
         vignetteTexture.dispose();
+        lowHpVignetteTexture.dispose();
     }
 
     /*
@@ -131,6 +214,32 @@ public final class StatusEffectVignetteRenderer implements Disposable {
                 float edgeAlpha      = Math.min(1f, distanceSquared);
                 int   alphaInt       = (int) (edgeAlpha * 255f);
                 pixmap.drawPixel(pixelX, pixelY, (255 << 24) | (0 << 16) | (0 << 8) | alphaInt);
+            }
+        }
+        Texture texture = new Texture(pixmap);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /*
+     * Formula: radial vignette gradient (white base)
+     * Derivation: identical falloff to buildVignetteTexture, but the RGB is white (255,255,255)
+     *             so SpriteBatch.setColor() can tint it to ANY hue. The red-based texture above
+     *             multiplies away non-red channels; the low-HP darkening needs a near-black tint,
+     *             so it must draw against this neutral white gradient instead.
+     * Edge cases: corners have d² > 1, clamped to 1 (fully opaque at extreme corners).
+     */
+    private static Texture buildWhiteVignetteTexture() {
+        Pixmap pixmap    = new Pixmap(GRADIENT_SIZE, GRADIENT_SIZE, Pixmap.Format.RGBA8888);
+        float halfSize   = GRADIENT_SIZE / 2f;
+        for (int pixelY = 0; pixelY < GRADIENT_SIZE; pixelY++) {
+            for (int pixelX = 0; pixelX < GRADIENT_SIZE; pixelX++) {
+                float normalX         = (pixelX - halfSize) / halfSize;
+                float normalY         = (pixelY - halfSize) / halfSize;
+                float distanceSquared = normalX * normalX + normalY * normalY;
+                float edgeAlpha       = Math.min(1f, distanceSquared);
+                int   alphaInt        = (int) (edgeAlpha * 255f);
+                pixmap.drawPixel(pixelX, pixelY, (255 << 24) | (255 << 16) | (255 << 8) | alphaInt);
             }
         }
         Texture texture = new Texture(pixmap);
