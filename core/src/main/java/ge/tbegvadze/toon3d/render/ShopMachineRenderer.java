@@ -349,10 +349,12 @@ public class ShopMachineRenderer implements Renderable, Disposable {
     // =========================================================================
 
     /**
-     * Bakes the detailed, non-moving UAC Fabricator cabinet once: a brushed-steel body with a cool
-     * rim highlight, a dark cyan-glass product window with faint stock silhouettes, a UAC-orange
-     * brand plate and hazard stripe, a recessed status-light housing, a dispenser tray, low grille
-     * vents, panel seams and corner rivets. Portrait, Pixmap y-down (row 0 = visual top).
+     * Bakes the detailed, non-moving UAC Fabricator kiosk once. Redesigned to stand apart from the
+     * grey stone/metal environment and read as clearly interactable: a DARK blue-steel chassis wrapped
+     * in a bright EMISSIVE AMBER FRAME (a lit tube border), a large cyan-glass product display with
+     * stock silhouettes, a UAC brand plate + hazard stripe, an ILLUMINATED KEYPAD with a big green
+     * "vend" button (the "operate me" cue), a recessed status-light housing, a cyan-lit dispenser tray,
+     * grille vents and corner rivets. Portrait, Pixmap y-down (row 0 = visual top).
      */
     private static Texture bakeBodyTexture() {
         final int width  = SHOP_SPRITE_TEXTURE_WIDTH;
@@ -361,100 +363,130 @@ public class ShopMachineRenderer implements Renderable, Disposable {
         pixmap.setColor(0f, 0f, 0f, 0f);
         pixmap.fill();
 
-        final int bodyLeft = 30, bodyRight = 226, bodyTop = 24, bodyBottom = 500;
+        // The glowing amber frame wraps a dark chassis recessed inside it. Frame first, body within.
+        final int frameLeft = 24, frameRight = 232, frameTop = 18, frameBottom = 504;
+        final int frameInset = 11;
+        final int bodyLeft  = frameLeft + frameInset,  bodyRight  = frameRight - frameInset;
+        final int bodyTop   = frameTop  + frameInset,  bodyBottom = frameBottom - frameInset;
 
-        // ── Chassis: dark outline, brushed-steel body, lighter top cap, darker base plinth ──
-        pixmap.setColor(0.08f, 0.09f, 0.11f, 1f);
+        // ── Drop shadow so the cabinet visibly detaches from the wall behind it ──
+        pixmap.setColor(0.03f, 0.03f, 0.05f, 1f);
+        pixmap.fillRectangle(frameLeft - 6, frameTop - 6, (frameRight - frameLeft) + 12, (frameBottom - frameTop) + 12);
+
+        // ── Emissive amber frame — the primary "interactable / lit" cue; two tones read as a glow tube ──
+        pixmap.setColor(0.78f, 0.42f, 0.10f, 1f);                       // deep amber base
+        pixmap.fillRectangle(frameLeft, frameTop, frameRight - frameLeft, frameBottom - frameTop);
+        pixmap.setColor(1.00f, 0.70f, 0.24f, 1f);                       // bright amber core band
+        pixmap.fillRectangle(frameLeft + 3, frameTop + 3, (frameRight - frameLeft) - 6, (frameBottom - frameTop) - 6);
+        pixmap.setColor(1.00f, 0.86f, 0.48f, 1f);                       // hot highlight along the frame top
+        pixmap.fillRectangle(frameLeft + 3, frameTop + 3, (frameRight - frameLeft) - 6, 3);
+
+        // ── Dark blue-steel chassis recessed inside the frame (contrasts hard with grey walls) ──
+        pixmap.setColor(0.05f, 0.05f, 0.07f, 1f);                       // socket shadow under the frame
         pixmap.fillRectangle(bodyLeft - 3, bodyTop - 3, (bodyRight - bodyLeft) + 6, (bodyBottom - bodyTop) + 6);
-        pixmap.setColor(0.42f, 0.44f, 0.47f, 1f);
+        pixmap.setColor(0.13f, 0.14f, 0.18f, 1f);                       // body
         pixmap.fillRectangle(bodyLeft, bodyTop, bodyRight - bodyLeft, bodyBottom - bodyTop);
-        pixmap.setColor(0.50f, 0.52f, 0.55f, 1f);                       // top cap
-        pixmap.fillRectangle(bodyLeft, bodyTop, bodyRight - bodyLeft, 40);
-        pixmap.setColor(0.22f, 0.23f, 0.26f, 1f);                       // base plinth
+        pixmap.setColor(0.17f, 0.18f, 0.23f, 1f);                       // top cap
+        pixmap.fillRectangle(bodyLeft, bodyTop, bodyRight - bodyLeft, 34);
+        pixmap.setColor(0.09f, 0.09f, 0.12f, 1f);                       // base plinth
         pixmap.fillRectangle(bodyLeft, bodyBottom - 30, bodyRight - bodyLeft, 30);
 
-        // Vertical brushed-steel striations for a metallic read.
-        pixmap.setColor(0.46f, 0.48f, 0.51f, 0.5f);
-        for (int column = bodyLeft + 6; column < bodyRight - 4; column += 10) {
-            pixmap.fillRectangle(column, bodyTop + 44, 2, (bodyBottom - 30) - (bodyTop + 44));
+        // Subtle vertical striations for a machined-metal read.
+        pixmap.setColor(0.18f, 0.19f, 0.24f, 0.5f);
+        for (int column = bodyLeft + 8; column < bodyRight - 6; column += 12) {
+            pixmap.fillRectangle(column, bodyTop + 40, 2, (bodyBottom - 30) - (bodyTop + 40));
         }
 
-        // Cool-white rim highlight down the left edge and across the top (the "interactable/lit" cue).
-        pixmap.setColor(0.82f, 0.86f, 0.92f, 1f);
-        pixmap.fillRectangle(bodyLeft, bodyTop, bodyRight - bodyLeft, 3);
-        pixmap.fillRectangle(bodyLeft, bodyTop, 3, bodyBottom - bodyTop);
-
-        // ── Product window: dark cyan glass with a bright bezel and faint stock silhouettes ──
-        final int windowLeft = 56, windowRight = 200, windowTop = 82, windowBottom = 222;
-        pixmap.setColor(0.30f, 0.62f, 0.72f, 1f);                       // bright bezel
-        pixmap.fillRectangle(windowLeft - 4, windowTop - 4, (windowRight - windowLeft) + 8, (windowBottom - windowTop) + 8);
-        pixmap.setColor(0.10f, 0.16f, 0.20f, 1f);                       // glass
+        // ── Product window: bright cyan-glass display with faint stock silhouettes ──
+        final int windowLeft = 52, windowRight = 204, windowTop = 78, windowBottom = 224;
+        pixmap.setColor(0.36f, 0.78f, 0.92f, 1f);                       // bright cyan bezel
+        pixmap.fillRectangle(windowLeft - 5, windowTop - 5, (windowRight - windowLeft) + 10, (windowBottom - windowTop) + 10);
+        pixmap.setColor(0.05f, 0.14f, 0.19f, 1f);                       // dark glass
         pixmap.fillRectangle(windowLeft, windowTop, windowRight - windowLeft, windowBottom - windowTop);
         // Faint goods behind the glass: an ammo box, a stim cross and a credit chip.
-        pixmap.setColor(0.20f, 0.30f, 0.34f, 1f);
-        pixmap.fillRectangle(windowLeft + 16, windowBottom - 54, 30, 34);           // ammo box
-        pixmap.setColor(0.24f, 0.36f, 0.40f, 1f);
-        pixmap.fillRectangle(windowLeft + 62, windowBottom - 60, 14, 46);           // stim cross vertical
-        pixmap.fillRectangle(windowLeft + 52, windowBottom - 44, 34, 14);           // stim cross horizontal
-        pixmap.setColor(0.22f, 0.32f, 0.36f, 1f);
-        pixmap.fillCircle(windowLeft + 112, windowBottom - 30, 15);                 // credit chip
+        pixmap.setColor(0.16f, 0.42f, 0.50f, 1f);
+        pixmap.fillRectangle(windowLeft + 18, windowBottom - 56, 32, 36);           // ammo box
+        pixmap.setColor(0.22f, 0.52f, 0.60f, 1f);
+        pixmap.fillRectangle(windowLeft + 68, windowBottom - 62, 14, 48);           // stim cross vertical
+        pixmap.fillRectangle(windowLeft + 56, windowBottom - 46, 38, 14);           // stim cross horizontal
+        pixmap.setColor(0.20f, 0.48f, 0.56f, 1f);
+        pixmap.fillCircle(windowLeft + 120, windowBottom - 30, 16);                 // credit chip
         // Diagonal glass sheen.
-        pixmap.setColor(0.55f, 0.75f, 0.85f, 0.18f);
+        pixmap.setColor(0.70f, 0.90f, 1.00f, 0.20f);
         for (int offset = 0; offset < (windowBottom - windowTop); offset++) {
-            int sheenColumn = windowLeft + 10 + offset;
+            int sheenColumn = windowLeft + 12 + offset;
             if (sheenColumn >= windowRight - 4) break;
-            pixmap.drawPixel(sheenColumn, windowTop + 4 + offset);
-            pixmap.drawPixel(sheenColumn + 1, windowTop + 4 + offset);
+            pixmap.drawPixel(sheenColumn, windowTop + 6 + offset);
+            pixmap.drawPixel(sheenColumn + 1, windowTop + 6 + offset);
         }
 
         // ── UAC brand plate (orange corporate stamp) below the window ──
-        pixmap.setColor(0.10f, 0.09f, 0.09f, 1f);
-        pixmap.fillRectangle(90, 226, 76, 30);
-        pixmap.setColor(0.80f, 0.45f, 0.15f, 1f);
-        pixmap.fillRectangle(94, 230, 68, 22);
-        pixmap.setColor(0.12f, 0.10f, 0.08f, 1f);                       // "UAC" bars suggestion
-        pixmap.fillRectangle(102, 236, 10, 10);
-        pixmap.fillRectangle(118, 236, 10, 10);
-        pixmap.fillRectangle(134, 236, 10, 10);
+        pixmap.setColor(0.08f, 0.07f, 0.07f, 1f);
+        pixmap.fillRectangle(88, 232, 80, 28);
+        pixmap.setColor(0.92f, 0.52f, 0.16f, 1f);
+        pixmap.fillRectangle(92, 236, 72, 20);
+        pixmap.setColor(0.10f, 0.08f, 0.06f, 1f);                       // "UAC" bars suggestion
+        pixmap.fillRectangle(100, 241, 10, 10);
+        pixmap.fillRectangle(116, 241, 10, 10);
+        pixmap.fillRectangle(132, 241, 10, 10);
 
         // ── Recessed status-light housing (Tier-B pulsing light sits here) ──
         int housingCenterX = Math.round(SHOP_STATUS_CENTER_FRACTION_FROM_LEFT * width);
         int housingCenterY = Math.round(SHOP_STATUS_CENTER_FRACTION_FROM_TOP  * height);
-        pixmap.setColor(0.14f, 0.15f, 0.17f, 1f);
-        pixmap.fillCircle(housingCenterX, housingCenterY, 18);
+        pixmap.setColor(0.10f, 0.11f, 0.13f, 1f);
+        pixmap.fillCircle(housingCenterX, housingCenterY, 20);
+        pixmap.setColor(0.04f, 0.04f, 0.06f, 1f);
+        pixmap.fillCircle(housingCenterX, housingCenterY, 13);
+
+        // ── UAC-amber hazard stripe band across the mid body ──
+        hazardStripeBand(pixmap, bodyLeft + 4, 268, (bodyRight - bodyLeft) - 8, 20,
+                         0.95f, 0.66f, 0.16f);
+
+        // ── Illuminated interaction keypad — a lit button grid that says "operate me" ──
+        pixmap.setColor(0.06f, 0.06f, 0.08f, 1f);                       // recessed panel
+        pixmap.fillRectangle(44, 300, 92, 108);
+        pixmap.setColor(0.30f, 0.33f, 0.38f, 1f);                       // panel bezel highlight
+        pixmap.drawRectangle(44, 300, 92, 108);
+        int[] keyColumns = {56, 84, 112};
+        int[] keyRows    = {312, 340, 368};
+        for (int keyRow : keyRows) {
+            for (int keyColumn : keyColumns) {
+                glowButton(pixmap, keyColumn, keyRow, 18, 0.28f, 0.78f, 0.95f);   // cyan keys
+            }
+        }
+        // A big green "confirm / vend" button beside the keypad — the clearest interaction affordance.
+        pixmap.setColor(0.05f, 0.06f, 0.06f, 1f);
+        pixmap.fillRectangle(150, 300, 60, 108);
+        pixmap.setColor(0.10f, 0.36f, 0.18f, 1f);
+        pixmap.fillRectangle(158, 318, 44, 72);
+        pixmap.setColor(0.34f, 0.98f, 0.48f, 1f);                       // bright green lens
+        pixmap.fillRectangle(162, 322, 36, 64);
+        pixmap.setColor(0.70f, 1.00f, 0.80f, 1f);                       // hot centre highlight
+        pixmap.fillRectangle(168, 330, 24, 20);
+
+        // ── Panel seam above the tray ──
         pixmap.setColor(0.06f, 0.06f, 0.08f, 1f);
-        pixmap.fillCircle(housingCenterX, housingCenterY, 12);
+        pixmap.fillRectangle(bodyLeft, 418, bodyRight - bodyLeft, 3);
 
-        // ── UAC-orange hazard stripe band across the mid body ──
-        hazardStripeBand(pixmap, bodyLeft + 6, 266, (bodyRight - bodyLeft) - 12, 22,
-                         0.82f, 0.60f, 0.14f);
-
-        // ── Panel seams dividing display / mid / tray ──
-        pixmap.setColor(0.16f, 0.17f, 0.19f, 1f);
-        pixmap.fillRectangle(bodyLeft, 300, bodyRight - bodyLeft, 3);
-        pixmap.fillRectangle(bodyLeft, 424, bodyRight - bodyLeft, 3);
-
-        // ── Dispenser tray: a recessed dark slot with a lip (where DISPENSE drops the product) ──
-        pixmap.setColor(0.09f, 0.09f, 0.11f, 1f);
-        pixmap.fillRectangle(48, 430, 160, 42);
-        pixmap.setColor(0.05f, 0.05f, 0.06f, 1f);
-        pixmap.fillRectangle(56, 438, 144, 26);
-        pixmap.setColor(0.30f, 0.31f, 0.34f, 1f);                       // tray lip highlight
-        pixmap.fillRectangle(48, 430, 160, 3);
+        // ── Dispenser tray: a recessed dark slot with a cyan-lit lip (where DISPENSE drops product) ──
+        pixmap.setColor(0.05f, 0.05f, 0.07f, 1f);
+        pixmap.fillRectangle(46, 428, 164, 44);
+        pixmap.setColor(0.02f, 0.02f, 0.03f, 1f);
+        pixmap.fillRectangle(54, 436, 148, 26);
+        pixmap.setColor(0.36f, 0.78f, 0.92f, 1f);                       // cyan-lit tray lip
+        pixmap.fillRectangle(46, 428, 164, 3);
 
         // ── Grille / hum vents low on the body ──
-        pixmap.setColor(0.12f, 0.13f, 0.15f, 1f);
-        for (int ventRow = 478; ventRow < 496; ventRow += 5) {
-            pixmap.fillRectangle(64, ventRow, 128, 2);
+        pixmap.setColor(0.07f, 0.08f, 0.10f, 1f);
+        for (int ventRow = 478; ventRow < 494; ventRow += 5) {
+            pixmap.fillRectangle(70, ventRow, 116, 2);
         }
 
-        // ── Corner rivets ──
-        rivet(pixmap, bodyLeft + 10, bodyTop + 12);
-        rivet(pixmap, bodyRight - 10, bodyTop + 12);
-        rivet(pixmap, bodyLeft + 10, bodyBottom - 12);
-        rivet(pixmap, bodyRight - 10, bodyBottom - 12);
-        rivet(pixmap, bodyLeft + 10, 360);
-        rivet(pixmap, bodyRight - 10, 360);
+        // ── Rivets on the amber frame corners ──
+        rivet(pixmap, frameLeft + 8, frameTop + 8);
+        rivet(pixmap, frameRight - 8, frameTop + 8);
+        rivet(pixmap, frameLeft + 8, frameBottom - 8);
+        rivet(pixmap, frameRight - 8, frameBottom - 8);
 
         Texture texture = new Texture(pixmap);
         texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
@@ -466,8 +498,20 @@ public class ShopMachineRenderer implements Renderable, Disposable {
     private static void rivet(Pixmap pixmap, int centerX, int centerY) {
         pixmap.setColor(0.10f, 0.10f, 0.12f, 1f);
         pixmap.fillCircle(centerX, centerY, 4);
-        pixmap.setColor(0.58f, 0.60f, 0.64f, 1f);
+        pixmap.setColor(0.72f, 0.62f, 0.40f, 1f);
         pixmap.fillCircle(centerX, centerY, 2);
+    }
+
+    /** A small illuminated keypad button: dark socket, coloured lens, brighter centre highlight. */
+    private static void glowButton(Pixmap pixmap, int centerX, int centerY, int size,
+                                   float red, float green, float blue) {
+        int half = size / 2;
+        pixmap.setColor(0.03f, 0.03f, 0.04f, 1f);
+        pixmap.fillRectangle(centerX - half - 1, centerY - half - 1, size + 2, size + 2);
+        pixmap.setColor(red, green, blue, 1f);
+        pixmap.fillRectangle(centerX - half, centerY - half, size, size);
+        pixmap.setColor(Math.min(1f, red + 0.40f), Math.min(1f, green + 0.20f), Math.min(1f, blue + 0.20f), 1f);
+        pixmap.fillRectangle(centerX - half + 3, centerY - half + 3, size - 8, size - 8);
     }
 
     /** A diagonal hazard-stripe band (alternating tinted / dark chevrons) for brand identity. */
