@@ -398,6 +398,7 @@ public final class EnemyManager implements EnemyHitTarget {
             Enemy enemy = enemies.get(index);
             enemy.advanceHitFlash(deltaTime);
             enemy.advanceAttackAnim(deltaTime);
+            enemy.advanceIntentPop(deltaTime);
         }
     }
 
@@ -507,6 +508,8 @@ public final class EnemyManager implements EnemyHitTarget {
             if (!enemy.isAlive() || !enemy.isAlerted()) continue;
             if (enemy instanceof Boss) continue;
             computeNextPlan(enemy, playerColumn, playerRow, player);
+            // order-2: fire the intent-icon pop when the freshly committed verb differs from last turn.
+            enemy.notifyCommitted(enemy.plannedAction.verb);
         }
     }
 

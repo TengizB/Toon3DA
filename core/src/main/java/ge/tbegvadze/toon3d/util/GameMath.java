@@ -3112,4 +3112,62 @@ public final class GameMath {
         float clamped = MathUtils.clamp(progress, 0f, 1f);
         return (float) Math.sin(Math.PI * clamped);
     }
+
+    /*
+     * Formula: intentIconSize — distance-scaled, clamped edge length of an enemy intent icon
+     * Derivation / explanation:
+     *   Billboard sprites shrink as 1/depth. To keep the intent icon readable we scale the same
+     *   way but relative to a reference distance: size = baseSize * (referenceDistance / depth),
+     *   so at depth == referenceDistance the icon is exactly baseSize, closer enemies get a bigger
+     *   icon and farther ones a smaller one. The result is clamped to [minSize, maxSize] so a
+     *   point-blank enemy's icon can't swallow the screen and a distant sniper's committed lane
+     *   stays legible (order-2 readability-at-distance requirement).
+     * Edge cases:
+     *   - depth <= 0 (enemy at/behind the camera) → return maxSize; such enemies are culled before
+     *     rendering, so this is only a divide-by-zero guard.
+     *   - minSize > maxSize (misconfigured constants) → clamp still returns a value in the intended
+     *     range because MathUtils.clamp treats its second arg as the low bound.
+     */
+    public static float intentIconSize(float baseSize, float depth,
+                                       float referenceDistance, float minSize, float maxSize) {
+        if (depth <= 0f) return maxSize;
+        float scaled = baseSize * (referenceDistance / depth);
+        return MathUtils.clamp(scaled, minSize, maxSize);
+    }
+
+    /*
+     * Formula: intentIconBobOffset — gentle idle vertical bob for a floating intent icon
+     * Derivation / explanation:
+     *   A sine wave in wall-clock time gives a smooth up/down float: offset = amplitude *
+     *   sin(2*pi*hz*clock + phase). The per-enemy phase seed (in radians) desynchronises a room
+     *   full of icons so they don't all bob in lockstep. Purely cosmetic; wall-clock time is
+     *   correct here (not turn-based).
+     * Edge cases:
+     *   - amplitude <= 0 → returns 0 (bob disabled).
+     */
+    public static float intentIconBobOffset(float clockSeconds, float phaseRadians,
+                                            float amplitude, float hz) {
+        if (amplitude <= 0f) return 0f;
+        return amplitude * (float) Math.sin(MathUtils.PI2 * hz * clockSeconds + phaseRadians);
+    }
+
+    /*
+     * Formula: intentIconScale — combined pop + wind-up pulse scale multiplier for an intent icon
+     * Derivation / explanation:
+     *   Two independent cosmetic scale sources are combined multiplicatively onto a base 1.0:
+     *     - re-commit "pop": as popStrength eases 1→0 the icon springs from (1 + popBonus) back to 1.
+     *     - WIND_UP pulse:   telegraphStrength (0..1, already animated for the sprite flash) adds up
+     *                        to pulseBonus so a charging attack visibly swells.
+     *   scale = (1 + popStrength*popBonus) * (1 + telegraphStrength*pulseBonus). Multiplying keeps
+     *   both effects visible when they overlap (a freshly-committed wind-up both pops and pulses).
+     * Edge cases:
+     *   - both strengths 0 → returns exactly 1.0 (no scaling), the common idle case.
+     *   - inputs are used as-is; callers pass clamped [0,1] strengths.
+     */
+    public static float intentIconScale(float popStrength, float popBonus,
+                                        float telegraphStrength, float pulseBonus) {
+        float popFactor   = 1f + popStrength * popBonus;
+        float pulseFactor = 1f + telegraphStrength * pulseBonus;
+        return popFactor * pulseFactor;
+    }
 }

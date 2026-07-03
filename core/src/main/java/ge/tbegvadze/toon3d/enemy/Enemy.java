@@ -7,6 +7,7 @@ import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
+import ge.tbegvadze.toon3d.util.IntentConstants;
 
 import java.util.EnumMap;
 
@@ -71,6 +72,19 @@ public class Enemy implements StatusHost {
      * wake turn). The intent-icon renderer (order-2) reads this during the player's turn.
      */
     public final PlannedAction plannedAction = new PlannedAction();
+
+    /**
+     * Wall-clock seconds remaining in the intent-icon "pop" (strategy-combat-order-2): a brief
+     * scale-in played when the enemy re-commits to a DIFFERENT verb than last turn, so the player's
+     * eye is drawn to the change. Cosmetic only — never read by the simulation.
+     */
+    public float intentPopTimerSeconds = 0f;
+
+    /**
+     * The verb committed on the PREVIOUS commit, used solely to detect a verb change and fire the
+     * intent-icon pop. Null until the enemy's first commit. Cosmetic bookkeeping for order-2.
+     */
+    private IntentVerb previouslyCommittedVerb = null;
 
     /**
      * Committed cardinal rush direction captured when the charger commits a WIND_UP intent (Pillar 2).
@@ -195,6 +209,32 @@ public class Enemy implements StatusHost {
     public float getTelegraphStrength() {
         if (EffectConstants.ENEMY_TELEGRAPH_DURATION_SECONDS <= 0f) return 0f;
         return telegraphTimerSeconds / EffectConstants.ENEMY_TELEGRAPH_DURATION_SECONDS;
+    }
+
+    /**
+     * Records the verb just committed and, if it differs from the previously committed verb, triggers
+     * the intent-icon pop (order-2). Call once per commit from EnemyManager's COMMIT phase. The first
+     * commit never pops (there is no earlier verb to differ from).
+     */
+    public void notifyCommitted(IntentVerb committedVerb) {
+        if (previouslyCommittedVerb != null && committedVerb != previouslyCommittedVerb) {
+            intentPopTimerSeconds = IntentConstants.INTENT_POP_DURATION_SECONDS;
+        }
+        previouslyCommittedVerb = committedVerb;
+    }
+
+    /** Decrements the intent-pop timer by deltaTime, clamping at zero. Call once per frame. */
+    public void advanceIntentPop(float deltaTime) {
+        if (intentPopTimerSeconds > 0f) {
+            intentPopTimerSeconds -= deltaTime;
+            if (intentPopTimerSeconds < 0f) intentPopTimerSeconds = 0f;
+        }
+    }
+
+    /** Returns intent-pop strength in [0, 1]: 1 at the instant of a verb change, 0 when settled. */
+    public float getIntentPopStrength() {
+        if (IntentConstants.INTENT_POP_DURATION_SECONDS <= 0f) return 0f;
+        return intentPopTimerSeconds / IntentConstants.INTENT_POP_DURATION_SECONDS;
     }
 
     /** True when this enemy's move cooldown allows it to step on the current turn. */

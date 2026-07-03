@@ -17,6 +17,8 @@ import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.enemy.EnemyState;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
+import ge.tbegvadze.toon3d.enemy.IntentVerb;
+import ge.tbegvadze.toon3d.enemy.PlannedAction;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.EffectConstants;
@@ -28,6 +30,7 @@ import java.util.Map;
 
 import static ge.tbegvadze.toon3d.util.Constants.*;
 import static ge.tbegvadze.toon3d.util.EnemyConstants.*;
+import static ge.tbegvadze.toon3d.util.IntentConstants.*;
 import static ge.tbegvadze.toon3d.util.RenderConstants.*;
 
 /**
@@ -85,6 +88,14 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final float[]   fxSpriteWidths;
     private final boolean[] fxDrawFlags;
 
+    // Pre-allocated intent-icon geometry cache — parallel to sortedIndices, populated in pass 1 and
+    // consumed by the intent-telegraph pass (strategy-combat-order-2). Only the screen center X and the
+    // top of the health-bar/name-tag cluster are cached; the icon size, per-verb glyph, damage number,
+    // and animation are resolved in the icon pass by reading the enemy's committed PlannedAction.
+    private final float[]   intentCenterXs;
+    private final float[]   intentClusterTops;
+    private final boolean[] drawIntentFlags;
+
     // Fixed per-particle phase offsets so overlay particles are evenly but non-uniformly spread.
     // Static so the table is built once per JVM load and shared by every EnemyRenderer instance.
     private static final float[] AFFLICTION_PHASE_OFFSETS =
@@ -96,6 +107,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
     // Reused per-frame colour buffer written by GameMath.healthBarColor — no allocation
     private final float[]   barColorRgb = new float[3];
+
+    // Reused per-frame RGBA buffer for the current intent-icon frame colour — no allocation
+    private final float[]   intentFrameColor = new float[4];
 
     // Name tag and HP text rendering — font and layouts pre-allocated to avoid render-loop allocation
     private final BitmapFont  nameTagFont;
@@ -139,6 +153,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.fxSpriteHeights     = new float[scratchSize];
         this.fxSpriteWidths      = new float[scratchSize];
         this.fxDrawFlags         = new boolean[scratchSize];
+        this.intentCenterXs      = new float[scratchSize];
+        this.intentClusterTops   = new float[scratchSize];
+        this.drawIntentFlags     = new boolean[scratchSize];
         this.shapeRenderer       = new ShapeRenderer();
         this.batch               = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
 
@@ -246,9 +263,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float depth      = sortedDepths[sortedPosition];
             Enemy enemy      = enemies.get(enemyIndex);
 
-            drawBarFlags[sortedPosition]  = false;
-            drawBeamFlags[sortedPosition] = false;
-            fxDrawFlags[sortedPosition]   = false;
+            drawBarFlags[sortedPosition]    = false;
+            drawBeamFlags[sortedPosition]   = false;
+            fxDrawFlags[sortedPosition]     = false;
+            drawIntentFlags[sortedPosition] = false;
             float attackAnimStrength      = enemy.getAttackAnimStrength();
 
             TextureRegion region = textureRegions.get(enemy.type);
@@ -444,6 +462,20 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 barHealthMaxes[sortedPosition]     = enemy.maxHealth;
                 drawBarFlags[sortedPosition]       = true;
             }
+
+            // Cache intent-icon anchor for the telegraph pass (order-2). Only alerted enemies with a
+            // committed plan reveal intent — DORMANT/un-committed enemies show nothing (no info leak).
+            // The anchor is the top of the health-bar + name-tag cluster so the icon stacks above it.
+            if (enemy.isAlerted() && enemy.plannedAction.committed
+                    && depth <= INTENT_ICON_MAX_DISTANCE_TILES) {
+                float healthBarBottom = drawTop + spriteScreenHeight * ENEMY_HEALTH_BAR_GAP_FRACTION;
+                float healthBarHeight = Math.max(ENEMY_HEALTH_BAR_MIN_PIXELS,
+                                                 spriteScreenHeight * ENEMY_HEALTH_BAR_HEIGHT_FRACTION);
+                intentCenterXs[sortedPosition]    = screenCenterColumn;
+                intentClusterTops[sortedPosition] = healthBarBottom + healthBarHeight
+                                                    + INTENT_ICON_NAMETAG_CLEARANCE;
+                drawIntentFlags[sortedPosition]   = true;
+            }
         }
 
         batch.setColor(Color.WHITE);
@@ -593,6 +625,71 @@ public final class EnemyRenderer implements Renderable, Disposable {
         }
 
         // =====================================================================
+        // Pass 2.5: Enemy intent telegraph icons (strategy-combat-order-2)
+        // For every alerted enemy with a committed plan, draw the floating "what happens next"
+        // frame + procedural glyph (+ damage/Block number) stacked above the health-bar cluster.
+        // Reuses pass-1 projection, the same center-column Z-buffer occlusion test as the bars, and
+        // the white-pixel texture + name-tag font — zero new allocation.
+        // =====================================================================
+        boolean anyIntent = false;
+        for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+            if (drawIntentFlags[sortedPosition]) { anyIntent = true; break; }
+        }
+        if (anyIntent) {
+            int playerTileColumn = (int) (playerWorldX / CELL_SIZE);
+            int playerTileRow    = (int) (playerWorldY / CELL_SIZE);
+            batch.begin();
+            for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+                if (!drawIntentFlags[sortedPosition]) continue;
+
+                float depth   = sortedDepths[sortedPosition];
+                float centerX = intentCenterXs[sortedPosition];
+                int   centerColumn = (int) centerX;
+                if (centerColumn < 0 || centerColumn >= WALL_PROJECTION_SCREEN_WIDTH) continue;
+                if (depth >= wallRenderer.getZBufferUnchecked(centerColumn)) continue; // occluded by wall
+
+                Enemy         enemy = enemies.get(sortedIndices[sortedPosition]);
+                PlannedAction plan  = enemy.plannedAction;
+                IntentVerb    verb  = plan.verb;
+
+                float iconSize = GameMath.intentIconSize(INTENT_ICON_SIZE_WORLD, depth,
+                        INTENT_ICON_REFERENCE_DISTANCE_TILES, INTENT_ICON_MIN_SIZE, INTENT_ICON_MAX_SIZE);
+                // WIND_UP pulses in sync with the sprite's telegraph flash; other verbs don't pulse.
+                float telegraphStrength = (verb == IntentVerb.WIND_UP) ? enemy.getTelegraphStrength() : 0f;
+                float scale = GameMath.intentIconScale(enemy.getIntentPopStrength(), INTENT_POP_SCALE_BONUS,
+                        telegraphStrength, INTENT_WINDUP_PULSE_SCALE_BONUS);
+                float drawnSize = iconSize * scale;
+
+                float phaseRadians = (enemy.getId() % 16) / 16f * MathUtils.PI2;
+                float bob = GameMath.intentIconBobOffset(statusAnimationClock, phaseRadians,
+                        INTENT_ICON_BOB_AMPLITUDE, INTENT_ICON_BOB_HZ);
+
+                boolean showsNumber = intentShowsNumber(verb);
+                float numberBand = showsNumber ? iconSize * 0.55f : 0f;
+                float baseY = intentClusterTops[sortedPosition] + bob;
+                float iconCenterY = baseY + numberBand + INTENT_ICON_Y_OFFSET_ABOVE_HEALTHBAR + drawnSize / 2f;
+
+                boolean locked = verb == IntentVerb.ATTACK_RANGED
+                        && isSameCardinalTile(enemy.tileColumn, enemy.tileRow, playerTileColumn, playerTileRow);
+
+                resolveIntentFrameColor(verb, intentFrameColor);
+                drawIntentFrame(centerX, iconCenterY, drawnSize, intentFrameColor, locked);
+                drawIntentGlyph(verb, enemy, plan, centerX, iconCenterY, drawnSize);
+
+                if (showsNumber && depth <= INTENT_DAMAGE_MAX_DISTANCE_TILES) {
+                    boolean isBlock = verb == IntentVerb.DEFEND;
+                    int value = isBlock ? plan.blockGain : plan.predictedDamage;
+                    if (value > 0) {
+                        drawIntentNumber(centerX, baseY + numberBand, value, isBlock);
+                    }
+                }
+            }
+            batch.setColor(Color.WHITE);
+            nameTagFont.setColor(Color.WHITE);
+            batch.end();
+        }
+
+        // =====================================================================
         // Pass 3: EYE_TYRANT instant beams (ShapeRenderer, drawn over all sprites)
         // =====================================================================
         boolean anyBeams = false;
@@ -681,6 +778,166 @@ public final class EnemyRenderer implements Renderable, Disposable {
             batch.draw(whitePixelTexture, particleX - size / 2f, particleY - size / 2f, size, size,
                     0, 0, 1, 1, false, false);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Intent telegraph icons (strategy-combat-order-2) — procedural, no textures
+    // -------------------------------------------------------------------------
+
+    /** True for verbs whose intent carries a magnitude number (damage, or Block for DEFEND). */
+    private static boolean intentShowsNumber(IntentVerb verb) {
+        return verb == IntentVerb.ATTACK_MELEE
+                || verb == IntentVerb.ATTACK_RANGED
+                || verb == IntentVerb.WIND_UP
+                || verb == IntentVerb.DEFEND;
+    }
+
+    /** True when two tiles share a cardinal line (same column OR same row) — the "locked" ranged case. */
+    private static boolean isSameCardinalTile(int fromColumn, int fromRow, int toColumn, int toRow) {
+        return fromColumn == toColumn || fromRow == toRow;
+    }
+
+    /** Writes the per-verb frame RGBA into {@code out} (WAIT is dimmed via a lower alpha). */
+    private static void resolveIntentFrameColor(IntentVerb verb, float[] out) {
+        float alpha = INTENT_FRAME_ALPHA;
+        switch (verb) {
+            case ATTACK_MELEE:  out[0] = INTENT_COLOR_ATTACK_RED;  out[1] = INTENT_COLOR_ATTACK_GREEN;  out[2] = INTENT_COLOR_ATTACK_BLUE;  break;
+            case ATTACK_RANGED: out[0] = INTENT_COLOR_RANGED_RED;  out[1] = INTENT_COLOR_RANGED_GREEN;  out[2] = INTENT_COLOR_RANGED_BLUE;  break;
+            case WIND_UP:       out[0] = INTENT_COLOR_WINDUP_RED;  out[1] = INTENT_COLOR_WINDUP_GREEN;  out[2] = INTENT_COLOR_WINDUP_BLUE;  break;
+            case MOVE:          out[0] = INTENT_COLOR_MOVE_RED;    out[1] = INTENT_COLOR_MOVE_GREEN;    out[2] = INTENT_COLOR_MOVE_BLUE;    break;
+            case DEFEND:        out[0] = INTENT_COLOR_DEFEND_RED;  out[1] = INTENT_COLOR_DEFEND_GREEN;  out[2] = INTENT_COLOR_DEFEND_BLUE;  break;
+            case SPECIAL:       out[0] = INTENT_COLOR_SPECIAL_RED; out[1] = INTENT_COLOR_SPECIAL_GREEN; out[2] = INTENT_COLOR_SPECIAL_BLUE; break;
+            case STUNNED:       out[0] = INTENT_COLOR_STUNNED_RED; out[1] = INTENT_COLOR_STUNNED_GREEN; out[2] = INTENT_COLOR_STUNNED_BLUE; break;
+            case WAIT:
+            default:            out[0] = INTENT_COLOR_WAIT_RED;    out[1] = INTENT_COLOR_WAIT_GREEN;    out[2] = INTENT_COLOR_WAIT_BLUE;
+                                alpha  = INTENT_FRAME_ALPHA * INTENT_WAIT_ALPHA_SCALE; break;
+        }
+        out[3] = alpha;
+    }
+
+    /**
+     * Draws the rounded-square intent frame: an optional bright "locked" outline (deadly ranged lane),
+     * a near-black border, then the verb-tinted fill. All quads are axis-aligned white-pixel draws.
+     */
+    private void drawIntentFrame(float centerX, float centerY, float size, float[] color, boolean locked) {
+        if (locked) {
+            float lockedSpan = size + 2f * (INTENT_FRAME_BORDER_PIXELS + INTENT_LOCKED_OUTLINE_PIXELS);
+            batch.setColor(INTENT_LOCKED_OUTLINE_RED, INTENT_LOCKED_OUTLINE_GREEN, INTENT_LOCKED_OUTLINE_BLUE, color[3]);
+            drawCenteredQuad(centerX, centerY, lockedSpan, lockedSpan, 0f);
+        }
+        float borderSpan = size + 2f * INTENT_FRAME_BORDER_PIXELS;
+        batch.setColor(INTENT_FRAME_BORDER_RED, INTENT_FRAME_BORDER_GREEN, INTENT_FRAME_BORDER_BLUE, color[3]);
+        drawCenteredQuad(centerX, centerY, borderSpan, borderSpan, 0f);
+        batch.setColor(color[0], color[1], color[2], color[3]);
+        drawCenteredQuad(centerX, centerY, size, size, 0f);
+    }
+
+    /** Dispatches the per-verb procedural glyph, drawn in bright ink centered in the frame. */
+    private void drawIntentGlyph(IntentVerb verb, Enemy enemy, PlannedAction plan,
+                                 float centerX, float centerY, float size) {
+        batch.setColor(INTENT_GLYPH_RED, INTENT_GLYPH_GREEN, INTENT_GLYPH_BLUE, 1f);
+        float glyph = size * 0.58f;
+        float thickness = Math.max(2f, size * 0.12f);
+        switch (verb) {
+            case ATTACK_MELEE:
+                // Fang/spike — a single diamond (rotated square).
+                drawCenteredQuad(centerX, centerY, glyph * 0.60f, glyph * 0.60f, 45f);
+                break;
+            case ATTACK_RANGED:
+                drawArrowGlyph(centerX, centerY, glyph, thickness, cardinalGlyphDegrees(enemy, plan));
+                break;
+            case WIND_UP: {
+                // Loaded spring — two diamonds stacked along the charge direction.
+                float degrees = cardinalGlyphDegrees(enemy, plan);
+                float unitX = MathUtils.cosDeg(degrees);
+                float unitY = MathUtils.sinDeg(degrees);
+                float offset = glyph * 0.22f;
+                drawCenteredQuad(centerX - unitX * offset, centerY - unitY * offset, glyph * 0.48f, glyph * 0.48f, 45f);
+                drawCenteredQuad(centerX + unitX * offset, centerY + unitY * offset, glyph * 0.48f, glyph * 0.48f, 45f);
+                break;
+            }
+            case MOVE:
+                // Two footprints stepping diagonally.
+                drawCenteredQuad(centerX - glyph * 0.18f, centerY - glyph * 0.12f, glyph * 0.28f, glyph * 0.28f, 0f);
+                drawCenteredQuad(centerX + glyph * 0.18f, centerY + glyph * 0.12f, glyph * 0.28f, glyph * 0.28f, 0f);
+                break;
+            case DEFEND:
+                // Shield — a plate over a pointed bottom.
+                drawCenteredQuad(centerX, centerY + glyph * 0.10f, glyph * 0.50f, glyph * 0.42f, 0f);
+                drawCenteredQuad(centerX, centerY - glyph * 0.22f, glyph * 0.34f, glyph * 0.34f, 45f);
+                break;
+            case SPECIAL:
+                // Starburst/rune — a four-armed cross plus a rotated cross (8-point star).
+                drawCenteredQuad(centerX, centerY, glyph * 0.78f, thickness, 0f);
+                drawCenteredQuad(centerX, centerY, glyph * 0.78f, thickness, 90f);
+                drawCenteredQuad(centerX, centerY, glyph * 0.70f, thickness * 0.8f, 45f);
+                drawCenteredQuad(centerX, centerY, glyph * 0.70f, thickness * 0.8f, 135f);
+                break;
+            case STUNNED:
+                // X — a wasted turn.
+                drawCenteredQuad(centerX, centerY, glyph * 0.80f, thickness, 45f);
+                drawCenteredQuad(centerX, centerY, glyph * 0.80f, thickness, 135f);
+                break;
+            case WAIT:
+            default:
+                // Ellipsis — three dots signalling "no threat this turn."
+                float dot = glyph * 0.16f;
+                drawCenteredQuad(centerX - glyph * 0.28f, centerY, dot, dot, 0f);
+                drawCenteredQuad(centerX,                 centerY, dot, dot, 0f);
+                drawCenteredQuad(centerX + glyph * 0.28f, centerY, dot, dot, 0f);
+                break;
+        }
+    }
+
+    /** Draws a directional arrow glyph: a shaft with a diamond head pointing at {@code degrees}. */
+    private void drawArrowGlyph(float centerX, float centerY, float glyph, float thickness, float degrees) {
+        drawCenteredQuad(centerX, centerY, glyph * 0.80f, thickness, degrees);
+        float tipX = centerX + MathUtils.cosDeg(degrees) * glyph * 0.40f;
+        float tipY = centerY + MathUtils.sinDeg(degrees) * glyph * 0.40f;
+        drawCenteredQuad(tipX, tipY, thickness * 2.2f, thickness * 2.2f, degrees + 45f);
+    }
+
+    /**
+     * Returns the glyph rotation (screen degrees, 0 = pointing right) from the enemy tile toward its
+     * committed target tile. Screen space here is Y-up, so +row maps to "up." Defaults to 0 when the
+     * enemy is already on the target tile.
+     */
+    private static float cardinalGlyphDegrees(Enemy enemy, PlannedAction plan) {
+        int differenceColumn = plan.targetColumn - enemy.tileColumn;
+        int differenceRow    = plan.targetRow    - enemy.tileRow;
+        if (differenceColumn == 0 && differenceRow == 0) return 0f;
+        return MathUtils.atan2(differenceRow, differenceColumn) * MathUtils.radiansToDegrees;
+    }
+
+    /** Draws the intent magnitude number centered horizontally at {@code centerX}, top-aligned at {@code topY}. */
+    private void drawIntentNumber(float centerX, float topY, int value, boolean isBlock) {
+        hpTextBuilder.setLength(0);
+        hpTextBuilder.append(value);
+        nameTagFont.getData().setScale(INTENT_DAMAGE_NUMBER_SCALE);
+        hpTextLayout.setText(nameTagFont, hpTextBuilder);
+        float textX = centerX - hpTextLayout.width / 2f;
+        if (isBlock) {
+            nameTagFont.setColor(INTENT_BLOCK_NUMBER_RED, INTENT_BLOCK_NUMBER_GREEN, INTENT_BLOCK_NUMBER_BLUE, 1f);
+        } else {
+            nameTagFont.setColor(INTENT_DAMAGE_NUMBER_RED, INTENT_DAMAGE_NUMBER_GREEN, INTENT_DAMAGE_NUMBER_BLUE, 1f);
+        }
+        nameTagFont.draw(batch, hpTextLayout, textX, topY);
+        nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
+    }
+
+    /**
+     * Draws a white-pixel quad centered at {@code (centerX, centerY)} with the given size, rotated by
+     * {@code rotationDegrees} about its center. The batch colour must be set by the caller.
+     */
+    private void drawCenteredQuad(float centerX, float centerY, float width, float height, float rotationDegrees) {
+        batch.draw(whitePixelTexture,
+                   centerX - width / 2f, centerY - height / 2f,
+                   width / 2f, height / 2f,
+                   width, height,
+                   1f, 1f,
+                   rotationDegrees,
+                   0, 0, 1, 1,
+                   false, false);
     }
 
     @Override
