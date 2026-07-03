@@ -405,10 +405,21 @@ public final class EnemyManager implements EnemyHitTarget {
     // Turn simulation
     // -------------------------------------------------------------------------
 
+    /**
+     * Runs one enemy turn using the pre-committed intent model (strategy-combat-order-1):
+     *   A  — Perception: dormant enemies wake on proximity/LOS, then chain-alert BFS.
+     *   B  — EXECUTE: every alerted enemy performs the action it COMMITTED last turn (with
+     *        fairness re-validation R1-R6). A freshly-woken enemy has no plan and only commits.
+     *   C  — COMMIT: every alerted enemy reads the now-resolved board and computes its NEXT
+     *        action, storing it so the player can read the telegraphed intent all next turn.
+     * All of B runs before any of C (spawn-index order), so no enemy re-plans on a same-turn
+     * ally's move — "what you saw is what you get."
+     */
     public void takeTurn(int playerColumn, int playerRow, Player player) {
         rebuildOccupancy();
         phaseA(playerColumn, playerRow);
-        phaseB(playerColumn, playerRow, player);
+        phaseBExecute(playerColumn, playerRow, player);
+        phaseCCommit(playerColumn, playerRow, player);
     }
 
     private void rebuildOccupancy() {
@@ -471,20 +482,31 @@ public final class EnemyManager implements EnemyHitTarget {
         }
     }
 
-    // Phase B: every alerted enemy acts once (stunned enemies skip their action this turn)
-    private void phaseB(int playerColumn, int playerRow, Player player) {
+    // Phase B (EXECUTE): every alerted enemy runs the action it committed last turn.
+    private void phaseBExecute(int playerColumn, int playerRow, Player player) {
         for (int index = 0; index < enemies.size(); index++) {
             Enemy enemy = enemies.get(index);
             if (!enemy.isAlive() || !enemy.isAlerted()) continue;
             // Boss AI is driven entirely by BossFloorController; skip it here.
             if (enemy instanceof Boss) continue;
+            enemy.turnCounter++;
+            // R6: a stun landed during the player turn — cancel the committed action this turn.
             if (enemy.skipNextAction) {
-                enemy.skipNextAction = false;
-                enemy.turnCounter++;
+                enemy.skipNextAction    = false;
+                enemy.plannedAction.verb = IntentVerb.STUNNED;
                 continue;
             }
-            enemy.turnCounter++;
-            actEnemy(enemy, playerColumn, playerRow, player);
+            executePlan(enemy, playerColumn, playerRow, player);
+        }
+    }
+
+    // Phase C (COMMIT): every alerted enemy decides its NEXT action from the resolved board.
+    private void phaseCCommit(int playerColumn, int playerRow, Player player) {
+        for (int index = 0; index < enemies.size(); index++) {
+            Enemy enemy = enemies.get(index);
+            if (!enemy.isAlive() || !enemy.isAlerted()) continue;
+            if (enemy instanceof Boss) continue;
+            computeNextPlan(enemy, playerColumn, playerRow, player);
         }
     }
 
@@ -513,86 +535,164 @@ public final class EnemyManager implements EnemyHitTarget {
         occupancy[boss.tileColumn][boss.tileRow] = true;
     }
 
-    private void actEnemy(Enemy enemy, int playerColumn, int playerRow, Player player) {
-        int chebyshev = GameMath.chebyshevDistanceTiles(
-                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+    // -------------------------------------------------------------------------
+    // EXECUTE step — run the action committed on the previous turn, R1-R6 re-validation
+    // -------------------------------------------------------------------------
 
+    /** Dispatches the enemy's committed plan. A not-yet-committed plan (fresh wake) does nothing. */
+    private void executePlan(Enemy enemy, int playerColumn, int playerRow, Player player) {
+        PlannedAction plan = enemy.plannedAction;
+        if (!plan.committed) return; // freshly woken — one full turn of warning before its first action
+        switch (plan.verb) {
+            case ATTACK_MELEE:  executeMeleeAttack(enemy, plan, playerColumn, playerRow, player); break;
+            case ATTACK_RANGED: executeRangedAttack(enemy, plan, playerColumn, playerRow, player); break;
+            case WIND_UP:       executeWindUp(enemy, playerColumn, playerRow, player);             break;
+            case MOVE:          executeMove(enemy, plan, playerColumn, playerRow);                 break;
+            case DEFEND:        // order-3 — no behaviour yet
+            case SPECIAL:       // order-5 — no behaviour yet
+            case WAIT:
+            case STUNNED:
+            default:            break; // holds position
+        }
+    }
+
+    /**
+     * Executes a committed melee strike (R1/R2). The swing animation always plays; damage only
+     * lands if the player is STILL cardinally adjacent. If the player stepped out of reach the
+     * attack whiffs — no damage, no free re-plan — so "bait the swing, step away, punish" is the
+     * counter. Void Shroud recomputes its blind-side bonus live from the player's current facing.
+     */
+    private void executeMeleeAttack(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow, Player player) {
+        enemy.state = EnemyState.ATTACKING;
+        enemy.triggerAttackAnim();
+        if (isCardinallyAdjacent(enemy, playerColumn, playerRow)) {
+            int damage = enemy.scaledAttackDamage();
+            if (enemy.type == EnemyType.VOID_SHROUD
+                    && isBehindPlayerFacing(enemy, playerColumn, playerRow, player)) {
+                damage = Math.max(1, Math.round(damage * EnemyConstants.VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER));
+            }
+            player.applyDamage(damage);
+            if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
+        }
+    }
+
+    /**
+     * Executes a committed ranged shot (R3). The tracer always fires down the committed line for
+     * readability; damage and status only apply if the player is still on the same cardinal line,
+     * in range, with clear LOS and no ally blocking the shot. Stepping off the lane makes the shot
+     * miss into the empty lane — the same "you dodged, enjoy the free turn" payoff as the melee whiff.
+     */
+    private void executeRangedAttack(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow, Player player) {
+        enemy.state = EnemyState.ATTACKING;
+        enemy.triggerAttackAnim();
+        boolean stillValid = GameMath.chebyshevDistanceTiles(
+                        enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) <= enemy.type.attackRangeTiles()
+                && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                && hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                && !hasEnemyBlockingShot(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+        if (enemyAttackListener != null) {
+            enemyAttackListener.onRangedAttack(enemy, plan.targetColumn, plan.targetRow);
+        }
+        if (stillValid) {
+            player.applyDamage(enemy.scaledAttackDamage());
+            applyRangedAttackStatusEffect(enemy, player);
+        }
+    }
+
+    /**
+     * Executes a committed WIND_UP charge (R5): the rush locks the direction captured at commit and
+     * runs down the lane, stopping at the player, a wall, or an ally. A connecting rush hits at the
+     * charge multiplier; a whiff leaves the brute in a punishable one-turn recovery (skipNextAction).
+     */
+    private void executeWindUp(Enemy enemy, int playerColumn, int playerRow, Player player) {
+        boolean connected = performCharge(enemy, playerColumn, playerRow, player);
+        if (!connected) {
+            enemy.skipNextAction = true; // committed rush missed — punishable recovery
+        }
+    }
+
+    /**
+     * Executes a committed MOVE. A retreat steps away from the player; an approach steps toward the
+     * committed goal tile, falling back to closing on the player (with stuck/wiggle handling) when
+     * the goal is unreachable this step (R4 — a failed move re-paths quietly, unlike a whiffed attack).
+     */
+    private void executeMove(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow) {
+        if (plan.fleeFromTarget) {
+            stepAway(enemy, playerColumn, playerRow);
+        } else if (plan.goalIsFixedTile) {
+            // Flanker: head to the blind-side tile; if that route is blocked close on the player.
+            if (!stepTowardTile(enemy, plan.targetColumn, plan.targetRow, playerColumn, playerRow)) {
+                stepToward(enemy, playerColumn, playerRow);
+            }
+        } else {
+            // Plain chase — track the player's LIVE position (stuck/wiggle aware), not the stale
+            // commit-time tile in plan.targetColumn/Row (that tile is kept only for icon display).
+            stepToward(enemy, playerColumn, playerRow);
+        }
+        enemy.state = EnemyState.CHASING;
+    }
+
+    // -------------------------------------------------------------------------
+    // COMMIT step — decide the NEXT action from the resolved board (writes plan, never acts)
+    // -------------------------------------------------------------------------
+
+    /** Routes each archetype to its plan-computation logic (mirrors the old act-dispatch branching). */
+    private void computeNextPlan(Enemy enemy, int playerColumn, int playerRow, Player player) {
+        PlannedAction plan = enemy.plannedAction;
         if (!enemy.type.isRanged()) {
             // Melee archetypes branch to their tactical VERB (balance idea 4, Pillar 2):
             //   SHELL_BRUTE — CHARGER: telegraphed rush; VOID_SHROUD — FLANKER: attack the blind
             //   side; everything else uses the shared greedy melee behaviour.
             if (enemy.type == EnemyType.SHELL_BRUTE) {
-                actChargerEnemy(enemy, playerColumn, playerRow, player);
+                computeChargerPlan(enemy, plan, playerColumn, playerRow);
             } else if (enemy.type == EnemyType.VOID_SHROUD) {
-                actFlankerEnemy(enemy, playerColumn, playerRow, player);
+                computeFlankerPlan(enemy, plan, playerColumn, playerRow, player);
             } else {
-                actMeleeEnemy(enemy, playerColumn, playerRow, player);
+                computeMeleePlan(enemy, plan, playerColumn, playerRow);
             }
         } else {
-            // Ranged kiting — used by EYE_TYRANT, MIRE_WRAITH, ACID_DRONE
-            actRangedEnemy(enemy, playerColumn, playerRow, player, chebyshev);
+            computeRangedPlan(enemy, plan, playerColumn, playerRow);
         }
     }
 
-    /** Shared greedy melee: hit when cardinally adjacent, otherwise close the gap. */
-    private void actMeleeEnemy(Enemy enemy, int playerColumn, int playerRow, Player player) {
-        boolean cardinalAdjacent = GameMath.manhattanDistanceTiles(
-                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
-        if (cardinalAdjacent) {
-            player.applyDamage(enemy.scaledAttackDamage());
-            enemy.state = EnemyState.ATTACKING;
-            enemy.triggerAttackAnim();
-            if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
+    /** Shared greedy melee plan: strike when cardinally adjacent, otherwise close the gap. */
+    private void computeMeleePlan(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow) {
+        if (isCardinallyAdjacent(enemy, playerColumn, playerRow)) {
+            plan.setAttack(IntentVerb.ATTACK_MELEE, playerColumn, playerRow, enemy.scaledAttackDamage());
+        } else if (enemy.shouldMoveThisTurn()) {
+            plan.set(IntentVerb.MOVE, playerColumn, playerRow); // goal = the player's tile
         } else {
-            if (enemy.shouldMoveThisTurn()) {
-                stepToward(enemy, playerColumn, playerRow);
-            }
-            enemy.state = EnemyState.CHASING;
+            plan.set(IntentVerb.WAIT, enemy.tileColumn, enemy.tileRow);
         }
     }
 
     /**
-     * CHARGER verb (Shell Brute, Pillar 2): when a clear cardinal lane opens within charge range
-     * the brute spends ONE telegraphed wind-up turn (no move, readable rim flash), then on the
-     * next turn rushes straight down that lane. A connecting rush hits for a high multiple of its
-     * base damage; if the player sidesteps off the lane the rush whiffs and the brute is left in
-     * an exposed recovery (skips its next action) — "sidestep the charge, then punish."
+     * CHARGER plan (Shell Brute, Pillar 2): when a clear cardinal lane opens within charge range the
+     * brute commits a WIND_UP — a readable rim-flash telegraph shown for the whole player turn — then
+     * rushes down that lane next turn (R5). Sidestepping off the lane is the counter. Adjacent with no
+     * room, it commits a normal melee hit instead.
      */
-    private void actChargerEnemy(Enemy enemy, int playerColumn, int playerRow, Player player) {
-        // Resolve a pending wind-up: this IS the rush turn.
-        if (enemy.chargeWindUpTurns > 0) {
-            enemy.chargeWindUpTurns = 0;
-            boolean connected = performCharge(enemy, playerColumn, playerRow, player);
-            if (!connected) {
-                enemy.skipNextAction = true; // committed rush missed — punishable recovery
-            }
+    private void computeChargerPlan(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow) {
+        if (isCardinallyAdjacent(enemy, playerColumn, playerRow)) {
+            // No room to build up a charge — commit a normal-strength hit.
+            plan.setAttack(IntentVerb.ATTACK_MELEE, playerColumn, playerRow, enemy.scaledAttackDamage());
             return;
         }
-
-        boolean cardinalAdjacent = GameMath.manhattanDistanceTiles(
-                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
-        if (cardinalAdjacent) {
-            // No room to build up a charge — just hit at normal strength.
-            player.applyDamage(enemy.scaledAttackDamage());
-            enemy.state = EnemyState.ATTACKING;
-            enemy.triggerAttackAnim();
-            if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
-            return;
-        }
-
         if (canBeginCharge(enemy, playerColumn, playerRow)) {
-            enemy.chargeWindUpTurns      = 1;
-            enemy.chargeDirectionColumn  = Integer.signum(playerColumn - enemy.tileColumn);
-            enemy.chargeDirectionRow     = Integer.signum(playerRow - enemy.tileRow);
-            enemy.state                  = EnemyState.WINDING_UP;
-            enemy.triggerTelegraph();    // readable wind-up cue; deliberately does NOT move
+            enemy.chargeDirectionColumn = Integer.signum(playerColumn - enemy.tileColumn);
+            enemy.chargeDirectionRow    = Integer.signum(playerRow - enemy.tileRow);
+            int chargeDamage = Math.max(1, Math.round(
+                    enemy.scaledAttackDamage() * EnemyConstants.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER));
+            plan.setWindUp(playerColumn, playerRow, chargeDamage, 1);
+            enemy.state = EnemyState.WINDING_UP;
+            enemy.triggerTelegraph();   // rim flash telegraph, visible for the whole player turn
             return;
         }
-
         if (enemy.shouldMoveThisTurn()) {
-            stepToward(enemy, playerColumn, playerRow);
+            plan.set(IntentVerb.MOVE, playerColumn, playerRow);
+        } else {
+            plan.set(IntentVerb.WAIT, enemy.tileColumn, enemy.tileRow);
         }
-        enemy.state = EnemyState.CHASING;
     }
 
     /** True when a clear, unobstructed cardinal lane to the player sits within the charge band. */
@@ -641,37 +741,37 @@ public final class EnemyManager implements EnemyHitTarget {
         return connected;
     }
 
-    /**
-     * FLANKER verb (Void Shroud, Pillar 2): prefers the tile directly behind the player's facing
-     * and strikes HARDER from that blind side, so "rotate to face it / keep your back covered" is
-     * the counterplay. When not adjacent it paths toward the flank tile rather than the player.
-     */
-    private void actFlankerEnemy(Enemy enemy, int playerColumn, int playerRow, Player player) {
-        boolean cardinalAdjacent = GameMath.manhattanDistanceTiles(
+    /** True when the enemy is exactly one tile away from the player along a cardinal (melee reach). */
+    private static boolean isCardinallyAdjacent(Enemy enemy, int playerColumn, int playerRow) {
+        return GameMath.manhattanDistanceTiles(
                 enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
-        if (cardinalAdjacent) {
+    }
+
+    /**
+     * FLANKER plan (Void Shroud, Pillar 2): commits a melee strike when adjacent — carrying the
+     * blind-side bonus in its predicted-damage number if it currently sits behind the player's
+     * facing — otherwise commits a MOVE toward the tile directly behind the player. The executor
+     * re-checks the blind side live, so "rotate to face it / keep your back covered" stays the
+     * counterplay. The move goal is the flank tile; executeMove falls back to closing directly
+     * when that route is blocked.
+     */
+    private void computeFlankerPlan(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow, Player player) {
+        if (isCardinallyAdjacent(enemy, playerColumn, playerRow)) {
             int damage = enemy.scaledAttackDamage();
             if (isBehindPlayerFacing(enemy, playerColumn, playerRow, player)) {
                 damage = Math.max(1, Math.round(
                         damage * EnemyConstants.VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER));
             }
-            player.applyDamage(damage);
-            enemy.state = EnemyState.ATTACKING;
-            enemy.triggerAttackAnim();
-            if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
-            return;
-        }
-
-        if (enemy.shouldMoveThisTurn()) {
+            plan.setAttack(IntentVerb.ATTACK_MELEE, playerColumn, playerRow, damage);
+        } else if (enemy.shouldMoveThisTurn()) {
             int faceColumn  = Math.round(player.directionX);
             int faceRow     = Math.round(player.directionY);
             int flankColumn = playerColumn - faceColumn; // tile directly behind the player
             int flankRow    = playerRow    - faceRow;
-            if (!stepTowardTile(enemy, flankColumn, flankRow, playerColumn, playerRow)) {
-                stepToward(enemy, playerColumn, playerRow); // flank route blocked — close in directly
-            }
+            plan.setMoveToTile(flankColumn, flankRow);
+        } else {
+            plan.set(IntentVerb.WAIT, enemy.tileColumn, enemy.tileRow);
         }
-        enemy.state = EnemyState.CHASING;
     }
 
     /** True when the enemy sits on the side opposite the player's facing (the blind side). */
@@ -684,49 +784,34 @@ public final class EnemyManager implements EnemyHitTarget {
         return toEnemyColumn * faceColumn + toEnemyRow * faceRow < 0;
     }
 
-    private void actRangedEnemy(Enemy enemy, int playerColumn, int playerRow, Player player, int distanceToPlayer) {
-        int rangeLimit = enemy.type.attackRangeTiles();
-        boolean hasLOS = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
-
-        // Melee-pin: once the player is cardinally adjacent (one tile away, in the player's own
-        // melee reach) the kiter can no longer simply back-pedal out of every swing — otherwise a
-        // melee build can NEVER connect with a ranged enemy in open space (the enemy flees on its
-        // turn every time the player steps in). When pinned it holds its ground and fires point-blank
-        // instead, so the player trades blows turn-for-turn: a fair, winnable melee duel.
-        boolean meleePinned = GameMath.manhattanDistanceTiles(
-                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
-
-        if (distanceToPlayer < EnemyConstants.RANGED_KITE_MIN_TILES && !meleePinned) {
-            // Too close (but not melee-pinned) — flee first, then re-evaluate
-            stepAway(enemy, playerColumn, playerRow);
-            hasLOS = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
-            distanceToPlayer = GameMath.chebyshevDistanceTiles(
-                    enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
-        } else if (distanceToPlayer <= rangeLimit && hasLOS
-                && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)) {
-            // Perfect kiting range on a cardinal line — hold position and fire; no movement
-        } else {
-            // Too far, LOS blocked, or not on a cardinal line — advance toward player
-            if (enemy.shouldMoveThisTurn()) {
-                stepToward(enemy, playerColumn, playerRow);
-            }
-            hasLOS = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
-            distanceToPlayer = GameMath.chebyshevDistanceTiles(
-                    enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
-        }
-
-        boolean canFire = distanceToPlayer <= rangeLimit
-                && hasLOS
+    /**
+     * RANGED plan (Eye Tyrant, Mire Wraith, Acid Drone). One committed verb per turn:
+     *   - too close and not melee-pinned  → retreat (MOVE flee); no shot this turn.
+     *   - a clear cardinal firing line now → commit ATTACK_RANGED with its predicted damage.
+     *   - otherwise                        → advance (MOVE) to gain a line, or WAIT if move-gated.
+     *
+     * Melee-pin: once the player is cardinally adjacent the kiter can no longer simply back-pedal
+     * out of every swing (that would make a melee build unable to ever connect in open space). When
+     * pinned it holds and commits a point-blank shot instead, so the player trades blows turn-for-turn.
+     */
+    private void computeRangedPlan(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow) {
+        int rangeLimit  = enemy.type.attackRangeTiles();
+        int distance    = GameMath.chebyshevDistanceTiles(
+                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+        boolean meleePinned = isCardinallyAdjacent(enemy, playerColumn, playerRow);
+        boolean canFireNow  = distance <= rangeLimit
                 && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                && hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
                 && !hasEnemyBlockingShot(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
-        if (canFire) {
-            player.applyDamage(enemy.scaledAttackDamage());
-            enemy.state = EnemyState.ATTACKING;
-            enemy.triggerAttackAnim();
-            if (enemyAttackListener != null) enemyAttackListener.onRangedAttack(enemy, playerColumn, playerRow);
-            applyRangedAttackStatusEffect(enemy, player);
+
+        if (distance < EnemyConstants.RANGED_KITE_MIN_TILES && !meleePinned) {
+            plan.setFlee(playerColumn, playerRow);       // too close — reposition, no shot this turn
+        } else if (canFireNow) {
+            plan.setAttack(IntentVerb.ATTACK_RANGED, playerColumn, playerRow, enemy.scaledAttackDamage());
+        } else if (enemy.shouldMoveThisTurn()) {
+            plan.set(IntentVerb.MOVE, playerColumn, playerRow); // advance to gain a firing line
         } else {
-            enemy.state = EnemyState.CHASING;
+            plan.set(IntentVerb.WAIT, enemy.tileColumn, enemy.tileRow);
         }
     }
 

@@ -61,17 +61,21 @@ public class Enemy implements StatusHost {
     /** Pre-built display string shown above the health bar, e.g. "Corruptor LVL 2". Set at spawn time. */
     public String     nameTag = "";
 
-    /** Set by StatusEffectController when STUNNED ticks; cleared and acted on by EnemyManager.phaseB(). */
+    /** Set by StatusEffectController when STUNNED ticks; consumed in EnemyManager's EXECUTE phase (R6). */
     public boolean skipNextAction = false;
 
     /**
-     * Charger wind-up counter (Pillar 2, Shell Brute). 0 = not charging; > 0 = telegraphing a
-     * rush this many turns before it lands. EnemyManager begins the wind-up when a charge lane
-     * opens, holds position for one readable turn, then rushes. Lets the player sidestep.
+     * The action this enemy has COMMITTED to perform on its next turn (strategy-combat-order-1).
+     * A single reused instance — never null after construction, but {@code committed} stays false
+     * until the enemy first commits (a freshly-woken enemy shows no intent and only commits on its
+     * wake turn). The intent-icon renderer (order-2) reads this during the player's turn.
      */
-    public int chargeWindUpTurns = 0;
+    public final PlannedAction plannedAction = new PlannedAction();
 
-    /** Committed cardinal rush direction captured when the charger begins its wind-up (Pillar 2). */
+    /**
+     * Committed cardinal rush direction captured when the charger commits a WIND_UP intent (Pillar 2).
+     * Read by EnemyManager.performCharge on the following turn when the WIND_UP plan executes.
+     */
     public int chargeDirectionColumn = 0;
     public int chargeDirectionRow    = 0;
 

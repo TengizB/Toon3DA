@@ -1,0 +1,163 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Enemy Move-Sets & Special Abilities — scripted, readable behavior patterns
+CREATED: 2026-07-03
+---
+
+OVERVIEW
+========
+Gives the SPECIAL intent verb (order-1/2) real content and makes enemy behavior a
+readable PATTERN rather than a greedy heuristic — the thing that makes Slay the Spire
+monsters feel like puzzles instead of noise. Each archetype gets a MOVE-SET: a small
+scripted library of actions (attack, defend, buff, debuff, summon, area-strike,
+reposition) chosen by weighted rules with "no-repeat" constraints, so a veteran player
+learns "the Acid Drone always shields the turn after it spits, then re-buffs" and can
+plan three moves deep. This is where combat becomes strategy: the enemy's next action
+is not just visible (order-2) but PREDICTABLE enough to outplay.
+
+This document OWNS: the EnemyMoveSet / EnemyMove abstraction, the weighted-selection +
+no-repeat rules, the catalogue of SPECIAL abilities (buff/debuff/summon/area/
+reposition) and how each is telegraphed, and per-archetype scripts for the existing
+roster. It does NOT own the commit/execute timing (order-1 calls into the move-set
+during COMMIT), the icon frame (order-2 supplies the purple SPECIAL frame + reserves
+a sub-glyph slot per ability), Block (order-3 is the DEFEND move's payload), or the
+damage powers Vulnerable/Weak/Strength (order-6 defines those; abilities here APPLY
+them).
+
+NO NEW TILE SYMBOL REQUIRED (abilities are behavior, not tiles). If a summon spawns a
+NEW enemy TYPE, that type follows the normal tile-symbol rule in its own doc; summons
+of EXISTING types need no symbol.
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING SYSTEMS
+================================================
+- EnemyType.java (IMPLEMENTED): each archetype already has stats + a tacticalVerb()
+  string. This doc adds a moveSet() to each type: the tacticalVerb tells the player
+  the COUNTER; the move-set defines the BEHAVIOR the counter answers. They pair up.
+- order-1 COMMIT step: instead of the flat "move or attack" heuristic, COMMIT asks the
+  enemy's EnemyMoveSet.chooseNext(board, history) for the next EnemyMove and stores it
+  as the PlannedAction. This doc IS the body of the COMMIT decision for scripted
+  enemies. Simple chaff can keep a trivial 1-move set (always ATTACK/MOVE) — not every
+  enemy needs a script.
+- roguelike_order_8 status effects (IMPLEMENTED): buff/debuff abilities APPLY existing
+  statuses (EMPOWERED/strength, SLOWED, BLINDED, POISONED) via StatusEffectController.
+  This doc does not invent new status MECHANICS; it invents enemy MOVES that deploy
+  them. New combat POWERS (Vulnerable/Weak) come from order-6.
+- resonant-pylon-support-enemy.txt / lurker-crawler-flank-blindspot-system.txt (ideas):
+  those are specific support/flanker enemy concepts. This doc is the GENERAL move-set
+  framework they'd plug into; fold their behaviors into moves rather than bespoke code.
+- balance-rule-system.txt: a SPECIAL move's threat is priced into the enemy's TP (a
+  buff/summon raises effective TP); see BALANCE.
+
+THE MOVE-SET ABSTRACTION
+========================
+New, package ge.tbegvadze.toon3d.enemy:
+
+  interface EnemyMove {
+      IntentVerb telegraphVerb();          // what order-2 shows (usually SPECIAL)
+      String     telegraphSubGlyph();      // order-2 sub-icon id (e.g. "buff","summon")
+      boolean    isUsable(Enemy self, BoardView board);  // preconditions
+      void       commit(Enemy self, BoardView board, PlannedAction out); // fill plan
+      void       execute(Enemy self, BoardView board, CombatContext ctx); // do it
+      int        weight(Enemy self, BoardView board);   // selection weight (0 = skip)
+  }
+
+  final class EnemyMoveSet {
+      // ordered list of EnemyMove + no-repeat constraints
+      EnemyMove chooseNext(Enemy self, BoardView board, MoveHistory history);
+  }
+
+BoardView = a read-only façade over the level/occupancy/player position the COMMIT
+step already has (do not hand moves raw mutable managers). Pre-allocate; zero alloc in
+takeTurn.
+
+SELECTION RULES (what makes it a readable pattern, not RNG soup)
+================================================================
+  - WEIGHTED choice among usable moves (weight()=0 filters out moves whose
+    preconditions fail — e.g. can't SUMMON if at the summon cap, can't ATTACK_RANGED
+    if not on the player's line).
+  - NO-REPEAT constraint (StS staple): a move may declare "cannot be used more than N
+    times in a row" (MoveHistory tracks the last few picks). This prevents a caster
+    from buff-locking and forces the varied, learnable rhythm.
+  - FORCED-SEQUENCE option: a move-set may hard-script an opening or a combo (e.g.
+    "turn 1 always BUFF, then alternate ATTACK/DEFEND"). Use for elites/bosses.
+  - The chosen move's telegraphVerb drives the icon, so the pattern is always visible
+    one turn ahead — the player learns the script BY WATCHING it, then predicts it.
+
+THE SPECIAL ABILITY CATALOGUE (v1)
+==================================
+Each is an EnemyMove; each is telegraphed (purple SPECIAL frame + sub-glyph, order-2):
+  BUFF_SELF / BUFF_ALLY  — grants EMPOWERED (strength, +damage) or Block (order-3) to
+      self or a nearby ally. Sub-glyph: up-arrow. Counter: kill the buffer first, or
+      the buffed target before it swings. (A support enemy that buffs is the classic
+      "priority target" the intent icons let you identify.)
+  DEBUFF_PLAYER — applies SLOWED / BLINDED / WEAK(order-6) to the player at range along
+      a cardinal line. Sub-glyph: down-arrow. Counter: break the line (isSameCardinalLine
+      dodge) or guard/kill it.
+  SUMMON — spawns 1-2 chaff of an EXISTING type on empty adjacent tiles (respect the
+      TP budget — see balance). Sub-glyph: spawn-rune. Counter: kill it before the room
+      floods; or AoE the summons. Enforce a hard summon CAP per enemy and per room.
+  AREA_STRIKE — a slam that hits all tiles in a small pattern around the enemy (or a
+      cross along both cardinals) NEXT turn — a big telegraphed hit you must step out
+      of. Sub-glyph: burst. This is a WIND_UP-style two-turn telegraph reusing the
+      existing telegraph timer. Counter: reposition out of the marked tiles.
+  REPOSITION / FLANK — deliberately moves to the player's SIDE/BACK to defeat the
+      Guard stance (order-4) — a move that specifically counters the player's defense,
+      creating the "he's circling to my flank, I must re-face" moment. Sub-glyph:
+      curved-arrow. Ties into lurker-crawler-flank-blindspot-system.txt.
+  DEFEND — the order-3 block move, surfaced here as a first-class move-set entry so
+      "turtle" archetypes weave it into their script.
+
+PER-ARCHETYPE SCRIPTS (starting point for the existing roster)
+==============================================================
+  Gore Biter (CHAFF, fast melee): trivial set — MOVE toward, ATTACK adjacent. No
+      specials (chaff must stay simple/cheap). Maybe a rare pack "frenzy" later.
+  Eye Tyrant (CHAFF ranged): ATTACK_RANGED on line; MOVE to re-establish a line when
+      off it. Optional DEBUFF_PLAYER (BLINDED) on a long cooldown for flavor.
+  Acid Drone (SOLDIER ranged): script = ATTACK_RANGED -> DEFEND -> DEBUFF_PLAYER(WEAK)
+      on a rotating no-repeat cadence: a readable caster puzzle.
+  Mire Wraith / Void Shroud (SOLDIER): one gets BUFF_ALLY (a support — high-priority
+      target the intents let you spot), the other gets REPOSITION/FLANK to punish
+      careless guarding.
+  Shell Brute (BRUISER charger): keep the existing charge as a WIND_UP move; add an
+      occasional DEFEND after a whiffed charge (turtles while it recovers — punishing
+      the exact window the player expects to punish IT, a nice mind-game).
+  Plague Hulk (SOLDIER tank): AREA_STRIKE slam + leaves the existing death toxic pool;
+      slow, telegraphed, positional.
+  Iron Stalker (MINI_ELITE): a real multi-move script — BUFF_SELF(strength) -> AREA_
+      STRIKE -> DEFEND -> repeat, with no-repeat guards. The mid-floor "solve me"
+      spike the intent system is built to make legible.
+
+BALANCE CONTRACT
+================
+A move-set changes an enemy's EFFECTIVE threat, so it must fold into the TP model
+(docs/balance-rule-system.txt PRIMITIVE 4):
+  - BUFF/DEBUFF/AREA moves raise effective DPT -> add a positionalMultiplier-style
+    surcharge OR compute a blended DPT across the script's cycle and use THAT in
+    threatPoints(). Recommended: BalanceReport computes each scripted enemy's
+    cycle-averaged DPT (sum of per-move expected damage / cycle length) and prices TP
+    from it, so a buff-heavy caster's TP honestly reflects the ally damage it enables.
+  - SUMMON is priced by the TP of what it can spawn: an enemy that can add 2 chaff is
+    worth its own TP PLUS the expected summoned TP; the encounter budget
+    (EncounterBudgetPlanner) must RESERVE that headroom or the floor blows its TP cap.
+    Enforce a summon cap so the reservation is bounded.
+  - Keep golden-ratio checks per role; a SOLDIER with a script must still resolve in
+    its TTK band on average. Add a MOVE-SETS section to BalanceReport listing each
+    archetype's cycle, cycle-averaged DPT, and resulting TP.
+  - FAIRNESS (inherit balance SECTION 13 + order-1): every damaging special is
+    telegraphed one turn ahead; AREA_STRIKE marks its tiles a turn early. No special
+    may deal >25% player eHP untelegraphed.
+
+IMPLEMENTATION CHECKLIST
+========================
+[ ] Add EnemyMove + EnemyMoveSet + MoveHistory + BoardView façade (enemy package),
+    zero-alloc, reused instances.
+[ ] Route order-1 COMMIT through moveSet.chooseNext for scripted types; trivial sets
+    for chaff.
+[ ] Implement the v1 ability catalogue; buff/debuff APPLY existing statuses via
+    StatusEffectController; new powers deferred to order-6.
+[ ] Author per-archetype scripts (table above) with no-repeat/forced-sequence rules.
+[ ] Enforce summon caps; reserve summon TP in EncounterBudgetPlanner.
+[ ] order-2: add SPECIAL sub-glyphs (buff/debuff/summon/area/flank); this doc names
+    them, order-2 draws them.
+[ ] Add the MOVE-SETS section to docs/balance-rule-system.txt + BalanceReport;
+    cycle-averaged DPT feeds TP; verify golden ratios + telegraph audit.

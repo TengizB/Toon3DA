@@ -1,0 +1,148 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Block & Defend — a shared damage-absorption resource (StS Block)
+CREATED: 2026-07-03
+---
+
+OVERVIEW
+========
+Introduces BLOCK — a temporary damage-absorbing buffer, modelled on Slay the Spire's
+Block — as a shared mechanic for BOTH enemies and the player. When an enemy commits
+the DEFEND intent (order-1/2), it gains Block; incoming damage is subtracted from
+Block before it touches HP, so a defending enemy genuinely takes less damage that
+turn. This is the "enemies that are defending take less damage" mechanic the design
+brief asks for, built as a clean, reusable resource rather than a one-off flag.
+
+Block is deliberately kept as a SEPARATE, GENERIC layer from the player's directional
+Guard stance (strategy-combat-order-4). Guard is the player's DIRECTIONAL defense
+(front vs sides vs back); Block is the raw NUMERIC buffer. Order-4 is built ON TOP of
+this Block layer (a guarded player facing the hit converts most of it into "blocked"
+damage). Splitting them keeps each mechanic single-responsibility.
+
+This document OWNS: the Block value on any combat actor, the decay/expiry rules, the
+exact damage-mitigation ORDER (where Block sits in the pipeline relative to armor and
+status), the enemy DEFEND intent's blockGain, the DEFEND AI conditions, and the
+Block-specific visuals. It does NOT own the intent commit timing (order-1), the icon
+(order-2 renders the shield + number), the player's DIRECTIONAL reduction (order-4),
+or which special abilities grant Block (order-5).
+
+NO NEW TILE SYMBOL REQUIRED. Actor-state layer.
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING SYSTEMS
+================================================
+- roguelike_order_8 status effects (IMPLEMENTED): Block is conceptually a status but
+  it behaves differently enough (absorbs then expires, no per-turn tick damage) that
+  it should be its own field, not shoe-horned into StatusEffect. However, it should
+  live NEXT TO the status layer and tick in the SAME turn phase (StatusEffectController
+  tick) so ordering is deterministic. Reuse the tick anchor; add a Block field.
+- Enemy.java (IMPLEMENTED): already has `public int armor = 0;` and applyDamage(int).
+  Block is a second, DECAYING mitigation layer above armor. Add `public int block;`.
+- Player / PlayerStats (IMPLEMENTED): the player already has armor (AR bar in the HUD,
+  HudConstants). Block is a distinct short-lived buffer, shown differently (order-4).
+- balance-rule-system.txt: Block changes eHP transiently. The eHP primitive
+  (GameMath.effectiveHitPoints) is a STEADY-STATE number; Block is a per-turn spike,
+  so it is priced as "turns of survival bought," see BALANCE below.
+
+THE BLOCK VALUE
+===============
+Add to any combat actor (Enemy, and the player via PlayerStats or a small
+CombatDefenseState):
+    int block;   // temporary HP-shield; absorbed before HP; decays (see rules)
+
+DECAY RULE (design decision — differs from StS on purpose):
+  Slay the Spire clears ALL Block at the start of the owner's turn. Here the game is
+  slower and more spatial, so use a GENTLER decay to keep Block meaningful for a beat
+  without making enemies un-killable:
+    - Enemy Block: expires at the END of the enemy's NEXT turn (i.e. it protects
+      through exactly one full player turn — the turn during which the player is
+      reacting to the shield icon). Any unused Block is then zeroed.
+    - This makes the DEFEND intent readable and counterable: "it will have 15 Block
+      next turn -> don't waste my big shot on it now, chip it or wait it out, or use
+      an armor-piercing option (order-6)."
+  Do NOT let Block persist indefinitely or stack across many turns — cap it
+  (BLOCK_MAX per actor) so a defend-spamming enemy can't become immortal.
+
+DAMAGE-MITIGATION PIPELINE (exact order — single source of truth)
+=================================================================
+When damage D is dealt to an actor, resolve in THIS order (implement once, in a
+shared GameMath.applyMitigation-style helper so enemy and player match):
+    1. Directional/Guard modifier (order-4, player only): D' = D * facingMultiplier.
+    2. Vulnerable/Weak modifiers (order-6, if present): D'' = D' * powerMultipliers.
+    3. BLOCK absorption: absorbed = min(block, D''); block -= absorbed;
+       D''' = D'' - absorbed.
+    4. Flat armor reduction (existing): D'''' = max(0, D''' - armorReduction).
+    5. Subtract from HP.
+Block sits ABOVE armor so a heavily-armored, blocking enemy isn't double-dipping in a
+confusing order; Block is the "I braced this turn" spike, armor is the permanent hide.
+Document this order in docs/balance-rule-system.txt (it affects eHP interpretation).
+
+ENEMY DEFEND INTENT — WHEN DO ENEMIES DEFEND?
+=============================================
+The COMMIT step (order-1 phaseC) chooses DEFEND for an enemy when defending is the
+correct play, so it reads as intelligent, not random. Candidate conditions (per
+archetype, tunable):
+  - The enemy is BELOW a HP threshold AND the player is aiming a big weapon at it
+    (heuristic: player faces it and is in its line) -> it turtles to survive a shot.
+  - A "bruiser/guardian" archetype defends on a fixed cadence (e.g. every 3rd turn)
+    to create the read-and-adapt rhythm StS elites have.
+  - A support/caster archetype defends when no ally is between it and the player
+    (self-preservation).
+  - Chaff should RARELY or NEVER defend (they're meant to die fast; defending chaff
+    just wastes player time). Restrict DEFEND to soldier/bruiser/elite roles.
+blockGain scales with the archetype and depth; store on PlannedAction.blockGain so
+order-2 shows the exact number in the blue shield icon.
+
+COUNTERPLAY (this is what makes it strategic, not just a damage sponge)
+======================================================================
+Defending enemies must be COUNTERABLE so the read matters:
+  - Don't waste your highest-damage shot into fresh Block (overkill is lost). Chip it
+    with a cheap weapon or reposition, then burst it after Block decays.
+  - Armor/Block-piercing options (order-6: an "Exposed" debuff, or a piercing weapon
+    tag) ignore or shred Block — a build answer to turtles.
+  - Status DoT (burning/poison, order-8) ignores Block if you resolve DoT as direct HP
+    loss (design choice: DoT bypasses Block, so status builds counter defensive enemies
+    — a nice rock-paper-scissors layer). DECIDE and document this: recommended = DoT
+    bypasses Block.
+  - Stunning a defending enemy (order-8) cancels its NEXT defend commit (order-1 R6).
+
+BLOCK VISUALS
+=============
+- On the enemy: a translucent blue "plating" shimmer over the sprite while it holds
+  Block > 0 (reuse the hit-flash overlay technique in EnemyRenderer, tinted blue), and
+  the numeric Block shown in the intent stack (order-2 DEFEND icon while telegraphing;
+  a small blue number by the health bar while Block is ACTIVE).
+- On a hit into Block: a "clink"/shield-spark impact effect (ImpactEffectSystem) that
+  is visually distinct from a flesh hit (blue sparks, no blood), plus a floating
+  "BLOCKED 15" via EventTextSystem so the player learns "my shot got eaten."
+- When Block breaks (damage exceeds it): a shatter effect + the remaining damage
+  carries through to HP, with the normal hit feedback for the overflow. This "shield
+  shatter -> real hit" moment is very satisfying and teaches the mechanic instantly.
+
+BALANCE CONTRACT
+================
+Block is transient eHP. Price it as survival-turns bought, per docs/balance-rule-system.txt
+method for consumables:
+    blockSurvivalTurns = blockGain / averageIncomingPlayerDPT(depth)
+  - An enemy DEFEND should buy it roughly 1 turn of survival (blockGain ~= reference
+    player sustained DPT at that depth), NOT more — otherwise defend-spam stalls the
+    fight past the golden-ratio TTK band. Add BLOCK_MAX and a per-archetype
+    defendBlockGain to BalanceConfig; verify in BalanceReport that a defend-heavy
+    enemy's EFFECTIVE TTK (accounting for ~1 defend per N turns) still lands in its
+    role's golden-ratio band.
+  - Add a new BLOCK section to BalanceReport listing each defending archetype's
+    blockGain, decay, and the resulting TTK inflation so it can't silently break the
+    golden ratio.
+
+IMPLEMENTATION CHECKLIST
+========================
+[ ] Add `int block` to Enemy and to the player's defense state; add BLOCK_MAX +
+    per-archetype defendBlockGain to BalanceConfig; NO hardcoding.
+[ ] Implement the shared 5-step mitigation pipeline in GameMath (pure) + call sites
+    in Enemy.applyDamage and the player damage path.
+[ ] Implement Block decay in the StatusEffectController tick (deterministic ordering).
+[ ] Add DEFEND to the COMMIT step's decision logic with the per-role conditions above.
+[ ] DoT bypasses Block (recommended) — implement and document.
+[ ] Add Block visuals: blue plating, BLOCKED floater, shield-spark + shatter effects.
+[ ] Add the BLOCK section to docs/balance-rule-system.txt and BalanceReport; verify
+    no golden-ratio break.
+[ ] order-2 renders the shield icon + block number; this doc supplies the value only.

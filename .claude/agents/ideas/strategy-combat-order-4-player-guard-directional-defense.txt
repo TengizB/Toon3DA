@@ -1,0 +1,178 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Player Guard Stance — directional defense (front-strong, flank-weak)
+CREATED: 2026-07-03
+---
+
+OVERVIEW
+========
+The player's answer to the enemy intent telegraphs: a GUARD action. The player taps
+Guard; it ENDS THE TURN (advances the world by one turn, enemies act) and puts the
+marine into a braced GUARDING stance. While guarding, incoming damage is heavily
+reduced from the direction the player is FACING, reduced somewhat from directly
+behind/opposite is NOT the point — the design brief is explicit: reduced damage from
+the front (facing) arc, FULL damage from the sides and back. This turns "which way am
+I facing" — already the game's core spatial fact — into a defensive decision: to
+guard well you must ROTATE to face the threat you read on the intent icons, then
+guard. Reading a room of intents and orienting your shield toward the biggest hit is
+the exact strategic loop this whole series is building toward.
+
+This is a directional, player-only layer built ON TOP of the generic Block resource
+from strategy-combat-order-3. Guard applies a facing-based multiplier (pipeline step 1
+in order-3); Block (step 3) can still stack under it if the player has any.
+
+This document OWNS: the Guard player action + state, the facing-arc damage model
+(front/side/back multipliers and the arc geometry), the turn/action-lock integration
+in PlayerController, the touch button, and all Guard visual feedback (the shield arc).
+It does NOT own the generic Block resource (order-3), the enemy intents it defends
+against (order-1/2), the Brace/Overwatch OFFENSIVE stance (brace-overwatch-stance.txt),
+or damage powers like Vulnerable (order-6).
+
+NO NEW TILE SYMBOL REQUIRED. Player-state layer.
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING SYSTEMS
+================================================
+- PlayerController.java (IMPLEMENTED): the IDLE->MOVING/ROTATING state machine with
+  action-lock. Guard adds a new momentary action from IDLE: it does not enter a long
+  animated MOVING/ROTATING phase; it sets the GUARDING flag, advances one turn, and
+  returns to IDLE — but the GUARDING flag PERSISTS until the player's next action
+  (see lifecycle). All input still routes through TouchInputState -> PlayerController
+  (mobile only, no keyboard — CLAUDE.md).
+- brace-overwatch-stance.txt (NOT IMPLEMENTED): DISTINCT and complementary. Brace =
+  OFFENSE (reaction fire down your facing line). Guard = DEFENSE (damage reduction
+  from your facing arc). Both end the turn, both key off facing, but they are opposite
+  tools: Brace punishes an approacher, Guard survives an attacker you can't kill this
+  turn. A future upgrade could let one button toggle between them; keep them separate
+  mechanics. Note the shared "face the threat" skill they both reward.
+- Player.java (IMPLEMENTED): directionX/directionY is the facing unit vector (always
+  cardinal after a rotation snaps). The Guard arc is computed from this vector. Never
+  mutate direction outside PlayerController (CLAUDE.md) — Guard reads it, never writes.
+- order-3 Block pipeline: Guard is pipeline STEP 1 (directional multiplier), applied
+  before Block absorption. Implement Guard's multiplier inside the same shared
+  GameMath mitigation helper so player and enemy math stay unified.
+- order-1 predictedDamage: the intent icons should show how Guard would change the
+  incoming number (see UX below) so the player can evaluate "guard vs move vs kill."
+
+THE FACING-ARC DAMAGE MODEL
+===========================
+When the player is GUARDING and takes a hit from an attacker, compute the angle
+between the player's facing vector and the direction FROM the player TO the attacker,
+then pick a multiplier by arc. Because movement/facing are cardinal, in practice the
+attacker is in one of four relations, but define it by arc so diagonal/line attacks
+resolve cleanly:
+
+    FRONT arc  (attacker within ±FRONT_HALF_ANGLE of facing, default ±60°):
+        damage x GUARD_FRONT_MULTIPLIER   (default 0.35 — a big reduction)
+    SIDE arcs  (beyond the front arc but not directly behind):
+        damage x GUARD_SIDE_MULTIPLIER    (default 1.0 — FULL damage, per brief)
+    BACK arc   (attacker roughly opposite facing, within ±BACK_HALF_ANGLE of the
+        reverse vector):
+        damage x GUARD_BACK_MULTIPLIER    (default 1.0 — FULL damage, per brief;
+        optionally >1.0 as a "backstab" penalty, see order-6)
+
+Design note: the brief says reduced from front, FULL from sides and back. So the
+DEFAULT side and back multipliers are 1.0 — guarding gives you NOTHING if you face the
+wrong way. That is the whole tension: a guard is only as good as your orientation, and
+enemies with MOVE intents (order-2) are threatening precisely because they can
+reposition to your flank while you guard the front. Keep front strong (0.35) so a
+correctly-oriented guard is a real, satisfying survival tool. Expose all three
+multipliers + the arc half-angles in a new GUARD block in a constants file.
+
+GEOMETRY (put the formula in GameMath, never inline — CLAUDE.md)
+================================================================
+  /*
+   * Formula: guardFacingMultiplier
+   * Derivation: let facing=(directionX,directionY) unit vector; let toAttacker=
+   *   normalize(attackerX-playerX, attackerY-playerY). alignment = dot(facing,
+   *   toAttacker) in [-1,1]. FRONT if alignment >= cos(FRONT_HALF_ANGLE); BACK if
+   *   alignment <= -cos(BACK_HALF_ANGLE); otherwise SIDE. Return the matching
+   *   multiplier. Cardinal facing + cardinal attacker lines make alignment land on
+   *   {1, 0, -1} in the common case, so ±60° front cleanly catches only the faced
+   *   direction and treats both perpendicular lanes as SIDE.
+   * Edge cases: attacker on the same tile (degenerate toAttacker) -> treat as FRONT
+   *   (point-blank, player is bracing at it); zero-length facing impossible (always
+   *   unit). Ranged attacker fires along a lane -> use the lane origin as attackerX/Y.
+   */
+This makes the four-way case exact while still handling any angle robustly.
+
+GUARD LIFECYCLE (PlayerController)
+==================================
+1. IDLE: pollInput() reads a GUARD TouchAction (new). If pressed:
+     -> set guarding = true; advance the world one turn (fire the tick so enemies
+        execute their committed actions — order-1 phaseB — against a guarding player);
+        remain in IDLE (guard is instantaneous, no slide/rotate anim needed, though a
+        short "brace" flourish anim is nice). Guarding IS the turn's action.
+2. GUARDING persists: the guarding flag stays TRUE through the enemy turn that
+   follows AND until the player's NEXT action begins. So a single Guard tap protects
+   against exactly the next enemy turn (the one whose intents the player just read).
+3. Guard ENDS the instant the player takes any other action (move/rotate/fire/etc.)
+   or taps Guard again to re-guard (refreshing another turn). You cannot move AND
+   stay guarded — guarding is a committed, stationary defensive turn, matching the
+   "it ends turn" brief.
+4. IMPORTANT ORIENTATION INTERACTION: because rotating is itself a turn, a player who
+   reads "big hit coming from the north" must ROTATE to face north (one turn) and THEN
+   guard (another turn) — OR guard immediately if already facing it. This two-step
+   cost is the strategic meat; do not add free rotate-while-guarding. (A high-tier
+   upgrade could grant "pivot-guard" — rotate and guard in one turn — as a rare reward.)
+
+TOUCH BUTTON (mobile only)
+==========================
+- Add a GUARD TouchAction + a TouchButton in TouchControllerRenderer, sized for a
+  thumb (TouchConstants). Natural placement: near/replacing or beside Skip Turn, since
+  Guard is "spend a turn defensively" — the defensive sibling of Skip. Distinct icon
+  (a shield) and color (blue) so it's not confused with Fire/Reload.
+- Consider a shared "stance" cluster if Brace (brace-overwatch-stance) also ships:
+  Skip / Guard / Brace as three turn-ending stance buttons.
+
+PLAYER GUARD VISUALS (the mandatory visual communication)
+=========================================================
+- A translucent SHIELD ARC rendered in the 3D view across the FRONT of the screen
+  (bottom-center, curving up the sides) while guarding — a HUD overlay (its own small
+  renderer, drawn with the weapon-HUD FrameBuffer style or a simple additive quad) so
+  the player constantly SEES they are protected and IN WHICH direction (the arc is on
+  the faced side only). Front-facing = shield glows in front of you.
+- A directional HIT reaction that TEACHES the arc: a hit into the front arc shows a
+  bright blue "GUARDED — 4" (reduced number) impact spark on the shield; a hit from
+  the side/back shows a red "FLANKED — 12" full-damage hit with the HitVignetteRenderer
+  flaring on the side the hit came from (the game already has a directional-ish hit
+  vignette — reuse/extend it to key off the attacker direction). The contrast between
+  a softly-blocked front hit and a punishing red flank hit is the lesson.
+- Minimap: optionally draw the player's guard arc as a faint blue cone on the facing
+  side so the top-down view also communicates orientation-vs-threats.
+- Intent-icon UX tie-in (order-1/2): while the player is oriented such that guarding
+  WOULD reduce a given enemy's telegraphed hit, that enemy's damage number can show a
+  "12 -> 4" preview, so the player can evaluate the guard before committing. Optional
+  but high-value for teaching.
+
+BALANCE CONTRACT
+================
+Guard is transient, CONDITIONAL eHP (only vs the front arc, only for one turn, costs
+a whole turn). Price it in docs/balance-rule-system.txt:
+    guardedFrontHitDamage = incoming * GUARD_FRONT_MULTIPLIER
+    turnsBought(front) = it converts a would-be lethal front turn into a survivable
+        one, at the cost of the offense you didn't do that turn (an opportunity cost of
+        ~1 reference-DPT turn). Because it does NOTHING vs flanks, its average value is
+        self-limiting (multi-enemy rooms will have off-arc attackers), so it does not
+        need a hard cap the way Block does. Verify: a front-guard must NOT reduce a
+        single-enemy duel below the enemy's golden-ratio expectations (it shouldn't,
+        since guarding costs the player's own turn 1:1). Add GUARD_* to BalanceConfig
+        and a note (not a full table row) to the balance doc.
+Interaction cap: Guard (step 1) then Block (step 3) can stack for a heavily defensive
+turn; ensure the combined front reduction can't hit ~0 incoming (floor the multiplier
+product or note that Block is finite and decays, so infinite mitigation is impossible).
+
+IMPLEMENTATION CHECKLIST
+========================
+[ ] Add GUARD TouchAction + TouchButton (thumb-sized, shield icon) — mobile only.
+[ ] Add guarding state + lifecycle to PlayerController (ends turn, persists to next
+    action, no move-while-guarded).
+[ ] Add guardFacingMultiplier to GameMath (pure, full comment block) + wire it as
+    step 1 of the order-3 mitigation pipeline in the player damage path.
+[ ] Add GUARD_FRONT/SIDE/BACK multipliers + arc half-angles to a constants file
+    (defaults 0.35 / 1.0 / 1.0, ±60° / ±60°); NO hardcoding.
+[ ] Build the shield-arc HUD overlay renderer (dispose it; no alloc in render).
+[ ] Directional hit feedback: GUARDED (blue, front) vs FLANKED (red, side/back) via
+    ImpactEffectSystem + directional HitVignetteRenderer + EventTextSystem.
+[ ] Optional: intent-icon "12 -> 4" guard preview; minimap guard cone.
+[ ] Add GUARD_* to BalanceConfig + a balance-doc note; verify no duel-break.
+[ ] Keep Guard (defense) distinct from Brace (offense); do not merge.

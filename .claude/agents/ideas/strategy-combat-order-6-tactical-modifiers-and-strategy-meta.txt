@@ -1,0 +1,160 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Tactical Modifiers & Strategy Meta — Vulnerable/Weak, positioning payoffs, the read-plan-counter loop
+CREATED: 2026-07-03
+---
+
+OVERVIEW
+========
+The capstone of the strategy-combat series and the "things I'd also add" the design
+brief invited. Order 1-5 give the game the STRUCTURE of Slay-the-Spire combat
+(telegraphed intent, block, directional guard, scripted enemies). This doc adds the
+MODIFIER LAYER that makes those reads pay off with build-defining decisions —
+Vulnerable / Weak / Exposed powers, positioning bonuses (backstab / flank), an
+initiative/priority read, and the connective tissue that ties the whole loop
+together: READ intent -> PLAN (move/rotate/guard/fire/status) -> COUNTER. It also
+specifies the combat-clarity / onboarding pass so players actually learn the system.
+
+This document OWNS: the new damage-modifier POWERS (Vulnerable, Weak, Exposed, and
+their interaction with the order-3 pipeline), the positioning damage bonuses
+(backstab/flank), the "priority read" surfacing, and the combat-onboarding/clarity
+plan. It does NOT re-implement the status TICK engine (roguelike_order_8 owns it —
+these are new status TYPES/POWERS that plug into it), the intent model (order-1), the
+icons (order-2 renders the new power badges), Block (order-3), Guard (order-4), or
+enemy scripts (order-5 abilities APPLY these powers).
+
+NO NEW TILE SYMBOL REQUIRED.
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING SYSTEMS
+================================================
+- roguelike_order_8 status effects (IMPLEMENTED): already has EMPOWERED (== StS
+  Strength, +damage dealt) and the STACK/REFRESH machinery. This doc ADDS three new
+  StatusType powers using that same engine — no new tick system:
+      VULNERABLE — the host takes +X% damage (default +50%). The offensive counterpart
+          to Block; makes a shot you set up hit harder.
+      WEAK       — the host deals -X% damage (default -25%). Defensive debuff; softens
+          an enemy's telegraphed hit (its predictedDamage number visibly drops).
+      EXPOSED    — the host's Block (order-3) is ignored / shredded by the next hit.
+          The dedicated answer to turtling enemies.
+  These are the classic StS "powers" that turn combat into setup-then-payoff.
+- order-3 mitigation pipeline: VULNERABLE/WEAK are pipeline STEP 2 (damage-dealt and
+  damage-taken multipliers), EXPOSED modifies STEP 3 (Block). Slot them into the SAME
+  shared GameMath mitigation helper — one pipeline, all modifiers.
+- order-4 Guard: the FLANK/backstab bonus below is the enemy-side mirror of Guard's
+  weakness — enemies that reach your flank both bypass your guard AND (optionally) get
+  a positional damage bonus, so positioning matters symmetrically.
+- levelup-stim-boon-choice-progression / balance idea 5 upgrade cards: new upgrade
+  cards that apply Vulnerable-on-hit, extend Weak duration, or grant backstab damage
+  become build-defining picks — but they must be priced by the PP budget (balance
+  SECTION D). This doc supplies the mechanics; card pricing stays in the balance
+  contract.
+
+THE POWER LAYER (new StatusTypes via the existing engine)
+=========================================================
+  VULNERABLE (on enemies, mostly): applied by player weapons/abilities (e.g. a
+      "marking" shot, a status-weapon), makes the target take VULNERABLE_MULTIPLIER
+      more damage while it lasts. The strategic play: land a cheap Vulnerable, THEN
+      dump your big weapon for a burst that clears the golden-ratio TTK a turn early.
+      Shown as an order-2 power badge on the target + a red-tinted damage preview.
+  WEAK (on enemies): reduces the enemy's dealt damage; its telegraphed predictedDamage
+      number (order-1) visibly drops (e.g. "12" -> "9"), so the player SEES their
+      debuff working — direct, legible feedback. A defensive alternative to killing:
+      soften the room instead of racing it.
+  EXPOSED (on enemies): the anti-turtle. A hit into an Exposed enemy ignores its Block
+      (order-3). Lets a build answer defend-heavy enemies without an armor-piercing
+      weapon. Applied by specific weapons/abilities/upgrades.
+  (Enemies MAY apply WEAK to the PLAYER too — order-5 DEBUFF_PLAYER — so the layer is
+  symmetric: the player's own damage numbers on the HUD dim when Weakened.)
+Stack/refresh rules follow roguelike_order_8 (REFRESH_DURATION for the multiplier
+powers, a small stack cap for VULNERABLE so it can't trivialize a boss).
+
+POSITIONING PAYOFFS (make the 2D board matter more)
+===================================================
+The game is spatial and cardinal; reward using that:
+  - BACKSTAB / FLANK BONUS: a player attack on an enemy from BEHIND its facing (an
+    enemy has an implicit facing = the direction it last moved/attacked) deals
+    BACKSTAB_MULTIPLIER more (default +30%). This rewards the maneuvering the intent
+    telegraphs enable (bait a MOVE, circle behind, punish). Mirror for enemies vs the
+    guarding player (order-4): an enemy that flanks a guarding player gets the same
+    bonus, so guarding the wrong way is doubly punished. Enemy facing is cheap to
+    track (they already have a movement/attack direction).
+  - CHOKEPOINT / LANE tactics already exist (isSameCardinalLine, generator
+    chokepoints); this doc just formalizes the DAMAGE incentive to use them.
+  - Keep positioning bonuses MODEST (±30%) so they're a nudge, not a mandatory combo —
+    strategy, not execution-check.
+
+THE PRIORITY READ (surface "who to kill first")
+===============================================
+With intents visible (order-2), the player should be able to triage a room at a
+glance. Add light decision-support (opt-in, never auto-play):
+  - A subtle emphasis on the HIGHEST-threat committed intent this turn (e.g. the enemy
+    whose telegraphed hit is the biggest gets a slightly brighter icon frame), so a
+    new player's eye is guided to "the 18 is the scary one." Keep it subtle; experts
+    read raw numbers.
+  - Support enemies (BUFF_ALLY, order-5) get a distinct "priority" tint so the classic
+    "kill the buffer first" lesson is discoverable.
+  - This is TEACHING, not solving — never show an optimal move; just make the salient
+    info salient.
+
+THE COMPLETE LOOP (what all six docs produce together)
+======================================================
+Each turn the player now:
+  1. READS the room: intent icons + damage numbers (order-1/2) + power badges (this
+     doc) tell them exactly what every enemy will do and for how much.
+  2. PLANS with a full toolkit, each option costing the turn:
+       - KILL the biggest threat (burst it, maybe after a Vulnerable setup),
+       - DODGE a committed attack (step off a melee/line — order-1 R2/R3 makes it whiff),
+       - GUARD the hit you can't avoid, facing it (order-4),
+       - DEBUFF (Weak) the room to survive, or EXPOSE a turtle,
+       - REPOSITION to a chokepoint / behind an enemy for a backstab,
+       - BRACE for overwatch (brace-overwatch-stance) against an approacher.
+  3. COUNTERS: the chosen action resolves, enemies execute what they telegraphed, and
+     the read pays off or the misread punishes.
+This is the Slay-the-Spire loop expressed in a cardinal, first-person dungeon — the
+whole point of the series.
+
+COMBAT CLARITY / ONBOARDING PASS (do not skip — a strategic system nobody
+understands is noise)
+=========================================================================
+  - FIRST-ENCOUNTER TEACHING: the first time the player sees each new element (an
+    intent icon, a DEFEND shield, a Vulnerable badge, their first FLANKED hit), show a
+    one-line EventTextSystem tip ("It will attack for 12 — move or Guard"). Gate each
+    tip to fire once (persist a flag in StatsStore/Preferences).
+  - LEGIBILITY AUDIT: numbers and icons must be readable at typical enemy distances on
+    a PHONE screen (the platform). Reuse the order-2 min-size clamps; test on the
+    Android target, not just desktop.
+  - CONSISTENCY: one color language across everything — red=incoming damage,
+    blue=defense/block/guard, purple=special, yellow=movement, green/red badges for
+    buff/debuff. Every doc in this series already uses it; enforce it in one shared
+    palette constant block so nothing drifts.
+  - NO INFORMATION ASYMMETRY THE PLAYER CAN'T ACT ON: if the game telegraphs it, the
+    player must have a turn to respond (guaranteed by order-1's commit-then-execute).
+
+BALANCE CONTRACT
+================
+  - VULNERABLE/WEAK are multipliers on the eHP/DPT primitives; price any UPGRADE CARD
+    that grants them by the PP budget (balance SECTION D), and cap VULNERABLE stacks so
+    a build can't multiply a boss into a 2-turn kill (respect the boss ruleset, idea 6).
+  - BACKSTAB/FLANK ±30% must not push any weapon's effective power-score out of its
+    role band when reliably achievable; since it requires setup/positioning, price it
+    as a conditional (like crit) with its own soft cap, per SECTION D's conditional
+    rule.
+  - EXPOSED must not let status/piercing trivialize the DEFEND counter it's meant to
+    answer — it removes Block for ONE hit, not permanently.
+  - Add a MODIFIERS section to BalanceReport: list each power's multiplier, cap, and
+    its effect on reference TTK/eHP so the whole layer stays inside the contract.
+
+IMPLEMENTATION CHECKLIST
+========================
+[ ] Add VULNERABLE / WEAK / EXPOSED StatusTypes to roguelike_order_8's engine (new
+    types, same tick machinery); wire into the order-3 pipeline (steps 2 & 3).
+[ ] Track enemy facing; add backstab/flank multipliers (GameMath, pure) for both
+    player->enemy and enemy->guarding-player.
+[ ] Surface the priority read (subtle highest-threat + support-enemy tint) via order-2
+    frame emphasis — teaching only, never auto-play.
+[ ] Build the first-encounter tip system (EventTextSystem + once-only StatsStore flags).
+[ ] Enforce one shared color palette across the whole series' visuals.
+[ ] Add order-2 power badges (Vulnerable/Weak/Exposed) — this doc names them, order-2
+    draws them.
+[ ] Add the MODIFIERS section to docs/balance-rule-system.txt + BalanceReport; cap
+    stacks; verify weapon bands, golden ratios, and the boss ruleset all still hold.

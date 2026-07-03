@@ -478,6 +478,13 @@ telegraphed or avoidable. BalanceReport's TELEGRAPH AUDIT checks every attack:
     wind-ups; ranged attacks are "telegraphed" by the cardinal-line tell (you can see the lane).
 No attack FAILS the contract.
 
+POST-INTENT-MODEL (strategy-combat-order-1): every enemy now COMMITS its next action at the end of
+its turn and the player reads that PlannedAction for the entire following turn, so EVERY direct
+attack — melee, ranged, and charge — is pre-committed one full turn ahead. The
+TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION rule is therefore satisfied by construction for all
+committed attacks. The only remaining untelegraphed damage is DoT ticks (Burning/Poison) and
+environmental hazards; all direct attacks are telegraphed by the intent system.
+
 SCOPE NOTE: idea 4 is a 5-pillar epic. Implemented across two PRs: Pillar 1 (encounter budget) and
 the enemy role/verb taxonomy in the first; the mechanical verb hooks (Pillar 2), the hazard
 chain-reaction system (Pillar 3), and the telegraph audit (Pillar 5) in the second. Pillar 4

@@ -1,0 +1,212 @@
+STATUS: IMPLEMENTED
+CATEGORY: Systems
+TITLE: Pre-Committed Enemy Intent Model — the Slay-the-Spire spine
+CREATED: 2026-07-03
+---
+
+OVERVIEW
+========
+This is the ARCHITECTURAL SPINE of the whole strategy-combat series. Everything
+else (intent icons, block, player guard, special abilities) hangs off it.
+
+Today the enemy AI is a REACTIVE greedy stepper: on its own turn each enemy looks
+at the current board and decides right then whether to move or attack
+(EnemyManager.actMeleeEnemy / actChargerEnemy / actRangedEnemy). The player never
+knows what an enemy will do until it already did it. That is the opposite of Slay
+the Spire, where combat is a game of READING telegraphed intent and PLANNING a
+counter a full turn ahead. The only thing the game currently telegraphs is the
+Shell Brute charge (EnemyState.WINDING_UP + telegraphTimerSeconds).
+
+The fix is to invert the decision timing: an enemy COMMITS to its next action at
+the END of the turn (once it can see the resolved board), stores that commitment as
+a PlannedAction, and the player sees it during their OWN turn. On the following
+enemy turn the enemy EXECUTES the committed action (with fairness re-validation, see
+below) and immediately commits its next one. "Decide-ahead, show, then execute."
+
+This document OWNS: the PlannedAction data structure, the commit/execute turn
+re-ordering inside EnemyManager.takeTurn, the intent VERB taxonomy, the re-validation
+& adaptation rules (what happens when the player invalidates a committed intent), and
+the first-turn / wake / stun edge cases. It does NOT own the ON-SCREEN ICON rendering
+(strategy-combat-order-2), the Block mechanic (order-3), the player Guard stance
+(order-4), enemy move-set scripting (order-5), or tactical damage modifiers (order-6).
+Those are separate docs that CONSUME the PlannedAction this doc produces.
+
+NO NEW TILE SYMBOL REQUIRED. This is an enemy-state layer.
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING SYSTEMS
+================================================
+- enemy_system.txt (IMPLEMENTED): EnemyManager.takeTurn runs phaseA (alert/aggro
+  propagation) then phaseB (per-enemy act). THIS doc splits phaseB into an EXECUTE
+  step and a COMMIT step and adds the PlannedAction field to Enemy. The existing
+  act* methods become the "compute the planned action" logic instead of the "do it
+  now" logic — same decision code, moved one turn earlier.
+- WINDING_UP / telegraphTimerSeconds (IMPLEMENTED): the Shell Brute charge is the
+  proof-of-concept that a one-turn telegraph already works and feels good. This doc
+  GENERALIZES that single hard-coded telegraph into a uniform system every enemy
+  uses. The charge wind-up becomes just one PlannedAction verb (WIND_UP / CHARGE).
+- tick-system.txt (IMPLEMENTED): commit happens as the last sub-phase of the enemy
+  turn, so a fresh intent is always visible for the entire player turn that follows.
+- brace-overwatch-stance.txt (NOT IMPLEMENTED): compatible. Overwatch reaction fire
+  resolves BEFORE an enemy executes its committed action — a braced player can shoot
+  an enemy that telegraphed ATTACK before the attack lands. Good synergy, no conflict.
+- roguelike_order_8 status effects (IMPLEMENTED): STUNNED must cancel a committed
+  action (see edge cases). SLOWED may cause an enemy to re-commit MOVE more often.
+
+THE CORE DATA STRUCTURE
+=======================
+New enum, package ge.tbegvadze.toon3d.enemy:
+
+  enum IntentVerb {
+      ATTACK_MELEE,    // will bite/smash the player next turn (adjacent)
+      ATTACK_RANGED,   // will fire down a cardinal line next turn
+      WIND_UP,         // telegraphing a big/charge attack that lands in 1+ turns
+      MOVE,            // will step toward the player (no attack this turn)
+      DEFEND,          // will gain Block and not attack (order-3)
+      SPECIAL,         // will use an archetype ability — buff/summon/area (order-5)
+      WAIT,            // out of range & no useful move; holds position
+      STUNNED          // cannot act; intent is "skipped" (shown greyed, order-2)
+  }
+
+New value class Enemy.PlannedAction (or a small final class in the enemy package):
+
+  final class PlannedAction {
+      IntentVerb verb;
+      int        targetColumn, targetRow;  // where a MOVE goes, or the attack origin
+      int        predictedDamage;          // number to show above the icon (StS-style)
+      int        blockGain;                // for DEFEND (order-3)
+      int        windUpTurnsRemaining;     // for WIND_UP / multi-turn telegraphs
+      Object     abilityRef;               // for SPECIAL (order-5); null otherwise
+  }
+
+Add to Enemy:  public PlannedAction plannedAction;  (null == "not yet committed",
+treated as WAIT for display). Keep it a single reused instance per enemy — NO
+allocation inside takeTurn (project rule). Mutate fields in place.
+
+TURN RE-ORDERING (the heart of the change)
+==========================================
+Current EnemyManager.takeTurn(playerColumn, playerRow, player):
+    phaseA: rebuildOccupancy + alert/chain-aggro
+    phaseB: for each alive enemy -> actEnemy(...)  // decides AND does in one step
+
+New takeTurn, three sub-phases per enemy turn:
+    phaseA: rebuildOccupancy + alert/chain-aggro   (unchanged)
+    phaseB (EXECUTE): for each alive enemy, run the action it COMMITTED last turn
+            (enemy.plannedAction). If plannedAction is null (freshly woken, see
+            edge cases) the enemy does nothing this turn except commit.
+    phaseC (COMMIT): for each alive enemy, look at the NOW-resolved board and
+            compute its next PlannedAction; store it. This is where the old act*
+            decision logic lives, but it only WRITES the plan, it does not act.
+
+Result: at the end of every enemy turn, every alive enemy holds a fresh, visible
+PlannedAction. During the entire following player turn the player can read it and
+plan. When the player finally acts, phaseB executes exactly what was shown.
+
+FAIRNESS: RE-VALIDATION & ADAPTATION (critical design decision)
+===============================================================
+Slay the Spire enemies keep their committed intent even if you move — a telegraphed
+attack that you dodge simply misses. But this game is spatial/cardinal, so a blind
+"execute no matter what" would feel broken (an enemy "attacking" an empty tile after
+you walked away). The rule set, tuned for fairness AND for keeping telegraphs
+meaningful:
+
+  RULE R1 (COMMITTED MELEE, player still adjacent): execute the hit. Player saw it,
+     chose to stay -> takes the hit. This is the tension we want.
+  RULE R2 (COMMITTED MELEE, player stepped out of reach): the attack WHIFFS. Enemy
+     plays a short "swing at air" anim (order-2 shows a broken/greyed icon flash),
+     does no damage, and does NOT get a free re-plan — it wasted its turn. This is
+     the core counter: bait the swing, step away, punish. Do NOT silently convert
+     the whiff into a chase; that would remove the reward for dodging.
+  RULE R3 (COMMITTED RANGED, player still on the same cardinal line): fire (respects
+     isSameCardinalLine, the existing invariant). Player stepped off the line ->
+     the shot MISSES down the empty lane (order-2 shows a tracer that hits nothing).
+     Same "you dodged, enjoy the free turn" payoff as R2.
+  RULE R4 (COMMITTED MOVE, target tile now blocked by another enemy/closed door):
+     re-path one step or WAIT; a move being invalidated is low-stakes so a quiet
+     re-plan is fine here (unlike attacks). Use the existing wiggleStep fallback.
+  RULE R5 (WIND_UP charge): unchanged from today — the charge locks a direction and
+     fires along it; sidestepping it is the intended counter (Shell Brute already
+     does this; it just becomes a formal WIND_UP verb).
+  RULE R6 (enemy got STUNNED during the player turn, order-8): its committed action
+     is CANCELLED and its icon shows STUNNED. It re-commits when the stun ends.
+
+The asymmetry — attacks that miss are wasted, moves that fail re-plan quietly — is
+deliberate: it makes DODGING committed attacks the central skill the whole system
+rewards, while not punishing the player with jittery enemies over trivial pathing.
+
+EDGE CASES
+==========
+- FRESH WAKE: an enemy that transitions DORMANT->ALERTED this turn has no committed
+  action yet. It spends this turn ONLY committing (phaseC), so a just-alerted enemy
+  always gives the player one full turn of warning before its first action. This is
+  a small buff to the player but a big readability win and matches StS (a summoned/
+  revealed enemy shows intent before acting). If designers want aggressive enemies,
+  give specific archetypes a "commits AND executes on wake" flag.
+- FIRST FRAME OF COMBAT / LEVEL LOAD: all enemies DORMANT -> no intents shown until
+  something alerts. Correct.
+- MULTI-TURN WIND_UP: windUpTurnsRemaining counts down in phaseB; the icon shows the
+  same WIND_UP the whole time (order-2 can add a countdown pip).
+- DEATH mid-plan: a killed enemy's plannedAction is irrelevant; skip in phaseB.
+- SIMULTANEITY: phaseB executes ALL committed actions in spawn-index order (as today)
+  BEFORE any phaseC re-commit, so no enemy re-plans based on a same-turn ally's move.
+  This keeps the "what you saw is what you get" contract exact.
+
+PREDICTED DAMAGE NUMBER
+=======================
+predictedDamage = the exact damage the player WOULD take if the action lands,
+computed the same way the real hit is computed (Enemy.scaledAttackDamage() *
+attackDamageMultiplier, minus the player's guard/block reduction the moment it is
+computed — but see order-3/4: the number should reflect PRE-mitigation damage and
+let the player see how their planned Guard would reduce it). Store it in
+PlannedAction.predictedDamage so order-2 can render "12" under a red fist exactly
+like Slay the Spire. This single number is the biggest readability upgrade in the
+whole series — it turns "something bad is coming" into "I will take 12; my Guard
+halves my front, so step to face it or eat 12."
+
+BALANCE CONTRACT HOOK
+=====================
+No new numbers of its own — this doc RESTRUCTURES timing, it does not add power. But
+it changes the fairness math in docs/balance-rule-system.txt SECTION 13 (TELEGRAPH):
+because EVERY attack is now telegraphed one full turn ahead, the
+TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION rule is satisfied by construction for all
+committed attacks. Update the telegraph audit note: "post-intent-model, the only
+untelegraphed damage is DoT ticks and hazards; all direct attacks are pre-committed."
+
+WHY THIS IS THE RIGHT FOUNDATION
+================================
+Every other part of this series needs a place to READ "what will this enemy do next
+turn." Without a pre-committed plan there is nothing to draw an icon for (order-2),
+nothing for the player's Guard to be aimed against (order-4), and no slot for a
+special-ability telegraph (order-5). Build this first; the rest are consumers.
+
+IMPLEMENTATION CHECKLIST
+========================
+[x] Add IntentVerb enum + PlannedAction class (enemy package), one reused instance
+    per Enemy, zero-alloc. (Enemy.plannedAction is a final pre-allocated instance;
+    PlannedAction.committed flag stands in for the "null == not committed" contract.)
+[x] Split EnemyManager phaseB into EXECUTE (phaseBExecute) + COMMIT (phaseCCommit).
+[x] Port existing act* decision logic into the COMMIT step (compute*Plan methods write
+    the plan and never act).
+[x] Implement R1-R6 re-validation in the EXECUTE step (execute* methods).
+[x] Fold the charger wind-up into the WIND_UP verb path. The old chargeWindUpTurns
+    field was removed; the wind-up is now a committed WIND_UP plan whose execute step
+    calls performCharge. EnemyState.WINDING_UP + triggerTelegraph() are set at COMMIT
+    so the rim flash shows for the whole player turn.
+[x] Handle wake / stun / death / multi-turn edge cases (fresh wake = plan.committed
+    false → EXECUTE skips; stun = R6 cancel in EXECUTE; death = isAlive() guards).
+[x] Populate predictedDamage from the real damage formula (scaledAttackDamage, plus
+    the charge/flank multipliers where they apply).
+[x] Update balance-rule-system.txt SECTION 13 telegraph note.
+[x] Leave rendering to order-2 (no draw code changed; EnemyState/telegraph timers reused).
+
+DEVIATIONS FROM THE ORIGINAL SPEC (intentional, recorded here)
+==============================================================
+1. RANGED = one verb per turn. The old reactive ranged AI could flee-AND-fire (or
+   advance-AND-fire) in a single turn. Under the committed model an enemy performs
+   exactly one telegraphed action per turn, so a kiter now flees OR fires OR advances —
+   its shot is delayed one turn when it has to reposition. This is the "what you saw is
+   what you get" contract, and it is a small, fair nerf that reads better.
+2. CHARGER drops its dedicated hold turn. The old charger spent a full turn winding up
+   (doing nothing) then rushed the next turn. Now the WIND_UP is committed at the end of
+   a normal turn and shown for the whole following player turn, then the rush executes —
+   still exactly one player-turn of warning to sidestep, but no wasted enemy turn. The
+   whiff-recovery (skipNextAction after a missed rush) is preserved so baiting still works.

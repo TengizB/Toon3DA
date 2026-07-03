@@ -1,0 +1,143 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Enemy Intent Telegraph Icons — the readable "what happens next" HUD
+CREATED: 2026-07-03
+---
+
+OVERVIEW
+========
+The player-facing half of the intent model. This document specifies the floating
+icon (and, for attacks, the damage number) drawn above every alerted enemy that
+communicates the PlannedAction committed in strategy-combat-order-1. This is the
+single most important VISUAL upgrade in the series — it is what turns the game from
+"react to what already hit me" into "read the board, plan a counter," exactly like
+the intent icons floating over every monster in Slay the Spire.
+
+This document OWNS: the icon taxonomy and art spec (procedural, no textures), the
+damage-number rendering, billboard placement above the enemy sprite, the color
+language, animation/pulse behavior, and the failure/whiff feedback. It does NOT own
+the PlannedAction data (order-1 produces it), the Block value shown for DEFEND
+(order-3), the player Guard visuals (order-4), or ability-specific icons for SPECIAL
+(order-5 supplies the specific sub-icon; this doc reserves the slot and the frame).
+
+NO NEW TILE SYMBOL REQUIRED. Pure render layer.
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING SYSTEMS
+================================================
+- EnemyRenderer.java (IMPLEMENTED): already draws each enemy billboard AND a
+  procedural health bar above it (see docs/enemy-health-bars.txt). The intent icon
+  is a THIRD element stacked above the health bar, using the SAME screen-projection
+  the health bar already computes (enemy world center -> screen X, sprite top Y,
+  distance scale, Z-buffer occlusion test). Reuse that projection; do not recompute.
+- docs/enemy-health-bars.txt: the icon sits directly ABOVE the health bar. Health bar
+  = current state (HP). Intent icon = future state (next action). Together they read
+  as one stacked status column over the enemy's head.
+- Charger WINDING_UP (IMPLEMENTED): the enemy already has telegraphTimerSeconds /
+  getTelegraphStrength() driving a red pulse on the sprite. The WIND_UP icon reuses
+  that strength value for its pulse so the sprite flash and the icon pulse are in
+  sync.
+- procedural-hud / procedural-vitals-hud.txt: icons are drawn PROCEDURALLY with
+  ShapeRenderer/filled tris + the existing white-pixel SpriteBatch technique — NO
+  new texture assets. This matches the game's no-sprite-texture HUD philosophy.
+
+THE ICON TAXONOMY (one glyph per IntentVerb)
+============================================
+Each icon is a small procedural glyph inside a rounded square "intent frame"
+(~28x28 world units at 1-tile distance, scaling down with enemy distance like the
+health bar). Glyph + frame-tint carry the meaning; the damage number carries the
+magnitude.
+
+  ATTACK_MELEE   red frame.   Glyph: a stylized FIST / fang (filled triangle cluster).
+                 Damage number shown below the icon (e.g. "12").
+  ATTACK_RANGED  orange frame. Glyph: a chevron/arrow pointing along the enemy's
+                 firing cardinal (so the player can see WHICH lane is hot). Damage
+                 number shown. If the enemy is currently ON the player's line, the
+                 arrow gets a brighter "locked" outline (this is the deadly one).
+  WIND_UP        deep-red frame, PULSING (reuse getTelegraphStrength). Glyph: a
+                 double-chevron / loaded-spring. For a charge, an arrow along the
+                 charge direction. Optional countdown pip if windUpTurnsRemaining>1.
+                 Damage number shown (the big hit that's coming).
+  MOVE           yellow frame. Glyph: two footprints / a running chevron pointing at
+                 the tile the enemy will step to. No damage number. Low visual
+                 weight (this enemy is not a threat THIS turn).
+  DEFEND         blue frame. Glyph: a SHIELD outline. Shows the Block amount it will
+                 gain (order-3) as the number, in blue, not red.
+  SPECIAL        purple frame. Glyph: a starburst / rune (order-5 may swap in an
+                 ability-specific sub-glyph). Number optional per ability.
+  WAIT           grey frame, low alpha. Glyph: an ellipsis / "zzz"-free dots. Signals
+                 "this enemy will do nothing useful" — lets the player deprioritize it.
+  STUNNED        grey frame, glyph: spinning-stars / "X". Signals a wasted enemy turn
+                 (the player's stun is working). High-value feedback for status builds.
+
+COLOR LANGUAGE (consistent, colorblind-aware)
+=============================================
+Danger is encoded by BOTH hue AND shape weight so it survives colorblindness:
+  red/orange + sharp/spiky glyph = "damage is coming, and how much"
+  blue + shield                  = "it's turtling; your hit will do less"
+  yellow + footsteps             = "it's just repositioning"
+  purple + rune                  = "something special — pay attention"
+  grey + dots/X                  = "no threat / disabled"
+The damage NUMBER is the precise layer; color/shape is the at-a-glance layer. A
+player should be able to scan a room and instantly see "two red fists with 12 and 9,
+one blue shield, three yellow footsteps" and know the whole turn's threat.
+
+PLACEMENT & PROJECTION
+======================
+Vertical stack above each alerted enemy, from the sprite up:
+    [ intent icon ]        <- new, this doc
+    [ damage number ]      <- new, below or inside the icon frame
+    [ health bar ]         <- existing (enemy-health-bars.txt)
+    [ enemy sprite ]       <- existing billboard
+Use EnemyRenderer's existing per-enemy screen projection. Apply the SAME Z-buffer
+occlusion test the health bar uses (getZBufferAt) so an icon behind a wall is hidden.
+DORMANT enemies show NO icon (they have no committed plan and revealing it would leak
+information the player shouldn't have pre-aggro). Only draw for isAlerted() enemies
+with a non-null plannedAction.
+
+ANIMATION
+=========
+- Idle: gentle bob (±2px, sine on a per-enemy phase offset so a room of icons doesn't
+  pulse in lockstep).
+- WIND_UP: pulse scale + alpha with getTelegraphStrength() (already animated for the
+  sprite) so the danger reads as "charging up."
+- COMMIT change: when an enemy re-commits to a DIFFERENT verb than last turn, play a
+  quick 0.15s pop/scale-in so the player's eye is drawn to the change ("it switched
+  from move to attack — react").
+- WHIFF / MISS feedback (order-1 R2/R3): when a committed attack executes against an
+  empty tile, flash the icon frame to a broken/greyed state for ~0.3s before it
+  disappears, and (optional) spawn an EventTextSystem "MISS" over the enemy. This
+  rewards the dodge with clear positive feedback: "you baited that swing."
+- Reuse ImpactEffectSystem / EventTextSystem for the MISS / "STUNNED" floaters rather
+  than a new system.
+
+READABILITY AT DISTANCE / CROWDS
+================================
+- Icons scale with distance like health bars but clamp to a MIN size so a far-off
+  sniper's ATTACK_RANGED intent is still legible (the lane it threatens matters even
+  from across the room).
+- If many enemies overlap on screen, the Z-buffer test naturally hides occluded ones;
+  do not attempt to declutter further in v1 — the mini-map already gives spatial
+  overview.
+- Optional accessibility toggle (TouchConstants / a settings flag): "always show
+  damage numbers" vs "icons only," for players who find numbers noisy.
+
+NEW CONSTANTS (add to a new INTENT block in EnemyConstants.java or a new
+IntentConstants.java — follow the split-constants rule, never hardcode)
+=======================================================================
+  INTENT_ICON_SIZE_WORLD, INTENT_ICON_MIN_SIZE, INTENT_ICON_Y_OFFSET_ABOVE_HEALTHBAR,
+  INTENT_FRAME_ALPHA, INTENT_DAMAGE_NUMBER_SCALE, INTENT_POP_DURATION_SECONDS,
+  INTENT_WHIFF_FLASH_DURATION, and the per-verb frame colors
+  (INTENT_COLOR_ATTACK, _RANGED, _WINDUP, _MOVE, _DEFEND, _SPECIAL, _WAIT, _STUNNED).
+
+IMPLEMENTATION CHECKLIST
+========================
+[ ] Add intent constants (colors, sizes, offsets) to a split constants file.
+[ ] In EnemyRenderer, after drawing the health bar, project + draw the intent frame,
+    procedural glyph, and (for attack verbs) the damage number — zero allocation,
+    reuse pre-allocated scratch.
+[ ] Map each IntentVerb -> glyph draw routine (procedural, no textures).
+[ ] Wire WIND_UP pulse to getTelegraphStrength(); wire re-commit pop; wire whiff/
+    stun floaters through EventTextSystem.
+[ ] Respect Z-buffer occlusion and DORMANT/no-plan suppression.
+[ ] Leave the actual damage/Block VALUES to order-1 (predictedDamage) and order-3
+    (blockGain) — this doc only renders them.

@@ -134,7 +134,8 @@ Player damages enemies:
   On HP <= 0: enemy removed from list, corpse 'm' stamped into level grid.
 
 Enemy damages player:
-  Player.applyDamage(amount) is called in EnemyManager.phaseB().
+  Player.applyDamage(amount) is called from EnemyManager's EXECUTE phase (phaseBExecute),
+  running the action the enemy COMMITTED on its previous turn (see "Pre-Committed Intent Model").
   Player.health starts at PLAYER_MAX_HEALTH (100).
   Player.isDead() returns true when health reaches 0.
 
@@ -165,8 +166,12 @@ EnemyRenderer (render/EnemyRenderer.java):
 ## Key Classes
 
   enemy/EnemyType.java      — enum: CORRUPTOR, VORTEX_EYE (config per type)
-  enemy/EnemyState.java     — enum: DORMANT, ALERTED, CHASING, ATTACKING
-  enemy/Enemy.java          — runtime instance: tile pos, health, state, turn counter
+  enemy/EnemyState.java     — enum: DORMANT, ALERTED, CHASING, WINDING_UP, ATTACKING
+  enemy/IntentVerb.java     — enum: the committed-action category (ATTACK_MELEE, ATTACK_RANGED,
+                              WIND_UP, MOVE, DEFEND, SPECIAL, WAIT, STUNNED)
+  enemy/PlannedAction.java  — the single action an enemy has committed for its next turn (reused
+                              per-Enemy instance; verb + target tile + predictedDamage)
+  enemy/Enemy.java          — runtime instance: tile pos, health, state, turn counter, plannedAction
   enemy/EnemyManager.java   — simulation core + EnemyHitTarget implementation
   render/EnemyRenderer.java — billboard renderer (mirrors PropRenderer)
   entity/EnemyHitTarget.java — narrow interface so Weapon.fire() can hit enemies
@@ -244,21 +249,43 @@ Composition rules the planner enforces (BalanceConfig SECTION 11 knobs):
 Verify the planned roster per depth with BalanceReport (the ENCOUNTER BUDGET section), the same
 dev-only auditor that prints the weapon/enemy/scarcity living tables.
 
-MECHANICAL VERB HOOKS (Pillar 2) — the AI in EnemyManager now ENFORCES three of the verbs above,
-not just labels them. actEnemy() branches melee archetypes to dedicated handlers:
+PRE-COMMITTED INTENT MODEL (strategy-combat-order-1) — the spine of the strategy-combat series.
+Enemies no longer decide-and-act in one step. EnemyManager.takeTurn() runs THREE phases:
 
-  - SHELL_BRUTE — CHARGER (actChargerEnemy / canBeginCharge / performCharge). When a clear,
-    unobstructed cardinal lane to the player opens within
-    SHELL_BRUTE_CHARGE_TRIGGER_MIN..MAX_TILES, the brute spends ONE telegraphed wind-up turn
-    (EnemyState.WINDING_UP, triggerTelegraph(), no movement) so the player can read it. The next
-    turn it rushes straight down the committed lane (chargeDirectionColumn/Row) and, if it ends
-    cardinally adjacent, hits for base * SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER. If the player
-    sidestepped off the lane the rush whiffs and the brute is left in a punishable recovery
-    (skipNextAction). Counterplay: "sidestep the charge, then punish."
-  - VOID_SHROUD — FLANKER (actFlankerEnemy / isBehindPlayerFacing / stepTowardTile). When not
-    adjacent it paths toward the tile directly behind the player's facing rather than toward the
-    player; when it strikes from that blind side it deals base * VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER.
-    Counterplay: "rotate to face it / keep your back covered."
+  A  phaseA           — perception: dormant enemies wake on proximity/LOS, then chain-alert BFS.
+  B  phaseBExecute    — EXECUTE: every alerted enemy runs the action it COMMITTED last turn, via
+                        executePlan() → execute{Melee,Ranged,WindUp,Move}. Fairness re-validation
+                        (R1-R6) happens here: a committed attack only lands if the player is STILL
+                        in reach / on the line — otherwise it whiffs (no damage, no free re-plan),
+                        so "bait the swing, step away, punish" is the core counter. A committed MOVE
+                        that is blocked quietly re-paths (low stakes). A stun cancels the action (R6).
+  C  phaseCCommit     — COMMIT: every alerted enemy reads the now-resolved board and computes its
+                        NEXT action via computeNextPlan() → compute{Melee,Charger,Flanker,Ranged}Plan,
+                        storing it in enemy.plannedAction (verb + target + predictedDamage). ALL of B
+                        runs before ANY of C, so no enemy re-plans on a same-turn ally's move.
+
+Because the plan is written at the END of the enemy turn, a fresh, readable intent is visible for
+the ENTIRE following player turn (order-2 draws the icon + predicted-damage number). A freshly-woken
+enemy has plan.committed == false, so it does nothing on its wake turn except commit — one full turn
+of warning before its first action. Enemies act one telegraphed action per turn (a kiting ranged
+enemy flees OR fires OR advances, never move-and-fire in the same turn).
+
+MECHANICAL VERB HOOKS (Pillar 2) — the compute*Plan step ENFORCES the tactical verbs, not just
+labels them:
+
+  - SHELL_BRUTE — CHARGER (computeChargerPlan / canBeginCharge / performCharge). When a clear,
+    unobstructed cardinal lane to the player opens within SHELL_BRUTE_CHARGE_TRIGGER_MIN..MAX_TILES,
+    the brute COMMITS a WIND_UP (IntentVerb.WIND_UP, EnemyState.WINDING_UP, triggerTelegraph(),
+    chargeDirectionColumn/Row captured) — a rim-flash telegraph shown for the whole player turn. The
+    next turn executeWindUp() rushes straight down the committed lane and, if it ends cardinally
+    adjacent, hits for base * SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER. If the player sidestepped off the
+    lane the rush whiffs and the brute is left in a punishable recovery (skipNextAction). Counterplay:
+    "sidestep the charge, then punish."
+  - VOID_SHROUD — FLANKER (computeFlankerPlan / isBehindPlayerFacing / stepTowardTile). When not
+    adjacent it commits a MOVE toward the tile directly behind the player's facing rather than toward
+    the player; when it strikes from that blind side executeMeleeAttack recomputes the bonus live and
+    deals base * VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER. Counterplay: "rotate to face it / keep your back
+    covered."
   - PLAGUE_HULK — AREA DENIAL. On death (EnemyManager.EnemyDeathHazardListener, wired in World) it
     leaves a lingering toxic cloud (HazardManager.spawnToxicCloud, radius
     HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS). Counterplay: "kill at range — don't melee into its cloud."
