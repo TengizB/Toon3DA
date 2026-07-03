@@ -1,0 +1,545 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Combat & Event Visual Feedback — Under-Served Events
+CREATED: 2026-07-03
+---
+
+================================================================================
+COMBAT & GAME-EVENT VISUAL FEEDBACK — FILLING THE GAPS
+================================================================================
+
+OVERVIEW
+========
+toon3D already has a deep feedback stack (see "WHAT ALREADY EXISTS" below). This
+document does NOT re-propose any of it. Instead it targets the events that
+currently produce weak or zero visual feedback, so the marine can always read
+what just happened and why. Every item here extends an existing system — no new
+subsystem is invented unless flagged. All visuals are wall-clock/real-time
+overlays that live and die in well under a second; none of them touch turn logic,
+pathfinding, LOS, collision, or damage. The 3D view stays cosmetic; game state
+stays 2D-tile and turn-based. Platform is mobile-only (touch, 1280x720 Y-up,
+origin bottom-left) — nothing here assumes a keyboard.
+
+Design pillar being served: "the player should always understand what just
+happened and why they died." (docs/roguelike-design-pillars.txt,
+docs/doom-rpg-reference.txt)
+
+--------------------------------------------------------------------------------
+WHAT ALREADY EXISTS — DO NOT DUPLICATE (baseline to build on)
+--------------------------------------------------------------------------------
+- ImpactEffectSystem / ImpactEffectRenderer: hit sparks, kill bursts, floating
+  damage numbers, screen shake, kill/crit/colored flashes, colored ring pulses,
+  heal particles, crit blood spray, DoT tick spark puffs, DoT-kill death bursts.
+- AbilityFeedback / EventTextSystem + EventTextRenderer: tiered banners
+  (PROC/SLAM/LEGENDARY), tag edge ticks, center-screen rising/fading text.
+- HitVignetteRenderer: red damage / cyan level-up / green heal / legendary
+  colored EDGE vignettes (transient, one-shot).
+- StatusEffectVignetteRenderer: PERSISTENT player screen-edge tints for
+  BURNING / POISONED / BLEED / STUNNED / BLINDED / SLOWED / EMPOWERED.
+- EnemyRenderer: static status color tint on afflicted sprites, hit-flash, melee
+  lunge, attack/telegraph tint, EYE_TYRANT beams, health bars + name tags,
+  animated additive fire/toxin/bleed overlays on billboards.
+- HudRenderer: left panel (face + HP/AR bars + status line), right panel (ammo
+  digits + weapon name). WeaponHudRenderer: procedural weapon sprite via
+  FrameBuffer. TouchConstants: on-screen button layout.
+
+Rule for the implementing agent: REUSE the pools, the vignette renderer, the
+event-text system, and the enemy overlay pass. Add new effect *variants* and new
+EffectConstants blocks; do not stand up parallel renderers.
+
+================================================================================
+GROUP 1 — PLAYER STATE
+================================================================================
+
+1A. CRITICAL / LOW HP  (heartbeat pulse + desaturation + red breathing edges)
+-----------------------------------------------------------------------------
+TRIGGER: Player HP crosses below a threshold (suggest <=25% = CRITICAL,
+         <=50% = WOUNDED) and REMAINS there. Persistent state, not one-shot.
+VISUAL:
+  - A slow red "breathing" vignette pulsing on the screen edges, period tied to
+    a heartbeat rhythm (~1.1s at WOUNDED, accelerating to ~0.7s at CRITICAL).
+    Two-thump cadence (lub-dub): a strong pulse then a weaker echo ~0.18s later.
+  - Full-frame desaturation + slight darkening that scales with how deep into
+    CRITICAL the player is (0% extra at 25% HP → up to ~35% desaturation at near
+    death). Sells "tunnel vision / adrenaline."
+  - Optional: the HUD face box (already 88x88) shifts to a bloodied/gritted
+    expression frame and micro-shakes on each heartbeat thump.
+TECHNICAL NOTES:
+  - Extend StatusEffectVignetteRenderer with a new persistent "LOW_HP" edge tint
+    layer whose alpha is driven by a heartbeat function of wall-clock time; it
+    already owns the persistent edge-tint pattern, so this is one more channel.
+  - Desaturation is the only piece that may need a shader OR a cheap full-screen
+    dark-red multiply quad if a grayscale shader is undesirable. Prefer a
+    full-screen additive/multiply quad drawn in HitVignetteRenderer's overlay
+    pass (no shader) to keep the "no new subsystem" rule; note the true grayscale
+    look would need a one-line desaturation fragment shader — flag as OPEN.
+  - Heartbeat alpha curve belongs in GameMath as a pure function
+    (heartbeatPulse(elapsedSeconds, periodSeconds) -> 0..1).
+  - State source: Player HP fields, read once per frame in World; no turn hook
+    needed (it is a continuous condition, not an event).
+NEW EFFECTCONSTANTS BLOCK: yes — LOW_HP heartbeat (WOUNDED/CRITICAL thresholds,
+  base + accelerated periods, lub-dub gap, max desaturation, max edge alpha,
+  red color).
+
+1B. DIRECTIONAL DAMAGE INDICATOR  (which side the hit came from)
+-----------------------------------------------------------------------------
+TRIGGER: Player takes damage from an enemy on a specific tile. Fired on the same
+         hook that currently spawns the red hit vignette.
+VISUAL:
+  - A directional red arc/wedge that blooms on the screen edge corresponding to
+    the attacker's bearing relative to the marine's facing: front = top-center,
+    left/right = respective side edges, behind = bottom edge. Because facing is
+    always cardinal and the attacker tile is known, bearing collapses to one of
+    4 relative sides (FRONT / LEFT / RIGHT / BEHIND).
+  - The wedge is brighter/thicker than the ambient hit vignette and fades over
+    ~0.4s. A "behind" hit is the loudest (biggest bottom bloom) since the player
+    can't see the attacker — this is the single most important readability win.
+VISUAL/MATH:
+  - relativeSide = f(attackerColumn-playerColumn, attackerRow-playerRow,
+    playerFacing). Pure integer classification into FRONT/LEFT/RIGHT/BEHIND.
+TECHNICAL NOTES:
+  - Extend HitVignetteRenderer: today it flashes all edges uniformly; add a
+    per-edge weighting so the flash concentrates on one side. The damage event
+    already carries (or can carry) the attacker tile; EnemyManager fires the hit,
+    so pass attacker (column,row) through to the vignette trigger.
+  - Add relativeAttackSide(...) to GameMath (pure).
+NEW EFFECTCONSTANTS BLOCK: extend the existing hit-vignette block — add per-side
+  peak alpha multipliers (FRONT/LEFT/RIGHT/BEHIND) and the directional fade time.
+
+1C. ARMOR ABSORB vs. ARMOR SHATTER  (two distinct reads)
+-----------------------------------------------------------------------------
+TRIGGER: Incoming damage is reduced by armor (ABSORB) OR armor drops to 0 as a
+         result of this hit (SHATTER).
+VISUAL:
+  - ABSORB: a brief cyan/steel-blue edge tick (cooler than the red damage flash)
+    layered UNDER the red one, plus a small "spark-off-plate" particle burst at
+    screen-center-low; the AR bar in the HUD flashes/ticks down. Reads as "the
+    plate ate some of that."
+  - SHATTER: a sharp white-cyan full-edge crack flash, a heavier shard-particle
+    burst, screen shake one notch above a normal hit, and a one-word EventText
+    banner "ARMOR BREACHED" (reuse the PROC-tier banner styling). The AR bar
+    empties with a red drain flash.
+TECHNICAL NOTES:
+  - Reuse ImpactEffectSystem colored ring pulse + particle burst (spawn with a
+    steel-blue palette for absorb, white shard palette for shatter).
+  - Reuse EventTextSystem for the "ARMOR BREACHED" banner (SHATTER only).
+  - Reuse HitVignetteRenderer's cyan channel (already used for level-up) for the
+    absorb edge tick — just a different trigger.
+  - Source: the armor-application code path (PlayerStats / damage resolution).
+    It must emit which case occurred; add a tiny event field, not new logic.
+NEW EFFECTCONSTANTS BLOCK: small — armor absorb color/particle count, shatter
+  color/particle count/shake magnitude, banner text.
+
+1D. EMPTY CLIP / LOW AMMO  (dry-fire click + HUD flash)
+-----------------------------------------------------------------------------
+TRIGGER:
+  - EMPTY: player taps Fire with 0 rounds in the current weapon's clip.
+  - LOW: clip crosses a low threshold (e.g. <=20% or <=2 rounds) after a shot.
+VISUAL:
+  - EMPTY: the weapon sprite does a small "dry-fire" hitch (tiny recoil-less
+    twitch), the right-panel ammo digits flash red once, and a brief EventText
+    tick "CLICK" / "EMPTY" near the ammo readout. No muzzle flash, no shake.
+    A subtle reload-button pulse hint (see 4A) can nudge the player.
+  - LOW: the ammo digits switch to an amber/red color and give one soft pulse on
+    each shot while under threshold — a passive "you're running dry" state.
+TECHNICAL NOTES:
+  - EMPTY dry-fire hitch: add a tiny animation state to WeaponHudRenderer
+    (reuse its existing recoil/offset timeline, but with zero muzzle flash).
+  - Ammo digit flash/color: HudRenderer right panel already draws the digits;
+    add a color-state driven by clip fraction, plus a one-shot flash timer.
+  - EMPTY/LOW banner tick: EventTextSystem near the ammo anchor.
+  - Source: Weapon fire path already knows clip count; it emits EMPTY when a fire
+    tap is rejected for ammo. This is a fire-attempt event, still one player
+    action = no turn is consumed on an empty click (confirm — see OPEN).
+NEW EFFECTCONSTANTS BLOCK: small — LOW ammo fraction threshold, digit colors
+  (normal/amber/red), flash duration, dry-fire hitch magnitude/duration.
+
+1E. WALL BUMP / BLOCKED MOVE  (nudge or thud so a no-op reads)
+-----------------------------------------------------------------------------
+TRIGGER: PlayerController.tryMove() targets a wall / solid prop / closed locked
+         door → the step is rejected and nothing currently happens on screen.
+VISUAL:
+  - A short "bump" nudge: the camera/view lurches ~4-8px toward the blocked
+    direction and springs back over ~0.15s (a soft collision recoil). Because
+    movement is animated already, this is a tiny one-shot view offset, not a
+    tile move.
+  - A dull thud impact ring at the bottom-center edge + a very light one-frame
+    darkening in the bumped direction. Optionally a faint dust puff decal.
+  - This turns a dead no-op into "yep, that's a wall" — critical for touch where
+    the player can't feel key travel.
+TECHNICAL NOTES:
+  - Blocked-move is detected in PlayerController.tryMove(). Have it emit a
+    "bumpBlocked(directionX, directionY)" signal that ImpactEffectSystem consumes
+    to schedule a short view-offset shake (reuse the screen-shake pool but as a
+    directional single-axis nudge rather than random shake).
+  - The nudge offset should be applied to the same view transform the existing
+    screen shake uses, so no new render path.
+  - IMPORTANT — turn semantics: a blocked move must NOT consume a turn (it is a
+    no-op today). Keep it that way; the bump is pure cosmetic. Confirm current
+    behavior (see OPEN).
+NEW EFFECTCONSTANTS BLOCK: small — bump nudge magnitude, duration, thud ring
+  color/size, optional dust-puff toggle.
+
+================================================================================
+GROUP 2 — ENEMY STATE
+================================================================================
+All of these ride the EnemyRenderer billboard overlay pass (the same pass that
+already draws status tints, fire/toxin overlays, health bars, name tags). They
+are anchored to the enemy's projected screen position + billboard scale, and
+z-tested against WallRenderer's z-buffer like every other enemy visual.
+
+2A. STUNNED  (orbiting "stun stars" overlay)
+-----------------------------------------------------------------------------
+TRIGGER: Enemy has the STUNNED status active (already a tracked state).
+VISUAL: 2-3 small yellow star/spark glyphs orbiting a ring above the enemy's
+  head billboard, rotating over wall-clock time; ring radius scales with the
+  enemy's projected billboard width so distance stays correct. Classic "seeing
+  stars." Persists for the stun duration.
+TECHNICAL NOTES: EnemyRenderer overlay pass. Reuse the white-pixel/star sprite
+  already available; position via billboard center + vertical offset. Orbit
+  angle = f(wall-clock). Pure per-frame, no alloc.
+NEW EFFECTCONSTANTS BLOCK: small — star count, orbit radius factor, orbit speed,
+  glyph size, color.
+
+2B. SLOWED / EMPOWERED / BLINDED  (billboard tells, none exist today)
+-----------------------------------------------------------------------------
+TRIGGER: Enemy carries SLOWED, EMPOWERED, or BLINDED status (tracked already;
+  player-side vignettes exist but the ENEMY sprite gives no tell).
+VISUAL:
+  - SLOWED: heavy blue-white "frost/drag" trailing after-images that lag behind
+    the billboard, plus slow downward-drifting motes. Reads as "it's sluggish."
+  - EMPOWERED: a pulsing red-orange rim-glow aura around the silhouette + upward
+    ember motes; the health/name tag can gain a small up-arrow glyph. Reads as
+    "buffed — hits harder."
+  - BLINDED: a gray swirl / question-mark glyph above the head and a dimmed,
+    desaturated sprite tint; optionally the sprite faces a wrong/idle direction
+    tell. Reads as "it can't see you."
+TECHNICAL NOTES: EnemyRenderer overlay pass, mirroring the existing additive
+  fire/toxin/bleed overlay approach (additive tinted quads + mote particles).
+  Distinguish from player StatusEffectVignetteRenderer (that is screen-edge,
+  player-only; this is on-sprite, enemy-only).
+NEW EFFECTCONSTANTS BLOCK: yes — one block covering SLOWED/EMPOWERED/BLINDED
+  colors, aura alpha/pulse, mote counts, glyph sizes.
+
+2C. IMMUNE / RESISTED  ("IMMUNE" / shrug tell)
+-----------------------------------------------------------------------------
+TRIGGER: An effect is applied to an enemy that ignores it — e.g. a fire-immune
+  enemy takes a burn attempt, or damage is reduced by a resistance. Fires at the
+  moment of the failed/reduced application.
+VISUAL:
+  - IMMUNE (fully negated): a small gray "IMMUNE" floating tag rising off the
+    enemy (styled like the floating damage numbers but desaturated), plus a quick
+    white "shrug" flash on the sprite and a muffled/soft ring instead of a spark.
+    No damage number, or a struck-through "0".
+  - RESISTED (partial): the damage number renders in a dimmed/gray color with a
+    small "RESIST" ticker so the player learns "this element is weak here."
+TECHNICAL NOTES: Reuse ImpactEffectSystem's floating-number pool with a gray
+  palette + alternate glyph string ("IMMUNE"/"RESIST"). Source: the status/
+  damage application path must report negated vs. reduced (add an enum result,
+  not new logic). This is the readability payoff for elemental immunities.
+NEW EFFECTCONSTANTS BLOCK: small — immune/resist colors, tag strings, rise
+  distance, lifetime.
+
+2D. DORMANT -> ALERTED  ("!" pop + eye-flash on wake)
+-----------------------------------------------------------------------------
+TRIGGER: An enemy transitions from a dormant/idle/unaware state to ALERTED /
+  aggro (already a state change in the AI on the turn it wakes).
+VISUAL: A yellow-to-red "!" glyph pops above the head, scaling up with a quick
+  overshoot then settling, and the enemy's eyes flash bright (a one-shot bright
+  additive dot at the sprite's eye height). Optional single sharp ring pulse at
+  its feet. Sells "it just noticed you" — the exact moment a fight starts.
+TECHNICAL NOTES: EnemyRenderer overlay pass, triggered off the AI state
+  transition in EnemyManager (one-shot, ~0.5s). Reuse the ability-banner easing
+  (overshoot pop) for the "!" scale. Distinct from the persistent telegraph tint
+  EnemyRenderer already has.
+NEW EFFECTCONSTANTS BLOCK: small — pop scale/overshoot, eye-flash color/duration,
+  "!" color gradient, glyph lifetime.
+
+2E. CHARGER WIND-UP / TELEGRAPH  (stronger read the turn before a rush)
+-----------------------------------------------------------------------------
+TRIGGER: A charger/rusher enemy enters its wind-up state (the turn BEFORE it
+  commits the multi-tile rush). Today's telegraph tint is too subtle for a
+  high-stakes move.
+VISUAL: Layered escalation over the wind-up turn: (1) the sprite crouches/leans
+  back and scales up slightly, (2) a bright directional streak/arrow projects
+  from the enemy toward the marine ALONG the cardinal lane it will charge (only
+  valid on a shared row/column — respect the cardinal-line rule), (3) an
+  intensifying red rim-glow + a low telegraph ring that "winds up" (radius
+  shrinks toward the enemy as the commit approaches). The lane arrow tells the
+  player exactly which tile-line is about to become lethal, so they can strafe
+  off it.
+TECHNICAL NOTES: EnemyRenderer overlay pass extending the existing telegraph
+  tint. The lane streak reuses the EYE_TYRANT beam drawing already in
+  EnemyRenderer (a cardinal-aligned beam from enemy to player), recolored.
+  Because logic is turn-based, the "wind-up" visual just plays for the real-time
+  duration of that one turn's display; it does not gate the turn.
+NEW EFFECTCONSTANTS BLOCK: yes — windup lean/scale, lane streak color/width/
+  pulse, rim-glow ramp, telegraph ring shrink curve.
+
+2F. OFF-SCREEN THREAT EDGE ARROWS  (enemies about to act out of view)
+-----------------------------------------------------------------------------
+TRIGGER: An enemy that is (a) alerted and (b) about to attack or is adjacent/
+  threatening, but is OUTSIDE the current FOV (behind or to the side of the
+  marine's facing). Evaluated each frame from enemy tiles + player facing.
+VISUAL: A small red chevron/arrow pinned to the screen edge pointing toward the
+  off-screen threat's bearing (left edge, right edge, or bottom edge for behind).
+  Arrow opacity/urgency scales with proximity; it pulses harder the turn the
+  enemy is set to strike. Caps at, say, 3 arrows to avoid clutter. Pairs
+  naturally with 1B (directional damage) — the arrow warns, the wedge confirms.
+TECHNICAL NOTES: New lightweight logic in World/EnemyManager to select threats
+  outside FOV; rendered via ImpactEffectRenderer's screen-overlay pass (same
+  layer as edge flashes). Bearing classification reuses the FRONT/LEFT/RIGHT/
+  BEHIND helper from 1B. Pre-allocate a small fixed arrow pool (max N) — no
+  per-frame alloc.
+NEW EFFECTCONSTANTS BLOCK: yes — max arrows, arrow size/color, proximity->alpha
+  curve, strike-turn pulse rate, edge inset.
+
+================================================================================
+GROUP 3 — WORLD & ITEMS
+================================================================================
+
+3A. ITEM / AMMO PICKUP  (sparkle + flash)
+-----------------------------------------------------------------------------
+TRIGGER: Player steps onto a tile with a pickup (ammo/medkit/armor/keycard/etc.)
+  and it is collected.
+VISUAL: A quick upward sparkle burst in the pickup's color family (gold for ammo,
+  green for medical, blue for armor, keycard color for keys), a soft ring pulse,
+  and a short EventText line naming what was grabbed ("+12 SHELLS", "MEDKIT",
+  "BLUE KEYCARD") rising near screen-center. The matching HUD element (ammo
+  digits / AR bar) gives a one-shot highlight so the eye is drawn to what changed.
+TECHNICAL NOTES: Reuse ImpactEffectSystem particle burst + ring pulse (color per
+  pickup category from ItemType metadata) and EventTextSystem for the label.
+  Source: the pickup/collection path (GroundItem -> Inventory). Reuse the
+  existing heal-particle path as a template.
+NEW EFFECTCONSTANTS BLOCK: small — per-category sparkle colors, particle count,
+  ring size, label lifetime.
+
+3B. LOCKED DOOR vs. DOOR OPENING  (two clear reads)
+-----------------------------------------------------------------------------
+TRIGGER:
+  - LOCKED: player attempts to open a keycard door without the key (DoorManager
+    keycard check fails).
+  - OPENING: a door successfully begins its open animation.
+VISUAL:
+  - LOCKED: the door's keycard-colored lock lamp flashes red, a short "LOCKED —
+    BLUE KEYCARD REQUIRED" EventText, a soft denial buzz ring, and a small
+    view-bump toward the door (reuse the 1E wall-bump nudge). If the player HAS a
+    different-colored key, still deny but name the color needed.
+  - OPENING: the lock lamp flashes GREEN + a rising ring/sparkle sweep up the
+    door seam, so a successful unlock feels rewarding.
+TECHNICAL NOTES: DoorManager already runs keycard checks + open animation; have
+  it emit LOCKED vs. OPENING events. LOCKED reuses EventTextSystem + the 1E bump
+  + a ring pulse. The lock-lamp color flash is a small additive quad on the door
+  billboard/wall face — reuse the prop/enemy overlay approach. No new door state.
+NEW EFFECTCONSTANTS BLOCK: small — lock lamp flash colors (locked red / open
+  green), denial buzz ring, unlock sweep timing, required-key text template.
+
+3C. EXPLOSIVE BARREL PRE-DETONATION WARNING  (pulse before it blows)
+-----------------------------------------------------------------------------
+TRIGGER: A barrel has been ignited / is in its fuse countdown (ExplosiveBarrel
+  Manager already tracks a barrel about to explode).
+VISUAL: The barrel prop billboard pulses with an escalating orange-red glow +
+  faint sparks, pulse frequency accelerating as the fuse runs down (fast strobe
+  right before the blast). A subtle heat-shimmer/expanding warning ring on the
+  floor around its tile telegraphs the blast radius so the player can clear it.
+  Gives the player the turns-of-warning they need to strafe away.
+TECHNICAL NOTES: PropRenderer / ExplosiveBarrelManager. The pulse is an additive
+  glow on the barrel sprite driven by remaining fuse (accelerating strobe curve
+  in GameMath). The floor warning ring reuses the ring-pulse primitive from
+  ImpactEffectSystem, anchored to the barrel's projected tile. Turn-based fuse
+  drives the curve; the strobe itself is wall-clock within each turn's display.
+NEW EFFECTCONSTANTS BLOCK: small — glow color ramp, strobe frequency curve
+  (fuse-remaining -> Hz), warning-ring radius/color/alpha.
+
+3D. HAZARD FLOOR  ("you're standing in it" cue)
+-----------------------------------------------------------------------------
+TRIGGER: Player occupies an acid/fire hazard tile (or begins a turn on one).
+VISUAL: A persistent-while-standing screen-edge tint in the hazard's color
+  (acid = green, fire = orange) — deliberately using the SAME visual language as
+  the BURNING/POISONED status vignettes so "the floor is doing this to me" reads
+  instantly — plus rising damage motes at the bottom of the frame and a per-turn
+  tick spark from below (reuse the DoT tick puff). A small "ACID" / "FIRE"
+  EventText the moment the player steps on. Clears immediately on stepping off.
+TECHNICAL NOTES: Reuse StatusEffectVignetteRenderer (add a hazard-floor tint
+  channel; it already handles persistent edge tints and already has green/orange
+  looks). The per-turn tick reuses the existing DoT tick-puff. Source: check the
+  player's current tile against hazard-tile type each turn (Level/hazard system).
+  No new persistent renderer.
+NEW EFFECTCONSTANTS BLOCK: small — hazard tint colors (acid/fire), edge alpha,
+  bottom-mote count, step-on banner strings.
+
+3E. BOSS PHASE TRANSITION BEAT  (a felt gear-shift)
+-----------------------------------------------------------------------------
+TRIGGER: A boss crosses a phase-threshold (e.g. 66% / 33% HP), a scripted moment
+  in the boss encounter.
+VISUAL: A short "cinematic" beat: a brief white/red full-screen flash + one
+  hard screen-shake punch, a LEGENDARY-tier EventText banner ("PHASE II" or a
+  boss-specific line), the boss sprite does a roar/expand pop with a shockwave
+  ring emanating outward, and the ambient lighting/red-alert can shift for the
+  new phase. Time freezes visually for ~0.6s of wall-clock (the sim is turn-based
+  so nothing else is acting anyway). Makes the fight feel like it has acts.
+TECHNICAL NOTES: Orchestrated in World/boss encounter code. Reuse: EventTextSystem
+  (LEGENDARY tier banner), ImpactEffectSystem (flash + shake + shockwave ring),
+  EnemyRenderer (boss roar pop via the ability-banner overshoot easing), and the
+  existing red-alert/ambient-light hooks (RenderConstants red-alert pulse) for
+  the lighting shift. No new subsystem — it is a scripted composition of existing
+  effects.
+NEW EFFECTCONSTANTS BLOCK: small — phase-flash color/duration, shockwave ring
+  size/speed, freeze-beat duration, per-phase ambient shift reference.
+
+================================================================================
+GROUP 4 — ACTIONS
+================================================================================
+
+4A. RELOAD PROGRESS / COMPLETION TELL  (on the weapon)
+-----------------------------------------------------------------------------
+TRIGGER: Player initiates reload (Reload button) and reload completes. Reload is
+  turn-based (it advances over game turns), so "progress" is measured in turns,
+  not seconds.
+VISUAL:
+  - IN PROGRESS: the weapon sprite plays a reload gesture (mag drop / insert) in
+    WeaponHudRenderer, and a small arc/segment progress indicator draws near the
+    ammo digits filling per turn (e.g. one segment per turn if multi-turn, or a
+    single sweep if one-turn). The Reload touch button (TouchControllerRenderer)
+    gets a highlighted "busy" state so the player knows the action registered.
+  - COMPLETE: a crisp "chunk/rack" flourish on the weapon (slide/bolt snaps
+    forward), the ammo digits snap to full with a green flash, and a short
+    "RELOADED" EventText tick. Now the player never wonders "did my reload go?"
+  - PASSIVE PROMPT: when clip hits empty (1D), the Reload button pulses to
+    suggest the next action — pure highlight, no forced input.
+TECHNICAL NOTES: WeaponHudRenderer already owns the weapon sprite timeline — add
+  a reload gesture keyed off the reload state/turn counter. Ammo digit flash +
+  progress arc live in HudRenderer right panel. Button highlight/pulse via
+  TouchControllerRenderer + TouchConstants (add a "busy"/"prompt" button visual
+  state). Reuse EventTextSystem for "RELOADED". Source: the existing reload tick
+  subscriber knows current progress-in-turns.
+NEW EFFECTCONSTANTS BLOCK: small — progress arc geometry/color, complete-flash
+  color/duration, reload-button busy + prompt tints (may live in TouchConstants).
+
+4B. WEAPON SWITCH CONFIRM FLOURISH
+-----------------------------------------------------------------------------
+TRIGGER: Player taps Switch Weapon and the active weapon changes.
+VISUAL: The outgoing weapon sprite slides/drops down off the bottom of the frame,
+  the incoming weapon rises/snaps up into place with a small overshoot settle
+  (reuse the ability-banner overshoot easing), a brief sprite-outline shimmer on
+  arrival, the right-panel weapon NAME flashes/typewrites the new name, and the
+  ammo digits refresh to the new weapon's clip with a one-shot highlight. Optional
+  quick "cha-chik" ready pose. Confirms the swap instantly on a screen where the
+  player can't feel a click.
+TECHNICAL NOTES: WeaponHudRenderer owns the sprite; add a lower->raise transition
+  keyed off a switch event (short wall-clock animation, ~0.2-0.3s; it does not
+  gate the turn). HudRenderer right panel handles the name flash + ammo refresh.
+  Reuse EventTextSystem optionally for the weapon name pop. Source: Loadout /
+  weapon-switch path already fires on switch.
+NEW EFFECTCONSTANTS BLOCK: small — switch drop/raise duration + overshoot,
+  arrival shimmer, name-flash timing.
+
+================================================================================
+CROSS-CUTTING TECHNICAL NOTES
+================================================================================
+- ZERO ALLOCATION IN render(): every new effect must use pre-allocated pools
+  (extend the existing ImpactEffectSystem / EventTextSystem pools, or add small
+  fixed-size arrays sized by a constant). No per-frame `new`.
+- REAL-TIME vs. TURN: all these visuals are wall-clock overlays. The simulation
+  stays strictly turn-based; a visual playing out does NOT hold or advance a
+  turn. Persistent-condition visuals (1A low HP, 3D hazard floor, 2A-2E enemy
+  status) are re-evaluated from game state each frame, not event-latched, so they
+  can't desync from the sim.
+- MATH IN GameMath: heartbeatPulse(), relativeAttackSide(), fuseStrobeFrequency(),
+  telegraphRingShrink(), all as pure static functions with the mandatory comment
+  block.
+- NO NEW TILE SYMBOLS: nothing here introduces a level-file symbol. Hazard floors
+  (3D) and locked doors (3B) use EXISTING symbols from docs/tile-symbols.txt
+  (hazard-wall/floor + the R/Y/B keycard doors). If a future acid-FLOOR tile is
+  wanted that does not already exist, that is a separate feature — this doc
+  assumes the hazard tile already exists; flag as OPEN if it does not.
+- COLOR-LANGUAGE CONSISTENCY (important for readability): red = damage/threat,
+  green = heal/unlock/acid-tick, cyan/steel = armor + level-up, gold = ammo/
+  pickup, orange = fire/empowered, blue-white = frost/slow, yellow = stun/alert.
+  Reuse these consistently so a glance is enough.
+
+--------------------------------------------------------------------------------
+NEW EFFECTCONSTANTS BLOCKS — SUMMARY (all in EffectConstants.java unless noted)
+--------------------------------------------------------------------------------
+  - LOW_HP heartbeat (1A)                     [new block]
+  - Hit-vignette directional per-side (1B)    [extend existing hit block]
+  - Armor absorb/shatter (1C)                 [new small block]
+  - Ammo empty/low + dry-fire (1D)            [new small block; HudConstants too]
+  - Wall-bump nudge (1E)                       [new small block]
+  - Enemy stun stars (2A)                      [new small block]
+  - Enemy slow/empower/blind overlays (2B)     [new block]
+  - Enemy immune/resist tags (2C)              [new small block]
+  - Enemy dormant->alerted pop (2D)            [new small block]
+  - Charger wind-up telegraph (2E)             [new block]
+  - Off-screen threat arrows (2F)              [new block]
+  - Pickup sparkle per-category (3A)           [new small block]
+  - Door locked/opening (3B)                   [new small block]
+  - Barrel pre-detonation (3C)                 [new small block]
+  - Hazard-floor cue (3D)                      [new small block]
+  - Boss phase transition (3E)                 [new small block]
+  - Reload progress/complete (4A)              [new small block; TouchConstants]
+  - Weapon switch flourish (4B)                [new small block]
+
+--------------------------------------------------------------------------------
+PLAYER EXPERIENCE
+--------------------------------------------------------------------------------
+The marine never suffers a "silent" event. A blocked step thuds, an empty gun
+clicks, a hit from behind slams the bottom edge, low HP makes the whole screen
+breathe red, a fire-immune demon visibly shrugs off your burn, a charger tells
+you the exact lane it's about to run down, and a boss shifting gears feels like a
+punch to the room. Every one of these is a readability decision: the player
+should die understanding why, and win feeling every beat.
+
+--------------------------------------------------------------------------------
+BALANCE / TUNING NOTES (all placeholders — flag for tuning)
+--------------------------------------------------------------------------------
+- HP thresholds: WOUNDED 50%, CRITICAL 25%. Heartbeat 1.1s -> 0.7s. PLACEHOLDER.
+- Directional damage fade ~0.4s; BEHIND peak alpha ~1.5x the side peak. PLACEHOLDER.
+- Low ammo threshold: <=20% clip or <=2 rounds, whichever the weapon prefers.
+- Off-screen arrows: cap 3, proximity within ~5 tiles to show. PLACEHOLDER.
+- Barrel strobe: from ~1 Hz at fuse start to ~6 Hz final turn. PLACEHOLDER.
+- Boss freeze-beat 0.6s. Weapon switch 0.25s. Wall-bump nudge 0.15s. PLACEHOLDER.
+- Keep every overlay short and low-alpha enough not to hide enemies/walls; on a
+  phone screen, err toward crisp+brief over big+lingering.
+
+--------------------------------------------------------------------------------
+INTERACTIONS
+--------------------------------------------------------------------------------
+- 1B (directional damage) + 2F (off-screen arrows): arrow warns of the unseen
+  threat, wedge confirms the hit's origin — same FRONT/LEFT/RIGHT/BEHIND helper.
+- 1A (low HP) + 3D (hazard floor) + status vignettes: all live in
+  StatusEffectVignetteRenderer; must layer/priority-blend so the player can still
+  distinguish "I'm low" from "I'm burning" from "I'm standing in acid" — define a
+  blend/priority order (suggest: hazard-floor and DoT tint on top of low-HP
+  breathing, capped total alpha).
+- 1E (wall bump) + 3B (locked door): a locked door reuses the bump nudge, so the
+  two must share the same nudge primitive and not double-fire.
+- 1D (empty clip) + 4A (reload prompt): empty triggers the reload-button pulse;
+  4A's completion clears it. Shared ammo-fraction state in HudRenderer.
+- 2C (immune/resist) + the existing DoT/status overlays: applying a status that
+  is immune must show the IMMUNE tag AND suppress the would-be DoT overlay, so
+  the player isn't shown a burn that does nothing.
+- 1C (armor) + existing red hit vignette: absorb tick layers UNDER the red flash;
+  ensure additive blending doesn't wash out to white.
+
+--------------------------------------------------------------------------------
+OPEN QUESTIONS
+--------------------------------------------------------------------------------
+1. Desaturation for low HP (1A): acceptable to add a one-line grayscale fragment
+   shader, or must it be a full-screen multiply quad only (no shader)? Affects
+   how convincing the "tunnel vision" look is.
+2. Confirm current turn semantics: does an EMPTY fire tap (1D) and a blocked move
+   (1E) consume ZERO turns today? The cosmetic feedback assumes no-op; if either
+   currently ticks the world, that's a separate gameplay bug to note.
+3. Do hazard FLOOR tiles already exist as a symbol, or only hazard WALLS? (3D).
+   If only walls exist, 3D needs the hazard-floor tile feature first (separate).
+4. Boss phase thresholds + which bosses (3E): tie to the boss encounter doc; is
+   the phase-transition hook already emitted, or does the boss code need it?
+5. Enemy status durations for 2A-2E: are SLOWED/EMPOWERED/BLINDED durations long
+   enough that a persistent on-sprite overlay reads, or are some 1-turn (needing
+   a min-display-time so a 1-turn status still flashes visibly)?
+6. Off-screen threat arrows (2F): should "about to act" be a hard predictor
+   (enemy is guaranteed to attack next turn) or a softer "adjacent+alerted"
+   heuristic? Hard predictor is more honest but needs the AI to expose intent.
+7. Max simultaneous overlays / global effect budget on a mid-range phone — do we
+   need a priority cull when many effects fire in one turn (big fight)?
