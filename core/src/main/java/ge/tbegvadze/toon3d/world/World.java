@@ -353,7 +353,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         inventoryOverlayRenderer.setWeaponHudRenderer(weaponHudRenderer);
         inventoryOverlayRenderer.setPlayerStats(playerStats);
         hudRenderer          = new HudRenderer(player, hudState);
-        hudRenderer.setLoadout(inventory.getLoadout());
+        hudRenderer.setPlayerInventory(inventory);
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);
         fadeOverlayRenderer  = new FadeOverlayRenderer();
 

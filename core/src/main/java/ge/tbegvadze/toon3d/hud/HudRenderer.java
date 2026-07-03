@@ -13,6 +13,8 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.Loadout;
 import ge.tbegvadze.toon3d.entity.Player;
+import ge.tbegvadze.toon3d.entity.PlayerInventory;
+import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.render.Renderable;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
@@ -114,9 +116,9 @@ public class HudRenderer implements Renderable, Disposable {
     // -------------------------------------------------------------------------
     // Inputs
     // -------------------------------------------------------------------------
-    private final Player   player;
-    private final HudState hudState;
-    private       Loadout  loadout = null;
+    private final Player          player;
+    private final HudState        hudState;
+    private       PlayerInventory playerInventory = null;
 
     // -------------------------------------------------------------------------
     // Animation state
@@ -145,9 +147,12 @@ public class HudRenderer implements Renderable, Disposable {
                 Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
     }
 
-    /** Provides the loadout whose slots are drawn in the left-panel strip. */
-    public void setLoadout(Loadout newLoadout) {
-        this.loadout = newLoadout;
+    /**
+     * Provides the player inventory whose weapons are drawn in the left-panel strip.
+     * The strip shows the melee weapon in the first slot, followed by the ranged loadout slots.
+     */
+    public void setPlayerInventory(PlayerInventory newPlayerInventory) {
+        this.playerInventory = newPlayerInventory;
     }
 
     /**
@@ -193,7 +198,7 @@ public class HudRenderer implements Renderable, Disposable {
         drawArmorBarFilled(isDead);
         drawClipBarFilled(isDead);
         drawXpBarFilled(isDead);
-        if (loadout != null) drawSlotStripFilled(loadout, pulse);
+        if (playerInventory != null) drawSlotStripFilled(playerInventory, pulse);
         if (!isDead) drawStatusIconsFilled();
         shapes.end();
 
@@ -201,14 +206,14 @@ public class HudRenderer implements Renderable, Disposable {
         shapes.begin(ShapeRenderer.ShapeType.Line);
         drawPanelChromeLines(0f, 0f, LEFT_WIDTH, PANEL_HEIGHT);
         drawBarBorders();
-        if (loadout != null) drawSlotStripLines(loadout);
+        if (playerInventory != null) drawSlotStripLines(playerInventory);
         shapes.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
         // ---- Pass C: Text ----
         batch.begin();
         drawVitalsText(lowHp, pulse, isDead);
-        if (loadout != null) drawSlotStripText(loadout, isDead);
+        if (playerInventory != null) drawSlotStripText(playerInventory, isDead);
         if (!isDead) drawStatusIconsText();
         if (groundWeaponLabel != null && !isDead) drawGroundWeaponLabel(groundWeaponLabel);
         boolean medkitWarn = !isDead
@@ -512,17 +517,59 @@ public class HudRenderer implements Renderable, Disposable {
         return HudConstants.HUD_SLOT_SIDE_PADDING + slotIndex * (slotBoxWidth + HudConstants.HUD_SLOT_GAP);
     }
 
-    private void drawSlotStripFilled(Loadout activeLoadout, float pulse) {
+    // -------------------------------------------------------------------------
+    // Display-slot model: slot 0 always shows the melee weapon; the remaining
+    // display slots map, in order, onto the non-locked ranged loadout slots.
+    // -------------------------------------------------------------------------
+
+    /** Total slots shown in the strip: one melee slot plus every non-locked ranged loadout slot. */
+    private int displaySlotCount(Loadout activeLoadout) {
+        int count = 1; // melee slot
+        for (int rangedSlot = 0; rangedSlot < activeLoadout.getSlotCount(); rangedSlot++) {
+            if (!activeLoadout.isSlotLocked(rangedSlot)) count++;
+        }
+        return count;
+    }
+
+    /**
+     * Maps a display index (>= 1) to the underlying ranged loadout slot index, skipping locked slots.
+     * Returns -1 when the display index has no matching ranged slot.
+     */
+    private int rangedSlotForDisplay(Loadout activeLoadout, int displayIndex) {
+        int rangedOrdinal = 0;
+        for (int rangedSlot = 0; rangedSlot < activeLoadout.getSlotCount(); rangedSlot++) {
+            if (activeLoadout.isSlotLocked(rangedSlot)) continue;
+            rangedOrdinal++;
+            if (rangedOrdinal == displayIndex) return rangedSlot;
+        }
+        return -1;
+    }
+
+    /** Weapon shown in the given display slot: melee for slot 0, otherwise the mapped ranged weapon. */
+    private Weapon displaySlotWeapon(PlayerInventory inventory, int displayIndex) {
+        if (displayIndex == 0) return inventory.getMeleeWeapon();
+        int rangedSlot = rangedSlotForDisplay(inventory.getLoadout(), displayIndex);
+        return rangedSlot < 0 ? null : inventory.getLoadout().getSlot(rangedSlot);
+    }
+
+    /** True when the given display slot holds the currently equipped weapon. */
+    private boolean displaySlotActive(PlayerInventory inventory, int displayIndex) {
+        if (displayIndex == 0) return inventory.isMeleeSelected();
+        if (inventory.isMeleeSelected()) return false;
+        int rangedSlot = rangedSlotForDisplay(inventory.getLoadout(), displayIndex);
+        return rangedSlot >= 0 && inventory.getLoadout().getActiveSlotIndex() == rangedSlot;
+    }
+
+    private void drawSlotStripFilled(PlayerInventory inventory, float pulse) {
         float originY       = HudConstants.HUD_SLOT_STRIP_Y;
         float slotBoxHeight = HudConstants.HUD_SLOT_STRIP_HEIGHT;
-        int   slotCount     = activeLoadout.getSlotCount();
+        int   slotCount     = displaySlotCount(inventory.getLoadout());
         float slotBoxWidth  = slotWidth(slotCount);
-        int   activeIndex   = activeLoadout.getActiveSlotIndex();
 
-        for (int slotIndex = 0; slotIndex < slotCount; slotIndex++) {
-            float   slotPositionX = slotX(slotIndex, slotBoxWidth);
-            boolean filled        = activeLoadout.getSlot(slotIndex) != null;
-            boolean isActive      = slotIndex == activeIndex && filled;
+        for (int displayIndex = 0; displayIndex < slotCount; displayIndex++) {
+            float   slotPositionX = slotX(displayIndex, slotBoxWidth);
+            boolean filled        = displaySlotWeapon(inventory, displayIndex) != null;
+            boolean isActive      = displaySlotActive(inventory, displayIndex) && filled;
 
             if (isActive) {
                 float brightness = 0.35f + 0.20f * pulse;
@@ -537,44 +584,43 @@ public class HudRenderer implements Renderable, Disposable {
         }
     }
 
-    private void drawSlotStripLines(Loadout activeLoadout) {
+    private void drawSlotStripLines(PlayerInventory inventory) {
         float originY       = HudConstants.HUD_SLOT_STRIP_Y;
         float slotBoxHeight = HudConstants.HUD_SLOT_STRIP_HEIGHT;
-        int   slotCount     = activeLoadout.getSlotCount();
+        int   slotCount     = displaySlotCount(inventory.getLoadout());
         float slotBoxWidth  = slotWidth(slotCount);
-        int   activeIndex   = activeLoadout.getActiveSlotIndex();
 
-        for (int slotIndex = 0; slotIndex < slotCount; slotIndex++) {
-            float   slotPositionX = slotX(slotIndex, slotBoxWidth);
-            boolean filled        = activeLoadout.getSlot(slotIndex) != null;
-            boolean isActive      = slotIndex == activeIndex && filled;
+        for (int displayIndex = 0; displayIndex < slotCount; displayIndex++) {
+            float   slotPositionX = slotX(displayIndex, slotBoxWidth);
+            boolean filled        = displaySlotWeapon(inventory, displayIndex) != null;
+            boolean isActive      = displaySlotActive(inventory, displayIndex) && filled;
             shapes.setColor(isActive ? SLOT_ACTIVE : SLOT_BORDER);
             shapes.rect(slotPositionX, originY, slotBoxWidth, slotBoxHeight);
         }
     }
 
-    private void drawSlotStripText(Loadout activeLoadout, boolean isDead) {
+    private void drawSlotStripText(PlayerInventory inventory, boolean isDead) {
         float originY       = HudConstants.HUD_SLOT_STRIP_Y;
         float slotBoxHeight = HudConstants.HUD_SLOT_STRIP_HEIGHT;
-        int   slotCount     = activeLoadout.getSlotCount();
+        int   slotCount     = displaySlotCount(inventory.getLoadout());
         float slotBoxWidth  = slotWidth(slotCount);
-        int   activeIndex   = activeLoadout.getActiveSlotIndex();
 
-        for (int slotIndex = 0; slotIndex < slotCount; slotIndex++) {
-            float   slotPositionX = slotX(slotIndex, slotBoxWidth);
-            boolean filled        = activeLoadout.getSlot(slotIndex) != null;
-            boolean isActive      = slotIndex == activeIndex && filled;
+        for (int displayIndex = 0; displayIndex < slotCount; displayIndex++) {
+            float   slotPositionX = slotX(displayIndex, slotBoxWidth);
+            Weapon  weapon        = displaySlotWeapon(inventory, displayIndex);
+            boolean filled        = weapon != null;
+            boolean isActive      = displaySlotActive(inventory, displayIndex) && filled;
 
             // Slot number, top-left corner of the slot.
             stringBuilder.setLength(0);
-            stringBuilder.append(slotIndex + 1);
+            stringBuilder.append(displayIndex + 1);
             Color numberColor = isDead ? TEXT_DIM : (isActive ? SLOT_ACTIVE : TEXT_DIM);
             drawTextWithShadow(stringBuilder, slotPositionX + 4f, originY + slotBoxHeight - 3f,
                     numberColor, HudConstants.HUD_SLOT_NUMBER_SCALE);
 
             // Weapon name, truncated to fit the slot, vertically centred under the number.
             if (filled && !isDead) {
-                appendTruncatedName(activeLoadout.getSlot(slotIndex).getDisplayName(),
+                appendTruncatedName(weapon.getDisplayName(),
                         slotBoxWidth - 8f, HudConstants.HUD_SLOT_NAME_SCALE);
                 font.getData().setScale(HudConstants.HUD_SLOT_NAME_SCALE);
                 glyphLayout.setText(font, stringBuilder);
