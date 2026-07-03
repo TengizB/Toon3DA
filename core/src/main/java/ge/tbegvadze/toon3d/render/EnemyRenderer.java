@@ -77,6 +77,23 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final float[]   beamStrengths;
     private final boolean[] drawBeamFlags;
 
+    // Pre-allocated affliction-overlay geometry cache — parallel to sortedIndices, populated in
+    // pass 1 and consumed by the animated fire/toxin/bleed overlay pass (pass 1.5).
+    private final float[]   fxCenterColumns;
+    private final float[]   fxDrawBottoms;
+    private final float[]   fxSpriteHeights;
+    private final float[]   fxSpriteWidths;
+    private final boolean[] fxDrawFlags;
+
+    // Fixed per-particle phase offsets so overlay particles are evenly but non-uniformly spread.
+    // Static so the table is built once per JVM load and shared by every EnemyRenderer instance.
+    private static final float[] AFFLICTION_PHASE_OFFSETS =
+            { 0.00f, 0.61f, 0.24f, 0.83f, 0.42f, 0.13f, 0.72f, 0.51f };
+
+    // Wall-clock accumulator driving the looping affliction overlay animation. Cosmetic only —
+    // never read by game logic, so wall-clock (not turn-based) time is correct here.
+    private float statusAnimationClock = 0f;
+
     // Reused per-frame colour buffer written by GameMath.healthBarColor — no allocation
     private final float[]   barColorRgb = new float[3];
 
@@ -117,6 +134,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.beamScreenYs        = new float[scratchSize];
         this.beamStrengths       = new float[scratchSize];
         this.drawBeamFlags       = new boolean[scratchSize];
+        this.fxCenterColumns     = new float[scratchSize];
+        this.fxDrawBottoms       = new float[scratchSize];
+        this.fxSpriteHeights     = new float[scratchSize];
+        this.fxSpriteWidths      = new float[scratchSize];
+        this.fxDrawFlags         = new boolean[scratchSize];
         this.shapeRenderer       = new ShapeRenderer();
         this.batch               = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
 
@@ -174,6 +196,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
         int enemyCount = enemies.size();
         if (enemyCount == 0) return;
 
+        // Advance the affliction overlay animation clock (wall-clock; cosmetic only).
+        statusAnimationClock += Gdx.graphics.getDeltaTime();
+
         // --- Cull enemies behind the player or too far ---
         int visibleCount = 0;
         for (int enemyIndex = 0; enemyIndex < enemyCount; enemyIndex++) {
@@ -223,6 +248,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
             drawBarFlags[sortedPosition]  = false;
             drawBeamFlags[sortedPosition] = false;
+            fxDrawFlags[sortedPosition]   = false;
             float attackAnimStrength      = enemy.getAttackAnimStrength();
 
             TextureRegion region = textureRegions.get(enemy.type);
@@ -332,6 +358,13 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 drawBeamFlags[sortedPosition] = true;
             }
 
+            // Cache billboard geometry for the affliction overlay pass (pass 1.5).
+            fxCenterColumns[sortedPosition] = screenCenterColumn;
+            fxDrawBottoms[sortedPosition]   = drawBottom;
+            fxSpriteHeights[sortedPosition] = spriteScreenHeight;
+            fxSpriteWidths[sortedPosition]  = spriteScreenWidth;
+            fxDrawFlags[sortedPosition]     = true;
+
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             float[] propZBuffer      = (propRenderer != null) ? propRenderer.getPropSpriteZBuffer()      : null;
@@ -415,6 +448,71 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
         batch.setColor(Color.WHITE);
         batch.end();
+
+        // =====================================================================
+        // Pass 1.5: Animated affliction overlays (fire / toxin / bleed)
+        // Additive-blended glow drawn over the body but under the health bars, so a
+        // burning enemy visibly burns, a poisoned one bubbles, a bleeding one drips.
+        // =====================================================================
+        boolean anyAffliction = false;
+        for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+            if (!fxDrawFlags[sortedPosition]) continue;
+            if (hasAnyAffliction(enemies.get(sortedIndices[sortedPosition]))) { anyAffliction = true; break; }
+        }
+
+        if (anyAffliction) {
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE); // additive glow
+            batch.begin();
+            for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+                if (!fxDrawFlags[sortedPosition]) continue;
+                Enemy enemy = enemies.get(sortedIndices[sortedPosition]);
+
+                float centerColumn = fxCenterColumns[sortedPosition];
+                int   centerScreenColumn = (int) centerColumn;
+                if (centerScreenColumn < 0 || centerScreenColumn >= WALL_PROJECTION_SCREEN_WIDTH) continue;
+                // Occlude behind walls using the same center-column depth test as the health bars.
+                if (sortedDepths[sortedPosition] >= wallRenderer.getZBufferUnchecked(centerScreenColumn)) continue;
+
+                float bottom = fxDrawBottoms[sortedPosition];
+                float height = fxSpriteHeights[sortedPosition];
+                float width  = fxSpriteWidths[sortedPosition];
+
+                StatusEffect burn   = enemy.getActiveEffects().get(StatusType.BURNING);
+                StatusEffect poison = enemy.getActiveEffects().get(StatusType.POISONED);
+                StatusEffect bleed  = enemy.getActiveEffects().get(StatusType.BLEED);
+
+                if (burn != null && burn.isActive()) {
+                    drawAfflictionParticles(centerColumn, bottom, height, width,
+                            EffectConstants.AFFLICTION_FIRE_RISE_HZ, EffectConstants.AFFLICTION_FIRE_WOBBLE_HZ,
+                            EffectConstants.AFFLICTION_FIRE_WOBBLE_FRAC, EffectConstants.AFFLICTION_FIRE_ZONE_FRAC,
+                            EffectConstants.AFFLICTION_FIRE_SIZE_FRAC, EffectConstants.AFFLICTION_FIRE_ALPHA,
+                            false, 0f,
+                            EffectConstants.AFFLICTION_FIRE_LOW_R, EffectConstants.AFFLICTION_FIRE_LOW_G, EffectConstants.AFFLICTION_FIRE_LOW_B,
+                            EffectConstants.AFFLICTION_FIRE_HIGH_R, EffectConstants.AFFLICTION_FIRE_HIGH_G, EffectConstants.AFFLICTION_FIRE_HIGH_B);
+                }
+                if (poison != null && poison.isActive()) {
+                    drawAfflictionParticles(centerColumn, bottom, height, width,
+                            EffectConstants.AFFLICTION_POISON_RISE_HZ, EffectConstants.AFFLICTION_POISON_WOBBLE_HZ,
+                            EffectConstants.AFFLICTION_POISON_WOBBLE_FRAC, EffectConstants.AFFLICTION_POISON_ZONE_FRAC,
+                            EffectConstants.AFFLICTION_POISON_SIZE_FRAC, EffectConstants.AFFLICTION_POISON_ALPHA,
+                            false, 0f,
+                            EffectConstants.AFFLICTION_POISON_LOW_R, EffectConstants.AFFLICTION_POISON_LOW_G, EffectConstants.AFFLICTION_POISON_LOW_B,
+                            EffectConstants.AFFLICTION_POISON_HIGH_R, EffectConstants.AFFLICTION_POISON_HIGH_G, EffectConstants.AFFLICTION_POISON_HIGH_B);
+                }
+                if (bleed != null && bleed.isActive()) {
+                    drawAfflictionParticles(centerColumn, bottom, height, width,
+                            EffectConstants.AFFLICTION_BLEED_FALL_HZ, EffectConstants.AFFLICTION_BLEED_FALL_HZ,
+                            EffectConstants.AFFLICTION_BLEED_WOBBLE_FRAC, EffectConstants.AFFLICTION_BLEED_ZONE_FRAC,
+                            EffectConstants.AFFLICTION_BLEED_SIZE_FRAC, EffectConstants.AFFLICTION_BLEED_ALPHA,
+                            true, EffectConstants.AFFLICTION_BLEED_ZONE_FRAC,
+                            EffectConstants.AFFLICTION_BLEED_R, EffectConstants.AFFLICTION_BLEED_G, EffectConstants.AFFLICTION_BLEED_B,
+                            EffectConstants.AFFLICTION_BLEED_R, EffectConstants.AFFLICTION_BLEED_G, EffectConstants.AFFLICTION_BLEED_B);
+                }
+            }
+            batch.setColor(Color.WHITE);
+            batch.end();
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA); // restore default alpha blend
+        }
 
         // =====================================================================
         // Pass 2: Health bars (white-pixel texture; single batch, ~3 flushes total)
@@ -534,6 +632,54 @@ public final class EnemyRenderer implements Renderable, Disposable {
             out.set(ENEMY_NAME_TAG_TIER4_R, ENEMY_NAME_TAG_TIER4_G, ENEMY_NAME_TAG_TIER4_B, 1f);
         } else {
             out.set(ENEMY_NAME_TAG_TIER5_R, ENEMY_NAME_TAG_TIER5_G, ENEMY_NAME_TAG_TIER5_B, 1f);
+        }
+    }
+
+    /** True when the enemy has any damage-over-time affliction that draws an animated overlay. */
+    private static boolean hasAnyAffliction(Enemy enemy) {
+        return enemy.getActiveEffects().get(StatusType.BURNING).isActive()
+                || enemy.getActiveEffects().get(StatusType.POISONED).isActive()
+                || enemy.getActiveEffects().get(StatusType.BLEED).isActive();
+    }
+
+    /*
+     * Draws one animated affliction overlay (a column of looping particles) on an enemy billboard.
+     * Each particle loops on a per-index phase in [0,1): rising types climb from the sprite base to
+     * `zoneFrac` of its height; falling types (bleed) drip down from `startFrac` height to the feet.
+     * Horizontal position = center ± a per-index spread plus a time-driven sine wobble. Size shrinks
+     * and alpha follows sin(phase·π) so each particle fades in at birth and out at the end of its loop.
+     * Color lerps low→high by phase (fire yellow→red; poison pale→toxic; bleed constant crimson).
+     * All draws use the additive-blended white-pixel quad set up by the caller — no allocation.
+     * Screen space is Y-up (origin bottom-left); larger Y is higher on screen, matching the sprite.
+     */
+    private void drawAfflictionParticles(float centerX, float bottom, float height, float width,
+                                         float riseHz, float wobbleHz, float wobbleFrac, float zoneFrac,
+                                         float sizeFrac, float maxAlpha, boolean falling, float startFrac,
+                                         float lowRed, float lowGreen, float lowBlue,
+                                         float highRed, float highGreen, float highBlue) {
+        int particleCount = EffectConstants.AFFLICTION_FX_PARTICLES;
+        for (int particleIndex = 0; particleIndex < particleCount; particleIndex++) {
+            float seed  = AFFLICTION_PHASE_OFFSETS[particleIndex % AFFLICTION_PHASE_OFFSETS.length];
+            float raw   = statusAnimationClock * riseHz + seed;
+            float phase = raw - (float) Math.floor(raw);            // looping progress 0..1
+
+            float verticalFraction = falling ? startFrac * (1f - phase) : phase * zoneFrac;
+            float particleY        = bottom + verticalFraction * height;
+
+            float wobble = (float) Math.sin(statusAnimationClock * wobbleHz * MathUtils.PI2 + seed * MathUtils.PI2);
+            float particleX = centerX + width * wobbleFrac * ((seed - 0.5f) * 1.4f + wobble * 0.4f);
+
+            float size  = width * sizeFrac * (1f - phase * 0.5f);
+            float alpha = maxAlpha * (float) Math.sin(phase * Math.PI); // 0 at birth/death, peak mid-life
+            if (size <= 0f || alpha <= 0.01f) continue;
+
+            float red   = GameMath.lerp(lowRed,   highRed,   phase);
+            float green = GameMath.lerp(lowGreen, highGreen, phase);
+            float blue  = GameMath.lerp(lowBlue,  highBlue,  phase);
+
+            batch.setColor(red, green, blue, alpha);
+            batch.draw(whitePixelTexture, particleX - size / 2f, particleY - size / 2f, size, size,
+                    0, 0, 1, 1, false, false);
         }
     }
 

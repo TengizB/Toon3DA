@@ -205,4 +205,53 @@ public final class EffectConstants {
     public static final float MELEE_TELEGRAPH_R                   = 0.90f;
     public static final float MELEE_TELEGRAPH_G                   = 0.20f;
     public static final float MELEE_TELEGRAPH_B                   = 0.15f;
+
+    // ─── Affliction feedback (Phase 3): crit blood, DoT tick sparks, animated overlays ───
+    // Critical-hit blood spray — dark-red spark burst erupting from the crit target
+    public static final float CRIT_BLOOD_R                        = 0.72f;
+    public static final float CRIT_BLOOD_G                        = 0.02f;
+    public static final float CRIT_BLOOD_B                        = 0.03f;
+    public static final int   CRIT_BLOOD_SPARK_COUNT              = 14;
+    public static final float CRIT_BLOOD_SPEED_MIN               = 60f;
+    public static final float CRIT_BLOOD_SPEED_MAX               = 170f;
+    public static final float CRIT_BLOOD_LIFE_SECONDS            = 0.45f;
+
+    // DoT tick spark puff — small colored burst each turn a burn/poison/bleed ticks on an enemy,
+    // confirming the damage-over-time is still working even between shots.
+    public static final int   DOT_TICK_SPARK_COUNT               = 5;
+    public static final float DOT_TICK_SPEED_MIN                = 30f;
+    public static final float DOT_TICK_SPEED_MAX                = 85f;
+    public static final float DOT_TICK_LIFE_SECONDS             = 0.35f;
+    public static final float DOT_FIRE_R   = 1.00f, DOT_FIRE_G   = 0.55f, DOT_FIRE_B   = 0.05f;
+    public static final float DOT_POISON_R = 0.35f, DOT_POISON_G = 1.00f, DOT_POISON_B = 0.15f;
+    public static final float DOT_BLEED_R  = 0.85f, DOT_BLEED_G  = 0.05f, DOT_BLEED_B  = 0.10f;
+
+    // Animated affliction overlays drawn on the enemy billboard each frame (additive glow):
+    // rising flames for BURNING, floating bubbles for POISONED, falling droplets for BLEED.
+    public static final int   AFFLICTION_FX_PARTICLES            = 7;    // particles per active status per enemy
+    // Fire — hot, fast, wide wobble; hot yellow-white core rising into deep-red tips
+    public static final float AFFLICTION_FIRE_RISE_HZ            = 1.6f;
+    public static final float AFFLICTION_FIRE_WOBBLE_HZ          = 3.0f;
+    public static final float AFFLICTION_FIRE_WOBBLE_FRAC        = 0.22f;  // wobble amplitude vs sprite width
+    public static final float AFFLICTION_FIRE_ZONE_FRAC          = 0.95f;  // vertical span vs sprite height
+    public static final float AFFLICTION_FIRE_SIZE_FRAC          = 0.34f;  // ember quad size vs sprite width
+    public static final float AFFLICTION_FIRE_ALPHA              = 0.75f;
+    public static final float AFFLICTION_FIRE_LOW_R  = 1.00f, AFFLICTION_FIRE_LOW_G  = 0.90f, AFFLICTION_FIRE_LOW_B  = 0.35f;
+    public static final float AFFLICTION_FIRE_HIGH_R = 1.00f, AFFLICTION_FIRE_HIGH_G = 0.25f, AFFLICTION_FIRE_HIGH_B = 0.00f;
+    // Poison — slower, smaller bubbles; pale green rising into saturated toxic green
+    public static final float AFFLICTION_POISON_RISE_HZ         = 0.9f;
+    public static final float AFFLICTION_POISON_WOBBLE_HZ       = 1.6f;
+    public static final float AFFLICTION_POISON_WOBBLE_FRAC     = 0.26f;
+    public static final float AFFLICTION_POISON_ZONE_FRAC       = 0.85f;
+    public static final float AFFLICTION_POISON_SIZE_FRAC       = 0.20f;
+    public static final float AFFLICTION_POISON_ALPHA           = 0.60f;
+    public static final float AFFLICTION_POISON_LOW_R  = 0.55f, AFFLICTION_POISON_LOW_G  = 1.00f, AFFLICTION_POISON_LOW_B  = 0.40f;
+    public static final float AFFLICTION_POISON_HIGH_R = 0.15f, AFFLICTION_POISON_HIGH_G = 0.85f, AFFLICTION_POISON_HIGH_B = 0.10f;
+    // Bleed — crimson droplets welling from the torso and falling to the feet (constant hue)
+    public static final float AFFLICTION_BLEED_FALL_HZ          = 1.3f;
+    public static final float AFFLICTION_BLEED_WOBBLE_FRAC      = 0.10f;
+    public static final float AFFLICTION_BLEED_ZONE_FRAC        = 0.55f;
+    public static final float AFFLICTION_BLEED_SIZE_FRAC        = 0.16f;
+    public static final float AFFLICTION_BLEED_ALPHA            = 0.70f;
+    public static final float AFFLICTION_BLEED_R = 0.75f, AFFLICTION_BLEED_G = 0.03f, AFFLICTION_BLEED_B = 0.05f;
 }

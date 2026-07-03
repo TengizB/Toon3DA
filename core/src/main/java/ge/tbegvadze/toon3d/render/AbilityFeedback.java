@@ -186,6 +186,13 @@ public final class AbilityFeedback {
         if (tileColumn >= 0 && tileRow >= 0) {
             impactEffectSystem.spawnColoredRingPulse(tileColumn, tileRow, heightMult,
                     WHITE_HOT_R, WHITE_HOT_G, WHITE_HOT_B);
+            // Blood spray: a dark-red spark burst erupts from the crit target so a critical
+            // hit reads viscerally, not just as a white flash.
+            impactEffectSystem.spawnColoredSparks(tileColumn, tileRow, heightMult,
+                    EffectConstants.CRIT_BLOOD_R, EffectConstants.CRIT_BLOOD_G, EffectConstants.CRIT_BLOOD_B,
+                    EffectConstants.CRIT_BLOOD_SPARK_COUNT,
+                    EffectConstants.CRIT_BLOOD_SPEED_MIN, EffectConstants.CRIT_BLOOD_SPEED_MAX,
+                    EffectConstants.CRIT_BLOOD_LIFE_SECONDS);
         }
     }
 

@@ -977,6 +977,13 @@ public final class EnemyManager implements EnemyHitTarget {
         if (killXpListener    != null) killXpListener.onEnemyKilledForXp(xpAwarded);
         if (killEventListener != null) killEventListener.onEnemyKilled(enemy.nameTag, xpAwarded);
         if (killCreditListener != null) killCreditListener.onEnemyKilledForCredits(enemy.type.baseCreditReward(), currentDepth);
+        // Fire the impact death burst BEFORE killEnemy() clears the tile, so a burn/poison
+        // DoT kill gets the same explosion + flash + shake as a weapon kill instead of the
+        // enemy silently vanishing at the end of the turn.
+        if (impactEventListener != null) {
+            impactEventListener.onEnemyKilled(enemy.worldCenterX(), enemy.worldCenterY(),
+                    enemy.type.heightMultiplier(), 0);
+        }
         killEnemy(enemy, false);
     }
 

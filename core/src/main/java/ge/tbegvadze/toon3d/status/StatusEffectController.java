@@ -4,6 +4,7 @@ import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
+import ge.tbegvadze.toon3d.render.ImpactEffectSystem;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 
 import java.util.List;
@@ -30,9 +31,16 @@ public final class StatusEffectController {
     private int pendingDoTDeathCount = 0;
 
     private EventTextSystem eventTextSystem;
+    // Nullable — wired by World. When present, each enemy DoT tick spawns a small colored
+    // spark puff so burning/poison/bleed reads as an active, ticking affliction.
+    private ImpactEffectSystem impactEffectSystem;
 
     public void setEventTextSystem(EventTextSystem system) {
         this.eventTextSystem = system;
+    }
+
+    public void setImpactEffectSystem(ImpactEffectSystem system) {
+        this.impactEffectSystem = system;
     }
 
     // -------------------------------------------------------------------------
@@ -147,6 +155,8 @@ public final class StatusEffectController {
             applyEnemyTickEffect(enemy, effect, type);
 
             if (!enemy.isAlive()) {
+                // Killing tick: the death burst (fired by processDoTKill) carries the feedback,
+                // so no tick puff is spawned at the corpse.
                 if (pendingDoTDeathCount < MAX_PENDING_DOT_DEATHS) {
                     pendingDoTDeaths[pendingDoTDeathCount++] = enemy;
                 }
@@ -154,11 +164,35 @@ public final class StatusEffectController {
                 return;
             }
 
+            spawnDoTTickFeedback(enemy, type);
+
             effect.remainingTurns--;
             if (effect.remainingTurns <= 0) {
                 effect.reset();
             }
         }
+    }
+
+    /**
+     * Spawns a small colored spark puff at the enemy for damage-over-time types (Burning,
+     * Poison, Bleed) so the affliction visibly ticks each world turn. No-op for control
+     * effects (Stun/Blind/Slow/Empowered) and when no ImpactEffectSystem is wired.
+     * Projection uses the current player state pushed by World earlier this frame.
+     */
+    private void spawnDoTTickFeedback(Enemy enemy, StatusType type) {
+        if (impactEffectSystem == null) return;
+        float red, green, blue;
+        switch (type) {
+            case BURNING:  red = EffectConstants.DOT_FIRE_R;   green = EffectConstants.DOT_FIRE_G;   blue = EffectConstants.DOT_FIRE_B;   break;
+            case POISONED: red = EffectConstants.DOT_POISON_R; green = EffectConstants.DOT_POISON_G; blue = EffectConstants.DOT_POISON_B; break;
+            case BLEED:    red = EffectConstants.DOT_BLEED_R;  green = EffectConstants.DOT_BLEED_G;  blue = EffectConstants.DOT_BLEED_B;  break;
+            default:       return;
+        }
+        impactEffectSystem.spawnColoredSparks(enemy.tileColumn, enemy.tileRow, enemy.type.heightMultiplier(),
+                red, green, blue,
+                EffectConstants.DOT_TICK_SPARK_COUNT,
+                EffectConstants.DOT_TICK_SPEED_MIN, EffectConstants.DOT_TICK_SPEED_MAX,
+                EffectConstants.DOT_TICK_LIFE_SECONDS);
     }
 
     private static void applyPlayerTickEffect(Player player, StatusEffect effect, StatusType type) {

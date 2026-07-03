@@ -360,6 +360,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Status effect system — run-persistent; controller keeps player state across floors
         statusEffectController       = new StatusEffectController();
         statusEffectController.setEventTextSystem(eventTextSystem);
+        statusEffectController.setImpactEffectSystem(impactEffectSystem);
         statusEffectVignetteRenderer = new StatusEffectVignetteRenderer();
 
         // Build level-dependent resources for the first floor
@@ -1344,6 +1345,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (eventTextSystem != null) {
                 eventTextSystem.spawnWithColor("+" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
             }
+            // Visual heal feedback: rising green '+' particles and a soft green edge vignette,
+            // mirroring the weapon lifesteal procs so a medkit reads as an obvious restore.
+            impactEffectSystem.spawnHealParticles();
+            hitVignetteRenderer.triggerHeal();
         }
     }
 
