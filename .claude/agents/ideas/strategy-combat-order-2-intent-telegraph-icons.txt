@@ -1,8 +1,39 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Enemy Intent Telegraph Icons — the readable "what happens next" HUD
 CREATED: 2026-07-03
 ---
+
+IMPLEMENTATION NOTES (2026-07-03)
+=================================
+- New util/IntentConstants.java holds all icon geometry, per-verb frame colours, damage/Block
+  number colours, and animation timings (split-constants rule; nothing hardcoded).
+- GameMath gained three pure helpers: intentIconSize() (distance-scaled, clamped edge length),
+  intentIconBobOffset() (idle sine bob with per-enemy phase), and intentIconScale() (combined
+  re-commit pop + WIND_UP pulse multiplier).
+- EnemyRenderer draws a new "Pass 2.5" after the health-bar pass: for every isAlerted() enemy whose
+  plannedAction.committed is true and within INTENT_ICON_MAX_DISTANCE_TILES, it draws the tinted
+  frame, a procedural glyph per IntentVerb (all built from rotated white-pixel quads — no textures),
+  and, for attack/DEFEND verbs, the predictedDamage / blockGain number. Reuses the existing per-enemy
+  screen projection, the same center-column Z-buffer occlusion test as the bars, and the name-tag
+  font — zero new per-frame allocation (geometry cached in parallel scratch arrays in pass 1).
+- DORMANT / un-committed enemies show no icon (no pre-aggro info leak). The icon stacks ABOVE the
+  existing health-bar + name-tag cluster (INTENT_ICON_NAMETAG_CLEARANCE) so nothing overlaps.
+- Animation: idle bob (per-enemy phase), WIND_UP pulse wired to Enemy.getTelegraphStrength() so the
+  icon swells in sync with the sprite flash, and a re-commit "pop" (Enemy.intentPopTimerSeconds,
+  fired from EnemyManager's COMMIT phase via Enemy.notifyCommitted() when the verb changes).
+- ATTACK_RANGED shows a brighter "locked" outline when the enemy currently shares the player's
+  cardinal line (the deadly lane). Arrow/wind-up glyphs point along the committed cardinal.
+- STUNNED renders a grey "X" frame (wasted-turn feedback for status builds).
+
+DEFERRED TO A FOLLOW-UP
+- The whiff/MISS floater (ANIMATION section, marked optional): in this turn architecture an enemy
+  re-commits a fresh plan on the same tick it whiffs, so greying the now-replaced icon would be
+  misleading. A clean "MISS" floater needs a new whiff callback plumbed from EnemyManager's execute
+  phase through World's EventTextSystem; left for a small follow-up so this PR stays render-only.
+  INTENT_WHIFF_FLASH_DURATION was therefore not added (would be an unused constant).
+- DEFEND (order-3) and SPECIAL (order-5) verbs are fully rendered here (blue shield / purple rune),
+  but their VALUES (blockGain / ability sub-glyph) are owned by those later docs as specified.
 
 OVERVIEW
 ========
