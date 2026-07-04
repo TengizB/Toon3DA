@@ -50,6 +50,7 @@ public final class EventTextRenderer implements Disposable {
     private static final Color BASE_GREY         = new Color(0.8f,  0.8f,  0.8f,  1f);
     private static final Color BASE_GOLD         = new Color(1f,    0.69f, 0.125f, 1f);
     private static final Color BASE_CREDIT_CYAN  = new Color(0.55f, 0.85f, 0.80f, 1f);
+    private static final Color BASE_BLUE         = new Color(0.45f, 0.72f, 1f,    1f);
 
     private final EventTextSystem eventTextSystem;
     private final SpriteBatch     batch;
@@ -280,6 +281,7 @@ public final class EventTextRenderer implements Disposable {
             case EventTextSystem.COLOR_GREY:         return BASE_GREY;
             case EventTextSystem.COLOR_GOLD:         return BASE_GOLD;
             case EventTextSystem.COLOR_CREDIT_CYAN:  return BASE_CREDIT_CYAN;
+            case EventTextSystem.COLOR_BLUE:         return BASE_BLUE;
             default:                                 return BASE_WHITE;
         }
     }

@@ -1,8 +1,37 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Combat
 TITLE: Block & Defend — a shared damage-absorption resource (StS Block)
 CREATED: 2026-07-03
 ---
+
+IMPLEMENTATION NOTES (2026-07-04)
+================================
+Built the ENEMY side of Block end-to-end — the concrete "defending enemies take less
+damage" mechanic — plus the SHARED, reusable mitigation pipeline so order-4 can layer
+the player's directional Guard on top without re-plumbing anything:
+  - Enemy.block / blockDecayTurns + gainBlock()/decayBlock(); Enemy.applyDamage() now
+    absorbs Block above armor. Enemy.applyDoTDamage() deliberately BYPASSES Block.
+  - Pure math: GameMath.blockAbsorbed() (pipeline step 3) and GameMath.defendBlockGain()
+    (role base × depth-health-scale, capped at BLOCK_MAX).
+  - Decay runs in StatusEffectController.tickEnemies() for deterministic status-phase order:
+    BLOCK_DECAY_TURNS = 1 means Block protects through exactly the single player turn the
+    player reacts to the active shield (gained on the defend turn's EXECUTE; zeroed by the
+    NEXT status tick, which fires after that reacting turn's damage resolves).
+  - DEFEND commit logic in EnemyManager (shouldDefend/commitDefend): CHAFF/BOSS never brace;
+    a bracing role turtles at <= DEFEND_HP_THRESHOLD_FRACTION HP when the player is positioned
+    to hit it, and BRUISER guardians also brace on DEFEND_BRUISER_CADENCE_TURNS cadence. DEFEND
+    only ever replaces a MOVE/WAIT, never a landable attack, so it never stalls a fight.
+  - Visuals: blue plating shimmer on the sprite while block>0, an active blue Block number
+    beside the health bar, a "BLOCKED N" floater (EventTextSystem.COLOR_BLUE), and blue shield
+    sparks + a shatter ring (ImpactEventListener.onBlockAbsorbed → ImpactEffectSystem).
+  - Balance: BLOCK_MAX + per-role DEFEND_BLOCK_GAIN_* in BalanceConfig; a BLOCK & DEFEND
+    section in BalanceReport + docs/balance-rule-system.txt (all three roles verify survTurns
+    ≈ 1, in band). The 5-step mitigation pipeline is documented as the single source of truth.
+  - order-2 already renders the DEFEND shield icon + block number from PlannedAction.blockGain.
+
+DEFERRED (belongs to order-4, which OWNS the player's directional reduction): the PLAYER
+`block` field and its Guard facing-multiplier. The mitigation helper is generic and ready for
+order-4 to call for the player; no player-side dead code was added here.
 
 OVERVIEW
 ========

@@ -14,9 +14,11 @@ import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.progression.KillCreditListener;
 import ge.tbegvadze.toon3d.progression.KillEventListener;
 import ge.tbegvadze.toon3d.progression.KillXpListener;
+import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
 import ge.tbegvadze.toon3d.status.StatusResistance;
 import ge.tbegvadze.toon3d.status.StatusType;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
 import ge.tbegvadze.toon3d.util.GameBalance;
@@ -96,6 +98,12 @@ public final class EnemyManager implements EnemyHitTarget {
     private StatusEffectController statusEffectController = null;
 
     /**
+     * Nullable — wired by World. When present, a shot swallowed by an enemy's Block spawns a
+     * "BLOCKED N" floater (strategy-combat-order-3) so the player learns the shield ate the hit.
+     */
+    private EventTextSystem eventTextSystem = null;
+
+    /**
      * @param dungeonDepth current floor number (1-based); drives enemy health and damage scaling.
      *                     Pass 1 for the first floor.
      */
@@ -119,6 +127,11 @@ public final class EnemyManager implements EnemyHitTarget {
     /** Injects the status effect controller so ranged enemies can inflict DoT on the player. */
     public void setStatusEffectController(StatusEffectController controller) {
         this.statusEffectController = controller;
+    }
+
+    /** Injects the event-text system so an enemy's Block absorbing a shot spawns a "BLOCKED N" floater. */
+    public void setEventTextSystem(EventTextSystem system) {
+        this.eventTextSystem = system;
     }
 
     /**
@@ -354,7 +367,17 @@ public final class EnemyManager implements EnemyHitTarget {
         // application point, so no weapon double-counts these multipliers.
         float damageMultiplier = thisKillWasMelee ? playerMeleeDamageMultiplier : playerRangedDamageMultiplier;
         int totalDamage = Math.round(amount * damageMultiplier) + playerFlatDamageBonus;
+
+        // Block absorption (strategy-combat-order-3): capture the buffer before the hit so we can tell
+        // how much the shield ate and whether it shattered, then fire the Block-specific feedback.
+        int blockBefore = enemy.block;
         enemy.applyDamage(totalDamage);
+        int blockAbsorbed = blockBefore - enemy.block;
+        if (blockAbsorbed > 0) {
+            boolean shattered = enemy.block == 0 && totalDamage > blockBefore;
+            spawnBlockFeedback(enemy, blockAbsorbed, shattered);
+        }
+
         enemy.triggerHitFlash();
 
         if (!enemy.isAlive()) {
@@ -551,7 +574,7 @@ public final class EnemyManager implements EnemyHitTarget {
             case ATTACK_RANGED: executeRangedAttack(enemy, plan, playerColumn, playerRow, player); break;
             case WIND_UP:       executeWindUp(enemy, playerColumn, playerRow, player);             break;
             case MOVE:          executeMove(enemy, plan, playerColumn, playerRow);                 break;
-            case DEFEND:        // order-3 — no behaviour yet
+            case DEFEND:        executeDefend(enemy, plan);                                        break;
             case SPECIAL:       // order-5 — no behaviour yet
             case WAIT:
             case STUNNED:
@@ -615,6 +638,17 @@ public final class EnemyManager implements EnemyHitTarget {
     }
 
     /**
+     * Executes a committed DEFEND (strategy-combat-order-3): the enemy braces and gains the Block it
+     * telegraphed last turn. The buffer becomes active immediately, so it protects the enemy against
+     * the player's NEXT turn — the turn during which the player reads the active blue Block number and
+     * decides whether to chip it, wait it out, or spend a Block-piercing option.
+     */
+    private void executeDefend(Enemy enemy, PlannedAction plan) {
+        enemy.state = EnemyState.DEFENDING;
+        enemy.gainBlock(plan.blockGain, BalanceConfig.BLOCK_MAX, BalanceConfig.BLOCK_DECAY_TURNS);
+    }
+
+    /**
      * Executes a committed MOVE. A retreat steps away from the player; an approach steps toward the
      * committed goal tile, falling back to closing on the player (with stuck/wiggle handling) when
      * the goal is unreachable this step (R4 — a failed move re-paths quietly, unlike a whiffed attack).
@@ -662,6 +696,8 @@ public final class EnemyManager implements EnemyHitTarget {
     private void computeMeleePlan(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow) {
         if (isCardinallyAdjacent(enemy, playerColumn, playerRow)) {
             plan.setAttack(IntentVerb.ATTACK_MELEE, playerColumn, playerRow, enemy.scaledAttackDamage());
+        } else if (shouldDefend(enemy, playerColumn, playerRow)) {
+            commitDefend(enemy, plan);
         } else if (enemy.shouldMoveThisTurn()) {
             plan.set(IntentVerb.MOVE, playerColumn, playerRow); // goal = the player's tile
         } else {
@@ -691,7 +727,11 @@ public final class EnemyManager implements EnemyHitTarget {
             enemy.triggerTelegraph();   // rim flash telegraph, visible for the whole player turn
             return;
         }
-        if (enemy.shouldMoveThisTurn()) {
+        // No charge lane and not adjacent — a BRUISER guardian braces on cadence (or when low), which
+        // is the read-and-adapt beat that makes the Shell Brute more than a straight-line rusher.
+        if (shouldDefend(enemy, playerColumn, playerRow)) {
+            commitDefend(enemy, plan);
+        } else if (enemy.shouldMoveThisTurn()) {
             plan.set(IntentVerb.MOVE, playerColumn, playerRow);
         } else {
             plan.set(IntentVerb.WAIT, enemy.tileColumn, enemy.tileRow);
@@ -766,6 +806,8 @@ public final class EnemyManager implements EnemyHitTarget {
                         damage * EnemyConstants.VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER));
             }
             plan.setAttack(IntentVerb.ATTACK_MELEE, playerColumn, playerRow, damage);
+        } else if (shouldDefend(enemy, playerColumn, playerRow)) {
+            commitDefend(enemy, plan);
         } else if (enemy.shouldMoveThisTurn()) {
             int faceColumn  = Math.round(player.directionX);
             int faceRow     = Math.round(player.directionY);
@@ -811,10 +853,80 @@ public final class EnemyManager implements EnemyHitTarget {
             plan.setFlee(playerColumn, playerRow);       // too close — reposition, no shot this turn
         } else if (canFireNow) {
             plan.setAttack(IntentVerb.ATTACK_RANGED, playerColumn, playerRow, enemy.scaledAttackDamage());
+        } else if (shouldDefend(enemy, playerColumn, playerRow)) {
+            commitDefend(enemy, plan);                   // can't fire and hurting — brace instead of shuffling
         } else if (enemy.shouldMoveThisTurn()) {
             plan.set(IntentVerb.MOVE, playerColumn, playerRow); // advance to gain a firing line
         } else {
             plan.set(IntentVerb.WAIT, enemy.tileColumn, enemy.tileRow);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // DEFEND decision (strategy-combat-order-3) — shared by every archetype that can brace
+    // -------------------------------------------------------------------------
+
+    /**
+     * True when this enemy should commit DEFEND this turn instead of repositioning or waiting.
+     * Called from the COMMIT step AFTER the attack branches, so an enemy that can land a hit always
+     * prefers attacking — bracing only ever replaces a MOVE/WAIT, never a productive attack, so it
+     * never stalls a fight. Two reasons an enemy braces (both tunable in BalanceConfig):
+     *   1. TURTLE  — it is at or below {@code DEFEND_HP_THRESHOLD_FRACTION} HP and the player is
+     *      positioned to hurt it next turn (cardinally adjacent, or sharing its line with clear LOS).
+     *   2. GUARDIAN — a BRUISER on its fixed {@code DEFEND_BRUISER_CADENCE_TURNS} rhythm, regardless
+     *      of HP, to give elites the read-and-adapt beat.
+     * CHAFF and BOSS roles never brace (chaff should die fast; bosses run their own AI).
+     */
+    private boolean shouldDefend(Enemy enemy, int playerColumn, int playerRow) {
+        EnemyRole role = enemy.type.role();
+        if (role == EnemyRole.CHAFF || role == EnemyRole.BOSS) return false;
+        if (role == EnemyRole.BRUISER
+                && enemy.turnCounter % BalanceConfig.DEFEND_BRUISER_CADENCE_TURNS == 0) {
+            return true;
+        }
+        boolean lowHp = enemy.health <= Math.round(enemy.maxHealth * BalanceConfig.DEFEND_HP_THRESHOLD_FRACTION);
+        if (!lowHp) return false;
+        boolean threatened = isCardinallyAdjacent(enemy, playerColumn, playerRow)
+                || (isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                    && hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow));
+        return threatened;
+    }
+
+    /**
+     * Writes a DEFEND plan carrying the Block the enemy will gain next turn. The goal tile is the
+     * enemy's own tile (it holds position while bracing). blockGain is role-based and depth-scaled;
+     * order-2 renders this exact number inside the blue shield intent icon.
+     */
+    private void commitDefend(Enemy enemy, PlannedAction plan) {
+        int blockGain = GameMath.defendBlockGain(
+                defendBlockGainBase(enemy.type.role()),
+                GameBalance.enemyHealthScaleForDepth(enemy.dungeonLevel),
+                BalanceConfig.BLOCK_MAX);
+        plan.setDefend(enemy.tileColumn, enemy.tileRow, blockGain);
+    }
+
+    /** Depth-1 base Block for a bracing role; 0 for roles that never DEFEND (CHAFF/BOSS). */
+    private static int defendBlockGainBase(EnemyRole role) {
+        switch (role) {
+            case MINI_ELITE: return BalanceConfig.DEFEND_BLOCK_GAIN_MINI_ELITE;
+            case BRUISER:    return BalanceConfig.DEFEND_BLOCK_GAIN_BRUISER;
+            case SOLDIER:    return BalanceConfig.DEFEND_BLOCK_GAIN_SOLDIER;
+            default:         return 0;
+        }
+    }
+
+    /**
+     * Fires the Block-specific feedback when a shot is eaten by an enemy's shield (order-3): a
+     * "BLOCKED N" floater teaching the player the hit was absorbed, plus blue shield sparks (and a
+     * shatter ring when the buffer broke) routed through the impact system. Purely cosmetic.
+     */
+    private void spawnBlockFeedback(Enemy enemy, int blockAbsorbed, boolean shattered) {
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("BLOCKED " + blockAbsorbed, EventTextSystem.COLOR_BLUE);
+        }
+        if (impactEventListener != null) {
+            impactEventListener.onBlockAbsorbed(enemy.tileColumn, enemy.tileRow,
+                    enemy.type.heightMultiplier(), blockAbsorbed, shattered);
         }
     }
 

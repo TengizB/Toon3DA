@@ -7,6 +7,7 @@ import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.IntentConstants;
 
 import java.util.EnumMap;
@@ -40,6 +41,19 @@ public class Enemy implements StatusHost {
      * Default 0; depth-scaled enemies may receive a non-zero value at spawn time.
      */
     public int        armor = 0;
+    /**
+     * Temporary damage-absorbing buffer (strategy-combat-order-3). Incoming damage is subtracted
+     * from Block before it reaches HP (and before flat armor) — see {@link #applyDamage}. Gained
+     * when the enemy EXECUTEs a committed DEFEND ({@link #gainBlock}); zeroed after
+     * {@link #decayBlock} counts down (driven by the StatusEffectController tick). Default 0.
+     * Direct HP loss from status DoT ({@link #applyDoTDamage}) deliberately BYPASSES Block.
+     */
+    public int        block = 0;
+    /**
+     * World turns of life remaining on the current Block before it expires. Set by {@link #gainBlock};
+     * decremented once per world turn by {@link #decayBlock}. Meaningless while {@code block == 0}.
+     */
+    public int        blockDecayTurns = 0;
     /**
      * Depth-scaling multiplier applied to type.attackDamage() on each turn.
      * Set to {@code GameBalance.enemyDamageScaleForDepth(depth)} at spawn time.
@@ -128,7 +142,41 @@ public class Enemy implements StatusHost {
     @Override
     public void applyDoTDamage(int amount) {
         // Enemies have no dodge or toughness reduction — DoT damage applies directly.
+        // Status DoT (burning/poison/bleed) BYPASSES Block by design (strategy-combat-order-3):
+        // status builds are the rock-paper-scissors answer to defensive, Block-stacking enemies.
         health = Math.max(0, health - amount);
+    }
+
+    /**
+     * Grants Block (strategy-combat-order-3): braces the enemy for {@code amount}, added to any
+     * residual Block and capped at {@code blockMax}. A fresh DEFEND also REFRESHES the decay window
+     * to a full {@code decayTurns} — re-bracing keeps the shield alive for another window rather than
+     * inheriting the old timer (the REFRESH_DURATION semantics the status layer uses for burns). With
+     * the default 1-turn decay, Block always expires between two of an enemy's turns, so this refresh
+     * only ever re-arms a freshly-emptied buffer in practice. Called from EnemyManager when a committed
+     * DEFEND executes.
+     */
+    public void gainBlock(int amount, int blockMax, int decayTurns) {
+        if (amount <= 0) return;
+        block           = Math.min(blockMax, block + amount);
+        blockDecayTurns = decayTurns;
+    }
+
+    /**
+     * Counts the active Block down by one world turn and zeroes it on expiry (strategy-combat-order-3).
+     * Called once per living enemy per turn from the StatusEffectController tick so Block expiry shares
+     * the deterministic status-phase ordering. No-op while the enemy holds no Block.
+     */
+    public void decayBlock() {
+        if (block <= 0) {
+            blockDecayTurns = 0;
+            return;
+        }
+        blockDecayTurns--;
+        if (blockDecayTurns <= 0) {
+            block           = 0;
+            blockDecayTurns = 0;
+        }
     }
 
     /** Returns this enemy's attack damage scaled by the depth multiplier, minimum 1. */
@@ -150,8 +198,20 @@ public class Enemy implements StatusHost {
         }
     }
 
+    /**
+     * Applies a weapon/ability hit through the Block → armor → HP portion of the shared mitigation
+     * pipeline (strategy-combat-order-3; the directional/power modifiers that precede these steps are
+     * resolved by the caller). Block absorbs first (a hit fully swallowed by fresh Block deals no HP
+     * damage — overkill into Block is lost), then flat armor reduces the overflow, then HP takes the
+     * remainder. See docs/balance-rule-system.txt for the full 5-step order.
+     */
     public void applyDamage(int amount) {
-        health = Math.max(0, health - amount);
+        int absorbed = GameMath.blockAbsorbed(block, amount);
+        block -= absorbed;
+        int remaining = amount - absorbed;
+        if (remaining <= 0) return;             // fully braced — HP untouched this turn
+        int afterArmor = Math.max(0, remaining - armor);
+        health = Math.max(0, health - afterArmor);
     }
 
     /** Resets the hit-flash timer to full duration. Calling again before it expires re-triggers cleanly. */

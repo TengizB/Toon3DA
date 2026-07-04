@@ -2092,6 +2092,49 @@ public final class GameMath {
         return Math.max(1, rawDamage - unpiercedReduction);
     }
 
+    /*
+     * Formula: Block absorption (strategy-combat-order-3)
+     * Derivation:
+     *   Block is a temporary HP-shield consumed before HP (and before flat armor). Step 3 of the
+     *   shared 5-step mitigation pipeline documented in docs/balance-rule-system.txt:
+     *     absorbed = min(block, incomingDamage)
+     *   The caller then does: block -= absorbed; remainingDamage = incomingDamage - absorbed.
+     *   A shot fully swallowed by fresh Block (incomingDamage <= block) is entirely absorbed and
+     *   deals 0 HP damage — overkill into Block is lost, which is the intended counterplay ("don't
+     *   dump your big shot into fresh Block").
+     * Edge cases:
+     *   block <= 0            → returns 0 (nothing absorbed; pipeline is a no-op, matching pre-Block behaviour).
+     *   incomingDamage <= 0   → returns 0 (a non-positive hit consumes no Block).
+     *   incomingDamage > block → returns block (Block shatters; the overflow carries through to armor/HP).
+     */
+    public static int blockAbsorbed(int block, int incomingDamage) {
+        if (block <= 0 || incomingDamage <= 0) return 0;
+        return Math.min(block, incomingDamage);
+    }
+
+    /*
+     * Formula: Defend Block gain (strategy-combat-order-3)
+     * Derivation:
+     *   An enemy that commits DEFEND braces for a role-based base Block, scaled to the floor so a
+     *   deep-floor bracing enemy stays proportionally as sturdy as it does on floor 1 (Block is
+     *   transient eHP, so it tracks the same depth curve as HP — GameBalance.enemyHealthScaleForDepth):
+     *     gain = round(baseBlock * depthHealthScale)
+     *   Then clamped to blockMax so defend-spam can never stack Block into immortality:
+     *     result = min(blockMax, gain)
+     *   Priced so one DEFEND buys ~1 turn of survival (baseBlock ≈ reference player DPT); see the
+     *   BALANCE CONTRACT in the idea doc and the BLOCK section of docs/balance-rule-system.txt.
+     * Edge cases:
+     *   baseBlock <= 0      → returns 0 (this role never braces; caller should not commit DEFEND).
+     *   depthHealthScale <= 0 → treated as no scaling is impossible here; round of a non-positive base
+     *                           still yields 0, and the min() keeps the result within [0, blockMax].
+     *   blockMax < gain     → result clamped down to blockMax.
+     */
+    public static int defendBlockGain(int baseBlock, float depthHealthScale, int blockMax) {
+        if (baseBlock <= 0) return 0;
+        int gain = Math.round(baseBlock * depthHealthScale);
+        return Math.max(0, Math.min(blockMax, gain));
+    }
+
     // =========================================================================
     // ABILITY EVENT FEEDBACK — BANNER ANIMATION AND RING PULSE
     // =========================================================================

@@ -168,6 +168,29 @@ public final class EnemyConstants {
     public static final float   ENEMY_HP_TEXT_GREEN              = 1.00f;
     public static final float   ENEMY_HP_TEXT_BLUE               = 1.00f;
 
+    // Active-Block visuals (strategy-combat-order-3). While an enemy holds Block > 0:
+    //   - a steely-blue plating tint is blended over the billboard (bracing shimmer), and
+    //   - the current Block value is drawn just left of the health bar in shield-blue.
+    // The intent-icon shield (order-2) telegraphs the UPCOMING Block; these show ACTIVE Block.
+    /** Strength of the blue plating tint blended over a blocking enemy's sprite [0,1]. */
+    public static final float   ENEMY_BLOCK_TINT_STRENGTH        = 0.42f;
+    public static final float   ENEMY_BLOCK_TINT_RED             = 0.38f;
+    public static final float   ENEMY_BLOCK_TINT_GREEN           = 0.60f;
+    public static final float   ENEMY_BLOCK_TINT_BLUE            = 1.00f;
+    /** Gentle shimmer added to the plating tint: strength varies by this ± around the base. */
+    public static final float   ENEMY_BLOCK_TINT_SHIMMER_AMOUNT  = 0.12f;
+    /** Shimmer oscillation frequency (Hz). */
+    public static final float   ENEMY_BLOCK_TINT_SHIMMER_HZ      = 1.4f;
+    /** Beyond this distance the active-Block number is hidden (matches HP text de-clutter). */
+    public static final float   ENEMY_BLOCK_NUMBER_MAX_DISTANCE_TILES = 6f;
+    /** Font scale for the active-Block number drawn beside the health bar. */
+    public static final float   ENEMY_BLOCK_NUMBER_FONT_SCALE    = 0.62f;
+    /** Horizontal gap between the active-Block number's right edge and the health bar's left edge. */
+    public static final float   ENEMY_BLOCK_NUMBER_BAR_GAP       = 5f;
+    public static final float   ENEMY_BLOCK_NUMBER_RED           = 0.55f;
+    public static final float   ENEMY_BLOCK_NUMBER_GREEN         = 0.80f;
+    public static final float   ENEMY_BLOCK_NUMBER_BLUE          = 1.00f;
+
     // Enemy name tag — shown above health bar only when close enough
     public static final float ENEMY_NAME_TAG_MAX_DISTANCE_TILES = 8f;
     // Name tag font scale applied to the default BitmapFont

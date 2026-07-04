@@ -23,6 +23,8 @@ public final class EventTextSystem {
     public static final byte COLOR_GOLD         = 4;
     /** Cyan-gold — used for credit pickup notifications. */
     public static final byte COLOR_CREDIT_CYAN  = 5;
+    /** Shield blue — used for the "BLOCKED N" floater when an enemy's Block eats a hit (order-3). */
+    public static final byte COLOR_BLUE         = 6;
 
     /**
      * Banner tier constants — controls font scale, animation style, and screen anchor.

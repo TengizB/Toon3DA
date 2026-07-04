@@ -194,6 +194,40 @@ public final class BalanceConfig {
     /** Turns an enemy stays blocked before it wiggles to a side tile. Range: 1–4. */
     public static final int STUCK_TURNS_BEFORE_WIGGLE = 2;
 
+    // -------------------------------------------------------------------------
+    // BLOCK & DEFEND (strategy-combat-order-3) — the shared damage-absorption buffer.
+    // When an enemy commits DEFEND it gains Block on its next turn; incoming damage is
+    // subtracted from Block before HP (see the 5-step mitigation pipeline in
+    // docs/balance-rule-system.txt). Block is transient eHP priced at ~1 turn of survival
+    // (baseBlock ≈ REFERENCE_PLAYER_DPT), so it never inflates a role's TTK out of its
+    // golden-ratio band. Verified by BalanceReport's BLOCK section.
+    // -------------------------------------------------------------------------
+
+    /** Hard cap on any actor's Block. Stops defend-spam from stacking into immortality. Range: 40–90. */
+    public static final int   BLOCK_MAX                       = 60;
+    /**
+     * World turns a gained Block survives before the StatusEffectController tick zeroes it.
+     * 1 = Block protects through exactly the single player turn during which the player reacts
+     * to the active shield (the enemy gains it on its defend turn; the next status tick — which
+     * fires AFTER that player turn's damage resolves — clears it). Range: 1–2.
+     */
+    public static final int   BLOCK_DECAY_TURNS               = 1;
+
+    /** Depth-1 base Block a SOLDIER-role enemy gains on DEFEND (≈ reference player DPT). Range: 16–30. */
+    public static final int   DEFEND_BLOCK_GAIN_SOLDIER       = 22;
+    /** Depth-1 base Block a BRUISER-role enemy gains on DEFEND (braces harder). Range: 24–40. */
+    public static final int   DEFEND_BLOCK_GAIN_BRUISER       = 30;
+    /** Depth-1 base Block a MINI_ELITE-role enemy gains on DEFEND (the sturdiest bracer). Range: 32–50. */
+    public static final int   DEFEND_BLOCK_GAIN_MINI_ELITE    = 40;
+
+    /** An enemy turtles (may DEFEND) only when its HP fraction is at or below this. Range: 0.35–0.6. */
+    public static final float DEFEND_HP_THRESHOLD_FRACTION    = 0.5f;
+    /**
+     * BRUISER guardians brace on this fixed turn cadence (every Nth of their turns) to create the
+     * read-and-adapt rhythm StS elites have, independent of their HP. Range: 2–4.
+     */
+    public static final int   DEFEND_BRUISER_CADENCE_TURNS    = 3;
+
     // Per-kill XP rewards (the progression payout for each archetype).
     public static final int XP_REWARD_GORE_BITER   = 10;
     public static final int XP_REWARD_EYE_TYRANT   = 10;

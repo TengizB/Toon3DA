@@ -368,6 +368,17 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 spriteBlue  = GameMath.lerp(spriteBlue,  EffectConstants.MELEE_TELEGRAPH_B, telegraphStrength);
             }
 
+            // Block plating shimmer (strategy-combat-order-3): a translucent steely-blue tint while the
+            // enemy holds active Block, gently pulsing so a braced enemy visibly "plates over."
+            if (enemy.block > 0) {
+                float shimmer = ENEMY_BLOCK_TINT_STRENGTH + ENEMY_BLOCK_TINT_SHIMMER_AMOUNT
+                        * MathUtils.sin(statusAnimationClock * ENEMY_BLOCK_TINT_SHIMMER_HZ * MathUtils.PI2);
+                shimmer = Math.max(0f, Math.min(1f, shimmer));
+                spriteRed   = GameMath.lerp(spriteRed,   ENEMY_BLOCK_TINT_RED,   shimmer);
+                spriteGreen = GameMath.lerp(spriteGreen, ENEMY_BLOCK_TINT_GREEN, shimmer);
+                spriteBlue  = GameMath.lerp(spriteBlue,  ENEMY_BLOCK_TINT_BLUE,  shimmer);
+            }
+
             // EYE_TYRANT instant beam: cache screen position for pass 3
             if (enemy.type == EnemyType.EYE_TYRANT && attackAnimStrength > 0f) {
                 beamScreenXs[sortedPosition]  = screenCenterColumn;
@@ -617,6 +628,22 @@ public final class EnemyRenderer implements Renderable, Disposable {
                     resolveNameTagColor(tagEnemy.dungeonLevel, nameTagColor);
                     nameTagFont.setColor(nameTagColor);
                     nameTagFont.draw(batch, nameTagLayout, tagX, tagY);
+                }
+
+                // Active-Block number (strategy-combat-order-3): the live shield value shown in
+                // shield-blue just left of the health bar while the enemy holds Block. Distinct from
+                // the intent icon's telegraphed number (order-2) — this is Block the enemy HAS now.
+                if (tagEnemy.block > 0 && depth <= ENEMY_BLOCK_NUMBER_MAX_DISTANCE_TILES) {
+                    hpTextBuilder.setLength(0);
+                    hpTextBuilder.append(tagEnemy.block);
+                    nameTagFont.getData().setScale(ENEMY_BLOCK_NUMBER_FONT_SCALE);
+                    hpTextLayout.setText(nameTagFont, hpTextBuilder);
+                    float blockTextX = barLeft - ENEMY_BLOCK_NUMBER_BAR_GAP - hpTextLayout.width;
+                    float blockTextY = barBottom + barHeight / 2f + hpTextLayout.height / 2f;
+                    nameTagFont.setColor(ENEMY_BLOCK_NUMBER_RED, ENEMY_BLOCK_NUMBER_GREEN,
+                            ENEMY_BLOCK_NUMBER_BLUE, 1f);
+                    nameTagFont.draw(batch, hpTextLayout, blockTextX, blockTextY);
+                    nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
                 }
             }
             batch.setColor(Color.WHITE);

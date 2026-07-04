@@ -256,6 +256,16 @@ public final class EffectConstants {
     public static final float DOT_POISON_R = 0.35f, DOT_POISON_G = 1.00f, DOT_POISON_B = 0.15f;
     public static final float DOT_BLEED_R  = 0.85f, DOT_BLEED_G  = 0.05f, DOT_BLEED_B  = 0.10f;
 
+    // Block "clink" — blue shield sparks when an enemy's Block eats a hit (strategy-combat-order-3),
+    // visually distinct from a flesh hit (blue, no blood). A shatter (Block broken) adds a ring pulse.
+    public static final int   BLOCK_SPARK_COUNT                   = 9;
+    public static final float BLOCK_SPARK_SPEED_MIN               = 45f;
+    public static final float BLOCK_SPARK_SPEED_MAX               = 130f;
+    public static final float BLOCK_SPARK_LIFE_SECONDS            = 0.40f;
+    public static final float BLOCK_SPARK_R = 0.45f, BLOCK_SPARK_G = 0.72f, BLOCK_SPARK_B = 1.00f;
+    /** Max radius of the shatter ring pulse drawn when a hit breaks an enemy's Block. */
+    public static final float BLOCK_SHATTER_RING_MAX_RADIUS       = 55f;
+
     // Animated affliction overlays drawn on the enemy billboard each frame (additive glow):
     // rising flames for BURNING, floating bubbles for POISONED, falling droplets for BLEED.
     public static final int   AFFLICTION_FX_PARTICLES            = 7;    // particles per active status per enemy

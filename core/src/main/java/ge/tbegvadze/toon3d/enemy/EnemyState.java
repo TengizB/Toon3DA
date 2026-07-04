@@ -11,5 +11,7 @@ public enum EnemyState {
     /** Charger telegraphing a rush: holding position for one readable turn before it lands (Pillar 2). */
     WINDING_UP,
     /** Alerted and in attack range; dealt damage this turn. */
-    ATTACKING
+    ATTACKING,
+    /** Braced this turn: gained Block instead of attacking or moving (strategy-combat-order-3). */
+    DEFENDING
 }
