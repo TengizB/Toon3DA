@@ -23,6 +23,9 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns() { return EnemyConstants.PLAGUE_HULK_MOVE_EVERY_N_TURNS; }
         @Override public char   spawnChar()          { return '1'; }
         @Override public String tacticalVerb()       { return "TANK: kill at range — don't grind it down in melee."; }
+        // Slow, positional area slam (order-5): a telegraphed cross-strike to step out of.
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_AREA; }
+        @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_SLOW; }
     },
 
     EYE_TYRANT {
@@ -40,6 +43,9 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns() { return 1; }
         @Override public char   spawnChar()          { return '2'; }
         @Override public String tacticalVerb()       { return "SNIPER: break its line — step off its row or column to deny the shot."; }
+        // Rare long-cadence BLINDED debuff for flavour (order-5) — chaff stays mostly simple.
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_DEBUFF; }
+        @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_SLOW; }
     },
 
     GORE_BITER {
@@ -91,6 +97,9 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns() { return 1; }
         @Override public char   spawnChar()          { return '5'; }
         @Override public String tacticalVerb()       { return "ARTILLERY: prioritise it — don't let its acid DOT stack."; }
+        // Ranged SLOWED debuff to pin the player in its firing lane (order-5).
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_DEBUFF; }
+        @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_CASTER; }
     },
 
     IRON_STALKER {
@@ -108,6 +117,9 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns() { return 1; }
         @Override public char   spawnChar()          { return '!'; }
         @Override public String tacticalVerb()       { return "MINI-ELITE: commit resources or avoid — a deliberate mid-floor spike."; }
+        // The "solve me" script (order-5): rotates BUFF_SELF (strength) and AREA_STRIKE on a fast cadence.
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_ELITE; }
+        @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_ELITE; }
     },
 
     ACID_DRONE {
@@ -125,6 +137,9 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns() { return 1; }
         @Override public char   spawnChar()          { return '$'; }
         @Override public String tacticalVerb()       { return "HARASSER: corner it — cut off its kite path with level geometry."; }
+        // Readable caster puzzle (order-5): a SLOWED debuff woven between its shots.
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_DEBUFF; }
+        @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_CASTER; }
     },
 
     VOID_SHROUD {
@@ -217,6 +232,9 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns()  { return 1; }
         @Override public char   spawnChar()           { return 'V'; }
         @Override public String tacticalVerb()        { return "EYE: a short-range caster — break its line or close the gap to shut it down."; }
+        // Short-range caster (order-5): a BLINDED debuff along its line to soften the player.
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_DEBUFF; }
+        @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_CASTER; }
     },
 
     BLIGHT_CORRUPTOR {
@@ -234,6 +252,9 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns()  { return 1; }
         @Override public char   spawnChar()           { return '*'; }
         @Override public String tacticalVerb()        { return "CARRIER: a durable infected brute — grind it down from range; don't trade blows."; }
+        // Carrier (order-5): summons chaff from its spores — kill it before the room floods.
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_SUMMON; }
+        @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_SLOW; }
     },
 
     // -------------------------------------------------------------------------
@@ -330,6 +351,30 @@ public enum EnemyType {
     public abstract char    spawnChar();
     /** One-sentence tactical VERB: the reason the player must fight this archetype differently. */
     public abstract String  tacticalVerb();
+
+    // -------------------------------------------------------------------------
+    // Special-ability move-sets (strategy-combat-order-5)
+    // moveSet() lists the SPECIAL abilities this archetype can script; specialAbilityCadenceTurns()
+    // is the rhythm (enemy turns between specials). Chaff and bosses keep the trivial empty set — not
+    // every enemy needs a script. The arrays are shared, pre-allocated singletons so consulting a
+    // move-set inside the COMMIT turn loop allocates nothing (project rule). Default = no specials.
+    // -------------------------------------------------------------------------
+
+    private static final SpecialAbility[] MOVESET_NONE   = new SpecialAbility[0];
+    private static final SpecialAbility[] MOVESET_DEBUFF = { SpecialAbility.DEBUFF_PLAYER };
+    private static final SpecialAbility[] MOVESET_AREA   = { SpecialAbility.AREA_STRIKE };
+    private static final SpecialAbility[] MOVESET_SUMMON = { SpecialAbility.SUMMON };
+    private static final SpecialAbility[] MOVESET_ELITE  = { SpecialAbility.BUFF_SELF, SpecialAbility.AREA_STRIKE };
+
+    /** The SPECIAL abilities this archetype may commit (strategy-combat-order-5). Empty = simple chaff. */
+    public SpecialAbility[] moveSet() { return MOVESET_NONE; }
+
+    /**
+     * Enemy turns between SPECIAL-ability attempts; 0 disables specials entirely. A special is only
+     * considered on turns where {@code turnCounter % cadence == 0}, giving each scripted archetype a
+     * readable, learnable rhythm.
+     */
+    public int specialAbilityCadenceTurns() { return 0; }
 
     /**
      * This archetype's depth-1 Threat-Point value — the "danger number" the encounter budget

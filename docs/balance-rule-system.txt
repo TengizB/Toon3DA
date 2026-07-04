@@ -543,6 +543,20 @@ TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION rule is therefore satisfied by construc
 committed attacks. The only remaining untelegraphed damage is DoT ticks (Burning/Poison) and
 environmental hazards; all direct attacks are telegraphed by the intent system.
 
+SPECIAL MOVE-SETS (strategy-combat-order-5): scripted archetypes weave SPECIAL abilities into their
+commit logic on a fixed cadence, each shown a full turn ahead inside the purple SPECIAL intent frame
+with a per-ability sub-glyph (buff up-arrow, debuff down-arrow, summon spawn-rune, area burst). The
+only DAMAGING special is AREA_STRIKE, which carries a predicted-damage number and is dodged by
+stepping out of its cross radius — telegraphed like every other committed attack, so the fairness
+contract still holds. BUFF_SELF (self EMPOWERED), DEBUFF_PLAYER (SLOWED/BLINDED down a cardinal
+line) and SUMMON deal no direct HP damage.
+  - A buff/debuff/area move raises the caster's EFFECTIVE DPT; price it as a blended cycle-averaged
+    DPT when it drifts a scripted archetype out of its TP band (the base-stat TP bands above still
+    gate each archetype's raw numbers — BalanceReport's SPECIAL MOVE-SETS table lists who is scripted).
+  - SUMMON is bounded by HARD CAPS, not a soft budget: a per-summoner cap (SUMMON_PER_ENEMY_CAP) and a
+    per-room live-enemy ceiling (SUMMON_ROOM_LIVE_CAP) cap the spawned TP a floor can accrue, so the
+    EncounterBudgetPlanner headroom stays bounded without per-spawn accounting.
+
 SCOPE NOTE: idea 4 is a 5-pillar epic. Implemented across two PRs: Pillar 1 (encounter budget) and
 the enemy role/verb taxonomy in the first; the mechanical verb hooks (Pillar 2), the hazard
 chain-reaction system (Pillar 3), and the telegraph audit (Pillar 5) in the second. Pillar 4

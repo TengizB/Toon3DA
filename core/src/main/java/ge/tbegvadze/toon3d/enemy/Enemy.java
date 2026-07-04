@@ -80,6 +80,20 @@ public class Enemy implements StatusHost {
     public boolean skipNextAction = false;
 
     /**
+     * No-repeat memory for scripted SPECIAL abilities (strategy-combat-order-5). One reused instance;
+     * the COMMIT step records each chosen ability so a multi-ability caster rotates its script rather
+     * than spamming one move. Never allocated inside the turn loop.
+     */
+    public final MoveHistory moveHistory = new MoveHistory();
+
+    /**
+     * How many chaff this summoner has spawned so far (strategy-combat-order-5). Bounded by
+     * {@code EnemyConstants.SUMMON_PER_ENEMY_CAP} so a single summoner cannot flood the room and blow
+     * the encounter's Threat-Point budget. Non-summoner archetypes leave this at 0.
+     */
+    public int summonsSpawned = 0;
+
+    /**
      * The action this enemy has COMMITTED to perform on its next turn (strategy-combat-order-1).
      * A single reused instance — never null after construction, but {@code committed} stays false
      * until the enemy first commits (a freshly-woken enemy shows no intent and only commits on its
@@ -179,9 +193,26 @@ public class Enemy implements StatusHost {
         }
     }
 
-    /** Returns this enemy's attack damage scaled by the depth multiplier, minimum 1. */
+    /**
+     * Returns this enemy's attack damage scaled by the depth multiplier AND its own EMPOWERED buff
+     * (strategy-combat-order-5: a caster that used BUFF_SELF hits harder), minimum 1. Reading the buff
+     * here means the same value drives both the committed predicted-damage number and the executed hit.
+     */
     public int scaledAttackDamage() {
-        return Math.max(1, Math.round(type.attackDamage() * attackDamageMultiplier));
+        return Math.max(1, Math.round(type.attackDamage() * attackDamageMultiplier * empoweredDamageMultiplier()));
+    }
+
+    /**
+     * Returns the outgoing-damage multiplier from an active EMPOWERED buff (1.0 when unbuffed), mirroring
+     * {@code Player.getEmpoweredDamageMultiplier()}: {@code 1 + magnitude / 100}. Lets an enemy that cast
+     * BUFF_SELF (order-5) actually swing harder while the buff lasts.
+     */
+    private float empoweredDamageMultiplier() {
+        StatusEffect empoweredEffect = activeEffects.get(StatusType.EMPOWERED);
+        if (empoweredEffect != null && empoweredEffect.isActive()) {
+            return 1f + empoweredEffect.getMagnitude() / 100f;
+        }
+        return 1f;
     }
 
     public boolean isAlive() {
