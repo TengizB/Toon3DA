@@ -31,7 +31,7 @@ public final class StatusEffect {
     public int getStacks()             { return stacks; }
     public StatusType getType()        { return type; }
 
-    void reset() {
+    public void reset() {
         remainingTurns = 0;
         stacks         = 0;
         magnitude      = 0;
