@@ -44,6 +44,25 @@ public final class IntentConstants {
     public static final float INTENT_GLYPH_GREEN = 0.98f;
     public static final float INTENT_GLYPH_BLUE  = 0.98f;
 
+    /** Fraction of the icon size reserved above the health-bar cluster for the magnitude number band. */
+    public static final float INTENT_NUMBER_BAND_FRACTION = 0.55f;
+
+    // --- Intent text label (plain-word description under the icon: "Attacking", "Moving", ...) ---
+    // Icons alone can be cryptic to new players, so a short verb label is stacked just above the icon.
+    /** Font scale for the intent word label (relative to the shared 1x name-tag font). */
+    public static final float INTENT_LABEL_FONT_SCALE          = 0.50f;
+    /** Vertical gap (screen pixels) between the top of the icon frame and the label baseline band. */
+    public static final float INTENT_LABEL_GAP_ABOVE_ICON      = 5f;
+    /** Beyond this distance the label is suppressed to de-clutter distant rooms (icon still shows). */
+    public static final float INTENT_LABEL_MAX_DISTANCE_TILES  = 9f;
+    /** How far the label text is pushed toward white (0 = raw frame hue, 1 = white) so tinted hues stay readable. */
+    public static final float INTENT_LABEL_WHITEN              = 0.45f;
+    /** Dark drop-shadow offset (pixels) drawn under the label so small text stays legible on bright walls. */
+    public static final float INTENT_LABEL_SHADOW_OFFSET       = 1.5f;
+    public static final float INTENT_LABEL_SHADOW_RED   = 0.03f;
+    public static final float INTENT_LABEL_SHADOW_GREEN = 0.03f;
+    public static final float INTENT_LABEL_SHADOW_BLUE  = 0.03f;
+
     // --- Damage number ---
     public static final float INTENT_DAMAGE_NUMBER_SCALE      = 0.62f;
     public static final float INTENT_DAMAGE_MAX_DISTANCE_TILES = 9f;

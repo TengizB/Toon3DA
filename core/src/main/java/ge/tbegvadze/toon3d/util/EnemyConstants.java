@@ -138,8 +138,17 @@ public final class EnemyConstants {
     public static final float   ENEMY_HEALTH_BAR_HEIGHT_FRACTION    = 0.06f;
     public static final float   ENEMY_HEALTH_BAR_GAP_FRACTION       = 0.04f;
     public static final float   ENEMY_HEALTH_BAR_MIN_PIXELS         = 3f;
+    // Upper clamps so a point-blank enemy (huge billboard) does not draw a screen-spanning bar.
+    public static final float   ENEMY_HEALTH_BAR_MAX_PIXELS         = 24f;
+    public static final float   ENEMY_HEALTH_BAR_MAX_WIDTH_PIXELS   = 240f;
     public static final float   ENEMY_HEALTH_BAR_BORDER_PIXELS      = 1f;
     public static final float   ENEMY_HEALTH_BAR_MAX_DISTANCE_TILES = 12f;
+
+    // On-screen safe area for the floating enemy UI cluster (health bar + name tag + intent icon).
+    // When an enemy stands right next to the player its billboard fills the screen and the anchor
+    // would push the whole cluster off the top / off the sides; these keep it clamped inside view.
+    // Left/right/top gap (screen pixels) kept clear so the cluster never touches the screen edge.
+    public static final float   ENEMY_UI_SCREEN_EDGE_MARGIN         = 8f;
     // Border / backdrop tint (semi-transparent near-black frame)
     public static final float   ENEMY_HEALTH_BAR_BORDER_RED         = 0.05f;
     public static final float   ENEMY_HEALTH_BAR_BORDER_GREEN       = 0.05f;
