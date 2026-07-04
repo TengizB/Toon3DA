@@ -117,6 +117,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final BitmapFont  nameTagFont;
     private final GlyphLayout nameTagLayout;
     private final GlyphLayout hpTextLayout;
+    // Line height of the name-tag font at its default scale — used to reserve on-screen headroom for
+    // the floating UI cluster so it never clips off the top when an enemy is point-blank.
+    private final float       nameTagLineHeight;
     private final StringBuilder hpTextBuilder = new StringBuilder(8);
     // Reusable scratch color for name tag tinting — never allocated inside render()
     private final Color       nameTagColor = new Color();
@@ -183,6 +186,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
         this.nameTagLayout        = new GlyphLayout();
         this.hpTextLayout         = new GlyphLayout();
+        this.nameTagLineHeight    = this.nameTagFont.getLineHeight();
     }
 
     public void setPlayerState(float worldX, float worldY,
@@ -475,38 +479,66 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 }
             }
 
-            // Cache bar geometry for pass 2; only for alerted enemies within bar draw distance
-            if (enemy.isAlerted() && depth <= ENEMY_HEALTH_BAR_MAX_DISTANCE_TILES) {
-                float barWidth          = spriteScreenWidth * ENEMY_HEALTH_BAR_WIDTH_FRACTION;
-                float barHeight         = Math.max(ENEMY_HEALTH_BAR_MIN_PIXELS,
-                                                   spriteScreenHeight * ENEMY_HEALTH_BAR_HEIGHT_FRACTION);
-                float barLeft           = screenCenterColumn - barWidth / 2f;
-                float barBottomPosition = drawTop + spriteScreenHeight * ENEMY_HEALTH_BAR_GAP_FRACTION;
-                float fillFraction      = Math.max(0f, Math.min(1f,
+            // ---- Floating UI cluster geometry (health bar + name tag + intent icon) ----
+            // Computed once per alerted enemy and shared by the bar cache (pass 2) and the intent
+            // anchor (pass 2.5) so both stay aligned. Every element is clamped inside the screen so a
+            // point-blank enemy — whose billboard fills the view — never has its cluster slide off the
+            // top or off the sides. Distant enemies are unaffected (their raw anchor is already inside).
+            if (enemy.isAlerted()) {
+                // Bar size clamped so a screen-filling sprite does not spawn a screen-spanning bar.
+                float barWidth  = Math.min(ENEMY_HEALTH_BAR_MAX_WIDTH_PIXELS,
+                                           spriteScreenWidth * ENEMY_HEALTH_BAR_WIDTH_FRACTION);
+                float barHeight = Math.min(ENEMY_HEALTH_BAR_MAX_PIXELS,
+                                           Math.max(ENEMY_HEALTH_BAR_MIN_PIXELS,
+                                                    spriteScreenHeight * ENEMY_HEALTH_BAR_HEIGHT_FRACTION));
+
+                // Horizontal clamp: keep the whole cluster (widest element is the bar) fully on screen.
+                float halfBarWidth = barWidth / 2f;
+                float uiCenterX    = MathUtils.clamp(screenCenterColumn,
+                        ENEMY_UI_SCREEN_EDGE_MARGIN + halfBarWidth,
+                        WALL_PROJECTION_SCREEN_WIDTH - ENEMY_UI_SCREEN_EDGE_MARGIN - halfBarWidth);
+                float barLeft      = uiCenterX - halfBarWidth;
+
+                // Vertical clamp: reserve headroom above the bar bottom for the tallest possible stack
+                // (name tag + intent icon with its number band and word label) so nothing clips the top.
+                float nameTagBand = nameTagLineHeight + ENEMY_NAME_TAG_BAR_GAP;
+                float labelBand   = nameTagLineHeight * (INTENT_LABEL_FONT_SCALE / ENEMY_NAME_TAG_FONT_SCALE)
+                                    + INTENT_LABEL_GAP_ABOVE_ICON;
+                float intentBand  = INTENT_ICON_NAMETAG_CLEARANCE
+                                    + INTENT_ICON_MAX_SIZE * INTENT_NUMBER_BAND_FRACTION
+                                    + INTENT_ICON_Y_OFFSET_ABOVE_HEALTHBAR
+                                    + INTENT_ICON_MAX_SIZE * (1f + INTENT_POP_SCALE_BONUS)
+                                    + INTENT_ICON_BOB_AMPLITUDE
+                                    + labelBand;
+                float clusterHeadroom = barHeight + nameTagBand + intentBand;
+                float maxBarBottom    = WALL_PROJECTION_SCREEN_HEIGHT
+                                        - ENEMY_UI_SCREEN_EDGE_MARGIN - clusterHeadroom;
+                float rawBarBottom      = drawTop + spriteScreenHeight * ENEMY_HEALTH_BAR_GAP_FRACTION;
+                float barBottomPosition = Math.min(rawBarBottom, maxBarBottom);
+
+                // Bar cache for pass 2 — only within the bar draw distance.
+                if (depth <= ENEMY_HEALTH_BAR_MAX_DISTANCE_TILES) {
+                    float fillFraction = Math.max(0f, Math.min(1f,
                                               (float) enemy.health / enemy.maxHealth));
+                    barLeftPositions[sortedPosition]   = barLeft;
+                    barBottomPositions[sortedPosition] = barBottomPosition;
+                    barWidths[sortedPosition]          = barWidth;
+                    barHeights[sortedPosition]         = barHeight;
+                    barFillFractions[sortedPosition]   = fillFraction;
+                    barHealthCurrents[sortedPosition]  = enemy.health;
+                    barHealthMaxes[sortedPosition]     = enemy.maxHealth;
+                    drawBarFlags[sortedPosition]       = true;
+                }
 
-                barLeftPositions[sortedPosition]   = barLeft;
-                barBottomPositions[sortedPosition] = barBottomPosition;
-                barWidths[sortedPosition]          = barWidth;
-                barHeights[sortedPosition]         = barHeight;
-                barFillFractions[sortedPosition]   = fillFraction;
-                barHealthCurrents[sortedPosition]  = enemy.health;
-                barHealthMaxes[sortedPosition]     = enemy.maxHealth;
-                drawBarFlags[sortedPosition]       = true;
-            }
-
-            // Cache intent-icon anchor for the telegraph pass (order-2). Only alerted enemies with a
-            // committed plan reveal intent — DORMANT/un-committed enemies show nothing (no info leak).
-            // The anchor is the top of the health-bar + name-tag cluster so the icon stacks above it.
-            if (enemy.isAlerted() && enemy.plannedAction.committed
-                    && depth <= INTENT_ICON_MAX_DISTANCE_TILES) {
-                float healthBarBottom = drawTop + spriteScreenHeight * ENEMY_HEALTH_BAR_GAP_FRACTION;
-                float healthBarHeight = Math.max(ENEMY_HEALTH_BAR_MIN_PIXELS,
-                                                 spriteScreenHeight * ENEMY_HEALTH_BAR_HEIGHT_FRACTION);
-                intentCenterXs[sortedPosition]    = screenCenterColumn;
-                intentClusterTops[sortedPosition] = healthBarBottom + healthBarHeight
-                                                    + INTENT_ICON_NAMETAG_CLEARANCE;
-                drawIntentFlags[sortedPosition]   = true;
+                // Intent anchor for the telegraph pass (order-2). Only alerted enemies with a committed
+                // plan reveal intent — DORMANT/un-committed enemies show nothing (no info leak). Uses the
+                // SAME clamped bar geometry so the icon stacks cleanly above the on-screen cluster.
+                if (enemy.plannedAction.committed && depth <= INTENT_ICON_MAX_DISTANCE_TILES) {
+                    intentCenterXs[sortedPosition]    = uiCenterX;
+                    intentClusterTops[sortedPosition] = barBottomPosition + barHeight
+                                                        + INTENT_ICON_NAMETAG_CLEARANCE;
+                    drawIntentFlags[sortedPosition]   = true;
+                }
             }
         }
 
@@ -726,7 +758,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 // debuffs and summons carry no predicted-damage number (order-5).
                 boolean showsNumber = intentShowsNumber(verb)
                         || (verb == IntentVerb.SPECIAL && plan.predictedDamage > 0);
-                float numberBand = showsNumber ? iconSize * 0.55f : 0f;
+                float numberBand = showsNumber ? iconSize * INTENT_NUMBER_BAND_FRACTION : 0f;
                 float baseY = intentClusterTops[sortedPosition] + bob;
                 float iconCenterY = baseY + numberBand + INTENT_ICON_Y_OFFSET_ABOVE_HEALTHBAR + drawnSize / 2f;
 
@@ -755,6 +787,15 @@ public final class EnemyRenderer implements Renderable, Disposable {
                     if (value > 0) {
                         drawIntentNumber(centerX, baseY + numberBand, value, isBlock);
                     }
+                }
+
+                // Plain-word label above the icon ("Attacking", "Moving", ...) so a new player never
+                // has to decode the glyph. Colour-matched to the frame for a single reading; suppressed
+                // at range to keep distant rooms clean.
+                if (depth <= INTENT_LABEL_MAX_DISTANCE_TILES) {
+                    float iconTop = iconCenterY + drawnSize / 2f;
+                    drawIntentLabel(intentLabelText(verb, plan), centerX, iconTop,
+                            intentFrameColor[0], intentFrameColor[1], intentFrameColor[2]);
                 }
             }
             batch.setColor(Color.WHITE);
@@ -1026,6 +1067,61 @@ public final class EnemyRenderer implements Renderable, Disposable {
         int differenceRow    = plan.targetRow    - enemy.tileRow;
         if (differenceColumn == 0 && differenceRow == 0) return 0f;
         return MathUtils.atan2(differenceRow, differenceColumn) * MathUtils.radiansToDegrees;
+    }
+
+    /**
+     * The plain-word description shown under an intent icon for new-player legibility. Returns interned
+     * string literals only (no per-frame allocation). SPECIAL resolves to its sub-ability's verb.
+     */
+    private static String intentLabelText(IntentVerb verb, PlannedAction plan) {
+        switch (verb) {
+            case ATTACK_MELEE:  return "Attacking";
+            case ATTACK_RANGED: return "Shooting";
+            case WIND_UP:       return "Charging";
+            case MOVE:          return "Moving";
+            case DEFEND:        return "Defending";
+            case SPECIAL:       return specialLabelText(plan.specialAbility);
+            case STUNNED:       return "Stunned";
+            case WAIT:
+            default:            return "Waiting";
+        }
+    }
+
+    /** The plain-word label for a SPECIAL ability (buff/debuff/summon/area); "Special" if unknown. */
+    private static String specialLabelText(SpecialAbility ability) {
+        if (ability == null) return "Special";
+        switch (ability) {
+            case BUFF_SELF:     return "Empowering";
+            case DEBUFF_PLAYER: return "Weakening";
+            case SUMMON:        return "Summoning";
+            case AREA_STRIKE:   return "Area Attack";
+            default:            return "Special";
+        }
+    }
+
+    /**
+     * Draws the intent word label centered at {@code centerX}, sitting just above {@code iconTopY}.
+     * A near-black drop shadow is drawn first so the small text stays readable over bright walls; the
+     * main text is the frame colour brightened toward white so tinted hues (blue/purple) stay legible.
+     */
+    private void drawIntentLabel(String label, float centerX, float iconTopY,
+                                 float red, float green, float blue) {
+        nameTagFont.getData().setScale(INTENT_LABEL_FONT_SCALE);
+        hpTextLayout.setText(nameTagFont, label);
+        float textX = centerX - hpTextLayout.width / 2f;
+        float textY = iconTopY + INTENT_LABEL_GAP_ABOVE_ICON + hpTextLayout.height;
+
+        nameTagFont.setColor(INTENT_LABEL_SHADOW_RED, INTENT_LABEL_SHADOW_GREEN,
+                INTENT_LABEL_SHADOW_BLUE, 1f);
+        nameTagFont.draw(batch, hpTextLayout,
+                textX + INTENT_LABEL_SHADOW_OFFSET, textY - INTENT_LABEL_SHADOW_OFFSET);
+
+        float legibleRed   = GameMath.lerpTowardWhite(red,   INTENT_LABEL_WHITEN);
+        float legibleGreen = GameMath.lerpTowardWhite(green, INTENT_LABEL_WHITEN);
+        float legibleBlue  = GameMath.lerpTowardWhite(blue,  INTENT_LABEL_WHITEN);
+        nameTagFont.setColor(legibleRed, legibleGreen, legibleBlue, 1f);
+        nameTagFont.draw(batch, hpTextLayout, textX, textY);
+        nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
     }
 
     /** Draws the intent magnitude number centered horizontally at {@code centerX}, top-aligned at {@code topY}. */
