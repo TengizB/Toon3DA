@@ -597,7 +597,7 @@ public final class EnemyManager implements EnemyHitTarget {
                     && isBehindPlayerFacing(enemy, playerColumn, playerRow, player)) {
                 damage = Math.max(1, Math.round(damage * EnemyConstants.VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER));
             }
-            player.applyDamage(damage);
+            player.applyDirectionalDamage(damage, enemy.worldCenterX(), enemy.worldCenterY());
             if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
         }
     }
@@ -620,7 +620,10 @@ public final class EnemyManager implements EnemyHitTarget {
             enemyAttackListener.onRangedAttack(enemy, plan.targetColumn, plan.targetRow);
         }
         if (stillValid) {
-            player.applyDamage(enemy.scaledAttackDamage());
+            // Ranged shot travels down the enemy's cardinal lane — use the enemy tile as the lane
+            // origin so a guarding player's facing arc is judged against where the shot comes from.
+            player.applyDirectionalDamage(enemy.scaledAttackDamage(),
+                    enemy.worldCenterX(), enemy.worldCenterY());
             applyRangedAttackStatusEffect(enemy, player);
         }
     }
@@ -778,7 +781,7 @@ public final class EnemyManager implements EnemyHitTarget {
         if (connected) {
             int chargeDamage = Math.max(1, Math.round(
                     enemy.scaledAttackDamage() * EnemyConstants.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER));
-            player.applyDamage(chargeDamage);
+            player.applyDirectionalDamage(chargeDamage, enemy.worldCenterX(), enemy.worldCenterY());
             if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
         }
         return connected;

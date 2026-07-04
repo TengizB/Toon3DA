@@ -173,6 +173,7 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
             case RELOAD:          drawReloadIcon(cx, cy, extent);              break;
             case SWITCH_WEAPON:   drawSwitchWeaponIcon(cx, cy, extent);        break;
             case HEAL:            drawHealIcon(cx, cy, extent);                break;
+            case GUARD:           drawGuardIcon(cx, cy, extent);               break;
             case OPEN_INVENTORY:  drawInventoryIcon(cx, cy, extent);           break;
             case INSPECT_WEAPON:  drawInspectIcon(cx, cy, extent);             break;
             case USE_MACHINE:     drawUseMachineIcon(cx, cy, extent);          break;
@@ -391,6 +392,28 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
         float fin2X = tipX + MathUtils.cosDeg(tangentDeg - 140f) * arrowSize;
         float fin2Y = tipY + MathUtils.sinDeg(tangentDeg - 140f) * arrowSize;
         shapeRenderer.triangle(tipX, tipY, fin1X, fin1Y, fin2X, fin2Y);
+    }
+
+    /**
+     * Shield icon: a heater-shield outline — flat top edge, straight upper sides, tapering to a
+     * point at the bottom. Reads as "brace / guard" (strategy-combat-order-4).
+     */
+    private void drawGuardIcon(float cx, float cy, float extent) {
+        float lineWidth = Math.max(2f, extent * 0.13f);
+        float halfWidth = extent * 0.55f;
+        float top       = cy + extent * 0.68f;
+        float shoulder  = cy + extent * 0.10f; // where the straight sides start curving inward
+        float tipY      = cy - extent * 0.78f;
+        float leftX     = cx - halfWidth;
+        float rightX    = cx + halfWidth;
+        // Top edge
+        shapeRenderer.rectLine(leftX, top, rightX, top, lineWidth);
+        // Upper sides (vertical) down to the shoulders
+        shapeRenderer.rectLine(leftX,  top, leftX,  shoulder, lineWidth);
+        shapeRenderer.rectLine(rightX, top, rightX, shoulder, lineWidth);
+        // Lower sides taper to the point
+        shapeRenderer.rectLine(leftX,  shoulder, cx, tipY, lineWidth);
+        shapeRenderer.rectLine(rightX, shoulder, cx, tipY, lineWidth);
     }
 
     /** Medical cross (+): two overlapping thick bars forming a plus sign. */

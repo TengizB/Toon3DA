@@ -5,6 +5,30 @@ public final class EffectConstants {
 
     private EffectConstants() {}
 
+    // -------------------------------------------------------------------------
+    // GUARD shield-arc overlay (strategy-combat-order-4) — the translucent blue rim drawn across
+    // the bottom of the 3D view while the player is braced in the GUARD stance, so the marine
+    // constantly SEES they are protected on the faced side. World space 1280×720, origin bottom-left.
+    // Modelled as a thin annulus segment centred FAR BELOW the screen (large radius). Because the
+    // centre sits at Y = -1400 (off-screen), the on-screen slice is the TOP of that circle: angles
+    // near 90° (pointing +Y / upward, Y-up CCW) place the band low on the screen — a shallow arc
+    // hugging the lower-centre that curves back down off the bottom edge at the sides. A point on the
+    // band is (centreX + radius·cosθ, centreY + radius·sinθ); at θ=90° the inner edge lands ~155px up.
+    // -------------------------------------------------------------------------
+    public static final float GUARD_SHIELD_CENTER_X          = 640f;    // horizontal centre of the arc
+    public static final float GUARD_SHIELD_CENTER_Y          = -1400f;  // arc centre BELOW the screen (off-screen)
+    public static final float GUARD_SHIELD_INNER_RADIUS      = 1555f;   // inner edge of the glowing band
+    public static final float GUARD_SHIELD_OUTER_RADIUS      = 1625f;   // outer edge of the glowing band
+    public static final float GUARD_SHIELD_ARC_START_DEGREES = 55f;     // sweep start (CCW from +X; ~90°=screen bottom-centre)
+    public static final float GUARD_SHIELD_ARC_END_DEGREES   = 125f;    // sweep end
+    public static final int   GUARD_SHIELD_SEGMENTS          = 40;      // quads across the sweep
+    public static final float GUARD_SHIELD_RED               = 0.35f;
+    public static final float GUARD_SHIELD_GREEN             = 0.68f;
+    public static final float GUARD_SHIELD_BLUE              = 1.00f;
+    public static final float GUARD_SHIELD_ALPHA_MIN         = 0.16f;   // trough of the breathing pulse
+    public static final float GUARD_SHIELD_ALPHA_MAX         = 0.40f;   // crest of the breathing pulse
+    public static final float GUARD_SHIELD_PULSE_HZ          = 1.1f;    // gentle breathe rate
+
     // Impact effects — screen shake, hit particles, kill flash, floating damage numbers
     // Hit shake: small jolt confirming contact; duration matches the weapon fire lock
     public static final float HIT_SHAKE_MAGNITUDE           = 4f;

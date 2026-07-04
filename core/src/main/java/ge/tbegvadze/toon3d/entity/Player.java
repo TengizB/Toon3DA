@@ -35,6 +35,15 @@ public class Player implements Renderable, Disposable, StatusHost {
 
     private final ShapeRenderer shapes;
     private PlayerDamageListener damageListener;
+    private GuardHitListener     guardHitListener;
+
+    /**
+     * True while the marine is braced in the directional GUARD stance (strategy-combat-order-4).
+     * Set/cleared exclusively by PlayerController (owns the guard lifecycle); read here by
+     * {@link #applyDirectionalDamage} and by the shield-arc HUD overlay. Persists across the enemy
+     * turn it buys and until the player's next action.
+     */
+    private boolean guarding = false;
 
     /**
      * Stat system — injected by World after construction.
@@ -177,6 +186,50 @@ public class Player implements Renderable, Disposable, StatusHost {
 
     public void setPlayerDamageListener(PlayerDamageListener listener) {
         this.damageListener = listener;
+    }
+
+    /** Wires the directional GUARDED/FLANKED feedback fired by {@link #applyDirectionalDamage}. */
+    public void setGuardHitListener(GuardHitListener listener) {
+        this.guardHitListener = listener;
+    }
+
+    /**
+     * Enters or leaves the directional GUARD stance (strategy-combat-order-4).
+     * Called only by PlayerController, which owns the guard lifecycle.
+     */
+    public void setGuarding(boolean guarding) { this.guarding = guarding; }
+
+    /** True while braced in the GUARD stance — read by the shield-arc HUD overlay. */
+    public boolean isGuarding() { return guarding; }
+
+    /**
+     * Directional damage entry point for enemy attacks (strategy-combat-order-4).
+     * When the player is GUARDING, scales the incoming amount by the facing-arc multiplier
+     * (front = big reduction; side/back = full damage) BEFORE the normal
+     * {@link #applyDamage} pipeline runs, and fires the GUARDED/FLANKED feedback. When not
+     * guarding this is a plain pass-through to {@link #applyDamage}.
+     *
+     * @param amount          raw incoming damage (already scaled for depth/charge by the caller).
+     * @param attackerWorldX  attacker (or ranged lane origin) X in world units.
+     * @param attackerWorldY  attacker (or ranged lane origin) Y in world units.
+     */
+    public void applyDirectionalDamage(int amount, float attackerWorldX, float attackerWorldY) {
+        if (!guarding) {
+            applyDamage(amount);
+            return;
+        }
+        float multiplier = GameMath.guardFacingMultiplier(
+                directionX, directionY, positionX, positionY, attackerWorldX, attackerWorldY,
+                GameBalance.GUARD_FRONT_MULTIPLIER, GameBalance.GUARD_SIDE_MULTIPLIER,
+                GameBalance.GUARD_BACK_MULTIPLIER,
+                GameBalance.GUARD_FRONT_HALF_ANGLE_DEGREES, GameBalance.GUARD_BACK_HALF_ANGLE_DEGREES);
+        int guardedDamage = Math.max(0, Math.round(amount * multiplier));
+        // A reduced hit means it landed in the protected front arc; side/back hits pass at full damage.
+        boolean frontArc = guardedDamage < amount;
+        if (guardHitListener != null) {
+            guardHitListener.onGuardedHit(frontArc, guardedDamage, attackerWorldX, attackerWorldY);
+        }
+        applyDamage(guardedDamage);
     }
 
     /**

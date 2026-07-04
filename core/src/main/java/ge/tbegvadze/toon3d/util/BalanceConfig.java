@@ -228,6 +228,31 @@ public final class BalanceConfig {
      */
     public static final int   DEFEND_BRUISER_CADENCE_TURNS    = 3;
 
+    // -------------------------------------------------------------------------
+    // PLAYER GUARD — directional defense (strategy-combat-order-4).
+    // Tapping GUARD ends the turn and braces the marine: incoming damage from the
+    // FRONT facing arc is heavily reduced, while SIDE and BACK hits land at FULL
+    // damage. This turns "which way am I facing" into a defensive decision — read the
+    // enemy intent icons, rotate to face the biggest hit, then guard.
+    //
+    // Guard is transient, CONDITIONAL eHP: it only helps vs the faced arc, only for the
+    // single enemy turn it buys, and it costs a whole turn of offense (a ~1 reference-DPT
+    // opportunity cost). Because it does NOTHING vs flanks, its average value is
+    // self-limiting in multi-enemy rooms, so it needs no hard cap the way Block does.
+    // Priced in docs/balance-rule-system.txt (GUARD note).
+    // -------------------------------------------------------------------------
+
+    /** Incoming-damage multiplier for a hit inside the front (facing) arc while guarding. Range: 0.25–0.5. */
+    public static final float GUARD_FRONT_MULTIPLIER      = 0.35f;
+    /** Multiplier for a hit from the side arcs while guarding — FULL damage by design. Range: 1.0 (do not weaken). */
+    public static final float GUARD_SIDE_MULTIPLIER       = 1.0f;
+    /** Multiplier for a hit from directly behind while guarding — FULL damage by design (>1.0 = optional backstab). Range: 1.0–1.5. */
+    public static final float GUARD_BACK_MULTIPLIER       = 1.0f;
+    /** Half-angle of the protected front arc, in degrees. ±60° cleanly catches only the faced cardinal. Range: 45–75. */
+    public static final float GUARD_FRONT_HALF_ANGLE_DEGREES = 60f;
+    /** Half-angle of the rear arc (measured from the reverse-facing vector), in degrees. Range: 45–75. */
+    public static final float GUARD_BACK_HALF_ANGLE_DEGREES  = 60f;
+
     // Per-kill XP rewards (the progression payout for each archetype).
     public static final int XP_REWARD_GORE_BITER   = 10;
     public static final int XP_REWARD_EYE_TYRANT   = 10;

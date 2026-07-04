@@ -29,7 +29,7 @@ import ge.tbegvadze.toon3d.world.TickEventBus;
 
 public class PlayerController {
 
-    private enum ActionState { IDLE, MOVING, ROTATING, INTERACTING, FIRING, SKIPPING, HEALING }
+    private enum ActionState { IDLE, MOVING, ROTATING, INTERACTING, FIRING, SKIPPING, HEALING, GUARDING }
 
     private final Player player;
     private final Level level;
@@ -155,6 +155,7 @@ public class PlayerController {
             case FIRING:      advanceFiring(deltaTime);      break;
             case SKIPPING:    advanceSkipping(deltaTime);    break;
             case HEALING:     advanceHealing(deltaTime);     break;
+            case GUARDING:    advanceGuarding(deltaTime);    break;
             case IDLE:        pollInput();                   break;
         }
     }
@@ -207,6 +208,19 @@ public class PlayerController {
         actionProgress = Math.min(1f, actionProgress + deltaTime / Constants.PLAYER_MOVE_DURATION);
         if (actionProgress >= 1f) {
             finishAction(true, TickCause.SKIP_TURN);
+        }
+    }
+
+    /**
+     * Guard is a momentary, turn-ending stance (strategy-combat-order-4): no slide/rotate, just a
+     * brief beat before the world advances so the enemy turn resolves against the braced player.
+     * The guarding flag was set in {@link #tryGuard} and PERSISTS through this GUARD tick and until
+     * the player's next non-guard action (finishAction clears it for any cause other than GUARD).
+     */
+    private void advanceGuarding(float deltaTime) {
+        actionProgress = Math.min(1f, actionProgress + deltaTime / Constants.PLAYER_MOVE_DURATION);
+        if (actionProgress >= 1f) {
+            finishAction(true, TickCause.GUARD);
         }
     }
 
@@ -418,6 +432,12 @@ public class PlayerController {
     private void finishAction(boolean causesTick, TickCause cause) {
         actionState    = ActionState.IDLE;
         actionProgress = 0f;
+        // GUARD persists through its own tick and while IDLE; ANY other completed action (including a
+        // turn-less rotate/interact, cause == null) drops the stance. Cleared BEFORE the tick fires so
+        // the enemy turn this action triggers is resolved UNGUARDED — guard covers exactly one turn.
+        if (cause != TickCause.GUARD) {
+            player.setGuarding(false);
+        }
         if (causesTick && tickEventBus != null) {
             int playerTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
             int playerTileRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
@@ -482,6 +502,8 @@ public class PlayerController {
 
         if (tapAction == TouchAction.HEAL) {
             tryHeal();
+        } else if (tapAction == TouchAction.GUARD) {
+            tryGuard();
         } else if (tapAction == TouchAction.FIRE) {
             tryFire();
         } else if (tapAction == TouchAction.SKIP_TURN) {
@@ -655,6 +677,19 @@ public class PlayerController {
     private void trySkipTurn() {
         if (eventTextSystem != null) eventTextSystem.spawn("Turn skipped");
         actionState    = ActionState.SKIPPING;
+        actionProgress = 0f;
+    }
+
+    /**
+     * Enters the directional GUARD stance (strategy-combat-order-4). Braces the marine and ends the
+     * turn: the guarding flag is set now (so the enemy turn this GUARD tick fires resolves against a
+     * guarded player) and PERSISTS until the next non-guard action clears it in finishAction. Tapping
+     * GUARD again while already guarding simply re-braces and buys another turn.
+     */
+    private void tryGuard() {
+        player.setGuarding(true);
+        if (eventTextSystem != null) eventTextSystem.spawnWithColor("GUARD", EventTextSystem.COLOR_BLUE);
+        actionState    = ActionState.GUARDING;
         actionProgress = 0f;
     }
 

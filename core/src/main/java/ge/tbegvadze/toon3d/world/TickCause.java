@@ -9,5 +9,7 @@ public enum TickCause {
     /** Player explicitly skipped their turn (Tab). */
     SKIP_TURN,
     /** Player used a medical item to recover HP (R). */
-    HEAL
+    HEAL,
+    /** Player braced into a directional GUARD stance (strategy-combat-order-4). */
+    GUARD
 }
