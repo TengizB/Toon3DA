@@ -103,6 +103,16 @@ public final class IntentConstants {
     public static final float INTENT_COLOR_STUNNED_GREEN = 0.40f;
     public static final float INTENT_COLOR_STUNNED_BLUE = 0.42f;
 
+    // --- Priority read (strategy-combat-order-6) — teaching, never auto-play ---
+    /**
+     * How far the intent frame of the PRIORITY target is brightened toward white (0 = no change,
+     * 1 = full white). A subtle emphasis on the highest-threat committed hit and on support casters
+     * (BUFF_SELF) so a new player's eye is guided to "the big number / the buffer" — the classic
+     * "who to kill first" read. Kept small so experts still read the raw numbers; it never shows an
+     * optimal move, it only makes the salient info salient.
+     */
+    public static final float INTENT_PRIORITY_FRAME_BRIGHTEN = 0.40f;
+
     // --- Ranged "locked" outline (enemy is on the player's line — the deadly one) ---
     public static final float INTENT_LOCKED_OUTLINE_RED   = 1.00f;
     public static final float INTENT_LOCKED_OUTLINE_GREEN = 0.95f;

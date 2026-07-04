@@ -184,6 +184,18 @@ public class Player implements Renderable, Disposable, StatusHost {
         return 1.0f;
     }
 
+    /**
+     * Returns the WEAK outgoing-damage multiplier (strategy-combat-order-6): {@code 1 - P/100} while a
+     * WEAK debuff (e.g. an enemy's DEBUFF_PLAYER) is active, else 1.0. EnemyManager folds this into
+     * every weapon hit the player lands, so a Weakened marine visibly deals less — the symmetric
+     * counterpart to Weakening an enemy. Floored at 0 by {@link GameMath#weakDamageMultiplier}.
+     */
+    public float getWeakDamageMultiplier() {
+        StatusEffect weakEffect = activeStatusEffects.get(StatusType.WEAK);
+        return GameMath.weakDamageMultiplier(weakEffect != null && weakEffect.isActive(),
+                EffectConstants.WEAK_DAMAGE_PERCENT);
+    }
+
     public void setPlayerDamageListener(PlayerDamageListener listener) {
         this.damageListener = listener;
     }

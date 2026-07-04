@@ -286,6 +286,12 @@ public final class EnemyConstants {
     // DEBUFF_PLAYER — control applied down a cardinal line. Duration in world turns.
     public static final int DEBUFF_SLOW_DURATION_TURNS  = 3;
     public static final int DEBUFF_BLIND_DURATION_TURNS = 2;
+    /**
+     * WEAK debuff duration (strategy-combat-order-6): the acid casters (Mire Wraith / Acid Drone)
+     * corrode the marine's output so its own HUD damage numbers dim — the symmetric, player-facing
+     * side of the Weak power. Kept short so it softens a couple of hits, not the whole fight.
+     */
+    public static final int DEBUFF_WEAK_DURATION_TURNS  = 2;
 
     // SUMMON — spawn chaff on empty adjacent tiles. The hard caps bound the encounter-budget headroom
     // (docs/balance-rule-system.txt): a per-summoner ceiling AND a per-room live-enemy ceiling.

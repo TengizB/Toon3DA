@@ -20,6 +20,7 @@ import ge.tbegvadze.toon3d.status.StatusResistance;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.EffectConstants;
+import ge.tbegvadze.toon3d.util.StatsStore;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -75,6 +76,17 @@ public final class EnemyManager implements EnemyHitTarget {
      */
     private float playerRangedDamageMultiplier = 1.0f;
     private float playerMeleeDamageMultiplier  = 1.0f;
+
+    /**
+     * Player reference + last-known tile, cached each turn from {@link #takeTurn} (strategy-combat-
+     * order-6). Read by {@link #applyDamageTo} — which has no player argument — so a weapon hit can
+     * apply the player's WEAK outgoing debuff and judge the backstab bonus against enemy facing.
+     * Null / -1 until the first world turn runs; the modifier helpers treat that as "no debuff, no
+     * backstab" (safe defaults), and no enemy can have acted on the player before then anyway.
+     */
+    private Player cachedPlayer       = null;
+    private int    cachedPlayerColumn = -1;
+    private int    cachedPlayerRow    = -1;
 
     // Pre-allocated scratch state — never re-allocated after construction
     private final boolean[][]  occupancy;           // [column][row] — true if an enemy is there this turn
@@ -368,10 +380,33 @@ public final class EnemyManager implements EnemyHitTarget {
         float damageMultiplier = thisKillWasMelee ? playerMeleeDamageMultiplier : playerRangedDamageMultiplier;
         int totalDamage = Math.round(amount * damageMultiplier) + playerFlatDamageBonus;
 
+        // Order-6 modifier layer — Step 2 of the shared mitigation pipeline (docs/balance-rule-system.txt),
+        // applied BEFORE Block/armor. All three are pure GameMath multipliers:
+        //   • WEAK on the player dims its OWN output (a debuffed marine hits softer).
+        //   • VULNERABLE on the target amplifies the hit (setup-then-payoff), stack-capped.
+        //   • BACKSTAB rewards landing the shot from behind the enemy's facing.
+        float playerWeakMultiplier = (cachedPlayer != null)
+                ? cachedPlayer.getWeakDamageMultiplier() : 1f;
+        float vulnerableMultiplier = GameMath.vulnerableDamageMultiplier(
+                enemy.vulnerableStacks(), EffectConstants.VULNERABLE_DAMAGE_PERCENT);
+        boolean backstab = cachedPlayerColumn >= 0 && GameMath.isAttackerBehindFacing(
+                enemy.facingColumn, enemy.facingRow, enemy.tileColumn, enemy.tileRow,
+                cachedPlayerColumn, cachedPlayerRow);
+        float backstabMultiplier = GameMath.backstabDamageMultiplier(backstab, EffectConstants.BACKSTAB_DAMAGE_PERCENT);
+        totalDamage = Math.round(totalDamage * playerWeakMultiplier * vulnerableMultiplier * backstabMultiplier);
+        if (backstab) {
+            showCombatTipOnce("backstab", "BACKSTAB! Hits from behind deal bonus damage");
+        }
+
+        // EXPOSED (order-6): the next hit into a marked enemy ignores its Block (anti-turtle). Read the
+        // flag now and consume it after the hit so the shred lasts exactly one blow.
+        boolean exposed = enemy.isExposed();
+
         // Block absorption (strategy-combat-order-3): capture the buffer before the hit so we can tell
         // how much the shield ate and whether it shattered, then fire the Block-specific feedback.
         int blockBefore = enemy.block;
-        enemy.applyDamage(totalDamage);
+        enemy.applyDamage(totalDamage, exposed);
+        if (exposed) enemy.consumeExposed();
         int blockAbsorbed = blockBefore - enemy.block;
         if (blockAbsorbed > 0) {
             boolean shattered = enemy.block == 0 && totalDamage > blockBefore;
@@ -415,6 +450,46 @@ public final class EnemyManager implements EnemyHitTarget {
                 turns, magnitudePerTurn, this);
     }
 
+    /**
+     * Applies a VULNERABLE mark on the enemy (strategy-combat-order-6). Routed through the shared
+     * controller so it respects the STACK_MAGNITUDE cap and the same resist table as every other
+     * status. Magnitude carries no per-turn value (the potency lives in the mitigation multiplier);
+     * a stack is added on each application. Used by the Railgun's marking slug.
+     */
+    @Override
+    public void applyVulnerableStatus(Object enemyObject, int turns) {
+        if (statusEffectController == null) return;
+        statusEffectController.apply((Enemy) enemyObject, StatusType.VULNERABLE, turns, 0, this);
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("VULNERABLE", EventTextSystem.COLOR_GOLD);
+        }
+        showCombatTipOnce("vulnerable", "VULNERABLE — it takes extra damage now. Follow up!");
+    }
+
+    /**
+     * Applies an EXPOSED flag on the enemy (strategy-combat-order-6): the next hit ignores its Block.
+     * Routed through the shared controller (REFRESH_DURATION). Used by the Plasma Rifle's piercing bolt.
+     */
+    @Override
+    public void applyExposedStatus(Object enemyObject, int turns) {
+        if (statusEffectController == null) return;
+        statusEffectController.apply((Enemy) enemyObject, StatusType.EXPOSED, turns, 0, this);
+        showCombatTipOnce("exposed", "EXPOSED — your next hit ignores its shield");
+    }
+
+    /**
+     * First-encounter teaching (strategy-combat-order-6 onboarding): the first time the player sees a
+     * given new combat element, spawn a one-line EventText tip, then persist a flag so it never fires
+     * again (across runs). Keeps a strategic system from being noise — a tip nobody sees is useless, a
+     * tip on every hit is spam. No-op without a wired EventTextSystem.
+     */
+    private void showCombatTipOnce(String tipKey, String message) {
+        if (eventTextSystem == null) return;
+        if (StatsStore.isTipSeen(tipKey)) return;
+        StatsStore.markTipSeen(tipKey);
+        eventTextSystem.spawnWithColor(message, EventTextSystem.COLOR_WHITE);
+    }
+
     /** Advances hit-flash and attack animation timers for all enemies. Call once per frame from World.update(). */
     public void advanceHitFlash(float deltaTime) {
         for (int index = 0; index < enemies.size(); index++) {
@@ -440,6 +515,11 @@ public final class EnemyManager implements EnemyHitTarget {
      * ally's move — "what you saw is what you get."
      */
     public void takeTurn(int playerColumn, int playerRow, Player player) {
+        // Cache for applyDamageTo (order-6): a weapon hit resolves during the player's action, before
+        // the next takeTurn, so the player's tile/state here is exactly the one a same-action shot sees.
+        cachedPlayer       = player;
+        cachedPlayerColumn = playerColumn;
+        cachedPlayerRow    = playerRow;
         rebuildOccupancy();
         phaseA(playerColumn, playerRow);
         phaseBExecute(playerColumn, playerRow, player);
@@ -591,6 +671,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private void executeMeleeAttack(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow, Player player) {
         enemy.state = EnemyState.ATTACKING;
         enemy.triggerAttackAnim();
+        faceEnemyToward(enemy, playerColumn, playerRow); // order-6: face the target so flanking it is meaningful
         if (isCardinallyAdjacent(enemy, playerColumn, playerRow)) {
             int damage = enemy.scaledAttackDamage();
             if (enemy.type == EnemyType.VOID_SHROUD
@@ -611,6 +692,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private void executeRangedAttack(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow, Player player) {
         enemy.state = EnemyState.ATTACKING;
         enemy.triggerAttackAnim();
+        faceEnemyToward(enemy, playerColumn, playerRow); // order-6: a kiter that fires without moving still faces its shot
         boolean stillValid = GameMath.chebyshevDistanceTiles(
                         enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) <= enemy.type.attackRangeTiles()
                 && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
@@ -726,24 +808,51 @@ public final class EnemyManager implements EnemyHitTarget {
         if (!stillValid || statusEffectController == null) return;
 
         StatusType debuff = debuffStatusFor(enemy.type);
-        int durationTurns = debuff == StatusType.BLINDED
-                ? EnemyConstants.DEBUFF_BLIND_DURATION_TURNS
-                : EnemyConstants.DEBUFF_SLOW_DURATION_TURNS;
+        int durationTurns = debuffDurationFor(debuff);
         statusEffectController.apply(player, debuff, durationTurns, 0, enemy);
         if (eventTextSystem != null) {
-            eventTextSystem.spawnWithColor(debuff == StatusType.BLINDED ? "BLINDED" : "SLOWED",
-                    EventTextSystem.COLOR_GREY);
+            eventTextSystem.spawnWithColor(debuffLabelFor(debuff), EventTextSystem.COLOR_GREY);
+        }
+        if (debuff == StatusType.WEAK) {
+            showCombatTipOnce("weak_player", "WEAKENED — your damage is cut. Retreat or wait it out");
         }
     }
 
-    /** Which control status a debuffing archetype inflicts: the eyes blind, the acid casters slow. */
+    /**
+     * Which control status a debuffing archetype inflicts: the eyes BLIND, the acid casters (Mire
+     * Wraith / Acid Drone) apply WEAK — corroding the marine's output (strategy-combat-order-6) — and
+     * everything else SLOWS.
+     */
     private static StatusType debuffStatusFor(EnemyType type) {
         switch (type) {
             case EYE_TYRANT:
             case VORTEX_EYE:
                 return StatusType.BLINDED;
+            case MIRE_WRAITH:
+            case ACID_DRONE:
+                return StatusType.WEAK;
             default:
                 return StatusType.SLOWED;
+        }
+    }
+
+    /** Duration (world turns) for each control debuff DEBUFF_PLAYER can inflict. */
+    private static int debuffDurationFor(StatusType debuff) {
+        switch (debuff) {
+            case BLINDED: return EnemyConstants.DEBUFF_BLIND_DURATION_TURNS;
+            case WEAK:    return EnemyConstants.DEBUFF_WEAK_DURATION_TURNS;
+            case SLOWED:
+            default:      return EnemyConstants.DEBUFF_SLOW_DURATION_TURNS;
+        }
+    }
+
+    /** Floater label for each DEBUFF_PLAYER control status. */
+    private static String debuffLabelFor(StatusType debuff) {
+        switch (debuff) {
+            case BLINDED: return "BLINDED";
+            case WEAK:    return "WEAKENED";
+            case SLOWED:
+            default:      return "SLOWED";
         }
     }
 
@@ -1329,9 +1438,35 @@ public final class EnemyManager implements EnemyHitTarget {
 
     private void commitMove(Enemy enemy, int targetColumn, int targetRow) {
         occupancy[enemy.tileColumn][enemy.tileRow] = false;
+        // Track implicit facing = the cardinal step just taken (order-6 backstab/flank). A one-tile
+        // enemy step is always a single cardinal, so signum yields a clean unit facing vector.
+        int deltaColumn = targetColumn - enemy.tileColumn;
+        int deltaRow    = targetRow    - enemy.tileRow;
+        if (deltaColumn != 0 || deltaRow != 0) {
+            enemy.facingColumn = Integer.signum(deltaColumn);
+            enemy.facingRow    = Integer.signum(deltaRow);
+        }
         enemy.tileColumn = targetColumn;
         enemy.tileRow    = targetRow;
         occupancy[targetColumn][targetRow] = true;
+    }
+
+    /**
+     * Points the enemy's implicit facing (order-6) at a target tile along the dominant cardinal axis.
+     * Called when an enemy attacks the player so a marine that circles behind an attacking enemy still
+     * earns the backstab bonus. No-op when the target is on the enemy's own tile.
+     */
+    private static void faceEnemyToward(Enemy enemy, int targetColumn, int targetRow) {
+        int deltaColumn = targetColumn - enemy.tileColumn;
+        int deltaRow    = targetRow    - enemy.tileRow;
+        if (deltaColumn == 0 && deltaRow == 0) return;
+        if (Math.abs(deltaColumn) >= Math.abs(deltaRow)) {
+            enemy.facingColumn = Integer.signum(deltaColumn);
+            enemy.facingRow    = 0;
+        } else {
+            enemy.facingColumn = 0;
+            enemy.facingRow    = Integer.signum(deltaRow);
+        }
     }
 
     /**

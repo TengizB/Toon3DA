@@ -36,6 +36,23 @@ public final class StatsStore {
         prefs.flush();
     }
 
+    /**
+     * True once the given first-encounter tip has already fired (strategy-combat-order-6 onboarding).
+     * Tips are gated to fire exactly once across all runs, so a returning player is never re-taught.
+     * Backed by the same Preferences store under a "tip_" key prefix.
+     */
+    public static boolean isTipSeen(String tipKey) {
+        Preferences prefs = Gdx.app.getPreferences(ProgressionConstants.STATS_PREFS_NAME);
+        return prefs.getBoolean("tip_" + tipKey, false);
+    }
+
+    /** Records that a first-encounter tip has fired so it never fires again (order-6 onboarding). */
+    public static void markTipSeen(String tipKey) {
+        Preferences prefs = Gdx.app.getPreferences(ProgressionConstants.STATS_PREFS_NAME);
+        prefs.putBoolean("tip_" + tipKey, true);
+        prefs.flush();
+    }
+
     /** Updates persistent records from the completed run and saves to disk. */
     public static void updateAndSave(RunStats run, PersistentStats persistent) {
         persistent.totalRuns++;

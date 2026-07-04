@@ -18,6 +18,7 @@ import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.render.Renderable;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
+import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.world.HudState;
@@ -86,10 +87,14 @@ public class HudRenderer implements Renderable, Disposable {
     private static final Color SLOT_BORDER    = new Color(0.220f, 0.220f, 0.260f, 1f);
 
     // Status icon colors — indexed by StatusType ordinal
-    // BURNING=0 POISONED=1 BLEED=2 STUNNED=3 BLINDED=4 SLOWED=5 EMPOWERED=6
-    private static final float[] STATUS_ICON_RED   = { 1.00f, 0.00f, 0.85f, 1.00f, 0.30f, 0.25f, 0.85f };
-    private static final float[] STATUS_ICON_GREEN = { 0.45f, 0.80f, 0.05f, 1.00f, 0.00f, 0.40f, 0.10f };
-    private static final float[] STATUS_ICON_BLUE  = { 0.00f, 0.15f, 0.10f, 1.00f, 0.50f, 0.70f, 0.00f };
+    // BURNING=0 POISONED=1 BLEED=2 STUNNED=3 BLINDED=4 SLOWED=5 EMPOWERED=6 VULNERABLE=7 WEAK=8 EXPOSED=9
+    // Order-6 powers (7-9) follow the combat colour language: VULNERABLE red, WEAK grey-purple, EXPOSED purple.
+    private static final float[] STATUS_ICON_RED   = { 1.00f, 0.00f, 0.85f, 1.00f, 0.30f, 0.25f, 0.85f,
+            CombatPalette.VULNERABLE_RED,   CombatPalette.WEAK_RED,   CombatPalette.EXPOSED_RED };
+    private static final float[] STATUS_ICON_GREEN = { 0.45f, 0.80f, 0.05f, 1.00f, 0.00f, 0.40f, 0.10f,
+            CombatPalette.VULNERABLE_GREEN, CombatPalette.WEAK_GREEN, CombatPalette.EXPOSED_GREEN };
+    private static final float[] STATUS_ICON_BLUE  = { 0.00f, 0.15f, 0.10f, 1.00f, 0.50f, 0.70f, 0.00f,
+            CombatPalette.VULNERABLE_BLUE,  CombatPalette.WEAK_BLUE,  CombatPalette.EXPOSED_BLUE };
     private static final StatusType[] STATUS_TYPES = StatusType.values();
     static {
         // Fail fast if a new StatusType was added without updating the icon color arrays above.

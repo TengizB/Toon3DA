@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Combat
 TITLE: Tactical Modifiers & Strategy Meta — Vulnerable/Weak, positioning payoffs, the read-plan-counter loop
 CREATED: 2026-07-03
@@ -146,15 +146,40 @@ BALANCE CONTRACT
 
 IMPLEMENTATION CHECKLIST
 ========================
-[ ] Add VULNERABLE / WEAK / EXPOSED StatusTypes to roguelike_order_8's engine (new
+[x] Add VULNERABLE / WEAK / EXPOSED StatusTypes to roguelike_order_8's engine (new
     types, same tick machinery); wire into the order-3 pipeline (steps 2 & 3).
-[ ] Track enemy facing; add backstab/flank multipliers (GameMath, pure) for both
+    → StatusType enum + StatusEffectController stack modes / per-type stack cap; the
+      mitigation pipeline lives in EnemyManager.applyDamageTo (VULNERABLE/WEAK/backstab
+      as step-2 multipliers, EXPOSED as the step-3 ignoreBlock flag via Enemy.applyDamage).
+[x] Track enemy facing; add backstab/flank multipliers (GameMath, pure) for both
     player->enemy and enemy->guarding-player.
-[ ] Surface the priority read (subtle highest-threat + support-enemy tint) via order-2
+    → Enemy.facingColumn/Row maintained in EnemyManager.commitMove + faceEnemyToward on
+      attack; GameMath.backstabDamageMultiplier + isAttackerBehindFacing (pure). The
+      enemy->guarding-player mirror already exists (VOID_SHROUD flank + order-4 guard arcs).
+[x] Surface the priority read (subtle highest-threat + support-enemy tint) via order-2
     frame emphasis — teaching only, never auto-play.
-[ ] Build the first-encounter tip system (EventTextSystem + once-only StatsStore flags).
-[ ] Enforce one shared color palette across the whole series' visuals.
-[ ] Add order-2 power badges (Vulnerable/Weak/Exposed) — this doc names them, order-2
+    → EnemyRenderer brightens the frame of the highest predicted-damage intent and of
+      BUFF_SELF support casters (INTENT_PRIORITY_FRAME_BRIGHTEN).
+[x] Build the first-encounter tip system (EventTextSystem + once-only StatsStore flags).
+    → StatsStore.isTipSeen/markTipSeen + EnemyManager.showCombatTipOnce, gated tips for
+      the first VULNERABLE / EXPOSED / player-WEAK / BACKSTAB the player experiences.
+[x] Enforce one shared color palette across the whole series' visuals.
+    → util/CombatPalette is the single source; HudRenderer + StatusEffectVignetteRenderer
+      colour arrays and the EnemyRenderer power tints all source it.
+[~] Add order-2 power badges (Vulnerable/Weak/Exposed) — this doc names them, order-2
     draws them.
-[ ] Add the MODIFIERS section to docs/balance-rule-system.txt + BalanceReport; cap
+    → Shipped as billboard SPRITE TINTS (VULNERABLE red / EXPOSED purple / WEAK grey-purple)
+      layered over the DoT tints, plus the player screen-edge vignette entries. A dedicated
+      floating badge glyph in the intent cluster is a future order-2 polish pass.
+[x] Add the MODIFIERS section to docs/balance-rule-system.txt + BalanceReport; cap
     stacks; verify weapon bands, golden ratios, and the boss ruleset all still hold.
+    → BalanceReport.printModifiersTable + the TACTICAL MODIFIERS block in the pipeline doc;
+      VULNERABLE_MAX_STACKS caps stacks, backstab priced as a conditional.
+
+CONCRETE IN-GAME SOURCES (so the layer is playable, not just wired)
+  • VULNERABLE ← Railgun marking slug (applied after its hit, sets up the next shot).
+  • EXPOSED    ← Plasma Rifle piercing bolt (shreds the next hit's Block).
+  • WEAK       ← the acid casters' DEBUFF_PLAYER (Mire Wraith / Acid Drone) corrode the
+                 marine's output; the mechanic is symmetric so an enemy-softening source
+                 can reuse applyVulnerableStatus-style hooks later.
+  • BACKSTAB   ← any player weapon hit landed from behind an enemy's facing.

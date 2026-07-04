@@ -8,6 +8,7 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
+import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -36,11 +37,22 @@ public final class StatusEffectVignetteRenderer implements Disposable {
     private static final int TYPE_COUNT = STATUS_TYPES.length;
 
     // Per-effect RGB color values (matched to StatusType ordinals)
-    // BURNING=0 POISONED=1 BLEED=2 STUNNED=3 BLINDED=4 SLOWED=5 EMPOWERED=6
+    // BURNING=0 POISONED=1 BLEED=2 STUNNED=3 BLINDED=4 SLOWED=5 EMPOWERED=6 VULNERABLE=7 WEAK=8 EXPOSED=9
     // BLEED uses deep crimson screen-edge tint distinct from BURNING orange.
-    private static final float[] EFFECT_RED   = { 1.00f, 0.00f, 0.85f, 1.00f, 0.00f, 0.25f, 0.85f };
-    private static final float[] EFFECT_GREEN = { 0.45f, 0.80f, 0.05f, 1.00f, 0.00f, 0.40f, 0.10f };
-    private static final float[] EFFECT_BLUE  = { 0.00f, 0.15f, 0.10f, 1.00f, 0.00f, 0.70f, 0.00f };
+    // The order-6 powers (7-9) share the combat colour language: VULNERABLE red (danger — you take
+    // more), WEAK muted grey-purple (your output is dimmed), EXPOSED purple (special/anti-turtle).
+    private static final float[] EFFECT_RED   = { 1.00f, 0.00f, 0.85f, 1.00f, 0.00f, 0.25f, 0.85f,
+            CombatPalette.VULNERABLE_RED,   CombatPalette.WEAK_RED,   CombatPalette.EXPOSED_RED };
+    private static final float[] EFFECT_GREEN = { 0.45f, 0.80f, 0.05f, 1.00f, 0.00f, 0.40f, 0.10f,
+            CombatPalette.VULNERABLE_GREEN, CombatPalette.WEAK_GREEN, CombatPalette.EXPOSED_GREEN };
+    private static final float[] EFFECT_BLUE  = { 0.00f, 0.15f, 0.10f, 1.00f, 0.00f, 0.70f, 0.00f,
+            CombatPalette.VULNERABLE_BLUE,  CombatPalette.WEAK_BLUE,  CombatPalette.EXPOSED_BLUE };
+    static {
+        // Fail fast if a new StatusType was added without extending the per-effect colour arrays.
+        if (EFFECT_RED.length != TYPE_COUNT || EFFECT_GREEN.length != TYPE_COUNT || EFFECT_BLUE.length != TYPE_COUNT) {
+            throw new IllegalStateException("EFFECT_* colour arrays must match StatusType count");
+        }
+    }
 
     private final SpriteBatch batch;
     private final Texture     vignetteTexture;

@@ -58,6 +58,8 @@ public final class BalanceReport {
         System.out.println();
         printBlockTable();
         System.out.println();
+        printModifiersTable();
+        System.out.println();
         printMoveSetTable();
         System.out.println();
         printUpgradeCardTable();
@@ -220,6 +222,47 @@ public final class BalanceReport {
         System.out.printf("%-12s %8d %8d %7d %10.2f %-6s%n",
                 roleName, baseBlock, BalanceConfig.BLOCK_MAX, BalanceConfig.BLOCK_DECAY_TURNS,
                 survivalTurns, inBand ? "OK" : "OUT!");
+    }
+
+    // -----------------------------------------------------------------------------------
+    // TACTICAL MODIFIERS (order-6) — the Vulnerable/Weak/Exposed powers and the backstab payoff.
+    // Each is a pure GameMath multiplier/flag folded into the shared mitigation pipeline. This table
+    // reports each power's multiplier at full effect, its cap, and its effect on a reference SOLDIER's
+    // TTK (turns-to-kill = ceil(eHP / DPT)) or on the marine's incoming damage, so the whole layer is
+    // visibly inside the balance contract (a stacked Vulnerable must not multiply a boss into a 2-turn
+    // kill; backstab must stay a conditional nudge, not a mandatory combo).
+    // -----------------------------------------------------------------------------------
+    private static void printModifiersTable() {
+        // Reference SOLDIER eHP — midpoint of the roster's soldier HP, no Block, for a clean TTK read.
+        float referenceEnemyEHP = BalanceConfig.REVENANT_MAX_HEALTH;
+        float dpt               = BalanceConfig.REFERENCE_PLAYER_DPT;
+        int   baseTTK           = (int) Math.ceil(referenceEnemyEHP / dpt);
+
+        float vulnMult    = GameMath.vulnerableDamageMultiplier(
+                EffectConstants.VULNERABLE_MAX_STACKS, EffectConstants.VULNERABLE_DAMAGE_PERCENT);
+        int   vulnTTK     = (int) Math.ceil(referenceEnemyEHP / (dpt * vulnMult));
+        float weakMult    = GameMath.weakDamageMultiplier(true, EffectConstants.WEAK_DAMAGE_PERCENT);
+        float backstab    = GameMath.backstabDamageMultiplier(true, EffectConstants.BACKSTAB_DAMAGE_PERCENT);
+        int   backstabTTK = (int) Math.ceil(referenceEnemyEHP / (dpt * backstab));
+
+        System.out.println("TACTICAL MODIFIERS (order-6)");
+        System.out.printf("%-12s %8s %6s %-40s%n", "power", "mult", "cap", "effect");
+        System.out.println("--------------------------------------------------------------------------------");
+        System.out.printf("%-12s %8s %6d  target takes +dmg; TTK %d -> %d turns%n",
+                "VULNERABLE", String.format("x%.2f", vulnMult),
+                EffectConstants.VULNERABLE_MAX_STACKS, baseTTK, vulnTTK);
+        System.out.printf("%-12s %8s %6s  attacker deals -%d%% (softens a telegraphed hit)%n",
+                "WEAK", String.format("x%.2f", weakMult), "1hit/refresh", EffectConstants.WEAK_DAMAGE_PERCENT);
+        System.out.printf("%-12s %8s %6s  next hit ignores Block; lasts %d turn(s), 1 hit%n",
+                "EXPOSED", "-", "1 hit", EffectConstants.EXPOSED_DURATION);
+        System.out.printf("%-12s %8s %6s  from behind facing; TTK %d -> %d turns%n",
+                "BACKSTAB", String.format("x%.2f", backstab), "conditional", baseTTK, backstabTTK);
+        System.out.println("--------------------------------------------------------------------------------");
+        System.out.printf("Reference SOLDIER eHP = %.0f, player DPT = %.0f. VULNERABLE is stack-capped so even%n",
+                referenceEnemyEHP, dpt);
+        System.out.println("at max stacks it shaves ~1 turn off a soldier, never trivializing a boss's eHP.");
+        System.out.println("BACKSTAB is priced as a conditional (like crit): it needs positioning, so its");
+        System.out.println("reliable value is self-limiting and it stays a nudge, not an execution check.");
     }
 
     // -----------------------------------------------------------------------------------

@@ -3,6 +3,7 @@ package ge.tbegvadze.toon3d.entity;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
@@ -145,6 +146,10 @@ public class Railgun extends Weapon {
                     boolean targetWasFullHp = enemyHitTarget.isAtFullHp(hitEnemy);
                     setLastHitEnemy(hitEnemy, computedDamage, targetWasFullHp);
                     enemyHitTarget.applyDamageTo(hitEnemy, computedDamage);
+                    // Marking slug (strategy-combat-order-6): the precision rifle leaves the target
+                    // VULNERABLE, so a follow-up burst (this or any weapon) lands harder — the classic
+                    // "mark, then dump the big shot" setup. Applied AFTER this hit so it benefits the NEXT.
+                    enemyHitTarget.applyVulnerableStatus(hitEnemy, EffectConstants.VULNERABLE_DURATION);
                     dispatchHitCallbacks(new FireResult(false, distanceTiles));
                     clearLastHit();
                     hitAnyEnemy = true;
