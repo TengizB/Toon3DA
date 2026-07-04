@@ -470,6 +470,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyManager.setEnemyAttackListener(enemyAttackEffectSystem);
 
         enemyManager.setStatusEffectController(statusEffectController);
+        enemyManager.setEventTextSystem(eventTextSystem); // "BLOCKED N" floater on Block absorption (order-3)
 
         // Terrain hazards (idea 4, Pillar 3) — two-sided fire/toxic chain-reaction system.
         // HazardManager holds no GPU resources, so it needs no dispose; it is rebuilt per floor.

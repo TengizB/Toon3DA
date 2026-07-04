@@ -204,6 +204,23 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         spawnDamageNumber(worldX, worldY, killingBlowDamage, true);
     }
 
+    @Override
+    public void onBlockAbsorbed(int tileColumn, int tileRow, float heightMultiplier,
+                                int absorbedAmount, boolean shattered) {
+        // Blue shield "clink": a small radial spark burst, distinct from the red flesh-hit particles.
+        spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.BLOCK_SPARK_R, EffectConstants.BLOCK_SPARK_G, EffectConstants.BLOCK_SPARK_B,
+                EffectConstants.BLOCK_SPARK_COUNT,
+                EffectConstants.BLOCK_SPARK_SPEED_MIN, EffectConstants.BLOCK_SPARK_SPEED_MAX,
+                EffectConstants.BLOCK_SPARK_LIFE_SECONDS);
+        // When the buffer breaks, add an expanding ring so the "shield shatter → real hit" beat reads.
+        if (shattered) {
+            spawnColoredRingPulse(tileColumn, tileRow, heightMultiplier,
+                    EffectConstants.BLOCK_SPARK_R, EffectConstants.BLOCK_SPARK_G, EffectConstants.BLOCK_SPARK_B,
+                    EffectConstants.BLOCK_SHATTER_RING_MAX_RADIUS);
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Flash triggers — called from AbilityFeedback
     // -------------------------------------------------------------------------

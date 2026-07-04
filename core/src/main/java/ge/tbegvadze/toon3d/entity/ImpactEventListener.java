@@ -28,4 +28,18 @@ public interface ImpactEventListener {
      * @param killingBlowDamage damage that caused the death (may exceed remaining HP)
      */
     void onEnemyKilled(float worldX, float worldY, float heightMultiplier, int killingBlowDamage);
+
+    /**
+     * Called when an enemy's Block absorbs part or all of an incoming hit (strategy-combat-order-3).
+     * Lets the effect system play the shield-specific "clink" — blue sparks, and a shatter ring when
+     * the buffer broke — visually distinct from a flesh hit. Default: no-op.
+     *
+     * @param tileColumn       enemy tile column (projected to screen at spawn time)
+     * @param tileRow          enemy tile row
+     * @param heightMultiplier the enemy type's billboard height fraction (scales effect placement)
+     * @param absorbedAmount   how much damage the Block ate this hit
+     * @param shattered        true when the hit exceeded the buffer and Block broke to zero
+     */
+    default void onBlockAbsorbed(int tileColumn, int tileRow, float heightMultiplier,
+                                 int absorbedAmount, boolean shattered) {}
 }

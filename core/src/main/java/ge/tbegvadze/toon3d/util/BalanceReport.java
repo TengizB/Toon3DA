@@ -56,6 +56,8 @@ public final class BalanceReport {
         System.out.println();
         printEnemyTable();
         System.out.println();
+        printBlockTable();
+        System.out.println();
         printUpgradeCardTable();
         System.out.println();
         printScarcityTable();
@@ -185,6 +187,37 @@ public final class BalanceReport {
                 enemyName, enemyRole.name(), enemyEffectiveHitPoints, attackDamage, attackCadenceTurns,
                 positionalMultiplier, threatPoints, bandVerdict(insideBand, threatPoints, enemyRole.bandMinimum),
                 goldenRatio, bandVerdict(goldenInside, goldenRatio, goldenMinimum));
+    }
+
+    // -----------------------------------------------------------------------------------
+    // BLOCK & DEFEND (strategy-combat-order-3) — Block is transient eHP. Priced as "turns of
+    // survival bought" = baseBlock / REFERENCE_PLAYER_DPT. A single DEFEND should buy ~1 turn
+    // (survTurns ≈ 1), so a defend does NOT inflate a role's TTK out of its golden-ratio band:
+    // Block decays after BLOCK_DECAY_TURNS and is capped at BLOCK_MAX, so it can never compound
+    // into immortality, and status DoT bypasses it entirely (the build answer to turtles).
+    // -----------------------------------------------------------------------------------
+    private static void printBlockTable() {
+        System.out.println("BLOCK & DEFEND (order-3)");
+        System.out.printf("%-12s %8s %8s %7s %10s %-6s%n",
+                "role", "baseBlk", "blkMax", "decay", "survTurns", "in?");
+        System.out.println("------------------------------------------------------------------");
+        printBlockRow("SOLDIER",    BalanceConfig.DEFEND_BLOCK_GAIN_SOLDIER);
+        printBlockRow("BRUISER",    BalanceConfig.DEFEND_BLOCK_GAIN_BRUISER);
+        printBlockRow("MINI_ELITE", BalanceConfig.DEFEND_BLOCK_GAIN_MINI_ELITE);
+        System.out.println("survTurns = baseBlk / REFERENCE_PLAYER_DPT (turns of survival one DEFEND buys).");
+        System.out.println("in? = OK when survTurns is in [0.6, 2.0] — ~1 turn bought, never a stall.");
+        System.out.printf("BRUISER also braces on a fixed cadence every %d turns; CHAFF/BOSS never brace.%n",
+                BalanceConfig.DEFEND_BRUISER_CADENCE_TURNS);
+        System.out.printf("Turtle trigger: HP <= %.0f%% and the player is positioned to hit next turn.%n",
+                BalanceConfig.DEFEND_HP_THRESHOLD_FRACTION * 100f);
+    }
+
+    private static void printBlockRow(String roleName, int baseBlock) {
+        float survivalTurns = baseBlock / BalanceConfig.REFERENCE_PLAYER_DPT;
+        boolean inBand = survivalTurns >= 0.6f && survivalTurns <= 2.0f;
+        System.out.printf("%-12s %8d %8d %7d %10.2f %-6s%n",
+                roleName, baseBlock, BalanceConfig.BLOCK_MAX, BalanceConfig.BLOCK_DECAY_TURNS,
+                survivalTurns, inBand ? "OK" : "OUT!");
     }
 
     // -----------------------------------------------------------------------------------

@@ -40,7 +40,7 @@ public final class PlannedAction {
     /** Damage the player would take if the committed attack lands — the Slay-the-Spire intent number. */
     public int predictedDamage = 0;
 
-    /** Block the enemy would gain from a DEFEND (order-3); unused by this layer. */
+    /** Block the enemy will gain when it EXECUTEs a committed DEFEND (strategy-combat-order-3). */
     public int blockGain = 0;
 
     /** Turns of telegraph left before a WIND_UP attack lands; order-2 may render this as a countdown pip. */
@@ -110,6 +110,24 @@ public final class PlannedAction {
         this.goalIsFixedTile      = false;
         this.predictedDamage      = predictedDamage;
         this.blockGain            = 0;
+        this.windUpTurnsRemaining = 0;
+        this.abilityRef           = null;
+    }
+
+    /**
+     * Overwrites all fields for a DEFEND: the enemy braces on its next turn, gaining {@code blockGain}
+     * Block (strategy-combat-order-3). Carries no predicted damage — the intent icon (order-2) shows
+     * the Block value instead. The target tile is the enemy's own tile (it holds position while bracing).
+     */
+    public void setDefend(int targetColumn, int targetRow, int blockGain) {
+        this.committed            = true;
+        this.verb                 = IntentVerb.DEFEND;
+        this.targetColumn         = targetColumn;
+        this.targetRow            = targetRow;
+        this.fleeFromTarget       = false;
+        this.goalIsFixedTile      = false;
+        this.predictedDamage      = 0;
+        this.blockGain            = blockGain;
         this.windUpTurnsRemaining = 0;
         this.abilityRef           = null;
     }

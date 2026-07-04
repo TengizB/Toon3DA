@@ -138,6 +138,10 @@ public final class StatusEffectController {
         for (int enemyIndex = 0; enemyIndex < enemies.size(); enemyIndex++) {
             Enemy enemy = enemies.get(enemyIndex);
             if (!enemy.isAlive()) continue;
+            // Block decay (strategy-combat-order-3) shares the status phase for deterministic ordering:
+            // an enemy's Block, gained on its previous defend turn, expires here one turn later — after
+            // the player's reacting turn has already resolved its damage against the active shield.
+            enemy.decayBlock();
             tickEnemy(enemy);
         }
 
