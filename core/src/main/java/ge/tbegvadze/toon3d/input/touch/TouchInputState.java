@@ -22,6 +22,7 @@ public final class TouchInputState extends InputAdapter {
     private static final int INDEX_OPEN_INVENTORY  = 11;
     private static final int INDEX_INSPECT_WEAPON  = 12;
     private static final int INDEX_USE_MACHINE     = 13;
+    private static final int INDEX_GUARD           = 14;
 
     private final TouchButton[]  buttons;
     private final Viewport       viewport;
@@ -42,7 +43,7 @@ public final class TouchInputState extends InputAdapter {
         float centerX = TouchConstants.TOUCH_GRID_CENTER_X;
         float baseY   = TouchConstants.TOUCH_GRID_BASE_Y;    // center Y of row 1 (BACK)
 
-        buttons = new TouchButton[14];
+        buttons = new TouchButton[15];
 
         // Row 1 (bottom) — center column only
         buttons[INDEX_BACK] = new TouchButton(
@@ -84,6 +85,13 @@ public final class TouchInputState extends InputAdapter {
         buttons[INDEX_SKIP_TURN] = new TouchButton(
             centerX + arm - half, row4Y - half,
             size, size, TouchAction.SKIP_TURN, TouchButton.Shape.ROUNDED_SQUARE, true);
+
+        // GUARD — bottom-right corner of the combat cluster (row 1 right column, the empty slot beside
+        // BACK). The defensive sibling of SKIP: a tap-only, turn-ending brace within thumb reach of the
+        // movement/rotate keys so the player can rotate-to-face then guard (strategy-combat-order-4).
+        buttons[INDEX_GUARD] = new TouchButton(
+            centerX + arm - half, baseY - half,
+            size, size, TouchAction.GUARD, TouchButton.Shape.ROUNDED_SQUARE, true);
 
         // Left secondary cluster — HEAL (row 2 height) | OPEN_INVENTORY (row 3 height)
         float leftCenterX = TouchConstants.TOUCH_GRID_LEFT_CENTER_X;

@@ -91,6 +91,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private final EventTextSystem        eventTextSystem;
     private final EventTextRenderer      eventTextRenderer;
     private final HitVignetteRenderer    hitVignetteRenderer;
+    private final GuardShieldRenderer    guardShieldRenderer;
     // Run-persistent ability visual feedback — no GPU resources, no dispose needed
     private final AbilityFeedback        abilityFeedback;
     private final PlayerProgress         playerProgress;
@@ -294,6 +295,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             hitVignetteRenderer.setIntensity(1f);
             eventTextSystem.spawnDamage(netDamage);
             runStats.recordDamageTaken(netDamage);
+        });
+
+        // GUARD stance (strategy-combat-order-4): the shield-arc overlay + the directional
+        // GUARDED (front, blue) / FLANKED (side-back, red) hit feedback that teaches the arc.
+        guardShieldRenderer = new GuardShieldRenderer(player);
+        player.setGuardHitListener((frontArc, guardedDamage, attackerWorldX, attackerWorldY) -> {
+            if (frontArc) {
+                eventTextSystem.spawnWithColor("GUARDED " + guardedDamage, EventTextSystem.COLOR_BLUE);
+            } else {
+                eventTextSystem.spawnWithColor("FLANKED " + guardedDamage, EventTextSystem.COLOR_RED);
+                hitVignetteRenderer.setIntensity(1f);
+            }
         });
 
         // Build all weapon instances and wire them to the shared systems.
@@ -1096,6 +1109,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         eventTextSystem.update(deltaTime);
         abilityFeedback.update(deltaTime);
         hitVignetteRenderer.update(deltaTime);
+        guardShieldRenderer.update(deltaTime);
         if (bossHudRenderer != null) bossHudRenderer.update(deltaTime);
 
         // Transition to level-up overlay as soon as XP threshold is crossed
@@ -1183,6 +1197,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
 
         impactEffectRenderer.renderScreenOverlays(camera);
+
+        // Guard shield arc: translucent blue rim across the screen bottom while the player is braced.
+        guardShieldRenderer.render(camera);
 
         // Hit vignette: red edge glow drawn under the minimap and HUD panels.
         hitVignetteRenderer.render(camera);
@@ -1290,6 +1307,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         fadeOverlayRenderer.dispose();
         eventTextRenderer.dispose();
         hitVignetteRenderer.dispose();
+        guardShieldRenderer.dispose();
         levelUpOverlayRenderer.dispose();
         inventoryOverlayRenderer.dispose();
         weaponInspectOverlayRenderer.dispose();

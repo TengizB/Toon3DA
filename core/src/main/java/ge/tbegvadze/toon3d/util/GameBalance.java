@@ -355,6 +355,18 @@ public final class GameBalance {
      */
     public static final int   TGH_MIN_DAMAGE          = 1;
 
+    // ---- Player GUARD stance (strategy-combat-order-4) — balance lives in BalanceConfig ----
+    /** Front-arc incoming-damage multiplier while guarding (big reduction). */
+    public static final float GUARD_FRONT_MULTIPLIER         = BalanceConfig.GUARD_FRONT_MULTIPLIER;
+    /** Side-arc multiplier while guarding (full damage by design). */
+    public static final float GUARD_SIDE_MULTIPLIER          = BalanceConfig.GUARD_SIDE_MULTIPLIER;
+    /** Back-arc multiplier while guarding (full damage by design). */
+    public static final float GUARD_BACK_MULTIPLIER          = BalanceConfig.GUARD_BACK_MULTIPLIER;
+    /** Half-angle (degrees) of the protected front arc. */
+    public static final float GUARD_FRONT_HALF_ANGLE_DEGREES = BalanceConfig.GUARD_FRONT_HALF_ANGLE_DEGREES;
+    /** Half-angle (degrees) of the rear arc (from the reverse-facing vector). */
+    public static final float GUARD_BACK_HALF_ANGLE_DEGREES  = BalanceConfig.GUARD_BACK_HALF_ANGLE_DEGREES;
+
     // =========================================================================
     // ABILITY CATALOGUE — BASE / PER_LEVEL / CAP
     // All values are PLACEHOLDERS — flag for playtesting.

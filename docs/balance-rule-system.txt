@@ -114,6 +114,22 @@ resolved as direct HP loss (Enemy.applyDoTDamage), so status builds are the
 rock-paper-scissors answer to turtling enemies. The BLOCK & DEFEND table in the
 living-table section below lists each bracing role's numbers and survTurns verdict.
 
+PLAYER GUARD (order-4) — directional, CONDITIONAL eHP. Tapping GUARD ends the turn
+and braces the marine: an incoming hit inside the FRONT facing arc (±GUARD_FRONT_
+HALF_ANGLE_DEGREES, default ±60°) is scaled by GUARD_FRONT_MULTIPLIER (0.35); SIDE
+and BACK hits land at FULL damage (GUARD_SIDE/BACK_MULTIPLIER = 1.0). Guard is
+pipeline STEP 0 for the player — the facing multiplier is applied to the raw hit
+(GameMath.guardFacingMultiplier) BEFORE the dodge/armour/toughness pipeline, so it
+composes with everything downstream. Pricing: guarding costs the player's own turn
+1:1 (a ~1 reference-DPT opportunity cost), and because it does NOTHING vs flanks its
+average value is self-limiting in any multi-enemy room, so it needs no BLOCK-style
+hard cap. A single-enemy duel is NOT broken: a front-guard converts a would-be
+lethal front turn into a survivable one at the cost of the offense skipped that turn,
+which keeps the enemy's effective TTK inside its golden-ratio band (the enemy simply
+"gets a turn back"). Since GUARD_SIDE/BACK stay at 1.0, guarding vs a flanker (a MOVE
+intent repositioning off your facing) yields zero mitigation — the read-and-rotate
+skill, not raw eHP, is what the stance rewards. Constants: BalanceConfig.GUARD_*.
+
 
 ================================================================================
 THE CONTRACT — checklist every new piece of content MUST pass

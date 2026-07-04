@@ -1,8 +1,31 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Combat
 TITLE: Player Guard Stance — directional defense (front-strong, flank-weak)
 CREATED: 2026-07-03
 ---
+
+IMPLEMENTATION NOTES (2026-07-04)
+================================
+Shipped as a self-contained player-side directional-defense layer:
+  - TouchAction.GUARD + a tap-only shield button in TouchInputState (bottom-right of the
+    combat cluster, beside BACK) with a heater-shield glyph in TouchControllerRenderer.
+  - PlayerController: new momentary GUARDING state. tryGuard() sets Player.guarding=true and
+    ends the turn (TickCause.GUARD); the flag PERSISTS through that enemy turn and while IDLE,
+    and finishAction() clears it for ANY other action (cause != GUARD) BEFORE its tick fires, so
+    guard covers exactly the one enemy turn it buys. No move-while-guarded.
+  - Facing-arc model: GameMath.guardFacingMultiplier() (pure, full derivation comment). Front
+    arc (±60°) -> GUARD_FRONT_MULTIPLIER (0.35); side/back -> full damage. Player.applyDirectional
+    Damage(amount, attackerWorldX, attackerWorldY) scales the hit then runs the normal
+    dodge/armour/toughness pipeline. EnemyManager melee, ranged (lane origin), and charge attacks
+    now call applyDirectionalDamage with enemy.worldCenterX()/Y().
+  - Constants: GUARD_* multipliers + arc half-angles in BalanceConfig (source of truth), mirrored
+    in GameBalance; shield-overlay geometry/colour in EffectConstants.
+  - Feedback: GuardShieldRenderer (translucent blue bottom-screen arc, breathing pulse, disposed
+    in World). GuardHitListener drives "GUARDED N" (blue) on a front hit vs "FLANKED N" (red +
+    vignette) on a side/back hit — the contrast teaches the arc.
+Not built (left as future/optional per the doc): intent-icon "12 -> 4" guard preview, minimap
+guard cone, a fully direction-keyed hit vignette, and the pivot-guard upgrade. Environmental/boss
+AoE damage (barrels, danger tiles) intentionally bypasses the guard multiplier.
 
 OVERVIEW
 ========

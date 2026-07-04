@@ -3213,4 +3213,48 @@ public final class GameMath {
         float pulseFactor = 1f + telegraphStrength * pulseBonus;
         return popFactor * pulseFactor;
     }
+
+    /*
+     * Formula: guardFacingMultiplier — directional damage multiplier for a guarding player
+     *          (strategy-combat-order-4 player guard stance).
+     * Derivation:
+     *   facing = (facingX, facingY) is the player's unit facing vector (always cardinal after a
+     *   rotation snaps, but any unit vector resolves cleanly). toAttacker = normalize(attackerX -
+     *   playerX, attackerY - playerY) is the unit vector from the player toward the attacker.
+     *     alignment = dot(facing, toAttacker) in [-1, 1]
+     *   is the cosine of the angle between "where I face" and "where the hit comes from".
+     *   Classify by arc using cosine thresholds (cos is monotonically DECREASING on [0°,180°], so a
+     *   larger alignment means a smaller angle = more in front):
+     *     FRONT if alignment >= cos(frontHalfAngle)  -> return frontMultiplier
+     *     BACK  if alignment <= -cos(backHalfAngle)   -> return backMultiplier
+     *     SIDE  otherwise                             -> return sideMultiplier
+     *   With cardinal facing + a cardinal attacker lane, alignment lands on {1, 0, -1}, so the
+     *   default ±60° front arc (cos 60° = 0.5) catches ONLY the exactly-faced direction (align 1)
+     *   and treats both perpendicular lanes (align 0) as SIDE — exactly the four-way intent.
+     * Edge cases:
+     *   - Attacker on the player's own tile (degenerate zero-length toAttacker): treated as FRONT
+     *     (point-blank — the marine is bracing straight at it), so it gets the front reduction.
+     *   - facing is assumed unit length (Player invariant); a non-unit facing only scales alignment
+     *     and never flips its sign, so the arc classification stays robust.
+     *   - Half-angles are passed through MathUtils.cosDeg, which handles any degree input.
+     */
+    public static float guardFacingMultiplier(float facingX, float facingY,
+                                              float playerX, float playerY,
+                                              float attackerX, float attackerY,
+                                              float frontMultiplier, float sideMultiplier,
+                                              float backMultiplier,
+                                              float frontHalfAngleDegrees, float backHalfAngleDegrees) {
+        float toAttackerX = attackerX - playerX;
+        float toAttackerY = attackerY - playerY;
+        float distance    = (float) Math.sqrt(toAttackerX * toAttackerX + toAttackerY * toAttackerY);
+        if (distance <= 1e-5f) {
+            return frontMultiplier; // point-blank / same tile — brace straight at it
+        }
+        float alignment      = (facingX * toAttackerX + facingY * toAttackerY) / distance;
+        float frontThreshold = MathUtils.cosDeg(frontHalfAngleDegrees);
+        float backThreshold  = MathUtils.cosDeg(backHalfAngleDegrees);
+        if (alignment >= frontThreshold)  return frontMultiplier;
+        if (alignment <= -backThreshold)  return backMultiplier;
+        return sideMultiplier;
+    }
 }
