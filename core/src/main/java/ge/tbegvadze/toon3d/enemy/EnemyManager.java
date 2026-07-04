@@ -575,7 +575,7 @@ public final class EnemyManager implements EnemyHitTarget {
             case WIND_UP:       executeWindUp(enemy, playerColumn, playerRow, player);             break;
             case MOVE:          executeMove(enemy, plan, playerColumn, playerRow);                 break;
             case DEFEND:        executeDefend(enemy, plan);                                        break;
-            case SPECIAL:       // order-5 — no behaviour yet
+            case SPECIAL:       executeSpecial(enemy, plan, playerColumn, playerRow, player);      break;
             case WAIT:
             case STUNNED:
             default:            break; // holds position
@@ -673,12 +673,146 @@ public final class EnemyManager implements EnemyHitTarget {
     }
 
     // -------------------------------------------------------------------------
+    // SPECIAL ability execution (strategy-combat-order-5) — EXECUTE side
+    // Each damaging/board-affecting special re-validates fairness at execution just like a normal
+    // attack (R1-R3): the player who reads the telegraph and repositions during their turn is rewarded.
+    // -------------------------------------------------------------------------
+
+    /** Dispatches a committed SPECIAL to its ability handler. A null ability (defensive) holds position. */
+    private void executeSpecial(Enemy enemy, PlannedAction plan,
+                                int playerColumn, int playerRow, Player player) {
+        if (plan.specialAbility == null) return;
+        switch (plan.specialAbility) {
+            case BUFF_SELF:     executeBuffSelf(enemy);                                      break;
+            case DEBUFF_PLAYER: executeDebuffPlayer(enemy, playerColumn, playerRow, player); break;
+            case SUMMON:        executeSummon(enemy, playerColumn, playerRow);               break;
+            case AREA_STRIKE:   executeAreaStrike(enemy, playerColumn, playerRow, player);   break;
+            default:                                                                         break;
+        }
+    }
+
+    /**
+     * BUFF_SELF: the caster gains EMPOWERED, so every subsequent {@code scaledAttackDamage()} — the
+     * predicted number AND the real hit — is raised while the buff lasts. Telegraphed a turn ahead, so
+     * the counter is "kill the buffer before its empowered swing lands."
+     */
+    private void executeBuffSelf(Enemy enemy) {
+        enemy.state = EnemyState.ATTACKING;
+        enemy.triggerTelegraph();
+        if (statusEffectController != null) {
+            statusEffectController.apply(enemy, StatusType.EMPOWERED,
+                    EnemyConstants.BUFF_SELF_DURATION_TURNS, EnemyConstants.BUFF_SELF_EMPOWERED_PERCENT, this);
+        }
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("EMPOWERED", EventTextSystem.COLOR_GOLD);
+        }
+    }
+
+    /**
+     * DEBUFF_PLAYER: fires a control shot down the committed cardinal lane (R3-style re-validation). The
+     * player who stepped off the line during their turn dodges it entirely; otherwise they take a SLOWED
+     * or BLINDED debuff (resolved per archetype). Deals no HP damage — the intent icon shows no number.
+     */
+    private void executeDebuffPlayer(Enemy enemy, int playerColumn, int playerRow, Player player) {
+        enemy.state = EnemyState.ATTACKING;
+        enemy.triggerAttackAnim();
+        if (enemyAttackListener != null) {
+            enemyAttackListener.onRangedAttack(enemy, playerColumn, playerRow);
+        }
+        boolean stillValid = GameMath.chebyshevDistanceTiles(
+                        enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) <= enemy.type.attackRangeTiles()
+                && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                && hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+        if (!stillValid || statusEffectController == null) return;
+
+        StatusType debuff = debuffStatusFor(enemy.type);
+        int durationTurns = debuff == StatusType.BLINDED
+                ? EnemyConstants.DEBUFF_BLIND_DURATION_TURNS
+                : EnemyConstants.DEBUFF_SLOW_DURATION_TURNS;
+        statusEffectController.apply(player, debuff, durationTurns, 0, enemy);
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor(debuff == StatusType.BLINDED ? "BLINDED" : "SLOWED",
+                    EventTextSystem.COLOR_GREY);
+        }
+    }
+
+    /** Which control status a debuffing archetype inflicts: the eyes blind, the acid casters slow. */
+    private static StatusType debuffStatusFor(EnemyType type) {
+        switch (type) {
+            case EYE_TYRANT:
+            case VORTEX_EYE:
+                return StatusType.BLINDED;
+            default:
+                return StatusType.SLOWED;
+        }
+    }
+
+    /**
+     * SUMMON: spawns 1-2 chaff of the archetype's spawn type on empty adjacent tiles, bounded by the
+     * per-summoner cap AND the per-room live-enemy ceiling so the encounter's Threat-Point budget stays
+     * bounded (docs/balance-rule-system.txt). Counter: kill the summoner before the room floods.
+     */
+    private void executeSummon(Enemy enemy, int playerColumn, int playerRow) {
+        enemy.state = EnemyState.ATTACKING;
+        enemy.triggerTelegraph();
+        EnemyType summonType = summonTypeFor(enemy.type);
+        int requested = EnemyConstants.SUMMON_COUNT_MIN
+                + effectRandom.nextInt(EnemyConstants.SUMMON_COUNT_MAX - EnemyConstants.SUMMON_COUNT_MIN + 1);
+        int spawned = 0;
+        for (int directionIndex = 0; directionIndex < 4 && spawned < requested; directionIndex++) {
+            if (enemy.summonsSpawned >= EnemyConstants.SUMMON_PER_ENEMY_CAP)  break;
+            if (countLiveEnemies()   >= EnemyConstants.SUMMON_ROOM_LIVE_CAP)  break;
+            int neighbourColumn = enemy.tileColumn + STEP_COLUMNS[directionIndex];
+            int neighbourRow    = enemy.tileRow    + STEP_ROWS[directionIndex];
+            if (!isPassableForEnemy(neighbourColumn, neighbourRow, playerColumn, playerRow)) continue;
+            spawnEnemy(summonType, neighbourColumn, neighbourRow, currentDepth);
+            enemy.summonsSpawned++;
+            spawned++;
+        }
+        if (spawned > 0 && eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("SUMMON", EventTextSystem.COLOR_GREEN);
+        }
+    }
+
+    /** The chaff type a summoner spawns. Thematic per faction; a fast, cheap swarmer by default. */
+    private static EnemyType summonTypeFor(EnemyType type) {
+        switch (type) {
+            case BLIGHT_CORRUPTOR: return EnemyType.GHOUL;   // necrotic carrier raises the shambling dead
+            default:               return EnemyType.CRAWLER; // fast, fragile chaff
+        }
+    }
+
+    /**
+     * AREA_STRIKE: a telegraphed slam that hits the player if they are still within the strike radius
+     * (Chebyshev square) of the enemy. The player who read the icon and stepped out of the marked band
+     * during their turn takes nothing — reposition is the counter.
+     */
+    private void executeAreaStrike(Enemy enemy, int playerColumn, int playerRow, Player player) {
+        enemy.state = EnemyState.ATTACKING;
+        enemy.triggerAttackAnim();
+        if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
+        boolean inBlast = GameMath.chebyshevDistanceTiles(
+                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) <= EnemyConstants.AREA_STRIKE_RADIUS_TILES;
+        if (inBlast) {
+            player.applyDirectionalDamage(areaStrikeDamage(enemy),
+                    enemy.worldCenterX(), enemy.worldCenterY());
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // COMMIT step — decide the NEXT action from the resolved board (writes plan, never acts)
     // -------------------------------------------------------------------------
 
     /** Routes each archetype to its plan-computation logic (mirrors the old act-dispatch branching). */
     private void computeNextPlan(Enemy enemy, int playerColumn, int playerRow, Player player) {
         PlannedAction plan = enemy.plannedAction;
+        // Scripted archetypes consult their SPECIAL move-set first (order-5): on its cadence turn an
+        // enemy may commit a telegraphed buff/debuff/summon/area move in place of a plain attack/move,
+        // producing the readable pattern the player learns to outplay. Off-cadence (or when no ability's
+        // preconditions hold) it falls through to the normal archetype behaviour below.
+        if (tryCommitSpecial(enemy, plan, playerColumn, playerRow, player)) {
+            return;
+        }
         if (!enemy.type.isRanged()) {
             // Melee archetypes branch to their tactical VERB (balance idea 4, Pillar 2):
             //   SHELL_BRUTE — CHARGER: telegraphed rush; VOID_SHROUD — FLANKER: attack the blind
@@ -863,6 +997,109 @@ public final class EnemyManager implements EnemyHitTarget {
         } else {
             plan.set(IntentVerb.WAIT, enemy.tileColumn, enemy.tileRow);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // SPECIAL move-set selection (strategy-combat-order-5) — COMMIT side
+    // -------------------------------------------------------------------------
+
+    /**
+     * Tries to commit a SPECIAL ability this turn. Returns true (and writes the plan) only when the
+     * archetype has a move-set, this is one of its cadence turns, and at least one ability's
+     * preconditions hold. The no-repeat {@link MoveHistory} then picks the least-recently-used usable
+     * ability, so a multi-ability elite rotates its script rather than spamming one move.
+     */
+    private boolean tryCommitSpecial(Enemy enemy, PlannedAction plan,
+                                     int playerColumn, int playerRow, Player player) {
+        SpecialAbility[] moveSet = enemy.type.moveSet();
+        int cadence = enemy.type.specialAbilityCadenceTurns();
+        if (moveSet.length == 0 || cadence <= 0) return false;
+        if (enemy.turnCounter % cadence != 0)    return false;
+
+        SpecialAbility chosen = chooseSpecial(enemy, moveSet, playerColumn, playerRow);
+        if (chosen == null) return false;
+
+        commitSpecial(enemy, plan, chosen, playerColumn, playerRow);
+        enemy.moveHistory.record(chosen);
+        return true;
+    }
+
+    /**
+     * Picks the usable ability with the FEWEST recent uses (no-repeat), breaking ties randomly so a
+     * two-ability set alternates and a single-ability set is never blocked from acting. Returns null
+     * when no ability's preconditions currently hold (the enemy falls back to normal behaviour).
+     */
+    private SpecialAbility chooseSpecial(Enemy enemy, SpecialAbility[] moveSet,
+                                         int playerColumn, int playerRow) {
+        SpecialAbility best = null;
+        int bestRecentUses  = Integer.MAX_VALUE;
+        int tieCount        = 0;
+        for (int index = 0; index < moveSet.length; index++) {
+            SpecialAbility candidate = moveSet[index];
+            if (!isSpecialUsable(candidate, enemy, playerColumn, playerRow)) continue;
+            int recentUses = enemy.moveHistory.recentUses(candidate);
+            if (recentUses < bestRecentUses) {
+                bestRecentUses = recentUses;
+                best           = candidate;
+                tieCount       = 1;
+            } else if (recentUses == bestRecentUses) {
+                // Reservoir tie-break: each equally-stale ability has an equal chance to be chosen.
+                tieCount++;
+                if (effectRandom.nextInt(tieCount) == 0) best = candidate;
+            }
+        }
+        return best;
+    }
+
+    /** True when the given ability's preconditions currently hold for this enemy (weight() == 0 filter). */
+    private boolean isSpecialUsable(SpecialAbility ability, Enemy enemy, int playerColumn, int playerRow) {
+        switch (ability) {
+            case BUFF_SELF:
+                // No point re-buffing while EMPOWERED is still active.
+                return !enemy.getActiveEffects().get(StatusType.EMPOWERED).isActive();
+            case DEBUFF_PLAYER:
+                // A ranged control move: needs a clear cardinal firing line, like a shot.
+                return GameMath.chebyshevDistanceTiles(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                            <= enemy.type.attackRangeTiles()
+                        && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                        && hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+            case SUMMON:
+                return enemy.summonsSpawned < EnemyConstants.SUMMON_PER_ENEMY_CAP
+                        && countLiveEnemies() < EnemyConstants.SUMMON_ROOM_LIVE_CAP
+                        && hasEmptyAdjacentTile(enemy, playerColumn, playerRow);
+            case AREA_STRIKE:
+                // Only telegraph the slam when the player is close enough that it can plausibly land
+                // even after they take a step — one tile of grace beyond the strike radius.
+                return GameMath.chebyshevDistanceTiles(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                        <= EnemyConstants.AREA_STRIKE_RADIUS_TILES + 1;
+            default:
+                return false;
+        }
+    }
+
+    /** Writes the SPECIAL plan: focus tile + predicted-damage number (AREA_STRIKE only) for order-2. */
+    private void commitSpecial(Enemy enemy, PlannedAction plan, SpecialAbility ability,
+                               int playerColumn, int playerRow) {
+        int targetColumn = ability.targetsSelf() ? enemy.tileColumn : playerColumn;
+        int targetRow    = ability.targetsSelf() ? enemy.tileRow    : playerRow;
+        int predictedDamage = ability.dealsDamage() ? areaStrikeDamage(enemy) : 0;
+        plan.setSpecial(ability, targetColumn, targetRow, predictedDamage);
+    }
+
+    /** AREA_STRIKE slam damage: the enemy's scaled attack times the slam multiplier, minimum 1. */
+    private static int areaStrikeDamage(Enemy enemy) {
+        return Math.max(1, Math.round(
+                enemy.scaledAttackDamage() * EnemyConstants.AREA_STRIKE_DAMAGE_MULTIPLIER));
+    }
+
+    /** True when at least one cardinal neighbour tile is a legal spawn tile (empty, walkable, not the player). */
+    private boolean hasEmptyAdjacentTile(Enemy enemy, int playerColumn, int playerRow) {
+        for (int directionIndex = 0; directionIndex < 4; directionIndex++) {
+            int neighbourColumn = enemy.tileColumn + STEP_COLUMNS[directionIndex];
+            int neighbourRow    = enemy.tileRow    + STEP_ROWS[directionIndex];
+            if (isPassableForEnemy(neighbourColumn, neighbourRow, playerColumn, playerRow)) return true;
+        }
+        return false;
     }
 
     // -------------------------------------------------------------------------

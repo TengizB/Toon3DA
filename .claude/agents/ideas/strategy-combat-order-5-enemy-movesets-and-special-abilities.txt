@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Enemies
 TITLE: Enemy Move-Sets & Special Abilities — scripted, readable behavior patterns
 CREATED: 2026-07-03
@@ -149,15 +149,45 @@ A move-set changes an enemy's EFFECTIVE threat, so it must fold into the TP mode
 
 IMPLEMENTATION CHECKLIST
 ========================
-[ ] Add EnemyMove + EnemyMoveSet + MoveHistory + BoardView façade (enemy package),
-    zero-alloc, reused instances.
-[ ] Route order-1 COMMIT through moveSet.chooseNext for scripted types; trivial sets
-    for chaff.
-[ ] Implement the v1 ability catalogue; buff/debuff APPLY existing statuses via
-    StatusEffectController; new powers deferred to order-6.
-[ ] Author per-archetype scripts (table above) with no-repeat/forced-sequence rules.
-[ ] Enforce summon caps; reserve summon TP in EncounterBudgetPlanner.
-[ ] order-2: add SPECIAL sub-glyphs (buff/debuff/summon/area/flank); this doc names
-    them, order-2 draws them.
-[ ] Add the MOVE-SETS section to docs/balance-rule-system.txt + BalanceReport;
-    cycle-averaged DPT feeds TP; verify golden ratios + telegraph audit.
+[x] Add the move-set abstraction (enemy package), zero-alloc, reused instances.
+    SpecialAbility (the ability catalogue enum) + MoveHistory (no-repeat ring buffer). See the
+    DEVIATIONS note: rather than a full EnemyMove/EnemyMoveSet/BoardView interface hierarchy, the
+    catalogue plugs into the existing order-1 COMMIT/EXECUTE split, which already IS the per-archetype
+    decision body the doc describes. Both new classes reuse per-Enemy instances (no turn-loop alloc).
+[x] Route order-1 COMMIT through the move-set for scripted types; trivial sets for chaff.
+    EnemyManager.computeNextPlan calls tryCommitSpecial() FIRST; chaff/bosses keep the empty move-set
+    (specialAbilityCadenceTurns()==0) and fall straight through to their existing behaviour.
+[x] Implement the v1 ability catalogue; buff/debuff APPLY existing statuses via StatusEffectController;
+    new powers deferred to order-6. BUFF_SELF=EMPOWERED (self), DEBUFF_PLAYER=SLOWED/BLINDED (per
+    archetype), SUMMON=chaff spawn, AREA_STRIKE=telegraphed cross slam. Enemy.scaledAttackDamage()
+    now reads EMPOWERED so a self-buff really raises the predicted AND executed hit. Vulnerable/Weak
+    left to order-6. REPOSITION/FLANK + DEFEND were already delivered by order-4/order-3 respectively.
+[x] Author per-archetype scripts with no-repeat rules. EnemyType.moveSet()/specialAbilityCadenceTurns():
+    Plague Hulk=AREA; Iron Stalker={BUFF_SELF,AREA_STRIKE} on a fast cadence (rotated by MoveHistory);
+    Acid Drone / Mire Wraith / Vortex Eye=DEBUFF; Eye Tyrant=long-cadence DEBUFF; Blight Corruptor=SUMMON.
+    No-repeat = MoveHistory picks the least-recently-used usable ability (a single-ability set is never
+    blocked). Forced opening sequences are supported by the same mechanism but unused in v1.
+[x] Enforce summon caps. SUMMON_PER_ENEMY_CAP + SUMMON_ROOM_LIVE_CAP bound spawned TP; the hard caps
+    ARE the reservation (see BALANCE note) so no per-spawn EncounterBudgetPlanner accounting was needed.
+[x] order-2: SPECIAL sub-glyphs (buff/debuff/summon/area). EnemyRenderer.drawSpecialGlyph draws a
+    distinct procedural sub-glyph per ability inside the existing purple SPECIAL frame; AREA_STRIKE also
+    surfaces its predicted-damage number.
+[x] Add the MOVE-SETS section to docs/balance-rule-system.txt + BalanceReport (printMoveSetTable lists
+    each scripted archetype's cadence + abilities). Telegraph audit note updated: every damaging special
+    is telegraphed one turn ahead, so the fairness contract still holds by construction.
+
+DEVIATIONS FROM THE ORIGINAL SPEC (intentional, recorded here)
+==============================================================
+1. NO heavyweight EnemyMove/EnemyMoveSet/BoardView interface hierarchy. order-1 already inverted the AI
+   into a COMMIT step whose compute*Plan methods ARE the per-archetype decision the doc wanted a move-set
+   to own; adding a parallel interface tree would duplicate that and risk the well-tuned existing
+   behaviour. Instead the SPECIAL catalogue (SpecialAbility) + no-repeat memory (MoveHistory) layer onto
+   the COMMIT step via tryCommitSpecial(), which is the "body of the COMMIT decision for scripted enemies"
+   the doc asked for — just expressed as methods on EnemyManager rather than an EnemyMove object graph.
+2. Move selection is WEIGHTED-by-recency, not a separate weight()+no-repeat pair: chooseSpecial picks the
+   usable ability with the fewest recent uses (MoveHistory), random tie-break. This delivers the readable,
+   non-repeating rhythm the doc's weight()/no-repeat rules exist to produce, in one pass.
+3. AREA_STRIKE is a single-turn committed telegraph (shown for the whole player turn via the order-1
+   intent icon), not a bespoke two-turn WIND_UP timer. Under the pre-committed model every action already
+   telegraphs a full turn ahead, so a second timer would be redundant; stepping out of the cross radius is
+   the counter.

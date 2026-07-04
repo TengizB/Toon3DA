@@ -46,8 +46,15 @@ public final class PlannedAction {
     /** Turns of telegraph left before a WIND_UP attack lands; order-2 may render this as a countdown pip. */
     public int windUpTurnsRemaining = 0;
 
-    /** Archetype ability reference for a SPECIAL verb (order-5); null otherwise. */
+    /** Archetype ability reference for a SPECIAL verb (order-5); null otherwise. Mirrors {@link #specialAbility}. */
     public Object abilityRef = null;
+
+    /**
+     * The concrete SPECIAL ability committed this turn (strategy-combat-order-5); null unless
+     * {@link #verb} is {@link IntentVerb#SPECIAL}. The intent renderer reads this to pick the
+     * per-ability sub-glyph, and the EXECUTE step reads it to dispatch the ability behaviour.
+     */
+    public SpecialAbility specialAbility = null;
 
     /**
      * Overwrites all fields for a plain (non-attack) verb and marks the plan committed. A MOVE set
@@ -64,6 +71,7 @@ public final class PlannedAction {
         this.blockGain            = 0;
         this.windUpTurnsRemaining = 0;
         this.abilityRef           = null;
+        this.specialAbility       = null;
     }
 
     /**
@@ -81,6 +89,7 @@ public final class PlannedAction {
         this.blockGain            = 0;
         this.windUpTurnsRemaining = 0;
         this.abilityRef           = null;
+        this.specialAbility       = null;
     }
 
     /**
@@ -98,6 +107,7 @@ public final class PlannedAction {
         this.blockGain            = 0;
         this.windUpTurnsRemaining = 0;
         this.abilityRef           = null;
+        this.specialAbility       = null;
     }
 
     /** Overwrites all fields for an attack verb carrying a predicted-damage number. */
@@ -112,6 +122,7 @@ public final class PlannedAction {
         this.blockGain            = 0;
         this.windUpTurnsRemaining = 0;
         this.abilityRef           = null;
+        this.specialAbility       = null;
     }
 
     /**
@@ -130,6 +141,7 @@ public final class PlannedAction {
         this.blockGain            = blockGain;
         this.windUpTurnsRemaining = 0;
         this.abilityRef           = null;
+        this.specialAbility       = null;
     }
 
     /** Overwrites all fields for a WIND_UP telegraph carrying its predicted damage and countdown. */
@@ -144,5 +156,27 @@ public final class PlannedAction {
         this.blockGain            = 0;
         this.windUpTurnsRemaining = windUpTurnsRemaining;
         this.abilityRef           = null;
+        this.specialAbility       = null;
+    }
+
+    /**
+     * Overwrites all fields for a SPECIAL move (strategy-combat-order-5): the enemy will deploy the
+     * given archetype ability on its next turn. {@code predictedDamage} is 0 for non-damaging abilities
+     * (buff/debuff/summon) and the slam damage for AREA_STRIKE — the intent renderer only shows a number
+     * when it is positive. {@code targetColumn}/{@code targetRow} carries the ability's focus tile (the
+     * player's tile for board-targeting abilities, the enemy's own tile for BUFF_SELF).
+     */
+    public void setSpecial(SpecialAbility ability, int targetColumn, int targetRow, int predictedDamage) {
+        this.committed            = true;
+        this.verb                 = IntentVerb.SPECIAL;
+        this.targetColumn         = targetColumn;
+        this.targetRow            = targetRow;
+        this.fleeFromTarget       = false;
+        this.goalIsFixedTile      = false;
+        this.predictedDamage      = predictedDamage;
+        this.blockGain            = 0;
+        this.windUpTurnsRemaining = 0;
+        this.abilityRef           = ability;
+        this.specialAbility       = ability;
     }
 }

@@ -19,6 +19,7 @@ import ge.tbegvadze.toon3d.enemy.EnemyState;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.enemy.IntentVerb;
 import ge.tbegvadze.toon3d.enemy.PlannedAction;
+import ge.tbegvadze.toon3d.enemy.SpecialAbility;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.EffectConstants;
@@ -691,7 +692,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 float bob = GameMath.intentIconBobOffset(statusAnimationClock, phaseRadians,
                         INTENT_ICON_BOB_AMPLITUDE, INTENT_ICON_BOB_HZ);
 
-                boolean showsNumber = intentShowsNumber(verb);
+                // SPECIAL abilities show a number only when they deal damage (AREA_STRIKE); buffs,
+                // debuffs and summons carry no predicted-damage number (order-5).
+                boolean showsNumber = intentShowsNumber(verb)
+                        || (verb == IntentVerb.SPECIAL && plan.predictedDamage > 0);
                 float numberBand = showsNumber ? iconSize * 0.55f : 0f;
                 float baseY = intentClusterTops[sortedPosition] + bob;
                 float iconCenterY = baseY + numberBand + INTENT_ICON_Y_OFFSET_ABOVE_HEALTHBAR + drawnSize / 2f;
@@ -894,11 +898,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 drawCenteredQuad(centerX, centerY - glyph * 0.22f, glyph * 0.34f, glyph * 0.34f, 45f);
                 break;
             case SPECIAL:
-                // Starburst/rune — a four-armed cross plus a rotated cross (8-point star).
-                drawCenteredQuad(centerX, centerY, glyph * 0.78f, thickness, 0f);
-                drawCenteredQuad(centerX, centerY, glyph * 0.78f, thickness, 90f);
-                drawCenteredQuad(centerX, centerY, glyph * 0.70f, thickness * 0.8f, 45f);
-                drawCenteredQuad(centerX, centerY, glyph * 0.70f, thickness * 0.8f, 135f);
+                drawSpecialGlyph(plan.specialAbility, centerX, centerY, glyph, thickness);
                 break;
             case STUNNED:
                 // X — a wasted turn.
@@ -912,6 +912,56 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 drawCenteredQuad(centerX - glyph * 0.28f, centerY, dot, dot, 0f);
                 drawCenteredQuad(centerX,                 centerY, dot, dot, 0f);
                 drawCenteredQuad(centerX + glyph * 0.28f, centerY, dot, dot, 0f);
+                break;
+        }
+    }
+
+    /**
+     * Draws the per-ability sub-glyph inside the purple SPECIAL frame (strategy-combat-order-5): an
+     * up-arrow for a self-buff, a down-arrow for a player debuff, a spawn-rune for a summon, and a
+     * radiating burst for an area strike. A null ability (defensive fallback) draws the generic
+     * eight-point starburst. Screen space is Y-up, so "up" is +Y (90°).
+     */
+    private void drawSpecialGlyph(SpecialAbility ability, float centerX, float centerY,
+                                  float glyph, float thickness) {
+        SpecialAbility.SubGlyph subGlyph = ability == null ? null : ability.telegraphSubGlyph();
+        if (subGlyph == null) {
+            // Generic starburst — a four-armed cross plus a rotated cross (8-point star).
+            drawCenteredQuad(centerX, centerY, glyph * 0.78f, thickness, 0f);
+            drawCenteredQuad(centerX, centerY, glyph * 0.78f, thickness, 90f);
+            drawCenteredQuad(centerX, centerY, glyph * 0.70f, thickness * 0.8f, 45f);
+            drawCenteredQuad(centerX, centerY, glyph * 0.70f, thickness * 0.8f, 135f);
+            return;
+        }
+        switch (subGlyph) {
+            case BUFF:
+                // Up-arrow — "getting stronger."
+                drawArrowGlyph(centerX, centerY, glyph, thickness, 90f);
+                break;
+            case DEBUFF:
+                // Down-arrow — "you're being weakened."
+                drawArrowGlyph(centerX, centerY, glyph, thickness, -90f);
+                break;
+            case SUMMON: {
+                // Spawn-rune — a parent diamond shedding two smaller offspring diamonds below it.
+                drawCenteredQuad(centerX, centerY + glyph * 0.16f, glyph * 0.36f, glyph * 0.36f, 45f);
+                float offspring = glyph * 0.22f;
+                drawCenteredQuad(centerX - glyph * 0.26f, centerY - glyph * 0.22f, offspring, offspring, 45f);
+                drawCenteredQuad(centerX + glyph * 0.26f, centerY - glyph * 0.22f, offspring, offspring, 45f);
+                break;
+            }
+            case AREA: {
+                // Burst — a core diamond with four diamonds radiating outward along the cardinals.
+                float radius = glyph * 0.30f;
+                drawCenteredQuad(centerX, centerY, glyph * 0.24f, glyph * 0.24f, 45f);
+                float shard = glyph * 0.20f;
+                drawCenteredQuad(centerX + radius, centerY, shard, shard, 45f);
+                drawCenteredQuad(centerX - radius, centerY, shard, shard, 45f);
+                drawCenteredQuad(centerX, centerY + radius, shard, shard, 45f);
+                drawCenteredQuad(centerX, centerY - radius, shard, shard, 45f);
+                break;
+            }
+            default:
                 break;
         }
     }

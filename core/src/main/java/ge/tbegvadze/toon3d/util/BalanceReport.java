@@ -58,6 +58,8 @@ public final class BalanceReport {
         System.out.println();
         printBlockTable();
         System.out.println();
+        printMoveSetTable();
+        System.out.println();
         printUpgradeCardTable();
         System.out.println();
         printScarcityTable();
@@ -218,6 +220,33 @@ public final class BalanceReport {
         System.out.printf("%-12s %8d %8d %7d %10.2f %-6s%n",
                 roleName, baseBlock, BalanceConfig.BLOCK_MAX, BalanceConfig.BLOCK_DECAY_TURNS,
                 survivalTurns, inBand ? "OK" : "OUT!");
+    }
+
+    // -----------------------------------------------------------------------------------
+    // SPECIAL MOVE-SETS (order-5) — each scripted archetype's ability cadence and catalogue.
+    // A move-set changes an enemy's EFFECTIVE threat: buff/debuff/area moves raise its blended DPT and
+    // summons add spawned TP. The hard summon caps bound that headroom so the encounter budget holds.
+    // This table lists which archetypes are scripted; the TP bands above still gate their base stats.
+    // -----------------------------------------------------------------------------------
+    private static void printMoveSetTable() {
+        System.out.println("SPECIAL MOVE-SETS (order-5)");
+        System.out.println("------------------------------------------------------------------------------------");
+        System.out.printf("%-16s %-11s %-9s %s%n", "archetype", "role", "cadence", "abilities");
+        System.out.println("------------------------------------------------------------------------------------");
+        for (ge.tbegvadze.toon3d.enemy.EnemyType type : ge.tbegvadze.toon3d.enemy.EnemyType.values()) {
+            ge.tbegvadze.toon3d.enemy.SpecialAbility[] moveSet = type.moveSet();
+            if (moveSet.length == 0) continue; // trivial chaff/boss — no scripted specials
+            StringBuilder abilities = new StringBuilder();
+            for (int index = 0; index < moveSet.length; index++) {
+                if (index > 0) abilities.append(", ");
+                abilities.append(moveSet[index].name());
+            }
+            System.out.printf("%-16s %-11s %-9d %s%n",
+                    type.displayName(), type.role().name(),
+                    type.specialAbilityCadenceTurns(), abilities);
+        }
+        System.out.println("------------------------------------------------------------------------------------");
+        System.out.println("cadence = enemy turns between specials; every damaging special is telegraphed 1 turn ahead.");
     }
 
     // -----------------------------------------------------------------------------------

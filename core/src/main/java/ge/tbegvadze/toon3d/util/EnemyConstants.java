@@ -261,6 +261,43 @@ public final class EnemyConstants {
     public static final float CORRUPTOR_ACCENT_G = 1.00f;
     public static final float CORRUPTOR_ACCENT_B = 0.10f;
 
+    // =====================================================================
+    // Special-ability move-sets (strategy-combat-order-5)
+    // A scripted archetype consults its move-set on a fixed cadence, producing a readable rhythm the
+    // player learns and plans around. Each damaging special is telegraphed one turn ahead (order-1),
+    // so no fairness rule is broken. All numbers here so nothing is hardcoded (split-constants rule).
+    // =====================================================================
+
+    /** Enemy turns between special-ability attempts for a caster (Acid Drone / Mire Wraith / Vortex Eye). */
+    public static final int SPECIAL_CADENCE_CASTER = 3;
+    /** Frequent, layered elite script (Iron Stalker) — a special roughly every other turn. */
+    public static final int SPECIAL_CADENCE_ELITE  = 2;
+    /** Slow, heavy specials (Plague Hulk area slam, Blight Corruptor summon, Eye Tyrant blind). */
+    public static final int SPECIAL_CADENCE_SLOW   = 4;
+
+    /** How many recent picks the per-enemy no-repeat history tracks (StS "cannot repeat" window). */
+    public static final int MOVE_HISTORY_SIZE = 4;
+
+    // BUFF_SELF — the caster gains EMPOWERED (outgoing-damage buff). Enemy-specific values so the buff
+    // prices into the enemy's Threat Points independently of the player's stim buff.
+    public static final int BUFF_SELF_EMPOWERED_PERCENT = 40;
+    public static final int BUFF_SELF_DURATION_TURNS    = 3;
+
+    // DEBUFF_PLAYER — control applied down a cardinal line. Duration in world turns.
+    public static final int DEBUFF_SLOW_DURATION_TURNS  = 3;
+    public static final int DEBUFF_BLIND_DURATION_TURNS = 2;
+
+    // SUMMON — spawn chaff on empty adjacent tiles. The hard caps bound the encounter-budget headroom
+    // (docs/balance-rule-system.txt): a per-summoner ceiling AND a per-room live-enemy ceiling.
+    public static final int SUMMON_COUNT_MIN     = 1;
+    public static final int SUMMON_COUNT_MAX     = 2;
+    public static final int SUMMON_PER_ENEMY_CAP = 4;
+    public static final int SUMMON_ROOM_LIVE_CAP = 14;
+
+    // AREA_STRIKE — telegraphed slam hitting every tile within this cross radius of the enemy.
+    public static final int   AREA_STRIKE_RADIUS_TILES      = 1;
+    public static final float AREA_STRIKE_DAMAGE_MULTIPLIER = 1.35f;
+
     // Hell Baron (depth 15) — armored greater demon; firewall + enrage
     public static final int HELL_BARON_MAX_HP               = 700;
     public static final int HELL_BARON_DEPTH                = 15;
