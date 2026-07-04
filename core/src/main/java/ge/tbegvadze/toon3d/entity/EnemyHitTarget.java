@@ -55,4 +55,26 @@ public interface EnemyHitTarget {
      * @param magnitudePerTurn burn damage applied each turn
      */
     default void applyBurningStatus(Object enemy, int turns, int magnitudePerTurn) {}
+
+    /**
+     * Applies (or refreshes) a VULNERABLE mark on the given enemy (strategy-combat-order-6): while it
+     * lasts the target takes more damage from every incoming hit, and each application adds a stack up
+     * to the balance-capped maximum. The "marking shot" setup — land a cheap mark, then dump the big
+     * weapon for a burst that clears the golden-ratio TTK a turn early.
+     * Default: no-op; EnemyManager overrides with the real status application.
+     *
+     * @param enemy the token returned by enemyAt()
+     * @param turns mark duration in world turns
+     */
+    default void applyVulnerableStatus(Object enemy, int turns) {}
+
+    /**
+     * Applies (or refreshes) an EXPOSED flag on the given enemy (strategy-combat-order-6): the next hit
+     * into the target ignores its Block. The dedicated answer to turtling, Block-stacking enemies for a
+     * build without an armor-piercing weapon. Default: no-op; EnemyManager overrides.
+     *
+     * @param enemy the token returned by enemyAt()
+     * @param turns how many world turns the flag stays armed before it lapses unused
+     */
+    default void applyExposedStatus(Object enemy, int turns) {}
 }

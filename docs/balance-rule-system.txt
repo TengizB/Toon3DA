@@ -92,8 +92,11 @@ When damage D lands on ANY combat actor, it is resolved in exactly this order.
 Implemented once so enemy and player agree; the numeric steps are pure GameMath.
 
    1. Directional/Guard modifier (player only, order-4):  D' = D * facingMultiplier
-   2. Vulnerable/Weak power modifiers (order-6, if present): D'' = D' * powerMult
+   2. Power / positioning modifiers (order-6, if present): D'' = D' * powerMult
+        powerMult = weak(attacker) * vulnerable(target) * backstab(attacker-behind-facing)
+        EXPOSED (order-6) is not a multiplier — it sets ignoreBlock=true for step 3 (one hit).
    3. BLOCK absorption:   absorbed = min(block, D'')  [GameMath.blockAbsorbed]
+                          (skipped entirely when the target is EXPOSED — order-6 anti-turtle)
                           block -= absorbed ; D''' = D'' - absorbed
    4. Flat armor reduction (existing):  D'''' = max(0, D''' - armorReduction)
    5. Subtract from HP.
@@ -129,6 +132,33 @@ which keeps the enemy's effective TTK inside its golden-ratio band (the enemy si
 "gets a turn back"). Since GUARD_SIDE/BACK stay at 1.0, guarding vs a flanker (a MOVE
 intent repositioning off your facing) yields zero mitigation — the read-and-rotate
 skill, not raw eHP, is what the stance rewards. Constants: BalanceConfig.GUARD_*.
+
+TACTICAL MODIFIERS (order-6) — the setup-then-payoff power layer. Three new StatusTypes
+plug into the SAME tick engine as EMPOWERED (no new tick system); they are passive
+multipliers/flags read at pipeline STEP 2/3, never per-turn DoT. All potency lives in
+EffectConstants (VULNERABLE_*, WEAK_*, EXPOSED_*, BACKSTAB_*); the pure multipliers live in
+GameMath (vulnerableDamageMultiplier / weakDamageMultiplier / backstabDamageMultiplier).
+   • VULNERABLE — the marked target takes +VULNERABLE_DAMAGE_PERCENT% per stack (default +50%),
+     STACK_MAGNITUDE-capped at VULNERABLE_MAX_STACKS (default 2) so a stacking setup shaves
+     ~1 turn off a soldier's TTK but can NEVER multiply a boss into a trivial 2-turn kill
+     (respects the boss ruleset). Source: the Railgun marking slug (applied AFTER its hit, so it
+     sets up the NEXT shot). Priced as an offensive conditional — see the MODIFIERS living table.
+   • WEAK — the debuffed actor deals -WEAK_DAMAGE_PERCENT% (default -25%), floored at 0. Symmetric:
+     enemies apply it to the player (the acid casters' DEBUFF_PLAYER → the marine's HUD damage
+     dims), and it is available as an enemy-softening debuff. Folded into scaledAttackDamage /
+     the player's outgoing hit, so a Weakened actor's telegraphed number AND its executed hit drop
+     together — legible feedback.
+   • EXPOSED — the next hit into the target ignores its Block (order-3), then the flag clears (ONE
+     hit, never permanent, so it does not invalidate the DEFEND counter it answers). Source: the
+     Plasma Rifle's piercing bolt. This is the build answer to turtling enemies without an
+     armor-piercing weapon, alongside status-DoT (which bypasses Block entirely).
+   • BACKSTAB/FLANK — a player hit landed from BEHIND an enemy's implicit facing (the cardinal it
+     last moved/attacked along) deals +BACKSTAB_DAMAGE_PERCENT% (default +30%). Mirror of the enemy
+     flanker vs a guarding player. Priced as a CONDITIONAL (like crit): it requires setup/
+     positioning, so its reliable value is self-limiting and it stays a nudge, not an execution
+     check — it must not push a weapon's effective power-score out of its role band. See the
+     MODIFIERS table (BalanceReport.printModifiersTable) for each power's multiplier, cap, and its
+     effect on the reference SOLDIER TTK.
 
 
 ================================================================================

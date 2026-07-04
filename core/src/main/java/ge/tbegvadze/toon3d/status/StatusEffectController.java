@@ -76,7 +76,7 @@ public final class StatusEffectController {
         } else {
             switch (stackMode) {
                 case STACK_MAGNITUDE:
-                    existing.stacks         = Math.min(existing.stacks + 1, EffectConstants.POISON_MAX_STACKS);
+                    existing.stacks         = Math.min(existing.stacks + 1, stackCapFor(type));
                     existing.remainingTurns = Math.max(existing.remainingTurns, effectiveDuration);
                     break;
                 case REFRESH_DURATION:
@@ -216,8 +216,13 @@ public final class StatusEffectController {
             case BLINDED:
             case SLOWED:
             case EMPOWERED:
-                // These effects work by the renderer/controller reading the active EnumMap;
-                // no per-tick action is needed beyond keeping the remaining turns count.
+            case VULNERABLE:
+            case WEAK:
+            case EXPOSED:
+                // These effects work by the renderer/controller/mitigation-pipeline reading the active
+                // EnumMap; no per-tick action is needed beyond keeping the remaining turns count. The
+                // order-6 powers (VULNERABLE/WEAK/EXPOSED) are passive multipliers/flags exactly like
+                // EMPOWERED — they deal no tick damage of their own.
                 break;
         }
     }
@@ -239,6 +244,10 @@ public final class StatusEffectController {
             case BLINDED:
             case SLOWED:
             case EMPOWERED:
+            case VULNERABLE:
+            case WEAK:
+            case EXPOSED:
+                // Passive order-6 powers — read by the mitigation pipeline, no per-tick action.
                 break;
         }
     }
@@ -251,23 +260,46 @@ public final class StatusEffectController {
 
     /*
      * Formula: stackModeFor
-     * Derivation: one-to-one mapping from design spec (roguelike_order_8):
-     *   Poison   → STACK_MAGNITUDE (each application adds +1 stack)
-     *   Burning  → REFRESH_DURATION (re-application resets to the longer timer, no stack)
-     *   Empowered→ REFRESH_DURATION (re-stim refreshes, does not stack to ×2.25)
+     * Derivation: one-to-one mapping from design spec (roguelike_order_8 + strategy-combat-order-6):
+     *   Poison     → STACK_MAGNITUDE (each application adds +1 stack)
+     *   Vulnerable → STACK_MAGNITUDE (order-6: each mark adds a stack up to VULNERABLE_MAX_STACKS so
+     *                a setup build can layer marks, but a small cap keeps it off a boss's neck)
+     *   Burning    → REFRESH_DURATION (re-application resets to the longer timer, no stack)
+     *   Empowered  → REFRESH_DURATION (re-stim refreshes, does not stack to ×2.25)
+     *   Weak       → REFRESH_DURATION (order-6: re-application refreshes the debuff window)
+     *   Exposed    → REFRESH_DURATION (order-6: a one-hit flag; re-applying keeps it armed longer)
      *   All control effects → REPLACE_IF_LONGER (keep whichever lasts longer)
      * Edge cases: default branch covers any future type added before this switch is updated.
      */
     private static StackMode stackModeFor(StatusType type) {
         switch (type) {
-            case POISONED:   return StackMode.STACK_MAGNITUDE;
+            case POISONED:
+            case VULNERABLE: return StackMode.STACK_MAGNITUDE;
             case BLEED:
             case BURNING:
-            case EMPOWERED:  return StackMode.REFRESH_DURATION;
+            case EMPOWERED:
+            case WEAK:
+            case EXPOSED:    return StackMode.REFRESH_DURATION;
             case STUNNED:
             case BLINDED:
             case SLOWED:
             default:         return StackMode.REPLACE_IF_LONGER;
+        }
+    }
+
+    /*
+     * Formula: stackCapFor
+     * Derivation: the per-type ceiling for STACK_MAGNITUDE effects. Poison keeps its own generous
+     *   cap; Vulnerable gets the tight VULNERABLE_MAX_STACKS (order-6 balance contract) so a stacking
+     *   setup can multiply a chaff's TTK down by a turn without trivializing a boss's eHP.
+     * Edge cases: any non-stacking type returns 1 (the default) — harmless, since the STACK_MAGNITUDE
+     *   branch is the only caller and only STACK_MAGNITUDE types ever reach it.
+     */
+    private static int stackCapFor(StatusType type) {
+        switch (type) {
+            case POISONED:   return EffectConstants.POISON_MAX_STACKS;
+            case VULNERABLE: return EffectConstants.VULNERABLE_MAX_STACKS;
+            default:         return 1;
         }
     }
 }

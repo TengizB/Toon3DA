@@ -131,6 +131,31 @@ public final class EffectConstants {
     public static final int   EMPOWERED_DAMAGE_PERCENT      = 50;
     public static final int   EMPOWERED_DURATION            = 5;
 
+    // ─── strategy-combat-order-6: tactical-modifier POWERS (Vulnerable / Weak / Exposed) ───
+    // New StatusTypes that plug into the SAME tick engine as EMPOWERED (no new tick system). They
+    // are passive multipliers/flags read by the shared mitigation pipeline (docs/balance-rule-
+    // system.txt), not per-turn DoT. Magnitudes are combat multipliers, so they are cross-referenced
+    // by BalanceConfig's MODIFIERS note and the BalanceReport MODIFIERS section (kept here beside
+    // EMPOWERED for a single status-tuning block, matching the existing EMPOWERED_* precedent).
+    /** VULNERABLE: the marked host takes +this% damage per stack from incoming hits (offensive setup). */
+    public static final int   VULNERABLE_DAMAGE_PERCENT     = 50;
+    /** World turns a VULNERABLE mark lasts. Re-application REFRESHES the timer and adds a stack. */
+    public static final int   VULNERABLE_DURATION           = 2;
+    /** Hard cap on VULNERABLE stacks so a build can't multiply a boss into a trivial 2-turn kill. */
+    public static final int   VULNERABLE_MAX_STACKS         = 2;
+    /** WEAK: the debuffed host deals -this% damage while active (softens telegraphed hits). */
+    public static final int   WEAK_DAMAGE_PERCENT           = 25;
+    /** World turns a WEAK debuff lasts (REFRESH_DURATION on re-application). */
+    public static final int   WEAK_DURATION                 = 2;
+    /** EXPOSED: while active the NEXT hit into the host ignores its Block (anti-turtle). Cleared on use. */
+    public static final int   EXPOSED_DURATION              = 2;
+    /**
+     * Backstab/flank positioning payoff: a player hit landed from BEHIND an enemy's facing deals
+     * +this%. A modest ±nudge (not a mandatory combo) that rewards the maneuvering the intent
+     * telegraphs enable — bait a MOVE, circle behind, punish. Priced as a conditional (like crit).
+     */
+    public static final int   BACKSTAB_DAMAGE_PERCENT       = 30;
+
     // Status effect visual — player screen-edge vignettes and enemy billboard tints
     public static final float STATUS_VIGNETTE_MAX_ALPHA     = 0.22f;
     public static final float STATUS_BLIND_VIGNETTE_ALPHA   = 0.65f;

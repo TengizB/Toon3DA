@@ -3,6 +3,7 @@ package ge.tbegvadze.toon3d.entity;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
@@ -65,6 +66,10 @@ public class PlasmaRifle extends Weapon {
                     int damageThisHit = damageAtDistance(distanceTiles);
                     setLastHitEnemy(enemy, damageThisHit, enemyHitTarget.isAtFullHp(enemy));
                     enemyHitTarget.applyDamageTo(enemy, damageThisHit);
+                    // Shield-shredding bolt (strategy-combat-order-6): piercing plasma leaves the target
+                    // EXPOSED, so the NEXT hit ignores its Block — the answer to a turtling enemy for a
+                    // build without an armor-piercing weapon. Applied after this hit so it sets up the follow-up.
+                    enemyHitTarget.applyExposedStatus(enemy, EffectConstants.EXPOSED_DURATION);
                     dispatchHitCallbacks(new FireResult(false, distanceTiles));
                     clearLastHit();
                     hitEnemy = true;

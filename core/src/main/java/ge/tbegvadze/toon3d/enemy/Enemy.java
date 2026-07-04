@@ -32,6 +32,15 @@ public class Enemy implements StatusHost {
     public int tileColumn;
     public int tileRow;
 
+    /**
+     * Implicit cardinal FACING (strategy-combat-order-6): the unit direction this enemy last moved or
+     * attacked along, used for the player's backstab/flank bonus. (0,0) until the enemy first moves or
+     * attacks — {@link GameMath#isAttackerBehindFacing} treats that as "no backstab" (safe default).
+     * Maintained by EnemyManager (set on every commitMove and on each attack toward the player).
+     */
+    public int facingColumn = 0;
+    public int facingRow    = 0;
+
     public int        health;
     /** Effective max HP for this instance — may exceed type.maxHealth() on deeper floors. */
     public int        maxHealth;
@@ -199,7 +208,41 @@ public class Enemy implements StatusHost {
      * here means the same value drives both the committed predicted-damage number and the executed hit.
      */
     public int scaledAttackDamage() {
-        return Math.max(1, Math.round(type.attackDamage() * attackDamageMultiplier * empoweredDamageMultiplier()));
+        return Math.max(1, Math.round(type.attackDamage() * attackDamageMultiplier
+                * empoweredDamageMultiplier() * weakOutgoingMultiplier()));
+    }
+
+    /**
+     * Returns this enemy's WEAK outgoing-damage multiplier (strategy-combat-order-6): {@code 1 - P/100}
+     * while a WEAK debuff is active, else 1.0. Because {@link #scaledAttackDamage} folds it in, a
+     * WEAK-ened enemy's telegraphed predicted-damage number AND its executed hit both drop together —
+     * the player SEES their debuff working. Softening the room is a defensive alternative to racing it.
+     */
+    public float weakOutgoingMultiplier() {
+        StatusEffect weakEffect = activeEffects.get(StatusType.WEAK);
+        return GameMath.weakDamageMultiplier(weakEffect != null && weakEffect.isActive(),
+                EffectConstants.WEAK_DAMAGE_PERCENT);
+    }
+
+    /**
+     * Returns the active VULNERABLE stack count (strategy-combat-order-6), or 0 when unmarked. The
+     * caller (EnemyManager mitigation pipeline) turns this into the incoming-damage multiplier via
+     * {@link GameMath#vulnerableDamageMultiplier}.
+     */
+    public int vulnerableStacks() {
+        StatusEffect vulnerableEffect = activeEffects.get(StatusType.VULNERABLE);
+        return (vulnerableEffect != null && vulnerableEffect.isActive()) ? vulnerableEffect.getStacks() : 0;
+    }
+
+    /** True while an EXPOSED flag is active (strategy-combat-order-6): the next hit ignores this enemy's Block. */
+    public boolean isExposed() {
+        StatusEffect exposedEffect = activeEffects.get(StatusType.EXPOSED);
+        return exposedEffect != null && exposedEffect.isActive();
+    }
+
+    /** Clears the EXPOSED flag after a hit has consumed it (one hit, not permanent — the anti-turtle contract). */
+    public void consumeExposed() {
+        activeEffects.get(StatusType.EXPOSED).reset();
     }
 
     /**
@@ -237,9 +280,23 @@ public class Enemy implements StatusHost {
      * remainder. See docs/balance-rule-system.txt for the full 5-step order.
      */
     public void applyDamage(int amount) {
-        int absorbed = GameMath.blockAbsorbed(block, amount);
-        block -= absorbed;
-        int remaining = amount - absorbed;
+        applyDamage(amount, false);
+    }
+
+    /**
+     * Block → armor → HP mitigation with an optional EXPOSED override (strategy-combat-order-6).
+     * When {@code ignoreBlock} is true the hit skips Block absorption entirely and bites straight
+     * into armor/HP — the answer to a turtling, Block-stacking enemy without an armor-piercing weapon.
+     * The caller (EnemyManager) sets this from {@link #isExposed()} and then {@link #consumeExposed()}
+     * so the shred lasts exactly ONE hit, never permanently.
+     */
+    public void applyDamage(int amount, boolean ignoreBlock) {
+        int remaining = amount;
+        if (!ignoreBlock) {
+            int absorbed = GameMath.blockAbsorbed(block, amount);
+            block -= absorbed;
+            remaining = amount - absorbed;
+        }
         if (remaining <= 0) return;             // fully braced — HP untouched this turn
         int afterArmor = Math.max(0, remaining - armor);
         health = Math.max(0, health - afterArmor);

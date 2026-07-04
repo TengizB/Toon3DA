@@ -22,6 +22,7 @@ import ge.tbegvadze.toon3d.enemy.PlannedAction;
 import ge.tbegvadze.toon3d.enemy.SpecialAbility;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
+import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
@@ -361,6 +362,25 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 spriteBlue  = GameMath.lerp(spriteBlue,  0.15f, tintStrength);
             }
 
+            // Order-6 power indicators — layered over any DoT tint so a marked target still reads.
+            // Colours come from the shared CombatPalette (one combat colour language): VULNERABLE red
+            // ("hit this now"), EXPOSED purple (Block shredded), WEAK a grey-purple dampening.
+            if (enemy.getActiveEffects().get(StatusType.VULNERABLE).isActive()) {
+                spriteRed   = GameMath.lerp(spriteRed,   CombatPalette.VULNERABLE_RED,   tintStrength);
+                spriteGreen = GameMath.lerp(spriteGreen, CombatPalette.VULNERABLE_GREEN, tintStrength);
+                spriteBlue  = GameMath.lerp(spriteBlue,  CombatPalette.VULNERABLE_BLUE,  tintStrength);
+            }
+            if (enemy.isExposed()) {
+                spriteRed   = GameMath.lerp(spriteRed,   CombatPalette.EXPOSED_RED,   tintStrength);
+                spriteGreen = GameMath.lerp(spriteGreen, CombatPalette.EXPOSED_GREEN, tintStrength);
+                spriteBlue  = GameMath.lerp(spriteBlue,  CombatPalette.EXPOSED_BLUE,  tintStrength);
+            }
+            if (enemy.getActiveEffects().get(StatusType.WEAK).isActive()) {
+                spriteRed   = GameMath.lerp(spriteRed,   CombatPalette.WEAK_RED,   tintStrength);
+                spriteGreen = GameMath.lerp(spriteGreen, CombatPalette.WEAK_GREEN, tintStrength);
+                spriteBlue  = GameMath.lerp(spriteBlue,  CombatPalette.WEAK_BLUE,  tintStrength);
+            }
+
             // Telegraph tint: brief danger flash at the instant of attack
             float telegraphStrength = enemy.getTelegraphStrength();
             if (telegraphStrength > 0f) {
@@ -666,6 +686,16 @@ public final class EnemyRenderer implements Renderable, Disposable {
         if (anyIntent) {
             int playerTileColumn = (int) (playerWorldX / CELL_SIZE);
             int playerTileRow    = (int) (playerWorldY / CELL_SIZE);
+
+            // Priority read (strategy-combat-order-6): find the biggest committed hit this turn so its
+            // frame can be brightened — teaching the "who to kill first" read without ever auto-playing.
+            int highestPredictedDamage = 0;
+            for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+                if (!drawIntentFlags[sortedPosition]) continue;
+                int predicted = enemies.get(sortedIndices[sortedPosition]).plannedAction.predictedDamage;
+                if (predicted > highestPredictedDamage) highestPredictedDamage = predicted;
+            }
+
             batch.begin();
             for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
                 if (!drawIntentFlags[sortedPosition]) continue;
@@ -704,6 +734,18 @@ public final class EnemyRenderer implements Renderable, Disposable {
                         && isSameCardinalTile(enemy.tileColumn, enemy.tileRow, playerTileColumn, playerTileRow);
 
                 resolveIntentFrameColor(verb, intentFrameColor);
+                // Priority read (order-6): brighten the frame of the biggest committed hit AND of
+                // support casters (BUFF_SELF) — "kill the buffer / the big number first" — so the
+                // salient target pops. Pure emphasis on the existing frame; never an auto-play prompt.
+                boolean isPriorityThreat = highestPredictedDamage > 0
+                        && plan.predictedDamage == highestPredictedDamage;
+                boolean isSupportCaster  = verb == IntentVerb.SPECIAL
+                        && plan.specialAbility == SpecialAbility.BUFF_SELF;
+                if (isPriorityThreat || isSupportCaster) {
+                    intentFrameColor[0] = GameMath.lerp(intentFrameColor[0], 1f, INTENT_PRIORITY_FRAME_BRIGHTEN);
+                    intentFrameColor[1] = GameMath.lerp(intentFrameColor[1], 1f, INTENT_PRIORITY_FRAME_BRIGHTEN);
+                    intentFrameColor[2] = GameMath.lerp(intentFrameColor[2], 1f, INTENT_PRIORITY_FRAME_BRIGHTEN);
+                }
                 drawIntentFrame(centerX, iconCenterY, drawnSize, intentFrameColor, locked);
                 drawIntentGlyph(verb, enemy, plan, centerX, iconCenterY, drawnSize);
 

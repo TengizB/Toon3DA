@@ -2135,6 +2135,84 @@ public final class GameMath {
         return Math.max(0, Math.min(blockMax, gain));
     }
 
+    /*
+     * Formula: Vulnerable damage multiplier (strategy-combat-order-6)
+     * Derivation:
+     *   VULNERABLE makes the marked host take more damage. It is a Step-2 OUTGOING multiplier in the
+     *   shared mitigation pipeline (applied to the incoming hit BEFORE Block/armor). Each stack adds a
+     *   fixed percent, so N stacks at P% each give:
+     *     multiplier = 1 + stacks * P/100
+     *   The caller multiplies the raw hit by this before Block absorption, so a Vulnerable target both
+     *   loses more Block AND takes more HP damage — the "land a cheap mark, then dump the big shot" play.
+     * Edge cases:
+     *   stacks <= 0 → returns 1.0 (unmarked target: pipeline no-op).
+     *   percentPerStack <= 0 → returns 1.0 (no configured potency).
+     *   Stacks are capped by the caller (StatusEffectController) at VULNERABLE_MAX_STACKS, so this
+     *   cannot run away; this pure helper does no clamping of its own.
+     */
+    public static float vulnerableDamageMultiplier(int stacks, int percentPerStack) {
+        if (stacks <= 0 || percentPerStack <= 0) return 1f;
+        return 1f + stacks * (percentPerStack / 100f);
+    }
+
+    /*
+     * Formula: Weak damage multiplier (strategy-combat-order-6)
+     * Derivation:
+     *   WEAK reduces the DEALT damage of whoever holds it (an enemy softened by the player, or the
+     *   player debuffed by an enemy). It is a Step-2 multiplier applied to the attacker's OUTGOING
+     *   damage:
+     *     multiplier = 1 - P/100   (when active), else 1
+     *   Floored at 0 so an over-100% configuration can never flip the sign and heal the target.
+     * Edge cases:
+     *   active == false → returns 1.0 (no debuff).
+     *   percent >= 100  → clamped to 0.0 (a fully-neutralised hit deals nothing, never negative).
+     *   percent <= 0    → returns 1.0.
+     */
+    public static float weakDamageMultiplier(boolean active, int percent) {
+        if (!active || percent <= 0) return 1f;
+        return Math.max(0f, 1f - percent / 100f);
+    }
+
+    /*
+     * Formula: Backstab/flank damage multiplier (strategy-combat-order-6)
+     * Derivation:
+     *   A hit landed from BEHIND the target's facing deals a modest positional bonus:
+     *     multiplier = 1 + P/100   (from behind), else 1
+     *   Priced as a conditional bonus (like crit) because it requires setup/positioning; kept small
+     *   (±30% default) so it is a nudge toward maneuvering, not a mandatory execution combo.
+     * Edge cases:
+     *   fromBehind == false → returns 1.0.
+     *   percent <= 0        → returns 1.0.
+     */
+    public static float backstabDamageMultiplier(boolean fromBehind, int percent) {
+        if (!fromBehind || percent <= 0) return 1f;
+        return 1f + percent / 100f;
+    }
+
+    /*
+     * Formula: attacker-behind-facing test (strategy-combat-order-6)
+     * Derivation:
+     *   An actor's implicit facing is the cardinal unit vector it last moved/attacked along. The
+     *   attacker is "behind" the target when the vector from the target to the attacker points against
+     *   that facing — i.e. their dot product is negative:
+     *     toAttacker = (attackerColumn - targetColumn, attackerRow - targetRow)
+     *     behind = dot(toAttacker, facing) < 0
+     *   Mirrors EnemyManager.isBehindPlayerFacing (enemy-behind-player), reused here for
+     *   player-behind-enemy so positioning matters symmetrically.
+     * Edge cases:
+     *   facing = (0,0) (never moved) → dot is 0, not < 0 → returns false (no backstab on a
+     *     never-committed enemy, which is the safe/generous-to-the-enemy default).
+     *   attacker on the target's own tile → toAttacker = (0,0) → dot 0 → false.
+     *   Pure integer arithmetic — no precision issues.
+     */
+    public static boolean isAttackerBehindFacing(int facingColumn, int facingRow,
+                                                 int targetColumn, int targetRow,
+                                                 int attackerColumn, int attackerRow) {
+        int toAttackerColumn = attackerColumn - targetColumn;
+        int toAttackerRow    = attackerRow    - targetRow;
+        return toAttackerColumn * facingColumn + toAttackerRow * facingRow < 0;
+    }
+
     // =========================================================================
     // ABILITY EVENT FEEDBACK — BANNER ANIMATION AND RING PULSE
     // =========================================================================
