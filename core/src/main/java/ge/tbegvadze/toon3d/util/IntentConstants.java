@@ -49,19 +49,18 @@ public final class IntentConstants {
 
     // --- Intent text label (plain-word description under the icon: "Attacking", "Moving", ...) ---
     // Icons alone can be cryptic to new players, so a short verb label is stacked just above the icon.
-    /** Font scale for the intent word label (relative to the shared 1x name-tag font). Sized for legibility. */
-    public static final float INTENT_LABEL_FONT_SCALE          = 0.85f;
+    /**
+     * Font scale for the intent word label (relative to the shared 1x name-tag font). Matched to
+     * {@code EnemyConstants.ENEMY_NAME_TAG_FONT_SCALE} so the intent text reads at the same size as the
+     * enemy name tag above it.
+     */
+    public static final float INTENT_LABEL_FONT_SCALE          = 1.15f;
     /** Vertical gap (screen pixels) between the top of the icon frame and the label baseline band. */
     public static final float INTENT_LABEL_GAP_ABOVE_ICON      = 6f;
     /** Beyond this distance the label is suppressed to de-clutter distant rooms (icon still shows). */
     public static final float INTENT_LABEL_MAX_DISTANCE_TILES  = 9f;
     /** How far the label text is pushed toward white (0 = raw frame hue, 1 = white) so tinted hues stay readable. */
     public static final float INTENT_LABEL_WHITEN              = 0.55f;
-    /** Dark drop-shadow offset (pixels) drawn under the label so small text stays legible on bright walls. */
-    public static final float INTENT_LABEL_SHADOW_OFFSET       = 1.5f;
-    public static final float INTENT_LABEL_SHADOW_RED   = 0.03f;
-    public static final float INTENT_LABEL_SHADOW_GREEN = 0.03f;
-    public static final float INTENT_LABEL_SHADOW_BLUE  = 0.03f;
 
     // Dark rounded backing plate drawn behind the label so the words stay readable over bright/noisy
     // walls regardless of the frame hue. Padding is added around the measured glyph box.
