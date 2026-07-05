@@ -503,7 +503,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 // (name tag + intent icon with its number band and word label) so nothing clips the top.
                 float nameTagBand = nameTagLineHeight + ENEMY_NAME_TAG_BAR_GAP;
                 float labelBand   = nameTagLineHeight * (INTENT_LABEL_FONT_SCALE / ENEMY_NAME_TAG_FONT_SCALE)
-                                    + INTENT_LABEL_GAP_ABOVE_ICON;
+                                    + INTENT_LABEL_GAP_ABOVE_ICON + 2f * INTENT_LABEL_PLATE_PAD_Y;
                 float intentBand  = INTENT_ICON_NAMETAG_CLEARANCE
                                     + INTENT_ICON_MAX_SIZE * INTENT_NUMBER_BAND_FRACTION
                                     + INTENT_ICON_Y_OFFSET_ABOVE_HEALTHBAR
@@ -1101,15 +1101,28 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
     /**
      * Draws the intent word label centered at {@code centerX}, sitting just above {@code iconTopY}.
-     * A near-black drop shadow is drawn first so the small text stays readable over bright walls; the
-     * main text is the frame colour brightened toward white so tinted hues (blue/purple) stay legible.
+     * A dark backing plate is drawn first so the words stay readable over bright/noisy walls, then a
+     * near-black drop shadow, then the main text — the frame colour brightened toward white so tinted
+     * hues (blue/purple) stay legible.
      */
     private void drawIntentLabel(String label, float centerX, float iconTopY,
                                  float red, float green, float blue) {
         nameTagFont.getData().setScale(INTENT_LABEL_FONT_SCALE);
         hpTextLayout.setText(nameTagFont, label);
-        float textX = centerX - hpTextLayout.width / 2f;
-        float textY = iconTopY + INTENT_LABEL_GAP_ABOVE_ICON + hpTextLayout.height;
+        float textWidth  = hpTextLayout.width;
+        float textHeight = hpTextLayout.height;
+        float textX = centerX - textWidth / 2f;
+        float textY = iconTopY + INTENT_LABEL_GAP_ABOVE_ICON + INTENT_LABEL_PLATE_PAD_Y + textHeight;
+
+        // Backing plate: a dark quad behind the glyph box (font.draw y is the TOP of the text, so the
+        // box spans [textY - textHeight, textY]).
+        batch.setColor(INTENT_LABEL_PLATE_RED, INTENT_LABEL_PLATE_GREEN,
+                INTENT_LABEL_PLATE_BLUE, INTENT_LABEL_PLATE_ALPHA);
+        batch.draw(whitePixelTexture,
+                textX - INTENT_LABEL_PLATE_PAD_X, textY - textHeight - INTENT_LABEL_PLATE_PAD_Y,
+                textWidth + 2f * INTENT_LABEL_PLATE_PAD_X, textHeight + 2f * INTENT_LABEL_PLATE_PAD_Y,
+                0, 0, 1, 1, false, false);
+        batch.setColor(Color.WHITE);
 
         nameTagFont.setColor(INTENT_LABEL_SHADOW_RED, INTENT_LABEL_SHADOW_GREEN,
                 INTENT_LABEL_SHADOW_BLUE, 1f);
