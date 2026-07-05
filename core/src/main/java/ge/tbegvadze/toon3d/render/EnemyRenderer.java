@@ -1101,9 +1101,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
     /**
      * Draws the intent word label centered at {@code centerX}, sitting just above {@code iconTopY}.
-     * A dark backing plate is drawn first so the words stay readable over bright/noisy walls, then a
-     * near-black drop shadow, then the main text — the frame colour brightened toward white so tinted
-     * hues (blue/purple) stay legible.
+     * A dark backing plate is drawn first so the words stay readable over bright/noisy walls, then the
+     * main text — the frame colour brightened toward white so tinted hues (blue/purple) stay legible.
      */
     private void drawIntentLabel(String label, float centerX, float iconTopY,
                                  float red, float green, float blue) {
@@ -1123,11 +1122,6 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 textWidth + 2f * INTENT_LABEL_PLATE_PAD_X, textHeight + 2f * INTENT_LABEL_PLATE_PAD_Y,
                 0, 0, 1, 1, false, false);
         batch.setColor(Color.WHITE);
-
-        nameTagFont.setColor(INTENT_LABEL_SHADOW_RED, INTENT_LABEL_SHADOW_GREEN,
-                INTENT_LABEL_SHADOW_BLUE, 1f);
-        nameTagFont.draw(batch, hpTextLayout,
-                textX + INTENT_LABEL_SHADOW_OFFSET, textY - INTENT_LABEL_SHADOW_OFFSET);
 
         float legibleRed   = GameMath.lerpTowardWhite(red,   INTENT_LABEL_WHITEN);
         float legibleGreen = GameMath.lerpTowardWhite(green, INTENT_LABEL_WHITEN);
