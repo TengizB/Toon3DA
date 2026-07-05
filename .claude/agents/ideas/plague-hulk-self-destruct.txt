@@ -1,0 +1,323 @@
+STATUS: IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Plague Hulk Self-Destruct (low-HP toxic detonation)
+CREATED: 2026-07-05
+---
+
+IMPLEMENTATION NOTES (2026-07-05): Built as designed with two adjustments:
+- Friendly fire on other enemies (OPEN QUESTION 1) was NOT enabled — the direct cross-blast
+  only damages the player. Ship-simple first, per the doc's own recommendation.
+- The optional longer-lifetime toxic overload (OPEN QUESTION 3 / PLAGUE_HULK_SELF_DESTRUCT_
+  TOXIC_LIFETIME_TURNS) was skipped — the massive cloud uses HazardManager's existing default
+  toxic lifetime and differs from the minimal cloud only by radius (3 vs 1). This was called
+  out in TECHNICAL NOTES as an acceptable simplification if skipped.
+- The kill is deferred via a new EnemyManager.pendingExecuteDeaths queue (mirroring
+  StatusEffectController's pendingDoTDeaths pattern) because executeSelfDestruct runs from
+  inside phaseBExecute's own by-index iteration over the enemies list — removing the enemy
+  immediately would shift the list and skip the next enemy's turn. Not called out explicitly
+  in TECHNICAL NOTES; documented here for future reference.
+All other constants, states, and flow match the design above.
+
+OVERVIEW
+--------
+When a Plague Hulk is chipped down to critical HP it stops fighting and PRIMES a
+self-destruction: it stands braced for two telegraphed player-turns, then explodes
+in a large toxic blast that damages the player and floods the surrounding cells
+with a big, long-lived poison cloud. If the player finishes it off (by any means)
+BEFORE the countdown reaches zero, only the existing minimal death cloud (radius 1)
+is left. This turns the Hulk's final moments into a real decision — burst it down,
+or get out of the blast — and gives the existing "TANK: kill at range, don't grind
+it in melee" verb a hard, memorable punish for greedy players. It reuses the
+committed-intent SPECIAL pipeline, the existing DEFENDING-style brace, and
+HazardManager.spawnToxicCloud, so no new subsystem is introduced.
+
+This is scoped to the Plague Hulk ONLY. It does not change the Hulk's base stats,
+its healthy-state AREA_STRIKE move-set, or any other enemy.
+
+
+GAMEPLAY LOOP
+-------------
+Baseline: Plague Hulk = 120 HP, 16 attack, SOLDIER role, moves every 2 turns.
+Turtle-defend already triggers at 50% HP (BalanceConfig.DEFEND_HP_THRESHOLD_FRACTION).
+Self-destruct triggers LOWER, at 30% HP (see BALANCE NOTES), so it is a distinct,
+more-desperate state that fires only when the Hulk is nearly dead.
+
+1. Player damages a Plague Hulk with a shot/melee hit during their action.
+2. Enemy turn runs. In phaseCCommit → computeNextPlan, the Hulk checks, BEFORE any
+   normal melee/defend/area branch:
+     if (!selfDestructPrimed
+         && health <= round(maxHealth * PLAGUE_HULK_SELF_DESTRUCT_HP_PERCENT))
+       → prime self-destruct.
+   Priming sets:
+     enemy.selfDestructPrimed        = true
+     enemy.selfDestructTurnsRemaining = PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS (2)
+     enemy.state                      = EnemyState.SELF_DESTRUCTING
+     plan.setSpecial(SpecialAbility.SELF_DESTRUCT, ownColumn, ownRow, blastDamage)
+     (countdown carried for the icon — see TECHNICAL NOTES).
+   The plan is now STICKY: on every later commit, if selfDestructPrimed is true the
+   Hulk always re-commits SELF_DESTRUCT (it never reverts to attacking/moving).
+3. PLAYER TURN: the intent renderer shows a DISTINCT self-destruct telegraph — a
+   pulsing sickly-green SPECIAL frame with a bomb/skull sub-glyph and a big countdown
+   number ("SELF-DESTRUCT · 2"), plus the predicted blast damage. The player reads
+   "this blows up in 2 turns" and decides: keep shooting to kill it, or flee the radius.
+4. Enemy turn (execute) — phaseBExecute → executeSpecial → SELF_DESTRUCT handler:
+     - if selfDestructTurnsRemaining > 1: decrement to 1, brace (no attack, no move,
+       NO block gained), re-trigger the green telegraph pulse. Do NOT detonate.
+     - phaseCCommit re-commits SELF_DESTRUCT with countdown 1 (sticky).
+5. PLAYER TURN: telegraph now reads "SELF-DESTRUCT · 1".
+6. Enemy turn (execute): selfDestructTurnsRemaining == 1 → decrement to 0 → DETONATE:
+     a. Compute blastDamage = min(BLAST_DAMAGE_MAX,
+                                   round(scaledAttackDamage() * BLAST_DAMAGE_MULTIPLIER)).
+     b. For every tile in the cardinal CROSS pattern out to
+        PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES (center + 4 arms, stop an arm at
+        the first wall): if the player's tile is in the set, apply blastDamage via
+        player.applyDirectionalDamage(blast, hulkX, hulkY). (Optionally also damage
+        other enemies on those tiles — see OPEN QUESTIONS.)
+     c. Set enemy.selfDestructed = true; fire the big-explosion impact visual.
+     d. killEnemy(enemy) — its death hook (World) spawns the MASSIVE toxic cloud:
+        spawnToxicCloud(col, row, PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES) with the
+        longer lifetime. The Hulk removes itself (self-inflicted death; no XP change).
+7. ALTERNATE PATH — player finishes it first: if the Hulk's HP reaches 0 at ANY point
+   before step 6 (a shot, melee, backstab, a poison/burn DoT tick, an explosive barrel),
+   killEnemy runs with selfDestructed == false. The death hook spawns the EXISTING
+   minimal cloud (radius PLAGUE_HULK_MINIMAL_TOXIC_RADIUS_TILES = 1). No blast damage.
+   The player "defused" it. This is the reward for choosing to commit the damage.
+
+
+PLAYER EXPERIENCE
+-----------------
+A primed Hulk becomes a ticking bomb the player can SEE counting down. The core
+feeling is dread-plus-decision, straight out of the Doom RPG playbook: a hulking
+plague-brute swells, hisses, and starts glowing toxic green — "two turns, marine."
+The decision is concrete and legible:
+  - COMMIT: pour burst damage in and defuse it (it grants NO block while priming, so
+    it is fully burstable — see below), leaving only a harmless radius-1 puddle.
+  - FLEE: back out of the cross radius and let it pop into empty space, trading the
+    room's floor to a big poison pool you now have to route around.
+The punish is earned and readable: a greedy player who kept meleeing a low Hulk in a
+corridor eats a big telegraphed hit AND is standing in the cloud afterward. Because
+the whole sequence is committed one turn ahead and shown with a countdown, a death to
+it always answers "why did I die?" — you ignored the timer.
+
+
+TECHNICAL NOTES
+---------------
+No new tile symbol required. The toxic cloud reuses the existing 'q' hazard tile
+(HazardManager); the blast damage is code-only. (Confirmed against docs/tile-symbols.txt
+— 'q' toxic and 'i' fire already exist.)
+
+Affected classes:
+  enemy/EnemyState.java
+    - Add state SELF_DESTRUCTING (braced, priming a detonation; distinct from DEFENDING
+      so the renderer and AI never confuse it with an ordinary Block-brace).
+  enemy/SpecialAbility.java
+    - Add SELF_DESTRUCT(SubGlyph.SELF_DESTRUCT, dealsDamage=true, targetsSelf=true).
+    - Add SubGlyph.SELF_DESTRUCT (bomb/skull icon) to the SubGlyph enum.
+    - Do NOT add SELF_DESTRUCT to PLAGUE_HULK's moveSet(): it is HP-triggered and
+      forced/sticky, NOT cadence-picked. Keeping it out of moveSet() leaves the healthy
+      Hulk's AREA_STRIKE cadence untouched and prevents tryCommitSpecial() from rolling
+      it at random.
+  enemy/Enemy.java  (new fields, all default-off; zero allocation)
+    - boolean selfDestructPrimed        = false;
+    - int     selfDestructTurnsRemaining = 0;
+    - boolean selfDestructed            = false;  // set true only at detonation
+  enemy/EnemyManager.java
+    - computeNextPlan(): for PLAGUE_HULK, add a PRIORITY guard at the very top (before
+      tryCommitSpecial and the melee/defend/area branches):
+        if (enemy.type == PLAGUE_HULK && shouldPrimeOrContinueSelfDestruct(enemy)) {
+            commitSelfDestruct(enemy, plan); return;
+        }
+      shouldPrimeOrContinueSelfDestruct = selfDestructPrimed
+          || health <= round(maxHealth * PLAGUE_HULK_SELF_DESTRUCT_HP_PERCENT).
+    - commitSelfDestruct(): first-time prime sets selfDestructPrimed = true and
+      selfDestructTurnsRemaining = BRACE_TURNS; every commit sets state = SELF_DESTRUCTING,
+      triggerTelegraph(), and plan.setSpecial(SELF_DESTRUCT, ownCol, ownRow, blastDamage()).
+      Carry the countdown to the icon (see below).
+    - executeSpecial() switch: add case SELF_DESTRUCT → executeSelfDestruct(...).
+    - executeSelfDestruct(enemy, playerCol, playerRow, player):
+        enemy.state = SELF_DESTRUCTING; triggerTelegraph();
+        if (selfDestructTurnsRemaining > 1) { selfDestructTurnsRemaining--; return; }
+        // countdown hit 0 → detonate:
+        int blast = blastDamage(enemy);
+        applyCrossBlast(enemy, blast, playerCol, playerRow, player);  // cross pattern, wall-stops arms
+        enemy.selfDestructed = true;
+        if (impactEventListener != null) impactEventListener.onEnemyKilled(x, y, height, blast);
+        killEnemy(enemy, false);
+      NOTE: killEnemy already fires enemyDeathHazardListener.onEnemyDied — extend that
+      hook (below) so World picks massive vs minimal radius from selfDestructed.
+    - blastDamage(enemy) = min(PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX,
+                               round(enemy.scaledAttackDamage()
+                                     * PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER)).
+      Deriving from scaledAttackDamage() means it inherits depth scaling AND any EMPOWERED
+      buff automatically, same as every other committed hit.
+    - applyCrossBlast(): reuse the ExplosiveBarrelManager cross idea — iterate center + 4
+      cardinal arms out to BLAST_RADIUS_TILES; break an arm at the first Level.isWall tile
+      (blast doesn't wrap corners); if a tile == player tile, player.applyDirectionalDamage
+      (so GUARD facing still applies, lane origin = Hulk tile).
+    - EnemyDeathHazardListener: extend the callback signature to carry the flag, e.g.
+        onEnemyDied(EnemyType type, int col, int row, boolean selfDestructMassive)
+      passing enemy.selfDestructed. (Minimal-change alternative: add a parallel
+      onEnemySelfDestructed hook. Prefer extending the existing single hook.)
+    - Enemy.resetIdCounter() context: no change; the new fields reset per-instance at spawn.
+  enemy/PlannedAction.java
+    - setSpecial already resets windUpTurnsRemaining to 0. To show the countdown, either
+      (a) after setSpecial set plan.windUpTurnsRemaining = selfDestructTurnsRemaining, or
+      (b) have the renderer read enemy.selfDestructTurnsRemaining directly. Prefer (b) to
+      avoid overloading windUpTurnsRemaining's charger meaning.
+  render/EnemyRenderer.java (+ intent icon renderer, strategy-combat-order-2)
+    - When plan.verb == SPECIAL && specialAbility == SELF_DESTRUCT: draw the bomb/skull
+      sub-glyph, the countdown (enemy.selfDestructTurnsRemaining), and the predicted blast
+      number, tinted sickly green and pulsing (reuse getTelegraphStrength()); intensity
+      ramps as the countdown nears 0. SELF_DESTRUCTING enemies may also get a body tint so
+      the brace reads at a glance without looking at the icon.
+  world/World.java
+    - Update the enemyDeathHazardListener lambda to the new signature: if the dead type is
+      PLAGUE_HULK, spawn radius PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES (with the long
+      lifetime) when selfDestructMassive, else the existing
+      HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS (== PLAGUE_HULK_MINIMAL_TOXIC_RADIUS_TILES = 1).
+  hazard/HazardManager.java
+    - Optional: add spawnToxicCloud(center, radius, lifetimeTurns) overload so the massive
+      cloud can outlive HAZARD_TOXIC_LIFETIME_TURNS (6). If skipped, the massive cloud uses
+      the default lifetime and only the radius differs. igniteToxic already refuses to
+      overwrite fire tiles, so a fire/toxic collision is safe.
+
+New Constants (BalanceConfig SECTION 2 / SECTION 12; mirrored in EnemyConstants like the
+other PLAGUE_HULK_* values):
+    PLAGUE_HULK_SELF_DESTRUCT_HP_PERCENT             = 0.30f
+    PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS            = 2
+    PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES     = 2
+    PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER = 3.0f   // × scaledAttackDamage
+    PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX       = 68      // hard cap ≈ 33% of 205 eHP
+    PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES     = 3       // massive cross radius
+    PLAGUE_HULK_SELF_DESTRUCT_TOXIC_LIFETIME_TURNS   = 10      // > default 6 (optional overload)
+    PLAGUE_HULK_MINIMAL_TOXIC_RADIUS_TILES           = 1       // alias existing DEATH_CLOUD_RADIUS
+
+Turn/commit timing (answers "when does it decide, how does the countdown advance"):
+  - The DECISION to prime happens in phaseCCommit (computeNextPlan), the moment the Hulk's
+    HP is observed at or below the threshold at the END of the turn on which the player's
+    damaging action resolved. This is the same seam every other intent is written at, so
+    the telegraph is visible for the full following player turn.
+  - The COUNTDOWN advances in phaseBExecute (executeSelfDestruct), once per enemy turn,
+    exactly like every committed action executes. Prime (commit) shows "2"; first execute
+    → "1"; second execute → detonate. The player therefore gets TWO full turns of warning.
+  - Because ALL of phaseBExecute runs before ANY of phaseCCommit, the detonation resolves
+    (and the Hulk is removed) before any ally re-plans on the now-empty tile.
+
+
+VISUAL DESIGN
+-------------
+Intent icon: reuse the purple SPECIAL frame BUT with a unique sickly-green fill and a
+bomb/skull sub-glyph so it is impossible to mistake for the blue DEFEND shield or the
+orange charger wind-up. Overlay a large countdown numeral (2 → 1) and the predicted
+blast damage. The frame PULSES via getTelegraphStrength(), and the pulse rate/brightness
+climbs as the countdown falls (calm-ish at 2, frantic at 1).
+Body: a SELF_DESTRUCTING Hulk gets a swelling green rim-glow / emissive tint (reuse the
+telegraph tint path) — it visibly over-pressurizes. No lunge animation (it is braced,
+not attacking).
+Detonation: a large green-white explosion burst via the existing impact system
+(onEnemyKilled with the blast number), a heavier screen-shake than a normal kill, and the
+immediate bloom of 'q' toxic decals in the cross pattern. The minimal (defused) case keeps
+the ordinary kill burst plus the single radius-1 puddle — visually much smaller, so the
+player SEES they got the good outcome.
+Audio (if/when sound lands): a rising hiss/whine during the brace, a wet concussive
+"whump" on detonation. Placeholder — no audio pipeline yet.
+
+
+BALANCE NOTES
+-------------
+All numbers are PLACEHOLDERS pending playtest.
+
+Threshold (PLAGUE_HULK_SELF_DESTRUCT_HP_PERCENT = 0.30): 30% of 120 HP = 36 HP. It fires
+only when a hit leaves the Hulk in (0, 36] without killing it — the "I chipped it but
+didn't finish" band. Kept BELOW the 50% turtle-defend threshold so the two states never
+collide: a Hulk turtles at 50–30%, then switches to priming below 30%. If priming feels
+too rare, raise toward 0.35; if the player defuses it too trivially, lower toward 0.25.
+
+Defuse window: once primed at ≤36 HP the player must deal ≤36 damage across two turns to
+kill it. Shotgun burst (44) one-shots that; sustained shotgun DPT (22) also clears it in
+two turns. So defusing is ALWAYS mechanically possible for an on-curve player — the choice
+is whether it is WORTH the ammo/exposure vs just leaving the room. That is the intended
+tension, not a DPS check. The Hulk grants NO block while priming (see below), so burst is
+never wasted into a shield.
+
+Blast damage (MULTIPLIER 3.0 × base 16 = 48; cap 68): 48 is ~23% of the 205 reference eHP,
+UNDER the 25% telegraph cap — and it is telegraphed for TWO full turns, which is far more
+warning than the contract's one-turn minimum, so even the 68 cap (~33% eHP, under the 35%
+boss hard cap) is justified for a fully-avoidable AoE. Per docs/balance-rule-system.txt
+TELEGRAPH & COUNTERPLAY, a >25% hit is allowed when telegraphed/avoidable; this qualifies
+on both counts (visible countdown + step out of a 2-tile cross). Do NOT push the cap past
+35% eHP (~72). Deriving from scaledAttackDamage() keeps it depth-coupled automatically.
+
+Threat-Point impact: the Plague Hulk's baseThreatPoints() (SOLDIER band, ~38 TP) is
+computed from its steady base stats and should stay unchanged — self-destruct is an
+end-of-life, one-shot, fully-avoidable finisher, so its blended cycle-averaged DPT
+contribution is small and self-limiting (same reasoning the balance doc applies to
+AREA_STRIKE). If playtest shows it drifts the Hulk out of the SOLDIER TP band, price it as
+a small added blended DPT and re-run BalanceReport's TELEGRAPH AUDIT and ENEMIES table; it
+should remain in-band because a smart player eats it ~0% of the time.
+
+Massive cloud (radius 3 cross, lifetime 10): 7 toxic tiles (center + three-tile arms) at
+POISON_DAMAGE_PER_STACK (2/turn) for HAZARD_TOXIC_POISON_TURNS (3) is real area denial but
+not lethal on its own — it forces a re-route, consistent with the "TANK / area-denial" verb.
+The existing slow toxic creep (HAZARD_TOXIC_SPREAD_CHANCE) satisfies "spread to other cells"
+organically after the initial bloom — no new chain system needed (see OPEN QUESTIONS for the
+chain alternative).
+
+
+INTERACTIONS
+------------
+1. Existing DEFEND / Block turtle (order-3): self-destruct threshold (0.30) sits below the
+   turtle threshold (0.50), so a Hulk turtles first and only primes when critically low.
+   Priming grants NO block on purpose — that keeps the read clean ("it's not guarding, it's
+   a bomb — shoot it NOW") and preserves the burst-to-defuse counterplay. A distinct
+   EnemyState (SELF_DESTRUCTING) and a distinct green bomb icon prevent any confusion with
+   the blue DEFEND shield.
+
+2. Existing on-death toxic cloud (Pillar 2 area-denial): this feature REUSES that hook. The
+   current radius-1 death cloud becomes the MINIMAL / defused outcome; the new massive cloud
+   is the same spawnToxicCloud call with a bigger radius + longer lifetime, chosen by the
+   selfDestructed flag. igniteToxic already refuses to overwrite fire tiles, so a Hulk
+   detonating in a burning room won't erase the fire (and vice-versa).
+
+3. Stun / R6 skipNextAction: a stun landed during the brace makes phaseBExecute skip the
+   execute (verb → STUNNED) that turn, so the countdown does NOT decrement — a control build
+   can literally buy a turn on the timer. phaseCCommit still re-commits SELF_DESTRUCT (sticky),
+   so the telegraph persists. This is an intended, rewarding interaction, not a bug.
+
+4. DoT kills (poison/burn) and order-6 burst (backstab/vulnerable): any of these reducing the
+   primed Hulk to 0 before detonation counts as a defuse → minimal cloud, no blast. Status DoT
+   bypasses Block (moot here since the brace grants none), so a lingering poison stack can
+   finish a primed Hulk on its own. Vulnerable/backstab burst is the cleanest defuse tool.
+
+5. Multi-enemy rooms / friendly fire: if enabled (OPEN QUESTIONS), the direct cross-blast can
+   also hit other enemies standing on the arms — a genuine tactic: kite the primed Hulk into a
+   pack and let it pop. Even without direct enemy damage, the massive toxic cloud denies the
+   pack's floor.
+
+6. Explosive barrels: the massive blast is a separate system and does NOT directly chain
+   barrels, but the detonation impact and resulting cloud share tiles harmlessly. See OPEN
+   QUESTIONS for whether the blast should trigger barrel chains for spectacle.
+
+
+OPEN QUESTIONS
+--------------
+1. Should the direct cross-blast damage OTHER ENEMIES (friendly fire), mirroring the
+   explosive-barrel blast? Recommended YES for tactical depth, but it slightly complicates the
+   TP/encounter math. Ship with player-only first if simpler, then enable.
+2. Blast falloff: flat damage anywhere in the cross (readable, barrel-style) vs. reduced on the
+   outer arms? Recommend FLAT for a 2-tile radius; revisit if the radius grows.
+3. "Spread to other cells": ship as a bigger one-shot cross (radius 3) + existing slow creep
+   (recommended, zero new code), OR add a turn-by-turn expanding toxic wavefront like fire
+   chains? The wavefront is cooler but needs new HazardManager logic and its own TP audit —
+   defer unless the one-shot version reads too static.
+4. Countdown display plumbing: read enemy.selfDestructTurnsRemaining directly in the renderer
+   (recommended) vs. repurpose PlannedAction.windUpTurnsRemaining (already used by the charger)?
+5. Should a freshly-woken Hulk that is spawned already below 30% HP (deep-floor edge case, or
+   pre-damaged by a barrel) prime on its very first commit? With the sticky guard it will —
+   confirm that is desired (it means a barreled-down Hulk immediately becomes a bomb).
+6. Does the detonation trigger a barrel chain if the Hulk pops adjacent to a barrel? Fun for
+   spectacle; needs a call into ExplosiveBarrelManager. Defer / optional.
+7. XP/credit: the self-kill currently awards nothing (killEnemy(false) path skips the XP
+   listeners used by weapon kills). Should a self-destruct still grant partial XP, or is
+   "it killed itself, no reward" the intended punish for letting it detonate? Recommend no XP
+   (reinforces "defuse it to get the kill").

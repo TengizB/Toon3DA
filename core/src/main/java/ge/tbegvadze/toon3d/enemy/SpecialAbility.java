@@ -38,10 +38,18 @@ public enum SpecialAbility {
      * turn — step out of the marked tiles to dodge it. Carries a predicted-damage number. Sub-glyph:
      * burst.
      */
-    AREA_STRIKE(SubGlyph.AREA, true, false);
+    AREA_STRIKE(SubGlyph.AREA, true, false),
+
+    /**
+     * Plague Hulk low-HP finisher: braces (targeting itself, no board tile) for a multi-turn countdown,
+     * then detonates a wall-stopped cross blast. Killing the Hulk before the countdown reaches zero
+     * defuses it — the death hazard hook awards a minimal cloud instead of the massive one. Sub-glyph:
+     * bomb/skull.
+     */
+    SELF_DESTRUCT(SubGlyph.SELF_DESTRUCT, true, true);
 
     /** The procedural icon drawn inside the SPECIAL frame so each ability reads distinctly (order-2). */
-    public enum SubGlyph { BUFF, DEBUFF, SUMMON, AREA }
+    public enum SubGlyph { BUFF, DEBUFF, SUMMON, AREA, SELF_DESTRUCT }
 
     private final SubGlyph subGlyph;
     private final boolean  dealsDamage;

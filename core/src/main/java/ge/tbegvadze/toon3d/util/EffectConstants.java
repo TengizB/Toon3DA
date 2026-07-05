@@ -315,6 +315,16 @@ public final class EffectConstants {
     /** Max radius of the shatter ring pulse drawn when a hit breaks an enemy's Block. */
     public static final float BLOCK_SHATTER_RING_MAX_RADIUS       = 55f;
 
+    // Summon portal — sickly green ring + spark burst marking the empty tile a SUMMON ability
+    // (strategy-combat-order-5) materializes a new enemy on, so the spawn reads as a deliberate
+    // event rather than the enemy silently appearing.
+    public static final int   SUMMON_PORTAL_SPARK_COUNT           = 10;
+    public static final float SUMMON_PORTAL_SPARK_SPEED_MIN       = 35f;
+    public static final float SUMMON_PORTAL_SPARK_SPEED_MAX       = 100f;
+    public static final float SUMMON_PORTAL_SPARK_LIFE_SECONDS    = 0.45f;
+    public static final float SUMMON_PORTAL_R = 0.45f, SUMMON_PORTAL_G = 0.90f, SUMMON_PORTAL_B = 0.35f;
+    public static final float SUMMON_PORTAL_RING_MAX_RADIUS       = 70f;
+
     // Animated affliction overlays drawn on the enemy billboard each frame (additive glow):
     // rising flames for BURNING, floating bubbles for POISONED, falling droplets for BLEED.
     public static final int   AFFLICTION_FX_PARTICLES            = 7;    // particles per active status per enemy

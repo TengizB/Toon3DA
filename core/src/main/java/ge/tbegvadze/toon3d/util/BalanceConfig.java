@@ -139,6 +139,33 @@ public final class BalanceConfig {
     public static final int PLAGUE_HULK_MAX_HEALTH         = 120;
     public static final int PLAGUE_HULK_ATTACK_DAMAGE      = 16;
     public static final int PLAGUE_HULK_MOVE_EVERY_N_TURNS = 2;
+    /**
+     * Low-HP finisher (.claude/agents/ideas/plague-hulk-self-destruct.txt): once HP drops to or below
+     * this fraction of max the Hulk primes a self-destruct instead of attacking/moving/defending. Kept
+     * BELOW DEFEND_HP_THRESHOLD_FRACTION (0.50) so the two brace states never collide — a Hulk turtles
+     * first, then only becomes a bomb once critically low.
+     */
+    public static final float PLAGUE_HULK_SELF_DESTRUCT_HP_PERCENT              = 0.30f;
+    /** Telegraphed turns the Hulk braces before detonating; the player sees a live countdown. */
+    public static final int   PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS             = 2;
+    /** Cardinal-arm reach (tiles) of the direct blast; an arm stops early at the first wall. */
+    public static final int   PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES      = 2;
+    /**
+     * Direct blast damage multiplier on scaledAttackDamage() if the countdown reaches zero. 16 * 3.0 =
+     * 48 (~23% of the 205 reference eHP) — telegraphed for two full turns, so it is allowed to exceed
+     * the 25%-eHP cap for un-telegraphed hits (docs/balance-rule-system.txt TELEGRAPH & COUNTERPLAY).
+     */
+    public static final float PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER = 3.0f;
+    /** Hard cap on the blast hit regardless of depth/EMPOWERED scaling (~33% eHP, under the 35% boss cap). */
+    public static final int   PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX        = 68;
+    /** Massive toxic cross radius left behind if the Hulk survives to detonate. */
+    public static final int   PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES      = 3;
+    /**
+     * Minimal toxic cross radius left behind when the player kills the Hulk before it detonates —
+     * mirrors the ordinary death cloud (defined later in this file); kept as its own named constant
+     * so the self-destruct feature reads independently of that unrelated section.
+     */
+    public static final int   PLAGUE_HULK_MINIMAL_TOXIC_RADIUS_TILES           = 1;
 
     // IRON_STALKER (spawn '!') — armoured elite, melee + ranged; the big threat. (was 95 HP /
     // 16 melee / 11 ranged). A mini-elite is a deliberate spike: tanky AND hard-hitting, so its

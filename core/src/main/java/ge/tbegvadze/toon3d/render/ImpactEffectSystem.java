@@ -221,6 +221,20 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         }
     }
 
+    @Override
+    public void onEnemySpawned(int tileColumn, int tileRow, float heightMultiplier) {
+        // Sickly green portal: a ring pulse plus an outward spark burst on the tile a SUMMON
+        // ability just materialized a new enemy on, so the pop-in reads as an event, not a glitch.
+        spawnColoredRingPulse(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.SUMMON_PORTAL_R, EffectConstants.SUMMON_PORTAL_G, EffectConstants.SUMMON_PORTAL_B,
+                EffectConstants.SUMMON_PORTAL_RING_MAX_RADIUS);
+        spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.SUMMON_PORTAL_R, EffectConstants.SUMMON_PORTAL_G, EffectConstants.SUMMON_PORTAL_B,
+                EffectConstants.SUMMON_PORTAL_SPARK_COUNT,
+                EffectConstants.SUMMON_PORTAL_SPARK_SPEED_MIN, EffectConstants.SUMMON_PORTAL_SPARK_SPEED_MAX,
+                EffectConstants.SUMMON_PORTAL_SPARK_LIFE_SECONDS);
+    }
+
     // -------------------------------------------------------------------------
     // Flash triggers — called from AbilityFeedback
     // -------------------------------------------------------------------------
