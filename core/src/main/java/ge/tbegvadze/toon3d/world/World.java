@@ -496,11 +496,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (incinerator != null) {
             incinerator.setHazardIgniteTarget(hazardManager::igniteFire);
         }
-        enemyManager.setEnemyDeathHazardListener((deadType, tileColumn, tileRow) -> {
-            // Plague Hulk leaves a lingering toxic cloud where it dies (area-denial verb).
+        enemyManager.setEnemyDeathHazardListener((deadType, tileColumn, tileRow, selfDestructMassive) -> {
+            // Plague Hulk leaves a lingering toxic cloud where it dies (area-denial verb). A Hulk
+            // that survived its self-destruct countdown to detonate (plague-hulk-self-destruct.txt)
+            // leaves the MASSIVE cloud instead of the ordinary minimal one — killing it first is
+            // the reward for committing the damage.
             if (deadType == EnemyType.PLAGUE_HULK) {
-                hazardManager.spawnToxicCloud(tileColumn, tileRow,
-                        BalanceConfig.HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS);
+                int radius = selfDestructMassive
+                        ? BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES
+                        : BalanceConfig.HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS;
+                hazardManager.spawnToxicCloud(tileColumn, tileRow, radius);
             }
         });
 

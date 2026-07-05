@@ -289,6 +289,21 @@ labels them:
   - PLAGUE_HULK — AREA DENIAL. On death (EnemyManager.EnemyDeathHazardListener, wired in World) it
     leaves a lingering toxic cloud (HazardManager.spawnToxicCloud, radius
     HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS). Counterplay: "kill at range — don't melee into its cloud."
+  - PLAGUE_HULK — SELF_DESTRUCT finisher (.claude/agents/ideas/plague-hulk-self-destruct.txt). Once
+    HP drops to or below PLAGUE_HULK_SELF_DESTRUCT_HP_PERCENT it PRIMES (sticky —
+    shouldPrimeOrContinueSelfDestruct/commitSelfDestruct pre-empt every other branch in
+    computeNextPlan, including the scripted move-set) and braces (EnemyState.SELF_DESTRUCTING, a
+    sickly-green SPECIAL telegraph, no Block gained) for
+    PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS turns. If it survives the countdown it detonates: a
+    wall-stopped cardinal cross blast (applySelfDestructBlast) against the player plus a MASSIVE
+    toxic cloud (PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES). Killing it before detonation leaves
+    only the ordinary minimal cloud instead — the EnemyDeathHazardListener carries a
+    selfDestructMassive flag so World picks the right radius. Counterplay: "burst it down before the
+    countdown hits zero, or get out of the blast radius." Because the detonation removes the enemy
+    from inside phaseBExecute's own iteration, the kill is deferred via
+    EnemyManager.pendingExecuteDeaths and applied in a second pass after the phaseB loop finishes.
+  - BLIGHT_CORRUPTOR — SUMMON (order-5) spawns VORTEX_EYE (not GHOUL) on empty adjacent tiles, each
+    spawn marked with a green portal ring-pulse + spark burst (ImpactEventListener.onEnemySpawned).
 
 All hooks respect the cardinal-line constraint; the charge only fires down a true cardinal lane.
 

@@ -119,6 +119,11 @@ public final class IntentConstants {
     public static final float INTENT_COLOR_SPECIAL_RED  = 0.62f;
     public static final float INTENT_COLOR_SPECIAL_GREEN = 0.24f;
     public static final float INTENT_COLOR_SPECIAL_BLUE = 0.86f;
+    // SELF_DESTRUCT (Plague Hulk finisher) — sickly green, overrides the purple SPECIAL frame so it
+    // is never mistaken for the blue DEFEND shield or the deep-red WIND_UP charger telegraph.
+    public static final float INTENT_COLOR_SELF_DESTRUCT_RED   = 0.35f;
+    public static final float INTENT_COLOR_SELF_DESTRUCT_GREEN = 0.95f;
+    public static final float INTENT_COLOR_SELF_DESTRUCT_BLUE  = 0.30f;
     // WAIT — grey, low alpha applied at draw time.
     public static final float INTENT_COLOR_WAIT_RED     = 0.45f;
     public static final float INTENT_COLOR_WAIT_GREEN   = 0.45f;

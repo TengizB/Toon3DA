@@ -13,5 +13,10 @@ public enum EnemyState {
     /** Alerted and in attack range; dealt damage this turn. */
     ATTACKING,
     /** Braced this turn: gained Block instead of attacking or moving (strategy-combat-order-3). */
-    DEFENDING
+    DEFENDING,
+    /**
+     * Priming a low-HP self-destruct (Plague Hulk finisher): braced for a telegraphed countdown
+     * with NO Block gained, distinct from DEFENDING so the player never mistakes it for a shield.
+     */
+    SELF_DESTRUCTING
 }

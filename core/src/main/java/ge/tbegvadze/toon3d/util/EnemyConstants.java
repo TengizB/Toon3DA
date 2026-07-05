@@ -37,6 +37,21 @@ public final class EnemyConstants {
     public static final int     PLAGUE_HULK_ATTACK_DAMAGE        = BalanceConfig.PLAGUE_HULK_ATTACK_DAMAGE;
     public static final int     PLAGUE_HULK_MOVE_EVERY_N_TURNS   = BalanceConfig.PLAGUE_HULK_MOVE_EVERY_N_TURNS;
     public static final float   PLAGUE_HULK_HEIGHT_MULTIPLIER    = 0.95f;
+    // PLAGUE_HULK self-destruct finisher (.claude/agents/ideas/plague-hulk-self-destruct.txt)
+    public static final float   PLAGUE_HULK_SELF_DESTRUCT_HP_PERCENT
+            = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_HP_PERCENT;
+    public static final int     PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS
+            = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS;
+    public static final int     PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES
+            = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES;
+    public static final float   PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER
+            = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER;
+    public static final int     PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX
+            = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX;
+    public static final int     PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES
+            = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES;
+    public static final int     PLAGUE_HULK_MINIMAL_TOXIC_RADIUS_TILES
+            = BalanceConfig.PLAGUE_HULK_MINIMAL_TOXIC_RADIUS_TILES;
 
     // EYE_TYRANT — fast ranged kiter (spawn '2'); hover offset keeps it floating
     public static final int     EYE_TYRANT_MAX_HEALTH            = BalanceConfig.EYE_TYRANT_MAX_HEALTH;

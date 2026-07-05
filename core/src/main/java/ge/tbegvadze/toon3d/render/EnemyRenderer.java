@@ -385,12 +385,20 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 spriteBlue  = GameMath.lerp(spriteBlue,  CombatPalette.WEAK_BLUE,  tintStrength);
             }
 
-            // Telegraph tint: brief danger flash at the instant of attack
+            // Telegraph tint: brief danger flash at the instant of attack. A priming SELF_DESTRUCT
+            // (plague-hulk-self-destruct.txt) gets its own sickly-green over-pressurize glow instead
+            // of the shared red melee/charge flash, so the brace visibly reads as a bomb, not a swing.
             float telegraphStrength = enemy.getTelegraphStrength();
             if (telegraphStrength > 0f) {
-                spriteRed   = GameMath.lerp(spriteRed,   EffectConstants.MELEE_TELEGRAPH_R, telegraphStrength);
-                spriteGreen = GameMath.lerp(spriteGreen, EffectConstants.MELEE_TELEGRAPH_G, telegraphStrength);
-                spriteBlue  = GameMath.lerp(spriteBlue,  EffectConstants.MELEE_TELEGRAPH_B, telegraphStrength);
+                if (enemy.state == EnemyState.SELF_DESTRUCTING) {
+                    spriteRed   = GameMath.lerp(spriteRed,   INTENT_COLOR_SELF_DESTRUCT_RED,   telegraphStrength);
+                    spriteGreen = GameMath.lerp(spriteGreen, INTENT_COLOR_SELF_DESTRUCT_GREEN, telegraphStrength);
+                    spriteBlue  = GameMath.lerp(spriteBlue,  INTENT_COLOR_SELF_DESTRUCT_BLUE,  telegraphStrength);
+                } else {
+                    spriteRed   = GameMath.lerp(spriteRed,   EffectConstants.MELEE_TELEGRAPH_R, telegraphStrength);
+                    spriteGreen = GameMath.lerp(spriteGreen, EffectConstants.MELEE_TELEGRAPH_G, telegraphStrength);
+                    spriteBlue  = GameMath.lerp(spriteBlue,  EffectConstants.MELEE_TELEGRAPH_B, telegraphStrength);
+                }
             }
 
             // Block plating shimmer (strategy-combat-order-3): a translucent steely-blue tint while the
@@ -766,6 +774,13 @@ public final class EnemyRenderer implements Renderable, Disposable {
                         && isSameCardinalTile(enemy.tileColumn, enemy.tileRow, playerTileColumn, playerTileRow);
 
                 resolveIntentFrameColor(verb, intentFrameColor);
+                // SELF_DESTRUCT (Plague Hulk finisher) overrides the shared purple SPECIAL fill with a
+                // sickly green so it is never mistaken for a buff/debuff/summon/area-strike telegraph.
+                if (verb == IntentVerb.SPECIAL && plan.specialAbility == SpecialAbility.SELF_DESTRUCT) {
+                    intentFrameColor[0] = INTENT_COLOR_SELF_DESTRUCT_RED;
+                    intentFrameColor[1] = INTENT_COLOR_SELF_DESTRUCT_GREEN;
+                    intentFrameColor[2] = INTENT_COLOR_SELF_DESTRUCT_BLUE;
+                }
                 // Priority read (order-6): brighten the frame of the biggest committed hit AND of
                 // support casters (BUFF_SELF) — "kill the buffer / the big number first" — so the
                 // salient target pops. Pure emphasis on the existing frame; never an auto-play prompt.
@@ -794,7 +809,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 // at range to keep distant rooms clean.
                 if (depth <= INTENT_LABEL_MAX_DISTANCE_TILES) {
                     float iconTop = iconCenterY + drawnSize / 2f;
-                    drawIntentLabel(intentLabelText(verb, plan), centerX, iconTop,
+                    drawIntentLabel(intentLabelText(verb, enemy, plan), centerX, iconTop,
                             intentFrameColor[0], intentFrameColor[1], intentFrameColor[2]);
                 }
             }
@@ -1044,6 +1059,17 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 drawCenteredQuad(centerX, centerY - radius, shard, shard, 45f);
                 break;
             }
+            case SELF_DESTRUCT: {
+                // Bomb — a round diamond body with a diagonal fuse and a spark at its tip.
+                drawCenteredQuad(centerX, centerY, glyph * 0.60f, glyph * 0.60f, 45f);
+                float fuseLength = glyph * 0.34f;
+                float fuseTipX   = centerX + MathUtils.cosDeg(60f) * fuseLength;
+                float fuseTipY   = centerY + MathUtils.sinDeg(60f) * fuseLength;
+                drawCenteredQuad((centerX + fuseTipX) * 0.5f, (centerY + fuseTipY) * 0.5f,
+                        fuseLength, thickness * 0.8f, 60f);
+                drawCenteredQuad(fuseTipX, fuseTipY, thickness * 2.4f, thickness * 2.4f, 45f);
+                break;
+            }
             default:
                 break;
         }
@@ -1071,30 +1097,43 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
     /**
      * The plain-word description shown under an intent icon for new-player legibility. Returns interned
-     * string literals only (no per-frame allocation). SPECIAL resolves to its sub-ability's verb.
+     * string literals only (no per-frame allocation). SPECIAL resolves to its sub-ability's verb; a
+     * SELF_DESTRUCT special additionally needs the caster's live countdown, hence the enemy parameter.
      */
-    private static String intentLabelText(IntentVerb verb, PlannedAction plan) {
+    private static String intentLabelText(IntentVerb verb, Enemy enemy, PlannedAction plan) {
         switch (verb) {
             case ATTACK_MELEE:  return "Attacking";
             case ATTACK_RANGED: return "Shooting";
             case WIND_UP:       return "Charging";
             case MOVE:          return "Moving";
             case DEFEND:        return "Defending";
-            case SPECIAL:       return specialLabelText(plan.specialAbility);
+            case SPECIAL:       return specialLabelText(plan.specialAbility, enemy);
             case STUNNED:       return "Stunned";
             case WAIT:
             default:            return "Waiting";
         }
     }
 
+    // Pre-built interned labels for the SELF_DESTRUCT countdown — indexed by turnsRemaining so the
+    // live number never requires a per-frame String allocation (project rule: no allocation in render).
+    private static final String[] SELF_DESTRUCT_COUNTDOWN_LABELS = {
+            "DETONATING", "SELF-DESTRUCT · 1", "SELF-DESTRUCT · 2",
+            "SELF-DESTRUCT · 3", "SELF-DESTRUCT · 4", "SELF-DESTRUCT · 5"
+    };
+
     /** The plain-word label for a SPECIAL ability (buff/debuff/summon/area); "Special" if unknown. */
-    private static String specialLabelText(SpecialAbility ability) {
+    private static String specialLabelText(SpecialAbility ability, Enemy enemy) {
         if (ability == null) return "Special";
         switch (ability) {
             case BUFF_SELF:     return "Empowering";
             case DEBUFF_PLAYER: return "Weakening";
             case SUMMON:        return "Summoning";
             case AREA_STRIKE:   return "Area Attack";
+            case SELF_DESTRUCT: {
+                int index = MathUtils.clamp(enemy.selfDestructTurnsRemaining,
+                        0, SELF_DESTRUCT_COUNTDOWN_LABELS.length - 1);
+                return SELF_DESTRUCT_COUNTDOWN_LABELS[index];
+            }
             default:            return "Special";
         }
     }

@@ -50,9 +50,15 @@ public final class EnemyManager implements EnemyHitTarget {
     /**
      * Notified when an enemy dies so area-denial archetypes can leave a hazard behind
      * (balance idea 4, Pillar 2/3 — the Plague Hulk's toxic death cloud).
+     *
+     * @param selfDestructMassive true only for a Plague Hulk that survived its self-destruct
+     *                            countdown to detonate (.claude/agents/ideas/plague-hulk-self-
+     *                            destruct.txt) — the death hook should leave the MASSIVE toxic
+     *                            cloud instead of the ordinary minimal one. Always false for a
+     *                            normal kill (including a Hulk killed before it could detonate).
      */
     public interface EnemyDeathHazardListener {
-        void onEnemyDied(EnemyType type, int tileColumn, int tileRow);
+        void onEnemyDied(EnemyType type, int tileColumn, int tileRow, boolean selfDestructMassive);
     }
 
     private final List<Enemy> enemies;
@@ -96,6 +102,17 @@ public final class EnemyManager implements EnemyHitTarget {
     private final Random       wiggleRandom;
     private final Random       dropRandom;
     private final Random       effectRandom;
+
+    /**
+     * Enemies that killed THEMSELVES mid-phaseBExecute (currently only a detonating Plague Hulk —
+     * see executeSelfDestruct). Removing an enemy from {@code enemies} while phaseBExecute is still
+     * iterating it by index would shift the list and skip the next enemy's turn, so the kill is
+     * queued here and applied in a second pass after the phaseB loop finishes — the same deferred
+     * pattern StatusEffectController uses for a DoT kill mid-tick.
+     */
+    private static final int MAX_PENDING_EXECUTE_DEATHS = 8;
+    private final Enemy[] pendingExecuteDeaths = new Enemy[MAX_PENDING_EXECUTE_DEATHS];
+    private int            pendingExecuteDeathCount = 0;
 
     private boolean anyAlertedEver = false;
 
@@ -588,6 +605,7 @@ public final class EnemyManager implements EnemyHitTarget {
 
     // Phase B (EXECUTE): every alerted enemy runs the action it committed last turn.
     private void phaseBExecute(int playerColumn, int playerRow, Player player) {
+        pendingExecuteDeathCount = 0;
         for (int index = 0; index < enemies.size(); index++) {
             Enemy enemy = enemies.get(index);
             if (!enemy.isAlive() || !enemy.isAlerted()) continue;
@@ -601,6 +619,12 @@ public final class EnemyManager implements EnemyHitTarget {
                 continue;
             }
             executePlan(enemy, playerColumn, playerRow, player);
+        }
+        // Apply any self-inflicted deaths (e.g. a detonating Plague Hulk) AFTER the loop above
+        // finishes, so removing them never shifts enemies.get(index) mid-iteration (R-self-destruct).
+        for (int deathIndex = 0; deathIndex < pendingExecuteDeathCount; deathIndex++) {
+            killEnemy(pendingExecuteDeaths[deathIndex], false);
+            pendingExecuteDeaths[deathIndex] = null;
         }
     }
 
@@ -769,6 +793,7 @@ public final class EnemyManager implements EnemyHitTarget {
             case DEBUFF_PLAYER: executeDebuffPlayer(enemy, playerColumn, playerRow, player); break;
             case SUMMON:        executeSummon(enemy, playerColumn, playerRow);               break;
             case AREA_STRIKE:   executeAreaStrike(enemy, playerColumn, playerRow, player);   break;
+            case SELF_DESTRUCT: executeSelfDestruct(enemy, playerColumn, playerRow, player); break;
             default:                                                                         break;
         }
     }
@@ -877,6 +902,9 @@ public final class EnemyManager implements EnemyHitTarget {
             spawnEnemy(summonType, neighbourColumn, neighbourRow, currentDepth);
             enemy.summonsSpawned++;
             spawned++;
+            if (impactEventListener != null) {
+                impactEventListener.onEnemySpawned(neighbourColumn, neighbourRow, summonType.heightMultiplier());
+            }
         }
         if (spawned > 0 && eventTextSystem != null) {
             eventTextSystem.spawnWithColor("SUMMON", EventTextSystem.COLOR_GREEN);
@@ -886,8 +914,8 @@ public final class EnemyManager implements EnemyHitTarget {
     /** The chaff type a summoner spawns. Thematic per faction; a fast, cheap swarmer by default. */
     private static EnemyType summonTypeFor(EnemyType type) {
         switch (type) {
-            case BLIGHT_CORRUPTOR: return EnemyType.GHOUL;   // necrotic carrier raises the shambling dead
-            default:               return EnemyType.CRAWLER; // fast, fragile chaff
+            case BLIGHT_CORRUPTOR: return EnemyType.VORTEX_EYE; // corrupted eyes swarm from its rifts
+            default:               return EnemyType.CRAWLER;    // fast, fragile chaff
         }
     }
 
@@ -915,6 +943,14 @@ public final class EnemyManager implements EnemyHitTarget {
     /** Routes each archetype to its plan-computation logic (mirrors the old act-dispatch branching). */
     private void computeNextPlan(Enemy enemy, int playerColumn, int playerRow, Player player) {
         PlannedAction plan = enemy.plannedAction;
+        // Plague Hulk low-HP finisher (.claude/agents/ideas/plague-hulk-self-destruct.txt) pre-empts
+        // EVERY other branch, including the scripted move-set below: once primed it is STICKY — the
+        // Hulk never reverts to attacking, moving, or Block-defending, it only ever re-telegraphs its
+        // countdown until it detonates or is killed first.
+        if (enemy.type == EnemyType.PLAGUE_HULK && shouldPrimeOrContinueSelfDestruct(enemy)) {
+            commitSelfDestruct(enemy, plan);
+            return;
+        }
         // Scripted archetypes consult their SPECIAL move-set first (order-5): on its cadence turn an
         // enemy may commit a telegraphed buff/debuff/summon/area move in place of a plain attack/move,
         // producing the readable pattern the player learns to outplay. Off-cadence (or when no ability's
@@ -997,20 +1033,31 @@ public final class EnemyManager implements EnemyHitTarget {
 
     /**
      * Rushes the brute along its committed charge direction up to the charge range, stopping at
-     * the player, a wall, or another enemy. Returns true if it ends cardinally adjacent to the
-     * player (a connecting rush, dealt at the charge multiplier).
+     * the player, a wall, or another enemy. The rush travels blind down the LOCKED lane (the row
+     * for a horizontal charge, the column for a vertical one) captured at commit time — it does not
+     * home in on the player's live position. A player who sidesteps off that lane during their turn
+     * leaves the lane empty and the rush passes through, whiffing entirely (R5 sidestep counter):
+     * before this fix, "connected" was decided purely by final Manhattan distance to the player's
+     * live tile, which could false-positive when the player stepped exactly one tile perpendicular
+     * (ending cardinally adjacent from the side even though they left the charge lane). Returns true
+     * only when the rush both stayed on the lane and ended adjacent to the player (a real connect,
+     * dealt at the charge multiplier).
      */
     private boolean performCharge(Enemy enemy, int playerColumn, int playerRow, Player player) {
         int stepColumn = enemy.chargeDirectionColumn;
         int stepRow    = enemy.chargeDirectionRow;
+        int lockedLaneRow    = enemy.tileRow;    // fixed axis for a horizontal charge (stepRow == 0)
+        int lockedLaneColumn = enemy.tileColumn; // fixed axis for a vertical charge (stepColumn == 0)
         enemy.state = EnemyState.ATTACKING;
         enemy.triggerAttackAnim();
 
         int maxRushTiles = EnemyConstants.SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES;
         for (int step = 0; step < maxRushTiles; step++) {
-            if (GameMath.manhattanDistanceTiles(enemy.tileColumn, enemy.tileRow,
+            boolean playerOnLane = (stepRow == 0) ? (playerRow == lockedLaneRow)
+                                                   : (playerColumn == lockedLaneColumn);
+            if (playerOnLane && GameMath.manhattanDistanceTiles(enemy.tileColumn, enemy.tileRow,
                     playerColumn, playerRow) == 1) {
-                break; // already in melee range — stop and strike
+                break; // already in melee range along the locked lane — stop and strike
             }
             int nextColumn = enemy.tileColumn + stepColumn;
             int nextRow    = enemy.tileRow    + stepRow;
@@ -1019,7 +1066,9 @@ public final class EnemyManager implements EnemyHitTarget {
             commitMove(enemy, nextColumn, nextRow);
         }
 
-        boolean connected = GameMath.manhattanDistanceTiles(
+        boolean playerOnLane = (stepRow == 0) ? (playerRow == lockedLaneRow)
+                                               : (playerColumn == lockedLaneColumn);
+        boolean connected = playerOnLane && GameMath.manhattanDistanceTiles(
                 enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
         if (connected) {
             int chargeDamage = Math.max(1, Math.round(
@@ -1034,6 +1083,103 @@ public final class EnemyManager implements EnemyHitTarget {
     private static boolean isCardinallyAdjacent(Enemy enemy, int playerColumn, int playerRow) {
         return GameMath.manhattanDistanceTiles(
                 enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
+    }
+
+    // -------------------------------------------------------------------------
+    // SELF_DESTRUCT — Plague Hulk low-HP finisher (.claude/agents/ideas/plague-hulk-self-destruct.txt)
+    // -------------------------------------------------------------------------
+
+    /**
+     * True once a Plague Hulk should be (or already is) primed. STICKY by design: once
+     * {@code selfDestructPrimed} is set this always returns true regardless of any later HP change
+     * (a heal, though none currently exist, would not un-prime it), so the countdown always runs to
+     * completion once started.
+     */
+    private static boolean shouldPrimeOrContinueSelfDestruct(Enemy enemy) {
+        return enemy.selfDestructPrimed
+                || enemy.health <= Math.round(enemy.maxHealth * EnemyConstants.PLAGUE_HULK_SELF_DESTRUCT_HP_PERCENT);
+    }
+
+    /**
+     * Commits (or re-commits) the SELF_DESTRUCT special. First entry primes the full brace countdown;
+     * every later commit just re-telegraphs the CURRENT countdown (decremented by executeSelfDestruct
+     * on the turns in between) so the player always sees an accurate "turns until detonation" number.
+     * Grants no Block — a primed Hulk is meant to be fully burstable, never a shield to chip through.
+     */
+    private void commitSelfDestruct(Enemy enemy, PlannedAction plan) {
+        if (!enemy.selfDestructPrimed) {
+            enemy.selfDestructPrimed         = true;
+            enemy.selfDestructTurnsRemaining = EnemyConstants.PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS;
+        }
+        enemy.state = EnemyState.SELF_DESTRUCTING;
+        enemy.triggerTelegraph();
+        plan.setSpecial(SpecialAbility.SELF_DESTRUCT, enemy.tileColumn, enemy.tileRow,
+                selfDestructBlastDamage(enemy));
+    }
+
+    /**
+     * SELF_DESTRUCT execute: while {@code selfDestructTurnsRemaining > 1} the Hulk just counts down
+     * (no attack, no move, no Block). On the final primed turn (countdown == 1) it detonates — a
+     * wall-stopped cross blast against the player, then removes itself with
+     * {@code selfDestructed = true} so the death hazard hook (World) knows to leave the MASSIVE toxic
+     * cloud rather than the ordinary minimal one. The kill is deferred to a post-loop pass (see
+     * {@link #pendingExecuteDeaths}) because this method runs from inside phaseBExecute's own
+     * by-index iteration over {@code enemies}.
+     */
+    private void executeSelfDestruct(Enemy enemy, int playerColumn, int playerRow, Player player) {
+        enemy.state = EnemyState.SELF_DESTRUCTING;
+        enemy.triggerTelegraph();
+        if (enemy.selfDestructTurnsRemaining > 1) {
+            enemy.selfDestructTurnsRemaining--;
+            return;
+        }
+        int blastDamage = selfDestructBlastDamage(enemy);
+        applySelfDestructBlast(enemy, blastDamage, playerColumn, playerRow, player);
+        enemy.selfDestructed = true;
+        enemy.health         = 0; // dead as of this instant — isAlive() must reflect it immediately
+        if (impactEventListener != null) {
+            impactEventListener.onEnemyKilled(enemy.worldCenterX(), enemy.worldCenterY(),
+                    enemy.type.heightMultiplier(), blastDamage);
+        }
+        if (pendingExecuteDeathCount < MAX_PENDING_EXECUTE_DEATHS) {
+            pendingExecuteDeaths[pendingExecuteDeathCount++] = enemy;
+        }
+    }
+
+    /** Detonation damage: scaled attack times the blast multiplier, hard-capped, minimum 1. */
+    private static int selfDestructBlastDamage(Enemy enemy) {
+        int scaled = Math.round(enemy.scaledAttackDamage()
+                * EnemyConstants.PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER);
+        return Math.min(EnemyConstants.PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX, Math.max(1, scaled));
+    }
+
+    /**
+     * Applies the direct detonation hit if the player is standing on the enemy's own tile or any
+     * cardinal arm out to {@code PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES} tiles — each arm stops
+     * at the first wall (the blast doesn't wrap corners), mirroring ExplosiveBarrelManager's cross
+     * pattern. Routed through applyDirectionalDamage so a GUARDing player still gets their facing-arc
+     * reduction, with the Hulk's tile as the lane origin.
+     */
+    private void applySelfDestructBlast(Enemy enemy, int blastDamage,
+                                        int playerColumn, int playerRow, Player player) {
+        boolean playerHit = enemy.tileColumn == playerColumn && enemy.tileRow == playerRow;
+        for (int directionIndex = 0; directionIndex < 4 && !playerHit; directionIndex++) {
+            int stepColumn = STEP_COLUMNS[directionIndex];
+            int stepRow    = STEP_ROWS[directionIndex];
+            for (int distance = 1; distance <= EnemyConstants.PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES;
+                    distance++) {
+                int armColumn = enemy.tileColumn + stepColumn * distance;
+                int armRow    = enemy.tileRow    + stepRow * distance;
+                if (Level.isWall(level.getCell(armColumn, armRow))) break; // arm stops at the first wall
+                if (armColumn == playerColumn && armRow == playerRow) {
+                    playerHit = true;
+                    break;
+                }
+            }
+        }
+        if (playerHit) {
+            player.applyDirectionalDamage(blastDamage, enemy.worldCenterX(), enemy.worldCenterY());
+        }
     }
 
     /**
@@ -1578,7 +1724,7 @@ public final class EnemyManager implements EnemyHitTarget {
         }
         // Area-denial death hook (Pillar 2/3): e.g. a Plague Hulk leaves a toxic cloud here.
         if (enemyDeathHazardListener != null) {
-            enemyDeathHazardListener.onEnemyDied(enemy.type, enemy.tileColumn, enemy.tileRow);
+            enemyDeathHazardListener.onEnemyDied(enemy.type, enemy.tileColumn, enemy.tileRow, enemy.selfDestructed);
         }
         enemies.remove(enemy);
     }

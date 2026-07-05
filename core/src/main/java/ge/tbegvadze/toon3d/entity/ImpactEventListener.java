@@ -42,4 +42,15 @@ public interface ImpactEventListener {
      */
     default void onBlockAbsorbed(int tileColumn, int tileRow, float heightMultiplier,
                                  int absorbedAmount, boolean shattered) {}
+
+    /**
+     * Called when a SUMMON ability (strategy-combat-order-5) materializes a new enemy on a
+     * previously empty tile, so the effect system can play a portal-burst animation there —
+     * without this, a summoned enemy would just silently appear. Default: no-op.
+     *
+     * @param tileColumn       the empty tile the new enemy spawned on
+     * @param tileRow          the empty tile the new enemy spawned on
+     * @param heightMultiplier the spawned enemy type's billboard height fraction
+     */
+    default void onEnemySpawned(int tileColumn, int tileRow, float heightMultiplier) {}
 }

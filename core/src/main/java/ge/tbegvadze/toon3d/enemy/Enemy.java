@@ -130,6 +130,17 @@ public class Enemy implements StatusHost {
     public int chargeDirectionColumn = 0;
     public int chargeDirectionRow    = 0;
 
+    /**
+     * Plague Hulk low-HP finisher (see .claude/agents/ideas/plague-hulk-self-destruct.txt). Once
+     * {@code selfDestructPrimed} is set it is STICKY — the Hulk never reverts to attacking, moving,
+     * or Block-defending; every later commit just re-telegraphs {@code selfDestructTurnsRemaining}.
+     * {@code selfDestructed} is set true only at the instant of detonation, and read by the death
+     * hazard hook to choose the massive toxic cloud over the ordinary minimal one.
+     */
+    public boolean selfDestructPrimed        = false;
+    public int     selfDestructTurnsRemaining = 0;
+    public boolean selfDestructed            = false;
+
     // Status effect storage — pre-allocated at construction, never replaced
     private final EnumMap<StatusType, StatusEffect> activeEffects;
     private StatusResistance statusResistance = StatusResistance.defaultResistance();
