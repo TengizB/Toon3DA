@@ -115,7 +115,7 @@ public final class TouchInputState extends InputAdapter {
         inspectButton.visible = false;
         buttons[INDEX_INSPECT_WEAPON] = inspectButton;
 
-        // Contextual USE button — left cluster, top row; hidden until player faces a vending machine
+        // Contextual USE button — centred on screen; hidden until player faces a vending machine
         float useHalf = TouchConstants.USE_BUTTON_SIZE / 2f;
         TouchButton useButton = new TouchButton(
             TouchConstants.USE_BUTTON_CENTER_X - useHalf,

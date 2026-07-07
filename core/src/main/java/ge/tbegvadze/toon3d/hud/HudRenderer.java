@@ -19,8 +19,10 @@ import ge.tbegvadze.toon3d.render.Renderable;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.CombatPalette;
+import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.HudConstants;
+import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.world.HudState;
 
 /**
@@ -225,7 +227,48 @@ public class HudRenderer implements Renderable, Disposable {
                 && hudState.medicalCharges > 0
                 && player.getHealthFraction() <= HudConstants.HUD_MEDKIT_WARN_HP_THRESHOLD;
         if (medkitWarn) drawMedkitWarning(pulse);
+        drawCreditsReadout();
+        if (!isDead) drawDebuffTextList();
         batch.end();
+    }
+
+    // =========================================================================
+    // Always-on top-right readouts — credits balance and active debuff list
+    // =========================================================================
+
+    private void drawCreditsReadout() {
+        font.getData().setScale(HudConstants.HUD_CREDITS_SCALE);
+        font.setColor(ItemConstants.INVENTORY_CREDITS_COLOR_R, ItemConstants.INVENTORY_CREDITS_COLOR_G,
+                      ItemConstants.INVENTORY_CREDITS_COLOR_B, 1f);
+        stringBuilder.setLength(0);
+        stringBuilder.append("CREDITS ").append(hudState.credits);
+        glyphLayout.setText(font, stringBuilder);
+        float drawX = Constants.WORLD_WIDTH - HudConstants.HUD_CREDITS_RIGHT_INSET_X - glyphLayout.width;
+        float drawY = Constants.WORLD_HEIGHT - HudConstants.HUD_CREDITS_TOP_INSET_Y;
+        font.draw(batch, stringBuilder, drawX, drawY);
+        font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
+    }
+
+    private void drawDebuffTextList() {
+        font.getData().setScale(HudConstants.HUD_DEBUFF_LIST_SCALE);
+        float drawY = Constants.WORLD_HEIGHT - HudConstants.HUD_CREDITS_TOP_INSET_Y
+                - HudConstants.HUD_DEBUFF_LIST_TOP_GAP;
+        int lineIndex = 0;
+        for (int typeIndex = 0; typeIndex < STATUS_TYPES.length; typeIndex++) {
+            StatusEffect effect = player.getActiveEffects().get(STATUS_TYPES[typeIndex]);
+            if (effect == null || !effect.isActive()) continue;
+            temporaryColor.set(STATUS_ICON_RED[typeIndex], STATUS_ICON_GREEN[typeIndex],
+                                STATUS_ICON_BLUE[typeIndex], 1f);
+            font.setColor(temporaryColor);
+            stringBuilder.setLength(0);
+            stringBuilder.append(STATUS_TYPES[typeIndex].name()).append(" (")
+                          .append(effect.getRemainingTurns()).append(")");
+            glyphLayout.setText(font, stringBuilder);
+            float drawX = Constants.WORLD_WIDTH - HudConstants.HUD_CREDITS_RIGHT_INSET_X - glyphLayout.width;
+            font.draw(batch, stringBuilder, drawX, drawY - lineIndex * HudConstants.HUD_DEBUFF_LIST_LINE_STEP);
+            lineIndex++;
+        }
+        font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
     }
 
     // =========================================================================

@@ -96,6 +96,18 @@ public final class HudConstants {
     public static final float HUD_STATUS_ROW_LOCAL_X    = 16f;
     public static final float HUD_STATUS_ROW_LOCAL_Y    = 14f;
 
+    // Always-on credits readout — top-right corner of the screen, clear of the mini-map
+    // (top-left) and the bottom HUD chrome. World units, screen 1280x720, Y-up.
+    public static final float HUD_CREDITS_RIGHT_INSET_X = 24f;    // gap from the right screen edge
+    public static final float HUD_CREDITS_TOP_INSET_Y   = 28f;    // gap from the top screen edge to the text top
+    public static final float HUD_CREDITS_SCALE         = 1.05f;
+
+    // Debuff text list — stacked lines beneath the credits readout, top-right corner.
+    // Each active status effect draws as "NAME (turnsRemaining)", counting down every turn.
+    public static final float HUD_DEBUFF_LIST_TOP_GAP   = 36f;    // gap below the credits text top for the first line
+    public static final float HUD_DEBUFF_LIST_LINE_STEP = 24f;    // vertical spacing between stacked debuff lines
+    public static final float HUD_DEBUFF_LIST_SCALE     = 0.8f;
+
     // Legacy weapon inspect constants — kept for compilation; renderer will be replaced
     public static final float WEAPON_INSPECT_CARD_WIDTH      = 640f;
     public static final float WEAPON_INSPECT_CARD_HEIGHT     = 460f;
