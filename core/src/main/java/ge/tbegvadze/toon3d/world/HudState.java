@@ -34,4 +34,7 @@ public class HudState {
      * so the player is never nagged to heal with an empty stash.
      */
     public int     medicalCharges = 0;
+
+    /** Current spendable credit balance. Drives the always-visible top-right credits readout. */
+    public int     credits        = 0;
 }

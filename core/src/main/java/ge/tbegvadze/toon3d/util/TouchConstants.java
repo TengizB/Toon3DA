@@ -34,10 +34,11 @@ public final class TouchConstants {
     public static final float INSPECT_BUTTON_CENTER_Y   = 200f;
     public static final float INSPECT_BUTTON_SIZE       = 96f;
 
-    // Contextual USE button — left secondary cluster, row 4 (top of the left stack), starts hidden.
-    // Shown only when the player faces a UAC Fabricator vending machine (shop_order_1). Placed above
-    // the INSPECT/HEAL/INVENTORY stack so it never overlaps them if both contextual cues are active.
-    public static final float USE_BUTTON_CENTER_X       = 180f;
-    public static final float USE_BUTTON_CENTER_Y       = 488f;
+    // Contextual USE button — shown only when the player faces a UAC Fabricator vending machine
+    // (shop_order_1). Centred on the screen so it's unmistakable and easy to reach with either
+    // thumb; the 3D view and every other HUD element (bottom chrome, mini-map, weapon sprite)
+    // stays clear of screen centre, so it never overlaps anything else while visible.
+    public static final float USE_BUTTON_CENTER_X       = Constants.WORLD_WIDTH  / 2f;
+    public static final float USE_BUTTON_CENTER_Y       = Constants.WORLD_HEIGHT / 2f;
     public static final float USE_BUTTON_SIZE           = 96f;
 }

@@ -63,6 +63,7 @@ import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.StatsStore;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
@@ -378,7 +379,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // Build level-dependent resources for the first floor
         level = initialLevel;
-        buildLevelDependentResources(initialLevel);
+        buildLevelDependentResources(initialLevel, startRoom ? startRoomGen : null);
 
         if (startRoom) {
             setupStartRoomWeaponOffers(startRoomGen, runSeed);
@@ -436,6 +437,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     private void buildLevelDependentResources(Level targetLevel) {
+        buildLevelDependentResources(targetLevel, null);
+    }
+
+    private void buildLevelDependentResources(Level targetLevel, StartGameLevelGenerator startRoomGen) {
         doorManager            = new DoorManager(targetLevel);
         floorCeilingRenderer   = new FloorCeilingRenderer(targetLevel);
         wallRenderer           = new WallRenderer(targetLevel, doorManager);
@@ -577,14 +582,30 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             }
             groundItems.add(groundItem);
         }
-        seedCreditChips(targetLevel, groundItems, currentDepth);
+        // The starting room's weapon/melee offer tiles aren't registered as ground items yet
+        // (setupStartRoomWeaponOffers runs after this method returns), so reserve them here
+        // to keep credit chips from landing on the same tile as a weapon offer.
+        java.util.List<int[]> reservedTiles = null;
+        if (startRoomGen != null) {
+            reservedTiles = new java.util.ArrayList<>();
+            for (int offerIndex = 0; offerIndex < LevelGenConstants.START_ROOM_WEAPON_OFFER_COUNT; offerIndex++) {
+                reservedTiles.add(new int[]{startRoomGen.getWeaponTileColumn(offerIndex),
+                                            startRoomGen.getWeaponTileRow(offerIndex)});
+            }
+            for (int offerIndex = 0; offerIndex < LevelGenConstants.START_ROOM_MELEE_OFFER_COUNT; offerIndex++) {
+                reservedTiles.add(new int[]{startRoomGen.getMeleeTileColumn(offerIndex),
+                                            startRoomGen.getMeleeTileRow(offerIndex)});
+            }
+        }
+        seedCreditChips(targetLevel, groundItems, currentDepth, reservedTiles);
 
         propRenderer.setGroundItems(groundItems);
         levelRenderer.setGroundItems(groundItems);
         playerController.setGroundItems(groundItems);
     }
 
-    private void seedCreditChips(Level targetLevel, java.util.List<GroundItem> items, int depth) {
+    private void seedCreditChips(Level targetLevel, java.util.List<GroundItem> items, int depth,
+                                  java.util.List<int[]> reservedTiles) {
         java.util.Random chipRandom = new java.util.Random();
         int chipCount = GameBalance.CREDIT_CHIPS_PER_FLOOR_MIN
                 + chipRandom.nextInt(GameBalance.CREDIT_CHIPS_PER_FLOOR_MAX
@@ -600,6 +621,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 if (Level.isKeycardPickup(cell) || Level.isMedicalPickup(cell)
                         || Level.isArmourPickup(cell) || Level.isAmmoPickup(cell)) continue;
                 if (isOccupiedByGroundItem(items, tileColumn, tileRow)) continue;
+                if (isReservedTile(reservedTiles, tileColumn, tileRow)) continue;
                 walkableTiles.add(new int[]{tileColumn, tileRow});
             }
         }
@@ -638,6 +660,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         for (int itemIndex = 0; itemIndex < items.size(); itemIndex++) {
             GroundItem item = items.get(itemIndex);
             if (item.tileColumn == tileColumn && item.tileRow == tileRow) return true;
+        }
+        return false;
+    }
+
+    /** True if this tile is reserved for a not-yet-seeded item (e.g. a start-room weapon offer). */
+    private boolean isReservedTile(java.util.List<int[]> reservedTiles, int tileColumn, int tileRow) {
+        if (reservedTiles == null) return false;
+        for (int tileIndex = 0; tileIndex < reservedTiles.size(); tileIndex++) {
+            int[] reservedTile = reservedTiles.get(tileIndex);
+            if (reservedTile[0] == tileColumn && reservedTile[1] == tileRow) return true;
         }
         return false;
     }
@@ -1223,6 +1255,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hudState.xpFraction     = playerProgress.getXpFraction();
         hudState.xpForNextLevel = playerProgress.getXpForNextLevel();
         hudState.medicalCharges = itemInventory.countOf(ItemType.MEDKIT_SMALL) + itemInventory.countOf(ItemType.MEDKIT_LARGE);
+        hudState.credits        = playerStats.getCredits();
         Weapon hudWeapon = inventory.getEquippedWeapon();
         if (hudWeapon != null) {
             hudState.currentAmmo = hudWeapon.getShotsInClip();
