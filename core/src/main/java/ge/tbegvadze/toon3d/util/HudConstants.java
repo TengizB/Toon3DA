@@ -100,13 +100,14 @@ public final class HudConstants {
     // (top-left) and the bottom HUD chrome. World units, screen 1280x720, Y-up.
     public static final float HUD_CREDITS_RIGHT_INSET_X = 24f;    // gap from the right screen edge
     public static final float HUD_CREDITS_TOP_INSET_Y   = 28f;    // gap from the top screen edge to the text top
-    public static final float HUD_CREDITS_SCALE         = 1.05f;
+    public static final float HUD_CREDITS_SCALE         = 1.40f;
 
     // Debuff text list — stacked lines beneath the credits readout, top-right corner.
-    // Each active status effect draws as "NAME (turnsRemaining)", counting down every turn.
-    public static final float HUD_DEBUFF_LIST_TOP_GAP   = 36f;    // gap below the credits text top for the first line
-    public static final float HUD_DEBUFF_LIST_LINE_STEP = 24f;    // vertical spacing between stacked debuff lines
-    public static final float HUD_DEBUFF_LIST_SCALE     = 0.8f;
+    // Each active status effect draws as "NAME (turnsRemaining)  <detail>", counting down every turn,
+    // where <detail> is the effect's concrete per-turn/per-hit potency (e.g. "-6 HP/TURN", "-25% DMG DEALT").
+    public static final float HUD_DEBUFF_LIST_TOP_GAP   = 48f;    // gap below the credits text top for the first line
+    public static final float HUD_DEBUFF_LIST_LINE_STEP = 34f;    // vertical spacing between stacked debuff lines
+    public static final float HUD_DEBUFF_LIST_SCALE     = 1.10f;
 
     // Legacy weapon inspect constants — kept for compilation; renderer will be replaced
     public static final float WEAPON_INSPECT_CARD_WIDTH      = 640f;
