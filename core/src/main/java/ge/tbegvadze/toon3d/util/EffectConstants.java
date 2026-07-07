@@ -124,7 +124,8 @@ public final class EffectConstants {
     public static final int   POISON_DURATION               = 4;
     public static final int   STUN_DURATION_DEFAULT         = 1;
     public static final int   STUN_DURATION_HEAVY           = 2;
-    public static final int   BLIND_FOV_DEGREES             = 30;
+    // (BLINDED no longer narrows the raycast FOV — that zoomed/stretched the whole view; it now reads
+    //  purely through STATUS_BLIND_VIGNETTE_ALPHA, see Player.getEffectiveFovRadians.)
     public static final int   BLIND_DURATION               = 2;
     public static final float SLOW_FACTOR                   = 2.0f;
     public static final int   SLOW_DURATION                = 3;

@@ -619,6 +619,33 @@ public final class EnemyRenderer implements Renderable, Disposable {
         }
 
         // =====================================================================
+        // Pass 1.6: SUMMON telegraph — pulsing spore runes on the pre-selected empty spawn cells
+        // For every enemy whose committed SPECIAL is SUMMON, draw an additive summoning circle on each
+        // target tile's floor so the incoming spawn is a readable, dodge-able intent on the ground
+        // (strategy-combat-order-5). Reuses the pass-1 billboard projection and the same center-column
+        // wall Z-buffer occlusion as the bars; iterates the full list (summoners are few) — no allocation.
+        // =====================================================================
+        boolean anySummonTelegraph = false;
+        for (int enemyIndex = 0; enemyIndex < enemyCount; enemyIndex++) {
+            if (isSummonTelegraphing(enemies.get(enemyIndex))) { anySummonTelegraph = true; break; }
+        }
+        if (anySummonTelegraph) {
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE); // additive glow
+            batch.begin();
+            for (int enemyIndex = 0; enemyIndex < enemyCount; enemyIndex++) {
+                Enemy enemy = enemies.get(enemyIndex);
+                if (!isSummonTelegraphing(enemy)) continue;
+                for (int targetIndex = 0; targetIndex < enemy.summonTargetCount; targetIndex++) {
+                    drawSummonTargetMarker(enemy.summonTargetColumns[targetIndex],
+                                           enemy.summonTargetRows[targetIndex]);
+                }
+            }
+            batch.setColor(Color.WHITE);
+            batch.end();
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA); // restore default alpha blend
+        }
+
+        // =====================================================================
         // Pass 2: Health bars (white-pixel texture; single batch, ~3 flushes total)
         // =====================================================================
         boolean anyBarsToRender = false;
@@ -858,6 +885,64 @@ public final class EnemyRenderer implements Renderable, Disposable {
             out.set(ENEMY_NAME_TAG_TIER4_R, ENEMY_NAME_TAG_TIER4_G, ENEMY_NAME_TAG_TIER4_B, 1f);
         } else {
             out.set(ENEMY_NAME_TAG_TIER5_R, ENEMY_NAME_TAG_TIER5_G, ENEMY_NAME_TAG_TIER5_B, 1f);
+        }
+    }
+
+    /** True when this enemy is telegraphing a SUMMON (committed SPECIAL/SUMMON with live target cells). */
+    private static boolean isSummonTelegraphing(Enemy enemy) {
+        return enemy.isAlive()
+                && enemy.plannedAction.committed
+                && enemy.plannedAction.verb == IntentVerb.SPECIAL
+                && enemy.plannedAction.specialAbility == SpecialAbility.SUMMON
+                && enemy.summonTargetCount > 0;
+    }
+
+    /*
+     * Draws one pulsing "spore rune" on a pre-selected summon target tile's floor (inside an already-open
+     * additive batch). Projects the tile centre through the same billboard math the sprites use, culls it
+     * behind the player / out of range / behind a nearer wall (centre-column Z test), then draws a central
+     * glow mote ringed by orbiting motes squashed vertically so the circle reads as lying flat on the
+     * ground. Everything breathes on a wall-clock pulse — cosmetic only, never read by the simulation.
+     */
+    private void drawSummonTargetMarker(int tileColumn, int tileRow) {
+        float worldCenterX = tileColumn * CELL_SIZE + CELL_SIZE / 2f;
+        float worldCenterY = tileRow    * CELL_SIZE + CELL_SIZE / 2f;
+        float tileOffsetX  = (worldCenterX - playerWorldX) / CELL_SIZE;
+        float tileOffsetY  = (worldCenterY - playerWorldY) / CELL_SIZE;
+
+        float depth = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
+        if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES) return;
+        if (depth > SUMMON_MARKER_MAX_DISTANCE_TILES)  return;
+
+        float screenCenterColumn = GameMath.spriteScreenColumnCenter(
+                tileOffsetX, tileOffsetY, directionX, directionY, planeX, planeY, WALL_PROJECTION_SCREEN_WIDTH);
+        int centerColumn = (int) screenCenterColumn;
+        if (centerColumn < 0 || centerColumn >= WALL_PROJECTION_SCREEN_WIDTH) return;
+        if (depth >= wallRenderer.getZBufferUnchecked(centerColumn)) return; // occluded by a nearer wall
+
+        float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
+        float floorY     = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
+        float markerSize = fullWallLineHeight * SUMMON_MARKER_SIZE_FRACTION;
+        if (markerSize < 1f) return;
+        float centerY = floorY + markerSize * SUMMON_MARKER_FLOOR_LIFT_FRACTION;
+
+        float pulse = 0.5f + 0.5f * (float) Math.sin(
+                statusAnimationClock * SUMMON_MARKER_PULSE_HZ * MathUtils.PI2);
+        float ringRadius = markerSize * (0.35f + 0.15f * pulse);
+        float moteSize   = markerSize * 0.22f;
+        float alpha      = SUMMON_MARKER_MAX_ALPHA * (0.45f + 0.55f * pulse);
+
+        batch.setColor(SUMMON_MARKER_R, SUMMON_MARKER_G, SUMMON_MARKER_B, alpha);
+        batch.draw(whitePixelTexture, screenCenterColumn - moteSize / 2f, centerY - moteSize / 2f,
+                moteSize, moteSize, 0, 0, 1, 1, false, false);
+
+        for (int moteIndex = 0; moteIndex < SUMMON_MARKER_MOTE_COUNT; moteIndex++) {
+            float angle = moteIndex / (float) SUMMON_MARKER_MOTE_COUNT * MathUtils.PI2
+                    + statusAnimationClock * SUMMON_MARKER_PULSE_HZ;
+            float moteX = screenCenterColumn + (float) Math.cos(angle) * ringRadius;
+            float moteY = centerY + (float) Math.sin(angle) * ringRadius * 0.5f; // squash → floor plane
+            batch.draw(whitePixelTexture, moteX - moteSize / 2f, moteY - moteSize / 2f,
+                    moteSize, moteSize, 0, 0, 1, 1, false, false);
         }
     }
 

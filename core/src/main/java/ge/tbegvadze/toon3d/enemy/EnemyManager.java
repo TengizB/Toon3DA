@@ -635,6 +635,12 @@ public final class EnemyManager implements EnemyHitTarget {
             if (!enemy.isAlive() || !enemy.isAlerted()) continue;
             if (enemy instanceof Boss) continue;
             computeNextPlan(enemy, playerColumn, playerRow, player);
+            // Track consecutive DEFENDs so shouldDefend can break an endless turtle loop (design feedback).
+            if (enemy.plannedAction.verb == IntentVerb.DEFEND) {
+                enemy.consecutiveDefendTurns++;
+            } else {
+                enemy.consecutiveDefendTurns = 0;
+            }
             // order-2: fire the intent-icon pop when the freshly committed verb differs from last turn.
             enemy.notifyCommitted(enemy.plannedAction.verb);
         }
@@ -882,22 +888,24 @@ public final class EnemyManager implements EnemyHitTarget {
     }
 
     /**
-     * SUMMON: spawns 1-2 chaff of the archetype's spawn type on empty adjacent tiles, bounded by the
-     * per-summoner cap AND the per-room live-enemy ceiling so the encounter's Threat-Point budget stays
-     * bounded (docs/balance-rule-system.txt). Counter: kill the summoner before the room floods.
+     * SUMMON: spawns the batch of 2-3 chaff pre-selected at commit ({@link #selectSummonTargets}) into
+     * the floor-telegraphed empty cells, re-validating each and bounded by the per-room live-enemy
+     * ceiling so the encounter's Threat-Point budget stays honest (docs/balance-rule-system.txt). No
+     * per-summoner lifetime cap — the SPECIAL cadence is the cooldown, so it can summon again later.
+     * Counter: read the marked cells and kill the summoner before the room floods.
      */
     private void executeSummon(Enemy enemy, int playerColumn, int playerRow) {
         enemy.state = EnemyState.ATTACKING;
         enemy.triggerTelegraph();
         EnemyType summonType = summonTypeFor(enemy.type);
-        int requested = EnemyConstants.SUMMON_COUNT_MIN
-                + effectRandom.nextInt(EnemyConstants.SUMMON_COUNT_MAX - EnemyConstants.SUMMON_COUNT_MIN + 1);
         int spawned = 0;
-        for (int directionIndex = 0; directionIndex < 4 && spawned < requested; directionIndex++) {
-            if (enemy.summonsSpawned >= EnemyConstants.SUMMON_PER_ENEMY_CAP)  break;
-            if (countLiveEnemies()   >= EnemyConstants.SUMMON_ROOM_LIVE_CAP)  break;
-            int neighbourColumn = enemy.tileColumn + STEP_COLUMNS[directionIndex];
-            int neighbourRow    = enemy.tileRow    + STEP_ROWS[directionIndex];
+        // Spawn into the EXACT tiles telegraphed at commit — re-validating each, since the player or an
+        // ally may have stepped onto a marked cell during their turn (that cell simply spawns nothing,
+        // the same "reposition dodges it" fairness the other specials honour).
+        for (int targetIndex = 0; targetIndex < enemy.summonTargetCount; targetIndex++) {
+            if (countLiveEnemies() >= EnemyConstants.SUMMON_ROOM_LIVE_CAP) break;
+            int neighbourColumn = enemy.summonTargetColumns[targetIndex];
+            int neighbourRow    = enemy.summonTargetRows[targetIndex];
             if (!isPassableForEnemy(neighbourColumn, neighbourRow, playerColumn, playerRow)) continue;
             spawnEnemy(summonType, neighbourColumn, neighbourRow, currentDepth);
             enemy.summonsSpawned++;
@@ -906,6 +914,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 impactEventListener.onEnemySpawned(neighbourColumn, neighbourRow, summonType.heightMultiplier());
             }
         }
+        enemy.summonTargetCount = 0; // batch consumed — clears the floor telegraph until the next commit
         if (spawned > 0 && eventTextSystem != null) {
             eventTextSystem.spawnWithColor("SUMMON", EventTextSystem.COLOR_GREEN);
         }
@@ -1040,8 +1049,10 @@ public final class EnemyManager implements EnemyHitTarget {
      * before this fix, "connected" was decided purely by final Manhattan distance to the player's
      * live tile, which could false-positive when the player stepped exactly one tile perpendicular
      * (ending cardinally adjacent from the side even though they left the charge lane). Returns true
-     * only when the rush both stayed on the lane and ended adjacent to the player (a real connect,
-     * dealt at the charge multiplier).
+     * when the rush stayed on the lane and ended adjacent to the player — that "reached" case is NOT a
+     * guaranteed hit: {@code SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE} of the time the brute over-commits and
+     * halts next to them dealing no damage (a punishable opening), otherwise it lands the full charge
+     * multiplier. Returns false only on a true lane whiff, which stuns the brute (executeWindUp).
      */
     private boolean performCharge(Enemy enemy, int playerColumn, int playerRow, Player player) {
         int stepColumn = enemy.chargeDirectionColumn;
@@ -1068,15 +1079,29 @@ public final class EnemyManager implements EnemyHitTarget {
 
         boolean playerOnLane = (stepRow == 0) ? (playerRow == lockedLaneRow)
                                                : (playerColumn == lockedLaneColumn);
-        boolean connected = playerOnLane && GameMath.manhattanDistanceTiles(
+        boolean reachedPlayer = playerOnLane && GameMath.manhattanDistanceTiles(
                 enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) == 1;
-        if (connected) {
+        if (!reachedPlayer) {
+            return false; // rushed into an empty lane (player sidestepped) — whiff → punishable recovery
+        }
+        // The rush reached the player. Most of the time (SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE) the brute
+        // over-commits and screeches to a halt right next to them WITHOUT landing the blow, handing the
+        // player a guaranteed swing before it can strike again next turn (design feedback: a charge
+        // should usually leave the brute punishable, not just delete HP). The rest of the time it lands
+        // the full telegraphed charge hit. Either way it ends adjacent, so there is NO whiff-recovery —
+        // executeWindUp only stuns the brute when the rush missed the player entirely (returns false above).
+        if (effectRandom.nextFloat() < EnemyConstants.SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE) {
+            enemy.triggerTelegraph(); // brief flinch/flash sells the abrupt stop
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("STAGGERED", EventTextSystem.COLOR_GREY);
+            }
+        } else {
             int chargeDamage = Math.max(1, Math.round(
                     enemy.scaledAttackDamage() * EnemyConstants.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER));
             player.applyDirectionalDamage(chargeDamage, enemy.worldCenterX(), enemy.worldCenterY());
             if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
         }
-        return connected;
+        return true; // reached the player — adjacent now, will commit a normal melee next turn
     }
 
     /** True when the enemy is exactly one tile away from the player along a cardinal (melee reach). */
@@ -1319,8 +1344,10 @@ public final class EnemyManager implements EnemyHitTarget {
                         && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
                         && hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
             case SUMMON:
-                return enemy.summonsSpawned < EnemyConstants.SUMMON_PER_ENEMY_CAP
-                        && countLiveEnemies() < EnemyConstants.SUMMON_ROOM_LIVE_CAP
+                // Reusable: no lifetime cap. The SPECIAL cadence spaces out casts (the cooldown) and the
+                // per-room live ceiling stops a flood, so the summoner can spawn a fresh batch whenever
+                // the board has room and an empty adjacent tile (design feedback: spawn 2-3, then reuse).
+                return countLiveEnemies() < EnemyConstants.SUMMON_ROOM_LIVE_CAP
                         && hasEmptyAdjacentTile(enemy, playerColumn, playerRow);
             case AREA_STRIKE:
                 // Only telegraph the slam when the player is close enough that it can plausibly land
@@ -1339,6 +1366,37 @@ public final class EnemyManager implements EnemyHitTarget {
         int targetRow    = ability.targetsSelf() ? enemy.tileRow    : playerRow;
         int predictedDamage = ability.dealsDamage() ? areaStrikeDamage(enemy) : 0;
         plan.setSpecial(ability, targetColumn, targetRow, predictedDamage);
+        if (ability == SpecialAbility.SUMMON) {
+            // Choose the exact spawn cells NOW so the floor telegraph is honest — the same tiles the
+            // player sees marked this turn are the ones executeSummon spawns into next turn.
+            selectSummonTargets(enemy, playerColumn, playerRow);
+        } else {
+            enemy.summonTargetCount = 0; // switching away from a summon plan clears any stale telegraph
+        }
+    }
+
+    /**
+     * Pre-selects a batch of 2-3 empty cardinal-neighbour tiles for a committed SUMMON and stores them
+     * on the enemy so the floor telegraph (EnemyRenderer) and executeSummon agree on the exact cells.
+     * The batch size is randomised in {@code [SUMMON_COUNT_MIN, SUMMON_COUNT_MAX]} but clamped by both
+     * the available passable tiles and the remaining per-room live-enemy headroom, so a telegraph never
+     * promises more spawns than the encounter budget allows.
+     */
+    private void selectSummonTargets(Enemy enemy, int playerColumn, int playerRow) {
+        int requested = EnemyConstants.SUMMON_COUNT_MIN
+                + effectRandom.nextInt(EnemyConstants.SUMMON_COUNT_MAX - EnemyConstants.SUMMON_COUNT_MIN + 1);
+        int count = 0;
+        int liveEnemies = countLiveEnemies();
+        for (int directionIndex = 0; directionIndex < 4 && count < requested; directionIndex++) {
+            if (liveEnemies + count >= EnemyConstants.SUMMON_ROOM_LIVE_CAP) break;
+            int neighbourColumn = enemy.tileColumn + STEP_COLUMNS[directionIndex];
+            int neighbourRow    = enemy.tileRow    + STEP_ROWS[directionIndex];
+            if (!isPassableForEnemy(neighbourColumn, neighbourRow, playerColumn, playerRow)) continue;
+            enemy.summonTargetColumns[count] = neighbourColumn;
+            enemy.summonTargetRows[count]    = neighbourRow;
+            count++;
+        }
+        enemy.summonTargetCount = count;
     }
 
     /** AREA_STRIKE slam damage: the enemy's scaled attack times the slam multiplier, minimum 1. */
@@ -1375,6 +1433,11 @@ public final class EnemyManager implements EnemyHitTarget {
     private boolean shouldDefend(Enemy enemy, int playerColumn, int playerRow) {
         EnemyRole role = enemy.type.role();
         if (role == EnemyRole.CHAFF || role == EnemyRole.BOSS) return false;
+        // Never brace more than a couple of turns in a row. A low-HP, cornered enemy that can neither
+        // land a hit nor safely reposition would otherwise commit DEFEND every single turn and just
+        // stand there shielding — which reads to the player as a broken enemy "doing nothing". After
+        // the cap it is forced to re-engage (attack/move) for at least one turn (design feedback).
+        if (enemy.consecutiveDefendTurns >= BalanceConfig.DEFEND_MAX_CONSECUTIVE_TURNS) return false;
         if (role == EnemyRole.BRUISER
                 && enemy.turnCounter % BalanceConfig.DEFEND_BRUISER_CADENCE_TURNS == 0) {
             return true;

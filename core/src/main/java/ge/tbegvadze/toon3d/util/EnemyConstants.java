@@ -75,6 +75,7 @@ public final class EnemyConstants {
     public static final float   SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER = BalanceConfig.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER;
     public static final int     SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES = BalanceConfig.SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES;
     public static final int     SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES = BalanceConfig.SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES;
+    public static final float   SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE = BalanceConfig.SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE;
 
     // MIRE_WRAITH — slow ground-based ranged acid (spawn '5')
     public static final int     MIRE_WRAITH_MAX_HEALTH           = BalanceConfig.MIRE_WRAITH_MAX_HEALTH;
@@ -317,12 +318,35 @@ public final class EnemyConstants {
      */
     public static final int DEBUFF_WEAK_DURATION_TURNS  = 2;
 
-    // SUMMON — spawn chaff on empty adjacent tiles. The hard caps bound the encounter-budget headroom
-    // (docs/balance-rule-system.txt): a per-summoner ceiling AND a per-room live-enemy ceiling.
-    public static final int SUMMON_COUNT_MIN     = 1;
-    public static final int SUMMON_COUNT_MAX     = 2;
-    public static final int SUMMON_PER_ENEMY_CAP = 4;
+    // SUMMON — spawn chaff on empty adjacent tiles. A summoner spawns a BATCH of 2-3 per cast, then is
+    // gated by its SPECIAL cadence (the natural cooldown) and the per-room live-enemy ceiling before it
+    // may summon again — reusable but never a per-turn flood (design feedback: "spawn 2-3 once, then be
+    // able to use the ability again", not indefinitely). The room cap bounds the encounter-budget
+    // headroom (docs/balance-rule-system.txt).
+    public static final int SUMMON_COUNT_MIN     = 2;
+    public static final int SUMMON_COUNT_MAX     = 3;
     public static final int SUMMON_ROOM_LIVE_CAP = 14;
+    /** Slots reserved for pre-selected summon target tiles (the four cardinal neighbours). */
+    public static final int SUMMON_TARGET_CAPACITY = 4;
+
+    // SUMMON telegraph — a pulsing "spore rune" drawn on each pre-selected empty spawn cell during the
+    // player's turn (EnemyRenderer), so the incoming spawn is a readable, dodge-able intent on the floor.
+    /** Marker footprint as a fraction of the target tile's full wall-stripe height at its depth. */
+    public static final float SUMMON_MARKER_SIZE_FRACTION = 0.55f;
+    /** Vertical lift of the rune off the floor line, as a fraction of its own size (0 = flat on floor). */
+    public static final float SUMMON_MARKER_FLOOR_LIFT_FRACTION = 0.20f;
+    /** Pulse speed (Hz) of the rune's breathing glow. */
+    public static final float SUMMON_MARKER_PULSE_HZ = 1.6f;
+    /** Number of orbiting glow motes forming the summoning circle. */
+    public static final int   SUMMON_MARKER_MOTE_COUNT = 8;
+    /** Peak additive alpha of the rune at the brightest point of its pulse. */
+    public static final float SUMMON_MARKER_MAX_ALPHA = 0.85f;
+    /** Max draw distance (tiles) for the telegraph rune; beyond this it is culled for clarity. */
+    public static final float SUMMON_MARKER_MAX_DISTANCE_TILES = 16f;
+    /** Toxic-green rune colour (matches the Blight Corruptor's spore theme). */
+    public static final float SUMMON_MARKER_R = 0.40f;
+    public static final float SUMMON_MARKER_G = 1.00f;
+    public static final float SUMMON_MARKER_B = 0.15f;
 
     // AREA_STRIKE — telegraphed slam hitting every tile within this cross radius of the enemy.
     public static final int   AREA_STRIKE_RADIUS_TILES      = 1;

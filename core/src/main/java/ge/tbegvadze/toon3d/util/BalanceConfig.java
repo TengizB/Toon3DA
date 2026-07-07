@@ -134,6 +134,13 @@ public final class BalanceConfig {
     public static final int   SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES = 2;
     /** Farthest cardinal-lane gap (tiles) the brute will start a charge from (<= LOS). Range: 3–6. */
     public static final int   SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES = 5;
+    /**
+     * Probability that a charge which reaches the player STOPS next to them and does NOT land the hit,
+     * ending its rush adjacent and unwinded so the player gets a guaranteed swing before it attacks
+     * again (design feedback: a charge should usually leave the brute punishable, not just delete HP).
+     * The remaining {@code 1 - this} of reaching charges land the full multiplier hit. Range: 0.5–0.9.
+     */
+    public static final float SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE = 0.75f;
 
     // PLAGUE_HULK (spawn '1') — slow tank melee. (was 50 HP / 10 dmg)
     public static final int PLAGUE_HULK_MAX_HEALTH         = 120;
@@ -254,6 +261,14 @@ public final class BalanceConfig {
      * read-and-adapt rhythm StS elites have, independent of their HP. Range: 2–4.
      */
     public static final int   DEFEND_BRUISER_CADENCE_TURNS    = 3;
+    /**
+     * Hard ceiling on how many turns in a row an enemy may commit DEFEND before it is forced to do
+     * something else (attack / reposition). Without this a low-HP, cornered enemy that can neither hit
+     * nor safely move would brace EVERY turn and just stand there shielding — reading to the player as
+     * a broken enemy "doing nothing". After this many consecutive braces the DEFEND branch is skipped
+     * for at least one turn so the enemy re-engages. Range: 1–3.
+     */
+    public static final int   DEFEND_MAX_CONSECUTIVE_TURNS    = 2;
 
     // -------------------------------------------------------------------------
     // PLAYER GUARD — directional defense (strategy-combat-order-4).

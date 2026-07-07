@@ -150,15 +150,17 @@ public class Player implements Renderable, Disposable, StatusHost {
     public void clearStunFlag() { isNextActionStunned = false; }
 
     /**
-     * Returns the effective field-of-view radians, accounting for BLINDED override.
-     * World.render() uses this instead of fieldOfViewRadians directly so the BLINDED
-     * FOV clamp takes effect immediately without mutating the base field.
+     * Returns the effective field-of-view radians used by every world renderer.
+     *
+     * <p>Historically BLINDED narrowed the raycast FOV to a tunnel, but shrinking the FOV zooms the
+     * DDA projection: at 30° vs the default 90° every wall stripe is ~3× taller, so the whole view
+     * visibly STRETCHES and reads as broken rather than "blinded". Blindness now communicates purely
+     * through the heavy dark screen-edge vignette (StatusEffectVignetteRenderer,
+     * {@link EffectConstants#STATUS_BLIND_VIGNETTE_ALPHA}) — the geometry stays undistorted, so the
+     * player still loses peripheral vision without the FOV warp. World.render() keeps calling this so
+     * any future non-distorting FOV modifier has a single hook.
      */
     public float getEffectiveFovRadians() {
-        StatusEffect blindEffect = activeStatusEffects.get(StatusType.BLINDED);
-        if (blindEffect != null && blindEffect.isActive()) {
-            return EffectConstants.BLIND_FOV_DEGREES * MathUtils.degreesToRadians;
-        }
         return fieldOfViewRadians;
     }
 

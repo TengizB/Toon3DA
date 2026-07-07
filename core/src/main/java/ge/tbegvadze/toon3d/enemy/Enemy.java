@@ -96,11 +96,30 @@ public class Enemy implements StatusHost {
     public final MoveHistory moveHistory = new MoveHistory();
 
     /**
-     * How many chaff this summoner has spawned so far (strategy-combat-order-5). Bounded by
-     * {@code EnemyConstants.SUMMON_PER_ENEMY_CAP} so a single summoner cannot flood the room and blow
-     * the encounter's Threat-Point budget. Non-summoner archetypes leave this at 0.
+     * Running total of chaff this summoner has spawned across its life (strategy-combat-order-5). No
+     * longer a hard cap on summoning — the per-cast batch size, the SPECIAL cadence (the reuse cooldown)
+     * and the per-room live ceiling bound the flood instead. Kept for stats/telemetry; non-summoners 0.
      */
     public int summonsSpawned = 0;
+
+    /**
+     * How many turns in a row this enemy has committed DEFEND. Incremented each time a DEFEND is
+     * committed, reset to 0 the moment it commits anything else. EnemyManager.shouldDefend refuses to
+     * brace again once this reaches {@code BalanceConfig.DEFEND_MAX_CONSECUTIVE_TURNS}, so a cornered
+     * low-HP enemy can't turtle forever and just stand there (design feedback: enemies "doing nothing").
+     */
+    public int consecutiveDefendTurns = 0;
+
+    /**
+     * Pre-selected spawn tiles for a committed SUMMON (strategy-combat-order-5). Chosen at COMMIT time
+     * (not execution) so the intent is honest: a floor telegraph marks these exact empty cells during
+     * the player's turn (EnemyRenderer), then executeSummon spawns into them one turn later. Sized to
+     * the four cardinal neighbours; {@code summonTargetCount} says how many slots are live this cast.
+     * Meaningful only while {@code plannedAction.verb == SPECIAL} and its ability is SUMMON.
+     */
+    public final int[] summonTargetColumns = new int[EnemyConstants.SUMMON_TARGET_CAPACITY];
+    public final int[] summonTargetRows    = new int[EnemyConstants.SUMMON_TARGET_CAPACITY];
+    public int         summonTargetCount   = 0;
 
     /**
      * The action this enemy has COMMITTED to perform on its next turn (strategy-combat-order-1).
