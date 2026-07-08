@@ -1,0 +1,150 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Route Map — Part 7: Special-Level Generation Framework
+CREATED: 2026-07-08
+---
+
+PREREQUISITE: order-1 (NodeLevelProfile id on NodeTypeDefinition), order-3 (the node->floor
+pipeline that calls NodeLevelProfile.resolve). READ: procedural-level-generation.txt,
+tile-symbols.txt (the ONLY legal tiles), level-design-context.txt, ILevelGenerator +
+LevelGenConfig source. This part is the SHARED CONTRACT that order-8/9/10 and every future
+special node build on. It ships the framework + the two simplest profiles; the bespoke layouts
+live in order-8/9.
+
+OWNS
+====
+NodeLevelProfile — the thing that answers "when the player enters a node of THIS type, what level
+do they get?" — plus the mechanism that keeps generators and node-contents orthogonal so any node
+can be hosted by any generator. This is the extensibility spine for special levels: adding a new
+special level later = write one profile + register it, no World edits.
+
+
+THE PROFILE CONTRACT
+====================
+   interface NodeLevelProfile {
+       LevelPlan resolve(RouteNode node, int depth, long floorSeed);
+   }
+   final class LevelPlan {
+       GeneratorId generatorId;          // which registered generator builds the base floor
+       LevelGenConfig config;            // biases that generator (props/rooms/lighting/pickups)
+       List<GuaranteedContent> guarantees; // applied POST-generation (order-3 step 5)
+       EnemyBudgetOverride enemyBudget;  // null = normal depth budget; else scaled/replaced
+       Theme themeOverride;              // null = region theme; else force a wall/lighting theme
+   }
+Profiles are registered in a NodeLevelProfileRegistry keyed by the levelProfileId string that
+NodeTypeDefinition carries (order-1). order-3 resolves node.type -> definition -> profileId ->
+profile -> LevelPlan. NOTHING switches on node type directly; it's all registry lookups.
+
+WHY POST-GENERATION GUARANTEES (the orthogonality trick)
+========================================================
+A CACHE must contain crates + ammo whether its base floor is rooms_mst, a cavern, or a linear
+corridor. So the profile does NOT need a bespoke generator for every node — it picks ANY suitable
+generator, biases it via LevelGenConfig, then STAMPS the guaranteed contents afterward:
+   GuaranteedContent kinds:
+     PICKUP(symbol, count, placement)      // e.g. 3x '6' bullet box, 1x 'H' medkit
+     PROP(symbol, count, placement)        // e.g. 2x '=' weapon rack, '&' bio-pod
+     STATION(kind, placement)              // e.g. HEAL_STATION (order-8), VENDING (shop)
+     SPAWN(enemyMarker, count, placement)  // e.g. force an '!' Iron Stalker for ELITE
+     TILE_THEME(region of the level)       // repaint a room's walls to 'M' medical, etc.
+   placement = enum { NEAR_SPAWN, NEAR_EXIT, FARTHEST_ROOM, CENTER_ROOM, SCATTERED, GATED_ROOM }
+Placement resolves against the generated Level's room metadata (LevelGenerator already knows its
+rooms / spawn / exit). Guarantees are stamped only on walkable, non-conflicting tiles (never over
+'p', '>', walls, or an existing pickup) — provide a GuaranteedContentStamper util that finds legal
+tiles deterministically from floorSeed so results are reproducible. ONLY use symbols from
+tile-symbols.txt (strict rule); no new tile symbols are introduced by this system.
+
+WHEN A BESPOKE GENERATOR IS ACTUALLY WARRANTED
+==============================================
+Most nodes = existing generator + config + guarantees (cheap, varied, reuses tested code). Write a
+NEW ILevelGenerator only when the SHAPE itself must be special and can't come from biasing an
+existing one — e.g. a single-room shrine, a symmetric shop showroom, a boss arena (already
+exists: BossArenaGenerator). order-8/9 note per-node which route they take. A new bespoke
+generator still just registers in GeneratorRegistry (order-1) and is named by a profile — no
+World changes. This is the promise: "when new level generators are added they can be part of the
+roadmap easily."
+
+
+V1 PROFILE ASSIGNMENTS (the catalog; details in the referenced parts)
+=====================================================================
+  COMBAT      -> DefaultCombatProfile (shipped in order-3): node.chosenGeneratorId + depth-default
+                 config, no guarantees. The baseline.
+  ELITE       -> EliteProfile (order-9): standard generator, hazard/large-room-heavy config,
+                 reduced-count-but-tougher enemy budget + a forced elite marker + a guaranteed
+                 better reward (weapon rack '='/armour 'A'/extra ammo). Affix applied (order-9).
+  CACHE       -> CacheProfile (order-8): low enemy budget, guaranteed ammo boxes + 'H' medkit +
+                 crates; calm curated feel.
+  REST/MED-BAY-> RestProfile (order-8): near-empty medical-themed floor ('M' walls, '&'/'I' pods),
+                 a one-time HEAL_STATION, minimal/zero enemies.
+  SHOP        -> ShopProfile (this file, thin): normal-ish floor with the VENDING guarantee so
+                 World.seedVendingMachines definitely places a machine; low enemy budget. Reuses
+                 the entire shop system (shop_order_1..6) unchanged — the node just guarantees the
+                 machine and calms the floor.
+  MYSTERY     -> MysteryProfile (order-9): rolls a hidden sub-outcome from a weighted table at
+                 entry (secret-room-rich, trap gauntlet, jackpot vault, lore cache, ambush) and
+                 delegates to whichever profile/config that outcome implies. The gambler's node.
+  EVENT       -> EventProfile (order-10): a small curated interaction room (lore terminal, choice
+                 shrine, rescue) with little/no combat.
+  REGION_GATE -> GateProfile (order-10): a short "airlock/bulkhead" transition floor marking the
+                 act change; can gate behind a keycard door for ceremony (reuses DoorManager).
+  BOSS        -> BossProfile (thin): generatorId = "boss_arena" (BossArenaGenerator, exists);
+                 BossFloorController already seeds the depth-keyed boss. Profile just forwards.
+
+SHOP and BOSS profiles are simple enough to ship HERE (order-7) since they mostly forward to
+existing systems; CACHE/REST -> order-8; ELITE/MYSTERY -> order-9; EVENT/GATE -> order-10.
+
+
+ENEMY BUDGET OVERRIDES (respecting the balance contract)
+========================================================
+- EnemyBudgetOverride tweaks the encounter budget the generator/EncounterBudgetPlanner spends
+  (that system already exists — EncounterBudgetPlanner.java). CALM nodes lower it (CACHE/REST),
+  DANGER nodes reshape it (ELITE: fewer bodies, higher per-enemy Threat). It MUST still be a
+  function of raw depth (order-3 invariant) — an ELITE at depth 8 is depth-8-hard AND elite,
+  never depth-frozen. Route it through the balance primitives (docs/balance-rule-system.txt): a
+  node scales eHP/DPT budget, it does not opt out of the depth ramp.
+- CACHE/REST are the pressure-release valves the economy needs (roguelike_order_2 anti-starvation);
+  their low budgets are the reward for routing there, paid for by skipping an ELITE's loot.
+
+
+ADD-A-NEW-SPECIAL-LEVEL RECIPE (guaranteed by this framework)
+=============================================================
+1. Decide: can an existing generator + config + guarantees produce it? If yes -> write a
+   NodeLevelProfile only. If no -> write an ILevelGenerator (register in GeneratorRegistry) AND a
+   profile that names it.
+2. (If a new node kind) add the RouteNodeType + NodeTypeDefinition (order-1) pointing
+   levelProfileId at your profile and iconPainterId at a new icon (order-5).
+3. Register the profile in NodeLevelProfileRegistry (in RouteRegistries.bootstrap or a follow-on).
+4. Add its weight to the pool (RouteMapConstants) / region tables (order-2).
+5. Update docs/route-map-system.txt (LIVING DOC CONTRACT). Use game-level-designer agent for any
+   hand-crafted layout .txt.
+=> New special level appears on random maps with NO edits to World, the overlay, or the generator
+   selection. That is the whole point.
+
+
+TECHNICAL NOTES
+===============
+- GuaranteedContentStamper is pure/deterministic from floorSeed; unit-test that guarantees always
+  land on legal walkable tiles and never clobber 'p'/'>'/walls/existing pickups.
+- Only tiles in tile-symbols.txt. If a special level truly needs a NEW symbol, follow the STRICT
+  RULE in CLAUDE.md (docs + Level.java + renderer + count) in that implementation commit — but
+  prefer reusing existing symbols; the current set is very rich (medical 'M', pods '&'/'I',
+  weapon rack '=', ammo 6-9/0, etc.).
+- Keep profiles headless-testable where possible (resolve() returns a LevelPlan; the stamping is a
+  separate pure step over the generated Level).
+
+
+DELIVERABLE CHECKLIST (order-7)
+===============================
+[ ] NodeLevelProfile interface + LevelPlan + GuaranteedContent/EnemyBudgetOverride/Theme types.
+[ ] NodeLevelProfileRegistry keyed by levelProfileId; wired into RouteRegistries.bootstrap.
+[ ] GuaranteedContentStamper (deterministic, legal-tile-only) + unit tests.
+[ ] ShopProfile + BossProfile (thin forwarders) shipped and wired.
+[ ] EnemyBudgetOverride routed through EncounterBudgetPlanner respecting the depth ramp.
+[ ] order-3's DefaultCombatProfile confirmed compatible / folded in.
+[ ] The add-a-new-special-level recipe verified by adding one throwaway test profile.
+
+LIVING DOC CONTRACT
+===================
+On implementation: flip STATUS to IMPLEMENTED and create/expand the "Special levels: the profile
+system" section of docs/route-map-system.txt — the profile contract, guarantee kinds, placement
+enum, and the add-a-new-special-level recipe. This is the section other agents (game-level-designer,
+creative-game-designer) read before adding node content.

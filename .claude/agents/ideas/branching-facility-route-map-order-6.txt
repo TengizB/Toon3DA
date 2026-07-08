@@ -1,0 +1,137 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Route Map — Part 6: Touch Navigation & Interaction UX
+CREATED: 2026-07-08
+---
+
+PREREQUISITE: order-3 (ROUTE_SELECT phase + commitRouteNode), order-4 (overlay visual targets),
+order-5 (icons). READ: TouchConstants.java, input/touch/* (the ONLY input path), doom-rpg-reference.
+
+PLATFORM LAW (CLAUDE.md): MOBILE ONLY. No keyboard, ever. All interaction is touch. Buttons must
+be thumb-sized. This file makes the beautiful map from order-4 actually usable with two thumbs.
+
+OWNS
+====
+All interaction with the nav console: hit-testing node cards, the focus->confirm selection model,
+the ENGAGE/CANCEL bar, pan/zoom for tall maps, the long-range SCANNER reveal, and the feedback
+(visual/haptic/audio-hook) that makes selection feel good. It reads RouteMap (order-1), drives the
+FOCUS/COMMIT visual states (order-4), and calls back into World.commitRouteNode (order-3).
+
+
+INPUT ROUTING (how the overlay receives touches)
+================================================
+- During RunPhase.ROUTE_SELECT the world sim is frozen (order-3). The overlay becomes the active
+  touch consumer. Mirror how SHOP_OPEN / INVENTORY_OPEN overlays already grab input.
+- ALWAYS unproject touches through the overlay camera before hit-testing (project invariant —
+  never use raw screen pixels). Provide RouteMapOverlay.handleTouchDown/Up/Dragged(worldX, worldY)
+  or route through the existing input processor stack, whichever the current overlays use — match
+  the codebase's established pattern, do not invent a parallel one.
+- The normal on-screen movement/action cluster (TouchControllerRenderer) is HIDDEN or ignored
+  while the map is open; only the map's own targets are live.
+
+
+SELECTION MODEL — TAP-TO-FOCUS, TAP-TO-ENGAGE (two-step, prevents mis-descents)
+===============================================================================
+A descent is irreversible, so guard it behind a deliberate confirm (no accidental fat-finger dive):
+  1. TAP a candidate node card -> it becomes FOCUSED (order-4 FOCUS visuals: ring, scale-up, glow,
+     hint animates into the LEGEND strip; the conduit from CURRENT to it brightens). Only ONE node
+     focused at a time. Tapping another candidate moves focus. Tapping empty space clears focus.
+  2. The ENGAGE button (order-4 confirm bar) is DISABLED/dimmed until a node is focused; once
+     focused it lights up and pulses. TAP ENGAGE -> COMMIT (order-4 COMMIT animation) -> after the
+     animation, World.commitRouteNode(focused) -> FADING_OUT swaps the floor.
+  Alternative shortcut (optional, RouteMapConstants DOUBLE_TAP_ENGAGE, default OFF for safety):
+     double-tapping an already-focused card engages it. Off by default so first-timers can't dive
+     by accident.
+- FORCED nodes (BOSS / single REGION_GATE): the layer has one card, auto-focused; the copy on the
+  ENGAGE button changes to "DESCEND TO BOSS" / "BREACH BULKHEAD" and the card carries the "all
+  roads converge" visual. Still a deliberate tap (the beat matters). If SHOW_FORCED_NODE_CARD is
+  false (order-3) this whole screen is skipped for that hop.
+- CANCEL: default behaviour — the exit portal is what opened the map, and leaving is committing, so
+  "CANCEL" simply keeps the map open (no-op back to browsing). If a future design lets the player
+  step OFF the portal without choosing, CANCEL closes the overlay and returns to PLAYING on the
+  same floor (portal re-triggers next step). Put the policy behind RouteMapConstants
+  ALLOW_PORTAL_BACKOUT (default: map must be resolved to descend, so no true cancel — you WILL pick).
+
+
+PAN / ZOOM (tall or wide maps on a small screen)
+================================================
+- The two decision-relevant layers (CURRENT + next) are always framed in view by default, so a
+  player never has to scroll to make the actual choice. Scrolling is for PLANNING ahead.
+- VERTICAL DRAG pans the MAP VIEWPORT to look further down the run (the dim distant layers). A
+  spring/clamp keeps it within the generated map bounds; releasing near the decision layers snaps
+  back so the choice is always reachable (RouteMapConstants MAP_PAN_CLAMP, SNAP_BACK).
+- PINCH-ZOOM (optional, default on): zoom out to see the whole region shape, zoom in for detail.
+  Clamp min/max zoom. If pinch is too fiddly for v1, ship a small [MAP / DETAIL] toggle button
+  instead (a tap target that swaps between "fit region" and "decision" framing). Prefer the toggle
+  for v1 simplicity; gate pinch behind a constant.
+- Momentum/inertia on the pan flick, decelerating — feels like shoving a physical schematic.
+- Distant layers are non-interactive (order-4): dragging over them pans, it never focuses them.
+
+
+FOG & THE LONG-RANGE SCANNER (reveal layer — creative planning reward)
+======================================================================
+- Default reveal policy (RouteMapConstants REVEAL_MODE):
+     v1 default = "region reveal": all node TYPES in the CURRENT region are shown; the NEXT
+     region's nodes are ghosted '?' until you cross its REGION_GATE. This makes the map a real
+     plan within an act while preserving surprise between acts.
+- SCANNER: a consumable/relic (hooks to salvage-cache-meta-progression / roguelike_order_14) that,
+  when held, reveals the next region early, or reveals MYSTERY node true types one hop ahead
+  (FTL long-range scanner fantasy). The overlay shows a "SCANNER ACTIVE" readout and un-ghosts the
+  revealed nodes with a scan-sweep animation. order-6 provides RouteMap.reveal()/revealRegion()
+  callers + the scan-sweep visual trigger; the item itself is defined by the meta/relic idea.
+- MYSTERY cards always render as the '?' icon pre-entry regardless of reveal (their PAYLOAD is the
+  surprise; order-9). Scanner reveals the mystery's CATEGORY hint text, not the full outcome.
+
+
+FEEDBACK (make the choice feel weighty)
+=======================================
+- On FOCUS: soft "select" blip (audio hook — no asset added here, just the trigger point), card
+  scale-up, hint slides in.
+- On ENGAGE: heavier "commit/power-down" flare, chosen conduit surges, screen-space micro-shake
+  hook (reuse ImpactEffectSystem's shake for a subtle console thunk), then the world fade.
+- On INVALID tap (LOCKED / distant / disabled ENGAGE): a short red border flash + dull buzz hook;
+  never a silent no-response (mobile clarity).
+- HAPTIC hooks: expose optional Gdx.input.vibrate() calls behind a RouteMapConstants HAPTICS flag
+  (Android has vibration; keep it a flag so desktop dev build no-ops). Light tick on focus, firmer
+  buzz on engage. Never spam.
+- All feedback is OPTIONAL and flag-gated; the core selection works with visuals alone.
+
+
+ACCESSIBILITY / THUMB ERGONOMICS (mobile-first)
+===============================================
+- Node cards are >= the minimum touch target (reuse TouchConstants min button size; if cards are
+  visually smaller when zoomed out, keep an invisible padded hit-rect so they stay tappable).
+- ENGAGE / CANCEL sit in the bottom bar within natural thumb reach; ENGAGE on the dominant
+  (right) side. Large, unmissable.
+- Two-step focus->engage means no destructive single-tap; forgiving of mis-taps.
+- Never rely on colour alone to indicate selectable vs locked — focus ring + scale + glow all say
+  "this one" (works for colour-blind players; consistent with order-4).
+
+
+TECHNICAL NOTES
+===============
+- Hit-testing: precompute each visible card's world-space rect when the overlay lays out the map
+  (once per open / per pan, NOT per touch); test point-in-rect on touch. No per-frame allocation.
+- Keep interaction STATE (focusedNode, panOffset, zoom, scannerActive) in the overlay/UX object,
+  not in RouteMap (RouteMap is pure run state). Selection does not mutate route data until COMMIT.
+- Respect the action-lock philosophy: while COMMIT animation plays, ignore further input (mirrors
+  PlayerController's animation lock) so a double-engage can't double-descend.
+- No keyboard constants, no Input.Keys — touch only (platform law).
+
+
+DELIVERABLE CHECKLIST (order-6)
+===============================
+[ ] Overlay input routing during ROUTE_SELECT (unprojected), movement cluster suppressed.
+[ ] Tap-to-focus / tap-ENGAGE two-step; forced-node auto-focus; ENGAGE gating.
+[ ] Card hit-rects (padded), invalid-tap feedback.
+[ ] Vertical pan with clamp/snap-back + momentum; MAP/DETAIL framing toggle (pinch behind a flag).
+[ ] Region-reveal fog + scanner reveal hooks + scan-sweep trigger.
+[ ] Focus/engage/invalid feedback + optional haptics (flag-gated).
+[ ] Commit animation-lock (no double-descend).
+[ ] All targets thumb-sized; colour-independent selection cues.
+
+LIVING DOC CONTRACT
+===================
+On implementation: flip STATUS to IMPLEMENTED and add the "Interaction & controls" section to
+docs/route-map-system.txt (selection model, reveal policy, scanner hook, the constants that gate
+pan/zoom/haptics) so future UI/relic work integrates without breaking the two-step safety model.

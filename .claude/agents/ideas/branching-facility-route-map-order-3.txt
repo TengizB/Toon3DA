@@ -1,0 +1,141 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Route Map — Part 3: World Integration & Node->Floor Pipeline
+CREATED: 2026-07-08
+---
+
+PREREQUISITE: order-1 (data model/registries), order-2 (map generation).
+READ: level-transitions-stairs-down.txt (IMPLEMENTED — owns the depth counter & fade swap),
+roguelike_order_16 (depth scaling reads raw depth), shop_order_1 (vending machine seeding).
+
+OWNS
+====
+The wiring that turns "player stepped on the exit portal" into "route map opens, player picks a
+node, the NEXT floor is generated according to that node." This is the connective tissue between
+the pure route data (order-1/2) and the actual game. It touches World.java, GameState/RunPhase,
+and the transition flow — and it REPLACES the current hard-coded generator selection with a
+node-driven one. No overlay pixels here (order-4); this part can be validated by logging the
+chosen node + generator to the console/run-stats.
+
+
+EXACT CURRENT-CODE HOOKS (verified 2026-07-08)
+==============================================
+1. RunPhase enum (World.java line 76):
+     { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT,
+       SHOP_OPEN }
+   ADD: ROUTE_SELECT. It behaves like the other overlay phases (sim paused, an overlay drawn,
+   input routed to the overlay) — SHOP_OPEN is the closest existing analogue to copy.
+
+2. World.onDescentRequested() (~line 394):
+     currently: if (runPhase == PLAYING) { ... runPhase = FADING_OUT; }
+   CHANGE: instead of going straight to FADING_OUT, go to ROUTE_SELECT and tell the overlay to
+   present routeMap.getSelectableNext(). The fade-out is deferred until the player COMMITS a node.
+   (Boss floors: if routeMap.isBossNext(), you MAY auto-skip the overlay and go straight to
+   FADING_OUT since a boss layer is a single forced node — but showing a one-card "converge to
+   boss" beat reads better; make it a RouteMapConstants flag SHOW_FORCED_NODE_CARD, default true.)
+
+3. Node commit (new method, e.g. World.commitRouteNode(RouteNode next)):
+     - routeMap.commitTo(next); store `pendingNode = next`.
+     - runPhase = FADING_OUT (hand back to the EXISTING transition machinery).
+
+4. FADING_OUT completion (World.update, ~lines 1004-1025) — the place the next level is built:
+     currently: rebuildForLevel(pickLevelGenerator(currentDepth, floorSeed(runSeed, currentDepth))
+                                 .generate(currentDepth));
+   CHANGE: build the generator + config from `pendingNode` (see PIPELINE below) instead of the
+   hard-coded pickLevelGenerator. Keep the depth++ and playerProgress/runStats calls exactly as-is.
+
+5. World.pickLevelGenerator(int depth, long seed) (~line 1851) and pickGenerator(seed) (~1841):
+   These become THIN and node-driven. New signature/behaviour:
+     ILevelGenerator generatorForNode(RouteNode node, int depth, long seed)
+   For a boss depth it still returns BossArenaGenerator (via GeneratorRegistry id "boss_arena")
+   — keep GameMath.isBossFloor as the authority, but now the RouteMap already forced a BOSS node
+   so the two agree by construction. The old random switch is deleted; the choice now lives on the
+   node (order-2 pre-rolled node.chosenGeneratorId for combat nodes) or on the node's
+   NodeLevelProfile (order-7 for special nodes).
+
+
+THE NODE -> FLOOR PIPELINE (the core of this part)
+==================================================
+Given `pendingNode` and the incremented `currentDepth`:
+  step 1  Resolve NodeTypeDefinition from NodeTypeRegistry.get(pendingNode.type).
+  step 2  Resolve its NodeLevelProfile by levelProfileId (order-7 defines profiles; order-3 must
+          define the INTERFACE and a trivial default so combat works before order-7 lands).
+          NodeLevelProfile.resolve(node, depth, seed) returns a LevelPlan:
+             { GeneratorId generatorId, LevelGenConfig config, List<GuaranteedContent> guarantees }
+          - COMBAT/ELITE: generatorId = node.chosenGeneratorId (pre-rolled order-2); config =
+            a depth-scaled default LevelGenConfig, ELITE bumps hazard/large-room weights + sets an
+            affix flag.
+          - CACHE/REST/SHOP/MYSTERY/EVENT/BOSS: generatorId + config come from their profile.
+  step 3  ILevelGenerator generator = GeneratorRegistry.create(plan.generatorId,
+             floorSeed(runSeed, depth), plan.config).
+  step 4  Level level = generator.generate(depth).
+  step 5  Apply GuaranteedContent to the generated Level (guaranteed pickups, shop flag, heal
+          station, etc. — see order-7). Guarantees are applied POST-generation so any generator
+          can host any node's guarantees (a cache can be a cavern OR a room map and still get its
+          crates). This keeps generators and node contents orthogonal — the extensibility win.
+  step 6  rebuildForLevel(level) exactly as today (this already re-seeds enemies via EnemyManager,
+          rolls shop stock via seedVendingMachines, places credit chips, etc.). The node's config
+          drives those existing systems (e.g. SHOP profile sets the vending-machine-guaranteed
+          flag; REST profile suppresses enemy spawn budget).
+
+CRITICAL INVARIANT: difficulty scaling (roguelike_order_16) still reads RAW currentDepth. A node
+only changes the KIND/flavour of the floor and its rewards — it NEVER pauses the depth ramp.
+Choosing "safe" nodes costs loot/tempo, never the clock. Enforce by NOT letting any NodeLevelProfile
+override the depth passed to generate() or to the enemy scaler.
+
+
+WHERE THE ROUTEMAP IS CREATED / OWNED
+=====================================
+- World owns a `RouteMap routeMap` field.
+- Generate it once, right when the real run begins: in the FADING_OUT completion branch where
+  `isStartingRoom` flips false (World.java ~line 1007) — i.e. when leaving the staging room and
+  the first dungeon floor is about to build. Call
+     routeMap = RouteMapGenerator.generate(runSeed, RegionPlan.defaultPlan());
+  and set its CURRENT node to depth 1. (Generating at staging-room exit, not at World ctor, means
+  the map lines up with the existing "floor 1 is first dungeon floor" convention.)
+- Persist nothing across runs (permadeath); the map dies with the run. Its seed is already in
+  runStats for reproducibility/seed-share (roguelike_order_17).
+- RouteRegistries.bootstrap() (order-1) must run before the first generate — call it once in the
+  World construction path (guard against double-registration for the death->new-run rebuild).
+
+
+RUN STATS / TELEMETRY
+=====================
+- On each commit, append the chosen node type to a run "route string" in RunStats (e.g.
+  "C-C-!-$-R-BOSS-...") — a compact, shareable summary of the run (roguelike_order_17 synergy) and
+  exactly the "readable story of the incursion" the vision promises.
+- Log resolved MYSTERY outcomes (order-9) to run stats even though the icon was hidden pre-entry.
+
+
+TECHNICAL NOTES
+===============
+- ROUTE_SELECT must PAUSE the sim like SHOP_OPEN: no enemy ticks, no player movement, weapon HUD
+  frozen. Mirror the SHOP_OPEN update/skip branches in World.update and the render gating (~line
+  1275) so the 3D world stays drawn behind the overlay but static.
+- Viewport rule still applies: viewport.apply() every frame in Main.render() regardless of phase
+  (CLAUDE.md critical rule) — do not gate it on runPhase.
+- The overlay's actual drawing + touch is order-4/order-6; order-3 only needs a stub
+  RouteMapOverlay with `present(List<RouteNode>)` and a callback `onNodeCommitted(RouteNode)` so
+  the world flow is testable (temporarily auto-commit the first candidate to prove the pipeline).
+- Keep NodeLevelProfile an interface with a DefaultCombatProfile shipped here; order-7 adds the
+  rest. This lets order-3 land and be verified before the special levels exist.
+
+
+DELIVERABLE CHECKLIST (order-3)
+===============================
+[ ] RunPhase.ROUTE_SELECT added + update/render gating mirrored from SHOP_OPEN.
+[ ] onDescentRequested routes to ROUTE_SELECT; commitRouteNode -> FADING_OUT.
+[ ] RouteMap created at staging-room exit from runSeed; RouteRegistries.bootstrap once.
+[ ] generatorForNode + the full node->floor pipeline (steps 1-6) replacing pickLevelGenerator.
+[ ] NodeLevelProfile interface + DefaultCombatProfile + LevelPlan/GuaranteedContent types.
+[ ] Depth ramp invariant preserved (node never alters depth passed to scalers).
+[ ] Run "route string" recorded in RunStats.
+[ ] Verified end-to-end with a stub overlay auto-committing (prove the descent still works and
+    each node type yields the expected generator/config in logs).
+
+LIVING DOC CONTRACT
+===================
+On implementation: flip STATUS to IMPLEMENTED and update docs/route-map-system.txt "World
+integration & the node->floor pipeline" section — the ROUTE_SELECT phase, the exact hook points,
+and the invariant that depth scaling is never bypassed. Cross-link from
+level-transitions-stairs-down.txt's follow-ups if that doc lists successors.

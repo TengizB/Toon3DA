@@ -1,0 +1,141 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Route Map — Part 9: Danger/Gamble Node Levels — Elite Hotzone & Mystery
+CREATED: 2026-07-08
+---
+
+PREREQUISITE: order-7 (profile framework), order-2 (affix roll hook on the node). READ:
+enemy-system.txt, docs/balance-rule-system.txt (Threat budget), roguelike_order_13
+(environmental traps/hazards), roguelike_order_12 (secret rooms), roguelike_order_14 (relics),
+tile-symbols.txt. USE game-level-designer for any hand-crafted templates.
+
+OWNS
+====
+The two high-tension route choices: ELITE HOTZONE (a knowable, deliberate risk for a better
+reward) and MYSTERY (an UNKNOWN box — the gambler's node). Together they are the "press your luck"
+side of the map that makes CACHE/REST (order-8) a real trade-off. Both are NodeLevelProfiles
+(order-7); MYSTERY additionally owns the hidden-outcome table.
+
+
+================================================================
+ELITE HOTZONE  (RouteNodeType.ELITE, profileId "elite")
+================================================================
+FANTASY: a containment breach — fewer enemies but MEAN ones, hazards live, red alert pulsing. High
+risk, but the facility stored something worth guarding here.
+
+BASE GENERATOR + CONFIG:
+  - generatorId: node.chosenGeneratorId (any standard generator) — the SHAPE is normal; the DANGER
+    comes from budget + affix + hazards, so no bespoke generator needed.
+  - LevelGenConfig: hazard-forward — radioactiveBarrels = true (higher weight), enableLargeRooms
+    = true (an arena-ish reward room), unlitFloors = true + some 'f' flicker (dread), oilPools /
+    corpses up. Set GameState.redAlert = true on this floor (reuse emergency-red-alert-pulse) so
+    it LOOKS dangerous the moment you arrive.
+
+ENEMY BUDGET (via EnemyBudgetOverride, still depth-scaled — order-3 invariant):
+  - FEWER bodies, HIGHER per-enemy Threat: spend the depth Threat budget on 1-2 ELITE markers
+    ('!' Iron Stalker, and deeper: boss-adjacent brutes '*' Blight Corruptor / 'K' Revenant) plus
+    a small support cast, instead of a swarm. Respect the cardinal-line ranged rule (CLAUDE.md) for
+    any ranged elite. The fight should feel like a mini-setpiece, not a grind.
+  - Guarantee at least one elite marker so the node always delivers its threat promise.
+
+NODE AFFIX (rolled at map-gen, order-2; applied here):
+  A NodeAffix modifies the whole floor for flavour + a readable twist. v1 affix pool
+  (NodeAffixRegistry — same registry discipline; new affixes drop in by registration):
+    - IRRADIATED: extra 'g' radioactive barrels + a radiation-wall 'U' theme; enemies leave brief
+      hazard pools. Tie to existing hazard/status systems.
+    - OVERCLOCKED: enemies act slightly faster / hit harder (AI speed + DPT bump within band).
+    - SWARM: the ONE exception to "fewer bodies" — many light chaff ('~'/'z'/'3') + a leader;
+      a crowd-control test.
+    - FORTIFIED: an armour/eHP bump + more cover columns 'P' (a slugfest).
+    - VOLATILE: extra explosive barrels 'E' + chain-reaction hazards (roguelike_order_13) — the
+      arena itself is a weapon for both sides.
+  The affix is shown on the ELITE icon (order-5 affix tag) and in the map hint ("ELITE — OVERCLOCKED:
+  they hit fast, but the vault's yours if you win"). Affix effects route through existing enemy /
+  hazard / balance systems; NodeAffix is just a bundle of typed modifiers, no bespoke per-affix code
+  paths beyond the modifier application.
+
+THE REWARD (the reason to take the risk — GuaranteedContent, placement GATED_ROOM/FARTHEST_ROOM):
+  - Worth ~1.5x a normal floor's loot (balance placeholder). One of, weighted by depth:
+      a guaranteed weapon rack '=' (a real new weapon / upgrade), an 'A' security vest, a relic/
+      artifact (roguelike_order_14 if implemented), or a fat ammo+medkit bundle.
+  - Reward is often behind a locked door ('R'/'Y'/'B') with the keycard dropped by the elite —
+    reuse DoorManager + keycard system so clearing the elite literally unlocks the payout. Clean
+    "kill the guardian, take the vault" loop.
+  - The reward room can be a secret-ish vault (weight secret-room generation up, roguelike_order_12).
+
+BALANCE: the elite's Threat and the reward's value are both depth-scaled and checked against
+docs/balance-rule-system.txt (eHP/DPT/TTK). ELITE must be beatable with the resources a careful
+player arrives with, but punishing if you routed here low — that's the gamble the map sells.
+
+
+================================================================
+MYSTERY  (RouteNodeType.MYSTERY, profileId "mystery")
+================================================================
+FANTASY: an unscanned sector. The icon is always '?'. You find out only by dropping in. Expected
+value is deliberately NEUTRAL (some jackpots, some traps) so it stays a genuine gamble, not a
+strictly-good or strictly-bad pick.
+
+HOW IT RESOLVES (the hidden table — the heart of this node):
+  On ENTRY (not on map-gen — so scanners reveal a HINT, never the full result), roll a hidden
+  MysteryOutcome from a weighted table using the node's nodeSeed (deterministic per run/seed).
+  MysteryProfile then DELEGATES to the resolved outcome's own LevelPlan (it is a meta-profile that
+  forwards to another profile/config). v1 outcome table (weights in RouteMapConstants):
+    - VAULT / JACKPOT (18%): a lightly-guarded room stuffed with loot (best-case; think a super-
+      cache + a relic). The dream pull.
+    - SECRET WARREN (18%): a floor with secret rooms weighted way up (roguelike_order_12) — the
+      "explorer's gamble": rewards those who search. Delegates to a combat config with
+      secretRoomWeight maxed + extra keycards.
+    - TRAP GAUNTLET (18%): pressure plates / environmental traps (roguelike_order_13, pressure-
+      plate-trap-tiles) dense; loot at the end. Skill/patience test, modest reward.
+    - AMBUSH (18%): looks calm, then a lockdown wave triggers (tie to containment-lockdown-arena-
+      waves.txt) — doors seal, enemies spawn in. Combat-heavy, decent reward for surviving.
+    - LORE / SIGNAL (14%): a near-combat-free EVENT-like room (a data terminal, a story beat, a
+      small permanent choice) — delegates toward the EVENT profile (order-10). The "nothing
+      dangerous, something interesting" pull.
+    - MALFUNCTION / HAZARD (14%): the sector is failing — fire/toxic hazards (hazard-chain-
+      reactions), unlit, no reward but a shortcut. The bad-but-survivable pull.
+  Weights sum to 100 and are tuned so EV ≈ a normal combat floor (genuine coin-flip). Adding a new
+  outcome = one table row + (usually) delegating to an existing profile — cheap and extensible.
+
+TELL / FAIRNESS:
+  - Pre-entry the card is ALWAYS '?' (order-5). A SCANNER (order-6) reveals the CATEGORY tone
+    (e.g. "reads as: HIGH REWARD / HIGH DANGER") but not the exact outcome — informed gambling.
+  - The resolved outcome IS logged to run stats (roguelike_order_17) even though it was hidden, so
+    the post-run route story is complete.
+  - No outcome should be a pure "you lose the run" trap (permadeath is harsh enough); worst case is
+    "wasted a hop + some resources," always survivable by a competent player.
+
+IMPLEMENTATION: MysteryProfile.resolve rolls the outcome, picks the delegate profileId + a config
+tweak, and returns that LevelPlan (optionally stamping a "SURPRISE" GameState flag for a reveal
+sting on the first frame — e.g. an EventText "SECTOR SCAN FAILED — UNKNOWN CONTACT"). Because it
+delegates, MYSTERY automatically benefits from every future special level added to the pool.
+
+
+SHARED NOTES
+============
+- Both profiles registered in NodeLevelProfileRegistry (order-7). NodeAffixRegistry + MysteryOutcome
+  table both live where new entries register cleanly (route package). Only tile-symbols.txt tiles.
+- Everything deterministic from floorSeed/nodeSeed. All numbers in RouteMapConstants; all combat
+  scaling through EncounterBudgetPlanner + balance-rule-system (never bypass the depth ramp).
+- Reuse existing systems for affix/outcome effects (hazards, lockdown waves, secret rooms, doors,
+  red alert) — this file wires them together, it does not reinvent them. Where a referenced system
+  (traps, secret rooms, lockdown, relics) is NOT yet implemented, the outcome degrades gracefully
+  to the nearest available effect (e.g. TRAP GAUNTLET -> extra explosive barrels) and notes the
+  upgrade in docs.
+
+
+DELIVERABLE CHECKLIST (order-9)
+===============================
+[ ] EliteProfile: hazard config + red alert + fewer-tougher enemy budget + guaranteed 1.5x reward
+    (often keycard-gated) + affix application.
+[ ] NodeAffixRegistry + 5 v1 affixes (typed modifier bundles routed through existing systems).
+[ ] MysteryProfile: entry-time weighted outcome table + delegation to other profiles + EV ≈ neutral.
+[ ] Scanner category-hint (not full reveal) + run-stats logging of resolved outcome.
+[ ] Graceful degradation where referenced systems aren't implemented yet.
+[ ] Determinism + constants + balance checks.
+
+LIVING DOC CONTRACT
+===================
+On implementation: flip STATUS to IMPLEMENTED and add "Danger/gamble node levels (Elite, Mystery)"
+to docs/route-map-system.txt — the affix registry + list, the mystery outcome table + weights, and
+the fairness rules (no run-ending traps, hidden-but-logged outcomes, EV neutrality).

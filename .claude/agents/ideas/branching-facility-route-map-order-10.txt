@@ -1,0 +1,138 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Route Map — Part 10: Narrative/Event Nodes & Region Theming
+CREATED: 2026-07-08
+---
+
+PREREQUISITE: order-2 (regions/acts + REGION_GATE), order-4/5 (region theme tint + crests),
+order-7 (profiles). READ: level-design-context.txt, doom-rpg-reference.txt, level idea docs
+(research_lab_room, laboratory-lighting), levelup-stim-boon-choice-progression. USE
+game-level-designer + creative-game-designer for content.
+
+OWNS
+====
+The two "texture the run" additions that turn the map from a difficulty selector into a JOURNEY:
+  (1) EVENT nodes — small, curated, low/no-combat interaction rooms (lore, choices, rescues) that
+      give the descent story and non-combat decisions.
+  (2) REGION THEMING — the act-band identity (visual, generator lean, enemy faction, music/ambience
+      hooks, and the REGION_GATE transition floor) that makes descending FEEL like moving through a
+      changing facility, not a reskinned treadmill.
+This is the "be creative — think about what the map also needs" part the product owner asked for.
+Both are extensible by registration (new event / new region = data + a profile, no core edits).
+
+
+================================================================
+EVENT NODES  (RouteNodeType.EVENT, profileId "event")
+================================================================
+FANTASY: you find something that isn't a fight — a distress beacon, a UAC data cache, a surviving
+scientist, a strange shrine. A beat of story and a choice, then onward.
+
+STRUCTURE: EventProfile builds a SMALL curated room (bespoke EventRoomGenerator "event_room", or a
+hand-crafted .txt template pool via game-level-designer) with near-zero enemies, a single central
+INTERACTABLE (reuse '@' special equipment / 'W' holo-workstation / 'T' terminal / 'J' AI core node
+as the visual — no new tile symbol), and the exit '>' just past it. Stepping to the interactable
+opens a small EVENT OVERLAY (reuse the level-up card UI pattern) presenting the event text + 1-3
+choices.
+
+EVENT REGISTRY (the content system):
+   interface FacilityEvent { String id; String[] narrativeLines; EventChoice[] choices;
+                             void applyChoice(int index, World world); }
+   FacilityEventRegistry.register(event) — pool rolled per EVENT node from nodeSeed.
+v1 events (creative-game-designer expands this list — it is meant to grow):
+   - DISTRESS BEACON: [ANSWER: reveals next region on the map (free scan) ] vs [IGNORE: +ammo cache]
+     — trades information for resources.
+   - ABANDONED STASH: a risk choice — [FORCE THE LOCKER: 60% loot / 40% mimic-ambush] vs [LEAVE IT].
+   - SURVIVING TECH: [ESCORT (they patch your armour to full now, but the next floor budget +10%)]
+     vs [TAKE THEIR KEYCARD AND GO].
+   - CORRUPTED SHRINE: a Faustian boon — [TOUCH IT: a strong permanent buff + a permanent minor
+     curse] vs [DESTROY IT: small XP]. Ties to levelup-stim-boon-choice-progression / relics.
+   - DATA TERMINAL: pure lore (world-building text) + a small guaranteed XP/credit; no downside —
+     the "breather with flavour."
+Choices apply through EXISTING systems (heal, ammo, XP, reveal, buff/relic, next-floor budget
+nudge). applyChoice is the only bespoke bit; keep effects small and legible. Log the chosen event +
+choice to run stats (the run story). EVENT nodes are weighted LOW (order-2, ~6%) so they stay
+special.
+
+WHY EVENTS MATTER: they give the map non-combat DECISIONS (StS's ? rooms), a place for lore without
+stopping the action, and a natural home for meta/relic hooks — deepening "run identity between
+fights," the whole thesis of the route map.
+
+
+================================================================
+REGION THEMING / ACTS
+================================================================
+order-2 already bands the run into regions (Outer Facility / Research Wing / Reactor Depths / The
+Breach / …). This file gives each region its IDENTITY so the descent reads as a journey. A Region
+is a data row (RegionDefinition, registered in a RegionRegistry — new region = new row):
+   RegionDefinition {
+     id, displayName, depthRange,
+     crestPainterId (order-5 title-plate crest),
+     overlayTheme (frame/scrim tint for the nav console — order-4),
+     wallThemePalette (which wall symbols the region's generators lean on),
+     generatorWeights (region's standard combat pool bias — order-1/2),
+     enemyFactionBias (which spawn markers dominate — see tile-symbols enemy list),
+     ambienceHooks (red-alert frequency, lighting mood, music id placeholder),
+     bossId (the boss at the region's closing depth), gateFlavour (REGION_GATE copy/theme)
+   }
+v1 regions (tunable; final count defers to roguelike_order_19 win condition):
+   A OUTER FACILITY (1-4, boss 5):   cool steel-cyan; walls 'x'/'c'/'k'; generators balanced;
+     faction: baseline demons (Plague Hulk/Eye Tyrant/Gore Biter). Clean, industrial, "the way in."
+   B RESEARCH WING (6-9, boss 10):   clinical white-green; walls 'M'/'N'/'D'/'Q'; lean rooms_mst +
+     server rooms; faction adds Acid Drone '$'/Void Shroud '^' + bio-pods everywhere. Lab horror.
+   C REACTOR DEPTHS (11-14, boss 15): amber-hot; walls 'U'/'h'/'X'/'j'; lean CavernGenerator +
+     hazards; faction heavier brutes (Shell Brute/Iron Stalker); more explosive barrels. Industrial
+     hellscape, red alert common.
+   D THE BREACH (16+, endless):      corrupted violet-red; walls 'G' gore + 'F' force-field; the
+     necrotic faction (Ghoul/Crawler/Revenant/Vortex Eye/Blight Corruptor) takes over; reality
+     failing. Bosses cycle, scaled. "You've gone too deep."
+Region identity is applied via LevelPlan.themeOverride (order-7) + generator/enemy weight tables
+(order-2) + overlay tint (order-4) + crest (order-5). NOTHING hard-codes the region list; it's the
+RegionRegistry, so adding "E CONTAINMENT CORE" later is one row + a crest + a boss.
+
+REGION_GATE NODE (RouteNodeType.REGION_GATE, profileId "gate"): the forced convergence node at a
+region boundary that ISN'T a boss depth (or the boss doubles as the gate). GateProfile builds a
+SHORT ceremonial "airlock/bulkhead" floor: a keycard-gated ('B' blue door) approach, a threshold
+room where the overlay/HUD announces the new region ("ENTERING: REACTOR DEPTHS"), then the exit.
+Almost no combat — it's a PACING BREATH + a visible chapter break. Reuses DoorManager for the
+airlock ceremony. The nav console shows the crossed gate as the boundary line on the map (order-4).
+
+MUSIC/AMBIENCE HOOKS: expose region ambienceHooks as flags/ids the audio + red-alert systems can
+read later (no audio assets added here). Keeps future audio work data-driven per region.
+
+
+CREATIVE "WHAT ELSE THE MAP NEEDS" — captured for future orders (not all built now)
+===================================================================================
+- MAP LEGEND / KEY: a collapsible icon key on the overlay (order-4/6) so new players learn the
+  vocabulary. Low effort, high clarity. RECOMMEND building with order-6.
+- ROUTE HISTORY RIBBON: the glowing "locked route" spine (order-4) doubles as a run-story artifact;
+  on the death screen, render the full taken route as the epitaph ("fell at REACTOR DEPTHS, depth
+  13, having taken: Cache -> Elite -> Mystery(Vault) -> ..."). Ties to roguelike_order_1 death screen +
+  roguelike_order_17 stats. RECOMMEND a small follow-on idea.
+- SEED SHARE: since the whole map is seed-deterministic (order-1/2), expose the run seed on the
+  main menu / death screen for challenge sharing (roguelike_order_17/18). Cheap, high value.
+- META UNLOCKS: salvage-cache-meta-progression could unlock new NODE TYPES, new EVENTS, a starting
+  SCANNER, or new REGIONS into the pool — all sideways (variety), never raw power. The registries
+  (order-1/5/7/9/10) make each a registration, not a rewrite.
+- DYNAMIC RISK PREVIEW: optionally show a node's rough enemy/threat forecast on focus (order-6) for
+  players who want to plan hard; gate behind a difficulty/assist flag.
+These are logged here so a future session can spin any of them into its own idea file that plugs
+into the same registries. They are NOT required for the core route map to ship.
+
+
+DELIVERABLE CHECKLIST (order-10)
+================================
+[ ] EventProfile + EventRoomGenerator (or template pool) + EVENT OVERLAY (reusing level-up card UI).
+[ ] FacilityEvent + FacilityEventRegistry + 5 v1 events wired to existing effect systems.
+[ ] RegionDefinition + RegionRegistry + 4 v1 regions (theme/generators/faction/crest/boss/gate).
+[ ] GateProfile: ceremonial airlock floor + region-announce beat + DoorManager reuse.
+[ ] Region theming applied across overlay tint, crest, wall palette, generator/enemy weights.
+[ ] ambienceHooks exposed for future audio; run-stats logging of events/regions.
+[ ] Creative follow-ons documented (legend, history ribbon, seed share, meta unlocks) for future
+    idea files — NOT implemented here.
+
+LIVING DOC CONTRACT
+===================
+On implementation: flip STATUS to IMPLEMENTED and add "Event nodes & region theming" to
+docs/route-map-system.txt — the FacilityEventRegistry recipe, the RegionRegistry schema + v1
+regions, and the REGION_GATE ceremony. Note the captured creative follow-ons so future agents know
+where the extensibility seams are.

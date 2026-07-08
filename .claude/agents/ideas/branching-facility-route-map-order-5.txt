@@ -1,0 +1,138 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Route Map — Part 5: Procedural Node Icon & Sprite System
+CREATED: 2026-07-08
+---
+
+PREREQUISITE: order-1 (NodeTypeDefinition.iconPainterId), order-4 (overlay + FrameBuffer/glow).
+READ: weapon-creation-guide.txt (the FrameBuffer procedural-sprite pipeline these icons reuse),
+procedural-vitals-hud.txt (ShapeRenderer primitive drawing, the synthetic marine face is the
+reference for "an icon built only from primitives").
+
+ABSOLUTE CONSTRAINT: every node icon is drawn from ShapeRenderer primitives and/or a FrameBuffer
+procedural pass. NO image assets. This is a hard product requirement.
+
+OWNS
+====
+The IconPainter system: a small, registry-driven set of procedural drawers, one per node type,
+plus region crests. It is the visual vocabulary of the whole map — the thing the player learns to
+read at a glance. Kept separate from order-4 so a NEW node type can ship its icon as a single new
+IconPainter + one registration line, matching the extensibility promise (order-1).
+
+
+WHY A PAINTER REGISTRY (not a switch in the overlay)
+====================================================
+order-4's overlay must NOT contain `switch(nodeType) { case COMBAT: drawCrosshair()... }`. Instead:
+   interface IconPainter { void paint(ShapeRenderer shapes, SpriteBatch batch, float centerX,
+                                      float centerY, float size, Color accent, float animationT); }
+   IconPainterRegistry.register(String iconPainterId, IconPainter painter)
+   IconPainterRegistry.get(id).paint(...)
+NodeTypeDefinition.iconPainterId (order-1) selects the painter. A new node type registers its
+painter in the same bootstrap that registers the node type. The overlay just calls get(id).paint().
+Adding an icon = add one class + one line. This is the requirement, applied to visuals.
+
+RENDERING APPROACH (two options; pick per-icon)
+===============================================
+  A. DIRECT: draw straight to the overlay's ShapeRenderer each frame (fine for simple line/fill
+     icons — crosshair, cross, crate). Cheapest; no FBO.
+  B. BAKED: draw once into a small FrameBuffer at create() (or first use) and cache as a Texture
+     region, then blit per frame (better for complex icons with glow/anti-aliasing — boss skull,
+     credit sigil). Follows the WeaponHudRenderer bake pattern. Cache is disposed in dispose().
+Default: bake the complex ones once, direct-draw the simple ones. Never bake inside render() (no
+render-loop allocations). animationT lets a baked icon still animate cheaply (e.g. rotate the
+drawn quad, pulse tint) without re-baking.
+
+
+V1 ICON CATALOG (geometry described so an implementer can draw it blind)
+========================================================================
+All icons are drawn within a `size x size` box centered at (centerX, centerY), tinted by the
+node's accent Color, with a slightly brighter core and the order-4 glow halo behind them.
+
+  COMBAT  — "crosshair / engagement reticle"
+     A thin ring (circle outline) + four tick marks at N/E/S/W crossing the ring + a center dot.
+     Reads as "standard fight." accent = HOLO_CYAN.
+  ELITE   — "skull in a hazard diamond"
+     A rotated square (diamond) outline in DANGER_RED/HAZARD_AMBER; inside, a minimal skull:
+     rounded-top dome (arc fan), two dark eye sockets (small filled circles), a short jaw notch.
+     A tiny affix glyph corner-tag if the node has a NodeAffix (order-9). accent = DANGER_RED.
+  CACHE   — "supply crate"
+     An isometric box: front face (rectangle) + a slanted top parallelogram + a slanted side, with
+     an X strap across the front and a small "+"/ammo tick. accent = HOLO_CYAN/steel with a green
+     glint. Reads "loot & refuel."
+  SHOP    — "credit sigil / vend"
+     A hexagon coin outline with a stylised "¤"/facility-credit rune (two vertical bars through a
+     circle), plus a small down-arrow "dispense" tick. accent = CREDIT_GOLD.
+  REST    — "med cross / bio-bed"
+     A rounded green cross (two overlapping filled rounded rects) inside a soft ring; optional tiny
+     "heartbeat" polyline underneath. accent = MED_GREEN (matches HUD phosphor green).
+  MYSTERY — "unknown query"
+     A bold "?" glyph built from an arc + stem + dot, floating inside a dashed/segmented ring that
+     slowly rotates (animationT). Pre-entry the icon is ALWAYS this regardless of the hidden real
+     type (order-9). accent = MYSTERY_VIOLET.
+  EVENT   — "comms / lore beacon"
+     Concentric broadcast arcs (like a signal/wifi fan) rising from a small base node, gently
+     pulsing outward (animationT). accent = HOLO_CYAN with a white core. Reads "something to
+     interact with, not necessarily a fight" (order-10).
+  REGION_GATE — "airlock / bulkhead"
+     A heavy circular hatch: outer ring + inner ring + 4-6 radial locking bolts + a central seam.
+     Slightly larger than a normal icon (it's a convergence beat). accent = region theme colour.
+  BOSS    — "horned command skull"
+     A larger, meaner skull than ELITE: broad cranium, pronounced brow, two horns curving out,
+     deep eye sockets with an inner red ember (small bright filled circle, pulsing via animationT),
+     set on a small spine base. Framed by a full hazard-diamond. accent = DANGER_RED, ember pulse.
+
+Each catalog entry above = one IconPainter class in `…toon3d.render.routeicons` (a small
+sub-package to keep the render package tidy; document in CLAUDE.md via order-11). Put any icon
+geometry math that isn't trivial (arc fans, diamond rotation, bezier for horns) in GameMath with
+the mandatory comment block — no inline formulas.
+
+
+REGION CRESTS (for the title plate, order-4)
+============================================
+A second, larger painter kind for the region banner: a heraldic "wing badge" per region built from
+primitives (Outer Facility = gear ring, Research Wing = molecule/atom, Reactor Depths = radiation
+trefoil, The Breach = cracked/corrupted sigil). Same registry pattern (RegionCrestPainter). New
+region added by order-10 registers its crest here.
+
+
+RISK PIP & STATE GLYPHS
+=======================
+Provide tiny shared painters reused by order-4 cards:
+  - riskPip(count 1..4, tier colour) — a row of small filled diamonds.
+  - lockGlyph, checkGlyph, hereReticle (rotating diamond), affixTag.
+Centralising these keeps the card visuals consistent and lets new node types opt in for free.
+
+
+PERFORMANCE / SAFETY
+====================
+- Bake complex icons ONCE (create()/lazy first-use), never per frame; cache Textures/regions and
+  dispose them. Simple icons draw direct — no allocation.
+- All Colors pre-allocated (tint by mutating a reusable Color's channels, or keep a small pool).
+- animationT is passed in (driven by the overlay's overlayTimeSeconds) — icons stay pure drawers,
+  no internal timers, so they are deterministic and testable.
+- Respect origin bottom-left / Y-up when placing arcs & polygons (project invariant).
+
+
+HOW TO ADD A NEW NODE ICON (the recipe this file guarantees)
+============================================================
+1. Write `class MyNodeIconPainter implements IconPainter` in render.routeicons.
+2. Register it: IconPainterRegistry.register("my_node_icon", new MyNodeIconPainter()).
+3. Point the node type at it: NodeTypeDefinition.iconPainterId = "my_node_icon".
+4. Done — the overlay draws it with zero edits. Add the geometry note to docs/route-map-system.txt.
+
+
+DELIVERABLE CHECKLIST (order-5)
+===============================
+[ ] IconPainter interface + IconPainterRegistry.
+[ ] All 9 v1 node IconPainters (COMBAT, ELITE, CACHE, SHOP, REST, MYSTERY, EVENT, REGION_GATE, BOSS).
+[ ] RegionCrestPainter + 4 v1 crests.
+[ ] Shared riskPip / state-glyph painters.
+[ ] Bake-vs-direct decision per icon; FBO cache disposed properly.
+[ ] Any non-trivial icon geometry in GameMath with comment blocks.
+[ ] render.routeicons sub-package documented (order-11 doc pass).
+
+LIVING DOC CONTRACT
+===================
+On implementation: flip STATUS to IMPLEMENTED and add the "Node icon vocabulary + how to add one"
+section to docs/route-map-system.txt (the catalog with one-line geometry per icon + the 4-step
+recipe) so every future node ships a consistent, procedural icon.
