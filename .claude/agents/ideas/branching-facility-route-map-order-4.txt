@@ -1,0 +1,197 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Route Map — Part 4: The Nav Console Overlay (Visual Design)
+CREATED: 2026-07-08
+---
+
+PREREQUISITE: order-1 (data), order-3 (ROUTE_SELECT phase + present/commit callbacks).
+COMPANION: order-5 (node icons), order-6 (touch/interaction). This file owns the LOOK; order-6
+owns the FEEL of touching it. READ: procedural-vitals-hud.txt (the procedural-only rendering
+contract this must obey), emergency-red-alert-pulse.txt for the facility colour language.
+
+ABSOLUTE CONSTRAINT (product owner): EVERY pixel is procedurally generated. No image files, no
+texture atlases, no fonts beyond the built-in BitmapFont. Draw with ShapeRenderer primitives,
+polylines, filled polygons, and (for glow/icon crispness) FrameBuffer passes — exactly like
+HudRenderer and WeaponHudRenderer already do. If you are tempted to load a .png, stop.
+
+OWNS
+====
+RouteMapOverlayRenderer (`…toon3d.render`, implements Renderable + Disposable): the full-screen
+"FACILITY NAV" console drawn over the frozen 3D world during RunPhase.ROUTE_SELECT. Layout,
+colour system, chrome, node cards, connector lines, "you are here" marker, region banner,
+animation states, and the sci-fi styling. Touch hit-testing and gesture handling are order-6;
+this file defines the visual TARGETS order-6 lights up.
+
+
+THE FANTASY / ART DIRECTION
+===========================
+You are looking at a UAC facility navigation console — a holographic schematic projected on a
+grimy CRT terminal bolted to the descent shaft. It should feel like the marine pulled up a
+tactical map: cold phosphor-cyan hologram lines over a dark steel bezel, scanlines rolling, a
+faint flicker, hazard chevrons on the frame. It is diegetic (in-world tech), NOT a flat mobile
+menu. Two visual layers stacked:
+   (1) BEZEL / CHROME — the physical terminal: dark brushed-steel frame, rivets, hazard stripe
+       trim, a title plate, a depth/region readout, a scanline+vignette CRT treatment.
+   (2) HOLOGRAM — the map itself: glowing translucent nodes and connector lines floating on the
+       "screen," with additive-blend glow and a subtle parallax/float so it reads as projected.
+
+
+CANVAS & LAYOUT (world coordinates, 1280x720, Y-up, origin bottom-left — project invariant)
+===========================================================================================
+Full-screen overlay. A dim scrim first (dark navy, ~0.72 alpha) over the frozen world so the map
+reads without fully hiding the 3D backdrop (you still see where you are). Regions of the screen:
+
+  TITLE PLATE            y 648..712   full width, centered text "FACILITY NAV — SELECT VECTOR"
+                                      left: region crest + name; right: "DEPTH 07 → 08".
+  MAP VIEWPORT           y 150..640   the hologram schematic (scrollable in order-6 for tall maps).
+  LEGEND / HINT STRIP    y 96..150    a thin band: the selected node's full hint line + icon key.
+  CONFIRM BAR            y 12..92      large touch targets: [ ◀ CANCEL ] ................ [ ENGAGE ▶ ]
+                                      (CANCEL only if design allows re-opening; default the portal
+                                      commits so CANCEL just re-shows the map — see order-6.)
+
+MAP VIEWPORT internal layout:
+  - The map flows BOTTOM-TO-TOP within the viewport = you descend, but nodes climb toward the
+    "next" at the top, so the eye travels toward the choice. (Alt: top-to-bottom; pick one and put
+    it in RouteMapConstants MAP_FLOW_DIRECTION. Default bottom->top: CURRENT node low, candidates
+    high, matching "reach up and pick your next drop point".)
+  - Each LAYER is a horizontal row of node cards; LANE index sets the x column. Layer spacing and
+    lane spacing are constants (RouteMapConstants MAP_LAYER_GAP, MAP_LANE_GAP). Node cards are
+    centered in their lane slot.
+  - Only the CURRENT layer + the immediately selectable next layer are drawn at full size and
+    interactive. Further layers are drawn SMALLER and DIMMER climbing into the distance (a
+    perspective "the facility goes deeper" fade), so the player sees the shape of the run ahead
+    without it being tappable. This gives planning value while keeping the decision unambiguous.
+    Region boundaries draw a horizontal "airlock" divider line with the next region's name ghosted.
+
+
+NODE CARD — the core visual unit
+================================
+A chunky rounded-rectangle "data slug" ~150w x 120h (constants). Composition, back-to-front:
+  1. GLOW HALO — additive radial glow in the node's accentColor; brighter for AVAILABLE, off for
+     LOCKED, pulsing for the currently-focused card. (Draw glow in an additive-blend FrameBuffer
+     pass so it doesn't muddy — same trick as weapon muzzle glow.)
+  2. CARD BODY — translucent fill (accentColor at low alpha) + a bright 2px accent border. Rounded
+     corners drawn as a filled polygon / arc fan (no texture). LOCKED cards are desaturated steel.
+  3. ICON — the procedural node icon (order-5) centered in the upper 2/3 of the card.
+  4. LABEL — node displayName in the lower third, BitmapFont, drop-shadow, auto-truncated to card
+     width (reuse the HUD truncation helper so it can never overflow — HudRenderer already does
+     this for weapon slots).
+  5. STATE DECOR:
+       CURRENT  — a rotating diamond "YOU ARE HERE" reticle + brighter frame.
+       VISITED  — a small check / dimmed body + a thin trail line back down the taken path.
+       BYPASSED — very dim, no glow (roads not taken, still visible for the "story").
+       AVAILABLE— full glow, gentle idle bob.
+       FOCUSED  — (order-6 selection) cyan selection ring + scale-up 1.06 + glow boost.
+       LOCKED   — steel, no icon colour, faint "◊" lock glyph.
+  6. RISK PIP — a tiny 1-4 dot meter in a corner encoding dangerTier (CALM..SET_PIECE), so risk is
+     readable at a glance without reading text. Colour ramps green->amber->red by tier.
+  7. REWARD TELL (optional, order-9/order-7) — a faint secondary glyph (e.g. weapon-rack tick for
+     ELITE, credit spark for SHOP) hinting the payout.
+
+
+CONNECTOR LINES (sell the "map")
+================================
+Between a node and each of its `outgoing` nodes draw a glowing hologram conduit:
+  - A slightly curved polyline (quadratic bezier via GameMath — no inline math) from the top edge
+    of the lower card to the bottom edge of the upper card, 2-3px, accent-cyan, additive glow.
+  - Animated "data pulse": a small bright dot travels along each conduit from CURRENT toward its
+    candidates on a slow loop (telegraphs "these are your options"). Pulses only on edges leaving
+    AVAILABLE/CURRENT nodes; static dim lines elsewhere.
+  - The path you have ALREADY taken is drawn as a solid brighter "locked route" spine so the run's
+    history reads as a glowing thread down the map (the narrated route).
+
+
+COLOUR SYSTEM (resolve accentColorId -> Color in the renderer; route pkg stays headless)
+========================================================================================
+Base palette (RouteMapConstants / a small ColorPalette in render):
+  HOLO_CYAN      primary hologram / conduits / frame accents
+  HOLO_DIM       inactive lines, distant layers
+  SCRIM_NAVY     background scrim
+  STEEL / RIVET  bezel chrome
+  HAZARD_AMBER   frame trim, warnings, ELITE/DANGER accents
+  DANGER_RED     ELITE/BOSS accents + risk pips high end
+  MED_GREEN      REST/CACHE/heal accents (matches HUD phosphor green)
+  CREDIT_GOLD    SHOP accents
+  MYSTERY_VIOLET MYSTERY accent
+Node accentColor comes from NodeTypeDefinition.accentColorId (order-1). REGION theme (order-10)
+tints the frame + scrim slightly per act (Outer Facility = cool steel-cyan, Research Wing =
+clinical white-green, Reactor Depths = amber-hot, The Breach = corrupted violet-red) so the player
+FEELS the descent change. All pre-allocated in create() (no-allocation render rule).
+
+
+CRT / SCI-FI TREATMENT (the polish that sells "diegetic terminal")
+==================================================================
+  - Scanlines: horizontal 1px dark lines every ~3px across the MAP VIEWPORT only, low alpha,
+    slowly scrolling upward. Consistent with the facility's CRT aesthetic.
+  - Vignette: darkened corners (reuse HitVignetteRenderer's approach or draw a gradient quad).
+  - Flicker: whole-hologram alpha jitters ~2% on a noise curve; a rare brighter "sync" flash.
+  - Bloom-ish glow: additive FrameBuffer pass for node halos + conduits (crisp, not muddy).
+  - Grain/hazard trim: hazard chevron stripe along the top and bottom of the bezel (drawn as a
+    row of filled parallelograms), UAC stencil text on the title plate.
+  - When the facility is on RED ALERT (GameState.redAlert) the frame trim pulses red (tie into the
+    existing emergency-red-alert-pulse system for continuity).
+
+
+ANIMATION STATES (drive with a single overlayTimeSeconds; NO allocations in render)
+===================================================================================
+  OPENING  (~0.35s): scrim fades in, bezel slides/scales in from center, hologram "boots up"
+           (a horizontal scan sweep reveals nodes bottom->top, conduits draw on as animated
+           lines). A subtle "power-on" brighten. Reuse FadeOverlayRenderer only for the world
+           fade; the console boot is its own timeline.
+  IDLE     : bob/flicker/scanline/pulse loops as above.
+  FOCUS    : focused card scales up + glow boost + its hint animates into the LEGEND strip.
+  COMMIT   (~0.4s): the ENGAGE press flares the chosen conduit bright, the chosen card pulses,
+           non-chosen cards dim & recede, then hand to the world's FADING_OUT (order-3) which does
+           the actual floor swap via FadeOverlayRenderer. The chosen route locks onto the history
+           spine.
+Timings live in RouteMapConstants; keep them snappy (mobile — don't make the player wait).
+
+
+RENDER PASSES (ordered, mirrors HudRenderer discipline)
+=======================================================
+  1. World scrim (ShapeRenderer filled quad, blended).
+  2. Bezel/chrome (ShapeRenderer filled + line — steel, rivets, hazard trim).
+  3. Hologram GLOW pass (additive FrameBuffer: node halos + conduit glow) composited back.
+  4. Connector conduits (polylines + travelling pulse dots).
+  5. Node card bodies + borders + state decor + risk pips.
+  6. Node icons (order-5; may itself be a small FrameBuffer/ShapeRenderer routine).
+  7. Text pass (SpriteBatch + BitmapFont: title, depth/region, labels, legend hint) — always last,
+     with drop-shadows, so text sits on top of everything and stays legible.
+  8. CRT overlay (scanlines + vignette + flicker) drawn over the whole map viewport.
+Own ONE ShapeRenderer, ONE SpriteBatch, ONE BitmapFont, and the FrameBuffer(s); pre-allocate all
+Colors, GlyphLayout, StringBuilder; dispose everything in dispose(). Unproject touch through the
+camera (order-6). viewport.apply() is Main's job every frame (project rule) — don't fight it.
+
+
+DATA IN (from order-3)
+======================
+present(RouteMap map): the renderer reads map.getCurrent(), the selectable next layer, and the
+distant layers for the perspective fade. It does NOT mutate route state; selection/commit go back
+through order-6 callbacks -> World.commitRouteNode.
+
+
+ACCESSIBILITY / READABILITY (mobile-first)
+==========================================
+- Icon + colour + risk-pip shape all encode danger (never colour alone — colour-blind safe).
+- Text min scale 0.9 with drop-shadow (HUD rule).
+- The two decision-relevant layers are the ONLY bright/large ones; distant layers never compete
+  for attention. One clear choice at a time.
+
+
+DELIVERABLE CHECKLIST (order-4)
+===============================
+[ ] RouteMapOverlayRenderer with the 8 render passes, single ShapeRenderer/SpriteBatch/Font/FBO.
+[ ] Bezel chrome + title plate + depth/region readout + hazard trim.
+[ ] Node cards with all 7 composition layers + all 6 state visuals + risk pip.
+[ ] Curved glowing connectors + travelling data pulses + locked-route history spine.
+[ ] Perspective fade for distant layers + region divider lines.
+[ ] CRT treatment (scanlines/vignette/flicker) + red-alert frame tie-in.
+[ ] OPENING / IDLE / FOCUS / COMMIT animation timelines.
+[ ] ColorPalette resolving accentColorId + region theme tint; all pre-allocated.
+[ ] No textures, no allocations in render(), all Disposables disposed.
+
+LIVING DOC CONTRACT
+===================
+On implementation: flip STATUS to IMPLEMENTED and add the "Overlay visual spec" section to
+docs/route-map-system.txt (layout coords, palette ids, render-pass order) so future UI work
+(and other agents) match the established look instead of reinventing it.

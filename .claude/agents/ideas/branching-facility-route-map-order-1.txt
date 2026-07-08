@@ -1,0 +1,191 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Progression
+TITLE: Route Map — Part 1: Architecture & Extensible Registries
+CREATED: 2026-07-08
+---
+
+PREREQUISITE: none (this is the foundation). READ FIRST: branching-facility-route-map.txt
+(master index) for the full vision and how the series fits the codebase.
+
+OWNS
+====
+The route-map DATA MODEL and the two REGISTRIES that satisfy the product owner's hard
+extensibility requirements:
+  * "New level generators can be added to the roadmap easily."  -> GeneratorRegistry
+  * "Same thing with nodes."                                    -> NodeTypeRegistry
+Also owns run-seeded determinism helpers. This part introduces NO UI and NO world wiring — it
+is pure data + registration so the later parts have a stable spine to build on. It must compile
+and be unit-testable on its own (headless, no LibGDX render calls).
+
+
+WHY REGISTRIES (the load-bearing design decision)
+=================================================
+Today, generator selection is a hard-coded switch in World.pickGenerator() (World.java ~1841):
+    case 0 -> new LevelGenerator(seed);
+    case 1 -> new LinearCorridorGenerator(seed);
+    default -> new CavernGenerator(seed);
+Every new generator means editing that switch, and it can never "appear on the map" without
+touching World. That is exactly the friction the product owner wants gone. The fix: a
+data-driven registry keyed by an enum-like id. Adding a generator = add one registration line;
+adding a node type = add one registration line. World, the map generator, and the overlay all
+read the registries — none of them hard-code the list. This is the single most important
+architectural rule in the whole series: NOTHING downstream may switch on a hard-coded node or
+generator list; it must ask a registry.
+
+
+NEW PACKAGE
+===========
+Create `…toon3d.route` (new sub-package; document it in .claude/CLAUDE.md Package Rules table
+in the order-11 documentation commit). Rationale: the route map is its own subsystem (data +
+generation + selection); it depends on `level` and is depended on by `world` and `render`, so a
+dedicated package keeps the dependency direction clean and avoids bloating `progression`.
+(The original pitch guessed `progression`; refined to `route` because it owns level-generation
+selection, not player stats.)
+
+
+CLASSES (all in …toon3d.route unless noted)
+===========================================
+
+1. RouteNodeType  (enum-like, but see EXTENSIBILITY note)
+   The KIND of a node. v1 members:
+     COMBAT, ELITE, CACHE, SHOP, REST, MYSTERY, EVENT, BOSS, REGION_GATE.
+   Each member carries METADATA (not behaviour) so the pool/overlay are data-driven:
+     - id (stable string, e.g. "combat") — used for save/seed-share/run-stats logging.
+     - displayName ("SUPPLY CACHE").
+     - hintLine template ("Guaranteed ammo + medkit. Light resistance.").
+     - baseWeight (float, relative pool probability — see order-2).
+     - dangerTier (enum CALM / STANDARD / DANGER / GAMBLE / SET_PIECE) — drives colour language
+       in order-4 and anti-starvation guards in order-2.
+     - accentColorId — a key into the overlay palette (order-4), NOT a raw Color (keep route
+       package free of LibGDX Color imports so it stays headless-testable; the renderer resolves
+       the id to a Color).
+     - forced (bool) — BOSS and REGION_GATE are convergence nodes the generator forces.
+   EXTENSIBILITY note: a plain Java enum is fine for v1 (it is the simplest thing that works),
+   but the metadata above MUST live in a lookup the registry owns, NOT scattered across switch
+   statements. Prefer: enum for the ids + a `NodeTypeRegistry` holding a
+   Map<RouteNodeType, NodeTypeDefinition>. A future node added by a later idea registers its
+   NodeTypeDefinition; if it needs a brand-new enum constant that is one enum edit + one
+   registration, and nothing else in the codebase should need editing.
+
+2. NodeTypeDefinition  (immutable value object)
+   Holds all the metadata fields listed above for one node type, plus:
+     - levelProfileId (string) — which NodeLevelProfile to use when this node is entered
+       (defined in order-7). Decouples "what the node IS" from "what level it spawns."
+     - iconPainterId (string) — which procedural IconPainter draws it (order-5).
+   Built once at startup and registered.
+
+3. NodeTypeRegistry  (static/singleton, populated once at startup)
+     - register(NodeTypeDefinition def)
+     - get(RouteNodeType type) -> NodeTypeDefinition
+     - allWeightedForPool() -> the subset eligible to be rolled into the random pool (excludes
+       `forced` types, which the generator injects deliberately).
+   A single `RouteRegistries.bootstrap()` call (invoked from World.create() path, order-3)
+   registers all v1 node types and generators. Later ideas append their registration inside
+   their own bootstrap hook — see the LIVING DOC CONTRACT (order-11) for the required doc update.
+
+4. GeneratorRegistry  (static/singleton)
+   The generator-side twin of NodeTypeRegistry. Replaces the hard-coded switch.
+     - GeneratorId (stable string id, e.g. "rooms_mst", "linear_corridor", "cavern",
+       "boss_arena"). Stable ids so seeds/run-stats stay reproducible across code changes.
+     - register(GeneratorId id, GeneratorFactory factory) where
+         GeneratorFactory = (long seed, LevelGenConfig config) -> ILevelGenerator
+       Note: existing generators take `seed` in their ctor; the factory closes over that. Config
+       may be null for generators that ignore it (they already default internally).
+     - create(GeneratorId id, long seed, LevelGenConfig config) -> ILevelGenerator
+     - standardPool() -> the ids eligible for ordinary COMBAT nodes (rooms_mst, linear_corridor,
+       cavern). BOSS_ARENA and any bespoke special generators are NOT in the standard pool; they
+       are addressed by id from a NodeLevelProfile.
+   ADDING A NEW GENERATOR LATER = one register() line in bootstrap + (optionally) adding its id
+   to a node's NodeLevelProfile. It then can appear on the map with zero edits to World or the
+   overlay. This is the requirement, made concrete.
+
+5. RouteNode  (mutable run-state value object)
+   One node instance on the generated map.
+     - RouteNodeType type
+     - int depth (the floor number this node represents; 1-based, matches World.currentDepth)
+     - int laneIndex (its column/lane within the region band — layout hint for the overlay)
+     - String resolvedLabel / resolvedHint (may be templated with depth/region)
+     - GeneratorId chosenGeneratorId (null until resolved; for COMBAT it is rolled from the
+       standard pool at MAP-GEN time so the map is fully deterministic; for special nodes it is
+       fixed by the NodeLevelProfile).
+     - NodeAffix affix (nullable; e.g. an ELITE modifier — see order-9; kept generic here).
+     - NodeStatus status: LOCKED (not yet reachable), AVAILABLE (a legal next pick),
+       VISITED (already travelled), CURRENT (you are here), BYPASSED (a sibling you did not pick).
+     - List<RouteNode> outgoing (the nodes you may travel to from here).
+     - boolean revealed (fog: is its type shown, or a '?' placeholder — order-6).
+     - long nodeSeed (derived; see determinism) — every per-node roll (generator pick, affix,
+       mystery outcome) draws from this so nothing depends on visit ORDER.
+
+6. RouteMap  (the whole run's graph + cursor)
+     - List<List<RouteNode>> layers (index = hop/floor; each inner list = that layer's nodes).
+       Using layers (not a free graph) keeps the DAG forward-only and the overlay layout simple.
+     - RouteNode currentNode
+     - regions metadata (order-2/order-10) — the act bands.
+     - API:
+         getCurrent(), getSelectableNext() -> List<RouteNode> (currentNode.outgoing filtered to
+           AVAILABLE), commitTo(RouteNode next) (advances cursor, restatuses nodes), isBossNext(),
+           reveal(RouteNode) / revealRegion(int index).
+     - Holds the run seed and exposes reproducibility (same seed => identical map).
+   RouteMap is generated by order-2's RouteMapGenerator and owned by World (order-3). It is pure
+   state — NO rendering, NO LibGDX imports.
+
+
+DETERMINISM (the "random each time" promise, made fair & reproducible)
+======================================================================
+- The run's master seed already exists (World runSeed; StartGameLevelGenerator path). The whole
+  RouteMap is generated once from it, so a given seed always yields the same map — required for
+  permadeath fairness, seed-sharing, and run-stats replay (roguelike_order_17).
+- Per-node seed = mix(runSeed, node.depth, node.laneIndex) using the same 64-bit mixer style as
+  World.floorSeed (multiply by 0x9E3779B97F4A7C15L then add). Add a `route` salt constant so a
+  node's rolls never collide with that floor's LevelGenerator seed (which is floorSeed(runSeed,
+  depth)). Provide GameMath.routeNodeSeed(runSeed, depth, laneIndex) — put the formula in
+  GameMath.java with the mandatory Formula/Derivation/Edge-cases comment block (project rule:
+  no inline formulas). "Random each time" across RUNS comes from the master seed differing each
+  run; determinism WITHIN a run comes from deriving everything from it.
+- IMPORTANT: because rolls are keyed by (depth, lane) and NOT by visit order, the map you could
+  have taken is identical to the map you did take — no save-scum advantage, and the overlay can
+  show consistent info for un-taken branches.
+
+
+CONSTANTS
+=========
+Add `RouteMapConstants.java` to `…toon3d.util` (a NEW split-constants file; document it in the
+util table per CLAUDE.md). It holds: pool weights, region band sizes, branch-width min/max,
+anti-starvation windows, reveal defaults. order-2 fills in the numbers; order-1 just creates the
+file with the pool-weight and branch-width entries the data model references. NEVER hardcode any
+of these inline (project rule).
+
+
+TECHNICAL NOTES
+===============
+- Keep the entire `route` package free of `com.badlogic.gdx.graphics.*` and any render/GL import
+  so it is unit-testable headless. Colours/icons are referenced by string id and resolved in the
+  render layer (order-4/5).
+- No allocations concern here (no render()), but RouteMap is built once per run — fine to
+  allocate freely at generation time; just don't rebuild it every frame.
+- Unit tests (headless) to include: same seed => identical map (deep-equals on type/lane/depth);
+  every non-first layer node is reachable; boss layers are single forced nodes; pool weights sum
+  and normalise; registry.get() never returns null for a registered type.
+
+
+DELIVERABLE CHECKLIST (order-1)
+===============================
+[ ] `…toon3d.route` package created.
+[ ] RouteNodeType enum + NodeTypeDefinition + NodeTypeRegistry.
+[ ] GeneratorRegistry + GeneratorFactory (wrapping the 4 existing generators by stable id).
+[ ] RouteNode + RouteMap (state only; no generation logic yet — that is order-2).
+[ ] RouteRegistries.bootstrap() registering all v1 node types + all existing generators.
+[ ] GameMath.routeNodeSeed(...) with the mandatory comment block.
+[ ] RouteMapConstants.java created in util.
+[ ] Headless unit tests for determinism + registry integrity.
+[ ] Package documented in CLAUDE.md (do in the order-11 doc pass, or note it here for that pass).
+
+
+LIVING DOC CONTRACT (every order file repeats this)
+===================================================
+docs/route-map-system.txt is the single source of truth for this subsystem (created in order-11).
+When THIS part is implemented you MUST: (1) flip this file's STATUS to IMPLEMENTED; (2) add/refresh
+the "Data model & registries" section of docs/route-map-system.txt (or, if order-11 has not run
+yet, leave a clearly marked TODO block at the top of THIS file listing what the doc will need);
+(3) ensure the registries' "how to add a node type / generator" recipe is accurate to the code you
+shipped. Other agents discover this subsystem through docs/route-map-system.txt and docs/INDEX.md.

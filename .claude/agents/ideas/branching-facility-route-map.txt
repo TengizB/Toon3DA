@@ -1,167 +1,111 @@
-STATUS: NOT IMPLEMENTED
+STATUS: SPLIT INTO ORDER FILES — this is now the MASTER INDEX (do not implement directly)
 CATEGORY: Progression
-TITLE: Branching Facility Route Map — choose your descent
+TITLE: Branching Facility Route Map — MASTER INDEX
 CREATED: 2026-07-08
+UPDATED: 2026-07-08
 ---
 
-OVERVIEW
-========
-Instead of a single blind staircase down, the descent becomes a CHOICE. At the end
-of each floor (on the exit portal), the game shows a small branching map of the
-next 1-2 hops: several node types the player can pick between — a normal combat
-floor, an elite/hazard floor, a supply cache, a shop, a rest node, or a mystery
-node. Each node advertises its flavor (icon + one-line risk/reward), so the player
-plans a route through the facility the way you plan a run through Slay the Spire's
-map or FTL's sector jumps. This adds the single biggest thing a linear roguelike
-lacks: strategic route agency and run identity BETWEEN fights, not just inside
-them. It reuses the existing depth counter and level-transition system entirely;
-the node only changes WHICH kind of level generates next.
+WHAT THIS FILE IS NOW
+=====================
+This was the original single-document pitch for the branching route map. It has been
+REFINED, EXPANDED, and SPLIT into an ordered implementation series so a coding agent can
+build it one dependency-clean slice at a time. DO NOT implement from this file — implement
+the `branching-facility-route-map-order-N.txt` files in order. This file survives only as
+the high-level vision + the reading order + the "why it is split this way" rationale.
 
-This document OWNS: the route-map data model, the node types, the map selection
-screen/overlay, and how a chosen node parameterizes the next floor. It BUILDS ON
-level-transitions-stairs-down.txt (IMPLEMENTED depth + fade swap), LevelGenerator /
-LevelGenConfig, roguelike_order_16 (difficulty scaling reads depth), the boss-floor
-system (order_10), and the shop docs (shop_order_1..6). It does NOT redefine level
-generation internals or the shop's stock model.
+Every order file carries the mandatory idea header and can be handed to an implementing
+agent (java-architect, libgdx-specialist, game-level-designer, etc.) on its own, provided
+the earlier orders it depends on are already IMPLEMENTED.
 
 
-GAMEPLAY LOOP
-=============
-1. Player reaches the exit portal ('>') and steps onto it. Instead of an immediate
-   floor swap, a ROUTE MAP overlay fades in (turn is already spent stepping on the
-   portal; the map is a menu state, not a turn).
-2. The overlay shows the CURRENT node (where you are) and 2-3 selectable NEXT
-   nodes, each with an icon, a name, and a one-line hint (e.g. "SUPPLY CACHE —
-   guaranteed ammo + medkit, light resistance"). Boss floors at depth 5/10/15 are
-   FORCED single nodes (the branches converge before a boss — StS style).
-3. Player taps a node to select it (large touch targets). A confirm tap commits.
-4. On commit: the map overlay fades out, depth increments (existing counter), and
-   LevelGenerator runs with a LevelGenConfig preset chosen by the node type
-   (combat density, hazard weight, guaranteed props/pickups, shop flag, etc.).
-5. The new floor loads via the existing transition fade. Marine spawns at 'p'.
-6. Repeat at that floor's exit. Over a run the sequence of chosen nodes IS the
-   player's route — a readable story of the incursion ("cache, elite, rest, shop,
-   boss").
-7. Optional: reveal only the immediate next hop by default; a rare "SCANNER" pickup
-   or boon reveals two hops ahead (FTL long-range scanners), rewarding planning.
+ONE-PARAGRAPH VISION
+====================
+Instead of a blind staircase down, the descent becomes a CHOICE. The whole run is laid out
+as a randomly generated, forward-only branching map of the UAC facility — a holographic
+"FACILITY NAV" console the player reads like Slay the Spire's act map or FTL's sector chart.
+Each node advertises its flavour (procedural icon + one-line risk/reward): combat, elite
+hotzone, supply cache, shop, med-bay/rest, mystery, narrative/event, region gate, and forced
+boss convergences. Picking a node routes you through a DIFFERENT kind of level — sometimes a
+bespoke, hand-feeling layout, sometimes a re-parameterised standard floor. The map is DIFFERENT
+EVERY RUN (seeded from the run's master seed). Two extensibility promises are load-bearing:
+(1) adding a NEW level generator later means registering it once and it can appear on the map,
+and (2) adding a NEW node type later means registering it once and it joins the pool. All
+visuals are 100% procedural — no image assets, ever — drawn with ShapeRenderer / FrameBuffer
+the way the vitals HUD and weapon sprites already are.
 
 
-NODE TYPES (v1)
-===============
-- COMBAT (common): standard generated floor at current difficulty. The baseline.
-- ELITE / HOTZONE: fewer, tougher enemies (elite spawns like Iron Stalker '!'),
-  higher hazard weight, but a guaranteed better reward on clear (weapon rack '=',
-  armor, or extra XP). Risk node.
-- SUPPLY CACHE: low enemy count, guaranteed ammo boxes + a medkit/armor pickup.
-  The "breathe and refuel" node. Skipping it is a gamble on scarcity.
-- SHOP: a low/no-combat floor containing the vending machine (shop_order_1). Spend
-  credits/salvage. Route planning around economy.
-- REST / MED-BAY: near-empty medical-themed floor with a one-time heal or a small
-  choice (heal vs. upgrade), reusing the medical wall theme 'M'. Very few enemies.
-- MYSTERY ('?'): unknown until entered — could be a secret-room-rich floor, a trap
-  gauntlet, a lore/story beat, or a jackpot. Gambler's node.
-- BOSS (forced at depth 5/10/15): converges the branches, hands off to
-  BossFloorController.
+THE FOUR HARD REQUIREMENTS (from the product owner) AND WHERE THEY LIVE
+======================================================================
+1. "The roadmap must be random each time."               -> order-2 (seeded DAG generation)
+2. "New level generators can be added to the roadmap easily." -> order-1 (GeneratorRegistry) + order-7
+3. "Same for nodes."                                     -> order-1 (NodeTypeRegistry)
+4. "Documentation of the roadmap must be created; every  -> order-11 (docs/route-map-system.txt
+    implemented idea updates it; other agents must know      + the LIVING DOC CONTRACT that every
+    it exists."                                              order file repeats in its footer)
+Plus: "design how it looks, the visuals, user-friendly sci-fi style" -> order-4, order-5, order-6.
+Plus: "special/distinct levels for some nodes"           -> order-7, order-8, order-9, order-10.
 
 
-PLAYER EXPERIENCE
-=================
-The player becomes the run's navigator. Low on health? Route toward a Rest or
-Cache and accept a weaker payout. Flush with ammo and confident? Dive the Elite
-Hotzone for the better loot. Hoarding credits? Chart a course through two Shops.
-The tension is that you can't take every good node — choosing the cache means
-skipping the elite's reward, and the difficulty ramp (order_16) keeps pressing, so
-"play it safe every time" slowly loses. It gives a run a shape you can narrate and
-a reason to think between floors, turning the descent from a treadmill into a
-map you're outsmarting.
+READING / IMPLEMENTATION ORDER
+==============================
+order-1  Architecture & Extensible Registries (data model; the two registries that make
+         nodes AND generators pluggable; run-seeded determinism). FOUNDATION — build first.
+order-2  Random Route-Graph Generation (the forward-only DAG built fresh & unique per run;
+         regions/acts; distribution weights; anti-starvation; boss convergence).
+order-3  World Integration & Node->Floor Pipeline (ROUTE_SELECT run-phase; exit-portal hook;
+         translating a chosen node into a generator + LevelGenConfig; transitions; run stats).
+order-4  Route-Map Overlay — Visual Design (the holographic sci-fi nav console: layout,
+         colour language, CRT/scanline styling, connector lines, camera, animation states).
+order-5  Procedural Node Icon & Sprite System (per-node icon geometry, the IconPainter
+         registry, region crests, all drawn procedurally — no textures).
+order-6  Touch Navigation & Interaction UX (selection, confirm, long-range scanner reveal,
+         pan/zoom for big maps, haptic/feedback, accessibility & thumb-reach rules).
+order-7  Special-Level Generation Framework (NodeLevelProfile: how a node picks a generator
+         + config + guaranteed contents; the catalog; the "add a new special level" recipe).
+order-8  Calm Node Levels — Supply Cache & Med-Bay/Rest (bespoke low-threat curated layouts).
+order-9  Danger/Gamble Node Levels — Elite Hotzone & Mystery (high-threat + the mystery table).
+order-10 Narrative/Event Nodes & Region Theming (lore beats, biome/act progression, the
+         creative "what a good map also needs" expansion set).
+order-11 Documentation, Living Roadmap Doc & Agent Contract (creates docs/route-map-system.txt;
+         registers it in docs/INDEX.md and .claude/CLAUDE.md; defines the update contract).
 
 
-TECHNICAL NOTES
-===============
-Affected / new code:
-- New package `…toon3d.progression` (existing) classes:
-  * RouteMap.java — holds the current node and the list of candidate next nodes;
-    generates the next layer of candidates (seeded by run seed + depth for
-    determinism/permadeath fairness).
-  * RouteNode.java — { RouteNodeType type, String label, String hintLine }.
-  * RouteNodeType.java — enum: COMBAT, ELITE, CACHE, SHOP, REST, MYSTERY, BOSS.
-- level/LevelGenConfig.java: add a factory / preset per RouteNodeType (enemy
-  density multiplier, hazard weight, guaranteed pickups list, shopEnabled flag,
-  restHeal flag). LevelGenConstants.java holds the numeric presets.
-- world/World.java: owns the RouteMap. On exit-portal step, enter a new GameState
-  (ROUTE_SELECT) instead of immediately swapping. On node commit, build the
-  LevelGenConfig from the node type, increment depth, run the existing transition.
-- world/GameState.java: add ROUTE_SELECT state (pauses the sim, shows overlay).
-- render/ new RouteMapOverlayRenderer.java (…toon3d.render): draws the node cards
-  as touch buttons using ShapeRenderer + the existing font pipeline. Pre-allocate
-  all sprites/labels in create() (no render() allocations). Unproject touch through
-  the camera per the coordinate invariant.
-- input: route the overlay taps through a touch handler; large targets per mobile
-  rules. No keyboard.
-- Determinism: candidate node types are rolled from the run's master seed so the
-  same seed yields the same map (roguelike fairness; enables run stats/seed share).
-- Boss forcing: at depth 4->5 (etc.) RouteMap returns a single BOSS node.
-No new tile symbol required. The exit portal '>' already exists; this hooks its
-step handler.
+HOW THE SPLIT MAPS ONTO THE REAL CODEBASE (verified 2026-07-08)
+===============================================================
+- Generators already share `level/ILevelGenerator` with `generate(int dungeonDepth)`. Existing
+  impls: LevelGenerator, LinearCorridorGenerator, CavernGenerator, BossArenaGenerator,
+  StartGameLevelGenerator. order-1's GeneratorRegistry formalises this list into a lookup.
+- `World.pickLevelGenerator(int depth, long seed)` (World.java ~line 1851) is the CURRENT
+  generator-selection choke point and already special-cases boss floors via
+  `GameMath.isBossFloor(depth)`. order-3 replaces its body with "ask the chosen RouteNode".
+- `World.onDescentRequested()` (~line 394) currently flips straight to `RunPhase.FADING_OUT`.
+  order-3 inserts `RunPhase.ROUTE_SELECT` in front of it.
+- `RunPhase` enum (World.java line 76) gains `ROUTE_SELECT`; it already models overlays exactly
+  like this (INVENTORY_OPEN, SHOP_OPEN, LEVEL_UP_OVERLAY) so the pattern is established.
+- `floorSeed(runSeed, depth)` (World.java ~1837) is the deterministic per-floor seed the map
+  generation reuses so a run's whole map is reproducible from its master seed.
+- `LevelGenConfig` (mutable POJO) is exactly the object a node hands the generator to bias a
+  floor (order-3/order-7). Boss floors, shop seeding (`seedVendingMachines`) already keyed on depth.
+- Visuals follow the established procedural-only pipeline (procedural-vitals-hud.txt,
+  WeaponHudRenderer FrameBuffer, ShapeRenderer). No new texture assets anywhere.
 
 
-VISUAL DESIGN
-=============
-- Overlay: dark UAC-terminal panel ("FACILITY NAV — SELECT VECTOR"), scanline/CRT
-  styling consistent with scanline-crt-hud docs. Node cards are chunky rounded
-  rectangles laid out horizontally, each with: a bold node icon, name, and a
-  one-line hint in mono font.
-- Icons (procedural shapes, no textures needed): COMBAT = crosshair, ELITE = skull
-  in a diamond (red), CACHE = crate, SHOP = credit sigil, REST = green cross,
-  MYSTERY = '?', BOSS = large horned skull.
-- Selected card highlights with a cyan border + soft glow; a confirm button pulses.
-- Current-node marker and thin connector lines to the candidate cards sell the
-  "map" read. Depth number shown top-corner ("DEPTH 07 -> 08").
-- A short fade both directions using the existing FadeOverlayRenderer.
+DELETED FROM THE ORIGINAL PITCH / CHANGED ON REFINEMENT
+=======================================================
+- Original proposed revealing "only the next 1-2 hops." Refined: the WHOLE run graph is
+  generated up front and revealed region-by-region (StS act reveal), because it makes the map
+  a real planning object and the "random each time" promise legible. Fog + scanner still exist
+  as a reveal LAYER on top (order-6).
+- Original left generation ad-hoc. Refined: an explicit seeded DAG with region bands so new
+  generators/nodes slot in by weight, not by code edits (the core extensibility promise).
+- Original bundled visuals into one paragraph. Refined: a dedicated visual spec (order-4/5/6)
+  because the product owner flagged look & feel as first-class.
 
 
-BALANCE NOTES
-=============
-All placeholders:
-- Branch width: 2-3 candidates per hop (mobile screen space + decision clarity).
-- Node distribution weights per hop (tune in LevelGenConstants): COMBAT 35%, CACHE
-  15%, ELITE 15%, SHOP 12%, REST 12%, MYSTERY 11% — with guards so you can't get
-  three Shops in a row and can't go >4 floors with no Cache/Rest offered (anti-
-  starvation for the ammo economy, roguelike_order_2).
-- ELITE reward should be worth ~1.5x a normal floor's loot to justify the risk.
-- REST heal ~30-40% max HP, once; MYSTERY expected value roughly neutral (some
-  jackpots, some traps) so it stays a genuine gamble.
-- Difficulty scaling (order_16) still reads raw depth, so choosing "easy" nodes
-  does not stop the ramp — safety costs you loot/tempo, never the clock.
-
-
-INTERACTIONS
-============
-- Difficulty scaling (roguelike_order_16): node presets multiply the depth-scaled
-  baseline, not replace it — an ELITE floor at depth 8 is depth-8-hard AND elite.
-- Shop (shop_order_1..6): the SHOP node is simply a floor with shopEnabled; it
-  reuses the vending machine entity and stock roll unchanged.
-- Boss floors (roguelike_order_10): the map forces convergence to the boss node at
-  depth 5/10/15, giving a clean "the branches all lead here" pacing beat.
-- Salvage / meta (salvage-cache-meta-progression): a meta unlock could add a
-  starting "long-range scanner" that reveals two hops ahead, or unlock a new node
-  type into the pool (sideways, not power).
-- Secret rooms (secret-rooms-hidden-passages): the MYSTERY node can weight secret-
-  room generation way up, making it the "explorer's gamble."
-- Run stats / seed sharing (roguelike_order_17): the chosen route is a compact,
-  shareable summary of a run.
-
-
-OPEN QUESTIONS
-==============
-- Reveal one hop or the whole floor's map at once (StS reveals the full act)?
-  Proposed v1: one hop, to keep the mobile UI tiny and decisions punchy; expand to
-  multi-hop preview if playtests want more planning.
-- Can the player ever backtrack or is it strictly forward? Proposed: forward-only
-  (matches the descent + permadeath tone).
-- Should MYSTERY node hints be fully hidden or give a vague tell? Proposed: fully
-  hidden icon '?', but its resolved type is logged to run stats.
-- Does stepping on the portal cost a turn before the map opens, or is the portal a
-  pure menu trigger? Proposed: stepping on is the turn; map is a paused menu.
-- How many total floors in a run / is there a fixed final node (order_19 win
-  condition), or endless with cycling bosses? Defer to the win-condition doc.
+OPEN QUESTIONS (carried down into the relevant order files)
+===========================================================
+- Full-run map vs. per-hop reveal — resolved to full-graph + regional fog (see order-2/order-6).
+- Backtracking — resolved to forward-only (descent + permadeath tone).
+- Total floors per run / final node — defers to roguelike_order_19 (win condition); order-2
+  supports both a fixed depth cap and endless cycling.
+- Mystery hint visibility — hidden icon, resolved type logged to run stats (order-9).

@@ -1,0 +1,142 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Route Map — Part 8: Calm Node Levels — Supply Cache & Med-Bay/Rest
+CREATED: 2026-07-08
+---
+
+PREREQUISITE: order-7 (NodeLevelProfile + GuaranteedContent framework). USE THE game-level-designer
+AGENT for any hand-crafted .txt layouts. READ: tile-symbols.txt (legal tiles), level-design-context,
+medkit-field-medicine-system.txt / armour-kit-system.txt (heal/armour semantics),
+roguelike_order_2 (finite-ammo economy — these nodes are its release valves).
+
+OWNS
+====
+The two "breathe and refuel" special levels: SUPPLY CACHE and MED-BAY / REST. Both are the
+strategic counterweight to ELITE/COMBAT — low threat, guaranteed sustain, a deliberate change of
+tempo and lighting so the player FEELS safe. Each is defined as a NodeLevelProfile (order-7); one
+may warrant a small bespoke generator (Med-Bay); the Cache reuses a standard generator + guarantees.
+
+
+DESIGN PILLAR FOR BOTH
+======================
+These are pacing exhales. The player routed HERE by choice, paying with a skipped ELITE reward, so
+deliver an unambiguous payoff and a visibly calmer space: brighter/steadier lighting, sparse or no
+enemies, tidy geometry, medical/storage theming. They must READ as a safe room within 2 seconds of
+entering — this legibility is what makes the route CHOICE meaningful on the map.
+
+
+================================================================
+SUPPLY CACHE  (RouteNodeType.CACHE, profileId "cache")
+================================================================
+FANTASY: a UAC forward supply depot the incursion hasn't fully overrun — munition crates, a med
+locker, a couple of stragglers at most. "Grab what you can and move."
+
+BASE GENERATOR + CONFIG (no bespoke generator needed):
+  - generatorId: any standard combat generator (rooms_mst preferred for tidy rooms), rolled from
+    node.chosenGeneratorId OR fixed to "rooms_mst" in the profile for a consistent depot feel.
+  - LevelGenConfig:
+      enableLargeRooms = true (need one big "cargo bay" room), enableServerRooms = false,
+      unlitFloors = false, normalFloors = true (KEEP IT BRIGHT — safe read),
+      crates = true, lockers = true, radioactiveBarrels = false (no hazards in a safe room),
+      medkits = true (bump medkitChancePerRoom), armourKits = true,
+      columns = true (cover/visual depth in the bay).
+  - EnemyBudgetOverride: ~25-35% of the normal depth budget, biased to light chaff only (Gore
+    Biter '3' / Ghoul '~' / Crawler 'z'); NEVER an elite here. Some players want ZERO enemies —
+    make it a RouteMapConstants CACHE_MIN_ENEMY flag (default: 1-2 light stragglers so it isn't
+    trivially free; a meta upgrade could zero it).
+
+GUARANTEED CONTENT (the payoff — placement resolves in the large "cargo bay" room, FARTHEST_ROOM):
+  - 3-5 ammo boxes spread across ammo TYPES the player actually uses (read Loadout: only drop
+    ammo for owned weapons where possible): '6' bullets, '7' shells, '8' cells, '9' rockets,
+    '0' slugs. Provide a smart-ammo GuaranteedContent variant that reads owned weapons (order-7
+    STATION/PICKUP with an "owned-only" flag) so a cache never dumps useless ammo.
+  - 1 guaranteed field medkit 'H' (+ maybe a stim '+').
+  - 1 armour pickup: 'a' shard or 'A' vest (depth-scaled: 'A' deeper).
+  - 2-4 crates 'C' + a locker 'L' or two as set dressing (the depot look).
+  - Optional 1 weapon rack '=' at low odds (a lucky cache) — but the reliable weapon payout is the
+    ELITE node; keep the cache about consumables so the two nodes stay distinct.
+VISUAL/THEME: bright lit floors, munitions crates stacked, UAC stencils; a "SUPPLY" feel. No red
+alert. Exit '>' placed a short walk past the loot so you still traverse the room.
+
+BALANCE: net resource gain here should roughly refill one weapon's ammo + ~1 medkit — enough to
+justify skipping a reward node, not so much it removes scarcity (roguelike_order_2). Numbers in
+RouteMapConstants (CACHE_AMMO_BOXES, CACHE_MEDKITS, etc.), tuned against docs/balance-rule-system.
+
+
+================================================================
+MED-BAY / REST  (RouteNodeType.REST, profileId "rest")
+================================================================
+FANTASY: an intact medical wing — cryo-pods humming, bio-beds, a functioning auto-doc. The one
+place to patch up. Near-silent. The calmest room in the run.
+
+WHY A SMALL BESPOKE GENERATOR IS JUSTIFIED HERE:
+A rest node wants a CURATED, legible clinic shape (a central auto-doc, a couple of pod alcoves, one
+short approach) rather than random rooms — legibility = the "sanctuary" read. Two options:
+  (A) MedBayGenerator (new ILevelGenerator, registered in GeneratorRegistry as "med_bay"): a tiny
+      hand-feeling generator that emits a fixed-ish clinic (approach corridor -> central ward with
+      the heal station -> 1-2 pod alcoves -> exit). Small, deterministic from seed with minor
+      variation (pod count, alcove side). PREFERRED for the strongest sanctuary feel.
+  (B) A hand-crafted .txt template pool loaded via LevelLoader + a Hand CraftedProfile that picks
+      one at random (built by game-level-designer). Simpler, but fixed layouts repeat.
+Recommend (A) for variety + reuse; if time-boxed, ship (B) first (game-level-designer makes 2-3
+med-bay .txt templates) and upgrade to (A) later — both plug in via the same profile id.
+
+THEME (all existing tiles):
+  - Walls: 'M' medical walls dominant; 'N' reinforced glass for the ward viewing window; 'Z' cryo
+    walls in the pod alcove for a frost accent; 'S' emergency strip walls on the approach.
+  - Props: '&' bio-pods and 'I' specimen tanks lining the ward (ambience, solid), 'T' terminals
+    as monitoring stations, a '%' generator humming.
+  - Floors: bright 'l'/lit; maybe one 'f' flicker at the entrance for atmosphere, then steady.
+  - Decals: minimal — a little 'O' oil or a lone 'm' corpse to sell "the staff didn't all make it"
+    without making it a combat room.
+
+THE HEAL STATION (the core mechanic — GuaranteedContent STATION kind, order-7):
+  - A single interactable AUTO-DOC at the ward center. Stepping onto/adjacent + interact = a
+    ONE-TIME heal. Default heal = 30-40% max HP (RouteMapConstants REST_HEAL_FRACTION), consumed
+    on use (visual: station powers down, screen goes dim/green pulse). Reuse the medkit heal path
+    (medkit-field-medicine-system) for the actual HP application; the station is just a fixed,
+    one-shot, free trigger.
+  - CHOICE VARIANT (recommended, ties to levelup-stim-boon-choice-progression): present a small
+    2-option choice at the station — [PATCH UP: heal 35% HP] vs [FIELD MOD: a minor permanent buff
+    / repair armour to full]. Makes REST a decision, not a button. Implement as a tiny overlay
+    reusing the level-up card UI pattern. Gate behind RouteMapConstants REST_OFFERS_CHOICE
+    (default true if the boon system exists; else plain heal).
+  - Only ONE heal per rest floor (no farming). Enforced by consuming the station.
+
+ENEMIES: default ZERO (REST_ENEMY_BUDGET = 0). It is the sanctuary. Optionally a single ambient
+non-hostile-until-provoked straggler behind glass for tension, but default clean. If a MYSTERY node
+resolves to "med-bay ambush" (order-9) that is a DIFFERENT profile — the honest REST node is safe,
+so the map's promise stays trustworthy (important: players must be able to TRUST the icon language,
+or route planning collapses).
+
+EXIT: '>' past the auto-doc so the heal is on the natural path.
+
+
+SHARED IMPLEMENTATION NOTES
+===========================
+- Both profiles registered in NodeLevelProfileRegistry (order-7) under "cache"/"rest".
+- All contents via GuaranteedContent stamping (order-7) or the bespoke MedBayGenerator; only
+  tile-symbols.txt tiles. If the auto-doc needs a NEW prop symbol, either reuse '@' special
+  equipment / 'W' holo-workstation as the station prop (PREFERRED — no new symbol), or follow the
+  STRICT new-symbol rule. Recommendation: reuse '@' or 'W' as the visual auto-doc; the "station"
+  interactivity is logic layered on that tile via the profile, not a new tile.
+- Lighting/theme overrides go through LevelPlan.themeOverride so the calm look is guaranteed even
+  if a standard generator is used.
+- Determinism: pod counts, ammo types, choice options all rolled from floorSeed.
+
+
+DELIVERABLE CHECKLIST (order-8)
+===============================
+[ ] CacheProfile: bright depot config + smart owned-ammo guarantees + medkit/armour + light budget.
+[ ] Smart-ammo GuaranteedContent variant (owned-weapons aware).
+[ ] RestProfile + MedBayGenerator ("med_bay") OR 2-3 med-bay .txt templates (game-level-designer).
+[ ] HEAL_STATION station kind + one-time heal (reusing medkit heal path) + optional choice overlay.
+[ ] Zero/near-zero enemy budgets; bright legible themes ('M'/'N'/'Z' med-bay, lit cargo bay).
+[ ] All contents from tile-symbols.txt; no gratuitous new symbols (reuse '@'/'W' for the auto-doc).
+[ ] Constants in RouteMapConstants; determinism from floorSeed; balance vs balance-rule-system.
+
+LIVING DOC CONTRACT
+===================
+On implementation: flip STATUS to IMPLEMENTED and add "Calm node levels (Cache, Med-Bay)" to
+docs/route-map-system.txt — their profiles, guaranteed contents, the heal-station behaviour, and
+the design rule that HONEST safe nodes must stay safe so icon language stays trustworthy.

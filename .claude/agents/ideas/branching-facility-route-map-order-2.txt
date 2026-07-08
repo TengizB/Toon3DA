@@ -1,0 +1,146 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Progression
+TITLE: Route Map — Part 2: Random Route-Graph Generation
+CREATED: 2026-07-08
+---
+
+PREREQUISITE: branching-facility-route-map-order-1.txt (data model + registries).
+READ: master index for the vision; roguelike_order_16 (depth scaling) and
+roguelike_order_10 (boss floors) for the beats this must respect.
+
+OWNS
+====
+The RouteMapGenerator — the algorithm that builds a fresh, UNIQUE-EVERY-RUN, forward-only
+branching graph and fills every node with a type (and, for combat nodes, a concrete generator id).
+This is the direct answer to "the roadmap must be random each time." It produces the RouteMap
+data object from order-1; it does NO rendering and NO world wiring (that is order-3/order-4).
+
+
+GRAPH SHAPE — a layered forward-only DAG (Slay-the-Spire style, tuned for a phone)
+==================================================================================
+- The run is a sequence of LAYERS (one layer per floor/hop). Layer 0 = the current floor the
+  player is standing on (the CURRENT node). Each subsequent layer holds 1..N candidate nodes.
+- Edges only ever go from layer i to layer i+1 (forward-only; no backtracking — matches the
+  descent + permadeath tone). A node's `outgoing` list is the subset of the next layer it
+  connects to.
+- Branch width per layer: BRANCH_MIN..BRANCH_MAX candidates (default 2..3 — mobile screen space
+  + decision clarity; from RouteMapConstants). Width is itself rolled per layer so the map has an
+  organic pinch-and-spread rhythm, not a uniform grid.
+- Connectivity RULES (must all hold — unit-tested):
+    * every node in layer i+1 has >=1 incoming edge (no orphan/unreachable node);
+    * every node in layer i has >=1 outgoing edge (no dead-end you can't leave);
+    * edges do not "cross" more than one lane (keeps the overlay's connector lines readable —
+      a node connects to next-layer nodes within +/-1 lane of itself, StS rule);
+    * at least one full path exists from CURRENT to the final layer (guaranteed by construction).
+- Lane assignment: each node gets a laneIndex (0..width-1) used purely as an overlay layout hint
+  (order-4). Generation is lane-aware so the "map" reads spatially.
+
+
+REGIONS / ACTS (creative expansion — gives the descent a narrated shape)
+========================================================================
+The layers are grouped into REGIONS (acts), each a themed band of the facility. Default bands
+(tunable in RouteMapConstants; final cap defers to roguelike_order_19 win condition):
+    Region A "OUTER FACILITY"   depth 1-4    boss at 5
+    Region B "RESEARCH WING"    depth 6-9    boss at 10
+    Region C "REACTOR DEPTHS"   depth 11-14  boss at 15
+    Region D "THE BREACH"       depth 16+    endless cycle (bosses every 5, scaled)
+- A region controls: which node types are weighted UP/DOWN, which generators are in that region's
+  standard combat pool (so REACTOR DEPTHS can lean CavernGenerator, RESEARCH WING lean rooms_mst,
+  etc. — WITHOUT hard-coding, just per-region weight tables), and the overlay theme colour
+  (order-4/order-10). New regions are added as data rows — same extensibility discipline.
+- REGION_GATE node: the single forced node at the end of a region that is NOT a boss (or the boss
+  IS the gate on boss depths). Visually it is the "airlock to the next wing" convergence beat.
+- BOSS convergence: on boss depths the entire layer collapses to ONE forced BOSS node (branches
+  reconverge before it — the classic "all roads lead here" pacing beat). Use
+  GameMath.isBossFloor(depth) as the single authority (already exists) so this never drifts from
+  roguelike_order_10 / BossArenaGenerator.
+
+
+NODE-TYPE ROLL (the randomness, with guard rails)
+=================================================
+For each non-forced node, roll a RouteNodeType from NodeTypeRegistry.allWeightedForPool() using
+its per-region-adjusted weight. Default base weights (RouteMapConstants; region tables scale them):
+    COMBAT 34   CACHE 14   ELITE 14   SHOP 11   REST 11   MYSTERY 10   EVENT 6
+ANTI-STARVATION / ANTI-CLUMP guards (roll, then repair — all tunable):
+    * No more than 2 SHOP nodes offered within any 4-layer window (economy pacing).
+    * The player must be OFFERED at least one CACHE or REST at least once per
+      RESOURCE_RELIEF_WINDOW layers (default 4) — protects the finite-ammo economy
+      (roguelike_order_2). "Offered" = present as a selectable candidate, not forced to take.
+    * No layer is ALL the same non-combat type (guarantees a real choice every hop).
+    * At least one COMBAT-family node (COMBAT or ELITE) per layer once past depth 1 (this is still
+      a combat game).
+    * The FIRST offered choice of a fresh run leans safe (bias the layer-1 pool toward COMBAT +
+      CACHE) so new players aren't gambling before they have footing.
+Guards are applied as a deterministic post-pass over the seeded roll so the map stays reproducible.
+
+
+COMBAT-NODE GENERATOR ASSIGNMENT (why this lives at map-gen time)
+================================================================
+For each COMBAT/ELITE node, roll a GeneratorId from the region's standardPool() (GeneratorRegistry)
+using the node's nodeSeed. Storing the chosen generator ON the node at map-gen time means:
+  - the map is fully deterministic and previewable (the overlay can even hint the biome);
+  - World's selection logic (order-3) becomes "read node.chosenGeneratorId" instead of re-rolling;
+  - a NEW generator added to a region's standard pool automatically starts appearing on maps with
+    zero further code — the extensibility promise, delivered.
+Special nodes (CACHE/SHOP/REST/MYSTERY/EVENT/BOSS) do NOT roll here; their generator+config come
+from their NodeLevelProfile (order-7), addressed by id.
+
+
+AFFIXES (hooks; full spec in order-9)
+=====================================
+ELITE (and optionally MYSTERY) nodes may roll a NodeAffix from an affix pool (e.g. "IRRADIATED",
+"OVERCLOCKED", "SWARM") at map-gen time from the nodeSeed. order-2 only reserves the field and the
+roll hook; order-9 defines the affix catalog and its level/enemy effects.
+
+
+DETERMINISM & UNIQUENESS
+========================
+- Generate the whole map once at run start (order-3 calls this right after World builds the run
+  seed / leaves the staging room). Seed the generator's RNG with the master runSeed; per-node
+  rolls use GameMath.routeNodeSeed (order-1). Same seed => byte-identical map. Different runs get
+  different master seeds => different maps ("random each time").
+- Provide RouteMapGenerator.generate(long runSeed, RegionPlan plan) -> RouteMap. Keep RegionPlan
+  data-driven (list of region rows) so region count/shape is config, not code.
+- Endless mode (Region D): the generator lazily EXTENDS the map by one more region band when the
+  player nears the current final layer, re-seeding from mix(runSeed, regionIndex) so extension is
+  still deterministic and doesn't require pre-allocating an infinite graph.
+
+
+TECHNICAL NOTES
+===============
+- Headless/pure: no LibGDX. RouteMapGenerator is a plain algorithm over order-1's data types.
+- Put any non-trivial formula (lane-crossing test, weighted pick, seed mix) in GameMath with the
+  mandatory comment block — no inline math (project rule).
+- Full naming discipline: `tileColumn`-style fully-spelled names; here e.g. `layerIndex`,
+  `laneIndex`, `candidateCount`, `regionIndex`, never `i`/`j`/`w`.
+- Guard the RNG so an empty/over-constrained pool can't infinite-loop: cap repair attempts, then
+  fall back to COMBAT (safe default) and log via run-stats debug, never hang.
+
+
+UNIT TESTS (headless)
+=====================
+[ ] Same seed => identical map (deep structural equals).
+[ ] Every node reachable from CURRENT; no orphans; no dead-ends; boss layers single & forced.
+[ ] Anti-starvation windows honoured across 100 random seeds (no >2 shops/4 layers; a cache-or-rest
+    offered within the relief window).
+[ ] Generator ids on combat nodes are always from the region's standard pool.
+[ ] Adding a mock generator to a region pool makes it appear on some maps (extensibility test).
+[ ] Adding a mock node type to the registry makes it appear in the pool at its weight.
+
+
+DELIVERABLE CHECKLIST (order-2)
+===============================
+[ ] RouteMapGenerator with layered-DAG construction + connectivity repair.
+[ ] Region/act band model (RegionPlan, data-driven) + boss convergence via GameMath.isBossFloor.
+[ ] Weighted node-type roll + anti-starvation/anti-clump post-pass.
+[ ] Combat-node generator assignment from GeneratorRegistry region pools.
+[ ] Affix roll hook (field + seed only).
+[ ] Endless-mode lazy region extension.
+[ ] RouteMapConstants filled with all weights/windows/band sizes.
+[ ] Headless unit tests above.
+
+LIVING DOC CONTRACT
+===================
+On implementation: flip STATUS to IMPLEMENTED and update the "Map generation & regions" section
+of docs/route-map-system.txt (created in order-11) — the graph rules, the weight table, the region
+bands, and the exact anti-starvation guards, so other agents can reason about run pacing.

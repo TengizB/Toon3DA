@@ -1,0 +1,141 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Route Map — Part 11: Living Documentation & Agent Contract
+CREATED: 2026-07-08
+---
+
+PREREQUISITE: conceptually depends on all prior parts (it documents them), but the DOC SCAFFOLD
+(create the file + register it) should be done EARLY — ideally right after order-1 lands — so every
+subsequent part has a doc to update as it ships. Treat "create the scaffold" and "keep it current"
+as two phases: scaffold now, sections fill in as parts implement.
+
+OWNS
+====
+The route map's PERMANENT documentation and the CONTRACT that keeps it accurate. The product owner
+requirement is explicit: "A documentation of the roadmap must be created, each implemented idea
+must update this roadmap document, and other agents must know about its existence." This part makes
+that real and enforceable.
+
+
+DELIVERABLE 1 — CREATE docs/route-map-system.txt
+================================================
+A new reference doc in docs/ (same tier as enemy-system.txt, tick-system.txt, etc.). It is the
+SINGLE SOURCE OF TRUTH for the route map subsystem. Required sections (each filled/updated by the
+order that implements it — see the contract table below):
+   1. OVERVIEW — what the route map is, the player-facing loop, the vision one-paragraph.
+   2. DATA MODEL & REGISTRIES — RouteNodeType, NodeTypeDefinition, RouteNode, RouteMap, the
+      NodeTypeRegistry / GeneratorRegistry / NodeLevelProfileRegistry / IconPainterRegistry /
+      NodeAffixRegistry / FacilityEventRegistry / RegionRegistry. (order-1, +5/7/9/10 append.)
+   3. MAP GENERATION & REGIONS — the layered DAG rules, weights, anti-starvation guards, region
+      bands, boss convergence, determinism/seed. (order-2.)
+   4. WORLD INTEGRATION & NODE->FLOOR PIPELINE — ROUTE_SELECT phase, exit-portal hook, the 6-step
+      pipeline, the depth-ramp invariant. (order-3.)
+   5. OVERLAY VISUAL SPEC — layout coords, palette ids, render-pass order, animation states. (order-4.)
+   6. NODE ICON VOCABULARY — the icon catalog + the 4-step add-an-icon recipe. (order-5.)
+   7. INTERACTION & CONTROLS — selection model, reveal/fog, scanner, pan/zoom, haptics. (order-6.)
+   8. SPECIAL LEVELS: THE PROFILE SYSTEM — NodeLevelProfile contract, GuaranteedContent, placement,
+      the add-a-new-special-level recipe. (order-7, +8/9/10 append their profiles.)
+   9. NODE CATALOG (LIVING TABLE) — one row per node type: id, danger tier, generator/profile,
+      guaranteed contents, reward, icon id, pool weight. New nodes ADD a row. (all content parts.)
+  10. REGION CATALOG (LIVING TABLE) — one row per region: id, depth range, theme, generators,
+      faction, boss, crest. New regions ADD a row. (order-10.)
+  11. EXTENSIBILITY RECIPES — the definitive "HOW TO ADD" section (see Deliverable 3).
+  12. HOW OTHER SYSTEMS PLUG IN — cross-links to level-transitions, boss floors, shop, difficulty
+      scaling, secret rooms, hazards, relics, meta-progression.
+Format: plain-text like the other docs/*.txt, wrapped ~90 cols, section headers in CAPS with =====.
+
+
+DELIVERABLE 2 — REGISTER THE DOC SO AGENTS DISCOVER IT
+======================================================
+The requirement "other agents must know about its existence" means wiring it into the two places
+agents actually look:
+  (a) docs/INDEX.md — add a "Route Map / Progression" row pointing to route-map-system.txt with a
+      "When to read" line ("Touching the branching route map, adding a node type, a map generator,
+      a special level, a region, or a route event."). Also update the "Ideas Backlog" note to
+      mention the branching-facility-route-map-order-N series.
+  (b) .claude/CLAUDE.md — several edits:
+       - "Where to Find Info" table: add a row (Route map / branching descent ->
+         docs/route-map-system.txt).
+       - "Docs Directory" table: add route-map-system.txt with its line count + summary.
+       - "Package Rules" table: add `…toon3d.route` (route map data/generation/selection) and note
+         the `render.routeicons` sub-package.
+       - "Key Classes" section: add short entries for RouteMap, RouteMapGenerator,
+         RouteMapOverlayRenderer, and the registries (mirroring how World/EnemyManager are listed).
+       - If an Agent Roster / workflow note is warranted: add a line telling agents to read
+         docs/route-map-system.txt before adding any node, generator, special level, region, or
+         route event.
+  (c) OPTIONAL but recommended: a one-line pointer in procedural-level-generation.txt and
+      level-transitions-stairs-down.txt ("descent target selection is owned by the route map — see
+      docs/route-map-system.txt") so anyone touching transitions/generation finds it.
+
+
+DELIVERABLE 3 — THE EXTENSIBILITY RECIPES (the product owner's core ask, made copy-pasteable)
+============================================================================================
+Section 11 of the doc must contain these exact, tested recipes so future work is trivial:
+
+  ADD A NEW LEVEL GENERATOR TO THE MAP:
+    1. Implement ILevelGenerator (as today).
+    2. GeneratorRegistry.register("my_generator", (seed, config) -> new MyGenerator(seed, config)).
+    3. Add "my_generator" to the standard pool and/or the relevant region's generatorWeights.
+    => It now appears on random combat floors. No World/overlay edits.
+
+  ADD A NEW NODE TYPE:
+    1. Add the RouteNodeType constant (+ NodeTypeDefinition: weight, tier, accent, hint,
+       levelProfileId, iconPainterId).
+    2. Write its NodeLevelProfile; register it. Write its IconPainter; register it.
+    3. Add its pool weight (+ region weights). Add a NODE CATALOG row to the doc.
+    => It joins the random pool at its weight. No World/overlay/generator edits.
+
+  ADD A NEW SPECIAL LEVEL (for an existing or new node): per order-7's recipe.
+  ADD A NEW REGION: per order-10's RegionRegistry recipe.
+  ADD A NEW ROUTE EVENT: FacilityEventRegistry.register(event) + a NODE CATALOG note.
+
+Each recipe ends with the invariant: "if you had to edit a switch statement in World or the
+overlay, the registries are being bypassed — fix that instead."
+
+
+DELIVERABLE 4 — THE UPDATE CONTRACT (make "each implemented idea updates the doc" enforceable)
+=============================================================================================
+Put this contract at the TOP of docs/route-map-system.txt and restate it here as the rule:
+  "Any change to the route map subsystem MUST update this document in the same commit:
+     - new/changed node type -> update the NODE CATALOG table + registries section;
+     - new/changed generator -> update the extensibility recipe list of generators;
+     - new region / event / affix / mystery outcome -> update the relevant catalog/table;
+     - visual/interaction changes -> update the overlay/interaction sections.
+   The `branching-facility-route-map-order-N` idea files each carry a LIVING DOC CONTRACT footer
+   naming exactly which section they own; when an order is implemented, its STATUS flips to
+   IMPLEMENTED and its owned section here is written. A code review that adds route content without
+   a doc update should be treated as incomplete."
+This mirrors the existing STRICT RULE pattern for tile-symbols.txt (single-commit doc+code), which
+the team already follows — so the enforcement style is familiar to every agent.
+
+Because a PostToolUse hook already runs code-reviewer on every .java write, consider adding (in a
+later settings change, NOT required here) a reviewer note: "if the diff touches …toon3d.route or
+RouteMapOverlayRenderer and does not touch docs/route-map-system.txt, flag it." Logged as a
+suggestion; the human/settings owner decides.
+
+
+TECHNICAL NOTES
+===============
+- This part writes DOCS + small edits to INDEX.md / CLAUDE.md; it ships NO Java (except possibly a
+  trivial registry-bootstrap doc-comment). It is safe to do the scaffold early and the section
+  fills incrementally.
+- Keep the doc in sync with reality: if an order changes a design during implementation (allowed —
+  the idea files say "update file if design changed"), the doc reflects SHIPPED behaviour, the idea
+  file reflects the design intent. The DOC wins for "how it actually works today."
+
+
+DELIVERABLE CHECKLIST (order-11)
+================================
+[ ] docs/route-map-system.txt created with all 12 sections (scaffold early; fill as parts land).
+[ ] docs/INDEX.md updated (new row + ideas-series note).
+[ ] .claude/CLAUDE.md updated (Where-to-Find, Docs Directory, Package Rules, Key Classes, agent note).
+[ ] Extensibility recipes (generator / node / special level / region / event) written + verified.
+[ ] The UPDATE CONTRACT placed at top of the doc and honoured by each implemented order.
+[ ] Optional pointers added to procedural-level-generation.txt & level-transitions-stairs-down.txt.
+
+LIVING DOC CONTRACT
+===================
+This part IS the living-doc machinery. On implementation: flip STATUS to IMPLEMENTED, confirm every
+prior IMPLEMENTED order has written its owned section, and confirm docs/INDEX.md + CLAUDE.md
+reference the doc so any future agent discovers the route map system before touching it.
