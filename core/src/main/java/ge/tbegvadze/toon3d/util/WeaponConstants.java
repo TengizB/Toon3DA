@@ -113,9 +113,41 @@ public final class WeaponConstants {
     public static final String CHAINGUN_NORMAL_TEXTURE_PATH = "textures/guns/chaingun/chaingun.png";
     public static final String CHAINGUN_FIRE_TEXTURE_PATH   = "textures/guns/chaingun/chaingun_fire.png";
     public static final String CHAINGUN_RELOAD_TEXTURE_PATH = "textures/guns/chaingun/chaingun_reload.png";
-    // Chaingun procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer
-    public static final int CHAINGUN_CANVAS_WIDTH  = 192;
-    public static final int CHAINGUN_CANVAS_HEIGHT = 134;
+    // Chaingun procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer.
+    // Rendered at 1.5× the base 192×134 for finer barrel/drum detail while preserving the exact
+    // 384:268 display aspect ratio (288/201 = 1.4328) so the sprite is never stretched.
+    public static final int CHAINGUN_CANVAS_WIDTH  = 288;
+    public static final int CHAINGUN_CANVAS_HEIGHT = 201;
+
+    // Chaingun barrel-spin animation.
+    // The six barrels are baked at several rotation phases into one horizontal sprite-sheet
+    // texture (CHAINGUN_ROTATION_FRAME_COUNT frames, each CANVAS_WIDTH wide). At run time the
+    // renderer only swaps which frame sub-region it samples — no per-frame FrameBuffer work and
+    // no allocation. Because six identical barrels sit 60° apart, one 60° step reproduces an
+    // identical image, so the baked frames span exactly one CHAINGUN_ROTOR_PERIOD_DEGREES and
+    // loop seamlessly. The rotor speed ramps up when firing starts and winds down afterward.
+    public static final int   CHAINGUN_ROTOR_BARREL_COUNT               = 6;
+    public static final float CHAINGUN_ROTOR_PERIOD_DEGREES             = 60f;   // 360 / barrel count
+    public static final int   CHAINGUN_ROTATION_FRAME_COUNT             = 6;     // baked phases per period
+    public static final float CHAINGUN_ROTOR_MAX_SPEED_DEGREES_PER_SECOND = 900f;// spun-up rotor speed while firing
+    public static final float CHAINGUN_ROTOR_RAMP_RATE                  = 7f;    // spin-up / wind-down lerp rate
+    public static final float CHAINGUN_ROTOR_START_ANGLE_DEGREES        = 90f;   // phase-0 (symmetric) arrangement
+
+    // Chaingun sprite layout (canvas pixels, Y-up, offsets relative to centerX). The receiver sits
+    // at the bottom nearest the player; the rotor drum above it; the barrels extend away to the top.
+    public static final float CHAINGUN_BODY_TOP_Y                = 74f;
+    public static final float CHAINGUN_BODY_HALF_WIDTH           = 78f;
+    public static final float CHAINGUN_DRUM_CENTER_Y             = 84f;
+    public static final float CHAINGUN_DRUM_RADIUS               = 50f;
+    public static final float CHAINGUN_CLAMP_BOTTOM_Y            = 126f;
+    public static final float CHAINGUN_CLAMP_TOP_Y               = 138f;
+    public static final float CHAINGUN_BARREL_BASE_Y            = 108f;  // geometric base (hidden behind the drum)
+    public static final float CHAINGUN_BARREL_MUZZLE_Y          = 194f;
+    public static final float CHAINGUN_BARREL_CLUSTER_RADIUS_X   = 42f;  // horizontal ring radius at barrel base
+    public static final float CHAINGUN_BARREL_CLUSTER_RADIUS_Y   = 9f;   // vertical (depth) foreshortening of the ring
+    public static final float CHAINGUN_BARREL_HALF_WIDTH         = 9f;   // half-width of one barrel tube at its base
+    public static final float CHAINGUN_BARREL_CONVERGENCE        = 0.66f;// muzzle offset = base offset × this factor
+    public static final float CHAINGUN_HUB_BOLT_RADIUS           = 30f;  // orbit radius of the rotor-face bolt studs
 
     // Assault Rifle — precision automatic bullet rifle, shares BULLETS ammo with the Chaingun.
     // Single accurate hitscan round per fire press; longer effective range, no penetration.

@@ -355,7 +355,11 @@ final class WeaponSlotsPanel implements Disposable {
         Texture texture = weaponHudRenderer.getWeaponTexture(weapon);
         if (texture == null) return;
 
-        float srcWidth   = texture.getWidth();
+        // Sprite-sheet weapons (e.g. the Chaingun rotation frames) pack several frames side by side;
+        // the thumbnail shows only the first frame, so measure and sample one frame's width.
+        int   frameColumns = weaponHudRenderer.getWeaponTextureFrameColumns(weapon);
+        int   frameWidth   = texture.getWidth() / frameColumns;
+        float srcWidth   = frameWidth;
         float srcHeight  = texture.getHeight();
         if (srcWidth <= 0f || srcHeight <= 0f) return;
         float dstWidth   = ItemConstants.INV_WEAPON_SPRITE_ZONE_WIDTH;
@@ -366,7 +370,8 @@ final class WeaponSlotsPanel implements Disposable {
         float drawX      = ItemConstants.INV_WEAPON_SLOT_X + (dstWidth  - drawWidth)  / 2f;
         float drawY      = slotY                           + (dstHeight - drawHeight) / 2f;
 
-        spriteBatch.draw(texture, drawX, drawY, drawWidth, drawHeight);
+        spriteBatch.draw(texture, drawX, drawY, drawWidth, drawHeight,
+                         0, 0, frameWidth, texture.getHeight(), false, false);
     }
 
     private void drawInfoZone(Weapon weapon, int slotIndex, float slotY, SlotState state) {
