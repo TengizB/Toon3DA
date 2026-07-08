@@ -8,6 +8,16 @@ dependencies {
   if(enableGraalNative == 'true') {
     implementation "io.github.berstanio:gdx-svmhelper-annotations:$graalHelperVersion"
   }
+
+  // Headless unit testing (JUnit 5). Used by the route-map subsystem tests, which run without a
+  // LibGDX render context.
+  testImplementation platform("org.junit:junit-bom:5.10.2")
+  testImplementation "org.junit.jupiter:junit-jupiter"
+  testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+  useJUnitPlatform()
 }
 
 jar {

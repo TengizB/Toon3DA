@@ -1304,6 +1304,41 @@ public final class GameMath {
     }
 
     // =========================================================================
+    // ROUTE NODE SEED — deterministic per-node seed for the branching route map
+    // =========================================================================
+    /*
+     * Formula: routeNodeSeed
+     * Derivation / explanation:
+     *   Every route-map node needs its own reproducible seed so that all of its
+     *   rolls (which standard generator to use, an elite affix, a mystery outcome)
+     *   depend ONLY on the run's master seed and the node's fixed layout position
+     *   (depth, laneIndex) — never on the ORDER the player visits nodes. That makes
+     *   the branch you could have taken identical to the branch you did take, and a
+     *   given run seed always yields an identical map.
+     *
+     *   Uses the same splitmix-style mixer as World.floorSeed (multiply by the
+     *   64-bit golden-ratio constant 0x9E3779B97F4A7C15, then add the next input):
+     *
+     *     mixed = (runSeed ^ ROUTE_NODE_SEED_SALT)
+     *     mixed = mixed * 0x9E3779B97F4A7C15 + depth
+     *     mixed = mixed * 0x9E3779B97F4A7C15 + laneIndex
+     *
+     *   The salt (RouteMapConstants.ROUTE_NODE_SEED_SALT) XORed in up front makes this
+     *   stream independent of World.floorSeed(runSeed, depth), so a node's rolls never
+     *   collide with that floor's LevelGenerator seed even at the same depth.
+     * Edge cases:
+     *   long overflow wraps arithmetically (desired for a hash); depth=0 and
+     *   laneIndex=0 still produce a well-mixed seed; negative depth/lane wrap
+     *   correctly like any other integer input.
+     */
+    public static long routeNodeSeed(long runSeed, int depth, int laneIndex) {
+        long mixed = runSeed ^ RouteMapConstants.ROUTE_NODE_SEED_SALT;
+        mixed = mixed * 0x9E3779B97F4A7C15L + depth;
+        mixed = mixed * 0x9E3779B97F4A7C15L + laneIndex;
+        return mixed;
+    }
+
+    // =========================================================================
     // FLICKER MULTIPLIER — deterministic per-tile brightness oscillator
     // =========================================================================
     /*
