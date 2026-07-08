@@ -890,9 +890,10 @@ public final class EnemyManager implements EnemyHitTarget {
     /**
      * SUMMON: spawns the batch of 2-3 chaff pre-selected at commit ({@link #selectSummonTargets}) into
      * the floor-telegraphed empty cells, re-validating each and bounded by the per-room live-enemy
-     * ceiling so the encounter's Threat-Point budget stays honest (docs/balance-rule-system.txt). No
-     * per-summoner lifetime cap — the SPECIAL cadence is the cooldown, so it can summon again later.
-     * Counter: read the marked cells and kill the summoner before the room floods.
+     * ceiling so the encounter's Threat-Point budget stays honest (docs/balance-rule-system.txt).
+     * One cast per summoner, lifetime — once at least one chaff spawns, {@code summonsSpawned > 0}
+     * permanently disqualifies SUMMON in {@link #isSpecialUsable} (see there), so this fires at most
+     * once per enemy. Counter: kill the summoner, or just outlast its single cast.
      */
     private void executeSummon(Enemy enemy, int playerColumn, int playerRow) {
         enemy.state = EnemyState.ATTACKING;
@@ -1344,10 +1345,11 @@ public final class EnemyManager implements EnemyHitTarget {
                         && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
                         && hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
             case SUMMON:
-                // Reusable: no lifetime cap. The SPECIAL cadence spaces out casts (the cooldown) and the
-                // per-room live ceiling stops a flood, so the summoner can spawn a fresh batch whenever
-                // the board has room and an empty adjacent tile (design feedback: spawn 2-3, then reuse).
-                return countLiveEnemies() < EnemyConstants.SUMMON_ROOM_LIVE_CAP
+                // One cast per summoner, lifetime: once it has actually spawned at least one chaff
+                // (summonsSpawned > 0, set in executeSummon), it never offers SUMMON again — killing
+                // the summoner permanently stops the flood instead of just pausing it for a cooldown.
+                return enemy.summonsSpawned == 0
+                        && countLiveEnemies() < EnemyConstants.SUMMON_ROOM_LIVE_CAP
                         && hasEmptyAdjacentTile(enemy, playerColumn, playerRow);
             case AREA_STRIKE:
                 // Only telegraph the slam when the player is close enough that it can plausibly land

@@ -20,6 +20,7 @@ import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.util.ItemConstants;
@@ -262,13 +263,48 @@ public class HudRenderer implements Renderable, Disposable {
             font.setColor(temporaryColor);
             stringBuilder.setLength(0);
             stringBuilder.append(STATUS_TYPES[typeIndex].name()).append(" (")
-                          .append(effect.getRemainingTurns()).append(")");
+                          .append(effect.getRemainingTurns()).append(")  ")
+                          .append(debuffDetailText(STATUS_TYPES[typeIndex], effect));
             glyphLayout.setText(font, stringBuilder);
             float drawX = Constants.WORLD_WIDTH - HudConstants.HUD_CREDITS_RIGHT_INSET_X - glyphLayout.width;
             font.draw(batch, stringBuilder, drawX, drawY - lineIndex * HudConstants.HUD_DEBUFF_LIST_LINE_STEP);
             lineIndex++;
         }
         font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
+    }
+
+    /**
+     * The concrete per-turn/per-hit potency of an active status effect, appended after the
+     * "(turnsRemaining)" countdown so the player sees what the debuff is actually doing, not just its
+     * name — e.g. "BURNING (2)  -6 HP/TURN" or "WEAK (3)  -25% DMG DEALT". DoT types read their stored
+     * per-instance magnitude (POISONED multiplies by stacks, matching StatusEffectController's tick
+     * math); WEAK/SLOWED read the flat EffectConstants values since the player's multiplier helpers
+     * (Player#getWeakDamageMultiplier, Player#getSlowMultiplier) don't use the per-instance magnitude.
+     */
+    private static String debuffDetailText(StatusType type, StatusEffect effect) {
+        switch (type) {
+            case BURNING:
+            case BLEED:
+                return "-" + effect.getMagnitude() + " HP/TURN";
+            case POISONED:
+                return "-" + (effect.getMagnitude() * effect.getStacks()) + " HP/TURN";
+            case STUNNED:
+                return "CANNOT ACT";
+            case BLINDED:
+                return "VISION IMPAIRED";
+            case SLOWED:
+                return "ACTIONS " + (int) EffectConstants.SLOW_FACTOR + "X SLOWER";
+            case WEAK:
+                return "-" + EffectConstants.WEAK_DAMAGE_PERCENT + "% DMG DEALT";
+            case VULNERABLE:
+                return "+" + (effect.getStacks() * EffectConstants.VULNERABLE_DAMAGE_PERCENT) + "% DMG TAKEN";
+            case EXPOSED:
+                return "BLOCK IGNORED";
+            case EMPOWERED:
+                return "+" + effect.getMagnitude() + "% DMG DEALT";
+            default:
+                return "";
+        }
     }
 
     // =========================================================================
