@@ -114,6 +114,9 @@ public class Railgun extends Weapon {
         chargeLevel = 0;
 
         boolean hitAnyEnemy = false;
+        // OVERPENETRATION on the infinite-pierce slug adds a stacking damage bonus per enemy struck
+        // beyond the first (see overpenetrationPiercingDamageMultiplier); 1.0 without the ability.
+        int enemiesHit = 0;
 
         for (int distanceTiles = 1; distanceTiles <= range; distanceTiles++) {
             int  targetColumn = playerTileColumn + facingStepColumn * distanceTiles;
@@ -142,7 +145,8 @@ public class Railgun extends Weapon {
                     int computedDamage = Math.round(baseForCharge
                             * GameMath.railgunFalloff(distanceTiles,
                                     WeaponConstants.RAILGUN_DROP_COEFF,
-                                    WeaponConstants.RAILGUN_DAMAGE_MIN_MULTIPLIER));
+                                    WeaponConstants.RAILGUN_DAMAGE_MIN_MULTIPLIER)
+                            * overpenetrationPiercingDamageMultiplier(enemiesHit));
                     boolean targetWasFullHp = enemyHitTarget.isAtFullHp(hitEnemy);
                     setLastHitEnemy(hitEnemy, computedDamage, targetWasFullHp);
                     enemyHitTarget.applyDamageTo(hitEnemy, computedDamage);
@@ -153,6 +157,7 @@ public class Railgun extends Weapon {
                     dispatchHitCallbacks(new FireResult(false, distanceTiles));
                     clearLastHit();
                     hitAnyEnemy = true;
+                    enemiesHit++;
                     // Infinite pierce: do NOT return — continue marching through this enemy.
                 }
             }

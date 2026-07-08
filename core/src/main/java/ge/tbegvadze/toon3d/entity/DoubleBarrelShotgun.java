@@ -62,23 +62,30 @@ public class DoubleBarrelShotgun extends Weapon {
                                    int facingStepColumn, int facingStepRow,
                                    Level level, EnemyHitTarget enemyHitTarget,
                                    BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
+        // OVERPENETRATION: the blast pierces up to overpenetrationExtraTargets() enemies beyond the
+        // first before it dissipates. Without the ability extraTargets is 0 and the blast stops on
+        // the first enemy exactly as before.
+        int enemiesHit      = 0;
+        int extraTargets    = overpenetrationExtraTargets();
+        int lastHitDistance = 0;
         for (int distanceTiles = 1; distanceTiles <= range; distanceTiles++) {
             int targetColumn = playerTileColumn + facingStepColumn * distanceTiles;
             int targetRow    = playerTileRow    + facingStepRow    * distanceTiles;
             char targetCell  = level.getCell(targetColumn, targetRow);
             if (Level.isWall(targetCell)) {
-                return FireResult.HIT_WALL;
+                return enemiesHit > 0 ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (Level.isDoor(targetCell)
                     && doorBlocksQuery != null && doorBlocksQuery.blocksShotAt(targetColumn, targetRow)) {
-                return FireResult.HIT_WALL;
+                return enemiesHit > 0 ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (barrelHitTarget != null && barrelHitTarget.isExplosiveBarrel(targetColumn, targetRow)) {
                 barrelHitTarget.onExplosiveBarrelHit(targetColumn, targetRow);
-                return FireResult.HIT_WALL;
+                return enemiesHit > 0 ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (isShotBlockingCover(targetCell)) {
-                return FireResult.HIT_WALL; // column / solid prop blocks the shot
+                // column / solid prop blocks the shot
+                return enemiesHit > 0 ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (enemyHitTarget != null) {
                 Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
@@ -86,13 +93,17 @@ public class DoubleBarrelShotgun extends Weapon {
                     int damageThisHit = damageAtDistance(distanceTiles);
                     setLastHitEnemy(hitEnemy, damageThisHit, enemyHitTarget.isAtFullHp(hitEnemy));
                     enemyHitTarget.applyDamageTo(hitEnemy, damageThisHit);
-                    if (!WeaponConstants.DBL_SHOTGUN_PENETRATION) {
+                    dispatchHitCallbacks(new FireResult(false, distanceTiles));
+                    clearLastHit();
+                    enemiesHit++;
+                    lastHitDistance = distanceTiles;
+                    if (!WeaponConstants.DBL_SHOTGUN_PENETRATION && enemiesHit > extraTargets) {
                         return new FireResult(false, distanceTiles);
                     }
                 }
             }
         }
-        return FireResult.MISSED;
+        return enemiesHit > 0 ? new FireResult(false, lastHitDistance) : FireResult.MISSED;
     }
 
     @Override public String getNormalTexturePath() { return WeaponConstants.DBL_SHOTGUN_NORMAL_TEXTURE_PATH; }

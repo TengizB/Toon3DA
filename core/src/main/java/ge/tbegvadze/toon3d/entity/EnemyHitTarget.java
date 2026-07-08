@@ -77,4 +77,16 @@ public interface EnemyHitTarget {
      * @param turns how many world turns the flag stays armed before it lapses unused
      */
     default void applyExposedStatus(Object enemy, int turns) {}
+
+    /**
+     * Arms a Block-pierce fraction for every applyDamageTo() call until it is cleared with 0f
+     * (ARMOR_PIERCE ability). While armed, each incoming hit ignores that fraction of the
+     * target's Block before it is absorbed, letting damage bleed through to HP on shielding
+     * enemies. Set once at the start of a fire activation and cleared (0f) at the end, so DoT
+     * ticks and barrel damage — which resolve outside the activation — are never affected.
+     * Default: no-op; EnemyManager overrides to store the fraction.
+     *
+     * @param fraction fraction of the target's Block to bypass, in [0, 1]; 0 disarms
+     */
+    default void setActivationBlockPierce(float fraction) {}
 }

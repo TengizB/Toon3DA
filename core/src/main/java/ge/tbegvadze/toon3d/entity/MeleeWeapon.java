@@ -48,12 +48,15 @@ public abstract class MeleeWeapon extends Weapon {
         resetFireCycleMultiplier();
         setFacingStep(facingStepColumn, facingStepRow);
         invokeAbilityOnFire();
+        // ARMOR_PIERCE: bypass a fraction of the target's Block for this swing (and any resolver bonuses).
+        armBlockPierce(enemyHitTarget, true);
         visualState           = WeaponVisualState.FIRING;
         fireFlashTimerSeconds = WeaponConstants.FIRE_FLASH_DURATION;
         flashCycleCount++;
         FireResult result = marchShot(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
                                       level, enemyHitTarget, barrelHitTarget, doorBlocksQuery);
         dispatchHitCallbacks(result);
+        armBlockPierce(enemyHitTarget, false);
         return result;
     }
 

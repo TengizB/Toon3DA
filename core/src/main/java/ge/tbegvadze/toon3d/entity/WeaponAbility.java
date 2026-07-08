@@ -33,9 +33,9 @@ public enum WeaponAbility {
     ),
     ARMOR_PIERCE(
         Family.UNIVERSAL, Trigger.PASSIVE, false, "Armor Pierce", 'A',
-        "Bypasses a portion of enemy armor on every hit.",
-        "Each attack ignores a percentage of the target's armor rating before damage is applied. Scales with weapon level. Highly effective against heavily armored or shielded enemies.",
-        new String[]{"Armor bypassed per hit %", "Effective damage vs armor"}
+        "Bypasses a portion of enemy Block on every hit.",
+        "Each attack ignores a percentage of the target's Block — the shield enemies raise to absorb damage — so part of the hit bleeds straight through to HP. Scales with weapon level. Highly effective against shielding, turtling enemies.",
+        new String[]{"Block bypassed per hit %", "Effective vs shielded enemies"}
     ),
     EXECUTIONER(
         Family.UNIVERSAL, Trigger.ON_HIT, false, "Executioner", 'X',
@@ -51,9 +51,9 @@ public enum WeaponAbility {
     ),
     OVERPENETRATION(
         Family.GUN, Trigger.PASSIVE, false, "Overpenetration", 'O',
-        "Projectile pierces all enemies on the same axis.",
-        "The projectile does not stop on first contact. It pierces through all enemies aligned on the same cardinal axis as the shot. Every enemy in the line of fire is struck without damage falloff.",
-        new String[]{"Max enemies hit per shot", "Line-of-fire targeting"}
+        "Projectile pierces extra enemies in the line.",
+        "The projectile continues past the first enemy, piercing additional targets aligned on the same cardinal axis without damage falloff. Weapons that already pierce everything (Plasma, Railgun) instead gain bonus damage on each enemy struck beyond the first.",
+        new String[]{"Extra enemies pierced", "Line-of-fire targeting"}
     ),
     STAGGER_ROUNDS(
         Family.GUN, Trigger.ON_HIT, false, "Stagger Rounds", 'S',
@@ -288,8 +288,9 @@ public enum WeaponAbility {
                 return pct + "% of attacks strike critical weak points, dealing 2× damage (100% bonus). "
                      + "Crit chance scales with weapon level up to 30%. Pairs well with high-speed weapons.";
             case ARMOR_PIERCE:
-                return "Every attack ignores " + pct + "% of the target's armor rating before damage is applied. "
-                     + "Scales up to 60% at max weapon level. Highly effective against heavily armored enemies.";
+                return "Every attack ignores " + pct + "% of the target's Block, so that fraction of the hit "
+                     + "bleeds through the shield to HP. Scales up to 60% at max weapon level. Highly effective "
+                     + "against shielding, turtling enemies.";
             case EXECUTIONER:
                 return "Deals +" + pct + "% bonus damage against targets below 25% HP. "
                      + "Bonus scales with weapon level up to +80%. Ideal for finishing stubborn, nearly-dead enemies.";
@@ -297,8 +298,9 @@ public enum WeaponAbility {
                 return "Hits apply bleeding: " + flat + " damage per turn for 4 turns. "
                      + "A new hit refreshes the duration rather than stacking. Effective against tanky targets.";
             case OVERPENETRATION:
-                return "Shots pierce up to " + count + (count == 1 ? " enemy" : " enemies") + " in a line without stopping. "
-                     + "No damage falloff between targets. Every enemy on the cardinal axis is struck.";
+                return "Shots pierce " + count + " additional " + (count == 1 ? "enemy" : "enemies")
+                     + " beyond the first, in a line with no damage falloff. On weapons that already pierce "
+                     + "(Plasma, Railgun), each enemy past the first instead takes +25% damage per pierce step.";
             case STAGGER_ROUNDS:
                 return pct + "% of hits delay or interrupt the target's next action for 1 turn. "
                      + "Stagger chance scales with weapon level up to 35%. Useful for buying time in difficult encounters.";
@@ -398,10 +400,10 @@ public enum WeaponAbility {
         switch (this) {
             case BURST_FIRE:          return "Fires " + count + " rounds per attack action.";
             case CRITICAL_STRIKE:     return pct + "% crit chance; 2× damage on every crit.";
-            case ARMOR_PIERCE:        return "Ignores " + pct + "% armor on every hit.";
+            case ARMOR_PIERCE:        return "Ignores " + pct + "% of enemy Block on every hit.";
             case EXECUTIONER:         return "+" + pct + "% damage vs enemies below 25% HP.";
             case REND:                return "Applies bleed: " + flat + " dmg/turn for 4 turns.";
-            case OVERPENETRATION:     return "Pierces up to " + count + (count == 1 ? " enemy" : " enemies") + " in line.";
+            case OVERPENETRATION:     return "Pierces " + count + " extra " + (count == 1 ? "enemy" : "enemies") + " in line.";
             case STAGGER_ROUNDS:      return pct + "% chance to stagger enemy for 1 turn.";
             case KINETIC_SLAM:        return pct + "% chance to stun for 1 turn (melee).";
             case CLEAVE:              return "Hits splash " + pct + "% damage to adjacent enemies.";
@@ -447,13 +449,13 @@ public enum WeaponAbility {
             case CRITICAL_STRIKE:
                 return new String[]{"Critical hit chance: " + pct + "%", "Crit damage multiplier: 2× (100% bonus)"};
             case ARMOR_PIERCE:
-                return new String[]{"Armor bypassed per hit: " + pct + "%", "Effective vs armored enemies"};
+                return new String[]{"Block bypassed per hit: " + pct + "%", "Effective vs shielded enemies"};
             case EXECUTIONER:
                 return new String[]{"Damage bonus vs low-HP: +" + pct + "%", "Threshold: target below 25% HP"};
             case REND:
                 return new String[]{"Bleed damage per turn: " + flat, "Bleed duration: 4 turns"};
             case OVERPENETRATION:
-                return new String[]{"Max enemies per shot: " + count, "Line-of-fire targeting"};
+                return new String[]{"Extra enemies pierced: " + count, "Piercing weapons: +25% dmg per pierce"};
             case STAGGER_ROUNDS:
                 return new String[]{"Stagger chance per hit: " + pct + "%", "Stagger duration: 1 turn"};
             case KINETIC_SLAM:

@@ -121,6 +121,10 @@ public final class EnemyManager implements EnemyHitTarget {
 
     // Set to true by notifyMeleeAttack() before applyDamageTo(); consumed and reset inside killEnemy().
     private boolean pendingMeleeKill = false;
+    // Fraction of enemy Block bypassed by every hit in the current fire activation (ARMOR_PIERCE).
+    // Armed to the ability magnitude by Weapon.fire() at activation start, cleared to 0 at its end,
+    // so only weapon hits pierce Block — DoT ticks and barrel damage resolve with pierce == 0.
+    private float activationBlockPierceFraction = 0f;
     // Injected by World so melee kills can drop ammo matching the player's equipped ranged weapons.
     private Loadout loadout = null;
 
@@ -174,6 +178,11 @@ public final class EnemyManager implements EnemyHitTarget {
     @Override
     public void notifyMeleeAttack() {
         pendingMeleeKill = true;
+    }
+
+    @Override
+    public void setActivationBlockPierce(float fraction) {
+        activationBlockPierceFraction = Math.max(0f, Math.min(1f, fraction));
     }
 
     @Override
@@ -422,7 +431,7 @@ public final class EnemyManager implements EnemyHitTarget {
         // Block absorption (strategy-combat-order-3): capture the buffer before the hit so we can tell
         // how much the shield ate and whether it shattered, then fire the Block-specific feedback.
         int blockBefore = enemy.block;
-        enemy.applyDamage(totalDamage, exposed);
+        enemy.applyDamage(totalDamage, exposed, activationBlockPierceFraction);
         if (exposed) enemy.consumeExposed();
         int blockAbsorbed = blockBefore - enemy.block;
         if (blockAbsorbed > 0) {

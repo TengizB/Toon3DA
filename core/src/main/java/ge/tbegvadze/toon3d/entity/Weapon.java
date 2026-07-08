@@ -300,6 +300,49 @@ public abstract class Weapon implements WeaponProfile {
         return 0;
     }
 
+    // ── Overpenetration helpers ───────────────────────────────────────────────
+
+    /**
+     * Number of EXTRA enemies a single shot may pierce beyond the first, from OVERPENETRATION.
+     * 0 when the weapon lacks the ability. Non-piercing weapons (Shotgun, Assault Rifle,
+     * Chaingun, Double-Barrel) keep marching through up to this many additional enemies before
+     * the shot stops; already-piercing weapons use it to cap the damage-bonus ramp below.
+     */
+    protected int overpenetrationExtraTargets() {
+        return hasAbility(WeaponAbility.OVERPENETRATION)
+                ? Math.max(0, abilityCount(WeaponAbility.OVERPENETRATION))
+                : 0;
+    }
+
+    /**
+     * Damage multiplier for an already-piercing weapon (Plasma Rifle, Railgun) that also carries
+     * OVERPENETRATION. The first enemy struck (index 0) takes normal damage; each subsequent enemy
+     * gains {@link GameBalance#OVERPENETRATION_ALREADY_PIERCING_BONUS}, capped at the ability's
+     * extra-target count so the ramp is bounded. Returns 1.0 when the weapon lacks the ability.
+     *
+     * @param enemiesHitBeforeThis how many enemies this shot already struck (0 for the first)
+     */
+    protected float overpenetrationPiercingDamageMultiplier(int enemiesHitBeforeThis) {
+        if (!hasAbility(WeaponAbility.OVERPENETRATION) || enemiesHitBeforeThis <= 0) {
+            return 1f;
+        }
+        int steps = Math.min(enemiesHitBeforeThis, overpenetrationExtraTargets());
+        return 1f + steps * GameBalance.OVERPENETRATION_ALREADY_PIERCING_BONUS;
+    }
+
+    /**
+     * Arms this weapon's ARMOR_PIERCE Block-pierce on the given target for the whole fire
+     * activation, or clears it. All applyDamageTo() calls that resolve synchronously inside
+     * fire() (base hit, burst extras, resolver crit/execute/cleave bonuses) then bypass the
+     * armed fraction of the target's Block. Clearing (arm=false) restores full Block absorption
+     * so DoT ticks and barrel damage — which resolve outside the activation — are unaffected.
+     * No-op when the weapon lacks ARMOR_PIERCE or the target is null.
+     */
+    protected void armBlockPierce(EnemyHitTarget target, boolean arm) {
+        if (target == null || !hasAbility(WeaponAbility.ARMOR_PIERCE)) return;
+        target.setActivationBlockPierce(arm ? abilityMagnitude(WeaponAbility.ARMOR_PIERCE) : 0f);
+    }
+
     /**
      * Injects the AbilityResolver so this weapon can trigger ability effects on fire and hit.
      * Called once by World after EnemyManager and EventTextSystem are both ready.
@@ -697,6 +740,9 @@ public abstract class Weapon implements WeaponProfile {
             abilityResolver.onFire(this);
         }
 
+        // ARMOR_PIERCE: bypass a fraction of the target's Block for every hit this activation.
+        armBlockPierce(enemyHitTarget, true);
+
         shotsInClip--;
         visualState           = WeaponVisualState.FIRING;
         fireFlashTimerSeconds = WeaponConstants.FIRE_FLASH_DURATION;
@@ -745,6 +791,9 @@ public abstract class Weapon implements WeaponProfile {
         }
         // Reset any remaining burst count (e.g. clip ran out mid-burst).
         pendingBurstExtra = 0;
+
+        // Disarm ARMOR_PIERCE so damage resolving after this activation keeps full Block absorption.
+        armBlockPierce(enemyHitTarget, false);
 
         return baseResult;
     }

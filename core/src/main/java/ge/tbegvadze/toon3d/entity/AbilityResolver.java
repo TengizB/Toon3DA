@@ -52,8 +52,11 @@ import java.util.Random;
  *   BERSERKERS_OATH    (PASSIVE)   — melee legendary: kill-streak stacks for damage/HP regen.
  *   SOULFORGE          (ON_KILL)   — gun/melee legendary: weapon levels up every N kills.
  *
- * Passive abilities (ARMOR_PIERCE, OVERPENETRATION) are NOT handled here; they are
- * applied inline inside each weapon's marchShot() implementation.
+ * Passive abilities (ARMOR_PIERCE, OVERPENETRATION) are NOT handled here.
+ * OVERPENETRATION is applied inline inside each weapon's marchShot() (pierce count for
+ * non-piercing weapons; a per-target damage ramp for already-piercing ones). ARMOR_PIERCE is
+ * armed by Weapon.fire() for the whole activation via EnemyHitTarget.setActivationBlockPierce(),
+ * so every applyDamageTo() during the shot bypasses a fraction of the target's Block.
  */
 public final class AbilityResolver {
 

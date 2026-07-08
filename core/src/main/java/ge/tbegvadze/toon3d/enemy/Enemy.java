@@ -45,8 +45,9 @@ public class Enemy implements StatusHost {
     /** Effective max HP for this instance — may exceed type.maxHealth() on deeper floors. */
     public int        maxHealth;
     /**
-     * Flat damage reduction from physical armour (0 = unarmoured).
-     * Used by GameMath.armorPierceDamage() when a weapon has the ARMOR_PIERCE ability.
+     * Flat damage reduction from physical armour (0 = unarmoured), subtracted after Block in
+     * {@link #applyDamage}. Distinct from the ARMOR_PIERCE ability, which pierces Block (the
+     * enemy's active damage-absorbing shield), not this flat layer.
      * Default 0; depth-scaled enemies may receive a non-zero value at spawn time.
      */
     public int        armor = 0;
@@ -321,9 +322,23 @@ public class Enemy implements StatusHost {
      * so the shred lasts exactly ONE hit, never permanently.
      */
     public void applyDamage(int amount, boolean ignoreBlock) {
+        applyDamage(amount, ignoreBlock, 0f);
+    }
+
+    /**
+     * Block → armor → HP mitigation with an EXPOSED override and an ARMOR_PIERCE Block-pierce
+     * fraction (weapon-ability audit). {@code ignoreBlock} skips Block entirely (EXPOSED);
+     * otherwise {@code blockPierceFraction} (clamped to [0, 1]) shrinks the Block that can
+     * absorb this hit, so a fraction of the damage bleeds straight through to HP even against a
+     * shielded enemy. pierce = 0 reproduces the plain Block → armor → HP behaviour exactly.
+     * The un-pierced portion of Block is left intact — the hit only bypasses it, never spends it.
+     */
+    public void applyDamage(int amount, boolean ignoreBlock, float blockPierceFraction) {
         int remaining = amount;
         if (!ignoreBlock) {
-            int absorbed = GameMath.blockAbsorbed(block, amount);
+            float clampedPierce = Math.max(0f, Math.min(1f, blockPierceFraction));
+            int   effectiveBlock = Math.round(block * (1f - clampedPierce));
+            int   absorbed       = GameMath.blockAbsorbed(effectiveBlock, amount);
             block -= absorbed;
             remaining = amount - absorbed;
         }

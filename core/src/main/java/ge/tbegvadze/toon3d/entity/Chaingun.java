@@ -124,10 +124,14 @@ public class Chaingun extends Weapon {
                 pendingBurstBullets--;
                 shotsInClip--;
                 flashCycleCount++;
+                // Deferred burst bullets fire OUTSIDE Weapon.fire(), so re-arm ARMOR_PIERCE here (the
+                // activation-scoped arm in fire() was already cleared when bullet 1's activation ended).
+                armBlockPierce(burstEnemyHitTarget, true);
                 FireResult burstShotResult = fireSingleBullet(burstPlayerColumn, burstPlayerRow,
                         burstFacingColumn, burstFacingRow,
                         burstLevel, burstEnemyHitTarget, burstBarrelHitTarget, burstDoorBlocksQuery);
                 dispatchHitCallbacks(burstShotResult);
+                armBlockPierce(burstEnemyHitTarget, false);
                 spawnEventText("BURST FIRE");
                 fireFlashTimerSeconds = WeaponConstants.FIRE_FLASH_DURATION;
             }
@@ -146,23 +150,32 @@ public class Chaingun extends Weapon {
             if (hasAbility(WeaponAbility.RHYTHM)) resetRhythm();
             return FireResult.MISSED;
         }
+        // OVERPENETRATION: each bullet pierces up to overpenetrationExtraTargets() enemies beyond
+        // the first before it stops. Ability callbacks are dispatched inline per enemy so every
+        // pierced target (not just the last) receives on-hit effects; the caller's dispatch is then
+        // a no-op after clearLastHit(). Without the ability extraTargets is 0 and the bullet stops
+        // on the first enemy exactly as before.
+        int enemiesHit      = 0;
+        int extraTargets    = overpenetrationExtraTargets();
+        int lastHitDistance = 0;
         for (int distanceTiles = 1; distanceTiles <= range; distanceTiles++) {
             int targetColumn = playerTileColumn + facingStepColumn * distanceTiles;
             int targetRow    = playerTileRow    + facingStepRow    * distanceTiles;
             char targetCell  = level.getCell(targetColumn, targetRow);
             if (Level.isWall(targetCell)) {
-                return FireResult.HIT_WALL;
+                return enemiesHit > 0 ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (Level.isDoor(targetCell)
                     && doorBlocksQuery != null && doorBlocksQuery.blocksShotAt(targetColumn, targetRow)) {
-                return FireResult.HIT_WALL;
+                return enemiesHit > 0 ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (barrelHitTarget != null && barrelHitTarget.isExplosiveBarrel(targetColumn, targetRow)) {
                 barrelHitTarget.onExplosiveBarrelHit(targetColumn, targetRow);
-                return FireResult.HIT_WALL;
+                return enemiesHit > 0 ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (isShotBlockingCover(targetCell)) {
-                return FireResult.HIT_WALL; // column / solid prop blocks the shot
+                // column / solid prop blocks the shot
+                return enemiesHit > 0 ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (enemyHitTarget != null) {
                 Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
@@ -170,13 +183,17 @@ public class Chaingun extends Weapon {
                     int damageThisHit = damageAtDistance(distanceTiles);
                     setLastHitEnemy(hitEnemy, damageThisHit, enemyHitTarget.isAtFullHp(hitEnemy));
                     enemyHitTarget.applyDamageTo(hitEnemy, damageThisHit);
-                    if (!WeaponConstants.CHAINGUN_PENETRATION) {
+                    dispatchHitCallbacks(new FireResult(false, distanceTiles));
+                    clearLastHit();
+                    enemiesHit++;
+                    lastHitDistance = distanceTiles;
+                    if (!WeaponConstants.CHAINGUN_PENETRATION && enemiesHit > extraTargets) {
                         return new FireResult(false, distanceTiles);
                     }
                 }
             }
         }
-        return FireResult.MISSED;
+        return enemiesHit > 0 ? new FireResult(false, lastHitDistance) : FireResult.MISSED;
     }
 
     /**

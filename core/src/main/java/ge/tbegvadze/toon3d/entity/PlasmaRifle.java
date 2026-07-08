@@ -40,6 +40,9 @@ public class PlasmaRifle extends Weapon {
                                    Level level, EnemyHitTarget enemyHitTarget,
                                    BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
         boolean hitEnemy = false;
+        // OVERPENETRATION on an already-piercing weapon adds a stacking damage bonus per enemy
+        // struck beyond the first (see overpenetrationPiercingDamageMultiplier); 1.0 without it.
+        int enemiesHit = 0;
         for (int distanceTiles = 1; distanceTiles <= range; distanceTiles++) {
             int  targetColumn = playerTileColumn + facingStepColumn * distanceTiles;
             int  targetRow    = playerTileRow    + facingStepRow    * distanceTiles;
@@ -63,7 +66,8 @@ public class PlasmaRifle extends Weapon {
             if (enemyHitTarget != null) {
                 Object enemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (enemy != null) {
-                    int damageThisHit = damageAtDistance(distanceTiles);
+                    int damageThisHit = Math.round(damageAtDistance(distanceTiles)
+                            * overpenetrationPiercingDamageMultiplier(enemiesHit));
                     setLastHitEnemy(enemy, damageThisHit, enemyHitTarget.isAtFullHp(enemy));
                     enemyHitTarget.applyDamageTo(enemy, damageThisHit);
                     // Shield-shredding bolt (strategy-combat-order-6): piercing plasma leaves the target
@@ -73,6 +77,7 @@ public class PlasmaRifle extends Weapon {
                     dispatchHitCallbacks(new FireResult(false, distanceTiles));
                     clearLastHit();
                     hitEnemy = true;
+                    enemiesHit++;
                     // Penetration: continue the bolt through this enemy into the next tile.
                     if (!WeaponConstants.PLASMA_RIFLE_PENETRATION) {
                         return new FireResult(false, distanceTiles);

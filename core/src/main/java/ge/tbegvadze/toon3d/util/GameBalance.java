@@ -383,7 +383,9 @@ public final class GameBalance {
     public static final float CRIT_CHANCE_CAP             = 0.30f;
 
     // ── Armor Pierce ────────────────────────────────────────────────────────
-    /** Level-1 pierce fraction for ARMOR_PIERCE ability (20%). */
+    // ARMOR_PIERCE bypasses this fraction of the target's Block (its active damage shield) on every
+    // hit — see Weapon.armBlockPierce() and Enemy.applyDamage(int,boolean,float).
+    /** Level-1 Block-pierce fraction for ARMOR_PIERCE ability (20%). */
     public static final float ARMOR_PIERCE_BASE           = 0.20f;
     /** Pierce fraction added per weapon level above 1. */
     public static final float ARMOR_PIERCE_PER_LEVEL      = 0.05f;
