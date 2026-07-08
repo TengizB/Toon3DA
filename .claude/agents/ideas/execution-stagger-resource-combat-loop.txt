@@ -1,0 +1,169 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Execution & Stagger — Doom-style resource combat loop
+CREATED: 2026-07-08
+---
+
+OVERVIEW
+========
+When an enemy is beaten down to a low-HP "stagger" threshold it does not die — it
+enters a STAGGERED state (stumbling, wounded, telegraphed by a flashing halo). If
+the player is standing on an adjacent cardinal tile facing the staggered enemy, a
+one-tap EXECUTE action performs a brutal finisher that kills it instantly AND
+sprays a burst of resources (health + a little ammo) onto the marine. This is the
+Doom (2016)/Eternal "glory kill" loop rebuilt for a turn-based cardinal grid: the
+game constantly nudges the player to push FORWARD into melee range to refuel,
+directly fighting the roguelike instinct to kite and retreat. It converts the
+existing "enemy near death" moment — currently a non-event — into the single most
+important tactical decision in every fight.
+
+This document OWNS: the STAGGERED enemy state, the stagger threshold rule, the
+EXECUTE player action, the resource-burst payout, and the risk/reward tuning. It
+BUILDS ON the existing Enemy/EnemyState machine, EnemyManager attack resolution,
+the melee adjacent-tile model (roguelike_order_9, IMPLEMENTED), the tick loop, and
+ImpactEffectSystem. It does NOT redefine weapon damage or the medkit item flow.
+
+
+GAMEPLAY LOOP
+=============
+1. Player damages an enemy (any weapon, ranged or melee). EnemyManager applies
+   damage as normal.
+2. On damage resolution, if the enemy's remaining HP drops to or below its
+   stagger threshold (see BALANCE) AND the enemy type is executable, it does NOT
+   die. It transitions EnemyState -> STAGGERED instead of taking the lethal step.
+   A STAGGERED enemy: cannot attack, does not advance, loses its turn, and shows a
+   pulsing execute-prompt halo.
+3. A staggered enemy has a STAGGER TIMER of N player-turns (default 2). Each
+   completed player turn decrements it. If it hits 0 before the player executes,
+   the enemy RECOVERS: it snaps back to a small fixed HP (e.g. its stagger
+   threshold value) and resumes normal AI. Staggering the same enemy again is
+   allowed (no immunity), so a whiffed execute is a real cost, not a soft-lock.
+4. When any enemy in the level is STAGGERED and the player occupies a tile
+   cardinally adjacent to it AND is facing it, the EXECUTE touch button lights up
+   (replaces/overlays the Fire button prompt, or a dedicated button — see UI).
+5. Player taps EXECUTE -> this consumes the player's turn (one tick) -> the
+   staggered enemy dies instantly, ignoring armor/resistances -> a RESOURCE BURST
+   is granted to the marine: flat health + small ammo to the currently equipped
+   weapon's ammo type. -> ImpactEffectSystem plays a heavy kill flash + short
+   screen shake + gore particles.
+6. If the player does nothing / walks away, the enemy recovers per step 3.
+7. XP is awarded on the execute kill exactly as a normal kill (no double XP).
+
+
+PLAYER EXPERIENCE
+=================
+The feeling is aggression-as-survival. Kiting is safe but starves you; the marine
+who pushes into the demon's face to rip it apart is the one who stays topped up on
+health and ammo. Every low-HP enemy becomes a live question: "Do I spend my turn
+and my position to close in and execute for the refill, or do I stay safe and
+just shoot it dead, wasting the resource?" Against a group, a staggered enemy is a
+mobile health pack that a second enemy is guarding — the player must weigh the
+burst against the incoming hits from stepping into the pack. It turns the Doom RPG
+grid into a forward-pressure dance and rewards reading the whole room, not just
+the tile in front of you.
+
+
+TECHNICAL NOTES
+===============
+Affected / new code:
+- enemy/EnemyState.java: add STAGGERED constant.
+- enemy/Enemy.java: add fields `boolean executable`, `int staggerTurnsRemaining`.
+  Add helper `isStaggered()`. Store `staggerThresholdHp` (derived from max HP).
+- enemy/EnemyType.java: add `staggerFraction` (0..1, fraction of max HP that
+  triggers stagger; 0 = enemy never staggers, e.g. bosses) and `boolean
+  executable`. Bosses and Sentry Turrets set executable=false.
+- enemy/EnemyManager.java:
+  * In damage application: after subtracting damage, if newHp <= staggerThreshold
+    and newHp > 0 and executable and state != STAGGERED -> set STAGGERED,
+    staggerTurnsRemaining = EXECUTE_STAGGER_TURNS. Skip the death branch.
+  * In the per-tick AI update: for each STAGGERED enemy, decrement
+    staggerTurnsRemaining; at 0 -> recover (set hp = staggerThreshold, state ->
+    the normal chase/attack state).
+  * New method `boolean tryExecute(player)`: finds a STAGGERED enemy on the tile
+    directly in the player's facing direction (reuse the melee adjacent-tile
+    lookup); if found, kill it, grant the resource burst, fire kill event/XP,
+    trigger ImpactEffectSystem. Returns true if an execute happened (so the
+    controller knows the turn was consumed).
+- input/PlayerController.java: add an EXECUTE branch in pollInput that routes a new
+  TouchAction to EnemyManager.tryExecute; if it returns true, advance one tick.
+- input/touch/TouchAction.java + TouchControllerRenderer.java + TouchConstants.java:
+  add EXECUTE action. Simplest: reuse the Fire button but swap its glyph/behaviour
+  to EXECUTE when a valid staggered target is adjacent-and-faced (context button),
+  so no new permanent button crowds the mobile HUD.
+- Resource burst applied through the existing health-restore path (same as medkit
+  use) and the existing ammo-reserve add path (same as ammo pickups).
+- Constants: add to a combat-relevant file (GameBalance.java for the tunables):
+  EXECUTE_STAGGER_TURNS = 2
+  EXECUTE_HEALTH_BURST = 15
+  EXECUTE_AMMO_BURST_FRACTION = 0.10  (of the equipped weapon's magazine, min 1)
+  EXECUTE_STAGGER_FRACTION_DEFAULT = 0.15  (per-EnemyType override)
+No new tile symbol required — this is entirely state + action logic.
+
+
+VISUAL DESIGN
+=============
+- STAGGERED halo: a pulsing amber/white ring drawn around the enemy billboard
+  (EnemyRenderer overlay, same pattern as health bars — no new renderer). Pulse
+  via a sine on world time, alpha 0.4..0.9. Reads as "wounded, finish me."
+- Execute prompt: when the player is adjacent-and-facing a staggered enemy, tint
+  the halo bright red and pop a small skull/fist glyph above the enemy.
+- Execute payoff: ImpactEffectSystem heavy kill flash (brighter/longer than a
+  normal kill), stronger screen shake, extra gore particle burst. A brief green
+  health-gain vignette pulse (reuse HitVignette pipeline, green tint) sells the
+  refill. Optional short desaturate/zoom pop is out of scope for v1 (no camera).
+- HUD: the contextual Fire->Execute button shows a fist/skull icon and a bright
+  red border while a valid target exists.
+
+
+BALANCE NOTES
+=============
+All placeholders, tune in GameBalance.java:
+- Stagger threshold: 15% of max HP default. Chaff (Crawler, Ghoul) can set 0 so
+  they just die (no fiddly executes on trash). Mid/heavy enemies (Shell Brute,
+  Iron Stalker, Plague Hulk) are the intended execute targets — bigger HP pools
+  make the "one more hit or execute?" choice real.
+- Stagger window: 2 player-turns. Long enough to reposition one tile, short
+  enough that you can't bank a staggered enemy as a pocket heal for later.
+- Health burst: ~15 HP (roughly one small stim). Should NOT fully heal — it is a
+  top-up that rewards aggression, not a replacement for medkits.
+- Ammo burst: ~10% of the equipped weapon's magazine (min 1). Keeps momentum
+  weapons (Chaingun, Plasma) fed if you execute aggressively; never enough to
+  ignore ammo scarcity (roguelike_order_2).
+- Recovery HP on whiff = the stagger threshold value, so a recovered enemy is
+  still nearly dead — the player didn't lose much except tempo and position.
+- Executes must be strictly worse total-DPS than just shooting; the payoff is the
+  RESOURCE, not faster killing, or players will execute-cheese everything.
+
+
+INTERACTIONS
+============
+- Melee weapons (roguelike_order_9): melee already resolves on the adjacent facing
+  tile, so a melee swing that would kill instead triggers stagger, then the
+  follow-up tap is an execute — melee builds become the natural execute build.
+- Status effects (roguelike_order_8): a BURNING or POISONED enemy ticking down
+  into the stagger threshold on the enemy's own turn should also enter STAGGERED,
+  giving damage-over-time builds free execute setups. Confirm ordering in tick.
+- Levelup boons (levelup-stim-boon-choice-progression): perfect boon hooks —
+  "executes heal +50%", "staggered enemies explode", "wider stagger window",
+  "executes refill armor too." Sideways build identity, not raw power.
+- Brace/Overwatch (brace-overwatch-stance): an overwatch shot can stagger rather
+  than kill, setting up a next-turn execute on the approaching enemy.
+- Chain reactions / hazards: executing an enemy standing on/next to an explosive
+  barrel should still detonate normally.
+
+
+OPEN QUESTIONS
+==============
+- Should the execute be a dedicated button or the contextual Fire-swap? Contextual
+  keeps the mobile HUD clean but risks a mis-tap firing when the player wanted to
+  shoot. Lean contextual with a clear visual state change; revisit after playtest.
+- Can multiple enemies be staggered at once, and does the button always target the
+  faced one? Proposed: yes, always the faced-adjacent one; ambiguity impossible
+  because only one tile is directly ahead.
+- Should ranged enemies (Eye Tyrant, Mire Wraith) be executable? They rarely sit
+  adjacent. Maybe executable=true but with a bigger health burst to reward the
+  risk of closing on a kiter.
+- Do executes count toward a kill-combo/momentum meter if one is added later?
+- Should a staggered enemy block the player's movement onto its tile, or can the
+  player step through/into it to execute? Proposed: it still blocks (occupies the
+  tile), execute happens from the adjacent tile.
