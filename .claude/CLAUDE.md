@@ -198,6 +198,7 @@ Root package (`ge.tbegvadze.toon3d`) is reserved for `Main.java` only.
 | `…toon3d.enemy` | Enemy manager, types, AI state |
 | `…toon3d.hazard` | Explosive barrels and environmental hazards |
 | `…toon3d.progression` | Player stats, XP, attributes, level-up rewards |
+| `…toon3d.route` | Branching route-map subsystem: node/generator registries, run-seeded map data model (headless, no LibGDX imports) |
 
 New class: pick the most specific matching package. If none fits, add a subpackage and document it here.
 

@@ -1,8 +1,30 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Progression
 TITLE: Route Map — Part 1: Architecture & Extensible Registries
 CREATED: 2026-07-08
 ---
+
+DOC TODO FOR ORDER-11 (docs/route-map-system.txt does not exist yet)
+====================================================================
+When order-11 creates docs/route-map-system.txt, its "Data model & registries" section must
+document the SHIPPED order-1 code:
+  * Package `ge.tbegvadze.toon3d.route` (headless, no LibGDX imports).
+  * RouteNodeType (enum) + NodeTypeDefinition (immutable, Builder) + NodeTypeRegistry.
+      - allWeightedForPool() excludes `forced` types (BOSS, REGION_GATE).
+  * GeneratorId (enum with stable string ids) + GeneratorFactory (functional) + GeneratorRegistry.
+      - standardPool() = ROOMS_MST, LINEAR_CORRIDOR, CAVERN (BOSS_ARENA excluded — profile-addressed).
+  * RouteNode (mutable state) + NodeStatus + NodeAffix + RouteRegion + RouteMap (graph + cursor).
+      - RouteMap API: getCurrent, initializeCursor, getSelectableNext, commitTo, isBossNext,
+        reveal, revealRegion, addRegion, getLayers, getRegions, getRunSeed.
+  * RouteRegistries.bootstrap() — idempotent; registers all v1 node types + the 4 generators.
+      - The shared singletons are RouteRegistries.nodeTypes() / .generators().
+  * GameMath.routeNodeSeed(runSeed, depth, laneIndex) — salted splitmix mixer; independent of
+    World.floorSeed. Salt = RouteMapConstants.ROUTE_NODE_SEED_SALT.
+  * util/RouteMapConstants.java — pool base weights, branch-width bounds, seed salt, fog default.
+RECIPE (keep accurate): add a node type = new RouteNodeType constant + one register() line in
+RouteRegistries.registerNodeTypes(); add a generator = new GeneratorId constant + one register()
+line in RouteRegistries.registerGenerators(). Nothing else in World/overlay changes.
+The route package row was added to .claude/CLAUDE.md Package Rules in this order (not deferred).
 
 PREREQUISITE: none (this is the foundation). READ FIRST: branching-facility-route-map.txt
 (master index) for the full vision and how the series fits the codebase.
