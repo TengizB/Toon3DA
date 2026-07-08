@@ -1,0 +1,167 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Containment Lockdown — sealed arena wave encounters
+CREATED: 2026-07-08
+---
+
+OVERVIEW
+========
+Certain rooms are CONTAINMENT ZONES. When the marine steps into one, the doors
+slam shut and lock ("CONTAINMENT BREACH — LOCKDOWN"), and a scripted sequence of
+enemy WAVES spawns in. The player must survive/clear all waves; only then do the
+doors unlock and a sealed REWARD (weapon rack, keycard, cache, or a level-up cache)
+becomes accessible. This is the Doom (2016/Eternal) arena fight rebuilt for the
+turn-based grid: a deliberate, high-intensity set-piece that breaks up corridor
+crawling with a "you're trapped, dig in" spike. It reuses doors, the enemy
+spawner, and the tick loop; the new part is the room-scoped controller that seals,
+paces waves, and gates the reward.
+
+This document OWNS: the lockdown room definition, the trigger, the wave scheduler,
+the seal/unseal rules, and the reward gate. It BUILDS ON DoorManager (door
+open/close/lock already exist), EnemyManager (spawning + AI), the tick system,
+LevelGenerator (placing arenas), and EffectConstants (red-alert pulse). It does NOT
+redefine enemy AI, door animation, or loot tables.
+
+
+GAMEPLAY LOOP
+=============
+1. LevelGenerator (or a hand-crafted level) marks one room as a CONTAINMENT ZONE:
+   a bounded room with a known set of boundary door tiles and a single interior
+   TRIGGER tile near its entrance.
+2. Player steps onto the trigger tile (a normal step, one turn). LockdownController
+   for that room ARMS -> DoorManager force-closes and LOCKS every boundary door
+   (state LOCKED_SEALED, not keycard-openable) -> red-alert pulse begins
+   (emergency-red-alert-pulse / EffectConstants) -> event text "CONTAINMENT BREACH
+   — LOCKDOWN".
+3. Wave 1 spawns from predefined spawn tiles inside the room (enemies fade/teleport
+   in with a spawn flash — no doors needed, they materialize). Combat proceeds on
+   the normal tick loop: one enemy action per player turn.
+4. When the living-enemy count in the room hits 0 AND the wave still has queued
+   waves, a short inter-wave beat (1-2 turns) plays, then the next wave spawns
+   (escalating: more enemies, tougher archetypes as depth/wave index rises).
+5. After the FINAL wave is cleared, the controller UNSEALS: doors unlock and open,
+   red-alert stops, event text "CONTAINMENT CLEARED", and the sealed reward
+   (already present in the room but behind an internal barrier, OR spawned now)
+   becomes reachable.
+6. If the player would die mid-lockdown, it's a normal death (permadeath). There is
+   no "give up" — the seal is the point. (See OPEN QUESTIONS on emergency vent.)
+
+
+PLAYER EXPERIENCE
+=================
+The corridor tension inverts: instead of retreating through a door to funnel
+enemies, the player is locked in a box with escalating waves and must hold ground,
+manage ammo, and use the room's geometry (columns 'P', barrels 'E', chokepoints).
+It's the run's adrenaline spike — you see the doors slam, the lights go red, and
+you know the next 30 seconds decide the run. The reward gate makes it a real
+choice at the trigger tile: the room telegraphs "this is an arena" before you step
+in, so entering is a deliberate commitment. Clearing one feels earned and loud —
+exactly the "difficulty should feel earned" pillar.
+
+
+TECHNICAL NOTES
+===============
+Affected / new code:
+- New package `…toon3d.world` or `…toon3d.enemy` class: LockdownController.java —
+  owns one arena's { boundary door list, trigger tile, wave schedule, current wave
+  index, state: DORMANT/SEALED/CLEARING/DONE }. World holds a list of these.
+- world/World.java: on player step, check if the new tile is a lockdown trigger;
+  if so and the controller is DORMANT, arm it. Advance each active controller in
+  the tick handler (spawn next wave when room clear + waves remain).
+- door/DoorManager.java + door/DoorState.java: add a LOCKED_SEALED state that
+  ignores keycards and player-interact; only LockdownController can clear it.
+  Reuse the existing close animation.
+- enemy/EnemyManager.java: add `int countLiveEnemiesInRegion(rectangle)` and a
+  `spawnWave(spawnTiles, EnemyType[])` helper (enemies appear with a spawn-in flash
+  rather than walking through doors). Reuse existing spawn + AI.
+- A WaveSchedule data object: list of waves, each wave a list of {EnemyType, count}
+  scaled by World.currentDepth.
+- render: reuse emergency red-alert pulse (EeffectConstants / red-alert doc) for
+  the sealed state; reuse EventTextSystem for the banner lines; reuse the enemy
+  spawn flash via ImpactEffectSystem.
+- Constants: LevelGenConstants (arena frequency, size bounds, wave counts);
+  GameBalance (per-wave enemy budget curve, inter-wave turn gap).
+
+TILE SYMBOLS — REQUIRES NEW SYMBOL (flagged per project strict rule):
+- The lockdown TRIGGER tile is best as its own walkable decal so LevelGenerator and
+  hand-crafted levels can place it explicitly. Proposed symbol: lowercase 'o'
+  (currently listed as FREE in docs/tile-symbols.txt SYMBOL BUDGET). It would be a
+  walkable "containment trigger plate" decal, 0.16x wall height.
+  --> Requires new symbol — add 'o' to docs/tile-symbols.txt AND Level.java
+      (isPropDecal + a new isLockdownTrigger check) AND a sprite in PropRenderer.java
+      AND update the SYMBOL BUDGET count, all in the same commit, BEFORE implementing.
+- ALTERNATIVE (no new symbol): detect the arena by room metadata at generation time
+  (LevelGenerator tags the room + its entrance tile) instead of a tile character.
+  This is preferred if we want zero new symbols; the trigger then lives in level
+  metadata, not the grid. Hand-crafted arena levels would still need SOME marker —
+  in that case the 'o' symbol is the cleaner route. Decide before implementing.
+- Boundary doors reuse EXISTING door tiles ('d' etc.); no new door symbol needed.
+
+
+VISUAL DESIGN
+=============
+- Seal moment: all boundary doors snam shut (existing anim), screen does one sharp
+  red-alert flash then settles into the steady red-alert pulse; event banner
+  "CONTAINMENT BREACH — LOCKDOWN" in harsh red mono.
+- Wave spawn: enemies materialize with a bright teleport-in flash + short shake
+  (ImpactEffectSystem), so the player reads "more incoming" without a door opening.
+- Inter-wave: brief "WAVE 2 / 3" ticker in event text; red pulse intensifies each
+  wave.
+- Clear: red-alert fades to normal lighting, doors thunk open, "CONTAINMENT
+  CLEARED" in green; the reward (weapon rack '=', keycard, cache) is now lit/reachable.
+- Arena rooms themed with hazard walls 'h' / quarantine walls 'Q' and a few columns
+  'P' for cover, so they read as arenas at a glance from the doorway.
+
+
+BALANCE NOTES
+=============
+All placeholders (tune in GameBalance / LevelGenConstants):
+- Waves per arena: 2-3 early floors, up to 4 deep. Enemy budget per wave scales
+  with World.currentDepth (reuse the difficulty-scaling curve, order_16).
+- Never spawn an enemy on the player's tile or an adjacent-facing tile at wave
+  start (no cheap free hits). Bias spawns to the room's far corners.
+- Inter-wave gap: 1-2 turns so the player can reload/heal/reposition — the pause is
+  a deliberate breather, part of the rhythm.
+- Reward must scale with pain: an arena that threw a Shell Brute + Iron Stalker
+  wave should pay a weapon/keycard, not just a stim.
+- Arena frequency: at most 1-2 per non-boss floor, and never gate the ONLY path to
+  the exit behind an arena unless the reward includes the required keycard (avoid
+  soft-locks / mandatory frustration). Prefer arenas guarding OPTIONAL loot.
+- Ammo economy (roguelike_order_2): a cleared arena should roughly refund the ammo
+  it cost via its reward, or aggressive players go bankrupt.
+
+
+INTERACTIONS
+============
+- DoorManager: introduces the LOCKED_SEALED door state; keycard logic must ignore
+  sealed doors (a red keycard does NOT open a lockdown seal).
+- Difficulty scaling (roguelike_order_16): wave budgets read currentDepth so arenas
+  stay dangerous as you descend.
+- Execution loop (execution-stagger-resource-combat-loop): arenas are the ideal
+  place for the execute-refuel loop to shine — a locked box of enemies is a box of
+  health/ammo bursts if you push aggressively. Strong synergy.
+- Hazard chain reactions (hazard-chain-reactions): explosive barrels 'E' placed as
+  arena cover become a wave-clearing tool — bait enemies onto them.
+- Route map (branching-facility-route-map): the ELITE/HOTZONE node can guarantee an
+  arena, making that node's risk concrete and readable.
+- Boss floors (roguelike_order_10): arenas are the "mini-boss" pacing beat between
+  the every-5th-floor real bosses; the LockdownController is a lightweight cousin
+  of BossFloorController and could share the seal/reward code.
+
+
+OPEN QUESTIONS
+==============
+- New tile symbol 'o' for the trigger vs. pure room metadata? (See TECHNICAL
+  NOTES.) Recommend metadata for generated levels + 'o' for hand-crafted, but pick
+  one to avoid two code paths.
+- Is there ANY escape hatch (e.g. an "emergency vent" that opens if you take too
+  long, at the cost of the reward), or is the seal absolute? Absolute is more
+  brutal/Doom; a vent is more forgiving on mobile. Lean absolute for v1.
+- Do enemies from outside the arena get pulled in, or only the scripted waves?
+  Proposed: only scripted waves; outside enemies stay out (sealed doors).
+- What happens if the player triggers an arena at very low HP with no heals — is
+  that a fair death or a design trap? Mitigate with the pre-entry telegraph so it's
+  always a chosen commitment.
+- Should clearing an arena grant bonus XP on top of per-kill XP (a "clear bonus")?
+- How to guarantee the room is fully enclosed by doors at generation time so the
+  seal is airtight (no open floor edge leaking the arena)?
