@@ -10,6 +10,11 @@ public final class WeaponConstants {
     public static final float PLAYER_FIRE_DURATION              = 0.16f;
     // FIRE_FLASH_DURATION: real-time muzzle-flash pose duration; cosmetic only
     public static final float FIRE_FLASH_DURATION               = 0.22f;
+    // BURST_VISUAL_FLASH_DURATION: per-round muzzle-flash duration when BURST_FIRE replays the
+    // flash once per burst round. Shorter than FIRE_FLASH_DURATION so a full burst reads as a
+    // rapid staccato rather than one long flash. Purely cosmetic — game logic resolves the whole
+    // burst in a single turn inside Weapon.fire(); these flashes are staggered over real time.
+    public static final float BURST_VISUAL_FLASH_DURATION       = 0.11f;
     // NORMAL_TO_RELOAD_DELAY: how long the normal pose is held after the fire flash
     // before the reload pose begins; lets the player see the weapon lower to idle first
     public static final float NORMAL_TO_RELOAD_DELAY_SECONDS    = 0.10f;

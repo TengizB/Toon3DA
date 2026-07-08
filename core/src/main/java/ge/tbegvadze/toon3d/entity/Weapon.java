@@ -86,6 +86,15 @@ public abstract class Weapon implements WeaponProfile {
     private int pendingBurstExtra = 0;
 
     /**
+     * Number of muzzle-flash replays still owed to the current burst activation.
+     * fire() resolves every burst round instantly (turn-based), then sets this to
+     * (roundsFired − 1) so update() can replay the muzzle flash once per round over real time,
+     * keeping the weapon in FIRING state until the whole burst has visually played out.
+     * Zero for single-shot activations and non-BURST_FIRE weapons.
+     */
+    private int pendingVisualBurstFlashes = 0;
+
+    /**
      * The enemy Object returned by EnemyHitTarget.enemyAt() for the most recent hit
      * confirmed by marchShot().  Cleared to null at the start of each fire() invocation.
      * Subclasses set this via {@link #setLastHitEnemy} inside marchShot() when they
@@ -253,6 +262,15 @@ public abstract class Weapon implements WeaponProfile {
         if (hasAbility(WeaponAbility.EXTENDED_MAG)) {
             int bonus = abilityCount(WeaponAbility.EXTENDED_MAG);
             effectiveClipSize = Math.min(effectiveClipSize + bonus, WeaponConstants.WEAPON_CLIP_HARD_CAP);
+        }
+        // BURST_FIRE must have a clip large enough to fire a full burst; otherwise the burst is
+        // silently truncated by the remaining-clip cap in fire(). Guarantee at least one whole
+        // burst's worth of rounds (e.g. a burst-5 roll on a small-clip weapon lifts the clip to 5).
+        // Applied AFTER the EXTENDED_MAG bonus so both stack, and capped at the hard limit.
+        if (hasAbility(WeaponAbility.BURST_FIRE)) {
+            int burstCount = Math.max(1, abilityCount(WeaponAbility.BURST_FIRE));
+            effectiveClipSize = Math.min(Math.max(effectiveClipSize, burstCount),
+                                         WeaponConstants.WEAPON_CLIP_HARD_CAP);
         }
         if (!isMelee() && hasAbility(WeaponAbility.QUICK_HANDS)) {
             effectiveReloadTicks = Math.max(WeaponConstants.WEAPON_RELOAD_MIN_TICKS,
@@ -645,9 +663,18 @@ public abstract class Weapon implements WeaponProfile {
         if (visualState == WeaponVisualState.FIRING) {
             fireFlashTimerSeconds -= deltaTime;
             if (fireFlashTimerSeconds <= 0f) {
-                visualState = WeaponVisualState.NORMAL;
-                if (shotsInClip == 0) {
-                    normalToReloadTimerSeconds = WeaponConstants.NORMAL_TO_RELOAD_DELAY_SECONDS;
+                if (pendingVisualBurstFlashes > 0) {
+                    // Burst still has rounds to show: replay the muzzle flash for the next round.
+                    // Bumping flashCycleCount signals the HUD renderer to restart its flash
+                    // animation without a NORMAL transition; the weapon stays FIRING meanwhile.
+                    pendingVisualBurstFlashes--;
+                    flashCycleCount++;
+                    fireFlashTimerSeconds = WeaponConstants.BURST_VISUAL_FLASH_DURATION;
+                } else {
+                    visualState = WeaponVisualState.NORMAL;
+                    if (shotsInClip == 0) {
+                        normalToReloadTimerSeconds = WeaponConstants.NORMAL_TO_RELOAD_DELAY_SECONDS;
+                    }
                 }
             }
         } else if (visualState == WeaponVisualState.NORMAL && normalToReloadTimerSeconds > 0f) {
@@ -770,6 +797,9 @@ public abstract class Weapon implements WeaponProfile {
 
         // BURST_FIRE: fire extra shots, each with its own accuracy roll.
         // Shots are capped by remaining clip; pendingBurstExtra is reset to 0 after use.
+        // roundsFired counts every round loosed this activation (base + burst extras) so the
+        // muzzle flash can be replayed once per round in update().
+        int roundsFired = 1;
         while (pendingBurstExtra > 0 && shotsInClip > 0) {
             pendingBurstExtra--;
             lastHitEnemy        = null;
@@ -777,6 +807,7 @@ public abstract class Weapon implements WeaponProfile {
             lastTargetWasFullHp = false;
             shotsInClip--;
             flashCycleCount++;
+            roundsFired++;
             if (!isPerPelletAccuracy() && !rollHitChance()) {
                 if (eventTextSystem != null) eventTextSystem.showMiss();
                 if (hasAbility(WeaponAbility.RHYTHM)) resetRhythm();
@@ -791,6 +822,16 @@ public abstract class Weapon implements WeaponProfile {
         }
         // Reset any remaining burst count (e.g. clip ran out mid-burst).
         pendingBurstExtra = 0;
+
+        // Schedule the muzzle flash to replay once per burst round over real time. The base shot's
+        // flash is already showing; the extras play as update() drains this counter. Shorten the
+        // current flash to the burst cadence so all rounds read as one rapid staccato.
+        if (roundsFired > 1) {
+            pendingVisualBurstFlashes = roundsFired - 1;
+            fireFlashTimerSeconds     = WeaponConstants.BURST_VISUAL_FLASH_DURATION;
+        } else {
+            pendingVisualBurstFlashes = 0;
+        }
 
         // Disarm ARMOR_PIERCE so damage resolving after this activation keeps full Block absorption.
         armBlockPierce(enemyHitTarget, false);
