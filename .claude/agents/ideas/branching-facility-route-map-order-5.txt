@@ -1,6 +1,27 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Route Map — Part 5: Procedural Node Icon & Sprite System
+
+IMPLEMENTATION NOTES (order-5)
+==============================
+- render/routeicons sub-package: IconPainter + IconPainterRegistry, RegionCrestPainter +
+  RegionCrestPainterRegistry, RouteIconBootstrap (render-layer twin of RouteRegistries.bootstrap),
+  RouteIconSupport (shared primitive draws + accent brighten/darken, out-param no-alloc),
+  RouteGlyphs (shared riskPip/lock/check/hereReticle/affixTag), PlaceholderIconPainter fallback.
+- 9 v1 node painters (icon_combat/elite/cache/shop/rest/mystery/event/gate/boss) + 4 region crests
+  (gear ring / molecule / radiation trefoil / corrupted sigil) + ring-badge fallback crest.
+- RENDERING DECISION: ALL icons DIRECT-drawn (option A), none BAKED (option B). Rationale: this
+  project bans per-frame FrameBuffer work — FrameBuffer.end() resets the GL viewport and corrupts the
+  FitViewport letterbox mid-frame (same reason order-4 fakes glow with additive discs). Direct
+  drawing through the overlay's one ShapeRenderer is viewport-safe + allocation-free, so there is NO
+  FBO cache to dispose. Painters switch fill/line with shapes.set(...) inside a single icon pass; the
+  IconPainter batch param is reserved for a future baked variant and is not begun.
+- Wired into RouteMapOverlayRenderer: placeholder diamond replaced by drawIconPass()
+  (registry.get(iconPainterId).paint), fog rule (un-revealed -> icon_mystery), affix corner-tags,
+  region crest on the title plate; risk pips + reticle + check delegated to RouteGlyphs.
+- Geometry reuses GameMath (pointOnCircleX/Y, quadraticBezier, rotateVectorX/Y, lerp) — no inline
+  formulas. New constants in RouteMapConstants (NODE ICON + REGION CREST SPEC section).
+- Docs: "NODE ICON VOCABULARY & HOW TO ADD ONE" section added to docs/route-map-system.txt.
 CREATED: 2026-07-08
 ---
 

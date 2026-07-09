@@ -199,6 +199,7 @@ Root package (`ge.tbegvadze.toon3d`) is reserved for `Main.java` only.
 | `…toon3d.hazard` | Explosive barrels and environmental hazards |
 | `…toon3d.progression` | Player stats, XP, attributes, level-up rewards |
 | `…toon3d.route` | Branching route-map subsystem: node/generator registries, run-seeded map data model (headless, no LibGDX imports) |
+| `…toon3d.render.routeicons` | Procedural route-map node icons + region crests: IconPainter/RegionCrestPainter registries, one painter per node type/region, shared RouteGlyphs + RouteIconSupport (ShapeRenderer primitives only, no assets) |
 
 New class: pick the most specific matching package. If none fits, add a subpackage and document it here.
 

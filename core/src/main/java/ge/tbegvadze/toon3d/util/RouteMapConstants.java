@@ -293,4 +293,47 @@ public final class RouteMapConstants {
     public static final float NODE_LABEL_SCALE   = 0.9f;
     public static final float LEGEND_TEXT_SCALE  = 0.95f;
     public static final float CONFIRM_LABEL_SCALE = 1.1f;
+
+    // =========================================================================
+    // NODE ICON + REGION CREST SPEC (order-5) — the procedural IconPainter system.
+    // =========================================================================
+    // Every node icon and region crest is drawn from ShapeRenderer primitives (no assets), direct
+    // into the overlay's ShapeRenderer (no per-frame FrameBuffer — viewport-safe, see order-4 note).
+    // Consumed by RouteMapOverlayRenderer and the …render.routeicons painters.
+
+    /** Side length (world units) of a node icon's drawing box, before the card's perspective scale. */
+    public static final float ICON_BOX_SIZE = 46f;
+    /** Line width used across icon strokes (rings, ticks, glyphs). */
+    public static final float ICON_LINE_WIDTH = 2.5f;
+    /** Fraction of the card height above centre where the icon sits (leaves room for the label). */
+    public static final float ICON_CENTER_Y_FRACTION = 0.18f;
+    /** REGION_GATE and BOSS are convergence set-pieces — their icons draw a touch larger. */
+    public static final float ICON_GATE_SIZE_SCALE = 1.18f;
+    public static final float ICON_BOSS_SIZE_SCALE = 1.14f;
+
+    // ---- MYSTERY icon (segmented rotating ring around a "?") ----------------
+    public static final float ICON_MYSTERY_SPIN_SPEED  = 0.8f;
+    public static final int   ICON_MYSTERY_RING_DASHES = 8;
+
+    // ---- EVENT icon (pulsing broadcast arc fan) ----------------------------
+    public static final int   ICON_EVENT_ARC_COUNT  = 3;
+    public static final float ICON_EVENT_PULSE_SPEED = 0.9f;
+
+    // ---- REGION_GATE icon (radial locking bolts) ---------------------------
+    public static final int   ICON_GATE_BOLT_COUNT = 6;
+
+    // ---- BOSS icon (pulsing eye-socket ember) ------------------------------
+    public static final float ICON_BOSS_EMBER_MIN   = 0.25f;
+    public static final float ICON_BOSS_EMBER_MAX   = 0.85f;
+    public static final float ICON_BOSS_EMBER_SPEED = 3.2f;
+
+    // ---- Region crest on the title plate -----------------------------------
+    public static final float CREST_CENTER_X = 60f;
+    public static final float CREST_SIZE     = 42f;
+    /** Left edge the region banner text starts at, clearing the crest badge. */
+    public static final float REGION_TEXT_LEFT_X = 96f;
+
+    // ---- Affix corner tag (order-9 affixes; slot reserved here) -------------
+    public static final float AFFIX_TAG_SIZE  = 13f;
+    public static final float AFFIX_TAG_INSET = 16f;
 }

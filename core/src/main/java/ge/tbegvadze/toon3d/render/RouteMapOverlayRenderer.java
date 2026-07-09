@@ -11,6 +11,12 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.render.routeicons.IconPainter;
+import ge.tbegvadze.toon3d.render.routeicons.IconPainterRegistry;
+import ge.tbegvadze.toon3d.render.routeicons.RegionCrestPainter;
+import ge.tbegvadze.toon3d.render.routeicons.RegionCrestPainterRegistry;
+import ge.tbegvadze.toon3d.render.routeicons.RouteGlyphs;
+import ge.tbegvadze.toon3d.render.routeicons.RouteIconBootstrap;
 import ge.tbegvadze.toon3d.route.DangerTier;
 import ge.tbegvadze.toon3d.route.NodeStatus;
 import ge.tbegvadze.toon3d.route.NodeTypeDefinition;
@@ -68,6 +74,8 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     private final GlyphLayout   layout;                 // used only outside render()
     private final RouteMapColorPalette palette;
     private final NodeTypeRegistry     nodeTypes;
+    private final IconPainterRegistry       iconPainters;   // order-5: per-type node icon painters
+    private final RegionCrestPainterRegistry regionCrests;  // order-5: per-region title-plate crests
 
     private final float worldWidth  = Constants.WORLD_WIDTH;
     private final float worldHeight = Constants.WORLD_HEIGHT;
@@ -100,6 +108,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     private String regionText  = "";
     private float  regionTextX;
     private Color  regionTint;
+    private String regionThemeId;                  // order-5: selects the title-plate crest painter
     private String legendText  = "";
     private float  legendTextX;
     private float  cancelLabelX, cancelLabelY, engageLabelX, engageLabelY;
@@ -114,6 +123,10 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         layout  = new GlyphLayout();
         palette = new RouteMapColorPalette();
         nodeTypes = RouteRegistries.nodeTypes();
+        iconPainters = new IconPainterRegistry();
+        RouteIconBootstrap.registerIconPainters(iconPainters);
+        regionCrests = new RegionCrestPainterRegistry();
+        RouteIconBootstrap.registerRegionCrests(regionCrests);
         font.getData().markupEnabled = false;
         regionTint = palette.holoCyan;
         precomputeStaticText();
@@ -261,8 +274,9 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
             }
         }
         regionText = region != null ? region.displayName() : UNKNOWN_REGION;
+        regionThemeId = region != null ? region.themeId() : null;
         regionTint = region != null ? palette.regionTint(region.themeId()) : palette.holoCyan;
-        regionTextX = 40f;
+        regionTextX = RouteMapConstants.REGION_TEXT_LEFT_X;   // cleared of the crest badge (order-5)
 
         String hint;
         if (focusNode == null) {
@@ -365,9 +379,11 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
 
         drawScrim();                 // 1. world scrim
         drawBezel();                 // 2. bezel / chrome / hazard trim
+        drawRegionCrestPass();       // 2b. region crest badge on the title plate (order-5)
         drawGlowPass();              // 3. additive hologram bloom (node halos + conduit cores)
         drawConduitPass();           // 4. curved conduits + travelling pulses
-        drawNodePass();              // 5. card bodies + borders + state decor + risk pips + icons
+        drawNodePass();              // 5. card bodies + borders + state decor + risk pips
+        drawIconPass();              // 6. procedural per-type node icons + affix tags (order-5)
         drawTextPass();              // 7. title / depth / region / labels / legend / confirm labels
         drawCrtPass();               // 8. scanlines + vignette + flicker + sync flash
 
@@ -598,12 +614,12 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     // ---- Pass 5: node cards -------------------------------------------------
 
     private void drawNodePass() {
-        // Bodies + icons + risk pips (filled).
+        // Bodies + risk pips (filled). Icons are their own pass (order-5) so painters can freely
+        // switch fill/line without disturbing the card body/border passes.
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         for (int index = 0; index < displayCount; index++) {
             if (!isRevealedBySweep(index)) continue;
             drawCardBody(index);
-            drawNodeIconPlaceholder(index);
             drawRiskPips(index);
             drawStateDecorFilled(index);
         }
@@ -619,6 +635,94 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         }
         Gdx.gl.glLineWidth(1f);
         shapes.end();
+    }
+
+    // ---- Pass 2b: region crest ---------------------------------------------
+
+    /** Draws the current region's heraldic crest badge on the title plate (order-5). */
+    private void drawRegionCrestPass() {
+        RegionCrestPainter crest = regionCrests.get(regionThemeId);
+        float crestCenterY = (RouteMapConstants.TITLE_PLATE_BOTTOM_Y
+                            + RouteMapConstants.TITLE_PLATE_TOP_Y) / 2f;
+        crestTint.set(regionTint.r, regionTint.g, regionTint.b, 0.95f * flicker());
+        Gdx.gl.glLineWidth(RouteMapConstants.ICON_LINE_WIDTH);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        crest.paint(shapes, RouteMapConstants.CREST_CENTER_X, crestCenterY,
+                    RouteMapConstants.CREST_SIZE, crestTint, overlayTimeSeconds);
+        shapes.set(ShapeRenderer.ShapeType.Filled);
+        shapes.end();
+        Gdx.gl.glLineWidth(1f);
+    }
+
+    // ---- Pass 6: procedural node icons (order-5) ---------------------------
+
+    /**
+     * Draws each visible node's procedural icon via its registered {@link IconPainter} (order-5),
+     * plus an affix corner-tag for any node carrying a {@code NodeAffix} (order-9). Un-revealed nodes
+     * always draw the MYSTERY "?" icon regardless of their hidden real type (the fog rule). Painters
+     * switch fill/line via {@code shapes.set(...)} inside this single begin()/end().
+     */
+    private void drawIconPass() {
+        Gdx.gl.glLineWidth(RouteMapConstants.ICON_LINE_WIDTH);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        for (int index = 0; index < displayCount; index++) {
+            if (!isRevealedBySweep(index)) continue;
+            drawNodeIcon(index);
+            drawAffixTag(index);
+        }
+        shapes.set(ShapeRenderer.ShapeType.Filled);
+        shapes.end();
+        Gdx.gl.glLineWidth(1f);
+    }
+
+    /** Resolves and paints one node's icon; the master opacity is folded into the accent's alpha. */
+    private void drawNodeIcon(int index) {
+        RouteNode node = nodeRef[index];
+        float scale = drawScale(index);
+        float iconSize = iconSizeFor(node) * scale;
+        float iconCenterY = drawCenterY(index)
+                          + RouteMapConstants.NODE_CARD_HEIGHT * scale * RouteMapConstants.ICON_CENTER_Y_FRACTION;
+        float alpha = effectiveAlpha(index) / baseAlpha(index);
+
+        // Fog rule: an un-revealed node always shows the MYSTERY '?' icon (order-9 reveal drives this).
+        String iconPainterId;
+        Color accent;
+        if (!node.revealed) {
+            iconPainterId = "icon_mystery";
+            accent = palette.accentFor("mystery");
+        } else {
+            NodeTypeDefinition definition = nodeTypes.get(node.type);
+            iconPainterId = definition.iconPainterId();
+            accent = (node.status == NodeStatus.LOCKED || node.status == NodeStatus.BYPASSED)
+                   ? palette.lockedAccent() : accentFor(node);
+        }
+        IconPainter painter = iconPainters.get(iconPainterId);
+        iconTint.set(accent.r, accent.g, accent.b, MathUtils.clamp(alpha, 0f, 1f));
+        painter.paint(shapes, batch, centerX[index], iconCenterY, iconSize, iconTint, overlayTimeSeconds);
+    }
+
+    /** Convergence set-pieces (BOSS / REGION_GATE) draw a slightly larger icon than normal nodes. */
+    private float iconSizeFor(RouteNode node) {
+        if (node.type == null) return RouteMapConstants.ICON_BOX_SIZE;
+        switch (node.type) {
+            case BOSS:        return RouteMapConstants.ICON_BOX_SIZE * RouteMapConstants.ICON_BOSS_SIZE_SCALE;
+            case REGION_GATE: return RouteMapConstants.ICON_BOX_SIZE * RouteMapConstants.ICON_GATE_SIZE_SCALE;
+            default:          return RouteMapConstants.ICON_BOX_SIZE;
+        }
+    }
+
+    /** A tiny accent diamond in the card's top-left corner when the node carries an affix (order-9). */
+    private void drawAffixTag(int index) {
+        RouteNode node = nodeRef[index];
+        if (node.affix == null || !node.revealed) return;
+        float scale = drawScale(index);
+        float width = RouteMapConstants.NODE_CARD_WIDTH * scale;
+        float height = RouteMapConstants.NODE_CARD_HEIGHT * scale;
+        float tagX = centerX[index] - width / 2f + RouteMapConstants.AFFIX_TAG_INSET * scale;
+        float tagY = drawCenterY(index) + height / 2f - RouteMapConstants.AFFIX_TAG_INSET * scale;
+        float alpha = effectiveAlpha(index) / baseAlpha(index);
+        RouteGlyphs.affixTag(shapes, tagX, tagY, RouteMapConstants.AFFIX_TAG_SIZE * scale,
+                             palette.hazardAmber, 0.95f * alpha);
     }
 
     private void drawCardBody(int index) {
@@ -645,30 +749,12 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         drawRoundedRectOutline(left, bottom, width, height, RouteMapConstants.NODE_CARD_CORNER_RADIUS * scale);
     }
 
-    /** Placeholder node glyph — order-5 replaces this with the real procedural IconPainter. */
-    private void drawNodeIconPlaceholder(int index) {
-        RouteNode node = nodeRef[index];
-        float scale = drawScale(index);
-        float iconCenterY = drawCenterY(index) + RouteMapConstants.NODE_CARD_HEIGHT * scale * 0.18f;
-        float radius = 20f * scale;
-        Color accent = node.status == NodeStatus.LOCKED ? palette.lockedAccent() : accentFor(node);
-        float alpha = effectiveAlpha(index) / baseAlpha(index);
-        setShape(accent, 0.85f * alpha);
-        // simple diamond
-        shapes.triangle(centerX[index], iconCenterY + radius, centerX[index] - radius, iconCenterY,
-                        centerX[index] + radius, iconCenterY);
-        shapes.triangle(centerX[index], iconCenterY - radius, centerX[index] - radius, iconCenterY,
-                        centerX[index] + radius, iconCenterY);
-    }
-
     /** 1-4 dot risk meter in the card's bottom-right corner (colour ramp green->amber->red). */
     private void drawRiskPips(int index) {
         RouteNode node = nodeRef[index];
         if (node.status == NodeStatus.LOCKED || !node.revealed) return;
         NodeTypeDefinition definition = nodeTypes.get(node.type);
         DangerTier tier = definition.dangerTier();
-        int pips = palette.pipCount(tier);
-        Color pipColor = palette.pipColor(tier);
         float scale = drawScale(index);
         float width = RouteMapConstants.NODE_CARD_WIDTH * scale;
         float height = RouteMapConstants.NODE_CARD_HEIGHT * scale;
@@ -677,27 +763,18 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         float radius = RouteMapConstants.RISK_PIP_RADIUS * scale;
         float step = (RouteMapConstants.RISK_PIP_RADIUS * 2f + RouteMapConstants.RISK_PIP_GAP) * scale;
         float alpha = effectiveAlpha(index) / baseAlpha(index);
-        for (int pip = 0; pip < RouteMapConstants.RISK_PIP_MAX; pip++) {
-            float pipX = rightX - pip * step;
-            if (pip < pips) {
-                setShape(pipColor, 0.95f * alpha);
-            } else {
-                setShape(palette.holoDim, 0.35f * alpha);
-            }
-            shapes.circle(pipX, pipY, radius);
-        }
+        RouteGlyphs.riskPips(shapes, rightX, pipY, radius, step,
+                             palette.pipCount(tier), palette.pipColor(tier), palette.holoDim,
+                             0.95f * alpha, 0.35f * alpha);
     }
 
     private void drawStateDecorFilled(int index) {
         RouteNode node = nodeRef[index];
         if (node.status == NodeStatus.VISITED) {
-            // small check mark tint over the body
             float scale = drawScale(index);
-            float checkX = centerX[index];
-            float checkY = drawCenterY(index);
-            setShape(palette.medGreen, 0.5f * effectiveAlpha(index) / baseAlpha(index));
-            shapes.rectLine(checkX - 14f * scale, checkY, checkX - 4f * scale, checkY - 10f * scale, 3f * scale);
-            shapes.rectLine(checkX - 4f * scale, checkY - 10f * scale, checkX + 16f * scale, checkY + 14f * scale, 3f * scale);
+            float alpha = 0.5f * effectiveAlpha(index) / baseAlpha(index);
+            RouteGlyphs.checkGlyph(shapes, centerX[index], drawCenterY(index), 34f * scale,
+                                   palette.medGreen, alpha, 3f * scale);
         }
     }
 
@@ -705,11 +782,11 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         RouteNode node = nodeRef[index];
         float alpha = effectiveAlpha(index) / baseAlpha(index);
         if (node.status == NodeStatus.CURRENT) {
-            // rotating "YOU ARE HERE" diamond reticle
+            // rotating "YOU ARE HERE" diamond reticle (shared glyph)
             float radius = RouteMapConstants.RETICLE_RADIUS * drawScale(index);
             float spin = overlayTimeSeconds * RouteMapConstants.RETICLE_SPIN_SPEED;
-            setShape(palette.holoCyan, 0.9f * alpha);
-            drawRotatedDiamond(centerX[index], drawCenterY(index), radius, spin);
+            RouteGlyphs.hereReticle(shapes, centerX[index], drawCenterY(index), radius, spin,
+                                    palette.holoCyan, 0.9f * alpha);
         } else if (node == focusNode && node.status == NodeStatus.AVAILABLE) {
             // selection ring + pulse
             float scale = drawScale(index);
@@ -721,20 +798,6 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
             setShape(palette.holoCyan, pulse * alpha);
             drawRoundedRectOutline(left, bottom, width, height,
                                    RouteMapConstants.NODE_CARD_CORNER_RADIUS * scale + RouteMapConstants.SELECTION_RING_PAD);
-        }
-    }
-
-    private void drawRotatedDiamond(float centerXValue, float centerYValue, float radius, float angleRadians) {
-        float previousX = 0f, previousY = 0f;
-        for (int corner = 0; corner <= 4; corner++) {
-            float cornerAngle = angleRadians + corner * MathUtils.HALF_PI;
-            float pointX = centerXValue + radius * MathUtils.cos(cornerAngle);
-            float pointY = centerYValue + radius * MathUtils.sin(cornerAngle);
-            if (corner > 0) {
-                shapes.line(previousX, previousY, pointX, pointY);
-            }
-            previousX = pointX;
-            previousY = pointY;
         }
     }
 
@@ -923,6 +986,8 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     }
 
     private final Color scratchTrim = new Color();
+    private final Color iconTint  = new Color();   // order-5: node accent + folded master alpha
+    private final Color crestTint = new Color();   // order-5: region tint + folded master alpha
 
     private int displayIndexOf(RouteNode node) {
         for (int index = 0; index < displayCount; index++) {

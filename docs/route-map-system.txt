@@ -108,11 +108,12 @@ above). Row 0 (current) + row 1 (selectable next) draw full size/opacity; distan
 (HISTORY_ALPHA). Each layer's nodes are sorted by laneIndex and spread evenly, centred on X=640.
 
 NODE CARD: rounded-rect data slug (150x120), translucent accent fill + 2px accent border. Layers:
-additive glow halo (AVAILABLE/CURRENT only, boosted when focused/committed), placeholder diamond
-icon (order-5 replaces with the real IconPainter), centred drop-shadowed label (truncated to width),
-1-4 risk pips (RouteMapColorPalette.pipCount/pipColor by DangerTier, green->amber->red). State decor:
-CURRENT=rotating diamond reticle, VISITED=check mark, AVAILABLE=idle bob, FOCUSED=pulsing selection
-ring + 1.06 scale, LOCKED/BYPASSED=steel.
+additive glow halo (AVAILABLE/CURRENT only, boosted when focused/committed), the procedural per-type
+node icon (order-5 IconPainter — see NODE ICON VOCABULARY below), centred drop-shadowed label
+(truncated to width), 1-4 risk pips (RouteMapColorPalette.pipCount/pipColor by DangerTier,
+green->amber->red). State decor: CURRENT=rotating diamond reticle, VISITED=check mark, AVAILABLE=idle
+bob, FOCUSED=pulsing selection ring + 1.06 scale, LOCKED/BYPASSED=steel. Risk pips + state glyphs are
+the shared RouteGlyphs painters (order-5) so every node type gets consistent card chrome for free.
 
 CONNECTORS: quadratic-bezier conduits (GameMath.quadraticBezier per axis) from card top to card
 bottom; hot edges (leaving CURRENT/AVAILABLE) carry an additive travelling pulse dot; the taken path
@@ -138,3 +139,55 @@ auto-focuses the first candidate and, after AUTO_SELECT_HOLD_SECONDS, drives its
 paused ROUTE_SELECT branch watches isReadyForSelection()/isCommitFinished() and fires the existing
 RouteMapOverlay.commit(node) -> commitRouteNode -> FADING_OUT pipeline (contract unchanged). Order-6
 replaces the auto-driver with real tap hit-testing against the card/confirm-bar targets defined here.
+
+
+NODE ICON VOCABULARY & HOW TO ADD ONE (order-5)
+===============================================
+Every node icon and region crest is drawn from ShapeRenderer primitives only — NO image assets (a
+hard product requirement). Code lives in `core/.../render/routeicons/` (the render sub-package; it is
+the only render code that draws the map's icon language). Icons are DIRECT-drawn straight into the
+overlay's single ShapeRenderer each frame — never baked to a FrameBuffer, because FrameBuffer.end()
+resets the GL viewport and would corrupt the FitViewport letterbox mid-frame (same reason the order-4
+glow is faked with additive discs). This keeps the pipeline viewport-safe and allocation-free with no
+FBO to dispose. Painters switch fill/line with shapes.set(...) (auto-flushing) inside the overlay's
+one begin()/end() icon pass; they hold no timers (animationT is passed in) so they stay deterministic.
+
+REGISTRY, NOT A SWITCH: the overlay never switches on node type. NodeTypeDefinition.iconPainterId
+selects an IconPainter via IconPainterRegistry.get(id).paint(...). RouteIconBootstrap registers the v1
+painters (the render-layer twin of RouteRegistries.bootstrap, since IconPainter touches LibGDX and so
+cannot live in the headless route package). Unknown ids fall back to PlaceholderIconPainter (a diamond).
+
+ICON CATALOG (one IconPainter class each; geometry in one line):
+  icon_combat  COMBAT  — crosshair: thin ring + N/E/S/W ticks + bright centre dot.
+  icon_elite   ELITE   — skull in a hazard diamond: arc-fan cranium dome, dark eye sockets, jaw notch.
+  icon_cache   CACHE   — iso supply crate: front face + slanted top/side, X strap, "+" ammo tick.
+  icon_shop    SHOP    — hexagon coin + credit rune (ring + two bars) + down-arrow dispense tick.
+  icon_rest    REST    — med cross inside a soft ring + tiny heartbeat trace beneath.
+  icon_mystery MYSTERY — "?" glyph (hook arc + stem + dot) inside a slowly-rotating segmented ring.
+                         ALSO the fog icon: any un-revealed node draws this regardless of real type.
+  icon_event   EVENT   — comms beacon: pulsing broadcast arc fan rising from a bright base node.
+  icon_gate    REGION_GATE — airlock hatch: outer+inner ring, radial locking bolts, central seam
+                             (drawn ICON_GATE_SIZE_SCALE larger — a convergence beat).
+  icon_boss    BOSS    — horned command skull (reuses the ELITE skull) + horns (bezier), brow, spine,
+                         pulsing red eye-socket ember; full hazard-diamond frame; drawn a touch larger.
+
+REGION CRESTS (RegionCrestPainter + RegionCrestPainterRegistry, keyed by RouteRegion.themeId; drawn on
+the title plate at CREST_CENTER_X): outer_facility=gear ring, research_wing=molecule/atom (orbiting
+electrons), reactor_depths=radiation trefoil, the_breach=cracked/corrupted sigil. Fallback=ring badge.
+
+SHARED GLYPHS (RouteGlyphs, reused by the order-4 cards): riskPips (1-4 dot meter), lockGlyph,
+checkGlyph (VISITED), hereReticle (rotating CURRENT diamond), affixTag (corner tag for a NodeAffix,
+order-9). Centralised so a new node type opts into the same card chrome for free.
+
+GEOMETRY MATH: non-trivial icon maths reuses GameMath (pointOnCircleX/Y for arc fans + radial bolts,
+quadraticBezier for horns/heartbeat, rotateVectorX/Y for tilted orbits, lerp) — never inlined.
+RouteIconSupport holds the shared primitive draws (disc/ring/diamond/arcFan/polygonOutline/
+bezierStroke) and accent brighten/darken (mix toward WHITE_CORE / DARK_SOCKET, out-param, no alloc).
+
+ADD A NEW NODE ICON (4 steps):
+  1. Write `class MyNodeIconPainter implements IconPainter` in render/routeicons (draw from primitives;
+     read accent.a as the master opacity; use RouteIconSupport helpers; no allocation in paint()).
+  2. Register it: RouteIconBootstrap.registerIconPainters -> register("my_node_icon", new ...()).
+  3. Point the node type at it: NodeTypeDefinition.iconPainterId("my_node_icon") in RouteRegistries.
+  4. Done — the overlay draws it with zero edits. Add the one-line geometry note to this catalog.
+A new region crest is the same recipe against RegionCrestPainterRegistry, keyed by the region themeId.
