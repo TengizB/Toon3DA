@@ -191,3 +191,68 @@ ADD A NEW NODE ICON (4 steps):
   3. Point the node type at it: NodeTypeDefinition.iconPainterId("my_node_icon") in RouteRegistries.
   4. Done — the overlay draws it with zero edits. Add the one-line geometry note to this catalog.
 A new region crest is the same recipe against RegionCrestPainterRegistry, keyed by the region themeId.
+
+================================================================================
+INTERACTION & CONTROLS (order-6) — two-thumb navigation of the FACILITY NAV console
+================================================================================
+Platform law: MOBILE ONLY, touch only, no keyboard ever. All state below lives in
+RouteMapOverlayRenderer (the UX object) — NOT in RouteMap (RouteMap stays pure run state).
+Selection never mutates route data until COMMIT. Constants: util/RouteMapConstants.java.
+
+INPUT ROUTING
+  During RunPhase.ROUTE_SELECT the world sim is frozen (like SHOP_OPEN) and the movement/action
+  cluster (TouchControllerRenderer) is HIDDEN. World.handleRouteSelectTouch() polls the raw pointer,
+  ALWAYS unprojects through the game viewport (project invariant — never raw pixels), and forwards to
+  the console. A small movement is a TAP; movement past DRAG_START_THRESHOLD is a PAN drag. The tap is
+  consumed from TouchInputState so it can never leak into the hidden move cluster.
+
+SELECTION MODEL — tap-to-focus, tap-to-ENGAGE (two-step; a descent is irreversible)
+  1. TAP a candidate card -> FOCUSED (ring + scale-up + glow; its hint slides into the legend strip;
+     the conduit brightens). One focus at a time; tapping empty space clears it (unless forced).
+  2. ENGAGE button is DISABLED/dimmed (ENGAGE_DISABLED_ALPHA) until a node is focused; then it lights
+     and ready-pulses. TAP ENGAGE -> COMMIT flare -> World.commitRouteNode -> FADING_OUT.
+  RouteMapOverlayRenderer.onTap() returns a PointerResult {NONE, FOCUS_CHANGED, ENGAGED, INVALID,
+  FRAMING_TOGGLED, CANCEL}; World reacts (thunk shake on ENGAGED, back-out on CANCEL).
+  FORCED node (single candidate / all-BOSS layer): auto-focused; ENGAGE copy becomes DESCEND TO BOSS /
+  BREACH BULKHEAD; still a deliberate tap. Skipped entirely if SHOW_FORCED_NODE_CARD is false (order-3).
+  Optional shortcut DOUBLE_TAP_ENGAGE (default OFF for safety): second tap on the focused card engages.
+  CANCEL policy ALLOW_PORTAL_BACKOUT (default false): the portal opened the map and leaving IS
+  committing, so CANCEL is a no-op that keeps browsing; when true it dismisses via RouteMapOverlay
+  .cancel() (no listener fires) and resumes PLAYING on the same floor.
+
+HIT-TESTING (no per-touch allocation)
+  Card world-rects come from the layout computed once per present()/pan/framing-toggle. Each hit-rect
+  is inflated to at least MIN_NODE_HIT_SIZE + NODE_HIT_PADDING so a shrunk/distant card stays thumb-
+  tappable. Nodes are culled to the viewport band (isNodeDrawable) so panned-away rows are neither
+  drawn nor tappable. Selection cues never rely on colour alone (ring + scale + glow all say "this one").
+
+PAN / FRAMING (plan ahead on a small screen)
+  The two decision layers (CURRENT + next) are always framed at home (panY == 0) — you never scroll to
+  make the actual choice. VERTICAL DRAG pans (direct manipulation: drag down to look further down the
+  run at the dim distant layers). Momentum flick decays (PAN_MOMENTUM_DECAY); a spring clamps to
+  [minPanY, 0] with PAN_MAX_OVERSCROLL slack; releasing within PAN_SNAP_BACK_THRESHOLD of home snaps
+  back so the choice is always reachable. minPanY is derived from the topmost laid-out row.
+  MAP / DETAIL toggle (top-right of the viewport) swaps DETAIL (roomy default) and MAP ("fit region",
+  MAP_FRAMING_COMPRESSION shrinks gap + scale); toggling re-lays out and resets the pan. Pinch-zoom is
+  gated behind PINCH_ZOOM_ENABLED (default OFF — the toggle is the v1 path). MAP_PAN_ENABLED gates pan.
+
+FOG & LONG-RANGE SCANNER (reveal layer)
+  REVEAL_CURRENT_REGION (v1 default true): present() reveals every node in the CURRENT region (a real
+  plan within the act) while the NEXT region stays ghosted '?' until its REGION_GATE is crossed.
+  MYSTERY nodes always render the '?' icon regardless of reveal (payload is the surprise, order-9).
+  Scanner is a relic hook (order-14 defines the item): setScannerActive(boolean) shows the SCANNER
+  ACTIVE readout; triggerScanReveal() calls RouteMap.revealRegion(nextRegion) and plays the scan-sweep
+  wipe (SCAN_SWEEP_SECONDS) that un-ghosts the revealed cards. Gated by SCANNER_REVEAL_ENABLED.
+
+FEEDBACK (make the choice feel weighty; all flag-gated, core works on visuals alone)
+  FOCUS  -> ring + scale-up + hint slide + light haptic tick (HAPTIC_FOCUS_MS) + audio-blip hook.
+  ENGAGE -> commit flare + conduit surge + firmer haptic (HAPTIC_ENGAGE_MS) + console-thunk screen
+            shake (ImpactEffectSystem.triggerUiThunk, ENGAGE_THUNK_*) fired from World.
+  INVALID (locked/distant/disabled-ENGAGE tap) -> red border flash (INVALID_FLASH_SECONDS) + dull
+            haptic buzz (HAPTIC_INVALID_MS); never a silent no-response.
+  Haptics gate: HAPTICS_ENABLED wraps every Gdx.input.vibrate() so the desktop dev build no-ops.
+
+COMMIT ANIMATION LOCK
+  onTap() ignores all input unless phase == IDLE, so during OPENING and the COMMIT flare a second
+  ENGAGE can never double-descend (mirrors PlayerController's action lock). The order-4 auto-select
+  timer is retired: isReadyForSelection() now always returns false — a descent is a deliberate tap only.

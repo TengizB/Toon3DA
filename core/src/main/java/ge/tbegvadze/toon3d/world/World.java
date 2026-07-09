@@ -119,6 +119,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private Viewport                gameViewport;
     private final Vector2           cardTouchPosition = new Vector2();
 
+    // Route-map (order-6) pointer tracking: distinguishes a tap from a vertical pan drag on the
+    // FACILITY NAV console. Reset on each present(); consumed by handleRouteSelectTouch().
+    private boolean routePointerDown;
+    private boolean routePointerDragging;
+    private float   routePointerStartY;
+    private float   routePointerLastY;
+
     // -------------------------------------------------------------------------
     // Level-dependent resources — rebuilt on every floor descent
     // -------------------------------------------------------------------------
@@ -460,7 +467,85 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         routeMapOverlay.present(nextPicks);
         routeMapOverlayRenderer.present(routeMap);
+        routePointerDown = false;
+        routePointerDragging = false;
         runPhase = RunPhase.ROUTE_SELECT;
+    }
+
+    /**
+     * Forwards the current touch to the FACILITY NAV console (order-6). Polls the raw pointer and
+     * classifies the gesture: a small movement is a TAP (focus a card / press ENGAGE / toggle framing),
+     * a larger vertical movement is a PAN drag. All coordinates are unprojected through the game
+     * viewport first (project invariant — never raw screen pixels). ENGAGE / INVALID / FOCUS taps get
+     * their out-of-renderer feedback here (haptics live in the renderer; the console-thunk shake needs
+     * World's ImpactEffectSystem).
+     */
+    private void handleRouteSelectTouch() {
+        if (gameViewport == null) {
+            return;
+        }
+        if (Gdx.input.isTouched()) {
+            cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+            gameViewport.unproject(cardTouchPosition);
+            float touchY = cardTouchPosition.y;
+            if (!routePointerDown) {
+                routePointerDown = true;
+                routePointerDragging = false;
+                routePointerStartY = touchY;
+                routePointerLastY = touchY;
+                routeMapOverlayRenderer.onPointerDown(cardTouchPosition.x, cardTouchPosition.y);
+            } else {
+                if (!routePointerDragging
+                        && Math.abs(touchY - routePointerStartY) > RouteMapConstants.DRAG_START_THRESHOLD) {
+                    routePointerDragging = true;
+                    routePointerLastY = touchY;   // reset baseline so the pan doesn't jump on hand-off
+                }
+                if (routePointerDragging) {
+                    routeMapOverlayRenderer.panByDrag(touchY - routePointerLastY);
+                    routePointerLastY = touchY;
+                }
+            }
+            return;
+        }
+
+        // Pointer released.
+        if (routePointerDown) {
+            if (routePointerDragging) {
+                routeMapOverlayRenderer.onDragReleased();
+            } else {
+                cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+                gameViewport.unproject(cardTouchPosition);
+                RouteMapOverlayRenderer.PointerResult result =
+                        routeMapOverlayRenderer.onTap(cardTouchPosition.x, cardTouchPosition.y);
+                reactToRouteTap(result);
+            }
+            if (touchInputState != null) {
+                touchInputState.consumeTapAction();   // never leak a tap into the hidden move cluster
+            }
+            routePointerDown = false;
+            routePointerDragging = false;
+        }
+    }
+
+    /** Fires the World-side feedback for a route-console tap and honours the CANCEL back-out policy. */
+    private void reactToRouteTap(RouteMapOverlayRenderer.PointerResult result) {
+        switch (result) {
+            case ENGAGED:
+                impactEffectSystem.triggerUiThunk(RouteMapConstants.ENGAGE_THUNK_MAGNITUDE,
+                                                  RouteMapConstants.ENGAGE_THUNK_SECONDS);
+                break;
+            case CANCEL:
+                // Only reachable when ALLOW_PORTAL_BACKOUT is on: leave the map and resume PLAYING on the
+                // same floor (the portal re-triggers on the next step).
+                routeMapOverlay.cancel();
+                routePointerDown = false;
+                runPhase = RunPhase.PLAYING;
+                break;
+            default:
+                // FOCUS_CHANGED / INVALID / FRAMING_TOGGLED / NONE — the renderer already gave the
+                // in-console feedback (ring, red flash, haptic). Nothing more to do here.
+                break;
+        }
     }
 
     /**
@@ -1236,10 +1321,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
-        // ROUTE_SELECT — world paused (like SHOP_OPEN) while the "FACILITY NAV" console is shown. Order-4
-        // owns the visual + its OPENING/IDLE/COMMIT timeline; touch selection is order-6, so the console
-        // auto-focuses the first candidate and drives its own commit once shown. commit() fires
-        // onNodeCommitted -> commitRouteNode -> FADING_OUT.
+        // ROUTE_SELECT — world paused (like SHOP_OPEN) while the "FACILITY NAV" console is shown.
+        // Order-6: the player drives selection by touch — tap a candidate card to FOCUS it, then tap
+        // ENGAGE to COMMIT (two-step, so a fat-finger can never dive). Vertical drag pans the schematic
+        // to plan ahead. The console owns the OPENING/IDLE/COMMIT timeline + all hit-testing; World only
+        // forwards unprojected touches and fires out-of-renderer feedback (console-thunk shake). When
+        // the COMMIT flare finishes, commit() fires onNodeCommitted -> commitRouteNode -> FADING_OUT.
         if (runPhase == RunPhase.ROUTE_SELECT) {
             if (routeMapOverlay.isActive()) {
                 java.util.List<RouteNode> candidates = routeMapOverlay.getCandidates();
@@ -1251,10 +1338,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 }
                 routeMapOverlayRenderer.setRedAlert(gameState.redAlert);
                 routeMapOverlayRenderer.update(deltaTime);
-                if (routeMapOverlayRenderer.isReadyForSelection()) {
-                    RouteNode focus = routeMapOverlayRenderer.getFocusNode();
-                    routeMapOverlayRenderer.beginCommit(focus != null ? focus : candidates.get(0));
-                }
+                impactEffectSystem.update(deltaTime);   // lets an ENGAGE console-thunk shake decay
+                handleRouteSelectTouch();
                 if (routeMapOverlayRenderer.isCommitFinished()) {
                     RouteNode chosen = routeMapOverlayRenderer.getCommittedNode();
                     routeMapOverlay.commit(chosen != null ? chosen : candidates.get(0));

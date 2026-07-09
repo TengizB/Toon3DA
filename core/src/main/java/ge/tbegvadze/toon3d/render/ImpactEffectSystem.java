@@ -585,6 +585,15 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     // Private helpers
     // -------------------------------------------------------------------------
 
+    /**
+     * Public "console thunk" hook — a subtle screen shake fired by UI beats outside combat (e.g. the
+     * route-map ENGAGE commit, order-6). Reuses the same shake accumulator so no new render path is
+     * needed; callers in other packages route here since {@link #triggerShake} is package-private.
+     */
+    public void triggerUiThunk(float magnitude, float duration) {
+        triggerShake(magnitude, duration);
+    }
+
     void triggerShake(float magnitude, float duration) {
         // Only escalate — a kill shake (magnitude 10) should not be overridden by a
         // simultaneous hit shake (magnitude 4) from a second enemy in the same turn

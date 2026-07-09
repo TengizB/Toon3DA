@@ -23,6 +23,7 @@ import ge.tbegvadze.toon3d.route.NodeTypeDefinition;
 import ge.tbegvadze.toon3d.route.NodeTypeRegistry;
 import ge.tbegvadze.toon3d.route.RouteMap;
 import ge.tbegvadze.toon3d.route.RouteNode;
+import ge.tbegvadze.toon3d.route.RouteNodeType;
 import ge.tbegvadze.toon3d.route.RouteRegion;
 import ge.tbegvadze.toon3d.route.RouteRegistries;
 import ge.tbegvadze.toon3d.util.Constants;
@@ -61,12 +62,23 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
 
     private enum Phase { INACTIVE, OPENING, IDLE, COMMIT, DONE }
 
+    /**
+     * Outcome of a discrete tap (order-6), returned to {@code World} so it can fire the matching
+     * out-of-renderer feedback (console-thunk shake, haptics) and drive the CANCEL/back-out policy.
+     * Focus, engage-arming and invalid flashes are handled inside this renderer; the enum only tells
+     * World what just happened.
+     */
+    public enum PointerResult { NONE, FOCUS_CHANGED, ENGAGED, INVALID, FRAMING_TOGGLED, CANCEL }
+
     private static final String TITLE_TEXT   = "FACILITY NAV  —  SELECT VECTOR";
     private static final String CANCEL_TEXT  = "◀ CANCEL";
     private static final String ENGAGE_TEXT  = "ENGAGE ▶";
     private static final String UAC_STENCIL  = "UAC//NAV";
     private static final String LOCK_GLYPH   = "◇";
     private static final String UNKNOWN_REGION = "UNKNOWN SECTOR";
+    private static final String TOGGLE_MAP_TEXT    = "MAP";
+    private static final String TOGGLE_DETAIL_TEXT = "DETAIL";
+    private static final String SCANNER_TEXT       = "SCANNER ACTIVE";
 
     private final ShapeRenderer shapes;
     private final SpriteBatch   batch;
@@ -101,6 +113,31 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     private float   phaseTimeSeconds   = 0f;   // resets on each phase change
     private boolean redAlert = false;
 
+    // ---- Interaction / UX state (order-6) — kept here, NOT in RouteMap -------
+    private RouteMap map;                       // cached so a framing toggle can re-lay out
+    private boolean  forcedChoice;              // single forced pick (BOSS / REGION_GATE): auto-focused
+    private String   engageText = RouteMapConstants.ENGAGE_TEXT_DEFAULT;
+    private float    engageLabelXDynamic;
+    private float    lastFocusTapTime = -10f;   // for the optional double-tap-to-engage shortcut
+    private RouteNode lastTapNode;
+
+    // Vertical pan of the map viewport (planning ahead); 0 = decision-layer home framing.
+    private float    panY;
+    private float    panVelocityY;
+    private float    minPanY;                   // most-negative pan that frames the topmost row
+    private float    lastDeltaTime = 1f / 60f;  // captured in update() for drag-velocity estimation
+    private boolean  dragging;
+    private boolean  mapFraming;                // false = DETAIL (default), true = MAP (fit region)
+
+    // Invalid-tap red flash (a rect + countdown), so a mis-tap is never a silent no-response.
+    private float    invalidFlashTimer;
+    private float    invalidFlashX, invalidFlashY, invalidFlashWidth, invalidFlashHeight;
+    private float    invalidFlashRadius;
+
+    // Long-range scanner reveal (relic hook — order-14 triggers it).
+    private boolean  scannerActive;
+    private float    scanSweepTimer;            // counts down while the un-ghost sweep plays
+
     // ---- Precomputed header / legend text ----------------------------------
     private float  titleBaselineX;
     private String depthText   = "";
@@ -112,6 +149,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     private String legendText  = "";
     private float  legendTextX;
     private float  cancelLabelX, cancelLabelY, engageLabelX, engageLabelY;
+    private float  toggleLabelXMap, toggleLabelXDetail, toggleLabelY;
 
     // ---- Per-conduit scratch (no allocation in render) ---------------------
     private float conduitStartX, conduitStartY, conduitControlX, conduitControlY, conduitEndX, conduitEndY;
@@ -149,6 +187,17 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         layout.setText(font, ENGAGE_TEXT);
         engageLabelX = engageLeft + RouteMapConstants.CONFIRM_BUTTON_WIDTH / 2f - layout.width / 2f;
         engageLabelY = barMidY + layout.height / 2f;
+
+        // MAP / DETAIL toggle labels — both fixed strings, laid out once so render() never touches
+        // the shared GlyphLayout (keeps the render path allocation-free).
+        font.getData().setScale(RouteMapConstants.FRAMING_TOGGLE_LABEL_SCALE);
+        float toggleCenterX = toggleLeft() + RouteMapConstants.FRAMING_TOGGLE_WIDTH / 2f;
+        float toggleCenterY = toggleBottom() + RouteMapConstants.FRAMING_TOGGLE_HEIGHT / 2f;
+        layout.setText(font, TOGGLE_MAP_TEXT);
+        toggleLabelXMap = toggleCenterX - layout.width / 2f;
+        layout.setText(font, TOGGLE_DETAIL_TEXT);
+        toggleLabelXDetail = toggleCenterX - layout.width / 2f;
+        toggleLabelY = toggleCenterY + layout.height / 2f;
     }
 
     // -------------------------------------------------------------------------
@@ -161,21 +210,75 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
      * NOT mutate route state — selection/commit flow back through {@code World.commitRouteNode}.
      */
     public void present(RouteMap map) {
+        this.map = map;
         displayCount = 0;
         focusNode = null;
         committedNode = null;
         phase = Phase.OPENING;
         overlayTimeSeconds = 0f;
         phaseTimeSeconds = 0f;
+        // Reset all interaction state — a fresh decision starts un-panned in DETAIL framing.
+        panY = 0f;
+        panVelocityY = 0f;
+        dragging = false;
+        mapFraming = false;
+        invalidFlashTimer = 0f;
+        scanSweepTimer = 0f;
+        lastTapNode = null;
+        lastFocusTapTime = -10f;
         if (map == null || map.getCurrent() == null) {
             return;
         }
 
+        applyRevealPolicy(map);
+
+        // Two-step safety: a normal branch starts with NO focus (the player must tap a card first).
+        // A FORCED convergence (one candidate, or an all-BOSS layer) is auto-focused so the single
+        // deliberate ENGAGE still reads as a beat without a redundant focus tap.
         List<RouteNode> candidates = map.getSelectableNext();
-        focusNode = candidates.isEmpty() ? null : candidates.get(0);
+        forcedChoice = candidates.size() == 1 || map.isBossNext();
+        focusNode = forcedChoice && !candidates.isEmpty() ? candidates.get(0) : null;
+        resolveEngageText(candidates);
 
         buildLayout(map);
         buildHeaderText(map);
+    }
+
+    /**
+     * v1 fog policy ({@link RouteMapConstants#REVEAL_CURRENT_REGION}): un-ghost every node in the
+     * CURRENT region so the act is a real plan, while the NEXT region stays '?' until its REGION_GATE
+     * is crossed. MYSTERY nodes still render as '?' by icon (their payload is the surprise, order-9).
+     */
+    private void applyRevealPolicy(RouteMap map) {
+        if (!RouteMapConstants.REVEAL_CURRENT_REGION) {
+            return;
+        }
+        RouteNode current = map.getCurrent();
+        List<RouteRegion> regions = map.getRegions();
+        for (int index = 0; index < regions.size(); index++) {
+            if (regions.get(index).containsDepth(current.depth)) {
+                map.revealRegion(index);
+                return;
+            }
+        }
+    }
+
+    /** Picks the ENGAGE-button copy: forced BOSS / REGION_GATE get their own convergence verbs. */
+    private void resolveEngageText(List<RouteNode> candidates) {
+        engageText = RouteMapConstants.ENGAGE_TEXT_DEFAULT;
+        if (forcedChoice && !candidates.isEmpty()) {
+            RouteNodeType type = candidates.get(0).type;
+            if (type == RouteNodeType.BOSS) {
+                engageText = RouteMapConstants.ENGAGE_TEXT_BOSS;
+            } else if (type == RouteNodeType.REGION_GATE) {
+                engageText = RouteMapConstants.ENGAGE_TEXT_REGION_GATE;
+            }
+        }
+        font.getData().setScale(RouteMapConstants.CONFIRM_LABEL_SCALE);
+        layout.setText(font, engageText);
+        float engageLeft = worldWidth - RouteMapConstants.CONFIRM_BUTTON_MARGIN
+                         - RouteMapConstants.CONFIRM_BUTTON_WIDTH;
+        engageLabelXDynamic = engageLeft + RouteMapConstants.CONFIRM_BUTTON_WIDTH / 2f - layout.width / 2f;
     }
 
     /** Locates the current layer, then lays out a window of rows around it (history .. lookahead). */
@@ -198,13 +301,22 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         int lastLayer  = Math.min(layers.size() - 1,
                                   currentLayerIndex + RouteMapConstants.MAP_LOOKAHEAD_LAYERS);
 
+        // MAP framing compresses the whole schematic so more of the region fits at once; DETAIL keeps
+        // the roomy default. Applied to both the row gap and every card scale.
+        float framing = mapFraming ? RouteMapConstants.MAP_FRAMING_COMPRESSION : 1f;
+        float layerGap = RouteMapConstants.MAP_LAYER_GAP * framing;
+        float topRowCenterY = RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y;   // tracks the highest laid row
+        float topRowScale   = 1f;
+
         for (int layerIndex = firstLayer; layerIndex <= lastLayer; layerIndex++) {
             int rowFromBottom = layerIndex - firstLayer;
             int relativeRow   = layerIndex - currentLayerIndex;   // -1 .. LOOKAHEAD
             float rowY = RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y + RouteMapConstants.MAP_BOTTOM_PAD
-                       + rowFromBottom * RouteMapConstants.MAP_LAYER_GAP;
-            float scale = scaleForRow(relativeRow);
+                       + rowFromBottom * layerGap;
+            float scale = scaleForRow(relativeRow) * framing;
             float alpha = alphaForRow(relativeRow);
+            topRowCenterY = rowY;
+            topRowScale   = scale;
 
             List<RouteNode> row = new ArrayList<>(layers.get(layerIndex));
             row.sort(Comparator.comparingInt(node -> node.laneIndex));
@@ -226,6 +338,12 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
                 buildNodeLabel(slot, node, scale);
             }
         }
+
+        // Pan clamp: the most-negative pan needed to bring the topmost row fully into view (0 if the
+        // whole map already fits, so pan is a no-op). Home framing is panY == 0.
+        float topRowTop = topRowCenterY + RouteMapConstants.NODE_CARD_HEIGHT * topRowScale / 2f;
+        minPanY = Math.min(0f,
+                (RouteMapConstants.MAP_VIEWPORT_TOP_Y - RouteMapConstants.PAN_TOP_MARGIN) - topRowTop);
     }
 
     private float scaleForRow(int relativeRow) {
@@ -314,11 +432,12 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     // Timeline (advanced by World's paused ROUTE_SELECT branch)
     // -------------------------------------------------------------------------
 
-    /** Advances the OPENING -> IDLE -> COMMIT -> DONE timeline. */
+    /** Advances the OPENING -> IDLE -> COMMIT -> DONE timeline plus the interaction physics. */
     public void update(float deltaTime) {
         if (phase == Phase.INACTIVE || phase == Phase.DONE) {
             return;
         }
+        lastDeltaTime = Math.max(1f / 240f, deltaTime);
         overlayTimeSeconds += deltaTime;
         phaseTimeSeconds   += deltaTime;
         if (phase == Phase.OPENING && phaseTimeSeconds >= RouteMapConstants.OPENING_SECONDS) {
@@ -327,13 +446,42 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         } else if (phase == Phase.COMMIT && phaseTimeSeconds >= RouteMapConstants.COMMIT_SECONDS) {
             phase = Phase.DONE;
         }
+
+        if (invalidFlashTimer > 0f) {
+            invalidFlashTimer = Math.max(0f, invalidFlashTimer - deltaTime);
+        }
+        if (scanSweepTimer > 0f) {
+            scanSweepTimer = Math.max(0f, scanSweepTimer - deltaTime);
+        }
+        updatePan(deltaTime);
     }
 
-    /** True once the map has been shown long enough that the auto-driver should pick (order-6: a tap). */
+    /** Momentum + spring/clamp/snap-back for the vertical map pan (only while browsing, phase IDLE). */
+    private void updatePan(float deltaTime) {
+        if (dragging) {
+            return;   // the finger owns the pan; physics resumes on release
+        }
+        panY += panVelocityY * deltaTime;
+        // Exponential-ish momentum decay.
+        panVelocityY -= panVelocityY * RouteMapConstants.PAN_MOMENTUM_DECAY * deltaTime;
+        if (Math.abs(panVelocityY) < RouteMapConstants.PAN_MOMENTUM_MIN_SPEED) {
+            panVelocityY = 0f;
+        }
+        // Spring toward the valid range; snap all the way home when released near the decision layers.
+        float target = MathUtils.clamp(panY, minPanY, 0f);
+        if (Math.abs(panY) < RouteMapConstants.PAN_SNAP_BACK_THRESHOLD) {
+            target = 0f;
+        }
+        float ease = Math.min(1f, RouteMapConstants.PAN_SNAP_BACK_SPEED * deltaTime);
+        panY = GameMath.lerp(panY, target, ease);
+    }
+
+    /**
+     * Retired auto-driver (order-4 had no touch, order-6 does): selection is now a deliberate tap on
+     * ENGAGE, never a timer. Kept returning {@code false} so any legacy caller can never auto-commit.
+     */
     public boolean isReadyForSelection() {
-        return phase == Phase.IDLE
-            && focusNode != null
-            && phaseTimeSeconds >= RouteMapConstants.AUTO_SELECT_HOLD_SECONDS;
+        return false;
     }
 
     /** The candidate the console is highlighting (order-6 will let touch move this). */
@@ -363,6 +511,254 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     }
 
     // -------------------------------------------------------------------------
+    // Touch interaction (order-6) — coords are ALREADY unprojected to world space by World.
+    // -------------------------------------------------------------------------
+
+    /** Records a pointer-down for the pan gesture; a tap is decided by World on release. */
+    public void onPointerDown(float worldX, float worldY) {
+        dragging = false;
+        panVelocityY = 0f;
+    }
+
+    /**
+     * Applies a vertical drag delta to the pan (World passes the frame-to-frame Y change once the
+     * finger has moved past the drag threshold). Clamped with a little overscroll slack; the delta
+     * also feeds the fling-momentum estimate. Horizontal drag is ignored (the map only pans vertically).
+     */
+    public void panByDrag(float deltaY) {
+        if (!RouteMapConstants.MAP_PAN_ENABLED) {
+            return;
+        }
+        dragging = true;
+        panY = MathUtils.clamp(panY + deltaY,
+                minPanY - RouteMapConstants.PAN_MAX_OVERSCROLL,
+                RouteMapConstants.PAN_MAX_OVERSCROLL);
+        // Instantaneous velocity estimate for the release fling.
+        panVelocityY = deltaY / lastDeltaTime;
+    }
+
+    /** Ends a drag; the last drag velocity now decays as momentum (see {@link #updatePan}). */
+    public void onDragReleased() {
+        dragging = false;
+    }
+
+    /**
+     * Handles a discrete tap (no drag). Returns what happened so World can fire the out-of-renderer
+     * feedback (thunk shake) and honour the CANCEL policy. Ignored unless the console is IDLE — during
+     * OPENING and COMMIT the input is locked (mirrors PlayerController's animation lock) so a double
+     * engage can never double-descend.
+     */
+    public PointerResult onTap(float worldX, float worldY) {
+        if (phase != Phase.IDLE) {
+            return PointerResult.NONE;
+        }
+
+        // ENGAGE — gated: only a focused node can be engaged; otherwise it flashes invalid.
+        if (pointInButton(worldX, worldY, engageButtonLeft())) {
+            if (focusNode != null) {
+                engageFocused();
+                return PointerResult.ENGAGED;
+            }
+            flashInvalidButton(engageButtonLeft());
+            return PointerResult.INVALID;
+        }
+
+        // CANCEL — policy in RouteMapConstants.ALLOW_PORTAL_BACKOUT (default: no true cancel).
+        if (pointInButton(worldX, worldY, RouteMapConstants.CONFIRM_BUTTON_MARGIN)) {
+            return RouteMapConstants.ALLOW_PORTAL_BACKOUT ? PointerResult.CANCEL : PointerResult.NONE;
+        }
+
+        // MAP / DETAIL framing toggle.
+        if (pointInRect(worldX, worldY, toggleLeft(), toggleBottom(),
+                        RouteMapConstants.FRAMING_TOGGLE_WIDTH, RouteMapConstants.FRAMING_TOGGLE_HEIGHT)) {
+            toggleFraming();
+            return PointerResult.FRAMING_TOGGLED;
+        }
+
+        // Node cards: a selectable candidate focuses (or double-tap engages); anything else is invalid.
+        int candidateSlot = hitTestCandidate(worldX, worldY);
+        if (candidateSlot >= 0) {
+            RouteNode node = nodeRef[candidateSlot];
+            if (RouteMapConstants.DOUBLE_TAP_ENGAGE && node == focusNode
+                    && overlayTimeSeconds - lastFocusTapTime <= RouteMapConstants.DOUBLE_TAP_WINDOW_SECONDS) {
+                engageFocused();
+                return PointerResult.ENGAGED;
+            }
+            setFocus(node);
+            lastTapNode = node;
+            lastFocusTapTime = overlayTimeSeconds;
+            return PointerResult.FOCUS_CHANGED;
+        }
+
+        int otherSlot = hitTestAnyNode(worldX, worldY);
+        if (otherSlot >= 0) {
+            flashInvalidNode(otherSlot);
+            return PointerResult.INVALID;
+        }
+
+        // Tap on empty space clears the focus (forced choices stay locked in).
+        if (!forcedChoice) {
+            focusNode = null;
+            buildHeaderText(map);
+        }
+        return PointerResult.NONE;
+    }
+
+    private void engageFocused() {
+        buzz(RouteMapConstants.HAPTIC_ENGAGE_MS);
+        // AUDIO HOOK: heavier "commit / power-down" flare blip would fire here.
+        beginCommit(focusNode);
+    }
+
+    private void setFocus(RouteNode node) {
+        if (node == focusNode) {
+            return;
+        }
+        focusNode = node;
+        buzz(RouteMapConstants.HAPTIC_FOCUS_MS);
+        // AUDIO HOOK: soft "select" blip would fire here.
+        buildHeaderText(map);   // slides the focused node's hint into the legend strip
+    }
+
+    private void toggleFraming() {
+        mapFraming = !mapFraming;
+        panY = 0f;
+        panVelocityY = 0f;
+        displayCount = 0;
+        buildLayout(map);
+        buildHeaderText(map);
+        buzz(RouteMapConstants.HAPTIC_FOCUS_MS);
+    }
+
+    /** Red border flash + dull haptic buzz for a mis-tap; never a silent no-response (mobile clarity). */
+    private void flashInvalidNode(int slot) {
+        float scale = baseScale[slot];
+        invalidFlashWidth  = RouteMapConstants.NODE_CARD_WIDTH * scale;
+        invalidFlashHeight = RouteMapConstants.NODE_CARD_HEIGHT * scale;
+        invalidFlashX = centerX[slot] - invalidFlashWidth / 2f;
+        invalidFlashY = drawCenterY(slot) - invalidFlashHeight / 2f;
+        invalidFlashRadius = RouteMapConstants.NODE_CARD_CORNER_RADIUS * scale;
+        invalidFlashTimer = RouteMapConstants.INVALID_FLASH_SECONDS;
+        buzz(RouteMapConstants.HAPTIC_INVALID_MS);
+    }
+
+    private void flashInvalidButton(float buttonLeft) {
+        invalidFlashX = buttonLeft;
+        invalidFlashY = RouteMapConstants.CONFIRM_BAR_BOTTOM_Y + 6f;
+        invalidFlashWidth  = RouteMapConstants.CONFIRM_BUTTON_WIDTH;
+        invalidFlashHeight = RouteMapConstants.CONFIRM_BAR_TOP_Y - RouteMapConstants.CONFIRM_BAR_BOTTOM_Y - 12f;
+        invalidFlashRadius = 6f;
+        invalidFlashTimer = RouteMapConstants.INVALID_FLASH_SECONDS;
+        buzz(RouteMapConstants.HAPTIC_INVALID_MS);
+    }
+
+    /** Optional Android haptic, flag-gated so the desktop dev build no-ops safely. */
+    private void buzz(int milliseconds) {
+        if (RouteMapConstants.HAPTICS_ENABLED && Gdx.input != null) {
+            Gdx.input.vibrate(milliseconds);
+        }
+    }
+
+    // ---- Hit-testing (padded thumb rects; computed from the cached layout) --
+
+    /** Returns the slot of a tapped AVAILABLE candidate card, or -1. Padded to a thumb-min target. */
+    private int hitTestCandidate(float worldX, float worldY) {
+        for (int index = 0; index < displayCount; index++) {
+            RouteNode node = nodeRef[index];
+            if (node.status != NodeStatus.AVAILABLE || !isNodeDrawable(index)) {
+                continue;
+            }
+            if (pointInPaddedCard(worldX, worldY, index)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    /** Returns the slot of ANY tapped drawn card (for invalid feedback on non-selectable taps), or -1. */
+    private int hitTestAnyNode(float worldX, float worldY) {
+        for (int index = 0; index < displayCount; index++) {
+            if (isNodeDrawable(index) && pointInPaddedCard(worldX, worldY, index)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private boolean pointInPaddedCard(float worldX, float worldY, int index) {
+        float scale = baseScale[index];
+        float width  = Math.max(RouteMapConstants.NODE_CARD_WIDTH * scale, RouteMapConstants.MIN_NODE_HIT_SIZE)
+                     + 2f * RouteMapConstants.NODE_HIT_PADDING;
+        float height = Math.max(RouteMapConstants.NODE_CARD_HEIGHT * scale, RouteMapConstants.MIN_NODE_HIT_SIZE)
+                     + 2f * RouteMapConstants.NODE_HIT_PADDING;
+        return pointInRect(worldX, worldY, centerX[index] - width / 2f,
+                           drawCenterY(index) - height / 2f, width, height);
+    }
+
+    private boolean pointInButton(float worldX, float worldY, float buttonLeft) {
+        float bottom = RouteMapConstants.CONFIRM_BAR_BOTTOM_Y + 6f;
+        float height = RouteMapConstants.CONFIRM_BAR_TOP_Y - RouteMapConstants.CONFIRM_BAR_BOTTOM_Y - 12f;
+        return pointInRect(worldX, worldY, buttonLeft, bottom, RouteMapConstants.CONFIRM_BUTTON_WIDTH, height);
+    }
+
+    private static boolean pointInRect(float pointX, float pointY,
+                                       float left, float bottom, float width, float height) {
+        return pointX >= left && pointX <= left + width
+            && pointY >= bottom && pointY <= bottom + height;
+    }
+
+    private float engageButtonLeft() {
+        return worldWidth - RouteMapConstants.CONFIRM_BUTTON_MARGIN - RouteMapConstants.CONFIRM_BUTTON_WIDTH;
+    }
+
+    private float toggleLeft() {
+        return worldWidth - RouteMapConstants.FRAMING_TOGGLE_MARGIN - RouteMapConstants.FRAMING_TOGGLE_WIDTH;
+    }
+
+    private float toggleBottom() {
+        return RouteMapConstants.MAP_VIEWPORT_TOP_Y - RouteMapConstants.FRAMING_TOGGLE_MARGIN
+             - RouteMapConstants.FRAMING_TOGGLE_HEIGHT;
+    }
+
+    // ---- Long-range scanner reveal (relic hook, order-14) -------------------
+
+    /**
+     * Turns the "SCANNER ACTIVE" readout on/off. The relic that actually holds/consumes a scanner is
+     * defined by the meta/relic idea (order-14); order-6 only provides this plumbing + the visual.
+     */
+    public void setScannerActive(boolean active) {
+        this.scannerActive = active;
+    }
+
+    /**
+     * Reveals the NEXT region early (FTL long-range-scanner fantasy) and plays the scan-sweep wipe that
+     * un-ghosts the newly revealed cards. No-op unless the scanner feature is compiled in. Re-lays out
+     * so the freshly revealed types are drawn.
+     */
+    public void triggerScanReveal() {
+        if (!RouteMapConstants.SCANNER_REVEAL_ENABLED || map == null || map.getCurrent() == null) {
+            return;
+        }
+        int currentRegion = -1;
+        List<RouteRegion> regions = map.getRegions();
+        for (int index = 0; index < regions.size(); index++) {
+            if (regions.get(index).containsDepth(map.getCurrent().depth)) {
+                currentRegion = index;
+                break;
+            }
+        }
+        int nextRegion = currentRegion + 1;
+        if (nextRegion >= 0 && nextRegion < regions.size()) {
+            map.revealRegion(nextRegion);
+            scannerActive = true;
+            scanSweepTimer = RouteMapConstants.SCAN_SWEEP_SECONDS;
+            displayCount = 0;
+            buildLayout(map);
+            buildHeaderText(map);
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Render — the eight ordered passes
     // -------------------------------------------------------------------------
 
@@ -384,6 +780,8 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         drawConduitPass();           // 4. curved conduits + travelling pulses
         drawNodePass();              // 5. card bodies + borders + state decor + risk pips
         drawIconPass();              // 6. procedural per-type node icons + affix tags (order-5)
+        drawInvalidFlashPass();      // 6b. red mis-tap flash (order-6)
+        drawScanSweepPass();         // 6c. long-range scanner sweep wipe (order-6)
         drawTextPass();              // 7. title / depth / region / labels / legend / confirm labels
         drawCrtPass();               // 8. scanlines + vignette + flicker + sync flash
 
@@ -417,15 +815,27 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         shapes.rect(0f, RouteMapConstants.CONFIRM_BAR_BOTTOM_Y, worldWidth,
                     RouteMapConstants.CONFIRM_BAR_TOP_Y - RouteMapConstants.CONFIRM_BAR_BOTTOM_Y);
 
-        // Confirm-bar buttons (visual targets; touch is order-6).
+        // Confirm-bar buttons. CANCEL is a dim no-op affordance; ENGAGE is GATED — dim/disabled until
+        // a node is focused, then it lights and ready-pulses (order-6 two-step selection safety).
         float barBottom = RouteMapConstants.CONFIRM_BAR_BOTTOM_Y + 6f;
         float barHeight = RouteMapConstants.CONFIRM_BAR_TOP_Y - RouteMapConstants.CONFIRM_BAR_BOTTOM_Y - 12f;
         setShape(palette.holoDim, 0.45f);
         shapes.rect(RouteMapConstants.CONFIRM_BUTTON_MARGIN, barBottom,
                     RouteMapConstants.CONFIRM_BUTTON_WIDTH, barHeight);
-        setShape(palette.holoCyan, 0.30f);
-        shapes.rect(worldWidth - RouteMapConstants.CONFIRM_BUTTON_MARGIN - RouteMapConstants.CONFIRM_BUTTON_WIDTH,
-                    barBottom, RouteMapConstants.CONFIRM_BUTTON_WIDTH, barHeight);
+        float engageAlpha;
+        if (focusNode == null) {
+            engageAlpha = RouteMapConstants.ENGAGE_DISABLED_ALPHA;
+        } else {
+            float pulse = 0.5f + 0.5f * MathUtils.sin(overlayTimeSeconds * RouteMapConstants.ENGAGE_PULSE_SPEED);
+            engageAlpha = RouteMapConstants.ENGAGE_ENABLED_ALPHA + 0.28f * pulse;
+        }
+        setShape(palette.holoCyan, engageAlpha);
+        shapes.rect(engageButtonLeft(), barBottom, RouteMapConstants.CONFIRM_BUTTON_WIDTH, barHeight);
+
+        // MAP / DETAIL framing toggle (top-right of the map viewport).
+        setShape(mapFraming ? palette.holoCyan : palette.holoDim, 0.4f);
+        shapes.rect(toggleLeft(), toggleBottom(),
+                    RouteMapConstants.FRAMING_TOGGLE_WIDTH, RouteMapConstants.FRAMING_TOGGLE_HEIGHT);
 
         // Hazard chevron trim along the top and bottom of the map viewport.
         drawHazardTrim(RouteMapConstants.TITLE_PLATE_BOTTOM_Y - RouteMapConstants.HAZARD_TRIM_HEIGHT, trim);
@@ -448,6 +858,10 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         setShape(trim, 0.5f);
         shapes.line(0f, RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y, worldWidth, RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y);
         shapes.line(0f, RouteMapConstants.MAP_VIEWPORT_TOP_Y, worldWidth, RouteMapConstants.MAP_VIEWPORT_TOP_Y);
+        // MAP / DETAIL toggle outline.
+        setShape(mapFraming ? palette.holoCyan : palette.textDim, 0.85f);
+        shapes.rect(toggleLeft(), toggleBottom(),
+                    RouteMapConstants.FRAMING_TOGGLE_WIDTH, RouteMapConstants.FRAMING_TOGGLE_HEIGHT);
         Gdx.gl.glLineWidth(1f);
         shapes.end();
     }
@@ -478,7 +892,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         for (int index = 0; index < displayCount; index++) {
             RouteNode node = nodeRef[index];
-            if (!isRevealedBySweep(index)) continue;
+            if (!isNodeDrawable(index)) continue;
             boolean glows = node.status == NodeStatus.AVAILABLE || node.status == NodeStatus.CURRENT;
             if (!glows) continue;
             Color accent = accentFor(node);
@@ -516,10 +930,10 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         Gdx.gl.glLineWidth(RouteMapConstants.CONDUIT_WIDTH);
         for (int index = 0; index < displayCount; index++) {
             RouteNode source = nodeRef[index];
-            if (!isRevealedBySweep(index)) continue;
+            if (!isNodeDrawable(index)) continue;
             for (RouteNode target : source.outgoing) {
                 int targetSlot = displayIndexOf(target);
-                if (targetSlot < 0 || !isRevealedBySweep(targetSlot)) continue;
+                if (targetSlot < 0 || !isNodeDrawable(targetSlot)) continue;
                 if (layerRow[targetSlot] <= layerRow[index]) continue;   // forward edges only
                 drawConduitLine(index, targetSlot, source, target);
             }
@@ -532,12 +946,12 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         for (int index = 0; index < displayCount; index++) {
             RouteNode source = nodeRef[index];
-            if (!isRevealedBySweep(index)) continue;
+            if (!isNodeDrawable(index)) continue;
             boolean hot = source.status == NodeStatus.CURRENT || source.status == NodeStatus.AVAILABLE;
             if (!hot) continue;
             for (RouteNode target : source.outgoing) {
                 int targetSlot = displayIndexOf(target);
-                if (targetSlot < 0 || !isRevealedBySweep(targetSlot)) continue;
+                if (targetSlot < 0 || !isNodeDrawable(targetSlot)) continue;
                 if (layerRow[targetSlot] <= layerRow[index]) continue;
                 drawConduitPulse(index, targetSlot, source);
             }
@@ -618,7 +1032,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         // switch fill/line without disturbing the card body/border passes.
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         for (int index = 0; index < displayCount; index++) {
-            if (!isRevealedBySweep(index)) continue;
+            if (!isNodeDrawable(index)) continue;
             drawCardBody(index);
             drawRiskPips(index);
             drawStateDecorFilled(index);
@@ -629,7 +1043,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         shapes.begin(ShapeRenderer.ShapeType.Line);
         Gdx.gl.glLineWidth(RouteMapConstants.NODE_CARD_BORDER_WIDTH);
         for (int index = 0; index < displayCount; index++) {
-            if (!isRevealedBySweep(index)) continue;
+            if (!isNodeDrawable(index)) continue;
             drawCardBorder(index);
             drawStateDecorLine(index);
         }
@@ -666,13 +1080,52 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         Gdx.gl.glLineWidth(RouteMapConstants.ICON_LINE_WIDTH);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         for (int index = 0; index < displayCount; index++) {
-            if (!isRevealedBySweep(index)) continue;
+            if (!isNodeDrawable(index)) continue;
             drawNodeIcon(index);
             drawAffixTag(index);
         }
         shapes.set(ShapeRenderer.ShapeType.Filled);
         shapes.end();
         Gdx.gl.glLineWidth(1f);
+    }
+
+    // ---- Pass 6b: invalid-tap red flash (order-6) --------------------------
+
+    /** A short, fading red border around the last mis-tapped target — never a silent no-response. */
+    private void drawInvalidFlashPass() {
+        if (invalidFlashTimer <= 0f) {
+            return;
+        }
+        float alpha = RouteMapConstants.INVALID_FLASH_ALPHA
+                    * (invalidFlashTimer / RouteMapConstants.INVALID_FLASH_SECONDS);
+        shapes.begin(ShapeRenderer.ShapeType.Line);
+        Gdx.gl.glLineWidth(RouteMapConstants.NODE_CARD_BORDER_WIDTH + 1.5f);
+        setShape(palette.dangerRed, alpha);
+        drawRoundedRectOutline(invalidFlashX, invalidFlashY, invalidFlashWidth, invalidFlashHeight,
+                               invalidFlashRadius);
+        Gdx.gl.glLineWidth(1f);
+        shapes.end();
+    }
+
+    // ---- Pass 6c: long-range scanner sweep (order-6) -----------------------
+
+    /** A bright horizontal wipe rising up the viewport as the scanner un-ghosts the next region. */
+    private void drawScanSweepPass() {
+        if (scanSweepTimer <= 0f) {
+            return;
+        }
+        float progress = 1f - scanSweepTimer / RouteMapConstants.SCAN_SWEEP_SECONDS;
+        float sweepY = GameMath.lerp(RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y,
+                                     RouteMapConstants.MAP_VIEWPORT_TOP_Y, progress);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(palette.holoCyan.r, palette.holoCyan.g, palette.holoCyan.b, 0.85f);
+        shapes.rect(0f, sweepY - 2f, worldWidth, 4f);
+        shapes.setColor(palette.holoCyan.r, palette.holoCyan.g, palette.holoCyan.b, 0.18f);
+        shapes.rect(0f, RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y, worldWidth,
+                    sweepY - RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y);
+        shapes.end();
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
     }
 
     /** Resolves and paints one node's icon; the master opacity is folded into the accent's alpha. */
@@ -827,7 +1280,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         // Node labels.
         font.getData().setScale(RouteMapConstants.NODE_LABEL_SCALE);
         for (int index = 0; index < displayCount; index++) {
-            if (!isRevealedBySweep(index)) continue;
+            if (!isNodeDrawable(index)) continue;
             RouteNode node = nodeRef[index];
             float scale = drawScale(index);
             float labelBaselineY = drawCenterY(index) - RouteMapConstants.NODE_CARD_HEIGHT * scale * 0.22f;
@@ -848,12 +1301,25 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
             font.draw(batch, legendText, legendTextX, legendY);
         }
 
-        // Confirm-bar labels.
+        // Confirm-bar labels. ENGAGE copy is dynamic (forced-node verbs) and dims when un-armed.
         font.getData().setScale(RouteMapConstants.CONFIRM_LABEL_SCALE);
         setFont(palette.textDim, 0.9f);
         font.draw(batch, CANCEL_TEXT, cancelLabelX, cancelLabelY);
-        setFont(palette.holoCyan, 1f);
-        font.draw(batch, ENGAGE_TEXT, engageLabelX, engageLabelY);
+        setFont(palette.holoCyan, focusNode != null ? 1f : 0.4f);
+        font.draw(batch, engageText, engageLabelXDynamic, engageLabelY);
+
+        // MAP / DETAIL framing toggle label (positions precomputed — no GlyphLayout in render()).
+        font.getData().setScale(RouteMapConstants.FRAMING_TOGGLE_LABEL_SCALE);
+        setFont(mapFraming ? palette.holoCyan : palette.textBright, 0.95f);
+        font.draw(batch, mapFraming ? TOGGLE_DETAIL_TEXT : TOGGLE_MAP_TEXT,
+                  mapFraming ? toggleLabelXDetail : toggleLabelXMap, toggleLabelY);
+
+        // Long-range scanner readout (relic hook, order-6).
+        if (scannerActive) {
+            setFont(palette.holoCyan, 0.85f);
+            font.draw(batch, SCANNER_TEXT, RouteMapConstants.REGION_TEXT_LEFT_X,
+                      RouteMapConstants.LEGEND_STRIP_TOP_Y + 22f);
+        }
 
         batch.end();
     }
@@ -920,15 +1386,28 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         return scale;
     }
 
-    /** Node centre Y including the idle bob (AVAILABLE cards only, while idling). */
+    /** Node centre Y including the vertical pan offset and the idle bob (AVAILABLE cards only). */
     private float drawCenterY(int index) {
-        float y = centerY[index];
+        float y = centerY[index] + panY;
         RouteNode node = nodeRef[index];
         if (node.status == NodeStatus.AVAILABLE && phase == Phase.IDLE) {
             y += RouteMapConstants.NODE_BOB_AMPLITUDE
                * MathUtils.sin(overlayTimeSeconds * RouteMapConstants.NODE_BOB_SPEED + index);
         }
         return y;
+    }
+
+    /**
+     * Whether a node is drawn this frame: revealed by the boot sweep AND its panned centre sits within
+     * the map viewport band (plus a small margin) so panned-away rows don't bleed over the chrome.
+     */
+    private boolean isNodeDrawable(int index) {
+        if (!isRevealedBySweep(index)) {
+            return false;
+        }
+        float y = drawCenterY(index);
+        return y >= RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y - RouteMapConstants.MAP_CULL_MARGIN_BOTTOM
+            && y <= RouteMapConstants.MAP_VIEWPORT_TOP_Y + RouteMapConstants.MAP_CULL_MARGIN_TOP;
     }
 
     private float baseAlpha(int index) {

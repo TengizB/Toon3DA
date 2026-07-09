@@ -336,4 +336,113 @@ public final class RouteMapConstants {
     // ---- Affix corner tag (order-9 affixes; slot reserved here) -------------
     public static final float AFFIX_TAG_SIZE  = 13f;
     public static final float AFFIX_TAG_INSET = 16f;
+
+    // =========================================================================
+    // TOUCH NAVIGATION & INTERACTION (order-6) — the two-thumb nav console UX.
+    // =========================================================================
+    // Consumed by RouteMapOverlayRenderer (gesture/hit-testing/feedback state) and World's
+    // ROUTE_SELECT input branch. Platform law: touch only, no keyboard. Every descent is guarded
+    // behind a deliberate tap-to-focus -> tap-ENGAGE two-step so a fat-finger can never dive.
+
+    // ---- Selection model ---------------------------------------------------
+    /**
+     * When true, a second tap on an ALREADY-focused card engages it (shortcut). Default OFF for
+     * safety so first-timers cannot dive by accident — ENGAGE is always the deliberate path.
+     */
+    public static final boolean DOUBLE_TAP_ENGAGE = false;
+    /** Window within which a second tap on the focused card counts as the double-tap engage. */
+    public static final float   DOUBLE_TAP_WINDOW_SECONDS = 0.35f;
+    /**
+     * Policy for the CANCEL button. Default false: the portal opened the map and leaving IS
+     * committing, so the map must be resolved to descend — CANCEL is a no-op that keeps browsing.
+     * If a future design lets the player step OFF the portal, flip this so CANCEL closes the overlay.
+     */
+    public static final boolean ALLOW_PORTAL_BACKOUT = false;
+
+    // ---- Hit-testing (padded thumb targets) --------------------------------
+    /** Extra world-unit padding added around a card's visual rect for a forgiving hit-rect. */
+    public static final float NODE_HIT_PADDING = 16f;
+    /** Minimum tappable size a card hit-rect is inflated to (mirrors TouchConstants thumb-min). */
+    public static final float MIN_NODE_HIT_SIZE = 96f;
+
+    // ---- Invalid-tap feedback ----------------------------------------------
+    /** Duration of the red border flash shown when the player taps a locked/distant/disabled target. */
+    public static final float INVALID_FLASH_SECONDS = 0.32f;
+    /** Peak alpha of the invalid-tap red flash. */
+    public static final float INVALID_FLASH_ALPHA   = 0.85f;
+
+    // ---- Haptics (Android vibration; desktop no-ops) -----------------------
+    /** Master gate for {@code Gdx.input.vibrate} feedback so the desktop dev build stays silent. */
+    public static final boolean HAPTICS_ENABLED   = true;
+    public static final int     HAPTIC_FOCUS_MS   = 12;   // light tick on focus
+    public static final int     HAPTIC_ENGAGE_MS  = 34;   // firmer buzz on engage
+    public static final int     HAPTIC_INVALID_MS = 22;   // dull buzz on invalid tap
+
+    // ---- Console-thunk shake hook (reuses ImpactEffectSystem's screen shake) -
+    public static final float ENGAGE_THUNK_MAGNITUDE = 5f;
+    public static final float ENGAGE_THUNK_SECONDS   = 0.22f;
+
+    // ---- Pan / framing (planning ahead on a small screen) ------------------
+    /** Master gate for vertical drag-to-pan of the map viewport. */
+    public static final boolean MAP_PAN_ENABLED = true;
+    /**
+     * Prefer the MAP/DETAIL framing toggle over pinch for v1 simplicity; pinch stays behind this flag
+     * until it proves worth the fiddliness on a phone.
+     */
+    public static final boolean PINCH_ZOOM_ENABLED = false;
+    /** World-unit finger travel before a touch is treated as a pan drag rather than a tap. */
+    public static final float DRAG_START_THRESHOLD = 12f;
+    /**
+     * When a released pan sits within this of the home (decision-framing) offset, it snaps back so the
+     * two decision layers are always reachable without scrolling.
+     */
+    public static final float PAN_SNAP_BACK_THRESHOLD = 70f;
+    /** Ease rate (per second) the pan springs back toward home when released near it. */
+    public static final float PAN_SNAP_BACK_SPEED = 9f;
+    /** Momentum velocity decay (per second) after a pan flick — decelerates like a shoved schematic. */
+    public static final float PAN_MOMENTUM_DECAY = 7f;
+    /** Below this pan speed (world units/sec) momentum is considered spent and zeroed. */
+    public static final float PAN_MOMENTUM_MIN_SPEED = 8f;
+    /** Slack the pan may overscroll past its clamp before the spring pulls it back. */
+    public static final float PAN_MAX_OVERSCROLL = 46f;
+    /** Extra headroom kept above the topmost row so a panned-to-limit row is never edge-clipped. */
+    public static final float PAN_TOP_MARGIN = 40f;
+    /** How far past the map viewport band (bottom / top) a node centre may sit and still be drawn. */
+    public static final float MAP_CULL_MARGIN_BOTTOM = 30f;
+    public static final float MAP_CULL_MARGIN_TOP    = 96f;
+
+    // ---- MAP / DETAIL framing toggle ---------------------------------------
+    /** Vertical compression applied to layer spacing + node scale in "fit region" (MAP) framing. */
+    public static final float MAP_FRAMING_COMPRESSION = 0.62f;
+    public static final float FRAMING_TOGGLE_WIDTH  = 168f;
+    public static final float FRAMING_TOGGLE_HEIGHT = 46f;
+    /** Inset of the toggle button from the map viewport's top-right corner. */
+    public static final float FRAMING_TOGGLE_MARGIN = 20f;
+    public static final float FRAMING_TOGGLE_LABEL_SCALE = 0.8f;
+
+    // ---- Fog / reveal policy -----------------------------------------------
+    /**
+     * v1 reveal policy: reveal every node whose depth falls in the CURRENT region on present, so the
+     * act is a real plan while the NEXT region stays ghosted '?' until its REGION_GATE is crossed.
+     */
+    public static final boolean REVEAL_CURRENT_REGION = true;
+
+    // ---- Long-range scanner (relic hook — order-14 defines the item) -------
+    /** Whether the scanner reveal path is compiled in (the relic that triggers it lands in meta/order-14). */
+    public static final boolean SCANNER_REVEAL_ENABLED = true;
+    /** Duration of the scan-sweep wipe that un-ghosts scanner-revealed nodes. */
+    public static final float   SCAN_SWEEP_SECONDS = 0.85f;
+
+    // ---- ENGAGE gating visuals ---------------------------------------------
+    /** Alpha of the ENGAGE button fill when no node is focused (disabled/dimmed). */
+    public static final float ENGAGE_DISABLED_ALPHA = 0.14f;
+    /** Base alpha of the ENGAGE button fill once a node is focused (before the pulse). */
+    public static final float ENGAGE_ENABLED_ALPHA  = 0.42f;
+    /** ENGAGE ready-pulse rate once a node is focused. */
+    public static final float ENGAGE_PULSE_SPEED    = 5f;
+
+    // ---- Forced-node ENGAGE copy -------------------------------------------
+    public static final String ENGAGE_TEXT_DEFAULT   = "ENGAGE ▶";
+    public static final String ENGAGE_TEXT_BOSS       = "DESCEND TO BOSS ▶";
+    public static final String ENGAGE_TEXT_REGION_GATE = "BREACH BULKHEAD ▶";
 }

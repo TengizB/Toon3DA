@@ -54,6 +54,16 @@ public final class RouteMapOverlay {
     }
 
     /**
+     * Dismisses the overlay WITHOUT committing (order-6 portal back-out, gated by
+     * {@code RouteMapConstants.ALLOW_PORTAL_BACKOUT}). No listener fires — the route cursor is
+     * unchanged and the portal simply re-triggers on the player's next step.
+     */
+    public void cancel() {
+        active = false;
+        candidates = Collections.emptyList();
+    }
+
+    /**
      * Commits to a node: deactivates the overlay and fires the listener. The node MUST be one of the
      * presented candidates.
      *
