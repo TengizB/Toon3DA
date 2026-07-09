@@ -167,4 +167,130 @@ public final class RouteMapConstants {
      * is not really a choice.
      */
     public static final boolean SHOW_FORCED_NODE_CARD = true;
+
+    // =========================================================================
+    // OVERLAY VISUAL SPEC (order-4) — the "FACILITY NAV" console.
+    // =========================================================================
+    // All coordinates are world units (1280x720, Y-up, origin bottom-left — project invariant).
+    // Consumed by RouteMapOverlayRenderer. Per project rule, no visual value is hardcoded inline.
+
+    /** Dim navy scrim alpha over the frozen 3D world so the map reads without fully hiding it. */
+    public static final float OVERLAY_SCRIM_ALPHA = 0.72f;
+
+    // ---- Screen regions (vertical bands) -----------------------------------
+    public static final float TITLE_PLATE_BOTTOM_Y   = 648f;
+    public static final float TITLE_PLATE_TOP_Y      = 712f;
+    public static final float MAP_VIEWPORT_BOTTOM_Y  = 150f;
+    public static final float MAP_VIEWPORT_TOP_Y     = 640f;
+    public static final float LEGEND_STRIP_BOTTOM_Y  = 96f;
+    public static final float LEGEND_STRIP_TOP_Y     = 150f;
+    public static final float CONFIRM_BAR_BOTTOM_Y   = 12f;
+    public static final float CONFIRM_BAR_TOP_Y      = 92f;
+
+    // ---- Map layout --------------------------------------------------------
+    /** Vertical spacing between successive layer rows (bottom->top flow: current low, candidates high). */
+    public static final float MAP_LAYER_GAP        = 138f;
+    /** Horizontal spacing between lanes within one layer row. */
+    public static final float MAP_LANE_GAP         = 210f;
+    /** How many layers above the current one are drawn (further = smaller + dimmer perspective fade). */
+    public static final int   MAP_LOOKAHEAD_LAYERS = 4;
+    /** Gap between the viewport's bottom edge and the bottom-most drawn row. */
+    public static final float MAP_BOTTOM_PAD       = 46f;
+    /** Hard cap on nodes drawn at once, sizing the renderer's pre-allocated layout arrays. */
+    public static final int   MAP_MAX_DISPLAY_NODES = 40;
+
+    // ---- Node card ---------------------------------------------------------
+    public static final float NODE_CARD_WIDTH         = 150f;
+    public static final float NODE_CARD_HEIGHT        = 120f;
+    public static final float NODE_CARD_CORNER_RADIUS = 14f;
+    public static final float NODE_CARD_BODY_ALPHA    = 0.22f;
+    public static final float NODE_CARD_BORDER_WIDTH  = 2f;
+
+    /** Per-layer shrink applied to distant (non-decision) rows: scale = 1 − (row−1)·step. */
+    public static final float DISTANT_SCALE_STEP = 0.16f;
+    public static final float DISTANT_MIN_SCALE  = 0.5f;
+    /** Per-layer fade applied to distant rows: alpha = 1 − (row−1)·step. */
+    public static final float DISTANT_ALPHA_STEP = 0.22f;
+    public static final float DISTANT_MIN_ALPHA  = 0.28f;
+    /** Alpha of the already-taken (VISITED) history row shown below the current node. */
+    public static final float HISTORY_ALPHA      = 0.45f;
+
+    // ---- Glow (additive ShapeRenderer discs — NOT a per-frame FrameBuffer) -
+    // Project rule: FrameBuffer.end() resets the GL viewport and would corrupt the FitViewport
+    // letterbox mid-frame (see WeaponHudRenderer), so the hologram bloom is faked with concentric
+    // additive-blended discs instead of an offscreen pass. Crisp, viewport-safe, no allocation.
+    public static final float GLOW_RADIUS      = 92f;
+    public static final int   GLOW_RING_COUNT  = 5;
+    public static final float GLOW_RING_ALPHA  = 0.13f;
+    public static final float FOCUS_GLOW_BOOST = 1.6f;
+
+    // ---- Node idle / focus animation ---------------------------------------
+    public static final float NODE_BOB_AMPLITUDE = 5f;
+    public static final float NODE_BOB_SPEED     = 2.4f;
+    public static final float FOCUS_SCALE        = 1.06f;
+    public static final float FOCUS_PULSE_SPEED  = 4f;
+    public static final float SELECTION_RING_PAD = 12f;
+    /** "YOU ARE HERE" reticle around the CURRENT card. */
+    public static final float RETICLE_RADIUS     = 86f;
+    public static final float RETICLE_SPIN_SPEED = 1.2f;
+
+    // ---- Connector conduits + travelling data pulses -----------------------
+    public static final float CONDUIT_WIDTH        = 2.5f;
+    public static final int   CONDUIT_SEGMENTS     = 18;
+    /** Sideways pull of the bezier control point, giving conduits a gentle S-curve. */
+    public static final float CONDUIT_CURVE_OFFSET = 26f;
+    public static final float CONDUIT_DIM_ALPHA    = 0.35f;
+    /** Travelling pulse loops per second along a hot (leaving CURRENT/AVAILABLE) conduit. */
+    public static final float PULSE_SPEED          = 0.55f;
+    public static final float PULSE_DOT_RADIUS     = 5f;
+    /** Extra-bright "locked route" spine drawn along the path already taken. */
+    public static final float HISTORY_SPINE_ALPHA  = 0.9f;
+
+    // ---- Risk pip meter (1-4 dots by dangerTier) ---------------------------
+    public static final float RISK_PIP_RADIUS = 4.5f;
+    public static final float RISK_PIP_GAP    = 5f;
+    public static final int   RISK_PIP_MAX    = 4;
+    public static final float RISK_PIP_INSET  = 12f;
+
+    // ---- CRT treatment -----------------------------------------------------
+    public static final float SCANLINE_SPACING      = 3f;
+    public static final float SCANLINE_ALPHA        = 0.10f;
+    public static final float SCANLINE_SCROLL_SPEED = 12f;
+    public static final float VIGNETTE_ALPHA        = 0.34f;
+    public static final float VIGNETTE_BAND         = 64f;
+    public static final float FLICKER_AMPLITUDE     = 0.02f;
+    public static final float FLICKER_SPEED         = 30f;
+    public static final float SYNC_FLASH_INTERVAL   = 4.5f;
+    public static final float SYNC_FLASH_ALPHA      = 0.06f;
+
+    // ---- Bezel chrome / hazard trim ----------------------------------------
+    public static final float FRAME_BORDER_WIDTH   = 3f;
+    public static final float HAZARD_CHEVRON_WIDTH = 28f;
+    public static final float HAZARD_TRIM_HEIGHT   = 12f;
+    public static final float RIVET_RADIUS         = 4f;
+    public static final float RIVET_INSET          = 18f;
+    /** Red-alert bezel pulse rate (ties into the emergency-red-alert language for continuity). */
+    public static final float RED_ALERT_PULSE_SPEED = 6f;
+
+    // ---- Confirm bar (visual targets; touch handling is order-6) -----------
+    public static final float CONFIRM_BUTTON_WIDTH  = 250f;
+    public static final float CONFIRM_BUTTON_MARGIN = 42f;
+
+    // ---- Animation timelines (kept snappy for mobile) ----------------------
+    public static final float OPENING_SECONDS      = 0.35f;
+    public static final float COMMIT_SECONDS       = 0.40f;
+    /**
+     * Order-4 has no touch selection yet (order-6), so the console auto-focuses the first candidate
+     * and, after showing the map this long, auto-commits it — proving the OPENING/IDLE/COMMIT
+     * timelines and the present/commit pipeline end-to-end. Order-6 replaces this with a real tap.
+     */
+    public static final float AUTO_SELECT_HOLD_SECONDS = 1.25f;
+
+    // ---- Text scales -------------------------------------------------------
+    public static final float TITLE_TEXT_SCALE   = 1.2f;
+    public static final float DEPTH_TEXT_SCALE   = 0.95f;
+    public static final float REGION_TEXT_SCALE  = 1.0f;
+    public static final float NODE_LABEL_SCALE   = 0.9f;
+    public static final float LEGEND_TEXT_SCALE  = 0.95f;
+    public static final float CONFIRM_LABEL_SCALE = 1.1f;
 }

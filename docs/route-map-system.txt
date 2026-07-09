@@ -83,3 +83,58 @@ getRouteString) — a compact, shareable summary of the incursion, e.g.
 
 Fallback: file-loaded / test worlds (`new World(Level)` / `new World(String)`) never build a route
 map; buildNextFloor() falls back to the depth-driven pickLevelGenerator so they still descend.
+
+OVERLAY VISUAL SPEC (order-4) — the "FACILITY NAV" console
+==========================================================
+RouteMapOverlayRenderer (…toon3d.render, Renderable+Disposable) draws the full-screen UAC nav
+console over the frozen 3D world during RunPhase.ROUTE_SELECT. Every pixel is procedural
+(ShapeRenderer + BitmapFont) — NO textures. All layout/colour numbers live in RouteMapConstants
+(OVERLAY VISUAL SPEC section) + RouteMapColorPalette; nothing hardcoded inline.
+
+GLOW WITHOUT AN FBO: the idea sketched an additive FrameBuffer bloom, but this project keeps all
+per-frame FrameBuffer work out of the loop (FrameBuffer.end() resets the GL viewport and corrupts
+the FitViewport letterbox mid-frame — see WeaponHudRenderer). The bloom is instead faked with
+concentric additive-blended discs (glBlendFunc SRC_ALPHA, ONE) drawn through the one ShapeRenderer.
+
+SCREEN BANDS (world coords, 1280x720, Y-up):
+  TITLE PLATE   y 648..712  — "FACILITY NAV — SELECT VECTOR", region crest (left), "DEPTH n -> n+1" (right)
+  MAP VIEWPORT  y 150..640  — hologram schematic (bottom->top flow: CURRENT low, candidates high)
+  LEGEND STRIP  y  96..150  — focused node's hint line
+  CONFIRM BAR   y  12.. 92  — [◀ CANCEL] ......... [ENGAGE ▶] (visual targets; touch is order-6)
+
+MAP LAYOUT: rows = layers around the CURRENT layer (one history row below, MAP_LOOKAHEAD_LAYERS
+above). Row 0 (current) + row 1 (selectable next) draw full size/opacity; distant rows shrink
+(DISTANT_SCALE_STEP) and fade (DISTANT_ALPHA_STEP) into the descent; the history row is dimmed
+(HISTORY_ALPHA). Each layer's nodes are sorted by laneIndex and spread evenly, centred on X=640.
+
+NODE CARD: rounded-rect data slug (150x120), translucent accent fill + 2px accent border. Layers:
+additive glow halo (AVAILABLE/CURRENT only, boosted when focused/committed), placeholder diamond
+icon (order-5 replaces with the real IconPainter), centred drop-shadowed label (truncated to width),
+1-4 risk pips (RouteMapColorPalette.pipCount/pipColor by DangerTier, green->amber->red). State decor:
+CURRENT=rotating diamond reticle, VISITED=check mark, AVAILABLE=idle bob, FOCUSED=pulsing selection
+ring + 1.06 scale, LOCKED/BYPASSED=steel.
+
+CONNECTORS: quadratic-bezier conduits (GameMath.quadraticBezier per axis) from card top to card
+bottom; hot edges (leaving CURRENT/AVAILABLE) carry an additive travelling pulse dot; the taken path
+draws a brighter "locked route" history spine.
+
+COLOUR: RouteMapColorPalette resolves NodeTypeDefinition.accentColorId (combat/elite/cache/shop/rest/
+mystery/event/boss/gate) and RouteRegion.themeId (outer_facility/research_wing/reactor_depths/
+the_breach) to pre-allocated Colors — the ONLY place accent ids become Colors, keeping …route
+headless. Region tint colours the frame/legend; RED ALERT (GameState.redAlert) pulses the trim
+amber->red.
+
+CRT TREATMENT: upward-scrolling scanlines + edge vignette over the viewport, ~2% whole-hologram
+flicker, and a rare sync brighten.
+
+ANIMATION: single overlayTimeSeconds/phaseTimeSeconds drive OPENING (0.35s boot sweep reveals nodes
+bottom->top) -> IDLE (bob/flicker/pulse loops) -> COMMIT (0.4s: chosen conduit flares, chosen card
+grows, others recede) -> DONE. No allocations in render(); the whole layout is precomputed in
+present(RouteMap).
+
+WORLD WIRING: onDescentRequested() calls routeMapOverlayRenderer.present(routeMap) alongside the
+order-3 RouteMapOverlay.present(candidates). Order-4 has no touch yet (order-6), so the console
+auto-focuses the first candidate and, after AUTO_SELECT_HOLD_SECONDS, drives its own COMMIT; World's
+paused ROUTE_SELECT branch watches isReadyForSelection()/isCommitFinished() and fires the existing
+RouteMapOverlay.commit(node) -> commitRouteNode -> FADING_OUT pipeline (contract unchanged). Order-6
+replaces the auto-driver with real tap hit-testing against the card/confirm-bar targets defined here.

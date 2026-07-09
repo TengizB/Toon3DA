@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Route Map — Part 4: The Nav Console Overlay (Visual Design)
 CREATED: 2026-07-08
@@ -180,15 +180,15 @@ ACCESSIBILITY / READABILITY (mobile-first)
 
 DELIVERABLE CHECKLIST (order-4)
 ===============================
-[ ] RouteMapOverlayRenderer with the 8 render passes, single ShapeRenderer/SpriteBatch/Font/FBO.
-[ ] Bezel chrome + title plate + depth/region readout + hazard trim.
-[ ] Node cards with all 7 composition layers + all 6 state visuals + risk pip.
-[ ] Curved glowing connectors + travelling data pulses + locked-route history spine.
-[ ] Perspective fade for distant layers + region divider lines.
-[ ] CRT treatment (scanlines/vignette/flicker) + red-alert frame tie-in.
-[ ] OPENING / IDLE / FOCUS / COMMIT animation timelines.
-[ ] ColorPalette resolving accentColorId + region theme tint; all pre-allocated.
-[ ] No textures, no allocations in render(), all Disposables disposed.
+[x] RouteMapOverlayRenderer with the 8 render passes, single ShapeRenderer/SpriteBatch/Font/FBO.
+[x] Bezel chrome + title plate + depth/region readout + hazard trim.
+[x] Node cards with all 7 composition layers + all 6 state visuals + risk pip.
+[x] Curved glowing connectors + travelling data pulses + locked-route history spine.
+[x] Perspective fade for distant layers + region divider lines.
+[x] CRT treatment (scanlines/vignette/flicker) + red-alert frame tie-in.
+[x] OPENING / IDLE / FOCUS / COMMIT animation timelines.
+[x] ColorPalette resolving accentColorId + region theme tint; all pre-allocated.
+[x] No textures, no allocations in render(), all Disposables disposed.
 
 LIVING DOC CONTRACT
 ===================

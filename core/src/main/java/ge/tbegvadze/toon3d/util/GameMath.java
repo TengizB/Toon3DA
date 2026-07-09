@@ -46,6 +46,28 @@ public final class GameMath {
     }
 
     // =========================================================================
+    // QUADRATIC BEZIER (single axis)
+    // =========================================================================
+    /*
+     * Formula: Quadratic Bezier point on one axis
+     * Derivation:
+     *   B(t) = (1 − t)² · start + 2(1 − t)t · control + t² · end
+     *   The classic three-point Bezier: at t=0 the curve sits on start, at t=1 on end, and
+     *   the control point pulls the middle without ever being touched. Evaluated per axis
+     *   (call twice — once with the X triple, once with the Y triple) to trace a smooth curved
+     *   connector, e.g. the route-map hologram conduits (order-4).
+     * Edge cases:
+     *   interpolationFactor is expected in [0, 1]; outside that range the expression still
+     *   evaluates but extrapolates off the curve. No division, so no singularity.
+     */
+    public static float quadraticBezier(float start, float control, float end, float interpolationFactor) {
+        float inverse = 1f - interpolationFactor;
+        return inverse * inverse * start
+             + 2f * inverse * interpolationFactor * control
+             + interpolationFactor * interpolationFactor * end;
+    }
+
+    // =========================================================================
     // SMOOTHSTEP EASING
     // =========================================================================
     /*

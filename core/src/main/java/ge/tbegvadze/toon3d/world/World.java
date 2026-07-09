@@ -156,6 +156,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
     private final RouteMapGenerator routeMapGenerator;
     private final RouteMapOverlay   routeMapOverlay;
+    /** The "FACILITY NAV" console visual (order-4). Drawn while runPhase == ROUTE_SELECT. */
+    private final RouteMapOverlayRenderer routeMapOverlayRenderer;
     private RouteMap                routeMap;
     /** The plan the map was last built from; grows as endless bands are appended. */
     private RegionPlan              routePlan;
@@ -265,6 +267,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         routeMapGenerator = new RouteMapGenerator(RouteRegistries.nodeTypes(), RouteRegistries.generators());
         routeMapOverlay   = new RouteMapOverlay();
         routeMapOverlay.setNodeCommitListener(this::commitRouteNode);
+        routeMapOverlayRenderer = new RouteMapOverlayRenderer();
 
         // Player faces north (toward the portal) in the start room; east otherwise.
         float initialDirectionX = startRoom ? 0f : 1f;
@@ -456,6 +459,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
         routeMapOverlay.present(nextPicks);
+        routeMapOverlayRenderer.present(routeMap);
         runPhase = RunPhase.ROUTE_SELECT;
     }
 
@@ -1232,18 +1236,28 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
-        // ROUTE_SELECT — world paused (like SHOP_OPEN) while the branching route map is shown. The real
-        // touch UI is order-4/order-6; order-3 auto-commits the first presented candidate to prove the
-        // node->floor pipeline end-to-end. commit() fires onNodeCommitted -> commitRouteNode -> FADING_OUT.
+        // ROUTE_SELECT — world paused (like SHOP_OPEN) while the "FACILITY NAV" console is shown. Order-4
+        // owns the visual + its OPENING/IDLE/COMMIT timeline; touch selection is order-6, so the console
+        // auto-focuses the first candidate and drives its own commit once shown. commit() fires
+        // onNodeCommitted -> commitRouteNode -> FADING_OUT.
         if (runPhase == RunPhase.ROUTE_SELECT) {
             if (routeMapOverlay.isActive()) {
                 java.util.List<RouteNode> candidates = routeMapOverlay.getCandidates();
-                if (!candidates.isEmpty()) {
-                    routeMapOverlay.commit(candidates.get(0));
-                } else {
+                if (candidates.isEmpty()) {
                     // No candidates (defensive) — resume a straight descent so the run never stalls.
                     fadeTimerSeconds = 0f;
                     runPhase = RunPhase.FADING_OUT;
+                    return;
+                }
+                routeMapOverlayRenderer.setRedAlert(gameState.redAlert);
+                routeMapOverlayRenderer.update(deltaTime);
+                if (routeMapOverlayRenderer.isReadyForSelection()) {
+                    RouteNode focus = routeMapOverlayRenderer.getFocusNode();
+                    routeMapOverlayRenderer.beginCommit(focus != null ? focus : candidates.get(0));
+                }
+                if (routeMapOverlayRenderer.isCommitFinished()) {
+                    RouteNode chosen = routeMapOverlayRenderer.getCommittedNode();
+                    routeMapOverlay.commit(chosen != null ? chosen : candidates.get(0));
                 }
             }
             return;
@@ -1466,6 +1480,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             shopOverlayRenderer.render(camera);
         }
 
+        // Route-map "FACILITY NAV" console — paused branching-route UI, drawn below fade/death overlays.
+        if (runPhase == RunPhase.ROUTE_SELECT) {
+            routeMapOverlayRenderer.render(camera);
+        }
+
         // Fade overlay drawn last — covers every other layer including the HUD.
         if (runPhase == RunPhase.FADING_OUT || runPhase == RunPhase.FADING_IN) {
             float fadeAlpha;
@@ -1513,6 +1532,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         inventoryOverlayRenderer.dispose();
         weaponInspectOverlayRenderer.dispose();
         shopOverlayRenderer.dispose();
+        routeMapOverlayRenderer.dispose();
         statusEffectVignetteRenderer.dispose();
         if (touchControllerRenderer != null) touchControllerRenderer.dispose();
         deathOverlayRenderer.dispose();
