@@ -1,0 +1,91 @@
+name: Build Debug APK on Push
+
+# Runs automatically after every commit push to master.
+# Builds a debug APK (no keystore secrets required) and publishes it as a
+# GitHub release. The version is auto-derived from the workflow run number
+# (Option B): v1.<run_number>.0 — monotonically increasing, zero-config.
+#
+# This is separate from the manual "Build and Publish APK Release" workflow
+# and deliberately does NOT delete existing releases, so it never clobbers
+# releases created by the manual workflow.
+
+on:
+  push:
+    branches: [master]
+
+# If several pushes land quickly, cancel older in-flight builds so only the
+# newest commit produces a release.
+concurrency:
+  group: build-debug-on-push
+  cancel-in-progress: true
+
+jobs:
+  build-debug-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Install Android SDK 36 and build tools
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            2>/dev/null
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+
+      - name: Compute version from run number
+        id: version
+        run: |
+          # Option B: minor component tracks the monotonic run counter.
+          VERSION_NAME="1.${{ github.run_number }}.0"
+          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "Building version $VERSION_NAME"
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: |
+          # versionCode must strictly increase for Android installs/updates;
+          # the run number guarantees that. versionName mirrors it for clarity.
+          ./gradlew android:assembleDebug \
+            -Pandroid.injected.version.code=${{ github.run_number }} \
+            -Pandroid.injected.version.name="${{ steps.version.outputs.name }}"
+
+      - name: Locate built APK
+        id: apk
+        run: |
+          APK_PATH=$(find android/build/outputs/apk/debug -name "*.apk" | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: No APK found after build" >&2
+            exit 1
+          fi
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "name=toon3d-v${{ steps.version.outputs.name }}.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.version.outputs.name }}"
+          APK_DEST="${{ steps.apk.outputs.name }}"
+          cp "${{ steps.apk.outputs.path }}" "$APK_DEST"
+
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "Toon3D $TAG (debug)" \
+            --notes "Automated debug build from commit ${{ github.sha }}" \
+            --prerelease \
+            "$APK_DEST"
