@@ -155,4 +155,16 @@ public final class RouteMapConstants {
 
     /** Whether a freshly generated node starts revealed (type shown) or hidden behind a '?'. */
     public static final boolean NODE_REVEALED_BY_DEFAULT = false;
+
+    // -------------------------------------------------------------------------
+    // World integration (order-3)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Whether the ROUTE_SELECT overlay is still shown when the only next pick is a FORCED convergence
+     * node (BOSS / REGION_GATE). {@code true} = present a one-card "converge to the boss" beat before
+     * the descent (reads better); {@code false} = auto-skip straight to the transition since the pick
+     * is not really a choice.
+     */
+    public static final boolean SHOW_FORCED_NODE_CARD = true;
 }

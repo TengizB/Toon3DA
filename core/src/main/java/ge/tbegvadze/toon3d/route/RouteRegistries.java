@@ -18,8 +18,9 @@ import ge.tbegvadze.toon3d.util.RouteMapConstants;
  */
 public final class RouteRegistries {
 
-    private static final NodeTypeRegistry NODE_TYPES  = new NodeTypeRegistry();
-    private static final GeneratorRegistry GENERATORS = new GeneratorRegistry();
+    private static final NodeTypeRegistry         NODE_TYPES     = new NodeTypeRegistry();
+    private static final GeneratorRegistry        GENERATORS     = new GeneratorRegistry();
+    private static final NodeLevelProfileRegistry LEVEL_PROFILES = new NodeLevelProfileRegistry();
     private static boolean bootstrapped = false;
 
     private RouteRegistries() {}
@@ -32,6 +33,11 @@ public final class RouteRegistries {
     /** The shared generator registry. */
     public static GeneratorRegistry generators() {
         return GENERATORS;
+    }
+
+    /** The shared node-level-profile registry (order-3: node -&gt; floor pipeline). */
+    public static NodeLevelProfileRegistry levelProfiles() {
+        return LEVEL_PROFILES;
     }
 
     /** Whether {@link #bootstrap()} has already run. */
@@ -49,6 +55,7 @@ public final class RouteRegistries {
         }
         registerNodeTypes(NODE_TYPES);
         registerGenerators(GENERATORS);
+        registerLevelProfiles(LEVEL_PROFILES, GENERATORS);
         bootstrapped = true;
     }
 
@@ -148,5 +155,17 @@ public final class RouteRegistries {
 
         // BossArenaGenerator is a bespoke fixed arena; it ignores both seed and config.
         registry.register(GeneratorId.BOSS_ARENA, (seed, config) -> new BossArenaGenerator());
+    }
+
+    /**
+     * Registers the order-3 level profiles. Only the {@link DefaultCombatProfile} ships now; it is
+     * registered under its own id AND set as the fallback, so every node type (special profiles land
+     * in order-7) resolves to a playable combat floor. Exposed (package-private) so tests can populate
+     * a fresh registry without touching the shared singleton.
+     */
+    static void registerLevelProfiles(NodeLevelProfileRegistry registry, GeneratorRegistry generators) {
+        DefaultCombatProfile defaultProfile = new DefaultCombatProfile(generators);
+        registry.register(defaultProfile);
+        registry.setFallback(defaultProfile);
     }
 }

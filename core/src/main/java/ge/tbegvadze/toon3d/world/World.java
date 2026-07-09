@@ -47,6 +47,15 @@ import ge.tbegvadze.toon3d.progression.UpgradeCardDeck;
 import ge.tbegvadze.toon3d.progression.Attribute;
 import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
+import ge.tbegvadze.toon3d.route.GuaranteedContent;
+import ge.tbegvadze.toon3d.route.LevelPlan;
+import ge.tbegvadze.toon3d.route.NodeLevelProfile;
+import ge.tbegvadze.toon3d.route.NodeTypeDefinition;
+import ge.tbegvadze.toon3d.route.RegionPlan;
+import ge.tbegvadze.toon3d.route.RouteMap;
+import ge.tbegvadze.toon3d.route.RouteMapGenerator;
+import ge.tbegvadze.toon3d.route.RouteNode;
+import ge.tbegvadze.toon3d.route.RouteRegistries;
 import ge.tbegvadze.toon3d.shop.DefaultShopOfferSource;
 import ge.tbegvadze.toon3d.shop.ShopAbilityService;
 import ge.tbegvadze.toon3d.shop.ShopContext;
@@ -67,13 +76,14 @@ import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.StatsStore;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
+import ge.tbegvadze.toon3d.util.RouteMapConstants;
 import ge.tbegvadze.toon3d.util.ProgressionConstants;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
-    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN }
+    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN, ROUTE_SELECT }
 
     // -------------------------------------------------------------------------
     // Run-persistent resources — kept alive across all floor transitions
@@ -138,6 +148,19 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private RunPhase runPhase         = RunPhase.PLAYING;
     private float    fadeTimerSeconds = 0f;
     private int      currentDepth     = RenderConstants.STARTING_DEPTH;
+
+    // -------------------------------------------------------------------------
+    // Branching route map (route-map order-3) — the node->floor pipeline. The map is generated once
+    // when the run leaves the staging room and drives which generator/config builds each next floor.
+    // Null on file-loaded / test worlds, which fall back to the depth-driven default selection.
+    // -------------------------------------------------------------------------
+    private final RouteMapGenerator routeMapGenerator;
+    private final RouteMapOverlay   routeMapOverlay;
+    private RouteMap                routeMap;
+    /** The plan the map was last built from; grows as endless bands are appended. */
+    private RegionPlan              routePlan;
+    /** The node the player committed to; the next floor is built from it. Null before the first commit. */
+    private RouteNode               pendingNode;
 
     // -------------------------------------------------------------------------
     // Player stat system — persistent across floor transitions (Order 6)
@@ -235,6 +258,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         this.runSeed        = runSeed;
         this.weaponRoller   = new WeaponRoller(runSeed);
         this.isStartingRoom = startRoom;
+
+        // Route-map subsystem (order-3). bootstrap() is idempotent, so the death->new-run rebuild is
+        // safe. The map itself is generated lazily at staging-room exit (see the FADING_OUT branch).
+        RouteRegistries.bootstrap();
+        routeMapGenerator = new RouteMapGenerator(RouteRegistries.nodeTypes(), RouteRegistries.generators());
+        routeMapOverlay   = new RouteMapOverlay();
+        routeMapOverlay.setNodeCommitListener(this::commitRouteNode);
 
         // Player faces north (toward the portal) in the start room; east otherwise.
         float initialDirectionX = startRoom ? 0f : 1f;
@@ -396,10 +426,121 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (eventTextSystem != null) eventTextSystem.spawn("ARM YOURSELF FIRST");
             return;
         }
-        if (runPhase == RunPhase.PLAYING) {
+        if (runPhase != RunPhase.PLAYING) {
+            return;
+        }
+
+        // Staging-room exit (map not built yet), or a route-map-less world (file-loaded/test): there is
+        // no node choice to present. Hand straight to the transition machinery, which builds the next
+        // floor (and, on the staging exit, generates the route map first).
+        if (isStartingRoom || routeMap == null) {
             fadeTimerSeconds = 0f;
             runPhase = RunPhase.FADING_OUT;
+            return;
         }
+
+        // Normal descent: present the next-node choice. Keep the graph ahead of the player first so the
+        // descent never runs out of map (endless lazy extension).
+        ensureRouteExtended();
+        java.util.List<RouteNode> nextPicks = routeMap.getSelectableNext();
+        if (nextPicks.isEmpty()) {
+            // Defensive: no legal move (should not happen once extension has run). Fall back to a
+            // straight descent so the run can never soft-lock at the portal.
+            fadeTimerSeconds = 0f;
+            runPhase = RunPhase.FADING_OUT;
+            return;
+        }
+        // A forced convergence (BOSS / REGION_GATE) is not really a choice; optionally skip the card.
+        if (!RouteMapConstants.SHOW_FORCED_NODE_CARD && routeMap.isBossNext()) {
+            commitRouteNode(nextPicks.get(0));
+            return;
+        }
+        routeMapOverlay.present(nextPicks);
+        runPhase = RunPhase.ROUTE_SELECT;
+    }
+
+    /**
+     * Commits the player's chosen next node and hands back to the existing fade transition. Wired as
+     * the {@link RouteMapOverlay} commit callback (order-3 auto-commits; order-4/order-6 drive it from
+     * touch). The next floor is built from {@link #pendingNode} in the FADING_OUT completion branch.
+     */
+    private void commitRouteNode(RouteNode next) {
+        routeMap.commitTo(next);
+        pendingNode = next;
+        recordRouteCommit(next);
+        fadeTimerSeconds = 0f;
+        runPhase = RunPhase.FADING_OUT;
+    }
+
+    /**
+     * Endless-mode safety: extend the map with the next region band once the player nears its final
+     * layer, so {@link RouteMap#getSelectableNext()} always has a legal move to offer.
+     */
+    private void ensureRouteExtended() {
+        if (routeMap != null && routePlan != null
+                && routeMapGenerator.shouldExtend(routeMap, currentDepth)) {
+            routePlan = routeMapGenerator.extendWithNextRegion(routeMap, routePlan);
+        }
+    }
+
+    /**
+     * Advances the route cursor onto the FIRST available depth-1 node when the run leaves the staging
+     * room, so floor 1 is node-driven and the map's CURRENT node sits at depth 1 (the first real
+     * floor). The very first floor is entered, not chosen — the first genuine branch choice is the
+     * descent from floor 1.
+     */
+    private void autoCommitFirstNode() {
+        java.util.List<RouteNode> firstPicks = routeMap.getSelectableNext();
+        if (firstPicks.isEmpty()) {
+            pendingNode = null;
+            return;
+        }
+        RouteNode first = firstPicks.get(0);
+        routeMap.commitTo(first);
+        pendingNode = first;
+        recordRouteCommit(first);
+    }
+
+    /** Appends the committed node to the run's shareable route string and logs the beat. */
+    private void recordRouteCommit(RouteNode node) {
+        NodeTypeDefinition definition = RouteRegistries.nodeTypes().get(node.type);
+        runStats.recordRouteNode(definition.id());
+        Gdx.app.log("RouteMap", "commit depth=" + node.depth + " node=" + definition.id()
+                + " route=" + runStats.getRouteString());
+    }
+
+    /**
+     * Builds the next floor's {@link Level}. The production path (a real run with a route map) runs the
+     * node-&gt;floor pipeline off {@link #pendingNode}; a route-map-less world (file-loaded / test) uses
+     * the depth-driven default selection so it still descends.
+     */
+    private Level buildNextFloor() {
+        long seed = floorSeed(runSeed, currentDepth);
+        if (routeMap == null || pendingNode == null) {
+            return pickLevelGenerator(currentDepth, seed).generate(currentDepth);
+        }
+        return buildFloorForNode(pendingNode, currentDepth, seed);
+    }
+
+    /**
+     * The node-&gt;floor pipeline (route-map order-3). Resolves the node's {@link NodeLevelProfile},
+     * asks it for a {@link LevelPlan} (generator + config + guarantees), builds the level, then replays
+     * the post-generation guarantees. The RAW {@code depth} is threaded straight through to
+     * {@code generate(depth)} — a node changes a floor's KIND/flavour and rewards, never the depth ramp
+     * the difficulty scaler reads (roguelike_order_16 invariant).
+     */
+    private Level buildFloorForNode(RouteNode node, int depth, long seed) {
+        NodeTypeDefinition definition = RouteRegistries.nodeTypes().get(node.type);
+        NodeLevelProfile   profile    = RouteRegistries.levelProfiles().getOrDefault(definition.levelProfileId());
+        LevelPlan          plan       = profile.resolve(node, depth, seed);
+        ILevelGenerator    generator  = RouteRegistries.generators().create(plan.generatorId(), seed, plan.config());
+        Level built = generator.generate(depth);
+        for (GuaranteedContent guarantee : plan.guarantees()) {
+            guarantee.applyTo(built);
+        }
+        Gdx.app.log("RouteMap", "build depth=" + depth + " node=" + definition.id()
+                + " generator=" + plan.generatorId().stableId());
+        return built;
     }
 
     // -------------------------------------------------------------------------
@@ -1005,21 +1146,25 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             fadeTimerSeconds += deltaTime;
             if (fadeTimerSeconds >= RenderConstants.LEVEL_TRANSITION_FADE_OUT_SECONDS) {
                 if (isStartingRoom) {
-                    // Leaving the staging room: generate the real first dungeon floor.
-                    // currentDepth stays at STARTING_DEPTH so floor 1 is the first dungeon floor.
+                    // Leaving the staging room: the real run begins. Generate the route map once from
+                    // the run seed, then advance the cursor onto a depth-1 node so floor 1 is
+                    // node-driven. currentDepth stays at STARTING_DEPTH so floor 1 is the first floor.
                     isStartingRoom               = false;
                     startRoomWeapons             = null;
                     startRoomGroundItems         = null;
                     startRoomMeleeWeapons        = null;
                     startRoomMeleeGroundItems    = null;
+                    routePlan = RegionPlan.defaultPlan();
+                    routeMap  = routeMapGenerator.generate(runSeed, routePlan);
+                    autoCommitFirstNode();
                     playerProgress.setFloorDepth(currentDepth);
                     runStats.recordFloor(currentDepth);
-                    rebuildForLevel(pickLevelGenerator(currentDepth, floorSeed(runSeed, currentDepth)).generate(currentDepth));
+                    rebuildForLevel(buildNextFloor());
                 } else {
                     currentDepth++;
                     playerProgress.setFloorDepth(currentDepth);
                     runStats.recordFloor(currentDepth);
-                    rebuildForLevel(pickLevelGenerator(currentDepth, floorSeed(runSeed, currentDepth)).generate(currentDepth));
+                    rebuildForLevel(buildNextFloor());
                 }
                 fadeTimerSeconds = 0f;
                 runPhase = RunPhase.FADING_IN;
@@ -1082,6 +1227,23 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     closeShop();
                 } else if (outcome == ShopOverlayRenderer.TouchOutcome.PURCHASE_CONFIRMED) {
                     resolveShopPurchase(shopOverlayRenderer.getPendingBuyIndex());
+                }
+            }
+            return;
+        }
+
+        // ROUTE_SELECT — world paused (like SHOP_OPEN) while the branching route map is shown. The real
+        // touch UI is order-4/order-6; order-3 auto-commits the first presented candidate to prove the
+        // node->floor pipeline end-to-end. commit() fires onNodeCommitted -> commitRouteNode -> FADING_OUT.
+        if (runPhase == RunPhase.ROUTE_SELECT) {
+            if (routeMapOverlay.isActive()) {
+                java.util.List<RouteNode> candidates = routeMapOverlay.getCandidates();
+                if (!candidates.isEmpty()) {
+                    routeMapOverlay.commit(candidates.get(0));
+                } else {
+                    // No candidates (defensive) — resume a straight descent so the run never stalls.
+                    fadeTimerSeconds = 0f;
+                    runPhase = RunPhase.FADING_OUT;
                 }
             }
             return;
@@ -1277,7 +1439,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         } else if (runPhase != RunPhase.WEAPON_INSPECT
                 && touchControllerRenderer != null
                 && runPhase != RunPhase.INVENTORY_OPEN
-                && runPhase != RunPhase.SHOP_OPEN) {
+                && runPhase != RunPhase.SHOP_OPEN
+                && runPhase != RunPhase.ROUTE_SELECT) {
             touchControllerRenderer.setActionLocked(!playerController.isIdle());
             touchControllerRenderer.render(camera);
         }

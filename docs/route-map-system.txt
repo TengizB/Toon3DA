@@ -1,0 +1,85 @@
+ROUTE MAP SYSTEM
+================
+Branching-facility route map: a Slay-the-Spire-style, forward-only layered DAG the player descends,
+picking one node per floor. The map is generated once per run from the run's master seed (so a seed
+reproduces an identical map) and drives which generator/config builds each next floor.
+
+Code lives in `core/.../route/` (pure, headless — no LibGDX imports) plus the World wiring below.
+
+  order-1  data model + registries (NodeTypeRegistry, GeneratorRegistry, RouteRegistries.bootstrap)
+  order-2  RouteMapGenerator — the layered DAG, node types, pre-rolled combat generators
+  order-3  World integration & the node->floor pipeline   <-- THIS SECTION
+  order-4+ overlay drawing, touch selection, fog, affixes, special level profiles (see idea files)
+
+
+WORLD INTEGRATION & THE NODE->FLOOR PIPELINE (order-3)
+=====================================================
+The connective tissue that turns "player stepped on the exit portal" into "route map opens, a node
+is committed, the NEXT floor is generated from that node." It replaces the old hard-coded generator
+switch with a node-driven pipeline.
+
+ROUTE_SELECT phase
+------------------
+`World.RunPhase.ROUTE_SELECT` is a paused overlay phase modelled on SHOP_OPEN:
+  - the simulation is paused (World.update returns early — no enemy ticks, no player movement, the
+    weapon HUD is frozen);
+  - the 3D world stays DRAWN but static behind the overlay (render() runs its world passes every
+    frame regardless of phase);
+  - the on-screen touch controller is hidden (render gating excludes ROUTE_SELECT, as it does
+    SHOP_OPEN / INVENTORY_OPEN / WEAPON_INSPECT);
+  - `viewport.apply()` still runs every frame in Main.render() (CLAUDE.md rule — never gated on phase).
+
+The overlay itself is `render/RouteMapOverlay` — an order-3 STUB carrying the presented candidates and
+a commit callback (present(List<RouteNode>) / onNodeCommitted). Order-4/order-6 replace its body with
+real drawing + touch while keeping that present/commit contract. Order-3 auto-commits the FIRST
+presented candidate each frame to prove the pipeline end-to-end.
+
+Hook points (World.java)
+------------------------
+  onDescentRequested()   — staging exit or a route-map-less world goes straight to FADING_OUT;
+                           otherwise it extends the map if needed, presents getSelectableNext() and
+                           enters ROUTE_SELECT. If SHOW_FORCED_NODE_CARD is false and the only pick is
+                           a forced BOSS/REGION_GATE, it auto-commits instead of showing a card.
+  commitRouteNode(next)  — routeMap.commitTo(next); pendingNode = next; append the node id to the run
+                           route string; then FADING_OUT (hands back to the existing fade machinery).
+  FADING_OUT completion  — at staging exit: routePlan = RegionPlan.defaultPlan();
+                           routeMap = routeMapGenerator.generate(runSeed, routePlan);
+                           autoCommitFirstNode() puts the cursor on a depth-1 node (floor 1 is entered,
+                           not chosen — the first real branch is the descent FROM floor 1).
+                           Every floor is then built with rebuildForLevel(buildNextFloor()).
+
+The pipeline (buildFloorForNode)
+--------------------------------
+  1. NodeTypeDefinition  = RouteRegistries.nodeTypes().get(node.type)
+  2. NodeLevelProfile    = RouteRegistries.levelProfiles().getOrDefault(def.levelProfileId())
+  3. LevelPlan plan      = profile.resolve(node, depth, floorSeed(runSeed, depth))
+                           -> { GeneratorId, LevelGenConfig, List<GuaranteedContent> }
+  4. ILevelGenerator     = RouteRegistries.generators().create(plan.generatorId(), seed, plan.config())
+  5. Level level         = generator.generate(depth)
+  6. for each guarantee: guarantee.applyTo(level)   (post-generation, so any generator can host any
+                                                     node's guarantees — generators and node contents
+                                                     stay orthogonal)
+  then rebuildForLevel(level) exactly as before (re-seeds enemies, rolls shop stock, places chips…).
+
+Order-3 ships ONE profile: `DefaultCombatProfile`, registered under "combat_standard" AND set as the
+registry FALLBACK, so every node type resolves to a playable combat floor before order-7 adds the
+bespoke CACHE/REST/SHOP/MYSTERY/EVENT/BOSS profiles. Guarantee lists are empty until order-7.
+
+Boss floors: `GameMath.isBossFloor(depth)` stays the single authority. DefaultCombatProfile returns
+GeneratorId.BOSS_ARENA on any boss depth, and RouteMapGenerator already forced a BOSS node there, so
+the two agree by construction.
+
+DEPTH RAMP INVARIANT (roguelike_order_16)
+-----------------------------------------
+A node changes only the KIND/flavour of a floor and its rewards — NEVER the depth. The RAW
+currentDepth is threaded straight through to generate(depth) and the enemy scaler. Choosing a "safe"
+node costs loot/tempo, never the clock. No NodeLevelProfile may override the depth it is handed.
+
+RUN TELEMETRY
+-------------
+Each commit appends the node's id to `RunStats.routeString` (RunStats.recordRouteNode /
+getRouteString) — a compact, shareable summary of the incursion, e.g.
+"cache-event-elite-combat-boss-…". World also logs "RouteMap" build/commit lines to Gdx.app.log.
+
+Fallback: file-loaded / test worlds (`new World(Level)` / `new World(String)`) never build a route
+map; buildNextFloor() falls back to the depth-driven pickLevelGenerator so they still descend.
