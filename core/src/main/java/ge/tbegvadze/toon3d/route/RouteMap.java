@@ -50,6 +50,25 @@ public final class RouteMap {
         return Collections.unmodifiableList(view);
     }
 
+    /** The number of layers (hops) currently in the map. */
+    public int getLayerCount() {
+        return layers.size();
+    }
+
+    /**
+     * Appends freshly generated layers to the end of the map (endless-mode lazy extension, order-2).
+     * The caller (the generator) must have already wired the incoming edges from the current final
+     * layer's nodes into the first appended layer, since those existing node instances are the real,
+     * mutable ones returned by {@link #getLayers()}. The lists are defensively copied.
+     *
+     * @param newLayers outer list = new hops appended in order; each inner list = that layer's nodes
+     */
+    public void appendLayers(List<List<RouteNode>> newLayers) {
+        for (List<RouteNode> layer : newLayers) {
+            layers.add(new ArrayList<>(layer));
+        }
+    }
+
     /** The act bands. Populated by the generator (order-2); empty until then. */
     public List<RouteRegion> getRegions() {
         return Collections.unmodifiableList(regions);

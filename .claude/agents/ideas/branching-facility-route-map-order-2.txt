@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Progression
 TITLE: Route Map — Part 2: Random Route-Graph Generation
 CREATED: 2026-07-08
@@ -144,3 +144,33 @@ LIVING DOC CONTRACT
 On implementation: flip STATUS to IMPLEMENTED and update the "Map generation & regions" section
 of docs/route-map-system.txt (created in order-11) — the graph rules, the weight table, the region
 bands, and the exact anti-starvation guards, so other agents can reason about run pacing.
+
+IMPLEMENTATION NOTES (order-2)
+==============================
+Delivered:
+- route/RouteMapGenerator.java — layered forward-only DAG, proportional +/-1-lane wiring with
+  orphan/dead-end repair, boss convergence via GameMath.isBossFloor, node-type roll + anti-clump
+  (per-layer) and anti-starvation (sliding-window) guards, combat-generator assignment from each
+  region's biased standard pool, affix roll HOOK (empty catalog by default; setters for order-9),
+  and endless lazy region extension.
+- route/RegionSpec.java + route/RegionPlan.java — data-driven act bands (A/B/C + endless BREACH),
+  per-type and per-generator weight multipliers, RegionPlan.defaultPlan() and withAppendedBreachBand().
+- route/RouteRng.java — deterministic SplitMix64 stream (math in GameMath).
+- GameMath: splitMix64, mixSeed, weightedChoiceIndex, projectedLaneCentre, lanesConnectable
+  (all with the mandatory derivation comment blocks).
+- util/RouteMapConstants.java — filled with base weights (order-2 table 34/14/14/11/11/10/6),
+  branch/spread, region bands + bias tables, guard windows, affix chances, extension distance.
+- RouteMap.appendLayers()/getLayerCount() added for lazy extension.
+- Tests: core/src/test/.../route/RouteMapGeneratorTest.java (14 tests).
+
+Determinism model: each region band is generated from mixSeed(runSeed, regionIndex) and only ever
+mutates its OWN layers (earlier bands are read-only context for the boundary-straddling window
+guards), so a lazily-appended band is byte-identical to generating the extended plan up front.
+
+Enum constraint: RouteNodeType and GeneratorId are fixed enums, so the "add a MOCK type/generator"
+extensibility tests are realised as "every registered pool type/generator appears across many maps"
+(the pool is always read from the registry, so a newly-registered one would appear identically).
+
+Deferred: docs/route-map-system.txt does not exist yet (order-11 owns it); the living-doc update
+lands with that file. No World wiring here — order-3 owns calling generate() and reading
+node.chosenGeneratorId.

@@ -3370,4 +3370,170 @@ public final class GameMath {
         if (alignment <= -backThreshold)  return backMultiplier;
         return sideMultiplier;
     }
+
+    // =========================================================================
+    // ROUTE MAP — SPLITMIX64 PSEUDO-RANDOM FINALIZER
+    // =========================================================================
+    /*
+     * Formula: splitMix64
+     * Derivation / explanation:
+     *   The standard SplitMix64 finalizer (Steele, Lea & Flood 2014). Given any
+     *   64-bit state it returns a well-mixed 64-bit output where every input bit
+     *   influences (on average) half the output bits:
+     *
+     *     z = state
+     *     z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9
+     *     z = (z ^ (z >>> 27)) * 0x94D049BB133111EB
+     *     z =  z ^ (z >>> 31)
+     *
+     *   The route-map generator advances a state by the 64-bit golden-ratio
+     *   increment (0x9E3779B97F4A7C15) between draws and passes each new state
+     *   through this finalizer, giving an equidistributed, reproducible stream of
+     *   random longs from a single seed.
+     * Edge cases:
+     *   state = 0 still produces a non-zero, well-mixed output (the added golden
+     *   increment upstream guarantees the state is stepped before finalizing).
+     *   Java long overflow wraps arithmetically, which is exactly what a hash wants.
+     */
+    public static long splitMix64(long state) {
+        long mixed = state;
+        mixed = (mixed ^ (mixed >>> 30)) * 0xBF58476D1CE4E5B9L;
+        mixed = (mixed ^ (mixed >>> 27)) * 0x94D049BB133111EBL;
+        mixed =  mixed ^ (mixed >>> 31);
+        return mixed;
+    }
+
+    // =========================================================================
+    // ROUTE MAP — SEED MIX (independent sub-stream derivation)
+    // =========================================================================
+    /*
+     * Formula: mixSeed
+     * Derivation / explanation:
+     *   Folds a salt into a base seed to spawn an INDEPENDENT deterministic
+     *   sub-stream — used by endless-mode region extension, which re-seeds each
+     *   new region band from mix(runSeed, regionIndex) so band N is reproducible
+     *   without pre-allocating an infinite graph:
+     *
+     *     mixSeed(seed, salt) = splitMix64(seed + salt * 0x9E3779B97F4A7C15)
+     *
+     *   Multiplying the salt by the golden-ratio constant before adding decorrelates
+     *   adjacent salts (regionIndex 3 vs 4) so their streams share no visible pattern.
+     * Edge cases:
+     *   seed = 0 and salt = 0 still yields a mixed value via splitMix64. Overflow
+     *   wraps arithmetically. Negative salt wraps correctly like any integer input.
+     */
+    public static long mixSeed(long seed, long salt) {
+        return splitMix64(seed + salt * 0x9E3779B97F4A7C15L);
+    }
+
+    // =========================================================================
+    // ROUTE MAP — WEIGHTED CHOICE INDEX
+    // =========================================================================
+    /*
+     * Formula: weightedChoiceIndex
+     * Derivation / explanation:
+     *   Picks an index into a weight array with probability proportional to each
+     *   weight, given a uniform roll in [0, 1):
+     *
+     *     total      = sum(weights)
+     *     target     = roll01 * total
+     *     cumulative = running sum; return the first index whose running sum > target
+     *
+     *   This is the inverse-CDF (roulette-wheel) sample. Feeding it a reproducible
+     *   roll (from splitMix64) makes every node-type / generator pick deterministic.
+     * Edge cases:
+     *   total <= 0 (all weights zero or empty array) → returns 0 as a safe default
+     *   (the caller is expected to guarantee a non-empty pool; falling back to the
+     *   first index never throws and never loops).
+     *   Floating-point rounding could leave target == total exactly at roll01≈1; the
+     *   final "return last index" guard covers that so the method always returns a
+     *   valid index.
+     */
+    public static int weightedChoiceIndex(float[] weights, float roll01) {
+        if (weights.length == 0) {
+            return 0;
+        }
+        float total = 0f;
+        for (float weight : weights) {
+            if (weight > 0f) {
+                total += weight;
+            }
+        }
+        if (total <= 0f) {
+            return 0;
+        }
+        float target     = roll01 * total;
+        float cumulative = 0f;
+        for (int index = 0; index < weights.length; index++) {
+            if (weights[index] > 0f) {
+                cumulative += weights[index];
+                if (target < cumulative) {
+                    return index;
+                }
+            }
+        }
+        return weights.length - 1;
+    }
+
+    // =========================================================================
+    // ROUTE MAP — PROJECTED LANE CENTRE (layer-to-layer lane mapping)
+    // =========================================================================
+    /*
+     * Formula: projectedLaneCentre
+     * Derivation / explanation:
+     *   The route graph stacks layers of differing widths; to keep connector lines
+     *   readable, a node in one layer wires to next-layer nodes near its own lateral
+     *   position. This maps a source lane onto the target layer proportionally:
+     *
+     *     centre = round( fromLane * (toWidth - 1) / (fromWidth - 1) )   clamped [0, toWidth-1]
+     *
+     *   so lane 0 maps to lane 0, the last source lane maps to the last target lane,
+     *   and interior lanes spread evenly. The generator connects a source to its
+     *   projected centre and (rolled) the centre's +/-1 neighbours — the Slay-the-Spire
+     *   "no edge crosses more than one lane" readability rule.
+     * Edge cases:
+     *   toWidth <= 1 (a boss/gate convergence layer) → returns 0, the lone target lane.
+     *   fromWidth <= 1 (a single source spreading outward) → returns the middle target
+     *   lane (toWidth-1)/2 as a neutral centre; the generator treats single sources as
+     *   fully spreading, so this value is only a fallback.
+     */
+    public static int projectedLaneCentre(int fromLane, int fromWidth, int toWidth) {
+        if (toWidth <= 1) {
+            return 0;
+        }
+        if (fromWidth <= 1) {
+            return (toWidth - 1) / 2;
+        }
+        int centre = Math.round(fromLane * (float) (toWidth - 1) / (float) (fromWidth - 1));
+        if (centre < 0) {
+            return 0;
+        }
+        if (centre > toWidth - 1) {
+            return toWidth - 1;
+        }
+        return centre;
+    }
+
+    // =========================================================================
+    // ROUTE MAP — LANE CONNECTABILITY (the +/-1 lane-crossing test)
+    // =========================================================================
+    /*
+     * Formula: lanesConnectable
+     * Derivation / explanation:
+     *   Whether a source lane may legally wire to a given target lane under the
+     *   "edges do not cross more than one lane" rule: the target must lie within
+     *   +/-1 of the source's projected centre.
+     *
+     *     |toLane - projectedLaneCentre(fromLane, fromWidth, toWidth)| <= 1
+     *
+     *   Used both to place spread edges and to assert overlay readability in tests.
+     * Edge cases:
+     *   Convergence/divergence layers (width 1 on either side) are handled by the
+     *   generator as full fan-in / fan-out and are intentionally exempt from this
+     *   test; callers only apply it to parallel sections (both widths > 1).
+     */
+    public static boolean lanesConnectable(int fromLane, int fromWidth, int toLane, int toWidth) {
+        int centre = projectedLaneCentre(fromLane, fromWidth, toWidth);
+        return Math.abs(toLane - centre) <= 1;
+    }
 }

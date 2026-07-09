@@ -33,13 +33,13 @@ public final class RouteMapConstants {
     // BOSS and REGION_GATE are FORCED convergence nodes the generator injects deliberately, so
     // they carry no pool weight. Order-2 consumes these weights when it builds the random pool.
 
-    public static final float NODE_WEIGHT_COMBAT  = 1.00f;
-    public static final float NODE_WEIGHT_ELITE   = 0.35f;
-    public static final float NODE_WEIGHT_CACHE   = 0.45f;
-    public static final float NODE_WEIGHT_SHOP    = 0.30f;
-    public static final float NODE_WEIGHT_REST    = 0.30f;
-    public static final float NODE_WEIGHT_MYSTERY = 0.40f;
-    public static final float NODE_WEIGHT_EVENT   = 0.35f;
+    public static final float NODE_WEIGHT_COMBAT  = 34f;
+    public static final float NODE_WEIGHT_ELITE   = 14f;
+    public static final float NODE_WEIGHT_CACHE   = 14f;
+    public static final float NODE_WEIGHT_SHOP    = 11f;
+    public static final float NODE_WEIGHT_REST    = 11f;
+    public static final float NODE_WEIGHT_MYSTERY = 10f;
+    public static final float NODE_WEIGHT_EVENT   = 6f;
 
     // -------------------------------------------------------------------------
     // Branch width — how many nodes a single layer may hold
@@ -49,6 +49,105 @@ public final class RouteMapConstants {
 
     public static final int BRANCH_WIDTH_MINIMUM = 2;
     public static final int BRANCH_WIDTH_MAXIMUM = 4;
+
+    /**
+     * Probability (0..1) that a source node grows an extra edge to one of its projected lane's
+     * neighbours, on top of the guaranteed centre edge. Higher = more cross-connected, busier map.
+     */
+    public static final float BRANCH_SPREAD_CHANCE = 0.55f;
+
+    // -------------------------------------------------------------------------
+    // Region / act bands — the descent's narrated shape
+    // -------------------------------------------------------------------------
+    // A region spans REGION_BAND_SIZE depths ending in a boss floor (isBossFloor(lastDepth) holds
+    // because REGION_BAND_SIZE == Constants.BOSS_FLOOR_INTERVAL). The first FIXED_REGION_COUNT regions
+    // are hand-named acts; every region beyond that is an endless "THE BREACH" cycle, generated lazily.
+
+    public static final int REGION_BAND_SIZE   = 5;
+    public static final int FIXED_REGION_COUNT = 3;
+
+    public static final String REGION_A_NAME = "OUTER FACILITY";
+    public static final String REGION_B_NAME = "RESEARCH WING";
+    public static final String REGION_C_NAME = "REACTOR DEPTHS";
+    public static final String REGION_D_NAME = "THE BREACH";
+
+    public static final String REGION_A_THEME = "outer_facility";
+    public static final String REGION_B_THEME = "research_wing";
+    public static final String REGION_C_THEME = "reactor_depths";
+    public static final String REGION_D_THEME = "the_breach";
+
+    // -------------------------------------------------------------------------
+    // Per-region node-type weight multipliers (scale the base weights above)
+    // -------------------------------------------------------------------------
+    // 1.0 = unchanged. >1 weights a type UP in that region, <1 down. These give each act a distinct
+    // pacing feel without hard-coding any node list — the roll still reads every registered type.
+
+    // Region A "OUTER FACILITY" — leans safe: more caches, fewer elites (footing for the run).
+    public static final float REGION_A_MULTIPLIER_COMBAT  = 1.15f;
+    public static final float REGION_A_MULTIPLIER_ELITE   = 0.50f;
+    public static final float REGION_A_MULTIPLIER_CACHE   = 1.35f;
+    public static final float REGION_A_MULTIPLIER_MYSTERY = 0.80f;
+
+    // Region B "RESEARCH WING" — leans exploratory: more mystery/event signals.
+    public static final float REGION_B_MULTIPLIER_MYSTERY = 1.40f;
+    public static final float REGION_B_MULTIPLIER_EVENT   = 1.50f;
+    public static final float REGION_B_MULTIPLIER_ELITE   = 1.10f;
+
+    // Region C "REACTOR DEPTHS" — leans lethal: more elites, fewer safe havens.
+    public static final float REGION_C_MULTIPLIER_ELITE = 1.60f;
+    public static final float REGION_C_MULTIPLIER_REST  = 0.75f;
+    public static final float REGION_C_MULTIPLIER_SHOP  = 0.85f;
+
+    // Region D "THE BREACH" (endless) — relentless: elites up, relief scarce but never absent.
+    public static final float REGION_D_MULTIPLIER_ELITE = 1.80f;
+    public static final float REGION_D_MULTIPLIER_REST  = 0.70f;
+    public static final float REGION_D_MULTIPLIER_SHOP  = 0.70f;
+
+    // -------------------------------------------------------------------------
+    // Per-region combat-generator weight multipliers (scale the standard pool)
+    // -------------------------------------------------------------------------
+    // The combat-node generator pool is ALWAYS the registry's standard pool, so a newly registered
+    // generator appears automatically. A region merely LEANS toward biomes by weighting existing ids
+    // up; an unlisted generator keeps weight 1.0. Values keyed by GeneratorId.stableId() at build.
+
+    public static final float REGION_B_GENERATOR_WEIGHT_ROOMS   = 1.75f; // research wing = built rooms
+    public static final float REGION_C_GENERATOR_WEIGHT_CAVERN  = 1.90f; // reactor depths = raw caverns
+    public static final float REGION_D_GENERATOR_WEIGHT_CAVERN  = 1.60f; // the breach = collapsed caverns
+
+    // -------------------------------------------------------------------------
+    // Anti-starvation / anti-clump guards (deterministic post-pass over the roll)
+    // -------------------------------------------------------------------------
+
+    /** Sliding window (in layers) over which no more than SHOP_MAX_PER_WINDOW shops may appear. */
+    public static final int SHOP_WINDOW_LAYERS = 4;
+    /** Max SHOP nodes permitted inside any SHOP_WINDOW_LAYERS-wide window (economy pacing). */
+    public static final int SHOP_MAX_PER_WINDOW = 2;
+    /**
+     * The player must be OFFERED a CACHE or REST at least once every RESOURCE_RELIEF_WINDOW layers,
+     * protecting the finite-ammo economy. "Offered" = present as a candidate, not forced to take.
+     */
+    public static final int RESOURCE_RELIEF_WINDOW = 4;
+    /** Hard cap on repair iterations per guard so an over-constrained pool can never infinite-loop. */
+    public static final int GUARD_REPAIR_ATTEMPT_CAP = 64;
+
+    // -------------------------------------------------------------------------
+    // Affix roll hook (ELITE / MYSTERY) — order-9 defines the catalog; order-2 reserves the roll
+    // -------------------------------------------------------------------------
+
+    /** Probability an ELITE node rolls an affix, IF an affix catalog has been supplied (else 0). */
+    public static final float AFFIX_ROLL_CHANCE_ELITE   = 0.60f;
+    /** Probability a MYSTERY node rolls an affix, IF an affix catalog has been supplied (else 0). */
+    public static final float AFFIX_ROLL_CHANCE_MYSTERY = 0.25f;
+
+    // -------------------------------------------------------------------------
+    // Endless-mode lazy extension
+    // -------------------------------------------------------------------------
+
+    /**
+     * When the player's current depth comes within this many layers of the map's final layer, the
+     * generator appends the next region band so the descent never runs out of graph.
+     */
+    public static final int EXTENSION_TRIGGER_DISTANCE = 3;
 
     // -------------------------------------------------------------------------
     // Fog / reveal defaults
