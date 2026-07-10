@@ -1,0 +1,191 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Route Map — Nav Console Legibility Fixes (border + CRT + contrast)
+CREATED: 2026-07-10
+---
+
+PREREQUISITE: The "FACILITY NAV" route-select console already ships (route-map order-4 LOOK,
+order-5 icons, order-6 touch). This is a POLISH / BUG-FIX pass on that existing console, NOT a
+new feature. Nothing here changes layout math, selection flow, or the graph — only the visual
+treatment constants and a couple of small draw-order tweaks that make the schematic readable.
+
+OWNS (files touched)
+====================
+- core/.../util/RouteMapConstants.java   — the visual-spec constants (all values live here first).
+- core/.../render/RouteMapOverlayRenderer.java — drawCrtPass(), drawScrim(), and (optional) a new
+  opaque "screen" fill for the map viewport band.
+
+ABSOLUTE CONSTRAINT (unchanged): every pixel is procedurally drawn — ShapeRenderer primitives +
+built-in BitmapFont. No textures, no FrameBuffer in the game loop (viewport-safe rule). These
+fixes are all constant nudges and existing-primitive draws; none of them break that contract.
+
+WHY (source: player screenshot, depth 0 -> 1, "UNKNOWN SECTOR")
+==============================================================
+The console renders, but the map is hard to read. Two problems the player called out, plus
+several contributing causes found in the renderer:
+
+  (1) "Parts of the roadmap are overlaid by a black border that does not look nice."
+  (2) "The screen-like effect is too strong and reduces clear visibility."
+
+Everything below is confirmed against RouteMapOverlayRenderer.drawCrtPass() /
+drawScrim() and the RouteMapConstants CRT + node-card values.
+
+----------------------------------------------------------------------------------------
+ISSUE 1 — The "black border" over the map  (player complaint #1)
+----------------------------------------------------------------------------------------
+CAUSE: drawCrtPass() paints a VIGNETTE — four opaque-ish black rectangles hugging the map
+viewport edges:
+
+    VIGNETTE_ALPHA = 0.34      // 34% black
+    VIGNETTE_BAND  = 64f       // 64 world-units thick on EACH edge
+
+The top band (y 576..640) and bottom band (150..214) sit directly on top of the top-most and
+bottom-most node rows. Because node rows are laid out right up to the viewport edges
+(MAP_BOTTOM_PAD = 46, and the lookahead rows climb to MAP_VIEWPORT_TOP_Y), the top row of "?"
+cards gets its upper third painted over with 34% black — that is the "black border cutting the
+cards" in the screenshot. The left/right bands do the same to the outer lanes.
+
+Made worse by a layout pinch at the top: MAP_VIEWPORT_TOP_Y = 640 but TITLE_PLATE_BOTTOM_Y = 648
+(only an 8 px gap), while MAP_CULL_MARGIN_TOP = 96 lets a card centre climb to y = 736 — i.e.
+ABOVE the title plate. So a distant top row can draw partly behind the title plate / hazard trim
+AND under the vignette top band at the same time. That stack reads as a hard black edge slicing
+the cards.
+
+FIX (pick A; B is the stronger version):
+  A. Kill the top and bottom vignette bands entirely and soften the sides. The vignette adds
+     almost nothing on a flat schematic and costs legibility:
+        VIGNETTE_ALPHA : 0.34  -> 0.12
+        VIGNETTE_BAND  : 64f   -> 40f
+     …and in drawCrtPass() draw ONLY the left and right bands (delete the two full-width top and
+     bottom rect() calls). Rationale: horizontal edge darkening is what eats the card rows; thin
+     side darkening alone still gives the faint "tube curvature" hint without touching content.
+  B. (Recommended) Remove the vignette bands completely (drop all four rect() calls) and instead
+     lean on the new opaque screen panel from ISSUE 3 for the "inside a display" feel. Cleaner and
+     one fewer moving part. Keep the constants but set VIGNETTE_ALPHA = 0f so the pass no-ops and
+     the values stay documented.
+
+  Also close the top pinch so no row can hide under the title plate:
+        MAP_CULL_MARGIN_TOP : 96f -> ~24f   (a card centre may no longer sit above the plate)
+     OR nudge MAP_VIEWPORT_TOP_Y down to ~624 so there's real breathing room under the plate.
+     Verify the top lookahead row still fully fits after the change (it is already shrunk by the
+     DISTANT_SCALE perspective fade, so this is safe).
+
+----------------------------------------------------------------------------------------
+ISSUE 2 — CRT "screen effect" too strong  (player complaint #2)
+----------------------------------------------------------------------------------------
+CAUSE: three stacked treatments in drawCrtPass()/flicker() over-darken the hologram:
+
+    SCANLINE_ALPHA   = 0.10    // dark line every 3 px across the ENTIRE viewport
+    SCANLINE_SPACING = 3f      // very dense -> a near-continuous grey wash
+    FLICKER_AMPLITUDE = 0.02   // whole-hologram dim that multiplies EVERY node/label/conduit alpha
+
+With SCANLINE_SPACING = 3 and a 1 px line, one third of every card is covered by a 10%-black line,
+and flicker() further scales down all content alpha every frame. On the low-contrast cards (see
+ISSUE 4) this is what "reduces clear visibility."
+
+FIX (tune down, don't remove — the CRT vibe is the console's identity):
+        SCANLINE_ALPHA   : 0.10 -> 0.05
+        SCANLINE_SPACING : 3f   -> 4f      (fewer, thinner-feeling lines; keeps the texture)
+        FLICKER_AMPLITUDE: 0.02 -> 0.012   (subtler breathing; labels stop shimmering)
+     SYNC_FLASH is already rare/cheap (every 4.5 s, alpha 0.06) — leave it, or drop to 0.04.
+     Keep SCANLINE_SCROLL_SPEED as-is; motion is fine, it's the darkness that hurt.
+
+----------------------------------------------------------------------------------------
+ISSUE 3 — The frozen 3D world bleeds through the map (found while investigating)
+----------------------------------------------------------------------------------------
+CAUSE: drawScrim() lays a single navy scrim at OVERLAY_SCRIM_ALPHA = 0.72 over the whole screen,
+so 28% of the paused 3D scene shows through UNDER the hologram. In the screenshot this is the
+faint green "EQUIPPED / RAILGUN" HUD text and wall shapes ghosting behind the cards — visual
+noise that fights the schematic and lowers contrast on the translucent cards.
+
+FIX: give the map its OWN clean display surface instead of relying on the see-through scrim.
+Add a near-opaque dark "screen" panel filling just the map viewport band, drawn AFTER the scrim
+and BEFORE the glow/conduits/cards. New constants:
+
+        MAP_SCREEN_FILL_ALPHA = 0.90f          // near-opaque phosphor screen
+        // colour: reuse palette.scrimNavy (or a slightly cooler near-black, e.g. a new
+        // palette.screenBlack ≈ (0.03, 0.05, 0.07)) so the cyan hologram pops.
+
+In render(), between drawScrim() and drawBezel()/drawGlowPass(), draw one filled rect:
+        (0, MAP_VIEWPORT_BOTTOM_Y) .. (worldWidth, MAP_VIEWPORT_TOP_Y)
+This is the single biggest readability win: the schematic now sits on a real screen, the world
+stops bleeding through, and the additive glow reads against a consistent dark backdrop. Keep the
+outer OVERLAY_SCRIM_ALPHA the same (the world OUTSIDE the map band can still ghost through the
+bezel — that's fine and diegetic).
+
+NOTE: draw the screen panel with NORMAL alpha blending BEFORE the additive glow pass so the glow
+still adds on top. Do not draw it after the cards.
+
+----------------------------------------------------------------------------------------
+ISSUE 4 — Node cards are barely legible (found while investigating)
+----------------------------------------------------------------------------------------
+CAUSE: the card bodies are almost transparent and the glow blobs swamp them:
+
+    NODE_CARD_BODY_ALPHA = 0.22    // card fill is 22% -> the "?" and labels float on near-nothing
+    GLOW_RADIUS = 92f, GLOW_RING_COUNT = 5, GLOW_RING_ALPHA = 0.13   // big soft additive discs
+
+In the screenshot the AVAILABLE nodes are giant green/blue glow BLOBS with the actual card + label
+lost inside them. The glow was meant to be a halo, not a fog bank.
+
+FIX (do this together with ISSUE 3 — on the new opaque screen these can stay tasteful):
+        NODE_CARD_BODY_ALPHA : 0.22 -> ~0.34   (card reads as a solid-ish panel, label has a base)
+        GLOW_RADIUS          : 92f  -> ~70f     (halo hugs the card instead of bleeding two cards over)
+        GLOW_RING_ALPHA      : 0.13 -> ~0.10    (a touch dimmer so the halo doesn't wash the label)
+     Leave FOCUS_GLOW_BOOST as-is so the focused card still clearly pops.
+     Optional: bump NODE_LABEL drop-shadow contrast is unnecessary once the body alpha is up.
+
+----------------------------------------------------------------------------------------
+SUGGESTED CONSTANT DIFF (one place — RouteMapConstants.java)
+----------------------------------------------------------------------------------------
+    OVERLAY_SCRIM_ALPHA   0.72  -> keep (outer world dim); ADD the screen panel instead
+  + MAP_SCREEN_FILL_ALPHA (new) = 0.90f
+
+    // CRT
+    SCANLINE_ALPHA        0.10  -> 0.05
+    SCANLINE_SPACING      3f    -> 4f
+    VIGNETTE_ALPHA        0.34  -> 0.0   (Issue 1 option B) or 0.12 (option A)
+    VIGNETTE_BAND         64f   -> 40f   (only if keeping option A)
+    FLICKER_AMPLITUDE     0.02  -> 0.012
+
+    // layout pinch
+    MAP_CULL_MARGIN_TOP   96f   -> 24f   (or drop MAP_VIEWPORT_TOP_Y 640 -> 624)
+
+    // card contrast
+    NODE_CARD_BODY_ALPHA  0.22  -> 0.34
+    GLOW_RADIUS           92f   -> 70f
+    GLOW_RING_ALPHA       0.13  -> 0.10
+
+All numbers are starting points — tune on device. Change them in RouteMapConstants ONLY; never
+inline (project rule).
+
+----------------------------------------------------------------------------------------
+IMPLEMENTATION ORDER (fastest path to the win)
+----------------------------------------------------------------------------------------
+1. Add MAP_SCREEN_FILL_ALPHA + the opaque screen-panel rect in render() (ISSUE 3). Biggest
+   single readability jump; also makes the rest safe to tune.
+2. Remove/zero the vignette top+bottom bands and close the top cull pinch (ISSUE 1).
+3. Soften scanlines + flicker (ISSUE 2).
+4. Raise card body alpha, shrink glow (ISSUE 4).
+5. Re-run on desktop (./gradlew lwjgl3:run), portal into a ROUTE_SELECT, eyeball: no black edge
+   slicing the top card row, world no longer ghosts through the map band, "?" labels crisp,
+   glow is a halo not a blob. Then confirm on an Android build (target platform).
+
+DO NOT
+======
+- Do NOT remove the CRT treatment wholesale — the phosphor/scanline identity is the console's
+  charm; the fix is DIALLING IT DOWN, not deleting it.
+- Do NOT introduce a per-frame FrameBuffer for the screen panel or glow — the opaque rect + the
+  existing additive-disc glow are enough and stay viewport-safe.
+- Do NOT touch selection/commit logic, layout math, or the graph — this is a pure visual pass.
+- Do NOT hardcode any of the new values in the renderer — add them to RouteMapConstants first.
+
+VERIFICATION CHECKLIST
+======================
+[ ] Top row of node cards is fully visible — no black band clipping their upper edge.
+[ ] No node card centre draws above/behind the title plate.
+[ ] Frozen 3D world (weapon/HUD text, walls) no longer ghosts through the map band.
+[ ] "?" glyphs and node labels are clearly readable against the card body.
+[ ] Glow reads as a halo around each live node, not a blob that swallows the card.
+[ ] Scanlines still visible as texture but no longer a grey wash over content.
+[ ] Focused card + ENGAGE pulse still clearly stand out.
+[ ] Red-alert trim, region tint, and commit flare all still work (regression check).
