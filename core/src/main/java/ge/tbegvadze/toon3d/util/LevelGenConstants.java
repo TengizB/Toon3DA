@@ -423,4 +423,25 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_CAVE_BIOME_LANDMARK_CHANCE  = 0.45f;
     // Minimum Chebyshev distance from player spawn before any solid biome prop appears.
     public static final int   LEVEL_GEN_CAVE_BIOME_PROP_SAFE_RADIUS = 4;
+
+    // -------------------------------------------------------------------------
+    // MED-BAY generator (route-map order-8) — the curated REST-node clinic
+    // -------------------------------------------------------------------------
+    // A tiny hand-feeling clinic: one approach corridor -> a central ward holding the
+    // auto-doc heal station -> 1-2 cryo-pod alcoves -> an exit past the auto-doc. The
+    // layout is fixed-ish and deterministic from the floor seed (only the alcove side and
+    // pod count vary), so the sanctuary reads the same calm way every time. All tiles come
+    // from docs/tile-symbols.txt; no new symbols. Emits ZERO enemy spawn points (the honest
+    // REST node is always safe — the map's icon language must stay trustworthy).
+
+    // Central ward footprint (walkable floor rectangle), centred on the grid.
+    public static final int   MED_BAY_WARD_WIDTH        = 16;
+    public static final int   MED_BAY_WARD_HEIGHT       = 10;
+    // 3-tile-wide approach corridor length, running left into the ward's mid row.
+    public static final int   MED_BAY_APPROACH_LENGTH   = 14;
+    public static final int   MED_BAY_APPROACH_HALF_WIDTH = 1; // 2*half+1 = 3 tiles wide
+    // Square cryo-pod alcove carved off the ward (top and/or bottom), floor side length.
+    public static final int   MED_BAY_ALCOVE_SIZE       = 4;
+    // Width (columns) of the 'N' reinforced-glass viewing window band on the ward's top wall.
+    public static final int   MED_BAY_WINDOW_WIDTH      = 4;
 }

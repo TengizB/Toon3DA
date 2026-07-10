@@ -445,4 +445,47 @@ public final class RouteMapConstants {
     public static final String ENGAGE_TEXT_DEFAULT   = "ENGAGE ▶";
     public static final String ENGAGE_TEXT_BOSS       = "DESCEND TO BOSS ▶";
     public static final String ENGAGE_TEXT_REGION_GATE = "BREACH BULKHEAD ▶";
+
+    // =========================================================================
+    // CALM NODE CONTENTS (order-8) — SUPPLY CACHE + MED-BAY / REST payoffs.
+    // =========================================================================
+    // These two nodes are the finite-ammo economy's release valves (roguelike_order_2): the
+    // player routed HERE by choice, paying with a skipped ELITE reward, so both deliver an
+    // unambiguous, deterministic-from-floorSeed payoff. Numbers tuned against
+    // docs/balance-rule-system.txt — enough to justify skipping a reward node, never so much
+    // it removes scarcity. Both nodes stay honestly SAFE so the map's icon language is
+    // trustworthy (a MYSTERY "med-bay ambush" is a DIFFERENT node, order-9).
+
+    // ---- SUPPLY CACHE (RouteNodeType.CACHE, profile "supply_cache") --------
+    /** Ammo boxes stamped in the cargo bay, spread across the player's OWNED ammo types. */
+    public static final int   CACHE_AMMO_BOXES      = 4;
+    /** Guaranteed field medkits ('H') in a cache. */
+    public static final int   CACHE_MEDKITS         = 1;
+    /** Guaranteed stim-packs ('+') in a cache (a small top-up alongside the medkit). */
+    public static final int   CACHE_STIMS           = 1;
+    /** Guaranteed armour pickups in a cache (shard 'a' shallow, vest 'A' deep). */
+    public static final int   CACHE_ARMOUR          = 1;
+    /** Depth at/after which the cache armour drop upgrades from a shard 'a' to a vest 'A'. */
+    public static final int   CACHE_ARMOUR_VEST_DEPTH = 6;
+    /** Crates ('C') stamped as depot set-dressing. */
+    public static final int   CACHE_CRATES          = 3;
+    /** Lockers ('L') stamped as depot set-dressing. */
+    public static final int   CACHE_LOCKERS         = 2;
+    /** Per-room medkit chance the cache config bumps (a depot is medkit-rich). */
+    public static final float CACHE_MEDKIT_CHANCE_PER_ROOM = 0.6f;
+    /** Per-room armour chance the cache config bumps. */
+    public static final float CACHE_ARMOUR_CHANCE_PER_ROOM = 0.4f;
+
+    // ---- MED-BAY / REST (RouteNodeType.REST, profile "rest_medbay") --------
+    /** The auto-doc heal-station prop tile. Reuses the holo-workstation 'W' (no new symbol); the
+     *  one-shot heal interactivity is logic layered on that tile by World, not a new tile. */
+    public static final char  HEAL_STATION_SYMBOL   = 'W';
+    /** One-time auto-doc heal, as a fraction of the player's max HP. */
+    public static final float REST_HEAL_FRACTION    = 0.35f;
+    /**
+     * Whether the auto-doc presents a 2-option choice (PATCH UP vs FIELD MOD) instead of a plain
+     * heal. Default OFF: the permanent-boon system it would tie into does not exist yet, so REST is
+     * an honest plain heal. Flip on once a boon system ships (levelup-stim-boon-choice-progression).
+     */
+    public static final boolean REST_OFFERS_CHOICE  = false;
 }

@@ -48,9 +48,12 @@ import ge.tbegvadze.toon3d.progression.UpgradeCardDeck;
 import ge.tbegvadze.toon3d.progression.Attribute;
 import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
+import ge.tbegvadze.toon3d.route.AmmoCacheRequest;
 import ge.tbegvadze.toon3d.route.EnemyBudgetOverride;
 import ge.tbegvadze.toon3d.route.GuaranteedContent;
+import ge.tbegvadze.toon3d.route.GuaranteedContentStamper;
 import ge.tbegvadze.toon3d.route.LevelPlan;
+import ge.tbegvadze.toon3d.route.Placement;
 import ge.tbegvadze.toon3d.route.NodeLevelProfile;
 import ge.tbegvadze.toon3d.route.NodeTypeDefinition;
 import ge.tbegvadze.toon3d.route.RegionPlan;
@@ -210,6 +213,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private VendingMachine machineInFront = null;
     /** Machine whose shop is currently open; null unless runPhase == SHOP_OPEN. */
     private VendingMachine openMachine    = null;
+
+    /**
+     * Charged auto-doc heal-station tiles on the current floor (route-map order-8 MED-BAY). Each entry
+     * is a {@code {tileColumn, tileRow}} pair; stepping adjacent to one triggers a one-time heal and
+     * removes it (consumed = powered down). Refreshed from the level on every floor rebuild. Empty on
+     * ordinary floors.
+     */
+    private java.util.List<int[]> chargedHealStations = new java.util.ArrayList<>();
 
     // -------------------------------------------------------------------------
     // Ground items — weapon pickups placed by LevelGenerator; rebuilt per floor
@@ -633,9 +644,59 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         for (GuaranteedContent guarantee : plan.guarantees()) {
             guarantee.applyTo(built);
         }
+        // Owned-ammo cache (order-8): the profile declares the intent; World fulfils it here because
+        // only World knows the arsenal, so a cache never dumps ammo the player can't use.
+        fulfillAmmoCache(built, plan.ammoCache(), seed);
         Gdx.app.log("RouteMap", "build depth=" + depth + " node=" + definition.id()
                 + " generator=" + plan.generatorId().stableId());
         return built;
+    }
+
+    /**
+     * Stamps a SUPPLY CACHE's ammo boxes across the player's OWNED ammo types (route-map order-8).
+     * The boxes are distributed as evenly as possible over the owned types, falling back to ALL ammo
+     * types if the player carries no ammo-using weapon (a melee-only run still gets a spread). Uses the
+     * same deterministic-from-floor-seed {@link GuaranteedContentStamper} the guarantees use, so a
+     * given (floor, arsenal) always lands the same boxes.
+     */
+    private void fulfillAmmoCache(Level targetLevel, AmmoCacheRequest request, long seed) {
+        if (targetLevel == null || request == null || request.boxCount() <= 0) return;
+        java.util.List<Character> ammoSymbols = collectOwnedAmmoSymbols();
+        if (ammoSymbols.isEmpty()) {
+            for (AmmoType ammoType : AmmoType.values()) {
+                ammoSymbols.add(ammoType.getPickupTileChar());
+            }
+        }
+        Placement placement = request.placement();
+        int typeCount = ammoSymbols.size();
+        int totalBoxes = request.boxCount();
+        // Even distribution: the first (totalBoxes % typeCount) types get one extra box.
+        for (int typeIndex = 0; typeIndex < typeCount; typeIndex++) {
+            int boxesForType = totalBoxes / typeCount + (typeIndex < totalBoxes % typeCount ? 1 : 0);
+            if (boxesForType <= 0) continue;
+            // Salt the seed per type so the stamper's per-symbol placement stays reproducible but the
+            // types don't all resolve against the same tile order.
+            long typeSeed = seed ^ (0x9E3779B97F4A7C15L * (typeIndex + 1L));
+            GuaranteedContentStamper.stamp(targetLevel, ammoSymbols.get(typeIndex), boxesForType,
+                    placement, typeSeed);
+        }
+    }
+
+    /** The distinct ammo-pickup symbols for the ammo types the player's equipped weapons consume. */
+    private java.util.List<Character> collectOwnedAmmoSymbols() {
+        java.util.List<Character> symbols = new java.util.ArrayList<>();
+        Loadout loadout = inventory.getLoadout();
+        if (loadout != null) {
+            for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+                Weapon weapon = loadout.getSlot(slotIndex);
+                if (weapon == null) continue;
+                AmmoType ammoType = weapon.getAmmoType();
+                if (ammoType == null) continue;
+                char symbol = ammoType.getPickupTileChar();
+                if (!symbols.contains(symbol)) symbols.add(symbol);
+            }
+        }
+        return symbols;
     }
 
     /**
@@ -815,6 +876,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // '@' solid tiles and skip them. 1-2 per non-boss floor (guaranteed presence).
         seedVendingMachines(targetLevel, currentDepth);
         shopMachineRenderer.setMachines(vendingMachines);
+
+        // Auto-doc heal stations (route-map order-8 MED-BAY): copy the tiles the level registered so
+        // the per-turn adjacency check can charge/consume them. Empty on ordinary floors.
+        chargedHealStations = new java.util.ArrayList<>();
+        for (int[] station : targetLevel.getHealStationTiles()) {
+            chargedHealStations.add(new int[]{station[0], station[1]});
+        }
 
         // Build ground items from weapon spawn points. Each item gets a pre-rolled
         // WeaponRoll so the compare card can show accurate stats before pickup.
@@ -1425,6 +1493,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             touchInputState.setUseMachineButtonVisible(machineInFront != null);
         }
 
+        // Auto-doc heal stations (order-8): a one-time free heal fires the moment the player steps
+        // adjacent to a still-charged station, reusing the medkit heal path. Consumed on use.
+        updateHealStations();
+
         if (touchInputState != null) {
             touchInputState.update(deltaTime);
         }
@@ -1688,6 +1760,38 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 tickEventBus.fireTick(playerTileColumn, playerTileRow, player, TickCause.SKIP_TURN);
             }
         }
+    }
+
+    /**
+     * Fires the auto-doc's one-time heal when the player is orthogonally adjacent to a charged
+     * heal-station tile (route-map order-8 MED-BAY). The heal reuses the medkit application path
+     * (HP + green event text + heal particles + edge vignette) and the station is consumed (removed)
+     * so it can never be farmed — one heal per station, one station per rest floor.
+     */
+    private void updateHealStations() {
+        if (chargedHealStations.isEmpty() || player == null || player.isDead()) return;
+        int playerColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
+        int playerRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
+        for (int index = 0; index < chargedHealStations.size(); index++) {
+            int[] station = chargedHealStations.get(index);
+            int manhattan = Math.abs(station[0] - playerColumn) + Math.abs(station[1] - playerRow);
+            if (manhattan > 1) continue; // not adjacent yet (the station tile itself is solid)
+            triggerAutoDocHeal();
+            chargedHealStations.remove(index);
+            return; // one heal per update; a rest floor has a single station anyway
+        }
+    }
+
+    /** Applies the auto-doc's one-shot heal, mirroring the medkit restore feedback. */
+    private void triggerAutoDocHeal() {
+        int healAmount = Math.round(player.getMaxHealth() * RouteMapConstants.REST_HEAL_FRACTION);
+        if (healAmount <= 0) return;
+        player.applyHealing(healAmount);
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("AUTO-DOC +" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
+        }
+        if (impactEffectSystem != null) impactEffectSystem.spawnHealParticles();
+        if (hitVignetteRenderer != null) hitVignetteRenderer.triggerHeal();
     }
 
     private void applyInventoryConsumableEffect() {

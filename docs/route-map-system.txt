@@ -92,8 +92,12 @@ Orthogonality trick — post-generation guarantees:
   factory and placed by `GuaranteedContentStamper` (pure, deterministic from floorSeed):
     Guarantees.pickup(symbol, count, Placement, seed)   — PICKUP kind (e.g. '6' ammo box, 'H' medkit)
     Guarantees.prop(symbol,   count, Placement, seed)   — PROP kind   (e.g. '=' weapon rack, 'C' crate)
-  (STATION heal/vending, forced SPAWN, and TILE_THEME repaint kinds arrive with the profiles that need
-  them in order-8/9 — no unused machinery ships early.)
+    Guarantees.brightenFloors()                         — TILE_THEME kind (order-8): promotes every
+                                                          'u'/'f' floor tile to lit 'l' for a CALM read
+  (Forced SPAWN and richer TILE_THEME repaint kinds arrive with the profiles that need them in
+  order-9 — no unused machinery ships early. The STATION heal kind landed in order-8 not as a
+  GuaranteedContent — a station needs runtime state World owns — but as a Level heal-station registry;
+  see CALM NODES below.)
   Placement (…toon3d.route.Placement): NEAR_SPAWN | NEAR_EXIT | FARTHEST_ROOM | CENTER_ROOM |
   SCATTERED | GATED_ROOM. Resolved against the floor's 'p' spawn / '>' exit anchors and walkable-tile
   distances. The stamper writes ONLY on legal walkable tiles — never over a wall, prop, column, door,
@@ -113,7 +117,10 @@ V1 profile catalog (levelProfileId -> profile):
                                             guaranteed on every floor by World.seedVendingMachines)
   boss            -> BossProfile           (order-7: forwards to GeneratorId.BOSS_ARENA; the boss is
                                             seeded by BossFloorController)
-  supply_cache / rest_medbay               -> order-8   (CACHE / REST)
+  supply_cache    -> CacheProfile          (order-8: bright depot, calm budget, owned-ammo + medkit +
+                                            armour + crates payoff; see CALM NODES)
+  rest_medbay     -> RestProfile           (order-8: MedBayGenerator clinic + auto-doc heal station;
+                                            see CALM NODES)
   elite_hotzone / mystery                  -> order-9   (ELITE / MYSTERY)
   event / region_gate                      -> order-10  (EVENT / GATE)
   Until a bespoke profile is registered, the FALLBACK (DefaultCombatProfile) keeps that node type
@@ -143,6 +150,63 @@ getRouteString) — a compact, shareable summary of the incursion, e.g.
 
 Fallback: file-loaded / test worlds (`new World(Level)` / `new World(String)`) never build a route
 map; buildNextFloor() falls back to the depth-driven pickLevelGenerator so they still descend.
+
+CALM NODES: SUPPLY CACHE & MED-BAY / REST (order-8)
+===================================================
+The two "breathe and refuel" special levels — the strategic counterweight to ELITE/COMBAT. The player
+routes here by CHOICE, paying with a skipped reward node, so each delivers an unambiguous, deterministic
+payoff and reads as visibly SAFE within ~2 seconds. Constants live in RouteMapConstants (CACHE_* /
+REST_* / HEAL_STATION_SYMBOL) and LevelGenConstants (MED_BAY_*).
+
+  HONEST-SAFE-NODE RULE (design invariant): a node whose icon promises safety MUST be safe. Route
+  planning collapses if the icon language can't be trusted, so the CACHE keeps only light stragglers
+  and the REST clinic is genuinely empty. A "med-bay ambush" is a DIFFERENT node (MYSTERY, order-9)
+  with its own icon — never a REST node wearing REST's face.
+
+SUPPLY CACHE  (RouteNodeType.CACHE, profile "supply_cache", CacheProfile)
+  A UAC forward depot. Reuses a STANDARD generator (fixed to ROOMS_MST for a tidy depot read) with a
+  bright, hazard-free config (no unlit/flicker floors, no radioactive barrels; crates + lockers + one
+  cargo bay + columns; medkit/armour chances bumped). Budget = EnemyBudgetOverride.calm() (light
+  chaff, never elite, never zero — a cache is not a free heal; depth ramp still applied first).
+  Guaranteed payoff (post-generation, FARTHEST_ROOM = the deep cargo bay, deterministic from floorSeed):
+    - brightenFloors() TILE_THEME so the depot never reads unsafe
+    - CACHE_MEDKITS 'H' + CACHE_STIMS '+'
+    - CACHE_ARMOUR: 'a' shard shallow, 'A' vest from depth CACHE_ARMOUR_VEST_DEPTH
+    - CACHE_CRATES 'C' + CACHE_LOCKERS 'L' as set dressing
+    - CACHE_AMMO_BOXES ammo boxes across the player's OWNED ammo types (smart ammo — see below)
+  The reliable WEAPON payout is the ELITE node; the cache stays about consumables so the two read
+  distinctly.
+
+  SMART (owned-aware) AMMO — the LevelPlan.ammoCache seam:
+    A profile can't see the arsenal (resolve() has no player state), and a GuaranteedContent only gets
+    the Level. So CacheProfile attaches an AmmoCacheRequest (count + Placement) to its LevelPlan, and
+    World.fulfillAmmoCache reads the loadout's ammo types (Weapon.getAmmoType -> pickupTileChar),
+    distributes the boxes evenly across the OWNED symbols (falling back to all 5 types for a melee-only
+    run), and stamps via GuaranteedContentStamper. Owned-logic lives in World (which legitimately owns
+    the arsenal) but is driven by a generic plan FIELD, not a per-node-type switch — the order-3 seam
+    holds.
+
+MED-BAY / REST  (RouteNodeType.REST, profile "rest_medbay", RestProfile + MedBayGenerator)
+  A bespoke curated clinic (GeneratorId.MED_BAY) — chosen over random rooms because legibility IS the
+  sanctuary read. Layout: approach corridor -> central ward (auto-doc at centre) -> 1-2 cryo-pod
+  alcoves -> exit a few tiles PAST the auto-doc so the heal is on the natural path out. Deterministic
+  from floorSeed; only the alcove side and whether a second alcove appears vary. Tiles (all from
+  tile-symbols.txt): 'M' medical walls dominant, 'N' reinforced-glass viewing window, 'Z' cryo-wall
+  alcove frames, 'S' emergency-strip approach; '&' bio-pods, 'I' specimen tanks, 'T' terminals, '%'
+  generator; sparse 'm'/'O'/'f' decals. Emits ZERO enemy spawn points — the honest sanctuary.
+
+  THE AUTO-DOC HEAL STATION (the STATION kind):
+    Reuses the holo-workstation 'W' as the auto-doc prop (RouteMapConstants.HEAL_STATION_SYMBOL) — NO
+    new tile symbol; the interactivity is logic layered on that tile. The generator registers the tile
+    via Level.markHealStation(); World copies the floor's getHealStationTiles() on every rebuild into
+    chargedHealStations. In the PLAYING update, the FIRST time the player steps ORTHOGONALLY ADJACENT
+    to a charged station (the 'W' tile itself is solid), a ONE-TIME heal fires — REST_HEAL_FRACTION of
+    max HP — reusing the medkit heal path (player.applyHealing + green "AUTO-DOC +N HP" event text +
+    heal particles + edge vignette). The station is then consumed (removed), so it can never be farmed:
+    one heal per station, one station per rest floor. Auto-trigger on adjacency = no new touch button
+    or run phase (mobile-friendly).
+    REST_OFFERS_CHOICE (default FALSE) reserves the 2-option "PATCH UP vs FIELD MOD" overlay for when a
+    permanent-boon system exists; until then REST is an honest plain heal.
 
 OVERLAY VISUAL SPEC (order-4) — the "FACILITY NAV" console
 ==========================================================

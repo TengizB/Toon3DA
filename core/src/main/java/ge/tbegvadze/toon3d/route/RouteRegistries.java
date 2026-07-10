@@ -4,6 +4,7 @@ import ge.tbegvadze.toon3d.level.BossArenaGenerator;
 import ge.tbegvadze.toon3d.level.CavernGenerator;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
 import ge.tbegvadze.toon3d.level.LinearCorridorGenerator;
+import ge.tbegvadze.toon3d.level.MedBayGenerator;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
 
 /**
@@ -157,6 +158,10 @@ public final class RouteRegistries {
 
         // BossArenaGenerator is a bespoke fixed arena; it ignores both seed and config.
         registry.register(GeneratorId.BOSS_ARENA, (seed, config) -> new BossArenaGenerator());
+
+        // MedBayGenerator is the bespoke REST-node clinic (route-map order-8); seed drives its only
+        // variation (alcove side + pod count). It ignores config and is NOT in the standard pool.
+        registry.register(GeneratorId.MED_BAY, (seed, config) -> new MedBayGenerator(seed));
     }
 
     /**
@@ -175,5 +180,9 @@ public final class RouteRegistries {
         // Order-7 special profiles (thin forwarders to existing systems).
         registry.register(new ShopProfile(generators));
         registry.register(new BossProfile());
+
+        // Order-8 CALM-node profiles: the SUPPLY CACHE depot and the MED-BAY / REST clinic.
+        registry.register(new CacheProfile());
+        registry.register(new RestProfile());
     }
 }

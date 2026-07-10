@@ -1,7 +1,38 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Level Design
 TITLE: Route Map — Part 8: Calm Node Levels — Supply Cache & Med-Bay/Rest
 CREATED: 2026-07-08
+---
+
+IMPLEMENTATION NOTES (2026-07-10)
+================================
+Shipped (no tests, per request):
+- CacheProfile ("supply_cache"): bright hazard-free depot config (ROOMS_MST, no unlit/flicker floors,
+  no radioactive barrels, crates+lockers+cargo bay+columns, medkit/armour chances bumped),
+  EnemyBudgetOverride.calm() light stragglers, and a FARTHEST_ROOM guaranteed payoff — brighten-floors
+  TILE_THEME, medkit 'H' + stim '+', depth-scaled armour ('a' shallow / 'A' from depth 6), crates 'C'
+  + lockers 'L' set dressing, plus an OWNED-ammo spread.
+- Owned-ammo: chose the LevelPlan.ammoCache (AmmoCacheRequest) seam over a resolve()-signature change.
+  The profile declares intent (count + Placement); World.fulfillAmmoCache reads the loadout's ammo
+  types and stamps boxes evenly across owned symbols (falls back to all 5 types for a melee-only run),
+  reusing GuaranteedContentStamper. Keeps the "zero World per-node switch" invariant.
+- TILE_THEME: Guarantees.brightenFloors() promotes every 'u'/'f' floor tile to lit 'l'. (Full
+  themeOverride on LevelPlan was not needed — the cache config + this guarantee already deliver the
+  bright read; deferred unless a later node needs richer repaint.)
+- RestProfile ("rest_medbay") + MedBayGenerator ("med_bay"): went with OPTION A (bespoke generator).
+  Curated clinic — approach corridor -> central ward (auto-doc at centre) -> 1-2 cryo-pod alcoves ->
+  exit past the auto-doc. Deterministic from floor seed (alcove side + second-alcove toggle vary).
+  Tiles: 'M' walls dominant, 'N' viewing window, 'Z' alcove frames, 'S' approach strips, '&'/'I' pods
+  + tanks, 'T' terminals, '%' generator, 'm'/'O'/'f' sparse decals. Emits ZERO enemy spawn points.
+- Heal station: reused holo-workstation 'W' as the auto-doc (NO new symbol). Level gained a
+  markHealStation/getHealStationTiles registry; the generator marks the 'W' tile. World copies the
+  station tiles per floor and, in the PLAYING update, fires a ONE-TIME heal when the player steps
+  orthogonally adjacent to a charged station (auto-trigger — no new touch button / phase), reusing the
+  medkit heal path (HP + green "AUTO-DOC +N HP" text + heal particles + vignette), then consumes it.
+- REST_OFFERS_CHOICE defaults FALSE (the permanent-boon system it would tie into doesn't exist yet),
+  so REST is an honest plain heal. The 2-option choice overlay is gated behind that flag for later.
+- Registration: one register() line each in RouteRegistries.bootstrap() (generator + both profiles);
+  no other World edits beyond the generic ammo-cache + heal-station hooks.
 ---
 
 PREREQUISITE: order-7 (NodeLevelProfile + GuaranteedContent framework). USE THE game-level-designer

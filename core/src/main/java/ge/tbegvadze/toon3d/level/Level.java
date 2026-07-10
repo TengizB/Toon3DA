@@ -18,12 +18,37 @@ public class Level {
     protected final char[][]               matrix;
     private final   List<EnemySpawnPoint>  enemySpawnPoints;
     private final   List<WeaponSpawnPoint> weaponSpawnPoints;
+    /**
+     * Interactive heal-station tiles (route-map order-8 MED-BAY auto-doc). Each entry is a
+     * {@code {tileColumn, tileRow}} pair a bespoke generator (e.g. {@code MedBayGenerator}) registered
+     * so {@code World} can layer one-time-heal interactivity onto that tile without special-casing the
+     * node type. Empty on every ordinary floor. Populated post-construction via {@link #markHealStation}.
+     */
+    private final   List<int[]>            healStationTiles = new java.util.ArrayList<>();
 
     Level(char[][] matrix, List<EnemySpawnPoint> enemySpawnPoints,
           List<WeaponSpawnPoint> weaponSpawnPoints) {
         this.matrix            = matrix;
         this.enemySpawnPoints  = Collections.unmodifiableList(enemySpawnPoints);
         this.weaponSpawnPoints = Collections.unmodifiableList(weaponSpawnPoints);
+    }
+
+    /**
+     * Registers a heal-station (auto-doc) tile so {@code World} can attach a one-time heal to it.
+     * Called by a bespoke generator right after it stamps the station prop. No-op for out-of-bounds
+     * coordinates.
+     */
+    public void markHealStation(int tileColumn, int tileRow) {
+        if (tileColumn < 0 || tileColumn >= getWidth() || tileRow < 0 || tileRow >= getHeight()) return;
+        healStationTiles.add(new int[]{tileColumn, tileRow});
+    }
+
+    /**
+     * The heal-station tiles registered on this floor ({@code {tileColumn, tileRow}} pairs). Empty on
+     * ordinary floors. The returned list is unmodifiable; {@code World} copies it to track charge state.
+     */
+    public List<int[]> getHealStationTiles() {
+        return Collections.unmodifiableList(healStationTiles);
     }
 
     /** Returns the read-only list of enemy spawn points extracted by LevelLoader. */

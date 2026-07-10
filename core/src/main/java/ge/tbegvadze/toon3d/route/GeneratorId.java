@@ -19,7 +19,9 @@ public enum GeneratorId {
     /** Cellular-automata organic caves ({@code CavernGenerator}). */
     CAVERN("cavern"),
     /** Bespoke boss arena ({@code BossArenaGenerator}). Not in the standard pool. */
-    BOSS_ARENA("boss_arena");
+    BOSS_ARENA("boss_arena"),
+    /** Bespoke curated med-bay clinic ({@code MedBayGenerator}) for REST nodes. Not in the standard pool. */
+    MED_BAY("med_bay");
 
     private final String stableId;
 

@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.route;
 
+import ge.tbegvadze.toon3d.level.Level;
+
 /**
  * Factory for the concrete {@link GuaranteedContent} KINDS a {@link NodeLevelProfile} attaches to a
  * {@link LevelPlan}. Each factory captures the floor seed at resolve time (so the promise is
@@ -35,5 +37,31 @@ public final class Guarantees {
      */
     public static GuaranteedContent prop(char symbol, int count, Placement placement, long seed) {
         return level -> GuaranteedContentStamper.stamp(level, symbol, count, placement, seed);
+    }
+
+    /**
+     * A TILE_THEME guarantee (order-8): repaints the floor lighting so a CALM node reads as an
+     * unambiguously bright, safe space no matter which generator built it. Every unlit ('u') and
+     * failing-light flicker ('f') floor tile is promoted to a steady lit floor ('l'). It touches
+     * ONLY those two lighting variants — walls, props, pickups, the spawn, and the exit are all left
+     * untouched — so it is order-independent with the pickup/prop stamps and never clobbers content.
+     *
+     * <p>No new symbols; both the read and written tiles are from {@code docs/tile-symbols.txt}.
+     */
+    public static GuaranteedContent brightenFloors() {
+        return level -> brightenAllFloors(level);
+    }
+
+    /** Promotes every 'u'/'f' floor tile to a steady lit 'l' tile, in place. */
+    private static void brightenAllFloors(Level level) {
+        if (level == null) return;
+        for (int tileRow = 0; tileRow < level.getHeight(); tileRow++) {
+            for (int tileColumn = 0; tileColumn < level.getWidth(); tileColumn++) {
+                char cell = level.getCell(tileColumn, tileRow);
+                if (cell == 'u' || cell == 'f') {
+                    level.setCell(tileColumn, tileRow, 'l');
+                }
+            }
+        }
     }
 }
