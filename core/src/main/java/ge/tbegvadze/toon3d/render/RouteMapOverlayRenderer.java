@@ -156,6 +156,10 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
 
     public RouteMapOverlayRenderer() {
         shapes  = new ShapeRenderer();
+        // The icon/crest painters switch Filled<->Line mid-batch via shapes.set(...) (see
+        // RouteIconSupport.fill/stroke). That call requires autoShapeType; without it the first
+        // painter throws "autoShapeType must be enabled" the instant the console opens on portal entry.
+        shapes.setAutoShapeType(true);
         batch   = new SpriteBatch();
         font    = new BitmapFont();
         layout  = new GlyphLayout();
