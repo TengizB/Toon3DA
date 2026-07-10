@@ -19,18 +19,36 @@ public final class LevelPlan {
     private final GeneratorId generatorId;
     private final LevelGenConfig config;
     private final List<GuaranteedContent> guarantees;
+    private final EnemyBudgetOverride enemyBudget;
 
     /**
+     * Full-fidelity plan with an explicit encounter-budget override.
+     *
      * @param generatorId which registered generator builds the floor (never null)
      * @param config      the generation config handed to that generator (may be null; generators
      *                    that ignore config default internally)
      * @param guarantees  post-generation content promises; may be empty, never null. Defensively copied.
+     * @param enemyBudget scales the depth-based encounter budget, or {@code null} for the normal
+     *                    depth budget. Never bypasses the depth ramp — see {@link EnemyBudgetOverride}.
      */
-    public LevelPlan(GeneratorId generatorId, LevelGenConfig config, List<GuaranteedContent> guarantees) {
+    public LevelPlan(GeneratorId generatorId, LevelGenConfig config, List<GuaranteedContent> guarantees,
+                     EnemyBudgetOverride enemyBudget) {
         this.generatorId = Objects.requireNonNull(generatorId, "generatorId");
         this.config      = config;
         this.guarantees  = Collections.unmodifiableList(new java.util.ArrayList<>(
                 Objects.requireNonNull(guarantees, "guarantees")));
+        this.enemyBudget = enemyBudget;
+    }
+
+    /**
+     * Convenience plan with the normal depth budget (no {@link EnemyBudgetOverride}).
+     *
+     * @param generatorId which registered generator builds the floor (never null)
+     * @param config      the generation config handed to that generator (may be null)
+     * @param guarantees  post-generation content promises; may be empty, never null. Defensively copied.
+     */
+    public LevelPlan(GeneratorId generatorId, LevelGenConfig config, List<GuaranteedContent> guarantees) {
+        this(generatorId, config, guarantees, null);
     }
 
     /** Which registered generator builds this floor. */
@@ -46,5 +64,13 @@ public final class LevelPlan {
     /** Post-generation content promises, in application order. Unmodifiable; possibly empty. */
     public List<GuaranteedContent> guarantees() {
         return guarantees;
+    }
+
+    /**
+     * The encounter-budget override, or {@code null} to spend the normal depth budget. Always a
+     * multiplier on the raw depth budget — a profile changes floor pressure, never the depth ramp.
+     */
+    public EnemyBudgetOverride enemyBudget() {
+        return enemyBudget;
     }
 }

@@ -1605,7 +1605,8 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     private void placeBudgetedEncounter(char[][] grid, List<Room> rooms, List<EnemySpawnPoint> spawnPoints) {
         if (rooms.size() < 2) return;
 
-        EncounterBudgetPlanner.Plan plan = new EncounterBudgetPlanner(dungeonDepth, random).plan();
+        EncounterBudgetPlanner.Plan plan =
+                new EncounterBudgetPlanner(dungeonDepth, random, config.enemyBudgetScale).plan();
         List<EnemyType> roster = plan.enemies();
         if (roster.isEmpty()) return;
 

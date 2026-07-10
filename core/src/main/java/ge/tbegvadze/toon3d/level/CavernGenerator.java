@@ -70,8 +70,21 @@ public class CavernGenerator implements ILevelGenerator {
     // budget (balance idea 4, Pillar 1). Defaults to 1; set via generate(int dungeonDepth).
     private int dungeonDepth = 1;
 
+    // Route-map order-7 encounter-budget multiplier (1.0 = normal). CALM nodes lower it; the depth
+    // ramp is still applied first inside EncounterBudgetPlanner.
+    private final float enemyBudgetScale;
+
     public CavernGenerator(long seed) {
-        this.random = new Random(seed);
+        this(seed, 1f);
+    }
+
+    /**
+     * @param enemyBudgetScale multiplier on the depth-scaled encounter budget (from a route-map
+     *                         node's {@code LevelGenConfig.enemyBudgetScale}); 1.0 = normal.
+     */
+    public CavernGenerator(long seed, float enemyBudgetScale) {
+        this.random           = new Random(seed);
+        this.enemyBudgetScale = enemyBudgetScale > 0f ? enemyBudgetScale : 1f;
     }
 
     // -------------------------------------------------------------------------
@@ -1116,7 +1129,8 @@ public class CavernGenerator implements ILevelGenerator {
         int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
         List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
 
-        EncounterBudgetPlanner.Plan plan = new EncounterBudgetPlanner(dungeonDepth, random).plan();
+        EncounterBudgetPlanner.Plan plan =
+                new EncounterBudgetPlanner(dungeonDepth, random, enemyBudgetScale).plan();
         List<EnemyType> roster = plan.enemies();
         if (roster.isEmpty()) return spawnPoints;
 

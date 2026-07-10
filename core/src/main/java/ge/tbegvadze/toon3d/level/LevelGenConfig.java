@@ -131,4 +131,16 @@ public final class LevelGenConfig {
 
     /** Probability (0–1) that any non-entrance room contains an armour kit. */
     public float armourChancePerRoom = 0.20f;
+
+    // -------------------------------------------------------------------------
+    // Encounter budget (route-map order-7)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Multiplier on the depth-scaled encounter Threat-Point budget spent by
+     * {@link EncounterBudgetPlanner}. 1.0 = normal; a route-map node lowers it for CALM floors
+     * (CACHE / REST / SHOP) or raises it for DANGER floors (ELITE). NEVER a substitute for the depth
+     * ramp — the budget is still computed from raw depth first, then scaled.
+     */
+    public float enemyBudgetScale = 1f;
 }

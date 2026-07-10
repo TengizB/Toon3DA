@@ -53,21 +53,81 @@ The pipeline (buildFloorForNode)
   1. NodeTypeDefinition  = RouteRegistries.nodeTypes().get(node.type)
   2. NodeLevelProfile    = RouteRegistries.levelProfiles().getOrDefault(def.levelProfileId())
   3. LevelPlan plan      = profile.resolve(node, depth, floorSeed(runSeed, depth))
-                           -> { GeneratorId, LevelGenConfig, List<GuaranteedContent> }
-  4. ILevelGenerator     = RouteRegistries.generators().create(plan.generatorId(), seed, plan.config())
-  5. Level level         = generator.generate(depth)
-  6. for each guarantee: guarantee.applyTo(level)   (post-generation, so any generator can host any
+                           -> { GeneratorId, LevelGenConfig, List<GuaranteedContent>, EnemyBudgetOverride }
+  4. LevelGenConfig cfg  = applyEnemyBudget(plan.config(), plan.enemyBudget())
+                           (folds the budget scale into config.enemyBudgetScale; null override = 1.0)
+  5. ILevelGenerator     = RouteRegistries.generators().create(plan.generatorId(), seed, cfg)
+  6. Level level         = generator.generate(depth)
+  7. for each guarantee: guarantee.applyTo(level)   (post-generation, so any generator can host any
                                                      node's guarantees — generators and node contents
                                                      stay orthogonal)
   then rebuildForLevel(level) exactly as before (re-seeds enemies, rolls shop stock, places chips…).
 
-Order-3 ships ONE profile: `DefaultCombatProfile`, registered under "combat_standard" AND set as the
-registry FALLBACK, so every node type resolves to a playable combat floor before order-7 adds the
-bespoke CACHE/REST/SHOP/MYSTERY/EVENT/BOSS profiles. Guarantee lists are empty until order-7.
+Order-3 shipped ONE profile: `DefaultCombatProfile`, registered under "combat_standard" AND set as the
+registry FALLBACK, so every node type resolves to a playable combat floor. Order-7 adds the framework
+below plus the two thin forwarders `ShopProfile` ("shop") and `BossProfile` ("boss"); the bespoke
+CACHE/REST/ELITE/MYSTERY/EVENT/GATE profiles land in order-8/9/10, each one register() line.
 
 Boss floors: `GameMath.isBossFloor(depth)` stays the single authority. DefaultCombatProfile returns
 GeneratorId.BOSS_ARENA on any boss depth, and RouteMapGenerator already forced a BOSS node there, so
 the two agree by construction.
+
+SPECIAL LEVELS: THE PROFILE SYSTEM (order-7)
+============================================
+A NodeLevelProfile answers "when the player enters a node of THIS type, what floor do they get?"
+Nothing switches on node type directly — order-3's pipeline is all registry lookups
+(def.levelProfileId -> NodeLevelProfileRegistry -> profile -> LevelPlan). Adding a special level
+later = write one profile + register it in RouteRegistries.registerLevelProfiles; ZERO World edits.
+
+The LevelPlan contract ( …toon3d.route.LevelPlan ):
+  GeneratorId          generatorId  — which registered generator builds the base floor
+  LevelGenConfig       config       — biases that generator (props/rooms/lighting/pickups); may be null
+  List<GuaranteedContent> guarantees — applied POST-generation (pipeline step 7)
+  EnemyBudgetOverride  enemyBudget  — null = normal depth budget; else a SCALE on it (never a freeze)
+
+Orthogonality trick — post-generation guarantees:
+  A CACHE must contain crates+ammo whether its base floor is rooms_mst, a cavern, or a corridor. So a
+  profile does NOT need a bespoke generator per node: it picks ANY suitable generator, biases it via
+  LevelGenConfig, then STAMPS guaranteed symbols afterward. Guarantees are built by the `Guarantees`
+  factory and placed by `GuaranteedContentStamper` (pure, deterministic from floorSeed):
+    Guarantees.pickup(symbol, count, Placement, seed)   — PICKUP kind (e.g. '6' ammo box, 'H' medkit)
+    Guarantees.prop(symbol,   count, Placement, seed)   — PROP kind   (e.g. '=' weapon rack, 'C' crate)
+  (STATION heal/vending, forced SPAWN, and TILE_THEME repaint kinds arrive with the profiles that need
+  them in order-8/9 — no unused machinery ships early.)
+  Placement (…toon3d.route.Placement): NEAR_SPAWN | NEAR_EXIT | FARTHEST_ROOM | CENTER_ROOM |
+  SCATTERED | GATED_ROOM. Resolved against the floor's 'p' spawn / '>' exit anchors and walkable-tile
+  distances. The stamper writes ONLY on legal walkable tiles — never over a wall, prop, column, door,
+  shop machine '@', 'p', '>', or an existing pickup — and only symbols already in tile-symbols.txt.
+
+Enemy budget overrides (respecting the balance contract):
+  EnemyBudgetOverride is a multiplier on the depth-scaled Threat-Point budget spent by
+  EncounterBudgetPlanner. It is threaded via LevelGenConfig.enemyBudgetScale into all three standard
+  generators (LevelGenerator / LinearCorridorGenerator / CavernGenerator). The depth ramp is applied
+  FIRST, then the scale — so a SHOP at depth 8 is depth-8-scaled AND calm, never depth-frozen.
+  Helpers: EnemyBudgetOverride.calm() (0.35x, CACHE/REST), .light() (0.5x, SHOP), .scaled(x). Clamped
+  to [0.1, 4.0].
+
+V1 profile catalog (levelProfileId -> profile):
+  combat_standard -> DefaultCombatProfile  (order-3 baseline + registry fallback)
+  shop            -> ShopProfile           (order-7: standard floor, .light() budget; vending already
+                                            guaranteed on every floor by World.seedVendingMachines)
+  boss            -> BossProfile           (order-7: forwards to GeneratorId.BOSS_ARENA; the boss is
+                                            seeded by BossFloorController)
+  supply_cache / rest_medbay               -> order-8   (CACHE / REST)
+  elite_hotzone / mystery                  -> order-9   (ELITE / MYSTERY)
+  event / region_gate                      -> order-10  (EVENT / GATE)
+  Until a bespoke profile is registered, the FALLBACK (DefaultCombatProfile) keeps that node type
+  playable, so partially-implemented catalogs never break a run.
+
+Add-a-new-special-level recipe (guaranteed by this framework):
+  1. Existing generator + config + guarantees enough? -> write a NodeLevelProfile only.
+     Else -> write an ILevelGenerator (register in GeneratorRegistry) AND a profile naming it.
+  2. (new node kind) add RouteNodeType + NodeTypeDefinition (levelProfileId -> your profile,
+     iconPainterId -> new icon) and a weight in RouteMapConstants / region tables.
+  3. register(new YourProfile(...)) in RouteRegistries.registerLevelProfiles.
+  4. Update this doc.
+  => the special level appears on random maps with NO edits to World, the overlay, or generator
+     selection.
 
 DEPTH RAMP INVARIANT (roguelike_order_16)
 -----------------------------------------

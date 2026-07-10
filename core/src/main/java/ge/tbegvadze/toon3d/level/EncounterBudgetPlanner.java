@@ -58,19 +58,32 @@ public final class EncounterBudgetPlanner {
 
     private final int    depth;
     private final Random random;
+    private final float  budgetScale;
 
     public EncounterBudgetPlanner(int depth, Random random) {
-        this.depth  = Math.max(1, depth);
-        this.random = random;
+        this(depth, random, 1f);
+    }
+
+    /**
+     * @param budgetScale route-map order-7 multiplier on the depth-scaled budget (1.0 = normal).
+     *                    CALM nodes lower it, DANGER nodes raise it. It scales the budget AFTER the
+     *                    depth ramp is applied, so difficulty is never frozen at an earlier depth.
+     *                    Non-positive values fall back to 1.0.
+     */
+    public EncounterBudgetPlanner(int depth, Random random, float budgetScale) {
+        this.depth       = Math.max(1, depth);
+        this.random      = random;
+        this.budgetScale = budgetScale > 0f ? budgetScale : 1f;
     }
 
     /** Plans the floor's enemy roster by spending the depth-scaled Threat-Point budget. */
     public Plan plan() {
+        // Depth ramp FIRST (roguelike_order_16 invariant), THEN the route-map node's scale.
         float budget = GameMath.floorThreatPointBudget(
                 BalanceConfig.FLOOR_BASE_THREAT_POINT_BUDGET,
                 BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH,
                 BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH,
-                depth);
+                depth) * budgetScale;
 
         List<EnemyType>           roster      = new ArrayList<>();
         EnumMap<EnemyType, Float> spentByType = new EnumMap<>(EnemyType.class);

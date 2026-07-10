@@ -32,6 +32,7 @@ import ge.tbegvadze.toon3d.entity.boss.OverseerPhase2Pattern;
 import ge.tbegvadze.toon3d.level.BossArenaGenerator;
 import ge.tbegvadze.toon3d.level.CavernGenerator;
 import ge.tbegvadze.toon3d.level.ILevelGenerator;
+import ge.tbegvadze.toon3d.level.LevelGenConfig;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
 import ge.tbegvadze.toon3d.level.LinearCorridorGenerator;
@@ -47,6 +48,7 @@ import ge.tbegvadze.toon3d.progression.UpgradeCardDeck;
 import ge.tbegvadze.toon3d.progression.Attribute;
 import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
+import ge.tbegvadze.toon3d.route.EnemyBudgetOverride;
 import ge.tbegvadze.toon3d.route.GuaranteedContent;
 import ge.tbegvadze.toon3d.route.LevelPlan;
 import ge.tbegvadze.toon3d.route.NodeLevelProfile;
@@ -622,7 +624,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         NodeTypeDefinition definition = RouteRegistries.nodeTypes().get(node.type);
         NodeLevelProfile   profile    = RouteRegistries.levelProfiles().getOrDefault(definition.levelProfileId());
         LevelPlan          plan       = profile.resolve(node, depth, seed);
-        ILevelGenerator    generator  = RouteRegistries.generators().create(plan.generatorId(), seed, plan.config());
+        // Fold the node's encounter-budget override into the config the generator receives. The
+        // depth ramp is still applied first inside EncounterBudgetPlanner (order-3 invariant); this
+        // only scales how much of that depth budget the floor spends. A null override leaves 1.0.
+        LevelGenConfig config = applyEnemyBudget(plan.config(), plan.enemyBudget());
+        ILevelGenerator    generator  = RouteRegistries.generators().create(plan.generatorId(), seed, config);
         Level built = generator.generate(depth);
         for (GuaranteedContent guarantee : plan.guarantees()) {
             guarantee.applyTo(built);
@@ -630,6 +636,20 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         Gdx.app.log("RouteMap", "build depth=" + depth + " node=" + definition.id()
                 + " generator=" + plan.generatorId().stableId());
         return built;
+    }
+
+    /**
+     * Returns the generator config to use, with the node's {@link EnemyBudgetOverride} folded in.
+     * A null override leaves the config untouched; a null config with an override gets a fresh
+     * default config carrying the scale (generators that ignore config still ignore it).
+     */
+    private LevelGenConfig applyEnemyBudget(LevelGenConfig config, EnemyBudgetOverride override) {
+        if (override == null) {
+            return config;
+        }
+        LevelGenConfig effective = config != null ? config : new LevelGenConfig();
+        effective.enemyBudgetScale = override.budgetScale();
+        return effective;
     }
 
     // -------------------------------------------------------------------------

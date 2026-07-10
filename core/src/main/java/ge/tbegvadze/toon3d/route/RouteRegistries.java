@@ -150,22 +150,30 @@ public final class RouteRegistries {
         registry.register(GeneratorId.LINEAR_CORRIDOR, (seed, config) ->
                 config != null ? new LinearCorridorGenerator(seed, config) : new LinearCorridorGenerator(seed));
 
-        // CavernGenerator has no config-aware constructor — it defaults internally.
-        registry.register(GeneratorId.CAVERN, (seed, config) -> new CavernGenerator(seed));
+        // CavernGenerator honours only the encounter-budget scale from config (route-map order-7);
+        // it defaults every other generation parameter internally.
+        registry.register(GeneratorId.CAVERN, (seed, config) ->
+                config != null ? new CavernGenerator(seed, config.enemyBudgetScale) : new CavernGenerator(seed));
 
         // BossArenaGenerator is a bespoke fixed arena; it ignores both seed and config.
         registry.register(GeneratorId.BOSS_ARENA, (seed, config) -> new BossArenaGenerator());
     }
 
     /**
-     * Registers the order-3 level profiles. Only the {@link DefaultCombatProfile} ships now; it is
-     * registered under its own id AND set as the fallback, so every node type (special profiles land
-     * in order-7) resolves to a playable combat floor. Exposed (package-private) so tests can populate
-     * a fresh registry without touching the shared singleton.
+     * Registers the level profiles. {@link DefaultCombatProfile} is registered under its own id AND
+     * set as the fallback, so every node type still resolves to a playable combat floor. Order-7 adds
+     * the two thin special profiles that mostly forward to existing systems ({@link ShopProfile},
+     * {@link BossProfile}); the bespoke CACHE / REST / ELITE / MYSTERY / EVENT / GATE profiles land in
+     * order-8/9/10 as one {@code register(...)} line each. Exposed (package-private) so tests can
+     * populate a fresh registry without touching the shared singleton.
      */
     static void registerLevelProfiles(NodeLevelProfileRegistry registry, GeneratorRegistry generators) {
         DefaultCombatProfile defaultProfile = new DefaultCombatProfile(generators);
         registry.register(defaultProfile);
         registry.setFallback(defaultProfile);
+
+        // Order-7 special profiles (thin forwarders to existing systems).
+        registry.register(new ShopProfile(generators));
+        registry.register(new BossProfile());
     }
 }
