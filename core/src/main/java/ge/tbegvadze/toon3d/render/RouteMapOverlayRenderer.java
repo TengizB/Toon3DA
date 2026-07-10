@@ -783,6 +783,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
 
         drawScrim();                 // 1. world scrim
+        drawScreenPanel();           // 1b. opaque phosphor screen over the map band (stops world bleed)
         drawBezel();                 // 2. bezel / chrome / hazard trim
         drawRegionCrestPass();       // 2b. region crest badge on the title plate (order-5)
         drawGlowPass();              // 3. additive hologram bloom (node halos + conduit cores)
@@ -805,6 +806,22 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         shapes.setColor(palette.scrimNavy.r, palette.scrimNavy.g, palette.scrimNavy.b,
                         RouteMapConstants.OVERLAY_SCRIM_ALPHA);
         shapes.rect(0f, 0f, worldWidth, worldHeight);
+        shapes.end();
+    }
+
+    // ---- Pass 1b: opaque phosphor screen -----------------------------------
+
+    /**
+     * Fills the map viewport band with a near-opaque dark "screen" so the frozen 3D world no longer
+     * ghosts through the schematic (the see-through outer scrim let weapon/HUD text and walls bleed in
+     * and wash out the translucent cards). Drawn with NORMAL alpha blending AFTER the scrim and BEFORE
+     * the additive glow pass so the hologram bloom still adds on top of a consistent dark backdrop.
+     */
+    private void drawScreenPanel() {
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        setShape(palette.screenBlack, RouteMapConstants.MAP_SCREEN_FILL_ALPHA);
+        shapes.rect(0f, RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y, worldWidth,
+                    RouteMapConstants.MAP_VIEWPORT_TOP_Y - RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y);
         shapes.end();
     }
 
@@ -1349,13 +1366,17 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
             shapes.rect(0f, lineY, worldWidth, 1f);
         }
 
-        // Vignette — darkened edge bands around the viewport.
-        float band = RouteMapConstants.VIGNETTE_BAND;
-        shapes.setColor(0f, 0f, 0f, RouteMapConstants.VIGNETTE_ALPHA);
-        shapes.rect(0f, viewportBottom, band, viewportTop - viewportBottom);
-        shapes.rect(worldWidth - band, viewportBottom, band, viewportTop - viewportBottom);
-        shapes.rect(0f, viewportTop - band, worldWidth, band);
-        shapes.rect(0f, viewportBottom, worldWidth, band);
+        // Vignette — darkened edge bands around the viewport. Zeroed (Issue 1 option B): the bands
+        // painted over the top/bottom node rows and outer lanes (the reported "black border cutting the
+        // cards"); the opaque screen panel now supplies the display feel. Pass skipped when alpha <= 0.
+        if (RouteMapConstants.VIGNETTE_ALPHA > 0f) {
+            float band = RouteMapConstants.VIGNETTE_BAND;
+            shapes.setColor(0f, 0f, 0f, RouteMapConstants.VIGNETTE_ALPHA);
+            shapes.rect(0f, viewportBottom, band, viewportTop - viewportBottom);
+            shapes.rect(worldWidth - band, viewportBottom, band, viewportTop - viewportBottom);
+            shapes.rect(0f, viewportTop - band, worldWidth, band);
+            shapes.rect(0f, viewportBottom, worldWidth, band);
+        }
 
         // Flicker + rare sync flash across the whole hologram.
         float syncPhase = overlayTimeSeconds % RouteMapConstants.SYNC_FLASH_INTERVAL;
