@@ -463,10 +463,32 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
-        // Staging-room exit (map not built yet), or a route-map-less world (file-loaded/test): there is
-        // no node choice to present. Hand straight to the transition machinery, which builds the next
-        // floor (and, on the staging exit, generates the route map first).
-        if (isStartingRoom || routeMap == null) {
+        // Staging-room exit: generate the route map (once) from the run seed, then present the depth-0 ->
+        // depth-1 lanes through the same FACILITY NAV console every later portal uses. The player's first
+        // floor is now chosen, not auto-picked.
+        if (isStartingRoom) {
+            if (routeMap == null) {
+                routePlan = RegionPlan.defaultPlan();
+                routeMap  = routeMapGenerator.generate(runSeed, routePlan);
+            }
+            java.util.List<RouteNode> firstPicks = routeMap.getSelectableNext();
+            if (firstPicks.isEmpty()) {
+                // Defensive: no legal opening move. Fall back to a straight descent.
+                fadeTimerSeconds = 0f;
+                runPhase = RunPhase.FADING_OUT;
+                return;
+            }
+            routeMapOverlay.present(firstPicks);
+            routeMapOverlayRenderer.present(routeMap);
+            routePointerDown = false;
+            routePointerDragging = false;
+            runPhase = RunPhase.ROUTE_SELECT;
+            return;
+        }
+
+        // Route-map-less world (file-loaded/test): there is no node choice to present. Hand straight to
+        // the transition machinery, which builds the next floor from the depth-driven fallback.
+        if (routeMap == null) {
             fadeTimerSeconds = 0f;
             runPhase = RunPhase.FADING_OUT;
             return;
@@ -593,24 +615,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 && routeMapGenerator.shouldExtend(routeMap, currentDepth)) {
             routePlan = routeMapGenerator.extendWithNextRegion(routeMap, routePlan);
         }
-    }
-
-    /**
-     * Advances the route cursor onto the FIRST available depth-1 node when the run leaves the staging
-     * room, so floor 1 is node-driven and the map's CURRENT node sits at depth 1 (the first real
-     * floor). The very first floor is entered, not chosen — the first genuine branch choice is the
-     * descent from floor 1.
-     */
-    private void autoCommitFirstNode() {
-        java.util.List<RouteNode> firstPicks = routeMap.getSelectableNext();
-        if (firstPicks.isEmpty()) {
-            pendingNode = null;
-            return;
-        }
-        RouteNode first = firstPicks.get(0);
-        routeMap.commitTo(first);
-        pendingNode = first;
-        recordRouteCommit(first);
     }
 
     /** Appends the committed node to the run's shareable route string and logs the beat. */
@@ -1377,17 +1381,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             fadeTimerSeconds += deltaTime;
             if (fadeTimerSeconds >= RenderConstants.LEVEL_TRANSITION_FADE_OUT_SECONDS) {
                 if (isStartingRoom) {
-                    // Leaving the staging room: the real run begins. Generate the route map once from
-                    // the run seed, then advance the cursor onto a depth-1 node so floor 1 is
-                    // node-driven. currentDepth stays at STARTING_DEPTH so floor 1 is the first floor.
+                    // Leaving the staging room: the real run begins. The normal path already generated
+                    // the route map and player-committed the depth-1 node in
+                    // onDescentRequested/commitRouteNode (pendingNode is set). In the defensive
+                    // no-legal-move fallback inside onDescentRequested, pendingNode stays null and
+                    // buildNextFloor()'s own null guard falls back to the depth-driven generator.
+                    // currentDepth stays at STARTING_DEPTH so floor 1 is the first floor either way.
                     isStartingRoom               = false;
                     startRoomWeapons             = null;
                     startRoomGroundItems         = null;
                     startRoomMeleeWeapons        = null;
                     startRoomMeleeGroundItems    = null;
-                    routePlan = RegionPlan.defaultPlan();
-                    routeMap  = routeMapGenerator.generate(runSeed, routePlan);
-                    autoCommitFirstNode();
                     playerProgress.setFloorDepth(currentDepth);
                     runStats.recordFloor(currentDepth);
                     rebuildForLevel(buildNextFloor());
