@@ -22,6 +22,7 @@ public final class RouteRegistries {
     private static final NodeTypeRegistry         NODE_TYPES     = new NodeTypeRegistry();
     private static final GeneratorRegistry        GENERATORS     = new GeneratorRegistry();
     private static final NodeLevelProfileRegistry LEVEL_PROFILES = new NodeLevelProfileRegistry();
+    private static final NodeAffixRegistry        AFFIXES        = new NodeAffixRegistry();
     private static boolean bootstrapped = false;
 
     private RouteRegistries() {}
@@ -41,6 +42,11 @@ public final class RouteRegistries {
         return LEVEL_PROFILES;
     }
 
+    /** The shared ELITE node-affix registry (order-9). */
+    public static NodeAffixRegistry affixes() {
+        return AFFIXES;
+    }
+
     /** Whether {@link #bootstrap()} has already run. */
     public static boolean isBootstrapped() {
         return bootstrapped;
@@ -56,7 +62,8 @@ public final class RouteRegistries {
         }
         registerNodeTypes(NODE_TYPES);
         registerGenerators(GENERATORS);
-        registerLevelProfiles(LEVEL_PROFILES, GENERATORS);
+        registerAffixes(AFFIXES);
+        registerLevelProfiles(LEVEL_PROFILES, GENERATORS, AFFIXES);
         bootstrapped = true;
     }
 
@@ -168,11 +175,13 @@ public final class RouteRegistries {
      * Registers the level profiles. {@link DefaultCombatProfile} is registered under its own id AND
      * set as the fallback, so every node type still resolves to a playable combat floor. Order-7 adds
      * the two thin special profiles that mostly forward to existing systems ({@link ShopProfile},
-     * {@link BossProfile}); the bespoke CACHE / REST / ELITE / MYSTERY / EVENT / GATE profiles land in
-     * order-8/9/10 as one {@code register(...)} line each. Exposed (package-private) so tests can
-     * populate a fresh registry without touching the shared singleton.
+     * {@link BossProfile}); order-8 the CALM depot/clinic ({@link CacheProfile}, {@link RestProfile});
+     * order-9 the DANGER / GAMBLE pair ({@link EliteProfile}, {@link MysteryProfile}). The remaining
+     * EVENT / GATE profiles land in order-10 as one {@code register(...)} line each. Exposed
+     * (package-private) so tests can populate a fresh registry without touching the shared singleton.
      */
-    static void registerLevelProfiles(NodeLevelProfileRegistry registry, GeneratorRegistry generators) {
+    static void registerLevelProfiles(NodeLevelProfileRegistry registry, GeneratorRegistry generators,
+                                      NodeAffixRegistry affixes) {
         DefaultCombatProfile defaultProfile = new DefaultCombatProfile(generators);
         registry.register(defaultProfile);
         registry.setFallback(defaultProfile);
@@ -184,5 +193,44 @@ public final class RouteRegistries {
         // Order-8 CALM-node profiles: the SUPPLY CACHE depot and the MED-BAY / REST clinic.
         registry.register(new CacheProfile());
         registry.register(new RestProfile());
+
+        // Order-9 DANGER / GAMBLE profiles: the ELITE hotzone and the MYSTERY meta-profile. MYSTERY
+        // delegates to other profiles, so it takes the profile registry it is being added to.
+        registry.register(new EliteProfile(generators, affixes));
+        registry.register(new MysteryProfile(registry, generators));
+    }
+
+    /**
+     * Registers the v1 ELITE affix catalog (order-9). Each affix is a bundle of TYPED modifiers routed
+     * through existing enemy / hazard / balance systems — adding a new affix is one register() line
+     * here, no bespoke code path. Exposed (package-private) so tests can populate a fresh registry.
+     */
+    static void registerAffixes(NodeAffixRegistry registry) {
+        // IRRADIATED — extra radioactive barrels + a hazard-pool read.
+        registry.register(NodeAffixDefinition.builder(RouteMapConstants.AFFIX_IRRADIATED_ID, "IRRADIATED")
+                .radioactiveBarrelWeightBonus(RouteMapConstants.AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS)
+                .extraRadioactiveBarrels(RouteMapConstants.AFFIX_IRRADIATED_EXTRA_BARRELS)
+                .build());
+
+        // OVERCLOCKED — enemies hit harder (approximated as more depth Threat spent).
+        registry.register(NodeAffixDefinition.builder(RouteMapConstants.AFFIX_OVERCLOCKED_ID, "OVERCLOCKED")
+                .budgetScaleMultiplier(RouteMapConstants.AFFIX_OVERCLOCKED_BUDGET_MULT)
+                .build());
+
+        // SWARM — the one exception to fewer-bodies: many chaff, a crowd-control test.
+        registry.register(NodeAffixDefinition.builder(RouteMapConstants.AFFIX_SWARM_ID, "SWARM")
+                .budgetScaleMultiplier(RouteMapConstants.AFFIX_SWARM_BUDGET_MULT)
+                .build());
+
+        // FORTIFIED — armour + more cover columns (a slugfest).
+        registry.register(NodeAffixDefinition.builder(RouteMapConstants.AFFIX_FORTIFIED_ID, "FORTIFIED")
+                .extraColumns(RouteMapConstants.AFFIX_FORTIFIED_EXTRA_COLUMNS)
+                .extraArmourPickups(RouteMapConstants.AFFIX_FORTIFIED_EXTRA_ARMOUR)
+                .build());
+
+        // VOLATILE — extra explosive barrels: the arena itself is a weapon for both sides.
+        registry.register(NodeAffixDefinition.builder(RouteMapConstants.AFFIX_VOLATILE_ID, "VOLATILE")
+                .extraExplosiveBarrels(RouteMapConstants.AFFIX_VOLATILE_EXTRA_BARRELS)
+                .build());
     }
 }

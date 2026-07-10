@@ -488,4 +488,96 @@ public final class RouteMapConstants {
      * an honest plain heal. Flip on once a boon system ships (levelup-stim-boon-choice-progression).
      */
     public static final boolean REST_OFFERS_CHOICE  = false;
+
+    // =========================================================================
+    // DANGER / GAMBLE NODE CONTENTS (order-9) — ELITE HOTZONE + MYSTERY.
+    // =========================================================================
+    // The "press your luck" side of the map that makes CACHE / REST (order-8) a real trade-off.
+    // ELITE is a knowable, deliberate risk for a bigger reward; MYSTERY is an unknown box whose
+    // expected value is deliberately NEUTRAL. Both are NodeLevelProfiles (order-7). Numbers tuned
+    // against docs/balance-rule-system.txt: ELITE must be beatable with the resources a careful
+    // player arrives with, punishing if routed here low — that IS the gamble the map sells.
+
+    // ---- ELITE HOTZONE (RouteNodeType.ELITE, profile "elite_hotzone") ------
+    /**
+     * Multiplier on the raw depth-scaled encounter budget for an ELITE floor. Above 1 so the fight is
+     * a mini-setpiece; the "fewer bodies, meaner enemies" fantasy is approximated by the planner
+     * spending a larger budget on higher-Threat enemies. Never bypasses the depth ramp (order-3
+     * invariant) — it scales the depth budget, it does not replace it. Clamped by EnemyBudgetOverride.
+     */
+    public static final float ELITE_BUDGET_SCALE       = 1.5f;
+    /** Ammo boxes stamped in the gated vault (~1.5x a cache's {@link #CACHE_AMMO_BOXES}). */
+    public static final int   ELITE_AMMO_BOXES         = 6;
+    /** Guaranteed field medkits ('H') behind the vault. */
+    public static final int   ELITE_MEDKITS            = 2;
+    /** Guaranteed stim-packs ('+') behind the vault. */
+    public static final int   ELITE_STIMS              = 1;
+    /** Guaranteed armour pickups behind the vault (shard 'a' shallow, vest 'A' deep). */
+    public static final int   ELITE_ARMOUR             = 1;
+    /** Depth at/after which the ELITE armour drop upgrades from a shard 'a' to a vest 'A'. */
+    public static final int   ELITE_ARMOUR_VEST_DEPTH  = 4;
+    /** Weapon-rack ('=') props stamped in the vault as the visual "worth guarding" promise. */
+    public static final int   ELITE_WEAPON_RACKS       = 1;
+    /** Column ('P') cover props scattered so the arena reads as a defensible set-piece. */
+    public static final int   ELITE_COVER_COLUMNS      = 2;
+    /** Radioactive-barrel weight the ELITE config bumps to (hazard-forward vs the default 0.22). */
+    public static final float ELITE_RADIOACTIVE_BARREL_WEIGHT = 0.34f;
+    /** Whether an ELITE floor arrives with the emergency red-alert pulse already lit. */
+    public static final boolean ELITE_RED_ALERT        = true;
+    /** First-frame sting shown on entering an ELITE floor. */
+    public static final String  ELITE_STING_TEXT       = "CONTAINMENT BREACH";
+
+    // ---- ELITE node affixes (rolled at map-gen via NodeAffixRegistry) -------
+    // Each affix is a bundle of TYPED modifiers routed through existing enemy / hazard / balance
+    // systems — no bespoke per-affix code path beyond applying the modifiers. Where a referenced
+    // system is not yet implemented the affix degrades to the nearest available effect.
+    public static final String AFFIX_IRRADIATED_ID    = "irradiated";
+    public static final String AFFIX_OVERCLOCKED_ID   = "overclocked";
+    public static final String AFFIX_SWARM_ID         = "swarm";
+    public static final String AFFIX_FORTIFIED_ID     = "fortified";
+    public static final String AFFIX_VOLATILE_ID      = "volatile";
+
+    /** Uniform pool weight each v1 affix carries (kept equal until a design reason splits them). */
+    public static final float AFFIX_WEIGHT_DEFAULT    = 1f;
+    /** Separator joining a node's base map hint to its rolled affix label (e.g. "… — OVERCLOCKED"). */
+    public static final String AFFIX_HINT_SEPARATOR   = " — ";
+    /** IRRADIATED: extra radioactive-barrel weight on top of the ELITE base. */
+    public static final float AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS = 0.12f;
+    /** IRRADIATED: extra 'g' radioactive barrels stamped as hazard pools. */
+    public static final int   AFFIX_IRRADIATED_EXTRA_BARRELS = 3;
+    /** OVERCLOCKED: budget multiplier (enemies "hit harder" — approximated as more Threat spent). */
+    public static final float AFFIX_OVERCLOCKED_BUDGET_MULT = 1.2f;
+    /** SWARM: budget multiplier (the one exception to fewer-bodies — a crowd-control test). */
+    public static final float AFFIX_SWARM_BUDGET_MULT = 1.5f;
+    /** FORTIFIED: extra cover columns 'P' (a slugfest of angles). */
+    public static final int   AFFIX_FORTIFIED_EXTRA_COLUMNS = 3;
+    /** FORTIFIED: extra armour pickups (an eHP bump the player can also claim). */
+    public static final int   AFFIX_FORTIFIED_EXTRA_ARMOUR = 1;
+    /** VOLATILE: extra explosive barrels 'E' — the arena itself is a weapon for both sides. */
+    public static final int   AFFIX_VOLATILE_EXTRA_BARRELS = 4;
+
+    // ---- MYSTERY (RouteNodeType.MYSTERY, profile "mystery") ----------------
+    // The outcome is rolled at ENTRY from the node's fixed nodeSeed (deterministic per run/seed), so
+    // a scanner reveals a category TONE but never the exact result. Weights sum to 100 and are tuned
+    // so expected value ≈ a normal combat floor — a genuine coin-flip, not a strictly-good pick.
+    public static final int MYSTERY_WEIGHT_VAULT        = 18;
+    public static final int MYSTERY_WEIGHT_SECRET_WARREN = 18;
+    public static final int MYSTERY_WEIGHT_TRAP_GAUNTLET = 18;
+    public static final int MYSTERY_WEIGHT_AMBUSH        = 18;
+    public static final int MYSTERY_WEIGHT_LORE_SIGNAL   = 14;
+    public static final int MYSTERY_WEIGHT_MALFUNCTION   = 14;
+
+    /** First-frame reveal sting stamped by the MYSTERY meta-profile on entry. */
+    public static final String MYSTERY_STING_TEXT = "SECTOR SCAN FAILED — UNKNOWN CONTACT";
+    /** Loot boxes in a MYSTERY vault jackpot (the dream pull — richer than an ELITE vault). */
+    public static final int   MYSTERY_VAULT_AMMO_BOXES = 7;
+    /** Explosive/radioactive barrels the TRAP GAUNTLET degrade stamps (traps -> barrels fallback). */
+    public static final int   MYSTERY_TRAP_BARRELS     = 6;
+    /** Loot boxes waiting at the end of a TRAP GAUNTLET (modest reward for patience). */
+    public static final int   MYSTERY_TRAP_AMMO_BOXES  = 3;
+    /** Medkits waiting at the exit of a TRAP GAUNTLET. */
+    public static final int   MYSTERY_TRAP_MEDKITS     = 1;
+    /** Extra keycard-gated loot the SECRET WARREN promises (rewards those who search). */
+    public static final int   MYSTERY_WARREN_AMMO_BOXES = 4;
+    public static final int   MYSTERY_WARREN_MEDKITS    = 1;
 }

@@ -1,6 +1,30 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Level Design
 TITLE: Route Map — Part 9: Danger/Gamble Node Levels — Elite Hotzone & Mystery
+
+IMPLEMENTATION NOTES (order-9, delivered):
+- EliteProfile ("elite_hotzone"): hazard-forward config (radioactive barrels up, arena room,
+  flicker/unlit dread, lock-and-key), red-alert on arrival via FloorEffects, ELITE_BUDGET_SCALE
+  encounter budget, and a ~1.5x GATED_ROOM reward (owned-ammo vault + armour/medkits/stims +
+  weapon-rack set-dressing). Reads the map-gen NodeAffix and folds its typed modifiers in.
+- NodeAffixRegistry + NodeAffixDefinition + 5 v1 affixes (IRRADIATED / OVERCLOCKED / SWARM /
+  FORTIFIED / VOLATILE). Each is a bundle of TYPED modifiers routed through existing
+  config/budget/guarantee systems — no bespoke per-affix code. Wired into RouteMapGenerator's
+  elite affix pool; the affix shows on the icon tag (order-5) and is appended to the map hint.
+- MysteryProfile ("mystery"): a META-profile over MysteryOutcome (6-row weighted table summing to
+  100, EV ≈ neutral). Rolls at ENTRY from the node's fixed nodeSeed; delegates (AMBUSH -> elite,
+  LORE -> rest) or builds directly (VAULT / SECRET_WARREN / TRAP_GAUNTLET / MALFUNCTION). Stamps a
+  generic reveal sting + logs the resolved-but-hidden outcome to RunStats.
+- Scanner category-hint: a scanned MYSTERY card shows its ScanTone bucket (REWARD-RICH / HIGH RISK /
+  QUIET), derived from the same nodeSeed, so several outcomes share a tone — informed gambling,
+  never the exact result.
+- Graceful degradation: traps -> explosive/radioactive barrels; secret rooms -> server rooms +
+  lock-and-key; lockdown waves -> the ELITE combat delegate; relics/EVENT (order-10/14) -> nearest
+  available (rest/loot). No run-ending trap — worst case (MALFUNCTION) is survivable, no reward.
+- FloorEffects value object carries redAlert / sting / stat-log from the headless profile to World.
+  All numbers in RouteMapConstants; all rolls deterministic from floorSeed/nodeSeed.
+  NOTE: could not run ./gradlew here (Google Maven egress blocked by session policy); the automated
+  code-reviewer hook validated each file for compile errors as it was written.
 CREATED: 2026-07-08
 ---
 

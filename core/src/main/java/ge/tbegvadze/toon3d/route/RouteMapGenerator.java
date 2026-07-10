@@ -418,6 +418,12 @@ public final class RouteMapGenerator {
                     node.chosenGeneratorId = rollCombatGenerator(node, region);
                 }
                 rollAffix(node);
+                // Order-9: surface a rolled affix in the map hint so the twist is readable before the
+                // player commits (the icon also shows an affix corner-tag). e.g. "… — OVERCLOCKED".
+                if (node.affix != null && node.resolvedHint != null) {
+                    node.resolvedHint = node.resolvedHint
+                            + RouteMapConstants.AFFIX_HINT_SEPARATOR + node.affix.displayName();
+                }
             }
         }
     }

@@ -50,6 +50,7 @@ import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
 import ge.tbegvadze.toon3d.route.AmmoCacheRequest;
 import ge.tbegvadze.toon3d.route.EnemyBudgetOverride;
+import ge.tbegvadze.toon3d.route.FloorEffects;
 import ge.tbegvadze.toon3d.route.GuaranteedContent;
 import ge.tbegvadze.toon3d.route.GuaranteedContentStamper;
 import ge.tbegvadze.toon3d.route.LevelPlan;
@@ -175,6 +176,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private RegionPlan              routePlan;
     /** The node the player committed to; the next floor is built from it. Null before the first commit. */
     private RouteNode               pendingNode;
+    /**
+     * Presentation / telemetry effects the last-built floor asked for (order-9): red alert, a reveal
+     * sting, and the resolved MYSTERY outcome to log. Applied AFTER {@code rebuildForLevel} (which
+     * resets red alert), so it survives the rebuild. Reset to {@link FloorEffects#NONE} each build.
+     */
+    private FloorEffects            pendingFloorEffects = FloorEffects.NONE;
 
     // -------------------------------------------------------------------------
     // Player stat system — persistent across floor transitions (Order 6)
@@ -285,6 +292,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // safe. The map itself is generated lazily at staging-room exit (see the FADING_OUT branch).
         RouteRegistries.bootstrap();
         routeMapGenerator = new RouteMapGenerator(RouteRegistries.nodeTypes(), RouteRegistries.generators());
+        // Order-9: supply the ELITE affix catalog so hotzones can roll a readable twist (empty pool =
+        // no affix rolls). MYSTERY uses its own entry-time outcome table, not a map-gen affix.
+        routeMapGenerator.setEliteAffixPool(RouteRegistries.affixes().elitePool());
         routeMapOverlay   = new RouteMapOverlay();
         routeMapOverlay.setNodeCommitListener(this::commitRouteNode);
         routeMapOverlayRenderer = new RouteMapOverlayRenderer();
@@ -618,6 +628,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      */
     private Level buildNextFloor() {
         long seed = floorSeed(runSeed, currentDepth);
+        // Default: no floor effects. buildFloorForNode overwrites this from the resolved plan (order-9).
+        pendingFloorEffects = FloorEffects.NONE;
         if (routeMap == null || pendingNode == null) {
             return pickLevelGenerator(currentDepth, seed).generate(currentDepth);
         }
@@ -647,9 +659,37 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Owned-ammo cache (order-8): the profile declares the intent; World fulfils it here because
         // only World knows the arsenal, so a cache never dumps ammo the player can't use.
         fulfillAmmoCache(built, plan.ammoCache(), seed);
+        // Presentation / telemetry effects (order-9): stash them so applyPendingFloorEffects() can run
+        // AFTER rebuildForLevel (which resets red alert). A profile is headless and cannot touch these.
+        pendingFloorEffects = plan.floorEffects();
         Gdx.app.log("RouteMap", "build depth=" + depth + " node=" + definition.id()
                 + " generator=" + plan.generatorId().stableId());
         return built;
+    }
+
+    /**
+     * Applies the last-built floor's {@link FloorEffects} (route-map order-9), which a headless
+     * {@link NodeLevelProfile} cannot touch itself. Runs AFTER {@code rebuildForLevel} (which clears
+     * red alert on every floor transition), so a DANGER floor's pulse survives the rebuild. Idempotent
+     * for a plain floor — {@link FloorEffects#NONE} does nothing.
+     */
+    private void applyPendingFloorEffects() {
+        FloorEffects effects = pendingFloorEffects;
+        if (effects == null || !effects.hasAny()) {
+            return;
+        }
+        if (effects.redAlertActive()) {
+            gameState.redAlert = true;
+            alertTimeSeconds   = 0f;
+        }
+        if (effects.stingText() != null && eventTextSystem != null) {
+            eventTextSystem.spawnWithColor(effects.stingText(), EventTextSystem.COLOR_RED);
+        }
+        // The resolved-but-hidden outcome is logged so the post-run route story is complete: it annotates
+        // the node token committed at route-select time (e.g. "mystery" -> "mystery:VAULT").
+        if (effects.statLogToken() != null) {
+            runStats.annotateLastRouteNode(effects.statLogToken());
+        }
     }
 
     /**
@@ -1351,11 +1391,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     playerProgress.setFloorDepth(currentDepth);
                     runStats.recordFloor(currentDepth);
                     rebuildForLevel(buildNextFloor());
+                    applyPendingFloorEffects();
                 } else {
                     currentDepth++;
                     playerProgress.setFloorDepth(currentDepth);
                     runStats.recordFloor(currentDepth);
                     rebuildForLevel(buildNextFloor());
+                    applyPendingFloorEffects();
                 }
                 fadeTimerSeconds = 0f;
                 runPhase = RunPhase.FADING_IN;

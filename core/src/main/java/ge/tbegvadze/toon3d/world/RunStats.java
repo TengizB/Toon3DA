@@ -33,6 +33,19 @@ public class RunStats {
         routeString.append(nodeToken);
     }
 
+    /**
+     * Annotates the most-recently committed route node with a resolved detail, joined by ':'
+     * (e.g. a MYSTERY node "mystery" becomes "mystery:VAULT"). Used by route-map order-9 to record a
+     * MYSTERY node's HIDDEN-but-resolved outcome so the post-run route story is complete. No-op before
+     * any node has been committed.
+     */
+    public void annotateLastRouteNode(String detailToken) {
+        if (detailToken == null || detailToken.isEmpty() || routeString.length() == 0) {
+            return;
+        }
+        routeString.append(':').append(detailToken);
+    }
+
     /** The route walked so far, as a single dash-separated string (empty before the first commit). */
     public String getRouteString() {
         return routeString.toString();
