@@ -21,6 +21,8 @@ final class RouteMapColorPalette {
     final Color holoCyan     = new Color(0.42f, 0.86f, 0.98f, 1f);
     final Color holoDim      = new Color(0.24f, 0.44f, 0.52f, 1f);
     final Color scrimNavy    = new Color(0.03f, 0.05f, 0.09f, 1f);
+    /** Near-black phosphor screen behind the schematic (a touch cooler than scrimNavy) so the cyan pops. */
+    final Color screenBlack  = new Color(0.03f, 0.05f, 0.07f, 1f);
     final Color steel        = new Color(0.14f, 0.17f, 0.21f, 1f);
     final Color rivet        = new Color(0.34f, 0.40f, 0.46f, 1f);
     final Color hazardAmber  = new Color(0.98f, 0.72f, 0.16f, 1f);

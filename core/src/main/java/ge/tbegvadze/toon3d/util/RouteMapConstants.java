@@ -177,6 +177,16 @@ public final class RouteMapConstants {
     /** Dim navy scrim alpha over the frozen 3D world so the map reads without fully hiding it. */
     public static final float OVERLAY_SCRIM_ALPHA = 0.72f;
 
+    /**
+     * Alpha of the near-opaque "phosphor screen" panel filling the map viewport band, drawn after the
+     * world scrim and before the additive glow/conduit/card passes. The see-through outer scrim alone
+     * let the frozen 3D world (weapon/HUD text, walls) ghost through the schematic and wash out the
+     * translucent cards; this dedicated dark surface gives the hologram a real screen to sit on so the
+     * additive glow reads against a consistent backdrop. The world OUTSIDE this band still ghosts
+     * through the bezel (diegetic). See RouteMapOverlayRenderer.drawScreenPanel().
+     */
+    public static final float MAP_SCREEN_FILL_ALPHA = 0.90f;
+
     // ---- Screen regions (vertical bands) -----------------------------------
     public static final float TITLE_PLATE_BOTTOM_Y   = 648f;
     public static final float TITLE_PLATE_TOP_Y      = 712f;
@@ -203,7 +213,7 @@ public final class RouteMapConstants {
     public static final float NODE_CARD_WIDTH         = 150f;
     public static final float NODE_CARD_HEIGHT        = 120f;
     public static final float NODE_CARD_CORNER_RADIUS = 14f;
-    public static final float NODE_CARD_BODY_ALPHA    = 0.22f;
+    public static final float NODE_CARD_BODY_ALPHA    = 0.34f;
     public static final float NODE_CARD_BORDER_WIDTH  = 2f;
 
     /** Per-layer shrink applied to distant (non-decision) rows: scale = 1 − (row−1)·step. */
@@ -219,9 +229,9 @@ public final class RouteMapConstants {
     // Project rule: FrameBuffer.end() resets the GL viewport and would corrupt the FitViewport
     // letterbox mid-frame (see WeaponHudRenderer), so the hologram bloom is faked with concentric
     // additive-blended discs instead of an offscreen pass. Crisp, viewport-safe, no allocation.
-    public static final float GLOW_RADIUS      = 92f;
+    public static final float GLOW_RADIUS      = 70f;
     public static final int   GLOW_RING_COUNT  = 5;
-    public static final float GLOW_RING_ALPHA  = 0.13f;
+    public static final float GLOW_RING_ALPHA  = 0.10f;
     public static final float FOCUS_GLOW_BOOST = 1.6f;
 
     // ---- Node idle / focus animation ---------------------------------------
@@ -253,12 +263,21 @@ public final class RouteMapConstants {
     public static final float RISK_PIP_INSET  = 12f;
 
     // ---- CRT treatment -----------------------------------------------------
-    public static final float SCANLINE_SPACING      = 3f;
-    public static final float SCANLINE_ALPHA        = 0.10f;
+    // Tuned DOWN from the first pass (player: "the screen-like effect is too strong and reduces clear
+    // visibility"). The phosphor/scanline identity stays — it is dialled back, not removed.
+    public static final float SCANLINE_SPACING      = 4f;
+    public static final float SCANLINE_ALPHA        = 0.05f;
     public static final float SCANLINE_SCROLL_SPEED = 12f;
-    public static final float VIGNETTE_ALPHA        = 0.34f;
+    /**
+     * Vignette edge-band darkening. Zeroed (Issue 1 option B): the four opaque bands hugged the map
+     * viewport edges and painted over the top/bottom node rows and outer lanes — the "black border
+     * cutting the cards" the player reported. The dedicated screen panel ({@link #MAP_SCREEN_FILL_ALPHA})
+     * now supplies the "inside a display" feel, so the vignette pass no-ops at alpha 0. Constants kept
+     * documented; drawCrtPass() skips the pass entirely when the alpha is not positive.
+     */
+    public static final float VIGNETTE_ALPHA        = 0.0f;
     public static final float VIGNETTE_BAND         = 64f;
-    public static final float FLICKER_AMPLITUDE     = 0.02f;
+    public static final float FLICKER_AMPLITUDE     = 0.012f;
     public static final float FLICKER_SPEED         = 30f;
     public static final float SYNC_FLASH_INTERVAL   = 4.5f;
     public static final float SYNC_FLASH_ALPHA      = 0.06f;
@@ -409,7 +428,13 @@ public final class RouteMapConstants {
     public static final float PAN_TOP_MARGIN = 40f;
     /** How far past the map viewport band (bottom / top) a node centre may sit and still be drawn. */
     public static final float MAP_CULL_MARGIN_BOTTOM = 30f;
-    public static final float MAP_CULL_MARGIN_TOP    = 96f;
+    /**
+     * Trimmed from 96f (Issue 1): the old margin let a distant top row's centre climb to y≈736 — ABOVE
+     * the title plate (bottom 648) — so a card could draw partly behind the plate/hazard trim. Capped
+     * near the plate so no card centre can hide under the chrome. Distant rows are already shrunk by the
+     * perspective fade, so the top lookahead row still fully fits.
+     */
+    public static final float MAP_CULL_MARGIN_TOP    = 24f;
 
     // ---- MAP / DETAIL framing toggle ---------------------------------------
     /** Vertical compression applied to layer spacing + node scale in "fit region" (MAP) framing. */

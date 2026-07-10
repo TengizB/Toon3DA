@@ -1,8 +1,25 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Route Map — Nav Console Legibility Fixes (border + CRT + contrast)
 CREATED: 2026-07-10
 ---
+
+IMPLEMENTATION NOTES (2026-07-10)
+=================================
+All four issues addressed as a pure visual-constant + draw-order pass (no layout/selection/graph
+changes). Decisions taken from the offered options:
+  - ISSUE 1: Option B — VIGNETTE_ALPHA zeroed (0.34 -> 0.0); drawCrtPass() now skips the vignette
+    bands entirely when the alpha is not positive (VIGNETTE_BAND kept documented at 64f). Top pinch
+    closed via MAP_CULL_MARGIN_TOP 96f -> 24f (kept MAP_VIEWPORT_TOP_Y at 640 so the framing toggle
+    button placement is undisturbed).
+  - ISSUE 2: SCANLINE_ALPHA 0.10 -> 0.05, SCANLINE_SPACING 3f -> 4f, FLICKER_AMPLITUDE 0.02 -> 0.012.
+    SYNC_FLASH and SCANLINE_SCROLL_SPEED left as-is.
+  - ISSUE 3: new MAP_SCREEN_FILL_ALPHA = 0.90f + new palette.screenBlack (0.03,0.05,0.07). New
+    drawScreenPanel() pass (1b) fills the map viewport band with normal alpha BEFORE the additive glow.
+  - ISSUE 4: NODE_CARD_BODY_ALPHA 0.22 -> 0.34, GLOW_RADIUS 92f -> 70f, GLOW_RING_ALPHA 0.13 -> 0.10.
+    FOCUS_GLOW_BOOST left as-is.
+Files touched: util/RouteMapConstants.java, render/RouteMapOverlayRenderer.java,
+render/RouteMapColorPalette.java (added screenBlack).
 
 PREREQUISITE: The "FACILITY NAV" route-select console already ships (route-map order-4 LOOK,
 order-5 icons, order-6 touch). This is a POLISH / BUG-FIX pass on that existing console, NOT a
