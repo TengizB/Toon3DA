@@ -9,8 +9,13 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
 
+import com.badlogic.gdx.utils.BufferUtils;
 import com.badlogic.gdx.utils.Disposable;
+
+import java.nio.IntBuffer;
 import ge.tbegvadze.toon3d.render.routeicons.IconPainter;
 import ge.tbegvadze.toon3d.render.routeicons.IconPainterRegistry;
 import ge.tbegvadze.toon3d.render.routeicons.RegionCrestPainter;
@@ -154,6 +159,17 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
 
     // ---- Per-conduit scratch (no allocation in render) ---------------------
     private float conduitStartX, conduitStartY, conduitControlX, conduitControlY, conduitEndX, conduitEndY;
+
+    // ---- Map-band scissor scratch (no allocation in render) ----------------
+    // The scrolling map content (glow / conduits / cards / icons / labels) is clipped to the map
+    // viewport band so a panned-away or bottom-most row can never bleed over the title plate, the
+    // confirm bar, or the hazard trim (the reported "nodes overlay the UI when scrolled" issue).
+    private final Rectangle mapClipArea    = new Rectangle();
+    private final Rectangle mapClipScissor = new Rectangle();
+    // Holds the live GL viewport rect (glGetIntegerv) so the scissor is computed against the actual
+    // FitViewport letterbox sub-rectangle, not the full window — otherwise the clip misaligns on any
+    // aspect ratio that pillar/letterboxes (e.g. a 19.5:9 phone).
+    private final IntBuffer glViewportBuffer = BufferUtils.newIntBuffer(16);
 
     public RouteMapOverlayRenderer() {
         shapes  = new ShapeRenderer();
@@ -783,20 +799,54 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
 
         drawScrim();                 // 1. world scrim
-        drawScreenPanel();           // 1b. opaque phosphor screen over the map band (stops world bleed)
+        drawScreenPanel();           // 1b. opaque backdrop over the map band (stops world bleed)
         drawBezel();                 // 2. bezel / chrome / hazard trim
         drawRegionCrestPass();       // 2b. region crest badge on the title plate (order-5)
+
+        // Passes 3-6 + the node labels are the SCROLLING map content: clipped to the map viewport band
+        // so a panned or bottom-most row is hard-cut at the chrome instead of overlaying it.
+        boolean clipped = beginMapClip(camera);
         drawGlowPass();              // 3. additive hologram bloom (node halos + conduit cores)
         drawConduitPass();           // 4. curved conduits + travelling pulses
         drawNodePass();              // 5. card bodies + borders + state decor + risk pips
         drawIconPass();              // 6. procedural per-type node icons + affix tags (order-5)
-        drawInvalidFlashPass();      // 6b. red mis-tap flash (order-6)
+        drawNodeLabels();            // 7a. per-node labels (clipped with the cards they belong to)
+        endMapClip(clipped);
+
+        drawInvalidFlashPass();      // 6b. red mis-tap flash (order-6) — node OR confirm-bar button
         drawScanSweepPass();         // 6c. long-range scanner sweep wipe (order-6)
-        drawTextPass();              // 7. title / depth / region / labels / legend / confirm labels
-        drawCrtPass();               // 8. scanlines + vignette + flicker + sync flash
+        drawChromeText();            // 7b. title / depth / region / legend hint / confirm labels
+        drawCrtPass();               // 8. scanlines + vignette + flicker + sync flash (all off now)
 
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    /**
+     * Enables a scissor clip to the map viewport band ([0,worldWidth] × [bottom,top]) for the scrolling
+     * map content. Returns whether the clip was actually pushed (false only if the band mapped to a
+     * zero-area rect, in which case nothing needs drawing — callers still call {@link #endMapClip} which
+     * no-ops). Uses pre-allocated Rectangles so the render path stays allocation-free.
+     */
+    private boolean beginMapClip(OrthographicCamera camera) {
+        mapClipArea.set(0f, RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y, worldWidth,
+                        RouteMapConstants.MAP_VIEWPORT_TOP_Y - RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y);
+        // Read the actual GL viewport (the FitViewport's letterboxed sub-rect) so the projected scissor
+        // lines up on pillar/letterboxed aspect ratios instead of assuming a full-window viewport.
+        Gdx.gl.glGetIntegerv(GL20.GL_VIEWPORT, glViewportBuffer);
+        float viewportX      = glViewportBuffer.get(0);
+        float viewportY      = glViewportBuffer.get(1);
+        float viewportWidth  = glViewportBuffer.get(2);
+        float viewportHeight = glViewportBuffer.get(3);
+        ScissorStack.calculateScissors(camera, viewportX, viewportY, viewportWidth, viewportHeight,
+                                       batch.getTransformMatrix(), mapClipArea, mapClipScissor);
+        return ScissorStack.pushScissors(mapClipScissor);
+    }
+
+    private void endMapClip(boolean clipped) {
+        if (clipped) {
+            ScissorStack.popScissors();
+        }
     }
 
     // ---- Pass 1: scrim ------------------------------------------------------
@@ -809,13 +859,14 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         shapes.end();
     }
 
-    // ---- Pass 1b: opaque phosphor screen -----------------------------------
+    // ---- Pass 1b: opaque map backdrop --------------------------------------
 
     /**
-     * Fills the map viewport band with a near-opaque dark "screen" so the frozen 3D world no longer
-     * ghosts through the schematic (the see-through outer scrim let weapon/HUD text and walls bleed in
-     * and wash out the translucent cards). Drawn with NORMAL alpha blending AFTER the scrim and BEFORE
-     * the additive glow pass so the hologram bloom still adds on top of a consistent dark backdrop.
+     * Fills the map viewport band with a FULLY-OPAQUE dark backdrop so the frozen 3D world never ghosts
+     * through the schematic (at the old 0.90 alpha ~10% of the weapon/HUD text and walls still bled in
+     * and washed out the cards — the "screen-like effect" the player asked to remove). Drawn with NORMAL
+     * alpha blending AFTER the scrim and BEFORE the additive glow pass so the hologram bloom still adds
+     * on top of a consistent dark backdrop.
      */
     private void drawScreenPanel() {
         shapes.begin(ShapeRenderer.ShapeType.Filled);
@@ -831,12 +882,11 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         Color trim = trimColor();
 
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        // Title plate + confirm-bar + legend bands (brushed steel).
+        // Title plate + confirm-bar bands (brushed steel). The legend strip band was retired; its hint
+        // line now sits in the confirm bar's centre gap.
         setShape(palette.steel, 0.92f);
         shapes.rect(0f, RouteMapConstants.TITLE_PLATE_BOTTOM_Y, worldWidth,
                     RouteMapConstants.TITLE_PLATE_TOP_Y - RouteMapConstants.TITLE_PLATE_BOTTOM_Y);
-        shapes.rect(0f, RouteMapConstants.LEGEND_STRIP_BOTTOM_Y, worldWidth,
-                    RouteMapConstants.LEGEND_STRIP_TOP_Y - RouteMapConstants.LEGEND_STRIP_BOTTOM_Y);
         setShape(palette.steel, 0.95f);
         shapes.rect(0f, RouteMapConstants.CONFIRM_BAR_BOTTOM_Y, worldWidth,
                     RouteMapConstants.CONFIRM_BAR_TOP_Y - RouteMapConstants.CONFIRM_BAR_BOTTOM_Y);
@@ -863,9 +913,10 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         shapes.rect(toggleLeft(), toggleBottom(),
                     RouteMapConstants.FRAMING_TOGGLE_WIDTH, RouteMapConstants.FRAMING_TOGGLE_HEIGHT);
 
-        // Hazard chevron trim along the top and bottom of the map viewport.
+        // Hazard chevron trim along the top and bottom of the map viewport. The bottom trim sits on
+        // top of the confirm bar, filling the gap up to the (lowered) map viewport bottom edge.
         drawHazardTrim(RouteMapConstants.TITLE_PLATE_BOTTOM_Y - RouteMapConstants.HAZARD_TRIM_HEIGHT, trim);
-        drawHazardTrim(RouteMapConstants.LEGEND_STRIP_TOP_Y, trim);
+        drawHazardTrim(RouteMapConstants.CONFIRM_BAR_TOP_Y, trim);
 
         // Rivets in the plate corners.
         setShape(palette.rivet, 0.9f);
@@ -1280,9 +1331,30 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         }
     }
 
-    // ---- Pass 7: text -------------------------------------------------------
+    // ---- Pass 7a: node labels (clipped to the map band with their cards) ----
 
-    private void drawTextPass() {
+    private void drawNodeLabels() {
+        batch.begin();
+        font.getData().setScale(RouteMapConstants.NODE_LABEL_SCALE);
+        for (int index = 0; index < displayCount; index++) {
+            if (!isNodeDrawable(index)) continue;
+            RouteNode node = nodeRef[index];
+            float scale = drawScale(index);
+            float labelBaselineY = drawCenterY(index) - RouteMapConstants.NODE_CARD_HEIGHT * scale * 0.22f;
+            Color labelColor = node.status == NodeStatus.LOCKED ? palette.textDim : palette.textBright;
+            float alpha = effectiveAlpha(index) / baseAlpha(index);
+            // drop shadow
+            setFont(palette.scrimNavy, 0.8f * alpha);
+            font.draw(batch, labelText[index], labelX[index] + 1.5f, labelBaselineY - 1.5f);
+            setFont(labelColor, alpha);
+            font.draw(batch, labelText[index], labelX[index], labelBaselineY);
+        }
+        batch.end();
+    }
+
+    // ---- Pass 7b: chrome text (unclipped — lives on the bezel, never scrolls) --
+
+    private void drawChromeText() {
         batch.begin();
 
         font.getData().setScale(RouteMapConstants.TITLE_TEXT_SCALE);
@@ -1303,26 +1375,11 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         setFont(palette.textDim, 0.55f);
         font.draw(batch, UAC_STENCIL, regionTextX, RouteMapConstants.TITLE_PLATE_BOTTOM_Y + 20f);
 
-        // Node labels.
-        font.getData().setScale(RouteMapConstants.NODE_LABEL_SCALE);
-        for (int index = 0; index < displayCount; index++) {
-            if (!isNodeDrawable(index)) continue;
-            RouteNode node = nodeRef[index];
-            float scale = drawScale(index);
-            float labelBaselineY = drawCenterY(index) - RouteMapConstants.NODE_CARD_HEIGHT * scale * 0.22f;
-            Color labelColor = node.status == NodeStatus.LOCKED ? palette.textDim : palette.textBright;
-            float alpha = effectiveAlpha(index) / baseAlpha(index);
-            // drop shadow
-            setFont(palette.scrimNavy, 0.8f * alpha);
-            font.draw(batch, labelText[index], labelX[index] + 1.5f, labelBaselineY - 1.5f);
-            setFont(labelColor, alpha);
-            font.draw(batch, labelText[index], labelX[index], labelBaselineY);
-        }
-
-        // Legend hint.
+        // Legend hint — now rendered in the confirm bar's centre gap (between CANCEL and ENGAGE), since
+        // the dedicated legend strip band was retired to give the map more vertical room.
         if (!legendText.isEmpty()) {
             font.getData().setScale(RouteMapConstants.LEGEND_TEXT_SCALE);
-            float legendY = (RouteMapConstants.LEGEND_STRIP_BOTTOM_Y + RouteMapConstants.LEGEND_STRIP_TOP_Y) / 2f + 6f;
+            float legendY = (RouteMapConstants.CONFIRM_BAR_BOTTOM_Y + RouteMapConstants.CONFIRM_BAR_TOP_Y) / 2f + 6f;
             setFont(regionTint, 0.95f);
             font.draw(batch, legendText, legendTextX, legendY);
         }
@@ -1340,11 +1397,11 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         font.draw(batch, mapFraming ? TOGGLE_DETAIL_TEXT : TOGGLE_MAP_TEXT,
                   mapFraming ? toggleLabelXDetail : toggleLabelXMap, toggleLabelY);
 
-        // Long-range scanner readout (relic hook, order-6).
+        // Long-range scanner readout (relic hook, order-6) — top-left inside the map band.
         if (scannerActive) {
             setFont(palette.holoCyan, 0.85f);
             font.draw(batch, SCANNER_TEXT, RouteMapConstants.REGION_TEXT_LEFT_X,
-                      RouteMapConstants.LEGEND_STRIP_TOP_Y + 22f);
+                      RouteMapConstants.MAP_VIEWPORT_TOP_Y - 10f);
         }
 
         batch.end();
@@ -1353,23 +1410,36 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     // ---- Pass 8: CRT --------------------------------------------------------
 
     private void drawCrtPass() {
+        // Every CRT layer is disabled (alphas zeroed in RouteMapConstants) per the player's request to
+        // remove the "screen-like effect" entirely. Each block is alpha-guarded, so the whole pass
+        // no-ops at the current values while staying re-enableable from constants alone. Bail early when
+        // nothing is drawable so the pass never opens an empty ShapeRenderer batch.
+        boolean anyScanlines = RouteMapConstants.SCANLINE_ALPHA > 0f;
+        boolean anyVignette  = RouteMapConstants.VIGNETTE_ALPHA > 0f;
+        boolean anySyncFlash = RouteMapConstants.SYNC_FLASH_ALPHA > 0f;
+        if (!anyScanlines && !anyVignette && !anySyncFlash) {
+            return;
+        }
+
         float viewportBottom = RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y;
         float viewportTop    = RouteMapConstants.MAP_VIEWPORT_TOP_Y;
 
         shapes.begin(ShapeRenderer.ShapeType.Filled);
 
         // Scanlines — dark 1px lines scrolling upward across the map viewport only.
-        float scroll = (overlayTimeSeconds * RouteMapConstants.SCANLINE_SCROLL_SPEED)
-                     % RouteMapConstants.SCANLINE_SPACING;
-        shapes.setColor(0f, 0f, 0f, RouteMapConstants.SCANLINE_ALPHA);
-        for (float lineY = viewportBottom + scroll; lineY < viewportTop; lineY += RouteMapConstants.SCANLINE_SPACING) {
-            shapes.rect(0f, lineY, worldWidth, 1f);
+        if (anyScanlines) {
+            float scroll = (overlayTimeSeconds * RouteMapConstants.SCANLINE_SCROLL_SPEED)
+                         % RouteMapConstants.SCANLINE_SPACING;
+            shapes.setColor(0f, 0f, 0f, RouteMapConstants.SCANLINE_ALPHA);
+            for (float lineY = viewportBottom + scroll; lineY < viewportTop; lineY += RouteMapConstants.SCANLINE_SPACING) {
+                shapes.rect(0f, lineY, worldWidth, 1f);
+            }
         }
 
-        // Vignette — darkened edge bands around the viewport. Zeroed (Issue 1 option B): the bands
-        // painted over the top/bottom node rows and outer lanes (the reported "black border cutting the
-        // cards"); the opaque screen panel now supplies the display feel. Pass skipped when alpha <= 0.
-        if (RouteMapConstants.VIGNETTE_ALPHA > 0f) {
+        // Vignette — darkened edge bands around the viewport. Zeroed: the bands painted over the
+        // top/bottom node rows and outer lanes (the reported "black border cutting the cards"); the
+        // opaque backdrop now supplies the display feel. Pass skipped when alpha <= 0.
+        if (anyVignette) {
             float band = RouteMapConstants.VIGNETTE_BAND;
             shapes.setColor(0f, 0f, 0f, RouteMapConstants.VIGNETTE_ALPHA);
             shapes.rect(0f, viewportBottom, band, viewportTop - viewportBottom);
@@ -1378,12 +1448,14 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
             shapes.rect(0f, viewportBottom, worldWidth, band);
         }
 
-        // Flicker + rare sync flash across the whole hologram.
-        float syncPhase = overlayTimeSeconds % RouteMapConstants.SYNC_FLASH_INTERVAL;
-        if (syncPhase < 0.06f) {
-            shapes.setColor(palette.holoCyan.r, palette.holoCyan.g, palette.holoCyan.b,
-                            RouteMapConstants.SYNC_FLASH_ALPHA);
-            shapes.rect(0f, viewportBottom, worldWidth, viewportTop - viewportBottom);
+        // Rare sync flash across the whole hologram.
+        if (anySyncFlash) {
+            float syncPhase = overlayTimeSeconds % RouteMapConstants.SYNC_FLASH_INTERVAL;
+            if (syncPhase < 0.06f) {
+                shapes.setColor(palette.holoCyan.r, palette.holoCyan.g, palette.holoCyan.b,
+                                RouteMapConstants.SYNC_FLASH_ALPHA);
+                shapes.rect(0f, viewportBottom, worldWidth, viewportTop - viewportBottom);
+            }
         }
 
         shapes.end();
