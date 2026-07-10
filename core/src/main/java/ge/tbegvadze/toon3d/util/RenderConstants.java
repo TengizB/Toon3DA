@@ -54,6 +54,18 @@ public final class RenderConstants {
     public static final float MINIMAP_ENEMY_THREAT_R   = 1.00f;
     public static final float MINIMAP_ENEMY_THREAT_G   = 0.16f;
     public static final float MINIMAP_ENEMY_THREAT_B   = 0.16f;
+    // Shop (vending machine, '@') marker — bright glowing magenta, distinct from generic props
+    // so it reads at a glance on the mini-map instead of blending in with grey obstacles.
+    public static final float MINIMAP_SHOP_R           = 0.85f;
+    public static final float MINIMAP_SHOP_G           = 0.25f;
+    public static final float MINIMAP_SHOP_B           = 1.00f;
+    // Outer glow square drawn under the pulsing shop marker core, sized as a multiple of
+    // MINI_MAP_PROP_SIZE and rendered dimmer (opaque) to read as a soft halo without GL blending.
+    // Kept below CELL_SIZE / PROP_SIZE (~1.67) so the glow never exceeds the tile's own bounds —
+    // markers here aren't clip-rectangled, so anything larger than the tile could bleed past the
+    // mini-map border on edge tiles.
+    public static final float MINIMAP_SHOP_GLOW_SCALE      = 1.5f;
+    public static final float MINIMAP_SHOP_GLOW_BRIGHTNESS = 0.45f;
     // Pulse brightness range for the exit marker and enemy threat chevrons (see GameMath.pulseMultiplier)
     public static final float MINIMAP_PULSE_MIN_BRIGHTNESS = 0.65f;
     public static final float MINIMAP_PULSE_MAX_BRIGHTNESS = 1.00f;

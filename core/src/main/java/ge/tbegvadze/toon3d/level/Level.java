@@ -221,6 +221,11 @@ public class Level {
             || cell == 'I' || cell == 'J' || cell == 'W';
     }
 
+    /** Returns true for a shop vending machine tile ('@'), stamped solid by World.placeMachine. */
+    public static boolean isShop(char cell) {
+        return cell == '@';
+    }
+
     /** Returns true for walkable decal props (corpses, dropped items, stains, keycard pickups, medical, armour, ammo pickups, stairs). */
     public static boolean isPropDecal(char cell) {
         return cell == 'm' || cell == 's' || cell == '.' || cell == 'O' || cell == 'e'
