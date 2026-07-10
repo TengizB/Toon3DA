@@ -1,0 +1,302 @@
+STATUS: IMPLEMENTED
+CATEGORY: Systems
+TITLE: Staging-Room Portal Opens FACILITY NAV (First Route Choice)
+CREATED: 2026-07-10
+---
+
+OVERVIEW
+========
+Today the FIRST portal of a run — the '>' in the procedurally-built staging room
+(StartGameLevelGenerator, game-start-weapon-selection-room.txt) — skips the route map
+entirely: World.onDescentRequested() early-exits to FADING_OUT, and the RouteMap is
+generated lazily in the fade completion handler which then AUTO-COMMITS floor 1 for the
+player. This change makes the staging portal behave like every other in-dungeon portal:
+it opens the same "FACILITY NAV" console (RunPhase.ROUTE_SELECT) and lets the player
+CHOOSE their first floor from the depth-0 -> depth-1 lane the generator already produces.
+
+This belongs in the game because the run's opening branch is currently invisible: the
+map already contains 2-3 real depth-1 lanes (COMBAT / CACHE / ELITE / etc.), but the
+player is silently railroaded onto lane 0. Surfacing that choice makes the first drop a
+deliberate decision (a roguelike pillar) and removes a one-off special case — the SAME
+present -> ROUTE_SELECT -> commit -> FADING_OUT pipeline runs at every portal, staging
+included. Scope is intentionally tight: this is "trigger the existing route-select flow
+one portal earlier," NOT a new subsystem or a parallel "opening choice" concept.
+
+DEDUPLICATION / RELATIONSHIP TO EXISTING DOCS
+=============================================
+- game-start-weapon-selection-room.txt (IMPLEMENTED): owns the staging room, the
+  three-weapon offer, and the "ARM YOURSELF FIRST" soft-guard. THIS doc changes only
+  what happens AFTER the weapon is chosen and the player steps on '>': the portal now
+  opens the route console instead of fading straight out. The weapon room, offer logic,
+  and guard are untouched.
+- branching-facility-route-map-order-1..11.txt + docs/route-map-system.txt: define the
+  RouteMap data model, RouteMapGenerator, the ROUTE_SELECT phase, RouteMapOverlay/
+  RouteMapOverlayRenderer console, and commitRouteNode pipeline. THIS doc REUSES all of
+  it verbatim; it adds no route classes and no new node type. Order-3's note that "there
+  is no node choice to present at the staging exit" is the exact simplification being
+  reversed here.
+- No new tile symbol. No new render class. No new route class.
+
+GAMEPLAY LOOP
+=============
+1. Player is in the staging room, has picked one of the three weapons
+   (startRoomChoiceResolved == true). They walk onto the central '>' portal tile.
+2. LevelTransitionListener fires World.onDescentRequested().
+3. GUARD (unchanged): if the weapon choice is NOT yet resolved, flash
+   "ARM YOURSELF FIRST" and return (no-op step). Route select can never open before a
+   weapon is taken.
+4. NEW: because isStartingRoom is true, World lazily builds the RouteMap if it does not
+   exist yet (routePlan = RegionPlan.defaultPlan(); routeMap =
+   routeMapGenerator.generate(runSeed, routePlan)), then presents the depth-0 -> depth-1
+   candidates via routeMap.getSelectableNext() through the SAME console
+   (routeMapOverlay.present(picks) + routeMapOverlayRenderer.present(routeMap)) and
+   enters RunPhase.ROUTE_SELECT. The staging room stays drawn but frozen behind the
+   overlay; the movement/action cluster is hidden (existing ROUTE_SELECT gating).
+5. The FACILITY NAV console boots (0.35s sweep) and shows the CURRENT node (depth 0,
+   "you are here" in the staging bay) at the bottom with its 2-3 selectable next lanes
+   above it. Title plate reads "DEPTH 0 -> 1"; region crest is outer_facility. There is
+   no history row (depth 0 is the root — nothing was departed from).
+6. Player TAPS a candidate card -> FOCUSED (ring + hint in the legend strip). Player TAPS
+   ENGAGE -> commit flare -> World.commitRouteNode(chosen).
+7. commitRouteNode does routeMap.commitTo(chosen); pendingNode = chosen;
+   recordRouteCommit(chosen); runPhase = FADING_OUT — identical to a mid-run commit.
+8. FADING_OUT completion (staging branch): tear down the staging state
+   (isStartingRoom = false, null the startRoom* fields) but DO NOT regenerate the map,
+   DO NOT auto-commit, and DO NOT increment currentDepth (floor 1 is the first floor, so
+   depth stays STARTING_DEPTH = 1). Then rebuildForLevel(buildNextFloor()) builds floor 1
+   from pendingNode exactly as before, and applyPendingFloorEffects() runs.
+9. From floor 1 onward the run is unchanged: every subsequent portal opens the same
+   console via the normal (non-staging) branch of onDescentRequested().
+
+WHEN THE ROUTEMAP IS GENERATED (the core decision)
+==================================================
+RECOMMENDED: generate lazily at the moment the player steps on the staging portal —
+inside onDescentRequested(), in the new isStartingRoom branch, guarded by
+`if (routeMap == null)`. Rationale:
+  - Minimal diff: the generation call simply MOVES from the FADING_OUT staging branch up
+    into onDescentRequested, one phase earlier, so there is a map to present. The
+    FADING_OUT staging branch loses its generate()+autoCommit lines.
+  - Preserves the `routeMap == null` invariant for file-loaded / test worlds
+    (new World(Level) / new World(String) never call the staging path, so routeMap stays
+    null and buildNextFloor()'s depth-driven fallback still fires — see route-map-system
+    "Fallback" note). We are NOT making every world build a map.
+  - Idempotent under ALLOW_PORTAL_BACKOUT: if a future build lets the player CANCEL the
+    first console, re-stepping the portal re-presents the SAME map (the `routeMap == null`
+    guard skips regeneration). Determinism from runSeed is unaffected — generate() is a
+    pure function of (runSeed, defaultPlan).
+
+ALTERNATIVE (not recommended for this change): generate the map in the World constructor
+(real-run path only, World(long runSeed)). Cleaner if a future feature wants to PREVIEW
+the whole map from the staging bay, but it changes the meaning of the `isStartingRoom ||
+routeMap == null` guard in onDescentRequested (routeMap would be non-null during staging)
+and touches construction ordering. Defer until a preview feature actually needs it; the
+lazy-at-portal path is the tight-scope choice now.
+
+WHAT THE PLAYER PICKS AT DEPTH 0 -> 1
+=====================================
+Reuse the map the generator ALREADY produces — NO special "opening choice" concept.
+RouteMapGenerator.generate() builds layer 0 as a single cosmetic COMBAT "you are here"
+node at depth 0, then initializeCursor(startNode) promotes that node's outgoing edges
+(the depth-1 lanes) from LOCKED to AVAILABLE. So routeMap.getSelectableNext() at the
+staging portal returns exactly the same 2-3 flavored depth-1 candidates the first
+in-dungeon branch would have offered — this is a genuine multi-lane choice, not a
+one-node formality. The depth-1 band can contain COMBAT / CACHE / SHOP / ELITE / MYSTERY
+etc. per the region weight tables, so the opening pick already carries real texture
+(a calm cache start vs. a risky elite start vs. plain combat).
+
+Do NOT invent a separate "starting paths" generator or a parallel present/commit path.
+The whole point is that the depth-0 root the generator makes for the overlay's "you are
+here" marker becomes the ACTUAL decision point instead of being auto-consumed by
+autoCommitFirstNode(). One code path, one console, one commit contract.
+
+WEAPON-SELECTION GUARD INTERACTION
+==================================
+Ordering is preserved exactly. onDescentRequested() keeps the existing FIRST check:
+    if (isStartingRoom && !startRoomChoiceResolved) { spawn("ARM YOURSELF FIRST"); return; }
+The new route-open branch runs only AFTER that guard, so:
+  - Weaponless step onto '>' -> "ARM YOURSELF FIRST", console never opens.
+  - Weapon chosen, step onto '>' -> weapon guard passes -> route console opens.
+The player therefore always arms first, then chooses a route — two sequential opening
+decisions (which gun, then which door), both deliberate taps. This matches the staging
+room's "sign the waiver" beat and adds a second, strategic beat on top of it.
+
+UI / FLAVOR FOR THE FIRST-EVER REVEAL vs A MID-RUN ONE
+======================================================
+The console works AS-IS with no special framing required, and the natural data reads
+correctly:
+  - TITLE PLATE: depthText is built from map.getCurrent().depth (RouteMapOverlayRenderer
+    line ~387: "DEPTH " + current.depth + " -> " + (current.depth+1)). At the staging
+    portal current.depth == 0, so it reads "DEPTH 0 -> 1" — accurate (staging is depth 0,
+    the first floor is depth 1). No code change needed.
+  - HISTORY ROW: the layout draws one dimmed history row BELOW the current layer for the
+    node just departed. At depth 0 there is no prior node, so that row is simply empty —
+    the console shows the CURRENT staging node at the bottom with the fresh lanes above,
+    which is the correct "start of descent" read. No departing-node handling needed.
+  - REGION CREST: outer_facility (the first region) — the correct opening region badge.
+  - FORCED-NODE / BOSS: depth-1 nodes are never a BOSS convergence, so
+    SHOW_FORCED_NODE_CARD / isBossNext() never trigger an auto-commit here; the card
+    always shows. Good — the first choice must always be a visible tap.
+
+OPTIONAL POLISH (all deferrable, flag before adding): a run could show a one-time framing
+line in the legend strip on this first reveal, e.g. "SELECT INSERTION VECTOR" instead of
+the focused-node hint until a card is focused, to signal "this is the drop, not a mid-run
+branch." Keep it to a constant string swap gated on current.depth == 0 if wanted; it is
+NOT required for the feature to read correctly and can be skipped for v1.
+
+PLAYER EXPERIENCE
+=================
+The staging bay stops being a corridor with an invisible fork at the end. After the held
+breath of picking a gun, the portal hums, the FACILITY NAV console boots with its CRT
+sweep, and the player sees — for the first time — the shape of the incursion ahead: a
+couple of real doors with different promises (a safe cache, a mean elite, plain combat).
+The opening pick now sets the run's tempo as well as its loadout: "shotgun into a supply
+cache" reads differently from "railgun into a hotzone." Because both the weapon offer and
+the first lane are re-rolled from the run seed, the first ten seconds re-author the run's
+identity every time — exactly the variety the roguelike pillars ask for, now with agency
+instead of a silent auto-pick.
+
+TECHNICAL NOTES
+===============
+AFFECTED CLASS: world/World.java ONLY. No new classes, no route/render/level changes.
+
+1) onDescentRequested() (currently ~lines 457-496). Restructure the head:
+   - KEEP as-is (first): the weapon guard
+       if (isStartingRoom && !startRoomChoiceResolved) { spawn("ARM YOURSELF FIRST"); return; }
+   - KEEP: if (runPhase != RunPhase.PLAYING) return;
+   - REPLACE the current early-exit block
+       // if (isStartingRoom || routeMap == null) { fade straight to FADING_OUT; return; }
+     with a split:
+       a) NEW staging branch (isStartingRoom == true, choice already resolved):
+            if (routeMap == null) {
+                routePlan = RegionPlan.defaultPlan();
+                routeMap  = routeMapGenerator.generate(runSeed, routePlan);
+            }
+            java.util.List<RouteNode> firstPicks = routeMap.getSelectableNext();
+            if (firstPicks.isEmpty()) { fadeTimerSeconds = 0f; runPhase = FADING_OUT; return; } // defensive
+            routeMapOverlay.present(firstPicks);
+            routeMapOverlayRenderer.present(routeMap);
+            routePointerDown = false; routePointerDragging = false;
+            runPhase = RunPhase.ROUTE_SELECT;
+            return;
+       b) KEEP the route-map-less fallback for file/test worlds:
+            if (routeMap == null) { fadeTimerSeconds = 0f; runPhase = FADING_OUT; return; }
+   - KEEP the rest of the normal-descent block unchanged (ensureRouteExtended();
+     getSelectableNext(); forced-boss auto-commit; present; ROUTE_SELECT).
+   NOTE: the staging branch does NOT call ensureRouteExtended() (a freshly generated map
+   already spans the full default plan) and does NOT run the isBossNext() short-circuit
+   (depth-1 is never a boss).
+
+2) commitRouteNode(next) (~579): NO change. It already does commitTo + pendingNode +
+   recordRouteCommit + FADING_OUT, which is exactly what the first commit needs.
+
+3) FADING_OUT completion, staging branch (~1376-1401). The current staging branch does
+   isStartingRoom=false, nulls startRoom* fields, routePlan=defaultPlan(),
+   routeMap=generate(...), autoCommitFirstNode(), then rebuild. REMOVE the map generation
+   and autoCommit (both now happen earlier, in onDescentRequested and commitRouteNode):
+       isStartingRoom               = false;
+       startRoomWeapons             = null;
+       startRoomGroundItems         = null;
+       startRoomMeleeWeapons        = null;
+       startRoomMeleeGroundItems    = null;
+       // routePlan/routeMap already set; pendingNode already committed via commitRouteNode
+       playerProgress.setFloorDepth(currentDepth);   // currentDepth stays STARTING_DEPTH (1)
+       runStats.recordFloor(currentDepth);
+       rebuildForLevel(buildNextFloor());             // builds floor 1 from pendingNode
+       applyPendingFloorEffects();
+   The `else` (normal) branch that does currentDepth++ is unchanged. The isStartingRoom
+   check in FADING_OUT is STILL required — it is what suppresses the currentDepth++ so
+   floor 1 (depth 1) is the first floor, matching the committed depth-1 node.
+
+4) autoCommitFirstNode() (~604): becomes UNUSED after step 3 removes its only caller.
+   Delete it (and its javadoc) to avoid dead code, OR leave a one-line comment if a future
+   headless path might want it. Recommend deletion — the choice is now always player-made.
+
+5) buildNextFloor() (~629): NO change. It already runs the node->floor pipeline off
+   pendingNode (the committed depth-1 node) at currentDepth == 1, so the DEPTH RAMP
+   INVARIANT (depth threaded straight to generate(depth)) holds exactly as before.
+
+6) handleRouteSelectTouch() / reactToRouteTap() / render() ROUTE_SELECT gating: NO change.
+   None of them branch on isStartingRoom, and isStartingRoom is still true during this
+   first ROUTE_SELECT (it is cleared only in FADING_OUT), so the frozen-sim + hidden-
+   controls + overlay-draw behaviour is identical to a mid-run select.
+
+DATA / FIELDS: no new fields. Reuses routeMap, routePlan, pendingNode, runSeed,
+routeMapOverlay, routeMapOverlayRenderer, isStartingRoom, startRoomChoiceResolved.
+
+CONSTANTS TO ADD: none required. (If the optional "SELECT INSERTION VECTOR" first-reveal
+string is built, add ONE constant to RouteMapConstants, e.g. FIRST_REVEAL_LEGEND_TEXT,
+gated on current.depth == 0 in RouteMapOverlayRenderer — flag it then, not now.)
+
+TILE SYMBOLS: none new. The staging portal stays the existing '>' tile.
+
+VISUAL DESIGN
+=============
+Pure reuse of the order-4/5/6 FACILITY NAV console over the frozen, brightly-lit staging
+bay:
+  - TITLE PLATE: "FACILITY NAV — SELECT VECTOR", outer_facility gear-ring crest (left),
+    "DEPTH 0 -> 1" readout (right).
+  - MAP VIEWPORT: CURRENT staging node low-centre (rotating diamond "you are here"
+    reticle), the 2-3 depth-1 lane cards spread above it with their per-type icons
+    (icon_combat crosshair / icon_cache crate / icon_elite skull-diamond / etc.), risk
+    pips (green->red), and idle bob. No dim history row below (nothing departed).
+  - OPENING SWEEP: the standard 0.35s bottom->top boot reveal, which reads especially well
+    here as "the drop plan coming online" for the first time.
+  - LEGEND STRIP: focused node's hint line (or the optional one-time first-reveal string).
+  - CONFIRM BAR: [ENGAGE] disabled until a card is focused, then ready-pulses.
+  - CRT scanlines + vignette as usual. Against the calm blue-white staging bay the amber
+    hologram pops — a clean visual handoff from "safe bay" to "here is the danger ahead."
+
+BALANCE NOTES
+=============
+- No combat numbers change. This is a UX/flow change; the floor that gets built is the
+  same depth-1 floor the generator already rolled.
+- The depth-1 band composition (how often the first pick offers a cache vs. elite vs.
+  combat) is governed entirely by the existing region weight tables in RouteMapConstants /
+  the outer_facility region spec. If the OPENING lane feels too swingy (e.g. an elite as
+  the very first floor punishes a fresh, under-leveled marine), tune the depth-1 band
+  weights there — do NOT special-case the first floor in World. Flag during playtest;
+  a reasonable guard is to bias depth-1 toward COMBAT/CACHE if elite-first proves brutal.
+- currentDepth stays STARTING_DEPTH (1) at the staging exit, so floor 1's enemy budget is
+  the normal depth-1 budget — unchanged from today.
+
+INTERACTIONS
+============
+1. Weapon-selection room (game-start-weapon-selection-room.txt): the ARM YOURSELF FIRST
+   guard gates route-select behind a weapon pick. The two opening decisions now chain:
+   pick gun -> step portal -> pick route -> descend. The weapon despawn / choice-lock beat
+   is unchanged and still fires before the console can open.
+2. Route-map pipeline (route-map-system.txt): this makes the staging portal a first-class
+   citizen of the SAME onDescentRequested -> present -> ROUTE_SELECT -> commitRouteNode ->
+   FADING_OUT -> buildFloorForNode flow. It REMOVES the staging special case
+   (autoCommitFirstNode) rather than adding a branch, so there is now ONE selection path.
+3. File-loaded / test worlds (new World(Level) / new World(String)): never touch the
+   staging path; routeMap stays null; buildNextFloor()'s depth-driven fallback still runs.
+   Unaffected.
+4. RunStats.routeString: the first commit is now recorded by commitRouteNode
+   (recordRouteCommit) instead of autoCommitFirstNode — the route string still opens with
+   the depth-1 node id (e.g. "cache-...", "elite-..."), so the shareable route story is
+   unchanged in content, just player-authored.
+5. ALLOW_PORTAL_BACKOUT (default false): CANCEL stays a no-op during the first select, so
+   the player cannot dodge the drop. If ever enabled, the `routeMap == null` guard makes
+   re-opening the console idempotent (no re-roll).
+6. Fade/transition machinery (LEVEL_TRANSITION_FADE_*): the commit hands off to the exact
+   same FADING_OUT timer used everywhere; only the staging teardown lines differ.
+
+OPEN QUESTIONS
+==============
+1. Generate the map lazily at the portal (recommended) or in the World constructor for the
+   real-run path? Lazy-at-portal is the tight-scope pick; revisit only if a "preview the
+   whole map from the staging bay" feature is later wanted.
+2. Does the first reveal want distinct framing copy ("SELECT INSERTION VECTOR") or is the
+   natural "DEPTH 0 -> 1" + empty history row enough? Recommend shipping with the natural
+   read; add the one-constant string swap only if playtesters find the first console
+   confusing versus a mid-run one.
+3. Should the opening depth-1 band be biased safer (COMBAT/CACHE only) so a fresh marine
+   is never forced to consider an ELITE as floor 1, or is offering the elite (with its
+   visible red pips as an honest warning) the intended press-your-luck opening? Settle in
+   playtest via the region weight tables, not in World.
+4. Delete autoCommitFirstNode() outright, or retain it for a possible future headless/auto
+   path? Recommend deletion now (no caller); re-add if a real auto path appears.
+5. If a future difficulty/seed wants the OLD auto-pick behaviour (skip the first console),
+   should that be a GameBalance flag (e.g. STAGING_ROUTE_SELECT_ENABLED) rather than a
+   hard branch? Defer until such a mode exists; the default is player-choice.
