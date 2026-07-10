@@ -178,22 +178,24 @@ public final class RouteMapConstants {
     public static final float OVERLAY_SCRIM_ALPHA = 0.72f;
 
     /**
-     * Alpha of the near-opaque "phosphor screen" panel filling the map viewport band, drawn after the
-     * world scrim and before the additive glow/conduit/card passes. The see-through outer scrim alone
-     * let the frozen 3D world (weapon/HUD text, walls) ghost through the schematic and wash out the
-     * translucent cards; this dedicated dark surface gives the hologram a real screen to sit on so the
-     * additive glow reads against a consistent backdrop. The world OUTSIDE this band still ghosts
-     * through the bezel (diegetic). See RouteMapOverlayRenderer.drawScreenPanel().
+     * Alpha of the FULLY-OPAQUE dark backdrop panel filling the map viewport band, drawn after the
+     * world scrim and before the additive glow/conduit/card passes. Raised to 1.0 (was 0.90): at 0.90
+     * the frozen 3D world (weapon/HUD text, walls) still ghosted ~10% through the schematic in the map
+     * band and washed out the cards/labels — the "screen-like effect" the player asked to have removed.
+     * A solid backdrop gives every card and label maximum contrast; the additive glow still reads on top
+     * of it. The world OUTSIDE this band still ghosts through the bezel chrome (diegetic).
      */
-    public static final float MAP_SCREEN_FILL_ALPHA = 0.90f;
+    public static final float MAP_SCREEN_FILL_ALPHA = 1.0f;
 
     // ---- Screen regions (vertical bands) -----------------------------------
+    // The map viewport now runs from just above the confirm bar (104) to just below the title plate
+    // (640). The old dedicated LEGEND_STRIP band (96..150) was retired: it wasted ~46px of vertical
+    // space that showed only faint HUD bleed, so the map band was extended DOWN over it and the focused
+    // node's hint line now renders in the confirm bar's centre gap (between CANCEL and ENGAGE).
     public static final float TITLE_PLATE_BOTTOM_Y   = 648f;
     public static final float TITLE_PLATE_TOP_Y      = 712f;
-    public static final float MAP_VIEWPORT_BOTTOM_Y  = 150f;
+    public static final float MAP_VIEWPORT_BOTTOM_Y  = 104f;
     public static final float MAP_VIEWPORT_TOP_Y     = 640f;
-    public static final float LEGEND_STRIP_BOTTOM_Y  = 96f;
-    public static final float LEGEND_STRIP_TOP_Y     = 150f;
     public static final float CONFIRM_BAR_BOTTOM_Y   = 12f;
     public static final float CONFIRM_BAR_TOP_Y      = 92f;
 
@@ -204,8 +206,9 @@ public final class RouteMapConstants {
     public static final float MAP_LANE_GAP         = 210f;
     /** How many layers above the current one are drawn (further = smaller + dimmer perspective fade). */
     public static final int   MAP_LOOKAHEAD_LAYERS = 4;
-    /** Gap between the viewport's bottom edge and the bottom-most drawn row. */
-    public static final float MAP_BOTTOM_PAD       = 46f;
+    /** Gap between the viewport's bottom edge and the bottom-most drawn row. Raised with the lowered
+     *  MAP_VIEWPORT_BOTTOM_Y so the CURRENT node card clears the bottom chrome (card is 120 tall). */
+    public static final float MAP_BOTTOM_PAD       = 60f;
     /** Hard cap on nodes drawn at once, sizing the renderer's pre-allocated layout arrays. */
     public static final int   MAP_MAX_DISPLAY_NODES = 40;
 
@@ -263,10 +266,14 @@ public final class RouteMapConstants {
     public static final float RISK_PIP_INSET  = 12f;
 
     // ---- CRT treatment -----------------------------------------------------
-    // Tuned DOWN from the first pass (player: "the screen-like effect is too strong and reduces clear
-    // visibility"). The phosphor/scanline identity stays — it is dialled back, not removed.
+    // REMOVED (player: "there is a 'screen like' effect on the main part of the roadmap, I want it
+    // removed completely because it makes text unreadable and nodes not seen well"). Every CRT layer —
+    // scanlines, vignette, whole-hologram flicker, and the periodic sync flash — is zeroed so the map
+    // reads as a clean, high-contrast schematic on the opaque backdrop. drawCrtPass() skips each pass
+    // whose alpha is not positive, so at these values it is a no-op. Constants kept (documented) so the
+    // treatment can be dialled back in without re-plumbing if a later design wants a subtle version.
     public static final float SCANLINE_SPACING      = 4f;
-    public static final float SCANLINE_ALPHA        = 0.05f;
+    public static final float SCANLINE_ALPHA        = 0.0f;
     public static final float SCANLINE_SCROLL_SPEED = 12f;
     /**
      * Vignette edge-band darkening. Zeroed (Issue 1 option B): the four opaque bands hugged the map
@@ -277,10 +284,10 @@ public final class RouteMapConstants {
      */
     public static final float VIGNETTE_ALPHA        = 0.0f;
     public static final float VIGNETTE_BAND         = 64f;
-    public static final float FLICKER_AMPLITUDE     = 0.012f;
+    public static final float FLICKER_AMPLITUDE     = 0.0f;
     public static final float FLICKER_SPEED         = 30f;
     public static final float SYNC_FLASH_INTERVAL   = 4.5f;
-    public static final float SYNC_FLASH_ALPHA      = 0.06f;
+    public static final float SYNC_FLASH_ALPHA      = 0.0f;
 
     // ---- Bezel chrome / hazard trim ----------------------------------------
     public static final float FRAME_BORDER_WIDTH   = 3f;
