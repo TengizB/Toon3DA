@@ -30,6 +30,7 @@ public class LevelRenderer implements Renderable, Disposable {
     private static final Color EXIT_COLOR          = new Color(MINIMAP_EXIT_R, MINIMAP_EXIT_G, MINIMAP_EXIT_B, 1f);
     private static final Color PROP_COLOR          = new Color(MINIMAP_PROP_R, MINIMAP_PROP_G, MINIMAP_PROP_B, 1f);
     private static final Color BARREL_COLOR        = new Color(MINIMAP_BARREL_R, MINIMAP_BARREL_G, MINIMAP_BARREL_B, 1f);
+    private static final Color SHOP_COLOR          = new Color(MINIMAP_SHOP_R, MINIMAP_SHOP_G, MINIMAP_SHOP_B, 1f);
     private static final Color HEALTH_PICKUP_COLOR = new Color(MINIMAP_HEALTH_PICKUP_R, MINIMAP_HEALTH_PICKUP_G, MINIMAP_HEALTH_PICKUP_B, 1f);
     private static final Color ARMOR_PICKUP_COLOR  = new Color(MINIMAP_ARMOR_PICKUP_R, MINIMAP_ARMOR_PICKUP_G, MINIMAP_ARMOR_PICKUP_B, 1f);
     private static final Color AMMO_PICKUP_COLOR   = new Color(MINIMAP_AMMO_PICKUP_R, MINIMAP_AMMO_PICKUP_G, MINIMAP_AMMO_PICKUP_B, 1f);
@@ -145,6 +146,8 @@ public class LevelRenderer implements Renderable, Disposable {
                     float markerCenterY = tileBottom + MINI_MAP_CELL_SIZE / 2f;
                     if (Level.isStairsDown(cell)) {
                         drawExitMarker(markerCenterX, markerCenterY, pulseBrightness);
+                    } else if (Level.isShop(cell)) {
+                        drawShopMarker(markerCenterX, markerCenterY, pulseBrightness);
                     } else if (Level.isPropSolid(cell)) {
                         drawPropMarker(markerCenterX, markerCenterY, cell);
                     } else if (Level.isKeycardPickup(cell)) {
@@ -238,6 +241,24 @@ public class LevelRenderer implements Renderable, Disposable {
         shapes.setColor(isBarrel ? BARREL_COLOR : PROP_COLOR);
         float half = MINI_MAP_PROP_SIZE / 2f;
         shapes.rect(centerX - half, centerY - half, MINI_MAP_PROP_SIZE, MINI_MAP_PROP_SIZE);
+    }
+
+    /**
+     * Bright pulsing magenta square with a dim outer glow halo, marking a shop vending machine
+     * ('@') distinctly from generic solid props (which render in dull grey via drawPropMarker).
+     * No GL blending is enabled in this render pass, so the "glow" is an opaque, dimmer square
+     * beneath a smaller pulsing bright core rather than a translucent overlay.
+     */
+    private void drawShopMarker(float centerX, float centerY, float pulseBrightness) {
+        float glowHalf = (MINI_MAP_PROP_SIZE * MINIMAP_SHOP_GLOW_SCALE) / 2f;
+        shapes.setColor(SHOP_COLOR.r * MINIMAP_SHOP_GLOW_BRIGHTNESS, SHOP_COLOR.g * MINIMAP_SHOP_GLOW_BRIGHTNESS,
+                SHOP_COLOR.b * MINIMAP_SHOP_GLOW_BRIGHTNESS, 1f);
+        shapes.rect(centerX - glowHalf, centerY - glowHalf, glowHalf * 2f, glowHalf * 2f);
+
+        float coreHalf = MINI_MAP_PROP_SIZE / 2f;
+        shapes.setColor(SHOP_COLOR.r * pulseBrightness, SHOP_COLOR.g * pulseBrightness,
+                SHOP_COLOR.b * pulseBrightness, 1f);
+        shapes.rect(centerX - coreHalf, centerY - coreHalf, coreHalf * 2f, coreHalf * 2f);
     }
 
     /** Small filled circle for a floor-decal pickup — caller guarantees the tile is fully on-map. */

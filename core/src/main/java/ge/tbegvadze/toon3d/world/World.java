@@ -814,10 +814,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         // The starting room's weapon/melee offer tiles aren't registered as ground items yet
         // (setupStartRoomWeaponOffers runs after this method returns), so reserve them here
-        // to keep credit chips from landing on the same tile as a weapon offer.
-        java.util.List<int[]> reservedTiles = null;
+        // to keep credit chips from landing on the same tile as a weapon offer. Every open
+        // orthogonal neighbor of a vending machine is a valid interaction stand tile (see
+        // findMachineFacingPlayer — the player can face the machine from any open side, not just
+        // the one facingStepColumn/Row cosmetically orients the sprite toward), so all of them are
+        // reserved too, keeping a credit chip from ever landing where the player must stand to shop.
+        java.util.List<int[]> reservedTiles = new java.util.ArrayList<>();
         if (startRoomGen != null) {
-            reservedTiles = new java.util.ArrayList<>();
             for (int offerIndex = 0; offerIndex < LevelGenConstants.START_ROOM_WEAPON_OFFER_COUNT; offerIndex++) {
                 reservedTiles.add(new int[]{startRoomGen.getWeaponTileColumn(offerIndex),
                                             startRoomGen.getWeaponTileRow(offerIndex)});
@@ -825,6 +828,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             for (int offerIndex = 0; offerIndex < LevelGenConstants.START_ROOM_MELEE_OFFER_COUNT; offerIndex++) {
                 reservedTiles.add(new int[]{startRoomGen.getMeleeTileColumn(offerIndex),
                                             startRoomGen.getMeleeTileRow(offerIndex)});
+            }
+        }
+        int[][] orthogonalStandSteps = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
+        for (int machineIndex = 0; machineIndex < vendingMachines.size(); machineIndex++) {
+            VendingMachine machine = vendingMachines.get(machineIndex);
+            for (int[] step : orthogonalStandSteps) {
+                int neighborColumn = machine.tileColumn + step[0];
+                int neighborRow    = machine.tileRow    + step[1];
+                if (!isSolidForMachine(targetLevel, neighborColumn, neighborRow)) {
+                    reservedTiles.add(new int[]{neighborColumn, neighborRow});
+                }
             }
         }
         seedCreditChips(targetLevel, groundItems, currentDepth, reservedTiles);
