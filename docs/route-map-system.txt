@@ -208,6 +208,74 @@ MED-BAY / REST  (RouteNodeType.REST, profile "rest_medbay", RestProfile + MedBay
     REST_OFFERS_CHOICE (default FALSE) reserves the 2-option "PATCH UP vs FIELD MOD" overlay for when a
     permanent-boon system exists; until then REST is an honest plain heal.
 
+DANGER / GAMBLE NODES: ELITE HOTZONE & MYSTERY (order-9)
+========================================================
+The "press your luck" side of the map — the counterweight that makes the CALM cache/rest (order-8) a
+real trade-off. ELITE is a KNOWABLE deliberate risk for a bigger reward; MYSTERY is an UNKNOWN box with
+deliberately NEUTRAL expected value. Both are NodeLevelProfiles (order-7). Constants live in
+RouteMapConstants (ELITE_* / AFFIX_* / MYSTERY_*). Everything is deterministic from floorSeed/nodeSeed;
+all combat scaling still flows through the depth ramp (EnemyBudgetOverride scales it, never bypasses it).
+
+FloorEffects — the headless-profile → World seam:
+  A profile is pure/headless, so it cannot light red-alert, spawn an EventText, or touch RunStats. It
+  attaches a FloorEffects (redAlert / stingText / statLogToken) to its LevelPlan; World stashes it in
+  pendingFloorEffects during buildFloorForNode and calls applyPendingFloorEffects() AFTER
+  rebuildForLevel (which clears red-alert every transition), so a DANGER floor's pulse survives. NONE
+  is the do-nothing default an ordinary floor carries.
+
+ELITE HOTZONE  (RouteNodeType.ELITE, profile "elite_hotzone", EliteProfile)
+  A containment breach — fewer bodies but MEANER, hazards live, red alert pulsing. Uses the node's
+  pre-rolled combat generator (the SHAPE is a normal floor; the danger is budget + affix + hazards).
+  Config: radioactive barrels up (ELITE_RADIOACTIVE_BARREL_WEIGHT), an arena room, flicker/unlit dread,
+  lock-and-key ON so clearing the floor can literally unlock the vault. FloorEffects = redAlert +
+  ELITE_STING_TEXT. Budget = ELITE_BUDGET_SCALE of the raw depth budget (a mini-setpiece). Reward
+  (~1.5x, GATED_ROOM = deep vault, deterministic from floorSeed): an owned-ammo vault (ELITE_AMMO_BOXES
+  via the same AmmoCacheRequest seam as CACHE), a depth-scaled armour drop ('a' shard / 'A' vest from
+  ELITE_ARMOUR_VEST_DEPTH), medkits/stims, a weapon-rack '=' display, cover columns 'P'. (A true
+  guaranteed WEAPON SPAWN is a future upgrade — weapon spawns come from WeaponSpawnPoints, not stampable
+  tiles — so the reliable payout is the ammo/armour/consumable vault + the rack as its visual promise.)
+
+  NODE AFFIXES (NodeAffixRegistry + NodeAffixDefinition):
+    Rolled at MAP-GEN (RouteMapGenerator.rollAffix, AFFIX_ROLL_CHANCE_ELITE, from the node's affix
+    sub-stream) onto ELITE nodes; the token (NodeAffix) is stored on the node, shown as an icon
+    corner-tag (order-5) and appended to the map hint. An affix is a bundle of TYPED modifiers — there
+    is NO bespoke per-affix code path; each modifier routes through an existing system. EliteProfile
+    looks the definition back up by id and folds it in (applyToConfig + budgetScaleMultiplier +
+    extraGuarantees). v1 catalog (register one line in RouteRegistries.registerAffixes to add more):
+      - IRRADIATED  : + radioactive-barrel weight + extra 'g' barrels (hazard pools).
+      - OVERCLOCKED : budget ×AFFIX_OVERCLOCKED_BUDGET_MULT (enemies "hit harder" ≈ more Threat spent).
+      - SWARM       : budget ×AFFIX_SWARM_BUDGET_MULT (the one exception to fewer-bodies — crowd control).
+      - FORTIFIED   : extra cover columns 'P' + an extra armour pickup (a slugfest).
+      - VOLATILE    : extra explosive barrels 'E' (the arena itself is a weapon for both sides).
+
+MYSTERY  (RouteNodeType.MYSTERY, profile "mystery", MysteryProfile — a META-profile)
+  The icon is always '?'; the payload is the surprise. On ENTRY (not map-gen, so a scanner reveals only
+  a tone) MysteryOutcome.rollFor(nodeSeed) draws a hidden outcome from a weighted table (MYSTERY_WEIGHT_*
+  sum to 100, tuned EV ≈ a normal combat floor). MysteryProfile then either DELEGATES to another
+  registered profile (so MYSTERY inherits every special level in the pool, now and future) or builds the
+  outcome's floor directly, then stamps MYSTERY_STING_TEXT + logs the resolved outcome. Table:
+      VAULT_JACKPOT (18) : built — bright lightly-guarded super-cache (MYSTERY_VAULT_AMMO_BOXES + armour).
+      SECRET_WARREN (18) : built — server rooms + lock-and-key + gated loot (rewards searching).
+      TRAP_GAUNTLET (18) : built — dense hazards (traps degrade to 'E'/'g' barrels), loot NEAR_EXIT.
+      AMBUSH        (18) : delegates → "elite_hotzone" (combat-heavy lockdown; keeps its red alert).
+      LORE_SIGNAL   (14) : delegates → "rest_medbay" (near-combat-free; EVENT profile order-10 degrade).
+      MALFUNCTION   (14) : built — failing sector: hazards, unlit, NO reward (bad-but-survivable).
+
+  FAIRNESS RULES (design invariants):
+    - Pre-scan the card is ALWAYS '?'. A SCANNER (order-6) reveals only the ScanTone BUCKET
+      (REWARD-RICH / HIGH RISK / QUIET), derived from the same nodeSeed — several outcomes share a
+      bucket, so a scan narrows but never pinpoints (informed gambling). Shown via the overlay hint when
+      the focused MYSTERY card is scanned.
+    - The resolved outcome is HIDDEN but LOGGED: RunStats.annotateLastRouteNode appends it to the route
+      string (e.g. "mystery:VAULT") so the post-run route story is complete.
+    - No outcome is a pure "you lose the run" trap — worst case wastes a hop + some resources, always
+      survivable. Delegated outcomes re-stamp MYSTERY's sting/log but preserve a delegate's own redAlert.
+
+  GRACEFUL DEGRADATION: where a referenced system isn't implemented yet the outcome falls back to the
+  nearest available effect (traps → barrels, secret rooms → server rooms + lock-and-key, lockdown waves →
+  the ELITE combat delegate, relics/EVENT → loot/rest). Each degrade is noted in-code so it can be
+  upgraded when the real system ships, without changing the table shape.
+
 OVERLAY VISUAL SPEC (order-4) — the "FACILITY NAV" console
 ==========================================================
 RouteMapOverlayRenderer (…toon3d.render, Renderable+Disposable) draws the full-screen UAC nav

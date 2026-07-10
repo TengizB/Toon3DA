@@ -18,6 +18,7 @@ import ge.tbegvadze.toon3d.render.routeicons.RegionCrestPainterRegistry;
 import ge.tbegvadze.toon3d.render.routeicons.RouteGlyphs;
 import ge.tbegvadze.toon3d.render.routeicons.RouteIconBootstrap;
 import ge.tbegvadze.toon3d.route.DangerTier;
+import ge.tbegvadze.toon3d.route.MysteryOutcome;
 import ge.tbegvadze.toon3d.route.NodeStatus;
 import ge.tbegvadze.toon3d.route.NodeTypeDefinition;
 import ge.tbegvadze.toon3d.route.NodeTypeRegistry;
@@ -405,6 +406,10 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
             hint = "";
         } else if (!focusNode.revealed) {
             hint = "Unknown vector. Contents obscured.";
+        } else if (focusNode.type == RouteNodeType.MYSTERY && scannerActive) {
+            // Order-9: a scanned MYSTERY reveals its category TONE (informed gambling) — never the
+            // exact outcome, which is rolled only at entry. Derived from the same fixed node seed.
+            hint = MysteryOutcome.scanToneLabel(focusNode.nodeSeed);
         } else {
             NodeTypeDefinition definition = nodeTypes.get(focusNode.type);
             hint = focusNode.resolvedHint != null ? focusNode.resolvedHint : definition.hintLine();
