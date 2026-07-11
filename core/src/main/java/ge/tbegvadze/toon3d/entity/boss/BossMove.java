@@ -49,6 +49,12 @@ public final class BossMove {
         SUMMON,
         /** Boss strikes an adjacent player directly (non-telegraphed melee). */
         MELEE,
+        /**
+         * Boss repairs itself by {@link BossMove#healAmount} HP this turn (ORDER 5). One repair tick of the
+         * one-time regeneration chain: the boss HOLDS (it does NOT attack while repairing — the whole point
+         * is the player can rush it), and the controller clamps the restored HP to maxHealth.
+         */
+        HEAL,
         /** Placeholder emitted during phase-transition invulnerability. */
         TRANSITION,
         /** No action this turn. */
@@ -80,10 +86,13 @@ public final class BossMove {
     /** For CAST_HAZARD: which terrain hazard to seed on the armed tiles. */
     public final HazardKind hazardKind;
 
+    /** For HEAL: how much HP the boss restores this repair tick (clamped to maxHealth by the controller). */
+    public final int       healAmount;
+
     private BossMove(Kind kind, int tileDamage, int summonCount, EnemyType summonType, int summonCap,
                      int dashTargetColumn, int dashTargetRow,
                      int chargeDirectionColumn, int chargeDirectionRow, int chargeRangeTiles,
-                     HazardKind hazardKind) {
+                     HazardKind hazardKind, int healAmount) {
         this.kind                  = kind;
         this.tileDamage            = tileDamage;
         this.summonCount           = summonCount;
@@ -95,21 +104,22 @@ public final class BossMove {
         this.chargeDirectionRow    = chargeDirectionRow;
         this.chargeRangeTiles      = chargeRangeTiles;
         this.hazardKind            = hazardKind;
+        this.healAmount            = healAmount;
     }
 
     /** Boss telegraphs danger tiles carrying the given damage value. */
     public static BossMove telegraph(int damage) {
-        return new BossMove(Kind.TELEGRAPH, damage, 0, null, 0, 0, 0, 0, 0, 0, null);
+        return new BossMove(Kind.TELEGRAPH, damage, 0, null, 0, 0, 0, 0, 0, 0, null, 0);
     }
 
     /** Resolves the previously armed DangerTileSet. */
     public static BossMove resolve() {
-        return new BossMove(Kind.RESOLVE, 0, 0, null, 0, 0, 0, 0, 0, 0, null);
+        return new BossMove(Kind.RESOLVE, 0, 0, null, 0, 0, 0, 0, 0, 0, null, 0);
     }
 
     /** Boss repositions one tile (direction decided by BossFloorController). */
     public static BossMove reposition() {
-        return new BossMove(Kind.REPOSITION, 0, 0, null, 0, 0, 0, 0, 0, 0, null);
+        return new BossMove(Kind.REPOSITION, 0, 0, null, 0, 0, 0, 0, 0, 0, null, 0);
     }
 
     /**
@@ -118,7 +128,7 @@ public final class BossMove {
      * reachable path and stops at the first blocked tile.
      */
     public static BossMove dash(int targetColumn, int targetRow) {
-        return new BossMove(Kind.DASH, 0, 0, null, 0, targetColumn, targetRow, 0, 0, 0, null);
+        return new BossMove(Kind.DASH, 0, 0, null, 0, targetColumn, targetRow, 0, 0, 0, null, 0);
     }
 
     /**
@@ -130,7 +140,7 @@ public final class BossMove {
      */
     public static BossMove charge(int directionColumn, int directionRow, int rangeTiles) {
         return new BossMove(Kind.CHARGE, 0, 0, null, 0, 0, 0,
-                directionColumn, directionRow, rangeTiles, null);
+                directionColumn, directionRow, rangeTiles, null, 0);
     }
 
     /**
@@ -140,7 +150,7 @@ public final class BossMove {
      * hazard system owns the lingering damage.
      */
     public static BossMove castHazard(HazardKind hazardKind) {
-        return new BossMove(Kind.CAST_HAZARD, 0, 0, null, 0, 0, 0, 0, 0, 0, hazardKind);
+        return new BossMove(Kind.CAST_HAZARD, 0, 0, null, 0, 0, 0, 0, 0, 0, hazardKind, 0);
     }
 
     /**
@@ -148,21 +158,29 @@ public final class BossMove {
      * minions already exist (fairness F5 — the room never floods).
      */
     public static BossMove summon(EnemyType type, int count, int cap) {
-        return new BossMove(Kind.SUMMON, 0, count, type, cap, 0, 0, 0, 0, 0, null);
+        return new BossMove(Kind.SUMMON, 0, count, type, cap, 0, 0, 0, 0, 0, null, 0);
     }
 
     /** Boss strikes the player directly for the given damage (only if adjacent). */
     public static BossMove melee(int damage) {
-        return new BossMove(Kind.MELEE, damage, 0, null, 0, 0, 0, 0, 0, 0, null);
+        return new BossMove(Kind.MELEE, damage, 0, null, 0, 0, 0, 0, 0, 0, null, 0);
+    }
+
+    /**
+     * Boss repairs {@code amount} HP this turn (ORDER 5) — one tick of the one-time regeneration chain.
+     * The controller applies and clamps the HP and the boss takes no offensive action this turn.
+     */
+    public static BossMove heal(int amount) {
+        return new BossMove(Kind.HEAL, 0, 0, null, 0, 0, 0, 0, 0, 0, null, amount);
     }
 
     /** Phase-transition placeholder — boss is invulnerable this turn. */
     public static BossMove transition() {
-        return new BossMove(Kind.TRANSITION, 0, 0, null, 0, 0, 0, 0, 0, 0, null);
+        return new BossMove(Kind.TRANSITION, 0, 0, null, 0, 0, 0, 0, 0, 0, null, 0);
     }
 
     /** Boss takes no action this turn. */
     public static BossMove none() {
-        return new BossMove(Kind.NONE, 0, 0, null, 0, 0, 0, 0, 0, 0, null);
+        return new BossMove(Kind.NONE, 0, 0, null, 0, 0, 0, 0, 0, 0, null, 0);
     }
 }

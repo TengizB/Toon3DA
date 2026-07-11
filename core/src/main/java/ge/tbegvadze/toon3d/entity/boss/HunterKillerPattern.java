@@ -41,8 +41,11 @@ import java.util.Random;
  * not allocate. The seeded RNG makes the random tiebreak reproducible for replays/debugging (ORDER 4 open
  * question 3).
  *
- * <p>HEAL (ORDER 5) is not yet a verb in the kit; when it lands it plugs in as a preempting tactic here
- * (see {@link #selectTactic}) exactly like the LAST STAND preempt already does.
+ * <p>HEAL (ORDER 5) is the one-time regeneration preempt: at a tactic boundary, once the boss drops below
+ * OVERSEER_HEAL_HP_THRESHOLD and has not yet healed, {@link #nextMove} breaks the boss off with a flee
+ * dash and then emits a {@link BossMove#heal} tick each turn for OVERSEER_HEAL_TURNS turns. It preempts
+ * the normal scored selection exactly like the LAST STAND preempt; the chain is cancelled by any damage
+ * via {@code Boss.applyDamage} (the {@link RegenState} interrupt).
  */
 public final class HunterKillerPattern implements BossAttackPattern {
 
@@ -207,8 +210,32 @@ public final class HunterKillerPattern implements BossAttackPattern {
         tickCooldowns();
         updateCampingTracker(playerColumn, playerRow);
 
+        // ORDER 5 — one-time regeneration. If a repair chain is already running, drive it directly and
+        // bypass the tactic machinery: the boss HOLDS and repairs (it does NOT attack while repairing —
+        // the whole point is the player can rush it). Interrupts are handled in Boss.applyDamage.
+        RegenState regen = boss.regenState;
+        if (regen.healActive) {
+            consecutiveMoveTurns = 0;          // a repair tick is a plant, never a kite
+            regen.healTurnsLeft--;
+            if (regen.healTurnsLeft <= 0) regen.healActive = false;   // this was the final repair tick
+            return BossMove.heal(EnemyConstants.OVERSEER_HEAL_PER_TURN);
+        }
+
         // If no tactic is in progress, choose the next one from the situation.
         if (currentTactic == null || tacticStepIndex >= currentTactic.steps.length) {
+            // ORDER 5 — the heal preempts normal tactic selection (like the LAST STAND preempt). Checked
+            // only at a tactic boundary so it never interrupts a charge/hazard wind-up→resolve pair
+            // mid-flight ("don't heal mid-charge"). Step 0 is the FLEE: break off toward a safe spot and
+            // commit the once-per-fight latch NOW so it can't cancel the flee and re-trigger later.
+            if (isHealEligible(regen, boss)) {
+                regen.healUsed        = true;
+                regen.healActive      = true;
+                regen.healTurnsLeft   = EnemyConstants.OVERSEER_HEAL_TURNS;
+                regen.healJustStarted = true;
+                currentTactic         = null;   // resume fresh tactic scoring after the chain ends
+                consecutiveMoveTurns  = 0;
+                return buildFleeDash(boss, playerColumn, playerRow);
+            }
             selectTactic(boss, level, playerColumn, playerRow);
         }
 
@@ -578,6 +605,16 @@ public final class HunterKillerPattern implements BossAttackPattern {
 
     private static float healthFraction(Boss boss) {
         return boss.maxHealth > 0 ? (float) boss.health / (float) boss.maxHealth : 0f;
+    }
+
+    /**
+     * ORDER 5 heal trigger: eligible when the boss has not yet used its one-time repair and its HP has
+     * fallen to or below OVERSEER_HEAL_HP_THRESHOLD. The "no danger currently forcing a dodge — don't heal
+     * mid-charge" guard is satisfied structurally: this is only consulted at a tactic boundary (never mid
+     * wind-up→resolve pair), and the phase-transition invuln window has long passed by the sub-threshold HP.
+     */
+    private static boolean isHealEligible(RegenState regen, Boss boss) {
+        return !regen.healUsed && healthFraction(boss) <= EnemyConstants.OVERSEER_HEAL_HP_THRESHOLD;
     }
 
     private static boolean isKiteVerb(Verb verb) {

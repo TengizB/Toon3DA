@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Enemies
 TITLE: Mobile Overseer — One-Time Regeneration (ORDER 5)
 CREATED: 2026-07-11
@@ -113,3 +113,41 @@ OPEN QUESTIONS
 3. If the player has no ranged ammo and the boss heals behind toxic, is it
    reachable? Yes — Order 6 guarantees ammo from adds, and the cloud always leaves
    a path (F5). Verify in playtest with an empty-ammo start.
+
+=============================================================================
+IMPLEMENTATION NOTES (2026-07-11)
+=============================================================================
+Files touched:
+- entity/boss/RegenState.java (NEW) — healUsed/healActive/healTurnsLeft latch +
+  interrupt() + two one-shot HUD signal flags. Lives on Boss (not the brain) so
+  the once-per-fight latch survives the phase transition (both HunterKillerPattern
+  instances share it) and Boss.applyDamage can cancel a repair without the entity
+  layer importing the AI/render packages.
+- entity/boss/Boss.java — new `regenState` field; the damage override MOVED from
+  the 1-arg applyDamage(int) to the terminal 3-arg
+  applyDamage(int,boolean,float). The weapon path (EnemyManager) calls the 3-arg
+  form directly, so the interrupt (and the phase-transition invuln absorb, which
+  had the same gap) MUST live there to catch a shot landing during the weld.
+- entity/boss/BossMove.java — new Kind.HEAL + healAmount payload + heal(amount).
+- entity/boss/HunterKillerPattern.java — heal preempts scored selection at a
+  tactic boundary (like LAST STAND): Step 0 emits buildFleeDash + commits the
+  latch; each following turn emits BossMove.heal until healTurnsLeft hits 0. Never
+  interrupts a wind-up→resolve pair, satisfying "don't heal mid-charge".
+- world/BossFloorController.java — case HEAL applies+clamps HP (bar ticks up on
+  its own, OQ2 = step per turn); announceHealSignals() shows the REPAIRING /
+  REPAIR INTERRUPTED banners + event text from the RegenState flags.
+- util/EnemyConstants.java — OVERSEER_HEAL_HP_THRESHOLD / _TURNS / _PER_TURN.
+
+Decisions:
+- OQ1 (guard add on heal): NOT implemented — kept the race clean and the balance
+  conservative. The flee + optional pre-laid toxic (via a preceding ZONER/hazard
+  tactic) already gates the approach; a summon can be layered later if playtests
+  show the interrupt is too easy.
+- Flee reuses the existing buildFleeDash helper (dash away along the dominant
+  escape axis); arena reachability is guaranteed by the arena generator (F5).
+- The repair chain does NOT attack (HEAL is a pure plant) — a guaranteed punish
+  window per the brief.
+
+Verified: `core` module compiles clean (javac via LibGDX from Maven Central; the
+full ./gradlew build is blocked only by the Android Gradle Plugin host being
+denied by this environment's egress policy, unrelated to these changes).
