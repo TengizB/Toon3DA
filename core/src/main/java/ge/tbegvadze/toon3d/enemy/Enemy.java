@@ -80,6 +80,25 @@ public class Enemy implements StatusHost {
     /** Wall-clock seconds remaining in the pre-hit telegraph (same-turn flinch). Cosmetic only. */
     public float      telegraphTimerSeconds = 0f;
 
+    // -------------------------------------------------------------------------
+    // Visible locomotion slide (boss-fight-mobile-overseer ORDER 2) — COSMETIC ONLY.
+    // The authoritative tileColumn/tileRow above jump to the destination instantly
+    // when a move resolves (the turn model stays clean — simulation is never
+    // mid-tile). These fields let the render position LAG behind and catch up over
+    // BOSS_DASH_ANIM_DURATION, sweeping smoothly through the exact tiles the boss
+    // logically crossed, so a multi-tile relocation reads as a sprint rather than a
+    // teleport (fairness contract F3). Same discipline as attackAnimTimerSeconds:
+    // never read by collision / LOS / attack math. Normal enemies leave these at
+    // rest; today only the boss calls beginSlide(). Buffers are pre-sized in the
+    // constructor so advanceSlide() — which runs every frame — never allocates.
+    private float visualColumn;   // interpolated render column (tiles)
+    private float visualRow;      // interpolated render row (tiles)
+    private float moveAnimSeconds;  // seconds remaining in the current slide
+    private float moveAnimDuration; // total seconds for the current slide
+    private final int[] slidePathColumns = new int[Constants.BOSS_MAX_DASH_TILES + 1];
+    private final int[] slidePathRows    = new int[Constants.BOSS_MAX_DASH_TILES + 1];
+    private int   slidePathLength;
+
     /** Dungeon floor on which this enemy spawned (1-based). Used for the name-tag display "Type LVL N". */
     public int        dungeonLevel = 1;
 
@@ -443,5 +462,83 @@ public class Enemy implements StatusHost {
     /** World-space Y center of this enemy's tile (for rendering). */
     public float worldCenterY() {
         return tileRow * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
+    }
+
+    // -------------------------------------------------------------------------
+    // Visible locomotion slide (ORDER 2) — cosmetic render-position interpolation.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Starts a cosmetic multi-tile slide (ORDER 2). The path is the exact sequence of tiles the boss
+     * logically crossed this turn, starting with its ORIGIN tile and ending on its (already-updated)
+     * destination tile. Copies the path into the pre-sized buffers (no allocation), snaps the visual
+     * position to the first path tile, and arms the animation for {@code durationSeconds}. Purely
+     * cosmetic — the caller has already committed the logical tile move. A {@code count} of 0 or 1
+     * (no real movement) leaves the slide inert.
+     */
+    public void beginSlide(int[] pathColumns, int[] pathRows, int count, float durationSeconds) {
+        slidePathLength = Math.min(count, slidePathColumns.length);
+        for (int pathIndex = 0; pathIndex < slidePathLength; pathIndex++) {
+            slidePathColumns[pathIndex] = pathColumns[pathIndex];
+            slidePathRows[pathIndex]    = pathRows[pathIndex];
+        }
+        if (slidePathLength < 2 || durationSeconds <= 0f) {
+            // Nothing to animate — leave the slide inert so renderColumn/Row fall back to the tile.
+            moveAnimSeconds  = 0f;
+            moveAnimDuration = 0f;
+            return;
+        }
+        moveAnimDuration = durationSeconds;
+        moveAnimSeconds  = durationSeconds;
+        visualColumn     = slidePathColumns[0];
+        visualRow        = slidePathRows[0];
+    }
+
+    /**
+     * Advances the cosmetic slide by {@code deltaTime} (ORDER 2). Called every frame from
+     * EnemyManager.advanceHitFlash — a no-op unless a slide is active. Maps overall progress across the
+     * path and lerps the visual position between the two bounding path tiles (slight ease-out so the
+     * boss "arrives and plants" with weight — OPEN QUESTION 2). Snaps the visual position to the final
+     * path tile (== the logical tile) on completion to kill float drift. Never allocates.
+     */
+    public void advanceSlide(float deltaTime) {
+        if (moveAnimSeconds <= 0f) return;
+        moveAnimSeconds -= deltaTime;
+        if (moveAnimSeconds <= 0f) {
+            moveAnimSeconds = 0f;
+            visualColumn    = slidePathColumns[slidePathLength - 1];
+            visualRow       = slidePathRows[slidePathLength - 1];
+            return;
+        }
+        int   segmentCount    = slidePathLength - 1;
+        float rawProgress     = 1f - moveAnimSeconds / moveAnimDuration;
+        float easedProgress   = GameMath.smoothstep01(rawProgress);
+        float pathPosition    = easedProgress * segmentCount;    // in [0, segmentCount]
+        int   segmentIndex    = (int) pathPosition;
+        if (segmentIndex >= segmentCount) segmentIndex = segmentCount - 1;
+        float segmentFraction = pathPosition - segmentIndex;
+        visualColumn = GameMath.lerp(slidePathColumns[segmentIndex],
+                slidePathColumns[segmentIndex + 1], segmentFraction);
+        visualRow    = GameMath.lerp(slidePathRows[segmentIndex],
+                slidePathRows[segmentIndex + 1], segmentFraction);
+    }
+
+    /** True while a cosmetic slide is playing out (ORDER 2). */
+    public boolean isSliding() { return moveAnimSeconds > 0f; }
+
+    /** Render column in tiles: the interpolated visual position while sliding, else the logical tile. */
+    public float renderColumn() { return isSliding() ? visualColumn : tileColumn; }
+
+    /** Render row in tiles: the interpolated visual position while sliding, else the logical tile. */
+    public float renderRow() { return isSliding() ? visualRow : tileRow; }
+
+    /** World-space X center for rendering — follows the cosmetic slide while one is active (ORDER 2). */
+    public float renderCenterX() {
+        return renderColumn() * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
+    }
+
+    /** World-space Y center for rendering — follows the cosmetic slide while one is active (ORDER 2). */
+    public float renderCenterY() {
+        return renderRow() * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
     }
 }

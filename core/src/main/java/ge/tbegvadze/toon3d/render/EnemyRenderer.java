@@ -228,8 +228,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
             Enemy enemy = enemies.get(enemyIndex);
             if (!enemy.isAlive()) continue;
 
-            float tileOffsetX = (enemy.worldCenterX() - playerWorldX) / CELL_SIZE;
-            float tileOffsetY = (enemy.worldCenterY() - playerWorldY) / CELL_SIZE;
+            // ORDER 2: render at the interpolated slide position (renderCenter*), so a boss mid-dash
+            // is culled/depth-sorted where the sprite actually is. No-op for a settled enemy.
+            float tileOffsetX = (enemy.renderCenterX() - playerWorldX) / CELL_SIZE;
+            float tileOffsetY = (enemy.renderCenterY() - playerWorldY) / CELL_SIZE;
             float depth       = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
             if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES) continue;
             if (depth > MAX_ENEMY_DRAW_DISTANCE_TILES)     continue;
@@ -278,8 +280,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
             TextureRegion region = textureRegions.get(enemy.type);
             if (region == null) continue;
 
-            float tileOffsetX = (enemy.worldCenterX() - playerWorldX) / CELL_SIZE;
-            float tileOffsetY = (enemy.worldCenterY() - playerWorldY) / CELL_SIZE;
+            // ORDER 2: draw the billboard at the interpolated slide position so a dashing boss visibly
+            // sweeps across the tiles it crossed instead of popping. Health bar / intent / beam passes
+            // reuse the screenCenterColumn computed here, so they follow the slide automatically.
+            float tileOffsetX = (enemy.renderCenterX() - playerWorldX) / CELL_SIZE;
+            float tileOffsetY = (enemy.renderCenterY() - playerWorldY) / CELL_SIZE;
 
             float screenCenterColumn = GameMath.spriteScreenColumnCenter(
                     tileOffsetX, tileOffsetY, directionX, directionY,

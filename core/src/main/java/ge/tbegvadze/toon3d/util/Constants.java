@@ -78,4 +78,20 @@ public final class Constants {
     public static final float BOSS_DEPTH_DAMAGE_SCALE     = 0.12f;
     // Proximity distance (Chebyshev) at which the player triggers the boss to awaken
     public static final int   BOSS_AWAKEN_RADIUS_TILES    = 12;
+
+    // -------------------------------------------------------------------------
+    // Boss locomotion (boss-fight-mobile-overseer ORDER 2) — visible multi-tile
+    // moves. The LOGICAL tile updates instantly at the start of the move (turn
+    // model stays clean); a cosmetic VISUAL position slides through the crossed
+    // tiles over BOSS_DASH_ANIM_DURATION so the boss NEVER appears to teleport
+    // (fairness contract F3). Fast enough to feel like a sprint, slow enough that
+    // the eye tracks it.
+    public static final float BOSS_DASH_ANIM_DURATION           = 0.30f;
+    // Longest single-turn relocation ("several cells" per the brief), capped so
+    // the slide stays readable and the boss can't cross the whole arena at once.
+    public static final int   BOSS_MAX_DASH_TILES               = 4;
+    // Fairness contract F1: the boss may not move more than this many turns in a
+    // row without a "planted" turn the player can punish. Enforced at the
+    // controller level so no pattern can accidentally kite forever.
+    public static final int   BOSS_MAX_CONSECUTIVE_MOVE_TURNS   = 2;
 }
