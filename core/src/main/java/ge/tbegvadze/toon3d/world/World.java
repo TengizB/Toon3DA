@@ -27,8 +27,7 @@ import ge.tbegvadze.toon3d.entity.boss.CorruptorPhase1Pattern;
 import ge.tbegvadze.toon3d.entity.boss.CorruptorPhase2Pattern;
 import ge.tbegvadze.toon3d.entity.boss.HellBaronPhase1Pattern;
 import ge.tbegvadze.toon3d.entity.boss.HellBaronPhase2Pattern;
-import ge.tbegvadze.toon3d.entity.boss.OverseerPhase1Pattern;
-import ge.tbegvadze.toon3d.entity.boss.OverseerPhase2Pattern;
+import ge.tbegvadze.toon3d.entity.boss.HunterKillerPattern;
 import ge.tbegvadze.toon3d.level.BossArenaGenerator;
 import ge.tbegvadze.toon3d.level.CavernGenerator;
 import ge.tbegvadze.toon3d.level.ILevelGenerator;
@@ -935,7 +934,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         bossFloorController = null;
         bossHudRenderer     = null;
         if (GameMath.isBossFloor(currentDepth)) {
-            Boss boss = createBossForDepth(currentDepth);
+            Boss boss = createBossForDepth(currentDepth, floorSeed(runSeed, currentDepth));
             if (boss != null) {
                 enemyManager.addBoss(boss);
                 bossHudRenderer     = new BossHudRenderer();
@@ -2597,7 +2596,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         return pickGenerator(seed);
     }
 
-    private static Boss createBossForDepth(int depth) {
+    private static Boss createBossForDepth(int depth, long bossSeed) {
         int bossIndex   = ((depth / Constants.BOSS_FLOOR_INTERVAL) - 1) % 3;
         int spawnColumn = BossArenaGenerator.getBossSpawnColumn();
         int spawnRow    = BossArenaGenerator.getBossSpawnRow();
@@ -2610,7 +2609,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                         "The Overseer", "Eye of the Abyss", "OVERSEER DESTROYED",
                         EnemyConstants.OVERSEER_ACCENT_R, EnemyConstants.OVERSEER_ACCENT_G,
                         EnemyConstants.OVERSEER_ACCENT_B, 1.80f,
-                        new OverseerPhase1Pattern(), new OverseerPhase2Pattern());
+                        new HunterKillerPattern(HunterKillerPattern.Pool.PHASE1, bossSeed),
+                        new HunterKillerPattern(HunterKillerPattern.Pool.PHASE2, bossSeed));
                 overseer.maxHealth    = scaledHp;
                 overseer.health       = scaledHp;
                 overseer.dungeonLevel = depth;

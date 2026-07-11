@@ -132,6 +132,10 @@ public final class BossFloorController implements TickSubscriber {
             return;
         }
 
+        // Refresh the live-adds count so the attack pattern (ORDER 4 HunterKillerPattern) can score
+        // summon tactics. countLiveEnemies() includes the boss itself, so subtract it.
+        boss.liveMinionCount = Math.max(0, enemyManager.countLiveEnemies() - 1);
+
         // Run boss AI pattern
         BossMove move = boss.activePattern().nextMove(boss, player, level, tickIndex);
         boss.ticksSinceAwaken++;
