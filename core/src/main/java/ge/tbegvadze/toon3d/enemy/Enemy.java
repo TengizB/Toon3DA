@@ -95,8 +95,10 @@ public class Enemy implements StatusHost {
     private float visualRow;      // interpolated render row (tiles)
     private float moveAnimSeconds;  // seconds remaining in the current slide
     private float moveAnimDuration; // total seconds for the current slide
-    private final int[] slidePathColumns = new int[Constants.BOSS_MAX_DASH_TILES + 1];
-    private final int[] slidePathRows    = new int[Constants.BOSS_MAX_DASH_TILES + 1];
+    // Sized to the longest single-turn slide (a full-range CHARGE lunge, ORDER 3), not just the
+    // DASH reach: BOSS_MAX_SLIDE_TILES steps + the origin tile. Reused every slide; never a new[].
+    private final int[] slidePathColumns = new int[Constants.BOSS_MAX_SLIDE_TILES + 1];
+    private final int[] slidePathRows    = new int[Constants.BOSS_MAX_SLIDE_TILES + 1];
     private int   slidePathLength;
 
     /** Dungeon floor on which this enemy spawned (1-based). Used for the name-tag display "Type LVL N". */
