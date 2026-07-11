@@ -1,4 +1,9 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED   (vision ratified 2026-07-11; grounding verified against live
+        codebase — Boss/BossAttackPattern/BossMove/DangerTileSet, Overseer
+        Phase1/2 patterns, BossFloorController.repositionBoss, HazardManager
+        igniteFire/igniteToxic/spawnToxicCloud, BossArenaGenerator, BossHudRenderer,
+        EnemyConstants OVERSEER_MAX_HP=250 + ENEMY_BOSS_OVERSEER_PATH all confirmed
+        present. No code deliverable for Order 1; Order 2 is now unblocked.)
 CATEGORY: Enemies
 TITLE: Mobile Overseer — Hunter-Killer Boss Rework (ORDER 1: Vision)
 CREATED: 2026-07-11
