@@ -1,0 +1,136 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Mobile Overseer — Procedural Boss Arena Rework (ORDER 7)
+CREATED: 2026-07-11
+---
+DEPENDS ON: order-1..3 (the fight this arena must support)
+USE AGENT: game-level-designer for tile layouts; java-architect for the generator.
+
+=============================================================================
+THE BRIEF
+=============================================================================
+"the boss room must be removed completely, the room must be generated and be also
+interesting and spacious."
+
+Today the arena is a FIXED, hardcoded layout: level/BossArenaGenerator produces a
+narrow 3-tile approach corridor (rows 0–14), a door at row 14, and a box arena
+above it with four 'P' cover columns in a rigid symmetric 2×2 and the boss dead-
+centre (verified). It is cramped for a hit-and-run boss (a 5-tile dash barely
+fits), repetitive (identical every run), and the tight corridor entry funnels the
+fight into a chokepoint. Replace it with a PROCEDURAL, spacious arena purpose-
+built for the mobile fight — while preserving the arena-lock / exit-gate contract
+BossFloorController depends on.
+
+=============================================================================
+HARD CONTRACT BossFloorController RELIES ON (must be preserved)
+=============================================================================
+BossFloorController currently reads STATIC fields from BossArenaGenerator:
+  ARENA_DOOR_COLUMN / ARENA_DOOR_ROW   (the door it locks on awaken / unlocks on death)
+  getExitColumn() / getExitRow()       (the '>' it blocks until death, restores after)
+  getBossSpawnColumn() / getBossSpawnRow()
+Because a PROCEDURAL arena's positions vary per run, these can no longer be
+compile-time constants. REFACTOR: the generator must RETURN these positions
+(a small BossArenaLayout result object: doorTile, exitTile, bossSpawnTile, and
+optionally heal-alcove tiles), and BossFloorController must take them via
+constructor injection instead of reading statics. This is the main structural
+change of this order — do it first, then the generator can vary layouts freely.
+
+  class BossArenaLayout { int doorColumn,doorRow, exitColumn,exitRow,
+                          bossColumn,bossRow; /* + fields Order 5/8 want */ }
+  BossArenaGenerator.generate() → returns Level AND exposes the chosen layout
+     (either return a wrapper, or provide a getLayout() after generate()).
+  World wiring: pass the layout into new BossFloorController(...). Remove the
+     static ARENA_DOOR_* / getExit* dependency.
+
+=============================================================================
+ARENA DESIGN GOALS (spacious + interesting + fair for hit-and-run)
+=============================================================================
+G1. SPACIOUS OPEN CORE. A large open central floor (target interior ~ 16×16+
+    walkable, well over the current box) so the boss can DASH its full
+    BOSS_MAX_DASH_TILES (4) and CHARGE its full range (5) and the player has room
+    to circle-strafe and kite adds. Openness is the point — this is a duel, not a
+    corridor grind.
+
+G2. ASYMMETRIC COVER. Scatter 'P' columns (and maybe short wall nubs) in an
+    IRREGULAR pattern, not a grid. Cover serves three roles:
+      - breaks LOS for the player vs charge/hazard lining-up,
+      - gives the boss flee spots that break LOS for the heal (Order 5),
+      - creates "lanes" for the hit-and-run dance.
+    FAIRNESS (F5): never place cover so densely that hazards/adds can seal the
+    player in; always leave multiple open escape routes from any tile. Verify
+    geometrically (flood-fill reachability check in the generator).
+
+G3. HAZARD-FRIENDLY ZONES. Open sub-areas where fire/toxic (Order 3) meaningfully
+    denies ground WITHOUT ever walling a 1-wide chokepoint (there shouldn't BE
+    1-wide chokepoints inside the arena — keep passages ≥2 wide so a toxic cloud
+    can't fully block a route, F5).
+
+G4. HEAL ALCOVES. 1–2 semi-recessed pockets (behind cover, near a wall) that read
+    as natural "the boss retreats here to repair" spots for Order 5's flee target,
+    each REACHABLE by the player within ~5 turns (so the interrupt race is winnable
+    — F4/F5). Expose their tiles in BossArenaLayout so chooseFleeTarget can prefer
+    them. They must NOT be dead-ends the boss can turtle in forever — open on ≥2
+    sides.
+
+G5. WIDER, MORE INTERESTING APPROACH. Replace the 3-wide funnel with a wider,
+    more characterful entrance (a short antechamber, or two flanking entries) so
+    the player doesn't fight the boss standing in a doorway. The arena door still
+    locks on awaken — keep exactly ONE lockable door tile (or a door "line") that
+    BossFloorController seals. Mark its tile(s) in the layout.
+
+G6. THEMING / MOOD. Use lighting tiles ('l' lit, 'u' unlit, 'f' flickering — all
+    valid per docs/tile-symbols.txt) to make it read as a failing security core:
+    lit centre, dim flickering edges. Optionally a couple of explosive barrels
+    ('B') near walls as a player tool (shoot to chip the boss via the existing
+    ExplosiveBarrelManager / hazard chain), placed so they can't trivially one-shot
+    the boss and aren't in the main dash lanes. Only use symbols already in
+    docs/tile-symbols.txt (STRICT tile rule) — this order should need NO new symbol.
+
+=============================================================================
+PROCEDURAL APPROACH (keep it readable & fair, not chaotic)
+=============================================================================
+- Seed from the run master seed (deterministic per run; matches the route system's
+  approach) so a given run's arena is reproducible.
+- Algorithm sketch (implement in level/BossArenaGenerator, or a new
+  ProceduralBossArenaGenerator implementing ILevelGenerator):
+    1. Carve one large rectangular/rounded open room (randomised size within
+       spacious bounds) centred in the grid, perimeter walls.
+    2. Place the boss spawn near the FAR side from the entrance (so the player
+       enters and SEES it across the room — presence).
+    3. Place the exit '>' beyond/near the boss (gated until death, as today).
+    4. Scatter K asymmetric cover columns via seeded jitter, then RUN A
+       REACHABILITY + FAIRNESS PASS: flood-fill from the player start; reject/patch
+       any layout where (a) the boss spawn, exit, or a heal alcove is unreachable,
+       (b) any 1-wide chokepoint exists inside the arena, or (c) fewer than 2
+       escape routes exist from the central core. Re-roll cover placement until it
+       passes (bounded retries; fall back to a safe template if exhausted).
+    5. Carve 1–2 heal alcoves against walls behind cover; record their tiles.
+    6. Sprinkle lighting + optional barrels; record door/exit/boss/alcove tiles
+       into BossArenaLayout.
+- Zero gameplay symbols outside docs/tile-symbols.txt. Boss spawn still uses 'n'
+  (extracted to a spawn point, replaced with floor — as today).
+
+=============================================================================
+VERIFY
+=============================================================================
+- Generate the arena across many seeds; assert (unit test if feasible, else dev
+  logging): reachability of boss/exit/alcoves, min passage width ≥2, ≥2 escape
+  routes from centre, dash/charge ranges fit in the open core.
+- Play the fight in a few seeds: confirm it feels spacious, the boss can hit-and-
+  run without instantly cornering itself, and the player can always find safe
+  ground and reach the heal spot.
+
+=============================================================================
+OPEN QUESTIONS
+=============================================================================
+1. Fully procedural vs a set of hand-authored spacious templates chosen by seed
+   (via game-level-designer). RECOMMEND a HYBRID: 2–3 hand-authored spacious arena
+   .txt templates + seeded selection + light procedural jitter (cover/lighting/
+   barrels). Lower risk than full procgen, still varied, and the level designer
+   controls the "interesting" feel. Reachability pass still runs on the result.
+2. Keep the lockable entry as a single door tile or a multi-tile door line? Single
+   tile is simplest for lock/unlock; if the entrance is wider, seal a door LINE
+   (BossFloorController would lock each). RECOMMEND single-tile door in a 2–3 wide
+   antechamber for v1.
+3. Do the other bosses (Corruptor/Hell Baron) share this arena generator or get
+   their own? RECOMMEND shared generator, per-boss theming/params later.

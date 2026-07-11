@@ -1,0 +1,179 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Mobile Overseer — Ability Kit (ORDER 3)
+CREATED: 2026-07-11
+---
+DEPENDS ON: order-1 (vision), order-2 (locomotion — moves must be visible)
+ENABLES: order-4 (the brain sequences these verbs into tactics)
+
+=============================================================================
+SCOPE
+=============================================================================
+Add the Overseer's action VERBS as data — each a BossMove kind (+ telegraph)
+resolvable by BossFloorController. This order does NOT decide WHEN the boss uses
+them (that is Order 4's brain). It just makes each verb exist, be telegraphed one
+turn ahead (Fairness F2), and resolve correctly. The brief's required verbs:
+
+  1. CHARGE          — lunge several tiles in a straight cardinal line, hit along it
+  2. SUMMON_ADDS     — spawn minions (Corruptor-style)  [reuses existing SUMMON]
+  3. SPAWN_FIRE      — seed a fire lane/patch            [HazardManager.igniteFire]
+  4. SPAWN_TOXIC     — seed a toxic cloud                [HazardManager.spawnToxicCloud]
+  5. MELEE           — adjacent slam                     [already in BossMove]
+
+Every damaging verb uses the TELEGRAPH → RESOLVE rhythm already in BossMove /
+DangerTileSet: the boss commits on turn T (marks danger tiles / crackles), damage
+lands on turn T+1. The player gets exactly one turn to react.
+
+=============================================================================
+VERB 1 — CHARGE (mobile line strike; the signature "hit then flee" opener)
+=============================================================================
+The boss picks a cardinal direction toward the player, telegraphs the corridor,
+then next turn LUNGES up to N tiles along it (a fast slide via Order 2), damaging
+the player if they are on any traversed tile, and ending adjacent-or-past them.
+Reuses the Shell Brute "charger" feel the game already teaches (EnemyType
+SHELL_BRUTE tacticalVerb: "sidestep its charge, then punish the recovery").
+
+BossMove: new kind CHARGE with a direction + range payload, OR model as:
+  - Turn T:  TELEGRAPH — arm DangerTileSet with the line of tiles from the boss
+             toward the player's current tile, up to BOSS_CHARGE_RANGE_TILES or
+             the first wall/'P' column (stop at solid). Damage =
+             BOSS_CHARGE_DAMAGE. Boss faces the charge axis (visual).
+  - Turn T+1: RESOLVE + move — apply DangerTileSet damage if the player is on a
+             marked tile, THEN slide the boss along the (now cleared) corridor to
+             the last passable tile via beginSlide (Order 2). The lunge is the
+             flee-enabling reposition: it ends the boss on the far side, set up to
+             DASH away next. After a charge, force a 1-turn RECOVERY plant (the
+             player's punish window — Fairness F1/F2).
+
+CONSTANTS (EnemyConstants.java — reuse/extend existing OVERSEER_CHARGE_DAMAGE=30,
+OVERSEER_RAM_COOLDOWN=3 which already exist):
+  OVERSEER_CHARGE_RANGE_TILES = 5
+  OVERSEER_CHARGE_RECOVERY_TURNS = 1
+Escape: step OFF the charge line (one perpendicular tile). Telegraph colour: red
+corridor (Order 8).
+
+=============================================================================
+VERB 2 — SUMMON_ADDS (Corruptor-style; pins the player while the boss kites)
+=============================================================================
+Already 90% built. BossMove.summon(EnemyType, count) exists and
+BossFloorController.summonMinions() spawns into free cardinal-adjacent tiles,
+capped by EnemyConstants.CORRUPTOR_MINION_CAP against countLiveEnemies(). Extend:
+
+  - WHICH adds: spawn a small mixed pack of EXISTING chaff so it reads as the
+    "Corruptor carrier" fantasy. RECOMMEND CRAWLER (fast pressure) + GHOUL
+    (durable body-block), 1–2 at a time. Do NOT invent new enemy types here.
+  - TELEGRAPH it: today SUMMON resolves instantly. For fairness, add a one-turn
+    tell (boss "vents spores", adjacent spawn tiles flash) then spawn next turn,
+    OR keep instant but cap to 1 add per summon on a slow cadence (Order 4 sets
+    cadence). RECOMMEND telegraphed spawn tiles for readability (F2/F6).
+  - CAP: keep a hard live-adds ceiling (reuse CORRUPTOR_MINION_CAP; expose as
+    OVERSEER_ADDS_CAP) so the room never floods (Fairness F5).
+  - Adds obey the same-cardinal-line ranged rule and all normal enemy AI — no
+    special-casing (they are just EnemyManager enemies).
+  - Order 6 makes these adds drop ammo 100% when the player is empty. Nothing to
+    do here except spawn them; Order 6 hooks the drop.
+
+CONSTANTS:
+  OVERSEER_ADDS_CAP = 4                 // max live adds at once
+  OVERSEER_SUMMON_COUNT = 2            // adds per summon action
+  OVERSEER_SUMMON_TYPES = {CRAWLER, GHOUL}  // pick per summon (round-robin/random)
+
+=============================================================================
+VERB 3 — SPAWN_FIRE (zone denial; deny the ground you're standing on)
+=============================================================================
+HazardManager already exposes igniteFire(tileColumn, tileRow). The boss casts a
+short FIRE LANE or PATCH to push the player off a position — classic "you can't
+stand there" pressure, and a natural thing to drop on the tile it just vacated
+when fleeing.
+
+  - Turn T: TELEGRAPH — mark the target fire tiles (DangerTileSet, amber/orange).
+    Target = either (a) a 3-tile line between boss and player, or (b) the player's
+    current tile + orthogonal neighbours (a small patch). Choose per brain (Order
+    4); the verb supports a "target tile + shape" payload.
+  - Turn T+1: RESOLVE — for each marked tile call HazardManager.igniteFire(col,
+    row). The hazard system then owns the burning DOT/lifetime (do NOT re-implement
+    fire damage; HazardManager.tick handles it). The DangerTileSet resolve here is
+    just "place the hazard", not a direct hit — the fire persists and chips anyone
+    standing in it, per the existing hazard rules.
+  - COMBO: dropping fire on the tile the boss flees FROM (Order 4 "Ambush" tactic)
+    means the player can't simply chase into melee — they must path around.
+
+New BossMove kind SPAWN_FIRE (payload: target tile + shape id), or a generic
+CAST_HAZARD move carrying {hazardKind: FIRE|TOXIC, shape, targetCol, targetRow}.
+RECOMMEND ONE generic hazard move (CAST_HAZARD) to cover Verbs 3 & 4 — less
+BossMove surface area. BossFloorController resolves it by calling the matching
+HazardManager entry point per tile.
+
+CONSTANTS:
+  OVERSEER_FIRE_LANE_LENGTH = 3
+  (fire DOT/lifetime come from existing HazardManager/hazard constants — reuse.)
+
+=============================================================================
+VERB 4 — SPAWN_TOXIC (persistent area denial; slower, wider than fire)
+=============================================================================
+HazardManager exposes igniteToxic(col,row) and spawnToxicCloud(centerColumn,
+centerRow, radius). Toxic is the WIDER, longer-linger zone — used to wall off a
+region of the arena or cover the boss's retreat / heal spot.
+
+  - Turn T: TELEGRAPH the cloud footprint (DangerTileSet, sickly green), centred
+    on a chosen tile (often behind the boss as it flees, or on the player's tile).
+  - Turn T+1: RESOLVE — call HazardManager.spawnToxicCloud(centerCol, centerRow,
+    OVERSEER_TOXIC_RADIUS). Hazard system owns the linger + DOT.
+  - COMBO with Order 5 heal: the boss can lay toxic between itself and the player
+    to buy time while it repairs (the player must path around it to interrupt).
+    Fairness F5: the cloud must NEVER fully seal the boss off — always leave a
+    walkable approach (arena design in Order 7 guarantees room; the cast picks a
+    radius that can't wall a corridor).
+
+CONSTANTS:
+  OVERSEER_TOXIC_RADIUS = 1            // 3x3 cloud (centre + ring); keep small
+                                       // enough to leave a path (F5).
+  (toxic DOT/linger from existing hazard constants — reuse.)
+
+=============================================================================
+VERB 5 — MELEE (the up-close punish; already exists)
+=============================================================================
+BossMove.melee(damage) already resolves: if the boss is Manhattan-adjacent to the
+player, apply damage. Keep as-is for the "hit manually, then flee" opener the
+brief calls for: STALK into adjacency → MELEE (plant) → DASH away (Order 2). Give
+it a one-turn wind (reuse WINDING_UP / a short telegraph) so it obeys F2, OR keep
+it as the fast reactive poke and rely on the charge for the telegraphed big hit.
+RECOMMEND: melee is a quick adjacent slam telegraphed by the boss rearing for one
+turn (EnemyState.WINDING_UP already exists for chargers) — modest damage
+(OVERSEER_MELEE_DAMAGE ~ 14), lower than CHARGE, because it is harder to avoid.
+
+CONSTANTS:
+  OVERSEER_MELEE_DAMAGE = 14
+
+=============================================================================
+BOSSMOVE SURFACE AFTER THIS ORDER (summary)
+=============================================================================
+  Existing: TELEGRAPH, RESOLVE, REPOSITION, SUMMON, MELEE, TRANSITION, NONE
+  Order 2 added: DASH (+ dash target payload)
+  Order 3 adds:  CHARGE (+ direction/range), CAST_HAZARD (+ kind/shape/target)
+  Order 5 adds:  HEAL (+ regen state)
+Keep the factory-method pattern in BossMove; keep payload fields grouped and
+documented per-kind (as the file already does).
+
+=============================================================================
+FAIRNESS / BALANCE
+=============================================================================
+- Every damaging verb (CHARGE, MELEE, and the initial placement of FIRE/TOXIC) is
+  telegraphed one turn ahead. Standing in a resolved hazard chips you — that is
+  your fault for not moving, and the hazard is visible.
+- No single verb one-shots. Rough hit budget at full player HP (100): CHARGE ~30,
+  MELEE ~14, fire/toxic tick per turn ~ small. The player dies from EATING several
+  because they mispositioned, never from one unreadable hit.
+- Slot every damage/range number into docs/balance-rule-system.txt and
+  balance_order_6_boss_balance_ruleset.txt (eHP/DPT/TTK/TP) before finalising.
+- Hazards must always leave a walkable path (F5). The cast targeting must refuse
+  to seal a 1-wide corridor; Order 7's spacious arena makes this easy.
+
+=============================================================================
+OPEN QUESTIONS
+=============================================================================
+1. One generic CAST_HAZARD move vs separate SPAWN_FIRE/SPAWN_TOXIC kinds.
+   RECOMMEND one generic move carrying a hazard-kind enum (smaller surface).
+2. Should CHARGE damage the boss's own adds it passes through? RECOMMEND no
+   (friendly-pass) for simplicity; the corridor only threatens the player.
+3. Telegraphed summon vs instant capped summon. RECOMMEND telegraphed (F2/F6).

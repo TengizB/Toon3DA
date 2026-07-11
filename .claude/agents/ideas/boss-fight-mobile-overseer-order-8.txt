@@ -1,0 +1,114 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Mobile Overseer — Presentation, Texture & Telegraphs (ORDER 8)
+CREATED: 2026-07-11
+---
+DEPENDS ON: order-2..5 (the behaviours this makes readable)
+USE AGENT: libgdx-specialist for renderer changes.
+
+=============================================================================
+SCOPE
+=============================================================================
+Make the whole mobile fight READABLE and juicy (Fairness F3/F6). This order wires
+the sprite, per-ability telegraph colours, the dash trail that sells movement, the
+phase/heal HUD states, and the intro/defeat/interrupt banners. No new gameplay —
+purely feedback.
+
+=============================================================================
+SPRITE / TEXTURE (already present — confirm wiring)
+=============================================================================
+enemy_boss_overseer.png EXISTS at assets/textures/enemies/enemy_boss_overseer.png
+and is bound to EnemyConstants.ENEMY_BOSS_OVERSEER_PATH, used by EnemyType.OVERSEER
+(heightMultiplier 1.80). Nothing to add — just confirm the reworked mobile Overseer
+still loads this texture and renders at its boss height. If a sprite sheet with
+pose rows (STALK / WIND-UP / CHARGE-crouch / REPAIRING / ENRAGED / DYING) is added
+later, split via EnemyRenderer; single frame is fine for v1.
+
+  - PHASE 2 TINT: on ENRAGE (BossFloorController.triggerPhase2 already fires), tint
+    the boss sprite hotter (shift toward its accent red / raise emissive) so the
+    enraged state is unmistakable. EnemyConstants.OVERSEER_ACCENT_* already define
+    the accent (0.60, 0.90, 1.00 — cyan); consider a distinct enraged accent.
+  - REPAIRING TINT: during Order 5's heal, pulse a green "welding" glow so the
+    player instantly reads "it's healing — go stop it."
+
+=============================================================================
+TELEGRAPH COLOUR LANGUAGE (one colour per threat — F6)
+=============================================================================
+All threatened-tile overlays use the existing DangerTileSet → BossHudRenderer /
+telegraph overlay path (flat coloured floor quads, world-space, z-tested — no new
+entities, pre-allocated quad pool). Assign a DISTINCT colour per ability so the
+player learns the vocabulary at a glance:
+
+  CHARGE corridor ....... RED line          (imminent lunge — sidestep the row/col)
+  MELEE wind-up ......... ORANGE ring        (adjacent slam next turn)
+  SPAWN_FIRE tiles ...... AMBER/ORANGE flicker (fire lands here)
+  SPAWN_TOXIC footprint . SICKLY GREEN        (cloud lands here)
+  SUMMON spawn tiles .... PURPLE runes        (matches SpecialAbility SUMMON glyph)
+  HEAL aura ............. GREEN pulse on the boss (Order 5)
+Keep colours consistent with the game's existing danger palette; document them as
+named constants (RenderConstants / a BossTelegraphColors block). Colour-blind
+safety: pair colour with SHAPE (line vs ring vs patch vs runes) so it's never
+colour-only.
+
+=============================================================================
+MOVEMENT FEEDBACK — sell the dash (F3, the "not a teleport" polish)
+=============================================================================
+Order 2 gives a smooth interpolated slide; this order adds the JUICE that makes it
+read as a deliberate sprint, not a glide:
+  - AFTERIMAGE / MOTION TRAIL: draw 2–3 fading ghost billboards along the slide
+    path behind the boss during a DASH/CHARGE (reuse EnemyRenderer's billboard
+    draw at the path's trailing tiles, decreasing alpha). Pre-allocated; drawn only
+    while isSliding().
+  - DUST / SCUFF at the start and end tiles (reuse ImpactEffectSystem particle
+    pool if it fits) so departure and arrival have weight.
+  - Optional slight sprite lean/squash in the travel direction (scale hint).
+  - The minimap (LevelRenderer) already tracks the boss by tile; it will update on
+    arrival — fine. Optionally interpolate the minimap dot along renderColumn/Row
+    for consistency.
+These are what stop the multi-tile move from feeling like a pop even at 0.30s.
+
+=============================================================================
+HUD STATES (BossHudRenderer — extend, don't replace)
+=============================================================================
+BossHudRenderer already does the intro, "PHASE 2" banner, and the full-screen HP
+bar. Add:
+  - Boss HP bar always visible during the fight (exists); make the heal TICK-UP
+    visible (bar rises per repair turn — Order 5) with a green flash.
+  - STATE LABEL under the boss name reflecting the current beat: STALKING /
+    CHARGING / SUMMONING / REPAIRING / ENRAGED. Small, unobtrusive; reads the
+    boss's current tactic/pose from the brain or a lightweight shared state flag.
+  - BANNERS via the existing showBanner path + EventTextSystem lines:
+      awaken:   boss.bossName intro (exists)
+      phase 2:  "ENRAGED!" (exists)
+      heal:     "OVERSEER REPAIRING" (Order 5)
+      interrupt:"REPAIR INTERRUPTED" (Order 5)
+      death:    boss.killLine (exists)
+  Reuse the procedural HUD (no textures) discipline of the existing renderer.
+
+=============================================================================
+AUDIO / EVENT HOOKS (optional, if an audio system exists)
+=============================================================================
+- Distinct cues for charge wind-up, dash whoosh, summon, hazard cast, heal start,
+  interrupt, phase 2, death. If no audio system is present yet, leave event-text
+  + screen feedback as the readability layer and note audio as a later pass.
+
+=============================================================================
+FAIRNESS / VERIFY
+=============================================================================
+- Play the full fight and confirm EVERY threat is legible one turn ahead by colour
+  + shape, the dash reads as movement (trail/dust), and the heal/enrage states are
+  impossible to miss. If a first-time player dies to something they couldn't see,
+  the telegraph failed — fix it here, not by nerfing damage.
+- No render-loop allocations (all pools/quads pre-allocated); every new Texture/
+  ShapeRenderer/pool disposed in the owner's dispose().
+
+=============================================================================
+OPEN QUESTIONS
+=============================================================================
+1. Where does the HUD read the boss's current "state label" from — the brain
+   (Order 4) exposing a currentTactic, or a small enum flag the controller sets
+   each tick? RECOMMEND a lightweight BossVisualState enum the controller updates
+   from the executed move kind (decouples HUD from brain internals).
+2. Afterimage count/alpha: tune so it reads at 0.30s dash without smearing.
+3. Minimap interpolation of the boss dot: nice-to-have; skip if it complicates the
+   existing LevelRenderer pass.

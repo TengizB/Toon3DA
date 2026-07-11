@@ -1,0 +1,196 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Mobile Overseer — Visible Locomotion (ORDER 2)
+CREATED: 2026-07-11
+---
+DEPENDS ON: boss-fight-mobile-overseer-order-1.txt (read it first)
+ENABLES: order-3 (abilities move the boss), order-4 (brain schedules moves)
+
+=============================================================================
+PROBLEM THIS ORDER SOLVES
+=============================================================================
+Two hard requirements from the brief:
+  (a) "boss must move several cells ... but it must not leave feeling that it
+       teleported ... quick moving animation, and player must actually see it
+       moved."
+  (b) "boss must be balanced and not move constantly so player would not be able
+       to hit it."
+
+Today the boss CANNOT do either:
+  - enemy/EnemyManager.tryPushEnemy() SNAPS the enemy: it sets tileColumn/tileRow
+    directly and returns. There is NO interpolation — a relocation is a teleport.
+    (Verified: Enemy has no render-position lerp fields; EnemyRenderer draws at
+    the tile centre via worldCenterX/Y.)
+  - BossFloorController.repositionBoss() only steps ONE cardinal tile TOWARD the
+    player, once. There is no multi-tile move, no fleeing, and no cap on how often
+    it can move.
+
+This order builds the LOCOMOTION LAYER: a visible, interpolated multi-tile move
+for the boss, plus the fairness cap that stops it kiting forever. It ships with a
+"dash to a target tile" behaviour but NO new attacks — Orders 3/4 use it.
+
+=============================================================================
+PART A — VISIBLE MOVEMENT ANIMATION (the "not a teleport" fix)
+=============================================================================
+The player moves with an animated slide (PlayerController lerps position over
+PLAYER_MOVE_DURATION). Give the boss the same treatment, but spanning MULTIPLE
+tiles inside ONE game tick.
+
+CONCEPT: the boss's LOGICAL tile (tileColumn/tileRow — used for all collision /
+LOS / attack math) updates instantly at the START of the move (so simulation is
+never mid-tile — the turn model stays clean). A separate VISUAL position lags
+behind and catches up over the next ~BOSS_DASH_ANIM_DURATION seconds, sliding
+smoothly through the path tiles. The 3D billboard is drawn at the VISUAL
+position. This is purely cosmetic (same discipline as the enemy attack-lunge
+animation, which the Enemy header already calls "cosmetic only — never affects
+simulation").
+
+IMPLEMENTATION (enemy/Enemy.java — new cosmetic fields, boss uses them; normal
+enemies leave them at rest):
+  private float visualColumn;         // interpolated render column (tiles)
+  private float visualRow;            // interpolated render row (tiles)
+  private float moveAnimSeconds;      // seconds remaining in the current slide
+  private float moveAnimDuration;     // total seconds for the current slide
+  // Path the visual position sweeps through this slide, pre-allocated buffer:
+  private final int[] slidePathColumns = new int[BOSS_MAX_DASH_TILES + 1];
+  private final int[] slidePathRows    = new int[BOSS_MAX_DASH_TILES + 1];
+  private int   slidePathLength;
+  private int   slidePathIndex;
+
+  void beginSlide(int[] pathCols, int[] pathRows, int count, float durationSeconds)
+      — copy path into the buffers (no alloc), set moveAnimSeconds =
+        moveAnimDuration = durationSeconds, snap visualColumn/Row to the FIRST
+        path tile (current position), slidePathIndex = 0.
+
+  void advanceSlide(float deltaTime) — called each frame from
+        EnemyManager.updateAnimations(deltaTime) (which already advances hit-flash
+        / attack timers). Decrement moveAnimSeconds; compute overall progress
+        p = 1 - moveAnimSeconds/moveAnimDuration in [0,1]; map p across the path
+        (segment = p * (count-1)); lerp visualColumn/Row between the two bounding
+        path tiles. When moveAnimSeconds <= 0, snap visualColumn/Row to the LAST
+        path tile (== logical tile) to kill drift.
+
+  boolean isSliding() { return moveAnimSeconds > 0f; }
+  float   renderColumn() { return isSliding() ? visualColumn : tileColumn; }
+  float   renderRow()    { return isSliding() ? visualRow    : tileRow;    }
+
+RENDER (render/EnemyRenderer.java):
+  For the boss billboard, compute world position from renderColumn()/renderRow()
+  instead of the integer tile. (World-space centre = (renderColumn()+0.5f) *
+  CELL_SIZE, same for row.) One branch: only the boss needs it (or all enemies —
+  it is a no-op when not sliding). Zero new allocation; the path buffers live on
+  the Enemy.
+
+ZERO-ALLOCATION RULE: all buffers pre-sized to BOSS_MAX_DASH_TILES in the Enemy
+constructor. advanceSlide runs every frame — it MUST NOT allocate.
+
+TIMING (util/Constants.java):
+  BOSS_DASH_ANIM_DURATION = 0.30f  // seconds for a full multi-tile slide.
+  Fast enough to feel like a sprint, slow enough that the eye tracks it. NOTE:
+  the game LOGICALLY resolves the move in one tick; the animation just plays out
+  over the following frames. If the player mashes the next action before the
+  slide finishes, either (i) let the slide snap to completion instantly, or (ii)
+  briefly gate the next tick until the slide ends. RECOMMEND (i) snap-on-next-tick
+  for responsiveness — see OPEN QUESTIONS.
+
+=============================================================================
+PART B — MULTI-TILE MOVE (BossMove.DASH)
+=============================================================================
+Add a DASH move so a pattern can relocate the boss up to N tiles in one turn.
+
+BossMove (entity/boss/BossMove.java) — new kind + payload:
+  enum Kind { ... , DASH }
+  // DASH payload: an ABSOLUTE target tile the boss wants to reach this turn.
+  public final int dashTargetColumn;
+  public final int dashTargetRow;
+  public static BossMove dash(int targetColumn, int targetRow) { ... }
+  (Existing REPOSITION stays for single-step nudges; DASH is the long move.)
+
+BossFloorController.executeBossMove — new case DASH:
+  1. PATH-STEP from the boss's current tile toward (dashTargetColumn,
+     dashTargetRow), one cardinal tile at a time, greedily reducing Manhattan
+     distance, up to BOSS_MAX_DASH_TILES steps, STOPPING at the first tile that
+     fails isBossStepPassable() (wall/door/occupied/player tile). Record every
+     tile stepped into the path buffer (start tile first).
+     - Use the existing isBossStepPassable() gate (already handles bounds, walls,
+       doors via level.isBlockedAt, enemy occupancy, and the player's tile).
+     - Prefer the axis with the larger remaining delta first (feels purposeful);
+       if blocked on that axis, try the other. A tiny greedy stepper — NOT full
+       A* (keep it allocation-free and predictable/readable for the player).
+  2. Update occupancy + logical tile to the FINAL reached tile (reuse the
+     tryPushEnemy occupancy bookkeeping, but for the whole move — or add
+     enemyManager.moveBossTo(finalCol, finalRow) that updates occupancy once).
+  3. Call boss.beginSlide(pathBuffer, pathLen, BOSS_DASH_ANIM_DURATION) so the
+     visual sprints along exactly the tiles it logically crossed.
+  4. If the greedy stepper reaches zero passable steps (fully boxed in), the DASH
+     degrades to HOLD (no move, no crash) — the brain will pick a plant action.
+
+Pre-allocate the path buffers on BossFloorController (or reuse the boss's
+slidePath buffers) sized BOSS_MAX_DASH_TILES+1. No per-tick new[].
+
+CONSTANTS (util/Constants.java or EnemyConstants.java):
+  BOSS_MAX_DASH_TILES = 4     // longest single-turn relocation. "Several cells"
+                              // per the brief, but capped so the slide stays
+                              // readable and the boss can't cross the whole arena.
+  (BOSS_DASH_ANIM_DURATION from Part A.)
+
+=============================================================================
+PART C — FAIRNESS: DON'T MOVE EVERY TURN (F1 from Order 1)
+=============================================================================
+The boss must be catchable. Enforce the "no two moves in a row without a plant"
+rule at the CONTROLLER level so no future pattern can accidentally break it.
+
+State on Boss (or BossFloorController):
+  int consecutiveMoveTurns;   // increments on DASH/REPOSITION, resets on any
+                              // planted action (TELEGRAPH/RESOLVE/SUMMON/MELEE/
+                              // HOLD/hazard cast/HEAL wind).
+
+Guard in executeBossMove: if the pattern returns DASH/REPOSITION while
+consecutiveMoveTurns >= BOSS_MAX_CONSECUTIVE_MOVE_TURNS, the controller OVERRIDES
+it to HOLD (a planted "catch me" turn) and resets the counter. This is a hard
+backstop; the brain (Order 4) should already respect it, but the controller
+guarantees it so the player ALWAYS gets a punish window.
+
+  BOSS_MAX_CONSECUTIVE_MOVE_TURNS = 2   // at most 2 moves, then it must plant.
+
+Also gives the "hit then flee" cadence a natural shape: STRIKE (plant) → DASH
+(flee, move 1) → maybe DASH/reposition (move 2) → forced plant (window).
+
+=============================================================================
+PART D — GENERALISE repositionBoss (flee, not just chase)
+=============================================================================
+Today repositionBoss only moves TOWARD the player. The hunter-killer needs to
+move AWAY (flee) too. Refactor into a helper the DASH stepper and the brain share:
+
+  chooseFleeTarget(playerCol, playerRow) → returns a tile that MAXIMISES distance
+    from the player while staying inside the arena and reachable within
+    BOSS_MAX_DASH_TILES steps (scan candidate tiles at dash range, prefer ones
+    with LOS broken by a 'P' column for the heal in Order 5). Pure, allocation-
+    free (scan a bounded ring). The brain passes the chosen target into
+    BossMove.dash(...).
+
+Keep the existing single-tile REPOSITION for small chase nudges when the boss
+wants to close just one tile without a full dash.
+
+=============================================================================
+TEST / VERIFY (desktop dev build)
+=============================================================================
+- Run lwjgl3, reach the boss floor, confirm the boss VISIBLY slides across
+  several tiles (no pop) when it dashes, and that after any 2 moves it plants for
+  a turn you can hit. Confirm logical position (LOS/attacks) matches where the
+  sprite ENDS, and that mashing input doesn't desync visual vs logical tile.
+- Confirm no allocation in updateAnimations/advanceSlide (no per-frame new[]).
+
+=============================================================================
+OPEN QUESTIONS
+=============================================================================
+1. Input gating during the slide: snap-to-complete on next tick (responsive) vs
+   block input until slide ends (cinematic). RECOMMEND snap-to-complete; a 0.30s
+   slide rarely overlaps a deliberate tap, and the logical tile is already
+   correct so no exploit exists.
+2. Should the slide ease (ease-out) or be linear? RECOMMEND slight ease-out so
+   the boss "arrives and plants" with weight (reuse GameMath smoothstep if
+   present; else linear v1).
+3. Diagonal-looking dashes: the stepper is cardinal (matches the grid). A dash
+   that goes 2 right then 2 up will visibly "L" — acceptable and readable. Do NOT
+   add true diagonal movement (breaks the cardinal invariant).

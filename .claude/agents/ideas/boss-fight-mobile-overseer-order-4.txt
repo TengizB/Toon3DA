@@ -1,0 +1,177 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Mobile Overseer — Hunter-Killer AI Brain (ORDER 4)
+CREATED: 2026-07-11
+---
+DEPENDS ON: order-1 (vision/fairness), order-2 (DASH/flee), order-3 (ability kit)
+ENABLES: the actual "interesting boss fight". order-5 (heal) plugs in as a tactic.
+
+=============================================================================
+SCOPE
+=============================================================================
+This is the heart of the fight: a BossAttackPattern implementation —
+HunterKillerPattern — that SEQUENCES the Order-3 verbs into readable, varied
+TACTICS, so the boss "can combine his abilities for different strategies" (the
+brief). It replaces the stationary OverseerPhase1/2Pattern as the Overseer's
+active pattern (Boss.phase1Pattern / phase2Pattern). It must honour every
+fairness rule from Order 1 (esp. F1 punish-window cadence).
+
+Design goal: the boss is not a fixed script the player memorises frame-for-frame;
+it is a small set of TACTICS chosen by situation (range to player, HP, adds
+alive, cooldowns) with enough variety that the player must READ it each time, but
+enough structure that it always feels FAIR and learnable. DCSS/Hades target.
+
+=============================================================================
+ARCHITECTURE — a tactic-selecting state machine (no giant switch, no per-tick alloc)
+=============================================================================
+HunterKillerPattern implements BossAttackPattern. It holds:
+  - currentTactic        (enum Tactic; the multi-turn plan in progress)
+  - tacticStepIndex      (which step of the current tactic we're on)
+  - cooldowns[]          (per-verb turn cooldowns: charge, summon, hazard, heal)
+  - consecutiveMoveTurns mirror (the controller also enforces F1; brain respects it)
+  - scratch buffers      (pre-allocated; no new[] in nextMove)
+
+nextMove(boss, player, level, tickIndex):
+  1. If a tactic is IN PROGRESS (tacticStepIndex < its length) → emit the next
+     step's BossMove, advance the index, tick cooldowns. (A tactic is a short
+     fixed sequence of verbs — see the catalogue — so mid-tactic behaviour is
+     deterministic and readable once the player recognises the opener.)
+  2. If a tactic just FINISHED → SELECT a new tactic:
+       a. Compute situation: rangeToPlayer (Chebyshev), hpFraction, addsAlive,
+          which verbs are off-cooldown, consecutiveMoveTurns.
+       b. Score the eligible tactics for this phase's pool; pick the best-scoring
+          eligible one, with a NO-IMMEDIATE-REPEAT rule (don't run the same
+          tactic twice in a row if another is eligible — prevents degenerate
+          loops; matches the existing boss doc's "pattern variety rule").
+       c. Reset tacticStepIndex, set the chosen verbs' cooldowns.
+  3. F1 BACKSTOP: if the selected step is a move (DASH/CHARGE-lunge/REPOSITION)
+     and consecutiveMoveTurns is at the cap, substitute a PLANT step (HOLD or a
+     ready plant verb). The controller also guards this; the brain avoids
+     tripping it so tactics flow naturally.
+
+onPhaseStart(): reset tactic, step index, cooldowns.
+
+Keep it a compact scored-selection machine, NOT a hard-coded cycle: that is what
+makes it feel intelligent while staying debuggable. Tactics are data (arrays of
+verb ids); selection is a small scoring function. Document the scoring weights as
+named constants (GameBalance) so a designer can retune aggression without code.
+
+=============================================================================
+TACTIC CATALOGUE (v1 — the "strategies" the brief asks for)
+=============================================================================
+Each tactic is a short, named, multi-turn verb sequence. The player learns to
+recognise the OPENER and respond. "(plant)" marks a punish window.
+
+PHASE 1 POOL (100% → 50% HP) — teaches the boss's vocabulary, moderate tempo:
+
+  T1. AMBUSH  — the signature "hit then flee" the brief describes.
+      [ STALK: DASH toward player ] → [ MELEE (plant, telegraphed) ]
+      → [ DASH away to flee tile ] → [ CAST_HAZARD FIRE on the tile it vacated ]
+      → [ HOLD (plant / recovery — punish window) ]
+      Feel: it lunges in, cracks you, sprints off, and burns the ground behind it
+      so you can't just follow. You must path around the fire to re-engage.
+
+  T2. ZONER  — ranged pressure; deny space, don't commit.
+      [ CAST_HAZARD TOXIC near player ] → [ DASH to keep distance ]
+      → [ SUMMON_ADDS (telegraphed) ] → [ HOLD (plant) ]
+      Feel: it walls off part of the arena, backs away, and drops adds to occupy
+      you while it resets. Kill the adds (Order 6 keeps you fed), then chase.
+
+  T3. CHARGER — the big telegraphed line hit + escape.
+      [ CHARGE telegraph ] → [ CHARGE resolve + lunge ]
+      → [ CHARGE recovery (plant — punish window) ] → [ DASH reposition ]
+      Feel: sidestep the red corridor, then punish the recovery (the game already
+      teaches this vs Shell Brute).
+
+PHASE 2 POOL (50% → 0% HP) — ENRAGED: faster, layered, combined threats:
+
+  T4. FIRESTORM — layered zoning; the enraged escalation of ZONER.
+      [ CAST_HAZARD FIRE lane ] → [ DASH ] → [ CAST_HAZARD TOXIC ]
+      → [ SUMMON_ADDS ] → [ HOLD (plant) ]
+      Feel: it carpets the arena with hazards AND adds — the player must fight for
+      every safe tile. Reads as "the facility purging the room."
+
+  T5. BLITZ — relentless close pressure; the enraged AMBUSH.
+      [ DASH toward ] → [ CHARGE telegraph ] → [ CHARGE resolve+lunge ]
+      → [ MELEE (plant) ] → [ DASH away ] → [ HOLD (plant) ]
+      Feel: charge chained into a melee — two telegraphs back to back; the player
+      must dodge twice, then gets a real window.
+
+  T6. HEAL (Order 5) — enters the pool ONCE, when HP first drops below the heal
+      threshold in phase 2 (or phase 1 if you allow it). Preempts normal selection
+      (highest priority when eligible). See order-5 for the full state machine:
+      [ DASH to safe alcove ] → [ REPAIR ×up to 5 (each a plant, interruptible) ].
+
+Phase 2 gets faster cadence (shorter cooldowns, fewer HOLD turns) but NEVER drops
+below the F1 minimum punish-window frequency. The 50% ENRAGE transition already
+exists (BossFloorController.triggerPhase2 → one-tick invuln + "PHASE 2" banner);
+this order just swaps which tactic POOL is active per phase.
+
+=============================================================================
+SELECTION SCORING (how the brain "thinks" — creative but fair)
+=============================================================================
+When choosing a tactic, score each eligible one from the situation. Suggested
+weights (GameBalance constants, tune freely):
+  - rangeToPlayer small (adjacent-ish)  → favour AMBUSH/BLITZ/MELEE openers.
+  - rangeToPlayer large                 → favour CHARGER (close the gap) or ZONER.
+  - addsAlive < cap AND summon ready    → +score to ZONER/FIRESTORM.
+  - player cornered / low mobility      → +score to CHARGER/BLITZ (punish it).
+  - player camping behind a 'P' column  → +score to a tactic that DASHES to
+     re-open LOS or drops hazard on their camp tile (counter-camping — the mobile
+     boss's answer to the old "park behind cover" strategy).
+  - hpFraction below heal threshold AND heal unused → HEAL preempts everything.
+No-repeat rule and per-verb cooldowns prevent spam. Add a small random tiebreak
+(dropRandom-style seeded RNG) so two identical situations don't always pick the
+same tactic — variety without unfairness.
+
+CREATIVE EXTRA IDEAS (optional, backlog — pick any that keep it fair):
+  - "FEINT": telegraph a charge, then DASH perpendicular instead of lunging —
+     baits a dodge the wrong way. Use SPARINGLY and only in phase 2 (a feint that
+     never pays off is just noise; one per fight makes the player respect tells).
+  - "HUNT THE CAMPER": if the player hasn't moved in N turns, the boss dashes to
+     flank and drops hazard on their tile — actively punishes turtling.
+  - "PACK LEADER": while adds are alive, the boss prefers to keep distance and let
+     adds body-block; when adds die, it re-engages aggressively. Emergent from the
+     addsAlive scoring above — no special code.
+  - "LAST STAND": below ~15% HP (after heal is spent), drop the flee behaviour and
+     go all-in aggressive (BLITZ only) — a readable, climactic finish where the
+     player finally gets to corner it. Reward for surviving.
+
+=============================================================================
+INTEGRATION
+=============================================================================
+- Boss construction (BossFloorController / wherever the Overseer Boss is built):
+  set phase1Pattern = new HunterKillerPattern(PHASE1_POOL),
+      phase2Pattern = new HunterKillerPattern(PHASE2_POOL).
+  (Or one pattern instance that reads boss.phase to pick the pool — but two
+  instances keep step/cooldown state clean across the transition. RECOMMEND two.)
+- BossFloorController.executeBossMove already dispatches the move kinds; Orders
+  2/3 added DASH/CHARGE/CAST_HAZARD/HEAL cases. The brain only PRODUCES moves; the
+  controller executes and enforces the F1 backstop.
+- No new tick subscriber. The brain runs inside the existing
+  Boss.activePattern().nextMove(...) call in BossFloorController.onTick.
+
+=============================================================================
+FAIRNESS / VERIFY
+=============================================================================
+- Instrument (dev log) the chosen tactic + step each turn; play the fight and
+  confirm: (a) a punish window arrives at least every ~3 turns, (b) no tactic
+  repeats back-to-back, (c) the player can always reach a safe tile, (d) LOS-camp
+  is answered but not instantly punished (the counter is telegraphed).
+- Playtest for the "it won't hold still, I have to read it" feeling. If it feels
+  like whack-a-mole (never hittable), lower BOSS_MAX_CONSECUTIVE_MOVE_TURNS or add
+  HOLD steps. If it feels static, shorten cooldowns / add DASH steps. This is the
+  main tuning surface of the whole series.
+
+=============================================================================
+OPEN QUESTIONS
+=============================================================================
+1. Tactics as hard-coded verb arrays (simple, readable) vs a fully generative
+   planner. RECOMMEND fixed arrays for v1 — readability for the PLAYER matters
+   more than novelty; a memorable opener the player learns to answer beats
+   unpredictable soup.
+2. Should phase 1 ever heal, or is heal phase-2-only? RECOMMEND heal available
+   from the moment HP first crosses the heal threshold regardless of phase, but
+   only once (Order 5).
+3. RNG determinism: seed the brain's tiebreak RNG from the run seed so replays/
+   debugging are reproducible (match the dropRandom approach in EnemyManager).
