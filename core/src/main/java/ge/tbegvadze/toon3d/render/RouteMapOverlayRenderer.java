@@ -677,10 +677,19 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         buzz(RouteMapConstants.HAPTIC_INVALID_MS);
     }
 
-    /** Optional Android haptic, flag-gated so the desktop dev build no-ops safely. */
+    /**
+     * Optional Android haptic, flag-gated so the desktop dev build no-ops safely. A missing/denied
+     * VIBRATE permission (or any backend that rejects the call) must never crash a tap on the route
+     * map — this is cosmetic feedback, not gameplay-critical, so failures are swallowed silently.
+     */
     private void buzz(int milliseconds) {
-        if (RouteMapConstants.HAPTICS_ENABLED && Gdx.input != null) {
+        if (!RouteMapConstants.HAPTICS_ENABLED || Gdx.input == null) {
+            return;
+        }
+        try {
             Gdx.input.vibrate(milliseconds);
+        } catch (Exception ignored) {
+            // Never let cosmetic haptic feedback crash node selection (e.g. missing VIBRATE permission).
         }
     }
 
@@ -772,8 +781,11 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
                 break;
             }
         }
+        if (currentRegion < 0) {
+            return;   // No region contains the current depth — cannot determine the "next" one.
+        }
         int nextRegion = currentRegion + 1;
-        if (nextRegion >= 0 && nextRegion < regions.size()) {
+        if (nextRegion < regions.size()) {
             map.revealRegion(nextRegion);
             scannerActive = true;
             scanSweepTimer = RouteMapConstants.SCAN_SWEEP_SECONDS;
