@@ -1,5 +1,9 @@
 # Procedural Level Generation — Technical Reference
 # LevelGenerator.java · level package · see also .claude/agents/ideas/procedural-level-generation.txt
+#
+# NOTE: descent-target SELECTION (which generator + config builds the NEXT floor) is owned by the
+# branching route map, not by any generator here — see docs/route-map-system.txt. This doc covers how
+# a single floor is built once a GeneratorId has been chosen.
 
 === OVERVIEW ===
 
