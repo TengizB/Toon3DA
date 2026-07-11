@@ -8,7 +8,7 @@ import ge.tbegvadze.toon3d.entity.boss.BossMove;
 import ge.tbegvadze.toon3d.entity.boss.DangerTileSet;
 import ge.tbegvadze.toon3d.entity.boss.RegenState;
 import ge.tbegvadze.toon3d.hazard.HazardManager;
-import ge.tbegvadze.toon3d.level.BossArenaGenerator;
+import ge.tbegvadze.toon3d.level.BossArenaLayout;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.render.BossHudRenderer;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
@@ -46,13 +46,14 @@ public final class BossFloorController implements TickSubscriber {
     private final BossHudRenderer bossHudRenderer;
     private final EventTextSystem eventTextSystem;
 
-    // Arena door position — set from BossArenaGenerator constants
-    private final int arenaDoorColumn = BossArenaGenerator.ARENA_DOOR_COLUMN;
-    private final int arenaDoorRow    = BossArenaGenerator.ARENA_DOOR_ROW;
+    // Arena door + exit positions — injected from the per-run BossArenaLayout (boss ORDER 7). The arena
+    // is now procedural, so these vary per run and can no longer be compile-time constants.
+    private final int arenaDoorColumn;
+    private final int arenaDoorRow;
 
     // Exit tile position — disabled until boss dies
-    private final int exitColumn = BossArenaGenerator.getExitColumn();
-    private final int exitRow    = BossArenaGenerator.getExitRow();
+    private final int exitColumn;
+    private final int exitRow;
 
     private boolean bossDefeated       = false;
     private boolean phase2Triggered    = false;
@@ -83,7 +84,7 @@ public final class BossFloorController implements TickSubscriber {
     private final int[] movePathColumns = new int[Constants.BOSS_MAX_SLIDE_TILES + 1];
     private final int[] movePathRows    = new int[Constants.BOSS_MAX_SLIDE_TILES + 1];
 
-    public BossFloorController(Boss boss, Level level, DoorManager doorManager,
+    public BossFloorController(Boss boss, Level level, BossArenaLayout arenaLayout, DoorManager doorManager,
                                EnemyManager enemyManager, HazardManager hazardManager,
                                BossHudRenderer bossHudRenderer, EventTextSystem eventTextSystem) {
         this.boss            = boss;
@@ -93,6 +94,11 @@ public final class BossFloorController implements TickSubscriber {
         this.hazardManager   = hazardManager;
         this.bossHudRenderer = bossHudRenderer;
         this.eventTextSystem = eventTextSystem;
+
+        this.arenaDoorColumn = arenaLayout.doorColumn;
+        this.arenaDoorRow    = arenaLayout.doorRow;
+        this.exitColumn      = arenaLayout.exitColumn;
+        this.exitRow         = arenaLayout.exitRow;
 
         // Block the exit until the boss is defeated
         level.setCell(exitColumn, exitRow, 'x');

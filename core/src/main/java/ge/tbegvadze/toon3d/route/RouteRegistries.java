@@ -179,8 +179,9 @@ public final class RouteRegistries {
         registry.register(GeneratorId.CAVERN, (seed, config) ->
                 config != null ? new CavernGenerator(seed, config.enemyBudgetScale) : new CavernGenerator(seed));
 
-        // BossArenaGenerator is a bespoke fixed arena; it ignores both seed and config.
-        registry.register(GeneratorId.BOSS_ARENA, (seed, config) -> new BossArenaGenerator());
+        // BossArenaGenerator is a bespoke, seed-driven procedural arena (boss ORDER 7): the seed drives
+        // its room size, cover/alcove/lighting jitter, and fairness re-rolls. It ignores config.
+        registry.register(GeneratorId.BOSS_ARENA, (seed, config) -> new BossArenaGenerator(seed));
 
         // MedBayGenerator is the bespoke REST-node clinic (route-map order-8); seed drives its only
         // variation (alcove side + pod count). It ignores config and is NOT in the standard pool.

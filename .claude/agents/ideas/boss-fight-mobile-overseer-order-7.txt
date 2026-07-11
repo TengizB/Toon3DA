@@ -1,7 +1,26 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Level Design
 TITLE: Mobile Overseer — Procedural Boss Arena Rework (ORDER 7)
 CREATED: 2026-07-11
+---
+IMPLEMENTATION NOTES (2026-07-11):
+- BossArenaGenerator rewritten as a seed-driven procedural generator (constructor now takes the
+  floor seed). It carves one large lit open core (interior >16x16) with dim/flickering 'u'/'f'
+  edges, a wide antechamber joined by exactly ONE lockable 'd' door, boss 'n' near the far top with
+  the '>' exit just beyond it, asymmetric scattered 'P' cover, two recessed side-wall heal alcoves,
+  and up to two wall-flush 'E' barrels. A reachability + fairness pass (flood-fill from the player
+  start; no 1-wide interior pinch; no dead-end; >=2 escape routes from centre) re-rolls the
+  cover/barrel scatter up to BOSS_ARENA_MAX_LAYOUT_ATTEMPTS, then falls back to the bare open room.
+  No new tile symbols (all from docs/tile-symbols.txt).
+- New BossArenaLayout returns the chosen door/exit/boss/alcove tiles (positions vary per run).
+  BossFloorController now takes the layout via constructor injection (no more static ARENA_DOOR_* /
+  getExit* / getBossSpawn*). World captures the layout when a boss floor's generator is a
+  BossArenaGenerator and threads it into createBossForDepth + BossFloorController.
+- Tuning constants live in LevelGenConstants (BOSS_ARENA_*). Verified by BossArenaGeneratorTest
+  (300 seeds: reachability, min passage width >=2, >=2 escape routes, single door, dash/charge fit,
+  determinism) — all green.
+- Order 5 flee: alcove tiles are exposed on the layout for chooseFleeTarget to prefer; wiring the
+  flee logic to them is left to Order 5 (this order only records/produces the tiles).
 ---
 DEPENDS ON: order-1..3 (the fight this arena must support)
 USE AGENT: game-level-designer for tile layouts; java-architect for the generator.

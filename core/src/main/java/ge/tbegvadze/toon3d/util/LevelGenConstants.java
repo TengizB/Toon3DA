@@ -465,4 +465,47 @@ public final class LevelGenConstants {
     public static final int   GATE_APPROACH_HALF_WIDTH  = 1; // 2*half+1 = 3 tiles wide
     public static final int   GATE_THRESHOLD_WIDTH      = 11;
     public static final int   GATE_THRESHOLD_HEIGHT     = 9;
+
+    // -------------------------------------------------------------------------
+    // BOSS ARENA (boss ORDER 7) — the procedural, spacious duel arena
+    // -------------------------------------------------------------------------
+    // Replaces the old fixed 3-wide corridor + rigid 2x2-column box. A large open core (so the boss
+    // can DASH/CHARGE its full range and the player can circle-strafe), asymmetric scattered cover,
+    // recessed heal alcoves, a wide antechamber with ONE lockable door, and mood lighting. Seeded from
+    // the floor seed so a run's arena is reproducible. A reachability + fairness pass rejects any cover
+    // roll that strands a key tile, creates a 1-wide interior chokepoint, or opens a dead-end; it
+    // re-rolls up to BOSS_ARENA_MAX_LAYOUT_ATTEMPTS times, then falls back to the open room. Every tile
+    // is from docs/tile-symbols.txt; no new symbol.
+
+    // Open-core footprint bounds (walkable interior; randomised per run within these inclusive ranges).
+    // Minimums keep the interior well over 16x16 so the dash (4) and charge (5) ranges fit with room to
+    // kite; maximums keep the room inside the 80x45 grid with wall margins.
+    public static final int   BOSS_ARENA_MIN_WIDTH        = 22;
+    public static final int   BOSS_ARENA_MAX_WIDTH        = 30;
+    public static final int   BOSS_ARENA_MIN_HEIGHT       = 22;
+    public static final int   BOSS_ARENA_MAX_HEIGHT       = 28;
+    // The open core's top interior row (one ring of perimeter wall sits above it).
+    public static final int   BOSS_ARENA_TOP_MARGIN       = 2;
+    // Wide entrance antechamber below the arena (player starts here; ONE door joins it to the arena).
+    public static final int   BOSS_ARENA_ANTECHAMBER_WIDTH  = 7;
+    public static final int   BOSS_ARENA_ANTECHAMBER_HEIGHT = 5;
+    // Boss spawns this many rows below the arena's top interior row (near the far side from the door).
+    public static final int   BOSS_ARENA_BOSS_TOP_OFFSET  = 3;
+    // Scattered asymmetric cover columns ('P'): count randomised in this inclusive range.
+    public static final int   BOSS_ARENA_MIN_COVER        = 6;
+    public static final int   BOSS_ARENA_MAX_COVER        = 10;
+    // A cover column keeps this Chebyshev clearance from walls, key tiles, and other columns so no
+    // 1-wide pinch forms and the entry/boss/exit lanes stay open (fairness F5).
+    public static final int   BOSS_ARENA_COVER_CLEARANCE  = 2;
+    // Radius (Chebyshev) of the protected zones around the door mouth, boss, and exit.
+    public static final int   BOSS_ARENA_KEEP_CLEAR_RADIUS = 3;
+    // Recessed heal alcoves ('the boss retreats to repair'): pockets carved into the side walls.
+    public static final int   BOSS_ARENA_ALCOVE_DEPTH     = 2;
+    public static final int   BOSS_ARENA_ALCOVE_HEIGHT    = 2;
+    // Explosive barrels ('E') dropped near the arena walls as a player tool (max; may place fewer).
+    public static final int   BOSS_ARENA_MAX_BARRELS      = 2;
+    // Bounded re-rolls of the cover/barrel scatter before falling back to a bare open room.
+    public static final int   BOSS_ARENA_MAX_LAYOUT_ATTEMPTS = 48;
+    // Minimum distinct open cardinal escape routes required from the arena centre (fairness F5).
+    public static final int   BOSS_ARENA_MIN_ESCAPE_ROUTES = 2;
 }
