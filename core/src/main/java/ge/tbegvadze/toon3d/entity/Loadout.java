@@ -147,6 +147,29 @@ public final class Loadout {
     }
 
     /**
+     * True when the player cannot fire any equipped weapon for lack of ammo — every equipped ranged
+     * weapon has an empty clip AND an empty reserve (boss-fight-mobile-overseer ORDER 6, the guaranteed
+     * ammo-lifeline trigger). Returns false when any ranged weapon can still fire, when a weapon uses
+     * infinite ammo (null ammo type), and — deliberately — for a melee-only loadout: a marine who
+     * consumes no ammo is never "out of ammo", so the lifeline does not apply to them.
+     */
+    public boolean hasNoUsableAmmo() {
+        boolean hasRangedWeapon = false;
+        for (int slotIndex = 0; slotIndex < slots.length; slotIndex++) {
+            if (isSlotLocked(slotIndex)) continue;
+            Weapon weapon = slots[slotIndex];
+            if (weapon == null || weapon instanceof MeleeWeapon) continue;
+            if (weapon.getAmmoType() == null) return false; // infinite-ammo weapon — always usable
+            hasRangedWeapon = true;
+            // getReserveAmmo() returns -1 when the reserve is untracked (e.g. ammo inventory not yet
+            // injected); only an exact 0 means a genuinely empty reserve, so use != 0 to treat the
+            // untracked case as still-usable and never trigger the lifeline on unknown state.
+            if (weapon.getShotsInClip() > 0 || weapon.getReserveAmmo() != 0) return false;
+        }
+        return hasRangedWeapon;
+    }
+
+    /**
      * True when every assignable (non-locked) slot is occupied.
      * Locked slots are ignored — they can never hold a weapon, so their permanent
      * emptiness must not make the loadout look like it still has free space.

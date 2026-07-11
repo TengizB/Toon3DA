@@ -358,12 +358,29 @@ public final class EnemyManager implements EnemyHitTarget {
      * No-op if the tile is out of bounds, already occupied, or blocked.
      */
     public void spawnEnemy(EnemyType type, int tileColumn, int tileRow, int dungeonDepth) {
+        spawnEnemyInternal(type, tileColumn, tileRow, dungeonDepth, false);
+    }
+
+    /**
+     * Spawns a boss-summoned add — identical to {@link #spawnEnemy} but tags the add with
+     * {@link Enemy#spawnedByBossSummon}. Called by BossFloorController's SUMMON path so the enemy-death
+     * drop logic can grant the guaranteed ammo lifeline (boss-fight-mobile-overseer ORDER 6): in the
+     * sealed arena, killing a summoned add ALWAYS drops matching ammo when the player is out of ammo.
+     * No-op if the tile is out of bounds, already occupied, or blocked.
+     */
+    public void spawnBossMinion(EnemyType type, int tileColumn, int tileRow, int dungeonDepth) {
+        spawnEnemyInternal(type, tileColumn, tileRow, dungeonDepth, true);
+    }
+
+    private void spawnEnemyInternal(EnemyType type, int tileColumn, int tileRow, int dungeonDepth,
+                                    boolean spawnedByBossSummon) {
         if (tileColumn < 0 || tileColumn >= level.getWidth())  return;
         if (tileRow    < 0 || tileRow    >= level.getHeight()) return;
         if (level.isBlockedAt(tileColumn, tileRow, doorManager)) return;
         if (isTileOccupiedByEnemy(tileColumn, tileRow)) return;
         Enemy enemy = initScaledEnemy(type, tileColumn, tileRow, dungeonDepth);
         enemy.alert();
+        enemy.spawnedByBossSummon = spawnedByBossSummon;
         enemies.add(enemy);
         occupancy[tileColumn][tileRow] = true;
     }
@@ -1791,7 +1808,10 @@ public final class EnemyManager implements EnemyHitTarget {
                 && !Level.isArmourPickup(currentCell)
                 && !Level.isKeycardPickup(currentCell)
                 && !Level.isAmmoPickup(currentCell)) {
-            char drop = rollEnemyDrop(enemy.type, isMeleeKill);
+            // ORDER 6 ammo lifeline: a summoned add killed while the player is out of ammo in the
+            // sealed boss arena ALWAYS drops matching ammo, replacing the normal roll (Fairness F5).
+            char guaranteedAmmo = guaranteedSummonerAmmoDrop(enemy);
+            char drop = (guaranteedAmmo != 0) ? guaranteedAmmo : rollEnemyDrop(enemy.type, isMeleeKill);
             level.setCell(enemy.tileColumn, enemy.tileRow, drop);
             if (dropPlacedListener != null) {
                 dropPlacedListener.onDropPlaced(enemy.tileColumn, enemy.tileRow, drop);
@@ -1852,5 +1872,54 @@ public final class EnemyManager implements EnemyHitTarget {
         }
         if (count == 0) return 0;
         return candidates[dropRandom.nextInt(count)];
+    }
+
+    /**
+     * ORDER 6 ammo lifeline (boss-fight-mobile-overseer): returns the ammo pickup char a summoned add
+     * must ALWAYS drop, or 0 when the guarantee does not apply (normal loot rules stand). The guarantee
+     * fires only when ALL of these hold, so it is purely an empty-safety net — never an ammo piñata:
+     *   • the dead enemy was spawned by the boss's SUMMON tactic ({@code spawnedByBossSummon}),
+     *   • a boss fight is still active (the arena is sealed — the only truly unwinnable case), and
+     *   • the player has no usable ammo across every equipped ranged weapon.
+     * The chosen char matches a weapon the player actually carries so the drop is never dead weight.
+     */
+    private char guaranteedSummonerAmmoDrop(Enemy enemy) {
+        if (!enemy.spawnedByBossSummon) return 0;
+        if (loadout == null) return 0;
+        if (!isBossFightActive()) return 0;
+        if (!loadout.hasNoUsableAmmo()) return 0;
+        return preferredAmmoCharForEmptyLoadout();
+    }
+
+    /** True while a live boss is present in the roster — the arena is still sealed. */
+    private boolean isBossFightActive() {
+        for (int index = 0; index < enemies.size(); index++) {
+            Enemy candidate = enemies.get(index);
+            if (candidate instanceof Boss && candidate.isAlive()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Picks the ammo pickup char for the guaranteed lifeline drop: the active weapon's ammo type when
+     * it is a ranged weapon that uses ammo, otherwise the first equipped ranged weapon's type. Mirrors
+     * the melee-drop matching intent (drop what the player can actually load). Returns 0 only for a
+     * melee-only loadout, which never triggers the guarantee.
+     */
+    private char preferredAmmoCharForEmptyLoadout() {
+        char activeChar = ammoPickupCharForWeapon(loadout.active());
+        if (activeChar != 0) return activeChar;
+        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+            char candidate = ammoPickupCharForWeapon(loadout.getSlot(slotIndex));
+            if (candidate != 0) return candidate;
+        }
+        return 0;
+    }
+
+    /** Ammo pickup char for a ranged weapon that draws from a reserve; 0 for null/melee/infinite-ammo weapons. */
+    private static char ammoPickupCharForWeapon(Weapon weapon) {
+        if (weapon == null || weapon instanceof MeleeWeapon) return 0;
+        AmmoType ammoType = weapon.getAmmoType();
+        return ammoType != null ? ammoType.getPickupTileChar() : 0;
     }
 }
