@@ -781,8 +781,11 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
                 break;
             }
         }
+        if (currentRegion < 0) {
+            return;   // No region contains the current depth — cannot determine the "next" one.
+        }
         int nextRegion = currentRegion + 1;
-        if (nextRegion >= 0 && nextRegion < regions.size()) {
+        if (nextRegion < regions.size()) {
             map.revealRegion(nextRegion);
             scannerActive = true;
             scanSweepTimer = RouteMapConstants.SCAN_SWEEP_SECONDS;
