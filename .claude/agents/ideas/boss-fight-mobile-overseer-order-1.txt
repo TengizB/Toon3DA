@@ -1,0 +1,204 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Mobile Overseer — Hunter-Killer Boss Rework (ORDER 1: Vision)
+CREATED: 2026-07-11
+---
+
+=============================================================================
+READ THIS FIRST — SERIES INDEX
+=============================================================================
+This is ORDER 1 of an ordered, multi-session boss rework. Each order is one
+self-contained implementation session; later orders depend on earlier ones.
+Implement them in numerical order. Do NOT start a later order before the one
+below it is IMPLEMENTED and its STATUS header updated.
+
+  ORDER 1  Vision & design pillars ............ (this file) READ FIRST
+  ORDER 2  Visible boss locomotion system ..... slide/dash, never teleport
+  ORDER 3  Boss ability kit .................... charge, summon, fire, toxic, melee
+  ORDER 4  Hunter-Killer AI brain ............. combining abilities into tactics
+  ORDER 5  One-time regeneration (heal) ....... flee → repair 5 turns, breakable
+  ORDER 6  Guaranteed ammo lifeline ........... adds drop ammo 100% when empty
+  ORDER 7  Procedural boss arena rework ....... remove fixed room, spacious gen
+  ORDER 8  Presentation, texture & telegraphs . enemy_boss_overseer.png + reads
+
+This whole series REWORKS THE EXISTING "OVERSEER" BOSS. It does not add a new
+boss type. enemy_boss_overseer.png (EnemyConstants.ENEMY_BOSS_OVERSEER_PATH) is
+already the Overseer's sprite. We keep EnemyType.OVERSEER, the Boss class, the
+BossAttackPattern/BossMove/BossFloorController pipeline, BossHudRenderer, and the
+arena-lock/exit-gate contract — and evolve the Overseer from a STATIONARY laser-
+lane turret (current OverseerPhase1Pattern / OverseerPhase2Pattern) into a MOBILE
+HUNTER-KILLER that stalks, strikes, flees, spawns, and heals.
+
+=============================================================================
+THE FANTASY — WHY THIS FIGHT
+=============================================================================
+The current Overseer is bolted to the floor: it fires row/plus laser lanes and
+never moves (see OverseerPhase1Pattern header). That is a fine "dodge the lanes"
+puzzle, but it is a STATIC fight — the player parks behind a 'P' column and trades
+shells. The user's brief asks for the opposite: a boss that is ALIVE in the room.
+
+New fantasy: the Overseer is a security-core drone that has torn free of its
+mount and now HUNTS. It closes distance, cracks you with a melee slam, then
+DASHES several tiles away before you can retaliate — a real, visible sprint
+across the arena, not a teleport. From range it seeds the floor with fire and
+toxic clouds to deny you ground, and it vomits up minion adds (Corruptor-style)
+to pin you while it repositions. Once, when badly hurt, it breaks off entirely,
+retreats to a corner, and REPAIRS itself over several turns — daring you to chase
+it down and interrupt the weld before it claws its health back.
+
+The player emotion we want: "It won't hold still. I have to READ where it's going,
+cut off its escape, and burn my window when it finally plants its feet." A cat-
+and-mouse duel across an open arena — the exact opposite of the turret it is today.
+
+Design lineage: Doom RPG floor bosses (telegraphed slams), Hades (bosses as a
+rhythm of telegraph → reposition → punish window), DCSS uniques (readable, on-
+your-turn threats; you can always see the kill coming), Doom Eternal Marauder /
+Archvile (a mobile threat that summons and zones and must be denied space).
+
+=============================================================================
+THE CORE LOOP (turn-based, unchanged tick model)
+=============================================================================
+Everything still runs on the existing one-tick-per-player-action model. Each
+completed player action (move / strafe / rotate / fire / reload / wait) fires ONE
+tick via TickEventBus; BossFloorController runs the Overseer's single action that
+tick, BEFORE normal enemies (it is subscribed first). NO real-time anything. The
+"mobile" feel comes entirely from (a) multi-tile committed moves that are
+ANIMATED across several frames of one tick (Order 2) and (b) an AI brain that
+sequences move+attack+flee into readable tactics (Order 4).
+
+One full cycle the player experiences:
+  1. STALK   — Overseer paths toward the player over 1–2 turns (visible slide).
+  2. STRIKE  — telegraphed charge or melee slam lands (one turn to dodge).
+  3. FLEE    — Overseer DASHES several tiles away (visible sprint), often
+               dropping a hazard on the tile it vacated so you can't just follow.
+  4. PRESSURE— from range it summons adds and/or seeds a fire/toxic lane, forcing
+               you to deal with the room while it lines up its next strike.
+  5. (once) REPAIR — below a HP threshold it flees to safety and heals over 5
+               turns unless you reach it and draw blood, which cancels the heal.
+
+The player's counter-loop: predict the dash destination, use arena geometry to
+cut off escape lanes, clear adds efficiently (Order 6 guarantees you never run
+dry), and save a burst window for when the boss commits to a STRIKE or a REPAIR
+(both plant it in place). This is the whole game of the fight.
+
+=============================================================================
+FAIRNESS CONTRACT (mandatory — every later order must honour this)
+=============================================================================
+A mobile boss is trivially unfair if it can move every turn (the player can never
+land a hit) or teleport (the player can never predict it). These rules keep it
+fair. They are non-negotiable; cite them in code comments.
+
+  F1. NEVER MOVES TWO TURNS IN A ROW WITHOUT A PLANT.  The boss must spend a
+      "planted" turn (STRIKE wind-up, RESOLVE, SUMMON, hazard cast, or HOLD) at
+      least every BOSS_MAX_CONSECUTIVE_MOVE_TURNS. It cannot kite forever. There
+      is ALWAYS a punish window arriving soon — this is what makes it beatable.
+
+  F2. EVERY DAMAGING ATTACK IS TELEGRAPHED ONE FULL TURN AHEAD.  Reuse the
+      DangerTileSet TELEGRAPH → RESOLVE rhythm already in BossMove. The player
+      gets exactly one turn to react to any hit. No same-tick "gotcha" damage.
+
+  F3. MOVEMENT IS ALWAYS VISIBLE.  A relocation of N tiles animates as a real
+      slide/sprint across those tiles within its tick (Order 2). The boss NEVER
+      pops from tile A to tile B. If a dash would be too fast to read, it is too
+      long — cap the per-turn dash distance so the eye can follow it.
+
+  F4. THE HEAL IS INTERRUPTIBLE AND ONCE-PER-FIGHT.  See Order 5. The repair is a
+      player-facing objective ("go stop it"), not an unbeatable reset. Any damage
+      cancels the current regen turn-chain and the ability is spent for the fight.
+
+  F5. THE ARENA IS NEVER A DEATH BOX.  Adds must never fully surround the player
+      with no escape, hazards must always leave a walkable path, and the player
+      can never be locked out of ammo (Order 6) inside the sealed room.
+
+  F6. READABILITY OVER SURPRISE.  Distinct telegraph colour per ability (Order 8).
+      The player loses to being out-thought, never to being unable to see the
+      threat.
+
+=============================================================================
+WHAT EACH ORDER DELIVERS (dependency map)
+=============================================================================
+ORDER 2 (Locomotion) — the foundation. Adds a visible interpolated move to the
+  boss (render-position lerp over the tick) and a multi-tile BossMove.DASH that
+  path-steps through free tiles. Implements F1 (consecutive-move cap) and F3
+  (visible movement). Without this, everything else looks like teleporting.
+
+ORDER 3 (Ability kit) — the verbs. New BossMove kinds / pattern helpers for
+  CHARGE, SUMMON_ADDS (Corruptor-style, reuses existing SUMMON plumbing),
+  SPAWN_FIRE and SPAWN_TOXIC (reuse HazardManager.igniteFire / igniteToxic /
+  spawnToxicCloud), and MELEE. Each with its own telegraph. Data only — the brain
+  that chooses between them is Order 4.
+
+ORDER 4 (AI brain) — the intelligence. A HunterKillerPattern (implements
+  BossAttackPattern) that SEQUENCES the Order-3 verbs into named tactics
+  (Ambush / Zoner / Attrition / …), one tactic per phase pool, honouring the
+  fairness cadence. This is where "combine abilities for different strategies"
+  and "be creative about boss AI" live.
+
+ORDER 5 (Heal) — the once-per-fight repair state machine.
+
+ORDER 6 (Ammo lifeline) — adds spawned by SUMMON drop ammo 100% when the player's
+  matching reserve is empty, so the sealed arena is never unwinnable.
+
+ORDER 7 (Arena) — replaces the fixed corridor+box BossArenaGenerator with a
+  spacious, interesting procedural arena built for hit-and-run: open lanes,
+  asymmetric cover, hazard-friendly zones, heal alcoves, guaranteed reachability.
+
+ORDER 8 (Presentation) — sprite/texture confirmation, phase tint, per-ability
+  telegraph colours, dash afterimage/dust so movement reads, HUD states
+  (REPAIRING / ENRAGED), intro & defeat banners, event-text hooks.
+
+=============================================================================
+EXISTING CODE THIS SERIES TOUCHES (grounding — verified 2026-07-11)
+=============================================================================
+  entity/boss/Boss.java              — boss entity, phase, dangerTileSet, health.
+  entity/boss/BossAttackPattern.java — the per-phase strategy interface (nextMove).
+  entity/boss/BossMove.java          — the per-tick action value + factories.
+                                        (Order 2/3 add kinds: DASH, CHARGE,
+                                        SPAWN_FIRE, SPAWN_TOXIC, HEAL.)
+  entity/boss/OverseerPhase1Pattern.java / OverseerPhase2Pattern.java
+                                     — CURRENT stationary laser-lane patterns.
+                                        Order 4 REPLACES these with the mobile
+                                        HunterKillerPattern(s) (keep files or
+                                        supersede — see Order 4).
+  world/BossFloorController.java     — executes BossMove; owns awaken/lock/phase/
+                                        death. repositionBoss() is single-tile
+                                        toward player TODAY; Order 2 generalises it.
+  enemy/EnemyManager.java            — spawnEnemy(), tryPushEnemy() (snaps today —
+                                        Order 2 animates), drop system
+                                        (rollEnemyDrop / overrideDropAt /
+                                        DropPlacedListener — Order 6 uses these).
+  hazard/HazardManager.java          — igniteFire(col,row), igniteToxic(col,row),
+                                        spawnToxicCloud(cx,cy,radius) — Order 3.
+  level/BossArenaGenerator.java      — the fixed arena; Order 7 reworks it.
+  render/BossHudRenderer.java        — intro/banner/HP bar; Order 5/8 extend.
+  render/EnemyRenderer.java          — billboard draw; Order 2 uses interpolated
+                                        position, Order 8 adds phase tint + trail.
+  util/EnemyConstants.java           — OVERSEER_* stats + ENEMY_BOSS_OVERSEER_PATH.
+  util/Constants.java                — BOSS_* tuning (phase threshold, awaken).
+
+=============================================================================
+BALANCE FRAME (placeholders — real numbers per order, tune in playtest)
+=============================================================================
+- Overseer HP today = EnemyConstants.OVERSEER_MAX_HP (250), depth-scaled. Keep
+  order-of-magnitude; the mobility already lengthens TTK because punish windows
+  are rationed. Re-tune only after Order 4 lands (the brain sets real pacing).
+- Read the balance contract (docs/balance-rule-system.txt) and
+  .claude/agents/ideas/balance_order_6_boss_balance_ruleset.txt before setting any
+  damage/HP number in Orders 3–5. Slot every new ability into that contract's
+  eHP / DPT / TTK / TP framing; do not invent free-floating numbers.
+- The mobile boss's DANGER must come from POSITIONING pressure (fire/toxic/adds
+  denying ground) more than raw per-hit damage. A single melee/charge hit should
+  hurt (~quarter HP at most, telegraphed) but not one-shot; the fight is lost by
+  slow attrition and bad positioning, not by one unreadable spike.
+
+=============================================================================
+OPEN QUESTIONS (resolve as the series is implemented)
+=============================================================================
+1. Keep OverseerPhase1/2Pattern as a selectable "classic turret" variant, or
+   fully retire them? RECOMMEND retire from the Overseer but keep the files as a
+   reference pattern (they are a clean example of the DangerTileSet lane recipe).
+2. Do the other boss types (CORRUPTOR, HELL_BARON) inherit any of this mobility,
+   or is hit-and-run the Overseer's signature? RECOMMEND Overseer-only for now;
+   the HunterKillerPattern framework (Order 4) is generic enough to reuse later.
+3. Footprint stays 1 tile (occupancy/LOS trivial); the sprite is just big. Confirm
+   in Order 2. RECOMMEND 1-tile.

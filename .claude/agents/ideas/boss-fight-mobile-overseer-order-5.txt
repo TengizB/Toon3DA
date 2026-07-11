@@ -1,0 +1,115 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Mobile Overseer — One-Time Regeneration (ORDER 5)
+CREATED: 2026-07-11
+---
+DEPENDS ON: order-1 (fairness F4), order-2 (flee/DASH), order-4 (HEAL tactic slot)
+ENABLES: the "chase it down and interrupt" mid-fight beat
+
+=============================================================================
+THE BRIEF
+=============================================================================
+"boss must be able to heal once during the fight, it flees then heals, boss
+restores small amount of hp each turn for 5 turns but if hit stops healing."
+
+Exactly one self-repair per fight. When the Overseer drops below a HP threshold
+(and hasn't healed yet), it BREAKS OFF: dashes to a safe spot away from the
+player, then REPAIRS a small amount of HP each turn for up to 5 turns. Taking ANY
+damage during the repair CANCELS the remaining ticks — and the ability is spent
+for the rest of the fight either way. This turns a defensive reset into a player
+OBJECTIVE: "cut off its escape and draw blood before it welds itself back up."
+
+=============================================================================
+STATE MACHINE (on Boss / a RegenState helper owned by the brain)
+=============================================================================
+Fields:
+  boolean healUsed          = false;  // once-per-fight latch
+  boolean healActive        = false;  // currently in the repair chain
+  int     healTurnsLeft     = 0;      // remaining repair ticks (starts at 5)
+
+TRIGGER (checked by HunterKillerPattern before normal tactic selection — Order 4
+gives HEAL top priority when eligible):
+  eligible = (!healUsed)
+          && (boss.health / boss.maxHealth <= OVERSEER_HEAL_HP_THRESHOLD)
+          && (no danger currently forcing a dodge — don't heal mid-charge)
+  When eligible, run the HEAL tactic:
+
+  Step 0  FLEE:  BossMove.dash(chooseFleeTarget(...))  — Order 2's flee helper,
+                 preferring a tile with LOS to the player BROKEN by a 'P' column
+                 or with a toxic cloud laid between (optionally cast TOXIC first as
+                 a cover step). Sets healUsed = true NOW (commit — it can't cancel
+                 the flee and re-trigger later). Boss enters a REPAIRING pose.
+  Step 1..5 REPAIR: each turn a new BossMove.HEAL step:
+                 - restore OVERSEER_HEAL_PER_TURN HP (clamped to maxHealth).
+                 - healTurnsLeft--.
+                 - the boss HOLDS (planted — it is a punish window! F1). It does
+                   NOT attack while repairing — the whole point is you can rush it.
+                 - BossHudRenderer shows a "REPAIRING" state + the HP bar visibly
+                   ticking up (Order 8).
+                 - end the chain when healTurnsLeft == 0.
+
+INTERRUPT (the key fairness mechanic, F4):
+  Boss.applyDamage(amount) override: if healActive and amount > 0 →
+      healActive = false; healTurnsLeft = 0;  // cancel remaining repair ticks
+      (fire an event: BossHudRenderer.showBanner("REPAIR INTERRUPTED"),
+       EventTextSystem line; Order 8). The ability stays spent (healUsed already
+      true). Then super.applyDamage(amount) as normal.
+  So one shell landing on the boss during the weld stops the heal cold. Reaching
+  it in time is the player's job; the boss picking a far/covered spot is its
+  counter-play. Balanced by geometry + the adds it may leave behind.
+
+=============================================================================
+NUMBERS (placeholders — tune; slot into balance_order_6_boss_balance_ruleset.txt)
+=============================================================================
+  OVERSEER_HEAL_HP_THRESHOLD = 0.35f   // triggers at 35% HP (below phase-2 line,
+                                       // so it heals when genuinely threatened).
+  OVERSEER_HEAL_TURNS        = 5       // per the brief.
+  OVERSEER_HEAL_PER_TURN     = 12      // "small amount" — 5×12 = 60 HP max, ~24%
+                                       // of 250 max. Meaningful but not a full
+                                       // reset; a full uninterrupted heal should
+                                       // feel like a real setback you SHOULD have
+                                       // prevented, not an infinite wall.
+Max recoverable = OVERSEER_HEAL_TURNS × OVERSEER_HEAL_PER_TURN. Keep it well below
+"back to full" so even a fully missed interrupt doesn't reset the fight — it just
+extends it. Playtest: if a clean interrupt feels mandatory-or-lose, lower per-turn.
+
+=============================================================================
+FAIRNESS
+=============================================================================
+- ONCE per fight (healUsed latch). No repeated stalling.
+- Boss does NOT attack while repairing → it is a pure punish window; the tension
+  is the RACE to reach it, not surviving its offense during the heal.
+- Interruptible by ANY damage (F4). A ranged player interrupts from afar; a melee/
+  shotgun player must path past hazards/adds — both viable.
+- The flee destination must be REACHABLE by the player within the 5 turns given
+  the arena (Order 7 guarantees no fully-walled heal spot — F5). If the boss laid
+  toxic to cover the approach, the player still has a path (radius capped, Order 3).
+- Telegraph the heal start clearly (banner + pose + distinct aura colour, Order 8)
+  so the player immediately understands "go stop it."
+
+=============================================================================
+INTEGRATION
+=============================================================================
+- BossMove: add kind HEAL (no payload, or carry the per-turn amount). Order 3's
+  summary already reserves it.
+- BossFloorController.executeBossMove: case HEAL → boss.health = min(maxHealth,
+  health + OVERSEER_HEAL_PER_TURN); update BossHudRenderer HP fraction.
+- Boss.applyDamage override already exists (absorbs during phase-transition
+  invuln). Extend it for the heal-interrupt branch (guard BEFORE the invuln
+  early-return so an interrupt during... — no: invuln absorbs all damage, and the
+  heal never overlaps the 1-tick transition invuln, so ordering is safe; document
+  it).
+- The brain (Order 4) owns eligibility + step sequencing; the controller owns HP
+  application + HUD.
+
+=============================================================================
+OPEN QUESTIONS
+=============================================================================
+1. Should the boss summon a "guard" add when it starts healing (to slow the
+   player's approach)? RECOMMEND optional: one add on the flee step in phase 2
+   only, capped by OVERSEER_ADDS_CAP. Keeps the race tense without walling it.
+2. Visual HP tick-up: animate the bar smoothly or step per turn? RECOMMEND step
+   per turn (each repair tick bumps it) so the player SEES progress they must stop.
+3. If the player has no ranged ammo and the boss heals behind toxic, is it
+   reachable? Yes — Order 6 guarantees ammo from adds, and the cloud always leaves
+   a path (F5). Verify in playtest with an empty-ammo start.

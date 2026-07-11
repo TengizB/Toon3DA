@@ -1,0 +1,110 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Mobile Overseer — Guaranteed Ammo Lifeline (ORDER 6)
+CREATED: 2026-07-11
+---
+DEPENDS ON: order-3 (SUMMON_ADDS spawns the adds this order feeds off)
+RELATED: existing salvage/drop system in EnemyManager
+
+=============================================================================
+THE BRIEF
+=============================================================================
+"the spawned enemies must have a 100% chance of dropping ammunition if player has
+no ammunition left."
+
+In a SEALED boss arena (arena door locks on awaken — BossFloorController.
+lockArenaDoor), a player who runs out of ammo has no ranged answer and, worst
+case, cannot interrupt the heal or clear adds → an unwinnable state (violates
+Fairness F5). This order makes the boss's SUMMONED adds a reliable ammo lifeline:
+if the player's ammo is empty, killing a summoned add ALWAYS drops matching ammo.
+
+=============================================================================
+EXISTING DROP PLUMBING (verified — reuse, don't reinvent)
+=============================================================================
+EnemyManager already has everything needed:
+  - rollEnemyDrop(EnemyType, isMeleeKill) — decides the drop char on death.
+  - The death path (~line 1792) checks the corpse tile isn't already a pickup,
+    then stamps level.setCell(col,row, drop) and notifies dropPlacedListener.
+  - overrideDropAt(col,row,dropChar) — "guarantee an ammo pickup after a kill,
+    replacing whatever drop the enemy's death would have left there" (already used
+    by SALVAGE_STRIKE). THIS IS THE EXACT HOOK WE WANT.
+  - The manager is injected with the player's loadout so melee kills can drop ammo
+    matching one of the player's equipped ranged weapons (see the injection
+    comment near line 128 / 171). Reuse that loadout reference to (a) detect empty
+    ammo and (b) choose WHICH ammo type to drop.
+
+=============================================================================
+DESIGN
+=============================================================================
+1. TAG SUMMONED ADDS. Adds spawned by the boss's SUMMON must be distinguishable
+   from level-placed enemies so only THEY get the guaranteed drop (we don't want
+   to rewrite global loot). Options:
+     (a) a boolean Enemy.spawnedBySummoner flag set true in
+         BossFloorController.summonMinions / EnemyManager.spawnEnemy's boss path.
+     (b) reuse an existing "summoned" flag if SpecialAbility.SUMMON already tags
+         adds (check Enemy for a summoned/leashed marker before adding one).
+   RECOMMEND a single boolean flag on Enemy, set at spawn time by the boss summon
+   path. Minimal, explicit.
+
+2. DETECT EMPTY AMMO. Add a helper on the injected loadout/PlayerInventory:
+     boolean playerHasNoUsableAmmo() — true when EVERY equipped ranged weapon's
+     reserve (and loaded mag) is 0. (If the player has a melee-only loadout, treat
+     as "not applicable" — no ammo drop needed; they don't consume ammo.)
+   Grep the loadout/inventory API for the existing ammo counters the melee-drop
+   feature already reads; reuse them (do not add a parallel ammo accounting path).
+
+3. GUARANTEE THE DROP. In the enemy-death drop path, BEFORE the normal
+   rollEnemyDrop stamp, branch:
+     if (enemy.spawnedBySummoner && bossActive && player.playerHasNoUsableAmmo()) {
+         char ammoChar = ammoCharFor(player's most-needed / equipped weapon);
+         overrideDropAt(enemy.tileColumn, enemy.tileRow, ammoChar);
+         return; // skip the normal roll — guaranteed ammo wins.
+     }
+   Pick ammoChar to match a weapon the player actually carries (same logic the
+   melee-kill matching drop already uses). If the player has multiple empty
+   weapons, drop for the primary/equipped one (or round-robin) so they're not
+   stuck needing a different type.
+
+4. NON-EMPTY CASE unchanged: if the player still has ammo, summoned adds use the
+   normal rollEnemyDrop chances (they might drop ammo, might not). The 100%
+   guarantee is ONLY the empty-safety net — it must not turn the fight into an
+   ammo piñata when the player is flush (that would trivialise resource pressure,
+   which docs/balance-rule-system.txt and the resource-scarcity economy idea care
+   about).
+
+=============================================================================
+FAIRNESS / BALANCE
+=============================================================================
+- Guarantees the arena is never unwinnable (F5): summon → kill add → get ammo →
+  keep fighting. The boss's own SUMMON tactic becomes the player's supply line —
+  a nice tension (the thing pressuring you is also feeding you).
+- The drop is a normal ground pickup: the player still has to WALK to it and grab
+  it (a turn cost, and a positioning risk near hazards/boss) — not free.
+- Amount per drop = one standard ammo pickup (reuse ItemConstants ammo pickup
+  quantities); enough to act, not enough to hoard. If the player keeps whiffing,
+  the boss keeps summoning (capped by OVERSEER_ADDS_CAP), so the lifeline refreshes
+  but the room never floods.
+- Melee-only builds: no ammo needed, no guarantee triggers — they interrupt the
+  heal and clear adds with the melee weapon (SALVAGE_STRIKE etc. still applies).
+
+=============================================================================
+VERIFY
+=============================================================================
+- Start the boss fight, dump all ammo (fire into a wall), let the boss summon,
+  kill an add → confirm ammo ALWAYS drops and matches an equipped weapon.
+- With full ammo, kill several adds → confirm drops follow normal odds (not 100%).
+- Confirm a level-placed (non-summoned) enemy on a normal floor does NOT get the
+  guarantee (flag scoping is correct).
+
+=============================================================================
+OPEN QUESTIONS
+=============================================================================
+1. Should the guarantee also apply on NON-boss floors when out of ammo (a global
+   anti-softlock), or boss-arena only? RECOMMEND boss-arena only for v1 (the
+   sealed room is the only truly unwinnable case); a global version is a separate
+   design (resource-scarcity economy owns that decision).
+2. Which ammo type when several weapons are empty? RECOMMEND the equipped/most-
+   recently-fired weapon's type; fall back to the primary. Reuse the melee-drop
+   matching logic exactly for consistency.
+3. Does grabbing the drop cost a turn (world tick)? Yes — pickup is a normal move
+   onto the tile; keep it that way (no free grab).
