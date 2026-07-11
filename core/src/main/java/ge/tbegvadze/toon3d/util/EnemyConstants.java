@@ -288,6 +288,18 @@ public final class EnemyConstants {
     // SPAWN_TOXIC footprint — 3x3 cloud radius (centre + one ring); kept small so it can never wall a
     // 1-wide corridor (fairness F5).
     public static final int OVERSEER_TOXIC_RADIUS          = 1;
+    // HEAL — one-time regeneration (boss-fight-mobile-overseer ORDER 5). The Overseer may repair itself
+    // exactly ONCE per fight: below the HP threshold it breaks off, dashes to a safe spot, then restores
+    // HP for a fixed number of turns. Taking ANY damage during the chain cancels the remaining ticks —
+    // and the ability is spent either way. Numbers kept well below "back to full" so a fully-missed
+    // interrupt only extends the fight, never resets it (see the idea file's NUMBERS section).
+    // Trigger threshold sits below the phase-2 line (BOSS_PHASE2_HP_THRESHOLD) so it heals only when
+    // genuinely threatened, never as a routine reset.
+    public static final float OVERSEER_HEAL_HP_THRESHOLD   = 0.35f;
+    // Repair ticks after the flee step ("small amount each turn for 5 turns" — the brief).
+    public static final int   OVERSEER_HEAL_TURNS          = 5;
+    // HP restored per repair tick — 5 x 12 = 60 (~24% of OVERSEER_MAX_HP): meaningful, not a full wall.
+    public static final int   OVERSEER_HEAL_PER_TURN        = 12;
     // Accent color (cyan-white)
     public static final float OVERSEER_ACCENT_R = 0.60f;
     public static final float OVERSEER_ACCENT_G = 0.90f;

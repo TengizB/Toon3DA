@@ -6,6 +6,7 @@ import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.entity.boss.Boss;
 import ge.tbegvadze.toon3d.entity.boss.BossMove;
 import ge.tbegvadze.toon3d.entity.boss.DangerTileSet;
+import ge.tbegvadze.toon3d.entity.boss.RegenState;
 import ge.tbegvadze.toon3d.hazard.HazardManager;
 import ge.tbegvadze.toon3d.level.BossArenaGenerator;
 import ge.tbegvadze.toon3d.level.Level;
@@ -140,6 +141,10 @@ public final class BossFloorController implements TickSubscriber {
         BossMove move = boss.activePattern().nextMove(boss, player, level, tickIndex);
         boss.ticksSinceAwaken++;
 
+        // ORDER 5 — turn the entity-layer heal signals into HUD banners + event text (the entity/render
+        // split keeps LibGDX out of the boss/AI classes; the controller owns the presentation).
+        announceHealSignals();
+
         executeBossMove(move, player, playerColumn, playerRow);
 
         // Death check (damage may have been applied by the player's weapon before this tick)
@@ -252,11 +257,44 @@ public final class BossFloorController implements TickSubscriber {
                 consecutiveMoveTurns = 0;
                 break;
 
+            case HEAL:
+                // ORDER 5 — one repair tick: restore HP (clamped to maxHealth), no offense. The full-screen
+                // HP bar reads boss.health directly, so it ticks up on its own. A repair tick is a plant.
+                boss.health = Math.min(boss.maxHealth, boss.health + move.healAmount);
+                consecutiveMoveTurns = 0;
+                break;
+
             case TRANSITION:
             case NONE:
             default:
                 consecutiveMoveTurns = 0;
                 break;
+        }
+    }
+
+    /**
+     * ORDER 5 — consumes the one-shot heal signals raised by the entity/AI layer ({@link RegenState}) and
+     * presents them: the "REPAIRING" banner when the repair chain starts, and "REPAIR INTERRUPTED" when a
+     * hit cancels it (the interrupt is raised inside {@code Boss.applyDamage}). Each flag is cleared as it
+     * is consumed, so a banner fires exactly once per event. Skipped when the boss is already dead, so a
+     * killing blow that also interrupts a repair does not flash a stray banner over the death line.
+     */
+    private void announceHealSignals() {
+        if (!boss.isAlive()) return;
+        RegenState regenState = boss.regenState;
+        if (regenState.healJustStarted) {
+            regenState.healJustStarted = false;
+            bossHudRenderer.showBanner("REPAIRING");
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("OVERSEER REPAIRING", EventTextSystem.COLOR_GREEN);
+            }
+        }
+        if (regenState.healJustInterrupted) {
+            regenState.healJustInterrupted = false;
+            bossHudRenderer.showBanner("REPAIR INTERRUPTED");
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("REPAIR INTERRUPTED", EventTextSystem.COLOR_GREEN);
+            }
         }
     }
 

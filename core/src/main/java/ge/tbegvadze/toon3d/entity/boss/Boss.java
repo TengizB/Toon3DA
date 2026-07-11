@@ -47,6 +47,13 @@ public class Boss extends Enemy {
     /** Live danger-tile state for telegraph → resolve mechanics. Pre-allocated; never replaced. */
     public final DangerTileSet dangerTileSet = new DangerTileSet();
 
+    /**
+     * One-time self-repair state (ORDER 5). Owned here (not by the brain) so the once-per-fight latch
+     * survives the phase transition and {@link #applyDamage} can interrupt an active repair. Pre-allocated;
+     * never replaced.
+     */
+    public final RegenState regenState = new RegenState();
+
     /** Monotonically increasing count of ticks since the boss awakened. Drives pattern sequencing. */
     public long ticksSinceAwaken = 0L;
 
@@ -92,11 +99,23 @@ public class Boss extends Enemy {
     }
 
     /**
-     * Damage is silently absorbed while the boss is invulnerable during phase transition.
+     * All boss damage funnels through this terminal overload (the 1-arg and 2-arg forms delegate here via
+     * {@link ge.tbegvadze.toon3d.enemy.Enemy#applyDamage}, and the weapon path in EnemyManager calls it
+     * directly), so both boss-specific damage rules live here:
+     * <ol>
+     *   <li><b>Phase-transition invulnerability</b> — damage is silently absorbed during the one-tick
+     *       window between phases.</li>
+     *   <li><b>Heal interrupt (ORDER 5)</b> — any real hit cancels an in-progress repair chain.</li>
+     * </ol>
+     * Ordering is safe: the invuln early-return runs first, and the repair chain never overlaps the
+     * phase-transition invuln window (the heal triggers below OVERSEER_HEAL_HP_THRESHOLD, which sits under
+     * the phase-2 threshold — by the time the boss can heal the transition is long past), so an absorbed
+     * hit never needs to interrupt a heal.
      */
     @Override
-    public void applyDamage(int amount) {
+    public void applyDamage(int amount, boolean ignoreBlock, float blockPierceFraction) {
         if (invulnerable) return;
-        super.applyDamage(amount);
+        if (amount > 0) regenState.interrupt();
+        super.applyDamage(amount, ignoreBlock, blockPierceFraction);
     }
 }
