@@ -55,6 +55,22 @@ public final class BossFloorController implements TickSubscriber {
     private boolean phase2Triggered    = false;
     private int     invulnerableTurnsLeft = 0;
 
+    /**
+     * Fairness contract F1 (ORDER 2): how many turns in a row the boss has MOVED (DASH/REPOSITION)
+     * without a planted turn. Reset to 0 by any planted action. When it would exceed
+     * BOSS_MAX_CONSECUTIVE_MOVE_TURNS the controller overrides the move to a HOLD so the player always
+     * gets a punish window — a hard backstop no pattern can break.
+     */
+    private int consecutiveMoveTurns = 0;
+
+    /**
+     * Pre-allocated path buffers for the greedy DASH/REPOSITION stepper (ORDER 2). Sized
+     * BOSS_MAX_DASH_TILES + 1 (start tile + one entry per step). Reused every move — never a per-tick
+     * new[]. Entry 0 is always the boss's origin tile; the last live entry is the destination.
+     */
+    private final int[] movePathColumns = new int[Constants.BOSS_MAX_DASH_TILES + 1];
+    private final int[] movePathRows    = new int[Constants.BOSS_MAX_DASH_TILES + 1];
+
     public BossFloorController(Boss boss, Level level, DoorManager doorManager,
                                EnemyManager enemyManager, BossHudRenderer bossHudRenderer,
                                EventTextSystem eventTextSystem) {
@@ -141,21 +157,47 @@ public final class BossFloorController implements TickSubscriber {
 
     private void executeBossMove(BossMove move, Player player,
                                  int playerColumn, int playerRow) {
+        // Fairness contract F1 (ORDER 2): the boss must plant at least every
+        // BOSS_MAX_CONSECUTIVE_MOVE_TURNS turns. If a pattern requests yet another move past that cap,
+        // the controller overrides it to a HOLD (a planted "catch me" turn) so there is ALWAYS a punish
+        // window. This is a hard backstop; the brain (ORDER 4) should respect it, but the controller
+        // guarantees it regardless of pattern.
+        boolean isMove = move.kind == BossMove.Kind.DASH || move.kind == BossMove.Kind.REPOSITION;
+        if (isMove && consecutiveMoveTurns >= Constants.BOSS_MAX_CONSECUTIVE_MOVE_TURNS) {
+            consecutiveMoveTurns = 0;   // this HOLD counts as the plant
+            return;                     // override to HOLD — no move this turn
+        }
+
         switch (move.kind) {
             case TELEGRAPH:
                 // DangerTileSet already armed by the pattern; nothing more to do this tick
+                consecutiveMoveTurns = 0;   // a plant — resets the fairness counter (F1)
                 break;
 
             case RESOLVE:
                 resolveDangerTiles(player, playerColumn, playerRow);
+                consecutiveMoveTurns = 0;
                 break;
 
             case REPOSITION:
-                repositionBoss(playerColumn, playerRow);
+                if (repositionBoss(playerColumn, playerRow)) {
+                    consecutiveMoveTurns++;
+                } else {
+                    consecutiveMoveTurns = 0;   // blocked in → effectively a plant
+                }
+                break;
+
+            case DASH:
+                if (executeDash(move, playerColumn, playerRow)) {
+                    consecutiveMoveTurns++;
+                } else {
+                    consecutiveMoveTurns = 0;   // fully boxed in → degrades to HOLD (a plant)
+                }
                 break;
 
             case SUMMON:
                 summonMinions(move, playerColumn, playerRow);
+                consecutiveMoveTurns = 0;
                 break;
 
             case MELEE:
@@ -163,11 +205,13 @@ public final class BossFloorController implements TickSubscriber {
                         boss.tileColumn, boss.tileRow, playerColumn, playerRow) == 1) {
                     player.applyDamage(move.tileDamage);
                 }
+                consecutiveMoveTurns = 0;
                 break;
 
             case TRANSITION:
             case NONE:
             default:
+                consecutiveMoveTurns = 0;
                 break;
         }
     }
@@ -180,7 +224,13 @@ public final class BossFloorController implements TickSubscriber {
         }
     }
 
-    private void repositionBoss(int playerColumn, int playerRow) {
+    /**
+     * Single-tile chase nudge toward the player (ORDER 2: generalised to animate a visible slide).
+     * Picks the cardinal neighbour that most reduces Manhattan distance to the player, commits the
+     * logical move, and plays a one-step cosmetic slide so even a single-tile reposition never pops.
+     * Returns true when the boss actually moved.
+     */
+    private boolean repositionBoss(int playerColumn, int playerRow) {
         int bestColumn   = boss.tileColumn;
         int bestRow      = boss.tileRow;
         int bestDistance = GameMath.manhattanDistanceTiles(
@@ -200,9 +250,82 @@ public final class BossFloorController implements TickSubscriber {
             }
         }
 
-        if (moved) {
-            enemyManager.tryPushEnemy(boss, bestColumn, bestRow);
+        if (!moved) return false;
+
+        // Record origin → destination for the cosmetic slide, then commit the logical move.
+        movePathColumns[0] = boss.tileColumn;
+        movePathRows[0]    = boss.tileRow;
+        movePathColumns[1] = bestColumn;
+        movePathRows[1]    = bestRow;
+        enemyManager.tryPushEnemy(boss, bestColumn, bestRow);
+        boss.beginSlide(movePathColumns, movePathRows, 2, Constants.BOSS_DASH_ANIM_DURATION);
+        return true;
+    }
+
+    /**
+     * Executes a multi-tile DASH toward the move's absolute target tile (ORDER 2). Greedily path-steps
+     * one cardinal tile at a time, reducing Manhattan distance to the target, up to BOSS_MAX_DASH_TILES
+     * steps, stopping at the first tile that fails isBossStepPassable (wall/door/occupied/player tile).
+     * The larger remaining axis is tried first so the move looks purposeful; if that axis is blocked the
+     * other axis is tried (a tiny greedy stepper — NOT full A*, so it stays allocation-free and readable
+     * for the player). The whole path (origin first) is recorded, the LOGICAL tile jumps to the final
+     * reached tile at once (turn model stays clean), and a cosmetic slide sweeps the sprite across the
+     * crossed tiles (fairness contract F3 — never a teleport). Returns false when zero steps were
+     * possible (fully boxed in) so the caller degrades the DASH to a HOLD.
+     */
+    private boolean executeDash(BossMove move, int playerColumn, int playerRow) {
+        int currentColumn = boss.tileColumn;
+        int currentRow    = boss.tileRow;
+        movePathColumns[0] = currentColumn;
+        movePathRows[0]    = currentRow;
+        int pathLength = 1;
+
+        for (int step = 0; step < Constants.BOSS_MAX_DASH_TILES; step++) {
+            int differenceColumn = move.dashTargetColumn - currentColumn;
+            int differenceRow    = move.dashTargetRow    - currentRow;
+            if (differenceColumn == 0 && differenceRow == 0) break;   // reached the target
+
+            int stepColumn = 0;
+            int stepRow    = 0;
+            // Prefer the axis with the larger remaining delta first (feels purposeful).
+            if (Math.abs(differenceColumn) >= Math.abs(differenceRow)) {
+                stepColumn = Integer.signum(differenceColumn);
+            } else {
+                stepRow = Integer.signum(differenceRow);
+            }
+
+            int nextColumn = currentColumn + stepColumn;
+            int nextRow    = currentRow    + stepRow;
+            if (!isBossStepPassable(nextColumn, nextRow, playerColumn, playerRow)) {
+                // Preferred axis blocked — try the other axis for this step.
+                if (stepColumn != 0) {
+                    stepColumn = 0;
+                    stepRow    = Integer.signum(differenceRow);
+                } else {
+                    stepRow    = 0;
+                    stepColumn = Integer.signum(differenceColumn);
+                }
+                nextColumn = currentColumn + stepColumn;
+                nextRow    = currentRow    + stepRow;
+                if ((stepColumn == 0 && stepRow == 0)
+                        || !isBossStepPassable(nextColumn, nextRow, playerColumn, playerRow)) {
+                    break;   // both axes blocked — stop here
+                }
+            }
+
+            currentColumn = nextColumn;
+            currentRow    = nextRow;
+            movePathColumns[pathLength] = currentColumn;
+            movePathRows[pathLength]    = currentRow;
+            pathLength++;
         }
+
+        if (pathLength < 2) return false;   // no passable step — fully boxed in, degrade to HOLD
+
+        // Commit the logical move to the final reached tile (single occupancy update) and animate.
+        enemyManager.tryPushEnemy(boss, currentColumn, currentRow);
+        boss.beginSlide(movePathColumns, movePathRows, pathLength, Constants.BOSS_DASH_ANIM_DURATION);
+        return true;
     }
 
     private boolean isBossStepPassable(int targetColumn, int targetRow,

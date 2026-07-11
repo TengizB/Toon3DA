@@ -523,6 +523,7 @@ public final class EnemyManager implements EnemyHitTarget {
             enemy.advanceHitFlash(deltaTime);
             enemy.advanceAttackAnim(deltaTime);
             enemy.advanceIntentPop(deltaTime);
+            enemy.advanceSlide(deltaTime);   // ORDER 2: cosmetic boss locomotion slide (no-op when idle)
         }
     }
 

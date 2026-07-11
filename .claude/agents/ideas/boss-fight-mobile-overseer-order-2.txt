@@ -1,4 +1,17 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED   (2026-07-11 — Parts A–D landed. Enemy.java gained the cosmetic
+        slide (beginSlide/advanceSlide/isSliding/renderColumn/Row + renderCenterX/Y,
+        pre-sized buffers, zero per-frame alloc); EnemyManager.advanceHitFlash now drives
+        advanceSlide each frame; EnemyRenderer draws the billboard at renderCenter*.
+        BossMove gained Kind.DASH + dash(col,row) payload/factory. BossFloorController
+        gained executeDash (greedy cardinal path-stepper, BOSS_MAX_DASH_TILES cap,
+        HOLD-on-boxed-in), generalised repositionBoss to a visible one-tile slide, and the
+        F1 consecutive-move guard (BOSS_MAX_CONSECUTIVE_MOVE_TURNS override → HOLD).
+        Constants got BOSS_DASH_ANIM_DURATION / BOSS_MAX_DASH_TILES /
+        BOSS_MAX_CONSECUTIVE_MOVE_TURNS. To exercise DASH before ORDER 4's brain,
+        OverseerPhase2Pattern now flees with a DASH the turn after its ram resolves,
+        using a level-only chooseFleeTarget (Part D) — a stand-in the ORDER-4
+        HunterKillerPattern will supersede. Ease-out slide via GameMath.smoothstep01
+        (OPEN Q2); snap-to-complete on next tick (OPEN Q1). core compiles clean.)
 CATEGORY: Enemies
 TITLE: Mobile Overseer — Visible Locomotion (ORDER 2)
 CREATED: 2026-07-11
