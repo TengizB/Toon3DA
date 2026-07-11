@@ -508,7 +508,9 @@ public final class BossFloorController implements TickSubscriber {
             if (targetColumn == playerColumn && targetRow == playerRow) continue;
             if (level.isBlockedAt(targetColumn, targetRow, doorManager)) continue;
             if (enemyManager.isTileOccupiedByEnemy(targetColumn, targetRow)) continue;
-            enemyManager.spawnEnemy(move.summonType, targetColumn, targetRow, boss.dungeonLevel);
+            // spawnBossMinion (not spawnEnemy) tags the add as boss-summoned so the enemy-death drop
+            // path can grant the guaranteed ammo lifeline in this sealed arena (ORDER 6, Fairness F5).
+            enemyManager.spawnBossMinion(move.summonType, targetColumn, targetRow, boss.dungeonLevel);
             spawned++;
         }
     }

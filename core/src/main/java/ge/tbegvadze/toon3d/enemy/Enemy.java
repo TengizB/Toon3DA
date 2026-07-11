@@ -182,6 +182,16 @@ public class Enemy implements StatusHost {
     public int     selfDestructTurnsRemaining = 0;
     public boolean selfDestructed            = false;
 
+    /**
+     * True only for an add spawned by the boss's SUMMON tactic (boss-fight-mobile-overseer ORDER 6).
+     * Set at spawn time by EnemyManager.spawnBossMinion; level-placed enemies and regular-summoner
+     * adds leave it false. Read by the death drop path to grant the guaranteed ammo lifeline: in the
+     * sealed boss arena, a player who has run out of ammo ALWAYS gets matching ammo from a summoned
+     * add so the fight can never become unwinnable (Fairness F5). Scoped to summoned adds so the normal
+     * loot economy is untouched everywhere else.
+     */
+    public boolean spawnedByBossSummon       = false;
+
     // Status effect storage — pre-allocated at construction, never replaced
     private final EnumMap<StatusType, StatusEffect> activeEffects;
     private StatusResistance statusResistance = StatusResistance.defaultResistance();

@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Enemies
 TITLE: Mobile Overseer — Guaranteed Ammo Lifeline (ORDER 6)
 CREATED: 2026-07-11
@@ -95,6 +95,27 @@ VERIFY
 - With full ammo, kill several adds → confirm drops follow normal odds (not 100%).
 - Confirm a level-placed (non-summoned) enemy on a normal floor does NOT get the
   guarantee (flag scoping is correct).
+
+=============================================================================
+AS BUILT (2026-07-11)
+=============================================================================
+- Enemy.spawnedByBossSummon flag (default false). Set true only by
+  EnemyManager.spawnBossMinion, which BossFloorController.summonMinions now calls
+  in place of spawnEnemy. Level-placed enemies and regular-summoner adds
+  (executeSummon) stay false — the guarantee is scoped to boss adds only (open Q1:
+  boss-arena only for v1).
+- Loadout.hasNoUsableAmmo(): true when every equipped ranged weapon has 0 in clip
+  AND 0 reserve. Skips locked/empty/melee slots; returns false for infinite-ammo
+  (null ammo type) and for a melee-only loadout (no ammo consumed → N/A). Reuses
+  Weapon.getShotsInClip()/getReserveAmmo()/getAmmoType() — no parallel accounting.
+- EnemyManager.guaranteedSummonerAmmoDrop(enemy) gates on: spawnedByBossSummon &&
+  a live boss still in the roster (isBossFightActive → arena sealed) &&
+  loadout.hasNoUsableAmmo(). When it fires it returns the ammo char of the active
+  ranged weapon (fallback: first equipped ranged weapon) via
+  preferredAmmoCharForEmptyLoadout(); killEnemy stamps that instead of rollEnemyDrop.
+  Non-empty case is untouched — normal drop odds still apply (no ammo piñata).
+- Reuses existing ammo pickup chars (AmmoType.getPickupTileChar: 6/7/8/9/0) — no
+  new tile symbol introduced.
 
 =============================================================================
 OPEN QUESTIONS
