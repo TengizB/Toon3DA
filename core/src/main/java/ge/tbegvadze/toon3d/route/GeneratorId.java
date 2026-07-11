@@ -21,7 +21,11 @@ public enum GeneratorId {
     /** Bespoke boss arena ({@code BossArenaGenerator}). Not in the standard pool. */
     BOSS_ARENA("boss_arena"),
     /** Bespoke curated med-bay clinic ({@code MedBayGenerator}) for REST nodes. Not in the standard pool. */
-    MED_BAY("med_bay");
+    MED_BAY("med_bay"),
+    /** Bespoke small curated narrative room ({@code EventRoomGenerator}) for EVENT nodes. Not in the standard pool. */
+    EVENT_ROOM("event_room"),
+    /** Bespoke ceremonial airlock/bulkhead floor ({@code GateAirlockGenerator}) for REGION_GATE nodes. Not in the standard pool. */
+    GATE_AIRLOCK("gate_airlock");
 
     private final String stableId;
 

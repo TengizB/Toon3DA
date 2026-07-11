@@ -50,6 +50,9 @@ import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
 import ge.tbegvadze.toon3d.route.AmmoCacheRequest;
 import ge.tbegvadze.toon3d.route.EnemyBudgetOverride;
+import ge.tbegvadze.toon3d.route.EventChoice;
+import ge.tbegvadze.toon3d.route.EventEffect;
+import ge.tbegvadze.toon3d.route.FacilityEvent;
 import ge.tbegvadze.toon3d.route.FloorEffects;
 import ge.tbegvadze.toon3d.route.GuaranteedContent;
 import ge.tbegvadze.toon3d.route.GuaranteedContentStamper;
@@ -57,7 +60,9 @@ import ge.tbegvadze.toon3d.route.LevelPlan;
 import ge.tbegvadze.toon3d.route.Placement;
 import ge.tbegvadze.toon3d.route.NodeLevelProfile;
 import ge.tbegvadze.toon3d.route.NodeTypeDefinition;
+import ge.tbegvadze.toon3d.route.RegionAmbience;
 import ge.tbegvadze.toon3d.route.RegionPlan;
+import ge.tbegvadze.toon3d.route.RegionSpec;
 import ge.tbegvadze.toon3d.route.RouteMap;
 import ge.tbegvadze.toon3d.route.RouteMapGenerator;
 import ge.tbegvadze.toon3d.route.RouteNode;
@@ -89,7 +94,7 @@ import ge.tbegvadze.toon3d.util.EnemyConstants;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
-    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN, ROUTE_SELECT }
+    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN, ROUTE_SELECT, EVENT_CHOICE }
 
     // -------------------------------------------------------------------------
     // Run-persistent resources — kept alive across all floor transitions
@@ -182,6 +187,33 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * resets red alert), so it survives the rebuild. Reset to {@link FloorEffects#NONE} each build.
      */
     private FloorEffects            pendingFloorEffects = FloorEffects.NONE;
+
+    // -------------------------------------------------------------------------
+    // Narrative EVENT nodes + region theming (route-map order-10)
+    // -------------------------------------------------------------------------
+    /** The "FACILITY EVENT" choice overlay (order-10). Drawn while runPhase == EVENT_CHOICE. */
+    private final EventChoiceOverlayRenderer eventChoiceOverlayRenderer;
+    /**
+     * Armed event-station tiles on the current floor ({@code {tileColumn, tileRow}} pairs copied from
+     * the level, like the heal stations). When the player steps adjacent to one, the floor's event
+     * opens; the station is then consumed so an event fires exactly once. Empty on non-EVENT floors.
+     */
+    private java.util.List<int[]>   armedEventStations = new java.util.ArrayList<>();
+    /** The event id this floor hosts (from {@link LevelPlan#eventId()}), or null on a non-EVENT floor. */
+    private String                  pendingEventId;
+    /** The event currently shown on the EVENT_CHOICE overlay, or null when not choosing. */
+    private FacilityEvent           activeEvent;
+    /**
+     * A one-shot BONUS added to the NEXT floor's encounter budget (order-10 EVENT effect, e.g. an
+     * escort makes the next floor hotter). Folded into that floor's budget in {@code buildFloorForNode}
+     * and then cleared, so it never compounds across floors.
+     */
+    private float                   pendingNextFloorBudgetBonus = 0f;
+    /**
+     * The region index whose entry was last announced, so crossing into a new region fires the
+     * "ENTERING: …" beat + theming + telemetry exactly once. -1 before the first floor.
+     */
+    private int                     lastAnnouncedRegionIndex = -1;
 
     // -------------------------------------------------------------------------
     // Player stat system — persistent across floor transitions (Order 6)
@@ -312,6 +344,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Progression — lives for the entire run; not reset between floors
         playerProgress         = new PlayerProgress();
         levelUpOverlayRenderer = new LevelUpOverlayRenderer(playerProgress);
+        eventChoiceOverlayRenderer = new EventChoiceOverlayRenderer();
         // Card deck seeded off the run seed so a given run's level-up offers are reproducible.
         upgradeCardDeck        = new UpgradeCardDeck(runSeed ^ 0xCA12D00D5EED1234L);
 
@@ -653,8 +686,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         LevelPlan          plan       = profile.resolve(node, depth, seed);
         // Fold the node's encounter-budget override into the config the generator receives. The
         // depth ramp is still applied first inside EncounterBudgetPlanner (order-3 invariant); this
-        // only scales how much of that depth budget the floor spends. A null override leaves 1.0.
-        LevelGenConfig config = applyEnemyBudget(plan.config(), plan.enemyBudget());
+        // only scales how much of that depth budget the floor spends. A null override leaves 1.0. A
+        // one-shot next-floor bonus from a previous EVENT choice (order-10, e.g. an escort) is folded
+        // in on top and then consumed, so it applies to exactly this floor and never compounds.
+        EnemyBudgetOverride budget = applyNextFloorBudgetBonus(plan.enemyBudget());
+        pendingNextFloorBudgetBonus = 0f;
+        LevelGenConfig config = applyEnemyBudget(plan.config(), budget);
         ILevelGenerator    generator  = RouteRegistries.generators().create(plan.generatorId(), seed, config);
         Level built = generator.generate(depth);
         for (GuaranteedContent guarantee : plan.guarantees()) {
@@ -666,9 +703,26 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Presentation / telemetry effects (order-9): stash them so applyPendingFloorEffects() can run
         // AFTER rebuildForLevel (which resets red alert). A profile is headless and cannot touch these.
         pendingFloorEffects = plan.floorEffects();
+        // Narrative EVENT (order-10): remember which event this floor hosts so rebuildForLevel can arm
+        // it on the room's event station. Null on every non-EVENT floor.
+        pendingEventId = plan.eventId();
         Gdx.app.log("RouteMap", "build depth=" + depth + " node=" + definition.id()
                 + " generator=" + plan.generatorId().stableId());
         return built;
+    }
+
+    /**
+     * Folds a one-shot next-floor budget bonus (route-map order-10 EVENT effect) into the plan's
+     * encounter-budget override. Returns the plan's override unchanged when no bonus is pending; else a
+     * scaled override that multiplies the base scale (1.0 when the plan had none) by {@code 1 + bonus}.
+     * Clamped by {@link EnemyBudgetOverride}; the depth ramp is still applied first (order-3 invariant).
+     */
+    private EnemyBudgetOverride applyNextFloorBudgetBonus(EnemyBudgetOverride planOverride) {
+        if (pendingNextFloorBudgetBonus <= 0f) {
+            return planOverride;
+        }
+        float baseScale = planOverride != null ? planOverride.budgetScale() : 1.0f;
+        return EnemyBudgetOverride.scaled(baseScale * (1f + pendingNextFloorBudgetBonus));
     }
 
     /**
@@ -926,6 +980,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         chargedHealStations = new java.util.ArrayList<>();
         for (int[] station : targetLevel.getHealStationTiles()) {
             chargedHealStations.add(new int[]{station[0], station[1]});
+        }
+
+        // Narrative EVENT stations (route-map order-10): copy the interactable tiles the EVENT room
+        // registered so the per-turn adjacency check can open the choice overlay. The floor's event id
+        // is pendingEventId (set in buildFloorForNode). Empty on non-EVENT floors, so this is a no-op
+        // on ordinary / file-loaded / test worlds (which never mark an event station).
+        armedEventStations = new java.util.ArrayList<>();
+        for (int[] station : targetLevel.getEventStationTiles()) {
+            armedEventStations.add(new int[]{station[0], station[1]});
         }
 
         // Build ground items from weapon spawn points. Each item gets a pre-rolled
@@ -1396,12 +1459,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     runStats.recordFloor(currentDepth);
                     rebuildForLevel(buildNextFloor());
                     applyPendingFloorEffects();
+                    detectRegionEntry();
                 } else {
                     currentDepth++;
                     playerProgress.setFloorDepth(currentDepth);
                     runStats.recordFloor(currentDepth);
                     rebuildForLevel(buildNextFloor());
                     applyPendingFloorEffects();
+                    detectRegionEntry();
                 }
                 fadeTimerSeconds = 0f;
                 runPhase = RunPhase.FADING_IN;
@@ -1510,6 +1575,25 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
+        // EVENT_CHOICE — game paused while the player picks a narrative choice (order-10). Mirrors the
+        // LEVEL_UP_OVERLAY: unproject the tap through the game viewport, hit-test the choice cards, and
+        // apply the picked choice's typed effect. Tapping a card resolves the event and resumes PLAYING.
+        if (runPhase == RunPhase.EVENT_CHOICE) {
+            if (gameViewport != null && Gdx.input.justTouched()) {
+                cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+                gameViewport.unproject(cardTouchPosition);
+                int tappedIndex = eventChoiceOverlayRenderer.getTappedChoiceIndex(
+                        cardTouchPosition.x, cardTouchPosition.y);
+                EventChoice tappedChoice = eventChoiceOverlayRenderer.getChoice(tappedIndex);
+                if (tappedChoice != null) {
+                    applyEventChoice(tappedChoice);
+                    activeEvent = null;
+                    runPhase = RunPhase.PLAYING;
+                }
+            }
+            return;
+        }
+
         // PLAYING phase — normal game simulation
         runStats.realSecondsPlayed += deltaTime;
         doorManager.update(deltaTime);
@@ -1542,6 +1626,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Auto-doc heal stations (order-8): a one-time free heal fires the moment the player steps
         // adjacent to a still-charged station, reusing the medkit heal path. Consumed on use.
         updateHealStations();
+
+        // Narrative EVENT stations (order-10): the moment the player steps adjacent to the room's
+        // interactable, the floor's event opens its choice overlay (mirrors the heal-station adjacency
+        // trigger, so no new touch button or aiming is needed). No-op on non-EVENT floors.
+        updateEventStations();
+        if (runPhase == RunPhase.EVENT_CHOICE) {
+            return; // the event overlay just opened — pause the sim for this frame
+        }
 
         if (touchInputState != null) {
             touchInputState.update(deltaTime);
@@ -1691,7 +1783,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 && touchControllerRenderer != null
                 && runPhase != RunPhase.INVENTORY_OPEN
                 && runPhase != RunPhase.SHOP_OPEN
-                && runPhase != RunPhase.ROUTE_SELECT) {
+                && runPhase != RunPhase.ROUTE_SELECT
+                && runPhase != RunPhase.EVENT_CHOICE) {
             touchControllerRenderer.setActionLocked(!playerController.isIdle());
             touchControllerRenderer.render(camera);
         }
@@ -1720,6 +1813,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Route-map "FACILITY NAV" console — paused branching-route UI, drawn below fade/death overlays.
         if (runPhase == RunPhase.ROUTE_SELECT) {
             routeMapOverlayRenderer.render(camera);
+        }
+
+        // Narrative EVENT choice overlay (order-10) — paused choice cards, drawn below fade/death overlays.
+        if (runPhase == RunPhase.EVENT_CHOICE) {
+            eventChoiceOverlayRenderer.render(camera);
         }
 
         // Fade overlay drawn last — covers every other layer including the HUD.
@@ -1766,6 +1864,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hitVignetteRenderer.dispose();
         guardShieldRenderer.dispose();
         levelUpOverlayRenderer.dispose();
+        eventChoiceOverlayRenderer.dispose();
         inventoryOverlayRenderer.dispose();
         weaponInspectOverlayRenderer.dispose();
         shopOverlayRenderer.dispose();
@@ -1838,6 +1937,199 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         if (impactEffectSystem != null) impactEffectSystem.spawnHealParticles();
         if (hitVignetteRenderer != null) hitVignetteRenderer.triggerHeal();
+    }
+
+    // -------------------------------------------------------------------------
+    // Narrative EVENT nodes (route-map order-10)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Opens the floor's narrative event the moment the player steps orthogonally adjacent to its
+     * interactable (route-map order-10 EVENT node), mirroring the auto-doc heal-station trigger so no
+     * new touch button or aiming is needed. The station is consumed (cleared) as it opens, so an event
+     * fires exactly once. No-op on non-EVENT floors (no armed stations) or if the event id no longer
+     * resolves (graceful degradation — a quiet room).
+     */
+    private void updateEventStations() {
+        if (armedEventStations.isEmpty() || player == null || player.isDead()) return;
+        int playerColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
+        int playerRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
+        for (int index = 0; index < armedEventStations.size(); index++) {
+            int[] station = armedEventStations.get(index);
+            int manhattan = Math.abs(station[0] - playerColumn) + Math.abs(station[1] - playerRow);
+            if (manhattan > 1) continue; // not adjacent yet (the interactable tile itself is solid)
+            FacilityEvent event = pendingEventId != null
+                    ? RouteRegistries.events().get(pendingEventId) : null;
+            armedEventStations.clear(); // consume every station: the beat fires once per floor
+            if (event == null) {
+                return; // no event resolved — leave the room quiet rather than open an empty overlay
+            }
+            activeEvent = event;
+            eventChoiceOverlayRenderer.present(event);
+            if (touchInputState != null) {
+                touchInputState.resetAllButtonStates();
+            }
+            runPhase = RunPhase.EVENT_CHOICE;
+            return;
+        }
+    }
+
+    /**
+     * Applies one picked {@link EventChoice}'s typed {@link EventEffect} (route-map order-10) through
+     * EXISTING systems — heal, armour, ammo, XP, map reveal, next-floor budget — so there is no bespoke
+     * per-event code path. A GAMBLE choice rolls the floor's own seed: on success the effect applies and
+     * the result line shows; on failure a small survivable bite plus the fail line (never a lost run).
+     * The picked choice's token is appended to the run's route story.
+     */
+    private void applyEventChoice(EventChoice choice) {
+        EventEffect effect = choice.effect();
+        boolean success = true;
+        if (effect.isGamble()) {
+            // Deterministic per-floor roll so a seed always resolves the gamble the same way.
+            java.util.Random gambleRandom = new java.util.Random(floorSeed(runSeed, currentDepth) ^ 0xE7E1D1CEL);
+            success = gambleRandom.nextFloat() < effect.gambleLootChance();
+        }
+
+        if (success) {
+            if (effect.healFraction() > 0f && player != null) {
+                int healAmount = Math.round(player.getMaxHealth() * effect.healFraction());
+                if (healAmount > 0) {
+                    player.applyHealing(healAmount);
+                    if (impactEffectSystem != null) impactEffectSystem.spawnHealParticles();
+                    if (hitVignetteRenderer != null) hitVignetteRenderer.triggerHeal();
+                }
+            }
+            if (effect.armourToFull() && player != null) {
+                player.applyArmor(player.getMaxArmor());
+            }
+            if (effect.ammoBoxes() > 0) {
+                grantAmmoBoxes(effect.ammoBoxes());
+            }
+            if (effect.grantXp() > 0) {
+                playerProgress.addXp(effect.grantXp());
+            }
+            if (effect.revealNextRegion()) {
+                revealNextRegion();
+            }
+            if (effect.nextFloorBudgetBonus() > 0f) {
+                pendingNextFloorBudgetBonus += effect.nextFloorBudgetBonus();
+            }
+            if (effect.resultText() != null && eventTextSystem != null) {
+                eventTextSystem.spawnWithColor(effect.resultText(), EventTextSystem.COLOR_GREEN);
+            }
+        } else {
+            // Lost gamble: a survivable bite + the fail sting (worst case wastes the hop, never fatal-by-design).
+            if (effect.gambleFailDamageFraction() > 0f && player != null) {
+                int damage = Math.round(player.getMaxHealth() * effect.gambleFailDamageFraction());
+                if (damage > 0) player.applyDamage(damage);
+            }
+            String failLine = effect.failText() != null ? effect.failText() : "IT WAS A TRAP";
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor(failLine, EventTextSystem.COLOR_RED);
+            }
+        }
+
+        // Log the chosen outcome so the post-run route story records the decision (order-10). The EVENT
+        // node's token is already "event:<id>"; this appends the choice, e.g. "event:distress_beacon:answered".
+        String token = effect.logToken();
+        if (token != null && !success) {
+            token = token + "_failed";
+        }
+        if (token != null) {
+            runStats.annotateLastRouteNode(token);
+        }
+        Gdx.app.log("RouteMap", "event=" + (activeEvent != null ? activeEvent.id() : "?")
+                + " choice=" + choice.label() + " success=" + success);
+    }
+
+    /**
+     * Grants {@code boxCount} ammo boxes spread across the player's OWNED ammo types (route-map
+     * order-10 EVENT reward), reusing each type's {@code amountPerBox}. Falls back to ALL ammo types for
+     * a melee-only run so the reward is never wasted. Directly credits the reserve (an event hands the
+     * ammo over, rather than stamping tiles on the current floor).
+     */
+    private void grantAmmoBoxes(int boxCount) {
+        java.util.List<AmmoType> ammoTypes = collectOwnedAmmoTypes();
+        if (ammoTypes.isEmpty()) {
+            for (AmmoType ammoType : AmmoType.values()) ammoTypes.add(ammoType);
+        }
+        int typeCount = ammoTypes.size();
+        // Distribute the boxes as evenly as possible across owned types (first types get any remainder).
+        for (int typeIndex = 0; typeIndex < typeCount; typeIndex++) {
+            int boxesForType = boxCount / typeCount + (typeIndex < boxCount % typeCount ? 1 : 0);
+            if (boxesForType <= 0) continue;
+            AmmoType ammoType = ammoTypes.get(typeIndex);
+            itemInventory.addAmmo(ammoType, boxesForType * ammoType.getAmountPerBox());
+        }
+    }
+
+    /** The distinct ammo types the player's equipped loadout can use (empty for a melee-only run). */
+    private java.util.List<AmmoType> collectOwnedAmmoTypes() {
+        java.util.List<AmmoType> types = new java.util.ArrayList<>();
+        Loadout loadout = inventory.getLoadout();
+        if (loadout != null) {
+            for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+                Weapon weapon = loadout.getSlot(slotIndex);
+                if (weapon == null) continue;
+                AmmoType ammoType = weapon.getAmmoType();
+                if (ammoType != null && !types.contains(ammoType)) types.add(ammoType);
+            }
+        }
+        return types;
+    }
+
+    /**
+     * Reveals the NEXT region on the route map (route-map order-10 EVENT reward — a free scan), reusing
+     * {@link RouteMap#revealRegion(int)}. No-op on a route-less world or when there is no deeper region
+     * yet mapped. The next region is the one after the one that owns the current depth.
+     */
+    private void revealNextRegion() {
+        if (routeMap == null || routePlan == null) return;
+        int currentRegionIndex;
+        try {
+            currentRegionIndex = routePlan.regionForDepth(currentDepth).regionIndex();
+        } catch (IllegalArgumentException outOfPlan) {
+            return; // depth not covered by the plan (defensive) — nothing to reveal
+        }
+        int nextRegionIndex = currentRegionIndex + 1;
+        if (nextRegionIndex < 0 || nextRegionIndex >= routeMap.getRegions().size()) return;
+        routeMap.revealRegion(nextRegionIndex);
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("SECTOR MAPPED", EventTextSystem.COLOR_GOLD);
+        }
+    }
+
+    /**
+     * Announces + logs a region transition the first time the descent enters each region (route-map
+     * order-10 theming). Reads the region's {@link RegionAmbience} identity for its display name and
+     * gate flavour, shows the "ENTERING: …" beat, and records the region to the run story. Generic — it
+     * fires on every region change (boss or gate), not just on a gate node. No-op on a route-less world.
+     */
+    private void detectRegionEntry() {
+        if (routePlan == null) return;
+        RegionSpec region;
+        try {
+            region = routePlan.regionForDepth(currentDepth);
+        } catch (IllegalArgumentException outOfPlan) {
+            return; // depth not covered by the plan (defensive)
+        }
+        if (region.regionIndex() == lastAnnouncedRegionIndex) {
+            return; // already announced this region
+        }
+        lastAnnouncedRegionIndex = region.regionIndex();
+        RegionAmbience ambience = RouteRegistries.regionAmbience().getOrFallback(region.themeId());
+        String regionName = ambience != null ? ambience.displayName() : region.displayName();
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor(RouteMapConstants.GATE_ANNOUNCE_PREFIX + regionName,
+                    EventTextSystem.COLOR_GOLD);
+            if (ambience != null) {
+                eventTextSystem.spawnWithColor(ambience.gateFlavour(), EventTextSystem.COLOR_WHITE);
+            }
+        }
+        runStats.recordRegionEntry(region.regionIndex(), regionName);
+        Gdx.app.log("RouteMap", "region-entry index=" + region.regionIndex() + " name=" + regionName
+                + (ambience != null ? " faction=" + ambience.enemyFactionId()
+                        + " music=" + ambience.musicId() : ""));
     }
 
     private void applyInventoryConsumableEffect() {

@@ -25,6 +25,14 @@ public class Level {
      * node type. Empty on every ordinary floor. Populated post-construction via {@link #markHealStation}.
      */
     private final   List<int[]>            healStationTiles = new java.util.ArrayList<>();
+    /**
+     * Interactive event-station tiles (route-map order-10 EVENT node). Each entry is a
+     * {@code {tileColumn, tileRow}} pair the {@code EventRoomGenerator} registered so {@code World} can
+     * open the narrative choice overlay when the player steps adjacent — the same tile-level seam the
+     * heal station uses, so no node type is special-cased. Empty on every non-EVENT floor. Populated
+     * post-construction via {@link #markEventStation}.
+     */
+    private final   List<int[]>            eventStationTiles = new java.util.ArrayList<>();
 
     Level(char[][] matrix, List<EnemySpawnPoint> enemySpawnPoints,
           List<WeaponSpawnPoint> weaponSpawnPoints) {
@@ -49,6 +57,25 @@ public class Level {
      */
     public List<int[]> getHealStationTiles() {
         return Collections.unmodifiableList(healStationTiles);
+    }
+
+    /**
+     * Registers an event-station tile so {@code World} can open the narrative choice overlay when the
+     * player steps adjacent (route-map order-10 EVENT node). Called by {@code EventRoomGenerator} right
+     * after it stamps the interactable prop. No-op for out-of-bounds coordinates.
+     */
+    public void markEventStation(int tileColumn, int tileRow) {
+        if (tileColumn < 0 || tileColumn >= getWidth() || tileRow < 0 || tileRow >= getHeight()) return;
+        eventStationTiles.add(new int[]{tileColumn, tileRow});
+    }
+
+    /**
+     * The event-station tiles registered on this floor ({@code {tileColumn, tileRow}} pairs). Empty on
+     * non-EVENT floors. The returned list is unmodifiable; {@code World} copies it to track which
+     * station is still armed (an event fires once, then the station is consumed).
+     */
+    public List<int[]> getEventStationTiles() {
+        return Collections.unmodifiableList(eventStationTiles);
     }
 
     /** Returns the read-only list of enemy spawn points extracted by LevelLoader. */

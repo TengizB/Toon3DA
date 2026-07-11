@@ -50,6 +50,30 @@ public class RunStats {
     public String getRouteString() {
         return routeString.toString();
     }
+
+    /**
+     * The regions the descent has entered, in order, as "index:NAME" tokens (route-map order-10).
+     * Recorded once per region the first time the player crosses into it, so the post-run story reads
+     * the acts traversed (e.g. "0:OUTER FACILITY | 1:RESEARCH WING"). Empty before the first floor.
+     */
+    private final StringBuilder regionsEntered = new StringBuilder();
+
+    /**
+     * Records that the descent has entered a region (route-map order-10). Called once per region as the
+     * player first crosses into it; tokens are '|'-separated.
+     */
+    public void recordRegionEntry(int regionIndex, String regionName) {
+        if (regionsEntered.length() > 0) {
+            regionsEntered.append(" | ");
+        }
+        regionsEntered.append(regionIndex).append(':').append(regionName == null ? "?" : regionName);
+    }
+
+    /** The regions entered so far, as a single '|'-separated string (empty before the first floor). */
+    public String getRegionsEntered() {
+        return regionsEntered.toString();
+    }
+
     public void recordDamageDealt(int amount) { totalDamageDealt += amount; }
     public void recordDamageTaken(int amount) { totalDamageTaken += amount; }
     public void recordShotFired()             { shotsFired++; }
