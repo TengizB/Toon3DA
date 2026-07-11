@@ -53,6 +53,14 @@ public class Boss extends Enemy {
     /** True after the boss first detects the player — gates the intro sequence and arena lock. */
     public boolean hasAwakened = false;
 
+    /**
+     * Live minion count (adds only, boss excluded), refreshed by BossFloorController each tick
+     * before the attack pattern runs. The HunterKillerPattern brain (ORDER 4) reads this to score
+     * summon tactics — the attack-pattern interface only receives (boss, player, level, tick), so the
+     * controller pushes the count here rather than the brain reaching into EnemyManager.
+     */
+    public int liveMinionCount = 0;
+
     public Boss(EnemyType type, int tileColumn, int tileRow,
                 String bossName, String bossEpithet, String killLine,
                 float accentRed, float accentGreen, float accentBlue,

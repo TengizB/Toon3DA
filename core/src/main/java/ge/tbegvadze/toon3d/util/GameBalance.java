@@ -783,4 +783,63 @@ public final class GameBalance {
 
     /** Maximum clip expansion from EXTENDED_MAG regardless of weapon level. */
     public static final int EXTENDED_MAG_MAX_COUNT       = 4;
+
+    // =========================================================================
+    // OVERSEER HUNTER-KILLER BRAIN (boss-fight-mobile-overseer ORDER 4)
+    // -------------------------------------------------------------------------
+    // Tunables for HunterKillerPattern — the tactic-selecting boss brain. A designer
+    // can retune the Overseer's aggression here WITHOUT touching pattern code:
+    //   * SCORE_* weights bias which tactic wins in a given situation.
+    //   * *_GAP values space out how often each heavy verb (charge/summon/hazard)
+    //     can headline a tactic — added on top of the tactic's own length so the
+    //     spacing is measured from when the last tactic that used the verb finished.
+    //   * Phase 2 gaps are shorter (enraged: faster, layered threats) but the
+    //     controller's Constants.BOSS_MAX_CONSECUTIVE_MOVE_TURNS backstop still
+    //     guarantees the fairness F1 punish-window cadence regardless of tuning.
+    // =========================================================================
+
+    /** Baseline score every eligible tactic starts from before situational bonuses. */
+    public static final int   BOSS_TACTIC_SCORE_BASE            = 10;
+    /** Bonus for melee-opener tactics (AMBUSH/BLITZ) when the player is close. */
+    public static final int   BOSS_TACTIC_SCORE_CLOSE_RANGE     = 6;
+    /** Bonus for gap-closing / zoning tactics (CHARGER/ZONER/FIRESTORM) when the player is far. */
+    public static final int   BOSS_TACTIC_SCORE_FAR_RANGE       = 6;
+    /** Bonus for summon tactics (ZONER/FIRESTORM) while there is room under the adds cap. */
+    public static final int   BOSS_TACTIC_SCORE_ADDS_ROOM       = 4;
+    /** Bonus for line-hit tactics (CHARGER/BLITZ) when the player is boxed against cover/walls. */
+    public static final int   BOSS_TACTIC_SCORE_CORNERED        = 5;
+    /** Bonus for hazard/dash tactics that punish a player who has been camping one tile. */
+    public static final int   BOSS_TACTIC_SCORE_CAMPING         = 6;
+
+    /** Chebyshev range (tiles) at or below which the player counts as "close" for scoring. */
+    public static final int   BOSS_TACTIC_CLOSE_RANGE_TILES     = 3;
+    /** Player counts as "camping" once its tile is unchanged for this many boss turns. */
+    public static final int   BOSS_TACTIC_CAMP_TURNS            = 3;
+    /** Passable cardinal neighbours at or below which the player counts as "cornered". */
+    public static final int   BOSS_TACTIC_CORNERED_EXITS        = 1;
+    /** Upper bound (exclusive) of the seeded random tiebreak added to every tactic score. */
+    public static final int   BOSS_TACTIC_RANDOM_TIEBREAK       = 3;
+
+    /** Phase-1 spacing (turns beyond the tactic's own length) before CHARGE may headline again. */
+    public static final int   BOSS_TACTIC_CHARGE_GAP_PHASE1     = 3;
+    /** Phase-1 spacing before SUMMON may headline again. */
+    public static final int   BOSS_TACTIC_SUMMON_GAP_PHASE1     = 4;
+    /** Phase-1 spacing before a hazard (fire/toxic) tactic may headline again. */
+    public static final int   BOSS_TACTIC_HAZARD_GAP_PHASE1     = 2;
+    /** Phase-2 (enraged) charge spacing — tighter than phase 1. */
+    public static final int   BOSS_TACTIC_CHARGE_GAP_PHASE2     = 1;
+    /** Phase-2 (enraged) summon spacing. */
+    public static final int   BOSS_TACTIC_SUMMON_GAP_PHASE2     = 2;
+    /** Phase-2 (enraged) hazard spacing. */
+    public static final int   BOSS_TACTIC_HAZARD_GAP_PHASE2     = 1;
+
+    /**
+     * "Last stand": once phase 2 HP falls to or below this fraction the boss drops its flee
+     * behaviour and commits to BLITZ every selection — a readable, climactic finish where the
+     * player finally gets to corner it (reward for surviving).
+     */
+    public static final float BOSS_TACTIC_LAST_STAND_HP_FRACTION = 0.15f;
+
+    /** When true, HunterKillerPattern logs each tactic selection (dev fairness instrumentation). */
+    public static final boolean BOSS_TACTIC_DEBUG_LOG            = false;
 }

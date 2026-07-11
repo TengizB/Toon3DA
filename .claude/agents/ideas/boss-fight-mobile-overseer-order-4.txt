@@ -1,7 +1,33 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Enemies
 TITLE: Mobile Overseer — Hunter-Killer AI Brain (ORDER 4)
 CREATED: 2026-07-11
+---
+IMPLEMENTATION NOTES (2026-07-11):
+- entity/boss/HunterKillerPattern.java is the tactic-selecting brain. It nests two data
+  enums: Verb (atomic per-turn steps) and Tactic (named fixed Verb[] sequences). Two
+  instances drive the Overseer — new HunterKillerPattern(Pool.PHASE1/PHASE2, bossSeed) —
+  wired in World.createBossForDepth (bossSeed = floorSeed(runSeed, depth), reproducible).
+- Tactic pools: PHASE1 = {AMBUSH, ZONER, CHARGER, PROBE}; PHASE2 = {FIRESTORM, BLITZ,
+  CHARGER, PROBE}. PROBE (STALK/MELEE/HOLD) uses no heavy verb so it is always eligible —
+  the guaranteed fallback that keeps selection non-empty and gives no-repeat an out.
+- Each damaging hazard/charge is a WINDUP→CAST/STRIKE pair (telegraph one turn ahead, F2).
+  A wind-up that cannot arm (boss boxed / footprint all walls) sets windupAborted so its
+  paired resolve HOLDs instead of firing an empty verb.
+- Scoring, per-verb cooldown gaps (phase-2 shorter), close-range/camp/cornered thresholds,
+  LAST STAND HP fraction, and the debug-log flag are all GameBalance.BOSS_TACTIC_* constants.
+- Cooldown = tactic length + configured gap, so heavy-verb spacing is measured from when a
+  tactic FINISHES; combined with the no-immediate-repeat rule this prevents charge/hazard spam.
+- F1: the brain mirrors the controller's consecutive-move cap (plants before tripping it);
+  BossFloorController remains the authoritative executor and enforces F1/F2 regardless.
+- addsAlive is read from Boss.liveMinionCount, refreshed by BossFloorController each tick
+  (the attack-pattern interface only receives boss/player/level/tick).
+- Replaced (deleted) the stand-in OverseerPhase1Pattern/OverseerPhase2Pattern.
+- ORDER 5 HEAL: not a verb yet; documented seam in selectTactic (plugs in as a preempt like
+  LAST STAND does). T6 HEAL therefore not in the pools until Order 5 lands.
+- NOTE: could not compile in this environment (egress policy blocks the Android Gradle
+  plugin + Gradle distribution; no deps cached). Verified by manual review against the
+  existing verb kit / controller / constants.
 ---
 DEPENDS ON: order-1 (vision/fairness), order-2 (DASH/flee), order-3 (ability kit)
 ENABLES: the actual "interesting boss fight". order-5 (heal) plugs in as a tactic.
