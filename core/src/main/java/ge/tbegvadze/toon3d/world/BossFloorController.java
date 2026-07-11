@@ -6,6 +6,7 @@ import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.entity.boss.Boss;
 import ge.tbegvadze.toon3d.entity.boss.BossMove;
 import ge.tbegvadze.toon3d.entity.boss.DangerTileSet;
+import ge.tbegvadze.toon3d.hazard.HazardManager;
 import ge.tbegvadze.toon3d.level.BossArenaGenerator;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.render.BossHudRenderer;
@@ -40,6 +41,7 @@ public final class BossFloorController implements TickSubscriber {
     private final Level          level;
     private final DoorManager    doorManager;
     private final EnemyManager   enemyManager;
+    private final HazardManager  hazardManager;
     private final BossHudRenderer bossHudRenderer;
     private final EventTextSystem eventTextSystem;
 
@@ -64,20 +66,30 @@ public final class BossFloorController implements TickSubscriber {
     private int consecutiveMoveTurns = 0;
 
     /**
-     * Pre-allocated path buffers for the greedy DASH/REPOSITION stepper (ORDER 2). Sized
-     * BOSS_MAX_DASH_TILES + 1 (start tile + one entry per step). Reused every move — never a per-tick
-     * new[]. Entry 0 is always the boss's origin tile; the last live entry is the destination.
+     * Fairness contract F1/F2 (ORDER 3): forced recovery turns remaining after a CHARGE lunge. While
+     * this is above zero the controller overrides any locomotion move (DASH/REPOSITION/CHARGE) to a
+     * HOLD so the boss cannot immediately flee or charge again — the player's guaranteed punish window.
+     * Non-locomotion moves (telegraph / resolve / melee / summon / cast-hazard) still resolve.
      */
-    private final int[] movePathColumns = new int[Constants.BOSS_MAX_DASH_TILES + 1];
-    private final int[] movePathRows    = new int[Constants.BOSS_MAX_DASH_TILES + 1];
+    private int chargeRecoveryTurnsLeft = 0;
+
+    /**
+     * Pre-allocated path buffers for the greedy DASH/REPOSITION stepper (ORDER 2) and the CHARGE lunge
+     * (ORDER 3). Sized BOSS_MAX_SLIDE_TILES + 1 (origin tile + one entry per step) so a full-range charge
+     * fits. Reused every move — never a per-tick new[]. Entry 0 is always the boss's origin tile; the
+     * last live entry is the destination.
+     */
+    private final int[] movePathColumns = new int[Constants.BOSS_MAX_SLIDE_TILES + 1];
+    private final int[] movePathRows    = new int[Constants.BOSS_MAX_SLIDE_TILES + 1];
 
     public BossFloorController(Boss boss, Level level, DoorManager doorManager,
-                               EnemyManager enemyManager, BossHudRenderer bossHudRenderer,
-                               EventTextSystem eventTextSystem) {
+                               EnemyManager enemyManager, HazardManager hazardManager,
+                               BossHudRenderer bossHudRenderer, EventTextSystem eventTextSystem) {
         this.boss            = boss;
         this.level           = level;
         this.doorManager     = doorManager;
         this.enemyManager    = enemyManager;
+        this.hazardManager   = hazardManager;
         this.bossHudRenderer = bossHudRenderer;
         this.eventTextSystem = eventTextSystem;
 
@@ -162,10 +174,26 @@ public final class BossFloorController implements TickSubscriber {
         // the controller overrides it to a HOLD (a planted "catch me" turn) so there is ALWAYS a punish
         // window. This is a hard backstop; the brain (ORDER 4) should respect it, but the controller
         // guarantees it regardless of pattern.
-        boolean isMove = move.kind == BossMove.Kind.DASH || move.kind == BossMove.Kind.REPOSITION;
-        if (isMove && consecutiveMoveTurns >= Constants.BOSS_MAX_CONSECUTIVE_MOVE_TURNS) {
+        // A "kite" move is a pure relocation the player can punish (DASH/REPOSITION). CHARGE is NOT a
+        // kite: it is telegraph-gated and self-planting (it forces its own recovery), so it is excluded
+        // from the kite cap — otherwise the cap could swallow a CHARGE and strand its armed corridor
+        // telegraph unresolved. It IS still blocked during recovery below.
+        boolean isKiteMove   = move.kind == BossMove.Kind.DASH || move.kind == BossMove.Kind.REPOSITION;
+        boolean isRelocation = isKiteMove || move.kind == BossMove.Kind.CHARGE;
+        if (isKiteMove && consecutiveMoveTurns >= Constants.BOSS_MAX_CONSECUTIVE_MOVE_TURNS) {
             consecutiveMoveTurns = 0;   // this HOLD counts as the plant
             return;                     // override to HOLD — no move this turn
+        }
+
+        // Fairness F1/F2 (ORDER 3): during CHARGE recovery the boss may not relocate. Any relocation
+        // (including a follow-up charge) is overridden to a HOLD — the player's guaranteed punish
+        // window; stationary verbs (telegraph / resolve / melee / summon / cast-hazard) still resolve.
+        if (chargeRecoveryTurnsLeft > 0) {
+            chargeRecoveryTurnsLeft--;
+            if (isRelocation) {
+                consecutiveMoveTurns = 0;   // the forced recovery HOLD counts as the plant
+                return;
+            }
         }
 
         switch (move.kind) {
@@ -193,6 +221,18 @@ public final class BossFloorController implements TickSubscriber {
                 } else {
                     consecutiveMoveTurns = 0;   // fully boxed in → degrades to HOLD (a plant)
                 }
+                break;
+
+            case CHARGE:
+                executeCharge(move, player, playerColumn, playerRow);
+                // The charge itself relocates, but its FORCED recovery IS the punish window, so it
+                // resets the F1 counter — a charge is never the start of a kite chain (ORDER 3).
+                consecutiveMoveTurns = 0;
+                break;
+
+            case CAST_HAZARD:
+                castHazard(move);
+                consecutiveMoveTurns = 0;
                 break;
 
             case SUMMON:
@@ -328,6 +368,81 @@ public final class BossFloorController implements TickSubscriber {
         return true;
     }
 
+    /**
+     * Executes a CHARGE lunge (ORDER 3) — the "hit then flee" signature move. The previous turn's
+     * TELEGRAPH armed the boss's DangerTileSet with the corridor tiles + damage; this turn:
+     *   1. RESOLVE the hit — any player standing on a marked corridor tile takes the telegraphed damage,
+     *      then the marks are cleared (the corridor is now spent).
+     *   2. LUNGE — slide the boss up to move.chargeRangeTiles along the cardinal charge axis, stopping
+     *      at the first blocked tile, ending on the far side of the lane. Reuses the ORDER 2 slide so
+     *      the lunge is a visible sprint, never a teleport (fairness F3).
+     *   3. Face the charge axis (visual + backstab facing) and arm the forced recovery plant so the
+     *      player gets a guaranteed punish window next turn (fairness F1/F2).
+     * The damage comes entirely from the armed DangerTileSet, so it lands even when the boss is boxed in
+     * and cannot slide a single tile.
+     */
+    private void executeCharge(BossMove move, Player player, int playerColumn, int playerRow) {
+        // Step 1 — resolve the telegraphed corridor hit, then clear it.
+        resolveDangerTiles(player, playerColumn, playerRow);
+        boss.dangerTileSet.clear();
+
+        // Face the lunge axis regardless of whether the slide is blocked (visual intent).
+        if (move.chargeDirectionColumn != 0 || move.chargeDirectionRow != 0) {
+            boss.facingColumn = move.chargeDirectionColumn;
+            boss.facingRow    = move.chargeDirectionRow;
+        }
+
+        // Step 2 — slide along the axis to the last passable tile (capped at the charge range).
+        int currentColumn = boss.tileColumn;
+        int currentRow    = boss.tileRow;
+        movePathColumns[0] = currentColumn;
+        movePathRows[0]    = currentRow;
+        int pathLength = 1;
+        int rangeTiles = Math.min(move.chargeRangeTiles, Constants.BOSS_MAX_SLIDE_TILES);
+        for (int step = 0; step < rangeTiles; step++) {
+            int nextColumn = currentColumn + move.chargeDirectionColumn;
+            int nextRow    = currentRow    + move.chargeDirectionRow;
+            if (!isBossStepPassable(nextColumn, nextRow, playerColumn, playerRow)) break;
+            currentColumn = nextColumn;
+            currentRow    = nextRow;
+            movePathColumns[pathLength] = currentColumn;
+            movePathRows[pathLength]    = currentRow;
+            pathLength++;
+        }
+
+        if (pathLength >= 2) {
+            enemyManager.tryPushEnemy(boss, currentColumn, currentRow);
+            boss.beginSlide(movePathColumns, movePathRows, pathLength, Constants.BOSS_DASH_ANIM_DURATION);
+        }
+
+        // Step 3 — force the recovery plant (the punish window). Applies even when boxed in: the hit
+        // still landed, so the boss must recover regardless.
+        chargeRecoveryTurnsLeft = EnemyConstants.OVERSEER_CHARGE_RECOVERY_TURNS;
+    }
+
+    /**
+     * Seeds a terrain hazard on the tiles armed by the previous turn's TELEGRAPH (ORDER 3). Places the
+     * move's hazard kind via HazardManager on every currently-marked DangerTileSet tile — so the placed
+     * hazard exactly matches what the player saw telegraphed — then clears the marks. Not a direct hit:
+     * HazardManager owns the lingering damage-over-time from here. HazardManager.ignite* silently
+     * ignores tiles that are not eligible floor, so walls/props in the footprint simply take no hazard.
+     */
+    private void castHazard(BossMove move) {
+        DangerTileSet dangerTileSet = boss.dangerTileSet;
+        if (dangerTileSet.isActive()) {
+            List<DangerTileSet.MarkedTile> tiles = dangerTileSet.getTiles();
+            for (int index = 0; index < tiles.size(); index++) {
+                DangerTileSet.MarkedTile tile = tiles.get(index);
+                if (move.hazardKind == BossMove.HazardKind.FIRE) {
+                    hazardManager.igniteFire(tile.tileColumn, tile.tileRow);
+                } else {
+                    hazardManager.igniteToxic(tile.tileColumn, tile.tileRow);
+                }
+            }
+        }
+        dangerTileSet.clear();
+    }
+
     private boolean isBossStepPassable(int targetColumn, int targetRow,
                                        int playerColumn, int playerRow) {
         if (targetColumn < 0 || targetColumn >= level.getWidth())  return false;
@@ -340,7 +455,9 @@ public final class BossFloorController implements TickSubscriber {
 
     private void summonMinions(BossMove move, int playerColumn, int playerRow) {
         int minionsBefore = enemyManager.countLiveEnemies() - 1; // subtract the boss itself
-        if (minionsBefore >= EnemyConstants.CORRUPTOR_MINION_CAP) return;
+        // Cap is carried per-move so each boss keeps its own ceiling (Overseer OVERSEER_ADDS_CAP,
+        // Corruptor CORRUPTOR_MINION_CAP) instead of sharing one hardcoded limit (fairness F5).
+        if (minionsBefore >= move.summonCap) return;
 
         int spawned = 0;
         for (int directionIndex = 0; directionIndex < 4 && spawned < move.summonCount; directionIndex++) {

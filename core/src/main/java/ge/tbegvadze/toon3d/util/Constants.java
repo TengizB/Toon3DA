@@ -94,4 +94,10 @@ public final class Constants {
     // row without a "planted" turn the player can punish. Enforced at the
     // controller level so no pattern can accidentally kite forever.
     public static final int   BOSS_MAX_CONSECUTIVE_MOVE_TURNS   = 2;
+    // Longest single-turn boss slide in tiles — the larger of the DASH reach
+    // (BOSS_MAX_DASH_TILES) and the CHARGE lunge reach
+    // (EnemyConstants.OVERSEER_CHARGE_RANGE_TILES, ORDER 3). Sizes the pre-allocated
+    // slide-path buffers on Enemy and BossFloorController so a full-range charge never
+    // overruns them. MUST stay >= both of those reaches.
+    public static final int   BOSS_MAX_SLIDE_TILES              = 5;
 }

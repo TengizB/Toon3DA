@@ -30,7 +30,7 @@ public final class CorruptorPhase1Pattern implements BossAttackPattern {
         BossMove move;
         if (!hasSummoned && stepIndex % EnemyConstants.CORRUPTOR_SUMMON_COOLDOWN
                 == EnemyConstants.CORRUPTOR_SUMMON_COOLDOWN - 1) {
-            move        = BossMove.summon(EnemyType.GORE_BITER, 2);
+            move        = BossMove.summon(EnemyType.GORE_BITER, 2, EnemyConstants.CORRUPTOR_MINION_CAP);
             hasSummoned = true;
         } else {
             move = BossMove.reposition();

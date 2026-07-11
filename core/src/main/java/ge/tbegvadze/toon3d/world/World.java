@@ -941,7 +941,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 bossHudRenderer     = new BossHudRenderer();
                 bossHudRenderer.setBoss(boss);
                 bossFloorController = new BossFloorController(boss, targetLevel, doorManager,
-                        enemyManager, bossHudRenderer, eventTextSystem);
+                        enemyManager, hazardManager, bossHudRenderer, eventTextSystem);
                 tickEventBus.subscribe(bossFloorController);
             }
         }

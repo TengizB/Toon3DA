@@ -269,6 +269,25 @@ public final class EnemyConstants {
     public static final int OVERSEER_LASER_DAMAGE  = 20;
     public static final int OVERSEER_CHARGE_DAMAGE = 30;
     public static final int OVERSEER_RAM_COOLDOWN  = 3;
+    // Ability kit (boss-fight-mobile-overseer ORDER 3) — the Overseer's action VERBS as data.
+    // Each damaging verb is telegraphed one turn ahead (fairness F2). Damage numbers sit under the
+    // boss fairness caps at full player HP (100): CHARGE 30 and MELEE 14 are both < 35% eHP, and the
+    // untelegraphed MELEE is < 25% eHP (docs/balance-rule-system.txt BOSS APPENDIX, RULE 3).
+    // CHARGE — mobile line strike: lunge up to this many tiles along the telegraphed corridor.
+    public static final int OVERSEER_CHARGE_RANGE_TILES    = 5;
+    // Forced plant turns after a CHARGE lands — the player's guaranteed punish window (fairness F1).
+    public static final int OVERSEER_CHARGE_RECOVERY_TURNS = 1;
+    // SUMMON_ADDS — Corruptor-style carrier pack: hard live-adds ceiling (F5) and adds per summon.
+    public static final int OVERSEER_ADDS_CAP              = 4;
+    public static final int OVERSEER_SUMMON_COUNT          = 2;
+    // MELEE — adjacent slam: modest, fast, non-telegraphed poke (lower than CHARGE; harder to avoid).
+    public static final int OVERSEER_MELEE_DAMAGE          = 14;
+    // SPAWN_FIRE footprint — length of the telegraphed fire lane the brain arms (hazard DOT/lifetime
+    // come from the existing HazardManager/BalanceConfig hazard constants; not re-declared here).
+    public static final int OVERSEER_FIRE_LANE_LENGTH      = 3;
+    // SPAWN_TOXIC footprint — 3x3 cloud radius (centre + one ring); kept small so it can never wall a
+    // 1-wide corridor (fairness F5).
+    public static final int OVERSEER_TOXIC_RADIUS          = 1;
     // Accent color (cyan-white)
     public static final float OVERSEER_ACCENT_R = 0.60f;
     public static final float OVERSEER_ACCENT_G = 0.90f;

@@ -1,6 +1,25 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Enemies
 TITLE: Mobile Overseer — Ability Kit (ORDER 3)
+
+IMPLEMENTATION NOTES (what shipped):
+- BossMove gains Kind.CHARGE (directionColumn/Row + rangeTiles payload) and Kind.CAST_HAZARD
+  (HazardKind FIRE|TOXIC payload — one generic hazard move per OPEN QUESTION 1). SUMMON now
+  carries an explicit per-move summonCap so each boss keeps its own ceiling (OPEN QUESTION 3:
+  kept instant-but-capped — the spawn itself deals no direct damage, so F2 is not broken;
+  visual spawn-tile tell is deferred to ORDER 8 which owns telegraph channels/colours).
+- BossFloorController resolves CHARGE (resolve armed corridor hit -> visible slide via the ORDER 2
+  beginSlide -> face axis -> arm forced recovery) and CAST_HAZARD (place the hazard on every
+  armed DangerTileSet tile via HazardManager, so placement == telegraph). A charge is excluded
+  from the F1 kite-cap (it is telegraph-gated + self-planting) but blocked during recovery.
+- OVERSEER_CHARGE_RECOVERY_TURNS forced-plant window enforced controller-side (chargeRecoveryTurnsLeft).
+- MELEE kept as the fast reactive poke (OVERSEER_MELEE_DAMAGE=14); CHARGE is the telegraphed big hit.
+- Constants in EnemyConstants: OVERSEER_CHARGE_RANGE_TILES/RECOVERY_TURNS, OVERSEER_ADDS_CAP,
+  OVERSEER_SUMMON_COUNT, OVERSEER_MELEE_DAMAGE, OVERSEER_FIRE_LANE_LENGTH, OVERSEER_TOXIC_RADIUS.
+  Constants.BOSS_MAX_SLIDE_TILES sizes the slide buffers so a full-range charge never overruns.
+- OverseerPhase2Pattern evolved to exercise CHARGE end-to-end (stalk -> telegraph corridor ->
+  charge lunge -> forced recovery) as the stand-in brain until ORDER 4's HunterKillerPattern.
+---
 CREATED: 2026-07-11
 ---
 DEPENDS ON: order-1 (vision), order-2 (locomotion — moves must be visible)
