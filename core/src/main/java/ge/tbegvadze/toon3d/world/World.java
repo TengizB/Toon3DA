@@ -29,6 +29,7 @@ import ge.tbegvadze.toon3d.entity.boss.HellBaronPhase1Pattern;
 import ge.tbegvadze.toon3d.entity.boss.HellBaronPhase2Pattern;
 import ge.tbegvadze.toon3d.entity.boss.HunterKillerPattern;
 import ge.tbegvadze.toon3d.level.BossArenaGenerator;
+import ge.tbegvadze.toon3d.level.BossArenaLayout;
 import ge.tbegvadze.toon3d.level.CavernGenerator;
 import ge.tbegvadze.toon3d.level.ILevelGenerator;
 import ge.tbegvadze.toon3d.level.LevelGenConfig;
@@ -186,6 +187,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * resets red alert), so it survives the rebuild. Reset to {@link FloorEffects#NONE} each build.
      */
     private FloorEffects            pendingFloorEffects = FloorEffects.NONE;
+    /**
+     * The layout of the boss arena built for the current floor (boss ORDER 7). Captured whenever the
+     * floor's generator is a {@link BossArenaGenerator} and consumed by {@code buildLevelDependentResources}
+     * to place the boss and wire {@link BossFloorController}. Null on every non-boss floor.
+     */
+    private BossArenaLayout         pendingBossArenaLayout;
 
     // -------------------------------------------------------------------------
     // Narrative EVENT nodes + region theming (route-map order-10)
@@ -666,8 +673,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         long seed = floorSeed(runSeed, currentDepth);
         // Default: no floor effects. buildFloorForNode overwrites this from the resolved plan (order-9).
         pendingFloorEffects = FloorEffects.NONE;
+        // Cleared here and re-captured below only when this floor's generator is a boss arena (ORDER 7).
+        pendingBossArenaLayout = null;
         if (routeMap == null || pendingNode == null) {
-            return pickLevelGenerator(currentDepth, seed).generate(currentDepth);
+            ILevelGenerator generator = pickLevelGenerator(currentDepth, seed);
+            Level built = generator.generate(currentDepth);
+            captureBossArenaLayout(generator);
+            return built;
         }
         return buildFloorForNode(pendingNode, currentDepth, seed);
     }
@@ -693,6 +705,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         LevelGenConfig config = applyEnemyBudget(plan.config(), budget);
         ILevelGenerator    generator  = RouteRegistries.generators().create(plan.generatorId(), seed, config);
         Level built = generator.generate(depth);
+        captureBossArenaLayout(generator);
         for (GuaranteedContent guarantee : plan.guarantees()) {
             guarantee.applyTo(built);
         }
@@ -933,13 +946,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Boss encounter — wired before EnemyTurnSubscriber so the boss acts first each turn.
         bossFloorController = null;
         bossHudRenderer     = null;
-        if (GameMath.isBossFloor(currentDepth)) {
-            Boss boss = createBossForDepth(currentDepth, floorSeed(runSeed, currentDepth));
+        if (GameMath.isBossFloor(currentDepth) && pendingBossArenaLayout != null) {
+            Boss boss = createBossForDepth(currentDepth, floorSeed(runSeed, currentDepth), pendingBossArenaLayout);
             if (boss != null) {
                 enemyManager.addBoss(boss);
                 bossHudRenderer     = new BossHudRenderer();
                 bossHudRenderer.setBoss(boss);
-                bossFloorController = new BossFloorController(boss, targetLevel, doorManager,
+                bossFloorController = new BossFloorController(boss, targetLevel, pendingBossArenaLayout, doorManager,
                         enemyManager, hazardManager, bossHudRenderer, eventTextSystem);
                 tickEventBus.subscribe(bossFloorController);
             }
@@ -2592,14 +2605,21 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     private static ILevelGenerator pickLevelGenerator(int depth, long seed) {
-        if (GameMath.isBossFloor(depth)) return new BossArenaGenerator();
+        if (GameMath.isBossFloor(depth)) return new BossArenaGenerator(seed);
         return pickGenerator(seed);
     }
 
-    private static Boss createBossForDepth(int depth, long bossSeed) {
+    /** Records a boss-arena generator's chosen layout (ORDER 7) for this floor; no-op for other generators. */
+    private void captureBossArenaLayout(ILevelGenerator generator) {
+        if (generator instanceof BossArenaGenerator) {
+            pendingBossArenaLayout = ((BossArenaGenerator) generator).getLayout();
+        }
+    }
+
+    private static Boss createBossForDepth(int depth, long bossSeed, BossArenaLayout arenaLayout) {
         int bossIndex   = ((depth / Constants.BOSS_FLOOR_INTERVAL) - 1) % 3;
-        int spawnColumn = BossArenaGenerator.getBossSpawnColumn();
-        int spawnRow    = BossArenaGenerator.getBossSpawnRow();
+        int spawnColumn = arenaLayout.bossColumn;
+        int spawnRow    = arenaLayout.bossRow;
         switch (bossIndex) {
             case 0: {
                 int scaledHp = Math.round(GameMath.bossDepthScaledStat(
