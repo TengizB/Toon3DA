@@ -4,13 +4,168 @@ Branching-facility route map: a Slay-the-Spire-style, forward-only layered DAG t
 picking one node per floor. The map is generated once per run from the run's master seed (so a seed
 reproduces an identical map) and drives which generator/config builds each next floor.
 
-Code lives in `core/.../route/` (pure, headless — no LibGDX imports) plus the World wiring below.
+This is the SINGLE SOURCE OF TRUTH for the route-map subsystem. It documents SHIPPED behaviour: if an
+order changed its design during implementation, this doc reflects how the code actually works today
+(the idea files in .claude/agents/ideas/branching-facility-route-map-order-N.txt hold the original
+intent). Read this before touching anything under `…toon3d.route`, `render.routeicons`, or
+RouteMapOverlayRenderer — or before adding a node type, a generator, a special level, a region, an
+affix, or a route event.
 
-  order-1  data model + registries (NodeTypeRegistry, GeneratorRegistry, RouteRegistries.bootstrap)
-  order-2  RouteMapGenerator — the layered DAG, node types, pre-rolled combat generators
-  order-3  World integration & the node->floor pipeline   <-- THIS SECTION
-  order-4+ overlay drawing, touch selection, fog, affixes, special level profiles (see idea files)
-  order-10 narrative EVENT nodes + region theming/ambience + the REGION_GATE ceremony (this file, end)
+
+UPDATE CONTRACT (mandatory — mirrors the tile-symbols.txt STRICT RULE)
+=====================================================================
+Any change to the route-map subsystem MUST update THIS document in the SAME commit:
+   - new/changed node type      -> update the NODE CATALOG table + the DATA MODEL & REGISTRIES section;
+   - new/changed generator       -> update the "ADD A NEW LEVEL GENERATOR" recipe's generator list;
+   - new region / event / affix / mystery outcome -> update the relevant catalog/table below;
+   - visual / interaction change  -> update the OVERLAY VISUAL SPEC / INTERACTION & CONTROLS sections.
+Each `branching-facility-route-map-order-N` idea file names the section it OWNS (its LIVING DOC
+CONTRACT footer). When an order is implemented, its STATUS flips to IMPLEMENTED and its owned section
+here is written. A code review that adds route content WITHOUT a matching doc update is INCOMPLETE —
+treat it exactly like adding a tile symbol without updating docs/tile-symbols.txt.
+
+The governing invariant behind every recipe below: "if you had to edit a switch statement in World or
+the overlay to add content, the registries are being bypassed — fix that instead."
+
+
+OVERVIEW — THE PLAYER-FACING LOOP
+=================================
+Clear a floor -> step on the exit portal -> the FACILITY NAV console opens (RunPhase.ROUTE_SELECT,
+the sim frozen behind it) -> the player reads 2-4 candidate nodes (each an icon + risk pips + a hint)
+and TAPS one to ENGAGE -> the world fades out and the NEXT floor is built from that node's type. Every
+floor is one hop down a layered DAG; picking a "safe" node (cache/rest/shop) costs a combat reward or
+tempo, never depth. The map is rolled ONCE per run from the master seed, so a shared seed reproduces
+an identical map, and the sequence of picks is logged as a compact "run story" (RunStats.routeString +
+regions-entered) on the death screen. Vision: the descent is a JOURNEY the player authors, not a
+linear stairwell — a difficulty/reward planner textured by regions, events, and gambles.
+
+Implementation orders (each owns the doc section it filled):
+  order-1  data model + registries          -> DATA MODEL & REGISTRIES
+  order-2  RouteMapGenerator (layered DAG)   -> MAP GENERATION & REGIONS
+  order-3  World integration & node->floor   -> WORLD INTEGRATION & THE NODE->FLOOR PIPELINE
+  order-4  the Nav Console overlay           -> OVERLAY VISUAL SPEC
+  order-5  procedural node icons / crests    -> NODE ICON VOCABULARY
+  order-6  touch navigation & interaction    -> INTERACTION & CONTROLS
+  order-7  special-level profile framework   -> SPECIAL LEVELS: THE PROFILE SYSTEM
+  order-8  CALM nodes (cache / rest)         -> CALM NODES
+  order-9  DANGER / GAMBLE nodes (elite/myst)-> DANGER / GAMBLE NODES
+  order-10 narrative EVENT nodes + regions   -> NARRATIVE / EVENT NODES & REGION THEMING
+  order-11 this living doc + agent contract  -> THIS FILE (contract, catalogs, recipes, plug-ins)
+
+Code lives in `core/.../route/` (pure, headless — NO LibGDX imports) plus the World wiring (order-3)
+and the render layer (`render/RouteMapOverlayRenderer` + `render/routeicons/`).
+
+
+DATA MODEL & REGISTRIES (order-1)
+=================================
+The headless data model + the extension seams every later order plugs into. NOTHING switches on a
+hard-coded node/generator/region list — every consumer asks a registry. All types below live in
+`…toon3d.route` and carry NO LibGDX import (colours/icons are string ids resolved in the render layer),
+which keeps the whole model unit-testable without a GL context.
+
+CORE DATA TYPES
+  RouteNodeType (enum)  — the stable IDENTITY of a node kind ONLY: COMBAT, ELITE, CACHE, SHOP, REST,
+                          MYSTERY, EVENT, BOSS, REGION_GATE. All behaviour/display lives in the
+                          definition, never here. BOSS + REGION_GATE are FORCED (excluded from the
+                          random pool; the generator injects them).
+  NodeTypeDefinition    — immutable per-type metadata built via Builder and registered once: id,
+                          displayName, hintLine, baseWeight, dangerTier, accentColorId (palette key,
+                          not a Color), forced, levelProfileId (order-7 pipeline key), iconPainterId
+                          (order-5 key). This is DATA; readers never switch on the enum.
+  RouteNode             — one node INSTANCE on a map: type, depth (1-based, == World.currentDepth),
+                          laneIndex, resolved label/hint, chosenGeneratorId (rolled at map-gen for
+                          COMBAT), affix (order-9), status, outgoing edges (forward-only DAG), revealed
+                          (fog), nodeSeed (GameMath.routeNodeSeed(runSeed, depth, laneIndex) — every
+                          per-node roll draws from THIS, never visit order, so branches not taken are
+                          identical to the one taken).
+  RouteMap              — the whole run's graph + cursor. Stored as LAYERS (index = hop/floor). Pure
+                          run-state, owned by World (order-3). Cursor API: initializeCursor,
+                          getSelectableNext (AVAILABLE outgoing edges), commitTo (VISITED old,
+                          BYPASSED siblings, CURRENT next, AVAILABLE its edges), isBossNext,
+                          appendLayers (endless lazy extension), reveal / revealRegion (fog).
+  NodeStatus (enum)     — cursor-relative: LOCKED, AVAILABLE, VISITED, CURRENT, BYPASSED.
+  DangerTier (enum)     — CALM < STANDARD < DANGER < GAMBLE < SET_PIECE. Drives overlay colour and the
+                          order-2 anti-starvation guards. Ordinal-comparable for tuning.
+  RouteRegion           — the minimal act band the map stores: index, name, first/last depth, themeId.
+                          (RegionSpec below is the richer generator-side blueprint that projects to it.)
+  GeneratorId (enum)    — stable key into the generator registry, each with a persisted stableId
+                          string (NEVER change a shipped stableId — it is written to seeds/run-stats):
+                          ROOMS_MST, LINEAR_CORRIDOR, CAVERN (the 3 standard-pool combat biomes),
+                          BOSS_ARENA, MED_BAY, EVENT_ROOM, GATE_AIRLOCK (bespoke, NOT in the pool).
+
+THE REGISTRIES (all held + populated in RouteRegistries; bootstrap() is idempotent, called from
+World.create()). Each is the ONLY edit-point for its kind of content:
+  NodeTypeRegistry          — RouteNodeType -> NodeTypeDefinition. allWeightedForPool() excludes forced
+                              types. (order-1; order-8/9/10 append definitions.)
+  GeneratorRegistry         — GeneratorId -> GeneratorFactory (seed, config) -> ILevelGenerator.
+                              create() builds one. A newly registered id joins the pool at weight 1.0.
+  NodeLevelProfileRegistry  — levelProfileId -> NodeLevelProfile (order-7 node->floor). Has a FALLBACK
+                              (DefaultCombatProfile) so every node stays playable pre-implementation.
+  NodeAffixRegistry         — affix id -> NodeAffixDefinition (order-9 ELITE modifiers).
+  FacilityEventRegistry     — event id -> FacilityEvent (order-10 narrative beats).
+  RegionAmbienceRegistry    — themeId -> RegionAmbience (order-10 act theming; fallback = THE BREACH).
+  IconPainterRegistry / RegionCrestPainterRegistry — the render-layer twins (order-5); populated by
+                              RouteIconBootstrap (LibGDX-touching, so it can't live in the route pkg).
+  (A NodeLevelProfileRegistry-style "NodeLevelProfileRegistry" fallback + a RouteRng/RouteRegistries
+  bootstrap are the seams; RouteRng is the deterministic per-stream PRNG the generator/profiles draw
+  from.)
+
+BASE POOL WEIGHTS (RouteMapConstants.NODE_WEIGHT_*; forced BOSS/GATE = 0, never rolled):
+  COMBAT 34 · ELITE 14 · CACHE 14 · SHOP 11 · REST 11 · MYSTERY 10 · EVENT 6.
+Region multipliers (order-2 RegionSpec) scale these per act; see MAP GENERATION & REGIONS.
+
+
+MAP GENERATION & REGIONS (order-2)
+==================================
+RouteMapGenerator builds the whole forward-only layered DAG from the run's master seed. Same seed =>
+byte-identical map (permadeath fairness, seed-share, run-stats replay); different runs get different
+seeds. Headless/pure — all non-trivial math (weighted pick, lane projection, seed mix) lives in
+GameMath; the generator only orchestrates.
+
+DETERMINISM MODEL (three independent streams so nothing correlates or depends on visit order):
+  - STRUCTURAL rolls (layer widths, branch spread) draw from a per-BAND stream mixSeed(runSeed,
+    regionIndex), so a band is identical whether generated at run start or appended later by endless
+    extension.
+  - Per-node CONTENT rolls each draw from an independent sub-stream salted off the node's fixed
+    nodeSeed: TYPE_STREAM_SALT (node type), GENERATOR_STREAM_SALT (combat biome), AFFIX_STREAM_SALT
+    (ELITE affix). The branch you COULD have taken == the branch you DID take.
+  - The anti-starvation / anti-clump guards are a deterministic NO-RNG post-pass (repair by fixed lane
+    order), so the map stays reproducible.
+
+LAYERED DAG SHAPE:
+  Layer 0 = the CURRENT floor (a single revealed node the player already stands on; rolls no
+  generator). Then each RegionSpec band contributes its depths. Each rollable layer is
+  BRANCH_WIDTH_MINIMUM..MAXIMUM (2..4) nodes wide; forward edges are wired with BRANCH_SPREAD_CHANCE
+  (0.55) fan-out so lanes cross and the graph actually branches (never a single column). Nodes carry a
+  laneIndex the overlay spreads evenly around X=640.
+
+NODE-TYPE ROLL: for each non-forced node, weightedChoice over every registered NodeTypeDefinition's
+baseWeight * the region's nodeTypeMultiplier(type). A new registered type therefore appears
+automatically at its base weight; a region only biases the types it names.
+
+COMBAT-BIOME ROLL: COMBAT (and combat-shaped) nodes pre-roll a chosenGeneratorId at MAP-GEN from the
+standard pool {ROOMS_MST, LINEAR_CORRIDOR, CAVERN} * the region's generatorWeight(id). A newly
+registered standard-pool generator appears automatically at weight 1.0.
+
+ANTI-STARVATION / PACING GUARDS (deterministic post-pass, RouteMapConstants):
+  - RESOURCE_RELIEF_WINDOW (4): the player must be OFFERED a CALM cache/rest at least once per
+    4-layer window; a starved window is repaired by promoting a lane to CACHE/REST.
+  - SHOP_MAX_PER_WINDOW (2) over SHOP_WINDOW_LAYERS (4): economy pacing cap.
+  - GUARD_REPAIR_ATTEMPT_CAP (64): repair passes are bounded so generation always terminates.
+
+REGION BANDS (RegionPlan / RegionSpec — DATA, not code branches):
+  A band is REGION_BAND_SIZE (5) deep and ENDS on its lastDepth, which is a boss floor because
+  REGION_BAND_SIZE == Constants.BOSS_FLOOR_INTERVAL (5) — so GameMath.isBossFloor(lastDepth) holds by
+  construction. The generator injects a forced BOSS at a boss depth, or a forced REGION_GATE at a band
+  boundary that ISN'T a boss depth. defaultPlan(): FIXED_REGION_COUNT (3) named acts — OUTER FACILITY
+  (1-5), RESEARCH WING (6-10), REACTOR DEPTHS (11-15) — then endless "THE BREACH" bands (16-20, …)
+  appended lazily via withAppendedBreachBand() as the run descends. Each RegionSpec carries per-type
+  and per-generator weight multipliers (see REGION CATALOG). RegionSpec.toRegion() projects to the
+  RouteRegion the map stores; RegionAmbience (order-10) adds the visual/audio identity keyed by themeId.
+
+BOSS CONVERGENCE: GameMath.isBossFloor(depth) is the SINGLE authority. The generator forces a BOSS
+node there and DefaultCombatProfile returns GeneratorId.BOSS_ARENA on the same depths, so map and
+pipeline agree by construction — no independent boss-depth logic anywhere.
 
 
 WORLD INTEGRATION & THE NODE->FLOOR PIPELINE (order-3)
@@ -541,3 +696,123 @@ CAPTURED CREATIVE FOLLOW-ONS (documented for future idea files, NOT built here)
   types/events/regions, and a DYNAMIC RISK PREVIEW — remain future work. Each plugs into the same
   registries (NodeType / Generator / Event / RegionAmbience / Affix), so each is a registration, not a
   rewrite. See .claude/agents/ideas/branching-facility-route-map-order-10.txt.
+
+
+================================================================================
+NODE CATALOG (LIVING TABLE) — one row per node type; a new node type ADDS a row
+================================================================================
+Base weight = RouteMapConstants.NODE_WEIGHT_* (region multipliers scale it, see REGION CATALOG).
+Forced nodes (BOSS, REGION_GATE) carry weight 0 and are injected by the generator, never rolled.
+
+  id          type         tier       weight  profile         generator(s)          icon         guaranteed / reward
+  ----------- ------------ ---------- ------- --------------- --------------------- ------------ -------------------------------------------
+  combat      COMBAT       STANDARD    34     combat_standard pre-rolled pool*      icon_combat  ordinary encounter; the descent backbone
+  elite       ELITE        DANGER      14     elite_hotzone   pre-rolled pool*      icon_elite   ~1.5x budget, hazards, red alert, +affix;
+                                                                                                 GATED_ROOM vault: owned-ammo + armour + rack
+  cache       CACHE        CALM        14     supply_cache    ROOMS_MST (fixed)     icon_cache   bright depot, calm budget; medkit + stims +
+                                                                                                 armour + crates + owned-ammo boxes
+  shop        SHOP         CALM        11     shop            pre-rolled pool*      icon_shop    standard floor, light budget; vending stock
+  rest        REST         CALM        11     rest_medbay     MED_BAY               icon_rest    empty clinic + one-shot auto-doc heal station
+  mystery     MYSTERY      GAMBLE      10     mystery         (delegates/builds)    icon_mystery '?' until entry; weighted outcome table**
+  event       EVENT        CALM         6     event           EVENT_ROOM            icon_event   non-combat choice room; 1-3 typed EventEffects
+  boss        BOSS         SET_PIECE    0(F)  boss            BOSS_ARENA            icon_boss    forced at isBossFloor depths; facility guardian
+  region_gate REGION_GATE  SET_PIECE    0(F)  region_gate     GATE_AIRLOCK          icon_gate    forced at a non-boss band boundary; ceremony
+  *  "pre-rolled pool" = the standard combat biome pool {ROOMS_MST, LINEAR_CORRIDOR, CAVERN}, chosen at
+     MAP-GEN and stored on the node (RouteNode.chosenGeneratorId), biased by the region's generatorWeight.
+  ** MYSTERY outcomes (RouteMapConstants.MYSTERY_WEIGHT_*, sum 100): VAULT_JACKPOT 18, SECRET_WARREN 18,
+     TRAP_GAUNTLET 18, AMBUSH 18 (->elite_hotzone), LORE_SIGNAL 14 (->rest_medbay), MALFUNCTION 14.
+  ELITE affixes (RouteMapConstants.AFFIX_*, rolled at AFFIX_ROLL_CHANCE_ELITE 0.60): IRRADIATED,
+     OVERCLOCKED, SWARM, FORTIFIED, VOLATILE (see DANGER / GAMBLE NODES).
+
+
+================================================================================
+REGION CATALOG (LIVING TABLE) — one row per act band; a new region ADDS a row
+================================================================================
+Depth ranges assume REGION_BAND_SIZE = 5 (== Constants.BOSS_FLOOR_INTERVAL). The first
+FIXED_REGION_COUNT (3) acts are fixed; THE BREACH repeats endlessly (each band appended lazily) and is
+also the RegionAmbience fallback. Node/generator biases are the RegionSpec multipliers over the base
+pool (unlisted types/generators stay at 1.0, so every registered type/generator still appears).
+
+  index themeId            name             depths  crest                   faction (hook)   biases (multipliers)
+  ----- ------------------ ---------------- ------- ----------------------- ---------------- ------------------------------------------
+  0     outer_facility     OUTER FACILITY   1-5     gear ring               baseline demons  COMBAT/ELITE/CACHE/MYSTERY tuned for onboarding
+  1     research_wing      RESEARCH WING    6-10    molecule / atom         lab horrors      MYSTERY/EVENT/ELITE up; ROOMS_MST leaned
+  2     reactor_depths     REACTOR DEPTHS   11-15   radiation trefoil       reactor brutes   ELITE/REST/SHOP up; CAVERN leaned; red-alert common
+  3+    the_breach         THE BREACH       16-20…  cracked/corrupted sigil necrotic          ELITE/REST/SHOP up; CAVERN leaned; endless (fallback)
+  Each region also carries (RegionAmbience, order-10): overlayThemeId tint, wallPalette, enemyFactionId,
+  redAlertFrequency / lightingMoodId / musicId ambience hooks, bossId, and gateFlavour announce copy.
+  Exact multiplier values live in RouteMapConstants.REGION_{A,B,C,D}_* — tune there, never inline.
+
+
+================================================================================
+EXTENSIBILITY RECIPES — the definitive "HOW TO ADD" (copy-paste ready)
+================================================================================
+The governing invariant for ALL of these: if you had to edit a switch statement in World or the
+overlay, the registries are being bypassed — fix THAT instead. Every recipe ends by updating this doc
+(the UPDATE CONTRACT at the top makes that mandatory, enforced like tile-symbols.txt).
+
+ADD A NEW LEVEL GENERATOR TO THE MAP
+  1. Implement ILevelGenerator (as today; e.g. a new class in the `level` package).
+  2. GeneratorRegistry.register(GeneratorId.MY_GENERATOR, (seed, config) -> new MyGenerator(seed, config))
+     in RouteRegistries.registerGenerators — plus a new GeneratorId constant with a FRESH stableId
+     string (never reuse/rename a shipped one).
+  3. Add MY_GENERATOR to the standard combat pool and/or a region's generatorWeights (RegionSpec).
+  4. Update this doc (the generator list in DATA MODEL & REGISTRIES / NODE CATALOG notes).
+  => It now appears on random combat floors at its weight. NO World/overlay edits.
+  Current standard-pool generators: ROOMS_MST, LINEAR_CORRIDOR, CAVERN. Bespoke (not pooled):
+  BOSS_ARENA, MED_BAY, EVENT_ROOM, GATE_AIRLOCK.
+
+ADD A NEW NODE TYPE
+  1. Add the RouteNodeType constant + a NodeTypeDefinition (weight, dangerTier, accentColorId, hintLine,
+     levelProfileId, iconPainterId) registered in RouteRegistries.registerNodeTypes.
+  2. Write its NodeLevelProfile and register it (registerLevelProfiles). Write its IconPainter and
+     register it (RouteIconBootstrap.registerIconPainters). Add its accent to RouteMapColorPalette.
+  3. Add its base pool weight (RouteMapConstants.NODE_WEIGHT_*) + any region multipliers.
+  4. Add a NODE CATALOG row to this doc.
+  => It joins the random pool at its weight. NO World/overlay/generator edits.
+
+ADD A NEW SPECIAL LEVEL (for an existing or new node)  — full recipe in SPECIAL LEVELS: THE PROFILE
+  SYSTEM. Short form: reuse an existing generator + LevelGenConfig + post-generation Guarantees where
+  possible (write a NodeLevelProfile only); write a new ILevelGenerator only if the SHAPE must be
+  bespoke. Register the profile, point the node type's levelProfileId at it, update this doc.
+
+ADD A NEW REGION  — full recipe in NARRATIVE / EVENT NODES & REGION THEMING. Short form: add a
+  RegionAmbience row (crest + tint + wallPalette + faction + hooks + boss + gateFlavour) in
+  RouteRegistries.registerRegionAmbience, its RegionSpec band in RegionPlan, and a RegionCrestPainter
+  (order-5). Add a REGION CATALOG row here. The region themes + announces itself with NO World edits.
+
+ADD A NEW ROUTE EVENT  — FacilityEventRegistry: write a FacilityEvent (title + narrative lines + 1-3
+  EventChoices, each a TYPED EventEffect that routes through an existing system) and register it in
+  FacilityEvents.registerAll. Add a note to the NODE CATALOG (event row). NO World/overlay edits.
+
+ADD A NEW ELITE AFFIX  — register a NodeAffixDefinition (a bundle of typed modifiers) in
+  RouteRegistries.registerAffixes; EliteProfile folds it in by id. Note it in DANGER / GAMBLE NODES.
+
+ADD A NEW NODE ICON  — 4-step recipe in NODE ICON VOCABULARY (write IconPainter -> register in
+  RouteIconBootstrap -> point NodeTypeDefinition.iconPainterId at it -> add the catalog line).
+
+
+================================================================================
+HOW OTHER SYSTEMS PLUG IN (cross-links)
+================================================================================
+The route map is the OWNER of "which floor comes next"; other systems attach through documented seams
+rather than reaching into it:
+  - LEVEL GENERATION (docs/procedural-level-generation.txt): the standard generators are the combat
+    biome pool. Descent-target SELECTION is owned by the route map — a generator never decides what
+    floor follows it; it just builds the floor the pipeline hands it a GeneratorId + config for.
+  - LEVEL TRANSITIONS / STAIRS-DOWN: the '>' exit portal fires World.onDescentRequested(), which opens
+    ROUTE_SELECT. The route map replaces the old depth-driven generator switch (WORLD INTEGRATION).
+  - BOSS FLOORS (GameMath.isBossFloor): the single authority both the generator (forces BOSS) and
+    DefaultCombatProfile (returns BOSS_ARENA) defer to. Never add independent boss-depth logic.
+  - SHOP / ECONOMY: SHOP nodes route to ShopProfile; vending stock is seeded by World every floor. The
+    SHOP_MAX_PER_WINDOW guard paces shop frequency.
+  - DIFFICULTY SCALING (docs/balance-rule-system.txt): a node changes a floor's KIND/rewards, NEVER its
+    depth. EnemyBudgetOverride SCALES the depth-ramped Threat budget (the depth ramp is applied FIRST);
+    it never freezes or bypasses it. See DEPTH RAMP INVARIANT.
+  - HAZARDS / SECRET ROOMS / RELICS: attach via post-generation Guarantees (stamped symbols) and the
+    FloorEffects seam (red alert / sting text / telemetry token). The long-range SCANNER is a relic
+    hook (setScannerActive / triggerScanReveal) already wired in INTERACTION & CONTROLS.
+  - META-PROGRESSION / UNLOCKS: future unlocks register new node types / events / regions / affixes
+    through the same registries — a registration, never a rewrite (see CAPTURED CREATIVE FOLLOW-ONS).
+  - RUN TELEMETRY: RunStats.routeString (per-commit node ids + annotations) + getRegionsEntered() form
+    the shareable "run story" surfaced on the death screen.

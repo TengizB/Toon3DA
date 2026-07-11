@@ -355,6 +355,12 @@ Top-level simulation class. Owns all managers (`EnemyManager`, `DoorManager`, `E
 ### `world/TickEventBus.java`
 Turn-based event dispatch: every player action fires a tick that subscribers (enemies, reload, etc.) respond to. See `docs/tick-system.txt`.
 
+### `route/RouteMap.java` + `route/RouteMapGenerator.java`
+Branching route-map subsystem (headless, no LibGDX). `RouteMap` is the run's forward-only layered DAG + cursor (pure state, owned by `World`); `RouteMapGenerator` builds it deterministically from the run's master seed. Node types, generators, level profiles, affixes, events, and regions are all registered through **`route/RouteRegistries.bootstrap()`** — never a switch statement. **Read `docs/route-map-system.txt` before adding any node type, generator, special level, region, affix, or route event, and update that doc in the same commit.**
+
+### `render/RouteMapOverlayRenderer.java`
+The full-screen "FACILITY NAV" console drawn during `RunPhase.ROUTE_SELECT` (procedural ShapeRenderer/BitmapFont, no textures). Node icons + region crests are procedural painters in `render/routeicons/`, registered via `RouteIconBootstrap`. See the OVERLAY VISUAL SPEC / INTERACTION & CONTROLS sections of `docs/route-map-system.txt`.
+
 ### `input/touch/TouchInputState.java`
 Holds which `TouchAction` is currently held or was just tapped. `PlayerController` polls this each frame.
 
@@ -385,6 +391,7 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 | Enemy health bar rendering | `docs/enemy-health-bars.txt` |
 | HUD procedural rendering (no textures) | `docs/procedural-vitals-hud.txt` |
 | Procedural level generation | `docs/procedural-level-generation.txt` |
+| Route map / branching descent (nodes, generators, special levels, regions, events) | `docs/route-map-system.txt` |
 | Turn/tick system architecture | `docs/tick-system.txt` |
 | Balance contract (eHP/DPT/TTK/TP, power & threat bands) | `docs/balance-rule-system.txt` |
 | XP and leveling system | `docs/xp-level-progression.txt` |
@@ -395,11 +402,12 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 
 ## Docs Directory (`docs/`)
 
-All 14 reference docs — read these before implementing anything in their domain:
+All 15 reference docs — read these before implementing anything in their domain:
 
 | File | Lines | What it covers |
 |---|---|---|
 | `tile-symbols.txt` | 139 | Complete tile character reference — walls, doors, floors, props, pickups, enemies. **Single source of truth for level format.** |
+| `route-map-system.txt` | 818 | Branching route-map subsystem: data model + registries, DAG generation & regions, node->floor pipeline, overlay/interaction, special-level profiles, node/region catalogs, and the extensibility recipes. **Single source of truth; update on any route change.** |
 | `balance-rule-system.txt` | 217 | Balance contract: the four primitives (eHP/DPT/TTK/TP), per-role power & threat bands, the new-content checklist, and the living table. **Read before adding any weapon/enemy/item.** |
 | `weapon-creation-guide.txt` | 537 | End-to-end weapon implementation: constants → Weapon subclass → marchShot → FrameBuffer sprite → World wiring |
 | `enemy-health-bars.txt` | 282 | Health bar geometry, gradient colors, HP text rendering spec |

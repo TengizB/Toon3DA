@@ -1,8 +1,23 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Route Map — Part 11: Living Documentation & Agent Contract
 CREATED: 2026-07-08
 ---
+
+IMPLEMENTATION NOTES (order-11, delivered):
+- docs/route-map-system.txt completed: UPDATE CONTRACT + OVERVIEW prepended; the order-1 DATA MODEL &
+  REGISTRIES and order-2 MAP GENERATION & REGIONS sections written (the doc had been scaffolded early
+  and filled by orders 3-10, so those were the missing sections); NODE CATALOG + REGION CATALOG living
+  tables, consolidated EXTENSIBILITY RECIPES, and HOW OTHER SYSTEMS PLUG IN appended.
+- docs/INDEX.md: added a "Route Map / Progression" row + the branching-facility-route-map-order-N
+  series note.
+- .claude/CLAUDE.md: Where-to-Find row, Docs Directory row (818 lines, count 14 -> 15), and Key Classes
+  entries (RouteMap/RouteMapGenerator/RouteRegistries + RouteMapOverlayRenderer) with an agent note to
+  read the doc before adding route content. Package Rules already carried `…toon3d.route` +
+  `render.routeicons` from order-1.
+- docs/procedural-level-generation.txt: one-line pointer that descent-target selection is owned by the
+  route map. (No level-transitions-stairs-down.txt exists in docs/, so that optional pointer is n/a.)
+- All prior orders 1-10 are IMPLEMENTED and their owned sections are present in the doc.
 
 PREREQUISITE: conceptually depends on all prior parts (it documents them), but the DOC SCAFFOLD
 (create the file + register it) should be done EARLY — ideally right after order-1 lands — so every
@@ -127,12 +142,13 @@ TECHNICAL NOTES
 
 DELIVERABLE CHECKLIST (order-11)
 ================================
-[ ] docs/route-map-system.txt created with all 12 sections (scaffold early; fill as parts land).
-[ ] docs/INDEX.md updated (new row + ideas-series note).
-[ ] .claude/CLAUDE.md updated (Where-to-Find, Docs Directory, Package Rules, Key Classes, agent note).
-[ ] Extensibility recipes (generator / node / special level / region / event) written + verified.
-[ ] The UPDATE CONTRACT placed at top of the doc and honoured by each implemented order.
-[ ] Optional pointers added to procedural-level-generation.txt & level-transitions-stairs-down.txt.
+[x] docs/route-map-system.txt created with all 12 sections (scaffold early; fill as parts land).
+[x] docs/INDEX.md updated (new row + ideas-series note).
+[x] .claude/CLAUDE.md updated (Where-to-Find, Docs Directory, Package Rules, Key Classes, agent note).
+[x] Extensibility recipes (generator / node / special level / region / event) written + verified.
+[x] The UPDATE CONTRACT placed at top of the doc and honoured by each implemented order.
+[~] Optional pointers added to procedural-level-generation.txt (level-transitions-stairs-down.txt
+    does not exist in docs/, so only the generation-doc pointer applies).
 
 LIVING DOC CONTRACT
 ===================

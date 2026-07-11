@@ -31,6 +31,12 @@ Quick lookup: find the right doc before starting any feature or fix.
 | `enemy-system.txt` | Adding/modifying enemy types, AI behaviour, attack resolution. |
 | `enemy-health-bars.txt` | Touching EnemyRenderer health bar geometry, colors, or HP text. |
 
+## Route Map / Progression
+
+| File | When to read |
+|---|---|
+| `route-map-system.txt` | Touching the branching route map — adding a node type, a map generator, a special level, a region, an affix, or a route event. **Single source of truth for the route map; update it in the same commit as any route change.** |
+
 ## Player Progression
 
 | File | When to read |
@@ -58,4 +64,7 @@ All feature design documents live in `.claude/agents/ideas/` (64 files).
 If none exists, invoke `creative-game-designer` first.
 
 Numbered `roguelike_order_N_*.txt` files define the implementation roadmap (1–19).
+The `branching-facility-route-map-order-N.txt` series (parts 1–11) specifies the
+branching route-map subsystem; its shipped behaviour is documented in
+`route-map-system.txt`, which every route change must keep current.
 Check their `STATUS:` header line to know if a feature is IMPLEMENTED, IN PROGRESS, or NOT IMPLEMENTED.
