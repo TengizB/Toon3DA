@@ -444,4 +444,25 @@ public final class LevelGenConstants {
     public static final int   MED_BAY_ALCOVE_SIZE       = 4;
     // Width (columns) of the 'N' reinforced-glass viewing window band on the ward's top wall.
     public static final int   MED_BAY_WINDOW_WIDTH      = 4;
+
+    // -------------------------------------------------------------------------
+    // EVENT ROOM (route-map order-10) — the bespoke small curated narrative room
+    // -------------------------------------------------------------------------
+    // A tight chamber: a short approach corridor feeds a small room with a single central
+    // interactable ('W' holo-workstation), and the exit sits a couple of tiles PAST it so the beat is
+    // on the natural path out. Near-empty of enemies — a story beat, not a fight.
+    public static final int   EVENT_ROOM_WIDTH          = 12;
+    public static final int   EVENT_ROOM_HEIGHT         = 9;
+    public static final int   EVENT_ROOM_APPROACH_LENGTH = 10;
+    public static final int   EVENT_ROOM_APPROACH_HALF_WIDTH = 1; // 2*half+1 = 3 tiles wide
+
+    // -------------------------------------------------------------------------
+    // GATE AIRLOCK (route-map order-10) — the ceremonial region-boundary bulkhead floor
+    // -------------------------------------------------------------------------
+    // A short reverent walk: an approach corridor, a keycard-gated 'B' blue-door airlock, then a
+    // threshold room where the overlay announces the new region, and the exit just past it.
+    public static final int   GATE_APPROACH_LENGTH      = 12;
+    public static final int   GATE_APPROACH_HALF_WIDTH  = 1; // 2*half+1 = 3 tiles wide
+    public static final int   GATE_THRESHOLD_WIDTH      = 11;
+    public static final int   GATE_THRESHOLD_HEIGHT     = 9;
 }

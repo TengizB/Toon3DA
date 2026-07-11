@@ -22,6 +22,7 @@ public final class LevelPlan {
     private final EnemyBudgetOverride enemyBudget;
     private final AmmoCacheRequest ammoCache;
     private final FloorEffects floorEffects;
+    private final String eventId;
 
     /**
      * Fullest-fidelity plan: explicit encounter-budget override AND an owned-ammo cache request.
@@ -57,6 +58,25 @@ public final class LevelPlan {
         this.enemyBudget  = enemyBudget;
         this.ammoCache    = ammoCache;
         this.floorEffects = Objects.requireNonNull(floorEffects, "floorEffects");
+        this.eventId      = null;
+    }
+
+    /**
+     * Private full-fidelity constructor that also carries an {@link #eventId} (order-10). Reached only
+     * through {@link #withEventId}, so every public constructor keeps {@code eventId == null} and only
+     * an EVENT floor's plan names an event.
+     */
+    private LevelPlan(GeneratorId generatorId, LevelGenConfig config, List<GuaranteedContent> guarantees,
+                      EnemyBudgetOverride enemyBudget, AmmoCacheRequest ammoCache, FloorEffects floorEffects,
+                      String eventId) {
+        this.generatorId  = Objects.requireNonNull(generatorId, "generatorId");
+        this.config       = config;
+        this.guarantees   = Collections.unmodifiableList(new java.util.ArrayList<>(
+                Objects.requireNonNull(guarantees, "guarantees")));
+        this.enemyBudget  = enemyBudget;
+        this.ammoCache    = ammoCache;
+        this.floorEffects = Objects.requireNonNull(floorEffects, "floorEffects");
+        this.eventId      = eventId;
     }
 
     /**
@@ -130,6 +150,24 @@ public final class LevelPlan {
      * stamp its own reveal sting + telemetry without rebuilding the whole plan.
      */
     public LevelPlan withFloorEffects(FloorEffects effects) {
-        return new LevelPlan(generatorId, config, guarantees, enemyBudget, ammoCache, effects);
+        return new LevelPlan(generatorId, config, guarantees, enemyBudget, ammoCache, effects, eventId);
+    }
+
+    /**
+     * The narrative event id this floor arms on its interactable (order-10 EVENT node), or
+     * {@code null} for a floor with no event. {@code World} looks the id up in the
+     * {@link FacilityEventRegistry} and presents its choice overlay when the player reaches the
+     * interactable.
+     */
+    public String eventId() {
+        return eventId;
+    }
+
+    /**
+     * Returns a copy of this plan tagged with {@code eventId}, preserving every other field. Lets the
+     * {@link EventProfile} declare which event its floor hosts without a bespoke constructor.
+     */
+    public LevelPlan withEventId(String eventId) {
+        return new LevelPlan(generatorId, config, guarantees, enemyBudget, ammoCache, floorEffects, eventId);
     }
 }

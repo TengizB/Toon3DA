@@ -10,6 +10,7 @@ Code lives in `core/.../route/` (pure, headless — no LibGDX imports) plus the 
   order-2  RouteMapGenerator — the layered DAG, node types, pre-rolled combat generators
   order-3  World integration & the node->floor pipeline   <-- THIS SECTION
   order-4+ overlay drawing, touch selection, fog, affixes, special level profiles (see idea files)
+  order-10 narrative EVENT nodes + region theming/ambience + the REGION_GATE ceremony (this file, end)
 
 
 WORLD INTEGRATION & THE NODE->FLOOR PIPELINE (order-3)
@@ -448,3 +449,95 @@ COMMIT ANIMATION LOCK
   onTap() ignores all input unless phase == IDLE, so during OPENING and the COMMIT flare a second
   ENGAGE can never double-descend (mirrors PlayerController's action lock). The order-4 auto-select
   timer is retired: isReadyForSelection() now always returns false — a descent is a deliberate tap only.
+
+
+NARRATIVE / EVENT NODES & REGION THEMING (order-10)
+===================================================
+The two "texture the run" additions that turn the map from a difficulty selector into a JOURNEY:
+narrative EVENT nodes (non-combat decisions) and REGION THEMING (the act-band identity + the
+ceremonial REGION_GATE bulkhead). Both extend by REGISTRATION — a new event / region is data + a
+registry line, never a core edit — and both reuse the order-3/7/9 seams (profiles, LevelPlan,
+FloorEffects) so nothing switches on node type.
+
+EVENT NODES (RouteNodeType.EVENT, profile "event", EventProfile)
+  A small curated NON-COMBAT beat — the map's "? room": a distress beacon, an abandoned stash, a
+  surviving tech, a corrupted shrine, a data terminal. Routing here trades a combat reward for a
+  DECISION. EventProfile builds the bespoke EventRoomGenerator floor (GeneratorId.EVENT_ROOM): a
+  tight room around one central interactable ('W' holo-workstation, reused — NO new tile symbol),
+  the exit set a couple of tiles past it, ZERO enemy spawns (EVENT_BUDGET_SCALE is near-zero too).
+  The profile rolls one FacilityEvent from the node seed and attaches its id to the LevelPlan
+  (LevelPlan.withEventId — the order-10 plan seam), plus an entry sting + the event id as a
+  telemetry token (FloorEffects).
+
+  THE EVENT REGISTRY (the content system):
+    FacilityEvent  = { id, title, weight, narrativeLines[], EventChoice[1..3] }
+    EventChoice    = { label, description, EventEffect }
+    EventEffect    = a TYPED bundle (heal / armourToFull / ammoBoxes / grantXp / revealNextRegion /
+                     nextFloorBudgetBonus / gamble{lootChance,failDamage} / result+fail+log text).
+  Every choice routes through an EXISTING system, so there is NO bespoke per-event code path — the
+  same trick NodeAffix uses. FacilityEventRegistry.rollFor(nodeSeed) draws deterministically
+  (weightedChoiceIndex + RouteRng, like MYSTERY). Adding an event is one register() line in
+  FacilityEvents.registerAll. v1 catalog: distress_beacon (reveal vs ammo), abandoned_stash (a
+  gamble locker), surviving_tech (escort: armour + hotter next floor, vs keycard), corrupted_shrine
+  (full heal + hotter next floor, vs XP), data_terminal (pure-lore breather, guaranteed XP).
+
+  WORLD SIDE (the headless registry can't touch World, by design): EventRoomGenerator marks the
+  interactable via Level.markEventStation(); World copies getEventStationTiles() into
+  armedEventStations on every rebuild (mirroring the order-8 heal-station seam) alongside the floor's
+  pendingEventId. In the PLAYING update, the first time the player steps ORTHOGONALLY ADJACENT to the
+  interactable, World opens RunPhase.EVENT_CHOICE and presents the event on EventChoiceOverlayRenderer
+  (a full-screen choice-card overlay REUSING the level-up card UI pattern). A tap resolves the choice:
+  applyEventChoice() applies the EventEffect through existing paths (heal path + particles/vignette,
+  applyArmor, itemInventory.addAmmo across OWNED ammo types, playerProgress.addXp,
+  RouteMap.revealRegion, a one-shot pendingNextFloorBudgetBonus folded into the NEXT floor's budget),
+  a GAMBLE rolls the floor seed (loot on success, a survivable bite + fail sting on failure — never a
+  lost run), and the chosen token is appended to the run's route story
+  (RunStats.annotateLastRouteNode, e.g. "event:distress_beacon:answered"). Adjacency-trigger + a
+  paused phase = no new touch button (mobile-friendly), consumed once per floor.
+
+REGION THEMING / ACTS (RegionAmbienceRegistry)
+  order-2's RegionSpec/RegionPlan already own each act's DISTRIBUTION (node-type + generator weight
+  biases). Order-10 adds each region's IDENTITY as a RegionAmbience row keyed by RouteRegion.themeId
+  in RegionAmbienceRegistry (register once at bootstrap; NOTHING hard-codes the list — a new region is
+  one row + a crest). A RegionAmbience carries: displayName, crestPainterId (order-5 crest) +
+  overlayThemeId (order-4 tint), wallPalette (the wall symbols its generators lean on), enemyFactionId
+  (which faction dominates — a hook EnemyManager reads later), the AMBIENCE HOOKS (redAlertFrequency,
+  lightingMoodId, musicId — ids/flags the audio + red-alert systems read LATER; NO audio assets added
+  here), bossId, and gateFlavour (the REGION_GATE announce copy). v1 regions: outer_facility (cool
+  steel, baseline demons), research_wing (clinical, lab horrors), reactor_depths (amber-hot, reactor
+  brutes, red-alert common), the_breach (corrupted violet, necrotic, endless — also the fallback).
+
+  REGION-ENTRY ANNOUNCE (generic, not gate-specific): World tracks lastAnnouncedRegionIndex and, on
+  each floor build, computes routePlan.regionForDepth(currentDepth); the first time it crosses into a
+  new region it fires the "ENTERING: <NAME>" beat + the region's gateFlavour (EventText), logs the
+  region to RunStats.recordRegionEntry, and logs the faction/music hooks. This fires on EVERY region
+  transition (boss OR gate), so theming reads even though the default band size == boss interval means
+  a literal REGION_GATE node is rarely injected.
+
+REGION_GATE (RouteNodeType.REGION_GATE, profile "region_gate", GateProfile)
+  The forced convergence node at a region boundary that ISN'T a boss depth (RouteMapGenerator injects
+  it at region.lastDepth() when !isBossFloor). GateProfile builds the bespoke GateAirlockGenerator
+  floor (GeneratorId.GATE_AIRLOCK): a 3-wide approach, a 1-tile 'B' blue-door bulkhead with a blue
+  keycard 'b' waiting on the approach (so the airlock ALWAYS opens — reuses DoorManager, never a
+  soft-lock), a threshold room, then the exit; near-zero budget, ZERO enemy spawns. A pacing breath +
+  a visible chapter break. (Boss depths still defer to the arena — GameMath.isBossFloor is the single
+  authority, matching every profile.)
+
+RUN TELEMETRY (order-10 additions)
+  RunStats.recordRegionEntry(index, name) -> getRegionsEntered() ("0:OUTER FACILITY | 1:RESEARCH
+  WING …"); the chosen event + choice is annotated onto the EVENT node's route token. Together the
+  route string + regions-entered string are the full "run story" the route-map vision promises.
+
+RECIPE — ADD AN EVENT / A REGION (guaranteed by this framework)
+  New EVENT : write a FacilityEvent (title + narrative + 1-3 choices, each a typed EventEffect) and
+              register it in FacilityEvents.registerAll. No World / overlay / generator edits.
+  New REGION: add a RegionAmbience row (crest + tint + palette + faction + hooks + boss + gate copy)
+              in RouteRegistries.registerRegionAmbience, its RegionSpec band in RegionPlan, and a
+              crest painter (order-5). The region then themes + announces itself with no World edits.
+
+CAPTURED CREATIVE FOLLOW-ONS (documented for future idea files, NOT built here)
+  The idea file's "what else the map needs" list — MAP LEGEND/KEY (order-6), ROUTE HISTORY RIBBON on
+  the death screen, SEED SHARE on the menu/death screen, META UNLOCKS that register new node
+  types/events/regions, and a DYNAMIC RISK PREVIEW — remain future work. Each plugs into the same
+  registries (NodeType / Generator / Event / RegionAmbience / Affix), so each is a registration, not a
+  rewrite. See .claude/agents/ideas/branching-facility-route-map-order-10.txt.

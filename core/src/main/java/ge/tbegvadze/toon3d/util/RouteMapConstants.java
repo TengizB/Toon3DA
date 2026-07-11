@@ -612,4 +612,89 @@ public final class RouteMapConstants {
     /** Extra keycard-gated loot the SECRET WARREN promises (rewards those who search). */
     public static final int   MYSTERY_WARREN_AMMO_BOXES = 4;
     public static final int   MYSTERY_WARREN_MEDKITS    = 1;
+
+    // =========================================================================
+    // NARRATIVE / EVENT NODES + REGION THEMING (order-10)
+    // =========================================================================
+    // The two "texture the run" additions that turn the map from a difficulty selector into a
+    // JOURNEY: EVENT nodes (small curated non-combat rooms with a choice) and REGION THEMING (the
+    // act-band identity + the ceremonial REGION_GATE bulkhead). Both extend by registration — a new
+    // event / region is data + a registry line, never a core edit.
+
+    // ---- EVENT node (RouteNodeType.EVENT, profile "event") -----------------
+    /**
+     * The event interactable prop tile. Reuses the holo-workstation 'W' (no new tile symbol); the
+     * "step adjacent to open the choice overlay" interactivity is logic layered on that tile by
+     * World, exactly as the MED-BAY auto-doc reuses the same glyph for its heal station.
+     */
+    public static final char   EVENT_STATION_SYMBOL     = 'W';
+    /** Budget scale for an EVENT floor — near-empty; a beat of story, not a fight. */
+    public static final float  EVENT_BUDGET_SCALE       = 0.15f;
+    /** First-frame sting shown on entering an EVENT floor (before the interactable is reached). */
+    public static final String EVENT_STING_TEXT         = "SIGNAL DETECTED";
+    /** XP awarded by an event choice tagged {@code EventEffect.grantXp} at its small tier. */
+    public static final int    EVENT_XP_SMALL           = 25;
+    /** XP awarded by an event choice tagged {@code EventEffect.grantXp} at its large tier. */
+    public static final int    EVENT_XP_LARGE           = 60;
+    /** Ammo boxes an event choice hands out (spread across owned ammo types, cache-style). */
+    public static final int    EVENT_AMMO_BOXES         = 3;
+    /** Next-floor encounter-budget nudge an event choice may apply (e.g. escort +10%). */
+    public static final float  EVENT_NEXT_FLOOR_BUDGET_BONUS = 0.10f;
+    /** Fraction of a mimic-ambush roll's [0,1) space that resolves as loot (else an ambush sting). */
+    public static final float  EVENT_STASH_LOOT_CHANCE  = 0.60f;
+
+    // ---- REGION GATE (RouteNodeType.REGION_GATE, profile "region_gate") ----
+    /** Budget scale for the ceremonial airlock floor — a pacing breath, almost no combat. */
+    public static final float  GATE_BUDGET_SCALE        = 0.10f;
+    /** Prefix the gate announce prepends to the entered region's display name ("ENTERING: …"). */
+    public static final String GATE_ANNOUNCE_PREFIX     = "ENTERING: ";
+
+    // ---- Region ambience / theming registry (RegionAmbienceRegistry) -------
+    // Per-region IDENTITY data future systems read: crest + overlay tint (order-4/5), the wall
+    // palette its generators lean on, the enemy faction that dominates, ambience hooks (red-alert
+    // frequency, lighting mood, music id — no audio assets added here), the closing boss, and the
+    // REGION_GATE announce flavour. Keyed by RouteRegion.themeId. NOTHING hard-codes the region list.
+
+    // Wall palettes (chars from docs/tile-symbols.txt) each region's generators lean toward.
+    public static final String REGION_A_WALL_PALETTE = "xck";   // clean industrial steel
+    public static final String REGION_B_WALL_PALETTE = "MNDQ";  // clinical lab white-green
+    public static final String REGION_C_WALL_PALETTE = "UhXj";  // amber-hot reactor
+    public static final String REGION_D_WALL_PALETTE = "GF";    // gore + force-field corruption
+
+    // Enemy faction ids that dominate each region's spawns (descriptive hook for EnemyManager).
+    public static final String REGION_A_FACTION = "baseline_demons";
+    public static final String REGION_B_FACTION = "lab_horrors";
+    public static final String REGION_C_FACTION = "reactor_brutes";
+    public static final String REGION_D_FACTION = "necrotic";
+
+    // Lighting mood ids (hook the lighting/red-alert systems can read; no assets added here).
+    public static final String REGION_A_LIGHTING = "cool_steel";
+    public static final String REGION_B_LIGHTING = "clinical_white";
+    public static final String REGION_C_LIGHTING = "amber_hot";
+    public static final String REGION_D_LIGHTING = "corrupted_violet";
+
+    // Music ids (placeholders — no audio assets added here; the audio system reads these later).
+    public static final String REGION_A_MUSIC = "music_outer_facility";
+    public static final String REGION_B_MUSIC = "music_research_wing";
+    public static final String REGION_C_MUSIC = "music_reactor_depths";
+    public static final String REGION_D_MUSIC = "music_the_breach";
+
+    // Ambient red-alert frequency per region (0..1): how often the emergency pulse flares. Escalates
+    // with depth so the descent FEELS more hostile the deeper the player goes.
+    public static final float  REGION_A_RED_ALERT_FREQUENCY = 0.00f;
+    public static final float  REGION_B_RED_ALERT_FREQUENCY = 0.10f;
+    public static final float  REGION_C_RED_ALERT_FREQUENCY = 0.35f;
+    public static final float  REGION_D_RED_ALERT_FREQUENCY = 0.55f;
+
+    // Boss ids that close each region (placeholders wired to the boss system as it grows).
+    public static final String REGION_A_BOSS = "boss_gatekeeper";
+    public static final String REGION_B_BOSS = "boss_prime_specimen";
+    public static final String REGION_C_BOSS = "boss_reactor_core";
+    public static final String REGION_D_BOSS = "boss_breach_avatar";
+
+    // REGION_GATE announce flavour lines (the ceremonial "chapter break" copy per region).
+    public static final String REGION_A_GATE_FLAVOUR = "Bulkhead sealed. The facility proper lies ahead.";
+    public static final String REGION_B_GATE_FLAVOUR = "Quarantine breached. Research containment ahead.";
+    public static final String REGION_C_GATE_FLAVOUR = "Coolant failing. Reactor levels ahead — mind the heat.";
+    public static final String REGION_D_GATE_FLAVOUR = "Reality thins. You have gone too deep.";
 }

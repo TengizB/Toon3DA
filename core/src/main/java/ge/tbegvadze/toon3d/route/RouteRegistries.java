@@ -2,6 +2,8 @@ package ge.tbegvadze.toon3d.route;
 
 import ge.tbegvadze.toon3d.level.BossArenaGenerator;
 import ge.tbegvadze.toon3d.level.CavernGenerator;
+import ge.tbegvadze.toon3d.level.EventRoomGenerator;
+import ge.tbegvadze.toon3d.level.GateAirlockGenerator;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
 import ge.tbegvadze.toon3d.level.LinearCorridorGenerator;
 import ge.tbegvadze.toon3d.level.MedBayGenerator;
@@ -23,6 +25,8 @@ public final class RouteRegistries {
     private static final GeneratorRegistry        GENERATORS     = new GeneratorRegistry();
     private static final NodeLevelProfileRegistry LEVEL_PROFILES = new NodeLevelProfileRegistry();
     private static final NodeAffixRegistry        AFFIXES        = new NodeAffixRegistry();
+    private static final FacilityEventRegistry    EVENTS         = new FacilityEventRegistry();
+    private static final RegionAmbienceRegistry   REGION_AMBIENCE = new RegionAmbienceRegistry();
     private static boolean bootstrapped = false;
 
     private RouteRegistries() {}
@@ -47,6 +51,16 @@ public final class RouteRegistries {
         return AFFIXES;
     }
 
+    /** The shared narrative EVENT registry (order-10). */
+    public static FacilityEventRegistry events() {
+        return EVENTS;
+    }
+
+    /** The shared region-ambience / theming registry (order-10). */
+    public static RegionAmbienceRegistry regionAmbience() {
+        return REGION_AMBIENCE;
+    }
+
     /** Whether {@link #bootstrap()} has already run. */
     public static boolean isBootstrapped() {
         return bootstrapped;
@@ -63,7 +77,9 @@ public final class RouteRegistries {
         registerNodeTypes(NODE_TYPES);
         registerGenerators(GENERATORS);
         registerAffixes(AFFIXES);
-        registerLevelProfiles(LEVEL_PROFILES, GENERATORS, AFFIXES);
+        registerEvents(EVENTS);
+        registerRegionAmbience(REGION_AMBIENCE);
+        registerLevelProfiles(LEVEL_PROFILES, GENERATORS, AFFIXES, EVENTS);
         bootstrapped = true;
     }
 
@@ -169,6 +185,14 @@ public final class RouteRegistries {
         // MedBayGenerator is the bespoke REST-node clinic (route-map order-8); seed drives its only
         // variation (alcove side + pod count). It ignores config and is NOT in the standard pool.
         registry.register(GeneratorId.MED_BAY, (seed, config) -> new MedBayGenerator(seed));
+
+        // EventRoomGenerator is the bespoke EVENT-node chamber (route-map order-10); a small curated
+        // room around one interactable. Seed drives only decal variation. NOT in the standard pool.
+        registry.register(GeneratorId.EVENT_ROOM, (seed, config) -> new EventRoomGenerator(seed));
+
+        // GateAirlockGenerator is the bespoke REGION_GATE ceremonial bulkhead (route-map order-10).
+        // Seed drives only sparse dressing. It ignores config and is NOT in the standard pool.
+        registry.register(GeneratorId.GATE_AIRLOCK, (seed, config) -> new GateAirlockGenerator(seed));
     }
 
     /**
@@ -181,7 +205,7 @@ public final class RouteRegistries {
      * (package-private) so tests can populate a fresh registry without touching the shared singleton.
      */
     static void registerLevelProfiles(NodeLevelProfileRegistry registry, GeneratorRegistry generators,
-                                      NodeAffixRegistry affixes) {
+                                      NodeAffixRegistry affixes, FacilityEventRegistry events) {
         DefaultCombatProfile defaultProfile = new DefaultCombatProfile(generators);
         registry.register(defaultProfile);
         registry.setFallback(defaultProfile);
@@ -198,6 +222,89 @@ public final class RouteRegistries {
         // delegates to other profiles, so it takes the profile registry it is being added to.
         registry.register(new EliteProfile(generators, affixes));
         registry.register(new MysteryProfile(registry, generators));
+
+        // Order-10 NARRATIVE / THEMING profiles: the EVENT beat (rolls an event from the registry)
+        // and the ceremonial REGION_GATE bulkhead (a calm airlock floor). Both replace the
+        // DefaultCombatProfile fallback for their node types. The region-entry ANNOUNCE + theming is
+        // applied generically by World when the descent crosses into a new region (RegionAmbience),
+        // so it fires on every region transition — boss or gate — not just on a gate node.
+        registry.register(new EventProfile(events));
+        registry.register(new GateProfile());
+    }
+
+    /**
+     * Registers the v1 narrative EVENT catalog (order-10). Each event is a small curated beat with a
+     * title, narrative lines, and 1-3 choices; every choice applies through EXISTING effect systems
+     * (heal / ammo / xp / reveal / next-floor budget) via a typed {@link EventEffect} bundle, so there
+     * is NO bespoke per-event code path — adding an event is one {@link FacilityEvent} row here.
+     * Exposed (package-private) so tests can populate a fresh registry.
+     */
+    static void registerEvents(FacilityEventRegistry registry) {
+        FacilityEvents.registerAll(registry);
+    }
+
+    /**
+     * Registers the v1 region-ambience / theming catalog (order-10): four acts (OUTER FACILITY,
+     * RESEARCH WING, REACTOR DEPTHS, THE BREACH) keyed by theme id, each carrying its crest, overlay
+     * tint, wall palette, enemy faction, ambience hooks, boss, and gate flavour. NOTHING hard-codes
+     * the list — a new region is one row. Exposed (package-private) so tests can populate a fresh
+     * registry without touching the shared singleton.
+     */
+    static void registerRegionAmbience(RegionAmbienceRegistry registry) {
+        RegionAmbience outerFacility = RegionAmbience.builder(RouteMapConstants.REGION_A_THEME)
+                .displayName(RouteMapConstants.REGION_A_NAME)
+                .crestPainterId("crest_outer_facility")
+                .wallPalette(RouteMapConstants.REGION_A_WALL_PALETTE)
+                .enemyFactionId(RouteMapConstants.REGION_A_FACTION)
+                .lightingMoodId(RouteMapConstants.REGION_A_LIGHTING)
+                .musicId(RouteMapConstants.REGION_A_MUSIC)
+                .redAlertFrequency(RouteMapConstants.REGION_A_RED_ALERT_FREQUENCY)
+                .bossId(RouteMapConstants.REGION_A_BOSS)
+                .gateFlavour(RouteMapConstants.REGION_A_GATE_FLAVOUR)
+                .build();
+
+        RegionAmbience researchWing = RegionAmbience.builder(RouteMapConstants.REGION_B_THEME)
+                .displayName(RouteMapConstants.REGION_B_NAME)
+                .crestPainterId("crest_research_wing")
+                .wallPalette(RouteMapConstants.REGION_B_WALL_PALETTE)
+                .enemyFactionId(RouteMapConstants.REGION_B_FACTION)
+                .lightingMoodId(RouteMapConstants.REGION_B_LIGHTING)
+                .musicId(RouteMapConstants.REGION_B_MUSIC)
+                .redAlertFrequency(RouteMapConstants.REGION_B_RED_ALERT_FREQUENCY)
+                .bossId(RouteMapConstants.REGION_B_BOSS)
+                .gateFlavour(RouteMapConstants.REGION_B_GATE_FLAVOUR)
+                .build();
+
+        RegionAmbience reactorDepths = RegionAmbience.builder(RouteMapConstants.REGION_C_THEME)
+                .displayName(RouteMapConstants.REGION_C_NAME)
+                .crestPainterId("crest_reactor_depths")
+                .wallPalette(RouteMapConstants.REGION_C_WALL_PALETTE)
+                .enemyFactionId(RouteMapConstants.REGION_C_FACTION)
+                .lightingMoodId(RouteMapConstants.REGION_C_LIGHTING)
+                .musicId(RouteMapConstants.REGION_C_MUSIC)
+                .redAlertFrequency(RouteMapConstants.REGION_C_RED_ALERT_FREQUENCY)
+                .bossId(RouteMapConstants.REGION_C_BOSS)
+                .gateFlavour(RouteMapConstants.REGION_C_GATE_FLAVOUR)
+                .build();
+
+        RegionAmbience theBreach = RegionAmbience.builder(RouteMapConstants.REGION_D_THEME)
+                .displayName(RouteMapConstants.REGION_D_NAME)
+                .crestPainterId("crest_the_breach")
+                .wallPalette(RouteMapConstants.REGION_D_WALL_PALETTE)
+                .enemyFactionId(RouteMapConstants.REGION_D_FACTION)
+                .lightingMoodId(RouteMapConstants.REGION_D_LIGHTING)
+                .musicId(RouteMapConstants.REGION_D_MUSIC)
+                .redAlertFrequency(RouteMapConstants.REGION_D_RED_ALERT_FREQUENCY)
+                .bossId(RouteMapConstants.REGION_D_BOSS)
+                .gateFlavour(RouteMapConstants.REGION_D_GATE_FLAVOUR)
+                .build();
+
+        registry.register(outerFacility);
+        registry.register(researchWing);
+        registry.register(reactorDepths);
+        registry.register(theBreach);
+        // THE BREACH is the endless cycle's identity — fall back to it for any unnamed deeper theme.
+        registry.setFallback(theBreach);
     }
 
     /**
