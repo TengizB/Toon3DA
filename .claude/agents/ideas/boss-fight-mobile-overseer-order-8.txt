@@ -1,7 +1,30 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Mobile Overseer — Presentation, Texture & Telegraphs (ORDER 8)
 CREATED: 2026-07-11
+---
+IMPLEMENTATION NOTES (2026-07-12)
+Delivered the full readability layer:
+ * SPRITE: wired the dedicated enemy_boss_overseer.png (EnemyRenderer had been drawing the
+   Overseer with a blight-sheet PLACEHOLDER region — now loaded/disposed as its own full-frame
+   texture and rendered at boss height via EnemyType.OVERSEER heightMultiplier 1.80).
+ * PHASE-2 / REPAIR TINT: EnemyRenderer blends a pulsing hot-red enrage tint (phase>=2) and a
+   green welding glow (RegenState.healActive) over the boss sprite; repair wins when both apply.
+ * TELEGRAPH COLOUR LANGUAGE: DangerTileSet now carries a TelegraphKind; HunterKillerPattern tags
+   charge/fire/toxic wind-ups. EnemyRenderer pass 1.7 draws a flat, additive, world-space,
+   wall-Z-tested floor quad per danger tile — one COLOUR + SHAPE per threat (CHARGE red line,
+   MELEE orange ring, FIRE amber patch, TOXIC green patch, SUMMON purple runes, GENERIC accent
+   patch). Colours are named constants in RenderConstants (BossTelegraphColors block); shape is
+   paired with colour for colour-blind safety.
+ * DASH AFTERIMAGE: EnemyRenderer draws 3 fading ghost billboards at trailing slide-path samples
+   while a boss isSliding() (Enemy gained sampleSlideColumn/Row + slideProgress).
+ * HUD STATES: BossVisualState enum (controller sets it from the executed move — OPEN QUESTION 1's
+   recommended lightweight flag). BossHudRenderer draws the state label under the boss name and
+   flashes the HP bar green on a heal tick-up. Banners (awaken/PHASE 2/REPAIRING/interrupt/death)
+   already existed from ORDER 5.
+DEFERRED (idea marks these Optional): dust/scuff particles at slide ends, sprite lean/squash,
+ minimap dot interpolation, and audio cues (no audio system present yet). All render-loop code is
+ allocation-free; the new Overseer Texture is disposed in EnemyRenderer.dispose().
 ---
 DEPENDS ON: order-2..5 (the behaviours this makes readable)
 USE AGENT: libgdx-specialist for renderer changes.

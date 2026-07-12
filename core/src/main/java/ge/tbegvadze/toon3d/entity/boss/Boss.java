@@ -61,6 +61,13 @@ public class Boss extends Enemy {
     public boolean hasAwakened = false;
 
     /**
+     * Presentation-only readout of the boss's current tactical beat (ORDER 8). Set by
+     * {@code BossFloorController} each tick from the move it executed; read only by the HUD for the state
+     * label. Never read by the simulation, so it can never affect gameplay logic.
+     */
+    public BossVisualState visualState = BossVisualState.DORMANT;
+
+    /**
      * Live minion count (adds only, boss excluded), refreshed by BossFloorController each tick
      * before the attack pattern runs. The HunterKillerPattern brain (ORDER 4) reads this to score
      * summon tactics — the attack-pattern interface only receives (boss, player, level, tick), so the

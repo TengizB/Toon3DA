@@ -177,6 +177,20 @@ public final class HudConstants {
     public static final float BOSS_INTRO_NAME_Y_OFFSET      = 10f;
     public static final float BOSS_INTRO_EPITHET_Y_GAP      = 6f;
 
+    // State label (ORDER 8) — a small tag under the boss name on the HP bar reading the current beat
+    // (STALKING / CHARGING / SUMMONING / CASTING / REPAIRING / ENRAGED). Unobtrusive; sits just below
+    // the name baseline. Colour is a dim white, or the boss accent when hot (enraged).
+    public static final float BOSS_STATE_LABEL_FONT_SCALE   = 0.62f;
+    public static final float BOSS_STATE_LABEL_Y_GAP        = 6f;    // gap below the name baseline
+    public static final float BOSS_STATE_LABEL_R            = 0.78f;
+    public static final float BOSS_STATE_LABEL_G            = 0.82f;
+    public static final float BOSS_STATE_LABEL_B            = 0.88f;
+
+    // Heal tick-up flash (ORDER 8 + ORDER 5) — when the boss HP bar RISES on a repair turn, flash the
+    // fill green so the player instantly reads "it's healing — go stop it". Driven by a decaying timer.
+    public static final float BOSS_HEAL_FLASH_DURATION_SECONDS = 0.45f;
+    public static final float BOSS_HEAL_FLASH_R = 0.25f, BOSS_HEAL_FLASH_G = 1.00f, BOSS_HEAL_FLASH_B = 0.35f;
+
     // =====================================================================
     // Shop / UAC Fabricator overlay (shop_order_5 — full-screen touch card grid).
     // Drawn in world units (origin bottom-left, 1280×720) over a darkened, paused 3D view.
