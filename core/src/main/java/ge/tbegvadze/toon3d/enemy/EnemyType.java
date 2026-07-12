@@ -210,7 +210,11 @@ public enum EnemyType {
         @Override public int    baseXpReward()        { return GameBalance.XP_REWARD_REVENANT; }
         @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_REVENANT; }
         @Override public String displayName()         { return "Revenant"; }
-        @Override public EnemyRole role()             { return EnemyRole.SOLDIER; }
+        // BRUISER, not SOLDIER: its stats (TP 79, golden ratio 2.4) are honestly bruiser-tier — a
+        // fast, non-charging bruiser counterpart to the Shell Brute charger. Reclassified in the
+        // game-balance-tuning contract pass so its Threat-Point cost is priced correctly by the
+        // EncounterBudgetPlanner and it braces on the bruiser cadence. See docs/balance-rule-system.txt.
+        @Override public EnemyRole role()             { return EnemyRole.BRUISER; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
         @Override public int    attackCadenceTurns()  { return 1; }
         @Override public char   spawnChar()           { return 'K'; }
