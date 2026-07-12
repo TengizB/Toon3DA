@@ -699,7 +699,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     private int hitTestCandidate(float worldX, float worldY) {
         for (int index = 0; index < displayCount; index++) {
             RouteNode node = nodeRef[index];
-            if (node.status != NodeStatus.AVAILABLE || !isNodeDrawable(index)) {
+            if ((node.status != NodeStatus.AVAILABLE && !isBossTestClickable(node)) || !isNodeDrawable(index)) {
                 continue;
             }
             if (pointInPaddedCard(worldX, worldY, index)) {
@@ -707,6 +707,18 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
             }
         }
         return -1;
+    }
+
+    /**
+     * TEMPORARY TESTING helper ({@link RouteMapConstants#BOSS_TEST_ALWAYS_CLICKABLE}): treats a drawn
+     * BOSS node as a tappable candidate even when it is not a legal AVAILABLE next pick, so the boss
+     * fight can be reached from any route-select screen. Returns {@code false} for every node when the
+     * debug flag is off, leaving the normal selection rules untouched.
+     */
+    private boolean isBossTestClickable(RouteNode node) {
+        return RouteMapConstants.BOSS_TEST_ALWAYS_CLICKABLE
+                && node != null
+                && node.type == RouteNodeType.BOSS;
     }
 
     /** Returns the slot of ANY tapped drawn card (for invalid feedback on non-selectable taps), or -1. */
@@ -1329,7 +1341,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
             float spin = overlayTimeSeconds * RouteMapConstants.RETICLE_SPIN_SPEED;
             RouteGlyphs.hereReticle(shapes, centerX[index], drawCenterY(index), radius, spin,
                                     palette.holoCyan, 0.9f * alpha);
-        } else if (node == focusNode && node.status == NodeStatus.AVAILABLE) {
+        } else if (node == focusNode && (node.status == NodeStatus.AVAILABLE || isBossTestClickable(node))) {
             // selection ring + pulse
             float scale = drawScale(index);
             float width = RouteMapConstants.NODE_CARD_WIDTH * scale + RouteMapConstants.SELECTION_RING_PAD * 2f;
@@ -1490,7 +1502,8 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     private float drawScale(int index) {
         float scale = baseScale[index];
         RouteNode node = nodeRef[index];
-        if (node == focusNode && node.status == NodeStatus.AVAILABLE && phase != Phase.COMMIT) {
+        if (node == focusNode && (node.status == NodeStatus.AVAILABLE || isBossTestClickable(node))
+                && phase != Phase.COMMIT) {
             scale *= RouteMapConstants.FOCUS_SCALE;
         }
         if (phase == Phase.COMMIT && node == committedNode) {
