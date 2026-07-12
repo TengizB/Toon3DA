@@ -87,9 +87,32 @@ public final class WeaponConstants {
     public static final String PLASMA_RIFLE_FIRE_TEXTURE_PATH   = "textures/guns/plasma/plasma_fire.png";
     public static final String PLASMA_RIFLE_RELOAD_TEXTURE_PATH = "textures/guns/plasma/plasma_reload.png";
 
-    // Plasma rifle procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer
-    public static final int PLASMA_RIFLE_CANVAS_WIDTH  = 192;
-    public static final int PLASMA_RIFLE_CANVAS_HEIGHT = 134;
+    // Plasma rifle procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer.
+    // Rendered at 1.5× the base 192×134 for finer panel/coil/emitter detail while preserving the
+    // exact 384:268 display aspect ratio (288/201 = 1.4328) so the sprite is never stretched.
+    public static final int PLASMA_RIFLE_CANVAS_WIDTH  = 288;
+    public static final int PLASMA_RIFLE_CANVAS_HEIGHT = 201;
+
+    // Plasma rifle idle "charged and breathing" pulse — a live ShapeRenderer glow overlay drawn on
+    // top of the static sprite each frame while the rifle is equipped and NOT firing/reloading. This
+    // is unique to the plasma rifle; no other weapon animates in its resting NORMAL state. The pulse
+    // is driven by GameMath.pulseMultiplier(clock, hertz, min, max) — a slow sine breath. Emitter
+    // glow modulates alpha + radius; the coil bands shimmer with a per-band phase offset so the
+    // energy reads as flowing up the barrel toward the emitter. All values kept low/subtle so the
+    // effect is a soft breath, not a distraction, and never fights the firing muzzle burst.
+    public static final float PLASMA_RIFLE_IDLE_PULSE_HERTZ        = 0.55f; // breaths per second (slow)
+    public static final float PLASMA_RIFLE_IDLE_EMITTER_MIN_ALPHA = 0.16f;
+    public static final float PLASMA_RIFLE_IDLE_EMITTER_MAX_ALPHA = 0.46f;
+    public static final float PLASMA_RIFLE_IDLE_EMITTER_MIN_RADIUS = 22f;   // world units, emitter halo
+    public static final float PLASMA_RIFLE_IDLE_EMITTER_MAX_RADIUS = 40f;
+    // Coil shimmer: thin cyan bands across the body/barrel, one per Y fraction of the HUD sprite.
+    public static final float   PLASMA_RIFLE_IDLE_COIL_MIN_ALPHA     = 0.08f;
+    public static final float   PLASMA_RIFLE_IDLE_COIL_MAX_ALPHA     = 0.30f;
+    public static final float   PLASMA_RIFLE_IDLE_COIL_PHASE_OFFSET  = 0.18f; // seconds of clock skew per band
+    public static final float   PLASMA_RIFLE_IDLE_COIL_HALF_WIDTH    = 104f;  // world units, half body width
+    public static final float   PLASMA_RIFLE_IDLE_COIL_THICKNESS     = 4f;    // world units
+    // Coil band centres as fractions of WEAPON_HUD_HEIGHT (body region of the sprite, front-to-back).
+    public static final float[] PLASMA_RIFLE_IDLE_COIL_Y_FRACTIONS   = {0.16f, 0.22f, 0.29f, 0.36f, 0.43f};
 
     // Chaingun — triple-barrel rotary weapon, sustained fire, medium range
     public static final String CHAINGUN_DISPLAY_NAME        = "CHAINGUN";

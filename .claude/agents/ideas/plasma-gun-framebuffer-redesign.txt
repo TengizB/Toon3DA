@@ -4,6 +4,38 @@ TITLE: Plasma Gun Sprite Redesign — ShapeRenderer + FrameBuffer
 CREATED: 2026-05-30
 ---
 
+FOLLOW-UP PASS (2026-07-12): HIGH-RESOLUTION + IDLE ANIMATION
+============================================================
+A cosmetic refinement pass built on top of this redesign. No gameplay logic
+touched (marchShot / damage / ammo unchanged); the firing muzzle burst
+(renderPlasmaEffect) was also left untouched.
+
+1. RESOLUTION BUMP. PLASMA_RIFLE_CANVAS_WIDTH/HEIGHT raised from 192×134 to
+   288×201 (1.5×, matching the Chaingun precedent and preserving the exact
+   384:268 = 1.4328 display aspect so the sprite never stretches). All
+   drawPlasmaRifleShape() coordinates were re-authored in the new pixel space.
+
+2. ADDED SPRITE DETAIL (drawPlasmaRifleShape, still one-time FrameBuffer +
+   ShapeRenderer, still Nearest-filtered, still bilaterally symmetric about
+   centerX=144): chamfered body flanks, vertical panel seams + rivets, 5 energy
+   coils (up from 4), dual + central energy conduits routing coil energy up the
+   spine, segmented 6-bar power cells per flank, a stepped upper receiver, a
+   scope with side rails, a ribbed retaining-band barrel shroud with cylinder
+   crown/edge shading, stepped muzzle prongs, and a 6-layer concentric emitter.
+   Palette unchanged (steel blue-gray body, cyan 0.00/0.88/1.00 energy,
+   white-hot core) so it still matches the unchanged firing burst.
+
+3. IDLE ANIMATION (unique — no other weapon animates in its resting NORMAL
+   state). A live ShapeRenderer overlay in render() (NOT a per-frame FrameBuffer
+   regen) drawn on top of the static normalTexture only while a PlasmaRifle is
+   equipped and state == NORMAL. A per-instance clock (plasmaIdlePulseTimeSeconds)
+   advances by deltaTime only in NORMAL and is frozen during FIRING/RELOADING so
+   it never fights the muzzle burst. GameMath.pulseMultiplier(clock, hertz, min,
+   max) drives a slow ~0.55 Hz "breath" that modulates the emitter halo alpha +
+   radius and shimmers the coil bands with a per-band phase skew (energy appears
+   to flow up the barrel). Additively blended; blend state restored afterward.
+   All tunables live in WeaponConstants.java as PLASMA_RIFLE_IDLE_*.
+
 OVERVIEW
 ========
 The current procedural plasma gun in WeaponHudRenderer is drawn with Pixmap

@@ -26,6 +26,7 @@ import ge.tbegvadze.toon3d.entity.MeleeWeapon;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.entity.WeaponVisualState;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.HashMap;
 import java.util.List;
@@ -66,6 +67,13 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     // Chaingun is equipped; both stay at rest for every other weapon.
     private float chaingunRotorAngleDegrees           = 0f;
     private float chaingunRotorSpeedDegreesPerSecond  = 0f;
+
+    // Plasma-rifle idle "breathing" clock. Advanced by deltaTime each frame ONLY while a PlasmaRifle
+    // is equipped and its visual state is NORMAL; frozen (value retained, not reset) during FIRING /
+    // RELOADING so the resting glow resumes smoothly and never fights the muzzle burst. Feeds
+    // GameMath.pulseMultiplier() to modulate the live emitter halo + coil shimmer overlay. Scalar
+    // float only — no allocation. Sits idle for every other weapon.
+    private float plasmaIdlePulseTimeSeconds = 0f;
 
     // Chaingun spark positions — static to avoid per-frame heap allocation.
     // Each pair (sparkFractionsX[i], sparkFractionsY[i]) is a fraction of the spark
@@ -267,112 +275,168 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     }
 
     /**
-     * Draws a plasma rifle in Quake-1 top-down first-person perspective.
+     * Draws a high-resolution plasma rifle in Quake-1 top-down first-person perspective on the
+     * 288×201 canvas. Energy weapon, top-down view. No bore holes — the muzzle ends with a layered
+     * concentric emitter (deep-blue outer ring through white-cyan core). The player sees the flat top
+     * surface of a tapered steel-blue body threaded with bright cyan coils and energy conduits.
      *
-     * Energy weapon, top-down view. No bore holes. The muzzle ends with a layered
-     * concentric emitter (deep-blue outer ring through white-cyan core). The player
-     * sees the flat top surface of a tapered steel-blue body with bright cyan coils.
+     * Every element is bilaterally symmetric about centerX (= 144). Barrel convergence: half-width
+     * tapers from 39px at Y=130 to 21px at Y=180 (factor ≈ 0.54, energy-weapon perspective).
      *
-     * Convergence: barrel tapers from 26px half-width at Y=86 to 14px at Y=118.
-     * Y=0..14  transparent (grip cut off below screen)
-     * Y=14..72 main body with energy coils and power cell flanks
-     * Y=70..88 upper receiver stepped section with scope
-     * Y=86..118 barrel tapered trapezoid
-     * Y=118..132 muzzle prongs and layered emitter
+     *   Y=0..22    transparent (grip cut off below screen)
+     *   Y=22..112  main body: chamfered flanks, panel greebles, 5 energy coils, dual power cells
+     *   Y=100..140 energy conduits routing coil energy up the spine
+     *   Y=108..134 upper receiver stepped section + targeting scope
+     *   Y=130..180 tapered barrel with ribbed retaining-band shroud + cylinder shading
+     *   Y=172..199 muzzle prongs and layered concentric emitter
      */
     private static void drawPlasmaRifleShape(ShapeRenderer shapeRenderer, float centerX) {
 
-        // 1. Main body — wide steel-blue trapezoid, top-surface perspective
-        //    Wider at near end (Y=14) than far end (Y=72, upper receiver join)
+        // 1. Main body — wide steel-blue trapezoid, top-surface perspective.
+        //    Wider at near end (Y=22) than far end (Y=112, upper receiver join).
         shapeRenderer.setColor(0.28f, 0.32f, 0.42f, 1f);
-        drawSymmetricTrapezoid(shapeRenderer, centerX, 60f, 14f, 52f, 72f);
-        // Far-edge highlight: top surface faces upward toward camera
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 90f, 22f, 78f, 112f);
+        // Chamfered side flanks — dark angled bevels down both edges (cylinder-body read).
+        shapeRenderer.setColor(0.20f, 0.23f, 0.31f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 90f, centerX - 80f, 22f,
+                                            centerX - 78f, centerX - 69f, 112f);   // left flank bevel
+        drawGeneralTrapezoid(shapeRenderer, centerX + 80f, centerX + 90f, 22f,
+                                            centerX + 69f, centerX + 78f, 112f);   // right flank bevel
+        // Far-edge highlight: top surface faces upward toward camera.
         shapeRenderer.setColor(0.40f, 0.46f, 0.58f, 1f);
-        shapeRenderer.rect(centerX - 52f, 69f, 104f, 3f);
-        // Near-edge shadow: underside curves away from camera
+        shapeRenderer.rect(centerX - 78f, 108f, 156f, 4f);
+        // Near-edge shadow: underside curves away from camera.
         shapeRenderer.setColor(0.18f, 0.21f, 0.29f, 1f);
-        shapeRenderer.rect(centerX - 60f, 14f, 120f, 3f);
-        // Mid-surface groove: lateral slot visible from above
+        shapeRenderer.rect(centerX - 90f, 22f, 180f, 4f);
+        // Lateral surface grooves visible from above.
         shapeRenderer.setColor(0.20f, 0.24f, 0.32f, 1f);
-        shapeRenderer.rect(centerX - 56f, 42f, 112f, 2f);
+        shapeRenderer.rect(centerX - 84f, 58f, 168f, 3f);
+        shapeRenderer.rect(centerX - 82f, 96f, 164f, 3f);
 
-        // 2. Energy coils — 4 bright cyan horizontal bands across body (seen from above)
-        float[] coilYPositions = {22f, 32f, 44f, 56f};
+        // 2. Panel greebles — vertical seams dividing the body into a central panel, plus rivets.
+        shapeRenderer.setColor(0.16f, 0.19f, 0.26f, 1f);
+        shapeRenderer.rect(centerX - 40f, 26f, 2f, 82f);    // left  seam  [CX-40 .. CX-38]
+        shapeRenderer.rect(centerX + 38f, 26f, 2f, 82f);    // right seam  [CX+38 .. CX+40] ✓ mirror
+        shapeRenderer.setColor(0.34f, 0.38f, 0.48f, 1f);
+        shapeRenderer.rect(centerX - 36f, 30f, 3f, 3f);     // rivet lower-left
+        shapeRenderer.rect(centerX + 33f, 30f, 3f, 3f);     // rivet lower-right [CX+33 .. CX+36] ✓
+        shapeRenderer.rect(centerX - 36f, 101f, 3f, 3f);    // rivet upper-left
+        shapeRenderer.rect(centerX + 33f, 101f, 3f, 3f);    // rivet upper-right ✓
+
+        // 3. Energy coils — 5 bright cyan horizontal bands across body (seen from above).
+        float[] coilYPositions = {32f, 46f, 60f, 74f, 88f};
         shapeRenderer.setColor(0.00f, 0.88f, 1.00f, 1f);
         for (float coilY : coilYPositions) {
-            shapeRenderer.rect(centerX - 54f, coilY, 108f, 3f);
+            shapeRenderer.rect(centerX - 72f, coilY, 144f, 4f);
         }
-        // Soft glow fringe above and below each coil
+        // Soft glow fringe above and below each coil.
         shapeRenderer.setColor(0.00f, 0.62f, 0.90f, 0.50f);
         for (float coilY : coilYPositions) {
-            shapeRenderer.rect(centerX - 54f, coilY - 1f, 108f, 1f);  // fringe below
-            shapeRenderer.rect(centerX - 54f, coilY + 3f, 108f, 1f);  // fringe above
+            shapeRenderer.rect(centerX - 72f, coilY - 2f, 144f, 2f);   // fringe below
+            shapeRenderer.rect(centerX - 72f, coilY + 4f, 144f, 2f);   // fringe above
         }
 
-        // 3. Power cell indicators — symmetric flanking panels on both sides of body.
-        //    Housing outer edge: ±62px from centerX. Housing inner edge: ±52px from centerX.
-        //    Charge bar outer edge: ±60px. Charge bar inner edge: ±54px. Width: 6px.
-        //    Symmetry invariant: left rect x = centerX - outerEdge; right rect x = centerX + innerEdge.
-        //    left housing:  x = CX-62, width=10  → spans CX-62..CX-52  (outer=-62, inner=-52)
-        //    right housing: x = CX+52, width=10  → spans CX+52..CX+62  (inner=+52, outer=+62) ✓ symmetric
-        //    left bars:     x = CX-60, width=6   → spans CX-60..CX-54  (outer=-60, inner=-54)
-        //    right bars:    x = CX+54, width=6   → spans CX+54..CX+60  (inner=+54, outer=+60) ✓ symmetric
+        // 4. Energy conduits — cyan channels routing coil energy up the spine into the barrel.
+        shapeRenderer.setColor(0.00f, 0.72f, 1.00f, 0.90f);
+        shapeRenderer.rect(centerX - 30f, 100f, 5f, 42f);   // left  conduit  [CX-30 .. CX-25]
+        shapeRenderer.rect(centerX + 25f, 100f, 5f, 42f);   // right conduit  [CX+25 .. CX+30] ✓ mirror
+        shapeRenderer.setColor(0.00f, 0.62f, 1.00f, 0.95f);
+        shapeRenderer.rect(centerX - 3f, 108f, 6f, 66f);    // central spine channel [CX-3 .. CX+3]
+        shapeRenderer.setColor(0.00f, 0.55f, 0.95f, 0.40f);
+        shapeRenderer.rect(centerX - 5f, 108f, 2f, 66f);    // spine glow fringe left  [CX-5 .. CX-3]
+        shapeRenderer.rect(centerX + 3f, 108f, 2f, 66f);    // spine glow fringe right [CX+3 .. CX+5] ✓
+
+        // 5. Power cell indicators — symmetric flanking housings with segmented charge bars.
+        //    left housing  [CX-92 .. CX-78];  right housing [CX+78 .. CX+92] ✓ symmetric
+        //    left bars     [CX-89 .. CX-81];  right bars    [CX+81 .. CX+89] ✓ symmetric
         shapeRenderer.setColor(0.16f, 0.20f, 0.28f, 1f);
-        shapeRenderer.rect(centerX - 62f, 20f, 10f, 38f);   // left  housing  [CX-62 .. CX-52]
-        shapeRenderer.rect(centerX + 52f, 20f, 10f, 38f);   // right housing  [CX+52 .. CX+62]
+        shapeRenderer.rect(centerX - 92f, 30f, 14f, 60f);   // left  housing
+        shapeRenderer.rect(centerX + 78f, 30f, 14f, 60f);   // right housing
+        float[] chargeBarYPositions = {34f, 43f, 52f, 61f, 70f, 79f};
         shapeRenderer.setColor(0.00f, 0.72f, 1.00f, 0.95f);
-        shapeRenderer.rect(centerX - 60f, 24f, 6f, 5f);     // left  bar 1    [CX-60 .. CX-54]
-        shapeRenderer.rect(centerX - 60f, 31f, 6f, 5f);     // left  bar 2    [CX-60 .. CX-54]
-        shapeRenderer.rect(centerX - 60f, 38f, 6f, 5f);     // left  bar 3    [CX-60 .. CX-54]
-        shapeRenderer.rect(centerX - 60f, 45f, 6f, 5f);     // left  bar 4    [CX-60 .. CX-54]
-        shapeRenderer.rect(centerX + 54f, 24f, 6f, 5f);     // right bar 1    [CX+54 .. CX+60]
-        shapeRenderer.rect(centerX + 54f, 31f, 6f, 5f);     // right bar 2    [CX+54 .. CX+60]
-        shapeRenderer.rect(centerX + 54f, 38f, 6f, 5f);     // right bar 3    [CX+54 .. CX+60]
-        shapeRenderer.rect(centerX + 54f, 45f, 6f, 5f);     // right bar 4    [CX+54 .. CX+60]
+        for (float barY : chargeBarYPositions) {
+            shapeRenderer.rect(centerX - 89f, barY, 8f, 6f);   // left  bar
+            shapeRenderer.rect(centerX + 81f, barY, 8f, 6f);   // right bar ✓ mirror
+        }
+        // Top "fully charged" segment brighter (white-cyan).
+        shapeRenderer.setColor(0.70f, 0.96f, 1.00f, 1f);
+        shapeRenderer.rect(centerX - 89f, 79f, 8f, 6f);
+        shapeRenderer.rect(centerX + 81f, 79f, 8f, 6f);
 
-        // 4. Upper receiver — stepped section between body and barrel
+        // 6. Upper receiver — stepped section between body and barrel.
         shapeRenderer.setColor(0.26f, 0.30f, 0.40f, 1f);
-        shapeRenderer.rect(centerX - 44f, 70f, 88f, 18f);
+        shapeRenderer.rect(centerX - 66f, 108f, 132f, 26f);
+        shapeRenderer.setColor(0.24f, 0.28f, 0.38f, 1f);
+        shapeRenderer.rect(centerX - 54f, 112f, 108f, 18f);  // inset sub-step
         shapeRenderer.setColor(0.38f, 0.44f, 0.56f, 1f);
-        shapeRenderer.rect(centerX - 44f, 85f, 88f, 3f);    // far-edge bevel highlight
+        shapeRenderer.rect(centerX - 66f, 130f, 132f, 4f);   // far-edge bevel highlight
         shapeRenderer.setColor(0.16f, 0.18f, 0.26f, 1f);
-        shapeRenderer.rect(centerX - 44f, 70f, 88f, 3f);    // near-edge shadow
+        shapeRenderer.rect(centerX - 66f, 108f, 132f, 4f);   // near-edge shadow
 
-        // 5. Targeting scope — centred housing on upper receiver, visible from above
-        shapeRenderer.setColor(0.16f, 0.19f, 0.26f, 1f);
-        shapeRenderer.rect(centerX - 18f, 72f, 36f, 16f);   // scope housing
-        shapeRenderer.setColor(0.10f, 0.82f, 0.58f, 0.90f);
-        shapeRenderer.rect(centerX - 14f, 74f, 28f, 12f);   // green lens surface
-        shapeRenderer.setColor(0.40f, 1.00f, 0.75f, 0.55f);
-        shapeRenderer.rect(centerX - 14f, 84f, 28f,  2f);   // lens far-edge highlight
-
-        // 6. Barrel — tapered trapezoid viewed from above (wide near Y=86, narrow far Y=118)
-        shapeRenderer.setColor(0.28f, 0.32f, 0.42f, 1f);
-        drawSymmetricTrapezoid(shapeRenderer, centerX, 26f, 86f, 14f, 118f);
-        shapeRenderer.setColor(0.38f, 0.44f, 0.56f, 1f);
-        shapeRenderer.rect(centerX - 26f, 114f, 52f, 2f);   // barrel top-edge highlight
-        shapeRenderer.setColor(0.16f, 0.18f, 0.26f, 1f);
-        shapeRenderer.rect(centerX - 20f, 100f, 40f, 2f);   // mid-barrel lateral groove
-
-        // 7. Muzzle prongs — symmetric structural flanges flanking the emitter
+        // 7. Targeting scope — centred housing on upper receiver, visible from above.
         shapeRenderer.setColor(0.22f, 0.26f, 0.34f, 1f);
-        shapeRenderer.rect(centerX - 26f, 112f, 8f, 10f);   // left prong
-        shapeRenderer.rect(centerX + 18f, 112f, 8f, 10f);   // right prong
+        shapeRenderer.rect(centerX - 30f, 112f, 4f, 20f);    // left  scope rail [CX-30 .. CX-26]
+        shapeRenderer.rect(centerX + 26f, 112f, 4f, 20f);    // right scope rail [CX+26 .. CX+30] ✓
+        shapeRenderer.setColor(0.16f, 0.19f, 0.26f, 1f);
+        shapeRenderer.rect(centerX - 27f, 110f, 54f, 24f);   // scope housing
+        shapeRenderer.setColor(0.10f, 0.82f, 0.58f, 0.90f);
+        shapeRenderer.rect(centerX - 21f, 113f, 42f, 18f);   // green lens surface
+        shapeRenderer.setColor(0.40f, 1.00f, 0.75f, 0.55f);
+        shapeRenderer.rect(centerX - 21f, 127f, 42f, 3f);    // lens far-edge highlight
 
-        // 8. Muzzle emitter — concentric ellipses deep-blue -> bright-cyan -> white-cyan -> white
-        //    Energy weapon: emitter face replaces bore concept entirely
+        // 8. Barrel — tapered trapezoid viewed from above (wide near Y=130, narrow far Y=180).
+        shapeRenderer.setColor(0.28f, 0.32f, 0.42f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 39f, 130f, 21f, 180f);
+        // Outer edge shadows — cylinder sides curve away, tapered with the barrel.
+        shapeRenderer.setColor(0.16f, 0.18f, 0.26f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 39f, centerX - 31f, 130f,
+                                            centerX - 21f, centerX - 16f, 180f);   // left edge shadow
+        drawGeneralTrapezoid(shapeRenderer, centerX + 31f, centerX + 39f, 130f,
+                                            centerX + 16f, centerX + 21f, 180f);   // right edge shadow ✓
+        // Crown highlight — top of the cylinder faces the camera, tapered.
+        shapeRenderer.setColor(0.42f, 0.48f, 0.60f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 10f, centerX + 10f, 130f,
+                                            centerX - 6f, centerX + 6f, 180f);
+
+        // 9. Ribbed shroud — retaining bands wrapping the barrel at intervals (full width at each Y).
+        //    Half-width interpolated along the 39→21 taper. Each band: dark rect + thin top highlight.
+        float[] bandYPositions     = {138f, 150f, 162f, 174f};
+        float[] bandHalfWidths     = {36f, 32f, 27f, 23f};
+        for (int bandIndex = 0; bandIndex < bandYPositions.length; bandIndex++) {
+            float bandY    = bandYPositions[bandIndex];
+            float bandHalf = bandHalfWidths[bandIndex];
+            shapeRenderer.setColor(0.18f, 0.20f, 0.28f, 1f);
+            shapeRenderer.rect(centerX - bandHalf, bandY, bandHalf * 2f, 3f);
+            shapeRenderer.setColor(0.36f, 0.42f, 0.54f, 1f);
+            shapeRenderer.rect(centerX - bandHalf, bandY + 3f, bandHalf * 2f, 1f);
+        }
+
+        // 10. Muzzle prongs — symmetric stepped flanges flanking the emitter.
+        shapeRenderer.setColor(0.22f, 0.26f, 0.34f, 1f);
+        shapeRenderer.rect(centerX - 39f, 172f, 12f, 18f);   // left  prong [CX-39 .. CX-27]
+        shapeRenderer.rect(centerX + 27f, 172f, 12f, 18f);   // right prong [CX+27 .. CX+39] ✓
+        shapeRenderer.setColor(0.30f, 0.34f, 0.44f, 1f);
+        shapeRenderer.rect(centerX - 39f, 186f, 12f, 3f);    // left  prong tip highlight
+        shapeRenderer.rect(centerX + 27f, 186f, 12f, 3f);    // right prong tip highlight ✓
+        shapeRenderer.setColor(0.18f, 0.21f, 0.29f, 1f);
+        shapeRenderer.rect(centerX - 30f, 176f, 6f, 14f);    // left  prong inner step [CX-30 .. CX-24]
+        shapeRenderer.rect(centerX + 24f, 176f, 6f, 14f);    // right prong inner step [CX+24 .. CX+30] ✓
+
+        // 11. Muzzle emitter — concentric ellipses deep-blue -> bright-cyan -> white-cyan -> white.
+        //     Energy weapon: emitter face replaces the bore concept entirely. All ellipses centred
+        //     on centerX (x = centerX - width/2) so the emitter is exactly symmetric.
         shapeRenderer.setColor(0.08f, 0.52f, 1.00f, 0.30f);
-        shapeRenderer.ellipse(centerX - 16f, 112f, 32f, 10f);  // under-glow halo (drawn first)
+        shapeRenderer.ellipse(centerX - 26f, 172f, 52f, 18f);   // under-glow halo (drawn first)
         shapeRenderer.setColor(0.18f, 0.22f, 0.30f, 1f);
-        shapeRenderer.ellipse(centerX - 13f, 117f, 26f, 14f);  // dark outer housing ring
+        shapeRenderer.ellipse(centerX - 22f, 176f, 44f, 22f);   // dark outer housing ring
         shapeRenderer.setColor(0.08f, 0.52f, 1.00f, 0.95f);
-        shapeRenderer.ellipse(centerX - 11f, 119f, 22f, 11f);  // outer deep-blue glow
+        shapeRenderer.ellipse(centerX - 18f, 178f, 36f, 18f);   // outer deep-blue glow
         shapeRenderer.setColor(0.30f, 0.82f, 1.00f, 1f);
-        shapeRenderer.ellipse(centerX -  8f, 121f, 16f,  9f);  // mid bright-cyan ring
+        shapeRenderer.ellipse(centerX - 14f, 180f, 28f, 15f);   // mid bright-cyan ring
         shapeRenderer.setColor(0.75f, 0.97f, 1.00f, 1f);
-        shapeRenderer.ellipse(centerX -  5f, 123f, 10f,  7f);  // hot white-cyan core
+        shapeRenderer.ellipse(centerX - 9f, 182f, 18f, 12f);    // hot white-cyan core
         shapeRenderer.setColor(1.00f, 1.00f, 1.00f, 1f);
-        shapeRenderer.ellipse(centerX -  3f, 125f,  6f,  5f);  // hottest pinpoint
+        shapeRenderer.ellipse(centerX - 5f, 184f, 10f, 8f);     // hottest pinpoint
     }
 
     /**
@@ -2818,6 +2882,7 @@ public class WeaponHudRenderer implements Renderable, Disposable {
 
         advanceOffsetY(state, deltaTime);
         advanceChaingunRotor(state, deltaTime);
+        advancePlasmaIdlePulse(state, deltaTime);
 
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
@@ -2861,7 +2926,82 @@ public class WeaponHudRenderer implements Renderable, Disposable {
                     renderFlameEffect(camera, normalizedTime);
                 }
             }
+        } else if (state == WeaponVisualState.NORMAL && equippedWeapon instanceof PlasmaRifle) {
+            // Unique resting-state animation: the plasma rifle quietly breathes while holstered-ready.
+            renderPlasmaIdlePulse(camera);
         }
+    }
+
+    /**
+     * Advances the plasma-rifle idle "breathing" clock. Runs the clock forward only while a
+     * PlasmaRifle is equipped and its visual state is NORMAL; during FIRING / RELOADING the clock is
+     * frozen (value retained) so the resting glow resumes smoothly and never competes with the muzzle
+     * burst. No-op for every other weapon. Scalar float only — no allocation.
+     */
+    private void advancePlasmaIdlePulse(WeaponVisualState state, float deltaTime) {
+        if (!(equippedWeapon instanceof PlasmaRifle) || state != WeaponVisualState.NORMAL) {
+            return;
+        }
+        plasmaIdlePulseTimeSeconds += deltaTime;
+    }
+
+    /**
+     * Draws the plasma rifle's resting idle-glow overlay as a live ShapeRenderer pass on top of the
+     * static sprite (the sprite texture itself is never regenerated). A slow sine breath modulates the
+     * emitter halo (alpha + radius) and shimmers the coil bands with a per-band phase skew so energy
+     * reads as flowing up the barrel. Additively blended for a luminous glow; blend state is restored
+     * to the standard alpha mode afterward. Cool cyan palette, shared with the sprite and firing burst.
+     */
+    private void renderPlasmaIdlePulse(OrthographicCamera camera) {
+        float centerX   = Constants.WORLD_WIDTH / 2f;
+        float emitterY  = currentOffsetY + WeaponConstants.WEAPON_HUD_HEIGHT
+                          * WeaponConstants.WEAPON_BARREL_TIP_Y_FRACTION;
+
+        float glowAlpha  = GameMath.pulseMultiplier(plasmaIdlePulseTimeSeconds,
+                              WeaponConstants.PLASMA_RIFLE_IDLE_PULSE_HERTZ,
+                              WeaponConstants.PLASMA_RIFLE_IDLE_EMITTER_MIN_ALPHA,
+                              WeaponConstants.PLASMA_RIFLE_IDLE_EMITTER_MAX_ALPHA);
+        float glowRadius = GameMath.pulseMultiplier(plasmaIdlePulseTimeSeconds,
+                              WeaponConstants.PLASMA_RIFLE_IDLE_PULSE_HERTZ,
+                              WeaponConstants.PLASMA_RIFLE_IDLE_EMITTER_MIN_RADIUS,
+                              WeaponConstants.PLASMA_RIFLE_IDLE_EMITTER_MAX_RADIUS);
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE);   // additive — luminous energy glow
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Coil shimmer bands across the body, front-to-back, each phase-skewed so the glow appears to
+        // travel up the weapon toward the emitter.
+        float coilHalfWidth = WeaponConstants.PLASMA_RIFLE_IDLE_COIL_HALF_WIDTH;
+        float coilThickness = WeaponConstants.PLASMA_RIFLE_IDLE_COIL_THICKNESS;
+        for (int coilIndex = 0; coilIndex < WeaponConstants.PLASMA_RIFLE_IDLE_COIL_Y_FRACTIONS.length; coilIndex++) {
+            float coilClock = plasmaIdlePulseTimeSeconds
+                              + coilIndex * WeaponConstants.PLASMA_RIFLE_IDLE_COIL_PHASE_OFFSET;
+            float coilAlpha = GameMath.pulseMultiplier(coilClock,
+                                  WeaponConstants.PLASMA_RIFLE_IDLE_PULSE_HERTZ,
+                                  WeaponConstants.PLASMA_RIFLE_IDLE_COIL_MIN_ALPHA,
+                                  WeaponConstants.PLASMA_RIFLE_IDLE_COIL_MAX_ALPHA);
+            float coilY = currentOffsetY + WeaponConstants.WEAPON_HUD_HEIGHT
+                          * WeaponConstants.PLASMA_RIFLE_IDLE_COIL_Y_FRACTIONS[coilIndex];
+            shapeRenderer.setColor(0.00f, 0.88f, 1.00f, coilAlpha);
+            shapeRenderer.rect(centerX - coilHalfWidth, coilY, coilHalfWidth * 2f, coilThickness);
+        }
+
+        // Emitter breathing halo — outer soft blue, mid cyan, inner white-cyan pinpoint.
+        shapeRenderer.setColor(0.00f, 0.55f, 1.00f, glowAlpha * 0.55f);
+        shapeRenderer.ellipse(centerX - glowRadius, emitterY - glowRadius * 0.55f,
+                              glowRadius * 2f, glowRadius * 1.10f);
+        shapeRenderer.setColor(0.30f, 0.82f, 1.00f, glowAlpha * 0.80f);
+        shapeRenderer.ellipse(centerX - glowRadius * 0.55f, emitterY - glowRadius * 0.30f,
+                              glowRadius * 1.10f, glowRadius * 0.60f);
+        shapeRenderer.setColor(0.80f, 0.98f, 1.00f, glowAlpha);
+        shapeRenderer.ellipse(centerX - glowRadius * 0.24f, emitterY - glowRadius * 0.13f,
+                              glowRadius * 0.48f, glowRadius * 0.26f);
+
+        shapeRenderer.end();
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);   // restore standard alpha
+        Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
     private void advanceOffsetY(WeaponVisualState state, float deltaTime) {
