@@ -190,29 +190,47 @@ public final class BalanceConfig {
     // tactical verbs keep them from duplicating the blight/infernal roster above.
     // -------------------------------------------------------------------------
 
+    // NECROTIC FACTION — CONTRACT PASS (game-balance-tuning): the five archetypes below were added
+    // AFTER the iteration-2 economy rescale and were never entered into the balance contract, so their
+    // Threat Points sat OUT of band while they were live in the EncounterBudgetPlanner fill pool
+    // (corrupting every procedural floor's budget). Re-tuned so each lands in its role's TP band and
+    // golden ratio, verified by BalanceReport's ENEMIES table. See docs/balance-rule-system.txt.
+
     // GHOUL (spawn '~') — slow shambling melee CHAFF; relentless but easily outpaced.
-    public static final int GHOUL_MAX_HEALTH          = 30;
-    public static final int GHOUL_ATTACK_DAMAGE       = 9;
+    // Was 30 HP / 9 dmg -> TP 10.8, UNDER the chaff band (16-34): under-costed filler. Raised to
+    // 42 HP / 13 dmg -> TP 21.8, mid-chaff, dies in 2 reference hits like the other chaff.
+    public static final int GHOUL_MAX_HEALTH          = 42;
+    public static final int GHOUL_ATTACK_DAMAGE       = 13;
     public static final int GHOUL_MOVE_EVERY_N_TURNS  = 2;
 
     // CRAWLER (spawn 'z') — fast, fragile low-to-the-ground melee CHAFF; rushes in.
-    public static final int CRAWLER_MAX_HEALTH         = 22;
-    public static final int CRAWLER_ATTACK_DAMAGE      = 8;
+    // Was 22 HP / 8 dmg -> TP 8.1, far UNDER the chaff band. Leaned into the fragile-glass-cannon
+    // niche: 24 HP / 15 dmg (fast melee) -> TP 16.6, in band; a 1-hit kill that punishes if ignored.
+    public static final int CRAWLER_MAX_HEALTH         = 24;
+    public static final int CRAWLER_ATTACK_DAMAGE      = 15;
     public static final int CRAWLER_MOVE_EVERY_N_TURNS = 1;
 
-    // REVENANT (spawn 'K') — fast, hard-hitting undead SOLDIER melee; punishes a slow kill.
+    // REVENANT (spawn 'K') — fast, hard-hitting undead melee; punishes a slow kill.
+    // Was classified SOLDIER but its stats (TP 79, golden ratio 2.4) are honestly BRUISER-tier — a
+    // "soldier" that duels like a bruiser is an unfair surprise. Reclassified to BRUISER in
+    // EnemyType.role() (TP 79 in the 70-120 bruiser band, gr 2.4 in the [2,4] bruiser band); it is
+    // the fast, non-charging bruiser counterpart to the Shell Brute charger. Stats unchanged.
     public static final int REVENANT_MAX_HEALTH         = 110;
     public static final int REVENANT_ATTACK_DAMAGE      = 18;
     public static final int REVENANT_MOVE_EVERY_N_TURNS = 1;
 
     // VORTEX_EYE (spawn 'V') — short-range ranged CHAFF caster; weaker, closer kiter than Eye Tyrant.
+    // TP 16.4 — already lands (just) inside the chaff band, so left unchanged by the contract pass.
     public static final int VORTEX_EYE_MAX_HEALTH         = 35;
     public static final int VORTEX_EYE_ATTACK_DAMAGE      = 9;
     public static final int VORTEX_EYE_RANGE_TILES        = 4;
     public static final int VORTEX_EYE_MOVE_EVERY_N_TURNS = 1;
 
-    // BLIGHT_CORRUPTOR (spawn '*') — durable slow infected brute SOLDIER melee; grind it from range.
-    public static final int BLIGHT_CORRUPTOR_MAX_HEALTH         = 130;
+    // BLIGHT_CORRUPTOR (spawn '*') — durable slow infected summoner SOLDIER melee; grind it from range.
+    // Was 130 HP / 14 dmg -> TP 72.8, OVER the soldier band (36-66) with a bruiser-tier golden ratio.
+    // HP trimmed 130 -> 115 -> TP 64.4 (top of the soldier band) and golden ratio 3.0 (in the [3,8]
+    // soldier band); lower HP also means its SUMMON move-set floods the room a little less.
+    public static final int BLIGHT_CORRUPTOR_MAX_HEALTH         = 115;
     public static final int BLIGHT_CORRUPTOR_ATTACK_DAMAGE      = 14;
     public static final int BLIGHT_CORRUPTOR_MOVE_EVERY_N_TURNS = 2;
 
@@ -304,8 +322,10 @@ public final class BalanceConfig {
     public static final int XP_REWARD_SHELL_BRUTE  = 18;
     public static final int XP_REWARD_PLAGUE_HULK  = 14;
     public static final int XP_REWARD_IRON_STALKER = 55;
-    public static final int XP_REWARD_GHOUL            = 8;
-    public static final int XP_REWARD_CRAWLER          = 7;
+    // Ghoul/Crawler XP raised (8->10, 7->9) in the game-balance-tuning pass so reward tracks their
+    // re-tuned chaff threat (now on par with the Gore Biter: TP ~22/~17, reward-scales-to-cost).
+    public static final int XP_REWARD_GHOUL            = 10;
+    public static final int XP_REWARD_CRAWLER          = 9;
     public static final int XP_REWARD_REVENANT         = 16;
     public static final int XP_REWARD_VORTEX_EYE       = 9;
     public static final int XP_REWARD_BLIGHT_CORRUPTOR = 18;
@@ -319,8 +339,8 @@ public final class BalanceConfig {
     public static final int CREDIT_REWARD_SHELL_BRUTE  = 12;
     public static final int CREDIT_REWARD_PLAGUE_HULK  = 8;
     public static final int CREDIT_REWARD_IRON_STALKER = 40;
-    public static final int CREDIT_REWARD_GHOUL            = 4;
-    public static final int CREDIT_REWARD_CRAWLER          = 4;
+    public static final int CREDIT_REWARD_GHOUL            = 5;
+    public static final int CREDIT_REWARD_CRAWLER          = 5;
     public static final int CREDIT_REWARD_REVENANT         = 11;
     public static final int CREDIT_REWARD_VORTEX_EYE       = 5;
     public static final int CREDIT_REWARD_BLIGHT_CORRUPTOR = 13;
@@ -335,15 +355,22 @@ public final class BalanceConfig {
     // (depthThreatScale), while the player's level-up power grows LINEARLY (1 + levels*budget/100,
     // GameMath.playerPowerAtDepth). At 1.08/1.06 the compound enemy curve outran the linear player
     // curve from depth 5 on (coupling ratio fell to 0.86 at d5 and ~0.40 by d15 — the game became
-    // unwinnable at depth). Trimmed to 1.045/1.035 so the coupled ratio stays in the [0.9, 1.2]
-    // invariant band through ~depth 14 (the Hell Baron's depth-15 floor lands at the band edge).
-    // Each floor's enemies still get meaningfully stronger (~8% threat/floor); they just no longer
-    // outpace the player's expected upgrades. Regenerate BalanceReport's DEPTH COUPLING table after
-    // changing either of these. Range: 1.03–1.08.
+    // unwinnable at depth).
+    //
+    // ENDLESS-MODE PASS (game-balance-tuning): the descent is ENDLESS (region bands of 5 depths,
+    // bosses every 5, "THE BREACH" cycling forever — see RouteMapConstants), so runs regularly pass
+    // depth 15-20. At 1.045/1.035 the coupling ratio fell out the bottom of the [0.9, 1.2] band at
+    // depth 15 (0.89) and collapsed to 0.74 by depth 20 — deep endless floors were unfair-hard.
+    // A compound enemy curve must eventually outrun a linear player curve, so this cannot be held
+    // forever; the goal is to hold the fair band as DEEP as possible while barely touching the
+    // well-tuned early/mid game. Trimmed 1.045/1.035 -> 1.042/1.032: the ratio now holds the band
+    // through depth 15 (0.97) and lands depth 18/20 at 0.88/0.83 (vs 0.80/0.74 before) — a soft,
+    // graceful hard-edge instead of a cliff. Early/mid (d1-12) moves <=+4% (still in band, still a
+    // real fight). Regenerate BalanceReport's DEPTH COUPLING table after changing either. Range: 1.03–1.08.
     /** Per-floor compound HP multiplier: baseHP * scale^(depth-1). Range: 1.03–1.08. */
-    public static final float ENEMY_HEALTH_SCALE_PER_DEPTH = 1.045f;
+    public static final float ENEMY_HEALTH_SCALE_PER_DEPTH = 1.042f;
     /** Per-floor compound damage multiplier: baseDmg * scale^(depth-1). Range: 1.02–1.06. */
-    public static final float ENEMY_DAMAGE_SCALE_PER_DEPTH = 1.035f;
+    public static final float ENEMY_DAMAGE_SCALE_PER_DEPTH = 1.032f;
     /** Per-floor linear credit bonus: base * (1 + (depth-1) * scale). Range: 0.05–0.25. */
     public static final float CREDIT_DEPTH_SCALE           = 0.12f;
 
@@ -706,8 +733,8 @@ public final class BalanceConfig {
      * (sustained DPT now 22) to pull its power score into the burst band, but this anchor
      * is deliberately HELD at 25: it is a stable reference for the whole enemy TP table,
      * not a live mirror of the current shotgun. Moving it would rescale every enemy's TP
-     * at once (all eight currently sit in-band) for no balance gain. Keep it at 25 unless
-     * you intend to re-tune the entire enemy roster.
+     * at once (all thirteen non-boss archetypes currently sit in-band) for no balance gain.
+     * Keep it at 25 unless you intend to re-tune the entire enemy roster.
      */
     // CONTRACT DECISION (idea-A, iteration 2): held at 25 and now ALSO the golden-ratio TTK metric.
     // The golden ratio (TTD/TTK) previously divided enemy eHP by the player's BEST BURST (shotgun

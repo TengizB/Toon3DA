@@ -162,6 +162,21 @@ public final class BalanceReport {
         // Iron Stalker scored on its melee profile (its higher damage line), like the contract worked example.
         printEnemyRow("Iron Stalker", EnemyRole.MINI_ELITE, BalanceConfig.IRON_STALKER_MAX_HEALTH,
                 BalanceConfig.IRON_STALKER_MELEE_DAMAGE, 1, BalanceConfig.POSITIONAL_MULT_FAST_MELEE, true);
+
+        // NECROTIC FACTION — added after the iteration-2 rescale and entered into the contract in the
+        // game-balance-tuning pass (previously UN-audited while live in the EncounterBudgetPlanner pool).
+        // Melee cadence = 1 (they attack every turn when adjacent, matching attackCadenceTurns() in EnemyType).
+        printEnemyRow("Ghoul",        EnemyRole.CHAFF,   BalanceConfig.GHOUL_MAX_HEALTH,
+                BalanceConfig.GHOUL_ATTACK_DAMAGE,       1, BalanceConfig.POSITIONAL_MULT_MELEE,     false);
+        printEnemyRow("Crawler",      EnemyRole.CHAFF,   BalanceConfig.CRAWLER_MAX_HEALTH,
+                BalanceConfig.CRAWLER_ATTACK_DAMAGE,     1, BalanceConfig.POSITIONAL_MULT_FAST_MELEE, false);
+        printEnemyRow("Vortex Eye",   EnemyRole.CHAFF,   BalanceConfig.VORTEX_EYE_MAX_HEALTH,
+                BalanceConfig.VORTEX_EYE_ATTACK_DAMAGE,  1, BalanceConfig.POSITIONAL_MULT_RANGED,    false);
+        // Revenant reclassified SOLDIER -> BRUISER (fast bruiser); scored on the bruiser golden band.
+        printEnemyRow("Revenant",     EnemyRole.BRUISER, BalanceConfig.REVENANT_MAX_HEALTH,
+                BalanceConfig.REVENANT_ATTACK_DAMAGE,    1, BalanceConfig.POSITIONAL_MULT_MELEE,     true);
+        printEnemyRow("Blight Corr.", EnemyRole.SOLDIER, BalanceConfig.BLIGHT_CORRUPTOR_MAX_HEALTH,
+                BalanceConfig.BLIGHT_CORRUPTOR_ATTACK_DAMAGE, 1, BalanceConfig.POSITIONAL_MULT_MELEE, false);
     }
 
     private static void printEnemyRow(String enemyName, EnemyRole enemyRole, int rawHealth,
