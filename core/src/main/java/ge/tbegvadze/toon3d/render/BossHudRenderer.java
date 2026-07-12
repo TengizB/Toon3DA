@@ -10,7 +10,9 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.boss.Boss;
+import ge.tbegvadze.toon3d.entity.boss.BossVisualState;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.HudConstants;
 
 /**
@@ -53,6 +55,11 @@ public final class BossHudRenderer implements Renderable, Disposable {
     private float   bannerTimer   = 0f;
     private String  bannerText    = "";
 
+    // Heal tick-up flash (ORDER 8) — previousHealth detects an HP RISE (a repair turn); the timer decays
+    // the green flash over the fill so the heal is impossible to miss.
+    private int   previousHealth  = 0;
+    private float healFlashTimer  = 0f;
+
     public BossHudRenderer() {
         this.batch         = new SpriteBatch();
         this.shapeRenderer = new ShapeRenderer();
@@ -63,8 +70,10 @@ public final class BossHudRenderer implements Renderable, Disposable {
 
     /** Sets the active boss; must be called before the first render. */
     public void setBoss(Boss boss) {
-        this.boss   = boss;
-        this.active = boss != null;
+        this.boss           = boss;
+        this.active         = boss != null;
+        this.previousHealth = boss != null ? boss.health : 0;
+        this.healFlashTimer = 0f;
     }
 
     /** Starts the intro letterbox + name banner sequence. */
@@ -91,6 +100,16 @@ public final class BossHudRenderer implements Renderable, Disposable {
 
     public void update(float deltaTime) {
         if (!active) return;
+        // Heal tick-up detection (ORDER 8): any RISE in boss HP is a repair turn — arm the green flash.
+        if (boss != null) {
+            if (boss.health > previousHealth) {
+                healFlashTimer = HudConstants.BOSS_HEAL_FLASH_DURATION_SECONDS;
+            }
+            previousHealth = boss.health;
+        }
+        if (healFlashTimer > 0f) {
+            healFlashTimer = Math.max(0f, healFlashTimer - deltaTime);
+        }
         if (introPlaying) {
             introTimer += deltaTime;
             if (introTimer >= Constants.BOSS_INTRO_DURATION_SECONDS) {
@@ -167,15 +186,23 @@ public final class BossHudRenderer implements Renderable, Disposable {
                 ? Math.max(0f, (float) currentBoss.health / currentBoss.maxHealth)
                 : 0f;
 
+        // Heal tick-up flash (ORDER 8): while the timer is live, blend the fill toward green so a repair
+        // turn's rising bar is unmistakable — "it's healing, go stop it".
+        float healFlash = healFlashTimer > 0f
+                ? healFlashTimer / HudConstants.BOSS_HEAL_FLASH_DURATION_SECONDS
+                : 0f;
+        float fillRed   = GameMath.lerp(currentBoss.accentRed,   HudConstants.BOSS_HEAL_FLASH_R, healFlash);
+        float fillGreen = GameMath.lerp(currentBoss.accentGreen, HudConstants.BOSS_HEAL_FLASH_G, healFlash);
+        float fillBlue  = GameMath.lerp(currentBoss.accentBlue,  HudConstants.BOSS_HEAL_FLASH_B, healFlash);
+
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
         // Track background
         shapeRenderer.setColor(0.08f, 0.04f, 0.04f, 0.90f);
         shapeRenderer.rect(HP_BAR_X, HP_BAR_Y, HP_BAR_W, HudConstants.BOSS_HP_BAR_HEIGHT);
 
-        // Fill tinted with boss accent colour
-        shapeRenderer.setColor(currentBoss.accentRed, currentBoss.accentGreen,
-                               currentBoss.accentBlue, 1f);
+        // Fill tinted with boss accent colour (flashed green on a heal tick)
+        shapeRenderer.setColor(fillRed, fillGreen, fillBlue, 1f);
         shapeRenderer.rect(HP_BAR_X, HP_BAR_Y, HP_BAR_W * fillFraction,
                            HudConstants.BOSS_HP_BAR_HEIGHT);
 
@@ -201,6 +228,25 @@ public final class BossHudRenderer implements Renderable, Disposable {
                           currentBoss.accentBlue, 1f);
         nameFont.draw(batch, currentBoss.bossName, HP_BAR_X, nameLabelY);
         nameFont.getData().setScale(1f); // restore default scale
+
+        // State label (ORDER 8) — the current tactical beat under the boss name. Hot (enraged) states
+        // borrow the boss accent; the rest use a dim neutral so the label never competes with the name.
+        BossVisualState visualState = currentBoss.visualState;
+        if (visualState != null && !visualState.label.isEmpty()) {
+            epithetFont.getData().setScale(HudConstants.BOSS_STATE_LABEL_FONT_SCALE);
+            glyphLayout.setText(epithetFont, visualState.label);
+            float stateLabelY = nameLabelY - glyphLayout.height - HudConstants.BOSS_STATE_LABEL_Y_GAP;
+            if (visualState.hot) {
+                epithetFont.setColor(currentBoss.accentRed, currentBoss.accentGreen,
+                                     currentBoss.accentBlue, 1f);
+            } else {
+                epithetFont.setColor(HudConstants.BOSS_STATE_LABEL_R, HudConstants.BOSS_STATE_LABEL_G,
+                                     HudConstants.BOSS_STATE_LABEL_B, 1f);
+            }
+            epithetFont.draw(batch, visualState.label, HP_BAR_X, stateLabelY);
+            epithetFont.getData().setScale(1f); // restore default scale
+        }
+
         batch.end();
     }
 

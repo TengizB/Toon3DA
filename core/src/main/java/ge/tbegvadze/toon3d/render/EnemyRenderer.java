@@ -20,6 +20,8 @@ import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.enemy.IntentVerb;
 import ge.tbegvadze.toon3d.enemy.PlannedAction;
 import ge.tbegvadze.toon3d.enemy.SpecialAbility;
+import ge.tbegvadze.toon3d.entity.boss.Boss;
+import ge.tbegvadze.toon3d.entity.boss.DangerTileSet;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.CombatPalette;
@@ -58,6 +60,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final Texture                       ghoulTexture;
     private final Texture                       crawlerTexture;
     private final Texture                       revenantTexture;
+    // Overseer boss — dedicated full-frame boss portrait (ORDER 8: wire the existing asset instead of the
+    // blight-sheet placeholder, so the reworked mobile Overseer renders as its own sprite at boss height).
+    private final Texture                       overseerBossTexture;
     private final Texture                       whitePixelTexture;
     private final SpriteBatch                   batch;
     private final ShapeRenderer                 shapeRenderer;
@@ -112,6 +117,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
     // Reused per-frame RGBA buffer for the current intent-icon frame colour — no allocation
     private final float[]   intentFrameColor = new float[4];
+
+    // Reused per-frame RGB buffer for the current boss telegraph quad colour (ORDER 8) — no allocation
+    private final float[]   bossTelegraphColorRgb = new float[3];
 
     // Name tag and HP text rendering — font and layouts pre-allocated to avoid render-loop allocation
     private final BitmapFont  nameTagFont;
@@ -173,6 +181,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.ghoulTexture           = loadSheetOrFallback(ENEMY_GHOUL_PATH,            0.45f, 0.55f, 0.35f);
         this.crawlerTexture         = loadSheetOrFallback(ENEMY_CRAWLER_PATH,          0.55f, 0.45f, 0.30f);
         this.revenantTexture        = loadSheetOrFallback(ENEMY_REVENANT_PATH,         0.50f, 0.50f, 0.55f);
+        // Overseer boss portrait — its own full-frame texture (ORDER 8), cyan-tinted fallback if absent.
+        this.overseerBossTexture    = loadSheetOrFallback(ENEMY_BOSS_OVERSEER_PATH,     0.55f, 0.80f, 0.95f);
         this.textureRegions       = buildTextureRegions(blightSheetTexture, infernalSheetTexture);
         // Map the standalone PNGs as full-frame regions (one whole image per archetype).
         textureRegions.put(EnemyType.BLIGHT_CORRUPTOR, new TextureRegion(blightCorruptorTexture));
@@ -180,6 +190,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
         textureRegions.put(EnemyType.GHOUL,            new TextureRegion(ghoulTexture));
         textureRegions.put(EnemyType.CRAWLER,          new TextureRegion(crawlerTexture));
         textureRegions.put(EnemyType.REVENANT,         new TextureRegion(revenantTexture));
+        // Overseer boss — override the blight-sheet placeholder with its dedicated full-frame texture.
+        textureRegions.put(EnemyType.OVERSEER,         new TextureRegion(overseerBossTexture));
 
         this.whitePixelTexture    = buildWhitePixelTexture();
         this.nameTagFont          = new BitmapFont();
@@ -417,6 +429,30 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 spriteBlue  = GameMath.lerp(spriteBlue,  ENEMY_BLOCK_TINT_BLUE,  shimmer);
             }
 
+            // Boss state feedback (ORDER 8): overlay the enraged (phase 2) or repairing (ORDER 5) tint so
+            // both states are unmistakable at a glance. REPAIRING wins when both could apply — it is the
+            // "go stop it" beat, and a hot-red enrage tint under a green heal glow would read muddily.
+            if (enemy instanceof Boss) {
+                Boss bossEnemy = (Boss) enemy;
+                if (bossEnemy.regenState.healActive) {
+                    float pulse    = 0.5f + 0.5f * MathUtils.sin(
+                            statusAnimationClock * BOSS_REPAIR_TINT_PULSE_HZ * MathUtils.PI2);
+                    float strength = Math.min(1f, BOSS_REPAIR_TINT_STRENGTH
+                            + BOSS_REPAIR_TINT_PULSE_AMOUNT * pulse);
+                    spriteRed   = GameMath.lerp(spriteRed,   BOSS_REPAIR_TINT_R, strength);
+                    spriteGreen = GameMath.lerp(spriteGreen, BOSS_REPAIR_TINT_G, strength);
+                    spriteBlue  = GameMath.lerp(spriteBlue,  BOSS_REPAIR_TINT_B, strength);
+                } else if (bossEnemy.phase >= 2) {
+                    float pulse    = 0.5f + 0.5f * MathUtils.sin(
+                            statusAnimationClock * BOSS_ENRAGE_TINT_PULSE_HZ * MathUtils.PI2);
+                    float strength = Math.min(1f, BOSS_ENRAGE_TINT_STRENGTH
+                            + BOSS_ENRAGE_TINT_PULSE_AMOUNT * pulse);
+                    spriteRed   = GameMath.lerp(spriteRed,   BOSS_ENRAGE_TINT_R, strength);
+                    spriteGreen = GameMath.lerp(spriteGreen, BOSS_ENRAGE_TINT_G, strength);
+                    spriteBlue  = GameMath.lerp(spriteBlue,  BOSS_ENRAGE_TINT_B, strength);
+                }
+            }
+
             // EYE_TYRANT instant beam: cache screen position for pass 3
             if (enemy.type == EnemyType.EYE_TYRANT && attackAnimStrength > 0f) {
                 beamScreenXs[sortedPosition]  = screenCenterColumn;
@@ -431,6 +467,15 @@ public final class EnemyRenderer implements Renderable, Disposable {
             fxSpriteHeights[sortedPosition] = spriteScreenHeight;
             fxSpriteWidths[sortedPosition]  = spriteScreenWidth;
             fxDrawFlags[sortedPosition]     = true;
+
+            // Dash afterimage / motion trail (ORDER 8): draw fading ghost billboards at the trailing tiles
+            // of the slide path so a multi-tile boss dash reads as a deliberate sprint, not a teleport
+            // (Fairness F3). Emitted here — before the solid sprite's draw loop below — so the live sprite
+            // renders over the ghosts. Only while a slide is active.
+            if (enemy instanceof Boss && enemy.isSliding()) {
+                drawBossAfterimageTrail(enemy, region, heightMultiplier,
+                        spriteRed, spriteGreen, spriteBlue);
+            }
 
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
@@ -643,6 +688,42 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 for (int targetIndex = 0; targetIndex < enemy.summonTargetCount; targetIndex++) {
                     drawSummonTargetMarker(enemy.summonTargetColumns[targetIndex],
                                            enemy.summonTargetRows[targetIndex]);
+                }
+            }
+            batch.setColor(Color.WHITE);
+            batch.end();
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA); // restore default alpha blend
+        }
+
+        // =====================================================================
+        // Pass 1.7: Boss telegraph floor overlay (boss-fight-mobile-overseer ORDER 8)
+        // For every boss with an armed DangerTileSet, draw a flat coloured quad on each danger tile's
+        // floor — one COLOUR + SHAPE per threat (Fairness F6) so the player reads what lands where a turn
+        // ahead. Reuses the same billboard projection + centre-column wall Z test as the summon marker;
+        // iterates the (few) enemies, boss-filtered — no allocation.
+        // =====================================================================
+        boolean anyBossTelegraph = false;
+        for (int enemyIndex = 0; enemyIndex < enemyCount; enemyIndex++) {
+            Enemy enemy = enemies.get(enemyIndex);
+            if (enemy instanceof Boss && enemy.isAlive() && ((Boss) enemy).dangerTileSet.isActive()) {
+                anyBossTelegraph = true;
+                break;
+            }
+        }
+        if (anyBossTelegraph) {
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE); // additive glow
+            batch.begin();
+            for (int enemyIndex = 0; enemyIndex < enemyCount; enemyIndex++) {
+                Enemy enemy = enemies.get(enemyIndex);
+                if (!(enemy instanceof Boss) || !enemy.isAlive()) continue;
+                Boss bossEnemy = (Boss) enemy;
+                DangerTileSet dangerTileSet = bossEnemy.dangerTileSet;
+                if (!dangerTileSet.isActive()) continue;
+                DangerTileSet.TelegraphKind kind = dangerTileSet.getTelegraphKind();
+                List<DangerTileSet.MarkedTile> tiles = dangerTileSet.getTiles();
+                for (int tileIndex = 0; tileIndex < tiles.size(); tileIndex++) {
+                    DangerTileSet.MarkedTile tile = tiles.get(tileIndex);
+                    drawBossTelegraphTile(tile.tileColumn, tile.tileRow, kind, bossEnemy);
                 }
             }
             batch.setColor(Color.WHITE);
@@ -949,6 +1030,164 @@ public final class EnemyRenderer implements Renderable, Disposable {
             batch.draw(whitePixelTexture, moteX - moteSize / 2f, moteY - moteSize / 2f,
                     moteSize, moteSize, 0, 0, 1, 1, false, false);
         }
+    }
+
+    /*
+     * Draws one boss telegraph quad on a danger tile's floor (ORDER 8), inside the already-open additive
+     * batch. Projects the tile centre through the same billboard math the summon marker uses and applies
+     * the same cull + centre-column wall Z test. The COLOUR comes from the threat kind (the learned
+     * vocabulary); the SHAPE also varies by kind so the overlay is legible without colour (Fairness F6,
+     * colour-blind safety): CHARGE → a slim red LINE bar, MELEE → an ORANGE ring of motes, fire/toxic/
+     * generic → a filled PATCH squashed onto the floor plane, summon → a PURPLE rune circle. Everything
+     * breathes on the wall-clock pulse. Cosmetic only — never read by the simulation.
+     */
+    private void drawBossTelegraphTile(int tileColumn, int tileRow,
+                                       DangerTileSet.TelegraphKind kind, Boss boss) {
+        float worldCenterX = tileColumn * CELL_SIZE + CELL_SIZE / 2f;
+        float worldCenterY = tileRow    * CELL_SIZE + CELL_SIZE / 2f;
+        float tileOffsetX  = (worldCenterX - playerWorldX) / CELL_SIZE;
+        float tileOffsetY  = (worldCenterY - playerWorldY) / CELL_SIZE;
+
+        float depth = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
+        if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES)   return;
+        if (depth > BOSS_TELEGRAPH_MAX_DISTANCE_TILES)   return;
+
+        float screenCenterColumn = GameMath.spriteScreenColumnCenter(
+                tileOffsetX, tileOffsetY, directionX, directionY, planeX, planeY,
+                WALL_PROJECTION_SCREEN_WIDTH);
+        int centerColumn = (int) screenCenterColumn;
+        if (centerColumn < 0 || centerColumn >= WALL_PROJECTION_SCREEN_WIDTH) return;
+        if (depth >= wallRenderer.getZBufferUnchecked(centerColumn)) return; // occluded by a nearer wall
+
+        float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
+        float floorY      = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
+        float markerSize  = fullWallLineHeight * BOSS_TELEGRAPH_SIZE_FRACTION;
+        if (markerSize < 1f) return;
+        float centerY     = floorY + markerSize * BOSS_TELEGRAPH_FLOOR_LIFT_FRACTION;
+
+        float pulse = 0.5f + 0.5f * MathUtils.sin(
+                statusAnimationClock * BOSS_TELEGRAPH_PULSE_HZ * MathUtils.PI2);
+        float alpha = BOSS_TELEGRAPH_MAX_ALPHA * (0.45f + 0.55f * pulse);
+
+        // Resolve the threat colour into the reusable scratch buffer (no allocation).
+        resolveTelegraphColor(kind, boss, bossTelegraphColorRgb);
+        float red   = bossTelegraphColorRgb[0];
+        float green = bossTelegraphColorRgb[1];
+        float blue  = bossTelegraphColorRgb[2];
+        batch.setColor(red, green, blue, alpha);
+
+        switch (kind) {
+            case CHARGE_LINE: {
+                // Slim horizontal bar lying on the floor — the "line" shape of the imminent lunge.
+                float barWidth  = markerSize * BOSS_TELEGRAPH_FILL_FRACTION;
+                float barHeight = markerSize * BOSS_TELEGRAPH_LINE_THICKNESS_FRACTION;
+                batch.draw(whitePixelTexture, screenCenterColumn - barWidth / 2f, centerY - barHeight / 2f,
+                        barWidth, barHeight, 0, 0, 1, 1, false, false);
+                break;
+            }
+            case MELEE_RING:
+            case SUMMON_RUNES: {
+                // Ring / rune circle of orbiting motes squashed onto the floor plane.
+                float ringRadius = markerSize * (0.35f + 0.15f * pulse);
+                float moteSize   = markerSize * BOSS_TELEGRAPH_MOTE_SIZE_FRACTION;
+                for (int moteIndex = 0; moteIndex < BOSS_TELEGRAPH_MOTE_COUNT; moteIndex++) {
+                    float angle = moteIndex / (float) BOSS_TELEGRAPH_MOTE_COUNT * MathUtils.PI2
+                            + statusAnimationClock * BOSS_TELEGRAPH_PULSE_HZ;
+                    float moteX = screenCenterColumn + (float) Math.cos(angle) * ringRadius;
+                    float moteY = centerY + (float) Math.sin(angle) * ringRadius * 0.5f; // squash → floor
+                    batch.draw(whitePixelTexture, moteX - moteSize / 2f, moteY - moteSize / 2f,
+                            moteSize, moteSize, 0, 0, 1, 1, false, false);
+                }
+                break;
+            }
+            case HAZARD_FIRE:
+            case HAZARD_TOXIC:
+            case GENERIC:
+            default: {
+                // Filled patch squashed vertically so it reads as lying flat where the hazard lands.
+                float patchWidth  = markerSize * BOSS_TELEGRAPH_FILL_FRACTION;
+                float patchHeight = markerSize * BOSS_TELEGRAPH_FILL_FRACTION * 0.5f; // floor-plane squash
+                batch.draw(whitePixelTexture, screenCenterColumn - patchWidth / 2f, centerY - patchHeight / 2f,
+                        patchWidth, patchHeight, 0, 0, 1, 1, false, false);
+                break;
+            }
+        }
+    }
+
+    /** Writes the telegraph threat colour (RGB) into {@code out} for the given kind; GENERIC uses the boss accent. */
+    private static void resolveTelegraphColor(DangerTileSet.TelegraphKind kind, Boss boss, float[] out) {
+        switch (kind) {
+            case CHARGE_LINE:
+                out[0] = BOSS_TELEGRAPH_CHARGE_R; out[1] = BOSS_TELEGRAPH_CHARGE_G; out[2] = BOSS_TELEGRAPH_CHARGE_B; break;
+            case MELEE_RING:
+                out[0] = BOSS_TELEGRAPH_MELEE_R;  out[1] = BOSS_TELEGRAPH_MELEE_G;  out[2] = BOSS_TELEGRAPH_MELEE_B;  break;
+            case HAZARD_FIRE:
+                out[0] = BOSS_TELEGRAPH_FIRE_R;   out[1] = BOSS_TELEGRAPH_FIRE_G;   out[2] = BOSS_TELEGRAPH_FIRE_B;   break;
+            case HAZARD_TOXIC:
+                out[0] = BOSS_TELEGRAPH_TOXIC_R;  out[1] = BOSS_TELEGRAPH_TOXIC_G;  out[2] = BOSS_TELEGRAPH_TOXIC_B;  break;
+            case SUMMON_RUNES:
+                out[0] = BOSS_TELEGRAPH_SUMMON_R; out[1] = BOSS_TELEGRAPH_SUMMON_G; out[2] = BOSS_TELEGRAPH_SUMMON_B; break;
+            case GENERIC:
+            default:
+                // Fall back to the boss's own accent so unclassified telegraphs still read as "this boss".
+                out[0] = boss.accentRed; out[1] = boss.accentGreen; out[2] = boss.accentBlue; break;
+        }
+    }
+
+    /*
+     * Draws the boss dash afterimage trail (ORDER 8) inside the already-open pass-1 sprite batch. Samples
+     * a few progress points BEHIND the live slide position, projects each through the same billboard math
+     * the solid sprite uses, and draws a fading full-region ghost at each (nearest ghost brightest). Each
+     * ghost is culled behind the player / out of range / behind a nearer wall via the same centre-column
+     * wall Z test the summon marker uses. Ghosts reuse the live sprite's tinted shade at reduced alpha so
+     * they read as motion smear, not a second creature. Allocation-free; restores full opacity on exit.
+     */
+    private void drawBossAfterimageTrail(Enemy enemy, TextureRegion region, float heightMultiplier,
+                                         float baseRed, float baseGreen, float baseBlue) {
+        float liveProgress = enemy.slideProgress();
+        int   regionWidth  = region.getRegionWidth();
+        int   regionHeight = region.getRegionHeight();
+        float aspectRatio  = (float) regionWidth / regionHeight;
+
+        for (int ghostIndex = 1; ghostIndex <= BOSS_AFTERIMAGE_COUNT; ghostIndex++) {
+            float rawProgress = liveProgress - ghostIndex * BOSS_AFTERIMAGE_PROGRESS_STEP;
+            if (rawProgress <= 0f) continue;   // ghost would sit at/behind the origin tile
+
+            float easedProgress = GameMath.smoothstep01(rawProgress);
+            float ghostColumn   = enemy.sampleSlideColumn(easedProgress);
+            float ghostRow      = enemy.sampleSlideRow(easedProgress);
+
+            float worldCenterX = ghostColumn * CELL_SIZE + CELL_SIZE / 2f;
+            float worldCenterY = ghostRow    * CELL_SIZE + CELL_SIZE / 2f;
+            float tileOffsetX  = (worldCenterX - playerWorldX) / CELL_SIZE;
+            float tileOffsetY  = (worldCenterY - playerWorldY) / CELL_SIZE;
+
+            float depth = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
+            if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES) continue;
+            if (depth > MAX_ENEMY_DRAW_DISTANCE_TILES)     continue;
+
+            float screenCenterColumn = GameMath.spriteScreenColumnCenter(
+                    tileOffsetX, tileOffsetY, directionX, directionY, planeX, planeY,
+                    WALL_PROJECTION_SCREEN_WIDTH);
+            int centerColumn = (int) screenCenterColumn;
+            if (centerColumn < 0 || centerColumn >= WALL_PROJECTION_SCREEN_WIDTH) continue;
+            if (depth >= wallRenderer.getZBufferUnchecked(centerColumn)) continue; // behind a nearer wall
+
+            float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
+            float ghostHeight        = fullWallLineHeight * heightMultiplier;
+            float ghostWidth         = ghostHeight * aspectRatio;
+            if (ghostWidth < 1f || ghostHeight < 1f) continue;
+            float drawBottom         = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT,
+                    fullWallLineHeight);
+
+            float alpha = BOSS_AFTERIMAGE_START_ALPHA
+                    * (float) Math.pow(BOSS_AFTERIMAGE_ALPHA_FALLOFF, ghostIndex - 1);
+            if (alpha <= 0.01f) continue;
+
+            batch.setColor(baseRed, baseGreen, baseBlue, alpha);
+            batch.draw(region, screenCenterColumn - ghostWidth / 2f, drawBottom, ghostWidth, ghostHeight);
+        }
+        batch.setColor(Color.WHITE);
     }
 
     /** True when the enemy has any damage-over-time affliction that draws an animated overlay. */
@@ -1302,6 +1541,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
         ghoulTexture.dispose();
         crawlerTexture.dispose();
         revenantTexture.dispose();
+        overseerBossTexture.dispose();
         whitePixelTexture.dispose();
         nameTagFont.dispose();
     }

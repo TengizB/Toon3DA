@@ -407,4 +407,66 @@ public final class RenderConstants {
     public static final float SHOP_HOLO_R        = 0.45f, SHOP_HOLO_G        = 0.95f, SHOP_HOLO_B        = 1.00f;
     // Ambient aura tint (warm UAC amber so the fabricator reads apart from cold walls / green chips).
     public static final float SHOP_AURA_R = 1.00f, SHOP_AURA_G = 0.66f, SHOP_AURA_B = 0.28f;
+
+    // =========================================================================================
+    // Boss telegraph floor overlay (boss-fight-mobile-overseer ORDER 8) — one COLOUR + SHAPE per
+    // threat (Fairness F6). Flat quads drawn on the danger tiles' floor by EnemyRenderer, world-
+    // space, occluded by nearer walls via the wall Z-buffer. Colour-blind safety: each threat pairs
+    // its colour with a distinct floor shape (patch / line bar / ring / runes), never colour alone.
+    // =========================================================================================
+    /** Max draw distance (tiles) for a boss telegraph floor quad; beyond this it is culled for clarity. */
+    public static final float BOSS_TELEGRAPH_MAX_DISTANCE_TILES = 20f;
+    /** Marker footprint as a fraction of the tile's full wall-stripe height at its depth. */
+    public static final float BOSS_TELEGRAPH_SIZE_FRACTION      = 0.72f;
+    /** Vertical lift of the quad off the floor line, as a fraction of its own size (0 = flat on floor). */
+    public static final float BOSS_TELEGRAPH_FLOOR_LIFT_FRACTION = 0.14f;
+    /** Pulse speed (Hz) of the telegraph's breathing glow so it reads as "armed, about to resolve". */
+    public static final float BOSS_TELEGRAPH_PULSE_HZ           = 2.2f;
+    /** Peak alpha of a telegraph quad at the brightest point of its pulse. */
+    public static final float BOSS_TELEGRAPH_MAX_ALPHA         = 0.55f;
+    /** Fraction of the tile a filled patch/bar core spans (leaves a small gutter so tiles stay distinct). */
+    public static final float BOSS_TELEGRAPH_FILL_FRACTION      = 0.82f;
+    /** Thickness of the CHARGE line bar as a fraction of the marker size (a slim bar = "line" shape). */
+    public static final float BOSS_TELEGRAPH_LINE_THICKNESS_FRACTION = 0.34f;
+    /** Number of orbiting motes drawn for ring/rune shapes (melee ring, summon runes). */
+    public static final int   BOSS_TELEGRAPH_MOTE_COUNT         = 8;
+    /** Mote size as a fraction of the marker size for ring/rune shapes. */
+    public static final float BOSS_TELEGRAPH_MOTE_SIZE_FRACTION = 0.20f;
+
+    // Per-threat telegraph colours (the learned vocabulary).
+    public static final float BOSS_TELEGRAPH_CHARGE_R = 1.00f, BOSS_TELEGRAPH_CHARGE_G = 0.12f, BOSS_TELEGRAPH_CHARGE_B = 0.10f; // RED line
+    public static final float BOSS_TELEGRAPH_MELEE_R  = 1.00f, BOSS_TELEGRAPH_MELEE_G  = 0.55f, BOSS_TELEGRAPH_MELEE_B  = 0.08f; // ORANGE ring
+    public static final float BOSS_TELEGRAPH_FIRE_R   = 1.00f, BOSS_TELEGRAPH_FIRE_G   = 0.62f, BOSS_TELEGRAPH_FIRE_B   = 0.12f; // AMBER patch
+    public static final float BOSS_TELEGRAPH_TOXIC_R  = 0.40f, BOSS_TELEGRAPH_TOXIC_G  = 0.90f, BOSS_TELEGRAPH_TOXIC_B  = 0.18f; // SICKLY GREEN patch
+    public static final float BOSS_TELEGRAPH_SUMMON_R = 0.66f, BOSS_TELEGRAPH_SUMMON_G = 0.30f, BOSS_TELEGRAPH_SUMMON_B = 0.95f; // PURPLE runes
+    public static final float BOSS_TELEGRAPH_GENERIC_R = 0.85f, BOSS_TELEGRAPH_GENERIC_G = 0.85f, BOSS_TELEGRAPH_GENERIC_B = 0.90f; // neutral
+
+    // =========================================================================================
+    // Boss sprite feedback (ORDER 8) — the enraged (phase 2) and repairing (ORDER 5) tints blended
+    // over the Overseer billboard in EnemyRenderer so both states are unmistakable at a glance.
+    // =========================================================================================
+    /** ENRAGED accent — a hot red the phase-2 boss sprite shifts toward (distinct from the cyan idle accent). */
+    public static final float BOSS_ENRAGE_TINT_R = 1.00f, BOSS_ENRAGE_TINT_G = 0.20f, BOSS_ENRAGE_TINT_B = 0.12f;
+    /** Base blend strength of the enrage tint, plus the amplitude and speed of its emissive pulse. */
+    public static final float BOSS_ENRAGE_TINT_STRENGTH = 0.34f;
+    public static final float BOSS_ENRAGE_TINT_PULSE_AMOUNT = 0.16f;
+    public static final float BOSS_ENRAGE_TINT_PULSE_HZ = 1.4f;
+    /** REPAIRING welding glow — a green the boss sprite pulses toward while its one-time heal chain runs. */
+    public static final float BOSS_REPAIR_TINT_R = 0.20f, BOSS_REPAIR_TINT_G = 1.00f, BOSS_REPAIR_TINT_B = 0.35f;
+    public static final float BOSS_REPAIR_TINT_STRENGTH = 0.45f;
+    public static final float BOSS_REPAIR_TINT_PULSE_AMOUNT = 0.30f;
+    public static final float BOSS_REPAIR_TINT_PULSE_HZ = 3.0f;
+
+    // =========================================================================================
+    // Boss dash afterimage / motion trail (ORDER 8) — 2-3 fading ghost billboards drawn behind the
+    // boss along its slide path while isSliding(), so a multi-tile dash reads as a deliberate sprint
+    // and never a teleport (Fairness F3). Pre-allocated; drawn only during a slide.
+    // =========================================================================================
+    /** Number of trailing ghost billboards behind a dashing boss. */
+    public static final int   BOSS_AFTERIMAGE_COUNT           = 3;
+    /** Progress spacing between consecutive ghosts, sampled backward from the live slide progress. */
+    public static final float BOSS_AFTERIMAGE_PROGRESS_STEP   = 0.12f;
+    /** Alpha of the nearest ghost; each further ghost fades by BOSS_AFTERIMAGE_ALPHA_FALLOFF. */
+    public static final float BOSS_AFTERIMAGE_START_ALPHA     = 0.40f;
+    public static final float BOSS_AFTERIMAGE_ALPHA_FALLOFF   = 0.55f;
 }

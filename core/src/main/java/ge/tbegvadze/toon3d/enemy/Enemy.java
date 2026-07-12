@@ -522,17 +522,50 @@ public class Enemy implements StatusHost {
             visualRow       = slidePathRows[slidePathLength - 1];
             return;
         }
+        float easedProgress = GameMath.smoothstep01(1f - moveAnimSeconds / moveAnimDuration);
+        visualColumn = sampleSlideColumn(easedProgress);
+        visualRow    = sampleSlideRow(easedProgress);
+    }
+
+    /**
+     * Interpolates the slide path column at an overall eased progress in [0, 1] (0 = origin tile,
+     * 1 = destination tile). Shared by {@link #advanceSlide} and the ORDER 8 afterimage trail, which
+     * samples a few earlier progress points to place fading ghost billboards behind a dashing boss.
+     * Returns the origin/destination tile for out-of-range or inert (< 2 tiles) paths.
+     */
+    public float sampleSlideColumn(float easedProgress) {
+        if (slidePathLength < 2) return tileColumn;
         int   segmentCount    = slidePathLength - 1;
-        float rawProgress     = 1f - moveAnimSeconds / moveAnimDuration;
-        float easedProgress   = GameMath.smoothstep01(rawProgress);
-        float pathPosition    = easedProgress * segmentCount;    // in [0, segmentCount]
+        float clamped         = easedProgress < 0f ? 0f : (easedProgress > 1f ? 1f : easedProgress);
+        float pathPosition    = clamped * segmentCount;
         int   segmentIndex    = (int) pathPosition;
         if (segmentIndex >= segmentCount) segmentIndex = segmentCount - 1;
         float segmentFraction = pathPosition - segmentIndex;
-        visualColumn = GameMath.lerp(slidePathColumns[segmentIndex],
+        return GameMath.lerp(slidePathColumns[segmentIndex],
                 slidePathColumns[segmentIndex + 1], segmentFraction);
-        visualRow    = GameMath.lerp(slidePathRows[segmentIndex],
+    }
+
+    /** Interpolates the slide path row at an overall eased progress in [0, 1]. See {@link #sampleSlideColumn}. */
+    public float sampleSlideRow(float easedProgress) {
+        if (slidePathLength < 2) return tileRow;
+        int   segmentCount    = slidePathLength - 1;
+        float clamped         = easedProgress < 0f ? 0f : (easedProgress > 1f ? 1f : easedProgress);
+        float pathPosition    = clamped * segmentCount;
+        int   segmentIndex    = (int) pathPosition;
+        if (segmentIndex >= segmentCount) segmentIndex = segmentCount - 1;
+        float segmentFraction = pathPosition - segmentIndex;
+        return GameMath.lerp(slidePathRows[segmentIndex],
                 slidePathRows[segmentIndex + 1], segmentFraction);
+    }
+
+    /**
+     * Raw (un-eased) overall progress of the active slide in [0, 1] — 0 at the origin tile, 1 at the
+     * destination. The afterimage trail (ORDER 8) offsets this backward to sample trailing ghost
+     * positions. Returns 1 when no slide is active.
+     */
+    public float slideProgress() {
+        if (moveAnimSeconds <= 0f || moveAnimDuration <= 0f) return 1f;
+        return 1f - moveAnimSeconds / moveAnimDuration;
     }
 
     /** True while a cosmetic slide is playing out (ORDER 2). */

@@ -496,7 +496,8 @@ public final class HunterKillerPattern implements BossAttackPattern {
             return BossMove.none();
         }
         windupAborted = false;
-        boss.dangerTileSet.arm(footprintScratch, EnemyConstants.OVERSEER_CHARGE_DAMAGE);
+        boss.dangerTileSet.arm(footprintScratch, EnemyConstants.OVERSEER_CHARGE_DAMAGE,
+                DangerTileSet.TelegraphKind.CHARGE_LINE);
         return BossMove.telegraph(EnemyConstants.OVERSEER_CHARGE_DAMAGE);
     }
 
@@ -521,7 +522,11 @@ public final class HunterKillerPattern implements BossAttackPattern {
         windupAborted = false;
         // Damage is nominal — the hazard system owns the DOT once cast; this value is only the telegraph
         // marker's carried damage and is never resolved (the paired cast ignites and clears the marks).
-        boss.dangerTileSet.arm(footprintScratch, EnemyConstants.OVERSEER_MELEE_DAMAGE);
+        // Tag the set with the hazard's colour language so the floor overlay reads fire (amber) vs toxic
+        // (sickly green) a turn ahead (ORDER 8, Fairness F6).
+        boss.dangerTileSet.arm(footprintScratch, EnemyConstants.OVERSEER_MELEE_DAMAGE,
+                fire ? DangerTileSet.TelegraphKind.HAZARD_FIRE
+                     : DangerTileSet.TelegraphKind.HAZARD_TOXIC);
         return BossMove.telegraph(EnemyConstants.OVERSEER_MELEE_DAMAGE);
     }
 

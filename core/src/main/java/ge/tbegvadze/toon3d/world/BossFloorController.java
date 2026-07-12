@@ -5,6 +5,7 @@ import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.entity.boss.Boss;
 import ge.tbegvadze.toon3d.entity.boss.BossMove;
+import ge.tbegvadze.toon3d.entity.boss.BossVisualState;
 import ge.tbegvadze.toon3d.entity.boss.DangerTileSet;
 import ge.tbegvadze.toon3d.entity.boss.RegenState;
 import ge.tbegvadze.toon3d.hazard.HazardManager;
@@ -161,6 +162,7 @@ public final class BossFloorController implements TickSubscriber {
 
     private void awakeBoss() {
         boss.hasAwakened = true;
+        boss.visualState = BossVisualState.STALKING;
         boss.alert();
         doorManager.lockArenaDoor(arenaDoorColumn, arenaDoorRow);
         bossHudRenderer.showIntro();
@@ -174,6 +176,7 @@ public final class BossFloorController implements TickSubscriber {
         phase2Triggered       = true;
         boss.phase            = 2;
         boss.invulnerable     = true;
+        boss.visualState      = BossVisualState.ENRAGED;
         invulnerableTurnsLeft = Constants.BOSS_PHASE_TRANSITION_TURNS;
         boss.phase2Pattern.onPhaseStart();
         bossHudRenderer.showBanner("PHASE 2");
@@ -184,6 +187,10 @@ public final class BossFloorController implements TickSubscriber {
 
     private void executeBossMove(BossMove move, Player player,
                                  int playerColumn, int playerRow) {
+        // ORDER 8 — record the beat this move represents so the HUD state label reflects what the player
+        // is seeing this turn. Planted-override branches below reset it to STALKING (a planted turn).
+        boss.visualState = visualStateForMove(move);
+
         // Fairness contract F1 (ORDER 2): the boss must plant at least every
         // BOSS_MAX_CONSECUTIVE_MOVE_TURNS turns. If a pattern requests yet another move past that cap,
         // the controller overrides it to a HOLD (a planted "catch me" turn) so there is ALWAYS a punish
@@ -197,6 +204,7 @@ public final class BossFloorController implements TickSubscriber {
         boolean isRelocation = isKiteMove || move.kind == BossMove.Kind.CHARGE;
         if (isKiteMove && consecutiveMoveTurns >= Constants.BOSS_MAX_CONSECUTIVE_MOVE_TURNS) {
             consecutiveMoveTurns = 0;   // this HOLD counts as the plant
+            boss.visualState = BossVisualState.STALKING;   // overridden to a planted HOLD
             return;                     // override to HOLD — no move this turn
         }
 
@@ -207,6 +215,7 @@ public final class BossFloorController implements TickSubscriber {
             chargeRecoveryTurnsLeft--;
             if (isRelocation) {
                 consecutiveMoveTurns = 0;   // the forced recovery HOLD counts as the plant
+                boss.visualState = BossVisualState.STALKING;   // overridden to a planted recovery HOLD
                 return;
             }
         }
@@ -275,6 +284,34 @@ public final class BossFloorController implements TickSubscriber {
             default:
                 consecutiveMoveTurns = 0;
                 break;
+        }
+    }
+
+    /**
+     * ORDER 8 — maps the move the boss is executing this turn to its presentation beat for the HUD state
+     * label. A bare {@code TELEGRAPH} is ambiguous (charge vs hazard vs summon), so it is disambiguated by
+     * the kind of the DangerTileSet the pattern just armed. Presentation only — never read by the sim.
+     */
+    private BossVisualState visualStateForMove(BossMove move) {
+        switch (move.kind) {
+            case CHARGE:
+                return BossVisualState.CHARGING;
+            case CAST_HAZARD:
+                return BossVisualState.CASTING;
+            case SUMMON:
+                return BossVisualState.SUMMONING;
+            case HEAL:
+                return BossVisualState.REPAIRING;
+            case TELEGRAPH:
+                switch (boss.dangerTileSet.getTelegraphKind()) {
+                    case CHARGE_LINE:                  return BossVisualState.CHARGING;
+                    case HAZARD_FIRE: case HAZARD_TOXIC: return BossVisualState.CASTING;
+                    case SUMMON_RUNES:                 return BossVisualState.SUMMONING;
+                    default:                           return BossVisualState.STALKING;
+                }
+            default:
+                // DASH / REPOSITION / RESOLVE / MELEE / TRANSITION / NONE — all read as stalking pressure.
+                return BossVisualState.STALKING;
         }
     }
 
