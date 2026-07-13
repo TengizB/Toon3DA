@@ -17,25 +17,6 @@ public final class RouteMapConstants {
     private RouteMapConstants() {}
 
     // -------------------------------------------------------------------------
-    // TEMPORARY TESTING TOGGLE — remove before shipping
-    // -------------------------------------------------------------------------
-
-    /**
-     * TEMPORARY DEBUG FLAG (testing only — must be {@code false} for real builds).
-     *
-     * <p>When {@code true}, any BOSS node drawn on the FACILITY NAV route console becomes tappable
-     * regardless of whether it is a legal AVAILABLE next pick, so a tester can jump straight into the
-     * boss arena from any route-select screen instead of clearing a whole region first. Selecting such
-     * a boss bypasses the normal cursor advance in {@code World.commitRouteNode} and drops directly
-     * into the boss floor.
-     *
-     * <p>This is a developer convenience for exercising the boss fight in isolation; it is NOT a
-     * gameplay feature. Set back to {@code false} (or delete the flag and its call sites) once boss
-     * testing is done.
-     */
-    public static final boolean BOSS_TEST_ALWAYS_CLICKABLE = true;
-
-    // -------------------------------------------------------------------------
     // Determinism
     // -------------------------------------------------------------------------
 

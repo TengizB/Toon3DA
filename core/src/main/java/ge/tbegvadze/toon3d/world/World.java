@@ -66,7 +66,6 @@ import ge.tbegvadze.toon3d.route.RegionSpec;
 import ge.tbegvadze.toon3d.route.RouteMap;
 import ge.tbegvadze.toon3d.route.RouteMapGenerator;
 import ge.tbegvadze.toon3d.route.RouteNode;
-import ge.tbegvadze.toon3d.route.RouteNodeType;
 import ge.tbegvadze.toon3d.route.RouteRegistries;
 import ge.tbegvadze.toon3d.shop.DefaultShopOfferSource;
 import ge.tbegvadze.toon3d.shop.ShopAbilityService;
@@ -639,19 +638,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * touch). The next floor is built from {@link #pendingNode} in the FADING_OUT completion branch.
      */
     private void commitRouteNode(RouteNode next) {
-        // TEMPORARY TESTING (RouteMapConstants.BOSS_TEST_ALWAYS_CLICKABLE): a BOSS node tapped out of
-        // turn is not a legal AVAILABLE next pick, so routeMap.commitTo() would reject it. Drop straight
-        // into the boss arena from pendingNode without advancing the route cursor, so the tester lands
-        // on the boss floor and the map is left untouched for whenever they resume the real run.
-        if (RouteMapConstants.BOSS_TEST_ALWAYS_CLICKABLE
-                && next.type == RouteNodeType.BOSS
-                && !routeMap.getSelectableNext().contains(next)) {
-            pendingNode = next;
-            recordRouteCommit(next);
-            fadeTimerSeconds = 0f;
-            runPhase = RunPhase.FADING_OUT;
-            return;
-        }
         routeMap.commitTo(next);
         pendingNode = next;
         recordRouteCommit(next);
