@@ -1,0 +1,458 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design
+TITLE: DEEP EXCAVATION — Monolith Dig chamber (3 walls,4 props,3 decals)
+CREATED: 2026-07-14
+---
+
+OVERVIEW
+========
+DEEP EXCAVATION is the "origin point" room: not a clean UAC lab and not a
+flesh-demon warren, but the raw dig site where corporate greed drilled straight
+through bedrock into something that should have stayed buried. It is a subterranean
+rock cavern — dark basalt walls, timber-and-steel shoring, industrial drill rigs,
+harsh portable floodlights — built radially around a central excavation PIT from
+which an ancient demonic MONOLITH has been unearthed and clamped with UAC sensors.
+Every other room says "the facility failed." This room says "the facility CAUSED
+it." Tonally: archaeological awe curdling into dread. Cold white work-light on the
+outer ring versus infernal red glow rising out of the pit at the center.
+
+This is a distinct sub-biome from all existing wall families (plain / conduit /
+vent / terminal / wires / hazard / rust / gore / bulkhead / glass / bio-quarantine /
+emergency / medical / cryo / radiation / blast / holo-data / force-field) — it is
+the only ROCK / geological / archaeological theme in the game. It reuses existing
+pipelines only (per-char wall switch in WallRenderer, billboard PropRenderer,
+RoomType decoration in LevelGenerator). No new runtime architecture required for
+phase 1.
+
+Adds:
+  - 1 new room type:      EXCAVATION_SITE
+  - 3 new walls:          o (bedrock), [ (strata/vein reveal), { (shoring/pit rim)
+  - 4 new solid props:    } (monolith), ( (drill rig), ) (rubble mound), / (floodlight mast)
+  - 3 new walkable decals: , (gravel scatter), _ (catwalk grating), : (bore tailings)
+
+
+NEW SYMBOLS — EXACTLY 10 (all confirmed FREE in docs/tile-symbols.txt)
+=====================================================================
+From the safe free set ( ) , - / : ; [ ] _ ` { } o, this design claims exactly 10:
+  o  [  {   (3 walls)      } ( ) /   (4 solid props)      , _ :   (3 decals)
+
+| SYMBOL | SECTION      | NAME              | RICH VISUAL DESCRIPTION (where it appears in the room) |
+|--------|--------------|-------------------|---------------------------------------------------------|
+| o      | WALL         | Bedrock wall      | Raw excavated dark basalt/igneous cave stone. The outer shell of the whole chamber. Dry, matte, NO wet sheen (deliberate contrast to Gore wall 'G'). Layered charcoal->slate value gradient, tiling rock-grain mottle, vertical drill-gouge striations (parallel faint lighter scratches from boring heads), embedded aggregate pebbles as small pale speckle clusters, 1-2 faint horizontal sediment bands per tile, ochre dust film, occasional pale quartz fleck highlight, darker damp patch near the base. Corner vignette. |
+| [      | WALL         | Strata/vein wall  | The "we dug too deep" reveal wall. Horizontal sedimentary strata bands (ochre / rust-red / gray / black) stacked and grained; a jagged diagonal fissure crosses the face filled with a GLOWING demonic vein — molten orange->blood-red with a thin white-hot core and branching lichtenberg cracks. Faint angular SIGIL glyphs are carved inside the vein, backlit red. A molten bead or two drips. The only warm emissive rock accent; placed on the wall the player faces on entry. |
+| {      | WALL         | Shoring wall      | Engineered pit-rim bracing: bedrock faced with horizontal timber lagging planks (worn grain, bolt heads) held by vertical steel H-beam soldier piles, diagonal tension struts, chipped hazard-yellow paint on the beams, a hung warning placard, dirt spilling between planks at the base. Reads "edge of the pit — do not fall." Forms the raised central plinth / pit rim. |
+| }      | SOLID PROP   | Unearthed Monolith| CENTERPIECE (0.95x height). A tall tapering roughly-hewn black-basalt obelisk canted slightly off-vertical, its whole surface densely carved with angular demonic sigils lit from WITHIN by a slow-pulsing infernal red-orange glow that bleeds up the grooves; heat-shimmer corona; UAC has bolted incongruous modern scanning clamps + sensor cables (cyan status LEDs) onto the ancient stone; offering-like rubble at its foot; optional slowly floating rock chips near the crown (implied levitation). The room's emotional anchor. |
+| (      | SOLID PROP   | Drill rig         | Tunnel-boring rock drill (0.85x). Heavy skid/tracked base, angled hydraulic arm holding a large dust-crusted spiral auger bit, motor housing with cooling vents + grimy amber worklight, hydraulic hoses, control-lever cluster; caked in ochre dust. Variant "jammed/active": faint red fault light + adjacent spark decal. Safety-orange + gray steel. Ringed radially around the pit, facing inward. |
+| )      | SOLID PROP   | Rubble mound      | Low wide heap of excavated spoil (0.45x): broken rock chunks, dirt, a half-buried timber beam, a snapped drill bit poking out; irregular silhouette, matte dusty. Blocks movement; used for cover / sightline breaks in the outer ring. |
+| /      | SOLID PROP   | Floodlight mast   | Portable telescoping work-light tower (0.90x): tripod base with a small generator box (green power LED, coiled cable), tall pole, crossbar with 2-4 harsh white halogen lamp heads aimed downward, bloom/glare halo. The room's cold-white light source, fighting the monolith's red glow. Placed around the outer ring. |
+| ,      | WALKABLE DECAL| Gravel scatter   | Loose excavated gravel/dirt on the floor (0.16x): irregular blotch of small rock chips, dust, boot-scuff footprints; matte ochre-gray. Tracks dig activity across the outer ring, heavier near drill rigs. |
+| _      | WALKABLE DECAL| Catwalk grating  | Metal plank/grating bridge segment over the pit (0.30x, slightly raised read): galvanized diamond-plate/bar grating with visible dark gaps (abyss showing through), riveted edge rails, hazard-stripe edge, worn tread marks; a hint of deep-red vein glow leaks up through the grating gaps. These tiles form the cross-shaped bridges to the monolith. |
+| :      | WALKABLE DECAL| Bore tailings    | Drill tailings (0.16x): paired small conical piles of finely pulverized rock powder dusted with faint warm glow-flecks (micro-fragments of the glowing vein), plus a couple of dark round core-sample bore holes. Scattered adjacent to drill rigs. Distinct from ',' gravel by the glow flecks + round holes. |
+
+
+ROOM SHAPE — RADIAL OCTAGON WITH CROSS-CATWALK CORE
+===================================================
+The silhouette is deliberately NON-rectangular so it reads instantly different on
+the mini-map and in the 3D view:
+
+  OUTER SHELL: an OCTAGON approximation on the square grid — a large square whose
+  four corners are chamfered (staircased) with bedrock 'o' walls, giving eight
+  visible wall faces instead of four. Reads as a round rock cavern, not a box.
+
+  CENTRAL PLINTH / PIT RIM: a concentric inner block of shoring wall '{' (the raised
+  rock plug the dig exposed). This inner mass is SOLID except for a PLUS/cross cut
+  through it: the center row and center column are laid with '_' catwalk grating
+  (walkable), forming four cardinal bridges that meet at the exact center.
+
+  MONOLITH: the '}' obelisk stands on the exact center tile — the crossing of the
+  four catwalk arms. To reach it the player must commit to walking a narrow bridge.
+
+  So the floorplan is: octagonal open ring (walkable) -> four narrow catwalk arms
+  cutting inward through a solid stone plinth -> monolith at the hub. The four solid
+  quadrant blocks of '{' between the arms give the room a pinwheel/cross reveal in
+  first person: from the ring you see stone terraces with a glowing obelisk framed
+  at the end of each bridge.
+
+Conceptual ASCII (o=bedrock, {=shoring, _=catwalk, }=monolith, ' '=lit floor,
+d=entrance door; corners chamfered):
+
+    o o o o d o o o o
+    o               o
+   o                 o
+  o     { { _ { {     o
+  o     {   _   {     o
+  o     _ _ } _ _     o
+  o     {   _   {     o
+  o     { { _ { {     o
+   o                 o
+    o               o
+     o o o o o o o o
+
+(Real placement spans a 11x11..13x13 interior; the plinth is a centered 5x5 or 7x7.)
+
+
+TEXTURE / SPRITE SPEC (procedural — detailed enough to implement)
+=================================================================
+General: walls are procedural tiling Pixmaps (Nearest filter, disposed in
+dispose()); props/decals are procedural billboard Pixmaps in PropRenderer. Reuse
+the existing wall/billboard pipelines. Palette discipline: the room's identity is
+DRY EARTH TONES (basalt black, slate gray, ochre/rust dust) + COLD WHITE floodlight
++ INFERNAL RED-ORANGE emissive (vein + monolith). This trio contrasts every other
+room (warm-yellow corridors, cyan labs, green radiation, red/orange armory hazard).
+
+--- WALL 'o' — BEDROCK ---
+Build (bottom to top, per tile, tiling seamless L/R):
+  1. Base fill: vertical gradient BASALT_BLACK (top) -> SLATE_GRAY (bottom).
+  2. Rock grain: 2-3 octaves of value/Perlin noise, multiply +/-8% luminance, so
+     no two tiles look flat. Clamp to keep it dark.
+  3. Drill striations: 6-10 faint near-vertical light scratches (1px, +6% luma),
+     slightly wavering, evenly-ish spaced — the boring-head gouges.
+  4. Aggregate: 20-40 small pale speckles (2-3px) in loose clusters (embedded stone).
+  5. Sediment bands: 1-2 horizontal bands, 3-5px tall, hue-shifted toward OCHRE_DUST,
+     at random Y.
+  6. Damp patch: one darker blue-desaturated blotch low on the tile (~20% chance).
+  7. Corner vignette: darken outer 10% border.
+  NO specular sheen. Matte only.
+COLORS (RGBA):
+  BASALT_BLACK   = (0.09,0.09,0.11,1.0)
+  SLATE_GRAY     = (0.22,0.22,0.25,1.0)
+  OCHRE_DUST     = (0.42,0.34,0.22,1.0)
+  QUARTZ_FLECK   = (0.78,0.80,0.82,1.0)
+  DAMP_BLUE      = (0.10,0.12,0.16,1.0)
+
+--- WALL '[' — STRATA / VEIN REVEAL ---
+Build:
+  1. Base: 4-5 stacked horizontal STRATA bands, top->bottom hues cycling
+     OCHRE_DUST -> RUST_RED -> SLATE_GRAY -> BASALT_BLACK, each grained (noise) and
+     separated by a 1px dark seam.
+  2. Fissure: a jagged diagonal polyline crack from lower-left toward upper-right,
+     width tapering 6px->2px.
+  3. Vein glow inside fissure: fill with radial-ish gradient VEIN_CORE_WHITE (thin
+     center) -> VEIN_ORANGE -> VEIN_BLOOD (edge), additive-look.
+  4. Lichtenberg branches: 4-6 thin (1px) VEIN_ORANGE cracks branching off the
+     fissure into the surrounding rock, fading out.
+  5. Sigils: 2-3 tiny angular rune glyphs (5-7px) drawn in VEIN_CORE_WHITE over the
+     vein, as if carved and backlit.
+  6. Molten bead: 1-2 bright drips (VEIN_ORANGE) hanging below the fissure.
+COLORS (RGBA):
+  RUST_RED       = (0.35,0.16,0.12,1.0)
+  VEIN_BLOOD     = (0.55,0.06,0.04,1.0)
+  VEIN_ORANGE    = (1.00,0.42,0.10,1.0)
+  VEIN_CORE_WHITE= (1.00,0.92,0.80,1.0)
+(reuse BASALT_BLACK, SLATE_GRAY, OCHRE_DUST from 'o')
+
+--- WALL '{' — SHORING / PIT RIM ---
+Build:
+  1. Base: darkened bedrock 'o' fill (multiply luma by 0.75 — it's in shadow at the
+     pit edge).
+  2. Timber lagging: 5-7 horizontal plank boards (TIMBER_BROWN, grained, 1px dark
+     gaps between), each with 2 bolt-head dots (STEEL_GRAY highlight).
+  3. Soldier piles: 2 vertical steel H-beams (STEEL_GRAY, edge highlight) at ~25%
+     and ~75% width, drawn over the planks.
+  4. Tension strut: 1 diagonal steel strut crossing the tile, HAZARD_YELLOW chips
+     flaking off it.
+  5. Base spill: dirt/spoil mound (OCHRE_DUST) piled along the bottom 4-6px.
+  6. Placard (~25% chance): small hung warning sign, HAZARD_YELLOW with a dark
+     glyph.
+COLORS (RGBA):
+  TIMBER_BROWN   = (0.34,0.24,0.15,1.0)
+  STEEL_GRAY     = (0.40,0.42,0.46,1.0)
+  HAZARD_YELLOW  = (0.85,0.72,0.12,1.0)
+
+--- PROP '}' — MONOLITH (billboard, 0.95x height) ---
+Build (tall narrow sprite):
+  1. Silhouette: tapering obelisk, base wider than crown, canted ~4deg off vertical,
+     rough-hewn edges (jagged 1-2px steps, not smooth).
+  2. Body: BASALT_BLACK with subtle vertical grain; darker on the shadow side.
+  3. Sigil grooves: dense vertical/angular carved glyph lines all over the body,
+     filled with a glow gradient VEIN_BLOOD (deep grooves) -> VEIN_ORANGE (shallow)
+     -> VEIN_CORE_WHITE (a few hot spots). Grooves brightest low, bleeding upward.
+  4. Heat corona: faint additive VEIN_ORANGE halo (soft alpha) around the whole
+     silhouette; 1-2px shimmer noise at the edges.
+  5. UAC clamps: near the base, 2 modern steel scanning clamps (STEEL_GRAY) gripping
+     the stone, with cyan sensor LEDs (0.35,0.95,1.00) and thin cables snaking off.
+  6. Foot rubble: a small ')' -like debris heap at the base.
+  Optional polish: 2-3 tiny floating rock chips near the crown (drawn statically,
+  offset from the body) implying levitation.
+PULSE: the groove glow may brighten/dim via the global-tick/flicker hook by scaling
+  the sprite's tint (NEVER reallocate the Pixmap in render()).
+
+--- PROP '(' — DRILL RIG (billboard, 0.85x) ---
+  Skid base (STEEL_GRAY, dust-caked ochre). Motor housing box with cooling-vent
+  slats + grimy amber worklight (0.90,0.65,0.20). Angled hydraulic arm (2 segments,
+  hoses drawn as curved dark lines) holding a large SPIRAL AUGER bit: a cone of
+  helical flighting, STEEL_GRAY with OCHRE_DUST crust, tip pointed down-forward.
+  Control-lever cluster (small). Body color safety-orange (0.85,0.45,0.12) + gray.
+  Jammed variant (~30%): red fault LED (0.95,0.20,0.15) + place a spark ':' or 'e'
+  decal on an adjacent tile.
+
+--- PROP ')' — RUBBLE MOUND (billboard, 0.45x) ---
+  Low wide irregular heap: 8-14 overlapping angular rock chunks (SLATE_GRAY /
+  BASALT_BLACK, top-lit lighter), OCHRE_DUST fill between, a half-buried TIMBER_BROWN
+  beam poking out at an angle, optional snapped drill-bit shard (STEEL_GRAY). Matte,
+  dusty. No glow.
+
+--- PROP '/' — FLOODLIGHT MAST (billboard, 0.90x) ---
+  Tripod base + small generator box (STEEL_GRAY, green power LED 0.20,0.85,0.35,
+  coiled cable). Tall thin pole. Crossbar at top with 2-4 halogen lamp heads
+  (rounded rectangles) glowing FLOOD_WHITE (0.95,0.97,1.00) with a soft additive
+  bloom halo, aimed downward. This is the room's cold key light — sprite should read
+  as the brightest cool element, opposing the monolith's warm glow.
+
+--- DECAL ',' — GRAVEL SCATTER (0.16x) ---
+  Flat irregular blotch: 30-60 tiny rock-chip specks (SLATE_GRAY / OCHRE_DUST) with
+  a faint dust smear and 1-2 boot-scuff streaks. Matte, no glow. Same ground band as
+  '.'/'O'/'e'.
+
+--- DECAL '_' — CATWALK GRATING (0.30x, walkable) ---
+  Rectangular grating plate: diamond-plate / bar-grid pattern (STEEL_GRAY lines on a
+  near-black ground so the DARK GAPS read as the pit below); riveted edge rails
+  (lighter STEEL_GRAY); a hazard-stripe (HAZARD_YELLOW / black) along the long
+  edges; worn tread wear-marks (brighter scuff). A faint VEIN_BLOOD glow bleeds up
+  through the grid gaps (the vein continues into the pit). Reads slightly raised.
+
+--- DECAL ':' — BORE TAILINGS (0.16x) ---
+  Two small conical powder piles (OCHRE_DUST, top-lit) dusted with 6-10 faint
+  VEIN_ORANGE glow-flecks; plus 2-3 dark round core-sample bore holes (near-black
+  circles with a thin bright rim). Placed next to drill rigs. Glow-flecks + round
+  holes distinguish it from plain ',' gravel.
+
+
+GENERATOR ALGORITHM (step-by-step for LevelGenerator.java)
+==========================================================
+Add RoomType.EXCAVATION_SITE with a decorateExcavationSite() method following the
+existing RoomType decoration pattern. The generator carves the octagon into a
+reserved rectangular room slot, then decorates radially.
+
+Inputs: reserved room rectangle (interior columnCount x rowCount), the run RNG, the
+door/entrance side(s) chosen by the connector pass.
+
+1. SIZE GATE: require interior footprint >= 11x11 (prefer 11x11 or 13x13, odd side).
+   If the slot is smaller, fall back to a different RoomType (do not force it).
+
+2. CARVE OCTAGON:
+   - Fill the whole interior with lit floor ' '.
+   - Ring the perimeter with bedrock 'o' walls.
+   - Chamfer each of the 4 corners: let chamferSize C = floor(sideLength / 4). For
+     each corner, for tileColumn/tileRow within C of that corner where
+     (cornerOffsetColumn + cornerOffsetRow) < C, set the tile to bedrock 'o' wall.
+     This staircases the diagonal, producing the octagon silhouette.
+
+3. STRATA REVEAL: pick 1-2 contiguous perimeter segments (2-3 'o' tiles each) on a
+   NON-entrance side (bias to the wall directly opposite the primary door) and
+   convert them to strata/vein wall '['. Never convert an entrance-adjacent tile.
+
+4. CENTRAL PLINTH: define a centered square of side P = sideLength - 6 (so P is 5 or
+   7). Fill every plinth tile with shoring wall '{' (solid). This is the raised pit
+   rim / rock plug.
+
+5. CUT THE CROSS CATWALK: within the plinth, convert the center row and the center
+   column (each 1 tile wide) from '{' to catwalk grating '_'. The center tile of the
+   plinth is where the two lanes cross. This yields four cardinal bridges through
+   solid stone. Guarantee each catwalk arm connects the plinth edge to the outer
+   ring floor (extend one tile of '_' just past the plinth edge if needed).
+
+6. MONOLITH: place '}' on the exact center tile (the catwalk crossing).
+
+7. DRILL RIGS: place 2-4 '(' in the OUTER RING, positioned near the mouths of the
+   catwalk arms (just outside the plinth), facing inward. ~30% rolled "jammed"
+   (spawns an adjacent ':' or 'e').
+
+8. FLOODLIGHT MASTS: place 2-4 '/' in the outer ring, spaced evenly against/near the
+   bedrock shell (leave 1 tile clearance so they don't block the wall-hug path).
+
+9. RUBBLE: scatter 2-4 ')' mounds in the outer ring for cover / sightline breaks;
+   keep them off the catwalk arms and out of the single guaranteed loop path.
+
+10. DECAL PASS: scatter ',' gravel across the outer-ring floor (density higher within
+    2 tiles of any drill rig); place ':' bore tailings adjacent to each drill rig;
+    ensure catwalk arms are all '_' (already placed step 5).
+
+11. LIGHTING: outer ring floor stays lit ' ' near floodlight masts; drop 1-3 'u'
+    unlit or 'f' flicker tiles in ring gaps far from masts for dread. The plinth is
+    solid (no floor). The catwalk arms stay lit ' '/'_' (the monolith self-lights).
+
+12. ENTRANCES: exactly 1 door gap in the octagon shell (2 opposite gaps allowed for a
+    through-room). Connector pass wires it into the corridor graph.
+
+13. ENEMY SPAWNS: place 2-4 spawn markers behind rubble mounds and at catwalk-arm
+    mouths (see BALANCE). NAVIGABILITY CHECK: the outer ring must be a full loop and
+    every catwalk arm must reach the ring — verify the monolith tile is reachable
+    from the entrance via flood-fill before committing the room (roguelike pillar 2:
+    no isolated cells).
+
+
+PLACEMENT RULES (frequency, depth-gating, spacing)
+==================================================
+  - RARITY: RARE set-piece. At most 1 per generated level; frequently 0. LOW weight
+    in the RoomType roll table. It is a landmark, not filler.
+  - DEPTH GATE: floors 4+. This is where the dig "found" the invasion — it belongs to
+    mid/late descent, thematically the cause the player uncovers. (Route-map: gate to
+    deeper regions; never on floor 1.)
+  - SPACING: minimum spacing from other set-piece rooms (RESEARCH_LAB, boss arena,
+    shop/safe room) — do not stack two landmarks adjacently. Never the start room.
+  - SLOT SIZE: only spawn if a >=11x11 interior slot exists (see step 1).
+  - SYMBOL CONTAINMENT: bedrock 'o', strata '[', shoring '{', monolith '}', catwalk
+    '_' and bore tailings ':' should appear ONLY in EXCAVATION_SITE rooms (keeps the
+    biome read exclusive). Drill rig '(', rubble ')', floodlight mast '/', gravel ','
+    MAY leak sparingly into adjacent maintenance/mining corridors (1-2 tiles) as a
+    breadcrumb hinting a dig is near — optional polish, keep rare.
+
+
+GAMEPLAY LOOP / ATMOSPHERE (roguelike pillars)
+==============================================
+1. Player enters via one octagon door. Room READ: rock walls + white floodlights +
+   a red glow rising from a central stone mass = "this is the dig; something is at
+   the middle, and reaching it means walking a bridge."
+2. The outer ring is the safe(ish) loop: cover from rubble mounds ')', cold light
+   from masts '/'. Ranged/melee enemies contest the ring.
+3. To reach the MONOLITH '}' the player must step onto a narrow catwalk arm '_'. On a
+   catwalk the player is COMMITTED and EXPOSED: single-file, no cover, and — crucially
+   — standing on a catwalk arm places the player on the same tile-row or tile-column
+   as anything sitting at that arm's mouth. Given the cardinal-line ranged rule
+   (isSameCardinalLine), a Vortex Eye / Eye Tyrant parked at an arm mouth gets a
+   clean shot down the bridge. Advancing to the relic is a deliberate risk. (Pillar 4:
+   meaningful choice under pressure; Pillar tactical positioning.)
+4. THE MONOLITH is an interactable relic/shrine node (phase 2 — ties to
+   roguelike_order_14 artifacts). Facing it and interacting offers a double-edged
+   trade: touch the stone to claim an ARTIFACT / boon, but the disturbance WAKES the
+   dig — spawns an ambush wave from the arm mouths and/or converts a strata seam into
+   a fresh vein. Take the power, pay the alarm. (Pillar 3: emergent; Pillar 1: a
+   death here is legible — "I woke it for the relic and got pinned on the bridge.")
+   Phase 1 fallback: monolith is a pure atmospheric prop and the reward (H / A /
+   keycard / artifact pickup) simply sits at its foot; the bridge exposure still
+   makes claiming it tense.
+5. EMOTIONAL ARC: descent-into-awe (a genuinely ancient, beautiful, terrible thing)
+   then dread (the UAC clamps and floodlights prove humans were HERE, poking it). The
+   room reframes the whole run — the invasion wasn't an accident, it was excavated.
+
+Atmosphere payoff ties directly to the pillars: unique readable biome (information
+management — you learn "rock + red glow = the dig, expect a bridge gauntlet"),
+committed positioning (tactical depth), and an optional relic-for-alarm bargain
+(meaningful choice + emergent consequence).
+
+
+BALANCE NOTES (all PLACEHOLDER — flag for tuning)
+=================================================
+  - Room spawn weight: LOW; cap 1 per level; floors 4+. (PLACEHOLDER)
+  - Solid-prop budget: keep total blocking props (', ) / plus plinth mass) navigable —
+    outer ring must remain a full walkable loop. Aim <= 8 free-standing props.
+  - Drill rigs '(': 2-4; ~30% jammed variant. Rubble ')': 2-4. Masts '/': 2-4.
+  - Catwalk arms: exactly 4, each 1 tile wide (the exposure is the point — do not
+    widen to 2, it removes the gauntlet).
+  - Enemy spawns: 2-4. Thematic fit = things the dig disturbed. Suggested: a ranged
+    "arm-mouth" guard (Eye Tyrant '2' or Vortex Eye 'V') positioned to punish the
+    bridge, plus 1-2 melee (Gore Biter '3' / Blight Corruptor '*') in the ring. On
+    deeper floors add a heavy (Shell Brute '4' / Iron Stalker '!').
+  - Relic wake-ambush (phase 2): spawn 2-3 enemies at arm mouths on interaction.
+    Tune so a prepared player survives and an over-extended one does not.
+  - 'f'/'u' dread tiles: 1-3 max in ring gaps; do not strobe-spam.
+  - Emissive discipline: red (vein/monolith) is the ONLY warm glow; white (masts) the
+    ONLY cool key light; everything else is dry earth tone. Keep the two lights
+    spatially separated (red = center/pit, white = outer ring) so the contrast reads.
+
+
+TECHNICAL NOTES
+===============
+NEW SYMBOLS — ALL CONFIRMED FREE in docs/tile-symbols.txt (from the safe set
+( ) , - / : ; [ ] _ ` { } o). EXACT ASSIGNMENTS:
+
+  WALLS (add to Level.isWall -> true; add case to WallRenderer wall switch):
+    'o'  Bedrock wall        1.0x height   exc_wall_bedrock (procedural)
+    '['  Strata/vein wall    1.0x height   exc_wall_strata  (procedural, emissive)
+    '{'  Shoring wall        1.0x height   exc_wall_shoring (procedural)
+
+  SOLID PROPS (add to Level.isPropSolid -> true; add case to PropRenderer):
+    '}'  Monolith            0.95x height  (INTERACTABLE in phase 2)
+    '('  Drill rig           0.85x height
+    ')'  Rubble mound        0.45x height
+    '/'  Floodlight mast     0.90x height
+
+  WALKABLE DECALS (add to Level.isPropDecal -> true; add case to PropRenderer):
+    ','  Gravel scatter      0.16x height
+    '_'  Catwalk grating     0.30x height
+    ':'  Bore tailings       0.16x height
+
+REQUIRED — adding each symbol MUST follow the STRICT RULE checklist in
+docs/tile-symbols.txt (this design specifies; it does NOT modify code):
+  1. Add all 10 symbols to docs/tile-symbols.txt in the correct sections
+     (o,[,{ under WALLS; },(,),/  under SOLID PROPS; ,_: under WALKABLE DECALS).
+  2. Update SYMBOL BUDGET: "Currently assigned" 75 -> 85, "Remaining" 20 -> 10;
+     remove o [ { } ( ) / , _ : from the free-characters list.
+  3. Level.java: add o,[,{ to isWall(); add },(,),/ to isPropSolid(); add ,_: to
+     isPropDecal().
+  4. Wire textures/sprites: o,[,{ in WallRenderer (procedural Pixmaps, Nearest,
+     dispose in dispose()); },(,),/ and ,_: in PropRenderer.
+  5. Constants: per-prop height multipliers
+     (PROP_HEIGHT_MONOLITH=0.95f, PROP_HEIGHT_DRILL_RIG=0.85f,
+      PROP_HEIGHT_RUBBLE_MOUND=0.45f, PROP_HEIGHT_FLOODLIGHT_MAST=0.90f,
+      PROP_HEIGHT_GRAVEL_SCATTER=0.16f, PROP_HEIGHT_CATWALK_GRATING=0.30f,
+      PROP_HEIGHT_BORE_TAILINGS=0.16f) plus the RGBA color constants above.
+
+AFFECTED CLASSES:
+  - Level.java          : isWall (o,[,{), isPropSolid (},(,),/), isPropDecal (,_:).
+  - WallRenderer.java   : three new procedural wall Pixmaps + switch cases.
+  - PropRenderer.java   : seven new billboard sprites + height-multiplier lookup.
+  - LevelGenerator.java : RoomType.EXCAVATION_SITE + decorateExcavationSite()
+    (octagon carve, plinth fill, cross-catwalk cut, monolith/rig/mast/rubble place,
+    decal scatter, navigability flood-fill check). Add to roll table at LOW weight,
+    depth-gated floors 4+, cap 1/level.
+  - LevelGenConstants.java : octagon chamfer ratio, plinth side formula, prop counts.
+  - Constants.java / RenderConstants.java : height multipliers + color constants.
+  - docs/tile-symbols.txt : 10 symbol entries + budget update (20 -> 10 remaining).
+
+MATH/ALGORITHM NOTES:
+  - Octagon carve is pure integer grid math (corner-chamfer via
+    cornerOffsetColumn + cornerOffsetRow < chamferSize). No raycast changes.
+  - Cross-catwalk cut = set center row/column of the plinth square to '_'. Reuse the
+    existing wall/decal pipelines; walls use DDA, props use billboard projection.
+  - Monolith glow PULSE (optional): scale the sprite tint via the global-tick/flicker
+    hook — NEVER reallocate the Pixmap in render() (respects the no-alloc rule).
+  - Navigability: flood-fill from the entrance must reach the center tile before the
+    room is committed.
+
+
+INTERACTIONS (with existing / planned systems)
+==============================================
+1. CATWALK '_'  <->  CARDINAL-LINE RANGED RULE (isSameCardinalLine): the narrow
+   cross bridges intentionally align the player with arm-mouth tiles, giving ranged
+   enemies (Eye Tyrant / Vortex Eye) a legal cardinal shot down the bridge. The room
+   is built AROUND the existing ranged constraint as a tactical gauntlet.
+2. MONOLITH '}'  <->  ARTIFACTS / RELICS (roguelike_order_14_artifacts_and_special_
+   relics): the monolith is a natural artifact/shrine node — claim a boon, pay an
+   ambush. Reuse any interactable-prop hook (same one the RESEARCH_LAB AI core 'J'
+   would use). If no hook exists yet, ship phase 1 with the reward at its foot.
+3. STRATA '['  &  MONOLITH GLOW  <->  LIGHTING SYSTEM (laboratory-lighting /
+   lighting-system-overhaul): the vein + monolith are warm emissive accents the
+   colored-lighting pass can sample; floodlight masts '/' are cool emitters. A room
+   with two opposed light colors is a strong test case for the lighting system.
+4. JAMMED DRILL RIG '('  <->  HAZARD CHAIN (hazard-chain-reactions): a jammed rig
+   sparking near an explosive barrel 'E' or spilled fuel could ignite — natural tie
+   to the fire/toxic chain system. Phase 1: atmosphere (adjacent ':'/'e' decal only).
+5. ROOM TYPE TABLE  <->  procedural-level-generation / route-map: slots in as one
+   more low-weight, depth-gated RoomType with its own decorate method; no generator
+   rewrite. On the route map it can flag as a "landmark/relic" node for legibility.
+6. BIOME CONTRAST  <->  RESEARCH_LAB: the Lab is where the invasion was INVITED
+   (clean cyan science); the Dig is where it was UNEARTHED (raw red rock). Pairing
+   both across a run tells the whole causal story — invited AND excavated.
+
+
+OPEN QUESTIONS
+==============
+1. Does an interactable-prop hook exist (face prop + interact -> event)? If yes,
+   wire the monolith relic bargain in phase 1; if not, ship monolith as a prop with
+   the reward at its foot and fast-follow the hook.
+2. Should the relic wake-ambush be one-shot (claim once) or re-trigger if the player
+   lingers? (Recommend one-shot; permadeath punishes greed enough.)
+3. Should the pit read as a true dark abyss (make the four plinth quadrants a
+   walkable 'u' unlit sunken floor with catwalks the only LIT path) instead of solid
+   '{' quadrants? Solid quadrants are simpler and guarantee the gauntlet; sunken
+   dark quadrants read more like a real pit but need care to stay navigable.
+   (Recommend: solid '{' quadrants for phase 1.)
+4. Two-door through-room vs single dead-end landmark? Through-room integrates better
+   into the corridor graph; dead-end makes it feel like a discovered vault.
+5. Should bedrock 'o' / shoring '{' ever appear in a dedicated "mining corridor"
+   connector biome leading INTO the dig, as foreshadowing? (Recommend: rare, 1-2
+   tiles, to preserve the room's exclusivity while hinting.)
+6. Monolith glow pulse: static Pixmap + tint scaling via tick hook (cheap, no
+   alloc), or leave fully static? (Recommend tint-scaling only.)
