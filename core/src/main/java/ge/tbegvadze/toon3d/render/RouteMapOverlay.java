@@ -1,6 +1,8 @@
 package ge.tbegvadze.toon3d.render;
 
 import ge.tbegvadze.toon3d.route.RouteNode;
+import ge.tbegvadze.toon3d.route.RouteNodeType;
+import ge.tbegvadze.toon3d.util.RouteMapConstants;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -65,12 +67,20 @@ public final class RouteMapOverlay {
 
     /**
      * Commits to a node: deactivates the overlay and fires the listener. The node MUST be one of the
-     * presented candidates.
+     * presented candidates, EXCEPT for the temporary boss-test bypass
+     * ({@link RouteMapConstants#BOSS_TEST_ALWAYS_CLICKABLE}), under which a BOSS node tapped out of turn
+     * is allowed through so it can be exercised in isolation.
      *
-     * @throws IllegalArgumentException if the node was not among the presented candidates
+     * @throws IllegalArgumentException if the node was not among the presented candidates and is not a
+     *                                  boss-test commit
      */
     public void commit(RouteNode node) {
-        if (!candidates.contains(node)) {
+        // TEMPORARY TESTING (RouteMapConstants.BOSS_TEST_ALWAYS_CLICKABLE): a BOSS node tapped out of
+        // turn is deliberately NOT one of the presented candidates, so skip the membership check for it
+        // and let World.commitRouteNode route it straight into the boss arena.
+        boolean bossTestCommit = RouteMapConstants.BOSS_TEST_ALWAYS_CLICKABLE
+                && node != null && node.type == RouteNodeType.BOSS;
+        if (!bossTestCommit && !candidates.contains(node)) {
             throw new IllegalArgumentException("Committed node was not one of the presented candidates");
         }
         active = false;

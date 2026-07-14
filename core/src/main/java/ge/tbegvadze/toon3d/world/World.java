@@ -183,6 +183,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     /** The node the player committed to; the next floor is built from it. Null before the first commit. */
     private RouteNode               pendingNode;
     /**
+     * TEMPORARY TESTING ({@link RouteMapConstants#BOSS_TEST_ALWAYS_CLICKABLE}): set when a BOSS node was
+     * tapped out of turn, so the FADING_OUT completion jumps {@code currentDepth} onto the boss's real
+     * (boss-floor) depth — otherwise {@code GameMath.isBossFloor()} is false and the boss never spawns.
+     */
+    private boolean                pendingBossTestJump;
+    /**
      * Presentation / telemetry effects the last-built floor asked for (order-9): red alert, a reveal
      * sting, and the resolved MYSTERY outcome to log. Applied AFTER {@code rebuildForLevel} (which
      * resets red alert), so it survives the rebuild. Reset to {@link FloorEffects#NONE} each build.
@@ -647,6 +653,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 && next.type == RouteNodeType.BOSS
                 && !routeMap.getSelectableNext().contains(next)) {
             pendingNode = next;
+            pendingBossTestJump = true;
             recordRouteCommit(next);
             fadeTimerSeconds = 0f;
             runPhase = RunPhase.FADING_OUT;
@@ -1469,7 +1476,24 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (runPhase == RunPhase.FADING_OUT) {
             fadeTimerSeconds += deltaTime;
             if (fadeTimerSeconds >= RenderConstants.LEVEL_TRANSITION_FADE_OUT_SECONDS) {
-                if (isStartingRoom) {
+                if (pendingBossTestJump) {
+                    // TEMPORARY TESTING (RouteMapConstants.BOSS_TEST_ALWAYS_CLICKABLE): land directly on
+                    // the boss node's real (boss-floor) depth so GameMath.isBossFloor() holds and the
+                    // boss actually spawns. Overrides both the staging-room and normal-descent depth
+                    // handling; the route cursor was intentionally left untouched by commitRouteNode.
+                    pendingBossTestJump          = false;
+                    isStartingRoom               = false;
+                    startRoomWeapons             = null;
+                    startRoomGroundItems         = null;
+                    startRoomMeleeWeapons        = null;
+                    startRoomMeleeGroundItems    = null;
+                    currentDepth                 = pendingNode.depth;
+                    playerProgress.setFloorDepth(currentDepth);
+                    runStats.recordFloor(currentDepth);
+                    rebuildForLevel(buildNextFloor());
+                    applyPendingFloorEffects();
+                    detectRegionEntry();
+                } else if (isStartingRoom) {
                     // Leaving the staging room: the real run begins. The normal path already generated
                     // the route map and player-committed the depth-1 node in
                     // onDescentRequested/commitRouteNode (pendingNode is set). In the defensive
