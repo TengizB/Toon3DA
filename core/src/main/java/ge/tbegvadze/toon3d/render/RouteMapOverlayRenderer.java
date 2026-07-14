@@ -252,6 +252,12 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         }
 
         applyRevealPolicy(map);
+        // TEMPORARY TESTING (RouteMapConstants.BOSS_TEST_ALWAYS_CLICKABLE): lift the fog on the next
+        // boss so the tester can recognise and tap it even from outside its region (where the normal
+        // reveal policy would still show it as '?').
+        if (RouteMapConstants.BOSS_TEST_ALWAYS_CLICKABLE) {
+            revealNextBossForTesting(map);
+        }
 
         // Two-step safety: a normal branch starts with NO focus (the player must tap a card first).
         // A FORCED convergence (one candidate, or an all-BOSS layer) is auto-focused so the single
@@ -321,6 +327,15 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         int firstLayer = hasHistory ? currentLayerIndex - 1 : currentLayerIndex;
         int lastLayer  = Math.min(layers.size() - 1,
                                   currentLayerIndex + RouteMapConstants.MAP_LOOKAHEAD_LAYERS);
+        // TEMPORARY TESTING (RouteMapConstants.BOSS_TEST_ALWAYS_CLICKABLE): a region is one layer deeper
+        // than the normal lookahead window, so its BOSS floor is drawn just off-screen. Stretch the
+        // window down to the next boss layer so the boss card is always laid out (and thus tappable).
+        if (RouteMapConstants.BOSS_TEST_ALWAYS_CLICKABLE) {
+            int bossLayer = nextBossLayerIndex(layers, currentLayerIndex);
+            if (bossLayer > lastLayer) {
+                lastLayer = Math.min(layers.size() - 1, bossLayer);
+            }
+        }
 
         // MAP framing compresses the whole schematic so more of the region fits at once; DETAIL keeps
         // the roomy default. Applied to both the row gap and every card scale.
@@ -719,6 +734,39 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         return RouteMapConstants.BOSS_TEST_ALWAYS_CLICKABLE
                 && node != null
                 && node.type == RouteNodeType.BOSS;
+    }
+
+    /**
+     * TEMPORARY TESTING helper ({@link RouteMapConstants#BOSS_TEST_ALWAYS_CLICKABLE}): the layer index
+     * of the first BOSS-singleton layer at or after {@code fromLayerIndex}, or -1 if none remain. Used
+     * to stretch the drawn window down to the next boss so it is always laid out and tappable.
+     */
+    private int nextBossLayerIndex(List<List<RouteNode>> layers, int fromLayerIndex) {
+        for (int index = fromLayerIndex; index < layers.size(); index++) {
+            List<RouteNode> layer = layers.get(index);
+            if (layer.size() == 1 && layer.get(0).type == RouteNodeType.BOSS) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * TEMPORARY TESTING helper ({@link RouteMapConstants#BOSS_TEST_ALWAYS_CLICKABLE}): un-fogs the next
+     * BOSS node at or beyond the current depth so it renders its boss icon (not '?') and the tester can
+     * identify it. The RouteNode instances behind the map's unmodifiable layer view stay mutable, so
+     * flipping {@code revealed} here is the same channel the real reveal policy uses.
+     */
+    private void revealNextBossForTesting(RouteMap map) {
+        int currentDepth = map.getCurrent().depth;
+        for (List<RouteNode> layer : map.getLayers()) {
+            if (layer.size() == 1
+                    && layer.get(0).type == RouteNodeType.BOSS
+                    && layer.get(0).depth >= currentDepth) {
+                layer.get(0).revealed = true;
+                return;
+            }
+        }
     }
 
     /** Returns the slot of ANY tapped drawn card (for invalid feedback on non-selectable taps), or -1. */
