@@ -1,0 +1,690 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design
+TITLE: STELLAR OBSERVATORY — Gravity Well Rotunda (3 walls,4 props,3 decals)
+CREATED: 2026-07-15
+---
+
+OVERVIEW
+========
+STELLAR OBSERVATORY is the "we are not on Earth anymore" room: not a UAC industrial
+lab, not a flesh-demon warren, not a raw rock dig site, and not a battle-scarred
+armory. It is a genuine space-station module — a circular rotunda hung in the void,
+its curved outer shell studded with deep-space viewport glass, magnetic-rail
+conduits threading violet/cyan light through brushed-titanium hull plating. At the
+exact centroid floats a suspended anti-gravity core: a containment ring cradling
+chunks of debris that drift in slow, silent orbit. A raised circular catwalk ring
+runs partway out from that core. Everything about this room reads COLD, CLEAN, and
+WEIGHTLESS — the tonal opposite of every other biome in the game. Where the rest of
+the facility is grime, gore, rust, and red hazard light, this is the one place that
+feels like being aboard a real starship: hushed, precise, and vast.
+
+The emotional read is awe without dread's grime — a beautiful engineered calm that
+is unnervingly indifferent to the marine bleeding his way through it. The invasion
+has reached even here, into the observation deck where UAC scientists once watched
+the stars; now the debris orbits over corpses.
+
+This is a distinct sub-biome from every existing wall family. For contrast, the
+current wall families are:
+  plain / conduit / vent / terminal / wires / hazard / rust / gore / bulkhead /
+  glass / bio-quarantine / emergency / medical / cryo / radiation / blast /
+  holo-data / force-field  (and the sibling EXCAVATION doc adds bedrock / strata /
+  shoring rock walls).
+None of those is a clean, weightless, deep-space station interior. The existing
+Glass wall 'N' is plain reinforced containment glass; this room's Viewport dome wall
+'"' is explicitly a CURVED star-window onto a nebula backdrop — a different thing.
+The existing Bulkhead wall 'k' is heavy blast armor; this room's Hull plate wall
+'`' is lighter, cleaner riveted titanium. The room deliberately stakes out the
+"pristine sci-fi" corner of the aesthetic space that nothing else occupies.
+
+It reuses existing pipelines only (per-char wall switch in WallRenderer, billboard
+PropRenderer, RoomType decoration in LevelGenerator). No new runtime architecture
+required for phase 1.
+
+Adds:
+  - 1 new room type:      STELLAR_OBSERVATORY
+  - 3 new walls:          " (viewport dome), ' (magrail conduit), ` (hull plate)
+  - 4 new solid props:    ; (gravity well core), \ (floating cargo crate),
+                          | (docking strut pylon), < (astro-nav hologram table)
+  - 3 new walkable decals: ? (magnetic deck plating), ] (zero-g debris scatter),
+                          - (starlight seam strip)
+
+
+NEW SYMBOLS — EXACTLY 10
+========================
+This design claims the exact 10-symbol complement of the free-20 pool that the
+sibling EXCAVATION doc did NOT take. EXCAVATION claimed:  o [ { } ( ) / , _ :
+This doc therefore claims the remaining free symbols:      " ' ; ? < \ ] - | `
+Using this exact set is what keeps the two set-piece docs from colliding. See the
+OPEN QUESTIONS section for the readability tradeoff on \ | < " '.
+
+| SYMBOL | SECTION       | NAME                 | RICH VISUAL DESCRIPTION (where it appears in the room) |
+|--------|---------------|----------------------|--------------------------------------------------------|
+| "      | WALL          | Viewport dome wall   | Curved reinforced star-window. A tall panoramic pane framed by a brushed-titanium mullion arch, glass tinted deep indigo-black with a NEBULA backdrop painted behind it: soft magenta/teal cloud bands, a scatter of white/blue starfield points, one faint distant planet crescent. Subtle double-glazed reflection highlight down one edge; hairline structural muntins cross the pane; a thin cyan status strip glows along the sill. Distinct from plain Glass wall 'N' by its curvature framing and the deep-space content behind it. |
+| '      | WALL          | Magrail conduit wall | Brushed hull panel threaded with 3-4 vertical magnetic-rail conduit lines that PULSE violet->cyan along their length (traveling light, like current in a track). Recessed channel housings in dark steel, each rail a bright emissive core with a soft bloom bleed onto the surrounding plate; small inline junction nodes (diamond LEDs) every few pixels; faint frost/condensation halo where the cold rails meet the plate. The room's cool moving-light accent wall. |
+| `      | WALL          | Hull plate wall      | Riveted brushed-titanium hull segment. Clean vertical/horizontal panel seams dividing the face into 4-6 plates, a rivet-dot border around each plate, subtle anisotropic brushed-metal streak, a couple of small green/amber status LEDs and one stenciled UAC hull-section code. Lighter, cooler, and far cleaner than the heavy blast-scarred Bulkhead wall 'k' — this is intact ship skin, not battle armor. The default shell wall of the rotunda. |
+| ;      | SOLID PROP    | Gravity well core    | CENTERPIECE (0.98x height). A floating anti-grav generator: a dark spherical emitter hub hovering above a short pedestal base (with control readouts + hazard band), encircled by a slowly spinning CONTAINMENT RING of pale blue energy. Held in that ring's field, several small debris chunks (rock, torn plating, a snapped antenna) drift in slow orbit at different radii. A vertical column of faint blue force-light connects hub to pedestal; soft caustic glow washes the deck beneath. The room's emotional + light anchor, cool blue against the warm HUD. |
+| \      | SOLID PROP    | Floating cargo crate | Magnetically clamped supply crate (0.55x), tilted ~20deg off level and hanging a hand's-width off the deck — visibly WEIGHTLESS. Brushed-steel box with corner brackets, a UAC stencil, and a thin TETHER-BEAM of cyan light anchoring it to a deck clamp below (the only thing keeping it from drifting). A faint secondary crate or two may hover near it. Sells the zero-g gimmick instantly. |
+| |      | SOLID PROP    | Docking strut pylon  | Vertical structural support strut (0.92x): a slim tapered titanium column with a wide clamp collar mid-height, cable conduits running up one side, and a vertical ladder of small status lights (green = nominal) climbing its length; a soft warm amber service lamp near the top. Reads as load-bearing ship architecture. Placed around the outer ring near the shell. |
+| <      | SOLID PROP    | Astro-nav holo table | Low navigation console (0.60x) projecting a translucent holographic STAR-CHART GLOBE above its surface: a slowly rotating cyan wireframe sphere with orbital arcs, plotted route dots, and drifting data glyphs, sitting over a ring-shaped emitter deck ringed with keypads and readout strips. A cooler, navigation-flavored cousin of the existing Holo-workstation 'W'. Placed just outside the catwalk ring as a landmark. |
+| ?      | WALKABLE DECAL| Magnetic deck plating| Walkway strip / grated mag-deck plate (0.18x): a rectangular panel of interlocking hex or diamond deck grating in cool gunmetal, with faint magnetic-lock seams, a thin cyan alignment line down the center, and low wear-scuff. Marks the "official" walking lanes across the rotunda floor. |
+| ]      | WALKABLE DECAL| Zero-g debris scatter| Small loose floating debris resting near-weightlessly on the deck (0.16x): a handful of tiny objects — bolts, a data-slate, a torn insulation tuft, glass shards — sitting with subtle drop-shadows gapped BENEATH them (barely touching, as if micro-gravity), a couple with faint drift-blur. Distinct from a blood/gravel decal: cool metal tones, weightless read, no organic content. |
+| -      | WALKABLE DECAL| Starlight seam strip | Thin glowing deck seam light (0.14x): a narrow inlaid light channel running across the floor, cold white->blue emissive with a soft bloom and a faint chromatic edge, like a fiber-optic guide strip. Used as radial guide lines from the shell toward the catwalk ring; the room's floor-level cool glow accent. |
+
+
+ROOM SHAPE — TRUE CIRCLE ROTUNDA WITH CATWALK RING + CENTER CORE
+================================================================
+The silhouette is a GENUINE CIRCLE, rasterized on the tile grid by a radius test —
+deliberately different from every rectangular room and from the EXCAVATION room's
+chamfered octagon. On the mini-map and in first person it reads as a round chamber.
+
+  CARVE TEST: pick the interior centroid (centerColumn, centerRow). Choose an
+  interior radius R in tiles. For every tile in the bounding square, compute
+  distanceSquared = (tileColumn - centerColumn)^2 + (tileRow - centerRow)^2.
+    - distanceSquared <= R^2                          -> interior FLOOR
+    - R^2 < distanceSquared <= (R + 0.75)^2           -> BOUNDARY RING wall
+    - distanceSquared > (R + 0.75)^2                  -> outside the room (untouched)
+  The boundary band (the "+0.75" shell thickness) guarantees a closed, watertight
+  one-tile-thick wall ring with no diagonal leaks (a pure "== R" test can leave
+  single-tile gaps where the circle passes between grid crossings; the band closes
+  them). See GENERATOR ALGORITHM step 2 for the leak-seal detail.
+
+  CATWALK RING: a concentric RAISED walkway at radius Rc (roughly R*0.5). Tiles whose
+  distance-from-center falls within a 1-tile-wide annulus around Rc are laid with
+  magnetic deck plating '?' (walkable, reads slightly raised). This ring circles the
+  core partway out — a balcony orbiting the gravity well.
+
+  CENTER CORE: the gravity well core ';' stands on the exact centroid tile. Around it
+  is a small inner floor disc (radius ~Rc-1) of open floor, so the player who crosses
+  onto the ring and steps inward reaches an open pad facing the core.
+
+  RADIAL SPOKES: four cardinal starlight seam strips '-' run from the catwalk ring
+  outward to the shell, plus (optionally) short '?' plate spokes, dividing the outer
+  annulus into four soft quadrants and guiding the eye/foot toward the core.
+
+Conceptual ASCII (`=hull plate, "=viewport dome, '=magrail conduit, ?=catwalk/mag
+deck, -=starlight seam, ;=gravity well core, d=entrance door, ' '=lit floor):
+
+              ` ` ` " " " ` ` `
+          ` `                   ` `
+        ` "                       " `
+      ` "         ? ? ? ?           " '
+     `          ?         ?          '
+    "         ?     - -     ?         "
+    "        ?    -     -    ?        "
+    d        ?    -  ;  -    ?        "        <- entrance door pierces the shell ring
+    "        ?    -     -    ?        "
+    "         ?     - -     ?         "
+     `          ?         ?          '
+      ` "         ? ? ? ?           " `
+        ` "                       " `
+          ` `                   ` `
+              ` ` ` " " " ` ` `
+
+(The circle above is schematic; the real rasterization from the radius test is
+tighter and fully closed. Interior diameter target 13-17 tiles, i.e. R = 6..8. The
+catwalk ring sits at Rc ~ 3..4; the core is the single centroid tile.)
+
+Reading in first person: the player enters through a gap in the curved shell, sees
+brushed hull plates and star-windows sweeping away on both sides, magrail light
+pulsing, and — framed dead center across an open floor — the slowly turning gravity
+well with its orbiting debris. To reach and inspect/loot the core they must cross the
+open inner floor and step onto the catwalk ring, fully exposed.
+
+
+TEXTURE / SPRITE SPEC (procedural — detailed enough to implement)
+=================================================================
+General: walls are procedural tiling Pixmaps (Nearest filter, disposed in dispose());
+props/decals are procedural billboard Pixmaps in PropRenderer. Reuse the existing
+wall/billboard pipelines. Palette discipline: the room's identity is COOL CLEAN
+METAL (titanium gray, gunmetal) + DEEP-SPACE INDIGO/BLACK + emissive CYAN/VIOLET/ICE-
+BLUE, with a single soft magenta-teal NEBULA behind the viewports. NO warm hazard
+orange, NO rust, NO gore, NO red glow — that cool/clean discipline is the entire
+point and the contrast to every other biome (warm-yellow corridors, cyan-but-grimy
+labs, green radiation, red armory hazard, red-rock dig).
+
+Suggested target texture resolution: same as existing high-res walls (match
+RenderConstants wall Pixmap size). Every wall is built in multiple layered passes.
+
+--- WALL '"' — VIEWPORT DOME ---
+Build (bottom to top, per tile, tiling seamless L/R at the mullion frame):
+  1. Frame base: fill with HULL_TITANIUM; draw a brushed vertical streak noise
+     (+/-4% luma) for the metal border.
+  2. Pane inset: carve a large rounded-top rectangular inset (the window), fill with
+     a vertical gradient VOID_INDIGO (top) -> VOID_BLACK (bottom).
+  3. Nebula: paint 2-3 soft cloud bands with additive NEBULA_MAGENTA and NEBULA_TEAL
+     using low-alpha blurred blobs; keep it subtle (this is deep, distant space).
+  4. Starfield: scatter 40-70 tiny star points (1-2px) in STAR_WHITE and STAR_BLUE,
+     a few with a faint 3px cross-glint on the brightest.
+  5. Planet crescent (~30% of tiles): one dim rimlit crescent (STAR_BLUE edge, dark
+     interior), small, low in the pane.
+  6. Muntins: 1 vertical + 1 horizontal hairline structural bar (HULL_STEEL_DARK,
+     1px) crossing the pane.
+  7. Reflection: a soft diagonal double-glaze highlight streak (STAR_WHITE at ~12%
+     alpha) down one edge of the glass.
+  8. Sill strip: a thin CYAN_GLOW status bar along the bottom frame with a soft
+     bloom, plus 2-3 tiny indicator LEDs.
+  9. Corner vignette: darken the outer 8% border of the frame.
+COLORS (RGBA):
+  HULL_TITANIUM  = (0.58,0.60,0.64,1.0)
+  HULL_STEEL_DARK= (0.20,0.22,0.26,1.0)
+  VOID_INDIGO    = (0.06,0.07,0.14,1.0)
+  VOID_BLACK     = (0.02,0.02,0.05,1.0)
+  NEBULA_MAGENTA = (0.55,0.22,0.55,1.0)
+  NEBULA_TEAL    = (0.16,0.42,0.48,1.0)
+  STAR_WHITE     = (0.96,0.98,1.00,1.0)
+  STAR_BLUE      = (0.62,0.78,1.00,1.0)
+  CYAN_GLOW      = (0.30,0.90,1.00,1.0)
+
+--- WALL ''' — MAGRAIL CONDUIT ---
+Build:
+  1. Base: HULL_TITANIUM fill with a brushed-metal vertical streak noise (+/-4% luma).
+  2. Recessed channels: draw 3-4 vertical recessed housings (HULL_STEEL_DARK) evenly
+     spaced across the tile, each ~3-4px wide with a 1px inner shadow lip.
+  3. Rail cores: inside each channel a bright emissive rail line; fill with a vertical
+     gradient that shifts MAGRAIL_VIOLET -> MAGRAIL_CYAN along the tile height
+     (the "traveling current" look). 1-2px bright core.
+  4. Bloom: soft additive halo of the same hue bleeding ~3-4px onto the plate either
+     side of each channel (low alpha, gaussian-ish falloff).
+  5. Junction nodes: every ~10-14px along a channel place a small diamond LED node
+     (bright ICE_BLUE center, dark bezel).
+  6. Frost halo: faint desaturated cool blotch (FROST_WHITE, low alpha) around the
+     coldest node, implying condensation.
+  7. Corner vignette.
+  ANIMATION (optional, cheap): the pulse can be faked at build time as a static
+  gradient; a live traveling pulse must be done by tint-scaling the sprite via the
+  global tick/flicker hook, NEVER by reallocating the Pixmap in render().
+COLORS (RGBA):
+  MAGRAIL_VIOLET = (0.55,0.30,0.95,1.0)
+  MAGRAIL_CYAN   = (0.25,0.85,1.00,1.0)
+  ICE_BLUE       = (0.70,0.92,1.00,1.0)
+  FROST_WHITE    = (0.85,0.92,0.98,1.0)
+  (reuse HULL_TITANIUM, HULL_STEEL_DARK)
+
+--- WALL '`' — HULL PLATE ---
+Build:
+  1. Base: HULL_TITANIUM fill; brushed anisotropic streak noise (horizontal, +/-5%
+     luma) for the machined-metal look.
+  2. Panel seams: divide the tile into a 2x3 or 3x2 grid of plates with 1px
+     HULL_STEEL_DARK seams, plus a 1px lighter highlight on the top/left of each seam
+     (bevel read).
+  3. Rivets: a border of small rivet dots (2px, HULL_STEEL_LIGHT with a 1px dark
+     shadow) around each plate.
+  4. Brushed sheen: one soft diagonal light band sweeping across the whole tile
+     (STAR_WHITE ~8% alpha) for a subtle specular gleam.
+  5. Status LEDs (~50% of tiles): 1-2 tiny green or amber indicator dots
+     (LED_GREEN / LED_AMBER) near a seam.
+  6. Stencil (~30% of tiles): a faint stenciled hull-section code (e.g. "SEC-7") in
+     HULL_STEEL_DARK, small, low alpha.
+  7. Corner vignette.
+COLORS (RGBA):
+  HULL_STEEL_LIGHT = (0.74,0.77,0.80,1.0)
+  LED_GREEN        = (0.30,0.90,0.45,1.0)
+  LED_AMBER        = (0.95,0.72,0.28,1.0)
+  (reuse HULL_TITANIUM, HULL_STEEL_DARK, STAR_WHITE)
+
+--- PROP ';' — GRAVITY WELL CORE (billboard, 0.98x height) ---
+Build (tall centerpiece sprite):
+  1. Pedestal base: a short trapezoidal plinth (HULL_STEEL_DARK -> HULL_TITANIUM
+     gradient) with a control-readout strip (tiny CYAN_GLOW segments), a keypad, and
+     a hazard band (thin CYAN/dark chevrons — cool, not orange).
+  2. Force column: a vertical translucent shaft of pale blue light (CORE_BLUE, low
+     alpha, additive) rising from the plinth to the hub.
+  3. Emitter hub: a dark spherical hub (VOID_BLACK -> HULL_STEEL_DARK radial shade)
+     floating above the column, with a bright CYAN_GLOW aperture ring around its
+     equator.
+  4. Containment ring: an ellipse (perspective circle) of CORE_BLUE energy encircling
+     the hub, brightest at its front arc, with a soft additive bloom; draw as a thin
+     bright band with 2px core.
+  5. Orbiting debris: 4-6 small chunks (rock fleck, torn plate shard, snapped antenna,
+     bolt cluster) placed at varied radii/angles ON the ring's plane, each with a tiny
+     rim-light on the side facing the hub and a faint motion-blur smear tail.
+  6. Caustic wash: a soft CORE_BLUE glow ellipse on the deck directly beneath the
+     plinth (drawn into the sprite's lower fringe / or as the decal underlay).
+  7. Edge shimmer: 1-2px cool shimmer noise along the hub silhouette.
+  PULSE/SPIN: the ring glow may breathe and the debris may be drawn at a static
+  orbit snapshot; any animation must be tint-scaling / pre-baked frames via the tick
+  hook, NEVER a per-frame Pixmap realloc.
+COLORS (RGBA):
+  CORE_BLUE      = (0.35,0.72,1.00,1.0)
+  (reuse VOID_BLACK, HULL_STEEL_DARK, HULL_TITANIUM, CYAN_GLOW)
+
+--- PROP '\' — FLOATING CARGO CRATE (billboard, 0.55x) ---
+  A brushed-steel box (HULL_TITANIUM faces, HULL_STEEL_DARK edges, corner brackets in
+  HULL_STEEL_LIGHT), tilted ~20deg (draw the top face and one side visible for the
+  canted read), a small UAC stencil on the front face. Beneath it, a visible GAP to
+  the deck, and a thin vertical TETHER_BEAM of CYAN_GLOW (low alpha, additive)
+  connecting a bottom corner to a small deck clamp puck. Optional: a fainter second
+  crate hovering just behind/above. A soft ground shadow that is OFFSET and gapped
+  (not touching) to sell weightlessness.
+  (colors: reuse HULL_* + CYAN_GLOW)
+
+--- PROP '|' — DOCKING STRUT PYLON (billboard, 0.92x) ---
+  A slim tapered vertical column (HULL_TITANIUM with a HULL_STEEL_DARK shadow side and
+  a HULL_STEEL_LIGHT highlight edge), narrower at top. A wide clamp COLLAR at ~55%
+  height (darker ring with bolt dots). Cable conduits (2-3 thin dark lines) run up one
+  side. A vertical ladder of small LED_GREEN status dots climbs the shaft. A soft warm
+  service lamp near the top (LED_AMBER with a small bloom — the ONLY warm accent in
+  the room, tiny and justified as a maintenance light). No hazard stripes.
+  (colors: reuse HULL_*, LED_GREEN, LED_AMBER)
+
+--- PROP '<' — ASTRO-NAV HOLO TABLE (billboard, 0.60x) ---
+  A low ring-shaped console deck (HULL_STEEL_DARK top, HULL_TITANIUM rim) with keypad
+  strips and CYAN_GLOW readout segments around its edge. Above it, a translucent
+  holographic STAR-CHART GLOBE: a wireframe sphere drawn as 3-4 CYAN_GLOW latitude
+  ellipses + 3-4 longitude arcs (low alpha, additive), with 4-6 plotted route dots
+  (brighter ICE_BLUE) and a couple of orbital-arc curves connecting them; 3-5 tiny
+  floating data glyphs (1-2px CYAN_GLOW) drifting around the globe; a faint upward
+  emitter cone of blue light from the deck to the globe. Cooler navigation-flavored
+  sibling of Holo-workstation 'W'.
+  (colors: reuse HULL_STEEL_DARK, HULL_TITANIUM, CYAN_GLOW, ICE_BLUE)
+
+--- DECAL '?' — MAGNETIC DECK PLATING (0.18x, walkable) ---
+  A rectangular deck panel: a hex or diamond GRATING pattern (HULL_STEEL_LIGHT lines
+  on a HULL_STEEL_DARK ground), faint magnetic-lock seams dividing it into 2-3
+  sub-plates, a thin CYAN_GLOW alignment line down the center (low alpha), and light
+  scuff wear (brighter random specks). Cool gunmetal; reads as a raised walkway
+  segment. Same ground band as '.'/'O'/'e'.
+
+--- DECAL ']' — ZERO-G DEBRIS SCATTER (0.16x, walkable) ---
+  A loose cluster of 6-12 tiny objects on the deck: bolts (HULL_STEEL_LIGHT dots), a
+  small data-slate (dark rect with a CYAN_GLOW screen line), a torn insulation tuft
+  (pale desaturated fluff), a few glass shards (STAR_BLUE glints). Each object drawn
+  with a small drop-shadow that is GAPPED beneath it (a 1px light gap between object
+  and shadow) to imply near-weightless rest; 2-3 objects given a faint 2px drift-blur
+  streak. Cool metal tones, NO organic content — clearly distinct from a corpse/blood
+  decal.
+
+--- DECAL '-' — STARLIGHT SEAM STRIP (0.14x, walkable) ---
+  A narrow inlaid light channel: a 2-3px emissive core running the length of the tile,
+  vertical gradient SEAM_WHITE (center) -> STAR_BLUE (edges), with a soft additive
+  bloom ~2px either side and a faint chromatic-aberration edge (a hint of magenta one
+  side, cyan the other). Set into a thin HULL_STEEL_DARK recess. Reads as a cold
+  fiber-optic guide strip in the floor. Used for the four radial spokes.
+COLORS (RGBA):
+  SEAM_WHITE     = (0.90,0.95,1.00,1.0)
+  (reuse STAR_BLUE, HULL_STEEL_DARK)
+
+
+GENERATOR ALGORITHM (step-by-step for LevelGenerator.java)
+==========================================================
+Add RoomType.STELLAR_OBSERVATORY with a decorateStellarObservatory() method following
+the existing RoomType decoration pattern. The generator carves a true circle into a
+reserved (near-square) room slot, then decorates radially.
+
+Inputs: reserved room rectangle (interior columnCount x rowCount), the run RNG, the
+door/entrance side(s) chosen by the connector pass.
+
+1. SIZE GATE: require a near-square interior footprint able to inscribe a circle of
+   diameter >= 13 (i.e. min interior 13x13; prefer 13x13, 15x15, or 17x17 with odd
+   sides so there is a single true centroid tile). If the slot is smaller or too
+   non-square (aspect > ~1.25), fall back to a different RoomType (do not force it).
+
+2. CARVE THE CIRCLE (distance-from-center test):
+   - centerColumn = interiorLeft + interiorColumnCount/2 (integer, centroid tile).
+   - centerRow    = interiorBottom + interiorRowCount/2.
+   - R = min(interiorColumnCount, interiorRowCount)/2 - 1  (leave a 1-tile margin).
+   - For each tile (tileColumn, tileRow) in the bounding square:
+       differenceColumn = tileColumn - centerColumn
+       differenceRow    = tileRow - centerRow
+       distanceSquared  = differenceColumn^2 + differenceRow^2
+       if distanceSquared <= R*R                         -> lit floor ' '
+       else if distanceSquared <= (R + 0.75)^2           -> hull plate wall '`'
+       else                                              -> leave untouched (outside)
+   - LEAK-SEAL PASS: after the ring is placed, scan every floor tile; if a floor tile
+     has a diagonal-only neighbor that is "outside" (untouched) with both shared
+     orthogonal neighbors NOT walls, promote the nearest boundary tile to '`' so no
+     diagonal gap exposes the room to outside. (The +0.75 band already closes most;
+     this pass guarantees a watertight rasterized circle — roguelike pillar 2.)
+
+3. SHELL VARIETY: walk the boundary ring and reassign wall types by arc position:
+   - The arc directly OPPOSITE the primary entrance (a contiguous run of ~3-5 ring
+     tiles): convert to Viewport dome wall '"' (the "hero" star-window the player
+     faces on entry). Optionally 1-2 more short '"' runs elsewhere.
+   - Two shorter runs (2-3 tiles each) on side arcs: convert to Magrail conduit
+     wall '''.
+   - All remaining ring tiles stay Hull plate wall '`' (the default shell).
+   - Never convert an entrance-adjacent ring tile away from being a clean opening.
+
+4. CATWALK RING: Rc = round(R * 0.5). For each floor tile, compute distance-from-
+   center; if abs(distance - Rc) <= 0.5 (a 1-tile-wide annulus), lay magnetic deck
+   plating '?'. This is the raised balcony circling the core. Ensure the annulus is
+   continuous (fill single-tile gaps the rounding leaves, same idea as step 2).
+
+5. CORE PLACEMENT: place the gravity well core ';' on the exact centroid tile
+   (centerColumn, centerRow). The inner disc (distance < Rc-1) stays open floor ' '
+   so the player has an approach pad facing the core. NOTE: ';' is a SOLID prop, so
+   the centroid tile is blocked; the player orbits it on the ring / inner disc.
+
+6. RADIAL SPOKES: for each of the four cardinal directions from center, lay starlight
+   seam strips '-' on the floor tiles from just inside the catwalk ring outward to
+   one tile shy of the shell (skip any tile that is a wall, the core, or the entrance
+   lane). These are decals (walkable) and divide the outer annulus into quadrants.
+
+7. PROP SCATTER (outer annulus only, never on the core tile or blocking the ring):
+   - Docking strut pylons '|': 2-4, placed near the shell in the outer annulus,
+     spaced roughly evenly (one per quadrant max), 1-tile clearance from walls.
+   - Astro-nav holo table '<': exactly 1 (occasionally 0), placed just OUTSIDE the
+     catwalk ring in one quadrant as a secondary landmark.
+   - Floating cargo crates '\': 1-3, in the outer annulus, off the spokes.
+   - Enforce a navigability budget: total solid props (pylons + table + crates + the
+     core) must keep the ring and both the inner disc reachable (see step 11).
+
+8. DECAL PASS:
+   - Magnetic deck plating '?': already the catwalk ring; optionally extend 1-tile
+     '?' stubs from the ring toward the entrance to mark the approach lane.
+   - Zero-g debris scatter ']': 3-6 tiles scattered in the outer annulus (bias near
+     cargo crates and pylons), off the spokes.
+   - Starlight seam strips '-': already the four spokes (step 6).
+
+9. LIGHTING: the rotunda reads bright and cool. Keep outer annulus floor mostly lit
+   ' '. Drop 0-2 'u' unlit tiles ONLY in a far quadrant behind cover for a hint of
+   dead-power dread (use sparingly — this room's signature is that it still WORKS).
+   The core self-lights the center; the magrail walls self-light their arcs. Avoid
+   'f' flicker here (a flickering star-station reads as "broken," which fights the
+   pristine tone) unless deliberately seeding a "power-failing observatory" variant.
+
+10. ENTRANCE / DOOR PLACEMENT ON THE CIRCLE BOUNDARY:
+   - The connector pass needs a door tile that lands on the rasterized ring. Pick the
+     ring tile nearest the corridor-facing side: from the room center, cast toward the
+     connecting corridor's direction and select the boundary '`' tile whose center is
+     closest to that bearing (argmin of angular difference among ring tiles on that
+     side). Convert that single ring tile to a plain door 'd' (or keycard door if the
+     route flags it locked), and ensure the tile just inside it is open floor ' ' and
+     the tile just outside connects to the corridor stub.
+   - For a through-room, repeat on the opposite arc for a second door; keep it OFF the
+     viewport hero arc so the star-window stays intact.
+
+11. NAVIGABILITY CHECK (flood-fill): from the entrance interior tile, flood-fill over
+    walkable tiles (floor + all decals; NOT solid props/walls). Require that the fill
+    reaches: (a) every catwalk-ring '?' tile, (b) the inner approach disc adjacent to
+    the core, and (c) the second door if present. If any required region is isolated,
+    remove the offending blocking prop (or nudge it one tile) and re-check, up to N
+    retries; if still failing, fall back to a simpler RoomType. (Roguelike pillar 2:
+    no isolated cells, always navigable.)
+
+12. ENEMY SPAWNS: place 2-4 spawn markers (see BALANCE). Favor: 1 ranged spawn on the
+    catwalk ring or at a spoke's outer end (to punish the exposed crossing per the
+    cardinal-line rule), and 1-2 melee spawns in the outer annulus behind cargo/pylon
+    cover. Never spawn on the core tile. Re-run the flood-fill after placement to
+    confirm spawns are reachable and do not seal the player out of the core.
+
+
+PLACEMENT RULES (frequency, depth-gating, spacing)
+==================================================
+  - RARITY: RARE set-piece / landmark. At most 1 per generated level; frequently 0.
+    LOW weight in the RoomType roll table. It is a destination, not filler.
+  - DEPTH GATE: floors 3+. The observatory is a "deeper facility" module; it can
+    appear across the mid/late descent as a cool-toned breather-with-teeth. (On the
+    route map it can flag as a landmark/vista node for legibility.)
+  - SPACING vs OTHER SET-PIECES: enforce minimum spacing from other landmarks —
+    RESEARCH_LAB, boss arena, shop/safe room, AND the EXCAVATION_SITE from the sibling
+    doc. Never stack two landmark rooms adjacently; ideally do not place the
+    Observatory and the Excavation on the same floor (they are tonal opposites and
+    each wants to be THE memorable room of its floor). Never the start room.
+  - SLOT SIZE: only spawn if a near-square >= 13x13 interior slot exists that can
+    inscribe the circle (see generator step 1). Because the room is a circle inscribed
+    in the slot, the reserved slot should be close to square; a long thin slot cannot
+    host it.
+  - SYMBOL CONTAINMENT: viewport dome '"', magrail conduit ''', gravity well core ';',
+    docking strut pylon '|', astro-nav table '<', magnetic deck '?', zero-g debris
+    ']', and starlight seam '-' should appear ONLY in STELLAR_OBSERVATORY rooms (keeps
+    the biome read exclusive). Hull plate wall '`' MAY leak sparingly (1-2 tiles) into
+    an adjacent "docking corridor" connector as a breadcrumb hinting the observatory
+    is near — optional polish, keep rare. Floating cargo crate '\' may likewise appear
+    1-2 tiles into an approach corridor.
+
+
+GAMEPLAY LOOP / ATMOSPHERE (roguelike pillars)
+==============================================
+1. Player enters through the curved shell. ROOM READ (Pillar 7, information
+   management): clean titanium + star-windows + cool blue orbiting core = "this is the
+   observatory; the prize is the thing floating dead center, and the floor is open —
+   there is no cover between me and it." The read is instant and unique; the player
+   learns "round + starlight = observatory, expect an exposed center crossing."
+2. The outer annulus is the relatively safe loop: cover behind docking pylons '|' and
+   floating cargo crates '\', cool light, a nav-table '<' landmark. Melee enemies
+   contest this ring; the player can circle-strafe using the pylons as pillars.
+3. To reach the GRAVITY WELL CORE ';' the player must cross the OPEN inner floor and
+   step onto the catwalk ring '?'. This crossing is deliberately EXPOSED — the round
+   shape puts the player on a wide bright pad with no cover, and — crucially — the
+   four radial spokes and the ring geometry mean that as the player approaches the
+   core they line up on the same tile-row or tile-column as a ranged enemy parked at a
+   spoke's outer end or across the ring. Per the cardinal-line ranged rule
+   (isSameCardinalLine), an Eye Tyrant / Acid Drone / Vortex Eye positioned on a spoke
+   axis gets a clean shot straight across the rotunda while the player is out in the
+   open. Advancing to the core is a committed, legible risk. (Pillar 4: meaningful
+   choice under pressure; tactical positioning.)
+4. ZERO-G SIGHTLINE FLAVOR: the orbiting debris on the core and the floating crates
+   are visual "this place obeys different rules" cues; the debris scatter ']' and the
+   weightless crates reinforce it. (Phase 2 idea, OPEN QUESTION: a debris chunk could
+   periodically drift into a spoke lane and briefly block a ranged sightline — a
+   moving cover element unique to this room. Phase 1: purely cosmetic.)
+5. THE CORE as a reward/interactable node (phase 2 — ties to the artifacts/relics
+   backlog): facing the gravity well and interacting offers a cool-toned counterpart
+   to the excavation monolith's infernal bargain. Options to arbitrate (OPEN
+   QUESTIONS): (a) it is a stable reward pedestal — a high-value pickup (medkit /
+   armor / keycard / artifact) simply orbits in the containment ring and claiming it
+   is safe-but-exposed; or (b) destabilizing the well to grab a stronger boon releases
+   the orbiting debris outward as a one-time hazard pulse and/or drops the room to
+   emergency power (converts lit tiles to 'u', kills the cool calm), trading safety
+   for power. Phase 1 fallback: the core is a pure atmospheric prop with the reward
+   sitting on the inner approach pad; the exposed crossing still makes claiming it
+   tense.
+6. EMOTIONAL ARC: relief-then-tension. After grimy corridors, the observatory is
+   genuinely beautiful and calm — a breather room by tone. But the openness is a trap:
+   the same emptiness that feels serene is a killing floor if the player walks in
+   greedy and gets caught mid-crossing by a ranged enemy on a spoke axis. A death here
+   is legible (Pillar 1): "I sprinted for the core across open floor and ate a shot
+   down the spoke." The room reframes the facility's scale — this thing has an
+   observation deck watching the stars, and the invasion reached even here.
+
+Atmosphere payoff ties to the pillars: unique readable biome (information
+management), a distinctive exposed-center tactical read built on the existing
+cardinal-line rule (tactical depth), and an optional core-for-power bargain
+(meaningful choice + emergent consequence, mirroring but tonally inverting the
+excavation monolith).
+
+
+BALANCE NOTES (all PLACEHOLDER — flag for tuning)
+=================================================
+  - Room spawn weight: LOW; cap 1 per level; floors 3+. (PLACEHOLDER)
+  - Interior diameter: 13-17 tiles (R = 6..8). Catwalk ring at Rc ~ 3..4.
+  - Solid-prop budget: keep the outer annulus AND the inner disc navigable. Aim for
+    <= 6 free-standing solid props total: pylons '|' 2-4, cargo crates '\' 1-3,
+    nav-table '<' 0-1, plus the single core ';'. Do not wall off the ring.
+  - Catwalk ring width: 1 tile (the exposure is the point — a 2-tile ring would give
+    the player a moving-cover lane and remove the gauntlet). Do not widen.
+  - Enemy spawns: 2-4. Thematic fit = things that boarded/breached the deck. Suggested:
+    1 ranged "spoke sniper" (Eye Tyrant '2' / Acid Drone '$' / Vortex Eye 'V')
+    positioned on a spoke axis to punish the crossing, plus 1-2 melee (Gore Biter '3'
+    / Void Shroud '^') behind pylon/crate cover in the annulus. On deeper floors (5+)
+    add one heavy (Shell Brute '4' / Iron Stalker '!').
+  - Core destabilize hazard pulse (phase 2): release 4-6 debris chunks as a one-shot
+    radial knock/damage burst; tune so a prepared player survives and a greedy
+    over-extended one does not.
+  - Dread tiles: 0-2 'u' unlit max, in a far quadrant only. Avoid 'f' flicker unless
+    building a deliberate "failing observatory" variant — the signature is that this
+    room still works.
+  - Emissive discipline: cool only. Cyan/violet/ice-blue (core, magrail, seams, holo)
+    are the palette; the single tiny warm accent is the pylon service lamp. NO orange
+    hazard, NO red glow anywhere — that is what makes it the tonal opposite room.
+
+
+TECHNICAL NOTES
+===============
+NEW SYMBOLS — from the free set. This design claims the 10-symbol complement of the
+EXCAVATION doc's claim, i.e. the free symbols the sibling doc did NOT take. EXACT
+ASSIGNMENTS:
+
+  WALLS (add to Level.isWall -> true; add case to WallRenderer wall switch):
+    '"'  Viewport dome wall   1.0x height   obs_wall_viewport (procedural, emissive)
+    '''  Magrail conduit wall 1.0x height   obs_wall_magrail  (procedural, emissive)
+    '`'  Hull plate wall      1.0x height   obs_wall_hullplate(procedural)
+
+  SOLID PROPS (add to Level.isPropSolid -> true; add case to PropRenderer):
+    ';'  Gravity well core    0.98x height  (INTERACTABLE in phase 2)
+    '\'  Floating cargo crate 0.55x height
+    '|'  Docking strut pylon  0.92x height
+    '<'  Astro-nav holo table 0.60x height
+
+  WALKABLE DECALS (add to Level.isPropDecal -> true; add case to PropRenderer):
+    '?'  Magnetic deck plating 0.18x height
+    ']'  Zero-g debris scatter 0.16x height
+    '-'  Starlight seam strip  0.14x height
+
+REQUIRED — adding each symbol MUST follow the STRICT RULE checklist in
+docs/tile-symbols.txt (this design specifies; it does NOT modify code). Restated for
+THIS room's exact 10 symbols:
+  1. Add all 10 symbols to docs/tile-symbols.txt in the correct sections:
+       " ' `  under WALLS
+       ; \ | <  under SOLID PROPS
+       ? ] -  under WALKABLE DECALS
+     (Note: several of these are currently listed in the "Avoid" line of the style
+     guidance — see OPEN QUESTIONS; the doc's Avoid note should be reconciled if this
+     room is greenlit.)
+  2. Update SYMBOL BUDGET. If the EXCAVATION room ships first, that doc moves the count
+     75 -> 85 (remaining 20 -> 10); this room then moves 85 -> 95 (remaining 10 -> 0,
+     the printable-ASCII pool is fully consumed). If this room ships first, 75 -> 85.
+     Remove " ' ; ? < \ ] - | ` from the free-characters list either way.
+  3. Level.java: add " ' ` to isWall(); add ; \ | < to isPropSolid(); add ? ] - to
+     isPropDecal().
+  4. Wire textures/sprites: " ' ` in WallRenderer (procedural Pixmaps, Nearest,
+     dispose in dispose()); ; \ | < and ? ] - in PropRenderer.
+  5. Constants: per-prop height multipliers
+       PROP_HEIGHT_GRAVITY_WELL_CORE   = 0.98f
+       PROP_HEIGHT_FLOATING_CARGO_CRATE= 0.55f
+       PROP_HEIGHT_DOCKING_STRUT_PYLON = 0.92f
+       PROP_HEIGHT_ASTRO_NAV_TABLE     = 0.60f
+       PROP_HEIGHT_MAGNETIC_DECK       = 0.18f
+       PROP_HEIGHT_ZEROG_DEBRIS        = 0.16f
+       PROP_HEIGHT_STARLIGHT_SEAM      = 0.14f
+     plus the RGBA color constants listed in TEXTURE/SPRITE SPEC.
+  6. Update docs since the symbol affects level generation (LevelGenerator.java).
+  7. Update the symbol count in SYMBOL BUDGET.
+  8. Commit all of the above together — never add a symbol in code without updating
+     docs/tile-symbols.txt in the same commit.
+
+AFFECTED CLASSES:
+  - Level.java          : isWall (" ' `), isPropSolid (; \ | <), isPropDecal (? ] -).
+                          IMPORTANT: '\' and '"' are Java escape characters — in any
+                          char/string literal write them as '\\' and '\"'. In the
+                          level .txt asset they are literal single characters.
+  - WallRenderer.java   : three new procedural wall Pixmaps + switch cases (viewport,
+                          magrail, hull plate).
+  - PropRenderer.java   : seven new billboard sprites + height-multiplier lookup
+                          (core, crate, pylon, holo-table, mag-deck, debris, seam).
+  - LevelGenerator.java : RoomType.STELLAR_OBSERVATORY + decorateStellarObservatory()
+                          (circle carve via distance test, leak-seal, catwalk-ring
+                          annulus, core placement, radial spokes, prop scatter, decal
+                          pass, boundary door placement, navigability flood-fill).
+                          Add to roll table at LOW weight, depth-gated floors 3+,
+                          cap 1/level, spaced from other landmarks (incl.
+                          EXCAVATION_SITE).
+  - LevelGenConstants.java : circle radius bounds, catwalk-ring ratio (Rc = R*0.5),
+                          shell-arc allocation (viewport/magrail/hull counts), prop
+                          counts, spoke count (4).
+  - Constants.java / RenderConstants.java : height multipliers + RGBA color constants.
+  - docs/tile-symbols.txt : 10 symbol entries + budget update.
+
+MATH/ALGORITHM NOTES:
+  - Circle carve is integer grid math with a squared-distance test (no sqrt, no
+    trig): distanceSquared = differenceColumn^2 + differenceRow^2 compared against
+    R^2 and (R+0.75)^2. Put the classify helper in GameMath (pure function:
+    classifyRotundaTile(differenceColumn, differenceRow, radius) -> {FLOOR, SHELL,
+    OUTSIDE}) with the required derivation/edge-case comment block.
+  - Catwalk annulus test needs one sqrt OR a banded squared comparison:
+    abs(distanceSquared - Rc*Rc) <= bandWidth is NOT geometrically exact; prefer
+    abs(sqrt(distanceSquared) - Rc) <= 0.5 computed once per tile at generation time
+    (generation is not in render(), so the sqrt is fine). Provide a GameMath helper.
+  - Boundary door selection = argmin over ring tiles of angular difference between the
+    tile's bearing-from-center and the corridor bearing (atan2). Generation-time only.
+  - No raycast changes: walls use the existing DDA wall pipeline, props/decals use the
+    existing billboard projection. No new render architecture.
+  - Any core-ring spin / magrail pulse animation must be tint-scaling or pre-baked
+    frames via the global tick/flicker hook — NEVER a per-frame Pixmap realloc
+    (respects the no-alloc-in-render rule).
+
+
+INTERACTIONS (with existing / planned systems)
+==============================================
+1. CATWALK RING '?' + SPOKES '-'  <->  CARDINAL-LINE RANGED RULE (isSameCardinalLine):
+   the open circular center and the four cardinal spokes are engineered so that
+   crossing to the core repeatedly aligns the player on a ranged enemy's row/column,
+   giving that enemy a legal cardinal shot across the rotunda. The room's core tactic
+   is built AROUND the existing ranged constraint — the round shape is the delivery
+   mechanism for an exposed-crossing gauntlet.
+2. GRAVITY WELL CORE ';'  <->  ARTIFACTS / RELICS backlog: the core is a natural
+   artifact/reward node and the COOL-TONED inverse of the excavation monolith '}':
+   monolith = infernal red, "take power, wake the dig"; core = cold blue, "take power,
+   destabilize the well." Reuse whatever interactable-prop hook the monolith / AI-core
+   'J' would use. If no hook exists yet, ship phase 1 with the reward on the approach
+   pad.
+3. MAGRAIL ''' + VIEWPORT '"' + CORE ';'  <->  LIGHTING SYSTEM (laboratory-lighting /
+   lighting-system-overhaul): this room is the game's best test case for a COOL
+   colored-lighting pass — cyan/violet emissive walls, a blue core caustic, and blue
+   floor seams, with essentially zero warm light. A biome that is entirely cool
+   complements the warm/red-dominant rest of the game for the lighting sampler.
+4. FLOATING CARGO CRATE '\' + ZERO-G DEBRIS ']'  <->  HAZARD / PHYSICS flavor: phase 2
+   the destabilized core could fling debris (the orbiting chunks + the tethered
+   crates) as a one-shot radial hazard pulse — a natural, self-contained tie to the
+   hazard system that needs no fire/toxic chain and stays on-theme (kinetic, not
+   incendiary).
+5. ROOM TYPE TABLE  <->  procedural-level-generation / route-map: slots in as one more
+   low-weight, depth-gated RoomType with its own decorate method; no generator
+   rewrite. On the route map it can flag as a "landmark/vista" node for legibility and
+   pacing (a cool breather between grimier floors).
+6. BIOME CONTRAST  <->  EXCAVATION_SITE (sibling doc) and RESEARCH_LAB: the three form
+   a tonal triangle — the Lab is where the invasion was INVITED (clean but grimy
+   cyan science), the Dig is where it was UNEARTHED (raw infernal red rock), and the
+   Observatory is where humanity was simply LOOKING OUTWARD (pristine cold deep-space
+   calm) when it all reached them. Encountering the Observatory and the Excavation in
+   one run is a deliberate hot/cold, dread/awe whiplash; the spacing rule keeps them
+   from landing on the same floor and diluting each other.
+
+
+OPEN QUESTIONS
+==============
+1. SYMBOL COLLISION / READABILITY TRADEOFF (mandatory flag for the developer):
+   This room claims " ' ; ? < \ ] - | ` — the exact complement of the free-20 pool
+   after the sibling EXCAVATION doc claimed o [ { } ( ) / , _ :. Several of THIS
+   room's symbols ( \ | < " ' ) are explicitly listed under the "Avoid" guidance in
+   docs/tile-symbols.txt ("Avoid: \ | < > (confusing in text editors); " ' (quoting
+   conflicts)"). They were chosen here PURELY because they are the only free symbols
+   left that do not collide with the excavation doc's cleaner claim. This is a known
+   tradeoff: text-editor readability of hand-authored level files vs. non-collision
+   between the two set-piece rooms. If BOTH rooms are ever greenlit for
+   implementation, the developer must arbitrate:
+     (a) accept the readability hit (these rooms are procedurally generated, so
+         hand-editing their tiles in a text editor is rare), OR
+     (b) re-partition the 20 free symbols across the two docs to give the more
+         readable punctuation to whichever room is authored/edited by hand more often,
+         OR
+     (c) expand the symbol space (e.g. multi-char tokens / a second symbol table) so
+         neither room has to use the "Avoid" set.
+   Additionally, '\' and '"' need escaping in Java literals ('\\', '\"') — noted in
+   TECHNICAL NOTES; harmless but easy to get wrong.
+2. Does an interactable-prop hook exist (face prop + interact -> event)? If yes, wire
+   the gravity-well core reward/destabilize bargain in phase 1; if not, ship the core
+   as a prop with the reward on the approach pad and fast-follow the hook.
+3. Core reward model: safe reward pedestal (loot orbits in the ring, claiming is
+   exposed-but-safe) vs. risky destabilize (stronger boon but releases a debris hazard
+   pulse and/or drops the room to emergency power)? Recommend shipping the safe
+   pedestal in phase 1 and adding the destabilize bargain in phase 2.
+4. Should orbiting debris become a MOVING cover mechanic (a chunk periodically drifts
+   into a spoke lane and briefly blocks a ranged sightline)? Unique to this room and
+   very on-theme, but adds per-turn state to a prop; recommend cosmetic-only for
+   phase 1.
+5. Through-room (two doors) vs single dead-end landmark? A through-room integrates
+   into the corridor graph; a dead-end makes the observatory feel like a discovered
+   vista worth detouring for. Recommend single-door landmark for the "destination"
+   feel, with through-room as a generator option when the slot has two corridor sides.
+6. "Failing observatory" variant: is a rare power-loss version (magrail dimmed, 'u'
+   unlit floor, 'f' flicker, dead core) worth authoring, or does it dilute the
+   pristine signature? Recommend keeping it rare/optional, gated to deeper floors.
+7. Circle rasterization aesthetics: at small R (6) the tile-circle can look chunky in
+   first person. Is R >= 7 a better hard minimum for the shape to read as "round"
+   rather than "octagon-ish"? Flag for a visual pass once the wall textures exist.
+8. Should Hull plate wall '`' be promoted to a general-purpose "clean ship" wall usable
+   OUTSIDE this room (e.g. station-themed connector corridors), or kept strictly
+   contained like the other signature walls? Recommend contained for phase 1 to
+   preserve the biome read, revisit if a full "station" region is ever added.
