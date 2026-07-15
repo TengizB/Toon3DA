@@ -3558,4 +3558,164 @@ public final class GameMath {
         int centre = projectedLaneCentre(fromLane, fromWidth, toWidth);
         return Math.abs(toLane - centre) <= 1;
     }
+
+    // =========================================================================
+    // STELLAR OBSERVATORY — TRUE-CIRCLE ROTUNDA CARVE CLASSIFICATION
+    // =========================================================================
+
+    /**
+     * Classification of a tile's relationship to a rasterized circle carved into
+     * the level grid, as used by the STELLAR_OBSERVATORY room generator.
+     * See {@code .claude/agents/ideas/stellar-observatory-gravity-well-room.txt}
+     * ("ROOM SHAPE" / "GENERATOR ALGORITHM" step 2).
+     */
+    public enum RotundaTileClass {
+        /** Interior of the rotunda — carve to open/lit floor. */
+        FLOOR,
+        /** The one-tile-thick boundary wall ring — carve to a shell wall variant. */
+        SHELL,
+        /** Outside the rotunda entirely — leave the tile untouched. */
+        OUTSIDE
+    }
+
+    /*
+     * Formula: classifyRotundaTile
+     * Derivation:
+     *   Given a tile's integer offset from the room centroid:
+     *     differenceColumn = tileColumn - centerColumn
+     *     differenceRow    = tileRow    - centerRow
+     *   compute the squared Euclidean distance from the centroid (no sqrt/trig
+     *   needed — this runs once per tile in the room's bounding square during
+     *   generation):
+     *     distanceSquared = differenceColumn^2 + differenceRow^2
+     *
+     *   Compare against two squared thresholds:
+     *     distanceSquared <= radius^2                      -> FLOOR   (interior)
+     *     radius^2 < distanceSquared <= (radius + 0.75)^2   -> SHELL   (boundary ring)
+     *     distanceSquared > (radius + 0.75)^2               -> OUTSIDE (untouched)
+     *
+     *   Why "+0.75" and not "+1.0" or an exact "== radius" test:
+     *     A pure "on the circle" test (distanceSquared == radius^2, or a thin band
+     *     like [radius, radius+epsilon]) can leave single-tile gaps where the
+     *     rasterized circle passes diagonally between two grid crossings without
+     *     ever landing exactly on an integer-offset tile at that arc — a "diagonal
+     *     leak" that would expose the room interior to the untouched exterior.
+     *     Widening the shell band to a full extra 0.75 tiles of squared-radius
+     *     margin guarantees every FLOOR tile has an orthogonally-adjacent (not just
+     *     diagonally-adjacent) SHELL tile all the way around the ring, closing those
+     *     gaps and producing a watertight one-tile-thick wall. (The generator's
+     *     LEAK-SEAL PASS is a belt-and-suspenders follow-up for the rare residual
+     *     case; this band is the primary defense.)
+     * Edge cases:
+     *   radius <= 0: every tile with distanceSquared > 0 is SHELL or OUTSIDE and the
+     *     centroid tile itself (distanceSquared = 0) is FLOOR — degenerate but not
+     *     divide-by-zero (no division in this method at all).
+     *   No sqrt or trig is used, so there is no precision loss beyond standard float
+     *     squaring; safe for the integer offsets used here (room radii are single-
+     *     digit tile counts, far below float precision limits).
+     */
+    public static RotundaTileClass classifyRotundaTile(int differenceColumn, int differenceRow, float radius) {
+        float distanceSquared = (float) (differenceColumn * differenceColumn + differenceRow * differenceRow);
+        float radiusSquared = radius * radius;
+        if (distanceSquared <= radiusSquared) {
+            return RotundaTileClass.FLOOR;
+        }
+        float shellOuterRadius = radius + 0.75f;
+        float shellOuterRadiusSquared = shellOuterRadius * shellOuterRadius;
+        if (distanceSquared <= shellOuterRadiusSquared) {
+            return RotundaTileClass.SHELL;
+        }
+        return RotundaTileClass.OUTSIDE;
+    }
+
+    // =========================================================================
+    // STELLAR OBSERVATORY — CATWALK ANNULUS TEST
+    // =========================================================================
+    /*
+     * Formula: isOnCatwalkAnnulus
+     * Derivation:
+     *   The catwalk ring is a concentric raised walkway at radius catwalkRadius
+     *   (Rc). A tile's offset from the centroid (differenceColumn, differenceRow)
+     *   lies "on" the ring when its true Euclidean distance from the centroid is
+     *   within bandHalfWidth of catwalkRadius:
+     *     distance = sqrt(differenceColumn^2 + differenceRow^2)
+     *     onAnnulus = abs(distance - catwalkRadius) <= bandHalfWidth
+     *
+     *   Why this needs an actual sqrt rather than a squared-distance shortcut:
+     *     A tempting cheaper test is a squared-distance band:
+     *       abs(distanceSquared - catwalkRadius^2) <= bandWidthSquaredTerm
+     *     but this is NOT geometrically equivalent to a constant-width annulus.
+     *     distanceSquared - catwalkRadius^2 = (distance - catwalkRadius) * (distance + catwalkRadius),
+     *     so a fixed threshold on the squared-difference corresponds to a
+     *     (distance - catwalkRadius) tolerance that SHRINKS as (distance + catwalkRadius)
+     *     grows — i.e. the effective band width varies with distance from the
+     *     center instead of staying a constant bandHalfWidth. For a small
+     *     centroid-relative radius like the catwalk ring (Rc ~ 3..4 tiles) this
+     *     would produce a visibly non-uniform ring thickness. Since this test runs
+     *     ONLY at level-generation time (never per-frame in render()), the exact
+     *     sqrt-based test is affordable and preferred over the inexact shortcut.
+     * Edge cases:
+     *   catwalkRadius = 0: annulus test degenerates to "within bandHalfWidth of the
+     *     centroid" (a small disc around the core) — not physically meaningful for
+     *     this room but not a divide-by-zero (no division in this method).
+     *   bandHalfWidth < 0: no tile ever satisfies the test (abs(...) is always >= 0);
+     *     treat as "ring disabled" rather than an error.
+     *   differenceColumn = differenceRow = 0: distance = 0, handled by sqrt(0) = 0
+     *     without issue.
+     */
+    public static boolean isOnCatwalkAnnulus(int differenceColumn, int differenceRow,
+                                              float catwalkRadius, float bandHalfWidth) {
+        float distanceSquared = (float) (differenceColumn * differenceColumn + differenceRow * differenceRow);
+        float distance = (float) Math.sqrt(distanceSquared);
+        return Math.abs(distance - catwalkRadius) <= bandHalfWidth;
+    }
+
+    // =========================================================================
+    // STELLAR OBSERVATORY — WRAPPED ANGULAR DIFFERENCE (BOUNDARY DOOR SELECTION)
+    // =========================================================================
+    /*
+     * Formula: angularDifferenceRadians
+     * Derivation:
+     *   Used by the generator to pick, via argmin over boundary-ring tiles, which
+     *   ring tile's bearing-from-center is closest to the corridor connector's
+     *   bearing (both bearings computed with atan2, range (-PI, PI]).
+     *
+     *   The naive difference (angleRadiansA - angleRadiansB) is wrong near the
+     *   +/-PI wraparound seam: e.g. angleRadiansA = -3.10, angleRadiansB = 3.10
+     *   are only ~0.08 radians apart on the circle, but the naive subtraction
+     *   gives -6.20, whose absolute value (~6.20) is nearly a full turn (2*PI)
+     *   away from the true answer.
+     *
+     *   Standard fix — normalize the raw difference into (-PI, PI] before taking
+     *   the magnitude:
+     *     rawDifference = angleRadiansA - angleRadiansB
+     *     wrapped = rawDifference - 2*PI * floor((rawDifference + PI) / (2*PI))
+     *   This is the textbook "wrap to (-PI, PI]" formula: adding PI before the
+     *   floor-divide by the full turn (2*PI) and subtracting it back out shifts
+     *   the wraparound seam from 0 to +/-PI, matching atan2's own range, so any
+     *   input difference (however many full turns off) is folded back into
+     *   exactly one representative in (-PI, PI].
+     *     result = abs(wrapped)   ∈ [0, PI]
+     *
+     *   Verification with the example above:
+     *     rawDifference = -3.10 - 3.10 = -6.20
+     *     (rawDifference + PI) / (2*PI) = (-6.20 + 3.14159) / 6.28319 ≈ -0.4867
+     *     floor(-0.4867) = -1
+     *     wrapped = -6.20 - 2*PI*(-1) = -6.20 + 6.28319 ≈ 0.0832
+     *     result = abs(0.0832) ≈ 0.083  radians  (matches the true ~0.08 answer)
+     * Edge cases:
+     *   angleRadiansA == angleRadiansB: rawDifference = 0, wrapped = 0, result = 0.
+     *   Difference of exactly PI (opposite bearings): wraps to exactly PI (or -PI,
+     *     both fold to the same magnitude), result = PI — the maximum possible
+     *     angular difference, as expected for antipodal bearings.
+     *   Inputs far outside (-PI, PI] (e.g. accumulated multi-turn angles): still
+     *     handled correctly because the floor-divide removes any integer number of
+     *     full turns before the final subtraction.
+     *   No division-by-zero: 2*PI is a nonzero compile-time constant.
+     */
+    public static float angularDifferenceRadians(float angleRadiansA, float angleRadiansB) {
+        float rawDifference = angleRadiansA - angleRadiansB;
+        float wrapped = rawDifference - MathUtils.PI2 * MathUtils.floor((rawDifference + MathUtils.PI) / MathUtils.PI2);
+        return Math.abs(wrapped);
+    }
 }

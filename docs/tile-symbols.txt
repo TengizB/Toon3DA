@@ -36,6 +36,14 @@ U   Radiation wall      Radiation-burned power-plant walls.
 X   Blast wall          Battle-scarred armory walls.
 D   Holo-data wall      Glowing cyan data-panel display wall. Research Lab far wall.
 F   Force-field wall    Electric-blue energy barrier. Research Lab alcove mouth.
+"   Viewport dome wall  Curved reinforced star-window: brushed-titanium mullion arch framing a
+                        deep-indigo nebula backdrop (starfield, planet crescent). STELLAR_OBSERVATORY
+                        room only — see room notes below.
+'   Magrail conduit wall Brushed hull panel threaded with violet->cyan pulsing magnetic-rail
+                        conduits. STELLAR_OBSERVATORY room only.
+`   Hull plate wall     Riveted brushed-titanium hull segment; clean, cool, intact ship skin — the
+                        default rotunda shell. Lighter and cleaner than the Bulkhead wall 'k'.
+                        STELLAR_OBSERVATORY room only.
 
 DOORS (solid until opened; runtime state managed by DoorManager)
 ----------------------------------------------------------------
@@ -72,6 +80,10 @@ C   Crate               Reinforced olive-drab munitions box: steel corner bracke
 I   Specimen tank       Tall research cylinder: steel plinth (readout, vents), capped collar with cyan emitter ring, teal cryo-fluid with air gap + meniscus, glowing containment bands, curled bioluminescent specimen, glass sheen, rising bubbles, frost. 0.85x wall height
 W   Holo-workstation    Low console (keypad deck, live waveform screen, status LEDs) with a holo-emitter disc projecting a translucent cyan wireframe globe: scan-lined volume, lat/long arcs, fanning beams, floating data glyphs. 0.70x wall height
 J   AI core node        Tall server tower: chassis with edge cooling fins, crown cyan-white core glow orb, glowing vertical data spine threading a stack of translucent processing slabs (internal glow, bright seam, edge LEDs), base readout. 0.95x wall height
+;   Gravity well core    CENTERPIECE. Floating anti-grav generator: dark emitter hub over a pedestal, encircled by a spinning pale-blue containment ring with orbiting debris chunks. STELLAR_OBSERVATORY room only, exactly one at the centroid tile. 0.98x wall height
+\   Floating cargo crate Magnetically tethered supply crate hanging off the deck, tilted ~20deg, cyan tether-beam to a deck clamp. STELLAR_OBSERVATORY room only. 0.55x wall height
+|   Docking strut pylon  Tapered titanium support strut with a clamp collar and a vertical ladder of status LEDs. STELLAR_OBSERVATORY room only. 0.92x wall height
+<   Astro-nav holo table Low console projecting a translucent rotating cyan wireframe star-chart globe. STELLAR_OBSERVATORY room only. 0.60x wall height
 
 WALKABLE DECALS (player walks over; rendered as flat billboard)
 --------------------------------------------------------------
@@ -89,6 +101,12 @@ q   Toxic hazard        Acid/toxic pool (idea 4, Pillar 3). DYNAMIC — area-den
                         ticks POISONED on any host standing on it; a Plague Hulk leaves one
                         where it dies. Creeps slowly; may be hand-placed to seed a toxic room.
                         Walkable. 0.16x wall height.
+?   Magnetic deck plating Raised mag-deck grating marking the catwalk ring / walking lanes.
+                        STELLAR_OBSERVATORY room only. Walkable. 0.18x wall height.
+]   Zero-g debris scatter Tiny weightless-looking debris (bolts, shards, a data-slate) with
+                        gapped drop-shadows. STELLAR_OBSERVATORY room only. Walkable. 0.16x wall height.
+-   Starlight seam strip Thin glowing fiber-optic deck seam; used as the four radial spokes
+                        toward the core. STELLAR_OBSERVATORY room only. Walkable. 0.14x wall height.
 
 PICKUPS (walkable; collected on player step)
 -------------------------------------------
@@ -127,11 +145,16 @@ n   Boss spawn (depth-keyed)  Replaced at load time with floor ' '; BossFloorCon
 SYMBOL BUDGET
 -------------
 Total printable ASCII characters: 95  (codes 32-126)
-Currently assigned:               75
-Remaining:                        20
+Currently assigned:               85
+Remaining:                        10
 
 Free characters (not yet assigned):
-" _ ` | { } [ ] \ / < > ( ) - + (some already used — check above)
+o [ { } ( ) / , _ :
+  (reserved by convention for the sibling EXCAVATION_SITE room design,
+  .claude/agents/ideas/excavation-monolith-chamber-room.txt — NOT IMPLEMENTED yet.
+  " ' ; ? < \ ] - | ` were the other half of this free-20 pool; they are now
+  assigned to the STELLAR_OBSERVATORY room — see WALLS / SOLID PROPS / WALKABLE
+  DECALS above. Contained to that room type; do not reuse elsewhere.)
   ('~' and '*' now taken as Ghoul / Blight Corruptor enemy-spawn markers)
 Uppercase: (K V now taken as Revenant / Vortex Eye enemy-spawn markers;
            D F I J W taken; Z taken as cryo; check walls/doors above)
@@ -144,7 +167,11 @@ PREFERRED SYMBOLS FOR NEW ADDITIONS
 - Lowercase letters for new walkable/decal things.
 - Digits: 6-9 now used for ammo pickups; no free digits remain.
 - Punctuation only when clearly readable in a plain-text editor.
-- Avoid: \ | < > (confusing in text editors); " ' (quoting conflicts).
+- Avoid: \ | < > (confusing in text editors); " ' (quoting conflicts). Exception:
+  the STELLAR_OBSERVATORY room deliberately used \ | < " ' anyway because they were
+  the only symbols left after the EXCAVATION doc's cleaner claim, and both rooms are
+  procedurally generated (rarely hand-edited in a text editor) — see that room's
+  design doc OPEN QUESTIONS for the tradeoff discussion.
 
 ---
 
