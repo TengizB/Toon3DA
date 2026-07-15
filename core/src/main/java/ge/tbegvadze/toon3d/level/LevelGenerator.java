@@ -2,9 +2,11 @@ package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.item.ItemType;
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -68,7 +70,7 @@ public class LevelGenerator implements ILevelGenerator {
         ENTRANCE, STANDARD, LARGE, SERVER_ROOM,
         MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
         POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK,
-        RESEARCH_LAB
+        RESEARCH_LAB, STELLAR_OBSERVATORY
     }
 
     private final Random         random;
@@ -158,6 +160,7 @@ public class LevelGenerator implements ILevelGenerator {
         placeCommandCenterProps(grid, rooms);
         placeContainmentBlockProps(grid, rooms);
         placeResearchLabProps(grid, rooms);
+        placeStellarObservatoryProps(grid, rooms);
         placePickups(grid, rooms, roomDepths, maxRoomDepth);
         placeWeaponSpawns(grid, rooms);
 
@@ -379,6 +382,69 @@ public class LevelGenerator implements ILevelGenerator {
             }
             // else: remains STANDARD
         }
+
+        // Step D — Stellar Observatory: RARE landmark rotunda (true-circle carve; decorated
+        // separately by decorateStellarObservatory(), called from placeStellarObservatoryProps()
+        // in phase 3). Depth-gated, LOW roll weight, and this block only ever runs once per
+        // generate() call, so it is a hard cap of 1 per level. See the design doc:
+        // .claude/agents/ideas/stellar-observatory-gravity-well-room.txt ("PLACEMENT RULES").
+        if (dungeonDepth >= LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_DEPTH
+                && random.nextFloat() < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_CHANCE) {
+            Room stellarObservatoryCandidate = findStellarObservatoryCandidate(rooms);
+            if (stellarObservatoryCandidate != null) {
+                stellarObservatoryCandidate.type = RoomType.STELLAR_OBSERVATORY;
+            }
+        }
+    }
+
+    /**
+     * Finds the best candidate for a Stellar Observatory: a STANDARD room whose interior is
+     * large enough and near-square enough to inscribe the rotunda circle, and spaced away from
+     * the Research Lab landmark (tonal-opposite spacing rule from the design doc's PLACEMENT
+     * RULES — the doc's other spacing partners, boss arena / shop-safe-room / EXCAVATION_SITE,
+     * are route-level or sibling-doc concepts that don't exist as a RoomType in this generator).
+     * Returns null if no candidate qualifies — the caller must never force the room type onto
+     * an ineligible slot; STELLAR_OBSERVATORY simply doesn't appear this level.
+     *
+     * Size-gate note: the design doc's declared target radius is R = 6..8 (from 15x15/17x17
+     * interiors), but LEVEL_GEN_ROOM_MAX_HEIGHT caps every room's interior height at 14 tiles,
+     * so a 15x15+ interior can never be produced by placeRooms(). Rather than raising that
+     * shared cap (which would perturb every other room type's size balance), this gate accepts
+     * the biggest near-square footprint the existing cap allows (13x13..14x14); combined with
+     * the carve formula in decorateStellarObservatory() that works out to R = 5..6 — still a
+     * genuine multi-tile rotunda, just more compact than the doc's standalone target.
+     */
+    private Room findStellarObservatoryCandidate(List<Room> rooms) {
+        Room researchLabRoom = null;
+        for (Room existing : rooms) {
+            if (existing.type == RoomType.RESEARCH_LAB) {
+                researchLabRoom = existing;
+                break;
+            }
+        }
+
+        List<Room> eligible = new ArrayList<>();
+        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
+            Room candidate = rooms.get(roomIndex);
+            if (candidate.type != RoomType.STANDARD) continue;
+
+            int interiorWidth  = candidate.interiorWidth();
+            int interiorHeight = candidate.interiorHeight();
+            if (interiorWidth  < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_INTERIOR
+                    || interiorHeight < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_INTERIOR) continue;
+
+            int largerDimension  = Math.max(interiorWidth, interiorHeight);
+            int smallerDimension = Math.min(interiorWidth, interiorHeight);
+            if (largerDimension > smallerDimension * LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MAX_ASPECT) continue;
+
+            if (researchLabRoom != null
+                    && manhattanDistance(candidate, researchLabRoom)
+                        < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_LANDMARK_SPACING) continue;
+
+            eligible.add(candidate);
+        }
+        if (eligible.isEmpty()) return null;
+        return eligible.get(random.nextInt(eligible.size()));
     }
 
     /**
@@ -1683,6 +1749,421 @@ public class LevelGenerator implements ILevelGenerator {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // STELLAR_OBSERVATORY — true-circle rotunda landmark room.
+    // See the design doc for the full spec and step numbering referenced below:
+    // .claude/agents/ideas/stellar-observatory-gravity-well-room.txt
+    // -------------------------------------------------------------------------
+
+    private void placeStellarObservatoryProps(char[][] grid, List<Room> rooms) {
+        for (Room room : rooms) {
+            if (room.type != RoomType.STELLAR_OBSERVATORY) continue;
+            decorateStellarObservatory(grid, room);
+        }
+    }
+
+    /**
+     * Carves and decorates a STELLAR_OBSERVATORY room: a true-circle rotunda rasterized with
+     * GameMath.classifyRotundaTile(), a raised catwalk ring, a centred gravity-well core, four
+     * radial spokes, boundary shell variety, scattered props/decals, sparse dread lighting, and
+     * boundary door placement via GameMath.angularDifferenceRadians() argmin bearing selection.
+     *
+     * Architectural note (adaptation from the design doc's literal step 2): Phase 1's
+     * carveRoomInteriors() already flooded this room's whole rectangular interior to floor
+     * before this method runs — every room type is carved the same generic way, then decorated
+     * in place (see the class-level phase doc-comment). That means GameMath.RotundaTileClass
+     * .OUTSIDE tiles are NOT "untouched wall" here the way the enum's javadoc frames it; they
+     * are already floor. Leaving them as floor would carve an unintended walkable dead-space
+     * ring/pocket outside the intended circle (the design doc's own ASCII diagram shows the
+     * corners solid, not open), so this method explicitly seals every OUTSIDE tile to a wall
+     * too — both SHELL and OUTSIDE become solid, differing only in which gets shell-variety
+     * texturing. That, in turn, makes the design doc's separate "leak-seal pass" unnecessary:
+     * since the entire non-FLOOR region is solid, there is no thin ring for a diagonal (or, at
+     * these small radii, even orthogonal — the classify band's "+0.75" margin does not always
+     * cover the single-step jump at an exact cardinal offset) rasterization gap to slip through.
+     */
+    private void decorateStellarObservatory(char[][] grid, Room room) {
+        int interiorLeft   = room.leftColumn + 1;
+        int interiorRight  = room.rightColumn - 1;
+        int interiorBottom = room.bottomRow + 1;
+        int interiorTop    = room.topRow - 1;
+
+        // Use the same centroid the rest of the generator already targets this room by
+        // (corridor connection, connectivity audit) so every subsystem agrees on one tile,
+        // regardless of interior-dimension parity.
+        int centerColumn = room.centerColumn();
+        int centerRow    = room.centerRow();
+
+        int rawRadius = Math.min(room.interiorWidth(), room.interiorHeight()) / 2
+                      - LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_RADIUS_MARGIN;
+        float radius = Math.max(LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_RADIUS,
+                        Math.min(LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MAX_RADIUS, rawRadius));
+        int radiusInt = Math.round(radius);
+
+        // --- Step 2 (+ sealed OUTSIDE, see method doc): carve the circle ---
+        List<int[]> shellRingTiles = new ArrayList<>();
+        for (int tileRow = interiorBottom; tileRow <= interiorTop; tileRow++) {
+            for (int tileColumn = interiorLeft; tileColumn <= interiorRight; tileColumn++) {
+                int differenceColumn = tileColumn - centerColumn;
+                int differenceRow    = tileRow    - centerRow;
+                GameMath.RotundaTileClass tileClass =
+                        GameMath.classifyRotundaTile(differenceColumn, differenceRow, radius);
+                if (tileClass == GameMath.RotundaTileClass.FLOOR) {
+                    grid[tileRow][tileColumn] = ' ';
+                } else {
+                    grid[tileRow][tileColumn] = '`'; // hull plate — default shell/seal wall
+                    if (tileClass == GameMath.RotundaTileClass.SHELL) {
+                        shellRingTiles.add(new int[]{ tileColumn, tileRow });
+                    }
+                }
+            }
+        }
+
+        // --- Corridor breach detection (feeds step 3 hero-arc bearing + step 10 doors) ---
+        // A breach is any non-wall tile Phase 2 already carved into this room's TRUE rectangle
+        // perimeter (assignWallVariety() only recolors 'x' tiles, so a corridor entry stays
+        // identifiable as 'l'/'d' among the perimeter's themed wall chars).
+        List<int[]> breachPoints = findPerimeterBreaches(grid, room);
+        if (shellRingTiles.isEmpty()) return; // degenerate slot; nothing further to decorate
+
+        int[] primaryBreach = breachPoints.isEmpty()
+                ? new int[]{ centerColumn + radiusInt, centerRow }
+                : breachPoints.get(0);
+        float primaryBearing = (float) Math.atan2(primaryBreach[1] - centerRow, primaryBreach[0] - centerColumn);
+
+        // --- Step 3: shell variety (viewport dome opposite the entrance, magrail side arcs) ---
+        assignStellarShellVariety(grid, centerColumn, centerRow, shellRingTiles, breachPoints, primaryBearing);
+
+        // --- Step 10: boundary door placement (argmin bearing) + connector lane through the
+        // sealed margin between the true rectangle wall and the shell ring ---
+        for (int[] breach : breachPoints) {
+            carveStellarObservatoryEntrance(grid, breach, centerColumn, centerRow, shellRingTiles);
+        }
+
+        // --- Step 4: catwalk ring ---
+        int catwalkRadiusInt = Math.round(radius * LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_CATWALK_RATIO);
+        float catwalkRadius = catwalkRadiusInt;
+        List<int[]> catwalkTiles = new ArrayList<>();
+        for (int tileRow = interiorBottom; tileRow <= interiorTop; tileRow++) {
+            for (int tileColumn = interiorLeft; tileColumn <= interiorRight; tileColumn++) {
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                int differenceColumn = tileColumn - centerColumn;
+                int differenceRow    = tileRow    - centerRow;
+                if (GameMath.isOnCatwalkAnnulus(differenceColumn, differenceRow, catwalkRadius,
+                        LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_CATWALK_BAND_HALF_WIDTH)) {
+                    grid[tileRow][tileColumn] = '?';
+                    catwalkTiles.add(new int[]{ tileColumn, tileRow });
+                }
+            }
+        }
+
+        // --- Step 5: core placement (always wins any conflict — placed after the ring) ---
+        grid[centerRow][centerColumn] = ';';
+
+        // --- Step 6: radial spokes (cardinal directions, ring to one tile shy of the shell) ---
+        int[][] spokeDirections = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+        assert spokeDirections.length == LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_SPOKE_COUNT;
+        for (int[] direction : spokeDirections) {
+            for (int distance = catwalkRadiusInt + 1; distance <= radiusInt - 1; distance++) {
+                int tileColumn = centerColumn + direction[0] * distance;
+                int tileRow    = centerRow    + direction[1] * distance;
+                if (!isInBounds(tileColumn, tileRow)) continue;
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                grid[tileRow][tileColumn] = '-';
+            }
+        }
+
+        // --- Step 7: prop scatter (outer annulus only; solid-prop budget <= 6 incl. the core) ---
+        int pylonTarget = randomBetween(LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_PYLON_MIN,
+                                        LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_PYLON_MAX);
+        boolean[] quadrantHasPylon = new boolean[4];
+        for (int placed = 0; placed < pylonTarget; placed++) {
+            placeStellarOuterAnnulusProp(grid, centerColumn, centerRow, radius, catwalkRadius, radiusInt,
+                    '|', quadrantHasPylon);
+        }
+        if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_HOLOTABLE_CHANCE) {
+            placeStellarOuterAnnulusProp(grid, centerColumn, centerRow, radius, catwalkRadius, radiusInt,
+                    '<', null);
+        }
+        int crateTarget = randomBetween(LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_CRATE_MIN,
+                                        LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_CRATE_MAX);
+        for (int placed = 0; placed < crateTarget; placed++) {
+            placeStellarOuterAnnulusProp(grid, centerColumn, centerRow, radius, catwalkRadius, radiusInt,
+                    '\\', null);
+        }
+
+        // --- Step 8: decal pass (zero-g debris; magnetic deck plating is already the ring) ---
+        int debrisTarget = randomBetween(LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_DEBRIS_MIN,
+                                         LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_DEBRIS_MAX);
+        for (int placed = 0; placed < debrisTarget; placed++) {
+            placeStellarOuterAnnulusProp(grid, centerColumn, centerRow, radius, catwalkRadius, radiusInt,
+                    ']', null);
+        }
+
+        // --- Step 9: sparse dread lighting (0-2 unlit tiles, far quadrant only, no flicker) ---
+        int unlitTarget = random.nextInt(LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_UNLIT_MAX + 1);
+        for (int placed = 0; placed < unlitTarget; placed++) {
+            placeStellarFarQuadrantUnlitTile(grid, centerColumn, centerRow, radius, catwalkRadius, radiusInt,
+                    primaryBearing);
+        }
+
+        // --- Step 11: navigability check (bounded local flood-fill) ---
+        if (!isStellarObservatoryFullyNavigable(grid, room, centerColumn, centerRow, catwalkTiles)) {
+            // Simplification of the design doc's "remove the offending prop and retry" loop:
+            // clear every non-core solid prop this method placed and accept the now-guaranteed
+            // open result. These props are single, sparse tiles in an already very open outer
+            // annulus, so a hard block is a rare edge case; a full strip is a small, always-
+            // correct fix rather than a much larger surgical targeted-removal retry loop.
+            clearStellarObservatorySolidProps(grid, interiorLeft, interiorRight, interiorBottom, interiorTop);
+        }
+
+        // Step 12 (enemy spawns) is intentionally not implemented here: this generator's only
+        // enemy placement is the generic budgeted-encounter system (placeBudgetedEncounter(),
+        // phase 4 — see EncounterBudgetPlanner), which runs after ALL room decoration and picks
+        // uniformly-random eligible tiles per room; no existing RoomType decorate method places
+        // bespoke archetypes/positions either. isEnemySpawnEligible() was widened to accept
+        // '?'/'-'/']' so the ring and spokes are viable spawn tiles, and the ranged "spoke
+        // sniper" gauntlet this room is built around still emerges naturally: any ranged enemy
+        // the budgeted system happens to drop on a spoke or the ring gets a clean shot at a
+        // player crossing the open centre, via the existing isSameCardinalLine() rule.
+    }
+
+    /**
+     * Scans a room's TRUE rectangle perimeter for tiles Phase 2's corridor carving already
+     * turned into floor/door ('l'/'d') — each one is a corridor connection point into this room.
+     */
+    private List<int[]> findPerimeterBreaches(char[][] grid, Room room) {
+        List<int[]> breaches = new ArrayList<>();
+        for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
+            addStellarBreachIfPresent(grid, breaches, tileColumn, room.bottomRow);
+            addStellarBreachIfPresent(grid, breaches, tileColumn, room.topRow);
+        }
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            addStellarBreachIfPresent(grid, breaches, room.leftColumn,  tileRow);
+            addStellarBreachIfPresent(grid, breaches, room.rightColumn, tileRow);
+        }
+        return breaches;
+    }
+
+    private void addStellarBreachIfPresent(char[][] grid, List<int[]> breaches, int tileColumn, int tileRow) {
+        if (!isInBounds(tileColumn, tileRow)) return;
+        if (!Level.isWall(grid[tileRow][tileColumn])) {
+            breaches.add(new int[]{ tileColumn, tileRow });
+        }
+    }
+
+    /**
+     * Step 3: reskins the SHELL ring by arc position — a viewport-dome hero arc opposite the
+     * primary entrance, two magrail-conduit side arcs, hull plate everywhere else. Ring tiles
+     * within DOOR_KEEPOUT_RADIANS of ANY entrance bearing are left as hull plate so every
+     * door's immediate neighbours stay a clean opening (never converted away from it).
+     */
+    private void assignStellarShellVariety(char[][] grid, int centerColumn, int centerRow,
+                                           List<int[]> shellRingTiles, List<int[]> breachPoints,
+                                           float primaryBearing) {
+        float heroBearing     = primaryBearing + (float) Math.PI;
+        float magrailBearingA = primaryBearing + (float) Math.PI / 2f;
+        float magrailBearingB = primaryBearing - (float) Math.PI / 2f;
+
+        for (int[] shellTile : shellRingTiles) {
+            int tileColumn = shellTile[0];
+            int tileRow    = shellTile[1];
+            float bearing = (float) Math.atan2(tileRow - centerRow, tileColumn - centerColumn);
+
+            boolean nearAnyBreach = false;
+            for (int[] breach : breachPoints) {
+                float breachBearing = (float) Math.atan2(breach[1] - centerRow, breach[0] - centerColumn);
+                if (GameMath.angularDifferenceRadians(bearing, breachBearing)
+                        < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_DOOR_KEEPOUT_RADIANS) {
+                    nearAnyBreach = true;
+                    break;
+                }
+            }
+            if (nearAnyBreach) continue;
+
+            if (GameMath.angularDifferenceRadians(bearing, heroBearing)
+                    <= LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_HERO_ARC_HALF_WIDTH_RADIANS) {
+                grid[tileRow][tileColumn] = '"'; // viewport dome
+            } else if (GameMath.angularDifferenceRadians(bearing, magrailBearingA)
+                        <= LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MAGRAIL_ARC_HALF_WIDTH_RADIANS
+                    || GameMath.angularDifferenceRadians(bearing, magrailBearingB)
+                        <= LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MAGRAIL_ARC_HALF_WIDTH_RADIANS) {
+                grid[tileRow][tileColumn] = '\''; // magrail conduit
+            }
+            // else: stays hull plate '`' (already the default from the carve pass)
+        }
+    }
+
+    /**
+     * Step 10: picks the SHELL ring tile whose bearing-from-centre is nearest the given
+     * corridor breach's bearing (argmin over GameMath.angularDifferenceRadians()), converts it
+     * to a door, then carves a straight L-shaped connector lane from the breach (on the room's
+     * TRUE rectangle wall) to that door tile — reopening the sealed OUTSIDE margin this method's
+     * circle carve walled off, so the corridor Phase 2 already dug actually reaches the rotunda.
+     */
+    private void carveStellarObservatoryEntrance(char[][] grid, int[] breach, int centerColumn, int centerRow,
+                                                  List<int[]> shellRingTiles) {
+        float breachBearing = (float) Math.atan2(breach[1] - centerRow, breach[0] - centerColumn);
+
+        int[] doorTile = null;
+        float bestDifference = Float.MAX_VALUE;
+        for (int[] shellTile : shellRingTiles) {
+            float bearing = (float) Math.atan2(shellTile[1] - centerRow, shellTile[0] - centerColumn);
+            float difference = GameMath.angularDifferenceRadians(bearing, breachBearing);
+            if (difference < bestDifference) {
+                bestDifference = difference;
+                doorTile = shellTile;
+            }
+        }
+        if (doorTile == null) return;
+
+        grid[doorTile[1]][doorTile[0]] = 'd';
+
+        int laneColumn = breach[0];
+        int laneRow    = breach[1];
+        while (laneColumn != doorTile[0]) {
+            laneColumn += Integer.signum(doorTile[0] - laneColumn);
+            if (grid[laneRow][laneColumn] != 'd') grid[laneRow][laneColumn] = ' ';
+        }
+        while (laneRow != doorTile[1]) {
+            laneRow += Integer.signum(doorTile[1] - laneRow);
+            if (grid[laneRow][laneColumn] != 'd') grid[laneRow][laneColumn] = ' ';
+        }
+    }
+
+    /**
+     * Random-samples a tile in the outer annulus (strictly between the catwalk ring and the
+     * shell, with PROP_CLEARANCE tiles of breathing room on each side) that is still plain open
+     * floor (' ') — i.e. not the ring, a spoke, a door/lane, or another prop — and stamps
+     * propChar there. When quadrantOccupied is non-null, enforces at most one placement per
+     * quadrant (used for docking-strut pylons per the design doc's step 7). Best-effort: silently
+     * places nothing if no valid tile is found within the attempt budget (the outer annulus is
+     * narrow at this room's achievable radius — see the LevelGenConstants size-gate note).
+     */
+    private void placeStellarOuterAnnulusProp(char[][] grid, int centerColumn, int centerRow,
+                                              float radius, float catwalkRadius, int radiusInt,
+                                              char propChar, boolean[] quadrantOccupied) {
+        float innerBound = catwalkRadius + LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_PROP_CLEARANCE;
+        float outerBound = radius - LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_PROP_CLEARANCE;
+        for (int attempt = 0; attempt < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_PROP_PLACEMENT_ATTEMPTS; attempt++) {
+            int offsetColumn = randomBetween(-radiusInt, radiusInt);
+            int offsetRow    = randomBetween(-radiusInt, radiusInt);
+            int tileColumn = centerColumn + offsetColumn;
+            int tileRow    = centerRow    + offsetRow;
+            if (!isInBounds(tileColumn, tileRow)) continue;
+            if (grid[tileRow][tileColumn] != ' ') continue;
+
+            double distance = Math.sqrt((double) (offsetColumn * offsetColumn + offsetRow * offsetRow));
+            if (distance <= innerBound || distance >= outerBound) continue;
+
+            if (quadrantOccupied != null) {
+                int quadrant = (offsetColumn >= 0 ? 0 : 1) | (offsetRow >= 0 ? 0 : 2);
+                if (quadrantOccupied[quadrant]) continue;
+                quadrantOccupied[quadrant] = true;
+            }
+
+            grid[tileRow][tileColumn] = propChar;
+            return;
+        }
+    }
+
+    /**
+     * Step 9: places a single unlit ('u') tile in the outer annulus, biased to the quadrant
+     * angularly farthest from the entrance bearing (design doc: "far quadrant only").
+     */
+    private void placeStellarFarQuadrantUnlitTile(char[][] grid, int centerColumn, int centerRow,
+                                                   float radius, float catwalkRadius, int radiusInt,
+                                                   float entranceBearing) {
+        float innerBound = catwalkRadius + LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_PROP_CLEARANCE;
+        float outerBound = radius - LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_PROP_CLEARANCE;
+        for (int attempt = 0; attempt < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_PROP_PLACEMENT_ATTEMPTS; attempt++) {
+            int offsetColumn = randomBetween(-radiusInt, radiusInt);
+            int offsetRow    = randomBetween(-radiusInt, radiusInt);
+            int tileColumn = centerColumn + offsetColumn;
+            int tileRow    = centerRow    + offsetRow;
+            if (!isInBounds(tileColumn, tileRow)) continue;
+            if (grid[tileRow][tileColumn] != ' ') continue;
+
+            double distance = Math.sqrt((double) (offsetColumn * offsetColumn + offsetRow * offsetRow));
+            if (distance <= innerBound || distance >= outerBound) continue;
+
+            float bearing = (float) Math.atan2(offsetRow, offsetColumn);
+            if (GameMath.angularDifferenceRadians(bearing, entranceBearing)
+                    < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_FAR_QUADRANT_RADIANS) continue;
+
+            grid[tileRow][tileColumn] = 'u';
+            return;
+        }
+    }
+
+    /**
+     * Step 11: bounded local flood-fill from a door tile over walkable cells within the room's
+     * bounding box, confirming every catwalk-ring tile and at least one core-adjacent inner-disc
+     * tile are reachable. Mirrors verifyAndRepairConnectivity()'s BFS-passability rules.
+     */
+    private boolean isStellarObservatoryFullyNavigable(char[][] grid, Room room, int centerColumn, int centerRow,
+                                                        List<int[]> catwalkTiles) {
+        int startColumn = -1;
+        int startRow    = -1;
+        outer:
+        for (int tileRow = room.bottomRow; tileRow <= room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
+                if (Level.isDoor(grid[tileRow][tileColumn])) {
+                    startColumn = tileColumn;
+                    startRow    = tileRow;
+                    break outer;
+                }
+            }
+        }
+        if (startColumn < 0) return true; // no door found; defensively treat as nothing to validate
+
+        boolean[][] visited = new boolean[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT][LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
+        ArrayDeque<int[]> queue = new ArrayDeque<>();
+        visited[startRow][startColumn] = true;
+        queue.add(new int[]{ startColumn, startRow });
+        int[] deltaColumns = { 0, 0, 1, -1 };
+        int[] deltaRows    = { 1, -1, 0, 0 };
+        while (!queue.isEmpty()) {
+            int[] current = queue.poll();
+            for (int direction = 0; direction < 4; direction++) {
+                int neighborColumn = current[0] + deltaColumns[direction];
+                int neighborRow    = current[1] + deltaRows[direction];
+                if (!isInBounds(neighborColumn, neighborRow)) continue;
+                if (visited[neighborRow][neighborColumn]) continue;
+                char cell = grid[neighborRow][neighborColumn];
+                boolean passable = cell == ' ' || cell == 'u' || cell == 'l' || cell == 'f'
+                                 || Level.isPropDecal(cell) || Level.isDoor(cell);
+                if (!passable) continue;
+                visited[neighborRow][neighborColumn] = true;
+                queue.add(new int[]{ neighborColumn, neighborRow });
+            }
+        }
+
+        for (int[] catwalkTile : catwalkTiles) {
+            if (!visited[catwalkTile[1]][catwalkTile[0]]) return false;
+        }
+        int[] deltaColumnsCore = { 0, 0, 1, -1 };
+        int[] deltaRowsCore    = { 1, -1, 0, 0 };
+        for (int direction = 0; direction < 4; direction++) {
+            int neighborColumn = centerColumn + deltaColumnsCore[direction];
+            int neighborRow    = centerRow    + deltaRowsCore[direction];
+            if (isInBounds(neighborColumn, neighborRow) && visited[neighborRow][neighborColumn]) return true;
+        }
+        return false;
+    }
+
+    private void clearStellarObservatorySolidProps(char[][] grid, int interiorLeft, int interiorRight,
+                                                    int interiorBottom, int interiorTop) {
+        for (int tileRow = interiorBottom; tileRow <= interiorTop; tileRow++) {
+            for (int tileColumn = interiorLeft; tileColumn <= interiorRight; tileColumn++) {
+                char cell = grid[tileRow][tileColumn];
+                if (cell == '|' || cell == '\\' || cell == '<') {
+                    grid[tileRow][tileColumn] = ' ';
+                }
+            }
+        }
+    }
+
     private char pickResearchLabReward() {
         float roll = random.nextFloat();
         if (roll < 0.35f) return 'H';   // field medkit
@@ -2173,7 +2654,18 @@ public class LevelGenerator implements ILevelGenerator {
 
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
-            if (!isTileReachable(grid, startColumn, startRow, room.centerColumn(), room.centerRow())) {
+            int targetColumn = room.centerColumn();
+            int targetRow    = room.centerRow();
+            if (room.type == RoomType.STELLAR_OBSERVATORY) {
+                // The room centre is the gravity-well core (';'), a solid prop by design
+                // (decorateStellarObservatory() step 5) — it can never itself be a BFS target
+                // (isBfsPassable() rejects solid props). Check the tile just north of it
+                // instead: always open inner-disc floor by construction, so this generic
+                // connectivity audit doesn't mistake a correctly-built rotunda for an
+                // unreachable room and punch an emergency corridor straight through it.
+                targetRow += 1;
+            }
+            if (!isTileReachable(grid, startColumn, startRow, targetColumn, targetRow)) {
                 carveEmergencyCorridor(grid, rooms.get(0), room);
             }
         }
@@ -2651,6 +3143,11 @@ public class LevelGenerator implements ILevelGenerator {
      * Wider eligibility check for enemy spawn positions.
      * Accepts the four floor tile types plus walkable decal props (blood stains, oil pools,
      * and corpses) — all of which are passable for both player and enemy during movement.
+     * Also accepts the STELLAR_OBSERVATORY room's walkable decals ('?' catwalk ring, '-'
+     * starlight spoke, ']' zero-g debris) — without this, the generic budgeted-encounter
+     * system (the only enemy placement this generator has; decorateStellarObservatory() does
+     * not stamp spawns directly) could never roll the "spoke sniper on the ring" encounter
+     * the design doc calls for, since every ring/spoke tile would otherwise be spawn-ineligible.
      * Excludes keycards, medical/armour pickups, and stairs to avoid destroying them on
      * enemy death (killEnemy stamps 'm' at the enemy's last tile).
      */
@@ -2658,6 +3155,7 @@ public class LevelGenerator implements ILevelGenerator {
         if (!isInBounds(tileColumn, tileRow)) return false;
         char cell = grid[tileRow][tileColumn];
         if (cell == ' ' || cell == 'l' || cell == 'u' || cell == 'f') return true;
+        if (cell == '?' || cell == '-' || cell == ']') return true;
         return cell == '.' || cell == 'O' || cell == 'm';
     }
 

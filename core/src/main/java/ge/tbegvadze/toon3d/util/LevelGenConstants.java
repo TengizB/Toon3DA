@@ -191,6 +191,77 @@ public final class LevelGenConstants {
     public static final int   LEVEL_GEN_RESEARCH_LAB_SCORCH_MAX     = 5;
     public static final int   LEVEL_GEN_RESEARCH_LAB_MAX            = 1;
 
+    // -------------------------------------------------------------------------
+    // STELLAR_OBSERVATORY — true-circle rotunda landmark room. RARE set-piece; at most 1 per
+    // level (assignRoomTypes() only ever attempts this once per generate() call). See the
+    // design doc for the full spec: .claude/agents/ideas/stellar-observatory-gravity-well-room.txt
+    // -------------------------------------------------------------------------
+
+    // Rarity / depth gate (design doc PLACEMENT RULES: LOW weight, floors 3+).
+    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_CHANCE          = 0.14f;
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_MIN_DEPTH       = 3;
+
+    // Size gate: near-square interior, minimum 13x13 (design doc GENERATOR ALGORITHM step 1).
+    // NOTE: the design doc's target radius (R = 6..8, from 15x15/17x17 interiors) assumes rooms
+    // up to 17 tiles tall, but LEVEL_GEN_ROOM_MAX_HEIGHT caps every room's interior height at 14
+    // — so a 15x15+ interior is never produced by placeRooms(). Rather than raising that shared
+    // cap (which would perturb every other room type's size balance), the observatory uses the
+    // biggest near-square footprint the existing cap allows; see MIN_RADIUS/MAX_RADIUS below.
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_MIN_INTERIOR   = 13;
+    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_MAX_ASPECT    = 1.25f;
+    // Minimum Manhattan room-centre distance from the Research Lab landmark (tonal-opposite
+    // spacing rule from PLACEMENT RULES). The doc's other spacing partners — boss arena,
+    // shop/safe room, EXCAVATION_SITE — are route-level or sibling-doc concepts that don't
+    // exist as a RoomType in this generator, so they have no analogous check here.
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_LANDMARK_SPACING = 20;
+
+    // Circle carve geometry (GENERATOR ALGORITHM step 2). RADIUS_MARGIN keeps a 1-tile gap
+    // between the rasterized circle and the interior bounds; MIN/MAX_RADIUS clamp the radius
+    // to what the achievable room sizes above actually produce (R = 5..6 given the 13x13..14x14
+    // size gate — see the size-gate note above).
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_RADIUS_MARGIN  = 1;
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_MIN_RADIUS     = 5;
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_MAX_RADIUS     = 6;
+
+    // Catwalk ring (step 4): Rc = round(R * ratio); a 1-tile-wide annulus (bandHalfWidth 0.5 —
+    // do not widen; BALANCE NOTES: "the exposure is the point").
+    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_CATWALK_RATIO            = 0.5f;
+    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_CATWALK_BAND_HALF_WIDTH  = 0.5f;
+
+    // Shell variety (step 3): angular half-widths (radians) of the viewport-dome hero arc
+    // (opposite the entrance) and the two magrail-conduit side arcs; everything else in the
+    // SHELL ring stays the default hull-plate wall. DOOR_KEEPOUT_RADIANS excludes ring tiles
+    // near any entrance bearing from hero/magrail reskinning, so a door's immediate neighbours
+    // are always a clean opening (never converted away from it).
+    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_HERO_ARC_HALF_WIDTH_RADIANS    = 0.35f;
+    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_MAGRAIL_ARC_HALF_WIDTH_RADIANS  = 0.20f;
+    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_DOOR_KEEPOUT_RADIANS            = 0.18f;
+
+    // Radial spokes (step 6): always 4 (cardinal directions).
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_SPOKE_COUNT = 4;
+
+    // Prop scatter (step 7) — solid-prop budget stays <= 6 total (pylons + table + crates +
+    // the single core) per BALANCE NOTES, so the ring and inner disc are never sealed off.
+    // PROP_CLEARANCE keeps placements off the ring/shell edges without eating the whole (very
+    // narrow, R=5..6) outer annulus band.
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_PYLON_MIN               = 2;
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_PYLON_MAX               = 4;
+    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_HOLOTABLE_CHANCE        = 0.65f; // 0-1 tables
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_CRATE_MIN               = 1;
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_CRATE_MAX               = 3;
+    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_PROP_CLEARANCE          = 0.5f;
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_PROP_PLACEMENT_ATTEMPTS = 30;
+
+    // Decal pass (step 8): zero-g debris count.
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_DEBRIS_MIN = 3;
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_DEBRIS_MAX = 6;
+
+    // Lighting (step 9): sparse unlit tiles in the far quadrant only; no 'f' flicker (the
+    // room's signature is that it still works). FAR_QUADRANT_RADIANS is the minimum angular
+    // distance from the (primary) entrance bearing before a tile counts as "far".
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_UNLIT_MAX             = 2;
+    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_FAR_QUADRANT_RADIANS  = 2.0f;
+
     // Global accent wall chances (post-pass, any room type)
     public static final float LEVEL_GEN_EMERG_STRIP_CORRIDOR_CHANCE = 0.25f; // 'S' near keycard doors
     public static final float LEVEL_GEN_BLAST_NEAR_CORPSE_CHANCE    = 0.10f; // 'X' near corpse clusters
