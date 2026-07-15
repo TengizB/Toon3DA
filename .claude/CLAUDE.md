@@ -288,6 +288,7 @@ Procedural dungeon generator. Takes `LevelGenConfig` and produces a `Level`. All
 
 ### `level/Level.java`
 2D tile grid. **Full tile symbol reference: `docs/tile-symbols.txt`** — single source of truth for every character used in level files.
+> ⚠️ Tileset migration in progress — a symbol's category is fixed but its sprite is becoming per-level. See `docs/environment-tileset-system.txt` (ORDER STATUS TABLE) before relying on the 1:1 symbol→sprite mapping.
 
 Quick summary of categories:
 - **Walls (18):** `x c v t w h j G k N Q S M Z U X D F`
@@ -304,6 +305,8 @@ Quick summary of categories:
 Tile grid indexed by `(x, y)` where `(0, 0)` = bottom-left tile (Y-up). Package-private constructor — always instantiate via `LevelLoader`.
 
 #### STRICT RULE — Adding a new tile symbol
+
+> ⚠️ Tileset migration in progress — this 1:1 rule is legacy; adding environment art will become a registry recipe. See `docs/environment-tileset-system.txt` (ORDER STATUS TABLE) for what is live.
 
 **Every new symbol must be introduced in a single commit that includes ALL of:**
 1. An entry in `docs/tile-symbols.txt` (correct section, description, notes).
