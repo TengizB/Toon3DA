@@ -1,8 +1,41 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Level Design
 TITLE: STELLAR OBSERVATORY — Gravity Well Rotunda (3 walls,4 props,3 decals)
 CREATED: 2026-07-15
+IMPLEMENTED: 2026-07-15
 ---
+
+IMPLEMENTATION NOTES (phase 1 ship)
+====================================
+All 10 symbols, wall/prop/decal rendering, and the RoomType.STELLAR_OBSERVATORY
+generator are implemented. A few numbers were adapted to fit the existing
+rectangular room-carving architecture rather than the letter of this doc:
+  - Radius clamped to R = 5..6 (not 6..8): LEVEL_GEN_ROOM_MAX_HEIGHT caps every
+    room's interior at 14 tiles, so the doc's 15x15/17x17 interiors are never
+    produced by placeRooms(). Raising that shared cap would perturb every other
+    room type's size balance, so the observatory uses the largest near-square
+    footprint the existing cap allows instead.
+  - OUTSIDE tiles (per GameMath.classifyRotundaTile) are sealed to hull-plate
+    wall rather than left untouched, since the generic room-carving pass floods
+    the whole rectangular interior to floor before decoration runs; leaving
+    OUTSIDE as floor would create an unintended walkable ring outside the
+    circle. This also makes the doc's separate "leak-seal pass" unnecessary.
+  - The entrance is carved as a short connector lane from the room's true
+    rectangle wall to the nearest-bearing shell tile (GameMath.
+    angularDifferenceRadians argmin), since doors from the generic corridor
+    pass land one ring outside the rasterized circle's shell.
+  - Enemy composition (step 12: spoke-sniper archetype pinning) is not bespoke
+    — this generator has no per-room-type spawn-archetype/position control
+    anywhere. Ring/spoke/debris tiles were made spawn-eligible so the shared
+    budgeted-encounter system can roll spawns there; the cardinal-line ranged
+    rule still does the tactical work once an enemy lands on a spoke axis.
+  - EXCAVATION_SITE spacing rule skipped: that sibling room type isn't
+    implemented yet, so there's no RoomType to space against.
+  - Core reward/destabilize interactable hook (open question 2/3) not wired —
+    ships per the doc's phase-1 fallback: the core is a pure atmospheric prop.
+See git history on branch claude/stellar-observatory-gravity-well-oo0b0b for
+the full implementation (Level.java, WallRenderer.java, PropRenderer.java,
+GameMath.java, LevelGenerator.java, LevelGenConstants.java, docs/tile-symbols.txt).
 
 OVERVIEW
 ========
