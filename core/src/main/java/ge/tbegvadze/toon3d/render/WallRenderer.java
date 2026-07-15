@@ -71,6 +71,10 @@ public class WallRenderer implements Renderable, Disposable {
     private final Texture wallTextureBlast;
     private final Texture wallTextureHoloData;
     private final Texture wallTextureForceField;
+    // STELLAR OBSERVATORY walls — see .claude/agents/ideas/stellar-observatory-gravity-well-room.txt
+    private final Texture wallTextureStellarViewport;
+    private final Texture wallTextureStellarMagrail;
+    private final Texture wallTextureStellarHullPlate;
     private final Texture doorTexture;
     private final Texture doorTextureRed;
     private final Texture doorTextureYellow;
@@ -117,6 +121,12 @@ public class WallRenderer implements Renderable, Disposable {
     private final int wallTextureHoloDataHeight;
     private final int wallTextureForceFieldWidth;
     private final int wallTextureForceFieldHeight;
+    private final int wallTextureStellarViewportWidth;
+    private final int wallTextureStellarViewportHeight;
+    private final int wallTextureStellarMagrailWidth;
+    private final int wallTextureStellarMagrailHeight;
+    private final int wallTextureStellarHullPlateWidth;
+    private final int wallTextureStellarHullPlateHeight;
     private final int columnTextureWidth;
     private final int columnTextureHeight;
 
@@ -275,6 +285,17 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureForceFieldWidth  = wallTextureForceField.getWidth();
         wallTextureForceFieldHeight = wallTextureForceField.getHeight();
 
+        wallTextureStellarViewport  = generateStellarViewportWallTexture();
+        wallTextureStellarMagrail   = generateStellarMagrailWallTexture();
+        wallTextureStellarHullPlate = generateStellarHullPlateWallTexture();
+
+        wallTextureStellarViewportWidth   = wallTextureStellarViewport.getWidth();
+        wallTextureStellarViewportHeight  = wallTextureStellarViewport.getHeight();
+        wallTextureStellarMagrailWidth    = wallTextureStellarMagrail.getWidth();
+        wallTextureStellarMagrailHeight   = wallTextureStellarMagrail.getHeight();
+        wallTextureStellarHullPlateWidth  = wallTextureStellarHullPlate.getWidth();
+        wallTextureStellarHullPlateHeight = wallTextureStellarHullPlate.getHeight();
+
         doorTexture      = loadOrGenerateDoorTexture(LAB_DOOR_CLOSED_PATH, 0f, 0f, 0f);
 
         doorTextureRed    = loadOrGenerateDoorTexture(LAB_DOOR_RED_PATH,    0.90f, 0.13f, 0.13f);
@@ -317,6 +338,9 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureTable['X'] = wallTextureBlast;      wallWidthTable['X'] = wallTextureBlastWidth;      wallHeightTable['X'] = wallTextureBlastHeight;
         wallTextureTable['D'] = wallTextureHoloData;  wallWidthTable['D'] = wallTextureHoloDataWidth;   wallHeightTable['D'] = wallTextureHoloDataHeight;
         wallTextureTable['F'] = wallTextureForceField; wallWidthTable['F'] = wallTextureForceFieldWidth; wallHeightTable['F'] = wallTextureForceFieldHeight;
+        wallTextureTable['"']  = wallTextureStellarViewport;  wallWidthTable['"']  = wallTextureStellarViewportWidth;  wallHeightTable['"']  = wallTextureStellarViewportHeight;
+        wallTextureTable['\''] = wallTextureStellarMagrail;   wallWidthTable['\''] = wallTextureStellarMagrailWidth;   wallHeightTable['\''] = wallTextureStellarMagrailHeight;
+        wallTextureTable['`']  = wallTextureStellarHullPlate; wallWidthTable['`']  = wallTextureStellarHullPlateWidth; wallHeightTable['`']  = wallTextureStellarHullPlateHeight;
 
         doorTextureTable = new Texture[128];
         Arrays.fill(doorTextureTable, doorTexture);
@@ -2160,6 +2184,9 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureBlast.dispose();
         wallTextureHoloData.dispose();
         wallTextureForceField.dispose();
+        wallTextureStellarViewport.dispose();
+        wallTextureStellarMagrail.dispose();
+        wallTextureStellarHullPlate.dispose();
         doorTexture.dispose();
         doorTextureRed.dispose();
         doorTextureYellow.dispose();
@@ -2322,6 +2349,509 @@ public class WallRenderer implements Renderable, Disposable {
         }
 
         // Suppress unused variable warning — seeded for determinism
+        random.nextInt();
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    // =========================================================================================
+    // STELLAR OBSERVATORY — walls '"' (Viewport dome), ''' (Magrail conduit), '`' (Hull plate).
+    // See .claude/agents/ideas/stellar-observatory-gravity-well-room.txt → TEXTURE / SPRITE SPEC
+    // for the full per-wall build spec. All three reuse RenderConstants' shared STELLAR_* cool
+    // palette so this biome's walls read as one consistent material system with the matching
+    // props another pass wires into PropRenderer. Baked once at load time and reused across every
+    // tile of that wall type, exactly like every other procedural wall generator in this file —
+    // there is no per-tile-instance texture variation anywhere in this pipeline.
+    // =========================================================================================
+
+    /**
+     * Alpha-blends (red, green, blue) onto the pixel already at (column, row), lerping the
+     * existing colour toward the given colour by {@code alpha} (0 = no change, 1 = fully
+     * replaced). Pixmap's draw calls used by these procedural generators have no built-in
+     * blending, so every "soft glow" / "low-alpha overlay" layer composites manually this way —
+     * the same manual-blend pattern the Gore wall's wet-sheen pass uses above. Silently no-ops
+     * for out-of-bounds coordinates so callers never need their own bounds checks.
+     */
+    private static void blendPixel(Pixmap pixmap, int column, int row,
+                                   float red, float green, float blue, float alpha) {
+        if (alpha <= 0f) return;
+        if (column < 0 || row < 0 || column >= pixmap.getWidth() || row >= pixmap.getHeight()) return;
+        int existingPixel   = pixmap.getPixel(column, row);
+        float existingRed   = ((existingPixel >>> 24) & 0xFF) / 255f;
+        float existingGreen = ((existingPixel >>> 16) & 0xFF) / 255f;
+        float existingBlue  = ((existingPixel >>>  8) & 0xFF) / 255f;
+        float blendedRed    = existingRed   + (red   - existingRed)   * alpha;
+        float blendedGreen  = existingGreen + (green - existingGreen) * alpha;
+        float blendedBlue   = existingBlue  + (blue  - existingBlue)  * alpha;
+        pixmap.setColor(clampUnit(blendedRed), clampUnit(blendedGreen), clampUnit(blendedBlue), 1f);
+        pixmap.drawPixel(column, row);
+    }
+
+    /**
+     * Darkens the outer border of a square wall-texture Pixmap toward black, strongest at the
+     * four corners and fading to no darkening at the vignette band's inner edge. Shared finishing
+     * pass for all three STELLAR OBSERVATORY wall generators ("corner vignette: darken the outer
+     * 8% border of the frame" in the design spec).
+     */
+    private static void applyStellarCornerVignette(Pixmap pixmap, int size) {
+        int vignetteThickness = Math.round(size * 0.08f);
+        if (vignetteThickness <= 0) return;
+        for (int row = 0; row < size; row++) {
+            int distanceFromTopOrBottom = Math.min(row, size - 1 - row);
+            for (int column = 0; column < size; column++) {
+                int distanceFromLeftOrRight = Math.min(column, size - 1 - column);
+                int distanceFromEdge = Math.min(distanceFromTopOrBottom, distanceFromLeftOrRight);
+                if (distanceFromEdge >= vignetteThickness) continue;
+                float darkenStrength = 0.40f * (1f - (float) distanceFromEdge / vignetteThickness);
+                blendPixel(pixmap, column, row, 0f, 0f, 0f, darkenStrength);
+            }
+        }
+    }
+
+    /**
+     * True if (column, row) falls inside a rectangular pane whose top-left and top-right corners
+     * are rounded off with {@code cornerRadius} — the Viewport dome wall's curved-window
+     * silhouette. Below the rounded band the pane is a plain rectangle; within the rounded band a
+     * pixel is inside only if it falls within the corresponding rounding-circle's radius.
+     */
+    private static boolean isInsideRoundedTopPane(int column, int row,
+                                                  int paneLeft, int paneRight,
+                                                  int paneBottom, int paneTop,
+                                                  int cornerRadius) {
+        if (column < paneLeft || column >= paneRight || row < paneBottom || row >= paneTop) return false;
+        int cornerBandBottomRow = paneTop - cornerRadius;
+        if (row < cornerBandBottomRow) return true; // below the rounded band — full rectangle width
+        boolean nearLeftCorner  = column < paneLeft + cornerRadius;
+        boolean nearRightCorner = column >= paneRight - cornerRadius;
+        if (!nearLeftCorner && !nearRightCorner) return true; // top band but not near either corner
+        int cornerCenterColumn = nearLeftCorner ? (paneLeft + cornerRadius) : (paneRight - cornerRadius);
+        float differenceColumn = column - cornerCenterColumn;
+        float differenceRow    = row - cornerBandBottomRow;
+        return (differenceColumn * differenceColumn + differenceRow * differenceRow)
+                <= (float) (cornerRadius * cornerRadius);
+    }
+
+    /**
+     * Generates the Viewport dome wall texture ('"') — a curved reinforced star-window onto deep
+     * space. See TEXTURE / SPRITE SPEC → WALL '"' — VIEWPORT DOME in the design doc referenced
+     * above for the full build spec.
+     *
+     * Build order (back to front): brushed-titanium frame → rounded-top glass inset (indigo→black
+     * vertical gradient) → soft nebula cloud bands → starfield with a few cross-glints → a baked
+     * planet crescent → hairline muntins → a diagonal reflection streak → a glowing cyan sill
+     * strip with LEDs → a corner vignette.
+     */
+    private static Texture generateStellarViewportWallTexture() {
+        int    size   = STELLAR_VIEWPORT_WALL_TEXTURE_SIZE;
+        Random random = new Random(STELLAR_VIEWPORT_WALL_SEED);
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Pane bounding box: tall panoramic window, rounded top, a sill margin at the bottom for
+        // the status strip, and a mullion frame margin all around.
+        int paneLeft     = 26;
+        int paneRight    = size - 26;
+        int paneBottom   = 40;
+        int paneTop      = size - 22;
+        int cornerRadius = STELLAR_VIEWPORT_CORNER_RADIUS;
+
+        // ── 1. Frame base: brushed titanium with a vertical streak noise (+/-4% luma) ──
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                float streak = ((column * 13 + (row / 5) * 7) % 17 - 8) / 220f; // vertical brush streak
+                float grain  = ((row * 7 + column * 11) % 13 - 6) / 260f;
+                pixmap.setColor(clampUnit(STELLAR_HULL_TITANIUM_R + streak + grain),
+                                clampUnit(STELLAR_HULL_TITANIUM_G + streak + grain),
+                                clampUnit(STELLAR_HULL_TITANIUM_B + streak + grain), 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // ── 2. Pane inset: rounded-top rectangle, vertical gradient VOID_INDIGO (top) → VOID_BLACK (bottom) ──
+        boolean[] paneMask = new boolean[size * size];
+        for (int row = paneBottom; row < paneTop; row++) {
+            for (int column = paneLeft; column < paneRight; column++) {
+                if (!isInsideRoundedTopPane(column, row, paneLeft, paneRight, paneBottom, paneTop, cornerRadius)) continue;
+                paneMask[row * size + column] = true;
+                float verticalFraction = (float) (paneTop - row) / (paneTop - paneBottom); // 0 top .. 1 bottom
+                float red   = STELLAR_VOID_INDIGO_R + verticalFraction * (STELLAR_VOID_BLACK_R - STELLAR_VOID_INDIGO_R);
+                float green = STELLAR_VOID_INDIGO_G + verticalFraction * (STELLAR_VOID_BLACK_G - STELLAR_VOID_INDIGO_G);
+                float blue  = STELLAR_VOID_INDIGO_B + verticalFraction * (STELLAR_VOID_BLACK_B - STELLAR_VOID_INDIGO_B);
+                pixmap.setColor(red, green, blue, 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // ── 3. Nebula: soft magenta/teal cloud bands, low-alpha blurred blobs ──
+        for (int bandIndex = 0; bandIndex < STELLAR_VIEWPORT_NEBULA_BAND_COUNT; bandIndex++) {
+            boolean magentaBand  = (bandIndex % 2 == 0);
+            int centerColumn = paneLeft + 20 + random.nextInt(Math.max(1, (paneRight - paneLeft) - 40));
+            int centerRow    = paneBottom + 30 + random.nextInt(Math.max(1, (paneTop - paneBottom) - 60));
+            int radiusX = 46 + random.nextInt(30);
+            int radiusY = 20 + random.nextInt(14);
+            float bandRed   = magentaBand ? STELLAR_NEBULA_MAGENTA_R : STELLAR_NEBULA_TEAL_R;
+            float bandGreen = magentaBand ? STELLAR_NEBULA_MAGENTA_G : STELLAR_NEBULA_TEAL_G;
+            float bandBlue  = magentaBand ? STELLAR_NEBULA_MAGENTA_B : STELLAR_NEBULA_TEAL_B;
+            for (int offsetY = -radiusY; offsetY <= radiusY; offsetY++) {
+                for (int offsetX = -radiusX; offsetX <= radiusX; offsetX++) {
+                    int pixelColumn = centerColumn + offsetX;
+                    int pixelRow    = centerRow + offsetY;
+                    if (pixelColumn < paneLeft || pixelColumn >= paneRight
+                            || pixelRow < paneBottom || pixelRow >= paneTop) continue;
+                    if (!paneMask[pixelRow * size + pixelColumn]) continue;
+                    float normalizedDistance = (float) Math.sqrt(
+                            (offsetX * offsetX) / (float) (radiusX * radiusX)
+                          + (offsetY * offsetY) / (float) (radiusY * radiusY));
+                    float falloff = GameMath.smoothstep01(GameMath.radialFalloff(normalizedDistance, 1f));
+                    if (falloff <= 0f) continue;
+                    blendPixel(pixmap, pixelColumn, pixelRow, bandRed, bandGreen, bandBlue, falloff * 0.22f);
+                }
+            }
+        }
+
+        // ── 4. Starfield: scattered star points, a few with a cross-glint ──
+        for (int starIndex = 0; starIndex < STELLAR_VIEWPORT_STAR_COUNT; starIndex++) {
+            int starColumn = paneLeft + random.nextInt(Math.max(1, paneRight - paneLeft));
+            int starRow    = paneBottom + random.nextInt(Math.max(1, paneTop - paneBottom));
+            if (!paneMask[starRow * size + starColumn]) continue;
+            boolean blueStar = random.nextBoolean();
+            float starRed   = blueStar ? STELLAR_STAR_BLUE_R : STELLAR_STAR_WHITE_R;
+            float starGreen = blueStar ? STELLAR_STAR_BLUE_G : STELLAR_STAR_WHITE_G;
+            float starBlue  = blueStar ? STELLAR_STAR_BLUE_B : STELLAR_STAR_WHITE_B;
+            pixmap.setColor(starRed, starGreen, starBlue, 1f);
+            pixmap.drawPixel(starColumn, starRow);
+            if (starIndex < STELLAR_VIEWPORT_STAR_GLINT_COUNT) {
+                if (starColumn - 1 >= paneLeft)  pixmap.drawPixel(starColumn - 1, starRow);
+                if (starColumn + 1 < paneRight)  pixmap.drawPixel(starColumn + 1, starRow);
+                if (starRow - 1 >= paneBottom)   pixmap.drawPixel(starColumn, starRow - 1);
+                if (starRow + 1 < paneTop)       pixmap.drawPixel(starColumn, starRow + 1);
+            }
+        }
+
+        // ── 5. Planet crescent: one dim rimlit crescent, low in the pane ──
+        int planetCenterColumn = paneLeft + (int) ((paneRight - paneLeft) * 0.30f);
+        int planetCenterRow    = paneBottom + (int) ((paneTop - paneBottom) * 0.20f);
+        int planetRadius = 16;
+        for (int offsetY = -planetRadius; offsetY <= planetRadius; offsetY++) {
+            for (int offsetX = -planetRadius; offsetX <= planetRadius; offsetX++) {
+                int pixelColumn = planetCenterColumn + offsetX;
+                int pixelRow    = planetCenterRow + offsetY;
+                if (pixelColumn < paneLeft || pixelColumn >= paneRight
+                        || pixelRow < paneBottom || pixelRow >= paneTop) continue;
+                if (!paneMask[pixelRow * size + pixelColumn]) continue;
+                float distance = (float) Math.sqrt(offsetX * offsetX + offsetY * offsetY);
+                if (distance > planetRadius) continue;
+                // Dark interior disc; a bright rim only along the upper-left edge (rimlit crescent).
+                boolean rimEdge = distance > planetRadius - 3f && offsetX <= 0 && offsetY >= 0;
+                if (rimEdge) {
+                    pixmap.setColor(STELLAR_STAR_BLUE_R, STELLAR_STAR_BLUE_G, STELLAR_STAR_BLUE_B, 1f);
+                } else {
+                    pixmap.setColor(STELLAR_VOID_BLACK_R, STELLAR_VOID_BLACK_G, STELLAR_VOID_BLACK_B, 1f);
+                }
+                pixmap.drawPixel(pixelColumn, pixelRow);
+            }
+        }
+
+        // ── 6. Muntins: 1 vertical + 1 horizontal hairline structural bar crossing the pane ──
+        int muntinColumn = (paneLeft + paneRight) / 2;
+        int muntinRow    = (paneBottom + paneTop) / 2;
+        pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+        pixmap.fillRectangle(muntinColumn, paneBottom, 1, paneTop - paneBottom);
+        pixmap.fillRectangle(paneLeft, muntinRow, paneRight - paneLeft, 1);
+
+        // ── 7. Reflection: soft diagonal double-glaze highlight streak down one edge ──
+        for (int stepIndex = 0; stepIndex < (paneTop - paneBottom); stepIndex++) {
+            int pixelColumn = paneLeft + 14 + stepIndex / 2;
+            int pixelRow    = paneBottom + stepIndex;
+            if (pixelColumn >= paneRight || pixelRow >= paneTop) break;
+            if (!paneMask[pixelRow * size + pixelColumn]) continue;
+            blendPixel(pixmap, pixelColumn, pixelRow,
+                       STELLAR_STAR_WHITE_R, STELLAR_STAR_WHITE_G, STELLAR_STAR_WHITE_B, 0.12f);
+            blendPixel(pixmap, pixelColumn + 1, pixelRow,
+                       STELLAR_STAR_WHITE_R, STELLAR_STAR_WHITE_G, STELLAR_STAR_WHITE_B, 0.06f);
+        }
+
+        // ── 8. Sill strip: cyan status bar along the bottom frame with a soft bloom + LEDs ──
+        int sillTop = paneBottom - 12;
+        pixmap.setColor(STELLAR_CYAN_GLOW_R * 0.35f, STELLAR_CYAN_GLOW_G * 0.35f, STELLAR_CYAN_GLOW_B * 0.35f, 1f);
+        pixmap.fillRectangle(paneLeft, sillTop, paneRight - paneLeft, 6);
+        pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 1f);
+        pixmap.fillRectangle(paneLeft, sillTop + 2, paneRight - paneLeft, 2);
+        for (int ledIndex = 0; ledIndex < STELLAR_VIEWPORT_SILL_LED_COUNT; ledIndex++) {
+            int ledColumn = paneLeft + (paneRight - paneLeft) * (ledIndex + 1) / (STELLAR_VIEWPORT_SILL_LED_COUNT + 1);
+            pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 1f);
+            pixmap.fillCircle(ledColumn, sillTop + 3, 3);
+            pixmap.setColor(STELLAR_STAR_WHITE_R, STELLAR_STAR_WHITE_G, STELLAR_STAR_WHITE_B, 1f);
+            pixmap.fillCircle(ledColumn, sillTop + 3, 1);
+        }
+
+        // ── 9. Corner vignette ──
+        applyStellarCornerVignette(pixmap, size);
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /** Draws a small diamond-shaped junction LED (bright centre, dark bezel) centred at (centerX, centerY). */
+    private static void drawStellarDiamondNode(Pixmap pixmap, int centerX, int centerY,
+                                               float red, float green, float blue) {
+        int outerRadius = 5;
+        for (int offsetY = -outerRadius; offsetY <= outerRadius; offsetY++) {
+            for (int offsetX = -outerRadius; offsetX <= outerRadius; offsetX++) {
+                int manhattanDistance = Math.abs(offsetX) + Math.abs(offsetY);
+                if (manhattanDistance > outerRadius) continue;
+                int pixelColumn = centerX + offsetX;
+                int pixelRow    = centerY + offsetY;
+                if (pixelColumn < 0 || pixelColumn >= pixmap.getWidth()
+                        || pixelRow < 0 || pixelRow >= pixmap.getHeight()) continue;
+                if (manhattanDistance >= outerRadius - 1) {
+                    pixmap.setColor(STELLAR_HULL_STEEL_DARK_R * 0.4f, STELLAR_HULL_STEEL_DARK_G * 0.4f,
+                                    STELLAR_HULL_STEEL_DARK_B * 0.4f, 1f);
+                } else {
+                    pixmap.setColor(red, green, blue, 1f);
+                }
+                pixmap.drawPixel(pixelColumn, pixelRow);
+            }
+        }
+    }
+
+    /**
+     * Generates the Magrail conduit wall texture (''') — a brushed hull panel threaded with
+     * vertical magnetic-rail conduits pulsing violet → cyan (the "traveling current" look). See
+     * TEXTURE / SPRITE SPEC → WALL ''' — MAGRAIL CONDUIT in the design doc referenced above.
+     *
+     * Build order: brushed-titanium base → recessed dark channel housings → emissive violet→cyan
+     * rail cores → soft additive bloom bleed → diamond junction LED nodes → a faint frost halo
+     * near the coldest node → corner vignette. The traveling-current pulse itself is baked as a
+     * static gradient here; any live animation must tint-scale this sprite via the global
+     * tick/flicker hook at render time, never reallocate the Pixmap (see design doc ANIMATION note).
+     */
+    private static Texture generateStellarMagrailWallTexture() {
+        int    size   = STELLAR_MAGRAIL_WALL_TEXTURE_SIZE;
+        Random random = new Random(STELLAR_MAGRAIL_WALL_SEED);
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // ── 1. Base: brushed titanium with a vertical streak noise (+/-4% luma) ──
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                float streak = ((column * 13 + (row / 5) * 7) % 17 - 8) / 220f;
+                float grain  = ((row * 7 + column * 11) % 13 - 6) / 260f;
+                pixmap.setColor(clampUnit(STELLAR_HULL_TITANIUM_R + streak + grain),
+                                clampUnit(STELLAR_HULL_TITANIUM_G + streak + grain),
+                                clampUnit(STELLAR_HULL_TITANIUM_B + streak + grain), 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        int channelCount = STELLAR_MAGRAIL_CHANNEL_COUNT;
+        int channelWidth = 4;
+        int[] channelCenters = new int[channelCount];
+        for (int channelIndex = 0; channelIndex < channelCount; channelIndex++) {
+            channelCenters[channelIndex] = size * (channelIndex + 1) / (channelCount + 1);
+        }
+
+        for (int channelIndex = 0; channelIndex < channelCount; channelIndex++) {
+            int channelCenter = channelCenters[channelIndex];
+            int channelLeft   = channelCenter - channelWidth / 2;
+
+            // ── 2. Recessed channel housing with a 1px inner shadow lip ──
+            pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+            pixmap.fillRectangle(channelLeft, 0, channelWidth, size);
+            pixmap.setColor(STELLAR_HULL_STEEL_DARK_R * 0.5f, STELLAR_HULL_STEEL_DARK_G * 0.5f,
+                            STELLAR_HULL_STEEL_DARK_B * 0.5f, 1f);
+            pixmap.fillRectangle(channelLeft, 0, 1, size);
+            pixmap.fillRectangle(channelLeft + channelWidth - 1, 0, 1, size);
+
+            int firstNodeRow = -1;
+
+            // ── 3. Rail core: vertical gradient violet (top) → cyan (bottom) ──
+            for (int row = 0; row < size; row++) {
+                float verticalFraction = (float) row / (size - 1); // 0 top .. 1 bottom
+                float railRed   = STELLAR_MAGRAIL_VIOLET_R + verticalFraction * (STELLAR_MAGRAIL_CYAN_R - STELLAR_MAGRAIL_VIOLET_R);
+                float railGreen = STELLAR_MAGRAIL_VIOLET_G + verticalFraction * (STELLAR_MAGRAIL_CYAN_G - STELLAR_MAGRAIL_VIOLET_G);
+                float railBlue  = STELLAR_MAGRAIL_VIOLET_B + verticalFraction * (STELLAR_MAGRAIL_CYAN_B - STELLAR_MAGRAIL_VIOLET_B);
+                pixmap.setColor(railRed, railGreen, railBlue, 1f);
+                pixmap.fillRectangle(channelLeft + 1, row, channelWidth - 2, 1);
+
+                // ── 4. Bloom: soft additive halo bleeding 3-4px onto the plate either side ──
+                for (int bloomOffset = 1; bloomOffset <= 4; bloomOffset++) {
+                    float bloomAlpha = 0.16f * (1f - (bloomOffset - 1) / 4f);
+                    blendPixel(pixmap, channelLeft - bloomOffset, row, railRed, railGreen, railBlue, bloomAlpha);
+                    blendPixel(pixmap, channelLeft + channelWidth - 1 + bloomOffset, row, railRed, railGreen, railBlue, bloomAlpha);
+                }
+            }
+
+            // ── 5. Junction nodes: a diamond LED every STELLAR_MAGRAIL_NODE_SPACING px ──
+            int nodeSpacing = STELLAR_MAGRAIL_NODE_SPACING;
+            for (int nodeRow = nodeSpacing / 2; nodeRow < size; nodeRow += nodeSpacing) {
+                drawStellarDiamondNode(pixmap, channelCenter, nodeRow,
+                                       STELLAR_ICE_BLUE_R, STELLAR_ICE_BLUE_G, STELLAR_ICE_BLUE_B);
+                if (firstNodeRow < 0) firstNodeRow = nodeRow;
+            }
+
+            // ── 6. Frost halo — implies condensation near the coldest node (first channel only) ──
+            if (channelIndex == 0 && firstNodeRow >= 0) {
+                int frostRadius = 14;
+                for (int offsetY = -frostRadius; offsetY <= frostRadius; offsetY++) {
+                    for (int offsetX = -frostRadius; offsetX <= frostRadius; offsetX++) {
+                        float distance = (float) Math.sqrt(offsetX * offsetX + offsetY * offsetY);
+                        float falloff  = GameMath.smoothstep01(GameMath.radialFalloff(distance, frostRadius));
+                        if (falloff <= 0f) continue;
+                        blendPixel(pixmap, channelCenter + offsetX, firstNodeRow + offsetY,
+                                   STELLAR_FROST_WHITE_R, STELLAR_FROST_WHITE_G, STELLAR_FROST_WHITE_B, falloff * 0.18f);
+                    }
+                }
+            }
+        }
+
+        // Suppress unused variable warning — seeded for determinism; channel/node placement here
+        // is deterministic by index rather than random-walk driven (same idiom as the Bio and
+        // Force-Field wall generators above).
+        random.nextInt();
+
+        applyStellarCornerVignette(pixmap, size);
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /** Builds `divisions + 1` cell-boundary positions evenly dividing [0, size) into `divisions` cells. */
+    private static int[] buildStellarGridBounds(int size, int divisions) {
+        int[] bounds = new int[divisions + 1];
+        for (int index = 0; index <= divisions; index++) {
+            bounds[index] = size * index / divisions;
+        }
+        return bounds;
+    }
+
+    /** Draws a small border rivet: a bright dot with a 1px dark shadow offset up-right. */
+    private static void drawStellarRivet(Pixmap pixmap, int centerX, int centerY) {
+        pixmap.setColor(STELLAR_HULL_STEEL_DARK_R * 0.6f, STELLAR_HULL_STEEL_DARK_G * 0.6f,
+                        STELLAR_HULL_STEEL_DARK_B * 0.6f, 1f);
+        pixmap.fillCircle(centerX + 1, centerY - 1, 2); // shadow
+        pixmap.setColor(STELLAR_HULL_STEEL_LIGHT_R, STELLAR_HULL_STEEL_LIGHT_G, STELLAR_HULL_STEEL_LIGHT_B, 1f);
+        pixmap.fillCircle(centerX, centerY, 2);          // bolt head
+    }
+
+    /**
+     * Draws a faint, low-alpha stencilled "hull-section code" mark — a short row of abstract dash
+     * blocks (procedural Pixmap generation has no font renderer available, so this suggests an
+     * alphanumeric code rather than rendering real glyphs; same abstraction the Bulkhead wall's
+     * stencil chevron above uses).
+     */
+    private static void drawStellarHullStencil(Pixmap pixmap, int left, int bottom) {
+        int[] dashWidths = { 4, 2, 2, 4, 2, 4, 4 };
+        int   cursorX    = left;
+        for (int dashWidth : dashWidths) {
+            for (int offsetX = 0; offsetX < dashWidth; offsetX++) {
+                blendPixel(pixmap, cursorX + offsetX, bottom,
+                           STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 0.45f);
+            }
+            cursorX += dashWidth + 2;
+        }
+    }
+
+    /**
+     * Generates the Hull plate wall texture ('`') — the default, clean riveted-titanium shell
+     * wall of the rotunda; lighter and far less battle-scarred than the Bulkhead wall ('k'). See
+     * TEXTURE / SPRITE SPEC → WALL '`' — HULL PLATE in the design doc referenced above.
+     *
+     * Build order: brushed-titanium base (horizontal anisotropic streak) → panel seam grid with a
+     * bevel highlight → rivet-dot borders → a soft diagonal specular sheen band → a couple of
+     * status LEDs → a faint stencilled hull-section code → corner vignette.
+     */
+    private static Texture generateStellarHullPlateWallTexture() {
+        int    size   = STELLAR_HULLPLATE_WALL_TEXTURE_SIZE;
+        Random random = new Random(STELLAR_HULLPLATE_WALL_SEED);
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // ── 1. Base: brushed titanium, HORIZONTAL anisotropic streak noise (+/-5% luma) ──
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                float streak = ((row * 13 + (column / 5) * 7) % 17 - 8) / 180f; // horizontal brush streak
+                float grain  = ((row * 7 + column * 11) % 13 - 6) / 260f;
+                pixmap.setColor(clampUnit(STELLAR_HULL_TITANIUM_R + streak + grain),
+                                clampUnit(STELLAR_HULL_TITANIUM_G + streak + grain),
+                                clampUnit(STELLAR_HULL_TITANIUM_B + streak + grain), 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // ── 2. Panel seams: divide into a grid with 1px dark seams + a lighter bevel highlight ──
+        int   gridColumns   = STELLAR_HULLPLATE_GRID_COLUMNS;
+        int   gridRows      = STELLAR_HULLPLATE_GRID_ROWS;
+        int[] plateColumnBounds = buildStellarGridBounds(size, gridColumns);
+        int[] plateRowBounds    = buildStellarGridBounds(size, gridRows);
+        for (int seamIndex = 1; seamIndex < gridColumns; seamIndex++) {
+            int seamColumn = plateColumnBounds[seamIndex];
+            pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+            pixmap.fillRectangle(seamColumn, 0, 1, size);
+            pixmap.setColor(STELLAR_HULL_STEEL_LIGHT_R, STELLAR_HULL_STEEL_LIGHT_G, STELLAR_HULL_STEEL_LIGHT_B, 1f);
+            pixmap.fillRectangle(seamColumn + 1, 0, 1, size); // bevel highlight to the right of the seam
+        }
+        for (int seamIndex = 1; seamIndex < gridRows; seamIndex++) {
+            int seamRow = plateRowBounds[seamIndex];
+            pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+            pixmap.fillRectangle(0, seamRow, size, 1);
+            pixmap.setColor(STELLAR_HULL_STEEL_LIGHT_R, STELLAR_HULL_STEEL_LIGHT_G, STELLAR_HULL_STEEL_LIGHT_B, 1f);
+            pixmap.fillRectangle(0, seamRow + 1, size, 1); // bevel highlight above the seam
+        }
+
+        // ── 3. Rivets: a border of small dots around each plate ──
+        int rivetSpacing = STELLAR_HULLPLATE_RIVET_SPACING;
+        for (int plateColumnIndex = 0; plateColumnIndex < gridColumns; plateColumnIndex++) {
+            int plateLeft  = plateColumnBounds[plateColumnIndex];
+            int plateRight = plateColumnBounds[plateColumnIndex + 1];
+            for (int plateRowIndex = 0; plateRowIndex < gridRows; plateRowIndex++) {
+                int plateBottom = plateRowBounds[plateRowIndex];
+                int plateTop    = plateRowBounds[plateRowIndex + 1];
+                for (int rivetColumn = plateLeft + 6; rivetColumn < plateRight - 4; rivetColumn += rivetSpacing) {
+                    drawStellarRivet(pixmap, rivetColumn, plateBottom + 5);
+                    drawStellarRivet(pixmap, rivetColumn, plateTop - 5);
+                }
+                for (int rivetRow = plateBottom + 6; rivetRow < plateTop - 4; rivetRow += rivetSpacing) {
+                    drawStellarRivet(pixmap, plateLeft + 5, rivetRow);
+                    drawStellarRivet(pixmap, plateRight - 5, rivetRow);
+                }
+            }
+        }
+
+        // ── 4. Brushed sheen: one soft diagonal specular gleam sweeping the whole tile ──
+        for (int stepIndex = 0; stepIndex < size + size / 2; stepIndex++) {
+            int pixelColumn = stepIndex;
+            int pixelRow    = stepIndex - size / 4;
+            if (pixelColumn >= size) break;
+            if (pixelRow < 0 || pixelRow >= size) continue;
+            blendPixel(pixmap, pixelColumn, pixelRow,
+                       STELLAR_STAR_WHITE_R, STELLAR_STAR_WHITE_G, STELLAR_STAR_WHITE_B, 0.08f);
+            blendPixel(pixmap, pixelColumn, pixelRow + 1,
+                       STELLAR_STAR_WHITE_R, STELLAR_STAR_WHITE_G, STELLAR_STAR_WHITE_B, 0.04f);
+        }
+
+        // ── 5. Status LEDs near a seam junction (baked; single texture reused across every tile) ──
+        if (gridColumns > 1 && gridRows > 1) {
+            int junctionColumn = plateColumnBounds[1];
+            int junctionRow    = plateRowBounds[1];
+            pixmap.setColor(STELLAR_LED_GREEN_R, STELLAR_LED_GREEN_G, STELLAR_LED_GREEN_B, 1f);
+            pixmap.fillCircle(junctionColumn - 14, junctionRow - 14, 3);
+            pixmap.setColor(STELLAR_LED_AMBER_R, STELLAR_LED_AMBER_G, STELLAR_LED_AMBER_B, 1f);
+            pixmap.fillCircle(junctionColumn + 14, junctionRow + 14, 3);
+        }
+
+        // ── 6. Stencil: a faint hull-section code, low alpha, in the bottom-left plate ──
+        drawStellarHullStencil(pixmap, 24, 20);
+
+        // ── 7. Corner vignette ──
+        applyStellarCornerVignette(pixmap, size);
+
+        // Suppress unused variable warning — seeded for determinism; every layer above is
+        // position-driven rather than random-walk driven (same idiom as the Bio wall generator).
         random.nextInt();
 
         Texture texture = new Texture(pixmap);

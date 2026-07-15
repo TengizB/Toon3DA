@@ -469,4 +469,67 @@ public final class RenderConstants {
     /** Alpha of the nearest ghost; each further ghost fades by BOSS_AFTERIMAGE_ALPHA_FALLOFF. */
     public static final float BOSS_AFTERIMAGE_START_ALPHA     = 0.40f;
     public static final float BOSS_AFTERIMAGE_ALPHA_FALLOFF   = 0.55f;
+
+    // =========================================================================================
+    // STELLAR OBSERVATORY — Gravity Well Rotunda (.claude/agents/ideas/stellar-observatory-
+    // gravity-well-room.txt). Shared cool-toned palette reused by both WallRenderer (walls '"'
+    // viewport dome, ''' magrail conduit, '`' hull plate) and PropRenderer (props ';' \\ | < and
+    // decals ? ] -) so the biome reads as one consistent material system. Palette discipline:
+    // titanium/gunmetal metal + deep-space indigo/black + emissive cyan/violet/ice-blue, with a
+    // single warm exception (the docking-pylon service lamp, LED_AMBER) — no hazard orange, no
+    // rust, no gore, no red glow anywhere else in this room.
+    // =========================================================================================
+    public static final float STELLAR_HULL_TITANIUM_R    = 0.58f, STELLAR_HULL_TITANIUM_G    = 0.60f, STELLAR_HULL_TITANIUM_B    = 0.64f;
+    public static final float STELLAR_HULL_STEEL_DARK_R  = 0.20f, STELLAR_HULL_STEEL_DARK_G  = 0.22f, STELLAR_HULL_STEEL_DARK_B  = 0.26f;
+    public static final float STELLAR_HULL_STEEL_LIGHT_R = 0.74f, STELLAR_HULL_STEEL_LIGHT_G = 0.77f, STELLAR_HULL_STEEL_LIGHT_B = 0.80f;
+    public static final float STELLAR_VOID_INDIGO_R      = 0.06f, STELLAR_VOID_INDIGO_G      = 0.07f, STELLAR_VOID_INDIGO_B      = 0.14f;
+    public static final float STELLAR_VOID_BLACK_R       = 0.02f, STELLAR_VOID_BLACK_G       = 0.02f, STELLAR_VOID_BLACK_B       = 0.05f;
+    public static final float STELLAR_NEBULA_MAGENTA_R   = 0.55f, STELLAR_NEBULA_MAGENTA_G   = 0.22f, STELLAR_NEBULA_MAGENTA_B   = 0.55f;
+    public static final float STELLAR_NEBULA_TEAL_R      = 0.16f, STELLAR_NEBULA_TEAL_G      = 0.42f, STELLAR_NEBULA_TEAL_B      = 0.48f;
+    public static final float STELLAR_STAR_WHITE_R       = 0.96f, STELLAR_STAR_WHITE_G       = 0.98f, STELLAR_STAR_WHITE_B       = 1.00f;
+    public static final float STELLAR_STAR_BLUE_R        = 0.62f, STELLAR_STAR_BLUE_G        = 0.78f, STELLAR_STAR_BLUE_B        = 1.00f;
+    public static final float STELLAR_CYAN_GLOW_R        = 0.30f, STELLAR_CYAN_GLOW_G        = 0.90f, STELLAR_CYAN_GLOW_B        = 1.00f;
+    public static final float STELLAR_MAGRAIL_VIOLET_R   = 0.55f, STELLAR_MAGRAIL_VIOLET_G   = 0.30f, STELLAR_MAGRAIL_VIOLET_B   = 0.95f;
+    public static final float STELLAR_MAGRAIL_CYAN_R     = 0.25f, STELLAR_MAGRAIL_CYAN_G     = 0.85f, STELLAR_MAGRAIL_CYAN_B     = 1.00f;
+    public static final float STELLAR_ICE_BLUE_R         = 0.70f, STELLAR_ICE_BLUE_G         = 0.92f, STELLAR_ICE_BLUE_B         = 1.00f;
+    public static final float STELLAR_FROST_WHITE_R      = 0.85f, STELLAR_FROST_WHITE_G      = 0.92f, STELLAR_FROST_WHITE_B     = 0.98f;
+    public static final float STELLAR_LED_GREEN_R        = 0.30f, STELLAR_LED_GREEN_G        = 0.90f, STELLAR_LED_GREEN_B        = 0.45f;
+    public static final float STELLAR_LED_AMBER_R        = 0.95f, STELLAR_LED_AMBER_G        = 0.72f, STELLAR_LED_AMBER_B        = 0.28f;
+    public static final float STELLAR_CORE_BLUE_R        = 0.35f, STELLAR_CORE_BLUE_G        = 0.72f, STELLAR_CORE_BLUE_B        = 1.00f;
+    public static final float STELLAR_SEAM_WHITE_R       = 0.90f, STELLAR_SEAM_WHITE_G       = 0.95f, STELLAR_SEAM_WHITE_B       = 1.00f;
+
+    // Wall texture sizes/seeds (WallRenderer generateXWallTexture pattern — see 'N'/'Q'/etc above).
+    public static final int  STELLAR_VIEWPORT_WALL_TEXTURE_SIZE  = 256;
+    public static final long STELLAR_VIEWPORT_WALL_SEED          = 0x5669657AL; // "ViewpZ" trunc
+    public static final int  STELLAR_MAGRAIL_WALL_TEXTURE_SIZE   = 256;
+    public static final long STELLAR_MAGRAIL_WALL_SEED           = 0x4D616772L; // "Magr"
+    public static final int  STELLAR_HULLPLATE_WALL_TEXTURE_SIZE = 256;
+    public static final long STELLAR_HULLPLATE_WALL_SEED         = 0x48756C6CL; // "Hull"
+
+    // Wall generator feature counts (non-colour implementation constants — see the wall texture
+    // builders in WallRenderer.java: generateStellarViewportWallTexture, generateStellarMagrailWallTexture,
+    // generateStellarHullPlateWallTexture). Baked once at load time like every other procedural wall
+    // in this file, so these describe the single baked look rather than a per-tile-instance variation.
+    public static final int   STELLAR_VIEWPORT_STAR_COUNT        = 55;  // 40-70 scattered star points
+    public static final int   STELLAR_VIEWPORT_STAR_GLINT_COUNT  = 6;   // brightest stars get a cross-glint
+    public static final int   STELLAR_VIEWPORT_NEBULA_BAND_COUNT = 3;   // soft magenta/teal cloud bands
+    public static final int   STELLAR_VIEWPORT_SILL_LED_COUNT    = 3;   // status LEDs along the sill strip
+    public static final int   STELLAR_VIEWPORT_CORNER_RADIUS     = 30;  // rounded-top window corner radius (px)
+
+    public static final int   STELLAR_MAGRAIL_CHANNEL_COUNT      = 4;   // vertical recessed rail housings
+    public static final int   STELLAR_MAGRAIL_NODE_SPACING       = 12;  // px between diamond junction LEDs
+
+    public static final int   STELLAR_HULLPLATE_GRID_COLUMNS     = 3;   // plate grid columns
+    public static final int   STELLAR_HULLPLATE_GRID_ROWS        = 2;   // plate grid rows
+    public static final int   STELLAR_HULLPLATE_RIVET_SPACING    = 22;  // px between border rivets
+
+    // Prop/decal height multipliers (relative to a full wall stripe) — see propHeightMultiplier()
+    // in PropRenderer.java.
+    public static final float PROP_HEIGHT_GRAVITY_WELL_CORE    = 0.98f; // ';' centerpiece
+    public static final float PROP_HEIGHT_FLOATING_CARGO_CRATE = 0.55f; // '\'
+    public static final float PROP_HEIGHT_DOCKING_STRUT_PYLON  = 0.92f; // '|'
+    public static final float PROP_HEIGHT_ASTRO_NAV_TABLE      = 0.60f; // '<'
+    public static final float PROP_HEIGHT_MAGNETIC_DECK        = 0.18f; // '?'
+    public static final float PROP_HEIGHT_ZEROG_DEBRIS         = 0.16f; // ']'
+    public static final float PROP_HEIGHT_STARLIGHT_SEAM       = 0.14f; // '-'
 }

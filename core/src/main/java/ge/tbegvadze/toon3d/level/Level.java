@@ -102,13 +102,17 @@ public class Level {
         return matrix[y][x];
     }
 
-    /** Returns true for any symbol that represents a solid wall tile. */
+    /**
+     * Returns true for any symbol that represents a solid wall tile. Also covers the
+     * STELLAR_OBSERVATORY room's walls: '"' viewport dome, ''' magrail conduit, '`' hull plate.
+     */
     public static boolean isWall(char cell) {
         return cell == 'x' || cell == 'c' || cell == 'v' || cell == 't' || cell == 'w' || cell == 'h'
             || cell == 'j' || cell == 'G' || cell == 'k'
             || cell == 'N' || cell == 'Q' || cell == 'S' || cell == 'M'
             || cell == 'Z' || cell == 'U' || cell == 'X'
-            || cell == 'D' || cell == 'F';
+            || cell == 'D' || cell == 'F'
+            || cell == '"' || cell == '\'' || cell == '`';
     }
 
     /** Returns true for any symbol that represents a door tile (plain or keycard-locked). */
@@ -234,7 +238,9 @@ public class Level {
         return cell == 'g' || cell == 'E' || cell == 'T' || cell == 'L' || cell == 'C'
             || cell == '#' || cell == '%' || cell == '&' || cell == '=' || cell == '@'
             || cell == 'I' || cell == 'J' || cell == 'W'
+            || cell == ';' || cell == '\\' || cell == '|' || cell == '<'
             || cell == 'm' || cell == 's' || cell == '.' || cell == 'O' || cell == 'e'
+            || cell == '?' || cell == ']' || cell == '-'
             || isHazardDecal(cell)
             || isKeycardPickup(cell) || isMedicalPickup(cell) || isArmourPickup(cell)
             || isAmmoPickup(cell)
@@ -266,11 +272,16 @@ public class Level {
             || cell == 'm' || cell == 's' || cell == '.' || cell == 'O' || cell == 'e';
     }
 
-    /** Returns true for solid props that block player movement (barrels, terminals, lockers, crates, new equipment). */
+    /**
+     * Returns true for solid props that block player movement (barrels, terminals, lockers, crates,
+     * new equipment). Also covers the STELLAR_OBSERVATORY room's solid props: ';' gravity well core,
+     * '\' floating cargo crate, '|' docking strut pylon, '<' astro-nav holo table.
+     */
     public static boolean isPropSolid(char cell) {
         return cell == 'g' || cell == 'E' || cell == 'T' || cell == 'L' || cell == 'C'
             || cell == '#' || cell == '%' || cell == '&' || cell == '=' || cell == '@'
-            || cell == 'I' || cell == 'J' || cell == 'W';
+            || cell == 'I' || cell == 'J' || cell == 'W'
+            || cell == ';' || cell == '\\' || cell == '|' || cell == '<';
     }
 
     /** Returns true for a shop vending machine tile ('@'), stamped solid by World.placeMachine. */
@@ -278,9 +289,14 @@ public class Level {
         return cell == '@';
     }
 
-    /** Returns true for walkable decal props (corpses, dropped items, stains, keycard pickups, medical, armour, ammo pickups, stairs). */
+    /**
+     * Returns true for walkable decal props (corpses, dropped items, stains, keycard pickups,
+     * medical, armour, ammo pickups, stairs). Also covers the STELLAR_OBSERVATORY room's decals:
+     * '?' magnetic deck plating, ']' zero-g debris scatter, '-' starlight seam strip.
+     */
     public static boolean isPropDecal(char cell) {
         return cell == 'm' || cell == 's' || cell == '.' || cell == 'O' || cell == 'e'
+            || cell == '?' || cell == ']' || cell == '-'
             || isHazardDecal(cell)
             || isKeycardPickup(cell) || isMedicalPickup(cell) || isArmourPickup(cell)
             || isAmmoPickup(cell)
