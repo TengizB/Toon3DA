@@ -79,6 +79,15 @@ public class PropRenderer implements Renderable, Disposable {
             case 'e': return PROP_HEIGHT_ENERGY_SCORCH;
             case 'i': return PROP_HEIGHT_HAZARD_FIRE;    // fire hazard tile
             case 'q': return PROP_HEIGHT_HAZARD_TOXIC;   // toxic hazard pool
+            // STELLAR_OBSERVATORY solid props + decals — see .claude/agents/ideas/
+            // stellar-observatory-gravity-well-room.txt "TEXTURE / SPRITE SPEC".
+            case ';': return PROP_HEIGHT_GRAVITY_WELL_CORE;    // centerpiece anti-grav core
+            case '\\': return PROP_HEIGHT_FLOATING_CARGO_CRATE;
+            case '|': return PROP_HEIGHT_DOCKING_STRUT_PYLON;
+            case '<': return PROP_HEIGHT_ASTRO_NAV_TABLE;
+            case '?': return PROP_HEIGHT_MAGNETIC_DECK;
+            case ']': return PROP_HEIGHT_ZEROG_DEBRIS;
+            case '-': return PROP_HEIGHT_STARLIGHT_SEAM;
             default:  return 0.70f;
         }
     }
@@ -886,6 +895,15 @@ public class PropRenderer implements Renderable, Disposable {
         map.put('W', generateHoloWorkstationTexture());
         map.put('J', generateAiCoreNodeTexture());
         map.put('e', generateEnergyScorchTexture());
+        // STELLAR_OBSERVATORY solid props + decals — see .claude/agents/ideas/
+        // stellar-observatory-gravity-well-room.txt "TEXTURE / SPRITE SPEC".
+        map.put(';', generateGravityWellCoreTexture());
+        map.put('\\', generateFloatingCargoCrateTexture());
+        map.put('|', generateDockingStrutPylonTexture());
+        map.put('<', generateAstroNavHoloTableTexture());
+        map.put('?', generateMagneticDeckPlatingTexture());
+        map.put(']', generateZeroGDebrisScatterTexture());
+        map.put('-', generateStarlightSeamStripTexture());
         // 'i' (fire) and 'q' (toxic) are NOT static entries — they are animated and resolved
         // per-frame from hazardFireFrames / hazardToxicFrames via resolvePropTexture().
         return map;
@@ -1089,6 +1107,18 @@ public class PropRenderer implements Renderable, Disposable {
                             Math.min(1f, baseBlue * factor), 1f);
             pixmap.fillRectangle(x, y + pixelRow, width, 1);
         }
+    }
+
+    // Fills an arbitrary (possibly rotated/skewed) quadrilateral by splitting it into two
+    // triangles sharing the (x1,y1)->(x3,y3) diagonal. Corners must be supplied in either
+    // clockwise or counter-clockwise winding order. Used to draw tilted billboard faces
+    // (e.g. the floating cargo crate) that a plain fillRectangle cannot represent.
+    private static void fillQuad(Pixmap pixmap, float red, float green, float blue, float alpha,
+                                 int x1, int y1, int x2, int y2,
+                                 int x3, int y3, int x4, int y4) {
+        pixmap.setColor(red, green, blue, alpha);
+        pixmap.fillTriangle(x1, y1, x2, y2, x3, y3);
+        pixmap.fillTriangle(x1, y1, x3, y3, x4, y4);
     }
 
     // Erases the four corners of a filled rectangle with transparent right-triangles,
@@ -3070,6 +3100,582 @@ public class PropRenderer implements Renderable, Disposable {
         for (int fleckIndex = 0; fleckIndex < 5; fleckIndex++) {
             pixmap.drawPixel(centerX - 4 + random.nextInt(9), centerY - 4 + random.nextInt(9));
         }
+        return finalize(pixmap);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STELLAR_OBSERVATORY — Gravity Well Rotunda props + decals (';' '\' '|' '<' '?' ']' '-').
+    // See .claude/agents/ideas/stellar-observatory-gravity-well-room.txt "TEXTURE / SPRITE
+    // SPEC" for the full authored description. Palette discipline: titanium/gunmetal metal +
+    // deep-space void black + emissive cyan/violet/ice-blue only (STELLAR_* constants in
+    // RenderConstants.java) — no hazard orange, no rust, no gore, no red glow anywhere except
+    // the single warm amber service lamp on the docking strut pylon.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Debris chunk silhouettes used by the gravity well core's containment ring.
+    private static final int DEBRIS_SHAPE_ROCK    = 0;
+    private static final int DEBRIS_SHAPE_ANTENNA = 1;
+    private static final int DEBRIS_SHAPE_PLATE   = 2;
+    private static final int DEBRIS_SHAPE_BOLTS   = 3;
+
+    // Draws orbiting debris chunks (array index range [fromIndex, toIndex)) along the
+    // elliptical containment ring at fixed angle/shape/radius slots — a rock fleck, snapped
+    // antenna, torn plate shard and bolt cluster — each with a small hub-facing rim-light
+    // and a faint motion-blur tail along its direction of travel. The caller splits the six
+    // slots into two draw passes (before/after the hub sphere fill) so the portion of the
+    // ring nearest the vertical axis correctly reads as passing behind the hub, while the
+    // wide side slots pass visibly in front. A fixed (non-random) layout matches the "static
+    // orbit snapshot" note in the design doc — any future spin animation must tint-scale or
+    // swap pre-baked frames via the tick hook, never reallocate this Pixmap per frame.
+    private static void drawOrbitDebris(Pixmap pixmap, int hubCenterX, int hubCenterY,
+                                        int ringRadiusX, int ringRadiusY,
+                                        int fromIndex, int toIndex) {
+        int[]   shapeKinds     = { DEBRIS_SHAPE_ROCK, DEBRIS_SHAPE_ANTENNA, DEBRIS_SHAPE_PLATE,
+                                   DEBRIS_SHAPE_BOLTS, DEBRIS_SHAPE_ROCK,   DEBRIS_SHAPE_PLATE };
+        float[] angleDegrees   = { 250f, 290f, 330f, 30f, 90f, 150f };
+        float[] radiusFraction = { 0.55f, 0.60f, 0.85f, 0.90f, 0.55f, 0.80f };
+        for (int debrisIndex = fromIndex; debrisIndex < toIndex; debrisIndex++) {
+            double radians = Math.toRadians(angleDegrees[debrisIndex]);
+            int chunkX = hubCenterX + Math.round(ringRadiusX * radiusFraction[debrisIndex] * (float) Math.cos(radians));
+            int chunkY = hubCenterY + Math.round(ringRadiusY * radiusFraction[debrisIndex] * (float) Math.sin(radians));
+
+            // Faint motion-blur tail trailing along the orbit's tangential direction.
+            double tangentRadians = radians + Math.PI / 2.0;
+            int tailX = chunkX - Math.round((float) Math.cos(tangentRadians) * 5);
+            int tailY = chunkY - Math.round((float) Math.sin(tangentRadians) * 2);
+            pixmap.setColor(STELLAR_ICE_BLUE_R, STELLAR_ICE_BLUE_G, STELLAR_ICE_BLUE_B, 0.25f);
+            pixmap.drawLine(tailX, tailY, chunkX, chunkY);
+
+            switch (shapeKinds[debrisIndex]) {
+                case DEBRIS_SHAPE_ROCK:
+                    pixmap.setColor(0.24f, 0.25f, 0.28f, 1f);
+                    pixmap.fillCircle(chunkX, chunkY, 3);
+                    pixmap.setColor(0.14f, 0.15f, 0.18f, 1f);
+                    pixmap.drawPixel(chunkX + 1, chunkY + 1);
+                    break;
+                case DEBRIS_SHAPE_PLATE:
+                    pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+                    pixmap.fillRectangle(chunkX - 3, chunkY - 2, 6, 4);
+                    pixmap.setColor(STELLAR_HULL_TITANIUM_R, STELLAR_HULL_TITANIUM_G, STELLAR_HULL_TITANIUM_B, 1f);
+                    pixmap.fillRectangle(chunkX - 3, chunkY - 2, 6, 1);
+                    break;
+                case DEBRIS_SHAPE_ANTENNA:
+                    pixmap.setColor(STELLAR_HULL_STEEL_LIGHT_R, STELLAR_HULL_STEEL_LIGHT_G, STELLAR_HULL_STEEL_LIGHT_B, 1f);
+                    pixmap.drawLine(chunkX - 4, chunkY + 3, chunkX + 3, chunkY - 4);
+                    pixmap.drawPixel(chunkX + 3, chunkY - 4);
+                    break;
+                default: // DEBRIS_SHAPE_BOLTS — a tiny loose bolt cluster
+                    pixmap.setColor(STELLAR_HULL_STEEL_LIGHT_R, STELLAR_HULL_STEEL_LIGHT_G, STELLAR_HULL_STEEL_LIGHT_B, 1f);
+                    pixmap.drawPixel(chunkX - 1, chunkY - 1);
+                    pixmap.drawPixel(chunkX + 1, chunkY);
+                    pixmap.drawPixel(chunkX, chunkY + 1);
+                    break;
+            }
+            // Rim-light on the side facing the hub.
+            double hubwardRadians = radians + Math.PI;
+            int rimX = chunkX + Math.round((float) Math.cos(hubwardRadians) * 2);
+            int rimY = chunkY + Math.round((float) Math.sin(hubwardRadians) * 2);
+            pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 0.9f);
+            pixmap.drawPixel(rimX, rimY);
+        }
+    }
+
+    // Gravity well core (';') — CENTERPIECE of the rotunda: a dark spherical anti-grav
+    // emitter hub floats above a hazard-banded pedestal plinth, joined by a translucent
+    // force column. An elliptical containment ring of blue energy encircles the hub with
+    // orbiting debris chunks at varied radii, and a soft caustic wash lights the deck below.
+    // Cool cyan/blue only — the tonal opposite of every other biome's warm-orange centerpiece.
+    private static Texture generateGravityWellCoreTexture() {
+        final int textureWidth = 140, textureHeight = 224;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        final int hubCenterX = 70, hubCenterY = 54, hubRadius = 26;
+        final int ringRadiusX = 58, ringRadiusY = 16;
+
+        // ── Caustic wash on the deck beneath the plinth ──
+        glowPool(pixmap, hubCenterX, 210, 60, 12, STELLAR_CORE_BLUE_R, STELLAR_CORE_BLUE_G, STELLAR_CORE_BLUE_B, 0.5f);
+
+        // ── Pedestal plinth: steel-dark body with a cyan readout, keypad and hazard band ──
+        beveledPanel(pixmap, 26, 186, 88, 36,
+                     STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1.6f, 0.5f);
+        pixmap.setColor(0.05f, 0.14f, 0.18f, 1f);
+        pixmap.fillRectangle(32, 192, 32, 12);
+        pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 1f);
+        pixmap.fillRectangle(34, 194, 24, 2);
+        pixmap.fillRectangle(34, 197, 16, 2);
+        pixmap.fillRectangle(34, 200, 20, 2);
+        pixmap.setColor(0.14f, 0.15f, 0.18f, 1f);
+        for (int keyColumn = 0; keyColumn < 4; keyColumn++) {
+            pixmap.fillRectangle(70 + keyColumn * 8, 194, 6, 6);
+        }
+        boltStud(pixmap, 30, 190); boltStud(pixmap, 110, 190);
+        // Hazard band chevrons — cyan/dark, never orange, per the room's cool-only discipline.
+        hazardStripeBand(pixmap, 26, 216, 88, 6, STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B);
+
+        // ── Force column: translucent pale-blue shaft rising from the plinth to the hub ──
+        int columnTop = hubCenterY + hubRadius - 6;
+        for (int row = columnTop; row < 186; row++) {
+            float fade = 1f - (row - columnTop) / (float) (186 - columnTop);
+            pixmap.setColor(STELLAR_CORE_BLUE_R, STELLAR_CORE_BLUE_G, STELLAR_CORE_BLUE_B, 0.10f + 0.20f * fade);
+            pixmap.fillRectangle(hubCenterX - 5, row, 10, 1);
+            pixmap.setColor(STELLAR_ICE_BLUE_R, STELLAR_ICE_BLUE_G, STELLAR_ICE_BLUE_B, 0.25f + 0.30f * fade);
+            pixmap.fillRectangle(hubCenterX - 1, row, 2, 1);
+        }
+
+        // ── Containment ring debris on the far side of the orbit, drawn before the hub ──
+        drawOrbitDebris(pixmap, hubCenterX, hubCenterY, ringRadiusX, ringRadiusY, 0, 3);
+
+        // ── Containment ring: thin bright ellipse band of blue energy, brightest at its
+        //    front (lower) arc — drawn before the hub so the near-vertical portion of the
+        //    ellipse is naturally occluded by the hub fill below. ──
+        pixmap.setColor(STELLAR_CORE_BLUE_R, STELLAR_CORE_BLUE_G, STELLAR_CORE_BLUE_B, 0.55f);
+        for (int degree = 0; degree < 360; degree += 3) {
+            double radians = Math.toRadians(degree);
+            int pointX = hubCenterX + Math.round(ringRadiusX * (float) Math.cos(radians));
+            int pointY = hubCenterY + Math.round(ringRadiusY * (float) Math.sin(radians));
+            pixmap.drawPixel(pointX, pointY);
+        }
+        pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 0.85f);
+        for (int degree = 0; degree < 360; degree += 3) {
+            double radians = Math.toRadians(degree);
+            float brightness = (float) (Math.sin(radians) * 0.5 + 0.5);
+            if (brightness < 0.4f) continue;
+            int pointX = hubCenterX + Math.round((ringRadiusX - 1) * (float) Math.cos(radians));
+            int pointY = hubCenterY + Math.round((ringRadiusY - 1) * (float) Math.sin(radians));
+            pixmap.drawPixel(pointX, pointY);
+        }
+
+        // ── Emitter hub: dark spherical shading (void black centre -> steel-dark rim) ──
+        for (int pixelRow = hubCenterY - hubRadius; pixelRow <= hubCenterY + hubRadius; pixelRow++) {
+            for (int pixelColumn = hubCenterX - hubRadius; pixelColumn <= hubCenterX + hubRadius; pixelColumn++) {
+                float normalizedX = (pixelColumn - hubCenterX) / (float) hubRadius;
+                float normalizedY = (pixelRow - hubCenterY) / (float) hubRadius;
+                float distance = (float) Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+                if (distance > 1f) continue;
+                float interpolationFactor = Math.min(1f, distance);
+                float red   = STELLAR_VOID_BLACK_R + (STELLAR_HULL_STEEL_DARK_R - STELLAR_VOID_BLACK_R) * interpolationFactor;
+                float green = STELLAR_VOID_BLACK_G + (STELLAR_HULL_STEEL_DARK_G - STELLAR_VOID_BLACK_G) * interpolationFactor;
+                float blue  = STELLAR_VOID_BLACK_B + (STELLAR_HULL_STEEL_DARK_B - STELLAR_VOID_BLACK_B) * interpolationFactor;
+                pixmap.setColor(red, green, blue, 1f);
+                pixmap.drawPixel(pixelColumn, pixelRow);
+            }
+        }
+        // Bright cyan aperture ring around the hub's equator.
+        pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 1f);
+        pixmap.fillRectangle(hubCenterX - hubRadius + 3, hubCenterY - 2, (hubRadius - 3) * 2, 4);
+        pixmap.setColor(STELLAR_ICE_BLUE_R, STELLAR_ICE_BLUE_G, STELLAR_ICE_BLUE_B, 1f);
+        pixmap.fillRectangle(hubCenterX - hubRadius + 3, hubCenterY - 1, (hubRadius - 3) * 2, 1);
+        // Edge shimmer noise along the hub silhouette.
+        pixmap.setColor(STELLAR_ICE_BLUE_R, STELLAR_ICE_BLUE_G, STELLAR_ICE_BLUE_B, 0.5f);
+        for (int degree = 0; degree < 360; degree += 11) {
+            double radians = Math.toRadians(degree);
+            int pointX = hubCenterX + Math.round(hubRadius * (float) Math.cos(radians));
+            int pointY = hubCenterY + Math.round(hubRadius * (float) Math.sin(radians));
+            pixmap.drawPixel(pointX, pointY);
+        }
+
+        // ── Containment ring debris on the near side of the orbit, drawn after the hub ──
+        drawOrbitDebris(pixmap, hubCenterX, hubCenterY, ringRadiusX, ringRadiusY, 3, 6);
+
+        return finalize(pixmap);
+    }
+
+    // Floating cargo crate ('\') — a magnetically clamped supply crate tilted ~20 degrees and
+    // hovering a hand's-width above the deck: visibly WEIGHTLESS. A thin cyan tether-beam
+    // anchors its lowest corner to a small deck clamp; the ground shadow sits offset and
+    // gapped beneath it (never touching) to sell the zero-g read.
+    private static Texture generateFloatingCargoCrateTexture() {
+        final int textureWidth = 112, textureHeight = 128;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        // Offset, gapped ground shadow — the weightless tell; never touches the crate above it.
+        glowPool(pixmap, 58, 122, 34, 5, 0f, 0f, 0f, 0.35f);
+
+        // Faint secondary crate hovering behind/above, at reduced alpha.
+        fillQuad(pixmap, STELLAR_HULL_TITANIUM_R, STELLAR_HULL_TITANIUM_G, STELLAR_HULL_TITANIUM_B, 0.30f,
+                 10, 8, 44, 20, 36, 40, 2, 28);
+
+        // Front face — a rectangle rotated ~20 degrees to sell the tilt.
+        final int frontTopLeftX = 37,     frontTopLeftY = 24;
+        final int frontTopRightX = 90,    frontTopRightY = 43;
+        final int frontBottomRightX = 75, frontBottomRightY = 84;
+        final int frontBottomLeftX = 22,  frontBottomLeftY = 65;
+        fillQuad(pixmap, STELLAR_HULL_TITANIUM_R, STELLAR_HULL_TITANIUM_G, STELLAR_HULL_TITANIUM_B, 1f,
+                 frontTopLeftX, frontTopLeftY, frontTopRightX, frontTopRightY,
+                 frontBottomRightX, frontBottomRightY, frontBottomLeftX, frontBottomLeftY);
+
+        // Top face — brighter, receding up-and-left, so the canted top reads clearly.
+        final int topBackLeftX  = frontTopLeftX - 12,  topBackLeftY  = frontTopLeftY - 14;
+        final int topBackRightX = frontTopRightX - 12, topBackRightY = frontTopRightY - 14;
+        fillQuad(pixmap, STELLAR_HULL_STEEL_LIGHT_R, STELLAR_HULL_STEEL_LIGHT_G, STELLAR_HULL_STEEL_LIGHT_B, 1f,
+                 frontTopLeftX, frontTopLeftY, frontTopRightX, frontTopRightY,
+                 topBackRightX, topBackRightY, topBackLeftX, topBackLeftY);
+
+        // Panel edges — dark seams along every side of both faces.
+        pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+        pixmap.drawLine(frontTopLeftX, frontTopLeftY, frontTopRightX, frontTopRightY);
+        pixmap.drawLine(frontTopRightX, frontTopRightY, frontBottomRightX, frontBottomRightY);
+        pixmap.drawLine(frontBottomRightX, frontBottomRightY, frontBottomLeftX, frontBottomLeftY);
+        pixmap.drawLine(frontBottomLeftX, frontBottomLeftY, frontTopLeftX, frontTopLeftY);
+        pixmap.drawLine(topBackLeftX, topBackLeftY, topBackRightX, topBackRightY);
+        pixmap.drawLine(frontTopLeftX, frontTopLeftY, topBackLeftX, topBackLeftY);
+        pixmap.drawLine(frontTopRightX, frontTopRightY, topBackRightX, topBackRightY);
+
+        // Corner brackets — small bright steel L-brackets at opposing front-face corners.
+        pixmap.setColor(STELLAR_HULL_STEEL_LIGHT_R, STELLAR_HULL_STEEL_LIGHT_G, STELLAR_HULL_STEEL_LIGHT_B, 1f);
+        pixmap.fillRectangle(frontTopLeftX - 1,     frontTopLeftY,          6, 2);
+        pixmap.fillRectangle(frontTopLeftX - 1,     frontTopLeftY,          2, 6);
+        pixmap.fillRectangle(frontBottomRightX - 5, frontBottomRightY - 1, 6, 2);
+        pixmap.fillRectangle(frontBottomRightX - 1, frontBottomRightY - 5, 2, 6);
+
+        // Small UAC stencil mark on the front face.
+        pixmap.setColor(0.30f, 0.32f, 0.36f, 1f);
+        pixmap.fillRectangle(48, 48, 2, 8); pixmap.fillRectangle(54, 48, 2, 8); pixmap.fillRectangle(48, 54, 8, 2);
+        pixmap.fillRectangle(60, 48, 2, 8); pixmap.fillRectangle(66, 48, 2, 8);
+        pixmap.fillRectangle(60, 48, 8, 2); pixmap.fillRectangle(60, 51, 8, 2);
+
+        // Deck clamp puck, gapped beneath the crate's lowest corner.
+        pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+        pixmap.fillRectangle(52, 116, 12, 6);
+        pixmap.setColor(STELLAR_HULL_TITANIUM_R, STELLAR_HULL_TITANIUM_G, STELLAR_HULL_TITANIUM_B, 1f);
+        pixmap.fillRectangle(52, 116, 12, 1);
+        boltStud(pixmap, 58, 119);
+
+        // Tether-beam: thin cyan light connecting the crate's lowest corner to the clamp —
+        // the only thing keeping the crate from drifting away.
+        pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 0.30f);
+        pixmap.drawLine(frontBottomRightX - 1, frontBottomRightY, 57, 116);
+        pixmap.drawLine(frontBottomRightX + 1, frontBottomRightY, 59, 116);
+        pixmap.setColor(STELLAR_ICE_BLUE_R, STELLAR_ICE_BLUE_G, STELLAR_ICE_BLUE_B, 0.80f);
+        pixmap.drawLine(frontBottomRightX, frontBottomRightY, 58, 116);
+
+        return finalize(pixmap);
+    }
+
+    // Docking strut pylon ('|') — a slim tapered vertical titanium column with a wide clamp
+    // collar at ~55% height, cable conduits running up one side, a vertical ladder of green
+    // status LEDs, and one small warm amber service lamp near the top — the ONLY warm accent
+    // anywhere in the room. No hazard stripes; this reads as clean, load-bearing ship
+    // architecture, not battle armour.
+    private static Texture generateDockingStrutPylonTexture() {
+        final int textureWidth = 48, textureHeight = 192;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        final int centerX = 24;
+        final int columnTop = 6, columnBottom = 186;
+        final int bottomHalfWidth = 15, topHalfWidth = 7;
+
+        // Tapered titanium shaft — dark shadow side (left), lit body (right), bright edge.
+        for (int row = columnTop; row < columnBottom; row++) {
+            float toBottom = (row - columnTop) / (float) (columnBottom - columnTop);
+            int halfWidth  = Math.round(topHalfWidth + (bottomHalfWidth - topHalfWidth) * toBottom);
+            pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+            pixmap.fillRectangle(centerX - halfWidth, row, halfWidth, 1);
+            pixmap.setColor(STELLAR_HULL_TITANIUM_R, STELLAR_HULL_TITANIUM_G, STELLAR_HULL_TITANIUM_B, 1f);
+            pixmap.fillRectangle(centerX, row, halfWidth, 1);
+            pixmap.setColor(STELLAR_HULL_STEEL_LIGHT_R, STELLAR_HULL_STEEL_LIGHT_G, STELLAR_HULL_STEEL_LIGHT_B, 1f);
+            pixmap.fillRectangle(centerX + halfWidth - 1, row, 1, 1);
+        }
+        // Base foot plate + top cap plate.
+        beveledPanel(pixmap, centerX - bottomHalfWidth - 3, columnBottom, bottomHalfWidth * 2 + 6, 6,
+                     STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1.5f, 0.5f);
+        beveledPanel(pixmap, centerX - topHalfWidth - 2, columnTop - 6, topHalfWidth * 2 + 4, 6,
+                     STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1.5f, 0.5f);
+
+        // Clamp collar at ~55% height (from the base) — a wide dark ring with bolt dots.
+        int collarRow = columnTop + Math.round((columnBottom - columnTop) * 0.45f);
+        int collarHalfWidth = Math.round(topHalfWidth + (bottomHalfWidth - topHalfWidth)
+                             * ((collarRow - columnTop) / (float) (columnBottom - columnTop))) + 3;
+        pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+        pixmap.fillRectangle(centerX - collarHalfWidth, collarRow - 5, collarHalfWidth * 2, 10);
+        for (int boltIndex = 0; boltIndex < 5; boltIndex++) {
+            int boltX = centerX - collarHalfWidth + 3 + boltIndex * (collarHalfWidth * 2 - 6) / 4;
+            boltStud(pixmap, boltX, collarRow);
+        }
+
+        // Cable conduits — two thin dark lines running up one side of the shaft.
+        pixmap.setColor(0.10f, 0.11f, 0.13f, 1f);
+        pixmap.fillRectangle(centerX - 3, columnTop + 10, 1, columnBottom - columnTop - 20);
+        pixmap.fillRectangle(centerX - 6, columnTop + 16, 1, columnBottom - columnTop - 32);
+
+        // Vertical ladder of green status LEDs climbing the shaft (skipping the collar band).
+        pixmap.setColor(STELLAR_LED_GREEN_R, STELLAR_LED_GREEN_G, STELLAR_LED_GREEN_B, 1f);
+        for (int ledRow = columnTop + 16; ledRow < columnBottom - 10; ledRow += 18) {
+            if (Math.abs(ledRow - collarRow) < 8) continue;
+            pixmap.fillRectangle(centerX + 2, ledRow, 3, 3);
+        }
+
+        // The single warm accent in the whole room — a small amber maintenance lamp near the top.
+        pixmap.setColor(STELLAR_LED_AMBER_R, STELLAR_LED_AMBER_G, STELLAR_LED_AMBER_B, 0.35f);
+        pixmap.fillCircle(centerX - 5, columnTop + 14, 5);
+        pixmap.setColor(STELLAR_LED_AMBER_R, STELLAR_LED_AMBER_G, STELLAR_LED_AMBER_B, 1f);
+        pixmap.fillCircle(centerX - 5, columnTop + 14, 2);
+
+        return finalize(pixmap);
+    }
+
+    // Astro-nav holo table ('<') — a low ring-shaped console deck with cyan readout strips
+    // around its rim, projecting a translucent wireframe star-chart globe above: latitude and
+    // longitude arcs, plotted route dots with connecting orbital arcs, and a couple of tiny
+    // drifting data glyphs. A cooler, navigation-flavoured cousin of the holo-workstation 'W'.
+    private static Texture generateAstroNavHoloTableTexture() {
+        final int textureWidth = 120, textureHeight = 108;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        final int deckCenterX = 60, deckCenterY = 90, deckRadiusX = 46, deckRadiusY = 14;
+
+        // ── Ring-shaped console deck ──
+        for (int pixelRow = deckCenterY - deckRadiusY; pixelRow <= deckCenterY + deckRadiusY; pixelRow++) {
+            for (int pixelColumn = deckCenterX - deckRadiusX; pixelColumn <= deckCenterX + deckRadiusX; pixelColumn++) {
+                float normalizedX = (pixelColumn - deckCenterX) / (float) deckRadiusX;
+                float normalizedY = (pixelRow - deckCenterY) / (float) deckRadiusY;
+                float distance = normalizedX * normalizedX + normalizedY * normalizedY;
+                if (distance > 1f) continue;
+                pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+                pixmap.drawPixel(pixelColumn, pixelRow);
+            }
+        }
+        // Titanium rim ring.
+        pixmap.setColor(STELLAR_HULL_TITANIUM_R, STELLAR_HULL_TITANIUM_G, STELLAR_HULL_TITANIUM_B, 1f);
+        for (int degree = 0; degree < 360; degree += 2) {
+            double radians = Math.toRadians(degree);
+            int rimX = deckCenterX + Math.round(deckRadiusX * (float) Math.cos(radians));
+            int rimY = deckCenterY + Math.round(deckRadiusY * (float) Math.sin(radians));
+            pixmap.drawPixel(rimX, rimY);
+        }
+        // Cyan readout strips around the front half of the rim (facing the player).
+        pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 0.85f);
+        for (int degree = 20; degree <= 160; degree += 20) {
+            double radians = Math.toRadians(degree);
+            int stripX = deckCenterX + Math.round((deckRadiusX - 6) * (float) Math.cos(radians));
+            int stripY = deckCenterY + Math.round((deckRadiusY - 3) * (float) Math.sin(radians));
+            pixmap.fillRectangle(stripX - 1, stripY, 2, 2);
+        }
+
+        // ── Faint upward emitter cone from the deck to the globe ──
+        final int globeCenterX = 60, globeCenterY = 46, globeRadius = 32;
+        for (int beamIndex = -3; beamIndex <= 3; beamIndex++) {
+            float brightness = 1f - Math.abs(beamIndex) / 4.5f;
+            pixmap.setColor(STELLAR_CYAN_GLOW_R * brightness, STELLAR_CYAN_GLOW_G * brightness,
+                            STELLAR_CYAN_GLOW_B * brightness, 0.35f);
+            int beamBottomRow = globeCenterY + globeRadius;
+            int beamTopRow    = deckCenterY - 4;
+            for (int beamRow = beamBottomRow; beamRow < beamTopRow; beamRow++) {
+                float fraction = (beamRow - beamBottomRow) / (float) (beamTopRow - beamBottomRow);
+                int beamColumn = Math.round(deckCenterX + beamIndex * 10 * (1f - fraction));
+                pixmap.drawPixel(beamColumn, beamRow);
+            }
+        }
+
+        // ── Wireframe star-chart globe: scan-lined volume fill + longitude/latitude arcs ──
+        for (int pixelRow = globeCenterY - globeRadius; pixelRow <= globeCenterY + globeRadius; pixelRow++) {
+            for (int pixelColumn = globeCenterX - globeRadius; pixelColumn <= globeCenterX + globeRadius; pixelColumn++) {
+                float normalizedX = (pixelColumn - globeCenterX) / (float) globeRadius;
+                float normalizedY = (pixelRow - globeCenterY) / (float) globeRadius;
+                float distance = (float) Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+                if (distance > 1f) continue;
+                if ((pixelRow % 2) == 0) continue;
+                pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 0.12f * (1f - distance));
+                pixmap.drawPixel(pixelColumn, pixelRow);
+            }
+        }
+        pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 0.75f);
+        pixmap.drawCircle(globeCenterX, globeCenterY, globeRadius);
+        float[] longitudeWidths = { globeRadius, globeRadius * 0.55f, 0f };
+        for (float longitudeWidth : longitudeWidths) {
+            for (int degree = 0; degree < 360; degree += 8) {
+                double radians = Math.toRadians(degree);
+                int pointColumn = globeCenterX + Math.round(longitudeWidth * (float) Math.sin(radians));
+                int pointRow    = globeCenterY + Math.round(globeRadius * (float) Math.cos(radians));
+                pixmap.drawPixel(pointColumn, pointRow);
+            }
+        }
+        int[] latitudeOffsets = { -14, 0, 14 };
+        for (int latitudeOffset : latitudeOffsets) {
+            float halfWidth  = (float) Math.sqrt(Math.max(0, globeRadius * globeRadius - latitudeOffset * latitudeOffset));
+            float halfHeight = halfWidth * 0.30f;
+            for (int degree = 0; degree < 360; degree += 8) {
+                double radians = Math.toRadians(degree);
+                int pointColumn = globeCenterX + Math.round(halfWidth * (float) Math.cos(radians));
+                int pointRow    = globeCenterY + latitudeOffset + Math.round(halfHeight * (float) Math.sin(radians));
+                pixmap.drawPixel(pointColumn, pointRow);
+            }
+        }
+
+        // ── Plotted route dots + connecting orbital arcs ──
+        int[] routeDotColumns = { 44, 58, 74, 50, 68 };
+        int[] routeDotRows    = { 36, 26, 40, 56, 60 };
+        pixmap.setColor(STELLAR_ICE_BLUE_R, STELLAR_ICE_BLUE_G, STELLAR_ICE_BLUE_B, 1f);
+        for (int dotIndex = 0; dotIndex < routeDotColumns.length; dotIndex++) {
+            pixmap.fillCircle(routeDotColumns[dotIndex], routeDotRows[dotIndex], 2);
+        }
+        pixmap.setColor(STELLAR_ICE_BLUE_R, STELLAR_ICE_BLUE_G, STELLAR_ICE_BLUE_B, 0.6f);
+        pixmap.drawLine(routeDotColumns[0], routeDotRows[0], routeDotColumns[1], routeDotRows[1]);
+        pixmap.drawLine(routeDotColumns[1], routeDotRows[1], routeDotColumns[2], routeDotRows[2]);
+        pixmap.drawLine(routeDotColumns[3], routeDotRows[3], routeDotColumns[4], routeDotRows[4]);
+
+        // ── Drifting data glyphs flanking the globe ──
+        pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 0.85f);
+        pixmap.fillRectangle(12, 20, 8, 2);
+        pixmap.fillRectangle(14, 24, 5, 2);
+        pixmap.fillRectangle(100, 22, 8, 2);
+        pixmap.fillRectangle(98, 26, 6, 2);
+
+        return finalize(pixmap);
+    }
+
+    // Magnetic deck plating ('?') — a walkable grated panel marking the rotunda's "official"
+    // walking lanes: a diamond grating pattern in cool gunmetal, a thin cyan alignment line
+    // down the centre, and light wear scuffs. Same low-profile ground band as '.'/'O'/'e'.
+    private static Texture generateMagneticDeckPlatingTexture() {
+        final int textureWidth = 112, textureHeight = 56;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        java.util.Random random = new java.util.Random(0x4D41474445434BL); // "MAGDECK" (truncated ASCII)
+
+        final int panelLeft = 6, panelTop = 6, panelWidth = 100, panelHeight = 44;
+        pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+        pixmap.fillRectangle(panelLeft, panelTop, panelWidth, panelHeight);
+
+        // Diamond grating pattern — two crossing families of diagonal hairlines, drawn with a
+        // bounded per-pixel modulo test (same technique as hazardStripeBand) so every pixel
+        // stays inside the panel rectangle.
+        for (int row = panelTop; row < panelTop + panelHeight; row++) {
+            for (int column = panelLeft; column < panelLeft + panelWidth; column++) {
+                boolean onDiagonalA = (((column - row) % 10) + 10) % 10 == 0;
+                boolean onDiagonalB = (((column + row) % 10) + 10) % 10 == 0;
+                if (onDiagonalA || onDiagonalB) {
+                    pixmap.setColor(STELLAR_HULL_STEEL_LIGHT_R, STELLAR_HULL_STEEL_LIGHT_G, STELLAR_HULL_STEEL_LIGHT_B, 0.5f);
+                    pixmap.drawPixel(column, row);
+                }
+            }
+        }
+        // Magnetic-lock seams dividing the panel into 3 sub-plates.
+        pixmap.setColor(STELLAR_VOID_BLACK_R, STELLAR_VOID_BLACK_G, STELLAR_VOID_BLACK_B, 1f);
+        pixmap.fillRectangle(panelLeft, panelTop, panelWidth, 1);
+        pixmap.fillRectangle(panelLeft, panelTop + panelHeight - 1, panelWidth, 1);
+        pixmap.fillRectangle(panelLeft + panelWidth / 3, panelTop, 1, panelHeight);
+        pixmap.fillRectangle(panelLeft + panelWidth * 2 / 3, panelTop, 1, panelHeight);
+
+        // Thin cyan alignment line down the centre of the walking lane.
+        pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 0.7f);
+        pixmap.fillRectangle(panelLeft, panelTop + panelHeight / 2 - 1, panelWidth, 2);
+
+        // Wear scuffs — bright random specks.
+        pixmap.setColor(STELLAR_HULL_STEEL_LIGHT_R, STELLAR_HULL_STEEL_LIGHT_G, STELLAR_HULL_STEEL_LIGHT_B, 0.8f);
+        for (int scuffIndex = 0; scuffIndex < 14; scuffIndex++) {
+            pixmap.drawPixel(panelLeft + random.nextInt(panelWidth), panelTop + random.nextInt(panelHeight));
+        }
+        return finalize(pixmap);
+    }
+
+    // Zero-g debris scatter (']') — a handful of tiny objects resting near-weightlessly on
+    // the deck: bolts, a small data-slate with a cyan screen line, a pale insulation fluff
+    // tuft, and glass shard glints. Each has a small drop-shadow GAPPED beneath it (never
+    // touching) to imply micro-gravity, and a few carry a faint drift-blur streak. Cool metal
+    // tones only — no organic content, clearly distinct from a corpse/blood decal.
+    private static Texture generateZeroGDebrisScatterTexture() {
+        final int textureWidth = 112, textureHeight = 56;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        // Object positions/kinds: 0=bolt, 1=data-slate, 2=fluff tuft, 3=glass shard.
+        int[] objectColumns = { 18, 34, 50, 66, 82, 96, 26, 58, 74, 44 };
+        int[] objectRows    = { 30, 22, 34, 20, 30, 24, 40, 42, 38, 14 };
+        int[] objectKinds   = {  0,  1,  2,  3,  0,  1,  2,  0,  3,  1 };
+
+        for (int objectIndex = 0; objectIndex < objectColumns.length; objectIndex++) {
+            int objectX = objectColumns[objectIndex];
+            int objectY = objectRows[objectIndex];
+
+            // Gapped drop-shadow — sits a couple of pixels below the object, never touching it.
+            pixmap.setColor(0f, 0f, 0f, 0.30f);
+            pixmap.fillCircle(objectX, objectY + 4, 2);
+
+            switch (objectKinds[objectIndex]) {
+                case 0: // bolt
+                    pixmap.setColor(STELLAR_HULL_STEEL_LIGHT_R, STELLAR_HULL_STEEL_LIGHT_G, STELLAR_HULL_STEEL_LIGHT_B, 1f);
+                    pixmap.fillCircle(objectX, objectY, 2);
+                    pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+                    pixmap.drawPixel(objectX, objectY);
+                    break;
+                case 1: // small data-slate with a cyan screen line
+                    pixmap.setColor(0.10f, 0.11f, 0.14f, 1f);
+                    pixmap.fillRectangle(objectX - 3, objectY - 2, 6, 4);
+                    pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 1f);
+                    pixmap.fillRectangle(objectX - 2, objectY - 1, 4, 1);
+                    break;
+                case 2: // pale insulation fluff tuft
+                    pixmap.setColor(0.55f, 0.56f, 0.52f, 0.75f);
+                    pixmap.fillCircle(objectX, objectY, 3);
+                    pixmap.setColor(0.70f, 0.70f, 0.66f, 0.60f);
+                    pixmap.fillCircle(objectX + 2, objectY - 1, 2);
+                    break;
+                default: // glass shard glint
+                    pixmap.setColor(STELLAR_STAR_BLUE_R, STELLAR_STAR_BLUE_G, STELLAR_STAR_BLUE_B, 0.9f);
+                    pixmap.fillTriangle(objectX - 3, objectY + 2, objectX + 3, objectY + 1, objectX, objectY - 3);
+                    pixmap.setColor(1f, 1f, 1f, 0.8f);
+                    pixmap.drawPixel(objectX, objectY - 1);
+                    break;
+            }
+        }
+
+        // Faint 2px drift-blur streaks on a few objects — implies near-weightless drift.
+        pixmap.setColor(STELLAR_ICE_BLUE_R, STELLAR_ICE_BLUE_G, STELLAR_ICE_BLUE_B, 0.25f);
+        pixmap.drawLine(objectColumns[1] - 5, objectRows[1],     objectColumns[1], objectRows[1]);
+        pixmap.drawLine(objectColumns[4] - 5, objectRows[4] - 1, objectColumns[4], objectRows[4] - 1);
+        pixmap.drawLine(objectColumns[8] + 5, objectRows[8],     objectColumns[8], objectRows[8]);
+
+        return finalize(pixmap);
+    }
+
+    // Starlight seam strip ('-') — a narrow inlaid deck light channel running the tile's
+    // length: a 2-3px emissive core (white centre fading to blue at the edges), a soft bloom
+    // wash either side, a faint chromatic-aberration fringe, and end caps that taper it into
+    // a thin dark recess so it reads as inlaid fibre-optic guide, not a floating line.
+    private static Texture generateStarlightSeamStripTexture() {
+        final int textureWidth = 112, textureHeight = 24;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        final int stripLeft = 4, stripRight = 108, centerRow = 12;
+
+        // Dark recessed channel the light sits in.
+        pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+        pixmap.fillRectangle(stripLeft, centerRow - 5, stripRight - stripLeft, 10);
+
+        // Soft bloom either side of the core.
+        pixmap.setColor(STELLAR_STAR_BLUE_R, STELLAR_STAR_BLUE_G, STELLAR_STAR_BLUE_B, 0.28f);
+        pixmap.fillRectangle(stripLeft, centerRow - 4, stripRight - stripLeft, 8);
+
+        // Faint chromatic-aberration fringe — a hint of magenta above, cyan below the core.
+        pixmap.setColor(0.55f, 0.22f, 0.55f, 0.30f);
+        pixmap.fillRectangle(stripLeft, centerRow - 2, stripRight - stripLeft, 1);
+        pixmap.setColor(STELLAR_CYAN_GLOW_R, STELLAR_CYAN_GLOW_G, STELLAR_CYAN_GLOW_B, 0.30f);
+        pixmap.fillRectangle(stripLeft, centerRow + 1, stripRight - stripLeft, 1);
+
+        // Emissive core: white centre fading to blue at the very edge of the 3px channel.
+        pixmap.setColor(STELLAR_STAR_BLUE_R, STELLAR_STAR_BLUE_G, STELLAR_STAR_BLUE_B, 1f);
+        pixmap.fillRectangle(stripLeft, centerRow - 1, stripRight - stripLeft, 3);
+        pixmap.setColor(STELLAR_SEAM_WHITE_R, STELLAR_SEAM_WHITE_G, STELLAR_SEAM_WHITE_B, 1f);
+        pixmap.fillRectangle(stripLeft, centerRow, stripRight - stripLeft, 1);
+
+        // End caps taper the channel into the recess so it reads as inlaid, not floating.
+        pixmap.setColor(STELLAR_HULL_STEEL_DARK_R, STELLAR_HULL_STEEL_DARK_G, STELLAR_HULL_STEEL_DARK_B, 1f);
+        pixmap.fillRectangle(stripLeft, centerRow - 5, 2, 10);
+        pixmap.fillRectangle(stripRight - 2, centerRow - 5, 2, 10);
+
         return finalize(pixmap);
     }
 
