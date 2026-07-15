@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Symbol/Sprite Reuse — Part 0: Documentation Guardrails (DO FIRST)
 CREATED: 2026-07-15
@@ -112,16 +112,16 @@ TECHNICAL NOTES
 
 DELIVERABLE CHECKLIST (order-0)
 ===============================
-[ ] docs/environment-tileset-system.txt created as a living skeleton with the ORDER STATUS TABLE
+[x] docs/environment-tileset-system.txt created as a living skeleton with the ORDER STATUS TABLE
     and per-order section placeholders.
-[ ] Transition banner stamped on tile-symbols.txt (top + STRICT RULE + SYMBOL BUDGET),
+[x] Transition banner stamped on tile-symbols.txt (top + STRICT RULE + SYMBOL BUDGET),
     wall-renderer-guide.txt, procedural-level-generation.txt, level-design-context.txt, and the
     CLAUDE.md pointers.
-[ ] Short pointer comments added to Level.java, WallRenderer.java, PropRenderer.java,
+[x] Short pointer comments added to Level.java, WallRenderer.java, PropRenderer.java,
     LevelGenerator.java (comments only, no logic change).
-[ ] The in-commit doc rule recorded in docs/environment-tileset-system.txt so every later order
+[x] The in-commit doc rule recorded in docs/environment-tileset-system.txt so every later order
     follows it.
-[ ] STATUS -> IMPLEMENTED; order-0 row in the status table set to DONE.
+[x] STATUS -> IMPLEMENTED; order-0 row in the status table set to DONE.
 
 LIVING DOC CONTRACT
 ===================

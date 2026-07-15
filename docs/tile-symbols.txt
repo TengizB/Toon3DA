@@ -1,6 +1,22 @@
+>>> TILESET MIGRATION IN PROGRESS (see docs/environment-tileset-system.txt) <<<
+The symbol->sprite behaviour described below is the LEGACY model. A staged refactor
+(.claude/agents/ideas/symbol-sprite-reuse-system*.txt) is decoupling symbols from sprites so a
+symbol is a fixed CATEGORY slot and its sprite is chosen PER LEVEL. Check the ORDER STATUS TABLE
+in docs/environment-tileset-system.txt for which parts are live. Do not rely on "one symbol = one
+fixed sprite" as permanent truth while this banner is present.
+
 TILE SYMBOL REFERENCE
 =====================
 Single source of truth for every character used in level .txt files.
+
+>>> TILESET MIGRATION IN PROGRESS (see docs/environment-tileset-system.txt) <<<
+The symbol->sprite behaviour described below is the LEGACY model. A staged refactor
+(.claude/agents/ideas/symbol-sprite-reuse-system*.txt) is decoupling symbols from sprites so a
+symbol is a fixed CATEGORY slot and its sprite is chosen PER LEVEL. Check the ORDER STATUS TABLE
+in docs/environment-tileset-system.txt for which parts are live. Do not rely on "one symbol = one
+fixed sprite" as permanent truth while this banner is present.
+NOTE: once the migration lands, "adding art" becomes RECIPE A (register a new sprite in the
+environment-sprite registry), NOT "consume a scarce symbol." The 1:1 rule below is legacy.
 
 STRICT RULE: Every time a new symbol is introduced anywhere in the codebase
 (Level.java, LevelLoader.java, LevelGenerator.java, WallRenderer.java, or any
@@ -141,6 +157,15 @@ V   Vortex Eye spawn      Necrotic faction. Short-range ranged chaff caster (wea
 n   Boss spawn (depth-keyed)  Replaced at load time with floor ' '; BossFloorController seeds the correct boss based on World.currentDepth. Exactly one per boss-floor arena.
 
 ---
+
+>>> TILESET MIGRATION IN PROGRESS (see docs/environment-tileset-system.txt) <<<
+The symbol->sprite behaviour described below is the LEGACY model. A staged refactor
+(.claude/agents/ideas/symbol-sprite-reuse-system*.txt) is decoupling symbols from sprites so a
+symbol is a fixed CATEGORY slot and its sprite is chosen PER LEVEL. Check the ORDER STATUS TABLE
+in docs/environment-tileset-system.txt for which parts are live. Do not rely on "one symbol = one
+fixed sprite" as permanent truth while this banner is present.
+NOTE: the "10 free symbols" scarcity framing below is the wall this migration removes. Once it
+lands, new environment art is added by RECIPE A (register a sprite), not by consuming a free symbol.
 
 SYMBOL BUDGET
 -------------

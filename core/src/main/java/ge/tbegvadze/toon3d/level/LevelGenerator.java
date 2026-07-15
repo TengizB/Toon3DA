@@ -66,6 +66,9 @@ public class LevelGenerator implements ILevelGenerator {
 
     private enum WallContext { CORRIDOR, ROOM, MIXED, INTERIOR }
 
+    // TILESET MIGRATION: hardcoded room types. Migrating to a registry-driven RoomBlueprintRegistry
+    // so rooms (and their symbol/category demand) are registered, not switched.
+    // See docs/environment-tileset-system.txt (tileset migration, order-5/8).
     private enum RoomType {
         ENTRANCE, STANDARD, LARGE, SERVER_ROOM,
         MEDICAL_BAY, ARMORY, CRYO_CHAMBER,

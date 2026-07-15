@@ -130,6 +130,9 @@ public class WallRenderer implements Renderable, Disposable {
     private final int columnTextureWidth;
     private final int columnTextureHeight;
 
+    // TILESET MIGRATION: legacy fixed symbol->texture table. To be replaced by a per-level
+    // LevelPalette + EnvironmentTextureSet so a symbol's sprite is chosen per level.
+    // See docs/environment-tileset-system.txt (tileset migration, order-6/7).
     // Char-indexed lookup tables (ASCII index 0–127) replace three switch statements per column.
     // Arrays.fill initialises every slot to the plain-wall default; named chars override it.
     private final Texture[] wallTextureTable;

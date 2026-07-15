@@ -1,3 +1,12 @@
+>>> TILESET MIGRATION IN PROGRESS (see docs/environment-tileset-system.txt) <<<
+The symbol->sprite behaviour described below is the LEGACY model. A staged refactor
+(.claude/agents/ideas/symbol-sprite-reuse-system*.txt) is decoupling symbols from sprites so a
+symbol is a fixed CATEGORY slot and its sprite is chosen PER LEVEL. Check the ORDER STATUS TABLE
+in docs/environment-tileset-system.txt for which parts are live. Do not rely on "one symbol = one
+fixed sprite" as permanent truth while this banner is present.
+# (Specifically: fixed per-room wall symbols like 'v'/'c'/'t'/'w' below become per-level palette
+#  choices; the wall MEANING stays, its sprite is assigned per level.)
+
 # Moved from: .claude/agents/game-level-designer.md
 # Background context for game-level-designer agent — not needed at runtime.
 

@@ -42,6 +42,9 @@ import static ge.tbegvadze.toon3d.util.WeaponConstants.*;
  */
 public class PropRenderer implements Renderable, Disposable {
 
+    // TILESET MIGRATION: legacy fixed symbol->sprite/height mapping. To be replaced by a per-level
+    // LevelPalette + EnvironmentTextureSet so a prop symbol's sprite is chosen per level.
+    // See docs/environment-tileset-system.txt (tileset migration, order-6/7).
     // Per-prop height multiplier relative to a full wall stripe (WORLD_HEIGHT / depth).
     // Keeps shorter objects (barrels, crates) below full wall height.
     private static float propHeightMultiplier(char propChar) {

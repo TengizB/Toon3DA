@@ -102,6 +102,9 @@ public class Level {
         return matrix[y][x];
     }
 
+    // TILESET MIGRATION: these category predicates are the CATEGORY authority today. A symbol's
+    // CATEGORY (wall/column/prop/decal) is fixed and stays here, but its SPRITE is becoming
+    // per-level. See docs/environment-tileset-system.txt (tileset migration, order-3/7).
     /**
      * Returns true for any symbol that represents a solid wall tile. Also covers the
      * STELLAR_OBSERVATORY room's walls: '"' viewport dome, ''' magrail conduit, '`' hull plate.
