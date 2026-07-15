@@ -45,7 +45,7 @@ Legend: NOT STARTED / IN PROGRESS / DONE.
   -----  ------------  -----------------------------------------------------------------------
   0      DONE          Documentation guardrails: this doc (skeleton + table), legacy banners,
                        pointer comments. No code logic change.
-  1      NOT STARTED   Tile categories + environment-sprite registry (the art catalog).
+  1      DONE          Tile categories + environment-sprite registry (the art catalog).
   2      NOT STARTED   Symbol budget: FIXED vs FLEXIBLE split, SymbolBudget config.
   3      NOT STARTED   LevelPalette (per-level symbol->category+sprite binding) + LEGACY default.
   4      NOT STARTED   SymbolAllocator: deterministic per-level assignment engine.
@@ -76,10 +76,61 @@ change"), applied from the first commit instead of the last.
 SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships that order)
 ========================================================================================
 
-1. ART CATALOG & REGISTRIES
-   TODO: filled by order-1 in the same commit that ships order-1.
-   (TileCategory, EnvironmentSpriteDefinition, EnvironmentSpriteRegistry, TilesetRegistries.bootstrap();
-    every existing wall/column/prop/decal registered as a sprite definition.)
+1. ART CATALOG & REGISTRIES  [DONE — order-1]
+   The `…toon3d.tileset` package (headless, no LibGDX imports) is the data-driven ART CATALOG: the
+   fixed set of tile CATEGORIES and a registry of every environment SPRITE the game can draw. order-1
+   is pure data + registration — NO per-level binding, NO allocator, NO renderer change. The legacy
+   WallRenderer texture table and PropRenderer switch stay the runtime authority; the registry exists
+   in parallel so later orders can enumerate the inventory instead of hardcoding a sprite list.
+
+   CLASSES (all in …toon3d.tileset):
+     * TileCategory (enum) — the FIXED semantic class a symbol MEANS; never varies per level. Four
+       FLEXIBLE-eligible visual members, one per existing Level predicate group:
+         WALL       (Level.isWall)      rendersAsStripe=true,  blocksMovement=true
+         COLUMN     (Level.isColumn)    rendersAsStripe=true,  blocksMovement=true
+         SOLID_PROP (Level.isPropSolid) rendersAsStripe=false, blocksMovement=true
+         FLOOR_DECAL(Level.isPropDecal, non-pickup) rendersAsStripe=false, blocksMovement=false
+       Metadata only (id, rendersAsStripe, blocksMovement) — consumers route a sprite to the wall vs
+       billboard pipeline by reading rendersAsStripe(), never a hardcoded char check. Doors, pickups,
+       keycards, ammo, hazards, enemy spawns, player-start, and exit are FIXED symbols and are NOT in
+       this enum or the sprite registry (order-2 formalises the FIXED/FLEXIBLE split).
+     * EnvironmentSpriteDefinition (immutable value; Builder) — one concrete piece of art. Fields:
+       id (STABLE string), category, displayName (tooling/logging only), heightMultiplier
+       (billboard height fraction; 1.0 for WALL/COLUMN), occluder (writes z-buffer; mirrors
+       Level.isPropOccluder), textureGeneratorId (= id for v1; kept separate so sprites can share a
+       generator later), themeTags (Set<String> coherence hints; empty allowed). No LibGDX types; no
+       colours (those live in the texture generators, order-6). Builder defaults: heightMultiplier 1.0,
+       occluder true, textureGeneratorId = id.
+     * EnvironmentSpriteRegistry — register(def) / get(id) (never null for a registered id) /
+       allInCategory(category) (the allocator's variety pool, unmodifiable) / contains(id) / size().
+       Duplicate id throws IllegalStateException (route-registry discipline); get(unknown) throws
+       IllegalArgumentException. Insertion-ordered so counts/order are reproducible.
+     * TilesetRegistries — bootstrap hub, the twin of route/RouteRegistries. sprites() returns the
+       shared singleton; bootstrap() is idempotent and registers ALL v1 sprites via private
+       registerWalls()/registerColumns()/registerSolidProps()/registerDecals() helpers. Called once
+       from World.create() next to RouteRegistries.bootstrap().
+
+   v1 INVENTORY (exactly today's art — no additions): 21 walls (x c v t w h j G k N Q S M Z U X D F
+   + observatory " ' `), 1 column (P → "column_round"), 17 solid props (g E T L C # % & = @ I J W +
+   observatory ; \ | <), 8 floor decals (m s . O e + observatory ? ] -). STELLAR_OBSERVATORY art is
+   tagged themeTag "observatory" (TilesetRegistries.THEME_TAG_OBSERVATORY) so the catalog is complete
+   yet a later allocator only pulls it for that room, preserving today's containment rule. Heights are
+   copied from the SAME RenderConstants the renderer reads (inline PropRenderer literals for g/E/T/L/C/
+   m/s/./O were first hoisted into RenderConstants.PROP_HEIGHT_* and referenced from both places — no
+   re-hardcoded values, no behaviour change).
+
+   STABLE SPRITE-ID SCHEME: category prefix + descriptor, e.g. "wall_plain", "wall_cryo",
+   "column_round", "prop_locker", "decal_blood". Ids are the key palettes/seeds use to stay
+   reproducible across code changes and MUST NOT be renamed once shipped.
+
+   RECIPE (add a wall/prop/column/decal sprite): build one EnvironmentSpriteDefinition + one
+   register() line in the matching TilesetRegistries helper. Nothing else in this order references a
+   specific char; nothing downstream switches on a hardcoded sprite/category list — it asks a registry.
+
+   TESTS (headless, core/src/test/.../tileset/TilesetRegistriesTest): get() never null for a
+   registered id; per-category counts equal the count of chars Level's predicates accept today (guards
+   the inventory is complete and nothing was dropped); duplicate-id throws; bootstrap() idempotent;
+   height/occluder metadata matches legacy values; observatory art carries the containment tag.
 
 2. SYMBOL BUDGET (FIXED vs FLEXIBLE)
    TODO: filled by order-2 in the same commit that ships order-2.

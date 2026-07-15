@@ -49,15 +49,15 @@ public class PropRenderer implements Renderable, Disposable {
     // Keeps shorter objects (barrels, crates) below full wall height.
     private static float propHeightMultiplier(char propChar) {
         switch (propChar) {
-            case 'g': return 0.65f;   // radioactive barrel
-            case 'E': return 0.65f;   // explosive barrel
-            case 'T': return 0.75f;
-            case 'L': return 0.90f;
-            case 'C': return 0.50f;
-            case 'm': return 0.35f;
-            case 's': return 0.22f;
-            case '.': return 0.18f;
-            case 'O': return 0.18f;
+            case 'g': return PROP_HEIGHT_RADIOACTIVE_BARREL;   // radioactive barrel
+            case 'E': return PROP_HEIGHT_EXPLOSIVE_BARREL;     // explosive barrel
+            case 'T': return PROP_HEIGHT_TERMINAL;
+            case 'L': return PROP_HEIGHT_LOCKER;
+            case 'C': return PROP_HEIGHT_CRATE;
+            case 'm': return PROP_HEIGHT_CORPSE;
+            case 's': return PROP_HEIGHT_BLOOD_ALT;
+            case '.': return PROP_HEIGHT_BLOOD;
+            case 'O': return PROP_HEIGHT_OIL;
             case 'r': return KEYCARD_PICKUP_SPRITE_HEIGHT;   // red keycard pickup
             case 'y': return KEYCARD_PICKUP_SPRITE_HEIGHT;   // yellow keycard pickup
             case 'b': return KEYCARD_PICKUP_SPRITE_HEIGHT;   // blue keycard pickup
