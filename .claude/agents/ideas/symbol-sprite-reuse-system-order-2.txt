@@ -4,9 +4,10 @@ TITLE: Symbol/Sprite Reuse — Part 2: Symbol Budget (Fixed vs Flexible)
 CREATED: 2026-07-15
 ---
 
-DOC TODO FOR ORDER-9
-====================
-docs/environment-tileset-system.txt "Symbol budget" section must document:
+DOC UPDATES — FILL IN THIS ORDER'S COMMIT (the doc exists from order-0)
+======================================================================
+In the same commit that ships order-2, fill the "Symbol budget" section of
+docs/environment-tileset-system.txt and flip the order-2 status-table row to DONE. It must document:
   * SymbolClass (FIXED / FLEXIBLE) and WHY the split exists.
   * The authoritative list of FIXED symbols (permanent meaning + sprite) vs the FLEXIBLE pool.
   * SymbolBudget API and TilesetConstants entries.
@@ -126,5 +127,8 @@ DELIVERABLE CHECKLIST (order-2)
 
 LIVING DOC CONTRACT
 ===================
-See master index. Keep the DOC TODO accurate; order-9 folds it into
-docs/environment-tileset-system.txt and revises docs/tile-symbols.txt.
+See master index. IN THIS ORDER'S COMMIT: fill the "Symbol budget" section of
+docs/environment-tileset-system.txt, flip the order-2 status-table row to DONE, and tighten the
+tile-symbols.txt banner to note that flexible symbols now carry a category, not a fixed sprite. The
+full tile-symbols.txt STRICT-RULE rewrite is order-9's final consolidation; the banner keeps it
+honest until then. Do not defer documentation to order-9.

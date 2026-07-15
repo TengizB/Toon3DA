@@ -4,9 +4,10 @@ TITLE: Symbol/Sprite Reuse — Part 6: Per-Level Texture Realization
 CREATED: 2026-07-15
 ---
 
-DOC TODO FOR ORDER-9
-====================
-docs/environment-tileset-system.txt "Texture realization" section must document:
+DOC UPDATES — FILL IN THIS ORDER'S COMMIT (the doc exists from order-0)
+======================================================================
+In the same commit that ships order-6, fill the "Texture realization" section of
+docs/environment-tileset-system.txt and flip the order-6 status-table row to DONE. It must document:
   * TextureGeneratorRegistry (sprite id -> procedural texture generator) and how existing
     WallRenderer/PropRenderer generator methods are registered into it.
   * EnvironmentTextureSet: realizes ONLY the sprites a level's palette uses, and its dispose()
@@ -122,5 +123,6 @@ DELIVERABLE CHECKLIST (order-6)
 
 LIVING DOC CONTRACT
 ===================
-See master index. Fold the realization + memory story into docs/environment-tileset-system.txt in
-order-9; keep the DOC TODO accurate until then.
+See master index. IN THIS ORDER'S COMMIT: fill the "Texture realization" section (registry +
+EnvironmentTextureSet + memory story) of docs/environment-tileset-system.txt and flip the order-6
+status-table row to DONE. Do not defer documentation to order-9.

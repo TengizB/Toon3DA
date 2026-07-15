@@ -4,9 +4,10 @@ TITLE: Symbol/Sprite Reuse — Part 3: LevelPalette (Per-Level Binding)
 CREATED: 2026-07-15
 ---
 
-DOC TODO FOR ORDER-9
-====================
-docs/environment-tileset-system.txt "Per-level binding" section must document:
+DOC UPDATES — FILL IN THIS ORDER'S COMMIT (the doc exists from order-0)
+======================================================================
+In the same commit that ships order-3, fill the "Per-level binding" section of
+docs/environment-tileset-system.txt and flip the order-3 status-table row to DONE. It must document:
   * LevelPalette (immutable): char -> (TileCategory, EnvironmentSpriteId); the resolution methods.
   * The LEGACY palette and why it exists (backward compatibility + pre-switch safety).
   * How Level carries a LevelPalette and the getter renderers will call in order-7.
@@ -105,5 +106,6 @@ DELIVERABLE CHECKLIST (order-3)
 
 LIVING DOC CONTRACT
 ===================
-See master index. docs/environment-tileset-system.txt (order-9) is the SoT; keep the DOC TODO
-accurate until then.
+See master index. IN THIS ORDER'S COMMIT: fill the "Per-level binding" section of
+docs/environment-tileset-system.txt and flip the order-3 status-table row to DONE. Do not defer
+documentation to order-9.

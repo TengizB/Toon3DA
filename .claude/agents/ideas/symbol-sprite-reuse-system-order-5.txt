@@ -4,9 +4,10 @@ TITLE: Symbol/Sprite Reuse — Part 5: RoomBlueprint Registry
 CREATED: 2026-07-15
 ---
 
-DOC TODO FOR ORDER-9
-====================
-docs/environment-tileset-system.txt "Room blueprints" section must document:
+DOC UPDATES — FILL IN THIS ORDER'S COMMIT (the doc exists from order-0)
+======================================================================
+In the same commit that ships order-5, fill the "Room blueprints" section of
+docs/environment-tileset-system.txt and flip the order-5 status-table row to DONE. It must document:
   * RoomBlueprint (interface) + RoomBlueprintRegistry + the SIGNATURE vs GENERIC distinction.
   * How a blueprint declares its RoomSymbolDemand (order-4) and its size/depth eligibility + weight.
   * The RECIPE: add a room = one RoomBlueprint + one register() line; no LevelGenerator edits.
@@ -131,5 +132,7 @@ DELIVERABLE CHECKLIST (order-5)
 
 LIVING DOC CONTRACT
 ===================
-See master index. Fold the blueprint catalog + the "add a room" recipe into
-docs/environment-tileset-system.txt in order-9; keep the DOC TODO accurate until then.
+See master index. IN THIS ORDER'S COMMIT: fill the "Room blueprints" section (catalog + demand
+model) of docs/environment-tileset-system.txt, flip the order-5 status-table row to DONE, and
+narrow the procedural-level-generation.txt banner to note room types are now registry-driven. The
+full "add a room" RECIPE B is order-9's consolidation. Do not defer documentation to order-9.

@@ -4,10 +4,11 @@ TITLE: Symbol/Sprite Reuse — Part 1: Tile Categories & Sprite Registry
 CREATED: 2026-07-15
 ---
 
-DOC TODO FOR ORDER-9 (docs/environment-tileset-system.txt does not exist yet)
-============================================================================
-When order-9 creates docs/environment-tileset-system.txt, its "Art catalog & registries" section
-must document the SHIPPED order-1 code:
+DOC UPDATES — FILL IN THIS ORDER'S COMMIT (the doc exists from order-0)
+======================================================================
+In the same commit that ships order-1, fill the "Art catalog & registries" section of
+docs/environment-tileset-system.txt, flip the order-1 row of its ORDER STATUS TABLE to DONE, and
+narrow the transition banner on any legacy doc this order affects. Document the SHIPPED order-1 code:
   * Package `…toon3d.tileset` (headless, no LibGDX imports).
   * TileCategory (enum) — the fixed semantic classes.
   * EnvironmentSpriteDefinition (immutable, Builder) + EnvironmentSpriteRegistry.
@@ -173,5 +174,6 @@ DELIVERABLE CHECKLIST (order-1)
 LIVING DOC CONTRACT
 ===================
 See master index (symbol-sprite-reuse-system.txt). docs/environment-tileset-system.txt is the
-single source of truth (created in order-9). Until then, keep the DOC TODO block at the top of this
-file accurate to the code you shipped.
+single source of truth and already exists (order-0). IN THIS ORDER'S COMMIT: fill its "Art catalog
+& registries" section, flip the order-1 status-table row to DONE, and narrow any legacy banner this
+order changed. Do not defer documentation to order-9.

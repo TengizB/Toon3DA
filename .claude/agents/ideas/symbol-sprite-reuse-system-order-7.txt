@@ -4,9 +4,10 @@ TITLE: Symbol/Sprite Reuse — Part 7: Rewire Renderers & Level to the Palette
 CREATED: 2026-07-15
 ---
 
-DOC TODO FOR ORDER-9
-====================
-docs/environment-tileset-system.txt "Render integration" section must document:
+DOC UPDATES — FILL IN THIS ORDER'S COMMIT (the doc exists from order-0)
+======================================================================
+In the same commit that ships order-7, fill the "Render integration" section of
+docs/environment-tileset-system.txt and flip the order-7 status-table row to DONE. It must document:
   * How WallRenderer/PropRenderer resolve a symbol -> sprite id (via LevelPalette) -> Texture (via
     EnvironmentTextureSet) each frame, replacing the static char tables/switches.
   * How Level's category predicates now treat FLEXIBLE symbols (palette-aware) vs FIXED (static).
@@ -104,5 +105,7 @@ DELIVERABLE CHECKLIST (order-7)
 
 LIVING DOC CONTRACT
 ===================
-See master index. Fold the render-integration description into docs/environment-tileset-system.txt
-in order-9; keep the DOC TODO accurate until then.
+See master index. IN THIS ORDER'S COMMIT: fill the "Render integration" section of
+docs/environment-tileset-system.txt, flip the order-7 status-table row to DONE, and tighten the
+wall-renderer-guide.txt banner to state the fixed symbol->texture table is now gone (replaced by
+the palette + EnvironmentTextureSet). Do not defer documentation to order-9.

@@ -6,18 +6,25 @@ CREATED: 2026-07-15
 
 PREREQUISITE: order-1..8 (the whole system must be live).
 READ FIRST: symbol-sprite-reuse-system.txt (master index — this order fulfils its ACCEPTANCE
-CRITERIA); every prior order file's DOC TODO block (this order consumes them).
+CRITERIA); docs/environment-tileset-system.txt (created in order-0, filled in-commit by orders 1-8
+— this order finalises it) and its ORDER STATUS TABLE.
 
 OWNS
 ====
-The CLOSE-OUT: the single source-of-truth doc, the recipe that proves the whole point (add content
-by registration alone), and every cross-cutting documentation/migration update the earlier orders
-deferred here. After order-9 the subsystem is documented, discoverable, and demonstrably
-extensible, and the master index's ACCEPTANCE CRITERIA all pass.
+The CLOSE-OUT: final CONSOLIDATION of the single source-of-truth doc (created in order-0, filled
+section-by-section by orders 1-8), the recipe that proves the whole point (add content by
+registration alone), REMOVAL of the now-obsolete transition banners, and the final legacy-doc
+rewrites. After order-9 the subsystem is documented, discoverable, and demonstrably extensible, and
+the master index's ACCEPTANCE CRITERIA all pass. NOTE: order-9 does NOT first-time-document orders
+1-8 — each already filled its own section in its own commit (order-0's in-commit rule). order-9
+only finalises, proves, and cleans up.
 
-DELIVERABLE 1 — docs/environment-tileset-system.txt (NEW single source of truth)
-================================================================================
-Create it, folding in every prior order's DOC TODO block. Required sections:
+DELIVERABLE 1 — docs/environment-tileset-system.txt (FINALISE — it already exists from order-0)
+==============================================================================================
+The doc and its per-order sections already exist (order-0 skeleton, filled by orders 1-8). In
+order-9: flip the doc header from "MIGRATION IN PROGRESS" to a settled status, verify the ORDER
+STATUS TABLE shows every row DONE, reconcile any drift between sections, and ADD the two RECIPES
+below. Confirm these sections are all present and accurate:
   * Overview & the fixed/flexible mental model (symbol = category slot; sprite = per-level).
   * Art catalog & registries (order-1): TileCategory, EnvironmentSpriteDefinition,
     EnvironmentSpriteRegistry, TilesetRegistries.bootstrap().
@@ -78,7 +85,21 @@ DELIVERABLE 4 — CLAUDE.md UPDATES
     per-level via LevelPalette. isWall() is still the movement authority but is now backed by the
     budget's category tables.
 
-DELIVERABLE 5 — HAND-CRAFTED LEVEL MIGRATION NOTES
+DELIVERABLE 5 — REMOVE THE TRANSITION BANNERS (the migration is over)
+====================================================================
+The order-0 transition banners were the guardrail WHILE the docs and code disagreed. Now they
+agree, so the banners must go — a stale "migration in progress" banner is itself misleading.
+  * grep the repo for "TILESET MIGRATION IN PROGRESS" and remove every banner instance from
+    docs/tile-symbols.txt, docs/wall-renderer-guide.txt, docs/procedural-level-generation.txt,
+    docs/level-design-context.txt, and the CLAUDE.md pointers — but ONLY after the underlying doc
+    text has been rewritten to the new model (do the rewrite, THEN drop the banner).
+  * Convert the order-0 pointer COMMENTS in Level.java/WallRenderer.java/PropRenderer.java/
+    LevelGenerator.java from "migration in progress" wording to settled "see
+    docs/environment-tileset-system.txt" references (keep a durable pointer; drop the "in progress").
+  * Flip docs/environment-tileset-system.txt header out of "MIGRATION IN PROGRESS".
+Do a final grep to confirm zero "MIGRATION IN PROGRESS" strings remain anywhere.
+
+DELIVERABLE 6 — HAND-CRAFTED LEVEL MIGRATION NOTES
 ==================================================
 - Confirm every assets/levels/*.txt still loads with the LEGACY palette and renders identically
   (order-3 guarantee). Document that hand levels are legacy-palette by default and how an author
@@ -103,16 +124,21 @@ signature-room fidelity, and confirm no disposal warnings across several level t
 
 DELIVERABLE CHECKLIST (order-9)
 ===============================
-[ ] docs/environment-tileset-system.txt created with all sections + RECIPE A/B.
+[ ] docs/environment-tileset-system.txt finalised: all order sections present, status table all
+    DONE, RECIPE A/B added, header out of "MIGRATION IN PROGRESS".
 [ ] Acceptance additions (one sprite via A, one room via B) proving zero-edit extensibility.
-[ ] docs/tile-symbols.txt STRICT RULE + SYMBOL BUDGET revised to fixed/flexible model.
-[ ] CLAUDE.md package/util/key-class/docs tables updated.
+[ ] docs/tile-symbols.txt STRICT RULE + SYMBOL BUDGET rewritten to fixed/flexible model.
+[ ] CLAUDE.md package/util/key-class/docs tables updated (packages added when they first landed;
+    verify nothing is missing here).
+[ ] ALL transition banners removed; pointer comments settled; zero "MIGRATION IN PROGRESS" strings
+    remain (final grep clean).
 [ ] Hand-level migration + containment notes documented; parity verified.
 [ ] Master-index ACCEPTANCE CRITERIA all verified.
 [ ] STATUS -> IMPLEMENTED on this file AND the master index.
 
 LIVING DOC CONTRACT
 ===================
-This order is where docs/environment-tileset-system.txt becomes the single source of truth. From
-here on, any change to the tileset/room/palette system updates that doc in the SAME commit — the
-same contract the route-map subsystem follows.
+docs/environment-tileset-system.txt was created in order-0 and filled in-commit by every order;
+order-9 finalises it and removes the transition scaffolding. From here on, any change to the
+tileset/room/palette system updates that doc in the SAME commit — the same contract the route-map
+subsystem follows.

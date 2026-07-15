@@ -4,9 +4,10 @@ TITLE: Symbol/Sprite Reuse — Part 4: SymbolAllocator (Assignment Engine)
 CREATED: 2026-07-15
 ---
 
-DOC TODO FOR ORDER-9
-====================
-docs/environment-tileset-system.txt "Allocation" section must document:
+DOC UPDATES — FILL IN THIS ORDER'S COMMIT (the doc exists from order-0)
+======================================================================
+In the same commit that ships order-4, fill the "Allocation" section of
+docs/environment-tileset-system.txt and flip the order-4 status-table row to DONE. It must document:
   * The SymbolAllocationRequest inputs and the allocation ALGORITHM (fixed -> reserved -> variety
     -> freed reclamation), step by step.
   * The coherence/theme rules and the anti-repetition rule.
@@ -131,5 +132,6 @@ DELIVERABLE CHECKLIST (order-4)
 
 LIVING DOC CONTRACT
 ===================
-See master index. Fold the ALGORITHM + RULES into docs/environment-tileset-system.txt in order-9;
-keep the DOC TODO accurate until then.
+See master index. IN THIS ORDER'S COMMIT: fill the "Allocation" section (algorithm + rules R1-R5 +
+the paletteSymbolSeed formula) of docs/environment-tileset-system.txt and flip the order-4
+status-table row to DONE. Do not defer documentation to order-9.

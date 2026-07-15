@@ -64,9 +64,14 @@ docs/procedural-level-generation.txt (the generator this series makes registry-d
 THE ORDER LIST (implement strictly in sequence)
 ===============================================
 Each order is a small, reviewable, ideally-compilable step. Headless orders (no LibGDX) ship
-with unit tests. Every order flips its own STATUS to IMPLEMENTED and updates the living doc
+with unit tests. Every order flips its own STATUS to IMPLEMENTED, fills its section of
+docs/environment-tileset-system.txt IN THE SAME COMMIT, and updates the ORDER STATUS TABLE there
 (see LIVING DOC CONTRACT below).
 
+  order-0  DOCUMENTATION GUARDRAILS — DO FIRST. Creates docs/environment-tileset-system.txt as a
+           living skeleton (with an order-status table) and stamps "migration in progress" banners
+           on every legacy doc + class comment so no agent is misled mid-refactor. No code logic
+           change. Establishes the in-commit doc rule for the whole series.
   order-1  Tile categories + environment-sprite registry (the art CATALOG). Headless data model:
            TileCategory, EnvironmentSpriteDefinition, EnvironmentSpriteRegistry,
            TilesetRegistries.bootstrap(). Registers every EXISTING wall/column/prop/decal as a
@@ -98,8 +103,8 @@ with unit tests. Every order flips its own STATUS to IMPLEMENTED and updates the
            the acceptance test; CLAUDE.md + tile-symbols.txt + docs INDEX updates; hand-crafted
            level migration notes.
 
-NEW PACKAGES INTRODUCED (documented in CLAUDE.md in order-9)
-============================================================
+NEW PACKAGES INTRODUCED (add to CLAUDE.md when the package first lands, not deferred)
+====================================================================================
   …toon3d.tileset          — headless data model + registries + allocator (orders 1-5). No LibGDX.
   …toon3d.render.tilesetgfx — procedural texture generators + per-level EnvironmentTextureSet
                               (order-6). Render layer only; the tileset package stays headless.
@@ -136,15 +141,24 @@ CROSS-CUTTING RULES (apply to EVERY order)
   fairness + seed sharing). Salt the palette seed so it never collides with floor/route seeds.
 * Backward compatibility: hand-crafted assets/levels/*.txt use FIXED symbols and must render
   identically. The LEGACY default palette (order-3) guarantees this until, and after, the switch.
+* IN-COMMIT DOCUMENTATION (do NOT defer docs to the end): docs/environment-tileset-system.txt is
+  created FIRST (order-0), and every order updates its own section of that doc — plus any legacy
+  doc/comment whose behaviour it just changed — IN THE SAME COMMIT that ships the code. The docs
+  must never describe behaviour the code no longer has. This is the concern order-0 exists to solve.
 
 LIVING DOC CONTRACT (every order file repeats this)
 ===================================================
-docs/environment-tileset-system.txt is the single source of truth for this subsystem (created in
-order-9). When a part is implemented you MUST: (1) flip that order file's STATUS to IMPLEMENTED;
-(2) add/refresh the relevant section of docs/environment-tileset-system.txt (or, if order-9 has
-not run yet, leave a clearly marked DOC TODO block at the top of your order file listing what the
-doc will need); (3) keep the "how to add a sprite / room" recipe accurate to the code you shipped.
-Other agents discover this subsystem through docs/environment-tileset-system.txt and CLAUDE.md.
+docs/environment-tileset-system.txt is the single source of truth for this subsystem. It is
+CREATED IN ORDER-0 (a living skeleton with an order-status table), NOT at the end — so it is
+discoverable and honest from the first commit. When you implement any order you MUST, IN THE SAME
+COMMIT: (1) flip that order file's STATUS to IMPLEMENTED; (2) fill/refresh that order's section of
+docs/environment-tileset-system.txt and flip its row in the ORDER STATUS TABLE to DONE; (3) update
+or narrow the transition banner (order-0) on any legacy doc/comment whose behaviour this order just
+changed; (4) keep the "how to add a sprite / room" recipe accurate to the code you shipped. Order-9
+does FINAL consolidation (recipes, acceptance additions, banner removal, tile-symbols.txt/CLAUDE.md
+rewrite) — it is not the first time orders 1-8 get documented. Other agents discover this subsystem
+through docs/environment-tileset-system.txt and CLAUDE.md; a legacy doc mid-migration always carries
+a banner pointing there.
 
 ACCEPTANCE CRITERIA (the whole series is done when ALL hold)
 ============================================================

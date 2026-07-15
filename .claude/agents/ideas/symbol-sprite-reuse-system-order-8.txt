@@ -4,9 +4,10 @@ TITLE: Symbol/Sprite Reuse — Part 8: Generator Integration & Variety
 CREATED: 2026-07-15
 ---
 
-DOC TODO FOR ORDER-9
-====================
-docs/environment-tileset-system.txt "Generator integration" section must document:
+DOC UPDATES — FILL IN THIS ORDER'S COMMIT (the doc exists from order-0)
+======================================================================
+In the same commit that ships order-8, fill the "Generator integration" section of
+docs/environment-tileset-system.txt and flip the order-8 status-table row to DONE. It must document:
   * How LevelGenerator selects RoomBlueprints from the registry (weighted, seeded) instead of the
     old RoomType switch.
   * How it builds the SymbolAllocationRequest from PLACED blueprints and applies the returned
@@ -128,5 +129,7 @@ DELIVERABLE CHECKLIST (order-8)
 
 LIVING DOC CONTRACT
 ===================
-See master index. Fold generator integration + both proofs into docs/environment-tileset-system.txt
-in order-9; keep the DOC TODO accurate until then.
+See master index. IN THIS ORDER'S COMMIT: fill the "Generator integration" section (registry-driven
+selection, palette wiring, variety, and both proofs) of docs/environment-tileset-system.txt, flip
+the order-8 status-table row to DONE, and narrow the procedural-level-generation.txt banner to match
+the now-live generator behaviour. Do not defer documentation to order-9.

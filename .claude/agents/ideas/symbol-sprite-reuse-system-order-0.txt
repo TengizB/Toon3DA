@@ -1,0 +1,130 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Symbol/Sprite Reuse — Part 0: Documentation Guardrails (DO FIRST)
+CREATED: 2026-07-15
+---
+
+WHY THIS ORDER EXISTS (read this)
+=================================
+Every existing doc and many class comments currently assert the LEGACY model: "one symbol = one
+fixed sprite, forever." That is the single source of truth today, and it is CORRECT today. The
+moment order-1 lands, and for the entire multi-order build, that assertion becomes progressively
+WRONG — but the docs will still say it. A Claude agent or a human reading docs/tile-symbols.txt,
+docs/wall-renderer-guide.txt, docs/procedural-level-generation.txt, CLAUDE.md, or the Level/
+WallRenderer/PropRenderer/LevelGenerator Javadocs mid-migration would be actively MISLED.
+
+order-0 closes that gap BEFORE any code changes, two ways:
+  1. Creates the single-source doc (docs/environment-tileset-system.txt) as a LIVING SKELETON with
+     a per-order status tracker, so the target model is documented and discoverable from step one.
+  2. Stamps a short, uniform TRANSITION BANNER on every existing doc/comment that describes the
+     legacy pattern, pointing forward to the new doc and stating the current migration status.
+
+order-0 changes NO game code and NO behaviour. It is pure documentation plumbing. It MUST be the
+first order implemented.
+
+PREREQUISITE: none — DO THIS FIRST, before order-1.
+READ FIRST: symbol-sprite-reuse-system.txt (master index).
+
+DELIVERABLE 1 — docs/environment-tileset-system.txt (LIVING SKELETON)
+====================================================================
+Create the doc now (not in order-9). It starts as a skeleton and each subsequent order FILLS its
+own section IN THE SAME COMMIT that ships that order's code. Required contents at order-0:
+  * A header: "STATUS: MIGRATION IN PROGRESS" + a one-paragraph statement of the TARGET model
+    (symbol = fixed category slot; sprite = per-level; fixed vs flexible symbols; registries).
+  * A LEGACY-vs-TARGET note: "Until this migration completes, the LEGACY 1:1 symbol->sprite mapping
+    is what actually renders (via the legacy LevelPalette). Where this doc and an older doc/comment
+    disagree, THIS doc describes the target; the banner on the older doc says which parts are live."
+  * An ORDER STATUS TABLE (order-0..order-9, each with a STATUS cell: NOT STARTED / IN PROGRESS /
+    DONE) so anyone can see, at a glance, how far the migration has progressed and which sections of
+    this doc are real yet.
+  * Empty, clearly-labelled section placeholders for each order to fill:
+      Art catalog & registries (1) / Symbol budget (2) / Per-level binding (3) / Allocation (4) /
+      Room blueprints (5) / Texture realization (6) / Render integration (7) / Generator
+      integration (8) / Recipes & final state (9).
+    Each placeholder reads "TODO: filled by order-N in the same commit that ships order-N."
+This makes docs/environment-tileset-system.txt the forward-looking source of truth from the very
+first step, and its status table the honest record of what is actually built.
+
+DELIVERABLE 2 — TRANSITION BANNERS on legacy docs (so nothing misleads)
+======================================================================
+Add a short, uniform banner to the TOP of each doc below (and, where noted, to the specific stale
+section). Use this exact template so it is greppable and easy to remove in order-9:
+
+  >>> TILESET MIGRATION IN PROGRESS (see docs/environment-tileset-system.txt) <<<
+  The symbol->sprite behaviour described below is the LEGACY model. A staged refactor
+  (.claude/agents/ideas/symbol-sprite-reuse-system*.txt) is decoupling symbols from sprites so a
+  symbol is a fixed CATEGORY slot and its sprite is chosen PER LEVEL. Check the ORDER STATUS TABLE
+  in docs/environment-tileset-system.txt for which parts are live. Do not rely on "one symbol = one
+  fixed sprite" as permanent truth while this banner is present.
+
+Stamp it on:
+  * docs/tile-symbols.txt — top of file, AND immediately above the STRICT RULE section and the
+    SYMBOL BUDGET section (the two places that assert the permanent 1:1 rule and the "10 free
+    symbols" scarcity framing). Note that "adding art" will soon be RECIPE A (register a sprite),
+    not "consume a symbol."
+  * docs/wall-renderer-guide.txt — top of file (it documents the fixed wall-texture table).
+  * docs/procedural-level-generation.txt — top of file (it documents the hardcoded room-type/wall
+    logic order-5/8 replace).
+  * docs/level-design-context.txt — top of file if it references fixed per-room wall symbols.
+  * CLAUDE.md — a one-line pointer under the Level.java "Full tile symbol reference" summary and at
+    the top of the "STRICT RULE — Adding a new tile symbol" block, pointing to the new doc. (Keep
+    it short; CLAUDE.md is loaded every session — one line, not the full banner.)
+
+DELIVERABLE 3 — POINTER COMMENTS on the legacy code seams
+=========================================================
+Add a SHORT (2-3 line) Javadoc/class-comment pointer at the top of each class the migration will
+change, so an agent editing the code sees it too (docs alone are not enough — code is read directly):
+  * Level.java — above isWall()/the category predicates: "Category authority today; a symbol's
+    CATEGORY is fixed but its SPRITE will become per-level (see docs/environment-tileset-system.txt,
+    tileset migration)."
+  * WallRenderer.java — above the wallTextureTable fields: "Legacy fixed symbol->texture table; to
+    be replaced by per-level LevelPalette + EnvironmentTextureSet (tileset migration, order-6/7)."
+  * PropRenderer.java — above propHeightMultiplier(): same style pointer.
+  * LevelGenerator.java — above the RoomType enum: "Hardcoded room types; migrating to
+    RoomBlueprintRegistry (tileset migration, order-5/8)."
+Keep these factual and short. They are pointer comments, not essays. These are the ONLY code files
+order-0 touches, and ONLY their comments — no logic changes.
+
+THE IN-COMMIT DOC RULE THIS ORDER ESTABLISHES (applies to ALL later orders)
+===========================================================================
+From here on, the LIVING DOC CONTRACT for every order is:
+  * When you ship order-N's code, in the SAME commit you (a) fill order-N's section in
+    docs/environment-tileset-system.txt, and (b) flip that order's row in the ORDER STATUS TABLE to
+    DONE, and (c) update or narrow the transition banner on any legacy doc whose described behaviour
+    order-N just changed (e.g. once order-7 flips the renderers, tighten the wall-renderer-guide
+    banner to say the fixed table is gone).
+  * Documentation is NOT deferred to order-9. order-9's remaining doc job is only FINAL
+    CONSOLIDATION: writing the RECIPES, doing the acceptance additions, REMOVING the now-obsolete
+    transition banners, and the final tile-symbols.txt/CLAUDE.md rewrite — not first-time
+    documentation of orders 1-8.
+This is the same discipline docs/route-map-system.txt follows ("single source of truth; update on
+any route change"), applied from the first commit instead of the last.
+
+TECHNICAL NOTES
+===============
+- No code logic changes; comment-only in the four classes. The PostToolUse code-reviewer hook will
+  fire on those .java edits — expect it; the changes are comments only.
+- Keep the banner text IDENTICAL everywhere (copy-paste) so order-9 can find and remove every
+  instance with one grep for "TILESET MIGRATION IN PROGRESS".
+- Do not delete or rewrite any legacy content in order-0 — only PREPEND banners/pointers. The
+  legacy text is still accurate for the parts not yet migrated; the banner tells the reader to
+  check the status table for what is live.
+
+DELIVERABLE CHECKLIST (order-0)
+===============================
+[ ] docs/environment-tileset-system.txt created as a living skeleton with the ORDER STATUS TABLE
+    and per-order section placeholders.
+[ ] Transition banner stamped on tile-symbols.txt (top + STRICT RULE + SYMBOL BUDGET),
+    wall-renderer-guide.txt, procedural-level-generation.txt, level-design-context.txt, and the
+    CLAUDE.md pointers.
+[ ] Short pointer comments added to Level.java, WallRenderer.java, PropRenderer.java,
+    LevelGenerator.java (comments only, no logic change).
+[ ] The in-commit doc rule recorded in docs/environment-tileset-system.txt so every later order
+    follows it.
+[ ] STATUS -> IMPLEMENTED; order-0 row in the status table set to DONE.
+
+LIVING DOC CONTRACT
+===================
+order-0 CREATES the single source of truth (docs/environment-tileset-system.txt) and the rule that
+every subsequent order updates it in-commit. See the master index (symbol-sprite-reuse-system.txt)
+for the series-wide contract.
