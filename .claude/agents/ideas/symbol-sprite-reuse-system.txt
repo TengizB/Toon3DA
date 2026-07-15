@@ -1,0 +1,172 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Symbol/Sprite Reuse System — Master Index
+CREATED: 2026-07-15
+---
+
+WHAT THIS SERIES IS
+===================
+A staged refactor that DECOUPLES a level-file symbol from the sprite it renders, so the game
+can grow an essentially unlimited library of walls, columns, props and whole ROOMS while the
+finite symbol alphabet (95 printable ASCII chars, docs/tile-symbols.txt) never runs out.
+
+Today the binding is 1:1 and GLOBAL: the wall symbol 'x' is ALWAYS the plain-wall texture, 'Z'
+is ALWAYS the cryo wall, and so on. Every new piece of wall/environment art needs its own new
+symbol, and docs/tile-symbols.txt reports only 10 free chars remain. That is the wall we are
+about to hit. This series removes it.
+
+THE CORE INSIGHT (the product owner's idea, restated as the design contract)
+============================================================================
+1. A SYMBOL is not an identity — it is a SLOT in a fixed CATEGORY (wall / column / solid-prop /
+   decal / ...). Its category/meaning never changes; WHICH sprite fills it is assigned PER LEVEL.
+       - Example: the column symbol 'P' ALWAYS means "column" (fixed gameplay meaning), but a
+         given level may render it as a round column OR a new square column — any sprite in the
+         COLUMN category. Same symbol, different art, per level.
+2. No level loads the whole art library. A level uses a SUBSET — as many distinct sprites as it
+   has free symbols — drawn from a large registered POOL. Per level: small palette. Across all
+   levels: huge variety.
+3. Two tiers of symbols:
+       FIXED    — reserved, permanent meaning AND sprite (player start 'p', exit '>', doors,
+                  keycards, pickups, ammo, enemy spawns, hazards). Never reassigned.
+       FLEXIBLE — the wall/decor visual symbols. Their category is fixed; their sprite is
+                  assigned per level by a rule-governed allocator (never random-chaos).
+4. Signature rooms (MEDICAL_BAY, ARMORY, CRYO_CHAMBER, SERVER_ROOM, ...) keep their EXACT
+   identity — architecture AND look. But they are registered "room blueprints" that CLAIM a set
+   of symbols only when the room is actually placed in that level.
+5. When a signature room is NOT placed on a level, the symbols it would have claimed are FREED
+   and reused — NOT to reskin that room, but to spawn a COMPLETELY NEW, unique generated room
+   and to add visual variety to the generic rooms and halls.
+6. ARCHITECTURE: adding a new wall sprite, a new prop, a new column, or a new ROOM must be ONE
+   REGISTRATION LINE — no edits to the level generator, renderers, or Level. This mirrors the
+   blessed precedent already in this codebase: route/RouteRegistries.bootstrap() ("never a
+   switch statement"). The whole point of the series is that future content is registered, not
+   wired.
+
+THE SEAMS WE ARE REPLACING (verified in the current code)
+=========================================================
+* WallRenderer.java  — `wallTextureTable[char]` char-indexed array (field ~line 135, filled in
+  the constructor ~lines 267-340). One fixed texture per wall char, chosen once at startup.
+* PropRenderer.java  — `propHeightMultiplier(char)` switch (~line 47) plus the per-char draw
+  dispatch. One fixed sprite + height per prop char.
+* Level.java         — isWall()/isColumn()/isPropSolid()/isPropDecal()/isPropOccluder() are the
+  hardcoded CATEGORY authority (static char comparisons).
+* LevelGenerator.java — private `enum RoomType` (~line 69) + hardcoded switches:
+  placeRooms() selection (~line 286+), themeNewRoomWalls() wall painting (~line 1066), floor
+  assignment (~line 810), pickup logic (~line 2287). Rooms and their wall symbols are hardwired.
+* docs/tile-symbols.txt — SYMBOL BUDGET: 85 assigned / 10 free. The scarcity this series ends.
+
+READ FIRST (context)
+====================
+docs/tile-symbols.txt (the alphabet + the STRICT "new symbol" rule this series revises),
+.claude/agents/ideas/branching-facility-route-map-order-1.txt (the registry pattern to imitate),
+docs/procedural-level-generation.txt (the generator this series makes registry-driven).
+
+THE ORDER LIST (implement strictly in sequence)
+===============================================
+Each order is a small, reviewable, ideally-compilable step. Headless orders (no LibGDX) ship
+with unit tests. Every order flips its own STATUS to IMPLEMENTED, fills its section of
+docs/environment-tileset-system.txt IN THE SAME COMMIT, and updates the ORDER STATUS TABLE there
+(see LIVING DOC CONTRACT below).
+
+  order-0  DOCUMENTATION GUARDRAILS — DO FIRST. Creates docs/environment-tileset-system.txt as a
+           living skeleton (with an order-status table) and stamps "migration in progress" banners
+           on every legacy doc + class comment so no agent is misled mid-refactor. No code logic
+           change. Establishes the in-commit doc rule for the whole series.
+  order-1  Tile categories + environment-sprite registry (the art CATALOG). Headless data model:
+           TileCategory, EnvironmentSpriteDefinition, EnvironmentSpriteRegistry,
+           TilesetRegistries.bootstrap(). Registers every EXISTING wall/column/prop/decal as a
+           sprite definition. No behaviour change.
+  order-2  Symbol budget: FIXED vs FLEXIBLE. SymbolClass, the reserved/flexible split of the
+           alphabet, SymbolBudget. Pure config the allocator will consume. Revises the
+           tile-symbols.txt rule.
+  order-3  LevelPalette: the per-level (symbol -> category + sprite) binding, carried on Level.
+           Ships a LEGACY default palette that exactly reproduces today's fixed mapping, so
+           nothing breaks before renderers switch over. Headless.
+  order-4  SymbolAllocator: the deterministic per-level assignment engine. Fixed symbols keep
+           their sprite; placed signature rooms get their required sprites; remaining flexible
+           symbols get rule-governed variety; freed symbols are reclaimed. Headless, seeded,
+           unit-tested. THE HEART of the series.
+  order-5  RoomBlueprint + RoomBlueprintRegistry. Wrap every EXISTING RoomType as a registered
+           SIGNATURE blueprint declaring its symbol/category demand. Behaviour identical; the
+           generator's room switches move behind the registry.
+  order-6  Per-level texture realization: TextureGeneratorRegistry (sprite id -> procedural
+           texture generator) + EnvironmentTextureSet that realizes ONLY the sprites this
+           level's palette uses, and disposes them on teardown. The "subset per level" mechanism.
+  order-7  Rewire WallRenderer / PropRenderer / Level to read the LevelPalette + Environment
+           TextureSet instead of the static char tables. Visual variety now reaches the screen.
+  order-8  LevelGenerator integration: pick room blueprints from the registry, ask the allocator
+           for the palette, paint generic rooms/halls with rule-driven variety. Proves the
+           requirements: a NEW generated room from freed symbols, and the square-column ('P' ->
+           square sprite) case.
+  order-9  Extensibility proof + docs. New doc docs/environment-tileset-system.txt; add ONE new
+           wall sprite and ONE new room by registration alone (zero generator/renderer edits) as
+           the acceptance test; CLAUDE.md + tile-symbols.txt + docs INDEX updates; hand-crafted
+           level migration notes.
+
+NEW PACKAGES INTRODUCED (add to CLAUDE.md when the package first lands, not deferred)
+====================================================================================
+  …toon3d.tileset          — headless data model + registries + allocator (orders 1-5). No LibGDX.
+  …toon3d.render.tilesetgfx — procedural texture generators + per-level EnvironmentTextureSet
+                              (order-6). Render layer only; the tileset package stays headless.
+
+GLOSSARY (use these names verbatim across the series)
+=====================================================
+  TileCategory              — the fixed semantic class of a symbol (WALL, COLUMN, SOLID_PROP,
+                              FLOOR_DECAL, ...). Answers "what does this symbol MEAN".
+  EnvironmentSprite(Def)    — one concrete piece of art in a category (e.g. "plain wall",
+                              "square column"). Registered; addressed by a stable string id.
+  EnvironmentSpriteRegistry — category -> weighted list of sprite definitions. Where new art
+                              registers.
+  SymbolClass               — FIXED or FLEXIBLE.
+  SymbolBudget              — the flexible symbols available to a level + the fixed reservations.
+  LevelPalette              — the per-level binding: char -> (TileCategory, EnvironmentSpriteId).
+  SymbolAllocator           — builds a LevelPalette deterministically from a seed + the rooms
+                              actually placed + the registries.
+  RoomBlueprint             — a registered room (SIGNATURE or GENERIC) declaring its symbol/
+                              category demand + its architecture builder.
+  EnvironmentTextureSet     — the per-level realized textures for exactly the sprites the palette
+                              uses; disposed on level teardown.
+
+CROSS-CUTTING RULES (apply to EVERY order)
+==========================================
+* The …toon3d.tileset package is HEADLESS — no com.badlogic.gdx.graphics.* imports, unit-testable
+  without a GL context (same rule the route package follows). Sprites/colours are referenced by
+  string id; the render layer resolves them.
+* NOTHING downstream may switch on a hardcoded wall/prop/room list. It must ask a registry. This
+  is the single most important rule (identical to the route series' load-bearing rule).
+* No inline formulas — every non-trivial formula (palette seed, weighted pick) goes in
+  GameMath.java with the mandatory Formula/Derivation/Edge-cases comment block.
+* No hardcoded values — new numbers go in a Constants* file (order-2 adds TilesetConstants.java).
+* Determinism: a given run/floor seed must always produce the same LevelPalette (permadeath
+  fairness + seed sharing). Salt the palette seed so it never collides with floor/route seeds.
+* Backward compatibility: hand-crafted assets/levels/*.txt use FIXED symbols and must render
+  identically. The LEGACY default palette (order-3) guarantees this until, and after, the switch.
+* IN-COMMIT DOCUMENTATION (do NOT defer docs to the end): docs/environment-tileset-system.txt is
+  created FIRST (order-0), and every order updates its own section of that doc — plus any legacy
+  doc/comment whose behaviour it just changed — IN THE SAME COMMIT that ships the code. The docs
+  must never describe behaviour the code no longer has. This is the concern order-0 exists to solve.
+
+LIVING DOC CONTRACT (every order file repeats this)
+===================================================
+docs/environment-tileset-system.txt is the single source of truth for this subsystem. It is
+CREATED IN ORDER-0 (a living skeleton with an order-status table), NOT at the end — so it is
+discoverable and honest from the first commit. When you implement any order you MUST, IN THE SAME
+COMMIT: (1) flip that order file's STATUS to IMPLEMENTED; (2) fill/refresh that order's section of
+docs/environment-tileset-system.txt and flip its row in the ORDER STATUS TABLE to DONE; (3) update
+or narrow the transition banner (order-0) on any legacy doc/comment whose behaviour this order just
+changed; (4) keep the "how to add a sprite / room" recipe accurate to the code you shipped. Order-9
+does FINAL consolidation (recipes, acceptance additions, banner removal, tile-symbols.txt/CLAUDE.md
+rewrite) — it is not the first time orders 1-8 get documented. Other agents discover this subsystem
+through docs/environment-tileset-system.txt and CLAUDE.md; a legacy doc mid-migration always carries
+a banner pointing there.
+
+ACCEPTANCE CRITERIA (the whole series is done when ALL hold)
+============================================================
+[ ] Adding a new wall/prop/column SPRITE = one register() line, no renderer/generator/Level edits.
+[ ] Adding a new ROOM = one RoomBlueprint register() line, no generator edits.
+[ ] The 'P' column symbol can render as a round OR square column depending on the level's palette.
+[ ] Two freshly generated levels visibly differ in their wall/environment sprites.
+[ ] Every existing signature room still looks and plays exactly as it does today.
+[ ] A brand-new generated room appears on levels where a signature room's symbols were freed.
+[ ] Same seed => identical LevelPalette (headless test).
+[ ] All hand-crafted assets/levels/*.txt render unchanged.

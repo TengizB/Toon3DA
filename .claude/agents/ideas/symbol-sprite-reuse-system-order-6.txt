@@ -1,0 +1,128 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Symbol/Sprite Reuse — Part 6: Per-Level Texture Realization
+CREATED: 2026-07-15
+---
+
+DOC UPDATES — FILL IN THIS ORDER'S COMMIT (the doc exists from order-0)
+======================================================================
+In the same commit that ships order-6, fill the "Texture realization" section of
+docs/environment-tileset-system.txt and flip the order-6 status-table row to DONE. It must document:
+  * TextureGeneratorRegistry (sprite id -> procedural texture generator) and how existing
+    WallRenderer/PropRenderer generator methods are registered into it.
+  * EnvironmentTextureSet: realizes ONLY the sprites a level's palette uses, and its dispose()
+    lifecycle (built on level load, disposed on level teardown).
+  * The memory story: subset-per-level, not whole-library-per-level.
+
+PREREQUISITE: order-1..5.
+READ FIRST: symbol-sprite-reuse-system.txt; WallRenderer.java (its generate*WallTexture() methods
++ the wallTextureTable filled ~lines 267-340); PropRenderer.java (its per-prop procedural draw
+methods); docs/wall-renderer-guide.txt.
+
+OWNS
+====
+The RENDER-SIDE foundation that makes "each level uses a subset of a large pool" real in memory:
+  * A registry mapping a sprite id to the procedural code that generates its Texture.
+  * A per-level EnvironmentTextureSet that realizes ONLY the sprites the level's LevelPalette
+    actually references, holds them for the level's lifetime, and disposes them on teardown.
+This order does NOT yet change what WallRenderer/PropRenderer DRAW (order-7 flips them to read the
+set). It builds the texture-supply mechanism and proves it disposes correctly. This is the ONLY
+render-layer order in the series' first half; it introduces the new render sub-package.
+
+WHY A SEPARATE REALIZATION LAYER
+================================
+Today WallRenderer generates EVERY wall texture once in its constructor and holds them all forever
+in wallTextureTable. That is fine for ~21 walls but does not scale to the large pool this series
+enables — you cannot keep hundreds of generated textures resident. The fix: generation is
+data-driven (registered per sprite id) and realization is PER LEVEL and LAZY — a level builds
+textures for the handful of sprite ids in its palette, and frees them when the level ends. Small
+GPU footprint per level; unbounded library overall. This is the literal payoff of the product
+owner's "no need to load all walls to each level."
+
+NEW PACKAGE
+===========
+Create `…toon3d.render.tilesetgfx` (render layer; documented in CLAUDE.md order-9). It holds the
+texture generators + EnvironmentTextureSet. It MAY import LibGDX (it produces Textures). The
+`…toon3d.tileset` package stays headless — this is the boundary where sprite ids become pixels.
+
+CLASSES (in …toon3d.render.tilesetgfx)
+======================================
+
+1. EnvironmentTextureGenerator  (functional interface)
+     - Texture generate()  — produces the Texture for one sprite. The BODY is the existing
+       procedural generation code (e.g. WallRenderer.generateCryoWallTexture(), the prop draw
+       routines). Move each generator method into (or delegate it from) a generator instance keyed
+       by sprite id. Keep pixel logic identical so art does not change.
+     - Optional: also expose intrinsic width/height if the renderer needs them (WallRenderer reads
+       wallWidthTable/wallHeightTable today).
+
+2. TextureGeneratorRegistry  (singleton)
+     - register(String spriteId, EnvironmentTextureGenerator generator)
+     - has(String spriteId) / generate(String spriteId) -> Texture
+     - Registered at startup by a render-layer bootstrap (the twin of RouteIconBootstrap):
+       TilesetGfxBootstrap.register(registry) — maps every v1 sprite id from order-1 to its
+       procedural generator. This is the render-side companion to TilesetRegistries.bootstrap();
+       keep them consistent (every registered EnvironmentSpriteDefinition MUST have a matching
+       texture generator — add a startup assertion that the id sets match).
+
+3. EnvironmentTextureSet  (per-level, Disposable)
+     - static EnvironmentTextureSet realize(LevelPalette palette, TextureGeneratorRegistry gens)
+       — collects the DISTINCT sprite ids referenced by the palette, generates each once, and
+       stores id -> Texture (+ dimensions). De-duplicate: two symbols bound to the same sprite id
+       share one Texture.
+     - Texture textureFor(String spriteId) / int widthFor(...) / int heightFor(...).
+     - dispose() — disposes every realized Texture. MUST be called on level teardown.
+     - MEMORY RULE: exactly the palette's sprites are resident; nothing else. Log the count on
+       realize() during development to confirm subset sizing.
+
+LIFECYCLE WIRING (World)
+========================
+- World builds an EnvironmentTextureSet when a Level is loaded/generated (right where it wires the
+  Level into the renderers) and DISPOSES the old set when the Level is torn down (level transition,
+  death->recreate). This mirrors how World already manages renderer lifecycles.
+- WallRenderer/PropRenderer receive the current EnvironmentTextureSet via a setter each level (like
+  setPlayerState but per-level), so order-7 can read from it. order-6 wires the plumbing and the
+  dispose path; order-7 makes the renderers actually read it.
+- CRITICAL (project rule): dispose every Disposable. The EnvironmentTextureSet is the new owner of
+  per-level wall/prop textures; add it to World's dispose() chain and to the per-level teardown.
+  Add a test/manual check that repeated level transitions do not leak (texture count stable across
+  N transitions).
+
+TRANSITION SAFETY (do not break order-3's legacy default)
+=========================================================
+- Because every Level defaults to the LEGACY palette (order-3), realize(legacyPalette, gens)
+  produces exactly today's full wall/prop set — so a level on the legacy palette looks identical.
+  This lets order-6 land WITHOUT visual change: the set contains the same textures WallRenderer
+  used to hold; order-7 then routes draws through the set.
+- Keep WallRenderer's existing constructor-built textures during order-6 (both paths coexist) so
+  the game keeps running; order-7 removes the old table once draws read the set.
+
+TECHNICAL NOTES
+===============
+- No allocations inside render(): realize() runs at LEVEL LOAD, never per frame. Textures are held
+  for the level's life. This respects the "no render-loop allocation" rule.
+- All Texture generation on the GL thread (level load already runs there). If any generator uses a
+  FrameBuffer (some procedural walls/props do), follow the existing FrameBuffer pipeline exactly.
+- Thread-safety: WallRenderer's worker threads (order-7) READ textureFor() results; realize() must
+  complete-before the workers run (it does — it happens at load, before any render()).
+- Keep the generator pixel code byte-identical to today's methods; this order is about WHERE
+  textures live and WHEN they are freed, not how they look.
+
+DELIVERABLE CHECKLIST (order-6)
+===============================
+[ ] `…toon3d.render.tilesetgfx` package created.
+[ ] EnvironmentTextureGenerator + TextureGeneratorRegistry + TilesetGfxBootstrap registering every
+    v1 sprite id's procedural generator (moved/delegated from WallRenderer/PropRenderer).
+[ ] Startup assertion: sprite-registry ids == texture-generator ids (no orphan either way).
+[ ] EnvironmentTextureSet.realize()/textureFor()/dispose(), realizing ONLY palette sprites.
+[ ] World builds the set on level load, sets it on the renderers, disposes it on teardown; added
+    to the dispose chain.
+[ ] Leak check: texture count stable across repeated level transitions.
+[ ] No visual change (legacy palette => same textures as today).
+[ ] STATUS -> IMPLEMENTED; DOC TODO accurate.
+
+LIVING DOC CONTRACT
+===================
+See master index. IN THIS ORDER'S COMMIT: fill the "Texture realization" section (registry +
+EnvironmentTextureSet + memory story) of docs/environment-tileset-system.txt and flip the order-6
+status-table row to DONE. Do not defer documentation to order-9.

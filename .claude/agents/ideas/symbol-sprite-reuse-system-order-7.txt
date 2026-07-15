@@ -1,0 +1,111 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Symbol/Sprite Reuse — Part 7: Rewire Renderers & Level to the Palette
+CREATED: 2026-07-15
+---
+
+DOC UPDATES — FILL IN THIS ORDER'S COMMIT (the doc exists from order-0)
+======================================================================
+In the same commit that ships order-7, fill the "Render integration" section of
+docs/environment-tileset-system.txt and flip the order-7 status-table row to DONE. It must document:
+  * How WallRenderer/PropRenderer resolve a symbol -> sprite id (via LevelPalette) -> Texture (via
+    EnvironmentTextureSet) each frame, replacing the static char tables/switches.
+  * How Level's category predicates now treat FLEXIBLE symbols (palette-aware) vs FIXED (static).
+  * The invariant: fixed symbols still resolve statically; only flexible art is palette-driven.
+
+PREREQUISITE: order-1..6 (esp. order-3 LevelPalette, order-6 EnvironmentTextureSet).
+READ FIRST: symbol-sprite-reuse-system.txt; WallRenderer.java (wallTextureTable read path in the
+worker/draw code ~line 2064 "O(1) array lookup replaces three switch statements"); PropRenderer.java
+(propHeightMultiplier + draw dispatch); Level.java (isWall/isColumn/isPropSolid/isPropDecal/
+isPropOccluder — the category authority).
+
+OWNS
+====
+The FLIP: renderers stop reading the static per-char texture tables and start resolving each
+symbol through the level's LevelPalette + EnvironmentTextureSet. After this order, changing a
+level's palette VISIBLY changes what its walls/columns/props look like. Because every level still
+defaults to the LEGACY palette (order-3), THE GAME LOOKS IDENTICAL after order-7 — variety only
+appears once order-8 feeds generated levels a varied palette. order-7 is the "swap the engine under
+the hood without changing the ride" step.
+
+THE THREE READS TO REPLACE
+==========================
+1. WALL texture lookup (WallRenderer):
+     BEFORE: texture = wallTextureTable[cellChar]  (static, global).
+     AFTER:  spriteId = levelPalette.spriteIdOf(cellChar);
+             texture  = environmentTextureSet.textureFor(spriteId);
+             width/height likewise from the set.
+   Keep the O(1) hot-path shape: at level load, PRE-RESOLVE a per-level char-indexed array
+   (char -> Texture) FROM the palette+set, so the render loop still does one array read per column
+   (no map lookup per column, preserving the current performance profile and the "no per-frame
+   allocation" rule). Rebuild this small array once per level in the per-level setter, not per
+   frame. This keeps WallRenderer's parallel worker design intact.
+2. COLUMN sprite (WallRenderer column path): resolve 'P' the same way — spriteIdOf('P') -> the
+   round OR square column texture. This is the mechanism that lets 'P' render either column per
+   level (proven visually in order-8).
+3. PROP sprite + height (PropRenderer): the per-char draw dispatch and propHeightMultiplier() read
+   the palette's sprite id, then the definition's heightMultiplier (order-1) and the set's texture.
+   Replace the height switch with EnvironmentSpriteRegistry.get(spriteId).heightMultiplier().
+
+LEVEL CATEGORY PREDICATES (the careful part)
+============================================
+Level.isWall()/isColumn()/isPropSolid()/isPropDecal()/isPropOccluder() are called from movement,
+collision, LOS, and rendering — not just draw. They must keep answering correctly for BOTH fixed
+and flexible symbols. Two-tier resolution:
+  * FIXED symbols: keep the existing static char checks (fast, always correct).
+  * FLEXIBLE symbols: the category is FIXED per the SymbolBudget (order-2) — a flexible WALL symbol
+    is ALWAYS a wall regardless of which wall sprite fills it. So category membership does NOT
+    actually depend on the per-level sprite; it depends only on the symbol's FIXED category.
+  => Therefore Level's predicates can stay STATIC and correct if they test category membership from
+     the SymbolBudget partition (order-2) rather than a hand-maintained char list. RECOMMENDED
+     refactor: back isWall()/isColumn()/isPropSolid()/isPropDecal() with the SymbolBudget's
+     category tables (fixed + flexible) so there is ONE source of truth for "which category is this
+     symbol", and adding a flexible symbol to a category is a data edit, not a predicate edit.
+  * DO NOT make these predicates require a LevelPalette argument — they must stay callable from hot
+    movement/AI code without a level-render dependency. Category is symbol-intrinsic; only the
+    SPRITE needs the palette. This separation is the whole reason category != sprite.
+  * isPropOccluder() likewise reads the sprite definition's occluder flag (order-1) via the fixed
+    category tables, not a char list.
+
+REMOVE THE OLD TABLES (end state)
+=================================
+- Delete WallRenderer's constructor-built wallTextureTable/wallWidthTable/wallHeightTable and the
+  per-char generate*WallTexture() ownership (those generators now live in the
+  TextureGeneratorRegistry, order-6). WallRenderer no longer OWNS wall textures; the
+  EnvironmentTextureSet does. Update WallRenderer.dispose() accordingly (it must NOT dispose
+  textures it no longer owns — the set owns them).
+- Same for PropRenderer's per-char texture ownership.
+- This is a net simplification: two big static tables + several switches become one palette read
+  path.
+
+TECHNICAL NOTES
+===============
+- Preserve WallRenderer's multithreaded column compute: workers read the pre-resolved per-level
+  char->Texture array (immutable for the level's life), established happens-before by the per-level
+  setter running on the GL thread before render().
+- No per-frame allocation: all resolution (palette+set -> the small char-indexed arrays) happens in
+  the per-level setter, never in render().
+- Disposal ownership moves to EnvironmentTextureSet (order-6). Double-check no renderer disposes a
+  texture the set also disposes (would double-free). Run the leak/transition check from order-6
+  again after the flip.
+- Behaviour guard: with the legacy palette the pre-resolved char->Texture array must equal the old
+  wallTextureTable entry-for-entry. Add a test/assert comparing them during a transition period, or
+  a golden-image spot check.
+
+DELIVERABLE CHECKLIST (order-7)
+===============================
+[ ] WallRenderer resolves walls + columns via palette+set through a pre-resolved per-level
+    char->Texture array (hot path unchanged in shape).
+[ ] PropRenderer resolves prop sprite + height via palette + sprite definition + set.
+[ ] Level category predicates backed by the SymbolBudget category tables (one source of truth),
+    still static and palette-free.
+[ ] Old static texture tables + per-renderer texture ownership removed; dispose paths corrected.
+[ ] Legacy-palette parity verified (identical look; no double-free; no leak across transitions).
+[ ] STATUS -> IMPLEMENTED; DOC TODO accurate.
+
+LIVING DOC CONTRACT
+===================
+See master index. IN THIS ORDER'S COMMIT: fill the "Render integration" section of
+docs/environment-tileset-system.txt, flip the order-7 status-table row to DONE, and tighten the
+wall-renderer-guide.txt banner to state the fixed symbol->texture table is now gone (replaced by
+the palette + EnvironmentTextureSet). Do not defer documentation to order-9.
