@@ -506,6 +506,23 @@ public final class RenderConstants {
     public static final int  STELLAR_HULLPLATE_WALL_TEXTURE_SIZE = 256;
     public static final long STELLAR_HULLPLATE_WALL_SEED         = 0x48756C6CL; // "Hull"
 
+    // Wall generator feature counts (non-colour implementation constants — see the wall texture
+    // builders in WallRenderer.java: generateStellarViewportWallTexture, generateStellarMagrailWallTexture,
+    // generateStellarHullPlateWallTexture). Baked once at load time like every other procedural wall
+    // in this file, so these describe the single baked look rather than a per-tile-instance variation.
+    public static final int   STELLAR_VIEWPORT_STAR_COUNT        = 55;  // 40-70 scattered star points
+    public static final int   STELLAR_VIEWPORT_STAR_GLINT_COUNT  = 6;   // brightest stars get a cross-glint
+    public static final int   STELLAR_VIEWPORT_NEBULA_BAND_COUNT = 3;   // soft magenta/teal cloud bands
+    public static final int   STELLAR_VIEWPORT_SILL_LED_COUNT    = 3;   // status LEDs along the sill strip
+    public static final int   STELLAR_VIEWPORT_CORNER_RADIUS     = 30;  // rounded-top window corner radius (px)
+
+    public static final int   STELLAR_MAGRAIL_CHANNEL_COUNT      = 4;   // vertical recessed rail housings
+    public static final int   STELLAR_MAGRAIL_NODE_SPACING       = 12;  // px between diamond junction LEDs
+
+    public static final int   STELLAR_HULLPLATE_GRID_COLUMNS     = 3;   // plate grid columns
+    public static final int   STELLAR_HULLPLATE_GRID_ROWS        = 2;   // plate grid rows
+    public static final int   STELLAR_HULLPLATE_RIVET_SPACING    = 22;  // px between border rivets
+
     // Prop/decal height multipliers (relative to a full wall stripe) — see propHeightMultiplier()
     // in PropRenderer.java.
     public static final float PROP_HEIGHT_GRAVITY_WELL_CORE    = 0.98f; // ';' centerpiece

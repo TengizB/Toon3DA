@@ -71,6 +71,10 @@ public class WallRenderer implements Renderable, Disposable {
     private final Texture wallTextureBlast;
     private final Texture wallTextureHoloData;
     private final Texture wallTextureForceField;
+    // STELLAR OBSERVATORY walls — see .claude/agents/ideas/stellar-observatory-gravity-well-room.txt
+    private final Texture wallTextureStellarViewport;
+    private final Texture wallTextureStellarMagrail;
+    private final Texture wallTextureStellarHullPlate;
     private final Texture doorTexture;
     private final Texture doorTextureRed;
     private final Texture doorTextureYellow;
@@ -117,6 +121,12 @@ public class WallRenderer implements Renderable, Disposable {
     private final int wallTextureHoloDataHeight;
     private final int wallTextureForceFieldWidth;
     private final int wallTextureForceFieldHeight;
+    private final int wallTextureStellarViewportWidth;
+    private final int wallTextureStellarViewportHeight;
+    private final int wallTextureStellarMagrailWidth;
+    private final int wallTextureStellarMagrailHeight;
+    private final int wallTextureStellarHullPlateWidth;
+    private final int wallTextureStellarHullPlateHeight;
     private final int columnTextureWidth;
     private final int columnTextureHeight;
 
@@ -275,6 +285,17 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureForceFieldWidth  = wallTextureForceField.getWidth();
         wallTextureForceFieldHeight = wallTextureForceField.getHeight();
 
+        wallTextureStellarViewport  = generateStellarViewportWallTexture();
+        wallTextureStellarMagrail   = generateStellarMagrailWallTexture();
+        wallTextureStellarHullPlate = generateStellarHullPlateWallTexture();
+
+        wallTextureStellarViewportWidth   = wallTextureStellarViewport.getWidth();
+        wallTextureStellarViewportHeight  = wallTextureStellarViewport.getHeight();
+        wallTextureStellarMagrailWidth    = wallTextureStellarMagrail.getWidth();
+        wallTextureStellarMagrailHeight   = wallTextureStellarMagrail.getHeight();
+        wallTextureStellarHullPlateWidth  = wallTextureStellarHullPlate.getWidth();
+        wallTextureStellarHullPlateHeight = wallTextureStellarHullPlate.getHeight();
+
         doorTexture      = loadOrGenerateDoorTexture(LAB_DOOR_CLOSED_PATH, 0f, 0f, 0f);
 
         doorTextureRed    = loadOrGenerateDoorTexture(LAB_DOOR_RED_PATH,    0.90f, 0.13f, 0.13f);
@@ -317,6 +338,9 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureTable['X'] = wallTextureBlast;      wallWidthTable['X'] = wallTextureBlastWidth;      wallHeightTable['X'] = wallTextureBlastHeight;
         wallTextureTable['D'] = wallTextureHoloData;  wallWidthTable['D'] = wallTextureHoloDataWidth;   wallHeightTable['D'] = wallTextureHoloDataHeight;
         wallTextureTable['F'] = wallTextureForceField; wallWidthTable['F'] = wallTextureForceFieldWidth; wallHeightTable['F'] = wallTextureForceFieldHeight;
+        wallTextureTable['"']  = wallTextureStellarViewport;  wallWidthTable['"']  = wallTextureStellarViewportWidth;  wallHeightTable['"']  = wallTextureStellarViewportHeight;
+        wallTextureTable['\''] = wallTextureStellarMagrail;   wallWidthTable['\''] = wallTextureStellarMagrailWidth;   wallHeightTable['\''] = wallTextureStellarMagrailHeight;
+        wallTextureTable['`']  = wallTextureStellarHullPlate; wallWidthTable['`']  = wallTextureStellarHullPlateWidth; wallHeightTable['`']  = wallTextureStellarHullPlateHeight;
 
         doorTextureTable = new Texture[128];
         Arrays.fill(doorTextureTable, doorTexture);
@@ -2160,6 +2184,9 @@ public class WallRenderer implements Renderable, Disposable {
         wallTextureBlast.dispose();
         wallTextureHoloData.dispose();
         wallTextureForceField.dispose();
+        wallTextureStellarViewport.dispose();
+        wallTextureStellarMagrail.dispose();
+        wallTextureStellarHullPlate.dispose();
         doorTexture.dispose();
         doorTextureRed.dispose();
         doorTextureYellow.dispose();
