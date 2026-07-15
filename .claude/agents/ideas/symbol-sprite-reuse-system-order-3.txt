@@ -1,0 +1,109 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Symbol/Sprite Reuse — Part 3: LevelPalette (Per-Level Binding)
+CREATED: 2026-07-15
+---
+
+DOC TODO FOR ORDER-9
+====================
+docs/environment-tileset-system.txt "Per-level binding" section must document:
+  * LevelPalette (immutable): char -> (TileCategory, EnvironmentSpriteId); the resolution methods.
+  * The LEGACY palette and why it exists (backward compatibility + pre-switch safety).
+  * How Level carries a LevelPalette and the getter renderers will call in order-7.
+
+PREREQUISITE: order-1 (categories + sprite registry), order-2 (symbol budget).
+READ FIRST: symbol-sprite-reuse-system.txt; Level.java (the class that will carry the palette).
+
+OWNS
+====
+The PER-LEVEL BINDING object: LevelPalette — the immutable map that says, for THIS level, which
+sprite each flexible symbol renders and which category each symbol belongs to. Plus the LEGACY
+palette that reproduces today's global 1:1 mapping exactly, and the wiring that lets a Level carry
+a palette. This order does NOT generate palettes from a seed (that is order-4) and does NOT change
+any renderer (order-7). It builds the data structure and threads it onto Level with a safe default.
+
+WHY A LEGACY DEFAULT FIRST (the migration lever)
+================================================
+The renderers and Level predicates are still the runtime authority until order-7. To switch them
+safely we need a palette that, when consulted, yields EXACTLY today's mapping ('Z' -> cryo wall,
+'M' -> medical wall, 'P' -> round column, ...). That is the LEGACY palette. With it in place:
+  * order-3 can attach a palette to every Level with zero visible change (Level defaults to LEGACY).
+  * Hand-crafted assets/levels/*.txt keep the LEGACY palette forever (they use fixed symbols and
+    must never change appearance).
+  * order-7 can flip renderers to "read the palette" and, because the default IS legacy, nothing
+    changes until order-4/8 actually start producing varied palettes for generated levels.
+This is the same "ship the identity transform first, then vary it" discipline the route series used.
+
+CLASSES (all in …toon3d.tileset)
+================================
+
+1. LevelPalette  (immutable value object)
+   The binding for one level.
+     - categoryOf(char symbol) -> TileCategory (or null if the symbol is not an environment symbol
+       — doors/pickups/etc. return null here; they are handled by the existing fixed paths, not the
+       palette).
+     - spriteIdOf(char symbol) -> String (the EnvironmentSpriteId this level renders for the
+       symbol). For FIXED sprite symbols this is the permanent binding ('x' -> "wall_plain"); for
+       FLEXIBLE symbols it is whatever the allocator assigned. Returns null for non-environment
+       symbols.
+     - hasBinding(char symbol) -> boolean.
+     - Built via a package-private Builder that the allocator (order-4) and the LEGACY factory use.
+       LevelPalette itself is immutable once built (thread-safe read from WallRenderer workers).
+   NOTE: LevelPalette resolves symbol -> sprite ID (a string). It does NOT hold textures — the
+   render layer turns sprite ids into textures in order-6. Keeping LevelPalette id-only preserves
+   the headless rule for the whole `tileset` package.
+
+2. LevelPalettes  (static factory helper)
+     - static LevelPalette legacy() — builds the palette that reproduces today's exact global
+       mapping. Source of truth: iterate the EnvironmentSpriteRegistry (order-1) and bind each
+       CURRENT symbol to the sprite id that matches its current fixed art (e.g. 'Z' -> "wall_cryo").
+       Because order-1 registered every existing sprite, this is a complete, mechanical mapping.
+       Memoise it (one shared immutable instance) — it never varies.
+   The legacy factory is the ONLY place that still encodes the historic 1:1 symbol->sprite table.
+   Everything else asks the palette. When order-7 lands, the legacy table is the fallback/default,
+   not a per-call hardcode.
+
+LEVEL WIRING (the only change outside the tileset package in order-3)
+====================================================================
+- Level.java gains a `LevelPalette palette` field, defaulting to LevelPalettes.legacy(), plus:
+     - public LevelPalette getPalette()
+     - a package-private setPalette(LevelPalette) OR a palette parameter on the package-private
+       Level(...) constructor (preferred: constructor param with an overload that defaults to
+       legacy, so existing LevelLoader/LevelGenerator call sites compile unchanged).
+- LevelLoader (hand-crafted .txt) passes LevelPalettes.legacy() — hand levels never vary.
+- LevelGenerator's constructor path keeps passing legacy FOR NOW; order-4/8 replace it with an
+  allocator-produced palette. order-3 must NOT change generated-level appearance.
+- IMPORTANT: do NOT yet make Level.isWall()/isColumn()/etc. consult the palette. Those static
+  predicates stay the category authority until order-7 (they are called from hot paths and other
+  systems; changing them is a deliberate order-7 step). order-3 only ADDS the palette; it does not
+  route any read through it.
+
+DETERMINISM / IMMUTABILITY
+==========================
+- LevelPalette is immutable and built once per level. Safe to read from WallRenderer's worker
+  threads (order-7) via happens-before from level construction.
+- The legacy palette is a shared singleton — no per-level allocation for hand levels.
+
+TECHNICAL NOTES
+===============
+- Still headless: LevelPalette + LevelPalettes live in `tileset`, hold only strings/enums.
+- Level already imports from util/item/door; adding a tileset import is a clean new dependency
+  (level -> tileset), consistent with the master-index dependency direction.
+- Unit tests: legacy().spriteIdOf('Z') == "wall_cryo" (and a spot-check across categories);
+  legacy().spriteIdOf('P') == "column_round"; a new Level with no explicit palette returns legacy;
+  spriteIdOf() of a door/pickup char returns null (not an environment symbol).
+
+DELIVERABLE CHECKLIST (order-3)
+===============================
+[ ] LevelPalette (immutable, id-only) + package-private Builder.
+[ ] LevelPalettes.legacy() reproducing today's exact global mapping, memoised.
+[ ] Level carries a LevelPalette (constructor param/overload defaulting to legacy) + getPalette().
+[ ] LevelLoader + LevelGenerator pass legacy (no visible change this order).
+[ ] Static Level predicates UNCHANGED (still the authority until order-7).
+[ ] Headless unit tests: legacy mapping correctness; default-to-legacy; null for non-env symbols.
+[ ] STATUS -> IMPLEMENTED; DOC TODO accurate.
+
+LIVING DOC CONTRACT
+===================
+See master index. docs/environment-tileset-system.txt (order-9) is the SoT; keep the DOC TODO
+accurate until then.

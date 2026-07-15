@@ -1,0 +1,132 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Symbol/Sprite Reuse — Part 8: Generator Integration & Variety
+CREATED: 2026-07-15
+---
+
+DOC TODO FOR ORDER-9
+====================
+docs/environment-tileset-system.txt "Generator integration" section must document:
+  * How LevelGenerator selects RoomBlueprints from the registry (weighted, seeded) instead of the
+    old RoomType switch.
+  * How it builds the SymbolAllocationRequest from PLACED blueprints and applies the returned
+    LevelPalette to the Level.
+  * The generic-room/hall variety pass and the freed-symbol -> new-room path.
+  * The square-column case as the canonical worked example.
+
+PREREQUISITE: order-1..7 (needs the allocator, blueprints, palette, and the render flip live).
+READ FIRST: symbol-sprite-reuse-system.txt; LevelGenerator.java (placeRooms ~286, themeNewRoomWalls
+~1066, generate() ~114); docs/procedural-level-generation.txt.
+
+OWNS
+====
+Making variety actually appear on generated levels: LevelGenerator now (1) selects rooms from the
+RoomBlueprintRegistry, (2) asks the SymbolAllocator for a per-level LevelPalette built from the
+rooms it actually placed, (3) attaches that palette to the Level, and (4) paints generic rooms and
+halls with rule-driven variety. It also delivers the two REQUIREMENT PROOFS: a brand-new generated
+room that only exists thanks to freed symbols, and the square column ('P' rendering square).
+
+After order-8, two freshly generated levels visibly differ in walls/columns/props, while every
+signature room and every hand-crafted level is unchanged.
+
+STEP A — Registry-driven room selection
+========================================
+Replace the hardcoded probability-band switch in placeRooms() (the CRYO_CHANCE/CONTAINMENT/
+SERVER bands ~lines 348-380 etc.) with a seeded weighted pick over
+RoomBlueprintRegistry.selectable(roomContext). Each candidate room:
+  - builds a RoomContext (dimensions, depth, counts-already-placed),
+  - gets the eligible blueprints + their selectionWeight(),
+  - rolls one with the SAME seeded Random used today (keep draw order stable where you can; if the
+    selection math changes, that is acceptable here since order-8 is explicitly the behaviour-change
+    order — but keep ENTRANCE first and MEDICAL_BAY's guaranteed-once semantics as blueprint
+    eligibility/weight rules, not special code).
+  - records the chosen blueprint on the Room.
+Signature-room caps (e.g. one MEDICAL_BAY, CRYO_MAX) become eligibility rules on the blueprints
+(order-5), so the generator has no per-room-type knowledge. THE RULE holds: no switch on a
+hardcoded room list.
+
+STEP B — Build the palette from placed rooms
+============================================
+After room types are chosen, before decoration:
+  - Collect placedRoomDemands = each placed blueprint's symbolDemand() (order-5).
+  - Build SymbolAllocationRequest(levelSeed, depth, SymbolBudget.standard(), placedRoomDemands,
+    EnvironmentSpriteRegistry) and call SymbolAllocator (order-4) -> LevelPalette.
+  - Attach the palette to the Level being generated (order-3 Level palette param).
+Absent signature rooms contributed no demand, so their symbols are FREE in the palette — the
+allocator already filled them with generic variety. This is where "server room not loaded => its
+symbols are reused" becomes concrete, with zero special-case code.
+
+STEP C — Generic rooms & halls get variety
+==========================================
+Today STANDARD rooms and corridors use mostly plain 'x'. Now:
+  - GENERIC blueprints (STANDARD/LARGE) and corridor carving may STAMP flexible accent-wall symbols
+    (the same symbols cryo/armory/etc. would use when absent) at a modest rate, so a generic room
+    reads with a per-level accent. Because the palette maps those flexible symbols to level-themed
+    variety sprites (order-4 R1 coherence), two levels look different even with identical layout.
+  - Keep it tasteful: 'x' stays dominant (order-2 PLAIN-WALL RULE); accents are sparse, exactly as
+    themeNewRoomWalls already sprinkles theme walls. The DIFFERENCE from today is that the accent
+    symbol's SPRITE is per-level, not fixed.
+  - Corridors/halls: optionally stamp a sparse flexible accent so connective space also varies.
+Drive all rates through LevelGenConstants/GameBalance (no inline numbers).
+
+STEP D — REQUIREMENT PROOF 1: a NEW generated room from freed symbols
+=====================================================================
+Add ONE brand-new GENERIC RoomBlueprint (e.g. "salvage_bay" or "maintenance_hub") that:
+  - has a DISTINCT architecture (its own build() layout — NOT a reskin of an existing room),
+  - declares a symbolDemand() in flexible categories only (walls/props/decals), so it composes from
+    whatever flexible symbols are free on that level,
+  - is eligible on ordinary floors and competes in STEP A selection.
+This proves the "completely unique room, not a sprite swap" requirement: it is new LAYOUT + new
+allocator-driven look, built entirely from the registry with no bespoke generator branch beyond its
+own blueprint. (Consult creative-game-designer for the room's identity/spec per the CLAUDE.md
+workflow before finalising its build().)
+
+STEP E — REQUIREMENT PROOF 2: the square column
+===============================================
+Deliver the square column as the canonical extensibility example:
+  - Register a new COLUMN sprite "column_square" in EnvironmentSpriteRegistry (order-1 catalog) and
+    its procedural texture generator in TextureGeneratorRegistry (order-6). This is new ART in an
+    EXISTING category — NOT a new symbol.
+  - The FIXED-meaning symbol 'P' (column) now resolves, per level, to EITHER "column_round" or
+    "column_square" via the allocator (COLUMN is a flexible-sprite slot; its MEANING stays column).
+  - Result: some levels show round columns, some square, same 'P' symbol, zero level-file changes,
+    zero renderer changes (order-7 already resolves 'P' through the palette). This is the exact
+    behaviour the product owner described.
+NOTE: the actual square-column PIXELS should be produced with the math/render helpers already used
+for the round column; use math-expert/libgdx-specialist if the square cross-section raycast/
+billboard needs new geometry. Keep the column's movement-blocking + ray-circle/ray-box handling
+correct (Level.isColumn stays fixed; only the sprite differs — but if a SQUARE column needs
+ray-BOX intersection instead of ray-circle, that is a real WallRenderer change; flag it and scope
+it here or defer the true square-geometry to a follow-up while at least shipping the square SPRITE).
+
+DETERMINISM / COMPATIBILITY
+===========================
+- Same floor seed => same room selection => same palette => same level. Verify with a seeded test.
+- Hand-crafted levels (LevelLoader) still pass the LEGACY palette (order-3) and are untouched.
+- Signature rooms look identical: their symbolDemand() pins their exact sprites (order-4 Step 2), so
+  a placed CRYO room still renders cryo walls. Verify a placed signature room is visually unchanged.
+
+TECHNICAL NOTES
+===============
+- All new rates/weights in LevelGenConstants / GameBalance; no inline literals.
+- The generator writes SYMBOLS as always; the palette is what makes them look varied. build() code
+  never mentions sprite ids except through the blueprint's symbolDemand().
+- Watch draw-order/seed stability: order-8 is allowed to change generated-level RNG sequences
+  (variety is a behaviour change), but keep it internally deterministic and re-baseline any snapshot
+  tests from order-5 that intentionally change now.
+
+DELIVERABLE CHECKLIST (order-8)
+===============================
+[ ] LevelGenerator selects rooms via RoomBlueprintRegistry (no hardcoded room switch remains).
+[ ] LevelGenerator builds the SymbolAllocationRequest from placed blueprints and attaches the
+    resulting LevelPalette to the Level.
+[ ] Generic rooms + halls stamp sparse flexible accents; two seeds visibly differ.
+[ ] NEW generic room blueprint (unique architecture) added and selectable — proof 1.
+[ ] Square-column sprite + generator registered; 'P' renders round OR square per level — proof 2.
+[ ] Determinism test (seed => identical level); signature rooms + hand levels visually unchanged.
+[ ] STATUS -> IMPLEMENTED; DOC TODO accurate.
+
+LIVING DOC CONTRACT
+===================
+See master index. Fold generator integration + both proofs into docs/environment-tileset-system.txt
+in order-9; keep the DOC TODO accurate until then.

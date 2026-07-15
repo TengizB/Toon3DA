@@ -1,0 +1,177 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Symbol/Sprite Reuse — Part 1: Tile Categories & Sprite Registry
+CREATED: 2026-07-15
+---
+
+DOC TODO FOR ORDER-9 (docs/environment-tileset-system.txt does not exist yet)
+============================================================================
+When order-9 creates docs/environment-tileset-system.txt, its "Art catalog & registries" section
+must document the SHIPPED order-1 code:
+  * Package `…toon3d.tileset` (headless, no LibGDX imports).
+  * TileCategory (enum) — the fixed semantic classes.
+  * EnvironmentSpriteDefinition (immutable, Builder) + EnvironmentSpriteRegistry.
+  * TilesetRegistries.bootstrap() — idempotent; registers every v1 sprite; called from
+    World.create() next to RouteRegistries.bootstrap() (World.java ~line 338).
+  * The stable sprite-id scheme (used by save/seed-share/palette determinism later).
+RECIPE (keep accurate): add a wall/prop/column/decal sprite = build one EnvironmentSpriteDefinition
++ one register() line in TilesetRegistries. Nothing else in this order references a specific char.
+
+PREREQUISITE: none (this is the foundation).
+READ FIRST: symbol-sprite-reuse-system.txt (master index) for the full vision and glossary;
+branching-facility-route-map-order-1.txt for the registry pattern being imitated.
+
+OWNS
+====
+The ART CATALOG: the fixed set of tile CATEGORIES and the registry of every environment SPRITE the
+game can draw. This part introduces NO per-level binding, NO allocator, NO renderer change — it is
+pure data + registration so later parts have a stable catalog to select from. It must compile and
+be unit-testable headless (no LibGDX render calls).
+
+Crucially, order-1 REGISTERS EVERY EXISTING wall, column, solid prop, and decal as a sprite
+definition. After this order the code has a complete, enumerable inventory of today's art — the
+thing that is currently scattered across WallRenderer's table and PropRenderer's switches — with
+zero behaviour change. Nothing reads the registry yet; it just exists and is correct.
+
+WHY A REGISTRY (the load-bearing decision)
+==========================================
+Today the art inventory is implicit and duplicated:
+  * WallRenderer.wallTextureTable[char] (field ~line 135; filled ~lines 267-340) knows the wall
+    textures.
+  * PropRenderer.propHeightMultiplier(char) (~line 47) + its per-char draw dispatch know the props.
+  * Level.isWall()/isPropSolid()/... know the categories.
+Nobody can ask "what wall sprites exist?" without reading three files. Every new sprite edits all
+of them. The fix is one authoritative, data-driven registry keyed by a stable sprite id, exactly
+like route/GeneratorRegistry and route/NodeTypeRegistry. Adding a sprite becomes one registration
+line; the allocator (order-4) and renderers (order-7) READ the registry and never hardcode a list.
+This is the single most important rule of the whole series: nothing downstream switches on a
+hardcoded sprite/category list — it asks a registry.
+
+NEW PACKAGE
+===========
+Create `…toon3d.tileset` (new sub-package; documented in CLAUDE.md Package Rules in the order-9
+doc pass). Rationale: the tileset system is its own subsystem (categories + sprites + budget +
+allocator); it depends on nothing render-specific and is depended on by `level`, `world`, and
+`render`, so a dedicated HEADLESS package keeps the dependency direction clean. Keep it free of
+`com.badlogic.gdx.graphics.*` — same discipline as the `route` package.
+
+CLASSES (all in …toon3d.tileset)
+================================
+
+1. TileCategory  (enum)
+   The FIXED semantic class a symbol belongs to — "what a symbol MEANS", never varies per level.
+   v1 members (one per existing Level predicate group):
+     WALL            (Level.isWall)         — solid, blocks movement + raycasting, drawn as a stripe.
+     COLUMN          (Level.isColumn)        — sub-cell cylinder/pillar (ray-circle), 'P' today.
+     SOLID_PROP      (Level.isPropSolid)     — billboard that blocks movement (barrels, terminals…).
+     FLOOR_DECAL     (Level.isPropDecal, non-pickup) — walkable flat billboard (corpses, stains…).
+   Each member carries METADATA (not behaviour) so consumers stay data-driven:
+     - id (stable string, e.g. "wall").
+     - rendersAsStripe (bool) — WALL/COLUMN true; billboard categories false. Lets the renderer
+       route a sprite to the wall pipeline vs the billboard pipeline without a hardcoded char check.
+     - blocksMovement (bool) — WALL/COLUMN/SOLID_PROP true; FLOOR_DECAL false.
+   NOTE ON SCOPE: order-1 covers ONLY the four FLEXIBLE-eligible visual categories above. Doors,
+   pickups, keycards, ammo, hazards, enemy spawns, player-start, and exit are FIXED symbols with
+   permanent meaning (order-2 formalises this) and are NOT part of the sprite registry — they keep
+   their existing dedicated handling. Do not register them here.
+
+2. EnvironmentSpriteDefinition  (immutable value object; Builder)
+   One concrete piece of art. Fields:
+     - id (stable string, e.g. "wall_plain", "wall_cryo", "column_round", "prop_locker",
+       "decal_blood"). Stable ids so palettes/seeds stay reproducible across code changes.
+     - category (TileCategory).
+     - displayName (e.g. "Cryo Wall") — for tooling/logging only.
+     - heightMultiplier (float) — for billboard categories, the current per-char height (e.g.
+       locker 0.90, crate 0.50); 1.0 for WALL. Copy today's values from PropRenderer /
+       tile-symbols.txt so nothing changes when order-7 reads them.
+     - occluder (bool) — writes to the z-buffer (mirrors Level.isPropOccluder). Solid props true;
+       flat floor stains false.
+     - textureGeneratorId (string) — which procedural texture generator draws it (order-6 defines
+       the generator registry). For v1 this equals the sprite id; kept separate so several sprites
+       could share one generator later.
+     - themeTags (Set<String>, optional) — coherence hints the allocator uses (order-4), e.g.
+       "clinical", "industrial", "frost", "gore", "generic". Empty allowed.
+   Built once at startup and registered. No LibGDX types anywhere in this class.
+
+3. EnvironmentSpriteRegistry  (singleton, populated once at startup)
+     - register(EnvironmentSpriteDefinition def)
+     - get(String spriteId) -> EnvironmentSpriteDefinition (never null for a registered id).
+     - allInCategory(TileCategory category) -> List<EnvironmentSpriteDefinition> (the pool the
+       allocator draws variety from).
+     - contains(String spriteId) -> boolean.
+   Idempotent registration guard (double-register of the same id is a no-op or a clear throw —
+   pick one and document it; route registries throw on duplicate, follow that).
+
+4. TilesetRegistries  (bootstrap hub — the twin of RouteRegistries)
+     - static EnvironmentSpriteRegistry sprites() — the shared singleton.
+     - static void bootstrap() — idempotent; registers ALL v1 sprite definitions. Invoked once
+       from the World.create() path, right next to RouteRegistries.bootstrap() (World.java ~338).
+     - Private registerWalls()/registerColumns()/registerSolidProps()/registerDecals() helpers,
+       each a flat list of builder+register lines. This is the human-readable inventory of the
+       game's environment art.
+
+THE v1 SPRITE INVENTORY (register EXACTLY today's art — no additions in order-1)
+===============================================================================
+Enumerate every current symbol from docs/tile-symbols.txt and Level.java into definitions. Do NOT
+invent new art here (that is order-9's proof). The mapping (symbol shown only to say WHICH art —
+order-1 does not bind symbols):
+  WALL:        x plain, c conduit, v vent, t terminal, w wires, h hazard, j rust, G gore,
+               k bulkhead, N glass, Q bio/quarantine, S emergency-strip, M medical, Z cryo,
+               U radiation, X blast, D holo-data, F force-field.
+               (STELLAR_OBSERVATORY walls " ' ` are room-contained; register them too, tagged
+               "observatory", so the catalog is complete — see NOTE below.)
+  COLUMN:      P round column (id "column_round"). This is the ONLY column sprite today; order-9
+               adds the square column as the extensibility proof.
+  SOLID_PROP:  g radioactive barrel, E explosive barrel, T terminal, L locker, C crate,
+               # camera, % generator, & bio-pod, = weapon rack, @ special-equipment/vendor,
+               I specimen tank, J AI core, W holo-workstation (+ observatory ; \ | < tagged
+               "observatory"). Copy heightMultiplier + occluder from current code.
+  FLOOR_DECAL: m corpse, s blood-alt, . blood, O oil, e energy-scorch (+ observatory ? ] -
+               tagged "observatory"). Copy heights.
+NOTE on room-contained symbols: the STELLAR_OBSERVATORY (and EXCAVATION_SITE) symbols are today
+"contained to that room type; do not reuse elsewhere" (tile-symbols.txt). Register them so the
+catalog is complete, but tag them with the room theme; order-4's allocator will only pull them for
+their room, preserving the containment rule. Do NOT change their behaviour in order-1.
+
+WHAT ORDER-1 DELIBERATELY DOES NOT DO
+=====================================
+- Does not touch WallRenderer, PropRenderer, Level, or LevelGenerator. The static tables/switches
+  stay exactly as they are; they remain the runtime authority until order-7. order-1 only ADDS the
+  parallel registry so it can be validated against the existing tables.
+- Does not bind any symbol to any sprite. Symbols enter the picture in order-2/3.
+- Does not add or remove any symbol from docs/tile-symbols.txt (no new art).
+
+TECHNICAL NOTES
+===============
+- Keep the whole package free of GL/render imports; heights and flags are plain floats/booleans,
+  colours are NOT stored here (they live in the texture generators, order-6).
+- Registration is startup-only; allocate freely. No render() involvement, so no allocation concern.
+- A sanity unit test may assert the registry's WALL/COLUMN/SOLID_PROP/FLOOR_DECAL counts match the
+  count of chars in the corresponding Level predicate today — a cheap guard that the inventory is
+  complete and nothing was dropped.
+
+CONSTANTS
+=========
+No new numeric constants required in order-1 (heights are copied literal-for-literal from existing
+Constants into the definitions via the SAME Constants references — do NOT re-hardcode them; import
+the existing RenderConstants/prop-height constants). If a height is currently an inline literal in
+PropRenderer, move it to RenderConstants first (project rule: no inline values) and reference it
+from both places.
+
+DELIVERABLE CHECKLIST (order-1)
+===============================
+[ ] `…toon3d.tileset` package created (headless).
+[ ] TileCategory enum (WALL, COLUMN, SOLID_PROP, FLOOR_DECAL) with metadata.
+[ ] EnvironmentSpriteDefinition (immutable + Builder) + EnvironmentSpriteRegistry.
+[ ] TilesetRegistries.bootstrap() registering EVERY existing wall/column/prop/decal sprite.
+[ ] bootstrap() called once from World.create() next to RouteRegistries.bootstrap().
+[ ] Heights/occluder flags copied from existing constants (no new literals; no behaviour change).
+[ ] Headless unit tests: registry integrity (get never null for registered id), per-category
+    counts match today's Level predicates, bootstrap() is idempotent.
+[ ] STATUS flipped to IMPLEMENTED; DOC TODO block kept accurate for order-9.
+
+LIVING DOC CONTRACT
+===================
+See master index (symbol-sprite-reuse-system.txt). docs/environment-tileset-system.txt is the
+single source of truth (created in order-9). Until then, keep the DOC TODO block at the top of this
+file accurate to the code you shipped.

@@ -1,0 +1,135 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Symbol/Sprite Reuse — Part 5: RoomBlueprint Registry
+CREATED: 2026-07-15
+---
+
+DOC TODO FOR ORDER-9
+====================
+docs/environment-tileset-system.txt "Room blueprints" section must document:
+  * RoomBlueprint (interface) + RoomBlueprintRegistry + the SIGNATURE vs GENERIC distinction.
+  * How a blueprint declares its RoomSymbolDemand (order-4) and its size/depth eligibility + weight.
+  * The RECIPE: add a room = one RoomBlueprint + one register() line; no LevelGenerator edits.
+  * The full v1 blueprint catalog (every existing RoomType, now a registered SIGNATURE blueprint).
+
+PREREQUISITE: order-1..4.
+READ FIRST: symbol-sprite-reuse-system.txt; LevelGenerator.java (the `enum RoomType` ~line 69 and
+its switches: placeRooms selection ~286, themeNewRoomWalls ~1066, floor assignment ~810, pickup
+logic ~2287) — this order relocates that logic behind a registry WITHOUT changing behaviour.
+
+OWNS
+====
+The ROOM extensibility layer: RoomBlueprint (a registered, self-describing room) and the
+RoomBlueprintRegistry the generator selects from. This order performs the big REFACTOR: every
+existing LevelGenerator.RoomType becomes a registered SIGNATURE blueprint whose build logic is the
+SAME code moved into a blueprint object. Behaviour must be byte-for-byte identical (same seed =>
+same level) — this order is a pure structural refactor plus the registry seam. New rooms and
+generator-side selection changes come in order-8; here we only make rooms REGISTERED instead of
+switch-cased.
+
+WHY (the requirement, made concrete)
+====================================
+The product owner's hard requirement: "registering a new available room for the level creator to
+randomly choose from." Today a room type is a private enum constant referenced by ~4 hardcoded
+switches; adding a room means editing all of them. After this order a room is an object in a
+registry; the generator iterates the registry. This is the exact route/GeneratorRegistry pattern
+applied to rooms. THE RULE: after order-5, LevelGenerator must not switch on a hardcoded room enum
+for the behaviours a blueprint owns — it asks the registry.
+
+CLASSES (in …toon3d.tileset unless noted)
+=========================================
+
+1. RoomKind  (enum) — SIGNATURE (fixed identity: architecture + look, e.g. MEDICAL_BAY) and
+   GENERIC (variety filler: ENTRANCE/STANDARD/LARGE-style rooms whose look is allocator-driven).
+
+2. RoomBlueprint  (interface — the registered room contract)
+     - String id() — stable id (e.g. "medical_bay", "armory", "cryo_chamber", "server_room",
+       "power_plant", "command_center", "containment_block", "research_lab",
+       "stellar_observatory", "standard", "large", "entrance").
+     - RoomKind kind().
+     - Eligibility: boolean eligible(RoomContext) — min interior width/height, depth window, and
+       any per-level cap (matches today's LevelGenConstants gates, e.g. MEDICAL_BAY_MIN_WIDTH,
+       CRYO_MAX). RoomContext is a small struct carrying the candidate room dimensions, depth, and
+       counts-already-placed.
+     - float selectionWeight(RoomContext) — the roll weight (today these are the *_CHANCE
+       constants). Registry-driven selection replaces the hardcoded probability bands.
+     - RoomSymbolDemand symbolDemand() — the sprite ids + category slot counts this room CLAIMS
+       when placed (order-4 consumes this). E.g. cryo_chamber demands its wall slot -> "wall_cryo"
+       (+ a glass accent). This is the single declaration that drives BOTH the allocator's
+       reservation AND the freed-symbol reclamation when the room is absent.
+     - void build(RoomBuildContext) — stamps the architecture (walls, props, floor, pickups) into
+       the grid. This is the EXISTING per-room code (themeNewRoomWalls branch + floor assignment +
+       pickup logic for that room), moved verbatim into the blueprint. It writes SYMBOLS, not
+       sprites — the palette maps symbols to sprites at render time, so build() stays about layout.
+   RoomBuildContext exposes exactly what the current room code uses: the grid, the Room bounds, the
+   seeded Random, the LevelGenConstants, and helpers (tryPlacePickup, facesRoomInterior, etc.). To
+   keep the refactor mechanical, RoomBuildContext can wrap the LevelGenerator instance and expose
+   its private helpers via package-private accessors rather than copying them.
+
+3. RoomBlueprintRegistry  (singleton)
+     - register(RoomBlueprint)
+     - all() / allSignature() / allGeneric()
+     - selectable(RoomContext) -> the blueprints eligible for a candidate room, with weights, for
+       the generator's seeded pick (order-8 uses this).
+
+4. TilesetRegistries.bootstrap() (order-1) EXTENDED to also register every v1 RoomBlueprint. One
+   bootstrap, all registries, called once from World.create().
+
+PACKAGE PLACEMENT DECISION
+==========================
+RoomBlueprint.build() writes into a char[][] grid using LevelGenerator's private helpers, so the
+blueprints are tightly coupled to the generator. TWO acceptable options — pick one and document it:
+  (a) Put blueprints in `…toon3d.level` (next to LevelGenerator) so they can use package-private
+      helpers directly. The DEMAND/eligibility/weight metadata stays headless-friendly (no LibGDX);
+      `level` is already headless. RECOMMENDED — least friction, keeps build() near the helpers.
+  (b) Put the metadata (id/kind/demand/eligibility/weight) in `…toon3d.tileset` and the build()
+      bodies in `…toon3d.level`. Cleaner layering but more indirection.
+Recommendation: (a). The `tileset` package stays purely about categories/sprites/budget/allocator;
+rooms live in `level` where generation already lives. Document whichever you choose in CLAUDE.md
+(order-9).
+
+THE REFACTOR DISCIPLINE (do not change behaviour)
+=================================================
+- Move, do not rewrite: each RoomType branch's body becomes one blueprint's build(). Keep the same
+  constants, the same roll order, the same random draws IN THE SAME SEQUENCE, or seeds will diverge
+  and existing runs will change. Add a test that a fixed seed produces the identical level before
+  and after (snapshot the grid).
+- Keep LevelGenerator's placeRooms() ASSIGNING blueprints instead of enum constants, but for
+  order-5 you may keep the SAME selection order/logic (just producing blueprint ids). The
+  registry-driven SELECTION change (weights via selectionWeight) is allowed to land here OR in
+  order-8 — prefer landing selection in order-8 so order-5 is a pure "same picks, now expressed as
+  blueprints" step. State which you did.
+- The private `enum RoomType` may remain temporarily as an internal tag during the refactor, but by
+  end of series (order-8) the generator must select from the registry, not the enum.
+
+INTERACTION WITH THE ALLOCATOR (order-4)
+========================================
+LevelGenerator, after choosing which blueprints are placed, collects each placed blueprint's
+symbolDemand() into the SymbolAllocationRequest.placedRoomDemands list. Absent blueprints
+contribute nothing => their symbols are free. This is the wiring that realises "server room not
+loaded => its symbols are free for another room." (The actual generate() call wiring is order-8;
+order-5 just guarantees every blueprint can PRODUCE its demand.)
+
+TECHNICAL NOTES
+===============
+- No LibGDX. build() writes chars into the grid exactly as today.
+- The observatory/excavation room-contained symbols are declared in those blueprints' symbolDemand
+  so they are only ever bound when the room is placed (satisfies order-4 R2 containment).
+- Unit tests: registry has one blueprint per existing RoomType; a fixed-seed generated level is
+  identical grid-for-grid to pre-refactor (snapshot test); each SIGNATURE blueprint's symbolDemand
+  lists the sprites its build() actually stamps (guard against drift).
+
+DELIVERABLE CHECKLIST (order-5)
+===============================
+[ ] RoomKind, RoomBlueprint (interface), RoomBlueprintRegistry.
+[ ] Every existing RoomType wrapped as a registered SIGNATURE (or GENERIC for ENTRANCE/STANDARD/
+    LARGE) blueprint, build() bodies moved verbatim.
+[ ] Each blueprint declares symbolDemand(), eligible(), selectionWeight().
+[ ] TilesetRegistries.bootstrap() registers all v1 blueprints.
+[ ] Snapshot test: fixed seed => identical level grid before/after the refactor.
+[ ] STATUS -> IMPLEMENTED; DOC TODO accurate.
+
+LIVING DOC CONTRACT
+===================
+See master index. Fold the blueprint catalog + the "add a room" recipe into
+docs/environment-tileset-system.txt in order-9; keep the DOC TODO accurate until then.
