@@ -12,7 +12,9 @@ import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
 import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
+import ge.tbegvadze.toon3d.tileset.LevelPalette;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.TilesetConstants;
 
 import java.util.Arrays;
 import java.util.Random;
@@ -55,93 +57,37 @@ public class WallRenderer implements Renderable, Disposable {
     private final Level level;
     private final DoorManager doorManager;
     private final SpriteBatch batch;
-    private final Texture wallTexturePlain;
-    private final Texture wallTextureConduit;
-    private final Texture wallTextureVent;
-    private final Texture wallTextureTerminal;
-    private final Texture wallTextureWires;
-    private final Texture wallTextureHazard;
-    private final Texture wallTextureRust;
-    private final Texture wallTextureGore;
-    private final Texture wallTextureBulkhead;
-    private final Texture wallTextureGlass;
-    private final Texture wallTextureBio;
-    private final Texture wallTextureEmerg;
-    private final Texture wallTextureMed;
-    private final Texture wallTextureCryo;
-    private final Texture wallTextureRad;
-    private final Texture wallTextureBlast;
-    private final Texture wallTextureHoloData;
-    private final Texture wallTextureForceField;
-    // STELLAR OBSERVATORY walls — see .claude/agents/ideas/stellar-observatory-gravity-well-room.txt
-    private final Texture wallTextureStellarViewport;
-    private final Texture wallTextureStellarMagrail;
-    private final Texture wallTextureStellarHullPlate;
     private final Texture doorTexture;
     private final Texture doorTextureRed;
     private final Texture doorTextureYellow;
     private final Texture doorTextureBlue;
-    private final Texture columnTexture;
     private final Texture whitePixelTexture;
     // Perpendicular wall distance per screen column — used for sprite depth-clipping later.
     private final float[] zBuffer;
 
-    // Cached at load time to avoid calling texture.getWidth()/getHeight() inside render().
-    private final int wallTexturePlainWidth;
-    private final int wallTexturePlainHeight;
-    private final int wallTextureConduitWidth;
-    private final int wallTextureConduitHeight;
-    private final int wallTextureVentWidth;
-    private final int wallTextureVentHeight;
-    private final int wallTextureTerminalWidth;
-    private final int wallTextureTerminalHeight;
-    private final int wallTextureWiresWidth;
-    private final int wallTextureWiresHeight;
-    private final int wallTextureHazardWidth;
-    private final int wallTextureHazardHeight;
-    private final int wallTextureRustWidth;
-    private final int wallTextureRustHeight;
-    private final int wallTextureGoreWidth;
-    private final int wallTextureGoreHeight;
-    private final int wallTextureBulkheadWidth;
-    private final int wallTextureBulkheadHeight;
-    private final int wallTextureGlassWidth;
-    private final int wallTextureGlassHeight;
-    private final int wallTextureBioWidth;
-    private final int wallTextureBioHeight;
-    private final int wallTextureEmergWidth;
-    private final int wallTextureEmergHeight;
-    private final int wallTextureMedWidth;
-    private final int wallTextureMedHeight;
-    private final int wallTextureCryoWidth;
-    private final int wallTextureCryoHeight;
-    private final int wallTextureRadWidth;
-    private final int wallTextureRadHeight;
-    private final int wallTextureBlastWidth;
-    private final int wallTextureBlastHeight;
-    private final int wallTextureHoloDataWidth;
-    private final int wallTextureHoloDataHeight;
-    private final int wallTextureForceFieldWidth;
-    private final int wallTextureForceFieldHeight;
-    private final int wallTextureStellarViewportWidth;
-    private final int wallTextureStellarViewportHeight;
-    private final int wallTextureStellarMagrailWidth;
-    private final int wallTextureStellarMagrailHeight;
-    private final int wallTextureStellarHullPlateWidth;
-    private final int wallTextureStellarHullPlateHeight;
-    private final int columnTextureWidth;
-    private final int columnTextureHeight;
+    // TILESET MIGRATION (order-7): the wall + column art is no longer owned by this renderer. Each level's
+    // EnvironmentTextureSet (owned/disposed by World, realized from the level's LevelPalette) supplies the
+    // textures; WallRenderer resolves symbol -> sprite id (via the palette) -> Texture (via the set) ONCE
+    // per level in setEnvironmentTextureSet() and caches the result in these char-indexed arrays. The hot
+    // per-column draw path still does a single O(1) array read (no per-frame map lookup, no allocation),
+    // preserving the parallel-worker performance profile — the workers read these immutable-for-the-level
+    // arrays via the happens-before edge from the per-level setter running on the GL thread before
+    // render(). With the legacy palette the arrays hold exactly the same textures the old static table did,
+    // so the look is unchanged; a varied palette (order-8) fills them with different accent art.
+    // See docs/environment-tileset-system.txt (section 7 / order-7).
+    private final Texture[] levelWallTextures = new Texture[128];
+    private final int[]     levelWallWidths   = new int[128];
+    private final int[]     levelWallHeights  = new int[128];
+    // Column ('P') resolves the same way; the column path is a separate branch, so its resolved texture is
+    // cached in dedicated fields rather than the char array.
+    private static final char COLUMN_SYMBOL = TilesetConstants.FLEXIBLE_COLUMN_SYMBOLS.charAt(0);
+    private Texture levelColumnTexture;
+    private int     levelColumnTextureWidth;
+    private int     levelColumnTextureHeight;
 
-    // TILESET MIGRATION: legacy fixed symbol->texture table, STILL the runtime authority for the wall draw.
-    // order-6 shipped the replacement plumbing — a per-level EnvironmentTextureSet, realized from the
-    // level's LevelPalette and handed here via setEnvironmentTextureSet() — but the draw still reads THIS
-    // table until order-7 flips it to pull wall textures from the set (then this table is removed).
-    // See docs/environment-tileset-system.txt (tileset migration, section 6 DONE / order-7 pending).
-    // Char-indexed lookup tables (ASCII index 0–127) replace three switch statements per column.
-    // Arrays.fill initialises every slot to the plain-wall default; named chars override it.
-    private final Texture[] wallTextureTable;
-    private final int[]     wallWidthTable;
-    private final int[]     wallHeightTable;
+    // Door textures ARE still owned here: doors are FIXED gameplay symbols, not environment sprites, so
+    // they are not part of any level's EnvironmentTextureSet. Char-indexed table (ASCII index 0–127);
+    // Arrays.fill initialises every slot to the plain-door default, named chars override it.
     private final Texture[] doorTextureTable;
 
     private float playerWorldX        = 0f;
@@ -156,10 +102,10 @@ public class WallRenderer implements Renderable, Disposable {
     // Monotonically increasing facility clock used to evaluate 'f' (flickering) tile brightness.
     private float lightingTimeSeconds = 0f;
 
-    // TILESET MIGRATION (order-6): the per-level texture supply realized from this level's palette.
-    // Set each level by World via setEnvironmentTextureSet(); order-6 only wires the plumbing and the
-    // dispose path — order-7 flips the wall draw to read wall textures FROM this set instead of the
-    // constructor-built wallTextureTable. Never disposed here: the set is owned/disposed by World.
+    // TILESET MIGRATION (order-7): the per-level texture supply realized from this level's palette. Set
+    // each level by World via setEnvironmentTextureSet(), which pre-resolves the wall + column textures
+    // from it into the char-indexed arrays above. The set is the OWNER of those wall/column textures;
+    // WallRenderer never disposes them (World disposes the set).
     private EnvironmentTextureSet environmentTextureSet;
 
     // Tile-space player position computed once per frame; workers read via happens-before from
@@ -236,124 +182,22 @@ public class WallRenderer implements Renderable, Disposable {
         this.batch   = new SpriteBatch(2 * WALL_PROJECTION_SCREEN_WIDTH + 2);
         this.zBuffer = new float[WALL_PROJECTION_SCREEN_WIDTH];
 
-        wallTexturePlain    = loadWallTexture(LAB_WALL_PLAIN_PATH);
-        wallTextureConduit  = loadWallTexture(LAB_WALL_CONDUIT_PATH);
-        wallTextureVent     = loadWallTexture(LAB_WALL_VENT_PATH);
-        wallTextureTerminal = loadWallTexture(LAB_WALL_TERMINAL_PATH);
-        wallTextureWires    = loadWallTexture(LAB_WALL_WIRES_PATH);
-        wallTextureHazard   = Gdx.files.internal(LAB_WALL_HAZARD_PATH).exists()
-                              ? loadWallTexture(LAB_WALL_HAZARD_PATH)
-                              : generateHazardWallTexture();
-
-        wallTexturePlainWidth    = wallTexturePlain.getWidth();
-        wallTexturePlainHeight   = wallTexturePlain.getHeight();
-        wallTextureConduitWidth  = wallTextureConduit.getWidth();
-        wallTextureConduitHeight = wallTextureConduit.getHeight();
-        wallTextureVentWidth     = wallTextureVent.getWidth();
-        wallTextureVentHeight    = wallTextureVent.getHeight();
-        wallTextureTerminalWidth  = wallTextureTerminal.getWidth();
-        wallTextureTerminalHeight = wallTextureTerminal.getHeight();
-        wallTextureWiresWidth    = wallTextureWires.getWidth();
-        wallTextureWiresHeight   = wallTextureWires.getHeight();
-        wallTextureHazardWidth   = wallTextureHazard.getWidth();
-        wallTextureHazardHeight  = wallTextureHazard.getHeight();
-
-        wallTextureRust     = generateRustWallTexture();
-        wallTextureGore     = generateGoreWallTexture();
-        wallTextureBulkhead = generateBulkheadWallTexture();
-
-        wallTextureRustWidth      = wallTextureRust.getWidth();
-        wallTextureRustHeight     = wallTextureRust.getHeight();
-        wallTextureGoreWidth      = wallTextureGore.getWidth();
-        wallTextureGoreHeight     = wallTextureGore.getHeight();
-        wallTextureBulkheadWidth  = wallTextureBulkhead.getWidth();
-        wallTextureBulkheadHeight = wallTextureBulkhead.getHeight();
-
-        wallTextureGlass = generateGlassWallTexture();
-        wallTextureBio   = generateBioWallTexture();
-        wallTextureEmerg = generateEmergWallTexture();
-        wallTextureMed   = generateMedWallTexture();
-        wallTextureCryo  = generateCryoWallTexture();
-        wallTextureRad   = generateRadWallTexture();
-        wallTextureBlast     = generateBlastWallTexture();
-        wallTextureHoloData  = generateHoloDataWallTexture();
-        wallTextureForceField = generateForceFieldWallTexture();
-
-        wallTextureGlassWidth  = wallTextureGlass.getWidth();
-        wallTextureGlassHeight = wallTextureGlass.getHeight();
-        wallTextureBioWidth    = wallTextureBio.getWidth();
-        wallTextureBioHeight   = wallTextureBio.getHeight();
-        wallTextureEmergWidth  = wallTextureEmerg.getWidth();
-        wallTextureEmergHeight = wallTextureEmerg.getHeight();
-        wallTextureMedWidth    = wallTextureMed.getWidth();
-        wallTextureMedHeight   = wallTextureMed.getHeight();
-        wallTextureCryoWidth   = wallTextureCryo.getWidth();
-        wallTextureCryoHeight  = wallTextureCryo.getHeight();
-        wallTextureRadWidth    = wallTextureRad.getWidth();
-        wallTextureRadHeight   = wallTextureRad.getHeight();
-        wallTextureBlastWidth       = wallTextureBlast.getWidth();
-        wallTextureBlastHeight      = wallTextureBlast.getHeight();
-        wallTextureHoloDataWidth    = wallTextureHoloData.getWidth();
-        wallTextureHoloDataHeight   = wallTextureHoloData.getHeight();
-        wallTextureForceFieldWidth  = wallTextureForceField.getWidth();
-        wallTextureForceFieldHeight = wallTextureForceField.getHeight();
-
-        wallTextureStellarViewport  = generateStellarViewportWallTexture();
-        wallTextureStellarMagrail   = generateStellarMagrailWallTexture();
-        wallTextureStellarHullPlate = generateStellarHullPlateWallTexture();
-
-        wallTextureStellarViewportWidth   = wallTextureStellarViewport.getWidth();
-        wallTextureStellarViewportHeight  = wallTextureStellarViewport.getHeight();
-        wallTextureStellarMagrailWidth    = wallTextureStellarMagrail.getWidth();
-        wallTextureStellarMagrailHeight   = wallTextureStellarMagrail.getHeight();
-        wallTextureStellarHullPlateWidth  = wallTextureStellarHullPlate.getWidth();
-        wallTextureStellarHullPlateHeight = wallTextureStellarHullPlate.getHeight();
-
+        // Wall + column textures are no longer built or owned here (order-7). They are supplied per level
+        // by the EnvironmentTextureSet and cached into levelWallTextures/levelColumn* by
+        // setEnvironmentTextureSet(); the per-char generate*WallTexture()/generateColumnTexture() routines
+        // now live behind the TextureGeneratorRegistry (see registerTextureGenerators). Doors are FIXED
+        // gameplay symbols, not environment sprites, so their textures are still built and owned here.
         doorTexture      = loadOrGenerateDoorTexture(LAB_DOOR_CLOSED_PATH, 0f, 0f, 0f);
 
         doorTextureRed    = loadOrGenerateDoorTexture(LAB_DOOR_RED_PATH,    0.90f, 0.13f, 0.13f);
         doorTextureYellow = loadOrGenerateDoorTexture(LAB_DOOR_YELLOW_PATH, 0.97f, 0.80f, 0.12f);
         doorTextureBlue   = loadOrGenerateDoorTexture(LAB_DOOR_BLUE_PATH,   0.16f, 0.48f, 0.97f);
 
-        columnTexture      = generateColumnTexture();
-        columnTextureWidth  = columnTexture.getWidth();
-        columnTextureHeight = columnTexture.getHeight();
-
         Pixmap whitePixel = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         whitePixel.setColor(Color.WHITE);
         whitePixel.fill();
         whitePixelTexture = new Texture(whitePixel);
         whitePixel.dispose();
-
-        // --- Texture lookup tables (char → texture / width / height) ---
-        // Fill entire range with the plain-wall default so any unrecognised wall char
-        // renders as the plain texture rather than throwing a NullPointerException.
-        wallTextureTable = new Texture[128];
-        wallWidthTable   = new int[128];
-        wallHeightTable  = new int[128];
-        Arrays.fill(wallTextureTable, wallTexturePlain);
-        Arrays.fill(wallWidthTable,   wallTexturePlainWidth);
-        Arrays.fill(wallHeightTable,  wallTexturePlainHeight);
-        wallTextureTable['c'] = wallTextureConduit;   wallWidthTable['c'] = wallTextureConduitWidth;   wallHeightTable['c'] = wallTextureConduitHeight;
-        wallTextureTable['v'] = wallTextureVent;      wallWidthTable['v'] = wallTextureVentWidth;      wallHeightTable['v'] = wallTextureVentHeight;
-        wallTextureTable['t'] = wallTextureTerminal;  wallWidthTable['t'] = wallTextureTerminalWidth;  wallHeightTable['t'] = wallTextureTerminalHeight;
-        wallTextureTable['w'] = wallTextureWires;     wallWidthTable['w'] = wallTextureWiresWidth;     wallHeightTable['w'] = wallTextureWiresHeight;
-        wallTextureTable['h'] = wallTextureHazard;    wallWidthTable['h'] = wallTextureHazardWidth;    wallHeightTable['h'] = wallTextureHazardHeight;
-        wallTextureTable['j'] = wallTextureRust;      wallWidthTable['j'] = wallTextureRustWidth;      wallHeightTable['j'] = wallTextureRustHeight;
-        wallTextureTable['G'] = wallTextureGore;      wallWidthTable['G'] = wallTextureGoreWidth;      wallHeightTable['G'] = wallTextureGoreHeight;
-        wallTextureTable['k'] = wallTextureBulkhead;  wallWidthTable['k'] = wallTextureBulkheadWidth;  wallHeightTable['k'] = wallTextureBulkheadHeight;
-        wallTextureTable['N'] = wallTextureGlass;     wallWidthTable['N'] = wallTextureGlassWidth;     wallHeightTable['N'] = wallTextureGlassHeight;
-        wallTextureTable['Q'] = wallTextureBio;       wallWidthTable['Q'] = wallTextureBioWidth;       wallHeightTable['Q'] = wallTextureBioHeight;
-        wallTextureTable['S'] = wallTextureEmerg;     wallWidthTable['S'] = wallTextureEmergWidth;     wallHeightTable['S'] = wallTextureEmergHeight;
-        wallTextureTable['M'] = wallTextureMed;       wallWidthTable['M'] = wallTextureMedWidth;       wallHeightTable['M'] = wallTextureMedHeight;
-        wallTextureTable['Z'] = wallTextureCryo;      wallWidthTable['Z'] = wallTextureCryoWidth;      wallHeightTable['Z'] = wallTextureCryoHeight;
-        wallTextureTable['U'] = wallTextureRad;       wallWidthTable['U'] = wallTextureRadWidth;       wallHeightTable['U'] = wallTextureRadHeight;
-        wallTextureTable['X'] = wallTextureBlast;      wallWidthTable['X'] = wallTextureBlastWidth;      wallHeightTable['X'] = wallTextureBlastHeight;
-        wallTextureTable['D'] = wallTextureHoloData;  wallWidthTable['D'] = wallTextureHoloDataWidth;   wallHeightTable['D'] = wallTextureHoloDataHeight;
-        wallTextureTable['F'] = wallTextureForceField; wallWidthTable['F'] = wallTextureForceFieldWidth; wallHeightTable['F'] = wallTextureForceFieldHeight;
-        wallTextureTable['"']  = wallTextureStellarViewport;  wallWidthTable['"']  = wallTextureStellarViewportWidth;  wallHeightTable['"']  = wallTextureStellarViewportHeight;
-        wallTextureTable['\''] = wallTextureStellarMagrail;   wallWidthTable['\''] = wallTextureStellarMagrailWidth;   wallHeightTable['\''] = wallTextureStellarMagrailHeight;
-        wallTextureTable['`']  = wallTextureStellarHullPlate; wallWidthTable['`']  = wallTextureStellarHullPlateWidth; wallHeightTable['`']  = wallTextureStellarHullPlateHeight;
 
         doorTextureTable = new Texture[128];
         Arrays.fill(doorTextureTable, doorTexture);
@@ -1863,13 +1707,52 @@ public class WallRenderer implements Renderable, Disposable {
     }
 
     /**
-     * Supplies this level's realized texture set (symbol/sprite-reuse order-6). Called once per level by
-     * World, right after the set is built from the level's palette. order-6 only stores the reference and
-     * wires the dispose path in World; the wall draw still reads the constructor-built texture table until
-     * order-7 rewires it to pull wall textures from this set.
+     * Supplies this level's realized texture set (symbol/sprite-reuse order-6/7) and PRE-RESOLVES the
+     * per-level wall + column textures from it. Called once per level by World, right after the set is
+     * built from the level's palette, on the GL thread BEFORE any render() — so the char-indexed arrays it
+     * fills are safely published to the render workers (happens-before via the executor dispatch each
+     * frame) and the hot per-column path keeps a single O(1) array read with no per-frame map lookup or
+     * allocation. Resolution: symbol -> sprite id (level palette) -> Texture + intrinsic size (the set).
      */
     public void setEnvironmentTextureSet(EnvironmentTextureSet textureSet) {
         this.environmentTextureSet = textureSet;
+        resolveLevelWallAndColumnTextures(textureSet);
+    }
+
+    /**
+     * Fills the char-indexed wall arrays and the column fields from this level's palette + texture set.
+     * Every non-wall slot defaults to the plain-wall texture so an unrecognised char can never NPE the
+     * draw (the array is only indexed by chars for which {@link Level#isWall} is true, but the default
+     * keeps the invariant the old static table held). With the legacy palette this reproduces the former
+     * table entry-for-entry, so the look is unchanged.
+     */
+    private void resolveLevelWallAndColumnTextures(EnvironmentTextureSet textureSet) {
+        LevelPalette palette = level.getPalette();
+
+        // Plain-wall is a FIXED binding present in every palette (and therefore every realized set), so it
+        // is always available as the NPE-safe default.
+        Texture plainTexture = textureSet.textureFor(TilesetConstants.FIXED_WALL_SPRITE_ID);
+        int     plainWidth   = textureSet.widthFor(TilesetConstants.FIXED_WALL_SPRITE_ID);
+        int     plainHeight  = textureSet.heightFor(TilesetConstants.FIXED_WALL_SPRITE_ID);
+        Arrays.fill(levelWallTextures, plainTexture);
+        Arrays.fill(levelWallWidths,   plainWidth);
+        Arrays.fill(levelWallHeights,  plainHeight);
+
+        for (int charIndex = 0; charIndex < levelWallTextures.length; charIndex++) {
+            char symbol = (char) charIndex;
+            if (!Level.isWall(symbol)) continue;
+            String spriteId = palette.spriteIdOf(symbol);
+            if (spriteId == null) continue; // defensive: a wall char with no binding keeps the plain default
+            levelWallTextures[charIndex] = textureSet.textureFor(spriteId);
+            levelWallWidths[charIndex]   = textureSet.widthFor(spriteId);
+            levelWallHeights[charIndex]  = textureSet.heightFor(spriteId);
+        }
+
+        // Column 'P' — resolves to the round OR (order-8) square column sprite for this level.
+        String columnSpriteId = palette.spriteIdOf(COLUMN_SYMBOL);
+        levelColumnTexture       = textureSet.textureFor(columnSpriteId);
+        levelColumnTextureWidth  = textureSet.widthFor(columnSpriteId);
+        levelColumnTextureHeight = textureSet.heightFor(columnSpriteId);
     }
 
     /** The current per-level texture set, or null before the first level is wired (order-6 plumbing). */
@@ -2086,7 +1969,7 @@ public class WallRenderer implements Renderable, Disposable {
 
                 float columnU         = GameMath.columnTextureU(hitTileX, hitTileY,
                                                                  columnCenterTileX, columnCenterTileY);
-                int   columnTexColumn = GameMath.textureColumn(columnU, columnTextureWidth);
+                int   columnTexColumn = GameMath.textureColumn(columnU, levelColumnTextureWidth);
 
                 // Lambert shading: dot of the outward surface normal with the world light direction.
                 float normalX          = (hitTileX - columnCenterTileX) / COLUMN_RADIUS_TILES;
@@ -2106,15 +1989,15 @@ public class WallRenderer implements Renderable, Disposable {
 
                 int texSrcY      = GameMath.wallTextureClipSrcY(
                                        unclampedTop, WALL_PROJECTION_SCREEN_HEIGHT,
-                                       lineHeight, columnTextureHeight);
+                                       lineHeight, levelColumnTextureHeight);
                 int texSrcHeight = GameMath.wallTextureClipSrcHeight(
                                        drawTop, drawBottom,
-                                       lineHeight, columnTextureHeight);
-                texSrcHeight = Math.min(texSrcHeight, columnTextureHeight - texSrcY);
+                                       lineHeight, levelColumnTextureHeight);
+                texSrcHeight = Math.min(texSrcHeight, levelColumnTextureHeight - texSrcY);
                 texSrcHeight = Math.max(1, texSrcHeight);
 
                 result.drawSurface         = true;
-                result.surfaceTexture      = columnTexture;
+                result.surfaceTexture      = levelColumnTexture;
                 result.surfaceTexColumn    = columnTexColumn;
                 result.surfaceTexSrcY      = texSrcY;
                 result.surfaceTexSrcHeight = texSrcHeight;
@@ -2136,11 +2019,13 @@ public class WallRenderer implements Renderable, Disposable {
                 int   adjacentFloorRow    = crossedVerticalLine ? tileRow                 : tileRow - stepRow;
                 float wallTileBrightness  = level.getTileBrightness(adjacentFloorColumn, adjacentFloorRow, lightingTimeSeconds);
 
-                // O(1) array lookup replaces three sequential switch statements.
+                // O(1) array lookup into this level's pre-resolved wall textures (order-7): the palette +
+                // texture-set resolution happened once in setEnvironmentTextureSet(), so the hot path stays
+                // a single array read per column.
                 int     hitCharIndex          = hitWallCell & 0x7F;
-                Texture selectedTexture       = wallTextureTable[hitCharIndex];
-                int     selectedTextureWidth  = wallWidthTable[hitCharIndex];
-                int     selectedTextureHeight = wallHeightTable[hitCharIndex];
+                Texture selectedTexture       = levelWallTextures[hitCharIndex];
+                int     selectedTextureWidth  = levelWallWidths[hitCharIndex];
+                int     selectedTextureHeight = levelWallHeights[hitCharIndex];
                 int     wallTextureColumn     = GameMath.textureColumn(wallHitFractionMirrored, selectedTextureWidth);
 
                 float shade = GameMath.wallShade(perpWallDistance, WALL_SHADING_FALLOFF);
@@ -2241,32 +2126,13 @@ public class WallRenderer implements Renderable, Disposable {
     @Override
     public void dispose() {
         batch.dispose();
-        wallTexturePlain.dispose();
-        wallTextureConduit.dispose();
-        wallTextureVent.dispose();
-        wallTextureTerminal.dispose();
-        wallTextureWires.dispose();
-        wallTextureHazard.dispose();
-        wallTextureRust.dispose();
-        wallTextureGore.dispose();
-        wallTextureBulkhead.dispose();
-        wallTextureGlass.dispose();
-        wallTextureBio.dispose();
-        wallTextureEmerg.dispose();
-        wallTextureMed.dispose();
-        wallTextureCryo.dispose();
-        wallTextureRad.dispose();
-        wallTextureBlast.dispose();
-        wallTextureHoloData.dispose();
-        wallTextureForceField.dispose();
-        wallTextureStellarViewport.dispose();
-        wallTextureStellarMagrail.dispose();
-        wallTextureStellarHullPlate.dispose();
+        // Wall + column textures are owned/disposed by the per-level EnvironmentTextureSet (World's dispose
+        // chain), NOT here — order-7 moved that ownership to the set. Disposing them here would double-free.
+        // WallRenderer still owns only the door textures and the 1×1 white pixel it builds itself.
         doorTexture.dispose();
         doorTextureRed.dispose();
         doorTextureYellow.dispose();
         doorTextureBlue.dispose();
-        columnTexture.dispose();
         whitePixelTexture.dispose();
         if (workerPool != null) {
             workerPool.shutdown();

@@ -5,6 +5,8 @@ import ge.tbegvadze.toon3d.entity.MedicalTier;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.tileset.LevelPalette;
 import ge.tbegvadze.toon3d.tileset.LevelPalettes;
+import ge.tbegvadze.toon3d.tileset.SymbolCategories;
+import ge.tbegvadze.toon3d.tileset.TileCategory;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.Collections;
@@ -137,20 +139,20 @@ public class Level {
         return matrix[y][x];
     }
 
-    // TILESET MIGRATION: these category predicates are the CATEGORY authority today. A symbol's
-    // CATEGORY (wall/column/prop/decal) is fixed and stays here, but its SPRITE is becoming
-    // per-level. See docs/environment-tileset-system.txt (tileset migration, order-3/7).
+    // TILESET MIGRATION (order-7): these category predicates are the CATEGORY authority. A symbol's
+    // CATEGORY (wall/column/prop/decal) is FIXED and symbol-intrinsic — it never depends on which sprite a
+    // level's palette assigns. So the predicates stay STATIC and PALETTE-FREE (callable from hot movement /
+    // AI / collision code) and are now backed by SymbolCategories — the ONE source of truth derived from
+    // the SymbolBudget partition (order-2) + the fixed-sprite exceptions' registry categories (order-1) —
+    // instead of hand-maintained char lists. Adding a flexible symbol to a category is a data edit, not a
+    // predicate edit. Only the SPRITE that fills the category is per-level (resolved in the renderers).
+    // See docs/environment-tileset-system.txt (section 7 / order-7).
     /**
      * Returns true for any symbol that represents a solid wall tile. Also covers the
      * STELLAR_OBSERVATORY room's walls: '"' viewport dome, ''' magrail conduit, '`' hull plate.
      */
     public static boolean isWall(char cell) {
-        return cell == 'x' || cell == 'c' || cell == 'v' || cell == 't' || cell == 'w' || cell == 'h'
-            || cell == 'j' || cell == 'G' || cell == 'k'
-            || cell == 'N' || cell == 'Q' || cell == 'S' || cell == 'M'
-            || cell == 'Z' || cell == 'U' || cell == 'X'
-            || cell == 'D' || cell == 'F'
-            || cell == '"' || cell == '\'' || cell == '`';
+        return SymbolCategories.categoryOf(cell) == TileCategory.WALL;
     }
 
     /** Returns true for any symbol that represents a door tile (plain or keycard-locked). */
@@ -207,7 +209,7 @@ public class Level {
      *  The DDA passes through the cell and uses ray-circle intersection to find the
      *  precise hit; the cell is still movement-blocked via isBlockedAt. */
     public static boolean isColumn(char cell) {
-        return cell == 'P';
+        return SymbolCategories.categoryOf(cell) == TileCategory.COLUMN;
     }
 
     /** Returns true for floor-decal medical pickups ('+' stim-pack, 'H' field medkit). */
@@ -273,16 +275,9 @@ public class Level {
      * 'g' = radioactive barrel (dark green); 'E' = explosive barrel (orange-red).
      */
     public static boolean isProp(char cell) {
-        return cell == 'g' || cell == 'E' || cell == 'T' || cell == 'L' || cell == 'C'
-            || cell == '#' || cell == '%' || cell == '&' || cell == '=' || cell == '@'
-            || cell == 'I' || cell == 'J' || cell == 'W'
-            || cell == ';' || cell == '\\' || cell == '|' || cell == '<'
-            || cell == 'm' || cell == 's' || cell == '.' || cell == 'O' || cell == 'e'
-            || cell == '?' || cell == ']' || cell == '-'
-            || isHazardDecal(cell)
-            || isKeycardPickup(cell) || isMedicalPickup(cell) || isArmourPickup(cell)
-            || isAmmoPickup(cell)
-            || isStairsDown(cell);
+        // A prop is any solid prop or any walkable decal — both already category-backed (plus the fixed
+        // gameplay decals isPropDecal folds in). One union keeps this in lockstep with the two predicates.
+        return isPropSolid(cell) || isPropDecal(cell);
     }
 
     /** Returns true for a fire hazard floor tile ('i'). Walkable; ticks BURNING via HazardManager. */
@@ -316,10 +311,7 @@ public class Level {
      * '\' floating cargo crate, '|' docking strut pylon, '<' astro-nav holo table.
      */
     public static boolean isPropSolid(char cell) {
-        return cell == 'g' || cell == 'E' || cell == 'T' || cell == 'L' || cell == 'C'
-            || cell == '#' || cell == '%' || cell == '&' || cell == '=' || cell == '@'
-            || cell == 'I' || cell == 'J' || cell == 'W'
-            || cell == ';' || cell == '\\' || cell == '|' || cell == '<';
+        return SymbolCategories.categoryOf(cell) == TileCategory.SOLID_PROP;
     }
 
     /** Returns true for a shop vending machine tile ('@'), stamped solid by World.placeMachine. */
@@ -333,8 +325,10 @@ public class Level {
      * '?' magnetic deck plating, ']' zero-g debris scatter, '-' starlight seam strip.
      */
     public static boolean isPropDecal(char cell) {
-        return cell == 'm' || cell == 's' || cell == '.' || cell == 'O' || cell == 'e'
-            || cell == '?' || cell == ']' || cell == '-'
+        // The "pure" environment decals are category-backed (FLOOR_DECAL); the FIXED gameplay decals
+        // (hazards, keycards, medical, armour, ammo, stairs) are not tileset sprites and keep their own
+        // dedicated checks.
+        return SymbolCategories.categoryOf(cell) == TileCategory.FLOOR_DECAL
             || isHazardDecal(cell)
             || isKeycardPickup(cell) || isMedicalPickup(cell) || isArmourPickup(cell)
             || isAmmoPickup(cell)
@@ -345,10 +339,13 @@ public class Level {
      * Returns true for props whose billboard sprite should write to the z-buffer, so that
      * EnemyRenderer correctly occludes enemies that stand behind them.
      *
-     * Excludes the five flat floor stains/decals that enemies visually walk over:
-     * corpse ('m'), dropped-shotgun decal ('s'), blood ('.'), oil ('O'), energy scorch ('e').
-     * All other props — solid equipment, pickup items, keycards, stairs — are elevated
-     * billboards that should block sprites drawn later in the render order.
+     * Excludes the flat floor stains/decals that enemies visually walk over — the whole FLOOR_DECAL
+     * category (corpse 'm', blood '.', oil 'O', energy scorch 'e', observatory decals, …), whose sprite
+     * definitions all carry {@code occluder=false} (order-1). All other props — solid equipment (the
+     * SOLID_PROP category, {@code occluder=true}), pickup items, keycards, stairs — are elevated
+     * billboards that should block sprites drawn later in the render order. Category-backed via
+     * {@link #isPropSolid(char)}, so occlusion mirrors the sprite definitions' occluder flag without a
+     * hand-maintained char list.
      */
     public static boolean isPropOccluder(char cell) {
         return isPropSolid(cell)

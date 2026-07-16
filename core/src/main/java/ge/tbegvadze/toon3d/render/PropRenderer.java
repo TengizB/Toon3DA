@@ -15,6 +15,8 @@ import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
 import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
+import ge.tbegvadze.toon3d.tileset.EnvironmentSpriteRegistry;
+import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.ArrayList;
@@ -44,24 +46,27 @@ import static ge.tbegvadze.toon3d.util.WeaponConstants.*;
  */
 public class PropRenderer implements Renderable, Disposable {
 
-    // TILESET MIGRATION: legacy fixed symbol->sprite/height mapping, STILL the runtime authority for the
-    // prop draw. order-6 shipped the replacement plumbing — a per-level EnvironmentTextureSet, realized
-    // from the level's LevelPalette and handed here via setEnvironmentTextureSet() — but the draw still
-    // reads THIS mapping until order-7 flips it to pull prop/decal textures from the set.
-    // See docs/environment-tileset-system.txt (tileset migration, section 6 DONE / order-7 pending).
-    // Per-prop height multiplier relative to a full wall stripe (WORLD_HEIGHT / depth).
-    // Keeps shorter objects (barrels, crates) below full wall height.
-    private static float propHeightMultiplier(char propChar) {
+    // TILESET MIGRATION (order-7): the ENVIRONMENT prop/decal art (SOLID_PROP + FLOOR_DECAL categories) is
+    // no longer owned or height-tabled here. A prop's texture is resolved symbol -> sprite id (this level's
+    // LevelPalette) -> Texture (the per-level EnvironmentTextureSet), and its height comes from the sprite
+    // DEFINITION (EnvironmentSpriteRegistry.heightMultiplier(), copied literal-for-literal from the same
+    // RenderConstants this switch used, so the look is unchanged). This switch now covers only the FIXED
+    // gameplay props — pickups, ammo, portal, and the animated hazards — which are not tileset sprites and
+    // keep their dedicated handling. See docs/environment-tileset-system.txt (section 7 / order-7).
+    // Per-prop height multiplier relative to a full wall stripe (WORLD_HEIGHT / depth); keeps shorter
+    // objects (pickups, ammo) below full wall height.
+    private float propHeightMultiplier(char propChar) {
+        String spriteId = level.getPalette().spriteIdOf(propChar);
+        if (spriteId != null) {
+            // Environment prop/decal — height from the sprite definition (SOLID_PROP + FLOOR_DECAL).
+            return spriteRegistry.get(spriteId).heightMultiplier();
+        }
+        return fixedPropHeightMultiplier(propChar);
+    }
+
+    /** Height fraction for the FIXED gameplay props (pickups, ammo, portal, hazards) — not tileset art. */
+    private static float fixedPropHeightMultiplier(char propChar) {
         switch (propChar) {
-            case 'g': return PROP_HEIGHT_RADIOACTIVE_BARREL;   // radioactive barrel
-            case 'E': return PROP_HEIGHT_EXPLOSIVE_BARREL;     // explosive barrel
-            case 'T': return PROP_HEIGHT_TERMINAL;
-            case 'L': return PROP_HEIGHT_LOCKER;
-            case 'C': return PROP_HEIGHT_CRATE;
-            case 'm': return PROP_HEIGHT_CORPSE;
-            case 's': return PROP_HEIGHT_BLOOD_ALT;
-            case '.': return PROP_HEIGHT_BLOOD;
-            case 'O': return PROP_HEIGHT_OIL;
             case 'r': return KEYCARD_PICKUP_SPRITE_HEIGHT;   // red keycard pickup
             case 'y': return KEYCARD_PICKUP_SPRITE_HEIGHT;   // yellow keycard pickup
             case 'b': return KEYCARD_PICKUP_SPRITE_HEIGHT;   // blue keycard pickup
@@ -75,26 +80,8 @@ public class PropRenderer implements Renderable, Disposable {
             case '8': return AMMO_PICKUP_HEIGHT_FRACTION;
             case '9': return AMMO_PICKUP_HEIGHT_FRACTION;
             case '0': return AMMO_PICKUP_HEIGHT_FRACTION;
-            case '#': return PROP_CAMERA_HEIGHT;
-            case '%': return PROP_GENERATOR_HEIGHT;
-            case '&': return PROP_BIOPOD_HEIGHT;
-            case '=': return PROP_RACK_HEIGHT;
-            case '@': return PROP_VENDOR_HEIGHT;
-            case 'I': return PROP_HEIGHT_SPECIMEN_TANK;
-            case 'W': return PROP_HEIGHT_HOLO_WORKSTATION;
-            case 'J': return PROP_HEIGHT_AICORE_NODE;
-            case 'e': return PROP_HEIGHT_ENERGY_SCORCH;
             case 'i': return PROP_HEIGHT_HAZARD_FIRE;    // fire hazard tile
             case 'q': return PROP_HEIGHT_HAZARD_TOXIC;   // toxic hazard pool
-            // STELLAR_OBSERVATORY solid props + decals — see .claude/agents/ideas/
-            // stellar-observatory-gravity-well-room.txt "TEXTURE / SPRITE SPEC".
-            case ';': return PROP_HEIGHT_GRAVITY_WELL_CORE;    // centerpiece anti-grav core
-            case '\\': return PROP_HEIGHT_FLOATING_CARGO_CRATE;
-            case '|': return PROP_HEIGHT_DOCKING_STRUT_PYLON;
-            case '<': return PROP_HEIGHT_ASTRO_NAV_TABLE;
-            case '?': return PROP_HEIGHT_MAGNETIC_DECK;
-            case ']': return PROP_HEIGHT_ZEROG_DEBRIS;
-            case '-': return PROP_HEIGHT_STARLIGHT_SEAM;
             default:  return 0.70f;
         }
     }
@@ -102,7 +89,12 @@ public class PropRenderer implements Renderable, Disposable {
     private final Level                   level;
     private final WallRenderer            wallRenderer;
     private final List<PropPlacement>     propPlacements;
+    // FIXED-gameplay prop textures only (pickups, ammo, portal) — the ENVIRONMENT prop/decal art now lives
+    // in the per-level EnvironmentTextureSet (order-7), not here. Owned + disposed by this renderer.
     private final Map<Character, Texture> textures;
+    // The shared environment-sprite catalog (order-1), read for environment prop/decal heightMultipliers.
+    // Bootstrapped in World.create() before any PropRenderer is built.
+    private final EnvironmentSpriteRegistry spriteRegistry = TilesetRegistries.sprites();
     // Animated hazard frames — fire ('i') and toxic ('q') cycle through these instead of using a
     // single static entry in {@link #textures}. Built once at construction, disposed in dispose().
     private final Texture[]               hazardFireFrames;
@@ -193,9 +185,12 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     /**
-     * Resolves the texture to draw for a prop tile. Animated hazards ('i' fire, 'q' toxic) return
-     * the current cycling frame (with a per-tile phase offset); every other prop returns its single
-     * static texture. Returns null when the char has no texture.
+     * Resolves the texture to draw for a prop tile. Animated hazards ('i' fire, 'q' toxic) return the
+     * current cycling frame (with a per-tile phase offset). ENVIRONMENT props/decals (SOLID_PROP +
+     * FLOOR_DECAL) resolve symbol -> sprite id (this level's LevelPalette) -> Texture (the per-level
+     * EnvironmentTextureSet) — this is the order-7 flip that lets a level's palette change what its props
+     * look like. FIXED gameplay props (pickups, ammo, portal) return their own owned texture. Returns null
+     * when the char has no texture.
      */
     private Texture resolvePropTexture(char propChar, int tileColumn, int tileRow) {
         if (propChar == 'i') {
@@ -203,6 +198,10 @@ public class PropRenderer implements Renderable, Disposable {
         }
         if (propChar == 'q') {
             return hazardToxicFrames[hazardFrameIndex(tileColumn, tileRow, hazardToxicFrames.length)];
+        }
+        String spriteId = level.getPalette().spriteIdOf(propChar);
+        if (spriteId != null) {
+            return environmentTextureSet.textureFor(spriteId);
         }
         return textures.get(propChar);
     }
@@ -944,17 +943,16 @@ public class PropRenderer implements Renderable, Disposable {
         return proceduralFallback;
     }
 
+    /**
+     * Builds ONLY the FIXED-gameplay prop textures this renderer still owns (keycards, medical, armour,
+     * portal, ammo). The ENVIRONMENT prop/decal art (solid props like barrels/terminals/lockers and floor
+     * decals like blood/oil/corpse — the SOLID_PROP + FLOOR_DECAL tileset categories) is realized per level
+     * into the {@code EnvironmentTextureSet} and resolved by {@link #resolvePropTexture} through the
+     * palette, so it is no longer generated or owned here (order-7). Their generators still live in this
+     * class, reached only through {@link #registerTextureGenerators}.
+     */
     private static Map<Character, Texture> buildTextures() {
         Map<Character, Texture> map = new HashMap<>();
-        map.put('g', loadOrGenerate(PROP_BARREL_RADIOACTIVE_PATH, generateBarrelTexture(false)));
-        map.put('E', generateBarrelTexture(true));
-        map.put('T', generateTerminalTexture());
-        map.put('L', generateLockerTexture());
-        map.put('C', generateCrateTexture());
-        map.put('m', generateCorpseTexture());
-        map.put('s', generateShotgunTexture());
-        map.put('.', generateBloodTexture());
-        map.put('O', generateOilTexture());
         map.put('r', generateKeycardTexture(0.95f, 0.16f, 0.16f));
         map.put('y', generateKeycardTexture(0.97f, 0.84f, 0.14f));
         map.put('b', generateKeycardTexture(0.18f, 0.52f, 0.97f));
@@ -968,24 +966,6 @@ public class PropRenderer implements Renderable, Disposable {
         map.put('8', generatePlasmaCellTexture());     // CELLS   — glowing cyan energy canister
         map.put('9', generateRocketTexture());         // ROCKETS — olive warhead with fins
         map.put('0', generateRailSlugsTexture());      // SLUGS   — heavy silver rail rounds
-        map.put('#', generateCameraTexture());
-        map.put('%', generateGeneratorTexture());
-        map.put('&', generateBioPodTexture());
-        map.put('=', generateWeaponRackTexture());
-        map.put('@', generateVendorTexture());
-        map.put('I', generateSpecimenTankTexture());
-        map.put('W', generateHoloWorkstationTexture());
-        map.put('J', generateAiCoreNodeTexture());
-        map.put('e', generateEnergyScorchTexture());
-        // STELLAR_OBSERVATORY solid props + decals — see .claude/agents/ideas/
-        // stellar-observatory-gravity-well-room.txt "TEXTURE / SPRITE SPEC".
-        map.put(';', generateGravityWellCoreTexture());
-        map.put('\\', generateFloatingCargoCrateTexture());
-        map.put('|', generateDockingStrutPylonTexture());
-        map.put('<', generateAstroNavHoloTableTexture());
-        map.put('?', generateMagneticDeckPlatingTexture());
-        map.put(']', generateZeroGDebrisScatterTexture());
-        map.put('-', generateStarlightSeamStripTexture());
         // 'i' (fire) and 'q' (toxic) are NOT static entries — they are animated and resolved
         // per-frame from hazardFireFrames / hazardToxicFrames via resolvePropTexture().
         return map;
