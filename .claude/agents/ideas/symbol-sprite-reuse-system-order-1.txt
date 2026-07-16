@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Symbol/Sprite Reuse — Part 1: Tile Categories & Sprite Registry
 CREATED: 2026-07-15
@@ -161,15 +161,15 @@ from both places.
 
 DELIVERABLE CHECKLIST (order-1)
 ===============================
-[ ] `…toon3d.tileset` package created (headless).
-[ ] TileCategory enum (WALL, COLUMN, SOLID_PROP, FLOOR_DECAL) with metadata.
-[ ] EnvironmentSpriteDefinition (immutable + Builder) + EnvironmentSpriteRegistry.
-[ ] TilesetRegistries.bootstrap() registering EVERY existing wall/column/prop/decal sprite.
-[ ] bootstrap() called once from World.create() next to RouteRegistries.bootstrap().
-[ ] Heights/occluder flags copied from existing constants (no new literals; no behaviour change).
-[ ] Headless unit tests: registry integrity (get never null for registered id), per-category
+[x] `…toon3d.tileset` package created (headless).
+[x] TileCategory enum (WALL, COLUMN, SOLID_PROP, FLOOR_DECAL) with metadata.
+[x] EnvironmentSpriteDefinition (immutable + Builder) + EnvironmentSpriteRegistry.
+[x] TilesetRegistries.bootstrap() registering EVERY existing wall/column/prop/decal sprite.
+[x] bootstrap() called once from World.create() next to RouteRegistries.bootstrap().
+[x] Heights/occluder flags copied from existing constants (no new literals; no behaviour change).
+[x] Headless unit tests: registry integrity (get never null for registered id), per-category
     counts match today's Level predicates, bootstrap() is idempotent.
-[ ] STATUS flipped to IMPLEMENTED; DOC TODO block kept accurate for order-9.
+[x] STATUS flipped to IMPLEMENTED; DOC TODO block kept accurate for order-9.
 
 LIVING DOC CONTRACT
 ===================

@@ -80,6 +80,7 @@ import ge.tbegvadze.toon3d.shop.ShopTransaction;
 import ge.tbegvadze.toon3d.shop.ShopWeaponService;
 import ge.tbegvadze.toon3d.shop.VendingMachine;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
+import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameBalance;
@@ -336,6 +337,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Route-map subsystem (order-3). bootstrap() is idempotent, so the death->new-run rebuild is
         // safe. The map itself is generated lazily at staging-room exit (see the FADING_OUT branch).
         RouteRegistries.bootstrap();
+        // Tileset art catalog (symbol/sprite-reuse order-1). Idempotent, like RouteRegistries; nothing
+        // reads it yet — it registers the complete inventory of today's wall/column/prop/decal art so
+        // later orders' allocator + renderers can enumerate it instead of hardcoding a sprite list.
+        TilesetRegistries.bootstrap();
         routeMapGenerator = new RouteMapGenerator(RouteRegistries.nodeTypes(), RouteRegistries.generators());
         // Order-9: supply the ELITE affix catalog so hotzones can roll a readable twist (empty pool =
         // no affix rolls). MYSTERY uses its own entry-time outcome table, not a map-gen affix.

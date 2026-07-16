@@ -132,6 +132,19 @@ public final class RenderConstants {
     public static final float COLUMN_LIGHT_DIRECTION_X  = 0.70710678f;
     public static final float COLUMN_LIGHT_DIRECTION_Y  = 0.70710678f;
 
+    // Prop/decal height multipliers previously inlined in PropRenderer.propHeightMultiplier() —
+    // hoisted here (project rule: no inline values) so the tileset sprite registry and the renderer
+    // reference the SAME literal. Values unchanged.
+    public static final float PROP_HEIGHT_RADIOACTIVE_BARREL   = 0.65f; // 'g' radioactive barrel
+    public static final float PROP_HEIGHT_EXPLOSIVE_BARREL     = 0.65f; // 'E' explosive barrel
+    public static final float PROP_HEIGHT_TERMINAL             = 0.75f; // 'T' computer terminal
+    public static final float PROP_HEIGHT_LOCKER               = 0.90f; // 'L' locker
+    public static final float PROP_HEIGHT_CRATE                = 0.50f; // 'C' crate
+    public static final float PROP_HEIGHT_CORPSE               = 0.35f; // 'm' corpse decal
+    public static final float PROP_HEIGHT_BLOOD_ALT            = 0.22f; // 's' blood stain (alt) decal
+    public static final float PROP_HEIGHT_BLOOD                = 0.18f; // '.' blood stain decal
+    public static final float PROP_HEIGHT_OIL                  = 0.18f; // 'O' oil/fluid pool decal
+
     // New prop height multipliers (relative to full wall stripe)
     public static final float PROP_CAMERA_HEIGHT               = 0.80f; // '#' security camera
     public static final float PROP_GENERATOR_HEIGHT            = 0.85f; // '%' power generator / reactor
