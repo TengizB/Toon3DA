@@ -3,6 +3,8 @@ package ge.tbegvadze.toon3d.level;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.entity.MedicalTier;
 import ge.tbegvadze.toon3d.item.AmmoType;
+import ge.tbegvadze.toon3d.tileset.LevelPalette;
+import ge.tbegvadze.toon3d.tileset.LevelPalettes;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.Collections;
@@ -34,11 +36,44 @@ public class Level {
      */
     private final   List<int[]>            eventStationTiles = new java.util.ArrayList<>();
 
+    /**
+     * The per-level symbol → (category, sprite id) binding (tileset migration, order-3). Immutable and
+     * set once at construction. Hand-crafted levels and, for now, generated levels use the shared
+     * {@link LevelPalettes#legacy()} instance so nothing changes visually until later orders vary it.
+     * The renderers begin reading this in order-7; the static category predicates below stay the
+     * authority until then. Never null.
+     */
+    private final   LevelPalette           palette;
+
+    /**
+     * Builds a level using the shared {@link LevelPalettes#legacy()} palette — today's exact global
+     * symbol → sprite mapping. This overload keeps every existing loader/generator call site unchanged
+     * while the migration is in progress.
+     */
     Level(char[][] matrix, List<EnemySpawnPoint> enemySpawnPoints,
           List<WeaponSpawnPoint> weaponSpawnPoints) {
+        this(matrix, enemySpawnPoints, weaponSpawnPoints, LevelPalettes.legacy());
+    }
+
+    /**
+     * Builds a level with an explicit {@link LevelPalette}. The allocator-driven path (order-4/8) uses
+     * this to hand a generated level its varied palette; hand-crafted and legacy paths pass
+     * {@link LevelPalettes#legacy()}.
+     */
+    Level(char[][] matrix, List<EnemySpawnPoint> enemySpawnPoints,
+          List<WeaponSpawnPoint> weaponSpawnPoints, LevelPalette palette) {
         this.matrix            = matrix;
         this.enemySpawnPoints  = Collections.unmodifiableList(enemySpawnPoints);
         this.weaponSpawnPoints = Collections.unmodifiableList(weaponSpawnPoints);
+        this.palette           = palette;
+    }
+
+    /**
+     * The per-level symbol → (category, sprite id) binding. Renderers consult this from order-7 onward;
+     * until then it is carried but not read. Never null (defaults to {@link LevelPalettes#legacy()}).
+     */
+    public LevelPalette getPalette() {
+        return palette;
     }
 
     /**

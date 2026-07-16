@@ -47,7 +47,7 @@ Legend: NOT STARTED / IN PROGRESS / DONE.
                        pointer comments. No code logic change.
   1      DONE          Tile categories + environment-sprite registry (the art catalog).
   2      DONE          Symbol budget: FIXED vs FLEXIBLE split, SymbolBudget config.
-  3      NOT STARTED   LevelPalette (per-level symbol->category+sprite binding) + LEGACY default.
+  3      DONE          LevelPalette (per-level symbol->category+sprite binding) + LEGACY default.
   4      NOT STARTED   SymbolAllocator: deterministic per-level assignment engine.
   5      NOT STARTED   RoomBlueprint + RoomBlueprintRegistry (existing rooms as blueprints).
   6      NOT STARTED   Per-level texture realization: TextureGeneratorRegistry + Environment-
@@ -207,10 +207,60 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    bound to "prop_vendor"; every flexible symbol maps to a real order-1 category with a non-empty pool;
    unknown char defaults to FIXED; returned maps/lists unmodifiable.
 
-3. PER-LEVEL BINDING (LevelPalette)
-   TODO: filled by order-3 in the same commit that ships order-3.
-   (Level carries a LevelPalette: char -> (TileCategory, EnvironmentSpriteId); LEGACY default palette
-    reproduces today's fixed mapping so nothing breaks before renderers switch over.)
+3. PER-LEVEL BINDING (LevelPalette)  [DONE — order-3]
+   The PER-LEVEL BINDING object: for ONE level, which sprite each environment symbol renders and which
+   category each symbol belongs to. order-3 builds this data structure and threads it onto Level with a
+   LEGACY default; it does NOT generate palettes from a seed (order-4) and changes NO renderer (order-7).
+   Because Level defaults to the legacy palette, order-3 attaches a palette to every level with zero
+   visible change — the "ship the identity transform first, then vary it" discipline the route series used.
+
+   CLASSES (all in …toon3d.tileset, headless — strings/enums only, no LibGDX, no textures):
+     * LevelPalette (immutable value object) — the binding for one level. Resolution methods:
+         - categoryOf(char) -> TileCategory, or null if the symbol is not an environment symbol
+           (doors/pickups/ammo/hazards/enemy-spawns/start/exit return null — the existing fixed paths
+           handle them, not the palette).
+         - spriteIdOf(char) -> String (the stable EnvironmentSpriteDefinition id this level renders for
+           the symbol); null for non-environment symbols. FIXED symbols return their permanent binding
+           ('x' -> "wall_plain", '@' -> "prop_vendor"); FLEXIBLE symbols return whatever was assigned (the
+           legacy palette returns today's fixed art).
+         - hasBinding(char) -> boolean.
+       Built via a package-private Builder (the only builders are LevelPalettes and the order-4
+       allocator). bind() validates category+spriteId non-null BEFORE mutating either map, keeping the
+       invariant "a symbol is in both the category and sprite maps, or neither." IMMUTABLE once built, so
+       it is safe to read from WallRenderer's worker threads (order-7) via happens-before from level
+       construction. ID-ONLY: it holds no textures — the render layer turns ids into textures in order-6.
+     * LevelPalettes (static factory) — LevelPalettes.legacy() builds the palette reproducing today's
+       exact global mapping. It is the ONLY place that still encodes the historic 1:1 symbol->sprite
+       table, and it does so MECHANICALLY: for each category it zips a registration-ordered symbol string
+       against that category's EnvironmentSpriteRegistry pool (allInCategory), so char[i] renders pool[i].
+       A length mismatch throws loudly, so registry drift cannot silently corrupt the mapping. The result
+       is memoised as one shared immutable singleton (hand levels pay no per-level cost) via
+       double-checked locking. legacy() calls TilesetRegistries.bootstrap() first so the shared registry
+       is populated before it is read.
+
+   WHY A LEGACY DEFAULT (the migration lever): the renderers and Level predicates stay the runtime
+   authority until order-7. To switch them safely we need a palette that yields EXACTLY today's mapping
+   ('Z' -> wall_cryo, 'M' -> wall_medical, 'P' -> column_round, ...). That is the legacy palette. With it
+   as Level's default: order-3 attaches a palette everywhere with zero visible change; hand-crafted
+   assets/levels/*.txt keep legacy forever (fixed symbols, never change appearance); order-7 can flip
+   renderers to "read the palette" and nothing changes until order-4/8 produce varied palettes for
+   generated levels.
+
+   LEVEL WIRING (the only change outside the tileset package this order):
+     * Level gains an immutable `LevelPalette palette` field. A NEW package-private constructor takes an
+       explicit palette; the EXISTING 3-arg constructor delegates to it with LevelPalettes.legacy(), so
+       every LevelLoader / LevelGenerator / *Generator call site compiles unchanged and renders identically.
+     * public LevelPalette getPalette() — never null; the getter order-7's renderers will call.
+     * Level's static category predicates (isWall/isColumn/isPropSolid/...) are UNCHANGED and remain the
+       category authority until order-7; order-3 only ADDS the palette, it routes no read through it.
+
+   TESTS (headless): LevelPaletteTest (tileset pkg) — legacy().spriteIdOf across every category
+   ('Z'->wall_cryo, 'x'->wall_plain, 'P'->column_round, '@'->prop_vendor, '.'->decal_blood, ...); each
+   symbol maps to its correct TileCategory; the legacy palette covers the whole registry 1:1 (every
+   registered sprite id is some symbol's binding, and every bound id is registered); non-environment
+   symbols (doors/pickups/ammo/hazards/enemy-spawns/start/exit) resolve to null; legacy() is a memoised
+   singleton. LevelPaletteWiringTest (level pkg, for the package-private constructor) — a Level built with
+   no palette defaults to legacy; an explicit palette is carried through unchanged.
 
 4. ALLOCATION (SymbolAllocator)
    TODO: filled by order-4 in the same commit that ships order-4.
