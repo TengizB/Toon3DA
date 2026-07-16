@@ -842,4 +842,37 @@ public final class GameBalance {
 
     /** When true, HunterKillerPattern logs each tactic selection (dev fairness instrumentation). */
     public static final boolean BOSS_TACTIC_DEBUG_LOG            = false;
+
+    // =========================================================================
+    // TILESET PALETTE VARIETY — SymbolAllocator weighting knobs (tileset order-4)
+    // =========================================================================
+    // These tune the RULE-GOVERNED variety of the per-level symbol/sprite allocator. They are pure
+    // selection WEIGHTS fed to GameMath.weightedChoiceIndex — never a switch on a specific char/sprite,
+    // so a designer can dial coherence and depth flavour without touching allocator logic. Coherence
+    // (R1) and depth influence (R5) only bite once catalog sprites carry the matching theme tags; with
+    // an untagged pool they collapse to a plain seeded pick, which is still fully deterministic.
+
+    /** Baseline selection weight every eligible variety sprite starts with (R1/R3/R5 add on top). */
+    public static final float PALETTE_VARIETY_BASE_WEIGHT          = 1f;
+
+    /**
+     * COHERENCE (R1) multiplier: a variety sprite whose theme tags overlap the level's chosen theme is
+     * this many times likelier to be picked, so a level trends toward one look instead of a random
+     * quilt. 1.0 disables coherence; larger values pull harder toward the theme.
+     */
+    public static final float PALETTE_COHERENCE_WEIGHT_MULTIPLIER  = 4f;
+
+    /**
+     * DEPTH INFLUENCE (R5, kept mild): extra additive weight per dungeon depth for a sprite carrying a
+     * {@link #PALETTE_HARSH_THEME_TAGS harsh} tag, so deeper floors trend grittier. Mild by design —
+     * depth 10 adds only 10× this. Set to 0 to disable depth flavour entirely.
+     */
+    public static final float PALETTE_DEPTH_HARSH_WEIGHT_PER_DEPTH = 0.12f;
+
+    /**
+     * The theme tags treated as "harsh" for the depth-influence rule (R5). Data, not code: a sprite is
+     * weighted grittier at depth purely by carrying one of these tags — the allocator never names a
+     * sprite. Tune the set here to change which flavours deep floors favour.
+     */
+    public static final String[] PALETTE_HARSH_THEME_TAGS = { "gore", "rust", "radiation" };
 }
