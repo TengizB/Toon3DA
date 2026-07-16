@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Symbol/Sprite Reuse — Part 7: Rewire Renderers & Level to the Palette
 CREATED: 2026-07-15
@@ -94,14 +94,30 @@ TECHNICAL NOTES
 
 DELIVERABLE CHECKLIST (order-7)
 ===============================
-[ ] WallRenderer resolves walls + columns via palette+set through a pre-resolved per-level
+[x] WallRenderer resolves walls + columns via palette+set through a pre-resolved per-level
     char->Texture array (hot path unchanged in shape).
-[ ] PropRenderer resolves prop sprite + height via palette + sprite definition + set.
-[ ] Level category predicates backed by the SymbolBudget category tables (one source of truth),
+    -> setEnvironmentTextureSet() pre-resolves levelWallTextures/Widths/Heights + levelColumn* fields;
+       the DDA workers still do one O(1) array read per column.
+[x] PropRenderer resolves prop sprite + height via palette + sprite definition + set.
+    -> resolvePropTexture() reads spriteIdOf -> set.textureFor; propHeightMultiplier() reads
+       spriteRegistry.get(spriteId).heightMultiplier() for environment props; buildTextures() now builds
+       ONLY the fixed gameplay props.
+[x] Level category predicates backed by the SymbolBudget category tables (one source of truth),
     still static and palette-free.
-[ ] Old static texture tables + per-renderer texture ownership removed; dispose paths corrected.
-[ ] Legacy-palette parity verified (identical look; no double-free; no leak across transitions).
-[ ] STATUS -> IMPLEMENTED; DOC TODO accurate.
+    -> new tileset/SymbolCategories.categoryOf(char); isWall/isColumn/isPropSolid/isPropDecal/isProp/
+       isPropOccluder now delegate to it.
+[x] Old static texture tables + per-renderer texture ownership removed; dispose paths corrected.
+    -> WallRenderer wallTextureTable/wallWidthTable/wallHeightTable + all wall/column texture fields and
+       their construction/dispose removed (set owns them now); PropRenderer buildTextures()/dispose()
+       trimmed to the fixed gameplay props.
+[x] Legacy-palette parity verified (identical look; no double-free; no leak across transitions).
+    -> legacy palette maps each symbol to the same sprite id via the same generators; 117 core tests pass
+       incl. LevelGeneratorSnapshotTest (byte-identical) + TilesetRegistriesTest (counts match predicates);
+       new SymbolCategoriesTest guards membership. Double-free avoided (WallRenderer no longer disposes
+       set-owned textures); leak-safety is the order-6 EnvironmentTextureSet dispose chain, verified in-game.
+[x] STATUS -> IMPLEMENTED; DOC TODO accurate.
+    -> environment-tileset-system.txt section 7 filled + status row DONE; wall-renderer-guide.txt banner
+       tightened (fixed table gone).
 
 LIVING DOC CONTRACT
 ===================

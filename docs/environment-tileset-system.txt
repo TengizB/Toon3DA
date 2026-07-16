@@ -52,7 +52,7 @@ Legend: NOT STARTED / IN PROGRESS / DONE.
   5      DONE          RoomBlueprint + RoomBlueprintRegistry (existing rooms as registered blueprints).
   6      DONE          Per-level texture realization: TextureGeneratorRegistry + Environment-
                        TextureSet (subset per level).
-  7      NOT STARTED   Rewire WallRenderer / PropRenderer / Level to read the palette.
+  7      DONE          Rewire WallRenderer / PropRenderer / Level to read the palette.
   8      NOT STARTED   LevelGenerator integration: registry-driven rooms + rule-driven variety.
   9      NOT STARTED   Extensibility proof + final doc/tile-symbols.txt/CLAUDE.md consolidation.
 
@@ -549,10 +549,81 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    actual pixel realization (realize()) needs a GL context and is verified in-game (stable texture count
    across repeated floor transitions).
 
-7. RENDER INTEGRATION
-   TODO: filled by order-7 in the same commit that ships order-7.
-   (WallRenderer / PropRenderer / Level read the LevelPalette + EnvironmentTextureSet instead of the
-    static char tables; visual variety reaches the screen.)
+7. RENDER INTEGRATION  [DONE — order-7]
+   THE FLIP: the renderers stop reading their own constructor-built per-char texture tables and instead
+   resolve each environment symbol through the level's LevelPalette + EnvironmentTextureSet (order-6). After
+   this order, changing a level's palette VISIBLY changes what its walls / columns / props look like.
+   Because every level still defaults to the LEGACY palette (order-3) — which maps each symbol to the SAME
+   sprite id the old tables used, realized by the SAME generators — THE GAME LOOKS IDENTICAL after order-7;
+   variety only appears once order-8 feeds generated levels a varied palette. "Swap the engine under the
+   hood without changing the ride."
+
+   SYMBOL -> SPRITE -> TEXTURE (each frame, per hit):
+     spriteId = levelPalette.spriteIdOf(symbol);            // headless id, per level
+     texture  = environmentTextureSet.textureFor(spriteId); // the pixels, realized per level (order-6)
+   Widths/heights come from the same set (widthFor/heightFor); billboard prop HEIGHTS come from the sprite
+   DEFINITION (EnvironmentSpriteRegistry.get(spriteId).heightMultiplier()), copied literal-for-literal from
+   the RenderConstants the old switch used — so the look is unchanged.
+
+   WALLRENDERER (walls + columns):
+     * HOT-PATH SHAPE PRESERVED. The per-column DDA workers must not do a map lookup per column. So at level
+       load — in the per-level setter setEnvironmentTextureSet(), on the GL thread BEFORE any render() —
+       WallRenderer PRE-RESOLVES the palette+set into small char-indexed arrays (levelWallTextures /
+       levelWallWidths / levelWallHeights, ASCII 0–127) and dedicated column fields (levelColumnTexture /
+       Width / Height). The draw loop still does ONE O(1) array read per column, exactly as the old static
+       wallTextureTable did. The arrays are immutable for the level's life; the workers read them via the
+       happens-before edge from the setter running before the executor dispatch, so no synchronisation is
+       needed (same publication contract as setPlayerState's cached fields). No per-frame allocation: all
+       resolution happens once per level in the setter, never in render().
+     * Every non-wall slot defaults to "wall_plain" (a FIXED binding present in every palette, hence every
+       realized set) so an unrecognised char can never NPE — the same NPE-safety the old Arrays.fill gave.
+     * The column path resolves 'P' via spriteIdOf('P') -> the round (today) OR square (order-8) column
+       texture. This is the mechanism that lets 'P' render either column per level.
+     * OWNERSHIP MOVED. WallRenderer NO LONGER owns wall/column textures — the per-level EnvironmentTextureSet
+       does (World's dispose chain). WallRenderer's constructor no longer builds them and dispose() no longer
+       frees them (freeing them here would double-free the set's textures). WallRenderer still owns only the
+       door textures (FIXED gameplay symbols, not tileset sprites, so not in any set) and its 1×1 white pixel.
+       The per-char generate*WallTexture()/generateColumnTexture() routines stay in the class but are reached
+       only through the TextureGeneratorRegistry (order-6 registerTextureGenerators), which the set uses.
+
+   PROPRENDERER (solid props + floor decals):
+     * resolvePropTexture() resolves ENVIRONMENT props (SOLID_PROP + FLOOR_DECAL) via
+       spriteIdOf(char) -> environmentTextureSet.textureFor(spriteId); FIXED gameplay props (keycards,
+       medical, armour, portal, ammo) keep their own owned textures (buildTextures now builds ONLY those),
+       and the animated hazards 'i'/'q' keep their frame cycles. propHeightMultiplier() reads the sprite
+       definition's heightMultiplier for environment props and a trimmed switch (fixed gameplay props only)
+       otherwise.
+     * The shop '@' -> "prop_vendor" is a FIXED-sprite exception but still an environment sprite, so it
+       resolves through the set like any other prop (identical vendor art).
+     * Opacity masks (enemy occlusion) still work: the set's prop textures are produced by the same
+       generate* routines, which register a COLUMN_OPACITY mask via finalize(); EnvironmentTextureSet.dispose()
+       routes through PropRenderer.disposeGeneratedTexture() to prune those masks (order-6), so no leak.
+
+   LEVEL CATEGORY PREDICATES (isWall / isColumn / isPropSolid / isPropDecal / isPropOccluder):
+     * FIXED vs FLEXIBLE, still STATIC and PALETTE-FREE. A symbol's CATEGORY is symbol-intrinsic — a flexible
+       WALL symbol is ALWAYS a wall regardless of which wall sprite fills it — so category membership does
+       NOT depend on the per-level sprite; only the sprite does. The predicates therefore keep answering
+       correctly for both fixed and flexible symbols WITHOUT taking a LevelPalette argument, so they stay
+       callable from hot movement / AI / collision / LOS code with no render dependency.
+     * ONE SOURCE OF TRUTH. They are now backed by tileset/SymbolCategories.categoryOf(char) instead of
+       hand-maintained char lists. SymbolCategories derives the char->category map ONCE from the SymbolBudget
+       partition (order-2, the flexible category tables) plus, for the two fixed-sprite exceptions
+       ('x' -> "wall_plain", '@' -> "prop_vendor"), the category recorded on their sprite definitions in the
+       registry (order-1). isWall == WALL, isColumn == COLUMN, isPropSolid == SOLID_PROP; isPropDecal ==
+       FLOOR_DECAL OR the fixed gameplay decals (hazards/keycards/medical/armour/ammo/stairs, which are not
+       tileset sprites and keep their own checks); isProp == isPropSolid || isPropDecal; isPropOccluder ==
+       isPropSolid (SOLID_PROP occludes; FLOOR_DECAL does not — mirroring the sprite definitions' occluder
+       flag) plus the fixed gameplay occluders. Adding a flexible symbol to a category is now a data edit in
+       TilesetConstants, not a predicate edit.
+
+   THE INVARIANT: fixed symbols still resolve statically; only flexible ART is palette-driven. Category is
+   symbol-intrinsic and never needs the palette; the sprite (and thus the texture) is the only per-level part.
+
+   TESTS: SymbolCategoriesTest (headless) asserts categoryOf agrees with Level's predicate membership across
+   the printable ASCII range and returns null for gameplay symbols; the existing LevelPaletteTest /
+   TilesetRegistriesTest / LevelGeneratorSnapshotTest continue to pass unchanged (identical membership,
+   byte-identical generation). Legacy-palette look parity + no double-free / no leak across floor transitions
+   are verified in-game (stable texture count).
 
 8. GENERATOR INTEGRATION
    TODO: filled by order-8 in the same commit that ships order-8.
