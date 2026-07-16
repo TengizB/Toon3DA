@@ -50,7 +50,7 @@ Legend: NOT STARTED / IN PROGRESS / DONE.
   3      DONE          LevelPalette (per-level symbol->category+sprite binding) + LEGACY default.
   4      DONE          SymbolAllocator: deterministic per-level assignment engine.
   5      DONE          RoomBlueprint + RoomBlueprintRegistry (existing rooms as registered blueprints).
-  6      NOT STARTED   Per-level texture realization: TextureGeneratorRegistry + Environment-
+  6      DONE          Per-level texture realization: TextureGeneratorRegistry + Environment-
                        TextureSet (subset per level).
   7      NOT STARTED   Rewire WallRenderer / PropRenderer / Level to read the palette.
   8      NOT STARTED   LevelGenerator integration: registry-driven rooms + rule-driven variety.
@@ -477,10 +477,77 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    (bidirectional drift guard). LevelGeneratorSnapshotTest — a fixed-seed digest over seeds×depths proves
    the refactor left generate() byte-for-byte identical.
 
-6. TEXTURE REALIZATION (per level)
-   TODO: filled by order-6 in the same commit that ships order-6.
-   (TextureGeneratorRegistry sprite-id -> procedural texture generator; EnvironmentTextureSet realizes
-    ONLY the palette's sprites and disposes them on teardown.)
+6. TEXTURE REALIZATION (per level)  [DONE — order-6]
+   The RENDER-SIDE foundation that makes "each level uses a subset of a large pool" real IN MEMORY. Today
+   WallRenderer generates EVERY wall texture in its constructor and holds them all forever; that does not
+   scale to the large pool this series enables. order-6 splits GENERATION (data-driven, registered per
+   sprite id) from REALIZATION (per level, lazy): a level builds textures only for the handful of sprite
+   ids in its palette and frees them when the level ends. Small GPU footprint per level; unbounded library
+   overall. This is the ONLY render-layer order in the series' first half and introduces the new render
+   sub-package. It does NOT change what WallRenderer/PropRenderer DRAW — that is order-7; order-6 builds
+   the texture-supply mechanism and proves it disposes correctly, with both paths coexisting.
+
+   NEW PACKAGE `…toon3d.render.tilesetgfx` (render layer — MAY import LibGDX; it produces Textures). This
+   is the boundary where headless sprite ids become pixels; the `tileset` package stays headless.
+
+   CLASSES (all in …toon3d.render.tilesetgfx):
+     * EnvironmentTextureGenerator (functional interface) — Texture generate(): produces the Texture for
+       ONE sprite. Its BODY is the EXISTING procedural code, reached by DELEGATION: the constructors'
+       generate*Texture() routines stay in WallRenderer/PropRenderer (byte-identical pixels — the art does
+       not change), and each renderer contributes its own generators via a public static
+       registerTextureGenerators(registry) that method-references those routines. Intrinsic width/height
+       are NOT carried on the generator; EnvironmentTextureSet reads them off the realized Texture.
+     * TextureGeneratorRegistry — register(spriteId, generator) / has(spriteId) / generate(spriteId)->
+       Texture / ids(). Duplicate id throws (route-registry discipline); generate() on an unknown id throws
+       BEFORE invoking any generator (so the check is testable headlessly). Insertion-ordered ids().
+     * TilesetGfxBootstrap — the render-side twin of TilesetRegistries.bootstrap() and sibling of
+       RouteIconBootstrap. Holds the process-wide generator singleton (generators()); bootstrap() is
+       idempotent and (a) registers every v1 sprite id's generator — walls + round column from
+       WallRenderer, solid props + floor decals from PropRenderer — and (b) runs the STARTUP ASSERTION:
+       the generator id set MUST EQUAL the sprite-catalog id set (TilesetRegistries.sprites().ids()), so a
+       sprite added without a generator (or vice-versa) fails loudly at startup, not mid-level. Called once
+       from World.create(), after TilesetRegistries.bootstrap() (the assertion cross-checks against it).
+     * EnvironmentTextureSet (per-level, Disposable) — realize(LevelPalette palette, TextureGeneratorRegistry
+       gens) collects the DISTINCT sprite ids the palette references (LevelPalette.distinctSpriteIds(),
+       de-duplicated so two symbols on the same sprite id share ONE texture), generates each once, and
+       stores id -> Texture (+ intrinsic width/height). textureFor/widthFor/heightFor throw for a sprite the
+       level never referenced (asking outside the subset is a bug, not silent null). dispose() frees every
+       realized texture and MUST run on level teardown. It routes disposal through
+       PropRenderer.disposeGeneratedTexture so prop/decal textures also drop their entry in PropRenderer's
+       static opacity-mask cache (a harmless no-op for wall/column textures) — otherwise that cache would
+       leak one mask per prop per transition. On realize() it logs the count (Gdx.app.debug) to confirm
+       subset sizing during development.
+
+   MEMORY STORY (the payoff): the resident texture set is EXACTLY the level's palette sprites — subset per
+   level, not whole-library per level. A legacy-palette level realizes today's full wall/prop set because
+   the legacy palette references the whole catalog (distinctSpriteIds() == the catalog id set), so order-6
+   lands with ZERO visual change; a future varied palette realizes only its own small subset.
+
+   LIFECYCLE WIRING (World): buildLevelDependentResources() realizes the set from targetLevel.getPalette()
+   right after building WallRenderer/PropRenderer, and hands it to both via setEnvironmentTextureSet()
+   (per-level setter, like setPlayerState but once per level). rebuildForLevel() disposes the OLD set
+   before the next floor rebuilds its subset; World.dispose() frees the current set at shutdown; both null
+   the reference after disposing. order-6 wires this plumbing + dispose path only — the renderers STORE the
+   set but still draw from their constructor-built tables until order-7 reads from it. Leak safety: the set
+   is the new owner of per-level wall/prop textures and is in World's dispose chain, so repeated level
+   transitions hold a stable texture count.
+
+   TRANSITION SAFETY: WallRenderer/PropRenderer keep their existing constructor-built textures during
+   order-6 (both paths coexist) so the game keeps running; the legacy default guarantees the set contains
+   the same textures the renderers used to hold. order-7 removes the old tables once draws read the set.
+
+   RECIPE (extends order-1's add-a-sprite recipe): register the sprite in TilesetRegistries AND its
+   generator in the matching renderer's registerTextureGenerators() — the startup id-set assertion enforces
+   you did both. (Full end-to-end add-a-sprite recipe consolidated in section 9 / order-9.)
+
+   TESTS (headless — generators are registered as method refs, never INVOKED, so no GL context is needed):
+   render/tilesetgfx/TextureGeneratorRegistryTest — the generator id set EQUALS the sprite catalog id set;
+   bootstrap() idempotent and passes the assertion; the legacy palette references the whole catalog;
+   duplicate/unknown ids throw; ids() preserves registration order. tileset/LevelPaletteDistinctSpriteIdsTest
+   — several symbols on one sprite id collapse to one distinct id (the subset-sizing core); a small palette's
+   distinct set is far smaller than the catalog; the legacy palette's distinct set IS the whole catalog. The
+   actual pixel realization (realize()) needs a GL context and is verified in-game (stable texture count
+   across repeated floor transitions).
 
 7. RENDER INTEGRATION
    TODO: filled by order-7 in the same commit that ships order-7.

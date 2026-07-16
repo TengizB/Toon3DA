@@ -10,6 +10,8 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
+import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.Arrays;
@@ -130,9 +132,11 @@ public class WallRenderer implements Renderable, Disposable {
     private final int columnTextureWidth;
     private final int columnTextureHeight;
 
-    // TILESET MIGRATION: legacy fixed symbol->texture table. To be replaced by a per-level
-    // LevelPalette + EnvironmentTextureSet so a symbol's sprite is chosen per level.
-    // See docs/environment-tileset-system.txt (tileset migration, order-6/7).
+    // TILESET MIGRATION: legacy fixed symbol->texture table, STILL the runtime authority for the wall draw.
+    // order-6 shipped the replacement plumbing — a per-level EnvironmentTextureSet, realized from the
+    // level's LevelPalette and handed here via setEnvironmentTextureSet() — but the draw still reads THIS
+    // table until order-7 flips it to pull wall textures from the set (then this table is removed).
+    // See docs/environment-tileset-system.txt (tileset migration, section 6 DONE / order-7 pending).
     // Char-indexed lookup tables (ASCII index 0–127) replace three switch statements per column.
     // Arrays.fill initialises every slot to the plain-wall default; named chars override it.
     private final Texture[] wallTextureTable;
@@ -151,6 +155,12 @@ public class WallRenderer implements Renderable, Disposable {
     private float alertPulse          = 0f;
     // Monotonically increasing facility clock used to evaluate 'f' (flickering) tile brightness.
     private float lightingTimeSeconds = 0f;
+
+    // TILESET MIGRATION (order-6): the per-level texture supply realized from this level's palette.
+    // Set each level by World via setEnvironmentTextureSet(); order-6 only wires the plumbing and the
+    // dispose path — order-7 flips the wall draw to read wall textures FROM this set instead of the
+    // constructor-built wallTextureTable. Never disposed here: the set is owned/disposed by World.
+    private EnvironmentTextureSet environmentTextureSet;
 
     // Tile-space player position computed once per frame; workers read via happens-before from
     // ExecutorService.execute(), which is established after these fields are written.
@@ -583,6 +593,53 @@ public class WallRenderer implements Renderable, Disposable {
         texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         pixmap.dispose();
         return texture;
+    }
+
+    /**
+     * Registers this renderer's wall + column texture generators into the tileset texture-generator
+     * registry (symbol/sprite-reuse order-6). One line per sprite id, each delegating to the SAME
+     * procedural routine (or disk load) the constructor uses today, so the realized textures are
+     * byte-identical to the constructor-built table — order-6 changes WHERE the textures live, not how
+     * they look. Called once at startup by {@code TilesetGfxBootstrap}; the ids registered here must
+     * match the WALL/COLUMN sprite ids in {@code TilesetRegistries} (the startup assertion enforces it).
+     *
+     * <p>Disk-backed walls (plain/conduit/vent/terminal/wires) reproduce today's load path exactly;
+     * 'hazard' reproduces the constructor's load-or-generate fallback.
+     */
+    public static void registerTextureGenerators(TextureGeneratorRegistry registry) {
+        registry.register("wall_plain",       () -> loadWallTexture(LAB_WALL_PLAIN_PATH));
+        registry.register("wall_conduit",     () -> loadWallTexture(LAB_WALL_CONDUIT_PATH));
+        registry.register("wall_vent",        () -> loadWallTexture(LAB_WALL_VENT_PATH));
+        registry.register("wall_terminal",    () -> loadWallTexture(LAB_WALL_TERMINAL_PATH));
+        registry.register("wall_wires",       () -> loadWallTexture(LAB_WALL_WIRES_PATH));
+        registry.register("wall_hazard",      WallRenderer::loadOrGenerateHazardWallTexture);
+        registry.register("wall_rust",        WallRenderer::generateRustWallTexture);
+        registry.register("wall_gore",        WallRenderer::generateGoreWallTexture);
+        registry.register("wall_bulkhead",    WallRenderer::generateBulkheadWallTexture);
+        registry.register("wall_glass",       WallRenderer::generateGlassWallTexture);
+        registry.register("wall_bio",         WallRenderer::generateBioWallTexture);
+        registry.register("wall_emergency",   WallRenderer::generateEmergWallTexture);
+        registry.register("wall_medical",     WallRenderer::generateMedWallTexture);
+        registry.register("wall_cryo",        WallRenderer::generateCryoWallTexture);
+        registry.register("wall_radiation",   WallRenderer::generateRadWallTexture);
+        registry.register("wall_blast",       WallRenderer::generateBlastWallTexture);
+        registry.register("wall_holo_data",   WallRenderer::generateHoloDataWallTexture);
+        registry.register("wall_force_field", WallRenderer::generateForceFieldWallTexture);
+        registry.register("wall_stellar_viewport",   WallRenderer::generateStellarViewportWallTexture);
+        registry.register("wall_stellar_magrail",    WallRenderer::generateStellarMagrailWallTexture);
+        registry.register("wall_stellar_hull_plate", WallRenderer::generateStellarHullPlateWallTexture);
+        registry.register("column_round",     WallRenderer::generateColumnTexture);
+    }
+
+    /**
+     * Load-or-generate for the hazard wall, mirroring the constructor: use the disk asset when present,
+     * otherwise the procedural caution-stripe texture. Kept as a helper so the generator registration
+     * reads as one line and shares the exact fallback logic.
+     */
+    private static Texture loadOrGenerateHazardWallTexture() {
+        return Gdx.files.internal(LAB_WALL_HAZARD_PATH).exists()
+               ? loadWallTexture(LAB_WALL_HAZARD_PATH)
+               : generateHazardWallTexture();
     }
 
     private static Texture generateColumnTexture() {
@@ -1803,6 +1860,21 @@ public class WallRenderer implements Renderable, Disposable {
 
     public void setLightingTime(float timeSeconds) {
         this.lightingTimeSeconds = timeSeconds;
+    }
+
+    /**
+     * Supplies this level's realized texture set (symbol/sprite-reuse order-6). Called once per level by
+     * World, right after the set is built from the level's palette. order-6 only stores the reference and
+     * wires the dispose path in World; the wall draw still reads the constructor-built texture table until
+     * order-7 rewires it to pull wall textures from this set.
+     */
+    public void setEnvironmentTextureSet(EnvironmentTextureSet textureSet) {
+        this.environmentTextureSet = textureSet;
+    }
+
+    /** The current per-level texture set, or null before the first level is wired (order-6 plumbing). */
+    public EnvironmentTextureSet getEnvironmentTextureSet() {
+        return environmentTextureSet;
     }
 
     /** Returns the perpendicular wall distance (in tile units) for a given screen column. */

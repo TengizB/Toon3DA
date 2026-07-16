@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Symbol/Sprite Reuse — Part 6: Per-Level Texture Realization
 CREATED: 2026-07-15
@@ -110,16 +110,22 @@ TECHNICAL NOTES
 
 DELIVERABLE CHECKLIST (order-6)
 ===============================
-[ ] `…toon3d.render.tilesetgfx` package created.
-[ ] EnvironmentTextureGenerator + TextureGeneratorRegistry + TilesetGfxBootstrap registering every
-    v1 sprite id's procedural generator (moved/delegated from WallRenderer/PropRenderer).
-[ ] Startup assertion: sprite-registry ids == texture-generator ids (no orphan either way).
-[ ] EnvironmentTextureSet.realize()/textureFor()/dispose(), realizing ONLY palette sprites.
-[ ] World builds the set on level load, sets it on the renderers, disposes it on teardown; added
-    to the dispose chain.
-[ ] Leak check: texture count stable across repeated level transitions.
-[ ] No visual change (legacy palette => same textures as today).
-[ ] STATUS -> IMPLEMENTED; DOC TODO accurate.
+[x] `…toon3d.render.tilesetgfx` package created.
+[x] EnvironmentTextureGenerator + TextureGeneratorRegistry + TilesetGfxBootstrap registering every
+    v1 sprite id's procedural generator (delegated from WallRenderer/PropRenderer via each renderer's
+    public static registerTextureGenerators() — pixel code stays put, byte-identical).
+[x] Startup assertion: sprite-registry ids == texture-generator ids (no orphan either way) —
+    TilesetGfxBootstrap.assertGeneratorsMatchCatalog(), run in bootstrap().
+[x] EnvironmentTextureSet.realize()/textureFor()/widthFor()/heightFor()/dispose(), realizing ONLY the
+    palette's distinct sprites (LevelPalette.distinctSpriteIds()).
+[x] World builds the set on level load (buildLevelDependentResources), sets it on both renderers,
+    disposes it on teardown (rebuildForLevel) and at shutdown (dispose); added to the dispose chain.
+[x] Leak check: EnvironmentTextureSet owns + disposes the per-level textures AND prunes PropRenderer's
+    opacity-mask cache, so texture count is stable across transitions (GL realize verified in-game;
+    dedup/subset logic covered by headless tests).
+[x] No visual change: both paths coexist; legacy palette references the whole catalog so realize()
+    yields today's full set (headless test asserts distinctSpriteIds == catalog id set).
+[x] STATUS -> IMPLEMENTED; docs/environment-tileset-system.txt section 6 filled + status row DONE.
 
 LIVING DOC CONTRACT
 ===================

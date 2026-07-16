@@ -49,6 +49,8 @@ import ge.tbegvadze.toon3d.progression.UpgradeCardDeck;
 import ge.tbegvadze.toon3d.progression.Attribute;
 import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
+import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
+import ge.tbegvadze.toon3d.render.tilesetgfx.TilesetGfxBootstrap;
 import ge.tbegvadze.toon3d.route.AmmoCacheRequest;
 import ge.tbegvadze.toon3d.route.EnemyBudgetOverride;
 import ge.tbegvadze.toon3d.route.EventChoice;
@@ -148,6 +150,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private DoorManager            doorManager;
     private WallRenderer           wallRenderer;
     private PropRenderer           propRenderer;
+    // TILESET MIGRATION (order-6): per-level texture supply realized from the level's palette; owned here,
+    // set on the wall/prop renderers each level, disposed on level teardown (leak-free across transitions).
+    private EnvironmentTextureSet  environmentTextureSet;
     private EnemyRenderer          enemyRenderer;
     private LevelRenderer          levelRenderer;
     private EnemyManager           enemyManager;
@@ -342,6 +347,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // reads it yet — it registers the complete inventory of today's wall/column/prop/decal art so
         // later orders' allocator + renderers can enumerate it instead of hardcoding a sprite list.
         TilesetRegistries.bootstrap();
+        // Render-side texture-generator registry (symbol/sprite-reuse order-6). Idempotent. Maps every v1
+        // sprite id to the procedural code that draws it and asserts that set matches the art catalog, so
+        // a level's EnvironmentTextureSet can realize just its palette's textures. Must run after the
+        // catalog bootstrap above (the assertion cross-checks against it).
+        TilesetGfxBootstrap.bootstrap();
         // Room-blueprint catalog (symbol/sprite-reuse order-5). Idempotent. Registers every v1 room as a
         // self-describing RoomBlueprint; nothing selects from it yet (generate() still uses the internal
         // RoomType tag until order-8), it exists so the registry seam is live and enumerable.
@@ -864,6 +874,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         floorCeilingRenderer.dispose();
         wallRenderer.dispose();
         propRenderer.dispose();
+        // TILESET MIGRATION (order-6): free this floor's realized textures before the next floor rebuilds
+        // its own subset — keeps GPU footprint at one level's palette, not an accumulation across floors.
+        if (environmentTextureSet != null) { environmentTextureSet.dispose(); environmentTextureSet = null; }
         if (shopMachineRenderer != null) shopMachineRenderer.dispose();
         enemyRenderer.dispose();
         enemyAttackEffectSystem.dispose();
@@ -897,6 +910,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         floorCeilingRenderer   = new FloorCeilingRenderer(targetLevel);
         wallRenderer           = new WallRenderer(targetLevel, doorManager);
         propRenderer           = new PropRenderer(targetLevel, wallRenderer);
+        // TILESET MIGRATION (order-6): realize ONLY this level's palette textures (subset per level, not
+        // the whole library) and hand the set to the renderers. order-6 only wires the supply + dispose
+        // path — the renderers still draw from their own tables until order-7 reads from the set. Built on
+        // the GL thread here (level load); disposed in rebuildForLevel/dispose so transitions stay leak-free.
+        environmentTextureSet  = EnvironmentTextureSet.realize(targetLevel.getPalette(),
+                                                               TilesetGfxBootstrap.generators());
+        wallRenderer.setEnvironmentTextureSet(environmentTextureSet);
+        propRenderer.setEnvironmentTextureSet(environmentTextureSet);
         propRenderer.setWeaponTierMap(buildWeaponTierMap());
         shopMachineRenderer    = new ShopMachineRenderer(targetLevel, wallRenderer);
         shopMachineRenderer.setPropRenderer(propRenderer);
@@ -1912,6 +1933,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         floorCeilingRenderer.dispose();
         wallRenderer.dispose();
         propRenderer.dispose();
+        // TILESET MIGRATION (order-6): free the current floor's realized textures at world shutdown.
+        if (environmentTextureSet != null) { environmentTextureSet.dispose(); environmentTextureSet = null; }
         if (shopMachineRenderer != null) shopMachineRenderer.dispose();
         enemyRenderer.dispose();
         enemyAttackEffectSystem.dispose();

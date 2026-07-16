@@ -4,8 +4,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The one authoritative, data-driven lookup of every {@link EnvironmentSpriteDefinition}, keyed by its
@@ -72,5 +74,14 @@ public final class EnvironmentSpriteRegistry {
     /** Total number of registered sprites across all categories. */
     public int size() {
         return definitions.size();
+    }
+
+    /**
+     * Every registered sprite id, in registration order, as an unmodifiable snapshot. Used by the
+     * render layer's texture-generator bootstrap to assert its generator id set matches this catalog
+     * exactly (no sprite without a generator, no generator without a sprite).
+     */
+    public Set<String> ids() {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(definitions.keySet()));
     }
 }

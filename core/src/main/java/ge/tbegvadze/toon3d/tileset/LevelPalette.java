@@ -2,8 +2,10 @@ package ge.tbegvadze.toon3d.tileset;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * The PER-LEVEL BINDING for the symbol/sprite-reuse migration (order-3): the immutable map that says,
@@ -61,6 +63,16 @@ public final class LevelPalette {
     /** Whether this palette binds a category + sprite to the given symbol. */
     public boolean hasBinding(char symbol) {
         return categoryBySymbol.containsKey(symbol);
+    }
+
+    /**
+     * The DISTINCT sprite ids this level actually renders — the small set the render layer realizes into
+     * textures for this level (order-6). De-duplicated: several symbols bound to the same sprite id (e.g.
+     * two levels' worth of walls collapsing onto "wall_plain") contribute that id once, so exactly one
+     * texture is built per shared sprite. Unmodifiable snapshot; order is unspecified.
+     */
+    public Set<String> distinctSpriteIds() {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(spriteIdBySymbol.values()));
     }
 
     /** Starts a fresh palette builder. Package-private: only the allocator and {@link LevelPalettes}. */
