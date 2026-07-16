@@ -4,8 +4,11 @@ The symbol->sprite behaviour described below is the LEGACY model. A staged refac
 symbol is a fixed CATEGORY slot and its sprite is chosen PER LEVEL. Check the ORDER STATUS TABLE
 in docs/environment-tileset-system.txt for which parts are live. Do not rely on "one symbol = one
 fixed sprite" as permanent truth while this banner is present.
-# (Specifically: the hardcoded room-type / wall-painting logic documented here is replaced by the
-#  RoomBlueprintRegistry + SymbolAllocator — see order-5/8 in the status table.)
+# (Specifically: as of order-5 every room type documented here is ALSO a registered RoomBlueprint in
+#  RoomBlueprintRegistry — rooms are registry-driven, not just a private `enum RoomType`. Behaviour is
+#  unchanged: generate() still selects with the internal RoomType tag and runs the passes below; order-8
+#  flips generate() to iterate the registry and call RoomBlueprint.build(), and order-4's SymbolAllocator
+#  takes over per-level sprite assignment. See order-5/8 in the status table.)
 
 # Procedural Level Generation — Technical Reference
 # LevelGenerator.java · level package · see also .claude/agents/ideas/procedural-level-generation.txt

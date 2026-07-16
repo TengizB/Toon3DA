@@ -579,4 +579,16 @@ public final class LevelGenConstants {
     public static final int   BOSS_ARENA_MAX_LAYOUT_ATTEMPTS = 48;
     // Minimum distinct open cardinal escape routes required from the arena centre (fairness F5).
     public static final int   BOSS_ARENA_MIN_ESCAPE_ROUTES = 2;
+
+    // --- Symbol/sprite-reuse order-5: RoomBlueprint selection weights ---
+    // RoomBlueprint.selectionWeight() reuses the existing *_CHANCE constants for the chance-rolled
+    // rooms; these cover the rooms that lack a natural chance gate. They are DECLARED in order-5 and
+    // CONSUMED by the registry-driven selection order-8 introduces (which defines how weights combine).
+    // ENTRANCE is assigned to room 0 by position, never rolled → zero weight.
+    public static final float LEVEL_GEN_ROOM_ENTRANCE_SELECTION_WEIGHT = 0f;
+    // STANDARD is the residual fallback for any room no specialty claims → baseline weight.
+    public static final float LEVEL_GEN_ROOM_STANDARD_SELECTION_WEIGHT = 1.0f;
+    // MEDICAL_BAY is guaranteed once per level (placed by a finder pass, not a chance roll) → nominal
+    // high weight so it always wins its slot when eligible.
+    public static final float LEVEL_GEN_ROOM_MEDICAL_BAY_SELECTION_WEIGHT = 1.0f;
 }

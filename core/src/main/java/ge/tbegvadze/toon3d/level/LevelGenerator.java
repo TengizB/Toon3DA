@@ -66,10 +66,14 @@ public class LevelGenerator implements ILevelGenerator {
 
     private enum WallContext { CORRIDOR, ROOM, MIXED, INTERIOR }
 
-    // TILESET MIGRATION: hardcoded room types. Migrating to a registry-driven RoomBlueprintRegistry
-    // so rooms (and their symbol/category demand) are registered, not switched.
-    // See docs/environment-tileset-system.txt (tileset migration, order-5/8).
-    private enum RoomType {
+    // TILESET MIGRATION (order-5): every RoomType now also exists as a registered RoomBlueprint
+    // (see RoomBlueprints + RoomBlueprintRegistry). The enum survives as an INTERNAL TAG during the
+    // refactor: placeRooms()/assignRoomTypes() still select with it, and the per-room architecture
+    // helpers are keyed off it. order-8 flips generate() to iterate the registry and calls
+    // RoomBlueprint.build() instead of these passes; the enum is removed then.
+    // Package-private so the level-package RoomBuildContext + blueprint tests can tag a Room's type.
+    // See docs/environment-tileset-system.txt (ORDER STATUS TABLE, section 5).
+    enum RoomType {
         ENTRANCE, STANDARD, LARGE, SERVER_ROOM,
         MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
         POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK,
@@ -196,7 +200,9 @@ public class LevelGenerator implements ILevelGenerator {
     // Room data structure
     // -------------------------------------------------------------------------
 
-    private static final class Room {
+    // Package-private (order-5): the level-package RoomBuildContext + blueprint tests construct and tag
+    // a Room when driving RoomBlueprint.build() outside the generator's own passes.
+    static final class Room {
         final int leftColumn, bottomRow, rightColumn, topRow;
         RoomType type;
 
@@ -806,7 +812,7 @@ public class LevelGenerator implements ILevelGenerator {
      *   CONTAINMENT_BLOCK — very dark 'u' dominant, 'f' flickering at cell fronts.
      *   STANDARD          — existing mixed logic (config-driven unlitFloors / normalFloors).
      */
-    private void assignFloorLighting(char[][] grid, List<Room> rooms) {
+    void assignFloorLighting(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type == RoomType.ENTRANCE) continue;
             switch (room.type) {
@@ -1041,14 +1047,23 @@ public class LevelGenerator implements ILevelGenerator {
     private void themeServerRoomWalls(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type != RoomType.SERVER_ROOM) continue;
-            for (int tileRow = room.bottomRow; tileRow <= room.topRow; tileRow++) {
-                for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
-                    if (!isInBounds(tileColumn, tileRow)) continue;
-                    if (!Level.isWall(grid[tileRow][tileColumn])) continue;
-                    if (!facesRoomInterior(grid, tileColumn, tileRow, room)) continue;
-                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SERVER_WALL_TERMINAL_CHANCE) {
-                        grid[tileRow][tileColumn] = 't';
-                    }
+            themeServerRoomWallsForRoom(grid, room);
+        }
+    }
+
+    /**
+     * SERVER_ROOM perimeter wall theming for ONE room (terminal walls 't'). Extracted verbatim from
+     * {@link #themeServerRoomWalls} so both the generate() pass and {@code RoomBuildContext} (the
+     * order-5 blueprint build path) stamp identical walls with the identical RNG draw sequence.
+     */
+    void themeServerRoomWallsForRoom(char[][] grid, Room room) {
+        for (int tileRow = room.bottomRow; tileRow <= room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
+                if (!isInBounds(tileColumn, tileRow)) continue;
+                if (!Level.isWall(grid[tileRow][tileColumn])) continue;
+                if (!facesRoomInterior(grid, tileColumn, tileRow, room)) continue;
+                if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SERVER_WALL_TERMINAL_CHANCE) {
+                    grid[tileRow][tileColumn] = 't';
                 }
             }
         }
@@ -1068,66 +1083,79 @@ public class LevelGenerator implements ILevelGenerator {
      */
     private void themeNewRoomWalls(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
-            for (int tileRow = room.bottomRow; tileRow <= room.topRow; tileRow++) {
-                for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
-                    if (!isInBounds(tileColumn, tileRow)) continue;
-                    if (!Level.isWall(grid[tileRow][tileColumn])) continue;
-                    if (!facesRoomInterior(grid, tileColumn, tileRow, room)) continue;
-                    float roll = random.nextFloat();
-                    switch (room.type) {
-                        case MEDICAL_BAY:
-                            if (roll < LevelGenConstants.LEVEL_GEN_MEDICAL_WALL_CHANCE) {
-                                grid[tileRow][tileColumn] = 'M';
-                            } else if (roll < LevelGenConstants.LEVEL_GEN_MEDICAL_WALL_CHANCE
-                                             + LevelGenConstants.LEVEL_GEN_MEDICAL_BIO_WALL_CHANCE) {
-                                grid[tileRow][tileColumn] = 'Q';
-                            }
-                            break;
-                        case ARMORY:
-                            if (roll < LevelGenConstants.LEVEL_GEN_ARMORY_BLAST_WALL_CHANCE) {
-                                grid[tileRow][tileColumn] = 'X';
-                            }
-                            break;
-                        case CRYO_CHAMBER:
-                            if (roll < LevelGenConstants.LEVEL_GEN_CRYO_WALL_CHANCE) {
-                                grid[tileRow][tileColumn] = 'Z';
-                            } else if (roll < LevelGenConstants.LEVEL_GEN_CRYO_WALL_CHANCE
-                                             + LevelGenConstants.LEVEL_GEN_CRYO_GLASS_WALL_CHANCE) {
-                                grid[tileRow][tileColumn] = 'N';
-                            }
-                            break;
-                        case POWER_PLANT:
-                            if (roll < LevelGenConstants.LEVEL_GEN_POWERPLANT_RAD_WALL_CHANCE) {
-                                grid[tileRow][tileColumn] = 'U';
-                            } else if (roll < LevelGenConstants.LEVEL_GEN_POWERPLANT_RAD_WALL_CHANCE
-                                             + LevelGenConstants.LEVEL_GEN_POWERPLANT_EMERG_WALL_CHANCE) {
-                                grid[tileRow][tileColumn] = 'S';
-                            }
-                            break;
-                        case COMMAND_CENTER:
-                            if (roll < LevelGenConstants.LEVEL_GEN_COMMAND_GLASS_WALL_CHANCE) {
-                                grid[tileRow][tileColumn] = 'N';
-                            } else if (roll < LevelGenConstants.LEVEL_GEN_COMMAND_GLASS_WALL_CHANCE
-                                             + LevelGenConstants.LEVEL_GEN_COMMAND_EMERG_WALL_CHANCE) {
-                                grid[tileRow][tileColumn] = 'S';
-                            }
-                            break;
-                        case CONTAINMENT_BLOCK:
-                            if (roll < LevelGenConstants.LEVEL_GEN_CONTAINMENT_GLASS_CHANCE) {
-                                grid[tileRow][tileColumn] = 'N';
-                            } else if (roll < LevelGenConstants.LEVEL_GEN_CONTAINMENT_GLASS_CHANCE
-                                             + LevelGenConstants.LEVEL_GEN_CONTAINMENT_BIO_CHANCE) {
-                                grid[tileRow][tileColumn] = 'Q';
-                            }
-                            break;
-                        case RESEARCH_LAB:
-                            if (roll < LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_HOLO_WALL_CHANCE) {
-                                grid[tileRow][tileColumn] = 'D';
-                            }
-                            break;
-                        default:
-                            break;
-                    }
+            themeNewRoomWallsForRoom(grid, room);
+        }
+    }
+
+    /**
+     * Room-type-specific perimeter wall theming for ONE room. Extracted verbatim from
+     * {@link #themeNewRoomWalls} so both the generate() pass and {@code RoomBuildContext} (the order-5
+     * blueprint build path) stamp identical walls with the identical RNG draw sequence. The internal
+     * {@code switch} on {@link RoomType} is the order-5 "enum as internal tag" — order-8 replaces it
+     * with per-blueprint wall logic. Every qualifying perimeter tile consumes exactly one
+     * {@code random.nextFloat()} for EVERY room type (the {@code default} branch rolls but no-ops),
+     * which is load-bearing for determinism; do not skip the roll for unthemed types.
+     */
+    void themeNewRoomWallsForRoom(char[][] grid, Room room) {
+        for (int tileRow = room.bottomRow; tileRow <= room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
+                if (!isInBounds(tileColumn, tileRow)) continue;
+                if (!Level.isWall(grid[tileRow][tileColumn])) continue;
+                if (!facesRoomInterior(grid, tileColumn, tileRow, room)) continue;
+                float roll = random.nextFloat();
+                switch (room.type) {
+                    case MEDICAL_BAY:
+                        if (roll < LevelGenConstants.LEVEL_GEN_MEDICAL_WALL_CHANCE) {
+                            grid[tileRow][tileColumn] = 'M';
+                        } else if (roll < LevelGenConstants.LEVEL_GEN_MEDICAL_WALL_CHANCE
+                                         + LevelGenConstants.LEVEL_GEN_MEDICAL_BIO_WALL_CHANCE) {
+                            grid[tileRow][tileColumn] = 'Q';
+                        }
+                        break;
+                    case ARMORY:
+                        if (roll < LevelGenConstants.LEVEL_GEN_ARMORY_BLAST_WALL_CHANCE) {
+                            grid[tileRow][tileColumn] = 'X';
+                        }
+                        break;
+                    case CRYO_CHAMBER:
+                        if (roll < LevelGenConstants.LEVEL_GEN_CRYO_WALL_CHANCE) {
+                            grid[tileRow][tileColumn] = 'Z';
+                        } else if (roll < LevelGenConstants.LEVEL_GEN_CRYO_WALL_CHANCE
+                                         + LevelGenConstants.LEVEL_GEN_CRYO_GLASS_WALL_CHANCE) {
+                            grid[tileRow][tileColumn] = 'N';
+                        }
+                        break;
+                    case POWER_PLANT:
+                        if (roll < LevelGenConstants.LEVEL_GEN_POWERPLANT_RAD_WALL_CHANCE) {
+                            grid[tileRow][tileColumn] = 'U';
+                        } else if (roll < LevelGenConstants.LEVEL_GEN_POWERPLANT_RAD_WALL_CHANCE
+                                         + LevelGenConstants.LEVEL_GEN_POWERPLANT_EMERG_WALL_CHANCE) {
+                            grid[tileRow][tileColumn] = 'S';
+                        }
+                        break;
+                    case COMMAND_CENTER:
+                        if (roll < LevelGenConstants.LEVEL_GEN_COMMAND_GLASS_WALL_CHANCE) {
+                            grid[tileRow][tileColumn] = 'N';
+                        } else if (roll < LevelGenConstants.LEVEL_GEN_COMMAND_GLASS_WALL_CHANCE
+                                         + LevelGenConstants.LEVEL_GEN_COMMAND_EMERG_WALL_CHANCE) {
+                            grid[tileRow][tileColumn] = 'S';
+                        }
+                        break;
+                    case CONTAINMENT_BLOCK:
+                        if (roll < LevelGenConstants.LEVEL_GEN_CONTAINMENT_GLASS_CHANCE) {
+                            grid[tileRow][tileColumn] = 'N';
+                        } else if (roll < LevelGenConstants.LEVEL_GEN_CONTAINMENT_GLASS_CHANCE
+                                         + LevelGenConstants.LEVEL_GEN_CONTAINMENT_BIO_CHANCE) {
+                            grid[tileRow][tileColumn] = 'Q';
+                        }
+                        break;
+                    case RESEARCH_LAB:
+                        if (roll < LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_HOLO_WALL_CHANCE) {
+                            grid[tileRow][tileColumn] = 'D';
+                        }
+                        break;
+                    default:
+                        break;
                 }
             }
         }
@@ -1169,25 +1197,36 @@ public class LevelGenerator implements ILevelGenerator {
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
             if (room.type != RoomType.STANDARD) continue;
-            if (room.interiorWidth()  < config.columnMinRoomSize) continue;
-            if (room.interiorHeight() < config.columnMinRoomSize) continue;
-            if (random.nextFloat() > config.columnChancePerRoom)  continue;
+            placeStandardColumnsForRoom(grid, room);
+        }
+    }
 
-            int columnCount = config.columnMinCount
-                    + random.nextInt(config.columnMaxCount - config.columnMinCount + 1);
-            int placed   = 0;
-            int attempts = 0;
-            while (placed < columnCount && attempts < 30) {
-                attempts++;
-                int tileColumn = room.leftColumn + 2 + random.nextInt(Math.max(1, room.interiorWidth()  - 2));
-                int tileRow    = room.bottomRow  + 2 + random.nextInt(Math.max(1, room.interiorHeight() - 2));
-                if (isWalkableFloor(grid, tileColumn, tileRow)
-                        && !isAdjacentToColumn(grid, tileColumn, tileRow)
-                        && !isAdjacentToDoor(grid, tileColumn, tileRow)
-                        && !isAdjacentToDoorAxis(grid, tileColumn, tileRow)) {
-                    grid[tileRow][tileColumn] = 'P';
-                    placed++;
-                }
+    /**
+     * STANDARD room column placement for ONE room. Extracted verbatim from {@link #placeColumns} so
+     * both the generate() pass and {@code RoomBuildContext} (order-5 blueprint build path) place
+     * identical columns with the identical RNG draw sequence. Honours {@code config.columns} via the
+     * caller; the size/chance gates below are unchanged.
+     */
+    void placeStandardColumnsForRoom(char[][] grid, Room room) {
+        if (!config.columns) return;
+        if (room.interiorWidth()  < config.columnMinRoomSize) return;
+        if (room.interiorHeight() < config.columnMinRoomSize) return;
+        if (random.nextFloat() > config.columnChancePerRoom)  return;
+
+        int columnCount = config.columnMinCount
+                + random.nextInt(config.columnMaxCount - config.columnMinCount + 1);
+        int placed   = 0;
+        int attempts = 0;
+        while (placed < columnCount && attempts < 30) {
+            attempts++;
+            int tileColumn = room.leftColumn + 2 + random.nextInt(Math.max(1, room.interiorWidth()  - 2));
+            int tileRow    = room.bottomRow  + 2 + random.nextInt(Math.max(1, room.interiorHeight() - 2));
+            if (isWalkableFloor(grid, tileColumn, tileRow)
+                    && !isAdjacentToColumn(grid, tileColumn, tileRow)
+                    && !isAdjacentToDoor(grid, tileColumn, tileRow)
+                    && !isAdjacentToDoorAxis(grid, tileColumn, tileRow)) {
+                grid[tileRow][tileColumn] = 'P';
+                placed++;
             }
         }
     }
@@ -1198,7 +1237,7 @@ public class LevelGenerator implements ILevelGenerator {
      *   CENTRE_AVENUE   — row of columns down the long axis, spaced 3 tiles.
      *   PERIMETER_RING  — columns at mid-edges just inside the walls (open arena centre).
      */
-    private void placeLargeRoomColumns(char[][] grid, List<Room> rooms) {
+    void placeLargeRoomColumns(char[][] grid, List<Room> rooms) {
         if (!config.columns) return;
         for (Room room : rooms) {
             if (room.type != RoomType.LARGE) continue;
@@ -1312,15 +1351,24 @@ public class LevelGenerator implements ILevelGenerator {
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
             if (room.type != RoomType.STANDARD) continue;
-            for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
-                for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
-                    if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
-                    if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
-                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_PROP_CHANCE) {
-                        char propChar = randomPropChar();
-                        if (Level.isPropSolid(propChar) && isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
-                        if (propChar != '\0') grid[tileRow][tileColumn] = propChar;
-                    }
+            placeStandardPropsForRoom(grid, room);
+        }
+    }
+
+    /**
+     * STANDARD room generic prop scatter for ONE room. Extracted verbatim from {@link #placeProps} so
+     * both the generate() pass and {@code RoomBuildContext} (order-5 blueprint build path) stamp
+     * identical props with the identical RNG draw sequence.
+     */
+    void placeStandardPropsForRoom(char[][] grid, Room room) {
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+                if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_PROP_CHANCE) {
+                    char propChar = randomPropChar();
+                    if (Level.isPropSolid(propChar) && isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
+                    if (propChar != '\0') grid[tileRow][tileColumn] = propChar;
                 }
             }
         }
@@ -1330,7 +1378,7 @@ public class LevelGenerator implements ILevelGenerator {
      * Places props in SERVER_ROOM rooms as rack rows of terminals ('T') and lockers ('L'),
      * reading as a UAC data vault — dense, claustrophobic, tactically dangerous.
      */
-    private void placeServerRoomProps(char[][] grid, List<Room> rooms) {
+    void placeServerRoomProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type != RoomType.SERVER_ROOM) continue;
             placeServerRoomRacks(grid, room);
@@ -1373,7 +1421,7 @@ public class LevelGenerator implements ILevelGenerator {
      * Places sparse props in LARGE rooms: crates and barrels at low density,
      * one optional explosive barrel near existing columns.
      */
-    private void placeLargeRoomProps(char[][] grid, List<Room> rooms) {
+    void placeLargeRoomProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type != RoomType.LARGE) continue;
             for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
@@ -1394,7 +1442,7 @@ public class LevelGenerator implements ILevelGenerator {
      * Medical Bay props: weapon racks '=' as equipment storage, security cameras '#'
      * near walls, blood stains '.' and corpses 'm' for backstory. Sparse overall.
      */
-    private void placeMedicalBayProps(char[][] grid, List<Room> rooms) {
+    void placeMedicalBayProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type != RoomType.MEDICAL_BAY) continue;
             // Place security cameras '#' near walls
@@ -1434,7 +1482,7 @@ public class LevelGenerator implements ILevelGenerator {
      * Armory props: weapon racks '=' in rows, crates 'C' (ammo), security camera '#',
      * scattered blood stains and corpses for the "last stand" narrative.
      */
-    private void placeArmoryProps(char[][] grid, List<Room> rooms) {
+    void placeArmoryProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type != RoomType.ARMORY) continue;
             // Weapon rack rows along the short axis
@@ -1472,7 +1520,7 @@ public class LevelGenerator implements ILevelGenerator {
      * Cryo Chamber props: bio-pods '&' in rows (specimen containment), security cameras '#',
      * oil pools 'O' (coolant leaks), crates 'C' for cryo-supply.
      */
-    private void placeCryoChamberProps(char[][] grid, List<Room> rooms) {
+    void placeCryoChamberProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type != RoomType.CRYO_CHAMBER) continue;
             placeCryoPodRows(grid, room);
@@ -1532,7 +1580,7 @@ public class LevelGenerator implements ILevelGenerator {
      * Power Plant props: generators '%' clustered near centre, security cameras '#',
      * radioactive barrels 'g' scattered around (coolant drums), oil pools 'O'.
      */
-    private void placePowerPlantProps(char[][] grid, List<Room> rooms) {
+    void placePowerPlantProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type != RoomType.POWER_PLANT) continue;
             // Cluster of generators near centre
@@ -1578,7 +1626,7 @@ public class LevelGenerator implements ILevelGenerator {
      * Command Center props: terminals 'T' in a row (operator stations), security camera '#',
      * weapon rack '=' near the back, scattered blood stains for fallen crew.
      */
-    private void placeCommandCenterProps(char[][] grid, List<Room> rooms) {
+    void placeCommandCenterProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type != RoomType.COMMAND_CENTER) continue;
             placeCommandTerminalRow(grid, room);
@@ -1618,7 +1666,7 @@ public class LevelGenerator implements ILevelGenerator {
      * Containment Block props: bio-pods '&' (cell interiors), security cameras '#' at
      * cell fronts, blood stains and corpses throughout (harrowing atmosphere).
      */
-    private void placeContainmentBlockProps(char[][] grid, List<Room> rooms) {
+    void placeContainmentBlockProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type != RoomType.CONTAINMENT_BLOCK) continue;
             // Bio-pods scattered as cell contents
@@ -1657,7 +1705,7 @@ public class LevelGenerator implements ILevelGenerator {
      * force-field tiles ('F') as a partial barrier, a reward pickup behind it,
      * and energy scorch decals ('e') throughout.
      */
-    private void placeResearchLabProps(char[][] grid, List<Room> rooms) {
+    void placeResearchLabProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type != RoomType.RESEARCH_LAB) continue;
 
@@ -1758,7 +1806,7 @@ public class LevelGenerator implements ILevelGenerator {
     // .claude/agents/ideas/stellar-observatory-gravity-well-room.txt
     // -------------------------------------------------------------------------
 
-    private void placeStellarObservatoryProps(char[][] grid, List<Room> rooms) {
+    void placeStellarObservatoryProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type != RoomType.STELLAR_OBSERVATORY) continue;
             decorateStellarObservatory(grid, room);
