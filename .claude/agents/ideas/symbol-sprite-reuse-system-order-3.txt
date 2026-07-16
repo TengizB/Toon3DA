@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Symbol/Sprite Reuse — Part 3: LevelPalette (Per-Level Binding)
 CREATED: 2026-07-15
@@ -96,13 +96,13 @@ TECHNICAL NOTES
 
 DELIVERABLE CHECKLIST (order-3)
 ===============================
-[ ] LevelPalette (immutable, id-only) + package-private Builder.
-[ ] LevelPalettes.legacy() reproducing today's exact global mapping, memoised.
-[ ] Level carries a LevelPalette (constructor param/overload defaulting to legacy) + getPalette().
-[ ] LevelLoader + LevelGenerator pass legacy (no visible change this order).
-[ ] Static Level predicates UNCHANGED (still the authority until order-7).
-[ ] Headless unit tests: legacy mapping correctness; default-to-legacy; null for non-env symbols.
-[ ] STATUS -> IMPLEMENTED; DOC TODO accurate.
+[x] LevelPalette (immutable, id-only) + package-private Builder.
+[x] LevelPalettes.legacy() reproducing today's exact global mapping, memoised.
+[x] Level carries a LevelPalette (constructor param/overload defaulting to legacy) + getPalette().
+[x] LevelLoader + LevelGenerator pass legacy (via the legacy-defaulting overload; no visible change).
+[x] Static Level predicates UNCHANGED (still the authority until order-7).
+[x] Headless unit tests: legacy mapping correctness; default-to-legacy; null for non-env symbols.
+[x] STATUS -> IMPLEMENTED; DOC TODO accurate.
 
 LIVING DOC CONTRACT
 ===================
