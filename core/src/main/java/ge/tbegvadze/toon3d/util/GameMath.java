@@ -1361,6 +1361,46 @@ public final class GameMath {
     }
 
     // =========================================================================
+    // PALETTE SYMBOL SEED — deterministic per-symbol seed for the tileset allocator
+    // =========================================================================
+    /*
+     * Formula: paletteSymbolSeed
+     * Derivation / explanation:
+     *   The per-level SymbolAllocator (tileset order-4) rolls a sprite for each FLEXIBLE
+     *   level-file symbol. Every symbol needs its OWN reproducible seed so its roll depends
+     *   only on the floor's master seed and the symbol's char value — never on the ORDER the
+     *   allocator happens to iterate symbols. Keying by the symbol (not by loop position) is
+     *   what makes a shared seed look identical for everyone (permadeath fairness / seed
+     *   sharing): the same levelSeed and the same placed rooms always yield a byte-identical
+     *   LevelPalette.
+     *
+     *   Uses the SAME multiply-by-golden-ratio mixing style as routeNodeSeed / World.floorSeed
+     *   (multiply by the 64-bit golden-ratio constant 0x9E3779B97F4A7C15, then fold in the next
+     *   input). A salt (TilesetConstants.PALETTE_SEED_SALT) scaled by (symbol + 1) is XORed in up
+     *   front so palette rolls form an INDEPENDENT stream from floor-content rolls
+     *   (World.floorSeed) and route-node rolls (routeNodeSeed) at the same seed:
+     *
+     *     mixed = levelSeed ^ (PALETTE_SEED_SALT * (symbol + 1))
+     *     mixed = mixed * 0x9E3779B97F4A7C15 + symbol
+     *
+     *   The result seeds a small advancing RNG (tileset PaletteRng), which finalises each draw
+     *   through splitMix64 — the same "seed a cursor, splitMix64 each step" shape RouteRng uses.
+     * Edge cases:
+     *   symbol == 0 (the NUL sentinel the allocator uses for its per-level theme roll): the
+     *     (symbol + 1) factor keeps the salt term non-zero, so a 0 char still produces a
+     *     well-mixed, salt-dependent seed rather than collapsing to levelSeed.
+     *   'char' in Java is UNSIGNED 16-bit (0..65535), so there are no "negative" chars; the
+     *     (symbol + 1L) promotion to long also prevents the multiply from overflowing an int at
+     *     the top of the char range.
+     *   long overflow wraps arithmetically, exactly what a hash mixer wants.
+     */
+    public static long paletteSymbolSeed(long levelSeed, char symbol) {
+        long mixed = levelSeed ^ (TilesetConstants.PALETTE_SEED_SALT * (symbol + 1L));
+        mixed = mixed * 0x9E3779B97F4A7C15L + symbol;
+        return mixed;
+    }
+
+    // =========================================================================
     // FLICKER MULTIPLIER — deterministic per-tile brightness oscillator
     // =========================================================================
     /*

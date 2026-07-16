@@ -48,7 +48,7 @@ Legend: NOT STARTED / IN PROGRESS / DONE.
   1      DONE          Tile categories + environment-sprite registry (the art catalog).
   2      DONE          Symbol budget: FIXED vs FLEXIBLE split, SymbolBudget config.
   3      DONE          LevelPalette (per-level symbol->category+sprite binding) + LEGACY default.
-  4      NOT STARTED   SymbolAllocator: deterministic per-level assignment engine.
+  4      DONE          SymbolAllocator: deterministic per-level assignment engine.
   5      NOT STARTED   RoomBlueprint + RoomBlueprintRegistry (existing rooms as blueprints).
   6      NOT STARTED   Per-level texture realization: TextureGeneratorRegistry + Environment-
                        TextureSet (subset per level).
@@ -262,11 +262,119 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    singleton. LevelPaletteWiringTest (level pkg, for the package-private constructor) — a Level built with
    no palette defaults to legacy; an explicit palette is carried through unchanged.
 
-4. ALLOCATION (SymbolAllocator)
-   TODO: filled by order-4 in the same commit that ships order-4.
-   (Deterministic, seeded per-level assignment: fixed symbols keep their sprite; placed signature
-    rooms get their required sprites; remaining flexible symbols get rule-governed variety; freed
-    symbols reclaimed.)
+4. ALLOCATION (SymbolAllocator)  [DONE — order-4]
+   THE HEART of the series: the deterministic, headless engine (`…toon3d.tileset`, no LibGDX) that turns
+   a floor's seed + the rooms actually placed into a concrete LevelPalette. This is where symbol reuse,
+   freed-symbol reclamation, and rule-governed (never random) variety happen. SymbolAllocator.allocate()
+   is a PURE FUNCTION of its request — no static mutable state, no clock, no iteration-order dependence —
+   so the same request always yields a byte-identical palette. It does NOT run the generator (order-8
+   calls it); order-4 only produces the palette.
+
+   THE INPUT — SymbolAllocationRequest (immutable; builder):
+     * long levelSeed   — the floor's master seed (same source World.floorSeed feeds LevelGenerator);
+                          every per-symbol roll derives from it.
+     * int  depth       — dungeon depth, used only for the mild depth-influence rule (R5). Optional
+                          flavour, defaults to 0.
+     * SymbolBudget budget            — the FIXED/FLEXIBLE partition (order-2); the allocator binds FIXED
+                          symbols verbatim and only assigns sprites to FLEXIBLE ones.
+     * List<RoomSymbolDemand> placedRoomDemands — ONE demand PER SIGNATURE ROOM ACTUALLY PLACED. Rooms
+                          NOT placed contribute NO demand, so their symbols are never reserved and fall
+                          through to the free variety pool. THAT is the "freed symbols" mechanic — it is
+                          emergent from the request shape, not a special case.
+     * EnvironmentSpriteRegistry registry — the art pool (order-1) variety is drawn from.
+   RoomSymbolDemand (immutable; defined in `tileset` so the pure allocator has no level/render dependency;
+   order-5's RoomBlueprint produces it): requiredSprites Map<Character,String> (symbol -> the sprite id
+   the room MUST render, e.g. a CRYO room reserves 'Z' -> "wall_cryo") + optional categoryCounts
+   Map<TileCategory,Integer> (how many GENERIC slots per category the room also wants — carried for
+   order-8; order-4's reservation keys only off requiredSprites).
+
+   THE OUTPUT: a LevelPalette (order-3), built via its package-private Builder, fully bound for every
+   symbol this level uses.
+
+   THE ALGORITHM (deterministic; step by step):
+     Step 0 — SEED: each FLEXIBLE symbol's variety roll comes from a per-symbol RNG stream seeded by
+              GameMath.paletteSymbolSeed(levelSeed, symbol) (see MATH). Keying by the SYMBOL (not by loop
+              position) makes the assignment independent of iteration order and reproducible.
+     Step 1 — FIXED bindings: every entry in budget.fixedAssignments ('x' -> "wall_plain",
+              '@' -> "prop_vendor") is bound verbatim (category read from the sprite). Never rolled.
+     Step 2 — RESERVE for placed rooms: for each placed RoomSymbolDemand, each required symbol is bound to
+              its required sprite and marked consumed so variety can never overwrite it. CLASH RESOLUTION:
+              if two placed rooms demand the SAME symbol for DIFFERENT sprites, the first keeps the symbol
+              and the second's sprite is rehomed onto the first UNBOUND flexible symbol of the same
+              category (declaration order) — capacity exists because absent rooms freed symbols. If a
+              category's flexible symbols are ALL bound (capacity exhausted), the deterministic fallback
+              is to drop the duplicate reservation; with current room caps this is unreachable and the
+              test suite asserts it never triggers.
+     Step 3 — VARIETY fill: for every still-unbound FLEXIBLE symbol (iterated in TileCategory enum order,
+              then budget declaration order — a fixed, reproducible order), pick a sprite from
+              registry.allInCategory(category) with the seeded RNG under the RULES below. This is where
+              generic rooms/halls get their per-level look and where freed room symbols become
+              new-generated-room art (order-8 decides which freed symbols a new room uses).
+     Step 4 — return the immutable LevelPalette.
+
+   THE RULES (variety is SEEDED and CONSTRAINED, never a raw random grab):
+     R1 COHERENCE — a per-level THEME (ONE tag) is chosen deterministically from the tags the catalog
+        actually carries across the flexible categories (containment tags excluded), via a PaletteRng
+        seeded by paletteSymbolSeed(levelSeed, NUL) (the reserved NUL key — not a real level char, so
+        its stream never collides with a symbol's roll). A candidate sprite whose theme tags overlap the
+        level theme is weighted up by GameBalance.PALETTE_COHERENCE_WEIGHT_MULTIPLIER, so a level reads as
+        one place. When the catalog carries no coherence tags the theme set is empty and coherence is a
+        no-op (a plain seeded pick).
+     R2 CONTAINMENT — room-contained sprites (the order-1 "observatory" tag,
+        TilesetRegistries.THEME_TAG_OBSERVATORY) are EXCLUDED from the generic variety pool; they are only
+        ever bound when their owning room reserves them in Step 2. So a freed observatory SYMBOL gets
+        generic art, while observatory SPRITES stay in-room — preserving today's containment rule.
+     R3 ANTI-REPETITION — within one category on one level, two symbols avoid the same sprite id: variety
+        prefers sprites not yet spent in that category (fixed + reserved + earlier variety all count).
+        Only when the eligible pool is smaller than the slot count (all already used) are repeats allowed,
+        deterministically.
+     R4 PLAIN-WALL FLOOR — 'x' is FIXED to "wall_plain" in Step 1, so variety only ever decorates accent
+        walls and corridors stay legible (order-2 PLAIN-WALL RULE).
+     R5 DEPTH INFLUENCE (mild) — a candidate carrying a GameBalance.PALETTE_HARSH_THEME_TAGS tag
+        ("gore"/"rust"/"radiation") gets an additive weight of depth ×
+        GameBalance.PALETTE_DEPTH_HARSH_WEIGHT_PER_DEPTH, so deeper floors trend grittier. All weighting
+        is data-driven through GameBalance — the allocator never switches on a specific char or sprite.
+   Weights feed GameMath.weightedChoiceIndex (the SHARED route/tileset roulette picker — no duplicate
+   implementation) with the seeded roll. Coherence and depth only bite once catalog sprites carry the
+   matching theme tags; the production catalog is largely untagged today (only observatory is tagged), so
+   in-game these rules currently collapse to a plain seeded pick — they activate as content adds tags.
+   Nothing renders varied yet regardless: order-4 changes NO runtime behaviour (renderers still read the
+   legacy palette until order-7).
+
+   MATH — GameMath.paletteSymbolSeed(long levelSeed, char symbol) -> long (with the mandatory
+   Formula/Derivation/Edge-cases comment block):
+       mixed = levelSeed ^ (TilesetConstants.PALETTE_SEED_SALT * (symbol + 1))
+       mixed = mixed * 0x9E3779B97F4A7C15 + symbol           // same golden-ratio mix as routeNodeSeed
+   The salt is scaled by (symbol + 1) so palette rolls form an INDEPENDENT stream from World.floorSeed and
+   routeNodeSeed at the same seed, and so the NUL theme key (symbol 0) still produces a salt-dependent
+   seed rather than collapsing to levelSeed. Java 'char' is unsigned 16-bit, so there are no negative
+   chars; the (symbol + 1L) long promotion also prevents int overflow at the top of the char range. The
+   result seeds tileset PaletteRng (the twin of route/RouteRng: advance by the golden increment, finalise
+   each draw through GameMath.splitMix64), the side-effecting cursor that cannot live in pure GameMath.
+   NEVER inline this formula in the allocator. PALETTE_SEED_SALT lives in TilesetConstants (order-2).
+
+   DETERMINISM (the fairness promise): same levelSeed + same placedRoomDemands => byte-identical
+   LevelPalette (required for permadeath fairness and seed sharing). Step 2 depends on WHICH rooms were
+   placed, and room placement is itself seeded upstream in LevelGenerator, so the whole chain stays
+   reproducible. The allocator is a pure function of its request — no static mutable state, no time, no
+   iteration-order dependence.
+
+   CLASSES (all in `…toon3d.tileset`): SymbolAllocationRequest, RoomSymbolDemand (immutable inputs),
+   SymbolAllocator (the pure engine), PaletteRng (package-private per-symbol RNG). Weighting knobs live in
+   GameBalance (PALETTE_VARIETY_BASE_WEIGHT, PALETTE_COHERENCE_WEIGHT_MULTIPLIER,
+   PALETTE_DEPTH_HARSH_WEIGHT_PER_DEPTH, PALETTE_HARSH_THEME_TAGS) so designers tune variety without
+   touching allocator logic.
+
+   TESTS (headless, core/src/test/.../tileset/SymbolAllocatorTest): determinism (same request => equal
+   palettes, deep-equals); fixed integrity ('x'->"wall_plain", '@'->"prop_vendor" for every seed, never
+   rolled); reservation + freed symbols (a placed CRYO demand binds its symbol to the room sprite; an
+   ABSENT room's symbol becomes generic variety; a reserved sprite never leaks to a second symbol);
+   containment R2 (no observatory sprite ever appears in a generic slot, across seeds, on the production
+   catalog); anti-repetition R3 (with a themed registry whose pool exceeds the slot count, all accent
+   walls are distinct); coherence R1 (statistical over 400 seeds on a themed registry: the majority of a
+   level's accent walls share the level theme's tag); capacity (all signature rooms placed at once
+   allocate with no clash; a deliberate same-symbol clash reroutes to a distinct free symbol without
+   dropping either sprite).
 
 5. ROOM BLUEPRINTS
    TODO: filled by order-5 in the same commit that ships order-5.
