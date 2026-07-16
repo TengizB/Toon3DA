@@ -1,8 +1,33 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Symbol/Sprite Reuse — Part 5: RoomBlueprint Registry
 CREATED: 2026-07-15
 ---
+
+IMPLEMENTATION NOTES (order-5, shipped)
+=======================================
+Package placement: option (a) — blueprints live in `…toon3d.level` next to LevelGenerator.
+Classes added (…toon3d.level): RoomKind, RoomContext, RoomBlueprint (interface), RoomBuildContext,
+RoomBlueprintRegistry, RoomBlueprints (bootstrap + the 12 v1 blueprints). RoomSymbolDemand (order-4)
+is produced by each blueprint. World.create() calls RoomBlueprints.bootstrap() next to
+TilesetRegistries.bootstrap(); LevelGenConstants gained three selection-weight constants for the
+positional/guaranteed/fallback rooms (the chance-rolled rooms reuse their existing *_CHANCE constants).
+
+SELECTION: landed in order-8, NOT here (per this file's guidance). order-5 keeps the SAME picks —
+generate() still selects via the internal `enum RoomType` tag (now package-private) and runs its existing
+passes; the registry/selectionWeight are declared and unit-tested but not yet consulted by generate().
+
+REFACTOR: byte-for-byte identical output (LevelGeneratorSnapshotTest, fixed-seed digest over
+seeds×depths). The type-guarded for-each passes were made package-private and are reused per-room by
+RoomBuildContext via a single-room list; themeNewRoomWalls + the two index-1 STANDARD passes were split
+into `*ForRoom` helpers shared by the pass and the build path. build() delegates to those helpers rather
+than copying, so there is no drift.
+
+DEVIATION FROM THE build() SPEC: build() owns the ENVIRONMENT architecture (floor lighting, themed walls,
+columns, props) — the parts that stamp the flexible symbols a blueprint declares. Pickups, weapon spawns,
+and enemy placement stay generator passes for order-5: they place FIXED symbols (never part of a
+symbolDemand) and are rewired with generate() in order-8. RoomBlueprintBuildDemandTest proves each
+SIGNATURE build() stamps exactly its declared demand across 400 seeds.
 
 DOC UPDATES — FILL IN THIS ORDER'S COMMIT (the doc exists from order-0)
 ======================================================================
@@ -122,13 +147,15 @@ TECHNICAL NOTES
 
 DELIVERABLE CHECKLIST (order-5)
 ===============================
-[ ] RoomKind, RoomBlueprint (interface), RoomBlueprintRegistry.
-[ ] Every existing RoomType wrapped as a registered SIGNATURE (or GENERIC for ENTRANCE/STANDARD/
-    LARGE) blueprint, build() bodies moved verbatim.
-[ ] Each blueprint declares symbolDemand(), eligible(), selectionWeight().
-[ ] TilesetRegistries.bootstrap() registers all v1 blueprints.
-[ ] Snapshot test: fixed seed => identical level grid before/after the refactor.
-[ ] STATUS -> IMPLEMENTED; DOC TODO accurate.
+[x] RoomKind, RoomBlueprint (interface), RoomBlueprintRegistry.
+[x] Every existing RoomType wrapped as a registered SIGNATURE (or GENERIC for ENTRANCE/STANDARD/
+    LARGE) blueprint; build() delegates to the generator's per-room helpers (no verbatim copy → no drift).
+[x] Each blueprint declares symbolDemand(), eligible(), selectionWeight().
+[x] Registered via RoomBlueprints.bootstrap() (level package; called from World.create() beside
+    TilesetRegistries.bootstrap() — see PACKAGE PLACEMENT DECISION option (a), documented in the
+    environment-tileset-system doc rather than TilesetRegistries to avoid a tileset→level dependency).
+[x] Snapshot test: fixed seed => identical level grid before/after the refactor (LevelGeneratorSnapshotTest).
+[x] STATUS -> IMPLEMENTED; DOC TODO accurate.
 
 LIVING DOC CONTRACT
 ===================

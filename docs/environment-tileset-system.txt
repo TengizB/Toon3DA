@@ -49,7 +49,7 @@ Legend: NOT STARTED / IN PROGRESS / DONE.
   2      DONE          Symbol budget: FIXED vs FLEXIBLE split, SymbolBudget config.
   3      DONE          LevelPalette (per-level symbol->category+sprite binding) + LEGACY default.
   4      DONE          SymbolAllocator: deterministic per-level assignment engine.
-  5      NOT STARTED   RoomBlueprint + RoomBlueprintRegistry (existing rooms as blueprints).
+  5      DONE          RoomBlueprint + RoomBlueprintRegistry (existing rooms as registered blueprints).
   6      NOT STARTED   Per-level texture realization: TextureGeneratorRegistry + Environment-
                        TextureSet (subset per level).
   7      NOT STARTED   Rewire WallRenderer / PropRenderer / Level to read the palette.
@@ -376,10 +376,106 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    allocate with no clash; a deliberate same-symbol clash reroutes to a distinct free symbol without
    dropping either sprite).
 
-5. ROOM BLUEPRINTS
-   TODO: filled by order-5 in the same commit that ships order-5.
-   (RoomBlueprint + RoomBlueprintRegistry; every existing RoomType wrapped as a registered SIGNATURE
-    blueprint declaring its symbol/category demand.)
+5. ROOM BLUEPRINTS  [DONE — order-5]
+   The ROOM extensibility layer: a room is now a REGISTERED, self-describing object (RoomBlueprint) in a
+   RoomBlueprintRegistry the generator can select from, instead of a private `enum RoomType` referenced by
+   ~4 hardcoded switches. This is the route/GeneratorRegistry pattern applied to rooms ("never a switch
+   statement"). order-5 is a PURE STRUCTURAL REFACTOR PLUS THE REGISTRY SEAM: same seed => byte-identical
+   level (guarded by LevelGeneratorSnapshotTest); it does NOT change room selection or rewire generate()
+   (that is order-8).
+
+   PACKAGE PLACEMENT (decision (a) from the order-5 design): the blueprints live in `…toon3d.level`, next
+   to LevelGenerator, because build() writes into the char[][] grid through the generator's per-room
+   helpers. The `tileset` package stays purely about categories/sprites/budget/allocator; only the demand
+   type it consumes (RoomSymbolDemand, order-4) lives there.
+
+   SIGNATURE vs GENERIC (RoomKind):
+     * SIGNATURE — fixed identity (architecture AND look): MEDICAL_BAY, ARMORY, CRYO_CHAMBER, SERVER_ROOM,
+       POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK, RESEARCH_LAB, STELLAR_OBSERVATORY. Each CLAIMS a set
+       of sprites when placed (its symbolDemand); absent, it frees them.
+     * GENERIC — allocator-driven filler with an EMPTY demand: ENTRANCE, STANDARD, LARGE. Their walls/props
+       get per-level variety from the order-4 allocator, not a fixed claim.
+
+   CLASSES (all in …toon3d.level, headless — no LibGDX):
+     * RoomKind — SIGNATURE | GENERIC.
+     * RoomContext — the immutable query struct eligible()/selectionWeight() read: candidate interior
+       width/height, the floor's dungeonDepth, and alreadyPlacedOfThisKind (for per-level hard caps). It
+       mirrors exactly the facts LevelGenerator.assignRoomTypes()'s gates read today.
+     * RoomBlueprint (interface) — id() (stable registry key, never renamed), kind(), eligible(RoomContext)
+       (the LevelGenConstants min-size / depth-window / hard-cap gates), selectionWeight(RoomContext) (the
+       *_CHANCE roll weight; consumed by order-8, declared here), symbolDemand() (RoomSymbolDemand — the
+       sprite ids reserved when placed), and build(RoomBuildContext) (stamps the room's architecture).
+     * RoomBuildContext — the build facade: wraps a LevelGenerator + the target grid + the one Room, and
+       exposes that room type's architecture steps as thin package-private delegators to the generator's
+       EXISTING per-room helpers (a per-type pass scoped to a single-room list, or a `*ForRoom` helper for
+       the two index-1 STANDARD passes). So build() stamps with the identical code (and identical RNG draw
+       sequence) the generator's own passes use — no copy that could drift.
+     * RoomBlueprintRegistry — register / get / contains / size / all / allSignature / allGeneric /
+       selectable(RoomContext). Insertion-ordered (reproducible), duplicate id throws, get(unknown) throws.
+     * RoomBlueprints — the bootstrap hub (twin of TilesetRegistries.bootstrap()). bootstrap() is
+       idempotent and registers all 12 v1 blueprints; called once from World.create() next to
+       TilesetRegistries.bootstrap().
+
+   THE DEMAND MODEL (order-4 interaction): a SIGNATURE blueprint's symbolDemand().requiredSprites() maps
+   each flexible symbol its build() stamps to that symbol's LEGACY sprite id (verified equal to
+   LevelPalettes.legacy() per symbol). Example: cryo_chamber demands 'Z'->"wall_cryo" (+ 'N'->"wall_glass"
+   accent, '&'->"prop_biopod", ...). The STELLAR_OBSERVATORY demand is exactly the "observatory"
+   theme-tagged sprites, so order-4 binds them ONLY when the room is placed — realising order-4 R2
+   containment through the demand, not a special case. When a signature room is NOT placed it contributes
+   no demand, so its symbols fall through to the free variety pool (the freed-symbol mechanic). order-8
+   collects each placed blueprint's symbolDemand into SymbolAllocationRequest.placedRoomDemands.
+
+   ORDER-5 REFACTOR DISCIPLINE (what changed in LevelGenerator, behaviour held constant):
+     * `enum RoomType` and its constructor stay as an INTERNAL TAG (now package-private) — placeRooms()/
+       assignRoomTypes() still select with it, and themeNewRoomWallsForRoom() still switches on it. order-8
+       removes the switch and the enum when it flips generate() to iterate the registry.
+     * The room-type passes were made reusable per-room WITHOUT touching their RNG: the type-guarded
+       for-each passes (floor lighting, themeServerRoomWalls, all *Props, placeLargeRoomColumns) were made
+       package-private and are invoked by RoomBuildContext on a single-room list; themeNewRoomWalls and the
+       two index-1 STANDARD passes (placeProps, placeColumns) were split into `*ForRoom` helpers that both
+       the generate() pass and RoomBuildContext call. Every qualifying perimeter tile still consumes one
+       random.nextFloat() for EVERY room type — do not skip the roll for unthemed types.
+     * Pickups, weapon spawns, and enemy placement are NOT owned by build() in order-5: they place FIXED
+       symbols (not part of any symbolDemand) and remain generator passes until order-8 rewires generate().
+
+   THE RECIPE (add a room, once order-8 lands the selection wiring): write one RoomBlueprint (id, kind,
+   eligible, selectionWeight, symbolDemand, build) + one register() line in RoomBlueprints.registerAll().
+   No LevelGenerator switch edits. order-5 makes rooms REGISTERED; order-8 makes the generator SELECT from
+   the registry; order-9 documents the full end-to-end RECIPE B.
+
+   V1 BLUEPRINT CATALOG (id — kind — claimed sprites; GENERIC rooms claim nothing):
+     entrance            GENERIC   —
+     standard            GENERIC   —
+     large               GENERIC   —
+     server_room         SIGNATURE t→wall_terminal, T→prop_terminal, L→prop_locker, O→decal_oil,
+                                   g→prop_radioactive_barrel
+     medical_bay         SIGNATURE M→wall_medical, Q→wall_bio, #→prop_camera, C→prop_crate,
+                                   T→prop_terminal, .→decal_blood, O→decal_oil, m→decal_corpse
+     armory              SIGNATURE X→wall_blast, =→prop_weapon_rack, #→prop_camera, .→decal_blood,
+                                   m→decal_corpse
+     cryo_chamber        SIGNATURE Z→wall_cryo, N→wall_glass, &→prop_biopod, #→prop_camera, O→decal_oil,
+                                   C→prop_crate
+     power_plant         SIGNATURE U→wall_radiation, S→wall_emergency, %→prop_generator, #→prop_camera,
+                                   g→prop_radioactive_barrel, O→decal_oil
+     command_center      SIGNATURE N→wall_glass, S→wall_emergency, T→prop_terminal, #→prop_camera,
+                                   =→prop_weapon_rack, .→decal_blood, m→decal_corpse
+     containment_block   SIGNATURE N→wall_glass, Q→wall_bio, &→prop_biopod, C→prop_crate, #→prop_camera,
+                                   .→decal_blood, O→decal_oil, m→decal_corpse
+     research_lab        SIGNATURE D→wall_holo_data, F→wall_force_field, I→prop_specimen_tank,
+                                   W→prop_holo_workstation, J→prop_ai_core, e→decal_energy_scorch
+     stellar_observatory SIGNATURE `→wall_stellar_hull_plate, "→wall_stellar_viewport,
+                                   '→wall_stellar_magrail, ;→prop_gravity_well_core,
+                                   |→prop_docking_strut_pylon, <→prop_astro_nav_table,
+                                   \→prop_floating_cargo_crate, ?→decal_magnetic_deck,
+                                   ]→decal_zerog_debris, -→decal_starlight_seam  (all "observatory"-tagged)
+
+   TESTS (headless): RoomBlueprintRegistryTest — one blueprint per RoomType (12: 3 GENERIC + 9 SIGNATURE);
+   idempotent bootstrap; duplicate/unknown id throw; GENERIC demand empty; every SIGNATURE demand names a
+   registered sprite of the symbol's flexible category and equal to the legacy palette's mapping;
+   eligibility/weight gates equal the LevelGenConstants. RoomBlueprintBuildDemandTest — runs each SIGNATURE
+   build() over 400 seeds and asserts the FLEXIBLE symbols it stamps equal its declared demand exactly
+   (bidirectional drift guard). LevelGeneratorSnapshotTest — a fixed-seed digest over seeds×depths proves
+   the refactor left generate() byte-for-byte identical.
 
 6. TEXTURE REALIZATION (per level)
    TODO: filled by order-6 in the same commit that ships order-6.

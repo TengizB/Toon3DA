@@ -37,6 +37,7 @@ import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
 import ge.tbegvadze.toon3d.level.LinearCorridorGenerator;
 import ge.tbegvadze.toon3d.level.LevelLoader;
+import ge.tbegvadze.toon3d.level.RoomBlueprints;
 import ge.tbegvadze.toon3d.level.StartGameLevelGenerator;
 import ge.tbegvadze.toon3d.level.WeaponSpawnPoint;
 import ge.tbegvadze.toon3d.render.BossHudRenderer;
@@ -341,6 +342,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // reads it yet — it registers the complete inventory of today's wall/column/prop/decal art so
         // later orders' allocator + renderers can enumerate it instead of hardcoding a sprite list.
         TilesetRegistries.bootstrap();
+        // Room-blueprint catalog (symbol/sprite-reuse order-5). Idempotent. Registers every v1 room as a
+        // self-describing RoomBlueprint; nothing selects from it yet (generate() still uses the internal
+        // RoomType tag until order-8), it exists so the registry seam is live and enumerable.
+        RoomBlueprints.bootstrap();
         routeMapGenerator = new RouteMapGenerator(RouteRegistries.nodeTypes(), RouteRegistries.generators());
         // Order-9: supply the ELITE affix catalog so hotzones can roll a readable twist (empty pool =
         // no affix rolls). MYSTERY uses its own entry-time outcome table, not a map-gen affix.
