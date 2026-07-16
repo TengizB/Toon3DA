@@ -13,6 +13,8 @@ import ge.tbegvadze.toon3d.entity.WeaponTier;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
+import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.ArrayList;
@@ -42,9 +44,11 @@ import static ge.tbegvadze.toon3d.util.WeaponConstants.*;
  */
 public class PropRenderer implements Renderable, Disposable {
 
-    // TILESET MIGRATION: legacy fixed symbol->sprite/height mapping. To be replaced by a per-level
-    // LevelPalette + EnvironmentTextureSet so a prop symbol's sprite is chosen per level.
-    // See docs/environment-tileset-system.txt (tileset migration, order-6/7).
+    // TILESET MIGRATION: legacy fixed symbol->sprite/height mapping, STILL the runtime authority for the
+    // prop draw. order-6 shipped the replacement plumbing — a per-level EnvironmentTextureSet, realized
+    // from the level's LevelPalette and handed here via setEnvironmentTextureSet() — but the draw still
+    // reads THIS mapping until order-7 flips it to pull prop/decal textures from the set.
+    // See docs/environment-tileset-system.txt (tileset migration, section 6 DONE / order-7 pending).
     // Per-prop height multiplier relative to a full wall stripe (WORLD_HEIGHT / depth).
     // Keeps shorter objects (barrels, crates) below full wall height.
     private static float propHeightMultiplier(char propChar) {
@@ -144,6 +148,12 @@ public class PropRenderer implements Renderable, Disposable {
     private float planeY            = 1f;
     private float alertPulse        = 0f;
     private float lightingTimeSeconds = 0f;
+
+    // TILESET MIGRATION (order-6): the per-level texture supply realized from this level's palette. Set
+    // each level by World via setEnvironmentTextureSet(); order-6 only wires the plumbing + dispose path —
+    // order-7 flips the prop draw to read prop/decal textures FROM this set instead of the constructor-
+    // built {@link #textures} map. Never disposed here: the set is owned/disposed by World.
+    private EnvironmentTextureSet environmentTextureSet;
 
     public PropRenderer(Level level, WallRenderer wallRenderer) {
         this.level          = level;
@@ -270,6 +280,21 @@ public class PropRenderer implements Renderable, Disposable {
 
     public void setLightingTime(float timeSeconds) {
         this.lightingTimeSeconds = timeSeconds;
+    }
+
+    /**
+     * Supplies this level's realized texture set (symbol/sprite-reuse order-6). Called once per level by
+     * World, right after the set is built from the level's palette. order-6 only stores the reference; the
+     * prop draw still reads the constructor-built {@link #textures} map until order-7 rewires it to pull
+     * prop/decal textures from this set.
+     */
+    public void setEnvironmentTextureSet(EnvironmentTextureSet textureSet) {
+        this.environmentTextureSet = textureSet;
+    }
+
+    /** The current per-level texture set, or null before the first level is wired (order-6 plumbing). */
+    public EnvironmentTextureSet getEnvironmentTextureSet() {
+        return environmentTextureSet;
     }
 
     /** Returns the per-column depth buffer written during render so EnemyRenderer can occlude against props. */
@@ -838,6 +863,60 @@ public class PropRenderer implements Renderable, Disposable {
     private static void disposeProp(Texture texture) {
         COLUMN_OPACITY.remove(texture);
         texture.dispose();
+    }
+
+    /**
+     * Disposes a texture produced by this class's prop/decal generators AND prunes its entry from the
+     * static {@link #COLUMN_OPACITY} cache (symbol/sprite-reuse order-6). The per-level
+     * {@code EnvironmentTextureSet} realizes prop/decal textures through those generators (which register
+     * an opacity mask via {@code finalize()}), so it must free them the same way this renderer frees its
+     * own — otherwise the cache would leak one mask per prop sprite per level transition. Safe to call on
+     * a wall/column texture too: those were never registered, so the {@code remove} is a harmless no-op.
+     */
+    public static void disposeGeneratedTexture(Texture texture) {
+        disposeProp(texture);
+    }
+
+    /**
+     * Registers this renderer's solid-prop + floor-decal texture generators into the tileset
+     * texture-generator registry (symbol/sprite-reuse order-6). One line per sprite id, each delegating to
+     * the SAME procedural routine the constructor's {@link #buildTextures()} uses today, so realized
+     * textures are byte-identical to the live prop map — order-6 changes WHERE textures live, not how they
+     * look. Called once at startup by {@code TilesetGfxBootstrap}; the ids registered here must match the
+     * SOLID_PROP/FLOOR_DECAL sprite ids in {@code TilesetRegistries} (the startup assertion enforces it).
+     *
+     * <p>The radioactive barrel reproduces {@code buildTextures()}'s load-or-generate for its optional
+     * disk asset; the explosive barrel shares the same generator with {@code explosive=true}.
+     */
+    public static void registerTextureGenerators(TextureGeneratorRegistry registry) {
+        // Solid props (registration order matches TilesetRegistries.registerSolidProps).
+        registry.register("prop_radioactive_barrel",
+                () -> loadOrGenerate(PROP_BARREL_RADIOACTIVE_PATH, generateBarrelTexture(false)));
+        registry.register("prop_explosive_barrel",   () -> generateBarrelTexture(true));
+        registry.register("prop_terminal",           PropRenderer::generateTerminalTexture);
+        registry.register("prop_locker",             PropRenderer::generateLockerTexture);
+        registry.register("prop_crate",              PropRenderer::generateCrateTexture);
+        registry.register("prop_camera",             PropRenderer::generateCameraTexture);
+        registry.register("prop_generator",          PropRenderer::generateGeneratorTexture);
+        registry.register("prop_biopod",             PropRenderer::generateBioPodTexture);
+        registry.register("prop_weapon_rack",        PropRenderer::generateWeaponRackTexture);
+        registry.register("prop_vendor",             PropRenderer::generateVendorTexture);
+        registry.register("prop_specimen_tank",      PropRenderer::generateSpecimenTankTexture);
+        registry.register("prop_ai_core",            PropRenderer::generateAiCoreNodeTexture);
+        registry.register("prop_holo_workstation",   PropRenderer::generateHoloWorkstationTexture);
+        registry.register("prop_gravity_well_core",  PropRenderer::generateGravityWellCoreTexture);
+        registry.register("prop_floating_cargo_crate", PropRenderer::generateFloatingCargoCrateTexture);
+        registry.register("prop_docking_strut_pylon",  PropRenderer::generateDockingStrutPylonTexture);
+        registry.register("prop_astro_nav_table",    PropRenderer::generateAstroNavHoloTableTexture);
+        // Floor decals (registration order matches TilesetRegistries.registerDecals).
+        registry.register("decal_corpse",            PropRenderer::generateCorpseTexture);
+        registry.register("decal_blood_alt",         PropRenderer::generateShotgunTexture);
+        registry.register("decal_blood",             PropRenderer::generateBloodTexture);
+        registry.register("decal_oil",               PropRenderer::generateOilTexture);
+        registry.register("decal_energy_scorch",     PropRenderer::generateEnergyScorchTexture);
+        registry.register("decal_magnetic_deck",     PropRenderer::generateMagneticDeckPlatingTexture);
+        registry.register("decal_zerog_debris",      PropRenderer::generateZeroGDebrisScatterTexture);
+        registry.register("decal_starlight_seam",    PropRenderer::generateStarlightSeamStripTexture);
     }
 
     // -------------------------------------------------------------------------
