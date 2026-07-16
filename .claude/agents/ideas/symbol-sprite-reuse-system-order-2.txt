@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Symbol/Sprite Reuse — Part 2: Symbol Budget (Fixed vs Flexible)
 CREATED: 2026-07-15
@@ -119,11 +119,26 @@ TECHNICAL NOTES
 
 DELIVERABLE CHECKLIST (order-2)
 ===============================
-[ ] SymbolClass enum.
-[ ] SymbolBudget value object + SymbolBudget.standard() factory.
-[ ] TilesetConstants.java with the fixed/flexible symbol string tables + PALETTE_SEED_SALT.
-[ ] Headless unit tests for partition integrity (disjoint sets, gameplay symbols FIXED, 'x' rule).
-[ ] STATUS -> IMPLEMENTED; DOC TODO kept accurate.
+[x] SymbolClass enum.
+[x] SymbolBudget value object + SymbolBudget.standard() factory.
+[x] TilesetConstants.java with the fixed/flexible symbol string tables + PALETTE_SEED_SALT.
+[x] Headless unit tests for partition integrity (disjoint sets, gameplay symbols FIXED, 'x' rule).
+[x] STATUS -> IMPLEMENTED; DOC TODO kept accurate.
+
+IMPLEMENTATION NOTES (as shipped)
+=================================
+- SymbolClass, SymbolBudget in …toon3d.tileset; TilesetConstants in …toon3d.util.
+- fixedAssignments holds ONLY the two sprite-bound fixed symbols: 'x'->"wall_plain",
+  shop '@'->"prop_vendor". All other FIXED symbols (doors/pickups/ammo/lighting/hazards/enemy
+  spawns/start/exit) are non-sprite and simply absent — the fail-safe default lands them on FIXED.
+- Flexible slots: WALL = accent walls c v t w h j G k N Q S M Z U X D F " ' ` (all isWall minus 'x');
+  COLUMN = P; SOLID_PROP = g E T L C # % & = I J W ; \ | < (all isPropSolid minus '@');
+  FLOOR_DECAL = m s . O e ? ] - (pure decals). Observatory art stays flexible-by-category; its room
+  containment is the allocator's job via the order-1 "observatory" theme tag.
+- Doc: filled the SYMBOL BUDGET section of docs/environment-tileset-system.txt, flipped the order-2
+  status row to DONE, and tightened the docs/tile-symbols.txt banner. The util-table entry for
+  TilesetConstants.java is deferred to order-9's final CLAUDE.md/util-table consolidation per this
+  order's CONSTANTS note.
 
 LIVING DOC CONTRACT
 ===================

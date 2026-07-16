@@ -17,6 +17,12 @@ in docs/environment-tileset-system.txt for which parts are live. Do not rely on 
 fixed sprite" as permanent truth while this banner is present.
 NOTE: once the migration lands, "adding art" becomes RECIPE A (register a new sprite in the
 environment-sprite registry), NOT "consume a scarce symbol." The 1:1 rule below is legacy.
+NOTE (order-2, LIVE): symbols are now split into FIXED and FLEXIBLE (see the SYMBOL BUDGET section
+of docs/environment-tileset-system.txt). A FIXED symbol keeps a permanent meaning AND sprite (player
+start, exit, doors, keycards, pickups, ammo, hazards, enemy spawns, the plain wall 'x', and the shop
+'@'). A FLEXIBLE symbol (the accent walls, column 'P', decoration props/decals) carries a fixed
+CATEGORY, not a fixed sprite — its art is chosen per level from that category's pool. The "sprite"
+column below is the LEGACY default for flexible symbols, not a permanent binding.
 
 STRICT RULE: Every time a new symbol is introduced anywhere in the codebase
 (Level.java, LevelLoader.java, LevelGenerator.java, WallRenderer.java, or any
