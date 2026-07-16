@@ -46,7 +46,7 @@ Legend: NOT STARTED / IN PROGRESS / DONE.
   0      DONE          Documentation guardrails: this doc (skeleton + table), legacy banners,
                        pointer comments. No code logic change.
   1      DONE          Tile categories + environment-sprite registry (the art catalog).
-  2      NOT STARTED   Symbol budget: FIXED vs FLEXIBLE split, SymbolBudget config.
+  2      DONE          Symbol budget: FIXED vs FLEXIBLE split, SymbolBudget config.
   3      NOT STARTED   LevelPalette (per-level symbol->category+sprite binding) + LEGACY default.
   4      NOT STARTED   SymbolAllocator: deterministic per-level assignment engine.
   5      NOT STARTED   RoomBlueprint + RoomBlueprintRegistry (existing rooms as blueprints).
@@ -132,9 +132,80 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    the inventory is complete and nothing was dropped); duplicate-id throws; bootstrap() idempotent;
    height/occluder metadata matches legacy values; observatory art carries the containment tag.
 
-2. SYMBOL BUDGET (FIXED vs FLEXIBLE)
-   TODO: filled by order-2 in the same commit that ships order-2.
-   (SymbolClass, the reserved/flexible split of the alphabet, SymbolBudget, TilesetConstants.java.)
+2. SYMBOL BUDGET (FIXED vs FLEXIBLE)  [DONE — order-2]
+   The SAFETY BOUNDARY of the whole series: the authoritative declaration of which level-file symbols
+   the per-level allocator (order-4) MAY reassign a sprite to (FLEXIBLE) and which it must NEVER touch
+   (FIXED). Isolated as one small, heavily-tested config so the allocator can trust it and a reviewer
+   can see, in one place, exactly what is safe to vary. Pure config + a small value object — NO
+   allocation logic (order-4), NO per-level binding (order-3). Headless, no LibGDX.
+
+   WHY THE SPLIT EXISTS: get it wrong and a level could repaint the exit '>' or a keycard 'r' as a
+   wall, breaking gameplay. The dangerous direction is OVER-declaring flexibility (marking a gameplay
+   symbol reassignable); UNDER-declaring is merely less variety. So flexibility is declared EXPLICITLY
+   and everything else is FIXED by default (fail-safe): any char not listed as flexible — including
+   unknown chars — resolves to FIXED without being enumerated.
+
+   SymbolClass (enum, …toon3d.tileset): FIXED (permanent meaning AND sprite) / FLEXIBLE (fixed
+   category/meaning, sprite chosen per level from the category pool).
+
+   AUTHORITATIVE FIXED / FLEXIBLE PARTITION (v1):
+     FIXED — permanent meaning AND sprite; NEVER reassigned. These keep exactly their current handling
+       and (except the two sprite-bound exceptions below) are NOT in the sprite registry:
+         * Special: player start 'p', exit '>'.
+         * Doors: d R Y B.  Floor lighting: (space) l u f  (brightness multipliers, not sprites).
+         * Pickups: r y b + H a A  and ammo 6 7 8 9 0.  Hazards: i (fire) q (toxic).
+         * Enemy spawns: 1 2 3 4 5 ! $ ^ ~ z K V * n.
+       FIXED symbols that DO map to a sprite (the only entries in fixedAssignments):
+         * 'x' plain wall -> "wall_plain" (see PLAIN-WALL RULE below).
+         * shop '@' -> "prop_vendor" (World.placeMachine stamps it solid; it must always render as the
+           vendor machine, so although '@' sits in the SOLID_PROP category it stays FIXED).
+     FLEXIBLE — category fixed, sprite assigned per level:
+         * WALL:       c v t w h j G k N Q S M Z U X D F " ' `  (every isWall char except 'x').
+         * COLUMN:     P  (meaning "column" is permanent; the filling sprite is flexible — round today,
+                          square after order-9).
+         * SOLID_PROP: g E T L C # % & = I J W ; \ | <  (every isPropSolid char except the shop '@').
+         * FLOOR_DECAL: m s . O e ? ] -  (the "pure" decals; pickup/hazard/stairs decals are FIXED).
+       The STELLAR_OBSERVATORY room art (" ' ` ; \ | < ? ] -) is FLEXIBLE by category; its room
+       containment is preserved by the allocator via the order-1 "observatory" sprite theme tag, NOT by
+       the budget.
+
+   PLAIN-WALL RULE: 'x' is the 80-90% default wall and hand-crafted levels lean on it heavily, so it
+   stays a FIXED WALL slot permanently bound to "wall_plain". Flexibility applies to the ACCENT walls,
+   where variety actually reads; this keeps generic corridors legible and every existing hand level's
+   bulk walls unchanged.
+
+   SymbolBudget (immutable value object, …toon3d.tileset):
+     * fixedAssignments(): Map<Character,String> — char -> permanently-bound sprite id (only the
+       sprite-bound FIXED symbols: 'x'->"wall_plain", '@'->"prop_vendor"). Non-sprite FIXED symbols are
+       simply absent.
+     * flexibleSlots(): Map<TileCategory,List<Character>> — the reassignable symbols per category.
+     * symbolClassOf(char) -> SymbolClass (fast lookup; FIXED for anything not declared flexible).
+     * categoryOfFlexibleSymbol(char) -> TileCategory (null if the char is not flexible).
+     * fixedSpriteId(char) / isFixed(char) / isFlexible(char) — convenience readers.
+     * static SymbolBudget.standard() — builds the canonical v1 partition above from TilesetConstants;
+       the single source the allocator consumes. Stores STRUCTURE only (which char is which
+       class/category) — it does NOT choose which sprite fills a flexible slot (order-4's job).
+   Both returned maps and their lists are unmodifiable.
+
+   TilesetConstants.java (…toon3d.util, a NEW split-constants file): holds the partition as named string
+   tables so changing it is a one-constant edit, never a code change:
+     FIXED_WALL_SYMBOL="x", FIXED_WALL_SPRITE_ID="wall_plain",
+     FLEXIBLE_WALL_SYMBOLS, FLEXIBLE_COLUMN_SYMBOLS, FLEXIBLE_SOLIDPROP_SYMBOLS, FLEXIBLE_DECAL_SYMBOLS,
+     FIXED_SPRITE_SYMBOLS / FIXED_SPRITE_IDS (index-aligned; the shop '@'->"prop_vendor" exception),
+     PALETTE_SEED_SALT (long; reserved here for order-4's palette-seed derivation, unused until then).
+
+   REVISED tile-symbols.txt RULE (transitional; order-9 does the full STRICT-RULE rewrite): a FIXED
+   symbol is permanent (meaning AND sprite); a FLEXIBLE symbol now carries a CATEGORY, not a fixed
+   sprite — its art is assigned per level within that category. Adding environment art becomes
+   "register a new SPRITE in the category pool" (order-1 RECIPE), not "consume a scarce symbol"; new
+   symbols become rare. The tile-symbols.txt banner is tightened this commit to say flexible symbols
+   carry a category, not a fixed sprite.
+
+   TESTS (core/src/test/.../tileset/SymbolBudgetTest): fixed and flexible sets disjoint; no char in two
+   flexible categories; every gameplay symbol (doors, pickups, ammo, hazards, enemy spawns, start, exit,
+   shop) resolves to FIXED via the fail-safe default; 'x' FIXED and bound to "wall_plain"; '@' FIXED and
+   bound to "prop_vendor"; every flexible symbol maps to a real order-1 category with a non-empty pool;
+   unknown char defaults to FIXED; returned maps/lists unmodifiable.
 
 3. PER-LEVEL BINDING (LevelPalette)
    TODO: filled by order-3 in the same commit that ships order-3.
