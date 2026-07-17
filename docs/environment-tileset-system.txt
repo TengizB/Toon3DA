@@ -68,6 +68,8 @@ Legend: NOT STARTED / IN PROGRESS / DONE.
                        new salvage-bay room (freed symbols) + square column ('P' round OR square).
   9      DONE          Extensibility proof (hex-plate wall via RECIPE A + supply-cache room via RECIPE B)
                        + final doc/tile-symbols.txt/CLAUDE.md consolidation; transition banners removed.
+  10     DONE          LARGE demoted from a blueprint to a per-room SIZE MODIFIER; min-3 special rooms
+                       guaranteed; LinearCorridorGenerator migrated onto the shared registry + spine bend.
 
 
 THE IN-COMMIT DOC RULE (established by order-0; now the subsystem's permanent contract)
@@ -403,8 +405,11 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
      * SIGNATURE — fixed identity (architecture AND look): MEDICAL_BAY, ARMORY, CRYO_CHAMBER, SERVER_ROOM,
        POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK, RESEARCH_LAB, STELLAR_OBSERVATORY. Each CLAIMS a set
        of sprites when placed (its symbolDemand); absent, it frees them.
-     * GENERIC — allocator-driven filler with an EMPTY demand: ENTRANCE, STANDARD, LARGE. Their walls/props
-       get per-level variety from the order-4 allocator, not a fixed claim.
+     * GENERIC — allocator-driven filler with an EMPTY demand: ENTRANCE, STANDARD, SALVAGE_BAY,
+       SUPPLY_CACHE (order-8/order-9 additions — see their own sections below). Their walls/props get
+       per-level variety from the order-4 allocator, not a fixed claim. LARGE was a fourth GENERIC
+       blueprint through order-9; order-10 REMOVED it as a blueprint — see the order-10 addendum at the
+       end of this doc.
 
    CLASSES (all in …toon3d.level, headless — no LibGDX):
      * RoomKind — SIGNATURE | GENERIC.
@@ -453,10 +458,11 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    No LevelGenerator switch edits. order-5 makes rooms REGISTERED; order-8 makes the generator SELECT from
    the registry; order-9 documents the full end-to-end RECIPE B.
 
-   V1 BLUEPRINT CATALOG (id — kind — claimed sprites; GENERIC rooms claim nothing):
+   V1 BLUEPRINT CATALOG (id — kind — claimed sprites; GENERIC rooms claim nothing). Snapshot as of
+   order-5; order-8/order-9 added salvage_bay/supply_cache (see their sections) and order-10 REMOVED
+   large (see the order-10 addendum at the end of this doc) — large is no longer in the registry:
      entrance            GENERIC   —
      standard            GENERIC   —
-     large               GENERIC   —
      server_room         SIGNATURE t→wall_terminal, T→prop_terminal, L→prop_locker, O→decal_oil,
                                    g→prop_radioactive_barrel
      medical_bay         SIGNATURE M→wall_medical, Q→wall_bio, #→prop_camera, C→prop_crate,
@@ -684,9 +690,9 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
      * Because every flexible wall symbol the generator already writes (c/v/t/w/h from assignWallVariety)
        is mapped to a per-level THEME sprite by the allocator, two seeds ALREADY differ. STEP C goes
        further: it computes the FREED accent symbols (candidates M/Z/U/X/D/N/Q/S/k/G/w/h/j MINUS anything
-       a placed room reserved) and sprinkles them sparsely into GENERIC room perimeters (each STANDARD/
-       LARGE room, at LEVEL_GEN_GENERIC_ACCENT_ROOM_CHANCE, gets ONE freed accent theme at
-       LEVEL_GEN_GENERIC_ACCENT_WALL_CHANCE per wall) and into pure corridor walls
+       a placed room reserved) and sprinkles them sparsely into GENERIC room perimeters (each STANDARD
+       room — including a large-modified one — at LEVEL_GEN_GENERIC_ACCENT_ROOM_CHANCE, gets ONE freed
+       accent theme at LEVEL_GEN_GENERIC_ACCENT_WALL_CHANCE per wall) and into pure corridor walls
        (LEVEL_GEN_CORRIDOR_ACCENT_WALL_CHANCE). Reserved symbols are excluded, so a freed 'M' never
        collides with a placed medical bay. 'x' stays dominant; all rates live in LevelGenConstants.
      * SAFETY: SymbolAllocator Step 3 binds EVERY flexible symbol, so any accent STEP C stamps always has
@@ -780,8 +786,8 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
       LevelGenConstants.
         - GENERIC room: empty requiredSprites; its look is allocator-driven (optionally declare
           categoryCounts as intent). A GENERIC room whose build() COMPOSES the existing RoomBuildContext
-          steps (assignFloorLighting / placeStandardColumns / placeStandardProps / placeLargeRoom* / …)
-          needs NO new generator code AND NO RoomType enum constant — roomTypeForBlueprint() tags an id
+          steps (assignFloorLighting / placeStandardColumns / placeStandardProps / …) needs NO new
+          generator code AND NO RoomType enum constant — roomTypeForBlueprint() tags an id
           with no matching enum as the generic STANDARD tag (the order-9 seam fix). THIS is the pure
           "one blueprint + one register() line" case.
         - SIGNATURE room: requiredSprites pins each flexible symbol its build() stamps to that symbol's
@@ -848,3 +854,54 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
      textures and is freed on level teardown and at World shutdown (routing prop textures through
      PropRenderer.disposeGeneratedTexture so the opacity-mask cache does not leak). Repeated floor
      transitions hold a stable texture count.
+
+
+10. LARGE BECAME A SIZE MODIFIER + GUARANTEED SPECIAL ROOMS  [DONE — order-10]
+   Post-series gameplay change to the two room-based generators (LevelGenerator/ROOMS_MST and
+   LinearCorridorGenerator/LINEAR_CORRIDOR). Three parts:
+
+   A. LARGE IS NO LONGER A ROOM BLUEPRINT — IT IS A SIZE MODIFIER.
+      * ID_LARGE and its RoomBlueprint registration are REMOVED from RoomBlueprints; RoomType.LARGE is
+        removed from both generators' enums. The registry now holds 13 blueprints (was 14): 4 GENERIC
+        (entrance/standard/salvage_bay/supply_cache) + 9 SIGNATURE.
+      * Instead, each generator's Room carries a `boolean isLarge`, rolled AT PLACEMENT TIME
+        (LEVEL_GEN_LARGE_MODIFIER_CHANCE = 0.05 per non-entrance room, gated by config.enableLargeRooms —
+        which was previously dead/unread). A large-modified room is stamped significantly bigger than a
+        standard room (interior floored at LEVEL_GEN_LARGE_MIN_DIM = 9, ceilinged at
+        LEVEL_GEN_LARGE_MODIFIER_MAX_WIDTH/HEIGHT = 28/20) but keeps WHATEVER blueprint styling it would
+        have received anyway — the modifier is orthogonal to room type. The entrance room is always
+        isLarge=false.
+      * The old LARGE-only decoration (assignLargeRoomFloor / placeLargeRoomColumns / placeLargeRoomProps
+        and the LinearCorridor twins + the RoomBuildContext delegators) is DELETED. isLarge now only:
+        (1) floors pickup chances at the historic LARGE loot levels (size earns richer loot regardless of
+        type), (2) counts as a landmark for wide-hallway priority + stairs tie-break (LevelGenerator).
+      * LEVEL_GEN_LARGE_ROOM_CHANCE / _MAX_PER_LEVEL / _COLUMN_MIN / _COLUMN_MAX / _PROP_CHANCE and the
+        LinearCorridor LEVEL_GEN_SPINE_LARGE_* constants are removed. LEVEL_GEN_LARGE_MIN_DIM survives
+        (reused as the large-modifier floor AND the POWER_PLANT size gate).
+
+   B. MINIMUM 3 SPECIAL ROOMS GUARANTEED (more possible, at lower odds).
+      * "Special" = any placed blueprint other than entrance/standard (the 9 SIGNATURE rooms + the GENERIC
+        flavour rooms salvage_bay/supply_cache). The normal STEP-A weighted roll already produces a
+        variable count with no upper cap; a BACKSTOP pass (ensureMinimumSpecialRooms) runs right after it
+        and, only when the count came up short, upgrades randomly-chosen STANDARD rooms to an eligible
+        special blueprint until LEVEL_GEN_MIN_SPECIAL_ROOMS (= 3) is reached. Best-effort: it never forces
+        an ineligible fit and never REMOVES a special, so more than 3 stays possible, fewer than before
+        never happens. Measured avg ≈ 3.3–3.4 special rooms/level.
+
+   C. LINEARCORRIDORGENERATOR MIGRATED ONTO THE SHARED REGISTRY + SPINE BEND.
+      * Its old hardcoded finder-pass / cumulative-band assignRoomTypes() is replaced by the SAME
+        seeded-weighted-roll-over-RoomBlueprintRegistry selection LevelGenerator uses (plus the shared
+        min-3 backstop). STORAGE_BAY and REACTOR remain this generator's own local top-up types (no
+        shared blueprint exists for them). The two generators now share one room catalog + one selection
+        algorithm.
+      * SPINE BEND: the 80x45 grid is far shorter tall than wide, so a vertical-only spine placed ~half
+        the rooms of a horizontal one — too few for the 3-special minimum to reach reliably. Each spine
+        now carves ONE perpendicular bend from its tail toward the roomier side of the grid, carrying its
+        own side rooms + landmark via the existing side-room helpers (LEVEL_GEN_SPINE_BEND_*). This is the
+        chosen fix for the room-budget deficit; it applies to both orientations for consistency.
+
+   VERIFICATION (headless): both generators were driven across 500 seeds (selection) + 300 seeds ×
+   varied depths (full generate()) with zero crashes; LevelGenerator hits the 3-special minimum on
+   100% of sampled seeds, LinearCorridorGenerator on the large majority (the shortfall is genuine
+   size-gate/cap exhaustion on sparse layouts, not a bug). RoomBlueprintRegistryTest updated to 13
+   blueprints / 4 GENERIC.

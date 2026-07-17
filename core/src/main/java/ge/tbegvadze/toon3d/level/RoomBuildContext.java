@@ -55,10 +55,6 @@ public final class RoomBuildContext {
         generator.placeStandardColumnsForRoom(grid, room);
     }
 
-    void placeLargeRoomColumns() {
-        generator.placeLargeRoomColumns(grid, singletonRoom);
-    }
-
     // --- Props (per room type) ---
 
     void placeStandardProps() {
@@ -67,10 +63,6 @@ public final class RoomBuildContext {
 
     void placeServerRoomProps() {
         generator.placeServerRoomProps(grid, singletonRoom);
-    }
-
-    void placeLargeRoomProps() {
-        generator.placeLargeRoomProps(grid, singletonRoom);
     }
 
     void placeMedicalBayProps() {
