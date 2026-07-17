@@ -13,6 +13,7 @@ import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
 import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
 import ge.tbegvadze.toon3d.tileset.LevelPalette;
+import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.TilesetConstants;
 
@@ -472,7 +473,8 @@ public class WallRenderer implements Renderable, Disposable {
         registry.register("wall_stellar_viewport",   WallRenderer::generateStellarViewportWallTexture);
         registry.register("wall_stellar_magrail",    WallRenderer::generateStellarMagrailWallTexture);
         registry.register("wall_stellar_hull_plate", WallRenderer::generateStellarHullPlateWallTexture);
-        registry.register("column_round",     WallRenderer::generateColumnTexture);
+        registry.register(TilesetRegistries.SPRITE_ID_COLUMN_ROUND,  WallRenderer::generateColumnTexture);
+        registry.register(TilesetRegistries.SPRITE_ID_COLUMN_SQUARE, WallRenderer::generateColumnSquareTexture);
     }
 
     /**
@@ -503,6 +505,58 @@ public class WallRenderer implements Renderable, Disposable {
         pixmap.setColor(0.28f, 0.28f, 0.30f, 1f);
         for (int row = COLUMN_MORTAR_SPACING; row < textureHeight; row += COLUMN_MORTAR_SPACING) {
             pixmap.fillRectangle(0, row, textureWidth, 4);
+        }
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * order-8 REQUIREMENT PROOF 2 — the square column sprite. A boxy gunmetal support pillar: a
+     * flat metal panel with bright vertical edge highlights (so the billboard reads as a squared-off
+     * column rather than a rounded stone one), horizontal panel seams, and corner rivets. It shares
+     * the same texture dimensions as {@link #generateColumnTexture} and is drawn through the identical
+     * billboard/ray path, so no new geometry is required to SHIP THE SPRITE; the FLEXIBLE 'P' slot now
+     * resolves to this OR the round column per level (see docs/environment-tileset-system.txt §8,
+     * SQUARE-COLUMN GEOMETRY note). Deferred: true ray-BOX cross-section — the pillar still uses the
+     * ray-circle collision of the round column, only the surface art differs.
+     */
+    private static Texture generateColumnSquareTexture() {
+        int textureWidth  = COLUMN_TEXTURE_WIDTH;
+        int textureHeight = COLUMN_TEXTURE_HEIGHT;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
+        // Gunmetal panel base with a faint per-pixel grain. Slightly cooler/darker than the round
+        // stone column so the two read as different materials at a glance.
+        for (int row = 0; row < textureHeight; row++) {
+            for (int column = 0; column < textureWidth; column++) {
+                float grain = ((row * 7 + column * 11) % 13 - 6) / 120f;
+                float gray  = 0.42f + grain;
+                pixmap.setColor(gray, gray, gray + 0.05f, 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+        // Bright vertical edge highlights near the left/right faces read the pillar as squared-off.
+        int edgeWidth = Math.max(2, textureWidth / 12);
+        for (int row = 0; row < textureHeight; row++) {
+            for (int column = 0; column < edgeWidth; column++) {
+                float edgeShade = 0.68f - (column / (float) edgeWidth) * 0.20f;
+                pixmap.setColor(edgeShade, edgeShade, edgeShade + 0.05f, 1f);
+                pixmap.drawPixel(column, row);
+                pixmap.drawPixel(textureWidth - 1 - column, row);
+            }
+        }
+        // Recessed dark panel seams at each course line (horizontal), thinner than the stone mortar.
+        pixmap.setColor(0.20f, 0.20f, 0.23f, 1f);
+        for (int row = COLUMN_MORTAR_SPACING; row < textureHeight; row += COLUMN_MORTAR_SPACING) {
+            pixmap.fillRectangle(edgeWidth, row, textureWidth - 2 * edgeWidth, 3);
+        }
+        // Corner rivets at each seam intersection near the panel edges.
+        pixmap.setColor(0.72f, 0.72f, 0.76f, 1f);
+        int rivetInset = edgeWidth + 3;
+        for (int row = COLUMN_MORTAR_SPACING; row < textureHeight; row += COLUMN_MORTAR_SPACING) {
+            pixmap.fillRectangle(rivetInset, row - 4, 3, 3);
+            pixmap.fillRectangle(textureWidth - rivetInset - 3, row - 4, 3, 3);
         }
         Texture texture = new Texture(pixmap);
         texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
@@ -1748,11 +1802,21 @@ public class WallRenderer implements Renderable, Disposable {
             levelWallHeights[charIndex]  = textureSet.heightFor(spriteId);
         }
 
-        // Column 'P' — resolves to the round OR (order-8) square column sprite for this level.
+        // Column 'P' — resolves to the round OR (order-8) square column sprite for this level. 'P' is a
+        // FLEXIBLE COLUMN symbol bound in every palette (legacy binds round; the allocator always fills
+        // it), so spriteIdOf is non-null in practice; the null branch keeps the plain-wall default
+        // (always present in the set) so a missing binding degrades gracefully instead of NPE-ing in the
+        // hot render path — the same defence the wall loop above uses.
         String columnSpriteId = palette.spriteIdOf(COLUMN_SYMBOL);
-        levelColumnTexture       = textureSet.textureFor(columnSpriteId);
-        levelColumnTextureWidth  = textureSet.widthFor(columnSpriteId);
-        levelColumnTextureHeight = textureSet.heightFor(columnSpriteId);
+        if (columnSpriteId == null) {
+            levelColumnTexture       = plainTexture;
+            levelColumnTextureWidth  = plainWidth;
+            levelColumnTextureHeight = plainHeight;
+        } else {
+            levelColumnTexture       = textureSet.textureFor(columnSpriteId);
+            levelColumnTextureWidth  = textureSet.widthFor(columnSpriteId);
+            levelColumnTextureHeight = textureSet.heightFor(columnSpriteId);
+        }
     }
 
     /** The current per-level texture set, or null before the first level is wired (order-6 plumbing). */

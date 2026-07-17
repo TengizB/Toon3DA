@@ -25,6 +25,22 @@ public final class TilesetRegistries {
     /** Theme tag on the room-contained STELLAR_OBSERVATORY art (walls, props, decals). */
     public static final String THEME_TAG_OBSERVATORY = "observatory";
 
+    /** Stable sprite id of the round column (the historic 1:1 COLUMN art the legacy palette binds 'P' to). */
+    public static final String SPRITE_ID_COLUMN_ROUND  = "column_round";
+    /** Stable sprite id of the order-8 square column (REQUIREMENT PROOF 2; variety-only, see below). */
+    public static final String SPRITE_ID_COLUMN_SQUARE = "column_square";
+
+    /**
+     * Sprite ids that exist in the catalog as PER-LEVEL VARIETY ALTERNATIVES which the historic 1:1
+     * legacy palette never maps a symbol to (order-8). Today this is exactly {@link #SPRITE_ID_COLUMN_SQUARE}
+     * — the second COLUMN sprite the flexible 'P' slot can resolve to (REQUIREMENT PROOF 2). They are
+     * fully registered (with texture generators) but only ever reached through the allocator, so the
+     * legacy palette references the whole catalog MINUS this set. Unmodifiable.
+     */
+    public static final java.util.Set<String> VARIETY_ONLY_SPRITE_IDS =
+            java.util.Collections.unmodifiableSet(
+                    new java.util.LinkedHashSet<>(java.util.Arrays.asList(SPRITE_ID_COLUMN_SQUARE)));
+
     private static final EnvironmentSpriteRegistry SPRITES = new EnvironmentSpriteRegistry();
     private static boolean bootstrapped = false;
 
@@ -102,7 +118,14 @@ public final class TilesetRegistries {
      * square column arrives later as the extensibility proof.
      */
     static void registerColumns(EnvironmentSpriteRegistry registry) {
-        registry.register(EnvironmentSpriteDefinition.builder("column_round", TileCategory.COLUMN, "Round Column").build());
+        registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_COLUMN_ROUND, TileCategory.COLUMN, "Round Column").build());
+        // order-8 REQUIREMENT PROOF 2 — the square column: a SECOND sprite in the EXISTING COLUMN
+        // category (new ART, not a new symbol). The FIXED-meaning symbol 'P' now resolves per level to
+        // EITHER "column_round" or "column_square" through the allocator (COLUMN is a flexible-sprite
+        // slot; its MEANING stays "column"). Adding it here is the whole recipe on the catalog side —
+        // its texture generator is registered in WallRenderer.registerTextureGenerators and the startup
+        // id-set assertion enforces the pair.
+        registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_COLUMN_SQUARE, TileCategory.COLUMN, "Square Column").build());
     }
 
     /**

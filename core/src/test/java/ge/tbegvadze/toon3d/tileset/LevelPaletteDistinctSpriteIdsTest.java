@@ -43,8 +43,13 @@ class LevelPaletteDistinctSpriteIdsTest {
     }
 
     @Test
-    void legacyDistinctSetIsTheWholeCatalog() {
+    void legacyDistinctSetIsTheWholeCatalogExceptVarietyOnlyArt() {
+        // Narrowed by order-8: the catalog now carries variety-only art (e.g. "column_square") that no
+        // legacy symbol maps to, so the legacy distinct set is the whole catalog MINUS that set.
         LevelPalette legacy = LevelPalettes.legacy();
-        assertEquals(TilesetRegistries.sprites().ids(), legacy.distinctSpriteIds());
+        java.util.Set<String> expected =
+                new java.util.LinkedHashSet<>(TilesetRegistries.sprites().ids());
+        expected.removeAll(TilesetRegistries.VARIETY_ONLY_SPRITE_IDS);
+        assertEquals(expected, legacy.distinctSpriteIds());
     }
 }

@@ -59,9 +59,15 @@ class LevelPaletteTest {
                     "legacy bound '" + candidate + "' to unregistered sprite " + spriteId);
             boundSpriteIds.add(spriteId);
         }
-        // One symbol per sprite (a 1:1 legacy table), covering the full registry.
-        assertEquals(registry.size(), boundSymbols);
-        assertEquals(registry.size(), boundSpriteIds.size());
+        // One symbol per sprite (a 1:1 legacy table), covering the full registry EXCEPT the order-8
+        // variety-only art (e.g. "column_square") that no legacy symbol maps to.
+        int legacyCatalogSize = registry.size() - TilesetRegistries.VARIETY_ONLY_SPRITE_IDS.size();
+        assertEquals(legacyCatalogSize, boundSymbols);
+        assertEquals(legacyCatalogSize, boundSpriteIds.size());
+        for (String varietyOnlyId : TilesetRegistries.VARIETY_ONLY_SPRITE_IDS) {
+            assertFalse(boundSpriteIds.contains(varietyOnlyId),
+                    "legacy palette must not bind variety-only sprite " + varietyOnlyId);
+        }
     }
 
     @Test

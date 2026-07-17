@@ -33,11 +33,11 @@ class RoomBlueprintRegistryTest {
     @Test
     void registersExactlyOneBlueprintPerRoomType() {
         RoomBlueprintRegistry registry = freshRegistry();
-        // 12 room types today → 12 blueprints, all ids distinct (LinkedHashMap keys).
+        // 13 room types (order-8 added SALVAGE_BAY) → 13 blueprints, all ids distinct (LinkedHashMap keys).
         assertEquals(LevelGenerator.RoomType.values().length, registry.size(),
                 "one blueprint per RoomType");
-        assertEquals(12, registry.size());
-        assertEquals(3, registry.allGeneric().size(), "ENTRANCE/STANDARD/LARGE are GENERIC");
+        assertEquals(13, registry.size());
+        assertEquals(4, registry.allGeneric().size(), "ENTRANCE/STANDARD/LARGE/SALVAGE_BAY are GENERIC");
         assertEquals(9, registry.allSignature().size(), "the nine specialty rooms are SIGNATURE");
     }
 
@@ -46,7 +46,7 @@ class RoomBlueprintRegistryTest {
         RoomBlueprints.bootstrap();
         RoomBlueprints.bootstrap();
         assertTrue(RoomBlueprints.isBootstrapped());
-        assertEquals(12, RoomBlueprints.rooms().size());
+        assertEquals(13, RoomBlueprints.rooms().size());
     }
 
     @Test
