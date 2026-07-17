@@ -53,7 +53,8 @@ Legend: NOT STARTED / IN PROGRESS / DONE.
   6      DONE          Per-level texture realization: TextureGeneratorRegistry + Environment-
                        TextureSet (subset per level).
   7      DONE          Rewire WallRenderer / PropRenderer / Level to read the palette.
-  8      NOT STARTED   LevelGenerator integration: registry-driven rooms + rule-driven variety.
+  8      DONE          LevelGenerator integration: registry-driven rooms + rule-driven variety;
+                       new salvage-bay room (freed symbols) + square column ('P' round OR square).
   9      NOT STARTED   Extensibility proof + final doc/tile-symbols.txt/CLAUDE.md consolidation.
 
 
@@ -625,11 +626,110 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    byte-identical generation). Legacy-palette look parity + no double-free / no leak across floor transitions
    are verified in-game (stable texture count).
 
-8. GENERATOR INTEGRATION
-   TODO: filled by order-8 in the same commit that ships order-8.
-   (LevelGenerator picks room blueprints from the registry, asks the allocator for the palette, paints
-    generic rooms/halls with rule-driven variety; new generated room from freed symbols; square-column
-    'P' case.)
+8. GENERATOR INTEGRATION  [DONE — order-8]
+   Where the whole series becomes VISIBLE on generated floors. LevelGenerator now (1) selects rooms from
+   the RoomBlueprintRegistry, (2) asks the SymbolAllocator for a per-level LevelPalette built from the
+   rooms it actually placed, (3) attaches that palette to the Level, and (4) paints generic rooms + halls
+   with rule-driven variety. Two freshly generated levels now visibly differ in walls / columns / props,
+   while every signature room and every hand-crafted level is unchanged. order-8 is an explicit BEHAVIOUR
+   change (the generated-level RNG sequence changed); LevelGeneratorSnapshotTest was re-baselined once and
+   remains a strict determinism guard (same seed ⇒ same grid).
+
+   REGISTRY-DRIVEN ROOM SELECTION (replaces the hardcoded probability-band switch):
+     * assignRoomBlueprints() runs right after placeRooms(). Room 0 is always ENTRANCE (position rule);
+       every other room draws ONE blueprint from RoomBlueprints.rooms() with a SEEDED WEIGHTED roll.
+     * For each candidate, every registered blueprint (except the position-only ENTRANCE) is evaluated
+       with its OWN RoomContext(interiorWidth, interiorHeight, dungeonDepth, alreadyPlacedOfThisKind) —
+       its own placed-count, so the blueprint's per-level hard cap reads correctly. Eligible blueprints
+       and their selectionWeight() feed GameMath.weightedChoiceIndex with ONE random.nextFloat() per room.
+     * STANDARD is always eligible with a dominant weight (LEVEL_GEN_ROOM_STANDARD_SELECTION_WEIGHT = 5.0),
+       so plain rooms stay the majority and specialties stay occasional — the mix the old cumulative bands
+       produced. MEDICAL_BAY's guaranteed-once semantics became an eligibility cap (< 1) + a raised roulette
+       weight (2.5) rather than a bespoke finder pass; ENTRANCE/CRYO_MAX/etc. are likewise blueprint
+       eligibility rules. THE RULE holds: no switch on a hardcoded room list. The old assignRoomTypes()
+       and its four finder passes are gone.
+     * roomTypeForBlueprint() maps a blueprint id to the internal RoomType tag with NO switch:
+       RoomType.valueOf(id.toUpperCase()) round-trips because every RoomBlueprints.ID_* equals its enum
+       name lower-cased. The enum survives ONLY as the tag the per-room build helpers key off.
+
+   PER-ROOM BUILD (replaces the global per-type decoration passes):
+     * generate() now runs assignWallVariety() (generic walls) + placePlayerSpawn(), then a single loop
+       `for (Room room : rooms) room.blueprint.build(new RoomBuildContext(this, grid, room));`. Each
+       blueprint's build() stamps its own floor lighting + wall theming + columns + props through the
+       order-5 RoomBuildContext delegators (identical helper code, so signature rooms look identical).
+       Rooms are margin-separated, so per-room builds are independent and the loop is deterministic.
+     * placeWideHallwayColumns(), placePickups(), placeWeaponSpawns(), the budgeted encounter, the
+       atmospheric post-passes, connectivity, gating, and stairs stay global (FIXED-symbol passes).
+
+   PALETTE FROM PLACED ROOMS (STEP B):
+     * allocatePalette() builds SymbolAllocationRequest(seed, dungeonDepth, SymbolBudget.standard(),
+       placedRoomDemands, TilesetRegistries.sprites()) where placedRoomDemands = each PLACED room's
+       symbolDemand() with a non-empty requiredSprites (SIGNATURE rooms). SymbolAllocator.allocate() →
+       LevelPalette, attached via the 4-arg Level constructor. The seed is the floor's master seed (the
+       same value World.floorSeed feeds the generator), so same seed ⇒ same rooms ⇒ same palette ⇒ same
+       level (verified by LevelGeneratorSnapshotTest). A signature room that is NOT placed contributes no
+       demand, so its symbols are FREE in the palette and the allocator fills them with generic variety —
+       "server room not loaded ⇒ its symbols are reused" with zero special-case code.
+
+   GENERIC ROOMS & HALLS GET VARIETY (STEP C — stampGenericVarietyAccents):
+     * Because every flexible wall symbol the generator already writes (c/v/t/w/h from assignWallVariety)
+       is mapped to a per-level THEME sprite by the allocator, two seeds ALREADY differ. STEP C goes
+       further: it computes the FREED accent symbols (candidates M/Z/U/X/D/N/Q/S/k/G/w/h/j MINUS anything
+       a placed room reserved) and sprinkles them sparsely into GENERIC room perimeters (each STANDARD/
+       LARGE room, at LEVEL_GEN_GENERIC_ACCENT_ROOM_CHANCE, gets ONE freed accent theme at
+       LEVEL_GEN_GENERIC_ACCENT_WALL_CHANCE per wall) and into pure corridor walls
+       (LEVEL_GEN_CORRIDOR_ACCENT_WALL_CHANCE). Reserved symbols are excluded, so a freed 'M' never
+       collides with a placed medical bay. 'x' stays dominant; all rates live in LevelGenConstants.
+     * SAFETY: SymbolAllocator Step 3 binds EVERY flexible symbol, so any accent STEP C stamps always has
+       a realized texture — no missing-texture risk.
+
+   REQUIREMENT PROOF 1 — a NEW generated room from freed symbols (salvage_bay):
+     * RoomBlueprints registers ID_SALVAGE_BAY as a GENERIC room with a DISTINCT architecture (its own
+       placeSalvageBayForRoom build: a dingy floor, an irregular CENTRAL SCRAP HEAP of solid props with a
+       walkable ring around it, locker racks lining the walls, sparse salvage wall panels, oil/scrap
+       decals, two corner support columns) — NOT a reskin of any existing room's rows/rings/rotunda.
+     * Its symbolDemand() reserves NO sprite; it declares FLEXIBLE-category slot COUNTS only
+       (WALL 2 / SOLID_PROP 2 / FLOOR_DECAL 1), so it composes from whatever flexible symbols are free on
+       the level and its look is fully allocator-driven. It is eligible on ordinary floors
+       (LEVEL_GEN_SALVAGE_BAY_MIN_*), capped (LEVEL_GEN_SALVAGE_BAY_MAX = 2), and competes in the STEP A
+       roulette (LEVEL_GEN_ROOM_SALVAGE_BAY_SELECTION_WEIGHT). It appears on roughly 1 in 8 floors.
+       This is new LAYOUT + new allocator-driven look from the registry, with no bespoke generator branch
+       beyond its own blueprint's build().
+
+   REQUIREMENT PROOF 2 — the square column ('P' round OR square):
+     * TilesetRegistries.registerColumns() now registers a SECOND COLUMN sprite "column_square" (new ART
+       in an EXISTING category — NOT a new symbol) and WallRenderer registers its procedural generator
+       (generateColumnSquareTexture — a gunmetal panel with vertical edge highlights, panel seams, and
+       corner rivets). The FIXED-meaning symbol 'P' (COLUMN category) now resolves PER LEVEL to EITHER
+       "column_round" or "column_square" via the allocator's variety fill (COLUMN is a flexible-sprite
+       slot; its MEANING stays "column"). Result: some levels show round columns, some square, same 'P'
+       symbol, ZERO level-file changes and ZERO renderer-logic changes (order-7 already resolves 'P'
+       through the palette + EnvironmentTextureSet; WallRenderer.resolveLevelTextures reads it). Measured
+       over 60 seeds: ~33 round / ~27 square.
+     * SQUARE-COLUMN GEOMETRY (scoped deferral): only the SPRITE ships here. The square column still uses
+       the round column's ray-circle collision + billboard path (Level.isColumn is unchanged), so its
+       cross-section is not yet a true ray-BOX. Shipping the square SPRITE is the exact behaviour the
+       product owner described; a true square cross-section (ray-box intersection in WallRenderer) is a
+       follow-up, flagged here.
+
+   THE CATALOG IS NOW BIGGER THAN THE LEGACY PALETTE: "column_square" is the first VARIETY-ONLY sprite —
+   registered art that no legacy symbol maps to (the legacy palette binds 'P' → round). LevelPalettes'
+   legacy zip was relaxed to allow a category to carry MORE sprites than the historic table has symbols
+   (binding the legacy symbols to the first N registered sprites); TilesetRegistries.VARIETY_ONLY_SPRITE_IDS
+   names that set, and the order-1/order-6 "legacy references the whole catalog" tests were narrowed to
+   "whole catalog MINUS the variety-only ids". This is exactly the migration's endpoint: no level loads
+   the whole art library.
+
+   DETERMINISM / COMPATIBILITY: same floor seed ⇒ same room selection ⇒ same palette ⇒ same level
+   (LevelGeneratorSnapshotTest). Hand-crafted levels (LevelLoader) and the other bespoke generators still
+   pass the LEGACY palette (3-arg Level constructor) and are untouched. Signature rooms look identical:
+   their symbolDemand() pins their exact sprites (allocator Step 2), so a placed CRYO room still renders
+   cryo walls.
+
+   RECIPE additions (consolidated fully in section 9 / order-9): add a room = one RoomBlueprint + one
+   register() line in RoomBlueprints (salvage_bay is the worked example); add environment art = one
+   EnvironmentSpriteDefinition + one texture generator (column_square is the worked example). Neither
+   touches the generator, the renderers' draw logic, or Level.
 
 9. RECIPES & FINAL STATE
    TODO: filled by order-9 in the same commit that ships order-9.

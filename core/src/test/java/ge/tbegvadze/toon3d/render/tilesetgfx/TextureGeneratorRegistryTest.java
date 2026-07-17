@@ -48,12 +48,16 @@ class TextureGeneratorRegistryTest {
     }
 
     @Test
-    void legacyPaletteReferencesTheWholeCatalog() {
-        // order-6 "no visual change" contract: a legacy level's palette references every registered
-        // sprite exactly once, so realize(legacyPalette) produces today's full wall/prop set.
+    void legacyPaletteReferencesTheWholeCatalogExceptVarietyOnlyArt() {
+        // order-6 "no visual change" contract, NARROWED by order-8: a legacy level's palette references
+        // every registered sprite exactly once EXCEPT the variety-only additions that no legacy symbol
+        // maps to (e.g. "column_square" — REQUIREMENT PROOF 2, an alternative COLUMN sprite reached only
+        // through the allocator). Legacy still realizes today's full historic wall/prop set.
         LevelPalette legacy = LevelPalettes.legacy();
         Set<String> referenced = legacy.distinctSpriteIds();
-        assertEquals(TilesetRegistries.sprites().ids(), referenced);
+        Set<String> expected = new java.util.LinkedHashSet<>(TilesetRegistries.sprites().ids());
+        expected.removeAll(TilesetRegistries.VARIETY_ONLY_SPRITE_IDS);
+        assertEquals(expected, referenced);
     }
 
     @Test

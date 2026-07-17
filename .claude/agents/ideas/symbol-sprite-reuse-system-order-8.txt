@@ -1,7 +1,27 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Symbol/Sprite Reuse — Part 8: Generator Integration & Variety
 CREATED: 2026-07-15
+---
+IMPLEMENTATION NOTES (order-8 shipped):
+  * LevelGenerator.assignRoomBlueprints() replaces assignRoomTypes() + its 4 finder passes: seeded
+    weighted pick over RoomBlueprintRegistry, per-candidate RoomContext, id→RoomType via valueOf (no
+    switch). generate() stamps each room via RoomBlueprint.build(); allocatePalette() feeds the placed
+    rooms' demands to SymbolAllocator and attaches the LevelPalette to the Level (4-arg constructor).
+  * STEP C = stampGenericVarietyAccents(): freed accent symbols (unreserved) sprinkled into GENERIC
+    rooms + corridors; rates in LevelGenConstants.
+  * PROOF 1 = salvage_bay (RoomBlueprints.ID_SALVAGE_BAY): brand-new GENERIC room, distinct central
+    scrap-heap architecture (placeSalvageBayForRoom), demand = flexible category counts only. Appears
+    ~1/8 floors.
+  * PROOF 2 = column_square: new COLUMN sprite in TilesetRegistries + WallRenderer.generateColumnSquare
+    Texture; 'P' resolves round OR square per level (~55/45 over 60 seeds). Only the SPRITE ships; true
+    ray-box cross-section deferred (Level.isColumn unchanged). LevelPalettes legacy zip relaxed +
+    VARIETY_ONLY_SPRITE_IDS; order-1/6 whole-catalog tests narrowed.
+  * Determinism: LevelGeneratorSnapshotTest re-baselined (order-8 is a behaviour change) and still a
+    strict same-seed⇒same-grid guard. Full suite: 120/120 green. Docs: environment-tileset-system.txt
+    §8 filled + status row DONE; procedural-level-generation.txt banner narrowed.
+  * Note: the salvage_bay identity/architecture was authored inline (not via a separate
+    creative-game-designer pass) to keep the order self-contained; refine later if desired.
 ---
 
 DOC UPDATES — FILL IN THIS ORDER'S COMMIT (the doc exists from order-0)

@@ -586,9 +586,41 @@ public final class LevelGenConstants {
     // CONSUMED by the registry-driven selection order-8 introduces (which defines how weights combine).
     // ENTRANCE is assigned to room 0 by position, never rolled → zero weight.
     public static final float LEVEL_GEN_ROOM_ENTRANCE_SELECTION_WEIGHT = 0f;
-    // STANDARD is the residual fallback for any room no specialty claims → baseline weight.
-    public static final float LEVEL_GEN_ROOM_STANDARD_SELECTION_WEIGHT = 1.0f;
-    // MEDICAL_BAY is guaranteed once per level (placed by a finder pass, not a chance roll) → nominal
-    // high weight so it always wins its slot when eligible.
-    public static final float LEVEL_GEN_ROOM_MEDICAL_BAY_SELECTION_WEIGHT = 1.0f;
+    // STANDARD is the residual fallback for any room no specialty claims. order-8 makes this the roulette
+    // weight for plain rooms; kept well above the summed specialty weights so most rooms stay plain and
+    // corridors/rooms read legibly (PLAIN-WALL discipline at the room level).
+    public static final float LEVEL_GEN_ROOM_STANDARD_SELECTION_WEIGHT = 5.0f;
+    // MEDICAL_BAY roulette weight (order-8): the guaranteed-once finder is gone, so eligibility caps it
+    // to one and this above-baseline weight keeps a heal-stop room common across a run.
+    public static final float LEVEL_GEN_ROOM_MEDICAL_BAY_SELECTION_WEIGHT = 2.5f;
+
+    // --- Symbol/sprite-reuse order-8: registry-driven selection + variety tuning ---
+    // order-8 replaces the hardcoded probability-band switch in assignRoomTypes() with a per-candidate
+    // seeded weighted pick over the RoomBlueprintRegistry (RoomBlueprint.selectionWeight). The roulette
+    // weighs each eligible specialty room (its existing *_CHANCE) against STANDARD's baseline weight, so
+    // a higher STANDARD weight keeps plain rooms dominant and specialties occasional — the mix the old
+    // bands produced. The STANDARD and MEDICAL_BAY roulette weights live with the order-5 selection
+    // weights above; the salvage-bay and STEP-C accent tunables follow.
+
+    // SALVAGE_BAY — order-8 REQUIREMENT PROOF 1: a brand-new GENERIC room with a distinct central
+    // scrap-heap architecture, composed entirely from FREE (unreserved) flexible symbols so its look is
+    // allocator-driven. Eligible on ordinary floors at a modest size; capped so it stays a flavour room.
+    public static final int   LEVEL_GEN_SALVAGE_BAY_MIN_WIDTH  = 6;
+    public static final int   LEVEL_GEN_SALVAGE_BAY_MIN_HEIGHT = 6;
+    public static final int   LEVEL_GEN_SALVAGE_BAY_MAX        = 2;
+    public static final float LEVEL_GEN_ROOM_SALVAGE_BAY_SELECTION_WEIGHT = 0.30f;
+    // Salvage-bay interior tuning (all rates seeded through the generator's Random).
+    public static final float LEVEL_GEN_SALVAGE_HEAP_DENSITY        = 0.55f; // solid-prop fill of the central heap
+    public static final float LEVEL_GEN_SALVAGE_PERIMETER_RACK_CHANCE = 0.30f; // lockers/racks along interior walls
+    public static final float LEVEL_GEN_SALVAGE_WALL_ACCENT_CHANCE  = 0.22f; // perimeter wall → salvage accent symbol
+    public static final float LEVEL_GEN_SALVAGE_DECAL_CHANCE        = 0.14f; // oil/scrap decals on open floor
+    public static final float LEVEL_GEN_SALVAGE_DARK_FLOOR_CHANCE   = 0.30f; // dingy 'u' patches over the 'l' floor
+
+    // STEP C — generic rooms & halls get per-level variety. A sparse pass stamps FREED flexible accent
+    // symbols (those NO placed signature room reserved this level) into GENERIC room perimeters and
+    // corridor walls, so the allocator's per-level sprite for those symbols makes two seeds visibly
+    // differ AND the freed symbols concretely appear. 'x' stays dominant (accents are sparse).
+    public static final float LEVEL_GEN_GENERIC_ACCENT_ROOM_CHANCE  = 0.60f; // chance a generic room gets an accent theme
+    public static final float LEVEL_GEN_GENERIC_ACCENT_WALL_CHANCE  = 0.14f; // per perimeter wall tile, if themed
+    public static final float LEVEL_GEN_CORRIDOR_ACCENT_WALL_CHANCE = 0.05f; // per corridor-context wall tile
 }

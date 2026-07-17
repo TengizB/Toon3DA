@@ -104,4 +104,10 @@ public final class RoomBuildContext {
     void placeStellarObservatoryProps() {
         generator.placeStellarObservatoryProps(grid, singletonRoom);
     }
+
+    // order-8 REQUIREMENT PROOF 1: the salvage bay stamps its own floor + walls + heap + racks + decals
+    // + columns in one self-contained pass, so it needs no shared floor-lighting/wall-theming switch case.
+    void placeSalvageBay() {
+        generator.placeSalvageBayForRoom(grid, room);
+    }
 }

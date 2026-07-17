@@ -62,10 +62,17 @@ class TilesetRegistriesTest {
     }
 
     @Test
-    void columnCountMatchesLevelIsColumn() {
+    void columnCategoryHoldsRoundAndSquareColumnVariety() {
+        // order-8 REQUIREMENT PROOF 2: the COLUMN category is the first flexible-sprite slot to carry
+        // MORE art than it has symbols — the single symbol 'P' (Level.isColumn) resolves per level to
+        // "column_round" OR "column_square". So the 1:1 symbol==sprite count invariant no longer holds
+        // for COLUMN by design; it must hold that the pool is at least the symbol count and contains
+        // both variety sprites.
         EnvironmentSpriteRegistry registry = freshRegistry();
-        assertEquals(countLevelChars(candidate -> Level.isColumn((char) candidate)),
-                registry.allInCategory(TileCategory.COLUMN).size());
+        int columnSymbolCount = countLevelChars(candidate -> Level.isColumn((char) candidate));
+        assertTrue(registry.allInCategory(TileCategory.COLUMN).size() >= columnSymbolCount);
+        assertTrue(registry.contains("column_round"));
+        assertTrue(registry.contains("column_square"));
     }
 
     @Test

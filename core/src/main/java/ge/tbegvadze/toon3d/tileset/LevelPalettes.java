@@ -73,14 +73,20 @@ public final class LevelPalettes {
     }
 
     // Zips a registration-ordered symbol string against a category's registry pool: char[i] binds to
-    // pool[i].id(). A size mismatch means the symbol table and the registry drifted apart — fail loudly.
+    // pool[i].id(). The historic environment sprites are registered FIRST in each category, so binding
+    // the legacy symbols to pool[0..symbols.length()-1] reproduces today's exact art. Since order-8 the
+    // catalog may carry MORE sprites than the legacy table has symbols (variety-only art that no
+    // legacy symbol maps to, e.g. "column_square" in the COLUMN category — REQUIREMENT PROOF 2): those
+    // extras are simply never bound by the legacy palette, which is correct — a level only ever uses as
+    // many distinct sprites as it has symbols. FEWER registered sprites than symbols still means the
+    // table and registry drifted apart, so that direction still fails loudly.
     private static void bindCategory(LevelPalette.Builder builder, EnvironmentSpriteRegistry registry,
                                      TileCategory category, String symbols) {
         List<EnvironmentSpriteDefinition> pool = registry.allInCategory(category);
-        if (pool.size() != symbols.length()) {
+        if (pool.size() < symbols.length()) {
             throw new IllegalStateException(
                     "Legacy palette symbol/sprite count mismatch for " + category + ": "
-                            + symbols.length() + " symbols vs " + pool.size() + " registered sprites");
+                            + symbols.length() + " symbols vs only " + pool.size() + " registered sprites");
         }
         for (int index = 0; index < symbols.length(); index++) {
             builder.bind(symbols.charAt(index), category, pool.get(index).id());

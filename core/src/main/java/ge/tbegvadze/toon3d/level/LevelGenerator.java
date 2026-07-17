@@ -2,28 +2,43 @@ package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.item.ItemType;
+import ge.tbegvadze.toon3d.tileset.LevelPalette;
+import ge.tbegvadze.toon3d.tileset.RoomSymbolDemand;
+import ge.tbegvadze.toon3d.tileset.SymbolAllocationRequest;
+import ge.tbegvadze.toon3d.tileset.SymbolAllocator;
+import ge.tbegvadze.toon3d.tileset.SymbolBudget;
+import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 /**
  * Procedural dungeon generator — six-phase algorithm inspired by Shattered Pixel Dungeon.
  *
- * Phase 1 — Room Placement:     randomly sized rectangular rooms placed without overlap,
- *                                typed as one of: ENTRANCE, STANDARD, LARGE, SERVER_ROOM,
- *                                MEDICAL_BAY, ARMORY, CRYO_CHAMBER, POWER_PLANT,
- *                                COMMAND_CENTER, or CONTAINMENT_BLOCK.
+ * Phase 1 — Room Placement:     randomly sized rectangular rooms placed without overlap, then each
+ *                                assigned a RoomBlueprint via a SEEDED WEIGHTED pick over the
+ *                                RoomBlueprintRegistry (order-8 assignRoomBlueprints — no hardcoded
+ *                                probability-band switch). Room types: ENTRANCE, STANDARD, LARGE,
+ *                                SALVAGE_BAY, SERVER_ROOM, MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
+ *                                POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK, RESEARCH_LAB,
+ *                                STELLAR_OBSERVATORY.
  * Phase 2 — Connectivity:       greedy MST + optional loop corridors; 2-3 MST edges
  *                                widened to 3-tile grand hallways with centre-line columns.
  *                                Single door pass after all corridor carving.
- * Phase 3 — Decoration:         context-aware wall variety, room-type-specific floor
- *                                lighting, patterned columns, room-type prop layout,
- *                                pickups, and hazard walls.
+ * Phase 3 — Decoration:         context-aware generic wall variety, then each room stamps its own
+ *                                architecture via RoomBlueprint.build() (floor lighting, wall theming,
+ *                                columns, props); a per-level LevelPalette from the placed rooms'
+ *                                symbol demands (order-8 SymbolAllocator) gives the written symbols
+ *                                their per-level sprites; sparse freed-symbol accents in generic rooms
+ *                                and halls; then pickups, weapon spawns, and hazard walls.
  * Phase 4 — Enemy Placement:    enemy spawns in non-entrance rooms, after props; count and
  *                                archetype toughness scale with the room's depth from spawn.
  * Phase 5 — Connectivity Audit: BFS flood-fill from player spawn; emergency corridors for
@@ -66,22 +81,29 @@ public class LevelGenerator implements ILevelGenerator {
 
     private enum WallContext { CORRIDOR, ROOM, MIXED, INTERIOR }
 
-    // TILESET MIGRATION (order-5): every RoomType now also exists as a registered RoomBlueprint
-    // (see RoomBlueprints + RoomBlueprintRegistry). The enum survives as an INTERNAL TAG during the
-    // refactor: placeRooms()/assignRoomTypes() still select with it, and the per-room architecture
-    // helpers are keyed off it. order-8 flips generate() to iterate the registry and calls
-    // RoomBlueprint.build() instead of these passes; the enum is removed then.
-    // Package-private so the level-package RoomBuildContext + blueprint tests can tag a Room's type.
-    // See docs/environment-tileset-system.txt (ORDER STATUS TABLE, section 5).
+    // TILESET MIGRATION (order-8): room SELECTION is now registry-driven — assignRoomBlueprints() picks
+    // each room's RoomBlueprint from RoomBlueprintRegistry with a seeded weighted roll, and generate()
+    // stamps each room via RoomBlueprint.build() instead of the old global per-type passes. There is no
+    // hardcoded room-list switch in selection any more. The enum survives ONLY as an INTERNAL TAG the
+    // per-room architecture helpers (assignFloorLighting/themeNewRoomWallsForRoom/place*Props) still key
+    // off; each blueprint's build() sets it via roomTypeForBlueprint(), and RoomType.valueOf(id.upper())
+    // maps id→tag with no switch. Package-private so RoomBuildContext + the blueprint tests can tag a
+    // Room's type. SALVAGE_BAY is the new order-8 GENERIC room (REQUIREMENT PROOF 1). See
+    // docs/environment-tileset-system.txt (ORDER STATUS TABLE, section 8).
     enum RoomType {
         ENTRANCE, STANDARD, LARGE, SERVER_ROOM,
         MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
         POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK,
-        RESEARCH_LAB, STELLAR_OBSERVATORY
+        RESEARCH_LAB, STELLAR_OBSERVATORY, SALVAGE_BAY
     }
 
     private final Random         random;
     private final LevelGenConfig config;
+
+    // The floor's master seed (same value World.floorSeed feeds this generator). Stored so order-8 can
+    // build the per-level LevelPalette from the SAME seed the layout RNG used — the SymbolAllocator is a
+    // pure function of (seed, placed rooms), so same seed ⇒ same palette ⇒ same-looking level.
+    private final long           seed;
 
     // Dungeon floor this generator is building for (1-based). Drives the encounter Threat-Point
     // budget (balance idea 4). Defaults to 1; set via generate(int dungeonDepth).
@@ -105,6 +127,7 @@ public class LevelGenerator implements ILevelGenerator {
     public LevelGenerator(long seed, LevelGenConfig config) {
         this.random = new Random(seed);
         this.config = config;
+        this.seed   = seed;
     }
 
     // -------------------------------------------------------------------------
@@ -128,7 +151,9 @@ public class LevelGenerator implements ILevelGenerator {
         List<Room> rooms = placeRooms();
         if (rooms.size() < 2) return buildFallbackLevel();
 
-        assignRoomTypes(rooms);
+        // order-8 STEP A — pick each room's blueprint from the registry with a seeded weighted roll
+        // (replaces the hardcoded probability-band switch). Records the blueprint + its RoomType tag.
+        assignRoomBlueprints(rooms);
 
         // Phase 1 — carve rooms and corridors
         carveRoomInteriors(grid, rooms);
@@ -148,26 +173,17 @@ public class LevelGenerator implements ILevelGenerator {
         // Phase 2 — doors (single pass after ALL corridor carving is complete)
         placeDoors(grid);
 
-        // Phase 3 — decoration
-        assignFloorLighting(grid, rooms);
+        // Phase 3 — decoration. order-8: generic wall variety first (build() theming overrides room
+        // perimeters), then each room stamps its own architecture through its blueprint's build().
         assignWallVariety(grid);
-        themeServerRoomWalls(grid, rooms);
-        themeNewRoomWalls(grid, rooms);
         placePlayerSpawn(grid, rooms.get(0));
-        placeColumns(grid, rooms);
-        placeLargeRoomColumns(grid, rooms);
+        for (Room room : rooms) {
+            room.blueprint.build(new RoomBuildContext(this, grid, room));
+        }
         placeWideHallwayColumns(grid);
-        placeProps(grid, rooms);
-        placeServerRoomProps(grid, rooms);
-        placeLargeRoomProps(grid, rooms);
-        placeMedicalBayProps(grid, rooms);
-        placeArmoryProps(grid, rooms);
-        placeCryoChamberProps(grid, rooms);
-        placePowerPlantProps(grid, rooms);
-        placeCommandCenterProps(grid, rooms);
-        placeContainmentBlockProps(grid, rooms);
-        placeResearchLabProps(grid, rooms);
-        placeStellarObservatoryProps(grid, rooms);
+        // order-8 STEP C — sparse per-level accents in GENERIC rooms and corridors from the FREED
+        // (unreserved) flexible symbols, so freed symbols appear and two seeds visibly differ.
+        stampGenericVarietyAccents(grid, rooms);
         placePickups(grid, rooms, roomDepths, maxRoomDepth);
         placeWeaponSpawns(grid, rooms);
 
@@ -193,7 +209,9 @@ public class LevelGenerator implements ILevelGenerator {
         // Phase 6 — stamp exactly one stairs-down exit in the deepest room (behind the gate if one exists)
         stampStairsDown(grid, rooms, roomDepths, gatedRooms);
 
-        return new Level(grid, spawnPoints, weaponSpawnPoints);
+        // order-8 STEP B — build this level's varied palette from the rooms actually placed and attach it.
+        // The generator only ever wrote SYMBOLS; the palette is what makes those symbols look varied.
+        return new Level(grid, spawnPoints, weaponSpawnPoints, allocatePalette(rooms));
     }
 
     // -------------------------------------------------------------------------
@@ -205,6 +223,9 @@ public class LevelGenerator implements ILevelGenerator {
     static final class Room {
         final int leftColumn, bottomRow, rightColumn, topRow;
         RoomType type;
+        // order-8: the registered blueprint selected for this room. Its build() stamps the architecture
+        // and its symbolDemand() feeds the palette allocator. Set by assignRoomBlueprints().
+        RoomBlueprint blueprint;
 
         Room(int leftColumn, int bottomRow, int rightColumn, int topRow) {
             this.leftColumn  = leftColumn;
@@ -270,259 +291,304 @@ public class LevelGenerator implements ILevelGenerator {
     }
 
     /**
-     * Multi-step room-type assignment:
-     *
-     * Step A — Guaranteed/rare uniques (run first to ensure they always appear):
-     *   ENTRANCE:       room 0, always.
-     *   MEDICAL_BAY:    guaranteed one per level, mid-distance, ≥7×6, hard cap 1.
-     *   COMMAND_CENTER: deepest eligible room ≥8×7, 50% chance, hard cap 1.
-     *   ARMORY:         random eligible ≥6×6, 80% chance, hard cap 1.
-     *
-     * Step B — LARGE-class rooms (consume LARGE-eligible rooms after uniques are placed):
-     *   POWER_PLANT:    from LARGE-eligible candidates, 45% chance, hard cap 1; rest → LARGE.
-     *
-     * Step C — Remaining rooms classified by sequential cumulative roll bands (one roll per room):
-     *   CRYO_CHAMBER:       ≥7×7, roll in [0, CRYO_CHANCE)           → ~16 % of rolls, hard cap 2.
-     *   CONTAINMENT_BLOCK:  ≥8×6, roll in [CRYO_CHANCE, +CONTAIN)    → next ~16 % band, hard cap 2.
-     *   SERVER_ROOM:        any,   roll in [prev, +SERVER_CHANCE)     → next ~16 % band, hard cap per config.
-     *   STANDARD:           fallback for all remaining rolls.
-     *
-     * Because these are else-if branches on a single roll, the bands are mutually exclusive per room.
-     * A room that is cryo-ineligible falls through to the CONTAINMENT check at the same roll value,
-     * so its effective CONTAINMENT threshold is the full [0, CRYO+CONTAIN) range (~32 %).
+     * order-8 STEP A — registry-driven room selection. Replaces the old hardcoded probability-band
+     * switch: room 0 is always the ENTRANCE (position rule), then every other room draws one blueprint
+     * from {@link RoomBlueprints#rooms()} with a seeded weighted roll over the blueprints eligible for
+     * that candidate's size/depth/per-kind count. Signature-room size gates and per-level caps are the
+     * blueprints' own {@link RoomBlueprint#eligible} rules (order-5), so the generator carries no
+     * hardcoded room-type knowledge — THE RULE: no switch on a hardcoded room list.
      */
-    private void assignRoomTypes(List<Room> rooms) {
-        rooms.get(0).type = RoomType.ENTRANCE;
+    private void assignRoomBlueprints(List<Room> rooms) {
+        RoomBlueprints.bootstrap(); // idempotent — safe outside World (tests build generators directly)
+        RoomBlueprintRegistry registry = RoomBlueprints.rooms();
 
-        boolean medicalBayPlaced    = false;
-        boolean armoryPlaced        = false;
-        boolean commandCenterPlaced = false;
-        boolean powerPlantPlaced    = false;
-        boolean researchLabPlaced   = false;
-        int     cryoChamberCount    = 0;
-        int     containmentCount    = 0;
-        int     serverRoomCount     = 0;
+        // Per-blueprint placed counts, so each candidate's RoomContext reports the right
+        // alreadyPlacedOfThisKind for that blueprint's hard-cap rule.
+        Map<String, Integer> placedCounts = new HashMap<>();
 
-        // Step A — Medical Bay: guaranteed, mid-distance room with minimum size
-        if (!medicalBayPlaced) {
-            Room medicalCandidate = findMedicalBayCandidate(rooms);
-            if (medicalCandidate != null) {
-                medicalCandidate.type = RoomType.MEDICAL_BAY;
-                medicalBayPlaced = true;
-            }
-        }
+        Room entrance = rooms.get(0);
+        entrance.blueprint = registry.get(RoomBlueprints.ID_ENTRANCE);
+        entrance.type      = RoomType.ENTRANCE;
+        placedCounts.merge(RoomBlueprints.ID_ENTRANCE, 1, Integer::sum);
 
-        // Step A — Command Center: deepest eligible LARGE-class room at 50% chance
-        if (!commandCenterPlaced && random.nextFloat() < LevelGenConstants.LEVEL_GEN_COMMAND_CHANCE) {
-            Room commandCandidate = findCommandCenterCandidate(rooms);
-            if (commandCandidate != null) {
-                commandCandidate.type = RoomType.COMMAND_CENTER;
-                commandCenterPlaced = true;
-            }
-        }
-
-        // Step A — Armory: random eligible room at 80% chance
-        if (!armoryPlaced && random.nextFloat() < LevelGenConstants.LEVEL_GEN_ARMORY_CHANCE) {
-            Room armoryCandidate = findArmoryCandidate(rooms);
-            if (armoryCandidate != null) {
-                armoryCandidate.type = RoomType.ARMORY;
-                armoryPlaced = true;
-            }
-        }
-
-        // Step B — LARGE-eligible rooms: Power Plant or plain LARGE
-        int largeRoomCount = 0;
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
-            if (room.type != RoomType.STANDARD) continue;
-            boolean largeEligible = room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM
-                                 && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM;
-            if (!largeEligible) continue;
-            if (config.enableLargeRooms
-                    && largeRoomCount < LevelGenConstants.LEVEL_GEN_LARGE_ROOM_MAX_PER_LEVEL) {
-                if (!powerPlantPlaced
-                        && random.nextFloat() < LevelGenConstants.LEVEL_GEN_POWERPLANT_CHANCE) {
-                    room.type = RoomType.POWER_PLANT;
-                    powerPlantPlaced = true;
+            RoomBlueprint chosen = selectBlueprint(registry, room, placedCounts);
+            room.blueprint = chosen;
+            room.type      = roomTypeForBlueprint(chosen);
+            placedCounts.merge(chosen.id(), 1, Integer::sum);
+        }
+    }
+
+    /**
+     * Seeded weighted pick of one blueprint for a candidate room. Each registered blueprint (except the
+     * position-only ENTRANCE) is evaluated with its OWN {@link RoomContext} — same dimensions/depth but
+     * its own already-placed count — so per-kind caps read correctly. STANDARD is always eligible with a
+     * dominant weight (LEVEL_GEN_ROOM_STANDARD_SELECTION_WEIGHT), so plain rooms stay the majority and
+     * specialties stay occasional. Deterministic: one {@code random.nextFloat()} per room over the
+     * roulette built from {@link RoomBlueprint#selectionWeight}.
+     */
+    private RoomBlueprint selectBlueprint(RoomBlueprintRegistry registry, Room room,
+                                          Map<String, Integer> placedCounts) {
+        List<RoomBlueprint> candidates = new ArrayList<>();
+        List<Float>         weights    = new ArrayList<>();
+        for (RoomBlueprint blueprint : registry.all()) {
+            if (blueprint.id().equals(RoomBlueprints.ID_ENTRANCE)) continue; // ENTRANCE is room 0 only
+            RoomContext context = new RoomContext(room.interiorWidth(), room.interiorHeight(),
+                    dungeonDepth, placedCounts.getOrDefault(blueprint.id(), 0));
+            if (!blueprint.eligible(context)) continue;
+            float weight = blueprint.selectionWeight(context);
+            if (weight <= 0f) continue;
+            candidates.add(blueprint);
+            weights.add(weight);
+        }
+        if (candidates.isEmpty()) return registry.get(RoomBlueprints.ID_STANDARD); // defensive
+        float[] weightArray = new float[weights.size()];
+        for (int index = 0; index < weightArray.length; index++) {
+            weightArray[index] = weights.get(index);
+        }
+        int chosenIndex = GameMath.weightedChoiceIndex(weightArray, random.nextFloat());
+        return candidates.get(chosenIndex);
+    }
+
+    /**
+     * Maps a blueprint id to its internal {@link RoomType} tag with NO switch: every {@code RoomBlueprints.ID_*}
+     * equals its RoomType name lower-cased, so {@code valueOf(upperCase)} round-trips (e.g. "cryo_chamber"
+     * → CRYO_CHAMBER). Keeps the generator free of a hardcoded id→type table.
+     */
+    private static RoomType roomTypeForBlueprint(RoomBlueprint blueprint) {
+        return RoomType.valueOf(blueprint.id().toUpperCase(java.util.Locale.ROOT));
+    }
+
+    /**
+     * order-8 STEP B — builds this level's {@link LevelPalette} from the rooms actually placed. Each
+     * SIGNATURE room contributes its {@link RoomBlueprint#symbolDemand()} (its reserved sprite ids);
+     * GENERIC rooms reserve nothing, so their symbols — and the symbols of every ABSENT signature room —
+     * fall through to the allocator's free variety pool (the freed-symbol mechanic). The allocator is a
+     * pure function of (seed, placed demands), so same seed ⇒ same palette.
+     */
+    private LevelPalette allocatePalette(List<Room> rooms) {
+        TilesetRegistries.bootstrap(); // idempotent — the art catalog must be populated before allocation
+        SymbolAllocationRequest.Builder request = SymbolAllocationRequest
+                .builder(seed, SymbolBudget.standard(), TilesetRegistries.sprites())
+                .depth(dungeonDepth);
+        for (Room room : rooms) {
+            if (room.blueprint == null) continue;
+            RoomSymbolDemand demand = room.blueprint.symbolDemand();
+            if (demand.requiredSprites().isEmpty()) continue; // GENERIC rooms reserve nothing
+            request.placedRoom(demand);
+        }
+        return SymbolAllocator.allocate(request.build());
+    }
+
+    /**
+     * order-8 STEP C — sprinkles per-level accents into GENERIC rooms and corridors from the FREED
+     * flexible symbols (those NO placed signature room reserved this level). Because the palette maps
+     * those symbols to level-themed variety sprites, two seeds read differently AND the freed symbols
+     * concretely appear. 'x' stays dominant — accents are sparse (LevelGenConstants rates). Signature
+     * rooms are untouched (their build() theming stays; their reserved symbols are excluded here).
+     */
+    private void stampGenericVarietyAccents(char[][] grid, List<Room> rooms) {
+        // Symbols reserved by placed signature rooms are NOT free — never use them as generic accents.
+        java.util.Set<Character> reserved = new HashSet<>();
+        for (Room room : rooms) {
+            if (room.blueprint == null) continue;
+            reserved.addAll(room.blueprint.symbolDemand().requiredSprites().keySet());
+        }
+        // Candidate accents: specialty accent walls (appear only when their room is absent) plus a few
+        // neutral flexible walls, minus anything reserved this level.
+        char[] accentCandidates = { 'M', 'Z', 'U', 'X', 'D', 'N', 'Q', 'S', 'k', 'G', 'w', 'h', 'j' };
+        List<Character> freed = new ArrayList<>();
+        for (char candidate : accentCandidates) {
+            if (!reserved.contains(candidate)) freed.add(candidate);
+        }
+        if (freed.isEmpty()) return;
+
+        // GENERIC rooms (STANDARD / LARGE): each gets, at a modest chance, ONE freed accent theme
+        // sprinkled over its interior-facing perimeter walls.
+        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            if (room.type != RoomType.STANDARD && room.type != RoomType.LARGE) continue;
+            if (random.nextFloat() >= LevelGenConstants.LEVEL_GEN_GENERIC_ACCENT_ROOM_CHANCE) continue;
+            char accent = freed.get(random.nextInt(freed.size()));
+            for (int tileRow = room.bottomRow; tileRow <= room.topRow; tileRow++) {
+                for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
+                    if (!isInBounds(tileColumn, tileRow)) continue;
+                    if (!Level.isWall(grid[tileRow][tileColumn])) continue;
+                    if (!facesRoomInterior(grid, tileColumn, tileRow, room)) continue;
+                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_GENERIC_ACCENT_WALL_CHANCE) {
+                        grid[tileRow][tileColumn] = accent;
+                    }
+                }
+            }
+        }
+
+        // Corridors: one level-wide freed accent, sparse, on walls that border a corridor tile but face
+        // NO room interior (so room perimeters keep their own look).
+        char corridorAccent = freed.get(random.nextInt(freed.size()));
+        for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT; tileRow++) {
+            for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
+                if (!Level.isWall(grid[tileRow][tileColumn])) continue;
+                if (!isCorridorAdjacentWall(grid, tileColumn, tileRow)) continue;
+                if (facesAnyRoomInterior(grid, tileColumn, tileRow, rooms)) continue;
+                if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_CORRIDOR_ACCENT_WALL_CHANCE) {
+                    grid[tileRow][tileColumn] = corridorAccent;
+                }
+            }
+        }
+    }
+
+    // True when a wall tile has at least one cardinal neighbour that is corridor floor/door ('l'/'d').
+    private boolean isCorridorAdjacentWall(char[][] grid, int tileColumn, int tileRow) {
+        int[] deltaColumns = { 0, 0, 1, -1 };
+        int[] deltaRows    = { 1, -1, 0, 0 };
+        for (int direction = 0; direction < 4; direction++) {
+            int neighborColumn = tileColumn + deltaColumns[direction];
+            int neighborRow    = tileRow    + deltaRows[direction];
+            if (!isInBounds(neighborColumn, neighborRow)) continue;
+            char neighbor = grid[neighborRow][neighborColumn];
+            if (neighbor == 'l' || neighbor == 'd') return true;
+        }
+        return false;
+    }
+
+    // True when a wall tile faces the interior of ANY room (so it is a room-perimeter wall, not a pure
+    // corridor wall). Used to keep corridor accents off room walls.
+    private boolean facesAnyRoomInterior(char[][] grid, int tileColumn, int tileRow, List<Room> rooms) {
+        for (Room room : rooms) {
+            if (facesRoomInterior(grid, tileColumn, tileRow, room)) return true;
+        }
+        return false;
+    }
+
+    // -------------------------------------------------------------------------
+    // SALVAGE_BAY — order-8 REQUIREMENT PROOF 1: a brand-new GENERIC room with a distinct central
+    // scrap-heap architecture, composed entirely from FREE flexible symbols (its look is allocator-
+    // driven, not a reskin of an existing room). Reached only through its RoomBlueprint's build().
+    // -------------------------------------------------------------------------
+
+    /**
+     * Stamps a salvage bay: a dingy staging room dominated by an irregular central scrap heap of crates,
+     * barrels, and scrap (SOLID_PROP symbols), lined with locker racks against the walls, sparse salvage
+     * wall panels, and oil/scrap floor decals. The layout is deliberately NOT the ordered rows/rings of
+     * the signature rooms — an off-centre pile with a walkable ring around it. Every symbol it writes is
+     * a FLEXIBLE symbol the allocator gives a per-level sprite, so no two salvage bays look identical.
+     */
+    void placeSalvageBayForRoom(char[][] grid, Room room) {
+        assignSalvageBayFloor(grid, room);
+        themeSalvageBayWalls(grid, room);
+        placeSalvageHeap(grid, room);
+        placeSalvagePerimeterRacks(grid, room);
+        placeSalvageDecals(grid, room);
+        // Two structural support columns just inside opposite corners (kept off the door axes).
+        tryPlaceColumnAt(grid, room.leftColumn  + 2, room.bottomRow + 2);
+        tryPlaceColumnAt(grid, room.rightColumn - 2, room.topRow    - 2);
+    }
+
+    // Dingy floor: dim 'l' dominant with scattered dark 'u' patches.
+    private void assignSalvageBayFloor(char[][] grid, Room room) {
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SALVAGE_DARK_FLOOR_CHANCE) {
+                    grid[tileRow][tileColumn] = 'u';
                 } else {
-                    room.type = RoomType.LARGE;
-                }
-                largeRoomCount++;
-            }
-        }
-
-        // Step C — remaining STANDARD rooms get specialty or stay STANDARD
-        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
-            Room room = rooms.get(roomIndex);
-            if (room.type != RoomType.STANDARD) continue;
-
-            boolean cryoEligible        = room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_CRYO_MIN_WIDTH
-                                       && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_CRYO_MIN_HEIGHT;
-            boolean containmentEligible = room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_CONTAINMENT_MIN_WIDTH
-                                       && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_CONTAINMENT_MIN_HEIGHT;
-
-            float roll = random.nextFloat();
-            if (cryoEligible
-                    && cryoChamberCount < LevelGenConstants.LEVEL_GEN_CRYO_MAX
-                    && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE) {
-                room.type = RoomType.CRYO_CHAMBER;
-                cryoChamberCount++;
-            } else if (containmentEligible
-                    && containmentCount < LevelGenConstants.LEVEL_GEN_CONTAINMENT_MAX
-                    && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE + LevelGenConstants.LEVEL_GEN_CONTAINMENT_CHANCE) {
-                room.type = RoomType.CONTAINMENT_BLOCK;
-                containmentCount++;
-            } else if (config.enableServerRooms
-                    && serverRoomCount < LevelGenConstants.LEVEL_GEN_SERVER_ROOM_MAX_PER_LEVEL
-                    && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE
-                              + LevelGenConstants.LEVEL_GEN_CONTAINMENT_CHANCE
-                              + LevelGenConstants.LEVEL_GEN_SERVER_ROOM_CHANCE) {
-                room.type = RoomType.SERVER_ROOM;
-                serverRoomCount++;
-            } else if (!researchLabPlaced
-                    && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_MIN_WIDTH
-                    && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_MIN_HEIGHT
-                    && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE
-                              + LevelGenConstants.LEVEL_GEN_CONTAINMENT_CHANCE
-                              + LevelGenConstants.LEVEL_GEN_SERVER_ROOM_CHANCE
-                              + LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_CHANCE) {
-                room.type = RoomType.RESEARCH_LAB;
-                researchLabPlaced = true;
-            }
-            // else: remains STANDARD
-        }
-
-        // Step D — Stellar Observatory: RARE landmark rotunda (true-circle carve; decorated
-        // separately by decorateStellarObservatory(), called from placeStellarObservatoryProps()
-        // in phase 3). Depth-gated, LOW roll weight, and this block only ever runs once per
-        // generate() call, so it is a hard cap of 1 per level. See the design doc:
-        // .claude/agents/ideas/stellar-observatory-gravity-well-room.txt ("PLACEMENT RULES").
-        if (dungeonDepth >= LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_DEPTH
-                && random.nextFloat() < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_CHANCE) {
-            Room stellarObservatoryCandidate = findStellarObservatoryCandidate(rooms);
-            if (stellarObservatoryCandidate != null) {
-                stellarObservatoryCandidate.type = RoomType.STELLAR_OBSERVATORY;
-            }
-        }
-    }
-
-    /**
-     * Finds the best candidate for a Stellar Observatory: a STANDARD room whose interior is
-     * large enough and near-square enough to inscribe the rotunda circle, and spaced away from
-     * the Research Lab landmark (tonal-opposite spacing rule from the design doc's PLACEMENT
-     * RULES — the doc's other spacing partners, boss arena / shop-safe-room / EXCAVATION_SITE,
-     * are route-level or sibling-doc concepts that don't exist as a RoomType in this generator).
-     * Returns null if no candidate qualifies — the caller must never force the room type onto
-     * an ineligible slot; STELLAR_OBSERVATORY simply doesn't appear this level.
-     *
-     * Size-gate note: the design doc's declared target radius is R = 6..8 (from 15x15/17x17
-     * interiors), but LEVEL_GEN_ROOM_MAX_HEIGHT caps every room's interior height at 14 tiles,
-     * so a 15x15+ interior can never be produced by placeRooms(). Rather than raising that
-     * shared cap (which would perturb every other room type's size balance), this gate accepts
-     * the biggest near-square footprint the existing cap allows (13x13..14x14); combined with
-     * the carve formula in decorateStellarObservatory() that works out to R = 5..6 — still a
-     * genuine multi-tile rotunda, just more compact than the doc's standalone target.
-     */
-    private Room findStellarObservatoryCandidate(List<Room> rooms) {
-        Room researchLabRoom = null;
-        for (Room existing : rooms) {
-            if (existing.type == RoomType.RESEARCH_LAB) {
-                researchLabRoom = existing;
-                break;
-            }
-        }
-
-        List<Room> eligible = new ArrayList<>();
-        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
-            Room candidate = rooms.get(roomIndex);
-            if (candidate.type != RoomType.STANDARD) continue;
-
-            int interiorWidth  = candidate.interiorWidth();
-            int interiorHeight = candidate.interiorHeight();
-            if (interiorWidth  < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_INTERIOR
-                    || interiorHeight < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_INTERIOR) continue;
-
-            int largerDimension  = Math.max(interiorWidth, interiorHeight);
-            int smallerDimension = Math.min(interiorWidth, interiorHeight);
-            if (largerDimension > smallerDimension * LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MAX_ASPECT) continue;
-
-            if (researchLabRoom != null
-                    && manhattanDistance(candidate, researchLabRoom)
-                        < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_LANDMARK_SPACING) continue;
-
-            eligible.add(candidate);
-        }
-        if (eligible.isEmpty()) return null;
-        return eligible.get(random.nextInt(eligible.size()));
-    }
-
-    /**
-     * Finds the best candidate for a Medical Bay: a STANDARD room at roughly mid-depth
-     * (not the nearest rooms, not the deepest) meeting minimum size requirements.
-     */
-    private Room findMedicalBayCandidate(List<Room> rooms) {
-        int midIndex = rooms.size() / 2;
-        // Search outward from mid-point to find first eligible room
-        for (int radius = 0; radius <= rooms.size() / 2; radius++) {
-            int forwardIndex  = midIndex + radius;
-            int backwardIndex = midIndex - radius;
-            if (forwardIndex < rooms.size()) {
-                Room candidate = rooms.get(forwardIndex);
-                if (candidate.type == RoomType.STANDARD
-                        && candidate.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH
-                        && candidate.interiorHeight() >= LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT) {
-                    return candidate;
-                }
-            }
-            if (backwardIndex > 0 && backwardIndex != forwardIndex) {
-                Room candidate = rooms.get(backwardIndex);
-                if (candidate.type == RoomType.STANDARD
-                        && candidate.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH
-                        && candidate.interiorHeight() >= LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT) {
-                    return candidate;
+                    grid[tileRow][tileColumn] = 'l';
                 }
             }
         }
-        return null;
     }
 
-    /**
-     * Finds the best candidate for a Command Center: the deepest STANDARD room
-     * meeting minimum size requirements (≥8×7).
-     */
-    private Room findCommandCenterCandidate(List<Room> rooms) {
-        for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
-            Room candidate = rooms.get(roomIndex);
-            if (candidate.type == RoomType.STANDARD
-                    && candidate.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_COMMAND_MIN_WIDTH
-                    && candidate.interiorHeight() >= LevelGenConstants.LEVEL_GEN_COMMAND_MIN_HEIGHT) {
-                return candidate;
+    // Sparse salvage wall panels on interior-facing perimeter walls, from FREE flexible walls.
+    private void themeSalvageBayWalls(char[][] grid, Room room) {
+        for (int tileRow = room.bottomRow; tileRow <= room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
+                if (!isInBounds(tileColumn, tileRow)) continue;
+                if (!Level.isWall(grid[tileRow][tileColumn])) continue;
+                if (!facesRoomInterior(grid, tileColumn, tileRow, room)) continue;
+                if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SALVAGE_WALL_ACCENT_CHANCE) {
+                    grid[tileRow][tileColumn] = randomSalvageAccentWall();
+                }
             }
         }
-        return null;
     }
 
-    /**
-     * Finds the best candidate for an Armory: any STANDARD room meeting minimum size (≥6×6),
-     * selected randomly from eligible candidates.
-     */
-    private Room findArmoryCandidate(List<Room> rooms) {
-        List<Room> eligible = new ArrayList<>();
-        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
-            Room candidate = rooms.get(roomIndex);
-            if (candidate.type == RoomType.STANDARD
-                    && candidate.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_ARMORY_MIN_WIDTH
-                    && candidate.interiorHeight() >= LevelGenConstants.LEVEL_GEN_ARMORY_MIN_HEIGHT) {
-                eligible.add(candidate);
+    // Irregular central scrap heap: solid props clustered within a small radius of the room centre, with
+    // gaps (density < 1) so it reads as a pile, and a clear walkable ring around it (never on the outer
+    // interior tiles, never on a door axis) so it can't seal the room.
+    private void placeSalvageHeap(char[][] grid, Room room) {
+        int centreColumn = room.centerColumn();
+        int centreRow    = room.centerRow();
+        int heapRadius   = Math.max(1, Math.min(room.interiorWidth(), room.interiorHeight()) / 3);
+        for (int tileRow = centreRow - heapRadius; tileRow <= centreRow + heapRadius; tileRow++) {
+            for (int tileColumn = centreColumn - heapRadius; tileColumn <= centreColumn + heapRadius; tileColumn++) {
+                // Keep a one-tile walkable ring inside the walls.
+                if (tileColumn <= room.leftColumn + 1 || tileColumn >= room.rightColumn - 1) continue;
+                if (tileRow    <= room.bottomRow  + 1 || tileRow    >= room.topRow      - 1) continue;
+                if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+                if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
+                if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SALVAGE_HEAP_DENSITY) {
+                    grid[tileRow][tileColumn] = randomSalvageHeapProp();
+                }
             }
         }
-        if (eligible.isEmpty()) return null;
-        return eligible.get(random.nextInt(eligible.size()));
+    }
+
+    // Locker/rack line one tile in from the interior walls (salvage storage).
+    private void placeSalvagePerimeterRacks(char[][] grid, Room room) {
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                boolean nextToInteriorWall = tileColumn == room.leftColumn + 1
+                                          || tileColumn == room.rightColumn - 1
+                                          || tileRow    == room.bottomRow  + 1
+                                          || tileRow    == room.topRow     - 1;
+                if (!nextToInteriorWall) continue;
+                if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+                if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
+                if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SALVAGE_PERIMETER_RACK_CHANCE) {
+                    grid[tileRow][tileColumn] = 'L';
+                }
+            }
+        }
+    }
+
+    // Oil pools and loose scrap decals on open floor.
+    private void placeSalvageDecals(char[][] grid, Room room) {
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+                if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SALVAGE_DECAL_CHANCE) {
+                    grid[tileRow][tileColumn] = random.nextBoolean() ? 'O' : 's';
+                }
+            }
+        }
+    }
+
+    // FREE flexible solid props for the heap (crate / barrel / scrap block / locker).
+    private char randomSalvageHeapProp() {
+        float roll = random.nextFloat();
+        if (roll < 0.40f) return 'C'; // crate
+        if (roll < 0.70f) return 'g'; // barrel
+        if (roll < 0.88f) return 'E'; // scrap block
+        return 'L';                    // toppled locker
+    }
+
+    // FREE flexible accent walls for salvage panelling (never claimed by a signature room).
+    private char randomSalvageAccentWall() {
+        float roll = random.nextFloat();
+        if (roll < 0.45f) return 'k';
+        if (roll < 0.75f) return 'G';
+        if (roll < 0.90f) return 'w';
+        return 'h';
     }
 
     // -------------------------------------------------------------------------
     // Phase 2 — Connectivity
     // -------------------------------------------------------------------------
+
 
     private void carveRoomInteriors(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {

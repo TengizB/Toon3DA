@@ -1,8 +1,10 @@
 package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.tileset.RoomSymbolDemand;
+import ge.tbegvadze.toon3d.tileset.TileCategory;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -40,6 +42,8 @@ public final class RoomBlueprints {
     public static final String ID_CONTAINMENT_BLOCK   = "containment_block";
     public static final String ID_RESEARCH_LAB        = "research_lab";
     public static final String ID_STELLAR_OBSERVATORY = "stellar_observatory";
+    // order-8 REQUIREMENT PROOF 1 — the brand-new GENERIC salvage bay.
+    public static final String ID_SALVAGE_BAY         = "salvage_bay";
 
     private static final RoomBlueprintRegistry ROOMS = new RoomBlueprintRegistry();
     private static boolean bootstrapped = false;
@@ -103,6 +107,19 @@ public final class RoomBlueprints {
                     context.placeLargeRoomColumns();
                     context.placeLargeRoomProps();
                 }));
+
+        // SALVAGE_BAY (order-8 REQUIREMENT PROOF 1): a brand-new GENERIC room with a DISTINCT central
+        // scrap-heap architecture (not a reskin). It reserves NO specific sprite — its demand is
+        // FLEXIBLE-category slot counts only, so it composes from whatever flexible symbols are free on
+        // the level and its look is fully allocator-driven. Eligible on ordinary floors at a modest size,
+        // capped so it stays a flavour room.
+        registry.register(new LambdaRoomBlueprint(ID_SALVAGE_BAY, RoomKind.GENERIC,
+                RoomSymbolDemand.of(emptyDemand(), salvageBayCategoryCounts()),
+                context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SALVAGE_BAY_MIN_WIDTH
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SALVAGE_BAY_MIN_HEIGHT
+                        && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_SALVAGE_BAY_MAX,
+                context -> LevelGenConstants.LEVEL_GEN_ROOM_SALVAGE_BAY_SELECTION_WEIGHT,
+                context -> context.placeSalvageBay()));
 
         // --- SIGNATURE rooms (fixed identity; declare the sprites they claim) ---
 
@@ -300,6 +317,17 @@ public final class RoomBlueprints {
 
     private static Map<Character, String> emptyDemand() {
         return new LinkedHashMap<>();
+    }
+
+    // The salvage bay's demand is FLEXIBLE-category slot counts only (no pinned sprite): it wants a
+    // couple of accent walls, a couple of scrap props, and a decal, all allocator-chosen from free
+    // symbols. order-4's allocator carries these counts; order-8's generic-variety pass consumes them.
+    private static Map<TileCategory, Integer> salvageBayCategoryCounts() {
+        Map<TileCategory, Integer> counts = new EnumMap<>(TileCategory.class);
+        counts.put(TileCategory.WALL, 2);
+        counts.put(TileCategory.SOLID_PROP, 2);
+        counts.put(TileCategory.FLOOR_DECAL, 1);
+        return counts;
     }
 
     // --- Concrete blueprint backed by the four functional pieces (kept package-private) ---

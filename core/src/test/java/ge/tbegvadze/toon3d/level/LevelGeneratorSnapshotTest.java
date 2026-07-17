@@ -9,28 +9,32 @@ import java.security.NoSuchAlgorithmException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Byte-for-byte regression guard for the {@code LevelGenerator} tileset order-5 refactor.
+ * Determinism guard for {@code LevelGenerator}: the same seed must always produce the identical level
+ * grid. This test digests the full generated grid across a spread of seeds and depths (so every room
+ * type — including the depth-gated STELLAR_OBSERVATORY and the order-8 SALVAGE_BAY — is exercised) into
+ * one stable SHA-256 fingerprint.
  *
- * <p>order-5 relocates the generator's room logic behind a registry WITHOUT changing behaviour: the
- * same seed must always produce the identical level grid. This test digests the full generated grid
- * across a spread of seeds and depths (so every room type — including the depth-gated
- * STELLAR_OBSERVATORY — is exercised) into one stable SHA-256 fingerprint. The expected digest was
- * captured from the pre-refactor generator; if any refactor perturbs the RNG draw sequence or a
- * stamped tile, the fingerprint changes and this test fails.
+ * <p>Through order-5 this was a byte-for-byte "pure structural refactor" guard. order-8 is an explicit
+ * BEHAVIOUR CHANGE (registry-driven room selection + rule-driven per-level variety), so the digest was
+ * re-baselined once, deliberately, from the post-order-8 generator. It remains a strict determinism
+ * contract afterwards: same seed ⇒ same rooms ⇒ same palette ⇒ same grid (permadeath / seed-sharing
+ * fairness). If any later change perturbs the RNG draw sequence or a stamped tile, the fingerprint
+ * changes and this test fails.
  */
 class LevelGeneratorSnapshotTest {
 
     /**
-     * SHA-256 over {@link #fingerprint()} captured from the pre-order-5 generator. Do NOT hand-edit;
-     * regenerate only via a deliberate, reviewed behaviour change.
+     * SHA-256 over {@link #fingerprint()}, re-baselined for the order-8 generator (registry selection +
+     * variety accents + salvage bay). Do NOT hand-edit; regenerate only via a deliberate, reviewed
+     * behaviour change.
      */
     private static final String EXPECTED_DIGEST =
-            "558072ab571d0a6aa9cbc47e4435590d8693d4498512ef50150f2aaa8d12923f";
+            "227736b1ddf41640cca7a9aefe889abb5d3493a9148b74037e8769c414ebd17c";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {
         assertEquals(EXPECTED_DIGEST, digest(fingerprint()),
-                "LevelGenerator output changed — order-5 must be a pure structural refactor");
+                "LevelGenerator output changed — same seed must produce the identical grid (determinism)");
     }
 
     /** Concatenates every generated grid (seeds 1..40 × depths 1,3,5,7) into one string. */
