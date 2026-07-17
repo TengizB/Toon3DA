@@ -641,6 +641,25 @@ public final class LevelGenConstants {
     public static final int   LEVEL_GEN_SUPPLY_CACHE_MAX        = 2;
     public static final float LEVEL_GEN_ROOM_SUPPLY_CACHE_SELECTION_WEIGHT = 0.30f;
 
+    // GORE_NEST — a SIGNATURE "aftermath" room where the demonic incursion physically won. Its identity is
+    // built from WALLS + ENVIRONMENT DECALS only, all reused art (zero new symbols/sprites): a flesh-
+    // membrane gore wall 'G' fringed by rusted steel 'j', a ruptured bio-pod '&' at the centre, and a dense
+    // carpet of corpse/blood/bile decals. Depth-gated so corruption is a deeper-floor dread beat; one per
+    // level (a set-piece, like the armory/research lab). Roulette weight sits between containment and
+    // research. See .claude/agents/ideas/gore-nest-corruption-room.txt and RECIPE B in
+    // docs/environment-tileset-system.txt §9.
+    public static final int   LEVEL_GEN_GORE_NEST_MIN_DEPTH  = 3;
+    public static final int   LEVEL_GEN_GORE_NEST_MIN_WIDTH  = 6;
+    public static final int   LEVEL_GEN_GORE_NEST_MIN_HEIGHT = 6;
+    public static final int   LEVEL_GEN_GORE_NEST_MAX        = 1;
+    public static final float LEVEL_GEN_GORE_NEST_CHANCE     = 0.35f;
+    // Gore-nest interior tuning (all rates seeded through the generator's Random).
+    public static final float LEVEL_GEN_GORE_NEST_WALL_FILL_CHANCE  = 0.75f; // interior-facing wall → gore 'G' (mostly consumed)
+    public static final float LEVEL_GEN_GORE_NEST_RUST_CHANCE       = 0.20f; // rust 'j' breaks among the gore membrane
+    public static final float LEVEL_GEN_GORE_NEST_DECAL_CHANCE      = 0.35f; // per-tile corpse/blood/bile carpet density
+    public static final float LEVEL_GEN_GORE_NEST_DARK_FLOOR_CHANCE = 0.55f; // unlit 'u' bias over the dim 'l' floor (dread)
+    public static final float LEVEL_GEN_GORE_NEST_FLICKER_CHANCE    = 0.10f; // flickering 'f' at the flesh seams
+
     // STEP C — generic rooms & halls get per-level variety. A sparse pass stamps FREED flexible accent
     // symbols (those NO placed signature room reserved this level) into GENERIC room perimeters and
     // corridor walls, so the allocator's per-level sprite for those symbols makes two seeds visibly
