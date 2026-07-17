@@ -1,38 +1,36 @@
->>> TILESET MIGRATION IN PROGRESS (see docs/environment-tileset-system.txt) <<<
-The symbol->sprite behaviour described below is the LEGACY model. A staged refactor
-(.claude/agents/ideas/symbol-sprite-reuse-system*.txt) is decoupling symbols from sprites so a
-symbol is a fixed CATEGORY slot and its sprite is chosen PER LEVEL. Check the ORDER STATUS TABLE
-in docs/environment-tileset-system.txt for which parts are live. Do not rely on "one symbol = one
-fixed sprite" as permanent truth while this banner is present.
-
 TILE SYMBOL REFERENCE
 =====================
 Single source of truth for every character used in level .txt files.
 
->>> TILESET MIGRATION IN PROGRESS (see docs/environment-tileset-system.txt) <<<
-The symbol->sprite behaviour described below is the LEGACY model. A staged refactor
-(.claude/agents/ideas/symbol-sprite-reuse-system*.txt) is decoupling symbols from sprites so a
-symbol is a fixed CATEGORY slot and its sprite is chosen PER LEVEL. Check the ORDER STATUS TABLE
-in docs/environment-tileset-system.txt for which parts are live. Do not rely on "one symbol = one
-fixed sprite" as permanent truth while this banner is present.
-NOTE: once the migration lands, "adding art" becomes RECIPE A (register a new sprite in the
-environment-sprite registry), NOT "consume a scarce symbol." The 1:1 rule below is legacy.
-NOTE (order-2, LIVE): symbols are now split into FIXED and FLEXIBLE (see the SYMBOL BUDGET section
-of docs/environment-tileset-system.txt). A FIXED symbol keeps a permanent meaning AND sprite (player
-start, exit, doors, keycards, pickups, ammo, hazards, enemy spawns, the plain wall 'x', and the shop
-'@'). A FLEXIBLE symbol (the accent walls, column 'P', decoration props/decals) carries a fixed
-CATEGORY, not a fixed sprite — its art is chosen per level from that category's pool. The "sprite"
-column below is the LEGACY default for flexible symbols, not a permanent binding.
+FIXED vs FLEXIBLE (the shipped model — see docs/environment-tileset-system.txt for the full system).
+A level-file symbol is a SLOT in a fixed CATEGORY; its category/meaning never changes. Symbols come
+in two tiers:
+  * FIXED — permanent meaning AND sprite; never reassigned. Player start 'p', exit '>', doors, floor
+    lighting, keycards, pickups, ammo, hazards, enemy spawns, the plain wall 'x', and the shop '@'.
+    A FIXED symbol's row below is a permanent binding.
+  * FLEXIBLE — fixed CATEGORY, sprite chosen PER LEVEL from that category's registered pool by the
+    deterministic allocator. The accent walls, the column 'P', and the decoration props/decals are
+    flexible. For a flexible symbol, the "sprite" column below is the LEGACY DEFAULT (what hand-crafted
+    levels and the legacy palette render) — NOT a permanent binding; a generated level may render a
+    different sprite of the same category.
 
-STRICT RULE: Every time a new symbol is introduced anywhere in the codebase
-(Level.java, LevelLoader.java, LevelGenerator.java, WallRenderer.java, or any
-other class that reads tile characters), this file MUST be updated in the same
-commit. No symbol may be used in a level file or recognised by game code unless
-it appears here first.
+ADDING ART NO LONGER CONSUMES A SYMBOL. New wall/column/prop/decal art is RECIPE A (register one
+EnvironmentSpriteDefinition + one texture generator); a new room is RECIPE B (register one
+RoomBlueprint). Neither needs a new symbol and neither edits the generator/renderers/Level. See the
+RECIPES in docs/environment-tileset-system.txt §9. New level-file SYMBOLS are now rare — needed only
+for a genuinely new FIXED gameplay meaning.
 
-Authority class: Level.java — isWall(), isColumn(), isPropSolid(), isPropDecal(),
-and the pickup/door/special checks are the single runtime source of truth.
-When this file and the code disagree, fix the code to match this file.
+STRICT RULE — adding a NEW level-file SYMBOL (rare; FIXED meanings only):
+Introducing a new symbol still requires updating THIS file in the SAME commit, plus wiring its
+category into Level.java (isWall/isPropSolid/… — now backed by tileset/SymbolBudget + SymbolCategories)
+and any FIXED handling it needs. No symbol may be used in a level file or recognised by game code
+unless it appears here first. But before adding a symbol, check whether you actually want RECIPE A
+(new art) or RECIPE B (new room) instead — the common cases need NO new symbol.
+
+Authority class: Level.java — isWall(), isColumn(), isPropSolid(), isPropDecal(), and the
+pickup/door/special checks are the single runtime CATEGORY source of truth (a symbol's category is
+symbol-intrinsic; only its sprite is per-level, via LevelPalette). When this file and the code
+disagree, fix the code to match this file.
 
 ---
 
@@ -164,57 +162,60 @@ n   Boss spawn (depth-keyed)  Replaced at load time with floor ' '; BossFloorCon
 
 ---
 
->>> TILESET MIGRATION IN PROGRESS (see docs/environment-tileset-system.txt) <<<
-The symbol->sprite behaviour described below is the LEGACY model. A staged refactor
-(.claude/agents/ideas/symbol-sprite-reuse-system*.txt) is decoupling symbols from sprites so a
-symbol is a fixed CATEGORY slot and its sprite is chosen PER LEVEL. Check the ORDER STATUS TABLE
-in docs/environment-tileset-system.txt for which parts are live. Do not rely on "one symbol = one
-fixed sprite" as permanent truth while this banner is present.
-NOTE: the "10 free symbols" scarcity framing below is the wall this migration removes. Once it
-lands, new environment art is added by RECIPE A (register a sprite), not by consuming a free symbol.
-
 SYMBOL BUDGET
 -------------
 Total printable ASCII characters: 95  (codes 32-126)
-Currently assigned:               85
-Remaining:                        10
+Assigned to a FIXED or FLEXIBLE symbol:  85
+Unassigned characters:                   10
 
-Free characters (not yet assigned):
+The symbol/sprite-reuse system (docs/environment-tileset-system.txt) REMOVED the scarcity this budget
+used to track. Symbol count no longer limits how much environment art or how many rooms the game can
+have: art is added by RECIPE A (register a sprite in a category pool) and rooms by RECIPE B (register a
+blueprint), NEITHER of which consumes a symbol. The 85 assigned symbols split into:
+  * FIXED symbols — permanent meaning AND sprite (start/exit/doors/floor-lighting/keycards/pickups/ammo/
+    hazards/enemy-spawns, plus the plain wall 'x' and the shop '@'). Authoritative list: the FIXED
+    partition in SymbolBudget (docs/environment-tileset-system.txt §2).
+  * FLEXIBLE symbols — a fixed CATEGORY, sprite per level: the accent walls, the column 'P', and the
+    decoration props/decals. Their category pool holds MANY sprites (already more than there are
+    symbols, e.g. the COLUMN slot 'P' → round OR square, and extra WALL variety art); a level uses a
+    small per-level subset.
+
+Unassigned characters (available if a genuinely new FIXED gameplay meaning is ever needed):
 o [ { } ( ) / , _ :
-  (reserved by convention for the sibling EXCAVATION_SITE room design,
-  .claude/agents/ideas/excavation-monolith-chamber-room.txt — NOT IMPLEMENTED yet.
-  " ' ; ? < \ ] - | ` were the other half of this free-20 pool; they are now
-  assigned to the STELLAR_OBSERVATORY room — see WALLS / SOLID PROPS / WALKABLE
-  DECALS above. Contained to that room type; do not reuse elsewhere.)
-  ('~' and '*' now taken as Ghoul / Blight Corruptor enemy-spawn markers)
-Uppercase: (K V now taken as Revenant / Vortex Eye enemy-spawn markers;
-           D F I J W taken; Z taken as cryo; check walls/doors above)
-Lowercase: o  ('z' now taken as Crawler enemy-spawn marker; e i j n q taken —
-           'i' fire hazard, 'q' toxic hazard)
+  (o [ { } ( ) / , _ : were historically pencilled in for the EXCAVATION_SITE room design,
+  .claude/agents/ideas/excavation-monolith-chamber-room.txt — NOT IMPLEMENTED. " ' ; ? < \ ] - | `
+  are ASSIGNED to the STELLAR_OBSERVATORY room as FLEXIBLE symbols; the allocator keeps their
+  observatory sprites contained to that room via the "observatory" theme tag.)
+  ('~' and '*' are Ghoul / Blight Corruptor enemy-spawn markers.)
+Uppercase taken: K V (enemy spawns), D F I J W, Z (cryo) — check WALLS / DOORS above.
+Lowercase taken: 'z' (Crawler spawn), e i j n q ('i' fire hazard, 'q' toxic hazard).
 
-PREFERRED SYMBOLS FOR NEW ADDITIONS
-------------------------------------
-- Uppercase letters for new solid/blocking things (walls, doors, props).
-- Lowercase letters for new walkable/decal things.
-- Digits: 6-9 now used for ammo pickups; no free digits remain.
+PREFERRED SYMBOLS FOR A NEW FIXED SYMBOL (rare)
+------------------------------------------------
+- Uppercase letters for new solid/blocking gameplay things; lowercase for walkable/decal ones.
 - Punctuation only when clearly readable in a plain-text editor.
-- Avoid: \ | < > (confusing in text editors); " ' (quoting conflicts). Exception:
-  the STELLAR_OBSERVATORY room deliberately used \ | < " ' anyway because they were
-  the only symbols left after the EXCAVATION doc's cleaner claim, and both rooms are
-  procedurally generated (rarely hand-edited in a text editor) — see that room's
-  design doc OPEN QUESTIONS for the tradeoff discussion.
+- Avoid: \ | < > (confusing in text editors); " ' (quoting conflicts). (The STELLAR_OBSERVATORY room
+  used \ | < " ' deliberately — it is procedurally generated, rarely hand-edited.)
 
 ---
 
-ADDING A NEW SYMBOL — CHECKLIST
---------------------------------
-1. Pick an unused symbol from the free list above.
+ADDING ENVIRONMENT ART OR A ROOM — USE A RECIPE (no new symbol)
+---------------------------------------------------------------
+For the COMMON cases, do NOT add a symbol:
+- New wall / column / prop / decal ART → RECIPE A (docs/environment-tileset-system.txt §9): register one
+  EnvironmentSpriteDefinition + one texture generator. It appears on generated levels automatically.
+- New ROOM → RECIPE B: register one RoomBlueprint. It competes in generation automatically.
+
+ADDING A NEW FIXED SYMBOL — CHECKLIST (only for a genuinely new gameplay meaning)
+--------------------------------------------------------------------------------
+1. Pick an unassigned character from the list above.
 2. Add it to this file (correct section, with description and notes).
-3. Add it to Level.java in the appropriate method: isWall(), isPropSolid(),
-   isPropDecal(), or a new dedicated check.
-4. Add texture/sprite lookup in WallRenderer.java or PropRenderer.java.
-5. Add any Constants entries (texture path, height multiplier, etc.).
-6. Update docs if the symbol affects level generation (LevelGenerator.java).
-7. Update the symbol count in SYMBOL BUDGET above.
-8. Commit all of the above together — never add a symbol in code without
-   updating this file in the same commit.
+3. Wire its CATEGORY into Level.java's predicates. Flexible categories are data-driven via
+   tileset/TilesetConstants + SymbolBudget + SymbolCategories; a FIXED gameplay symbol adds its own
+   dedicated check.
+4. Add its FIXED sprite/texture handling (WallRenderer/PropRenderer) and any Constants entries — a FIXED
+   symbol keeps a permanent sprite. (A new FLEXIBLE symbol instead just names a category whose pool the
+   allocator fills; adding the ART for that pool is RECIPE A, not this checklist.)
+5. Update the SYMBOL BUDGET counts above.
+6. Commit all of the above together — never add a symbol in code without updating this file in the same
+   commit.

@@ -44,6 +44,9 @@ public final class RoomBlueprints {
     public static final String ID_STELLAR_OBSERVATORY = "stellar_observatory";
     // order-8 REQUIREMENT PROOF 1 — the brand-new GENERIC salvage bay.
     public static final String ID_SALVAGE_BAY         = "salvage_bay";
+    // order-9 RECIPE B acceptance room — a GENERIC storeroom added by REGISTRATION ALONE (composes
+    // existing build steps; no bespoke generator helper, no RoomType constant).
+    public static final String ID_SUPPLY_CACHE        = "supply_cache";
 
     private static final RoomBlueprintRegistry ROOMS = new RoomBlueprintRegistry();
     private static boolean bootstrapped = false;
@@ -120,6 +123,27 @@ public final class RoomBlueprints {
                         && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_SALVAGE_BAY_MAX,
                 context -> LevelGenConstants.LEVEL_GEN_ROOM_SALVAGE_BAY_SELECTION_WEIGHT,
                 context -> context.placeSalvageBay()));
+
+        // SUPPLY_CACHE (order-9 RECIPE B acceptance room): a compact ancillary storeroom added by
+        // REGISTRATION ALONE — this blueprint + this register() line, nothing else. It needs NO RoomType
+        // enum constant (roomTypeForBlueprint tags an unmatched id STANDARD) and NO bespoke generator
+        // helper: its build() COMPOSES the EXISTING per-room steps — standard floor lighting, standard
+        // columns, and a DOUBLE standard-prop pass so the room reads as a cluttered, densely-stocked
+        // store. Its accent walls are allocator-driven per level (tagged STANDARD, it receives the STEP-C
+        // generic-variety accents), and its demand declares only FLEXIBLE-category slot counts, so it
+        // composes from whatever symbols are free. It competes in the STEP-A roulette like any room.
+        registry.register(new LambdaRoomBlueprint(ID_SUPPLY_CACHE, RoomKind.GENERIC,
+                RoomSymbolDemand.of(emptyDemand(), supplyCacheCategoryCounts()),
+                context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MIN_WIDTH
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MIN_HEIGHT
+                        && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MAX,
+                context -> LevelGenConstants.LEVEL_GEN_ROOM_SUPPLY_CACHE_SELECTION_WEIGHT,
+                context -> {
+                    context.assignFloorLighting();
+                    context.placeStandardColumns();
+                    context.placeStandardProps();
+                    context.placeStandardProps(); // second pass → denser, cluttered storeroom clutter
+                }));
 
         // --- SIGNATURE rooms (fixed identity; declare the sprites they claim) ---
 
@@ -325,6 +349,16 @@ public final class RoomBlueprints {
     private static Map<TileCategory, Integer> salvageBayCategoryCounts() {
         Map<TileCategory, Integer> counts = new EnumMap<>(TileCategory.class);
         counts.put(TileCategory.WALL, 2);
+        counts.put(TileCategory.SOLID_PROP, 2);
+        counts.put(TileCategory.FLOOR_DECAL, 1);
+        return counts;
+    }
+
+    // The supply cache's demand is FLEXIBLE-category slot counts only (no pinned sprite): a single accent
+    // wall and a couple of stock props, all allocator-chosen from free symbols (order-9 RECIPE B).
+    private static Map<TileCategory, Integer> supplyCacheCategoryCounts() {
+        Map<TileCategory, Integer> counts = new EnumMap<>(TileCategory.class);
+        counts.put(TileCategory.WALL, 1);
         counts.put(TileCategory.SOLID_PROP, 2);
         counts.put(TileCategory.FLOOR_DECAL, 1);
         return counts;

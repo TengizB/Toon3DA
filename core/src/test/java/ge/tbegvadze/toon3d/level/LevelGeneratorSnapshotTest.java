@@ -16,20 +16,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>Through order-5 this was a byte-for-byte "pure structural refactor" guard. order-8 is an explicit
  * BEHAVIOUR CHANGE (registry-driven room selection + rule-driven per-level variety), so the digest was
- * re-baselined once, deliberately, from the post-order-8 generator. It remains a strict determinism
- * contract afterwards: same seed ⇒ same rooms ⇒ same palette ⇒ same grid (permadeath / seed-sharing
- * fairness). If any later change perturbs the RNG draw sequence or a stamped tile, the fingerprint
- * changes and this test fails.
+ * re-baselined once, deliberately, from the post-order-8 generator; order-9 registers ONE MORE room
+ * (SUPPLY_CACHE, RECIPE B) that competes in the same seeded roulette, shifting the RNG draw sequence, so
+ * the digest is re-baselined a second time, deliberately, from the post-order-9 generator. It remains a
+ * strict determinism contract afterwards: same seed ⇒ same rooms ⇒ same palette ⇒ same grid (permadeath /
+ * seed-sharing fairness). If any later change perturbs the RNG draw sequence or a stamped tile, the
+ * fingerprint changes and this test fails.
  */
 class LevelGeneratorSnapshotTest {
 
     /**
-     * SHA-256 over {@link #fingerprint()}, re-baselined for the order-8 generator (registry selection +
-     * variety accents + salvage bay). Do NOT hand-edit; regenerate only via a deliberate, reviewed
-     * behaviour change.
+     * SHA-256 over {@link #fingerprint()}, re-baselined for the order-9 generator (order-8 registry
+     * selection + variety accents + salvage bay, plus the order-9 supply-cache room). Do NOT hand-edit;
+     * regenerate only via a deliberate, reviewed behaviour change.
      */
     private static final String EXPECTED_DIGEST =
-            "227736b1ddf41640cca7a9aefe889abb5d3493a9148b74037e8769c414ebd17c";
+            "90d225874955723f39f086e7d2eaa7a7f3dd1c79bc99df75b92e92f0fd5d098a";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

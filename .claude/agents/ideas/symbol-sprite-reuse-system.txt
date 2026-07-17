@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Symbol/Sprite Reuse System — Master Index
 CREATED: 2026-07-15
@@ -160,13 +160,21 @@ rewrite) — it is not the first time orders 1-8 get documented. Other agents di
 through docs/environment-tileset-system.txt and CLAUDE.md; a legacy doc mid-migration always carries
 a banner pointing there.
 
-ACCEPTANCE CRITERIA (the whole series is done when ALL hold)
+ACCEPTANCE CRITERIA (the whole series is done when ALL hold) — ALL MET (order-9)
 ============================================================
-[ ] Adding a new wall/prop/column SPRITE = one register() line, no renderer/generator/Level edits.
-[ ] Adding a new ROOM = one RoomBlueprint register() line, no generator edits.
-[ ] The 'P' column symbol can render as a round OR square column depending on the level's palette.
-[ ] Two freshly generated levels visibly differ in their wall/environment sprites.
-[ ] Every existing signature room still looks and plays exactly as it does today.
-[ ] A brand-new generated room appears on levels where a signature room's symbols were freed.
-[ ] Same seed => identical LevelPalette (headless test).
-[ ] All hand-crafted assets/levels/*.txt render unchanged.
+[x] Adding a new wall/prop/column SPRITE = one register() line, no renderer/generator/Level edits.
+    (order-9 RECIPE A proof: "wall_hex_plate" added by registration alone.)
+[x] Adding a new ROOM = one RoomBlueprint register() line, no generator edits.
+    (order-9 RECIPE B proof: "supply_cache" added by registration alone; roomTypeForBlueprint seam fix.)
+[x] The 'P' column symbol can render as a round OR square column depending on the level's palette.
+    (order-8 "column_square"; ~33 round / ~27 square over 60 seeds.)
+[x] Two freshly generated levels visibly differ in their wall/environment sprites.
+    (order-8 allocator variety + STEP-C freed accents.)
+[x] Every existing signature room still looks and plays exactly as it does today.
+    (symbolDemand pins each signature room's exact legacy sprites; RoomBlueprintBuildDemandTest.)
+[x] A brand-new generated room appears on levels where a signature room's symbols were freed.
+    (order-8 salvage_bay + order-9 supply_cache, both allocator-driven from freed symbols.)
+[x] Same seed => identical LevelPalette (headless test).
+    (SymbolAllocatorTest determinism + LevelGeneratorSnapshotTest.)
+[x] All hand-crafted assets/levels/*.txt render unchanged.
+    (LevelLoader → legacy palette via Level's 3-arg constructor; LevelPalette tests.)

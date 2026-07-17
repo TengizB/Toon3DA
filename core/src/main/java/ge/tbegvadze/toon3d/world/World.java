@@ -150,7 +150,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private DoorManager            doorManager;
     private WallRenderer           wallRenderer;
     private PropRenderer           propRenderer;
-    // TILESET MIGRATION (order-6): per-level texture supply realized from the level's palette; owned here,
+    // TILESET SYSTEM (order-6): per-level texture supply realized from the level's palette; owned here,
     // set on the wall/prop renderers each level, disposed on level teardown (leak-free across transitions).
     private EnvironmentTextureSet  environmentTextureSet;
     private EnemyRenderer          enemyRenderer;
@@ -874,7 +874,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         floorCeilingRenderer.dispose();
         wallRenderer.dispose();
         propRenderer.dispose();
-        // TILESET MIGRATION (order-6): free this floor's realized textures before the next floor rebuilds
+        // TILESET SYSTEM (order-6): free this floor's realized textures before the next floor rebuilds
         // its own subset — keeps GPU footprint at one level's palette, not an accumulation across floors.
         if (environmentTextureSet != null) { environmentTextureSet.dispose(); environmentTextureSet = null; }
         if (shopMachineRenderer != null) shopMachineRenderer.dispose();
@@ -910,7 +910,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         floorCeilingRenderer   = new FloorCeilingRenderer(targetLevel);
         wallRenderer           = new WallRenderer(targetLevel, doorManager);
         propRenderer           = new PropRenderer(targetLevel, wallRenderer);
-        // TILESET MIGRATION (order-6): realize ONLY this level's palette textures (subset per level, not
+        // TILESET SYSTEM (order-6): realize ONLY this level's palette textures (subset per level, not
         // the whole library) and hand the set to the renderers. order-6 only wires the supply + dispose
         // path — the renderers still draw from their own tables until order-7 reads from the set. Built on
         // the GL thread here (level load); disposed in rebuildForLevel/dispose so transitions stay leak-free.
@@ -1933,7 +1933,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         floorCeilingRenderer.dispose();
         wallRenderer.dispose();
         propRenderer.dispose();
-        // TILESET MIGRATION (order-6): free the current floor's realized textures at world shutdown.
+        // TILESET SYSTEM (order-6): free the current floor's realized textures at world shutdown.
         if (environmentTextureSet != null) { environmentTextureSet.dispose(); environmentTextureSet = null; }
         if (shopMachineRenderer != null) shopMachineRenderer.dispose();
         enemyRenderer.dispose();

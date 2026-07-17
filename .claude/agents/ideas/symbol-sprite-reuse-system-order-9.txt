@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Symbol/Sprite Reuse — Part 9: Extensibility Proof & Docs
 CREATED: 2026-07-15

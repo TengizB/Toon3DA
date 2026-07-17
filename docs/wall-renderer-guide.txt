@@ -1,8 +1,5 @@
->>> TILESET MIGRATION IN PROGRESS (see docs/environment-tileset-system.txt) <<<
-A staged refactor (.claude/agents/ideas/symbol-sprite-reuse-system*.txt) decouples symbols from
-sprites so a symbol is a fixed CATEGORY slot and its sprite is chosen PER LEVEL. Check the ORDER
-STATUS TABLE in docs/environment-tileset-system.txt for which parts are live. Do not rely on "one
-symbol = one fixed sprite" as permanent truth while this banner is present.
+# TILESET SYSTEM: a wall symbol is a fixed CATEGORY slot; its sprite is chosen PER LEVEL via the
+#  level's LevelPalette + EnvironmentTextureSet. See docs/environment-tileset-system.txt.
 # GONE as of order-7 (DONE): the fixed constructor-built wall/column texture table this guide used to
 #  describe NO LONGER EXISTS. WallRenderer no longer owns or builds wall/column textures; it resolves
 #  each symbol per frame through symbol -> sprite id (the level's LevelPalette) -> Texture (the per-level

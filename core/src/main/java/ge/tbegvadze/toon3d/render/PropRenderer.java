@@ -46,7 +46,7 @@ import static ge.tbegvadze.toon3d.util.WeaponConstants.*;
  */
 public class PropRenderer implements Renderable, Disposable {
 
-    // TILESET MIGRATION (order-7): the ENVIRONMENT prop/decal art (SOLID_PROP + FLOOR_DECAL categories) is
+    // TILESET SYSTEM (order-7): the ENVIRONMENT prop/decal art (SOLID_PROP + FLOOR_DECAL categories) is
     // no longer owned or height-tabled here. A prop's texture is resolved symbol -> sprite id (this level's
     // LevelPalette) -> Texture (the per-level EnvironmentTextureSet), and its height comes from the sprite
     // DEFINITION (EnvironmentSpriteRegistry.heightMultiplier(), copied literal-for-literal from the same
@@ -141,7 +141,7 @@ public class PropRenderer implements Renderable, Disposable {
     private float alertPulse        = 0f;
     private float lightingTimeSeconds = 0f;
 
-    // TILESET MIGRATION (order-6): the per-level texture supply realized from this level's palette. Set
+    // TILESET SYSTEM (order-6): the per-level texture supply realized from this level's palette. Set
     // each level by World via setEnvironmentTextureSet(); order-6 only wires the plumbing + dispose path —
     // order-7 flips the prop draw to read prop/decal textures FROM this set instead of the constructor-
     // built {@link #textures} map. Never disposed here: the set is owned/disposed by World.

@@ -278,6 +278,13 @@ public final class RenderConstants {
     public static final int   BULKHEAD_FRAME_WIDTH            = 28;
     public static final int   BULKHEAD_BOLT_SPACING           = 42;
 
+    // Hex-plate procedural wall texture generation (order-9 RECIPE A acceptance sprite "wall_hex_plate"):
+    // a tessellated hexagonal-panel accent wall. Variety-only art reached through the allocator; see
+    // docs/environment-tileset-system.txt §9.
+    public static final int   HEX_PLATE_WALL_TEXTURE_SIZE     = 256;
+    public static final int   HEX_PLATE_CELL_RADIUS           = 30;   // hexagon circum-radius in pixels
+    public static final int   HEX_PLATE_SEAM_WIDTH            = 3;    // dark groove between panels
+
     // 'P' — Cylindrical column texture (taller than wide; mortar course lines)
     public static final int   COLUMN_TEXTURE_WIDTH            = 128;
     public static final int   COLUMN_TEXTURE_HEIGHT           = 256;

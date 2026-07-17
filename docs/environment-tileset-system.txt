@@ -1,11 +1,16 @@
 ENVIRONMENT TILESET SYSTEM — Symbol/Sprite Reuse
 ================================================
-STATUS: MIGRATION IN PROGRESS
+STATUS: LIVE (migration complete — orders 0-9 shipped)
 
-Single source of truth for the symbol/sprite decoupling refactor. This doc is FORWARD-LOOKING:
-it describes the TARGET model the migration is building toward. It was created in order-0 (before
-any code changed) and is filled section-by-section, in-commit, by each subsequent order. The ORDER
-STATUS TABLE below is the honest record of which parts are actually built yet.
+Single source of truth for the symbol/sprite decoupling subsystem. The migration that built it is
+COMPLETE: every order (0-9) has shipped, and this doc now describes SHIPPED behaviour, not a target.
+It was created in order-0 (before any code changed) and filled section-by-section, in-commit, by each
+subsequent order; order-9 finalised it, added the RECIPES (section 9), and removed the transition
+scaffolding. The ORDER STATUS TABLE below records the whole series as DONE.
+
+LIVING DOC CONTRACT (now permanent): from here on, ANY change to the tileset / room / palette /
+allocator system updates THIS doc in the SAME commit — the same discipline docs/route-map-system.txt
+follows. This is the discoverable source of truth; CLAUDE.md points here.
 
 Series design docs: .claude/agents/ideas/symbol-sprite-reuse-system.txt (master index) and
 .claude/agents/ideas/symbol-sprite-reuse-system-order-0.txt .. order-9.txt.
@@ -26,14 +31,20 @@ room — is ONE registration line, never an edit to the generator, the renderers
 "never a switch statement" discipline as route/RouteRegistries.bootstrap()).
 
 
-LEGACY vs TARGET — WHICH IS LIVE
-================================
-Until this migration completes, the LEGACY 1:1 symbol->sprite mapping is what actually RENDERS
-(via the legacy LevelPalette default, order-3). Where THIS doc and an older doc or class comment
-disagree, THIS doc describes the TARGET; the transition banner stamped on the older doc/comment
-(">>> TILESET MIGRATION IN PROGRESS <<<") tells the reader to consult the ORDER STATUS TABLE below
-for which parts are actually live. Do not treat "one symbol = one fixed sprite" as permanent truth
-while that banner is present anywhere in the tree.
+LEGACY vs VARIED — HOW A LEVEL PICKS ITS ART (both are live)
+===========================================================
+Every level carries a LevelPalette (order-3). There are two kinds:
+  * The LEGACY palette (LevelPalettes.legacy()) reproduces the historic global 1:1 symbol->sprite
+    table EXACTLY. Hand-crafted assets/levels/*.txt and the non-dungeon bespoke generators use it, so
+    they render pixel-for-pixel as they always did. It is the safe default (Level's 3-arg constructor).
+  * A VARIED palette (SymbolAllocator.allocate(), order-4) is built per generated floor from its seed +
+    the rooms actually placed, so a generated level's FLEXIBLE symbols resolve to per-level sprites and
+    two seeds look different (order-8).
+The renderers ALWAYS read the palette + the per-level EnvironmentTextureSet (order-7) — there is no
+longer any global "one symbol = one fixed sprite" table in WallRenderer/PropRenderer. A symbol's
+CATEGORY is still symbol-intrinsic (Level's predicates, backed by SymbolBudget); only the SPRITE is
+per-level. The order-0 transition banners were removed in order-9 now that every doc and class matches
+this shipped behaviour.
 
 
 ORDER STATUS TABLE
@@ -55,23 +66,21 @@ Legend: NOT STARTED / IN PROGRESS / DONE.
   7      DONE          Rewire WallRenderer / PropRenderer / Level to read the palette.
   8      DONE          LevelGenerator integration: registry-driven rooms + rule-driven variety;
                        new salvage-bay room (freed symbols) + square column ('P' round OR square).
-  9      NOT STARTED   Extensibility proof + final doc/tile-symbols.txt/CLAUDE.md consolidation.
+  9      DONE          Extensibility proof (hex-plate wall via RECIPE A + supply-cache room via RECIPE B)
+                       + final doc/tile-symbols.txt/CLAUDE.md consolidation; transition banners removed.
 
 
-THE IN-COMMIT DOC RULE (established by order-0, applies to ALL later orders)
-===========================================================================
-Documentation is NOT deferred to order-9. When you ship order-N's code you MUST, IN THE SAME COMMIT:
-  (a) fill order-N's section of this doc with the behaviour you actually shipped;
-  (b) flip order-N's row in the ORDER STATUS TABLE above to DONE (or IN PROGRESS if partial);
-  (c) update or NARROW the transition banner on any legacy doc/comment whose behaviour order-N just
-      changed (e.g. once order-7 flips the renderers, tighten the wall-renderer-guide banner to say
-      the fixed table is gone);
-  (d) keep the "how to add a sprite / room" recipe accurate to the code you shipped.
-order-9's remaining doc job is ONLY FINAL CONSOLIDATION: writing the RECIPES, the acceptance
-additions, REMOVING the now-obsolete transition banners (grep "TILESET MIGRATION IN PROGRESS"), and
-the final tile-symbols.txt / CLAUDE.md rewrite — NOT first-time documentation of orders 1-8. This is
-the same discipline docs/route-map-system.txt follows ("single source of truth; update on any route
-change"), applied from the first commit instead of the last.
+THE IN-COMMIT DOC RULE (established by order-0; now the subsystem's permanent contract)
+======================================================================================
+Documentation was never deferred to the end. Each order shipped its code and, IN THE SAME COMMIT,
+filled its own section of this doc, flipped its ORDER STATUS TABLE row, narrowed the transition
+banners it obsoleted, and kept the "how to add a sprite / room" recipe accurate. order-9 did the FINAL
+CONSOLIDATION: the RECIPES (section 9), the acceptance additions, REMOVING the now-obsolete transition
+banners, and the tile-symbols.txt / CLAUDE.md rewrite.
+
+Going forward this is the subsystem's permanent rule (the same discipline docs/route-map-system.txt
+follows, "single source of truth; update on any change"): any change to categories / sprites / budget /
+palette / allocator / rooms / texture-realization updates THIS doc in the SAME commit.
 
 
 SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships that order)
@@ -731,7 +740,111 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    EnvironmentSpriteDefinition + one texture generator (column_square is the worked example). Neither
    touches the generator, the renderers' draw logic, or Level.
 
-9. RECIPES & FINAL STATE
-   TODO: filled by order-9 in the same commit that ships order-9.
-   (Add-a-sprite / add-a-room recipes, acceptance additions, banner removal, tile-symbols.txt/CLAUDE.md
-    rewrite, hand-crafted level migration notes.)
+9. RECIPES & FINAL STATE  [DONE — order-9]
+   The load-bearing payoff of the whole series: new environment art and new rooms are added by
+   REGISTRATION ALONE — never an edit to LevelGenerator, WallRenderer/PropRenderer draw logic, or Level.
+   This is the same "never a switch statement" discipline route/RouteRegistries.bootstrap() established.
+   Both recipes below were EXERCISED END-TO-END in order-9 as the acceptance proof (see ACCEPTANCE
+   ADDITIONS), on top of order-8's own worked examples (square column, salvage bay).
+
+   ---------------------------------------------------------------------------------------------------
+   RECIPE A — ADD A NEW WALL / COLUMN / SOLID-PROP / FLOOR-DECAL SPRITE
+   ---------------------------------------------------------------------------------------------------
+   1. Build an EnvironmentSpriteDefinition (stable id, TileCategory, displayName; plus heightMultiplier /
+      occluder / themeTags as needed) and register() it in the matching helper of
+      tileset/TilesetRegistries (registerWalls / registerColumns / registerSolidProps / registerDecals).
+        - Height defaults 1.0 (walls/columns), occluder default true. Props/decals copy their height from
+          RenderConstants.PROP_HEIGHT_* (do not re-hardcode a literal).
+        - If the sprite is NEW art with no free legacy symbol to bind it (the common case — the historic
+          1:1 table is full), register it AFTER the historic sprites in its category AND add its id to
+          TilesetRegistries.VARIETY_ONLY_SPRITE_IDS. That declares it a per-level VARIETY ALTERNATIVE the
+          allocator can pick but the legacy palette never binds — so hand levels are unchanged and the
+          "legacy references the whole catalog MINUS variety-only" tests stay green.
+   2. Register its procedural texture generator (a Texture-producing method reference) in the matching
+      renderer's registerTextureGenerators(): WallRenderer for WALL/COLUMN, PropRenderer for
+      SOLID_PROP/FLOOR_DECAL. The generator method lives beside the other pixel code in that renderer.
+      The startup id-set assertion (TilesetGfxBootstrap) fails loudly if the sprite and generator sets
+      disagree, so you cannot forget one.
+   3. (Optional) add theme tags so the allocator's coherence rule (R1) / harsh-depth rule (R5) use it
+      coherently; add the "observatory"-style containment tag only if it must be room-contained (R2).
+   => The sprite now appears on generated levels automatically: the FLEXIBLE symbols in its category
+      resolve to it per level through SymbolAllocator. ZERO edits to LevelGenerator, the renderers' draw
+      loops, or Level. No new level-file symbol is consumed.
+
+   ---------------------------------------------------------------------------------------------------
+   RECIPE B — ADD A NEW ROOM
+   ---------------------------------------------------------------------------------------------------
+   1. Write a RoomBlueprint — id (stable), RoomKind (GENERIC or SIGNATURE), eligible(RoomContext),
+      selectionWeight(RoomContext), symbolDemand(), build(RoomBuildContext) — and register() it in
+      level/RoomBlueprints.registerAll(). New constants (min size, per-level cap, selection weight) go in
+      LevelGenConstants.
+        - GENERIC room: empty requiredSprites; its look is allocator-driven (optionally declare
+          categoryCounts as intent). A GENERIC room whose build() COMPOSES the existing RoomBuildContext
+          steps (assignFloorLighting / placeStandardColumns / placeStandardProps / placeLargeRoom* / …)
+          needs NO new generator code AND NO RoomType enum constant — roomTypeForBlueprint() tags an id
+          with no matching enum as the generic STANDARD tag (the order-9 seam fix). THIS is the pure
+          "one blueprint + one register() line" case.
+        - SIGNATURE room: requiredSprites pins each flexible symbol its build() stamps to that symbol's
+          sprite (so the allocator reserves its exact look, order-4 Step 2).
+        - A room that needs a BESPOKE architecture (its own rows/rings/heap, not a composition of existing
+          steps) also adds a *ForRoom helper in LevelGenerator + a delegator in RoomBuildContext, and — if
+          it wants its own type tag — a RoomType constant. salvage_bay (order-8) is the worked example.
+          That is a bigger change than pure registration, but it is still driven entirely by the blueprint
+          seam: the generator's SELECTION code is never edited.
+   2. That's it. selectBlueprint() already iterates the registry with a seeded weighted roll, so the new
+      room competes in generation automatically. ZERO edits to the generator's room-SELECTION code.
+   => Registering a room changes the generated-level RNG sequence (one more roulette candidate), so
+      LevelGeneratorSnapshotTest is a DELIBERATE, reviewed re-baseline (as in order-8 and order-9) — not a
+      determinism break: same seed still ⇒ same level.
+
+   ---------------------------------------------------------------------------------------------------
+   ACCEPTANCE ADDITIONS (order-9 — the recipes proven with real, minimal additions)
+   ---------------------------------------------------------------------------------------------------
+   * RECIPE A proof — "wall_hex_plate": a hexagonal-plate accent WALL sprite (Voronoi honeycomb of a
+     triangular lattice). Added by ONLY (a) one EnvironmentSpriteDefinition + register() line in
+     TilesetRegistries.registerWalls, its id added to VARIETY_ONLY_SPRITE_IDS, and (b) one
+     generateHexPlateWallTexture() + register() line in WallRenderer.registerTextureGenerators (its size
+     constants in RenderConstants). It is variety-only (no legacy symbol maps to it), so hand levels are
+     unchanged; it appears on generated floors as a per-level wall-variety pick. ZERO edits to
+     LevelGenerator, the WallRenderer draw loop, PropRenderer, or Level.
+   * RECIPE B proof — "supply_cache": a GENERIC storeroom. Added by ONLY one RoomBlueprint + one
+     register() line in RoomBlueprints (its size/cap/weight constants in LevelGenConstants). It carries NO
+     RoomType constant — it is tagged STANDARD via the seam fix — and NO bespoke generator helper: its
+     build() COMPOSES existing steps (standard floor + standard columns + a double standard-prop pass for
+     a cluttered, densely-stocked feel), and its accent walls are allocator-driven per level (STEP-C
+     generic variety). It competes in the STEP-A roulette and can be selected. ZERO edits to the
+     generator's selection code, the renderers, or Level.
+   * THE SEAM FIX (order-9): roomTypeForBlueprint() previously threw for any id without a matching
+     RoomType, which would have forced an enum edit per new room. It now falls back to the generic
+     STANDARD tag, so a composed GENERIC room is truly pure-registration. This is "fix the seam, do not
+     work around it" — a one-time generalisation, not a per-room workaround.
+
+   ---------------------------------------------------------------------------------------------------
+   HAND-CRAFTED LEVELS & CONTAINMENT (the backward-compat guarantees)
+   ---------------------------------------------------------------------------------------------------
+   * Hand levels are LEGACY-PALETTE BY DEFAULT. LevelLoader builds every assets/levels/*.txt through
+     Level's 3-arg constructor, which attaches LevelPalettes.legacy() — the exact historic 1:1 mapping.
+     So every hand-crafted level renders pixel-for-pixel as it always did (verified: the legacy palette
+     covers the whole catalog MINUS the variety-only ids, and its distinct-sprite set is that whole set).
+     A future author who WANTS a hand level to use a themed/allocated palette could build a varied
+     LevelPalette (via SymbolAllocator or a bespoke LevelPalettes factory) and pass it to Level's 4-arg
+     constructor at load — that is future work, NOT part of this series; the default stays legacy.
+   * ROOM-CONTAINED ART STAYS CONTAINED. The STELLAR_OBSERVATORY sprites (walls " ' `, props ; \ | <,
+     decals ? ] -) carry the "observatory" theme tag. The allocator EXCLUDES tagged sprites from the
+     generic variety pool (R2) and binds them ONLY when the observatory room is placed and reserves them
+     (its symbolDemand). So a freed observatory SYMBOL gets ordinary generic art, while observatory
+     SPRITES never leak into generic rooms — today's containment rule, preserved by the demand + the tag,
+     with no special-case code. The excavation/observatory symbols behave the same way: bound only when
+     their room is placed.
+
+   ---------------------------------------------------------------------------------------------------
+   DETERMINISM & BACKWARD-COMPAT (subsystem-wide guarantees)
+   ---------------------------------------------------------------------------------------------------
+   * Same run/floor seed ⇒ identical LevelPalette and identical grid (permadeath fairness + seed sharing).
+     SymbolAllocator is a pure function of (seed, placed demands); GameMath.paletteSymbolSeed salts the
+     palette stream so it never collides with the floor/route seeds. Headless tests
+     (SymbolAllocatorTest, LevelGeneratorSnapshotTest) enforce this.
+   * Every Disposable is disposed: the per-level EnvironmentTextureSet owns this floor's wall/column/prop
+     textures and is freed on level teardown and at World shutdown (routing prop textures through
+     PropRenderer.disposeGeneratedTexture so the opacity-mask cache does not leak). Repeated floor
+     transitions hold a stable texture count.
