@@ -23,13 +23,18 @@ import java.util.Random;
 /**
  * Procedural dungeon generator — six-phase algorithm inspired by Shattered Pixel Dungeon.
  *
- * Phase 1 — Room Placement:     randomly sized rectangular rooms placed without overlap, then each
- *                                assigned a RoomBlueprint via a SEEDED WEIGHTED pick over the
- *                                RoomBlueprintRegistry (order-8 assignRoomBlueprints — no hardcoded
- *                                probability-band switch). Room types: ENTRANCE, STANDARD, LARGE,
- *                                SALVAGE_BAY, SERVER_ROOM, MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
+ * Phase 1 — Room Placement:     randomly sized rectangular rooms placed without overlap — each
+ *                                independently rolls a small chance (LEVEL_GEN_LARGE_MODIFIER_CHANCE)
+ *                                to be stamped significantly larger than a standard room (Room.isLarge)
+ *                                — then each assigned a RoomBlueprint via a SEEDED WEIGHTED pick over
+ *                                the RoomBlueprintRegistry (order-8 assignRoomBlueprints — no hardcoded
+ *                                probability-band switch), followed by a backstop pass that upgrades
+ *                                extra STANDARD rooms to a special blueprint if fewer than
+ *                                LEVEL_GEN_MIN_SPECIAL_ROOMS were rolled. Room types: ENTRANCE,
+ *                                STANDARD, SALVAGE_BAY, SERVER_ROOM, MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
  *                                POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK, RESEARCH_LAB,
- *                                STELLAR_OBSERVATORY.
+ *                                STELLAR_OBSERVATORY. "LARGE" is a size modifier orthogonal to type —
+ *                                see Room.isLarge — not a room type of its own.
  * Phase 2 — Connectivity:       greedy MST + optional loop corridors; 2-3 MST edges
  *                                widened to 3-tile grand hallways with centre-line columns.
  *                                Single door pass after all corridor carving.
@@ -58,13 +63,12 @@ import java.util.Random;
  * Room types:
  *   ENTRANCE          — player spawn room; fully lit, no hazards.
  *   STANDARD          — baseline UAC lab room; existing decoration logic.
- *   LARGE             — landmark arena (reactor floor, cargo bay); patterned columns, sparse props.
  *   SERVER_ROOM       — data vault; terminal walls 't', rack rows of T/L props, dark atmosphere.
  *   MEDICAL_BAY       — guaranteed once per level; medical-tile 'M' walls, medkit/stim pickups.
  *   ARMORY            — last-stand room; blast-scarred 'X' walls, weapon racks '=', corpses.
  *   CRYO_CHAMBER      — cryogenic bay; frost 'Z' walls, bio-pod '&' rows, dim lighting.
- *   POWER_PLANT       — reactor core (LARGE-class); radiation 'U' walls, generator '%' cluster.
- *   COMMAND_CENTER    — control room (LARGE-class); glass 'N' walls, terminal 'T' rows.
+ *   POWER_PLANT       — reactor core; radiation 'U' walls, generator '%' cluster.
+ *   COMMAND_CENTER    — control room; glass 'N' walls, terminal 'T' rows.
  *   CONTAINMENT_BLOCK — cell block; glass 'N' cell fronts, quarantine 'Q' walls, high enemy den.
  *   RESEARCH_LAB      — sci-fi set-piece; holo-data 'D' walls, specimen tanks 'I', AI core 'J',
  *                        force-field barrier 'F', energy scorch 'e' decals. At most 1 per level.
@@ -91,7 +95,7 @@ public class LevelGenerator implements ILevelGenerator {
     // Room's type. SALVAGE_BAY is the new order-8 GENERIC room (REQUIREMENT PROOF 1). See
     // docs/environment-tileset-system.txt (ORDER STATUS TABLE, section 8).
     enum RoomType {
-        ENTRANCE, STANDARD, LARGE, SERVER_ROOM,
+        ENTRANCE, STANDARD, SERVER_ROOM,
         MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
         POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK,
         RESEARCH_LAB, STELLAR_OBSERVATORY, SALVAGE_BAY
@@ -226,6 +230,10 @@ public class LevelGenerator implements ILevelGenerator {
         // order-8: the registered blueprint selected for this room. Its build() stamps the architecture
         // and its symbolDemand() feeds the palette allocator. Set by assignRoomBlueprints().
         RoomBlueprint blueprint;
+        // Size modifier, independent of blueprint/type: rolled at placement time in placeRooms(). A
+        // large room keeps whatever blueprint styling it would have received anyway — only its footprint
+        // is bigger. Never true for the entrance room (see placeRooms()).
+        boolean isLarge;
 
         Room(int leftColumn, int bottomRow, int rightColumn, int topRow) {
             this.leftColumn  = leftColumn;
@@ -261,10 +269,23 @@ public class LevelGenerator implements ILevelGenerator {
                 && attempts < LevelGenConstants.LEVEL_GEN_PLACEMENT_TRIES) {
             attempts++;
 
-            int interiorWidth  = randomBetween(LevelGenConstants.LEVEL_GEN_ROOM_MIN_WIDTH,
+            // Room 0 always becomes the entrance (positional rule in assignRoomBlueprints) — never
+            // let the large modifier apply to whatever room ends up being placed first.
+            boolean rollLarge = config.enableLargeRooms && !rooms.isEmpty()
+                    && random.nextFloat() < LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_CHANCE;
+
+            int interiorWidth, interiorHeight;
+            if (rollLarge) {
+                interiorWidth  = randomBetween(LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM,
+                                               LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_MAX_WIDTH);
+                interiorHeight = randomBetween(LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM,
+                                               LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_MAX_HEIGHT);
+            } else {
+                interiorWidth  = randomBetween(LevelGenConstants.LEVEL_GEN_ROOM_MIN_WIDTH,
                                                LevelGenConstants.LEVEL_GEN_ROOM_MAX_WIDTH);
-            int interiorHeight = randomBetween(LevelGenConstants.LEVEL_GEN_ROOM_MIN_HEIGHT,
+                interiorHeight = randomBetween(LevelGenConstants.LEVEL_GEN_ROOM_MIN_HEIGHT,
                                                LevelGenConstants.LEVEL_GEN_ROOM_MAX_HEIGHT);
+            }
             int totalWidth     = interiorWidth  + 2;
             int totalHeight    = interiorHeight + 2;
 
@@ -277,6 +298,7 @@ public class LevelGenerator implements ILevelGenerator {
             Room candidate = new Room(leftColumn, bottomRow,
                                       leftColumn + totalWidth  - 1,
                                       bottomRow  + totalHeight - 1);
+            candidate.isLarge = rollLarge;
 
             boolean overlapsExisting = false;
             for (Room existing : rooms) {
@@ -309,31 +331,45 @@ public class LevelGenerator implements ILevelGenerator {
         Room entrance = rooms.get(0);
         entrance.blueprint = registry.get(RoomBlueprints.ID_ENTRANCE);
         entrance.type      = RoomType.ENTRANCE;
+        entrance.isLarge   = false; // never the large modifier, regardless of what placeRooms() rolled
         placedCounts.merge(RoomBlueprints.ID_ENTRANCE, 1, Integer::sum);
 
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
-            RoomBlueprint chosen = selectBlueprint(registry, room, placedCounts);
+            RoomBlueprint chosen = selectBlueprint(registry, room, placedCounts, NOT_ENTRANCE);
+            if (chosen == null) chosen = registry.get(RoomBlueprints.ID_STANDARD); // defensive
             room.blueprint = chosen;
             room.type      = roomTypeForBlueprint(chosen);
             placedCounts.merge(chosen.id(), 1, Integer::sum);
         }
+
+        ensureMinimumSpecialRooms(registry, rooms, placedCounts);
     }
 
+    // Pool filters for selectBlueprint(): ENTRANCE is room 0 only (position rule), never rolled.
+    private static final java.util.function.Predicate<RoomBlueprint> NOT_ENTRANCE =
+            blueprint -> !blueprint.id().equals(RoomBlueprints.ID_ENTRANCE);
+    // Special = neither ENTRANCE nor STANDARD (matches the "special room" concept placeWeaponSpawns()
+    // already uses, extended to GENERIC flavour rooms like SALVAGE_BAY/SUPPLY_CACHE — see isSpecialRoom).
+    private static final java.util.function.Predicate<RoomBlueprint> SPECIAL_ONLY =
+            blueprint -> !blueprint.id().equals(RoomBlueprints.ID_ENTRANCE)
+                      && !blueprint.id().equals(RoomBlueprints.ID_STANDARD);
+
     /**
-     * Seeded weighted pick of one blueprint for a candidate room. Each registered blueprint (except the
-     * position-only ENTRANCE) is evaluated with its OWN {@link RoomContext} — same dimensions/depth but
-     * its own already-placed count — so per-kind caps read correctly. STANDARD is always eligible with a
-     * dominant weight (LEVEL_GEN_ROOM_STANDARD_SELECTION_WEIGHT), so plain rooms stay the majority and
-     * specialties stay occasional. Deterministic: one {@code random.nextFloat()} per room over the
-     * roulette built from {@link RoomBlueprint#selectionWeight}.
+     * Seeded weighted pick of one blueprint for a candidate room, drawn from every registered
+     * blueprint {@code poolFilter} admits. Each candidate blueprint is evaluated with its OWN
+     * {@link RoomContext} — same dimensions/depth but its own already-placed count — so per-kind caps
+     * read correctly. Returns {@code null} when no blueprint in the filtered pool is eligible (the
+     * caller decides the fallback — a defensive STANDARD default for the main roll, "skip this room"
+     * for the minimum-special-rooms backstop).
      */
     private RoomBlueprint selectBlueprint(RoomBlueprintRegistry registry, Room room,
-                                          Map<String, Integer> placedCounts) {
+                                          Map<String, Integer> placedCounts,
+                                          java.util.function.Predicate<RoomBlueprint> poolFilter) {
         List<RoomBlueprint> candidates = new ArrayList<>();
         List<Float>         weights    = new ArrayList<>();
         for (RoomBlueprint blueprint : registry.all()) {
-            if (blueprint.id().equals(RoomBlueprints.ID_ENTRANCE)) continue; // ENTRANCE is room 0 only
+            if (!poolFilter.test(blueprint)) continue;
             RoomContext context = new RoomContext(room.interiorWidth(), room.interiorHeight(),
                     dungeonDepth, placedCounts.getOrDefault(blueprint.id(), 0));
             if (!blueprint.eligible(context)) continue;
@@ -342,13 +378,60 @@ public class LevelGenerator implements ILevelGenerator {
             candidates.add(blueprint);
             weights.add(weight);
         }
-        if (candidates.isEmpty()) return registry.get(RoomBlueprints.ID_STANDARD); // defensive
+        if (candidates.isEmpty()) return null;
         float[] weightArray = new float[weights.size()];
         for (int index = 0; index < weightArray.length; index++) {
             weightArray[index] = weights.get(index);
         }
         int chosenIndex = GameMath.weightedChoiceIndex(weightArray, random.nextFloat());
         return candidates.get(chosenIndex);
+    }
+
+    /**
+     * Backstop: guarantees at least {@code LEVEL_GEN_MIN_SPECIAL_ROOMS} rooms carry a SPECIAL blueprint
+     * (any id other than "entrance"/"standard"). The normal weighted roll in assignRoomBlueprints()
+     * already lets more specials occur naturally with no cap here — this pass only ever ADDS specials
+     * when the roll came up short, by upgrading a random selection of the level's STANDARD rooms to a
+     * blueprint that's actually eligible for that room's size/depth. Best-effort: if too few STANDARD
+     * rooms exist or none fit any special blueprint, it stops early rather than forcing an ineligible fit.
+     */
+    private void ensureMinimumSpecialRooms(RoomBlueprintRegistry registry, List<Room> rooms,
+                                           Map<String, Integer> placedCounts) {
+        int specialCount = 0;
+        List<Room> standardRooms = new ArrayList<>();
+        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            if (isSpecialRoom(room)) {
+                specialCount++;
+            } else {
+                standardRooms.add(room);
+            }
+        }
+        if (specialCount >= LevelGenConstants.LEVEL_GEN_MIN_SPECIAL_ROOMS) return;
+
+        java.util.Collections.shuffle(standardRooms, random);
+        for (Room candidate : standardRooms) {
+            if (specialCount >= LevelGenConstants.LEVEL_GEN_MIN_SPECIAL_ROOMS) break;
+            RoomBlueprint upgrade = selectBlueprint(registry, candidate, placedCounts, SPECIAL_ONLY);
+            if (upgrade == null) continue; // nothing special fits this room's size/depth — try the next
+
+            placedCounts.merge(candidate.blueprint.id(), -1, Integer::sum);
+            candidate.blueprint = upgrade;
+            candidate.type      = roomTypeForBlueprint(upgrade);
+            placedCounts.merge(upgrade.id(), 1, Integer::sum);
+            specialCount++;
+        }
+    }
+
+    // Special = any placed blueprint other than ENTRANCE/STANDARD (themed SIGNATURE rooms plus
+    // GENERIC flavour rooms like SALVAGE_BAY/SUPPLY_CACHE). Deliberately keyed off the blueprint id,
+    // not the RoomType tag: an unmatched-enum GENERIC blueprint (e.g. SUPPLY_CACHE) still counts as
+    // special here even though roomTypeForBlueprint() tags it RoomType.STANDARD for the older,
+    // narrower type-keyed passes (e.g. placeWeaponSpawns()).
+    private static boolean isSpecialRoom(Room room) {
+        return room.blueprint != null
+            && !room.blueprint.id().equals(RoomBlueprints.ID_ENTRANCE)
+            && !room.blueprint.id().equals(RoomBlueprints.ID_STANDARD);
     }
 
     /**
@@ -418,11 +501,11 @@ public class LevelGenerator implements ILevelGenerator {
         }
         if (freed.isEmpty()) return;
 
-        // GENERIC rooms (STANDARD / LARGE): each gets, at a modest chance, ONE freed accent theme
-        // sprinkled over its interior-facing perimeter walls.
+        // GENERIC rooms (STANDARD, including large-modified ones): each gets, at a modest chance, ONE
+        // freed accent theme sprinkled over its interior-facing perimeter walls.
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
-            if (room.type != RoomType.STANDARD && room.type != RoomType.LARGE) continue;
+            if (room.type != RoomType.STANDARD) continue;
             if (random.nextFloat() >= LevelGenConstants.LEVEL_GEN_GENERIC_ACCENT_ROOM_CHANCE) continue;
             char accent = freed.get(random.nextInt(freed.size()));
             for (int tileRow = room.bottomRow; tileRow <= room.topRow; tileRow++) {
@@ -671,8 +754,9 @@ public class LevelGenerator implements ILevelGenerator {
 
     /**
      * Promotes LEVEL_GEN_WIDE_HALLWAY_COUNT MST edges from 1-tile to 3-tile grand corridors.
-     * Prefers edges that touch an ENTRANCE or LARGE room (main arteries feel most natural
-     * leading to/from landmark rooms). Falls back to any MST edge when priority ones run out.
+     * Prefers edges that touch an ENTRANCE, large-modified, or landmark room (main arteries feel
+     * most natural leading to/from important rooms). Falls back to any MST edge when priority
+     * ones run out.
      *
      * Each widened corridor records its centre-spine tiles in wideHallwaySpineTiles so
      * placeWideHallwayColumns() can space 'P' columns along it evenly.
@@ -684,11 +768,11 @@ public class LevelGenerator implements ILevelGenerator {
         List<Room[]> otherEdges    = new ArrayList<>();
         for (Room[] edge : mstEdgeRooms) {
             boolean touchesLandmark = edge[0].type == RoomType.ENTRANCE
-                                   || edge[0].type == RoomType.LARGE
+                                   || edge[0].isLarge
                                    || edge[0].type == RoomType.COMMAND_CENTER
                                    || edge[0].type == RoomType.POWER_PLANT
                                    || edge[1].type == RoomType.ENTRANCE
-                                   || edge[1].type == RoomType.LARGE
+                                   || edge[1].isLarge
                                    || edge[1].type == RoomType.COMMAND_CENTER
                                    || edge[1].type == RoomType.POWER_PLANT;
             if (touchesLandmark) {
@@ -883,21 +967,21 @@ public class LevelGenerator implements ILevelGenerator {
      * Assigns floor lighting for each room type:
      *   ENTRANCE          — fully lit ' ' (safe start zone, no conversion).
      *   SERVER_ROOM       — dark 'u' dominant, sprinkle of 'f' flickering, no bright ' '.
-     *   LARGE             — mostly lit ' ', ring of 'l' at edges, one small 'u' dark alcove.
      *   MEDICAL_BAY       — fully lit ' ' (clinical brightness).
      *   ARMORY            — mostly lit ' ', dark 'u' corners for hiding stashes.
      *   CRYO_CHAMBER      — dim 'l' dominant with rare 'u' patches (cold, unwelcoming).
      *   POWER_PLANT       — dark 'u' floor, 'f' flickering near centre (reactor hum).
      *   COMMAND_CENTER    — lit ' ' dominant, thin 'l' ring at perimeter.
      *   CONTAINMENT_BLOCK — very dark 'u' dominant, 'f' flickering at cell fronts.
-     *   STANDARD          — existing mixed logic (config-driven unlitFloors / normalFloors).
+     *   STANDARD          — existing mixed logic (config-driven unlitFloors / normalFloors); a
+     *                       large-modified STANDARD room (Room.isLarge) keeps this exact styling,
+     *                       just stamped onto a bigger footprint.
      */
     void assignFloorLighting(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type == RoomType.ENTRANCE) continue;
             switch (room.type) {
                 case SERVER_ROOM:       assignServerRoomFloor(grid, room);       break;
-                case LARGE:             assignLargeRoomFloor(grid, room);         break;
                 case MEDICAL_BAY:       assignMedicalBayFloor(grid, room);        break;
                 case ARMORY:            assignArmoryFloor(grid, room);             break;
                 case CRYO_CHAMBER:      assignCryoChamberFloor(grid, room);        break;
@@ -921,30 +1005,6 @@ public class LevelGenerator implements ILevelGenerator {
                 } else if (roll < 0.55f) {
                     grid[tileRow][tileColumn] = 'u';
                 } else {
-                    grid[tileRow][tileColumn] = 'l';
-                }
-            }
-        }
-    }
-
-    private void assignLargeRoomFloor(char[][] grid, Room room) {
-        boolean hasAlcove    = random.nextBoolean();
-        int     alcoveColumn = random.nextBoolean() ? room.leftColumn + 1  : room.rightColumn - 1;
-        int     alcoveRow    = random.nextBoolean() ? room.bottomRow  + 1  : room.topRow      - 1;
-        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
-            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
-                if (grid[tileRow][tileColumn] != ' ') continue;
-                if (hasAlcove
-                        && Math.abs(tileColumn - alcoveColumn) <= 1
-                        && Math.abs(tileRow    - alcoveRow)    <= 1) {
-                    grid[tileRow][tileColumn] = 'u';
-                    continue;
-                }
-                boolean isEdgeTile = tileColumn == room.leftColumn  + 1
-                                  || tileColumn == room.rightColumn - 1
-                                  || tileRow    == room.bottomRow   + 1
-                                  || tileRow    == room.topRow      - 1;
-                if (isEdgeTile && random.nextFloat() < 0.50f) {
                     grid[tileRow][tileColumn] = 'l';
                 }
             }
@@ -1269,8 +1329,9 @@ public class LevelGenerator implements ILevelGenerator {
 
     /**
      * Places columns in STANDARD rooms only — all special room types have dedicated
-     * prop/column handlers (LARGE, SERVER_ROOM, MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
-     * POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK).
+     * prop/column handlers (SERVER_ROOM, MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
+     * POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK). A large-modified STANDARD room
+     * (Room.isLarge) goes through this same pass — its bigger footprint is the only difference.
      */
     private void placeColumns(char[][] grid, List<Room> rooms) {
         if (!config.columns) return;
@@ -1309,67 +1370,6 @@ public class LevelGenerator implements ILevelGenerator {
                 placed++;
             }
         }
-    }
-
-    /**
-     * Places columns in LARGE rooms using one of three deliberate architectural patterns:
-     *   SYMMETRIC_FOUR  — columns at the four interior quadrant centres (classic pillared hall).
-     *   CENTRE_AVENUE   — row of columns down the long axis, spaced 3 tiles.
-     *   PERIMETER_RING  — columns at mid-edges just inside the walls (open arena centre).
-     */
-    void placeLargeRoomColumns(char[][] grid, List<Room> rooms) {
-        if (!config.columns) return;
-        for (Room room : rooms) {
-            if (room.type != RoomType.LARGE) continue;
-            int pattern = random.nextInt(3);
-            switch (pattern) {
-                case 0: placeLargeColumnsSymmetricFour(grid, room);  break;
-                case 1: placeLargeColumnsCentreAvenue(grid, room);   break;
-                default: placeLargeColumnsPerimeterRing(grid, room); break;
-            }
-        }
-    }
-
-    private void placeLargeColumnsSymmetricFour(char[][] grid, Room room) {
-        int quarterWidth  = room.interiorWidth()  / 4;
-        int quarterHeight = room.interiorHeight() / 4;
-        int[] quadrantColumns = {
-            room.leftColumn  + 1 + quarterWidth,
-            room.rightColumn - 1 - quarterWidth
-        };
-        int[] quadrantRows = {
-            room.bottomRow   + 1 + quarterHeight,
-            room.topRow      - 1 - quarterHeight
-        };
-        for (int quadrantColumn : quadrantColumns) {
-            for (int quadrantRow : quadrantRows) {
-                tryPlaceColumnAt(grid, quadrantColumn, quadrantRow);
-            }
-        }
-    }
-
-    private void placeLargeColumnsCentreAvenue(char[][] grid, Room room) {
-        int spacing = 3;
-        if (room.interiorWidth() >= room.interiorHeight()) {
-            int fixedRow = room.centerRow();
-            for (int tileColumn = room.leftColumn + 2; tileColumn < room.rightColumn - 1; tileColumn += spacing) {
-                tryPlaceColumnAt(grid, tileColumn, fixedRow);
-            }
-        } else {
-            int fixedColumn = room.centerColumn();
-            for (int tileRow = room.bottomRow + 2; tileRow < room.topRow - 1; tileRow += spacing) {
-                tryPlaceColumnAt(grid, fixedColumn, tileRow);
-            }
-        }
-    }
-
-    private void placeLargeColumnsPerimeterRing(char[][] grid, Room room) {
-        int midColumn = room.centerColumn();
-        int midRow    = room.centerRow();
-        tryPlaceColumnAt(grid, midColumn,            room.bottomRow + 2);
-        tryPlaceColumnAt(grid, midColumn,            room.topRow    - 2);
-        tryPlaceColumnAt(grid, room.leftColumn  + 2, midRow);
-        tryPlaceColumnAt(grid, room.rightColumn - 2, midRow);
     }
 
     private void tryPlaceColumnAt(char[][] grid, int tileColumn, int tileRow) {
@@ -1492,27 +1492,6 @@ public class LevelGenerator implements ILevelGenerator {
                     if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
                     char prop = random.nextFloat() < LevelGenConstants.LEVEL_GEN_SERVER_LOCKER_RATIO ? 'L' : 'T';
                     grid[tileRow][tileColumn] = prop;
-                }
-            }
-        }
-    }
-
-    /**
-     * Places sparse props in LARGE rooms: crates and barrels at low density,
-     * one optional explosive barrel near existing columns.
-     */
-    void placeLargeRoomProps(char[][] grid, List<Room> rooms) {
-        for (Room room : rooms) {
-            if (room.type != RoomType.LARGE) continue;
-            for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
-                for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
-                    if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
-                    if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
-                    if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
-                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_LARGE_PROP_CHANCE) {
-                        char prop = random.nextFloat() < 0.70f ? 'C' : 'g';
-                        grid[tileRow][tileColumn] = prop;
-                    }
                 }
             }
         }
@@ -2402,10 +2381,14 @@ public class LevelGenerator implements ILevelGenerator {
     /**
      * Places medkit ('H'), stim-pack ('+'), and armour-kit ('A') pickups in non-entrance rooms.
      * Per-type boosts:
-     *   MEDICAL_BAY:       high medkit + stim chance (loot hub).
-     *   ARMORY:            high armour chance, low medkit (last-stand gear).
-     *   COMMAND_CENTER:    moderate medkit + armour (VIP resupply).
-     *   SERVER_ROOM/LARGE: existing boosted chances.
+     *   MEDICAL_BAY:    high medkit + stim chance (loot hub).
+     *   ARMORY:         high armour chance, low medkit (last-stand gear).
+     *   COMMAND_CENTER: moderate medkit + armour (VIP resupply).
+     *   SERVER_ROOM:    existing boosted chances.
+     * A large-modified room (Room.isLarge) additionally floors its chances at the same boosted
+     * levels a LARGE landmark room used to guarantee — size alone earns richer loot regardless
+     * of the room's type (skipped for MEDICAL_BAY/ARMORY, which roll their own bespoke pickups
+     * below and never reach the boost).
      */
     private void placePickups(char[][] grid, List<Room> rooms, int[] roomDepths, int maxRoomDepth) {
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
@@ -2420,11 +2403,6 @@ public class LevelGenerator implements ILevelGenerator {
                     medkitChance = LevelGenConstants.LEVEL_GEN_SERVER_MEDKIT_CHANCE;
                     armourChance = LevelGenConstants.LEVEL_GEN_SERVER_ARMOUR_CHANCE;
                     ammoChance   = 0.45f;
-                    break;
-                case LARGE:
-                    medkitChance = LevelGenConstants.LEVEL_GEN_LARGE_MEDKIT_CHANCE;
-                    armourChance = LevelGenConstants.LEVEL_GEN_LARGE_ARMOUR_CHANCE;
-                    ammoChance   = 0.55f;
                     break;
                 case MEDICAL_BAY:
                     tryPlacePickup(grid, room, 'H');
@@ -2455,6 +2433,12 @@ public class LevelGenerator implements ILevelGenerator {
                     break;
             }
 
+            if (room.isLarge) {
+                medkitChance = Math.max(medkitChance, LevelGenConstants.LEVEL_GEN_LARGE_MEDKIT_CHANCE);
+                armourChance = Math.max(armourChance, LevelGenConstants.LEVEL_GEN_LARGE_ARMOUR_CHANCE);
+                ammoChance   = Math.max(ammoChance, 0.55f);
+            }
+
             // Depth gradient: deeper rooms are richer to sustain the harder fights there.
             medkitChance += depthFraction * LevelGenConstants.LEVEL_GEN_DEPTH_MEDKIT_BONUS;
             ammoChance   += depthFraction * LevelGenConstants.LEVEL_GEN_DEPTH_AMMO_BONUS;
@@ -2482,7 +2466,7 @@ public class LevelGenerator implements ILevelGenerator {
      * Places weapon pickups across the level as WeaponSpawnPoints (no grid tile written).
      *
      * Two independent passes:
-     *   1. All special rooms (LARGE, SERVER_ROOM, MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
+     *   1. All special rooms (SERVER_ROOM, MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
      *      POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK, RESEARCH_LAB) — guaranteed
      *      placement so every special room always contains a weapon.
      *   2. STANDARD rooms — each has a LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE independent
@@ -2895,7 +2879,7 @@ public class LevelGenerator implements ILevelGenerator {
      *      becomes the payoff for finding the key and unlocking the vault.
      *   2. Otherwise the deepest room overall (by MST hop distance from the entrance).
      *   In both cases ties are broken toward landmark room types (command center > power plant
-     *   > large) for a more cinematic finale.
+     *   > large-modified) for a more cinematic finale.
      *   3. Legacy fallback by index, then the entrance room as an absolute last resort.
      */
     private void stampStairsDown(char[][] grid, List<Room> rooms, int[] roomDepths, boolean[] gatedRooms) {
@@ -2921,7 +2905,7 @@ public class LevelGenerator implements ILevelGenerator {
         }
         candidates.sort((indexA, indexB) -> {
             if (roomDepths[indexB] != roomDepths[indexA]) return roomDepths[indexB] - roomDepths[indexA];
-            return landmarkRank(rooms.get(indexB).type) - landmarkRank(rooms.get(indexA).type);
+            return landmarkRank(rooms.get(indexB)) - landmarkRank(rooms.get(indexA));
         });
         for (int roomIndex : candidates) {
             if (tryStampInRoom(grid, rooms.get(roomIndex))) return true;
@@ -2929,13 +2913,14 @@ public class LevelGenerator implements ILevelGenerator {
         return false;
     }
 
-    private int landmarkRank(RoomType type) {
-        switch (type) {
-            case COMMAND_CENTER: return 3;
-            case POWER_PLANT:    return 2;
-            case LARGE:          return 1;
-            default:             return 0;
+    private int landmarkRank(Room room) {
+        int rank;
+        switch (room.type) {
+            case COMMAND_CENTER: rank = 3; break;
+            case POWER_PLANT:    rank = 2; break;
+            default:              rank = 0; break;
         }
+        return room.isLarge ? Math.max(rank, 1) : rank;
     }
 
     private boolean tryStampInRoom(char[][] grid, Room room) {

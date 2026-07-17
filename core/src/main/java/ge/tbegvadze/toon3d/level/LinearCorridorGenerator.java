@@ -2,12 +2,17 @@ package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.item.ItemType;
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.function.Predicate;
 
 /**
  * Linear corridor dungeon generator — a single 3-tile-wide spine corridor runs most
@@ -16,9 +21,23 @@ import java.util.Random;
  * scattered boxes, the player navigates one long artery and explores the ribs.
  *
  * Phase 1 — Spine:          3-tile-wide central corridor (horizontal 70 % or vertical 30 %).
- *                            Entrance room near the head; landmark room near the tail.
- * Phase 2 — Side Rooms:     rectangular rooms placed at regular intervals along both sides,
- *                            each connected to the spine via a single-tile doorway.
+ *                            Entrance room near the head. After the primary run, a single
+ *                            perpendicular BEND is carved from its tail toward whichever side of
+ *                            the grid has more open space (extendHorizontalSpineWithVerticalBend /
+ *                            extendVerticalSpineWithHorizontalBend), carrying its own side rooms
+ *                            and landmark — the 80x45 grid is far shorter tall than wide, so a
+ *                            vertical-only spine would place roughly half as many rooms as a
+ *                            horizontal one; the bend brings both orientations to comparable
+ *                            room-placement budgets (see LEVEL_GEN_SPINE_BEND_* in LevelGenConstants).
+ * Phase 2 — Side Rooms:     rectangular rooms placed at regular intervals along both sides, each
+ *                            connected to the spine via a single-tile doorway. Each room
+ *                            independently rolls a small chance to be significantly larger than
+ *                            standard (LEVEL_GEN_LARGE_MODIFIER_CHANCE, Room.isLarge — shared with
+ *                            LevelGenerator, not a room type of its own). Room type is then picked
+ *                            via the same seeded weighted roll over RoomBlueprintRegistry that
+ *                            LevelGenerator uses (assignRoomTypes), followed by a backstop that
+ *                            guarantees at least LEVEL_GEN_MIN_SPECIAL_ROOMS. STORAGE_BAY/REACTOR
+ *                            remain this generator's own local, unchanged room types.
  * Phase 3 — Decoration:     floor lighting, context-aware wall variety, spine columns,
  *                            per-room-type props, pickups, and weapon spawns.
  * Phase 4 — Enemies:        spawn points in all non-entrance rooms.
@@ -30,7 +49,7 @@ import java.util.Random;
 public class LinearCorridorGenerator implements ILevelGenerator {
 
     private enum RoomType {
-        ENTRANCE, STANDARD, LARGE, SERVER_ROOM,
+        ENTRANCE, STANDARD, SERVER_ROOM,
         MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
         POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK,
         RESEARCH_LAB, STORAGE_BAY, REACTOR
@@ -39,6 +58,10 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     private static final class Room {
         final int leftColumn, bottomRow, rightColumn, topRow;
         RoomType type;
+        // Size modifier, independent of type: rolled at placement time (mirrors LevelGenerator.Room).
+        // A large room keeps whatever type-driven styling it would have received anyway — only its
+        // footprint is bigger. Never true for the entrance room.
+        boolean isLarge;
 
         Room(int leftColumn, int bottomRow, int rightColumn, int topRow) {
             this.leftColumn  = leftColumn;
@@ -178,6 +201,7 @@ public class LinearCorridorGenerator implements ILevelGenerator {
 
         List<Room> rooms = new ArrayList<>();
         placeHorizontalSpineRooms(grid, rooms, spineRow, spineStartColumn, spineEndColumn);
+        extendHorizontalSpineWithVerticalBend(grid, rooms, spineEndColumn, spineRow);
         return rooms;
     }
 
@@ -192,7 +216,10 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         // ENTRANCE: near the spine head (leftmost slot)
         Room entranceRoom = tryPlaceHorizontalSideRoom(
             grid, rooms, spineStartColumn + 1, spineRow, spineHalfWidth, random.nextBoolean());
-        if (entranceRoom != null) entranceRoom.type = RoomType.ENTRANCE;
+        if (entranceRoom != null) {
+            entranceRoom.type    = RoomType.ENTRANCE;
+            entranceRoom.isLarge = false; // never the large modifier, regardless of its placement roll
+        }
 
         // Middle rooms along the spine
         int slotColumn = spineStartColumn + randomBetween(
@@ -217,8 +244,72 @@ public class LinearCorridorGenerator implements ILevelGenerator {
 
         // Guarantee the first room in the list is ENTRANCE
         if (!rooms.isEmpty() && rooms.get(0).type != RoomType.ENTRANCE) {
-            rooms.get(0).type = RoomType.ENTRANCE;
+            rooms.get(0).type    = RoomType.ENTRANCE;
+            rooms.get(0).isLarge = false;
         }
+    }
+
+    /**
+     * Extends the horizontal spine with a single perpendicular VERTICAL bend at its tail
+     * (spineEndColumn), toward whichever side of the grid has more open space. Carries its own
+     * side rooms and landmark via {@link #tryPlaceVerticalSideRoom}, the same helper the vertical
+     * spine's own primary run uses, so the added stretch reads identically. See
+     * LEVEL_GEN_SPINE_BEND_* for why both orientations get a bend (room-budget parity).
+     */
+    private void extendHorizontalSpineWithVerticalBend(char[][] grid, List<Room> rooms,
+                                                        int spineEndColumn, int spineRow) {
+        int spineHalfWidth = LevelGenConstants.LEVEL_GEN_SPINE_WIDTH / 2;
+        int gridHeight      = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+
+        int belowSpace = spineRow - 1;
+        int aboveSpace = gridHeight - 2 - spineRow;
+        boolean extendAbove = aboveSpace >= belowSpace;
+        int availableSpace  = extendAbove ? aboveSpace : belowSpace;
+        if (availableSpace < LevelGenConstants.LEVEL_GEN_SPINE_BEND_MIN_LENGTH) return;
+
+        int bendLength = Math.max(LevelGenConstants.LEVEL_GEN_SPINE_BEND_MIN_LENGTH,
+                (int) (availableSpace * randomFloat(LevelGenConstants.LEVEL_GEN_SPINE_BEND_LENGTH_MIN_FRAC,
+                                                    LevelGenConstants.LEVEL_GEN_SPINE_BEND_LENGTH_MAX_FRAC)));
+        int bendEndRow = extendAbove ? spineRow + bendLength : spineRow - bendLength;
+
+        int bendColumn  = spineEndColumn;
+        int startRow    = Math.min(spineRow, bendEndRow);
+        int endRow      = Math.max(spineRow, bendEndRow);
+        for (int tileRow = startRow; tileRow <= endRow; tileRow++) {
+            for (int deltaColumn = -spineHalfWidth; deltaColumn <= spineHalfWidth; deltaColumn++) {
+                int tileColumn = bendColumn + deltaColumn;
+                if (!isInBounds(tileColumn, tileRow)) continue;
+                if (deltaColumn == 0) {
+                    grid[tileRow][tileColumn] = ' ';
+                    spineCenterTiles.add(new int[]{ tileColumn, tileRow });
+                } else {
+                    grid[tileRow][tileColumn] = 'l';
+                }
+            }
+        }
+
+        // Side rooms along the bend, same slot-stepping pattern as the primary vertical spine.
+        int slotRow = extendAbove
+            ? spineRow + randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX, LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX + 2)
+            : spineRow - randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX, LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX + 2);
+        int landmarkCutoff = extendAbove
+            ? bendEndRow - LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX
+            : bendEndRow + LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX;
+        while (extendAbove ? slotRow <= landmarkCutoff : slotRow >= landmarkCutoff) {
+            if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE) {
+                tryPlaceVerticalSideRoom(grid, rooms, bendColumn, spineHalfWidth, slotRow, true);
+            }
+            if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE) {
+                tryPlaceVerticalSideRoom(grid, rooms, bendColumn, spineHalfWidth, slotRow, false);
+            }
+            slotRow += extendAbove
+                ? randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MIN, LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX)
+                : -randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MIN, LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX);
+        }
+
+        // Landmark near the bend's far end.
+        int landmarkRow = extendAbove ? bendEndRow - 1 : bendEndRow + 1;
+        tryPlaceVerticalSideRoom(grid, rooms, bendColumn, spineHalfWidth, landmarkRow, random.nextBoolean());
     }
 
     /**
@@ -229,13 +320,22 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     private Room tryPlaceHorizontalSideRoom(char[][] grid, List<Room> rooms,
                                              int slotColumn, int spineRow, int spineHalfWidth,
                                              boolean northSide) {
-        boolean bigRoom    = random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_BIG_ROOM_CHANCE;
-        int interiorWidth  = bigRoom
-            ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_WIDTH)
-            : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_WIDTH, 8);
-        int interiorHeight = bigRoom
-            ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_HEIGHT)
-            : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_HEIGHT, 8);
+        // Independent size tiers: a small chance of the LARGE modifier (significantly oversized,
+        // shared with LevelGenerator — see LEVEL_GEN_LARGE_MODIFIER_CHANCE), else the existing
+        // "bigRoom" oversized-band roll, else the normal small/medium range.
+        boolean rollLarge  = config.enableLargeRooms
+                && random.nextFloat() < LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_CHANCE;
+        boolean bigRoom    = !rollLarge && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_BIG_ROOM_CHANCE;
+        int interiorWidth  = rollLarge
+            ? randomBetween(LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM, LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_MAX_WIDTH)
+            : bigRoom
+                ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_WIDTH)
+                : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_WIDTH, 8);
+        int interiorHeight = rollLarge
+            ? randomBetween(LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM, LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_MAX_HEIGHT)
+            : bigRoom
+                ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_HEIGHT)
+                : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_HEIGHT, 8);
         int totalWidth     = interiorWidth  + 2;
         int totalHeight    = interiorHeight + 2;
 
@@ -271,6 +371,7 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         int connectionColumn = Math.min(Math.max(slotColumn, leftColumn + 1), rightColumn - 1);
 
         Room candidate = new Room(leftColumn, bottomRow, rightColumn, topRow);
+        candidate.isLarge = rollLarge;
         for (Room existing : rooms) {
             if (candidate.overlaps(existing)) return null;
         }
@@ -331,6 +432,7 @@ public class LinearCorridorGenerator implements ILevelGenerator {
 
         List<Room> rooms = new ArrayList<>();
         placeVerticalSpineRooms(grid, rooms, spineColumn, spineStartRow, spineEndRow);
+        extendVerticalSpineWithHorizontalBend(grid, rooms, spineColumn, spineEndRow);
         return rooms;
     }
 
@@ -371,7 +473,10 @@ public class LinearCorridorGenerator implements ILevelGenerator {
 
         Room entranceRoom = tryPlaceVerticalSideRoom(
             grid, rooms, spineColumn, spineHalfWidth, spineStartRow + 1, random.nextBoolean());
-        if (entranceRoom != null) entranceRoom.type = RoomType.ENTRANCE;
+        if (entranceRoom != null) {
+            entranceRoom.type    = RoomType.ENTRANCE;
+            entranceRoom.isLarge = false; // never the large modifier, regardless of its placement roll
+        }
 
         int slotRow = spineStartRow + randomBetween(
             LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX,
@@ -393,8 +498,73 @@ public class LinearCorridorGenerator implements ILevelGenerator {
             grid, rooms, spineColumn, spineHalfWidth, spineEndRow - 1, random.nextBoolean());
 
         if (!rooms.isEmpty() && rooms.get(0).type != RoomType.ENTRANCE) {
-            rooms.get(0).type = RoomType.ENTRANCE;
+            rooms.get(0).type    = RoomType.ENTRANCE;
+            rooms.get(0).isLarge = false;
         }
+    }
+
+    /**
+     * Extends the vertical spine with a single perpendicular HORIZONTAL bend at its tail
+     * (spineEndRow), toward whichever side of the grid has more open space. Carries its own side
+     * rooms and landmark via {@link #tryPlaceHorizontalSideRoom}, the same helper the horizontal
+     * spine's own primary run uses, so the added stretch reads identically. See
+     * LEVEL_GEN_SPINE_BEND_* for why both orientations get a bend (room-budget parity) — the 80x45
+     * grid is far shorter tall than wide, so this is the orientation that needs it most.
+     */
+    private void extendVerticalSpineWithHorizontalBend(char[][] grid, List<Room> rooms,
+                                                        int spineColumn, int spineEndRow) {
+        int spineHalfWidth = LevelGenConstants.LEVEL_GEN_SPINE_WIDTH / 2;
+        int gridWidth       = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
+
+        int rightSpace = gridWidth - 2 - spineColumn;
+        int leftSpace  = spineColumn - 1;
+        boolean extendRight = rightSpace >= leftSpace;
+        int availableSpace  = extendRight ? rightSpace : leftSpace;
+        if (availableSpace < LevelGenConstants.LEVEL_GEN_SPINE_BEND_MIN_LENGTH) return;
+
+        int bendLength = Math.max(LevelGenConstants.LEVEL_GEN_SPINE_BEND_MIN_LENGTH,
+                (int) (availableSpace * randomFloat(LevelGenConstants.LEVEL_GEN_SPINE_BEND_LENGTH_MIN_FRAC,
+                                                    LevelGenConstants.LEVEL_GEN_SPINE_BEND_LENGTH_MAX_FRAC)));
+        int bendEndColumn = extendRight ? spineColumn + bendLength : spineColumn - bendLength;
+
+        int bendRow     = spineEndRow;
+        int startColumn = Math.min(spineColumn, bendEndColumn);
+        int endColumn   = Math.max(spineColumn, bendEndColumn);
+        for (int tileColumn = startColumn; tileColumn <= endColumn; tileColumn++) {
+            for (int deltaRow = -spineHalfWidth; deltaRow <= spineHalfWidth; deltaRow++) {
+                int tileRow = bendRow + deltaRow;
+                if (!isInBounds(tileColumn, tileRow)) continue;
+                if (deltaRow == 0) {
+                    grid[tileRow][tileColumn] = ' ';
+                    spineCenterTiles.add(new int[]{ tileColumn, tileRow });
+                } else {
+                    grid[tileRow][tileColumn] = 'l';
+                }
+            }
+        }
+
+        // Side rooms along the bend, same slot-stepping pattern as the primary horizontal spine.
+        int slotColumn = extendRight
+            ? spineColumn + randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX, LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX + 2)
+            : spineColumn - randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX, LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX + 2);
+        int landmarkCutoff = extendRight
+            ? bendEndColumn - LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX
+            : bendEndColumn + LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX;
+        while (extendRight ? slotColumn <= landmarkCutoff : slotColumn >= landmarkCutoff) {
+            if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE) {
+                tryPlaceHorizontalSideRoom(grid, rooms, slotColumn, bendRow, spineHalfWidth, true);
+            }
+            if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE) {
+                tryPlaceHorizontalSideRoom(grid, rooms, slotColumn, bendRow, spineHalfWidth, false);
+            }
+            slotColumn += extendRight
+                ? randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MIN, LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX)
+                : -randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MIN, LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX);
+        }
+
+        // Landmark near the bend's far end.
+        int landmarkColumn = extendRight ? bendEndColumn - 1 : bendEndColumn + 1;
+        tryPlaceHorizontalSideRoom(grid, rooms, landmarkColumn, bendRow, spineHalfWidth, random.nextBoolean());
     }
 
     /**
@@ -404,13 +574,20 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     private Room tryPlaceVerticalSideRoom(char[][] grid, List<Room> rooms,
                                            int spineColumn, int spineHalfWidth,
                                            int slotRow, boolean eastSide) {
-        boolean bigRoom    = random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_BIG_ROOM_CHANCE;
-        int interiorWidth  = bigRoom
-            ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_WIDTH)
-            : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_WIDTH, 8);
-        int interiorHeight = bigRoom
-            ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_HEIGHT)
-            : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_HEIGHT, 8);
+        // Independent size tiers — mirrors tryPlaceHorizontalSideRoom.
+        boolean rollLarge  = config.enableLargeRooms
+                && random.nextFloat() < LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_CHANCE;
+        boolean bigRoom    = !rollLarge && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_BIG_ROOM_CHANCE;
+        int interiorWidth  = rollLarge
+            ? randomBetween(LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM, LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_MAX_WIDTH)
+            : bigRoom
+                ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_WIDTH)
+                : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_WIDTH, 8);
+        int interiorHeight = rollLarge
+            ? randomBetween(LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM, LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_MAX_HEIGHT)
+            : bigRoom
+                ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_HEIGHT)
+                : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_HEIGHT, 8);
         int totalWidth     = interiorWidth  + 2;
         int totalHeight    = interiorHeight + 2;
 
@@ -445,6 +622,7 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         int connectionRow = Math.min(Math.max(slotRow, bottomRow + 1), topRow - 1);
 
         Room candidate = new Room(leftColumn, bottomRow, rightColumn, topRow);
+        candidate.isLarge = rollLarge;
         for (Room existing : rooms) {
             if (candidate.overlaps(existing)) return null;
         }
@@ -471,158 +649,156 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     // Room type assignment
     // -------------------------------------------------------------------------
 
+    // Pool filters for selectBlueprint() — mirrors LevelGenerator's NOT_ENTRANCE/SPECIAL_ONLY.
+    private static final Predicate<RoomBlueprint> NOT_ENTRANCE =
+            blueprint -> !blueprint.id().equals(RoomBlueprints.ID_ENTRANCE);
+    private static final Predicate<RoomBlueprint> SPECIAL_ONLY =
+            blueprint -> !blueprint.id().equals(RoomBlueprints.ID_ENTRANCE)
+                      && !blueprint.id().equals(RoomBlueprints.ID_STANDARD);
+
     /**
-     * Assigns room types using the same priority logic as {@link LevelGenerator}:
-     * guaranteed uniques first (ENTRANCE, MEDICAL_BAY, COMMAND_CENTER, ARMORY),
-     * then POWER_PLANT for large-eligible rooms, then cumulative band rolls.
+     * Assigns room types via the same seeded weighted roll {@link LevelGenerator} uses
+     * (RoomBlueprintRegistry) — MEDICAL_BAY, ARMORY, COMMAND_CENTER, POWER_PLANT, CRYO_CHAMBER,
+     * CONTAINMENT_BLOCK, SERVER_ROOM, RESEARCH_LAB, and any GENERIC blueprint (e.g. SALVAGE_BAY/
+     * SUPPLY_CACHE) all compete for each room slot with one weighted roll, replacing the previous
+     * hardcoded finder-pass/cumulative-band logic — the two generators now share one room catalog
+     * and selection algorithm. A backstop then tops the level up to LEVEL_GEN_MIN_SPECIAL_ROOMS if
+     * the roll came up short (see LevelGenerator.ensureMinimumSpecialRooms for the same contract).
+     *
+     * STORAGE_BAY and REACTOR remain THIS generator's own local, unchanged top-up pass on whatever
+     * STANDARD rooms are left — they are not registered in the shared RoomBlueprintRegistry (only
+     * this generator has decoration for them), so they stay outside the shared roll on purpose.
      */
     private void assignRoomTypes(List<Room> rooms) {
-        rooms.get(0).type = RoomType.ENTRANCE;
+        RoomBlueprints.bootstrap(); // idempotent — safe outside World (tests build generators directly)
+        RoomBlueprintRegistry registry = RoomBlueprints.rooms();
+        Map<String, Integer> placedCounts = new HashMap<>();
 
-        boolean commandCenterPlaced = false;
-        boolean armoryPlaced        = false;
-        boolean powerPlantPlaced    = false;
-        int     cryoChamberCount    = 0;
-        int     containmentCount    = 0;
-        int     serverRoomCount     = 0;
-        int     largeRoomCount      = 0;
-        int     researchLabCount    = 0;
-        int     storageBayCount     = 0;
-        int     reactorCount        = 0;
+        Room entrance = rooms.get(0);
+        entrance.type    = RoomType.ENTRANCE;
+        entrance.isLarge = false; // never the large modifier, regardless of what it rolled at placement
+        placedCounts.merge(RoomBlueprints.ID_ENTRANCE, 1, Integer::sum);
 
-        // Medical Bay — guaranteed; prefer the mid-list room with minimum size
-        int midIndex = rooms.size() / 2;
-        outer:
-        for (int searchRadius = 0; searchRadius < rooms.size(); searchRadius++) {
-            for (int sign : new int[]{-1, 1}) {
-                int index = midIndex + sign * searchRadius;
-                if (index <= 0 || index >= rooms.size()) continue;
-                Room candidate = rooms.get(index);
-                if (candidate.type == RoomType.STANDARD
-                        && candidate.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH
-                        && candidate.interiorHeight() >= LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT) {
-                    candidate.type = RoomType.MEDICAL_BAY;
-                    break outer;
-                }
-            }
+        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            RoomBlueprint chosen = selectBlueprint(registry, room, placedCounts, NOT_ENTRANCE);
+            if (chosen == null) chosen = registry.get(RoomBlueprints.ID_STANDARD); // defensive
+            room.type = roomTypeForBlueprint(chosen);
+            placedCounts.merge(chosen.id(), 1, Integer::sum);
         }
 
-        // Command Center — deepest eligible room at 50 % chance
-        if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_COMMAND_CHANCE) {
-            for (int roomIndex = rooms.size() - 1; roomIndex >= 1; roomIndex--) {
-                Room room = rooms.get(roomIndex);
-                if (room.type == RoomType.STANDARD
-                        && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_COMMAND_MIN_WIDTH
-                        && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_COMMAND_MIN_HEIGHT) {
-                    room.type = RoomType.COMMAND_CENTER;
-                    commandCenterPlaced = true;
-                    break;
-                }
+        ensureMinimumSpecialRooms(registry, rooms, placedCounts);
+        assignLegacyStorageAndReactorTypes(rooms);
+    }
+
+    /**
+     * Seeded weighted pick of one blueprint for a candidate room, drawn from every registered
+     * blueprint {@code poolFilter} admits. Mirrors {@code LevelGenerator.selectBlueprint} exactly
+     * (same {@link GameMath#weightedChoiceIndex} roulette) so both generators pick the same way.
+     * Returns {@code null} when nothing in the filtered pool is eligible.
+     */
+    private RoomBlueprint selectBlueprint(RoomBlueprintRegistry registry, Room room,
+                                          Map<String, Integer> placedCounts,
+                                          Predicate<RoomBlueprint> poolFilter) {
+        List<RoomBlueprint> candidates = new ArrayList<>();
+        List<Float>         weights    = new ArrayList<>();
+        for (RoomBlueprint blueprint : registry.all()) {
+            if (!poolFilter.test(blueprint)) continue;
+            RoomContext context = new RoomContext(room.interiorWidth(), room.interiorHeight(),
+                    dungeonDepth, placedCounts.getOrDefault(blueprint.id(), 0));
+            if (!blueprint.eligible(context)) continue;
+            float weight = blueprint.selectionWeight(context);
+            if (weight <= 0f) continue;
+            candidates.add(blueprint);
+            weights.add(weight);
+        }
+        if (candidates.isEmpty()) return null;
+        float[] weightArray = new float[weights.size()];
+        for (int index = 0; index < weightArray.length; index++) {
+            weightArray[index] = weights.get(index);
+        }
+        int chosenIndex = GameMath.weightedChoiceIndex(weightArray, random.nextFloat());
+        return candidates.get(chosenIndex);
+    }
+
+    /**
+     * Backstop guaranteeing at least LEVEL_GEN_MIN_SPECIAL_ROOMS carry a SPECIAL blueprint (any id
+     * other than "entrance"/"standard"). Mirrors {@code LevelGenerator.ensureMinimumSpecialRooms}:
+     * only ever ADDS specials by upgrading random STANDARD rooms whose size/depth fit an eligible
+     * special blueprint; best-effort, never forces an ineligible fit.
+     */
+    private void ensureMinimumSpecialRooms(RoomBlueprintRegistry registry, List<Room> rooms,
+                                           Map<String, Integer> placedCounts) {
+        int specialCount = 0;
+        List<Room> standardRooms = new ArrayList<>();
+        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            if (room.type != RoomType.ENTRANCE && room.type != RoomType.STANDARD) {
+                specialCount++;
+            } else if (room.type == RoomType.STANDARD) {
+                standardRooms.add(room);
             }
         }
+        if (specialCount >= LevelGenConstants.LEVEL_GEN_MIN_SPECIAL_ROOMS) return;
 
-        // Armory — random eligible room at 80 % chance
-        if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_ARMORY_CHANCE) {
-            List<Room> eligible = new ArrayList<>();
-            for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
-                Room room = rooms.get(roomIndex);
-                if (room.type == RoomType.STANDARD
-                        && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_ARMORY_MIN_WIDTH
-                        && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_ARMORY_MIN_HEIGHT) {
-                    eligible.add(room);
-                }
-            }
-            if (!eligible.isEmpty()) {
-                eligible.get(random.nextInt(eligible.size())).type = RoomType.ARMORY;
-                armoryPlaced = true;
+        Collections.shuffle(standardRooms, random);
+        for (Room candidate : standardRooms) {
+            if (specialCount >= LevelGenConstants.LEVEL_GEN_MIN_SPECIAL_ROOMS) break;
+            RoomBlueprint upgrade = selectBlueprint(registry, candidate, placedCounts, SPECIAL_ONLY);
+            if (upgrade == null) continue; // nothing special fits this room's size/depth — try the next
+
+            placedCounts.merge(RoomBlueprints.ID_STANDARD, -1, Integer::sum);
+            candidate.type = roomTypeForBlueprint(upgrade);
+            placedCounts.merge(upgrade.id(), 1, Integer::sum);
+            specialCount++;
+        }
+    }
+
+    /**
+     * Maps a blueprint id to this generator's own {@link RoomType} tag with no switch: an id that
+     * matches an enum constant name gets that tag; anything else (SALVAGE_BAY, SUPPLY_CACHE,
+     * STELLAR_OBSERVATORY — registered blueprints this generator has no bespoke decoration for)
+     * falls back to STANDARD, so it renders as an ordinary side room. Mirrors
+     * {@code LevelGenerator.roomTypeForBlueprint}.
+     */
+    private static RoomType roomTypeForBlueprint(RoomBlueprint blueprint) {
+        String enumName = blueprint.id().toUpperCase(java.util.Locale.ROOT);
+        for (RoomType candidate : RoomType.values()) {
+            if (candidate.name().equals(enumName)) {
+                return candidate;
             }
         }
+        return RoomType.STANDARD;
+    }
 
-        // Power Plant — first large-eligible STANDARD room at 45 % chance
-        for (int roomIndex = 1; roomIndex < rooms.size() && !powerPlantPlaced; roomIndex++) {
+    /**
+     * STORAGE_BAY and REACTOR are exclusive to this generator (not registered in the shared
+     * RoomBlueprintRegistry — LevelGenerator has no decoration for them). Unchanged cumulative-band
+     * top-up on whatever STANDARD rooms remain after the shared registry roll + special-room backstop.
+     */
+    private void assignLegacyStorageAndReactorTypes(List<Room> rooms) {
+        int storageBayCount = 0;
+        int reactorCount    = 0;
+        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
             if (room.type != RoomType.STANDARD) continue;
-            if (room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM
-                    && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM
-                    && random.nextFloat() < LevelGenConstants.LEVEL_GEN_POWERPLANT_CHANCE) {
-                room.type = RoomType.POWER_PLANT;
-                powerPlantPlaced = true;
-            }
-        }
 
-        // Research Lab — first eligible STANDARD room becomes a sci-fi set-piece (capped at 1).
-        for (int roomIndex = 1; roomIndex < rooms.size() && researchLabCount < LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_MAX; roomIndex++) {
-            Room room = rooms.get(roomIndex);
-            if (room.type != RoomType.STANDARD) continue;
-            if (room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_MIN_WIDTH
-                    && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_MIN_HEIGHT
-                    && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_RESEARCH_CHANCE) {
-                room.type = RoomType.RESEARCH_LAB;
-                researchLabCount++;
+            if (storageBayCount < LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_MAX
+                    && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_MIN_WIDTH
+                    && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_MIN_HEIGHT
+                    && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_CHANCE) {
+                room.type = RoomType.STORAGE_BAY;
+                storageBayCount++;
+                continue;
             }
-        }
-
-        // Reactor — first large-ish STANDARD room becomes a volatile hazard field (capped at 1).
-        for (int roomIndex = 1; roomIndex < rooms.size() && reactorCount < LevelGenConstants.LEVEL_GEN_SPINE_REACTOR_MAX; roomIndex++) {
-            Room room = rooms.get(roomIndex);
-            if (room.type != RoomType.STANDARD) continue;
-            if (room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SPINE_REACTOR_MIN_WIDTH
+            if (reactorCount < LevelGenConstants.LEVEL_GEN_SPINE_REACTOR_MAX
+                    && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SPINE_REACTOR_MIN_WIDTH
                     && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SPINE_REACTOR_MIN_HEIGHT
                     && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_REACTOR_CHANCE) {
                 room.type = RoomType.REACTOR;
                 reactorCount++;
             }
         }
-
-        // Remaining rooms — cumulative probability bands (LARGE / specialty / STANDARD).
-        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
-            Room  room = rooms.get(roomIndex);
-            if (room.type != RoomType.STANDARD) continue;
-
-            // LARGE landmark — only oversized rooms qualify; rolled before the specialty bands.
-            if (largeRoomCount < LevelGenConstants.LEVEL_GEN_SPINE_LARGE_MAX
-                    && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM
-                    && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM
-                    && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_LARGE_CHANCE) {
-                room.type = RoomType.LARGE;
-                largeRoomCount++;
-                continue;
-            }
-
-            float roll = random.nextFloat();
-            if (cryoChamberCount < LevelGenConstants.LEVEL_GEN_CRYO_MAX
-                    && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_CRYO_MIN_WIDTH
-                    && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_CRYO_MIN_HEIGHT
-                    && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE) {
-                room.type = RoomType.CRYO_CHAMBER;
-                cryoChamberCount++;
-            } else if (containmentCount < LevelGenConstants.LEVEL_GEN_CONTAINMENT_MAX
-                    && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_CONTAINMENT_MIN_WIDTH
-                    && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_CONTAINMENT_MIN_HEIGHT
-                    && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE
-                              + LevelGenConstants.LEVEL_GEN_CONTAINMENT_CHANCE) {
-                room.type = RoomType.CONTAINMENT_BLOCK;
-                containmentCount++;
-            } else if (storageBayCount < LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_MAX
-                    && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_MIN_WIDTH
-                    && room.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_MIN_HEIGHT
-                    && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE
-                              + LevelGenConstants.LEVEL_GEN_CONTAINMENT_CHANCE
-                              + LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_CHANCE) {
-                room.type = RoomType.STORAGE_BAY;
-                storageBayCount++;
-            } else if (serverRoomCount < LevelGenConstants.LEVEL_GEN_SERVER_ROOM_MAX_PER_LEVEL
-                    && roll < LevelGenConstants.LEVEL_GEN_CRYO_CHANCE
-                              + LevelGenConstants.LEVEL_GEN_CONTAINMENT_CHANCE
-                              + LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_CHANCE
-                              + LevelGenConstants.LEVEL_GEN_SERVER_ROOM_CHANCE) {
-                room.type = RoomType.SERVER_ROOM;
-                serverRoomCount++;
-            }
-        }
-
-        // Suppress "assigned but never read" warnings for future-guard boolean flags.
-        boolean unused = commandCenterPlaced || armoryPlaced || powerPlantPlaced;
     }
 
     // -------------------------------------------------------------------------
@@ -640,7 +816,6 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                 case POWER_PLANT:        assignPowerPlantFloor(grid, room);        break;
                 case COMMAND_CENTER:     assignCommandCenterFloor(grid, room);     break;
                 case CONTAINMENT_BLOCK:  assignContainmentBlockFloor(grid, room);  break;
-                case LARGE:              assignLargeRoomFloor(grid, room);         break;
                 case RESEARCH_LAB:       assignResearchLabFloor(grid, room);       break;
                 case STORAGE_BAY:        assignStorageBayFloor(grid, room);        break;
                 case REACTOR:            assignReactorFloor(grid, room);           break;
@@ -760,22 +935,6 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                     grid[tileRow][tileColumn] = 'l';
                 }
                 // else: leave as ' ' (lit)
-            }
-        }
-    }
-
-    /** LARGE landmark — mostly lit open floor with a dimmer 'l' edge ring for depth. */
-    private void assignLargeRoomFloor(char[][] grid, Room room) {
-        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
-            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
-                if (grid[tileRow][tileColumn] != ' ') continue;
-                boolean isEdgeTile = tileColumn == room.leftColumn  + 1
-                                  || tileColumn == room.rightColumn - 1
-                                  || tileRow    == room.bottomRow   + 1
-                                  || tileRow    == room.topRow      - 1;
-                if (isEdgeTile && random.nextFloat() < 0.50f) {
-                    grid[tileRow][tileColumn] = 'l';
-                }
             }
         }
     }
@@ -928,7 +1087,6 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                 case POWER_PLANT:        placePowerPlantProps(grid, room);        break;
                 case COMMAND_CENTER:     placeCommandCenterProps(grid, room);     break;
                 case CONTAINMENT_BLOCK:  placeContainmentBlockProps(grid, room);  break;
-                case LARGE:              placeLargeRoomProps(grid, room);         break;
                 case RESEARCH_LAB:       placeResearchLabProps(grid, room);       break;
                 case STORAGE_BAY:        placeStorageBayProps(grid, room);        break;
                 case REACTOR:            placeReactorProps(grid, room);           break;
@@ -1124,20 +1282,6 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     }
 
     /**
-     * LARGE landmark — a patterned column hall with deliberately sparse props so the open
-     * floor stays navigable and the pillars carry the visual rhythm.
-     */
-    private void placeLargeRoomProps(char[][] grid, Room room) {
-        switch (random.nextInt(3)) {
-            case 0:  layoutFourPillars(grid, room);      break;
-            case 1:  layoutCentreAvenue(grid, room);     break;
-            default: layoutPerimeterColumns(grid, room); break;
-        }
-        char[] sparseProps = { 'C', 'E', '#' };
-        scatterSparseProps(grid, room, LevelGenConstants.LEVEL_GEN_LARGE_PROP_CHANCE, sparseProps);
-    }
-
-    /**
      * RESEARCH_LAB — sci-fi set-piece: holo-data 'D' back wall, a row of specimen tanks 'I',
      * a central AI core 'J', a holo-workstation 'W' and special equipment '@', plus scattered
      * energy-scorch 'e' decals. Solids go down lane-safe so the lab never seals.
@@ -1220,7 +1364,8 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     }
 
     // -------------------------------------------------------------------------
-    // Phase 3 — Interior architecture (STANDARD / LARGE structural layouts)
+    // Phase 3 — Interior architecture (STANDARD structural layouts; a large-modified STANDARD
+    // room, Room.isLarge, goes through this same pass on a bigger footprint)
     // -------------------------------------------------------------------------
 
     /**
@@ -1273,16 +1418,6 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         }
     }
 
-    /** Columns hugging the four interior mid-edges, leaving a wide open centre (mini-arena). */
-    private void layoutPerimeterColumns(char[][] grid, Room room) {
-        int midColumn = room.centerColumn();
-        int midRow    = room.centerRow();
-        tryPlaceColumnAt(grid, midColumn,            room.bottomRow + 2);
-        tryPlaceColumnAt(grid, midColumn,            room.topRow    - 2);
-        tryPlaceColumnAt(grid, room.leftColumn  + 2, midRow);
-        tryPlaceColumnAt(grid, room.rightColumn - 2, midRow);
-    }
-
     /**
      * Four columns framing a central reward pedestal — a small shrine. The pickup sits on the
      * open centre tile; the columns occupy the diagonals so all four cardinal lanes stay clear.
@@ -1312,16 +1447,6 @@ public class LinearCorridorGenerator implements ILevelGenerator {
             for (int offset = 0; offset < crateCount; offset++) {
                 char crate = random.nextFloat() < 0.30f ? 'L' : 'C';
                 tryPlaceSolidProp(grid, anchorColumn + offset, anchorRow, crate);
-            }
-        }
-    }
-
-    /** Scatters {@code count} solid props of one type at random walkable, lane-safe interior tiles. */
-    private void scatterSparseProps(char[][] grid, Room room, float chance, char[] propChars) {
-        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
-            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
-                if (random.nextFloat() >= chance) continue;
-                tryPlaceSolidProp(grid, tileColumn, tileRow, propChars[random.nextInt(propChars.length)]);
             }
         }
     }
@@ -1445,11 +1570,6 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                     armourChance = LevelGenConstants.LEVEL_GEN_HAZARD_ROOM_ARMOUR_CHANCE;
                     ammoChance   = LevelGenConstants.LEVEL_GEN_COMMAND_AMMO_CHANCE;
                     break;
-                case LARGE:
-                    medkitChance = LevelGenConstants.LEVEL_GEN_LARGE_MEDKIT_CHANCE;
-                    armourChance = LevelGenConstants.LEVEL_GEN_LARGE_ARMOUR_CHANCE;
-                    ammoChance   = LevelGenConstants.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
-                    break;
                 case POWER_PLANT:
                 case REACTOR:
                 case CRYO_CHAMBER:
@@ -1463,6 +1583,16 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                     armourChance = config.armourChancePerRoom;
                     ammoChance   = LevelGenConstants.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
                     break;
+            }
+
+            // A large-modified room (Room.isLarge) floors its chances at the same boosted levels a
+            // LARGE landmark room used to guarantee — size alone earns richer loot regardless of type
+            // (mirrors LevelGenerator.placePickups; skipped for MEDICAL_BAY/ARMORY/STORAGE_BAY, which
+            // roll their own bespoke pickups above and never reach here).
+            if (room.isLarge) {
+                medkitChance = Math.max(medkitChance, LevelGenConstants.LEVEL_GEN_LARGE_MEDKIT_CHANCE);
+                armourChance = Math.max(armourChance, LevelGenConstants.LEVEL_GEN_LARGE_ARMOUR_CHANCE);
+                ammoChance   = Math.max(ammoChance, LevelGenConstants.LEVEL_GEN_AMMO_CHANCE_PER_ROOM);
             }
 
             if (config.medkits    && random.nextFloat() < medkitChance) tryPlacePickup(grid, room, 'H');

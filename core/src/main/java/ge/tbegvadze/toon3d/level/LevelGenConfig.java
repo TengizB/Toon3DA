@@ -63,7 +63,11 @@ public final class LevelGenConfig {
     /** Cylindrical columns ('P'). Adds visual depth and cover in larger rooms. */
     public boolean columns = true;
 
-    /** Enable LARGE landmark rooms (reactor floors, cargo bays, arenas). */
+    /**
+     * Enable the LARGE size modifier: gates whether any non-entrance room may independently roll
+     * LEVEL_GEN_LARGE_MODIFIER_CHANCE to be stamped significantly larger than standard, keeping
+     * whatever room-type styling it would have received anyway. Not a room type of its own.
+     */
     public boolean enableLargeRooms = true;
 
     /** Enable SERVER_ROOM data vaults (terminal walls, rack rows, dark atmosphere). */

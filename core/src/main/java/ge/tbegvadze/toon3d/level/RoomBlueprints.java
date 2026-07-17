@@ -11,10 +11,12 @@ import java.util.Map;
 /**
  * The one place the {@link RoomBlueprintRegistry} is populated (symbol/sprite-reuse order-5) — the ROOM
  * twin of {@code route/RouteRegistries.bootstrap()} and {@code tileset/TilesetRegistries.bootstrap()}.
- * {@link #bootstrap()} registers every v1 room: the three GENERIC filler rooms (ENTRANCE / STANDARD /
- * LARGE) and the nine SIGNATURE rooms, each wrapping an existing {@code LevelGenerator.RoomType}. After
- * this order a room is a registered object, not a private enum constant referenced by ~4 hardcoded
- * switches; adding a room becomes ONE {@link RoomBlueprint} + one {@code register()} line here.
+ * {@link #bootstrap()} registers every v1 room: the GENERIC filler rooms (ENTRANCE / STANDARD /
+ * SALVAGE_BAY / SUPPLY_CACHE) and the nine SIGNATURE rooms, each wrapping an existing
+ * {@code LevelGenerator.RoomType}. After this order a room is a registered object, not a private enum
+ * constant referenced by ~4 hardcoded switches; adding a room becomes ONE {@link RoomBlueprint} + one
+ * {@code register()} line here. "LARGE" is a size MODIFIER applied independently to any room
+ * (see {@code LevelGenerator.Room#isLarge}), not a registered blueprint.
  *
  * <p>{@link #bootstrap()} is idempotent (safe across a death→new-run rebuild). It is invoked once from
  * {@code World.create()} next to {@code TilesetRegistries.bootstrap()}. Lives in {@code …toon3d.level}
@@ -32,7 +34,6 @@ public final class RoomBlueprints {
     // Stable blueprint ids (registry keys + reproducibility contract — never rename once shipped).
     public static final String ID_ENTRANCE            = "entrance";
     public static final String ID_STANDARD            = "standard";
-    public static final String ID_LARGE               = "large";
     public static final String ID_SERVER_ROOM         = "server_room";
     public static final String ID_MEDICAL_BAY         = "medical_bay";
     public static final String ID_ARMORY              = "armory";
@@ -98,18 +99,9 @@ public final class RoomBlueprints {
                     context.placeStandardProps();
                 }));
 
-        // LARGE: landmark arena; needs LARGE_MIN_DIM in both axes, hard-capped per level.
-        registry.register(new LambdaRoomBlueprint(ID_LARGE, RoomKind.GENERIC,
-                RoomSymbolDemand.of(emptyDemand()),
-                context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM
-                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM
-                        && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_LARGE_ROOM_MAX_PER_LEVEL,
-                context -> LevelGenConstants.LEVEL_GEN_LARGE_ROOM_CHANCE,
-                context -> {
-                    context.assignFloorLighting();
-                    context.placeLargeRoomColumns();
-                    context.placeLargeRoomProps();
-                }));
+        // NOTE: "LARGE" is no longer a room blueprint/type — it is a size MODIFIER applied
+        // independently to any room (LevelGenerator/LinearCorridorGenerator Room.isLarge, rolled at
+        // placement time), which keeps whatever blueprint styling the room would have gotten anyway.
 
         // SALVAGE_BAY (order-8 REQUIREMENT PROOF 1): a brand-new GENERIC room with a DISTINCT central
         // scrap-heap architecture (not a reskin). It reserves NO specific sprite — its demand is

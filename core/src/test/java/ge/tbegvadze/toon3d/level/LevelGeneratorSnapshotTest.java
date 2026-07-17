@@ -18,7 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * BEHAVIOUR CHANGE (registry-driven room selection + rule-driven per-level variety), so the digest was
  * re-baselined once, deliberately, from the post-order-8 generator; order-9 registers ONE MORE room
  * (SUPPLY_CACHE, RECIPE B) that competes in the same seeded roulette, shifting the RNG draw sequence, so
- * the digest is re-baselined a second time, deliberately, from the post-order-9 generator. It remains a
+ * the digest is re-baselined a second time, deliberately, from the post-order-9 generator. order-10 is a
+ * third deliberate re-baseline: the LARGE blueprint is removed (one fewer roulette candidate), placeRooms()
+ * now rolls a per-room large-modifier (an extra RNG draw per room), and a minimum-special-rooms backstop
+ * upgrades some STANDARD rooms — all of which shift the RNG draw sequence and stamped tiles. It remains a
  * strict determinism contract afterwards: same seed ⇒ same rooms ⇒ same palette ⇒ same grid (permadeath /
  * seed-sharing fairness). If any later change perturbs the RNG draw sequence or a stamped tile, the
  * fingerprint changes and this test fails.
@@ -26,12 +29,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class LevelGeneratorSnapshotTest {
 
     /**
-     * SHA-256 over {@link #fingerprint()}, re-baselined for the order-9 generator (order-8 registry
-     * selection + variety accents + salvage bay, plus the order-9 supply-cache room). Do NOT hand-edit;
-     * regenerate only via a deliberate, reviewed behaviour change.
+     * SHA-256 over {@link #fingerprint()}, re-baselined for the order-10 generator (LARGE demoted to a
+     * per-room size modifier + guaranteed-minimum-special-rooms backstop, on top of the order-8/9 registry
+     * selection + variety accents + salvage bay + supply cache). Do NOT hand-edit; regenerate only via a
+     * deliberate, reviewed behaviour change.
      */
     private static final String EXPECTED_DIGEST =
-            "90d225874955723f39f086e7d2eaa7a7f3dd1c79bc99df75b92e92f0fd5d098a";
+            "b7e71d394d8679c0af1ded41c63fa40e5e8a24848a8062782f10810a41805512";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

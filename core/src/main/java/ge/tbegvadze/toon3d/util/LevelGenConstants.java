@@ -39,19 +39,26 @@ public final class LevelGenConstants {
     // Maximum Manhattan distance (room-center to room-center) for optional loop corridors.
     // Keeps loop connections local so they add shortcuts rather than crossing the entire dungeon.
     public static final int   LEVEL_GEN_LOOP_MAX_DISTANCE     = 25;
+    // Guaranteed floor: at least this many non-entrance rooms roll a SPECIAL blueprint (any id
+    // other than "entrance"/"standard" — themed SIGNATURE rooms plus GENERIC flavour rooms like
+    // SALVAGE_BAY/SUPPLY_CACHE). The normal seeded weighted roll can naturally exceed this count;
+    // a backstop pass only ever ADDS specials when the roll comes up short, never removes any.
+    public static final int   LEVEL_GEN_MIN_SPECIAL_ROOMS     = 3;
 
     // --- Room type system ---
-    // LARGE rooms: interior must meet LARGE_MIN_DIM in both axes to be eligible.
+    // LARGE is now a size MODIFIER (not a room type/blueprint): every non-entrance room
+    // independently rolls a small chance to be stamped significantly larger than a standard
+    // room, while keeping whatever blueprint styling it would have received anyway (Room.isLarge,
+    // rolled in LevelGenerator.placeRooms() / LinearCorridorGenerator's side-room placement).
+    // LEVEL_GEN_LARGE_MIN_DIM is reused as: (a) the floor for a large-modified room's interior
+    // width AND height, and (b) the size gate for LARGE-class SIGNATURE rooms (e.g. POWER_PLANT).
     public static final int   LEVEL_GEN_LARGE_MIN_DIM              = 9;
-    // Probability that an eligible (large enough) room becomes a LARGE landmark room.
-    public static final float LEVEL_GEN_LARGE_ROOM_CHANCE          = 0.55f;
-    // Hard cap: at most this many LARGE rooms per level so they feel special.
-    public static final int   LEVEL_GEN_LARGE_ROOM_MAX_PER_LEVEL   = 3;
-    // Column count range for LARGE rooms (more than the standard 1-3).
-    public static final int   LEVEL_GEN_LARGE_COLUMN_MIN           = 4;
-    public static final int   LEVEL_GEN_LARGE_COLUMN_MAX           = 6;
-    // Prop density for LARGE rooms — sparse so the open floor stays navigable.
-    public static final float LEVEL_GEN_LARGE_PROP_CHANCE          = 0.06f;
+    // Probability any non-entrance room independently rolls the large size modifier.
+    public static final float LEVEL_GEN_LARGE_MODIFIER_CHANCE      = 0.05f;
+    // Ceiling for a large-modified room's interior size — deliberately well above the standard
+    // room max (LEVEL_GEN_ROOM_MAX_WIDTH/HEIGHT) so the modifier reads as genuinely oversized.
+    public static final int   LEVEL_GEN_LARGE_MODIFIER_MAX_WIDTH   = 28;
+    public static final int   LEVEL_GEN_LARGE_MODIFIER_MAX_HEIGHT  = 20;
     // Probability that a SERVER_ROOM perimeter wall tile is converted to terminal wall 't'.
     public static final float LEVEL_GEN_SERVER_WALL_TERMINAL_CHANCE = 0.80f;
     // Probability that any small/medium room becomes a SERVER_ROOM (data vault).
@@ -283,6 +290,17 @@ public final class LevelGenConstants {
     // Probability per slot of attempting to place a room on one side of the spine.
     public static final float LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE    = 0.70f;
 
+    // Spine BEND: a single perpendicular continuation carved from the primary spine's tail,
+    // toward whichever side of the grid has more open space, carrying its own side rooms and
+    // landmark via the same helpers the primary spine uses. Exists because the 80x45 grid is far
+    // shorter tall than wide, so a vertical-only spine places roughly half as many rooms as a
+    // horizontal one (~3.1 vs ~6.4 average, measured) — too few for the 3-special-room minimum to
+    // reliably reach. Applied to both orientations for consistency. Skipped entirely when the
+    // available space in the extend direction is below the minimum (rare edge case).
+    public static final int   LEVEL_GEN_SPINE_BEND_MIN_LENGTH      = 15;
+    public static final float LEVEL_GEN_SPINE_BEND_LENGTH_MIN_FRAC = 0.70f;
+    public static final float LEVEL_GEN_SPINE_BEND_LENGTH_MAX_FRAC = 0.92f;
+
     // --- Spine wall character cumulative distribution (checked in order; remainder → 'x') ---
     public static final float LEVEL_GEN_SPINE_WALL_CONDUIT_CHANCE          = 0.30f; // 'c'
     public static final float LEVEL_GEN_SPINE_WALL_VENT_CUMULATIVE         = 0.50f; // 'v'
@@ -293,25 +311,22 @@ public final class LevelGenConstants {
     // -------------------------------------------------------------------------
     // LINEAR CORRIDOR generator — side-room size & special-room enrichment
     // -------------------------------------------------------------------------
-    // Side rooms branching off the spine. The upper bounds are large enough that an
-    // occasional oversized room qualifies as a LARGE landmark (LEVEL_GEN_LARGE_MIN_DIM).
+    // Side rooms branching off the spine. The upper bounds give an occasional room a bigger
+    // footprint independent of the (now shared, registry-driven) room-type roll.
     public static final int   LEVEL_GEN_SPINE_ROOM_MIN_WIDTH        = 4;
     public static final int   LEVEL_GEN_SPINE_ROOM_MAX_WIDTH        = 12;
     public static final int   LEVEL_GEN_SPINE_ROOM_MIN_HEIGHT       = 4;
     public static final int   LEVEL_GEN_SPINE_ROOM_MAX_HEIGHT       = 11;
-    // Probability a side-room slot rolls for the oversized (landmark-eligible) size band.
+    // Probability a side-room slot rolls for the oversized size band (independent of, and rolled
+    // before, the LEVEL_GEN_LARGE_MODIFIER_CHANCE size modifier — see LevelGenConstants room type
+    // system section above).
     public static final float LEVEL_GEN_SPINE_BIG_ROOM_CHANCE       = 0.28f;
 
-    // LARGE landmark room (open arena off the spine; patterned columns, sparse props).
-    public static final float LEVEL_GEN_SPINE_LARGE_CHANCE          = 0.60f; // large-eligible → LARGE
-    public static final int   LEVEL_GEN_SPINE_LARGE_MAX             = 2;
-
-    // RESEARCH_LAB — sci-fi set-piece: specimen tanks 'I', AI core 'J', holo-workstation 'W',
-    // special equipment '@', holo-data 'D' walls, energy-scorch 'e' decals. At most 1 per level.
-    public static final float LEVEL_GEN_SPINE_RESEARCH_CHANCE       = 0.32f;
-    public static final int   LEVEL_GEN_SPINE_RESEARCH_MAX          = 1;
-    public static final int   LEVEL_GEN_SPINE_RESEARCH_MIN_WIDTH    = 6;
-    public static final int   LEVEL_GEN_SPINE_RESEARCH_MIN_HEIGHT   = 5;
+    // RESEARCH_LAB, CRYO_CHAMBER, CONTAINMENT_BLOCK, SERVER_ROOM, MEDICAL_BAY, ARMORY, POWER_PLANT,
+    // COMMAND_CENTER selection now goes through the shared RoomBlueprintRegistry (RoomBlueprints.java)
+    // — the same seeded weighted roll LevelGenerator uses — so this generator no longer carries its
+    // own duplicate selection chance/size-gate constants for those types.
+    // RESEARCH_LAB decoration (holo-data wall band, specimen tank count, scorch decal count):
     public static final float LEVEL_GEN_SPINE_RESEARCH_HOLO_WALL_CHANCE = 0.55f; // 'D' back wall band
     public static final int   LEVEL_GEN_SPINE_RESEARCH_MIN_TANKS    = 2;
     public static final int   LEVEL_GEN_SPINE_RESEARCH_MAX_TANKS    = 4;

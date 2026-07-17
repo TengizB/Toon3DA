@@ -3,6 +3,15 @@ CATEGORY: Level Design
 TITLE: Level Generation Improvements — Diverse Rooms and Wide Hallways
 ---
 
+SUPERSEDED-IN-PART NOTE (order-10): the "LARGE" room type described below as a distinct
+ROOM TYPE (with its own floor/columns/props architecture) was later REMOVED as a room type.
+"Large" is now a per-room SIZE MODIFIER (Room.isLarge, ~5% per non-entrance room) that keeps
+whatever blueprint styling the room already has — only its footprint grows. The LARGE ROOM
+SPECIFICATION section below is retained as the original design record but no longer matches the
+code. See docs/environment-tileset-system.txt section 10 for the current behaviour (plus the
+guaranteed-3-special-rooms rule and the LinearCorridor registry migration + spine bend).
+---
+
 OVERVIEW
 The current LevelGenerator (core/.../level/LevelGenerator.java) places ~10 same-flavoured
 rectangular rooms (interior 3-16 x 3-11) joined by 1-tile L-shaped corridors. Every room

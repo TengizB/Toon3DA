@@ -33,15 +33,16 @@ class RoomBlueprintRegistryTest {
     @Test
     void registryHoldsEveryV1RoomPlusTheRegistrationOnlyAcceptanceRoom() {
         RoomBlueprintRegistry registry = freshRegistry();
-        // 14 blueprints: the 13 v1 rooms (order-8 added SALVAGE_BAY) + order-9's SUPPLY_CACHE, which is
-        // added by REGISTRATION ALONE and deliberately carries NO RoomType constant (the seam fix maps
-        // its id to the generic STANDARD tag). So a blueprint no longer needs a 1:1 RoomType — the
-        // registry has one MORE entry than the enum has values, all ids distinct (LinkedHashMap keys).
-        assertEquals(14, registry.size());
+        // 13 blueprints: the 12 v1 rooms (order-8 added SALVAGE_BAY; LARGE was removed — it is now a
+        // size MODIFIER, not a blueprint) + order-9's SUPPLY_CACHE, which is added by REGISTRATION ALONE
+        // and deliberately carries NO RoomType constant (the seam fix maps its id to the generic
+        // STANDARD tag). So a blueprint no longer needs a 1:1 RoomType — the registry has one MORE entry
+        // than the enum has values, all ids distinct (LinkedHashMap keys).
+        assertEquals(13, registry.size());
         assertEquals(LevelGenerator.RoomType.values().length + 1, registry.size(),
                 "SUPPLY_CACHE registers without a RoomType constant");
-        assertEquals(5, registry.allGeneric().size(),
-                "ENTRANCE/STANDARD/LARGE/SALVAGE_BAY/SUPPLY_CACHE are GENERIC");
+        assertEquals(4, registry.allGeneric().size(),
+                "ENTRANCE/STANDARD/SALVAGE_BAY/SUPPLY_CACHE are GENERIC");
         assertEquals(9, registry.allSignature().size(), "the nine specialty rooms are SIGNATURE");
     }
 
@@ -50,7 +51,7 @@ class RoomBlueprintRegistryTest {
         RoomBlueprints.bootstrap();
         RoomBlueprints.bootstrap();
         assertTrue(RoomBlueprints.isBootstrapped());
-        assertEquals(14, RoomBlueprints.rooms().size());
+        assertEquals(13, RoomBlueprints.rooms().size());
     }
 
     @Test
@@ -119,7 +120,6 @@ class RoomBlueprintRegistryTest {
         assertTrue(containsId(tinySelectable, RoomBlueprints.ID_STANDARD));
         assertTrue(containsId(tinySelectable, RoomBlueprints.ID_SERVER_ROOM));
         assertFalse(containsId(tinySelectable, RoomBlueprints.ID_MEDICAL_BAY), "3x3 too small for medical bay");
-        assertFalse(containsId(tinySelectable, RoomBlueprints.ID_LARGE), "3x3 too small for a LARGE room");
 
         // Medical bay turns eligible exactly at its minimum footprint.
         RoomContext medicalFit = new RoomContext(
