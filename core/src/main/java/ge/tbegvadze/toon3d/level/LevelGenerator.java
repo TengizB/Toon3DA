@@ -98,7 +98,8 @@ public class LevelGenerator implements ILevelGenerator {
         ENTRANCE, STANDARD, SERVER_ROOM,
         MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
         POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK,
-        RESEARCH_LAB, STELLAR_OBSERVATORY, SALVAGE_BAY
+        RESEARCH_LAB, STELLAR_OBSERVATORY, SALVAGE_BAY,
+        GORE_NEST
     }
 
     private final Random         random;
@@ -988,6 +989,7 @@ public class LevelGenerator implements ILevelGenerator {
                 case POWER_PLANT:       assignPowerPlantFloor(grid, room);         break;
                 case COMMAND_CENTER:    assignCommandCenterFloor(grid, room);      break;
                 case CONTAINMENT_BLOCK: assignContainmentBlockFloor(grid, room);   break;
+                case GORE_NEST:         assignGoreNestFloor(grid, room);           break;
                 default:                assignStandardRoomFloor(grid, room);       break;
             }
         }
@@ -1095,6 +1097,26 @@ public class LevelGenerator implements ILevelGenerator {
                     flickerBudget--;
                 } else {
                     grid[tileRow][tileColumn] = 'u';
+                }
+            }
+        }
+    }
+
+    // GORE_NEST: a lost, corrupted section — mostly unlit 'u' with a few flickering 'f' seams so the
+    // wet flesh-membrane walls pop against shadow and the dread reads before any enemy is seen.
+    private void assignGoreNestFloor(char[][] grid, Room room) {
+        int flickerBudget = 3;
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                float roll = random.nextFloat();
+                if (roll < LevelGenConstants.LEVEL_GEN_GORE_NEST_FLICKER_CHANCE && flickerBudget > 0) {
+                    grid[tileRow][tileColumn] = 'f';
+                    flickerBudget--;
+                } else if (roll < LevelGenConstants.LEVEL_GEN_GORE_NEST_DARK_FLOOR_CHANCE) {
+                    grid[tileRow][tileColumn] = 'u';
+                } else {
+                    grid[tileRow][tileColumn] = 'l';
                 }
             }
         }
@@ -1292,6 +1314,16 @@ public class LevelGenerator implements ILevelGenerator {
                     case RESEARCH_LAB:
                         if (roll < LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_HOLO_WALL_CHANCE) {
                             grid[tileRow][tileColumn] = 'D';
+                        }
+                        break;
+                    case GORE_NEST:
+                        // Mostly consumed by flesh membrane 'G', with sparse rusted-steel 'j' breaks so
+                        // the room reads as flesh EATING metal — a raised fill vs a normal accented room.
+                        if (roll < LevelGenConstants.LEVEL_GEN_GORE_NEST_RUST_CHANCE) {
+                            grid[tileRow][tileColumn] = 'j';
+                        } else if (roll < LevelGenConstants.LEVEL_GEN_GORE_NEST_RUST_CHANCE
+                                         + LevelGenConstants.LEVEL_GEN_GORE_NEST_WALL_FILL_CHANCE) {
+                            grid[tileRow][tileColumn] = 'G';
                         }
                         break;
                     default:
@@ -1756,6 +1788,77 @@ public class LevelGenerator implements ILevelGenerator {
                 if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'm');
             }
         }
+    }
+
+    /**
+     * Places Gore Nest props: a single ruptured bio-pod '&' at the room centroid (the breach the demons
+     * crawled out of), a DENSE carpet of corpse 'm' / blood '.'/'s' / bile 'O' decals across the interior
+     * (the environmental heart of the room — decals are walkable, so they carry no collision risk), and a
+     * little abandoned-facility debris (leaking barrels 'g', toppled crates 'C') along the walls. The only
+     * solid props are the pod and the wall debris; they go through the existing clearance guards so the
+     * nest never seals its own walkable ring or blocks a door approach.
+     */
+    void placeGoreNestProps(char[][] grid, List<Room> rooms) {
+        for (Room room : rooms) {
+            if (room.type != RoomType.GORE_NEST) continue;
+            placeGoreNestBreachPod(grid, room);
+            placeGoreNestDecals(grid, room);
+            // Abandoned-facility leftovers pushed against the walls (each uses the shared wall-prop guard).
+            tryPlaceAtmosphericPropNearWall(grid, room, 'g');
+            tryPlaceAtmosphericPropNearWall(grid, room, 'C');
+            if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'C');
+            if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'g');
+        }
+    }
+
+    // The single "origin" anchor: a ruptured bio-pod '&' at the room centroid, or the nearest valid
+    // interior tile if the centroid falls on a door approach (mirrors the observatory's one-core anchor).
+    private void placeGoreNestBreachPod(char[][] grid, Room room) {
+        int centreColumn = room.centerColumn();
+        int centreRow    = room.centerRow();
+        if (tryStampGoreNestProp(grid, centreColumn, centreRow, '&')) return;
+        for (int radius = 1; radius <= 2; radius++) {
+            for (int deltaRow = -radius; deltaRow <= radius; deltaRow++) {
+                for (int deltaColumn = -radius; deltaColumn <= radius; deltaColumn++) {
+                    if (tryStampGoreNestProp(grid, centreColumn + deltaColumn, centreRow + deltaRow, '&')) {
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    // Solid-prop stamp through the existing clearance checks (walkable floor, clear of doors + door axes)
+    // so a stamped '&' can never seal the room or block the only path to a door.
+    private boolean tryStampGoreNestProp(char[][] grid, int tileColumn, int tileRow, char propChar) {
+        if (!isWalkableFloor(grid, tileColumn, tileRow)) return false;
+        if (isAdjacentToDoor(grid, tileColumn, tileRow)) return false;
+        if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) return false;
+        grid[tileRow][tileColumn] = propChar;
+        return true;
+    }
+
+    // Dense corpse/blood/bile carpet across the interior — the "kill-site" read. Decals are walkable, so
+    // they overwrite only floor tiles and never affect collision or block doors.
+    private void placeGoreNestDecals(char[][] grid, Room room) {
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+                if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_GORE_NEST_DECAL_CHANCE) {
+                    grid[tileRow][tileColumn] = randomGoreNestDecal();
+                }
+            }
+        }
+    }
+
+    // FREE flexible floor decals for the nest carpet (corpse dominant, blood variants, dark bile pools).
+    private char randomGoreNestDecal() {
+        float roll = random.nextFloat();
+        if (roll < 0.40f) return 'm'; // corpse cluster
+        if (roll < 0.65f) return '.'; // pooled blood
+        if (roll < 0.85f) return 's'; // blood spatter variant
+        return 'O';                    // dark bile/fluid seep
     }
 
     /**

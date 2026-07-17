@@ -1,0 +1,198 @@
+STATUS: IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Gore Nest — demonic breach / corruption room
+CREATED: 2026-07-17
+---
+
+IMPLEMENTATION NOTES (2026-07-17)
+================================
+Built exactly as specified via RECIPE B (signature room, bespoke prop pass), zero new symbols/sprites:
+  - level/RoomBlueprints.java: ID_GORE_NEST + LambdaRoomBlueprint registration (pins G/j/&/g/C/m/./s/O
+    to their legacy sprites; depth>=3, min 6x6, max 1, weight 0.35).
+  - level/LevelGenerator.java: RoomType.GORE_NEST; assignGoreNestFloor() (unlit/flicker dread bias);
+    a GORE_NEST case in themeNewRoomWallsForRoom() (dense 'G' membrane + sparse 'j' rust breaks);
+    placeGoreNestProps() + helpers (centroid bio-pod '&' via shared clearance guards, dense
+    corpse/blood/bile decal carpet, wall debris 'g'/'C').
+  - level/RoomBuildContext.java: placeGoreNestProps() delegator.
+  - util/LevelGenConstants.java: LEVEL_GEN_GORE_NEST_* constants (depth/size/cap/weight + fill/decal knobs).
+  - Tests: RoomBlueprintRegistryTest updated to 14 blueprints / 10 signature + a gore-nest depth/cap
+    eligibility case; LevelGeneratorSnapshotTest deliberately re-baselined (one more roulette candidate).
+Verified headless: compiles; gore nest is selected on depth>=3 floors and never at depth 1; 800
+generations across seeds/depths with zero crashes.
+
+OVERVIEW
+========
+The GORE NEST is a SIGNATURE room where the demonic incursion physically won: the facility walls have
+been consumed by a living flesh membrane (gore wall 'G') fringed by corroded, rusted steel (rust wall
+'j'), and the floor is a carpet of corpses, blood, and dark bile around a ruptured bio-pod at the centre
+— the wound the demons crawled out of. It fills a gap in the room catalog: every existing special room is
+a CLEAN facility function (server, medical, armory, cryo, reactor, command, containment, research,
+observatory) or GENERIC storage (salvage, supply). None is the AFTERMATH — the "this section is lost"
+dread beat. Its identity is built entirely from WALLS and ENVIRONMENT DECALS (the two things the brief
+asked for), reusing existing art only: it claims the currently-unclaimed gore wall 'G' as its signature,
+so it costs ZERO new symbols and ZERO new sprites (no RECIPE A).
+
+GAMEPLAY LOOP
+=============
+1. Generator places rooms and runs the seeded weighted roulette (STEP A). On a floor at depth >= 3 with a
+   candidate room >= 6x6 interior and no gore nest yet placed, GORE_NEST competes like any blueprint.
+2. If selected -> build() stamps the room: floor lighting, gore/rust wall theming, then the nest prop pass.
+3. Player enters a corridor that visibly darkens (nest rooms bias toward unlit/flickering floor). The far
+   wall is wet red flesh, not steel. Player reads "something happened here" before any enemy is seen.
+4. A ruptured bio-pod '&' sits near the room centroid; a dense ring of corpse 'm' + blood '.'/'s' decals
+   surrounds it; radioactive barrels 'g' and toppled crates 'C' clutter the walls; oil 'O' bile pools bleed
+   from the flesh seams. A walkable ring is always left around the nest (see TECHNICAL NOTES pathing rule).
+5. Because this room is the natural home of the necrotic faction, the encounter budget tends to seed
+   melee-heavy packs here (Ghoul '~', Crawler 'z', Blight Corruptor '*', Revenant 'K') — the room reads as
+   their den. (Spawn placement stays the generator's global FIXED-symbol pass; the room only sets the mood.)
+6. Player fights through, loots any pickups the global pass dropped, and exits. The nest is a memorable,
+   dread-heavy landmark on the minimap and in memory.
+
+PLAYER EXPERIENCE
+=================
+Dread and recognition. Every other room says "UAC ran experiments here"; the gore nest says "the
+experiment got out, and this is where it nested." The wet-flesh far wall is an instant, wordless
+storytelling beat — the player slows down, checks corners, expects a swarm. The decision it creates: push
+in for the loot the generator seeded, or skirt the doorway and pick the pack apart from the corridor
+(cardinal-line kiting) rather than walking into a corpse-strewn kill-box. It rewards the tactical
+"read the room before entering" instinct the game already teaches with dark/flickering floor.
+
+TECHNICAL NOTES
+===============
+Recommendation: SIGNATURE room (RoomKind.SIGNATURE). It must PIN the gore wall so the flesh membrane
+actually renders (a GENERIC room has an empty demand and could not claim 'G'); pinning is the whole point.
+
+NO NEW SYMBOLS, NO NEW SPRITES. All symbols and sprites below already exist (verified against
+docs/tile-symbols.txt and tileset/TilesetRegistries). This is RECIPE B (a signature room with a bespoke
+prop pass), NOT RECIPE A.
+
+Claimed symbol -> sprite pairs (the room's symbolDemand().requiredSprites, all legacy bindings so the
+allocator reserves the exact intended art via order-4 Step 2):
+    WALLS (accent walls — the signature):
+      'G' -> "wall_gore"      (primary perimeter: wet demonic flesh membrane — the room's face)
+      'j' -> "wall_rust"      (accent: corroded steel where flesh meets the old bulkhead)
+    SOLID PROPS (reused; the "nest" clutter):
+      '&' -> "prop_biopod"    (ruptured specimen pod at the nest centre — the breach origin)
+      'g' -> "prop_radioactive_barrel" (leaking drums that fed the rot)
+      'C' -> "prop_crate"     (toppled supply crates — abandoned barricade debris)
+    FLOOR DECALS (the environment heart of the room — dense):
+      'm' -> "decal_corpse"   (corpse clusters)
+      '.' -> "decal_blood"    (pooled blood)
+      's' -> "decal_blood_alt"(spatter variant, for visual break-up)
+      'O' -> "decal_oil"      (dark bile/fluid seep)
+
+Clash safety: '&', 'C', '.', 'O', 'm' are also demanded by other signature rooms (cryo/containment/
+medical/etc.) but ALL to the SAME sprite id — the allocator's Step-2 clash resolution only reroutes on
+same-symbol/DIFFERENT-sprite, so there is no clash. 'G' and 'j' are currently claimed by NO signature
+room (they live only in the generic-variety / harsh-depth pools), so reserving them here is free.
+
+Affected / new code (mirrors exactly how the other 9 signature rooms are wired — see RECIPE B "bespoke
+architecture" path in docs/environment-tileset-system.txt §9):
+  - level/RoomBlueprints.java: add ID_GORE_NEST = "gore_nest"; register one LambdaRoomBlueprint (below).
+  - level/RoomKind: unchanged (reuse SIGNATURE).
+  - level/LevelGenerator.java (RoomType enum): add RoomType.GORE_NEST tag (round-trips via
+    roomTypeForBlueprint()'s RoomType.valueOf(id.toUpperCase())).
+  - level/LevelGenerator.java: add a wall-theming case + a prop helper:
+      * themeNewRoomWallsForRoom(): add a GORE_NEST branch (OR a dedicated themeGoreNestWallsForRoom) that
+        stamps 'G' on perimeter tiles at a RAISED density (see BALANCE) with sparse 'j' rust breaks — the
+        room should read as MOSTLY consumed, denser than a normal accented room's 1-2 accent walls.
+      * placeGoreNestProps(grid, singletonRoom): the nest layout pass (see prop layout concept).
+  - level/RoomBuildContext.java: add a placeGoreNestProps() delegator (thin, like the other placeXProps).
+  - util/LevelGenConstants.java: add the constants listed under BALANCE NOTES.
+  - No edits to WallRenderer/PropRenderer draw logic, Level.java, or the generator's SELECTION code.
+
+RoomBlueprint registration (drop-in, matching the file's existing style):
+    registry.register(new LambdaRoomBlueprint(ID_GORE_NEST, RoomKind.SIGNATURE,
+            RoomSymbolDemand.of(demand(
+                    'G', "wall_gore",
+                    'j', "wall_rust",
+                    '&', "prop_biopod",
+                    'g', "prop_radioactive_barrel",
+                    'C', "prop_crate",
+                    'm', "decal_corpse",
+                    '.', "decal_blood",
+                    's', "decal_blood_alt",
+                    'O', "decal_oil")),
+            context -> context.dungeonDepth()  >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_DEPTH
+                    && context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_WIDTH
+                    && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_HEIGHT
+                    && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_GORE_NEST_MAX,
+            context -> LevelGenConstants.LEVEL_GEN_GORE_NEST_CHANCE,
+            context -> {
+                context.assignFloorLighting();
+                context.themeNewRoomWalls();      // themeNewRoomWallsForRoom handles the GORE_NEST case
+                context.placeGoreNestProps();
+            }));
+
+Prop layout concept (placeGoreNestProps):
+  - Compute the room centroid tile. Place ONE ruptured bio-pod '&' at (or adjacent to, if centroid is on a
+    door approach) the centroid — the single "origin" anchor, like the observatory's one gravity-well core.
+  - Corpse ring: scatter corpse 'm' and blood '.'/'s' decals on the floor ring immediately around the pod
+    (radius 1-2 tiles), at a HIGH decal density so the nest reads as a kill-site. Bile 'O' pools mixed in.
+  - Wall debris: along interior walls, sparsely place radioactive barrels 'g' and toppled crates 'C'
+    (reuse the standard perimeter-prop placement pattern; these are the "abandoned facility" leftovers).
+  - PATHING RULE (mandatory): never fully seal the walkable ring around the nest and never block a door
+    approach. Decals ('m'/'.'/'s'/'O') are walkable so they carry no collision risk; only the solid props
+    ('&'/'g'/'C') need the standard "leave a 1-tile clearance / don't block the only path" guard the other
+    prop passes already use. Reuse the existing prop-placement clearance check — do not invent a new one.
+
+VISUAL DESIGN
+=============
+  - Walls: gore wall 'G' (existing high-res procedural flesh: metaball membrane, wet sheen, sinew vessels,
+    pustules, blood-drip gashes, bone nodules) dominates the perimeter; rust wall 'j' breaks it up so the
+    room reads as flesh EATING metal, not a solid meat cube. This is the room's signature silhouette.
+  - Floor: bias toward unlit ('u') and flickering ('f') floor via assignFloorLighting for the GORE_NEST
+    tag (darker than a clinical room) — sells the dread and makes the wet 'G' sheen pop against shadow.
+  - Centre: the ruptured bio-pod '&' (green fluid tube, cracked glass) as the visual focal point, ringed by
+    corpse 'm' billboards lying flat and dark blood '.'/'s' pools — a clear "nest" read at a glance.
+  - Palette: deep reds (flesh) + oxide orange/brown (rust) + sickly green (barrels/pod) + black bile pools.
+    Distinct from every existing room's cool steel/cyan/clinical-white.
+  - No HUD changes. Purely environmental. Reads instantly on the raycast far wall from the doorway.
+
+BALANCE NOTES  (placeholders — flag as tunable in LevelGenConstants, calibrated against siblings)
+==============
+  LEVEL_GEN_GORE_NEST_MIN_DEPTH   = 3     // corruption is a DEEPER-floor beat; early floors stay clean
+  LEVEL_GEN_GORE_NEST_MIN_WIDTH   = 6
+  LEVEL_GEN_GORE_NEST_MIN_HEIGHT  = 6
+  LEVEL_GEN_GORE_NEST_MAX         = 1     // one per level — a set-piece, not filler (like armory/research)
+  LEVEL_GEN_GORE_NEST_CHANCE      = 0.35f // roulette weight vs STANDARD=5.0; sits between containment
+                                          // (0.16) and research (0.40). Depth gate keeps it off floors 1-2,
+                                          // so effective appearance is "occasional, deeper-floor dread room."
+  Wall-theming density knob (new): LEVEL_GEN_GORE_NEST_WALL_FILL_CHANCE = 0.75f — fraction of perimeter
+  tiles turned to gore 'G' (vs a normal accented room's sparse 1-2). LEVEL_GEN_GORE_NEST_RUST_CHANCE = 0.20f
+  for the 'j' rust breaks among them. Tune so the room is clearly "mostly flesh" but not a solid meat box.
+  Decal density knob (new): LEVEL_GEN_GORE_NEST_DECAL_CHANCE ~ 0.35f per interior-ring tile (much higher
+  than a standard room's atmospheric decals) — the corpse carpet is the point. Placeholder; playtest.
+
+INTERACTIONS
+============
+  1. Allocator harsh-depth rule (R5): gore/rust carry the PALETTE_HARSH_THEME_TAGS ("gore"/"rust"). Deeper
+     floors already trend grittier via the variety pool; this room CONCENTRATES that trend into one
+     landmark rather than scattering it — coherent with the existing depth-influence system, not fighting it.
+  2. Encounter budget / necrotic faction: the room is the thematic den of the necrotic spawns
+     (~ Ghoul, z Crawler, K Revenant, * Blight Corruptor). Spawn placement stays the generator's global
+     FIXED-symbol pass, but designers can bias the budget planner to seed a melee pack in a gore nest for a
+     signature "swarm out of the flesh" encounter. Cardinal-line kiting from the doorway is the counter-play.
+  3. Hazard tiles (fire 'i' / toxic 'q'): the nest is an ideal hand-seed OR runtime target for a toxic pool
+     'q' (a Plague Hulk dying here leaves one). Its walkable decal floor and dark lighting make it the
+     natural home for area-denial dread — the room and the hazard system reinforce each other.
+  4. Freed-symbol mechanic: on floors WITHOUT a gore nest, 'G' and 'j' fall back into the generic-variety
+     pool exactly as today (no regression); when the nest IS placed, its demand reserves them so a random
+     corridor never accidentally sprouts a lone flesh wall next to a placed nest.
+  5. Fog-of-war / minimap: as a rare, visually distinct landmark it aids player mental-mapping (the
+     "meat room" is a memorable node) — synergises with any minimap-memory feature.
+
+OPEN QUESTIONS
+==============
+  - Should the ruptured bio-pod '&' at the centre optionally be a guaranteed loot anchor (drop a stim/ammo
+    beside it) to reward pushing into the kill-box, or stay purely atmospheric? (Leaning atmospheric;
+    global pickup pass already handles loot.)
+  - MIN_DEPTH = 3 vs 4: is floor 3 too early for the "lost section" beat, or does earlier corruption raise
+    tension sooner? Playtest.
+  - Should MAX be 1 (set-piece) or 2 (let deep floors feel overrun)? Starting at 1; consider scaling to 2
+    at depth >= 7 via the eligibility lambda if deep floors want more dread.
+  - Wall theming: reuse the shared themeNewRoomWallsForRoom switch with a GORE_NEST case (less code) vs a
+    dedicated themeGoreNestWallsForRoom (cleaner if the raised-density fill logic diverges too much from the
+    other rooms' sparse accenting). Implementer's call; dedicated helper is safer if fill density is special.
+  - Does the darker floor bias hurt readability of the corpse decals? May need to lift a few centre tiles to
+    normal 'l' lighting around the nest so the focal cluster stays legible.

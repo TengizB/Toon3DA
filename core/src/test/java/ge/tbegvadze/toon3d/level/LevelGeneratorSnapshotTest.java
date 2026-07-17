@@ -29,13 +29,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class LevelGeneratorSnapshotTest {
 
     /**
-     * SHA-256 over {@link #fingerprint()}, re-baselined for the order-10 generator (LARGE demoted to a
-     * per-room size modifier + guaranteed-minimum-special-rooms backstop, on top of the order-8/9 registry
-     * selection + variety accents + salvage bay + supply cache). Do NOT hand-edit; regenerate only via a
-     * deliberate, reviewed behaviour change.
+     * SHA-256 over {@link #fingerprint()}, re-baselined for the GORE_NEST room addition (RECIPE B): one
+     * more blueprint competes in the STEP-A weighted roulette and, when selected on a depth&gt;=3 room, it
+     * stamps its own gore/rust wall theming + bespoke nest-prop pass — both of which shift the RNG draw
+     * sequence and the stamped tiles. This sits on top of the order-10 generator (LARGE demoted to a
+     * per-room size modifier + guaranteed-minimum-special-rooms backstop, order-8/9 registry selection +
+     * variety accents + salvage bay + supply cache). Do NOT hand-edit; regenerate only via a deliberate,
+     * reviewed behaviour change.
      */
     private static final String EXPECTED_DIGEST =
-            "b7e71d394d8679c0af1ded41c63fa40e5e8a24848a8062782f10810a41805512";
+            "4b7a2c7918612d49782cba9ecfad9c2f4c516540a5edfad9784a58596de5b527";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

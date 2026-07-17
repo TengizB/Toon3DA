@@ -43,6 +43,8 @@ public final class RoomBlueprints {
     public static final String ID_CONTAINMENT_BLOCK   = "containment_block";
     public static final String ID_RESEARCH_LAB        = "research_lab";
     public static final String ID_STELLAR_OBSERVATORY = "stellar_observatory";
+    // A SIGNATURE "aftermath" room built from walls + environment decals (RECIPE B, bespoke prop pass).
+    public static final String ID_GORE_NEST           = "gore_nest";
     // order-8 REQUIREMENT PROOF 1 — the brand-new GENERIC salvage bay.
     public static final String ID_SALVAGE_BAY         = "salvage_bay";
     // order-9 RECIPE B acceptance room — a GENERIC storeroom added by REGISTRATION ALONE (composes
@@ -319,6 +321,36 @@ public final class RoomBlueprints {
                 context -> {
                     context.assignFloorLighting();
                     context.placeStellarObservatoryProps();
+                }));
+
+        // GORE_NEST: a demonic-breach "aftermath" set-piece, built from WALLS + ENVIRONMENT DECALS only,
+        // all reused art (no new symbol, no new sprite). It PINS the currently-unclaimed gore wall 'G'
+        // (flesh membrane) + rust wall 'j' accent so the allocator reserves its exact look; the ruptured
+        // bio-pod '&', barrels 'g' and crates 'C', and the corpse/blood/bile decals ('m' '.' 's' 'O') all
+        // claim the SAME legacy sprite the sibling rooms use (no clash — same-symbol/same-sprite is a
+        // no-op for the allocator). Depth-gated (>=3), one per level, at a modest weight so it stays an
+        // occasional deeper-floor dread beat. Its build() composes floor lighting + the shared wall
+        // theming (GORE_NEST case) + a bespoke nest-prop pass.
+        registry.register(new LambdaRoomBlueprint(ID_GORE_NEST, RoomKind.SIGNATURE,
+                RoomSymbolDemand.of(demand(
+                        'G', "wall_gore",
+                        'j', "wall_rust",
+                        '&', "prop_biopod",
+                        'g', "prop_radioactive_barrel",
+                        'C', "prop_crate",
+                        'm', "decal_corpse",
+                        '.', "decal_blood",
+                        's', "decal_blood_alt",
+                        'O', "decal_oil")),
+                context -> context.dungeonDepth()   >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_DEPTH
+                        && context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_WIDTH
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_HEIGHT
+                        && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_GORE_NEST_MAX,
+                context -> LevelGenConstants.LEVEL_GEN_GORE_NEST_CHANCE,
+                context -> {
+                    context.assignFloorLighting();
+                    context.themeNewRoomWalls();      // themeNewRoomWallsForRoom handles the GORE_NEST case
+                    context.placeGoreNestProps();
                 }));
     }
 

@@ -100,6 +100,7 @@ class RoomBlueprintBuildDemandTest {
         map.put(RoomBlueprints.ID_CONTAINMENT_BLOCK,   LevelGenerator.RoomType.CONTAINMENT_BLOCK);
         map.put(RoomBlueprints.ID_RESEARCH_LAB,        LevelGenerator.RoomType.RESEARCH_LAB);
         map.put(RoomBlueprints.ID_STELLAR_OBSERVATORY, LevelGenerator.RoomType.STELLAR_OBSERVATORY);
+        map.put(RoomBlueprints.ID_GORE_NEST,           LevelGenerator.RoomType.GORE_NEST);
         return map;
     }
 }

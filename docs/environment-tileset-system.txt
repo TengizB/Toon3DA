@@ -905,3 +905,47 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    100% of sampled seeds, LinearCorridorGenerator on the large majority (the shortfall is genuine
    size-gate/cap exhaustion on sparse layouts, not a bug). RoomBlueprintRegistryTest updated to 13
    blueprints / 4 GENERIC.
+
+
+11. GORE_NEST — A SIGNATURE "AFTERMATH" ROOM (RECIPE B, bespoke prop pass)  [DONE]
+   A new SIGNATURE room proving RECIPE B's "bespoke architecture" path a second time (after salvage_bay).
+   The GORE_NEST is the demonic-breach dread beat the catalog lacked: every other special room is a CLEAN
+   facility function or generic storage; this is the section the incursion physically won. Its identity is
+   built from WALLS + ENVIRONMENT DECALS only, reusing existing art — ZERO new symbols, ZERO new sprites
+   (no RECIPE A):
+     * Signature walls: 'G' -> "wall_gore" (wet flesh membrane, the room's face) with 'j' -> "wall_rust"
+       accents. Both were previously claimed by NO signature room (they lived only in the generic-variety /
+       harsh-depth pools), so pinning them here is free; on floors WITHOUT a gore nest they fall back into
+       the generic pool exactly as before (no regression).
+     * Nest props: '&' prop_biopod (ruptured breach pod at the centroid), 'g' prop_radioactive_barrel,
+       'C' prop_crate — all claiming the SAME legacy sprite the sibling rooms use, so the allocator's
+       Step-2 clash resolution (same-symbol/DIFFERENT-sprite only) treats them as no-ops (no clash).
+     * Floor decals (the environmental heart, DENSE): 'm' decal_corpse, '.' decal_blood,
+       's' decal_blood_alt, 'O' decal_oil.
+
+   WIRED VIA (mirrors the other 9 signature rooms — RECIPE B, bigger-than-pure-registration path):
+     * level/RoomBlueprints.java: ID_GORE_NEST + one LambdaRoomBlueprint (pins the symbols above; eligible
+       at dungeonDepth>=LEVEL_GEN_GORE_NEST_MIN_DEPTH=3, interior>=6x6, capped at 1/level; weight 0.35,
+       between containment (0.16) and research (0.40)). build() = assignFloorLighting + themeNewRoomWalls
+       (GORE_NEST case) + placeGoreNestProps.
+     * level/LevelGenerator.java: RoomType.GORE_NEST; assignGoreNestFloor() (unlit 'u'/flicker 'f' dread
+       bias so the wet 'G' sheen pops against shadow); a GORE_NEST branch in themeNewRoomWallsForRoom()
+       (raised 'G' fill + sparse 'j' rust breaks — "flesh EATING metal", denser than a normal accented
+       room); placeGoreNestProps() + helpers (centroid bio-pod via the SHARED clearance guards
+       isWalkableFloor/isAdjacentToDoor/isAdjacentToDoorAxis — never seals the ring or a door; dense
+       corpse/blood/bile decal carpet; wall-debris barrels/crates via tryPlaceAtmosphericPropNearWall).
+     * level/RoomBuildContext.java: placeGoreNestProps() delegator.
+     * util/LevelGenConstants.java: LEVEL_GEN_GORE_NEST_* (depth/size/cap/weight + wall-fill/rust/decal/
+       floor knobs).
+   ZERO edits to WallRenderer/PropRenderer draw logic, Level.java, or the generator's room-SELECTION code.
+
+   COUNTS: the registry now holds 14 blueprints (was 13): 4 GENERIC (entrance/standard/salvage_bay/
+   supply_cache) + 10 SIGNATURE. GORE_NEST carries its own RoomType.GORE_NEST tag (its themed walls must be
+   preserved from the STANDARD-only STEP-C generic-accent pass), so the "registry size == RoomType count +
+   1" invariant is unchanged (SUPPLY_CACHE remains the sole RoomType-less blueprint).
+
+   VERIFICATION (headless): compiles; LevelGeneratorSnapshotTest deliberately re-baselined (one more
+   roulette candidate + a new architecture shift the RNG draw sequence and stamped tiles — same seed still
+   => same grid); 800 generations across seeds × depths {1,3,5,7} with zero crashes; the nest is selected
+   on depth>=3 floors and NEVER at depth 1 (depth gate). RoomBlueprintRegistryTest updated to 14
+   blueprints / 10 SIGNATURE with a gore-nest depth+cap eligibility case.
