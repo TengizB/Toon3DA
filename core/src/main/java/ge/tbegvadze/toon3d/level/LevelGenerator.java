@@ -81,7 +81,7 @@ public class LevelGenerator implements ILevelGenerator {
 
     private enum WallContext { CORRIDOR, ROOM, MIXED, INTERIOR }
 
-    // TILESET MIGRATION (order-8): room SELECTION is now registry-driven — assignRoomBlueprints() picks
+    // TILESET SYSTEM (order-8): room SELECTION is now registry-driven — assignRoomBlueprints() picks
     // each room's RoomBlueprint from RoomBlueprintRegistry with a seeded weighted roll, and generate()
     // stamps each room via RoomBlueprint.build() instead of the old global per-type passes. There is no
     // hardcoded room-list switch in selection any more. The enum survives ONLY as an INTERNAL TAG the
@@ -352,12 +352,26 @@ public class LevelGenerator implements ILevelGenerator {
     }
 
     /**
-     * Maps a blueprint id to its internal {@link RoomType} tag with NO switch: every {@code RoomBlueprints.ID_*}
-     * equals its RoomType name lower-cased, so {@code valueOf(upperCase)} round-trips (e.g. "cryo_chamber"
-     * → CRYO_CHAMBER). Keeps the generator free of a hardcoded id→type table.
+     * Maps a blueprint id to its internal {@link RoomType} tag with NO switch: every v1
+     * {@code RoomBlueprints.ID_*} equals its RoomType name lower-cased, so a name match round-trips (e.g.
+     * "cryo_chamber" → CRYO_CHAMBER). Keeps the generator free of a hardcoded id→type table.
+     *
+     * <p>SEAM (order-9): a NEW GENERIC room added by REGISTRATION ALONE — whose {@code build()} composes
+     * the existing per-room steps rather than a bespoke architecture — needs NO {@code RoomType} constant.
+     * An id with no matching enum is tagged {@link RoomType#STANDARD} (generic filler), so the type-keyed
+     * floor/weapon/variety passes treat it as an ordinary room. This is what makes "add a room by
+     * registration alone" true (docs/environment-tileset-system.txt §9, RECIPE B). A room that needs its
+     * OWN architecture still adds a build helper (as SALVAGE_BAY did) and, if it wants a distinct tag, its
+     * own enum constant — but that is no longer required merely to register and select a room.
      */
     private static RoomType roomTypeForBlueprint(RoomBlueprint blueprint) {
-        return RoomType.valueOf(blueprint.id().toUpperCase(java.util.Locale.ROOT));
+        String enumName = blueprint.id().toUpperCase(java.util.Locale.ROOT);
+        for (RoomType candidate : RoomType.values()) {
+            if (candidate.name().equals(enumName)) {
+                return candidate;
+            }
+        }
+        return RoomType.STANDARD;
     }
 
     /**

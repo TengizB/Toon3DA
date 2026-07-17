@@ -3,7 +3,7 @@ package ge.tbegvadze.toon3d.tileset;
 /**
  * The FIXED semantic class a level-file symbol belongs to — "what a symbol MEANS", never varies per
  * level. A symbol's category is permanent; only WHICH {@link EnvironmentSpriteDefinition} fills that
- * category's slot becomes per-level later in the tileset migration (see
+ * category's slot becomes per-level later in the tileset system (see
  * {@code docs/environment-tileset-system.txt}). order-1 covers ONLY the four FLEXIBLE-eligible visual
  * categories below — one per existing {@code Level} predicate group. Doors, pickups, keycards, ammo,
  * hazards, enemy spawns, player-start, and exit are FIXED symbols with permanent meaning AND sprite;

@@ -1,9 +1,6 @@
->>> TILESET MIGRATION IN PROGRESS (see docs/environment-tileset-system.txt) <<<
-The symbol->sprite behaviour described below is the LEGACY model. A staged refactor
-(.claude/agents/ideas/symbol-sprite-reuse-system*.txt) is decoupling symbols from sprites so a
-symbol is a fixed CATEGORY slot and its sprite is chosen PER LEVEL. Check the ORDER STATUS TABLE
-in docs/environment-tileset-system.txt for which parts are live. Do not rely on "one symbol = one
-fixed sprite" as permanent truth while this banner is present.
+# TILESET SYSTEM: room selection + decoration are registry-driven and a symbol's sprite is chosen PER
+#  LEVEL by the allocator. Where this doc describes a fixed symbol->sprite mapping, that is the LEGACY
+#  DEFAULT; generated levels vary it. See docs/environment-tileset-system.txt.
 # (Specifically: as of order-8 room SELECTION and DECORATION are registry-driven. assignRoomBlueprints()
 #  picks each room's RoomBlueprint from RoomBlueprintRegistry with a SEEDED WEIGHTED roll (the old
 #  probability-band switch and its finder passes are GONE), and generate() stamps each room via

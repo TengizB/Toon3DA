@@ -616,6 +616,16 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_SALVAGE_DECAL_CHANCE        = 0.14f; // oil/scrap decals on open floor
     public static final float LEVEL_GEN_SALVAGE_DARK_FLOOR_CHANCE   = 0.30f; // dingy 'u' patches over the 'l' floor
 
+    // SUPPLY_CACHE — order-9 RECIPE B acceptance room: a compact ancillary storeroom, added by
+    // REGISTRATION ALONE. Its build() COMPOSES the existing per-room steps (standard floor + standard
+    // columns + a double standard-prop pass for cluttered density) — no bespoke generator helper — and
+    // its accent walls are allocator-driven per level via the generic-variety pass. Modest size window,
+    // capped so it stays occasional. See docs/environment-tileset-system.txt §9 (RECIPE B).
+    public static final int   LEVEL_GEN_SUPPLY_CACHE_MIN_WIDTH  = 5;
+    public static final int   LEVEL_GEN_SUPPLY_CACHE_MIN_HEIGHT = 5;
+    public static final int   LEVEL_GEN_SUPPLY_CACHE_MAX        = 2;
+    public static final float LEVEL_GEN_ROOM_SUPPLY_CACHE_SELECTION_WEIGHT = 0.30f;
+
     // STEP C — generic rooms & halls get per-level variety. A sparse pass stamps FREED flexible accent
     // symbols (those NO placed signature room reserved this level) into GENERIC room perimeters and
     // corridor walls, so the allocator's per-level sprite for those symbols makes two seeds visibly

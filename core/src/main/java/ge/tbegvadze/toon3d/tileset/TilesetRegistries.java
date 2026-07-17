@@ -29,17 +29,26 @@ public final class TilesetRegistries {
     public static final String SPRITE_ID_COLUMN_ROUND  = "column_round";
     /** Stable sprite id of the order-8 square column (REQUIREMENT PROOF 2; variety-only, see below). */
     public static final String SPRITE_ID_COLUMN_SQUARE = "column_square";
+    /**
+     * Stable sprite id of the order-9 hex-plate accent wall — the acceptance-test wall sprite added by
+     * RECIPE A alone (see docs/environment-tileset-system.txt §9). No legacy symbol maps to it, so it is
+     * variety-only, reached only through the allocator's per-level wall variety.
+     */
+    public static final String SPRITE_ID_WALL_HEX_PLATE = "wall_hex_plate";
 
     /**
      * Sprite ids that exist in the catalog as PER-LEVEL VARIETY ALTERNATIVES which the historic 1:1
-     * legacy palette never maps a symbol to (order-8). Today this is exactly {@link #SPRITE_ID_COLUMN_SQUARE}
-     * — the second COLUMN sprite the flexible 'P' slot can resolve to (REQUIREMENT PROOF 2). They are
-     * fully registered (with texture generators) but only ever reached through the allocator, so the
-     * legacy palette references the whole catalog MINUS this set. Unmodifiable.
+     * legacy palette never maps a symbol to. A sprite lands here whenever it is NEW art in an EXISTING
+     * category with no free legacy symbol to bind it (the common case for content added via RECIPE A):
+     * {@link #SPRITE_ID_COLUMN_SQUARE} (order-8, the second COLUMN sprite the flexible 'P' slot resolves
+     * to) and {@link #SPRITE_ID_WALL_HEX_PLATE} (order-9, an extra WALL accent). They are fully registered
+     * (with texture generators) but only ever reached through the allocator, so the legacy palette
+     * references the whole catalog MINUS this set. Unmodifiable.
      */
     public static final java.util.Set<String> VARIETY_ONLY_SPRITE_IDS =
             java.util.Collections.unmodifiableSet(
-                    new java.util.LinkedHashSet<>(java.util.Arrays.asList(SPRITE_ID_COLUMN_SQUARE)));
+                    new java.util.LinkedHashSet<>(java.util.Arrays.asList(
+                            SPRITE_ID_COLUMN_SQUARE, SPRITE_ID_WALL_HEX_PLATE)));
 
     private static final EnvironmentSpriteRegistry SPRITES = new EnvironmentSpriteRegistry();
     private static boolean bootstrapped = false;
@@ -111,6 +120,14 @@ public final class TilesetRegistries {
                 .themeTag(THEME_TAG_OBSERVATORY).build());
         registry.register(EnvironmentSpriteDefinition.builder("wall_stellar_hull_plate", TileCategory.WALL, "Hull Plate Wall")
                 .themeTag(THEME_TAG_OBSERVATORY).build());
+
+        // order-9 RECIPE A acceptance sprite — a hexagonal-plate accent wall. NEW art in the EXISTING
+        // WALL category: no legacy symbol maps to it (VARIETY_ONLY_SPRITE_IDS), so it is registered LAST
+        // — after the historic 1:1 walls the legacy palette zips against — and only ever reached through
+        // the allocator's per-level wall variety. Added by REGISTRATION ALONE: this line + its texture
+        // generator in WallRenderer.registerTextureGenerators, with ZERO edits to LevelGenerator,
+        // WallRenderer draw logic, or Level. See docs/environment-tileset-system.txt §9 (RECIPE A).
+        registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_WALL_HEX_PLATE, TileCategory.WALL, "Hex Plate Wall").build());
     }
 
     /**

@@ -200,7 +200,8 @@ Root package (`ge.tbegvadze.toon3d`) is reserved for `Main.java` only.
 | `…toon3d.progression` | Player stats, XP, attributes, level-up rewards |
 | `…toon3d.route` | Branching route-map subsystem: node/generator registries, run-seeded map data model (headless, no LibGDX imports) |
 | `…toon3d.render.routeicons` | Procedural route-map node icons + region crests: IconPainter/RegionCrestPainter registries, one painter per node type/region, shared RouteGlyphs + RouteIconSupport (ShapeRenderer primitives only, no assets) |
-| `…toon3d.tileset` | Symbol/sprite-reuse tileset subsystem (headless, no LibGDX imports): `TileCategory`, `EnvironmentSpriteDefinition` + `EnvironmentSpriteRegistry`, `TilesetRegistries.bootstrap()` — the data-driven art catalog of every wall/column/prop/decal sprite; `SymbolBudget` (FIXED/FLEXIBLE split); `LevelPalette` + `LevelPalettes.legacy()` (per-level symbol→category+sprite binding, carried by `Level`). See `docs/environment-tileset-system.txt`. |
+| `…toon3d.tileset` | Symbol/sprite-reuse tileset subsystem (headless, no LibGDX imports): `TileCategory`, `EnvironmentSpriteDefinition` + `EnvironmentSpriteRegistry`, `TilesetRegistries.bootstrap()` — the data-driven art catalog of every wall/column/prop/decal sprite; `SymbolBudget` (FIXED/FLEXIBLE split) + `SymbolCategories`; `LevelPalette` + `LevelPalettes.legacy()` (per-level symbol→category+sprite binding, carried by `Level`); `SymbolAllocator` (deterministic per-level palette engine); `RoomBlueprint` + `RoomBlueprintRegistry` room demands. See `docs/environment-tileset-system.txt`. |
+| `…toon3d.render.tilesetgfx` | Render-layer half of the tileset subsystem (MAY import LibGDX): `TextureGeneratorRegistry` (sprite id → procedural texture generator, `TilesetGfxBootstrap`) + `EnvironmentTextureSet` (per-level realized textures for only the palette's sprites; `Disposable`). Turns headless sprite ids into pixels. See `docs/environment-tileset-system.txt`. |
 
 New class: pick the most specific matching package. If none fits, add a subpackage and document it here.
 
@@ -269,6 +270,7 @@ Never hardcode a value anywhere. Always add to the matching constant file first,
 | `EffectConstants.java` | Screen shake, vignette, ambient lighting, fade durations |
 | `ProgressionConstants.java` | XP, death beat, stats preferences key |
 | `TouchConstants.java` | On-screen button sizes, positions, alpha values |
+| `TilesetConstants.java` | Symbol/sprite-reuse partition: FIXED vs FLEXIBLE symbol tables per category, fixed-sprite exceptions, palette-seed salt |
 
 ### `util/GameMath.java`
 Every non-trivial formula as a `public static` method. **Never implement a formula inline in game code.** Required comment block above every method:
@@ -289,7 +291,7 @@ Procedural dungeon generator. Takes `LevelGenConfig` and produces a `Level`. All
 
 ### `level/Level.java`
 2D tile grid. **Full tile symbol reference: `docs/tile-symbols.txt`** — single source of truth for every character used in level files.
-> ⚠️ Tileset migration in progress — a symbol's category is fixed but its sprite is becoming per-level. See `docs/environment-tileset-system.txt` (ORDER STATUS TABLE) before relying on the 1:1 symbol→sprite mapping.
+> A symbol's CATEGORY is symbol-intrinsic (from `tileset/SymbolBudget` + `SymbolCategories`, backing `isWall()`/`isPropSolid()`/…), but its SPRITE is per-level via the `LevelPalette` the `Level` carries. Hand levels use the LEGACY palette (the historic 1:1 mapping); generated levels vary the sprite per seed. See `docs/environment-tileset-system.txt`.
 
 Quick summary of categories:
 - **Walls (18):** `x c v t w h j G k N Q S M Z U X D F`
@@ -305,18 +307,31 @@ Quick summary of categories:
 
 Tile grid indexed by `(x, y)` where `(0, 0)` = bottom-left tile (Y-up). Package-private constructor — always instantiate via `LevelLoader`.
 
-#### STRICT RULE — Adding a new tile symbol
+#### Adding environment art or a room — use a RECIPE (no new symbol)
 
-> ⚠️ Tileset migration in progress — this 1:1 rule is legacy; adding environment art will become a registry recipe. See `docs/environment-tileset-system.txt` (ORDER STATUS TABLE) for what is live.
+The symbol/sprite-reuse system decoupled symbols from art, so the common cases need **no new symbol**:
+- **New wall/column/prop/decal ART → RECIPE A:** register one `EnvironmentSpriteDefinition` (+ its texture generator). It appears on generated levels automatically.
+- **New ROOM → RECIPE B:** register one `RoomBlueprint`. It competes in generation automatically.
 
-**Every new symbol must be introduced in a single commit that includes ALL of:**
+Both recipes are ONE registration line each — **zero edits to `LevelGenerator`, the renderers' draw logic, or `Level`** (the same "never a switch statement" discipline as `route/RouteRegistries`). Full copy-pasteable checklists: `docs/environment-tileset-system.txt` §9.
+
+#### STRICT RULE — Adding a new FIXED tile symbol (rare)
+
+Only when a genuinely new FIXED gameplay meaning is needed (not for art/rooms — those are RECIPE A/B). **Every new symbol must be introduced in a single commit that includes ALL of:**
 1. An entry in `docs/tile-symbols.txt` (correct section, description, notes).
-2. The symbol added to `Level.java` in the appropriate method (`isWall()`, `isPropSolid()`, etc.).
-3. Texture/sprite lookup wired in `WallRenderer.java` or `PropRenderer.java`.
+2. Its CATEGORY wired into `Level.java` (`isWall()`, `isPropSolid()`, … — flexible categories are data-driven via `tileset/TilesetConstants` + `SymbolBudget`; a FIXED gameplay symbol adds its own check).
+3. Its FIXED texture/sprite handling in `WallRenderer.java` or `PropRenderer.java`.
 4. Any new `Constants` entries (texture path, height multiplier, etc.).
 5. The symbol count updated in the SYMBOL BUDGET section of `docs/tile-symbols.txt`.
 
 **Never use a symbol in a level file or in game code that is not already in `docs/tile-symbols.txt`.**
+
+### Tileset subsystem key classes (see `docs/environment-tileset-system.txt`)
+- **`tileset/EnvironmentSpriteRegistry`** — the art catalog: register/get environment sprites, `allInCategory()` is the allocator's variety pool. Populated by `TilesetRegistries.bootstrap()`. Adding art = one `register()` line (RECIPE A).
+- **`tileset/SymbolAllocator`** — pure, deterministic engine that builds a per-level `LevelPalette` from a floor seed + the rooms actually placed (fixed bindings, room reservations, freed-symbol reclamation, rule-governed variety). Same request ⇒ byte-identical palette.
+- **`tileset/LevelPalette`** — the per-level `symbol → (category, sprite id)` binding carried by `Level`. `LevelPalettes.legacy()` reproduces the historic 1:1 mapping (hand levels + the default).
+- **`level/RoomBlueprintRegistry`** — registered rooms the generator selects from (`RoomBlueprints.bootstrap()`). Adding a room = one `RoomBlueprint` register line (RECIPE B); no generator-selection edits.
+- **`render/tilesetgfx/EnvironmentTextureSet`** — per-level `Disposable` that realizes textures for ONLY the palette's sprites and frees them on level teardown. Owned by `World`'s dispose chain.
 
 ### `entity/Player.java`
 Fields: `positionX`, `positionY` (world units), `directionX`, `directionY` (unit vector, always length 1), `fieldOfViewRadians`.
@@ -395,6 +410,7 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 | Enemy health bar rendering | `docs/enemy-health-bars.txt` |
 | HUD procedural rendering (no textures) | `docs/procedural-vitals-hud.txt` |
 | Procedural level generation | `docs/procedural-level-generation.txt` |
+| Tileset symbol/sprite reuse (categories, sprite registry, budget, palette, allocator, rooms, texture realization; RECIPE A/B) | `docs/environment-tileset-system.txt` |
 | Route map / branching descent (nodes, generators, special levels, regions, events) | `docs/route-map-system.txt` |
 | Turn/tick system architecture | `docs/tick-system.txt` |
 | Balance contract (eHP/DPT/TTK/TP, power & threat bands) | `docs/balance-rule-system.txt` |
@@ -406,11 +422,12 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 
 ## Docs Directory (`docs/`)
 
-All 15 reference docs — read these before implementing anything in their domain:
+All 16 reference docs — read these before implementing anything in their domain:
 
 | File | Lines | What it covers |
 |---|---|---|
-| `tile-symbols.txt` | 139 | Complete tile character reference — walls, doors, floors, props, pickups, enemies. **Single source of truth for level format.** |
+| `tile-symbols.txt` | 221 | Complete tile character reference — walls, doors, floors, props, pickups, enemies + the FIXED/FLEXIBLE model. **Single source of truth for level format.** |
+| `environment-tileset-system.txt` | 850 | Symbol/sprite-reuse subsystem: categories, sprite registry, symbol budget, per-level palette, allocator, room blueprints, texture realization, render integration, and RECIPE A (add a sprite) / RECIPE B (add a room). **Single source of truth; update on any tileset/room/palette change.** |
 | `route-map-system.txt` | 818 | Branching route-map subsystem: data model + registries, DAG generation & regions, node->floor pipeline, overlay/interaction, special-level profiles, node/region catalogs, and the extensibility recipes. **Single source of truth; update on any route change.** |
 | `balance-rule-system.txt` | 217 | Balance contract: the four primitives (eHP/DPT/TTK/TP), per-role power & threat bands, the new-content checklist, and the living table. **Read before adding any weapon/enemy/item.** |
 | `weapon-creation-guide.txt` | 537 | End-to-end weapon implementation: constants → Weapon subclass → marchShot → FrameBuffer sprite → World wiring |

@@ -39,7 +39,7 @@ public class Level {
     private final   List<int[]>            eventStationTiles = new java.util.ArrayList<>();
 
     /**
-     * The per-level symbol → (category, sprite id) binding (tileset migration, order-3). Immutable and
+     * The per-level symbol → (category, sprite id) binding (tileset system, order-3). Immutable and
      * set once at construction. Hand-crafted levels and, for now, generated levels use the shared
      * {@link LevelPalettes#legacy()} instance so nothing changes visually until later orders vary it.
      * The renderers begin reading this in order-7; the static category predicates below stay the
@@ -139,7 +139,7 @@ public class Level {
         return matrix[y][x];
     }
 
-    // TILESET MIGRATION (order-7): these category predicates are the CATEGORY authority. A symbol's
+    // TILESET SYSTEM (order-7): these category predicates are the CATEGORY authority. A symbol's
     // CATEGORY (wall/column/prop/decal) is FIXED and symbol-intrinsic — it never depends on which sprite a
     // level's palette assigns. So the predicates stay STATIC and PALETTE-FREE (callable from hot movement /
     // AI / collision code) and are now backed by SymbolCategories — the ONE source of truth derived from

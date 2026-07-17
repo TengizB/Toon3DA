@@ -55,10 +55,16 @@ class TilesetRegistriesTest {
     }
 
     @Test
-    void wallCountMatchesLevelIsWall() {
+    void wallCategoryHoldsEveryWallSymbolPlusVarietyArt() {
+        // Like the COLUMN category (order-8), the WALL category carries per-level VARIETY art beyond the
+        // historic 1:1 table since order-9: "wall_hex_plate" (RECIPE A acceptance sprite) is an extra
+        // accent no legacy symbol maps to. So the pool is AT LEAST the wall-symbol count and contains the
+        // variety sprite; the exact 1:1 count no longer holds by design.
         EnvironmentSpriteRegistry registry = freshRegistry();
-        assertEquals(countLevelChars(candidate -> Level.isWall((char) candidate)),
-                registry.allInCategory(TileCategory.WALL).size());
+        int wallSymbolCount = countLevelChars(candidate -> Level.isWall((char) candidate));
+        assertTrue(registry.allInCategory(TileCategory.WALL).size() >= wallSymbolCount);
+        assertTrue(registry.contains("wall_plain"));
+        assertTrue(registry.contains(TilesetRegistries.SPRITE_ID_WALL_HEX_PLATE));
     }
 
     @Test

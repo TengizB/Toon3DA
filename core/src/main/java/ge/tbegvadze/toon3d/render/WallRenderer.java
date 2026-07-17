@@ -66,7 +66,7 @@ public class WallRenderer implements Renderable, Disposable {
     // Perpendicular wall distance per screen column — used for sprite depth-clipping later.
     private final float[] zBuffer;
 
-    // TILESET MIGRATION (order-7): the wall + column art is no longer owned by this renderer. Each level's
+    // TILESET SYSTEM (order-7): the wall + column art is no longer owned by this renderer. Each level's
     // EnvironmentTextureSet (owned/disposed by World, realized from the level's LevelPalette) supplies the
     // textures; WallRenderer resolves symbol -> sprite id (via the palette) -> Texture (via the set) ONCE
     // per level in setEnvironmentTextureSet() and caches the result in these char-indexed arrays. The hot
@@ -103,7 +103,7 @@ public class WallRenderer implements Renderable, Disposable {
     // Monotonically increasing facility clock used to evaluate 'f' (flickering) tile brightness.
     private float lightingTimeSeconds = 0f;
 
-    // TILESET MIGRATION (order-7): the per-level texture supply realized from this level's palette. Set
+    // TILESET SYSTEM (order-7): the per-level texture supply realized from this level's palette. Set
     // each level by World via setEnvironmentTextureSet(), which pre-resolves the wall + column textures
     // from it into the char-indexed arrays above. The set is the OWNER of those wall/column textures;
     // WallRenderer never disposes them (World disposes the set).
@@ -475,6 +475,7 @@ public class WallRenderer implements Renderable, Disposable {
         registry.register("wall_stellar_hull_plate", WallRenderer::generateStellarHullPlateWallTexture);
         registry.register(TilesetRegistries.SPRITE_ID_COLUMN_ROUND,  WallRenderer::generateColumnTexture);
         registry.register(TilesetRegistries.SPRITE_ID_COLUMN_SQUARE, WallRenderer::generateColumnSquareTexture);
+        registry.register(TilesetRegistries.SPRITE_ID_WALL_HEX_PLATE, WallRenderer::generateHexPlateWallTexture);
     }
 
     /**
@@ -558,6 +559,76 @@ public class WallRenderer implements Renderable, Disposable {
             pixmap.fillRectangle(rivetInset, row - 4, 3, 3);
             pixmap.fillRectangle(textureWidth - rivetInset - 3, row - 4, 3, 3);
         }
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * order-9 RECIPE A acceptance sprite — the hex-plate accent wall ("wall_hex_plate"). A tessellated
+     * honeycomb of hexagonal steel panels: recessed dark seams between plates and a soft
+     * centre-to-edge shade per panel with a faint per-panel tint. The honeycomb is the Voronoi diagram of
+     * a triangular lattice (each lattice point's Voronoi cell is a regular flat-top hexagon), so a pixel
+     * is a SEAM when its two nearest lattice points are almost equidistant (it sits on a cell boundary),
+     * and a PANEL otherwise, shaded by its distance to the owning lattice point.
+     *
+     * <p>Added by REGISTRATION ALONE (RECIPE A): this generator + its one registration line in
+     * {@link #registerTextureGenerators}, plus the sprite definition in {@code TilesetRegistries}. No
+     * edits to the draw loop, {@code LevelGenerator}, {@code PropRenderer}, or {@code Level} — the
+     * FLEXIBLE wall symbols resolve to it per level through the allocator. See
+     * docs/environment-tileset-system.txt §9.
+     */
+    private static Texture generateHexPlateWallTexture() {
+        int   size       = HEX_PLATE_WALL_TEXTURE_SIZE;
+        float spacingX   = HEX_PLATE_CELL_RADIUS;
+        float spacingY   = HEX_PLATE_CELL_RADIUS * (float) (Math.sqrt(3.0) / 2.0);
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        for (int pixelRow = 0; pixelRow < size; pixelRow++) {
+            for (int pixelColumn = 0; pixelColumn < size; pixelColumn++) {
+                float nearestSquared       = Float.MAX_VALUE;
+                float secondNearestSquared = Float.MAX_VALUE;
+                int   nearestLatticeRow    = 0;
+                int   nearestLatticeColumn = 0;
+
+                int centreLatticeRow = Math.round(pixelRow / spacingY);
+                for (int latticeRow = centreLatticeRow - 1; latticeRow <= centreLatticeRow + 1; latticeRow++) {
+                    float latticeCentreY = latticeRow * spacingY;
+                    float rowOffsetX     = (latticeRow & 1) == 0 ? 0f : spacingX / 2f;
+                    int   centreLatticeColumn = Math.round((pixelColumn - rowOffsetX) / spacingX);
+                    for (int latticeColumn = centreLatticeColumn - 1; latticeColumn <= centreLatticeColumn + 1; latticeColumn++) {
+                        float latticeCentreX = latticeColumn * spacingX + rowOffsetX;
+                        float differenceX    = pixelColumn - latticeCentreX;
+                        float differenceY    = pixelRow    - latticeCentreY;
+                        float distanceSquared = differenceX * differenceX + differenceY * differenceY;
+                        if (distanceSquared < nearestSquared) {
+                            secondNearestSquared = nearestSquared;
+                            nearestSquared       = distanceSquared;
+                            nearestLatticeRow    = latticeRow;
+                            nearestLatticeColumn = latticeColumn;
+                        } else if (distanceSquared < secondNearestSquared) {
+                            secondNearestSquared = distanceSquared;
+                        }
+                    }
+                }
+
+                float edgeMargin = (float) Math.sqrt(secondNearestSquared) - (float) Math.sqrt(nearestSquared);
+                if (edgeMargin < HEX_PLATE_SEAM_WIDTH) {
+                    // Recessed dark groove between hexagonal panels.
+                    pixmap.setColor(0.16f, 0.16f, 0.19f, 1f);
+                } else {
+                    // Steel panel: brighter at the centre, subtly darker toward the seam, with a faint
+                    // deterministic per-panel tint so neighbouring plates read as separate pieces.
+                    float centreFade = Math.min(1f, (float) Math.sqrt(nearestSquared) / HEX_PLATE_CELL_RADIUS);
+                    float panelTint  = ((nearestLatticeRow * 73 + nearestLatticeColumn * 31) % 7 - 3) / 90f;
+                    float gray       = 0.46f - centreFade * 0.12f + panelTint;
+                    pixmap.setColor(Math.max(0f, gray), Math.max(0f, gray), Math.max(0f, gray + 0.04f), 1f);
+                }
+                pixmap.drawPixel(pixelColumn, pixelRow);
+            }
+        }
+
         Texture texture = new Texture(pixmap);
         texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         pixmap.dispose();
