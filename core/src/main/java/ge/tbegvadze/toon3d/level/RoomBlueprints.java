@@ -111,14 +111,14 @@ public final class RoomBlueprints {
         // SALVAGE_BAY (order-8 REQUIREMENT PROOF 1): a brand-new GENERIC room with a DISTINCT central
         // scrap-heap architecture (not a reskin). It reserves NO specific sprite — its demand is
         // FLEXIBLE-category slot counts only, so it composes from whatever flexible symbols are free on
-        // the level and its look is fully allocator-driven. Eligible on ordinary floors at a modest size,
-        // capped so it stays a flavour room.
+        // the level and its look is fully allocator-driven. Eligible on ordinary floors at a modest size.
+        // EQUAL-CHANCE: shares the common special-room weight and carries no per-level cap (a floor may
+        // roll it as many times as its rooms fit) — see LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT.
         registry.register(new LambdaRoomBlueprint(ID_SALVAGE_BAY, RoomKind.GENERIC,
                 RoomSymbolDemand.of(emptyDemand(), salvageBayCategoryCounts()),
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SALVAGE_BAY_MIN_WIDTH
-                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SALVAGE_BAY_MIN_HEIGHT
-                        && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_SALVAGE_BAY_MAX,
-                context -> LevelGenConstants.LEVEL_GEN_ROOM_SALVAGE_BAY_SELECTION_WEIGHT,
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SALVAGE_BAY_MIN_HEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 context -> context.placeSalvageBay()));
 
         // SUPPLY_CACHE (order-9 RECIPE B acceptance room): a compact ancillary storeroom added by
@@ -132,9 +132,8 @@ public final class RoomBlueprints {
         registry.register(new LambdaRoomBlueprint(ID_SUPPLY_CACHE, RoomKind.GENERIC,
                 RoomSymbolDemand.of(emptyDemand(), supplyCacheCategoryCounts()),
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MIN_WIDTH
-                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MIN_HEIGHT
-                        && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MAX,
-                context -> LevelGenConstants.LEVEL_GEN_ROOM_SUPPLY_CACHE_SELECTION_WEIGHT,
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MIN_HEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.placeStandardColumns();
@@ -152,15 +151,16 @@ public final class RoomBlueprints {
                         'L', "prop_locker",
                         'O', "decal_oil",
                         'g', "prop_radioactive_barrel")),
-                context -> context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_SERVER_ROOM_MAX_PER_LEVEL,
-                context -> LevelGenConstants.LEVEL_GEN_SERVER_ROOM_CHANCE,
+                context -> true,
+                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeServerRoomWalls();
                     context.placeServerRoomProps();
                 }));
 
-        // MEDICAL_BAY: guaranteed once per level; medical 'M' walls + bio 'Q' accents, clinical props.
+        // MEDICAL_BAY: medical 'M' walls + bio 'Q' accents, clinical props. EQUAL-CHANCE: shares the
+        // common special-room weight and carries no per-level cap (a floor may roll more than one).
         registry.register(new LambdaRoomBlueprint(ID_MEDICAL_BAY, RoomKind.SIGNATURE,
                 RoomSymbolDemand.of(demand(
                         'M', "wall_medical",
@@ -172,9 +172,8 @@ public final class RoomBlueprints {
                         'O', "decal_oil",
                         'm', "decal_corpse")),
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_WIDTH
-                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT
-                        && context.alreadyPlacedOfThisKind() < 1,
-                context -> LevelGenConstants.LEVEL_GEN_ROOM_MEDICAL_BAY_SELECTION_WEIGHT,
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_MEDICAL_BAY_MIN_HEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeNewRoomWalls();
@@ -190,9 +189,8 @@ public final class RoomBlueprints {
                         '.', "decal_blood",
                         'm', "decal_corpse")),
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_ARMORY_MIN_WIDTH
-                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_ARMORY_MIN_HEIGHT
-                        && context.alreadyPlacedOfThisKind() < 1,
-                context -> LevelGenConstants.LEVEL_GEN_ARMORY_CHANCE,
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_ARMORY_MIN_HEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeNewRoomWalls();
@@ -209,9 +207,8 @@ public final class RoomBlueprints {
                         'O', "decal_oil",
                         'C', "prop_crate")),
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_CRYO_MIN_WIDTH
-                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_CRYO_MIN_HEIGHT
-                        && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_CRYO_MAX,
-                context -> LevelGenConstants.LEVEL_GEN_CRYO_CHANCE,
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_CRYO_MIN_HEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeNewRoomWalls();
@@ -228,9 +225,8 @@ public final class RoomBlueprints {
                         'g', "prop_radioactive_barrel",
                         'O', "decal_oil")),
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM
-                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM
-                        && context.alreadyPlacedOfThisKind() < 1,
-                context -> LevelGenConstants.LEVEL_GEN_POWERPLANT_CHANCE,
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM,
+                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeNewRoomWalls();
@@ -248,9 +244,8 @@ public final class RoomBlueprints {
                         '.', "decal_blood",
                         'm', "decal_corpse")),
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_COMMAND_MIN_WIDTH
-                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_COMMAND_MIN_HEIGHT
-                        && context.alreadyPlacedOfThisKind() < 1,
-                context -> LevelGenConstants.LEVEL_GEN_COMMAND_CHANCE,
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_COMMAND_MIN_HEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeNewRoomWalls();
@@ -269,9 +264,8 @@ public final class RoomBlueprints {
                         'O', "decal_oil",
                         'm', "decal_corpse")),
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_CONTAINMENT_MIN_WIDTH
-                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_CONTAINMENT_MIN_HEIGHT
-                        && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_CONTAINMENT_MAX,
-                context -> LevelGenConstants.LEVEL_GEN_CONTAINMENT_CHANCE,
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_CONTAINMENT_MIN_HEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeNewRoomWalls();
@@ -288,9 +282,8 @@ public final class RoomBlueprints {
                         'J', "prop_ai_core",
                         'e', "decal_energy_scorch")),
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_MIN_WIDTH
-                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_MIN_HEIGHT
-                        && context.alreadyPlacedOfThisKind() < 1,
-                context -> LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_CHANCE,
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_RESEARCH_LAB_MIN_HEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeNewRoomWalls();
@@ -318,9 +311,8 @@ public final class RoomBlueprints {
                         && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_INTERIOR
                         && Math.max(context.interiorWidth(), context.interiorHeight())
                                 <= Math.min(context.interiorWidth(), context.interiorHeight())
-                                        * LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MAX_ASPECT
-                        && context.alreadyPlacedOfThisKind() < 1,
-                context -> LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_CHANCE,
+                                        * LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MAX_ASPECT,
+                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.placeStellarObservatoryProps();
@@ -331,9 +323,10 @@ public final class RoomBlueprints {
         // (flesh membrane) + rust wall 'j' accent so the allocator reserves its exact look; the ruptured
         // bio-pod '&', barrels 'g' and crates 'C', and the corpse/blood/bile decals ('m' '.' 's' 'O') all
         // claim the SAME legacy sprite the sibling rooms use (no clash — same-symbol/same-sprite is a
-        // no-op for the allocator). Depth-gated (>=3), one per level, at a modest weight so it stays an
-        // occasional deeper-floor dread beat. Its build() composes floor lighting + the shared wall
-        // theming (GORE_NEST case) + a bespoke nest-prop pass.
+        // no-op for the allocator). Still DEPTH/SIZE-gated (>=3 deep, min interior) so it only appears on
+        // deeper floors with room to breathe, but EQUAL-CHANCE: it shares the common special-room weight
+        // and carries NO per-level cap. Its build() composes floor lighting + the shared wall theming
+        // (GORE_NEST case) + a bespoke nest-prop pass.
         registry.register(new LambdaRoomBlueprint(ID_GORE_NEST, RoomKind.SIGNATURE,
                 RoomSymbolDemand.of(demand(
                         'G', "wall_gore",
@@ -347,9 +340,8 @@ public final class RoomBlueprints {
                         'O', "decal_oil")),
                 context -> context.dungeonDepth()   >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_DEPTH
                         && context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_WIDTH
-                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_HEIGHT
-                        && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_GORE_NEST_MAX,
-                context -> LevelGenConstants.LEVEL_GEN_GORE_NEST_CHANCE,
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_HEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeNewRoomWalls();      // themeNewRoomWallsForRoom handles the GORE_NEST case
@@ -362,8 +354,9 @@ public final class RoomBlueprints {
         // bulkhead) + vent wall 'v' (ventilation grille) so the allocator reserves its exact face; the
         // scrubber pumps '%', live gas cylinders 'E', coolant drums 'g', coolant slick 'O' and thermal
         // scorch 'e' all claim the SAME legacy sprite the sibling rooms use (no clash — same-symbol/
-        // same-sprite is a no-op for the allocator). Depth-gated (>=2), one per level, at a modest weight so
-        // it stays an occasional industrial hazard beat. Its build() composes floor lighting + a DEDICATED
+        // same-sprite is a no-op for the allocator). Still DEPTH/SIZE-gated (>=2 deep, min interior), but
+        // EQUAL-CHANCE: it shares the common special-room weight and carries NO per-level cap. Its build()
+        // composes floor lighting + a DEDICATED
         // hazard/vent wall pass (guaranteed vent midpoints) + a bespoke machinery-and-leak prop pass. The
         // 'E' cluster becomes live explosive barrels at load, making the room the game's chain-reaction arena.
         registry.register(new LambdaRoomBlueprint(ID_ATMOSPHERIC_PLANT, RoomKind.SIGNATURE,
@@ -377,9 +370,8 @@ public final class RoomBlueprints {
                         'e', "decal_energy_scorch")),
                 context -> context.dungeonDepth()   >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH
                         && context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_WIDTH
-                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_HEIGHT
-                        && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MAX,
-                context -> LevelGenConstants.LEVEL_GEN_ATMO_PLANT_CHANCE,
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_HEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeAtmosphericPlantWalls(); // dedicated hazard 'h' + guaranteed vent 'v' pass

@@ -58,6 +58,15 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     private static final class Room {
         final int leftColumn, bottomRow, rightColumn, topRow;
         RoomType type;
+        // The registered blueprint selected for this room (RoomBlueprintRegistry). Set by
+        // assignRoomTypes()/ensureMinimumSpecialRooms(); drives special-room counting (by id, not the
+        // STANDARD-defaulting type tag) and the delegated-build bridge.
+        RoomBlueprint blueprint;
+        // True when this room's blueprint is a SPECIAL room this generator has NO native decoration for
+        // (STELLAR_OBSERVATORY, GORE_NEST, ATMOSPHERIC_PLANT, SALVAGE_BAY, SUPPLY_CACHE): its architecture
+        // is stamped canonically via the LevelGenerator build bridge (buildDelegatedRooms), so the native
+        // per-type floor/prop/legacy passes MUST skip it.
+        boolean delegated;
         // Size modifier, independent of type: rolled at placement time (mirrors LevelGenerator.Room).
         // A large room keeps whatever type-driven styling it would have received anyway — only its
         // footprint is bigger. Never true for the entrance room.
@@ -130,6 +139,11 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         // Phase 3 — Decoration
         assignFloorLighting(grid, rooms);
         assignWallVariety(grid);
+        // Delegated specials (STELLAR_OBSERVATORY, GORE_NEST, ATMOSPHERIC_PLANT, SALVAGE_BAY, SUPPLY_CACHE)
+        // are stamped canonically via the LevelGenerator build bridge AFTER wall variety — variety only
+        // recolours 'x', so their themed/sealed walls survive it — and BEFORE doors/props so entrances and
+        // the prop-skip guards see finished rooms. assignFloorLighting/placeProps already skip them.
+        buildDelegatedRooms(grid, rooms);
         placeSpineColumns(grid);
         placePlayerSpawn(grid, rooms.get(0));
 
@@ -675,15 +689,17 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         Map<String, Integer> placedCounts = new HashMap<>();
 
         Room entrance = rooms.get(0);
-        entrance.type    = RoomType.ENTRANCE;
-        entrance.isLarge = false; // never the large modifier, regardless of what it rolled at placement
+        entrance.blueprint = registry.get(RoomBlueprints.ID_ENTRANCE);
+        entrance.type      = RoomType.ENTRANCE;
+        entrance.delegated = false;
+        entrance.isLarge   = false; // never the large modifier, regardless of what it rolled at placement
         placedCounts.merge(RoomBlueprints.ID_ENTRANCE, 1, Integer::sum);
 
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
             RoomBlueprint chosen = selectBlueprint(registry, room, placedCounts, NOT_ENTRANCE);
             if (chosen == null) chosen = registry.get(RoomBlueprints.ID_STANDARD); // defensive
-            room.type = roomTypeForBlueprint(chosen);
+            assignBlueprint(room, chosen);
             placedCounts.merge(chosen.id(), 1, Integer::sum);
         }
 
@@ -731,9 +747,12 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                                            Map<String, Integer> placedCounts) {
         int specialCount = 0;
         List<Room> standardRooms = new ArrayList<>();
+        // Count SPECIAL rooms by BLUEPRINT id, not the RoomType tag: a delegated special (SALVAGE_BAY,
+        // STELLAR_OBSERVATORY, GORE_NEST, …) is tagged RoomType.STANDARD but is genuinely special, so it
+        // must count toward the minimum and must NOT be re-offered as an upgradeable standard room.
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
-            if (room.type != RoomType.ENTRANCE && room.type != RoomType.STANDARD) {
+            if (isSpecialBlueprint(room.blueprint)) {
                 specialCount++;
             } else if (room.type == RoomType.STANDARD) {
                 standardRooms.add(room);
@@ -748,9 +767,52 @@ public class LinearCorridorGenerator implements ILevelGenerator {
             if (upgrade == null) continue; // nothing special fits this room's size/depth — try the next
 
             placedCounts.merge(RoomBlueprints.ID_STANDARD, -1, Integer::sum);
-            candidate.type = roomTypeForBlueprint(upgrade);
+            assignBlueprint(candidate, upgrade);
             placedCounts.merge(upgrade.id(), 1, Integer::sum);
             specialCount++;
+        }
+    }
+
+    /**
+     * Records the selected blueprint on a room and derives its native {@link RoomType} tag and its
+     * {@link Room#delegated} flag. A room is DELEGATED when its blueprint is a SPECIAL room (not
+     * ENTRANCE/STANDARD) that maps to no native RoomType — i.e. one this generator has no bespoke
+     * decoration for (SALVAGE_BAY, SUPPLY_CACHE, STELLAR_OBSERVATORY, GORE_NEST, ATMOSPHERIC_PLANT).
+     * Those are stamped canonically through the LevelGenerator build bridge instead of the native passes.
+     */
+    private void assignBlueprint(Room room, RoomBlueprint blueprint) {
+        room.blueprint = blueprint;
+        room.type      = roomTypeForBlueprint(blueprint);
+        room.delegated = isSpecialBlueprint(blueprint) && room.type == RoomType.STANDARD;
+    }
+
+    /** A blueprint is SPECIAL when it is neither the ENTRANCE nor the STANDARD filler blueprint. */
+    private static boolean isSpecialBlueprint(RoomBlueprint blueprint) {
+        return blueprint != null
+                && !blueprint.id().equals(RoomBlueprints.ID_ENTRANCE)
+                && !blueprint.id().equals(RoomBlueprints.ID_STANDARD);
+    }
+
+    /**
+     * Stamps every DELEGATED room (a special blueprint this generator has no native decoration for) with
+     * its CANONICAL architecture by driving {@link RoomBlueprint#build} through a {@link LevelGenerator}
+     * used purely as a room-stamping engine. This is what lets LINEAR_CORRIDOR spawn STELLAR_OBSERVATORY,
+     * GORE_NEST, ATMOSPHERIC_PLANT, SALVAGE_BAY and SUPPLY_CACHE looking IDENTICAL to how ROOMS_MST builds
+     * them — one implementation, not a divergent copy (the size/look/feel stay unchanged). A single bridge
+     * is created lazily and seeded deterministically from THIS generator's RNG, so a given floor seed still
+     * yields a byte-identical level; its build() draws render under the level's legacy palette, which maps
+     * every symbol these rooms use.
+     */
+    private void buildDelegatedRooms(char[][] grid, List<Room> rooms) {
+        LevelGenerator buildBridge = null;
+        for (Room room : rooms) {
+            if (!room.delegated || room.blueprint == null) continue;
+            if (buildBridge == null) {
+                buildBridge = new LevelGenerator(random.nextLong());
+                buildBridge.setDungeonDepthForBridge(dungeonDepth);
+            }
+            buildBridge.buildRoomForBridge(grid, room.leftColumn, room.bottomRow,
+                    room.rightColumn, room.topRow, room.blueprint);
         }
     }
 
@@ -781,7 +843,7 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         int reactorCount    = 0;
         for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
             Room room = rooms.get(roomIndex);
-            if (room.type != RoomType.STANDARD) continue;
+            if (room.type != RoomType.STANDARD || room.delegated) continue; // never re-tag a delegated special
 
             if (storageBayCount < LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_MAX
                     && room.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SPINE_STORAGE_MIN_WIDTH
@@ -808,6 +870,7 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     private void assignFloorLighting(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type == RoomType.ENTRANCE) continue;
+            if (room.delegated) continue; // floor lit canonically by the build bridge (buildDelegatedRooms)
             switch (room.type) {
                 case SERVER_ROOM:        assignServerRoomFloor(grid, room);        break;
                 case MEDICAL_BAY:        break; // fully lit: clinical brightness
@@ -1079,6 +1142,7 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     private void placeProps(char[][] grid, List<Room> rooms) {
         for (Room room : rooms) {
             if (room.type == RoomType.ENTRANCE) continue;
+            if (room.delegated) continue; // props placed canonically by the build bridge (buildDelegatedRooms)
             switch (room.type) {
                 case SERVER_ROOM:        placeServerRoomProps(grid, room);        break;
                 case MEDICAL_BAY:        placeMedicalBayProps(grid, room);        break;

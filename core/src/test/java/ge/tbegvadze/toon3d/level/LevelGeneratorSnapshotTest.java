@@ -29,16 +29,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class LevelGeneratorSnapshotTest {
 
     /**
-     * SHA-256 over {@link #fingerprint()}, re-baselined for the ATMOSPHERIC_PLANT room addition (RECIPE B):
-     * one more blueprint competes in the STEP-A weighted roulette and, when selected on a depth&gt;=2 room,
-     * it stamps its own hazard/vent wall theming + bespoke machinery-and-leak prop pass — both of which
-     * shift the RNG draw sequence and the stamped tiles. This sits on top of the GORE_NEST re-baseline and
-     * the order-10 generator (LARGE demoted to a per-room size modifier + guaranteed-minimum-special-rooms
+     * SHA-256 over {@link #fingerprint()}, re-baselined for the EQUAL-CHANCE special-rooms change: every
+     * SPECIAL blueprint now shares one selection weight (LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT) instead
+     * of its former per-room chance, and all per-level room caps were removed (only depth/size/aspect gates
+     * remain). Both alter which blueprint the STEP-A weighted roulette picks for each room, shifting the RNG
+     * draw sequence and the stamped tiles. This sits on top of the ATMOSPHERIC_PLANT / GORE_NEST re-baselines
+     * and the order-10 generator (LARGE demoted to a per-room size modifier + guaranteed-minimum-special-rooms
      * backstop, order-8/9 registry selection + variety accents + salvage bay + supply cache). Do NOT
      * hand-edit; regenerate only via a deliberate, reviewed behaviour change.
      */
     private static final String EXPECTED_DIGEST =
-            "0369de5c4847165ee1672e9eb835a3372fcb6dfc51d727c21cfec3204ebde9b6";
+            "995402458b191d20c128fa8188c75a81cb36549b61ba21b498e08b858225b819";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

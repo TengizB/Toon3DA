@@ -82,12 +82,13 @@ class TilesetExtensibilityAcceptanceTest {
         assertTrue(supplyCache.eligible(ordinaryRoom), "supply_cache should be eligible on an ordinary room");
         assertTrue(supplyCache.selectionWeight(ordinaryRoom) > 0f, "supply_cache needs a positive weight");
 
-        // Its per-level hard cap is honoured: at the cap it is no longer eligible.
-        RoomContext atCap = new RoomContext(
+        // EQUAL-CHANCE removed all per-level room caps: supply_cache stays eligible even with instances
+        // already placed (only its size gate still applies), so a floor may roll it more than once.
+        RoomContext manyPlaced = new RoomContext(
                 LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MIN_WIDTH + 2,
                 LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MIN_HEIGHT + 2,
                 3, LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MAX);
-        assertFalse(supplyCache.eligible(atCap), "supply_cache must respect its per-level cap");
+        assertTrue(supplyCache.eligible(manyPlaced), "supply_cache is no longer capped per level");
 
         // It claims no specific sprite (GENERIC): its look is fully allocator-driven from free symbols.
         assertTrue(supplyCache.symbolDemand().requiredSprites().isEmpty(),
