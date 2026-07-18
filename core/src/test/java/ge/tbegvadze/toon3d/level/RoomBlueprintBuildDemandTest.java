@@ -101,6 +101,7 @@ class RoomBlueprintBuildDemandTest {
         map.put(RoomBlueprints.ID_RESEARCH_LAB,        LevelGenerator.RoomType.RESEARCH_LAB);
         map.put(RoomBlueprints.ID_STELLAR_OBSERVATORY, LevelGenerator.RoomType.STELLAR_OBSERVATORY);
         map.put(RoomBlueprints.ID_GORE_NEST,           LevelGenerator.RoomType.GORE_NEST);
+        map.put(RoomBlueprints.ID_ATMOSPHERIC_PLANT,   LevelGenerator.RoomType.ATMOSPHERIC_PLANT);
         return map;
     }
 }

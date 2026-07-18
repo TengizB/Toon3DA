@@ -660,6 +660,31 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_GORE_NEST_DARK_FLOOR_CHANCE = 0.55f; // unlit 'u' bias over the dim 'l' floor (dread)
     public static final float LEVEL_GEN_GORE_NEST_FLICKER_CHANCE    = 0.10f; // flickering 'f' at the flesh seams
 
+    // ATMOSPHERIC_PLANT — a SIGNATURE "industrial utility / hazardous-materials" room: the facility's
+    // air-and-coolant scrubbing hub. Its identity is built from WALLS + ENVIRONMENT DECALS + a few reused
+    // props only (zero new symbols/sprites): a hazard-striped bulkhead wall 'h' broken by ventilation
+    // grille 'v' banks, scrubber pumps '%', a cluster of LIVE pressurized gas cylinders 'E' (the
+    // chain-reaction hazard that distinguishes it from the energy-focused power plant), leaking coolant
+    // drums 'g', and a floor slick with coolant 'O' and thermal scorch 'e'. Depth-gated so the industrial
+    // guts appear past the entrance floor; one per level (a hazard set-piece). Roulette weight sits between
+    // containment (0.16) and research (0.40), just under the gore nest (0.35). See
+    // .claude/agents/ideas/atmospheric-processing-plant-room.txt and RECIPE B in
+    // docs/environment-tileset-system.txt §12.
+    public static final int   LEVEL_GEN_ATMO_PLANT_MIN_DEPTH  = 2;
+    public static final int   LEVEL_GEN_ATMO_PLANT_MIN_WIDTH  = 6;
+    public static final int   LEVEL_GEN_ATMO_PLANT_MIN_HEIGHT = 6;
+    public static final int   LEVEL_GEN_ATMO_PLANT_MAX        = 1;
+    public static final float LEVEL_GEN_ATMO_PLANT_CHANCE     = 0.28f;
+    // Atmospheric-plant interior tuning (all scatter rates seeded through the generator's Random; the
+    // signature look is guaranteed by deterministic minimums so every seed stamps the full demand set).
+    public static final float LEVEL_GEN_ATMO_PLANT_WALL_FILL_CHANCE = 0.70f; // interior-facing perimeter → hazard 'h' (corners always 'h')
+    public static final int   LEVEL_GEN_ATMO_PLANT_VENT_PER_WALL    = 1;     // guaranteed 'v' grille at each wall-run midpoint
+    public static final int   LEVEL_GEN_ATMO_PLANT_PUMP_COUNT       = 2;     // '%' scrubber stacks along the back interior row
+    public static final int   LEVEL_GEN_ATMO_PLANT_GAS_CYLINDER_COUNT = 3;   // 'E' live explosive gas cylinders — the hazard core
+    public static final int   LEVEL_GEN_ATMO_PLANT_DRUM_MIN         = 1;     // 'g' coolant drum(s) in a fixed near-corner slot
+    public static final float LEVEL_GEN_ATMO_PLANT_COOLANT_CHANCE   = 0.35f; // 'O' coolant-slick scatter per interior tile
+    public static final float LEVEL_GEN_ATMO_PLANT_SCORCH_CHANCE    = 0.20f; // 'e' scorch scatter near the machinery
+
     // STEP C — generic rooms & halls get per-level variety. A sparse pass stamps FREED flexible accent
     // symbols (those NO placed signature room reserved this level) into GENERIC room perimeters and
     // corridor walls, so the allocator's per-level sprite for those symbols makes two seeds visibly

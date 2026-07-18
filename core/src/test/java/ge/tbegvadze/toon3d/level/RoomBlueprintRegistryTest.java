@@ -33,18 +33,18 @@ class RoomBlueprintRegistryTest {
     @Test
     void registryHoldsEveryV1RoomPlusTheRegistrationOnlyAcceptanceRoom() {
         RoomBlueprintRegistry registry = freshRegistry();
-        // 14 blueprints: the 13 rooms above (order-8 added SALVAGE_BAY; LARGE was removed — it is now a
-        // size MODIFIER, not a blueprint; order-9 added SUPPLY_CACHE by REGISTRATION ALONE, carrying NO
-        // RoomType constant via the seam fix) + the GORE_NEST signature "aftermath" room (a bespoke-prop
-        // RECIPE B room WITH its own RoomType.GORE_NEST tag). So the registry has exactly one MORE entry
-        // than the enum has values (SUPPLY_CACHE remains the sole RoomType-less blueprint), all ids
-        // distinct (LinkedHashMap keys).
-        assertEquals(14, registry.size());
+        // 15 blueprints: order-8 added SALVAGE_BAY; LARGE was removed — it is now a size MODIFIER, not a
+        // blueprint; order-9 added SUPPLY_CACHE by REGISTRATION ALONE, carrying NO RoomType constant via
+        // the seam fix; the GORE_NEST and ATMOSPHERIC_PLANT signature rooms are bespoke-prop RECIPE B rooms
+        // that each carry their OWN RoomType tag (their themed walls must survive the STANDARD-only STEP-C
+        // generic-accent pass). So the registry has exactly one MORE entry than the enum has values
+        // (SUPPLY_CACHE remains the sole RoomType-less blueprint), all ids distinct (LinkedHashMap keys).
+        assertEquals(15, registry.size());
         assertEquals(LevelGenerator.RoomType.values().length + 1, registry.size(),
                 "SUPPLY_CACHE registers without a RoomType constant");
         assertEquals(4, registry.allGeneric().size(),
                 "ENTRANCE/STANDARD/SALVAGE_BAY/SUPPLY_CACHE are GENERIC");
-        assertEquals(10, registry.allSignature().size(), "the ten specialty rooms are SIGNATURE");
+        assertEquals(11, registry.allSignature().size(), "the eleven specialty rooms are SIGNATURE");
     }
 
     @Test
@@ -52,7 +52,7 @@ class RoomBlueprintRegistryTest {
         RoomBlueprints.bootstrap();
         RoomBlueprints.bootstrap();
         assertTrue(RoomBlueprints.isBootstrapped());
-        assertEquals(14, RoomBlueprints.rooms().size());
+        assertEquals(15, RoomBlueprints.rooms().size());
     }
 
     @Test
@@ -154,6 +154,20 @@ class RoomBlueprintRegistryTest {
         assertFalse(goreNest.eligible(new RoomContext(goreWidth, goreHeight,
                 LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_DEPTH, LevelGenConstants.LEVEL_GEN_GORE_NEST_MAX)),
                 "gore nest capped at one per level");
+
+        // Atmospheric plant is depth-gated AND capped at 1: below MIN_DEPTH it is ineligible even at a
+        // fitting size; at MIN_DEPTH with a fitting size it is eligible; once its single instance is placed
+        // it is ineligible again.
+        RoomBlueprint atmosphericPlant = registry.get(RoomBlueprints.ID_ATMOSPHERIC_PLANT);
+        int plantWidth  = LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_WIDTH;
+        int plantHeight = LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_HEIGHT;
+        assertFalse(atmosphericPlant.eligible(new RoomContext(plantWidth, plantHeight,
+                LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH - 1, 0)), "atmospheric plant below min depth");
+        assertTrue(atmosphericPlant.eligible(new RoomContext(plantWidth, plantHeight,
+                LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH, 0)), "atmospheric plant at min depth + min size");
+        assertFalse(atmosphericPlant.eligible(new RoomContext(plantWidth, plantHeight,
+                LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH, LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MAX)),
+                "atmospheric plant capped at one per level");
     }
 
     @Test

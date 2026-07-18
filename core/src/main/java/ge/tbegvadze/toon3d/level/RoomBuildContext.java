@@ -49,6 +49,10 @@ public final class RoomBuildContext {
         generator.themeNewRoomWallsForRoom(grid, room);
     }
 
+    void themeAtmosphericPlantWalls() {
+        generator.themeAtmosphericPlantWallsForRoom(grid, room);
+    }
+
     // --- Columns ---
 
     void placeStandardColumns() {
@@ -99,6 +103,10 @@ public final class RoomBuildContext {
 
     void placeGoreNestProps() {
         generator.placeGoreNestProps(grid, singletonRoom);
+    }
+
+    void placeAtmosphericPlantProps() {
+        generator.placeAtmosphericPlantProps(grid, singletonRoom);
     }
 
     // order-8 REQUIREMENT PROOF 1: the salvage bay stamps its own floor + walls + heap + racks + decals
