@@ -99,7 +99,7 @@ public class LevelGenerator implements ILevelGenerator {
         MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
         POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK,
         RESEARCH_LAB, STELLAR_OBSERVATORY, SALVAGE_BAY,
-        GORE_NEST
+        GORE_NEST, ATMOSPHERIC_PLANT
     }
 
     private final Random         random;
@@ -990,6 +990,7 @@ public class LevelGenerator implements ILevelGenerator {
                 case COMMAND_CENTER:    assignCommandCenterFloor(grid, room);      break;
                 case CONTAINMENT_BLOCK: assignContainmentBlockFloor(grid, room);   break;
                 case GORE_NEST:         assignGoreNestFloor(grid, room);           break;
+                case ATMOSPHERIC_PLANT: assignAtmosphericPlantFloor(grid, room);    break;
                 default:                assignStandardRoomFloor(grid, room);       break;
             }
         }
@@ -1122,6 +1123,26 @@ public class LevelGenerator implements ILevelGenerator {
         }
     }
 
+    // ATMOSPHERIC_PLANT: a malfunctioning industrial utility hub — dim 'l' dominant with strobing 'f'
+    // flicker (failing hazard lights), so the yellow-black hazard walls and coolant slick catch and lose
+    // the light. Deliberately less pitch-black than the gore nest: the volatile machinery must stay legible
+    // so the player can read the barrel cluster and their lines of fire.
+    private void assignAtmosphericPlantFloor(char[][] grid, Room room) {
+        int flickerBudget = 4;
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (grid[tileRow][tileColumn] != ' ') continue;
+                float roll = random.nextFloat();
+                if (roll < LevelGenConstants.LEVEL_GEN_ATMO_PLANT_SCORCH_CHANCE && flickerBudget > 0) {
+                    grid[tileRow][tileColumn] = 'f';
+                    flickerBudget--;
+                } else {
+                    grid[tileRow][tileColumn] = 'l';
+                }
+            }
+        }
+    }
+
     private void assignStandardRoomFloor(char[][] grid, Room room) {
         int flickerBudget = config.flickeringFloors ? 2 + random.nextInt(2) : 0;
         for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
@@ -1229,6 +1250,59 @@ public class LevelGenerator implements ILevelGenerator {
                 }
             }
         }
+    }
+
+    /**
+     * ATMOSPHERIC_PLANT perimeter wall theming for ONE room: hazard-striped bulkhead 'h' broken by
+     * ventilation grille 'v' banks. This is a DEDICATED whole-room method (like
+     * {@link #themeServerRoomWallsForRoom}), not a case in the shared {@link #themeNewRoomWallsForRoom}
+     * per-tile switch, because the room GUARANTEES a vent at each wall-run midpoint — deterministic
+     * placement the per-tile-roll pass cannot express. Every interior-facing perimeter tile defaults to
+     * hazard 'h'; the tiles hugging each corner are ALWAYS 'h' (so 'h' can never vanish on any seed), and
+     * the rest convert at {@code LEVEL_GEN_ATMO_PLANT_WALL_FILL_CHANCE}. Then each of the four wall runs
+     * gets its guaranteed vent(s). Doors and openings are never overwritten (guarded by {@link Level#isWall}
+     * + {@link #facesRoomInterior}), so connectivity is preserved.
+     */
+    void themeAtmosphericPlantWallsForRoom(char[][] grid, Room room) {
+        for (int tileRow = room.bottomRow; tileRow <= room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn; tileColumn <= room.rightColumn; tileColumn++) {
+                if (!isInBounds(tileColumn, tileRow)) continue;
+                if (!Level.isWall(grid[tileRow][tileColumn])) continue;
+                if (!facesRoomInterior(grid, tileColumn, tileRow, room)) continue;
+                boolean isNearCorner =
+                        (Math.abs(tileColumn - room.leftColumn) <= 1 || Math.abs(tileColumn - room.rightColumn) <= 1)
+                     && (Math.abs(tileRow    - room.bottomRow)  <= 1 || Math.abs(tileRow    - room.topRow)      <= 1);
+                float roll = random.nextFloat();
+                if (isNearCorner || roll < LevelGenConstants.LEVEL_GEN_ATMO_PLANT_WALL_FILL_CHANCE) {
+                    grid[tileRow][tileColumn] = 'h';
+                }
+            }
+        }
+        stampAtmosphericPlantVents(grid, room);
+    }
+
+    // Deterministically stamps ventilation grille 'v' banks at evenly-spaced points along each of the four
+    // wall runs (LEVEL_GEN_ATMO_PLANT_VENT_PER_WALL per wall). No RNG, so 'v' is present on every seed. Each
+    // candidate is guarded so a door or opening is never turned into a wall (connectivity is preserved).
+    private void stampAtmosphericPlantVents(char[][] grid, Room room) {
+        int ventsPerWall = LevelGenConstants.LEVEL_GEN_ATMO_PLANT_VENT_PER_WALL;
+        int columnSpan = room.rightColumn - room.leftColumn;
+        int rowSpan    = room.topRow      - room.bottomRow;
+        for (int ventIndex = 1; ventIndex <= ventsPerWall; ventIndex++) {
+            int ventColumn = room.leftColumn + columnSpan * ventIndex / (ventsPerWall + 1);
+            int ventRow    = room.bottomRow  + rowSpan    * ventIndex / (ventsPerWall + 1);
+            stampAtmosphericPlantVentTile(grid, room, ventColumn, room.bottomRow); // bottom wall run
+            stampAtmosphericPlantVentTile(grid, room, ventColumn, room.topRow);    // top wall run
+            stampAtmosphericPlantVentTile(grid, room, room.leftColumn,  ventRow);  // left wall run
+            stampAtmosphericPlantVentTile(grid, room, room.rightColumn, ventRow);  // right wall run
+        }
+    }
+
+    private void stampAtmosphericPlantVentTile(char[][] grid, Room room, int tileColumn, int tileRow) {
+        if (!isInBounds(tileColumn, tileRow)) return;
+        if (!Level.isWall(grid[tileRow][tileColumn])) return;           // never overwrite a door/opening
+        if (!facesRoomInterior(grid, tileColumn, tileRow, room)) return;
+        grid[tileRow][tileColumn] = 'v';
     }
 
     /**
@@ -1859,6 +1933,119 @@ public class LevelGenerator implements ILevelGenerator {
         if (roll < 0.65f) return '.'; // pooled blood
         if (roll < 0.85f) return 's'; // blood spatter variant
         return 'O';                    // dark bile/fluid seep
+    }
+
+    /**
+     * Places Atmospheric Plant machinery + coolant-leak field: a back-wall bank of scrubber pumps '%',
+     * a tight cluster of live pressurized gas cylinders 'E' (the chain-reaction hazard) in the row in
+     * front of them, leaking coolant drum(s) 'g' in a fixed near-corner slot, a guaranteed coolant-slick
+     * 'O' carpet around the machinery pocket plus a bounded scatter over the interior, and thermal scorch
+     * 'e' at the ruptured-pipe seams flanking the gas cluster plus a light scatter near the machinery.
+     * Solid props ('%'/'E'/'g') pass through the shared clearance guards (walkable floor, clear of doors +
+     * door axes) so the machinery never seals the walkable lane or a door approach; decals ('O'/'e') are
+     * walkable and overwrite only floor tiles. Every declared symbol is stamped by a deterministic minimum
+     * so build() reliably writes the full demand set on every seed (RoomBlueprintBuildDemandTest contract).
+     */
+    void placeAtmosphericPlantProps(char[][] grid, List<Room> rooms) {
+        for (Room room : rooms) {
+            if (room.type != RoomType.ATMOSPHERIC_PLANT) continue;
+            placeAtmosphericPlantMachinery(grid, room);
+            placeAtmosphericPlantLeaks(grid, room);
+        }
+    }
+
+    // The machinery: a deterministic pump bank against the back interior row, a volatile gas-cylinder
+    // cluster in front of it, and coolant drum(s) tucked into a near corner — each via the solid-prop guard.
+    private void placeAtmosphericPlantMachinery(char[][] grid, Room room) {
+        int backRow = room.topRow - 1;
+        int centreColumn = room.centerColumn();
+
+        // Scrubber pump bank '%' along the back interior row, spaced one tile apart.
+        int pumpCount = LevelGenConstants.LEVEL_GEN_ATMO_PLANT_PUMP_COUNT;
+        for (int pumpIndex = 0; pumpIndex < pumpCount; pumpIndex++) {
+            int pumpColumn = centreColumn - (pumpCount - 1) + pumpIndex * 2;
+            tryStampAtmosphericPlantProp(grid, pumpColumn, backRow, '%');
+        }
+
+        // Pressurized gas cylinder cluster 'E' in the row in front of the pumps — the chain-reaction pocket.
+        int cylinderCount = LevelGenConstants.LEVEL_GEN_ATMO_PLANT_GAS_CYLINDER_COUNT;
+        int cylinderRow   = backRow - 1;
+        int cylinderStart = centreColumn - cylinderCount / 2;
+        for (int cylinderIndex = 0; cylinderIndex < cylinderCount; cylinderIndex++) {
+            tryStampAtmosphericPlantProp(grid, cylinderStart + cylinderIndex, cylinderRow, 'E');
+        }
+
+        // Leaking coolant drum(s) 'g' in a fixed near-corner slot away from the machinery pocket.
+        int drumCount   = LevelGenConstants.LEVEL_GEN_ATMO_PLANT_DRUM_MIN;
+        int drumsPlaced = 0;
+        int[] drumColumns = { room.leftColumn + 1, room.rightColumn - 1, room.leftColumn + 1, room.rightColumn - 1 };
+        int[] drumRows    = { room.bottomRow + 1, room.bottomRow + 1, room.bottomRow + 2, room.bottomRow + 2 };
+        for (int slot = 0; slot < drumColumns.length && drumsPlaced < drumCount; slot++) {
+            if (tryStampAtmosphericPlantProp(grid, drumColumns[slot], drumRows[slot], 'g')) {
+                drumsPlaced++;
+            }
+        }
+    }
+
+    // The leak field: guaranteed coolant 'O' + scorch 'e' tiles around the machinery pocket, then bounded
+    // scatters so the floor reads as flooded and heat-scarred without ever blocking movement (decals are
+    // walkable and only overwrite floor tiles).
+    private void placeAtmosphericPlantLeaks(char[][] grid, Room room) {
+        int backRow       = room.topRow - 1;
+        int centreColumn  = room.centerColumn();
+        int cylinderCount = LevelGenConstants.LEVEL_GEN_ATMO_PLANT_GAS_CYLINDER_COUNT;
+        int cylinderRow   = backRow - 1;
+        int cylinderStart = centreColumn - cylinderCount / 2;
+
+        // Guaranteed coolant slick 'O' ring immediately below the machinery pocket.
+        int ringRow = cylinderRow - 1;
+        for (int cylinderIndex = 0; cylinderIndex < cylinderCount; cylinderIndex++) {
+            tryStampAtmosphericPlantDecal(grid, cylinderStart + cylinderIndex, ringRow, 'O');
+        }
+        // Guaranteed thermal scorch 'e' at the ruptured-pipe seams flanking the gas cluster.
+        tryStampAtmosphericPlantDecal(grid, cylinderStart - 1, cylinderRow, 'e');
+        tryStampAtmosphericPlantDecal(grid, cylinderStart + cylinderCount, cylinderRow, 'e');
+
+        // Bounded coolant-slick 'O' scatter across the interior — the flooded-floor read.
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+                if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_ATMO_PLANT_COOLANT_CHANCE) {
+                    grid[tileRow][tileColumn] = 'O';
+                }
+            }
+        }
+        // Light scorch 'e' scatter across the machinery band (the upper interior rows near the hot pipes).
+        int scorchBandBottom = Math.max(room.bottomRow + 1, cylinderRow - 1);
+        for (int tileRow = scorchBandBottom; tileRow <= backRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
+                if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
+                if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_ATMO_PLANT_SCORCH_CHANCE) {
+                    grid[tileRow][tileColumn] = 'e';
+                }
+            }
+        }
+    }
+
+    // Solid-prop stamp through the existing clearance checks (walkable floor, clear of doors + door axes)
+    // so a stamped machine can never seal the room or block the only path to a door.
+    private boolean tryStampAtmosphericPlantProp(char[][] grid, int tileColumn, int tileRow, char propChar) {
+        if (!isWalkableFloor(grid, tileColumn, tileRow)) return false;
+        if (isAdjacentToDoor(grid, tileColumn, tileRow)) return false;
+        if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) return false;
+        grid[tileRow][tileColumn] = propChar;
+        return true;
+    }
+
+    // Walkable decal stamp — overwrites only floor tiles and never a door approach, so it carries no
+    // collision risk (decals are passable).
+    private boolean tryStampAtmosphericPlantDecal(char[][] grid, int tileColumn, int tileRow, char decalChar) {
+        if (!isWalkableFloor(grid, tileColumn, tileRow)) return false;
+        if (isAdjacentToDoor(grid, tileColumn, tileRow)) return false;
+        grid[tileRow][tileColumn] = decalChar;
+        return true;
     }
 
     /**

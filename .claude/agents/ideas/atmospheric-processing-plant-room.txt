@@ -1,0 +1,275 @@
+STATUS: IMPLEMENTED
+CATEGORY: Level Design
+TITLE: ATMOSPHERIC PROCESSING PLANT — volatile scrubber hub (2w,3p,2d)
+CREATED: 2026-07-17
+---
+
+IMPLEMENTATION NOTES (2026-07-17)
+================================
+Built exactly as specified via RECIPE B (signature room, dedicated wall pass + bespoke prop pass), zero
+new symbols/sprites:
+  - level/RoomBlueprints.java: ID_ATMOSPHERIC_PLANT + LambdaRoomBlueprint (pins h/v/%/E/g/O/e to their
+    legacy sprites; depth>=2, min 6x6, max 1, weight 0.28). build() = assignFloorLighting +
+    themeAtmosphericPlantWalls (DEDICATED, for the guaranteed vent midpoints) + placeAtmosphericPlantProps.
+  - level/LevelGenerator.java: RoomType.ATMOSPHERIC_PLANT; assignAtmosphericPlantFloor() (dim 'l' + strobing
+    'f' so the machinery stays legible); themeAtmosphericPlantWallsForRoom() (hazard 'h' default, corners
+    always 'h', guaranteed 'v' grille at each wall-run midpoint via stampAtmosphericPlantVents, doors never
+    overwritten); placeAtmosphericPlantProps() + helpers (deterministic pump bank '%', gas-cylinder cluster
+    'E', near-corner drum 'g' via the shared clearance guards; guaranteed coolant 'O' ring + scorch 'e'
+    seams then bounded scatters).
+  - level/RoomBuildContext.java: themeAtmosphericPlantWalls() + placeAtmosphericPlantProps() delegators.
+  - util/LevelGenConstants.java: LEVEL_GEN_ATMO_PLANT_* constants (depth/size/cap/weight + fill/vent/pump/
+    cylinder/drum/coolant/scorch knobs).
+  - Tests: RoomBlueprintRegistryTest updated to 15 blueprints / 11 signature + an atmospheric-plant
+    depth/cap eligibility case; RoomBlueprintBuildDemandTest maps the id→RoomType (asserts the exact
+    {h,v,%,E,g,O,e} demand across 400 seeds); LevelGeneratorSnapshotTest deliberately re-baselined.
+  - docs/environment-tileset-system.txt: new section 12 (living-doc contract).
+Verified headless (gradle unavailable in this environment — org egress policy blocks the Gradle distro +
+artifact repos — so the level/tileset/util subset was compiled with javac against an EXACT MathUtils stub;
+the stub was proven faithful by reproducing the pre-change snapshot digest byte-for-byte): the room stamps
+exactly {h,v,%,E,g,O,e} across all 400 demand-test seeds with no extra flexible symbol; registry counts +
+plant eligibility (depth<2 ineligible, depth>=2 eligible, capped at 1) pass; 3200 generations across
+seeds×depths{1..8} with zero crashes; new snapshot digest 0369de5c...4ebde9b6.
+
+OVERVIEW
+========
+The ATMOSPHERIC PROCESSING PLANT is the facility's air-and-coolant guts: the ventilation /
+gas-scrubbing hub that keeps the whole UAC installation breathable. Its perimeter is armored in
+hazard-striped bulkheads ('h' = wall_hazard) broken by floor-to-ceiling ventilation grille banks
+('v' = wall_vent); inside sit rows of scrubber pumps ('%' = generator), racks of PRESSURIZED VOLATILE
+GAS CYLINDERS ('E' = explosive barrel), and leaking coolant drums ('g' = radioactive barrel), all
+standing in a floor slick with spilled coolant ('O' = oil) and thermal-burn scorch ('e' = energy
+scorch) where the pipes ruptured. It fills a clear catalog gap: every existing special room is either a
+CLEAN facility FUNCTION (medical, armory, cryo, server, power plant, command, containment, research,
+observatory), a demonic AFTERMATH (gore nest), or GENERIC storage (salvage, supply). None is the raw
+INDUSTRIAL UTILITY / HAZARDOUS-MATERIALS space — the dangerous, unglamorous machinery room. Its
+identity is built entirely from WALLS + FLOOR DECALS + a few reused props, ZERO new symbols, ZERO new
+sprites (RECIPE B only; the gore nest is the exact precedent). It claims the two currently-unclaimed
+signature walls 'h' and 'v' as its face, so both reservations are free.
+
+Its mechanical hook is what makes it distinct from the power plant (which is about energy/generators):
+this is the game's CHAIN-REACTION HAZARD ROOM. Real explosive barrels are packed inside on purpose, so
+the whole space is a volatile arena where one stray shot — yours or an enemy's — can cascade.
+
+GAMEPLAY LOOP
+=============
+1. Generator places rooms and runs the seeded weighted roulette (STEP A). On a floor at depth >= 2 with a
+   candidate room >= 6x6 interior and no plant yet placed, ATMOSPHERIC_PLANT competes like any blueprint.
+2. If selected -> build() stamps the room: floor lighting bias, hazard/vent wall theming, then the plant
+   prop-and-leak pass (deterministic minimums + a bounded scatter; see TECHNICAL NOTES).
+3. Player enters through a corridor whose far wall is yellow-black HAZARD STRIPES, not plain steel, with a
+   dark ventilation grille bank strobing under flickering light. It reads instantly as "industrial / do
+   not linger" before any enemy is seen.
+4. Inside: a bank of scrubber pumps '%' along the back wall, a cluster of pressurized gas cylinders 'E'
+   flanking them, leaking coolant drums 'g' in a corner, and a floor carpeted in coolant slick 'O' and
+   scorch 'e'. A walkable lane is always left between the machinery and the door approach.
+5. THE HAZARD DECISION: because 'E' cylinders are LIVE explosive barrels (handled by
+   ExplosiveBarrelManager at load time), the room is a powder keg. If enemies pack in near the cylinders,
+   the player can pop one from the doorway for a chain-reaction wipe — or get punished if an enemy shot
+   (or the player's own careless spray) detonates the cluster while the player is inside the blast lane.
+6. Player fights through, loots the global pickup pass, and exits. The plant is a memorable, high-tension
+   "watch your line of fire" landmark on the minimap and in memory.
+
+PLAYER EXPERIENCE
+=================
+Tension and opportunity, not dread. The gore nest says "this section is lost"; the plant says "this
+section is DANGEROUS — to everything in it." The hazard-stripe far wall and strobing vent grilles are an
+instant, wordless "volatile" read: the player slows, clocks the barrels, and starts thinking about lines
+of fire. The decision it creates is a risk/reward positioning puzzle unique among the rooms: bait the
+enemy pack next to the gas cluster and detonate for a huge economy swing (ammo saved, pack wiped), or
+play it safe and clear from the corridor because standing in a barrel-lined kill-box while a ranged enemy
+holds your cardinal line is how you die to your own environment. It rewards the "read the room, mind your
+muzzle" instinct and gives explosive weapons (grenade launcher, rockets) a signature stage.
+
+TECHNICAL NOTES
+===============
+Recommendation: SIGNATURE room (RoomKind.SIGNATURE). It must PIN the hazard and vent walls so the
+striped/grille face actually renders (a GENERIC room has an empty demand and could not claim 'h'/'v');
+pinning is the whole point.
+
+NO NEW SYMBOLS, NO NEW SPRITES. All seven symbols and their sprites already exist (verified against
+docs/tile-symbols.txt and tileset/TilesetRegistries — 'h'->wall_hazard, 'v'->wall_vent, '%'->prop_generator,
+'E'->prop_explosive_barrel, 'g'->prop_radioactive_barrel, 'O'->decal_oil, 'e'->decal_energy_scorch are all
+normal flexible registry entries; only '@' is a FIXED-sprite exception). This is RECIPE B (a signature
+room with a bespoke prop pass), NOT RECIPE A.
+
+EXACT DEMAND SET (the room's symbolDemand().requiredSprites — all legacy bindings so the allocator
+reserves the intended art via order-4 Step 2). This is the COMPLETE set of flexible symbols build() may
+ever stamp — the RoomBlueprintBuildDemandTest asserts the stamped set EQUALS this set across 400 seeds,
+so build() must reliably stamp EACH of these every seed and NOTHING else flexible:
+    WALLS (the signature face — 2):
+      'h' -> "wall_hazard"   (primary perimeter: yellow-black hazard-striped bulkhead — the room's face)
+      'v' -> "wall_vent"     (accent: ventilation grille banks — one guaranteed per wall)
+    SOLID PROPS (reused; the machinery — 3):
+      '%' -> "prop_generator"          (scrubber / pump stacks along the back wall)
+      'E' -> "prop_explosive_barrel"   (pressurized volatile gas cylinders — the chain-reaction hazard)
+      'g' -> "prop_radioactive_barrel" (leaking coolant / chemical drums)
+    FLOOR DECALS (the environmental heart — 2):
+      'O' -> "decal_oil"           (spilled coolant slick — dense carpet)
+      'e' -> "decal_energy_scorch" (thermal / chemical burn scorch at ruptured pipe seams)
+Total = 2 walls + 3 props + 2 decals = 7 symbols. Modest and each reliably placed (see RELIABILITY below).
+
+RELIABILITY RULE (mandatory — so the build-demand test passes over 400 seeds on a 16x16 room):
+Every declared symbol is stamped by a DETERMINISTIC minimum that does NOT depend on RNG succeeding, and
+the build stamps NOTHING outside the seven. Concretely:
+  - 'h': after carving, set EVERY interior-facing perimeter wall tile to 'h' as the default (guaranteed
+    many). The bounded fill knob only chooses which tiles STAY plain 'x' vs become 'h'; keep at least the
+    four wall-run tiles adjacent to corners always 'h' so 'h' cannot vanish on any seed.
+  - 'v': deterministically overwrite the MIDPOINT tile of each of the four wall runs to 'v'
+    (LEVEL_GEN_ATMO_PLANT_VENT_PER_WALL, default 1). Zero RNG dependence -> 'v' present every seed.
+  - '%': place a deterministic line of LEVEL_GEN_ATMO_PLANT_PUMP_COUNT (2) generators against the back
+    interior wall row.
+  - 'E': place a deterministic cluster of LEVEL_GEN_ATMO_PLANT_GAS_CYLINDER_COUNT (3) explosive barrels
+    flanking the pump bank.
+  - 'g': place LEVEL_GEN_ATMO_PLANT_DRUM_MIN (1) radioactive drum in a fixed near-corner slot.
+  - 'O': the coolant slick is a GUARANTEED carpet — always stamp at least the ring immediately around the
+    pump/cylinder cluster, then a bounded scatter (LEVEL_GEN_ATMO_PLANT_COOLANT_CHANCE) over the interior.
+  - 'e': always stamp at least one scorch ring tile at the ruptured-seam positions (adjacent to the gas
+    cluster), then a bounded scatter (LEVEL_GEN_ATMO_PLANT_SCORCH_CHANCE).
+  Decals ('O'/'e') are walkable -> no collision risk. Solid props ('%'/'E'/'g') MUST use the existing
+  shared prop-placement clearance guard (leave a 1-tile lane, never block the sole path or a door approach)
+  — reuse it, do not invent a new one. Do NOT stamp crates, blood, or any other flexible symbol anywhere.
+
+Clash safety: '%', 'E', 'g', 'O' are also demanded by sibling signature rooms (power plant, gore nest,
+etc.) but ALL to the SAME sprite id — the allocator's Step-2 clash resolution only reroutes on
+same-symbol/DIFFERENT-sprite, so there is no clash. 'h' and 'v' are currently claimed by NO signature
+room (they live only in the generic-variety / harsh pools), so reserving them here is free. 'e'
+(decal_energy_scorch) is likewise unclaimed by any signature room today.
+
+'E' NOTE (important for the implementer): 'E' is a normal flexible SOLID_PROP in the registry, so it is
+valid in the demand and the build-demand test sees it stamped in the grid. Separately, at LOAD time the
+generator/ExplosiveBarrelManager turns each 'E' into a live explosive-barrel entity — which is the whole
+mechanical point of this room. The build-demand test inspects the grid straight out of build() (before
+that load-time extraction), so 'E' is present when asserted. Confirm 'E' is in the flexible SOLID_PROP
+budget set before wiring (it is registered exactly like 'g'); if for any reason 'E' is treated as FIXED
+in SymbolBudget, drop it from the demand and substitute 'C' (prop_crate), losing only the chain-reaction
+hook.
+
+Affected / new code (mirrors exactly how the existing signature rooms are wired — RECIPE B "bespoke
+architecture" path, docs/environment-tileset-system.txt §9):
+  - level/RoomBlueprints.java: add ID_ATMOSPHERIC_PLANT = "atmospheric_plant"; register one
+    LambdaRoomBlueprint (below).
+  - level/RoomKind: unchanged (reuse SIGNATURE).
+  - level/LevelGenerator.java (RoomType enum): add RoomType.ATMOSPHERIC_PLANT (round-trips via
+    roomTypeForBlueprint()'s RoomType.valueOf(id.toUpperCase()) — "atmospheric_plant" -> ATMOSPHERIC_PLANT).
+  - level/LevelGenerator.java: add a wall-theming case + a prop helper:
+      * themeNewRoomWallsForRoom(): add an ATMOSPHERIC_PLANT branch (or a dedicated
+        themeAtmosphericPlantWallsForRoom) that defaults the perimeter to 'h' at the fill knob and
+        overwrites the four wall midpoints to 'v'.
+      * placeAtmosphericPlantProps(grid, singletonRoom): the machinery + coolant-leak pass (see layout).
+  - level/RoomBuildContext.java: add a placeAtmosphericPlantProps() delegator (thin, like the others).
+  - util/LevelGenConstants.java: add the LEVEL_GEN_ATMO_PLANT_* constants listed under BALANCE NOTES.
+  - No edits to WallRenderer/PropRenderer draw logic, Level.java, or the generator's SELECTION code.
+
+RoomBlueprint registration (drop-in, matching the file's existing style):
+    registry.register(new LambdaRoomBlueprint(ID_ATMOSPHERIC_PLANT, RoomKind.SIGNATURE,
+            RoomSymbolDemand.of(demand(
+                    'h', "wall_hazard",
+                    'v', "wall_vent",
+                    '%', "prop_generator",
+                    'E', "prop_explosive_barrel",
+                    'g', "prop_radioactive_barrel",
+                    'O', "decal_oil",
+                    'e', "decal_energy_scorch")),
+            context -> context.dungeonDepth()  >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH
+                    && context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_WIDTH
+                    && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_HEIGHT
+                    && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MAX,
+            context -> LevelGenConstants.LEVEL_GEN_ATMO_PLANT_CHANCE,
+            context -> {
+                context.assignFloorLighting();
+                context.themeNewRoomWalls();      // themeNewRoomWallsForRoom handles the ATMOSPHERIC_PLANT case
+                context.placeAtmosphericPlantProps();
+            }));
+
+Prop layout concept (placeAtmosphericPlantProps):
+  - Identify the interior "back" wall row (the wall run opposite the door approach, or simply the top
+    interior row if none is special). Place the pump bank '%' (PUMP_COUNT, default 2) along it, spaced one
+    tile apart, each with the shared clearance guard.
+  - Flank the pump bank with the gas cylinder cluster 'E' (GAS_CYLINDER_COUNT, default 3): e.g. one tile
+    to each side of the pump line plus one in front, forming a tight volatile pocket. Guard clearance so
+    the cluster never seals the room or a door.
+  - Place the coolant drum(s) 'g' (DRUM_MIN, default 1) in a fixed near-corner slot away from the door.
+  - Coolant slick 'O': stamp the guaranteed ring around the pump/cylinder pocket, then a bounded scatter
+    over the rest of the interior at COOLANT_CHANCE — the floor should read as flooded/leaking.
+  - Scorch 'e': stamp the guaranteed seam-scorch tiles adjacent to the gas cluster, then a light scatter
+    at SCORCH_CHANCE near the machinery — burn marks where hot pipes vented.
+  - PATHING RULE (mandatory): never fully seal the walkable lane between the machinery and the door and
+    never block a door approach. Only '%'/'E'/'g' are solid; use the existing clearance check for them.
+
+VISUAL DESIGN
+=============
+  - Walls: hazard wall 'h' (yellow-black caution chevrons on riveted bulkhead) dominates the perimeter,
+    broken by ventilation grille 'v' banks at each wall midpoint (dark slatted vents, faint airflow shimmer).
+    The room reads INDUSTRIAL and DANGEROUS at a glance — a silhouette no other room shares.
+  - Floor: bias toward dim 'l' and flickering 'f' lighting via assignFloorLighting for the ATMOSPHERIC_PLANT
+    tag — the plant's failing power makes hazard lights strobe. The flicker sells "malfunctioning utility"
+    and makes the coolant slick catch and lose the light.
+  - Machinery: the scrubber pumps '%' (boxy generator stacks) form a back-wall bank; the gas cylinders 'E'
+    (red-banded pressure barrels) cluster in front as the obvious volatile focal point; coolant drums 'g'
+    (green-glow radioactive barrels) leak in the corner.
+  - Palette: caution yellow + black (hazard stripes) + gunmetal grille grey + toxic green (drums) + oily
+    blue-black coolant sheen + charcoal scorch. Cold industrial, distinct from the power plant's electric
+    blue/energy glow and the gore nest's wet reds.
+  - No HUD changes. Purely environmental. Reads instantly on the raycast far wall from the doorway.
+
+BALANCE NOTES  (placeholders — flag as tunable in LevelGenConstants; calibrated against siblings)
+==============
+  LEVEL_GEN_ATMO_PLANT_MIN_DEPTH        = 2      // industrial guts appear once past the entrance floor
+  LEVEL_GEN_ATMO_PLANT_MIN_WIDTH        = 6
+  LEVEL_GEN_ATMO_PLANT_MIN_HEIGHT       = 6
+  LEVEL_GEN_ATMO_PLANT_MAX              = 1      // one per level — a hazard set-piece, not filler
+  LEVEL_GEN_ATMO_PLANT_CHANCE           = 0.28f  // roulette weight vs STANDARD=5.0; sits between
+                                                 // containment (0.16) and research (0.40), just under a
+                                                 // gore nest (0.35). "occasional industrial hazard room."
+  LEVEL_GEN_ATMO_PLANT_WALL_FILL_CHANCE = 0.70f  // fraction of perimeter tiles turned to hazard 'h'
+                                                 // (corners always 'h'); the rest stay plain 'x'.
+  LEVEL_GEN_ATMO_PLANT_VENT_PER_WALL    = 1      // guaranteed 'v' grille per wall midpoint (deterministic)
+  LEVEL_GEN_ATMO_PLANT_PUMP_COUNT       = 2      // '%' scrubber stacks along the back wall
+  LEVEL_GEN_ATMO_PLANT_GAS_CYLINDER_COUNT = 3    // 'E' live explosive gas cylinders — the hazard core.
+                                                 // TUNE CAREFULLY: 3 is a punchy chain but not a guaranteed
+                                                 // one-shot on the player; playtest against blast radius.
+  LEVEL_GEN_ATMO_PLANT_DRUM_MIN         = 1      // 'g' coolant drum(s), fixed near-corner
+  LEVEL_GEN_ATMO_PLANT_COOLANT_CHANCE   = 0.35f  // 'O' slick scatter per interior tile (guaranteed ring +
+                                                 // this scatter) — the flooded-floor read
+  LEVEL_GEN_ATMO_PLANT_SCORCH_CHANCE    = 0.20f  // 'e' scorch scatter near the machinery
+  All placeholders — playtest the cylinder count and blast geometry first; it is the room's balance lever.
+
+INTERACTIONS
+============
+  1. ExplosiveBarrelManager / chain reactions: this is the marquee interaction. The 'E' cluster becomes
+     live barrels at load; the existing chain-reaction/explosive-barrel system does all the work. The room
+     is the natural home for the hazard-chain-reactions feature (see hazard-chain-reactions idea) and gives
+     the grenade launcher / railgun / rockets a signature "detonate the pocket" stage. No new hazard code
+     needed — the room just seeds a dense barrel cluster the existing system already handles.
+  2. Encounter budget / faction: pairs best with a mixed pack that WANTS to close on the player (melee or a
+     ranged enemy holding a cardinal line), so the player is tempted to lure them into the cylinder pocket.
+     Spawn placement stays the generator's global FIXED-symbol pass; the room only sets the volatile stage.
+     Cardinal-line kiting from the doorway + one shot on the cluster is the intended power play.
+  3. Hazard tiles (fire 'i' / toxic 'q'): the plant is an ideal hand-seed or runtime target for a toxic
+     leak 'q' — a ruptured scrubber venting gas — reinforcing the "do not linger" read. Its walkable coolant
+     floor + flickering light make it the natural home for area-denial hazards.
+  4. Freed-symbol mechanic: on floors WITHOUT a plant, 'h' and 'v' fall back into the generic-variety pool
+     exactly as today (no regression); when the plant IS placed, its demand reserves them so a random
+     corridor never accidentally sprouts a lone hazard-stripe wall next to a placed plant.
+  5. Power plant contrast: deliberately distinct from the reactor/power room — that room is about ENERGY
+     (generators/cores as power source); this room is about AIR/COOLANT PROCESSING and VOLATILITY. Even
+     though both can use '%', the plant's identity is the hazard-stripe/vent wall face + the live 'E' cluster,
+     which the power plant does not have. Keeps the two industrial rooms readable as different beats.
+  6. Fog-of-war / minimap: a rare, visually loud landmark (the "barrel room") aids player mental-mapping and
+     synergises with any minimap-memory feature.
+
+OPEN QUESTIONS
+==============
+  - GAS_CYLINDER_COUNT: 3 punchy vs 2 safer vs 4 lethal. The chain must reward a smart detonation without
+    being an unavoidable death sentence if the player is caught inside — playtest against the actual barrel
+    blast radius before shipping.
+  - MIN_DEPTH 2 vs 1: is floor 1 too early to hand the player a live barrel room, or is it a great early
+    "learn the hazard" beat? Leaning 2 so the entrance floor stays calm; consider 1 if playtests want it.
+  - Should one guaranteed pickup (ammo/stim) sit inside the cylinder pocket to actively bait the risky
+    detonation play, or stay purely atmospheric and let the global pickup pass decide? (Leaning atmospheric.)
+  - Wall theming: reuse the shared themeNewRoomWallsForRoom switch with an ATMOSPHERIC_PLANT case (less code)
+    vs a dedicated themeAtmosphericPlantWallsForRoom (cleaner if the deterministic vent-midpoint logic
+    diverges from the other rooms' sparse accenting). Dedicated helper is safer given the guaranteed-vent rule.
+  - Does the flickering floor bias hurt readability of the coolant slick? May need a few 'l' dim tiles around
+    the machinery so the volatile cluster stays legible at a glance.

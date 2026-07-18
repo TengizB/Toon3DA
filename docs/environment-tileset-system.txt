@@ -949,3 +949,59 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    => same grid); 800 generations across seeds × depths {1,3,5,7} with zero crashes; the nest is selected
    on depth>=3 floors and NEVER at depth 1 (depth gate). RoomBlueprintRegistryTest updated to 14
    blueprints / 10 SIGNATURE with a gore-nest depth+cap eligibility case.
+
+
+12. ATMOSPHERIC_PLANT — A SIGNATURE "INDUSTRIAL UTILITY" ROOM (RECIPE B, dedicated wall + prop pass)  [DONE]
+   A new SIGNATURE room proving RECIPE B a third time (after salvage_bay and gore_nest). The ATMOSPHERIC
+   PLANT is the raw INDUSTRIAL UTILITY / HAZARDOUS-MATERIALS space the catalog lacked: every other special
+   room is a CLEAN facility function, a demonic AFTERMATH (gore nest), or GENERIC storage; this is the
+   facility's volatile air/coolant scrubbing hub — the dangerous, unglamorous machinery room. Like the gore
+   nest, its identity is built from WALLS + ENVIRONMENT DECALS + a few reused props only — ZERO new symbols,
+   ZERO new sprites (no RECIPE A):
+     * Signature walls: 'h' -> "wall_hazard" (yellow-black hazard-striped bulkhead, the room's face) with
+       'v' -> "wall_vent" (ventilation grille) banks. Both were previously claimed by NO signature room
+       (they lived only in the generic-variety / harsh pools), so pinning them here is free; on floors
+       WITHOUT a plant they fall back into the generic pool exactly as before (no regression).
+     * Machinery props: '%' prop_generator (scrubber pump bank), 'E' prop_explosive_barrel (LIVE pressurized
+       gas cylinders — the chain-reaction hazard that distinguishes it from the energy-focused POWER_PLANT),
+       'g' prop_radioactive_barrel (leaking coolant drums) — all claiming the SAME legacy sprite the sibling
+       rooms use, so the allocator's Step-2 clash resolution (same-symbol/DIFFERENT-sprite only) is a no-op.
+     * Floor decals (the environmental heart): 'O' decal_oil (coolant slick), 'e' decal_energy_scorch
+       (thermal-burn scorch at ruptured pipe seams — likewise unclaimed by any signature room today).
+
+   THE MECHANICAL HOOK: the 'E' cluster becomes live explosive barrels at load (ExplosiveBarrelManager), so
+   the room is the game's CHAIN-REACTION HAZARD ARENA — a risk/reward positioning puzzle (detonate the pocket
+   to wipe a packed enemy group, or die to your own environment in the barrel-lined kill-box) unique among
+   the rooms, giving explosive weapons a signature stage.
+
+   WIRED VIA (mirrors the other signature rooms — RECIPE B, bigger-than-pure-registration path):
+     * level/RoomBlueprints.java: ID_ATMOSPHERIC_PLANT + one LambdaRoomBlueprint (pins the symbols above;
+       eligible at dungeonDepth>=LEVEL_GEN_ATMO_PLANT_MIN_DEPTH=2, interior>=6x6, capped at 1/level;
+       weight 0.28, between containment (0.16) and research (0.40), just under the gore nest (0.35)).
+       build() = assignFloorLighting + themeAtmosphericPlantWalls + placeAtmosphericPlantProps.
+     * level/LevelGenerator.java: RoomType.ATMOSPHERIC_PLANT; assignAtmosphericPlantFloor() (dim 'l' +
+       strobing 'f' bias so the machinery stays legible while the failing power flickers);
+       themeAtmosphericPlantWallsForRoom() — a DEDICATED whole-room wall pass (not a case in the shared
+       themeNewRoomWallsForRoom per-tile switch, like SERVER_ROOM's) because the room GUARANTEES a vent 'v'
+       at each of the four wall-run midpoints (deterministic placement the per-tile-roll pass cannot express):
+       hazard 'h' default with corner-hugging tiles always 'h', the rest at the fill knob, then
+       stampAtmosphericPlantVents(); placeAtmosphericPlantProps() + helpers (deterministic pump bank '%',
+       gas-cylinder cluster 'E', near-corner drum 'g' through the SHARED clearance guards
+       isWalkableFloor/isAdjacentToDoor/isAdjacentToDoorAxis — never seals the lane or a door; guaranteed
+       coolant 'O' ring + scorch 'e' seams then bounded scatters).
+     * level/RoomBuildContext.java: themeAtmosphericPlantWalls() + placeAtmosphericPlantProps() delegators.
+     * util/LevelGenConstants.java: LEVEL_GEN_ATMO_PLANT_* (depth/size/cap/weight + fill/vent/pump/cylinder/
+       drum/coolant/scorch knobs).
+   ZERO edits to WallRenderer/PropRenderer draw logic, Level.java, or the generator's room-SELECTION code.
+
+   COUNTS: the registry now holds 15 blueprints (was 14): 4 GENERIC (entrance/standard/salvage_bay/
+   supply_cache) + 11 SIGNATURE. ATMOSPHERIC_PLANT carries its own RoomType.ATMOSPHERIC_PLANT tag (its themed
+   walls must be preserved from the STANDARD-only STEP-C generic-accent pass), so the "registry size ==
+   RoomType count + 1" invariant is unchanged (SUPPLY_CACHE remains the sole RoomType-less blueprint).
+
+   VERIFICATION (headless): compiles; LevelGeneratorSnapshotTest deliberately re-baselined (one more roulette
+   candidate + a new architecture shift the RNG draw sequence and stamped tiles — same seed still => same
+   grid); RoomBlueprintBuildDemandTest asserts build() stamps EXACTLY {h,v,%,E,g,O,e} across 400 seeds (each
+   guaranteed by a deterministic minimum, nothing else flexible); 3200 generations across seeds × depths
+   {1..8} with zero crashes; the plant is depth-gated at >=2. RoomBlueprintRegistryTest updated to 15
+   blueprints / 11 SIGNATURE with an atmospheric-plant depth+cap eligibility case.

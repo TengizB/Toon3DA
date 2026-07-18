@@ -45,6 +45,9 @@ public final class RoomBlueprints {
     public static final String ID_STELLAR_OBSERVATORY = "stellar_observatory";
     // A SIGNATURE "aftermath" room built from walls + environment decals (RECIPE B, bespoke prop pass).
     public static final String ID_GORE_NEST           = "gore_nest";
+    // A SIGNATURE "industrial utility / hazardous-materials" room built from walls + environment decals +
+    // reused props (RECIPE B, bespoke prop pass): the facility's volatile air/coolant scrubbing hub.
+    public static final String ID_ATMOSPHERIC_PLANT   = "atmospheric_plant";
     // order-8 REQUIREMENT PROOF 1 — the brand-new GENERIC salvage bay.
     public static final String ID_SALVAGE_BAY         = "salvage_bay";
     // order-9 RECIPE B acceptance room — a GENERIC storeroom added by REGISTRATION ALONE (composes
@@ -351,6 +354,36 @@ public final class RoomBlueprints {
                     context.assignFloorLighting();
                     context.themeNewRoomWalls();      // themeNewRoomWallsForRoom handles the GORE_NEST case
                     context.placeGoreNestProps();
+                }));
+
+        // ATMOSPHERIC_PLANT: an industrial "hazardous-materials" set-piece — the facility's volatile
+        // air/coolant scrubbing hub, built from WALLS + ENVIRONMENT DECALS + reused props only (no new
+        // symbol, no new sprite). It PINS the currently-unclaimed hazard wall 'h' (yellow-black striped
+        // bulkhead) + vent wall 'v' (ventilation grille) so the allocator reserves its exact face; the
+        // scrubber pumps '%', live gas cylinders 'E', coolant drums 'g', coolant slick 'O' and thermal
+        // scorch 'e' all claim the SAME legacy sprite the sibling rooms use (no clash — same-symbol/
+        // same-sprite is a no-op for the allocator). Depth-gated (>=2), one per level, at a modest weight so
+        // it stays an occasional industrial hazard beat. Its build() composes floor lighting + a DEDICATED
+        // hazard/vent wall pass (guaranteed vent midpoints) + a bespoke machinery-and-leak prop pass. The
+        // 'E' cluster becomes live explosive barrels at load, making the room the game's chain-reaction arena.
+        registry.register(new LambdaRoomBlueprint(ID_ATMOSPHERIC_PLANT, RoomKind.SIGNATURE,
+                RoomSymbolDemand.of(demand(
+                        'h', "wall_hazard",
+                        'v', "wall_vent",
+                        '%', "prop_generator",
+                        'E', "prop_explosive_barrel",
+                        'g', "prop_radioactive_barrel",
+                        'O', "decal_oil",
+                        'e', "decal_energy_scorch")),
+                context -> context.dungeonDepth()   >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH
+                        && context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_WIDTH
+                        && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_HEIGHT
+                        && context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MAX,
+                context -> LevelGenConstants.LEVEL_GEN_ATMO_PLANT_CHANCE,
+                context -> {
+                    context.assignFloorLighting();
+                    context.themeAtmosphericPlantWalls(); // dedicated hazard 'h' + guaranteed vent 'v' pass
+                    context.placeAtmosphericPlantProps();
                 }));
     }
 
