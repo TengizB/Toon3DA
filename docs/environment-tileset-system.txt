@@ -315,8 +315,9 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
               and the second's sprite is rehomed onto the first UNBOUND flexible symbol of the same
               category (declaration order) — capacity exists because absent rooms freed symbols. If a
               category's flexible symbols are ALL bound (capacity exhausted), the deterministic fallback
-              is to drop the duplicate reservation; with current room caps this is unreachable and the
-              test suite asserts it never triggers.
+              is to drop the duplicate reservation; with the current catalog size this is unreachable
+              (repeated rooms reuse the same symbols, so only the count of DISTINCT signature types placed
+              — bounded by the registry — reserves symbols) and the test suite asserts it never triggers.
      Step 3 — VARIETY fill: for every still-unbound FLEXIBLE symbol (iterated in TileCategory enum order,
               then budget declaration order — a fixed, reproducible order), pick a sprite from
               registry.allInCategory(category) with the seeded RNG under the RULES below. This is where
@@ -1005,3 +1006,64 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    guaranteed by a deterministic minimum, nothing else flexible); 3200 generations across seeds × depths
    {1..8} with zero crashes; the plant is depth-gated at >=2. RoomBlueprintRegistryTest updated to 15
    blueprints / 11 SIGNATURE with an atmospheric-plant depth+cap eligibility case.
+
+
+13. EQUAL-CHANCE SPECIAL ROOMS + LINEAR_CORRIDOR BUILDS EVERY SPECIAL  [DONE]
+   A gameplay-fairness change to the two room-based generators (LevelGenerator/ROOMS_MST and
+   LinearCorridorGenerator/LINEAR_CORRIDOR) so that every SPECIAL room is equally likely and BOTH
+   generators can produce all of them. "Special" = any placed blueprint other than entrance/standard
+   (the 11 SIGNATURE rooms + the GENERIC flavour rooms salvage_bay/supply_cache). Three parts:
+
+   A. ONE EQUAL SELECTION WEIGHT FOR EVERY SPECIAL ROOM.
+      * RoomBlueprints now returns LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT (= 1.0) from selectionWeight()
+        for EVERY special blueprint, replacing the former per-room *_CHANCE weights (which ranged 0.14 for
+        STELLAR_OBSERVATORY up to 2.5 for MEDICAL_BAY). No special room is rarer than another in the STEP-A
+        weighted roulette. ENTRANCE stays 0 (never rolled); STANDARD keeps LEVEL_GEN_ROOM_STANDARD_SELECTION_
+        WEIGHT (= 5.0), so plain rooms remain the majority and specials appear at a lower — but equal-across-
+        specials — rate. Because both generators read weight through RoomBlueprint.selectionWeight(), the
+        rule holds for both with no per-generator code.
+      * The old per-room weight constants (LEVEL_GEN_*_CHANCE / _SELECTION_WEIGHT for the specials) remain
+        defined but are no longer read by selection; interior-decoration knobs of the same rooms are
+        untouched. Size/look/feel of every room is UNCHANGED — only its selection odds changed.
+
+   B. ALL PER-LEVEL ROOM CAPS REMOVED (only depth/size/aspect gates remain).
+      * The `alreadyPlacedOfThisKind() < MAX` clauses were deleted from every blueprint's eligible():
+        MEDICAL_BAY/ARMORY/POWER_PLANT/COMMAND_CENTER/RESEARCH_LAB (was 1), SERVER_ROOM/CRYO_CHAMBER/
+        CONTAINMENT_BLOCK/GORE_NEST/ATMOSPHERIC_PLANT/SALVAGE_BAY/SUPPLY_CACHE (was their *_MAX), and
+        STELLAR_OBSERVATORY (was 1). A floor may now roll the same special more than once. The DEPTH,
+        SIZE and (observatory) ASPECT gates are DELIBERATELY KEPT — they guard a room's ability to render
+        (e.g. the observatory rotunda still needs a >=13x13 near-square room), not its rarity, so they are
+        not "look/feel" changes. The min-3-special backstop (section 10B) still guarantees the floor never
+        falls short. The *_MAX constants that CavernGenerator still reads (LEVEL_GEN_CRYO_MAX,
+        LEVEL_GEN_CONTAINMENT_MAX) stay defined — CAVERN is out of scope and unchanged.
+
+   C. LINEAR_CORRIDOR NOW BUILDS THE SPECIALS IT HAD NO NATIVE DECORATION FOR (via a build bridge).
+      * Previously LinearCorridorGenerator selected from the shared registry but, for any blueprint with no
+        matching local RoomType (STELLAR_OBSERVATORY, GORE_NEST, ATMOSPHERIC_PLANT, SALVAGE_BAY,
+        SUPPLY_CACHE), roomTypeForBlueprint() fell back to STANDARD and the room rendered as a plain side
+        room — those five could NEVER appear as themselves in a corridor level.
+      * Now each Room records its chosen RoomBlueprint and a `delegated` flag (true when the blueprint is
+        special AND maps to no native RoomType). A new buildDelegatedRooms() pass stamps every delegated
+        room's CANONICAL architecture by driving RoomBlueprint.build() through a LevelGenerator used purely
+        as a room-stamping engine — the new package-private seam LevelGenerator.buildRoomForBridge(grid,
+        bounds, blueprint) (+ setDungeonDepthForBridge). One bridge is created lazily and seeded
+        deterministically from the corridor generator's own RNG, so a floor seed still yields a byte-
+        identical level. The 10 rooms LinearCorridor already decorates natively are UNCHANGED (not routed
+        through the bridge), so their spine-flavoured look is preserved.
+      * Ordering: buildDelegatedRooms() runs right after assignWallVariety() (which only recolours 'x', so
+        the delegated rooms' themed/sealed walls survive it) and before doors/props; assignFloorLighting()
+        and placeProps() skip delegated rooms (build() already lit + propped them), and
+        assignLegacyStorageAndReactorTypes() skips them (never re-tag a delegated special as storage/reactor).
+        Special-room counting in ensureMinimumSpecialRooms() is now by BLUEPRINT id (not the STANDARD-
+        defaulting type tag), so a delegated special counts toward the minimum and is never re-offered as an
+        upgradeable standard room. Delegated rooms render under the level's LEGACY palette, which maps every
+        symbol they use (walls " ' `, props ; \ | <, decals ? ] - included).
+
+   VERIFICATION (headless): both generators' changed closures compile against gdx; LevelGeneratorSnapshotTest
+   deliberately re-baselined (equal weights + removed caps change which blueprint the roulette picks, shifting
+   the RNG draw sequence and stamped tiles — same seed still => same grid). The bridge was driven for all five
+   delegated blueprints on a 16x16 room (each stamps its themed walls + props). LinearCorridorGenerator ran
+   1600 levels (seeds 1..400 × depths {1,3,5,7}) with ZERO crashes and full determinism (same seed => identical
+   grid), and Stellar Observatories now appear in corridor levels (delegated hull-plate '`' present). Tests
+   updated: RoomBlueprintRegistryTest (equal-weight assertion; caps replaced with no-cap assertions),
+   TilesetExtensibilityAcceptanceTest (supply_cache no-cap), LevelGeneratorSnapshotTest (digest).

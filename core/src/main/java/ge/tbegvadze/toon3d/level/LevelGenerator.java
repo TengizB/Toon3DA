@@ -458,6 +458,38 @@ public class LevelGenerator implements ILevelGenerator {
         return RoomType.STANDARD;
     }
 
+    // -------------------------------------------------------------------------
+    // Cross-generator room-stamping bridge (EQUAL-CHANCE special rooms)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Bridge use only: sets the dungeon depth this instance reports to {@link RoomBlueprint#build}
+     * (loot/threat scaling reads it) when ANOTHER generator drives this one purely as a room-stamping
+     * engine — see {@link #buildRoomForBridge}.
+     */
+    void setDungeonDepthForBridge(int dungeonDepth) {
+        this.dungeonDepth = Math.max(1, dungeonDepth);
+    }
+
+    /**
+     * Bridge entry point: stamps {@code blueprint}'s canonical architecture into {@code grid} for a
+     * rectangular room with the given bounds, using THIS instance as the build engine. It exists so
+     * {@link LinearCorridorGenerator} can render the registered blueprints it has no native decoration for
+     * (STELLAR_OBSERVATORY, GORE_NEST, ATMOSPHERIC_PLANT, SALVAGE_BAY, SUPPLY_CACHE) with the IDENTICAL
+     * look ROOMS_MST produces, rather than a divergent copy — one implementation, one canonical look. The
+     * bounds match {@link Room}'s (left/bottom/right/top, walls inclusive); the interior is assumed already
+     * carved to floor, exactly as this generator's own passes leave it before {@code build()}. Weapon
+     * spawns are placed by a separate {@code generate()} phase, never by {@code build()}, so none are lost
+     * by driving {@code build()} through this bridge.
+     */
+    void buildRoomForBridge(char[][] grid, int leftColumn, int bottomRow, int rightColumn, int topRow,
+                            RoomBlueprint blueprint) {
+        Room room = new Room(leftColumn, bottomRow, rightColumn, topRow);
+        room.blueprint = blueprint;
+        room.type      = roomTypeForBlueprint(blueprint);
+        blueprint.build(new RoomBuildContext(this, grid, room));
+    }
+
     /**
      * order-8 STEP B — builds this level's {@link LevelPalette} from the rooms actually placed. Each
      * SIGNATURE room contributes its {@link RoomBlueprint#symbolDemand()} (its reserved sprite ids);

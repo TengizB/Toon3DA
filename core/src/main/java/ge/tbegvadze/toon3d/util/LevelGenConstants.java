@@ -609,6 +609,15 @@ public final class LevelGenConstants {
     // to one and this above-baseline weight keeps a heal-stop room common across a run.
     public static final float LEVEL_GEN_ROOM_MEDICAL_BAY_SELECTION_WEIGHT = 2.5f;
 
+    // EQUAL-CHANCE SPECIAL ROOMS: every SPECIAL room (any registered blueprint that is not ENTRANCE or
+    // STANDARD) shares this single roulette weight, so no special room is rarer than any other — the
+    // former per-room weight disparity (e.g. STELLAR_OBSERVATORY 0.14 vs ARMORY 0.80) is gone. STANDARD
+    // stays well above this so plain rooms remain the majority and specials appear at a lower, but
+    // EQUAL-across-specials, rate; the LEVEL_GEN_MIN_SPECIAL_ROOMS backstop still guarantees a floor
+    // never falls below its special-room minimum. Both generators (ROOMS_MST and LINEAR_CORRIDOR) read
+    // this same weight through RoomBlueprint.selectionWeight(), so the equal-chance rule holds for both.
+    public static final float LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT = 1.0f;
+
     // --- Symbol/sprite-reuse order-8: registry-driven selection + variety tuning ---
     // order-8 replaces the hardcoded probability-band switch in assignRoomTypes() with a per-candidate
     // seeded weighted pick over the RoomBlueprintRegistry (RoomBlueprint.selectionWeight). The roulette
