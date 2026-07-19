@@ -1609,10 +1609,15 @@ public class LevelGenerator implements ILevelGenerator {
     private void placeServerRoomRacks(char[][] grid, Room room) {
         boolean horizontalRacks = room.interiorWidth() >= room.interiorHeight();
         if (horizontalRacks) {
+            // Rack rows run across the room, but a central column is kept clear as a walkway spine so
+            // every aisle between racks stays connected (racks never span wall-to-wall, which would seal
+            // each aisle into an unreachable strip). Result: two rack banks flanking a central corridor.
+            int spineColumn = room.centerColumn();
             for (int tileRow = room.bottomRow + 2; tileRow < room.topRow - 1; tileRow++) {
                 int rowOffset = tileRow - (room.bottomRow + 2);
                 if (rowOffset % 2 != 0) continue;
                 for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                    if (tileColumn == spineColumn) continue;
                     if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
@@ -1621,10 +1626,12 @@ public class LevelGenerator implements ILevelGenerator {
                 }
             }
         } else {
+            int spineRow = room.centerRow();
             for (int tileColumn = room.leftColumn + 2; tileColumn < room.rightColumn - 1; tileColumn++) {
                 int columnOffset = tileColumn - (room.leftColumn + 2);
                 if (columnOffset % 2 != 0) continue;
                 for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+                    if (tileRow == spineRow) continue;
                     if (!isWalkableFloor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
                     if (isAdjacentToDoorAxis(grid, tileColumn, tileRow)) continue;
