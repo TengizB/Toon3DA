@@ -285,22 +285,26 @@ public final class RenderConstants {
     public static final int   HEX_PLATE_CELL_RADIUS           = 30;   // hexagon circum-radius in pixels
     public static final int   HEX_PLATE_SEAM_WIDTH            = 3;    // dark groove between panels
 
-    // Alternate BASE-WALL procedural textures. These are extra plain "bulk wall" sprites the per-level
-    // allocator can pick for the 80-90% default wall symbol 'x' on GENERATED levels, so two seeds no
-    // longer share one base wall. A GOOD base wall is muted/low-contrast (so accent walls still read),
+    // Alternate BASE-WALL procedural textures. These are extra "bulk wall" sprites the per-level allocator
+    // can pick for the 80-90% default wall symbol 'x' on GENERATED levels, so two seeds no longer share one
+    // base wall. A GOOD base wall must give the whole floor a distinct FACILITY IDENTITY — a clear material
+    // AND hue, so swapping it makes the level FEEL like a different place — while staying LIGHT (never dark),
     // horizontally tileable (no seam between adjacent tiles — interior features only, plain edges), and
-    // vertically even in brightness (distance-shading multiplies the texture, so bright bands would read
-    // as fake lighting). Both below stay desaturated gunmetal at the same average luminance as the plain
-    // wall. See docs/environment-tileset-system.txt (BASE-WALL VARIETY).
-    // 'wall_plain_riveted' — riveted steel plating: gunmetal base, evenly-spaced vertical panel seams
-    // (a divisor of the width so they wrap), and a rivet course along each seam.
-    public static final int   PLAIN_RIVETED_WALL_TEXTURE_SIZE = 256;
-    public static final int   PLAIN_RIVETED_PANEL_COUNT       = 4;    // vertical panels across the width
-    public static final int   PLAIN_RIVETED_RIVET_SPACING     = 40;   // vertical gap between rivets on a seam
-    // 'wall_plain_tech' — brushed composite panelling: a slightly cooler flat gray with fine horizontal
-    // brushed grain and two faint interior vertical grooves; even, quiet, distinct from the riveted metal.
-    public static final int   PLAIN_TECH_WALL_TEXTURE_SIZE    = 256;
-    public static final long  PLAIN_TECH_WALL_SEED            = 0x5465_6368L; // "Tech"
+    // vertically even in brightness (distance-shading multiplies the texture, so bright bands would read as
+    // fake lighting). The default 'wall_plain' is the neutral gray disk image; these two are deliberately
+    // NOT gray. See docs/environment-tileset-system.txt (BASE-WALL VARIETY).
+    // 'wall_plain_sandstone' — a warm, light sandstone-block facility: staggered ashlar masonry courses in
+    // warm tan, with pale grout joints and per-block tint variation (a running-bond that wraps).
+    public static final int   SANDSTONE_WALL_TEXTURE_SIZE     = 256;
+    public static final int   SANDSTONE_BLOCK_WIDTH           = 64;   // divides the width -> courses wrap
+    public static final int   SANDSTONE_BLOCK_HEIGHT          = 32;
+    public static final int   SANDSTONE_MORTAR_THICKNESS      = 3;    // grout joint thickness in pixels
+    // 'wall_plain_clean' — a bright, cool clinical-lab facility: large off-white composite panels on a
+    // recessed grid, with soft per-panel sheen and light steel corner bolts. Distinct, airy, high-key.
+    public static final int   CLEANLAB_WALL_TEXTURE_SIZE      = 256;
+    public static final int   CLEANLAB_PANEL_ROWS             = 4;    // horizontal panel divisions
+    public static final int   CLEANLAB_SEAM_THICKNESS         = 3;    // recessed grid seam thickness
+    public static final long  CLEANLAB_WALL_SEED              = 0x436C_6E4CL; // "ClnL"
 
     // 'P' — Cylindrical column texture (taller than wide; mortar course lines)
     public static final int   COLUMN_TEXTURE_WIDTH            = 128;
