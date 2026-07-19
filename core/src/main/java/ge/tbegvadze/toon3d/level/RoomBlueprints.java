@@ -226,7 +226,7 @@ public final class RoomBlueprints {
                         'O', "decal_oil")),
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM
                         && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM,
-                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SETPIECE_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeNewRoomWalls();
@@ -245,7 +245,7 @@ public final class RoomBlueprints {
                         'm', "decal_corpse")),
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_COMMAND_MIN_WIDTH
                         && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_COMMAND_MIN_HEIGHT,
-                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SETPIECE_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeNewRoomWalls();
@@ -306,13 +306,14 @@ public final class RoomBlueprints {
                         '?',  "decal_magnetic_deck",
                         ']',  "decal_zerog_debris",
                         '-',  "decal_starlight_seam")),
-                context -> context.dungeonDepth() >= LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_DEPTH
+                context -> context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MAX
+                        && context.dungeonDepth() >= LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_DEPTH
                         && context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_INTERIOR
                         && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_INTERIOR
                         && Math.max(context.interiorWidth(), context.interiorHeight())
                                 <= Math.min(context.interiorWidth(), context.interiorHeight())
                                         * LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MAX_ASPECT,
-                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.placeStellarObservatoryProps();
@@ -323,10 +324,11 @@ public final class RoomBlueprints {
         // (flesh membrane) + rust wall 'j' accent so the allocator reserves its exact look; the ruptured
         // bio-pod '&', barrels 'g' and crates 'C', and the corpse/blood/bile decals ('m' '.' 's' 'O') all
         // claim the SAME legacy sprite the sibling rooms use (no clash — same-symbol/same-sprite is a
-        // no-op for the allocator). Still DEPTH/SIZE-gated (>=3 deep, min interior) so it only appears on
-        // deeper floors with room to breathe, but EQUAL-CHANCE: it shares the common special-room weight
-        // and carries NO per-level cap. Its build() composes floor lighting + the shared wall theming
-        // (GORE_NEST case) + a bespoke nest-prop pass.
+        // no-op for the allocator). DEPTH/SIZE-gated (>=2 deep, min interior) so it only appears past the
+        // intro floor with room to breathe, and capped at LEVEL_GEN_GORE_NEST_MAX (1) per level so it stays a
+        // landmark. Carries the above-baseline SET-PIECE selection weight (see section 14): at the old flat
+        // 1.0 the depth gate made it invisible on the early floors most players see. Its build() composes
+        // floor lighting + the shared wall theming (GORE_NEST case) + a bespoke nest-prop pass.
         registry.register(new LambdaRoomBlueprint(ID_GORE_NEST, RoomKind.SIGNATURE,
                 RoomSymbolDemand.of(demand(
                         'G', "wall_gore",
@@ -338,10 +340,11 @@ public final class RoomBlueprints {
                         '.', "decal_blood",
                         's', "decal_blood_alt",
                         'O', "decal_oil")),
-                context -> context.dungeonDepth()   >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_DEPTH
+                context -> context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_GORE_NEST_MAX
+                        && context.dungeonDepth()   >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_DEPTH
                         && context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_WIDTH
                         && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_HEIGHT,
-                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SETPIECE_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeNewRoomWalls();      // themeNewRoomWallsForRoom handles the GORE_NEST case
@@ -354,9 +357,10 @@ public final class RoomBlueprints {
         // bulkhead) + vent wall 'v' (ventilation grille) so the allocator reserves its exact face; the
         // scrubber pumps '%', live gas cylinders 'E', coolant drums 'g', coolant slick 'O' and thermal
         // scorch 'e' all claim the SAME legacy sprite the sibling rooms use (no clash — same-symbol/
-        // same-sprite is a no-op for the allocator). Still DEPTH/SIZE-gated (>=2 deep, min interior), but
-        // EQUAL-CHANCE: it shares the common special-room weight and carries NO per-level cap. Its build()
-        // composes floor lighting + a DEDICATED
+        // same-sprite is a no-op for the allocator). DEPTH/SIZE-gated (>=2 deep, min interior) and capped at
+        // LEVEL_GEN_ATMO_PLANT_MAX (1) per level so it stays a landmark. Carries the above-baseline SET-PIECE
+        // selection weight (see section 14): at the old flat 1.0 the depth gate made it invisible on the early
+        // floors most players see. Its build() composes floor lighting + a DEDICATED
         // hazard/vent wall pass (guaranteed vent midpoints) + a bespoke machinery-and-leak prop pass. The
         // 'E' cluster becomes live explosive barrels at load, making the room the game's chain-reaction arena.
         registry.register(new LambdaRoomBlueprint(ID_ATMOSPHERIC_PLANT, RoomKind.SIGNATURE,
@@ -368,10 +372,11 @@ public final class RoomBlueprints {
                         'g', "prop_radioactive_barrel",
                         'O', "decal_oil",
                         'e', "decal_energy_scorch")),
-                context -> context.dungeonDepth()   >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH
+                context -> context.alreadyPlacedOfThisKind() < LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MAX
+                        && context.dungeonDepth()   >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH
                         && context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_WIDTH
                         && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_HEIGHT,
-                context -> LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT,
+                context -> LevelGenConstants.LEVEL_GEN_SETPIECE_ROOM_SELECTION_WEIGHT,
                 context -> {
                     context.assignFloorLighting();
                     context.themeAtmosphericPlantWalls(); // dedicated hazard 'h' + guaranteed vent 'v' pass

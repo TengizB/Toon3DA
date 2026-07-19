@@ -29,17 +29,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class LevelGeneratorSnapshotTest {
 
     /**
-     * SHA-256 over {@link #fingerprint()}, re-baselined for the EQUAL-CHANCE special-rooms change: every
-     * SPECIAL blueprint now shares one selection weight (LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT) instead
-     * of its former per-room chance, and all per-level room caps were removed (only depth/size/aspect gates
-     * remain). Both alter which blueprint the STEP-A weighted roulette picks for each room, shifting the RNG
-     * draw sequence and the stamped tiles. This sits on top of the ATMOSPHERIC_PLANT / GORE_NEST re-baselines
-     * and the order-10 generator (LARGE demoted to a per-room size modifier + guaranteed-minimum-special-rooms
-     * backstop, order-8/9 registry selection + variety accents + salvage bay + supply cache). Do NOT
-     * hand-edit; regenerate only via a deliberate, reviewed behaviour change.
+     * SHA-256 over {@link #fingerprint()}, re-baselined for the SET-PIECE VISIBILITY change: the big and
+     * depth-gated signature rooms that had become effectively unspawnable under the flat equal-chance weight
+     * are made reliably reachable again. Specifically: STELLAR_OBSERVATORY / GORE_NEST / ATMOSPHERIC_PLANT
+     * regain a per-level cap of 1 (RoomContext.alreadyPlacedOfThisKind gate); GORE_NEST and STELLAR_OBSERVATORY
+     * depth gates drop to 2; STELLAR_OBSERVATORY gets a relaxed aspect window (1.4) and a high dedicated
+     * selection weight, while GORE_NEST / ATMOSPHERIC_PLANT / POWER_PLANT / COMMAND_CENTER share an above-
+     * baseline set-piece weight; and the large-room modifier chance rises so the oversized footprints these
+     * rooms need actually occur. Each alters which blueprint the STEP-A weighted roulette picks and the room
+     * sizes rolled, shifting the RNG draw sequence and the stamped tiles. This sits on top of the earlier
+     * EQUAL-CHANCE, ATMOSPHERIC_PLANT / GORE_NEST, and order-8/9/10 re-baselines. It remains a strict
+     * determinism contract: same seed ⇒ same grid. Do NOT hand-edit; regenerate only via a deliberate,
+     * reviewed behaviour change.
      */
     private static final String EXPECTED_DIGEST =
-            "995402458b191d20c128fa8188c75a81cb36549b61ba21b498e08b858225b819";
+            "42003771e27256491f15580cef9bff6bab221016eec8e456e6347697e1ace00c";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

@@ -54,7 +54,13 @@ public final class LevelGenConstants {
     // width AND height, and (b) the size gate for LARGE-class SIGNATURE rooms (e.g. POWER_PLANT).
     public static final int   LEVEL_GEN_LARGE_MIN_DIM              = 9;
     // Probability any non-entrance room independently rolls the large size modifier.
-    public static final float LEVEL_GEN_LARGE_MODIFIER_CHANCE      = 0.05f;
+    // This is the intended vehicle for the big set-piece rooms (STELLAR_OBSERVATORY, POWER_PLANT,
+    // COMMAND_CENTER) — see the STELLAR_OBSERVATORY size-gate note: the shared standard-room height
+    // cap (LEVEL_GEN_ROOM_MAX_HEIGHT) never produces a 13x13+ near-square footprint, so those rooms
+    // can only be hosted by a large-modified room. At the old 0.05 an oversized room was so rare that
+    // the observatory appeared in ~1% of standard levels and 0% of linear levels; raised so a couple
+    // of oversized rooms occur per level and the set-pieces have somewhere to live.
+    public static final float LEVEL_GEN_LARGE_MODIFIER_CHANCE      = 0.16f;
     // Ceiling for a large-modified room's interior size — deliberately well above the standard
     // room max (LEVEL_GEN_ROOM_MAX_WIDTH/HEIGHT) so the modifier reads as genuinely oversized.
     public static final int   LEVEL_GEN_LARGE_MODIFIER_MAX_WIDTH   = 28;
@@ -204,9 +210,17 @@ public final class LevelGenConstants {
     // design doc for the full spec: .claude/agents/ideas/stellar-observatory-gravity-well-room.txt
     // -------------------------------------------------------------------------
 
-    // Rarity / depth gate (design doc PLACEMENT RULES: LOW weight, floors 3+).
+    // Rarity / depth gate (design doc PLACEMENT RULES: floors 2+). Lowered from 3 so the room is
+    // reachable in normal play instead of only on deep runs the player rarely survives to.
     public static final float LEVEL_GEN_STELLAR_OBSERVATORY_CHANCE          = 0.14f;
-    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_MIN_DEPTH       = 3;
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_MIN_DEPTH       = 2;
+    // At most one observatory per level — it is a landmark. Enforced via RoomContext.alreadyPlacedOfThisKind.
+    public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_MAX            = 1;
+    // Selection weight when eligible. The observatory's eligibility is the rarest of any room (needs a
+    // large near-square footprint AND depth), so a high weight here is self-limiting — it only wins the
+    // scarce oversized rooms it actually fits, rather than losing them to STANDARD (weight 5) or the many
+    // equal-weight small specials that are ALSO eligible in a big room. This is what makes it actually appear.
+    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_SELECTION_WEIGHT = 20.0f;
 
     // Size gate: near-square interior, minimum 13x13 (design doc GENERATOR ALGORITHM step 1).
     // NOTE: the design doc's target radius (R = 6..8, from 15x15/17x17 interiors) assumes rooms
@@ -215,7 +229,10 @@ public final class LevelGenConstants {
     // cap (which would perturb every other room type's size balance), the observatory uses the
     // biggest near-square footprint the existing cap allows; see MIN_RADIUS/MAX_RADIUS below.
     public static final int   LEVEL_GEN_STELLAR_OBSERVATORY_MIN_INTERIOR   = 13;
-    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_MAX_ASPECT    = 1.25f;
+    // Relaxed from 1.25 to 1.4: the rotunda build centres its circle on min(interiorWidth, interiorHeight),
+    // so a mildly rectangular room still renders a correct radius-5 rotunda (the extra length is just floor
+    // around it). Relaxing the aspect window roughly doubles the pool of oversized rooms that qualify.
+    public static final float LEVEL_GEN_STELLAR_OBSERVATORY_MAX_ASPECT    = 1.4f;
     // Minimum Manhattan room-centre distance from the Research Lab landmark (tonal-opposite
     // spacing rule from PLACEMENT RULES). The doc's other spacing partners — boss arena,
     // shop/safe room, EXCAVATION_SITE — are route-level or sibling-doc concepts that don't
@@ -618,6 +635,18 @@ public final class LevelGenConstants {
     // this same weight through RoomBlueprint.selectionWeight(), so the equal-chance rule holds for both.
     public static final float LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT = 1.0f;
 
+    // SET-PIECE ROOMS: the under-served themed signature rooms whose eligibility is narrowed by a bigger
+    // footprint and/or a depth gate — GORE_NEST and ATMOSPHERIC_PLANT (depth-gated, so invisible on the
+    // early floors most players see) and POWER_PLANT / COMMAND_CENTER (need a large footprint that is
+    // itself rare). At the flat equal-chance weight of 1.0 these were routinely out-rolled by STANDARD
+    // (weight 5) and the many small specials that share the same rooms, so they appeared in well under a
+    // third of levels even where eligible. This above-baseline weight lets such a set-piece claim a room
+    // it actually fits so the player reliably encounters it, while STANDARD stays the majority. Read by
+    // BOTH generators through RoomBlueprint.selectionWeight(), so the boost holds for each. (RESEARCH_LAB
+    // is deliberately NOT in this tier: it already appeared often enough at the baseline weight; the
+    // rarest room of all, STELLAR_OBSERVATORY, gets its own even-higher dedicated weight above.)
+    public static final float LEVEL_GEN_SETPIECE_ROOM_SELECTION_WEIGHT = 3.0f;
+
     // --- Symbol/sprite-reuse order-8: registry-driven selection + variety tuning ---
     // order-8 replaces the hardcoded probability-band switch in assignRoomTypes() with a per-candidate
     // seeded weighted pick over the RoomBlueprintRegistry (RoomBlueprint.selectionWeight). The roulette
@@ -657,7 +686,9 @@ public final class LevelGenConstants {
     // level (a set-piece, like the armory/research lab). Roulette weight sits between containment and
     // research. See .claude/agents/ideas/gore-nest-corruption-room.txt and RECIPE B in
     // docs/environment-tileset-system.txt §9.
-    public static final int   LEVEL_GEN_GORE_NEST_MIN_DEPTH  = 3;
+    // Depth gate lowered from 3 to 2 so the corruption beat is reachable in normal play, not only on
+    // deep runs the player rarely survives to; still absent from the floor-1 intro.
+    public static final int   LEVEL_GEN_GORE_NEST_MIN_DEPTH  = 2;
     public static final int   LEVEL_GEN_GORE_NEST_MIN_WIDTH  = 6;
     public static final int   LEVEL_GEN_GORE_NEST_MIN_HEIGHT = 6;
     public static final int   LEVEL_GEN_GORE_NEST_MAX        = 1;
