@@ -8,8 +8,11 @@ import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -144,7 +147,7 @@ class RoomBlueprintRegistryTest {
                 LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_DEPTH, 0)), "at min depth + near-square");
 
         // Gore nest stays depth+size-gated (below MIN_DEPTH ineligible, at MIN_DEPTH with a fitting size
-        // eligible) but is NO LONGER capped — it remains eligible even with instances already placed.
+        // eligible) and is capped at GORE_NEST_MAX per level — once that many are placed it turns ineligible.
         RoomBlueprint goreNest = registry.get(RoomBlueprints.ID_GORE_NEST);
         int goreWidth  = LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_WIDTH;
         int goreHeight = LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_HEIGHT;
@@ -152,11 +155,11 @@ class RoomBlueprintRegistryTest {
                 LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_DEPTH - 1, 0)), "gore nest below min depth");
         assertTrue(goreNest.eligible(new RoomContext(goreWidth, goreHeight,
                 LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_DEPTH, 0)), "gore nest at min depth + min size");
-        assertTrue(goreNest.eligible(new RoomContext(goreWidth, goreHeight,
+        assertFalse(goreNest.eligible(new RoomContext(goreWidth, goreHeight,
                 LevelGenConstants.LEVEL_GEN_GORE_NEST_MIN_DEPTH, LevelGenConstants.LEVEL_GEN_GORE_NEST_MAX)),
-                "gore nest is no longer capped per level");
+                "gore nest is capped at GORE_NEST_MAX per level");
 
-        // Atmospheric plant stays depth+size-gated but, like the others, is NO LONGER capped.
+        // Atmospheric plant stays depth+size-gated and is likewise capped at ATMO_PLANT_MAX per level.
         RoomBlueprint atmosphericPlant = registry.get(RoomBlueprints.ID_ATMOSPHERIC_PLANT);
         int plantWidth  = LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_WIDTH;
         int plantHeight = LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_HEIGHT;
@@ -164,19 +167,33 @@ class RoomBlueprintRegistryTest {
                 LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH - 1, 0)), "atmospheric plant below min depth");
         assertTrue(atmosphericPlant.eligible(new RoomContext(plantWidth, plantHeight,
                 LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH, 0)), "atmospheric plant at min depth + min size");
-        assertTrue(atmosphericPlant.eligible(new RoomContext(plantWidth, plantHeight,
+        assertFalse(atmosphericPlant.eligible(new RoomContext(plantWidth, plantHeight,
                 LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MIN_DEPTH, LevelGenConstants.LEVEL_GEN_ATMO_PLANT_MAX)),
-                "atmospheric plant is no longer capped per level");
+                "atmospheric plant is capped at ATMO_PLANT_MAX per level");
+
+        // Stellar observatory is likewise capped at STELLAR_OBSERVATORY_MAX per level (a landmark).
+        assertFalse(observatory.eligible(new RoomContext(bigInterior, bigInterior,
+                LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MIN_DEPTH,
+                LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_MAX)),
+                "stellar observatory is capped at STELLAR_OBSERVATORY_MAX per level");
     }
 
     @Test
-    void everySpecialRoomSharesOneEqualSelectionWeight() {
+    void selectionWeightsFollowTheRarityTiers() {
         RoomBlueprintRegistry registry = freshRegistry();
         RoomContext any = new RoomContext(16, 16, 5, 0);
-        // EQUAL-CHANCE: every SPECIAL blueprint (anything but ENTRANCE/STANDARD) returns the single shared
-        // weight, so no special room is rarer than another. ENTRANCE stays 0 (never rolled); STANDARD keeps
-        // its high baseline so plain rooms remain the majority.
-        float shared = LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT;
+        // Selection weights are tiered by how hard a room is to place, so the size/depth-scarce set-pieces
+        // aren't drowned out by STANDARD and the many small specials that share the same rooms:
+        //   ENTRANCE                                       — 0 (never rolled; assigned to room 0 by position)
+        //   STANDARD                                       — high baseline (plain rooms stay the majority)
+        //   STELLAR_OBSERVATORY                            — dedicated high weight (rarest eligibility of all)
+        //   GORE_NEST/ATMO/POWER_PLANT/COMMAND_CENTER      — above-baseline set-piece weight
+        //   every other special                            — the equal special-room baseline
+        float baseline  = LevelGenConstants.LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT;
+        float setpiece  = LevelGenConstants.LEVEL_GEN_SETPIECE_ROOM_SELECTION_WEIGHT;
+        Set<String> setpieceIds = new HashSet<>(Arrays.asList(
+                RoomBlueprints.ID_GORE_NEST, RoomBlueprints.ID_ATMOSPHERIC_PLANT,
+                RoomBlueprints.ID_POWER_PLANT, RoomBlueprints.ID_COMMAND_CENTER));
         for (RoomBlueprint blueprint : registry.all()) {
             float weight = blueprint.selectionWeight(any);
             if (blueprint.id().equals(RoomBlueprints.ID_ENTRANCE)) {
@@ -185,9 +202,15 @@ class RoomBlueprintRegistryTest {
             } else if (blueprint.id().equals(RoomBlueprints.ID_STANDARD)) {
                 assertEquals(LevelGenConstants.LEVEL_GEN_ROOM_STANDARD_SELECTION_WEIGHT, weight,
                         "standard keeps its baseline weight");
+            } else if (blueprint.id().equals(RoomBlueprints.ID_STELLAR_OBSERVATORY)) {
+                assertEquals(LevelGenConstants.LEVEL_GEN_STELLAR_OBSERVATORY_SELECTION_WEIGHT, weight,
+                        "observatory carries its dedicated high weight");
+            } else if (setpieceIds.contains(blueprint.id())) {
+                assertEquals(setpiece, weight,
+                        blueprint.id() + " (set-piece) must carry the above-baseline set-piece weight");
             } else {
-                assertEquals(shared, weight,
-                        blueprint.id() + " (special) must share the equal special-room weight");
+                assertEquals(baseline, weight,
+                        blueprint.id() + " (special) must carry the equal special-room baseline weight");
             }
         }
     }

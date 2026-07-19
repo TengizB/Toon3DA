@@ -1067,3 +1067,59 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
    grid), and Stellar Observatories now appear in corridor levels (delegated hull-plate '`' present). Tests
    updated: RoomBlueprintRegistryTest (equal-weight assertion; caps replaced with no-cap assertions),
    TilesetExtensibilityAcceptanceTest (supply_cache no-cap), LevelGeneratorSnapshotTest (digest).
+
+
+14. SET-PIECE VISIBILITY — RARITY-TIERED WEIGHTS + LANDMARK CAPS + BIGGER ROOMS  [DONE]
+   Section 13's flat equal-chance weight (every special = 1.0) had a severe unintended consequence: the
+   big and/or depth-gated signature rooms became effectively unreachable. Measured over 400 generated
+   levels per depth (blueprint census, both generators): STELLAR_OBSERVATORY appeared in ~1% of ROOMS_MST
+   levels and 0% of LINEAR_CORRIDOR levels; POWER_PLANT in ~10%; and GORE_NEST/ATMOSPHERIC_PLANT in 0% of
+   the early floors most players ever see (their depth gate excludes floors 1-2/1). A player could play
+   for a long time and never encounter these rooms even once. Two compounding causes:
+     (i)  SIZE SCARCITY — the observatory needs a >=13x13 near-square interior, but the shared standard-room
+          height cap (LEVEL_GEN_ROOM_MAX_HEIGHT = 14) almost never yields one, and the LARGE size modifier
+          that CAN (up to 28x20) fired on only 5% of rooms. Only ~22% of ROOMS_MST levels (5% of LINEAR) even
+          contained a room big enough to host it.
+     (ii) SELECTION DILUTION — at weight 1.0 a rare set-piece, eligible only in a scarce big room where EVERY
+          special plus STANDARD (weight 5) is ALSO eligible, was almost always out-rolled. Even when a
+          qualifying room existed, the observatory won it only ~1-in-22 of the time.
+   This is a generation-tuning fix ONLY — every room's architecture/build()/look is untouched.
+
+   A. RARITY-TIERED SELECTION WEIGHTS (RoomBlueprint.selectionWeight, read by BOTH generators).
+      * STELLAR_OBSERVATORY returns a dedicated high weight LEVEL_GEN_STELLAR_OBSERVATORY_SELECTION_WEIGHT
+        (= 20.0). Its eligibility is the rarest of any room (large near-square footprint AND a depth gate),
+        so a high weight is SELF-LIMITING: it only wins the scarce oversized rooms it actually fits, instead
+        of losing them to STANDARD or the many equal-weight small specials that share a big room.
+      * GORE_NEST, ATMOSPHERIC_PLANT, POWER_PLANT and COMMAND_CENTER share an above-baseline set-piece weight
+        LEVEL_GEN_SETPIECE_ROOM_SELECTION_WEIGHT (= 3.0) — narrow eligibility (depth gate and/or big footprint)
+        that was drowned out at 1.0.
+      * Every other special keeps LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT (= 1.0); STANDARD keeps 5.0.
+        RESEARCH_LAB is deliberately left at 1.0 (it already appeared often enough).
+
+   B. LANDMARK CAPS RESTORED for the three "one-of" rooms (reverses part of 13B for these only). Their
+      eligible() regains an `alreadyPlacedOfThisKind() < *_MAX` clause: STELLAR_OBSERVATORY (MAX = 1, new
+      constant), GORE_NEST (LEVEL_GEN_GORE_NEST_MAX = 1) and ATMOSPHERIC_PLANT (LEVEL_GEN_ATMO_PLANT_MAX = 1).
+      With their weights boosted, the cap keeps each a once-per-level landmark rather than letting the boost
+      spawn several. All OTHER rooms stay uncapped (13B unchanged for them).
+
+   C. GATES RELAXED so eligible rooms actually occur / are reachable in normal play.
+      * LEVEL_GEN_LARGE_MODIFIER_CHANCE 0.05 -> 0.16: the intended vehicle for the big set-pieces now fires
+        often enough that a couple of oversized rooms occur per level (room counts stay healthy: ROOMS_MST
+        averages ~15 rooms, LINEAR unchanged). This is the documented "just increase the size" lever.
+      * STELLAR_OBSERVATORY_MAX_ASPECT 1.25 -> 1.4: the rotunda build centres its circle on min(w,h), so a
+        mildly rectangular room still renders a correct radius-5 rotunda; relaxing the window roughly doubles
+        the qualifying-room pool. MIN_INTERIOR stays 13 (the rotunda's true minimum) — look unchanged.
+      * Depth gates lowered so the beat is reachable before deep runs: STELLAR_OBSERVATORY_MIN_DEPTH 3 -> 2,
+        GORE_NEST_MIN_DEPTH 3 -> 2 (ATMOSPHERIC_PLANT stays 2). Floor 1 remains a clean intro.
+
+   RESULT (same 400-levels-per-depth census, depths 2+): STELLAR_OBSERVATORY ~15% ROOMS_MST / ~8% LINEAR
+   (from 1% / 0%); GORE_NEST ~54% / ~39%; ATMOSPHERIC_PLANT ~55% / ~40%; POWER_PLANT ~22%; COMMAND_CENTER
+   ~37% — every named room now reliably spawns in BOTH generators, while STANDARD stays the majority and the
+   landmark rooms stay capped at one per level.
+
+   VERIFICATION (headless): full core test suite (123 tests) green. LevelGeneratorSnapshotTest deliberately
+   re-baselined (new weights, caps, sizes shift the RNG draw sequence and stamped tiles — same seed still =>
+   identical grid; determinism reconfirmed over repeated digests). Tests updated: RoomBlueprintRegistryTest
+   (rarity-tiered weight assertion; landmark-cap assertions for observatory/gore/atmo), LevelGeneratorSnapshotTest
+   (digest). Constants added: LEVEL_GEN_STELLAR_OBSERVATORY_SELECTION_WEIGHT, LEVEL_GEN_STELLAR_OBSERVATORY_MAX,
+   LEVEL_GEN_SETPIECE_ROOM_SELECTION_WEIGHT (all in util/LevelGenConstants.java).
