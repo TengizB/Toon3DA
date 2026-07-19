@@ -1137,23 +1137,31 @@ deterministically from the floor seed. Hand-crafted / legacy levels are UNCHANGE
 LevelPalettes.legacy(), which never runs the allocator, so their 'x' stays "wall_plain" exactly.
 
 WHAT MAKES A GOOD BASE WALL (the design brief every base-wall sprite must meet):
-  * MUTED / LOW-CONTRAST — it covers most of the wall surface, so it must not fight the accent walls for
-    attention or fatigue the eye. Desaturated gunmetal, near the plain wall's average luminance.
+  * DISTINCT FACILITY IDENTITY — it covers most of the wall surface, so swapping it is what makes a floor
+    FEEL like a different place. Each base wall commits to a clear MATERIAL and HUE (warm stone, bright
+    clinical panel, …), not an interchangeable gray. It should still be calm enough that accent walls stay
+    the eye-catchers, but it must have character.
+  * LIGHT, NEVER DARK — base walls stay high-key; a dim wall makes the whole floor feel murky. (The one
+    neutral option is the default "wall_plain" disk image; the procedural alternates are deliberately not
+    gray.)
   * HORIZONTALLY TILEABLE — a single wall face maps the whole texture width (u = 0..1), and adjacent
     tiles repeat it, so the left and right edges must meet seamlessly: interior features only, plain
-    edges. (Vertical seams / grooves tile trivially in x; horizontal bands do not break tiling but must
-    stay even — see next point.)
+    edges. (A running-bond / grid whose cell size divides the width wraps; horizontal seams do not break
+    tiling but must stay even — see next point.)
   * VERTICALLY EVEN BRIGHTNESS — distance shading MULTIPLIES the texture, so a bright horizontal band
     would read as fake lighting. No bright bands; keep luminance even top-to-bottom.
   * FULL-HEIGHT OCCLUDER — heightMultiplier 1.0, occluder true (a WALL sprite).
   * DETERMINISTIC PIXELS — the same texture every run (fixed pattern / fixed-seed Random), for
     permadeath fairness and no per-frame variance.
 
-THE TWO NEW BASE WALLS (procedural, WallRenderer, added by RECIPE A — registration + generator only):
-  * "wall_plain_riveted" (Riveted Plate Wall) — gunmetal base, evenly-spaced vertical panel seams (on
-    columns that divide the width, so they wrap) with a rivet course down each seam.
-  * "wall_plain_tech" (Brushed Tech Wall) — a cooler flat gray with fine horizontal brushed grain and
-    two faint interior vertical grooves.
+THE TWO NEW BASE WALLS (procedural, WallRenderer, added by RECIPE A — registration + generator only) are
+deliberately opposite in feel so the base-wall roll is obvious in play:
+  * "wall_plain_sandstone" (Sandstone Block Wall) — a WARM, light stone facility: staggered ashlar masonry
+    (running-bond courses whose block width + half-course shift both divide the texture width, so it wraps)
+    in warm tan, with pale grout joints, a soft per-block bevel, and a deterministic per-block tint.
+  * "wall_plain_clean" (Clean Lab Panel Wall) — a BRIGHT, cool clinical facility: large off-white composite
+    panels on a recessed grid (one interior vertical seam + evenly-spaced horizontal seams), soft per-panel
+    sheen, and light steel corner bolts. High-key and airy — the opposite of the sandstone.
 Both are registered LAST in TilesetRegistries.registerWalls() (after the historic 1:1 walls the legacy
 palette zips against) and listed in TilesetRegistries.VARIETY_ONLY_SPRITE_IDS, so no legacy symbol maps
 to them and the legacy-palette "whole catalog minus variety-only" invariant still holds.
@@ -1184,6 +1192,7 @@ and 'x' ∈ base walls (WALL category) rather than a single sprite; new tests
 baseWallVariesAcrossSeedsButIsDeterministic and minimalRegistryWithoutAlternatesKeepsDefaultBaseWall. The
 legacy-palette / texture-generator id-set invariants are unchanged (the two new sprites are variety-only
 and have generators). Constants added: TilesetConstants.BASE_WALL_ALTERNATE_SPRITE_IDS;
-RenderConstants.PLAIN_RIVETED_WALL_TEXTURE_SIZE / PLAIN_RIVETED_PANEL_COUNT / PLAIN_RIVETED_RIVET_SPACING /
-PLAIN_TECH_WALL_TEXTURE_SIZE / PLAIN_TECH_WALL_SEED. Sprite-id constants
-TilesetRegistries.SPRITE_ID_WALL_PLAIN_RIVETED / SPRITE_ID_WALL_PLAIN_TECH.
+RenderConstants.SANDSTONE_WALL_TEXTURE_SIZE / SANDSTONE_BLOCK_WIDTH / SANDSTONE_BLOCK_HEIGHT /
+SANDSTONE_MORTAR_THICKNESS / CLEANLAB_WALL_TEXTURE_SIZE / CLEANLAB_PANEL_ROWS / CLEANLAB_SEAM_THICKNESS /
+CLEANLAB_WALL_SEED. Sprite-id constants TilesetRegistries.SPRITE_ID_WALL_PLAIN_SANDSTONE /
+SPRITE_ID_WALL_PLAIN_CLEAN.
