@@ -35,20 +35,31 @@ public final class TilesetRegistries {
      * variety-only, reached only through the allocator's per-level wall variety.
      */
     public static final String SPRITE_ID_WALL_HEX_PLATE = "wall_hex_plate";
+    /**
+     * Stable sprite ids of the two ALTERNATE BASE WALLS. The bulk wall symbol 'x' resolves per GENERATED
+     * level to "wall_plain" OR one of these, seeded from the floor seed, so levels no longer share one
+     * base wall. Both are muted, tileable, full-height gunmetal walls (the base-wall design brief). They
+     * carry no legacy symbol, so they are variety-only (see {@link #VARIETY_ONLY_SPRITE_IDS}).
+     */
+    public static final String SPRITE_ID_WALL_PLAIN_RIVETED = "wall_plain_riveted";
+    public static final String SPRITE_ID_WALL_PLAIN_TECH    = "wall_plain_tech";
 
     /**
      * Sprite ids that exist in the catalog as PER-LEVEL VARIETY ALTERNATIVES which the historic 1:1
      * legacy palette never maps a symbol to. A sprite lands here whenever it is NEW art in an EXISTING
      * category with no free legacy symbol to bind it (the common case for content added via RECIPE A):
      * {@link #SPRITE_ID_COLUMN_SQUARE} (order-8, the second COLUMN sprite the flexible 'P' slot resolves
-     * to) and {@link #SPRITE_ID_WALL_HEX_PLATE} (order-9, an extra WALL accent). They are fully registered
-     * (with texture generators) but only ever reached through the allocator, so the legacy palette
-     * references the whole catalog MINUS this set. Unmodifiable.
+     * to), {@link #SPRITE_ID_WALL_HEX_PLATE} (order-9, an extra WALL accent), and the two alternate base
+     * walls {@link #SPRITE_ID_WALL_PLAIN_RIVETED} / {@link #SPRITE_ID_WALL_PLAIN_TECH} (which the allocator
+     * picks for the plain 'x' slot per level). They are fully registered (with texture generators) but only
+     * ever reached through the allocator, so the legacy palette references the whole catalog MINUS this
+     * set. Unmodifiable.
      */
     public static final java.util.Set<String> VARIETY_ONLY_SPRITE_IDS =
             java.util.Collections.unmodifiableSet(
                     new java.util.LinkedHashSet<>(java.util.Arrays.asList(
-                            SPRITE_ID_COLUMN_SQUARE, SPRITE_ID_WALL_HEX_PLATE)));
+                            SPRITE_ID_COLUMN_SQUARE, SPRITE_ID_WALL_HEX_PLATE,
+                            SPRITE_ID_WALL_PLAIN_RIVETED, SPRITE_ID_WALL_PLAIN_TECH)));
 
     private static final EnvironmentSpriteRegistry SPRITES = new EnvironmentSpriteRegistry();
     private static boolean bootstrapped = false;
@@ -128,6 +139,16 @@ public final class TilesetRegistries {
         // generator in WallRenderer.registerTextureGenerators, with ZERO edits to LevelGenerator,
         // WallRenderer draw logic, or Level. See docs/environment-tileset-system.txt §9 (RECIPE A).
         registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_WALL_HEX_PLATE, TileCategory.WALL, "Hex Plate Wall").build());
+
+        // Alternate BASE WALLS — extra plain "bulk wall" sprites the allocator can pick for the default
+        // wall symbol 'x' per GENERATED level (the fix for "every level looks the same"). NEW art in the
+        // EXISTING WALL category with no legacy symbol, so — like the hex-plate above — they are registered
+        // LAST (after the historic 1:1 walls the legacy palette zips against) and only ever reached through
+        // the allocator's base-wall roll. Each is one register() line here + its texture generator in
+        // WallRenderer.registerTextureGenerators (startup id-set assertion enforces the pair). See
+        // docs/environment-tileset-system.txt (BASE-WALL VARIETY).
+        registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_WALL_PLAIN_RIVETED, TileCategory.WALL, "Riveted Plate Wall").build());
+        registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_WALL_PLAIN_TECH,    TileCategory.WALL, "Brushed Tech Wall").build());
     }
 
     /**

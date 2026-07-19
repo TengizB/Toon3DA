@@ -26,8 +26,24 @@ public final class TilesetConstants {
     // existing hand levels render their bulk walls unchanged. Flexibility applies to the ACCENT walls.
     /** The single plain-wall symbol, permanently bound to {@link #FIXED_WALL_SPRITE_ID}. */
     public static final String FIXED_WALL_SYMBOL    = "x";
-    /** The sprite id 'x' is permanently bound to (registered in order-1's wall pool). */
+    /**
+     * The DEFAULT sprite 'x' is bound to (registered in order-1's wall pool). Hand-crafted levels and the
+     * legacy palette always render 'x' as this. GENERATED levels may instead pick one of the alternate
+     * base walls below, seeded from the floor seed (see {@link #BASE_WALL_ALTERNATE_SPRITE_IDS}).
+     */
     public static final String FIXED_WALL_SPRITE_ID = "wall_plain";
+
+    /**
+     * Extra base-wall sprites (beyond {@link #FIXED_WALL_SPRITE_ID}) the per-level allocator may pick for
+     * the bulk wall symbol 'x' on GENERATED levels, so two seeds no longer share one base wall — the fix
+     * for "every level looks the same". Comma-separated stable sprite ids, all registered in the WALL pool
+     * with their own procedural texture generators (and listed in
+     * {@code TilesetRegistries.VARIETY_ONLY_SPRITE_IDS}, since no legacy symbol maps to them). Together
+     * with {@link #FIXED_WALL_SPRITE_ID} these form the ordered base-wall candidate list the allocator
+     * rolls against. Adding another base wall is: register the sprite + generator, then append its id here.
+     * Hand-crafted / legacy levels ignore this list entirely and keep {@link #FIXED_WALL_SPRITE_ID}.
+     */
+    public static final String BASE_WALL_ALTERNATE_SPRITE_IDS = "wall_plain_riveted,wall_plain_tech";
 
     // ── FLEXIBLE slots (category fixed, sprite assigned per level by the allocator, order-4) ──────
     /**
