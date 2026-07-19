@@ -476,6 +476,8 @@ public class WallRenderer implements Renderable, Disposable {
         registry.register(TilesetRegistries.SPRITE_ID_COLUMN_ROUND,  WallRenderer::generateColumnTexture);
         registry.register(TilesetRegistries.SPRITE_ID_COLUMN_SQUARE, WallRenderer::generateColumnSquareTexture);
         registry.register(TilesetRegistries.SPRITE_ID_WALL_HEX_PLATE, WallRenderer::generateHexPlateWallTexture);
+        registry.register(TilesetRegistries.SPRITE_ID_WALL_PLAIN_RIVETED, WallRenderer::generatePlainRivetedWallTexture);
+        registry.register(TilesetRegistries.SPRITE_ID_WALL_PLAIN_TECH,    WallRenderer::generatePlainTechWallTexture);
     }
 
     /**
@@ -627,6 +629,102 @@ public class WallRenderer implements Renderable, Disposable {
                 }
                 pixmap.drawPixel(pixelColumn, pixelRow);
             }
+        }
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Alternate BASE WALL — "wall_plain_riveted": riveted steel plating. A muted gunmetal base with a
+     * fine deterministic grain, evenly-spaced vertical panel seams, and a rivet course running down each
+     * seam. Designed to the BASE-WALL brief: low contrast (so accent walls still read), horizontally
+     * tileable (all seams sit on interior columns that evenly divide the width, and the left/right texture
+     * edges stay plain base, so adjacent tiles meet seamlessly), and vertically EVEN in brightness (no
+     * horizontal bands — distance-shading multiplies the texture, so a bright band would look like fake
+     * lighting). Deterministic: the same pixels every run. Reached only through the allocator's per-level
+     * base-wall roll for 'x' on generated levels — see docs/environment-tileset-system.txt (BASE-WALL
+     * VARIETY). Added by REGISTRATION ALONE (its sprite definition in {@code TilesetRegistries} + one line
+     * in {@link #registerTextureGenerators}); no draw-loop, {@code LevelGenerator}, or {@code Level} edits.
+     */
+    private static Texture generatePlainRivetedWallTexture() {
+        int size = PLAIN_RIVETED_WALL_TEXTURE_SIZE;
+        int panelWidth = size / PLAIN_RIVETED_PANEL_COUNT; // seams fall on multiples of this — tiles cleanly
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Gunmetal base with a faint per-pixel grain (same neutral luminance as the plain wall).
+        for (int row = 0; row < size; row++) {
+            for (int column = 0; column < size; column++) {
+                float grain = ((row * 7 + column * 11) % 13 - 6) / 150f;
+                pixmap.setColor(Math.max(0f, Math.min(1f, 0.32f + grain)),
+                                Math.max(0f, Math.min(1f, 0.33f + grain)),
+                                Math.max(0f, Math.min(1f, 0.37f + grain)), 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // Vertical panel seams on interior columns (multiples of panelWidth, skipping column 0 so the
+        // texture's left/right edges stay plain base and wrap seamlessly). Each seam is a 2px recessed
+        // groove with a 1px lit lip on its left — a purely vertical feature, so it tiles trivially in x.
+        for (int seamColumn = panelWidth; seamColumn < size; seamColumn += panelWidth) {
+            pixmap.setColor(0.18f, 0.19f, 0.22f, 1f);
+            pixmap.fillRectangle(seamColumn, 0, 2, size);
+            pixmap.setColor(0.46f, 0.48f, 0.53f, 1f);
+            pixmap.fillRectangle(seamColumn - 1, 0, 1, size);
+
+            // Rivet course down each seam: alternating dark shadow + lit head, evenly spaced in y.
+            for (int rivetRow = PLAIN_RIVETED_RIVET_SPACING / 2; rivetRow < size;
+                 rivetRow += PLAIN_RIVETED_RIVET_SPACING) {
+                pixmap.setColor(0.10f, 0.11f, 0.13f, 1f);
+                pixmap.fillRectangle(seamColumn - 1, rivetRow + 1, 4, 4);
+                pixmap.setColor(0.55f, 0.58f, 0.63f, 1f);
+                pixmap.fillRectangle(seamColumn - 1, rivetRow, 4, 4);
+            }
+        }
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Alternate BASE WALL — "wall_plain_tech": brushed composite panelling. A slightly cooler, flatter
+     * gray than the riveted metal, textured with fine HORIZONTAL brushed grain and broken by two faint
+     * interior vertical grooves. Same BASE-WALL brief as {@link #generatePlainRivetedWallTexture}: muted,
+     * horizontally tileable (grooves sit on interior columns; edges stay plain), and vertically even in
+     * brightness. The brushed streaks use a fixed-seed {@link Random} so the wall is byte-identical every
+     * run (permadeath-fair). Reached only through the allocator's per-level base-wall roll for 'x'.
+     */
+    private static Texture generatePlainTechWallTexture() {
+        int size = PLAIN_TECH_WALL_TEXTURE_SIZE;
+        Random random = new Random(PLAIN_TECH_WALL_SEED);
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Per-row brushed offset: a small deterministic horizontal streak brightness that varies slowly
+        // row to row, giving a "brushed metal" read without any bright horizontal band (even luminance).
+        for (int row = 0; row < size; row++) {
+            float brush = (random.nextFloat() - 0.5f) * 0.05f;
+            for (int column = 0; column < size; column++) {
+                float grain = ((row * 5 + column * 3) % 11 - 5) / 220f;
+                float shade = 0.31f + brush + grain;
+                pixmap.setColor(Math.max(0f, Math.min(1f, shade - 0.01f)),
+                                Math.max(0f, Math.min(1f, shade)),
+                                Math.max(0f, Math.min(1f, shade + 0.04f)), 1f);
+                pixmap.drawPixel(column, row);
+            }
+        }
+
+        // Two faint interior vertical grooves at 1/3 and 2/3 width — quiet panel divisions that wrap
+        // (edges stay plain base). Each is a 1px recessed line with a 1px lit lip to its left.
+        int[] grooveColumns = { size / 3, 2 * size / 3 };
+        for (int grooveColumn : grooveColumns) {
+            pixmap.setColor(0.22f, 0.24f, 0.28f, 1f);
+            pixmap.fillRectangle(grooveColumn, 0, 1, size);
+            pixmap.setColor(0.40f, 0.43f, 0.48f, 1f);
+            pixmap.fillRectangle(grooveColumn - 1, 0, 1, size);
         }
 
         Texture texture = new Texture(pixmap);

@@ -75,14 +75,55 @@ class SymbolAllocatorTest {
     void fixedSymbolsAreNeverRolled() {
         EnvironmentSpriteRegistry registry = productionRegistry();
         SymbolBudget budget = SymbolBudget.standard();
-        // 'x' -> wall_plain and '@' -> prop_vendor must hold for EVERY seed.
+        Set<String> baseWalls = new HashSet<>(budget.baseWallSpriteIds());
+        // '@' -> prop_vendor is a true fixed sprite for EVERY seed. The bulk wall symbol 'x' is a BASE
+        // WALL that varies per level (Step 1b), so it must always resolve to one of the registered base
+        // walls in the WALL category — never an accent sprite — but not necessarily the same one.
         for (long seed = 0; seed < 200; seed++) {
             LevelPalette palette = SymbolAllocator.allocate(
                     SymbolAllocationRequest.builder(seed, budget, registry).build());
-            assertEquals("wall_plain", palette.spriteIdOf('x'), "x rolled at seed " + seed);
             assertEquals("prop_vendor", palette.spriteIdOf('@'), "@ rolled at seed " + seed);
-            assertEquals(TileCategory.WALL, palette.categoryOf('x'));
             assertEquals(TileCategory.SOLID_PROP, palette.categoryOf('@'));
+            assertTrue(baseWalls.contains(palette.spriteIdOf('x')),
+                    "x resolved to a non-base wall at seed " + seed + ": " + palette.spriteIdOf('x'));
+            assertEquals(TileCategory.WALL, palette.categoryOf('x'));
+        }
+    }
+
+    @Test
+    void baseWallVariesAcrossSeedsButIsDeterministic() {
+        EnvironmentSpriteRegistry registry = productionRegistry();
+        SymbolBudget budget = SymbolBudget.standard();
+        // Deterministic: the same seed always yields the same base wall.
+        assertEquals(
+                SymbolAllocator.allocate(SymbolAllocationRequest.builder(7L, budget, registry).build())
+                        .spriteIdOf('x'),
+                SymbolAllocator.allocate(SymbolAllocationRequest.builder(7L, budget, registry).build())
+                        .spriteIdOf('x'));
+        // Varied: across many seeds the base wall is not always the default — the alternates DO get used.
+        Set<String> observed = new HashSet<>();
+        for (long seed = 0; seed < 200; seed++) {
+            observed.add(SymbolAllocator.allocate(
+                    SymbolAllocationRequest.builder(seed, budget, registry).build()).spriteIdOf('x'));
+        }
+        assertTrue(observed.size() > 1,
+                "base wall never varied across 200 seeds; only saw " + observed);
+        assertTrue(new HashSet<>(budget.baseWallSpriteIds()).containsAll(observed),
+                "an unexpected base wall was chosen: " + observed);
+    }
+
+    @Test
+    void minimalRegistryWithoutAlternatesKeepsDefaultBaseWall() {
+        // A budget whose alternate base walls are NOT registered (e.g. the themed test registry) must
+        // safely fall back to the single available base wall — the allocator filters candidates to the
+        // request's registry, so no registry.get() on a missing id and no crash.
+        EnvironmentSpriteRegistry registry = themedRegistry();
+        SymbolBudget budget = SymbolBudget.standard();
+        for (long seed = 0; seed < 50; seed++) {
+            LevelPalette palette = SymbolAllocator.allocate(
+                    SymbolAllocationRequest.builder(seed, budget, registry).build());
+            assertEquals("wall_plain", palette.spriteIdOf('x'),
+                    "base wall should stay the only registered candidate at seed " + seed);
         }
     }
 

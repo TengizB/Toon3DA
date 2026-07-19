@@ -40,8 +40,16 @@ public final class SymbolBudget {
     // Fast reverse lookup char -> its flexible category, built once from flexibleSlots.
     private final Map<Character, TileCategory> flexibleCategoryByChar;
 
+    // The bulk wall symbol ('x') and the ordered list of base-wall sprite ids the allocator may pick for
+    // it per GENERATED level (the default sprite first). See baseWallSpriteIds() for the full contract.
+    private final char baseWallSymbol;
+    private final List<String> baseWallSpriteIds;
+
     private SymbolBudget(Map<Character, String> fixedAssignments,
-                         Map<TileCategory, List<Character>> flexibleSlots) {
+                         Map<TileCategory, List<Character>> flexibleSlots,
+                         char baseWallSymbol, List<String> baseWallSpriteIds) {
+        this.baseWallSymbol    = baseWallSymbol;
+        this.baseWallSpriteIds = Collections.unmodifiableList(new ArrayList<>(baseWallSpriteIds));
         this.fixedAssignments = Collections.unmodifiableMap(new LinkedHashMap<>(fixedAssignments));
 
         Map<TileCategory, List<Character>> copiedSlots = new EnumMap<>(TileCategory.class);
@@ -64,8 +72,10 @@ public final class SymbolBudget {
      * flexible category slots. This is the single source the allocator consumes.
      */
     public static SymbolBudget standard() {
+        char baseWallSymbol = TilesetConstants.FIXED_WALL_SYMBOL.charAt(0);
+
         Map<Character, String> fixed = new LinkedHashMap<>();
-        fixed.put(TilesetConstants.FIXED_WALL_SYMBOL.charAt(0), TilesetConstants.FIXED_WALL_SPRITE_ID);
+        fixed.put(baseWallSymbol, TilesetConstants.FIXED_WALL_SPRITE_ID);
         putFixedSpriteExceptions(fixed);
 
         Map<TileCategory, List<Character>> flexible = new EnumMap<>(TileCategory.class);
@@ -74,7 +84,17 @@ public final class SymbolBudget {
         flexible.put(TileCategory.SOLID_PROP, toCharList(TilesetConstants.FLEXIBLE_SOLIDPROP_SYMBOLS));
         flexible.put(TileCategory.FLOOR_DECAL, toCharList(TilesetConstants.FLEXIBLE_DECAL_SYMBOLS));
 
-        return new SymbolBudget(fixed, flexible);
+        // Ordered base-wall candidates: the default sprite first, then the alternates from the constant.
+        List<String> baseWalls = new ArrayList<>();
+        baseWalls.add(TilesetConstants.FIXED_WALL_SPRITE_ID);
+        for (String alternateId : TilesetConstants.BASE_WALL_ALTERNATE_SPRITE_IDS.split(",")) {
+            String trimmed = alternateId.trim();
+            if (!trimmed.isEmpty()) {
+                baseWalls.add(trimmed);
+            }
+        }
+
+        return new SymbolBudget(fixed, flexible, baseWallSymbol, baseWalls);
     }
 
     /**
@@ -91,6 +111,27 @@ public final class SymbolBudget {
      */
     public Map<TileCategory, List<Character>> flexibleSlots() {
         return flexibleSlots;
+    }
+
+    /**
+     * The bulk wall symbol whose base-wall sprite the allocator varies per level (today 'x'). It is still
+     * a FIXED symbol (its category and gameplay meaning never change, and {@link #fixedSpriteId(char)}
+     * returns its default sprite) — only WHICH base wall fills it varies, and only on generated levels.
+     */
+    public char baseWallSymbol() {
+        return baseWallSymbol;
+    }
+
+    /**
+     * The ordered candidate base-wall sprite ids the allocator may pick for {@link #baseWallSymbol()} on a
+     * generated level, the default {@link TilesetConstants#FIXED_WALL_SPRITE_ID} first followed by the
+     * {@link TilesetConstants#BASE_WALL_ALTERNATE_SPRITE_IDS}. Unmodifiable; never empty (always contains
+     * at least the default). Hand-crafted / legacy levels never consult this — they keep the default via
+     * {@link LevelPalettes#legacy()}. The allocator filters this list to the ids actually registered in the
+     * request's sprite registry, so a minimal test registry with only the default still resolves safely.
+     */
+    public List<String> baseWallSpriteIds() {
+        return baseWallSpriteIds;
     }
 
     /**
