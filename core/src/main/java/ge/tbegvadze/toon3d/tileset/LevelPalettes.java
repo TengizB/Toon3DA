@@ -59,17 +59,47 @@ public final class LevelPalettes {
         return cached;
     }
 
-    private static LevelPalette buildLegacy() {
-        // Idempotent; guarantees the shared registry holds the full v1 inventory before we zip against it.
-        TilesetRegistries.bootstrap();
-        EnvironmentSpriteRegistry registry = TilesetRegistries.sprites();
+    /**
+     * A per-level palette identical to {@link #legacy()} EXCEPT the bulk wall symbol 'x' is a base wall
+     * chosen from the floor seed. This is how EVERY procedural generator (caverns, corridors, boss arenas,
+     * special rooms, …) — not just the main dungeon {@code LevelGenerator} — gets BASE-WALL VARIETY without
+     * disturbing its other art: the generator passes its own seed here and hands the result to
+     * {@code new Level(grid, spawns, weapons, palette)}. Hand-crafted levels loaded by {@code LevelLoader}
+     * keep {@link #legacy()} and never vary. Deterministic (same seed ⇒ same palette); the base-wall pick
+     * is {@link SymbolAllocator#chooseBaseWall} — the same single source of truth the full allocator uses,
+     * on an RNG stream independent of the generator's own {@code Random}, so the generated grid is
+     * unchanged. NOT memoised (the seed varies per level); building it is cheap.
+     */
+    public static LevelPalette generatedWithBaseWall(long levelSeed) {
+        SymbolBudget budget = SymbolBudget.standard();
+        EnvironmentSpriteRegistry registry = bootstrappedRegistry();
+        LevelPalette.Builder builder = legacyBuilder(registry);
+        String baseWall = SymbolAllocator.chooseBaseWall(levelSeed, budget, registry);
+        if (baseWall != null) {
+            builder.bind(budget.baseWallSymbol(), TileCategory.WALL, baseWall);
+        }
+        return builder.build();
+    }
 
+    private static LevelPalette buildLegacy() {
+        return legacyBuilder(bootstrappedRegistry()).build();
+    }
+
+    // Fills a builder with the historic 1:1 legacy bindings for every category. Shared by buildLegacy()
+    // and generatedWithBaseWall() so both encode the legacy table exactly once.
+    private static LevelPalette.Builder legacyBuilder(EnvironmentSpriteRegistry registry) {
         LevelPalette.Builder builder = LevelPalette.builder();
         bindCategory(builder, registry, TileCategory.WALL,        LEGACY_WALL_SYMBOLS);
         bindCategory(builder, registry, TileCategory.COLUMN,      LEGACY_COLUMN_SYMBOLS);
         bindCategory(builder, registry, TileCategory.SOLID_PROP,  LEGACY_SOLID_PROP_SYMBOLS);
         bindCategory(builder, registry, TileCategory.FLOOR_DECAL, LEGACY_DECAL_SYMBOLS);
-        return builder.build();
+        return builder;
+    }
+
+    // Idempotent; guarantees the shared registry holds the full v1 inventory before it is read.
+    private static EnvironmentSpriteRegistry bootstrappedRegistry() {
+        TilesetRegistries.bootstrap();
+        return TilesetRegistries.sprites();
     }
 
     // Zips a registration-ordered symbol string against a category's registry pool: char[i] binds to

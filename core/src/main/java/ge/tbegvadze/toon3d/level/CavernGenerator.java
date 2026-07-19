@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.item.ItemType;
+import ge.tbegvadze.toon3d.tileset.LevelPalettes;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
 
@@ -58,6 +59,9 @@ public class CavernGenerator implements ILevelGenerator {
     }
 
     private final Random random;
+    // The raw floor seed, kept for deterministic per-level BASE-WALL selection (independent of `random`,
+    // so it never perturbs the generated grid). See LevelPalettes.generatedWithBaseWall.
+    private final long   seed;
     private       int    spawnColumn;
     private       int    spawnRow;
     private       List<WeaponSpawnPoint> weaponSpawnPoints;
@@ -84,6 +88,7 @@ public class CavernGenerator implements ILevelGenerator {
      */
     public CavernGenerator(long seed, float enemyBudgetScale) {
         this.random           = new Random(seed);
+        this.seed             = seed;
         this.enemyBudgetScale = enemyBudgetScale > 0f ? enemyBudgetScale : 1f;
     }
 
@@ -156,7 +161,8 @@ public class CavernGenerator implements ILevelGenerator {
         // Phase 10 — connectivity audit
         verifyChamberConnectivity(grid, chambers);
 
-        return new Level(grid, spawnPoints, weaponSpawnPoints);
+        return new Level(grid, spawnPoints, weaponSpawnPoints,
+                         LevelPalettes.generatedWithBaseWall(seed));
     }
 
     // -------------------------------------------------------------------------
@@ -1323,7 +1329,8 @@ public class CavernGenerator implements ILevelGenerator {
             }
         }
         grid[centerRow][centerColumn] = 'p';
-        return new Level(grid, new ArrayList<>(), new ArrayList<>());
+        return new Level(grid, new ArrayList<>(), new ArrayList<>(),
+                         LevelPalettes.generatedWithBaseWall(seed));
     }
 
     // -------------------------------------------------------------------------

@@ -3,6 +3,7 @@ package ge.tbegvadze.toon3d.level;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.tileset.LevelPalette;
+import ge.tbegvadze.toon3d.tileset.LevelPalettes;
 import ge.tbegvadze.toon3d.tileset.RoomSymbolDemand;
 import ge.tbegvadze.toon3d.tileset.SymbolAllocationRequest;
 import ge.tbegvadze.toon3d.tileset.SymbolAllocator;
@@ -3635,6 +3636,7 @@ public class LevelGenerator implements ILevelGenerator {
             }
         }
         grid[22][40] = 'p';
-        return new Level(grid, new ArrayList<>(), new ArrayList<>());
+        return new Level(grid, new ArrayList<>(), new ArrayList<>(),
+                         LevelPalettes.generatedWithBaseWall(seed));
     }
 }

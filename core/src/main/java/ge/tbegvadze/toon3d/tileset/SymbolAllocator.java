@@ -109,7 +109,7 @@ public final class SymbolAllocator {
         // one base wall — the fix for "every generated level looks the same". Deterministic: same seed ⇒
         // same base wall. It stays a base wall (WALL category, never an accent), and hand/legacy levels
         // never reach here (they use LevelPalettes.legacy()), so their bulk walls are unchanged.
-        bindBaseWall(request, paletteBuilder, boundSpriteBySymbol, usedByCategory, baseWallSymbol);
+        bindBaseWall(request, paletteBuilder, boundSpriteBySymbol, usedByCategory);
 
         // Step 2 — RESERVE the sprites required by every PLACED signature room.
         for (RoomSymbolDemand demand : request.placedRoomDemands()) {
@@ -140,19 +140,37 @@ public final class SymbolAllocator {
         return paletteBuilder.build();
     }
 
-    // Step 1b helper: bind the bulk wall symbol to a seed-chosen base wall. Filters the budget's ordered
-    // base-wall candidates to the ids actually present in this request's registry (so a minimal test
-    // registry with only the default resolves safely), then picks one with a dedicated per-symbol RNG
-    // stream — GameMath.paletteSymbolSeed(levelSeed, baseWallSymbol), independent of the accent-variety
-    // rolls. With a single candidate the pick is forced, reproducing today's fixed base wall.
+    // Step 1b helper: bind the bulk wall symbol to a seed-chosen base wall via chooseBaseWall (below).
     private static void bindBaseWall(SymbolAllocationRequest request,
                                      LevelPalette.Builder paletteBuilder,
                                      Map<Character, String> boundSpriteBySymbol,
-                                     Map<TileCategory, Set<String>> usedByCategory,
-                                     char baseWallSymbol) {
+                                     Map<TileCategory, Set<String>> usedByCategory) {
         SymbolBudget budget = request.budget();
         EnvironmentSpriteRegistry registry = request.registry();
+        String chosen = chooseBaseWall(request.levelSeed(), budget, registry);
+        if (chosen == null) {
+            // Degenerate: not even the default base wall is registered in this registry. Leave the symbol
+            // unbound rather than call registry.get() on a missing id.
+            return;
+        }
+        TileCategory category = registry.get(chosen).category();
+        bind(paletteBuilder, boundSpriteBySymbol, usedByCategory, budget.baseWallSymbol(), category, chosen);
+    }
 
+    /**
+     * Picks the base-wall sprite id for a level from its seed — the SINGLE source of truth for base-wall
+     * selection, shared by the full allocator (Step 1b) and every other generator via
+     * {@link LevelPalettes#generatedWithBaseWall(long)}. It filters the budget's ordered base-wall
+     * candidates ({@link SymbolBudget#baseWallSpriteIds()}) to the ids actually registered, then rolls one
+     * with a dedicated per-symbol RNG stream (GameMath.paletteSymbolSeed(levelSeed, baseWallSymbol)) that is
+     * INDEPENDENT of a generator's own {@code Random}, so choosing a base wall never perturbs the generated
+     * grid. Pure and deterministic: same (seed, budget, registry) ⇒ same id. With a single registered
+     * candidate the pick is forced (reproduces the historic fixed base wall). Returns {@code null} only when
+     * no base wall — not even the default — is registered, so callers can leave the symbol on its existing
+     * binding.
+     */
+    public static String chooseBaseWall(long levelSeed, SymbolBudget budget,
+                                        EnvironmentSpriteRegistry registry) {
         List<String> candidates = new ArrayList<>();
         for (String spriteId : budget.baseWallSpriteIds()) {
             if (registry.contains(spriteId)) {
@@ -160,17 +178,10 @@ public final class SymbolAllocator {
             }
         }
         if (candidates.isEmpty()) {
-            // Degenerate: not even the default base wall is registered in this request's registry (the
-            // default is always the first candidate, so an empty list means it too is absent). Leave the
-            // symbol unbound rather than call registry.get() on a missing id — the same behaviour any
-            // symbol gets when its sprite is not registered.
-            return;
+            return null;
         }
-
-        PaletteRng rng = new PaletteRng(GameMath.paletteSymbolSeed(request.levelSeed(), baseWallSymbol));
-        String chosen = candidates.get(rng.nextIntInclusive(0, candidates.size() - 1));
-        TileCategory category = registry.get(chosen).category();
-        bind(paletteBuilder, boundSpriteBySymbol, usedByCategory, baseWallSymbol, category, chosen);
+        PaletteRng rng = new PaletteRng(GameMath.paletteSymbolSeed(levelSeed, budget.baseWallSymbol()));
+        return candidates.get(rng.nextIntInclusive(0, candidates.size() - 1));
     }
 
     // Binds one symbol and records it in the local mirrors so later steps see it as consumed.

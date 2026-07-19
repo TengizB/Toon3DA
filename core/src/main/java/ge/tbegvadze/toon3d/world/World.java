@@ -319,7 +319,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     /** Creates a new run from a seed; starts in the weapon-selection staging room. */
     public World(long runSeed) {
-        this(new StartGameLevelGenerator(), runSeed);
+        this(new StartGameLevelGenerator(runSeed), runSeed);
     }
 
     /** Creates a World from a pre-built level (file-loaded or test). Uses a random run seed. */

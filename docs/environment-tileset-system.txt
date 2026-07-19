@@ -1174,22 +1174,42 @@ MECHANISM (all deterministic, headless):
     alternates) and exposes baseWallSymbol() ('x') + baseWallSpriteIds(). 'x' is STILL a FIXED symbol —
     its category and gameplay meaning never change, and fixedSpriteId('x') is still "wall_plain"; only
     WHICH base wall fills it varies, and only on generated levels.
-  * SymbolAllocator Step 1 now SKIPS the base-wall symbol; new Step 1b binds it to a seed-chosen base
-    wall via a dedicated per-symbol RNG stream GameMath.paletteSymbolSeed(levelSeed, 'x') — independent
-    of the accent-variety rolls. The candidate list is filtered to the ids actually registered in the
-    request's registry, so a minimal registry with only the default resolves safely (single candidate =
-    forced pick = today's behaviour). Because exactly one base wall is recorded as spent, anti-repetition
-    (R3) treats the chosen base wall — not the unused default — as the consumed WALL sprite. R4 updated:
-    'x' is a base wall (never an accent), so accent variety still only decorates the accent walls.
+  * SymbolAllocator.chooseBaseWall(levelSeed, budget, registry) is the SINGLE SOURCE OF TRUTH for the pick:
+    it filters the ordered candidates to the ids actually registered, then rolls one with a dedicated
+    per-symbol RNG stream GameMath.paletteSymbolSeed(levelSeed, 'x') — independent of the accent-variety
+    rolls AND of any generator's own Random, so picking a base wall never perturbs a generated grid. A
+    minimal registry with only the default resolves safely (single candidate = forced pick = today's
+    behaviour); it returns null only when not even the default is registered.
+  * SymbolAllocator Step 1 SKIPS the base-wall symbol; Step 1b calls chooseBaseWall and binds the result.
+    Because exactly one base wall is recorded as spent, anti-repetition (R3) treats the chosen base wall —
+    not the unused default — as the consumed WALL sprite. R4 updated: 'x' is a base wall (never an accent),
+    so accent variety still only decorates the accent walls. 'x' is STILL a FIXED symbol — its category and
+    gameplay meaning never change, and fixedSpriteId('x') is still "wall_plain"; only WHICH base wall fills
+    it varies, and only on generated levels.
+
+APPLIES TO EVERY GENERATOR — WITHOUT EXCEPTION. The main dungeon LevelGenerator gets base-wall variety
+through the full allocator (Step 1b above). EVERY OTHER generator — CavernGenerator, LinearCorridorGenerator,
+BossArenaGenerator, GateAirlockGenerator, EventRoomGenerator, MedBayGenerator, StartGameLevelGenerator, and
+the two generators' emergency fallback levels — gets it through LevelPalettes.generatedWithBaseWall(seed): a
+palette IDENTICAL to legacy() EXCEPT 'x', which chooseBaseWall re-binds from the seed. Each generator keeps
+its own raw floor seed and passes it to the 4-arg Level constructor (StartGameLevelGenerator now takes the
+run seed; World passes it). This varies ONLY the base wall on those generators — their accent walls, props,
+and decals stay legacy, so no bespoke look changes beyond the bulk wall. Hand-crafted levels loaded by
+LevelLoader keep pure legacy() and never vary. (The only level path that is NOT a generator — the file
+loader — is therefore the only one that stays fixed, which is correct: hand-authored art must not shuffle.)
 
 DETERMINISM: same floor seed => same base wall (permadeath / seed-sharing fairness), the same promise the
-rest of the allocator makes. The base wall is realised per level by EnvironmentTextureSet exactly like any
-other palette sprite (its generator is registered, so the startup id-set assertion still passes), and a
-hand/legacy level never realises the alternates.
+rest of the allocator makes. Because the pick uses a paletteSymbolSeed stream independent of each generator's
+Random, the generated GRID is byte-identical to before — only the palette's 'x' binding changes. The base
+wall is realised per level by EnvironmentTextureSet exactly like any other palette sprite (its generator is
+registered, so the startup id-set assertion still passes), and a hand/legacy level never realises the
+alternates.
 
-VERIFICATION (headless): SymbolAllocatorTest updated — fixedSymbolsAreNeverRolled now asserts '@' fixed
-and 'x' ∈ base walls (WALL category) rather than a single sprite; new tests
-baseWallVariesAcrossSeedsButIsDeterministic and minimalRegistryWithoutAlternatesKeepsDefaultBaseWall. The
+VERIFICATION (headless): SymbolAllocatorTest — fixedSymbolsAreNeverRolled asserts '@' fixed and 'x' ∈ base
+walls (WALL category) rather than a single sprite; baseWallVariesAcrossSeedsButIsDeterministic and
+minimalRegistryWithoutAlternatesKeepsDefaultBaseWall. LevelPaletteTest.generatedWithBaseWallVariesOnlyTheBaseWall
+proves the every-generator path: 'x' varies + is deterministic + is a base wall, and EVERY other symbol
+matches legacy exactly (accents/props/decals untouched), while legacy() itself stays wall_plain. The
 legacy-palette / texture-generator id-set invariants are unchanged (the two new sprites are variety-only
 and have generators). Constants added: TilesetConstants.BASE_WALL_ALTERNATE_SPRITE_IDS;
 RenderConstants.SANDSTONE_WALL_TEXTURE_SIZE / SANDSTONE_BLOCK_WIDTH / SANDSTONE_BLOCK_HEIGHT /

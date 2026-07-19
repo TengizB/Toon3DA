@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.level;
 
+import ge.tbegvadze.toon3d.tileset.LevelPalettes;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
 
@@ -65,11 +66,15 @@ public final class BossArenaGenerator implements ILevelGenerator {
     private final int    gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;  // 80
     private final int    gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT; // 45
     private final Random random;
+    // Raw floor seed, kept for deterministic per-level BASE-WALL selection (independent of `random`,
+    // so it never perturbs the generated grid). See LevelPalettes.generatedWithBaseWall.
+    private final long   seed;
 
     private BossArenaLayout layout;
 
     public BossArenaGenerator(long seed) {
         this.random = new Random(seed);
+        this.seed   = seed;
     }
 
     /** The layout chosen by the most recent {@link #generate(int)} call. Null before the first call. */
@@ -164,7 +169,8 @@ public final class BossArenaGenerator implements ILevelGenerator {
         this.layout = new BossArenaLayout(centerColumn, doorRow, exitColumn, exitRow,
                 bossColumn, bossRow, alcoveTiles);
 
-        return new Level(matrix, spawnPoints, new ArrayList<>());
+        return new Level(matrix, spawnPoints, new ArrayList<>(),
+                         LevelPalettes.generatedWithBaseWall(seed));
     }
 
     // -------------------------------------------------------------------------
