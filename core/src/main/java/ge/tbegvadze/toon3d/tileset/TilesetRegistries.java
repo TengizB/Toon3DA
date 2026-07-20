@@ -36,31 +36,33 @@ public final class TilesetRegistries {
      */
     public static final String SPRITE_ID_WALL_HEX_PLATE = "wall_hex_plate";
     /**
-     * Stable sprite ids of the two ALTERNATE BASE WALLS. The bulk wall symbol 'x' resolves per GENERATED
+     * Stable sprite ids of the ALTERNATE BASE WALLS. The bulk wall symbol 'x' resolves per GENERATED
      * level to "wall_plain" OR one of these, seeded from the floor seed, so levels no longer share one
      * base wall. Each gives the floor its own FACILITY IDENTITY and is LIGHT, not gray: a warm
-     * sandstone-block facility and a bright clinical-lab facility. They carry no legacy symbol, so they are
-     * variety-only (see {@link #VARIETY_ONLY_SPRITE_IDS}).
+     * sandstone-block facility, a bright clinical-lab facility, and a sage/teal glazed ceramic-tile
+     * facility. They carry no legacy symbol, so they are variety-only (see {@link #VARIETY_ONLY_SPRITE_IDS}).
      */
     public static final String SPRITE_ID_WALL_PLAIN_SANDSTONE = "wall_plain_sandstone";
     public static final String SPRITE_ID_WALL_PLAIN_CLEAN     = "wall_plain_clean";
+    public static final String SPRITE_ID_WALL_PLAIN_TILED     = "wall_plain_tiled";
 
     /**
      * Sprite ids that exist in the catalog as PER-LEVEL VARIETY ALTERNATIVES which the historic 1:1
      * legacy palette never maps a symbol to. A sprite lands here whenever it is NEW art in an EXISTING
      * category with no free legacy symbol to bind it (the common case for content added via RECIPE A):
      * {@link #SPRITE_ID_COLUMN_SQUARE} (order-8, the second COLUMN sprite the flexible 'P' slot resolves
-     * to), {@link #SPRITE_ID_WALL_HEX_PLATE} (order-9, an extra WALL accent), and the two alternate base
-     * walls {@link #SPRITE_ID_WALL_PLAIN_SANDSTONE} / {@link #SPRITE_ID_WALL_PLAIN_CLEAN} (which the
-     * allocator picks for the plain 'x' slot per level). They are fully registered (with texture
-     * generators) but only ever reached through the allocator, so the legacy palette references the whole
-     * catalog MINUS this set. Unmodifiable.
+     * to), {@link #SPRITE_ID_WALL_HEX_PLATE} (order-9, an extra WALL accent), and the alternate base
+     * walls {@link #SPRITE_ID_WALL_PLAIN_SANDSTONE} / {@link #SPRITE_ID_WALL_PLAIN_CLEAN} /
+     * {@link #SPRITE_ID_WALL_PLAIN_TILED} (which the allocator picks for the plain 'x' slot per level).
+     * They are fully registered (with texture generators) but only ever reached through the allocator, so
+     * the legacy palette references the whole catalog MINUS this set. Unmodifiable.
      */
     public static final java.util.Set<String> VARIETY_ONLY_SPRITE_IDS =
             java.util.Collections.unmodifiableSet(
                     new java.util.LinkedHashSet<>(java.util.Arrays.asList(
                             SPRITE_ID_COLUMN_SQUARE, SPRITE_ID_WALL_HEX_PLATE,
-                            SPRITE_ID_WALL_PLAIN_SANDSTONE, SPRITE_ID_WALL_PLAIN_CLEAN)));
+                            SPRITE_ID_WALL_PLAIN_SANDSTONE, SPRITE_ID_WALL_PLAIN_CLEAN,
+                            SPRITE_ID_WALL_PLAIN_TILED)));
 
     private static final EnvironmentSpriteRegistry SPRITES = new EnvironmentSpriteRegistry();
     private static boolean bootstrapped = false;
@@ -150,6 +152,7 @@ public final class TilesetRegistries {
         // docs/environment-tileset-system.txt (BASE-WALL VARIETY).
         registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_WALL_PLAIN_SANDSTONE, TileCategory.WALL, "Sandstone Block Wall").build());
         registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_WALL_PLAIN_CLEAN,     TileCategory.WALL, "Clean Lab Panel Wall").build());
+        registry.register(EnvironmentSpriteDefinition.builder(SPRITE_ID_WALL_PLAIN_TILED,     TileCategory.WALL, "Ceramic Tile Wall").build());
     }
 
     /**

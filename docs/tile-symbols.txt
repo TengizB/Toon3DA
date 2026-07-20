@@ -39,8 +39,9 @@ WALLS (solid — block movement and raycasting)
 x   Plain wall          Default. Use for 80-90% of all wall tiles.           lab_wall_plain.jpg
     (BASE-WALL VARIETY: 'x' stays a FIXED WALL symbol, but on GENERATED levels the allocator picks its
      base-wall sprite per floor seed from a small set — "wall_plain" (neutral) OR the warm
-     "wall_plain_sandstone" / the bright "wall_plain_clean" — so each floor feels like a different
-     facility. Hand levels keep "wall_plain". See docs/environment-tileset-system.txt, BASE-WALL VARIETY.)
+     "wall_plain_sandstone" / the bright "wall_plain_clean" / the sage-teal "wall_plain_tiled" — so each
+     floor feels like a different facility. Hand levels keep "wall_plain". See
+     docs/environment-tileset-system.txt, BASE-WALL VARIETY.)
 c   Conduit wall        Utility corridors, visible pipes. Sparse.             lab_wall_conduit.jpg
 v   Vent wall           Room interior side walls. 1-2 per room max.           lab_wall_vent.jpg
 t   Terminal wall       Rare. Corner alcoves, dead-ends. Max 1-2 per level.   lab_wall_terminal.jpg

@@ -291,8 +291,8 @@ public final class RenderConstants {
     // AND hue, so swapping it makes the level FEEL like a different place — while staying LIGHT (never dark),
     // horizontally tileable (no seam between adjacent tiles — interior features only, plain edges), and
     // vertically even in brightness (distance-shading multiplies the texture, so bright bands would read as
-    // fake lighting). The default 'wall_plain' is the neutral gray disk image; these two are deliberately
-    // NOT gray. See docs/environment-tileset-system.txt (BASE-WALL VARIETY).
+    // fake lighting). The default 'wall_plain' is the neutral gray disk image; the alternates below are
+    // deliberately NOT gray. See docs/environment-tileset-system.txt (BASE-WALL VARIETY).
     // 'wall_plain_sandstone' — a warm, light sandstone-block facility: staggered ashlar masonry courses in
     // warm tan, with pale grout joints and per-block tint variation (a running-bond that wraps).
     public static final int   SANDSTONE_WALL_TEXTURE_SIZE     = 256;
@@ -305,6 +305,14 @@ public final class RenderConstants {
     public static final int   CLEANLAB_PANEL_ROWS             = 4;    // horizontal panel divisions
     public static final int   CLEANLAB_SEAM_THICKNESS         = 3;    // recessed grid seam thickness
     public static final long  CLEANLAB_WALL_SEED              = 0x436C_6E4CL; // "ClnL"
+    // 'wall_plain_tiled' — a light sage/teal glazed ceramic-TILE facility (a hydroponics / sanitation
+    // wing): a tight grid of small glazed tiles with pale grout, a soft top-left glaze sheen per tile, and
+    // faint per-tile tint. Its GREEN-TEAL hue and small tile scale set it apart from the warm sandstone
+    // blocks and the bright blue-white composite panels. The tile size divides the width, so it wraps.
+    public static final int   TILED_WALL_TEXTURE_SIZE         = 256;
+    public static final int   TILED_WALL_TILE_SIZE            = 32;   // divides the width -> tiles wrap
+    public static final int   TILED_WALL_GROUT_THICKNESS      = 2;    // grout line thickness in pixels
+    public static final long  TILED_WALL_SEED                 = 0x5469_6C65L; // "Tile"
 
     // 'P' — Cylindrical column texture (taller than wide; mortar course lines)
     public static final int   COLUMN_TEXTURE_WIDTH            = 128;

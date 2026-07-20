@@ -478,6 +478,7 @@ public class WallRenderer implements Renderable, Disposable {
         registry.register(TilesetRegistries.SPRITE_ID_WALL_HEX_PLATE, WallRenderer::generateHexPlateWallTexture);
         registry.register(TilesetRegistries.SPRITE_ID_WALL_PLAIN_SANDSTONE, WallRenderer::generateSandstoneWallTexture);
         registry.register(TilesetRegistries.SPRITE_ID_WALL_PLAIN_CLEAN,     WallRenderer::generateCleanLabWallTexture);
+        registry.register(TilesetRegistries.SPRITE_ID_WALL_PLAIN_TILED,     WallRenderer::generateTiledWallTexture);
     }
 
     /**
@@ -758,6 +759,64 @@ public class WallRenderer implements Renderable, Disposable {
             pixmap.setColor(0.70f, 0.74f, 0.80f, 1f);
             pixmap.fillRectangle(verticalSeamColumn - 3, seamRow - 3, 3, 3);
             pixmap.fillRectangle(verticalSeamColumn + seam, seamRow - 3, 3, 3);
+        }
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        pixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Alternate BASE WALL — "wall_plain_tiled": a light sage/teal glazed CERAMIC-TILE facility (a
+     * hydroponics / sanitation wing). A tight grid of small glazed tiles: pale grout lines, a soft
+     * top-left glaze sheen on each tile, and a faint deterministic per-tile tint so no two glazes match.
+     * Its GREEN-TEAL hue and small tile scale set it apart from the warm sandstone blocks and the bright
+     * blue-white composite panels — a third, unmistakable facility identity. Same BASE-WALL brief: LIGHT
+     * (never dark), horizontally tileable (the tile size divides the texture width, so the grid is
+     * perfectly periodic and wraps), and vertically even in brightness (thin regular grout, gentle sheen —
+     * no bright band). A fixed-seed {@link Random} adds a faint per-tile tint so the wall is byte-identical
+     * every run (permadeath-fair). Reached only through the allocator's per-level base-wall roll for 'x'.
+     */
+    private static Texture generateTiledWallTexture() {
+        int size  = TILED_WALL_TEXTURE_SIZE;
+        int tile  = TILED_WALL_TILE_SIZE;
+        int grout = TILED_WALL_GROUT_THICKNESS;
+        Random random = new Random(TILED_WALL_SEED);
+
+        // Deterministic per-tile tint, keyed by tile grid position (independent of pixel iteration order).
+        int tilesPerAxis = size / tile;
+        float[][] tileTint = new float[tilesPerAxis][tilesPerAxis];
+        for (int tileRow = 0; tileRow < tilesPerAxis; tileRow++) {
+            for (int tileColumn = 0; tileColumn < tilesPerAxis; tileColumn++) {
+                tileTint[tileRow][tileColumn] = (random.nextFloat() - 0.5f) * 0.06f;
+            }
+        }
+
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        for (int row = 0; row < size; row++) {
+            int localY = row % tile;
+            for (int column = 0; column < size; column++) {
+                int localX = column % tile;
+                boolean groutLine = localX < grout || localY < grout;
+                if (groutLine) {
+                    // Pale cool grout — LIGHTER than the glaze so joints read without darkening the wall.
+                    pixmap.setColor(0.82f, 0.85f, 0.83f, 1f);
+                } else {
+                    float tint = tileTint[row / tile][column / tile];
+                    // Sage/teal glaze base (green + blue lead the red for a cool, verdant read).
+                    float baseRed   = 0.58f + tint;
+                    float baseGreen = 0.76f + tint;
+                    float baseBlue  = 0.70f + tint;
+                    // Soft top-left glaze sheen: a diagonal highlight easing away from the tile's lit corner.
+                    float sheen = (tile - localX - localY) / (float) (2 * tile); // ~0.5 top-left -> ~-0.5 bottom-right
+                    float lift  = Math.max(0f, sheen) * 0.12f;
+                    pixmap.setColor(Math.max(0f, Math.min(1f, baseRed + lift)),
+                                    Math.max(0f, Math.min(1f, baseGreen + lift)),
+                                    Math.max(0f, Math.min(1f, baseBlue + lift)), 1f);
+                }
+                pixmap.drawPixel(column, row);
+            }
         }
 
         Texture texture = new Texture(pixmap);

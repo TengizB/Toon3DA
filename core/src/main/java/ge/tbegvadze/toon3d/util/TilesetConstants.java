@@ -37,15 +37,17 @@ public final class TilesetConstants {
      * Extra base-wall sprites (beyond {@link #FIXED_WALL_SPRITE_ID}) the per-level allocator may pick for
      * the bulk wall symbol 'x' on GENERATED levels, so two seeds no longer share one base wall — the fix
      * for "every level looks the same". Each carries a distinct FACILITY IDENTITY (material + hue) and is
-     * LIGHT, not gray: "wall_plain_sandstone" (a warm sandstone-block facility) and "wall_plain_clean" (a
-     * bright clinical-lab facility). Comma-separated stable sprite ids, all registered in the WALL pool
+     * LIGHT, not gray: "wall_plain_sandstone" (a warm sandstone-block facility), "wall_plain_clean" (a
+     * bright clinical-lab facility), and "wall_plain_tiled" (a sage/teal glazed ceramic-tile facility).
+     * Comma-separated stable sprite ids, all registered in the WALL pool
      * with their own procedural texture generators (and listed in
      * {@code TilesetRegistries.VARIETY_ONLY_SPRITE_IDS}, since no legacy symbol maps to them). Together
      * with {@link #FIXED_WALL_SPRITE_ID} these form the ordered base-wall candidate list the allocator
      * rolls against. Adding another base wall is: register the sprite + generator, then append its id here.
      * Hand-crafted / legacy levels ignore this list entirely and keep {@link #FIXED_WALL_SPRITE_ID}.
      */
-    public static final String BASE_WALL_ALTERNATE_SPRITE_IDS = "wall_plain_sandstone,wall_plain_clean";
+    public static final String BASE_WALL_ALTERNATE_SPRITE_IDS =
+            "wall_plain_sandstone,wall_plain_clean,wall_plain_tiled";
 
     // ── FLEXIBLE slots (category fixed, sprite assigned per level by the allocator, order-4) ──────
     /**

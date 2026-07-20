@@ -1154,17 +1154,23 @@ WHAT MAKES A GOOD BASE WALL (the design brief every base-wall sprite must meet):
   * DETERMINISTIC PIXELS — the same texture every run (fixed pattern / fixed-seed Random), for
     permadeath fairness and no per-frame variance.
 
-THE TWO NEW BASE WALLS (procedural, WallRenderer, added by RECIPE A — registration + generator only) are
-deliberately opposite in feel so the base-wall roll is obvious in play:
+THE ALTERNATE BASE WALLS (procedural, WallRenderer, added by RECIPE A — registration + generator only) are
+deliberately distinct in material AND hue so the base-wall roll is obvious in play:
   * "wall_plain_sandstone" (Sandstone Block Wall) — a WARM, light stone facility: staggered ashlar masonry
     (running-bond courses whose block width + half-course shift both divide the texture width, so it wraps)
     in warm tan, with pale grout joints, a soft per-block bevel, and a deterministic per-block tint.
   * "wall_plain_clean" (Clean Lab Panel Wall) — a BRIGHT, cool clinical facility: large off-white composite
     panels on a recessed grid (one interior vertical seam + evenly-spaced horizontal seams), soft per-panel
-    sheen, and light steel corner bolts. High-key and airy — the opposite of the sandstone.
-Both are registered LAST in TilesetRegistries.registerWalls() (after the historic 1:1 walls the legacy
+    sheen, and light steel corner bolts. High-key and airy.
+  * "wall_plain_tiled" (Ceramic Tile Wall) — a light SAGE/TEAL glazed ceramic-tile facility (a hydroponics /
+    sanitation wing): a tight grid of small glazed tiles (the tile size divides the width, so the grid is
+    periodic and wraps), pale grout, a soft top-left glaze sheen per tile, and a faint per-tile tint. Its
+    green-teal hue and small tile scale make it unmistakable next to the warm blocks and the blue-white panels.
+All are registered LAST in TilesetRegistries.registerWalls() (after the historic 1:1 walls the legacy
 palette zips against) and listed in TilesetRegistries.VARIETY_ONLY_SPRITE_IDS, so no legacy symbol maps
-to them and the legacy-palette "whole catalog minus variety-only" invariant still holds.
+to them and the legacy-palette "whole catalog minus variety-only" invariant still holds. Adding another
+base wall is exactly these steps: one register() line + one WallRenderer generator + append the id to
+TilesetConstants.BASE_WALL_ALTERNATE_SPRITE_IDS + the VARIETY_ONLY_SPRITE_IDS set.
 
 MECHANISM (all deterministic, headless):
   * TilesetConstants.BASE_WALL_ALTERNATE_SPRITE_IDS lists the alternates beyond the default
@@ -1210,9 +1216,10 @@ walls (WALL category) rather than a single sprite; baseWallVariesAcrossSeedsButI
 minimalRegistryWithoutAlternatesKeepsDefaultBaseWall. LevelPaletteTest.generatedWithBaseWallVariesOnlyTheBaseWall
 proves the every-generator path: 'x' varies + is deterministic + is a base wall, and EVERY other symbol
 matches legacy exactly (accents/props/decals untouched), while legacy() itself stays wall_plain. The
-legacy-palette / texture-generator id-set invariants are unchanged (the two new sprites are variety-only
-and have generators). Constants added: TilesetConstants.BASE_WALL_ALTERNATE_SPRITE_IDS;
+legacy-palette / texture-generator id-set invariants are unchanged (the alternate base-wall sprites are
+variety-only and have generators). Constants added: TilesetConstants.BASE_WALL_ALTERNATE_SPRITE_IDS;
 RenderConstants.SANDSTONE_WALL_TEXTURE_SIZE / SANDSTONE_BLOCK_WIDTH / SANDSTONE_BLOCK_HEIGHT /
 SANDSTONE_MORTAR_THICKNESS / CLEANLAB_WALL_TEXTURE_SIZE / CLEANLAB_PANEL_ROWS / CLEANLAB_SEAM_THICKNESS /
-CLEANLAB_WALL_SEED. Sprite-id constants TilesetRegistries.SPRITE_ID_WALL_PLAIN_SANDSTONE /
-SPRITE_ID_WALL_PLAIN_CLEAN.
+CLEANLAB_WALL_SEED / TILED_WALL_TEXTURE_SIZE / TILED_WALL_TILE_SIZE / TILED_WALL_GROUT_THICKNESS /
+TILED_WALL_SEED. Sprite-id constants TilesetRegistries.SPRITE_ID_WALL_PLAIN_SANDSTONE /
+SPRITE_ID_WALL_PLAIN_CLEAN / SPRITE_ID_WALL_PLAIN_TILED.
