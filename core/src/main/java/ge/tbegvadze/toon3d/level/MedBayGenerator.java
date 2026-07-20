@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.level;
 
+import ge.tbegvadze.toon3d.tileset.LevelPalettes;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
@@ -31,9 +32,13 @@ import java.util.Random;
 public class MedBayGenerator implements ILevelGenerator {
 
     private final Random random;
+    // Raw floor seed, kept for deterministic per-level BASE-WALL selection (independent of `random`,
+    // so it never perturbs the generated grid). See LevelPalettes.generatedWithBaseWall.
+    private final long   seed;
 
     public MedBayGenerator(long seed) {
         this.random = new Random(seed);
+        this.seed   = seed;
     }
 
     @Override
@@ -131,7 +136,8 @@ public class MedBayGenerator implements ILevelGenerator {
 
         List<EnemySpawnPoint>  enemySpawnPoints  = new ArrayList<>(); // ZERO enemies — the sanctuary.
         List<WeaponSpawnPoint> weaponSpawnPoints = new ArrayList<>();
-        Level level = new Level(grid, enemySpawnPoints, weaponSpawnPoints);
+        Level level = new Level(grid, enemySpawnPoints, weaponSpawnPoints,
+                                LevelPalettes.generatedWithBaseWall(seed));
         level.markHealStation(stationColumn, stationRow);
         return level;
     }

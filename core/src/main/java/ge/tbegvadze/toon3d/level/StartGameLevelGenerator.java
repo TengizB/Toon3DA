@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.level;
 
+import ge.tbegvadze.toon3d.tileset.LevelPalettes;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 
 import java.util.Collections;
@@ -29,6 +30,15 @@ public class StartGameLevelGenerator implements ILevelGenerator {
     private final int[] weaponTileRows    = new int[OFFER_COUNT];
     private final int[] meleeTileColumns  = new int[MELEE_OFFER_COUNT];
     private final int[] meleeTileRows     = new int[MELEE_OFFER_COUNT];
+
+    // The run seed, used only to pick this staging room's BASE WALL so every generator — this one
+    // included, without exception — gets per-run base-wall variety. The layout is otherwise fixed.
+    private final long seed;
+
+    /** Uses the run seed to vary the staging room's base wall. */
+    public StartGameLevelGenerator(long seed) {
+        this.seed = seed;
+    }
 
     @Override
     public Level generate() {
@@ -101,7 +111,8 @@ public class StartGameLevelGenerator implements ILevelGenerator {
                                   roomLeft, roomBottom, outerSize);
         }
 
-        return new Level(matrix, Collections.emptyList(), Collections.emptyList());
+        return new Level(matrix, Collections.emptyList(), Collections.emptyList(),
+                         LevelPalettes.generatedWithBaseWall(seed));
     }
 
     /** Returns the tile column for the weapon offer at the given index (0 to OFFER_COUNT-1). */

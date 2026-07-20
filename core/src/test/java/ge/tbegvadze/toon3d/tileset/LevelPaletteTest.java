@@ -31,6 +31,43 @@ class LevelPaletteTest {
     }
 
     @Test
+    void generatedWithBaseWallVariesOnlyTheBaseWall() {
+        // The palette every non-dungeon generator uses: identical to legacy EXCEPT the bulk wall symbol
+        // 'x', which becomes a seed-chosen base wall. This is how ALL generators (caverns, corridors, boss
+        // arenas, special rooms, the staging room, ...) get base-wall variety without changing their other
+        // art. Hand-crafted levels keep legacy (covered above), so they never vary.
+        LevelPalette legacy = LevelPalettes.legacy();
+        SymbolBudget budget = SymbolBudget.standard();
+        java.util.Set<String> baseWalls = new java.util.HashSet<>(budget.baseWallSpriteIds());
+        java.util.Set<String> observed = new java.util.HashSet<>();
+
+        for (long seed = 0; seed < 200; seed++) {
+            LevelPalette generated = LevelPalettes.generatedWithBaseWall(seed);
+            // 'x' resolves to a registered base wall in the WALL category.
+            assertTrue(baseWalls.contains(generated.spriteIdOf('x')),
+                    "generated 'x' is not a base wall at seed " + seed + ": " + generated.spriteIdOf('x'));
+            assertEquals(TileCategory.WALL, generated.categoryOf('x'));
+            observed.add(generated.spriteIdOf('x'));
+            // Deterministic: same seed => same base wall.
+            assertEquals(generated.spriteIdOf('x'),
+                    LevelPalettes.generatedWithBaseWall(seed).spriteIdOf('x'));
+            // Every OTHER environment symbol matches legacy exactly (accents/props/decals untouched).
+            for (char symbol = 32; symbol <= 126; symbol++) {
+                if (symbol == 'x') {
+                    continue;
+                }
+                assertEquals(legacy.spriteIdOf(symbol), generated.spriteIdOf(symbol),
+                        "symbol '" + symbol + "' drifted from legacy at seed " + seed);
+            }
+        }
+        // Across seeds the base wall actually varies (the alternates are used, not just the default).
+        assertTrue(observed.size() > 1, "base wall never varied across 200 seeds: " + observed);
+        assertTrue(baseWalls.containsAll(observed), "an unexpected base wall was chosen: " + observed);
+        // Legacy itself is unchanged — hand levels keep the default plain wall.
+        assertEquals("wall_plain", legacy.spriteIdOf('x'));
+    }
+
+    @Test
     void legacyBindsEachSymbolToItsCategory() {
         LevelPalette legacy = LevelPalettes.legacy();
         assertEquals(TileCategory.WALL, legacy.categoryOf('Z'));

@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.level;
 
+import ge.tbegvadze.toon3d.tileset.LevelPalettes;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
 
@@ -23,9 +24,13 @@ import java.util.Random;
 public class GateAirlockGenerator implements ILevelGenerator {
 
     private final Random random;
+    // Raw floor seed, kept for deterministic per-level BASE-WALL selection (independent of `random`,
+    // so it never perturbs the generated grid). See LevelPalettes.generatedWithBaseWall.
+    private final long   seed;
 
     public GateAirlockGenerator(long seed) {
         this.random = new Random(seed);
+        this.seed   = seed;
     }
 
     @Override
@@ -92,7 +97,8 @@ public class GateAirlockGenerator implements ILevelGenerator {
 
         List<EnemySpawnPoint>  enemySpawnPoints  = new ArrayList<>(); // ZERO enemies — a pacing breath.
         List<WeaponSpawnPoint> weaponSpawnPoints = new ArrayList<>();
-        return new Level(grid, enemySpawnPoints, weaponSpawnPoints);
+        return new Level(grid, enemySpawnPoints, weaponSpawnPoints,
+                         LevelPalettes.generatedWithBaseWall(seed));
     }
 
     /** Carves an inclusive rectangle of lit floor 'l'. */
