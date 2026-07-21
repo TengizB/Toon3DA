@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -65,6 +66,32 @@ class LevelPaletteTest {
         assertTrue(baseWalls.containsAll(observed), "an unexpected base wall was chosen: " + observed);
         // Legacy itself is unchanged — hand levels keep the default plain wall.
         assertEquals("wall_plain", legacy.spriteIdOf('x'));
+    }
+
+    @Test
+    void generatedBaseWallSpriteIsAlwaysRealizableAndPlainIsNotAssumed() {
+        // Regression guard for the startup crash: WallRenderer defaults its wall array to the level's BASE
+        // WALL sprite, which MUST be in the palette's realized sprite set. It must NOT assume "wall_plain"
+        // is realized — once 'x' varies to an alternate base wall, "wall_plain" is no longer referenced by
+        // the level and EnvironmentTextureSet.textureFor("wall_plain") would throw (the crash). This test
+        // proves (a) the base-wall sprite is always among distinctSpriteIds (safe to realize), and (b) on
+        // many seeds "wall_plain" is genuinely absent — so hardcoding it as the default is a bug.
+        int seedsWherePlainAbsent = 0;
+        for (long seed = 0; seed < 300; seed++) {
+            LevelPalette generated = LevelPalettes.generatedWithBaseWall(seed);
+            String baseWallSprite = generated.spriteIdOf('x');
+            assertNotNull(baseWallSprite);
+            assertTrue(generated.distinctSpriteIds().contains(baseWallSprite),
+                    "base wall " + baseWallSprite + " not realizable at seed " + seed);
+            if (!"wall_plain".equals(baseWallSprite)
+                    && !generated.distinctSpriteIds().contains("wall_plain")) {
+                seedsWherePlainAbsent++;
+            }
+        }
+        assertTrue(seedsWherePlainAbsent > 0,
+                "expected some generated levels to omit wall_plain from the realized set");
+        // The legacy (hand-level) palette always keeps wall_plain realizable.
+        assertTrue(LevelPalettes.legacy().distinctSpriteIds().contains("wall_plain"));
     }
 
     @Test
