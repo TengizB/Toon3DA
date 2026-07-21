@@ -2044,11 +2044,20 @@ public class WallRenderer implements Renderable, Disposable {
     private void resolveLevelWallAndColumnTextures(EnvironmentTextureSet textureSet) {
         LevelPalette palette = level.getPalette();
 
-        // Plain-wall is a FIXED binding present in every palette (and therefore every realized set), so it
-        // is always available as the NPE-safe default.
-        Texture plainTexture = textureSet.textureFor(TilesetConstants.FIXED_WALL_SPRITE_ID);
-        int     plainWidth   = textureSet.widthFor(TilesetConstants.FIXED_WALL_SPRITE_ID);
-        int     plainHeight  = textureSet.heightFor(TilesetConstants.FIXED_WALL_SPRITE_ID);
+        // Default fill for any non-wall / unbound char = this level's ACTUAL base wall (the sprite the
+        // palette binds to the bulk wall symbol 'x'). This must NOT be hardcoded to "wall_plain": with
+        // base-wall variety 'x' may resolve to an alternate base wall (e.g. "wall_plain_sandstone"), and
+        // "wall_plain" is then NOT in this level's realized set, so textureFor("wall_plain") would throw
+        // and crash the level at load. The base-wall symbol is bound by EVERY palette (legacy, the
+        // allocator, and generatedWithBaseWall), so its sprite is always realized and safe here.
+        char   baseWallSymbol   = TilesetConstants.FIXED_WALL_SYMBOL.charAt(0);
+        String baseWallSpriteId = palette.spriteIdOf(baseWallSymbol);
+        if (baseWallSpriteId == null) {
+            baseWallSpriteId = TilesetConstants.FIXED_WALL_SPRITE_ID; // defensive: every palette binds 'x'
+        }
+        Texture plainTexture = textureSet.textureFor(baseWallSpriteId);
+        int     plainWidth   = textureSet.widthFor(baseWallSpriteId);
+        int     plainHeight  = textureSet.heightFor(baseWallSpriteId);
         Arrays.fill(levelWallTextures, plainTexture);
         Arrays.fill(levelWallWidths,   plainWidth);
         Arrays.fill(levelWallHeights,  plainHeight);
