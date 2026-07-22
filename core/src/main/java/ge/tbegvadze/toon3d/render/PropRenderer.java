@@ -4493,6 +4493,7 @@ public class PropRenderer implements Renderable, Disposable {
         map.put(ItemType.WEAPON_PLASMA,        generateWeaponPlasmaGroundTexture());
         map.put(ItemType.WEAPON_RAILGUN,       generateWeaponRailgunGroundTexture());
         map.put(ItemType.WEAPON_INCINERATOR,   generateWeaponIncineratorGroundTexture());
+        map.put(ItemType.WEAPON_ARC_CANNON,    generateWeaponArcCannonGroundTexture());
         map.put(ItemType.WEAPON_ROCKET,        generateWeaponRocketGroundTexture());
         map.put(ItemType.WEAPON_FIST,          generateWeaponFistGroundTexture());
         map.put(ItemType.WEAPON_KNIFE,         generateWeaponKnifeGroundTexture());
@@ -4794,6 +4795,43 @@ public class PropRenderer implements Renderable, Disposable {
         p.fillRectangle(44, 42, 2, 10); p.fillRectangle(44, 51, 14, 2); p.fillRectangle(56, 42, 2, 9);
         // Cool-white shimmer (also reads as plasma glow)
         p.setColor(0.92f, 0.98f, 1.00f, 1f); p.fillRectangle(4, 17, 2, 2);
+        return finalize(p);
+    }
+
+    /**
+     * Arc Cannon — chain-lightning energy weapon.
+     * Steel-blue body threaded with cyan coils; twin electrode PRONGS at the muzzle with a bright
+     * cyan Tesla emitter arcing between them (identity). Pistol grip below.
+     */
+    private static Texture generateWeaponArcCannonGroundTexture() {
+        int S = WEAPON_PICKUP_TEXTURE_SIZE;
+        Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
+        p.setColor(0f, 0f, 0f, 0f);
+        p.fill();
+        // BODY (steel blue-grey)
+        p.setColor(0.16f, 0.20f, 0.28f, 1f); p.fillRectangle(20, 21, 38, 22);
+        p.setColor(0.28f, 0.34f, 0.44f, 1f); p.fillRectangle(20, 21, 38, 1); // top highlight
+        p.setColor(0.11f, 0.14f, 0.20f, 1f); p.fillRectangle(20, 42, 38, 1); // bottom shadow
+        // ENERGY COILS (3 bright cyan lines across body)
+        p.setColor(0.00f, 0.88f, 1.00f, 1f);
+        p.fillRectangle(22, 26, 34, 2); p.fillRectangle(22, 31, 34, 2); p.fillRectangle(22, 36, 34, 2);
+        // CAPACITOR POD (flank)
+        p.setColor(0.12f, 0.16f, 0.24f, 1f); p.fillRectangle(50, 20, 8, 24);
+        p.setColor(0.30f, 0.82f, 1.00f, 1f); p.fillRectangle(52, 23, 4, 18);
+        // EMITTER BARREL (short steel muzzle)
+        p.setColor(0.24f, 0.28f, 0.38f, 1f); p.fillRectangle(10, 25, 12, 14);
+        p.setColor(0.40f, 0.46f, 0.58f, 1f); p.fillRectangle(10, 25, 12, 1); // barrel top highlight
+        // ELECTRODE PRONGS (twin cyan-tipped flanges)
+        p.setColor(0.22f, 0.26f, 0.34f, 1f); p.fillRectangle(4, 22, 4, 6); p.fillRectangle(4, 36, 4, 6);
+        p.setColor(0.40f, 0.90f, 1.00f, 1f); p.fillRectangle(4, 22, 3, 2); p.fillRectangle(4, 40, 3, 2);
+        // TESLA EMITTER CORE (layered cyan arcing between the prongs)
+        p.setColor(0.08f, 0.52f, 1.00f, 1f); p.fillRectangle(5, 28, 8, 8);
+        p.setColor(0.50f, 0.96f, 1.00f, 1f); p.fillRectangle(7, 30, 4, 4);
+        p.setColor(1.00f, 1.00f, 1.00f, 1f); p.fillRectangle(8, 31, 2, 2); // hot white centre
+        // PISTOL GRIP
+        p.setColor(0.11f, 0.14f, 0.20f, 1f); p.fillRectangle(48, 43, 12, 19);
+        p.setColor(0.08f, 0.10f, 0.15f, 1f); // checkering
+        p.fillRectangle(49, 48, 10, 1); p.fillRectangle(49, 53, 10, 1); p.fillRectangle(49, 58, 10, 1);
         return finalize(p);
     }
 

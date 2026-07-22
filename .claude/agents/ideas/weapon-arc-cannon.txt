@@ -1,0 +1,49 @@
+STATUS: IMPLEMENTED
+CATEGORY: Combat
+TITLE: Arc Cannon — chain-lightning anti-swarm energy weapon
+---
+
+CONCEPT
+The Arc Cannon fires an electric bolt that strikes the first enemy in the facing line, then LEAPS
+laterally to adjacent enemies, creeping sideways through a cluster. It is the anti-swarm specialist:
+no other weapon in the arsenal chains between separated targets. Where the Incinerator sprays a fixed
+cone and the Grenade Launcher lobs a plus-splash, the Arc Cannon dynamically follows the shape of a
+mob — reward for letting enemies bunch up.
+
+NICHE / GAP FILLED
+Existing fire behaviours: single-target hitscan (Shotgun), line-pierce (Plasma, Railgun), burst-fire
+line (Chaingun), fixed cone (Incinerator), bouncing plus-splash (Grenade Launcher). MISSING: a weapon
+that chains damage between DISCRETE, SEPARATED enemies. The Arc Cannon is that mechanic.
+
+FIRE BEHAVIOUR (turn-based, deterministic)
+1. Primary bolt: standard hitscan, marches the facing line, stops at the FIRST enemy (no pierce),
+   applies distance-scaled primary damage. Walls / closed doors / cover / explosive barrels stop it.
+2. Lateral chain from the primary target's tile: up to ARC_CANNON_CHAIN_JUMPS (3) leaps. Each leap
+   inspects the four cardinal neighbours of the current arc tile in a fixed order (left, right,
+   forward, back relative to the player's facing) and jumps to the first neighbour that holds a
+   not-yet-struck enemy and is not blocked. Each jump deals CHAIN_DAMAGE_MULTIPLIER^jump (0.6^n) of
+   the primary damage. The chain dies as soon as no eligible neighbour is found. A visited-tile set
+   prevents re-hitting the same enemy.
+
+AMMO
+CELLS (energy weapon) — shared with Plasma Rifle and Incinerator. Thematically correct; no new ammo
+type needed, so the scarcity model and reserve caps are untouched.
+
+BALANCE (docs/balance-rule-system.txt WEAPONS living table)
+Role: BURST / SPECIALIST. Credited on the SINGLE-TARGET primary line only (same convention the
+Grenade Launcher uses on its centre splash):
+  damage 28, clipSize 7, reloadTime 2, dropCoeff 0.08, range 7.
+  sustainedDPT = 7*28 / (7+2) = 21.8 ; ammoEff = 28 ; powerScore = 21.8*sqrt(28/40) = 18.2  -> band 18-26 OK.
+The lateral chain (~61 dmg across 4 targets) is UNCREDITED bonus AoE, well under the heavy-band
+Grenade Launcher's 130-dmg ceiling. Distinct by MECHANIC, not band.
+
+TECHNICAL NOTES / FILES
+- BalanceConfig SECTION 4: ARC_CANNON_* stats + CHAIN_JUMPS / CHAIN_DAMAGE_MULTIPLIER.
+- WeaponConstants: re-exports + canvas/texture-path/effect/base-accuracy/shake constants.
+- entity/ArcCannon.java: marchShot (primary) + dischargeChain (lateral, allocation-free scratch buffers).
+- render/WeaponHudRenderer.java: procedural FrameBuffer sprite (drawArcCannonShape) + renderArcCannonEffect.
+- item/ItemType.java: WEAPON_ARC_CANNON.
+- world/World.java: construction, arsenal, starter-ammo + weaponClassToItemType mappings.
+- input/PlayerController.java: weaponMatchesItemType + weaponItemTypeToAmmoType cases.
+- level/LevelGenerator.java: added to the random weapon-offer table.
+- render/ItemWindow.java + render/PropRenderer.java: detail-panel labels + ground pickup texture.

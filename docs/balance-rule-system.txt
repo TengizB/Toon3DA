@@ -299,6 +299,15 @@ Assault Rifle   WORKHORSE      19.4     20.0        13.7   12-18   OK
 Chaingun        WORKHORSE      18.2     19.0        12.6   12-18   OK
 Railgun(full)   HEAVY          30.0     90.0        45.0   24-32   OVER
 Grenade Lchr    HEAVY          25.2     42.0        25.8   24-32   OK
+Arc Cannon      BURST          21.8     28.0        18.2   18-26   OK
+
+  Arc Cannon (chain-lightning energy weapon, CELLS ammo) — powerScore credited on the SINGLE-TARGET
+  primary line only (28 dmg, clip 7, reload 2: sustDPT = 7*28/9 = 21.8, ammoEff 28, power 18.2), the
+  same convention the Grenade Launcher uses (credited on centre splash, not the whole plus). The
+  lateral chain (up to 3 leaps at 0.6^n of the primary, ~61 dmg across 4 targets) is UNCREDITED bonus
+  AoE — its per-shot ceiling stays well under the heavy-band Grenade Launcher's 130, so it does not
+  push the weapon out of the burst band. It fills the "chain between separated targets" mechanic gap
+  (no other weapon leaps laterally through a cluster); it is distinct by MECHANIC, not by band.
 
 ENEMIES   (ECONOMY-RESCALED, iteration 2 ; TP = (atkDmg/cad)*(eHP/25)*posMult ; gr = TTD/TTK)
 enemy         role         eHP  atkDmg  cad  posMult       TP   in?   TTD/TTK  gr?

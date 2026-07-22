@@ -480,6 +480,27 @@ public final class BalanceConfig {
     public static final int   GRENADE_CLIP_SIZE         = 3;
     public static final int   GRENADE_RELOAD_TIME_TICKS = 2;
 
+    // Arc Cannon — chain-lightning energy weapon (CELLS ammo). Anti-swarm specialist: the
+    // primary bolt hits the first enemy in the facing line, then the arc LEAPS laterally through
+    // adjacent enemies in a cluster, dealing decaying damage to each additional target. No other
+    // weapon chains between separated targets — this is the crowd-clear niche.
+    //
+    // BALANCE (credited on the SINGLE-TARGET primary line, exactly as the Grenade Launcher is
+    // credited on its centre splash — the lateral chain is bonus AoE, uncredited, and its per-shot
+    // ceiling (~61 across 4 targets) stays well under the heavy-band Grenade Launcher's 130):
+    //   sustainedDPT = 7 * 28 / (7 + 2) = 21.78 ; ammoEff = 28 (1 cell/shot)
+    //   powerScore   = 21.78 * sqrt(28/40) = 18.2  -> BURST/SPECIALIST band 18-26, low end. OK.
+    // Distinct from the three existing burst weapons (Shotgun/Dbl/Plasma) by MECHANIC, not band.
+    public static final int   ARC_CANNON_DAMAGE            = 28;
+    public static final int   ARC_CANNON_CLIP_SIZE         = 7;
+    public static final int   ARC_CANNON_RANGE_TILES       = 7;
+    public static final float ARC_CANNON_DAMAGE_DROP_COEFF = 0.08f;
+    public static final int   ARC_CANNON_RELOAD_TIME_TICKS = 2;
+    // Lateral chain (uncredited bonus): up to CHAIN_JUMPS leaps beyond the primary target, each
+    // dealing CHAIN_DAMAGE_MULTIPLIER^jump of the primary hit (28 -> 17 -> 10 -> 6).
+    public static final int   ARC_CANNON_CHAIN_JUMPS             = 3;
+    public static final float ARC_CANNON_CHAIN_DAMAGE_MULTIPLIER = 0.6f;
+
     // Melee weapons — base damage per swing (all swing once per turn).
     public static final int MELEE_FIST_DAMAGE     = 6;
     public static final int MELEE_KNIFE_DAMAGE    = 12;
