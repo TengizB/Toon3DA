@@ -113,4 +113,4 @@ ACCEPTANCE CRITERIA
       re-checked after re-pricing, since it justifies the order-1 waiver.
 
 DEPENDENCIES: orders 1, 2. UNBLOCKS: order 6 (boss reward = consumption *
-premium needs a working economy), order 7 (per-mode scarcity targets).
+premium needs a working economy).

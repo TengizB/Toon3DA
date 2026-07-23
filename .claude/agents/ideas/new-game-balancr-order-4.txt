@@ -55,8 +55,8 @@ B) XP PACING AS A RULE, NOT A HOPE:
 C) MAKE EACH LEVEL FELT (design intent for the card pool):
    - Keep the equal-budget card discipline (12 PP each) — build DIVERSITY comes
      from shape, not size. But re-verify each card's PP price via the audit
-     after A) (the eHP reference the prices divide by changes per difficulty in
-     order 7).
+     after A) (there is exactly ONE eHP reference the prices divide by — the
+     game has a single difficulty; order 7 removes the legacy mode system).
    - Add BREAKPOINT AWARENESS to card pricing: a card that moves a fight past
      an integer TTK threshold vs the current region's soldier (e.g. 4 shots ->
      3 shots) is WORTH more than its raw PP; price the pool so most cards cross
@@ -98,4 +98,4 @@ ACCEPTANCE CRITERIA
       when at/above expected level (unit test).
 
 DEPENDENCIES: orders 1, 2. UNBLOCKS: order 5 (budget uses v2 threat pricing),
-order 6 (boss expects level(d) + gear(d)), order 7 (per-mode anchors).
+order 6 (boss expects level(d) + gear(d)).

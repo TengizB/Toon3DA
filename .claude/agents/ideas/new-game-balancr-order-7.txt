@@ -1,108 +1,114 @@
 STATUS: NOT IMPLEMENTED
 CATEGORY: Systems
-TITLE: Difficulty Modes as Real Profiles — four fair games
+TITLE: One Difficulty — remove modes, tune one true game
 ---
 
 ================================================================================
 NEW GAME BALANCE — ORDER 7 of 8
-DIFFICULTY MODES: FOUR COMPLETE BALANCE PROFILES, ONE SHARED SCHEMA
+ONE DIFFICULTY: REMOVE THE MODE SYSTEM, PERFECT THE SINGLE GAME
 ================================================================================
-Requires: orders 1–6 (the whole contract must exist before it can be
-instantiated per mode).
+Requires: orders 1–6. DESIGN DECISION (from the game owner, final): the game
+has EXACTLY ONE difficulty. There are no easy/normal/hard modes and there must
+never be. This order REMOVES the existing four-mode system and re-anchors the
+entire contract to the one canonical game.
 
 --------------------------------------------------------------------------------
 PROBLEM
 --------------------------------------------------------------------------------
-Knowledge doc SECTION 17, problem 6: difficulty modes change ONLY the player's
-starting attributes. Enemy numbers, scaling, scarcity, XP and loot are
-identical across RECRUIT/MARINE/NIGHTMARE/ULTRA, and the entire contract is
-anchored to MARINE's 205 eHP. So RECRUIT is "MARINE with padding" (trivializes
-the scarcity model that assumes 205 eHP), and ULTRA is "MARINE while poor"
-(silently violates the telegraph cap: 25% of MARINE eHP is a much bigger
-fraction of ULTRA's). The other modes are balanced only by accident — the exact
-opposite of "challenging but fair" at every setting.
+The game currently ships four difficulty modes (RECRUIT/MARINE/NIGHTMARE/ULTRA)
+implemented as per-mode starting-attribute tables in GameBalance (STAT_BASE_*;
+knowledge doc SECTION 17). This is wrong twice over:
+  1. It contradicts the design decision above — the game must be ONE tuned,
+     challenging-but-fair experience, the same for every player. In this
+     roguelike, difficulty variance is supposed to come from INSIDE the run
+     (route choices, region danger, risk/reward nodes, loot luck you adapt
+     to), not from a menu.
+  2. Even as implemented it was fake: modes changed only starting stats while
+     every enemy number, scarcity target and telegraph cap stayed anchored to
+     MARINE's 205 eHP (problem 6) — so three of the four modes were never
+     actually balanced. Rather than tuning four games (quadrupling every
+     audit, band and playtest forever), we delete three of them and spend all
+     tuning effort on the one that remains.
 
 --------------------------------------------------------------------------------
-DESIGN — A MODE IS A PROFILE, THE SCHEMA IS SHARED
+DESIGN — DELETE, CONSOLIDATE, LOCK
 --------------------------------------------------------------------------------
-A) BalanceProfile (BalanceConfig SECTION 17): per-mode struct of the SEMANTIC
-   dials the earlier orders created — never raw stat overrides scattered in
-   code. Every rule in BalanceSchema evaluates against EACH profile's own
-   anchors; all four modes must pass the SAME bands. Four fair games, not one
-   fair game and three accidents.
+A) DELETE THE MODE SYSTEM:
+   - Remove difficulty selection from the run-start flow (UI screen/buttons,
+     any Difficulty enum, and the plumbing that carries the choice into World
+     and the managers).
+   - Delete the per-mode STAT_BASE_* tables. The single canonical start is the
+     current MARINE block (STR 2 / AGI 2 / TGH 2 / MRK 2, 130 HP, 75 armour,
+     205 eHP) — it is what every band, anchor and living table in orders 1–6
+     was derived against, so the whole contract becomes EXACT for the one real
+     game instead of "exact for one mode out of four".
+   - StatsStore: drop any difficulty/mode key from persisted run stats;
+     migrate/ignore old records (best-effort read, never crash on legacy keys).
+   - Sweep every mode conditional out of game code — after this order,
+     grepping for RECRUIT/NIGHTMARE/ULTRA/difficulty returns nothing in
+     core/src.
 
-   Dial philosophy (roguelike-honest: harder = SCARCER + LESS FORGIVING, not
-   damage-sponge enemies; easier = FORGIVING, not power fantasy):
+B) ONE ANCHOR, NOW TRUE BY CONSTRUCTION:
+   REFERENCE_PLAYER_EHP (205) stops being "the MARINE anchor with three
+   unbalanced siblings" and becomes THE player anchor, period. The telegraph
+   fairness caps (25% un-telegraphed, 35% boss single-hit) now provably
+   protect the actual player pool in every run. No re-derivation needed —
+   orders 1–6 already priced everything against this anchor; this order makes
+   the assumption legitimate.
 
-     dial                        RECRUIT  MARINE  NIGHTMARE  ULTRA
-     startingStats (existing)    3/3/4/3  2/2/2/2  1/1/1/1   0/1/1/0
-     enemyDamageMultiplier         0.85     1.00     1.12      1.25
-     enemyHealthMultiplier         0.90     1.00     1.05      1.10   (small!)
-     scarcityTargetS            0.90–1.05 0.75–0.95 0.70–0.88 0.62–0.80
-     healNetDrainBand (of eHP)    2–8%     5–15%    8–18%    10–22%
-     xpYieldBand (levels/floor)  1.1–1.4  1.0–1.3  1.0–1.3   0.9–1.2
-     creditIncomeRatio band     1.1–1.6  0.9–1.4  0.8–1.2   0.7–1.1
-     emergencySupplyFraction      0.35     0.25     0.15      0.0 (off)
-     bossSurvivalRatio band     0.55–0.8 0.4–0.7  0.35–0.6  0.3–0.55
-     enrageRampPerTurn            +5%      +8%      +10%      +12%
+C) LOCK IT WITH THE SCHEMA (so modes cannot creep back):
+   R-SINGLE-DIFFICULTY (structural rule in BalanceSchema):
+     - Exactly one starting-attribute block exists in BalanceConfig.
+     - The audit reflection sweep fails on any constant or enum matching
+       mode-family naming (RECRUIT/NIGHTMARE/ULTRA/*_EASY_*/*_HARD_*/
+       *_MODE_*), the same way R-FLAGS bans live test flags.
+   Difficulty tuning happens by moving THE dials (scarcity band, heal drain
+   band, survival ratios, region danger multipliers) — one set, one game.
 
-   Deliberate choices:
-     - enemyHEALTH barely moves: TTK feel (and every golden-ratio band) stays
-       intact on all modes; danger comes from incoming damage and scarcity.
-     - ULTRA has NO emergency ammo floor — resource mistakes are fully lethal.
-       That is the promise of the mode, and it's a dial, not a code path.
-     - The gear gate and boss gate (orders 2, 6) hold on ALL modes: the
-       R-BOSS-GATE assertion runs per profile (RECRUIT must ALSO be unable to
-       start-weapon the boss — easier must never mean progression-optional,
-       or the user's original bug returns on easy mode).
-
-B) PER-MODE ANCHORS (fixes the 205-eHP monoculture):
-   referencePlayerEHP(mode) computed from that mode's starting stats through
-   the same eHP formula. The telegraph cap (25% un-telegraphed, 35% boss) is
-   evaluated against EACH mode's eHP — ULTRA's cap protects ULTRA's actual
-   pools. Where a single attack passes MARINE but breaches ULTRA's cap, the
-   attack's telegraph requirement follows the STRICTEST mode it can appear in
-   (telegraphs are cheap; unfair one-shots are not).
-
-C) MODE INTEGRITY RULES:
-   R-MODE-MONOTONE: for every derived difficulty metric (TTD at reference
-   depth, S target midpoint, net drain midpoint), RECRUIT <= MARINE <=
-   NIGHTMARE <= ULTRA must hold — no dial combination may accidentally make a
-   "harder" mode easier anywhere on the curve. The audit sweeps depths 1..15.
-   R-MODE-COMPLETE: every dial in the profile struct must be explicitly set
-   for every mode (no silent inheritance) — adding a new dial without pricing
-   all four modes fails the build, same coverage discipline as content.
-
-D) UI TRUTH: the difficulty-select copy states what actually changes ("fewer
-   supplies, deadlier hits" — not "enemies are stronger"), sourced from the
-   profile so the description can't drift from the numbers. (Copy only; no new
-   UI systems in this order.)
+D) WHERE THE VARIANCE LIVES INSTEAD (design intent, no new systems):
+   The legitimate difficulty range players experience comes from systems that
+   already exist or are already in this series:
+     - Route choice: the region danger dial (order 5) makes the lethal lane a
+       CHOICE with budgeted, fair consequences — the player self-selects
+       challenge in-run, which is the roguelike way.
+     - Depth: the coupling curve (order 4) IS the difficulty ramp; endless
+       depth is the skill ceiling.
+     - Scarcity swings and loot adaptation (orders 2–3) create run texture
+       within the audited bands.
+   If a future request ever asks for accessibility options, they must be
+   framed as exactly that (e.g. animation speed) — never as balance-touching
+   modes; the schema rule above is the tripwire.
 
 --------------------------------------------------------------------------------
 TECHNICAL NOTES
 --------------------------------------------------------------------------------
-  - BalanceProfile as a plain final class with four static instances in
-    BalanceConfig SECTION 17; the active profile is selected at run start and
-    threaded where the multiplied values are read (EnemyManager damage/HP at
-    spawn, drop planners, XP award, boss derivation, emergency rule).
-  - GameMath methods stay pure — profile values are passed IN as parameters
-    (no global mode state inside formulas).
-  - BalanceAuditTest parameterizes every existing rule over all four profiles
-    (JUnit parameterized tests) — this quadruples audit coverage for free.
-  - BalanceReport prints per-mode tables (or a mode column) for DEPTH COUPLING,
-    SCARCITY, TELEGRAPH, BOSS.
-  - StatsStore records the run's mode with its stats (order 8 telemetry needs
-    per-mode death curves).
+  - GameBalance STAT_BASE_RECRUIT/NIGHTMARE/ULTRA_* constants: delete. The
+    surviving base block moves into BalanceConfig SECTION 7 with the other
+    progression anchors (order 1's consolidation rule: gameplay numbers live
+    in BalanceConfig).
+  - Check for a difficulty/mode field on run creation (World construction,
+    RunStats, death screen display, any menu Screen) and remove end to end.
+    Mobile-first UI note: removing the selection step SHORTENS the touch flow
+    to run start — one less screen, which is a win on its own.
+  - BalanceReport: delete any per-mode plumbing added speculatively; all
+    tables are single-game.
+  - Update docs in the same commit: game-balance-authority.txt states the
+    one-difficulty rule as a design invariant; the knowledge doc's SECTION 17
+    (difficulty modes) is superseded — mark it resolved-by-removal.
 
 --------------------------------------------------------------------------------
 ACCEPTANCE CRITERIA
 --------------------------------------------------------------------------------
-  [ ] All schema rules pass for ALL FOUR profiles, depths 1..15.
-  [ ] R-MODE-MONOTONE holds across the sweep; R-MODE-COMPLETE enforced.
-  [ ] Telegraph caps evaluated against per-mode eHP; no attack breaches any
-      mode it can appear in.
-  [ ] R-BOSS-GATE (start-weapon cannot beat boss) verified on RECRUIT too.
-  [ ] ULTRA run with zero ammo pickups reaches a fightable death, not a
-      softlock UI state (melee path remains; emergency floor correctly off).
+  [ ] No difficulty selection anywhere in the run-start flow; a new run always
+      starts with the canonical stat block.
+  [ ] Zero matches for RECRUIT/NIGHTMARE/ULTRA/mode-family naming in core/src
+      (audit rule R-SINGLE-DIFFICULTY enforces this permanently).
+  [ ] StatsStore reads legacy records with mode keys without crashing.
+  [ ] All schema rules from orders 1–6 still green against the single anchor
+      (they should be untouched — this order removes assumptions, not values).
+  [ ] docs updated: one-difficulty invariant recorded in
+      game-balance-authority.txt.
 
-DEPENDENCIES: orders 1–6. UNBLOCKS: order 8 (simulator runs the matrix).
+DEPENDENCIES: orders 1–6 (they define the single contract this order makes
+exclusive). UNBLOCKS: order 8 (the simulator matrix collapses to one
+difficulty — cheaper and sharper).

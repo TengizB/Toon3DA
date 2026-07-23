@@ -35,7 +35,7 @@ A) THE RUN SIMULATOR (core test source, headless, no LibGDX):
      HOARDER-START-WEAPON  TACTICAL but never equips a new weapon (the user's
                boss-cheese reproduction, as a permanent regression case).
 
-   OUTPUTS per (policy, mode, seed): death depth, per-floor HP drain, ammo S
+   OUTPUTS per (policy, seed): death depth, per-floor HP drain, ammo S
    experienced vs modelled, levels vs expected, boss fight turns, softlocks.
    Aggregated over SIM_SEED_COUNT (200) seeds into distributions.
 
@@ -44,15 +44,15 @@ B) THE BEHAVIORAL BANDS (the model's claims, tested against play):
    slower gradle task (`./gradlew balanceSim`) with results checked by
    BalanceAuditTest against recorded summaries:
      S-GATE      HOARDER-START-WEAPON policy: 0% of 200 seeds clear the first
-                 boss, on EVERY mode. (The original bug can never return.)
-     S-FAIR      TACTICAL on MARINE: median death depth in
+                 boss. (The original bug can never return.)
+     S-FAIR      TACTICAL: median death depth in
                  [SIM_TARGET_DEPTH_MIN, MAX] = [8, 14]; >= 90% of deaths
                  preceded by a telegraphed hit or a resource state below 25%
                  (deaths are readable, not ambushes).
      S-SKILL     NAIVE dies meaningfully earlier than TACTICAL (median gap
-                 >= 3 depths) — playing well must matter.
-     S-MODES     median death depth strictly ordered RECRUIT > MARINE >
-                 NIGHTMARE > ULTRA (order 7's monotonicity, proven in play).
+                 >= 3 depths) — playing well must matter. This gap IS the
+                 game's difficulty range: one fixed difficulty (order 7),
+                 skill decides depth.
      S-ECONOMY   experienced S within ±0.08 of the modelled S per depth;
                  emergency rule triggers in < 5% of TACTICAL floors and 0% of
                  disciplined-ammo floors.
@@ -60,7 +60,7 @@ B) THE BEHAVIORAL BANDS (the model's claims, tested against play):
    Bands are BalanceConfig SECTION 18 values — tunable targets like all others.
 
 C) LIVE TELEMETRY (the human half — simulators can't feel fun):
-   RunStats/StatsStore extended to record per real run: mode, death depth &
+   RunStats/StatsStore extended to record per real run: death depth &
    cause, per-floor HP drain, ammo starvation events, heals used, upgrades
    taken vs offered, boss fight turn counts, level vs expected level.
    Death screen gains a compact RUN AUTOPSY block (existing death overlay,
@@ -93,9 +93,9 @@ TECHNICAL NOTES
   - Policies are ~100-line heuristic classes implementing a PlayerPolicy
     interface (chooseAction(WorldView) -> TouchAction-equivalent); they reuse
     the same action entry points PlayerController calls — no parallel rules.
-  - Runtime budget: 200 seeds x 3 policies x 4 modes must finish < 10 min on
-    CI; if not, trim seeds per matrix cell (keep 200 for S-GATE — it is the
-    headline guarantee).
+  - Runtime budget: 200 seeds x 3 policies (single difficulty — order 7) must
+    finish < 10 min on CI; if not, trim seeds per policy (keep 200 for
+    S-GATE — it is the headline guarantee).
   - Sim summaries written to build/reports/balance-sim/ as plain text tables;
     BalanceReport learns to inline the latest summary into the living tables.
 
@@ -104,7 +104,7 @@ ACCEPTANCE CRITERIA
 --------------------------------------------------------------------------------
   [ ] Full sim matrix runs headless and deterministically (same seed = same
       run) under `./gradlew balanceSim`.
-  [ ] All six behavioral bands pass; S-GATE at exactly 0/200 on every mode.
+  [ ] All five behavioral bands pass; S-GATE at exactly 0/200.
   [ ] Run autopsy visible on the death screen; dev dump logged at run end.
   [ ] CHANGE PROTOCOL section exists in docs/game-balance-authority.txt; the
       knowledge doc's workflow section points to it.
@@ -113,5 +113,5 @@ ACCEPTANCE CRITERIA
 
 DEPENDENCIES: orders 1–7. This order completes the series: values in one
 place, rules enforced, progression essential, resources scarce-but-fair,
-threats priced honestly, bosses gated, all modes fair — and PROOF that it
-plays the way the math says.
+threats priced honestly, bosses gated, one single fair difficulty — and
+PROOF that it plays the way the math says.
