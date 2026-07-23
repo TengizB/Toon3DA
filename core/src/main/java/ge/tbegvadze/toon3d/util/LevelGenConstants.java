@@ -18,7 +18,6 @@ public final class LevelGenConstants {
     public static final int   LEVEL_GEN_TARGET_ROOMS          = 16;
     public static final int   LEVEL_GEN_PLACEMENT_TRIES       = 600;
     // Probability that any interior floor tile in a non-entrance room receives a prop.
-    // Balance values (loot/enemy density) live in BalanceConfig (SINGLE SOURCE OF TRUTH).
     public static final float LEVEL_GEN_PROP_CHANCE           = BalanceConfig.LEVEL_GEN_PROP_CHANCE;
     public static final int   LEVEL_GEN_MAX_ENEMIES_PER_ROOM  = BalanceConfig.LEVEL_GEN_MAX_ENEMIES_PER_ROOM;
     // Cumulative thresholds for enemy type selection (each range maps to a spawn digit):
@@ -76,13 +75,11 @@ public final class LevelGenConstants {
     // Ratio of rack props that are lockers vs terminals in a server room.
     public static final float LEVEL_GEN_SERVER_LOCKER_RATIO        = 0.30f;
     // Boosted pickup chances for special rooms (loot hubs / set-piece arenas).
-    // Loot room budgets are balance values — see BalanceConfig (SINGLE SOURCE OF TRUTH).
     public static final float LEVEL_GEN_SERVER_MEDKIT_CHANCE       = BalanceConfig.LEVEL_GEN_SERVER_MEDKIT_CHANCE;
     public static final float LEVEL_GEN_SERVER_ARMOUR_CHANCE       = BalanceConfig.LEVEL_GEN_SERVER_ARMOUR_CHANCE;
     public static final float LEVEL_GEN_LARGE_MEDKIT_CHANCE        = BalanceConfig.LEVEL_GEN_LARGE_MEDKIT_CHANCE;
     public static final float LEVEL_GEN_LARGE_ARMOUR_CHANCE        = BalanceConfig.LEVEL_GEN_LARGE_ARMOUR_CHANCE;
     // Base probability that any non-entrance room contains at least one ammo box pickup.
-    // Balance value — see BalanceConfig (SINGLE SOURCE OF TRUTH).
     public static final float LEVEL_GEN_AMMO_CHANCE_PER_ROOM       = BalanceConfig.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
 
     // --- Wide hallway generation ---

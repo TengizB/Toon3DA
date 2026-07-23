@@ -24,8 +24,7 @@ public final class EnemyConstants {
     public static final String  ENEMY_BOSS_OVERSEER_PATH         = "textures/enemies/enemy_boss_overseer.png";
 
     // Enemy system — AI and combat
-    // Balance values (HP, damage, range, cadence, AI knobs) live in BalanceConfig —
-    // the SINGLE SOURCE OF TRUTH. Only cosmetic fields (height/hover) stay here.
+    // Only cosmetic fields (height/hover) stay here.
     // Probability (0–1) that a killed enemy drops an ammo pickup on its tile.
     public static final float   ENEMY_AMMO_DROP_CHANCE           = BalanceConfig.ENEMY_AMMO_DROP_CHANCE;
     public static final int     ALERT_RADIUS_TILES               = BalanceConfig.ALERT_RADIUS_TILES;

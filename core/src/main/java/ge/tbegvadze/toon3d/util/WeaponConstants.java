@@ -19,7 +19,6 @@ public final class WeaponConstants {
     // before the reload pose begins; lets the player see the weapon lower to idle first
     public static final float NORMAL_TO_RELOAD_DELAY_SECONDS    = 0.10f;
     // DAMAGE_MIN_MULTIPLIER: damage floor at extreme range; prevents a dead zone.
-    // Balance value — lives in BalanceConfig (SINGLE SOURCE OF TRUTH).
     public static final float DAMAGE_MIN_MULTIPLIER             = BalanceConfig.DAMAGE_MIN_MULTIPLIER;
 
     // Per-weapon fire shake magnitudes — triggered via ImpactEffectSystem.triggerShake on fire.
@@ -32,7 +31,7 @@ public final class WeaponConstants {
     public static final float ASSAULT_RIFLE_FIRE_SHAKE_MAGNITUDE = 4f;
     public static final float ARC_CANNON_FIRE_SHAKE_MAGNITUDE   = 3f;
 
-    // Shotgun stats — balance values live in BalanceConfig (SINGLE SOURCE OF TRUTH).
+    // Shotgun stats.
     public static final int     SHOTGUN_DAMAGE             = BalanceConfig.SHOTGUN_DAMAGE;
     public static final int     SHOTGUN_CLIP_SIZE          = BalanceConfig.SHOTGUN_CLIP_SIZE;
     public static final int     SHOTGUN_RELOAD_TIME_TICKS  = BalanceConfig.SHOTGUN_RELOAD_TIME_TICKS;

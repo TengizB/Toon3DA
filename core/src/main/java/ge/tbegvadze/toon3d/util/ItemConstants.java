@@ -6,14 +6,13 @@ public final class ItemConstants {
     private ItemConstants() {}
 
     // Medical pickup system — stim-packs ('+') and field medkits ('H')
-    // Balance values (heal amounts) live in BalanceConfig — see SINGLE SOURCE OF TRUTH.
     public static final int   MEDKIT_STIM_HEAL                = BalanceConfig.MEDKIT_STIM_HEAL;
     public static final int   MEDKIT_FULL_HEAL                = BalanceConfig.MEDKIT_FULL_HEAL;
     public static final float PLAYER_HEAL_DURATION            = 0.18f;
     public static final float MEDKIT_STIM_SPRITE_HEIGHT       = 0.20f;
     public static final float MEDKIT_FULL_SPRITE_HEIGHT       = 0.30f;
 
-    // Player stats — balance values live in BalanceConfig (SINGLE SOURCE OF TRUTH).
+    // Player stats.
     public static final int   PLAYER_MAX_HEALTH               = BalanceConfig.PLAYER_MAX_HEALTH;
     // Player armor — pool capped at 75; armour pickups feed directly into this pool
     public static final int   PLAYER_MAX_ARMOR                = BalanceConfig.PLAYER_MAX_ARMOR;
@@ -33,7 +32,7 @@ public final class ItemConstants {
     public static final int INVENTORY_SLOT_COUNT          = 12;
     // ITEM_STACK_MAX_DEFAULT: generic fallback cap for any stackable not listed below.
     public static final int ITEM_STACK_MAX_DEFAULT        = 99;
-    // Per-type stack caps — these are the definitive balance numbers; tune via constants only.
+    // Per-type stack caps.
     public static final int ITEM_STACK_MAX_MEDKIT_SMALL   = 5;
     public static final int ITEM_STACK_MAX_MEDKIT_LARGE   = 3;
     public static final int ITEM_STACK_MAX_STIMPACK       = 5;
@@ -43,7 +42,6 @@ public final class ItemConstants {
 
     // Ammo system — reserve caps, box grants, starting reserves
     // All values are PLACEHOLDERS pending playtest.
-    // Reserve caps and box grants are balance — see BalanceConfig (SINGLE SOURCE OF TRUTH).
     public static final int   AMMO_RESERVE_CAP_BULLETS    = BalanceConfig.AMMO_RESERVE_CAP_BULLETS;
     public static final int   AMMO_RESERVE_CAP_SHELLS     = BalanceConfig.AMMO_RESERVE_CAP_SHELLS;
     public static final int   AMMO_RESERVE_CAP_CELLS      = BalanceConfig.AMMO_RESERVE_CAP_CELLS;
@@ -249,7 +247,6 @@ public final class ItemConstants {
     public static final int   CREDIT_LARGE_BASE            = 70;
     public static final int   CREDIT_LARGE_JITTER          = 15;
     // Spawn weights — proportional; SMALL+MEDIUM+LARGE need not sum to any specific value.
-    // Balance values live in BalanceConfig (SINGLE SOURCE OF TRUTH).
     public static final int   CREDIT_SPAWN_WEIGHT_SMALL    = BalanceConfig.CREDIT_SPAWN_WEIGHT_SMALL;
     public static final int   CREDIT_SPAWN_WEIGHT_MEDIUM   = BalanceConfig.CREDIT_SPAWN_WEIGHT_MEDIUM;
     public static final int   CREDIT_SPAWN_WEIGHT_LARGE    = BalanceConfig.CREDIT_SPAWN_WEIGHT_LARGE;
