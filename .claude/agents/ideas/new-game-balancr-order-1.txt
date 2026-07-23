@@ -4,7 +4,7 @@ TITLE: Balance Authority — one source of truth, enforced schema
 ---
 
 ================================================================================
-NEW GAME BALANCE — ORDER 1 of 8
+NEW GAME BALANCE — ORDER 1 of 9
 THE BALANCE AUTHORITY: SINGLE SOURCE OF TRUTH + AN ENFORCED, TUNABLE SCHEMA
 ================================================================================
 Series: new-game-balancr-order-1..8. This series SUPERSEDES the old
@@ -150,4 +150,4 @@ ACCEPTANCE CRITERIA
   [ ] BalanceReport prints a WAIVERS table; only the Railgun waiver is active.
 
 DEPENDENCIES: none (this is the foundation).
-UNBLOCKS: orders 2–8 all register their rules into this schema.
+UNBLOCKS: orders 2–9 all register their rules into this schema.

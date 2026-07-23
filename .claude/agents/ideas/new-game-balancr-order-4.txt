@@ -4,7 +4,7 @@ TITLE: Felt Progression — leveling that matters and is paced
 ---
 
 ================================================================================
-NEW GAME BALANCE — ORDER 4 of 8
+NEW GAME BALANCE — ORDER 4 of 9
 FELT PROGRESSION: XP PACING + AN HONEST TOTAL-POWER MODEL
 ================================================================================
 Requires: order 1 (schema), order 2 (gear curve + priced abilities).
@@ -56,7 +56,7 @@ C) MAKE EACH LEVEL FELT (design intent for the card pool):
    - Keep the equal-budget card discipline (12 PP each) — build DIVERSITY comes
      from shape, not size. But re-verify each card's PP price via the audit
      after A) (there is exactly ONE eHP reference the prices divide by — the
-     game has a single difficulty; order 7 removes the legacy mode system).
+     game has a single difficulty; order 8 removes the legacy mode system).
    - Add BREAKPOINT AWARENESS to card pricing: a card that moves a fight past
      an integer TTK threshold vs the current region's soldier (e.g. 4 shots ->
      3 shots) is WORTH more than its raw PP; price the pool so most cards cross

@@ -4,7 +4,7 @@ TITLE: Power Curve & Gear Gate — upgrades become essential
 ---
 
 ================================================================================
-NEW GAME BALANCE — ORDER 2 of 8
+NEW GAME BALANCE — ORDER 2 of 9
 THE EXPECTED POWER CURVE & THE GEAR GATE
 ================================================================================
 Requires: new-game-balancr-order-1 (schema + consolidated BalanceConfig).

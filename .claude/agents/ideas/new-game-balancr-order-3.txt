@@ -4,7 +4,7 @@ TITLE: Resource Economy That Bites — ammo, heals, credit sink
 ---
 
 ================================================================================
-NEW GAME BALANCE — ORDER 3 of 8
+NEW GAME BALANCE — ORDER 3 of 9
 RESOURCE ECONOMY: SCARCITY ACROSS DEPTH + A REAL CREDIT SINK
 ================================================================================
 Requires: order 1 (schema), order 2 (expected DPT curve — ammo supply must be
@@ -95,7 +95,7 @@ TECHNICAL NOTES
   - The audit's per-depth S uses the ENCOUNTER PLANNER's actual budget spend
     (deterministic given depth), not hand-listed rosters — one source.
   - RunStats tracks: ammo picked up / spent per type, credits earned/spent,
-    heals used, emergency-rule triggers (telemetry for order 8).
+    heals used, emergency-rule triggers (telemetry for order 9).
   - BalanceReport: SCARCITY table becomes a depth-sweep matrix (d x S, per-weapon
     worst offender), plus CREDIT ECONOMY and SHOP PRICING tables.
 
@@ -107,7 +107,7 @@ ACCEPTANCE CRITERIA
   [ ] Shop is purchasable in-game end to end (stock, price display, buy,
       deduct, deliver) on a real floor.
   [ ] Emergency rule triggers in a starved simulation and never in a normal
-      one (order 8's simulator will regression-test this; for now a unit test
+      one (order 9's simulator will regression-test this; for now a unit test
       with synthetic inventories).
   [ ] Railgun slug supply remains the tightest gate (~1.0 floor banked) —
       re-checked after re-pricing, since it justifies the order-1 waiver.

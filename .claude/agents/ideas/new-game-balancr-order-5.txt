@@ -4,7 +4,7 @@ TITLE: True Threat Pricing — specials, budgets, region danger
 ---
 
 ================================================================================
-NEW GAME BALANCE — ORDER 5 of 8
+NEW GAME BALANCE — ORDER 5 of 9
 TRUE THREAT PRICING: CYCLE-AVERAGED SPECIALS + ENCOUNTER BUDGET V2
 ================================================================================
 Requires: orders 1, 2, 4 (schema; expected-DPT curve; honest power model).
@@ -109,4 +109,4 @@ ACCEPTANCE CRITERIA
       shortcut left in TP/TTK call sites).
 
 DEPENDENCIES: orders 1, 2, 4. UNBLOCKS: order 6 (boss adds priced by the same
-verb equivalences), order 8 (simulator uses true TP as ground truth).
+verb equivalences), order 9 (simulator uses true TP as ground truth).

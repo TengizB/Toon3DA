@@ -4,7 +4,7 @@ TITLE: Boss = Build Check — derived fights you can't cheese
 ---
 
 ================================================================================
-NEW GAME BALANCE — ORDER 6 of 8
+NEW GAME BALANCE — ORDER 6 of 9
 BOSSES AS BUILD CHECKS: THE SIX RULES, ACTUALLY IMPLEMENTED
 ================================================================================
 Requires: orders 1–5 (schema; expected arsenal + honest power curve; economy;
@@ -82,7 +82,7 @@ E) REWARD = REFUND * RISK PREMIUM (R6, now computable because order 3 exists):
    boss TP is huge, so boss XP is too, automatically).
    PRE-BOSS PROVISIONING: the route generator guarantees a shop or cache node
    is reachable in the layer before every boss (the "sharpen your knife" beat;
-   hook into route-map node guarantees).
+   order 7 formalizes this as an enforced route-graph guarantee).
 
 --------------------------------------------------------------------------------
 TECHNICAL NOTES
@@ -109,5 +109,6 @@ ACCEPTANCE CRITERIA
   [ ] Boss reward >= 1.3x modelled consumption; pre-boss provisioning node
       guaranteed in 100-seed route generation test.
 
-DEPENDENCIES: orders 1–5. UNBLOCKS: order 8 (simulator plays the boss gate
-end to end).
+DEPENDENCIES: orders 1–5. UNBLOCKS: order 7 (route economics turns pre-boss
+provisioning into an enforced graph guarantee), order 9 (simulator plays the
+boss gate end to end).
