@@ -1,0 +1,126 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Progression
+TITLE: Power Curve & Gear Gate — upgrades become essential
+---
+
+================================================================================
+NEW GAME BALANCE — ORDER 2 of 8
+THE EXPECTED POWER CURVE & THE GEAR GATE
+================================================================================
+Requires: new-game-balancr-order-1 (schema + consolidated BalanceConfig).
+
+--------------------------------------------------------------------------------
+PROBLEM (the user's headline complaint)
+--------------------------------------------------------------------------------
+"Once I was able to beat the boss with a level 1 weapon that I've got from the
+starting room, and that must not be possible. Finding better weapons must be
+essential for survival."
+
+Root causes in the current model (knowledge doc SECTIONS 2, 6, 9; problems 3, 7):
+  1. The whole contract anchors "the player" to a FIXED 25 sustained DPT (the
+     depth-1 shotgun) forever. Enemies and bosses are priced against a player
+     who never upgrades — so never upgrading is viable by construction.
+  2. Weapon ability magnitudes are unpriced placeholders; tier/rarity has no
+     enforced power meaning, and (before order 1) legendaries could roll at
+     run start.
+  3. Nothing in the game gets HARDER for a player whose arsenal stagnates:
+     enemy HP compounds at only 1.042/floor, which a flat-DPT player out-heals
+     with cards alone.
+
+--------------------------------------------------------------------------------
+DESIGN — THE EXPECTED ARSENAL CURVE
+--------------------------------------------------------------------------------
+Replace the single fixed anchor with a per-depth EXPECTED PLAYER, made of two
+explicit components:
+
+  expectedPlayerDpt(depth) = REFERENCE_PLAYER_DPT
+                             * gearCurve(depth)      <- THIS ORDER
+                             * cardCurve(depth)      <- order 4 re-derives
+
+  gearCurve(depth): the arsenal the game EXPECTS you to be holding at depth d.
+    Modelled as a step-per-region multiplier:
+      GEAR_CURVE_PER_REGION = 1.35   (each 5-floor region expects ~+35% weapon
+                                      power from found/bought weapons + weapon
+                                      levels)
+      gearCurve(d) = GEAR_CURVE_PER_REGION ^ floor((d-1) / REGION_BAND_SIZE)
+    All new constants in BalanceConfig SECTION 9 (anchors).
+
+  Everything downstream re-prices against expectedPlayerDpt(depth):
+    - survivalTurns inside threatPoints() (enemy TP at depth)
+    - turnsToKill / golden-ratio checks at region-entry depths
+    - the floor TP budget (order 5) and boss HP (order 6)
+
+THE GEAR GATE (what makes upgrades ESSENTIAL, not merely nice):
+  Because enemy eHP is priced against gearCurve, a player still holding the
+  starting shotgun in region 2 fights at ~74% of expected DPT; in region 3 at
+  ~55%. Their golden ratio (TTD/TTK) falls OUT of the fair band — fights become
+  slow, ammo demand per kill rises past what the scarcity economy supplies
+  (order 3 supplies ammo priced at expected DPT), and the boss fight becomes
+  arithmetically unwinnable (order 6 asserts it). Falling behind the gear curve
+  is FELT as mounting pressure, then becomes lethal — exactly the roguelike
+  "find better gear or die" loop.
+  SCHEMA RULE (register in BalanceSchema):
+    R-GEARGATE: with the depth-1 starting loadout, turnsToKill vs the region-2
+    entry SOLDIER must exceed the soldier golden-band max (i.e. the starting
+    weapon must read UNDERPOWERED by region 2), AND region-1 content must
+    remain IN band (the start is fair; stagnation is what's punished).
+
+DELIVERING THE CURVE (the game must actually SUPPLY the expected gear —
+a gate without supply is just a difficulty spike):
+  1. DEPTH-GATED LOOT TIERS (BalanceConfig SECTION 15/loot):
+       WEAPON_DROP_TIER_BANDS: region 1 -> COMMON..UNCOMMON, region 2 ->
+       UNCOMMON..RARE, region 3 -> RARE..EPIC, region 4+ -> EPIC..LEGENDARY.
+       Dropped weapon LEVEL rolls depth-proportional (weapon level already
+       grants +10%/level damage — it becomes part of gearCurve, not a bonus
+       outside the model).
+  2. THE PITY RULE (no run starved of its curve by RNG):
+       GUARANTEED_UPGRADE_PER_REGION = 1 — every region must PLACE at least one
+       weapon at that region's tier band (armory room, boss-adjacent cache, or
+       shop stock; the route generator already guarantees node variety, hook
+       into it). Track "upgrades seen this region" in RunStats; the floor
+       generator force-spawns one if the region is about to end at zero.
+  3. TIER = PRICED ABILITY BUDGET (fixes problem 3):
+       Rarity NEVER raises the power band; it buys ABILITIES — but now abilities
+       are PRICED. Extend GameMath with abilityPowerPoints(ability, level)
+       (reuse the PP pricing used for level-up cards: %DPT or %eHP equivalent).
+       Tier ability-PP budgets in BalanceConfig SECTION 15:
+         COMMON 0 PP | UNCOMMON 6 PP | RARE 12 PP | EPIC 20 PP | LEGENDARY 30 PP
+         (tolerance ±20%)
+       WeaponRoller rolls abilities until the tier budget is spent — never past.
+       SCHEMA RULE R-ABILITY: every catalogued ability has a registered PP
+       price; every rollable tier/ability combination fits its tier budget.
+       This converts the whole "PLACEHOLDER — flag for playtesting" catalogue
+       into priced content in one pass. Magnitudes may be tuned freely later —
+       the price recomputes from the magnitude, so tuning stays free.
+
+--------------------------------------------------------------------------------
+TECHNICAL NOTES
+--------------------------------------------------------------------------------
+  - GameMath additions (pure, with Formula/Derivation/Edge-case blocks):
+      gearCurveAtDepth(perRegionMultiplier, depth, regionBandSize)
+      expectedPlayerDamagePerTurn(depth)   (replaces raw REFERENCE_PLAYER_DPT
+                                            use in threatPoints/turnsToKill call
+                                            sites that mean "player at depth")
+      abilityPowerPoints(...)
+  - REFERENCE_PLAYER_DPT itself stays (depth-1 anchor); audit compares depth-1
+    expected == reference exactly (gearCurve(1..5) == 1).
+  - WeaponRoller: budgeted rolling replaces free rolling; keep the roll
+    deterministic per run seed (same discipline as SymbolAllocator).
+  - The starting room offer stays COMMON..UNCOMMON (order 1) — the run BEGINS
+    on the curve, at the bottom of it.
+  - BalanceReport: new GEAR CURVE table (per region: expected DPT, band of
+    droppable tiers, pity status) + ABILITY PRICING table.
+
+--------------------------------------------------------------------------------
+ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+  [ ] expectedPlayerDpt(d) monotonically steps per region; depth 1 == 25.
+  [ ] R-GEARGATE and R-ABILITY pass in BalanceAuditTest.
+  [ ] Every region can demonstrably supply >= 1 in-band weapon (generator test
+      across 100 seeds: zero regions end with no upgrade placed).
+  [ ] A legendary's total ability PP <= 30 * 1.2 for every possible roll.
+  [ ] Starting-loadout TTK vs region-2 soldier is out of golden band (the gate
+      exists) AND all region-1 content in band (the start is fair).
+
+DEPENDENCIES: order 1. UNBLOCKS: order 3 (ammo priced at expected DPT),
+order 5 (budget at expected DPT), order 6 (boss as gear check).

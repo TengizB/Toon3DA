@@ -413,7 +413,7 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 | Tileset symbol/sprite reuse (categories, sprite registry, budget, palette, allocator, rooms, texture realization; RECIPE A/B) | `docs/environment-tileset-system.txt` |
 | Route map / branching descent (nodes, generators, special levels, regions, events) | `docs/route-map-system.txt` |
 | Turn/tick system architecture | `docs/tick-system.txt` |
-| Balance contract (eHP/DPT/TTK/TP, power & threat bands) | `docs/balance-rule-system.txt` |
+| Game balance — current state, every number/system/formula and known problems | `docs/game-balance-knowledge.txt` |
 | XP and leveling system | `docs/xp-level-progression.txt` |
 | Level design philosophy | `docs/level-design-context.txt` |
 | Doom RPG design inspiration | `docs/doom-rpg-reference.txt` |
@@ -429,7 +429,7 @@ All 16 reference docs — read these before implementing anything in their domai
 | `tile-symbols.txt` | 221 | Complete tile character reference — walls, doors, floors, props, pickups, enemies + the FIXED/FLEXIBLE model. **Single source of truth for level format.** |
 | `environment-tileset-system.txt` | 850 | Symbol/sprite-reuse subsystem: categories, sprite registry, symbol budget, per-level palette, allocator, room blueprints, texture realization, render integration, and RECIPE A (add a sprite) / RECIPE B (add a room). **Single source of truth; update on any tileset/room/palette change.** |
 | `route-map-system.txt` | 818 | Branching route-map subsystem: data model + registries, DAG generation & regions, node->floor pipeline, overlay/interaction, special-level profiles, node/region catalogs, and the extensibility recipes. **Single source of truth; update on any route change.** |
-| `balance-rule-system.txt` | 217 | Balance contract: the four primitives (eHP/DPT/TTK/TP), per-role power & threat bands, the new-content checklist, and the living table. **Read before adding any weapon/enemy/item.** |
+| `game-balance-knowledge.txt` | 842 | Complete map of the CURRENT balance state: the four primitives (eHP/DPT/TTK/TP), every balance-bearing file, all bands/anchors, and the consolidated known-problems list. **Read before touching any balance number.** The old `balance-rule-system.txt` contract doc is DELETED (deprecated); its replacement is created by the `new-game-balancr-order-*.txt` idea series (order 1). |
 | `weapon-creation-guide.txt` | 537 | End-to-end weapon implementation: constants → Weapon subclass → marchShot → FrameBuffer sprite → World wiring |
 | `enemy-health-bars.txt` | 282 | Health bar geometry, gradient colors, HP text rendering spec |
 | `procedural-level-generation.txt` | 208 | Dungeon generator algorithm, room types, wall distribution logic |

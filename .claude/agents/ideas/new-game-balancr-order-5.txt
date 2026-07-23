@@ -1,0 +1,112 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: True Threat Pricing — specials, budgets, region danger
+---
+
+================================================================================
+NEW GAME BALANCE — ORDER 5 of 8
+TRUE THREAT PRICING: CYCLE-AVERAGED SPECIALS + ENCOUNTER BUDGET V2
+================================================================================
+Requires: orders 1, 2, 4 (schema; expected-DPT curve; honest power model).
+
+--------------------------------------------------------------------------------
+PROBLEM
+--------------------------------------------------------------------------------
+The encounter budget spends Threat Points, but TP is computed from BASE STATS
+only (knowledge doc SECTIONS 7, 8, 16; problems 9, 12):
+  1. Casters, summoners and buffers raise EFFECTIVE damage far beyond their
+     stat block (EMPOWERED +40%, summons add whole extra enemies, WEAK cuts
+     player output 25%) — none of it priced into TP. Floors with casters are
+     silently harder than their budget says.
+  2. Enemy eHP == raw HP is hard-coded; the first armoured/dodging archetype
+     breaks the model.
+  3. Macro pacing (route regions) and micro difficulty (TP budget) are not
+     unified: a "lethal" region is lethal only by node FREQUENCY. Region danger
+     should be a budgeted number, not a vibe.
+
+--------------------------------------------------------------------------------
+DESIGN
+--------------------------------------------------------------------------------
+A) CYCLE-AVERAGED EFFECTIVE DPT (specials priced automatically):
+   Every archetype's TP now uses a blended DPT over its special cadence cycle:
+     cycleAveragedDpt = (basic attacks in cycle * attackDamage
+                         + specialEquivalentDamage) / cycleTurns
+   specialEquivalentDamage per verb, as pure GameMath conversions:
+     AREA_STRIKE -> its predicted damage (already a number).
+     BUFF_SELF   -> extra damage the buff adds over its duration.
+     DEBUFF WEAK -> player DPT lost over duration * DEBUFF_TP_EQUIVALENCE (a
+                    defensive verb priced as offense; start 0.6 — a turn of
+                    your lost output is worth less than a turn of their damage
+                    because you can rotate/heal around it).
+     DEBUFF SLOW/BLIND -> enemy pack's bonus turns gained * pack average DPT
+                    share (priced conservatively; band-checked).
+     SUMMON      -> amortized: summonedTP * expectedSummonsPerFight /
+                    survivalTurns, bounded by the existing hard caps.
+   TP role bands stay AS IS — archetypes whose true TP now overflows their band
+   get their base stats trimmed (that's the point: the budget stops lying).
+   Schema R-ENEMY switches to cycle-averaged TP; the COVERAGE rule now also
+   fails any special verb with no registered equivalence formula.
+
+B) GENERALIZED ENEMY eHP:
+   Enemy struct gains armor/dodge/flatReduction (default 0) and enemy eHP runs
+   through the SAME GameMath.effectiveHitPoints as the player — one formula,
+   both sides (the mitigation pipeline already is shared; survivability math
+   should be too). No archetype uses them YET; the model just stops assuming.
+   Iron Stalker (MINI_ELITE) is the designated first user in a later content
+   pass — with flat reduction it punishes chip damage and rewards heavy
+   weapons, deepening the gear gate.
+
+C) ENCOUNTER BUDGET V2:
+   Keep: anchor fraction 0.15–0.30, variety cap 0.40, per-room cap 0.25, fill
+   target 0.95, ranged+melee mix. Add:
+     1. TACTICAL ROOM CAPS: a room's spent TP is capped against its GEOMETRY —
+        open rooms (no cover props, wide sightlines) get
+        ROOM_OPEN_TP_MULTIPLIER 0.8 (nowhere to break ranged cardinal lines);
+        corridor-adjacent chokepoint rooms 1.1. Computed from the generator's
+        room metadata, not per-room hand tags.
+     2. PACK COHERENCE: chaff spawns in packs of CHAFF_PACK_MIN..MAX (2..4)
+        (the golden-band exemption assumes packs; the spawner now guarantees
+        the assumption).
+     3. THE REGION DANGER DIAL (fixes problem 12): route regions stop being
+        frequency-only. Each region declares REGION_TP_BUDGET_MULTIPLIER in
+        BalanceConfig (A "Outer Facility" 0.9 | B "Research Wing" 1.0 |
+        C "Reactor Depths" 1.15 | D "The Breach" 1.25) applied ON TOP of the
+        depth curve, and the depth-coupling audit (order 4) includes it — so a
+        lethal region is EXPLICITLY lethal, budgeted, and provably fair. Node
+        weight multipliers remain for FLAVOR (what kind of rooms), the TP dial
+        owns HOW HARD.
+     4. ELITE-GAUNTLET floors keep their 0.15 chance but must still fit the
+        (region-scaled) budget — an elite floor is a composition choice, not a
+        budget override.
+
+--------------------------------------------------------------------------------
+TECHNICAL NOTES
+--------------------------------------------------------------------------------
+  - GameMath: cycleAveragedDamagePerTurn + one specialEquivalent* method per
+    verb; enemyEffectiveHitPoints (delegates to effectiveHitPoints).
+  - BalanceConfig SECTION 2: per-verb equivalence constants
+    (DEBUFF_TP_EQUIVALENCE etc.); SECTION 11: room-geometry multipliers, pack
+    sizes, per-region TP multipliers (SECTION 16 region data references them).
+  - EncounterBudgetPlanner: consumes cycle-averaged TP; pack-spawning; region
+    multiplier input.
+  - Expect a REBALANCE FALLOUT pass: casters (Acid Drone, Mire Wraith, Vortex
+    Eye, Blight Corruptor, Eye Tyrant blind) will read OVER band once priced
+    honestly — trim their base stats back into band rather than widening bands.
+  - BalanceReport: ENEMIES table gains cycleDPT + trueTP columns; ENCOUNTER
+    table gains region-multiplier sweep.
+
+--------------------------------------------------------------------------------
+ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+  [ ] Every special verb has a priced equivalence; audit fails on unpriced
+      verbs (coverage).
+  [ ] All archetypes back IN their TP band under cycle-averaged pricing.
+  [ ] Chaff always spawns in packs >= 2 (generator test, 100 seeds).
+  [ ] Region C/D floors show measurably higher spent TP than A at equal depth,
+      and the depth-coupling audit still passes for depths 1..15 in every
+      region lane.
+  [ ] Enemy eHP path runs through GameMath.effectiveHitPoints (no raw-HP
+      shortcut left in TP/TTK call sites).
+
+DEPENDENCIES: orders 1, 2, 4. UNBLOCKS: order 6 (boss adds priced by the same
+verb equivalences), order 8 (simulator uses true TP as ground truth).
