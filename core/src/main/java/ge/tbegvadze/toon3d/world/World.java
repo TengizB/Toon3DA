@@ -448,10 +448,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         Railgun             railgun         = new Railgun();
         Incinerator         incinerator     = new Incinerator();
         this.incinerator    = incinerator; // kept so per-floor hazard wiring can reach it
+        ArcCannon           arcCannon       = new ArcCannon();
         GrenadeLauncher     grenadeLauncher = new GrenadeLauncher();
         float rangedMultiplier   = playerStats.getRangedDamageMultiplier();
         float accuracyMultiplier = playerStats.getAccuracyMultiplier();
-        for (Weapon weapon : new Weapon[]{shotgun, dblShotgun, plasmaRifle, chaingun, assaultRifle, railgun, incinerator, grenadeLauncher}) {
+        for (Weapon weapon : new Weapon[]{shotgun, dblShotgun, plasmaRifle, chaingun, assaultRifle, railgun, incinerator, arcCannon, grenadeLauncher}) {
             weapon.setEventTextSystem(eventTextSystem);
             weapon.setAmmoInventory(itemInventory);
             weapon.setRangedDamageMultiplier(rangedMultiplier);
@@ -470,7 +471,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             // Start room: full arsenal registered for the HUD renderer, but loadout is empty
             // so the player is unarmed until they walk onto a weapon offer.
             inventory.setArsenal(java.util.List.of(shotgun, dblShotgun, plasmaRifle, chaingun,
-                                                   assaultRifle, railgun, incinerator, grenadeLauncher));
+                                                   assaultRifle, railgun, incinerator, arcCannon, grenadeLauncher));
             inventory.clearLoadout();
             // Re-set melee weapon after clearLoadout (which resets meleeSelected but not the weapon itself).
             inventory.setMeleeWeapon(fist);
@@ -478,7 +479,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         } else {
             // Normal floor entry: equip Chaingun + Shotgun with starting ammo reserves.
             inventory.setArsenal(java.util.List.of(chaingun, shotgun, dblShotgun, plasmaRifle,
-                                                   assaultRifle, railgun, incinerator, grenadeLauncher));
+                                                   assaultRifle, railgun, incinerator, arcCannon, grenadeLauncher));
             itemInventory.tryAdd(ItemType.AMMO_BULLETS, ItemConstants.AMMO_START_BULLETS);
             itemInventory.tryAdd(ItemType.AMMO_SHELLS,  ItemConstants.AMMO_START_SHELLS);
         }
@@ -2838,7 +2839,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (weapon instanceof Shotgun || weapon instanceof DoubleBarrelShotgun) {
             ammoType = AmmoType.SHELLS;
             amount   = ItemConstants.START_ROOM_AMMO_SHELLS;
-        } else if (weapon instanceof PlasmaRifle || weapon instanceof Incinerator) {
+        } else if (weapon instanceof PlasmaRifle || weapon instanceof Incinerator
+                || weapon instanceof ArcCannon) {
             ammoType = AmmoType.CELLS;
             amount   = ItemConstants.START_ROOM_AMMO_CELLS;
         } else if (weapon instanceof Chaingun || weapon instanceof AssaultRifle) {
@@ -2868,6 +2870,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (weapon instanceof AssaultRifle)        return ItemType.WEAPON_ASSAULT_RIFLE;
         if (weapon instanceof Railgun)             return ItemType.WEAPON_RAILGUN;
         if (weapon instanceof Incinerator)         return ItemType.WEAPON_INCINERATOR;
+        if (weapon instanceof ArcCannon)           return ItemType.WEAPON_ARC_CANNON;
         if (weapon instanceof PlasmaRifle)         return ItemType.WEAPON_PLASMA;
         if (weapon instanceof GrenadeLauncher)     return ItemType.WEAPON_ROCKET;
         if (weapon instanceof MeleeChainsaw)       return ItemType.WEAPON_CHAINSAW;

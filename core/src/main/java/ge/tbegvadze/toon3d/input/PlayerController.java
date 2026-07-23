@@ -391,6 +391,7 @@ public class PlayerController {
             case WEAPON_ASSAULT_RIFLE: return weapon instanceof AssaultRifle;
             case WEAPON_RAILGUN:       return weapon instanceof Railgun;
             case WEAPON_INCINERATOR:   return weapon instanceof Incinerator;
+            case WEAPON_ARC_CANNON:    return weapon instanceof ArcCannon;
             case WEAPON_ROCKET:        return weapon instanceof GrenadeLauncher;
             case WEAPON_PISTOL:        return false; // no Pistol class; falls through to ammo
             case WEAPON_FIST:          return weapon instanceof Fist;
@@ -419,6 +420,7 @@ public class PlayerController {
             case WEAPON_ASSAULT_RIFLE: return AmmoType.BULLETS;
             case WEAPON_PLASMA:        return AmmoType.CELLS;
             case WEAPON_INCINERATOR:   return AmmoType.CELLS;
+            case WEAPON_ARC_CANNON:    return AmmoType.CELLS;
             case WEAPON_RAILGUN:       return AmmoType.SLUGS;
             case WEAPON_ROCKET:        return AmmoType.ROCKETS;
             case WEAPON_FIST:

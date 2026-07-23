@@ -136,6 +136,17 @@ public enum ItemType {
             new WeaponAbility[]{WeaponAbility.INCENDIARY, WeaponAbility.POINT_BLANK}
     ),
 
+    WEAPON_ARC_CANNON(
+            "Arc Cannon",
+            ItemCategory.WEAPON,
+            false,
+            ItemConstants.ITEM_STACK_MAX_WEAPON,
+            'T',
+            1.00f, 0.75f, 0.10f,
+            "Fires a chain-lightning bolt that leaps between clustered enemies. Anti-swarm.",
+            new WeaponAbility[]{WeaponAbility.STATIC_DISCHARGE, WeaponAbility.RHYTHM}
+    ),
+
     WEAPON_FIST(
             "Fist",
             ItemCategory.WEAPON,

@@ -899,7 +899,8 @@ final class ItemWindow implements Disposable {
             case WEAPON_CHAINGUN:
             case WEAPON_ASSAULT_RIFLE: return "AUTOMATIC CLASS";
             case WEAPON_PLASMA:
-            case WEAPON_INCINERATOR:   return "ENERGY CLASS";
+            case WEAPON_INCINERATOR:
+            case WEAPON_ARC_CANNON:    return "ENERGY CLASS";
             case WEAPON_RAILGUN:       return "PRECISION CLASS";
             case WEAPON_ROCKET:        return "EXPLOSIVE CLASS";
             case WEAPON_FIST:
@@ -919,6 +920,7 @@ final class ItemWindow implements Disposable {
             case WEAPON_ASSAULT_RIFLE: return WeaponConstants.ASSAULT_RIFLE_DAMAGE + "/round";
             case WEAPON_RAILGUN:       return "40-90";
             case WEAPON_INCINERATOR:   return WeaponConstants.FLAME_IMPACT_DAMAGE + "+" + WeaponConstants.FLAME_BURN_DAMAGE_PER_TURN + "/turn";
+            case WEAPON_ARC_CANNON:    return WeaponConstants.ARC_CANNON_DAMAGE + "+chain";
             case WEAPON_ROCKET:        return String.valueOf(WeaponConstants.GRENADE_SPLASH_DAMAGE);
             case WEAPON_FIST:          return "4";
             case WEAPON_KNIFE:         return "8";
@@ -948,7 +950,8 @@ final class ItemWindow implements Disposable {
             case WEAPON_CHAINGUN:
             case WEAPON_ASSAULT_RIFLE: return "Bullets";
             case WEAPON_PLASMA:
-            case WEAPON_INCINERATOR:   return "Cells";
+            case WEAPON_INCINERATOR:
+            case WEAPON_ARC_CANNON:    return "Cells";
             case WEAPON_ROCKET:        return "Rockets";
             case WEAPON_RAILGUN:       return "Slugs";
             default:                   return "None (melee)";
@@ -964,6 +967,7 @@ final class ItemWindow implements Disposable {
             case WEAPON_ASSAULT_RIFLE: return "— / " + WeaponConstants.ASSAULT_RIFLE_CLIP_SIZE;
             case WEAPON_RAILGUN:       return "— / " + WeaponConstants.RAILGUN_CLIP_SIZE;
             case WEAPON_INCINERATOR:   return "— / " + WeaponConstants.FLAME_CLIP_SIZE;
+            case WEAPON_ARC_CANNON:    return "— / " + WeaponConstants.ARC_CANNON_CLIP_SIZE;
             case WEAPON_ROCKET:        return "— / " + WeaponConstants.GRENADE_CLIP_SIZE;
             default:                   return "—";
         }

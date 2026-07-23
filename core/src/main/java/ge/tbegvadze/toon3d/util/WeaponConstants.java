@@ -30,6 +30,7 @@ public final class WeaponConstants {
     public static final float CHAINGUN_FIRE_SHAKE_MAGNITUDE     = 2f;
     public static final float GRENADE_FIRE_SHAKE_MAGNITUDE      = 7f;
     public static final float ASSAULT_RIFLE_FIRE_SHAKE_MAGNITUDE = 4f;
+    public static final float ARC_CANNON_FIRE_SHAKE_MAGNITUDE   = 3f;
 
     // Shotgun stats — balance values live in BalanceConfig (SINGLE SOURCE OF TRUTH).
     public static final int     SHOTGUN_DAMAGE             = BalanceConfig.SHOTGUN_DAMAGE;
@@ -364,6 +365,34 @@ public final class WeaponConstants {
     public static final String  GRENADE_FIRE_TEXTURE_PATH    = "textures/guns/grenade/grenade_fire.png";
     public static final String  GRENADE_RELOAD_TEXTURE_PATH  = "textures/guns/grenade/grenade_reload.png";
 
+    // Arc Cannon — chain-lightning energy weapon (CELLS ammo). Primary bolt stops at the first
+    // enemy in the facing line; the arc then LEAPS laterally through a cluster (see ArcCannon).
+    // Balance values (damage, clip, reload, range, drop, chain) live in BalanceConfig.
+    public static final int     ARC_CANNON_DAMAGE                  = BalanceConfig.ARC_CANNON_DAMAGE;
+    public static final int     ARC_CANNON_CLIP_SIZE               = BalanceConfig.ARC_CANNON_CLIP_SIZE;
+    public static final int     ARC_CANNON_RANGE_TILES             = BalanceConfig.ARC_CANNON_RANGE_TILES;
+    public static final float   ARC_CANNON_DAMAGE_DROP_COEFF       = BalanceConfig.ARC_CANNON_DAMAGE_DROP_COEFF;
+    public static final int     ARC_CANNON_RELOAD_TIME_TICKS       = BalanceConfig.ARC_CANNON_RELOAD_TIME_TICKS;
+    // Primary bolt stops at the first enemy in the line; lateral chaining handles multi-target.
+    public static final boolean ARC_CANNON_PENETRATION             = false;
+    public static final int     ARC_CANNON_CHAIN_JUMPS             = BalanceConfig.ARC_CANNON_CHAIN_JUMPS;
+    public static final float   ARC_CANNON_CHAIN_DAMAGE_MULTIPLIER = BalanceConfig.ARC_CANNON_CHAIN_DAMAGE_MULTIPLIER;
+    // Arc Cannon procedural canvas — ShapeRenderer renders into this offscreen FrameBuffer
+    public static final int     ARC_CANNON_CANVAS_WIDTH            = 192;
+    public static final int     ARC_CANNON_CANVAS_HEIGHT           = 134;
+    // Arc Cannon HUD textures — always procedural (no asset files)
+    public static final String  ARC_CANNON_NORMAL_TEXTURE_PATH     = "textures/guns/arc_cannon/arc_cannon.png";
+    public static final String  ARC_CANNON_FIRE_TEXTURE_PATH       = "textures/guns/arc_cannon/arc_cannon_fire.png";
+    public static final String  ARC_CANNON_RELOAD_TEXTURE_PATH     = "textures/guns/arc_cannon/arc_cannon_reload.png";
+    // Arc Cannon muzzle discharge effect (world units) — central cyan flash + branching bolts.
+    public static final float   ARC_CANNON_EFFECT_CORE_RADIUS      = 60f;  // bright cyan emitter flash radius
+    public static final float   ARC_CANNON_EFFECT_BOLT_SPREAD_X    = 120f; // horizontal reach of the branching arcs
+    public static final float   ARC_CANNON_EFFECT_BOLT_HEIGHT      = 150f; // vertical reach of the branching arcs
+    public static final int     ARC_CANNON_EFFECT_BRANCH_COUNT     = 4;    // branching arcs flung out per discharge
+    public static final int     ARC_CANNON_EFFECT_BRANCH_SEGMENTS  = 4;    // zig-zag segments per branch
+    public static final float   ARC_CANNON_EFFECT_BRANCH_JITTER    = 22f;  // lateral kink magnitude per segment
+    public static final float   ARC_CANNON_EFFECT_BOLT_HALF_WIDTH  = 3.0f; // half-thickness of each lightning stroke
+
     // Melee weapon procedural canvas — same dimensions as ranged weapons for consistent HUD framing
     public static final int MELEE_CANVAS_WIDTH  = 192;
     public static final int MELEE_CANVAS_HEIGHT = 134;
@@ -444,5 +473,6 @@ public final class WeaponConstants {
     public static final float INCINERATOR_BASE_ACCURACY           = 1.00f;
     public static final float GRENADE_LAUNCHER_BASE_ACCURACY      = 0.80f;
     public static final float ASSAULT_RIFLE_BASE_ACCURACY         = 0.88f;
+    public static final float ARC_CANNON_BASE_ACCURACY            = 0.88f;
     public static final float MELEE_BASE_ACCURACY                 = 1.00f;
 }

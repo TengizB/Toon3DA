@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.entity.ArcCannon;
 import ge.tbegvadze.toon3d.entity.AssaultRifle;
 import ge.tbegvadze.toon3d.entity.Chaingun;
 import ge.tbegvadze.toon3d.entity.CombatKnife;
@@ -189,6 +190,9 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         }
         if (weapon instanceof Incinerator) {
             return generateIncineratorTexture();
+        }
+        if (weapon instanceof ArcCannon) {
+            return generateArcCannonTexture();
         }
         if (weapon instanceof GrenadeLauncher) {
             return generateGrenadeLauncherTexture();
@@ -937,6 +941,176 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         shapeRenderer.rect(centerX +  2f, 52f, 8f, 4f);     // right sight wing
         shapeRenderer.setColor(0.08f, 0.09f, 0.11f, 1f);
         shapeRenderer.rect(centerX -  2f, 52f, 4f, 4f);     // notch slot (dark gap)
+    }
+
+    /**
+     * Generates the Arc Cannon sprite via the offscreen FrameBuffer + ShapeRenderer pipeline.
+     * Energy weapon, Quake-1 top-down view; the FrameBuffer is disposed before return.
+     */
+    private static Texture generateArcCannonTexture() {
+        int canvasWidth  = WeaponConstants.ARC_CANNON_CANVAS_WIDTH;   // 192
+        int canvasHeight = WeaponConstants.ARC_CANNON_CANVAS_HEIGHT;  // 134
+
+        FrameBuffer        frameBuffer            = new FrameBuffer(Pixmap.Format.RGBA8888, canvasWidth, canvasHeight, false);
+        ShapeRenderer      temporaryShapeRenderer = new ShapeRenderer();
+        OrthographicCamera camera                 = new OrthographicCamera(canvasWidth, canvasHeight);
+        camera.position.set(canvasWidth / 2f, canvasHeight / 2f, 0f);
+        camera.update();
+
+        frameBuffer.begin();
+        Gdx.gl.glClearColor(0f, 0f, 0f, 0f);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        temporaryShapeRenderer.setProjectionMatrix(camera.combined);
+        temporaryShapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        drawArcCannonShape(temporaryShapeRenderer, canvasWidth / 2f);
+        temporaryShapeRenderer.end();
+
+        // Read pixels while the FBO is still bound; GL Y=0 is the bottom row, so flip before upload.
+        Pixmap rawPixmap = new Pixmap(canvasWidth, canvasHeight, Pixmap.Format.RGBA8888);
+        Gdx.gl.glReadPixels(0, 0, canvasWidth, canvasHeight,
+                            GL20.GL_RGBA, GL20.GL_UNSIGNED_BYTE, rawPixmap.getPixels());
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+        frameBuffer.end();
+        frameBuffer.dispose();
+        temporaryShapeRenderer.dispose();
+
+        Pixmap flippedPixmap = flipPixmapVertically(rawPixmap);
+        rawPixmap.dispose();
+
+        Texture texture = new Texture(flippedPixmap);
+        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        flippedPixmap.dispose();
+        return texture;
+    }
+
+    /**
+     * Draws the Arc Cannon on the 192×134 canvas in Quake-1 top-down first-person perspective.
+     * Energy weapon: no bore holes — the barrel ends in a pronged Tesla emitter with a layered
+     * concentric core. The player sees the flat top surface of a tapered steel-blue receiver
+     * threaded with bright cyan coils, capped by twin electrode prongs that arc energy.
+     *
+     * Every element is bilaterally symmetric about centerX (= 96). Barrel convergence: half-width
+     * tapers from 17px at Y=60 to 11px at Y=120 (top-down energy-weapon perspective). The grip
+     * (Y=0..14) is transparent — cut off below the screen edge.
+     *
+     *   Y=0..14    transparent (grip cut off below screen)
+     *   Y=14..62   main receiver: steel-blue top surface, cyan coils, dual capacitor housings
+     *   Y=58..74   upper receiver stepped section
+     *   Y=60..120  tapered emitter barrel with retaining bands + cylinder shading
+     *   Y=112..134 electrode prongs, muzzle cap, layered concentric Tesla emitter
+     */
+    private static void drawArcCannonShape(ShapeRenderer shapeRenderer, float centerX) {
+
+        // 1. Main receiver — wide steel-blue trapezoid, top-surface perspective (wide near Y=14).
+        shapeRenderer.setColor(0.28f, 0.32f, 0.42f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 48f, 14f, 40f, 62f);
+        // Far-edge highlight (top surface faces the camera) and near-edge shadow.
+        shapeRenderer.setColor(0.40f, 0.46f, 0.58f, 1f);
+        shapeRenderer.rect(centerX - 40f, 58f, 80f, 4f);
+        shapeRenderer.setColor(0.18f, 0.21f, 0.29f, 1f);
+        shapeRenderer.rect(centerX - 48f, 14f, 96f, 4f);
+        // Chamfered side flanks — dark angled bevels down both edges (cylinder-body read).
+        shapeRenderer.setColor(0.20f, 0.23f, 0.31f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 48f, centerX - 41f, 14f,
+                                            centerX - 40f, centerX - 34f, 62f);   // left flank bevel
+        drawGeneralTrapezoid(shapeRenderer, centerX + 41f, centerX + 48f, 14f,
+                                            centerX + 34f, centerX + 40f, 62f);   // right flank bevel ✓
+
+        // 2. Energy coils — 4 bright cyan horizontal bands across the receiver (seen from above).
+        float[] coilYPositions = {22f, 32f, 42f, 52f};
+        shapeRenderer.setColor(0.00f, 0.88f, 1.00f, 1f);
+        for (float coilY : coilYPositions) {
+            shapeRenderer.rect(centerX - 36f, coilY, 72f, 3f);
+        }
+        // Soft cyan glow fringe below/above each coil band.
+        shapeRenderer.setColor(0.00f, 0.62f, 0.90f, 0.50f);
+        for (float coilY : coilYPositions) {
+            shapeRenderer.rect(centerX - 36f, coilY - 1f, 72f, 1f);   // fringe below
+            shapeRenderer.rect(centerX - 36f, coilY + 3f, 72f, 1f);   // fringe above
+        }
+
+        // 3. Capacitor housings — symmetric flanking pods with a bright charge segment.
+        //    left  housing [CX-46 .. CX-38];  right housing [CX+38 .. CX+46] ✓ symmetric
+        shapeRenderer.setColor(0.16f, 0.20f, 0.28f, 1f);
+        shapeRenderer.rect(centerX - 46f, 20f, 8f, 34f);   // left  housing
+        shapeRenderer.rect(centerX + 38f, 20f, 8f, 34f);   // right housing ✓ mirror
+        shapeRenderer.setColor(0.30f, 0.82f, 1.00f, 0.95f);
+        shapeRenderer.rect(centerX - 44f, 24f, 4f, 26f);   // left  charge bar
+        shapeRenderer.rect(centerX + 40f, 24f, 4f, 26f);   // right charge bar ✓ mirror
+
+        // 4. Central spine channel — cyan energy conduit routing power up into the barrel.
+        shapeRenderer.setColor(0.00f, 0.62f, 1.00f, 0.95f);
+        shapeRenderer.rect(centerX - 3f, 40f, 6f, 34f);    // central spine [CX-3 .. CX+3]
+        shapeRenderer.setColor(0.00f, 0.55f, 0.95f, 0.40f);
+        shapeRenderer.rect(centerX - 5f, 40f, 2f, 34f);    // spine glow fringe left  [CX-5 .. CX-3]
+        shapeRenderer.rect(centerX + 3f, 40f, 2f, 34f);    // spine glow fringe right [CX+3 .. CX+5] ✓
+
+        // 5. Upper receiver — stepped section between body and barrel.
+        shapeRenderer.setColor(0.26f, 0.30f, 0.40f, 1f);
+        shapeRenderer.rect(centerX - 30f, 58f, 60f, 16f);
+        shapeRenderer.setColor(0.38f, 0.44f, 0.56f, 1f);
+        shapeRenderer.rect(centerX - 30f, 71f, 60f, 3f);   // far-edge bevel highlight
+        shapeRenderer.setColor(0.16f, 0.18f, 0.26f, 1f);
+        shapeRenderer.rect(centerX - 30f, 58f, 60f, 3f);   // near-edge shadow
+
+        // 6. Emitter barrel — tapered trapezoid viewed from above (wide near Y=60, narrow far Y=120).
+        shapeRenderer.setColor(0.28f, 0.32f, 0.42f, 1f);
+        drawSymmetricTrapezoid(shapeRenderer, centerX, 17f, 60f, 11f, 120f);
+        // Outer edge shadows — cylinder sides curve away, tapered with the barrel (factor ≈ 0.65).
+        shapeRenderer.setColor(0.16f, 0.18f, 0.26f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 17f, centerX - 13f, 60f,
+                                            centerX - 11f, centerX -  8f, 120f);   // left edge shadow
+        drawGeneralTrapezoid(shapeRenderer, centerX + 13f, centerX + 17f, 60f,
+                                            centerX +  8f, centerX + 11f, 120f);   // right edge shadow ✓
+        // Crown highlight — top of the cylinder faces the camera, tapered.
+        shapeRenderer.setColor(0.42f, 0.48f, 0.60f, 1f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 6f, centerX + 6f, 60f,
+                                            centerX - 4f, centerX + 4f, 120f);
+        // Cyan energy channel running up the centre of the barrel top surface.
+        shapeRenderer.setColor(0.00f, 0.72f, 1.00f, 0.85f);
+        drawGeneralTrapezoid(shapeRenderer, centerX - 2f, centerX + 2f, 62f,
+                                            centerX - 1f, centerX + 1f, 118f);
+
+        // 7. Retaining bands — full-width steel rings wrapping the barrel; half-width interpolated
+        //    along the 17→11 taper. Each band: dark rect + thin bright top edge.
+        float[] bandYPositions = {74f, 90f, 106f};
+        float[] bandHalfWidths = {15f, 13f, 12f};
+        for (int bandIndex = 0; bandIndex < bandYPositions.length; bandIndex++) {
+            float bandY    = bandYPositions[bandIndex];
+            float bandHalf = bandHalfWidths[bandIndex];
+            shapeRenderer.setColor(0.18f, 0.20f, 0.28f, 1f);
+            shapeRenderer.rect(centerX - bandHalf, bandY, bandHalf * 2f, 3f);
+            shapeRenderer.setColor(0.36f, 0.42f, 0.54f, 1f);
+            shapeRenderer.rect(centerX - bandHalf, bandY + 3f, bandHalf * 2f, 1f);
+        }
+
+        // 8. Electrode prongs — twin symmetric Tesla flanges arcing past the muzzle.
+        shapeRenderer.setColor(0.22f, 0.26f, 0.34f, 1f);
+        shapeRenderer.rect(centerX - 11f, 118f, 4f, 14f);   // left  prong [CX-11 .. CX-7]
+        shapeRenderer.rect(centerX +  7f, 118f, 4f, 14f);   // right prong [CX+7 .. CX+11] ✓
+        shapeRenderer.setColor(0.40f, 0.90f, 1.00f, 1f);
+        shapeRenderer.rect(centerX - 11f, 129f, 4f, 3f);    // left  prong charged tip
+        shapeRenderer.rect(centerX +  7f, 129f, 4f, 3f);    // right prong charged tip ✓
+
+        // 9. Muzzle cap — bright steel rim at the barrel tip (energy weapon still shows the ring).
+        shapeRenderer.setColor(0.40f, 0.44f, 0.52f, 1f);
+        shapeRenderer.rect(centerX - 11f, 118f, 22f, 2f);   // muzzle cap band, muzzle barrel width
+
+        // 10. Tesla emitter — layered concentric ellipses deep-blue -> cyan -> white-cyan -> white.
+        shapeRenderer.setColor(0.08f, 0.52f, 1.00f, 0.30f);
+        shapeRenderer.ellipse(centerX - 16f, 112f, 32f, 16f);   // under-glow halo (drawn first)
+        shapeRenderer.setColor(0.08f, 0.52f, 1.00f, 0.95f);
+        shapeRenderer.ellipse(centerX - 12f, 114f, 24f, 14f);   // outer deep-blue glow
+        shapeRenderer.setColor(0.30f, 0.82f, 1.00f, 1f);
+        shapeRenderer.ellipse(centerX -  8f, 116f, 16f, 11f);   // mid bright-cyan ring
+        shapeRenderer.setColor(0.75f, 0.97f, 1.00f, 1f);
+        shapeRenderer.ellipse(centerX -  5f, 118f, 10f, 8f);    // inner white-cyan core
+        shapeRenderer.setColor(1.00f, 1.00f, 1.00f, 1f);
+        shapeRenderer.ellipse(centerX -  2f, 120f, 4f, 4f);     // hot white centre
     }
 
     /**
@@ -2918,6 +3092,8 @@ public class WeaponHudRenderer implements Renderable, Disposable {
                     renderRailgunEffect(camera, normalizedTime);
                 } else if (equippedWeapon instanceof Incinerator) {
                     renderIncineratorEffect(camera, normalizedTime);
+                } else if (equippedWeapon instanceof ArcCannon) {
+                    renderArcCannonEffect(camera, normalizedTime);
                 } else if (equippedWeapon instanceof GrenadeLauncher) {
                     renderGrenadeLauncherEffect(camera, normalizedTime);
                 } else if (equippedWeapon instanceof MeleeWeapon) {
@@ -3623,6 +3799,109 @@ public class WeaponHudRenderer implements Renderable, Disposable {
                                    nextX - boltHalfWidth, nextY);
             // Inner bright white-cyan core stroke
             shapeRenderer.setColor(0.82f, 0.95f, 1.00f, alpha * 0.78f);
+            shapeRenderer.triangle(previousX - boltHalfWidth * 0.45f, previousY,
+                                   previousX + boltHalfWidth * 0.45f, previousY,
+                                   nextX + boltHalfWidth * 0.45f, nextY);
+            shapeRenderer.triangle(previousX - boltHalfWidth * 0.45f, previousY,
+                                   nextX + boltHalfWidth * 0.45f, nextY,
+                                   nextX - boltHalfWidth * 0.45f, nextY);
+
+            previousX = nextX;
+            previousY = nextY;
+        }
+    }
+
+    /**
+     * Draws the Arc Cannon muzzle discharge: a bright layered cyan Tesla flash at the emitter plus
+     * a fan of branching zig-zag lightning bolts leaping outward — the visual echo of the weapon's
+     * chain mechanic. All layers fade (alpha) and the flash shrinks as normalizedTime approaches 1;
+     * the bolts fan symmetrically so the effect is bilaterally balanced about the muzzle. No
+     * per-frame allocation — jitter is read from the shared RAILGUN_BRANCH_JITTER_FRACTIONS table.
+     */
+    private void renderArcCannonEffect(OrthographicCamera camera, float normalizedTime) {
+        float alpha      = 1f - normalizedTime;
+        float scale      = 1f - normalizedTime * 0.55f;
+        float barrelX    = Constants.WORLD_WIDTH / 2f;
+        float barrelY    = currentOffsetY + WeaponConstants.WEAPON_HUD_HEIGHT
+                           * WeaponConstants.WEAPON_BARREL_TIP_Y_FRACTION;
+        float coreRadius = WeaponConstants.ARC_CANNON_EFFECT_CORE_RADIUS * scale;
+        float boltSpread = WeaponConstants.ARC_CANNON_EFFECT_BOLT_SPREAD_X * scale;
+        float boltHeight = WeaponConstants.ARC_CANNON_EFFECT_BOLT_HEIGHT * scale;
+        int   branchCount = WeaponConstants.ARC_CANNON_EFFECT_BRANCH_COUNT;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        // 1. Branching lightning bolts — fanned symmetrically to both sides of the muzzle. Each
+        //    branchIndex maps to a signed lateral reach evenly spaced across [-spread, +spread],
+        //    skipping zero so no bolt fires straight up (the central flash owns the centre).
+        for (int branchIndex = 0; branchIndex < branchCount; branchIndex++) {
+            // Fraction in (-1, 1): -1..-something for the left half, +something..+1 for the right.
+            float sideFraction = (branchIndex * 2f + 1f) / branchCount - 1f;   // symmetric, skips 0
+            float lateralReach = sideFraction * boltSpread;
+            float verticalReach = boltHeight * (0.70f + 0.30f * Math.abs(sideFraction));
+            drawArcCannonBolt(barrelX, barrelY, lateralReach, verticalReach, alpha, branchIndex);
+        }
+
+        // 2. Outer translucent cyan discharge halo.
+        shapeRenderer.setColor(0.08f, 0.52f, 1.00f, alpha * 0.28f);
+        shapeRenderer.ellipse(barrelX - coreRadius, barrelY - coreRadius * 0.55f,
+                              coreRadius * 2f, coreRadius * 1.10f);
+        // 3. Main bright-cyan flash disc.
+        shapeRenderer.setColor(0.30f, 0.82f, 1.00f, alpha * 0.72f);
+        shapeRenderer.ellipse(barrelX - coreRadius * 0.65f, barrelY - coreRadius * 0.36f,
+                              coreRadius * 1.30f, coreRadius * 0.72f);
+        // 4. Hot white-cyan core.
+        shapeRenderer.setColor(0.85f, 0.98f, 1.00f, alpha * 0.92f);
+        shapeRenderer.ellipse(barrelX - coreRadius * 0.26f, barrelY - coreRadius * 0.15f,
+                              coreRadius * 0.52f, coreRadius * 0.30f);
+
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    /**
+     * Draws a single zig-zag cyan lightning bolt for the Arc Cannon discharge as a chain of thin
+     * quads (two triangles each), mirroring the railgun branch construction with the energy-cyan
+     * palette. Jitter is read deterministically from RAILGUN_BRANCH_JITTER_FRACTIONS (no allocation);
+     * the branchIndex seeds the read offset so the fanned bolts do not all kink identically.
+     *
+     * @param originX       muzzle X in world units
+     * @param originY       muzzle Y in world units
+     * @param lateralReach  signed final horizontal offset of the bolt tip (sign = side)
+     * @param verticalReach final height of the bolt tip above the muzzle
+     * @param alpha         current fade alpha (1 at fire start, 0 at end)
+     * @param branchIndex   fan index, used to offset the jitter read so bolts differ
+     */
+    private void drawArcCannonBolt(float originX, float originY,
+                                   float lateralReach, float verticalReach, float alpha, int branchIndex) {
+        int   segmentCount  = WeaponConstants.ARC_CANNON_EFFECT_BRANCH_SEGMENTS;
+        float jitter        = WeaponConstants.ARC_CANNON_EFFECT_BRANCH_JITTER;
+        float boltHalfWidth = WeaponConstants.ARC_CANNON_EFFECT_BOLT_HALF_WIDTH;
+
+        float previousX = originX;
+        float previousY = originY;
+        for (int segmentIndex = 1; segmentIndex <= segmentCount; segmentIndex++) {
+            float progress       = (float) segmentIndex / segmentCount;
+            int   jitterReadIndex = (segmentIndex + branchIndex) % RAILGUN_BRANCH_JITTER_FRACTIONS.length;
+            float jitterFraction  = RAILGUN_BRANCH_JITTER_FRACTIONS[jitterReadIndex];
+            // Tip snaps back to the straight target (no jitter) so the bolt end is clean.
+            float kink  = (segmentIndex == segmentCount) ? 0f : jitterFraction * jitter;
+            float nextX = originX + lateralReach * progress + kink;
+            float nextY = originY + verticalReach * progress;
+
+            // Outer dim cyan glow stroke.
+            shapeRenderer.setColor(0.30f, 0.72f, 1.00f, alpha * 0.55f);
+            shapeRenderer.triangle(previousX - boltHalfWidth, previousY,
+                                   previousX + boltHalfWidth, previousY,
+                                   nextX + boltHalfWidth, nextY);
+            shapeRenderer.triangle(previousX - boltHalfWidth, previousY,
+                                   nextX + boltHalfWidth, nextY,
+                                   nextX - boltHalfWidth, nextY);
+            // Inner bright white-cyan core stroke.
+            shapeRenderer.setColor(0.82f, 0.97f, 1.00f, alpha * 0.80f);
             shapeRenderer.triangle(previousX - boltHalfWidth * 0.45f, previousY,
                                    previousX + boltHalfWidth * 0.45f, previousY,
                                    nextX + boltHalfWidth * 0.45f, nextY);
