@@ -24,8 +24,7 @@ public final class GameBalance {
     // XP REWARDS — XP dropped by each enemy archetype on death
     // =========================================================================
 
-    // Per-enemy XP rewards are balance values — they live in BalanceConfig
-    // (SINGLE SOURCE OF TRUTH). Boss XP (XP_REWARD_BOSS_BASE) stays here pending idea 6.
+    // Boss XP (XP_REWARD_BOSS_BASE) stays here pending idea 6.
 
     /** PLAGUE_HULK (tile '1') — slow tank melee; tanky so yields solid XP. */
     public static final int XP_REWARD_PLAGUE_HULK   = BalanceConfig.XP_REWARD_PLAGUE_HULK;
@@ -306,8 +305,6 @@ public final class GameBalance {
     public static final int STAT_REFERENCE         = 0;
 
     // ---- Per-point effect rates ----
-
-    // Per-point stat rates are balance values — see BalanceConfig (SINGLE SOURCE OF TRUTH).
 
     /** Each STRENGTH point adds this fraction to the melee damage multiplier. */
     public static final float STR_MELEE_PER_POINT     = BalanceConfig.STR_MELEE_PER_POINT;

@@ -23,8 +23,7 @@ public final class Constants {
     // Player
     public static final float PLAYER_RADIUS = CELL_SIZE / 4f;
     // Seconds per cell step or 90° rotation. Lower = snappier animation.
-    // These affect turn economy (how many enemy turns you eat per action) and are
-    // therefore balance values — see BalanceConfig (SINGLE SOURCE OF TRUTH).
+    // These affect turn economy (how many enemy turns you eat per action).
     public static final float PLAYER_MOVE_DURATION   = BalanceConfig.PLAYER_MOVE_DURATION;
     public static final float PLAYER_ROTATE_DURATION = BalanceConfig.PLAYER_ROTATE_DURATION;
     // FOV stored as degrees for readability; radians derived from it.

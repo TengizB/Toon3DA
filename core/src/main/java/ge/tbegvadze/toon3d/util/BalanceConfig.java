@@ -1,8 +1,6 @@
 package ge.tbegvadze.toon3d.util;
 
 /**
- * SINGLE SOURCE OF TRUTH FOR BALANCE.
- *
  * Every number in this file changes how hard the game is, or how generous it is with
  * resources. If you change a value here, the game gets easier, harder, more, or less
  * generous — nothing else. Cosmetic values (colours, sprite offsets, HUD geometry,

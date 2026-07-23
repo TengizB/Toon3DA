@@ -1,0 +1,841 @@
+================================================================================
+GAME BALANCE — COMPLETE KNOWLEDGE DOCUMENT (toon3D)
+================================================================================
+Audience: future Claude sessions working on toon3D balance/difficulty.
+Purpose:  a single, complete map of EVERYTHING that the game's balance and
+          difficulty depend on — every number, every system, every formula, and
+          the file each of them lives in — so a session can reason about
+          difficulty without re-discovering the whole codebase first.
+
+--------------------------------------------------------------------------------
+⚠️  READ THIS FIRST — THE CURRENT BALANCE IS NOT GOOD AND MUST BE REFINED  ⚠️
+--------------------------------------------------------------------------------
+The balance described in this document is the CURRENT state, not a target state.
+It is far from perfect. Large parts of it have never been playtested — only
+verified against a standalone arithmetic harness (BalanceReport) that checks the
+numbers against their own formulas. Passing that harness proves the numbers are
+INTERNALLY CONSISTENT with the contract; it does NOT prove the game feels good,
+is fun, or is fair in practice. Treat every number here as PROVISIONAL.
+
+This warning is repeated throughout the document, deliberately, at each system,
+because each system has its own unresolved problems. Do not read any section as
+"this is solved". Read every section as "this is where it stands today, and it
+needs another pass." A consolidated list of the known problems is in SECTION 21.
+
+Whenever you touch balance: change the numbers in the SINGLE SOURCE OF TRUTH
+(util/BalanceConfig.java), re-run the auditor (SECTION 20), and assume the result
+still needs human playtesting before it can be called "good".
+
+
+================================================================================
+SECTION 0 — THE TURN-BASED FOUNDATION (why the math is exact)
+================================================================================
+The game is strictly turn-based (Doom-RPG style). One player action = exactly
+one world turn; every enemy acts once per player turn. Therefore TIME is measured
+in TURNS, never seconds. There is no real-time DPS — only DAMAGE-PER-TURN (DPT).
+This makes the entire balance model exact arithmetic instead of physics.
+
+Consequences that everything below depends on:
+  - Movement/rotation animation DURATION (seconds) does NOT change combat math —
+    it only changes game feel and how fast the player can physically issue turns.
+    (util/BalanceConfig.PLAYER_MOVE_DURATION / PLAYER_ROTATE_DURATION.)
+  - "How long does X take" is always a turn count you can compute, never timing.
+  - Ranged enemies may only attack the player on a shared cardinal line (same tile
+    column OR same tile row) — never diagonally. Enforced by isSameCardinalLine()
+    in enemy/EnemyManager.java. This is a HARD design rule, not a tuning number,
+    but it shapes every ranged threat's real-world DPT.
+
+Docs: docs/tick-system.txt, docs/doom-rpg-reference.txt, docs/balance-rule-system.txt.
+
+⚠️ Not-good note: because everything is turn-exact, a single mis-set constant
+propagates cleanly through the whole model — which is why so many sections below
+are "in band on paper" yet still unproven in play.
+
+
+================================================================================
+SECTION 1 — WHERE BALANCE LIVES (the file map)
+================================================================================
+THE SINGLE SOURCE OF TRUTH:
+  util/BalanceConfig.java
+    Every number that changes how hard the game is, or how generous it is with
+    resources. Organised into 14 numbered SECTIONS (see the map below). If you
+    change a value here, the game gets easier/harder/more-or-less generous and
+    NOTHING ELSE. Cosmetic values are deliberately NOT mirrored here.
+
+    The other *Constants files RE-EXPORT their balance fields FROM BalanceConfig
+    (e.g. EnemyConstants.PLAGUE_HULK_MAX_HEALTH = BalanceConfig.PLAGUE_HULK_MAX_HEALTH).
+    So the game reads them by their old names, but the real number lives in
+    BalanceConfig. ALWAYS change the value in BalanceConfig.
+
+  BalanceConfig SECTION MAP:
+     1  Player survivability (HP, armour, heals, move/rotate duration)
+     2  Enemy threat (per-archetype HP/damage/range/cadence, XP+credit rewards,
+        Block/Defend, Guard) — the "numerator" of difficulty
+     3  Depth scaling (per-floor compound HP/damage growth, linear credit growth)
+     4  Weapon output (per-weapon damage/clip/range/falloff/reload; global knobs)
+     5  Resource supply (ammo box sizes, reserve caps, drop frequencies) — scarcity
+     6  Loot / pickup spawn chances (prop + enemy density, per-room-type budgets)
+     7  Progression (XP curve, level-up card budget, stat per-point rates)
+     8  Status / DoT magnitudes (bleed/burn/stun per-turn + durations)
+     9  Balance-rule anchors & bands (reference DPT/eHP, weapon power bands,
+        enemy TP bands, golden-ratio bands, depth-coupling invariant)
+    10  Resource scarcity model & the canonical MODEL FLOOR
+    11  Encounter budget (floor Threat-Point budget + composition rules)
+    12  Terrain hazards (fire/toxic lifetimes, spread, damage multipliers)
+    13  Telegraph & counterplay (max un-telegraphed hit fraction)
+    14  Boss balance ruleset (fight-length/survival bands; fights deferred)
+
+THE MATH:
+  util/GameMath.java
+    EVERY non-trivial balance formula as a pure static method with a
+    Formula/Derivation/Edge-case comment block. No formula is ever inlined in
+    game code. This is where the four primitives and all derived scores live.
+
+THE OTHER BALANCE-BEARING CONSTANT FILES (all re-export from BalanceConfig):
+  util/GameBalance.java       XP rewards, depth-scale helpers, melee stats, the
+                              per-weapon ABILITY catalogue (crit/pierce/lifesteal/
+                              DoT/economy/legendary), stat system caps + bases,
+                              level-up card magnitudes, shop stock/pricing, boss
+                              AI tactic weights (Overseer Hunter-Killer brain).
+  util/EnemyConstants.java    Boss stats (Overseer/Corruptor/Hell Baron — flat
+                              PLACEHOLDERS), special-move-set cadences, buff/debuff
+                              magnitudes, health-bar geometry (cosmetic).
+  util/WeaponConstants.java   Per-weapon stats (re-exported), HUD/timing/cosmetic.
+  util/ItemConstants.java     Heal/armour values (re-exported), stack caps, ammo.
+  util/LevelGenConstants.java Loot/enemy density + per-room budgets (re-exported).
+  util/EffectConstants.java   Status-effect gameplay magnitudes: BURN/POISON per
+                              turn, EMPOWERED/VULNERABLE/WEAK/EXPOSED/BACKSTAB,
+                              SLOW/BLIND durations. (Mostly NOT mirrored into
+                              BalanceConfig — see the "not-good note" below.)
+  util/Constants.java         Core world/grid/FOV/ray constants; a few gameplay
+                              knobs re-export from BalanceConfig.
+  util/RouteMapConstants.java Endless-descent structure: region bands, per-region
+                              node-type/generator weight multipliers, boss cadence.
+  util/IntentConstants.java   Enemy intent telegraph timing/display (fairness).
+  util/BalanceReport.java     DEV-ONLY auditor. Regenerates the living tables from
+                              the CURRENT BalanceConfig through GameMath.
+
+THE DOCS:
+  docs/balance-rule-system.txt   THE balance contract (four primitives, bands,
+                                 checklists, depth coupling, scarcity, encounter
+                                 budget, hazards, telegraph, boss appendix, living
+                                 tables). This is the most important companion doc.
+  docs/xp-level-progression.txt  Player leveling curve + card system.
+  docs/enemy-system.txt          Enemy AI turn logic, attack resolution.
+  docs/procedural-level-generation.txt  Generator + room types.
+  docs/route-map-system.txt      Branching endless descent (regions/nodes/events).
+  docs/tick-system.txt           Turn loop / TickEventBus.
+  Idea files: .claude/agents/ideas/balance_order_2..6_*.txt and
+              .claude/agents/ideas/balance-ideas-review.txt (design intent).
+
+⚠️ Not-good note: the "single source of truth" is only ~90% true. EffectConstants
+status magnitudes (burn/poison/empowered/vulnerable/weak/backstab), the whole
+GameBalance ABILITY CATALOGUE (crit, pierce, lifesteal, etc.), the shop economy,
+and every BOSS number are STILL scattered outside BalanceConfig and many are
+explicitly labelled PLACEHOLDER. So balance is NOT actually tunable from one
+screen yet. Consolidating these is unfinished work.
+
+
+================================================================================
+SECTION 2 — THE FOUR PRIMITIVES + DERIVED SCORES (the core math)
+================================================================================
+All in util/GameMath.java. Everything else is derived from these four.
+
+1. eHP — EFFECTIVE HIT POINTS            GameMath.effectiveHitPoints(...)
+     eHP = (rawHP + armor) * 1/(1 - dodge) * H/max(1, H - R)
+       H = average incoming hit, R = flat reduction.
+     - Dodge multiplies survivability by 1/(1 - dodge) (a dodged hit deals 0).
+     - Flat reduction: each landed hit of size H only removes (H - R).
+     MARINE start (130 HP, 75 armour, 0 dodge, 0 R) -> 205 eHP (the reference).
+     RULE: enemies currently have NO dodge/reduction, so enemy eHP == raw HP.
+
+2. DPT — DAMAGE PER TURN
+     BURST DPT   = damage of one fire action (one turn).
+     SUSTAINED   = (clipSize * damagePerShot) / (clipSize + reloadTicks)
+                                             GameMath.sustainedDamagePerTurn(...)
+   2b. AMMO EFFICIENCY = damagePerShot / ammoPerShot   GameMath.ammoEfficiency(...)
+     Run-budget = ammoEfficiency * (total ammo the economy supplies). This is the
+     bridge to the scarcity model — governed by SUPPLY, not the reserve cap.
+
+3. TTK — TURNS TO KILL                    GameMath.turnsToKill(...)
+     turnsToKill = ceil(target.eHP / attacker.effectiveDPT)
+     Feed ENEMY DPT + PLAYER eHP to get the player's Turns-To-Die (TTD).
+
+4. TP — THREAT POINTS (one danger number per enemy)  GameMath.threatPoints(...)
+     enemyDPT      = attackDamage / max(1, attackCadenceTurns)
+     survivalTurns = enemy.eHP / REFERENCE_PLAYER_DPT   (= 25)
+     TP            = enemyDPT * survivalTurns * positionalMultiplier
+     positionalMultiplier (DESIGNER classification, BalanceConfig.POSITIONAL_MULT_*):
+       1.00 melee | 1.15 fast-melee | 1.30 ranged | +0.25 if it applies DOT/stun/slow.
+     TP is the currency the floor encounter budget spends.
+
+DERIVED SCORES:
+  weaponPowerScore = sustainedEffectiveDPT * sqrt(ammoEfficiency / 40)
+                                             GameMath.weaponPowerScore(...)
+  goldenRatio      = turnsToDie / turnsToKill          GameMath.goldenRatio(...)
+  depthThreatScale = healthScale^(d-1) * damageScale^(d-1)
+                                             GameMath.depthThreatScale(...)
+
+REFERENCE ANCHORS (BalanceConfig SECTION 9):
+  REFERENCE_PLAYER_DPT      = 25   (held fixed; also the golden-ratio TTK metric)
+  REFERENCE_PLAYER_EHP      = 205  (MARINE start eHP)
+  REFERENCE_AMMO_EFFICIENCY = 40   (weapon power-score normaliser)
+
+⚠️ Not-good note: the whole model treats the shotgun's 25 sustained DPT as "the
+player", ignoring found weapons, abilities, crits, and stat growth. Real player
+DPT swings far above this. The anchors are a convenient fiction, not a measured
+average — a known source of drift between "in band" and "actually balanced".
+
+
+================================================================================
+SECTION 3 — PLAYER SURVIVABILITY (the denominator of all difficulty)
+================================================================================
+File: BalanceConfig SECTION 1, plus the stat system in SECTION 7.
+
+Base pools:
+  PLAYER_MAX_HEALTH      = 130   (biggest single forgiveness dial; range 80–200)
+  PLAYER_MAX_ARMOR       = 75    (armour soaks part of every hit)
+  ARMOUR_ABSORB_FRACTION = 0.50  (fraction of each hit taken from armour, not HP)
+
+Heals (HP/armour is a RESOURCE — see SECTION 12):
+  MEDKIT_STIM_HEAL  = 32   ('+')      MEDKIT_FULL_HEAL = 90   ('H')
+  ARMOUR_SHARD_VALUE= 14   ('a')      ARMOUR_VEST_VALUE= 62   ('A')
+  (All ~1.8x their legacy values after the economy rescale, to track higher
+   incoming damage. A heal is priced in "turns of survival bought" — SECTION 12.)
+
+The five-step DAMAGE-MITIGATION PIPELINE (single source of truth; every actor
+resolves damage in EXACTLY this order — GameMath, docs/balance-rule-system.txt):
+  1. Directional/Guard modifier (player only): D' = D * facingMultiplier
+  2. Power/positioning modifiers (if present): D'' = D' * weak*vulnerable*backstab
+     (EXPOSED is not a multiplier — it sets ignoreBlock for step 3, one hit.)
+  3. BLOCK absorption: absorbed = min(block, D''); D''' = D'' - absorbed
+  4. Flat armour reduction: D'''' = max(0, D''' - armorReduction)
+  5. Subtract from HP.
+  BLOCK sits ABOVE armour ("I braced this turn"); overkill into Block is LOST.
+  STATUS DoT (burn/poison/bleed) BYPASSES Block — direct HP loss.
+
+PLAYER GUARD (directional, conditional eHP) — BalanceConfig SECTION 2 / GUARD_*:
+  Tapping GUARD ends the turn and braces the marine.
+  GUARD_FRONT_MULTIPLIER = 0.35 (heavy reduction inside the ±60° facing arc)
+  GUARD_SIDE/BACK_MULTIPLIER = 1.0 (flanks land at FULL damage — read & rotate)
+  GUARD_FRONT/BACK_HALF_ANGLE_DEGREES = 60
+  Priced as a 1-turn opportunity cost; self-limiting vs flanks, so no hard cap.
+
+STAT-DRIVEN survivability (attribute system, SECTION 7 below):
+  TOUGHNESS -> +HP (TGH_HP_PER_POINT=5) and flat reduction (TGH_REDUCTION_PER_POINT=1).
+  AGILITY   -> dodge (AGI_DODGE_PER_POINT=0.02, DODGE_CAP=0.35) + faster actions.
+
+⚠️ Not-good note: 205 reference eHP is the MARINE (normal) start only. RECRUIT
+starts far tankier and ULTRA far squishier (SECTION 18), yet the ENTIRE contract
+is anchored to the MARINE number. Difficulty modes are therefore balanced only by
+accident relative to the contract. This needs a proper per-difficulty pass.
+
+
+================================================================================
+SECTION 4 — PLAYER OFFENSE: WEAPONS (the player's side of TTK)
+================================================================================
+File: BalanceConfig SECTION 4. Each weapon: damage, clip, range, falloff
+(dropCoeff = per-tile damage decay), reload ticks. Melee weapons swing once/turn.
+
+RANGED (current stat blocks; per-shot damage / clip / range / reloadTicks):
+  Shotgun            44 / 1  / 5  / 1   (burst; 1-shell identity)
+  Double-Barrel      32 / 2  / 4  / 1
+  Plasma Rifle       28 / 4  / 8  / 1   (piercing)
+  Chaingun           19 / 24 / 8  / 1   (sustained fire workhorse)
+  Assault Rifle      20 / 30 / 10 / 1   (precision workhorse)
+  Railgun     {0,40,90} / 1 / 16 / 2    (charge-up infinite-pierce sniper)
+  Incinerator   impact 8 + falloff 5, burn DoT / clip 30 / range 3 / reload 1
+  Grenade Launcher  splash 42 / falloff 22 / self 24 / clip 3 / range 6 / reload 2
+  Arc Cannon         28 / 7  / 7  / 2   (chain-lightning: leaps to 3 more targets
+                                         at 0.6^n; the lateral chain is uncredited)
+
+MELEE (BalanceConfig SECTION 4 / GameBalance):
+  Fist 6 | Combat Knife 12 | Chainsaw 18 | Hammer 20
+  Hammer: MELEE_HAMMER_KNOCKBACK_TILES=1, KNOCKBACK_CHANCE=0.50 (GameBalance).
+  MELEE_KILL_AMMO_DROP_CHANCE = 0.20 (higher than ranged; rewards the risky path).
+
+GLOBAL WEAPON KNOBS (BalanceConfig SECTION 4):
+  CRIT_DAMAGE_MULTIPLIER        = 2.0   (crit deals 2x base)
+  DAMAGE_MIN_MULTIPLIER         = 0.15  (damage floor at max falloff range)
+  WEAPON_LEVEL_DAMAGE_PER_LEVEL = 0.10  (+10% outgoing per weapon level)
+  Railgun-specific: RAILGUN_DAMAGE_MIN_MULTIPLIER=0.70, RAILGUN_DROP_COEFF=0.02.
+
+WEAPON POWER BANDS (weaponPowerScore MUST land in the band for its role;
+BalanceConfig SECTION 9; higher rarity does NOT raise the band — it buys abilities):
+  sidearm 8–14 | workhorse 12–18 | burst/specialist 18–26 | heavy/charge 24–32
+  Current scores (from the living table): Shotgun 23.1, DblSG 19.1, Plasma 18.7,
+  AssaultRifle 13.7, Chaingun 12.6, Railgun(full) 45.0 (OVER — intentional
+  scarcity-gated exception), Grenade 25.8, Arc Cannon 18.2.
+
+⚠️ Not-good note: the Railgun is DELIBERATELY out of band (power 45 vs cap 32).
+It is "held in check by slug scarcity, not raw damage" — but the scarcity model
+that is supposed to gate it (SECTION 12) is itself unproven and the credit half
+of the economy is not even implemented. So the Railgun is currently just
+over-powered in practice. Falloff is also credited at muzzle numbers, not at each
+weapon's real engagement band — another acknowledged approximation.
+
+
+================================================================================
+SECTION 5 — WEAPON ABILITIES (rarity buys power here, not raw DPT)
+================================================================================
+File: util/GameBalance.java (the ABILITY CATALOGUE — huge block of BASE/PER_LEVEL/
+CAP constants). These are almost ALL explicitly marked "PLACEHOLDER — flag for
+playtesting". Weapons roll abilities by tier (WeaponRoller); magnitudes scale with
+weapon level. This is a major, largely-unbalanced surface.
+
+Combat/offense:  Critical Strike, Armor Pierce (bypasses Block), Executioner
+                 (<25% HP), Stagger Rounds (stun), Overpenetration.
+Sustain:         Lifesteal, Hemorrhage Harvest (on-kill HP), Vampiric Crit,
+                 Adrenal Surge (+30% next hit), Bulwark Rounds (temp armour on
+                 reload), Second Wind (<30% HP damage bonus).
+Melee-only:      Kinetic Slam, Cleave, Salvage Strike (ammo drop), Scholar's Edge
+                 (XP bonus), Berserker's Oath (stacking legendary).
+Utility/economy: Scavenger Rounds (ammo refund), Field Medic Rounds (drops '+'),
+                 Credit Fang (credits on kill), Extended Mag.
+DoT/status:      Rend (BLEED), Incendiary (BURN), Stagger (STUN). Magnitudes for
+                 these three ARE in BalanceConfig SECTION 8 (they count toward TTK).
+Positional:      Point Blank, Marksman's Patience, Opening Salvo, Rhythm/Heat-Up,
+                 Static Discharge, Resonant Rounds (% max-HP).
+Legendary:       Soulforge (self-leveling), Judgment (periodic lance x3.0),
+                 Hellfire Nova (crit AoE).
+
+Weapon tiers / roll config (GameBalance, weapon-system-order-11):
+  RUN_START_WEAPON_TIER = COMMON, LEVEL 1.
+  START_ROOM_OFFER_MIN/MAX_TIER = COMMON..UNCOMMON (START_ROOM_ANY_TIER_ENABLED=true
+  currently overrides this to allow any tier — a TEST flag left on).
+
+⚠️ Not-good note: this entire catalogue is unpriced against the contract. The
+balance-rule-system prices LEVEL-UP CARDS in power points, but weapon ABILITIES
+have NO equivalent power-budget check — a legendary with several stacked abilities
+can push a weapon's EFFECTIVE power far past its band, silently. START_ROOM_ANY_
+TIER_ENABLED=true means players can currently roll legendaries at run start. These
+are among the least-balanced numbers in the game and are self-labelled placeholders.
+
+
+================================================================================
+SECTION 6 — PLAYER PROGRESSION (XP curve, level-up cards, attributes)
+================================================================================
+File: BalanceConfig SECTION 7; docs/xp-level-progression.txt; progression/*.
+
+XP CURVE:
+  xpRequired(level) = XP_BASE_REQUIREMENT * level ^ XP_CURVE_EXPONENT
+  XP_BASE_REQUIREMENT = 50, XP_CURVE_EXPONENT = 1.3.
+  (L1->2: 50, L2->3: 123, L3->4: 207, ...)   GameMath.xpRequiredForLevel(...)
+  Per-enemy XP rewards live in BalanceConfig SECTION 2 (10–55; boss 500 placeholder).
+
+LEVEL-UP CARD SYSTEM (the build-diversity engine, idea 5):
+  On each level-up, LEVEL_UP_CARDS_OFFERED = 3 cards are drawn from four pools.
+  Every card costs the SAME power budget:
+    LEVEL_UP_BUDGET_PP        = 12   (power points = %-gain to reference DPT or eHP)
+    LEVEL_UP_BUDGET_TOLERANCE = 0.15 (a card must price into [10.2, 13.8] PP)
+    LEVEL_UP_DRAW_BIAS_PER_PICK = 0.6 (biases offers toward the emerging build)
+  THE TOTAL-PP INVARIANT: because every card is budget-equal, total player power
+  at level L = L * 12 PP for EVERY build; only the SHAPE differs. This is what
+  keeps all builds on the depth-coupling curve (SECTION 11).
+  Card PP is computed from stat deltas via GameMath (damagePerTurnPowerPoints /
+  effectiveHitPointPowerPoints), so it "cannot lie". Cards + magnitudes:
+    Hollow Points (+6 dmg), Marksman Training (+3 MRK), Brutal Strength (+3 STR),
+    Glass Cannon (+10 dmg / -18 HP), Combat Armor (+24 armour), Toughened Hide
+    (+1 TGH), Vitality (+25 HP), Iron Constitution (+45 HP / -22 armour), Evasion
+    Training (+5 AGI), Reckless Charge (+8 AGI / -12 armour).
+
+ATTRIBUTE (STAT) SYSTEM (BalanceConfig SECTION 7 + GameBalance caps/bases):
+  STRENGTH    -> +melee dmg     STR_MELEE_PER_POINT   = 0.05, cap 12
+  MARKSMANSHIP-> +ranged dmg    MRK_DAMAGE_PER_POINT  = 0.04 (+accuracy 0.03), cap 12
+  AGILITY     -> dodge + speed  AGI_DODGE_PER_POINT=0.02 (DODGE_CAP 0.35),
+                                AGI_SPEED_PER_POINT=0.03 (floor AGI_MIN_DURATION_MULT
+                                0.55), cap 10
+  TOUGHNESS   -> +HP + flat red TGH_HP_PER_POINT=5, TGH_REDUCTION_PER_POINT=1
+                                (min damage TGH_MIN_DAMAGE=1), cap 12
+  Per-difficulty STARTING stat bases live in GameBalance (STAT_BASE_*): see SECTION 18.
+
+⚠️ Not-good note: the total-PP invariant is elegant on paper but assumes the
+player only gains power from level-up cards. In reality found weapons, weapon
+abilities (SECTION 5, unpriced), crits, and consumables all add uncounted power.
+So "every build sits on the curve" is true only for the CARD contribution, not
+for real total power. The curve the depth-coupling invariant defends is therefore
+optimistic. Needs re-derivation once weapon power is priced in.
+
+
+================================================================================
+SECTION 7 — ENEMIES: STATS, ROLES, THREAT POINTS (the numerator)
+================================================================================
+File: BalanceConfig SECTION 2 (stats) + SECTION 9 (bands). enemy/EnemyType.role().
+
+Each archetype (depth-1 base stats: HP / attack / cadence / range):
+  Gore Biter '3'      40 / 12 / every turn / melee            CHAFF
+  Eye Tyrant '2'      40 / 11 / every turn / range 5          CHAFF (ranged kiter)
+  Acid Drone '$'      90 / 12 / every turn / range 4          SOLDIER (ranged)
+  Void Shroud '^'     96 / 13 / every turn / melee FLANKER    SOLDIER
+                      (VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER = 1.6 from behind)
+  Mire Wraith '5'    100 / 11 / every 2 turns / range 3       SOLDIER (ranged acid)
+  Shell Brute '4'    120 / 20 / every turn / melee CHARGER    BRUISER
+                      (CHARGE x2.4 telegraphed; trigger 2–5 tiles; STOP_SHORT 0.75)
+  Plague Hulk '1'    120 / 16 / every 2 turns / melee tank    SOLDIER
+                      (self-destruct <30% HP: 2-turn brace, x3.0 blast capped 68,
+                       leaves toxic cloud)
+  Iron Stalker '!'   230 / 24 melee, 17 ranged / range 4      MINI_ELITE
+  -- necrotic faction --
+  Ghoul '~'           42 / 13 / every 2 turns / melee         CHAFF
+  Crawler 'z'         24 / 15 / every turn / melee            CHAFF (fragile glass)
+  Revenant 'K'       110 / 18 / every turn / melee            BRUISER (fast, no charge)
+  Vortex Eye 'V'      35 / 9  / every turn / range 4          CHAFF (ranged caster)
+  Blight Corruptor '*'115 / 14 / every 2 turns / melee summoner SOLDIER
+
+ENEMY TP BANDS (threatPoints must land in band; BalanceConfig SECTION 9):
+  chaff 16–34 | soldier 36–66 | bruiser 70–120 | mini-elite 160–310 | boss: own rules
+GOLDEN-RATIO BANDS (TTD/TTK; below = swingy/unfair, above = damage sponge):
+  chaff/soldier [3,8] | bruiser [2,4]. Chaff is EXEMPT (budgeted by pack TP, not the
+  lone unit; reads ~9). Mini-elite reads UNDER the duel band BY DESIGN (a spike you
+  avoid or spend heavies on).
+
+GLOBAL ENEMY AI KNOBS (BalanceConfig SECTION 2):
+  ALERT_RADIUS_TILES=4, CHAIN_ALERT_RADIUS_TILES=5, LOS_MAX_RANGE_TILES=8,
+  RANGED_KITE_MIN_TILES=2, STUCK_TURNS_BEFORE_WIGGLE=2.
+
+BLOCK & DEFEND (shared damage-absorption buffer; BalanceConfig SECTION 2):
+  BLOCK_MAX=60, BLOCK_DECAY_TURNS=1.
+  DEFEND_BLOCK_GAIN: SOLDIER 22, BRUISER 30, MINI_ELITE 40 (≈1 turn of survival).
+  DEFEND_HP_THRESHOLD_FRACTION=0.5 (turtle when low), BRUISER cadence every 3 turns,
+  DEFEND_MAX_CONSECUTIVE_TURNS=2. Status DoT bypasses Block (the answer to turtling).
+
+⚠️ Not-good note: the necrotic faction was live in the spawn pool for a while
+WITHOUT being entered into the contract, corrupting every floor's budget until a
+later tuning pass. That class of bug — content shipped before it is priced — is a
+recurring failure mode here. Assume other newer content may be un-priced too;
+always re-run BalanceReport's ENEMIES table after adding an archetype. Enemy eHP
+being exactly raw HP (no dodge/reduction) is also a simplification that breaks the
+moment an armoured archetype is added.
+
+
+================================================================================
+SECTION 8 — ENEMY ABILITIES & SPECIAL MOVE-SETS (threat beyond raw stats)
+================================================================================
+Files: EnemyConstants (cadences + magnitudes), EffectConstants (status), GameBalance
+(boss AI weights), enemy/EnemyManager.java. docs/balance-rule-system.txt (Pillars).
+
+Enemy intent / telegraph: every enemy COMMITS its next action at end of turn; the
+player reads that PlannedAction for the whole next turn. So EVERY direct attack —
+melee, ranged, charge — is pre-committed one turn ahead (fairness by construction).
+Timing/display: util/IntentConstants.java.
+
+SPECIAL MOVE-SET CADENCES (EnemyConstants):
+  SPECIAL_CADENCE_CASTER = 3 (Acid Drone / Mire Wraith / Vortex Eye)
+  SPECIAL_CADENCE_ELITE  = 2 (Iron Stalker — a special ~every other turn)
+  SPECIAL_CADENCE_SLOW   = 4 (Plague Hulk slam, Blight Corruptor summon, Eye blind)
+  MOVE_HISTORY_SIZE = 4 (no-repeat window).
+
+SPECIAL VERBS (EnemyConstants + EffectConstants):
+  BUFF_SELF  -> EMPOWERED: BUFF_SELF_EMPOWERED_PERCENT=40, duration 3.
+  DEBUFF_PLAYER -> SLOW (DEBUFF_SLOW_DURATION_TURNS=3) / BLIND (2) / WEAK (caster
+                   corrodes player output; WEAK_DAMAGE_PERCENT=25).
+  SUMMON     -> hard-capped by SUMMON_PER_ENEMY_CAP + SUMMON_ROOM_LIVE_CAP (NOT a
+               soft budget), so spawned TP stays bounded.
+  AREA_STRIKE-> the only DAMAGING special; carries a predicted-damage number, dodged
+               by stepping out of the cross radius.
+
+STATUS EFFECTS the enemies apply (EffectConstants):
+  BURN_DAMAGE_PER_TURN=4, POISON_DAMAGE_PER_STACK=2 (POISON_MAX_STACKS=5),
+  EMPOWERED_DAMAGE_PERCENT=50 (dur 5), VULNERABLE_DAMAGE_PERCENT=50 (max 2 stacks),
+  WEAK_DAMAGE_PERCENT=25, EXPOSED (ignore-Block one hit), BACKSTAB_DAMAGE_PERCENT=30,
+  SLOW_FACTOR=2.0 (dur 3), BLIND_DURATION=2.
+
+BOSS AI (Overseer Hunter-Killer brain — GameBalance BOSS_TACTIC_*): tactic-scoring
+weights (close/far/adds-room/cornered/camping bonuses), per-verb spacing gaps
+(phase 1 vs enraged phase 2), last-stand HP fraction 0.15. Tunable without touching
+pattern code.
+
+⚠️ Not-good note: special move-sets that raise a caster's EFFECTIVE DPT (buffs,
+debuffs, area strikes) are supposed to be "priced as a blended cycle-averaged DPT
+when they drift an archetype out of its TP band" — but this pricing is manual and
+mostly NOT done. The base-stat TP bands gate raw numbers only; the real threat of a
+buff/summon caster is under-counted in the encounter budget. Enemy status/ability
+magnitudes live in EffectConstants OUTSIDE BalanceConfig, so they are invisible to
+the "single source of truth" and easy to forget when tuning.
+
+
+================================================================================
+SECTION 9 — BOSSES (a separate ruleset; fights deferred)
+================================================================================
+Files: EnemyConstants (stats — FLAT PLACEHOLDERS), BalanceConfig SECTION 14
+(the ruleset bands), GameMath (BOSS BALANCE RULESET block), GameBalance
+(XP/CREDIT_REWARD_BOSS_BASE placeholders), docs/balance-rule-system.txt (appendix).
+
+Bosses break the trash-mob math (a single entity meant to survive many turns vs a
+PREPARED player), so the TP/golden-ratio bands do NOT apply. A boss is tuned to a
+FIGHT-LENGTH target + phase-structured threat curve instead.
+
+Current PLACEHOLDER bosses (flat HP, to be re-derived by the ruleset):
+  Overseer   (depth 5)  250 HP | laser 20, charge 30 (x tele), melee 14, heal once
+  Corruptor  (depth 10) 450 HP | summoner + acid 15
+  Hell Baron (depth 15) 700 HP | firewall + cleave 35 (P1) / 52 (P2)
+
+THE SIX RULES (apply when a boss is actually built/retuned):
+  R1 HP = expectedPlayerSustainedDpt(depth) * targetFightTurns * multiPhaseFactor
+       (act boss 18–40 turns; NEVER a literal HP constant).
+  R2 Cap fight length from above (<=1.5x target); add a PHASE, not HP.
+  R3 DPT set by survival check: playerEHP/bossDpt = ratio(0.4–0.7) * fightTurns.
+       Hard cap: no single hit > 35% eHP; anything > 25% MUST be telegraphed.
+  R4 N equal phases (2–3), each escalates ONE mechanic.
+  R5 The boss is a BUILD CHECK (HP tied to expected player DPT at depth).
+  R6 Reward = consumption * RISK_PREMIUM (1.3), so it refunds the fight + profit.
+
+⚠️ Not-good note: ALL three bosses are flat placeholders. The living table shows
+every one reads UNDER its derived HP band — they were eyeballed against the depth-1
+reference, not the (much higher) expected player DPT at their depth. Boss rewards
+(500 XP / 250 credits) are arbitrary flat numbers. Boss balance is essentially
+UNIMPLEMENTED beyond the ruleset; the fights are explicitly deferred pending
+story/run structure. Do not treat current boss numbers as balanced in any sense.
+
+
+================================================================================
+SECTION 10 — DEPTH SCALING & THE COUPLING INVARIANT (the master curve)
+================================================================================
+File: BalanceConfig SECTION 3 + SECTION 9 invariant; GameMath depth methods.
+
+Enemy threat COMPOUNDS per floor:
+  HP:     baseHP  * ENEMY_HEALTH_SCALE_PER_DEPTH ^ (depth-1),  scale = 1.042
+  Damage: baseDmg * ENEMY_DAMAGE_SCALE_PER_DEPTH ^ (depth-1),  scale = 1.032
+  enemyThreatAtDepth = baseTP * depthThreatScale(1.042, 1.032, depth)
+Credits scale LINEARLY: base * (1 + (depth-1)*CREDIT_DEPTH_SCALE), scale = 0.12.
+Player power grows LINEARLY: 1 + LEVEL_UP_BUDGET_PP * levelsPerDepth * (d-1)/100,
+  with EXPECTED_LEVELS_PER_DEPTH = 1.0.   GameMath.playerPowerAtDepth(...)
+
+THE DEPTH-COUPLING INVARIANT (must hold or the game goes unfair/trivial):
+  0.9 <= playerPowerAtDepth(d) / enemyThreatScale(d) <= 1.2
+                                             GameMath.depthCouplingRatio(...)
+  Bounds: BalanceConfig DEPTH_COUPLING_RATIO_MIN/MAX.
+  A compound curve ALWAYS eventually outruns a linear one, so this can never hold
+  forever — the enemy compound RATE is the lever that keeps it coupled as deep as
+  possible. History: 1.08/1.06 broke by depth 5; trimmed to 1.045/1.035; then to
+  1.042/1.032 for endless mode. Current: in band through depth ~15, gently UNDER
+  (harder) at depth 18/20 (0.88/0.83) — a deliberate "graceful degradation" edge.
+
+Depth generosity bumps (BalanceConfig SECTION 3): at full depth, extra enemies
+(LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX=2), heavy-upgrade chance 0.60, +medkit 0.15,
++ammo 0.20, extra-ammo 0.50.
+
+⚠️ Not-good note: the invariant is defended by a MODELLED linear player curve that
+ignores found loot and abilities (which only help the player), so the real ratio
+is "at least this favourable" — meaning the deep-floor "graceful hard edge" may
+actually be easier than modelled, or the early game harder, depending on real loot
+luck. Endless runs past depth ~20 are explicitly unbalanced (intentional graceful
+degradation, i.e. it gets unfairly hard and that is currently accepted, not fixed).
+
+
+================================================================================
+SECTION 11 — ENCOUNTER BUDGET (difficulty as a dial, not an accident)
+================================================================================
+File: BalanceConfig SECTION 11; level/EncounterBudgetPlanner.java; GameMath.
+
+The generator SPENDS a per-floor Threat-Point budget instead of rolling enemies at
+random:
+  floorThreatPointBudget(depth) = FLOOR_BASE_THREAT_POINT_BUDGET * depthThreatScale(depth)
+  FLOOR_BASE_THREAT_POINT_BUDGET = 500 (depth 1).
+Because both the budget AND each enemy's TP cost scale by the same depth curve, the
+enemy COUNT stays ~constant across floors while each enemy gets stronger.
+
+COMPOSITION RULES the planner enforces:
+  ENCOUNTER_ANCHOR_BUDGET_FRACTION_MIN/MAX = 0.15 / 0.30 (one anchor bruiser/elite)
+  ENCOUNTER_MAX_SINGLE_TYPE_FRACTION = 0.40 (variety)
+  ENCOUNTER_PER_ROOM_TP_FRACTION_CAP = 0.25 (no un-winnable pile-up in one room)
+  ENCOUNTER_BUDGET_FILL_TARGET_FRACTION = 0.95 (headroom so rosters don't overshoot)
+  ENCOUNTER_ELITE_ANCHOR_FLOOR_CHANCE = 0.15 (min depth 3) — elite-gauntlet floors.
+  Every roster must contain BOTH ranged and melee archetypes.
+
+Level-gen spawn/loot density (BalanceConfig SECTION 6):
+  LEVEL_GEN_PROP_CHANCE=0.13, LEVEL_GEN_MAX_ENEMIES_PER_ROOM=3,
+  credit chips per floor 3–7 (weights small 70 / medium 24 / large 6),
+  per-room-type medkit/armour/ammo/weapon chances (server/large/armory/command/
+  hazard rooms each have their own budget).
+
+⚠️ Not-good note: the budget reproduces the SECTION 12 model floor "on average",
+but the actual per-seed rosters are only spot-checked via BalanceReport. Room-level
+distribution (which enemies end up crowded together) is governed by a load-balancer
+plus a safety cap, not by a tactical-placement model — so a bad seed can still
+produce a lopsided or trivially easy floor. This is untested in real play.
+
+
+================================================================================
+SECTION 12 — RESOURCE MANAGEMENT / SCARCITY ECONOMY (a core balance pillar)
+================================================================================
+Files: BalanceConfig SECTION 5 (levers) + SECTION 10 (model + bands); GameMath
+scarcity block; docs/balance-rule-system.txt (RESOURCE SCARCITY MODEL).
+This is one of the MOST important balance systems and the user's stated priority.
+
+WHY IT MATTERS: scarcity is what turns a shooter into a roguelike. With infinite
+ammo there are no resource DECISIONS. The goal is to land supply JUST BELOW comfort
+so clever spending is rewarded and careless spending is punished — NOT to starve.
+
+THE CENTRAL EQUATION (per floor, "fight everything" basis):
+  DEMAND = sum of every enemy's eHP       (damage needed to clear the floor)
+  SUPPLY = sum over ammo pickups of (boxSize * damagePerAmmoUnit)  (ranged only)
+  S = SUPPLY / DEMAND
+  TARGET: S in [0.75, 0.95] floor-wide AND < 0.60 for any SINGLE weapon.
+    (BalanceConfig SCARCITY_RATIO_FLOOR_MIN/MAX/TARGET, SCARCITY_PER_WEAPON_MAX.)
+  Ammo alone covers ~75–95% of a floor; the rest is melee/avoidance/reserves.
+
+THE FOUR LEVERS (all in BalanceConfig):
+  1 DROP FREQUENCY  ENEMY_AMMO_DROP_CHANCE=0.10, MELEE_KILL_AMMO_DROP_CHANCE=0.20,
+                    LEVEL_GEN_AMMO_CHANCE_PER_ROOM=0.20                (SECTION 5)
+  2 DROP SIZE       AMMO_BOX_BULLETS 15 / SHELLS 5 / CELLS 10 / ROCKETS 2,
+                    RAILGUN_PICKUP_SLUGS 2, FLAME_PICKUP_FUEL 25, GRENADE 3 (SECTION 5)
+  3 RESERVE CAP     AMMO_RESERVE_CAP_BULLETS 54 / SHELLS 24 / CELLS 38 / ROCKETS 26,
+                    RAILGUN_MAX_SLUGS 8, FLAME_MAX_FUEL 50, GRENADE_MAX_AMMO 10 (SECTION 5)
+  4 DEMAND          enemy density / eHP per floor (the TP budget)  (SECTION 2/11)
+  Tune LEVER 4 (demand) + LEVER 2 (drop size) first — biggest effect.
+
+ANTI-HOARD: reserve caps bank only ~RESERVE_BANKING_FLOORS_TARGET=1.5 floors of a
+weapon's run-demand (GameMath.reserveBankingFloors). Enemy eHP compounds with depth
+while the ammo depth bonus is gentler, so S tightens as you descend and hoards get
+spent. Railgun slugs are the tightest gate (~1.0 floor) to honour its power
+exception.
+
+HEAL ECONOMY (HP is a resource too):
+  INCOMING    = totalEnemyDPT * turnsEngaged * (1 - avoidanceFactor)
+  HEAL_SUPPLY = medkits*avgHeal + armour*avgArmour
+  netHpDrain  = INCOMING - HEAL_SUPPLY  (target: small NET LOSS, 5–15% of eHP/floor)
+    (BalanceConfig HEAL_NET_DRAIN_FRACTION_MIN/MAX.)
+  Each floor should cost some HP you don't recover, so HP slowly becomes precious.
+
+THE MODEL FLOOR (depth 1 reference; BalanceConfig SECTION 10):
+  6x Gore Biter + 3x Eye Tyrant + 2x Shell Brute + 1x Plague Hulk
+  DEMAND = 720 damage, ~432 TP. All SECTION 5 levers are tuned against THIS floor.
+  Current living-table result: S = 0.83 floor-wide, every per-weapon S < 0.6,
+  netHpDrain 11.5% of eHP — all in band.
+
+CREDITS (the currency economy):
+  Per-kill credits (BalanceConfig SECTION 2): 5–40 (boss 250 placeholder).
+  Credit chips per floor 3–7. Depth scale 0.12. Credit Fang ability (GameBalance).
+  SHOP / UAC Fabricator (GameBalance SHOP_*): 1–2 machines/floor, 9 offers each,
+  category weights, depth+rarity pricing, base prices per offer type.
+
+⚠️ Not-good note (IMPORTANT): the CREDIT half of the economy is effectively BROKEN
+as a balance lever. Credits are awarded everywhere, but the doc/idea history flags
+that a real spending SINK (the shop) was a prerequisite blocker — currency with no
+sink is a meaningless counter, not a resource. Shop constants EXIST in GameBalance,
+but the shop's integration/pricing is unproven and was explicitly "blocked/deferred"
+in the design notes. Until the shop is verified in play, treat all credit numbers,
+shop weights, and shop prices as UNBALANCED placeholders. The ammo/heal half is
+modelled but was verified only by the arithmetic harness — NEVER playtested. So
+even the "in band" scarcity result is provisional and must be refined against real
+play. This is the single biggest gap between "looks balanced" and "is balanced".
+
+
+================================================================================
+SECTION 13 — TERRAIN HAZARDS (two-sided danger folded into the TP contract)
+================================================================================
+File: BalanceConfig SECTION 12; hazard/HazardManager.java; GameMath.hazardTileThreatPoints.
+
+Fire ('i') and toxic ('q') floor tiles tick BURNING/POISONED onto ANY host —
+player AND enemies. That two-sidedness IS the tactic. A hazard tile has no HP, so:
+  hazardTileThreatPoints = hazardDamagePerTurn * HAZARD_THREAT_TURNS_STOOD * posMult
+
+Knobs (BalanceConfig SECTION 12):
+  HAZARD_FIRE_LIFETIME_TURNS=3, HAZARD_TOXIC_LIFETIME_TURNS=6.
+  HAZARD_FIRE_BURN_TURNS=2, HAZARD_TOXIC_POISON_TURNS=3.
+  HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER=1.5 (enemies burn faster — reward herding).
+  HAZARD_FIRE_SPREAD_CHANCE=0.18 (sub-critical: 3*0.18 < 1, so fire shrinks & dies),
+  HAZARD_TOXIC_SPREAD_CHANCE=0.10.
+  HAZARD_EXPLOSION_IGNITE_CHANCE=0.50 (barrel -> fire chain).
+  HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS=1, HAZARD_THREAT_TURNS_STOOD=2.
+Actual per-turn hazard damage comes from EffectConstants BURN/POISON magnitudes.
+
+⚠️ Not-good note: hazard TP is folded in with a fixed "turns stood = 2" assumption;
+a careful player stands 0 turns and a careless one stands more, so the hazard
+contribution to a room's real difficulty is a rough average, not a measured value.
+Untested in play.
+
+
+================================================================================
+SECTION 14 — TELEGRAPH & FAIRNESS CONTRACT
+================================================================================
+File: BalanceConfig SECTION 13; IntentConstants; enemy intent system.
+RULE: every attack that can deal > TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION (0.25)
+of reference eHP (~51 of 205) in ONE hit MUST be telegraphed or avoidable. Burst
+damage without warning is banned — a death must feel like "I made a mistake".
+Because the intent system pre-commits every direct attack one turn ahead, this rule
+is satisfied by construction for all committed attacks. Remaining un-telegraphed
+damage is only DoT ticks and environmental hazards.
+Boss hard cap: no single hit > 35% eHP (BalanceConfig SECTION 14).
+
+⚠️ Not-good note: the contract is satisfied "by construction" only for attacks that
+go through the intent-commit system. Any new attack path that bypasses it (a new
+special, a scripted boss verb, a hazard burst) can silently violate the cap. The
+BalanceReport TELEGRAPH AUDIT only checks the attacks it knows about.
+
+
+================================================================================
+SECTION 15 — STATUS EFFECTS / DAMAGE-OVER-TIME (DoT is damage; it counts toward TTK)
+================================================================================
+Files: BalanceConfig SECTION 8 (weapon DoT) + EffectConstants (shared status).
+  Rend/BLEED: 2/turn base (+0.5/level, cap 6), 4 turns.
+  Incendiary/BURN: 3/turn base (+0.5/level, cap 7), 3 turns (+1 on Incinerator).
+  Flamethrower burn: FLAME_BURN_DAMAGE_PER_TURN=6, 4 turns.
+  Stagger/STUN: STAGGER_STUN_DURATION=1.
+  Shared (EffectConstants): BURN 4/turn, POISON 2/stack (max 5), EMPOWERED +50%
+  (5 turns), VULNERABLE +50% (max 2 stacks), WEAK -25%, EXPOSED (ignore Block 1 hit),
+  BACKSTAB +30%, SLOW x2.0 (3 turns), BLIND (2 turns).
+DoT BYPASSES Block (it is the rock-paper-scissors answer to turtling enemies).
+
+⚠️ Not-good note: two parallel DoT definitions exist — weapon-ability DoT
+(BalanceConfig SECTION 8) and shared status DoT (EffectConstants), with DIFFERENT
+per-turn numbers (e.g. BURN 3 vs 4). The split is a maintenance hazard and the
+EffectConstants half is outside the single source of truth.
+
+
+================================================================================
+SECTION 16 — ROUTE MAP / ENDLESS DESCENT PACING (macro difficulty)
+================================================================================
+File: util/RouteMapConstants.java; route/*; docs/route-map-system.txt.
+The run is an ENDLESS forward branching DAG. Difficulty pacing at the macro scale:
+  REGION_BAND_SIZE = 5 (a region spans 5 depths, ending in a boss floor;
+  == Constants.BOSS_FLOOR_INTERVAL, so bosses appear every 5 floors).
+  First FIXED_REGION_COUNT regions are hand-named acts; beyond that every region is
+  an endless "THE BREACH" cycle generated lazily.
+  Branch shape: BRANCH_WIDTH 2–4, BRANCH_SPREAD_CHANCE 0.55.
+  Per-region node-type weight multipliers tilt each act's feel WITHOUT hard-coding
+  node lists:
+    A "Outer Facility" — safe: +cache, -elite (footing).
+    B "Research Wing"  — exploratory: +mystery/event.
+    C "Reactor Depths" — lethal: +elite (1.6x), -rest/shop.
+    D "The Breach" (endless) — relentless: +elite (1.8x), -rest/shop (relief scarce).
+  Per-region combat-generator biases (rooms/caverns) also shift the biome.
+
+⚠️ Not-good note: the region multipliers change how OFTEN dangerous nodes appear
+but do NOT feed the Threat-Point budget or the depth-coupling invariant — so a
+"lethal" region is lethal by node FREQUENCY, not by a budgeted difficulty increase.
+The macro pacing and the micro TP contract are not yet unified. Endless "Breach"
+depth is where the coupling invariant already fails (SECTION 10).
+
+
+================================================================================
+SECTION 17 — DIFFICULTY MODES (per-difficulty starting stats)
+================================================================================
+File: util/GameBalance.java (STAT_BASE_* and caps).
+Four difficulties set only the player's STARTING attribute values:
+  RECRUIT (easy):    STR 3 / AGI 3 / TGH 4 / MRK 3   (generous padding)
+  MARINE (normal):   STR 2 / AGI 2 / TGH 2 / MRK 2   (the tuning reference)
+  NIGHTMARE (hard):  STR 1 / AGI 1 / TGH 1 / MRK 1
+  ULTRA (brutal):    STR 0 / AGI 1 / TGH 1 / MRK 0
+Caps: STR 12, AGI 10, TGH 12, MRK 12; STAT_REFERENCE=0 (so STR 5 = +25% melee).
+
+⚠️ Not-good note: difficulty is expressed ONLY through starting stats. Enemy
+numbers, scaling, loot, and scarcity are IDENTICAL across all four modes. The
+entire balance contract is anchored to MARINE (205 eHP), so RECRUIT and ULTRA are
+balanced only incidentally. This is a thin, under-developed difficulty system that
+needs real per-mode tuning (enemy scaling, loot rates, scarcity).
+
+
+================================================================================
+SECTION 18 — THE MATH REFERENCE (util/GameMath.java)
+================================================================================
+Every balance formula is a pure static method with a Formula/Derivation/Edge-case
+block. Key methods (never inline any of these — always call GameMath):
+  Primitives:    effectiveHitPoints, sustainedDamagePerTurn, ammoEfficiency,
+                 turnsToKill, threatPoints.
+  Derived:       weaponPowerScore, goldenRatio, depthThreatScale,
+                 depthCouplingRatio, playerPowerAtDepth.
+  Progression:   xpRequiredForLevel, compoundScaleForDepth,
+                 damagePerTurnPowerPoints, effectiveHitPointPowerPoints.
+  Scarcity:      reserveBankingFloors + the scarcity/heal-economy block.
+  Encounter:     floorThreatPointBudget, enemyThreatAtDepth.
+  Hazards:       hazardTileThreatPoints.
+  Combat mods:   vulnerableDamageMultiplier, weakDamageMultiplier,
+                 backstabDamageMultiplier, guardFacingMultiplier, blockAbsorbed.
+  Boss ruleset:  bossEffectiveHitPoints, bossFightTurnsForPlayerDamagePerTurn,
+                 bossDamagePerTurnForSurvivalCheck, bossSurvivalCheckRatio,
+                 bossSingleHitFractionOfEffectiveHitPoints, bossPhaseHealthThreshold,
+                 bossReward, expectedPlayerSustainedDamagePerTurn.
+
+
+================================================================================
+SECTION 19 — THE LIVING TABLE / AUDITOR (util/BalanceReport.java)
+================================================================================
+DEV-ONLY main; touches no render state (pure GameMath + BalanceConfig). It
+regenerates every living table (WEAPONS, ENEMIES, BLOCK & DEFEND, UPGRADE CARDS,
+DEPTH COUPLING, SCARCITY, ENCOUNTER, HAZARDS, TELEGRAPH AUDIT, MODIFIERS, BOSS
+RULESET) from the CURRENT constants — so the tables "cannot lie" about the numbers.
+Run it and paste its output over the matching sections of docs/balance-rule-system.txt
+after ANY BalanceConfig change:
+    ./gradlew core:run -PmainClass=ge.tbegvadze.toon3d.util.BalanceReport
+
+⚠️ Not-good note: BalanceReport proves INTERNAL CONSISTENCY (numbers match their
+formulas and land in their declared bands). It does NOT prove the game is fun,
+fair, or correctly tuned in play. Per the balance docs, the rescales were "verified
+by harness only — NOT Gradle-built or playtested here (the proxy blocks the Android
+plugin)". So a green BalanceReport is necessary but NOT sufficient. Real balance
+still requires human playtesting.
+
+
+================================================================================
+SECTION 20 — CONSOLIDATED LIST OF KNOWN PROBLEMS (why balance is NOT good)
+================================================================================
+Every item below is a place where the current balance is known to be weak,
+unproven, or outright broken. This is not exhaustive — it is the floor, not the
+ceiling, of what needs refinement.
+
+  1. NOTHING has been playtested. Every rescale is harness-verified arithmetic
+     only. "In band" ≠ "feels right". (SECTION 19)
+  2. The CREDIT economy has no proven sink — the shop is deferred/unverified, so
+     credits, shop weights, and shop prices are meaningless placeholders. (SECTION 12)
+  3. WEAPON ABILITIES (crit/pierce/lifesteal/legendaries) are entirely UN-priced
+     against the contract and self-labelled "PLACEHOLDER — flag for playtesting".
+     START_ROOM_ANY_TIER_ENABLED=true lets players roll legendaries at run start
+     (a test flag left on). (SECTION 5)
+  4. All THREE bosses are flat placeholder HP walls, reading UNDER their derived
+     bands; boss rewards are arbitrary. Boss fights are effectively unimplemented. (SECTION 9)
+  5. The "single source of truth" is incomplete: EffectConstants status magnitudes,
+     the ability catalogue, shop, and boss stats live OUTSIDE BalanceConfig, so
+     balance is NOT tunable from one screen. (SECTION 1, 15)
+  6. Difficulty modes only change starting stats; enemies/loot/scarcity are
+     identical across all four. RECRUIT/ULTRA are balanced only by accident. (SECTION 17)
+  7. The contract anchors "the player" to a fixed 25 DPT / 205 eHP, ignoring found
+     weapons, abilities, crits, and consumables — the model systematically
+     under-counts real player power. (SECTION 2, 6)
+  8. Endless depth (past ~15–20) already fails the depth-coupling invariant. It is
+     labelled "intentional graceful degradation" but in practice means it becomes
+     unfairly hard, unaddressed. (SECTION 10)
+  9. Special-move / summon / buff casters raise EFFECTIVE DPT that is mostly NOT
+     priced into their TP, so the encounter budget under-counts their real threat. (SECTION 8)
+ 10. Content has repeatedly shipped BEFORE being priced (the necrotic faction
+     corrupted every floor's budget until a later pass). Assume newer content may
+     be un-priced. (SECTION 7)
+ 11. Two divergent DoT definitions (BalanceConfig SECTION 8 vs EffectConstants) with
+     different per-turn numbers. (SECTION 15)
+ 12. Macro pacing (route regions) and micro difficulty (TP budget) are not unified —
+     "lethal" regions are lethal by node frequency, not budgeted difficulty. (SECTION 16)
+ 13. The Railgun is deliberately out of its power band, "gated by scarcity" that is
+     itself unproven — so it is effectively overpowered right now. (SECTION 4)
+ 14. Falloff/engagement-band crediting for weapons uses muzzle numbers, not real
+     engagement distances — an acknowledged approximation. (SECTION 2, 4)
+
+BOTTOM LINE: the balance model is a coherent, well-documented SKELETON with a solid
+math contract, but it is provisional throughout, unplaytested, incomplete in its
+consolidation, and broken in the credit/boss/ability areas. It MUST be refined.
+Do not present any current number to a user as a finished, correct value.
+
+
+================================================================================
+SECTION 21 — HOW TO CHANGE BALANCE SAFELY (workflow for future sessions)
+================================================================================
+  1. Change the number in util/BalanceConfig.java (the single source of truth).
+     If it lives outside BalanceConfig (EffectConstants status, GameBalance
+     abilities/shop, EnemyConstants bosses), consider moving it in first.
+  2. Check it against the contract (docs/balance-rule-system.txt):
+       - new weapon  -> weaponPowerScore in its role band (SECTION 4/9)
+       - new enemy   -> threatPoints in its role band + golden ratio in band (SECTION 7)
+       - new heal    -> priced in survival-turns-bought (SECTION 12)
+       - new card    -> power points in the budget band (SECTION 6)
+       - new boss    -> the six-rule checklist (SECTION 9)
+  3. Re-run BalanceReport and paste its tables over docs/balance-rule-system.txt.
+  4. Verify the depth-coupling invariant still holds across depth (SECTION 10).
+  5. Remember: a green auditor is NECESSARY, not SUFFICIENT. Flag anything you
+     could not playtest as still-provisional — because it is.
+
+--------------------------------------------------------------------------------
+FINAL REMINDER: the current game balance is NOT good. It is a provisional,
+harness-verified, largely-unplaytested skeleton with known-broken areas (credits,
+bosses, weapon abilities, difficulty modes). Everything in this document describes
+WHAT IS, not WHAT SHOULD BE. Refine it, and re-verify — then playtest.
+--------------------------------------------------------------------------------
