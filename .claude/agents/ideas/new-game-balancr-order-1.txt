@@ -1,0 +1,153 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Balance Authority — one source of truth, enforced schema
+---
+
+================================================================================
+NEW GAME BALANCE — ORDER 1 of 9
+THE BALANCE AUTHORITY: SINGLE SOURCE OF TRUTH + AN ENFORCED, TUNABLE SCHEMA
+================================================================================
+Series: new-game-balancr-order-1..8. This series SUPERSEDES the old
+balance_order_1..6 idea files. The deprecated docs/balance-rule-system.txt has
+been DELETED; this order creates its replacement. The factual map of the current
+state is docs/game-balance-knowledge.txt — read it first (especially SECTION 20,
+the consolidated problem list). Implement the series strictly in order: every
+later order builds on the schema this order creates.
+
+--------------------------------------------------------------------------------
+PROBLEM (why this is order 1)
+--------------------------------------------------------------------------------
+Balance today cannot be tuned from one place and cannot be enforced anywhere:
+  - The "single source of truth" (util/BalanceConfig.java) is only ~90% true.
+    Status magnitudes live in EffectConstants, the entire weapon-ability
+    catalogue + shop + boss AI weights live in GameBalance, boss stats live in
+    EnemyConstants. (knowledge doc SECTION 1/15, problem 5)
+  - Two DIVERGENT DoT definitions exist (BalanceConfig SECTION 8 says BURN 3/turn,
+    EffectConstants says 4/turn). (problem 11)
+  - Bands and invariants exist as NUMBERS, but nothing FAILS when content
+    violates them. The necrotic faction shipped un-priced and silently corrupted
+    every floor budget for weeks. (problem 10)
+  - BalanceReport is a report you must remember to run and read; it cannot stop
+    a bad number from shipping.
+  - Test flags are live in production (START_ROOM_ANY_TIER_ENABLED=true lets a
+    run start with a legendary — the direct enabler of "beat the boss with the
+    starting-room weapon").
+
+The user's requirement, verbatim intent: "a source of truth for game balance…
+ultimate rules that enforce some schema on every aspect of game balance but
+also be tuneable if needed." That is exactly this order.
+
+--------------------------------------------------------------------------------
+DESIGN
+--------------------------------------------------------------------------------
+Three layers, cleanly separated:
+
+  LAYER 1 — VALUES (tunable): util/BalanceConfig.java
+    After this order, EVERY gameplay-affecting number lives here. Change a value
+    -> the game gets easier/harder/more generous, and NOTHING else changes.
+
+  LAYER 2 — RULES (the schema): util/BalanceSchema.java  (NEW)
+    Declarative registry of every rule the values must satisfy. Rules are DATA
+    (registered constraints), never switch statements — same discipline as
+    route/RouteRegistries. A rule = (subject, formula via GameMath, band, waiver?).
+
+  LAYER 3 — ENFORCEMENT: util/BalanceAuditTest.java  (NEW, under core test src)
+    A plain JUnit test that runs every registered schema rule and FAILS THE
+    BUILD on any violation. `./gradlew test` is the gatekeeper. BalanceReport
+    stays as the human-readable table printer, but it becomes a VIEW of the
+    schema, not the only check.
+
+TUNABILITY IS PRESERVED BY CONSTRUCTION: designers tune values in LAYER 1
+freely; the schema only constrains them to their declared bands. When a value
+must deliberately sit outside its band, it needs an explicit WAIVER — visible,
+reasoned, and auditable — never a silent exception.
+
+--------------------------------------------------------------------------------
+IMPLEMENTATION STEPS
+--------------------------------------------------------------------------------
+STEP 1 — CONSOLIDATE (finish the single source of truth):
+  Move INTO BalanceConfig (keep re-export shims so call sites don't churn):
+    a. EffectConstants gameplay magnitudes: BURN/POISON per-turn, POISON_MAX_STACKS,
+       EMPOWERED/VULNERABLE/WEAK/EXPOSED/BACKSTAB percents, SLOW_FACTOR,
+       SLOW/BLIND durations. EffectConstants keeps ONLY cosmetic values
+       (colors, particle counts, screen-shake).
+    b. The GameBalance ABILITY CATALOGUE (every BASE/PER_LEVEL/CAP for crit,
+       pierce, lifesteal, DoT abilities, economy abilities, legendaries) into a
+       new BalanceConfig SECTION 15 — WEAPON ABILITY MAGNITUDES.
+    c. Shop economy (SHOP_* stock, weights, base prices, depth pricing) into
+       SECTION 16 — SHOP ECONOMY.
+    d. Boss stats out of EnemyConstants into SECTION 14 (which already holds the
+       boss ruleset bands) — as DERIVED values (see order 6), flat for now.
+    e. UNIFY DoT: exactly one BURN definition, one POISON definition. Delete the
+       divergent copy. Weapon-ability DoT levels reference the unified base.
+  Rule of thumb for what moves: "would a designer change this to make the game
+  easier or harder?" -> BalanceConfig. "is it about how it looks/feels?" -> stays.
+
+STEP 2 — KILL LIVE TEST FLAGS:
+  START_ROOM_ANY_TIER_ENABLED = false. Start-room offers roll COMMON..UNCOMMON
+  as designed. Add a schema rule: any *_TEST_* or *_DEBUG_* boolean must be
+  false (audit fails otherwise), so this class of leak cannot recur.
+
+STEP 3 — BUILD THE SCHEMA (util/BalanceSchema.java):
+  Registered rule kinds (initial set — later orders add more):
+    R-WEAPON   every ranged weapon declares a ROLE; weaponPowerScore must land in
+               the role band (sidearm 8–14 | workhorse 12–18 | burst 18–26 |
+               heavy 24–32).
+    R-ENEMY    every archetype declares a ROLE; threatPoints in role TP band;
+               goldenRatio in role band (chaff pack-exempt as today).
+    R-CARD     every level-up card prices into LEVEL_UP_BUDGET_PP ± tolerance.
+    R-HEAL     every heal/armour pickup prices into a survival-turns-bought band.
+    R-TELEGRAPH no attack > 25% reference eHP un-telegraphed; boss cap 35%.
+    R-DEPTH    depth-coupling ratio in [MIN, MAX] for depths 1..15.
+    R-SCARCITY model-floor S in [0.75, 0.95] floor-wide, < 0.60 per weapon.
+    R-DOT      exactly one definition per status (structural rule: the audit
+               greps for duplicate constants by reflection over BalanceConfig).
+    R-FLAGS    no live test/debug flags (step 2).
+  COVERAGE RULE (the anti-"shipped unpriced" rule, fixes problem 10):
+    The audit iterates EnemyType.values(), the weapon registry, the card pool,
+    and ItemType pickups, and FAILS if any entry has no registered role/band.
+    New content that skips pricing no longer compiles into a green build.
+  WAIVERS: BalanceSchema.waive(subject, rule, "reason", "expiry-condition").
+    Ships with exactly one: the Railgun power-band waiver ("gated by slug
+    scarcity; expires when order-3 scarcity audit proves the gate"). BalanceReport
+    prints all active waivers in their own table so they stay visible.
+
+STEP 4 — ENFORCE (util/BalanceAuditTest.java):
+  JUnit test in core's test source set; pure JVM (GameMath + BalanceConfig +
+  BalanceSchema only, no LibGDX state) so it runs in CI and via `./gradlew test`.
+  One test method per rule kind -> failures name the exact subject, value, band.
+
+STEP 5 — WRITE THE NEW DOC: docs/game-balance-authority.txt  (NEW)
+  The replacement for the deleted balance-rule-system.txt. Contents:
+    1. The three layers (values / schema / enforcement) and where each lives.
+    2. The four primitives + derived scores (from GameMath) — brief, with
+       pointers, not re-derivations.
+    3. Every schema rule with its current band and WHY the band is shaped so.
+    4. The waiver policy and the live waiver list.
+    5. The new-content checklist: "add value -> declare role -> run
+       `./gradlew test` -> paste BalanceReport tables here."
+    6. The living tables (BalanceReport output).
+  Sweep ALL references to docs/balance-rule-system.txt (code comments in
+  BalanceConfig/GameMath/BalanceReport/EnemyConstants/RouteMapConstants/enemy/*,
+  plus docs/route-map-system.txt and docs/game-balance-knowledge.txt) and
+  repoint them to docs/game-balance-authority.txt. Update .claude/CLAUDE.md's
+  docs tables. Update the doc in the SAME commit as any future schema change —
+  it inherits the "single source of truth; update on any change" contract.
+
+--------------------------------------------------------------------------------
+ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+  [ ] Reflection sweep: no gameplay-magnitude constant outside BalanceConfig
+      (re-export shims allowed; audited by naming convention).
+  [ ] Exactly one BURN and one POISON definition; game behaviour unchanged
+      except where the two copies disagreed (pick the EffectConstants value —
+      it is the one the game actually applied).
+  [ ] `./gradlew test` fails if: any weapon/enemy/card/heal is unpriced, any
+      value leaves its band without a waiver, any test flag is true.
+  [ ] START_ROOM_ANY_TIER_ENABLED=false; start-room offers are COMMON..UNCOMMON.
+  [ ] docs/game-balance-authority.txt exists; zero remaining references to the
+      deleted balance-rule-system.txt anywhere in the repo.
+  [ ] BalanceReport prints a WAIVERS table; only the Railgun waiver is active.
+
+DEPENDENCIES: none (this is the foundation).
+UNBLOCKS: orders 2–9 all register their rules into this schema.

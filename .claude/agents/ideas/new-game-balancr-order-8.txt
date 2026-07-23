@@ -1,0 +1,115 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: One Difficulty — remove modes, tune one true game
+---
+
+================================================================================
+NEW GAME BALANCE — ORDER 8 of 9
+ONE DIFFICULTY: REMOVE THE MODE SYSTEM, PERFECT THE SINGLE GAME
+================================================================================
+Requires: orders 1–7. DESIGN DECISION (from the game owner, final): the game
+has EXACTLY ONE difficulty. There are no easy/normal/hard modes and there must
+never be. This order REMOVES the existing four-mode system and re-anchors the
+entire contract to the one canonical game.
+
+--------------------------------------------------------------------------------
+PROBLEM
+--------------------------------------------------------------------------------
+The game currently ships four difficulty modes (RECRUIT/MARINE/NIGHTMARE/ULTRA)
+implemented as per-mode starting-attribute tables in GameBalance (STAT_BASE_*;
+knowledge doc SECTION 17). This is wrong twice over:
+  1. It contradicts the design decision above — the game must be ONE tuned,
+     challenging-but-fair experience, the same for every player. In this
+     roguelike, difficulty variance is supposed to come from INSIDE the run
+     (route choices, region danger, risk/reward nodes, loot luck you adapt
+     to), not from a menu.
+  2. Even as implemented it was fake: modes changed only starting stats while
+     every enemy number, scarcity target and telegraph cap stayed anchored to
+     MARINE's 205 eHP (problem 6) — so three of the four modes were never
+     actually balanced. Rather than tuning four games (quadrupling every
+     audit, band and playtest forever), we delete three of them and spend all
+     tuning effort on the one that remains.
+
+--------------------------------------------------------------------------------
+DESIGN — DELETE, CONSOLIDATE, LOCK
+--------------------------------------------------------------------------------
+A) DELETE THE MODE SYSTEM:
+   - Remove difficulty selection from the run-start flow (UI screen/buttons,
+     any Difficulty enum, and the plumbing that carries the choice into World
+     and the managers).
+   - Delete the per-mode STAT_BASE_* tables. The single canonical start is the
+     current MARINE block (STR 2 / AGI 2 / TGH 2 / MRK 2, 130 HP, 75 armour,
+     205 eHP) — it is what every band, anchor and living table in orders 1–7
+     was derived against, so the whole contract becomes EXACT for the one real
+     game instead of "exact for one mode out of four".
+   - StatsStore: drop any difficulty/mode key from persisted run stats;
+     migrate/ignore old records (best-effort read, never crash on legacy keys).
+   - Sweep every mode conditional out of game code — after this order,
+     grepping for RECRUIT/NIGHTMARE/ULTRA/difficulty returns nothing in
+     core/src.
+
+B) ONE ANCHOR, NOW TRUE BY CONSTRUCTION:
+   REFERENCE_PLAYER_EHP (205) stops being "the MARINE anchor with three
+   unbalanced siblings" and becomes THE player anchor, period. The telegraph
+   fairness caps (25% un-telegraphed, 35% boss single-hit) now provably
+   protect the actual player pool in every run. No re-derivation needed —
+   orders 1–7 already priced everything against this anchor; this order makes
+   the assumption legitimate.
+
+C) LOCK IT WITH THE SCHEMA (so modes cannot creep back):
+   R-SINGLE-DIFFICULTY (structural rule in BalanceSchema):
+     - Exactly one starting-attribute block exists in BalanceConfig.
+     - The audit reflection sweep fails on any constant or enum matching
+       mode-family naming (RECRUIT/NIGHTMARE/ULTRA/*_EASY_*/*_HARD_*/
+       *_MODE_*), the same way R-FLAGS bans live test flags.
+   Difficulty tuning happens by moving THE dials (scarcity band, heal drain
+   band, survival ratios, region danger multipliers) — one set, one game.
+
+D) WHERE THE VARIANCE LIVES INSTEAD (design intent, no new systems):
+   The legitimate difficulty range players experience comes from systems that
+   already exist or are already in this series:
+     - Route choice: the region danger dial (order 5) and the priced route
+       map (order 7) make the lethal lane a CHOICE with budgeted, fair
+       consequences — the player self-selects challenge in-run, which is the
+       roguelike way.
+     - Depth: the coupling curve (order 4) IS the difficulty ramp; endless
+       depth is the skill ceiling.
+     - Scarcity swings and loot adaptation (orders 2–3) create run texture
+       within the audited bands.
+   If a future request ever asks for accessibility options, they must be
+   framed as exactly that (e.g. animation speed) — never as balance-touching
+   modes; the schema rule above is the tripwire.
+
+--------------------------------------------------------------------------------
+TECHNICAL NOTES
+--------------------------------------------------------------------------------
+  - GameBalance STAT_BASE_RECRUIT/NIGHTMARE/ULTRA_* constants: delete. The
+    surviving base block moves into BalanceConfig SECTION 7 with the other
+    progression anchors (order 1's consolidation rule: gameplay numbers live
+    in BalanceConfig).
+  - Check for a difficulty/mode field on run creation (World construction,
+    RunStats, death screen display, any menu Screen) and remove end to end.
+    Mobile-first UI note: removing the selection step SHORTENS the touch flow
+    to run start — one less screen, which is a win on its own.
+  - BalanceReport: delete any per-mode plumbing added speculatively; all
+    tables are single-game.
+  - Update docs in the same commit: game-balance-authority.txt states the
+    one-difficulty rule as a design invariant; the knowledge doc's SECTION 17
+    (difficulty modes) is superseded — mark it resolved-by-removal.
+
+--------------------------------------------------------------------------------
+ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+  [ ] No difficulty selection anywhere in the run-start flow; a new run always
+      starts with the canonical stat block.
+  [ ] Zero matches for RECRUIT/NIGHTMARE/ULTRA/mode-family naming in core/src
+      (audit rule R-SINGLE-DIFFICULTY enforces this permanently).
+  [ ] StatsStore reads legacy records with mode keys without crashing.
+  [ ] All schema rules from orders 1–7 still green against the single anchor
+      (they should be untouched — this order removes assumptions, not values).
+  [ ] docs updated: one-difficulty invariant recorded in
+      game-balance-authority.txt.
+
+DEPENDENCIES: orders 1–7 (they define the single contract this order makes
+exclusive). UNBLOCKS: order 9 (the simulator matrix collapses to one
+difficulty — cheaper and sharper).

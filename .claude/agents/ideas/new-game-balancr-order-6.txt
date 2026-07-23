@@ -1,0 +1,114 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Boss = Build Check — derived fights you can't cheese
+---
+
+================================================================================
+NEW GAME BALANCE — ORDER 6 of 9
+BOSSES AS BUILD CHECKS: THE SIX RULES, ACTUALLY IMPLEMENTED
+================================================================================
+Requires: orders 1–5 (schema; expected arsenal + honest power curve; economy;
+true threat pricing). This is the order that makes "I beat the boss with the
+starting-room weapon" IMPOSSIBLE — by arithmetic, verified by the audit.
+
+--------------------------------------------------------------------------------
+PROBLEM
+--------------------------------------------------------------------------------
+Knowledge doc SECTION 9, problem 4: all three bosses (Overseer 250 HP,
+Corruptor 450, Hell Baron 700) are flat, eyeballed placeholders priced against
+the DEPTH-1 shotgun. That is precisely why a level-1 weapon beats them: the
+Overseer's 250 HP is 10 turns of starting-shotgun fire, while his DPT cannot
+kill a modestly-healed player in 10 turns. The fight is a formality, and every
+progression system upstream becomes optional.
+
+--------------------------------------------------------------------------------
+DESIGN — DERIVE, ASSERT, REWARD
+--------------------------------------------------------------------------------
+A) HP AND DPT ARE DERIVED, NEVER SET (the six rules become live formulas):
+   For a boss at depth d (region-end floors: 5, 10, 15, then every 5):
+     R1 bossHP  = expectedPlayerSustainedDpt(d)          <- order 2/4 curve,
+                  * TARGET_FIGHT_TURNS (band 18–40 by act)   the HONEST one
+                  * MULTI_PHASE_FACTOR
+     R3 bossDPT from the survival check: playerEHP(d) / bossDPT =
+                  SURVIVAL_RATIO (0.4–0.7) * targetFightTurns
+        Single-hit caps: none > 35% eHP; > 25% must be telegraphed (the intent
+        system already pre-commits, so this holds by construction — the audit
+        checks every boss verb's damage against the caps anyway, because boss
+        verbs are the likeliest bypass path — knowledge doc problem re
+        SECTION 14).
+     R4 2–3 equal phases; each phase escalates exactly ONE mechanic; phase
+        thresholds via bossPhaseHealthThreshold.
+   All BalanceConfig SECTION 14; the flat HP constants are DELETED and replaced
+   by the derivation inputs. Changing boss difficulty = tuning
+   TARGET_FIGHT_TURNS or SURVIVAL_RATIO — semantic dials, not raw HP.
+
+B) THE BUILD-CHECK ASSERTIONS (the user's complaint, as schema rules):
+   R-BOSS-GATE (the core one):
+     With the DEPTH-1 STARTING LOADOUT (starting weapon at level 1, no
+     abilities, base stats), against boss(d) for every boss depth:
+       turnsToKillBoss(startLoadout) >= 2.0 * survivableTurns(bossDPT, eHP(d)
+                                        + all heals the economy can supply to
+                                        that fight)
+     i.e. even a perfect-play hoarder with the starting weapon DIES at less
+     than half the damage needed. Beating a boss with the start weapon becomes
+     arithmetically impossible, not merely hard.
+   R-BOSS-FAIR (the other side — on-curve players get a real but winnable
+     fight): with the EXPECTED loadout at d (gear curve tier + expected level),
+     fight length lands in [targetTurns, 1.5 * targetTurns] and the survival
+     ratio in [0.4, 0.7]. Under-curve by ONE region tier -> fight reads
+     out-of-band hard (pressure to upgrade), never impossible-looking fair.
+   AMMO CHECK: the boss fight's expected ammo consumption (bossHP / expected
+     ammo efficiency) must be coverable by reserve caps + arena pickups
+     (BOSS_ARENA_AMMO_BUDGET) — a build check must test your BUILD, not
+     whether you happened to enter with full pockets. Arena pickups placed by
+     the boss-floor generator.
+
+C) ADDS AND SPECIALS PRICED (order 5 pays off):
+   Summoned adds during the fight are priced by the same amortized-summon
+   equivalence and INCLUDED in the fight-turn model (they extend TTK and add
+   DPT). No free difficulty smuggled in through un-priced adds.
+
+D) SOFT ENRAGE, NOT A TIMER:
+   Past 1.5 * targetTurns, the boss gains ENRAGE_DPT_RAMP (+8% DPT per turn,
+   telegraphed "OVERSEER IS FURIOUS"). Fights cannot drag into 60-turn
+   attrition slogs (R2's cap enforced by escalation, not a fail state), and
+   turtling past the survival-check math stops being a strategy.
+
+E) REWARD = REFUND * RISK PREMIUM (R6, now computable because order 3 exists):
+   bossReward (credits + guaranteed drops) = expected fight consumption (ammo
+   value + heal value from the models) * RISK_PREMIUM (1.3). Boss floors are
+   economically net-positive — the run's paydays — and the flat 500 XP / 250
+   credit placeholders are deleted (XP flows from TP via order 4's derivation;
+   boss TP is huge, so boss XP is too, automatically).
+   PRE-BOSS PROVISIONING: the route generator guarantees a shop or cache node
+   is reachable in the layer before every boss (the "sharpen your knife" beat;
+   order 7 formalizes this as an enforced route-graph guarantee).
+
+--------------------------------------------------------------------------------
+TECHNICAL NOTES
+--------------------------------------------------------------------------------
+  - GameMath boss block already has most derivation methods — wire them so
+    EnemyConstants boss stats are COMPUTED at spawn (bossStatsForDepth(d)),
+    not read from flat constants. Endless mode gets scaling bosses for free.
+  - Verb damage tables per boss live in SECTION 14 as FRACTIONS of derived
+    bossDPT (e.g. laser = 0.8 * bossDPT, charge = 1.6 * telegraphed), so
+    tuning the survival ratio retunes every verb coherently.
+  - BalanceReport: BOSS RULESET table shows per-boss derived HP/DPT, both gate
+    assertions' margins, ammo-check coverage, reward math.
+  - The Overseer's tactic-weight AI brain (GameBalance -> BalanceConfig via
+    order 1) is untouched — this order prices the fight, not the choreography.
+
+--------------------------------------------------------------------------------
+ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+  [ ] Zero flat boss HP/damage constants; all derived from SECTION 14 inputs.
+  [ ] R-BOSS-GATE holds for every boss: starting loadout cannot win (>= 2x
+      short on damage before dying, WITH maximum heal supply).
+  [ ] R-BOSS-FAIR holds for the expected loadout at each boss depth.
+  [ ] Every boss verb <= 35% eHP per hit; > 25% verbs are telegraphed.
+  [ ] Boss reward >= 1.3x modelled consumption; pre-boss provisioning node
+      guaranteed in 100-seed route generation test.
+
+DEPENDENCIES: orders 1–5. UNBLOCKS: order 7 (route economics turns pre-boss
+provisioning into an enforced graph guarantee), order 9 (simulator plays the
+boss gate end to end).

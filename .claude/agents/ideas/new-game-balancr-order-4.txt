@@ -1,0 +1,101 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Progression
+TITLE: Felt Progression — leveling that matters and is paced
+---
+
+================================================================================
+NEW GAME BALANCE — ORDER 4 of 9
+FELT PROGRESSION: XP PACING + AN HONEST TOTAL-POWER MODEL
+================================================================================
+Requires: order 1 (schema), order 2 (gear curve + priced abilities).
+
+--------------------------------------------------------------------------------
+PROBLEM
+--------------------------------------------------------------------------------
+"The progression is not felt at all… leveling up must be essential."
+Current state (knowledge doc SECTIONS 6, 10; problem 7):
+  1. The total-PP invariant ("player power at level L = L * 12 PP") counts ONLY
+     level-up cards. Found weapons, abilities, crits and consumables add
+     uncounted power, so the modelled player curve the depth-coupling invariant
+     defends is fiction — and difficulty tuned against fiction cannot feel
+     right.
+  2. XP pacing is a hope, not a rule: EXPECTED_LEVELS_PER_DEPTH=1.0 exists but
+     nothing checks that a floor actually AWARDS enough XP for it.
+  3. A single level-up changes the player by ~12 PP against enemies whose
+     threat compounds — if pacing drifts even slightly, levels feel like
+     nothing (the user's exact report).
+
+--------------------------------------------------------------------------------
+DESIGN
+--------------------------------------------------------------------------------
+A) THE HONEST TOTAL-POWER MODEL (one curve, all sources):
+   playerPowerAtDepth v2 = cardPower(level(d)) * gearCurve(d) * abilityPower(d)
+     - cardPower: the existing L * LEVEL_UP_BUDGET_PP linear term.
+     - gearCurve: order 2's per-region arsenal step.
+     - abilityPower: expected ability PP at the region's tier band (order 2
+       priced the catalogue, so this is now computable: expected tier at region
+       r -> tier PP budget -> % power).
+   The DEPTH-COUPLING INVARIANT (0.9 <= power/threat <= 1.2) is re-derived
+   against v2 and re-tuned: with the player curve now steeper and honest, the
+   enemy compound rates (1.042/1.032) are re-fit so the ratio holds through
+   depth 15 WITHOUT the current "quietly under band at 18+" fudge. Schema rule
+   R-DEPTH updates to use v2. This is the master fairness dial of the game.
+
+B) XP PACING AS A RULE, NOT A HOPE:
+   R-XP-PACE: for each depth d, total XP available on the floor (roster XP from
+   the encounter budget + expected event XP) / xpRequired(level(d)) must land
+   in [XP_FLOOR_YIELD_MIN, MAX] = [1.0, 1.3] level-ups per floor. Per-enemy XP
+   rewards become DERIVED: xpReward = XP_PER_THREAT_POINT * enemyTP (one
+   constant replaces 13 hand-set rewards; dangerous enemies automatically pay
+   more, and new archetypes can never ship with forgotten XP values).
+   CATCH-UP (rubber band, forward only): if playerLevel < expectedLevel(d) - 1,
+   XP gains scale by XP_CATCHUP_MULTIPLIER (1.5) until caught up. Never slows
+   an ahead player — being ahead is earned; being behind is recoverable.
+
+C) MAKE EACH LEVEL FELT (design intent for the card pool):
+   - Keep the equal-budget card discipline (12 PP each) — build DIVERSITY comes
+     from shape, not size. But re-verify each card's PP price via the audit
+     after A) (there is exactly ONE eHP reference the prices divide by — the
+     game has a single difficulty; order 8 removes the legacy mode system).
+   - Add BREAKPOINT AWARENESS to card pricing: a card that moves a fight past
+     an integer TTK threshold vs the current region's soldier (e.g. 4 shots ->
+     3 shots) is WORTH more than its raw PP; price the pool so most cards cross
+     at least one breakpoint at the region where they're likely picked. This is
+     what makes a level-up FEEL different in the next fight, not just on a
+     character sheet. GameMath.turnsToKillBreakpointGain(...) computes it; the
+     card table in BalanceReport prints each card's breakpoints per region.
+   - The draw-bias system (0.6 per pick toward the emerging build) stays.
+
+D) DEATH-ADJACENT PROGRESSION HONESTY:
+   XP/level is run-local (permadeath roguelike — knowledge doc pillars). No
+   meta-progression added in this order; StatsStore keeps recording run stats
+   for the death screen so progress-per-run is VISIBLE even when it resets.
+
+--------------------------------------------------------------------------------
+TECHNICAL NOTES
+--------------------------------------------------------------------------------
+  - GameMath: playerPowerAtDepthV2, expectedLevelAtDepth, xpPerThreatPoint
+    inversion, turnsToKillBreakpointGain — pure, formula blocks.
+  - BalanceConfig SECTION 7 changes: delete 13 per-enemy XP constants, add
+    XP_PER_THREAT_POINT, XP_FLOOR_YIELD_MIN/MAX, XP_CATCHUP_MULTIPLIER.
+    SECTION 3: re-fit ENEMY_HEALTH/DAMAGE_SCALE_PER_DEPTH against v2 (expect
+    them to RISE — the honest player curve is steeper than the old fiction;
+    likely landing near 1.06/1.05; derive, don't guess).
+  - EnemyManager XP award path reads the derived reward.
+  - BalanceReport: DEPTH COUPLING table shows v2 curve; new XP PACING table
+    (per depth: available XP, required XP, yield); CARD table gains a
+    breakpoints column.
+
+--------------------------------------------------------------------------------
+ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+  [ ] R-DEPTH passes with the v2 power model for depths 1..15 with NO
+      under-band fudge; 16+ may degrade gracefully but the boundary is printed.
+  [ ] R-XP-PACE passes for depths 1..15; zero hand-set per-enemy XP constants.
+  [ ] Every level-up card crosses >= 1 TTK breakpoint in at least one region
+      band (printed in the living table).
+  [ ] Catch-up multiplier engages in a synthetic under-leveled state and never
+      when at/above expected level (unit test).
+
+DEPENDENCIES: orders 1, 2. UNBLOCKS: order 5 (budget uses v2 threat pricing),
+order 6 (boss expects level(d) + gear(d)).

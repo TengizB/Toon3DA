@@ -1,0 +1,116 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Items
+TITLE: Resource Economy That Bites — ammo, heals, credit sink
+---
+
+================================================================================
+NEW GAME BALANCE — ORDER 3 of 9
+RESOURCE ECONOMY: SCARCITY ACROSS DEPTH + A REAL CREDIT SINK
+================================================================================
+Requires: order 1 (schema), order 2 (expected DPT curve — ammo supply must be
+priced against the arsenal the player is EXPECTED to hold, or upgrades would
+break the economy).
+
+--------------------------------------------------------------------------------
+PROBLEM
+--------------------------------------------------------------------------------
+"Managing resources must be essential for survival." Today (knowledge doc
+SECTION 12; problems 1, 2):
+  1. The scarcity model is tuned against ONE depth-1 model floor and verified
+     only by arithmetic. Nothing guarantees S stays in band at depth 6 or 12,
+     where enemy eHP has compounded but the player's ammo efficiency has
+     changed weapon by weapon.
+  2. The CREDIT half of the economy is broken as a lever: credits are awarded
+     everywhere but the shop sink is unverified/deferred. Currency without a
+     sink is a score counter, not a resource.
+  3. Heal net-drain (each floor should cost 5–15% eHP you don't recover) is a
+     model target, never enforced per depth.
+  4. There is no softlock guard: a player who wastes ammo can reach a state
+     where the floor cannot supply enough to continue — dying to an empty
+     inventory screen instead of to gameplay.
+
+--------------------------------------------------------------------------------
+DESIGN
+--------------------------------------------------------------------------------
+A) SCARCITY ACROSS THE WHOLE RUN (not one model floor):
+   Keep the central equation (S = SUPPLY/DEMAND, target 0.75–0.95 floor-wide,
+   < 0.60 per weapon) but audit it AT EVERY DEPTH 1..15:
+     DEMAND(d) = floor TP budget's total eHP at depth d (order 5 planner output)
+     SUPPLY(d) = expected pickups at depth d * box sizes * damagePerAmmoUnit of
+                 the EXPECTED arsenal at d (order 2 gearCurve tiers, not the
+                 starting weapons)
+   New schema rule R-SCARCITY-DEPTH: S(d) in band for all d in 1..15.
+   Levers stay the four existing ones (drop freq, box size, reserve cap,
+   demand); add per-region supply multipliers in BalanceConfig SECTION 5 so
+   regions can be tuned without touching global boxes:
+     AMMO_SUPPLY_REGION_MULTIPLIER[region]   (default 1.0)
+   Reserve-cap anti-hoard target stays ~1.5 floors banked; re-verify with the
+   depth-priced demand.
+
+B) HEAL ECONOMY, ENFORCED:
+   R-HEALDRAIN-DEPTH: netHpDrain(d) in [5%, 15%] of current-difficulty eHP for
+   all d in 1..15, computed with expected avoidance factor. Medkit/armour spawn
+   chances get the same per-region multiplier treatment. Result: HP is a slowly
+   depleting run-resource — medkits are decisions ("spend now or bank"), and
+   reaching a boss at full resources means you played well, not that the game
+   is generous.
+
+C) THE CREDIT SINK — MAKE THE SHOP REAL (fixes problem 2):
+   The UAC Fabricator (constants exist in GameBalance -> moved to BalanceConfig
+   SECTION 16 by order 1) becomes THE credit sink and the deliberate half of the
+   gear curve (order 2's pity rule may route through it):
+     1. PRICING FROM POWER, NOT VIBES: every shop offer's price derives from
+        its priced value: price = PP-or-supply-value * SHOP_PRICE_PER_PP *
+        depthPriceScale(d). A RARE weapon (12 ability PP + its band DPT), a
+        medkit (survival-turns), an ammo box (damage supplied) all price
+        through the same formula. GameMath.shopPrice(...).
+     2. INCOME <-> SINK COUPLING (the credit band): expected credit income per
+        region (kills + chips, linear depth scale) must afford
+        SHOP_EXPECTED_BUYS_PER_REGION = 1 significant purchase (weapon-class
+        offer) + 1–2 small ones (ammo/medkit), with CREDIT_BANK_TARGET_FLOORS
+        ~= 1 region of banking. Schema rule R-CREDITS: income(region) /
+        priceOfSignificantBuy(region) in [0.9, 1.4]. Credits become a real
+        strategic resource: save for the weapon, or stay topped up on supplies.
+     3. SHOP STOCK follows the region tier bands (order 2) — the shop is the
+        deterministic backstop of the gear curve when drop RNG is cold.
+   If the shop's game-side integration is still incomplete, FINISHING it is in
+   scope for this order — the economy cannot be balanced around a sink that
+   does not run.
+
+D) NEVER-SOFTLOCK RULE:
+   EMERGENCY_SUPPLY_RULE: if the player's TOTAL potential damage (all reserves
+   * efficiency + melee) falls below the remaining floor demand times
+   EMERGENCY_SUPPLY_FRACTION (0.25), the next eligible enemy drop is forced to
+   be ammo for an equipped weapon. Cap: once per floor. This is a floor under
+   catastrophe, far below the scarcity band — it never feeds hoarders (they
+   never trigger it), it only converts "standing empty-handed" deaths into
+   fighting-retreat deaths. Melee remaining always-available is the true
+   backstop (fist has no ammo); this rule just keeps the gap crossable.
+
+--------------------------------------------------------------------------------
+TECHNICAL NOTES
+--------------------------------------------------------------------------------
+  - GameMath additions: scarcityRatioAtDepth, netHpDrainAtDepth, shopPrice,
+    creditIncomePerRegion, emergencySupplyThreshold (pure; formula blocks).
+  - The audit's per-depth S uses the ENCOUNTER PLANNER's actual budget spend
+    (deterministic given depth), not hand-listed rosters — one source.
+  - RunStats tracks: ammo picked up / spent per type, credits earned/spent,
+    heals used, emergency-rule triggers (telemetry for order 9).
+  - BalanceReport: SCARCITY table becomes a depth-sweep matrix (d x S, per-weapon
+    worst offender), plus CREDIT ECONOMY and SHOP PRICING tables.
+
+--------------------------------------------------------------------------------
+ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+  [ ] R-SCARCITY-DEPTH, R-HEALDRAIN-DEPTH, R-CREDITS pass for depths 1..15.
+  [ ] Every shop price is formula-derived; zero hand-set price constants.
+  [ ] Shop is purchasable in-game end to end (stock, price display, buy,
+      deduct, deliver) on a real floor.
+  [ ] Emergency rule triggers in a starved simulation and never in a normal
+      one (order 9's simulator will regression-test this; for now a unit test
+      with synthetic inventories).
+  [ ] Railgun slug supply remains the tightest gate (~1.0 floor banked) —
+      re-checked after re-pricing, since it justifies the order-1 waiver.
+
+DEPENDENCIES: orders 1, 2. UNBLOCKS: order 6 (boss reward = consumption *
+premium needs a working economy).
