@@ -1,7 +1,54 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Progression
 TITLE: Power Curve & Gear Gate — upgrades become essential
 ---
+
+================================================================================
+IMPLEMENTATION NOTES (order 2 shipped)
+================================================================================
+Implemented as specified, with these concretisations:
+  - GEAR CURVE (BalanceConfig SECTION 9): GEAR_CURVE_PER_REGION = 1.35,
+    GEAR_CURVE_REGION_BAND_SIZE = RouteMapConstants.REGION_BAND_SIZE (5, single
+    source of truth so the curve and the descent's regions can't drift).
+  - GameMath (pure, with Formula/Derivation/Edge blocks): gearCurveAtDepth,
+    expectedPlayerDamagePerTurn, compoundDepthMultiplier (one-axis depth growth
+    for the gate), and abilityPowerPoints (magnitude -> PP via utilisation
+    weights). REFERENCE_PLAYER_DPT is UNCHANGED; expectedPlayerDamagePerTurn(1..5)
+    == REFERENCE_PLAYER_DPT exactly (asserted by R-GEARGATE's anchor check).
+  - R-GEARGATE (BalanceSchema.GEAR_GATE): proven on the Void Shroud SOLDIER
+    through the golden-ratio lens (start fair at depth 1 = 4.0 in band; gate
+    fires at the region-2 entry depth = 2.8 < 3 out of band for the stagnant
+    reference-DPT player; on-curve = 3.5 back in band). The stagnant baseline is
+    REFERENCE_PLAYER_DPT (the depth-1 anchor), so region-1 fairness for the whole
+    roster is already the existing R-ENEMY guarantee; this rule adds the depth
+    axis. NOTE: with the current gentle depth-health scaling (1.042/floor) the
+    gate becomes UNAMBIGUOUS at the region-2 entry for a fast-melee soldier (Void
+    Shroud); tankier soldiers cross by region 3 — the gate deepens each region as
+    designed (region 2 ~74% of expected DPT, region 3 ~55%).
+  - TIER = PRICED ABILITY BUDGET (R-ABILITY, BalanceConfig SECTION 15):
+    COMMON 0 | UNCOMMON 6 | RARE 12 | EPIC 20 | LEGENDARY 30 PP (±20%). The
+    WeaponRoller now fills abilities greedily against the tier ceiling (legendary
+    signature reserved first) — both the spawn roll AND the shop tier-upgrade — so
+    every roll fits its budget BY CONSTRUCTION; BalanceAuditTest sweeps 200 seeds
+    x tiers x levels x melee-ness to prove no roll (esp. legendary) exceeds 30*1.2.
+    Ability magnitudes stay PLACEHOLDERS; the price recomputes from them via the
+    utilisation weights, so tuning stays free.
+  - DEPTH-GATED LOOT TIERS (BalanceConfig SECTION 15): WEAPON_DROP_TIER_*_BY_REGION
+    clamp every dropped weapon's tier to its region band (region 1 COMMON..UNCOMMON,
+    region 2 UNCOMMON..RARE, region 3 RARE..EPIC, region 4+ EPIC..LEGENDARY),
+    applied automatically inside WeaponRoller.rollToSnapshot/rollWeapon.
+  - PITY RULE (GUARANTEED_UPGRADE_PER_REGION = 1): RunStats tracks weapon upgrades
+    placed per region (enterUpgradeRegion / recordWeaponUpgradeSeen /
+    regionUpgradeQuotaUnmet). World force-spawns a guaranteed in-band upgrade onto
+    a region's LAST-floor first weapon drop when the region would otherwise end at
+    zero (WeaponRoller.rollGuaranteedUpgradeToSnapshot). The full "add a brand-new
+    weapon tile when a floor has no weapon spawn" is approximated by upgrading an
+    existing drop's tier — the tracking + supply model is in place for a later pass
+    to harden.
+  - BalanceReport: new GEAR CURVE table (per region: depths, gearCurve, expected
+    DPT, droppable tier band, stagnant vs on-curve golden ratio) + ABILITY PRICING
+    table (per-ability PP at L1/L10, tier budgets).
+  - No new waiver needed (the only active waiver stays the Railgun's).
 
 ================================================================================
 NEW GAME BALANCE — ORDER 2 of 9

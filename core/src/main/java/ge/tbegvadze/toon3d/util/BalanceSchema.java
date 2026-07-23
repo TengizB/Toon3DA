@@ -2,6 +2,10 @@ package ge.tbegvadze.toon3d.util;
 
 import ge.tbegvadze.toon3d.enemy.EnemyRole;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
+import ge.tbegvadze.toon3d.entity.AbilityInstance;
+import ge.tbegvadze.toon3d.entity.WeaponAbility;
+import ge.tbegvadze.toon3d.entity.WeaponRoller;
+import ge.tbegvadze.toon3d.entity.WeaponTier;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemCategory;
 import ge.tbegvadze.toon3d.item.ItemType;
@@ -74,7 +78,11 @@ public final class BalanceSchema {
         /** R-FLAGS: no live test/debug flags (any TEST/DEBUG boolean must be false). */
         FLAGS,
         /** COVERAGE: every content entry (weapon item, consumable, ammo type, enemy role) is classified/priced. */
-        COVERAGE
+        COVERAGE,
+        /** R-GEARGATE (order 2): the starting loadout is fair in region 1 but reads underpowered by the gate depth. */
+        GEAR_GATE,
+        /** R-ABILITY (order 2): every ability has a priced PP value; every rollable tier fits its ability-PP budget. */
+        ABILITY_BUDGET
     }
 
     // =====================================================================================
@@ -573,6 +581,8 @@ public final class BalanceSchema {
         results.addAll(dotUniquenessResults());
         results.addAll(flagResults());
         results.addAll(coverageResults());
+        results.addAll(gearGateResults());
+        results.addAll(abilityBudgetResults());
         return results;
     }
 
@@ -840,6 +850,130 @@ public final class BalanceSchema {
                     hasRow ? "priced in the scarcity model"
                            : "NOT priced — register a scarcity row in BalanceSchema"));
         }
+        return results;
+    }
+
+    // =====================================================================================
+    // R-GEARGATE (new-game-balancr order 2) — the starting loadout is FAIR at the start but reads
+    // UNDERPOWERED once the gear curve has stepped, while an ON-CURVE player stays fair. Proven on a
+    // reference SOLDIER at three points, all through the same golden-ratio lens (TTD / TTK):
+    //   1. START FAIR   — stagnant (reference-DPT) golden ratio at depth 1 is IN the soldier band.
+    //   2. GATE FIRES   — the SAME stagnant player's golden ratio at the region-2 entry depth is BELOW
+    //                     the band (the start weapon now reads underpowered — stagnation is punished).
+    //   3. ON-CURVE FAIR— the EXPECTED player (reference DPT * gearCurve) golden ratio at that same
+    //                     depth is back IN band (upgrading keeps you fair — "find better gear or die").
+    // Region-1 fairness for the WHOLE roster is already guaranteed by R-ENEMY (same reference-DPT lens
+    // at depth 1); this rule adds the depth axis the gear gate introduces.
+    // =====================================================================================
+
+    /** The reference "region-2 entry soldier" the gate is proven on (a standard, common SOLDIER). */
+    private static final EnemyType GEAR_GATE_REFERENCE_SOLDIER = EnemyType.VOID_SHROUD;
+
+    /** The reference soldier the gear gate is proven on (BalanceReport's GEAR CURVE table). */
+    public static EnemyType gearGateReferenceSoldier() { return GEAR_GATE_REFERENCE_SOLDIER; }
+
+    /** Display name of the gear-gate reference soldier. */
+    public static String gearGateReferenceSoldierName() { return GEAR_GATE_REFERENCE_SOLDIER.displayName(); }
+
+    /** Golden ratio of an archetype at a given depth against a player of the given sustained DPT. */
+    private static float gearGateGoldenRatio(EnemyType enemyType, int depth, float playerDamagePerTurn) {
+        float enemyEffectiveHitPoints = GameMath.effectiveHitPoints(enemyType.maxHealth(), 0f, 0f, 0f, 0f)
+                * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
+        int turnsToKill = GameMath.turnsToKill(enemyEffectiveHitPoints, playerDamagePerTurn);
+        float enemyDamagePerTurn = ((float) enemyType.attackDamage() / Math.max(1, enemyType.attackCadenceTurns()))
+                * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
+        int turnsToDie = GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP, enemyDamagePerTurn);
+        return GameMath.goldenRatio(turnsToDie, turnsToKill);
+    }
+
+    /** R-GEARGATE: the start is fair, the gate fires, and the on-curve player stays fair. */
+    public static List<RuleResult> gearGateResults() {
+        List<RuleResult> results = new ArrayList<>();
+        EnemyType soldier   = GEAR_GATE_REFERENCE_SOLDIER;
+        int region2Depth    = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE + 1; // first floor of region 2
+        float bandMin       = BalanceConfig.GOLDEN_RATIO_TRASH_MIN;
+        float bandMax       = BalanceConfig.GOLDEN_RATIO_TRASH_MAX;
+        float stagnantDpt   = BalanceConfig.REFERENCE_PLAYER_DPT; // never upgrades — keeps the depth-1 anchor
+        float expectedDpt   = GameMath.expectedPlayerDamagePerTurn(BalanceConfig.REFERENCE_PLAYER_DPT,
+                BalanceConfig.GEAR_CURVE_PER_REGION, region2Depth, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
+
+        // 1. START FAIR — stagnant golden ratio at depth 1 is inside the soldier band.
+        float startGolden = gearGateGoldenRatio(soldier, 1, stagnantDpt);
+        results.add(new RuleResult(RuleKind.GEAR_GATE, soldier.displayName() + " region-1 start fair",
+                startGolden, bandMin, bandMax, startGolden >= bandMin && startGolden <= bandMax,
+                "starting loadout (reference DPT " + BalanceConfig.REFERENCE_PLAYER_DPT + ") vs depth-1 soldier"));
+
+        // 2. GATE FIRES — the same stagnant player is now UNDER the band at the region-2 entry depth.
+        float stagnantGateGolden = gearGateGoldenRatio(soldier, region2Depth, stagnantDpt);
+        results.add(new RuleResult(RuleKind.GEAR_GATE, soldier.displayName() + " region-2 gate fires",
+                stagnantGateGolden, 0f, bandMin, stagnantGateGolden < bandMin,
+                "stagnant starting loadout vs region-2 (depth " + region2Depth + ") soldier must read UNDER the band"));
+
+        // 3. ON-CURVE FAIR — the expected (geared) player is back in band at the same depth.
+        float expectedGateGolden = gearGateGoldenRatio(soldier, region2Depth, expectedDpt);
+        results.add(new RuleResult(RuleKind.GEAR_GATE, soldier.displayName() + " region-2 on-curve fair",
+                expectedGateGolden, bandMin, bandMax,
+                expectedGateGolden >= bandMin && expectedGateGolden <= bandMax,
+                "expected DPT " + String.format("%.1f", expectedDpt) + " (reference * gearCurve) vs the same soldier"));
+
+        // Anchor check: gearCurve is 1.0 across all of region 1, so expected == reference at depth 1..5.
+        boolean anchorHeld = true;
+        for (int depth = 1; depth <= BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE; depth++) {
+            float expected = GameMath.expectedPlayerDamagePerTurn(BalanceConfig.REFERENCE_PLAYER_DPT,
+                    BalanceConfig.GEAR_CURVE_PER_REGION, depth, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
+            if (expected != BalanceConfig.REFERENCE_PLAYER_DPT) anchorHeld = false;
+        }
+        results.add(new RuleResult(RuleKind.GEAR_GATE, "region-1 anchor (expected == reference)",
+                anchorHeld ? 1f : 0f, 1f, 1f, anchorHeld,
+                "expectedPlayerDamagePerTurn(1.." + BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE
+                        + ") must equal REFERENCE_PLAYER_DPT exactly (the run begins on the curve)"));
+        return results;
+    }
+
+    // =====================================================================================
+    // R-ABILITY (new-game-balancr order 2) — TIER = a priced ABILITY BUDGET. Two guarantees:
+    //   (a) COVERAGE — every catalogued ability (standard and legendary signature) has a registered,
+    //       finite, non-negative PP price at every weapon level.
+    //   (b) BUDGET — no ROLLABLE ability alone exceeds the ceiling of the CHEAPEST tier that can roll
+    //       it, and the full roll never exceeds its tier ceiling (the WeaponRoller enforces the sum by
+    //       construction; BalanceAuditTest exercises real rolls across seeds/levels for the sum).
+    // The tier budgets (COMMON 0 | UNCOMMON 6 | RARE 12 | EPIC 20 | LEGENDARY 30, ±20%) live in
+    // BalanceConfig SECTION 15. Magnitudes may be tuned freely — the price recomputes from them.
+    // =====================================================================================
+
+    /** R-ABILITY: every ability is priced (coverage) and prices are finite/non-negative at all levels. */
+    public static List<RuleResult> abilityBudgetResults() {
+        List<RuleResult> results = new ArrayList<>();
+        float legendaryCeiling = BalanceConfig.TIER_ABILITY_PP_BUDGET_LEGENDARY
+                * (1f + BalanceConfig.TIER_ABILITY_PP_TOLERANCE);
+        for (WeaponAbility ability : WeaponAbility.values()) {
+            float maxPriceAcrossLevels = 0f;
+            boolean priced = true;
+            for (int weaponLevel = 1; weaponLevel <= WeaponConstants.MAX_WEAPON_LEVEL; weaponLevel++) {
+                AbilityInstance instance = WeaponRoller.buildAbilityInstance(ability, weaponLevel);
+                float price = GameMath.abilityPowerPoints(ability, instance.magnitude, instance.countValue);
+                if (Float.isNaN(price) || Float.isInfinite(price) || price < 0f) priced = false;
+                maxPriceAcrossLevels = Math.max(maxPriceAcrossLevels, price);
+            }
+            // No single ability may exceed the richest tier's ceiling — otherwise it could never roll.
+            boolean fitsSomewhere = maxPriceAcrossLevels <= legendaryCeiling;
+            results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "ability " + ability.name(),
+                    maxPriceAcrossLevels, 0f, legendaryCeiling, priced && fitsSomewhere,
+                    priced ? (fitsSomewhere ? "priced; max-level PP fits the legendary ceiling"
+                                            : "max-level PP EXCEEDS the legendary ceiling — no tier can roll it")
+                           : "UNPRICED — GameMath.abilityPowerPoints returned a non-finite/negative value"));
+        }
+        // Tier budgets must be monotonic non-decreasing with rarity (a richer tier is never poorer).
+        float previousBudget = -1f;
+        boolean monotonic = true;
+        for (WeaponTier tier : WeaponTier.values()) {
+            float budget = WeaponRoller.tierAbilityPowerPointBudget(tier);
+            if (budget < previousBudget) monotonic = false;
+            previousBudget = budget;
+        }
+        results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "tier budgets monotonic",
+                monotonic ? 1f : 0f, 1f, 1f, monotonic,
+                "TIER_ABILITY_PP_BUDGET_* must not decrease as rarity rises"));
         return results;
     }
 
