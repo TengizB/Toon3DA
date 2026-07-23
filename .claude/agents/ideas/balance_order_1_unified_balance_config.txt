@@ -213,7 +213,7 @@ SECTION 8 — STATUS / DOT MAGNITUDES (already in GameBalance, keep here)
   [ ] Add a header comment block: "SINGLE SOURCE OF TRUTH FOR BALANCE. Every
       number here changes difficulty or resource supply. Cosmetic values live
       in the *Constants files. Before adding a weapon/enemy/item, see
-      docs/balance-rule-system.txt (idea 2)."
+      docs/game-balance-authority.txt (idea 2)."
   [ ] Verify ./gradlew build is green (pure refactor; behavior unchanged).
   [ ] Confirm no remaining balance literal lives outside BalanceConfig:
       grep for numeric assignments of HP/damage/chance in the old files.

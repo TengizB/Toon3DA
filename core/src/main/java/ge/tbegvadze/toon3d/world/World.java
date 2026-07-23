@@ -2787,7 +2787,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         ge.tbegvadze.toon3d.entity.WeaponTier startRoomMaxTier =
                 GameBalance.START_ROOM_ANY_TIER_ENABLED
                         ? ge.tbegvadze.toon3d.entity.WeaponTier.LEGENDARY
-                        : ge.tbegvadze.toon3d.entity.WeaponTier.COMMON;
+                        : GameBalance.START_ROOM_OFFER_MAX_TIER;
 
         for (int offerIndex = 0; offerIndex < rangedOfferCount; offerIndex++) {
             Weapon     offeredWeapon = shuffledRanged.get(offerIndex);

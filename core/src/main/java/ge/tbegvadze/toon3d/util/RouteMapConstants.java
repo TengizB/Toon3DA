@@ -33,7 +33,7 @@ public final class RouteMapConstants {
      * gameplay feature. Set back to {@code false} (or delete the flag and its call sites) once boss
      * testing is done.
      */
-    public static final boolean BOSS_TEST_ALWAYS_CLICKABLE = true;
+    public static final boolean BOSS_TEST_ALWAYS_CLICKABLE = false;
 
     // -------------------------------------------------------------------------
     // Determinism
@@ -503,7 +503,7 @@ public final class RouteMapConstants {
     // These two nodes are the finite-ammo economy's release valves (roguelike_order_2): the
     // player routed HERE by choice, paying with a skipped ELITE reward, so both deliver an
     // unambiguous, deterministic-from-floorSeed payoff. Numbers tuned against
-    // docs/balance-rule-system.txt — enough to justify skipping a reward node, never so much
+    // docs/game-balance-authority.txt — enough to justify skipping a reward node, never so much
     // it removes scarcity. Both nodes stay honestly SAFE so the map's icon language is
     // trustworthy (a MYSTERY "med-bay ambush" is a DIFFERENT node, order-9).
 
@@ -546,7 +546,7 @@ public final class RouteMapConstants {
     // The "press your luck" side of the map that makes CACHE / REST (order-8) a real trade-off.
     // ELITE is a knowable, deliberate risk for a bigger reward; MYSTERY is an unknown box whose
     // expected value is deliberately NEUTRAL. Both are NodeLevelProfiles (order-7). Numbers tuned
-    // against docs/balance-rule-system.txt: ELITE must be beatable with the resources a careful
+    // against docs/game-balance-authority.txt: ELITE must be beatable with the resources a careful
     // player arrives with, punishing if routed here low — that IS the gamble the map sells.
 
     // ---- ELITE HOTZONE (RouteNodeType.ELITE, profile "elite_hotzone") ------

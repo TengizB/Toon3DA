@@ -24,14 +24,21 @@ package ge.tbegvadze.toon3d.util;
  * numbers moved. Folding the {@code *Constants} files away entirely (Strategy B) is
  * deferred to the balance rule-system idea (idea 2).
  *
- * <h2>Out of scope (deliberately NOT moved here)</h2>
- * Boss stats (Overseer / Corruptor / Hell Baron) remain in {@link EnemyConstants}; the
- * boss-balancing ruleset is idea 6. The per-weapon ability catalogue (crit chance, pierce,
- * lifesteal, etc.) remains in {@link GameBalance} pending idea 2's formula contract.
+ * <h2>Consolidation is COMPLETE (Balance Authority, new-game-balancr order 1)</h2>
+ * The formerly-scattered gameplay magnitudes now all live here: shared status-effect
+ * magnitudes (SECTION 8, previously {@link EffectConstants}), boss stats and boss AI
+ * tactic weights (SECTION 14, previously {@link EnemyConstants} / {@link GameBalance}),
+ * the whole weapon ABILITY catalogue (SECTION 15, previously {@link GameBalance}), and
+ * the shop economy (SECTION 16, previously {@link GameBalance}). The origin files keep
+ * re-export shims so call sites did not churn.
  *
- * <p>Before adding a weapon / enemy / item, consult the balance rule system (idea 2)
- * once it exists, and add the new tuning number HERE first, then reference it from the
- * matching {@code *Constants} file.
+ * <p>Every value in this file is constrained by the declarative rule schema in
+ * {@link BalanceSchema}; {@code BalanceAuditTest} runs that schema under
+ * {@code ./gradlew test} and FAILS THE BUILD when a value leaves its band without an
+ * explicit waiver. Before adding a weapon / enemy / item, read
+ * {@code docs/game-balance-authority.txt}, add the tuning number HERE first, declare its
+ * role/band in {@link BalanceSchema}, then reference it from the matching
+ * {@code *Constants} file.
  */
 public final class BalanceConfig {
 
@@ -82,7 +89,7 @@ public final class BalanceConfig {
     // (SECTION 9), encounter budget (SECTION 11), the scarcity DEMAND / ammo box sizes / reserve
     // caps (SECTION 5), and the heal magnitudes (SECTION 1) were ALL re-derived together so every
     // band still holds (verified via the standalone harness; not Gradle-built — proxy blocks the
-    // Android plugin). See docs/balance-rule-system.txt and balance-ideas-review.txt.
+    // Android plugin). See docs/game-balance-authority.txt and balance-ideas-review.txt.
 
     // GORE_BITER (spawn '3') — fast light melee; spawns in packs. (was 18 HP / 7 dmg)
     public static final int GORE_BITER_MAX_HEALTH          = 40;
@@ -158,7 +165,7 @@ public final class BalanceConfig {
     /**
      * Direct blast damage multiplier on scaledAttackDamage() if the countdown reaches zero. 16 * 3.0 =
      * 48 (~23% of the 205 reference eHP) — telegraphed for two full turns, so it is allowed to exceed
-     * the 25%-eHP cap for un-telegraphed hits (docs/balance-rule-system.txt TELEGRAPH & COUNTERPLAY).
+     * the 25%-eHP cap for un-telegraphed hits (docs/game-balance-authority.txt TELEGRAPH & COUNTERPLAY).
      */
     public static final float PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER = 3.0f;
     /** Hard cap on the blast hit regardless of depth/EMPOWERED scaling (~33% eHP, under the 35% boss cap). */
@@ -192,7 +199,7 @@ public final class BalanceConfig {
     // AFTER the iteration-2 economy rescale and were never entered into the balance contract, so their
     // Threat Points sat OUT of band while they were live in the EncounterBudgetPlanner fill pool
     // (corrupting every procedural floor's budget). Re-tuned so each lands in its role's TP band and
-    // golden ratio, verified by BalanceReport's ENEMIES table. See docs/balance-rule-system.txt.
+    // golden ratio, verified by BalanceReport's ENEMIES table. See docs/game-balance-authority.txt.
 
     // GHOUL (spawn '~') — slow shambling melee CHAFF; relentless but easily outpaced.
     // Was 30 HP / 9 dmg -> TP 10.8, UNDER the chaff band (16-34): under-costed filler. Raised to
@@ -248,7 +255,7 @@ public final class BalanceConfig {
     // BLOCK & DEFEND (strategy-combat-order-3) — the shared damage-absorption buffer.
     // When an enemy commits DEFEND it gains Block on its next turn; incoming damage is
     // subtracted from Block before HP (see the 5-step mitigation pipeline in
-    // docs/balance-rule-system.txt). Block is transient eHP priced at ~1 turn of survival
+    // docs/game-balance-authority.txt). Block is transient eHP priced at ~1 turn of survival
     // (baseBlock ≈ REFERENCE_PLAYER_DPT), so it never inflates a role's TTK out of its
     // golden-ratio band. Verified by BalanceReport's BLOCK section.
     // -------------------------------------------------------------------------
@@ -297,7 +304,7 @@ public final class BalanceConfig {
     // single enemy turn it buys, and it costs a whole turn of offense (a ~1 reference-DPT
     // opportunity cost). Because it does NOTHING vs flanks, its average value is
     // self-limiting in multi-enemy rooms, so it needs no hard cap the way Block does.
-    // Priced in docs/balance-rule-system.txt (GUARD note).
+    // Priced in docs/game-balance-authority.txt (GUARD note).
     // -------------------------------------------------------------------------
 
     /** Incoming-damage multiplier for a hit inside the front (facing) arc while guarding. Range: 0.25–0.5. */
@@ -400,7 +407,7 @@ public final class BalanceConfig {
     // Shotgun — high single-shot burst, 1-shell clip.
     // Was 50 (powerScore 28.0, OVER the 18-26 burst band — best sustained DPT AND best
     // ammo efficiency of the non-charge guns). Trimmed to 44 (powerScore 23.1, in band)
-    // so it no longer invalidates the other guns. See docs/balance-rule-system.txt.
+    // so it no longer invalidates the other guns. See docs/game-balance-authority.txt.
     public static final int   SHOTGUN_DAMAGE             = 44;
     public static final int   SHOTGUN_CLIP_SIZE          = 1;
     public static final int   SHOTGUN_RANGE_TILES        = 5;
@@ -449,7 +456,7 @@ public final class BalanceConfig {
     //       tightest reserve cap RAILGUN_MAX_SLUGS=8 — see SECTION 5), not by raw damage; and
     //   (2) the rescale made enemies far tankier (mini-elite 230 eHP), so a single big-burst slug
     //       is a genuine elite-buster niche — exactly what the heavy/charge role should own.
-    // Per docs/balance-rule-system.txt, nerfing the raw 90 would make it worthless rather than
+    // Per docs/game-balance-authority.txt, nerfing the raw 90 would make it worthless rather than
     // merely scarce, so the raw number is left intact deliberately.
     public static final int[] RAILGUN_DAMAGE_BY_CHARGE      = {0, 40, 90};
     public static final int   RAILGUN_RANGE_TILES           = 16;
@@ -528,13 +535,13 @@ public final class BalanceConfig {
     // floor, the rest coming from melee/avoidance. Pre-idea-3 these were ~6x too generous
     // (S ~= 5.8: a single weapon's ammo cleared the floor six times over). Regenerate the
     // scarcity living table with BalanceReport after any change here. See
-    // docs/balance-rule-system.txt and balance_order_3_resource_scarcity_economy.txt.
+    // docs/game-balance-authority.txt and balance_order_3_resource_scarcity_economy.txt.
     //
     // NOTE ON MAGNITUDE: the cuts are large because the weapon-damage / enemy-eHP economy
     // is high-damage / low-eHP (a single 44-dmg shell two-shots most chaff), so a whole
     // floor's DEMAND (~288 dmg at depth 1) is only ~6-12 ammo units. Scarce ammo therefore
     // means small boxes and low drop rates. Fully reconciling clip sizes with this economy
-    // is the deferred eHP/damage rescale flagged in docs/balance-rule-system.txt.
+    // is the deferred eHP/damage rescale flagged in docs/game-balance-authority.txt.
 
     // LEVER 2 — DROP SIZE: ammo box grants (rounds per pickup). RE-SCALED ~2.5x in the economy
     // rescale (idea-A, iteration 2): the model-floor DEMAND rose from 288 to 720 dmg (enemy eHP
@@ -641,7 +648,7 @@ public final class BalanceConfig {
     // they differ in KIND, not amount. Because each pick is budget-equal, the player's
     // TOTAL power at level L is L * LEVEL_UP_BUDGET_PP regardless of which cards were taken;
     // only its SHAPE differs. That is how build diversity stays inside the depth-coupling
-    // band (SECTION 9) for every build. See docs/balance-rule-system.txt (section [D]).
+    // band (SECTION 9) for every build. See docs/game-balance-authority.txt (section [D]).
     //
     // The three OLD flat boons (HP / armour / damage) survive as ONE card each, RE-PRICED
     // from their legacy magnitudes to ~LEVEL_UP_BUDGET_PP so they sit on the same curve as
@@ -714,8 +721,70 @@ public final class BalanceConfig {
 
     // =====================================================================================
     // SECTION 8 — STATUS / DOT MAGNITUDES (damage-over-time is damage; it counts toward TTK)
-    // Per-turn tick damage and durations for the damage-over-time effects.
+    // Per-turn tick damage and durations for every status effect, shared and weapon-applied.
+    // CONSOLIDATED (Balance Authority, order 1): the shared status magnitudes below moved in
+    // from EffectConstants (which keeps re-export shims and now holds only cosmetic values).
     // =====================================================================================
+
+    // --- THE UNIFIED DOT BASES. Exactly ONE definition per status — BalanceSchema's R-DOT
+    // rule fails the build if a second base definition appears. Before order 1 two divergent
+    // BURN definitions existed (EffectConstants said 4/turn — the value the game actually
+    // applied via StatusEffectController — while the Incendiary ability base said 3/turn).
+    // The EffectConstants value won; the Incendiary base now REFERENCES the unified base.
+    /** BURNING damage per turn — THE single burn base (hazard fire, enemy burns, Incendiary level 1). */
+    public static final int   BURN_DAMAGE_PER_TURN    = 4;
+    /** Minimum BURNING duration (turns) a burn application may roll. */
+    public static final int   BURN_DURATION_MIN       = 3;
+    /** Maximum BURNING duration (turns) a burn application may roll. */
+    public static final int   BURN_DURATION_MAX       = 5;
+    /** POISONED damage per stack per turn — THE single poison base (toxic pools, enemy acid). */
+    public static final int   POISON_DAMAGE_PER_STACK = 2;
+    /** Hard cap on concurrent POISONED stacks on one host. */
+    public static final int   POISON_MAX_STACKS       = 5;
+    /** POISONED duration (turns) per application (re-application refreshes and stacks). */
+    public static final int   POISON_DURATION         = 4;
+
+    // --- Shared status-effect magnitudes (moved from EffectConstants; gameplay, not cosmetic).
+    /** STUNNED duration (turns) for the standard stun application. */
+    public static final int   STUN_DURATION_DEFAULT   = 1;
+    /** STUNNED duration (turns) for heavy stun sources. */
+    public static final int   STUN_DURATION_HEAVY     = 2;
+    /** BLINDED duration (turns). */
+    public static final int   BLIND_DURATION          = 2;
+    /** SLOWED action-duration multiplier applied to the debuffed host. */
+    public static final float SLOW_FACTOR             = 2.0f;
+    /** SLOWED duration (turns). */
+    public static final int   SLOW_DURATION           = 3;
+    /** EMPOWERED outgoing-damage bonus percent. */
+    public static final int   EMPOWERED_DAMAGE_PERCENT = 50;
+    /** EMPOWERED duration (turns). */
+    public static final int   EMPOWERED_DURATION       = 5;
+    /** VULNERABLE incoming-damage bonus percent per stack. */
+    public static final int   VULNERABLE_DAMAGE_PERCENT = 50;
+    /** VULNERABLE duration (turns); re-application refreshes and adds a stack. */
+    public static final int   VULNERABLE_DURATION       = 2;
+    /** Hard cap on VULNERABLE stacks so a build can't multiply a boss into a trivial kill. */
+    public static final int   VULNERABLE_MAX_STACKS     = 2;
+    /** WEAK outgoing-damage reduction percent on the debuffed host. */
+    public static final int   WEAK_DAMAGE_PERCENT       = 25;
+    /** WEAK duration (turns). */
+    public static final int   WEAK_DURATION             = 2;
+    /** EXPOSED duration (turns): the next hit into the host ignores its Block, then clears. */
+    public static final int   EXPOSED_DURATION          = 2;
+    /** Bonus damage percent for a player hit landed from BEHIND an enemy's facing. */
+    public static final int   BACKSTAB_DAMAGE_PERCENT   = 30;
+
+    // --- Enemy status-application chances (moved from EffectConstants; gameplay).
+    /** Chance a Mire Wraith ranged hit applies POISONED. */
+    public static final float MIRE_WRAITH_POISON_CHANCE = 0.30f;
+    /** Chance an Acid Drone ranged hit applies POISONED. */
+    public static final float ACID_DRONE_POISON_CHANCE  = 0.75f;
+
+    // --- Explosive barrel hazard (moved from EffectConstants; gameplay).
+    /** Damage a detonating explosive barrel deals to hosts in its blast. */
+    public static final int   EXPLOSION_DAMAGE    = 12;
+    /** Hard ceiling on chained barrel detonations from one trigger. */
+    public static final int   EXPLOSION_CHAIN_MAX = 32;
 
     // Rend (BLEED DoT — on hit).
     public static final float REND_DAMAGE_PER_TURN_BASE      = 2f;
@@ -723,8 +792,9 @@ public final class BalanceConfig {
     public static final float REND_DAMAGE_PER_TURN_CAP       = 6f;
     public static final int   REND_DURATION_TURNS            = 4;
 
-    // Incendiary (BURN DoT — on hit).
-    public static final float INCENDIARY_BURN_PER_TURN_BASE      = 3f;
+    // Incendiary (BURN DoT — on hit). The level-1 base IS the unified burn base above (was a
+    // divergent literal 3f before order 1; the game's applied value 4 won the unification).
+    public static final float INCENDIARY_BURN_PER_TURN_BASE      = BURN_DAMAGE_PER_TURN;
     public static final float INCENDIARY_BURN_PER_TURN_PER_LEVEL = 0.5f;
     public static final float INCENDIARY_BURN_PER_TURN_CAP       = 7f;
     public static final int   INCENDIARY_BURN_DURATION           = 3;
@@ -741,7 +811,7 @@ public final class BalanceConfig {
     // SECTION 9 — BALANCE RULE SYSTEM ANCHORS & BANDS (the math contract, idea 2)
     // The reference yardsticks every contract formula in GameMath compares against, plus
     // the per-role POWER and THREAT-POINT bands a new weapon / enemy must land inside.
-    // See docs/balance-rule-system.txt for the full contract and the living table
+    // See docs/game-balance-authority.txt for the full contract and the living table
     // (regenerate the table with BalanceReport whenever any number above changes).
     // =====================================================================================
 
@@ -836,7 +906,7 @@ public final class BalanceConfig {
     // The bands the scarcity contract checks against, plus the canonical MODEL FLOOR — a
     // fixed depth-1 reference encounter whose SUPPLY/DEMAND, scarcity ratio S, and net HP
     // drain are computed by GameMath and printed by BalanceReport. The SECTION 5 levers are
-    // tuned against this model floor. See docs/balance-rule-system.txt and
+    // tuned against this model floor. See docs/game-balance-authority.txt and
     // .claude/agents/ideas/balance_order_3_resource_scarcity_economy.txt.
     // =====================================================================================
 
@@ -857,6 +927,16 @@ public final class BalanceConfig {
     // the run stays survivable. Net drain as a fraction of reference eHP must land in band.
     public static final float HEAL_NET_DRAIN_FRACTION_MIN = 0.05f;
     public static final float HEAL_NET_DRAIN_FRACTION_MAX = 0.15f;
+
+    // --- HEAL PRICING BANDS (Balance Authority R-HEAL): every heal/armour pickup is priced in
+    // SURVIVAL TURNS BOUGHT = pickupValue / averageIncomingDamagePerTurn on the model floor
+    // (GameMath.survivalTurnsBought). Small pickups ('+' stim, 'a' shard) buy a few turns; large
+    // pickups ('H' medkit, 'A' vest) buy most of a fight but never a full reset. A pickup outside
+    // its band is either worthless filler (under) or removes the resource decision (over).
+    public static final float HEAL_SMALL_SURVIVAL_TURNS_MIN = 2f;
+    public static final float HEAL_SMALL_SURVIVAL_TURNS_MAX = 6f;
+    public static final float HEAL_LARGE_SURVIVAL_TURNS_MIN = 8f;
+    public static final float HEAL_LARGE_SURVIVAL_TURNS_MAX = 16f;
 
     // --- THE MODEL FLOOR (depth 1) — the worked reference encounter from idea 3.
     // Enemy composition (DEMAND = sum of these enemies' eHP). At depth 1 eHP == raw HP. After the
@@ -1011,7 +1091,7 @@ public final class BalanceConfig {
     // Bosses break the trash-mob threat math (a single entity meant to survive many turns
     // and threaten a PREPARED player), so the SECTION 9 golden-ratio / TP bands do NOT apply
     // to them. A boss is tuned to a fight-LENGTH target and a phase-structured threat curve
-    // instead — see GameMath's BOSS BALANCE RULESET block and docs/balance-rule-system.txt
+    // instead — see GameMath's BOSS BALANCE RULESET block and docs/game-balance-authority.txt
     // (Boss appendix). Boss FIGHTS are deferred (they need story/run structure), so these are
     // a CONTRACT the future boss work must satisfy: the targets/bands below feed the boss
     // formulas to RE-DERIVE boss HP/damage/reward, never to bless a literal HP constant. The
@@ -1068,4 +1148,273 @@ public final class BalanceConfig {
     // --- RULE 6: reward priced by consumption * a risk premium (so a boss REFUNDS the fight + profit).
     /** Profit margin a boss pays over the ammo+heal resources its fight consumes (> 1, never a net loss). Range: 1.2–1.6. */
     public static final float BOSS_REWARD_RISK_PREMIUM             = 1.3f;
+
+    // -------------------------------------------------------------------------------------
+    // BOSS STATS — CONSOLIDATED from EnemyConstants / GameBalance (Balance Authority, order 1).
+    // Every number below is still a FLAT PLACEHOLDER flagged "to be re-derived via the boss
+    // ruleset above" (order 6 of this series); moving them here makes them tunable from the
+    // single source of truth and visible to the schema. Cosmetic boss values (accent colours,
+    // texture paths, telegraph visuals) stay in EnemyConstants.
+    // -------------------------------------------------------------------------------------
+
+    // Boss rewards (PLACEHOLDERS — RULE 6 re-derives these as consumption * risk premium).
+    public static final int   XP_REWARD_BOSS_BASE     = 500;
+    public static final int   CREDIT_REWARD_BOSS_BASE = 250;
+
+    // The Overseer (depth 5) — security core robot; laser lanes + melee charge.
+    public static final int   OVERSEER_MAX_HP               = 250;
+    public static final int   OVERSEER_DEPTH                = 5;
+    public static final int   OVERSEER_LASER_DAMAGE         = 20;
+    public static final int   OVERSEER_CHARGE_DAMAGE        = 30;
+    public static final int   OVERSEER_RAM_COOLDOWN         = 3;
+    public static final int   OVERSEER_CHARGE_RANGE_TILES   = 5;
+    public static final int   OVERSEER_CHARGE_RECOVERY_TURNS = 1;
+    public static final int   OVERSEER_ADDS_CAP             = 4;
+    public static final int   OVERSEER_SUMMON_COUNT         = 2;
+    public static final int   OVERSEER_MELEE_DAMAGE         = 14;
+    public static final int   OVERSEER_FIRE_LANE_LENGTH     = 3;
+    public static final int   OVERSEER_TOXIC_RADIUS         = 1;
+    public static final float OVERSEER_HEAL_HP_THRESHOLD    = 0.35f;
+    public static final int   OVERSEER_HEAL_TURNS           = 5;
+    public static final int   OVERSEER_HEAL_PER_TURN        = 12;
+
+    // The Corruptor (depth 10) — mutated scientist; summoner + acid burst.
+    public static final int   CORRUPTOR_MAX_HP              = 450;
+    public static final int   CORRUPTOR_DEPTH               = 10;
+    public static final int   CORRUPTOR_SUMMON_COOLDOWN     = 3;
+    public static final int   CORRUPTOR_MINION_CAP          = 5;
+    public static final int   CORRUPTOR_ACID_DAMAGE         = 15;
+    public static final int   CORRUPTOR_ACID_POOL_DURATION  = 3;
+
+    // Hell Baron (depth 15) — armored greater demon; firewall + enrage.
+    public static final int   HELL_BARON_MAX_HP             = 700;
+    public static final int   HELL_BARON_DEPTH              = 15;
+    public static final int   HELL_BARON_FIREWALL_COOLDOWN_P1 = 4;
+    public static final int   HELL_BARON_FIREWALL_COOLDOWN_P2 = 2;
+    public static final int   HELL_BARON_FIREWALL_DURATION  = 4;
+    public static final int   HELL_BARON_FIRE_DAMAGE        = 12;
+    public static final int   HELL_BARON_CLEAVE_DAMAGE_P1   = 35;
+    public static final int   HELL_BARON_CLEAVE_DAMAGE_P2   = 52;
+
+    // Overseer Hunter-Killer brain tactic weights (moved from GameBalance; boss AI aggression
+    // is a difficulty dial). BOSS_TACTIC_DEBUG_LOG stays in GameBalance (dev instrumentation).
+    public static final int   BOSS_TACTIC_SCORE_BASE        = 10;
+    public static final int   BOSS_TACTIC_SCORE_CLOSE_RANGE = 6;
+    public static final int   BOSS_TACTIC_SCORE_FAR_RANGE   = 6;
+    public static final int   BOSS_TACTIC_SCORE_ADDS_ROOM   = 4;
+    public static final int   BOSS_TACTIC_SCORE_CORNERED    = 5;
+    public static final int   BOSS_TACTIC_SCORE_CAMPING     = 6;
+    public static final int   BOSS_TACTIC_CLOSE_RANGE_TILES = 3;
+    public static final int   BOSS_TACTIC_CAMP_TURNS        = 3;
+    public static final int   BOSS_TACTIC_CORNERED_EXITS    = 1;
+    public static final int   BOSS_TACTIC_RANDOM_TIEBREAK   = 3;
+    public static final int   BOSS_TACTIC_CHARGE_GAP_PHASE1 = 3;
+    public static final int   BOSS_TACTIC_SUMMON_GAP_PHASE1 = 4;
+    public static final int   BOSS_TACTIC_HAZARD_GAP_PHASE1 = 2;
+    public static final int   BOSS_TACTIC_CHARGE_GAP_PHASE2 = 1;
+    public static final int   BOSS_TACTIC_SUMMON_GAP_PHASE2 = 2;
+    public static final int   BOSS_TACTIC_HAZARD_GAP_PHASE2 = 1;
+    public static final float BOSS_TACTIC_LAST_STAND_HP_FRACTION = 0.15f;
+
+    // =====================================================================================
+    // SECTION 15 — WEAPON ABILITY MAGNITUDES (the ability catalogue)
+    // CONSOLIDATED from GameBalance (Balance Authority, order 1). BASE / PER_LEVEL / CAP for
+    // every rollable weapon ability. All values remain PLAYTESTING PLACEHOLDERS — order 1
+    // moves them into the single source of truth; pricing them against the contract is a
+    // later order in this series. GameBalance keeps re-export shims.
+    // =====================================================================================
+
+    // ── Critical Strike ──
+    public static final float CRIT_CHANCE_BASE            = 0.05f;
+    public static final float CRIT_CHANCE_PER_LEVEL       = 0.015f;
+    public static final float CRIT_CHANCE_CAP             = 0.30f;
+
+    // ── Armor Pierce (bypasses a fraction of the target's Block) ──
+    public static final float ARMOR_PIERCE_BASE           = 0.20f;
+    public static final float ARMOR_PIERCE_PER_LEVEL      = 0.05f;
+    public static final float ARMOR_PIERCE_CAP            = 0.60f;
+
+    // ── Executioner (bonus vs low-HP targets) ──
+    public static final float EXECUTIONER_THRESHOLD       = 0.25f;
+    public static final float EXECUTIONER_BONUS_BASE      = 0.30f;
+    public static final float EXECUTIONER_BONUS_PER_LEVEL = 0.06f;
+    public static final float EXECUTIONER_BONUS_CAP       = 0.80f;
+
+    // ── Stagger Rounds (stun on hit) ──
+    public static final float STAGGER_CHANCE_BASE         = 0.08f;
+    public static final float STAGGER_CHANCE_PER_LEVEL    = 0.02f;
+    public static final float STAGGER_CHANCE_CAP          = 0.35f;
+
+    // ── Overpenetration ──
+    public static final int   OVERPENETRATION_BASE_COUNT              = 1;
+    public static final int   OVERPENETRATION_LEVELS_PER_STEP         = 3;
+    public static final int   OVERPENETRATION_MAX_COUNT               = 3;
+    public static final float OVERPENETRATION_ALREADY_PIERCING_BONUS  = 0.25f;
+
+    // ── Lifesteal ──
+    public static final float LIFESTEAL_BASE              = 0.06f;
+    public static final float LIFESTEAL_PER_LEVEL         = 0.015f;
+    public static final float LIFESTEAL_CAP               = 0.20f;
+
+    // ── Hemorrhage Harvest (on-kill HP) ──
+    public static final float HEMORRHAGE_HP_BASE          = 3f;
+    public static final float HEMORRHAGE_HP_PER_LEVEL     = 0.7f;
+    public static final int   HEMORRHAGE_HP_CAP           = 12;
+
+    // ── Vampiric Crit ──
+    public static final float VAMPIRIC_CRIT_HP_BASE       = 4f;
+    public static final float VAMPIRIC_CRIT_HP_PER_LEVEL  = 1.0f;
+    public static final int   VAMPIRIC_CRIT_HP_CAP        = 14;
+
+    // ── Adrenal Surge ──
+    public static final float ADRENAL_SURGE_CHANCE_BASE      = 0.10f;
+    public static final float ADRENAL_SURGE_CHANCE_PER_LEVEL = 0.03f;
+    public static final float ADRENAL_SURGE_CHANCE_CAP       = 0.40f;
+    public static final float ADRENAL_SURGE_DAMAGE_BONUS     = 0.30f;
+
+    // ── Bulwark Rounds (temp armour on reload) ──
+    public static final float BULWARK_ARMOR_BASE          = 2f;
+    public static final float BULWARK_ARMOR_PER_LEVEL     = 0.5f;
+    public static final int   BULWARK_ARMOR_CAP           = 8;
+    public static final int   BULWARK_ARMOR_DURATION      = 3;
+
+    // ── Second Wind (low-HP damage bonus) ──
+    public static final float SECOND_WIND_HP_THRESHOLD    = 0.30f;
+    public static final float SECOND_WIND_BONUS_BASE      = 0.25f;
+    public static final float SECOND_WIND_BONUS_PER_LEVEL = 0.05f;
+    public static final float SECOND_WIND_BONUS_CAP       = 0.75f;
+
+    // ── Kinetic Slam (melee) ──
+    public static final float KINETIC_SLAM_CHANCE_BASE       = 0.20f;
+    public static final float KINETIC_SLAM_CHANCE_PER_LEVEL  = 0.04f;
+    public static final float KINETIC_SLAM_CHANCE_CAP        = 0.60f;
+    public static final int   KINETIC_SLAM_WALL_BONUS_DAMAGE = 3;
+
+    // ── Cleave (melee) ──
+    public static final float CLEAVE_FRACTION_BASE      = 0.40f;
+    public static final float CLEAVE_FRACTION_PER_LEVEL = 0.05f;
+    public static final float CLEAVE_FRACTION_CAP       = 0.80f;
+
+    // ── Salvage Strike (melee, on-kill ammo) ──
+    public static final float SALVAGE_CHANCE_BASE      = 0.50f;
+    public static final float SALVAGE_CHANCE_PER_LEVEL = 0.06f;
+    public static final float SALVAGE_CHANCE_CAP       = 1.00f;
+
+    // ── Scholar's Edge (melee, on-kill XP) ──
+    public static final float SCHOLARS_XP_BONUS_BASE      = 0.15f;
+    public static final float SCHOLARS_XP_BONUS_PER_LEVEL = 0.05f;
+    public static final float SCHOLARS_XP_BONUS_CAP       = 0.75f;
+
+    // ── Berserker's Oath (legendary, melee) ──
+    public static final float BERSERKER_DAMAGE_PER_STACK  = 0.10f;
+    public static final int   BERSERKER_HP_TICK_PER_STACK = 1;
+    public static final int   BERSERKER_MAX_STACKS        = 5;
+
+    // ── Scavenger Rounds (gun, on-kill ammo refund) ──
+    public static final float SCAVENGER_CHANCE_BASE          = 0.15f;
+    public static final float SCAVENGER_CHANCE_PER_LEVEL     = 0.03f;
+    public static final float SCAVENGER_CHANCE_CAP           = 0.50f;
+    public static final int   SCAVENGER_REFUND_BASE          = 1;
+    public static final int   SCAVENGER_REFUND_HIGH_LEVEL    = 2;
+    public static final int   SCAVENGER_HIGH_LEVEL_THRESHOLD = 7;
+
+    // ── Field Medic Rounds (on-kill medkit drop) ──
+    public static final float FIELD_MEDIC_CHANCE_BASE        = 0.05f;
+    public static final float FIELD_MEDIC_CHANCE_PER_LEVEL   = 0.02f;
+    public static final float FIELD_MEDIC_CHANCE_CAP         = 0.25f;
+
+    // ── Credit Fang (on-kill credits) ──
+    public static final float CREDIT_FANG_BASE               = 2f;
+    public static final float CREDIT_FANG_PER_LEVEL          = 1f;
+    public static final int   CREDIT_FANG_CAP                = 12;
+
+    // ── Point Blank ──
+    public static final float POINT_BLANK_BONUS_BASE      = 0.20f;
+    public static final float POINT_BLANK_BONUS_PER_LEVEL = 0.05f;
+    public static final float POINT_BLANK_BONUS_CAP       = 0.70f;
+    public static final int   POINT_BLANK_MAX_DISTANCE    = 1;
+
+    // ── Marksman's Patience ──
+    public static final float MARKSMAN_PER_TILE_BASE      = 0.05f;
+    public static final float MARKSMAN_PER_TILE_PER_LEVEL = 0.01f;
+    public static final float MARKSMAN_PER_TILE_CAP       = 0.12f;
+    public static final int   MARKSMAN_MIN_DISTANCE       = 2;
+    public static final float MARKSMAN_TOTAL_BONUS_CAP    = 0.60f;
+
+    // ── Opening Salvo ──
+    public static final float OPENING_SALVO_BONUS_BASE      = 0.30f;
+    public static final float OPENING_SALVO_BONUS_PER_LEVEL = 0.07f;
+    public static final float OPENING_SALVO_BONUS_CAP       = 0.90f;
+
+    // ── Rhythm / Heat-Up ──
+    public static final float RHYTHM_RAMP_PER_HIT_BASE      = 0.06f;
+    public static final float RHYTHM_RAMP_PER_HIT_PER_LEVEL = 0.01f;
+    public static final float RHYTHM_RAMP_PER_HIT_CAP       = 0.15f;
+    public static final int   RHYTHM_MAX_STACKS             = 5;
+
+    // ── Static Discharge ──
+    public static final float STATIC_SPLASH_BASE      = 4f;
+    public static final float STATIC_SPLASH_PER_LEVEL = 1f;
+    public static final int   STATIC_SPLASH_CAP       = 14;
+
+    // ── Resonant Rounds (% of target max HP) ──
+    public static final float RESONANT_PCT_BASE      = 0.04f;
+    public static final float RESONANT_PCT_PER_LEVEL = 0.008f;
+    public static final float RESONANT_PCT_CAP       = 0.10f;
+
+    // ── Legendary signatures ──
+    public static final int   SOULFORGE_KILLS_PER_LEVEL_UP  = 5;
+    public static final int   JUDGMENT_COOLDOWN_FIRES       = 5;
+    public static final int   JUDGMENT_LANCE_RANGE          = 20;
+    public static final float JUDGMENT_DAMAGE_MULTIPLIER    = 3.0f;
+    public static final int   HELLFIRE_NOVA_RADIUS          = 2;
+    public static final float HELLFIRE_NOVA_DAMAGE_FRACTION = 0.75f;
+
+    // ── Extended Mag ──
+    public static final int   EXTENDED_MAG_BASE_COUNT      = 1;
+    public static final int   EXTENDED_MAG_LEVELS_PER_STEP = 3;
+    public static final int   EXTENDED_MAG_MAX_COUNT       = 4;
+
+    // =====================================================================================
+    // SECTION 16 — SHOP ECONOMY (UAC Fabricator)
+    // CONSOLIDATED from GameBalance (Balance Authority, order 1). Stock size, category
+    // weights, base prices, and the depth/rarity price scaling. The credit economy is still
+    // flagged provisional (the sink is unproven in play — knowledge doc SECTION 12), but its
+    // numbers now live in the single source of truth. Machine PLACEMENT geometry
+    // (SHOP_TWO_MACHINE_MIN_SPACING) stays in GameBalance — layout, not economy.
+    // =====================================================================================
+
+    /** Minimum UAC Fabricator machines per non-boss floor (guaranteed credit sink). */
+    public static final int   SHOP_MIN_PER_FLOOR            = 1;
+    /** Maximum machines per floor. */
+    public static final int   SHOP_MAX_PER_FLOOR            = 2;
+    /** Probability a floor rolls the second machine. */
+    public static final float SHOP_SECOND_MACHINE_CHANCE    = 0.40f;
+
+    // Stock roll — offers per machine and weighted category pool for the remainder slots.
+    public static final int   SHOP_ENTRY_MIN                 = 9;
+    public static final int   SHOP_ENTRY_MAX                 = 9;
+    public static final int   SHOP_CAT_WEIGHT_WEAPON_LEVELUP = 26;
+    public static final int   SHOP_CAT_WEIGHT_AMMO           = 24;
+    public static final int   SHOP_CAT_WEIGHT_MEDKIT         = 18;
+    public static final int   SHOP_CAT_WEIGHT_ABILITY        = 16;
+    public static final int   SHOP_CAT_WEIGHT_TIER_UPGRADE   = 16;
+    /** Weight multiplier applied to the favoured category group when a machine is biased. */
+    public static final float SHOP_BIAS_WEIGHT_MULTIPLIER    = 2.0f;
+
+    // Pricing — price = round(base * depthFactor * rarityFactor).
+    public static final float SHOP_DEPTH_PRICE_SCALE         = 0.10f;
+    public static final float SHOP_RARITY_PRICE_MULT_COMMON  = 1.0f;
+    public static final float SHOP_RARITY_PRICE_MULT_RARE    = 1.6f;
+    public static final float SHOP_RARITY_PRICE_MULT_EPIC    = 2.4f;
+    public static final float SHOP_REPEAT_LEVELUP_SURCHARGE  = 0.35f;
+    public static final int   SHOP_BASE_PRICE_MEDKIT_STIM    = 35;
+    public static final int   SHOP_BASE_PRICE_MEDKIT_FIELD   = 80;
+    public static final int   SHOP_BASE_PRICE_AMMO_SMALL     = 40;
+    public static final int   SHOP_BASE_PRICE_AMMO_LARGE     = 90;
+    public static final int   SHOP_BASE_PRICE_WEAPON_LEVELUP = 110;
+    public static final int   SHOP_BASE_PRICE_PLAYER_ABILITY = 150;
+    public static final int   SHOP_BASE_PRICE_TIER_UPGRADE   = 240;
+    /** Ammo "large box" multiplier over the standard box size. */
+    public static final int   SHOP_AMMO_LARGE_BOX_MULTIPLIER = 2;
 }

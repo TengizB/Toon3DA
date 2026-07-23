@@ -170,7 +170,7 @@ PLAYER GUARD VISUALS (the mandatory visual communication)
 BALANCE CONTRACT
 ================
 Guard is transient, CONDITIONAL eHP (only vs the front arc, only for one turn, costs
-a whole turn). Price it in docs/balance-rule-system.txt:
+a whole turn). Price it in docs/game-balance-authority.txt:
     guardedFrontHitDamage = incoming * GUARD_FRONT_MULTIPLIER
     turnsBought(front) = it converts a would-be lethal front turn into a survivable
         one, at the cost of the offense you didn't do that turn (an opportunity cost of

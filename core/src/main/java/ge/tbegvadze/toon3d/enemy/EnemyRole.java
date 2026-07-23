@@ -7,7 +7,7 @@ import ge.tbegvadze.toon3d.util.BalanceConfig;
  * Pillar 1). A role bundles two things the floor generator needs:
  *
  *   1. The Threat-Point band the archetype is balanced against (see the balance contract,
- *      docs/balance-rule-system.txt, section [B]). The generator never reads these bands at
+ *      docs/game-balance-authority.txt, section [B]). The generator never reads these bands at
  *      runtime, but they document which band each role belongs to so the living table and the
  *      encounter planner agree.
  *   2. Whether the role is an ENCOUNTER ANCHOR — a bruiser or mini-elite that defines a floor's

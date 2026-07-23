@@ -45,7 +45,7 @@ Consequences that everything below depends on:
     in enemy/EnemyManager.java. This is a HARD design rule, not a tuning number,
     but it shapes every ranged threat's real-world DPT.
 
-Docs: docs/tick-system.txt, docs/doom-rpg-reference.txt, docs/balance-rule-system.txt.
+Docs: docs/tick-system.txt, docs/doom-rpg-reference.txt, docs/game-balance-authority.txt.
 
 ⚠️ Not-good note: because everything is turn-exact, a single mis-set constant
 propagates cleanly through the whole model — which is why so many sections below
@@ -92,31 +92,42 @@ THE MATH:
     game code. This is where the four primitives and all derived scores live.
 
 THE OTHER BALANCE-BEARING CONSTANT FILES (all re-export from BalanceConfig):
-  util/GameBalance.java       XP rewards, depth-scale helpers, melee stats, the
-                              per-weapon ABILITY catalogue (crit/pierce/lifesteal/
-                              DoT/economy/legendary), stat system caps + bases,
-                              level-up card magnitudes, shop stock/pricing, boss
-                              AI tactic weights (Overseer Hunter-Killer brain).
-  util/EnemyConstants.java    Boss stats (Overseer/Corruptor/Hell Baron — flat
-                              PLACEHOLDERS), special-move-set cadences, buff/debuff
-                              magnitudes, health-bar geometry (cosmetic).
+  util/GameBalance.java       XP rewards, depth-scale helpers, melee stats, stat
+                              system caps + bases; the ABILITY catalogue, shop
+                              economy, boss rewards, and boss AI tactic weights are
+                              now RE-EXPORT SHIMS of BalanceConfig SECTIONs 14-16
+                              (new-game-balancr order 1).
+  util/EnemyConstants.java    Boss stats now RE-EXPORT SHIMS of BalanceConfig
+                              SECTION 14 (still flat PLACEHOLDERS by value);
+                              special-move-set cadences, buff/debuff magnitudes,
+                              health-bar geometry (cosmetic).
   util/WeaponConstants.java   Per-weapon stats (re-exported), HUD/timing/cosmetic.
   util/ItemConstants.java     Heal/armour values (re-exported), stack caps, ammo.
   util/LevelGenConstants.java Loot/enemy density + per-room budgets (re-exported).
-  util/EffectConstants.java   Status-effect gameplay magnitudes: BURN/POISON per
-                              turn, EMPOWERED/VULNERABLE/WEAK/EXPOSED/BACKSTAB,
-                              SLOW/BLIND durations. (Mostly NOT mirrored into
-                              BalanceConfig — see the "not-good note" below.)
+  util/EffectConstants.java   Now COSMETIC ONLY plus re-export shims: the shared
+                              status magnitudes (BURN/POISON, EMPOWERED/VULNERABLE/
+                              WEAK/EXPOSED/BACKSTAB, SLOW/BLIND/STUN, poison-apply
+                              chances, barrel explosion) moved into BalanceConfig
+                              SECTION 8 (new-game-balancr order 1).
   util/Constants.java         Core world/grid/FOV/ray constants; a few gameplay
                               knobs re-export from BalanceConfig.
   util/RouteMapConstants.java Endless-descent structure: region bands, per-region
                               node-type/generator weight multipliers, boss cadence.
   util/IntentConstants.java   Enemy intent telegraph timing/display (fairness).
-  util/BalanceReport.java     DEV-ONLY auditor. Regenerates the living tables from
-                              the CURRENT BalanceConfig through GameMath.
+  util/BalanceSchema.java     LAYER 2 of the Balance Authority: the declarative
+                              rule registry (roles/bands/waivers/coverage) every
+                              BalanceConfig value must satisfy. See
+                              docs/game-balance-authority.txt.
+  util/BalanceReport.java     DEV-ONLY auditor — the human-readable VIEW of the
+                              schema. Regenerates the living tables (incl. the
+                              WAIVERS table) from the CURRENT BalanceConfig.
+  core test source set:
+  util/BalanceAuditTest.java  LAYER 3 — ENFORCEMENT: runs every schema rule under
+                              `./gradlew test` and FAILS THE BUILD on any unwaived
+                              violation, live test flag, or unpriced content.
 
 THE DOCS:
-  docs/balance-rule-system.txt   THE balance contract (four primitives, bands,
+  docs/game-balance-authority.txt   THE balance contract (four primitives, bands,
                                  checklists, depth coupling, scarcity, encounter
                                  budget, hazards, telegraph, boss appendix, living
                                  tables). This is the most important companion doc.
@@ -128,12 +139,16 @@ THE DOCS:
   Idea files: .claude/agents/ideas/balance_order_2..6_*.txt and
               .claude/agents/ideas/balance-ideas-review.txt (design intent).
 
-⚠️ Not-good note: the "single source of truth" is only ~90% true. EffectConstants
-status magnitudes (burn/poison/empowered/vulnerable/weak/backstab), the whole
-GameBalance ABILITY CATALOGUE (crit, pierce, lifesteal, etc.), the shop economy,
-and every BOSS number are STILL scattered outside BalanceConfig and many are
-explicitly labelled PLACEHOLDER. So balance is NOT actually tunable from one
-screen yet. Consolidating these is unfinished work.
+RESOLVED (new-game-balancr order 1): the "single source of truth" is now COMPLETE.
+EffectConstants status magnitudes, the whole GameBalance ABILITY CATALOGUE (now
+BalanceConfig SECTION 15), the shop economy (SECTION 16), and the boss stats +
+boss AI tactic weights (SECTION 14) all moved INTO BalanceConfig; the origin files
+keep re-export shims. Enforcement: util/BalanceSchema.java (declarative rules) +
+BalanceAuditTest (fails `./gradlew test` on any unwaived out-of-band value, any
+divergent shim, any live TEST/DEBUG flag, and any unclassified/unpriced content).
+Governance doc: docs/game-balance-authority.txt. Note: many consolidated values
+(abilities, shop, bosses) are still PLACEHOLDER numbers awaiting their own orders
+— consolidation made them tunable and visible, not correct.
 
 
 ================================================================================
@@ -204,7 +219,7 @@ Heals (HP/armour is a RESOURCE — see SECTION 12):
    incoming damage. A heal is priced in "turns of survival bought" — SECTION 12.)
 
 The five-step DAMAGE-MITIGATION PIPELINE (single source of truth; every actor
-resolves damage in EXACTLY this order — GameMath, docs/balance-rule-system.txt):
+resolves damage in EXACTLY this order — GameMath, docs/game-balance-authority.txt):
   1. Directional/Guard modifier (player only): D' = D * facingMultiplier
   2. Power/positioning modifiers (if present): D'' = D' * weak*vulnerable*backstab
      (EXPOSED is not a multiplier — it sets ignoreBlock for step 3, one hit.)
@@ -301,15 +316,18 @@ Legendary:       Soulforge (self-leveling), Judgment (periodic lance x3.0),
 
 Weapon tiers / roll config (GameBalance, weapon-system-order-11):
   RUN_START_WEAPON_TIER = COMMON, LEVEL 1.
-  START_ROOM_OFFER_MIN/MAX_TIER = COMMON..UNCOMMON (START_ROOM_ANY_TIER_ENABLED=true
-  currently overrides this to allow any tier — a TEST flag left on).
+  START_ROOM_OFFER_MIN/MAX_TIER = COMMON..UNCOMMON (START_ROOM_ANY_TIER_ENABLED is
+  FALSE — the old any-tier TEST leak was closed by new-game-balancr order 1, and the
+  R-FLAGS schema rule fails the build if any TEST/DEBUG flag ships true).
 
 ⚠️ Not-good note: this entire catalogue is unpriced against the contract. The
-balance-rule-system prices LEVEL-UP CARDS in power points, but weapon ABILITIES
+authority schema prices LEVEL-UP CARDS in power points, but weapon ABILITIES
 have NO equivalent power-budget check — a legendary with several stacked abilities
-can push a weapon's EFFECTIVE power far past its band, silently. START_ROOM_ANY_
-TIER_ENABLED=true means players can currently roll legendaries at run start. These
-are among the least-balanced numbers in the game and are self-labelled placeholders.
+can push a weapon's EFFECTIVE power far past its band, silently. (The catalogue's
+VALUES were consolidated into BalanceConfig SECTION 15 by new-game-balancr order 1,
+and START_ROOM_ANY_TIER_ENABLED is now FALSE and enforced false by the R-FLAGS
+audit rule — but pricing the abilities themselves is still open.) These are among
+the least-balanced numbers in the game and are self-labelled placeholders.
 
 
 ================================================================================
@@ -412,7 +430,7 @@ moment an armoured archetype is added.
 SECTION 8 — ENEMY ABILITIES & SPECIAL MOVE-SETS (threat beyond raw stats)
 ================================================================================
 Files: EnemyConstants (cadences + magnitudes), EffectConstants (status), GameBalance
-(boss AI weights), enemy/EnemyManager.java. docs/balance-rule-system.txt (Pillars).
+(boss AI weights), enemy/EnemyManager.java. docs/game-balance-authority.txt (Pillars).
 
 Enemy intent / telegraph: every enemy COMMITS its next action at end of turn; the
 player reads that PlannedAction for the whole next turn. So EVERY direct attack —
@@ -459,7 +477,7 @@ SECTION 9 — BOSSES (a separate ruleset; fights deferred)
 ================================================================================
 Files: EnemyConstants (stats — FLAT PLACEHOLDERS), BalanceConfig SECTION 14
 (the ruleset bands), GameMath (BOSS BALANCE RULESET block), GameBalance
-(XP/CREDIT_REWARD_BOSS_BASE placeholders), docs/balance-rule-system.txt (appendix).
+(XP/CREDIT_REWARD_BOSS_BASE placeholders), docs/game-balance-authority.txt (appendix).
 
 Bosses break the trash-mob math (a single entity meant to survive many turns vs a
 PREPARED player), so the TP/golden-ratio bands do NOT apply. A boss is tuned to a
@@ -560,7 +578,7 @@ produce a lopsided or trivially easy floor. This is untested in real play.
 SECTION 12 — RESOURCE MANAGEMENT / SCARCITY ECONOMY (a core balance pillar)
 ================================================================================
 Files: BalanceConfig SECTION 5 (levers) + SECTION 10 (model + bands); GameMath
-scarcity block; docs/balance-rule-system.txt (RESOURCE SCARCITY MODEL).
+scarcity block; docs/game-balance-authority.txt (RESOURCE SCARCITY MODEL).
 This is one of the MOST important balance systems and the user's stated priority.
 
 WHY IT MATTERS: scarcity is what turns a shooter into a roguelike. With infinite
@@ -668,20 +686,24 @@ BalanceReport TELEGRAPH AUDIT only checks the attacks it knows about.
 ================================================================================
 SECTION 15 — STATUS EFFECTS / DAMAGE-OVER-TIME (DoT is damage; it counts toward TTK)
 ================================================================================
-Files: BalanceConfig SECTION 8 (weapon DoT) + EffectConstants (shared status).
+Files: BalanceConfig SECTION 8 (ALL status magnitudes, shared + weapon DoT;
+EffectConstants keeps re-export shims only).
   Rend/BLEED: 2/turn base (+0.5/level, cap 6), 4 turns.
-  Incendiary/BURN: 3/turn base (+0.5/level, cap 7), 3 turns (+1 on Incinerator).
+  Incendiary/BURN: base = THE unified BURN_DAMAGE_PER_TURN (4/turn)
+  (+0.5/level, cap 7), 3 turns (+1 on Incinerator).
   Flamethrower burn: FLAME_BURN_DAMAGE_PER_TURN=6, 4 turns.
   Stagger/STUN: STAGGER_STUN_DURATION=1.
-  Shared (EffectConstants): BURN 4/turn, POISON 2/stack (max 5), EMPOWERED +50%
+  Shared: BURN 4/turn, POISON 2/stack (max 5), EMPOWERED +50%
   (5 turns), VULNERABLE +50% (max 2 stacks), WEAK -25%, EXPOSED (ignore Block 1 hit),
   BACKSTAB +30%, SLOW x2.0 (3 turns), BLIND (2 turns).
 DoT BYPASSES Block (it is the rock-paper-scissors answer to turtling enemies).
 
-⚠️ Not-good note: two parallel DoT definitions exist — weapon-ability DoT
-(BalanceConfig SECTION 8) and shared status DoT (EffectConstants), with DIFFERENT
-per-turn numbers (e.g. BURN 3 vs 4). The split is a maintenance hazard and the
-EffectConstants half is outside the single source of truth.
+RESOLVED (new-game-balancr order 1): the two divergent DoT definitions were UNIFIED.
+BURN has exactly one base (BalanceConfig.BURN_DAMAGE_PER_TURN = 4 — the value the
+game actually applied); INCENDIARY_BURN_PER_TURN_BASE now REFERENCES it (its old
+divergent literal 3 is gone, so Incendiary level-1 burn ticked up 3 -> 4). The
+R-DOT schema rule + shim-integrity reflection audit fail the build if a second
+definition or a diverged shim ever reappears.
 
 
 ================================================================================
@@ -756,7 +778,7 @@ DEV-ONLY main; touches no render state (pure GameMath + BalanceConfig). It
 regenerates every living table (WEAPONS, ENEMIES, BLOCK & DEFEND, UPGRADE CARDS,
 DEPTH COUPLING, SCARCITY, ENCOUNTER, HAZARDS, TELEGRAPH AUDIT, MODIFIERS, BOSS
 RULESET) from the CURRENT constants — so the tables "cannot lie" about the numbers.
-Run it and paste its output over the matching sections of docs/balance-rule-system.txt
+Run it and paste its output over the matching sections of docs/game-balance-authority.txt
 after ANY BalanceConfig change:
     ./gradlew core:run -PmainClass=ge.tbegvadze.toon3d.util.BalanceReport
 
@@ -781,13 +803,15 @@ ceiling, of what needs refinement.
      credits, shop weights, and shop prices are meaningless placeholders. (SECTION 12)
   3. WEAPON ABILITIES (crit/pierce/lifesteal/legendaries) are entirely UN-priced
      against the contract and self-labelled "PLACEHOLDER — flag for playtesting".
-     START_ROOM_ANY_TIER_ENABLED=true lets players roll legendaries at run start
-     (a test flag left on). (SECTION 5)
+     [PARTLY RESOLVED by order 1: the values now live in BalanceConfig SECTION 15,
+     and START_ROOM_ANY_TIER_ENABLED is false + enforced by R-FLAGS. The pricing
+     itself is still open.] (SECTION 5)
   4. All THREE bosses are flat placeholder HP walls, reading UNDER their derived
      bands; boss rewards are arbitrary. Boss fights are effectively unimplemented. (SECTION 9)
-  5. The "single source of truth" is incomplete: EffectConstants status magnitudes,
-     the ability catalogue, shop, and boss stats live OUTSIDE BalanceConfig, so
-     balance is NOT tunable from one screen. (SECTION 1, 15)
+  5. [RESOLVED by order 1] The "single source of truth" is now complete: status
+     magnitudes, the ability catalogue, shop, and boss stats were consolidated into
+     BalanceConfig (SECTIONs 8/14/15/16) with re-export shims, and the shim-integrity
+     audit keeps them from diverging again. (SECTION 1, 15)
   6. Difficulty modes only change starting stats; enemies/loot/scarcity are
      identical across all four. RECRUIT/ULTRA are balanced only by accident. (SECTION 17)
   7. The contract anchors "the player" to a fixed 25 DPT / 205 eHP, ignoring found
@@ -799,10 +823,12 @@ ceiling, of what needs refinement.
   9. Special-move / summon / buff casters raise EFFECTIVE DPT that is mostly NOT
      priced into their TP, so the encounter budget under-counts their real threat. (SECTION 8)
  10. Content has repeatedly shipped BEFORE being priced (the necrotic faction
-     corrupted every floor's budget until a later pass). Assume newer content may
-     be un-priced. (SECTION 7)
- 11. Two divergent DoT definitions (BalanceConfig SECTION 8 vs EffectConstants) with
-     different per-turn numbers. (SECTION 15)
+     corrupted every floor's budget until a later pass). [MITIGATED by order 1:
+     BalanceAuditTest's COVERAGE rule fails the build when a weapon item,
+     consumable, ammo type, or enemy role is unclassified/unpriced.] (SECTION 7)
+ 11. [RESOLVED by order 1] The two divergent DoT definitions were unified to one
+     BURN base (4/turn) and one POISON base; the R-DOT rule fails the build if a
+     second definition reappears. (SECTION 15)
  12. Macro pacing (route regions) and micro difficulty (TP budget) are not unified —
      "lethal" regions are lethal by node frequency, not budgeted difficulty. (SECTION 16)
  13. The Railgun is deliberately out of its power band, "gated by scarcity" that is
@@ -819,17 +845,21 @@ Do not present any current number to a user as a finished, correct value.
 ================================================================================
 SECTION 21 — HOW TO CHANGE BALANCE SAFELY (workflow for future sessions)
 ================================================================================
-  1. Change the number in util/BalanceConfig.java (the single source of truth).
-     If it lives outside BalanceConfig (EffectConstants status, GameBalance
-     abilities/shop, EnemyConstants bosses), consider moving it in first.
-  2. Check it against the contract (docs/balance-rule-system.txt):
-       - new weapon  -> weaponPowerScore in its role band (SECTION 4/9)
-       - new enemy   -> threatPoints in its role band + golden ratio in band (SECTION 7)
-       - new heal    -> priced in survival-turns-bought (SECTION 12)
-       - new card    -> power points in the budget band (SECTION 6)
+  1. Change the number in util/BalanceConfig.java (the single source of truth —
+     since order 1 EVERY gameplay magnitude lives there; the other *Constants
+     files only re-export it).
+  2. Declare/keep its role and band in util/BalanceSchema.java per the contract
+     (docs/game-balance-authority.txt, new-content checklist):
+       - new weapon  -> RangedWeaponSpec + item classification (role band)
+       - new enemy   -> EnemyType.role() is the declaration (TP + golden bands)
+       - new heal    -> HealPickupSpec (survival-turns-bought band)
+       - new card    -> automatic (UpgradeCard.values() is iterated)
        - new boss    -> the six-rule checklist (SECTION 9)
-  3. Re-run BalanceReport and paste its tables over docs/balance-rule-system.txt.
-  4. Verify the depth-coupling invariant still holds across depth (SECTION 10).
+  3. Run `./gradlew test` — BalanceAuditTest fails the build on any unwaived
+     out-of-band value, live test flag, or unpriced content. A deliberate
+     exception needs a WAIVER in BalanceSchema, never a band hack.
+  4. Re-run BalanceReport and paste its tables over docs/game-balance-authority.txt
+     SECTION 6; verify the DEPTH COUPLING table still holds (SECTION 10).
   5. Remember: a green auditor is NECESSARY, not SUFFICIENT. Flag anything you
      could not playtest as still-provisional — because it is.
 

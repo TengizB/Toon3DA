@@ -339,7 +339,7 @@ public class Enemy implements StatusHost {
      * pipeline (strategy-combat-order-3; the directional/power modifiers that precede these steps are
      * resolved by the caller). Block absorbs first (a hit fully swallowed by fresh Block deals no HP
      * damage — overkill into Block is lost), then flat armor reduces the overflow, then HP takes the
-     * remainder. See docs/balance-rule-system.txt for the full 5-step order.
+     * remainder. See docs/game-balance-authority.txt for the full 5-step order.
      */
     public void applyDamage(int amount) {
         applyDamage(amount, false);

@@ -64,9 +64,9 @@ public final class EffectConstants {
     public static final float DAMAGE_NUMBER_SCALE_PER_POINT  = 0.04f;
     public static final float DAMAGE_NUMBER_MAX_FONT_SCALE   = 3.0f;
 
-    // Explosive barrel hazard — detonation damage and chain limit
-    public static final int   EXPLOSION_DAMAGE    = 12;
-    public static final int   EXPLOSION_CHAIN_MAX = 32;
+    // Explosive barrel hazard — detonation damage and chain limit (balance: BalanceConfig SECTION 8)
+    public static final int   EXPLOSION_DAMAGE    = BalanceConfig.EXPLOSION_DAMAGE;
+    public static final int   EXPLOSION_CHAIN_MAX = BalanceConfig.EXPLOSION_CHAIN_MAX;
 
     // Event Text — screen-space rising text for game events
     public static final int   EVENT_TEXT_MAX             = 8;
@@ -115,22 +115,24 @@ public final class EffectConstants {
     public static final float BUMP_THUD_TICK_G = 0.34f;
     public static final float BUMP_THUD_TICK_B = 0.30f;
 
-    // Status effects — gameplay constants (balance numbers live in GameBalance)
-    public static final int   BURN_DAMAGE_PER_TURN           = 4;
-    public static final int   BURN_DURATION_MIN              = 3;
-    public static final int   BURN_DURATION_MAX              = 5;
-    public static final int   POISON_DAMAGE_PER_STACK        = 2;
-    public static final int   POISON_MAX_STACKS              = 5;
-    public static final int   POISON_DURATION               = 4;
-    public static final int   STUN_DURATION_DEFAULT         = 1;
-    public static final int   STUN_DURATION_HEAVY           = 2;
+    // Status effects — RE-EXPORT SHIMS (Balance Authority, order 1): the gameplay magnitudes
+    // moved into BalanceConfig SECTION 8 (the single source of truth); only cosmetic status
+    // values (vignette alphas, tints, particle counts) remain owned by this file.
+    public static final int   BURN_DAMAGE_PER_TURN           = BalanceConfig.BURN_DAMAGE_PER_TURN;
+    public static final int   BURN_DURATION_MIN              = BalanceConfig.BURN_DURATION_MIN;
+    public static final int   BURN_DURATION_MAX              = BalanceConfig.BURN_DURATION_MAX;
+    public static final int   POISON_DAMAGE_PER_STACK        = BalanceConfig.POISON_DAMAGE_PER_STACK;
+    public static final int   POISON_MAX_STACKS              = BalanceConfig.POISON_MAX_STACKS;
+    public static final int   POISON_DURATION               = BalanceConfig.POISON_DURATION;
+    public static final int   STUN_DURATION_DEFAULT         = BalanceConfig.STUN_DURATION_DEFAULT;
+    public static final int   STUN_DURATION_HEAVY           = BalanceConfig.STUN_DURATION_HEAVY;
     // (BLINDED no longer narrows the raycast FOV — that zoomed/stretched the whole view; it now reads
     //  purely through STATUS_BLIND_VIGNETTE_ALPHA, see Player.getEffectiveFovRadians.)
-    public static final int   BLIND_DURATION               = 2;
-    public static final float SLOW_FACTOR                   = 2.0f;
-    public static final int   SLOW_DURATION                = 3;
-    public static final int   EMPOWERED_DAMAGE_PERCENT      = 50;
-    public static final int   EMPOWERED_DURATION            = 5;
+    public static final int   BLIND_DURATION               = BalanceConfig.BLIND_DURATION;
+    public static final float SLOW_FACTOR                   = BalanceConfig.SLOW_FACTOR;
+    public static final int   SLOW_DURATION                = BalanceConfig.SLOW_DURATION;
+    public static final int   EMPOWERED_DAMAGE_PERCENT      = BalanceConfig.EMPOWERED_DAMAGE_PERCENT;
+    public static final int   EMPOWERED_DURATION            = BalanceConfig.EMPOWERED_DURATION;
 
     // ─── strategy-combat-order-6: tactical-modifier POWERS (Vulnerable / Weak / Exposed) ───
     // New StatusTypes that plug into the SAME tick engine as EMPOWERED (no new tick system). They
@@ -139,23 +141,23 @@ public final class EffectConstants {
     // by BalanceConfig's MODIFIERS note and the BalanceReport MODIFIERS section (kept here beside
     // EMPOWERED for a single status-tuning block, matching the existing EMPOWERED_* precedent).
     /** VULNERABLE: the marked host takes +this% damage per stack from incoming hits (offensive setup). */
-    public static final int   VULNERABLE_DAMAGE_PERCENT     = 50;
+    public static final int   VULNERABLE_DAMAGE_PERCENT     = BalanceConfig.VULNERABLE_DAMAGE_PERCENT;
     /** World turns a VULNERABLE mark lasts. Re-application REFRESHES the timer and adds a stack. */
-    public static final int   VULNERABLE_DURATION           = 2;
+    public static final int   VULNERABLE_DURATION           = BalanceConfig.VULNERABLE_DURATION;
     /** Hard cap on VULNERABLE stacks so a build can't multiply a boss into a trivial 2-turn kill. */
-    public static final int   VULNERABLE_MAX_STACKS         = 2;
+    public static final int   VULNERABLE_MAX_STACKS         = BalanceConfig.VULNERABLE_MAX_STACKS;
     /** WEAK: the debuffed host deals -this% damage while active (softens telegraphed hits). */
-    public static final int   WEAK_DAMAGE_PERCENT           = 25;
+    public static final int   WEAK_DAMAGE_PERCENT           = BalanceConfig.WEAK_DAMAGE_PERCENT;
     /** World turns a WEAK debuff lasts (REFRESH_DURATION on re-application). */
-    public static final int   WEAK_DURATION                 = 2;
+    public static final int   WEAK_DURATION                 = BalanceConfig.WEAK_DURATION;
     /** EXPOSED: while active the NEXT hit into the host ignores its Block (anti-turtle). Cleared on use. */
-    public static final int   EXPOSED_DURATION              = 2;
+    public static final int   EXPOSED_DURATION              = BalanceConfig.EXPOSED_DURATION;
     /**
      * Backstab/flank positioning payoff: a player hit landed from BEHIND an enemy's facing deals
      * +this%. A modest ±nudge (not a mandatory combo) that rewards the maneuvering the intent
      * telegraphs enable — bait a MOVE, circle behind, punish. Priced as a conditional (like crit).
      */
-    public static final int   BACKSTAB_DAMAGE_PERCENT       = 30;
+    public static final int   BACKSTAB_DAMAGE_PERCENT       = BalanceConfig.BACKSTAB_DAMAGE_PERCENT;
 
     // Status effect visual — player screen-edge vignettes and enemy billboard tints
     public static final float STATUS_VIGNETTE_MAX_ALPHA     = 0.22f;
@@ -246,9 +248,9 @@ public final class EffectConstants {
     public static final float LEGENDARY_VIGNETTE_FADE_SECONDS   = 0.9f;
     public static final float LEGENDARY_VIGNETTE_MAX_ALPHA      = 0.40f;
 
-    // Enemy attack status-effect application chances (0..1)
-    public static final float MIRE_WRAITH_POISON_CHANCE     = 0.30f;
-    public static final float ACID_DRONE_POISON_CHANCE      = 0.75f;
+    // Enemy attack status-effect application chances (0..1) — balance: BalanceConfig SECTION 8
+    public static final float MIRE_WRAITH_POISON_CHANCE     = BalanceConfig.MIRE_WRAITH_POISON_CHANCE;
+    public static final float ACID_DRONE_POISON_CHANCE      = BalanceConfig.ACID_DRONE_POISON_CHANCE;
 
     // Enemy attack animations — purely cosmetic, timer-driven (wall-clock, not turn-driven)
     public static final float ENEMY_ATTACK_ANIM_DURATION_SECONDS  = 0.30f;

@@ -29,7 +29,7 @@ CREATED: 2026-07-08
 ---
 
 PREREQUISITE: order-7 (profile framework), order-2 (affix roll hook on the node). READ:
-enemy-system.txt, docs/balance-rule-system.txt (Threat budget), roguelike_order_13
+enemy-system.txt, docs/game-balance-authority.txt (Threat budget), roguelike_order_13
 (environmental traps/hazards), roguelike_order_12 (secret rooms), roguelike_order_14 (relics),
 tile-symbols.txt. USE game-level-designer for any hand-crafted templates.
 
@@ -88,7 +88,7 @@ THE REWARD (the reason to take the risk — GuaranteedContent, placement GATED_R
   - The reward room can be a secret-ish vault (weight secret-room generation up, roguelike_order_12).
 
 BALANCE: the elite's Threat and the reward's value are both depth-scaled and checked against
-docs/balance-rule-system.txt (eHP/DPT/TTK). ELITE must be beatable with the resources a careful
+docs/game-balance-authority.txt (eHP/DPT/TTK). ELITE must be beatable with the resources a careful
 player arrives with, but punishing if you routed here low — that's the gamble the map sells.
 
 
@@ -140,7 +140,7 @@ SHARED NOTES
 - Both profiles registered in NodeLevelProfileRegistry (order-7). NodeAffixRegistry + MysteryOutcome
   table both live where new entries register cleanly (route package). Only tile-symbols.txt tiles.
 - Everything deterministic from floorSeed/nodeSeed. All numbers in RouteMapConstants; all combat
-  scaling through EncounterBudgetPlanner + balance-rule-system (never bypass the depth ramp).
+  scaling through EncounterBudgetPlanner + game-balance-authority (never bypass the depth ramp).
 - Reuse existing systems for affix/outcome effects (hazards, lockdown waves, secret rooms, doors,
   red alert) — this file wires them together, it does not reinvent them. Where a referenced system
   (traps, secret rooms, lockdown, relics) is NOT yet implemented, the outcome degrades gracefully

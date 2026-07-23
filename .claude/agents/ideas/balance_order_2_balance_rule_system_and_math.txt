@@ -152,7 +152,7 @@ A) NEW WEAPON must fall inside the POWER BAND for its role + tier.
   RULE: a new weapon picks a role, then its numbers are tuned until weaponPower
   lands in that role's band. If it lands above the band it WILL invalidate the
   others. (The shotgun was over its band; the tuning pass trimmed it 50->44 and
-  raised the under-band guns into compliance — see docs/balance-rule-system.txt.)
+  raised the under-band guns into compliance — see docs/game-balance-authority.txt.)
   Higher RARITY does NOT raise the DPT band — it buys ABILITIES (idea 5), not
   raw damage. This keeps a legendary from being a strict numeric upgrade.
 
@@ -216,7 +216,7 @@ relative to each other, never independently:
 All pure, all with the mandatory Formula/Derivation/Edge-cases comment block.
 
 
-=== A LIVING SPREADSHEET (docs/balance-rule-system.txt) ===
+=== A LIVING SPREADSHEET (docs/game-balance-authority.txt) ===
 
 Ship a companion doc that TABULATES every current weapon and enemy with its
 computed power/TP, so the bands are visible and "out of band" content is obvious
@@ -232,7 +232,7 @@ or unit test that prints the table keeps it honest — the numbers can't lie.)
 
 === DEFINITION OF DONE ===
   - The four primitive formulas exist in GameMath with derivations.
-  - The contract (A-D) is written into docs/balance-rule-system.txt as a
+  - The contract (A-D) is written into docs/game-balance-authority.txt as a
     checklist any future weapon/enemy/item idea must pass.
   - The living table is generated and currently-out-of-band content (e.g. the
     shotgun) is flagged for a follow-up tuning pass.
@@ -242,4 +242,4 @@ or unit test that prints the table keeps it honest — the numbers can't lie.)
     Enemy TP is all in-band; the golden-ratio flags were proven to be a
     band-vs-scale contract conflict (only glass-cannon stat blocks satisfy both
     TP and golden-ratio bands), so enemies were left unchanged and the decision
-    is deferred to a dedicated balance idea. See docs/balance-rule-system.txt.
+    is deferred to a dedicated balance idea. See docs/game-balance-authority.txt.

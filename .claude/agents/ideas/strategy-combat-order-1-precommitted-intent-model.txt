@@ -165,7 +165,7 @@ halves my front, so step to face it or eat 12."
 BALANCE CONTRACT HOOK
 =====================
 No new numbers of its own — this doc RESTRUCTURES timing, it does not add power. But
-it changes the fairness math in docs/balance-rule-system.txt SECTION 13 (TELEGRAPH):
+it changes the fairness math in docs/game-balance-authority.txt SECTION 13 (TELEGRAPH):
 because EVERY attack is now telegraphed one full turn ahead, the
 TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION rule is satisfied by construction for all
 committed attacks. Update the telegraph audit note: "post-intent-model, the only
@@ -195,7 +195,7 @@ IMPLEMENTATION CHECKLIST
     false → EXECUTE skips; stun = R6 cancel in EXECUTE; death = isAlive() guards).
 [x] Populate predictedDamage from the real damage formula (scaledAttackDamage, plus
     the charge/flank multipliers where they apply).
-[x] Update balance-rule-system.txt SECTION 13 telegraph note.
+[x] Update game-balance-authority.txt SECTION 13 telegraph note.
 [x] Leave rendering to order-2 (no draw code changed; EnemyState/telegraph timers reused).
 
 DEVIATIONS FROM THE ORIGINAL SPEC (intentional, recorded here)

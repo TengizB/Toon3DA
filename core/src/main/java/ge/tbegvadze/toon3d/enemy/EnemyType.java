@@ -213,7 +213,7 @@ public enum EnemyType {
         // BRUISER, not SOLDIER: its stats (TP 79, golden ratio 2.4) are honestly bruiser-tier — a
         // fast, non-charging bruiser counterpart to the Shell Brute charger. Reclassified in the
         // game-balance-tuning contract pass so its Threat-Point cost is priced correctly by the
-        // EncounterBudgetPlanner and it braces on the bruiser cadence. See docs/balance-rule-system.txt.
+        // EncounterBudgetPlanner and it braces on the bruiser cadence. See docs/game-balance-authority.txt.
         @Override public EnemyRole role()             { return EnemyRole.BRUISER; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
         @Override public int    attackCadenceTurns()  { return 1; }

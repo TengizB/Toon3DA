@@ -2193,7 +2193,7 @@ public final class GameMath {
      * Formula: Block absorption (strategy-combat-order-3)
      * Derivation:
      *   Block is a temporary HP-shield consumed before HP (and before flat armor). Step 3 of the
-     *   shared 5-step mitigation pipeline documented in docs/balance-rule-system.txt:
+     *   shared 5-step mitigation pipeline documented in docs/game-balance-authority.txt:
      *     absorbed = min(block, incomingDamage)
      *   The caller then does: block -= absorbed; remainingDamage = incomingDamage - absorbed.
      *   A shot fully swallowed by fresh Block (incomingDamage <= block) is entirely absorbed and
@@ -2219,7 +2219,7 @@ public final class GameMath {
      *   Then clamped to blockMax so defend-spam can never stack Block into immortality:
      *     result = min(blockMax, gain)
      *   Priced so one DEFEND buys ~1 turn of survival (baseBlock ≈ reference player DPT); see the
-     *   BALANCE CONTRACT in the idea doc and the BLOCK section of docs/balance-rule-system.txt.
+     *   BALANCE CONTRACT in the idea doc and the BLOCK section of docs/game-balance-authority.txt.
      * Edge cases:
      *   baseBlock <= 0      → returns 0 (this role never braces; caller should not commit DEFEND).
      *   depthHealthScale <= 0 → treated as no scaling is impossible here; round of a non-positive base
@@ -2369,7 +2369,7 @@ public final class GameMath {
     // =========================================================================
     // BALANCE RULE SYSTEM — the four primitives + derived contract math
     // -------------------------------------------------------------------------
-    // The whole balance contract (docs/balance-rule-system.txt) rests on four
+    // The whole balance contract (docs/game-balance-authority.txt) rests on four
     // primitive quantities — eHP, DPT, TTK, TP — plus a handful of derived
     // scores. The game is strictly turn-based (one action = one world turn), so
     // TIME is measured in TURNS, never seconds: there is no real-time DPS, only
@@ -2681,7 +2681,7 @@ public final class GameMath {
     /*
      * Formula: playerPowerAtDepth — the player's expected power multiplier on a given floor
      * Derivation:
-     *   The depth-coupling invariant (docs/balance-rule-system.txt, DEPTH SCALING) compares the
+     *   The depth-coupling invariant (docs/game-balance-authority.txt, DEPTH SCALING) compares the
      *   player's power curve against the enemy threat curve and demands they stay coupled. The
      *   enemy side is depthThreatScale (a COMPOUND curve). The player side is set by the level-up
      *   power budget: every level grants a fixed LEVEL_UP_BUDGET_PP power points (idea 5), and the
@@ -2769,7 +2769,7 @@ public final class GameMath {
     // defines; boss FIGHTS themselves are deferred (they need story/run structure),
     // so for now these formulas exist to re-derive the placeholder boss numbers when
     // boss work lands, NEVER to bless a literal HP constant. Anchors and bands live
-    // in BalanceConfig SECTION 14; see docs/balance-rule-system.txt (Boss appendix).
+    // in BalanceConfig SECTION 14; see docs/game-balance-authority.txt (Boss appendix).
     //
     // The six rules, mapped to the methods below:
     //   RULE 1  HP from fight length, never a flat number  -> bossEffectiveHitPoints
@@ -3023,7 +3023,7 @@ public final class GameMath {
     // TARGET: S in [0.75, 0.95] floor-wide on a "fight everything" basis, and
     // < 0.6 for any SINGLE weapon (so no one gun's ammo clears the floor — the
     // player must diversify). The remaining 5-25% comes from melee (free but
-    // risky), avoidance, or carried reserves. See docs/balance-rule-system.txt
+    // risky), avoidance, or carried reserves. See docs/game-balance-authority.txt
     // and .claude/agents/ideas/balance_order_3_resource_scarcity_economy.txt.
     //
     // All methods below are pure and unit-free; BalanceReport feeds them the model

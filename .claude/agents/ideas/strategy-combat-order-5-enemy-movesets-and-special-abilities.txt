@@ -45,7 +45,7 @@ DEDUPLICATION / RELATIONSHIP TO EXISTING SYSTEMS
 - resonant-pylon-support-enemy.txt / lurker-crawler-flank-blindspot-system.txt (ideas):
   those are specific support/flanker enemy concepts. This doc is the GENERAL move-set
   framework they'd plug into; fold their behaviors into moves rather than bespoke code.
-- balance-rule-system.txt: a SPECIAL move's threat is priced into the enemy's TP (a
+- game-balance-authority.txt: a SPECIAL move's threat is priced into the enemy's TP (a
   buff/summon raises effective TP); see BALANCE.
 
 THE MOVE-SET ABSTRACTION
@@ -130,7 +130,7 @@ PER-ARCHETYPE SCRIPTS (starting point for the existing roster)
 BALANCE CONTRACT
 ================
 A move-set changes an enemy's EFFECTIVE threat, so it must fold into the TP model
-(docs/balance-rule-system.txt PRIMITIVE 4):
+(docs/game-balance-authority.txt PRIMITIVE 4):
   - BUFF/DEBUFF/AREA moves raise effective DPT -> add a positionalMultiplier-style
     surcharge OR compute a blended DPT across the script's cycle and use THAT in
     threatPoints(). Recommended: BalanceReport computes each scripted enemy's
@@ -172,7 +172,7 @@ IMPLEMENTATION CHECKLIST
 [x] order-2: SPECIAL sub-glyphs (buff/debuff/summon/area). EnemyRenderer.drawSpecialGlyph draws a
     distinct procedural sub-glyph per ability inside the existing purple SPECIAL frame; AREA_STRIKE also
     surfaces its predicted-damage number.
-[x] Add the MOVE-SETS section to docs/balance-rule-system.txt + BalanceReport (printMoveSetTable lists
+[x] Add the MOVE-SETS section to docs/game-balance-authority.txt + BalanceReport (printMoveSetTable lists
     each scripted archetype's cadence + abilities). Telegraph audit note updated: every damaging special
     is telegraphed one turn ahead, so the fairness contract still holds by construction.
 

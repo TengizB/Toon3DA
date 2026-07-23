@@ -25,7 +25,7 @@ the player's directional Guard on top without re-plumbing anything:
     beside the health bar, a "BLOCKED N" floater (EventTextSystem.COLOR_BLUE), and blue shield
     sparks + a shatter ring (ImpactEventListener.onBlockAbsorbed → ImpactEffectSystem).
   - Balance: BLOCK_MAX + per-role DEFEND_BLOCK_GAIN_* in BalanceConfig; a BLOCK & DEFEND
-    section in BalanceReport + docs/balance-rule-system.txt (all three roles verify survTurns
+    section in BalanceReport + docs/game-balance-authority.txt (all three roles verify survTurns
     ≈ 1, in band). The 5-step mitigation pipeline is documented as the single source of truth.
   - order-2 already renders the DEFEND shield icon + block number from PlannedAction.blockGain.
 
@@ -68,7 +68,7 @@ DEDUPLICATION / RELATIONSHIP TO EXISTING SYSTEMS
   Block is a second, DECAYING mitigation layer above armor. Add `public int block;`.
 - Player / PlayerStats (IMPLEMENTED): the player already has armor (AR bar in the HUD,
   HudConstants). Block is a distinct short-lived buffer, shown differently (order-4).
-- balance-rule-system.txt: Block changes eHP transiently. The eHP primitive
+- game-balance-authority.txt: Block changes eHP transiently. The eHP primitive
   (GameMath.effectiveHitPoints) is a STEADY-STATE number; Block is a per-turn spike,
   so it is priced as "turns of survival bought," see BALANCE below.
 
@@ -103,7 +103,7 @@ shared GameMath.applyMitigation-style helper so enemy and player match):
     5. Subtract from HP.
 Block sits ABOVE armor so a heavily-armored, blocking enemy isn't double-dipping in a
 confusing order; Block is the "I braced this turn" spike, armor is the permanent hide.
-Document this order in docs/balance-rule-system.txt (it affects eHP interpretation).
+Document this order in docs/game-balance-authority.txt (it affects eHP interpretation).
 
 ENEMY DEFEND INTENT — WHEN DO ENEMIES DEFEND?
 =============================================
@@ -149,7 +149,7 @@ BLOCK VISUALS
 
 BALANCE CONTRACT
 ================
-Block is transient eHP. Price it as survival-turns bought, per docs/balance-rule-system.txt
+Block is transient eHP. Price it as survival-turns bought, per docs/game-balance-authority.txt
 method for consumables:
     blockSurvivalTurns = blockGain / averageIncomingPlayerDPT(depth)
   - An enemy DEFEND should buy it roughly 1 turn of survival (blockGain ~= reference
@@ -172,6 +172,6 @@ IMPLEMENTATION CHECKLIST
 [ ] Add DEFEND to the COMMIT step's decision logic with the per-role conditions above.
 [ ] DoT bypasses Block (recommended) — implement and document.
 [ ] Add Block visuals: blue plating, BLOCKED floater, shield-spark + shatter effects.
-[ ] Add the BLOCK section to docs/balance-rule-system.txt and BalanceReport; verify
+[ ] Add the BLOCK section to docs/game-balance-authority.txt and BalanceReport; verify
     no golden-ratio break.
 [ ] order-2 renders the shield icon + block number; this doc supplies the value only.

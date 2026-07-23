@@ -183,7 +183,7 @@ FAIRNESS / BALANCE
 - No single verb one-shots. Rough hit budget at full player HP (100): CHARGE ~30,
   MELEE ~14, fire/toxic tick per turn ~ small. The player dies from EATING several
   because they mispositioned, never from one unreadable hit.
-- Slot every damage/range number into docs/balance-rule-system.txt and
+- Slot every damage/range number into docs/game-balance-authority.txt and
   balance_order_6_boss_balance_ruleset.txt (eHP/DPT/TTK/TP) before finalising.
 - Hazards must always leave a walkable path (F5). The cast targeting must refuse
   to seal a 1-wide corridor; Order 7's spacious arena makes this easy.
