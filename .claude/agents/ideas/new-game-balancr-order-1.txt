@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Balance Authority — one source of truth, enforced schema
 ---
@@ -8,7 +8,7 @@ NEW GAME BALANCE — ORDER 1 of 9
 THE BALANCE AUTHORITY: SINGLE SOURCE OF TRUTH + AN ENFORCED, TUNABLE SCHEMA
 ================================================================================
 Series: new-game-balancr-order-1..8. This series SUPERSEDES the old
-balance_order_1..6 idea files. The deprecated docs/balance-rule-system.txt has
+balance_order_1..6 idea files. The deprecated docs/balance-rule-system (deleted) has
 been DELETED; this order creates its replacement. The factual map of the current
 state is docs/game-balance-knowledge.txt — read it first (especially SECTION 20,
 the consolidated problem list). Implement the series strictly in order: every
@@ -118,7 +118,7 @@ STEP 4 — ENFORCE (util/BalanceAuditTest.java):
   One test method per rule kind -> failures name the exact subject, value, band.
 
 STEP 5 — WRITE THE NEW DOC: docs/game-balance-authority.txt  (NEW)
-  The replacement for the deleted balance-rule-system.txt. Contents:
+  The replacement for the deleted balance-rule-system (deleted). Contents:
     1. The three layers (values / schema / enforcement) and where each lives.
     2. The four primitives + derived scores (from GameMath) — brief, with
        pointers, not re-derivations.
@@ -127,7 +127,7 @@ STEP 5 — WRITE THE NEW DOC: docs/game-balance-authority.txt  (NEW)
     5. The new-content checklist: "add value -> declare role -> run
        `./gradlew test` -> paste BalanceReport tables here."
     6. The living tables (BalanceReport output).
-  Sweep ALL references to docs/balance-rule-system.txt (code comments in
+  Sweep ALL references to docs/balance-rule-system (deleted) (code comments in
   BalanceConfig/GameMath/BalanceReport/EnemyConstants/RouteMapConstants/enemy/*,
   plus docs/route-map-system.txt and docs/game-balance-knowledge.txt) and
   repoint them to docs/game-balance-authority.txt. Update .claude/CLAUDE.md's
@@ -146,8 +146,39 @@ ACCEPTANCE CRITERIA
       value leaves its band without a waiver, any test flag is true.
   [ ] START_ROOM_ANY_TIER_ENABLED=false; start-room offers are COMMON..UNCOMMON.
   [ ] docs/game-balance-authority.txt exists; zero remaining references to the
-      deleted balance-rule-system.txt anywhere in the repo.
+      deleted balance-rule-system (deleted) anywhere in the repo.
   [ ] BalanceReport prints a WAIVERS table; only the Railgun waiver is active.
 
 DEPENDENCIES: none (this is the foundation).
 UNBLOCKS: orders 2–9 all register their rules into this schema.
+
+--------------------------------------------------------------------------------
+IMPLEMENTATION NOTES (order 1 shipped)
+--------------------------------------------------------------------------------
+Implemented as specified, with these concretisations:
+  - LAYER 2 = util/BalanceSchema.java (rule registry + waivers + content
+    registries + coverage classifications); LAYER 3 = BalanceAuditTest in the
+    core test source set (12 test methods, one per rule kind + a full sweep).
+  - R-FLAGS also caught and disabled a SECOND live test flag:
+    RouteMapConstants.BOSS_TEST_ALWAYS_CLICKABLE (was true). The rule scans all
+    constant files by reflection for TEST/DEBUG booleans, plus the explicitly
+    named START_ROOM_ANY_TIER_ENABLED.
+  - World.java start-room offers now clamp to START_ROOM_OFFER_MAX_TIER
+    (COMMON..UNCOMMON as designed) when the flag is false, not COMMON-only.
+  - The weapon registry covers ALL nine ranged weapons — including Arc Cannon
+    and Incinerator, which the old report omitted. Incinerator is credited as
+    impact + one full burn application per shot (HEAVY role, power 27.7, in
+    band); Arc Cannon on its primary bolt (BURST, 18.2, in band).
+  - R-HEAL bands were defined in BalanceConfig SECTION 10: small pickups buy
+    [2,6] survival turns, large pickups [8,16] (current: stim 5.0, shard 2.2,
+    medkit 14.1, vest 9.7 — all in band).
+  - R-DOT is generalised into a shim-integrity rule: every same-named field in a
+    re-export shim class must equal its BalanceConfig counterpart byte-for-byte.
+  - DoT unification behaviour change (accepted by spec): Incendiary level-1 burn
+    base 3 -> 4 (the EffectConstants value the game actually applied won).
+  - The new contract doc is docs/game-balance-authority.txt; BalanceReport
+    prints the WAIVERS table and iterates the schema registries for its
+    WEAPONS / ENEMIES / TELEGRAPH tables. Only the Railgun waiver is active.
+  - .claude/CLAUDE.md docs tables were deliberately left untouched (maintainer
+    preference during implementation); its balance rows still describe the old
+    doc layout and can be refreshed separately.

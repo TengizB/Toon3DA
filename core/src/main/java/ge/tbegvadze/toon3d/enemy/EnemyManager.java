@@ -423,7 +423,7 @@ public final class EnemyManager implements EnemyHitTarget {
         float damageMultiplier = thisKillWasMelee ? playerMeleeDamageMultiplier : playerRangedDamageMultiplier;
         int totalDamage = Math.round(amount * damageMultiplier) + playerFlatDamageBonus;
 
-        // Order-6 modifier layer — Step 2 of the shared mitigation pipeline (docs/balance-rule-system.txt),
+        // Order-6 modifier layer — Step 2 of the shared mitigation pipeline (docs/game-balance-authority.txt),
         // applied BEFORE Block/armor. All three are pure GameMath multipliers:
         //   • WEAK on the player dims its OWN output (a debuffed marine hits softer).
         //   • VULNERABLE on the target amplifies the hit (setup-then-payoff), stack-capped.
@@ -917,7 +917,7 @@ public final class EnemyManager implements EnemyHitTarget {
     /**
      * SUMMON: spawns the batch of 2-3 chaff pre-selected at commit ({@link #selectSummonTargets}) into
      * the floor-telegraphed empty cells, re-validating each and bounded by the per-room live-enemy
-     * ceiling so the encounter's Threat-Point budget stays honest (docs/balance-rule-system.txt).
+     * ceiling so the encounter's Threat-Point budget stays honest (docs/game-balance-authority.txt).
      * One cast per summoner, lifetime — once at least one chaff spawns, {@code summonsSpawned > 0}
      * permanently disqualifies SUMMON in {@link #isSpecialUsable} (see there), so this fires at most
      * once per enemy. Counter: kill the summoner, or just outlast its single cast.

@@ -29,7 +29,7 @@ AMMO
 CELLS (energy weapon) — shared with Plasma Rifle and Incinerator. Thematically correct; no new ammo
 type needed, so the scarcity model and reserve caps are untouched.
 
-BALANCE (docs/balance-rule-system.txt WEAPONS living table)
+BALANCE (docs/game-balance-authority.txt WEAPONS living table)
 Role: BURST / SPECIALIST. Credited on the SINGLE-TARGET primary line only (same convention the
 Grenade Launcher uses on its centre splash):
   damage 28, clipSize 7, reloadTime 2, dropCoeff 0.08, range 7.

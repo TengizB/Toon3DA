@@ -806,7 +806,7 @@ rather than reaching into it:
     DefaultCombatProfile (returns BOSS_ARENA) defer to. Never add independent boss-depth logic.
   - SHOP / ECONOMY: SHOP nodes route to ShopProfile; vending stock is seeded by World every floor. The
     SHOP_MAX_PER_WINDOW guard paces shop frequency.
-  - DIFFICULTY SCALING (docs/balance-rule-system.txt): a node changes a floor's KIND/rewards, NEVER its
+  - DIFFICULTY SCALING (docs/game-balance-authority.txt): a node changes a floor's KIND/rewards, NEVER its
     depth. EnemyBudgetOverride SCALES the depth-ramped Threat budget (the depth ramp is applied FIRST);
     it never freezes or bypasses it. See DEPTH RAMP INVARIANT.
   - HAZARDS / SECRET ROOMS / RELICS: attach via post-generation Guarantees (stamped symbols) and the

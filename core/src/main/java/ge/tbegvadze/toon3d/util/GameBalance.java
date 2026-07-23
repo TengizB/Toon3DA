@@ -67,12 +67,12 @@ public final class GameBalance {
 
     /**
      * Base XP reward for killing any boss (before depth scaling applied by BossFloorController).
-     * PLACEHOLDER — TO BE RE-DERIVED VIA THE BOSS BALANCE RULESET (idea 6, RULE 6): a boss reward
+     * PLACEHOLDER — TO BE RE-DERIVED VIA THE BOSS BALANCE RULESET (RULE 6): a boss reward
      * must be priced by the ammo+heal the fight CONSUMES times a risk premium
      * (GameMath.bossReward / BalanceConfig.BOSS_REWARD_RISK_PREMIUM), so it refunds the fight plus a
-     * profit — never a flat 500. Re-derive once the scarcity model (idea 3) is fully tuned.
+     * profit — never a flat 500. Re-derive once the scarcity model is fully tuned. (Balance: BalanceConfig.)
      */
-    public static final int XP_REWARD_BOSS_BASE     = 500;
+    public static final int XP_REWARD_BOSS_BASE     = BalanceConfig.XP_REWARD_BOSS_BASE;
 
     // =========================================================================
     // XP CURVE — how much XP is needed to reach each next player level
@@ -367,58 +367,60 @@ public final class GameBalance {
     // =========================================================================
     // ABILITY CATALOGUE — BASE / PER_LEVEL / CAP
     // All values are PLACEHOLDERS — flag for playtesting.
+    // RE-EXPORT SHIMS (Balance Authority, order 1): the magnitudes moved into
+    // BalanceConfig SECTION 15 (the single source of truth). Tune them THERE.
     // AbilityResolver reads pre-scaled magnitudes from AbilityInstance at runtime;
     // these constants are used by WeaponRoller at weapon-spawn time (order-11).
     // =========================================================================
 
     // ── Critical Strike ────────────────────────────────────────────────────
     /** Level-1 crit chance for CRITICAL_STRIKE ability (5%). */
-    public static final float CRIT_CHANCE_BASE            = 0.05f;
+    public static final float CRIT_CHANCE_BASE            = BalanceConfig.CRIT_CHANCE_BASE;
     /** Crit chance added per weapon level above 1. */
-    public static final float CRIT_CHANCE_PER_LEVEL       = 0.015f;
+    public static final float CRIT_CHANCE_PER_LEVEL       = BalanceConfig.CRIT_CHANCE_PER_LEVEL;
     /** Maximum crit chance regardless of weapon level (30%). */
-    public static final float CRIT_CHANCE_CAP             = 0.30f;
+    public static final float CRIT_CHANCE_CAP             = BalanceConfig.CRIT_CHANCE_CAP;
 
     // ── Armor Pierce ────────────────────────────────────────────────────────
     // ARMOR_PIERCE bypasses this fraction of the target's Block (its active damage shield) on every
     // hit — see Weapon.armBlockPierce() and Enemy.applyDamage(int,boolean,float).
     /** Level-1 Block-pierce fraction for ARMOR_PIERCE ability (20%). */
-    public static final float ARMOR_PIERCE_BASE           = 0.20f;
+    public static final float ARMOR_PIERCE_BASE           = BalanceConfig.ARMOR_PIERCE_BASE;
     /** Pierce fraction added per weapon level above 1. */
-    public static final float ARMOR_PIERCE_PER_LEVEL      = 0.05f;
+    public static final float ARMOR_PIERCE_PER_LEVEL      = BalanceConfig.ARMOR_PIERCE_PER_LEVEL;
     /** Maximum pierce fraction regardless of weapon level (60%). */
-    public static final float ARMOR_PIERCE_CAP            = 0.60f;
+    public static final float ARMOR_PIERCE_CAP            = BalanceConfig.ARMOR_PIERCE_CAP;
 
     // ── Executioner ─────────────────────────────────────────────────────────
     /** HP-fraction threshold below which EXECUTIONER fires (targets at 25% HP or lower). Fixed value. */
-    public static final float EXECUTIONER_THRESHOLD       = 0.25f;
+    public static final float EXECUTIONER_THRESHOLD       = BalanceConfig.EXECUTIONER_THRESHOLD;
     /** Level-1 bonus multiplier for EXECUTIONER (30% of base damage added as bonus). */
-    public static final float EXECUTIONER_BONUS_BASE      = 0.30f;
+    public static final float EXECUTIONER_BONUS_BASE      = BalanceConfig.EXECUTIONER_BONUS_BASE;
     /** Bonus multiplier added per weapon level above 1. */
-    public static final float EXECUTIONER_BONUS_PER_LEVEL = 0.06f;
+    public static final float EXECUTIONER_BONUS_PER_LEVEL = BalanceConfig.EXECUTIONER_BONUS_PER_LEVEL;
     /** Maximum EXECUTIONER bonus multiplier regardless of weapon level (80%). */
-    public static final float EXECUTIONER_BONUS_CAP       = 0.80f;
+    public static final float EXECUTIONER_BONUS_CAP       = BalanceConfig.EXECUTIONER_BONUS_CAP;
 
     // ── Stagger Rounds ──────────────────────────────────────────────────────
     /** Level-1 stagger chance for STAGGER_ROUNDS ability (8%). */
-    public static final float STAGGER_CHANCE_BASE         = 0.08f;
+    public static final float STAGGER_CHANCE_BASE         = BalanceConfig.STAGGER_CHANCE_BASE;
     /** Stagger chance added per weapon level above 1. */
-    public static final float STAGGER_CHANCE_PER_LEVEL    = 0.02f;
+    public static final float STAGGER_CHANCE_PER_LEVEL    = BalanceConfig.STAGGER_CHANCE_PER_LEVEL;
     /** Maximum stagger chance regardless of weapon level (35%). */
-    public static final float STAGGER_CHANCE_CAP          = 0.35f;
+    public static final float STAGGER_CHANCE_CAP          = BalanceConfig.STAGGER_CHANCE_CAP;
 
     // ── Overpenetration ─────────────────────────────────────────────────────
     /** Base number of additional enemies the shot can pierce (1). */
-    public static final int   OVERPENETRATION_BASE_COUNT                = 1;
+    public static final int   OVERPENETRATION_BASE_COUNT                = BalanceConfig.OVERPENETRATION_BASE_COUNT;
     /** Weapon levels needed to gain each additional pierce count (+1 per 3 levels). */
-    public static final int   OVERPENETRATION_LEVELS_PER_STEP          = 3;
+    public static final int   OVERPENETRATION_LEVELS_PER_STEP          = BalanceConfig.OVERPENETRATION_LEVELS_PER_STEP;
     /** Maximum extra-pierce count regardless of weapon level (3 additional enemies). */
-    public static final int   OVERPENETRATION_MAX_COUNT                 = 3;
+    public static final int   OVERPENETRATION_MAX_COUNT                 = BalanceConfig.OVERPENETRATION_MAX_COUNT;
     /**
      * For already-piercing weapons (PlasmaRifle, Railgun): fraction of getEffectiveDamage()
      * applied as a bonus for each enemy hit beyond the first (25% bonus per extra pierce).
      */
-    public static final float OVERPENETRATION_ALREADY_PIERCING_BONUS   = 0.25f;
+    public static final float OVERPENETRATION_ALREADY_PIERCING_BONUS   = BalanceConfig.OVERPENETRATION_ALREADY_PIERCING_BONUS;
 
     // =========================================================================
     // SUSTAIN ABILITIES — weapon-system-order-5
@@ -427,61 +429,61 @@ public final class GameBalance {
 
     // ── Lifesteal (ON_HIT) ──────────────────────────────────────────────────
     /** Level-1 lifesteal fraction: 6% of damage dealt returned as HP. */
-    public static final float LIFESTEAL_BASE              = 0.06f;
+    public static final float LIFESTEAL_BASE              = BalanceConfig.LIFESTEAL_BASE;
     /** Lifesteal fraction added per weapon level above 1. */
-    public static final float LIFESTEAL_PER_LEVEL         = 0.015f;
+    public static final float LIFESTEAL_PER_LEVEL         = BalanceConfig.LIFESTEAL_PER_LEVEL;
     /** Maximum lifesteal fraction regardless of weapon level (20%). */
-    public static final float LIFESTEAL_CAP               = 0.20f;
+    public static final float LIFESTEAL_CAP               = BalanceConfig.LIFESTEAL_CAP;
     /** Minimum heal from lifesteal to show event text (avoids single-point spam). */
     public static final int   LIFESTEAL_TEXT_THRESHOLD    = 5;
 
     // ── Hemorrhage Harvest (ON_KILL) ─────────────────────────────────────────
     /** HP restored on kill at level 1. */
-    public static final float HEMORRHAGE_HP_BASE          = 3f;
+    public static final float HEMORRHAGE_HP_BASE          = BalanceConfig.HEMORRHAGE_HP_BASE;
     /** HP per level scaling for Hemorrhage Harvest. */
-    public static final float HEMORRHAGE_HP_PER_LEVEL     = 0.7f;
+    public static final float HEMORRHAGE_HP_PER_LEVEL     = BalanceConfig.HEMORRHAGE_HP_PER_LEVEL;
     /** Maximum HP per kill for Hemorrhage Harvest. */
-    public static final int   HEMORRHAGE_HP_CAP           = 12;
+    public static final int   HEMORRHAGE_HP_CAP           = BalanceConfig.HEMORRHAGE_HP_CAP;
 
     // ── Vampiric Crit (ON_CRIT) ──────────────────────────────────────────────
     /** HP restored on crit at level 1. */
-    public static final float VAMPIRIC_CRIT_HP_BASE       = 4f;
+    public static final float VAMPIRIC_CRIT_HP_BASE       = BalanceConfig.VAMPIRIC_CRIT_HP_BASE;
     /** HP per level scaling for Vampiric Crit. */
-    public static final float VAMPIRIC_CRIT_HP_PER_LEVEL  = 1.0f;
+    public static final float VAMPIRIC_CRIT_HP_PER_LEVEL  = BalanceConfig.VAMPIRIC_CRIT_HP_PER_LEVEL;
     /** Maximum HP per crit for Vampiric Crit. */
-    public static final int   VAMPIRIC_CRIT_HP_CAP        = 14;
+    public static final int   VAMPIRIC_CRIT_HP_CAP        = BalanceConfig.VAMPIRIC_CRIT_HP_CAP;
 
     // ── Adrenal Surge (ON_KILL) ───────────────────────────────────────────────
     /** Level-1 proc chance for Adrenal Surge (10%). */
-    public static final float ADRENAL_SURGE_CHANCE_BASE      = 0.10f;
+    public static final float ADRENAL_SURGE_CHANCE_BASE      = BalanceConfig.ADRENAL_SURGE_CHANCE_BASE;
     /** Proc chance added per weapon level above 1. */
-    public static final float ADRENAL_SURGE_CHANCE_PER_LEVEL = 0.03f;
+    public static final float ADRENAL_SURGE_CHANCE_PER_LEVEL = BalanceConfig.ADRENAL_SURGE_CHANCE_PER_LEVEL;
     /** Maximum proc chance for Adrenal Surge regardless of weapon level (40%). */
-    public static final float ADRENAL_SURGE_CHANCE_CAP       = 0.40f;
+    public static final float ADRENAL_SURGE_CHANCE_CAP       = BalanceConfig.ADRENAL_SURGE_CHANCE_CAP;
     /** Outgoing damage bonus multiplier applied to the next attack after Surge procs (+30%). */
-    public static final float ADRENAL_SURGE_DAMAGE_BONUS     = 0.30f;
+    public static final float ADRENAL_SURGE_DAMAGE_BONUS     = BalanceConfig.ADRENAL_SURGE_DAMAGE_BONUS;
 
     // ── Bulwark Rounds (ON_RELOAD) ────────────────────────────────────────────
     /** Number of fixed temp-armor slots in PlayerStats (determines max concurrent Bulwark stacks). */
     public static final int   BULWARK_TEMP_ARMOR_SLOTS    = 4;
     /** Temporary armor points granted on reload completion at level 1. */
-    public static final float BULWARK_ARMOR_BASE          = 2f;
+    public static final float BULWARK_ARMOR_BASE          = BalanceConfig.BULWARK_ARMOR_BASE;
     /** Temp armor added per weapon level above 1. */
-    public static final float BULWARK_ARMOR_PER_LEVEL     = 0.5f;
+    public static final float BULWARK_ARMOR_PER_LEVEL     = BalanceConfig.BULWARK_ARMOR_PER_LEVEL;
     /** Maximum temp armor per reload for Bulwark Rounds. */
-    public static final int   BULWARK_ARMOR_CAP           = 8;
+    public static final int   BULWARK_ARMOR_CAP           = BalanceConfig.BULWARK_ARMOR_CAP;
     /** Number of player-action turns the Bulwark temp armor persists. */
-    public static final int   BULWARK_ARMOR_DURATION      = 3;
+    public static final int   BULWARK_ARMOR_DURATION      = BalanceConfig.BULWARK_ARMOR_DURATION;
 
     // ── Second Wind (PASSIVE) ─────────────────────────────────────────────────
     /** HP fraction at or below which Second Wind activates (30% HP = critically low). */
-    public static final float SECOND_WIND_HP_THRESHOLD    = 0.30f;
+    public static final float SECOND_WIND_HP_THRESHOLD    = BalanceConfig.SECOND_WIND_HP_THRESHOLD;
     /** Level-1 outgoing damage bonus while Second Wind is active (+25%). */
-    public static final float SECOND_WIND_BONUS_BASE      = 0.25f;
+    public static final float SECOND_WIND_BONUS_BASE      = BalanceConfig.SECOND_WIND_BONUS_BASE;
     /** Damage bonus multiplier added per weapon level above 1. */
-    public static final float SECOND_WIND_BONUS_PER_LEVEL = 0.05f;
+    public static final float SECOND_WIND_BONUS_PER_LEVEL = BalanceConfig.SECOND_WIND_BONUS_PER_LEVEL;
     /** Maximum Second Wind damage bonus regardless of weapon level (75%). */
-    public static final float SECOND_WIND_BONUS_CAP       = 0.75f;
+    public static final float SECOND_WIND_BONUS_CAP       = BalanceConfig.SECOND_WIND_BONUS_CAP;
 
     // =========================================================================
     // MELEE-SPECIFIC ABILITIES — weapon-system-order-6
@@ -489,31 +491,31 @@ public final class GameBalance {
     // =========================================================================
 
     // ── Kinetic Slam (ON_HIT, melee only) ────────────────────────────────────
-    public static final float KINETIC_SLAM_CHANCE_BASE       = 0.20f;
-    public static final float KINETIC_SLAM_CHANCE_PER_LEVEL  = 0.04f;
-    public static final float KINETIC_SLAM_CHANCE_CAP        = 0.60f;
-    public static final int   KINETIC_SLAM_WALL_BONUS_DAMAGE = 3;
+    public static final float KINETIC_SLAM_CHANCE_BASE       = BalanceConfig.KINETIC_SLAM_CHANCE_BASE;
+    public static final float KINETIC_SLAM_CHANCE_PER_LEVEL  = BalanceConfig.KINETIC_SLAM_CHANCE_PER_LEVEL;
+    public static final float KINETIC_SLAM_CHANCE_CAP        = BalanceConfig.KINETIC_SLAM_CHANCE_CAP;
+    public static final int   KINETIC_SLAM_WALL_BONUS_DAMAGE = BalanceConfig.KINETIC_SLAM_WALL_BONUS_DAMAGE;
 
     // ── Cleave (ON_HIT, melee only) ───────────────────────────────────────────
-    public static final float CLEAVE_FRACTION_BASE      = 0.40f;
-    public static final float CLEAVE_FRACTION_PER_LEVEL = 0.05f;
-    public static final float CLEAVE_FRACTION_CAP       = 0.80f;
+    public static final float CLEAVE_FRACTION_BASE      = BalanceConfig.CLEAVE_FRACTION_BASE;
+    public static final float CLEAVE_FRACTION_PER_LEVEL = BalanceConfig.CLEAVE_FRACTION_PER_LEVEL;
+    public static final float CLEAVE_FRACTION_CAP       = BalanceConfig.CLEAVE_FRACTION_CAP;
 
     // ── Salvage Strike (ON_KILL, melee only) ─────────────────────────────────
-    public static final float SALVAGE_CHANCE_BASE      = 0.50f;
-    public static final float SALVAGE_CHANCE_PER_LEVEL = 0.06f;
-    public static final float SALVAGE_CHANCE_CAP       = 1.00f;
+    public static final float SALVAGE_CHANCE_BASE      = BalanceConfig.SALVAGE_CHANCE_BASE;
+    public static final float SALVAGE_CHANCE_PER_LEVEL = BalanceConfig.SALVAGE_CHANCE_PER_LEVEL;
+    public static final float SALVAGE_CHANCE_CAP       = BalanceConfig.SALVAGE_CHANCE_CAP;
     public static final char  SALVAGE_AMMO_DROP_CHAR   = '6';
 
     // ── Scholar's Edge (ON_KILL, melee only) ─────────────────────────────────
-    public static final float SCHOLARS_XP_BONUS_BASE      = 0.15f;
-    public static final float SCHOLARS_XP_BONUS_PER_LEVEL = 0.05f;
-    public static final float SCHOLARS_XP_BONUS_CAP       = 0.75f;
+    public static final float SCHOLARS_XP_BONUS_BASE      = BalanceConfig.SCHOLARS_XP_BONUS_BASE;
+    public static final float SCHOLARS_XP_BONUS_PER_LEVEL = BalanceConfig.SCHOLARS_XP_BONUS_PER_LEVEL;
+    public static final float SCHOLARS_XP_BONUS_CAP       = BalanceConfig.SCHOLARS_XP_BONUS_CAP;
 
     // ── Berserker's Oath (PASSIVE/ON_KILL, legendary, melee only) ────────────
-    public static final float BERSERKER_DAMAGE_PER_STACK  = 0.10f;
-    public static final int   BERSERKER_HP_TICK_PER_STACK = 1;
-    public static final int   BERSERKER_MAX_STACKS        = 5;
+    public static final float BERSERKER_DAMAGE_PER_STACK  = BalanceConfig.BERSERKER_DAMAGE_PER_STACK;
+    public static final int   BERSERKER_HP_TICK_PER_STACK = BalanceConfig.BERSERKER_HP_TICK_PER_STACK;
+    public static final int   BERSERKER_MAX_STACKS        = BalanceConfig.BERSERKER_MAX_STACKS;
 
     // =========================================================================
     // UTILITY & ECONOMY ABILITIES — weapon-system-order-7
@@ -522,25 +524,25 @@ public final class GameBalance {
 
     // ── Scavenger Rounds (ON_KILL, gun only) ────────────────────────────────
     /** Level-1 proc chance for Scavenger Rounds (15%). */
-    public static final float SCAVENGER_CHANCE_BASE          = 0.15f;
+    public static final float SCAVENGER_CHANCE_BASE          = BalanceConfig.SCAVENGER_CHANCE_BASE;
     /** Proc chance added per weapon level above 1. */
-    public static final float SCAVENGER_CHANCE_PER_LEVEL     = 0.03f;
+    public static final float SCAVENGER_CHANCE_PER_LEVEL     = BalanceConfig.SCAVENGER_CHANCE_PER_LEVEL;
     /** Maximum proc chance for Scavenger Rounds regardless of weapon level (50%). */
-    public static final float SCAVENGER_CHANCE_CAP           = 0.50f;
+    public static final float SCAVENGER_CHANCE_CAP           = BalanceConfig.SCAVENGER_CHANCE_CAP;
     /** Ammo units refunded to reserve at weapon level below SCAVENGER_HIGH_LEVEL_THRESHOLD. */
-    public static final int   SCAVENGER_REFUND_BASE          = 1;
+    public static final int   SCAVENGER_REFUND_BASE          = BalanceConfig.SCAVENGER_REFUND_BASE;
     /** Ammo units refunded to reserve at weapon level >= SCAVENGER_HIGH_LEVEL_THRESHOLD. */
-    public static final int   SCAVENGER_REFUND_HIGH_LEVEL    = 2;
+    public static final int   SCAVENGER_REFUND_HIGH_LEVEL    = BalanceConfig.SCAVENGER_REFUND_HIGH_LEVEL;
     /** Weapon level threshold at which the refund amount increases from BASE to HIGH_LEVEL. */
-    public static final int   SCAVENGER_HIGH_LEVEL_THRESHOLD = 7;
+    public static final int   SCAVENGER_HIGH_LEVEL_THRESHOLD = BalanceConfig.SCAVENGER_HIGH_LEVEL_THRESHOLD;
 
     // ── Field Medic Rounds (ON_KILL, universal) ──────────────────────────────
     /** Level-1 proc chance for Field Medic Rounds (5%). */
-    public static final float FIELD_MEDIC_CHANCE_BASE        = 0.05f;
+    public static final float FIELD_MEDIC_CHANCE_BASE        = BalanceConfig.FIELD_MEDIC_CHANCE_BASE;
     /** Proc chance added per weapon level above 1. */
-    public static final float FIELD_MEDIC_CHANCE_PER_LEVEL   = 0.02f;
+    public static final float FIELD_MEDIC_CHANCE_PER_LEVEL   = BalanceConfig.FIELD_MEDIC_CHANCE_PER_LEVEL;
     /** Maximum proc chance for Field Medic Rounds regardless of weapon level (25%). */
-    public static final float FIELD_MEDIC_CHANCE_CAP         = 0.25f;
+    public static final float FIELD_MEDIC_CHANCE_CAP         = BalanceConfig.FIELD_MEDIC_CHANCE_CAP;
     /** Tile character placed at the killed enemy's tile when Field Medic Rounds procs. '+' = MEDKIT_SMALL. */
     public static final char  FIELD_MEDIC_DROP_CHAR          = '+';
 
@@ -566,11 +568,12 @@ public final class GameBalance {
     public static final int   CREDIT_REWARD_VORTEX_EYE       = BalanceConfig.CREDIT_REWARD_VORTEX_EYE;
     public static final int   CREDIT_REWARD_BLIGHT_CORRUPTOR = BalanceConfig.CREDIT_REWARD_BLIGHT_CORRUPTOR;
     /**
-     * PLACEHOLDER — TO BE RE-DERIVED VIA THE BOSS BALANCE RULESET (idea 6, RULE 6), the same as
+     * PLACEHOLDER — TO BE RE-DERIVED VIA THE BOSS BALANCE RULESET (RULE 6), the same as
      * XP_REWARD_BOSS_BASE above: price it by consumption * BalanceConfig.BOSS_REWARD_RISK_PREMIUM
      * (GameMath.bossReward) once the scarcity/credit economy is tuned, not a flat 250.
+     * (Balance: BalanceConfig.)
      */
-    public static final int   CREDIT_REWARD_BOSS_BASE     = 250;
+    public static final int   CREDIT_REWARD_BOSS_BASE     = BalanceConfig.CREDIT_REWARD_BOSS_BASE;
     public static final float CREDIT_DEPTH_SCALE          = BalanceConfig.CREDIT_DEPTH_SCALE;
     public static final int   CREDIT_CHIPS_PER_FLOOR_MIN  = BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MIN;
     public static final int   CREDIT_CHIPS_PER_FLOOR_MAX  = BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MAX;
@@ -580,10 +583,10 @@ public final class GameBalance {
     // Every non-boss floor gets 1 or 2 machines (guaranteed presence, not a chance),
     // so credits always have a sink. Stock/pricing/effects are shop parts 2-4.
     // =========================================================================
-    public static final int   SHOP_MIN_PER_FLOOR            = 1;
-    public static final int   SHOP_MAX_PER_FLOOR            = 2;
+    public static final int   SHOP_MIN_PER_FLOOR            = BalanceConfig.SHOP_MIN_PER_FLOOR;
+    public static final int   SHOP_MAX_PER_FLOOR            = BalanceConfig.SHOP_MAX_PER_FLOOR;
     /** Probability a floor rolls the SECOND machine (a two-shop floor is a small treat). */
-    public static final float SHOP_SECOND_MACHINE_CHANCE    = 0.40f;
+    public static final float SHOP_SECOND_MACHINE_CHANCE    = BalanceConfig.SHOP_SECOND_MACHINE_CHANCE;
     /** When two machines are placed, keep them at least this many tiles apart (Manhattan). */
     public static final int   SHOP_TWO_MACHINE_MIN_SPACING  = 8;
 
@@ -593,45 +596,45 @@ public final class GameBalance {
      * shop is a full 9-item shelf (the roller fills to this many distinct offers whenever the pool
      * of distinct offers allows — abilities alone provide enough to reach 9 on any floor).
      */
-    public static final int   SHOP_ENTRY_MIN                 = 9;
-    public static final int   SHOP_ENTRY_MAX                 = 9;
+    public static final int   SHOP_ENTRY_MIN                 = BalanceConfig.SHOP_ENTRY_MIN;
+    public static final int   SHOP_ENTRY_MAX                 = BalanceConfig.SHOP_ENTRY_MAX;
     // Weighted category pool for the "remainder" slots (after the guaranteed supply + upgrade slot).
-    public static final int   SHOP_CAT_WEIGHT_WEAPON_LEVELUP = 26;
-    public static final int   SHOP_CAT_WEIGHT_AMMO           = 24;
-    public static final int   SHOP_CAT_WEIGHT_MEDKIT         = 18;
-    public static final int   SHOP_CAT_WEIGHT_ABILITY        = 16;
-    public static final int   SHOP_CAT_WEIGHT_TIER_UPGRADE   = 16;
+    public static final int   SHOP_CAT_WEIGHT_WEAPON_LEVELUP = BalanceConfig.SHOP_CAT_WEIGHT_WEAPON_LEVELUP;
+    public static final int   SHOP_CAT_WEIGHT_AMMO           = BalanceConfig.SHOP_CAT_WEIGHT_AMMO;
+    public static final int   SHOP_CAT_WEIGHT_MEDKIT         = BalanceConfig.SHOP_CAT_WEIGHT_MEDKIT;
+    public static final int   SHOP_CAT_WEIGHT_ABILITY        = BalanceConfig.SHOP_CAT_WEIGHT_ABILITY;
+    public static final int   SHOP_CAT_WEIGHT_TIER_UPGRADE   = BalanceConfig.SHOP_CAT_WEIGHT_TIER_UPGRADE;
     /** Two-shop floors: lean one machine toward upgrades and the other toward supplies. */
     public static final boolean SHOP_TWO_MACHINE_BIAS        = true;
     /** Weight multiplier applied to the favoured category group when a machine is biased. */
-    public static final float SHOP_BIAS_WEIGHT_MULTIPLIER    = 2.0f;
+    public static final float SHOP_BIAS_WEIGHT_MULTIPLIER    = BalanceConfig.SHOP_BIAS_WEIGHT_MULTIPLIER;
 
     // ── Shop pricing (shop_order_2) — price = round(base * depthFactor * rarityFactor) ────────
     /** Depth price scaling: +10% per floor beyond the first (mirrors credit depth scaling). */
-    public static final float SHOP_DEPTH_PRICE_SCALE         = 0.10f;
-    public static final float SHOP_RARITY_PRICE_MULT_COMMON  = 1.0f;
-    public static final float SHOP_RARITY_PRICE_MULT_RARE    = 1.6f;
-    public static final float SHOP_RARITY_PRICE_MULT_EPIC    = 2.4f;
+    public static final float SHOP_DEPTH_PRICE_SCALE         = BalanceConfig.SHOP_DEPTH_PRICE_SCALE;
+    public static final float SHOP_RARITY_PRICE_MULT_COMMON  = BalanceConfig.SHOP_RARITY_PRICE_MULT_COMMON;
+    public static final float SHOP_RARITY_PRICE_MULT_RARE    = BalanceConfig.SHOP_RARITY_PRICE_MULT_RARE;
+    public static final float SHOP_RARITY_PRICE_MULT_EPIC    = BalanceConfig.SHOP_RARITY_PRICE_MULT_EPIC;
     /** Optional escalating surcharge for repeat level-ups of the same weapon (deferred; see part 2). */
-    public static final float SHOP_REPEAT_LEVELUP_SURCHARGE  = 0.35f;
+    public static final float SHOP_REPEAT_LEVELUP_SURCHARGE  = BalanceConfig.SHOP_REPEAT_LEVELUP_SURCHARGE;
     // Base prices (Credits) per offer variant — the category value floor before depth/rarity scaling.
-    public static final int   SHOP_BASE_PRICE_MEDKIT_STIM     = 35;
-    public static final int   SHOP_BASE_PRICE_MEDKIT_FIELD    = 80;
-    public static final int   SHOP_BASE_PRICE_AMMO_SMALL      = 40;
-    public static final int   SHOP_BASE_PRICE_AMMO_LARGE      = 90;
-    public static final int   SHOP_BASE_PRICE_WEAPON_LEVELUP  = 110;
-    public static final int   SHOP_BASE_PRICE_PLAYER_ABILITY  = 150;
-    public static final int   SHOP_BASE_PRICE_TIER_UPGRADE    = 240;
+    public static final int   SHOP_BASE_PRICE_MEDKIT_STIM     = BalanceConfig.SHOP_BASE_PRICE_MEDKIT_STIM;
+    public static final int   SHOP_BASE_PRICE_MEDKIT_FIELD    = BalanceConfig.SHOP_BASE_PRICE_MEDKIT_FIELD;
+    public static final int   SHOP_BASE_PRICE_AMMO_SMALL      = BalanceConfig.SHOP_BASE_PRICE_AMMO_SMALL;
+    public static final int   SHOP_BASE_PRICE_AMMO_LARGE      = BalanceConfig.SHOP_BASE_PRICE_AMMO_LARGE;
+    public static final int   SHOP_BASE_PRICE_WEAPON_LEVELUP  = BalanceConfig.SHOP_BASE_PRICE_WEAPON_LEVELUP;
+    public static final int   SHOP_BASE_PRICE_PLAYER_ABILITY  = BalanceConfig.SHOP_BASE_PRICE_PLAYER_ABILITY;
+    public static final int   SHOP_BASE_PRICE_TIER_UPGRADE    = BalanceConfig.SHOP_BASE_PRICE_TIER_UPGRADE;
     /** Ammo "large box" multiplier over the standard box size (price already reflected in base). */
-    public static final int   SHOP_AMMO_LARGE_BOX_MULTIPLIER  = 2;
+    public static final int   SHOP_AMMO_LARGE_BOX_MULTIPLIER  = BalanceConfig.SHOP_AMMO_LARGE_BOX_MULTIPLIER;
 
     // ── Credit Fang (ON_KILL, universal) ─────────────────────────────────────
     /** Credits awarded at level 1 for each Credit Fang kill. */
-    public static final float CREDIT_FANG_BASE               = 2f;
+    public static final float CREDIT_FANG_BASE               = BalanceConfig.CREDIT_FANG_BASE;
     /** Additional credits per weapon level above 1. */
-    public static final float CREDIT_FANG_PER_LEVEL          = 1f;
+    public static final float CREDIT_FANG_PER_LEVEL          = BalanceConfig.CREDIT_FANG_PER_LEVEL;
     /** Maximum credits awarded per kill regardless of weapon level. */
-    public static final int   CREDIT_FANG_CAP                = 12;
+    public static final int   CREDIT_FANG_CAP                = BalanceConfig.CREDIT_FANG_CAP;
 
     // =========================================================================
     // DOT & STATUS ABILITIES — weapon-system-order-8
@@ -672,59 +675,59 @@ public final class GameBalance {
 
     // ── Point Blank (ON_HIT, GUN only) ───────────────────────────────────────
     /** Level-1 bonus damage fraction when target is at POINT_BLANK_MAX_DISTANCE or closer. */
-    public static final float POINT_BLANK_BONUS_BASE      = 0.20f;
+    public static final float POINT_BLANK_BONUS_BASE      = BalanceConfig.POINT_BLANK_BONUS_BASE;
     /** Bonus fraction added per weapon level above 1. */
-    public static final float POINT_BLANK_BONUS_PER_LEVEL = 0.05f;
+    public static final float POINT_BLANK_BONUS_PER_LEVEL = BalanceConfig.POINT_BLANK_BONUS_PER_LEVEL;
     /** Maximum Point Blank bonus fraction regardless of weapon level. */
-    public static final float POINT_BLANK_BONUS_CAP       = 0.70f;
+    public static final float POINT_BLANK_BONUS_CAP       = BalanceConfig.POINT_BLANK_BONUS_CAP;
     /** Maximum tile distance at which Point Blank fires (adjacent tile only). */
-    public static final int   POINT_BLANK_MAX_DISTANCE    = 1;
+    public static final int   POINT_BLANK_MAX_DISTANCE    = BalanceConfig.POINT_BLANK_MAX_DISTANCE;
 
     // ── Marksman's Patience (ON_HIT, GUN only) ────────────────────────────────
     /** Level-1 bonus fraction per tile beyond MARKSMAN_MIN_DISTANCE. */
-    public static final float MARKSMAN_PER_TILE_BASE      = 0.05f;
+    public static final float MARKSMAN_PER_TILE_BASE      = BalanceConfig.MARKSMAN_PER_TILE_BASE;
     /** Per-tile bonus fraction added per weapon level above 1. */
-    public static final float MARKSMAN_PER_TILE_PER_LEVEL = 0.01f;
+    public static final float MARKSMAN_PER_TILE_PER_LEVEL = BalanceConfig.MARKSMAN_PER_TILE_PER_LEVEL;
     /** Maximum per-tile bonus fraction regardless of weapon level. */
-    public static final float MARKSMAN_PER_TILE_CAP       = 0.12f;
+    public static final float MARKSMAN_PER_TILE_CAP       = BalanceConfig.MARKSMAN_PER_TILE_CAP;
     /** Minimum tile distance before the per-tile bonus accumulates (distance > this). */
-    public static final int   MARKSMAN_MIN_DISTANCE       = 2;
+    public static final int   MARKSMAN_MIN_DISTANCE       = BalanceConfig.MARKSMAN_MIN_DISTANCE;
     /** Hard cap on total Marksman's Patience bonus regardless of distance. */
-    public static final float MARKSMAN_TOTAL_BONUS_CAP    = 0.60f;
+    public static final float MARKSMAN_TOTAL_BONUS_CAP    = BalanceConfig.MARKSMAN_TOTAL_BONUS_CAP;
 
     // ── Opening Salvo (ON_HIT, UNIVERSAL) ─────────────────────────────────────
     /** Level-1 bonus damage fraction when target is at full HP. */
-    public static final float OPENING_SALVO_BONUS_BASE      = 0.30f;
+    public static final float OPENING_SALVO_BONUS_BASE      = BalanceConfig.OPENING_SALVO_BONUS_BASE;
     /** Bonus fraction added per weapon level above 1. */
-    public static final float OPENING_SALVO_BONUS_PER_LEVEL = 0.07f;
+    public static final float OPENING_SALVO_BONUS_PER_LEVEL = BalanceConfig.OPENING_SALVO_BONUS_PER_LEVEL;
     /** Maximum Opening Salvo bonus fraction regardless of weapon level. */
-    public static final float OPENING_SALVO_BONUS_CAP       = 0.90f;
+    public static final float OPENING_SALVO_BONUS_CAP       = BalanceConfig.OPENING_SALVO_BONUS_CAP;
 
     // ── Rhythm / Heat-Up (ON_HIT, GUN only) ───────────────────────────────────
     /** Level-1 ramp bonus per consecutive hit on the same target (added per extra stack). */
-    public static final float RHYTHM_RAMP_PER_HIT_BASE      = 0.06f;
+    public static final float RHYTHM_RAMP_PER_HIT_BASE      = BalanceConfig.RHYTHM_RAMP_PER_HIT_BASE;
     /** Ramp bonus added per weapon level above 1. */
-    public static final float RHYTHM_RAMP_PER_HIT_PER_LEVEL = 0.01f;
+    public static final float RHYTHM_RAMP_PER_HIT_PER_LEVEL = BalanceConfig.RHYTHM_RAMP_PER_HIT_PER_LEVEL;
     /** Maximum ramp-per-hit value regardless of weapon level. */
-    public static final float RHYTHM_RAMP_PER_HIT_CAP       = 0.15f;
+    public static final float RHYTHM_RAMP_PER_HIT_CAP       = BalanceConfig.RHYTHM_RAMP_PER_HIT_CAP;
     /** Maximum consecutive-hit stacks before the bonus plateaus. */
-    public static final int   RHYTHM_MAX_STACKS              = 5;
+    public static final int   RHYTHM_MAX_STACKS              = BalanceConfig.RHYTHM_MAX_STACKS;
 
     // ── Static Discharge (ON_KILL, UNIVERSAL) ────────────────────────────────
     /** Level-1 splash damage dealt to enemies adjacent to the killed target. */
-    public static final float STATIC_SPLASH_BASE      = 4f;
+    public static final float STATIC_SPLASH_BASE      = BalanceConfig.STATIC_SPLASH_BASE;
     /** Splash damage added per weapon level above 1. */
-    public static final float STATIC_SPLASH_PER_LEVEL = 1f;
+    public static final float STATIC_SPLASH_PER_LEVEL = BalanceConfig.STATIC_SPLASH_PER_LEVEL;
     /** Maximum splash damage regardless of weapon level. */
-    public static final int   STATIC_SPLASH_CAP       = 14;
+    public static final int   STATIC_SPLASH_CAP       = BalanceConfig.STATIC_SPLASH_CAP;
 
     // ── Resonant Rounds (ON_HIT, UNIVERSAL) ──────────────────────────────────
     /** Level-1 bonus as a fraction of the target's MAX HP applied as flat bonus damage. */
-    public static final float RESONANT_PCT_BASE      = 0.04f;
+    public static final float RESONANT_PCT_BASE      = BalanceConfig.RESONANT_PCT_BASE;
     /** PCT fraction added per weapon level above 1. */
-    public static final float RESONANT_PCT_PER_LEVEL = 0.008f;
+    public static final float RESONANT_PCT_PER_LEVEL = BalanceConfig.RESONANT_PCT_PER_LEVEL;
     /** Maximum Resonant Rounds PCT fraction regardless of weapon level. */
-    public static final float RESONANT_PCT_CAP       = 0.10f;
+    public static final float RESONANT_PCT_CAP       = BalanceConfig.RESONANT_PCT_CAP;
 
     // =========================================================================
     // LEGENDARY SIGNATURE ABILITIES — weapon-system-order-10
@@ -733,21 +736,21 @@ public final class GameBalance {
 
     // ── Soulforge (ON_KILL, legendary, universal) ─────────────────────────────
     /** Kills with this weapon needed to permanently raise its weapon level by 1. */
-    public static final int   SOULFORGE_KILLS_PER_LEVEL_UP  = 5;
+    public static final int   SOULFORGE_KILLS_PER_LEVEL_UP  = BalanceConfig.SOULFORGE_KILLS_PER_LEVEL_UP;
 
     // ── Judgment (ON_FIRE, legendary, gun only) ───────────────────────────────
     /** Number of fires between consecutive Judgment lance shots. */
-    public static final int   JUDGMENT_COOLDOWN_FIRES        = 5;
+    public static final int   JUDGMENT_COOLDOWN_FIRES        = BalanceConfig.JUDGMENT_COOLDOWN_FIRES;
     /** Maximum tiles the Judgment lance travels before stopping. */
-    public static final int   JUDGMENT_LANCE_RANGE           = 20;
+    public static final int   JUDGMENT_LANCE_RANGE           = BalanceConfig.JUDGMENT_LANCE_RANGE;
     /** Effective-damage multiplier applied to the Judgment lance hit. */
-    public static final float JUDGMENT_DAMAGE_MULTIPLIER     = 3.0f;
+    public static final float JUDGMENT_DAMAGE_MULTIPLIER     = BalanceConfig.JUDGMENT_DAMAGE_MULTIPLIER;
 
     // ── Hellfire Nova (ON_CRIT, legendary, universal) ─────────────────────────
     /** Chebyshev tile radius of the AoE explosion triggered by a crit. */
-    public static final int   HELLFIRE_NOVA_RADIUS           = 2;
+    public static final int   HELLFIRE_NOVA_RADIUS           = BalanceConfig.HELLFIRE_NOVA_RADIUS;
     /** Fraction of critDamage dealt as AoE damage to enemies within the nova radius. */
-    public static final float HELLFIRE_NOVA_DAMAGE_FRACTION  = 0.75f;
+    public static final float HELLFIRE_NOVA_DAMAGE_FRACTION  = BalanceConfig.HELLFIRE_NOVA_DAMAGE_FRACTION;
 
     // =========================================================================
     // WEAPON ROLLER — weapon-system-order-11
@@ -766,20 +769,22 @@ public final class GameBalance {
     public static final WeaponTier START_ROOM_OFFER_MAX_TIER = WeaponTier.UNCOMMON;
 
     /**
-     * When true, start-room weapon offers can roll any tier (COMMON through LEGENDARY).
-     * When false, only COMMON-tier weapons are offered in the start room.
-     * Set to true for testing to verify higher-tier weapon spawns work correctly.
+     * TEST FLAG — MUST STAY {@code false} in every real build (Balance Authority R-FLAGS rule;
+     * {@code BalanceAuditTest} fails the build otherwise). When true, start-room weapon offers can
+     * roll any tier (COMMON through LEGENDARY) — the direct enabler of "beat the boss with the
+     * starting-room weapon". When false, offers roll the DESIGNED band
+     * {@link #START_ROOM_OFFER_MIN_TIER}..{@link #START_ROOM_OFFER_MAX_TIER} (COMMON..UNCOMMON).
      */
-    public static final boolean START_ROOM_ANY_TIER_ENABLED = true;
+    public static final boolean START_ROOM_ANY_TIER_ENABLED = false;
 
     /** Level-1 clip expansion from EXTENDED_MAG ability (+1 clip slot). */
-    public static final int EXTENDED_MAG_BASE_COUNT      = 1;
+    public static final int EXTENDED_MAG_BASE_COUNT      = BalanceConfig.EXTENDED_MAG_BASE_COUNT;
 
     /** Weapon levels needed to gain each additional clip slot (+1 per 3 levels). */
-    public static final int EXTENDED_MAG_LEVELS_PER_STEP = 3;
+    public static final int EXTENDED_MAG_LEVELS_PER_STEP = BalanceConfig.EXTENDED_MAG_LEVELS_PER_STEP;
 
     /** Maximum clip expansion from EXTENDED_MAG regardless of weapon level. */
-    public static final int EXTENDED_MAG_MAX_COUNT       = 4;
+    public static final int EXTENDED_MAG_MAX_COUNT       = BalanceConfig.EXTENDED_MAG_MAX_COUNT;
 
     // =========================================================================
     // OVERSEER HUNTER-KILLER BRAIN (boss-fight-mobile-overseer ORDER 4)
@@ -796,46 +801,46 @@ public final class GameBalance {
     // =========================================================================
 
     /** Baseline score every eligible tactic starts from before situational bonuses. */
-    public static final int   BOSS_TACTIC_SCORE_BASE            = 10;
+    public static final int   BOSS_TACTIC_SCORE_BASE            = BalanceConfig.BOSS_TACTIC_SCORE_BASE;
     /** Bonus for melee-opener tactics (AMBUSH/BLITZ) when the player is close. */
-    public static final int   BOSS_TACTIC_SCORE_CLOSE_RANGE     = 6;
+    public static final int   BOSS_TACTIC_SCORE_CLOSE_RANGE     = BalanceConfig.BOSS_TACTIC_SCORE_CLOSE_RANGE;
     /** Bonus for gap-closing / zoning tactics (CHARGER/ZONER/FIRESTORM) when the player is far. */
-    public static final int   BOSS_TACTIC_SCORE_FAR_RANGE       = 6;
+    public static final int   BOSS_TACTIC_SCORE_FAR_RANGE       = BalanceConfig.BOSS_TACTIC_SCORE_FAR_RANGE;
     /** Bonus for summon tactics (ZONER/FIRESTORM) while there is room under the adds cap. */
-    public static final int   BOSS_TACTIC_SCORE_ADDS_ROOM       = 4;
+    public static final int   BOSS_TACTIC_SCORE_ADDS_ROOM       = BalanceConfig.BOSS_TACTIC_SCORE_ADDS_ROOM;
     /** Bonus for line-hit tactics (CHARGER/BLITZ) when the player is boxed against cover/walls. */
-    public static final int   BOSS_TACTIC_SCORE_CORNERED        = 5;
+    public static final int   BOSS_TACTIC_SCORE_CORNERED        = BalanceConfig.BOSS_TACTIC_SCORE_CORNERED;
     /** Bonus for hazard/dash tactics that punish a player who has been camping one tile. */
-    public static final int   BOSS_TACTIC_SCORE_CAMPING         = 6;
+    public static final int   BOSS_TACTIC_SCORE_CAMPING         = BalanceConfig.BOSS_TACTIC_SCORE_CAMPING;
 
     /** Chebyshev range (tiles) at or below which the player counts as "close" for scoring. */
-    public static final int   BOSS_TACTIC_CLOSE_RANGE_TILES     = 3;
+    public static final int   BOSS_TACTIC_CLOSE_RANGE_TILES     = BalanceConfig.BOSS_TACTIC_CLOSE_RANGE_TILES;
     /** Player counts as "camping" once its tile is unchanged for this many boss turns. */
-    public static final int   BOSS_TACTIC_CAMP_TURNS            = 3;
+    public static final int   BOSS_TACTIC_CAMP_TURNS            = BalanceConfig.BOSS_TACTIC_CAMP_TURNS;
     /** Passable cardinal neighbours at or below which the player counts as "cornered". */
-    public static final int   BOSS_TACTIC_CORNERED_EXITS        = 1;
+    public static final int   BOSS_TACTIC_CORNERED_EXITS        = BalanceConfig.BOSS_TACTIC_CORNERED_EXITS;
     /** Upper bound (exclusive) of the seeded random tiebreak added to every tactic score. */
-    public static final int   BOSS_TACTIC_RANDOM_TIEBREAK       = 3;
+    public static final int   BOSS_TACTIC_RANDOM_TIEBREAK       = BalanceConfig.BOSS_TACTIC_RANDOM_TIEBREAK;
 
     /** Phase-1 spacing (turns beyond the tactic's own length) before CHARGE may headline again. */
-    public static final int   BOSS_TACTIC_CHARGE_GAP_PHASE1     = 3;
+    public static final int   BOSS_TACTIC_CHARGE_GAP_PHASE1     = BalanceConfig.BOSS_TACTIC_CHARGE_GAP_PHASE1;
     /** Phase-1 spacing before SUMMON may headline again. */
-    public static final int   BOSS_TACTIC_SUMMON_GAP_PHASE1     = 4;
+    public static final int   BOSS_TACTIC_SUMMON_GAP_PHASE1     = BalanceConfig.BOSS_TACTIC_SUMMON_GAP_PHASE1;
     /** Phase-1 spacing before a hazard (fire/toxic) tactic may headline again. */
-    public static final int   BOSS_TACTIC_HAZARD_GAP_PHASE1     = 2;
+    public static final int   BOSS_TACTIC_HAZARD_GAP_PHASE1     = BalanceConfig.BOSS_TACTIC_HAZARD_GAP_PHASE1;
     /** Phase-2 (enraged) charge spacing — tighter than phase 1. */
-    public static final int   BOSS_TACTIC_CHARGE_GAP_PHASE2     = 1;
+    public static final int   BOSS_TACTIC_CHARGE_GAP_PHASE2     = BalanceConfig.BOSS_TACTIC_CHARGE_GAP_PHASE2;
     /** Phase-2 (enraged) summon spacing. */
-    public static final int   BOSS_TACTIC_SUMMON_GAP_PHASE2     = 2;
+    public static final int   BOSS_TACTIC_SUMMON_GAP_PHASE2     = BalanceConfig.BOSS_TACTIC_SUMMON_GAP_PHASE2;
     /** Phase-2 (enraged) hazard spacing. */
-    public static final int   BOSS_TACTIC_HAZARD_GAP_PHASE2     = 1;
+    public static final int   BOSS_TACTIC_HAZARD_GAP_PHASE2     = BalanceConfig.BOSS_TACTIC_HAZARD_GAP_PHASE2;
 
     /**
      * "Last stand": once phase 2 HP falls to or below this fraction the boss drops its flee
      * behaviour and commits to BLITZ every selection — a readable, climactic finish where the
      * player finally gets to corner it (reward for surviving).
      */
-    public static final float BOSS_TACTIC_LAST_STAND_HP_FRACTION = 0.15f;
+    public static final float BOSS_TACTIC_LAST_STAND_HP_FRACTION = BalanceConfig.BOSS_TACTIC_LAST_STAND_HP_FRACTION;
 
     /** When true, HunterKillerPattern logs each tactic selection (dev fairness instrumentation). */
     public static final boolean BOSS_TACTIC_DEBUG_LOG            = false;

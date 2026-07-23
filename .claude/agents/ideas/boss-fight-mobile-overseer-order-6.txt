@@ -69,7 +69,7 @@ DESIGN
    normal rollEnemyDrop chances (they might drop ammo, might not). The 100%
    guarantee is ONLY the empty-safety net — it must not turn the fight into an
    ammo piñata when the player is flush (that would trivialise resource pressure,
-   which docs/balance-rule-system.txt and the resource-scarcity economy idea care
+   which docs/game-balance-authority.txt and the resource-scarcity economy idea care
    about).
 
 =============================================================================

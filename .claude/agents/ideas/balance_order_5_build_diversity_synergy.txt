@@ -27,7 +27,7 @@ IMPLEMENTATION NOTES (what shipped)
     those attribute cards actually change damage. Dodge / action-speed / flat
     reduction / max-HP / max-armour / flat-damage levers were already live.
   - Living table: BalanceReport.printUpgradeCardTable() prints every card's PP and
-    flags any out-of-band card; mirrored into docs/balance-rule-system.txt.
+    flags any out-of-band card; mirrored into docs/game-balance-authority.txt.
   - DESIGN DEVIATION: the catalogue of conditional WEAPON abilities (bleed/
     executioner/hemorrhage/crit/point-blank/…) was NOT folded into the level-up
     deck. Those are per-weapon roll effects (WeaponAbility/AbilityResolver) and

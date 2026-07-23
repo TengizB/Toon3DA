@@ -99,7 +99,7 @@ ENEMY BUDGET OVERRIDES (respecting the balance contract)
   (that system already exists — EncounterBudgetPlanner.java). CALM nodes lower it (CACHE/REST),
   DANGER nodes reshape it (ELITE: fewer bodies, higher per-enemy Threat). It MUST still be a
   function of raw depth (order-3 invariant) — an ELITE at depth 8 is depth-8-hard AND elite,
-  never depth-frozen. Route it through the balance primitives (docs/balance-rule-system.txt): a
+  never depth-frozen. Route it through the balance primitives (docs/game-balance-authority.txt): a
   node scales eHP/DPT budget, it does not opt out of the depth ramp.
 - CACHE/REST are the pressure-release valves the economy needs (roguelike_order_2 anti-starvation);
   their low budgets are the reward for routing there, paid for by skipping an ELITE's loot.

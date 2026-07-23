@@ -16,7 +16,7 @@ IMPLEMENTATION NOTES (ammo + HP half done; credit half BLOCKED on a shop sink):
   - Bullets reserve cap is floored at the largest bullet clip (AR 30) so the weapon
     stays usable; it is the one cap above the 1.5-floor target.
   - CREDIT SINK remains a hard blocker for the credit economy (no shop exists yet);
-    documented in docs/balance-rule-system.txt. Full reconciliation of clip sizes with
+    documented in docs/game-balance-authority.txt. Full reconciliation of clip sizes with
     the high-damage/low-eHP economy is the deferred eHP/damage rescale (see same doc).
 
 Idea 3 of 6 in the balance series (see balance_order_1 for the full list).

@@ -243,7 +243,7 @@ never wasted into a shield.
 Blast damage (MULTIPLIER 3.0 × base 16 = 48; cap 68): 48 is ~23% of the 205 reference eHP,
 UNDER the 25% telegraph cap — and it is telegraphed for TWO full turns, which is far more
 warning than the contract's one-turn minimum, so even the 68 cap (~33% eHP, under the 35%
-boss hard cap) is justified for a fully-avoidable AoE. Per docs/balance-rule-system.txt
+boss hard cap) is justified for a fully-avoidable AoE. Per docs/game-balance-authority.txt
 TELEGRAPH & COUNTERPLAY, a >25% hit is allowed when telegraphed/avoidable; this qualifies
 on both counts (visible countdown + step out of a 2-tile cross). Do NOT push the cap past
 35% eHP (~72). Deriving from scaledAttackDamage() keeps it depth-coupled automatically.

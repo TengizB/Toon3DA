@@ -94,7 +94,7 @@ WEAPON TUNING — all values now inside their role's power band:
   RAILGUN:       left over-band by design (held by slug scarcity — documented) ✓
   INCINERATOR:   8 impact + 5 falloff + 6 burn/turn (matches spec; not part of tuning pass) ✓
 
-LIVING DOCUMENT: docs/balance-rule-system.txt exists and contains:
+LIVING DOCUMENT: docs/game-balance-authority.txt exists and contains:
   - The four primitives definition with formulas
   - Per-role weapon power bands
   - Per-role enemy TP bands
@@ -104,12 +104,12 @@ LIVING DOCUMENT: docs/balance-rule-system.txt exists and contains:
 
 NOTE: AR and Chaingun are documented in BalanceConfig as intentionally placed at the top
 of the workhorse band (20 and 19 respectively) to improve earlier under-powered status,
-with inline comments explaining the trade-off. This is flagged in docs/balance-rule-system.txt
+with inline comments explaining the trade-off. This is flagged in docs/game-balance-authority.txt
 and is not a defect.
 
 DEFINITION OF DONE: All items pass.
   ✓ Four primitive formulas in GameMath with derivations
-  ✓ Contract (A-D) written into docs/balance-rule-system.txt
+  ✓ Contract (A-D) written into docs/game-balance-authority.txt
   ✓ Living table generated and out-of-band content flagged
   ✓ All weapon power scores brought into band (with noted exceptions documented)
 
@@ -144,7 +144,7 @@ BALANCEREPORT.java:
   (HEAL ECONOMY table included in printScarcityTable output)
 
 KNOWN BLOCKER — CREDIT ECONOMY:
-  Status: explicitly documented in idea file and in docs/balance-rule-system.txt.
+  Status: explicitly documented in idea file and in docs/game-balance-authority.txt.
   Root cause: no shop / vending / credit sink exists (roguelike_order_11 not implemented).
   Credits are awarded correctly but accumulate with no spend path.
   Impact: credits do not participate in the scarcity model. The ammo + HP half is complete.
@@ -158,7 +158,7 @@ DEFINITION OF DONE (ammo + HP half):
 
 ONE KNOWN LIMITATION (documented, not a bug):
   Credits remain a meaningless counter until a shop/sink is built. This was the
-  explicit scope boundary set in the idea file and is tracked in docs/balance-rule-system.txt.
+  explicit scope boundary set in the idea file and is tracked in docs/game-balance-authority.txt.
 
 
 ===========================================================================================
@@ -288,7 +288,7 @@ IDEA 6 — BOSS BALANCE RULESET
 
 SCOPE REMINDER: Boss FIGHTS explicitly deferred (needs story/plot). This idea is RULES ONLY.
 
-DOCS — docs/balance-rule-system.txt BOSS APPENDIX:
+DOCS — docs/game-balance-authority.txt BOSS APPENDIX:
   All six rules documented (lines 435-508 approximately) ✓
   Boss checklist present ✓
   Living table entry for existing placeholder bosses with "to be re-derived" flags ✓
@@ -313,10 +313,10 @@ EXISTING PLACEHOLDER BOSS CONSTANTS:
   OVERSEER 250hp and CORRUPTOR 450hp remain in EnemyConstants.java
   (NOT in BalanceConfig — per BalanceConfig line 30 which explicitly defers these).
   Both are flagged "to be re-derived via ruleset when boss fights are implemented"
-  in docs/balance-rule-system.txt. This is the intended state for rules-only idea 6.
+  in docs/game-balance-authority.txt. This is the intended state for rules-only idea 6.
 
 DEFINITION OF DONE (ruleset only):
-  ✓ Six rules + checklist in docs/balance-rule-system.txt as Boss appendix
+  ✓ Six rules + checklist in docs/game-balance-authority.txt as Boss appendix
   ✓ Boss HP/damage/reward formulas in GameMath (derived, not literal)
   ✓ Existing placeholder boss constants flagged as to be re-derived
 
@@ -397,7 +397,7 @@ FIXED:
        * Added EXPECTED_LEVELS_PER_DEPTH (SECTION 3); BOSS_EXPECTED_LEVELS_PER_DEPTH now mirrors it.
   2. AMMO_RESERVE_CAP_BULLETS 45 -> 30 (the 30-round AR clip floor). It banked 3.12 floors, far over
      the 1.5 anti-hoard target; now banks 2.08 — as close as the clip-vs-eHP mismatch allows.
-  Docs (docs/balance-rule-system.txt) regenerated: depth-scaling section, depth-coupling table,
+  Docs (docs/game-balance-authority.txt) regenerated: depth-scaling section, depth-coupling table,
   encounter budgets (slower growth), scarcity bullets row.
 
 STILL DEFERRED (NOT safely auto-tunable — need a dedicated balance idea + playtest/design sign-off):
@@ -472,7 +472,7 @@ WHAT CHANGED (all re-derived TOGETHER; every band re-verified in the harness):
 
 VERIFICATION: harness output shows ALL bands green — weapons in band, every enemy TP in band, every
 soldier/bruiser golden ratio in band, scarcity S=0.83 with all per-weapon < 0.6, heal drain 11.5%,
-depth coupling unchanged. Docs (docs/balance-rule-system.txt) regenerated: enemy table, TP bands,
+depth coupling unchanged. Docs (docs/game-balance-authority.txt) regenerated: enemy table, TP bands,
 scarcity table, heal economy, encounter budgets, model-floor DEMAND, reference-anchor metric note,
 and the TUNING-PASS narrative (golden-ratio conflict marked RESOLVED).
 

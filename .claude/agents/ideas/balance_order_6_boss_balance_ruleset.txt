@@ -115,7 +115,7 @@ much damage the EXPECTED player can output at that depth — not picked arbitrar
     this ruleset tells those systems what NUMBERS to use.
 
 === DEFINITION OF DONE (for the RULESET) ===
-  - The six rules + checklist are written into docs/balance-rule-system.txt as
+  - The six rules + checklist are written into docs/game-balance-authority.txt as
     the "Boss" appendix to the content contract.
   - Boss HP/damage/reward formulas are added to GameMath (derived, not literal).
   - The existing placeholder boss constants are flagged as "to be re-derived via

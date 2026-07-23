@@ -91,7 +91,7 @@ alert. Exit '>' placed a short walk past the loot so you still traverse the room
 
 BALANCE: net resource gain here should roughly refill one weapon's ammo + ~1 medkit — enough to
 justify skipping a reward node, not so much it removes scarcity (roguelike_order_2). Numbers in
-RouteMapConstants (CACHE_AMMO_BOXES, CACHE_MEDKITS, etc.), tuned against docs/balance-rule-system.
+RouteMapConstants (CACHE_AMMO_BOXES, CACHE_MEDKITS, etc.), tuned against docs/game-balance-authority.
 
 
 ================================================================
@@ -164,7 +164,7 @@ DELIVERABLE CHECKLIST (order-8)
 [ ] HEAL_STATION station kind + one-time heal (reusing medkit heal path) + optional choice overlay.
 [ ] Zero/near-zero enemy budgets; bright legible themes ('M'/'N'/'Z' med-bay, lit cargo bay).
 [ ] All contents from tile-symbols.txt; no gratuitous new symbols (reuse '@'/'W' for the auto-doc).
-[ ] Constants in RouteMapConstants; determinism from floorSeed; balance vs balance-rule-system.
+[ ] Constants in RouteMapConstants; determinism from floorSeed; balance vs game-balance-authority.
 
 LIVING DOC CONTRACT
 ===================

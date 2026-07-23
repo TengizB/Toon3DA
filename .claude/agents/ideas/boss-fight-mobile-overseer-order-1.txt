@@ -187,7 +187,7 @@ BALANCE FRAME (placeholders — real numbers per order, tune in playtest)
 - Overseer HP today = EnemyConstants.OVERSEER_MAX_HP (250), depth-scaled. Keep
   order-of-magnitude; the mobility already lengthens TTK because punish windows
   are rationed. Re-tune only after Order 4 lands (the brain sets real pacing).
-- Read the balance contract (docs/balance-rule-system.txt) and
+- Read the balance contract (docs/game-balance-authority.txt) and
   .claude/agents/ideas/balance_order_6_boss_balance_ruleset.txt before setting any
   damage/HP number in Orders 3–5. Slot every new ability into that contract's
   eHP / DPT / TTK / TP framing; do not invent free-floating numbers.

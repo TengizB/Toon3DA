@@ -246,6 +246,10 @@ public final class EnemyConstants {
     // -------------------------------------------------------------------------
     // Boss encounter stats
     //
+    // RE-EXPORT SHIMS (Balance Authority, order 1): the boss gameplay numbers moved
+    // into BalanceConfig SECTION 14 (the single source of truth). Tune them THERE.
+    // Only cosmetic boss values (accent colours) remain owned by this file.
+    //
     // PLACEHOLDER NUMBERS — TO BE RE-DERIVED VIA THE BOSS BALANCE RULESET (idea 6).
     // Every HP / damage / phase number below is a flat placeholder, exactly the "big
     // trash mob with arbitrary HP" the boss ruleset replaces. When boss FIGHTS are
@@ -257,36 +261,36 @@ public final class EnemyConstants {
     //            with NO single hit over BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION of eHP,
     //            and any hit over 25% telegraphed one turn ahead (RULE 3 fairness caps).
     //   * phases at GameMath.bossPhaseHealthThreshold(i, n) (RULE 4).
-    // Targets/bands live in BalanceConfig SECTION 14; see docs/balance-rule-system.txt
+    // Targets/bands live in BalanceConfig SECTION 14; see docs/game-balance-authority.txt
     // (Boss appendix). BalanceReport's BOSS RULESET section prints the derived HP each
     // current boss SHOULD have at its depth next to the placeholder literals below.
     // -------------------------------------------------------------------------
 
     // The Overseer (depth 5) — security core robot; laser lanes + melee charge
-    public static final int OVERSEER_MAX_HP        = 250;
-    public static final int OVERSEER_DEPTH         = 5;
-    public static final int OVERSEER_LASER_DAMAGE  = 20;
-    public static final int OVERSEER_CHARGE_DAMAGE = 30;
-    public static final int OVERSEER_RAM_COOLDOWN  = 3;
+    public static final int OVERSEER_MAX_HP        = BalanceConfig.OVERSEER_MAX_HP;
+    public static final int OVERSEER_DEPTH         = BalanceConfig.OVERSEER_DEPTH;
+    public static final int OVERSEER_LASER_DAMAGE  = BalanceConfig.OVERSEER_LASER_DAMAGE;
+    public static final int OVERSEER_CHARGE_DAMAGE = BalanceConfig.OVERSEER_CHARGE_DAMAGE;
+    public static final int OVERSEER_RAM_COOLDOWN  = BalanceConfig.OVERSEER_RAM_COOLDOWN;
     // Ability kit (boss-fight-mobile-overseer ORDER 3) — the Overseer's action VERBS as data.
     // Each damaging verb is telegraphed one turn ahead (fairness F2). Damage numbers sit under the
     // boss fairness caps at full player HP (100): CHARGE 30 and MELEE 14 are both < 35% eHP, and the
-    // untelegraphed MELEE is < 25% eHP (docs/balance-rule-system.txt BOSS APPENDIX, RULE 3).
+    // untelegraphed MELEE is < 25% eHP (docs/game-balance-authority.txt BOSS APPENDIX, RULE 3).
     // CHARGE — mobile line strike: lunge up to this many tiles along the telegraphed corridor.
-    public static final int OVERSEER_CHARGE_RANGE_TILES    = 5;
+    public static final int OVERSEER_CHARGE_RANGE_TILES    = BalanceConfig.OVERSEER_CHARGE_RANGE_TILES;
     // Forced plant turns after a CHARGE lands — the player's guaranteed punish window (fairness F1).
-    public static final int OVERSEER_CHARGE_RECOVERY_TURNS = 1;
+    public static final int OVERSEER_CHARGE_RECOVERY_TURNS = BalanceConfig.OVERSEER_CHARGE_RECOVERY_TURNS;
     // SUMMON_ADDS — Corruptor-style carrier pack: hard live-adds ceiling (F5) and adds per summon.
-    public static final int OVERSEER_ADDS_CAP              = 4;
-    public static final int OVERSEER_SUMMON_COUNT          = 2;
+    public static final int OVERSEER_ADDS_CAP              = BalanceConfig.OVERSEER_ADDS_CAP;
+    public static final int OVERSEER_SUMMON_COUNT          = BalanceConfig.OVERSEER_SUMMON_COUNT;
     // MELEE — adjacent slam: modest, fast, non-telegraphed poke (lower than CHARGE; harder to avoid).
-    public static final int OVERSEER_MELEE_DAMAGE          = 14;
+    public static final int OVERSEER_MELEE_DAMAGE          = BalanceConfig.OVERSEER_MELEE_DAMAGE;
     // SPAWN_FIRE footprint — length of the telegraphed fire lane the brain arms (hazard DOT/lifetime
     // come from the existing HazardManager/BalanceConfig hazard constants; not re-declared here).
-    public static final int OVERSEER_FIRE_LANE_LENGTH      = 3;
+    public static final int OVERSEER_FIRE_LANE_LENGTH      = BalanceConfig.OVERSEER_FIRE_LANE_LENGTH;
     // SPAWN_TOXIC footprint — 3x3 cloud radius (centre + one ring); kept small so it can never wall a
     // 1-wide corridor (fairness F5).
-    public static final int OVERSEER_TOXIC_RADIUS          = 1;
+    public static final int OVERSEER_TOXIC_RADIUS          = BalanceConfig.OVERSEER_TOXIC_RADIUS;
     // HEAL — one-time regeneration (boss-fight-mobile-overseer ORDER 5). The Overseer may repair itself
     // exactly ONCE per fight: below the HP threshold it breaks off, dashes to a safe spot, then restores
     // HP for a fixed number of turns. Taking ANY damage during the chain cancels the remaining ticks —
@@ -294,23 +298,23 @@ public final class EnemyConstants {
     // interrupt only extends the fight, never resets it (see the idea file's NUMBERS section).
     // Trigger threshold sits below the phase-2 line (BOSS_PHASE2_HP_THRESHOLD) so it heals only when
     // genuinely threatened, never as a routine reset.
-    public static final float OVERSEER_HEAL_HP_THRESHOLD   = 0.35f;
+    public static final float OVERSEER_HEAL_HP_THRESHOLD   = BalanceConfig.OVERSEER_HEAL_HP_THRESHOLD;
     // Repair ticks after the flee step ("small amount each turn for 5 turns" — the brief).
-    public static final int   OVERSEER_HEAL_TURNS          = 5;
+    public static final int   OVERSEER_HEAL_TURNS          = BalanceConfig.OVERSEER_HEAL_TURNS;
     // HP restored per repair tick — 5 x 12 = 60 (~24% of OVERSEER_MAX_HP): meaningful, not a full wall.
-    public static final int   OVERSEER_HEAL_PER_TURN        = 12;
+    public static final int   OVERSEER_HEAL_PER_TURN        = BalanceConfig.OVERSEER_HEAL_PER_TURN;
     // Accent color (cyan-white)
     public static final float OVERSEER_ACCENT_R = 0.60f;
     public static final float OVERSEER_ACCENT_G = 0.90f;
     public static final float OVERSEER_ACCENT_B = 1.00f;
 
     // The Corruptor (depth 10) — mutated scientist; summoner + acid burst
-    public static final int CORRUPTOR_MAX_HP             = 450;
-    public static final int CORRUPTOR_DEPTH              = 10;
-    public static final int CORRUPTOR_SUMMON_COOLDOWN    = 3;
-    public static final int CORRUPTOR_MINION_CAP         = 5;
-    public static final int CORRUPTOR_ACID_DAMAGE        = 15;
-    public static final int CORRUPTOR_ACID_POOL_DURATION = 3;
+    public static final int CORRUPTOR_MAX_HP             = BalanceConfig.CORRUPTOR_MAX_HP;
+    public static final int CORRUPTOR_DEPTH              = BalanceConfig.CORRUPTOR_DEPTH;
+    public static final int CORRUPTOR_SUMMON_COOLDOWN    = BalanceConfig.CORRUPTOR_SUMMON_COOLDOWN;
+    public static final int CORRUPTOR_MINION_CAP         = BalanceConfig.CORRUPTOR_MINION_CAP;
+    public static final int CORRUPTOR_ACID_DAMAGE        = BalanceConfig.CORRUPTOR_ACID_DAMAGE;
+    public static final int CORRUPTOR_ACID_POOL_DURATION = BalanceConfig.CORRUPTOR_ACID_POOL_DURATION;
     // Accent color (toxic green)
     public static final float CORRUPTOR_ACCENT_R = 0.40f;
     public static final float CORRUPTOR_ACCENT_G = 1.00f;
@@ -352,7 +356,7 @@ public final class EnemyConstants {
     // gated by its SPECIAL cadence (the natural cooldown) and the per-room live-enemy ceiling before it
     // may summon again — reusable but never a per-turn flood (design feedback: "spawn 2-3 once, then be
     // able to use the ability again", not indefinitely). The room cap bounds the encounter-budget
-    // headroom (docs/balance-rule-system.txt).
+    // headroom (docs/game-balance-authority.txt).
     public static final int SUMMON_COUNT_MIN     = 2;
     public static final int SUMMON_COUNT_MAX     = 3;
     public static final int SUMMON_ROOM_LIVE_CAP = 14;
@@ -383,14 +387,14 @@ public final class EnemyConstants {
     public static final float AREA_STRIKE_DAMAGE_MULTIPLIER = 1.35f;
 
     // Hell Baron (depth 15) — armored greater demon; firewall + enrage
-    public static final int HELL_BARON_MAX_HP               = 700;
-    public static final int HELL_BARON_DEPTH                = 15;
-    public static final int HELL_BARON_FIREWALL_COOLDOWN_P1 = 4;
-    public static final int HELL_BARON_FIREWALL_COOLDOWN_P2 = 2;
-    public static final int HELL_BARON_FIREWALL_DURATION    = 4;
-    public static final int HELL_BARON_FIRE_DAMAGE          = 12;
-    public static final int HELL_BARON_CLEAVE_DAMAGE_P1     = 35;
-    public static final int HELL_BARON_CLEAVE_DAMAGE_P2     = 52;
+    public static final int HELL_BARON_MAX_HP               = BalanceConfig.HELL_BARON_MAX_HP;
+    public static final int HELL_BARON_DEPTH                = BalanceConfig.HELL_BARON_DEPTH;
+    public static final int HELL_BARON_FIREWALL_COOLDOWN_P1 = BalanceConfig.HELL_BARON_FIREWALL_COOLDOWN_P1;
+    public static final int HELL_BARON_FIREWALL_COOLDOWN_P2 = BalanceConfig.HELL_BARON_FIREWALL_COOLDOWN_P2;
+    public static final int HELL_BARON_FIREWALL_DURATION    = BalanceConfig.HELL_BARON_FIREWALL_DURATION;
+    public static final int HELL_BARON_FIRE_DAMAGE          = BalanceConfig.HELL_BARON_FIRE_DAMAGE;
+    public static final int HELL_BARON_CLEAVE_DAMAGE_P1     = BalanceConfig.HELL_BARON_CLEAVE_DAMAGE_P1;
+    public static final int HELL_BARON_CLEAVE_DAMAGE_P2     = BalanceConfig.HELL_BARON_CLEAVE_DAMAGE_P2;
     // Accent color (ember orange-red)
     public static final float HELL_BARON_ACCENT_R = 1.00f;
     public static final float HELL_BARON_ACCENT_G = 0.30f;

@@ -171,7 +171,7 @@ IMPLEMENTATION CHECKLIST
     → Shipped as billboard SPRITE TINTS (VULNERABLE red / EXPOSED purple / WEAK grey-purple)
       layered over the DoT tints, plus the player screen-edge vignette entries. A dedicated
       floating badge glyph in the intent cluster is a future order-2 polish pass.
-[x] Add the MODIFIERS section to docs/balance-rule-system.txt + BalanceReport; cap
+[x] Add the MODIFIERS section to docs/game-balance-authority.txt + BalanceReport; cap
     stacks; verify weapon bands, golden ratios, and the boss ruleset all still hold.
     → BalanceReport.printModifiersTable + the TACTICAL MODIFIERS block in the pipeline doc;
       VULNERABLE_MAX_STACKS caps stacks, backstab priced as a conditional.
