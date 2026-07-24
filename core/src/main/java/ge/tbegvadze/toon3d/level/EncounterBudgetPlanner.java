@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.level;
 
+import ge.tbegvadze.toon3d.enemy.EnemyRole;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -78,18 +79,23 @@ public final class EncounterBudgetPlanner {
 
     /** Plans the floor's enemy roster by spending the depth-scaled Threat-Point budget. */
     public Plan plan() {
-        // Depth ramp FIRST (roguelike_order_16 invariant), THEN the route-map node's scale.
-        float budget = GameMath.floorThreatPointBudget(
+        // Depth ramp FIRST (roguelike_order_16 invariant), THEN the REGION DANGER DIAL (order 5) —
+        // the region's Threat-Point multiplier applied ON TOP of the depth curve so a lethal region
+        // spends more TP at the same depth — THEN the route-map node's per-node scale (order 7).
+        float budget = GameMath.regionScaledFloorThreatPointBudget(
                 BalanceConfig.FLOOR_BASE_THREAT_POINT_BUDGET,
                 BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH,
                 BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH,
-                depth) * budgetScale;
+                depth, BalanceConfig.REGION_TP_BUDGET_MULTIPLIER,
+                BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE) * budgetScale;
 
         List<EnemyType>           roster      = new ArrayList<>();
         EnumMap<EnemyType, Float> spentByType = new EnumMap<>(EnemyType.class);
         float spent = 0f;
 
-        // --- Composition rule 1: reserve budget for exactly one anchor.
+        // --- Composition rule 1: reserve budget for exactly one anchor. An elite-gauntlet anchor must
+        // still fit the (region-scaled) budget — an elite floor is a composition choice, not a budget
+        // override (order 5, C.4) — which chooseAnchor already enforces via threatOf(elite) <= budget.
         EnemyType anchor = chooseAnchor(budget);
         if (anchor != null) {
             float anchorCost = threatOf(anchor);
@@ -98,7 +104,10 @@ public final class EncounterBudgetPlanner {
             spent += anchorCost;
         }
 
-        // --- Fill the rest of the budget with a mix (rules 2 and 3).
+        // --- Fill the rest of the budget with a mix (rules 2 and 3). CHAFF is added in PACKS
+        // (order 5, PACK COHERENCE): the golden-band chaff exemption ASSUMES packs (a lone chaff reads a
+        // harmless ~9 golden ratio, balanced by pack TP), so the spawner now guarantees the assumption
+        // instead of hoping for it — every chaff type enters in a group of CHAFF_PACK_MIN..MAX.
         float fillTarget = budget * BalanceConfig.ENCOUNTER_BUDGET_FILL_TARGET_FRACTION;
         float maxPerType = budget * BalanceConfig.ENCOUNTER_MAX_SINGLE_TYPE_FRACTION;
         while (spent < fillTarget && roster.size() < ROSTER_SAFETY_CAP) {
@@ -106,9 +115,14 @@ public final class EncounterBudgetPlanner {
                     rosterContainsRanged(roster), rosterContainsMelee(roster));
             if (pick == null) break;
             float cost = threatOf(pick);
-            roster.add(pick);
-            spentByType.merge(pick, cost, Float::sum);
-            spent += cost;
+            int addCount = pick.role() == EnemyRole.CHAFF
+                    ? chaffPackSize(pick, cost, spentByType.getOrDefault(pick, 0f), spent, budget, maxPerType)
+                    : 1;
+            for (int copy = 0; copy < addCount && roster.size() < ROSTER_SAFETY_CAP; copy++) {
+                roster.add(pick);
+                spentByType.merge(pick, cost, Float::sum);
+                spent += cost;
+            }
         }
 
         float perRoomCap = budget * BalanceConfig.ENCOUNTER_PER_ROOM_TP_FRACTION_CAP;
@@ -168,8 +182,12 @@ public final class EncounterBudgetPlanner {
         for (EnemyType type : FILL_TYPES) {
             float cost      = threatOf(type);
             float typeSpent = spentByType.getOrDefault(type, 0f);
-            if (typeSpent + cost > maxPerType) continue;   // rule 2: per-type cap
-            if (spent + cost > budget)         continue;   // never overshoot the floor budget
+            // CHAFF is only offered when a full minimum PACK fits (order 5 pack coherence): the golden-band
+            // chaff exemption assumes packs, so a lone chaff is never added — a chaff type that can only fit
+            // one more copy is skipped in favour of a non-chaff filler.
+            int required = type.role() == EnemyRole.CHAFF ? BalanceConfig.CHAFF_PACK_MIN : 1;
+            if (typeSpent + required * cost > maxPerType) continue;   // rule 2: per-type cap
+            if (spent + required * cost > budget)         continue;   // never overshoot the floor budget
             affordable.add(type);
         }
         if (affordable.isEmpty()) return null;
@@ -184,6 +202,31 @@ public final class EncounterBudgetPlanner {
         if (preferred.isEmpty()) preferred = affordable;
 
         return preferred.get(random.nextInt(preferred.size()));
+    }
+
+    /**
+     * How many copies of a chosen chaff type to add as one pack (order 5 pack coherence): a random target
+     * in [CHAFF_PACK_MIN, CHAFF_PACK_MAX], grown one copy at a time only while the NEXT copy still fits
+     * under BOTH the floor budget and the per-type cap. The pack STARTS at {@code CHAFF_PACK_MIN}, which
+     * {@link #chooseFill} has already guaranteed fits (it offers a chaff type only when
+     * {@code spent + CHAFF_PACK_MIN * cost <= budget} and the analogous per-type check hold), so a chaff
+     * pack is never smaller than the minimum. Growth uses the SAME additive arithmetic as those checks, so
+     * no copy is ever added that would overshoot either cap (no float-floor mismatch).
+     */
+    private int chaffPackSize(EnemyType chaff, float cost, float typeSpent, float spent,
+                              float budget, float maxPerType) {
+        int packSpan = BalanceConfig.CHAFF_PACK_MAX - BalanceConfig.CHAFF_PACK_MIN + 1;
+        int desired  = BalanceConfig.CHAFF_PACK_MIN + random.nextInt(Math.max(1, packSpan));
+        int packSize = BalanceConfig.CHAFF_PACK_MIN;    // guaranteed to fit by chooseFill's precondition
+        // Grow one copy at a time, testing the NEXT size with the SAME multiplicative form and <= boundary
+        // chooseFill uses for its cap checks (count * cost, not an accumulated sum), so the two never
+        // disagree at an exact budget boundary and no float drift can slip an over-cap copy in.
+        while (packSize < desired
+                && spent + (packSize + 1) * cost <= budget
+                && typeSpent + (packSize + 1) * cost <= maxPerType) {
+            packSize++;
+        }
+        return packSize;
     }
 
     private static List<EnemyType> filterByRanged(List<EnemyType> source, boolean ranged) {
@@ -253,8 +296,20 @@ public final class EncounterBudgetPlanner {
         /** Threat points actually spent by the roster (<= floorBudget). */
         public float spentThreatPoints() { return spentThreatPoints; }
 
-        /** Maximum Threat points a single non-anchor room may hold. */
+        /** Maximum Threat points a single non-anchor room may hold (neutral geometry). */
         public float perRoomThreatPointCap() { return perRoomThreatPointCap; }
+
+        /**
+         * The per-room TP cap scaled by a room's GEOMETRY (order 5 tactical room caps): an OPEN room caps
+         * LOWER (nowhere to break ranged cardinal lines), a corridor-adjacent CHOKEPOINT caps a little
+         * HIGHER (the player can funnel the pack). The caller passes the flags it reads from the generator's
+         * room metadata (footprint / corridor adjacency); a neutral room (both false) returns the base cap.
+         */
+        public float perRoomThreatPointCap(boolean isOpenRoom, boolean isChokepointRoom) {
+            return perRoomThreatPointCap * GameMath.roomGeometryThreatCapMultiplier(
+                    isOpenRoom, isChokepointRoom,
+                    BalanceConfig.ROOM_OPEN_TP_MULTIPLIER, BalanceConfig.ROOM_CHOKEPOINT_TP_MULTIPLIER);
+        }
 
         /** Depth-scaled Threat-Point cost of one enemy of the given type. */
         public float threatOf(EnemyType type) { return threatByType.getOrDefault(type, 0f); }

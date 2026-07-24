@@ -910,16 +910,9 @@ public final class EnemyManager implements EnemyHitTarget {
      * everything else SLOWS.
      */
     private static StatusType debuffStatusFor(EnemyType type) {
-        switch (type) {
-            case EYE_TYRANT:
-            case VORTEX_EYE:
-                return StatusType.BLINDED;
-            case MIRE_WRAITH:
-            case ACID_DRONE:
-                return StatusType.WEAK;
-            default:
-                return StatusType.SLOWED;
-        }
+        // Single source of truth: EnemyType owns the mapping so the live effect and the order-5
+        // Threat-Point pricing of DEBUFF_PLAYER can never drift apart.
+        return type.debuffStatusType();
     }
 
     /** Duration (world turns) for each control debuff DEBUFF_PLAYER can inflict. */
@@ -976,12 +969,10 @@ public final class EnemyManager implements EnemyHitTarget {
         }
     }
 
-    /** The chaff type a summoner spawns. Thematic per faction; a fast, cheap swarmer by default. */
+    /** The chaff type a summoner spawns. Single source of truth: EnemyType owns it so the summon
+     *  TP pricing (order 5) matches what actually spawns. */
     private static EnemyType summonTypeFor(EnemyType type) {
-        switch (type) {
-            case BLIGHT_CORRUPTOR: return EnemyType.VORTEX_EYE; // corrupted eyes swarm from its rifts
-            default:               return EnemyType.CRAWLER;    // fast, fragile chaff
-        }
+        return type.summonType();
     }
 
     /**

@@ -1,7 +1,42 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Enemies
 TITLE: True Threat Pricing — specials, budgets, region danger
 ---
+
+IMPLEMENTATION NOTES (design followed; refined where the math demanded it — every
+acceptance criterion verified numerically against the exact Java formula bodies via
+the standalone harness, since the proxy blocks the Android Gradle plugin):
+  A) CYCLE-AVERAGED DPT: cycleAveragedDamagePerTurn(basicDPT, perCastSpecialDamage,
+     summonDPT, cycleTurns) = (basicDPT*(cycleTurns-1) + perCastSpecialDamage)/cycleTurns
+     + summonDPT. A special of ANY kind occupies (displaces) its cast turn, so the
+     displacement applies whenever the move-set is non-empty (incl. a lone summoner —
+     it survives ~1 cadence cycle so its single cast lands on its cadence turn).
+     Non-summon verbs (AREA/BUFF/DEBUFF) are AVERAGED one-per-cycle into
+     perCastSpecialDamage; SUMMON is a SEPARATE amortised per-turn term (bodies, not
+     caster output). Per-verb GameMath.specialEquivalent* formulas as specified.
+     DEBUFF resolves per archetype (BLIND/WEAK/SLOW) via EnemyType.debuffStatusType()
+     (single source; EnemyManager.debuffStatusFor delegates to it).
+  B) REBALANCE FALLOUT: only BLIGHT_CORRUPTOR overflowed once priced honestly (summon
+     pricing pushed its 115-HP body to ~92 TP). Trimmed HP 115 -> 90 (true TP ~64, top
+     of the 36-66 soldier band; golden ratio 3.75). The debuff casters (Mire/Acid/
+     Eye/Vortex) stayed IN band under the conservative DEBUFF_TP_EQUIVALENCE=0.6 (a
+     WEAK/SLOW/BLIND cast that displaces a basic attack is a small net change), so no
+     band was widened — the budget stopped lying without a roster-wide re-fit.
+  C) SUMMON_EXPECTED_PER_FIGHT=1.5 (conservative vs the 2..3 batch: one cast per
+     lifetime, blocked tiles + room live-cap eat part of the batch).
+  D) GENERALISED eHP: EnemyType.armorPool/dodgeChance/flatReduction (default 0) feed
+     EnemyType.effectiveHitPoints() -> GameMath.enemyEffectiveHitPoints; every TP/TTK/
+     golden-ratio call site (EnemyType, BalanceSchema, BalanceReport) routes through
+     it. No runtime dead fields added — the archetype-level inputs ARE the model's
+     enemy stat struct; the live Enemy already carries armor+block.
+  E) TACTICAL ROOM CAPS wired in LevelGenerator only (caverns are roomless/open);
+     open = Room.isLarge, chokepoint = small non-large room (min interior dim <=
+     LEVEL_GEN_CHOKEPOINT_INTERIOR_MAX). REGION DANGER DIAL rides DEPTH (regions ARE
+     5-depth bands), consistent with AMMO_SUPPLY_REGION_MULTIPLIER; no route coupling
+     needed. R-REGION rule added + registered; special-verb COVERAGE added.
+     Acceptance: all 13 archetypes in band; chaff packs >=2 over 100 seeds/15 depths
+     (0 violations); C/D spend > A at every intra-region offset; coupling holds 1..15
+     in every lane; enemy eHP path fully through GameMath.effectiveHitPoints.
 
 ================================================================================
 NEW GAME BALANCE — ORDER 5 of 9

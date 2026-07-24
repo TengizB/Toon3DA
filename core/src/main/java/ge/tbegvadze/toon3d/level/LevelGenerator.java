@@ -2996,7 +2996,17 @@ public class LevelGenerator implements ILevelGenerator {
         float[] roomSpentThreat = new float[rooms.size()];
         boolean[][] usedTiles = new boolean[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT]
                                             [LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
-        float perRoomCap = plan.perRoomThreatPointCap();
+        // TACTICAL ROOM CAPS (order 5): each room's TP cap is scaled by its GEOMETRY (open vs chokepoint),
+        // read from the room's own metadata (isLarge + interior dims), never a hand tag.
+        float[] perRoomCap = new float[rooms.size()];
+        for (int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            boolean isOpenRoom = room.isLarge;
+            boolean isChokepointRoom = !room.isLarge
+                    && Math.min(room.interiorWidth(), room.interiorHeight())
+                            <= LevelGenConstants.LEVEL_GEN_CHOKEPOINT_INTERIOR_MAX;
+            perRoomCap[roomIndex] = plan.perRoomThreatPointCap(isOpenRoom, isChokepointRoom);
+        }
 
         // --- Place the anchor first, deepest room, exempt from the per-room cap.
         EnemyType anchor    = plan.anchor();
@@ -3028,6 +3038,9 @@ public class LevelGenerator implements ILevelGenerator {
         }
     }
 
+    // (perRoomCap is now a per-room array indexed by room, so a room's geometry — open vs chokepoint —
+    // scales the Threat-Point cap it may hold; see placeBudgetedEncounter's tactical-room-cap block.)
+
     /**
      * Places one enemy into the least-loaded eligible room, spreading the roster across the whole
      * floor (balance fix: no empty rooms, no over-stuffed death-trap room). "Load" is the room's
@@ -3037,7 +3050,7 @@ public class LevelGenerator implements ILevelGenerator {
      * cap blocked every room) any room with a free tile so the budget is still spent.
      */
     private void placeEnemyLoadBalanced(char[][] grid, List<Room> rooms, Integer[] roomOrder,
-                                        int[] roomDepths, EnemyType enemy, float cost, float perRoomCap,
+                                        int[] roomDepths, EnemyType enemy, float cost, float[] perRoomCap,
                                         float[] roomSpentThreat, boolean[] roomTilesExhausted,
                                         boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
         for (int phase = 0; phase < 2; phase++) {
@@ -3048,7 +3061,7 @@ public class LevelGenerator implements ILevelGenerator {
                 int   bestDepth = -1;
                 for (Integer roomIndex : roomOrder) {
                     if (roomTilesExhausted[roomIndex]) continue;
-                    if (capPhase && roomSpentThreat[roomIndex] + cost > perRoomCap) continue;
+                    if (capPhase && roomSpentThreat[roomIndex] + cost > perRoomCap[roomIndex]) continue;
                     float weight = 1f + roomDepths[roomIndex];
                     float load   = roomSpentThreat[roomIndex] / weight;
                     if (load < bestLoad

@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.enemy;
 
+import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
 import ge.tbegvadze.toon3d.util.GameBalance;
@@ -375,14 +376,169 @@ public enum EnemyType {
      */
     public int specialAbilityCadenceTurns() { return 0; }
 
+    // -------------------------------------------------------------------------
+    // Enemy survivability inputs (new-game-balancr order 5, Pillar B) — generalised eHP.
+    // Enemy eHP now runs through the SAME GameMath.effectiveHitPoints the player uses, so the
+    // survivability model stops ASSUMING enemies never mitigate. No non-boss archetype supplies a
+    // non-zero value YET (all default to 0 -> eHP == raw HP, byte-identical to before); Iron Stalker
+    // is the designated first user of flat reduction in a later content pass. Overriding any of these
+    // re-prices that archetype's TP / TTK / golden ratio for free.
+    // -------------------------------------------------------------------------
+
+    /** Extra absorbed-HP pool (player-style armour). Default 0 — no non-boss archetype uses it yet. */
+    public float armorPool()     { return 0f; }
+    /** Dodge probability applied to eHP as 1/(1-dodge). Default 0 — no non-boss archetype uses it yet. */
+    public float dodgeChance()   { return 0f; }
+    /** Flat damage shaved off each incoming hit (punishes chip damage). Default 0 — Iron Stalker later. */
+    public float flatReduction() { return 0f; }
+
     /**
-     * This archetype's depth-1 Threat-Point value — the "danger number" the encounter budget
-     * spends. Computed from its own stats via the balance contract's Threat-Point primitive
-     * (GameMath.threatPoints). Enemies carry no armour/dodge, so effective HP == raw HP.
-     * Scale to a given floor with GameMath.enemyThreatAtDepth.
+     * This archetype's effective HP through the shared survivability primitive (order 5). With the
+     * default all-zero mitigation this equals raw {@code maxHealth()}; the flat-reduction term is priced
+     * against the player's sustained reference DPT (the same yardstick the TP survivalTurns uses).
+     */
+    public float effectiveHitPoints() {
+        return GameMath.enemyEffectiveHitPoints(maxHealth(), armorPool(), dodgeChance(),
+                flatReduction(), BalanceConfig.REFERENCE_PLAYER_DPT);
+    }
+
+    /**
+     * The control status this archetype's DEBUFF_PLAYER special inflicts (order 5): the eyes BLIND, the
+     * acid casters (Mire Wraith / Acid Drone) apply WEAK, everything else SLOWS. Single source of truth —
+     * {@code EnemyManager.debuffStatusFor} delegates here so the TP pricing and the live effect can never
+     * drift. Archetypes with no DEBUFF_PLAYER verb never call this; SLOWED is the harmless default.
+     */
+    public StatusType debuffStatusType() {
+        switch (this) {
+            case EYE_TYRANT:
+            case VORTEX_EYE:
+                return StatusType.BLINDED;
+            case MIRE_WRAITH:
+            case ACID_DRONE:
+                return StatusType.WEAK;
+            default:
+                return StatusType.SLOWED;
+        }
+    }
+
+    /**
+     * The chaff type this archetype's SUMMON special spawns (order 5): the Blight Corruptor bleaks
+     * corrupted eyes (Vortex Eye), everything else a fast fragile Crawler. Single source of truth —
+     * {@code EnemyManager.summonTypeFor} delegates here so the summon TP pricing matches what spawns.
+     */
+    public EnemyType summonType() {
+        switch (this) {
+            case BLIGHT_CORRUPTOR:
+                return VORTEX_EYE;
+            default:
+                return CRAWLER;
+        }
+    }
+
+    /**
+     * This archetype's depth-1 Threat-Point value — the "danger number" the encounter budget spends.
+     *
+     * <p>CYCLE-AVERAGED (new-game-balancr order 5): the DPT is blended over the archetype's special-ability
+     * cadence cycle (GameMath.cycleAveragedDamagePerTurn) so casters, buffers and summoners are priced by
+     * their EFFECTIVE output, not just their stat block. Per-verb equivalences are pure GameMath
+     * conversions (specialEquivalent*): AREA_STRIKE = predicted slam damage, BUFF_SELF = extra damage the
+     * EMPOWERED buff adds over its life, DEBUFF = the player output it steals priced at DEBUFF_TP_EQUIVALENCE,
+     * SUMMON = the amortised threat of the bodies it adds. One special fires per cadence cycle (rotating
+     * move-set), so the non-summon verbs are AVERAGED into the per-cast damage while SUMMON adds a separate
+     * amortised per-turn term (it adds bodies, not caster output). eHP runs through the shared survivability
+     * primitive (order 5, Pillar B). Scale to a given floor with GameMath.enemyThreatAtDepth.
      */
     public float baseThreatPoints() {
-        return GameMath.threatPoints(attackDamage(), attackCadenceTurns(),
-                maxHealth(), BalanceConfig.REFERENCE_PLAYER_DPT, positionalMultiplier());
+        float survivalTurns = effectiveHitPoints() / BalanceConfig.REFERENCE_PLAYER_DPT;
+        return cycleAveragedDamagePerTurn() * survivalTurns * positionalMultiplier();
+    }
+
+    /**
+     * This archetype's TRUE effective damage-per-turn (order 5), blended over its special-ability cadence
+     * cycle: basic attacks plus the per-cast equivalent of its scripted specials (AREA_STRIKE / BUFF_SELF /
+     * DEBUFF averaged one-per-cycle) plus a summon's amortised per-turn threat. An enemy with no move-set
+     * returns its plain stat-block DPT (attackDamage / cadence). This is the numerator {@link
+     * #baseThreatPoints()} multiplies by survival turns and the positional multiplier; BalanceReport prints
+     * it alongside the resulting Threat Points.
+     */
+    public float cycleAveragedDamagePerTurn() {
+        float survivalTurns = effectiveHitPoints() / BalanceConfig.REFERENCE_PLAYER_DPT;
+        float basicDamagePerTurn = (float) attackDamage() / Math.max(1, attackCadenceTurns());
+
+        SpecialAbility[] moveSet = moveSet();
+        int specialCadenceTurns = specialAbilityCadenceTurns();
+
+        // Non-summon verbs (AREA_STRIKE / BUFF_SELF / DEBUFF) rotate one-per-cycle, so their per-cast
+        // equivalent damage is averaged; SUMMON adds a separate amortised per-turn term (whole extra
+        // bodies, not caster output). An empty move-set or zero cadence yields the plain stat-block DPT.
+        float perCastSpecialDamageSum = 0f;
+        int   perCastSpecialCount     = 0;
+        float summonDamagePerTurn     = 0f;
+        for (SpecialAbility ability : moveSet) {
+            if (ability == SpecialAbility.SUMMON) {
+                summonDamagePerTurn += GameMath.specialEquivalentSummon(
+                        summonType().baseThreatPoints(),
+                        BalanceConfig.SUMMON_EXPECTED_PER_FIGHT, survivalTurns);
+            } else {
+                float perCast = specialEquivalentDamageOf(ability, basicDamagePerTurn);
+                if (perCast > 0f) {
+                    perCastSpecialDamageSum += perCast;
+                    perCastSpecialCount++;
+                }
+            }
+        }
+        // A special of ANY kind occupies its cast turn (displacing a basic attack), so the cycle
+        // displacement applies whenever the move-set is non-empty — including a lone summoner, whose
+        // single cast lands on its cadence turn. Non-summon verbs supply the averaged per-cast damage;
+        // the summon adds its amortised per-turn threat on top (whole extra bodies, not caster output).
+        float perCastSpecialDamage = perCastSpecialCount > 0
+                ? perCastSpecialDamageSum / perCastSpecialCount : 0f;
+        int cycleTurns = moveSet.length > 0 ? specialCadenceTurns : 0;
+        return GameMath.cycleAveragedDamagePerTurn(
+                basicDamagePerTurn, perCastSpecialDamage, summonDamagePerTurn, cycleTurns);
+    }
+
+    /**
+     * Per-cast equivalent DAMAGE of a non-summon special verb (order 5), routed to its pure GameMath
+     * pricing formula. SUMMON is priced separately (amortised per-turn) in {@link #baseThreatPoints()};
+     * SELF_DESTRUCT is a death-triggered finisher governed by the telegraph rule, not sustained DPT, so it
+     * prices at zero here. Every catalogued verb is covered — {@code BalanceSchema}'s COVERAGE rule fails
+     * the build if a new verb reaches the default branch with no registered equivalence.
+     */
+    private float specialEquivalentDamageOf(SpecialAbility ability, float basicDamagePerTurn) {
+        switch (ability) {
+            case AREA_STRIKE:
+                return GameMath.specialEquivalentAreaStrike(attackDamage(),
+                        EnemyConstants.AREA_STRIKE_DAMAGE_MULTIPLIER);
+            case BUFF_SELF:
+                return GameMath.specialEquivalentBuffSelf(basicDamagePerTurn,
+                        EnemyConstants.BUFF_SELF_EMPOWERED_PERCENT, EnemyConstants.BUFF_SELF_DURATION_TURNS);
+            case DEBUFF_PLAYER:
+                return debuffEquivalentDamage(basicDamagePerTurn);
+            case SUMMON:         // priced as amortised per-turn threat in baseThreatPoints()
+            case SELF_DESTRUCT:  // death-triggered finisher — priced by the telegraph rule, not cycle DPT
+            default:
+                return 0f;
+        }
+    }
+
+    /** Per-cast equivalent damage of this archetype's DEBUFF_PLAYER, resolved by the control status it applies. */
+    private float debuffEquivalentDamage(float basicDamagePerTurn) {
+        switch (debuffStatusType()) {
+            case WEAK:
+                return GameMath.specialEquivalentDebuffWeak(BalanceConfig.REFERENCE_PLAYER_DPT,
+                        BalanceConfig.WEAK_DAMAGE_PERCENT, EnemyConstants.DEBUFF_WEAK_DURATION_TURNS,
+                        BalanceConfig.DEBUFF_TP_EQUIVALENCE);
+            case BLINDED:
+                return GameMath.specialEquivalentDebuffControl(basicDamagePerTurn,
+                        EnemyConstants.DEBUFF_BLIND_DURATION_TURNS, BalanceConfig.DEBUFF_TP_EQUIVALENCE);
+            case SLOWED:
+            default: {
+                float bonusEnemyTurns = (BalanceConfig.SLOW_FACTOR - 1f)
+                        * EnemyConstants.DEBUFF_SLOW_DURATION_TURNS;
+                return GameMath.specialEquivalentDebuffControl(basicDamagePerTurn, bonusEnemyTurns,
+                        BalanceConfig.DEBUFF_TP_EQUIVALENCE);
+            }
+        }
     }
 }
