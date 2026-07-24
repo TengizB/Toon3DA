@@ -46,6 +46,10 @@ public final class BalanceReport {
         System.out.println();
         printDepthCouplingTable();
         System.out.println();
+        printGearCurveTable();
+        System.out.println();
+        printAbilityPricingTable();
+        System.out.println();
         printHazardTable();
         System.out.println();
         printTelegraphAudit();
@@ -385,6 +389,95 @@ public final class BalanceReport {
                     : (ratio < BalanceConfig.DEPTH_COUPLING_RATIO_MIN ? "UNDER(hard)" : "OVER(easy)");
             System.out.printf("%-6d %10.3f %10.3f %8.3f %-12s%n", depth, playerPower, enemyThreat, ratio, verdict);
         }
+    }
+
+    // -----------------------------------------------------------------------------------
+    // GEAR CURVE — the expected arsenal per region + the GEAR GATE (new-game-balancr order 2).
+    // Per region: its depth span, the gearCurve multiplier, the expected player DPT, the tier band
+    // droppable weapons roll from, and — for the reference soldier — the stagnant (never-upgraded)
+    // vs on-curve golden ratio, so the gate is visible: stagnant falls out of band, on-curve holds.
+    // -----------------------------------------------------------------------------------
+    private static void printGearCurveTable() {
+        int bandSize = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+        System.out.println("GEAR CURVE — expected arsenal per region (perRegion "
+                + BalanceConfig.GEAR_CURVE_PER_REGION + ", band " + bandSize + " floors ; soldier golden band "
+                + String.format("%.0f-%.0f", BalanceConfig.GOLDEN_RATIO_TRASH_MIN, BalanceConfig.GOLDEN_RATIO_TRASH_MAX)
+                + ")");
+        System.out.printf("%-7s %-8s %6s %9s %-14s %10s %10s%n",
+                "region", "depths", "gear", "expDPT", "tier band", "stagnantGR", "onCurveGR");
+        System.out.println("------------------------------------------------------------------------------------");
+        int regionCount = BalanceConfig.WEAPON_DROP_TIER_MIN_BY_REGION.length;
+        for (int region = 0; region < regionCount; region++) {
+            int entryDepth = region * bandSize + 1;
+            float gear = GameMath.gearCurveAtDepth(BalanceConfig.GEAR_CURVE_PER_REGION, entryDepth, bandSize);
+            float expectedDpt = GameMath.expectedPlayerDamagePerTurn(BalanceConfig.REFERENCE_PLAYER_DPT,
+                    BalanceConfig.GEAR_CURVE_PER_REGION, entryDepth, bandSize);
+            String tierBand = tierName(BalanceConfig.WEAPON_DROP_TIER_MIN_BY_REGION[region])
+                    + ".." + tierName(BalanceConfig.WEAPON_DROP_TIER_MAX_BY_REGION[region]);
+            float stagnantGolden = referenceSoldierGolden(entryDepth, BalanceConfig.REFERENCE_PLAYER_DPT);
+            float onCurveGolden  = referenceSoldierGolden(entryDepth, expectedDpt);
+            System.out.printf("%-7d %-8s %6.2f %9.1f %-14s %10s %10s%n",
+                    region + 1, entryDepth + "-" + (entryDepth + bandSize - 1), gear, expectedDpt, tierBand,
+                    goldenVerdict(stagnantGolden), goldenVerdict(onCurveGolden));
+        }
+        System.out.println("  reference soldier: " + BalanceSchema.gearGateReferenceSoldierName()
+                + "   (stagnantGR = never-upgraded player ; onCurveGR = reference * gearCurve)");
+        System.out.println("  GATE: stagnantGR must fall OUT of the band by region 2 while onCurveGR stays IN — R-GEARGATE.");
+        System.out.println("  PITY: every region PLACES >= " + BalanceConfig.GUARANTEED_UPGRADE_PER_REGION
+                + " in-band weapon (RunStats-tracked force-spawn).");
+    }
+
+    private static float referenceSoldierGolden(int depth, float playerDamagePerTurn) {
+        ge.tbegvadze.toon3d.enemy.EnemyType soldier = BalanceSchema.gearGateReferenceSoldier();
+        float scaledEnemyEHP = enemyEffectiveHitPoints(soldier.maxHealth())
+                * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
+        int turnsToKill = GameMath.turnsToKill(scaledEnemyEHP, playerDamagePerTurn);
+        float enemyDamagePerTurn = ((float) soldier.attackDamage() / Math.max(1, soldier.attackCadenceTurns()))
+                * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
+        int turnsToDie = GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP, enemyDamagePerTurn);
+        return GameMath.goldenRatio(turnsToDie, turnsToKill);
+    }
+
+    private static String goldenVerdict(float golden) {
+        boolean inBand = golden >= BalanceConfig.GOLDEN_RATIO_TRASH_MIN
+                && golden <= BalanceConfig.GOLDEN_RATIO_TRASH_MAX;
+        return String.format("%.2f%s", golden, inBand ? "" : "*");
+    }
+
+    private static String tierName(int tierOrdinal) {
+        ge.tbegvadze.toon3d.entity.WeaponTier[] tiers = ge.tbegvadze.toon3d.entity.WeaponTier.values();
+        int clamped = Math.max(0, Math.min(tiers.length - 1, tierOrdinal));
+        return tiers[clamped].displayName;
+    }
+
+    // -----------------------------------------------------------------------------------
+    // ABILITY PRICING — every weapon ability's PP price at level 1 and level 10, plus the per-tier
+    // ability-PP budgets (new-game-balancr order 2). Rarity buys abilities within these budgets;
+    // the WeaponRoller never overspends a tier's ceiling. Iterated straight from GameMath so the
+    // table cannot drift from the roller.
+    // -----------------------------------------------------------------------------------
+    private static void printAbilityPricingTable() {
+        System.out.println("ABILITY PRICING — PP cost per ability (budget = PP a tier may spend on abilities)");
+        System.out.print("  tier budgets: ");
+        for (ge.tbegvadze.toon3d.entity.WeaponTier tier : ge.tbegvadze.toon3d.entity.WeaponTier.values()) {
+            System.out.printf("%s=%.0f  ", tier.displayName,
+                    ge.tbegvadze.toon3d.entity.WeaponRoller.tierAbilityPowerPointBudget(tier));
+        }
+        System.out.printf("(±%.0f%%)%n", BalanceConfig.TIER_ABILITY_PP_TOLERANCE * 100f);
+        System.out.printf("%-22s %8s %8s%n", "ability", "PP@L1", "PP@L10");
+        System.out.println("------------------------------------------------------------------------------------");
+        for (ge.tbegvadze.toon3d.entity.WeaponAbility ability
+                : ge.tbegvadze.toon3d.entity.WeaponAbility.values()) {
+            float ppLevel1  = abilityPowerPointsAt(ability, 1);
+            float ppLevel10 = abilityPowerPointsAt(ability, WeaponConstants.MAX_WEAPON_LEVEL);
+            System.out.printf("%-22s %8.2f %8.2f%n", ability.name(), ppLevel1, ppLevel10);
+        }
+    }
+
+    private static float abilityPowerPointsAt(ge.tbegvadze.toon3d.entity.WeaponAbility ability, int level) {
+        ge.tbegvadze.toon3d.entity.AbilityInstance instance =
+                ge.tbegvadze.toon3d.entity.WeaponRoller.buildAbilityInstance(ability, level);
+        return GameMath.abilityPowerPoints(ability, instance.magnitude, instance.countValue);
     }
 
     // -----------------------------------------------------------------------------------

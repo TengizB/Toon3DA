@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.entity;
 
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
@@ -13,6 +14,19 @@ import java.util.Random;
  * Rolls weapon level, tier, and abilities at spawn time.
  * Constructed once per run from runSeed for reproducibility:
  * same seed → same sequence of rolls across all weapons in the run.
+ *
+ * <p><b>The gear curve (new-game-balancr order 2).</b> Two order-2 rules shape a rolled weapon:
+ * <ul>
+ *   <li><b>Depth-gated tier bands</b> — a dropped weapon's tier is clamped to its region's band
+ *       ({@code BalanceConfig.WEAPON_DROP_TIER_*_BY_REGION}): region 1 rolls COMMON..UNCOMMON,
+ *       region 2 UNCOMMON..RARE, and so on, so the arsenal the game supplies keeps pace with the
+ *       expected gear curve.</li>
+ *   <li><b>Priced abilities</b> — tier is a PP BUDGET, not a slot count. Abilities are rolled
+ *       greedily and each is charged its {@link GameMath#abilityPowerPoints} price; the roll stops
+ *       once the next ability would exceed the tier's ability-PP ceiling
+ *       ({@code TIER_ABILITY_PP_BUDGET_* × (1 + TIER_ABILITY_PP_TOLERANCE)}). Rarity buys abilities,
+ *       never raw power. BalanceSchema R-ABILITY asserts every roll fits its budget.</li>
+ * </ul>
  */
 public class WeaponRoller {
 
@@ -31,9 +45,48 @@ public class WeaponRoller {
      */
     public void rollWeapon(Weapon weapon, int floorDepth) {
         int               rolledLevel     = rollLevel(floorDepth);
-        WeaponTier        rolledTier      = rollTierClamped(floorDepth, null, null);
+        WeaponTier        rolledTier      = rollTierClamped(floorDepth,
+                                                regionMinTier(floorDepth), regionMaxTier(floorDepth));
         AbilityInstance[] rolledAbilities = rollAbilities(weapon, rolledTier, rolledLevel);
         weapon.configureRoll(rolledLevel, rolledTier, rolledAbilities);
+    }
+
+    /**
+     * THE PITY RULE (new-game-balancr order 2): rolls a GUARANTEED in-band upgrade for a region — a
+     * weapon whose tier is forced to at least this region's band minimum (and no higher than its max),
+     * so a region can never end with the player starved of the gear its curve expects. The floor
+     * generator calls this for the pity spawn it force-places when a region is about to end with zero
+     * upgrades seen (RunStats tracks the count).
+     *
+     * @param weapon     the weapon instance to configure
+     * @param floorDepth current dungeon floor (1-based); selects the region band
+     */
+    public void rollGuaranteedUpgrade(Weapon weapon, int floorDepth) {
+        WeaponTier minTier            = regionMinTier(floorDepth);
+        int               rolledLevel = rollLevel(floorDepth);
+        WeaponTier        rolledTier  = rollTierClamped(floorDepth, minTier, regionMaxTier(floorDepth));
+        // Never below the region's guaranteed floor: a pity drop must actually BE an upgrade.
+        if (rolledTier.ordinal() < minTier.ordinal()) rolledTier = minTier;
+        AbilityInstance[] rolledAbilities = rollAbilities(weapon, rolledTier, rolledLevel);
+        weapon.configureRoll(rolledLevel, rolledTier, rolledAbilities);
+    }
+
+    /**
+     * Snapshot form of {@link #rollGuaranteedUpgrade} for the pity force-spawn (a floor's weapons are
+     * stored as {@link WeaponRoll} snapshots on ground items, not applied to a live weapon).
+     */
+    public WeaponRoll rollGuaranteedUpgradeToSnapshot(Weapon weapon, int floorDepth) {
+        WeaponTier minTier            = regionMinTier(floorDepth);
+        int               rolledLevel = rollLevel(floorDepth);
+        WeaponTier        rolledTier  = rollTierClamped(floorDepth, minTier, regionMaxTier(floorDepth));
+        if (rolledTier.ordinal() < minTier.ordinal()) rolledTier = minTier;
+        AbilityInstance[] rolledAbilities = rollAbilities(weapon, rolledTier, rolledLevel);
+        return new WeaponRoll(rolledLevel, rolledTier, rolledAbilities);
+    }
+
+    /** The lowest tier that counts as a real weapon UPGRADE (UNCOMMON or better) — the pity threshold. */
+    public static WeaponTier upgradeTierThreshold() {
+        return WeaponTier.UNCOMMON;
     }
 
     /**
@@ -73,9 +126,41 @@ public class WeaponRoller {
      */
     public WeaponRoll rollToSnapshot(Weapon weapon, int floorDepth) {
         int               rolledLevel     = rollLevel(floorDepth);
-        WeaponTier        rolledTier      = rollTierClamped(floorDepth, null, null);
+        WeaponTier        rolledTier      = rollTierClamped(floorDepth,
+                                                regionMinTier(floorDepth), regionMaxTier(floorDepth));
         AbilityInstance[] rolledAbilities = rollAbilities(weapon, rolledTier, rolledLevel);
         return new WeaponRoll(rolledLevel, rolledTier, rolledAbilities);
+    }
+
+    // ── Depth-gated loot tier bands (new-game-balancr order 2) ──────────────
+
+    /**
+     * Region index for a floor depth: {@code floor((depth-1) / REGION_BAND_SIZE)}, clamped to a valid
+     * index into the per-region tier-band tables (deeper regions reuse the last, deepest band entry).
+     */
+    private static int regionBandIndex(int floorDepth, int tableLength) {
+        int bandSize = Math.max(1, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
+        int region   = Math.max(0, floorDepth - 1) / bandSize;
+        return Math.min(region, tableLength - 1);
+    }
+
+    /** Lowest tier a dropped weapon may roll at this depth (from WEAPON_DROP_TIER_MIN_BY_REGION). */
+    private static WeaponTier regionMinTier(int floorDepth) {
+        int[] table = BalanceConfig.WEAPON_DROP_TIER_MIN_BY_REGION;
+        return tierByOrdinal(table[regionBandIndex(floorDepth, table.length)]);
+    }
+
+    /** Highest tier a dropped weapon may roll at this depth (from WEAPON_DROP_TIER_MAX_BY_REGION). */
+    private static WeaponTier regionMaxTier(int floorDepth) {
+        int[] table = BalanceConfig.WEAPON_DROP_TIER_MAX_BY_REGION;
+        return tierByOrdinal(table[regionBandIndex(floorDepth, table.length)]);
+    }
+
+    /** Maps a band's tier-ordinal to the nearest existing WeaponTier (LEGENDARY has ordinal 4). */
+    private static WeaponTier tierByOrdinal(int tierOrdinal) {
+        WeaponTier[] tiers = WeaponTier.values();
+        int clamped = Math.max(0, Math.min(tiers.length - 1, tierOrdinal));
+        return tiers[clamped];
     }
 
     // ── Private helpers ────────────────────────────────────────────────────
@@ -157,46 +242,110 @@ public class WeaponRoller {
         return 0f;
     }
 
+    /**
+     * Rolls a weapon's abilities against its tier's PP BUDGET (new-game-balancr order 2). Tier is a
+     * spend limit, not a slot count: abilities are drawn greedily and each is charged its
+     * {@link GameMath#abilityPowerPoints} price; an ability is added only while the running total stays
+     * within the tier's ability-PP ceiling ({@code budget × (1 + tolerance)}), and the tier's slot
+     * geometry ({@link WeaponTier#standardSlotCount()}) still caps the count from above. A LEGENDARY
+     * reserves and places its signature FIRST (that is its identity), then fills standard slots with
+     * the remaining budget. The result therefore always satisfies R-ABILITY by construction.
+     */
     private AbilityInstance[] rollAbilities(Weapon weapon, WeaponTier tier, int level) {
-        if (tier.abilitySlots == 0) return new AbilityInstance[0];
+        return rollAbilitySet(weapon.isMelee(), tier, level);
+    }
 
-        List<WeaponAbility> standardPool = buildStandardPool(weapon);
+    /**
+     * Rolls a tier's abilities against its PP budget for a weapon of the given melee-ness, without a
+     * Weapon instance. Public so BalanceReport and the audit can exercise the budgeted roll headlessly.
+     * Uses this roller's RNG, so the sequence stays reproducible per run seed.
+     */
+    public AbilityInstance[] rollAbilitySet(boolean isMeleeWeapon, WeaponTier tier, int level) {
+        float ceiling = tierAbilityPowerPointCeiling(tier);
+        if (ceiling <= 0f) return new AbilityInstance[0];
 
-        int standardCount = tier.standardSlotCount();
         List<AbilityInstance> result = new ArrayList<>();
+        float spentPowerPoints = 0f;
 
-        Collections.shuffle(standardPool, rng);
-        for (int slotIndex = 0; slotIndex < Math.min(standardCount, standardPool.size()); slotIndex++) {
-            result.add(buildInstance(standardPool.get(slotIndex), level));
-        }
-
+        // Legendary signature first: it defines the legendary, so it is placed before standard fill.
         if (tier.isLegendary()) {
-            List<WeaponAbility> legendaryPool = buildLegendaryPool(weapon);
+            List<WeaponAbility> legendaryPool = buildLegendaryPool(isMeleeWeapon);
             if (!legendaryPool.isEmpty()) {
                 WeaponAbility signature = legendaryPool.get(rng.nextInt(legendaryPool.size()));
-                result.add(buildInstance(signature, level));
+                AbilityInstance signatureInstance = buildAbilityInstance(signature, level);
+                float signatureCost = GameMath.abilityPowerPoints(signature,
+                        signatureInstance.magnitude, signatureInstance.countValue);
+                if (spentPowerPoints + signatureCost <= ceiling) {
+                    result.add(signatureInstance);
+                    spentPowerPoints += signatureCost;
+                }
             }
+        }
+
+        // Standard fill: draw the shuffled pool and add each ability whose price still fits the budget.
+        List<WeaponAbility> standardPool = buildStandardPool(isMeleeWeapon);
+        Collections.shuffle(standardPool, rng);
+        int standardSlotCap = tier.standardSlotCount();
+        int standardAdded   = 0;
+        for (WeaponAbility ability : standardPool) {
+            if (standardAdded >= standardSlotCap) break;
+            AbilityInstance instance = buildAbilityInstance(ability, level);
+            float cost = GameMath.abilityPowerPoints(ability, instance.magnitude, instance.countValue);
+            if (spentPowerPoints + cost <= ceiling) {
+                result.add(instance);
+                spentPowerPoints += cost;
+                standardAdded++;
+            }
+            // else: too expensive for the remaining budget — skip it and try the next (cheaper) draw.
         }
 
         return result.toArray(new AbilityInstance[0]);
     }
 
+    /** The ability-PP ceiling a tier may spend: its budget plus the allowed overspend tolerance. */
+    private static float tierAbilityPowerPointCeiling(WeaponTier tier) {
+        return tierAbilityPowerPointBudget(tier) * (1f + BalanceConfig.TIER_ABILITY_PP_TOLERANCE);
+    }
+
+    /** The nominal ability-PP budget for a tier (BalanceConfig SECTION 15). */
+    public static float tierAbilityPowerPointBudget(WeaponTier tier) {
+        switch (tier) {
+            case COMMON:    return BalanceConfig.TIER_ABILITY_PP_BUDGET_COMMON;
+            case UNCOMMON:  return BalanceConfig.TIER_ABILITY_PP_BUDGET_UNCOMMON;
+            case RARE:      return BalanceConfig.TIER_ABILITY_PP_BUDGET_RARE;
+            case EPIC:      return BalanceConfig.TIER_ABILITY_PP_BUDGET_EPIC;
+            case LEGENDARY: return BalanceConfig.TIER_ABILITY_PP_BUDGET_LEGENDARY;
+            default:        return 0f;
+        }
+    }
+
+    /** Total ability PP carried by a set of rolled abilities (R-ABILITY / BalanceReport helper). */
+    public static float totalAbilityPowerPoints(AbilityInstance[] abilities) {
+        float total = 0f;
+        if (abilities != null) {
+            for (AbilityInstance instance : abilities) {
+                total += GameMath.abilityPowerPoints(instance.ability, instance.magnitude, instance.countValue);
+            }
+        }
+        return total;
+    }
+
     /** Eligible non-signature abilities for this weapon (shared by spawn roll + shop tier upgrade). */
-    private List<WeaponAbility> buildStandardPool(Weapon weapon) {
+    private List<WeaponAbility> buildStandardPool(boolean isMeleeWeapon) {
         List<WeaponAbility> pool = new ArrayList<>();
         for (WeaponAbility ability : WeaponAbility.values()) {
-            if (!ability.legendaryOnly && ability.eligibleFor(weapon.isMelee())) {
+            if (!ability.legendaryOnly && ability.eligibleFor(isMeleeWeapon)) {
                 pool.add(ability);
             }
         }
         return pool;
     }
 
-    /** Eligible signature (legendary-only) abilities for this weapon. */
-    private List<WeaponAbility> buildLegendaryPool(Weapon weapon) {
+    /** Eligible signature (legendary-only) abilities for a weapon of the given melee-ness. */
+    private List<WeaponAbility> buildLegendaryPool(boolean isMeleeWeapon) {
         List<WeaponAbility> pool = new ArrayList<>();
         for (WeaponAbility ability : WeaponAbility.values()) {
-            if (ability.legendaryOnly && ability.eligibleFor(weapon.isMelee())) {
+            if (ability.legendaryOnly && ability.eligibleFor(isMeleeWeapon)) {
                 pool.add(ability);
             }
         }
@@ -211,7 +360,7 @@ public class WeaponRoller {
     /**
      * Shop level-up: raises the weapon's level by one and rescales its existing abilities'
      * magnitudes to the new level (ability magnitude scales with level), then installs them.
-     * Reuses {@link #buildInstance} — the same magnitude math the spawn roll uses.
+     * Reuses {@link #buildAbilityInstance} — the same magnitude math the spawn roll uses.
      *
      * @return false with no change if the weapon is already at max level.
      */
@@ -221,7 +370,7 @@ public class WeaponRoller {
         int abilityCount = weapon.getAbilityCount();
         AbilityInstance[] rescaled = new AbilityInstance[abilityCount];
         for (int index = 0; index < abilityCount; index++) {
-            rescaled[index] = buildInstance(weapon.getAbility(index).ability, newLevel);
+            rescaled[index] = buildAbilityInstance(weapon.getAbility(index).ability, newLevel);
         }
         weapon.applyShopLevelUp(rescaled);
         return true;
@@ -252,23 +401,43 @@ public class WeaponRoller {
             else                                currentStandardCount++;
         }
 
-        // Fill the standard slots the destination tier grants beyond what the weapon holds.
-        int newStandardNeeded = Math.max(0, newTier.standardSlotCount() - currentStandardCount);
-        if (newStandardNeeded > 0) {
-            List<WeaponAbility> pool = buildStandardPool(weapon);
-            pool.removeAll(alreadyOwned);
-            Collections.shuffle(pool, rng);
-            for (int slotIndex = 0; slotIndex < Math.min(newStandardNeeded, pool.size()); slotIndex++) {
-                combined.add(buildInstance(pool.get(slotIndex), currentLevel));
-            }
-        }
+        // Existing abilities carry over; new ones must keep the weapon within the NEW tier's PP
+        // ceiling (R-ABILITY holds for shop upgrades too, not just spawn rolls).
+        float ceiling = tierAbilityPowerPointCeiling(newTier);
+        float spentPowerPoints = totalAbilityPowerPoints(combined.toArray(new AbilityInstance[0]));
 
         // Into Legendary: add the signature (legendary-only) ability if the weapon has none.
         if (newTier.isLegendary() && !hasSignature) {
-            List<WeaponAbility> legendaryPool = buildLegendaryPool(weapon);
+            List<WeaponAbility> legendaryPool = buildLegendaryPool(weapon.isMelee());
             if (!legendaryPool.isEmpty()) {
                 WeaponAbility signature = legendaryPool.get(rng.nextInt(legendaryPool.size()));
-                combined.add(buildInstance(signature, currentLevel));
+                AbilityInstance signatureInstance = buildAbilityInstance(signature, currentLevel);
+                float cost = GameMath.abilityPowerPoints(signature,
+                        signatureInstance.magnitude, signatureInstance.countValue);
+                if (spentPowerPoints + cost <= ceiling) {
+                    combined.add(signatureInstance);
+                    spentPowerPoints += cost;
+                }
+            }
+        }
+
+        // Fill the standard slots the destination tier grants beyond what the weapon holds, greedily,
+        // adding only abilities whose price still fits the remaining budget.
+        int newStandardNeeded = Math.max(0, newTier.standardSlotCount() - currentStandardCount);
+        if (newStandardNeeded > 0) {
+            List<WeaponAbility> pool = buildStandardPool(weapon.isMelee());
+            pool.removeAll(alreadyOwned);
+            Collections.shuffle(pool, rng);
+            int added = 0;
+            for (WeaponAbility ability : pool) {
+                if (added >= newStandardNeeded) break;
+                AbilityInstance instance = buildAbilityInstance(ability, currentLevel);
+                float cost = GameMath.abilityPowerPoints(ability, instance.magnitude, instance.countValue);
+                if (spentPowerPoints + cost <= ceiling) {
+                    combined.add(instance);
+                    spentPowerPoints += cost;
+                    added++;
+                }
             }
         }
 
@@ -276,7 +445,12 @@ public class WeaponRoller {
         return true;
     }
 
-    private AbilityInstance buildInstance(WeaponAbility ability, int weaponLevel) {
+    /**
+     * Builds a level-scaled {@link AbilityInstance} for an ability. Deterministic and rng-free — the
+     * same (ability, level) always yields the same magnitude/count — so BalanceSchema, BalanceReport,
+     * and the audit can price any ability without a WeaponRoller instance.
+     */
+    public static AbilityInstance buildAbilityInstance(WeaponAbility ability, int weaponLevel) {
         float magnitude = 0f;
         int   countVal  = 0;
 

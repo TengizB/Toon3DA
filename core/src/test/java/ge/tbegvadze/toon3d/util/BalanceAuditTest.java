@@ -99,6 +99,53 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.coverageResults());
     }
 
+    /** R-GEARGATE: the starting loadout is fair in region 1, reads underpowered by the gate, on-curve stays fair. */
+    @Test
+    void theGearGateExistsAndTheStartIsFair() {
+        assertNoViolations(BalanceSchema.gearGateResults());
+    }
+
+    /** R-ABILITY: every ability is priced and fits the richest tier's ceiling; tier budgets are monotonic. */
+    @Test
+    void everyAbilityIsPricedWithinItsTierBudget() {
+        assertNoViolations(BalanceSchema.abilityBudgetResults());
+    }
+
+    /**
+     * R-ABILITY (the roll invariant): NO rolled weapon — at any tier, level, melee-ness, or seed —
+     * carries more ability PP than its tier's ceiling. In particular a legendary never exceeds
+     * {@code 30 * 1.2 = 36} (the acceptance criterion). The WeaponRoller enforces this by construction;
+     * this sweep proves it empirically over a grid of rolls.
+     */
+    @Test
+    void everyBudgetedRollStaysWithinItsTierCeiling() {
+        java.util.List<String> overspends = new java.util.ArrayList<>();
+        for (long seed = 0; seed < 200; seed++) {
+            ge.tbegvadze.toon3d.entity.WeaponRoller roller =
+                    new ge.tbegvadze.toon3d.entity.WeaponRoller(seed);
+            for (ge.tbegvadze.toon3d.entity.WeaponTier tier
+                    : ge.tbegvadze.toon3d.entity.WeaponTier.values()) {
+                float ceiling = ge.tbegvadze.toon3d.entity.WeaponRoller.tierAbilityPowerPointBudget(tier)
+                        * (1f + BalanceConfig.TIER_ABILITY_PP_TOLERANCE);
+                for (boolean isMelee : new boolean[]{false, true}) {
+                    for (int level = 1; level <= 10; level++) {
+                        ge.tbegvadze.toon3d.entity.AbilityInstance[] abilities =
+                                roller.rollAbilitySet(isMelee, tier, level);
+                        float total = ge.tbegvadze.toon3d.entity.WeaponRoller
+                                .totalAbilityPowerPoints(abilities);
+                        if (total > ceiling + 1e-3f) {
+                            overspends.add(String.format(
+                                    "  seed=%d tier=%s melee=%b level=%d total=%.2f > ceiling=%.2f",
+                                    seed, tier, isMelee, level, total, ceiling));
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(overspends.isEmpty(),
+                () -> "Budgeted ability rolls exceeded their tier ceiling:\n" + String.join("\n", overspends));
+    }
+
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */
     @Test
     void fullSchemaSweepHasNoViolations() {

@@ -901,6 +901,31 @@ public final class BalanceConfig {
     public static final float DEPTH_COUPLING_RATIO_MIN = 0.9f;
     public static final float DEPTH_COUPLING_RATIO_MAX = 1.2f;
 
+    // --- THE EXPECTED ARSENAL CURVE (new-game-balancr order 2) — the GEAR GATE anchor.
+    // REFERENCE_PLAYER_DPT (above) is the FIXED depth-1 yardstick. Order 2 layers a per-depth
+    // EXPECTED PLAYER on top of it: expectedPlayerDamagePerTurn(depth) = REFERENCE_PLAYER_DPT *
+    // gearCurve(depth) (a later order multiplies in a card curve too). gearCurve models the arsenal
+    // the game EXPECTS you to be holding at a depth — found/bought weapons + weapon levels — as a
+    // step-per-region multiplier:
+    //     gearCurve(d) = GEAR_CURVE_PER_REGION ^ floor((d-1) / GEAR_CURVE_REGION_BAND_SIZE)
+    // Because a region is GEAR_CURVE_REGION_BAND_SIZE (5) depths, gearCurve is 1.0 across the whole
+    // first region (depths 1..5), so expectedPlayerDamagePerTurn(1..5) == REFERENCE_PLAYER_DPT exactly
+    // (the run BEGINS on the curve, at the bottom of it). Each subsequent region expects ~+35% weapon
+    // power. THE GATE: a player who never upgrades keeps the depth-1 REFERENCE_PLAYER_DPT while the
+    // curve rises, so by region 2 they fight at ~1/1.35 = 74% of the expected DPT and by region 3 at
+    // ~55% — their golden ratio falls out of the fair band (BalanceSchema R-GEARGATE proves this with
+    // the region-2 entry soldier), which is what makes "find better gear or die" a real loop.
+    // See docs/game-balance-authority.txt (THE GEAR CURVE) and GameMath.gearCurveAtDepth.
+    /** Weapon-power multiplier the game expects the player to GAIN per 5-floor region (each region ~+35%). Range: 1.2–1.5. */
+    public static final float GEAR_CURVE_PER_REGION       = 1.35f;
+    /**
+     * Depths per region for the gear curve — the SAME 5-floor band the route map uses
+     * ({@link RouteMapConstants#REGION_BAND_SIZE}), referenced here so the curve and the descent's
+     * region boundaries can never drift apart. A region ends on a boss floor, and the gear step lands
+     * exactly on the region boundary.
+     */
+    public static final int   GEAR_CURVE_REGION_BAND_SIZE = RouteMapConstants.REGION_BAND_SIZE;
+
     // =====================================================================================
     // SECTION 10 — RESOURCE SCARCITY MODEL & BANDS (idea 3)
     // The bands the scarcity contract checks against, plus the canonical MODEL FLOOR — a
@@ -1374,6 +1399,77 @@ public final class BalanceConfig {
     public static final int   EXTENDED_MAG_BASE_COUNT      = 1;
     public static final int   EXTENDED_MAG_LEVELS_PER_STEP = 3;
     public static final int   EXTENDED_MAG_MAX_COUNT       = 4;
+
+    // -------------------------------------------------------------------------------------
+    // TIER = PRICED ABILITY BUDGET (new-game-balancr order 2). Rarity NEVER raises a weapon's
+    // POWER band (that stays a role property, SECTION 9) — it buys ABILITIES, and now abilities
+    // are PRICED in power points (PP = %-of-reference-DPT/eHP, the SAME currency the level-up
+    // cards use; see GameMath.abilityPowerPoints). Each tier gets an ability-PP BUDGET; the
+    // WeaponRoller rolls abilities until the budget is spent — never past. This converts the whole
+    // "PLACEHOLDER — flag for playtesting" ability catalogue above into priced content: magnitudes
+    // may be tuned freely, the price recomputes from the magnitude. BalanceSchema R-ABILITY asserts
+    // every rollable tier/level roll fits its tier budget. See docs/game-balance-authority.txt.
+    // -------------------------------------------------------------------------------------
+    /** Ability-PP budget a COMMON weapon may spend on abilities (none — commons are vanilla). */
+    public static final float TIER_ABILITY_PP_BUDGET_COMMON    = 0f;
+    /** Ability-PP budget an UNCOMMON weapon may spend (~one modest ability). */
+    public static final float TIER_ABILITY_PP_BUDGET_UNCOMMON  = 6f;
+    /** Ability-PP budget a RARE weapon may spend (~two abilities). */
+    public static final float TIER_ABILITY_PP_BUDGET_RARE      = 12f;
+    /** Ability-PP budget an EPIC weapon may spend (~three abilities). */
+    public static final float TIER_ABILITY_PP_BUDGET_EPIC      = 20f;
+    /** Ability-PP budget a LEGENDARY weapon may spend (~four abilities + a signature). */
+    public static final float TIER_ABILITY_PP_BUDGET_LEGENDARY = 30f;
+    /** Fractional slack the roller may overspend a tier budget by before an ability is rejected (±20%). */
+    public static final float TIER_ABILITY_PP_TOLERANCE        = 0.20f;
+
+    // ── ABILITY PRICING UTILISATION WEIGHTS ──────────────────────────────────────────────
+    // An ability's PP is its magnitude converted to a %-of-reference value, DISCOUNTED by how often
+    // that value actually applies (a bonus that only fires below 30% HP is worth a fraction of an
+    // always-on bonus of the same magnitude). These weights are the pricing MODEL — designer data,
+    // tunable; the price always recomputes from (weight * live magnitude). GameMath.abilityPowerPoints
+    // classifies each WeaponAbility into one of these and applies the matching weight.
+    /** Always-on / on-every-hit damage multipliers (crit expectation, rhythm). Full weight. */
+    public static final float ABILITY_UTIL_ALWAYS_ON        = 1.00f;
+    /** Chance-gated crowd control (stagger, kinetic slam) — defensive value, not raw damage. */
+    public static final float ABILITY_UTIL_CROWD_CONTROL    = 0.45f;
+    /** Bypass/penetration value (armor pierce) — only pays off vs shielding enemies. */
+    public static final float ABILITY_UTIL_PENETRATION      = 0.30f;
+    /** Damage-over-time (rend, incendiary) — refreshes not stacks, and overkills dying targets. */
+    public static final float ABILITY_UTIL_DAMAGE_OVER_TIME = 0.60f;
+    /** Close-range / long-range / first-shot / low-HP conditional damage bonuses. */
+    public static final float ABILITY_UTIL_CONDITIONAL      = 0.30f;
+    /** Lifesteal-style sustain expressed as a fraction of damage dealt. */
+    public static final float ABILITY_UTIL_SUSTAIN_FRACTION = 0.50f;
+    /** Flat per-event HP/armour sustain and flat AoE burst — small, situational. */
+    public static final float ABILITY_UTIL_FLAT_EVENT       = 0.35f;
+    /** Percent-of-target-max-HP amplifiers (resonant) — strong but conditional on a bleed. */
+    public static final float ABILITY_UTIL_PERCENT_MAX_HP   = 0.30f;
+    /** PP per extra count for count utilities (extra pierce, +clip step, extra burst round). */
+    public static final float ABILITY_PP_PER_COUNT          = 2.0f;
+    /** Flat nominal PP for pure-utility on-kill economy abilities (scavenger, salvage, credits, medic, XP). */
+    public static final float ABILITY_PP_UTILITY_NOMINAL    = 3.0f;
+    /** Flat nominal PP for a legendary SIGNATURE ability (priced as a fixed marquee effect). */
+    public static final float ABILITY_PP_LEGENDARY_SIGNATURE = 10.0f;
+
+    // -------------------------------------------------------------------------------------
+    // DEPTH-GATED LOOT TIERS + THE PITY RULE (new-game-balancr order 2). The game must actually
+    // SUPPLY the arsenal the gear curve expects — a gate without supply is just a difficulty spike.
+    // Dropped weapons roll their tier from a per-region BAND (indices into WeaponTier's ordinal:
+    // 0 COMMON, 1 UNCOMMON, 2 RARE, 3 EPIC, 4/5 LEGENDARY). Region index = floor((depth-1)/band).
+    // Regions beyond the last band entry clamp to the last (deepest) band. The run BEGINS on the
+    // curve: region 1 offers COMMON..UNCOMMON (matching the start-room offer band, order 1).
+    // -------------------------------------------------------------------------------------
+    /** Per-region MINIMUM dropped-weapon tier ordinal, indexed by region (clamped to last entry). */
+    public static final int[] WEAPON_DROP_TIER_MIN_BY_REGION = {0, 1, 2, 3};
+    /** Per-region MAXIMUM dropped-weapon tier ordinal, indexed by region (clamped to last entry). */
+    public static final int[] WEAPON_DROP_TIER_MAX_BY_REGION = {1, 2, 3, 5};
+    /**
+     * THE PITY RULE: every region must PLACE at least this many weapons at its tier band so no run is
+     * starved of its curve by RNG. RunStats tracks upgrades seen this region; the floor generator
+     * force-spawns one at a region's last floor if the region is about to end at zero. Range: 1–2.
+     */
+    public static final int   GUARANTEED_UPGRADE_PER_REGION = 1;
 
     // =====================================================================================
     // SECTION 16 — SHOP ECONOMY (UAC Fabricator)

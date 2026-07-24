@@ -1058,7 +1058,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // Build ground items from weapon spawn points. Each item gets a pre-rolled
         // WeaponRoll so the compare card can show accurate stats before pickup.
+        // Tier is depth-gated inside the roller (new-game-balancr order 2): a region's drops roll from
+        // its band (region 1 COMMON..UNCOMMON, region 2 UNCOMMON..RARE, ...), so the arsenal the game
+        // supplies keeps pace with the expected gear curve — finding better weapons is what survives.
         groundItems = new java.util.ArrayList<>();
+        // THE PITY RULE: track upgrades placed this region so a region never ends starved of its curve.
+        int upgradeRegionIndex = Math.max(0, currentDepth - 1) / BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+        runStats.enterUpgradeRegion(upgradeRegionIndex);
+        GroundItem firstWeaponGroundItem = null;
+        Weapon     firstWeaponBase       = null;
         for (WeaponSpawnPoint spawnPoint : targetLevel.getWeaponSpawnPoints()) {
             GroundItem groundItem = new GroundItem(spawnPoint.tileColumn, spawnPoint.tileRow,
                                                    spawnPoint.weaponItemType, 1);
@@ -1069,8 +1077,24 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             }
             if (baseWeapon != null) {
                 groundItem.weaponRoll = weaponRoller.rollToSnapshot(baseWeapon, currentDepth);
+                if (firstWeaponGroundItem == null) {
+                    firstWeaponGroundItem = groundItem;
+                    firstWeaponBase       = baseWeapon;
+                }
+                if (isWeaponUpgrade(groundItem.weaponRoll)) {
+                    runStats.recordWeaponUpgradeSeen();
+                }
             }
             groundItems.add(groundItem);
+        }
+        // On a region's LAST floor, if no in-band upgrade was placed all region, force one onto the
+        // floor's first weapon drop so the run is never starved of its gear curve by RNG (the pity rule).
+        boolean regionLastFloor = currentDepth % BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE == 0;
+        if (regionLastFloor && runStats.regionUpgradeQuotaUnmet()
+                && firstWeaponGroundItem != null && firstWeaponBase != null) {
+            firstWeaponGroundItem.weaponRoll =
+                    weaponRoller.rollGuaranteedUpgradeToSnapshot(firstWeaponBase, currentDepth);
+            runStats.recordWeaponUpgradeSeen();
         }
         // The starting room's weapon/melee offer tiles aren't registered as ground items yet
         // (setupStartRoomWeaponOffers runs after this method returns), so reserve them here
@@ -2902,6 +2926,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         melee.setPlayerAccuracyMultiplier(playerStats.getAccuracyMultiplier());
         weaponRoller.configureRunStart(melee);
         return melee;
+    }
+
+    /**
+     * Whether a rolled weapon drop counts as a real UPGRADE for the pity rule (new-game-balancr
+     * order 2): a tier of UNCOMMON or better. COMMON drops are vanilla and do not satisfy a region's
+     * guaranteed-upgrade quota.
+     */
+    private boolean isWeaponUpgrade(WeaponRoll weaponRoll) {
+        return weaponRoll != null
+                && weaponRoll.tier.ordinal() >= WeaponRoller.upgradeTierThreshold().ordinal();
     }
 
     /**

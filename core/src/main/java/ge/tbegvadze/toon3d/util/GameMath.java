@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.util;
 
 import com.badlogic.gdx.math.MathUtils;
+import ge.tbegvadze.toon3d.entity.WeaponAbility;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
 
@@ -2564,6 +2565,95 @@ public final class GameMath {
     }
 
     /*
+     * Formula: abilityPowerPoints — price a weapon ABILITY in the level-up-card currency (order 2)
+     * Derivation:
+     *   Rarity buys ABILITIES, not raw damage (weapon POWER bands are role properties, SECTION 9).
+     *   To make tier an ENFORCEABLE budget, every ability is priced in the SAME power points (PP =
+     *   %-of-reference DPT/eHP) the level-up cards use (damagePerTurnPowerPoints / effectiveHitPoint-
+     *   PowerPoints are the primitives). An ability's value is its live magnitude converted to a
+     *   %-of-reference, DISCOUNTED by a utilisation weight for how often that value actually applies
+     *   (an always-on crit bonus is worth more than a below-30%-HP bonus of the same size). The
+     *   weights are designer DATA in BalanceConfig SECTION 15, so a tuned magnitude re-prices for free:
+     *       damage multiplier  -> magnitude * 100 * util          (fraction of reference DPT gained)
+     *       damage-over-time    -> (magnitude / refDPT) * 100 * util (sustained added DPT as %)
+     *       flat sustain/AoE    -> (magnitude / refEHP or refDPT) * 100 * util
+     *       count utility       -> countValue * PP_PER_COUNT
+     *       pure economy/util   -> a small flat nominal PP
+     *       legendary signature -> a fixed marquee PP
+     *   The tier budgets (TIER_ABILITY_PP_BUDGET_*) cap the SUM of an rolled weapon's ability PP; the
+     *   WeaponRoller fills abilities greedily until the next would exceed the tier ceiling.
+     * Edge cases:
+     *   Every WeaponAbility is classified (a missing case would fall through to the nominal price, and
+     *   BalanceSchema R-ABILITY asserts coverage). Magnitudes are >= 0 by construction, so PP >= 0.
+     */
+    public static float abilityPowerPoints(WeaponAbility ability, float magnitude, int countValue) {
+        switch (ability) {
+            // Always-on / on-every-hit damage multipliers (fraction of reference DPT gained).
+            case CRITICAL_STRIKE:
+            case RHYTHM:
+                return magnitude * 100f * BalanceConfig.ABILITY_UTIL_ALWAYS_ON;
+            // Conditional damage bonuses (low-HP, close/long range, first shot, on-kill next hit, splash).
+            case EXECUTIONER:
+            case SECOND_WIND:
+            case POINT_BLANK:
+            case MARKSMANS_PATIENCE:
+            case OPENING_SALVO:
+            case ADRENAL_SURGE:
+            case CLEAVE:
+                return magnitude * 100f * BalanceConfig.ABILITY_UTIL_CONDITIONAL;
+            // Chance-gated crowd control (defensive value).
+            case STAGGER_ROUNDS:
+            case KINETIC_SLAM:
+                return magnitude * 100f * BalanceConfig.ABILITY_UTIL_CROWD_CONTROL;
+            // Block-bypass / penetration.
+            case ARMOR_PIERCE:
+                return magnitude * 100f * BalanceConfig.ABILITY_UTIL_PENETRATION;
+            // Damage-over-time: sustained added DPT as a fraction of the reference DPT.
+            case REND:
+            case INCENDIARY:
+                return (magnitude / BalanceConfig.REFERENCE_PLAYER_DPT) * 100f
+                        * BalanceConfig.ABILITY_UTIL_DAMAGE_OVER_TIME;
+            // Lifesteal-style sustain, expressed as a fraction of damage dealt returned as HP.
+            case LIFESTEAL:
+                return magnitude * 100f * BalanceConfig.ABILITY_UTIL_SUSTAIN_FRACTION;
+            // Flat per-event HP/armour sustain — value as a fraction of reference eHP.
+            case HEMORRHAGE_HARVEST:
+            case VAMPIRIC_CRIT:
+            case BULWARK_ROUNDS:
+                return (magnitude / BalanceConfig.REFERENCE_PLAYER_EHP) * 100f
+                        * BalanceConfig.ABILITY_UTIL_FLAT_EVENT;
+            // Flat AoE burst on kill — value as a fraction of reference DPT.
+            case STATIC_DISCHARGE:
+                return (magnitude / BalanceConfig.REFERENCE_PLAYER_DPT) * 100f
+                        * BalanceConfig.ABILITY_UTIL_FLAT_EVENT;
+            // Percent-of-target-max-HP amplifier (conditional on a bleed).
+            case RESONANT_ROUNDS:
+                return magnitude * 100f * BalanceConfig.ABILITY_UTIL_PERCENT_MAX_HP;
+            // Count utilities — priced per extra count (pierce targets, clip step, burst rounds).
+            case OVERPENETRATION:
+            case EXTENDED_MAG:
+            case BURST_FIRE:
+                return Math.max(0, countValue) * BalanceConfig.ABILITY_PP_PER_COUNT;
+            // Pure on-kill / reload economy utilities — small flat nominal combat value.
+            case SCAVENGER_ROUNDS:
+            case SALVAGE_STRIKE:
+            case SCHOLARS_EDGE:
+            case FIELD_MEDIC_ROUNDS:
+            case CREDIT_FANG:
+            case QUICK_HANDS:
+                return BalanceConfig.ABILITY_PP_UTILITY_NOMINAL;
+            // Legendary signatures — fixed marquee price.
+            case SOULFORGE:
+            case JUDGMENT:
+            case HELLFIRE_NOVA:
+            case BERSERKERS_OATH:
+                return BalanceConfig.ABILITY_PP_LEGENDARY_SIGNATURE;
+            default:
+                return BalanceConfig.ABILITY_PP_UTILITY_NOMINAL;
+        }
+    }
+
+    /*
      * Formula: weaponPowerScore — the weapon contract's single comparable number
      * Derivation:
      *   A weapon's power is its sustained output scaled by how ammo-cheap that
@@ -2731,6 +2821,67 @@ public final class GameMath {
             return 0f;
         }
         return playerPowerAtDepth / enemyThreatScale;
+    }
+
+    /*
+     * Formula: gearCurveAtDepth — the arsenal the game EXPECTS you to hold (new-game-balancr order 2)
+     * Derivation:
+     *   The gear gate replaces the single fixed player anchor with a per-depth EXPECTED PLAYER whose
+     *   weapon power steps up once per region. Modelled as a step-per-region multiplier:
+     *       regionIndex  = floor((depth - 1) / regionBandSize)
+     *       gearCurve(d) = perRegionMultiplier ^ regionIndex
+     *   Because a region is regionBandSize (5) depths, gearCurve is 1.0 across the WHOLE first region
+     *   (depths 1..regionBandSize), so the run begins exactly on the anchor and steps up only when the
+     *   player crosses into region 2, 3, ... A player who never upgrades keeps the depth-1 anchor while
+     *   this curve rises — that gap (1/gearCurve) is the pressure the gear gate turns lethal.
+     *   Worked: perRegion 1.35, band 5 -> gearCurve(1..5)=1.0, gearCurve(6..10)=1.35, gearCurve(11..15)=1.82.
+     * Edge cases:
+     *   depth <= regionBandSize -> regionIndex 0 -> returns 1.0 (the whole first region is un-stepped).
+     *   regionBandSize <= 0 -> floored at 1 (avoids divide-by-zero / negative bands).
+     *   perRegionMultiplier <= 0 -> returns 0 at region >= 1 (nonsensical config surfaces as a bad number).
+     */
+    public static float gearCurveAtDepth(float perRegionMultiplier, int depth, int regionBandSize) {
+        int safeBandSize = Math.max(1, regionBandSize);
+        int regionIndex = Math.max(0, depth - 1) / safeBandSize;
+        return (float) Math.pow(perRegionMultiplier, regionIndex);
+    }
+
+    /*
+     * Formula: expectedPlayerDamagePerTurn — the player the game PRICES against at a depth (order 2)
+     * Derivation:
+     *   Enemies, boss HP, ammo demand and the floor budget should be priced against the player the
+     *   game EXPECTS at that depth, not the fixed depth-1 reference forever (that is what made "never
+     *   upgrade" viable by construction). The expected player's sustained DPT is the reference DPT
+     *   lifted by the gear curve (a later order multiplies in a card curve too):
+     *       expectedPlayerDamagePerTurn = referenceDamagePerTurn * gearCurveAtDepth(...)
+     *   By construction gearCurve is 1.0 across region 1, so expectedPlayerDamagePerTurn(1..5) equals
+     *   referenceDamagePerTurn EXACTLY (the audit checks this) — the anchor is preserved, then stepped.
+     *   Worked: reference 25, perRegion 1.35, band 5 -> depth 1..5 = 25, depth 6..10 = 33.75.
+     * Edge cases:
+     *   Inherits gearCurveAtDepth's edge cases; referenceDamagePerTurn <= 0 -> returns <= 0 verbatim
+     *     (no yardstick; BalanceReport would surface it rather than silently clamp).
+     */
+    public static float expectedPlayerDamagePerTurn(float referenceDamagePerTurn,
+                                                    float perRegionMultiplier,
+                                                    int depth, int regionBandSize) {
+        return referenceDamagePerTurn * gearCurveAtDepth(perRegionMultiplier, depth, regionBandSize);
+    }
+
+    /*
+     * Formula: compoundDepthMultiplier — one compound per-depth growth factor (order 2 helper)
+     * Derivation:
+     *   Enemy HP and enemy damage each compound per floor by their own scale (SECTION 3). The growth
+     *   factor from depth 1 to depth d for a single axis is:
+     *       compoundDepthMultiplier = perDepthScale ^ (depth - 1)
+     *   depthThreatScale is the PRODUCT of two of these (health axis * damage axis); this exposes one
+     *   axis on its own so the gear-gate audit can scale a reference enemy's eHP and DPT independently
+     *   to a region-entry depth (its eHP grows on the health axis, its hit grows on the damage axis).
+     * Edge cases:
+     *   depth <= 1 -> exponent 0 -> returns 1.0 (depth 1 is the un-scaled base).
+     */
+    public static float compoundDepthMultiplier(float perDepthScale, int depth) {
+        int floorsDescended = Math.max(0, depth - 1);
+        return (float) Math.pow(perDepthScale, floorsDescended);
     }
 
     /*

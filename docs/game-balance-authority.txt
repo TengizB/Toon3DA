@@ -175,6 +175,52 @@ COVERAGE (RuleKind.COVERAGE) — the anti-"shipped unpriced" rule
   floor budget for weeks. New content that skips pricing no longer produces a
   green build.
 
+R-GEARGATE (RuleKind.GEAR_GATE) — the expected arsenal curve (new-game-balancr order 2)
+  Order 2 replaces the single fixed player anchor with a per-depth EXPECTED
+  PLAYER whose weapon power steps up once per 5-floor region:
+    gearCurve(d)                = GEAR_CURVE_PER_REGION ^ floor((d-1)/band)   (1.35^region)
+    expectedPlayerDamagePerTurn = REFERENCE_PLAYER_DPT * gearCurve(d)
+  gearCurve is 1.0 across all of region 1, so expectedPlayerDamagePerTurn(1..5)
+  == REFERENCE_PLAYER_DPT EXACTLY (the run begins on the curve). The rule proves
+  the GATE on a reference SOLDIER (Void Shroud) through the golden-ratio lens:
+    1. START FAIR    — stagnant (never-upgraded, reference-DPT) golden ratio at
+                       depth 1 is IN the soldier band [3,8];
+    2. GATE FIRES    — the SAME stagnant player's golden ratio at the region-2
+                       entry depth is BELOW the band (the start weapon now reads
+                       underpowered — stagnation is punished);
+    3. ON-CURVE FAIR — the EXPECTED player (reference * gearCurve) golden ratio
+                       at that same depth is back IN band (upgrading keeps you
+                       fair — the "find better gear or die" loop);
+    + ANCHOR         — expectedPlayerDamagePerTurn(1..5) == REFERENCE_PLAYER_DPT.
+  Region-1 fairness for the WHOLE roster is already guaranteed by R-ENEMY (same
+  reference-DPT lens at depth 1); R-GEARGATE adds the depth axis. The curve is
+  SUPPLIED, not just demanded: dropped weapons roll their tier from a per-region
+  BAND (WEAPON_DROP_TIER_*_BY_REGION: region 1 COMMON..UNCOMMON, region 2
+  UNCOMMON..RARE, ...), and THE PITY RULE (GUARANTEED_UPGRADE_PER_REGION, tracked
+  in RunStats) force-spawns one in-band weapon on a region's last floor if none
+  was placed. WHY: the old contract anchored every enemy to a FIXED 25 DPT
+  forever, so never upgrading was viable by construction — you could beat a boss
+  with the starting-room weapon. Now stagnation is FELT as mounting pressure and
+  becomes lethal.
+
+R-ABILITY (RuleKind.ABILITY_BUDGET) — tier is a priced ability budget (order 2)
+  Rarity NEVER raises a weapon's POWER band (that is a role property, R-WEAPON) —
+  it buys ABILITIES, and abilities are now PRICED in the SAME power points (PP =
+  %-of-reference DPT/eHP) the level-up cards use (GameMath.abilityPowerPoints;
+  an ability's magnitude converted to a %-of-reference, discounted by a
+  utilisation weight for how often it applies). Each tier has an ability-PP
+  budget: COMMON 0 | UNCOMMON 6 | RARE 12 | EPIC 20 | LEGENDARY 30 (±20%). The
+  WeaponRoller fills abilities greedily and stops before the tier ceiling, so
+  every roll — spawn OR shop tier-upgrade — fits its budget by construction. The
+  rule asserts (a) every ability is priced to a finite, non-negative PP at every
+  level and no ability's max-level PP exceeds the legendary ceiling, and (b) the
+  tier budgets are monotonic with rarity; BalanceAuditTest additionally sweeps
+  real rolls across seeds/levels/tiers and confirms no roll (in particular no
+  legendary) exceeds its ceiling. WHY: the whole ability catalogue shipped as
+  unpriced "PLACEHOLDER — flag for playtesting" magnitudes; this converts it to
+  priced content in one pass. Magnitudes may still be tuned freely — the price
+  recomputes from the magnitude, so tuning stays free.
+
 --------------------------------------------------------------------------------
 SECTION 4 — WAIVER POLICY + LIVE WAIVERS
 --------------------------------------------------------------------------------
@@ -210,6 +256,9 @@ SECTION 5 — NEW-CONTENT CHECKLIST
      new card          -> nothing: UpgradeCard.values() is iterated
      new heal/pickup   -> add a HealPickupSpec + consumable classification
      new ammo type     -> add a ScarcityRowSpec
+     new weapon ability-> add its magnitude to BalanceConfig SECTION 15 AND a
+                          pricing case in GameMath.abilityPowerPoints (R-ABILITY
+                          fails the build on an unpriced ability)
      new status        -> ONE base definition in BalanceConfig SECTION 8
 3. Run `./gradlew test` — BalanceAuditTest must be green. If a value must
    deliberately sit out of band, register a waiver (SECTION 4), never a hack.

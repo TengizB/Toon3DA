@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.world;
 
+import ge.tbegvadze.toon3d.util.BalanceConfig;
+
 /** Per-run accumulator. Reset by constructing a new instance at the start of every run. */
 public class RunStats {
 
@@ -82,5 +84,47 @@ public class RunStats {
 
     public void recordFloor(int floor) {
         if (floor > floorReached) floorReached = floor;
+    }
+
+    // =====================================================================================
+    // THE PITY RULE (new-game-balancr order 2): track weapon UPGRADES the player is offered per
+    // region so the floor generator can force-spawn one when a region is about to end with zero,
+    // guaranteeing no run is starved of the gear curve by RNG. "Upgrade" = an UNCOMMON-or-better
+    // weapon PLACED on a floor of the region (ground drop, cache, armory, or shop stock).
+    // =====================================================================================
+
+    private int currentUpgradeRegionIndex     = -1;
+    private int weaponUpgradesSeenThisRegion   = 0;
+
+    /**
+     * Announces the region the player is now generating floors for. Crossing into a NEW region resets
+     * the per-region upgrade counter (each region owns its own pity quota); re-announcing the same
+     * region is a no-op, so this is safe to call once per floor build.
+     *
+     * @param regionIndex 0-based region index, {@code floor((depth-1) / GEAR_CURVE_REGION_BAND_SIZE)}
+     */
+    public void enterUpgradeRegion(int regionIndex) {
+        if (regionIndex != currentUpgradeRegionIndex) {
+            currentUpgradeRegionIndex   = regionIndex;
+            weaponUpgradesSeenThisRegion = 0;
+        }
+    }
+
+    /** Records that an in-band weapon upgrade was placed on the current region's floors. */
+    public void recordWeaponUpgradeSeen() {
+        weaponUpgradesSeenThisRegion++;
+    }
+
+    /** Weapon upgrades placed so far in the current region. */
+    public int getWeaponUpgradesSeenThisRegion() {
+        return weaponUpgradesSeenThisRegion;
+    }
+
+    /**
+     * Whether the current region still owes the player its guaranteed upgrade(s). The floor generator
+     * consults this on a region's LAST floor and force-spawns a pity weapon if it returns true.
+     */
+    public boolean regionUpgradeQuotaUnmet() {
+        return weaponUpgradesSeenThisRegion < BalanceConfig.GUARANTEED_UPGRADE_PER_REGION;
     }
 }
