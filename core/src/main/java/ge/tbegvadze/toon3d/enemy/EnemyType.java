@@ -15,7 +15,6 @@ public enum EnemyType {
         @Override public int    moveEveryNTurns()    { return EnemyConstants.PLAGUE_HULK_MOVE_EVERY_N_TURNS; }
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return EnemyConstants.PLAGUE_HULK_HEIGHT_MULTIPLIER; }
-        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_PLAGUE_HULK; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_PLAGUE_HULK; }
         @Override public String displayName()        { return "Plague Hulk"; }
         @Override public EnemyRole role()            { return EnemyRole.SOLDIER; }
@@ -35,7 +34,6 @@ public enum EnemyType {
         @Override public int    moveEveryNTurns()    { return 1; }
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return EnemyConstants.EYE_TYRANT_HEIGHT_MULTIPLIER; }
-        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_EYE_TYRANT; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_EYE_TYRANT; }
         @Override public String displayName()        { return "Eye Tyrant"; }
         @Override public EnemyRole role()            { return EnemyRole.CHAFF; }
@@ -55,7 +53,6 @@ public enum EnemyType {
         @Override public int    moveEveryNTurns()    { return EnemyConstants.GORE_BITER_MOVE_EVERY_N_TURNS; }
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return EnemyConstants.GORE_BITER_HEIGHT_MULTIPLIER; }
-        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_GORE_BITER; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_GORE_BITER; }
         @Override public String displayName()        { return "Gore Biter"; }
         @Override public EnemyRole role()            { return EnemyRole.CHAFF; }
@@ -72,7 +69,6 @@ public enum EnemyType {
         @Override public int    moveEveryNTurns()    { return EnemyConstants.SHELL_BRUTE_MOVE_EVERY_N_TURNS; }
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return EnemyConstants.SHELL_BRUTE_HEIGHT_MULTIPLIER; }
-        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_SHELL_BRUTE; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_SHELL_BRUTE; }
         @Override public String displayName()        { return "Shell Brute"; }
         @Override public EnemyRole role()            { return EnemyRole.BRUISER; }
@@ -89,7 +85,6 @@ public enum EnemyType {
         @Override public int    moveEveryNTurns()    { return EnemyConstants.MIRE_WRAITH_MOVE_EVERY_N_TURNS; }
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return EnemyConstants.MIRE_WRAITH_HEIGHT_MULTIPLIER; }
-        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_MIRE_WRAITH; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_MIRE_WRAITH; }
         @Override public String displayName()        { return "Mire Wraith"; }
         @Override public EnemyRole role()            { return EnemyRole.SOLDIER; }
@@ -109,7 +104,6 @@ public enum EnemyType {
         @Override public int    moveEveryNTurns()    { return EnemyConstants.IRON_STALKER_MOVE_EVERY_N_TURNS; }
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return EnemyConstants.IRON_STALKER_HEIGHT_MULTIPLIER; }
-        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_IRON_STALKER; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_IRON_STALKER; }
         @Override public String displayName()        { return "Iron Stalker"; }
         @Override public EnemyRole role()            { return EnemyRole.MINI_ELITE; }
@@ -129,7 +123,6 @@ public enum EnemyType {
         @Override public int    moveEveryNTurns()    { return EnemyConstants.ACID_DRONE_MOVE_EVERY_N_TURNS; }
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return EnemyConstants.ACID_DRONE_HEIGHT_MULTIPLIER; }
-        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_ACID_DRONE; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_ACID_DRONE; }
         @Override public String displayName()        { return "Acid Drone"; }
         @Override public EnemyRole role()            { return EnemyRole.SOLDIER; }
@@ -149,7 +142,6 @@ public enum EnemyType {
         @Override public int    moveEveryNTurns()    { return EnemyConstants.VOID_SHROUD_MOVE_EVERY_N_TURNS; }
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return EnemyConstants.VOID_SHROUD_HEIGHT_MULTIPLIER; }
-        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_VOID_SHROUD; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_VOID_SHROUD; }
         @Override public String displayName()        { return "Void Shroud"; }
         @Override public EnemyRole role()            { return EnemyRole.SOLDIER; }
@@ -173,7 +165,6 @@ public enum EnemyType {
         @Override public int    moveEveryNTurns()     { return EnemyConstants.GHOUL_MOVE_EVERY_N_TURNS; }
         @Override public boolean isRanged()           { return false; }
         @Override public float  heightMultiplier()    { return EnemyConstants.GHOUL_HEIGHT_MULTIPLIER; }
-        @Override public int    baseXpReward()        { return GameBalance.XP_REWARD_GHOUL; }
         @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_GHOUL; }
         @Override public String displayName()         { return "Ghoul"; }
         @Override public EnemyRole role()             { return EnemyRole.CHAFF; }
@@ -190,7 +181,6 @@ public enum EnemyType {
         @Override public int    moveEveryNTurns()     { return EnemyConstants.CRAWLER_MOVE_EVERY_N_TURNS; }
         @Override public boolean isRanged()           { return false; }
         @Override public float  heightMultiplier()    { return EnemyConstants.CRAWLER_HEIGHT_MULTIPLIER; }
-        @Override public int    baseXpReward()        { return GameBalance.XP_REWARD_CRAWLER; }
         @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_CRAWLER; }
         @Override public String displayName()         { return "Crawler"; }
         @Override public EnemyRole role()             { return EnemyRole.CHAFF; }
@@ -207,7 +197,6 @@ public enum EnemyType {
         @Override public int    moveEveryNTurns()     { return EnemyConstants.REVENANT_MOVE_EVERY_N_TURNS; }
         @Override public boolean isRanged()           { return false; }
         @Override public float  heightMultiplier()    { return EnemyConstants.REVENANT_HEIGHT_MULTIPLIER; }
-        @Override public int    baseXpReward()        { return GameBalance.XP_REWARD_REVENANT; }
         @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_REVENANT; }
         @Override public String displayName()         { return "Revenant"; }
         // BRUISER, not SOLDIER: its stats (TP 79, golden ratio 2.4) are honestly bruiser-tier — a
@@ -228,7 +217,6 @@ public enum EnemyType {
         @Override public int    moveEveryNTurns()     { return EnemyConstants.VORTEX_EYE_MOVE_EVERY_N_TURNS; }
         @Override public boolean isRanged()           { return true; }
         @Override public float  heightMultiplier()    { return EnemyConstants.VORTEX_EYE_HEIGHT_MULTIPLIER; }
-        @Override public int    baseXpReward()        { return GameBalance.XP_REWARD_VORTEX_EYE; }
         @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_VORTEX_EYE; }
         @Override public String displayName()         { return "Vortex Eye"; }
         @Override public EnemyRole role()             { return EnemyRole.CHAFF; }
@@ -248,7 +236,6 @@ public enum EnemyType {
         @Override public int    moveEveryNTurns()     { return EnemyConstants.BLIGHT_CORRUPTOR_MOVE_EVERY_N_TURNS; }
         @Override public boolean isRanged()           { return false; }
         @Override public float  heightMultiplier()    { return EnemyConstants.BLIGHT_CORRUPTOR_HEIGHT_MULTIPLIER; }
-        @Override public int    baseXpReward()        { return GameBalance.XP_REWARD_BLIGHT_CORRUPTOR; }
         @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_BLIGHT_CORRUPTOR; }
         @Override public String displayName()         { return "Blight Corruptor"; }
         @Override public EnemyRole role()             { return EnemyRole.SOLDIER; }
@@ -324,8 +311,16 @@ public enum EnemyType {
     public abstract int     moveEveryNTurns();
     public abstract boolean isRanged();
     public abstract float   heightMultiplier();
-    /** XP awarded to the player when this enemy archetype is killed at dungeon depth 1. */
-    public abstract int     baseXpReward();
+    /**
+     * XP awarded to the player when this enemy archetype is killed at dungeon depth 1. DERIVED, not
+     * hand-set (new-game-balancr order 4): every non-boss archetype's depth-1 XP is its Threat Points
+     * times the single knob XP_PER_THREAT_POINT, so dangerous enemies automatically pay more and a new
+     * archetype can never ship with a forgotten XP value. EnemyManager scales this to the enemy's depth
+     * via GameMath.xpRewardAtDepth. Bosses OVERRIDE this to keep their flat placeholder reward.
+     */
+    public int baseXpReward() {
+        return Math.round(BalanceConfig.XP_PER_THREAT_POINT * baseThreatPoints());
+    }
     /** Base credits awarded at dungeon depth 1; scaled by depth in EnemyManager. */
     public abstract int     baseCreditReward();
     /** Human-readable name shown in HUD name tags (e.g. "Plague Hulk LVL 2") and kill messages. */

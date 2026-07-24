@@ -1757,6 +1757,68 @@ public final class GameMath {
         return (int)(base * Math.pow(safeLevel, exponent));
     }
 
+    /*
+     * Formula: xpRequiredForLevelGeometric — the honest, depth-coupled XP curve (order 4)
+     * Derivation:
+     *   The polynomial curve (base * level^exponent) grows POLYNOMIALLY while enemy threat — and
+     *   therefore the XP a floor's roster is worth — grows GEOMETRICALLY (depthThreatScale). Those two
+     *   shapes cannot stay coupled, so the per-floor XP yield drifts and leveling stops being paced
+     *   (new-game-balancr order 4, problem 2). A GEOMETRIC requirement fixes this:
+     *       xpRequired(level) = base * growthPerLevel ^ (level - 1)
+     *   Choose growthPerLevel to track the enemy threat compound (ENEMY_HEALTH_SCALE * ENEMY_DAMAGE_
+     *   SCALE per floor). Then, with per-enemy XP DERIVED from the enemy's depth-scaled Threat Points
+     *   (xpRewardAtDepth below), a floor's total roster XP and the level requirement grow at the SAME
+     *   rate, so the yield (available XP / required XP) is depth-STABLE — R-XP-PACE holds at every depth.
+     *   Worked: base 150, growth 1.118 -> level 1->2 needs 150, level 10->11 needs 150*1.118^9 = 409.
+     * Edge cases:
+     *   currentLevel < 1 is clamped to 1 (no negative/zero requirements).
+     *   growthPerLevel <= 0 is nonsensical; not clamped so a bad config surfaces as a bad number.
+     */
+    public static int xpRequiredForLevelGeometric(int base, float growthPerLevel, int currentLevel) {
+        int safeLevel = Math.max(1, currentLevel);
+        return (int) (base * Math.pow(growthPerLevel, safeLevel - 1));
+    }
+
+    /*
+     * Formula: expectedLevelAtDepth — the player level the pacing model expects at a floor (order 4)
+     * Derivation:
+     *   The player starts at level 1 on depth 1 and is expected to gain levelsPerDepth levels per floor
+     *   (BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, the depth-coupling input). So:
+     *       expectedLevel(d) = round(1 + levelsPerDepth * (depth - 1))
+     *   At the default 1.0 level/floor this is simply depth. It is the reference the XP-pacing rule
+     *   prices against (xpRequired at THIS level) and the anchor the catch-up rubber band compares the
+     *   real player level to.
+     * Edge cases:
+     *   depth <= 1 -> returns 1 (the run begins at level 1). Rounded so the expectation is a whole level.
+     */
+    public static int expectedLevelAtDepth(float levelsPerDepth, int depth) {
+        int floorsDescended = Math.max(0, depth - 1);
+        return Math.max(1, Math.round(1f + levelsPerDepth * floorsDescended));
+    }
+
+    /*
+     * Formula: catchUpScaledXp — the forward-only XP rubber band (order 4)
+     * Derivation:
+     *   A player who falls behind the expected level curve would spiral (weaker -> slower kills ->
+     *   even less XP). The catch-up band multiplies incoming XP while the player is more than one level
+     *   BELOW the expected level for their depth, and does nothing otherwise:
+     *       underLevelled = playerLevel < expectedLevel - 1
+     *       scaledXp      = underLevelled ? round(baseXp * catchUpMultiplier) : baseXp
+     *   It is FORWARD-ONLY: it never slows an at-or-ahead player (being ahead is earned), it only helps
+     *   a behind one recover. The "-1" band gives one level of slack so normal variance never trips it.
+     * Edge cases:
+     *   baseXp <= 0 -> returned unchanged (no XP to scale).
+     *   catchUpMultiplier < 1 would PUNISH being behind; callers pass >= 1 (not clamped so a bad config
+     *     surfaces rather than being silently corrected).
+     */
+    public static int catchUpScaledXp(int baseXp, int playerLevel, int expectedLevel, float catchUpMultiplier) {
+        if (baseXp <= 0) {
+            return baseXp;
+        }
+        boolean underLevelled = playerLevel < expectedLevel - 1;
+        return underLevelled ? Math.round(baseXp * catchUpMultiplier) : baseXp;
+    }
+
     // =========================================================================
     // COMPOUND DEPTH SCALE
     // =========================================================================
@@ -2485,6 +2547,33 @@ public final class GameMath {
     }
 
     /*
+     * Formula: turnsToKillBreakpointGain — how many whole turns a damage increase SHAVES off a kill (order 4)
+     * Derivation:
+     *   Turn-based combat is felt in INTEGER turns: a card that takes a fight from 4 shots to 3 changes
+     *   the next fight, while a raw +8% DPT that leaves it at 4 shots does not. The breakpoint gain is
+     *   the drop in turnsToKill against a fixed target when the player's damage-per-turn rises:
+     *       gain = turnsToKill(target, dptBefore) - turnsToKill(target, dptAfter)
+     *   A gain >= 1 means the upgrade CROSSES a kill breakpoint versus that target. Order 4 prices the
+     *   level-up card pool so most cards cross at least one breakpoint against the region's soldier at
+     *   the depth they are likely picked — that is what makes a level-up FEEL different in the next
+     *   fight, not just on the character sheet. The symmetric survivability breakpoint (a defensive
+     *   card taking the player from dying in 3 enemy hits to 4) is the same primitive with the player's
+     *   eHP as the target and the enemy's DPT held fixed, evaluated at the before/after eHP.
+     *   Worked: soldier 118 eHP, dpt 25 -> 40 : ceil(118/25)=5 - ceil(118/40)=3 = 2 breakpoints.
+     * Edge cases:
+     *   dptAfter <= dptBefore -> gain <= 0 (no breakpoint from a non-increase; a negative value is a
+     *     meaningful regression that the caller can surface).
+     *   Either dpt <= 0 -> turnsToKill returns MAX_VALUE for that side; the caller compares finite
+     *     realistic DPTs, so this only guards degenerate input.
+     */
+    public static int turnsToKillBreakpointGain(float targetEffectiveHitPoints,
+                                                float damagePerTurnBefore, float damagePerTurnAfter) {
+        int turnsBefore = turnsToKill(targetEffectiveHitPoints, damagePerTurnBefore);
+        int turnsAfter  = turnsToKill(targetEffectiveHitPoints, damagePerTurnAfter);
+        return turnsBefore - turnsAfter;
+    }
+
+    /*
      * Formula: threatPoints (TP) — PRIMITIVE 4
      * Derivation:
      *   One comparable "danger number" per enemy. An enemy is dangerous in
@@ -2865,6 +2954,128 @@ public final class GameMath {
                                                     float perRegionMultiplier,
                                                     int depth, int regionBandSize) {
         return referenceDamagePerTurn * gearCurveAtDepth(perRegionMultiplier, depth, regionBandSize);
+    }
+
+    /*
+     * Formula: gearRampAtDepth — the CONTINUOUS expected-arsenal curve for depth coupling (order 4)
+     * Derivation:
+     *   gearCurveAtDepth is a per-region STEP (flat within a region, +perRegion at each boundary). That
+     *   step is the right tool for the GATE (it measures a STAGNANT player against the arsenal the game
+     *   hands out in a region), but its boundary JUMPS make it unusable inside the honest depth-coupling
+     *   curve: a fixed ratio band [0.9, 1.2] cannot absorb a x1.35 single-depth jump. The truth the
+     *   coupling models is that gear is acquired GRADUALLY across a region, reaching the region's arsenal
+     *   by its end. So the ramp interpolates (log-linearly) from the previous region's step value to the
+     *   current region's step value across the region's floors, hitting gearCurveAtDepth exactly at each
+     *   region's LAST floor:
+     *       r        = regionIndexAtDepth(depth)
+     *       startVal = perRegion ^ max(0, r-1)     // arsenal carried in from the previous region
+     *       endVal   = perRegion ^ r               // this region's arsenal (== gearCurveAtDepth here)
+     *       p        = (depth - r*band) / band     // 0<p<=1 across the region (1 at its last floor)
+     *       gearRamp = startVal * (endVal/startVal) ^ p
+     *   Region 0 has startVal == endVal == 1, so the whole first region is flat 1.0 (the run begins on
+     *   the curve). gearRamp(5)=1.0, gearRamp(10)=perRegion, gearRamp(15)=perRegion^2 — the step values,
+     *   reached smoothly with no jumps. See playerPowerAtDepthV2.
+     * Edge cases:
+     *   regionBandSize <= 0 -> floored at 1 (avoids divide-by-zero).
+     *   depth <= regionBandSize -> region 0 -> returns 1.0 (flat first region).
+     *   perRegion <= 0 at region >= 1 -> surfaces as a bad number rather than being clamped.
+     */
+    public static float gearRampAtDepth(float perRegionMultiplier, int depth, int regionBandSize) {
+        int safeBandSize = Math.max(1, regionBandSize);
+        int regionIndex = Math.max(0, depth - 1) / safeBandSize;
+        float startValue = (float) Math.pow(perRegionMultiplier, Math.max(0, regionIndex - 1));
+        float endValue   = (float) Math.pow(perRegionMultiplier, regionIndex);
+        if (endValue == startValue) {
+            return startValue;
+        }
+        float positionInRegion = (depth - regionIndex * safeBandSize) / (float) safeBandSize;
+        return startValue * (float) Math.pow(endValue / startValue, positionInRegion);
+    }
+
+    /*
+     * Formula: expectedAbilityPowerPointsAtDepth — the ability PP the expected weapon carries (order 4)
+     * Derivation:
+     *   Order 2 priced every weapon ABILITY in power points and gave each rarity TIER an ability-PP
+     *   budget, and it gates dropped-weapon tiers per region. So the arsenal the game EXPECTS at a region
+     *   carries a computable ability-PP budget: the average tier budget over the region's drop band
+     *   (regionAbilityBudgetPoints[r], supplied by the caller from the order-2 tables). Measured as
+     *   NET-NEW power over the run's start (region 0 baseline), and RAMPED across the region like the
+     *   gear curve (abilities are acquired gradually, not in a lump at the boundary):
+     *       startPP = regionAbilityBudgetPoints[max(0,r-1)] - regionAbilityBudgetPoints[0]
+     *       endPP   = regionAbilityBudgetPoints[r]          - regionAbilityBudgetPoints[0]
+     *       p       = (depth - r*band) / band
+     *       result  = startPP + (endPP - startPP) * p       // linear ramp of PP within the region
+     *   Region 0 returns 0 (the run begins with a vanilla weapon), so playerPowerAtDepthV2 is exactly the
+     *   card curve there. This is the third, honest source folded into the total-power model.
+     * Edge cases:
+     *   regionBandSize <= 0 -> floored at 1.
+     *   regionAbilityBudgetPoints null/empty -> returns 0 (no ability model; v2 falls back to card*gear).
+     *   region index clamps to the last supplied entry (deeper regions reuse the deepest known budget).
+     */
+    public static float expectedAbilityPowerPointsAtDepth(float[] regionAbilityBudgetPoints,
+                                                          int depth, int regionBandSize) {
+        if (regionAbilityBudgetPoints == null || regionAbilityBudgetPoints.length == 0) {
+            return 0f;
+        }
+        int safeBandSize = Math.max(1, regionBandSize);
+        int regionIndex = Math.max(0, depth - 1) / safeBandSize;
+        int lastIndex = regionAbilityBudgetPoints.length - 1;
+        float baseline = regionAbilityBudgetPoints[0];
+        float startPoints = regionAbilityBudgetPoints[Math.min(Math.max(0, regionIndex - 1), lastIndex)] - baseline;
+        float endPoints   = regionAbilityBudgetPoints[Math.min(regionIndex, lastIndex)] - baseline;
+        float positionInRegion = (depth - regionIndex * safeBandSize) / (float) safeBandSize;
+        return startPoints + (endPoints - startPoints) * positionInRegion;
+    }
+
+    /*
+     * Formula: playerPowerAtDepthV2 — the HONEST total-power model (all sources) (order 4)
+     * Derivation:
+     *   The v1 curve (playerPowerAtDepth) counted ONLY level-up cards, so the difficulty defended a
+     *   FICTION of the player's real power and could not feel right (order 4, problem 1). v2 multiplies
+     *   the three honest, independent power sources the on-curve player actually accumulates:
+     *       playerPowerAtDepthV2 = cardPower(d) * gearRamp(d) * abilityPower(d)
+     *     - cardPower(d)   = 1 + budgetPP * levelsPerDepth * (d-1)/100   (the v1 linear level-up term)
+     *     - gearRamp(d)    = gearRampAtDepth(...)                        (found/bought weapons, continuous)
+     *     - abilityPower(d)= 1 + expectedAbilityPowerPointsAtDepth(...)/100  (priced weapon abilities)
+     *   The gear/ability curves are the CONTINUOUS ramp forms (not the step gearCurve) precisely because
+     *   the coupling band must hold at EVERY depth; the step form stays the gate's tool. This honest
+     *   (steeper) curve is what the enemy compound rates (ENEMY_*_SCALE_PER_DEPTH) are re-fit against so
+     *   the depth-coupling ratio (playerPowerAtDepthV2 / depthThreatScale) holds [0.9, 1.2] through the
+     *   tuned depth range — with no under-band fudge, degrading gracefully (to the EASY side) only deep.
+     *   Worked (budget 12, 1 level/floor, perRegion 1.35, band 5): v2(1)=1.0, v2(10)=~2.98, v2(15)=~5.5.
+     * Edge cases:
+     *   depth <= 1 -> cardPower 1.0, gearRamp 1.0, abilityPower 1.0 -> returns 1.0 (the baseline).
+     *   Inherits the ramp helpers' edge cases; a null ability array degrades v2 to card*gear.
+     */
+    public static float playerPowerAtDepthV2(float budgetPowerPointsPerLevel, float levelsPerDepth,
+                                             float gearPerRegionMultiplier, float[] regionAbilityBudgetPoints,
+                                             int depth, int regionBandSize) {
+        float cardPower = playerPowerAtDepth(budgetPowerPointsPerLevel, levelsPerDepth, depth);
+        float gearRamp = gearRampAtDepth(gearPerRegionMultiplier, depth, regionBandSize);
+        float abilityPower = 1f
+                + expectedAbilityPowerPointsAtDepth(regionAbilityBudgetPoints, depth, regionBandSize) / 100f;
+        return cardPower * gearRamp * abilityPower;
+    }
+
+    /*
+     * Formula: xpRewardAtDepth — the DERIVED per-kill XP, scaled to the enemy's depth (order 4)
+     * Derivation:
+     *   Per-enemy XP is no longer hand-set (thirteen forgotten constants); it is DERIVED from the one
+     *   thing that already measures how dangerous an enemy is — its Threat Points — times a single knob:
+     *       xpReward(depth) = round( xpPerThreatPoint * enemyThreatAtDepth(baseThreatPoints, d) )
+     *   Because enemyThreatAtDepth scales the base TP by depthThreatScale, a deeper (stronger) instance
+     *   of the same archetype automatically pays more XP, and the whole floor's roster XP grows at the
+     *   SAME geometric rate as the level requirement (xpRequiredForLevelGeometric) — the coupling that
+     *   makes R-XP-PACE hold at every depth. Dangerous enemies pay more; new archetypes can never ship
+     *   with a forgotten XP value.
+     * Edge cases:
+     *   depth <= 1 -> depthThreatScale 1.0 -> the depth-1 base reward.
+     *   xpPerThreatPoint or baseThreatPoints <= 0 -> a 0 reward (surfaces bad config rather than clamping).
+     */
+    public static int xpRewardAtDepth(float xpPerThreatPoint, float baseThreatPoints,
+                                      float healthScalePerDepth, float damageScalePerDepth, int depth) {
+        float scaledThreat = enemyThreatAtDepth(baseThreatPoints, healthScalePerDepth, damageScalePerDepth, depth);
+        return Math.round(xpPerThreatPoint * scaledThreat);
     }
 
     /*

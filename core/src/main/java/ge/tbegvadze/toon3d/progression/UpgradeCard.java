@@ -155,15 +155,33 @@ public enum UpgradeCard {
      * (every card is budget-equal by construction), but the balance report uses it to PROVE that.
      */
     public float estimatedPowerPoints() {
-        // --- OFFENCE: convert flat damage and attribute multipliers into a reference-DPT gain.
+        float offencePowerPoints = GameMath.damagePerTurnPowerPoints(
+                damagePerTurnGain(), GameBalance.REFERENCE_PLAYER_DPT);
+        float survivabilityPowerPoints = GameMath.effectiveHitPointPowerPoints(
+                effectiveHitPointGain(), GameBalance.REFERENCE_PLAYER_EHP);
+        return offencePowerPoints + survivabilityPowerPoints;
+    }
+
+    /**
+     * This card's OFFENCE contribution as a flat gain to the player's reference damage-per-turn: flat
+     * per-shot damage (at the reference weapon's DPT fraction) plus the STRENGTH (melee, utilisation-
+     * discounted) and MARKSMANSHIP (ranged) multipliers. The offence half of {@link #estimatedPowerPoints()}
+     * and the input to the offence TTK-breakpoint check (new-game-balancr order 4). Pure read.
+     */
+    public float damagePerTurnGain() {
         float meleeFraction  = strengthDelta     * GameBalance.STR_MELEE_PER_POINT * GameBalance.CARD_MELEE_UTILIZATION;
         float rangedFraction = marksmanshipDelta * GameBalance.MRK_DAMAGE_PER_POINT;
-        float damagePerTurnGain = GameBalance.REFERENCE_PLAYER_DPT * (meleeFraction + rangedFraction)
+        return GameBalance.REFERENCE_PLAYER_DPT * (meleeFraction + rangedFraction)
                 + flatDamageDelta * GameBalance.CARD_FLAT_DAMAGE_DPT_FRACTION;
-        float offencePowerPoints = GameMath.damagePerTurnPowerPoints(
-                damagePerTurnGain, GameBalance.REFERENCE_PLAYER_DPT);
+    }
 
-        // --- SURVIVABILITY: fold HP, armour, toughness reduction and agility dodge into one eHP delta.
+    /**
+     * This card's SURVIVABILITY contribution as a flat gain to the player's reference effective HP: HP,
+     * armour, TOUGHNESS flat-reduction and AGILITY dodge folded into one eHP delta via
+     * {@link GameMath#effectiveHitPoints}. The survivability half of {@link #estimatedPowerPoints()} and
+     * the input to the defensive survival-breakpoint check (new-game-balancr order 4). Pure read.
+     */
+    public float effectiveHitPointGain() {
         float referenceAverageHit = GameBalance.CARD_PRICING_AVERAGE_HIT;
         float flatReduction = toughnessDelta * GameBalance.TGH_REDUCTION_PER_POINT;
         float dodgeChance   = Math.min(GameBalance.DODGE_CAP,
@@ -176,10 +194,7 @@ public enum UpgradeCard {
                 GameBalance.PLAYER_MAX_HEALTH, GameBalance.PLAYER_MAX_ARMOR, 0f, 0f, referenceAverageHit);
         float newEffectiveHitPoints = GameMath.effectiveHitPoints(
                 newHitPoints, newArmor, dodgeChance, flatReduction, referenceAverageHit);
-        float survivabilityPowerPoints = GameMath.effectiveHitPointPowerPoints(
-                newEffectiveHitPoints - baseEffectiveHitPoints, GameBalance.REFERENCE_PLAYER_EHP);
-
-        return offencePowerPoints + survivabilityPowerPoints;
+        return newEffectiveHitPoints - baseEffectiveHitPoints;
     }
 
     /**

@@ -335,11 +335,22 @@ SECTION 6 — PLAYER PROGRESSION (XP curve, level-up cards, attributes)
 ================================================================================
 File: BalanceConfig SECTION 7; docs/xp-level-progression.txt; progression/*.
 
-XP CURVE:
-  xpRequired(level) = XP_BASE_REQUIREMENT * level ^ XP_CURVE_EXPONENT
-  XP_BASE_REQUIREMENT = 50, XP_CURVE_EXPONENT = 1.3.
-  (L1->2: 50, L2->3: 123, L3->4: 207, ...)   GameMath.xpRequiredForLevel(...)
-  Per-enemy XP rewards live in BalanceConfig SECTION 2 (10–55; boss 500 placeholder).
+XP CURVE (GEOMETRIC — re-shaped for pacing, new-game-balancr order 4):
+  xpRequired(level) = XP_BASE_REQUIREMENT * XP_CURVE_GROWTH_PER_LEVEL ^ (level-1)
+  XP_BASE_REQUIREMENT = 150, XP_CURVE_GROWTH_PER_LEVEL = 1.118.
+  (L1->2: 150, L5->6: 234, L10->11: 409, ...)  GameMath.xpRequiredForLevelGeometric
+  WHY geometric: the old polynomial (base*level^1.3) grew at a different rate than
+  the enemy threat a floor's roster is worth (that grows GEOMETRICALLY), so pacing
+  drifted. The growth 1.118 tracks the enemy compound (HEALTH*DAMAGE scale), so —
+  with per-enemy XP DERIVED from depth-scaled TP — the player gains ~1 level/floor
+  at EVERY depth. This is enforced: R-XP-PACE (available/required in [1.0,1.3]).
+PER-ENEMY XP — DERIVED, not hand-set (order 4):
+  xpReward = round(XP_PER_THREAT_POINT(0.35) * enemyThreatAtDepth). The 13 hand-set
+  XP constants are DELETED; dangerous enemies automatically pay more and a new
+  archetype can never ship with a forgotten XP value. Boss XP stays a placeholder.
+CATCH-UP (rubber band, forward-only, order 4): a player > 1 level below the expected
+  level for their depth gets XP * XP_CATCHUP_MULTIPLIER(1.5); never slows an
+  at-or-ahead player.  GameMath.catchUpScaledXp; applied in PlayerProgress.addXp.
 
 LEVEL-UP CARD SYSTEM (the build-diversity engine, idea 5):
   On each level-up, LEVEL_UP_CARDS_OFFERED = 3 cards are drawn from four pools.
@@ -513,21 +524,29 @@ File: BalanceConfig SECTION 3 + SECTION 9 invariant; GameMath depth methods.
 
 Enemy threat COMPOUNDS per floor:
   HP:     baseHP  * ENEMY_HEALTH_SCALE_PER_DEPTH ^ (depth-1),  scale = 1.042
-  Damage: baseDmg * ENEMY_DAMAGE_SCALE_PER_DEPTH ^ (depth-1),  scale = 1.032
-  enemyThreatAtDepth = baseTP * depthThreatScale(1.042, 1.032, depth)
+  Damage: baseDmg * ENEMY_DAMAGE_SCALE_PER_DEPTH ^ (depth-1),  scale = 1.073 (order 4)
+  enemyThreatAtDepth = baseTP * depthThreatScale(1.042, 1.073, depth)
 Credits scale LINEARLY: base * (1 + (depth-1)*CREDIT_DEPTH_SCALE), scale = 0.12.
-Player power grows LINEARLY: 1 + LEVEL_UP_BUDGET_PP * levelsPerDepth * (d-1)/100,
-  with EXPECTED_LEVELS_PER_DEPTH = 1.0.   GameMath.playerPowerAtDepth(...)
+
+Player power — THE HONEST TOTAL-POWER MODEL v2 (new-game-balancr order 4):
+  playerPowerAtDepthV2 = cardPower(d) * gearRamp(d) * abilityPower(d)   (ALL sources)
+    cardPower    = the old linear level-up term (v1)
+    gearRamp     = order-2 gear curve in CONTINUOUS ramp form (reaches the step value
+                   at each region end; no boundary jumps a fixed band can't absorb)
+    abilityPower = 1 + expected weapon-ability PP / 100 (order-2 priced tables)
+  The old v1 curve counted ONLY cards — a FICTION. v2 is honest and far steeper
+  (v2(15) ~= 5.5 vs 2.68), which is WHY the enemy DAMAGE rate was re-fit up.
 
 THE DEPTH-COUPLING INVARIANT (must hold or the game goes unfair/trivial):
-  0.9 <= playerPowerAtDepth(d) / enemyThreatScale(d) <= 1.2
+  0.9 <= playerPowerAtDepthV2(d) / enemyThreatScale(d) <= 1.2   (order 4 uses v2)
                                              GameMath.depthCouplingRatio(...)
-  Bounds: BalanceConfig DEPTH_COUPLING_RATIO_MIN/MAX.
-  A compound curve ALWAYS eventually outruns a linear one, so this can never hold
-  forever — the enemy compound RATE is the lever that keeps it coupled as deep as
-  possible. History: 1.08/1.06 broke by depth 5; trimmed to 1.045/1.035; then to
-  1.042/1.032 for endless mode. Current: in band through depth ~15, gently UNDER
-  (harder) at depth 18/20 (0.88/0.83) — a deliberate "graceful degradation" edge.
+  Bounds: BalanceConfig DEPTH_COUPLING_RATIO_MIN/MAX. Enforced 1..15 (R-DEPTH).
+  History: 1.08/1.06 broke by depth 5; 1.045/1.035; 1.042/1.032 (v1, under at 18+).
+  Order 4: re-derived vs v2, DAMAGE re-fit 1.032 -> 1.073 (HEALTH held at 1.042 so
+  order-3 scarcity is untouched). Now IN band 1..15 (~0.95..1.16) with NO under-band
+  fudge; depths 16..20 (printed, not audited) degrade to the EASY side (on-curve
+  player pulls slightly ahead), never unfair-hard. The gate stays in band at the
+  re-fit rate (region-2 on-curve soldier golden ratio = 3.0, the fair edge).
 
 Depth generosity bumps (BalanceConfig SECTION 3): at full depth, extra enemies
 (LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX=2), heavy-upgrade chance 0.60, +medkit 0.15,

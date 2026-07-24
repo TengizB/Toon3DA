@@ -1,6 +1,8 @@
 package ge.tbegvadze.toon3d.progression;
 
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.GameBalance;
+import ge.tbegvadze.toon3d.util.GameMath;
 
 /**
  * Tracks the player's experience points, player level, and accumulated stat bonuses
@@ -35,10 +37,18 @@ public final class PlayerProgress {
      * Adds the given XP to the current pool.  Sets {@link #hasPendingLevelUp()} when
      * the threshold is crossed.  Does not advance level immediately — World does that
      * after the player picks a reward.
+     *
+     * <p>Applies the CATCH-UP rubber band (new-game-balancr order 4): while the player is more than one
+     * level BELOW the expected level for their current floor, incoming XP is scaled up by
+     * {@link BalanceConfig#XP_CATCHUP_MULTIPLIER} so a fallen-behind run can recover. It is forward-only
+     * — an at-or-ahead player is never slowed. See {@link GameMath#catchUpScaledXp}.</p>
      */
     public void addXp(int amount) {
         if (amount <= 0) return;
-        currentXp += amount;
+        int expectedLevel = GameMath.expectedLevelAtDepth(BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, currentFloor);
+        int awardedXp = GameMath.catchUpScaledXp(amount, playerLevel, expectedLevel,
+                BalanceConfig.XP_CATCHUP_MULTIPLIER);
+        currentXp += awardedXp;
         if (!pendingLevelUp && currentXp >= xpForNextLevel) {
             pendingLevelUp = true;
         }

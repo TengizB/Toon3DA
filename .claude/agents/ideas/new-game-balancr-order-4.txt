@@ -1,7 +1,24 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Progression
 TITLE: Felt Progression — leveling that matters and is paced
 ---
+
+IMPLEMENTATION NOTES (design refined where the math demanded it; all acceptance
+criteria pass — verified numerically against the exact Java formula bodies):
+  A) v2 = cardPower * gearRamp * abilityPower. gearCurve/abilityPower are used in
+     their CONTINUOUS RAMP form (GameMath.gearRampAtDepth / expectedAbilityPower-
+     PointsAtDepth), NOT the step form: a fixed ratio band [0.9,1.2] cannot absorb
+     the step gearCurve's x1.35 single-depth boundary jump, so the honest curve
+     models gear/abilities as acquired GRADUALLY across a region (reaching the
+     order-2 step value at each region's END). The step gearCurve stays the GATE's
+     tool. Enemy re-fit: HEALTH held at 1.042 (leaves order-3 scarcity untouched),
+     the whole re-fit put into DAMAGE 1.032 -> 1.073 (cancels in heal-drain, only
+     touches the gate — which stays in band, region-2 on-curve golden ratio = 3.0).
+     R-DEPTH holds 1..15 (~0.95..1.16), no fudge; 16..20 degrade to the EASY side.
+  B) XP curve made GEOMETRIC (base 150 * 1.118^(level-1)) so it tracks the enemy
+     threat compound; per-enemy XP derived (XP_PER_THREAT_POINT=0.35 * depth-scaled
+     TP); R-XP-PACE flat ~1.11 at every depth. Catch-up x1.5 forward-only.
+  C) All 10 cards already cross >= 1 breakpoint at current magnitudes (no re-price).
 
 ================================================================================
 NEW GAME BALANCE — ORDER 4 of 9

@@ -21,49 +21,13 @@ public final class GameBalance {
     private GameBalance() {}
 
     // =========================================================================
-    // XP REWARDS — XP dropped by each enemy archetype on death
+    // XP REWARDS — DERIVED, not hand-set (new-game-balancr order 4)
     // =========================================================================
 
-    // Boss XP (XP_REWARD_BOSS_BASE) stays here pending idea 6.
-
-    /** PLAGUE_HULK (tile '1') — slow tank melee; tanky so yields solid XP. */
-    public static final int XP_REWARD_PLAGUE_HULK   = BalanceConfig.XP_REWARD_PLAGUE_HULK;
-
-    /** EYE_TYRANT (tile '2') — fast ranged kiter; low XP, common annoyance. */
-    public static final int XP_REWARD_EYE_TYRANT    = BalanceConfig.XP_REWARD_EYE_TYRANT;
-
-    /** GORE_BITER (tile '3') — fast light melee; low XP, spawns in packs. */
-    public static final int XP_REWARD_GORE_BITER    = BalanceConfig.XP_REWARD_GORE_BITER;
-
-    /** SHELL_BRUTE (tile '4') — heavy charger melee; more XP for the threat. */
-    public static final int XP_REWARD_SHELL_BRUTE   = BalanceConfig.XP_REWARD_SHELL_BRUTE;
-
-    /** MIRE_WRAITH (tile '5') — slow hovering acid ranged; high XP, tanky. */
-    public static final int XP_REWARD_MIRE_WRAITH   = BalanceConfig.XP_REWARD_MIRE_WRAITH;
-
-    /** IRON_STALKER (tile '!') — armored elite melee+ranged; the big reward. */
-    public static final int XP_REWARD_IRON_STALKER  = BalanceConfig.XP_REWARD_IRON_STALKER;
-
-    /** ACID_DRONE (tile '$') — ranged mechanical; medium XP. */
-    public static final int XP_REWARD_ACID_DRONE    = BalanceConfig.XP_REWARD_ACID_DRONE;
-
-    /** VOID_SHROUD (tile '^') — fast stealth melee; medium XP. */
-    public static final int XP_REWARD_VOID_SHROUD   = BalanceConfig.XP_REWARD_VOID_SHROUD;
-
-    /** GHOUL (tile '~') — slow shambling chaff; low XP. */
-    public static final int XP_REWARD_GHOUL            = BalanceConfig.XP_REWARD_GHOUL;
-
-    /** CRAWLER (tile 'z') — fast fragile chaff; low XP. */
-    public static final int XP_REWARD_CRAWLER          = BalanceConfig.XP_REWARD_CRAWLER;
-
-    /** REVENANT (tile 'K') — fast hard-hitting undead soldier; solid XP. */
-    public static final int XP_REWARD_REVENANT         = BalanceConfig.XP_REWARD_REVENANT;
-
-    /** VORTEX_EYE (tile 'V') — short-range ranged chaff caster; low XP. */
-    public static final int XP_REWARD_VORTEX_EYE       = BalanceConfig.XP_REWARD_VORTEX_EYE;
-
-    /** BLIGHT_CORRUPTOR (tile '*') — durable infected brute soldier; solid XP. */
-    public static final int XP_REWARD_BLIGHT_CORRUPTOR = BalanceConfig.XP_REWARD_BLIGHT_CORRUPTOR;
+    // The thirteen per-archetype XP_REWARD_* re-exports that lived here are GONE. Per-enemy XP is now
+    // DERIVED from Threat Points (EnemyType.baseXpReward -> GameMath.xpRewardAtDepth, one knob
+    // BalanceConfig.XP_PER_THREAT_POINT). Boss XP (XP_REWARD_BOSS_BASE) stays a flat placeholder
+    // pending idea 6.
 
     /**
      * Base XP reward for killing any boss (before depth scaling applied by BossFloorController).
@@ -75,21 +39,21 @@ public final class GameBalance {
     public static final int XP_REWARD_BOSS_BASE     = BalanceConfig.XP_REWARD_BOSS_BASE;
 
     // =========================================================================
-    // XP CURVE — how much XP is needed to reach each next player level
+    // XP CURVE — GEOMETRIC, coupled to the enemy threat compound (order 4)
     //
-    // Formula:  xpRequired(level) = XP_BASE * level ^ XP_CURVE_EXPONENT
-    //   level 1 → 2:    50 * 1^1.3  =   50 XP   (~5 gore-biters or 1 stalker)
-    //   level 2 → 3:    50 * 2^1.3  =  123 XP   (~floor 1 cleared + a few floor-2 kills)
-    //   level 3 → 4:    50 * 3^1.3  =  207 XP
-    //   level 4 → 5:    50 * 4^1.3  =  302 XP
-    //   level 5 → 6:    50 * 5^1.3  =  406 XP
+    // Formula:  xpRequired(level) = XP_BASE * XP_CURVE_GROWTH_PER_LEVEL ^ (level - 1)
+    //   level 1 → 2:   150 * 1.118^0 =  150 XP
+    //   level 5 → 6:   150 * 1.118^4 =  234 XP
+    //   level 10 → 11: 150 * 1.118^9 =  409 XP
+    // Because per-enemy XP is DERIVED from depth-scaled Threat Points and the requirement grows at the
+    // same geometric rate as enemy threat, the player gains ~1 level/floor at EVERY depth (R-XP-PACE).
     // =========================================================================
 
     /** Base XP needed to advance from level 1 to level 2. (Balance: BalanceConfig.) */
     public static final int   XP_BASE_REQUIREMENT = BalanceConfig.XP_BASE_REQUIREMENT;
 
-    /** Exponent in the power curve.  1.3 = gentler acceleration so level-ups arrive before each difficulty wall. (Balance: BalanceConfig.) */
-    public static final float XP_CURVE_EXPONENT   = BalanceConfig.XP_CURVE_EXPONENT;
+    /** Per-level geometric growth of the XP requirement, tied to the enemy threat compound. (Balance: BalanceConfig.) */
+    public static final float XP_CURVE_GROWTH_PER_LEVEL = BalanceConfig.XP_CURVE_GROWTH_PER_LEVEL;
 
     // =========================================================================
     // LEVEL-UP STAT BONUSES — applied once per level-up per chosen reward
@@ -183,10 +147,11 @@ public final class GameBalance {
 
     /**
      * Returns the XP needed to advance from {@code currentLevel} to the next level.
-     * Delegates to {@link GameMath#xpRequiredForLevel(int, float, int)}.
+     * Delegates to {@link GameMath#xpRequiredForLevelGeometric(int, float, int)} — the geometric curve
+     * coupled to the enemy threat compound (new-game-balancr order 4).
      */
     public static int xpRequiredForLevel(int currentLevel) {
-        return GameMath.xpRequiredForLevel(XP_BASE_REQUIREMENT, XP_CURVE_EXPONENT, currentLevel);
+        return GameMath.xpRequiredForLevelGeometric(XP_BASE_REQUIREMENT, XP_CURVE_GROWTH_PER_LEVEL, currentLevel);
     }
 
     /**

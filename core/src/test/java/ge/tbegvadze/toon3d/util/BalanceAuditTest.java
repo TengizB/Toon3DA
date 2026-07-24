@@ -194,6 +194,50 @@ class BalanceAuditTest {
                 "an empty floor (no remaining demand) never triggers the lifeline");
     }
 
+    /** R-XP-PACE (order 4): every floor awards [1.0, 1.3] level-ups worth of XP at depths 1..15. */
+    @Test
+    void xpPacingHoldsAtEveryDepthOneToFifteen() {
+        assertNoViolations(BalanceSchema.xpPaceResults());
+    }
+
+    /** R-CARD-BREAKPOINT (order 4): every level-up card crosses >= 1 combat breakpoint in some region. */
+    @Test
+    void everyUpgradeCardCrossesABreakpoint() {
+        assertNoViolations(BalanceSchema.cardBreakpointResults());
+    }
+
+    /**
+     * Order-4 CATCH-UP rule (GameMath.catchUpScaledXp), the acceptance criterion proven with SYNTHETIC
+     * level/depth states: the forward-only rubber band engages when the player is more than one level
+     * BELOW the expected level for their depth, and NEVER when at or above it.
+     */
+    @Test
+    void catchUpEngagesOnlyWhenUnderLevelled() {
+        float multiplier = BalanceConfig.XP_CATCHUP_MULTIPLIER; // 1.5
+        int baseXp = 100;
+        // expectedLevelAtDepth(1.0, 5) == 5. A level-2 player at depth 5 is 3 levels behind -> boosted.
+        int expectedAtDepth5 = GameMath.expectedLevelAtDepth(BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, 5);
+        assertTrue(expectedAtDepth5 == 5, "expected level at depth 5 should be 5 at 1 level/floor");
+
+        // UNDER-LEVELLED (more than one level behind) -> scaled up.
+        assertTrue(GameMath.catchUpScaledXp(baseXp, 2, expectedAtDepth5, multiplier) == Math.round(baseXp * multiplier),
+                "a player 3 levels behind must receive catch-up-boosted XP");
+        assertTrue(GameMath.catchUpScaledXp(baseXp, 3, expectedAtDepth5, multiplier) == Math.round(baseXp * multiplier),
+                "a player 2 levels behind (playerLevel < expected-1) must be boosted");
+
+        // AT OR ABOVE (within the one-level slack, exactly at, or ahead) -> untouched.
+        assertTrue(GameMath.catchUpScaledXp(baseXp, 4, expectedAtDepth5, multiplier) == baseXp,
+                "a player exactly one level behind (within slack) must NOT be boosted");
+        assertTrue(GameMath.catchUpScaledXp(baseXp, 5, expectedAtDepth5, multiplier) == baseXp,
+                "a player at the expected level must NOT be boosted");
+        assertTrue(GameMath.catchUpScaledXp(baseXp, 8, expectedAtDepth5, multiplier) == baseXp,
+                "an AHEAD player must never be slowed — the band is forward-only");
+        // Depth 1: expected level 1, so no player can be under-levelled -> never boosted.
+        int expectedAtDepth1 = GameMath.expectedLevelAtDepth(BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, 1);
+        assertTrue(GameMath.catchUpScaledXp(baseXp, 1, expectedAtDepth1, multiplier) == baseXp,
+                "at depth 1 the starting player is on-curve and never boosted");
+    }
+
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */
     @Test
     void fullSchemaSweepHasNoViolations() {

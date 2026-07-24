@@ -318,24 +318,15 @@ public final class BalanceConfig {
     /** Half-angle of the rear arc (measured from the reverse-facing vector), in degrees. Range: 45–75. */
     public static final float GUARD_BACK_HALF_ANGLE_DEGREES  = 60f;
 
-    // Per-kill XP rewards (the progression payout for each archetype).
-    public static final int XP_REWARD_GORE_BITER   = 10;
-    public static final int XP_REWARD_EYE_TYRANT   = 10;
-    public static final int XP_REWARD_ACID_DRONE   = 14;
-    public static final int XP_REWARD_VOID_SHROUD  = 18;
-    public static final int XP_REWARD_MIRE_WRAITH  = 22;
-    public static final int XP_REWARD_SHELL_BRUTE  = 18;
-    public static final int XP_REWARD_PLAGUE_HULK  = 14;
-    public static final int XP_REWARD_IRON_STALKER = 55;
-    // Ghoul/Crawler XP raised (8->10, 7->9) in the game-balance-tuning pass so reward tracks their
-    // re-tuned chaff threat (now on par with the Gore Biter: TP ~22/~17, reward-scales-to-cost).
-    public static final int XP_REWARD_GHOUL            = 10;
-    public static final int XP_REWARD_CRAWLER          = 9;
-    public static final int XP_REWARD_REVENANT         = 16;
-    public static final int XP_REWARD_VORTEX_EYE       = 9;
-    public static final int XP_REWARD_BLIGHT_CORRUPTOR = 18;
+    // Per-kill XP rewards are now DERIVED, not hand-set (new-game-balancr order 4). The thirteen
+    // per-archetype XP constants that lived here were DELETED: every enemy's XP is computed from its
+    // Threat Points via GameMath.xpRewardAtDepth (xpReward = XP_PER_THREAT_POINT * enemyThreatAtDepth),
+    // so dangerous enemies automatically pay more and a new archetype can never ship with a forgotten
+    // XP value. The single knob is XP_PER_THREAT_POINT (SECTION 7). Boss XP stays a flat placeholder
+    // (XP_REWARD_BOSS_BASE, SECTION 14) pending the boss ruleset (order 6).
 
-    // Per-kill credit rewards (the currency payout for each archetype).
+    // Per-kill credit rewards (the currency payout for each archetype). Credits stay hand-set (order 4
+    // only re-derives XP); the credit economy is order 3's concern.
     public static final int CREDIT_REWARD_GORE_BITER   = 5;
     public static final int CREDIT_REWARD_EYE_TYRANT   = 6;
     public static final int CREDIT_REWARD_ACID_DRONE   = 8;
@@ -368,14 +359,27 @@ public final class BalanceConfig {
     // depth 15 (0.89) and collapsed to 0.74 by depth 20 — deep endless floors were unfair-hard.
     // A compound enemy curve must eventually outrun a linear player curve, so this cannot be held
     // forever; the goal is to hold the fair band as DEEP as possible while barely touching the
-    // well-tuned early/mid game. Trimmed 1.045/1.035 -> 1.042/1.032: the ratio now holds the band
-    // through depth 15 (0.97) and lands depth 18/20 at 0.88/0.83 (vs 0.80/0.74 before) — a soft,
-    // graceful hard-edge instead of a cliff. Early/mid (d1-12) moves <=+4% (still in band, still a
-    // real fight). Regenerate BalanceReport's DEPTH COUPLING table after changing either. Range: 1.03–1.08.
-    /** Per-floor compound HP multiplier: baseHP * scale^(depth-1). Range: 1.03–1.08. */
+    // well-tuned early/mid game. Trimmed 1.045/1.035 -> 1.042/1.032: the ratio held the band through
+    // depth 15 (0.97) and landed depth 18/20 at 0.88/0.83 — a soft, graceful hard-edge.
+    //
+    // HONEST-POWER RE-FIT (new-game-balancr order 4): the OLD coupling defended a FICTION — the player
+    // curve counted ONLY level-up cards (playerPowerAtDepth), ignoring found weapons, priced abilities
+    // and crits. Order 4 replaces it with the HONEST total-power model GameMath.playerPowerAtDepthV2
+    // (cardPower * gearRamp * abilityPower). That honest curve is far STEEPER (v2(15) ~= 5.5 vs the old
+    // fiction's 2.68), so the enemy compound rates had to RISE to stay coupled (as the order-4 design
+    // predicted). The HEALTH scale is deliberately HELD at 1.042 so order-3's scarcity depth-sweep
+    // (DEMAND rides the HEALTH curve) and its region multipliers are UNTOUCHED; the whole re-fit is put
+    // into the DAMAGE scale, which cancels in the heal-drain fraction (order 3) and interacts only with
+    // the gear gate (order 2). DAMAGE scale re-fit 1.032 -> 1.073: the depth-coupling ratio against v2
+    // now holds [0.9, 1.2] for depths 1..15 (ranging ~0.95..1.19) with NO under-band fudge, degrading
+    // gracefully to the EASY side (an on-curve player pulls slightly ahead) only from depth ~17 — the
+    // boundary is printed in BalanceReport's DEPTH COUPLING table. The gear gate stays in band at the
+    // re-fit rate (region-2 on-curve soldier golden ratio = 3.0, exactly the fair edge). Regenerate the
+    // DEPTH COUPLING table after changing either. Range: 1.03–1.08 (HP) / 1.02–1.08 (dmg).
+    /** Per-floor compound HP multiplier: baseHP * scale^(depth-1). Held at 1.042 (protects order-3 scarcity). Range: 1.03–1.08. */
     public static final float ENEMY_HEALTH_SCALE_PER_DEPTH = 1.042f;
-    /** Per-floor compound damage multiplier: baseDmg * scale^(depth-1). Range: 1.02–1.06. */
-    public static final float ENEMY_DAMAGE_SCALE_PER_DEPTH = 1.032f;
+    /** Per-floor compound damage multiplier: baseDmg * scale^(depth-1). Re-fit 1.032->1.073 vs the honest v2 curve (order 4). Range: 1.02–1.08. */
+    public static final float ENEMY_DAMAGE_SCALE_PER_DEPTH = 1.073f;
     /** Per-floor linear credit bonus: base * (1 + (depth-1) * scale). Range: 0.05–0.25. */
     public static final float CREDIT_DEPTH_SCALE           = 0.12f;
 
@@ -644,10 +648,41 @@ public final class BalanceConfig {
     // The player's power-growth curve. Per-enemy XP rewards live in section 2.
     // =====================================================================================
 
-    /** Base XP needed to advance from level 1 to 2: xpRequired = base * level^exponent. Range: 30–80. */
-    public static final int   XP_BASE_REQUIREMENT = 50;
-    /** Exponent of the XP power curve; higher = steeper. Range: 1.1–1.6. */
-    public static final float XP_CURVE_EXPONENT   = 1.3f;
+    // XP CURVE — GEOMETRIC (new-game-balancr order 4). The old curve was POLYNOMIAL (base * level^exp),
+    // which grows at a different rate than the enemy threat a floor's roster is worth (that grows
+    // GEOMETRICALLY, depthThreatScale). Those shapes cannot stay coupled, so per-floor XP pacing drifted
+    // (order 4, problem 2). The curve is now GEOMETRIC (base * growth^(level-1)) with the growth tied to
+    // the enemy threat compound, so — with per-enemy XP DERIVED from depth-scaled TP (XP_PER_THREAT_POINT)
+    // — a floor's roster XP and the level requirement grow at the SAME rate and the yield is depth-stable
+    // (R-XP-PACE holds at every depth). See GameMath.xpRequiredForLevelGeometric.
+    /** Base XP needed to advance from level 1 to 2: xpRequired = base * growth^(level-1). Raised 50->150 with the geometric curve. Range: 100–200. */
+    public static final int   XP_BASE_REQUIREMENT = 150;
+    /**
+     * Per-level GEOMETRIC growth of the XP requirement. Chosen to TRACK the enemy threat compound
+     * (ENEMY_HEALTH_SCALE_PER_DEPTH * ENEMY_DAMAGE_SCALE_PER_DEPTH ~= 1.118/floor) so leveling keeps pace
+     * with the descent — the player gains ~1 level/floor at EVERY depth. R-XP-PACE is the guardrail that
+     * fails the build if this drifts out of coupling with the enemy rates. Range: 1.08–1.16.
+     */
+    public static final float XP_CURVE_GROWTH_PER_LEVEL = 1.118f;
+
+    // XP PACING (new-game-balancr order 4) — pacing is now a RULE (R-XP-PACE), not a hope.
+    /**
+     * Per-kill XP per Threat Point — the single knob that replaces the thirteen deleted per-enemy XP
+     * constants. xpReward = round(XP_PER_THREAT_POINT * enemyThreatAtDepth). Chosen so a floor's roster
+     * XP lands ~1.1x the level requirement (mid-band of the yield below) and per-enemy magnitudes stay
+     * familiar (a depth-1 soldier ~13 XP, a mini-elite ~89). Range: 0.25–0.5.
+     */
+    public static final float XP_PER_THREAT_POINT      = 0.35f;
+    /** R-XP-PACE lower bound: a floor must award at least this many level-ups worth of XP. Range: 0.9–1.1. */
+    public static final float XP_FLOOR_YIELD_MIN       = 1.0f;
+    /** R-XP-PACE upper bound: a floor must not award more than this many level-ups (progression stays paced). Range: 1.2–1.5. */
+    public static final float XP_FLOOR_YIELD_MAX       = 1.3f;
+    /**
+     * CATCH-UP rubber band (forward only): while the player is more than one level BELOW the expected
+     * level for their depth, incoming XP is multiplied by this. Never slows an at-or-ahead player — being
+     * ahead is earned, being behind is recoverable. See GameMath.catchUpScaledXp. Range: 1.25–2.0.
+     */
+    public static final float XP_CATCHUP_MULTIPLIER    = 1.5f;
 
     // ---------------------------------------------------------------------------------
     // LEVEL-UP CARD SYSTEM — power budget & re-priced boons (idea 5: build diversity)
