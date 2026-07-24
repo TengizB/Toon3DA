@@ -42,6 +42,14 @@ public final class BalanceReport {
         System.out.println();
         printScarcityTable();
         System.out.println();
+        printScarcityDepthSweep();
+        System.out.println();
+        printHealDrainDepthSweep();
+        System.out.println();
+        printCreditEconomyTable();
+        System.out.println();
+        printShopPricingTable();
+        System.out.println();
         printEncounterTable();
         System.out.println();
         printDepthCouplingTable();
@@ -591,6 +599,109 @@ public final class BalanceReport {
     /** Enemy eHP with no dodge or flat reduction (the contract rule for current enemies). */
     private static float enemyEffectiveHitPoints(int rawHealth) {
         return GameMath.effectiveHitPoints(rawHealth, 0f, 0f, 0f, 0f);
+    }
+
+    // -----------------------------------------------------------------------------------
+    // ORDER-3 RESOURCE ECONOMY DEPTH SWEEPS — the whole-run generalisation of the model floor.
+    // R-SCARCITY-DEPTH / R-HEALDRAIN-DEPTH / R-CREDITS across depths 1..15, plus the formula-derived
+    // shop price list. All numbers flow through the same BalanceSchema helpers the audit uses.
+    // -----------------------------------------------------------------------------------
+
+    /** R-SCARCITY-DEPTH: the scarcity ratio S at every depth 1..15 (DEMAND up eHP curve, SUPPLY up gear curve). */
+    private static void printScarcityDepthSweep() {
+        System.out.println("SCARCITY DEPTH SWEEP (R-SCARCITY-DEPTH) — S=SUPPLY/DEMAND at each depth, band "
+                + String.format("%.2f-%.2f", BalanceConfig.SCARCITY_RATIO_FLOOR_MIN, BalanceConfig.SCARCITY_RATIO_FLOOR_MAX)
+                + "  [model supply=" + String.format("%.0f", BalanceSchema.modelFloorTotalRangedSupply())
+                + " demand=" + String.format("%.0f", BalanceSchema.modelFloorDemand()) + "]");
+        System.out.printf("%-6s %-7s %8s %8s %8s %9s %-6s%n",
+                "depth", "region", "gearX", "DEMAND", "SUPPLY", "S", "in?");
+        System.out.println("------------------------------------------------------------------------------------");
+        for (BalanceSchema.RuleResult result : BalanceSchema.scarcityDepthResults()) {
+            int depth = Integer.parseInt(result.subject.replaceAll("[^0-9]", ""));
+            int band  = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+            float gearX  = GameMath.gearCurveAtDepth(BalanceConfig.GEAR_CURVE_PER_REGION, depth, band)
+                    * GameMath.perRegionMultiplierAtDepth(BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
+            float demand = GameMath.floorDemandAtDepth(BalanceSchema.modelFloorDemand(),
+                    BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
+            float supply = GameMath.ammoSupplyAtDepth(BalanceSchema.modelFloorTotalRangedSupply(),
+                    BalanceConfig.GEAR_CURVE_PER_REGION, BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
+            System.out.printf("%-6d %-7d %8.2f %8.0f %8.0f %9.2f %-6s%n",
+                    depth, GameMath.regionIndexAtDepth(depth, band), gearX, demand, supply, result.value,
+                    bandVerdict(result.satisfied, result.value, result.bandMinimum));
+        }
+    }
+
+    /** R-HEALDRAIN-DEPTH: the per-floor net HP drain fraction at every depth 1..15. */
+    private static void printHealDrainDepthSweep() {
+        System.out.println("HEAL DRAIN DEPTH SWEEP (R-HEALDRAIN-DEPTH) — net HP loss per floor, band "
+                + String.format("%.0f-%.0f%%", BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN * 100f,
+                        BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX * 100f)
+                + " of depth-scaled eHP");
+        System.out.printf("%-6s %-7s %9s %-6s%n", "depth", "region", "drain%", "in?");
+        System.out.println("------------------------------------------------------------------------------------");
+        for (BalanceSchema.RuleResult result : BalanceSchema.healDrainDepthResults()) {
+            int depth = Integer.parseInt(result.subject.replaceAll("[^0-9]", ""));
+            System.out.printf("%-6d %-7d %8.1f%% %-6s%n",
+                    depth, GameMath.regionIndexAtDepth(depth, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE),
+                    result.value * 100f, bandVerdict(result.satisfied, result.value, result.bandMinimum));
+        }
+    }
+
+    /** R-CREDITS: expected income vs the price of the expected purchase bundle, per region. */
+    private static void printCreditEconomyTable() {
+        System.out.println("CREDIT ECONOMY (R-CREDITS) — income(region) / bundle price, band "
+                + String.format("%.2f-%.2f", BalanceConfig.CREDIT_INCOME_RATIO_MIN, BalanceConfig.CREDIT_INCOME_RATIO_MAX)
+                + "  [kill base=" + String.format("%.0f", BalanceSchema.modelFloorKillCreditReward())
+                + "/floor  chips=" + String.format("%.0f", BalanceSchema.chipIncomePerFloor()) + "/floor]");
+        System.out.printf("%-8s %10s %10s %8s %-6s%n", "region", "income", "bundle", "ratio", "in?");
+        System.out.println("------------------------------------------------------------------------------------");
+        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+        int region = 0;
+        for (BalanceSchema.RuleResult result : BalanceSchema.creditResults()) {
+            int firstDepth = region * band + 1;
+            int repDepth   = firstDepth + (band - 1) / 2;
+            float income = GameMath.creditIncomePerRegion(BalanceSchema.modelFloorKillCreditReward(),
+                    BalanceConfig.CREDIT_DEPTH_SCALE, BalanceSchema.chipIncomePerFloor(), firstDepth, band);
+            int bundle = BalanceSchema.regionPurchaseBundlePrice(repDepth);
+            System.out.printf("%-8d %10.0f %10d %8.2f %-6s%n",
+                    region, income, bundle, result.value,
+                    bandVerdict(result.satisfied, result.value, result.bandMinimum));
+            region++;
+        }
+        System.out.println("  (bundle = " + BalanceConfig.SHOP_EXPECTED_SIGNIFICANT_BUYS_PER_REGION
+                + " significant @ " + String.format("%.0f", BalanceConfig.SHOP_SIGNIFICANT_BUY_POWER_POINTS)
+                + "PP + " + String.format("%.1f", BalanceConfig.SHOP_EXPECTED_SMALL_BUYS_PER_REGION)
+                + " small @ " + String.format("%.0f", BalanceConfig.SHOP_SMALL_BUY_POWER_POINTS) + "PP each)");
+    }
+
+    /** Formula-derived shop prices (GameMath.shopPrice) for representative offers at depths 1/5/10/15. */
+    private static void printShopPricingTable() {
+        System.out.println("SHOP PRICING — price = valuePP * " + String.format("%.0f", BalanceConfig.SHOP_CREDITS_PER_POWER_POINT)
+                + " cr/PP * depthFactor (zero hand-set base prices)");
+        int[] depths = {1, 5, 10, 15};
+        System.out.printf("%-26s %7s", "offer", "valuePP");
+        for (int depth : depths) System.out.printf("  d%-6d", depth);
+        System.out.println();
+        System.out.println("------------------------------------------------------------------------------------");
+        printShopPriceRow("Ammo box (15 x 20 dmg)", 15 * 20 / BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT, depths);
+        printShopPriceRow("Stim medkit (" + BalanceConfig.MEDKIT_STIM_HEAL + " HP)",
+                BalanceConfig.MEDKIT_STIM_HEAL / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT, depths);
+        printShopPriceRow("Field medkit (" + BalanceConfig.MEDKIT_FULL_HEAL + " HP)",
+                BalanceConfig.MEDKIT_FULL_HEAL / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT, depths);
+        printShopPriceRow("Weapon level-up", BalanceConfig.SHOP_WEAPON_LEVEL_UP_POWER_POINTS, depths);
+        printShopPriceRow("Tier up (RARE, 12 PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_RARE, depths);
+        printShopPriceRow("Tier up (EPIC, 20 PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_EPIC, depths);
+        printShopPriceRow("Player ability boon (~12 PP)", BalanceConfig.LEVEL_UP_BUDGET_PP, depths);
+    }
+
+    private static void printShopPriceRow(String label, float valuePowerPoints, int[] depths) {
+        System.out.printf("%-26s %7.1f", label, valuePowerPoints);
+        for (int depth : depths) {
+            int price = GameMath.shopPrice(valuePowerPoints, BalanceConfig.SHOP_CREDITS_PER_POWER_POINT,
+                    depth, BalanceConfig.SHOP_DEPTH_PRICE_SCALE);
+            System.out.printf("  %-7d", price);
+        }
+        System.out.println();
     }
 
     // -----------------------------------------------------------------------------------

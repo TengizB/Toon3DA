@@ -3351,6 +3351,233 @@ public final class GameMath {
     }
 
     // =========================================================================
+    // RESOURCE ECONOMY ACROSS DEPTH (new-game-balancr order 3)
+    // -------------------------------------------------------------------------
+    // Order 3 audits the ammo economy, the heal economy, and the credit sink at
+    // EVERY depth 1..15, not just one depth-1 model floor. The depth-1 model floor
+    // (SECTION 10) stays the box-size calibration anchor; these methods carry that
+    // anchor down the run using the two curves the run actually rides:
+    //   - DEMAND rides the enemy eHP curve   (compoundDepthMultiplier(healthScale, d))
+    //   - SUPPLY rides the EXPECTED-ARSENAL curve (gearCurveAtDepth) — ammo must be
+    //     priced against the guns the player is EXPECTED to hold at d (order 2), or
+    //     upgrades would silently break the economy.
+    // See docs/game-balance-authority.txt and
+    // .claude/agents/ideas/new-game-balancr-order-3.txt.
+    // =========================================================================
+
+    /*
+     * Formula: regionIndexAtDepth — which 5-floor region a depth belongs to
+     * Derivation:
+     *   The gear curve, the loot-tier bands and the per-region economy multipliers all step once per
+     *   region of regionBandSize depths (the SAME band the route map uses). The 0-based region index is:
+     *       regionIndexAtDepth = floor((depth - 1) / regionBandSize)
+     *   depths 1..5 -> region 0, 6..10 -> region 1, and so on. This is the shared index every
+     *   per-region lever (AMMO_SUPPLY_REGION_MULTIPLIER, HEAL_SUPPLY_REGION_MULTIPLIER, tier bands)
+     *   reads, so no two of them can drift apart.
+     * Edge cases:
+     *   regionBandSize <= 0 -> treated as 1 (every depth is its own region) to avoid divide-by-zero.
+     *   depth <= 1 -> region 0 (the run begins in the first region).
+     */
+    public static int regionIndexAtDepth(int depth, int regionBandSize) {
+        int safeBandSize = Math.max(1, regionBandSize);
+        return Math.max(0, depth - 1) / safeBandSize;
+    }
+
+    /*
+     * Formula: perRegionMultiplierAtDepth — read a per-region lever, clamping past the last band
+     * Derivation:
+     *   The economy levers are small arrays indexed by region (one entry per designed region). Endless
+     *   mode descends past the last designed region, so a depth beyond the table clamps to its LAST
+     *   entry (the deepest designed tuning holds for every deeper region):
+     *       index = min(regionIndexAtDepth(depth), multipliers.length - 1)
+     *       result = multipliers[index]
+     * Edge cases:
+     *   Empty/null array -> returns 1.0 (a no-op multiplier, so a missing table never zeroes supply).
+     */
+    public static float perRegionMultiplierAtDepth(float[] multipliers, int depth, int regionBandSize) {
+        if (multipliers == null || multipliers.length == 0) {
+            return 1f;
+        }
+        int index = Math.min(regionIndexAtDepth(depth, regionBandSize), multipliers.length - 1);
+        return multipliers[index];
+    }
+
+    /*
+     * Formula: floorDemandAtDepth — the damage needed to clear a floor at depth d
+     * Derivation:
+     *   The depth-1 model floor has a fixed DEMAND (sum of its enemies' eHP). Deeper floors keep a
+     *   scale-invariant enemy COUNT (the encounter budget and each enemy's TP cost scale by the same
+     *   curve — SECTION 11), so the whole floor's eHP grows by the single enemy-eHP axis:
+     *       floorDemandAtDepth = modelFloorDemand * compoundDepthMultiplier(healthScale, d)
+     *   This is the deterministic "one source" DEMAND the order-3 audit uses instead of a hand-listed
+     *   per-depth roster (the encounter planner spends this same budget in play).
+     * Edge cases:
+     *   depth <= 1 -> multiplier 1.0 -> returns modelFloorDemand unchanged.
+     */
+    public static float floorDemandAtDepth(float modelFloorDemand, float healthScalePerDepth, int depth) {
+        return modelFloorDemand * compoundDepthMultiplier(healthScalePerDepth, depth);
+    }
+
+    /*
+     * Formula: ammoSupplyAtDepth — the ranged damage a floor hands the player at depth d
+     * Derivation:
+     *   A floor's raw box count / box sizes are fixed, but each ammo unit buys MORE damage as the
+     *   player's arsenal improves (order 2's gear curve models exactly this). So the depth-1 model
+     *   SUPPLY is lifted by the gear curve and by the per-region supply lever:
+     *       ammoSupplyAtDepth = modelFloorSupply * gearCurveAtDepth(d) * regionSupplyMultiplier(d)
+     *   gearCurve is a per-region STEP (flat within a region, +perRegion at each boundary); the region
+     *   multiplier is the four-lever design's per-region trim/boost so a region can be tuned without
+     *   touching the global box sizes. Because gear steps ~+35%/region while eHP compounds only
+     *   ~+23%/region, deep regions tend to drift ABOVE the scarcity band — the region multiplier trims
+     *   them back (and boosts the within-region dip of region 1) into [0.75, 0.95].
+     * Edge cases:
+     *   Inherits gearCurveAtDepth / perRegionMultiplierAtDepth edge cases; a 1.0 region multiplier and
+     *   depth-1 gear curve reproduce modelFloorSupply exactly.
+     */
+    public static float ammoSupplyAtDepth(float modelFloorSupply, float perRegionGearMultiplier,
+                                          float[] regionSupplyMultipliers, int depth, int regionBandSize) {
+        float gearCurve = gearCurveAtDepth(perRegionGearMultiplier, depth, regionBandSize);
+        float regionSupply = perRegionMultiplierAtDepth(regionSupplyMultipliers, depth, regionBandSize);
+        return modelFloorSupply * gearCurve * regionSupply;
+    }
+
+    /*
+     * Formula: scarcityRatioAtDepth — the scarcity ratio S at an arbitrary depth (order 3)
+     * Derivation:
+     *   The central scarcity equation carried down the run:
+     *       S(d) = ammoSupplyAtDepth(d) / floorDemandAtDepth(d)
+     *   The order-3 rule R-SCARCITY-DEPTH requires S(d) in [0.75, 0.95] for every d in 1..15, so ammo
+     *   covers most-but-not-all of every floor at every depth — the "shoot or save?" question never
+     *   evaporates as the arsenal and the enemies co-escalate.
+     * Edge cases:
+     *   floorDemand <= 0 -> returns 0 (delegated to scarcityRatio; an empty floor has no scarcity).
+     */
+    public static float scarcityRatioAtDepth(float ammoSupplyAtDepth, float floorDemandAtDepth) {
+        return scarcityRatio(ammoSupplyAtDepth, floorDemandAtDepth);
+    }
+
+    /*
+     * Formula: netHpDrainFractionAtDepth — per-floor net HP loss as a fraction of eHP at depth d
+     * Derivation:
+     *   Each floor should cost a small slice of HP you never recover (order 3, part B). Both the
+     *   incoming damage and the heal supply ride the enemy-damage curve (incoming grows with enemy
+     *   damage; heal supply is modelled to track it via depth spawn bonuses + the per-region heal
+     *   lever), and the player's "current-difficulty eHP" tracks the SAME curve (the depth-coupling
+     *   contract keeps survivability proportional to enemy threat). Writing D = compoundDepthMultiplier(
+     *   damageScale, d):
+     *       incoming(d)   = incomingBase * D
+     *       healSupply(d) = healSupplyBase * D * healRegionMultiplier(d)
+     *       eHP(d)        = referenceEHP  * D
+     *       netDrainFraction(d) = (incoming(d) - healSupply(d)) / eHP(d)
+     *                           = (incomingBase - healSupplyBase * healRegionMultiplier(d)) / referenceEHP
+     *   The shared D cancels, so with the region multipliers at their 1.0 default the net drain is
+     *   depth-STABLE (each floor costs the same fraction of your depth-scaled eHP). The region lever
+     *   exists to nudge a region's drain without touching heal magnitudes. R-HEALDRAIN-DEPTH requires
+     *   the result in [0.05, 0.15] for every d in 1..15.
+     * Edge cases:
+     *   referenceEHP <= 0 -> returns 0 (no eHP to measure a fraction of; avoids divide-by-zero).
+     *   A negative result is meaningful (net HP GAIN — the anti-face-tank failure mode the band bans).
+     */
+    public static float netHpDrainFractionAtDepth(float incomingBase, float healSupplyBase,
+                                                  float healRegionMultiplier, float referenceEffectiveHitPoints) {
+        if (referenceEffectiveHitPoints <= 0f) {
+            return 0f;
+        }
+        return (incomingBase - healSupplyBase * healRegionMultiplier) / referenceEffectiveHitPoints;
+    }
+
+    /*
+     * Formula: shopPrice — a shop offer's credit price derived from its priced VALUE (order 3)
+     * Derivation:
+     *   Every offer prices through ONE formula from its value in power points (PP — the same %-of-
+     *   reference currency the level-up cards and the ability budget use), never a hand-set base price:
+     *       depthFactor = 1 + depthPriceScale * (depth - 1)     // deeper credits are worth less
+     *       price       = round( valuePowerPoints * creditsPerPowerPoint * depthFactor )
+     *   A weapon-class upgrade prices on its ability/level PP; a consumable prices on its supply value
+     *   converted to PP (damage supplied / DAMAGE_PER_PP, or HP restored / HP_PER_PP). One knob
+     *   (creditsPerPowerPoint) sets the whole economy's price level, so the credit BAND (R-CREDITS) is
+     *   tuned by moving a single number rather than eight hand-set prices.
+     * Edge cases:
+     *   depth < 1 clamped to 1 (a bad depth never underprices below the base).
+     *   Negative value/knob is nonsensical config; not clamped so a bad number surfaces as a bad price
+     *     rather than being silently floored. Math.round(double) -> long, cast to int (prices are small).
+     */
+    public static int shopPrice(float valuePowerPoints, float creditsPerPowerPoint,
+                                int depth, float depthPriceScale) {
+        int clampedDepth  = Math.max(1, depth);
+        float depthFactor = 1f + depthPriceScale * (clampedDepth - 1);
+        return (int) Math.round(valuePowerPoints * creditsPerPowerPoint * depthFactor);
+    }
+
+    /*
+     * Formula: creditIncomePerRegion — expected credits earned across one region (order 3, part C)
+     * Derivation:
+     *   The credit HALF of the economy is only a real resource if income is COUPLED to the sink. Income
+     *   over a region is the kill bounties (which scale linearly with depth) plus the flat credit chips,
+     *   summed across the region's floors:
+     *       killIncome(d) = floorKillCreditBase * (1 + creditDepthScale * (d - 1))
+     *       income(region) = sum over the region's floors of ( killIncome(d) + chipIncomePerFloor )
+     *   floorKillCreditBase is the model floor's total per-kill credit reward; chipIncomePerFloor is the
+     *   expected chip count * average chip value. R-CREDITS then checks income(region) against the price
+     *   of the expected purchase bundle (one weapon-class buy + a couple of supplies) so a region affords
+     *   roughly one significant purchase plus resupply, banking ~one region's worth.
+     * Edge cases:
+     *   firstDepth < 1 clamped to 1; floorsPerRegion <= 0 -> returns 0 (no floors, no income).
+     */
+    public static float creditIncomePerRegion(float floorKillCreditBase, float creditDepthScale,
+                                              float chipIncomePerFloor, int firstDepth, int floorsPerRegion) {
+        if (floorsPerRegion <= 0) {
+            return 0f;
+        }
+        int startDepth = Math.max(1, firstDepth);
+        float income = 0f;
+        for (int floorOffset = 0; floorOffset < floorsPerRegion; floorOffset++) {
+            int depth = startDepth + floorOffset;
+            float killIncome = floorKillCreditBase * (1f + creditDepthScale * (depth - 1));
+            income += killIncome + chipIncomePerFloor;
+        }
+        return income;
+    }
+
+    /*
+     * Formula: emergencySupplyDemandThreshold — the never-softlock floor under catastrophe (order 3, D)
+     * Derivation:
+     *   A player who wastes ammo must never reach a state where the floor cannot supply enough to
+     *   continue — dying to an empty inventory screen instead of to gameplay. The guard: if the player's
+     *   TOTAL remaining potential damage (all reserve ammo * efficiency, plus melee) falls below the
+     *   remaining floor demand times a small fraction, force the next enemy drop to be ammo:
+     *       threshold = remainingFloorDemand * emergencySupplyFraction
+     *   emergencySupplyFraction (0.25) sits FAR below the scarcity band, so a hoarder never trips it —
+     *   it only converts "standing empty-handed" deaths into fighting-retreat deaths. Melee (fist, no
+     *   ammo) is the true always-available backstop; this only keeps the gap crossable.
+     * Edge cases:
+     *   Negative demand/fraction is nonsensical config; returned verbatim so a bad number is visible.
+     */
+    public static float emergencySupplyDemandThreshold(float remainingFloorDemand, float emergencySupplyFraction) {
+        return remainingFloorDemand * emergencySupplyFraction;
+    }
+
+    /*
+     * Formula: emergencySupplyTriggers — whether the never-softlock ammo drop must fire (order 3, D)
+     * Derivation:
+     *   True exactly when the player's total remaining potential damage has fallen below the emergency
+     *   threshold AND the once-per-floor guarantee has not already fired:
+     *       triggers = !alreadyGrantedThisFloor
+     *                  && totalPotentialDamage < emergencySupplyDemandThreshold(remainingFloorDemand, f)
+     *   Kept a pure predicate so a unit test can exercise it with synthetic inventories (order-3
+     *   acceptance) and the live EnemyManager can call the identical logic on each kill.
+     * Edge cases:
+     *   remainingFloorDemand <= 0 -> false (nothing left to fight; no lifeline needed).
+     */
+    public static boolean emergencySupplyTriggers(float totalPotentialDamage, float remainingFloorDemand,
+                                                  float emergencySupplyFraction, boolean alreadyGrantedThisFloor) {
+        if (alreadyGrantedThisFloor || remainingFloorDemand <= 0f) {
+            return false;
+        }
+        return totalPotentialDamage < emergencySupplyDemandThreshold(remainingFloorDemand, emergencySupplyFraction);
+    }
+
+    // =========================================================================
     // MINI-MAP — FACING WEDGE GEOMETRY (replaces the unreadable facing line)
     // =========================================================================
     /*
@@ -3403,24 +3630,6 @@ public final class GameMath {
     public static float facingWedgeBaseRightY(float centerY, float facingX, float facingY,
                                                float wedgeBack, float wedgeHalfWidth) {
         return centerY - facingY * wedgeBack - facingX * wedgeHalfWidth;
-    }
-
-    /*
-     * Formula: shopEntryPrice — credit price of one shop offer (shop_order_2)
-     * Derivation:
-     *   depthFactor  = 1 + depthScale * (depth - 1)   // linear +depthScale per floor beyond the first
-     *   price        = round( basePrice * depthFactor * rarityMultiplier )
-     *   Base price is the offer variant's value floor; depthFactor keeps prices meaningful as kill
-     *   bounties grow with depth; rarityMultiplier bumps fancier (rarer) offers.
-     * Edge cases:
-     *   - depth < 1 is clamped to 1 so a bad depth never yields a below-base price.
-     *   - basePrice / multipliers are assumed >= 0; a 0 base yields 0 (a free offer).
-     *   - Math.round returns a long; cast to int — prices are far within int range.
-     */
-    public static int shopEntryPrice(int basePrice, int depth, float depthScale, float rarityMultiplier) {
-        int clampedDepth  = Math.max(1, depth);
-        float depthFactor = 1f + depthScale * (clampedDepth - 1);
-        return (int) Math.round(basePrice * depthFactor * rarityMultiplier);
     }
 
     /*

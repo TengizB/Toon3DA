@@ -948,7 +948,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyManager.setKillCreditListener((baseReward, dungeonDepth) -> {
             int scaled = Math.round(baseReward * (1f + (dungeonDepth - 1) * GameBalance.CREDIT_DEPTH_SCALE));
             playerStats.addCredits(scaled);
+            runStats.recordCreditsEarned(scaled);
         });
+        // Never-softlock emergency ammo lifeline telemetry (new-game-balancr order 3, part D).
+        enemyManager.setEmergencySupplyListener(runStats::recordEmergencySupplyTrigger);
         enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
         // Carry the run's accumulated STRENGTH/MARKSMANSHIP damage multipliers onto the fresh manager.
         refreshPlayerDamageMultipliers();
@@ -1026,6 +1029,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setItemInventory(itemInventory);
         playerController.setLoadout(inventory.getLoadout());
         playerController.setPlayerStats(playerStats);
+        playerController.setHealUsedListener(runStats::recordHealUsed); // resource-economy telemetry (order 3)
+        playerController.setAmmoPickedUpListener(runStats::recordAmmoPickedUp); // resource-economy telemetry (order 3)
         playerController.setWeaponSwitchCallback(
             () -> weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon()));
         playerController.setInventoryToggleCallback(this::openInventory);
@@ -1456,6 +1461,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 ShopTransaction.buy(entry, playerStats, shopEffectApplier);
         boolean purchased = result == ShopTransaction.Result.PURCHASED;
         if (purchased) {
+            runStats.recordCreditsSpent(entry.price); // resource-economy telemetry (order 3)
             shopOverlayRenderer.setCredits(playerStats.getCredits());
             // Kick off the machine's one-shot DISPENSE animation (shop_order_6): window flash,
             // status blink, product drop into the tray. Cosmetic only — no world tick.
@@ -2252,6 +2258,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         if (healAmount > 0) {
             player.applyHealing(healAmount);
+            runStats.recordHealUsed(); // resource-economy telemetry (order 3)
             if (eventTextSystem != null) {
                 eventTextSystem.spawnWithColor("+" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
             }

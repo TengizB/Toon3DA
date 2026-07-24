@@ -221,6 +221,63 @@ R-ABILITY (RuleKind.ABILITY_BUDGET) — tier is a priced ability budget (order 2
   priced content in one pass. Magnitudes may still be tuned freely — the price
   recomputes from the magnitude, so tuning stays free.
 
+R-SCARCITY-DEPTH (RuleKind.SCARCITY_DEPTH) — scarcity across the whole run (new-game-balancr order 3)
+  R-SCARCITY checks the ammo economy on ONE depth-1 model floor; R-SCARCITY-DEPTH
+  carries that anchor down the run and requires the scarcity ratio S in [0.75,
+  0.95] at EVERY depth 1..15. The two curves it rides (deterministic, one source):
+    DEMAND(d) = modelFloorDemand * healthScale^(d-1)          (enemy eHP compounds)
+    SUPPLY(d) = modelFloorSupply * gearCurve(d)               (the EXPECTED arsenal,
+                                  * AMMO_SUPPLY_REGION_MULTIPLIER[region]  order 2)
+    S(d)      = SUPPLY(d) / DEMAND(d)               (GameMath.scarcityRatioAtDepth)
+  SUPPLY is priced against the guns the player is EXPECTED to hold at d (gearCurve),
+  not the starting weapons — or an upgrade would silently break the economy. Because
+  gear steps ~+35%/region while eHP compounds ~+23%/region, S drifts within/across
+  regions; the FIFTH lever AMMO_SUPPLY_REGION_MULTIPLIER (SECTION 5, default 1.0,
+  here {1.08, 1.00, 0.94}) trims region 1's within-region dip up and the deeper
+  regions' gear-outruns-eHP rise down, holding the band at all 15 depths. The slug
+  reserve-banking gate stays the TIGHTEST (~1.0 floor at depth 1) — the Railgun
+  power-band waiver is justified by scarcity, re-checked here.
+
+R-HEALDRAIN-DEPTH (RuleKind.HEALDRAIN_DEPTH) — the heal economy, enforced (order 3)
+  The per-floor NET HP drain holds [5%, 15%] of the player's current-difficulty eHP
+  at EVERY depth 1..15 (R-SCARCITY only pins the model floor). Incoming damage, heal
+  supply and eHP all ride the enemy-damage curve, so the drain FRACTION is depth-
+  STABLE (GameMath.netHpDrainFractionAtDepth):
+    netDrainFraction(d) = (incomingBase - healBase * HEAL_SUPPLY_REGION_MULTIPLIER[r])
+                          / REFERENCE_PLAYER_EHP
+  The shared depth factor cancels; with the region multipliers at their 1.0 default
+  every floor costs ~11.5% of your depth-scaled eHP. WHY: HP is a slowly depleting
+  run-resource — medkits are decisions ("spend now or bank"), and reaching a boss at
+  full resources means you played well, not that the game is generous.
+
+R-CREDITS (RuleKind.CREDITS) — the credit sink made real (order 3)
+  Currency without a coupled sink is a score counter. The rule couples income to the
+  shop: expected income per region / price of the expected purchase bundle in [0.9,
+  1.4] for every region across depths 1..15.
+    income(region)  = sum over the region's floors of (killBounty(d) + chipIncome)
+                      (GameMath.creditIncomePerRegion; killBounty scales linearly)
+    bundle(region)  = 1 significant (weapon-class, 12 PP) + 1.5 small (supply, 3 PP)
+                      buys, priced through GameMath.shopPrice at the region's depth
+  So a region affords roughly one significant purchase plus resupply, banking about
+  one region's worth (CREDIT_BANK_TARGET_FLOORS). PRICING FROM POWER, NOT VIBES:
+  every shop offer's price = valuePowerPoints * SHOP_CREDITS_PER_POWER_POINT *
+  depthFactor(d) (GameMath.shopPrice) — a weapon-class upgrade on its ability/level
+  PP, a consumable on its supply value converted to PP. There are ZERO hand-set per-
+  offer base prices; SHOP_CREDITS_PER_POWER_POINT (36) is the single price-level knob.
+  The shop is purchasable in-game end to end (stock -> price -> buy -> deduct ->
+  deliver); order 3 finished the pricing half.
+
+NEVER-SOFTLOCK (GameMath.emergencySupplyTriggers, not a schema band — a floor guard)
+  A player who wastes ammo must never die to an empty inventory screen. When total
+  remaining potential damage (all reserves * per-shot damage + one melee swing) falls
+  below remainingFloorDemand * EMERGENCY_SUPPLY_FRACTION (0.25), the next enemy drop
+  is forced to be ammo for an equipped weapon, capped ONCE PER FLOOR (EnemyManager).
+  0.25 sits far below the scarcity band, so a hoarder never trips it — it only turns
+  "standing empty-handed" deaths into fighting-retreat deaths; melee (fist, no ammo)
+  is the true backstop. Proven by a synthetic-inventory unit test (fires when starved,
+  never when supplied, honours the once-per-floor cap). RunStats records ammo picked
+  up, credits earned/spent, heals used and emergency triggers as order-9 telemetry.
+
 --------------------------------------------------------------------------------
 SECTION 4 — WAIVER POLICY + LIVE WAIVERS
 --------------------------------------------------------------------------------
@@ -238,7 +295,9 @@ LIVE WAIVERS (exactly one):
              (~1.1 slugs/floor, tightest reserve banking ~1.0 floor) is the
              real limiter. Nerfing the raw 90 would make the weapon worthless
              rather than merely scarce.
-    expires: when the order-3 scarcity audit proves the slug gate in real play.
+    expires: re-checked by order-3 R-SCARCITY-DEPTH — slug reserve banking stays
+             the TIGHTEST gate (~1.0 floor at depth 1) after the shop re-pricing;
+             the waiver holds because scarcity, not raw damage, is the limiter.
 
 --------------------------------------------------------------------------------
 SECTION 5 — NEW-CONTENT CHECKLIST

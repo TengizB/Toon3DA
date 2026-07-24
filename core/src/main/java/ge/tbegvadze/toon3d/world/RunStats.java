@@ -127,4 +127,48 @@ public class RunStats {
     public boolean regionUpgradeQuotaUnmet() {
         return weaponUpgradesSeenThisRegion < BalanceConfig.GUARANTEED_UPGRADE_PER_REGION;
     }
+
+    // =====================================================================================
+    // RESOURCE-ECONOMY TELEMETRY (new-game-balancr order 3). Counters the order-9 balance simulator
+    // reads back to regression-test the live economy against the audited model (ammo scarcity, the
+    // credit sink, the heal drain, and the never-softlock lifeline). Purely observational — nothing
+    // here feeds gameplay logic; it only records what the run actually spent and earned.
+    // =====================================================================================
+
+    public int ammoPickedUp;              // total ammo UNITS collected across the run
+    public int ammoSpent;                 // total ammo UNITS consumed firing weapons
+    public int creditsEarned;             // total credits awarded (kills + chips + abilities)
+    public int creditsSpent;              // total credits spent at the shop
+    public int healsUsed;                 // medkits/stims consumed
+    public int emergencySupplyTriggers;   // times the never-softlock ammo lifeline fired
+
+    /** Records ammo UNITS the player collected (positive amounts only). */
+    public void recordAmmoPickedUp(int units) {
+        if (units > 0) ammoPickedUp += units;
+    }
+
+    /** Records ammo UNITS the player consumed firing (positive amounts only). */
+    public void recordAmmoSpent(int units) {
+        if (units > 0) ammoSpent += units;
+    }
+
+    /** Records credits awarded to the player (positive amounts only). */
+    public void recordCreditsEarned(int amount) {
+        if (amount > 0) creditsEarned += amount;
+    }
+
+    /** Records credits the player spent at the shop (positive amounts only). */
+    public void recordCreditsSpent(int amount) {
+        if (amount > 0) creditsSpent += amount;
+    }
+
+    /** Records one heal (medkit/stim) consumed. */
+    public void recordHealUsed() {
+        healsUsed++;
+    }
+
+    /** Records that the never-softlock emergency ammo lifeline fired (order 3, part D). */
+    public void recordEmergencySupplyTrigger() {
+        emergencySupplyTriggers++;
+    }
 }

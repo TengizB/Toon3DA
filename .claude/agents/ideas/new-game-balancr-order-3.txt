@@ -1,7 +1,32 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Items
 TITLE: Resource Economy That Bites — ammo, heals, credit sink
 ---
+
+IMPLEMENTATION NOTES (new-game-balancr order 3):
+  A) SCARCITY ACROSS THE RUN — GameMath.floorDemandAtDepth / ammoSupplyAtDepth /
+     scarcityRatioAtDepth carry the depth-1 model floor down the run (DEMAND up the
+     enemy-eHP curve, SUPPLY up the order-2 gear curve). New schema rule
+     R-SCARCITY-DEPTH (BalanceSchema.scarcityDepthResults) proves S in [0.75, 0.95]
+     at every depth 1..15. New fifth lever BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER
+     {1.08, 1.00, 0.94} trims the band per region. Slug reserve banking stays the
+     tightest gate (~1.0 floor), re-checked; the Railgun waiver holds.
+  B) HEAL ECONOMY ENFORCED — GameMath.netHpDrainFractionAtDepth + rule
+     R-HEALDRAIN-DEPTH prove net drain in [5%, 15%] at every depth (depth-stable at
+     ~11.5%). Lever HEAL_SUPPLY_REGION_MULTIPLIER (default 1.0).
+  C) THE CREDIT SINK — shop pricing is now formula-derived: GameMath.shopPrice
+     (valuePP * SHOP_CREDITS_PER_POWER_POINT * depthFactor); ALL hand-set
+     SHOP_BASE_PRICE_* / rarity multipliers deleted (OfferRarity is now cosmetic).
+     DefaultShopOfferSource prices every offer from its PP value. Rule R-CREDITS
+     (GameMath.creditIncomePerRegion) proves income/bundle in [0.9, 1.4] per region.
+     The shop was already integrated end to end (stock->buy->deduct->deliver); this
+     order finished the pricing half.
+  D) NEVER-SOFTLOCK — GameMath.emergencySupplyTriggers + EnemyManager force an ammo
+     drop once per floor when reserves fall below remaining demand *
+     EMERGENCY_SUPPLY_FRACTION (0.25). Unit-tested with synthetic inventories.
+  TELEMETRY — RunStats tracks ammo picked up, credits earned/spent, heals used, and
+  emergency triggers (for order 9). BalanceReport gains SCARCITY/HEAL-DRAIN depth
+  sweeps, a CREDIT ECONOMY table and a SHOP PRICING table. All 199 schema rules green.
 
 ================================================================================
 NEW GAME BALANCE — ORDER 3 of 9

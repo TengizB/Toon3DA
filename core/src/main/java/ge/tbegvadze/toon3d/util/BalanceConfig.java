@@ -586,6 +586,16 @@ public final class BalanceConfig {
     /** Base chance any non-entrance room contains at least one ammo box. Range: 0.1–0.6. */
     public static final float LEVEL_GEN_AMMO_CHANCE_PER_ROOM = 0.20f;
 
+    // LEVER 5 — PER-REGION SUPPLY MULTIPLIER (new-game-balancr order 3): a per-region trim/boost on
+    // ammo SUPPLY so a region can be tuned without touching the global box sizes. Indexed by 0-based
+    // region (floor((depth-1)/GEAR_CURVE_REGION_BAND_SIZE)); depths past the last entry clamp to it.
+    // WHY it is not all-1.0: SUPPLY rides the gear curve (steps ~+35%/region) while DEMAND rides enemy
+    // eHP (compounds ~+23%/region), so region 1's within-region dip needs a small boost and the deeper
+    // regions (gear outrunning eHP) need a small trim to hold the scarcity ratio S in [0.75, 0.95] at
+    // EVERY depth (R-SCARCITY-DEPTH). Verified by the SCARCITY depth-sweep in BalanceReport. Range per
+    // entry: 0.85–1.15. See docs/game-balance-authority.txt and new-game-balancr-order-3.txt.
+    public static final float[] AMMO_SUPPLY_REGION_MULTIPLIER = {1.08f, 1.00f, 0.94f};
+
     // =====================================================================================
     // SECTION 6 — LOOT / PICKUP SPAWN CHANCES (the drop economy)
     // Global density of props and enemies, plus the room budgets that govern where
@@ -952,6 +962,40 @@ public final class BalanceConfig {
     // the run stays survivable. Net drain as a fraction of reference eHP must land in band.
     public static final float HEAL_NET_DRAIN_FRACTION_MIN = 0.05f;
     public static final float HEAL_NET_DRAIN_FRACTION_MAX = 0.15f;
+
+    // --- PER-REGION HEAL SUPPLY MULTIPLIER (new-game-balancr order 3, part B): the heal-economy
+    // twin of AMMO_SUPPLY_REGION_MULTIPLIER — a per-region nudge on heal/armour SUPPLY, indexed the
+    // same way (clamped past the last entry). Defaults to 1.0: incoming damage, heal supply and the
+    // player's current-difficulty eHP all ride the enemy-damage curve, so the net-drain FRACTION is
+    // depth-stable (GameMath.netHpDrainFractionAtDepth) and R-HEALDRAIN-DEPTH holds at every depth
+    // 1..15 with no per-region tuning. The lever exists to shift a region's drain without touching
+    // the heal magnitudes in SECTION 1. Range per entry: 0.85–1.15.
+    public static final float[] HEAL_SUPPLY_REGION_MULTIPLIER = {1.00f, 1.00f, 1.00f};
+
+    // --- NEVER-SOFTLOCK (order 3, part D): the emergency ammo lifeline. When the player's TOTAL
+    // remaining potential damage (all reserves * efficiency + melee) falls below the remaining floor
+    // demand times this fraction, the next eligible enemy drop is forced to be ammo for an equipped
+    // weapon (capped once per floor — GameMath.emergencySupplyTriggers). Sits FAR below the scarcity
+    // band, so a hoarder never trips it; it only converts "standing empty-handed" deaths into
+    // fighting-retreat deaths. Melee (fist, no ammo) is the true backstop. Range: 0.15–0.35.
+    public static final float EMERGENCY_SUPPLY_FRACTION = 0.25f;
+
+    // --- CREDIT ECONOMY BAND (order 3, part C): the credit sink is only a real resource if income is
+    // COUPLED to it. R-CREDITS checks expected income per region / price of the expected purchase
+    // bundle (one weapon-class buy + a couple of supplies) lands in [MIN, MAX] — a region affords
+    // roughly one significant purchase plus resupply, banking about one region's worth.
+    public static final float CREDIT_INCOME_RATIO_MIN = 0.9f;
+    public static final float CREDIT_INCOME_RATIO_MAX = 1.4f;
+    /** Target credit banking horizon (floors) — a full purse should bank about one region. Range: 4–7. */
+    public static final float CREDIT_BANK_TARGET_FLOORS = 5f;
+    /** PP value of the ONE "significant" (weapon-class) purchase a region's income is expected to afford. */
+    public static final float SHOP_SIGNIFICANT_BUY_POWER_POINTS = 12f;
+    /** PP value of a representative small (supply) purchase — ammo box / stim, used in the credit bundle. */
+    public static final float SHOP_SMALL_BUY_POWER_POINTS        = 3f;
+    /** Significant (weapon-class) purchases a region's income should afford. */
+    public static final int   SHOP_EXPECTED_SIGNIFICANT_BUYS_PER_REGION = 1;
+    /** Small (supply) purchases a region's income should afford on top of the significant buy (1–2). */
+    public static final float SHOP_EXPECTED_SMALL_BUYS_PER_REGION       = 1.5f;
 
     // --- HEAL PRICING BANDS (Balance Authority R-HEAL): every heal/armour pickup is priced in
     // SURVIVAL TURNS BOUGHT = pickupValue / averageIncomingDamagePerTurn on the model floor
@@ -1498,19 +1542,27 @@ public final class BalanceConfig {
     /** Weight multiplier applied to the favoured category group when a machine is biased. */
     public static final float SHOP_BIAS_WEIGHT_MULTIPLIER    = 2.0f;
 
-    // Pricing — price = round(base * depthFactor * rarityFactor).
-    public static final float SHOP_DEPTH_PRICE_SCALE         = 0.10f;
-    public static final float SHOP_RARITY_PRICE_MULT_COMMON  = 1.0f;
-    public static final float SHOP_RARITY_PRICE_MULT_RARE    = 1.6f;
-    public static final float SHOP_RARITY_PRICE_MULT_EPIC    = 2.4f;
-    public static final float SHOP_REPEAT_LEVELUP_SURCHARGE  = 0.35f;
-    public static final int   SHOP_BASE_PRICE_MEDKIT_STIM    = 35;
-    public static final int   SHOP_BASE_PRICE_MEDKIT_FIELD   = 80;
-    public static final int   SHOP_BASE_PRICE_AMMO_SMALL     = 40;
-    public static final int   SHOP_BASE_PRICE_AMMO_LARGE     = 90;
-    public static final int   SHOP_BASE_PRICE_WEAPON_LEVELUP = 110;
-    public static final int   SHOP_BASE_PRICE_PLAYER_ABILITY = 150;
-    public static final int   SHOP_BASE_PRICE_TIER_UPGRADE   = 240;
+    // PRICING FROM POWER, NOT VIBES (new-game-balancr order 3, part C). Every offer's price derives
+    // from its VALUE IN POWER POINTS through GameMath.shopPrice — there are ZERO hand-set per-offer
+    // base prices (acceptance criterion). A weapon-class upgrade prices on its ability/level PP; a
+    // consumable prices on its supply value converted to PP. One knob (SHOP_CREDITS_PER_POWER_POINT)
+    // sets the whole economy's price level, so the credit BAND (R-CREDITS) is tuned by moving a single
+    // number. depthFactor = 1 + SHOP_DEPTH_PRICE_SCALE * (depth - 1) keeps prices meaningful as kill
+    // bounties grow with depth.
+    public static final float SHOP_DEPTH_PRICE_SCALE       = 0.10f;
+    /** Credits charged per power point of an offer's priced value — the single price-level knob. Range: 24–48. */
+    public static final float SHOP_CREDITS_PER_POWER_POINT = 36f;
+    /** Damage supplied per power point when pricing an ammo box (box damage / this = its PP value). Range: 60–120. */
+    public static final float SHOP_AMMO_DAMAGE_PER_POWER_POINT = 90f;
+    /** HP restored per power point when pricing a medkit (heal amount / this = its PP value). Range: 8–16. */
+    public static final float SHOP_HEAL_HP_PER_POWER_POINT     = 11f;
+    /** PP value of a single weapon LEVEL-UP offer (a level is ~+10% weapon damage). Range: 8–14. */
+    public static final float SHOP_WEAPON_LEVEL_UP_POWER_POINTS = 10f;
+    // A weapon TIER-UPGRADE prices on the ABILITY-PP budget its destination tier unlocks
+    // (TIER_ABILITY_PP_BUDGET_*, SECTION 15) — the marquee value is the ability slot the tier buys.
+    // A PLAYER-ABILITY boon prices on the level-up card's own PP (LEVEL_UP_BUDGET_PP), since a shop
+    // boon is a paid acquisition of the same budget-equal card. Both are read directly from those
+    // sections in DefaultShopOfferSource — no separate price constants here.
     /** Ammo "large box" multiplier over the standard box size. */
     public static final int   SHOP_AMMO_LARGE_BOX_MULTIPLIER = 2;
 }

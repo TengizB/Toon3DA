@@ -47,6 +47,10 @@ public class PlayerController {
     private Runnable                inventoryToggleCallback           = null;
     private Runnable                inspectWeaponCallback             = null;
     private Runnable                shopOpenCallback                  = null;
+    /** Fired when a heal is actually spent (order 3 resource-economy telemetry). Nullable. */
+    private Runnable                healUsedListener                  = null;
+    /** Fired with the ammo UNITS actually collected on a pickup (order 3 telemetry). Nullable. */
+    private java.util.function.IntConsumer ammoPickedUpListener       = null;
     private Inventory               itemInventory                     = null;
     private Loadout                 loadout                           = null;
     private PlayerStats             playerStats                       = null;
@@ -121,6 +125,16 @@ public class PlayerController {
         this.shopOpenCallback = callback;
     }
 
+    /** Injects the heal-used telemetry listener (order 3 resource economy). Nullable. */
+    public void setHealUsedListener(Runnable listener) {
+        this.healUsedListener = listener;
+    }
+
+    /** Injects the ammo-picked-up telemetry listener (order 3 resource economy). Nullable. */
+    public void setAmmoPickedUpListener(java.util.function.IntConsumer listener) {
+        this.ammoPickedUpListener = listener;
+    }
+
     /** Returns the weapon GroundItem the player is currently standing on, or null. */
     public GroundItem getStandingOnWeapon() { return standingOnWeapon; }
 
@@ -190,8 +204,11 @@ public class PlayerController {
             MedicalTier tier   = chooseHealTier(player.getHealth(), player.getMaxHealth());
             int         amount = spendHeal(tier);
             player.applyHealing(amount);
-            if (amount > 0 && eventTextSystem != null) {
-                eventTextSystem.spawnWithColor("+" + amount + " HP", EventTextSystem.COLOR_GREEN);
+            if (amount > 0) {
+                if (healUsedListener != null) healUsedListener.run();
+                if (eventTextSystem != null) {
+                    eventTextSystem.spawnWithColor("+" + amount + " HP", EventTextSystem.COLOR_GREEN);
+                }
             }
             finishAction(true, TickCause.HEAL);
         }
@@ -308,6 +325,7 @@ public class PlayerController {
         int amountBefore = itemInventory.countOf(type.getItemType());
         itemInventory.tryAdd(type.getItemType(), amount);
         int amountAdded  = itemInventory.countOf(type.getItemType()) - amountBefore;
+        if (amountAdded > 0 && ammoPickedUpListener != null) ammoPickedUpListener.accept(amountAdded);
         if (eventTextSystem != null && amountAdded > 0) {
             eventTextSystem.spawnWithColor("+" + amountAdded + " " + type.getDisplayName().toUpperCase(),
                                            EventTextSystem.COLOR_GREEN);
