@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.util;
 
 import ge.tbegvadze.toon3d.enemy.EnemyRole;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
+import ge.tbegvadze.toon3d.enemy.SpecialAbility;
 import ge.tbegvadze.toon3d.entity.AbilityInstance;
 import ge.tbegvadze.toon3d.entity.WeaponAbility;
 import ge.tbegvadze.toon3d.entity.WeaponRoller;
@@ -93,7 +94,9 @@ public final class BalanceSchema {
         /** R-XP-PACE (order 4): a floor's available XP / xpRequired(expectedLevel) holds [1.0, 1.3] at every depth 1..15. */
         XP_PACE,
         /** R-CARD-BREAKPOINT (order 4): every level-up card crosses >= 1 TTK/TTD breakpoint vs the region soldier. */
-        CARD_BREAKPOINT
+        CARD_BREAKPOINT,
+        /** R-REGION (order 5): region TP dial is monotonic + bounded; C/D spend more than A; coupling holds per lane. */
+        REGION_DANGER
     }
 
     // =====================================================================================
@@ -366,6 +369,42 @@ public final class BalanceSchema {
     }
 
     // =====================================================================================
+    // SPECIAL-VERB PRICING COVERAGE (new-game-balancr order 5). The cycle-averaged Threat-Point
+    // model (EnemyType.baseThreatPoints) prices every enemy SPECIAL verb. COVERAGE now fails the
+    // build if a catalogued SpecialAbility has NO registered equivalence — the anti-"shipped
+    // unpriced" discipline extended to enemy moves. DATA (an EnumMap), never a switch. A new verb
+    // added to SpecialAbility without a row here is a COVERAGE violation.
+    // =====================================================================================
+
+    /** How each enemy SPECIAL verb is priced into cycle-averaged Threat Points (order 5). */
+    public enum SpecialVerbPricing {
+        /** Priced as per-cast equivalent DAMAGE folded through the cycle average (GameMath.specialEquivalent{AreaStrike,BuffSelf,Debuff*}). */
+        CYCLE_DAMAGE,
+        /** Priced as amortised per-turn threat of the summoned bodies (GameMath.specialEquivalentSummon). */
+        AMORTISED_SUMMON,
+        /** Exempt from cycle-DPT pricing — a death-triggered finisher governed by the telegraph rule, not sustained output. */
+        TELEGRAPH_EXEMPT
+    }
+
+    private static final Map<SpecialAbility, SpecialVerbPricing> SPECIAL_VERB_PRICING =
+            buildSpecialVerbPricing();
+
+    private static Map<SpecialAbility, SpecialVerbPricing> buildSpecialVerbPricing() {
+        Map<SpecialAbility, SpecialVerbPricing> pricing = new EnumMap<>(SpecialAbility.class);
+        pricing.put(SpecialAbility.AREA_STRIKE,   SpecialVerbPricing.CYCLE_DAMAGE);
+        pricing.put(SpecialAbility.BUFF_SELF,     SpecialVerbPricing.CYCLE_DAMAGE);
+        pricing.put(SpecialAbility.DEBUFF_PLAYER, SpecialVerbPricing.CYCLE_DAMAGE);
+        pricing.put(SpecialAbility.SUMMON,        SpecialVerbPricing.AMORTISED_SUMMON);
+        pricing.put(SpecialAbility.SELF_DESTRUCT, SpecialVerbPricing.TELEGRAPH_EXEMPT);
+        return Collections.unmodifiableMap(pricing);
+    }
+
+    /** The pricing classification for an enemy SPECIAL verb, or null when none is registered (COVERAGE fails). */
+    public static SpecialVerbPricing specialVerbPricing(SpecialAbility ability) {
+        return SPECIAL_VERB_PRICING.get(ability);
+    }
+
+    // =====================================================================================
     // R-TELEGRAPH — the registered attack list (data). readableKind: TELE = wind-up telegraph,
     // LANE = ranged cardinal-line tell, FACE = positional counter, NONE = un-telegraphed burst.
     // =====================================================================================
@@ -600,6 +639,7 @@ public final class BalanceSchema {
         results.addAll(creditResults());
         results.addAll(xpPaceResults());
         results.addAll(cardBreakpointResults());
+        results.addAll(regionResults());
         return results;
     }
 
@@ -651,7 +691,10 @@ public final class BalanceSchema {
 
     /** Golden ratio of one archetype at the reference player (shared by the audit and the report). */
     public static float goldenRatioOf(EnemyType enemyType) {
-        float enemyEffectiveHitPoints = GameMath.effectiveHitPoints(enemyType.maxHealth(), 0f, 0f, 0f, 0f);
+        // Order 5: enemy eHP runs through the shared survivability primitive (EnemyType.effectiveHitPoints
+        // -> GameMath.enemyEffectiveHitPoints), not a hard-coded raw-HP shortcut, so the first mitigating
+        // archetype re-prices its own golden ratio for free.
+        float enemyEffectiveHitPoints = enemyType.effectiveHitPoints();
         int turnsToKill = GameMath.turnsToKill(enemyEffectiveHitPoints, BalanceConfig.REFERENCE_PLAYER_DPT);
         float enemyDamagePerTurn = (float) enemyType.attackDamage() / Math.max(1, enemyType.attackCadenceTurns());
         int turnsToDie = GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP, enemyDamagePerTurn);
@@ -765,6 +808,80 @@ public final class BalanceSchema {
                     inBand, "v2 honest power model"));
         }
         return results;
+    }
+
+    /**
+     * R-REGION (new-game-balancr order 5): the REGION DANGER DIAL is a budgeted, provably-fair number, not
+     * a vibe. It checks that (1) every region's TP multiplier sits in [MIN, MAX]; (2) the dial is monotonic
+     * non-decreasing across regions (a deeper region is never easier); (3) the two lethal regions (C/D)
+     * out-dial region A by a measurable margin — a lethal region is EXPLICITLY, budgeted-ly lethal; and
+     * (4) the depth-coupling audit still holds for depths 1..15 in every region lane. Point (4) is the key
+     * fairness proof: the region dial scales the BUDGET (how many bodies), not the per-enemy threat scale,
+     * so the per-fight coupling ratio is region-INDEPENDENT and stays in band in every lane — region danger
+     * is an attrition tax of extra bodies, not an unfair per-duel spike.
+     */
+    public static List<RuleResult> regionResults() {
+        List<RuleResult> results = new ArrayList<>();
+        float[] multipliers = BalanceConfig.REGION_TP_BUDGET_MULTIPLIER;
+        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+
+        // 1. Each region multiplier in [MIN, MAX].
+        for (int region = 0; region < multipliers.length; region++) {
+            boolean inBand = multipliers[region] >= BalanceConfig.REGION_TP_BUDGET_MULTIPLIER_MIN
+                    && multipliers[region] <= BalanceConfig.REGION_TP_BUDGET_MULTIPLIER_MAX;
+            results.add(new RuleResult(RuleKind.REGION_DANGER, "region " + region + " TP dial",
+                    multipliers[region], BalanceConfig.REGION_TP_BUDGET_MULTIPLIER_MIN,
+                    BalanceConfig.REGION_TP_BUDGET_MULTIPLIER_MAX, inBand, regionDisplayName(region)));
+        }
+
+        // 2. Monotonic non-decreasing across regions (deeper is never easier).
+        boolean monotonic = true;
+        for (int region = 1; region < multipliers.length; region++) {
+            if (multipliers[region] < multipliers[region - 1]) monotonic = false;
+        }
+        results.add(new RuleResult(RuleKind.REGION_DANGER, "region dial monotonic non-decreasing",
+                monotonic ? 1f : 0f, 1f, 1f, monotonic, "A <= B <= C <= D — a deeper region never trivialises"));
+
+        // 3. The lethal regions (C=2, D=3) out-dial region A by a measurable margin.
+        float regionAMultiplier = multipliers.length > 0 ? multipliers[0] : 1f;
+        int[] lethalRegions = {2, 3};
+        for (int region : lethalRegions) {
+            if (region >= multipliers.length) continue;
+            float threshold = regionAMultiplier + BalanceConfig.REGION_TP_LETHAL_MARGIN;
+            boolean measurablyHarder = multipliers[region] >= threshold;
+            results.add(new RuleResult(RuleKind.REGION_DANGER,
+                    "region " + region + " measurably harder than A", multipliers[region],
+                    threshold, Float.POSITIVE_INFINITY, measurablyHarder,
+                    regionDisplayName(region) + " dial " + multipliers[region] + " vs A " + regionAMultiplier));
+        }
+
+        // 4. Depth-coupling holds 1..15 in every region lane (region-independent by construction — the
+        //    dial scales budget, not per-enemy threat). One result per lane confirms the whole sweep stays
+        //    in band, so the depth-coupling audit provably "includes" the region dial as fair.
+        for (int region = 0; region < multipliers.length; region++) {
+            boolean laneHolds = true;
+            for (int depth = 1; depth <= 15; depth++) {
+                float ratio = GameMath.depthCouplingRatio(playerPowerV2(depth),
+                        GameMath.depthThreatScale(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH,
+                                BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth));
+                if (ratio < BalanceConfig.DEPTH_COUPLING_RATIO_MIN
+                        || ratio > BalanceConfig.DEPTH_COUPLING_RATIO_MAX) laneHolds = false;
+            }
+            results.add(new RuleResult(RuleKind.REGION_DANGER,
+                    "region " + region + " lane coupling 1..15", laneHolds ? 1f : 0f, 1f, 1f, laneHolds,
+                    regionDisplayName(region) + " — per-fight coupling is region-independent and in band"));
+        }
+        return results;
+    }
+
+    /** The route region name for a 0-based region index (A/B/C/D, clamped past D — endless "The Breach"). */
+    private static String regionDisplayName(int region) {
+        switch (region) {
+            case 0:  return RouteMapConstants.REGION_A_NAME;
+            case 1:  return RouteMapConstants.REGION_B_NAME;
+            case 2:  return RouteMapConstants.REGION_C_NAME;
+            default: return RouteMapConstants.REGION_D_NAME;
+        }
     }
 
     /** R-SCARCITY: floor-wide S in band, every per-weapon S under its cap, heal net-drain in band. */
@@ -1010,7 +1127,7 @@ public final class BalanceSchema {
     /** Max integer breakpoint a card crosses at a depth: offence turns-shaved OR defence turns-survived, vs the region soldier. */
     public static int cardBreakpointGainAtDepth(UpgradeCard card, int depth) {
         EnemyType soldier = GEAR_GATE_REFERENCE_SOLDIER;
-        float soldierEffectiveHitPoints = GameMath.effectiveHitPoints(soldier.maxHealth(), 0f, 0f, 0f, 0f)
+        float soldierEffectiveHitPoints = soldier.effectiveHitPoints()
                 * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
         float soldierDamagePerTurn = ((float) soldier.attackDamage() / Math.max(1, soldier.attackCadenceTurns()))
                 * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
@@ -1144,6 +1261,16 @@ public final class BalanceSchema {
                     hasRow ? "priced in the scarcity model"
                            : "NOT priced — register a scarcity row in BalanceSchema"));
         }
+        // Order 5: every enemy SPECIAL verb must have a registered equivalence (or an explicit exempt
+        // classification) so the cycle-averaged Threat-Point model can never silently under-price a caster.
+        for (SpecialAbility ability : SpecialAbility.values()) {
+            SpecialVerbPricing pricing = SPECIAL_VERB_PRICING.get(ability);
+            boolean priced = pricing != null;
+            results.add(new RuleResult(RuleKind.COVERAGE, "special verb " + ability.name(),
+                    priced ? 1f : 0f, 1f, 1f, priced,
+                    priced ? "priced " + pricing
+                           : "UNPRICED — register a SpecialVerbPricing equivalence in BalanceSchema"));
+        }
         return results;
     }
 
@@ -1171,7 +1298,7 @@ public final class BalanceSchema {
 
     /** Golden ratio of an archetype at a given depth against a player of the given sustained DPT. */
     private static float gearGateGoldenRatio(EnemyType enemyType, int depth, float playerDamagePerTurn) {
-        float enemyEffectiveHitPoints = GameMath.effectiveHitPoints(enemyType.maxHealth(), 0f, 0f, 0f, 0f)
+        float enemyEffectiveHitPoints = enemyType.effectiveHitPoints()
                 * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
         int turnsToKill = GameMath.turnsToKill(enemyEffectiveHitPoints, playerDamagePerTurn);
         float enemyDamagePerTurn = ((float) enemyType.attackDamage() / Math.max(1, enemyType.attackCadenceTurns()))

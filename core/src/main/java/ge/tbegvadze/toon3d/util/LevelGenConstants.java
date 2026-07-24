@@ -64,6 +64,14 @@ public final class LevelGenConstants {
     // room max (LEVEL_GEN_ROOM_MAX_WIDTH/HEIGHT) so the modifier reads as genuinely oversized.
     public static final int   LEVEL_GEN_LARGE_MODIFIER_MAX_WIDTH   = 28;
     public static final int   LEVEL_GEN_LARGE_MODIFIER_MAX_HEIGHT  = 20;
+    // TACTICAL ROOM CAP geometry classifier (new-game-balancr order 5, Pillar C.1). A room's share of
+    // the floor Threat-Point budget is scaled by its geometry: a LARGE room reads OPEN (wide sightlines,
+    // nowhere to break a ranged enemy's cardinal line) and caps LOWER; a small room whose smaller interior
+    // dimension is at most this many tiles reads as a corridor-like CHOKEPOINT (the player can funnel the
+    // pack) and caps HIGHER. Derived from the generator's own room metadata (Room.isLarge + interior dims),
+    // never a per-room hand tag. The cap multipliers themselves live in BalanceConfig (ROOM_*_TP_MULTIPLIER).
+    public static final int   LEVEL_GEN_CHOKEPOINT_INTERIOR_MAX = 3;
+
     // Probability that a SERVER_ROOM perimeter wall tile is converted to terminal wall 't'.
     public static final float LEVEL_GEN_SERVER_WALL_TERMINAL_CHANCE = 0.80f;
     // Probability that any small/medium room becomes a SERVER_ROOM (data vault).

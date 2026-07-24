@@ -474,13 +474,39 @@ weights (close/far/adds-room/cornered/camping bonuses), per-verb spacing gaps
 (phase 1 vs enraged phase 2), last-stand HP fraction 0.15. Tunable without touching
 pattern code.
 
-⚠️ Not-good note: special move-sets that raise a caster's EFFECTIVE DPT (buffs,
-debuffs, area strikes) are supposed to be "priced as a blended cycle-averaged DPT
-when they drift an archetype out of its TP band" — but this pricing is manual and
-mostly NOT done. The base-stat TP bands gate raw numbers only; the real threat of a
-buff/summon caster is under-counted in the encounter budget. Enemy status/ability
-magnitudes live in EffectConstants OUTSIDE BalanceConfig, so they are invisible to
-the "single source of truth" and easy to forget when tuning.
+✅ FIXED (new-game-balancr order 5) — CYCLE-AVERAGED THREAT PRICING. Special move-sets
+that raise a caster's EFFECTIVE DPT (buffs, debuffs, area strikes, summons) are now
+PRICED automatically. EnemyType.baseThreatPoints() blends the DPT over the archetype's
+special-ability cadence cycle (GameMath.cycleAveragedDamagePerTurn):
+    cycleAveragedDpt = (basicAttacks * attackDamage + perCastSpecialDamage) / cycleTurns
+                       + summonAmortisedDpt
+Each verb converts to an equivalent-damage number via a pure GameMath.specialEquivalent*
+formula (one per verb):
+    AREA_STRIKE  -> its predicted slam damage (attackDamage * AREA_STRIKE multiplier)
+    BUFF_SELF    -> extra damage the EMPOWERED buff adds over its duration
+    DEBUFF WEAK  -> player DPT lost over duration * DEBUFF_TP_EQUIVALENCE (start 0.6 — a
+                    defensive verb priced as offence, worth less than dealt damage)
+    DEBUFF SLOW/BLIND -> enemy bonus turns gained * caster DPT * DEBUFF_TP_EQUIVALENCE
+    SUMMON       -> summonedTP * SUMMON_EXPECTED_PER_FIGHT / survivalTurns (amortised
+                    whole-body threat; bounded by the existing summon hard caps)
+The TP role bands are UNCHANGED — the archetype whose TRUE TP overflowed its band was
+trimmed back into band (the point: the budget stops lying). Expected fallout landed on
+BLIGHT_CORRUPTOR: honest summon pricing pushed its 115-HP body to ~92 TP (over the
+36-66 soldier band), so its HP was trimmed 115 -> 90 (true TP ~64, golden ratio 3.75).
+COVERAGE now fails the build for any SpecialAbility with no registered equivalence
+(BalanceSchema.SpecialVerbPricing); SELF_DESTRUCT is explicitly exempt (a death-triggered
+finisher governed by the telegraph rule, not sustained DPT). BalanceReport's ENEMIES
+table prints cycleDPT + trueTP columns. The per-verb equivalence knobs (DEBUFF_TP_
+EQUIVALENCE, SUMMON_EXPECTED_PER_FIGHT) live in BalanceConfig SECTION 2; the status
+magnitudes the formulas read still live in EnemyConstants/BalanceConfig SECTION 8.
+
+GENERALISED ENEMY eHP (order 5): enemy eHP now runs through the SAME
+GameMath.effectiveHitPoints the player uses (EnemyType.effectiveHitPoints() ->
+GameMath.enemyEffectiveHitPoints), so the survivability model stops ASSUMING enemies
+never mitigate. EnemyType gains armorPool()/dodgeChance()/flatReduction() (all default 0
+-> eHP == raw HP today, byte-identical). Iron Stalker (MINI_ELITE) is the designated
+first user of flat reduction in a later content pass. No raw-HP shortcut is left in any
+TP/TTK/golden-ratio call site.
 
 
 ================================================================================
@@ -579,6 +605,34 @@ COMPOSITION RULES the planner enforces:
   ENCOUNTER_BUDGET_FILL_TARGET_FRACTION = 0.95 (headroom so rosters don't overshoot)
   ENCOUNTER_ELITE_ANCHOR_FLOOR_CHANCE = 0.15 (min depth 3) — elite-gauntlet floors.
   Every roster must contain BOTH ranged and melee archetypes.
+
+ENCOUNTER BUDGET V2 (new-game-balancr order 5) — three additions:
+  1. TACTICAL ROOM CAPS: a room's TP cap is scaled by its GEOMETRY, read from the
+     generator's room metadata (Room.isLarge + interior dims), never a hand tag —
+     ROOM_OPEN_TP_MULTIPLIER 0.8 (a LARGE/open room has nowhere to break a ranged
+     cardinal line, caps LOWER) | ROOM_CHOKEPOINT_TP_MULTIPLIER 1.1 (a narrow,
+     corridor-like room the player can funnel, caps HIGHER). Applied per room via
+     EncounterBudgetPlanner.Plan.perRoomThreatPointCap(open, choke) +
+     GameMath.roomGeometryThreatCapMultiplier; wired in LevelGenerator (caverns are
+     roomless/open so they only get the region dial).
+  2. PACK COHERENCE: chaff spawns in packs of CHAFF_PACK_MIN..MAX (2..4). The
+     golden-band chaff exemption ASSUMES packs (a lone chaff reads a harmless ~9
+     golden ratio, balanced by pack TP); the planner now GUARANTEES it — a chaff type
+     is only added when a full min-pack fits, and enters as a group. Proven by a
+     100-seed generator test (no chaff ever appears alone).
+  3. THE REGION DANGER DIAL (fixes problem 12): route regions stop being frequency-
+     only. Each region declares REGION_TP_BUDGET_MULTIPLIER (A OUTER FACILITY 0.9 |
+     B RESEARCH WING 1.0 | C REACTOR DEPTHS 1.15 | D THE BREACH 1.25) applied ON TOP
+     of the depth curve (GameMath.regionScaledFloorThreatPointBudget), so a lethal
+     region spends measurably MORE TP (more bodies) at the same depth. R-REGION (a
+     new schema rule) checks the dial is bounded [0.8,1.3], monotonic non-decreasing,
+     and that C/D out-dial A by >= REGION_TP_LETHAL_MARGIN. Node WEIGHT multipliers
+     (RouteMapConstants) still own FLAVOUR (what kind of rooms); the TP dial owns HOW
+     HARD. FAIRNESS: the dial scales the BUDGET (body count), NOT the per-enemy threat
+     scale, so per-fight depth-coupling (R-DEPTH) holds in every region lane — region
+     danger is an attrition tax of extra bodies, not an unfair per-duel spike.
+  4. ELITE-GAUNTLET floors keep their 0.15 chance but must still fit the (region-
+     scaled) budget — a composition choice, not a budget override.
 
 Level-gen spawn/loot density (BalanceConfig SECTION 6):
   LEVEL_GEN_PROP_CHANCE=0.13, LEVEL_GEN_MAX_ENEMIES_PER_ROOM=3,
@@ -743,11 +797,18 @@ The run is an ENDLESS forward branching DAG. Difficulty pacing at the macro scal
     D "The Breach" (endless) — relentless: +elite (1.8x), -rest/shop (relief scarce).
   Per-region combat-generator biases (rooms/caverns) also shift the biome.
 
-⚠️ Not-good note: the region multipliers change how OFTEN dangerous nodes appear
-but do NOT feed the Threat-Point budget or the depth-coupling invariant — so a
-"lethal" region is lethal by node FREQUENCY, not by a budgeted difficulty increase.
-The macro pacing and the micro TP contract are not yet unified. Endless "Breach"
-depth is where the coupling invariant already fails (SECTION 10).
+✅ FIXED (new-game-balancr order 5) — THE REGION DANGER DIAL unifies macro pacing
+with the micro TP contract. Each region now declares REGION_TP_BUDGET_MULTIPLIER
+(A 0.9 | B 1.0 | C 1.15 | D 1.25) applied ON TOP of the depth curve
+(GameMath.regionScaledFloorThreatPointBudget, spent by EncounterBudgetPlanner), so a
+"lethal" region is budgeted-ly lethal — it spends measurably more Threat Points (more
+bodies) at the same depth, not merely rolls dangerous nodes more often. The node-type
+WEIGHT multipliers above stay for FLAVOUR (what kind of rooms); the TP dial owns HOW
+HARD. R-REGION gates it (bounded [0.8,1.3], monotonic non-decreasing A<=B<=C<=D, C/D
+out-dial A by >= REGION_TP_LETHAL_MARGIN). Per-fight fairness is preserved: the dial
+scales body COUNT, not per-enemy threat, so depth-coupling (R-DEPTH) holds in every
+region lane. (The endless "Breach" coupling degradation past depth ~20 in SECTION 10
+is a separate, still-open issue — the region dial does not change per-enemy scaling.)
 
 
 ================================================================================
@@ -839,8 +900,11 @@ ceiling, of what needs refinement.
   8. Endless depth (past ~15–20) already fails the depth-coupling invariant. It is
      labelled "intentional graceful degradation" but in practice means it becomes
      unfairly hard, unaddressed. (SECTION 10)
-  9. Special-move / summon / buff casters raise EFFECTIVE DPT that is mostly NOT
-     priced into their TP, so the encounter budget under-counts their real threat. (SECTION 8)
+  9. [RESOLVED by order 5] Special-move / summon / buff casters now have their
+     EFFECTIVE DPT PRICED into TP via cycle-averaging (EnemyType.baseThreatPoints ->
+     GameMath.cycleAveragedDamagePerTurn + specialEquivalent* per verb). COVERAGE
+     fails the build on any unpriced SpecialAbility; the one archetype that overflowed
+     its band once priced honestly (Blight Corruptor) was trimmed back in. (SECTION 8)
  10. Content has repeatedly shipped BEFORE being priced (the necrotic faction
      corrupted every floor's budget until a later pass). [MITIGATED by order 1:
      BalanceAuditTest's COVERAGE rule fails the build when a weapon item,
@@ -848,8 +912,11 @@ ceiling, of what needs refinement.
  11. [RESOLVED by order 1] The two divergent DoT definitions were unified to one
      BURN base (4/turn) and one POISON base; the R-DOT rule fails the build if a
      second definition reappears. (SECTION 15)
- 12. Macro pacing (route regions) and micro difficulty (TP budget) are not unified —
-     "lethal" regions are lethal by node frequency, not budgeted difficulty. (SECTION 16)
+ 12. [RESOLVED by order 5] Macro pacing (route regions) and micro difficulty (TP
+     budget) are now unified by the REGION DANGER DIAL (REGION_TP_BUDGET_MULTIPLIER,
+     applied on top of the depth curve; R-REGION gates it). A "lethal" region is now
+     budgeted-ly lethal — it spends measurably more TP at the same depth — while
+     per-fight depth-coupling still holds in every lane. (SECTION 16)
  13. The Railgun is deliberately out of its power band, "gated by scarcity" that is
      itself unproven — so it is effectively overpowered right now. (SECTION 4)
  14. Falloff/engagement-band crediting for weapons uses muzzle numbers, not real

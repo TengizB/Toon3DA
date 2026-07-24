@@ -235,7 +235,14 @@ public final class BalanceConfig {
     // Was 130 HP / 14 dmg -> TP 72.8, OVER the soldier band (36-66) with a bruiser-tier golden ratio.
     // HP trimmed 130 -> 115 -> TP 64.4 (top of the soldier band) and golden ratio 3.0 (in the [3,8]
     // soldier band); lower HP also means its SUMMON move-set floods the room a little less.
-    public static final int BLIGHT_CORRUPTOR_MAX_HEALTH         = 115;
+    //
+    // ORDER-5 CYCLE-AVERAGED RE-FIT (the predicted "rebalance fallout"): once its SUMMON verb is PRICED
+    // (GameMath.specialEquivalentSummon amortises ~1.5 summoned bodies worth of TP into its cycle-averaged
+    // DPT), the old 115-HP body read ~92 TP — OVER the soldier band, exactly as the order-5 idea predicted.
+    // Trimmed 115 -> 90: the summon adds a flat ~26 TP regardless of body HP, so the BODY must stay light
+    // to keep the whole archetype a SOLDIER. New cycle-averaged TP ~64 (top of the 36-66 band), golden
+    // ratio ceil(90/25)=4 -> 15/4 = 3.75 (in [3,8]); the lighter body also floods the room a touch less.
+    public static final int BLIGHT_CORRUPTOR_MAX_HEALTH         = 90;
     public static final int BLIGHT_CORRUPTOR_ATTACK_DAMAGE      = 14;
     public static final int BLIGHT_CORRUPTOR_MOVE_EVERY_N_TURNS = 2;
 
@@ -340,6 +347,32 @@ public final class BalanceConfig {
     public static final int CREDIT_REWARD_REVENANT         = 11;
     public static final int CREDIT_REWARD_VORTEX_EYE       = 5;
     public static final int CREDIT_REWARD_BLIGHT_CORRUPTOR = 13;
+
+    // -------------------------------------------------------------------------------------
+    // SPECIAL-VERB TP EQUIVALENCE (new-game-balancr order 5) — cycle-averaged threat pricing.
+    // An archetype's Threat Points are now blended over its special-ability cadence cycle
+    // (GameMath.cycleAveragedDamagePerTurn): a caster/buffer/summoner's EFFECTIVE danger, not
+    // just its stat block. Each verb converts to an equivalent-damage number through a pure
+    // GameMath.specialEquivalent* formula; these two knobs are the only tunable inputs those
+    // formulas need beyond the already-existing status magnitudes (SECTION 8) and the special
+    // constants in EnemyConstants. See docs/game-balance-knowledge.txt (cycle-averaged TP).
+    // -------------------------------------------------------------------------------------
+    /**
+     * How much of the PLAYER's lost output a defensive debuff (WEAK / SLOW / BLIND) is worth as enemy
+     * OFFENCE when pricing it into Threat Points. Below 1.0 because a turn of your lost output is worth
+     * LESS than a turn of the enemy's dealt damage — you can rotate, retreat or heal around a debuff, so
+     * it never converts one-for-one into threat. Start 0.6 (band-checked against every debuffing caster).
+     * Used by GameMath.specialEquivalentDebuffWeak / specialEquivalentDebuffControl. Range: 0.4–0.8.
+     */
+    public static final float DEBUFF_TP_EQUIVALENCE       = 0.6f;
+    /**
+     * Bodies a SUMMON verb is expected to add over one fight, for TP pricing (GameMath.specialEquivalent-
+     * Summon). Priced CONSERVATIVELY below the max batch (SUMMON_COUNT_MIN..MAX in EnemyConstants): a
+     * summoner casts once per lifetime, and blocked tiles + the per-room live cap (SUMMON_ROOM_LIVE_CAP)
+     * eat part of the batch — "bounded by the existing hard caps." Each expected body adds its own priced
+     * TP to the summoner's total. Range: 1.0–2.5.
+     */
+    public static final float SUMMON_EXPECTED_PER_FIGHT   = 1.5f;
 
     // =====================================================================================
     // SECTION 3 — DEPTH SCALING (how threat and reward grow per floor)
@@ -1114,6 +1147,44 @@ public final class BalanceConfig {
     public static final float ENCOUNTER_ELITE_ANCHOR_FLOOR_CHANCE = 0.15f;
     /** Earliest depth an elite-gauntlet floor may appear, so floor 1 is never a mini-elite spike. Range: 2–5. */
     public static final int   ENCOUNTER_ELITE_ANCHOR_MIN_DEPTH    = 3;
+
+    // --- ENCOUNTER BUDGET V2 (new-game-balancr order 5) — three additions on top of the composition
+    // rules above. See docs/game-balance-knowledge.txt (ENCOUNTER BUDGET V2) and new-game-balancr-order-5.
+
+    // 1. TACTICAL ROOM CAPS — a room's spent TP is capped against its GEOMETRY, computed from the
+    //    generator's room metadata (open vs chokepoint), never a per-room hand tag. An OPEN room has
+    //    nowhere to break a ranged enemy's cardinal line, so it is capped LOWER; a corridor-adjacent
+    //    chokepoint is more defensible, so it may hold a little MORE.
+    /** Per-room TP cap multiplier for an OPEN room (no cover, wide sightlines — ranged lines can't be broken). Range: 0.7–0.9. */
+    public static final float ROOM_OPEN_TP_MULTIPLIER       = 0.8f;
+    /** Per-room TP cap multiplier for a corridor-adjacent CHOKEPOINT room (defensible — the player can funnel). Range: 1.0–1.2. */
+    public static final float ROOM_CHOKEPOINT_TP_MULTIPLIER = 1.1f;
+
+    // 2. PACK COHERENCE — chaff spawns in packs, because the golden-band CHAFF exemption ASSUMES packs
+    //    (a lone chaff reads a harmless ~9 golden ratio; it is balanced by pack TP). The spawner now
+    //    guarantees the assumption instead of hoping for it.
+    /** Minimum chaff pack size the encounter spawner guarantees (the golden-band exemption assumes packs). Range: 2–3. */
+    public static final int   CHAFF_PACK_MIN               = 2;
+    /** Maximum chaff pack size a single pack may reach before a new pack is started. Range: 3–5. */
+    public static final int   CHAFF_PACK_MAX               = 4;
+
+    // 3. THE REGION DANGER DIAL (fixes knowledge-doc problem 12) — route regions stop being frequency-only.
+    //    Each region declares a Threat-Point budget multiplier applied ON TOP of the depth curve
+    //    (GameMath.regionScaledFloorThreatPointBudget), indexed 0-based by region
+    //    (floor((depth-1)/GEAR_CURVE_REGION_BAND_SIZE)); depths past the last entry clamp to it (endless
+    //    "The Breach" keeps its multiplier forever). Node WEIGHT multipliers (RouteMapConstants
+    //    REGION_*_MULTIPLIER_*) stay for FLAVOUR — what kind of rooms; this dial owns HOW HARD. A lethal
+    //    region is now EXPLICITLY lethal and budgeted, and the depth-coupling audit reads it per lane so it
+    //    stays provably fair (region danger is extra bodies, not an unfair per-duel spike). Aligned to the
+    //    four route regions: A OUTER FACILITY 0.9 | B RESEARCH WING 1.0 | C REACTOR DEPTHS 1.15 | D THE
+    //    BREACH 1.25 (RouteMapConstants.REGION_A..D_NAME). Range per entry: 0.8–1.3, monotonic non-decreasing.
+    public static final float[] REGION_TP_BUDGET_MULTIPLIER = {0.90f, 1.00f, 1.15f, 1.25f};
+    /** R-REGION lower bound: no region's TP dial may fall below this (a region never trivialises a floor). */
+    public static final float   REGION_TP_BUDGET_MULTIPLIER_MIN = 0.8f;
+    /** R-REGION upper bound: no region's TP dial may exceed this (region danger stays an attrition tax, not a wall). */
+    public static final float   REGION_TP_BUDGET_MULTIPLIER_MAX = 1.3f;
+    /** R-REGION: minimum margin by which the two LETHAL regions (C/D) must out-dial region A (measurably harder). */
+    public static final float   REGION_TP_LETHAL_MARGIN         = 0.1f;
 
     // =====================================================================================
     // SECTION 12 — TERRAIN HAZARDS (idea 4, Pillar 3) — the two-sided chain-reaction system

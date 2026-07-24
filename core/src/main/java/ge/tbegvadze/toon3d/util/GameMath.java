@@ -2485,6 +2485,33 @@ public final class GameMath {
     }
 
     /*
+     * Formula: enemyEffectiveHitPoints (enemy eHP) — the SAME survivability primitive, both sides (order 5)
+     * Derivation:
+     *   Before order 5 enemy eHP was hard-coded as raw HP everywhere (TP, TTK, golden-ratio call sites),
+     *   which silently ASSUMED no enemy ever mitigates. The moment a single armoured/dodging archetype
+     *   ships that assumption breaks. The mitigation PIPELINE is already shared player<->enemy (Block, flat
+     *   armour), so the survivability MATH is unified here too: an enemy's eHP runs through the exact same
+     *   GameMath.effectiveHitPoints the player uses —
+     *       enemyEffectiveHitPoints = effectiveHitPoints(rawHitPoints, armorPool, dodgeChance,
+     *                                                     flatReduction, averageIncomingHit)
+     *   No non-boss archetype supplies non-zero armour/dodge/reduction YET (Iron Stalker is the designated
+     *   first user in a later content pass — flat reduction to punish chip damage and reward heavy weapons),
+     *   so today this returns rawHitPoints unchanged (armorPool=dodge=flatReduction=0 -> pool*1*1). The point
+     *   is that the model STOPS ASSUMING: the first mitigating enemy re-prices its own TP/TTK for free.
+     *   averageIncomingHit is the reference hit the flat-reduction term is priced against — the player's
+     *   sustained reference DPT (BalanceConfig.REFERENCE_PLAYER_DPT) is the natural yardstick, matching the
+     *   TP formula's survivalTurns normaliser.
+     * Edge cases:
+     *   Inherits effectiveHitPoints' clamps (dodge < 1, hit - reduction floored at 1, hit <= 0 neutralises
+     *   the reduction term). With all-zero mitigation the result is exactly rawHitPoints + armorPool.
+     */
+    public static float enemyEffectiveHitPoints(float rawHitPoints, float armorPool,
+                                                float dodgeChance, float flatReduction,
+                                                float averageIncomingHit) {
+        return effectiveHitPoints(rawHitPoints, armorPool, dodgeChance, flatReduction, averageIncomingHit);
+    }
+
+    /*
      * Formula: sustainedDamagePerTurn (sustained DPT) — PRIMITIVE 2
      * Derivation:
      *   Damage output averaged over a full fire-the-whole-clip-then-reload cycle.
@@ -2606,6 +2633,146 @@ public final class GameMath {
         float enemyDamagePerTurn = attackDamage / safeCadence;
         float survivalTurns = enemyEffectiveHitPoints / referencePlayerDamagePerTurn;
         return enemyDamagePerTurn * survivalTurns * positionalMultiplier;
+    }
+
+    /*
+     * Formula: cycleAveragedDamagePerTurn — TRUE effective DPT over a special-cadence cycle (order 5)
+     * Derivation:
+     *   The plain threatPoints DPT is attackDamage/cadence — BASIC ATTACKS ONLY. Casters, buffers and
+     *   summoners raise their EFFECTIVE output far beyond their stat block (an EMPOWERED buff, an area
+     *   slam, a debuff that steals the player's turns, whole extra summoned bodies), and none of it was
+     *   priced. Cycle-averaging fixes that: over one special-cadence cycle of {@code cycleTurns} enemy
+     *   turns the archetype spends ONE turn on a special (which DISPLACES a basic attack that turn) and
+     *   the remaining {@code cycleTurns - 1} turns attacking normally, so —
+     *       basicTurns          = cycleTurns - 1
+     *       cycleAveragedDpt    = (basicDamagePerTurn * basicTurns + perCastSpecialDamage) / cycleTurns
+     *                             + summonDamagePerTurn
+     *   {@code perCastSpecialDamage} is the equivalent DAMAGE of the special that fires this cycle
+     *   (AREA_STRIKE / BUFF_SELF / DEBUFF, averaged over a rotating move-set — one fires per cycle),
+     *   priced by the specialEquivalent* verbs below. {@code summonDamagePerTurn} is added SEPARATELY (it
+     *   is already a per-turn figure, see specialEquivalentSummon) because a summon adds whole extra
+     *   BODIES, not caster output — folding it through the cycle average would double-amortise it.
+     *   An archetype with no move-set (cycleTurns <= 0) returns basicDamagePerTurn + summonDamagePerTurn
+     *   unchanged — the plain stat-block DPT, so non-scripted enemies are untouched.
+     *   Worked: Iron Stalker basic 24, per-cast mean 30.6 (buff 28.8 / area 32.4), cycleTurns 2, no summon
+     *           -> (24*1 + 30.6)/2 = 27.3 effective DPT (vs 24 raw).
+     * Edge cases:
+     *   cycleTurns <= 0 -> no special cadence -> returns basicDamagePerTurn + summonDamagePerTurn.
+     *   cycleTurns == 1 (a special every turn) -> basicTurns 0 -> pure specials, no displaced basic.
+     *   Negative per-cast damage is impossible by construction (every verb returns a non-negative number).
+     */
+    public static float cycleAveragedDamagePerTurn(float basicDamagePerTurn, float perCastSpecialDamage,
+                                                   float summonDamagePerTurn, int cycleTurns) {
+        if (cycleTurns <= 0) {
+            return basicDamagePerTurn + summonDamagePerTurn;
+        }
+        int basicTurns = Math.max(0, cycleTurns - 1);
+        return (basicDamagePerTurn * basicTurns + perCastSpecialDamage) / cycleTurns + summonDamagePerTurn;
+    }
+
+    /*
+     * Formula: specialEquivalentAreaStrike — per-cast equivalent damage of a telegraphed slam (order 5)
+     * Derivation:
+     *   AREA_STRIKE carries a predicted-damage number already (the slam hits for scaled attackDamage times
+     *   a multiplier), so its equivalence is simply that predicted damage:
+     *       equivalent = attackDamage * areaStrikeDamageMultiplier
+     *   The player can step out of the marked band to dodge it; the price is the FULL predicted hit (the
+     *   conservative, band-checked assumption that a careless player eats it — the same discipline the
+     *   telegraph audit uses for its worst-case hit).
+     * Edge cases:
+     *   Non-negative inputs by construction; a zero multiplier prices the slam at nothing.
+     */
+    public static float specialEquivalentAreaStrike(float attackDamage, float areaStrikeDamageMultiplier) {
+        return attackDamage * areaStrikeDamageMultiplier;
+    }
+
+    /*
+     * Formula: specialEquivalentBuffSelf — extra damage an EMPOWERED self-buff adds over its life (order 5)
+     * Derivation:
+     *   BUFF_SELF grants the caster EMPOWERED: +empoweredPercent% outgoing damage for durationTurns turns.
+     *   Its equivalent value is the EXTRA damage that buff produces over its duration, on top of the
+     *   caster's normal output —
+     *       equivalent = basicDamagePerTurn * (empoweredPercent / 100) * durationTurns
+     *   i.e. a fraction of the caster's own per-turn damage, sustained across the buff. This prices the
+     *   "kill the buffer before its empowered swing lands" priority-target threat the stat block ignores.
+     *   Worked: basic 24, +40% for 3 turns -> 24 * 0.40 * 3 = 28.8 equivalent damage per cast.
+     * Edge cases:
+     *   durationTurns <= 0 or empoweredPercent <= 0 -> 0 (a no-op buff is worth nothing).
+     */
+    public static float specialEquivalentBuffSelf(float basicDamagePerTurn, float empoweredPercent,
+                                                  int durationTurns) {
+        return basicDamagePerTurn * (empoweredPercent / 100f) * Math.max(0, durationTurns);
+    }
+
+    /*
+     * Formula: specialEquivalentDebuffWeak — a WEAK debuff priced as offence (order 5)
+     * Derivation:
+     *   WEAK cuts the PLAYER's outgoing damage by weakPercent% for durationTurns turns. A defensive verb,
+     *   but the encounter budget spends offence, so we price the player OUTPUT it steals —
+     *       playerDamageLost = referencePlayerDamagePerTurn * (weakPercent / 100) * durationTurns
+     *       equivalent       = playerDamageLost * debuffEquivalence
+     *   {@code debuffEquivalence} (< 1) discounts it because a turn of your LOST output is worth less than
+     *   a turn of the enemy's DEALT damage: you can rotate, retreat or heal around a debuff, so it does not
+     *   convert one-for-one into the enemy's threat.
+     *   Worked: refDPT 25, -25% for 2 turns, equivalence 0.6 -> 25 * 0.25 * 2 * 0.6 = 7.5 equivalent damage.
+     * Edge cases:
+     *   durationTurns <= 0 or weakPercent <= 0 -> 0. referencePlayerDamagePerTurn <= 0 -> 0 (no yardstick).
+     */
+    public static float specialEquivalentDebuffWeak(float referencePlayerDamagePerTurn, float weakPercent,
+                                                    int durationTurns, float debuffEquivalence) {
+        if (referencePlayerDamagePerTurn <= 0f) {
+            return 0f;
+        }
+        float playerDamageLost = referencePlayerDamagePerTurn * (weakPercent / 100f) * Math.max(0, durationTurns);
+        return playerDamageLost * debuffEquivalence;
+    }
+
+    /*
+     * Formula: specialEquivalentDebuffControl — SLOW / BLIND priced as bonus enemy turns (order 5)
+     * Derivation:
+     *   SLOW and BLIND deny the player turns rather than cutting a percentage of damage: a slow makes the
+     *   player's actions take longer (the pack gets extra turns to act), a blind wastes the player's aim.
+     *   Both are priced as BONUS ENEMY TURNS gained, valued at the caster's own per-turn output and
+     *   discounted by the same defensive-verb equivalence as WEAK —
+     *       equivalent = bonusEnemyTurns * basicDamagePerTurn * debuffEquivalence
+     *   The caller supplies bonusEnemyTurns per verb (priced conservatively, band-checked):
+     *       SLOW  -> (slowFactor - 1) * slowDurationTurns   (a 2x slow over 3 turns ~= 3 bonus turns)
+     *       BLIND -> blindDurationTurns                     (each blinded turn ~= one wasted player turn)
+     *   Using the CASTER's DPT as the "pack average DPT share" is the conservative single-enemy stand-in
+     *   the design doc calls for (no whole-pack lookup inside the TP primitive).
+     * Edge cases:
+     *   bonusEnemyTurns <= 0 -> 0. Negative is impossible for the supported verbs.
+     */
+    public static float specialEquivalentDebuffControl(float basicDamagePerTurn, float bonusEnemyTurns,
+                                                       float debuffEquivalence) {
+        return basicDamagePerTurn * Math.max(0f, bonusEnemyTurns) * debuffEquivalence;
+    }
+
+    /*
+     * Formula: specialEquivalentSummon — amortised per-turn threat of summoned bodies (order 5)
+     * Derivation:
+     *   A summon adds whole EXTRA enemies, each worth summonedThreatPoints of danger the encounter budget
+     *   never paid for. Amortising that added threat across the caster's own life turns it into a per-turn
+     *   figure that folds into the caster's cycle-averaged DPT (so a single archetype-level TP number still
+     *   captures the flood) —
+     *       summonDamagePerTurn = summonedThreatPoints * expectedSummonsPerFight / survivalTurns
+     *   because TP = cycleAveragedDpt * survivalTurns * positional, adding this per-turn term contributes
+     *   summonedThreatPoints * expectedSummonsPerFight back into the caster's TP (the survivalTurns cancel),
+     *   i.e. the summoner's TP rises by the FULL threat of the bodies it adds. expectedSummonsPerFight is
+     *   priced conservatively below the max batch (one cast per summoner lifetime, blocked tiles and the
+     *   per-room live cap eat part of the batch) — the "bounded by the existing hard caps" clause.
+     *   Worked: summoned chaff TP 17.5, expected 1.5 bodies, caster survives 3.6 turns
+     *           -> 17.5 * 1.5 / 3.6 = 7.29 added effective DPT.
+     * Edge cases:
+     *   survivalTurns <= 0 -> 0 (a caster that dies instantly summons nothing worth pricing; avoids
+     *     divide-by-zero). expectedSummonsPerFight <= 0 or summonedThreatPoints <= 0 -> 0.
+     */
+    public static float specialEquivalentSummon(float summonedThreatPoints, float expectedSummonsPerFight,
+                                                float survivalTurns) {
+        if (survivalTurns <= 0f) {
+            return 0f;
+        }
+        return summonedThreatPoints * expectedSummonsPerFight / survivalTurns;
     }
 
     /*
@@ -2836,6 +3003,62 @@ public final class GameMath {
             return 0f;
         }
         return baseThreatPointBudget * depthThreatScale(healthScalePerDepth, damageScalePerDepth, depth);
+    }
+
+    /*
+     * Formula: regionScaledFloorThreatPointBudget — the REGION DANGER DIAL (order 5, Pillar C.3)
+     * Derivation:
+     *   Macro pacing (route regions) and micro difficulty (the TP budget) used to be unrelated: a "lethal"
+     *   region was lethal only by how OFTEN it rolled combat nodes — danger by vibe, not a budgeted number.
+     *   The region danger dial unifies them by scaling the depth-ramped floor budget by a per-region
+     *   multiplier applied ON TOP of the depth curve —
+     *       regionBudget = floorThreatPointBudget(base, hpScale, dmgScale, depth)
+     *                      * perRegionMultiplierAtDepth(regionTpMultipliers, depth, regionBandSize)
+     *   so a deeper, more dangerous region spends MORE Threat Points at the same depth (more / stronger
+     *   bodies), while the per-ENEMY fairness (golden ratio, depth-coupling) is untouched — region danger
+     *   is an attrition tax of extra bodies, not an unfair per-duel spike. This is the number the
+     *   depth-coupling audit reads per region lane, so a lethal region is EXPLICITLY lethal and budgeted.
+     *   Node weight multipliers still own FLAVOUR (what kind of rooms); this dial owns HOW HARD.
+     * Edge cases:
+     *   Inherits floorThreatPointBudget / perRegionMultiplierAtDepth edge cases. A regions array of all
+     *   1.0 (or depths inside region A at multiplier 1.0) reproduces the plain floorThreatPointBudget.
+     *   Depths past the last region entry clamp to it (endless "The Breach" keeps its multiplier forever).
+     */
+    public static float regionScaledFloorThreatPointBudget(float baseThreatPointBudget,
+                                                           float healthScalePerDepth,
+                                                           float damageScalePerDepth,
+                                                           int depth, float[] regionTpMultipliers,
+                                                           int regionBandSize) {
+        float depthBudget = floorThreatPointBudget(baseThreatPointBudget, healthScalePerDepth,
+                damageScalePerDepth, depth);
+        return depthBudget * perRegionMultiplierAtDepth(regionTpMultipliers, depth, regionBandSize);
+    }
+
+    /*
+     * Formula: roomGeometryThreatCapMultiplier — TACTICAL ROOM CAPS (order 5, Pillar C.1)
+     * Derivation:
+     *   A room's share of the floor's Threat-Point budget is capped against its GEOMETRY, because the same
+     *   TP is more dangerous in an open room than a defensible one. An OPEN room (no cover, wide sightlines)
+     *   gives the player nowhere to break a ranged enemy's cardinal line, so it is capped LOWER; a
+     *   corridor-adjacent CHOKEPOINT room lets the player funnel the pack, so it may hold a little MORE —
+     *       multiplier = openMultiplier        if isOpenRoom
+     *                    chokepointMultiplier   if isChokepointRoom
+     *                    1.0                    otherwise (a neutral room)
+     *   The flags come from the generator's own room metadata (footprint / corridor adjacency), never a
+     *   per-room hand tag. OPEN takes precedence if a room somehow reads as both (a big room is open first).
+     * Edge cases:
+     *   Neither flag -> 1.0 (the base per-room cap is unchanged). Both flags -> open wins (the conservative,
+     *     lower cap). The multipliers themselves are validated in band by BalanceSchema.
+     */
+    public static float roomGeometryThreatCapMultiplier(boolean isOpenRoom, boolean isChokepointRoom,
+                                                        float openMultiplier, float chokepointMultiplier) {
+        if (isOpenRoom) {
+            return openMultiplier;
+        }
+        if (isChokepointRoom) {
+            return chokepointMultiplier;
+        }
+        return 1f;
     }
 
     /*

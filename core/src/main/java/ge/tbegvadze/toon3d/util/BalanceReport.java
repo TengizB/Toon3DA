@@ -54,6 +54,8 @@ public final class BalanceReport {
         System.out.println();
         printEncounterTable();
         System.out.println();
+        printRegionDangerTable();
+        System.out.println();
         printDepthCouplingTable();
         System.out.println();
         printGearCurveTable();
@@ -117,8 +119,9 @@ public final class BalanceReport {
     // -----------------------------------------------------------------------------------
     private static void printEnemyTable() {
         System.out.println("ENEMIES (registry: EnemyType.values() through BalanceSchema bands)");
-        System.out.printf("%-17s %-11s %5s %6s %5s %8s %10s %-6s %9s %-6s%n",
-                "enemy", "role", "eHP", "atkDmg", "cad", "posMult", "TP", "in?", "TTD/TTK", "gr?");
+        System.out.println("  cycleDPT = order-5 cycle-averaged effective DPT (basic + priced specials); trueTP = cycle-averaged Threat Points.");
+        System.out.printf("%-17s %-11s %5s %6s %5s %8s %8s %10s %-6s %9s %-6s%n",
+                "enemy", "role", "eHP", "atkDmg", "cad", "cycleDPT", "posMult", "trueTP", "in?", "TTD/TTK", "gr?");
         System.out.println("------------------------------------------------------------------------------------");
         for (ge.tbegvadze.toon3d.enemy.EnemyType enemyType : ge.tbegvadze.toon3d.enemy.EnemyType.values()) {
             if (enemyType.role() == ge.tbegvadze.toon3d.enemy.EnemyRole.BOSS) continue; // SECTION 14 ruleset
@@ -127,8 +130,10 @@ public final class BalanceReport {
     }
 
     private static void printEnemyRow(ge.tbegvadze.toon3d.enemy.EnemyType enemyType) {
-        // Enemies currently have no dodge or flat reduction, so eHP == raw HP.
-        float enemyEffectiveHitPoints = GameMath.effectiveHitPoints(enemyType.maxHealth(), 0f, 0f, 0f, 0f);
+        // Order 5: enemy eHP runs through the shared survivability primitive (EnemyType.effectiveHitPoints),
+        // not a hard-coded raw-HP shortcut — with all-zero mitigation today it still equals raw HP.
+        float enemyEffectiveHitPoints = enemyType.effectiveHitPoints();
+        float cycleAveragedDamagePerTurn = enemyType.cycleAveragedDamagePerTurn();
         float threatPoints = enemyType.baseThreatPoints();
         float[] threatBand = BalanceSchema.threatPointBand(enemyType.role());
         boolean insideBand = threatBand != null
@@ -142,9 +147,9 @@ public final class BalanceReport {
                 : bandVerdict(goldenRatio >= goldenBand[0] && goldenRatio <= goldenBand[1],
                         goldenRatio, goldenBand[0]);
 
-        System.out.printf("%-17s %-11s %5.0f %6d %5d %8.2f %10.1f %-6s %9.1f %-6s%n",
+        System.out.printf("%-17s %-11s %5.0f %6d %5d %8.2f %8.2f %10.1f %-6s %9.1f %-6s%n",
                 enemyType.displayName(), enemyType.role().name(), enemyEffectiveHitPoints,
-                enemyType.attackDamage(), enemyType.attackCadenceTurns(),
+                enemyType.attackDamage(), enemyType.attackCadenceTurns(), cycleAveragedDamagePerTurn,
                 enemyType.positionalMultiplier(), threatPoints, bandVerdictText,
                 goldenRatio, goldenVerdictText);
     }
@@ -401,6 +406,58 @@ public final class BalanceReport {
                 depth, plan.floorBudget(), plan.spentThreatPoints(), roster.size(),
                 anchorName, maxTypeFraction * 100f,
                 mixOk ? "OK" : "NO", allRules ? "OK" : "CHECK");
+    }
+
+    // -----------------------------------------------------------------------------------
+    // REGION DANGER DIAL (R-REGION, order 5) — macro pacing as a budgeted number. Each route region
+    // scales the depth-ramped floor budget by REGION_TP_BUDGET_MULTIPLIER on top of the depth curve, so
+    // a lethal region spends MORE Threat Points (more bodies) at the same depth. The sweep prints the
+    // region-scaled floor budget at each region's entry depth, showing C/D measurably out-spending A.
+    // Per-fight fairness (depth-coupling) is region-INDEPENDENT and shown holding in every lane.
+    // -----------------------------------------------------------------------------------
+    private static void printRegionDangerTable() {
+        float[] multipliers = BalanceConfig.REGION_TP_BUDGET_MULTIPLIER;
+        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+        System.out.println("REGION DANGER DIAL (R-REGION, order 5) — TP multiplier applied ON TOP of the depth curve");
+        System.out.printf("%-8s %-16s %8s %8s %10s %-6s%n",
+                "region", "name", "dial", "entryD", "regionBudget", "dial?");
+        System.out.println("------------------------------------------------------------------------------------");
+        for (int region = 0; region < multipliers.length; region++) {
+            int entryDepth = region * band + 1;
+            float regionBudget = GameMath.regionScaledFloorThreatPointBudget(
+                    BalanceConfig.FLOOR_BASE_THREAT_POINT_BUDGET,
+                    BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH,
+                    entryDepth, multipliers, band);
+            boolean dialInBand = multipliers[region] >= BalanceConfig.REGION_TP_BUDGET_MULTIPLIER_MIN
+                    && multipliers[region] <= BalanceConfig.REGION_TP_BUDGET_MULTIPLIER_MAX;
+            System.out.printf("%-8s %-16s %8.2f %8d %10.0f %-6s%n",
+                    regionLetter(region), regionName(region), multipliers[region], entryDepth,
+                    regionBudget, dialInBand ? "OK" : "OUT");
+        }
+        System.out.println("  DIAL: monotonic non-decreasing (A<=B<=C<=D); C/D out-dial A by >= "
+                + BalanceConfig.REGION_TP_LETHAL_MARGIN + " (measurably lethal).");
+        System.out.println("  FAIRNESS: the dial scales the BUDGET (body count), NOT per-enemy threat — "
+                + "per-fight depth-coupling holds in every region lane (R-DEPTH).");
+    }
+
+    /** Route region letter A..D for a 0-based region index (clamped past D — endless "The Breach"). */
+    private static String regionLetter(int region) {
+        switch (region) {
+            case 0:  return "A";
+            case 1:  return "B";
+            case 2:  return "C";
+            default: return "D";
+        }
+    }
+
+    /** Route region name for a 0-based region index (clamped past D). */
+    private static String regionName(int region) {
+        switch (region) {
+            case 0:  return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_A_NAME;
+            case 1:  return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_B_NAME;
+            case 2:  return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_C_NAME;
+            default: return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_D_NAME;
+        }
     }
 
     // -----------------------------------------------------------------------------------

@@ -207,6 +207,83 @@ class BalanceAuditTest {
     }
 
     /**
+     * R-REGION (order 5): the region danger dial is bounded and monotonic, the lethal regions (C/D)
+     * out-dial region A measurably, and the per-fight depth-coupling holds in every region lane.
+     */
+    @Test
+    void regionDangerDialIsBoundedMonotonicAndFair() {
+        assertNoViolations(BalanceSchema.regionResults());
+    }
+
+    /**
+     * Order-5 COVERAGE (special verbs): every catalogued enemy SPECIAL verb has a registered
+     * cycle-averaged Threat-Point equivalence (or an explicit exempt classification) — a new verb without
+     * one is an unpriced-content COVERAGE violation, exactly like an unpriced weapon or ammo type.
+     */
+    @Test
+    void everySpecialVerbHasARegisteredEquivalence() {
+        java.util.List<String> unpriced = new java.util.ArrayList<>();
+        for (ge.tbegvadze.toon3d.enemy.SpecialAbility ability
+                : ge.tbegvadze.toon3d.enemy.SpecialAbility.values()) {
+            if (BalanceSchema.specialVerbPricing(ability) == null) {
+                unpriced.add("  " + ability.name() + " has no SpecialVerbPricing registered");
+            }
+        }
+        assertTrue(unpriced.isEmpty(),
+                () -> "Unpriced enemy special verbs (register a SpecialVerbPricing equivalence):\n"
+                        + String.join("\n", unpriced));
+    }
+
+    /**
+     * Order-5 PACK COHERENCE acceptance criterion: chaff ALWAYS spawns in packs of >= CHAFF_PACK_MIN.
+     * Proven over 100 seeds x depths 1..15 by planning the encounter roster and asserting no CHAFF-role
+     * type ever appears alone (the golden-band chaff exemption assumes packs — the spawner guarantees it).
+     */
+    @Test
+    void chaffAlwaysSpawnsInPacksOverAHundredSeeds() {
+        java.util.List<String> lonePacks = new java.util.ArrayList<>();
+        for (long seed = 0; seed < 100; seed++) {
+            for (int depth = 1; depth <= 15; depth++) {
+                ge.tbegvadze.toon3d.level.EncounterBudgetPlanner.Plan plan =
+                        new ge.tbegvadze.toon3d.level.EncounterBudgetPlanner(
+                                depth, new java.util.Random(seed * 97L + depth)).plan();
+                java.util.EnumMap<ge.tbegvadze.toon3d.enemy.EnemyType, Integer> counts =
+                        new java.util.EnumMap<>(ge.tbegvadze.toon3d.enemy.EnemyType.class);
+                for (ge.tbegvadze.toon3d.enemy.EnemyType type : plan.enemies()) {
+                    counts.merge(type, 1, Integer::sum);
+                }
+                for (java.util.Map.Entry<ge.tbegvadze.toon3d.enemy.EnemyType, Integer> entry
+                        : counts.entrySet()) {
+                    if (entry.getKey().role() == ge.tbegvadze.toon3d.enemy.EnemyRole.CHAFF
+                            && entry.getValue() < BalanceConfig.CHAFF_PACK_MIN) {
+                        lonePacks.add(String.format("  seed=%d depth=%d %s count=%d (< %d)",
+                                seed, depth, entry.getKey().displayName(), entry.getValue(),
+                                BalanceConfig.CHAFF_PACK_MIN));
+                    }
+                }
+            }
+        }
+        assertTrue(lonePacks.isEmpty(),
+                () -> "Chaff spawned below the minimum pack size:\n" + String.join("\n", lonePacks));
+    }
+
+    /**
+     * Order-5 acceptance criterion (enemy eHP path): every archetype's eHP runs through the shared
+     * GameMath.effectiveHitPoints primitive via EnemyType.effectiveHitPoints() — no raw-HP shortcut. With
+     * today's all-zero mitigation the result still equals raw maxHealth, but through the one formula.
+     */
+    @Test
+    void enemyEffectiveHitPointsRunThroughTheSharedPrimitive() {
+        for (ge.tbegvadze.toon3d.enemy.EnemyType type
+                : ge.tbegvadze.toon3d.enemy.EnemyType.values()) {
+            float viaPrimitive = GameMath.enemyEffectiveHitPoints(type.maxHealth(), type.armorPool(),
+                    type.dodgeChance(), type.flatReduction(), BalanceConfig.REFERENCE_PLAYER_DPT);
+            assertTrue(Math.abs(type.effectiveHitPoints() - viaPrimitive) < 1e-3f,
+                    () -> type.displayName() + " eHP must come from GameMath.enemyEffectiveHitPoints");
+        }
+    }
+
+    /**
      * Order-4 CATCH-UP rule (GameMath.catchUpScaledXp), the acceptance criterion proven with SYNTHETIC
      * level/depth states: the forward-only rubber band engages when the player is more than one level
      * BELOW the expected level for their depth, and NEVER when at or above it.
