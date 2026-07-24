@@ -1,27 +1,41 @@
 package ge.tbegvadze.toon3d.shop;
 
 import ge.tbegvadze.toon3d.entity.WeaponProfile;
+import ge.tbegvadze.toon3d.entity.WeaponRoller;
 import ge.tbegvadze.toon3d.entity.WeaponTier;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.progression.UpgradeCard;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
 
 /**
  * shop_order_2's built-in {@link ShopOfferSource}. Builds concrete offers (including price) from the
- * systems available today: ammo (from the player's usable ammo types), medkits, and weapon
- * level-up / tier-upgrade offers (read-only, targeting an owned weapon — the EFFECT is applied by
- * shop_order_3). Player-ability offers require the boon system that shop_order_4 owns, so
- * {@link #rollAbilityOffer} returns null until then (the roller falls back to a supply offer).
+ * systems available today: ammo (from the player's usable ammo types), medkits, weapon
+ * level-up / tier-upgrade offers, and player-ability boons.
+ *
+ * <p><b>Pricing (new-game-balancr order 3).</b> Every price is derived from the offer's VALUE IN
+ * POWER POINTS through {@link GameMath#shopPrice} — there are ZERO hand-set per-offer base prices.
+ * A weapon-class upgrade prices on its ability/level PP; a consumable prices on its supply value
+ * converted to PP (damage supplied / {@code SHOP_AMMO_DAMAGE_PER_POWER_POINT}, or HP restored /
+ * {@code SHOP_HEAL_HP_PER_POWER_POINT}). The single knob {@code SHOP_CREDITS_PER_POWER_POINT} sets
+ * the whole economy's price level, coupled to the credit BAND (R-CREDITS).
  */
 public final class DefaultShopOfferSource implements ShopOfferSource {
+
+    /** Credit price of an offer worth {@code valuePowerPoints}, at the context's depth. */
+    private static int priceOf(float valuePowerPoints, ShopContext context) {
+        return GameMath.shopPrice(valuePowerPoints, GameBalance.SHOP_CREDITS_PER_POWER_POINT,
+                context.depth, GameBalance.SHOP_DEPTH_PRICE_SCALE);
+    }
 
     @Override
     public ShopEntry rollTierUpgradeOffer(ShopContext context, Random random) {
@@ -34,8 +48,10 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
         WeaponProfile target      = upgradeable.get(random.nextInt(upgradeable.size()));
         WeaponTier    destination = ShopWeaponService.nextTier(target.getTier());
         OfferRarity   rarity      = tierUpgradeRarity(destination);
-        int price = GameMath.shopEntryPrice(GameBalance.SHOP_BASE_PRICE_TIER_UPGRADE,
-                context.depth, GameBalance.SHOP_DEPTH_PRICE_SCALE, rarity.priceMultiplier);
+        // Priced on the ABILITY-PP budget the destination tier unlocks — the marquee value is the
+        // ability slot the tier buys (SECTION 15, TIER_ABILITY_PP_BUDGET_*).
+        float valuePowerPoints = WeaponRoller.tierAbilityPowerPointBudget(destination);
+        int price = priceOf(valuePowerPoints, context);
         String name = "Tier Up: " + target.getDisplayName()
                 + " (" + target.getTier().displayName + " -> " + destination.displayName + ")";
         return new ShopEntry(OfferCategory.WEAPON_TIER_UPGRADE, rarity, name,
@@ -54,8 +70,8 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
         if (levelable.isEmpty()) return null;
 
         WeaponProfile target = levelable.get(random.nextInt(levelable.size()));
-        int price = GameMath.shopEntryPrice(GameBalance.SHOP_BASE_PRICE_WEAPON_LEVELUP,
-                context.depth, GameBalance.SHOP_DEPTH_PRICE_SCALE, OfferRarity.COMMON.priceMultiplier);
+        // A weapon level is ~+10% damage — priced at the fixed weapon-level PP value.
+        int price = priceOf(BalanceConfig.SHOP_WEAPON_LEVEL_UP_POWER_POINTS, context);
         String name = "Level Up: " + target.getDisplayName()
                 + " (Lv" + target.getWeaponLevel() + " -> Lv" + (target.getWeaponLevel() + 1) + ")";
         return new ShopEntry(OfferCategory.WEAPON_LEVEL_UP, OfferRarity.COMMON, name,
@@ -66,31 +82,32 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
     @Override
     public ShopEntry rollAbilityOffer(ShopContext context, Random random) {
         // shop_order_4: a PLAYER_ABILITY is a paid, alternate acquisition of the SAME boons the
-        // level-up screen hands out — the budget-equal UpgradeCards (progression package). Every
-        // card is a repeatable stat boon, so all are always eligible; draw one at random. WHICH card
-        // a machine offers is rolled from the machine's seeded RNG, so abilities are random per floor
-        // (the roller de-dups by dedupKey so two machines never offer the same one).
+        // level-up screen hands out — the budget-equal UpgradeCards. Priced on the card's OWN power
+        // points (each card ~= LEVEL_UP_BUDGET_PP), so a boon and a level-up card cost the same value.
         UpgradeCard[] boons = UpgradeCard.values();
         if (boons.length == 0) return null;
         UpgradeCard boon = boons[random.nextInt(boons.length)];
 
-        // Trade-off boons (a big gain paid for with a downside) are the premium, high-variance line
-        // and read as EPIC; the plain budget boons read as RARE. Rarity drives price + UI card tint.
+        // Trade-off boons read as EPIC, plain budget boons as RARE — purely a UI/card tint now.
         OfferRarity rarity = boon.isTradeOff() ? OfferRarity.EPIC : OfferRarity.RARE;
-        int price = GameMath.shopEntryPrice(GameBalance.SHOP_BASE_PRICE_PLAYER_ABILITY,
-                context.depth, GameBalance.SHOP_DEPTH_PRICE_SCALE, rarity.priceMultiplier);
+        int price = priceOf(boon.estimatedPowerPoints(), context);
         return new ShopEntry(OfferCategory.PLAYER_ABILITY, rarity, "Boon: " + boon.displayName,
                 boon.description, price, 0, boon, "ABILITY:" + boon.name());
     }
 
     @Override
     public ShopEntry rollAmmoOffer(ShopContext context, Random random) {
-        // Usable ammo = the types the player's owned weapons actually consume (deterministic order).
+        // Usable ammo = the types the player's owned weapons actually consume (deterministic order),
+        // paired with the per-shot damage of the weapon that eats them (for supply-value pricing).
         LinkedHashSet<AmmoType> usable = new LinkedHashSet<>();
+        EnumMap<AmmoType, Integer> damagePerUnit = new EnumMap<>(AmmoType.class);
         for (WeaponProfile weapon : context.ownedWeapons) {
             if (weapon == null) continue;
             AmmoType ammoType = weapon.getAmmoType();
-            if (ammoType != null) usable.add(ammoType);
+            if (ammoType == null) continue;
+            usable.add(ammoType);
+            // Keep the highest per-shot damage seen for the type (its most valuable consumer).
+            damagePerUnit.merge(ammoType, weapon.getEffectiveDamage(), Math::max);
         }
         if (usable.isEmpty()) return null;
 
@@ -102,9 +119,10 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
         int amount     = large
                 ? ammoType.getAmountPerBox() * GameBalance.SHOP_AMMO_LARGE_BOX_MULTIPLIER
                 : ammoType.getAmountPerBox();
-        int basePrice  = large ? GameBalance.SHOP_BASE_PRICE_AMMO_LARGE : GameBalance.SHOP_BASE_PRICE_AMMO_SMALL;
-        int price = GameMath.shopEntryPrice(basePrice, context.depth,
-                GameBalance.SHOP_DEPTH_PRICE_SCALE, OfferRarity.COMMON.priceMultiplier);
+        // Priced on damage SUPPLIED = amount * damage-per-unit, converted to PP.
+        int perUnit = Math.max(1, damagePerUnit.getOrDefault(ammoType, 1));
+        float valuePowerPoints = (amount * (float) perUnit) / BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT;
+        int price = priceOf(valuePowerPoints, context);
         String name = "Ammo: " + ammoType.getDisplayName() + " x" + amount;
         return new ShopEntry(OfferCategory.AMMO, OfferRarity.COMMON, name,
                 "Reserve ammo for your guns.", price, amount, ammoType,
@@ -115,10 +133,10 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
     public ShopEntry rollMedkitOffer(ShopContext context, Random random) {
         boolean field = random.nextBoolean();
         ItemType itemType = field ? ItemType.MEDKIT_LARGE : ItemType.MEDKIT_SMALL;
-        int basePrice     = field ? GameBalance.SHOP_BASE_PRICE_MEDKIT_FIELD
-                                   : GameBalance.SHOP_BASE_PRICE_MEDKIT_STIM;
-        int price = GameMath.shopEntryPrice(basePrice, context.depth,
-                GameBalance.SHOP_DEPTH_PRICE_SCALE, OfferRarity.COMMON.priceMultiplier);
+        // Priced on HP restored, converted to PP.
+        int healAmount = field ? BalanceConfig.MEDKIT_FULL_HEAL : BalanceConfig.MEDKIT_STIM_HEAL;
+        float valuePowerPoints = healAmount / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT;
+        int price = priceOf(valuePowerPoints, context);
         return new ShopEntry(OfferCategory.MEDKIT, OfferRarity.COMMON, itemType.getDisplayName(),
                 "Healing — stashed in your inventory.", price, 1, itemType,
                 "MEDKIT:" + itemType.name());

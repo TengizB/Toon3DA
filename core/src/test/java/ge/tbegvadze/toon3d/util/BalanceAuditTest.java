@@ -146,6 +146,54 @@ class BalanceAuditTest {
                 () -> "Budgeted ability rolls exceeded their tier ceiling:\n" + String.join("\n", overspends));
     }
 
+    /** R-SCARCITY-DEPTH (order 3): the scarcity ratio S holds [0.75, 0.95] at every depth 1..15. */
+    @Test
+    void scarcityHoldsAtEveryDepthOneToFifteen() {
+        assertNoViolations(BalanceSchema.scarcityDepthResults());
+    }
+
+    /** R-HEALDRAIN-DEPTH (order 3): the per-floor net HP drain holds [5%, 15%] at every depth 1..15. */
+    @Test
+    void healDrainHoldsAtEveryDepthOneToFifteen() {
+        assertNoViolations(BalanceSchema.healDrainDepthResults());
+    }
+
+    /** R-CREDITS (order 3): expected region income / expected purchase-bundle price stays in [0.9, 1.4]. */
+    @Test
+    void creditIncomeAffordsTheExpectedBundleEveryRegion() {
+        assertNoViolations(BalanceSchema.creditResults());
+    }
+
+    /**
+     * Order-3 NEVER-SOFTLOCK rule (GameMath.emergencySupplyTriggers). The acceptance criterion, proven
+     * with SYNTHETIC inventories: the emergency ammo lifeline fires in a STARVED state and never in a
+     * normal one, and honours the once-per-floor cap. eHP/damage numbers are arbitrary synthetic totals.
+     */
+    @Test
+    void emergencySupplyFiresOnlyWhenStarvedAndOncePerFloor() {
+        float fraction = BalanceConfig.EMERGENCY_SUPPLY_FRACTION; // 0.25
+        float remainingDemand = 400f;                             // 400 eHP left on the floor
+        float threshold = GameMath.emergencySupplyDemandThreshold(remainingDemand, fraction); // 100
+
+        // STARVED: total potential damage (reserves*efficiency + melee) is below the threshold — fires.
+        assertTrue(GameMath.emergencySupplyTriggers(60f, remainingDemand, fraction, false),
+                "a starved player (60 potential dmg < 100 threshold) must trigger the lifeline");
+
+        // NORMAL / hoarder: comfortably above the threshold — never fires (far below the scarcity band).
+        assertTrue(!GameMath.emergencySupplyTriggers(500f, remainingDemand, fraction, false),
+                "a well-supplied player (500 potential dmg) must never trigger the lifeline");
+        assertTrue(!GameMath.emergencySupplyTriggers(threshold + 1f, remainingDemand, fraction, false),
+                "just above the threshold must not trigger");
+
+        // ONCE PER FLOOR: even while starved, a second trigger is suppressed after the first grant.
+        assertTrue(!GameMath.emergencySupplyTriggers(10f, remainingDemand, fraction, true),
+                "the lifeline is capped once per floor — a second starved kill must not re-trigger");
+
+        // CLEARED FLOOR: nothing left to fight -> no lifeline regardless of reserves.
+        assertTrue(!GameMath.emergencySupplyTriggers(0f, 0f, fraction, false),
+                "an empty floor (no remaining demand) never triggers the lifeline");
+    }
+
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */
     @Test
     void fullSchemaSweepHasNoViolations() {

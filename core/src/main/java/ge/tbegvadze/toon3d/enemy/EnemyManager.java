@@ -128,6 +128,14 @@ public final class EnemyManager implements EnemyHitTarget {
     // Injected by World so melee kills can drop ammo matching the player's equipped ranged weapons.
     private Loadout loadout = null;
 
+    /** Notified when the never-softlock emergency ammo lifeline fires (order 3, part D) — for telemetry. */
+    public interface EmergencySupplyListener {
+        void onEmergencySupplyGranted();
+    }
+    private EmergencySupplyListener emergencySupplyListener;
+    /** Once-per-floor cap on the emergency ammo lifeline. Fresh EnemyManager per floor resets it. */
+    private boolean emergencySupplyGrantedThisFloor = false;
+
     private StatusEffectController statusEffectController = null;
 
     /**
@@ -173,6 +181,11 @@ public final class EnemyManager implements EnemyHitTarget {
      */
     public void setLoadout(Loadout playerLoadout) {
         this.loadout = playerLoadout;
+    }
+
+    /** Injects the emergency-supply telemetry listener (order 3, part D). Nullable. */
+    public void setEmergencySupplyListener(EmergencySupplyListener listener) {
+        this.emergencySupplyListener = listener;
     }
 
     @Override
@@ -1811,7 +1824,23 @@ public final class EnemyManager implements EnemyHitTarget {
             // ORDER 6 ammo lifeline: a summoned add killed while the player is out of ammo in the
             // sealed boss arena ALWAYS drops matching ammo, replacing the normal roll (Fairness F5).
             char guaranteedAmmo = guaranteedSummonerAmmoDrop(enemy);
-            char drop = (guaranteedAmmo != 0) ? guaranteedAmmo : rollEnemyDrop(enemy.type, isMeleeKill);
+            char drop;
+            if (guaranteedAmmo != 0) {
+                drop = guaranteedAmmo;
+            } else {
+                // NEVER-SOFTLOCK (new-game-balancr order 3, part D): if the player's remaining potential
+                // damage has fallen catastrophically below the remaining floor demand, force this drop to
+                // be ammo for an equipped weapon (once per floor). Keeps "wasted all my ammo" deaths as
+                // fighting retreats, never empty-inventory softlocks. Evaluated BEFORE the normal roll.
+                char emergencyAmmo = emergencySupplyDrop(enemy);
+                if (emergencyAmmo != 0) {
+                    drop = emergencyAmmo;
+                    emergencySupplyGrantedThisFloor = true;
+                    if (emergencySupplyListener != null) emergencySupplyListener.onEmergencySupplyGranted();
+                } else {
+                    drop = rollEnemyDrop(enemy.type, isMeleeKill);
+                }
+            }
             level.setCell(enemy.tileColumn, enemy.tileRow, drop);
             if (dropPlacedListener != null) {
                 dropPlacedListener.onDropPlaced(enemy.tileColumn, enemy.tileRow, drop);
@@ -1889,6 +1918,61 @@ public final class EnemyManager implements EnemyHitTarget {
         if (!isBossFightActive()) return 0;
         if (!loadout.hasNoUsableAmmo()) return 0;
         return preferredAmmoCharForEmptyLoadout();
+    }
+
+    /**
+     * NEVER-SOFTLOCK emergency ammo lifeline (new-game-balancr order 3, part D). Returns the ammo pickup
+     * char this kill must drop to keep the floor crossable, or 0 when the guarantee does not apply
+     * (normal loot rules stand). Fires only when ALL hold, so it is a catastrophe floor far below the
+     * scarcity band — never an ammo piñata for a hoarder:
+     *   • it has NOT already fired this floor (once-per-floor cap; the EnemyManager is rebuilt per floor),
+     *   • the player carries at least one equipped ranged weapon (melee-only never triggers — fist is the
+     *     true backstop), and
+     *   • the player's TOTAL remaining potential damage (all reserves * per-shot damage + one melee swing)
+     *     has fallen below the remaining floor demand * EMERGENCY_SUPPLY_FRACTION (GameMath predicate).
+     * The chosen char matches a weapon the player actually carries so the drop is never dead weight. The
+     * enemy being killed is EXCLUDED from the remaining demand (it is already dead for this purpose).
+     */
+    private char emergencySupplyDrop(Enemy dyingEnemy) {
+        if (emergencySupplyGrantedThisFloor) return 0;
+        if (loadout == null) return 0;
+        char ammoChar = preferredAmmoCharForEmptyLoadout();
+        if (ammoChar == 0) return 0; // melee-only loadout — melee is the backstop, no lifeline needed
+        float totalPotentialDamage = playerPotentialDamage();
+        float remainingFloorDemand = remainingFloorDemand(dyingEnemy);
+        if (!GameMath.emergencySupplyTriggers(totalPotentialDamage, remainingFloorDemand,
+                BalanceConfig.EMERGENCY_SUPPLY_FRACTION, false)) {
+            return 0;
+        }
+        return ammoChar;
+    }
+
+    /**
+     * The player's total remaining potential ranged damage: for every equipped ranged weapon, its
+     * reserve ammo times its per-shot damage, plus one melee swing (the always-available backstop). A
+     * conservative UPPER bound — weapons sharing an ammo type double-count it, so the lifeline fires
+     * LESS often, never more (a hoarder is never fed).
+     */
+    private float playerPotentialDamage() {
+        float total = BalanceConfig.MELEE_FIST_DAMAGE; // one always-available melee swing
+        if (loadout == null) return total;
+        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+            Weapon weapon = loadout.getSlot(slotIndex);
+            if (weapon == null || weapon instanceof MeleeWeapon) continue;
+            total += (float) weapon.getReserveAmmo() * weapon.getEffectiveDamage();
+        }
+        return total;
+    }
+
+    /** Remaining floor demand = current HP left across all alive enemies, minus the one being killed. */
+    private float remainingFloorDemand(Enemy dyingEnemy) {
+        float demand = 0f;
+        for (int index = 0; index < enemies.size(); index++) {
+            Enemy candidate = enemies.get(index);
+            if (candidate == dyingEnemy) continue;
+            if (candidate.isAlive()) demand += candidate.health;
+        }
+        return demand;
     }
 
     /** True while a live boss is present in the roster — the arena is still sealed. */

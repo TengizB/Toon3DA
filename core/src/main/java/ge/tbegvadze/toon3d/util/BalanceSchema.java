@@ -9,6 +9,7 @@ import ge.tbegvadze.toon3d.entity.WeaponTier;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemCategory;
 import ge.tbegvadze.toon3d.item.ItemType;
+import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.progression.UpgradeCard;
 
 import java.lang.reflect.Field;
@@ -82,7 +83,13 @@ public final class BalanceSchema {
         /** R-GEARGATE (order 2): the starting loadout is fair in region 1 but reads underpowered by the gate depth. */
         GEAR_GATE,
         /** R-ABILITY (order 2): every ability has a priced PP value; every rollable tier fits its ability-PP budget. */
-        ABILITY_BUDGET
+        ABILITY_BUDGET,
+        /** R-SCARCITY-DEPTH (order 3): the scarcity ratio S holds [0.75, 0.95] at EVERY depth 1..15. */
+        SCARCITY_DEPTH,
+        /** R-HEALDRAIN-DEPTH (order 3): the per-floor net HP drain holds [5%, 15%] of eHP at EVERY depth 1..15. */
+        HEALDRAIN_DEPTH,
+        /** R-CREDITS (order 3): expected region income / price of the expected purchase bundle in [0.9, 1.4]. */
+        CREDITS
     }
 
     // =====================================================================================
@@ -154,7 +161,8 @@ public final class BalanceSchema {
                 "Gated by slug scarcity, not raw damage: the 90-per-slug elite-buster hit is the "
                         + "heavy role's identity and supply (~1.1 slugs/floor, tightest reserve cap) "
                         + "is the real limiter.",
-                "Expires when the order-3 scarcity audit proves the slug gate in real play.");
+                "Re-checked by order-3 R-SCARCITY-DEPTH: slug reserve banking stays the TIGHTEST gate "
+                        + "(~1.0 floor at depth 1, tightest of all ammo types) after the shop re-pricing.");
     }
 
     /** Registers an explicit waiver. Every call must be mirrored in docs/game-balance-authority.txt. */
@@ -583,6 +591,9 @@ public final class BalanceSchema {
         results.addAll(coverageResults());
         results.addAll(gearGateResults());
         results.addAll(abilityBudgetResults());
+        results.addAll(scarcityDepthResults());
+        results.addAll(healDrainDepthResults());
+        results.addAll(creditResults());
         return results;
     }
 
@@ -752,6 +763,164 @@ public final class BalanceSchema {
         results.add(new RuleResult(RuleKind.SCARCITY, "heal net-drain fraction", netDrainFraction,
                 BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN, BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX,
                 drainInBand, "fraction of reference eHP lost per floor"));
+        return results;
+    }
+
+    // =====================================================================================
+    // ORDER-3 depth-sweep helpers — shared "one source" numbers for R-SCARCITY-DEPTH,
+    // R-HEALDRAIN-DEPTH and R-CREDITS (the same model-floor primitives the SECTION-10 table uses).
+    // =====================================================================================
+
+    /** Expected ammo boxes handed out on the model floor (LEVER 1 sources: rooms + kills). */
+    private static float modelFloorExpectedBoxes() {
+        return GameMath.expectedAmmoBoxesPerFloor(
+                BalanceConfig.MODEL_FLOOR_ROOM_COUNT, BalanceConfig.LEVEL_GEN_AMMO_CHANCE_PER_ROOM,
+                modelFloorEnemyCount(), BalanceConfig.ENEMY_AMMO_DROP_CHANCE);
+    }
+
+    /** Total ranged-ammo SUPPLY damage on the depth-1 model floor (the depth-sweep's baseline). */
+    public static float modelFloorTotalRangedSupply() {
+        float boxesPerType = modelFloorExpectedBoxes() / BalanceConfig.MODEL_FLOOR_AMMO_TYPE_COUNT;
+        float totalSupply = 0f;
+        for (ScarcityRowSpec row : SCARCITY_ROWS) {
+            totalSupply += GameMath.ammoSupplyDamage(boxesPerType, row.boxSize, row.damagePerUnit);
+        }
+        return totalSupply;
+    }
+
+    /** Worst single-weapon SUPPLY damage on the model floor (the tightest per-weapon share driver). */
+    private static float modelFloorWorstWeaponSupply() {
+        float boxesPerType = modelFloorExpectedBoxes() / BalanceConfig.MODEL_FLOOR_AMMO_TYPE_COUNT;
+        float worst = 0f;
+        for (ScarcityRowSpec row : SCARCITY_ROWS) {
+            worst = Math.max(worst, GameMath.ammoSupplyDamage(boxesPerType, row.boxSize, row.damagePerUnit));
+        }
+        return worst;
+    }
+
+    /**
+     * R-SCARCITY-DEPTH (order 3): the scarcity ratio S holds [0.75, 0.95] at EVERY depth 1..15, and no
+     * single weapon's share exceeds the per-weapon cap at any depth. DEMAND rides the enemy-eHP curve;
+     * SUPPLY rides the EXPECTED-arsenal gear curve times the per-region supply multiplier. This is the
+     * whole-run generalisation of the depth-1 R-SCARCITY model-floor check.
+     */
+    public static List<RuleResult> scarcityDepthResults() {
+        List<RuleResult> results = new ArrayList<>();
+        float modelDemand = modelFloorDemand();
+        float modelSupply = modelFloorTotalRangedSupply();
+        float worstWeaponSupply = modelFloorWorstWeaponSupply();
+        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+        for (int depth = 1; depth <= 15; depth++) {
+            float demand = GameMath.floorDemandAtDepth(modelDemand,
+                    BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
+            float supply = GameMath.ammoSupplyAtDepth(modelSupply, BalanceConfig.GEAR_CURVE_PER_REGION,
+                    BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
+            float scarcity = GameMath.scarcityRatioAtDepth(supply, demand);
+            boolean inBand = scarcity >= BalanceConfig.SCARCITY_RATIO_FLOOR_MIN
+                    && scarcity <= BalanceConfig.SCARCITY_RATIO_FLOOR_MAX;
+            // Worst per-weapon share at this depth (SUPPLY of the single biggest weapon over DEMAND).
+            float worstSupply = GameMath.ammoSupplyAtDepth(worstWeaponSupply,
+                    BalanceConfig.GEAR_CURVE_PER_REGION, BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
+            float worstShare = GameMath.scarcityRatioAtDepth(worstSupply, demand);
+            results.add(new RuleResult(RuleKind.SCARCITY_DEPTH, "S at depth " + depth, scarcity,
+                    BalanceConfig.SCARCITY_RATIO_FLOOR_MIN, BalanceConfig.SCARCITY_RATIO_FLOOR_MAX, inBand,
+                    "region " + GameMath.regionIndexAtDepth(depth, band)
+                            + "; worst per-weapon share " + String.format("%.2f", worstShare)));
+        }
+        return results;
+    }
+
+    /**
+     * R-HEALDRAIN-DEPTH (order 3): the per-floor net HP drain holds [5%, 15%] of the player's
+     * current-difficulty eHP at EVERY depth 1..15. Incoming damage, heal supply and eHP all ride the
+     * enemy-damage curve, so the drain FRACTION is depth-stable at the region multipliers' 1.0 default.
+     */
+    public static List<RuleResult> healDrainDepthResults() {
+        List<RuleResult> results = new ArrayList<>();
+        float incomingBase = GameMath.incomingDamagePerFloor(modelFloorEnemyDamagePerTurn(),
+                BalanceConfig.MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY, BalanceConfig.MODEL_FLOOR_AVOIDANCE_FACTOR);
+        float averageMedkitHeal  = (BalanceConfig.MEDKIT_STIM_HEAL + BalanceConfig.MEDKIT_FULL_HEAL) / 2f;
+        float averageArmourValue = (BalanceConfig.ARMOUR_SHARD_VALUE + BalanceConfig.ARMOUR_VEST_VALUE) / 2f;
+        float healBase = GameMath.healSupplyPerFloor(
+                BalanceConfig.MODEL_FLOOR_EXPECTED_MEDKITS, averageMedkitHeal,
+                BalanceConfig.MODEL_FLOOR_EXPECTED_ARMOUR_PICKUPS, averageArmourValue);
+        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+        for (int depth = 1; depth <= 15; depth++) {
+            float healRegionMultiplier = GameMath.perRegionMultiplierAtDepth(
+                    BalanceConfig.HEAL_SUPPLY_REGION_MULTIPLIER, depth, band);
+            float drainFraction = GameMath.netHpDrainFractionAtDepth(incomingBase, healBase,
+                    healRegionMultiplier, BalanceConfig.REFERENCE_PLAYER_EHP);
+            boolean inBand = drainFraction >= BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN
+                    && drainFraction <= BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX;
+            results.add(new RuleResult(RuleKind.HEALDRAIN_DEPTH, "net drain at depth " + depth, drainFraction,
+                    BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN, BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX,
+                    inBand, "region " + GameMath.regionIndexAtDepth(depth, band)
+                            + " heal mult " + String.format("%.2f", healRegionMultiplier)));
+        }
+        return results;
+    }
+
+    // --- CREDIT ECONOMY inputs (order 3, part C) — deterministic "one source" income model. ---
+
+    /** Total per-kill credit reward the model-floor roster pays out (the floor's kill-income base). */
+    public static float modelFloorKillCreditReward() {
+        return    BalanceConfig.MODEL_FLOOR_GORE_BITER_COUNT  * BalanceConfig.CREDIT_REWARD_GORE_BITER
+                + BalanceConfig.MODEL_FLOOR_EYE_TYRANT_COUNT  * BalanceConfig.CREDIT_REWARD_EYE_TYRANT
+                + BalanceConfig.MODEL_FLOOR_SHELL_BRUTE_COUNT * BalanceConfig.CREDIT_REWARD_SHELL_BRUTE
+                + BalanceConfig.MODEL_FLOOR_PLAGUE_HULK_COUNT * BalanceConfig.CREDIT_REWARD_PLAGUE_HULK;
+    }
+
+    /** Expected credit-chip income on a single floor (expected chip count * weighted average chip value). */
+    public static float chipIncomePerFloor() {
+        float expectedChips = (BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MIN
+                + BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MAX) / 2f;
+        float weightSmall  = BalanceConfig.CREDIT_SPAWN_WEIGHT_SMALL;
+        float weightMedium = BalanceConfig.CREDIT_SPAWN_WEIGHT_MEDIUM;
+        float weightLarge  = BalanceConfig.CREDIT_SPAWN_WEIGHT_LARGE;
+        float weightTotal  = weightSmall + weightMedium + weightLarge;
+        float averageChipValue = (weightSmall * ItemConstants.CREDIT_SMALL_BASE
+                + weightMedium * ItemConstants.CREDIT_MEDIUM_BASE
+                + weightLarge * ItemConstants.CREDIT_LARGE_BASE) / weightTotal;
+        return expectedChips * averageChipValue;
+    }
+
+    /** The credit price of the expected per-region purchase BUNDLE (one weapon-class buy + supplies). */
+    public static int regionPurchaseBundlePrice(int representativeDepth) {
+        int significant = GameMath.shopPrice(BalanceConfig.SHOP_SIGNIFICANT_BUY_POWER_POINTS,
+                BalanceConfig.SHOP_CREDITS_PER_POWER_POINT, representativeDepth,
+                BalanceConfig.SHOP_DEPTH_PRICE_SCALE) * BalanceConfig.SHOP_EXPECTED_SIGNIFICANT_BUYS_PER_REGION;
+        int small = GameMath.shopPrice(BalanceConfig.SHOP_SMALL_BUY_POWER_POINTS,
+                BalanceConfig.SHOP_CREDITS_PER_POWER_POINT, representativeDepth,
+                BalanceConfig.SHOP_DEPTH_PRICE_SCALE);
+        return Math.round(significant + BalanceConfig.SHOP_EXPECTED_SMALL_BUYS_PER_REGION * small);
+    }
+
+    /**
+     * R-CREDITS (order 3): the credit sink is a real lever — expected income per region divided by the
+     * price of the expected purchase bundle (one weapon-class buy + a couple of supplies) lands in
+     * [0.9, 1.4] for every region across depths 1..15. Currency is thus neither a runaway score counter
+     * (income &gt;&gt; sink) nor unaffordable (income &lt;&lt; sink).
+     */
+    public static List<RuleResult> creditResults() {
+        List<RuleResult> results = new ArrayList<>();
+        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+        float killCreditBase = modelFloorKillCreditReward();
+        float chipIncome = chipIncomePerFloor();
+        int regionCount = (15 + band - 1) / band; // regions spanning depths 1..15
+        for (int region = 0; region < regionCount; region++) {
+            int firstDepth = region * band + 1;
+            int representativeDepth = firstDepth + (band - 1) / 2; // region's middle floor
+            float income = GameMath.creditIncomePerRegion(killCreditBase,
+                    BalanceConfig.CREDIT_DEPTH_SCALE, chipIncome, firstDepth, band);
+            int bundlePrice = regionPurchaseBundlePrice(representativeDepth);
+            float ratio = bundlePrice <= 0 ? 0f : income / bundlePrice;
+            boolean inBand = ratio >= BalanceConfig.CREDIT_INCOME_RATIO_MIN
+                    && ratio <= BalanceConfig.CREDIT_INCOME_RATIO_MAX;
+            results.add(new RuleResult(RuleKind.CREDITS, "region " + region + " income/bundle", ratio,
+                    BalanceConfig.CREDIT_INCOME_RATIO_MIN, BalanceConfig.CREDIT_INCOME_RATIO_MAX, inBand,
+                    "income " + Math.round(income) + " / bundle " + bundlePrice
+                            + " (rep depth " + representativeDepth + ")"));
+        }
         return results;
     }
 

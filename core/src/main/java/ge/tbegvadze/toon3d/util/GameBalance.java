@@ -609,23 +609,19 @@ public final class GameBalance {
     /** Weight multiplier applied to the favoured category group when a machine is biased. */
     public static final float SHOP_BIAS_WEIGHT_MULTIPLIER    = BalanceConfig.SHOP_BIAS_WEIGHT_MULTIPLIER;
 
-    // ── Shop pricing (shop_order_2) — price = round(base * depthFactor * rarityFactor) ────────
+    // ── Shop pricing (new-game-balancr order 3) — every price is formula-derived from an offer's
+    // VALUE IN POWER POINTS via GameMath.shopPrice; zero hand-set per-offer base prices. ──────────
     /** Depth price scaling: +10% per floor beyond the first (mirrors credit depth scaling). */
-    public static final float SHOP_DEPTH_PRICE_SCALE         = BalanceConfig.SHOP_DEPTH_PRICE_SCALE;
-    public static final float SHOP_RARITY_PRICE_MULT_COMMON  = BalanceConfig.SHOP_RARITY_PRICE_MULT_COMMON;
-    public static final float SHOP_RARITY_PRICE_MULT_RARE    = BalanceConfig.SHOP_RARITY_PRICE_MULT_RARE;
-    public static final float SHOP_RARITY_PRICE_MULT_EPIC    = BalanceConfig.SHOP_RARITY_PRICE_MULT_EPIC;
-    /** Optional escalating surcharge for repeat level-ups of the same weapon (deferred; see part 2). */
-    public static final float SHOP_REPEAT_LEVELUP_SURCHARGE  = BalanceConfig.SHOP_REPEAT_LEVELUP_SURCHARGE;
-    // Base prices (Credits) per offer variant — the category value floor before depth/rarity scaling.
-    public static final int   SHOP_BASE_PRICE_MEDKIT_STIM     = BalanceConfig.SHOP_BASE_PRICE_MEDKIT_STIM;
-    public static final int   SHOP_BASE_PRICE_MEDKIT_FIELD    = BalanceConfig.SHOP_BASE_PRICE_MEDKIT_FIELD;
-    public static final int   SHOP_BASE_PRICE_AMMO_SMALL      = BalanceConfig.SHOP_BASE_PRICE_AMMO_SMALL;
-    public static final int   SHOP_BASE_PRICE_AMMO_LARGE      = BalanceConfig.SHOP_BASE_PRICE_AMMO_LARGE;
-    public static final int   SHOP_BASE_PRICE_WEAPON_LEVELUP  = BalanceConfig.SHOP_BASE_PRICE_WEAPON_LEVELUP;
-    public static final int   SHOP_BASE_PRICE_PLAYER_ABILITY  = BalanceConfig.SHOP_BASE_PRICE_PLAYER_ABILITY;
-    public static final int   SHOP_BASE_PRICE_TIER_UPGRADE    = BalanceConfig.SHOP_BASE_PRICE_TIER_UPGRADE;
-    /** Ammo "large box" multiplier over the standard box size (price already reflected in base). */
+    public static final float SHOP_DEPTH_PRICE_SCALE           = BalanceConfig.SHOP_DEPTH_PRICE_SCALE;
+    /** Credits per power point of an offer's priced value — the single price-level knob. */
+    public static final float SHOP_CREDITS_PER_POWER_POINT     = BalanceConfig.SHOP_CREDITS_PER_POWER_POINT;
+    /** Damage supplied per power point when pricing an ammo box. */
+    public static final float SHOP_AMMO_DAMAGE_PER_POWER_POINT = BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT;
+    /** HP restored per power point when pricing a medkit. */
+    public static final float SHOP_HEAL_HP_PER_POWER_POINT     = BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT;
+    /** PP value of a single weapon level-up offer. */
+    public static final float SHOP_WEAPON_LEVEL_UP_POWER_POINTS = BalanceConfig.SHOP_WEAPON_LEVEL_UP_POWER_POINTS;
+    /** Ammo "large box" multiplier over the standard box size (price derives from the larger supply). */
     public static final int   SHOP_AMMO_LARGE_BOX_MULTIPLIER  = BalanceConfig.SHOP_AMMO_LARGE_BOX_MULTIPLIER;
 
     // ── Credit Fang (ON_KILL, universal) ─────────────────────────────────────
