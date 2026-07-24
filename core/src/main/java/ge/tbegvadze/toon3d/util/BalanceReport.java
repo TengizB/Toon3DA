@@ -40,6 +40,8 @@ public final class BalanceReport {
         System.out.println();
         printUpgradeCardTable();
         System.out.println();
+        printXpPacingTable();
+        System.out.println();
         printScarcityTable();
         System.out.println();
         printScarcityDepthSweep();
@@ -281,24 +283,59 @@ public final class BalanceReport {
         System.out.println("UPGRADE CARDS (idea 5) — budget = " + String.format("%.0f", budget)
                 + " PP   band = " + String.format("%.1f-%.1f", bandMinimum, bandMaximum)
                 + " PP   (offered " + GameBalance.LEVEL_UP_CARDS_OFFERED + "/level)");
-        System.out.printf("%-20s %-9s %-13s %8s %-8s %-6s%n",
-                "card", "pool", "lever", "PP", "tradeoff", "in?");
+        System.out.printf("%-20s %-9s %-13s %8s %-8s %-6s %-8s%n",
+                "card", "pool", "lever", "PP", "tradeoff", "in?", "maxBP");
         System.out.println("------------------------------------------------------------------------------------");
 
         boolean allInBand = true;
+        boolean allCross  = true;
         for (ge.tbegvadze.toon3d.progression.UpgradeCard card
                 : ge.tbegvadze.toon3d.progression.UpgradeCard.values()) {
             float powerPoints = card.estimatedPowerPoints();
             boolean inBand = powerPoints >= bandMinimum && powerPoints <= bandMaximum;
             allInBand &= inBand;
-            System.out.printf("%-20s %-9s %-13s %8.1f %-8s %-6s%n",
+            // R-CARD-BREAKPOINT: the deepest integer TTK/TTD breakpoint the card crosses vs the region soldier.
+            int bestBreakpoint = ge.tbegvadze.toon3d.util.BalanceSchema.cardBestBreakpoint(card);
+            allCross &= bestBreakpoint >= 1;
+            System.out.printf("%-20s %-9s %-13s %8.1f %-8s %-6s %-8s%n",
                     card.displayName, card.pool.name(), card.lever.name(), powerPoints,
                     card.isTradeOff() ? "YES" : "no",
-                    bandVerdict(inBand, powerPoints, bandMinimum));
+                    bandVerdict(inBand, powerPoints, bandMinimum),
+                    bestBreakpoint >= 1 ? ("+" + bestBreakpoint) : "NONE");
         }
         System.out.println("------------------------------------------------------------------------------------");
         System.out.println("INVARIANT: every card in band => total PP at level L = L * budget (build-independent).  "
                 + (allInBand ? "ALL CARDS IN BAND" : "*** OUT-OF-BAND CARD(S) — RE-PRICE ***"));
+        System.out.println("R-CARD-BREAKPOINT (order 4): each card crosses >= 1 TTK/TTD breakpoint vs the region soldier.  "
+                + (allCross ? "ALL CROSS" : "*** CARD CROSSES NO BREAKPOINT — RE-PRICE ***"));
+    }
+
+    // -----------------------------------------------------------------------------------
+    // XP PACING (new-game-balancr order 4) — R-XP-PACE. A floor's roster XP (XP_PER_THREAT_POINT *
+    // fill-target * floor TP budget) over the geometric level requirement at the expected level must
+    // land in [XP_FLOOR_YIELD_MIN, MAX] at every depth — leveling is paced, not a hope.
+    // -----------------------------------------------------------------------------------
+    private static void printXpPacingTable() {
+        System.out.println("XP PACING (order 4) — floor XP / xpRequired(expected level)  (band "
+                + String.format("%.1f-%.1f", BalanceConfig.XP_FLOOR_YIELD_MIN, BalanceConfig.XP_FLOOR_YIELD_MAX)
+                + " level-ups/floor)");
+        System.out.println("  per-enemy XP = " + BalanceConfig.XP_PER_THREAT_POINT
+                + " * depth-scaled TP ; curve = " + BalanceConfig.XP_BASE_REQUIREMENT + " * "
+                + BalanceConfig.XP_CURVE_GROWTH_PER_LEVEL + "^(level-1) (geometric, tracks enemy compound)");
+        System.out.printf("%-6s %8s %10s %10s %8s %-8s%n",
+                "depth", "expLvl", "avail XP", "req XP", "yield", "in band?");
+        System.out.println("------------------------------------------------------------------------------------");
+        for (int depth = 1; depth <= 15; depth++) {
+            int expectedLevel = GameMath.expectedLevelAtDepth(BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, depth);
+            int requiredXp = GameMath.xpRequiredForLevelGeometric(BalanceConfig.XP_BASE_REQUIREMENT,
+                    BalanceConfig.XP_CURVE_GROWTH_PER_LEVEL, expectedLevel);
+            float availableXp = ge.tbegvadze.toon3d.util.BalanceSchema.floorRosterXp(depth);
+            float yield = requiredXp <= 0 ? 0f : availableXp / requiredXp;
+            boolean inBand = yield >= BalanceConfig.XP_FLOOR_YIELD_MIN && yield <= BalanceConfig.XP_FLOOR_YIELD_MAX;
+            String verdict = inBand ? "OK" : (yield < BalanceConfig.XP_FLOOR_YIELD_MIN ? "STARVED" : "RUNAWAY");
+            System.out.printf("%-6d %8d %10.0f %10d %8.3f %-8s%n",
+                    depth, expectedLevel, availableXp, requiredXp, yield, verdict);
+        }
     }
 
     private static String bandVerdict(boolean insideBand, float value, float bandMinimum) {
@@ -367,35 +404,48 @@ public final class BalanceReport {
     }
 
     // -----------------------------------------------------------------------------------
-    // DEPTH COUPLING — the fairness-over-depth invariant (balance contract, DEPTH SCALING).
-    // The player's power curve (LINEAR: level-up power points accumulate per floor,
-    // GameMath.playerPowerAtDepth) must stay coupled to the enemy threat curve (COMPOUND:
-    // GameMath.depthThreatScale). Their ratio must hold in [DEPTH_COUPLING_RATIO_MIN, MAX]:
-    // below = unfair-hard (player fell behind), above = trivial-easy (player outscaled it).
-    // This table is what the SECTION 3 enemy depth-scale tune is verified against.
+    // DEPTH COUPLING — the fairness-over-depth invariant, now vs the HONEST total-power model (order 4).
+    // The player's power is the v2 curve (GameMath.playerPowerAtDepthV2 = cardPower * gearRamp *
+    // abilityPower — all sources, not the cards-only fiction), and it must stay coupled to the enemy
+    // threat curve (COMPOUND: GameMath.depthThreatScale). Their ratio holds [MIN, MAX] for depths 1..15
+    // (the rule range); depths 16..20 are printed so the graceful-degradation boundary is visible.
+    // This table is what the SECTION 3 enemy depth-scale RE-FIT is verified against.
     // -----------------------------------------------------------------------------------
     private static void printDepthCouplingTable() {
-        System.out.println("DEPTH COUPLING — player power vs enemy threat (band "
+        System.out.println("DEPTH COUPLING (order 4, HONEST v2 power) — player power vs enemy threat (band "
                 + String.format("%.2f-%.2f", BalanceConfig.DEPTH_COUPLING_RATIO_MIN,
                         BalanceConfig.DEPTH_COUPLING_RATIO_MAX) + ")");
         System.out.println("  enemy scale = " + BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH + " HP * "
-                + BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH + " dmg / floor (compound) ; player = "
-                + String.format("%.0f", GameBalance.LEVEL_UP_BUDGET_PP) + " PP * "
-                + BalanceConfig.EXPECTED_LEVELS_PER_DEPTH + " level/floor (linear)");
-        System.out.printf("%-6s %10s %10s %8s %-12s%n", "depth", "player", "enemy", "ratio", "in band?");
+                + BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH + " dmg / floor (compound) ; player v2 = "
+                + "card(" + String.format("%.0f", GameBalance.LEVEL_UP_BUDGET_PP) + "PP*"
+                + BalanceConfig.EXPECTED_LEVELS_PER_DEPTH + "/floor) * gearRamp("
+                + BalanceConfig.GEAR_CURVE_PER_REGION + "/region) * abilityRamp");
+        System.out.printf("%-6s %8s %8s %8s %9s %9s %8s %-12s%n",
+                "depth", "card", "gear", "abil", "playerV2", "enemy", "ratio", "in band?");
         System.out.println("------------------------------------------------------------------------------------");
-        int[] depths = {1, 2, 3, 4, 5, 8, 10, 12, 15};
-        for (int depth : depths) {
-            float playerPower = GameMath.playerPowerAtDepth(GameBalance.LEVEL_UP_BUDGET_PP,
+        float[] regionAbilityBudgets = ge.tbegvadze.toon3d.util.BalanceSchema.regionAbilityBudgetPoints();
+        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+        for (int depth = 1; depth <= 20; depth++) {
+            float cardPower = GameMath.playerPowerAtDepth(GameBalance.LEVEL_UP_BUDGET_PP,
                     BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, depth);
+            float gearRamp = GameMath.gearRampAtDepth(BalanceConfig.GEAR_CURVE_PER_REGION, depth, band);
+            float abilityPower = 1f
+                    + GameMath.expectedAbilityPowerPointsAtDepth(regionAbilityBudgets, depth, band) / 100f;
+            float playerPower = GameMath.playerPowerAtDepthV2(GameBalance.LEVEL_UP_BUDGET_PP,
+                    BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, BalanceConfig.GEAR_CURVE_PER_REGION,
+                    regionAbilityBudgets, depth, band);
             float enemyThreat = GameMath.depthThreatScale(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH,
                     BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
             float ratio = GameMath.depthCouplingRatio(playerPower, enemyThreat);
             boolean inBand = ratio >= BalanceConfig.DEPTH_COUPLING_RATIO_MIN
                     && ratio <= BalanceConfig.DEPTH_COUPLING_RATIO_MAX;
-            String verdict = inBand ? "OK"
+            String verdict = inBand ? (depth <= 15 ? "OK" : "OK (past rule)")
                     : (ratio < BalanceConfig.DEPTH_COUPLING_RATIO_MIN ? "UNDER(hard)" : "OVER(easy)");
-            System.out.printf("%-6d %10.3f %10.3f %8.3f %-12s%n", depth, playerPower, enemyThreat, ratio, verdict);
+            if (depth == 16) {
+                System.out.println("  --- rule range 1..15 above ; 16+ printed for the degradation boundary ---");
+            }
+            System.out.printf("%-6d %8.3f %8.3f %8.3f %9.3f %9.3f %8.3f %-12s%n",
+                    depth, cardPower, gearRamp, abilityPower, playerPower, enemyThreat, ratio, verdict);
         }
     }
 

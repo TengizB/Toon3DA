@@ -89,7 +89,11 @@ public final class BalanceSchema {
         /** R-HEALDRAIN-DEPTH (order 3): the per-floor net HP drain holds [5%, 15%] of eHP at EVERY depth 1..15. */
         HEALDRAIN_DEPTH,
         /** R-CREDITS (order 3): expected region income / price of the expected purchase bundle in [0.9, 1.4]. */
-        CREDITS
+        CREDITS,
+        /** R-XP-PACE (order 4): a floor's available XP / xpRequired(expectedLevel) holds [1.0, 1.3] at every depth 1..15. */
+        XP_PACE,
+        /** R-CARD-BREAKPOINT (order 4): every level-up card crosses >= 1 TTK/TTD breakpoint vs the region soldier. */
+        CARD_BREAKPOINT
     }
 
     // =====================================================================================
@@ -594,6 +598,8 @@ public final class BalanceSchema {
         results.addAll(scarcityDepthResults());
         results.addAll(healDrainDepthResults());
         results.addAll(creditResults());
+        results.addAll(xpPaceResults());
+        results.addAll(cardBreakpointResults());
         return results;
     }
 
@@ -706,12 +712,49 @@ public final class BalanceSchema {
         return results;
     }
 
-    /** R-DEPTH: the depth-coupling ratio holds its band across depths 1..15. */
+    /**
+     * The expected weapon ABILITY-PP budget per region (new-game-balancr order 4), derived from order 2's
+     * data: the average of the tier ability-PP budgets over the region's dropped-weapon tier band
+     * (WEAPON_DROP_TIER_MIN/MAX_BY_REGION). This is the honest ability-power input to playerPowerAtDepthV2;
+     * a purely data-driven read of the priced catalogue, never a switch. Indexed 0-based by region.
+     */
+    private static final float[] REGION_ABILITY_BUDGET_POINTS = computeRegionAbilityBudgetPoints();
+
+    private static float[] computeRegionAbilityBudgetPoints() {
+        int regionCount = BalanceConfig.WEAPON_DROP_TIER_MIN_BY_REGION.length;
+        WeaponTier[] tiers = WeaponTier.values();
+        float[] budgets = new float[regionCount];
+        for (int region = 0; region < regionCount; region++) {
+            int minOrdinal = Math.max(0, Math.min(tiers.length - 1, BalanceConfig.WEAPON_DROP_TIER_MIN_BY_REGION[region]));
+            int maxOrdinal = Math.max(0, Math.min(tiers.length - 1, BalanceConfig.WEAPON_DROP_TIER_MAX_BY_REGION[region]));
+            float minBudget = WeaponRoller.tierAbilityPowerPointBudget(tiers[minOrdinal]);
+            float maxBudget = WeaponRoller.tierAbilityPowerPointBudget(tiers[maxOrdinal]);
+            budgets[region] = (minBudget + maxBudget) / 2f;
+        }
+        return budgets;
+    }
+
+    public static float[] regionAbilityBudgetPoints() {
+        return REGION_ABILITY_BUDGET_POINTS;
+    }
+
+    /** The player's honest total-power multiplier at a depth (order 4 v2 model) — shared by the rule and the report. */
+    public static float playerPowerV2(int depth) {
+        return GameMath.playerPowerAtDepthV2(BalanceConfig.LEVEL_UP_BUDGET_PP,
+                BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, BalanceConfig.GEAR_CURVE_PER_REGION,
+                regionAbilityBudgetPoints(), depth, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
+    }
+
+    /**
+     * R-DEPTH: the depth-coupling ratio holds its band across depths 1..15, measured against the HONEST
+     * total-power model (new-game-balancr order 4) — cardPower * gearRamp * abilityPower, not the old
+     * cards-only fiction. Depths 16+ are surfaced by BalanceReport (may degrade gracefully to the EASY
+     * side); the rule enforces the tuned range 1..15.
+     */
     public static List<RuleResult> depthCouplingResults() {
         List<RuleResult> results = new ArrayList<>();
         for (int depth = 1; depth <= 15; depth++) {
-            float playerPower = GameMath.playerPowerAtDepth(BalanceConfig.LEVEL_UP_BUDGET_PP,
-                    BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, depth);
+            float playerPower = playerPowerV2(depth);
             float enemyThreat = GameMath.depthThreatScale(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH,
                     BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
             float ratio = GameMath.depthCouplingRatio(playerPower, enemyThreat);
@@ -719,7 +762,7 @@ public final class BalanceSchema {
                     && ratio <= BalanceConfig.DEPTH_COUPLING_RATIO_MAX;
             results.add(new RuleResult(RuleKind.DEPTH_COUPLING, "depth " + depth, ratio,
                     BalanceConfig.DEPTH_COUPLING_RATIO_MIN, BalanceConfig.DEPTH_COUPLING_RATIO_MAX,
-                    inBand, null));
+                    inBand, "v2 honest power model"));
         }
         return results;
     }
@@ -920,6 +963,88 @@ public final class BalanceSchema {
                     BalanceConfig.CREDIT_INCOME_RATIO_MIN, BalanceConfig.CREDIT_INCOME_RATIO_MAX, inBand,
                     "income " + Math.round(income) + " / bundle " + bundlePrice
                             + " (rep depth " + representativeDepth + ")"));
+        }
+        return results;
+    }
+
+    // =====================================================================================
+    // R-XP-PACE (new-game-balancr order 4) — XP pacing is a RULE, not a hope. A floor must award
+    // enough XP for ~1 level-up but not a runaway, at EVERY depth. Roster XP = XP_PER_THREAT_POINT *
+    // (fill-target * floor TP budget) — because per-enemy XP is DERIVED from depth-scaled TP, the whole
+    // roster's XP equals the knob times the spent budget. Divided by the geometric level requirement at
+    // the expected level, the yield must land in [XP_FLOOR_YIELD_MIN, MAX].
+    // =====================================================================================
+
+    /** The XP a floor's roster is worth at a depth (order 4): XP_PER_THREAT_POINT * fill-target * budget. */
+    public static float floorRosterXp(int depth) {
+        float floorBudget = GameMath.floorThreatPointBudget(BalanceConfig.FLOOR_BASE_THREAT_POINT_BUDGET,
+                BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
+        return BalanceConfig.XP_PER_THREAT_POINT
+                * BalanceConfig.ENCOUNTER_BUDGET_FILL_TARGET_FRACTION * floorBudget;
+    }
+
+    /** R-XP-PACE: available XP / xpRequired(expectedLevel) in [MIN, MAX] for every depth 1..15. */
+    public static List<RuleResult> xpPaceResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (int depth = 1; depth <= 15; depth++) {
+            int expectedLevel = GameMath.expectedLevelAtDepth(BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, depth);
+            int requiredXp = GameMath.xpRequiredForLevelGeometric(BalanceConfig.XP_BASE_REQUIREMENT,
+                    BalanceConfig.XP_CURVE_GROWTH_PER_LEVEL, expectedLevel);
+            float yield = requiredXp <= 0 ? 0f : floorRosterXp(depth) / requiredXp;
+            boolean inBand = yield >= BalanceConfig.XP_FLOOR_YIELD_MIN && yield <= BalanceConfig.XP_FLOOR_YIELD_MAX;
+            results.add(new RuleResult(RuleKind.XP_PACE, "depth " + depth, yield,
+                    BalanceConfig.XP_FLOOR_YIELD_MIN, BalanceConfig.XP_FLOOR_YIELD_MAX, inBand,
+                    "expected level " + expectedLevel + ", req " + requiredXp));
+        }
+        return results;
+    }
+
+    // =====================================================================================
+    // R-CARD-BREAKPOINT (new-game-balancr order 4) — a level-up must FEEL different in the next fight,
+    // not just on a character sheet. Every card must cross at least one INTEGER combat breakpoint vs the
+    // region soldier in some region band: an OFFENCE card shaves a whole turn off the kill (turnsToKill-
+    // BreakpointGain), a DEFENCE card survives a whole extra enemy hit (turnsToDie gain). Cards keep their
+    // equal PP budget (R-CARD); this rule proves the budget is spent where it changes the fight.
+    // =====================================================================================
+
+    /** Max integer breakpoint a card crosses at a depth: offence turns-shaved OR defence turns-survived, vs the region soldier. */
+    public static int cardBreakpointGainAtDepth(UpgradeCard card, int depth) {
+        EnemyType soldier = GEAR_GATE_REFERENCE_SOLDIER;
+        float soldierEffectiveHitPoints = GameMath.effectiveHitPoints(soldier.maxHealth(), 0f, 0f, 0f, 0f)
+                * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
+        float soldierDamagePerTurn = ((float) soldier.attackDamage() / Math.max(1, soldier.attackCadenceTurns()))
+                * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
+        float expectedPlayerDamagePerTurn = GameMath.expectedPlayerDamagePerTurn(BalanceConfig.REFERENCE_PLAYER_DPT,
+                BalanceConfig.GEAR_CURVE_PER_REGION, depth, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
+        // OFFENCE: whole turns shaved off killing the soldier when the card's DPT is added.
+        int offenceBreakpoint = GameMath.turnsToKillBreakpointGain(soldierEffectiveHitPoints,
+                expectedPlayerDamagePerTurn, expectedPlayerDamagePerTurn + card.damagePerTurnGain());
+        // DEFENCE: whole extra turns the player survives the soldier when the card's eHP is added.
+        int turnsToDieBefore = GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP, soldierDamagePerTurn);
+        int turnsToDieAfter  = GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP + card.effectiveHitPointGain(),
+                soldierDamagePerTurn);
+        int defenceBreakpoint = turnsToDieAfter - turnsToDieBefore;
+        return Math.max(offenceBreakpoint, defenceBreakpoint);
+    }
+
+    /** The deepest breakpoint a card crosses anywhere in depths 1..15 (shared by the rule and the report). */
+    public static int cardBestBreakpoint(UpgradeCard card) {
+        int best = 0;
+        for (int depth = 1; depth <= 15; depth++) {
+            best = Math.max(best, cardBreakpointGainAtDepth(card, depth));
+        }
+        return best;
+    }
+
+    /** R-CARD-BREAKPOINT: every card crosses >= 1 combat breakpoint vs the region soldier in some region. */
+    public static List<RuleResult> cardBreakpointResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (UpgradeCard card : UpgradeCard.values()) {
+            int best = cardBestBreakpoint(card);
+            boolean crosses = best >= 1;
+            results.add(new RuleResult(RuleKind.CARD_BREAKPOINT, card.displayName, best, 1f, Float.POSITIVE_INFINITY,
+                    crosses, crosses ? "crosses a breakpoint in some region"
+                            : "NEVER crosses a breakpoint — re-price so a level-up changes the next fight"));
         }
         return results;
     }

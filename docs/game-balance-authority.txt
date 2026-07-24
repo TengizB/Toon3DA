@@ -64,8 +64,12 @@ Formula/Derivation/Edge-case blocks. Full walkthrough: knowledge doc SECTION 2.
   goldenRatio(...)       = turnsToDie / turnsToKill (TTK at the SUSTAINED
                            reference DPT — contract decision)
   depthThreatScale(...)  = healthScale^(d-1) * damageScale^(d-1)
-  playerPowerAtDepth(...)= 1 + budgetPP * levelsPerDepth * (d-1) / 100
-  depthCouplingRatio(...)= playerPower / enemyThreat
+  playerPowerAtDepth(...)= 1 + budgetPP * levelsPerDepth * (d-1) / 100  (v1 cards-only)
+  playerPowerAtDepthV2(..)= cardPower * gearRamp * abilityPower (HONEST, all sources; order 4)
+  depthCouplingRatio(...)= playerPowerV2 / enemyThreat
+  xpRequiredForLevelGeometric(..)= base * growth^(level-1)  (order 4)
+  xpRewardAtDepth(...)   = round(xpPerThreatPoint * enemyThreatAtDepth)  (order 4)
+  turnsToKillBreakpointGain(..)= TTK(before) - TTK(after)  (order 4)
   survivalTurnsBought(...)= healValue / averageIncomingDamagePerTurn
 
   REFERENCE ANCHORS (BalanceConfig SECTION 9): REFERENCE_PLAYER_DPT = 25,
@@ -124,12 +128,44 @@ R-TELEGRAPH (RuleKind.TELEGRAPH)
   NOTE: any NEW attack path must be added to the registered list — the audit
   only checks attacks it knows about.
 
-R-DEPTH (RuleKind.DEPTH_COUPLING)
-  depthCouplingRatio must hold [0.9, 1.2] for every depth 1..15.
-  WHY: below = the compound enemy curve outran the linear player curve
-  (unfair-hard); above = trivial-easy. A compound curve always outruns a linear
-  one eventually — depths beyond 15 are accepted "graceful degradation" and are
-  NOT audited (18/20 currently read 0.88/0.83 by design).
+R-DEPTH (RuleKind.DEPTH_COUPLING) — RE-DERIVED vs the HONEST power model (order 4)
+  depthCouplingRatio must hold [0.9, 1.2] for every depth 1..15, where player
+  power is now GameMath.playerPowerAtDepthV2 — the HONEST total-power model:
+      playerPowerV2(d) = cardPower(d) * gearRamp(d) * abilityPower(d)
+        cardPower   = the old v1 linear level-up term (1 + budgetPP*lpd*(d-1)/100)
+        gearRamp    = gearRampAtDepth (order-2 gear curve, CONTINUOUS ramp form —
+                      reaches the step value at each region's end, no boundary
+                      jumps, because a fixed ratio band cannot absorb a x1.35 jump;
+                      the STEP gearCurve stays the gate's tool)
+        abilityPower= 1 + expectedAbilityPowerPointsAtDepth/100 (the priced weapon
+                      ability budget the expected arsenal carries, order-2 tables)
+  WHY v2: the OLD coupling counted ONLY cards, defending a FICTION of player power;
+  difficulty tuned against fiction cannot feel right (order 4, problem 1). The
+  honest curve is far steeper (v2(15) ~= 5.5 vs the fiction's 2.68), so the enemy
+  DAMAGE compound was RE-FIT 1.032 -> 1.073 (HEALTH held at 1.042 so order-3
+  scarcity is untouched; damage cancels in the heal-drain fraction and only
+  interacts with the gate, which stays in band — region-2 on-curve soldier golden
+  ratio = 3.0). The ratio now holds [0.9, 1.2] for 1..15 (~0.95..1.16) with NO
+  under-band fudge; depths 16..20 (printed, not audited) degrade GRACEFULLY to the
+  EASY side (an on-curve player pulls slightly ahead), never unfair-hard.
+
+R-XP-PACE (RuleKind.XP_PACE) — XP pacing is a RULE, not a hope (order 4)
+  For every depth 1..15: floorRosterXp(d) / xpRequired(expectedLevel(d)) in
+  [XP_FLOOR_YIELD_MIN, MAX] = [1.0, 1.3] level-ups per floor. Per-enemy XP is
+  DERIVED — xpReward = XP_PER_THREAT_POINT * enemyThreatAtDepth (one knob replaces
+  13 hand-set constants) — and the XP curve is GEOMETRIC (base * growth^(level-1),
+  growth 1.118 tied to the enemy threat compound), so roster XP and the level
+  requirement grow at the SAME rate and the yield is depth-STABLE (~1.11). CATCH-UP
+  (GameMath.catchUpScaledXp): a player > 1 level below expected gets XP * 1.5,
+  forward-only. WHY: leveling must be FELT and PACED — a floor reliably buys ~1
+  level at every depth, and a fallen-behind run can recover.
+
+R-CARD-BREAKPOINT (RuleKind.CARD_BREAKPOINT) — a level-up must change the fight (order 4)
+  Every level-up card must cross >= 1 INTEGER combat breakpoint vs the region
+  soldier in some region: an OFFENCE card shaves a whole turn off the kill
+  (GameMath.turnsToKillBreakpointGain), a DEFENCE card survives a whole extra hit
+  (turnsToDie gain). Cards keep their equal PP budget (R-CARD); this rule proves
+  the budget is spent where it FEELS different next fight, not just on the sheet.
 
 R-SCARCITY (RuleKind.SCARCITY)
   On the model floor (BalanceConfig SECTION 10): floor-wide S = SUPPLY/DEMAND

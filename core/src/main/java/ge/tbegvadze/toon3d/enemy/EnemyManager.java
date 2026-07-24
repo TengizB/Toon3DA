@@ -310,6 +310,21 @@ public final class EnemyManager implements EnemyHitTarget {
         this.killXpListener = listener;
     }
 
+    /**
+     * XP awarded for killing this archetype on THIS floor (new-game-balancr order 4). Non-boss XP is
+     * DERIVED from the enemy's depth-scaled Threat Points (GameMath.xpRewardAtDepth), so a deeper,
+     * stronger instance automatically pays more and the whole floor's roster XP tracks the level
+     * requirement (R-XP-PACE). Bosses keep their flat placeholder reward (baseXpReward) pending idea 6.
+     */
+    private int depthScaledXpReward(EnemyType enemyType) {
+        if (enemyType.role() == EnemyRole.BOSS) {
+            return enemyType.baseXpReward();
+        }
+        return GameMath.xpRewardAtDepth(BalanceConfig.XP_PER_THREAT_POINT, enemyType.baseThreatPoints(),
+                BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH,
+                currentDepth);
+    }
+
     /** Wires the kill-message system so every kill fires a display notification with name + XP. */
     public void setKillEventListener(KillEventListener listener) {
         this.killEventListener = listener;
@@ -472,7 +487,7 @@ public final class EnemyManager implements EnemyHitTarget {
         enemy.triggerHitFlash();
 
         if (!enemy.isAlive()) {
-            int xpAwarded = enemy.type.baseXpReward();
+            int xpAwarded = depthScaledXpReward(enemy.type);
             if (killXpListener != null) {
                 killXpListener.onEnemyKilledForXp(xpAwarded);
             }
@@ -1799,7 +1814,7 @@ public final class EnemyManager implements EnemyHitTarget {
      * so the enemy list is safe to modify (no ConcurrentModificationException risk).
      */
     public void processDoTKill(Enemy enemy) {
-        int xpAwarded = enemy.type.baseXpReward();
+        int xpAwarded = depthScaledXpReward(enemy.type);
         if (killXpListener    != null) killXpListener.onEnemyKilledForXp(xpAwarded);
         if (killEventListener != null) killEventListener.onEnemyKilled(enemy.nameTag, xpAwarded);
         if (killCreditListener != null) killCreditListener.onEnemyKilledForCredits(enemy.type.baseCreditReward(), currentDepth);
