@@ -121,8 +121,10 @@ R-HEAL (RuleKind.HEAL_PRICING)
 R-TELEGRAPH (RuleKind.TELEGRAPH)
   Registered attack list: BalanceSchema.telegraphAttacks(). No UN-readable
   (readable=NONE) attack may exceed TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION
-  (25% of reference eHP ~= 51 dmg) in one hit; NO boss attack may exceed
-  BOSS_HARD_SINGLE_HIT_FRACTION (35% ~= 72 dmg), telegraphed or not.
+  (25% of reference eHP ~= 51 dmg) in one hit. The 35% hard cap
+  (BOSS_HARD_SINGLE_HIT_FRACTION) now applies to boss verbs via R-BOSS-VERB-CAP
+  (order 6) — boss verbs are DERIVED per depth, not flat, so they are checked there
+  (at their derived values) rather than in this flat, depth-scaled trash-mob list.
   WHY: a death must feel like "I made a mistake", never a dice roll. Readable
   kinds: TELE (wind-up), LANE (cardinal-line tell), FACE (positional counter).
   NOTE: any NEW attack path must be added to the registered list — the audit
@@ -302,6 +304,38 @@ R-CREDITS (RuleKind.CREDITS) — the credit sink made real (order 3)
   offer base prices; SHOP_CREDITS_PER_POWER_POINT (36) is the single price-level knob.
   The shop is purchasable in-game end to end (stock -> price -> buy -> deduct ->
   deliver); order 3 finished the pricing half.
+
+R-BOSS-* (RuleKind.BOSS_GATE / BOSS_FAIR / BOSS_VERB_CAP / BOSS_REWARD / BOSS_AMMO) — bosses as BUILD CHECKS (order 6)
+  A boss's HP, DPT, every verb's damage, XP and credit reward are DERIVED at spawn by
+  BossBalance.statsForDepth from the SECTION 14 inputs (per-boss TARGET_FIGHT_TURNS +
+  survival ratio) through the GameMath BOSS BALANCE RULESET — there are ZERO flat boss
+  HP/damage/reward constants left. The five rules assert the derivation upholds the
+  contract at every act-boss depth (5, 10, 15, and every 5th floor in endless mode):
+    R-BOSS-GATE     with the DEPTH-1 starting loadout (reference DPT), turnsToKill(boss)
+                    >= BOSS_GATE_MIN_DAMAGE_MARGIN (2.0) x survivableTurns computed WITH
+                    the maximum modelled heal supply (25% eHP). The start weapon cannot
+                    win — a perfect-play hoarder dies at < half the damage needed. The
+                    margin = (expectedDPT/refDPT)/survivalRatio, so it RISES with depth
+                    (Overseer 2.08x is the tightest; Corruptor 2.56x; Hell Baron 3.04x).
+    R-BOSS-FAIR     the EXPECTED loadout gets a fight in [target, 1.5*target] turns with
+                    a survival ratio in [0.4, 0.7] (0.50 by construction).
+    R-BOSS-VERB-CAP every DERIVED verb <= 35% eHP; any verb > 25% is telegraphed (checked
+                    at the boss's canonical depth against the same caps as R-TELEGRAPH).
+    R-BOSS-REWARD   credit reward >= modelled fight consumption (ammo + heal value in shop
+                    units) x BOSS_REWARD_RISK_PREMIUM (1.3) — a boss floor is a net-positive
+                    payday, never a loss for progressing. XP flows from boss Threat Points.
+    R-BOSS-AMMO     the fight's ammo demand (eHP) is coverable by a full reserve at that
+                    depth + the arena ammo budget (BOSS_ARENA_AMMO_BUDGET_FRACTION), so the
+                    check tests your BUILD, not whether you arrived with full pockets.
+  WHY: knowledge-doc SECTION 9 problem 4 — the three bosses were flat, eyeballed HP priced
+  against the depth-1 shotgun, which is exactly why a level-1 weapon could beat them and
+  every upstream progression system became optional. Derivation makes "beat the boss with
+  the starting weapon" arithmetically impossible, verified by the audit. Soft ENRAGE
+  (BOSS_ENRAGE_DPT_RAMP_PER_TURN, +8%/turn past 1.5*target, telegraphed "FURIOUS") enforces
+  the R2 no-sponge ceiling by escalation, not a fail timer. The route generator guarantees a
+  reachable SHOP or CACHE in the layer before every boss (the "sharpen your knife" beat),
+  proven over 100 seeds (RouteMapGeneratorTest). Boss AI CHOREOGRAPHY is untouched — order 6
+  prices the fight, not the tactic brain.
 
 NEVER-SOFTLOCK (GameMath.emergencySupplyTriggers, not a schema band — a floor guard)
   A player who wastes ammo must never die to an empty inventory screen. When total
@@ -531,15 +565,27 @@ Corruptor acid                15 TELE             >30 OK
 Hell Baron cleave1            35 TELE              14 OK     
 Hell Baron cleave2            52 TELE               1 OK     
 
-BOSS RULESET (idea 6) — act-boss target fight = 18-40 turns ; survivalRatio band 0.40-0.70 ; single-hit caps: telegraph >25% eHP, hard 35% eHP
-boss         depth  expDPT      derivedHP     litHP HP?       fairDPT bigHit%eHP hitVerdict
-------------------------------------------------------------------------------------
-Overseer         5    32.5       585-1300       250 UNDER        14.1       14.6 OK        
-Corruptor       10    40.0       720-1600       450 UNDER        14.1        7.3 OK        
-Hell Baron      15    47.5       855-1900       700 UNDER        14.1       25.4 TELE-OK   
-------------------------------------------------------------------------------------
-  phase seams (3-phase act boss): 67% -> 33% -> 0% (death)  [GameMath.bossPhaseHealthThreshold]
-  litHP are PLACEHOLDERS: HP? flags the literal vs the derived band. Re-derive when boss fights ship.
+BOSS RULESET (order 6) — HP/DPT/verbs/reward all DERIVED (BossBalance), no flat constants. survivalRatio band 0.40-0.70 ; single-hit caps: telegraph >25% eHP, hard 35% eHP
+boss         depth  expDPT    derHP  bossDPT   target   gate fairRatio   reward  ammoCov
+------------------------------------------------------------------------------------------
+The Overseer     5    32.5      715     18.6       22  2.08x     0.50     1244    2.28x
+The Corruptor   10    40.0     1120     14.6       28  2.56x     0.50     1455    1.90x
+Hell Baron      15    47.5     1615     12.1       34  3.04x     0.50     1712    1.69x
+------------------------------------------------------------------------------------------
+  GATE holds when start-weapon TTK >= 2.0x survivable turns (WITH max heals = 25% eHP). phase seams (2-phase): 50% (death).
+boss verb                 dmg       %eHP capVerdict
+Overseer melee             14       6.8% OK
+Overseer charge            34      16.6% OK
+Overseer laser             21      10.2% OK
+Corruptor acid             21      10.2% OK
+Hell Baron fire             6       2.9% OK
+Hell Baron cleave1         21      10.2% OK
+Hell Baron cleave2         35      17.1% OK
+  gate = R-BOSS-GATE margin (start-weapon TTK / survivable turns; >=2.0 => start weapon CANNOT win).
+  fairRatio = R-BOSS-FAIR survival ratio for the expected loadout (band 0.40-0.70). reward = credits (RULE 6).
+  Bosses no longer have flat HP/damage/XP/credit constants — BossBalance.statsForDepth derives every number
+  per depth, so endless-mode bosses scale for free. Tune a boss via its *_TARGET_FIGHT_TURNS or the survival
+  ratio (SECTION 14), never a raw HP number.
 
 LEGEND: in?/gr?/<0.6?/band = OK inside band, UNDER below, OVER above.
   sustDPT = (clip*dmg)/(clip+reload).  powerScore = sustDPT*sqrt(ammoEff/anchor).

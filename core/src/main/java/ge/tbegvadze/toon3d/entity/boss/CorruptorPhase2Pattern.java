@@ -46,9 +46,10 @@ public final class CorruptorPhase2Pattern implements BossAttackPattern {
             int playerColumn = GameMath.worldToTile(player.positionX);
             int playerRow    = GameMath.worldToTile(player.positionY);
             buildAcidBurst(scratchTiles, playerColumn, playerRow, level);
-            boss.dangerTileSet.arm(new ArrayList<>(scratchTiles), EnemyConstants.CORRUPTOR_ACID_DAMAGE);
+            int acidDamage = boss.verbDamage(EnemyConstants.CORRUPTOR_ACID_DPT_FRACTION);
+            boss.dangerTileSet.arm(new ArrayList<>(scratchTiles), acidDamage);
             pendingResolve = true;
-            move = BossMove.telegraph(EnemyConstants.CORRUPTOR_ACID_DAMAGE);
+            move = BossMove.telegraph(acidDamage);
         }
         stepIndex++;
         return move;

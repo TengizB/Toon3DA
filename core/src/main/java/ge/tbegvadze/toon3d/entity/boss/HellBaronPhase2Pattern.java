@@ -14,7 +14,7 @@ import java.util.List;
  * Changes from phase 1:
  *   - Repositions every turn (no idle turns).
  *   - Firewall cooldown drops to HELL_BARON_FIREWALL_COOLDOWN_P2.
- *   - Cleave reach extends to 3 tiles, damage is HELL_BARON_CLEAVE_DAMAGE_P2.
+ *   - Cleave reach extends to 3 tiles; damage is the derived HELL_BARON_CLEAVE_P2_DPT_FRACTION of boss DPT.
  *   - Cleave still takes priority over firewall.
  */
 public final class HellBaronPhase2Pattern implements BossAttackPattern {
@@ -47,16 +47,16 @@ public final class HellBaronPhase2Pattern implements BossAttackPattern {
 
         if (manhattan <= 3) {
             buildCleaveTiles(scratchTiles, boss, playerColumn, playerRow, level, 3);
-            boss.dangerTileSet.arm(new ArrayList<>(scratchTiles),
-                    EnemyConstants.HELL_BARON_CLEAVE_DAMAGE_P2);
+            int cleaveDamage = boss.verbDamage(EnemyConstants.HELL_BARON_CLEAVE_P2_DPT_FRACTION);
+            boss.dangerTileSet.arm(new ArrayList<>(scratchTiles), cleaveDamage);
             pendingResolve = true;
-            move = BossMove.telegraph(EnemyConstants.HELL_BARON_CLEAVE_DAMAGE_P2);
+            move = BossMove.telegraph(cleaveDamage);
         } else if (stepIndex > 0 && stepIndex % EnemyConstants.HELL_BARON_FIREWALL_COOLDOWN_P2 == 0) {
             buildFirewall(scratchTiles, boss, playerColumn, playerRow, level);
-            boss.dangerTileSet.arm(new ArrayList<>(scratchTiles),
-                    EnemyConstants.HELL_BARON_FIRE_DAMAGE);
+            int fireDamage = boss.verbDamage(EnemyConstants.HELL_BARON_FIRE_DPT_FRACTION);
+            boss.dangerTileSet.arm(new ArrayList<>(scratchTiles), fireDamage);
             pendingResolve = true;
-            move = BossMove.telegraph(EnemyConstants.HELL_BARON_FIRE_DAMAGE);
+            move = BossMove.telegraph(fireDamage);
         } else {
             move = BossMove.reposition();
         }

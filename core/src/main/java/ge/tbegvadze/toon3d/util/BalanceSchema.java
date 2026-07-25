@@ -96,7 +96,17 @@ public final class BalanceSchema {
         /** R-CARD-BREAKPOINT (order 4): every level-up card crosses >= 1 TTK/TTD breakpoint vs the region soldier. */
         CARD_BREAKPOINT,
         /** R-REGION (order 5): region TP dial is monotonic + bounded; C/D spend more than A; coupling holds per lane. */
-        REGION_DANGER
+        REGION_DANGER,
+        /** R-BOSS-GATE (order 6): the DEPTH-1 starting loadout cannot win — turnsToKill >= 2x survivableTurns (with max heals). */
+        BOSS_GATE,
+        /** R-BOSS-FAIR (order 6): the EXPECTED loadout gets a real but winnable fight — length + survival ratio in band. */
+        BOSS_FAIR,
+        /** R-BOSS-VERB-CAP (order 6): every derived boss verb <= 35% eHP; any verb > 25% must be telegraphed. */
+        BOSS_VERB_CAP,
+        /** R-BOSS-REWARD (order 6): a boss's reward refunds the modelled fight consumption times the risk premium. */
+        BOSS_REWARD,
+        /** R-BOSS-AMMO (order 6): the fight's ammo demand is coverable by reserve caps + the boss-arena ammo budget. */
+        BOSS_AMMO
     }
 
     // =====================================================================================
@@ -451,13 +461,10 @@ public final class BalanceSchema {
         registry.add(new TelegraphAttackSpec("Revenant strike",    BalanceConfig.REVENANT_ATTACK_DAMAGE,    "NONE", false));
         registry.add(new TelegraphAttackSpec("Vortex Eye bolt",    BalanceConfig.VORTEX_EYE_ATTACK_DAMAGE,  "LANE", false));
         registry.add(new TelegraphAttackSpec("Blight Corr. smash", BalanceConfig.BLIGHT_CORRUPTOR_ATTACK_DAMAGE, "NONE", false));
-        // Boss attacks: every damaging boss verb is telegraphed one turn ahead by the intent system.
-        registry.add(new TelegraphAttackSpec("Overseer laser",     BalanceConfig.OVERSEER_LASER_DAMAGE,     "TELE", true));
-        registry.add(new TelegraphAttackSpec("Overseer charge",    BalanceConfig.OVERSEER_CHARGE_DAMAGE,    "TELE", true));
-        registry.add(new TelegraphAttackSpec("Overseer melee",     BalanceConfig.OVERSEER_MELEE_DAMAGE,     "NONE", true));
-        registry.add(new TelegraphAttackSpec("Corruptor acid",     BalanceConfig.CORRUPTOR_ACID_DAMAGE,     "TELE", true));
-        registry.add(new TelegraphAttackSpec("Hell Baron cleave1", BalanceConfig.HELL_BARON_CLEAVE_DAMAGE_P1, "TELE", true));
-        registry.add(new TelegraphAttackSpec("Hell Baron cleave2", BalanceConfig.HELL_BARON_CLEAVE_DAMAGE_P2, "TELE", true));
+        // Boss verbs are NOT listed here (order 6): their damage is DERIVED per depth (a fraction of the
+        // boss's DPT), not a flat constant scaled by the trash-mob depth curve, so the generic telegraph
+        // audit's depth scaling does not apply. Boss verbs get their own single-hit-cap rule instead —
+        // R-BOSS-VERB-CAP (bossVerbCapResults), which checks each derived verb against the 35%/25% caps.
         return Collections.unmodifiableList(registry);
     }
 
@@ -640,6 +647,11 @@ public final class BalanceSchema {
         results.addAll(xpPaceResults());
         results.addAll(cardBreakpointResults());
         results.addAll(regionResults());
+        results.addAll(bossGateResults());
+        results.addAll(bossFairResults());
+        results.addAll(bossVerbCapResults());
+        results.addAll(bossRewardResults());
+        results.addAll(bossAmmoResults());
         return results;
     }
 
@@ -1395,6 +1407,185 @@ public final class BalanceSchema {
         results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "tier budgets monotonic",
                 monotonic ? 1f : 0f, 1f, 1f, monotonic,
                 "TIER_ABILITY_PP_BUDGET_* must not decrease as rarity rises"));
+        return results;
+    }
+
+    // =====================================================================================
+    // R-BOSS-* (new-game-balancr order 6) — BOSSES AS BUILD CHECKS. A boss's HP, DPT, per-verb damage and
+    // reward are all DERIVED (BossBalance) from SECTION 14 inputs, never flat constants, so these rules
+    // assert the derivation upholds the contract at every act-boss depth:
+    //   R-BOSS-GATE     the DEPTH-1 starting loadout CANNOT win — even a perfect-play hoarder dies at less
+    //                   than 1/MARGIN of the damage needed, WITH the maximum heal supply. Beating a boss
+    //                   with the start weapon is arithmetically impossible, not merely hard.
+    //   R-BOSS-FAIR     the EXPECTED loadout gets a real but winnable fight — length in [target, 1.5*target]
+    //                   and survival ratio in [0.4, 0.7].
+    //   R-BOSS-VERB-CAP every derived verb <= 35% eHP; any verb > 25% is telegraphed (boss verbs are the
+    //                   likeliest fairness-bypass path, so every one is checked at its derived value).
+    //   R-BOSS-REWARD   reward >= modelled fight consumption * risk premium (a boss is a net-positive payday).
+    //   R-BOSS-AMMO     the fight's ammo demand is coverable by reserve caps + the arena ammo budget, so the
+    //                   check tests your BUILD, not whether you entered with full pockets.
+    // =====================================================================================
+
+    /** One boss verb the fairness caps are proven on: which boss, its display name, DPT fraction, telegraph flag. */
+    public static final class BossVerbSpec {
+        public final BossBalance.Archetype archetype;
+        public final String  verbName;
+        public final float   dptFraction;
+        public final boolean telegraphed;
+
+        BossVerbSpec(BossBalance.Archetype archetype, String verbName, float dptFraction, boolean telegraphed) {
+            this.archetype   = archetype;
+            this.verbName    = verbName;
+            this.dptFraction = dptFraction;
+            this.telegraphed = telegraphed;
+        }
+    }
+
+    private static final List<BossVerbSpec> BOSS_VERBS = buildBossVerbRegistry();
+
+    private static List<BossVerbSpec> buildBossVerbRegistry() {
+        List<BossVerbSpec> registry = new ArrayList<>();
+        registry.add(new BossVerbSpec(BossBalance.Archetype.OVERSEER,   "Overseer melee",
+                BalanceConfig.OVERSEER_MELEE_DPT_FRACTION,  false));
+        registry.add(new BossVerbSpec(BossBalance.Archetype.OVERSEER,   "Overseer charge",
+                BalanceConfig.OVERSEER_CHARGE_DPT_FRACTION, true));
+        registry.add(new BossVerbSpec(BossBalance.Archetype.OVERSEER,   "Overseer laser",
+                BalanceConfig.OVERSEER_LASER_DPT_FRACTION,  true));
+        registry.add(new BossVerbSpec(BossBalance.Archetype.CORRUPTOR,  "Corruptor acid",
+                BalanceConfig.CORRUPTOR_ACID_DPT_FRACTION,  true));
+        registry.add(new BossVerbSpec(BossBalance.Archetype.HELL_BARON, "Hell Baron fire",
+                BalanceConfig.HELL_BARON_FIRE_DPT_FRACTION,      true));
+        registry.add(new BossVerbSpec(BossBalance.Archetype.HELL_BARON, "Hell Baron cleave1",
+                BalanceConfig.HELL_BARON_CLEAVE_P1_DPT_FRACTION, true));
+        registry.add(new BossVerbSpec(BossBalance.Archetype.HELL_BARON, "Hell Baron cleave2",
+                BalanceConfig.HELL_BARON_CLEAVE_P2_DPT_FRACTION, true));
+        return Collections.unmodifiableList(registry);
+    }
+
+    /** The registered boss verbs — BalanceReport's BOSS RULESET table iterates exactly this list. */
+    public static List<BossVerbSpec> bossVerbs() {
+        return BOSS_VERBS;
+    }
+
+    /**
+     * R-BOSS-GATE: with the DEPTH-1 starting loadout (reference DPT), the turns to kill the boss must be at
+     * least {@link BalanceConfig#BOSS_GATE_MIN_DAMAGE_MARGIN} times the turns the player survives even WITH
+     * the maximum modelled heal supply — so the start weapon can never win. The margin is depth-independent
+     * of the fight length and rises with the expected-DPT gate, so the shallowest boss is the tightest case.
+     */
+    public static List<RuleResult> bossGateResults() {
+        List<RuleResult> results = new ArrayList<>();
+        float minMargin  = BalanceConfig.BOSS_GATE_MIN_DAMAGE_MARGIN;
+        float maxHeals   = BalanceConfig.REFERENCE_PLAYER_EHP
+                * BalanceConfig.BOSS_GATE_MODELED_HEAL_SUPPLY_EHP_FRACTION;
+        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
+            BossStats stats = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
+            float startTurnsToKill = GameMath.bossFightTurnsForPlayerDamagePerTurn(
+                    stats.effectiveHitPoints, BalanceConfig.REFERENCE_PLAYER_DPT);
+            float survivableTurns  = GameMath.bossFightTurnsForPlayerDamagePerTurn(
+                    BalanceConfig.REFERENCE_PLAYER_EHP + maxHeals, stats.damagePerTurn);
+            float margin = survivableTurns > 0f ? startTurnsToKill / survivableTurns : Float.POSITIVE_INFINITY;
+            results.add(new RuleResult(RuleKind.BOSS_GATE, archetype.displayName + " depth " + archetype.canonicalDepth,
+                    margin, minMargin, Float.POSITIVE_INFINITY, margin >= minMargin,
+                    String.format("start-weapon TTK %.1f vs survivable %.1f turns (with max heals) — must be >= %.1fx",
+                            startTurnsToKill, survivableTurns, minMargin)));
+        }
+        return results;
+    }
+
+    /**
+     * R-BOSS-FAIR: the EXPECTED player at each boss depth gets a fight whose LENGTH lands in
+     * [target, 1.5*target] turns and whose SURVIVAL RATIO lands in [0.4, 0.7]. Both hold by construction of
+     * the derivation, so a broken input (a bad target or ratio) surfaces here rather than in a live fight.
+     */
+    public static List<RuleResult> bossFairResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
+            BossStats stats     = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
+            float expectedDpt   = BossBalance.expectedPlayerDamagePerTurn(archetype.canonicalDepth);
+            float fightTurns    = GameMath.bossFightTurnsForPlayerDamagePerTurn(
+                    stats.effectiveHitPoints, expectedDpt);
+            float lengthMin     = stats.targetFightTurns;
+            float lengthMax     = stats.upperFightTurnsCap; // == 1.5 * target
+            results.add(new RuleResult(RuleKind.BOSS_FAIR, archetype.displayName + " fight length",
+                    fightTurns, lengthMin, lengthMax, fightTurns >= lengthMin && fightTurns <= lengthMax,
+                    "expected-loadout fight turns must land in [target, 1.5*target]"));
+
+            float survivalRatio = GameMath.bossSurvivalCheckRatio(
+                    BalanceConfig.REFERENCE_PLAYER_EHP, stats.damagePerTurn, fightTurns);
+            results.add(new RuleResult(RuleKind.BOSS_FAIR, archetype.displayName + " survival ratio",
+                    survivalRatio, BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MIN,
+                    BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MAX,
+                    survivalRatio >= BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MIN
+                            && survivalRatio <= BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MAX,
+                    "a no-heal player survives this fraction of the fight"));
+        }
+        return results;
+    }
+
+    /**
+     * R-BOSS-VERB-CAP: every derived boss verb, evaluated at the boss's canonical depth, respects the
+     * single-hit fairness caps — no hit over 35% of reference eHP (hard cap, telegraphed or not), and any
+     * hit over 25% must be telegraphed a turn ahead. The band max is 25% for an un-telegraphed verb, 35%
+     * for a telegraphed one; the value is the verb's fraction of reference eHP.
+     */
+    public static List<RuleResult> bossVerbCapResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (BossVerbSpec verb : BOSS_VERBS) {
+            BossStats stats = BossBalance.statsForDepth(verb.archetype, verb.archetype.canonicalDepth);
+            int damage = stats.verbDamage(verb.dptFraction);
+            float fraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
+                    damage, BalanceConfig.REFERENCE_PLAYER_EHP);
+            float bandMax = verb.telegraphed
+                    ? BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION
+                    : BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION;
+            results.add(new RuleResult(RuleKind.BOSS_VERB_CAP, verb.verbName, fraction, 0f, bandMax,
+                    fraction <= bandMax,
+                    String.format("derived %d dmg = %.0f%% eHP; %s cap %.0f%%", damage, fraction * 100f,
+                            verb.telegraphed ? "telegraphed" : "un-telegraphed", bandMax * 100f)));
+        }
+        return results;
+    }
+
+    /**
+     * R-BOSS-REWARD: a boss's credit reward must be at least the modelled fight consumption (ammo + heal
+     * value) times the risk premium — so the fight is a net-positive payday, never a resource loss for
+     * progressing. Holds by construction; the tiny tolerance absorbs integer rounding of the reward.
+     */
+    public static List<RuleResult> bossRewardResults() {
+        List<RuleResult> results = new ArrayList<>();
+        float premium = BalanceConfig.BOSS_REWARD_RISK_PREMIUM;
+        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
+            BossStats stats = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
+            float consumption = BossBalance.modelledConsumptionCredits(stats.effectiveHitPoints);
+            float ratio = consumption > 0f ? stats.creditReward / consumption : Float.POSITIVE_INFINITY;
+            results.add(new RuleResult(RuleKind.BOSS_REWARD, archetype.displayName + " reward/consumption",
+                    ratio, premium - 0.02f, Float.POSITIVE_INFINITY, ratio >= premium - 0.02f,
+                    String.format("reward %d credits vs modelled consumption %.0f (>= %.2fx)",
+                            stats.creditReward, consumption, premium)));
+        }
+        return results;
+    }
+
+    /**
+     * R-BOSS-AMMO: the fight's ammo DEMAND (the eHP a build must burn through) must be coverable by a full
+     * reserve at the boss depth PLUS the arena's placed ammo budget — a build check tests the BUILD, not
+     * whether the player happened to arrive with full pockets. Coverage = (reserve + arena) / demand >= 1.
+     */
+    public static List<RuleResult> bossAmmoResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
+            BossStats stats = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
+            float demand       = BossBalance.modelledAmmoDemandDamage(stats.effectiveHitPoints);
+            float reserveDamage = BalanceConfig.RESERVE_BANKING_FLOORS_TARGET
+                    * GameMath.floorDemandAtDepth(modelFloorDemand(),
+                            BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, archetype.canonicalDepth);
+            float arenaDamage  = BossBalance.arenaAmmoBudgetDamage(stats.effectiveHitPoints);
+            float coverage     = demand > 0f ? (reserveDamage + arenaDamage) / demand : Float.POSITIVE_INFINITY;
+            results.add(new RuleResult(RuleKind.BOSS_AMMO, archetype.displayName + " ammo coverage",
+                    coverage, 1f, Float.POSITIVE_INFINITY, coverage >= 1f,
+                    String.format("reserve %.0f + arena %.0f vs demand %.0f damage", reserveDamage, arenaDamage, demand)));
+        }
         return results;
     }
 

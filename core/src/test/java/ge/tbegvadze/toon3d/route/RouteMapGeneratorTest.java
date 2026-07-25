@@ -153,6 +153,41 @@ class RouteMapGeneratorTest {
         }
     }
 
+    /**
+     * PRE-BOSS PROVISIONING GUARANTEE (new-game-balancr order 6): the layer immediately before every boss
+     * floor must offer a SHOP or CACHE that WIRES FORWARD to the boss — a reachable "sharpen your knife"
+     * stop so the boss tests the BUILD, not whether the player happened to arrive stocked. Proven over 100
+     * seeds across every boss floor in the default plan (depths 5, 10, 15).
+     */
+    @Test
+    void everyBossIsPrecededByReachableProvisioningOverAHundredSeeds() {
+        RegionPlan plan = RegionPlan.defaultPlan();
+        List<String> failures = new ArrayList<>();
+        for (long seed = 0; seed < 100; seed++) {
+            RouteMap map = generator().generate(seed, plan);
+            List<List<RouteNode>> layers = map.getLayers();
+            for (int depth = 1; depth < layers.size(); depth++) {
+                if (!GameMath.isBossFloor(depth)) continue;
+                List<RouteNode> bossLayer = layers.get(depth);
+                if (bossLayer.size() != 1 || bossLayer.get(0).type != RouteNodeType.BOSS) continue;
+                RouteNode boss = bossLayer.get(0);
+                boolean reachableProvisioning = false;
+                for (RouteNode node : layers.get(depth - 1)) {
+                    boolean provisions = node.type == RouteNodeType.SHOP || node.type == RouteNodeType.CACHE;
+                    if (provisions && node.outgoing.contains(boss)) {
+                        reachableProvisioning = true;
+                        break;
+                    }
+                }
+                if (!reachableProvisioning) {
+                    failures.add("seed " + seed + " depth " + depth + ": no reachable SHOP/CACHE before the boss");
+                }
+            }
+        }
+        assertTrue(failures.isEmpty(),
+                () -> "Pre-boss provisioning guarantee violated:\n" + String.join("\n", failures));
+    }
+
     @Test
     void everyRollableLayerOffersARealChoiceAndCombatPastDepthOne() {
         RegionPlan plan = RegionPlan.defaultPlan();

@@ -315,6 +315,74 @@ class BalanceAuditTest {
                 "at depth 1 the starting player is on-curve and never boosted");
     }
 
+    /**
+     * R-BOSS-GATE (order 6): with the DEPTH-1 starting loadout, every boss is un-winnable — the start
+     * weapon needs at least 2x as many turns to kill the boss as the player survives WITH maximum heals.
+     * Beating a boss with the starting weapon is arithmetically impossible, not merely hard.
+     */
+    @Test
+    void startingLoadoutCannotWinAnyBossFight() {
+        assertNoViolations(BalanceSchema.bossGateResults());
+    }
+
+    /**
+     * R-BOSS-FAIR (order 6): the EXPECTED loadout at each boss depth gets a real but winnable fight — the
+     * length lands in [target, 1.5*target] turns and the survival ratio in [0.4, 0.7].
+     */
+    @Test
+    void expectedLoadoutGetsAFairBossFight() {
+        assertNoViolations(BalanceSchema.bossFairResults());
+    }
+
+    /**
+     * R-BOSS-VERB-CAP (order 6): every DERIVED boss verb respects the single-hit fairness caps — no hit
+     * over 35% of reference eHP, and any hit over 25% is telegraphed. Boss verbs are the likeliest
+     * fairness-bypass path, so every one is checked at its derived value.
+     */
+    @Test
+    void everyBossVerbRespectsTheSingleHitCaps() {
+        assertNoViolations(BalanceSchema.bossVerbCapResults());
+    }
+
+    /**
+     * R-BOSS-REWARD (order 6): every boss's credit reward is at least its modelled fight consumption times
+     * the risk premium — a boss floor is a net-positive payday, never a resource loss for progressing.
+     */
+    @Test
+    void bossRewardRefundsTheFightPlusPremium() {
+        assertNoViolations(BalanceSchema.bossRewardResults());
+    }
+
+    /**
+     * R-BOSS-AMMO (order 6): each boss fight's ammo demand is coverable by a full reserve at that depth plus
+     * the arena's placed ammo budget — the build check tests your BUILD, not whether you arrived with full
+     * pockets.
+     */
+    @Test
+    void bossFightAmmoDemandIsCoverable() {
+        assertNoViolations(BalanceSchema.bossAmmoResults());
+    }
+
+    /**
+     * Order-6 acceptance criterion (zero flat boss constants): boss HP and every verb's damage are DERIVED
+     * per depth by {@link BossBalance}, so a DEEPER endless-mode boss re-derives strictly MORE HP than its
+     * canonical instance — proof the stats are computed from depth, not read from a flat constant.
+     */
+    @Test
+    void bossStatsScaleWithDepthNotFlatConstants() {
+        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
+            BossStats canonical = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
+            // The same archetype re-fought a full boss-rotation deeper (endless mode) must be strictly tankier.
+            int deeperDepth = archetype.canonicalDepth + 3 * Constants.BOSS_FLOOR_INTERVAL;
+            BossStats deeper = BossBalance.statsForDepth(archetype, deeperDepth);
+            assertTrue(deeper.effectiveHitPoints > canonical.effectiveHitPoints,
+                    () -> archetype.displayName + " deeper HP " + deeper.effectiveHitPoints
+                            + " must exceed canonical " + canonical.effectiveHitPoints + " (derived, not flat)");
+            assertTrue(deeper.xpReward > canonical.xpReward,
+                    () -> archetype.displayName + " deeper XP must exceed canonical (reward scales with depth)");
+        }
+    }
+
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */
     @Test
     void fullSchemaSweepHasNoViolations() {

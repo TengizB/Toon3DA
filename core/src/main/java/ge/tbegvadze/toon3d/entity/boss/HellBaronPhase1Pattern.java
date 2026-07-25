@@ -49,16 +49,16 @@ public final class HellBaronPhase1Pattern implements BossAttackPattern {
 
         if (manhattan == 1) {
             buildCleaveTiles(scratchTiles, boss, playerColumn, playerRow, level, 1);
-            boss.dangerTileSet.arm(new ArrayList<>(scratchTiles),
-                    EnemyConstants.HELL_BARON_CLEAVE_DAMAGE_P1);
+            int cleaveDamage = boss.verbDamage(EnemyConstants.HELL_BARON_CLEAVE_P1_DPT_FRACTION);
+            boss.dangerTileSet.arm(new ArrayList<>(scratchTiles), cleaveDamage);
             pendingResolve = true;
-            move = BossMove.telegraph(EnemyConstants.HELL_BARON_CLEAVE_DAMAGE_P1);
+            move = BossMove.telegraph(cleaveDamage);
         } else if (stepIndex > 0 && stepIndex % EnemyConstants.HELL_BARON_FIREWALL_COOLDOWN_P1 == 0) {
             buildFirewall(scratchTiles, boss, playerColumn, playerRow, level);
-            boss.dangerTileSet.arm(new ArrayList<>(scratchTiles),
-                    EnemyConstants.HELL_BARON_FIRE_DAMAGE);
+            int fireDamage = boss.verbDamage(EnemyConstants.HELL_BARON_FIRE_DPT_FRACTION);
+            boss.dangerTileSet.arm(new ArrayList<>(scratchTiles), fireDamage);
             pendingResolve = true;
-            move = BossMove.telegraph(EnemyConstants.HELL_BARON_FIRE_DAMAGE);
+            move = BossMove.telegraph(fireDamage);
         } else if (stepIndex % 2 == 0) {
             move = BossMove.reposition();
         } else {

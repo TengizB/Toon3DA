@@ -329,8 +329,8 @@ public final class BalanceConfig {
     // per-archetype XP constants that lived here were DELETED: every enemy's XP is computed from its
     // Threat Points via GameMath.xpRewardAtDepth (xpReward = XP_PER_THREAT_POINT * enemyThreatAtDepth),
     // so dangerous enemies automatically pay more and a new archetype can never ship with a forgotten
-    // XP value. The single knob is XP_PER_THREAT_POINT (SECTION 7). Boss XP stays a flat placeholder
-    // (XP_REWARD_BOSS_BASE, SECTION 14) pending the boss ruleset (order 6).
+    // XP value. The single knob is XP_PER_THREAT_POINT (SECTION 7). Boss XP is DERIVED too (order 6):
+    // BossBalance prices it from the boss's depth-scaled Threat Points — no flat placeholder anywhere.
 
     // Per-kill credit rewards (the currency payout for each archetype). Credits stay hand-set (order 4
     // only re-derives XP); the credit economy is order 3's concern.
@@ -1267,11 +1267,10 @@ public final class BalanceConfig {
     // and threaten a PREPARED player), so the SECTION 9 golden-ratio / TP bands do NOT apply
     // to them. A boss is tuned to a fight-LENGTH target and a phase-structured threat curve
     // instead — see GameMath's BOSS BALANCE RULESET block and docs/game-balance-authority.txt
-    // (Boss appendix). Boss FIGHTS are deferred (they need story/run structure), so these are
-    // a CONTRACT the future boss work must satisfy: the targets/bands below feed the boss
-    // formulas to RE-DERIVE boss HP/damage/reward, never to bless a literal HP constant. The
-    // current placeholder boss stats (OVERSEER/CORRUPTOR/HELL_BARON in EnemyConstants, and
-    // XP/CREDIT_REWARD_BOSS_BASE in GameBalance) are flagged "to be re-derived via this ruleset".
+    // (Boss appendix). Order 6 makes this LIVE: BossBalance re-derives every boss's HP, per-verb damage,
+    // and reward at spawn from the targets/bands below through the GameMath formulas — there are NO flat
+    // boss HP/damage/reward constants anymore. Changing a boss's difficulty = tuning its TARGET_FIGHT_TURNS
+    // or the SURVIVAL_RATIO here (semantic dials), never editing a literal HP number.
     // =====================================================================================
 
     // --- RULE 1: HP from fight length. Target fight-length BANDS (turns), never a flat HP.
@@ -1323,53 +1322,100 @@ public final class BalanceConfig {
     // --- RULE 6: reward priced by consumption * a risk premium (so a boss REFUNDS the fight + profit).
     /** Profit margin a boss pays over the ammo+heal resources its fight consumes (> 1, never a net loss). Range: 1.2–1.6. */
     public static final float BOSS_REWARD_RISK_PREMIUM             = 1.3f;
+    /**
+     * Fraction of the fight's ammo consumption the BOSS ARENA guarantees via placed pickups (RULE 5 / the
+     * AMMO CHECK): a build check must test your BUILD, not whether you happened to enter with full pockets,
+     * so the arena tops the reserve cap up to at least this share of the modelled ammo demand. The boss-floor
+     * generator places the pickups; {@code BossBalance.arenaAmmoBudgetDamage} is the modelled quantity the
+     * audit charges against. Range: 0.3–0.7.
+     */
+    public static final float BOSS_ARENA_AMMO_BUDGET_FRACTION      = 0.50f;
 
-    // -------------------------------------------------------------------------------------
-    // BOSS STATS — CONSOLIDATED from EnemyConstants / GameBalance (Balance Authority, order 1).
-    // Every number below is still a FLAT PLACEHOLDER flagged "to be re-derived via the boss
-    // ruleset above" (order 6 of this series); moving them here makes them tunable from the
-    // single source of truth and visible to the schema. Cosmetic boss values (accent colours,
-    // texture paths, telegraph visuals) stay in EnemyConstants.
-    // -------------------------------------------------------------------------------------
+    // --- RULE 3 (soft enrage, not a timer): once a fight drags past the upper cap (1.5 * target) the boss
+    // gains a per-turn DPT ramp so turtling past the survival-check math stops working. Telegraphed, never a
+    // fail-state — R2's ceiling is enforced by ESCALATION, not a clock.
+    /** Extra boss damage per turn spent beyond the upper fight-turns cap, as a fraction of the base hit. Range: 0.05–0.12. */
+    public static final float BOSS_ENRAGE_DPT_RAMP_PER_TURN        = 0.08f;
 
-    // Boss rewards (PLACEHOLDERS — RULE 6 re-derives these as consumption * risk premium).
-    public static final int   XP_REWARD_BOSS_BASE     = 500;
-    public static final int   CREDIT_REWARD_BOSS_BASE = 250;
+    // --- RULE 5 (the build check, as an assertion): with the DEPTH-1 STARTING loadout a perfect-play hoarder
+    // must DIE at less than 1/MARGIN of the damage needed, WITH the maximum heal supply the fight can offer.
+    /** turnsToKill(start) must be >= this * survivableTurns(bossDPT, eHP + max heals) for every boss (R-BOSS-GATE). Range: 1.8–2.5. */
+    public static final float BOSS_GATE_MIN_DAMAGE_MARGIN          = 2.0f;
+    /**
+     * The maximum heal supply the GATE credits to the fight, as a fraction of reference eHP (arena drops +
+     * a bounded carry). Kept modest because the FIRST boss (Overseer, only ~+30% expected DPT over the start
+     * player) is the tightest gate — like the Railgun scarcity waiver, the shallowest case is the real limiter.
+     * Raising it narrows the gate margin at the Overseer first. Range: 0.15–0.35.
+     */
+    public static final float BOSS_GATE_MODELED_HEAL_SUPPLY_EHP_FRACTION = 0.25f;
+
+    // =====================================================================================
+    // BOSS STATS — DERIVED, NEVER SET (order 6). The flat HP / verb-damage / reward PLACEHOLDERS that
+    // used to live here are DELETED. Boss HP and DPT are now COMPUTED at spawn by BossBalance from the
+    // inputs above (target fight turns + survival ratio) through the GameMath boss ruleset; each verb's
+    // damage is a FRACTION of the derived boss DPT (below), so tuning the survival ratio retunes every
+    // verb coherently. Changing a boss's difficulty = tuning its TARGET_FIGHT_TURNS or the SURVIVAL_RATIO
+    // — semantic dials, not raw HP. Cosmetic boss values (accent colours, sprites) stay in EnemyConstants.
+    // Non-damage gameplay constants (ranges, cooldowns, counts, radii, heal cadence) stay flat below —
+    // they shape the CHOREOGRAPHY, which this order leaves untouched; only HP/damage/reward are derived.
+    // =====================================================================================
+
+    /** Boss phases: one HP bar split into this many equal escalation phases (RULE 4). 2 = phase-2 at 50%. */
+    public static final int   BOSS_PHASE_COUNT                     = 2;
+
+    // Per-boss TARGET FIGHT TURNS — the RULE-1 dial. Each sits inside the act band [18, 40] and escalates
+    // by act (a deeper boss is a longer fight). bossHP = expectedPlayerSustainedDpt(depth) * target.
+    /** The Overseer's target fight length (turns), inside the act band. Range: 18–40. */
+    public static final float OVERSEER_TARGET_FIGHT_TURNS          = 22f;
+    /** The Corruptor's target fight length (turns), inside the act band. Range: 18–40. */
+    public static final float CORRUPTOR_TARGET_FIGHT_TURNS         = 28f;
+    /** Hell Baron's target fight length (turns), inside the act band. Range: 18–40. */
+    public static final float HELL_BARON_TARGET_FIGHT_TURNS        = 34f;
+
+    // VERB DAMAGE TABLES — each boss verb's single-hit damage as a FRACTION of that boss's derived DPT
+    // (order 6, TECHNICAL NOTES). A telegraphed signature hit is a multiple of the sustained per-turn
+    // average; an un-telegraphed poke is a small fraction (it must stay under 25% eHP, RULE 3). All are
+    // audited against the 35%/25% single-hit caps by R-BOSS-VERB-CAP at the derived values.
 
     // The Overseer (depth 5) — security core robot; laser lanes + melee charge.
-    public static final int   OVERSEER_MAX_HP               = 250;
     public static final int   OVERSEER_DEPTH                = 5;
-    public static final int   OVERSEER_LASER_DAMAGE         = 20;
-    public static final int   OVERSEER_CHARGE_DAMAGE        = 30;
+    /** MELEE (UN-telegraphed poke) as a fraction of boss DPT — must resolve under 25% eHP. Range: 0.5–1.0. */
+    public static final float OVERSEER_MELEE_DPT_FRACTION   = 0.75f;
+    /** CHARGE (telegraphed line strike) as a fraction of boss DPT — the signature hit. Range: 1.2–2.2. */
+    public static final float OVERSEER_CHARGE_DPT_FRACTION  = 1.80f;
+    /** LASER (telegraphed lane) as a fraction of boss DPT — the ranged tell (EnemyType headline). Range: 0.8–1.4. */
+    public static final float OVERSEER_LASER_DPT_FRACTION   = 1.10f;
+    /** One-time REPAIR total, as a fraction of the boss's DERIVED max HP, spread over OVERSEER_HEAL_TURNS. Range: 0.18–0.30. */
+    public static final float OVERSEER_HEAL_TOTAL_HP_FRACTION = 0.24f;
     public static final int   OVERSEER_RAM_COOLDOWN         = 3;
     public static final int   OVERSEER_CHARGE_RANGE_TILES   = 5;
     public static final int   OVERSEER_CHARGE_RECOVERY_TURNS = 1;
     public static final int   OVERSEER_ADDS_CAP             = 4;
     public static final int   OVERSEER_SUMMON_COUNT         = 2;
-    public static final int   OVERSEER_MELEE_DAMAGE         = 14;
     public static final int   OVERSEER_FIRE_LANE_LENGTH     = 3;
     public static final int   OVERSEER_TOXIC_RADIUS         = 1;
     public static final float OVERSEER_HEAL_HP_THRESHOLD    = 0.35f;
     public static final int   OVERSEER_HEAL_TURNS           = 5;
-    public static final int   OVERSEER_HEAL_PER_TURN        = 12;
 
     // The Corruptor (depth 10) — mutated scientist; summoner + acid burst.
-    public static final int   CORRUPTOR_MAX_HP              = 450;
     public static final int   CORRUPTOR_DEPTH               = 10;
+    /** ACID (telegraphed burst) as a fraction of boss DPT. Range: 1.0–1.8. */
+    public static final float CORRUPTOR_ACID_DPT_FRACTION   = 1.40f;
     public static final int   CORRUPTOR_SUMMON_COOLDOWN     = 3;
     public static final int   CORRUPTOR_MINION_CAP          = 5;
-    public static final int   CORRUPTOR_ACID_DAMAGE         = 15;
     public static final int   CORRUPTOR_ACID_POOL_DURATION  = 3;
 
     // Hell Baron (depth 15) — armored greater demon; firewall + enrage.
-    public static final int   HELL_BARON_MAX_HP             = 700;
     public static final int   HELL_BARON_DEPTH              = 15;
+    /** FIRE (telegraphed hazard tick) as a fraction of boss DPT — the DOT seed. Range: 0.3–0.7. */
+    public static final float HELL_BARON_FIRE_DPT_FRACTION      = 0.50f;
+    /** CLEAVE phase-1 (telegraphed) as a fraction of boss DPT. Range: 1.3–2.0. */
+    public static final float HELL_BARON_CLEAVE_P1_DPT_FRACTION = 1.70f;
+    /** CLEAVE phase-2 (telegraphed, the enraged signature) as a fraction of boss DPT. Range: 2.2–3.4. */
+    public static final float HELL_BARON_CLEAVE_P2_DPT_FRACTION = 2.90f;
     public static final int   HELL_BARON_FIREWALL_COOLDOWN_P1 = 4;
     public static final int   HELL_BARON_FIREWALL_COOLDOWN_P2 = 2;
     public static final int   HELL_BARON_FIREWALL_DURATION  = 4;
-    public static final int   HELL_BARON_FIRE_DAMAGE        = 12;
-    public static final int   HELL_BARON_CLEAVE_DAMAGE_P1   = 35;
-    public static final int   HELL_BARON_CLEAVE_DAMAGE_P2   = 52;
 
     // Overseer Hunter-Killer brain tactic weights (moved from GameBalance; boss AI aggression
     // is a difficulty dial). BOSS_TACTIC_DEBUG_LOG stays in GameBalance (dev instrumentation).

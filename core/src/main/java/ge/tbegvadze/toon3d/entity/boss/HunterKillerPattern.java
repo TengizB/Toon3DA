@@ -218,7 +218,8 @@ public final class HunterKillerPattern implements BossAttackPattern {
             consecutiveMoveTurns = 0;          // a repair tick is a plant, never a kite
             regen.healTurnsLeft--;
             if (regen.healTurnsLeft <= 0) regen.healActive = false;   // this was the final repair tick
-            return BossMove.heal(EnemyConstants.OVERSEER_HEAL_PER_TURN);
+            return BossMove.heal(boss.healPerTurn(
+                    EnemyConstants.OVERSEER_HEAL_TOTAL_HP_FRACTION, EnemyConstants.OVERSEER_HEAL_TURNS));
         }
 
         // If no tactic is in progress, choose the next one from the situation.
@@ -391,7 +392,7 @@ public final class HunterKillerPattern implements BossAttackPattern {
                 return buildFleeDash(boss, playerColumn, playerRow);
 
             case MELEE:
-                return BossMove.melee(EnemyConstants.OVERSEER_MELEE_DAMAGE);
+                return BossMove.melee(boss.verbDamage(EnemyConstants.OVERSEER_MELEE_DPT_FRACTION));
 
             case SUMMON:
                 return BossMove.summon(pickSummonType(), EnemyConstants.OVERSEER_SUMMON_COUNT,
@@ -496,9 +497,10 @@ public final class HunterKillerPattern implements BossAttackPattern {
             return BossMove.none();
         }
         windupAborted = false;
-        boss.dangerTileSet.arm(footprintScratch, EnemyConstants.OVERSEER_CHARGE_DAMAGE,
+        int chargeDamage = boss.verbDamage(EnemyConstants.OVERSEER_CHARGE_DPT_FRACTION);
+        boss.dangerTileSet.arm(footprintScratch, chargeDamage,
                 DangerTileSet.TelegraphKind.CHARGE_LINE);
-        return BossMove.telegraph(EnemyConstants.OVERSEER_CHARGE_DAMAGE);
+        return BossMove.telegraph(chargeDamage);
     }
 
     /**
@@ -524,10 +526,11 @@ public final class HunterKillerPattern implements BossAttackPattern {
         // marker's carried damage and is never resolved (the paired cast ignites and clears the marks).
         // Tag the set with the hazard's colour language so the floor overlay reads fire (amber) vs toxic
         // (sickly green) a turn ahead (ORDER 8, Fairness F6).
-        boss.dangerTileSet.arm(footprintScratch, EnemyConstants.OVERSEER_MELEE_DAMAGE,
+        int nominalMarkerDamage = boss.verbDamage(EnemyConstants.OVERSEER_MELEE_DPT_FRACTION);
+        boss.dangerTileSet.arm(footprintScratch, nominalMarkerDamage,
                 fire ? DangerTileSet.TelegraphKind.HAZARD_FIRE
                      : DangerTileSet.TelegraphKind.HAZARD_TOXIC);
-        return BossMove.telegraph(EnemyConstants.OVERSEER_MELEE_DAMAGE);
+        return BossMove.telegraph(nominalMarkerDamage);
     }
 
     /** Marks a cardinal fire lane from the boss toward the player, length OVERSEER_FIRE_LANE_LENGTH. */

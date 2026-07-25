@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.enemy;
 
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.BossBalance;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -256,14 +257,14 @@ public enum EnemyType {
     // -------------------------------------------------------------------------
 
     OVERSEER {
-        @Override public int    maxHealth()         { return EnemyConstants.OVERSEER_MAX_HP; }
-        @Override public int    attackDamage()       { return EnemyConstants.OVERSEER_LASER_DAMAGE; }
+        @Override public int    maxHealth()         { return BossBalance.statsForDepth(BossBalance.Archetype.OVERSEER, EnemyConstants.OVERSEER_DEPTH).effectiveHitPoints; }
+        @Override public int    attackDamage()       { return BossBalance.statsForDepth(BossBalance.Archetype.OVERSEER, EnemyConstants.OVERSEER_DEPTH).verbDamage(EnemyConstants.OVERSEER_LASER_DPT_FRACTION); }
         @Override public int    attackRangeTiles()   { return 8; }
         @Override public int    moveEveryNTurns()    { return 1; }
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return 1.80f; }
-        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_BOSS_BASE; }
-        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_BOSS_BASE; }
+        @Override public int    baseXpReward()       { return BossBalance.statsForDepth(BossBalance.Archetype.OVERSEER, EnemyConstants.OVERSEER_DEPTH).xpReward; }
+        @Override public int    baseCreditReward()   { return BossBalance.statsForDepth(BossBalance.Archetype.OVERSEER, EnemyConstants.OVERSEER_DEPTH).creditReward; }
         @Override public String displayName()        { return "The Overseer"; }
         @Override public EnemyRole role()            { return EnemyRole.BOSS; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
@@ -273,14 +274,14 @@ public enum EnemyType {
     },
 
     CORRUPTOR {
-        @Override public int    maxHealth()         { return EnemyConstants.CORRUPTOR_MAX_HP; }
-        @Override public int    attackDamage()       { return EnemyConstants.CORRUPTOR_ACID_DAMAGE; }
+        @Override public int    maxHealth()         { return BossBalance.statsForDepth(BossBalance.Archetype.CORRUPTOR, EnemyConstants.CORRUPTOR_DEPTH).effectiveHitPoints; }
+        @Override public int    attackDamage()       { return BossBalance.statsForDepth(BossBalance.Archetype.CORRUPTOR, EnemyConstants.CORRUPTOR_DEPTH).verbDamage(EnemyConstants.CORRUPTOR_ACID_DPT_FRACTION); }
         @Override public int    attackRangeTiles()   { return 6; }
         @Override public int    moveEveryNTurns()    { return 1; }
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return 1.60f; }
-        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_BOSS_BASE; }
-        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_BOSS_BASE; }
+        @Override public int    baseXpReward()       { return BossBalance.statsForDepth(BossBalance.Archetype.CORRUPTOR, EnemyConstants.CORRUPTOR_DEPTH).xpReward; }
+        @Override public int    baseCreditReward()   { return BossBalance.statsForDepth(BossBalance.Archetype.CORRUPTOR, EnemyConstants.CORRUPTOR_DEPTH).creditReward; }
         @Override public String displayName()        { return "The Corruptor"; }
         @Override public EnemyRole role()            { return EnemyRole.BOSS; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
@@ -290,14 +291,14 @@ public enum EnemyType {
     },
 
     HELL_BARON {
-        @Override public int    maxHealth()         { return EnemyConstants.HELL_BARON_MAX_HP; }
-        @Override public int    attackDamage()       { return EnemyConstants.HELL_BARON_CLEAVE_DAMAGE_P1; }
+        @Override public int    maxHealth()         { return BossBalance.statsForDepth(BossBalance.Archetype.HELL_BARON, EnemyConstants.HELL_BARON_DEPTH).effectiveHitPoints; }
+        @Override public int    attackDamage()       { return BossBalance.statsForDepth(BossBalance.Archetype.HELL_BARON, EnemyConstants.HELL_BARON_DEPTH).verbDamage(EnemyConstants.HELL_BARON_CLEAVE_P1_DPT_FRACTION); }
         @Override public int    attackRangeTiles()   { return 3; }
         @Override public int    moveEveryNTurns()    { return 1; }
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return 2.00f; }
-        @Override public int    baseXpReward()       { return GameBalance.XP_REWARD_BOSS_BASE; }
-        @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_BOSS_BASE; }
+        @Override public int    baseXpReward()       { return BossBalance.statsForDepth(BossBalance.Archetype.HELL_BARON, EnemyConstants.HELL_BARON_DEPTH).xpReward; }
+        @Override public int    baseCreditReward()   { return BossBalance.statsForDepth(BossBalance.Archetype.HELL_BARON, EnemyConstants.HELL_BARON_DEPTH).creditReward; }
         @Override public String displayName()        { return "Hell Baron"; }
         @Override public EnemyRole role()            { return EnemyRole.BOSS; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
