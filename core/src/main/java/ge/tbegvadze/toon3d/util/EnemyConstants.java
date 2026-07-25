@@ -266,12 +266,18 @@ public final class EnemyConstants {
     // current boss SHOULD have at its depth next to the placeholder literals below.
     // -------------------------------------------------------------------------
 
-    // The Overseer (depth 5) — security core robot; laser lanes + melee charge
-    public static final int OVERSEER_MAX_HP        = BalanceConfig.OVERSEER_MAX_HP;
-    public static final int OVERSEER_DEPTH         = BalanceConfig.OVERSEER_DEPTH;
-    public static final int OVERSEER_LASER_DAMAGE  = BalanceConfig.OVERSEER_LASER_DAMAGE;
-    public static final int OVERSEER_CHARGE_DAMAGE = BalanceConfig.OVERSEER_CHARGE_DAMAGE;
-    public static final int OVERSEER_RAM_COOLDOWN  = BalanceConfig.OVERSEER_RAM_COOLDOWN;
+    // The Overseer (depth 5) — security core robot; laser lanes + melee charge.
+    // HP and per-verb DAMAGE are DERIVED at spawn (order 6) — see BossBalance / the *_DPT_FRACTION shims
+    // below; there is no flat OVERSEER_MAX_HP / *_DAMAGE anymore. Only depth, cadence, and choreography
+    // numbers stay flat here.
+    public static final int   OVERSEER_DEPTH               = BalanceConfig.OVERSEER_DEPTH;
+    /** MELEE (un-telegraphed) damage as a fraction of the derived boss DPT (order 6). */
+    public static final float OVERSEER_MELEE_DPT_FRACTION  = BalanceConfig.OVERSEER_MELEE_DPT_FRACTION;
+    /** CHARGE (telegraphed line strike) damage as a fraction of the derived boss DPT. */
+    public static final float OVERSEER_CHARGE_DPT_FRACTION = BalanceConfig.OVERSEER_CHARGE_DPT_FRACTION;
+    /** LASER (telegraphed lane) damage as a fraction of the derived boss DPT — the EnemyType headline. */
+    public static final float OVERSEER_LASER_DPT_FRACTION  = BalanceConfig.OVERSEER_LASER_DPT_FRACTION;
+    public static final int   OVERSEER_RAM_COOLDOWN        = BalanceConfig.OVERSEER_RAM_COOLDOWN;
     // Ability kit (boss-fight-mobile-overseer ORDER 3) — the Overseer's action VERBS as data.
     // Each damaging verb is telegraphed one turn ahead (fairness F2). Damage numbers sit under the
     // boss fairness caps at full player HP (100): CHARGE 30 and MELEE 14 are both < 35% eHP, and the
@@ -283,8 +289,6 @@ public final class EnemyConstants {
     // SUMMON_ADDS — Corruptor-style carrier pack: hard live-adds ceiling (F5) and adds per summon.
     public static final int OVERSEER_ADDS_CAP              = BalanceConfig.OVERSEER_ADDS_CAP;
     public static final int OVERSEER_SUMMON_COUNT          = BalanceConfig.OVERSEER_SUMMON_COUNT;
-    // MELEE — adjacent slam: modest, fast, non-telegraphed poke (lower than CHARGE; harder to avoid).
-    public static final int OVERSEER_MELEE_DAMAGE          = BalanceConfig.OVERSEER_MELEE_DAMAGE;
     // SPAWN_FIRE footprint — length of the telegraphed fire lane the brain arms (hazard DOT/lifetime
     // come from the existing HazardManager/BalanceConfig hazard constants; not re-declared here).
     public static final int OVERSEER_FIRE_LANE_LENGTH      = BalanceConfig.OVERSEER_FIRE_LANE_LENGTH;
@@ -301,20 +305,22 @@ public final class EnemyConstants {
     public static final float OVERSEER_HEAL_HP_THRESHOLD   = BalanceConfig.OVERSEER_HEAL_HP_THRESHOLD;
     // Repair ticks after the flee step ("small amount each turn for 5 turns" — the brief).
     public static final int   OVERSEER_HEAL_TURNS          = BalanceConfig.OVERSEER_HEAL_TURNS;
-    // HP restored per repair tick — 5 x 12 = 60 (~24% of OVERSEER_MAX_HP): meaningful, not a full wall.
-    public static final int   OVERSEER_HEAL_PER_TURN        = BalanceConfig.OVERSEER_HEAL_PER_TURN;
+    // Total HP restored over the repair chain, as a fraction of the DERIVED max HP (order 6): meaningful
+    // (~24%), never a full wall. Per-tick amount is BossStats.healPerTurn(fraction, OVERSEER_HEAL_TURNS).
+    public static final float OVERSEER_HEAL_TOTAL_HP_FRACTION = BalanceConfig.OVERSEER_HEAL_TOTAL_HP_FRACTION;
     // Accent color (cyan-white)
     public static final float OVERSEER_ACCENT_R = 0.60f;
     public static final float OVERSEER_ACCENT_G = 0.90f;
     public static final float OVERSEER_ACCENT_B = 1.00f;
 
-    // The Corruptor (depth 10) — mutated scientist; summoner + acid burst
-    public static final int CORRUPTOR_MAX_HP             = BalanceConfig.CORRUPTOR_MAX_HP;
-    public static final int CORRUPTOR_DEPTH              = BalanceConfig.CORRUPTOR_DEPTH;
-    public static final int CORRUPTOR_SUMMON_COOLDOWN    = BalanceConfig.CORRUPTOR_SUMMON_COOLDOWN;
-    public static final int CORRUPTOR_MINION_CAP         = BalanceConfig.CORRUPTOR_MINION_CAP;
-    public static final int CORRUPTOR_ACID_DAMAGE        = BalanceConfig.CORRUPTOR_ACID_DAMAGE;
-    public static final int CORRUPTOR_ACID_POOL_DURATION = BalanceConfig.CORRUPTOR_ACID_POOL_DURATION;
+    // The Corruptor (depth 10) — mutated scientist; summoner + acid burst.
+    // HP and ACID damage are DERIVED at spawn (order 6) — see BossBalance / CORRUPTOR_ACID_DPT_FRACTION.
+    public static final int   CORRUPTOR_DEPTH             = BalanceConfig.CORRUPTOR_DEPTH;
+    public static final int   CORRUPTOR_SUMMON_COOLDOWN   = BalanceConfig.CORRUPTOR_SUMMON_COOLDOWN;
+    public static final int   CORRUPTOR_MINION_CAP        = BalanceConfig.CORRUPTOR_MINION_CAP;
+    /** ACID (telegraphed burst) damage as a fraction of the derived boss DPT (order 6). */
+    public static final float CORRUPTOR_ACID_DPT_FRACTION = BalanceConfig.CORRUPTOR_ACID_DPT_FRACTION;
+    public static final int   CORRUPTOR_ACID_POOL_DURATION = BalanceConfig.CORRUPTOR_ACID_POOL_DURATION;
     // Accent color (toxic green)
     public static final float CORRUPTOR_ACCENT_R = 0.40f;
     public static final float CORRUPTOR_ACCENT_G = 1.00f;
@@ -386,15 +392,18 @@ public final class EnemyConstants {
     public static final int   AREA_STRIKE_RADIUS_TILES      = 1;
     public static final float AREA_STRIKE_DAMAGE_MULTIPLIER = 1.35f;
 
-    // Hell Baron (depth 15) — armored greater demon; firewall + enrage
-    public static final int HELL_BARON_MAX_HP               = BalanceConfig.HELL_BARON_MAX_HP;
-    public static final int HELL_BARON_DEPTH                = BalanceConfig.HELL_BARON_DEPTH;
-    public static final int HELL_BARON_FIREWALL_COOLDOWN_P1 = BalanceConfig.HELL_BARON_FIREWALL_COOLDOWN_P1;
-    public static final int HELL_BARON_FIREWALL_COOLDOWN_P2 = BalanceConfig.HELL_BARON_FIREWALL_COOLDOWN_P2;
-    public static final int HELL_BARON_FIREWALL_DURATION    = BalanceConfig.HELL_BARON_FIREWALL_DURATION;
-    public static final int HELL_BARON_FIRE_DAMAGE          = BalanceConfig.HELL_BARON_FIRE_DAMAGE;
-    public static final int HELL_BARON_CLEAVE_DAMAGE_P1     = BalanceConfig.HELL_BARON_CLEAVE_DAMAGE_P1;
-    public static final int HELL_BARON_CLEAVE_DAMAGE_P2     = BalanceConfig.HELL_BARON_CLEAVE_DAMAGE_P2;
+    // Hell Baron (depth 15) — armored greater demon; firewall + enrage.
+    // HP and per-verb DAMAGE are DERIVED at spawn (order 6) — see BossBalance / the *_DPT_FRACTION shims.
+    public static final int   HELL_BARON_DEPTH                = BalanceConfig.HELL_BARON_DEPTH;
+    public static final int   HELL_BARON_FIREWALL_COOLDOWN_P1 = BalanceConfig.HELL_BARON_FIREWALL_COOLDOWN_P1;
+    public static final int   HELL_BARON_FIREWALL_COOLDOWN_P2 = BalanceConfig.HELL_BARON_FIREWALL_COOLDOWN_P2;
+    public static final int   HELL_BARON_FIREWALL_DURATION    = BalanceConfig.HELL_BARON_FIREWALL_DURATION;
+    /** FIRE (telegraphed hazard tick) damage as a fraction of the derived boss DPT (order 6). */
+    public static final float HELL_BARON_FIRE_DPT_FRACTION      = BalanceConfig.HELL_BARON_FIRE_DPT_FRACTION;
+    /** CLEAVE phase-1 (telegraphed) damage as a fraction of the derived boss DPT. */
+    public static final float HELL_BARON_CLEAVE_P1_DPT_FRACTION = BalanceConfig.HELL_BARON_CLEAVE_P1_DPT_FRACTION;
+    /** CLEAVE phase-2 (telegraphed signature) damage as a fraction of the derived boss DPT. */
+    public static final float HELL_BARON_CLEAVE_P2_DPT_FRACTION = BalanceConfig.HELL_BARON_CLEAVE_P2_DPT_FRACTION;
     // Accent color (ember orange-red)
     public static final float HELL_BARON_ACCENT_R = 1.00f;
     public static final float HELL_BARON_ACCENT_G = 0.30f;

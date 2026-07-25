@@ -19,6 +19,7 @@ import ge.tbegvadze.toon3d.status.StatusEffectController;
 import ge.tbegvadze.toon3d.status.StatusResistance;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.BossBalance;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.StatsStore;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
@@ -318,11 +319,26 @@ public final class EnemyManager implements EnemyHitTarget {
      */
     private int depthScaledXpReward(EnemyType enemyType) {
         if (enemyType.role() == EnemyRole.BOSS) {
-            return enemyType.baseXpReward();
+            // Order 6: boss XP is DERIVED from the boss's depth-scaled stats (its Threat Points), so an
+            // endless-mode boss at depth 20 pays its depth-20 XP automatically — no flat placeholder.
+            return BossBalance.statsForDepth(currentDepth).xpReward;
         }
         return GameMath.xpRewardAtDepth(BalanceConfig.XP_PER_THREAT_POINT, enemyType.baseThreatPoints(),
                 BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH,
                 currentDepth);
+    }
+
+    /**
+     * Credits awarded for killing this archetype on THIS floor. Non-boss credits come from the archetype's
+     * base bounty; a boss's credit reward is DERIVED (order 6, RULE 6) from the modelled fight consumption at
+     * the boss's actual depth, so a deeper boss pays more and the reward always refunds the fight plus a
+     * premium.
+     */
+    private int depthScaledCreditReward(EnemyType enemyType) {
+        if (enemyType.role() == EnemyRole.BOSS) {
+            return BossBalance.statsForDepth(currentDepth).creditReward;
+        }
+        return enemyType.baseCreditReward();
     }
 
     /** Wires the kill-message system so every kill fires a display notification with name + XP. */
@@ -495,7 +511,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 killEventListener.onEnemyKilled(enemy.nameTag, xpAwarded);
             }
             if (killCreditListener != null) {
-                killCreditListener.onEnemyKilledForCredits(enemy.type.baseCreditReward(), currentDepth);
+                killCreditListener.onEnemyKilledForCredits(depthScaledCreditReward(enemy.type), currentDepth);
             }
             killEnemy(enemy, thisKillWasMelee);
             if (impactEventListener != null) {
@@ -1808,7 +1824,7 @@ public final class EnemyManager implements EnemyHitTarget {
         int xpAwarded = depthScaledXpReward(enemy.type);
         if (killXpListener    != null) killXpListener.onEnemyKilledForXp(xpAwarded);
         if (killEventListener != null) killEventListener.onEnemyKilled(enemy.nameTag, xpAwarded);
-        if (killCreditListener != null) killCreditListener.onEnemyKilledForCredits(enemy.type.baseCreditReward(), currentDepth);
+        if (killCreditListener != null) killCreditListener.onEnemyKilledForCredits(depthScaledCreditReward(enemy.type), currentDepth);
         // Fire the impact death burst BEFORE killEnemy() clears the tile, so a burn/poison
         // DoT kill gets the same explosion + flash + shake as a weapon kill instead of the
         // enemy silently vanishing at the end of the turn.

@@ -59,6 +59,8 @@ public final class BossFloorController implements TickSubscriber {
     private boolean bossDefeated       = false;
     private boolean phase2Triggered    = false;
     private int     invulnerableTurnsLeft = 0;
+    /** Soft enrage (order 6): true once the "FURIOUS" banner has fired, so the announcement plays exactly once. */
+    private boolean enrageAnnounced    = false;
 
     /**
      * Fairness contract F1 (ORDER 2): how many turns in a row the boss has MOVED (DASH/REPOSITION)
@@ -147,6 +149,11 @@ public final class BossFloorController implements TickSubscriber {
         // Run boss AI pattern
         BossMove move = boss.activePattern().nextMove(boss, player, level, tickIndex);
         boss.ticksSinceAwaken++;
+
+        // SOFT ENRAGE (order 6, RULE 3) — not a fail timer: once the fight drags past the upper turns cap
+        // (1.5 * target) the boss's direct hits ramp up (BossStats.enrageDamageMultiplier), so turtling past
+        // the survival-check math stops working. Announce the escalation ONCE so the ramp is telegraphed.
+        announceEnrageIfDue();
 
         // ORDER 5 — turn the entity-layer heal signals into HUD banners + event text (the entity/render
         // split keeps LibGDX out of the boss/AI classes; the controller owns the presentation).
@@ -267,7 +274,7 @@ public final class BossFloorController implements TickSubscriber {
             case MELEE:
                 if (GameMath.manhattanDistanceTiles(
                         boss.tileColumn, boss.tileRow, playerColumn, playerRow) == 1) {
-                    player.applyDamage(move.tileDamage);
+                    applyBossDamageToPlayer(player, move.tileDamage);
                 }
                 consecutiveMoveTurns = 0;
                 break;
@@ -345,7 +352,34 @@ public final class BossFloorController implements TickSubscriber {
         DangerTileSet dangerTileSet = boss.dangerTileSet;
         if (!dangerTileSet.isActive()) return;
         if (dangerTileSet.contains(playerColumn, playerRow)) {
-            player.applyDamage(dangerTileSet.getDamage());
+            applyBossDamageToPlayer(player, dangerTileSet.getDamage());
+        }
+    }
+
+    /**
+     * Applies a DIRECT boss hit to the player, scaled by the soft-enrage multiplier (order 6). Every direct
+     * boss hit (melee slam, telegraphed charge/danger-tile resolve) funnels through here so the enrage ramp
+     * is applied uniformly; lingering hazard DOT is owned by HazardManager and intentionally NOT ramped.
+     */
+    private void applyBossDamageToPlayer(Player player, int baseDamage) {
+        int scaled = baseDamage;
+        if (boss.stats != null) {
+            scaled = Math.round(baseDamage * boss.stats.enrageDamageMultiplier(boss.ticksSinceAwaken));
+        }
+        player.applyDamage(scaled);
+    }
+
+    /**
+     * Fires the one-time "FURIOUS" escalation banner (order 6, soft enrage) the first turn the fight passes
+     * the upper turns cap. Presentation only — the actual damage ramp lives in {@link #applyBossDamageToPlayer}.
+     */
+    private void announceEnrageIfDue() {
+        if (enrageAnnounced || boss.stats == null) return;
+        if (boss.ticksSinceAwaken <= boss.stats.upperFightTurnsCap) return;
+        enrageAnnounced = true;
+        bossHudRenderer.showBanner("FURIOUS");
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor(boss.bossName.toUpperCase() + " IS FURIOUS", EventTextSystem.COLOR_GREEN);
         }
     }
 

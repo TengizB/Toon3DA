@@ -83,7 +83,7 @@ THE SINGLE SOURCE OF TRUTH:
     11  Encounter budget (floor Threat-Point budget + composition rules)
     12  Terrain hazards (fire/toxic lifetimes, spread, damage multipliers)
     13  Telegraph & counterplay (max un-telegraphed hit fraction)
-    14  Boss balance ruleset (fight-length/survival bands; fights deferred)
+    14  Boss balance ruleset (fight-length/survival bands + verb fractions; DERIVED via BossBalance, order 6)
 
 THE MATH:
   util/GameMath.java
@@ -97,8 +97,9 @@ THE OTHER BALANCE-BEARING CONSTANT FILES (all re-export from BalanceConfig):
                               economy, boss rewards, and boss AI tactic weights are
                               now RE-EXPORT SHIMS of BalanceConfig SECTIONs 14-16
                               (new-game-balancr order 1).
-  util/EnemyConstants.java    Boss stats now RE-EXPORT SHIMS of BalanceConfig
-                              SECTION 14 (still flat PLACEHOLDERS by value);
+  util/EnemyConstants.java    Boss DEPTH + verb DPT-FRACTION shims of BalanceConfig
+                              SECTION 14 (HP/damage are DERIVED at spawn by BossBalance,
+                              order 6 — no flat boss HP/damage/reward left); plus
                               special-move-set cadences, buff/debuff magnitudes,
                               health-bar geometry (cosmetic).
   util/WeaponConstants.java   Per-weapon stats (re-exported), HUD/timing/cosmetic.
@@ -510,37 +511,48 @@ TP/TTK/golden-ratio call site.
 
 
 ================================================================================
-SECTION 9 — BOSSES (a separate ruleset; fights deferred)
+SECTION 9 — BOSSES (a separate ruleset; DERIVED, order 6)
 ================================================================================
-Files: EnemyConstants (stats — FLAT PLACEHOLDERS), BalanceConfig SECTION 14
-(the ruleset bands), GameMath (BOSS BALANCE RULESET block), GameBalance
-(XP/CREDIT_REWARD_BOSS_BASE placeholders), docs/game-balance-authority.txt (appendix).
+Files: BossBalance (the derivation engine: statsForDepth -> BossStats), BossStats
+(the derived block), BalanceConfig SECTION 14 (the inputs: per-boss TARGET_FIGHT_TURNS,
+verb DPT-fractions, survival ratio, enrage, gate margin, reward), GameMath (BOSS
+BALANCE RULESET block), BalanceSchema (R-BOSS-* rules), World.createBossForDepth
+(spawn), BossFloorController (soft enrage), docs/game-balance-authority.txt (R-BOSS-*).
 
 Bosses break the trash-mob math (a single entity meant to survive many turns vs a
 PREPARED player), so the TP/golden-ratio bands do NOT apply. A boss is tuned to a
-FIGHT-LENGTH target + phase-structured threat curve instead.
+FIGHT-LENGTH target + phase-structured threat curve instead — and (order 6) every
+number is DERIVED at spawn, never a flat constant. There are ZERO flat boss
+HP/damage/XP/credit constants anywhere; BossBalance.statsForDepth(depth) computes the
+whole stat block, so endless-mode bosses scale for free.
 
-Current PLACEHOLDER bosses (flat HP, to be re-derived by the ruleset):
-  Overseer   (depth 5)  250 HP | laser 20, charge 30 (x tele), melee 14, heal once
-  Corruptor  (depth 10) 450 HP | summoner + acid 15
-  Hell Baron (depth 15) 700 HP | firewall + cleave 35 (P1) / 52 (P2)
+Current DERIVED bosses (BossBalance, at their canonical depths):
+  Overseer   (d5)  715 HP  | bossDPT 18.6 | melee 14, charge 34, laser 21 | reward 1244cr
+  Corruptor  (d10) 1120 HP | bossDPT 14.6 | acid 21                       | reward 1455cr
+  Hell Baron (d15) 1615 HP | bossDPT 12.1 | fire 6, cleave 21(P1)/35(P2)  | reward 1712cr
+  (verbs are FRACTIONS of bossDPT; all <= 17% eHP, well under the 25/35% caps)
 
-THE SIX RULES (apply when a boss is actually built/retuned):
+THE SIX RULES (now LIVE — enforced by BossBalance + R-BOSS-* audit):
   R1 HP = expectedPlayerSustainedDpt(depth) * targetFightTurns * multiPhaseFactor
-       (act boss 18–40 turns; NEVER a literal HP constant).
-  R2 Cap fight length from above (<=1.5x target); add a PHASE, not HP.
-  R3 DPT set by survival check: playerEHP/bossDpt = ratio(0.4–0.7) * fightTurns.
-       Hard cap: no single hit > 35% eHP; anything > 25% MUST be telegraphed.
-  R4 N equal phases (2–3), each escalates ONE mechanic.
-  R5 The boss is a BUILD CHECK (HP tied to expected player DPT at depth).
-  R6 Reward = consumption * RISK_PREMIUM (1.3), so it refunds the fight + profit.
+       (act boss 18–40 turns; per-boss target 22/28/34; NEVER a literal HP constant).
+  R2 Cap fight length from above (<=1.5x target); SOFT ENRAGE (+8% DPT/turn past the
+       cap, telegraphed "FURIOUS") enforces it by escalation, not a fail timer.
+  R3 DPT set by survival check: playerEHP/bossDpt = ratio(0.4–0.7) * fightTurns (0.50).
+       Verbs are fractions of bossDPT; no single hit > 35% eHP; > 25% MUST be telegraphed.
+  R4 N equal phases (BOSS_PHASE_COUNT=2), each escalates ONE mechanic; seams via
+       GameMath.bossPhaseHealthThreshold.
+  R5 The boss is a BUILD CHECK: R-BOSS-GATE proves the DEPTH-1 starting loadout CANNOT
+       win — turnsToKill >= 2.0x survivableTurns WITH max heals (margins 2.08/2.56/3.04,
+       tightest at the first boss). R-BOSS-FAIR proves the expected loadout gets a fair
+       fight (length in [target,1.5*target], survival ratio 0.50).
+  R6 Reward = consumption * RISK_PREMIUM (1.3); XP flows from boss Threat Points. The
+       route generator guarantees a reachable SHOP/CACHE the layer before every boss
+       (pre-boss provisioning, 100-seed test). R-BOSS-AMMO proves the demand is coverable
+       by reserve + arena budget (tests the BUILD, not full pockets).
 
-⚠️ Not-good note: ALL three bosses are flat placeholders. The living table shows
-every one reads UNDER its derived HP band — they were eyeballed against the depth-1
-reference, not the (much higher) expected player DPT at their depth. Boss rewards
-(500 XP / 250 credits) are arbitrary flat numbers. Boss balance is essentially
-UNIMPLEMENTED beyond the ruleset; the fights are explicitly deferred pending
-story/run structure. Do not treat current boss numbers as balanced in any sense.
+Tune a boss via its *_TARGET_FIGHT_TURNS or the survival ratio (SECTION 14) — semantic
+dials, never a raw HP number. Boss AI CHOREOGRAPHY (the Overseer Hunter-Killer brain) is
+untouched: order 6 prices the fight, not the tactic brain.
 
 
 ================================================================================

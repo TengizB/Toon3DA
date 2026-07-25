@@ -893,85 +893,72 @@ public final class BalanceReport {
     // signal the boss work will act on. Every number is BalanceConfig through GameMath.
     // -----------------------------------------------------------------------------------
     private static void printBossRulesetTable() {
-        float targetMin = BalanceConfig.BOSS_TARGET_FIGHT_TURNS_ACT_MIN;
-        float targetMax = BalanceConfig.BOSS_TARGET_FIGHT_TURNS_ACT_MAX;
-        float targetMid = (targetMin + targetMax) / 2f;
-        float refEhp = BalanceConfig.REFERENCE_PLAYER_EHP;
-
-        System.out.println("BOSS RULESET (idea 6) — act-boss target fight = "
-                + String.format("%.0f-%.0f", targetMin, targetMax) + " turns ; survivalRatio band "
-                + String.format("%.2f-%.2f", BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MIN,
+        System.out.println("BOSS RULESET (order 6) — HP/DPT/verbs/reward all DERIVED (BossBalance), no flat constants."
+                + " survivalRatio band " + String.format("%.2f-%.2f", BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MIN,
                         BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MAX)
-                + " ; single-hit caps: telegraph >"
-                + String.format("%.0f%%", BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION * 100f)
-                + " eHP, hard "
-                + String.format("%.0f%%", BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION * 100f) + " eHP");
-        System.out.printf("%-12s %5s %7s %14s %9s %-7s %9s %10s %-10s%n",
-                "boss", "depth", "expDPT", "derivedHP", "litHP", "HP?", "fairDPT", "bigHit%eHP", "hitVerdict");
-        System.out.println("------------------------------------------------------------------------------------");
+                + " ; single-hit caps: telegraph >" + String.format("%.0f%%", BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION * 100f)
+                + " eHP, hard " + String.format("%.0f%%", BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION * 100f) + " eHP");
+        System.out.printf("%-12s %5s %7s %8s %8s %8s %6s %8s %8s %8s%n",
+                "boss", "depth", "expDPT", "derHP", "bossDPT", "target", "gate", "fairRatio", "reward", "ammoCov");
+        System.out.println("------------------------------------------------------------------------------------------");
 
-        // Current placeholder bosses: their depth, placeholder HP, and biggest single hit.
-        // Each divides ONE HP bar across its phases (it is not RE-fought), so multiPhaseFactor = 1.0
-        // (matches the idea's Corruptor sanity check 450 ~= 25 * 18 * 1.0).
-        printBossRow("Overseer", EnemyConstants.OVERSEER_DEPTH, EnemyConstants.OVERSEER_MAX_HP,
-                EnemyConstants.OVERSEER_CHARGE_DAMAGE, true,
-                targetMin, targetMax, targetMid, refEhp);
-        printBossRow("Corruptor", EnemyConstants.CORRUPTOR_DEPTH, EnemyConstants.CORRUPTOR_MAX_HP,
-                EnemyConstants.CORRUPTOR_ACID_DAMAGE, false,
-                targetMin, targetMax, targetMid, refEhp);
-        printBossRow("Hell Baron", EnemyConstants.HELL_BARON_DEPTH, EnemyConstants.HELL_BARON_MAX_HP,
-                EnemyConstants.HELL_BARON_CLEAVE_DAMAGE_P2, true,
-                targetMin, targetMax, targetMid, refEhp);
+        float maxHeals = BalanceConfig.REFERENCE_PLAYER_EHP
+                * BalanceConfig.BOSS_GATE_MODELED_HEAL_SUPPLY_EHP_FRACTION;
+        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
+            int depth = archetype.canonicalDepth;
+            BossStats stats = BossBalance.statsForDepth(archetype, depth);
+            float expectedDpt = BossBalance.expectedPlayerDamagePerTurn(depth);
 
-        System.out.println("------------------------------------------------------------------------------------");
-        // Phase seams for a 3-phase act boss (RULE 4): where mechanics escalate.
-        System.out.printf("  phase seams (3-phase act boss): %.0f%% -> %.0f%% -> %.0f%% (death)  [GameMath.bossPhaseHealthThreshold]%n",
-                GameMath.bossPhaseHealthThreshold(1, 3) * 100f,
-                GameMath.bossPhaseHealthThreshold(2, 3) * 100f,
-                GameMath.bossPhaseHealthThreshold(3, 3) * 100f);
-        System.out.println("  litHP are PLACEHOLDERS: HP? flags the literal vs the derived band. Re-derive when boss fights ship.");
-    }
+            // R-BOSS-GATE margin: start-weapon TTK vs survivable turns with max heals (>= 2.0 holds the gate).
+            float startTtk = GameMath.bossFightTurnsForPlayerDamagePerTurn(
+                    stats.effectiveHitPoints, BalanceConfig.REFERENCE_PLAYER_DPT);
+            float survivable = GameMath.bossFightTurnsForPlayerDamagePerTurn(
+                    BalanceConfig.REFERENCE_PLAYER_EHP + maxHeals, stats.damagePerTurn);
+            float gateMargin = survivable > 0f ? startTtk / survivable : Float.POSITIVE_INFINITY;
 
-    private static void printBossRow(String bossName, int depth, int placeholderHp,
-                                     int biggestSingleHit, boolean biggestHitTelegraphed,
-                                     float targetMinTurns, float targetMaxTurns, float targetMidTurns,
-                                     float referenceEffectiveHitPoints) {
-        // Expected OFFENCE power points the average player has invested by this depth (idea 5 bridge):
-        //   fraction-of-budget * budget-per-level * (levels-per-floor * depth).
-        float expectedOffencePowerPoints = BalanceConfig.BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION
-                * GameBalance.LEVEL_UP_BUDGET_PP
-                * (BalanceConfig.BOSS_EXPECTED_LEVELS_PER_DEPTH * depth);
-        float expectedDamagePerTurn = GameMath.expectedPlayerSustainedDamagePerTurn(
-                BalanceConfig.REFERENCE_PLAYER_DPT, expectedOffencePowerPoints);
+            // R-BOSS-FAIR survival ratio for the expected loadout.
+            float fightTurns = GameMath.bossFightTurnsForPlayerDamagePerTurn(stats.effectiveHitPoints, expectedDpt);
+            float fairRatio  = GameMath.bossSurvivalCheckRatio(
+                    BalanceConfig.REFERENCE_PLAYER_EHP, stats.damagePerTurn, fightTurns);
 
-        // Derived HP BAND from the fight-length target (RULE 1), one bar / no re-fight => factor 1.0.
-        float derivedHpMin = GameMath.bossEffectiveHitPoints(expectedDamagePerTurn, targetMinTurns,
-                BalanceConfig.BOSS_MULTI_PHASE_FACTOR_PER_PHASE);
-        float derivedHpMax = GameMath.bossEffectiveHitPoints(expectedDamagePerTurn, targetMaxTurns,
-                BalanceConfig.BOSS_MULTI_PHASE_FACTOR_PER_PHASE);
-        boolean hpInBand = placeholderHp >= derivedHpMin && placeholderHp <= derivedHpMax;
+            // R-BOSS-AMMO coverage.
+            float demand = BossBalance.modelledAmmoDemandDamage(stats.effectiveHitPoints);
+            float reserveDamage = BalanceConfig.RESERVE_BANKING_FLOORS_TARGET
+                    * GameMath.floorDemandAtDepth(BalanceSchema.modelFloorDemand(),
+                            BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
+            float ammoCoverage = demand > 0f
+                    ? (reserveDamage + BossBalance.arenaAmmoBudgetDamage(stats.effectiveHitPoints)) / demand
+                    : Float.POSITIVE_INFINITY;
 
-        // Boss DPT the survival check wants at the mid target fight length (RULE 3).
-        float fairDamagePerTurn = GameMath.bossDamagePerTurnForSurvivalCheck(
-                referenceEffectiveHitPoints, targetMidTurns, BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_TARGET);
-
-        // Biggest single hit vs the fairness caps (RULE 3).
-        float hitFraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
-                biggestSingleHit, referenceEffectiveHitPoints);
-        String hitVerdict;
-        if (hitFraction > BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION) {
-            hitVerdict = "BANNED";                       // over the hard cap: never allowed.
-        } else if (hitFraction > BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION) {
-            hitVerdict = biggestHitTelegraphed ? "TELE-OK" : "NEEDS-TELE";   // must be telegraphed.
-        } else {
-            hitVerdict = "OK";                           // under both caps.
+            System.out.printf("%-12s %5d %7.1f %8d %8.1f %8.0f %5.2fx %8.2f %8d %7.2fx%n",
+                    archetype.displayName, depth, expectedDpt, stats.effectiveHitPoints, stats.damagePerTurn,
+                    stats.targetFightTurns, gateMargin, fairRatio, stats.creditReward, ammoCoverage);
         }
 
-        System.out.printf("%-12s %5d %7.1f %14s %9d %-7s %9.1f %10.1f %-10s%n",
-                bossName, depth, expectedDamagePerTurn,
-                String.format("%.0f-%.0f", derivedHpMin, derivedHpMax), placeholderHp,
-                hpInBand ? "OK" : (placeholderHp < derivedHpMin ? "UNDER" : "OVER"),
-                fairDamagePerTurn, hitFraction * 100f, hitVerdict);
+        System.out.println("------------------------------------------------------------------------------------------");
+        System.out.printf("  GATE holds when start-weapon TTK >= %.1fx survivable turns (WITH max heals = %.0f%% eHP). "
+                        + "phase seams (2-phase): %.0f%% (death).%n",
+                BalanceConfig.BOSS_GATE_MIN_DAMAGE_MARGIN,
+                BalanceConfig.BOSS_GATE_MODELED_HEAL_SUPPLY_EHP_FRACTION * 100f,
+                GameMath.bossPhaseHealthThreshold(1, BalanceConfig.BOSS_PHASE_COUNT) * 100f);
+
+        // Derived verb damages vs the single-hit fairness caps (RULE 3).
+        System.out.printf("%-22s %6s %10s %-12s%n", "boss verb", "dmg", "%eHP", "capVerdict");
+        for (BalanceSchema.BossVerbSpec verb : BalanceSchema.bossVerbs()) {
+            BossStats stats = BossBalance.statsForDepth(verb.archetype, verb.archetype.canonicalDepth);
+            int damage = stats.verbDamage(verb.dptFraction);
+            float fraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
+                    damage, BalanceConfig.REFERENCE_PLAYER_EHP);
+            String verdict;
+            if (fraction > BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION) {
+                verdict = "BANNED";
+            } else if (fraction > BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION) {
+                verdict = verb.telegraphed ? "TELE-OK" : "NEEDS-TELE";
+            } else {
+                verdict = "OK";
+            }
+            System.out.printf("%-22s %6d %9.1f%% %-12s%n", verb.verbName, damage, fraction * 100f, verdict);
+        }
     }
 
     private static void printLegend() {

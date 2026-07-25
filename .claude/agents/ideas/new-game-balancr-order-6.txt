@@ -1,7 +1,25 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Combat
 TITLE: Boss = Build Check — derived fights you can't cheese
 ---
+
+IMPLEMENTATION NOTES (order 6):
+  - BossBalance.statsForDepth(archetype, depth) -> BossStats is the single derivation
+    engine (util, headless). World.createBossForDepth, EnemyType boss entries,
+    EnemyManager boss reward, BalanceReport and BalanceSchema all read from it. Boss AI
+    patterns read each verb's damage via Boss.verbDamage(FRACTION).
+  - DELETED all flat boss constants (OVERSEER/CORRUPTOR/HELL_BARON MAX_HP + verb damages,
+    XP/CREDIT_REWARD_BOSS_BASE). SECTION 14 now holds per-boss TARGET_FIGHT_TURNS, verb
+    DPT-fractions, heal fraction, phase count, soft-enrage ramp, gate margin + modelled
+    heal supply, and arena ammo budget.
+  - R-BOSS-GATE / R-BOSS-FAIR / R-BOSS-VERB-CAP / R-BOSS-REWARD / R-BOSS-AMMO added to
+    BalanceSchema + BalanceAuditTest (fullSchemaSweep + per-rule). Derived numbers:
+    Overseer 715 HP / gate 2.08x, Corruptor 1120 / 2.56x, Hell Baron 1615 / 3.04x; all
+    verbs <= 17% eHP; rewards net-positive; ammo coverage >= 1.
+  - Soft enrage (+8% DPT/turn past 1.5*target, "FURIOUS" banner) in BossFloorController.
+  - Pre-boss provisioning: RouteMapGenerator guarantees a reachable SHOP/CACHE the layer
+    before every boss; 100-seed test in RouteMapGeneratorTest.
+  - Boss AI choreography untouched (this order prices the fight, not the tactic brain).
 
 ================================================================================
 NEW GAME BALANCE — ORDER 6 of 9

@@ -85,6 +85,8 @@ import ge.tbegvadze.toon3d.shop.VendingMachine;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.BossBalance;
+import ge.tbegvadze.toon3d.util.BossStats;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -2720,57 +2722,46 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     private static Boss createBossForDepth(int depth, long bossSeed, BossArenaLayout arenaLayout) {
-        int bossIndex   = ((depth / Constants.BOSS_FLOOR_INTERVAL) - 1) % 3;
         int spawnColumn = arenaLayout.bossColumn;
         int spawnRow    = arenaLayout.bossRow;
-        switch (bossIndex) {
-            case 0: {
-                int scaledHp = Math.round(GameMath.bossDepthScaledStat(
-                        EnemyConstants.OVERSEER_MAX_HP, depth,
-                        EnemyConstants.OVERSEER_DEPTH, Constants.BOSS_DEPTH_HP_SCALE));
-                Boss overseer = new Boss(EnemyType.OVERSEER, spawnColumn, spawnRow,
+        // HP and every verb's damage are DERIVED from depth (order 6): the boss's whole stat block comes
+        // from BossBalance, never a flat constant. The archetype rotation matches BossBalance.archetypeForDepth.
+        BossBalance.Archetype archetype = BossBalance.archetypeForDepth(depth);
+        BossStats stats = BossBalance.statsForDepth(archetype, depth);
+        Boss boss;
+        switch (archetype) {
+            case OVERSEER:
+                boss = new Boss(EnemyType.OVERSEER, spawnColumn, spawnRow,
                         "The Overseer", "Eye of the Abyss", "OVERSEER DESTROYED",
                         EnemyConstants.OVERSEER_ACCENT_R, EnemyConstants.OVERSEER_ACCENT_G,
                         EnemyConstants.OVERSEER_ACCENT_B, 1.80f,
                         new HunterKillerPattern(HunterKillerPattern.Pool.PHASE1, bossSeed),
                         new HunterKillerPattern(HunterKillerPattern.Pool.PHASE2, bossSeed));
-                overseer.maxHealth    = scaledHp;
-                overseer.health       = scaledHp;
-                overseer.dungeonLevel = depth;
-                overseer.nameTag      = "The Overseer LVL " + depth;
-                return overseer;
-            }
-            case 1: {
-                int scaledHp = Math.round(GameMath.bossDepthScaledStat(
-                        EnemyConstants.CORRUPTOR_MAX_HP, depth,
-                        EnemyConstants.CORRUPTOR_DEPTH, Constants.BOSS_DEPTH_HP_SCALE));
-                Boss corruptor = new Boss(EnemyType.CORRUPTOR, spawnColumn, spawnRow,
+                boss.nameTag = "The Overseer LVL " + depth;
+                break;
+            case CORRUPTOR:
+                boss = new Boss(EnemyType.CORRUPTOR, spawnColumn, spawnRow,
                         "The Corruptor", "Herald of Decay", "CORRUPTOR PURGED",
                         EnemyConstants.CORRUPTOR_ACCENT_R, EnemyConstants.CORRUPTOR_ACCENT_G,
                         EnemyConstants.CORRUPTOR_ACCENT_B, 1.60f,
                         new CorruptorPhase1Pattern(), new CorruptorPhase2Pattern());
-                corruptor.maxHealth    = scaledHp;
-                corruptor.health       = scaledHp;
-                corruptor.dungeonLevel = depth;
-                corruptor.nameTag      = "The Corruptor LVL " + depth;
-                return corruptor;
-            }
-            default: {
-                int scaledHp = Math.round(GameMath.bossDepthScaledStat(
-                        EnemyConstants.HELL_BARON_MAX_HP, depth,
-                        EnemyConstants.HELL_BARON_DEPTH, Constants.BOSS_DEPTH_HP_SCALE));
-                Boss hellBaron = new Boss(EnemyType.HELL_BARON, spawnColumn, spawnRow,
+                boss.nameTag = "The Corruptor LVL " + depth;
+                break;
+            case HELL_BARON:
+            default:
+                boss = new Boss(EnemyType.HELL_BARON, spawnColumn, spawnRow,
                         "Hell Baron", "Lord of Flame", "HELL BARON FALLS",
                         EnemyConstants.HELL_BARON_ACCENT_R, EnemyConstants.HELL_BARON_ACCENT_G,
                         EnemyConstants.HELL_BARON_ACCENT_B, 2.00f,
                         new HellBaronPhase1Pattern(), new HellBaronPhase2Pattern());
-                hellBaron.maxHealth    = scaledHp;
-                hellBaron.health       = scaledHp;
-                hellBaron.dungeonLevel = depth;
-                hellBaron.nameTag      = "Hell Baron LVL " + depth;
-                return hellBaron;
-            }
+                boss.nameTag = "Hell Baron LVL " + depth;
+                break;
         }
+        boss.stats        = stats;
+        boss.maxHealth    = stats.effectiveHitPoints;
+        boss.health       = stats.effectiveHitPoints;
+        boss.dungeonLevel = depth;
+        return boss;
     }
 
     private static float findPlayerStartX(Level level) {

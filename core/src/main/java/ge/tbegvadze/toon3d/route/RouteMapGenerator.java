@@ -88,6 +88,9 @@ public final class RouteMapGenerator {
         for (RegionSpec region : plan.regions()) {
             List<List<RouteNode>> bandLayers = buildBand(runSeed, region, previousLayer);
             applyWindowGuards(bandLayers, accumulatedRollable);
+            // Runs AFTER the window guards so the shop-window guard can no longer convert away the SHOP/CACHE
+            // it depends on — the pre-boss provisioning stop is the LAST word on the pre-boss layer's type.
+            enforcePreBossProvisioning(bandLayers, region.lastDepth());
             finaliseNodes(bandLayers, region);
             allLayers.addAll(bandLayers);
             collectRollable(bandLayers, accumulatedRollable);
@@ -122,6 +125,7 @@ public final class RouteMapGenerator {
 
         List<List<RouteNode>> bandLayers = buildBand(map.getRunSeed(), newRegion, prevLast);
         applyWindowGuards(bandLayers, accumulatedRollable);
+        enforcePreBossProvisioning(bandLayers, newRegion.lastDepth());
         finaliseNodes(bandLayers, newRegion);
         map.appendLayers(bandLayers);
         map.addRegion(newRegion.toRegion());
@@ -177,6 +181,49 @@ public final class RouteMapGenerator {
             priorLayer = layer;
         }
         return bandLayers;
+    }
+
+    /**
+     * PRE-BOSS PROVISIONING GUARANTEE (new-game-balancr order 6, RULE 6 / the "sharpen your knife" beat):
+     * every boss is a BUILD CHECK, so the layer immediately before a boss floor must offer a SHOP or CACHE
+     * the player can reach to top up ammo/heals before committing. Because the boss layer is a forced
+     * convergence singleton, EVERY node in the penultimate layer wires forward to it — so a single SHOP or
+     * CACHE placed there is guaranteed reachable on the way in. If the penultimate layer already offers one,
+     * this is a no-op; otherwise it converts a deterministically chosen node (preferring a non-combat-family
+     * node so a combat option survives) to a CACHE. Only fires for bands that actually end in a boss floor;
+     * region-gate bands are untouched. Order 7 formalises this as an enforced route-graph guarantee.
+     */
+    private void enforcePreBossProvisioning(List<List<RouteNode>> bandLayers, int lastDepth) {
+        if (!GameMath.isBossFloor(lastDepth)) return;      // region-gate band — no boss to provision for
+        if (bandLayers.size() < 2) return;                 // no layer before the boss (degenerate band)
+        List<RouteNode> bossLayer    = bandLayers.get(bandLayers.size() - 1);
+        List<RouteNode> preBossLayer = bandLayers.get(bandLayers.size() - 2);
+        RouteNode boss = bossLayer.get(0);
+        // Provisioning must be REACHABLE: a SHOP/CACHE that actually wires forward to the boss. A dead-end
+        // shop the player can never route through does not count (the boss layer is already wired at this
+        // point, so outgoing edges to the boss are settled).
+        for (RouteNode node : preBossLayer) {
+            boolean provisions = node.type == RouteNodeType.SHOP || node.type == RouteNodeType.CACHE;
+            if (provisions && node.outgoing.contains(boss)) {
+                return;                                    // reachable provisioning already present
+            }
+        }
+        // None reachable — convert a node that DOES wire to the boss to a CACHE, preferring a non-combat
+        // node (keep a combat option), falling back to any boss-connected node. Deterministic per seed.
+        for (int lane = preBossLayer.size() - 1; lane >= 0; lane--) {
+            RouteNode node = preBossLayer.get(lane);
+            if (node.outgoing.contains(boss) && !isCombatFamily(node.type)) {
+                node.type = RouteNodeType.CACHE;
+                return;
+            }
+        }
+        for (int lane = preBossLayer.size() - 1; lane >= 0; lane--) {
+            RouteNode node = preBossLayer.get(lane);
+            if (node.outgoing.contains(boss)) {
+                node.type = RouteNodeType.CACHE;
+                return;
+            }
+        }
     }
 
     /** Appends {@code bandLayers}' rollable (non-forced) layers to the running context list. */

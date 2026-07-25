@@ -26,17 +26,9 @@ public final class GameBalance {
 
     // The thirteen per-archetype XP_REWARD_* re-exports that lived here are GONE. Per-enemy XP is now
     // DERIVED from Threat Points (EnemyType.baseXpReward -> GameMath.xpRewardAtDepth, one knob
-    // BalanceConfig.XP_PER_THREAT_POINT). Boss XP (XP_REWARD_BOSS_BASE) stays a flat placeholder
-    // pending idea 6.
-
-    /**
-     * Base XP reward for killing any boss (before depth scaling applied by BossFloorController).
-     * PLACEHOLDER — TO BE RE-DERIVED VIA THE BOSS BALANCE RULESET (RULE 6): a boss reward
-     * must be priced by the ammo+heal the fight CONSUMES times a risk premium
-     * (GameMath.bossReward / BalanceConfig.BOSS_REWARD_RISK_PREMIUM), so it refunds the fight plus a
-     * profit — never a flat 500. Re-derive once the scarcity model is fully tuned. (Balance: BalanceConfig.)
-     */
-    public static final int XP_REWARD_BOSS_BASE     = BalanceConfig.XP_REWARD_BOSS_BASE;
+    // BalanceConfig.XP_PER_THREAT_POINT). Boss XP is DERIVED too (order 6): BossBalance prices it from the
+    // boss's depth-scaled Threat Points, so the flat XP_REWARD_BOSS_BASE placeholder is DELETED — a boss's
+    // XP flows through EnemyType.baseXpReward -> BossBalance.statsForDepth(depth).xpReward.
 
     // =========================================================================
     // XP CURVE — GEOMETRIC, coupled to the enemy threat compound (order 4)
@@ -518,7 +510,9 @@ public final class GameBalance {
     // =========================================================================
 
     // Per-enemy credit rewards, depth scale, and chips-per-floor are balance values —
-    // see BalanceConfig. Boss credit (CREDIT_REWARD_BOSS_BASE) stays here pending idea 6.
+    // see BalanceConfig. Boss credit is DERIVED (order 6): the flat CREDIT_REWARD_BOSS_BASE placeholder is
+    // DELETED — a boss's credit reward flows through EnemyManager.depthScaledCreditReward ->
+    // BossBalance.statsForDepth(depth).creditReward (RULE 6: consumption * risk premium).
     public static final int   CREDIT_REWARD_GORE_BITER    = BalanceConfig.CREDIT_REWARD_GORE_BITER;
     public static final int   CREDIT_REWARD_EYE_TYRANT    = BalanceConfig.CREDIT_REWARD_EYE_TYRANT;
     public static final int   CREDIT_REWARD_PLAGUE_HULK   = BalanceConfig.CREDIT_REWARD_PLAGUE_HULK;
@@ -532,13 +526,6 @@ public final class GameBalance {
     public static final int   CREDIT_REWARD_REVENANT         = BalanceConfig.CREDIT_REWARD_REVENANT;
     public static final int   CREDIT_REWARD_VORTEX_EYE       = BalanceConfig.CREDIT_REWARD_VORTEX_EYE;
     public static final int   CREDIT_REWARD_BLIGHT_CORRUPTOR = BalanceConfig.CREDIT_REWARD_BLIGHT_CORRUPTOR;
-    /**
-     * PLACEHOLDER — TO BE RE-DERIVED VIA THE BOSS BALANCE RULESET (RULE 6), the same as
-     * XP_REWARD_BOSS_BASE above: price it by consumption * BalanceConfig.BOSS_REWARD_RISK_PREMIUM
-     * (GameMath.bossReward) once the scarcity/credit economy is tuned, not a flat 250.
-     * (Balance: BalanceConfig.)
-     */
-    public static final int   CREDIT_REWARD_BOSS_BASE     = BalanceConfig.CREDIT_REWARD_BOSS_BASE;
     public static final float CREDIT_DEPTH_SCALE          = BalanceConfig.CREDIT_DEPTH_SCALE;
     public static final int   CREDIT_CHIPS_PER_FLOOR_MIN  = BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MIN;
     public static final int   CREDIT_CHIPS_PER_FLOOR_MAX  = BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MAX;

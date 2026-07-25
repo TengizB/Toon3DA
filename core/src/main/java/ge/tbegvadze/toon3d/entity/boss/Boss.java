@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.entity.boss;
 
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
+import ge.tbegvadze.toon3d.util.BossStats;
 import ge.tbegvadze.toon3d.util.Constants;
 
 /**
@@ -10,7 +11,8 @@ import ge.tbegvadze.toon3d.util.Constants;
  *
  * Boss AI is driven entirely by BossFloorController (a TickSubscriber);
  * EnemyManager's normal AI is bypassed for Boss instances via an instanceof check.
- * The boss health scales with depth via GameMath.bossDepthScaledStat().
+ * HP and every verb's damage are DERIVED per depth by {@code BossBalance.statsForDepth}
+ * (order 6) and carried on {@link #stats}; there are no flat boss HP/damage constants.
  */
 public class Boss extends Enemy {
 
@@ -30,6 +32,14 @@ public class Boss extends Enemy {
 
     /** Height multiplier applied over the normal enemy sprite height (e.g. 2.0 = double-height). */
     public final float bossHeightMultiplier;
+
+    /**
+     * The DERIVED stat block for this boss at its spawn depth (order 6). HP came from here (it set
+     * {@link #maxHealth}); the attack patterns read every verb's damage off it via {@link #verbDamage}, and
+     * {@code BossFloorController} reads {@link BossStats#upperFightTurnsCap} / {@link BossStats#enrageDamageMultiplier}
+     * for soft enrage. Assigned once at spawn, before the first tick; never null for a live boss.
+     */
+    public BossStats stats;
 
     /** Current phase: 1 = initial phase, 2 = triggered after crossing phase-2 HP threshold. */
     public int phase = 1;
@@ -95,6 +105,24 @@ public class Boss extends Enemy {
     /** Returns the active attack pattern for the current phase. */
     public BossAttackPattern activePattern() {
         return phase == 1 ? phase1Pattern : phase2Pattern;
+    }
+
+    /**
+     * The derived single-hit damage of a boss verb (order 6): the verb's DPT-fraction constant times this
+     * boss's derived DPT. The pattern classes pass their own fraction constants (SECTION 14); the multiply
+     * and floor live in {@link BossStats}. A boss with no stats yet (never happens for a live, spawned boss)
+     * would NPE, which is the correct loud failure rather than a silent zero-damage verb.
+     */
+    public int verbDamage(float damagePerTurnFraction) {
+        return stats.verbDamage(damagePerTurnFraction);
+    }
+
+    /**
+     * The derived per-turn HP of the one-time repair (order 6): a fraction of this boss's derived max HP,
+     * spread over {@code turns} ticks. Scales with the derived HP instead of a flat number.
+     */
+    public int healPerTurn(float totalHealHpFraction, int turns) {
+        return stats.healPerTurn(totalHealHpFraction, turns);
     }
 
     /**
