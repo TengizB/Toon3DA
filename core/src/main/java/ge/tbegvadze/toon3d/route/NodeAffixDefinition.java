@@ -32,6 +32,7 @@ public final class NodeAffixDefinition {
     private final int    extraExplosiveBarrels;
     private final int    extraColumns;
     private final int    extraArmourPickups;
+    private final int    extraVaultAmmoBoxes;
 
     private NodeAffixDefinition(Builder builder) {
         this.id                           = Objects.requireNonNull(builder.id, "id");
@@ -43,6 +44,18 @@ public final class NodeAffixDefinition {
         this.extraExplosiveBarrels        = builder.extraExplosiveBarrels;
         this.extraColumns                 = builder.extraColumns;
         this.extraArmourPickups           = builder.extraArmourPickups;
+        this.extraVaultAmmoBoxes          = builder.extraVaultAmmoBoxes;
+    }
+
+    /**
+     * Extra owned-ammo boxes this affix adds to the ELITE vault — the REWARD side of the affix.
+     * An affix that raises {@link #budgetScaleMultiplier()} must pay for the threat it adds
+     * (R-RISK-PREMIUM, new-game-balancr order 7): SWARM and OVERCLOCKED price their vault up with
+     * them, so an affixed elite is never a sucker bet. Fulfilled by {@link EliteProfile} through
+     * the same owned-aware {@link AmmoCacheRequest} seam the base vault uses.
+     */
+    public int extraVaultAmmoBoxes() {
+        return extraVaultAmmoBoxes;
     }
 
     /** Stable id — used for the {@link NodeAffix} token, save / run-stats logging, and lookup. */
@@ -127,6 +140,7 @@ public final class NodeAffixDefinition {
         private int   extraExplosiveBarrels        = 0;
         private int   extraColumns                 = 0;
         private int   extraArmourPickups           = 0;
+        private int   extraVaultAmmoBoxes          = 0;
 
         private Builder(String id, String displayName) {
             this.id          = id;
@@ -140,6 +154,7 @@ public final class NodeAffixDefinition {
         public Builder extraExplosiveBarrels(int value)          { this.extraExplosiveBarrels = value; return this; }
         public Builder extraColumns(int value)                   { this.extraColumns = value; return this; }
         public Builder extraArmourPickups(int value)             { this.extraArmourPickups = value; return this; }
+        public Builder extraVaultAmmoBoxes(int value)            { this.extraVaultAmmoBoxes = value; return this; }
 
         public NodeAffixDefinition build() {
             return new NodeAffixDefinition(this);

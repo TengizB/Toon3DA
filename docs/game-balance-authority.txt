@@ -17,9 +17,12 @@ output over SECTION 6 below.
 SECTION 1 — THE THREE LAYERS
 --------------------------------------------------------------------------------
 LAYER 1 — VALUES (tunable):        util/BalanceConfig.java
-  EVERY gameplay-affecting number lives here, organised into 16 numbered
+  EVERY gameplay-affecting number lives here, organised into 17 numbered
   sections (1-14 as before, plus 15 WEAPON ABILITY MAGNITUDES and 16 SHOP
-  ECONOMY, both consolidated by order 1; shared status magnitudes joined
+  ECONOMY, both consolidated by order 1, and 19 ROUTE ECONOMICS, added by
+  order 7 — the branching MAP's numbers: node budget scales, affix multipliers,
+  calm/elite/mystery/event payoffs, the audited map shape, the node-pricing
+  model's knobs and every route band; shared status magnitudes joined
   SECTION 8, boss stats + boss AI tactic weights joined SECTION 14). Change a
   value -> the game gets easier/harder/more generous, and NOTHING else changes.
   The other *Constants files only RE-EXPORT these values under their old names
@@ -337,6 +340,71 @@ R-BOSS-* (RuleKind.BOSS_GATE / BOSS_FAIR / BOSS_VERB_CAP / BOSS_REWARD / BOSS_AM
   proven over 100 seeds (RouteMapGeneratorTest). Boss AI CHOREOGRAPHY is untouched — order 6
   prices the fight, not the tactic brain.
 
+R-ROUTE-* (RuleKind.ROUTE_PRICED / RISK_PREMIUM / CALM_COST / MYSTERY_EV / PIPS_DERIVED / HONEST_SAFE /
+           TRAJECTORY / ROUTE_GUARANTEES) — ROUTE ECONOMICS: the branching MAP joins the contract (order 7)
+  Orders 1-6 balance FLOORS, but the player never plays "a floor" — they play a JOURNEY through the
+  route map's DAG (COMBAT / ELITE / CACHE / REST / SHOP / MYSTERY / EVENT), and that macro layer is
+  where run difficulty is actually decided. Order 7 prices it. Every node type, ELITE affix and MYSTERY
+  outcome carries a NodeEconomics row (route/RouteEconomics — the map's twin of the weapon/enemy/heal
+  registries); route/RouteEconomicsModel folds a row into one comparable EV through the SAME order-3/4
+  models (supply/demand, heal economy, credit income, derived XP) in the shared POWER POINT currency:
+      threatCost    = regionScaledFloorBudget(depth) * budgetScale * affixMultiplier   (GameMath.nodeThreatCost)
+      resourceDelta = (supply - demand)/ammoPP + (heal - incoming)/healPP + credits/creditPP
+      progress      = XP-as-levels * LEVEL_UP_BUDGET_PP + upgradeOpportunity * significant-buy PP
+      EV            = resourceDelta + PERMANENT_POWER_WEIGHT * progress
+                      - RISK_PP_PER_STANDARD_FLOOR * threatRatio                (GameMath.nodeExpectedValue)
+  PERMANENT_POWER_WEIGHT (2.6) exists because a level or a gun applies to EVERY remaining floor while an
+  ammo box is spent once; without it the model says fighting never pays, which is exactly how the
+  un-priced map let a calm-chaining route out-earn a fighting one. The risk charge rides the threat
+  RATIO, not raw Threat Points, so it is depth-stable.
+    R-ROUTE-PRICED     COVERAGE for the map: a node type, affix or mystery outcome with NO ledger row
+                       fails the build — the same anti-"shipped unpriced" rule order 5 applied to enemies.
+    R-RISK-PREMIUM     (reward premium)/(threat premium) in [1.0, 1.2] for ELITE and EVERY affixed
+                       variant: danger pays, slightly better than fair, never free and never a sucker
+                       bet. SWARM/OVERCLOCKED raise threatCost, so they now carry VAULT PREMIUMS
+                       (AFFIX_*_VAULT_AMMO_BOXES) that price up with them.
+    R-CALM-COST        a calm node's EV sits [10%, 35%] BELOW a standard combat node's — the route doc's
+                       "costs loot/tempo, never the clock" invariant as a number. The band's top edge is
+                       0.35 rather than the idea's 0.30 because the discount necessarily WIDENS with
+                       depth (a combat floor's own reward grows with the gear/ability curves while a
+                       sanctuary payoff is capped by the player's own maxima) and ONE band must cover
+                       depths 1..15. This rule is what RE-PRICED the order-8/9 hand-set payoffs: cache
+                       supply down, med-bay heal + stock up, elite vault down, event payout up.
+    R-MYSTERY-EV       the weighted outcome table within ±15% of a standard combat node at every audited
+                       depth (order 9 ASSERTED this; it is audited now), and the worst outcome's expected
+                       resource loss bounded by one floor's maximum modelled drain x 1.5 — "bad but
+                       survivable" as arithmetic, not adjective.
+    R-PIPS-DERIVED     DangerTier is DERIVED from the priced threat ratio, never hand-assigned
+                       (GameMath.derivedDangerTierIndex: forced -> SET_PIECE, hidden outcome table ->
+                       GAMBLE, else CALM <= 0.60x <= STANDARD <= 1.25x < DANGER), and must equal what the
+                       overlay displays. The pips are the player's ONLY route information: if they drift
+                       from the price the map LIES and informed choice collapses.
+    R-HONEST-SAFE      CACHE/REST face <= 0.30x a combat floor's Threat Points (the HONEST-SAFE-NODE
+                       design rule as an enforced bound — a "med-bay ambush" must be a MYSTERY wearing
+                       its own face), and the MYSTERY scan tones partition consistently with their
+                       prices: REWARD-RICH really is the richest bucket by EV, HIGH RISK really is the
+                       most dangerous by threat.
+    R-TRAJECTORY       the JOURNEY replaces the floor as the audited unit. 100 real maps are generated
+                       headlessly and walked under three deterministic policies (SAFEST / DEADLIEST /
+                       BALANCED); at every region boundary the cumulative order-3/4 quantities are
+                       measured over the nodes ACTUALLY VISITED, each priced by its own row: scarcity S
+                       [0.55, 1.60], per-floor net HP drain [-0.85, +0.45], XP pace [0.70, 2.30], and
+                       depth coupling [0.80, 1.50] AT THE LEVEL THE ROUTE ACTUALLY BOUGHT (a route that
+                       skips fights stands below the curve — GameMath.levelForCumulativeXp). All three
+                       must hold: SAFEST rides the generous edge, DEADLIEST the starved edge, and those
+                       ENDS are the game's real difficulty range (printed by BalanceReport).
+    R-ROUTE-GUARANTEES no lane strands a run. Enforced at MAP-GEN by a deterministic no-RNG fixpoint
+                       post-pass (RouteMapGenerator.repairBandGuarantees) and verified over the same 100
+                       seeds: from every node with room ahead of it an UPGRADE-bearing node (ELITE/SHOP)
+                       and a CALM node stay reachable inside the region; the layer before every boss
+                       offers reachable provisioning (order 6's beat, which is also what covers the
+                       band's tail); and every selectable layer offers >= 2 DISTINCT node types (no fake
+                       choices). Order 2's "an upgrade per region" pity rule is now a graph property.
+  WHY: knowledge-doc problem "the audited game and the played game diverge at the first branch". A
+  player who chained caches sailed far above the order-3 supply band; one who never routed calm starved
+  below it; ELITE's risk/reward and every affix multiplier were unpriced; and the risk pips were hand-set
+  so the map could quietly lie. Full subsystem detail: docs/route-map-system.txt (ROUTE ECONOMICS).
+
 NEVER-SOFTLOCK (GameMath.emergencySupplyTriggers, not a schema band — a floor guard)
   A player who wastes ammo must never die to an empty inventory screen. When total
   remaining potential damage (all reserves * per-shot damage + one melee swing) falls
@@ -389,6 +457,15 @@ SECTION 5 — NEW-CONTENT CHECKLIST
                           pricing case in GameMath.abilityPowerPoints (R-ABILITY
                           fails the build on an unpriced ability)
      new status        -> ONE base definition in BalanceConfig SECTION 8
+     new ROUTE content -> a NodeEconomics row in route/RouteEconomics for every new
+                          node type, ELITE affix or MYSTERY outcome, and its numbers
+                          in BalanceConfig SECTION 19 (R-ROUTE-PRICED fails the build
+                          without the row; R-PIPS-DERIVED then requires the node's
+                          declared DangerTier to equal the tier its price derives).
+                          A payoff or budget-scale change is a BALANCE change: re-run
+                          the audit, since R-CALM-COST / R-RISK-PREMIUM / R-MYSTERY-EV
+                          all read it. Update docs/route-map-system.txt too — that
+                          doc's UPDATE CONTRACT is enforced like tile-symbols.txt.
 3. Run `./gradlew test` — BalanceAuditTest must be green. If a value must
    deliberately sit out of band, register a waiver (SECTION 4), never a hack.
 4. Run BalanceReport and paste its output over SECTION 6 below.
@@ -586,6 +663,63 @@ Hell Baron cleave2         35      17.1% OK
   Bosses no longer have flat HP/damage/XP/credit constants — BossBalance.statsForDepth derives every number
   per depth, so endless-mode bosses scale for free. Tune a boss via its *_TARGET_FIGHT_TURNS or the survival
   ratio (SECTION 14), never a raw HP number.
+
+ROUTE ECONOMICS (order 7) — the node EV ledger at depth 5; EV in power points, threat in TP. permanent-power weight 2.6, risk 3.0 PP per standard floor
+subject                    threat resDelta progress   reward       EV pips        in?   
+------------------------------------------------------------------------------------
+combat                        668     1.07    16.19    66.50    40.16 STANDARD    OK    
+elite                        1002    12.28    25.19   112.78    73.27 DANGER      OK    
+cache                         187    24.20     3.96    41.02    33.65 CALM        OK    
+shop                          334     9.56     9.60    46.18    33.01 CALM        OK    
+rest                            0    34.86     0.00    34.86    34.86 CALM        OK    
+mystery                       418    17.77    10.81    60.46    43.99 GAMBLE      OK    
+event                           0    18.03     4.80    30.51    30.51 CALM        OK    
+boss                         1336   -31.64    23.98    77.39    24.71 SET_PIECE   OK    
+region_gate                     0     6.32     0.00     6.32     6.32 SET_PIECE   OK    
+irradiated                    668   -20.05    11.99    34.46     8.12 -           -     
+overclocked                   802   -21.70    14.39    43.72    12.11 -           -     
+swarm                        1002   -20.62    17.99    61.15    21.64 -           -     
+fortified                     668   -19.09    11.99    35.42     9.08 -           -     
+volatile                      668   -20.05    11.99    34.46     8.12 -           -     
+VAULT_JACKPOT                 334    29.44    13.20    75.42    62.25 -           -     
+SECRET_WARREN                 668    11.97    16.19    77.40    51.06 -           -     
+TRAP_GAUNTLET                 187    21.11     3.96    37.94    30.56 -           -     
+AMBUSH                       1002    12.28    25.19   112.78    73.27 -           -     
+LORE_SIGNAL                     0    34.86     0.00    34.86    34.86 -           -     
+MALFUNCTION                   187     0.07     3.36    15.33     7.96 -           -     
+------------------------------------------------------------------------------------
+  standard COMBAT node EV = 40.16. calm discount band 10-35%; risk premium band 1.00-1.20; mystery EV tolerance +/-15%
+  AFFIX rows are MULTIPLIERS folded onto their host ELITE node; MYSTERY rows are the hidden table.
+  risk premium elite                       1.17  OK
+  risk premium elite + irradiated          1.17  OK
+  risk premium elite + overclocked         1.04  OK
+  risk premium elite + swarm               1.01  OK
+  risk premium elite + fortified           1.19  OK
+  risk premium elite + volatile            1.17  OK
+  cache EV discount                       0.12  OK
+  shop EV discount                        0.18  OK
+  rest EV discount                        0.13  OK
+  event EV discount                       0.32  OK
+
+TRAJECTORY (order 7) — cumulative bands over 100 real maps, sampled at every region boundary; worst reading per policy
+policy / metric                                worst band               in?   
+------------------------------------------------------------------------------------
+SAFEST cumulative scarcity S                    1.55 [   0.55,   1.60] OK    
+SAFEST net HP drain / floor                    -0.77 [  -0.85,   0.45] OK    
+SAFEST XP pace                                  0.79 [   0.70,   2.45] OK    
+SAFEST depth coupling                           0.87 [   0.80,   1.55] OK    
+DEADLIEST cumulative scarcity S                 0.61 [   0.55,   1.60] OK    
+DEADLIEST net HP drain / floor                  0.40 [  -0.85,   0.45] OK    
+DEADLIEST XP pace                               2.33 [   0.70,   2.45] OK    
+DEADLIEST depth coupling                        1.47 [   0.80,   1.55] OK    
+BALANCED cumulative scarcity S                  1.49 [   0.55,   1.60] OK    
+BALANCED net HP drain / floor                   0.21 [  -0.85,   0.45] OK    
+BALANCED XP pace                                0.93 [   0.70,   2.45] OK    
+BALANCED depth coupling                         0.87 [   0.80,   1.55] OK    
+------------------------------------------------------------------------------------
+  R-ROUTE-GUARANTEES reachability over 100 seeds       0 violation(s)  OK
+    100 seeds: every lane reaches an upgrade, a calm node and pre-boss provisioning; every layer offers a real choice
+  SAFEST rides the generous edge and DEADLIEST the starved edge — both ENDS must stay fair.
 
 LEGEND: in?/gr?/<0.6?/band = OK inside band, UNDER below, OVER above.
   sustDPT = (clip*dmg)/(clip+reload).  powerScore = sustDPT*sqrt(ammoEff/anchor).

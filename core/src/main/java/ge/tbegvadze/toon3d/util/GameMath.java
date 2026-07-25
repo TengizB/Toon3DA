@@ -4012,6 +4012,274 @@ public final class GameMath {
     }
 
     // =========================================================================
+    // ROUTE ECONOMICS (new-game-balancr order 7) — PRICING THE BRANCHING MAP
+    // Orders 1-6 price FLOORS; the player plays a JOURNEY through the route map's DAG. These are
+    // the formulas that turn a route node's ledger row (route/NodeEconomics) into numbers the
+    // balance contract can band: what it COSTS in threat, what it is WORTH, whether its reward
+    // pays for its danger, what risk tier it must therefore display, and how a whole journey's
+    // resources accumulate. All pure; the model that feeds them lives in util/RouteEconomicsModel.
+    // =========================================================================
+
+    /*
+     * Formula: nodeThreatCost — the Threat Points a route node actually puts in front of the player
+     * Derivation:
+     *   A node never changes the DEPTH of the floor it builds (route-map DEPTH RAMP INVARIANT) — it
+     *   scales the Threat-Point budget the encounter planner spends on that depth. Two multipliers
+     *   compose, both applied on TOP of the already depth- and region-scaled budget:
+     *       threatCost = regionScaledFloorBudget(depth) * nodeBudgetScale * affixBudgetMultiplier
+     *   nodeBudgetScale is the node's own dial (CACHE 0.28, COMBAT 1.0, ELITE 1.5); the affix
+     *   multiplier is the ELITE modifier folded on (SWARM 1.5, OVERCLOCKED 1.2, others 1.0). Because
+     *   both are multipliers on the SAME depth-ramped budget, a node's threat ratio against the
+     *   standard combat node is exactly (scale * affix) at every depth — which is what makes the
+     *   risk-premium and derived-pip rules depth-independent.
+     * Edge cases:
+     *   A zero or negative budget/scale yields 0 (a floor with no roster — the honest read of the
+     *   MED-BAY / EVENT / GATE generators, which emit no enemy spawn points at all).
+     */
+    public static float nodeThreatCost(float regionScaledFloorThreatPointBudget,
+                                       float nodeBudgetScale, float affixBudgetMultiplier) {
+        float threatCost = regionScaledFloorThreatPointBudget * nodeBudgetScale * affixBudgetMultiplier;
+        return threatCost > 0f ? threatCost : 0f;
+    }
+
+    /*
+     * Formula: nodeExpectedValue — one comparable EV number for any route node
+     * Derivation:
+     *   A node hands the player RESOURCES (ammo damage, healing, credits — net of what the fight
+     *   consumes) and PROGRESS (XP levels, weapon-class upgrade opportunities), and charges DANGER.
+     *   Resources and progress are already in the same currency (POWER POINTS: the unit orders 2/3
+     *   use for cards, abilities and shop prices), but they are not interchangeable one-for-one: a
+     *   level or a gun applies to EVERY remaining floor, while an ammo box is spent once. So progress
+     *   is weighted by a durability factor, and the danger is charged as a multiple of what ONE
+     *   standard floor's danger is worth:
+     *       EV = resourceDeltaPP + permanentWeight * progressPP - riskPerStandardFloor * threatRatio
+     *   permanentWeight < 1 would say "consumables beat permanent power"; the honest read is the
+     *   opposite, which is exactly why an un-priced map let a calm-chaining route out-earn a fighting
+     *   one. The risk term is charged on the threat RATIO (this node's Threat Points over a standard
+     *   combat floor's at the same depth), not on raw Threat Points: TP grow geometrically with depth
+     *   while the resources and progress a floor hands over do not, so a raw-TP charge would make
+     *   every deep floor read as a catastrophic loss. A ratio keeps the danger charge depth-stable —
+     *   one standard floor always costs one standard floor's worth of risk.
+     * Edge cases:
+     *   All terms may be negative (a MALFUNCTION sector nets resources DOWN), so no clamping — a
+     *   node that is a net loss must be visible as one.
+     */
+    public static float nodeExpectedValue(float resourceDeltaPowerPoints, float progressPowerPoints,
+                                          float threatRatioVsStandardFloor, float permanentPowerWeight,
+                                          float riskPowerPointsPerStandardFloor) {
+        return resourceDeltaPowerPoints
+                + permanentPowerWeight * progressPowerPoints
+                - riskPowerPointsPerStandardFloor * threatRatioVsStandardFloor;
+    }
+
+    /*
+     * Formula: rewardPremiumRatio — does a node's reward pay for its danger? (R-RISK-PREMIUM)
+     * Derivation:
+     *   A route choice is only a real trade-off if reward scales with priced risk. Measure both as
+     *   PREMIUMS over the standard combat node and divide:
+     *       rewardPremium = nodeReward / standardReward
+     *       threatPremium = nodeThreat / standardThreat
+     *       ratio         = rewardPremium / threatPremium
+     *                     = (nodeReward * standardThreat) / (standardReward * nodeThreat)
+     *   ratio == 1 is a FAIR bet (reward rises exactly in step with danger); the contract band
+     *   [1.0, 1.2] means danger pays slightly better than fair — never free, never a sucker bet.
+     *   Reward here is GROSS (what the node hands over), because the consumption side is already
+     *   proportional to the threat premium it is being divided by.
+     * Edge cases:
+     *   standardReward or nodeThreat <= 0 -> POSITIVE_INFINITY (an un-priced denominator must fail
+     *   loudly in the audit rather than silently read as fair).
+     */
+    public static float rewardPremiumRatio(float nodeRewardPowerPoints, float standardRewardPowerPoints,
+                                           float nodeThreatCost, float standardThreatCost) {
+        if (standardRewardPowerPoints <= 0f || nodeThreatCost <= 0f || standardThreatCost <= 0f) {
+            return Float.POSITIVE_INFINITY;
+        }
+        float rewardPremium = nodeRewardPowerPoints / standardRewardPowerPoints;
+        float threatPremium = nodeThreatCost / standardThreatCost;
+        return rewardPremium / threatPremium;
+    }
+
+    /*
+     * Formula: derivedDangerTierIndex — risk pips DERIVED from price, never hand-assigned (R-PIPS-DERIVED)
+     * Derivation:
+     *   The overlay's risk pips are the player's ONLY information when choosing a route, so they must
+     *   track the priced threat or the map lies and informed choice collapses. The tier is read off
+     *   the node's threat RATIO against the standard combat node at the same depth (a ratio, so it is
+     *   depth-independent — see nodeThreatCost), with two structural overrides first:
+     *       forced convergence node        -> SET_PIECE (4)   (a boss/gate is a set-piece, not a dial)
+     *       hidden outcome table (MYSTERY)  -> GAMBLE   (3)   (its VARIANCE is the danger, not its mean)
+     *       ratio <= calmMaxRatio           -> CALM     (0)
+     *       ratio <= standardMaxRatio       -> STANDARD (1)
+     *       otherwise                        -> DANGER   (2)
+     *   The returned index is the ordinal of route/DangerTier, kept as an int so this formula stays
+     *   in the headless math layer instead of importing the route enum.
+     * Edge cases:
+     *   A negative ratio cannot occur (threat costs are clamped at 0); ratio 0 reads CALM, which is
+     *   the correct read for a floor that spawns nothing.
+     */
+    public static int derivedDangerTierIndex(float nodeThreatRatioVsStandardCombat,
+                                             boolean forcedConvergenceNode, boolean hiddenOutcomeTable,
+                                             float calmMaxRatio, float standardMaxRatio) {
+        if (forcedConvergenceNode) {
+            return 4; // DangerTier.SET_PIECE
+        }
+        if (hiddenOutcomeTable) {
+            return 3; // DangerTier.GAMBLE
+        }
+        if (nodeThreatRatioVsStandardCombat <= calmMaxRatio) {
+            return 0; // DangerTier.CALM
+        }
+        if (nodeThreatRatioVsStandardCombat <= standardMaxRatio) {
+            return 1; // DangerTier.STANDARD
+        }
+        return 2; // DangerTier.DANGER
+    }
+
+    /*
+     * Formula: trajectoryResourceLedger — the JOURNEY's cumulative scarcity (R-TRAJECTORY)
+     * Derivation:
+     *   Order 3 audits scarcity S = SUPPLY / DEMAND on ONE floor. A branching map means the player
+     *   never plays "a floor" — they play a PATH, and a path that chains calm nodes accumulates a
+     *   very different ledger from one that chains elites. The journey-level ledger is the same
+     *   ratio taken over the nodes ACTUALLY VISITED:
+     *       S(journey) = sum(supplyDamage of visited nodes) / sum(demandDamage of visited nodes)
+     *   Summing first and dividing once (rather than averaging per-floor ratios) is the correct
+     *   aggregation: ammo banks across floors, so a rich floor genuinely offsets a lean one.
+     * Edge cases:
+     *   cumulativeDemand <= 0 (a journey of nothing but zero-spawn sanctuary floors) -> returns
+     *   POSITIVE_INFINITY, which the audit reads as "no demand to measure", not as a violation.
+     */
+    public static float trajectoryResourceLedger(float cumulativeSupplyDamage, float cumulativeDemandDamage) {
+        if (cumulativeDemandDamage <= 0f) {
+            return Float.POSITIVE_INFINITY;
+        }
+        return cumulativeSupplyDamage / cumulativeDemandDamage;
+    }
+
+    /*
+     * Formula: depthScaledPickupCount — a stocked payoff that keeps its VALUE as depth scales (order 7)
+     * Derivation:
+     *   A medkit is a flat number of hit points, but the damage a floor deals compounds with depth, so a
+     *   fixed stock of pickups is worth a shrinking share of the fight the deeper the run goes. Where a
+     *   node's ENTIRE payoff is healing (the MED-BAY clinic), that decay turns it into a dead choice deep
+     *   in a run. Scaling the COUNT by the same enemy-damage compound the incoming damage rides restores
+     *   the node's relative worth:
+     *       count(d) = max(1, round( baseCount * perDepthScale^(d-1) ))
+     *   i.e. "the deeper the facility, the better stocked its medical bay" — one medkit early, three at
+     *   depth 15. Integer rounding makes it step rather than ramp, which is what a stack of pickups is.
+     * Edge cases:
+     *   depth <= 1 -> the base count. baseCount <= 0 -> 0 (a node that stocks nothing stays empty).
+     */
+    public static int depthScaledPickupCount(int baseCount, float perDepthScale, int depth) {
+        if (baseCount <= 0) {
+            return 0;
+        }
+        return Math.max(1, Math.round(baseCount * compoundDepthMultiplier(perDepthScale, depth)));
+    }
+
+    /*
+     * Formula: depthScaledRewardXp — a hand-set XP reward, carried honestly down the run (order 7)
+     * Derivation:
+     *   Order 4 made per-KILL XP derived (XP_PER_THREAT_POINT * depth-scaled Threat), but a FLAT XP
+     *   grant written into content — an EVENT choice's "you learn something" payout — silently decays
+     *   to nothing as the geometric level requirement grows: 60 XP is 40% of a level at depth 1 and 9%
+     *   of one at depth 15, so a deep event node quietly becomes worthless. The fix is to read a
+     *   hand-set grant as "this fraction of a level", and re-express it at the depth actually played:
+     *       reward(d) = baseXpAtDepthOne * xpRequired(expectedLevel(d)) / xpBaseRequirement
+     *   At depth 1 this is exactly the authored number (xpRequired(1) == base), and deeper it keeps the
+     *   SAME share of a level — the reward is depth-honest without a second table of constants.
+     * Edge cases:
+     *   xpBaseRequirement <= 0 -> the base value is returned unscaled (bad config stays visible).
+     *   depth <= 1 -> the scale factor is exactly 1.0.
+     */
+    public static int depthScaledRewardXp(int baseXpAtDepthOne, int xpBaseRequirement,
+                                          float growthPerLevel, float levelsPerDepth, int depth) {
+        if (xpBaseRequirement <= 0) {
+            return baseXpAtDepthOne;
+        }
+        int expectedLevel = expectedLevelAtDepth(levelsPerDepth, depth);
+        int levelCost = xpRequiredForLevelGeometric(xpBaseRequirement, growthPerLevel, expectedLevel);
+        return Math.round(baseXpAtDepthOne * (levelCost / (float) xpBaseRequirement));
+    }
+
+    /*
+     * Formula: cumulativeXpRequiredToReachLevel — total XP a run must bank to stand at a level
+     * Derivation:
+     *   xpRequiredForLevelGeometric(level) is the XP for ONE step (level -> level+1). Reaching level L
+     *   from level 1 costs the sum of the first L-1 steps, a geometric series:
+     *       total(L) = sum over l = 1..L-1 of base * growth^(l-1)
+     *                = base * (growth^(L-1) - 1) / (growth - 1)      for growth != 1
+     *                = base * (L - 1)                                 for growth == 1
+     *   The closed form is used so a journey audit can price "how far behind is this route?" in one
+     *   call rather than looping per level. Integer-truncated per step matches the live curve's
+     *   per-level int cast closely enough for a pacing ratio (the audit bands are percentages).
+     * Edge cases:
+     *   level <= 1 -> 0 (standing at level 1 costs nothing). growth <= 0 is nonsensical config and is
+     *   not clamped, so a bad number surfaces in the report rather than silently reading as sane.
+     */
+    public static float cumulativeXpRequiredToReachLevel(int base, float growthPerLevel, int level) {
+        int steps = Math.max(0, level - 1);
+        if (steps == 0) {
+            return 0f;
+        }
+        if (Math.abs(growthPerLevel - 1f) < 1e-6f) {
+            return (float) base * steps;
+        }
+        return (float) (base * (Math.pow(growthPerLevel, steps) - 1.0) / (growthPerLevel - 1.0));
+    }
+
+    /*
+     * Formula: levelForCumulativeXp — the level a journey's banked XP actually buys
+     * Derivation:
+     *   The inverse of cumulativeXpRequiredToReachLevel: the largest L whose total requirement the
+     *   banked XP covers. Solving base * (growth^(L-1) - 1)/(growth - 1) <= xp for L gives
+     *       L = 1 + floor( log( 1 + xp * (growth - 1) / base ) / log(growth) )
+     *   This is what makes the trajectory audit honest: a SAFEST route that skips fights banks less
+     *   XP, so it stands at a LOWER level than the depth expects, and its depth-coupling is measured
+     *   at that real level instead of the expected one.
+     * Edge cases:
+     *   xp <= 0 or base <= 0 -> level 1 (the run's starting level). growth == 1 degrades to the
+     *   linear inverse 1 + floor(xp / base).
+     */
+    public static int levelForCumulativeXp(int base, float growthPerLevel, float cumulativeXp) {
+        if (cumulativeXp <= 0f || base <= 0) {
+            return 1;
+        }
+        if (Math.abs(growthPerLevel - 1f) < 1e-6f) {
+            return 1 + (int) Math.floor(cumulativeXp / base);
+        }
+        double stepsCovered = Math.log(1.0 + cumulativeXp * (growthPerLevel - 1.0) / base)
+                / Math.log(growthPerLevel);
+        return 1 + (int) Math.floor(stepsCovered);
+    }
+
+    /*
+     * Formula: playerPowerAtLevelAndDepth — the honest power model at a REAL level (order 7)
+     * Derivation:
+     *   playerPowerAtDepthV2 assumes the player is exactly ON the pacing curve (level == expected level
+     *   for the depth). A JOURNEY audit cannot assume that: the route chosen decides how much XP was
+     *   actually banked. This is the same three-factor product with the card term re-expressed against
+     *   the player's ACTUAL level rather than the depth's expected one:
+     *       power = (1 + budgetPP * (level - 1) / 100) * gearRamp(d) * (1 + abilityPP(d)/100)
+     *   With level == expectedLevelAtDepth(levelsPerDepth, d) it reproduces playerPowerAtDepthV2
+     *   exactly, so the per-floor rule and the journey rule read the same curve.
+     * Edge cases:
+     *   level <= 1 -> the card term is 1.0 (no levels banked). Inherits the ramp helpers' edge cases;
+     *   a null ability array degrades the product to card * gear.
+     */
+    public static float playerPowerAtLevelAndDepth(float budgetPowerPointsPerLevel, int playerLevel,
+                                                   float gearPerRegionMultiplier,
+                                                   float[] regionAbilityBudgetPoints,
+                                                   int depth, int regionBandSize) {
+        int levelsBanked = Math.max(0, playerLevel - 1);
+        float cardPower = 1f + budgetPowerPointsPerLevel * levelsBanked / 100f;
+        float gearRamp  = gearRampAtDepth(gearPerRegionMultiplier, depth, regionBandSize);
+        float abilityPower = 1f
+                + expectedAbilityPowerPointsAtDepth(regionAbilityBudgetPoints, depth, regionBandSize) / 100f;
+        return cardPower * gearRamp * abilityPower;
+    }
+
+    // =========================================================================
     // MINI-MAP — FACING WEDGE GEOMETRY (replaces the unreadable facing line)
     // =========================================================================
     /*

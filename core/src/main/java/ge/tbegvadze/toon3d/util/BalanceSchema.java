@@ -12,6 +12,19 @@ import ge.tbegvadze.toon3d.item.ItemCategory;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.progression.UpgradeCard;
+// The order-7 ROUTE ECONOMICS rules read the (headless, LibGDX-free) route subsystem: the priced
+// node ledger, the pricing/trajectory model, and the real map generator the audit walks.
+import ge.tbegvadze.toon3d.route.DangerTier;
+import ge.tbegvadze.toon3d.route.MysteryOutcome;
+import ge.tbegvadze.toon3d.route.NodeEconomics;
+import ge.tbegvadze.toon3d.route.NodeEconomicsRegistry;
+import ge.tbegvadze.toon3d.route.NodeTypeRegistry;
+import ge.tbegvadze.toon3d.route.RegionPlan;
+import ge.tbegvadze.toon3d.route.RouteEconomicsModel;
+import ge.tbegvadze.toon3d.route.RouteMap;
+import ge.tbegvadze.toon3d.route.RouteMapGenerator;
+import ge.tbegvadze.toon3d.route.RouteNodeType;
+import ge.tbegvadze.toon3d.route.RouteRegistries;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -106,7 +119,23 @@ public final class BalanceSchema {
         /** R-BOSS-REWARD (order 6): a boss's reward refunds the modelled fight consumption times the risk premium. */
         BOSS_REWARD,
         /** R-BOSS-AMMO (order 6): the fight's ammo demand is coverable by reserve caps + the boss-arena ammo budget. */
-        BOSS_AMMO
+        BOSS_AMMO,
+        /** R-ROUTE-PRICED (order 7): every node type, affix and mystery outcome has a NodeEconomics row. */
+        ROUTE_PRICED,
+        /** R-RISK-PREMIUM (order 7): (reward premium)/(threat premium) in [1.0, 1.2] for every danger node. */
+        RISK_PREMIUM,
+        /** R-CALM-COST (order 7): a calm node's EV sits 10-30% BELOW a standard combat node's. */
+        CALM_COST,
+        /** R-MYSTERY-EV (order 7): the weighted mystery table is within ±15% of a combat node; worst case bounded. */
+        MYSTERY_EV,
+        /** R-PIPS-DERIVED (order 7): the displayed DangerTier equals the tier DERIVED from priced threat. */
+        PIPS_DERIVED,
+        /** R-HONEST-SAFE (order 7): a safe-looking node IS safe, and scan tones partition by price. */
+        HONEST_SAFE,
+        /** R-TRAJECTORY (order 7): SAFEST/DEADLIEST/BALANCED journeys all stay inside the route bands. */
+        TRAJECTORY,
+        /** R-ROUTE-GUARANTEES (order 7): no lane strands a run (upgrade/calm/pre-boss/real choices). */
+        ROUTE_GUARANTEES
     }
 
     // =====================================================================================
@@ -652,6 +681,14 @@ public final class BalanceSchema {
         results.addAll(bossVerbCapResults());
         results.addAll(bossRewardResults());
         results.addAll(bossAmmoResults());
+        results.addAll(routePricedResults());
+        results.addAll(riskPremiumResults());
+        results.addAll(calmCostResults());
+        results.addAll(mysteryExpectedValueResults());
+        results.addAll(derivedPipResults());
+        results.addAll(honestSafeResults());
+        results.addAll(trajectoryResults());
+        results.addAll(routeGuaranteeResults());
         return results;
     }
 
@@ -1587,6 +1624,467 @@ public final class BalanceSchema {
                     String.format("reserve %.0f + arena %.0f vs demand %.0f damage", reserveDamage, arenaDamage, demand)));
         }
         return results;
+    }
+
+    // =====================================================================================
+    // R-ROUTE-* (new-game-balancr order 7) — ROUTE ECONOMICS: the branching MAP joins the contract.
+    // Orders 1-6 price FLOORS, but the player plays a JOURNEY through the route map's DAG, and that
+    // macro layer is where run difficulty is actually decided. Every node type, ELITE affix and
+    // MYSTERY outcome carries a priced NodeEconomics row (route/RouteEconomics); RouteEconomicsModel
+    // folds a row into one comparable EV; these rules band the results:
+    //   R-ROUTE-PRICED      coverage — un-priced route content can never ship (order-5 discipline).
+    //   R-RISK-PREMIUM      reward must scale with priced risk: premium ratio in [1.0, 1.2].
+    //   R-CALM-COST         safety is bought with tempo + loot: calm EV 10-30% BELOW combat.
+    //   R-MYSTERY-EV        the "EV ~= a combat floor" claim is AUDITED, and the worst pull bounded.
+    //   R-PIPS-DERIVED      the map may tempt, never lie: displayed pips == pips derived from price.
+    //   R-HONEST-SAFE       a safe-looking node IS safe; scan tones partition by their priced EV.
+    //   R-TRAJECTORY        the JOURNEY replaces the floor as the audited unit (3 path policies).
+    //   R-ROUTE-GUARANTEES  no lane strands a run (upgrade/calm per region, pre-boss, real choices).
+    // The audited depth range matches every other order-3/4 depth rule: 1..15.
+    // =====================================================================================
+
+    /** The audited depth range shared by the order-7 route rules (matches R-DEPTH / R-SCARCITY-DEPTH). */
+    private static final int ROUTE_AUDIT_MAX_DEPTH = 15;
+
+    /**
+     * The order-3 MODEL FLOOR, handed to the route model so the map is priced against the very same
+     * reference encounter the floor rules use (one source — the map can never drift from the floor).
+     */
+    public static RouteEconomicsModel.ModelFloor routeModelFloor() {
+        float roomBoxes = BalanceConfig.MODEL_FLOOR_ROOM_COUNT * BalanceConfig.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
+        float killBoxes = modelFloorEnemyCount() * BalanceConfig.ENEMY_AMMO_DROP_CHANCE;
+        float totalBoxes = Math.max(1e-3f, roomBoxes + killBoxes);
+        float totalSupply = modelFloorTotalRangedSupply();
+        float averageBoxDamage = totalSupply / totalBoxes;
+        float incoming = GameMath.incomingDamagePerFloor(modelFloorEnemyDamagePerTurn(),
+                BalanceConfig.MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY, BalanceConfig.MODEL_FLOOR_AVOIDANCE_FACTOR);
+        float averageMedkitHeal  = (BalanceConfig.MEDKIT_STIM_HEAL + BalanceConfig.MEDKIT_FULL_HEAL) / 2f;
+        float averageArmourValue = (BalanceConfig.ARMOUR_SHARD_VALUE + BalanceConfig.ARMOUR_VEST_VALUE) / 2f;
+        float healSupply = GameMath.healSupplyPerFloor(
+                BalanceConfig.MODEL_FLOOR_EXPECTED_MEDKITS, averageMedkitHeal,
+                BalanceConfig.MODEL_FLOOR_EXPECTED_ARMOUR_PICKUPS, averageArmourValue);
+        return new RouteEconomicsModel.ModelFloor(modelFloorDemand(),
+                totalSupply * (roomBoxes / totalBoxes), totalSupply * (killBoxes / totalBoxes),
+                averageBoxDamage, incoming, healSupply, modelFloorKillCreditReward(), chipIncomePerFloor(),
+                regionAbilityBudgetPoints());
+    }
+
+    /** The priced ledger, with its registration latched exactly once (headless — no LibGDX touched). */
+    public static NodeEconomicsRegistry routeLedger() {
+        return RouteRegistries.nodeEconomics();
+    }
+
+    /**
+     * R-ROUTE-PRICED (COVERAGE for the map): every {@link RouteNodeType}, every registered ELITE
+     * affix and every {@link MysteryOutcome} must carry a {@link NodeEconomics} row. This is the same
+     * anti-"shipped unpriced" rule that fixed enemies in order 5, applied to route content: the map
+     * can never again gain a node, affix or outcome the balance contract cannot see.
+     */
+    public static List<RuleResult> routePricedResults() {
+        List<RuleResult> results = new ArrayList<>();
+        NodeEconomicsRegistry ledger = routeLedger();
+        for (RouteNodeType type : RouteNodeType.values()) {
+            boolean priced = ledger.forNodeType(type) != null;
+            results.add(new RuleResult(RuleKind.ROUTE_PRICED, "node " + type.name(),
+                    priced ? 1f : 0f, 1f, 1f, priced,
+                    priced ? "priced in the node EV ledger"
+                           : "UNPRICED — register a NodeEconomics row in route/RouteEconomics"));
+        }
+        for (String affixId : RouteRegistries.affixes().ids()) {
+            boolean priced = ledger.get(affixId) != null;
+            results.add(new RuleResult(RuleKind.ROUTE_PRICED, "affix " + affixId,
+                    priced ? 1f : 0f, 1f, 1f, priced,
+                    priced ? "priced in the node EV ledger"
+                           : "UNPRICED — register a NodeEconomics.affix row in route/RouteEconomics"));
+        }
+        for (MysteryOutcome outcome : MysteryOutcome.values()) {
+            boolean priced = ledger.get(outcome.name()) != null;
+            results.add(new RuleResult(RuleKind.ROUTE_PRICED, "mystery outcome " + outcome.name(),
+                    priced ? 1f : 0f, 1f, 1f, priced,
+                    priced ? "priced in the node EV ledger"
+                           : "UNPRICED — register a NodeEconomics.mysteryOutcome row in route/RouteEconomics"));
+        }
+        return results;
+    }
+
+    /**
+     * R-RISK-PREMIUM: for the ELITE node and for EVERY affixed variant of it, the reward premium
+     * divided by the threat premium (both measured against a standard COMBAT node at the same depth)
+     * must land in [1.0, 1.2] — danger pays, slightly better than fair, never free and never a sucker
+     * bet. SWARM / OVERCLOCKED raise the threat, so their vaults must price up with them. Reported as
+     * the WORST depth in 1..15 for each subject, so one row names the exact failing case.
+     */
+    public static List<RuleResult> riskPremiumResults() {
+        List<RuleResult> results = new ArrayList<>();
+        NodeEconomicsRegistry ledger = routeLedger();
+        RouteEconomicsModel.ModelFloor floor = routeModelFloor();
+        for (NodeEconomics node : ledger.allOfKind(NodeEconomics.Kind.NODE)) {
+            if (node.forced() || node.budgetScale() <= 1f) {
+                continue; // only DANGER nodes (threat above a standard combat floor) buy a premium
+            }
+            results.add(worstRiskPremium(ledger, floor, node, null));
+            for (NodeEconomics affix : ledger.allOfKind(NodeEconomics.Kind.AFFIX)) {
+                results.add(worstRiskPremium(ledger, floor, node, affix));
+            }
+        }
+        return results;
+    }
+
+    /** The depth in 1..15 whose risk premium sits furthest outside the band (or nearest its edge). */
+    private static RuleResult worstRiskPremium(NodeEconomicsRegistry ledger,
+                                               RouteEconomicsModel.ModelFloor floor,
+                                               NodeEconomics node, NodeEconomics affix) {
+        String subject = node.id() + (affix == null ? "" : " + " + affix.id());
+        float worstValue = Float.NaN;
+        int   worstDepth = 1;
+        float worstExtremity = -1f;
+        for (int depth = 1; depth <= ROUTE_AUDIT_MAX_DEPTH; depth++) {
+            RouteEconomicsModel.NodePrice standard = RouteEconomicsModel.standardCombat(ledger, floor, depth);
+            RouteEconomicsModel.NodePrice priced   = RouteEconomicsModel.price(ledger, node, affix, floor, depth);
+            float ratio = GameMath.rewardPremiumRatio(priced.rewardPowerPoints, standard.rewardPowerPoints,
+                    priced.threatCost, standard.threatCost);
+            float extremity = bandExtremity(ratio, BalanceConfig.ROUTE_RISK_PREMIUM_MIN,
+                    BalanceConfig.ROUTE_RISK_PREMIUM_MAX);
+            if (extremity > worstExtremity) {
+                worstExtremity = extremity;
+                worstValue    = ratio;
+                worstDepth    = depth;
+            }
+        }
+        boolean inBand = worstValue >= BalanceConfig.ROUTE_RISK_PREMIUM_MIN
+                && worstValue <= BalanceConfig.ROUTE_RISK_PREMIUM_MAX;
+        return new RuleResult(RuleKind.RISK_PREMIUM, subject, worstValue,
+                BalanceConfig.ROUTE_RISK_PREMIUM_MIN, BalanceConfig.ROUTE_RISK_PREMIUM_MAX, inBand,
+                "worst depth " + worstDepth + " — reward premium / threat premium");
+    }
+
+    /**
+     * R-CALM-COST: every CALM node's total EV must sit BELOW a standard combat node's by 10-30%.
+     * Safety is bought with TEMPO and LOOT — the route doc's "costs loot/tempo, never the clock"
+     * invariant, now a number. Cache supply and the med-bay heal are therefore order-3 economy inputs:
+     * routing calm is a real strategic spend of the heal/ammo budget, not free income on top.
+     */
+    public static List<RuleResult> calmCostResults() {
+        List<RuleResult> results = new ArrayList<>();
+        NodeEconomicsRegistry ledger = routeLedger();
+        RouteEconomicsModel.ModelFloor floor = routeModelFloor();
+        NodeTypeRegistry nodeTypes = RouteRegistries.nodeTypes();
+        for (NodeEconomics node : ledger.allOfKind(NodeEconomics.Kind.NODE)) {
+            if (node.forced() || nodeTypes.get(node.nodeType()).dangerTier() != DangerTier.CALM) {
+                continue;
+            }
+            float worstDiscount = Float.NaN;
+            int   worstDepth = 1;
+            float worstExtremity = -1f;
+            for (int depth = 1; depth <= ROUTE_AUDIT_MAX_DEPTH; depth++) {
+                RouteEconomicsModel.NodePrice standard =
+                        RouteEconomicsModel.standardCombat(ledger, floor, depth);
+                RouteEconomicsModel.NodePrice priced = RouteEconomicsModel.price(ledger, node, floor, depth);
+                float discount = standard.expectedValue == 0f ? 0f
+                        : 1f - priced.expectedValue / standard.expectedValue;
+                float extremity = bandExtremity(discount, BalanceConfig.ROUTE_CALM_EV_DISCOUNT_MIN,
+                        BalanceConfig.ROUTE_CALM_EV_DISCOUNT_MAX);
+                if (extremity > worstExtremity) {
+                    worstExtremity = extremity;
+                    worstDiscount = discount;
+                    worstDepth    = depth;
+                }
+            }
+            boolean inBand = worstDiscount >= BalanceConfig.ROUTE_CALM_EV_DISCOUNT_MIN
+                    && worstDiscount <= BalanceConfig.ROUTE_CALM_EV_DISCOUNT_MAX;
+            results.add(new RuleResult(RuleKind.CALM_COST, node.id() + " EV discount", worstDiscount,
+                    BalanceConfig.ROUTE_CALM_EV_DISCOUNT_MIN, BalanceConfig.ROUTE_CALM_EV_DISCOUNT_MAX,
+                    inBand, "worst depth " + worstDepth + " — 1 - EV(calm)/EV(combat)"));
+        }
+        return results;
+    }
+
+    /**
+     * R-MYSTERY-EV: the WEIGHTED EV of the mystery outcome table must sit within ±15% of a standard
+     * combat node at every audited depth (the order-9 doc ASSERTED this; now it is audited and can no
+     * longer drift when any payoff or upstream re-tune moves), and the worst outcome (MALFUNCTION)
+     * must stay "bad but survivable" as arithmetic: its expected NET resource loss may not exceed one
+     * floor's maximum modelled drain times {@code ROUTE_MYSTERY_WORST_LOSS_FLOOR_MULTIPLIER}.
+     */
+    public static List<RuleResult> mysteryExpectedValueResults() {
+        List<RuleResult> results = new ArrayList<>();
+        NodeEconomicsRegistry ledger = routeLedger();
+        RouteEconomicsModel.ModelFloor floor = routeModelFloor();
+        NodeEconomics mystery = ledger.forNodeType(RouteNodeType.MYSTERY);
+
+        float worstDeviation = 0f;
+        int   worstDepth = 1;
+        for (int depth = 1; depth <= ROUTE_AUDIT_MAX_DEPTH; depth++) {
+            RouteEconomicsModel.NodePrice standard = RouteEconomicsModel.standardCombat(ledger, floor, depth);
+            RouteEconomicsModel.NodePrice table    = RouteEconomicsModel.price(ledger, mystery, floor, depth);
+            float deviation = standard.expectedValue == 0f ? 0f
+                    : Math.abs(table.expectedValue / standard.expectedValue - 1f);
+            if (deviation > worstDeviation) {
+                worstDeviation = deviation;
+                worstDepth     = depth;
+            }
+        }
+        results.add(new RuleResult(RuleKind.MYSTERY_EV, "weighted table vs combat", worstDeviation,
+                0f, BalanceConfig.ROUTE_MYSTERY_EV_TOLERANCE,
+                worstDeviation <= BalanceConfig.ROUTE_MYSTERY_EV_TOLERANCE,
+                "worst depth " + worstDepth + " — |EV(table)/EV(combat) - 1|"));
+
+        // Worst-outcome bound, measured at depth 1 where a loss hurts a thin run the most.
+        float maximumLoss = oneFloorMaximumResourceLossPowerPoints()
+                * BalanceConfig.ROUTE_MYSTERY_WORST_LOSS_FLOOR_MULTIPLIER;
+        for (NodeEconomics outcome : ledger.allOfKind(NodeEconomics.Kind.MYSTERY_OUTCOME)) {
+            float worstLoss = 0f;
+            int   lossDepth = 1;
+            for (int depth = 1; depth <= ROUTE_AUDIT_MAX_DEPTH; depth++) {
+                RouteEconomicsModel.NodePrice priced =
+                        RouteEconomicsModel.price(ledger, outcome, floor, depth);
+                float loss = -priced.resourceDeltaPowerPoints; // positive == a net drain
+                if (loss > worstLoss) {
+                    worstLoss = loss;
+                    lossDepth = depth;
+                }
+            }
+            results.add(new RuleResult(RuleKind.MYSTERY_EV, "worst-case loss " + outcome.id(), worstLoss,
+                    0f, maximumLoss, worstLoss <= maximumLoss,
+                    "worst depth " + lossDepth + " — net resource loss in power points"));
+        }
+        return results;
+    }
+
+    /**
+     * One floor's MAXIMUM modelled resource drain in power points: the order-3 heal net-drain band
+     * ceiling plus the share of a floor's ammo demand the scarcity band leaves uncovered. This is the
+     * "one bad floor" yardstick R-MYSTERY-EV measures the worst pull against.
+     */
+    public static float oneFloorMaximumResourceLossPowerPoints() {
+        float healLoss = BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX * BalanceConfig.REFERENCE_PLAYER_EHP
+                / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT;
+        float ammoLoss = (1f - BalanceConfig.SCARCITY_RATIO_FLOOR_MIN) * modelFloorDemand()
+                / BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT;
+        return healLoss + ammoLoss;
+    }
+
+    /**
+     * R-PIPS-DERIVED: the overlay's risk pips are the player's ONLY information for a route decision,
+     * so a hand-assigned {@link DangerTier} that drifts from the priced threat makes the map LIE and
+     * informed choice collapses. Every node type's displayed tier must equal the tier DERIVED from its
+     * threat ratio (GameMath.derivedDangerTierIndex) against a standard combat node.
+     */
+    public static List<RuleResult> derivedPipResults() {
+        List<RuleResult> results = new ArrayList<>();
+        NodeEconomicsRegistry ledger = routeLedger();
+        RouteEconomicsModel.ModelFloor floor = routeModelFloor();
+        NodeTypeRegistry nodeTypes = RouteRegistries.nodeTypes();
+        for (NodeEconomics node : ledger.allOfKind(NodeEconomics.Kind.NODE)) {
+            DangerTier declared = nodeTypes.get(node.nodeType()).dangerTier();
+            int derivedIndex = derivedDangerTierIndexOf(ledger, floor, node);
+            DangerTier derived = DangerTier.values()[derivedIndex];
+            boolean matches = declared == derived;
+            results.add(new RuleResult(RuleKind.PIPS_DERIVED, node.id() + " danger tier",
+                    derivedIndex, declared.ordinal(), declared.ordinal(), matches,
+                    "declared " + declared + " vs derived " + derived + " (threat ratio "
+                            + String.format("%.2f", routeThreatRatio(ledger, floor, node)) + "x combat)"));
+        }
+        return results;
+    }
+
+    /** The DangerTier index a node's PRICE implies (shared by the rule and BalanceReport's table). */
+    public static int derivedDangerTierIndexOf(NodeEconomicsRegistry ledger,
+                                               RouteEconomicsModel.ModelFloor floor, NodeEconomics node) {
+        return GameMath.derivedDangerTierIndex(routeThreatRatio(ledger, floor, node), node.forced(),
+                node.hiddenOutcomeTable(), BalanceConfig.ROUTE_PIP_CALM_MAX_THREAT_RATIO,
+                BalanceConfig.ROUTE_PIP_STANDARD_MAX_THREAT_RATIO);
+    }
+
+    /** A node's threat as a multiple of a standard combat node's, at the reference audit depth. */
+    public static float routeThreatRatio(NodeEconomicsRegistry ledger,
+                                         RouteEconomicsModel.ModelFloor floor, NodeEconomics node) {
+        return RouteEconomicsModel.threatRatioVsStandardCombat(ledger, node, floor, 1);
+    }
+
+    /**
+     * R-HONEST-SAFE: the honest-safe-node design rule as an enforced bound plus a scan-tone check.
+     * <ol>
+     *   <li>A node whose icon promises safety (CACHE / REST) may face at most
+     *       {@code ROUTE_HONEST_SAFE_MAX_THREAT_RATIO} of a combat floor's Threat Points — a "med-bay
+     *       ambush" must be a DIFFERENT node (a MYSTERY), never a REST wearing REST's face.</li>
+     *   <li>The MYSTERY scan-tone buckets must partition consistently with their priced values:
+     *       REWARD-RICH really is the richest bucket by EV, and HIGH RISK really is the most dangerous
+     *       by threat — so a scan narrows honestly instead of flavour-texting.</li>
+     * </ol>
+     */
+    public static List<RuleResult> honestSafeResults() {
+        List<RuleResult> results = new ArrayList<>();
+        NodeEconomicsRegistry ledger = routeLedger();
+        RouteEconomicsModel.ModelFloor floor = routeModelFloor();
+
+        for (RouteNodeType type : new RouteNodeType[]{RouteNodeType.CACHE, RouteNodeType.REST}) {
+            NodeEconomics node = ledger.forNodeType(type);
+            float ratio = routeThreatRatio(ledger, floor, node);
+            results.add(new RuleResult(RuleKind.HONEST_SAFE, node.id() + " threat ratio", ratio,
+                    0f, BalanceConfig.ROUTE_HONEST_SAFE_MAX_THREAT_RATIO,
+                    ratio <= BalanceConfig.ROUTE_HONEST_SAFE_MAX_THREAT_RATIO,
+                    "a node whose icon promises safety must BE safe"));
+        }
+
+        float richValue  = scanToneMean(ledger, floor, MysteryOutcome.ScanTone.REWARD_RICH, true);
+        float quietValue = scanToneMean(ledger, floor, MysteryOutcome.ScanTone.QUIET, true);
+        float riskValue  = scanToneMean(ledger, floor, MysteryOutcome.ScanTone.HIGH_RISK, true);
+        results.add(new RuleResult(RuleKind.HONEST_SAFE, "scan tone REWARD-RICH is the richest",
+                richValue, Math.max(quietValue, riskValue), Float.POSITIVE_INFINITY,
+                richValue > quietValue && richValue > riskValue,
+                String.format("EV rich %.1f vs quiet %.1f, high-risk %.1f", richValue, quietValue, riskValue)));
+
+        float richThreat  = scanToneMean(ledger, floor, MysteryOutcome.ScanTone.REWARD_RICH, false);
+        float quietThreat = scanToneMean(ledger, floor, MysteryOutcome.ScanTone.QUIET, false);
+        float riskThreat  = scanToneMean(ledger, floor, MysteryOutcome.ScanTone.HIGH_RISK, false);
+        results.add(new RuleResult(RuleKind.HONEST_SAFE, "scan tone HIGH RISK is the most dangerous",
+                riskThreat, Math.max(quietThreat, richThreat), Float.POSITIVE_INFINITY,
+                riskThreat > quietThreat && riskThreat > richThreat,
+                String.format("threat high-risk %.0f vs quiet %.0f, rich %.0f",
+                        riskThreat, quietThreat, richThreat)));
+        return results;
+    }
+
+    /** Mean EV (or mean threat) of the mystery outcomes sharing one scan tone, at the audit depth. */
+    private static float scanToneMean(NodeEconomicsRegistry ledger, RouteEconomicsModel.ModelFloor floor,
+                                      MysteryOutcome.ScanTone tone, boolean expectedValue) {
+        float total = 0f;
+        int   count = 0;
+        for (NodeEconomics outcome : ledger.allOfKind(NodeEconomics.Kind.MYSTERY_OUTCOME)) {
+            if (!tone.name().equals(outcome.scanToneId())) {
+                continue;
+            }
+            RouteEconomicsModel.NodePrice priced = RouteEconomicsModel.price(ledger, outcome, floor, 1);
+            total += expectedValue ? priced.expectedValue : priced.threatCost;
+            count++;
+        }
+        return count == 0 ? 0f : total / count;
+    }
+
+    // --- The trajectory + reachability audits: real maps, walked headlessly. ----------------
+
+    /** A freshly generated route map for one seed, using the real generator and the real registries. */
+    private static RouteMap generateAuditMap(long seed) {
+        RouteMapGenerator generator = new RouteMapGenerator(RouteRegistries.nodeTypes(),
+                RouteRegistries.generators());
+        generator.setEliteAffixPool(RouteRegistries.affixes().elitePool());
+        return generator.generate(seed, RegionPlan.defaultPlan());
+    }
+
+    /**
+     * R-TRAJECTORY: the JOURNEY is the audited unit. Real maps are generated for
+     * {@code ROUTE_TRAJECTORY_SEED_COUNT} seeds and walked under three deterministic policies
+     * (SAFEST / DEADLIEST / BALANCED); at every region boundary the cumulative order-3/4 quantities —
+     * scarcity S, per-floor net HP drain, XP pace and depth coupling AT THE LEVEL THE ROUTE ACTUALLY
+     * BOUGHT — are measured over the nodes actually visited, each priced by its own ledger row rather
+     * than by the combat-floor average. All three policies must stay in band: SAFEST may ride the
+     * generous edge and DEADLIEST the starved edge, and those ENDS are the game's real difficulty
+     * range, but both must stay fair.
+     */
+    public static List<RuleResult> trajectoryResults() {
+        List<RuleResult> results = new ArrayList<>();
+        NodeEconomicsRegistry ledger = routeLedger();
+        RouteEconomicsModel.ModelFloor floor = routeModelFloor();
+        for (RouteEconomicsModel.PathPolicy policy : RouteEconomicsModel.PathPolicy.values()) {
+            float worstScarcity = Float.NaN, worstDrain = Float.NaN;
+            float worstPace = Float.NaN, worstCoupling = Float.NaN;
+            float scarcityExtremity = -1f, drainExtremity = -1f, paceExtremity = -1f, couplingExtremity = -1f;
+            for (long seed = 0; seed < BalanceConfig.ROUTE_TRAJECTORY_SEED_COUNT; seed++) {
+                RouteMap map = generateAuditMap(seed);
+                for (RouteEconomicsModel.TrajectorySample sample
+                        : RouteEconomicsModel.walk(map, policy, ledger, floor, ROUTE_AUDIT_MAX_DEPTH)) {
+                    float extremity = bandExtremity(sample.scarcityRatio,
+                            BalanceConfig.ROUTE_TRAJECTORY_SCARCITY_MIN, BalanceConfig.ROUTE_TRAJECTORY_SCARCITY_MAX);
+                    if (extremity > scarcityExtremity) {
+                        scarcityExtremity = extremity;
+                        worstScarcity    = sample.scarcityRatio;
+                    }
+                    extremity = bandExtremity(sample.netDrainFraction,
+                            BalanceConfig.ROUTE_TRAJECTORY_DRAIN_MIN, BalanceConfig.ROUTE_TRAJECTORY_DRAIN_MAX);
+                    if (extremity > drainExtremity) {
+                        drainExtremity = extremity;
+                        worstDrain    = sample.netDrainFraction;
+                    }
+                    extremity = bandExtremity(sample.experiencePace,
+                            BalanceConfig.ROUTE_TRAJECTORY_XP_PACE_MIN, BalanceConfig.ROUTE_TRAJECTORY_XP_PACE_MAX);
+                    if (extremity > paceExtremity) {
+                        paceExtremity = extremity;
+                        worstPace    = sample.experiencePace;
+                    }
+                    extremity = bandExtremity(sample.couplingRatio,
+                            BalanceConfig.ROUTE_TRAJECTORY_COUPLING_MIN, BalanceConfig.ROUTE_TRAJECTORY_COUPLING_MAX);
+                    if (extremity > couplingExtremity) {
+                        couplingExtremity = extremity;
+                        worstCoupling    = sample.couplingRatio;
+                    }
+                }
+            }
+            String policyName = policy.name();
+            results.add(bandedResult(RuleKind.TRAJECTORY, policyName + " cumulative scarcity S",
+                    worstScarcity, BalanceConfig.ROUTE_TRAJECTORY_SCARCITY_MIN,
+                    BalanceConfig.ROUTE_TRAJECTORY_SCARCITY_MAX, "over the nodes actually visited"));
+            results.add(bandedResult(RuleKind.TRAJECTORY, policyName + " net HP drain / floor",
+                    worstDrain, BalanceConfig.ROUTE_TRAJECTORY_DRAIN_MIN,
+                    BalanceConfig.ROUTE_TRAJECTORY_DRAIN_MAX, "fraction of eHP lost per visited floor"));
+            results.add(bandedResult(RuleKind.TRAJECTORY, policyName + " XP pace",
+                    worstPace, BalanceConfig.ROUTE_TRAJECTORY_XP_PACE_MIN,
+                    BalanceConfig.ROUTE_TRAJECTORY_XP_PACE_MAX, "banked XP / XP for the expected level"));
+            results.add(bandedResult(RuleKind.TRAJECTORY, policyName + " depth coupling",
+                    worstCoupling, BalanceConfig.ROUTE_TRAJECTORY_COUPLING_MIN,
+                    BalanceConfig.ROUTE_TRAJECTORY_COUPLING_MAX, "measured at the level the route bought"));
+        }
+        return results;
+    }
+
+    /**
+     * R-ROUTE-GUARANTEES: over the same seed sweep, EVERY generated map must satisfy the reachability
+     * guarantees the generator's post-pass enforces — from every node an upgrade-bearing node and a
+     * calm node are still reachable inside the region, the layer before each boss offers reachable
+     * provisioning, and every selectable layer offers at least two distinct node types. A branching
+     * map must never strand a floor-level promise on the lane not taken.
+     */
+    public static List<RuleResult> routeGuaranteeResults() {
+        List<String> violations = new ArrayList<>();
+        for (long seed = 0; seed < BalanceConfig.ROUTE_TRAJECTORY_SEED_COUNT; seed++) {
+            for (String violation : RouteEconomicsModel.guaranteeViolations(generateAuditMap(seed))) {
+                violations.add("seed " + seed + ": " + violation);
+            }
+        }
+        List<RuleResult> results = new ArrayList<>();
+        String detail = violations.isEmpty()
+                ? BalanceConfig.ROUTE_TRAJECTORY_SEED_COUNT + " seeds: every lane reaches an upgrade, "
+                        + "a calm node and pre-boss provisioning; every layer offers a real choice"
+                : violations.size() + " violation(s), first: " + violations.get(0);
+        results.add(new RuleResult(RuleKind.ROUTE_GUARANTEES, "reachability over "
+                + BalanceConfig.ROUTE_TRAJECTORY_SEED_COUNT + " seeds",
+                violations.size(), 0f, 0f, violations.isEmpty(), detail));
+        return results;
+    }
+
+    /**
+     * How EXTREME a reading is: its distance from the band's centre. Used to pick which depth (or which
+     * seed/sample) a rule reports, because the reading furthest from the centre is out of band exactly
+     * when ANY reading is — so one row can carry both the verdict and the most informative number
+     * (a plain "is it outside?" distance reports 0 for every in-band reading and would print whichever
+     * sample happened to come first).
+     */
+    private static float bandExtremity(float value, float bandMinimum, float bandMaximum) {
+        if (Float.isNaN(value)) {
+            return Float.MAX_VALUE;
+        }
+        float bandCentre = (bandMinimum + bandMaximum) / 2f;
+        if (Float.isInfinite(bandCentre)) {
+            return Math.abs(value - bandMinimum); // one-sided band: distance from its only edge
+        }
+        return Math.abs(value - bandCentre);
+    }
+
+    /** A RuleResult whose verdict is simply "is the value inside the band?". */
+    private static RuleResult bandedResult(RuleKind kind, String subject, float value,
+                                           float bandMinimum, float bandMaximum, String detail) {
+        boolean inBand = !Float.isNaN(value) && value >= bandMinimum && value <= bandMaximum;
+        return new RuleResult(kind, subject, value, bandMinimum, bandMaximum, inBand, detail);
     }
 
     // =====================================================================================

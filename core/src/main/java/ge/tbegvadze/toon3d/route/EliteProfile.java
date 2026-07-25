@@ -64,6 +64,7 @@ public final class EliteProfile implements NodeLevelProfile {
         LevelGenConfig config = buildHotzoneConfig();
         List<GuaranteedContent> guarantees = buildRewardGuarantees(depth, seed);
         float budgetScale = RouteMapConstants.ELITE_BUDGET_SCALE;
+        int   vaultAmmoBoxes = RouteMapConstants.ELITE_AMMO_BOXES;
 
         // Fold in the map-gen affix, if any: a bundle of typed modifiers, no bespoke per-affix code.
         NodeAffixDefinition affix = node != null && node.affix != null
@@ -71,11 +72,13 @@ public final class EliteProfile implements NodeLevelProfile {
         if (affix != null) {
             affix.applyToConfig(config);
             budgetScale *= affix.budgetScaleMultiplier();
+            // An affix that raises the THREAT must raise the REWARD with it (R-RISK-PREMIUM, order 7):
+            // SWARM / OVERCLOCKED add vault boxes so their risk premium stays in the [1.0, 1.2] band.
+            vaultAmmoBoxes += affix.extraVaultAmmoBoxes();
             guarantees.addAll(affix.extraGuarantees(depth, seed));
         }
 
-        AmmoCacheRequest vault =
-                new AmmoCacheRequest(RouteMapConstants.ELITE_AMMO_BOXES, Placement.GATED_ROOM);
+        AmmoCacheRequest vault = new AmmoCacheRequest(vaultAmmoBoxes, Placement.GATED_ROOM);
         FloorEffects effects = RouteMapConstants.ELITE_RED_ALERT
                 ? FloorEffects.redAlert().withSting(RouteMapConstants.ELITE_STING_TEXT)
                 : FloorEffects.NONE.withSting(RouteMapConstants.ELITE_STING_TEXT);

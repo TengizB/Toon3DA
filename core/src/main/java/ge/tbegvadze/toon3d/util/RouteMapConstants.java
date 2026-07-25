@@ -66,14 +66,16 @@ public final class RouteMapConstants {
     // Consumed by order-2's RouteMapGenerator. Declared here so the data model documents its
     // layout bounds in one place.
 
-    public static final int BRANCH_WIDTH_MINIMUM = 2;
-    public static final int BRANCH_WIDTH_MAXIMUM = 4;
+    // BALANCE SHIMS (new-game-balancr order 7): branch width and spread decide how many REAL
+    // choices a layer offers, so they are audited map shape and live in BalanceConfig SECTION 19.
+    public static final int BRANCH_WIDTH_MINIMUM = BalanceConfig.BRANCH_WIDTH_MINIMUM;
+    public static final int BRANCH_WIDTH_MAXIMUM = BalanceConfig.BRANCH_WIDTH_MAXIMUM;
 
     /**
      * Probability (0..1) that a source node grows an extra edge to one of its projected lane's
      * neighbours, on top of the guaranteed centre edge. Higher = more cross-connected, busier map.
      */
-    public static final float BRANCH_SPREAD_CHANCE = 0.55f;
+    public static final float BRANCH_SPREAD_CHANCE = BalanceConfig.BRANCH_SPREAD_CHANCE;
 
     // -------------------------------------------------------------------------
     // Region / act bands — the descent's narrated shape
@@ -138,14 +140,14 @@ public final class RouteMapConstants {
     // -------------------------------------------------------------------------
 
     /** Sliding window (in layers) over which no more than SHOP_MAX_PER_WINDOW shops may appear. */
-    public static final int SHOP_WINDOW_LAYERS = 4;
+    public static final int SHOP_WINDOW_LAYERS = BalanceConfig.SHOP_WINDOW_LAYERS;
     /** Max SHOP nodes permitted inside any SHOP_WINDOW_LAYERS-wide window (economy pacing). */
-    public static final int SHOP_MAX_PER_WINDOW = 2;
+    public static final int SHOP_MAX_PER_WINDOW = BalanceConfig.SHOP_MAX_PER_WINDOW;
     /**
      * The player must be OFFERED a CACHE or REST at least once every RESOURCE_RELIEF_WINDOW layers,
      * protecting the finite-ammo economy. "Offered" = present as a candidate, not forced to take.
      */
-    public static final int RESOURCE_RELIEF_WINDOW = 4;
+    public static final int RESOURCE_RELIEF_WINDOW = BalanceConfig.RESOURCE_RELIEF_WINDOW;
     /** Hard cap on repair iterations per guard so an over-constrained pool can never infinite-loop. */
     public static final int GUARD_REPAIR_ATTEMPT_CAP = 64;
 
@@ -154,9 +156,9 @@ public final class RouteMapConstants {
     // -------------------------------------------------------------------------
 
     /** Probability an ELITE node rolls an affix, IF an affix catalog has been supplied (else 0). */
-    public static final float AFFIX_ROLL_CHANCE_ELITE   = 0.60f;
+    public static final float AFFIX_ROLL_CHANCE_ELITE   = BalanceConfig.AFFIX_ROLL_CHANCE_ELITE;
     /** Probability a MYSTERY node rolls an affix, IF an affix catalog has been supplied (else 0). */
-    public static final float AFFIX_ROLL_CHANCE_MYSTERY = 0.25f;
+    public static final float AFFIX_ROLL_CHANCE_MYSTERY = BalanceConfig.AFFIX_ROLL_CHANCE_MYSTERY;
 
     // -------------------------------------------------------------------------
     // Endless-mode lazy extension
@@ -508,16 +510,18 @@ public final class RouteMapConstants {
     // trustworthy (a MYSTERY "med-bay ambush" is a DIFFERENT node, order-9).
 
     // ---- SUPPLY CACHE (RouteNodeType.CACHE, profile "supply_cache") --------
+    // BALANCE SHIMS (order 7): the cache payoff is an order-3 economy input now — it is priced in
+    // the node EV ledger and bounded by R-CALM-COST, so the numbers live in BalanceConfig SECTION 19.
     /** Ammo boxes stamped in the cargo bay, spread across the player's OWNED ammo types. */
-    public static final int   CACHE_AMMO_BOXES      = 4;
+    public static final int   CACHE_AMMO_BOXES      = BalanceConfig.CACHE_AMMO_BOXES;
     /** Guaranteed field medkits ('H') in a cache. */
-    public static final int   CACHE_MEDKITS         = 1;
+    public static final int   CACHE_MEDKITS         = BalanceConfig.CACHE_MEDKITS;
     /** Guaranteed stim-packs ('+') in a cache (a small top-up alongside the medkit). */
-    public static final int   CACHE_STIMS           = 1;
+    public static final int   CACHE_STIMS           = BalanceConfig.CACHE_STIMS;
     /** Guaranteed armour pickups in a cache (shard 'a' shallow, vest 'A' deep). */
-    public static final int   CACHE_ARMOUR          = 1;
+    public static final int   CACHE_ARMOUR          = BalanceConfig.CACHE_ARMOUR;
     /** Depth at/after which the cache armour drop upgrades from a shard 'a' to a vest 'A'. */
-    public static final int   CACHE_ARMOUR_VEST_DEPTH = 6;
+    public static final int   CACHE_ARMOUR_VEST_DEPTH = BalanceConfig.CACHE_ARMOUR_VEST_DEPTH;
     /** Crates ('C') stamped as depot set-dressing. */
     public static final int   CACHE_CRATES          = 3;
     /** Lockers ('L') stamped as depot set-dressing. */
@@ -531,8 +535,16 @@ public final class RouteMapConstants {
     /** The auto-doc heal-station prop tile. Reuses the holo-workstation 'W' (no new symbol); the
      *  one-shot heal interactivity is logic layered on that tile by World, not a new tile. */
     public static final char  HEAL_STATION_SYMBOL   = 'W';
-    /** One-time auto-doc heal, as a fraction of the player's max HP. */
-    public static final float REST_HEAL_FRACTION    = 0.35f;
+    /** One-time auto-doc heal, as a fraction of the player's max HP (priced by R-CALM-COST). */
+    public static final float REST_HEAL_FRACTION    = BalanceConfig.REST_HEAL_FRACTION;
+    /** Take-away field medkits ('H') the clinic stocks near its exit (order-7 re-pricing). */
+    public static final int   REST_MEDKITS          = BalanceConfig.REST_MEDKITS;
+    /** Take-away stim-packs ('+') the clinic stocks alongside the medkit. */
+    public static final int   REST_STIMS            = BalanceConfig.REST_STIMS;
+    /** Take-away armour pickups the clinic stocks (shard 'a' shallow, vest 'A' deep). */
+    public static final int   REST_ARMOUR           = BalanceConfig.REST_ARMOUR;
+    /** Depth at/after which the clinic's armour stock upgrades from a shard 'a' to a vest 'A'. */
+    public static final int   REST_ARMOUR_VEST_DEPTH = BalanceConfig.REST_ARMOUR_VEST_DEPTH;
     /**
      * Whether the auto-doc presents a 2-option choice (PATCH UP vs FIELD MOD) instead of a plain
      * heal. Default OFF: the permanent-boon system it would tie into does not exist yet, so REST is
@@ -556,17 +568,17 @@ public final class RouteMapConstants {
      * spending a larger budget on higher-Threat enemies. Never bypasses the depth ramp (order-3
      * invariant) — it scales the depth budget, it does not replace it. Clamped by EnemyBudgetOverride.
      */
-    public static final float ELITE_BUDGET_SCALE       = 1.5f;
-    /** Ammo boxes stamped in the gated vault (~1.5x a cache's {@link #CACHE_AMMO_BOXES}). */
-    public static final int   ELITE_AMMO_BOXES         = 6;
+    public static final float ELITE_BUDGET_SCALE       = BalanceConfig.ELITE_BUDGET_SCALE;
+    /** Ammo boxes stamped in the gated vault (priced against the threat premium, R-RISK-PREMIUM). */
+    public static final int   ELITE_AMMO_BOXES         = BalanceConfig.ELITE_AMMO_BOXES;
     /** Guaranteed field medkits ('H') behind the vault. */
-    public static final int   ELITE_MEDKITS            = 2;
+    public static final int   ELITE_MEDKITS            = BalanceConfig.ELITE_MEDKITS;
     /** Guaranteed stim-packs ('+') behind the vault. */
-    public static final int   ELITE_STIMS              = 1;
+    public static final int   ELITE_STIMS              = BalanceConfig.ELITE_STIMS;
     /** Guaranteed armour pickups behind the vault (shard 'a' shallow, vest 'A' deep). */
-    public static final int   ELITE_ARMOUR             = 1;
+    public static final int   ELITE_ARMOUR             = BalanceConfig.ELITE_ARMOUR;
     /** Depth at/after which the ELITE armour drop upgrades from a shard 'a' to a vest 'A'. */
-    public static final int   ELITE_ARMOUR_VEST_DEPTH  = 4;
+    public static final int   ELITE_ARMOUR_VEST_DEPTH  = BalanceConfig.ELITE_ARMOUR_VEST_DEPTH;
     /** Weapon-rack ('=') props stamped in the vault as the visual "worth guarding" promise. */
     public static final int   ELITE_WEAPON_RACKS       = 1;
     /** Column ('P') cover props scattered so the arena reads as a defensible set-piece. */
@@ -592,45 +604,55 @@ public final class RouteMapConstants {
     public static final float AFFIX_WEIGHT_DEFAULT    = 1f;
     /** Separator joining a node's base map hint to its rolled affix label (e.g. "… — OVERCLOCKED"). */
     public static final String AFFIX_HINT_SEPARATOR   = " — ";
+    // BALANCE SHIMS (order 7): an affix's budget multiplier is priced threat and its vault bonus is
+    // the reward that must pay for it (R-RISK-PREMIUM) — both live in BalanceConfig SECTION 19.
     /** IRRADIATED: extra radioactive-barrel weight on top of the ELITE base. */
-    public static final float AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS = 0.12f;
+    public static final float AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS =
+            BalanceConfig.AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS;
     /** IRRADIATED: extra 'g' radioactive barrels stamped as hazard pools. */
-    public static final int   AFFIX_IRRADIATED_EXTRA_BARRELS = 3;
+    public static final int   AFFIX_IRRADIATED_EXTRA_BARRELS = BalanceConfig.AFFIX_IRRADIATED_EXTRA_BARRELS;
     /** OVERCLOCKED: budget multiplier (enemies "hit harder" — approximated as more Threat spent). */
-    public static final float AFFIX_OVERCLOCKED_BUDGET_MULT = 1.2f;
+    public static final float AFFIX_OVERCLOCKED_BUDGET_MULT = BalanceConfig.AFFIX_OVERCLOCKED_BUDGET_MULT;
+    /** OVERCLOCKED: extra vault ammo boxes that pay for the raised threat. */
+    public static final int   AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES =
+            BalanceConfig.AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES;
     /** SWARM: budget multiplier (the one exception to fewer-bodies — a crowd-control test). */
-    public static final float AFFIX_SWARM_BUDGET_MULT = 1.5f;
+    public static final float AFFIX_SWARM_BUDGET_MULT = BalanceConfig.AFFIX_SWARM_BUDGET_MULT;
+    /** SWARM: extra vault ammo boxes that pay for the raised threat. */
+    public static final int   AFFIX_SWARM_VAULT_AMMO_BOXES = BalanceConfig.AFFIX_SWARM_VAULT_AMMO_BOXES;
     /** FORTIFIED: extra cover columns 'P' (a slugfest of angles). */
-    public static final int   AFFIX_FORTIFIED_EXTRA_COLUMNS = 3;
+    public static final int   AFFIX_FORTIFIED_EXTRA_COLUMNS = BalanceConfig.AFFIX_FORTIFIED_EXTRA_COLUMNS;
     /** FORTIFIED: extra armour pickups (an eHP bump the player can also claim). */
-    public static final int   AFFIX_FORTIFIED_EXTRA_ARMOUR = 1;
+    public static final int   AFFIX_FORTIFIED_EXTRA_ARMOUR = BalanceConfig.AFFIX_FORTIFIED_EXTRA_ARMOUR;
     /** VOLATILE: extra explosive barrels 'E' — the arena itself is a weapon for both sides. */
-    public static final int   AFFIX_VOLATILE_EXTRA_BARRELS = 4;
+    public static final int   AFFIX_VOLATILE_EXTRA_BARRELS = BalanceConfig.AFFIX_VOLATILE_EXTRA_BARRELS;
 
     // ---- MYSTERY (RouteNodeType.MYSTERY, profile "mystery") ----------------
     // The outcome is rolled at ENTRY from the node's fixed nodeSeed (deterministic per run/seed), so
     // a scanner reveals a category TONE but never the exact result. Weights sum to 100 and are tuned
     // so expected value ≈ a normal combat floor — a genuine coin-flip, not a strictly-good pick.
-    public static final int MYSTERY_WEIGHT_VAULT        = 18;
-    public static final int MYSTERY_WEIGHT_SECRET_WARREN = 18;
-    public static final int MYSTERY_WEIGHT_TRAP_GAUNTLET = 18;
-    public static final int MYSTERY_WEIGHT_AMBUSH        = 18;
-    public static final int MYSTERY_WEIGHT_LORE_SIGNAL   = 14;
-    public static final int MYSTERY_WEIGHT_MALFUNCTION   = 14;
+    // BALANCE SHIMS (order 7): the whole table is priced by R-MYSTERY-EV, so the weights and every
+    // outcome's payoff live in BalanceConfig SECTION 19 (the "EV ≈ a combat floor" claim is audited now).
+    public static final int MYSTERY_WEIGHT_VAULT         = BalanceConfig.MYSTERY_WEIGHT_VAULT;
+    public static final int MYSTERY_WEIGHT_SECRET_WARREN = BalanceConfig.MYSTERY_WEIGHT_SECRET_WARREN;
+    public static final int MYSTERY_WEIGHT_TRAP_GAUNTLET = BalanceConfig.MYSTERY_WEIGHT_TRAP_GAUNTLET;
+    public static final int MYSTERY_WEIGHT_AMBUSH        = BalanceConfig.MYSTERY_WEIGHT_AMBUSH;
+    public static final int MYSTERY_WEIGHT_LORE_SIGNAL   = BalanceConfig.MYSTERY_WEIGHT_LORE_SIGNAL;
+    public static final int MYSTERY_WEIGHT_MALFUNCTION   = BalanceConfig.MYSTERY_WEIGHT_MALFUNCTION;
 
     /** First-frame reveal sting stamped by the MYSTERY meta-profile on entry. */
     public static final String MYSTERY_STING_TEXT = "SECTOR SCAN FAILED — UNKNOWN CONTACT";
     /** Loot boxes in a MYSTERY vault jackpot (the dream pull — richer than an ELITE vault). */
-    public static final int   MYSTERY_VAULT_AMMO_BOXES = 7;
+    public static final int   MYSTERY_VAULT_AMMO_BOXES = BalanceConfig.MYSTERY_VAULT_AMMO_BOXES;
     /** Explosive/radioactive barrels the TRAP GAUNTLET degrade stamps (traps -> barrels fallback). */
-    public static final int   MYSTERY_TRAP_BARRELS     = 6;
+    public static final int   MYSTERY_TRAP_BARRELS     = BalanceConfig.MYSTERY_TRAP_BARRELS;
     /** Loot boxes waiting at the end of a TRAP GAUNTLET (modest reward for patience). */
-    public static final int   MYSTERY_TRAP_AMMO_BOXES  = 3;
+    public static final int   MYSTERY_TRAP_AMMO_BOXES  = BalanceConfig.MYSTERY_TRAP_AMMO_BOXES;
     /** Medkits waiting at the exit of a TRAP GAUNTLET. */
-    public static final int   MYSTERY_TRAP_MEDKITS     = 1;
+    public static final int   MYSTERY_TRAP_MEDKITS     = BalanceConfig.MYSTERY_TRAP_MEDKITS;
     /** Extra keycard-gated loot the SECRET WARREN promises (rewards those who search). */
-    public static final int   MYSTERY_WARREN_AMMO_BOXES = 4;
-    public static final int   MYSTERY_WARREN_MEDKITS    = 1;
+    public static final int   MYSTERY_WARREN_AMMO_BOXES = BalanceConfig.MYSTERY_WARREN_AMMO_BOXES;
+    public static final int   MYSTERY_WARREN_MEDKITS    = BalanceConfig.MYSTERY_WARREN_MEDKITS;
 
     // =========================================================================
     // NARRATIVE / EVENT NODES + REGION THEMING (order-10)
@@ -648,23 +670,23 @@ public final class RouteMapConstants {
      */
     public static final char   EVENT_STATION_SYMBOL     = 'W';
     /** Budget scale for an EVENT floor — near-empty; a beat of story, not a fight. */
-    public static final float  EVENT_BUDGET_SCALE       = 0.15f;
+    public static final float  EVENT_BUDGET_SCALE       = BalanceConfig.EVENT_BUDGET_SCALE;
     /** First-frame sting shown on entering an EVENT floor (before the interactable is reached). */
     public static final String EVENT_STING_TEXT         = "SIGNAL DETECTED";
     /** XP awarded by an event choice tagged {@code EventEffect.grantXp} at its small tier. */
-    public static final int    EVENT_XP_SMALL           = 25;
+    public static final int    EVENT_XP_SMALL           = BalanceConfig.EVENT_XP_SMALL;
     /** XP awarded by an event choice tagged {@code EventEffect.grantXp} at its large tier. */
-    public static final int    EVENT_XP_LARGE           = 60;
+    public static final int    EVENT_XP_LARGE           = BalanceConfig.EVENT_XP_LARGE;
     /** Ammo boxes an event choice hands out (spread across owned ammo types, cache-style). */
-    public static final int    EVENT_AMMO_BOXES         = 3;
+    public static final int    EVENT_AMMO_BOXES         = BalanceConfig.EVENT_AMMO_BOXES;
     /** Next-floor encounter-budget nudge an event choice may apply (e.g. escort +10%). */
-    public static final float  EVENT_NEXT_FLOOR_BUDGET_BONUS = 0.10f;
+    public static final float  EVENT_NEXT_FLOOR_BUDGET_BONUS = BalanceConfig.EVENT_NEXT_FLOOR_BUDGET_BONUS;
     /** Fraction of a mimic-ambush roll's [0,1) space that resolves as loot (else an ambush sting). */
-    public static final float  EVENT_STASH_LOOT_CHANCE  = 0.60f;
+    public static final float  EVENT_STASH_LOOT_CHANCE  = BalanceConfig.EVENT_STASH_LOOT_CHANCE;
 
     // ---- REGION GATE (RouteNodeType.REGION_GATE, profile "region_gate") ----
     /** Budget scale for the ceremonial airlock floor — a pacing breath, almost no combat. */
-    public static final float  GATE_BUDGET_SCALE        = 0.10f;
+    public static final float  GATE_BUDGET_SCALE        = BalanceConfig.GATE_BUDGET_SCALE;
     /** Prefix the gate announce prepends to the entered region's display name ("ENTERING: …"). */
     public static final String GATE_ANNOUNCE_PREFIX     = "ENTERING: ";
 

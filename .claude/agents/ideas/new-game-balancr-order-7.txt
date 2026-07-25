@@ -1,7 +1,47 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Route Economics — price the map, audit every journey
 ---
+
+IMPLEMENTATION NOTES (what shipped, and where the design moved)
+--------------------------------------------------------------------------------
+Shipped as specified: the NodeEconomics ledger (route/NodeEconomics + Registry +
+RouteEconomics — one row per node type, affix and mystery outcome), the pricing /
+trajectory / guarantee model (route/RouteEconomicsModel), the GameMath formulas
+(nodeThreatCost, nodeExpectedValue, rewardPremiumRatio, trajectoryResourceLedger,
+derivedDangerTierIndex, plus levelForCumulativeXp / playerPowerAtLevelAndDepth /
+depthScaledRewardXp / depthScaledPickupCount), BalanceConfig SECTION 19 with
+RouteMapConstants re-export shims, the eight rules in BalanceSchema, the
+BalanceReport ROUTE ECONOMICS + TRAJECTORY tables, and the map-gen guarantees.
+
+Four places the design MOVED during implementation (all documented in
+docs/game-balance-authority.txt SECTION 3 and docs/route-map-system.txt):
+
+1. EV needs a DURABILITY weight. Priced purely per power point, a calm floor's
+   un-spent ammo and un-taken damage ALWAYS beat a combat floor's XP, so no set of
+   payoffs could satisfy R-CALM-COST. ROUTE_PERMANENT_POWER_WEIGHT (2.6) prices a
+   level / a gun as worth more than an equal PP of consumables — which is the honest
+   read, and precisely why the un-priced map let calm-chaining out-earn fighting.
+   The risk charge also rides the threat RATIO, not raw Threat Points (raw TP
+   compound with depth and made every deep floor read as a catastrophic loss).
+
+2. R-CALM-COST band is [10%, 35%], not [10%, 30%]. The discount necessarily widens
+   with depth: a combat floor's own reward grows with the gear/ability curves while a
+   sanctuary payoff is capped by the player's own maxima. One band must cover 1..15.
+
+3. R-ROUTE-GUARANTEES is scoped to nodes with ROOM ahead of them (depth <=
+   region.lastDepth - 3). Requiring "an upgrade AND a calm node still reachable" from
+   the pre-boss layer forces that whole layer to one node type — which violates the
+   order's own no-fake-choices rule. The band's tail is covered by order 6's pre-boss
+   provisioning guarantee instead. The three guarantees are repaired to a FIXPOINT
+   (each pass's rewrite can undo another's) targeting the nearest NEUTRAL node ahead.
+
+4. The re-pricing bit harder than expected, in both directions: CACHE and ELITE
+   payoffs came DOWN, and REST/EVENT went UP (a REST floor earns no roster XP at all,
+   so its order-8 payoff priced it far below the calm band — a sucker node). The
+   MED-BAY now gives a full auto-doc heal plus a depth-scaled stock, and EVENT XP
+   grants are depth-scaled so they cannot decay against the geometric level curve.
+   Affixes gained VAULT PREMIUMS so SWARM/OVERCLOCKED pay for the threat they add.
 
 ================================================================================
 NEW GAME BALANCE — ORDER 7 of 9

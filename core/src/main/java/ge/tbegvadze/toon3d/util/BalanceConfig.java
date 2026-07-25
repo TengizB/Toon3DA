@@ -1717,4 +1717,281 @@ public final class BalanceConfig {
     // sections in DefaultShopOfferSource — no separate price constants here.
     /** Ammo "large box" multiplier over the standard box size. */
     public static final int   SHOP_AMMO_LARGE_BOX_MULTIPLIER = 2;
+
+    // =====================================================================================
+    // SECTION 19 — ROUTE ECONOMICS (new-game-balancr order 7) — the MAP joins the contract
+    // Orders 1-6 balance FLOORS; the player plays a JOURNEY through the route map's branching
+    // DAG (COMBAT / ELITE / CACHE / REST / SHOP / MYSTERY / EVENT). Every balance-bearing
+    // route number now lives HERE — node budget scales, affix multipliers, calm/elite/mystery
+    // payoffs, the mystery weight table, the audited map-shape constants, the pricing model's
+    // knobs and every route band. util/RouteMapConstants keeps re-export shims under the old
+    // names (order-1 discipline, structurally enforced by R-DOT), so no route call site churned;
+    // COSMETIC overlay layout stays in RouteMapConstants and is NOT mirrored here.
+    //
+    // THE LEDGER: every node type, affix and mystery outcome is priced in
+    // route/RouteEconomics (a NodeEconomics row) and folded into one comparable EV by
+    // util/RouteEconomicsModel through GameMath.nodeExpectedValue. Rules R-ROUTE-PRICED,
+    // R-RISK-PREMIUM, R-CALM-COST, R-MYSTERY-EV, R-PIPS-DERIVED, R-HONEST-SAFE,
+    // R-TRAJECTORY and R-ROUTE-GUARANTEES enforce the numbers below.
+    // See docs/game-balance-authority.txt and docs/route-map-system.txt.
+    // =====================================================================================
+
+    // --- A. NODE BUDGET SCALES (the THREAT side of every node) ---------------------------
+    // Multipliers on the raw, depth-scaled Threat-Point budget (never a bypass of the depth
+    // ramp — route-map DEPTH RAMP INVARIANT). 1.0 == a standard COMBAT floor.
+    /** CALM floors (CACHE / REST): light stragglers only. Bounded by R-HONEST-SAFE. Range: 0.15–0.30. */
+    public static final float ROUTE_CALM_BUDGET_SCALE  = 0.28f;
+    /** Calm-but-not-empty floors (SHOP, MYSTERY vault): real but light resistance. Range: 0.4–0.6. */
+    public static final float ROUTE_LIGHT_BUDGET_SCALE = 0.50f;
+    /**
+     * ELITE floor budget: a mini-setpiece. Its REWARD must price up with it (R-RISK-PREMIUM),
+     * so raising this without raising the vault fails the audit. Range: 1.3–1.8.
+     */
+    public static final float ELITE_BUDGET_SCALE       = 1.5f;
+    /** EVENT floor budget — a beat of story, not a fight. Range: 0.10–0.25. */
+    public static final float EVENT_BUDGET_SCALE       = 0.15f;
+    /** REGION_GATE ceremonial airlock budget — a pacing breath. Range: 0.05–0.20. */
+    public static final float GATE_BUDGET_SCALE        = 0.10f;
+
+    // --- B. ELITE AFFIXES: threat multiplier AND the vault that must pay for it -----------
+    // An affix that raises threatCost MUST raise the vault (R-RISK-PREMIUM prices the pair).
+    /** Probability an ELITE node rolls an affix. Range: 0.4–0.8. */
+    public static final float AFFIX_ROLL_CHANCE_ELITE   = 0.60f;
+    /** Probability a MYSTERY node rolls an affix (MYSTERY carries no affix catalog in v1). */
+    public static final float AFFIX_ROLL_CHANCE_MYSTERY = 0.25f;
+    /** OVERCLOCKED: budget multiplier (enemies "hit harder" = more Threat spent). Range: 1.1–1.3. */
+    public static final float AFFIX_OVERCLOCKED_BUDGET_MULT = 1.2f;
+    /** SWARM: budget multiplier (the crowd-control test — the one fewer-bodies exception). Range: 1.3–1.6. */
+    public static final float AFFIX_SWARM_BUDGET_MULT       = 1.5f;
+    /** OVERCLOCKED vault premium: extra owned-ammo boxes that pay for its raised threat. */
+    public static final int   AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES = 1;
+    /** SWARM vault premium: extra owned-ammo boxes that pay for its raised threat. */
+    public static final int   AFFIX_SWARM_VAULT_AMMO_BOXES       = 4;
+    /** IRRADIATED: extra radioactive-barrel weight on top of the ELITE base. */
+    public static final float AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS = 0.12f;
+    /** IRRADIATED: extra 'g' radioactive barrels stamped as hazard pools. */
+    public static final int   AFFIX_IRRADIATED_EXTRA_BARRELS = 3;
+    /** FORTIFIED: extra cover columns 'P' (a slugfest of angles). */
+    public static final int   AFFIX_FORTIFIED_EXTRA_COLUMNS = 3;
+    /** FORTIFIED: extra armour pickups (an eHP bump the player can also claim). */
+    public static final int   AFFIX_FORTIFIED_EXTRA_ARMOUR = 1;
+    /** VOLATILE: extra explosive barrels 'E' — the arena itself is a weapon for both sides. */
+    public static final int   AFFIX_VOLATILE_EXTRA_BARRELS = 4;
+
+    // --- C. CALM-NODE PAYOFFS (re-priced as order-3 economy inputs, R-CALM-COST) ----------
+    // A calm node buys safety with TEMPO and LOOT: its total EV must sit 10-30% BELOW a
+    // standard combat node's. The order-8 hand-set payoffs sat far ABOVE it (a chained
+    // cache/rest route sailed over the order-3 supply band), so they are re-priced here.
+    /** Ammo boxes stamped in a cache's cargo bay, spread across OWNED ammo types. Range: 1–3. */
+    public static final int   CACHE_AMMO_BOXES        = 2;
+    /** Guaranteed field medkits ('H') in a cache. */
+    public static final int   CACHE_MEDKITS           = 1;
+    /** Guaranteed stim-packs ('+') in a cache. */
+    public static final int   CACHE_STIMS             = 0;
+    /** Guaranteed armour pickups in a cache (shard 'a' shallow, vest 'A' deep). */
+    public static final int   CACHE_ARMOUR            = 0;
+    /** Depth at/after which the cache armour drop upgrades from a shard 'a' to a vest 'A'. */
+    public static final int   CACHE_ARMOUR_VEST_DEPTH = 6;
+    /**
+     * MED-BAY auto-doc one-shot heal, as a fraction of the player's max HP. Raised from the
+     * order-8 hand-set 0.35: a REST node earns NO floor XP and almost no loot, so at 0.35 it
+     * priced far BELOW the calm band (a sucker node). Range: 0.5–1.0.
+     */
+    public static final float REST_HEAL_FRACTION      = 1.0f;
+    /** Take-away field medkits ('H') the clinic stocks near its exit (order-7 re-pricing). */
+    public static final int   REST_MEDKITS            = 1;
+    /** Take-away stim-packs ('+') the clinic stocks alongside the medkit. */
+    public static final int   REST_STIMS              = 1;
+    /** Take-away armour pickups the clinic stocks (shard 'a' shallow, vest 'A' deep). */
+    public static final int   REST_ARMOUR             = 1;
+    /** Depth at/after which the clinic's armour stock upgrades from a shard 'a' to a vest 'A'. */
+    public static final int   REST_ARMOUR_VEST_DEPTH  = 4;
+
+    // --- D. ELITE PAYOFF (the vault the risk premium pays for, R-RISK-PREMIUM) ------------
+    /** Ammo boxes stamped in the gated vault. Range: 2–5. */
+    public static final int   ELITE_AMMO_BOXES        = 3;
+    /** Guaranteed field medkits ('H') behind the vault. */
+    public static final int   ELITE_MEDKITS           = 1;
+    /** Guaranteed stim-packs ('+') behind the vault. */
+    public static final int   ELITE_STIMS             = 1;
+    /** Guaranteed armour pickups behind the vault (shard 'a' shallow, vest 'A' deep). */
+    public static final int   ELITE_ARMOUR            = 1;
+    /** Depth at/after which the ELITE armour drop upgrades from a shard 'a' to a vest 'A'. */
+    public static final int   ELITE_ARMOUR_VEST_DEPTH = 4;
+
+    // --- E. MYSTERY OUTCOME TABLE (weights sum to 100; R-MYSTERY-EV audits the mean) ------
+    public static final int MYSTERY_WEIGHT_VAULT          = 16;
+    public static final int MYSTERY_WEIGHT_SECRET_WARREN  = 18;
+    public static final int MYSTERY_WEIGHT_TRAP_GAUNTLET  = 18;
+    public static final int MYSTERY_WEIGHT_AMBUSH         = 18;
+    public static final int MYSTERY_WEIGHT_LORE_SIGNAL    = 14;
+    public static final int MYSTERY_WEIGHT_MALFUNCTION    = 16;
+    /** Loot boxes in a MYSTERY vault jackpot (the dream pull — richer than an ELITE vault). */
+    public static final int MYSTERY_VAULT_AMMO_BOXES  = 4;
+    /** Loot boxes waiting at the end of a TRAP GAUNTLET (modest reward for patience). */
+    public static final int MYSTERY_TRAP_AMMO_BOXES   = 2;
+    /** Medkits waiting at the exit of a TRAP GAUNTLET. */
+    public static final int MYSTERY_TRAP_MEDKITS      = 1;
+    /** Explosive/radioactive barrels the TRAP GAUNTLET degrade stamps (traps -> barrels fallback). */
+    public static final int MYSTERY_TRAP_BARRELS      = 6;
+    /** Extra keycard-gated loot the SECRET WARREN promises (rewards those who search). */
+    public static final int MYSTERY_WARREN_AMMO_BOXES = 2;
+    public static final int MYSTERY_WARREN_MEDKITS    = 1;
+
+    // --- F. EVENT-NODE PAYOFFS (the average an event choice hands out) -------------------
+    /** XP awarded by an event choice at its small tier. */
+    public static final int   EVENT_XP_SMALL              = 60;
+    /** XP awarded by an event choice at its large tier. */
+    public static final int   EVENT_XP_LARGE              = 150;
+    /** Ammo boxes an event choice hands out (spread across owned ammo types, cache-style). */
+    public static final int   EVENT_AMMO_BOXES            = 5;
+    /** Next-floor encounter-budget nudge an event choice may apply (e.g. escort +10%). */
+    public static final float EVENT_NEXT_FLOOR_BUDGET_BONUS = 0.10f;
+    /** Fraction of a mimic-ambush roll's [0,1) space that resolves as loot (else an ambush sting). */
+    public static final float EVENT_STASH_LOOT_CHANCE     = 0.60f;
+
+    // --- G. AUDITED MAP SHAPE (branch width / spread / windows / graph guarantees) --------
+    // These stop being layout trivia the moment the JOURNEY is the audited unit: they decide
+    // how many real choices a layer offers and how often relief is reachable.
+    public static final int   BRANCH_WIDTH_MINIMUM   = 2;
+    public static final int   BRANCH_WIDTH_MAXIMUM   = 4;
+    /** Probability a source node grows an extra edge to a projected-lane neighbour. Range: 0.4–0.7. */
+    public static final float BRANCH_SPREAD_CHANCE   = 0.55f;
+    /** Layers over which a CACHE/REST must be OFFERED at least once (ammo-economy protection). */
+    public static final int   RESOURCE_RELIEF_WINDOW = 4;
+    /** Sliding window (in layers) the shop pacing cap is measured over. */
+    public static final int   SHOP_WINDOW_LAYERS     = 4;
+    /** Max SHOP nodes permitted inside any SHOP_WINDOW_LAYERS-wide window (economy pacing). */
+    public static final int   SHOP_MAX_PER_WINDOW    = 2;
+    /** R-ROUTE-GUARANTEES: minimum DISTINCT node types every selectable layer must offer (no fake choices). */
+    public static final int   ROUTE_MIN_NODE_TYPES_PER_LAYER = 2;
+    /**
+     * Layer index INSIDE a region band whose nodes carry the region's guaranteed UPGRADE-bearing
+     * option (ELITE / SHOP). Every path through the band crosses this layer, so the order-2 pity
+     * rule becomes a graph property instead of a spawn hope. Range: 0..bandSize-2.
+     */
+    public static final int   ROUTE_UPGRADE_GUARANTEE_LAYER = 1;
+    /** Layer index inside a region band whose nodes carry the region's guaranteed CALM option. */
+    public static final int   ROUTE_CALM_GUARANTEE_LAYER    = 2;
+
+    // --- H. THE PRICING MODEL (how a node's ledger row becomes one comparable EV) ---------
+    // Common currency = POWER POINTS (PP), the same unit orders 2/3 use for cards, abilities
+    // and shop prices: ammo damage / SHOP_AMMO_DAMAGE_PER_POWER_POINT, HP /
+    // SHOP_HEAL_HP_PER_POWER_POINT, credits / SHOP_CREDITS_PER_POWER_POINT.
+    /**
+     * DURABILITY WEIGHT on PERMANENT power (XP levels + weapon-class upgrades) against one-shot
+     * consumables. A level-up or a gun applies to EVERY remaining floor; an ammo box is spent
+     * once. Without this weight the model says fighting never pays (a calm floor's un-spent ammo
+     * and un-taken damage always beat a floor's XP), which is exactly how the un-priced map let a
+     * calm-chaining route sail above the supply band. Range: 2.0–4.0.
+     */
+    public static final float ROUTE_PERMANENT_POWER_WEIGHT = 2.6f;
+    /**
+     * Power points charged for the DEATH risk of ONE standard combat floor, on top of the ammo/HP
+     * that floor consumes. Charged on the node's threat RATIO (a 1.5x ELITE pays 1.5x this), so the
+     * danger price is depth-stable — Threat Points compound with depth while a floor's rewards do
+     * not, and a raw per-TP charge would make every deep floor read as a catastrophic loss. Range:
+     * 1.0–6.0 power points.
+     */
+    public static final float ROUTE_RISK_POWER_POINTS_PER_STANDARD_FLOOR = 3f;
+    /** PP value of one reliable weapon-class upgrade opportunity (priced as the shop's significant buy). */
+    public static final float ROUTE_UPGRADE_OPPORTUNITY_POWER_POINTS = SHOP_SIGNIFICANT_BUY_POWER_POINTS;
+    // How much of ONE weapon-class upgrade a node reliably offers (0..1) — the honest read of what
+    // each node type actually delivers today. ELITE is NOT 1.0: it has no guaranteed weapon SPAWN
+    // (weapons come from WeaponSpawnPoints, not stampable tiles), only a richer drop band + the rack.
+    // SHOP is not 1.0 either: its purchase is paid for at a fair price (GameMath.shopPrice), so only
+    // the CHOOSE-EXACTLY-WHAT-YOU-NEED surplus over a random drop is credited.
+    public static final float ROUTE_UPGRADE_OPPORTUNITY_COMBAT = 0.35f;
+    public static final float ROUTE_UPGRADE_OPPORTUNITY_ELITE  = 0.60f;
+    public static final float ROUTE_UPGRADE_OPPORTUNITY_SHOP   = 0.30f;
+    public static final float ROUTE_UPGRADE_OPPORTUNITY_CACHE  = 0.05f;
+    /** Threat scale a BOSS floor is priced at for the ledger (bosses are governed by R-BOSS-*, not the node bands). */
+    public static final float ROUTE_BOSS_THREAT_SCALE = 2.0f;
+    /** HP a TRAP GAUNTLET's hazard field is expected to bite out of the player (priced as negative heal). */
+    public static final float ROUTE_TRAP_GAUNTLET_HAZARD_HIT_POINTS = 45f;
+    /** HP a MALFUNCTION sector's failing hazards are expected to cost (the bad-but-survivable pull). */
+    public static final float ROUTE_MALFUNCTION_HAZARD_HIT_POINTS   = 55f;
+    /** Ordinary-loot share a MALFUNCTION sector rolls (its config switches medkits/armour off). */
+    public static final float ROUTE_MALFUNCTION_LOOT_SCALE          = 0.5f;
+    /** Share of an EVENT's payoff any single choice delivers, averaged over the v1 choice catalogue. */
+    public static final float ROUTE_EVENT_EXPECTED_CHOICE_SHARE     = 0.40f;
+    /**
+     * Share of a standard floor's ORDINARY room loot a bespoke, curated small floor rolls
+     * (MED_BAY clinic, EVENT room, GATE airlock — a handful of rooms, not a full dungeon).
+     * Range: 0.2–0.6.
+     */
+    public static final float ROUTE_BESPOKE_FLOOR_LOOT_SCALE = 0.35f;
+
+    // --- I. THE ROUTE BANDS (what the audit enforces) -------------------------------------
+    /** R-RISK-PREMIUM: (reward premium)/(threat premium) — danger pays, slightly better than fair. */
+    public static final float ROUTE_RISK_PREMIUM_MIN = 1.00f;
+    public static final float ROUTE_RISK_PREMIUM_MAX = 1.20f;
+    /**
+     * R-CALM-COST: a calm node's EV must sit this far BELOW a standard combat node's — safety is
+     * bought with tempo and loot. The upper edge is 0.35 rather than the 0.30 the order-7 idea
+     * sketched, because the discount necessarily WIDENS with depth and one band must cover all of
+     * 1..15: a combat floor's own value grows down the run (its ammo supply rides the gear curve, its
+     * progress rides the ability curve) while a sanctuary node's payoff is capped by the player's own
+     * maximum HP. Measured range across the audited depths: cache 0.12-0.23, shop 0.18-0.23, rest
+     * 0.13-0.31, event 0.24-0.32.
+     */
+    public static final float ROUTE_CALM_EV_DISCOUNT_MIN = 0.10f;
+    public static final float ROUTE_CALM_EV_DISCOUNT_MAX = 0.35f;
+    /** R-MYSTERY-EV: the weighted mystery table EV may differ from a combat node's by at most this. */
+    public static final float ROUTE_MYSTERY_EV_TOLERANCE = 0.15f;
+    /**
+     * R-MYSTERY-EV (worst case): the worst outcome's expected NET resource loss, as a multiple of
+     * ONE floor's maximum modelled drain (the order-3 net-drain band max plus the un-covered share
+     * of a floor's ammo demand). "Bad but survivable" as arithmetic. Range: 1.0–2.0.
+     */
+    public static final float ROUTE_MYSTERY_WORST_LOSS_FLOOR_MULTIPLIER = 1.5f;
+    /** R-HONEST-SAFE: a node whose icon promises safety (CACHE/REST) may face at most this share of a combat floor's TP. */
+    public static final float ROUTE_HONEST_SAFE_MAX_THREAT_RATIO = 0.30f;
+    /** R-PIPS-DERIVED: threatCost ratio (vs the standard combat node) at/below which a node reads CALM. */
+    public static final float ROUTE_PIP_CALM_MAX_THREAT_RATIO     = 0.60f;
+    /** R-PIPS-DERIVED: ratio at/below which a node reads STANDARD; above it reads DANGER. */
+    public static final float ROUTE_PIP_STANDARD_MAX_THREAT_RATIO = 1.25f;
+
+    // --- J. THE TRAJECTORY AUDIT (the JOURNEY replaces the floor as the audited unit) -----
+    // Three deterministic path policies (SAFEST / DEADLIEST / BALANCED) are walked through real
+    // generated maps; the cumulative order-3/4 quantities are checked at every region boundary
+    // over the ACTUAL nodes visited. The bands are WIDER than the per-floor bands by design:
+    // their ENDS are the route's real difficulty range, and both ends must stay fair.
+    /** Seeds the trajectory + reachability audits generate real route maps for. Range: 50–200. */
+    public static final int   ROUTE_TRAJECTORY_SEED_COUNT = 100;
+    /**
+     * Cumulative scarcity S over a whole journey (the per-FLOOR band is [0.75, 0.95]). The floor is
+     * the starved end an all-ELITE run rides — below it even the emergency lifeline could not keep a
+     * fighting retreat armed; the ceiling is the generous end a calm-chaining run rides — above it
+     * ammo would stop being a resource at all. Measured: 0.59 (DEADLIEST) .. 1.50 (SAFEST).
+     */
+    public static final float ROUTE_TRAJECTORY_SCARCITY_MIN = 0.55f;
+    public static final float ROUTE_TRAJECTORY_SCARCITY_MAX = 1.60f;
+    /**
+     * Cumulative per-floor net HP drain fraction over a journey (the per-FLOOR band is [0.05, 0.15]).
+     * NEGATIVE means the route BANKS health — which is exactly what a calm route buys with its skipped
+     * XP and loot. Measured: -0.78 (SAFEST banks) .. +0.39 (DEADLIEST bleeds ~40% of eHP per floor,
+     * survivable only by routing calm before the boss). Both ends must stay inside these bounds.
+     */
+    public static final float ROUTE_TRAJECTORY_DRAIN_MIN = -0.85f;
+    public static final float ROUTE_TRAJECTORY_DRAIN_MAX =  0.45f;
+    /**
+     * Cumulative XP pace: banked XP / XP needed to stand at the depth's expected level (the per-floor
+     * yield is ~1.11). The floor says even the safest route ends a region no worse than ~30% under the
+     * curve (the order-4 catch-up band then pulls it back); the ceiling caps how far a fight-everything
+     * route may out-level the content. Measured: 0.79 (SAFEST) .. 2.33 (DEADLIEST — it also collects
+     * the ELITEs the upgrade guarantee plants), with ~5% headroom above.
+     */
+    public static final float ROUTE_TRAJECTORY_XP_PACE_MIN = 0.70f;
+    public static final float ROUTE_TRAJECTORY_XP_PACE_MAX = 2.45f;
+    /**
+     * Depth coupling measured at the level the journey's XP ACTUALLY bought (the per-floor band is
+     * [0.90, 1.20], which assumes an exactly on-curve player). This is the fairness end-stop of the
+     * whole route: neither the safest nor the deadliest way to play may leave the player unfairly weak
+     * against the floor, or trivially strong. Measured: 0.87 (SAFEST) .. 1.47 (DEADLIEST), with a small
+     * margin either side — a route that fights everything SHOULD end a region ahead of the curve; it
+     * just may not run away with the game.
+     */
+    public static final float ROUTE_TRAJECTORY_COUPLING_MIN = 0.80f;
+    public static final float ROUTE_TRAJECTORY_COUPLING_MAX = 1.55f;
 }

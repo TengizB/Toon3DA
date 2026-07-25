@@ -2122,7 +2122,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 grantAmmoBoxes(effect.ammoBoxes());
             }
             if (effect.grantXp() > 0) {
-                playerProgress.addXp(effect.grantXp());
+                // A hand-set XP grant is authored at DEPTH 1 and re-expressed as the same share of a
+                // level at the depth actually played (new-game-balancr order 7) — otherwise the flat
+                // number silently decays to nothing against the geometric level curve and a deep EVENT
+                // node becomes worthless. R-CALM-COST prices the event node on this scaled value.
+                playerProgress.addXp(GameMath.depthScaledRewardXp(effect.grantXp(),
+                        BalanceConfig.XP_BASE_REQUIREMENT, BalanceConfig.XP_CURVE_GROWTH_PER_LEVEL,
+                        BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, currentDepth));
             }
             if (effect.revealNextRegion()) {
                 revealNextRegion();

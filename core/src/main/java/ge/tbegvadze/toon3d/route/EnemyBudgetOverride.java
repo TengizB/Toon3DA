@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.route;
 
+import ge.tbegvadze.toon3d.util.BalanceConfig;
+
 /**
  * A node's request to reshape the encounter budget the generator spends on this floor, WITHOUT ever
  * escaping the depth ramp (roguelike_order_16 / order-3 invariant). It is a multiplier on the raw,
@@ -22,10 +24,14 @@ public final class EnemyBudgetOverride {
     /** Hard ceiling so a node can never balloon the budget beyond a sane multiple of the depth base. */
     public static final float MAX_SCALE = 4.0f;
 
-    /** The share of the depth budget a nearly-empty CALM floor spends (CACHE / REST). */
-    public static final float CALM_SCALE = 0.35f;
+    /**
+     * The share of the depth budget a nearly-empty CALM floor spends (CACHE / REST). Balance shim:
+     * the value is priced threat (R-HONEST-SAFE bounds it at 0.30x a combat floor), so it lives in
+     * {@code BalanceConfig} SECTION 19 — new-game-balancr order 7.
+     */
+    public static final float CALM_SCALE  = BalanceConfig.ROUTE_CALM_BUDGET_SCALE;
     /** A gentler reduction for nodes that are calm but not empty (SHOP keeps light resistance). */
-    public static final float LIGHT_SCALE = 0.5f;
+    public static final float LIGHT_SCALE = BalanceConfig.ROUTE_LIGHT_BUDGET_SCALE;
 
     private final float budgetScale;
 
