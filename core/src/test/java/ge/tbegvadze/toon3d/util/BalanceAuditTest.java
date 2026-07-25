@@ -383,6 +383,113 @@ class BalanceAuditTest {
         }
     }
 
+    /**
+     * R-ROUTE-PRICED (order 7): every route node type, ELITE affix and MYSTERY outcome carries a
+     * NodeEconomics row. The map can never again gain content the balance contract cannot see.
+     */
+    @Test
+    void everyRouteNodeAffixAndOutcomeIsPriced() {
+        assertNoViolations(BalanceSchema.routePricedResults());
+    }
+
+    /**
+     * R-RISK-PREMIUM (order 7): the ELITE node and every affixed variant pay a reward premium in
+     * [1.0, 1.2] of their threat premium — danger pays, never free, never a sucker bet.
+     */
+    @Test
+    void dangerNodesPayARewardPremiumForTheirThreat() {
+        assertNoViolations(BalanceSchema.riskPremiumResults());
+    }
+
+    /** R-CALM-COST (order 7): every calm node's EV sits below a combat node's by the banded discount. */
+    @Test
+    void calmNodesCostTempoAndLoot() {
+        assertNoViolations(BalanceSchema.calmCostResults());
+    }
+
+    /**
+     * R-MYSTERY-EV (order 7): the weighted mystery table really is worth about a combat floor
+     * (±15%), and the worst pull stays "bad but survivable" as arithmetic rather than adjective.
+     */
+    @Test
+    void theMysteryTableIsWorthAboutACombatFloor() {
+        assertNoViolations(BalanceSchema.mysteryExpectedValueResults());
+    }
+
+    /** R-PIPS-DERIVED (order 7): displayed risk pips equal the tier DERIVED from priced threat. */
+    @Test
+    void riskPipsMatchTheDerivedDangerTier() {
+        assertNoViolations(BalanceSchema.derivedPipResults());
+    }
+
+    /** R-HONEST-SAFE (order 7): a safe-looking node IS safe, and scan tones partition by price. */
+    @Test
+    void safeLookingNodesAreSafeAndScanTonesAreHonest() {
+        assertNoViolations(BalanceSchema.honestSafeResults());
+    }
+
+    /**
+     * R-TRAJECTORY (order 7): the JOURNEY is the audited unit. All three deterministic path policies
+     * (SAFEST / DEADLIEST / BALANCED) walked through 100 real generated maps stay inside the route
+     * bands at every region boundary — the band ENDS are the game's real difficulty range.
+     */
+    @Test
+    void everyRoutePolicyStaysInBandOverAHundredSeeds() {
+        assertNoViolations(BalanceSchema.trajectoryResults());
+    }
+
+    /**
+     * R-ROUTE-GUARANTEES (order 7): over the same seed sweep, no lane strands a run — an upgrade and
+     * a calm node stay reachable inside every region, the pre-boss layer offers reachable
+     * provisioning, and every selectable layer offers at least two distinct node types.
+     */
+    @Test
+    void noLaneStrandsARunOverAHundredSeeds() {
+        assertNoViolations(BalanceSchema.routeGuaranteeResults());
+    }
+
+    /**
+     * Order-7 acceptance criterion (the printed difficulty RANGE): the SAFEST and DEADLIEST policies
+     * must actually differ — if every policy walked the same numbers the route map would not be a
+     * difficulty planner at all. Proven on the two quantities the player feels: the resources banked
+     * (cumulative scarcity) and the levels earned (XP pace).
+     */
+    @Test
+    void safestAndDeadliestRoutesSpanARealDifficultyRange() {
+        ge.tbegvadze.toon3d.route.NodeEconomicsRegistry ledger = BalanceSchema.routeLedger();
+        ge.tbegvadze.toon3d.route.RouteEconomicsModel.ModelFloor floor = BalanceSchema.routeModelFloor();
+        float safestScarcity = 0f, deadliestScarcity = 0f, safestPace = 0f, deadliestPace = 0f;
+        int samples = 0;
+        for (long seed = 0; seed < 25; seed++) {
+            ge.tbegvadze.toon3d.route.RouteMapGenerator generator =
+                    new ge.tbegvadze.toon3d.route.RouteMapGenerator(
+                            ge.tbegvadze.toon3d.route.RouteRegistries.nodeTypes(),
+                            ge.tbegvadze.toon3d.route.RouteRegistries.generators());
+            generator.setEliteAffixPool(ge.tbegvadze.toon3d.route.RouteRegistries.affixes().elitePool());
+            ge.tbegvadze.toon3d.route.RouteMap map = generator.generate(seed,
+                    ge.tbegvadze.toon3d.route.RegionPlan.defaultPlan());
+            java.util.List<ge.tbegvadze.toon3d.route.RouteEconomicsModel.TrajectorySample> safest =
+                    ge.tbegvadze.toon3d.route.RouteEconomicsModel.walk(map,
+                            ge.tbegvadze.toon3d.route.RouteEconomicsModel.PathPolicy.SAFEST, ledger, floor, 15);
+            java.util.List<ge.tbegvadze.toon3d.route.RouteEconomicsModel.TrajectorySample> deadliest =
+                    ge.tbegvadze.toon3d.route.RouteEconomicsModel.walk(map,
+                            ge.tbegvadze.toon3d.route.RouteEconomicsModel.PathPolicy.DEADLIEST, ledger, floor, 15);
+            int paired = Math.min(safest.size(), deadliest.size());
+            for (int index = 0; index < paired; index++) {
+                safestScarcity    += safest.get(index).scarcityRatio;
+                deadliestScarcity += deadliest.get(index).scarcityRatio;
+                safestPace        += safest.get(index).experiencePace;
+                deadliestPace     += deadliest.get(index).experiencePace;
+                samples++;
+            }
+        }
+        assertTrue(samples > 0, "the trajectory walker must produce region-boundary samples");
+        assertTrue(safestScarcity > deadliestScarcity,
+                "the SAFEST route must bank more ammo than the DEADLIEST one");
+        assertTrue(deadliestPace > safestPace,
+                "the DEADLIEST route must earn more XP than the SAFEST one — that is what it buys");
+    }
+
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */
     @Test
     void fullSchemaSweepHasNoViolations() {

@@ -68,7 +68,84 @@ public final class BalanceReport {
         System.out.println();
         printBossRulesetTable();
         System.out.println();
+        printRouteEconomicsTable();
+        System.out.println();
+        printTrajectoryTable();
+        System.out.println();
         printLegend();
+    }
+
+    /**
+     * ROUTE ECONOMICS (order 7) — the priced map: every node type, affix and mystery outcome with its
+     * threat, its resource delta, its EV, and the risk pips that EV derives.
+     */
+    private static void printRouteEconomicsTable() {
+        int depth = 5;
+        ge.tbegvadze.toon3d.route.NodeEconomicsRegistry ledger = BalanceSchema.routeLedger();
+        ge.tbegvadze.toon3d.route.RouteEconomicsModel.ModelFloor floor = BalanceSchema.routeModelFloor();
+        ge.tbegvadze.toon3d.route.RouteEconomicsModel.NodePrice combat =
+                ge.tbegvadze.toon3d.route.RouteEconomicsModel.standardCombat(ledger, floor, depth);
+        System.out.println("ROUTE ECONOMICS (order 7) — the node EV ledger at depth " + depth
+                + "; EV in power points, threat in TP. permanent-power weight "
+                + String.format("%.1f", BalanceConfig.ROUTE_PERMANENT_POWER_WEIGHT)
+                + ", risk " + String.format("%.1f", BalanceConfig.ROUTE_RISK_POWER_POINTS_PER_STANDARD_FLOOR)
+                + " PP per standard floor");
+        System.out.printf("%-24s %8s %8s %8s %8s %8s %-11s %-6s%n",
+                "subject", "threat", "resDelta", "progress", "reward", "EV", "pips", "in?");
+        System.out.println("------------------------------------------------------------------------------------");
+        for (ge.tbegvadze.toon3d.route.NodeEconomics row : ledger.all()) {
+            ge.tbegvadze.toon3d.route.RouteEconomicsModel.NodePrice priced =
+                    ge.tbegvadze.toon3d.route.RouteEconomicsModel.price(ledger, row, floor, depth);
+            String pips = "-";
+            String verdict = "-";
+            if (row.kind() == ge.tbegvadze.toon3d.route.NodeEconomics.Kind.NODE) {
+                int derived = BalanceSchema.derivedDangerTierIndexOf(ledger, floor, row);
+                ge.tbegvadze.toon3d.route.DangerTier declared =
+                        ge.tbegvadze.toon3d.route.RouteRegistries.nodeTypes().get(row.nodeType()).dangerTier();
+                pips = ge.tbegvadze.toon3d.route.DangerTier.values()[derived].name();
+                verdict = declared.ordinal() == derived ? "OK" : "MISMATCH";
+            }
+            System.out.printf("%-24s %8.0f %8.2f %8.2f %8.2f %8.2f %-11s %-6s%n",
+                    row.id(), priced.threatCost, priced.resourceDeltaPowerPoints, priced.progressPowerPoints,
+                    priced.rewardPowerPoints, priced.expectedValue, pips, verdict);
+        }
+        System.out.println("------------------------------------------------------------------------------------");
+        System.out.printf("  standard COMBAT node EV = %.2f. calm discount band %.0f-%.0f%%; risk premium band %.2f-%.2f;"
+                        + " mystery EV tolerance ±%.0f%%%n",
+                combat.expectedValue, BalanceConfig.ROUTE_CALM_EV_DISCOUNT_MIN * 100f,
+                BalanceConfig.ROUTE_CALM_EV_DISCOUNT_MAX * 100f, BalanceConfig.ROUTE_RISK_PREMIUM_MIN,
+                BalanceConfig.ROUTE_RISK_PREMIUM_MAX, BalanceConfig.ROUTE_MYSTERY_EV_TOLERANCE * 100f);
+        System.out.println("  AFFIX rows are MULTIPLIERS folded onto their host ELITE node; MYSTERY rows are the hidden table.");
+        for (BalanceSchema.RuleResult result : BalanceSchema.riskPremiumResults()) {
+            System.out.printf("  risk premium %-26s %5.2f  %s%n", result.subject, result.value,
+                    result.satisfied ? "OK" : "OUT-OF-BAND");
+        }
+        for (BalanceSchema.RuleResult result : BalanceSchema.calmCostResults()) {
+            System.out.printf("  %-38s %5.2f  %s%n", result.subject, result.value,
+                    result.satisfied ? "OK" : "OUT-OF-BAND");
+        }
+    }
+
+    /**
+     * TRAJECTORY (order 7) — the JOURNEY as the audited unit: the worst cumulative reading each path
+     * policy produces over the seed sweep, i.e. the game's real difficulty range end to end.
+     */
+    private static void printTrajectoryTable() {
+        System.out.println("TRAJECTORY (order 7) — cumulative bands over " + BalanceConfig.ROUTE_TRAJECTORY_SEED_COUNT
+                + " real maps, sampled at every region boundary; worst reading per policy");
+        System.out.printf("%-42s %9s %-18s %-6s%n", "policy / metric", "worst", "band", "in?");
+        System.out.println("------------------------------------------------------------------------------------");
+        for (BalanceSchema.RuleResult result : BalanceSchema.trajectoryResults()) {
+            System.out.printf("%-42s %9.2f [%7.2f,%7.2f] %-6s%n", result.subject, result.value,
+                    result.bandMinimum, result.bandMaximum, result.satisfied ? "OK" : "OUT-OF-BAND");
+        }
+        System.out.println("------------------------------------------------------------------------------------");
+        for (BalanceSchema.RuleResult result : BalanceSchema.routeGuaranteeResults()) {
+            System.out.printf("  R-ROUTE-GUARANTEES %-30s %4.0f violation(s)  %s%n",
+                    result.subject, result.value, result.satisfied ? "OK" : "FAIL");
+            System.out.println("    " + result.detail);
+        }
+        System.out.println("  SAFEST rides the generous edge and DEADLIEST the starved edge — both ENDS must stay fair.");
     }
 
     private static void printHeader() {

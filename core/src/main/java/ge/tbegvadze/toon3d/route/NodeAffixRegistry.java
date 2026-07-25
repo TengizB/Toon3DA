@@ -52,6 +52,14 @@ public final class NodeAffixRegistry {
         return pool;
     }
 
+    /**
+     * Every registered affix id, in registration order. Read by the balance audit's R-ROUTE-PRICED
+     * coverage rule (order 7): an affix with no {@code NodeEconomics} row fails the build.
+     */
+    public List<String> ids() {
+        return new ArrayList<>(definitions.keySet());
+    }
+
     /** How many affixes are registered. */
     public int size() {
         return definitions.size();

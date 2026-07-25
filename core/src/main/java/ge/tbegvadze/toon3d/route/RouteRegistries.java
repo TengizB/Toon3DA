@@ -27,18 +27,47 @@ public final class RouteRegistries {
     private static final NodeAffixRegistry        AFFIXES        = new NodeAffixRegistry();
     private static final FacilityEventRegistry    EVENTS         = new FacilityEventRegistry();
     private static final RegionAmbienceRegistry   REGION_AMBIENCE = new RegionAmbienceRegistry();
+    private static final NodeEconomicsRegistry    NODE_ECONOMICS  = new NodeEconomicsRegistry();
     private static boolean bootstrapped = false;
+    // Per-registry latches so the three registries the headless BALANCE AUDIT reads (node types,
+    // generators, node economics) can be pulled in isolation — the audit prices and walks the map
+    // without booting the profile / event / ambience content. Each still registers exactly once.
+    private static boolean nodeTypesRegistered     = false;
+    private static boolean generatorsRegistered    = false;
+    private static boolean nodeEconomicsRegistered = false;
+    private static boolean affixesRegistered       = false;
 
     private RouteRegistries() {}
 
-    /** The shared node-type registry. */
-    public static NodeTypeRegistry nodeTypes() {
+    /** The shared node-type registry (populated on first access; registration happens exactly once). */
+    public static synchronized NodeTypeRegistry nodeTypes() {
+        if (!nodeTypesRegistered) {
+            nodeTypesRegistered = true;
+            registerNodeTypes(NODE_TYPES);
+        }
         return NODE_TYPES;
     }
 
-    /** The shared generator registry. */
-    public static GeneratorRegistry generators() {
+    /** The shared generator registry (populated on first access; registration happens exactly once). */
+    public static synchronized GeneratorRegistry generators() {
+        if (!generatorsRegistered) {
+            generatorsRegistered = true;
+            registerGenerators(GENERATORS);
+        }
         return GENERATORS;
+    }
+
+    /**
+     * The shared NODE EV LEDGER (new-game-balancr order 7) — every node type, affix and mystery
+     * outcome with its priced threat / resources / progress. Populated on first access so the
+     * headless balance audit can read the map's prices without booting the whole route subsystem.
+     */
+    public static synchronized NodeEconomicsRegistry nodeEconomics() {
+        if (!nodeEconomicsRegistered) {
+            nodeEconomicsRegistered = true;
+            RouteEconomics.registerAll(NODE_ECONOMICS);
+        }
+        return NODE_ECONOMICS;
     }
 
     /** The shared node-level-profile registry (order-3: node -&gt; floor pipeline). */
@@ -46,8 +75,12 @@ public final class RouteRegistries {
         return LEVEL_PROFILES;
     }
 
-    /** The shared ELITE node-affix registry (order-9). */
-    public static NodeAffixRegistry affixes() {
+    /** The shared ELITE node-affix registry (order-9; populated on first access, exactly once). */
+    public static synchronized NodeAffixRegistry affixes() {
+        if (!affixesRegistered) {
+            affixesRegistered = true;
+            registerAffixes(AFFIXES);
+        }
         return AFFIXES;
     }
 
@@ -74,9 +107,12 @@ public final class RouteRegistries {
         if (bootstrapped) {
             return;
         }
-        registerNodeTypes(NODE_TYPES);
-        registerGenerators(GENERATORS);
-        registerAffixes(AFFIXES);
+        // Through the latched accessors, so a registry already pulled in by the balance audit (or by
+        // any earlier caller) is never registered twice.
+        nodeTypes();
+        generators();
+        nodeEconomics();
+        affixes();
         registerEvents(EVENTS);
         registerRegionAmbience(REGION_AMBIENCE);
         registerLevelProfiles(LEVEL_PROFILES, GENERATORS, AFFIXES, EVENTS);
@@ -320,14 +356,18 @@ public final class RouteRegistries {
                 .extraRadioactiveBarrels(RouteMapConstants.AFFIX_IRRADIATED_EXTRA_BARRELS)
                 .build());
 
-        // OVERCLOCKED — enemies hit harder (approximated as more depth Threat spent).
+        // OVERCLOCKED — enemies hit harder (approximated as more depth Threat spent). The raised threat
+        // is PAID FOR by a richer vault (R-RISK-PREMIUM, order 7): danger must never be a sucker bet.
         registry.register(NodeAffixDefinition.builder(RouteMapConstants.AFFIX_OVERCLOCKED_ID, "OVERCLOCKED")
                 .budgetScaleMultiplier(RouteMapConstants.AFFIX_OVERCLOCKED_BUDGET_MULT)
+                .extraVaultAmmoBoxes(RouteMapConstants.AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES)
                 .build());
 
-        // SWARM — the one exception to fewer-bodies: many chaff, a crowd-control test.
+        // SWARM — the one exception to fewer-bodies: many chaff, a crowd-control test. The biggest
+        // threat multiplier in the catalog, so it carries the biggest vault premium.
         registry.register(NodeAffixDefinition.builder(RouteMapConstants.AFFIX_SWARM_ID, "SWARM")
                 .budgetScaleMultiplier(RouteMapConstants.AFFIX_SWARM_BUDGET_MULT)
+                .extraVaultAmmoBoxes(RouteMapConstants.AFFIX_SWARM_VAULT_AMMO_BOXES)
                 .build());
 
         // FORTIFIED — armour + more cover columns (a slugfest).

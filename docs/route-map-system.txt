@@ -51,6 +51,11 @@ Implementation orders (each owns the doc section it filled):
   order-9  DANGER / GAMBLE nodes (elite/myst)-> DANGER / GAMBLE NODES
   order-10 narrative EVENT nodes + regions   -> NARRATIVE / EVENT NODES & REGION THEMING
   order-11 this living doc + agent contract  -> THIS FILE (contract, catalogs, recipes, plug-ins)
+Plus one order from the BALANCE series (docs/game-balance-authority.txt), which owns the map's NUMBERS
+rather than its machinery:
+  new-game-balancr order-7 ROUTE ECONOMICS   -> ROUTE ECONOMICS: THE PRICED MAP (below). It added the
+      node EV ledger, DERIVED risk pips, the map-gen reachability guarantees and the trajectory audit —
+      and RE-PRICED the calm / elite / mystery / event payoffs the earlier orders hand-set.
 
 Code lives in `core/.../route/` (pure, headless — NO LibGDX imports) plus the World wiring (order-3)
 and the render layer (`render/RouteMapOverlayRenderer` + `render/routeicons/`).
@@ -152,6 +157,11 @@ ANTI-STARVATION / PACING GUARDS (deterministic post-pass, RouteMapConstants):
     4-layer window; a starved window is repaired by promoting a lane to CACHE/REST.
   - SHOP_MAX_PER_WINDOW (2) over SHOP_WINDOW_LAYERS (4): economy pacing cap.
   - GUARD_REPAIR_ATTEMPT_CAP (64): repair passes are bounded so generation always terminates.
+  - R-ROUTE-GUARANTEES (new-game-balancr order-7, repairBandGuarantees): after the window guards, a
+    FIXPOINT post-pass enforces the reachability promises (an upgrade + a calm node reachable per
+    region, pre-boss provisioning, >= 2 distinct node types per selectable layer). It has the LAST word
+    on a node's type, and where it collides with the SHOP pacing cap the GUARANTEE wins. See ROUTE
+    ECONOMICS: THE PRICED MAP.
 
 REGION BANDS (RegionPlan / RegionSpec — DATA, not code branches):
   A band is REGION_BAND_SIZE (5) deep and ENDS on its lastDepth, which is a boss floor because
@@ -324,12 +334,14 @@ SUPPLY CACHE  (RouteNodeType.CACHE, profile "supply_cache", CacheProfile)
   bright, hazard-free config (no unlit/flicker floors, no radioactive barrels; crates + lockers + one
   cargo bay + columns; medkit/armour chances bumped). Budget = EnemyBudgetOverride.calm() (light
   chaff, never elite, never zero — a cache is not a free heal; depth ramp still applied first).
-  Guaranteed payoff (post-generation, FARTHEST_ROOM = the deep cargo bay, deterministic from floorSeed):
+  Guaranteed payoff (post-generation, FARTHEST_ROOM = the deep cargo bay, deterministic from floorSeed).
+  Every count is a BalanceConfig SECTION 19 value, priced by R-CALM-COST (order-7 re-priced them DOWN:
+  a chained cache route used to sail above the order-3 supply band):
     - brightenFloors() TILE_THEME so the depot never reads unsafe
-    - CACHE_MEDKITS 'H' + CACHE_STIMS '+'
-    - CACHE_ARMOUR: 'a' shard shallow, 'A' vest from depth CACHE_ARMOUR_VEST_DEPTH
+    - CACHE_MEDKITS 'H' + CACHE_STIMS '+'   (v1: 1 medkit, 0 stims)
+    - CACHE_ARMOUR: 'a' shard shallow, 'A' vest from depth CACHE_ARMOUR_VEST_DEPTH (v1: 0)
     - CACHE_CRATES 'C' + CACHE_LOCKERS 'L' as set dressing
-    - CACHE_AMMO_BOXES ammo boxes across the player's OWNED ammo types (smart ammo — see below)
+    - CACHE_AMMO_BOXES ammo boxes across the player's OWNED ammo types (v1: 2 — smart ammo, see below)
   The reliable WEAPON payout is the ELITE node; the cache stays about consumables so the two read
   distinctly.
 
@@ -350,6 +362,13 @@ MED-BAY / REST  (RouteNodeType.REST, profile "rest_medbay", RestProfile + MedBay
   tile-symbols.txt): 'M' medical walls dominant, 'N' reinforced-glass viewing window, 'Z' cryo-wall
   alcove frames, 'S' emergency-strip approach; '&' bio-pods, 'I' specimen tanks, 'T' terminals, '%'
   generator; sparse 'm'/'O'/'f' decals. Emits ZERO enemy spawn points — the honest sanctuary.
+
+  THE CLINIC'S STOCK (new-game-balancr order-7): on top of the auto-doc, the profile stamps take-away
+  supplies near the exit — REST_MEDKITS 'H', REST_STIMS '+', REST_ARMOUR 'a'/'A' — and their COUNT
+  rides the enemy-damage depth curve (GameMath.depthScaledPickupCount: one medkit early, three at
+  depth 15). A REST floor earns NO roster XP, so a fixed hit-point payoff decays into a dead choice as
+  incoming damage compounds; "the deeper the facility, the better stocked its medical bay" is what
+  keeps the node inside the R-CALM-COST band at every depth.
 
   THE AUTO-DOC HEAL STATION (the STATION kind):
     Reuses the holo-workstation 'W' as the auto-doc prop (RouteMapConstants.HEAL_STATION_SYMBOL) — NO
@@ -399,8 +418,11 @@ ELITE HOTZONE  (RouteNodeType.ELITE, profile "elite_hotzone", EliteProfile)
     looks the definition back up by id and folds it in (applyToConfig + budgetScaleMultiplier +
     extraGuarantees). v1 catalog (register one line in RouteRegistries.registerAffixes to add more):
       - IRRADIATED  : + radioactive-barrel weight + extra 'g' barrels (hazard pools).
-      - OVERCLOCKED : budget ×AFFIX_OVERCLOCKED_BUDGET_MULT (enemies "hit harder" ≈ more Threat spent).
-      - SWARM       : budget ×AFFIX_SWARM_BUDGET_MULT (the one exception to fewer-bodies — crowd control).
+      - OVERCLOCKED : budget ×AFFIX_OVERCLOCKED_BUDGET_MULT (enemies "hit harder" ≈ more Threat spent)
+                      + AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES extra vault boxes — the REWARD that pays for
+                      the threat it adds (R-RISK-PREMIUM; an affix may never be a sucker bet).
+      - SWARM       : budget ×AFFIX_SWARM_BUDGET_MULT (the one exception to fewer-bodies — crowd control)
+                      + AFFIX_SWARM_VAULT_AMMO_BOXES extra vault boxes (the biggest premium in the catalog).
       - FORTIFIED   : extra cover columns 'P' + an extra armour pickup (a slugfest).
       - VOLATILE    : extra explosive barrels 'E' (the arena itself is a weapon for both sides).
 
@@ -431,6 +453,86 @@ MYSTERY  (RouteNodeType.MYSTERY, profile "mystery", MysteryProfile — a META-pr
   nearest available effect (traps → barrels, secret rooms → server rooms + lock-and-key, lockdown waves →
   the ELITE combat delegate, relics/EVENT → loot/rest). Each degrade is noted in-code so it can be
   upgraded when the real system ships, without changing the table shape.
+
+ROUTE ECONOMICS: THE PRICED MAP (new-game-balancr order-7)
+==========================================================
+Orders 1-11 built the map; the balance series' order-7 put it INSIDE the balance contract. Before it,
+every macro number (calm payoffs, ELITE budget scale, affix multipliers, mystery weights, risk pips)
+was hand-set outside the floor economy — so the game the audit checked (a floor) and the game the
+player plays (a JOURNEY of chosen nodes) were different games. Now every node the map can offer
+carries a PRICE, and the journey itself is audited.
+
+THE NODE EV LEDGER (route/NodeEconomics + NodeEconomicsRegistry + RouteEconomics)
+  One NodeEconomics row per NODE TYPE, per ELITE AFFIX and per MYSTERY OUTCOME, registered in
+  route/RouteEconomics exactly like a node type or an affix. A row declares:
+    budgetScale        threat: its multiplier on the raw depth-scaled Threat-Point budget (1.0 ==
+                       a standard COMBAT floor). Priced at what the floor ACTUALLY spawns — MED_BAY /
+                       EVENT_ROOM / GATE_AIRLOCK emit ZERO spawn points, so those rows price 0.
+    ordinaryLootScale  the share of a standard floor's ordinary room/kill loot its floor rolls (a
+                       bespoke one-room clinic rolls far fewer loot slots than a full dungeon).
+    guaranteed*        its payoff: ammo boxes, flat healing, eHP-fraction healing, credits, XP.
+    upgradeOpportunity the share of ONE weapon-class upgrade it reliably offers.
+  util/RouteEconomicsModel folds a row into one comparable EV (GameMath.nodeExpectedValue) using the
+  order-3/4 models — the same supply/demand, heal, credit and XP curves the floor rules use — in the
+  shared POWER POINT currency. R-ROUTE-PRICED fails the build on any node/affix/outcome without a row.
+
+THE RULES (all in BalanceSchema; full text in docs/game-balance-authority.txt SECTION 3)
+  R-RISK-PREMIUM     reward premium / threat premium in [1.0, 1.2] for ELITE and EVERY affixed variant
+                     — so SWARM / OVERCLOCKED now carry a VAULT PREMIUM that pays for the threat they add.
+  R-CALM-COST        a calm node's EV sits 10-35% BELOW a combat node's: safety is bought with tempo
+                     and loot, never free income on top.
+  R-MYSTERY-EV       the weighted outcome table is within ±15% of a combat floor, and MALFUNCTION's
+                     expected loss is bounded ("bad but survivable" as arithmetic).
+  R-PIPS-DERIVED     DangerTier is DERIVED from the priced threat ratio (GameMath.derivedDangerTierIndex:
+                     forced -> SET_PIECE, hidden table -> GAMBLE, else CALM/STANDARD/DANGER thresholds)
+                     and must equal what the overlay displays. The map may tempt; it may never lie.
+  R-HONEST-SAFE      CACHE/REST face <= 0.30x a combat floor's Threat Points, and the MYSTERY scan
+                     tones partition honestly (REWARD-RICH really is the richest bucket by EV,
+                     HIGH RISK really is the most dangerous by threat).
+  R-TRAJECTORY       the JOURNEY replaces the floor as the audited unit — see below.
+  R-ROUTE-GUARANTEES no lane strands a run — see below.
+
+THE TRAJECTORY AUDIT (the journey is the audited unit)
+  100 real maps are generated headlessly (the real RouteMapGenerator) and walked under three
+  deterministic policies — SAFEST (always the lowest-threat node), DEADLIEST (always the highest),
+  BALANCED (alternating) — and at EVERY region boundary the cumulative order-3/4 quantities are
+  measured over the nodes ACTUALLY VISITED, each priced by its own ledger row: scarcity S, per-floor
+  net HP drain, XP pace, and depth coupling AT THE LEVEL THE ROUTE ACTUALLY BOUGHT (a route that skips
+  fights stands lower than the depth expects — GameMath.levelForCumulativeXp). All three policies must
+  stay in band; the band ENDS are the game's real difficulty range, and both ends must stay fair.
+
+ROUTE GUARANTEES AT MAP-GEN (RouteMapGenerator.repairBandGuarantees — a deterministic, no-RNG post-pass)
+  A floor-level promise can be stranded on the lane not taken, so three promises are enforced as GRAPH
+  properties, repaired to a FIXPOINT (each pass's rewrite can undo another's, so they run in a loop
+  until nothing changes; every rewrite targets the nearest NEUTRAL node ahead, which is what makes it
+  converge):
+    - UPGRADE per region : from every node with room ahead of it (depth <= region.lastDepth - 3), some
+      forward path inside the region still reaches an ELITE or SHOP. Order 2's pity rule becomes a
+      graph property instead of a spawn hope.
+    - CALM per region    : the same, for a CACHE or REST.
+    - PRE-BOSS PROVISION : the layer before every boss offers a reachable SHOP/CACHE (order 6's beat).
+      This is what covers the band's TAIL, where there is no longer room to carry the two per-region
+      promises without collapsing a layer into one node type.
+    - REAL CHOICES       : every selectable layer offers >= ROUTE_MIN_NODE_TYPES_PER_LAYER (2) DISTINCT
+      node types. A row of identical cards is a choice in name only.
+  Proven over 100 seeds by BalanceAuditTest + RouteEconomicsTest, including endless lazily-appended
+  bands, and the repair is deterministic so seeds stay shareable.
+
+WHAT ORDER-7 RE-PRICED (the payoff numbers below are its output, not the order-8/9/10 hand-set ones)
+  CACHE  2 ammo boxes + 1 medkit (was 4 + medkit + stim + armour) — a chained cache route used to sail
+         far above the order-3 supply band.
+  REST   a FULL auto-doc heal (was 35% of max HP) plus a stocked clinic (medkit + stim + armour, the
+         COUNT scaling with depth) — a REST floor earns no roster XP at all, so at its old payoff it
+         priced far BELOW the calm band: a sucker node.
+  ELITE  3 vault boxes + 1 medkit + 1 stim + 1 armour (was 6 + 2 + 1 + 1), plus per-affix vault
+         premiums so an affixed elite's reward tracks its raised threat.
+  EVENT  richer, DEPTH-SCALED payouts: a hand-set XP grant is authored at depth 1 and re-expressed as
+         the same share of a level at the depth played (GameMath.depthScaledRewardXp, applied in
+         World.applyEventChoice) — a flat grant decayed to nothing against the geometric level curve.
+  MYSTERY weights re-tuned so the table's audited EV really does sit within ±15% of a combat floor.
+  All of these values live in BalanceConfig SECTION 19; RouteMapConstants keeps re-export shims under
+  the old names, so no route call site changed.
+
 
 OVERLAY VISUAL SPEC (order-4) — the "FACILITY NAV" console
 ==========================================================
@@ -707,20 +809,24 @@ Forced nodes (BOSS, REGION_GATE) carry weight 0 and are injected by the generato
   id          type         tier       weight  profile         generator(s)          icon         guaranteed / reward
   ----------- ------------ ---------- ------- --------------- --------------------- ------------ -------------------------------------------
   combat      COMBAT       STANDARD    34     combat_standard pre-rolled pool*      icon_combat  ordinary encounter; the descent backbone
-  elite       ELITE        DANGER      14     elite_hotzone   pre-rolled pool*      icon_elite   ~1.5x budget, hazards, red alert, +affix;
-                                                                                                 GATED_ROOM vault: owned-ammo + armour + rack
-  cache       CACHE        CALM        14     supply_cache    ROOMS_MST (fixed)     icon_cache   bright depot, calm budget; medkit + stims +
-                                                                                                 armour + crates + owned-ammo boxes
+  elite       ELITE        DANGER      14     elite_hotzone   pre-rolled pool*      icon_elite   1.5x budget, hazards, red alert, +affix;
+                                                                                                 GATED_ROOM vault: owned-ammo + armour + rack,
+                                                                                                 priced against its threat (R-RISK-PREMIUM)
+  cache       CACHE        CALM        14     supply_cache    ROOMS_MST (fixed)     icon_cache   bright depot, calm budget; medkit + crates +
+                                                                                                 owned-ammo boxes (priced, R-CALM-COST)
   shop        SHOP         CALM        11     shop            pre-rolled pool*      icon_shop    standard floor, light budget; vending stock
-  rest        REST         CALM        11     rest_medbay     MED_BAY               icon_rest    empty clinic + one-shot auto-doc heal station
+  rest        REST         CALM        11     rest_medbay     MED_BAY               icon_rest    empty clinic; FULL one-shot auto-doc heal +
+                                                                                                 depth-scaled take-away stock
   mystery     MYSTERY      GAMBLE      10     mystery         (delegates/builds)    icon_mystery '?' until entry; weighted outcome table**
   event       EVENT        CALM         6     event           EVENT_ROOM            icon_event   non-combat choice room; 1-3 typed EventEffects
   boss        BOSS         SET_PIECE    0(F)  boss            BOSS_ARENA            icon_boss    forced at isBossFloor depths; facility guardian
   region_gate REGION_GATE  SET_PIECE    0(F)  region_gate     GATE_AIRLOCK          icon_gate    forced at a non-boss band boundary; ceremony
   *  "pre-rolled pool" = the standard combat biome pool {ROOMS_MST, LINEAR_CORRIDOR, CAVERN}, chosen at
      MAP-GEN and stored on the node (RouteNode.chosenGeneratorId), biased by the region's generatorWeight.
-  ** MYSTERY outcomes (RouteMapConstants.MYSTERY_WEIGHT_*, sum 100): VAULT_JACKPOT 18, SECRET_WARREN 18,
-     TRAP_GAUNTLET 18, AMBUSH 18 (->elite_hotzone), LORE_SIGNAL 14 (->rest_medbay), MALFUNCTION 14.
+  ** MYSTERY outcomes (BalanceConfig SECTION 19 MYSTERY_WEIGHT_*, sum 100): VAULT_JACKPOT 16,
+     SECRET_WARREN 18, TRAP_GAUNTLET 18, AMBUSH 18 (->elite_hotzone), LORE_SIGNAL 14 (->rest_medbay),
+     MALFUNCTION 16. The weights are AUDITED (R-MYSTERY-EV): the table's EV must sit within ±15% of a
+     standard combat floor at every audited depth, so re-tuning one outcome's payoff re-tunes the table.
   ELITE affixes (RouteMapConstants.AFFIX_*, rolled at AFFIX_ROLL_CHANCE_ELITE 0.60): IRRADIATED,
      OVERCLOCKED, SWARM, FORTIFIED, VOLATILE (see DANGER / GAMBLE NODES).
 
@@ -768,7 +874,10 @@ ADD A NEW NODE TYPE
   2. Write its NodeLevelProfile and register it (registerLevelProfiles). Write its IconPainter and
      register it (RouteIconBootstrap.registerIconPainters). Add its accent to RouteMapColorPalette.
   3. Add its base pool weight (RouteMapConstants.NODE_WEIGHT_*) + any region multipliers.
-  4. Add a NODE CATALOG row to this doc.
+  4. PRICE IT: register a NodeEconomics row in route/RouteEconomics (threat scale, ordinary-loot share,
+     guaranteed payoff, upgrade opportunity) — R-ROUTE-PRICED FAILS THE BUILD without one, and the
+     dangerTier you declared in step 1 must equal the tier its price DERIVES (R-PIPS-DERIVED).
+  5. Add a NODE CATALOG row to this doc.
   => It joins the random pool at its weight. NO World/overlay/generator edits.
 
 ADD A NEW SPECIAL LEVEL (for an existing or new node)  — full recipe in SPECIAL LEVELS: THE PROFILE
@@ -784,9 +893,18 @@ ADD A NEW REGION  — full recipe in NARRATIVE / EVENT NODES & REGION THEMING. S
 ADD A NEW ROUTE EVENT  — FacilityEventRegistry: write a FacilityEvent (title + narrative lines + 1-3
   EventChoices, each a TYPED EventEffect that routes through an existing system) and register it in
   FacilityEvents.registerAll. Add a note to the NODE CATALOG (event row). NO World/overlay edits.
+  Its payoff is priced through the EVENT node's ledger row (the expected value across the choice
+  catalogue), so a materially richer/poorer event means re-checking that row. An XP grant is authored
+  at DEPTH 1 and depth-scaled when applied (GameMath.depthScaledRewardXp).
+
+ADD A NEW MYSTERY OUTCOME  — add the MysteryOutcome row (weight + scan tone + delegate/build recipe)
+  AND a NodeEconomics.mysteryOutcome row in route/RouteEconomics. R-MYSTERY-EV re-audits the whole
+  table's expected value against a combat floor, so a new outcome re-prices the table's weights.
 
 ADD A NEW ELITE AFFIX  — register a NodeAffixDefinition (a bundle of typed modifiers) in
-  RouteRegistries.registerAffixes; EliteProfile folds it in by id. Note it in DANGER / GAMBLE NODES.
+  RouteRegistries.registerAffixes; EliteProfile folds it in by id. PRICE IT with a NodeEconomics.affix
+  row in route/RouteEconomics: if it raises the budget it must raise the vault with it, or
+  R-RISK-PREMIUM fails the build. Note it in DANGER / GAMBLE NODES.
 
 ADD A NEW NODE ICON  — 4-step recipe in NODE ICON VOCABULARY (write IconPainter -> register in
   RouteIconBootstrap -> point NodeTypeDefinition.iconPainterId at it -> add the catalog line).
@@ -808,7 +926,10 @@ rather than reaching into it:
     SHOP_MAX_PER_WINDOW guard paces shop frequency.
   - DIFFICULTY SCALING (docs/game-balance-authority.txt): a node changes a floor's KIND/rewards, NEVER its
     depth. EnemyBudgetOverride SCALES the depth-ramped Threat budget (the depth ramp is applied FIRST);
-    it never freezes or bypasses it. See DEPTH RAMP INVARIANT.
+    it never freezes or bypasses it. See DEPTH RAMP INVARIANT. Since new-game-balancr order-7 the map is
+    also PRICED: every node/affix/outcome carries a NodeEconomics row, the balance-bearing route numbers
+    live in BalanceConfig SECTION 19 (RouteMapConstants re-exports them), and the audit walks real maps.
+    Changing a node's payoff or budget scale WITHOUT re-checking its row fails ./gradlew test.
   - HAZARDS / SECRET ROOMS / RELICS: attach via post-generation Guarantees (stamped symbols) and the
     FloorEffects seam (red alert / sting text / telemetry token). The long-range SCANNER is a relic
     hook (setScannerActive / triggerScanReveal) already wired in INTERACTION & CONTROLS.

@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.route;
 
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
 
@@ -88,9 +89,9 @@ public final class RouteMapGenerator {
         for (RegionSpec region : plan.regions()) {
             List<List<RouteNode>> bandLayers = buildBand(runSeed, region, previousLayer);
             applyWindowGuards(bandLayers, accumulatedRollable);
-            // Runs AFTER the window guards so the shop-window guard can no longer convert away the SHOP/CACHE
-            // it depends on — the pre-boss provisioning stop is the LAST word on the pre-boss layer's type.
-            enforcePreBossProvisioning(bandLayers, region.lastDepth());
+            // Runs AFTER the window guards so the shop-window guard can no longer convert away the
+            // SHOP/CACHE the guarantees depend on — R-ROUTE-GUARANTEES has the LAST word on node types.
+            repairBandGuarantees(bandLayers, region.lastDepth());
             finaliseNodes(bandLayers, region);
             allLayers.addAll(bandLayers);
             collectRollable(bandLayers, accumulatedRollable);
@@ -125,7 +126,9 @@ public final class RouteMapGenerator {
 
         List<List<RouteNode>> bandLayers = buildBand(map.getRunSeed(), newRegion, prevLast);
         applyWindowGuards(bandLayers, accumulatedRollable);
-        enforcePreBossProvisioning(bandLayers, newRegion.lastDepth());
+        // Same guarantee pipeline as generate(): an endlessly-appended band must be exactly as fair as
+        // one built up front (and byte-identical to it — every pass is deterministic).
+        repairBandGuarantees(bandLayers, newRegion.lastDepth());
         finaliseNodes(bandLayers, newRegion);
         map.appendLayers(bandLayers);
         map.addRegion(newRegion.toRegion());
@@ -184,6 +187,379 @@ public final class RouteMapGenerator {
     }
 
     /**
+     * R-ROUTE-GUARANTEES — REACHABILITY (new-game-balancr order 7). A floor-level promise can be
+     * stranded on the lane not taken, so order 2's "an upgrade per region" pity rule and order 8's
+     * "relief is always offered" become GRAPH properties instead of spawn hopes: from EVERY node in
+     * the band, at least one forward path inside the region still reaches
+     * <ul>
+     *   <li>an UPGRADE-bearing node (ELITE / SHOP — where a weapon-class upgrade can be had), and</li>
+     *   <li>a CALM node (CACHE / REST — the pressure-release valve).</li>
+     * </ul>
+     * Deterministic repair (no RNG, so the map stays reproducible): a node that cannot reach one has
+     * a successor rewritten to the required kind, preferring a non-combat-family successor in the next
+     * rollable layer so a combat option survives, and falling back to the node itself when its only
+     * successor is the forced convergence node. Where the repair collides with the SHOP pacing cap the
+     * GUARANTEE wins — a reachable upgrade matters more than shop spacing in that rare case.
+     */
+    private void repairBandGuarantees(List<List<RouteNode>> bandLayers, int regionLastDepth) {
+        // All THREE guarantees are repaired together, to a FIXPOINT, because each one's rewrite can
+        // undo another's: a calm rewrite can consume the SHOP the upgrade pass just planted, a variety
+        // rewrite can consume either, and the pre-boss provisioning stop can consume the upgrade node an
+        // earlier lane depended on. Running them in a loop until nothing changes is what makes them
+        // compose. Convergence comes from the repair TARGETS: each reachability rewrite lands on the
+        // nearest NEUTRAL node ahead (one that carries no guarantee), so it plants what is missing
+        // without removing what is already there. The cap is the usual anti-hang backstop.
+        for (int pass = 0; pass < RouteMapConstants.GUARD_REPAIR_ATTEMPT_CAP; pass++) {
+            boolean changed = enforcePreBossProvisioning(bandLayers, regionLastDepth);
+            changed |= repairReachability(bandLayers);
+            changed |= enforceLayerVariety(bandLayers);
+            if (!changed) {
+                return;
+            }
+        }
+    }
+
+    /** Repairs both reachability guarantees until neither pass changes anything. */
+    private boolean repairReachability(List<List<RouteNode>> bandLayers) {
+        boolean changedAtAll = false;
+        for (int pass = 0; pass < RouteMapConstants.GUARD_REPAIR_ATTEMPT_CAP; pass++) {
+            boolean changed = enforceReachabilityGuarantee(bandLayers, true);
+            changed |= enforceReachabilityGuarantee(bandLayers, false);
+            if (!changed) {
+                break;
+            }
+            changedAtAll = true;
+        }
+        return changedAtAll;
+    }
+
+    /** @return whether this pass rewrote at least one node. */
+    private boolean enforceReachabilityGuarantee(List<List<RouteNode>> bandLayers, boolean upgradeKind) {
+        if (bandLayers.isEmpty()) {
+            return false;
+        }
+        boolean changed = false;
+        int lastDepth = bandLayers.get(bandLayers.size() - 1).get(0).depth;
+        for (List<RouteNode> layer : bandLayers) {
+            if (isForcedLayer(layer)
+                    || layer.get(0).depth > RouteEconomicsModel.lastGuaranteedSourceDepth(lastDepth)) {
+                // The tail of a band has too little room ahead to carry BOTH guarantees without
+                // collapsing into one-type layers (fake choices) — see lastGuaranteedSourceDepth. The
+                // PRE-BOSS PROVISIONING guarantee is what protects the player there instead.
+                continue;
+            }
+            for (RouteNode node : layer) {
+                // Per-node attempt budget: one conversion normally settles a node, and the cap only
+                // exists so an over-constrained band can never spin (the order-2 guard discipline).
+                int attempts = 0;
+                while (!canReachRequiredKind(node, lastDepth, upgradeKind)
+                        && attempts++ < RouteMapConstants.GUARD_REPAIR_ATTEMPT_CAP) {
+                    // ELITE pays the upgrade guarantee, not SHOP: ELITE is combat-family (so a repair can
+                    // never strip a layer's last combat option, an order-2 guard) and it leaves the SHOP
+                    // pacing cap the window guard just enforced alone. CACHE pays the calm guarantee,
+                    // matching the order-2 relief guard's own repair.
+                    RouteNodeType replacement = upgradeKind ? RouteNodeType.ELITE : RouteNodeType.CACHE;
+                    RouteNode target = pickGuaranteeConversionTarget(node, lastDepth, bandLayers, replacement);
+                    if (target == null) {
+                        break;
+                    }
+                    target.type = replacement;
+                    changed = true;
+                }
+            }
+        }
+        return changed;
+    }
+
+    /** Whether SOME forward path from this node, inside the region, still meets the requirement. */
+    private boolean canReachRequiredKind(RouteNode node, int lastDepth, boolean upgradeKind) {
+        if (upgradeKind ? RouteEconomicsModel.isUpgradeBearing(node.type)
+                        : RouteEconomicsModel.isCalm(node.type)) {
+            return true;
+        }
+        if (node.depth >= lastDepth) {
+            return false;
+        }
+        for (RouteNode next : node.outgoing) {
+            if (next.depth <= lastDepth && canReachRequiredKind(next, lastDepth, upgradeKind)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Which node to rewrite so {@code source} regains its guarantee. Successors are scanned from the
+     * highest lane down (deterministic) and the preference order is what keeps the two guarantees from
+     * eating each other:
+     * <ol>
+     *   <li>the NEAREST NEUTRAL node reachable ahead of the source — one that carries neither guarantee
+     *       (COMBAT / MYSTERY / EVENT). Rewriting it plants what is missing without removing what is
+     *       already there, which is what makes the repair fixpoint converge instead of oscillating
+     *       (an earlier version only looked at DIRECT successors, so the calm pass kept eating the very
+     *       SHOP the upgrade pass had just planted, and vice versa);</li>
+     *   <li>any non-forced successor (the band is over-constrained — accept collateral and let the
+     *       fixpoint settle it);</li>
+     *   <li>the source itself, when every successor is the forced convergence node.</li>
+     * </ol>
+     * The forward scan is breadth-first in lane order, so the choice stays deterministic.
+     */
+    private RouteNode pickGuaranteeConversionTarget(RouteNode source, int lastDepth,
+                                                    List<List<RouteNode>> bandLayers,
+                                                    RouteNodeType replacement) {
+        RouteNode neutral = findNearestNeutralAhead(source, lastDepth, bandLayers, replacement, true);
+        if (neutral != null) {
+            return neutral;
+        }
+        // Nothing neutral is available anywhere ahead — accept collateral: the nearest node that may
+        // legally be rewritten at all, even if it currently carries the OTHER guarantee. The fixpoint
+        // then re-plants whatever this displaces (one node deeper), which is why this is safe.
+        return findNearestNeutralAhead(source, lastDepth, bandLayers, replacement, false);
+    }
+
+    /**
+     * Whether a node may be rewritten to {@code replacement} without breaking an EARLIER guard. Two
+     * are protected because the guarantee post-pass runs last and would otherwise silently undo them:
+     * <ul>
+     *   <li>the OPENING layer (depth 1) keeps its safe-start bias — only COMBAT/CACHE are ever offered
+     *       on the very first branch, so a new player is not gambling before they have footing;</li>
+     *   <li>a layer past depth 1 always keeps at least one COMBAT-FAMILY node — this is still a combat
+     *       game, and a row with no fight in it is not a route choice.</li>
+     * </ul>
+     */
+    private boolean isRewritable(List<List<RouteNode>> bandLayers, RouteNode node, RouteNodeType replacement) {
+        if (node.type == RouteNodeType.BOSS || node.type == RouteNodeType.REGION_GATE) {
+            return false;
+        }
+        if (node.depth <= 1 && replacement != RouteNodeType.CACHE) {
+            return false;
+        }
+        if (isCombatFamily(node.type) && !isCombatFamily(replacement)) {
+            List<RouteNode> layer = layerOf(bandLayers, node);
+            if (layer != null && countCombatFamily(layer) <= 1) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether planting one more SHOP on {@code target} would push its window past the economy pacing
+     * cap ({@link RouteMapConstants#SHOP_MAX_PER_WINDOW} per {@link RouteMapConstants#SHOP_WINDOW_LAYERS}).
+     * Measured over the BAND's own rollable layers — the guarantee repair runs per band, so this keeps
+     * it from undoing the window guard that ran just before it, without needing the cross-band context.
+     */
+    private boolean wouldExceedShopWindow(List<List<RouteNode>> bandLayers, RouteNode target) {
+        if (target.type == RouteNodeType.SHOP) {
+            return false; // already a shop — nothing new is planted
+        }
+        List<List<RouteNode>> rollable = new ArrayList<>();
+        collectRollable(bandLayers, rollable);
+        int targetIndex = -1;
+        for (int index = 0; index < rollable.size(); index++) {
+            if (rollable.get(index).contains(target)) {
+                targetIndex = index;
+                break;
+            }
+        }
+        if (targetIndex < 0) {
+            return false; // a forced layer holds no shops anyway
+        }
+        int window = RouteMapConstants.SHOP_WINDOW_LAYERS;
+        for (int start = Math.max(0, targetIndex - window + 1); start <= targetIndex; start++) {
+            if (start + window > rollable.size()) {
+                break;
+            }
+            int shops = 1; // the shop this repair is about to plant
+            for (int offset = 0; offset < window; offset++) {
+                for (RouteNode node : rollable.get(start + offset)) {
+                    if (node.type == RouteNodeType.SHOP) {
+                        shops++;
+                    }
+                }
+            }
+            if (shops > RouteMapConstants.SHOP_MAX_PER_WINDOW) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The band layer a node belongs to (bands are a handful of layers, so a scan is cheapest). */
+    private List<RouteNode> layerOf(List<List<RouteNode>> bandLayers, RouteNode node) {
+        for (List<RouteNode> layer : bandLayers) {
+            for (RouteNode candidate : layer) {
+                if (candidate == node) {
+                    return layer;
+                }
+            }
+        }
+        return null;
+    }
+
+    private int countCombatFamily(List<RouteNode> layer) {
+        int count = 0;
+        for (RouteNode node : layer) {
+            if (isCombatFamily(node.type)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Breadth-first search for the closest node ahead of (or at) {@code source} that carries no
+     * guarantee AND may legally be rewritten (see {@link #isRewritable}).
+     */
+    private RouteNode findNearestNeutralAhead(RouteNode source, int lastDepth,
+                                              List<List<RouteNode>> bandLayers, RouteNodeType replacement,
+                                              boolean neutralOnly) {
+        java.util.ArrayDeque<RouteNode> queue = new java.util.ArrayDeque<>();
+        java.util.Set<RouteNode> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        queue.add(source);
+        seen.add(source);
+        while (!queue.isEmpty()) {
+            RouteNode node = queue.poll();
+            boolean carriesAGuarantee = RouteEconomicsModel.isUpgradeBearing(node.type)
+                    || RouteEconomicsModel.isCalm(node.type);
+            boolean acceptable = neutralOnly ? !carriesAGuarantee : true;
+            if (acceptable && isRewritable(bandLayers, node, replacement)) {
+                return node;
+            }
+            for (RouteNode next : node.outgoing) {
+                if (next.depth <= lastDepth && seen.add(next)) {
+                    queue.add(next);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * R-ROUTE-GUARANTEES — NO FAKE CHOICES (order 7). Every selectable layer must offer at least
+     * {@link ge.tbegvadze.toon3d.util.BalanceConfig#ROUTE_MIN_NODE_TYPES_PER_LAYER} DISTINCT node
+     * types: a row of identical cards is a choice in name only, and the whole point of a route map is
+     * an informed decision. The rewrite plants a GUARANTEE-CARRYING type (CACHE, or SHOP when the layer
+     * is already all-CACHE), and it SEARCHES for a lane whose rewrite keeps the reachability + pre-boss
+     * promises intact, rolling back and trying the next lane otherwise. Searching rather than always
+     * taking the highest lane is what stops this pass and the calm pass from trading the same node back
+     * and forth inside the {@link #repairBandGuarantees} fixpoint. A layer where NO lane can be rewritten
+     * without stranding a lane is left alone — the audit reports it rather than the generator looping.
+     *
+     * @return whether this pass rewrote at least one node
+     */
+    private boolean enforceLayerVariety(List<List<RouteNode>> bandLayers) {
+        boolean changed = false;
+        int lastDepth = bandLayers.isEmpty()
+                ? 0 : bandLayers.get(bandLayers.size() - 1).get(0).depth;
+        for (List<RouteNode> layer : bandLayers) {
+            if (layer.size() < 2 || isForcedLayer(layer)) {
+                continue;
+            }
+            if (distinctTypeCount(layer) >= BalanceConfig.ROUTE_MIN_NODE_TYPES_PER_LAYER) {
+                continue;
+            }
+            RouteNodeType uniformType = layer.get(0).type;
+            // A uniform CALM layer gains a COMBAT option (which also restores the "every layer past
+            // depth 1 keeps a fight" guard); anything else gains a CACHE. Never SHOP — that would fight
+            // the economy pacing cap the window guard just enforced.
+            RouteNodeType replacement = RouteEconomicsModel.isCalm(uniformType)
+                    ? RouteNodeType.COMBAT : RouteNodeType.CACHE;
+            for (int lane = layer.size() - 1; lane >= 0; lane--) {
+                if (!isRewritable(bandLayers, layer.get(lane), replacement)) {
+                    continue;
+                }
+                // TRANSACTIONAL rewrite: apply it, let the reachability fixpoint re-plant whatever the
+                // rewrite displaced (usually one node deeper along the lane), and keep the result only
+                // if the layer really is varied AND every promise still holds. Otherwise restore the
+                // whole band and try the next lane. Checking the rewrite in ISOLATION rejected repairs
+                // the fixpoint could easily absorb; skipping the check let the two passes trade the same
+                // node forever. The transaction is what makes both guarantees hold at once.
+                RouteNodeType[] snapshot = snapshotTypes(bandLayers);
+                layer.get(lane).type = replacement;
+                repairReachability(bandLayers);
+                if (distinctTypeCount(layer) >= BalanceConfig.ROUTE_MIN_NODE_TYPES_PER_LAYER
+                        && guaranteesStillHold(bandLayers, lastDepth)
+                        && preBossProvisioningHolds(bandLayers, lastDepth)) {
+                    changed = true;
+                    break;
+                }
+                restoreTypes(bandLayers, snapshot);
+            }
+        }
+        return changed;
+    }
+
+    /** Every node's type, in fixed layer/lane order — the transaction snapshot of a band. */
+    private RouteNodeType[] snapshotTypes(List<List<RouteNode>> bandLayers) {
+        int count = 0;
+        for (List<RouteNode> layer : bandLayers) {
+            count += layer.size();
+        }
+        RouteNodeType[] snapshot = new RouteNodeType[count];
+        int index = 0;
+        for (List<RouteNode> layer : bandLayers) {
+            for (RouteNode node : layer) {
+                snapshot[index++] = node.type;
+            }
+        }
+        return snapshot;
+    }
+
+    /** Restores a {@link #snapshotTypes} snapshot (same traversal order — the band shape never changes). */
+    private void restoreTypes(List<List<RouteNode>> bandLayers, RouteNodeType[] snapshot) {
+        int index = 0;
+        for (List<RouteNode> layer : bandLayers) {
+            for (RouteNode node : layer) {
+                node.type = snapshot[index++];
+            }
+        }
+    }
+
+    private int distinctTypeCount(List<RouteNode> layer) {
+        java.util.EnumSet<RouteNodeType> distinct = java.util.EnumSet.noneOf(RouteNodeType.class);
+        for (RouteNode node : layer) {
+            distinct.add(node.type);
+        }
+        return distinct.size();
+    }
+
+    /**
+     * Whether the boss layer (if this band ends in one) still has a reachable SHOP/CACHE in the layer
+     * before it — the order-6 provisioning beat, re-checked so a later variety rewrite cannot undo it.
+     */
+    private boolean preBossProvisioningHolds(List<List<RouteNode>> bandLayers, int lastDepth) {
+        if (!GameMath.isBossFloor(lastDepth) || bandLayers.size() < 2) {
+            return true;
+        }
+        RouteNode boss = bandLayers.get(bandLayers.size() - 1).get(0);
+        for (RouteNode node : bandLayers.get(bandLayers.size() - 2)) {
+            boolean provisions = node.type == RouteNodeType.SHOP || node.type == RouteNodeType.CACHE;
+            if (provisions && node.outgoing.contains(boss)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether every rollable node in the band still reaches an upgrade node AND a calm node. */
+    private boolean guaranteesStillHold(List<List<RouteNode>> bandLayers, int lastDepth) {
+        for (List<RouteNode> layer : bandLayers) {
+            if (isForcedLayer(layer)
+                    || layer.get(0).depth > RouteEconomicsModel.lastGuaranteedSourceDepth(lastDepth)) {
+                continue; // EXACTLY the scope enforceReachabilityGuarantee repairs — see that method
+            }
+            for (RouteNode node : layer) {
+                if (!canReachRequiredKind(node, lastDepth, true)
+                        || !canReachRequiredKind(node, lastDepth, false)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
      * PRE-BOSS PROVISIONING GUARANTEE (new-game-balancr order 6, RULE 6 / the "sharpen your knife" beat):
      * every boss is a BUILD CHECK, so the layer immediately before a boss floor must offer a SHOP or CACHE
      * the player can reach to top up ammo/heals before committing. Because the boss layer is a forced
@@ -191,11 +567,15 @@ public final class RouteMapGenerator {
      * CACHE placed there is guaranteed reachable on the way in. If the penultimate layer already offers one,
      * this is a no-op; otherwise it converts a deterministically chosen node (preferring a non-combat-family
      * node so a combat option survives) to a CACHE. Only fires for bands that actually end in a boss floor;
-     * region-gate bands are untouched. Order 7 formalises this as an enforced route-graph guarantee.
+     * region-gate bands are untouched. Order 7 formalises this as an enforced route-graph guarantee and
+     * folds it into the {@link #repairBandGuarantees} fixpoint, so it can neither be undone by a later
+     * pass nor silently undo one.
+     *
+     * @return whether this pass rewrote a node
      */
-    private void enforcePreBossProvisioning(List<List<RouteNode>> bandLayers, int lastDepth) {
-        if (!GameMath.isBossFloor(lastDepth)) return;      // region-gate band — no boss to provision for
-        if (bandLayers.size() < 2) return;                 // no layer before the boss (degenerate band)
+    private boolean enforcePreBossProvisioning(List<List<RouteNode>> bandLayers, int lastDepth) {
+        if (!GameMath.isBossFloor(lastDepth)) return false; // region-gate band — no boss to provision for
+        if (bandLayers.size() < 2) return false;            // no layer before the boss (degenerate band)
         List<RouteNode> bossLayer    = bandLayers.get(bandLayers.size() - 1);
         List<RouteNode> preBossLayer = bandLayers.get(bandLayers.size() - 2);
         RouteNode boss = bossLayer.get(0);
@@ -205,7 +585,7 @@ public final class RouteMapGenerator {
         for (RouteNode node : preBossLayer) {
             boolean provisions = node.type == RouteNodeType.SHOP || node.type == RouteNodeType.CACHE;
             if (provisions && node.outgoing.contains(boss)) {
-                return;                                    // reachable provisioning already present
+                return false;                              // reachable provisioning already present
             }
         }
         // None reachable — convert a node that DOES wire to the boss to a CACHE, preferring a non-combat
@@ -214,16 +594,17 @@ public final class RouteMapGenerator {
             RouteNode node = preBossLayer.get(lane);
             if (node.outgoing.contains(boss) && !isCombatFamily(node.type)) {
                 node.type = RouteNodeType.CACHE;
-                return;
+                return true;
             }
         }
         for (int lane = preBossLayer.size() - 1; lane >= 0; lane--) {
             RouteNode node = preBossLayer.get(lane);
             if (node.outgoing.contains(boss)) {
                 node.type = RouteNodeType.CACHE;
-                return;
+                return true;
             }
         }
+        return false;
     }
 
     /** Appends {@code bandLayers}' rollable (non-forced) layers to the running context list. */
