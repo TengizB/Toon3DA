@@ -11,6 +11,8 @@ import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemCategory;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.ItemConstants;
+import ge.tbegvadze.toon3d.progression.Attribute;
+import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.progression.UpgradeCard;
 // The order-7 ROUTE ECONOMICS rules read the (headless, LibGDX-free) route subsystem: the priced
 // node ledger, the pricing/trajectory model, and the real map generator the audit walks.
@@ -135,7 +137,9 @@ public final class BalanceSchema {
         /** R-TRAJECTORY (order 7): SAFEST/DEADLIEST/BALANCED journeys all stay inside the route bands. */
         TRAJECTORY,
         /** R-ROUTE-GUARANTEES (order 7): no lane strands a run (upgrade/calm/pre-boss/real choices). */
-        ROUTE_GUARANTEES
+        ROUTE_GUARANTEES,
+        /** R-SINGLE-DIFFICULTY (order 8): exactly one starting-attribute block; no mode-family naming anywhere. */
+        SINGLE_DIFFICULTY
     }
 
     // =====================================================================================
@@ -642,6 +646,22 @@ public final class BalanceSchema {
             ItemConstants.class, LevelGenConstants.class, Constants.class
     };
 
+    // R-SINGLE-DIFFICULTY (order 8): the game has EXACTLY ONE difficulty. Any constant, nested
+    // type or enum constant whose NAME belongs to the mode family fails the audit the same way a
+    // live test flag does (R-FLAGS) — the tripwire that stops modes creeping back in.
+    //
+    // These two live HERE, not in a *Constants file, for the same reason SHIM_CLASSES and
+    // FLAG_SCAN_CLASSES do: they are inputs to a STRUCTURAL rule (names the schema forbids /
+    // requires), not gameplay values a designer tunes. Putting mode-family tokens into a scanned
+    // constants file would also make that file trip its own rule.
+    private static final String[] MODE_FAMILY_TOKENS = {
+            "RECRUIT", "NIGHTMARE", "ULTRA", "DIFFICULTY", "STAT_BASE_", "EASY_MODE", "HARD_MODE"
+    };
+
+    // The ONE starting-attribute block: BalanceConfig must declare exactly this many
+    // PLAYER_START_* constants — one per Attribute, no second block for a second mode.
+    private static final String STARTING_ATTRIBUTE_PREFIX = "PLAYER_START_";
+
     // Every constant-bearing class scanned for live test/debug flags (R-FLAGS).
     private static final Class<?>[] FLAG_SCAN_CLASSES = {
             BalanceConfig.class, GameBalance.class, Constants.class, WeaponConstants.class,
@@ -649,6 +669,19 @@ public final class BalanceSchema {
             RouteMapConstants.class, IntentConstants.class, TilesetConstants.class,
             ProgressionConstants.class, HudConstants.class, RenderConstants.class, TouchConstants.class
     };
+
+    // Classes swept for mode-family naming (R-SINGLE-DIFFICULTY): every constant file plus the
+    // player-progression types a mode system would have to touch to exist at all — the starting
+    // stat carrier and the attribute enum it seeds.
+    private static final Class<?>[] MODE_SCAN_CLASSES = buildModeScanClasses();
+
+    private static Class<?>[] buildModeScanClasses() {
+        Class<?>[] progressionClasses = { PlayerStats.class, Attribute.class, GameMath.class };
+        Class<?>[] scanned = new Class<?>[FLAG_SCAN_CLASSES.length + progressionClasses.length];
+        System.arraycopy(FLAG_SCAN_CLASSES, 0, scanned, 0, FLAG_SCAN_CLASSES.length);
+        System.arraycopy(progressionClasses, 0, scanned, FLAG_SCAN_CLASSES.length, progressionClasses.length);
+        return scanned;
+    }
 
     // =====================================================================================
     // EVALUATION — every registered rule, evaluated against the CURRENT BalanceConfig.
@@ -689,6 +722,7 @@ public final class BalanceSchema {
         results.addAll(honestSafeResults());
         results.addAll(trajectoryResults());
         results.addAll(routeGuaranteeResults());
+        results.addAll(singleDifficultyResults());
         return results;
     }
 
@@ -1272,6 +1306,79 @@ public final class BalanceSchema {
                 !GameBalance.START_ROOM_ANY_TIER_ENABLED,
                 "start-room offers must roll the designed COMMON..UNCOMMON band"));
         return results;
+    }
+
+    /**
+     * R-SINGLE-DIFFICULTY (order 8): the game has EXACTLY ONE difficulty and must never grow modes.
+     *
+     * <p>Two structural checks, both by reflection (no gameplay values involved):
+     * <ol>
+     *   <li>BalanceConfig declares exactly ONE starting-attribute block — one {@code PLAYER_START_*}
+     *       constant per {@link Attribute}, no more (a second block is how a second mode starts).</li>
+     *   <li>No constant, nested type or enum constant in any scanned class carries mode-family
+     *       naming ({@link #MODE_FAMILY_TOKENS}), the same tripwire R-FLAGS uses for live test flags.</li>
+     * </ol>
+     *
+     * <p>WHY: difficulty in this roguelike is chosen INSIDE the run (route, region danger, depth,
+     * loot), never from a menu. The four old modes changed only starting stats while every enemy
+     * number, band and telegraph cap stayed anchored to one of them, so three of the four were never
+     * actually balanced. Deleting them makes the whole contract exact for the one real game.
+     */
+    public static List<RuleResult> singleDifficultyResults() {
+        List<RuleResult> results = new ArrayList<>();
+
+        int startingBlockSize = 0;
+        for (Field field : BalanceConfig.class.getDeclaredFields()) {
+            if (isComparableConstant(field) && field.getName().startsWith(STARTING_ATTRIBUTE_PREFIX)) {
+                startingBlockSize++;
+            }
+        }
+        int expectedBlockSize = Attribute.values().length;
+        results.add(new RuleResult(RuleKind.SINGLE_DIFFICULTY, "one starting-attribute block",
+                startingBlockSize, expectedBlockSize, expectedBlockSize,
+                startingBlockSize == expectedBlockSize,
+                "BalanceConfig must declare exactly one " + STARTING_ATTRIBUTE_PREFIX
+                        + "<ATTRIBUTE> constant per attribute — a second block means a second mode"));
+
+        int modeNameHits = 0;
+        for (Class<?> scannedClass : MODE_SCAN_CLASSES) {
+            for (Field field : scannedClass.getDeclaredFields()) {
+                if (!Modifier.isStatic(field.getModifiers())) continue;
+                modeNameHits += addModeNamingViolation(results, scannedClass, "constant", field.getName());
+            }
+            for (Class<?> nestedClass : scannedClass.getDeclaredClasses()) {
+                modeNameHits += addModeNamingViolation(results, scannedClass, "nested type", nestedClass.getSimpleName());
+                if (!nestedClass.isEnum()) continue;
+                for (Object enumConstant : nestedClass.getEnumConstants()) {
+                    modeNameHits += addModeNamingViolation(results, scannedClass, "enum constant",
+                            ((Enum<?>) enumConstant).name());
+                }
+            }
+        }
+        if (modeNameHits == 0) {
+            results.add(new RuleResult(RuleKind.SINGLE_DIFFICULTY, "no mode-family naming",
+                    0f, 0f, 0f, true,
+                    "no RECRUIT/NIGHTMARE/ULTRA/DIFFICULTY/STAT_BASE_/*_MODE naming in any scanned class"));
+        }
+        return results;
+    }
+
+    /**
+     * Records a violation when {@code name} carries mode-family naming.
+     * Returns 1 when a violation was added, 0 otherwise, so the caller can emit the single
+     * "clean" row only when the whole sweep found nothing.
+     */
+    private static int addModeNamingViolation(List<RuleResult> results, Class<?> scannedClass,
+                                              String memberKind, String name) {
+        for (String token : MODE_FAMILY_TOKENS) {
+            if (!name.contains(token)) continue;
+            results.add(new RuleResult(RuleKind.SINGLE_DIFFICULTY,
+                    scannedClass.getSimpleName() + " " + memberKind + " " + name, 1f, 0f, 0f, false,
+                    "mode-family naming (matched \"" + token + "\") — the game has exactly ONE "
+                            + "difficulty; tune THE dials (scarcity, heal drain, region danger) instead"));
+            return 1;
+        }
+        return 0;
     }
 
     /** COVERAGE: every content entry is classified/priced — un-priced content fails the build. */

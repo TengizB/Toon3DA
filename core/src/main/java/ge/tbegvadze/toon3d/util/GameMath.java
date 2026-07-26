@@ -2458,7 +2458,7 @@ public final class GameMath {
      *   averageIncomingHit, so each landed hit of size H only removes (H - R) from
      *   the pool — multiplying survivability by H / max(1, H - R).
      *       eHP = pool * 1/(1 - dodgeChance) * averageIncomingHit / max(1, averageIncomingHit - flatReduction)
-     *   Worked: MARINE start (130 HP, 75 armour, 0 dodge, 0 reduction) -> 205 eHP.
+     *   Worked: canonical start (130 HP, 75 armour, 0 dodge, 0 reduction) -> 205 eHP.
      *           Tough/Agile build (160 HP, 75 armour, 0.20 dodge, R=6, H=12)
      *           -> 235 * 1.25 * 2 = 587 eHP.
      *   Enemies currently have no dodge or reduction, so enemy eHP == raw HP.

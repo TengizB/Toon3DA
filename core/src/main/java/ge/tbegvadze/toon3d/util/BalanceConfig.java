@@ -781,6 +781,35 @@ public final class BalanceConfig {
     /** Flat per-shot damage gained when the Hollow Points (legacy DAMAGE_BOOST) card is chosen. Re-priced 8→6 to ~budget PP. Range: 4–15. */
     public static final int LEVEL_UP_DAMAGE_BONUS = 6;
 
+    // ---------------------------------------------------------------------------------
+    // THE CANONICAL STARTING ATTRIBUTE BLOCK — ONE DIFFICULTY (new-game-balancr order 8)
+    //
+    // DESIGN INVARIANT (owner decision, final): the game has EXACTLY ONE difficulty.
+    // There are no easy/normal/hard modes and there must never be. Difficulty variance
+    // comes from INSIDE the run — route choice (SECTION 19), region danger (SECTION 3),
+    // depth (the coupling curve), and loot luck — never from a menu.
+    //
+    // Order 8 deleted the four per-mode starting-attribute tables that used to live in
+    // GameBalance. These four values ARE the surviving block (the old "normal" tier), and
+    // they are what every band, anchor and living table in orders 1-7 was derived against:
+    // with PLAYER_MAX_HEALTH 130 + PLAYER_MAX_ARMOR 75, no dodge and no flat reduction,
+    // they produce REFERENCE_PLAYER_EHP = 205 (SECTION 9). The whole contract is therefore
+    // EXACT for the one real game rather than exact for one mode out of four.
+    //
+    // ENFORCEMENT: BalanceSchema's R-SINGLE-DIFFICULTY rule requires exactly one starting
+    // block (these four PLAYER_START_* fields, one per Attribute) and fails the build on
+    // any constant, enum or nested type reintroducing mode-family naming.
+    // ---------------------------------------------------------------------------------
+
+    /** Canonical starting STRENGTH. Feeds the melee multiplier (STAT_REFERENCE 0 → 1.10x at 2). Range: 0–4. */
+    public static final int PLAYER_START_STRENGTH     = 2;
+    /** Canonical starting AGILITY. Feeds dodge chance and action duration. Range: 0–4. */
+    public static final int PLAYER_START_AGILITY      = 2;
+    /** Canonical starting TOUGHNESS. Feeds max-HP bonus and flat damage reduction; part of the 205 eHP anchor. Range: 0–4. */
+    public static final int PLAYER_START_TOUGHNESS    = 2;
+    /** Canonical starting MARKSMANSHIP. Feeds ranged damage and accuracy. Range: 0–4. */
+    public static final int PLAYER_START_MARKSMANSHIP = 2;
+
     // Per-point stat rates (attribute system). Each point of a stat applies this effect.
     /** Melee damage fraction added per STRENGTH point. Range: 0.03–0.08. */
     public static final float STR_MELEE_PER_POINT     = 0.05f;
@@ -912,9 +941,13 @@ public final class BalanceConfig {
     // and it keeps the metric semantically identical to the TP normaliser below (one yardstick).
     public static final float REFERENCE_PLAYER_DPT = 25f;
     /**
-     * Reference player effective HP — the MARINE start survivability (130 HP + 75 armour,
-     * no dodge, no flat reduction). Used as the denominator for the player's Turns-To-Die
-     * in golden-ratio checks.
+     * Reference player effective HP — THE start survivability of the one canonical player
+     * (130 HP + 75 armour, no dodge, no flat reduction; the SECTION 7 PLAYER_START_* block).
+     * Used as the denominator for the player's Turns-To-Die in golden-ratio checks.
+     *
+     * <p>Order 8 removed the difficulty modes, so this stopped being "the anchor of one mode
+     * out of four" and became THE player anchor: the telegraph fairness caps (25% un-telegraphed,
+     * 35% boss single hit) now provably protect the actual player pool in every run.
      */
     public static final float REFERENCE_PLAYER_EHP = 205f;
     /**

@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: One Difficulty — remove modes, tune one true game
 ---
@@ -100,15 +100,34 @@ TECHNICAL NOTES
 --------------------------------------------------------------------------------
 ACCEPTANCE CRITERIA
 --------------------------------------------------------------------------------
-  [ ] No difficulty selection anywhere in the run-start flow; a new run always
-      starts with the canonical stat block.
-  [ ] Zero matches for RECRUIT/NIGHTMARE/ULTRA/mode-family naming in core/src
-      (audit rule R-SINGLE-DIFFICULTY enforces this permanently).
-  [ ] StatsStore reads legacy records with mode keys without crashing.
-  [ ] All schema rules from orders 1–7 still green against the single anchor
-      (they should be untouched — this order removes assumptions, not values).
-  [ ] docs updated: one-difficulty invariant recorded in
-      game-balance-authority.txt.
+  [x] No difficulty selection anywhere in the run-start flow; a new run always
+      starts with the canonical stat block. (There was no selection screen to
+      remove — World hard-coded the normal tier — so the touch flow is unchanged;
+      the mode ARGUMENT and enum are gone: PlayerStats() takes none.)
+  [x] Zero matches for RECRUIT/NIGHTMARE/ULTRA/mode-family naming in core/src
+      (audit rule R-SINGLE-DIFFICULTY enforces this permanently — reflection over
+      the constant/progression classes PLUS a source sweep of core/src/main/java
+      in BalanceAuditTest; BalanceSchema.java, which defines the banned tokens,
+      is the one excluded file and is covered by the reflection half).
+  [x] StatsStore reads legacy records with mode keys without crashing — load()
+      only asks for the keys it knows, and any legacy mode key is now dropped.
+  [x] All schema rules from orders 1–7 still green against the single anchor
+      (untouched — no value changed; BalanceReport output is byte-identical).
+  [x] docs updated: one-difficulty invariant recorded in
+      game-balance-authority.txt (R-SINGLE-DIFFICULTY + SECTION 2 anchor note +
+      new-content checklist), and knowledge-doc SECTION 17 / problem 6 marked
+      resolved-by-removal.
+
+IMPLEMENTATION NOTES (as built)
+--------------------------------------------------------------------------------
+  - The canonical block is BalanceConfig SECTION 7: PLAYER_START_STRENGTH /
+    _AGILITY / _TOUGHNESS / _MARKSMANSHIP = 2/2/2/2 (the old normal tier), which
+    with 130 HP + 75 armour IS REFERENCE_PLAYER_EHP = 205.
+  - GameBalance's 16 per-mode constants and PlayerStats.Difficulty are deleted;
+    PlayerStats seeds the four base values with no branch.
+  - Pre-existing, unrelated: LevelGeneratorSnapshotTest fails on this branch's
+    base commit too (generator snapshot drift from an earlier order) — untouched
+    by this order.
 
 DEPENDENCIES: orders 1–7 (they define the single contract this order makes
 exclusive). UNBLOCKS: order 9 (the simulator matrix collapses to one

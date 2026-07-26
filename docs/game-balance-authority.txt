@@ -76,7 +76,9 @@ Formula/Derivation/Edge-case blocks. Full walkthrough: knowledge doc SECTION 2.
   survivalTurnsBought(...)= healValue / averageIncomingDamagePerTurn
 
   REFERENCE ANCHORS (BalanceConfig SECTION 9): REFERENCE_PLAYER_DPT = 25,
-  REFERENCE_PLAYER_EHP = 205 (MARINE start), REFERENCE_AMMO_EFFICIENCY = 40.
+  REFERENCE_PLAYER_EHP = 205, REFERENCE_AMMO_EFFICIENCY = 40. The eHP anchor is
+  THE canonical start (SECTION 7 PLAYER_START_* block, 130 HP + 75 armour) — the
+  game has exactly one difficulty, so it describes every real run (R-SINGLE-DIFFICULTY).
 
 --------------------------------------------------------------------------------
 SECTION 3 — THE SCHEMA RULES (kind, band, and WHY the band is shaped so)
@@ -405,6 +407,41 @@ R-ROUTE-* (RuleKind.ROUTE_PRICED / RISK_PREMIUM / CALM_COST / MYSTERY_EV / PIPS_
   below it; ELITE's risk/reward and every affix multiplier were unpriced; and the risk pips were hand-set
   so the map could quietly lie. Full subsystem detail: docs/route-map-system.txt (ROUTE ECONOMICS).
 
+R-SINGLE-DIFFICULTY (RuleKind.SINGLE_DIFFICULTY) — ONE difficulty, locked (order 8)
+  DESIGN INVARIANT (owner decision, final): the game has EXACTLY ONE difficulty. There are no
+  easy/normal/hard modes and there must never be. Every run starts from the one canonical
+  attribute block — BalanceConfig SECTION 7: PLAYER_START_STRENGTH / _AGILITY / _TOUGHNESS /
+  _MARKSMANSHIP = 2/2/2/2, which with PLAYER_MAX_HEALTH 130 + PLAYER_MAX_ARMOR 75 IS the
+  REFERENCE_PLAYER_EHP = 205 anchor every band in orders 1-7 was derived against.
+  Two structural checks (reflection, no gameplay values):
+    1. BalanceConfig declares exactly ONE starting block — one PLAYER_START_<ATTRIBUTE>
+       constant per Attribute. A second block is how a second mode starts.
+    2. No constant, nested type or enum constant in any scanned class carries mode-family
+       naming (RECRUIT / NIGHTMARE / ULTRA / DIFFICULTY / STAT_BASE_ / EASY_MODE / HARD_MODE) —
+       the same tripwire R-FLAGS uses for live test flags. BalanceAuditTest adds the
+       source-level half: it walks every file under core/src/main/java and fails on the mode
+       names themselves, so a mode cannot return through a file the reflection sweep does not
+       scan (a new Screen, a menu, a save field). BalanceSchema.java is the one excluded file:
+       it DEFINES the banned tokens, and its own members are covered by check 2 itself.
+  WHAT WAS REMOVED: four modes (the old RECRUIT/normal/NIGHTMARE/ULTRA tables in GameBalance),
+  the Difficulty enum on PlayerStats, and the mode argument at run creation. StatsStore drops
+  any legacy mode key on load (best-effort; a legacy record has always loaded fine because
+  load() asks only for the keys it knows). There was no difficulty-selection screen to remove —
+  World hard-coded the normal tier — so the mobile touch flow into a run is unchanged.
+  WHY: the modes were wrong twice. They contradict the design (in this roguelike, difficulty is
+  chosen INSIDE the run — route choice and the priced map, region danger, depth via the coupling
+  curve, scarcity swings and loot luck — never from a menu), and even as implemented they were
+  fake: modes changed ONLY starting stats while every enemy number, scarcity target and telegraph
+  cap stayed anchored to the normal tier's 205 eHP, so three of the four were never actually
+  balanced. Deleting three makes the contract EXACT for the one real game instead of exact for
+  one mode out of four, and the telegraph fairness caps (25% un-telegraphed, 35% boss single hit)
+  now provably protect the actual player pool in every run. No value was re-derived by this
+  order — it removes an assumption, not numbers.
+  TUNING: difficulty moves by moving THE dials — the scarcity band, the heal-drain band, the
+  boss survival ratios, the region danger multipliers. One set, one game. If accessibility
+  options are ever wanted they must be framed as exactly that (e.g. animation speed) and never
+  as balance-touching modes; this rule is the tripwire.
+
 NEVER-SOFTLOCK (GameMath.emergencySupplyTriggers, not a schema band — a floor guard)
   A player who wastes ammo must never die to an empty inventory screen. When total
   remaining potential damage (all reserves * per-shot damage + one melee swing) falls
@@ -466,6 +503,10 @@ SECTION 5 — NEW-CONTENT CHECKLIST
                           the audit, since R-CALM-COST / R-RISK-PREMIUM / R-MYSTERY-EV
                           all read it. Update docs/route-map-system.txt too — that
                           doc's UPDATE CONTRACT is enforced like tile-symbols.txt.
+     new player start  -> NOTHING to add: the ONE starting attribute block lives in
+                          BalanceConfig SECTION 7 (PLAYER_START_*) and is tuned in place.
+                          Never add a second block, a mode enum, or a difficulty
+                          argument — R-SINGLE-DIFFICULTY fails the build (SECTION 3).
 3. Run `./gradlew test` — BalanceAuditTest must be green. If a value must
    deliberately sit out of band, register a waiver (SECTION 4), never a hack.
 4. Run BalanceReport and paste its output over SECTION 6 below.

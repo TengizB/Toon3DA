@@ -189,50 +189,19 @@ public final class GameBalance {
     public static final float MELEE_KILL_AMMO_DROP_CHANCE = BalanceConfig.MELEE_KILL_AMMO_DROP_CHANCE;
 
     // =========================================================================
-    // STAT SYSTEM — per-difficulty base values, caps, and per-point effect rates
+    // STAT SYSTEM — caps and per-point effect rates
     //
     // Convention: STAT_REFERENCE = 0 means the formula is anchored at zero so a
-    // fresh MARINE (STR 2) already has a small bonus (+10% melee).  This matches
+    // fresh player (STR 2) already has a small bonus (+10% melee).  This matches
     // the literal user spec "STR 5 = +25% melee".
+    //
+    // ONE DIFFICULTY (new-game-balancr order 8): the four per-mode starting-
+    // attribute tables that used to live here are DELETED.  The game has one
+    // starting attribute block and it lives with the other progression anchors in
+    // BalanceConfig SECTION 7 (PLAYER_START_STRENGTH / _AGILITY / _TOUGHNESS /
+    // _MARKSMANSHIP).  BalanceSchema's R-SINGLE-DIFFICULTY rule fails the build if
+    // mode-family naming ever reappears in a constant file.
     // =========================================================================
-
-    // ---- Per-difficulty base values (16 entries: 4 difficulties × 4 attributes) ----
-
-    /** RECRUIT (easy) starting STRENGTH — all-round generous padding. */
-    public static final int STAT_BASE_RECRUIT_STR  = 3;
-    /** RECRUIT (easy) starting AGILITY. */
-    public static final int STAT_BASE_RECRUIT_AGI  = 3;
-    /** RECRUIT (easy) starting TOUGHNESS — extra HP budget. */
-    public static final int STAT_BASE_RECRUIT_TGH  = 4;
-    /** RECRUIT (easy) starting MARKSMANSHIP. */
-    public static final int STAT_BASE_RECRUIT_MRK  = 3;
-
-    /** MARINE (normal) starting STRENGTH — the tuning reference loadout. */
-    public static final int STAT_BASE_MARINE_STR   = 2;
-    /** MARINE (normal) starting AGILITY. */
-    public static final int STAT_BASE_MARINE_AGI   = 2;
-    /** MARINE (normal) starting TOUGHNESS. */
-    public static final int STAT_BASE_MARINE_TGH   = 2;
-    /** MARINE (normal) starting MARKSMANSHIP. */
-    public static final int STAT_BASE_MARINE_MRK   = 2;
-
-    /** NIGHTMARE (hard) starting STRENGTH — lean start; growth depends on perk choices. */
-    public static final int STAT_BASE_NIGHTMARE_STR = 1;
-    /** NIGHTMARE (hard) starting AGILITY. */
-    public static final int STAT_BASE_NIGHTMARE_AGI = 1;
-    /** NIGHTMARE (hard) starting TOUGHNESS. */
-    public static final int STAT_BASE_NIGHTMARE_TGH = 1;
-    /** NIGHTMARE (hard) starting MARKSMANSHIP. */
-    public static final int STAT_BASE_NIGHTMARE_MRK = 1;
-
-    /** ULTRA (brutal) starting STRENGTH — minimal; mastery required. */
-    public static final int STAT_BASE_ULTRA_STR    = 0;
-    /** ULTRA (brutal) starting AGILITY — one point to enable some dodge. */
-    public static final int STAT_BASE_ULTRA_AGI    = 1;
-    /** ULTRA (brutal) starting TOUGHNESS — one point of flat reduction. */
-    public static final int STAT_BASE_ULTRA_TGH    = 1;
-    /** ULTRA (brutal) starting MARKSMANSHIP — zero bonus ranged. */
-    public static final int STAT_BASE_ULTRA_MRK    = 0;
 
     // ---- Stat caps (each attribute independently capped) ----
 
@@ -257,7 +226,7 @@ public final class GameBalance {
     /**
      * Reference stat value at which every multiplier equals exactly 1.0 (no bonus).
      * Set to 0 so the literal spec "STR 5 = +25% melee" holds: 1.0 + 5 × 0.05 = 1.25.
-     * A fresh MARINE (STR 2) therefore starts at 1.10× melee — small but visible bonus.
+     * A fresh player (STR 2) therefore starts at 1.10× melee — small but visible bonus.
      */
     public static final int STAT_REFERENCE         = 0;
 

@@ -391,9 +391,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         abilityFeedback.setHealVignetteRenderer(hitVignetteRenderer);
         abilityFeedback.setLegendaryVignetteRenderer(hitVignetteRenderer);
 
-        // Player stat system — seeded from MARINE difficulty for now; difficulty selection
-        // will be wired when the run-setup screen (order_18) is implemented.
-        playerStats = new PlayerStats(PlayerStats.Difficulty.MARINE);
+        // Player stat system — seeded from the ONE canonical starting block (BalanceConfig
+        // SECTION 7). The game has exactly one difficulty (new-game-balancr order 8): there is
+        // no selection step, so a run starts straight into the first floor.
+        playerStats = new PlayerStats();
         player.setPlayerStats(playerStats);
         // TOUGHNESS increases maxHealth without auto-healing; heal to full once at run
         // start so the player always begins with a full HP bar.
