@@ -2,6 +2,10 @@ package ge.tbegvadze.toon3d.util;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -488,6 +492,84 @@ class BalanceAuditTest {
                 "the SAFEST route must bank more ammo than the DEADLIEST one");
         assertTrue(deadliestPace > safestPace,
                 "the DEADLIEST route must earn more XP than the SAFEST one — that is what it buys");
+    }
+
+    /**
+     * R-SINGLE-DIFFICULTY (order 8): exactly one starting-attribute block, and no constant, nested
+     * type or enum constant anywhere in the scanned classes carries mode-family naming.
+     */
+    @Test
+    void theGameHasExactlyOneDifficulty() {
+        assertNoViolations(BalanceSchema.singleDifficultyResults());
+    }
+
+    /**
+     * R-SINGLE-DIFFICULTY, source-level half: the reflection sweep can only see classes it is handed,
+     * so this walks every main source file and fails on the mode names themselves. After order 8
+     * there are zero matches in core/src/main — a mode system cannot come back through a file the
+     * schema does not scan (a new Screen, a menu, a save field).
+     *
+     * <p>BalanceSchema.java is excluded because it is the file that DEFINES the banned tokens; its own
+     * members are covered by the reflection half above.
+     */
+    @Test
+    void noModeNamingSurvivesAnywhereInTheMainSources() {
+        File sourceRoot = locateMainSourceRoot();
+        List<String> offendingLines = new ArrayList<>();
+        collectModeNamingMatches(sourceRoot, offendingLines);
+        assertTrue(offendingLines.isEmpty(),
+                () -> "The game has exactly ONE difficulty (new-game-balancr order 8). Mode-family "
+                        + "naming found in the main sources:\n" + String.join("\n", offendingLines));
+    }
+
+    /** Mode names with zero legitimate use in this codebase — the source-sweep ban list. */
+    private static final String[] SOURCE_MODE_TOKENS = { "RECRUIT", "NIGHTMARE", "ULTRA", "STAT_BASE_" };
+
+    /** The one file allowed to name the banned tokens: the rule that bans them. */
+    private static final String MODE_RULE_FILE_NAME = "BalanceSchema.java";
+
+    /**
+     * Finds {@code core/src/main/java} from the test's working directory, which Gradle sets to the
+     * module project directory. Both the module-relative and repo-relative layouts are accepted, and
+     * a few parent levels are searched so the test survives being run from either root.
+     */
+    private static File locateMainSourceRoot() {
+        File directory = new File("").getAbsoluteFile();
+        for (int level = 0; level < 5 && directory != null; level++, directory = directory.getParentFile()) {
+            File moduleRelative = new File(directory, "src/main/java");
+            if (moduleRelative.isDirectory()) return moduleRelative;
+            File repoRelative = new File(directory, "core/src/main/java");
+            if (repoRelative.isDirectory()) return repoRelative;
+        }
+        throw new IllegalStateException("cannot locate core/src/main/java from " + new File("").getAbsolutePath());
+    }
+
+    /** Recursively records every {@code path:line} in the tree whose text carries a banned mode name. */
+    private static void collectModeNamingMatches(File directory, List<String> offendingLines) {
+        File[] entries = directory.listFiles();
+        if (entries == null) return;
+        for (File entry : entries) {
+            if (entry.isDirectory()) {
+                collectModeNamingMatches(entry, offendingLines);
+                continue;
+            }
+            if (!entry.getName().endsWith(".java") || entry.getName().equals(MODE_RULE_FILE_NAME)) continue;
+            List<String> sourceLines;
+            try {
+                sourceLines = Files.readAllLines(entry.toPath(), StandardCharsets.UTF_8);
+            } catch (IOException readFailure) {
+                throw new IllegalStateException("cannot read source file " + entry, readFailure);
+            }
+            for (int lineIndex = 0; lineIndex < sourceLines.size(); lineIndex++) {
+                String sourceLine = sourceLines.get(lineIndex);
+                for (String token : SOURCE_MODE_TOKENS) {
+                    if (sourceLine.contains(token)) {
+                        offendingLines.add("  " + entry.getPath() + ":" + (lineIndex + 1) + " — " + sourceLine.trim());
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */

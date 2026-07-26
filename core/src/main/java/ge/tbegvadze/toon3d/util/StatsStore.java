@@ -11,9 +11,18 @@ public final class StatsStore {
 
     private StatsStore() {}
 
+    /**
+     * Keys written by builds that still had a difficulty-mode system (new-game-balancr order 8
+     * removed it). They are never read — {@link #load} asks only for the keys it knows, so a
+     * legacy record loads fine whatever type they held — but they are dropped on the next load so
+     * a stale mode choice cannot linger in a player's preferences file.
+     */
+    private static final String[] LEGACY_MODE_KEYS = { "difficulty", "difficultyMode" };
+
     public static PersistentStats load() {
         PersistentStats stats = new PersistentStats();
         Preferences prefs = Gdx.app.getPreferences(ProgressionConstants.STATS_PREFS_NAME);
+        dropLegacyModeKeys(prefs);
         stats.bestFloor            = prefs.getInteger("bestFloor",            0);
         stats.mostKills            = prefs.getInteger("mostKills",            0);
         stats.lifetimeKills        = prefs.getInteger("lifetimeKills",        0);
@@ -22,6 +31,22 @@ public final class StatsStore {
         stats.longestSurvivalTicks = prefs.getLong("longestSurvivalTicks",    0L);
         stats.fastestClearTicks    = prefs.getLong("fastestClearTicks",       0L);
         return stats;
+    }
+
+    /**
+     * Best-effort migration: removes any difficulty-mode key left by an older build.
+     * Never throws — a record that has no such key (every record written since order 8) is
+     * untouched and nothing is flushed.
+     */
+    private static void dropLegacyModeKeys(Preferences prefs) {
+        boolean removedAny = false;
+        for (String legacyKey : LEGACY_MODE_KEYS) {
+            if (prefs.contains(legacyKey)) {
+                prefs.remove(legacyKey);
+                removedAny = true;
+            }
+        }
+        if (removedAny) prefs.flush();
     }
 
     public static void save(PersistentStats stats) {

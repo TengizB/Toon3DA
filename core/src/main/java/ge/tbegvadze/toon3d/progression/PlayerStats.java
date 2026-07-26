@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.progression;
 
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 
@@ -10,7 +11,7 @@ import ge.tbegvadze.toon3d.util.GameMath;
  * <h2>Storage layout</h2>
  * Three {@code int[4]} arrays, each indexed by {@link Attribute#ordinal()}:
  * <ul>
- *   <li>{@code baseValue}        — set once from the chosen difficulty at run start; immutable.</li>
+ *   <li>{@code baseValue}        — seeded once from the canonical starting block at run start; immutable.</li>
  *   <li>{@code permanentBonus}   — cumulative perk bumps; grows via {@link #addPermanent}.</li>
  *   <li>{@code equipmentBonus}   — recomputed on equip/unequip via {@link #setEquipmentBonus};
  *                                  never touched per frame.</li>
@@ -20,10 +21,13 @@ import ge.tbegvadze.toon3d.util.GameMath;
  * All arrays are pre-sized in the constructor.  {@link #getEffective} and the derived
  * getter methods are pure reads that allocate nothing — safe to call at fire time.
  *
- * <h2>Difficulty</h2>
- * The inner {@link Difficulty} enum maps to the per-difficulty base tables in
- * {@link GameBalance}.  MARINE is the balance anchor: its base values set the reference
- * point from which RECRUIT gets padding and NIGHTMARE/ULTRA get reduced starts.
+ * <h2>One difficulty</h2>
+ * The game has EXACTLY ONE difficulty (new-game-balancr order 8) — there are no modes and
+ * there must never be. Every run starts from the single canonical attribute block in
+ * {@link BalanceConfig} SECTION 7 ({@code PLAYER_START_*}), which is the block the entire
+ * balance contract (205 reference eHP, every band and telegraph cap) was derived against.
+ * In-run variance comes from route choice, region danger, depth and loot — never a menu.
+ * {@code BalanceSchema}'s R-SINGLE-DIFFICULTY rule fails the build if a mode system creeps back.
  *
  * <h2>Stat caps</h2>
  * {@link #getEffective} clamps to [{@code GameBalance.STAT_MIN},
@@ -31,25 +35,6 @@ import ge.tbegvadze.toon3d.util.GameMath;
  * are silently saturated — surplus never corrupts the stored value.
  */
 public final class PlayerStats {
-
-    // =========================================================================
-    // Difficulty enum — chosen once at run start
-    // =========================================================================
-
-    /**
-     * Difficulty tier chosen at run start.  Determines the initial base values for
-     * each attribute (see GameBalance.STAT_BASE_<DIFFICULTY>_<ATTRIBUTE>).
-     */
-    public enum Difficulty {
-        /** Easiest — generous all-round starting stats. */
-        RECRUIT,
-        /** Normal — the tuning reference loadout. */
-        MARINE,
-        /** Hard — lean starting stats; growth depends on perk choices. */
-        NIGHTMARE,
-        /** Brutal — minimal starting values; mastery required. */
-        ULTRA
-    }
 
     // =========================================================================
     // Attribute count — must match Attribute.values().length
@@ -81,7 +66,7 @@ public final class PlayerStats {
     // Storage — three layers, indexed by Attribute.ordinal()
     // =========================================================================
 
-    /** Difficulty-seeded base value; set once in the constructor, never changed. */
+    /** Canonical starting base value; set once in the constructor, never changed. */
     private final int[] baseValue;
 
     /** Accumulated permanent perk bonuses; grown via addPermanent(). */
@@ -98,12 +83,12 @@ public final class PlayerStats {
     // =========================================================================
 
     /**
-     * Creates a fresh PlayerStats seeded from the given difficulty.
+     * Creates a fresh PlayerStats seeded from the one canonical starting attribute block
+     * ({@link BalanceConfig} SECTION 7). There is no mode parameter and there must never be —
+     * every run of the game starts from exactly these values.
      * All permanent and equipment bonuses start at zero.
-     *
-     * @param difficulty the chosen difficulty tier for this run
      */
-    public PlayerStats(Difficulty difficulty) {
+    public PlayerStats() {
         baseValue      = new int[ATTRIBUTE_COUNT];
         permanentBonus = new int[ATTRIBUTE_COUNT];
         equipmentBonus = new int[ATTRIBUTE_COUNT];
@@ -115,33 +100,12 @@ public final class PlayerStats {
         effectiveCap[Attribute.TOUGHNESS.ordinal()]    = GameBalance.STAT_CAP_TOUGHNESS;
         effectiveCap[Attribute.MARKSMANSHIP.ordinal()] = GameBalance.STAT_CAP_MARKSMANSHIP;
 
-        // Seed base values from difficulty tables.
-        switch (difficulty) {
-            case RECRUIT:
-                baseValue[Attribute.STRENGTH.ordinal()]     = GameBalance.STAT_BASE_RECRUIT_STR;
-                baseValue[Attribute.AGILITY.ordinal()]      = GameBalance.STAT_BASE_RECRUIT_AGI;
-                baseValue[Attribute.TOUGHNESS.ordinal()]    = GameBalance.STAT_BASE_RECRUIT_TGH;
-                baseValue[Attribute.MARKSMANSHIP.ordinal()] = GameBalance.STAT_BASE_RECRUIT_MRK;
-                break;
-            case MARINE:
-                baseValue[Attribute.STRENGTH.ordinal()]     = GameBalance.STAT_BASE_MARINE_STR;
-                baseValue[Attribute.AGILITY.ordinal()]      = GameBalance.STAT_BASE_MARINE_AGI;
-                baseValue[Attribute.TOUGHNESS.ordinal()]    = GameBalance.STAT_BASE_MARINE_TGH;
-                baseValue[Attribute.MARKSMANSHIP.ordinal()] = GameBalance.STAT_BASE_MARINE_MRK;
-                break;
-            case NIGHTMARE:
-                baseValue[Attribute.STRENGTH.ordinal()]     = GameBalance.STAT_BASE_NIGHTMARE_STR;
-                baseValue[Attribute.AGILITY.ordinal()]      = GameBalance.STAT_BASE_NIGHTMARE_AGI;
-                baseValue[Attribute.TOUGHNESS.ordinal()]    = GameBalance.STAT_BASE_NIGHTMARE_TGH;
-                baseValue[Attribute.MARKSMANSHIP.ordinal()] = GameBalance.STAT_BASE_NIGHTMARE_MRK;
-                break;
-            case ULTRA:
-                baseValue[Attribute.STRENGTH.ordinal()]     = GameBalance.STAT_BASE_ULTRA_STR;
-                baseValue[Attribute.AGILITY.ordinal()]      = GameBalance.STAT_BASE_ULTRA_AGI;
-                baseValue[Attribute.TOUGHNESS.ordinal()]    = GameBalance.STAT_BASE_ULTRA_TGH;
-                baseValue[Attribute.MARKSMANSHIP.ordinal()] = GameBalance.STAT_BASE_ULTRA_MRK;
-                break;
-        }
+        // Seed base values from the ONE canonical starting block (BalanceConfig SECTION 7).
+        // No branch, no mode: the same four numbers every run, for every player.
+        baseValue[Attribute.STRENGTH.ordinal()]     = BalanceConfig.PLAYER_START_STRENGTH;
+        baseValue[Attribute.AGILITY.ordinal()]      = BalanceConfig.PLAYER_START_AGILITY;
+        baseValue[Attribute.TOUGHNESS.ordinal()]    = BalanceConfig.PLAYER_START_TOUGHNESS;
+        baseValue[Attribute.MARKSMANSHIP.ordinal()] = BalanceConfig.PLAYER_START_MARKSMANSHIP;
     }
 
     // =========================================================================

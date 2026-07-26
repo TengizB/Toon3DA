@@ -162,7 +162,7 @@ All in util/GameMath.java. Everything else is derived from these four.
        H = average incoming hit, R = flat reduction.
      - Dodge multiplies survivability by 1/(1 - dodge) (a dodged hit deals 0).
      - Flat reduction: each landed hit of size H only removes (H - R).
-     MARINE start (130 HP, 75 armour, 0 dodge, 0 R) -> 205 eHP (the reference).
+     Canonical start (130 HP, 75 armour, 0 dodge, 0 R) -> 205 eHP (the reference).
      RULE: enemies currently have NO dodge/reduction, so enemy eHP == raw HP.
 
 2. DPT — DAMAGE PER TURN
@@ -194,7 +194,7 @@ DERIVED SCORES:
 
 REFERENCE ANCHORS (BalanceConfig SECTION 9):
   REFERENCE_PLAYER_DPT      = 25   (held fixed; also the golden-ratio TTK metric)
-  REFERENCE_PLAYER_EHP      = 205  (MARINE start eHP)
+  REFERENCE_PLAYER_EHP      = 205  (the canonical start eHP; one difficulty)
   REFERENCE_AMMO_EFFICIENCY = 40   (weapon power-score normaliser)
 
 ⚠️ Not-good note: the whole model treats the shotgun's 25 sustained DPT as "the
@@ -241,10 +241,10 @@ STAT-DRIVEN survivability (attribute system, SECTION 7 below):
   TOUGHNESS -> +HP (TGH_HP_PER_POINT=5) and flat reduction (TGH_REDUCTION_PER_POINT=1).
   AGILITY   -> dodge (AGI_DODGE_PER_POINT=0.02, DODGE_CAP=0.35) + faster actions.
 
-⚠️ Not-good note: 205 reference eHP is the MARINE (normal) start only. RECRUIT
-starts far tankier and ULTRA far squishier (SECTION 18), yet the ENTIRE contract
-is anchored to the MARINE number. Difficulty modes are therefore balanced only by
-accident relative to the contract. This needs a proper per-difficulty pass.
+[RESOLVED by order 8] 205 reference eHP used to be "the normal mode's start only",
+with the other three modes anchored to it by accident. The mode system is deleted:
+there is exactly ONE difficulty, so 205 eHP is THE player anchor and every band and
+telegraph cap derived from it protects the real player pool in every run (SECTION 17).
 
 
 ================================================================================
@@ -377,7 +377,8 @@ ATTRIBUTE (STAT) SYSTEM (BalanceConfig SECTION 7 + GameBalance caps/bases):
                                 0.55), cap 10
   TOUGHNESS   -> +HP + flat red TGH_HP_PER_POINT=5, TGH_REDUCTION_PER_POINT=1
                                 (min damage TGH_MIN_DAMAGE=1), cap 12
-  Per-difficulty STARTING stat bases live in GameBalance (STAT_BASE_*): see SECTION 18.
+  The ONE canonical starting stat block lives in BalanceConfig SECTION 7
+  (PLAYER_START_* = 2/2/2/2); there are no difficulty modes: see SECTION 17.
 
 ⚠️ Not-good note: the total-PP invariant is elegant on paper but assumes the
 player only gains power from level-up cards. In reality found weapons, weapon
@@ -824,21 +825,31 @@ is a separate, still-open issue — the region dial does not change per-enemy sc
 
 
 ================================================================================
-SECTION 17 — DIFFICULTY MODES (per-difficulty starting stats)
+SECTION 17 — ONE DIFFICULTY (superseded: the mode system was REMOVED)
 ================================================================================
-File: util/GameBalance.java (STAT_BASE_* and caps).
-Four difficulties set only the player's STARTING attribute values:
-  RECRUIT (easy):    STR 3 / AGI 3 / TGH 4 / MRK 3   (generous padding)
-  MARINE (normal):   STR 2 / AGI 2 / TGH 2 / MRK 2   (the tuning reference)
-  NIGHTMARE (hard):  STR 1 / AGI 1 / TGH 1 / MRK 1
-  ULTRA (brutal):    STR 0 / AGI 1 / TGH 1 / MRK 0
-Caps: STR 12, AGI 10, TGH 12, MRK 12; STAT_REFERENCE=0 (so STR 5 = +25% melee).
+[SUPERSEDED — RESOLVED BY REMOVAL, new-game-balancr order 8]
+This section used to describe four difficulty modes (per-mode starting-attribute
+tables in GameBalance). They are DELETED. The game has EXACTLY ONE difficulty and
+must never have modes again — a design decision by the game owner, now a structural
+rule (R-SINGLE-DIFFICULTY, authority doc SECTION 3).
 
-⚠️ Not-good note: difficulty is expressed ONLY through starting stats. Enemy
-numbers, scaling, loot, and scarcity are IDENTICAL across all four modes. The
-entire balance contract is anchored to MARINE (205 eHP), so RECRUIT and ULTRA are
-balanced only incidentally. This is a thin, under-developed difficulty system that
-needs real per-mode tuning (enemy scaling, loot rates, scarcity).
+Current state:
+File: util/BalanceConfig.java SECTION 7 — the ONE canonical starting block:
+  PLAYER_START_STRENGTH / _AGILITY / _TOUGHNESS / _MARKSMANSHIP = 2 / 2 / 2 / 2
+With PLAYER_MAX_HEALTH 130 + PLAYER_MAX_ARMOR 75 (no dodge, no flat reduction) this
+IS REFERENCE_PLAYER_EHP = 205 — the anchor every band, telegraph cap and living
+table in orders 1-7 was derived against. Caps stay in GameBalance: STR 12, AGI 10,
+TGH 12, MRK 12; STAT_REFERENCE=0 (so STR 5 = +25% melee).
+progression/PlayerStats has no Difficulty enum and its constructor takes no mode
+argument; World seeds it directly. StatsStore drops legacy mode keys on load.
+
+Why the modes went: they changed ONLY starting stats while enemy numbers, scaling,
+loot, scarcity and every telegraph cap stayed anchored to the normal tier's 205 eHP —
+so three of the four modes were never actually balanced. Rather than tuning four
+games forever, three were deleted; the contract is now EXACT for the one real game.
+The difficulty a player experiences comes from INSIDE the run: route choice and the
+priced map (SECTION 16 + route economics), region danger, depth via the coupling
+curve, and scarcity/loot swings inside the audited bands.
 
 
 ================================================================================
@@ -904,8 +915,11 @@ ceiling, of what needs refinement.
      magnitudes, the ability catalogue, shop, and boss stats were consolidated into
      BalanceConfig (SECTIONs 8/14/15/16) with re-export shims, and the shim-integrity
      audit keeps them from diverging again. (SECTION 1, 15)
-  6. Difficulty modes only change starting stats; enemies/loot/scarcity are
-     identical across all four. RECRUIT/ULTRA are balanced only by accident. (SECTION 17)
+  6. [RESOLVED by order 8 — by REMOVAL] The four difficulty modes are deleted. The
+     game has exactly ONE difficulty, started from the single canonical attribute
+     block in BalanceConfig SECTION 7, so the 205 eHP anchor and every band/telegraph
+     cap derived from it now describe the real player pool in every run. Modes cannot
+     creep back: R-SINGLE-DIFFICULTY fails the build on mode-family naming. (SECTION 17)
   7. The contract anchors "the player" to a fixed 25 DPT / 205 eHP, ignoring found
      weapons, abilities, crits, and consumables — the model systematically
      under-counts real player power. (SECTION 2, 6)
@@ -964,6 +978,6 @@ SECTION 21 — HOW TO CHANGE BALANCE SAFELY (workflow for future sessions)
 --------------------------------------------------------------------------------
 FINAL REMINDER: the current game balance is NOT good. It is a provisional,
 harness-verified, largely-unplaytested skeleton with known-broken areas (credits,
-bosses, weapon abilities, difficulty modes). Everything in this document describes
+bosses, weapon abilities). Everything in this document describes
 WHAT IS, not WHAT SHOULD BE. Refine it, and re-verify — then playtest.
 --------------------------------------------------------------------------------
