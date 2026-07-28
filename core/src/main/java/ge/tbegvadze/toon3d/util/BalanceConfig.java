@@ -1752,6 +1752,127 @@ public final class BalanceConfig {
     public static final int   SHOP_AMMO_LARGE_BOX_MULTIPLIER = 2;
 
     // =====================================================================================
+    // SECTION 18 — SIMULATION PROOF (new-game-balancr order 9) — the BEHAVIOURAL bands
+    // Orders 1-8 make the numbers self-consistent; a green audit still cannot prove the game
+    // PLAYS the way the model claims (knowledge-doc problem 1: "verified by harness only —
+    // NEVER playtested"). Because the game is strictly turn-based, a whole run is SIMULABLE:
+    // sim/BalanceSimulator plays real runs through the real systems with scripted policies,
+    // and the bands below are what those played runs must satisfy. They are TUNABLE TARGETS
+    // like every other value here — moving one is a design decision, recorded in the authority
+    // doc's CHANGELOG. Enforced by BalanceSchema (RuleKind.SIM_*) via `./gradlew balanceSim`.
+    // =====================================================================================
+
+    // --- A. HARNESS PARAMETERS (how much play is simulated) ------------------------------
+    /**
+     * Seeds per policy in the full matrix. 200 is the headline sample: it makes "0% clear the
+     * first boss" (S-GATE) a claim with teeth while keeping the matrix inside the CI budget.
+     */
+    public static final int   SIM_SEED_COUNT              = 200;
+    /**
+     * Depth the simulator stops at. Above the S-FAIR target band, so a run that survives to the
+     * ceiling is a genuine outlier rather than an artefact of stopping early.
+     */
+    public static final int   SIM_DEPTH_CEILING           = 20;
+    /** First floor of a simulated run (the staging room is skipped — see SimWorld). */
+    public static final int   SIM_STARTING_DEPTH          = 1;
+    /**
+     * Turns a policy may spend on one floor before the run is declared STALLED. Generous: a big
+     * cavern floor plus a boss fight is a few hundred turns; anything past this is a policy that
+     * cannot find the exit, which the S-SOFTLOCK band wants to see rather than hide.
+     */
+    public static final int   SIM_TURNS_PER_FLOOR_CAP     = 900;
+    /**
+     * Fixed time step fed to the real controller/door/weapon update() calls. Far larger than any
+     * animation duration, so exactly one action resolves per simulated turn (the game is
+     * turn-based; wall-clock time carries no gameplay meaning).
+     */
+    public static final float SIM_TIME_STEP_SECONDS       = 1.0f;
+    /** Safety net on the per-action drain loop — never a rule, just a guard against a stuck state. */
+    public static final int   SIM_MAX_STEPS_PER_ACTION    = 8;
+
+    // --- B. POLICY THRESHOLDS (how the scripted players behave) --------------------------
+    /**
+     * How far away an enemy still counts as "the fight I am in" rather than scenery. Wider than any
+     * weapon's range so a policy commits to a fight it can already be shot in, not just one it can
+     * shoot into.
+     */
+    public static final int   SIM_ENGAGE_RANGE_TILES      = 12;
+    /** Vitality fraction at or below which a policy heals. The "heals at <30% HP" NAIVE rule. */
+    public static final float SIM_NAIVE_HEAL_FRACTION     = 0.30f;
+    /** The TACTICAL policy heals earlier — it does not wait to be one hit from death. */
+    public static final float SIM_TACTICAL_HEAL_FRACTION  = 0.55f;
+    /**
+     * How close a sleeping enemy has to be before the TACTICAL policy bothers to pick the fight. It
+     * still fights anything ALREADY awake — this only stops it crossing a floor to wake something.
+     */
+    public static final int   SIM_TACTICAL_ENGAGE_RANGE_TILES = 6;
+    /** How far a policy will detour from its route to collect a pickup. Beyond this it walks on. */
+    public static final int   SIM_SUPPLY_DETOUR_RANGE_TILES = 10;
+    /** Consecutive refusals of the SAME step before the simulator writes that tile off as impassable. */
+    public static final int   SIM_REFUSALS_BEFORE_TILE_WRITTEN_OFF = 3;
+    /**
+     * Turns a policy keeps walking toward a goal it is not getting closer to before writing that goal
+     * off for the floor. Commitment is what stops a scripted player oscillating between two
+     * destinations; patience is what stops it committing to something it can never reach.
+     */
+    public static final int   SIM_GOAL_PATIENCE_TURNS = 25;
+    /** Vitality fraction at which TACTICAL breaks off a fight and heads for the stairs (no heals left). */
+    public static final float SIM_TACTICAL_RETREAT_FRACTION = 0.35f;
+    /** Vitality/ammo/heal fraction below which a turn counts as taken in a RESOURCE CRISIS. */
+    public static final float SIM_RESOURCE_CRISIS_FRACTION = 0.25f;
+    /** Telegraphed incoming damage (as a fraction of remaining vitality) that makes TACTICAL guard. */
+    public static final float SIM_TACTICAL_GUARD_DAMAGE_FRACTION = 0.20f;
+
+    // --- C. S-GATE: the boss-cheese regression (the headline guarantee) ------------------
+    /**
+     * Fraction of HOARDER-START-WEAPON seeds allowed to clear the FIRST boss. Zero, by contract:
+     * the starting loadout losing to the first boss is what R-BOSS-GATE proves on paper, and this
+     * band proves it in play. The original bug (a starting shotgun that could grind a boss down)
+     * can never return silently.
+     */
+    public static final float SIM_GATE_MAX_CLEAR_FRACTION = 0.0f;
+
+    // --- D. S-FAIR: deaths land in the intended window, and read as fair -----------------
+    /** Median death depth the TACTICAL policy should reach — the intended run length. */
+    public static final int   SIM_TARGET_DEPTH_MIN        = 8;
+    public static final int   SIM_TARGET_DEPTH_MAX        = 14;
+    /**
+     * Fraction of TACTICAL deaths that must be READABLE: preceded either by a committed enemy
+     * intent (the hit was shown before it landed) or by a resource state under the crisis
+     * fraction (the player walked in weak). A death must feel like "I made a mistake".
+     */
+    public static final float SIM_FAIR_READABLE_DEATH_MIN = 0.90f;
+
+    // --- E. S-SKILL: playing well must matter --------------------------------------------
+    /**
+     * Median depth the TACTICAL policy must reach BEYOND the NAIVE one. The game ships one
+     * difficulty (order 8); this gap IS its difficulty range, so it may never collapse.
+     */
+    public static final int   SIM_SKILL_DEPTH_GAP_MIN     = 3;
+
+    // --- F. S-ECONOMY: the played economy matches the modelled one -----------------------
+    /**
+     * Tolerance between the scarcity ratio S the runs EXPERIENCE and the S the order-3 model
+     * predicts for that depth. Wider than a rounding error, tighter than a re-derivation: if the
+     * played S drifts past this, the model is describing a different game than the one shipping.
+     */
+    public static final float SIM_ECONOMY_SCARCITY_TOLERANCE = 0.08f;
+    /** Fraction of TACTICAL floors allowed to fire the never-softlock emergency ammo lifeline. */
+    public static final float SIM_ECONOMY_EMERGENCY_MAX_FRACTION = 0.05f;
+
+    // --- G. S-ROUTE: the priced map survives contact with play ---------------------------
+    /**
+     * Tolerance on the played per-floor net HP drain versus the order-7 modelled trajectory band.
+     * Play is noisier than the ledger (a policy can dodge a fight the model charges for), so the
+     * band is widened by this fraction rather than applied raw.
+     */
+    public static final float SIM_ROUTE_TRAJECTORY_TOLERANCE = 0.25f;
+
+    // --- H. S-SOFTLOCK: a run may end, but never get stuck --------------------------------
+    /** Fraction of seeds allowed to end in a "cannot damage anything" state. Zero, by contract. */
+    public static final float SIM_SOFTLOCK_MAX_FRACTION   = 0.0f;
+
+    // =====================================================================================
     // SECTION 19 — ROUTE ECONOMICS (new-game-balancr order 7) — the MAP joins the contract
     // Orders 1-6 balance FLOORS; the player plays a JOURNEY through the route map's branching
     // DAG (COMBAT / ELITE / CACHE / REST / SHOP / MYSTERY / EVENT). Every balance-bearing

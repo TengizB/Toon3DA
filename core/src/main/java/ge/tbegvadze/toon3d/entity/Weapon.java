@@ -173,7 +173,12 @@ public abstract class Weapon implements WeaponProfile {
 
     // Per-weapon RNG for hit-chance rolls — not seeded from run seed, which is acceptable
     // because miss results are cosmetic feedback and do not affect long-term balance.
-    private final java.util.Random random = new java.util.Random();
+    /**
+     * Accuracy / pellet / crit rolls. SEEDED via {@link #setRandomSeed} so a run replays identically
+     * from its run seed (R-SIM-DETERMINISM, new-game-balancr order 9). Subclasses that own extra RNG
+     * streams override {@link #setRandomSeed} and reseed them from the same value.
+     */
+    private final java.util.Random random = new java.util.Random(0x5DEECE66DL);
 
     protected Weapon(String displayName, int damage, int clipSize, int reloadTime,
                      float damageDropCoefficient, int range, AmmoType ammoType) {
@@ -982,6 +987,15 @@ public abstract class Weapon implements WeaponProfile {
     }
 
     public WeaponVisualState getVisualState()             { return visualState; }
+    /**
+     * Reseeds this weapon's roll stream. Called once per run (World / the balance simulator) with a
+     * seed derived from the run seed, so the same run always rolls the same hits and crits.
+     * Subclasses with their own Random must override and reseed it too.
+     */
+    public void setRandomSeed(long seed) {
+        random.setSeed(seed);
+    }
+
     public int               getShotsInClip()            { return shotsInClip; }
     public int               getClipSize()               { return clipSize; }
     public String            getDisplayName()            { return displayName; }

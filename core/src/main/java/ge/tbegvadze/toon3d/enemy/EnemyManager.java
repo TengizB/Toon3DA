@@ -146,14 +146,41 @@ public final class EnemyManager implements EnemyHitTarget {
     private EventTextSystem eventTextSystem = null;
 
     /**
+     * Per-stream salts so the spawn roll, the wiggle tie-break, the drop roll and the effect roll are
+     * INDEPENDENT streams derived from one floor seed — otherwise a change in how many drops rolled
+     * would shift every later spawn. Arbitrary distinct odd constants; only their distinctness matters.
+     */
+    private static final long SPAWN_STREAM_SALT  = 0x5DEECE66DL;
+    private static final long WIGGLE_STREAM_SALT = 0x1D2B7A3CL;
+    private static final long DROP_STREAM_SALT   = 0x9E3779B9L;
+    private static final long EFFECT_STREAM_SALT = 0x27D4EB2FL;
+
+    /** Seed used by the legacy (unseeded-looking) constructor so tests and tools stay reproducible. */
+    private static final long DEFAULT_RANDOM_SEED = 12345L;
+
+    /**
      * @param dungeonDepth current floor number (1-based); drives enemy health and damage scaling.
      *                     Pass 1 for the first floor.
      */
     public EnemyManager(Level level, DoorManager doorManager, int dungeonDepth) {
+        this(level, doorManager, dungeonDepth, DEFAULT_RANDOM_SEED);
+    }
+
+    /**
+     * Seeded variant — the SAME floor seed in always produces the same spawn roll, the same drops and
+     * the same effect rolls. World passes its per-floor seed and the order-9 balance simulator passes
+     * its own, so a run replays identically from its run seed (R-SIM-DETERMINISM). Unseeded
+     * randomness in a gameplay manager is a determinism bug, not a style choice.
+     *
+     * @param dungeonDepth current floor number (1-based); drives enemy health and damage scaling.
+     * @param randomSeed   the floor's master seed; every RNG stream below is derived from it.
+     */
+    public EnemyManager(Level level, DoorManager doorManager, int dungeonDepth, long randomSeed) {
         this.level        = level;
         this.doorManager  = doorManager;
         this.currentDepth = dungeonDepth;
-        this.enemies      = buildInitialEnemies(level.getEnemySpawnPoints(), dungeonDepth, new Random());
+        this.enemies      = buildInitialEnemies(level.getEnemySpawnPoints(), dungeonDepth,
+                                                new Random(randomSeed ^ SPAWN_STREAM_SALT));
         int levelWidth   = level.getWidth();
         int levelHeight  = level.getHeight();
         int enemyCount   = enemies.size();
@@ -161,9 +188,9 @@ public final class EnemyManager implements EnemyHitTarget {
         this.chainAlertQueue    = new int[Math.max(1, enemyCount)];
         this.wiggleLegalColumns = new int[4];
         this.wiggleLegalRows    = new int[4];
-        this.wiggleRandom       = new Random(12345L);
-        this.dropRandom         = new Random();
-        this.effectRandom       = new Random();
+        this.wiggleRandom       = new Random(randomSeed ^ WIGGLE_STREAM_SALT);
+        this.dropRandom         = new Random(randomSeed ^ DROP_STREAM_SALT);
+        this.effectRandom       = new Random(randomSeed ^ EFFECT_STREAM_SALT);
     }
 
     /** Injects the status effect controller so ranged enemies can inflict DoT on the player. */

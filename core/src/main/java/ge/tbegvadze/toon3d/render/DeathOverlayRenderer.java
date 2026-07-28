@@ -40,6 +40,8 @@ public final class DeathOverlayRenderer implements Disposable {
     private static final Color VALUE_COLOR  = new Color(0.95f, 0.95f, 0.95f, 1f);
     private static final Color NEW_BEST     = new Color(1f, 0.88f, 0.20f, 1f);
     private static final Color FLAVOR_COLOR = new Color(0.50f, 0.50f, 0.50f, 1f);
+    /** RUN AUTOPSY text — dimmer than the stat values, brighter than the flavour line. */
+    private static final Color AUTOPSY_COLOR = new Color(0.62f, 0.66f, 0.70f, 1f);
     private static final Color PROMPT_COLOR = new Color(0.90f, 0.90f, 0.90f, 1f);
 
     // ---- Display text strings ----------------------------------------------
@@ -64,6 +66,12 @@ public final class DeathOverlayRenderer implements Disposable {
     private final ShapeRenderer shapes;
     private final SpriteBatch   batch;
     private final BitmapFont    font;
+
+    /**
+     * The RUN AUTOPSY block (order 9): what killed the marine, how hard the last floor drained it,
+     * what it had run out of, and whether the level curve had kept up. Empty until {@link #show}.
+     */
+    private String[] autopsyLines = new String[0];
     private final GlyphLayout   layout;  // used only in show() — zero use in render()
 
     // ---- Pre-computed display state (set in show()) ------------------------
@@ -105,6 +113,9 @@ public final class DeathOverlayRenderer implements Disposable {
         killsValue       = String.valueOf(run.enemiesKilled);
         damageTakenValue = String.valueOf(run.totalDamageTaken);
         timeValue        = GameMath.formatPlayTime(run.realSecondsPlayed);
+
+        // RUN AUTOPSY (new-game-balancr order 9): the six lines a playtester reports a run with.
+        autopsyLines = run.autopsyLines();
 
         int flavorIndex = (int)(run.ticksElapsed % FLAVOR_POOL.length);
         flavorLine = FLAVOR_POOL[flavorIndex];
@@ -190,6 +201,16 @@ public final class DeathOverlayRenderer implements Disposable {
         drawStatLine(LABEL_DAMAGE, damageTakenValue,  damageTakenValueX, false,        statY);
         statY -= HudConstants.DEATH_OVERLAY_STAT_LINE_STEP;
         drawStatLine(LABEL_TIME,   timeValue,         timeValueX,        false,        statY);
+
+        // RUN AUTOPSY — left-aligned under the stat block, smaller than the stats so it reads as a
+        // report rather than a score (order 9, part C).
+        font.getData().setScale(HudConstants.DEATH_OVERLAY_AUTOPSY_SCALE);
+        font.setColor(AUTOPSY_COLOR);
+        float autopsyY = statY - HudConstants.DEATH_OVERLAY_AUTOPSY_Y_BELOW_STATS;
+        for (String autopsyLine : autopsyLines) {
+            font.draw(batch, autopsyLine, HudConstants.DEATH_OVERLAY_LABEL_X, autopsyY);
+            autopsyY -= HudConstants.DEATH_OVERLAY_AUTOPSY_LINE_STEP;
+        }
 
         font.getData().setScale(HudConstants.DEATH_OVERLAY_FLAVOR_SCALE);
         font.setColor(FLAVOR_COLOR);

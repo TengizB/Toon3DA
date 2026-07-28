@@ -44,6 +44,11 @@ public final class BossFloorController implements TickSubscriber {
     private final DoorManager    doorManager;
     private final EnemyManager   enemyManager;
     private final HazardManager  hazardManager;
+    /**
+     * Nullable — the boss banner/health HUD. Null in the headless balance simulator
+     * (new-game-balancr order 9), which runs real boss fights with no render layer; every call site
+     * below guards for it exactly like {@link #eventTextSystem} does.
+     */
     private final BossHudRenderer bossHudRenderer;
     private final EventTextSystem eventTextSystem;
 
@@ -172,7 +177,7 @@ public final class BossFloorController implements TickSubscriber {
         boss.visualState = BossVisualState.STALKING;
         boss.alert();
         doorManager.lockArenaDoor(arenaDoorColumn, arenaDoorRow);
-        bossHudRenderer.showIntro();
+        if (bossHudRenderer != null) bossHudRenderer.showIntro();
         boss.phase1Pattern.onPhaseStart();
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor(boss.bossName.toUpperCase(), EventTextSystem.COLOR_GREEN);
@@ -186,7 +191,7 @@ public final class BossFloorController implements TickSubscriber {
         boss.visualState      = BossVisualState.ENRAGED;
         invulnerableTurnsLeft = Constants.BOSS_PHASE_TRANSITION_TURNS;
         boss.phase2Pattern.onPhaseStart();
-        bossHudRenderer.showBanner("PHASE 2");
+        if (bossHudRenderer != null) bossHudRenderer.showBanner("PHASE 2");
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("ENRAGED!", EventTextSystem.COLOR_GREEN);
         }
@@ -334,14 +339,14 @@ public final class BossFloorController implements TickSubscriber {
         RegenState regenState = boss.regenState;
         if (regenState.healJustStarted) {
             regenState.healJustStarted = false;
-            bossHudRenderer.showBanner("REPAIRING");
+            if (bossHudRenderer != null) bossHudRenderer.showBanner("REPAIRING");
             if (eventTextSystem != null) {
                 eventTextSystem.spawnWithColor("OVERSEER REPAIRING", EventTextSystem.COLOR_GREEN);
             }
         }
         if (regenState.healJustInterrupted) {
             regenState.healJustInterrupted = false;
-            bossHudRenderer.showBanner("REPAIR INTERRUPTED");
+            if (bossHudRenderer != null) bossHudRenderer.showBanner("REPAIR INTERRUPTED");
             if (eventTextSystem != null) {
                 eventTextSystem.spawnWithColor("REPAIR INTERRUPTED", EventTextSystem.COLOR_GREEN);
             }
@@ -377,7 +382,7 @@ public final class BossFloorController implements TickSubscriber {
         if (enrageAnnounced || boss.stats == null) return;
         if (boss.ticksSinceAwaken <= boss.stats.upperFightTurnsCap) return;
         enrageAnnounced = true;
-        bossHudRenderer.showBanner("FURIOUS");
+        if (bossHudRenderer != null) bossHudRenderer.showBanner("FURIOUS");
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor(boss.bossName.toUpperCase() + " IS FURIOUS", EventTextSystem.COLOR_GREEN);
         }
@@ -603,7 +608,7 @@ public final class BossFloorController implements TickSubscriber {
         doorManager.unlockArenaDoor(arenaDoorColumn, arenaDoorRow);
 
         // Hide the boss HUD overlay
-        bossHudRenderer.hide();
+        if (bossHudRenderer != null) bossHudRenderer.hide();
 
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor(boss.killLine, EventTextSystem.COLOR_GREEN);

@@ -171,4 +171,87 @@ public class RunStats {
     public void recordEmergencySupplyTrigger() {
         emergencySupplyTriggers++;
     }
+
+    // =====================================================================================
+    // RUN AUTOPSY (new-game-balancr order 9, part C) — the HUMAN half of the proof.
+    // A simulator cannot feel fun. These are the few facts a playtester needs to report a run
+    // usefully — "died depth 7, starved of shells, two levels behind" — without an instrumented
+    // build: what killed them, where, how hard the floor was draining them, and whether the
+    // progression curve had kept up. The death screen prints them; World logs the same block at
+    // run end. Purely observational; nothing here feeds gameplay.
+    // =====================================================================================
+
+    /** Display name of whatever landed the killing blow ("-" until the marine dies). */
+    private String killedBy = "-";
+
+    /** Hit points lost on the CURRENT floor, and on the floor the run ended on. */
+    private int healthLostThisFloor;
+    private int healthLostOnFinalFloor;
+
+    /** Player level and the level the depth expected, sampled when the run ends. */
+    private int finalPlayerLevel   = 1;
+    private int expectedPlayerLevel = 1;
+
+    /** Turns spent on the last boss floor entered (0 when the run never reached one). */
+    private int bossFightTurns;
+    private boolean onBossFloor;
+
+    /** The ammo type the run ran shortest on, for the "starved of shells" half of the report. */
+    private String scarcestAmmo = "-";
+
+    /** Records damage taken on the current floor; call alongside {@link #recordDamageTaken}. */
+    public void recordFloorDamageTaken(int amount) {
+        if (amount > 0) healthLostThisFloor += amount;
+    }
+
+    /** Starts a fresh floor's autopsy counters. Call on every floor transition. */
+    public void beginFloor(boolean isBossFloor) {
+        healthLostThisFloor = 0;
+        bossFightTurns      = 0;
+        onBossFloor         = isBossFloor;
+    }
+
+    /** Counts one turn spent on a boss floor (the boss-fight length the model makes claims about). */
+    public void recordBossFloorTurn() {
+        if (onBossFloor) bossFightTurns++;
+    }
+
+    /** Seals the autopsy: what killed the marine, where the curves stood, what it had run out of. */
+    public void recordDeath(String killedByName, int playerLevel, int expectedLevel, String scarcestAmmoName) {
+        this.killedBy               = killedByName == null ? "-" : killedByName;
+        this.healthLostOnFinalFloor = healthLostThisFloor;
+        this.finalPlayerLevel       = playerLevel;
+        this.expectedPlayerLevel    = expectedLevel;
+        this.scarcestAmmo           = scarcestAmmoName == null ? "-" : scarcestAmmoName;
+    }
+
+    public String getKilledBy()               { return killedBy; }
+    public int    getHealthLostOnFinalFloor() { return healthLostOnFinalFloor; }
+    public int    getFinalPlayerLevel()       { return finalPlayerLevel; }
+    public int    getExpectedPlayerLevel()    { return expectedPlayerLevel; }
+    public int    getBossFightTurns()         { return bossFightTurns; }
+    public String getScarcestAmmo()           { return scarcestAmmo; }
+
+    /** Levels behind (negative) or ahead (positive) of the curve the depth expected. */
+    public int getLevelVersusExpected() { return finalPlayerLevel - expectedPlayerLevel; }
+
+    /**
+     * The compact RUN AUTOPSY block: six lines a playtester can read off the death screen or paste
+     * from the log. Shared by the death overlay and World's end-of-run dump so both always agree.
+     */
+    public String[] autopsyLines() {
+        int levelGap = getLevelVersusExpected();
+        return new String[] {
+            "DEPTH REACHED    " + floorReached,
+            "KILLED BY        " + killedBy,
+            "HP LOST (FLOOR)  " + healthLostOnFinalFloor,
+            "HEALS / AMMO     " + healsUsed + " used / " + ammoSpent + " spent, " + ammoPickedUp + " found",
+            "SCARCEST AMMO    " + scarcestAmmo + (emergencySupplyTriggers > 0
+                                                  ? "  (lifeline x" + emergencySupplyTriggers + ")" : ""),
+            "LEVEL            " + finalPlayerLevel + " vs expected " + expectedPlayerLevel
+                                + (levelGap == 0 ? "" : (levelGap > 0 ? "  (+" + levelGap + ")"
+                                                                      : "  (" + levelGap + ")"))
+                                + (bossFightTurns > 0 ? "   BOSS TURNS " + bossFightTurns : "")
+        };
+    }
 }

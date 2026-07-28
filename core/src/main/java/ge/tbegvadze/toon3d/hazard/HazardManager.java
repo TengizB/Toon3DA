@@ -86,14 +86,26 @@ public final class HazardManager {
     private ExplosiveBarrelManager explosiveBarrelManager;
     private HazardVisualListener   visualListener;
 
+    /** Seed used by the seedless constructor so hazard behaviour stays reproducible in tests/tools. */
+    private static final long DEFAULT_RANDOM_SEED = 987654321L;
+
     public HazardManager(Level level, EnemyManager enemyManager,
                          StatusEffectController statusEffectController) {
+        this(level, enemyManager, statusEffectController, DEFAULT_RANDOM_SEED);
+    }
+
+    /**
+     * Seeded variant — spread/burn-out rolls replay identically for the same floor seed
+     * (R-SIM-DETERMINISM, new-game-balancr order 9). World and the balance simulator both use it.
+     */
+    public HazardManager(Level level, EnemyManager enemyManager,
+                         StatusEffectController statusEffectController, long randomSeed) {
         this.level                 = level;
         this.enemyManager          = enemyManager;
         this.statusEffectController = statusEffectController;
         this.gridWidth             = level.getWidth();
         this.gridHeight            = level.getHeight();
-        this.hazardRandom          = new Random();
+        this.hazardRandom          = new Random(randomSeed);
         this.hazardType            = new byte[gridHeight][gridWidth];
         this.remainingTurns        = new short[gridHeight][gridWidth];
         this.savedUnderChar        = new char[gridHeight][gridWidth];

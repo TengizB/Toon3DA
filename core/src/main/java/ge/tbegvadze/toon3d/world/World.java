@@ -8,6 +8,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import ge.tbegvadze.toon3d.door.DoorManager;
+import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.*;
 import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
@@ -22,6 +23,7 @@ import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.entity.boss.Boss;
+import ge.tbegvadze.toon3d.entity.boss.BossFactory;
 import ge.tbegvadze.toon3d.entity.boss.BossAttackPattern;
 import ge.tbegvadze.toon3d.entity.boss.CorruptorPhase1Pattern;
 import ge.tbegvadze.toon3d.entity.boss.CorruptorPhase2Pattern;
@@ -396,6 +398,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // no selection step, so a run starts straight into the first floor.
         playerStats = new PlayerStats();
         player.setPlayerStats(playerStats);
+        player.setRandomSeed(runSeed ^ 0xD0D6E5EEDL);   // AGILITY dodge rolls join the seeded run
         // TOUGHNESS increases maxHealth without auto-healing; heal to full once at run
         // start so the player always begins with a full HP bar.
         player.applyHealing(player.getMaxHealth());
@@ -428,6 +431,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             hitVignetteRenderer.setIntensity(1f);
             eventTextSystem.spawnDamage(netDamage);
             runStats.recordDamageTaken(netDamage);
+            runStats.recordFloorDamageTaken(netDamage);   // RUN AUTOPSY (order 9): per-floor drain
         });
 
         // GUARD stance (strategy-combat-order-4): the shield-arc overlay + the directional
@@ -455,7 +459,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         GrenadeLauncher     grenadeLauncher = new GrenadeLauncher();
         float rangedMultiplier   = playerStats.getRangedDamageMultiplier();
         float accuracyMultiplier = playerStats.getAccuracyMultiplier();
+        // Every weapon's accuracy/crit stream is seeded off the run seed (new-game-balancr order 9)
+        // so a run is reproducible end to end; the per-weapon offset keeps the streams independent.
+        int weaponSeedOffset = 0;
         for (Weapon weapon : new Weapon[]{shotgun, dblShotgun, plasmaRifle, chaingun, assaultRifle, railgun, incinerator, arcCannon, grenadeLauncher}) {
+            weapon.setRandomSeed(runSeed + (weaponSeedOffset++ * 0x9E3779B97F4A7C15L));
             weapon.setEventTextSystem(eventTextSystem);
             weapon.setAmmoInventory(itemInventory);
             weapon.setRangedDamageMultiplier(rangedMultiplier);
@@ -465,6 +473,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // Melee slot — the Fist is the always-available fallback; wired at run start and never removed.
         Fist fist = new Fist();
+        fist.setRandomSeed(runSeed + (weaponSeedOffset++ * 0x9E3779B97F4A7C15L));
         fist.setEventTextSystem(eventTextSystem);
         fist.setPlayerAccuracyMultiplier(accuracyMultiplier);
         weaponRoller.configureRunStart(fist);
@@ -715,7 +724,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * the depth-driven default selection so it still descends.
      */
     private Level buildNextFloor() {
-        long seed = floorSeed(runSeed, currentDepth);
+        long seed = GameMath.floorSeed(runSeed, currentDepth);
         // Default: no floor effects. buildFloorForNode overwrites this from the resolved plan (order-9).
         pendingFloorEffects = FloorEffects.NONE;
         // Cleared here and re-captured below only when this floor's generator is a boss arena (ORDER 7).
@@ -926,7 +935,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         shopMachineRenderer    = new ShopMachineRenderer(targetLevel, wallRenderer);
         shopMachineRenderer.setPropRenderer(propRenderer);
         levelRenderer          = new LevelRenderer(targetLevel, doorManager);
-        enemyManager           = new EnemyManager(targetLevel, doorManager, currentDepth);
+        // Seeded from the floor seed (new-game-balancr order 9): spawn/drop/effect rolls replay
+        // identically for the same run seed + depth, so a shared seed is a shared run.
+        enemyManager           = new EnemyManager(targetLevel, doorManager, currentDepth,
+                                                  GameMath.floorSeed(runSeed, currentDepth));
         levelRenderer.setEnemies(enemyManager.getEnemies());
         abilityResolver        = new AbilityResolver(enemyManager, eventTextSystem, player, runSeed);
         abilityResolver.setKillXpListener(xpAwarded -> playerProgress.addXp(xpAwarded));
@@ -972,7 +984,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // Terrain hazards (idea 4, Pillar 3) — two-sided fire/toxic chain-reaction system.
         // HazardManager holds no GPU resources, so it needs no dispose; it is rebuilt per floor.
-        hazardManager = new HazardManager(targetLevel, enemyManager, statusEffectController);
+        hazardManager = new HazardManager(targetLevel, enemyManager, statusEffectController,
+                                          GameMath.floorSeed(runSeed, currentDepth) ^ 0x4A2A5D9BL);
         hazardManager.setExplosiveBarrelManager(explosiveBarrelManager);
         hazardManager.setHazardVisualListener(propRenderer::addDynamicProp);
         explosiveBarrelManager.setDetonationListener(hazardManager::igniteFireFromExplosion);
@@ -994,31 +1007,36 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             }
         });
 
-        tickEventBus = new TickEventBus();
-        tickEventBus.subscribe(new WeaponReloadSubscriber(inventory));
-        // Hazards tick BEFORE status so a tile's burn/poison lands the same turn you stand in it.
-        tickEventBus.subscribe(new HazardTickSubscriber(hazardManager));
-        tickEventBus.subscribe(new StatusEffectSubscriber(statusEffectController, player, enemyManager));
-        // Decrement Bulwark Rounds temp-armor turn counters each player action.
-        tickEventBus.subscribe(context -> playerStats.tickTempArmor());
-
-        // Boss encounter — wired before EnemyTurnSubscriber so the boss acts first each turn.
+        // Boss encounter — built before the pipeline so TickPipeline can slot it in ahead of the
+        // ordinary roster (the boss acts first each turn).
         bossFloorController = null;
         bossHudRenderer     = null;
         if (GameMath.isBossFloor(currentDepth) && pendingBossArenaLayout != null) {
-            Boss boss = createBossForDepth(currentDepth, floorSeed(runSeed, currentDepth), pendingBossArenaLayout);
+            Boss boss = BossFactory.createForDepth(currentDepth, GameMath.floorSeed(runSeed, currentDepth),
+                                                   pendingBossArenaLayout);
             if (boss != null) {
                 enemyManager.addBoss(boss);
                 bossHudRenderer     = new BossHudRenderer();
                 bossHudRenderer.setBoss(boss);
                 bossFloorController = new BossFloorController(boss, targetLevel, pendingBossArenaLayout, doorManager,
                         enemyManager, hazardManager, bossHudRenderer, eventTextSystem);
-                tickEventBus.subscribe(bossFloorController);
             }
         }
         gameState.isBossFloor = bossFloorController != null;
+        // RUN AUTOPSY (order 9): a fresh floor resets the per-floor drain and boss-turn counters.
+        runStats.beginFloor(gameState.isBossFloor);
 
-        tickEventBus.subscribe(new EnemyTurnSubscriber(enemyManager, gameState));
+        // The shared assembly (TickPipeline) owns the dispatch ORDER, so a simulated floor
+        // (sim.SimWorld) resolves its turns in exactly the order a played floor does.
+        tickEventBus = TickPipeline.standardFloor(inventory, hazardManager, statusEffectController,
+                                                  player, enemyManager, playerStats,
+                                                  bossFloorController, gameState);
+        // RUN AUTOPSY (order 9): count the turns a boss fight actually takes, so the reported number
+        // can be compared with the modelled fight length (R-BOSS-FAIR).
+        tickEventBus.subscribe(context -> {
+            runStats.recordTick();
+            runStats.recordBossFloorTurn();
+        });
 
         // Create the controller before building ground items so weapon roll generation
         // can look up arsenal weapons via findWeaponInArsenalForType().
@@ -1142,7 +1160,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     private void seedCreditChips(Level targetLevel, java.util.List<GroundItem> items, int depth,
                                   java.util.List<int[]> reservedTiles) {
-        java.util.Random chipRandom = new java.util.Random();
+        // Seeded off the floor seed (order 9 determinism audit) — chip placement is part of the run.
+        java.util.Random chipRandom = new java.util.Random(GameMath.floorSeed(runSeed, depth) ^ 0xC417C417L);
         int chipCount = GameBalance.CREDIT_CHIPS_PER_FLOOR_MIN
                 + chipRandom.nextInt(GameBalance.CREDIT_CHIPS_PER_FLOOR_MAX
                                      - GameBalance.CREDIT_CHIPS_PER_FLOOR_MIN + 1);
@@ -1227,7 +1246,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Shops appear on every floor now — the starting room and boss arenas included. Placement
         // still requires an eligible wall-mounted tile; if a floor has none, no machine is placed.
 
-        java.util.Random random = new java.util.Random(floorSeed(runSeed, depth) ^ 0x5309CAFED00DL);
+        java.util.Random random = new java.util.Random(GameMath.floorSeed(runSeed, depth) ^ 0x5309CAFED00DL);
         int machineCount = GameBalance.SHOP_MIN_PER_FLOOR;
         if (GameBalance.SHOP_MAX_PER_FLOOR > GameBalance.SHOP_MIN_PER_FLOOR
                 && random.nextFloat() < GameBalance.SHOP_SECOND_MACHINE_CHANCE) {
@@ -1275,7 +1294,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private void rollMachineStock(int depth) {
         if (vendingMachines.isEmpty()) return;
         ShopContext context = buildShopContext(depth);
-        long baseSeed       = floorSeed(runSeed, depth);
+        long baseSeed       = GameMath.floorSeed(runSeed, depth);
         boolean twoMachineBias = GameBalance.SHOP_TWO_MACHINE_BIAS && vendingMachines.size() > 1;
         for (int index = 0; index < vendingMachines.size(); index++) {
             VendingMachine machine = vendingMachines.get(index);
@@ -1717,6 +1736,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Death check: resolved after the tick fully completes, never mid-tick
         if (player.isDead()) {
             runStats.recordFloor(currentDepth);
+            sealRunAutopsy();
             deathOverlayRenderer.show(runStats, persistentStats);
             runPhase              = RunPhase.DEAD;
             deathBeatTimerSeconds = 0f;
@@ -2103,7 +2123,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         boolean success = true;
         if (effect.isGamble()) {
             // Deterministic per-floor roll so a seed always resolves the gamble the same way.
-            java.util.Random gambleRandom = new java.util.Random(floorSeed(runSeed, currentDepth) ^ 0xE7E1D1CEL);
+            java.util.Random gambleRandom = new java.util.Random(GameMath.floorSeed(runSeed, currentDepth) ^ 0xE7E1D1CEL);
             success = gambleRandom.nextFloat() < effect.gambleLootChance();
         }
 
@@ -2686,6 +2706,69 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
+     * Seals the RUN AUTOPSY (new-game-balancr order 9, part C) and logs it.
+     *
+     * <p>The death screen shows these six lines so a playtester can report a run without an
+     * instrumented build ("died depth 7, starved of shells, two levels behind"); the same block goes
+     * to the log so a tuning session has a paste-able record. This is the human half of the order-9
+     * proof — the simulator checks that the numbers PLAY as modelled, and this checks that they FEEL
+     * right, which no simulator can do.
+     */
+    private void sealRunAutopsy() {
+        Enemy nearestEnemy = enemyManager != null ? nearestLivingEnemy() : null;
+        String killedBy = nearestEnemy != null ? nearestEnemy.type.displayName()
+                                               : (gameState.isBossFloor ? "Boss floor" : "Hazard");
+        int expectedLevel = Math.round(1f + BalanceConfig.EXPECTED_LEVELS_PER_DEPTH * (currentDepth - 1));
+        runStats.recordDeath(killedBy, playerProgress.getPlayerLevel(), expectedLevel,
+                             scarcestAmmoName());
+        Gdx.app.log("RunAutopsy", "--- RUN AUTOPSY ---");
+        for (String autopsyLine : runStats.autopsyLines()) {
+            Gdx.app.log("RunAutopsy", autopsyLine);
+        }
+        Gdx.app.log("RunAutopsy", "ROUTE " + runStats.getRouteString());
+    }
+
+    /** The closest living enemy to the marine — the best available guess at what landed the last hit. */
+    private Enemy nearestLivingEnemy() {
+        Enemy nearest = null;
+        int bestDistance = Integer.MAX_VALUE;
+        int playerTileColumn = GameMath.worldToTile(player.positionX);
+        int playerTileRow    = GameMath.worldToTile(player.positionY);
+        for (Enemy enemy : enemyManager.getEnemies()) {
+            if (!enemy.isAlive()) continue;
+            int distance = GameMath.chebyshevDistanceTiles(playerTileColumn, playerTileRow,
+                                                           enemy.tileColumn, enemy.tileRow);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                nearest      = enemy;
+            }
+        }
+        return nearest;
+    }
+
+    /**
+     * The ammo type the run is shortest on, as a share of its reserve cap — the "starved of shells"
+     * line of the autopsy. Only counts ammo the player's loadout can actually fire.
+     */
+    private String scarcestAmmoName() {
+        AmmoType scarcest = null;
+        float    lowestShare = Float.MAX_VALUE;
+        Loadout  loadout = inventory.getLoadout();
+        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+            Weapon weapon = loadout.getSlot(slotIndex);
+            if (weapon == null || weapon.getAmmoType() == null) continue;
+            AmmoType ammoType = weapon.getAmmoType();
+            int   held  = itemInventory.countOf(ammoType.getItemType());
+            float share = held / (float) Math.max(1, ammoType.getAmountPerBox());
+            if (share < lowestShare) {
+                lowestShare = share;
+                scarcest    = ammoType;
+            }
+        }
+        return scarcest == null ? "-" : scarcest.getDisplayName();
+    }
+
+    /**
      * Pushes the player's current melee/ranged damage multipliers (from STRENGTH / MARKSMANSHIP)
      * to the EnemyManager, which applies them centrally. Call after any attribute change and after
      * each floor rebuild so a fresh EnemyManager inherits the run's accumulated stats.
@@ -2695,16 +2778,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyManager.setPlayerRangedDamageMultiplier(playerStats.getRangedDamageMultiplier());
     }
 
-    /*
-     * Formula: floorSeed
-     * Derivation: splitmix-style mixing — large prime multiplication distributes the
-     *             seed bits, then adding depth ensures unique output per floor even when
-     *             two run seeds differ only in low bits.
-     * Edge cases: long overflow wraps safely; depth=0 still produces a valid seed.
-     */
-    private static long floorSeed(long runSeed, int depth) {
-        return runSeed * 0x9E3779B97F4A7C15L + depth;
-    }
 
     private static ILevelGenerator pickGenerator(long seed) {
         // XOR with a constant so the generator selection is independent of the floor layout seed.
@@ -2726,49 +2799,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (generator instanceof BossArenaGenerator) {
             pendingBossArenaLayout = ((BossArenaGenerator) generator).getLayout();
         }
-    }
-
-    private static Boss createBossForDepth(int depth, long bossSeed, BossArenaLayout arenaLayout) {
-        int spawnColumn = arenaLayout.bossColumn;
-        int spawnRow    = arenaLayout.bossRow;
-        // HP and every verb's damage are DERIVED from depth (order 6): the boss's whole stat block comes
-        // from BossBalance, never a flat constant. The archetype rotation matches BossBalance.archetypeForDepth.
-        BossBalance.Archetype archetype = BossBalance.archetypeForDepth(depth);
-        BossStats stats = BossBalance.statsForDepth(archetype, depth);
-        Boss boss;
-        switch (archetype) {
-            case OVERSEER:
-                boss = new Boss(EnemyType.OVERSEER, spawnColumn, spawnRow,
-                        "The Overseer", "Eye of the Abyss", "OVERSEER DESTROYED",
-                        EnemyConstants.OVERSEER_ACCENT_R, EnemyConstants.OVERSEER_ACCENT_G,
-                        EnemyConstants.OVERSEER_ACCENT_B, 1.80f,
-                        new HunterKillerPattern(HunterKillerPattern.Pool.PHASE1, bossSeed),
-                        new HunterKillerPattern(HunterKillerPattern.Pool.PHASE2, bossSeed));
-                boss.nameTag = "The Overseer LVL " + depth;
-                break;
-            case CORRUPTOR:
-                boss = new Boss(EnemyType.CORRUPTOR, spawnColumn, spawnRow,
-                        "The Corruptor", "Herald of Decay", "CORRUPTOR PURGED",
-                        EnemyConstants.CORRUPTOR_ACCENT_R, EnemyConstants.CORRUPTOR_ACCENT_G,
-                        EnemyConstants.CORRUPTOR_ACCENT_B, 1.60f,
-                        new CorruptorPhase1Pattern(), new CorruptorPhase2Pattern());
-                boss.nameTag = "The Corruptor LVL " + depth;
-                break;
-            case HELL_BARON:
-            default:
-                boss = new Boss(EnemyType.HELL_BARON, spawnColumn, spawnRow,
-                        "Hell Baron", "Lord of Flame", "HELL BARON FALLS",
-                        EnemyConstants.HELL_BARON_ACCENT_R, EnemyConstants.HELL_BARON_ACCENT_G,
-                        EnemyConstants.HELL_BARON_ACCENT_B, 2.00f,
-                        new HellBaronPhase1Pattern(), new HellBaronPhase2Pattern());
-                boss.nameTag = "Hell Baron LVL " + depth;
-                break;
-        }
-        boss.stats        = stats;
-        boss.maxHealth    = stats.effectiveHitPoints;
-        boss.health       = stats.effectiveHitPoints;
-        boss.dungeonLevel = depth;
-        return boss;
     }
 
     private static float findPlayerStartX(Level level) {
@@ -2804,7 +2834,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private void setupStartRoomWeaponOffers(StartGameLevelGenerator startGen, long runSeed) {
         // --- Ranged offers: pick 3 from the shuffled ranged arsenal ---
         java.util.List<Weapon> shuffledRanged = new java.util.ArrayList<>(inventory.getArsenal());
-        java.util.Collections.shuffle(shuffledRanged, new java.util.Random(floorSeed(runSeed, 0)));
+        java.util.Collections.shuffle(shuffledRanged, new java.util.Random(GameMath.floorSeed(runSeed, 0)));
 
         int rangedOfferCount = Math.min(
                 ge.tbegvadze.toon3d.util.LevelGenConstants.START_ROOM_WEAPON_OFFER_COUNT,
@@ -2836,7 +2866,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // --- Melee offers: 3 non-fist melee weapons (Fist is already the default) ---
         java.util.List<Weapon> meleePool = new java.util.ArrayList<>(
                 java.util.Arrays.asList(new CombatKnife(), new Hammer(), new MeleeChainsaw()));
-        java.util.Collections.shuffle(meleePool, new java.util.Random(floorSeed(runSeed, 0) + 1));
+        java.util.Collections.shuffle(meleePool, new java.util.Random(GameMath.floorSeed(runSeed, 0) + 1));
 
         int meleeOfferCount = Math.min(
                 ge.tbegvadze.toon3d.util.LevelGenConstants.START_ROOM_MELEE_OFFER_COUNT,

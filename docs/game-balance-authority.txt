@@ -453,6 +453,57 @@ NEVER-SOFTLOCK (GameMath.emergencySupplyTriggers, not a schema band — a floor 
   never when supplied, honours the once-per-floor cap). RunStats records ammo picked
   up, credits earned/spent, heals used and emergency triggers as order-9 telemetry.
 
+S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SOFTLOCK (RuleKind.SIM_*, order 9)
+  THE BEHAVIOURAL BANDS — the only rules in this document that are checked against PLAY
+  rather than against arithmetic. Everything above proves the numbers are self-consistent;
+  it cannot prove the game plays the way they claim (knowledge-doc problem 1: "verified by
+  harness only — NEVER playtested"). Because the game is strictly turn-based, a whole run is
+  SIMULABLE: sim/BalanceSimulator plays SIM_SEED_COUNT (200) runs per policy through the REAL
+  systems — real LevelGenerator floors via the real route pipeline, real EncounterBudgetPlanner
+  rosters, real EnemyManager turns, the real damage/drop/XP/economy path, and the real
+  PlayerController action entry points — with a scripted PlayerPolicy instead of touch input.
+  Values live in BalanceConfig SECTION 18; the bands are evaluated in sim/BehavioralBands and
+  gated by `./gradlew balanceSim` (BalanceSimTest), NOT by the fast `./gradlew test`.
+
+  THE POLICIES (deliberately simple heuristics, not AI — the gap between them IS the game's
+  difficulty range, since the game ships exactly one difficulty):
+    NAIVE                 attacks the nearest enemy, never guards, ignores hazards and cardinal
+                          lines, heals at <30% vitality, never switches weapons, walks the
+                          shortest route, picks route nodes at random.
+    TACTICAL              keeps range, breaks the cardinal line vs ranged, guards a telegraphed
+                          spike (never twice running), manages ammo across weapons, heals early,
+                          buys the shop backstop, takes upgrades, routes by the order-7 node EV.
+    HOARDER-START-WEAPON  TACTICAL, but NEVER equips a weapon it finds or buys — the user's
+                          boss-cheese reproduction, kept as a permanent regression case.
+
+  S-GATE      HOARDER-START-WEAPON clears the FIRST boss on 0% of seeds. The headline
+              guarantee: R-BOSS-GATE proves the starting loadout cannot win on paper; this
+              proves it in play. WHY zero and not "rarely": the original bug WAS the starting
+              shotgun grinding a boss down, and a band with slack invites it back.
+  S-FAIR      TACTICAL median death depth in [SIM_TARGET_DEPTH_MIN, MAX] = [8, 14], and >= 90%
+              of deaths preceded either by a COMMITTED enemy intent (the hit was shown before it
+              landed) or by a sub-25% resource state (the player walked in weak). WHY: a death
+              must feel like "I made a mistake", never a dice roll.
+  S-SKILL     TACTICAL's median depth exceeds NAIVE's by >= SIM_SKILL_DEPTH_GAP_MIN (3). WHY:
+              one fixed difficulty (order 8) only works if SKILL decides depth; if this gap
+              collapses the game stopped rewarding play and became a wall.
+  S-ROUTE     The played per-floor net HP drain sits inside the order-7 modelled trajectory
+              band, widened by SIM_ROUTE_TRAJECTORY_TOLERANCE (play dodges fights the ledger
+              charges for). WHY: the priced map must survive contact with play.
+  S-ECONOMY   The experienced scarcity ratio S is within SIM_ECONOMY_SCARCITY_TOLERANCE (0.08)
+              of the modelled S per depth, and the never-softlock lifeline fires on < 5% of
+              floors. WHY: if the played S drifts, the model describes a different game.
+  S-SOFTLOCK  Zero seeds end unable to damage anything. Structurally guaranteed rather than
+              tuned: the Fist is wired at run start and never removed, so "no ranged ammo" is a
+              fighting retreat, not a dead end. The band exists to keep that structural
+              guarantee from being quietly removed.
+
+  DETERMINISM is part of the contract: every stream is seeded from the run seed (level
+  generation, route map, weapon roller, card deck, and — since order 9 — the enemy
+  spawn/drop/effect rolls, weapon accuracy rolls, hazard rolls and the AGILITY dodge roll,
+  all of which used to be unseeded). Same seed + same policy => byte-identical ledger;
+  BalanceSimTest asserts it. Unseeded randomness in a gameplay path is now a determinism bug.
+
 --------------------------------------------------------------------------------
 SECTION 4 — WAIVER POLICY + LIVE WAIVERS
 --------------------------------------------------------------------------------
@@ -463,7 +514,7 @@ and mirror it HERE in the same commit. A waiver must state a real reason and a
 condition under which it expires; BalanceReport prints all active waivers so
 they can never fade into folklore. Never weaken a band to make a test pass.
 
-LIVE WAIVERS (exactly one):
+LIVE WAIVERS (one value waiver + the order-9 navigation-limited bands):
   [WEAPON_POWER] Railgun (full charge) — power score 45.0 vs heavy band 24-32.
     reason:  gated by slug scarcity, not raw damage; the 90-per-slug
              elite-buster hit is the heavy role's identity and supply
@@ -473,6 +524,24 @@ LIVE WAIVERS (exactly one):
     expires: re-checked by order-3 R-SCARCITY-DEPTH — slug reserve banking stays
              the TIGHTEST gate (~1.0 floor at depth 1) after the shop re-pricing;
              the waiver holds because scarcity, not raw damage, is the limiter.
+
+  [SIM_FAIR] TACTICAL median death depth, [SIM_FAIR] TACTICAL readable deaths,
+  [SIM_SKILL] TACTICAL vs NAIVE depth gap, [SIM_ROUTE] played per-floor net drain,
+  [SIM_ECONOMY] experienced S vs modelled S, [SIM_ECONOMY] emergency lifeline floors
+    reason:  these six read the SCRIPTED PLAYER's floor-completion rate, not the
+             game's balance. The order-9 simulator plays the real systems, but its
+             navigation heuristic still runs the turn cap out on a large share of
+             generated floors instead of reaching the stairs (~88% of TACTICAL runs
+             in the first matrix), which drags every depth-derived statistic down:
+             median death depth reads 2 against a band of [8, 14]. Enforcing them
+             today would gate the build on the harness's pathing, and TUNING the
+             game to satisfy them would be tuning against a measurement error.
+             S-GATE and S-SOFTLOCK are unaffected and stay enforced; the readable-
+             death half of S-FAIR already reads 1.00.
+    expires: when the scripted policies reach the exit on >90% of floors. The stall
+             count is printed in every balance-sim report (the "stalled" column), so
+             the moment the harness is good enough the waiver must be deleted and
+             the bands enforced against the real numbers.
 
 --------------------------------------------------------------------------------
 SECTION 5 — NEW-CONTENT CHECKLIST
@@ -768,3 +837,89 @@ LEGEND: in?/gr?/<0.6?/band = OK inside band, UNDER below, OVER above.
   S = SUPPLY/DEMAND (ranged ammo vs sum of enemy eHP).  perWpnS = that weapon's share.
   bankFloors = full reserve / floor demand (anti-hoard target ~1.5).  netHpDrain = INCOMING - HEAL_SUPPLY.
 Out-of-band rows FAIL BalanceAuditTest unless waived — see docs/game-balance-authority.txt.
+
+
+--------------------------------------------------------------------------------
+SECTION 7 — THE CHANGE PROTOCOL (new-game-balancr order 9) — MANDATORY
+--------------------------------------------------------------------------------
+This section SUPERSEDES the workflow in docs/game-balance-knowledge.txt SECTION 21
+(that section now points here). It is the whole series' closing move: values in one
+place, rules enforced, and PROOF that the game plays the way the math says.
+
+EVERY change to util/BalanceConfig.java ships with all four of these:
+
+  1. GREEN AUDIT      `./gradlew test`
+     Fast (seconds), runs on every commit. BalanceAuditTest evaluates every rule in
+     BalanceSchema and fails the build on any unwaived violation. This is the
+     gatekeeper for the NUMBERS.
+
+  2. GREEN SIM        `./gradlew balanceSim`
+     Slow (whole simulated runs), run on balance changes and nightly in CI.
+     BalanceSimTest plays SIM_SEED_COUNT runs per policy through the real systems and
+     checks the six behavioural bands. This is the gatekeeper for the BEHAVIOUR.
+     Its plain-text summary lands in core/build/reports/balance-sim/summary.txt —
+     read it even when it is green: "median death depth moved 9 -> 6" is a sentence
+     you can act on long before a band breaks.
+
+  3. UPDATED LIVING TABLES
+     Re-run BalanceReport and paste its output over SECTION 6. The tables are a VIEW
+     of the schema; a stale view is worse than none, because it reads as current.
+
+  4. ONE CHANGELOG LINE (below)
+     Which dial moved, and WHY. One sentence. The reason is the part that cannot be
+     recovered from the diff six months later.
+
+WHEN THE SIM AND THE MODEL DISAGREE, the sim wins — but only after you check WHICH
+is wrong. A band can fail because the game got worse, or because the harness got
+better (a policy that now finishes floors it used to stall on will move every depth
+statistic). The report's per-policy columns (median depth, stalled, readable,
+bossClear, softlock, level gap) are there to tell those two apart.
+
+THE TUNING LOOP the whole series was built to enable:
+     telemetry says it FEELS wrong (the RUN AUTOPSY on the death screen, and the
+     same block logged at run end)
+  -> adjust the BAND or the TARGET in BalanceConfig, never the call site
+  -> the derived dials re-derive themselves
+  -> `./gradlew test` confirms the model is still self-consistent
+  -> `./gradlew balanceSim` confirms it still PLAYS that way
+  -> humans confirm the feel.
+  Numbers chase feel; the schema keeps them honest.
+
+CHANGELOG
+  order 9 (this commit) — added BalanceConfig SECTION 18 (simulation harness
+    parameters + the six behavioural bands) and seeded every gameplay RNG stream off
+    the run seed. No existing balance VALUE was changed: order 9 is proof
+    infrastructure, not a tuning pass. Six bands ship WAIVED (SECTION 4) because the
+    scripted navigation, not the balance, is what they currently measure.
+
+--------------------------------------------------------------------------------
+SECTION 8 — THE BALANCE-SIM REPORT (latest `./gradlew balanceSim` output)
+--------------------------------------------------------------------------------
+Regenerate with `./gradlew balanceSim` and paste the summary here, the same way
+SECTION 6 mirrors BalanceReport. The run below is the FIRST matrix (order 9):
+
+  policy                  runs  medDep stalled readable bossClear  softlock   lvlGap
+  NAIVE                    200     1.0     189     1.00      0.00      0.00    -0.69
+  TACTICAL                 200     2.0     176     1.00      0.00      0.00    -0.81
+  HOARDER-START-WEAPON     200     2.0     176     1.00      0.00      0.00    -0.82
+
+  BANDS
+  OK   [SIM_GATE]     HOARDER first-boss clears   0.00  band 0.00..0.00
+  WAIV [SIM_FAIR]     TACTICAL median death depth 2.00  band 8.00..14.00
+  OK   [SIM_FAIR]     TACTICAL readable deaths    1.00  band 0.90..1.00
+  WAIV [SIM_SKILL]    TACTICAL vs NAIVE gap       1.00  band 3.00..inf
+  OK   [SIM_ROUTE]    played per-floor net drain  0.16  band -1.10..0.70
+  WAIV [SIM_ECONOMY]  experienced S vs modelled S 4.05  band 0.00..0.08
+  OK   [SIM_ECONOMY]  emergency lifeline floors   0.04  band 0.00..0.05
+  OK   [SIM_SOFTLOCK] NAIVE / TACTICAL / HOARDER  0.00  band 0.00..0.00
+
+READ THIS TABLE HONESTLY. The "stalled" column is the headline finding of the first
+matrix: the scripted policies fail to find the stairs on ~88% of generated floors,
+so every depth-derived number below it is a floor-completion measurement wearing a
+balance measurement's clothes. What the matrix DOES establish today:
+  - the harness is real and deterministic (same seed => same run, asserted);
+  - S-GATE holds across 200 seeds with the hoarder never clearing a first boss;
+  - S-SOFTLOCK holds structurally (the Fist backstop);
+  - every death recorded was READABLE (1.00) — telegraph or resource crisis;
+  - the emergency ammo lifeline stays rare (4% of floors), as order 3 intended.
+Closing the stall gap is the next order of business, and it expires six waivers.

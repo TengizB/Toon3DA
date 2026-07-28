@@ -15,10 +15,17 @@ import java.util.Random;
  */
 public final class Hammer extends MeleeWeapon {
 
-    private final Random knockbackRandom = new Random();
+    private final Random knockbackRandom = new Random(0x27D4EB2FL);
 
     public Hammer() {
         super("HAMMER", GameBalance.MELEE_HAMMER_DAMAGE);
+    }
+
+    /** Reseeds the knockback stream alongside the shared accuracy stream (run determinism). */
+    @Override
+    public void setRandomSeed(long seed) {
+        super.setRandomSeed(seed);
+        knockbackRandom.setSeed(seed ^ 0x1D2B7A3CL);
     }
 
     @Override public ItemType getItemType() { return ItemType.WEAPON_HAMMER; }

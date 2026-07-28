@@ -957,6 +957,12 @@ Do not present any current number to a user as a finished, correct value.
 ================================================================================
 SECTION 21 — HOW TO CHANGE BALANCE SAFELY (workflow for future sessions)
 ================================================================================
+SUPERSEDED by THE CHANGE PROTOCOL — docs/game-balance-authority.txt SECTION 7
+(new-game-balancr order 9). That protocol is now the authority: every BalanceConfig
+change ships with (1) a green `./gradlew test`, (2) a green `./gradlew balanceSim`
+(the behavioural bands, played through the real systems), (3) regenerated living
+tables, and (4) one CHANGELOG line saying which dial moved and why. The steps below
+remain accurate as the DETAIL of step 1-2; read the protocol first.
   1. Change the number in util/BalanceConfig.java (the single source of truth —
      since order 1 EVERY gameplay magnitude lives there; the other *Constants
      files only re-export it).

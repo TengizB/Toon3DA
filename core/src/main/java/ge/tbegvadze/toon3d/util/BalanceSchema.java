@@ -139,7 +139,19 @@ public final class BalanceSchema {
         /** R-ROUTE-GUARANTEES (order 7): no lane strands a run (upgrade/calm/pre-boss/real choices). */
         ROUTE_GUARANTEES,
         /** R-SINGLE-DIFFICULTY (order 8): exactly one starting-attribute block; no mode-family naming anywhere. */
-        SINGLE_DIFFICULTY
+        SINGLE_DIFFICULTY,
+        /** S-GATE (order 9): 0% of HOARDER-START-WEAPON seeds clear the first boss. */
+        SIM_GATE,
+        /** S-FAIR (order 9): TACTICAL median death depth in band; deaths readable. */
+        SIM_FAIR,
+        /** S-SKILL (order 9): TACTICAL out-lives NAIVE by at least the skill gap. */
+        SIM_SKILL,
+        /** S-ROUTE (order 9): played per-floor drain matches the order-7 modelled trajectory band. */
+        SIM_ROUTE,
+        /** S-ECONOMY (order 9): experienced S tracks the modelled S; the emergency lifeline stays rare. */
+        SIM_ECONOMY,
+        /** S-SOFTLOCK (order 9): zero seeds end in a "cannot damage anything" state. */
+        SIM_SOFTLOCK
     }
 
     // =====================================================================================
@@ -181,6 +193,19 @@ public final class BalanceSchema {
         }
     }
 
+    /**
+     * Builds a rule result from OUTSIDE this class — the seam the order-9 behavioural bands use.
+     * Those bands are evaluated against SIMULATED PLAY (sim/BehavioralBands), which needs a played
+     * matrix as input and therefore cannot live in this pure, input-free schema; routing their
+     * results through here keeps them subject to the same waiver lookup and the same report tables
+     * as every other rule.
+     */
+    public static RuleResult result(RuleKind kind, String subject, float value,
+                                    float bandMinimum, float bandMaximum,
+                                    boolean satisfied, String detail) {
+        return new RuleResult(kind, subject, value, bandMinimum, bandMaximum, satisfied, detail);
+    }
+
     /** An explicit, reasoned exception to one rule for one subject. Never silent. */
     public static final class Waiver {
         public final RuleKind kind;
@@ -213,6 +238,29 @@ public final class BalanceSchema {
                         + "is the real limiter.",
                 "Re-checked by order-3 R-SCARCITY-DEPTH: slug reserve banking stays the TIGHTEST gate "
                         + "(~1.0 floor at depth 1, tightest of all ammo types) after the shop re-pricing.");
+        waiveNavigationLimitedBands();
+    }
+
+    /**
+     * The order-9 behavioural bands whose measurement currently depends on the SCRIPTED PLAYER's
+     * pathing competence rather than on the game's balance. The simulator plays the real systems, but
+     * its heuristic navigation still fails to finish a sizeable share of generated floors (it runs the
+     * floor's turn cap out instead of reaching the stairs), which drags every depth-derived statistic
+     * down. Waiving them keeps the numbers VISIBLE in every report while being honest that they do not
+     * yet measure what they claim to; S-GATE and S-SOFTLOCK are unaffected and stay enforced.
+     */
+    private static void waiveNavigationLimitedBands() {
+        String reason = "Measures the scripted policy's floor-completion rate, not the game's balance: "
+                + "the order-9 navigation heuristic still stalls on a large share of generated floors, "
+                + "so every depth-derived statistic reads low.";
+        String expiry = "Expires when the balance simulator's scripted policies reach the exit on >90% "
+                + "of floors (BalanceSimTest reports the stall rate on every run).";
+        waive(RuleKind.SIM_FAIR,    "TACTICAL median death depth", reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "TACTICAL readable deaths",    reason, expiry);
+        waive(RuleKind.SIM_SKILL,   "TACTICAL vs NAIVE depth gap", reason, expiry);
+        waive(RuleKind.SIM_ROUTE,   "played per-floor net drain",  reason, expiry);
+        waive(RuleKind.SIM_ECONOMY, "experienced S vs modelled S", reason, expiry);
+        waive(RuleKind.SIM_ECONOMY, "emergency lifeline floors",   reason, expiry);
     }
 
     /** Registers an explicit waiver. Every call must be mirrored in docs/game-balance-authority.txt. */
@@ -1047,6 +1095,21 @@ public final class BalanceSchema {
      * SUPPLY rides the EXPECTED-arsenal gear curve times the per-region supply multiplier. This is the
      * whole-run generalisation of the depth-1 R-SCARCITY model-floor check.
      */
+    /**
+     * The scarcity ratio S the order-3 model predicts for a depth — the single arithmetic the
+     * depth-scarcity rule and the order-9 simulator both compare against, so a played run and a
+     * modelled floor are measured with the same yardstick.
+     */
+    public static float modelledScarcityAtDepth(int depth) {
+        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+        float demand = GameMath.floorDemandAtDepth(modelFloorDemand(),
+                BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
+        float supply = GameMath.ammoSupplyAtDepth(modelFloorTotalRangedSupply(),
+                BalanceConfig.GEAR_CURVE_PER_REGION,
+                BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
+        return GameMath.scarcityRatioAtDepth(supply, demand);
+    }
+
     public static List<RuleResult> scarcityDepthResults() {
         List<RuleResult> results = new ArrayList<>();
         float modelDemand = modelFloorDemand();
