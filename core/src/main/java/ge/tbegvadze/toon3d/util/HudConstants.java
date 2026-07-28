@@ -83,6 +83,10 @@ public final class HudConstants {
     public static final float DEATH_OVERLAY_SUBHEAD_Y_BELOW_TOP  = 100f;
     public static final float DEATH_OVERLAY_FIRST_STAT_Y_BELOW_TOP = 175f;
     public static final float DEATH_OVERLAY_STAT_LINE_STEP        = 48f;
+    // RUN AUTOPSY block (new-game-balancr order 9) — six compact lines under the stat block.
+    public static final float DEATH_OVERLAY_AUTOPSY_SCALE          = 0.85f;
+    public static final float DEATH_OVERLAY_AUTOPSY_Y_BELOW_STATS  = 46f;
+    public static final float DEATH_OVERLAY_AUTOPSY_LINE_STEP      = 26f;
     // Y positions relative to panel bottom (PANEL_Y)
     public static final float DEATH_OVERLAY_FLAVOR_Y_ABOVE_BOTTOM = 130f;
     public static final float DEATH_OVERLAY_PROMPT_Y_ABOVE_BOTTOM = 50f;

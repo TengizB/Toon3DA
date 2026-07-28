@@ -8,6 +8,7 @@ import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.door.DoorState;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.*;
+import ge.tbegvadze.toon3d.input.touch.ActionSource;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
 import ge.tbegvadze.toon3d.input.touch.TouchInputState;
 import ge.tbegvadze.toon3d.item.AmmoType;
@@ -40,7 +41,7 @@ public class PlayerController {
     private EnemyManager            enemyManager                      = null;
     private BarrelHitTarget         barrelHitTarget                   = null;
     private LevelTransitionListener transitionListener                = null;
-    private TouchInputState         touchInputState                   = null;
+    private ActionSource            actionSource                      = null;
     private EventTextSystem         eventTextSystem                   = null;
     private MoveBlockedListener     moveBlockedListener               = null;
     private Runnable                weaponSwitchCallback              = null;
@@ -104,7 +105,16 @@ public class PlayerController {
     }
 
     public void setTouchInputState(TouchInputState state) {
-        this.touchInputState = state;
+        this.actionSource = state;
+    }
+
+    /**
+     * Injects an arbitrary {@link ActionSource} — the seam the headless balance simulator
+     * (new-game-balancr order 9) uses to drive this controller from a scripted policy. On device the
+     * source is always the {@link TouchInputState} thumb cluster (see {@link #setTouchInputState}).
+     */
+    public void setActionSource(ActionSource source) {
+        this.actionSource = source;
     }
 
     public void setWeaponSwitchCallback(Runnable callback) {
@@ -479,10 +489,10 @@ public class PlayerController {
     }
 
     private void pollInput() {
-        if (touchInputState == null) return;
+        if (actionSource == null) return;
 
-        TouchAction heldAction = touchInputState.getHeldAction();
-        TouchAction tapAction  = touchInputState.consumeTapAction();
+        TouchAction heldAction = actionSource.getHeldAction();
+        TouchAction tapAction  = actionSource.consumeTapAction();
 
         // If the player is stunned, any input attempt wastes the turn.
         if (player.hasActiveStun()) {

@@ -201,6 +201,7 @@ Root package (`ge.tbegvadze.toon3d`) is reserved for `Main.java` only.
 | `…toon3d.route` | Branching route-map subsystem: node/generator registries, run-seeded map data model, plus the PRICED map — `NodeEconomics`/`NodeEconomicsRegistry`/`RouteEconomics` (the node EV ledger) and `RouteEconomicsModel` (pricing, path policies, route guarantees). Headless, no LibGDX imports |
 | `…toon3d.render.routeicons` | Procedural route-map node icons + region crests: IconPainter/RegionCrestPainter registries, one painter per node type/region, shared RouteGlyphs + RouteIconSupport (ShapeRenderer primitives only, no assets) |
 | `…toon3d.tileset` | Symbol/sprite-reuse tileset subsystem (headless, no LibGDX imports): `TileCategory`, `EnvironmentSpriteDefinition` + `EnvironmentSpriteRegistry`, `TilesetRegistries.bootstrap()` — the data-driven art catalog of every wall/column/prop/decal sprite; `SymbolBudget` (FIXED/FLEXIBLE split) + `SymbolCategories`; `LevelPalette` + `LevelPalettes.legacy()` (per-level symbol→category+sprite binding, carried by `Level`); `SymbolAllocator` (deterministic per-level palette engine); `RoomBlueprint` + `RoomBlueprintRegistry` room demands. See `docs/environment-tileset-system.txt`. |
+| `…toon3d.sim` | Headless BALANCE SIMULATOR (new-game-balancr order 9): `SimWorld` plays whole runs turn-by-turn through the REAL systems with a scripted `PlayerPolicy` (NAIVE / TACTICAL / HOARDER-START-WEAPON) instead of touch input; `BalanceSimulator` runs the seed matrix, `BehavioralBands` evaluates the six S-* bands, `SimReport` writes the summary. No LibGDX render state; drives the real `PlayerController` through the `ActionSource` seam. See `docs/game-balance-authority.txt` SECTION 7. |
 | `…toon3d.render.tilesetgfx` | Render-layer half of the tileset subsystem (MAY import LibGDX): `TextureGeneratorRegistry` (sprite id → procedural texture generator, `TilesetGfxBootstrap`) + `EnvironmentTextureSet` (per-level realized textures for only the palette's sprites; `Disposable`). Turns headless sprite ids into pixels. See `docs/environment-tileset-system.txt`. |
 
 New class: pick the most specific matching package. If none fits, add a subpackage and document it here.
@@ -414,6 +415,7 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 | Route map / branching descent (nodes, generators, special levels, regions, events) | `docs/route-map-system.txt` |
 | Turn/tick system architecture | `docs/tick-system.txt` |
 | Game balance — current state, every number/system/formula and known problems | `docs/game-balance-knowledge.txt` |
+| Balance CONTRACT: the schema, the waivers, the behavioural bands, THE CHANGE PROTOCOL | `docs/game-balance-authority.txt` |
 | XP and leveling system | `docs/xp-level-progression.txt` |
 | Level design philosophy | `docs/level-design-context.txt` |
 | Doom RPG design inspiration | `docs/doom-rpg-reference.txt` |
@@ -590,7 +592,10 @@ batch.draw(wallTexture,
 ```bash
 ./gradlew lwjgl3:run    # Desktop run
 ./gradlew build         # Full build
-./gradlew test          # Tests
+./gradlew test          # Fast gate: unit tests + the whole balance audit (every commit)
+./gradlew balanceSim    # Slow gate: plays the balance simulation matrix, checks the
+                        # behavioural bands (run on any BalanceConfig change; see
+                        # docs/game-balance-authority.txt SECTION 7 — THE CHANGE PROTOCOL)
 ```
 
 ## Dependencies

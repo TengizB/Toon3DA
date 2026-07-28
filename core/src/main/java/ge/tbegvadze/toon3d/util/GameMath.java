@@ -4820,4 +4820,45 @@ public final class GameMath {
         float wrapped = rawDifference - MathUtils.PI2 * MathUtils.floor((rawDifference + MathUtils.PI) / MathUtils.PI2);
         return Math.abs(wrapped);
     }
+
+    /*
+     * Formula: vitalityFraction
+     * Derivation:
+     *   The marine's survivability pool is health PLUS armour: armour absorbs a fixed
+     *   fraction of every incoming hit, so a full armour bar is real staying power, not
+     *   decoration. The fraction is therefore the combined current pool over the combined
+     *   maximum pool:
+     *     vitality = (health + armor) / (maxHealth + maxArmor)
+     *   This is the single number a "how close am I to dying" check should read; health
+     *   alone under-reports danger at full armour and over-reports it at zero armour.
+     * Edge cases:
+     *   maxHealth + maxArmor == 0 (a degenerate/unconfigured player) returns 0 instead of
+     *     dividing by zero.
+     *   Values above the maxima (over-heal) can return > 1; callers that need a probability
+     *     should clamp. Negative current values are impossible (both pools floor at zero).
+     */
+    public static float vitalityFraction(int health, int armor, int maxHealth, int maxArmor) {
+        int maximumPool = maxHealth + maxArmor;
+        if (maximumPool <= 0) return 0f;
+        return (health + armor) / (float) maximumPool;
+    }
+
+    /*
+     * Formula: floorSeed
+     * Derivation:
+     *   splitmix-style mixing — multiplying the run seed by a large odd prime (the golden-ratio
+     *   64-bit constant 0x9E3779B97F4A7C15) distributes its bits across the whole word, then
+     *   adding the depth guarantees a distinct seed per floor even when two run seeds differ
+     *   only in their low bits:
+     *       floorSeed(runSeed, depth) = runSeed * 0x9E3779B97F4A7C15 + depth
+     *   Every per-floor stream (level generation, enemy spawn/drop/effect rolls, hazards, the
+     *   shop roll) derives from this one value, which is what makes a run reproducible from its
+     *   run seed alone (the order-9 determinism contract).
+     * Edge cases:
+     *   long overflow wraps, which is intended (the multiply is modulo 2^64).
+     *   depth = 0 is valid and yields the pre-descent (staging) seed.
+     */
+    public static long floorSeed(long runSeed, int depth) {
+        return runSeed * 0x9E3779B97F4A7C15L + depth;
+    }
 }

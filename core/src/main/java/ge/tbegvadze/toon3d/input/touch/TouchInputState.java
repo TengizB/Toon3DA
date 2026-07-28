@@ -5,7 +5,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import ge.tbegvadze.toon3d.util.TouchConstants;
 
-public final class TouchInputState extends InputAdapter {
+public final class TouchInputState extends InputAdapter implements ActionSource {
 
     // Ordered by action priority: index 0 = highest priority
     private static final int INDEX_FORWARD         = 0;
@@ -130,6 +130,7 @@ public final class TouchInputState extends InputAdapter {
     }
 
     /** Returns the highest-priority currently-pressed held action (movement), or NONE. */
+    @Override
     public TouchAction getHeldAction() {
         for (TouchButton button : buttons) {
             if (button.pressed && !button.tapOnly) return button.action;
@@ -142,6 +143,7 @@ public final class TouchInputState extends InputAdapter {
      * First checks the immediate pending slot (same-frame tap); falls through to the
      * cross-frame buffer if valid. Returns NONE when nothing is waiting.
      */
+    @Override
     public TouchAction consumeTapAction() {
         if (pendingTapAction != TouchAction.NONE) {
             TouchAction tap   = pendingTapAction;

@@ -16,8 +16,32 @@ dependencies {
   testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }
 
+// FAST GATE — every commit. Runs the whole schema audit (orders 1-8) plus the ordinary unit tests,
+// and EXCLUDES the order-9 behavioural bands, which play thousands of simulated turns.
 test {
-  useJUnitPlatform()
+  useJUnitPlatform {
+    excludeTags 'balanceSim'
+  }
+}
+
+// SLOW GATE — `./gradlew balanceSim`, run on balance changes and nightly in CI. Plays whole runs
+// through the real systems and checks the six behavioural bands (new-game-balancr order 9). Writes a
+// plain-text summary to core/build/reports/balance-sim/summary.txt.
+tasks.register('balanceSim', Test) {
+  description = 'Plays the balance simulation matrix and checks the behavioural bands (order 9).'
+  group       = 'verification'
+  testClassesDirs = sourceSets.test.output.classesDirs
+  classpath       = sourceSets.test.runtimeClasspath
+  useJUnitPlatform {
+    includeTags 'balanceSim'
+  }
+  // Whole simulated runs are memory-light but CPU-hungry; the matrix parallelises internally.
+  maxHeapSize = '2g'
+  testLogging {
+    showStandardStreams = true
+    events 'passed', 'failed', 'skipped'
+  }
+  outputs.upToDateWhen { false }   // a simulation gate must actually run when asked
 }
 
 jar {

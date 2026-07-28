@@ -3,7 +3,6 @@ package ge.tbegvadze.toon3d.entity;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.render.Renderable;
@@ -33,7 +32,12 @@ public class Player implements Renderable, Disposable, StatusHost {
     private int armor;
     private int maxArmor;
 
-    private final ShapeRenderer shapes;
+    /**
+     * Mini-map dot/wedge renderer. Created LAZILY on the first {@link #render} call: a ShapeRenderer
+     * allocates GL resources, and the headless balance simulator (new-game-balancr order 9) builds
+     * real Player instances with no GL context. Never touched by any simulation path.
+     */
+    private ShapeRenderer shapes;
     private PlayerDamageListener damageListener;
     private GuardHitListener     guardHitListener;
 
@@ -44,6 +48,18 @@ public class Player implements Renderable, Disposable, StatusHost {
      * turn it buys and until the player's next action.
      */
     private boolean guarding = false;
+
+    /**
+     * The AGILITY dodge roll's RNG. SEEDED (see {@link #setRandomSeed}) so a run replays identically
+     * from its run seed — the determinism contract the order-9 balance simulator audits
+     * (R-SIM-DETERMINISM). Was {@code MathUtils.random()}, a process-global unseeded generator.
+     */
+    private final java.util.Random dodgeRandom = new java.util.Random(0x9E3779B97F4A7C15L);
+
+    /** Reseeds the dodge roll so the same run seed always replays the same dodges. */
+    public void setRandomSeed(long seed) {
+        dodgeRandom.setSeed(seed);
+    }
 
     /**
      * Stat system — injected by World after construction.
@@ -68,7 +84,7 @@ public class Player implements Renderable, Disposable, StatusHost {
         this.directionX         = directionX;
         this.directionY         = directionY;
         this.fieldOfViewRadians = Constants.PLAYER_FIELD_OF_VIEW_RADIANS;
-        this.shapes             = new ShapeRenderer();
+
         this.maxHealth          = ItemConstants.PLAYER_MAX_HEALTH;
         this.health             = this.maxHealth;
         this.maxArmor           = ItemConstants.PLAYER_MAX_ARMOR;
@@ -286,7 +302,7 @@ public class Player implements Renderable, Disposable, StatusHost {
         // (a) AGILITY dodge roll — checked before armour or toughness.
         if (playerStats != null) {
             float dodgeChance = playerStats.getDodgeChance();
-            if (dodgeChance > 0f && MathUtils.random() < dodgeChance) {
+            if (dodgeChance > 0f && dodgeRandom.nextFloat() < dodgeChance) {
                 // Dodge: entire hit negated; listener not called (no HP change).
                 return;
             }
@@ -372,6 +388,7 @@ public class Player implements Renderable, Disposable, StatusHost {
 
     @Override
     public void render(OrthographicCamera camera) {
+        if (shapes == null) shapes = new ShapeRenderer();   // first draw: on the GL thread by contract
         float dotX = Constants.MINI_MAP_ORIGIN_X + Constants.MINI_MAP_CENTER_X;
         float dotY = Constants.MINI_MAP_ORIGIN_Y + Constants.MINI_MAP_CENTER_Y;
 
@@ -400,6 +417,6 @@ public class Player implements Renderable, Disposable, StatusHost {
 
     @Override
     public void dispose() {
-        shapes.dispose();
+        if (shapes != null) shapes.dispose();
     }
 }
