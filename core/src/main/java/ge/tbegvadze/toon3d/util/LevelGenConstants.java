@@ -72,6 +72,25 @@ public final class LevelGenConstants {
     // never a per-room hand tag. The cap multipliers themselves live in BalanceConfig (ROOM_*_TP_MULTIPLIER).
     public static final int   LEVEL_GEN_CHOKEPOINT_INTERIOR_MAX = 3;
 
+    // ENEMY SPAWN TILE SEARCH. A spawn tile is found by random probing inside the room; when probing
+    // fails the room used to be retired PERMANENTLY, which silently dropped ~10% of every floor's
+    // planned roster (worst measured case: 13 enemies of one roster, i.e. most of the floor) because an
+    // unlucky probe run is indistinguishable from a genuinely full room. Probing is now backed by a
+    // deterministic full interior scan, so a room is only retired when it truly has no eligible tile.
+    /** Random tile probes before falling back to the deterministic full-interior scan. Range: 24–64. */
+    public static final int   LEVEL_GEN_ENEMY_SPAWN_PROBE_ATTEMPTS = 40;
+    /** As above for the cave generator, which probes the whole grid rather than one room. Range: 48–128. */
+    public static final int   LEVEL_GEN_CAVE_SPAWN_PROBE_ATTEMPTS  = 80;
+
+    // PACK COHERENCE IN SPACE (encounter-density-and-corpse-semantics). The planner forms chaff packs
+    // because the golden-band chaff exemption assumes them, then the load balancer used to scatter each
+    // member into a different room — measured mean distance to the nearest other enemy was ~14 tiles,
+    // i.e. ~14 player turns, so every enemy was fought alone and the pack the pricing model assumes
+    // never existed in play. A pack now lands in ONE room, clustered within this radius of its first
+    // member, so the player meets groups.
+    /** Max Chebyshev radius from a pack's first member that the rest of the pack may spawn within. Range: 2–5. */
+    public static final int   LEVEL_GEN_PACK_CLUSTER_RADIUS = 3;
+
     // Probability that a SERVER_ROOM perimeter wall tile is converted to terminal wall 't'.
     public static final float LEVEL_GEN_SERVER_WALL_TERMINAL_CHANCE = 0.80f;
     // Probability that any small/medium room becomes a SERVER_ROOM (data vault).

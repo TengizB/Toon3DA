@@ -1,0 +1,349 @@
+STATUS: IMPLEMENTED
+CATEGORY: Systems
+TITLE: Encounter density: spend the budget in BODIES, keep packs whole
+---
+
+## THE COMPLAINT
+
+"Levels seem too empty, too few enemies are spawning — or maybe there is a bug
+where they are somehow killed by themselves, because there are corpses. One level
+was generated without any enemies."
+
+Both halves of that report are real defects, and neither is what it looks like.
+Nothing is dying on its own. The floors genuinely are near-empty — but not because
+the Threat-Point budget is too small. The budget is fine; it is being CONVERTED
+into bodies badly, and on a low-budget floor it is barely converted at all.
+
+Every number below was measured headlessly against the generators on this branch
+(seeds 1..200, depths 1/2/3/5/8/12), not estimated.
+
+
+## THE EVIDENCE
+
+### A. A CACHE floor contains exactly ONE enemy
+
+CacheProfile builds a FULL-SIZE dungeon — GeneratorId.ROOMS_MST, 80x45, ~1,100
+walkable tiles — and applies EnemyBudgetOverride.calm() = ROUTE_CALM_BUDGET_SCALE
+= 0.28. Measured over 100 seeds:
+
+    CACHE/CALM 0.28   depth=1   avg=1.0  min=1  max=1   (100 seeds)
+    CACHE/CALM 0.28   depth=3   avg=1.0  min=1  max=1   (100 seeds)
+    CACHE/CALM 0.28   depth=8   avg=3.0  min=3  max=3   (100 seeds)
+
+Not "about one" — EXACTLY one, on every seed, with zero variance. One Shell Brute
+in a thousand-tile dungeon. CACHE is NODE_WEIGHT_CACHE=14 of 100 route weight, so
+roughly one floor in seven is this.
+
+The trace that explains it (depth 1, scale 0.28):
+
+    budget = 126    anchor SHELL_BRUTE = 96    leftover = 30
+    maxPerType = 126 * ENCOUNTER_MAX_SINGLE_TYPE_FRACTION(0.40) = 50
+    cheapest chaff PACK = CRAWLER 16.56 * CHAFF_PACK_MIN(2) = 33  >  leftover 30
+    => chooseFill returns null on its first call => roster = [SHELL_BRUTE]
+
+Two independent bugs stack to produce it:
+
+### B. PROBLEM 1 — the anchor reserve is bypassed on small budgets
+
+EncounterBudgetPlanner.chooseAnchor picks a reserve fraction in
+[ENCOUNTER_ANCHOR_BUDGET_FRACTION_MIN 0.15, _MAX 0.30] and takes the largest anchor
+that fits it. When nothing fits, it falls through to:
+
+    "Nothing fits the reserve — place the cheapest anchor that fits the WHOLE
+     budget so the floor still has a defining threat"
+
+On a 126 TP budget that fallback spends 96 TP — 76% of the floor — on one body.
+The 15-30% reserve rule, the whole point of composition rule 1, is not a rule at
+all: it is a preference with an unbounded escape hatch. A "defining threat" that
+consumes three quarters of the floor does not define the floor, it IS the floor.
+
+### C. PROBLEM 2 — the remainder is unspendable, and silently discarded
+
+CHAFF_PACK_MIN = 2 (order-5 pack coherence) means chooseFill only OFFERS a chaff
+type when a full minimum pack fits. That is correct on a full floor. On a small
+floor it means the last 20-30% of the budget can never be spent: the leftover buys
+one chaff but not two, so the fill loop breaks immediately and the change is thrown
+away. The budget was authorised; the bodies were not delivered.
+
+Measured budget utilisation in BODIES (not TP) is 76% on a CALM floor. On a
+standard floor it is ~99%, which is why the bug is invisible at scale 1.0.
+
+### D. PROBLEM 3 — placement is FRAGILE, but was not actually losing enemies
+
+CORRECTED FINDING. An earlier draft of this document claimed ~10% of planned
+enemies were being dropped in placement. That number was a MEASUREMENT ARTIFACT and
+is withdrawn: it compared the generator's placed count against a roster re-planned
+from a fresh Random(seed), which is a different RNG stream than the generator's own,
+so it was diffing two unrelated rosters. Instrumenting the generator itself
+(counting inside placeBudgetedEncounter, 300 seeds x depths 1/3/8/12) shows:
+
+    planned == placed exactly, loss = 0.00%, at every depth, BEFORE the fix.
+
+The real defect here is a latent one, not an observed loss. tryPlaceEnemyInRoom
+gives up after 40 random tile probes, and placeEnemyLoadBalanced then marks that
+room roomTilesExhausted PERMANENTLY — even though a probe miss is not evidence the
+room is full. Today the rosters are small enough relative to room area that the
+probes essentially always succeed, so nothing is lost; the failure mode is real but
+dormant, and it would surface exactly when rosters grow (which FIX 1/2 do, and which
+the depth body-count ramp in NON-GOALS would do much more).
+
+So the fix below is hardening, not a bug fix, and is worth doing on that basis
+alone: after the change a room is retired only when a deterministic full-interior
+scan proves it has no eligible tile. Loss stays 0.00% and can no longer become
+non-zero as rosters grow.
+
+### E. PROBLEM 4 — packs are formed, then shredded
+
+The planner goes to real trouble to add chaff in coherent packs of
+CHAFF_PACK_MIN..CHAFF_PACK_MAX (2..4), because the golden-band chaff exemption
+EXPLICITLY assumes packs: "a lone chaff reads a harmless ~9 golden ratio, balanced
+by pack TP". placeEnemyLoadBalanced then drops each roster entry into whichever
+room currently has the LOWEST depth-weighted load — which is a near-perfect
+algorithm for guaranteeing that the three members of a pack land in three
+different rooms.
+
+    mean manhattan distance to the nearest OTHER enemy:
+      depth  1  ->  13.9 tiles
+      depth  5  ->  13.5 tiles
+      depth 12  ->  10.8 tiles
+
+Fourteen tiles is fourteen player turns. Every enemy is fought alone. The pack
+that the pricing model assumes exists has never once existed in play, which means
+the chaff exemption has been pricing a fight the game does not contain.
+
+This is also the single biggest contributor to the FEEL of emptiness, independent
+of the raw count: 12 enemies met one at a time across 1,100 tiles reads as an
+abandoned facility. The same 12 in four groups of three reads as a defended one.
+
+### F. PROBLEM 5 — enemy COUNT is mathematically frozen across depth
+
+    GameMath.floorThreatPointBudget = base   * depthThreatScale(hp, dmg, depth)
+    GameMath.enemyThreatAtDepth     = baseTP * depthThreatScale(hp, dmg, depth)
+
+The SAME factor. Therefore budget/cost — the number of bodies the budget buys — is
+depth-invariant by construction. Confirmed empirically: the spawn histograms at
+depth 1 and depth 2 are byte-identical, and so are depth 3 and depth 5. Count only
+moves at all because the region-band multiplier and the elite-anchor depth gate
+perturb it:
+
+    depth  1 -> 12.4 enemies     depth  8 -> 13.5 enemies
+    depth 12 -> 15.8 enemies
+
+Twelve floors of descent buy 3 extra bodies. Deeper floors are stronger, never
+busier, and the composition is literally the same roster.
+
+NOTE: this one is DOCUMENTED HERE BUT DELIBERATELY NOT FIXED IN THIS PASS — see
+NON-GOALS. It cannot be fixed by adding budget without moving the R-DEPTH coupling
+curve, and that deserves its own order with its own audit run.
+
+### G. PROBLEM 6 — the corpse symbol lies to the player
+
+This is the "enemies killed themselves" half of the report, and it is a pure
+semantics bug.
+
+EnemyManager.killEnemy stamps 'm' at the dead enemy's tile — 'm' is the game's
+DEATH MARKER. The generator ALSO stamps 'm' as ambient atmosphere, at
+LevelGenConfig.corpseWeight = 0.14 of the prop budget. Measured per floor at
+depth 3:
+
+    corpse decals 'm' : 16.4        LIVE enemies : 11.7
+    blood '.'         : 16.7        oil 'O'      : 35.6
+    => 1.4 pre-placed corpses for every living enemy
+
+The player walks into a room they have never visited, sees corpses that are
+indistinguishable from the ones their own kills leave behind, and correctly infers
+that something died here — then reasonably concludes the enemies are killing
+themselves. The game told them that. There is no bug in the enemies; there is a
+bug in the vocabulary.
+
+Verified there is genuinely no self-kill mechanic: the Plague Hulk's self-destruct
+blast (applySelfDestructBlast) only ever tests the PLAYER's tile, and enemy ranged
+attacks do not detonate explosive barrels. Barrels damage enemies only when the
+PLAYER shoots them.
+
+### H. PROBLEM 7 — dead constants: EVENT / GATE budget scales
+
+    BalanceConfig.EVENT_BUDGET_SCALE = 0.15    GATE_BUDGET_SCALE = 0.10
+
+EventProfile and GateProfile pass these through as EnemyBudgetOverride.scaled(...).
+EventRoomGenerator and GateAirlockGenerator ignore the config entirely and hardcode
+an empty spawn list ("ZERO enemies — a story beat"). Meanwhile RouteEconomics
+prices both node rows at budgetScale(0f).
+
+Three sources of truth; two of them agree on 0 and the third claims 0.15/0.10. The
+constants are dead and actively misleading — anyone tuning EVENT difficulty would
+change a number that does nothing.
+
+(These floors being enemy-free is CORRECT and stays: MedBay/Event/Gate build small
+curated rooms — 131-222 walkable tiles, not 1,100 — so they read as a deliberate
+pacing beat, not an empty dungeon. Only the lying constants are the defect.)
+
+### I. PROBLEM 8 — the determinism gate is already RED
+
+LevelGeneratorSnapshotTest expects 42003771e27256491f15580cef9bff6bab221016eec8e456
+e6347697e1ace00c; the generator actually produces e8d312a1f01b1c88bd21b35e058dbf77
+ad08a4ba485de61f3ad28ce63d05f03d. Generation IS still deterministic — the digest is
+byte-stable across three separate JVM runs — the baseline was simply never
+re-based after a previous behaviour change. `./gradlew test` fails on master.
+
+
+## THE FIX
+
+Design constraint that shapes everything below: **every change is
+Threat-Point-NEUTRAL.** No floor's total TP spend moves. This matters because the
+route economics ledger (RouteEconomicsModel, R-CALM-COST, R-RISK-PREMIUM) prices
+nodes off budgetScale, and the depth-coupling rule R-DEPTH prices the floor's total
+threat. Converting the SAME budget into more, better-arranged bodies changes what
+the player meets without moving a single number the audit reads.
+
+### FIX 1 — the anchor reserve becomes a real ceiling
+
+Delete the "cheapest anchor that fits the whole budget" fallback. An anchor is
+placed only when its cost fits ENCOUNTER_ANCHOR_BUDGET_FRACTION_MAX of the budget.
+If no anchor fits that ceiling, the floor simply has no anchor and the full budget
+goes to fill — which is the honest description of a CALM floor anyway ("light
+stragglers", per CacheProfile's own doc comment).
+
+Standard floors are unaffected: at scale 1.0 depth 1, the ceiling is
+0.30 * 450 = 135 and SHELL_BRUTE costs 96, so the anchor still lands every time.
+Only budgets too small to afford a bruiser within its own reserve lose it.
+
+### FIX 2 — spend the remainder in bodies
+
+After the main fill loop, add a REMAINDER PASS: while budget is left, add the
+cheapest affordable single enemy (pack minimum relaxed to 1 for this pass only,
+per-type cap still enforced). This is the ONLY place a lone chaff may be created,
+and it exists precisely so authorised TP always becomes a body.
+
+Projected CALM depth-1 result: no anchor, ~126 TP of chaff => 6-8 light enemies
+instead of 1 bruiser. Same TP, same ledger, a floor that is actually populated and
+that finally matches the "light resistance" the node claims to be.
+
+### FIX 3 — placement retries instead of retiring rooms (HARDENING)
+
+- Move the hardcoded 40-probe budget into LEVEL_GEN_ENEMY_SPAWN_PROBE_ATTEMPTS
+  (and LEVEL_GEN_CAVE_SPAWN_PROBE_ATTEMPTS for the cave, which probes the whole
+  grid rather than one room).
+- On probe exhaustion, fall back to a DETERMINISTIC full scan of the room interior
+  (whole grid, for the cave) before declaring it exhausted. A room is retired only
+  when it truly has no eligible tile.
+
+Target: keep placement loss at the 0.00% it already measures, and keep it there as
+rosters grow. Not a fix for an observed loss — see the corrected PROBLEM 3.
+
+### FIX 4 — packs land together
+
+Add placePackTogether: when a chaff type appears as consecutive roster entries
+(which is exactly how the planner emits packs), place the whole pack into ONE room,
+on tiles near each other, and charge the room the pack's full TP. The load balancer
+still chooses WHICH room — it just receives the pack as one indivisible unit
+instead of N independent placements.
+
+This is what makes the chaff golden-band exemption honest for the first time, and
+it is the change that most directly answers "the level feels empty": the player
+meets groups.
+
+### FIX 5 — 'm' becomes exclusively a death marker
+
+The generator stops stamping 'm' as ambient decor. LevelGenConfig.corpses defaults
+to false and its prop weight is redistributed to the blood-stain decals, which
+already mean "combat happened here" without implying a body the player did not
+make. 'm' now means one thing only: SOMETHING DIED HERE DURING THIS RUN.
+
+No new symbol, no renderer change, no docs/tile-symbols.txt budget change — 'm'
+keeps its entry and its sprite, it just stops being generated as scenery. Blood
+'.', alt-blood 's', oil 'O' and scorch 'e' carry the aftermath atmosphere, which is
+what they are for.
+
+### FIX 6 — delete the lying constants
+
+EVENT_BUDGET_SCALE and GATE_BUDGET_SCALE go to 0f with a comment stating that
+these generators emit zero spawns BY DESIGN and that the ledger rows agree. The
+number now matches the behaviour and the price.
+
+### FIX 7 — re-baseline the determinism digest
+
+Re-base LevelGeneratorSnapshotTest from the post-change generator, with the reason
+recorded in its javadoc as every previous re-baseline has been. This is a
+deliberate, reviewed behaviour change: fixes 1-5 all perturb the RNG draw sequence.
+
+
+## NON-GOALS (deliberately out of scope for this pass)
+
+- **PROBLEM 5, depth-invariant body count.** Fixing it means giving the floor
+  budget a per-depth multiplier that is NOT applied to per-enemy cost, which moves
+  total floor threat and therefore the R-DEPTH coupling curve. That is a balance
+  change with its own audit obligations, not a bug fix. It belongs in its own
+  order alongside a re-derived depth curve.
+- **The waived simulator bands.** 6 of 8 behavioural bands are waived because the
+  scripted policy stalls on 88% of floors (median death depth 2.0 against a target
+  of 8-14). That is the sim NAVIGATOR's competence, not the game's balance, and the
+  waiver already says so. Worth noting here only because it explains why none of
+  the above was caught: the one gate that could measure "floors feel empty" is not
+  currently measuring anything.
+
+
+## TECHNICAL NOTES
+
+Files touched:
+  util/BalanceConfig.java              anchor ceiling behaviour, EVENT/GATE = 0f
+  util/LevelGenConstants.java          spawn probe attempts
+  level/EncounterBudgetPlanner.java    FIX 1 + FIX 2
+  level/LevelGenerator.java            FIX 3 + FIX 4 + FIX 5
+  level/LinearCorridorGenerator.java   FIX 3 + FIX 4
+  level/CavernGenerator.java           FIX 3
+  level/LevelGenConfig.java            corpses default false
+  test/.../LevelGeneratorSnapshotTest  re-baseline
+
+Invariants preserved:
+  - Determinism: same seed => same grid. All new randomness flows through the
+    existing seeded Random; the remainder pass and pack placement are ordered
+    deterministically.
+  - TP neutrality: no floor's total Threat-Point spend changes, so RouteEconomics,
+    R-CALM-COST, R-RISK-PREMIUM and R-DEPTH all read the same numbers.
+  - No new tile symbols (docs/tile-symbols.txt SYMBOL BUDGET unchanged).
+  - Ranged enemies still restricted to cardinal lines (isSameCardinalLine).
+
+Gates:
+  ./gradlew test         must be GREEN (it was RED before this change — see PROBLEM 8)
+  ./gradlew balanceSim   must stay GREEN with no NEW waivers
+
+
+## MEASURED RESULT (same harness as THE EVIDENCE, after implementation)
+
+Enemies per floor by node budget scale, 100 seeds each:
+
+    node                depth   before -> after
+    CACHE / CALM 0.28     1      1.0   ->  5.5   (min 1/max 1  ->  min 4/max 6)
+    CACHE / CALM 0.28     3      1.0   ->  5.6
+    CACHE / CALM 0.28     8      3.0   ->  5.5
+    SHOP  / LIGHT 0.50    1      5.1   ->  7.4
+    SHOP  / LIGHT 0.50    3      5.1   ->  7.7
+    COMBAT 1.00           1     12.4   -> 12.8   (unchanged by design)
+    COMBAT 1.00           3     11.7   -> 11.9
+    ELITE  1.50           3     18.7   -> 19.2
+    EVENT  (now 0f)      any     0.0   ->  0.0   (unchanged; constant now honest)
+    GATE   (now 0f)      any     0.0   ->  0.0   (unchanged; constant now honest)
+
+The CALM floor is the headline: 1 enemy -> 5.5, on the SAME 126 TP budget. Standard
+COMBAT floors move by less than a body, which is the intended shape of the change —
+the leak only ever mattered where the budget was small.
+
+Pack coherence, mean manhattan distance to the nearest OTHER enemy:
+
+    depth  1   13.9 -> 5.9 tiles
+    depth  5   13.5 -> 6.4 tiles
+    depth 12   10.8 -> 5.3 tiles
+
+Corpse decals per floor (depth 3, 100 seeds):
+
+    corpse 'm'  16.4 -> 6.8      live enemies 11.7 -> 11.9
+    ratio        1.4 -> 0.6 pre-placed corpses per living enemy
+
+The 6.8 that remain are the DELIBERATE set-pieces (GORE_NEST corpse carpets, the
+cave GORE_WARREN / DERELICT_NEST biomes, the single scripted corpse in the MedBay
+and Event rooms). Those read as authored scenes rather than as ambient litter, and
+they stay.
+
+Placement loss: 0.00% before, 0.00% after (300 seeds x depths 1/3/8/12), measured
+by instrumenting placeBudgetedEncounter directly. See the corrected PROBLEM 3.

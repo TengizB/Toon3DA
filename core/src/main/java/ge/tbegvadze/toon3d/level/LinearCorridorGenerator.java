@@ -3,6 +3,7 @@ package ge.tbegvadze.toon3d.level;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.tileset.LevelPalettes;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
@@ -1842,14 +1843,35 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         // rooms empty while stuffing 2-3 rooms into a low-level death trap). Each enemy drops into the
         // eligible room with the lowest depth-weighted load; along a spine the room index doubles as
         // the depth, so deeper rooms (higher index) still trend denser.
+        // PACK COHERENCE IN SPACE: consecutive identical roster entries are one pack and land in ONE
+        // room together, instead of being handed to the load balancer individually and split apart.
         boolean[] roomTilesExhausted = new boolean[rooms.size()];
         for (int rosterIndex = 0; rosterIndex < roster.size(); rosterIndex++) {
             if (rosterIndex == anchorIndexInRoster) continue;
-            EnemyType enemy = roster.get(rosterIndex);
-            float     cost  = plan.threatOf(enemy);
-            placeEnemyLoadBalanced(grid, rooms, roomOrder, enemy, cost, perRoomCap,
+            EnemyType enemy    = roster.get(rosterIndex);
+            int       packSize = packRunLengthAt(roster, rosterIndex, anchorIndexInRoster);
+            float     cost     = plan.threatOf(enemy);
+            placePackLoadBalanced(grid, rooms, roomOrder, enemy, packSize, cost, perRoomCap,
                     roomSpentThreat, roomTilesExhausted, usedTiles, spawnPoints);
+            rosterIndex += packSize - 1;
         }
+    }
+
+    /**
+     * Length of the run of consecutive identical entries starting at {@code startIndex} — the shape in
+     * which {@link EncounterBudgetPlanner} emits a pack — capped at {@code CHAFF_PACK_MAX} so a long
+     * remainder-pass tail of one type cannot pile into a single room.
+     */
+    private int packRunLengthAt(List<EnemyType> roster, int startIndex, int anchorIndexInRoster) {
+        EnemyType type   = roster.get(startIndex);
+        int       length = 1;
+        while (startIndex + length < roster.size()
+                && roster.get(startIndex + length) == type
+                && (startIndex + length) != anchorIndexInRoster
+                && length < BalanceConfig.CHAFF_PACK_MAX) {
+            length++;
+        }
+        return length;
     }
 
     /**
@@ -1859,10 +1881,11 @@ public class LinearCorridorGenerator implements ILevelGenerator {
      * deeper rooms absorb proportionally more while enemies still fan out. First pass honours the
      * per-room cap; a second pass falls back to any room with a free tile so the budget is spent.
      */
-    private void placeEnemyLoadBalanced(char[][] grid, List<Room> rooms, Integer[] roomOrder,
-                                        EnemyType enemy, float cost, float perRoomCap,
-                                        float[] roomSpentThreat, boolean[] roomTilesExhausted,
-                                        boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
+    private void placePackLoadBalanced(char[][] grid, List<Room> rooms, Integer[] roomOrder,
+                                       EnemyType enemy, int packSize, float cost, float perRoomCap,
+                                       float[] roomSpentThreat, boolean[] roomTilesExhausted,
+                                       boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
+        float packCost = cost * packSize;
         for (int phase = 0; phase < 2; phase++) {
             boolean capPhase = (phase == 0);
             while (true) {
@@ -1871,7 +1894,8 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                 int   bestDepth = -1;
                 for (Integer roomIndex : roomOrder) {
                     if (roomTilesExhausted[roomIndex]) continue;
-                    if (capPhase && roomSpentThreat[roomIndex] + cost > perRoomCap) continue;
+                    // The room is charged for the whole pack, so the cap is tested against the total.
+                    if (capPhase && roomSpentThreat[roomIndex] + packCost > perRoomCap) continue;
                     float weight = 1f + roomIndex;
                     float load   = roomSpentThreat[roomIndex] / weight;
                     if (load < bestLoad || (load == bestLoad && roomIndex > bestDepth)) {
@@ -1881,30 +1905,93 @@ public class LinearCorridorGenerator implements ILevelGenerator {
                     }
                 }
                 if (bestRoom < 0) break;
-                if (tryPlaceEnemyInRoom(grid, rooms.get(bestRoom), enemy, usedTiles, spawnPoints)) {
-                    roomSpentThreat[bestRoom] += cost;
-                    return;
+                int placed = tryPlacePackInRoom(grid, rooms.get(bestRoom), enemy, packSize,
+                        usedTiles, spawnPoints);
+                if (placed > 0) {
+                    roomSpentThreat[bestRoom] += cost * placed;
+                    if (placed == packSize) return;
+                    // Room held part of the pack — carry the rest onward instead of dropping it.
+                    packSize -= placed;
+                    packCost  = cost * packSize;
+                    continue;
                 }
                 roomTilesExhausted[bestRoom] = true;
             }
         }
     }
 
+    /**
+     * Places up to {@code packSize} members of one archetype in a single room, clustered within
+     * {@link LevelGenConstants#LEVEL_GEN_PACK_CLUSTER_RADIUS} of the first member so the group fights
+     * as a group. Returns how many were placed (0 only when the room has no eligible tile at all).
+     */
+    private int tryPlacePackInRoom(char[][] grid, Room room, EnemyType enemy, int packSize,
+                                   boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
+        if (!tryPlaceEnemyInRoom(grid, room, enemy, usedTiles, spawnPoints)) return 0;
+
+        EnemySpawnPoint leader = spawnPoints.get(spawnPoints.size() - 1);
+        int placed = 1;
+        int radius = LevelGenConstants.LEVEL_GEN_PACK_CLUSTER_RADIUS;
+        for (int ring = 1; ring <= radius && placed < packSize; ring++) {
+            for (int rowOffset = -ring; rowOffset <= ring && placed < packSize; rowOffset++) {
+                for (int columnOffset = -ring; columnOffset <= ring && placed < packSize; columnOffset++) {
+                    if (Math.max(Math.abs(rowOffset), Math.abs(columnOffset)) != ring) continue;
+                    int tileColumn = leader.tileColumn + columnOffset;
+                    int tileRow    = leader.tileRow    + rowOffset;
+                    if (!isInsideRoomInterior(room, tileColumn, tileRow))       continue;
+                    if (!isSpawnableTile(grid, usedTiles, tileColumn, tileRow)) continue;
+                    claimSpawnTile(usedTiles, spawnPoints, enemy, tileColumn, tileRow);
+                    placed++;
+                }
+            }
+        }
+        while (placed < packSize
+                && tryPlaceEnemyInRoom(grid, room, enemy, usedTiles, spawnPoints)) {
+            placed++;
+        }
+        return placed;
+    }
+
     /** Records an enemy spawn on a free, eligible, non-door-adjacent tile in the room. */
     private boolean tryPlaceEnemyInRoom(char[][] grid, Room room, EnemyType enemy,
                                         boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
         if (room.interiorWidth() <= 0 || room.interiorHeight() <= 0) return false;
-        for (int attempt = 0; attempt < 40; attempt++) {
+        for (int attempt = 0; attempt < LevelGenConstants.LEVEL_GEN_ENEMY_SPAWN_PROBE_ATTEMPTS; attempt++) {
             int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
             int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
-            if (!isEnemySpawnEligible(grid, tileColumn, tileRow)) continue;
-            if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
-            if (usedTiles[tileRow][tileColumn]) continue;
-            usedTiles[tileRow][tileColumn] = true;
-            spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
+            if (!isSpawnableTile(grid, usedTiles, tileColumn, tileRow)) continue;
+            claimSpawnTile(usedTiles, spawnPoints, enemy, tileColumn, tileRow);
             return true;
         }
+        // Random probing missing is not evidence the room is full — settle it deterministically before
+        // retiring the room, so an unlucky probe run stops silently dropping planned enemies.
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (!isSpawnableTile(grid, usedTiles, tileColumn, tileRow)) continue;
+                claimSpawnTile(usedTiles, spawnPoints, enemy, tileColumn, tileRow);
+                return true;
+            }
+        }
         return false;
+    }
+
+    private boolean isInsideRoomInterior(Room room, int tileColumn, int tileRow) {
+        return tileColumn > room.leftColumn && tileColumn < room.rightColumn
+            && tileRow    > room.bottomRow  && tileRow    < room.topRow;
+    }
+
+    /** A tile an enemy may spawn on: eligible terrain, not beside a door, not already claimed. */
+    private boolean isSpawnableTile(char[][] grid, boolean[][] usedTiles, int tileColumn, int tileRow) {
+        // isEnemySpawnEligible bounds-checks first, so the usedTiles access below is safe.
+        return isEnemySpawnEligible(grid, tileColumn, tileRow)
+            && !isAdjacentToDoor(grid, tileColumn, tileRow)
+            && !usedTiles[tileRow][tileColumn];
+    }
+
+    private void claimSpawnTile(boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints,
+                                EnemyType enemy, int tileColumn, int tileRow) {
+        usedTiles[tileRow][tileColumn] = true;
+        spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
     }
 
     // -------------------------------------------------------------------------

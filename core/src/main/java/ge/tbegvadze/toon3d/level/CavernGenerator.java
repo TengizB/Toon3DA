@@ -3,6 +3,7 @@ package ge.tbegvadze.toon3d.level;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.tileset.LevelPalettes;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
 
@@ -1141,23 +1142,96 @@ public class CavernGenerator implements ILevelGenerator {
         if (roster.isEmpty()) return spawnPoints;
 
         boolean[][] usedTiles = new boolean[gridHeight][gridWidth];
-        for (EnemyType enemy : roster) {
-            for (int attempt = 0; attempt < 80; attempt++) {
-                int tileColumn = 1 + random.nextInt(gridWidth  - 2);
-                int tileRow    = 1 + random.nextInt(gridHeight - 2);
-                char cell = grid[tileRow][tileColumn];
-                if (!isWalkableTile(cell) && !isDecal(cell)) continue;
-                if (cell == 'p') continue;
-                if (usedTiles[tileRow][tileColumn]) continue;
-                int chebyshevDistance = Math.max(Math.abs(tileColumn - spawnColumn),
-                                                 Math.abs(tileRow    - spawnRow));
-                if (chebyshevDistance < LevelGenConstants.LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS) continue;
-                usedTiles[tileRow][tileColumn] = true;
-                spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
-                break;
+        // PACK COHERENCE IN SPACE: the planner emits a pack as a run of consecutive identical entries.
+        // A cave has no rooms to place them in, so the pack clusters around its first member instead —
+        // the same "the player meets groups, not a scattering of solo duels" guarantee the room-based
+        // generators get from tryPlacePackInRoom.
+        for (int rosterIndex = 0; rosterIndex < roster.size(); rosterIndex++) {
+            EnemyType enemy    = roster.get(rosterIndex);
+            int       packSize = packRunLengthAt(roster, rosterIndex);
+            if (!placeOneEnemy(grid, usedTiles, spawnPoints, enemy)) {
+                continue;   // no eligible tile anywhere in the cave — nothing more to try
             }
+            EnemySpawnPoint leader = spawnPoints.get(spawnPoints.size() - 1);
+            int placed = 1;
+            for (int ring = 1; ring <= LevelGenConstants.LEVEL_GEN_PACK_CLUSTER_RADIUS
+                    && placed < packSize; ring++) {
+                for (int rowOffset = -ring; rowOffset <= ring && placed < packSize; rowOffset++) {
+                    for (int columnOffset = -ring; columnOffset <= ring && placed < packSize; columnOffset++) {
+                        if (Math.max(Math.abs(rowOffset), Math.abs(columnOffset)) != ring) continue;
+                        int tileColumn = leader.tileColumn + columnOffset;
+                        int tileRow    = leader.tileRow    + rowOffset;
+                        if (!isCaveSpawnTile(grid, usedTiles, tileColumn, tileRow)) continue;
+                        usedTiles[tileRow][tileColumn] = true;
+                        spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
+                        placed++;
+                    }
+                }
+            }
+            // Cave walls can make the cluster too tight for the whole pack; the rest go anywhere
+            // eligible rather than being dropped (the budget for them was already spent).
+            while (placed < packSize && placeOneEnemy(grid, usedTiles, spawnPoints, enemy)) {
+                placed++;
+            }
+            rosterIndex += packSize - 1;
         }
         return spawnPoints;
+    }
+
+    /**
+     * Length of the run of consecutive identical entries starting at {@code startIndex} — how
+     * {@link EncounterBudgetPlanner} emits a pack — capped at {@code CHAFF_PACK_MAX}.
+     */
+    private int packRunLengthAt(List<EnemyType> roster, int startIndex) {
+        EnemyType type   = roster.get(startIndex);
+        int       length = 1;
+        while (startIndex + length < roster.size()
+                && roster.get(startIndex + length) == type
+                && length < BalanceConfig.CHAFF_PACK_MAX) {
+            length++;
+        }
+        return length;
+    }
+
+    /**
+     * Places one enemy on any eligible cave tile: random probing first, then a deterministic full-grid
+     * scan. The scan matters — probing alone silently dropped the enemy (and the Threat Points already
+     * spent on it) whenever the probes missed, which on a cave-shaped grid is often.
+     */
+    private boolean placeOneEnemy(char[][] grid, boolean[][] usedTiles,
+                                  List<EnemySpawnPoint> spawnPoints, EnemyType enemy) {
+        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
+        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+        for (int attempt = 0; attempt < LevelGenConstants.LEVEL_GEN_CAVE_SPAWN_PROBE_ATTEMPTS; attempt++) {
+            int tileColumn = 1 + random.nextInt(gridWidth  - 2);
+            int tileRow    = 1 + random.nextInt(gridHeight - 2);
+            if (!isCaveSpawnTile(grid, usedTiles, tileColumn, tileRow)) continue;
+            usedTiles[tileRow][tileColumn] = true;
+            spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
+            return true;
+        }
+        for (int tileRow = 1; tileRow < gridHeight - 1; tileRow++) {
+            for (int tileColumn = 1; tileColumn < gridWidth - 1; tileColumn++) {
+                if (!isCaveSpawnTile(grid, usedTiles, tileColumn, tileRow)) continue;
+                usedTiles[tileRow][tileColumn] = true;
+                spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** An unclaimed, walkable cave tile outside the player's spawn safe radius. */
+    private boolean isCaveSpawnTile(char[][] grid, boolean[][] usedTiles, int tileColumn, int tileRow) {
+        if (tileColumn < 1 || tileColumn >= LevelGenConstants.LEVEL_GEN_GRID_WIDTH  - 1) return false;
+        if (tileRow    < 1 || tileRow    >= LevelGenConstants.LEVEL_GEN_GRID_HEIGHT - 1) return false;
+        char cell = grid[tileRow][tileColumn];
+        if (!isWalkableTile(cell) && !isDecal(cell)) return false;
+        if (cell == 'p')                             return false;
+        if (usedTiles[tileRow][tileColumn])          return false;
+        int chebyshevDistance = Math.max(Math.abs(tileColumn - spawnColumn),
+                                         Math.abs(tileRow    - spawnRow));
+        return chebyshevDistance >= LevelGenConstants.LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS;
     }
 
     // -------------------------------------------------------------------------

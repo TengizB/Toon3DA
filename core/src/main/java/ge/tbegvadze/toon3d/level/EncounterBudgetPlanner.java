@@ -74,7 +74,11 @@ public final class EncounterBudgetPlanner {
     public EncounterBudgetPlanner(int depth, Random random, float budgetScale) {
         this.depth       = Math.max(1, depth);
         this.random      = random;
-        this.budgetScale = budgetScale > 0f ? budgetScale : 1f;
+        // Exactly 0 is a LEGAL request for an empty floor (EnemyBudgetOverride.empty) and is honoured
+        // as such; only a NEGATIVE scale is meaningless and falls back to the normal depth budget.
+        // This used to read "> 0f ? scale : 1f", which turned a zero into the FULL budget — the one
+        // value in the range where asking for nothing gave you everything.
+        this.budgetScale = budgetScale >= 0f ? budgetScale : 1f;
     }
 
     /** Plans the floor's enemy roster by spending the depth-scaled Threat-Point budget. */
@@ -125,6 +129,15 @@ public final class EncounterBudgetPlanner {
             }
         }
 
+        // --- REMAINDER PASS: convert the leftover change into BODIES.
+        // The fill loop above stops the moment it cannot afford a whole minimum chaff PACK, which on a
+        // small (CALM-scaled) budget stranded a quarter of the floor's Threat Points — authorised, then
+        // silently discarded. Measured effect before this pass: a CACHE floor spent 96 of 126 TP on one
+        // bruiser and spawned EXACTLY one enemy on a ~1,100-tile dungeon, on every seed. This pass keeps
+        // buying the cheapest affordable enemy — single copies allowed, per-type cap still enforced —
+        // until nothing else fits. Threat-Point-NEUTRAL: it spends budget that was already granted.
+        spent = spendRemainder(roster, spentByType, spent, budget, maxPerType);
+
         float perRoomCap = budget * BalanceConfig.ENCOUNTER_PER_ROOM_TP_FRACTION_CAP;
         EnumMap<EnemyType, Float> threatLookup = new EnumMap<>(EnemyType.class);
         for (EnemyType type : EnemyType.values()) {
@@ -166,10 +179,78 @@ public final class EncounterBudgetPlanner {
         }
         if (best != null) return best;
 
-        // Nothing fits the reserve — place the cheapest anchor that fits the whole budget so the
-        // floor still has a defining threat; null only if even that is unaffordable.
-        EnemyType cheapest    = ANCHOR_TYPES[0];
-        return threatOf(cheapest) <= budget ? cheapest : null;
+        // Nothing fits the rolled reserve — try once more against the CEILING (the top of the reserve
+        // band) rather than against the whole budget, so an unlucky low roll still yields an anchor on
+        // a floor that can genuinely afford one.
+        //
+        // This replaces a fallback that accepted any anchor fitting the ENTIRE budget, which made the
+        // 15-30% reserve advisory rather than binding: on a CALM-scaled 126 TP floor it seated a 96 TP
+        // bruiser — 76% of the floor — leaving too little to buy anything else, so the floor was ONE
+        // enemy. A "defining threat" that consumes three quarters of the budget is not defining the
+        // floor, it IS the floor. When nothing fits the ceiling the floor now gets NO anchor and the
+        // whole budget goes to fill, which is the honest shape of a light floor ("light stragglers",
+        // per CacheProfile) and is Threat-Point-identical either way.
+        float     anchorCeiling      = budget * BalanceConfig.ENCOUNTER_ANCHOR_BUDGET_CEILING_FRACTION;
+        EnemyType ceilingBest        = null;
+        float     ceilingBestCost    = -1f;
+        for (EnemyType type : ANCHOR_TYPES) {
+            float cost = threatOf(type);
+            if (cost <= anchorCeiling && cost > ceilingBestCost) {
+                ceilingBest     = type;
+                ceilingBestCost = cost;
+            }
+        }
+        return ceilingBest;
+    }
+
+    // -------------------------------------------------------------------------
+    // Remainder pass
+    // -------------------------------------------------------------------------
+
+    /**
+     * Spends whatever budget the anchor and the fill loop left behind, one cheapest-affordable enemy at
+     * a time, and returns the new total spend.
+     *
+     * <p>PACK COHERENCE IS PRESERVED. The golden-band chaff exemption assumes packs, and the
+     * pack-coherence audit proves no CHAFF type ever appears alone across 100 seeds x depths 1-15, so
+     * this pass may never CREATE a lone chaff. It may only TOP UP a chaff type already standing at
+     * full pack strength ({@code >= CHAFF_PACK_MIN}) — a 3rd Crawler beside 2 is still a pack — gated
+     * by {@link BalanceConfig#ENCOUNTER_REMAINDER_TOPS_UP_CHAFF_PACKS}. Non-chaff roles, which carry no
+     * pack assumption, are addable singly.
+     *
+     * <p>Deterministic: candidates are scanned in {@code FILL_TYPES} order and ties break toward the
+     * first, so no {@link Random} draw is consumed and a given floor seed still yields a byte-identical
+     * roster. Terminates because every added enemy costs a strictly positive number of Threat Points
+     * and {@link #ROSTER_SAFETY_CAP} bounds the roster regardless.
+     */
+    private float spendRemainder(List<EnemyType> roster, EnumMap<EnemyType, Float> spentByType,
+                                 float spent, float budget, float maxPerType) {
+        while (roster.size() < ROSTER_SAFETY_CAP) {
+            EnemyType cheapest     = null;
+            float     cheapestCost = Float.MAX_VALUE;
+            for (EnemyType type : FILL_TYPES) {
+                float typeSpent = spentByType.getOrDefault(type, 0f);
+                if (type.role() == EnemyRole.CHAFF) {
+                    // Never CREATE a lone chaff — only reinforce a pack that already stands at full
+                    // strength, so the pack-coherence invariant holds by construction.
+                    if (!BalanceConfig.ENCOUNTER_REMAINDER_TOPS_UP_CHAFF_PACKS) continue;
+                    if (countOf(roster, type) < BalanceConfig.CHAFF_PACK_MIN)   continue;
+                }
+                float cost = threatOf(type);
+                if (cost <= 0f)                    continue; // never loop forever
+                if (spent + cost > budget)         continue; // never overshoot
+                if (typeSpent + cost > maxPerType) continue; // variety rule holds
+                if (cost < cheapestCost) {
+                    cheapest     = type;
+                    cheapestCost = cost;
+                }
+            }
+            if (cheapest == null) break;   // nothing else is affordable — the budget is genuinely spent
+            roster.add(cheapest);
+            spentByType.merge(cheapest, cheapestCost, Float::sum);
+            spent += cheapestCost;
+        }
+        return spent;
     }
 
     // -------------------------------------------------------------------------
@@ -227,6 +308,15 @@ public final class EncounterBudgetPlanner {
             packSize++;
         }
         return packSize;
+    }
+
+    /** How many copies of {@code type} the roster currently holds. */
+    private static int countOf(List<EnemyType> roster, EnemyType type) {
+        int count = 0;
+        for (EnemyType entry : roster) {
+            if (entry == type) count++;
+        }
+        return count;
     }
 
     private static List<EnemyType> filterByRanged(List<EnemyType> source, boolean ranged) {

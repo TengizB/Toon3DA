@@ -633,6 +633,52 @@ ENCOUNTER BUDGET V2 (new-game-balancr order 5) — three additions:
      golden ratio, balanced by pack TP); the planner now GUARANTEES it — a chaff type
      is only added when a full min-pack fits, and enters as a group. Proven by a
      100-seed generator test (no chaff ever appears alone).
+     PACKS NOW LAND TOGETHER IN SPACE TOO (encounter density change): the planner had
+     always emitted packs, but the generators' load balancer then handed each member
+     to a different room, so the mean distance to the nearest other enemy was ~14
+     tiles (~14 player turns) and every fight was a solo duel — the pack this
+     exemption assumes had never once existed in play. Consecutive same-type roster
+     entries are now placed as ONE unit into ONE room, clustered within
+     LEVEL_GEN_PACK_CLUSTER_RADIUS. Measured nearest-neighbour: 13.9 -> 5.9 tiles.
+
+ENCOUNTER BUDGET V3 (encounter density) — the budget is only worth what it BUYS:
+  4. BUDGET -> BODIES. Two leaks stranded a large share of a SMALL floor's budget, so
+     a CALM/CACHE node — which uses the FULL ~1,100-tile ROOMS_MST dungeon at
+     ROUTE_CALM_BUDGET_SCALE 0.28 — spawned EXACTLY one enemy on every seed:
+       (a) chooseAnchor's fallback accepted any anchor fitting the WHOLE budget, so a
+           96 TP Shell Brute took 76% of a 126 TP floor. It is now bounded by
+           ENCOUNTER_ANCHOR_BUDGET_CEILING_FRACTION; when nothing fits, the floor gets
+           NO anchor and the whole budget goes to fill (the honest shape of a light
+           floor), rather than one bruiser alone in an empty dungeon.
+       (b) CHAFF_PACK_MIN made the remainder unspendable (leftover 30 TP < cheapest
+           33 TP pack), so the fill loop broke and the change was discarded. A
+           REMAINDER PASS now buys the cheapest affordable enemy until nothing fits.
+           It may TOP UP a chaff type already at full pack strength but may never
+           CREATE a lone chaff, so pack coherence (2) still holds by construction.
+     Measured: CALM floor 1.0 -> 5.5 enemies at depth 1 on the SAME 126 TP budget;
+     SHOP 5.1 -> 7.4; standard COMBAT floors move < 1 body (the leak only ever
+     mattered where the budget was small).
+     TP-NEUTRAL, NOT eHP-NEUTRAL: total Threat Points per floor are unchanged, so
+     every route-economics price (R-CALM-COST, R-RISK-PREMIUM) and R-DEPTH read the
+     same — but several cheap bodies carry more total eHP, and so more ammo demand,
+     than the one anchor they replace. SIM_ECONOMY emergency-lifeline floors moved
+     0.04 -> 0.06 as a result (inside the existing waiver). If it climbs further the
+     lever is AMMO_SUPPLY, not fewer enemies.
+  5. ZERO IS EXPRESSIBLE. EnemyBudgetOverride.empty() / a 0f scale now means "no
+     enemies on this floor". Previously a non-positive scale was read as "unset" and
+     became the FULL depth budget — asking for nothing gave you everything — which is
+     why EVENT/REST/REGION_GATE each hardcoded an empty spawn list instead, leaving
+     EVENT_BUDGET_SCALE 0.15 / GATE_BUDGET_SCALE 0.10 as dead numbers contradicting
+     the ledger rows that priced them at 0. Both constants are now 0.
+
+  KNOWN NON-GOAL — enemy COUNT is still depth-invariant. floorThreatPointBudget and
+  enemyThreatAtDepth are multiplied by the SAME depthThreatScale factor, so
+  budget/cost — the bodies the budget buys — is constant by construction: the depth-1
+  and depth-2 spawn histograms are byte-identical, as are depth-3 and depth-5. Twelve
+  floors of descent buy ~3 extra bodies (12.4 -> 15.8). Deeper floors are stronger,
+  never busier. Fixing it means a per-depth multiplier on the BUDGET that is not
+  applied to per-enemy cost, which moves total floor threat and therefore the R-DEPTH
+  coupling curve — a balance change with its own audit obligations, not a bug fix.
   3. THE REGION DANGER DIAL (fixes problem 12): route regions stop being frequency-
      only. Each region declares REGION_TP_BUDGET_MULTIPLIER (A OUTER FACILITY 0.9 |
      B RESEARCH WING 1.0 | C REACTOR DEPTHS 1.15 | D THE BREACH 1.25) applied ON TOP
