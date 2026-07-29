@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Enemies
 TITLE: Auric Sentinel — gold golem whose shards are armour and ammo
 ---
@@ -313,6 +313,56 @@ DEPENDENCIES
      band; if the player can reach floor 3 with only single-hit weapons, this enemy is
      unfair there and the band moves to 4+.
   5. No new SpecialAbility, no BalanceSchema pricing row, no new status type.
+
+AS BUILT — DECISIONS AND DEVIATIONS
+===================================
+Implemented as specced; the notes below are the places the build had to decide something the doc left
+open, plus the one mechanism it had to add.
+
+  1. FLOOR BAND NEEDED A MECHANISM. The doc says "floors 3-10+ ... with no generator change", but the
+     EncounterBudgetPlanner had NO depth-gating concept at all — every fill archetype was available at
+     every depth. Rather than special-case the Sentinel, a general DATA gate was added:
+     EnemyType.minSpawnDepth() (default 1), which the planner applies once when it builds its fill pool.
+     No switch, no generator edit, and banding a future archetype now costs one override. Verified:
+     0/60 seeds field a Sentinel at depths 1-2, ~24/60 from depth 3.
+  2. DISARMED MID-COMMIT. The doc says a shard is spent even if the shot whiffs. It does not say what
+     happens when the player strips the LAST shard during their turn, after the shot was committed.
+     Resolved in favour of the archetype's core promise ("your aggression disarms it"): the committed
+     shot simply cannot happen — no damage, no animation, no shard. Stripping the ring is therefore
+     always rewarded, and the whiff cost still applies whenever a shard was actually available.
+  3. VISUAL EFFECTS 4 and 6 are simplified. The spec asks for a gold mote that rises from the floor and
+     spirals into the ring (REGROW), and for each shard to fall out of orbit and shatter individually on
+     death (COLLAPSE). Both ship as tile-anchored gold bursts through the existing ImpactEffectSystem
+     (a ring pulse plus sparks, scaled by how many shards broke) rather than as bespoke per-shard
+     animation systems. The READABLE content is identical — "a shard is coming back", "the whole ring
+     just died with it" — at a fraction of the machinery. The signature ORBIT RING, the gold absorb
+     flash, the exposed matte and the gold lane streak are all implemented as specced.
+  4. OPEN QUESTIONS 1-5 were all resolved as RECOMMENDED. Notably Q2 (a blast counts as one instance,
+     one shard) falls out for free: explosions route through the same applyDamageTo path. Q5 did not
+     arise — the EXCAVATION_SITE room is still NOT IMPLEMENTED, so '(' was free to take.
+  5. DEPENDENCY 4 VERIFIED, not assumed: the Chaingun genuinely fires CHAINGUN_BURST_SIZE separate
+     bullets per trigger pull, each its own applyDamageTo call, so one burst strips a full three-shard
+     ring. The "wide/rapid weapons strip more shards" promise needed no weapon change.
+
+GATES RUN
+=========
+  Gradle cannot run in this environment (the agent proxy blocks dl.google.com, so the Android Gradle
+  plugin cannot be resolved — the same constraint noted in BalanceConfig SECTION 2). Everything was
+  instead verified with a standalone javac harness that compiles the real sources against minimal
+  LibGDX stubs. The harness was validated first by reproducing the EXISTING LevelGeneratorSnapshotTest
+  digest byte-for-byte before any change was made.
+    - Whole main source set compiles clean.
+    - Balance audit (BalanceSchema.evaluate(), the same rules BalanceAuditTest asserts): 325 rules,
+      0 violations. Sentinel eHP 140.0, TP 54.6 (SOLDIER band 36-66), golden ratio 4.67 (band 3-8),
+      XP 19 (derived). Exactly the doc's derivation.
+    - New AuricSentinelShardTest (10 methods) — all pass.
+    - LevelGeneratorSnapshotTest digest re-baselined, deliberately: the new archetype shifts the roster
+      roulette from depth 3, which shifts the RNG sequence for the grid passes that run after enemy
+      placement. Blast radius verified rather than assumed — a depths-1-2-only digest is BYTE-IDENTICAL
+      to the pre-change baseline.
+    - ./gradlew balanceSim (the slow gate, and the doc's stated instrument for the per-policy S-* band
+      spread) COULD NOT BE RUN here for the same proxy reason. It should be run before this ships; the
+      lever if the spread is unacceptable is AURIC_MAX_SHARDS (3 -> 2), never the HP.
 
 OPEN QUESTIONS
 ==============

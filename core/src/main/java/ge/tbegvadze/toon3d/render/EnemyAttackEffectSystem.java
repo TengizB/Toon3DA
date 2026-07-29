@@ -10,6 +10,7 @@ import ge.tbegvadze.toon3d.enemy.EnemyAttackListener;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
+import ge.tbegvadze.toon3d.util.EnemyConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import static ge.tbegvadze.toon3d.util.Constants.CELL_SIZE;
@@ -151,6 +152,13 @@ public final class EnemyAttackEffectSystem implements EnemyAttackListener, Dispo
                     shapeRenderer.setColor(EffectConstants.MIRE_WRAITH_PROJECTILE_R,
                                           EffectConstants.MIRE_WRAITH_PROJECTILE_G,
                                           EffectConstants.MIRE_WRAITH_PROJECTILE_B, alpha);
+                    break;
+                case AURIC_SENTINEL:
+                    // A launched SHARD: the same gold as the orbit ring, because it IS one of the
+                    // orbiting shards. The player watches the enemy disarm itself down the lane.
+                    shapeRenderer.setColor(EnemyConstants.AURIC_SHARD_R,
+                                          EnemyConstants.AURIC_SHARD_G,
+                                          EnemyConstants.AURIC_SHARD_B, alpha);
                     break;
                 default:
                     shapeRenderer.setColor(1f, 1f, 1f, alpha);

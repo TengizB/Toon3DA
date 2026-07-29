@@ -113,6 +113,83 @@ public final class GameMath {
     }
 
     // =========================================================================
+    // ORBITING SHARD RING (elemental-golem-auric-sentinel) — cosmetic billboard decoration.
+    // The ring shows the enemy's live shard count, which is simultaneously its remaining armour and
+    // its remaining ammunition, so these three formulas ARE the archetype's readability contract.
+    // =========================================================================
+    /*
+     * Formula: Orbiting shard angle, with a smooth re-space after the ring loses a shard
+     * Derivation:
+     *   Shards sit at even angles around a common ring and sweep it at a constant rate:
+     *       spacing = 2*PI / shardCount
+     *       angle(i) = wallClockSeconds * orbitSpeed + i * spacing
+     *   When a shard is destroyed the survivors must close the gap. Snapping straight to the new
+     *   spacing pops; instead the SPACING itself is interpolated over the absorb-flash window:
+     *       spacing = lerp(2*PI / previousCount, 2*PI / liveCount, respaceProgress)
+     *   Interpolating the spacing (not the angle) keeps the ring evenly divided at every instant of
+     *   the transition, so it reads as the survivors sliding apart rather than as a rotation glitch.
+     *   Worked: 3 -> 2 shards sweeps the spacing 120deg -> 180deg across ~0.25 s.
+     * Edge cases:
+     *   liveCount <= 0 -> no shard is ever drawn; returns the base sweep angle (spacing term 0).
+     *   previousCount <= 0 (or <= liveCount, i.e. a REGROWTH rather than a loss) falls back to the
+     *     live spacing, so a new shard simply appears at its final slot.
+     *   respaceProgress is clamped to [0, 1]; the caller normally passes 1 - flashStrength.
+     */
+    public static float shardOrbitAngleRadians(float wallClockSeconds, float orbitSpeedRadiansPerSecond,
+                                               int shardIndex, int liveShardCount,
+                                               int previousShardCount, float respaceProgress) {
+        float sweepAngle = wallClockSeconds * orbitSpeedRadiansPerSecond;
+        if (liveShardCount <= 0) return sweepAngle;
+        float liveSpacing = MathUtils.PI2 / liveShardCount;
+        float spacing     = liveSpacing;
+        if (previousShardCount > liveShardCount) {
+            float clampedProgress  = respaceProgress < 0f ? 0f : (respaceProgress > 1f ? 1f : respaceProgress);
+            float previousSpacing  = MathUtils.PI2 / previousShardCount;
+            spacing = lerp(previousSpacing, liveSpacing, clampedProgress);
+        }
+        return sweepAngle + shardIndex * spacing;
+    }
+
+    /*
+     * Formula: Orbiting shard size scale (near/far perspective on a billboard ring)
+     * Derivation:
+     *   The ring is drawn on a flat billboard, so the only cue that it encircles the body rather than
+     *   being a flat halo is that shards on the FAR side draw smaller. Treat the orbit as a circle seen
+     *   edge-on: cos(angle) is the horizontal offset the renderer draws, so the orthogonal component
+     *   sin(angle) is the toward/away axis — +1 nearest the viewer, -1 furthest.
+     *   Map it to a scale whose maximum is exactly 1 (the nominal size) at the near point:
+     *       nearness = (1 + sin(angle)) / 2        in [0, 1]
+     *       scale    = 1 - farSideFalloff * (1 - nearness)
+     *   so the far point draws (1 - farSideFalloff) x the near point and nothing is ever enlarged.
+     *   Worked: falloff 0.35 -> near 1.00, side 0.825, far 0.65.
+     * Edge cases:
+     *   farSideFalloff is clamped to [0, 1), so the scale stays strictly positive; 0 disables the cue
+     *   entirely (a flat halo) rather than producing a degenerate zero-size quad.
+     */
+    public static float shardOrbitSizeScale(float angleRadians, float farSideFalloff) {
+        float clampedFalloff = farSideFalloff < 0f ? 0f : (farSideFalloff > 0.99f ? 0.99f : farSideFalloff);
+        float nearness = (1f + MathUtils.sin(angleRadians)) / 2f;
+        return 1f - clampedFalloff * (1f - nearness);
+    }
+
+    /*
+     * Formula: Orbiting shard horizontal screen offset
+     * Derivation:
+     *   The visible (screen-X) component of a circular orbit seen edge-on is the cosine of the orbit
+     *   angle scaled by the ring radius:
+     *       offsetX = cos(angle) * orbitRadius
+     *   The perpendicular component is NOT drawn as a Y offset — it is the depth axis, and it is what
+     *   {@link #shardOrbitSizeScale} turns into a size cue. (The small vertical bob a shard also gets is
+     *   a separate, independent oscillation via {@link #pickupBobOffset}.)
+     * Edge cases:
+     *   A non-positive radius returns 0, collapsing the ring onto the sprite's centre line.
+     */
+    public static float shardOrbitOffsetX(float angleRadians, float orbitRadius) {
+        if (orbitRadius <= 0f) return 0f;
+        return MathUtils.cos(angleRadians) * orbitRadius;
+    }
+
+    // =========================================================================
     // ANGLE BETWEEN TWO POINTS
     // =========================================================================
     /*

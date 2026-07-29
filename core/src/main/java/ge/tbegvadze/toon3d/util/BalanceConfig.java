@@ -246,6 +246,48 @@ public final class BalanceConfig {
     public static final int BLIGHT_CORRUPTOR_ATTACK_DAMAGE      = 14;
     public static final int BLIGHT_CORRUPTOR_MOVE_EVERY_N_TURNS = 2;
 
+    // -------------------------------------------------------------------------
+    // ELEMENTAL GOLEM family — animate mineral constructs (EnemyFamily.GOLEM).
+    // -------------------------------------------------------------------------
+
+    // AURIC_SENTINEL (spawn '(') — ranged SOLDIER whose three orbiting gold shards are BOTH its
+    // armour and its ammunition (.claude/agents/ideas/elemental-golem-auric-sentinel.txt). Each shard
+    // nullifies exactly ONE incoming damage instance whatever its size, and each shot SPENDS one, so
+    // the player's aggression disarms it. The body under the ring is deliberately glassy (70 HP): once
+    // the ring is gone one good hit is most of the fight. It is the roster's LOADOUT test — a rapid,
+    // multi-hit weapon strips the ring in a burst while a single huge slug wastes its whole damage on
+    // one shard — and the deliberate mirror of the burst-hungry Rimeshell Lancer.
+    public static final int AURIC_SENTINEL_MAX_HEALTH           = 70;
+    public static final int AURIC_SENTINEL_ATTACK_DAMAGE        = 15;
+    public static final int AURIC_SENTINEL_RANGE_TILES          = 5;
+    public static final int AURIC_SENTINEL_MOVE_EVERY_N_TURNS   = 1;
+    /** Turns between shard launches — it can only fire as fast as it re-grows shards. Range: 1–3. */
+    public static final int AURIC_SENTINEL_ATTACK_CADENCE_TURNS = 2;
+    /**
+     * Shallowest floor the encounter planner may spend budget on a Sentinel. By depth 3 the player
+     * reliably holds a second weapon, which is precisely the decision this archetype tests; on floor 1,
+     * against a single starting weapon, it would be a wall rather than a puzzle. Range: 2–4.
+     */
+    public static final int AURIC_SENTINEL_MIN_SPAWN_DEPTH      = 3;
+    /** Shards in a full ring. THE tuning lever if the loadout swing proves too wide (3 -> 2). Range: 2–4. */
+    public static final int AURIC_MAX_SHARDS                    = 3;
+    /** Enemy turns between shard re-growths. The counter advances on EVERY turn, fired or not. Range: 2–5. */
+    public static final int AURIC_SHARD_REGEN_TURNS             = 3;
+    /**
+     * The PRICED value of shard absorption, fed to GameMath.enemyEffectiveHitPoints as an armour pool.
+     * Absorbing a hit outright IS "extra effective HP", so the shards are priced exactly there rather
+     * than as a bespoke TP term. Derivation:
+     *     shards absorbed over a fight ~= 3 (the ring) + ~0.5 (one regrow) = 3.5
+     *     value per absorbed hit       ~= REFERENCE_PLAYER_DPT (25) * 0.8  = 20
+     *     armorPool                     = 3.5 * 20                          = 70
+     * The 0.8 factor is the honest discount for the fact that a player who READS the enemy strips
+     * shards with cheap hits, not reference-sized ones. Yields eHP 140, TP ~55 (mid SOLDIER band).
+     * RISK, STATED PLAINLY: this is the archetype whose effective eHP swings hardest with the player's
+     * loadout, and one averaged pool cannot express that — the simulator's per-policy S-* bands are the
+     * right instrument, and the lever if the spread is unacceptable is AURIC_MAX_SHARDS, not the HP.
+     */
+    public static final float AURIC_SHARD_ARMOR_POOL            = 70f;
+
     // Global enemy AI knobs — perception and kiting tuning shared across types.
     /** Tiles within which an enemy notices the player and wakes. Range: 3–6. */
     public static final int ALERT_RADIUS_TILES        = 4;
@@ -347,6 +389,8 @@ public final class BalanceConfig {
     public static final int CREDIT_REWARD_REVENANT         = 11;
     public static final int CREDIT_REWARD_VORTEX_EYE       = 5;
     public static final int CREDIT_REWARD_BLIGHT_CORRUPTOR = 13;
+    /** Sits between Void Shroud (12) and Mire Wraith (15) — consistent with its mid-soldier TP. */
+    public static final int CREDIT_REWARD_AURIC_SENTINEL    = 14;
 
     // -------------------------------------------------------------------------------------
     // SPECIAL-VERB TP EQUIVALENCE (new-game-balancr order 5) — cycle-averaged threat pricing.

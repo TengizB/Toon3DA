@@ -542,6 +542,7 @@ public final class BalanceSchema {
         registry.add(new TelegraphAttackSpec("Revenant strike",    BalanceConfig.REVENANT_ATTACK_DAMAGE,    "NONE", false));
         registry.add(new TelegraphAttackSpec("Vortex Eye bolt",    BalanceConfig.VORTEX_EYE_ATTACK_DAMAGE,  "LANE", false));
         registry.add(new TelegraphAttackSpec("Blight Corr. smash", BalanceConfig.BLIGHT_CORRUPTOR_ATTACK_DAMAGE, "NONE", false));
+        registry.add(new TelegraphAttackSpec("Auric shard launch", BalanceConfig.AURIC_SENTINEL_ATTACK_DAMAGE, "LANE", false));
         // Boss verbs are NOT listed here (order 6): their damage is DERIVED per depth (a fraction of the
         // boss's DPT), not a flat constant scaled by the trash-mob depth curve, so the generic telegraph
         // audit's depth scaling does not apply. Boss verbs get their own single-hit-cap rule instead —

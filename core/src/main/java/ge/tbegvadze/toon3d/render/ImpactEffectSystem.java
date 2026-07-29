@@ -222,6 +222,36 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     }
 
     @Override
+    public void onShardShattered(int tileColumn, int tileRow, float heightMultiplier,
+                                 int shardsShattered) {
+        // Gold shard "clink": a spark burst plus a ring pulse, scaled by how many shards broke at once
+        // (1 for an absorb or a launch, the whole remaining ring when the enemy dies and it collapses).
+        int sparkCount = EffectConstants.SHARD_SPARK_COUNT * Math.max(1, shardsShattered);
+        spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.SHARD_SPARK_R, EffectConstants.SHARD_SPARK_G, EffectConstants.SHARD_SPARK_B,
+                sparkCount,
+                EffectConstants.SHARD_SPARK_SPEED_MIN, EffectConstants.SHARD_SPARK_SPEED_MAX,
+                EffectConstants.SHARD_SPARK_LIFE_SECONDS);
+        spawnColoredRingPulse(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.SHARD_SPARK_R, EffectConstants.SHARD_SPARK_G, EffectConstants.SHARD_SPARK_B,
+                EffectConstants.SHARD_SHATTER_RING_MAX_RADIUS);
+    }
+
+    @Override
+    public void onShardRegrown(int tileColumn, int tileRow, float heightMultiplier) {
+        // Softer gold crystallise flash — a smaller ring and fewer sparks than a shatter, so the ring
+        // coming back is legible without competing with the moment one breaks.
+        spawnColoredRingPulse(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.SHARD_SPARK_R, EffectConstants.SHARD_SPARK_G, EffectConstants.SHARD_SPARK_B,
+                EffectConstants.SHARD_REGROW_RING_MAX_RADIUS);
+        spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.SHARD_SPARK_R, EffectConstants.SHARD_SPARK_G, EffectConstants.SHARD_SPARK_B,
+                EffectConstants.SHARD_REGROW_SPARK_COUNT,
+                EffectConstants.SHARD_SPARK_SPEED_MIN, EffectConstants.SHARD_SPARK_SPEED_MAX,
+                EffectConstants.SHARD_SPARK_LIFE_SECONDS);
+    }
+
+    @Override
     public void onEnemySpawned(int tileColumn, int tileRow, float heightMultiplier) {
         // Sickly green portal: a ring pulse plus an outward spark burst on the tile a SUMMON
         // ability just materialized a new enemy on, so the pop-in reads as an event, not a glitch.
