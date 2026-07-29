@@ -157,6 +157,7 @@ toon3D/
 │   ├── enemy/
 │   │   ├── EnemyManager.java            # Spawn, AI turns, attacks, death
 │   │   ├── Enemy.java                   # Enemy instance state
+│   │   ├── EnemyFamily.java            # Bestiary taxonomy (undead/insect/machine/demon/golem)
 │   │   └── EnemyType.java / EnemyState.java
 │   ├── door/
 │   │   ├── DoorManager.java             # Open/close animation, keycard checks
