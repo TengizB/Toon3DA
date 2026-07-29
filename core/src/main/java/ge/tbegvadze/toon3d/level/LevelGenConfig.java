@@ -50,8 +50,19 @@ public final class LevelGenConfig {
     /** Blood stain decals ('.'). Also trigger rust and gore wall post-passes. */
     public boolean bloodStains = true;
 
-    /** Corpse decals ('m'). Also trigger gore-wall post-pass. */
-    public boolean corpses = true;
+    /**
+     * Corpse decals ('m'). OFF by default: 'm' is the game's DEATH MARKER — EnemyManager.killEnemy
+     * stamps it on the tile where an enemy dies — so generating it as scenery made a freshly entered
+     * room indistinguishable from one the player had already fought through. Measured at ~16.4
+     * pre-placed corpses against ~11.7 live enemies per floor (1.4 corpses per living enemy), which
+     * reads unmistakably as "the enemies here died on their own" and was reported as exactly that.
+     *
+     * <p>'m' now means one thing only: SOMETHING DIED HERE DURING THIS RUN. Aftermath atmosphere is
+     * carried by the blood ('.'), alt-blood ('s'), oil ('O') and scorch ('e') decals, which imply a
+     * fight without implying a body the player did not make. Turn this on only for a hand-authored
+     * level where pre-existing corpses are the intended story.
+     */
+    public boolean corpses = false;
 
     /** Oil pool decals ('O'). Also trigger rust-wall post-pass. */
     public boolean oilPools = true;

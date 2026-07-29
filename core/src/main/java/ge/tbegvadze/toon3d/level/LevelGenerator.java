@@ -9,6 +9,7 @@ import ge.tbegvadze.toon3d.tileset.SymbolAllocationRequest;
 import ge.tbegvadze.toon3d.tileset.SymbolAllocator;
 import ge.tbegvadze.toon3d.tileset.SymbolBudget;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
@@ -1656,7 +1657,10 @@ public class LevelGenerator implements ILevelGenerator {
             // Scatter blood stains and a corpse for narrative
             if (config.bloodStains) tryPlaceAtmosphericProp(grid, room, '.');
             if (config.bloodStains) tryPlaceAtmosphericProp(grid, room, '.');
-            if (config.corpses && random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'm');
+            // SET-PIECE corpse: an AUTHORED scene (declared in this room's RoomBlueprint symbol demand),
+            // not ambient litter, so it is NOT gated on config.corpses — that flag now governs only the
+            // random floor-decal scatter, which is what made 'm' read as "they died on their own".
+            if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'm');
             // General sparse props
             for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
                 for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
@@ -1699,10 +1703,11 @@ public class LevelGenerator implements ILevelGenerator {
                 tryPlaceAtmosphericProp(grid, room, '.');
                 tryPlaceAtmosphericProp(grid, room, '.');
             }
-            if (config.corpses) {
-                tryPlaceAtmosphericPropNearWall(grid, room, 'm');
-                if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'm');
-            }
+            // SET-PIECE corpse: an AUTHORED scene (declared in this room's RoomBlueprint symbol demand),
+            // not ambient litter, so it is NOT gated on config.corpses — that flag now governs only the
+            // random floor-decal scatter, which is what made 'm' read as "they died on their own".
+            tryPlaceAtmosphericPropNearWall(grid, room, 'm');
+            if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'm');
         }
     }
 
@@ -1839,7 +1844,10 @@ public class LevelGenerator implements ILevelGenerator {
             if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, '#');
             tryPlaceAtmosphericPropNearWall(grid, room, '=');
             if (config.bloodStains) tryPlaceAtmosphericProp(grid, room, '.');
-            if (config.corpses && random.nextFloat() < 0.30f) {
+            // SET-PIECE corpse: an AUTHORED scene (declared in this room's RoomBlueprint symbol demand),
+            // not ambient litter, so it is NOT gated on config.corpses — that flag now governs only the
+            // random floor-decal scatter, which is what made 'm' read as "they died on their own".
+            if (random.nextFloat() < 0.30f) {
                 tryPlaceAtmosphericPropNearWall(grid, room, 'm');
             }
         }
@@ -1897,10 +1905,11 @@ public class LevelGenerator implements ILevelGenerator {
                 tryPlaceAtmosphericProp(grid, room, '.');
                 if (random.nextBoolean()) tryPlaceAtmosphericProp(grid, room, '.');
             }
-            if (config.corpses) {
-                tryPlaceAtmosphericPropNearWall(grid, room, 'm');
-                if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'm');
-            }
+            // SET-PIECE corpse: an AUTHORED scene (declared in this room's RoomBlueprint symbol demand),
+            // not ambient litter, so it is NOT gated on config.corpses — that flag now governs only the
+            // random floor-decal scatter, which is what made 'm' read as "they died on their own".
+            tryPlaceAtmosphericPropNearWall(grid, room, 'm');
+            if (random.nextBoolean()) tryPlaceAtmosphericPropNearWall(grid, room, 'm');
         }
     }
 
@@ -3028,14 +3037,41 @@ public class LevelGenerator implements ILevelGenerator {
         // while the rest stayed empty (the player struggled to find a fight). We now drop each enemy
         // into the eligible room with the LOWEST depth-weighted load, so enemies fan out across the
         // whole floor; deeper rooms still end up denser because their weight lets them absorb more.
+        // PACK COHERENCE IN SPACE: the planner emits a chaff pack as a RUN of consecutive identical
+        // roster entries. Placing them one at a time handed each member to the load balancer
+        // independently, which reliably split every pack across different rooms (measured ~14 tiles to
+        // the nearest other enemy — every fight a solo duel, and the pack the golden-band chaff
+        // exemption assumes never actually existed). Consecutive same-type runs are now placed as ONE
+        // unit into ONE room, so the player meets groups.
         boolean[] roomTilesExhausted = new boolean[rooms.size()];
         for (int rosterIndex = 0; rosterIndex < roster.size(); rosterIndex++) {
             if (rosterIndex == anchorIndexInRoster) continue; // already placed
             EnemyType enemy = roster.get(rosterIndex);
+            int packSize = packRunLengthAt(roster, rosterIndex, anchorIndexInRoster);
             float cost = plan.threatOf(enemy);
-            placeEnemyLoadBalanced(grid, rooms, roomOrder, roomDepths, enemy, cost, perRoomCap,
+            placePackLoadBalanced(grid, rooms, roomOrder, roomDepths, enemy, packSize, cost, perRoomCap,
                     roomSpentThreat, roomTilesExhausted, usedTiles, spawnPoints);
+            rosterIndex += packSize - 1;
         }
+    }
+
+    /**
+     * Length of the run of consecutive identical entries starting at {@code startIndex} — the shape in
+     * which {@link EncounterBudgetPlanner} emits a pack. Capped at {@code CHAFF_PACK_MAX} so the
+     * remainder pass (which appends cheapest-first and can produce a long tail of one type) cannot
+     * concentrate an unbounded crowd into a single room; the overflow simply becomes the next pack and
+     * is load-balanced elsewhere. The anchor's slot never joins a run — it is already placed.
+     */
+    private int packRunLengthAt(List<EnemyType> roster, int startIndex, int anchorIndexInRoster) {
+        EnemyType type   = roster.get(startIndex);
+        int       length = 1;
+        while (startIndex + length < roster.size()
+                && roster.get(startIndex + length) == type
+                && (startIndex + length) != anchorIndexInRoster
+                && length < BalanceConfig.CHAFF_PACK_MAX) {
+            length++;
+        }
+        return length;
     }
 
     // (perRoomCap is now a per-room array indexed by room, so a room's geometry — open vs chokepoint —
@@ -3049,10 +3085,12 @@ public class LevelGenerator implements ILevelGenerator {
      * still fanning enemies out. Two passes: first only rooms under the per-room cap, then (if the
      * cap blocked every room) any room with a free tile so the budget is still spent.
      */
-    private void placeEnemyLoadBalanced(char[][] grid, List<Room> rooms, Integer[] roomOrder,
-                                        int[] roomDepths, EnemyType enemy, float cost, float[] perRoomCap,
-                                        float[] roomSpentThreat, boolean[] roomTilesExhausted,
-                                        boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
+    private void placePackLoadBalanced(char[][] grid, List<Room> rooms, Integer[] roomOrder,
+                                       int[] roomDepths, EnemyType enemy, int packSize, float cost,
+                                       float[] perRoomCap, float[] roomSpentThreat,
+                                       boolean[] roomTilesExhausted, boolean[][] usedTiles,
+                                       List<EnemySpawnPoint> spawnPoints) {
+        float packCost = cost * packSize;
         for (int phase = 0; phase < 2; phase++) {
             boolean capPhase = (phase == 0);
             while (true) {
@@ -3061,7 +3099,9 @@ public class LevelGenerator implements ILevelGenerator {
                 int   bestDepth = -1;
                 for (Integer roomIndex : roomOrder) {
                     if (roomTilesExhausted[roomIndex]) continue;
-                    if (capPhase && roomSpentThreat[roomIndex] + cost > perRoomCap[roomIndex]) continue;
+                    // The whole pack is charged to the room it lands in, so the cap is tested against
+                    // the pack's total — a room never quietly absorbs a group it could not hold.
+                    if (capPhase && roomSpentThreat[roomIndex] + packCost > perRoomCap[roomIndex]) continue;
                     float weight = 1f + roomDepths[roomIndex];
                     float load   = roomSpentThreat[roomIndex] / weight;
                     if (load < bestLoad
@@ -3072,11 +3112,18 @@ public class LevelGenerator implements ILevelGenerator {
                     }
                 }
                 if (bestRoom < 0) break; // no eligible room this phase
-                if (tryPlaceEnemyInRoom(grid, rooms.get(bestRoom), enemy, usedTiles, spawnPoints)) {
-                    roomSpentThreat[bestRoom] += cost;
-                    return;
+                int placed = tryPlacePackInRoom(grid, rooms.get(bestRoom), enemy, packSize,
+                        usedTiles, spawnPoints);
+                if (placed > 0) {
+                    roomSpentThreat[bestRoom] += cost * placed;
+                    if (placed == packSize) return;
+                    // The room held only part of the pack; carry the rest to the next-best room rather
+                    // than dropping it (budget already spent must become bodies).
+                    packSize -= placed;
+                    packCost  = cost * packSize;
+                    continue;
                 }
-                // Chosen room had no free tile after a bounded search — exclude it and retry.
+                // Chosen room has no eligible tile at all (confirmed by full scan) — retire it.
                 roomTilesExhausted[bestRoom] = true;
             }
         }
@@ -3089,18 +3136,82 @@ public class LevelGenerator implements ILevelGenerator {
      */
     private boolean tryPlaceEnemyInRoom(char[][] grid, Room room, EnemyType enemy,
                                         boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
-        for (int attempt = 0; attempt < 40; attempt++) {
+        for (int attempt = 0; attempt < LevelGenConstants.LEVEL_GEN_ENEMY_SPAWN_PROBE_ATTEMPTS; attempt++) {
             int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
             int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
-            // isEnemySpawnEligible bounds-checks first, so the usedTiles access below is safe.
-            if (!isEnemySpawnEligible(grid, tileColumn, tileRow)) continue;
-            if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
-            if (usedTiles[tileRow][tileColumn]) continue;
-            usedTiles[tileRow][tileColumn] = true;
-            spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
+            if (!isSpawnableTile(grid, usedTiles, tileColumn, tileRow)) continue;
+            claimSpawnTile(usedTiles, spawnPoints, enemy, tileColumn, tileRow);
             return true;
         }
+        // Random probing missed — that is NOT evidence the room is full (with 40 probes over a large
+        // interior it frequently missed rooms with plenty of space, which is how ~10% of every floor's
+        // roster used to vanish). Settle the question deterministically before giving up.
+        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                if (!isSpawnableTile(grid, usedTiles, tileColumn, tileRow)) continue;
+                claimSpawnTile(usedTiles, spawnPoints, enemy, tileColumn, tileRow);
+                return true;
+            }
+        }
         return false;
+    }
+
+    /**
+     * Places up to {@code packSize} members of one archetype in a single room, clustered so the group
+     * reads — and fights — as a group: the first member is placed by the ordinary search, and the rest
+     * take the nearest free eligible tiles within
+     * {@link LevelGenConstants#LEVEL_GEN_PACK_CLUSTER_RADIUS}. Members that do not fit the cluster fall
+     * back to anywhere in the room rather than being dropped. Returns how many were actually placed
+     * (0 only when the room has no eligible tile at all).
+     */
+    private int tryPlacePackInRoom(char[][] grid, Room room, EnemyType enemy, int packSize,
+                                   boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
+        if (!tryPlaceEnemyInRoom(grid, room, enemy, usedTiles, spawnPoints)) return 0;
+
+        EnemySpawnPoint leader = spawnPoints.get(spawnPoints.size() - 1);
+        int placed = 1;
+        int radius = LevelGenConstants.LEVEL_GEN_PACK_CLUSTER_RADIUS;
+        // Deterministic ring-outward scan from the leader, so a pack is compact and a given seed still
+        // produces a byte-identical level.
+        for (int ring = 1; ring <= radius && placed < packSize; ring++) {
+            for (int rowOffset = -ring; rowOffset <= ring && placed < packSize; rowOffset++) {
+                for (int columnOffset = -ring; columnOffset <= ring && placed < packSize; columnOffset++) {
+                    if (Math.max(Math.abs(rowOffset), Math.abs(columnOffset)) != ring) continue; // ring edge only
+                    int tileColumn = leader.tileColumn + columnOffset;
+                    int tileRow    = leader.tileRow    + rowOffset;
+                    if (!isInsideRoomInterior(room, tileColumn, tileRow))           continue;
+                    if (!isSpawnableTile(grid, usedTiles, tileColumn, tileRow))     continue;
+                    claimSpawnTile(usedTiles, spawnPoints, enemy, tileColumn, tileRow);
+                    placed++;
+                }
+            }
+        }
+        // Cluster is full but the pack is not — put the stragglers anywhere in the same room, which
+        // still keeps the group on one floor tile-cluster rather than scattering it across the level.
+        while (placed < packSize
+                && tryPlaceEnemyInRoom(grid, room, enemy, usedTiles, spawnPoints)) {
+            placed++;
+        }
+        return placed;
+    }
+
+    private boolean isInsideRoomInterior(Room room, int tileColumn, int tileRow) {
+        return tileColumn > room.leftColumn && tileColumn < room.rightColumn
+            && tileRow    > room.bottomRow  && tileRow    < room.topRow;
+    }
+
+    /** A tile an enemy may spawn on: eligible terrain, not beside a door, not already claimed. */
+    private boolean isSpawnableTile(char[][] grid, boolean[][] usedTiles, int tileColumn, int tileRow) {
+        // isEnemySpawnEligible bounds-checks first, so the usedTiles access below is safe.
+        return isEnemySpawnEligible(grid, tileColumn, tileRow)
+            && !isAdjacentToDoor(grid, tileColumn, tileRow)
+            && !usedTiles[tileRow][tileColumn];
+    }
+
+    private void claimSpawnTile(boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints,
+                                EnemyType enemy, int tileColumn, int tileRow) {
+        usedTiles[tileRow][tileColumn] = true;
+        spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
     }
 
     // -------------------------------------------------------------------------

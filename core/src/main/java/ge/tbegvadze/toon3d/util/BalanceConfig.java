@@ -1201,6 +1201,31 @@ public final class BalanceConfig {
     /** Maximum chaff pack size a single pack may reach before a new pack is started. Range: 3–5. */
     public static final int   CHAFF_PACK_MAX               = 4;
 
+    // 4. BUDGET->BODIES CONVERSION (encounter-density-and-corpse-semantics) — the budget is only worth
+    //    what it actually BUYS. Two leaks used to strand a large share of a small floor's budget:
+    //    an anchor fallback with no ceiling, and a remainder too small to afford a minimum chaff pack.
+    //    A CALM (0.28x) floor therefore spent 96 of 126 TP on ONE bruiser and discarded the rest —
+    //    measured EXACTLY one enemy per floor across 100 seeds, on a full-size ~1,100-tile dungeon.
+    //    Both fixes below are Threat-Point-NEUTRAL: they change what the budget buys, never its size,
+    //    so every route-economics price (R-CALM-COST, R-RISK-PREMIUM) and R-DEPTH read unchanged.
+    /**
+     * Hard CEILING on the fraction of the floor budget the single anchor may consume. The anchor
+     * reserve band ([_FRACTION_MIN, _FRACTION_MAX]) is a preference for WHICH anchor to pick; this is
+     * the rule that makes it binding. When no anchor fits this ceiling the floor gets NO anchor and
+     * the whole budget goes to fill — the honest shape of a light floor ("light stragglers", per
+     * CacheProfile) rather than one bruiser standing alone in an empty dungeon.
+     * Range: 0.30–0.50.
+     */
+    public static final float ENCOUNTER_ANCHOR_BUDGET_CEILING_FRACTION = ENCOUNTER_ANCHOR_BUDGET_FRACTION_MAX;
+    /**
+     * Whether the REMAINDER PASS may TOP UP a chaff type that is already present at full pack strength
+     * (>= CHAFF_PACK_MIN). It may never CREATE a lone chaff: the golden-band chaff exemption assumes
+     * packs, and R-ENEMY's pack-coherence audit (BalanceAuditTest.chaffAlwaysSpawnsInPacksOverAHundred
+     * Seeds) enforces that across 100 seeds x depths 1-15. Adding a 3rd Crawler to an existing pack of
+     * 2 keeps the invariant; adding a 1st Crawler breaks it. Non-chaff roles are always addable singly.
+     */
+    public static final boolean ENCOUNTER_REMAINDER_TOPS_UP_CHAFF_PACKS = true;
+
     // 3. THE REGION DANGER DIAL (fixes knowledge-doc problem 12) — route regions stop being frequency-only.
     //    Each region declares a Threat-Point budget multiplier applied ON TOP of the depth curve
     //    (GameMath.regionScaledFloorThreatPointBudget), indexed 0-based by region
@@ -1902,10 +1927,20 @@ public final class BalanceConfig {
      * so raising this without raising the vault fails the audit. Range: 1.3–1.8.
      */
     public static final float ELITE_BUDGET_SCALE       = 1.5f;
-    /** EVENT floor budget — a beat of story, not a fight. Range: 0.10–0.25. */
-    public static final float EVENT_BUDGET_SCALE       = 0.15f;
-    /** REGION_GATE ceremonial airlock budget — a pacing breath. Range: 0.05–0.20. */
-    public static final float GATE_BUDGET_SCALE        = 0.10f;
+    /**
+     * EVENT floor budget — ZERO, because EventRoomGenerator emits an empty spawn list by design
+     * (a curated story beat in a ~135-tile room, not a dungeon to clear). Was 0.15f, which was a
+     * DEAD number: the generator ignored it and the RouteEconomics EVENT row already priced the
+     * node at budgetScale(0f). Three sources of truth, two of them right; this is the third
+     * agreeing. Keep at 0 unless EventRoomGenerator is taught to spawn.
+     */
+    public static final float EVENT_BUDGET_SCALE       = 0f;
+    /**
+     * REGION_GATE ceremonial airlock budget — ZERO, for the same reason as EVENT_BUDGET_SCALE:
+     * GateAirlockGenerator hardcodes an empty spawn list (a ~131-tile pacing breath between acts)
+     * and the RouteEconomics REGION_GATE row prices it at budgetScale(0f). Was a dead 0.10f.
+     */
+    public static final float GATE_BUDGET_SCALE        = 0f;
 
     // --- B. ELITE AFFIXES: threat multiplier AND the vault that must pay for it -----------
     // An affix that raises threatCost MUST raise the vault (R-RISK-PREMIUM prices the pair).

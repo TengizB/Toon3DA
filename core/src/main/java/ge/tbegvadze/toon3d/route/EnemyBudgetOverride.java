@@ -19,7 +19,11 @@ import ge.tbegvadze.toon3d.util.BalanceConfig;
  */
 public final class EnemyBudgetOverride {
 
-    /** Hard floor on the scale so a node can never zero out (or invert) the encounter. */
+    /**
+     * Hard floor on any POSITIVE scale, so a node that wants a fight can never accidentally shrink it
+     * to nothing. Exactly {@code 0f} is a distinct, legal value meaning "this floor has NO enemies"
+     * (see {@link #empty()}) and is passed through un-clamped; negative scales clamp up to here.
+     */
     public static final float MIN_SCALE = 0.1f;
     /** Hard ceiling so a node can never balloon the budget beyond a sane multiple of the depth base. */
     public static final float MAX_SCALE = 4.0f;
@@ -54,12 +58,32 @@ public final class EnemyBudgetOverride {
         return new EnemyBudgetOverride(LIGHT_SCALE);
     }
 
+    /**
+     * A floor with NO enemies at all — a curated story beat (EVENT), a ceremonial airlock
+     * (REGION_GATE) or a sanctuary (REST). Distinct from {@link #calm()}: calm means "a few light
+     * stragglers", this means "none".
+     *
+     * <p>Before this existed the system could not EXPRESS an empty floor: {@code scaled(0f)} clamped
+     * up to {@link #MIN_SCALE}, and {@code EncounterBudgetPlanner} read a non-positive scale as
+     * "unset" and fell back to the FULL depth budget — so a zero was silently the most dangerous
+     * value in the range. The three bespoke generators each worked around it by hardcoding an empty
+     * spawn list, which left their declared budget scales dead and contradicting the ledger rows that
+     * priced them at zero. Zero is now a first-class value that every layer agrees on.
+     */
+    public static EnemyBudgetOverride empty() {
+        return new EnemyBudgetOverride(0f);
+    }
+
     /** The multiplier applied to the raw depth-scaled Threat-Point budget. Always within bounds. */
     public float budgetScale() {
         return budgetScale;
     }
 
     private static float clamp(float scale) {
+        // Exactly zero is the legal "no enemies on this floor" value (see empty()) and must survive
+        // the clamp; every other sub-minimum scale (including negatives) is a node asking for a fight
+        // too small to be one, and is raised to MIN_SCALE.
+        if (scale == 0f)      return 0f;
         if (scale < MIN_SCALE) return MIN_SCALE;
         if (scale > MAX_SCALE) return MAX_SCALE;
         return scale;
