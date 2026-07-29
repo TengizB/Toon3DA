@@ -163,9 +163,46 @@ EnemyRenderer (render/EnemyRenderer.java):
 
   See docs/tick-system.txt for the full tick architecture.
 
+## Enemy Family Classification (bestiary taxonomy)
+
+Every archetype declares a FAMILY on EnemyType (enemy/EnemyFamily.java) alongside its role:
+
+    EnemyType.PLAGUE_HULK.family()  ->  EnemyFamily.ABERRATION
+
+FAMILY vs ROLE — two orthogonal axes:
+  - family() = WHAT the thing is    (undead / insect / machine / demon / aberration / golem)
+  - role()   = what JOB it does     (chaff / soldier / bruiser / mini-elite / boss)
+An UNDEAD floor still fields chaff, a soldier and an anchor; the family only changes the flavour
+of the bodies filling those roles.
+
+  family       archetypes
+  ---------------------------------------------------------------------------------------
+  ABERRATION   Plague Hulk, Eye Tyrant, Gore Biter, Mire Wraith, The Corruptor (boss)
+  UNDEAD       Ghoul, Crawler, Revenant, Vortex Eye, Blight Corruptor
+  INSECT       Shell Brute, Iron Stalker
+  MACHINE      Acid Drone, The Overseer (boss)
+  DEMON        Void Shroud, Hell Baron (boss)
+  GOLEM        (reserved — the four elemental golems; see the elemental-golem-* idea docs)
+
+STATUS: DESCRIPTIVE ONLY. Nothing reads family() yet — no spawn, budget, AI or render path branches
+on it, so adding the taxonomy changed zero behaviour and every archetype stays spawnable on every
+floor exactly as before.
+
+STAGED FOR: the FAMILY-COHERENT FLOOR rule — a generated floor picks ONE family and draws its whole
+roster from that family, so a level reads as a single infestation instead of a random bestiary dump.
+When that lands it must be a FILTER inside EncounterBudgetPlanner's roster selection (drop candidate
+archetypes whose family != the floor's family), never a switch on EnemyType. A family must therefore
+carry enough archetypes to fill the role wheel — chaff + soldier + one anchor — before it can be
+chosen as a floor family; GOLEM is the first family authored to that standard.
+
+RULE: family() is ABSTRACT on EnemyType. A new archetype cannot compile without stating its family,
+so the taxonomy can never silently fall out of date.
+
 ## Key Classes
 
   enemy/EnemyType.java      — enum: CORRUPTOR, VORTEX_EYE (config per type)
+  enemy/EnemyFamily.java    — enum: ABERRATION, UNDEAD, INSECT, MACHINE, DEMON, GOLEM (bestiary
+                              taxonomy; descriptive today, see the family section above)
   enemy/EnemyState.java     — enum: DORMANT, ALERTED, CHASING, WINDING_UP, ATTACKING
   enemy/IntentVerb.java     — enum: the committed-action category (ATTACK_MELEE, ATTACK_RANGED,
                               WIND_UP, MOVE, DEFEND, SPECIAL, WAIT, STUNNED)

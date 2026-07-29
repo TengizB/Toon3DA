@@ -1,0 +1,310 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Cinderforge Colossus — magma golem that hardens when unharmed
+---
+
+OVERVIEW
+========
+The second ELEMENTAL GOLEM (EnemyFamily.GOLEM). A towering bipedal furnace of
+red-orange magma crystal, spiked crown, molten seams running under a black crust.
+Slow, enormous, and the first enemy in the game that gets HARDER the longer you
+stop shooting it.
+
+Two mechanics, one idea — THE GAME PUNISHES HESITATION:
+  * COOLING CRUST — every enemy turn it takes no damage, its surface cools and it
+    gains a stack of flat armour. Any damage shatters ALL stacks.
+  * MOLTEN TRAIL — every tile it leaves behind ignites. It burns the ground you
+    would have retreated across.
+Ducking behind cover to reload is exactly the wrong move: it hardens while you
+hide, and the corridor behind you is on fire when you come out.
+
+FAMILY & ROLE
+=============
+  family()               EnemyFamily.GOLEM
+  role()                 EnemyRole.BRUISER          (TP band 70-120, ANCHOR)
+  positionalMultiplier() BalanceConfig.POSITIONAL_MULT_MELEE (1.00)
+  isRanged()             false
+  tacticalVerb()         "FORGE: keep the pressure on — it re-hardens the moment
+                          you stop shooting, and it burns the ground behind it."
+
+Distinct from the Shell Brute, the other BRUISER: the Brute is a POSITIONING puzzle
+(sidestep the lane, punish the recovery). The Colossus is a TEMPO puzzle (never let
+the damage stop). Two bruisers, two different failures.
+
+SPRITE / SOURCE ART
+===================
+Shared 2x2 sheet: textures/enemies/enemy_sheet_elemental_golems.png, sliced as in
+EnemyRenderer.buildTextureRegions (TextureRegion y=0 is the TOP of the image):
+
+    Q1 (0, 0, halfW, halfH)         -> RIMESHELL_LANCER
+    Q2 (halfW, 0, halfW, halfH)     -> CINDERFORGE_COLOSSUS   <- THIS DOC
+    Q3 (0, halfH, halfW, halfH)     -> VERDANT_SPIRESOWER
+    Q4 (halfW, halfH, halfW, halfH) -> AURIC_SENTINEL
+
+Q2 art: upright, broad-shouldered, crowned with a fan of flame-shaped shards; heavy
+arms hanging past the knees; white-hot slits for eyes; the body a lattice of dark
+crust over glowing seams, with embers scattered at its feet. The crust-over-glow
+lattice IS the armour readout — the art already tells the player what the mechanic
+does, which is why the cooling stacks are drawn on the sprite rather than in the HUD.
+
+SPAWN SYMBOL — '{' (NEW, requires the strict-rule commit)
+=========================================================
+'{' is currently UNASSIGNED in docs/tile-symbols.txt. The golem family takes the
+bracket block ('[' '{' '}' '(').
+
+Single commit (docs/tile-symbols.txt STRICT RULE):
+  1. ENEMY SPAWN MARKERS entry:
+       {   Cinderforge Colossus spawn   Golem faction. Heavy melee anchor; leaves fire.
+  2. `case '{': type = EnemyType.CINDERFORGE_COLOSSUS; break;` in EnemyManager's
+     spawn switch (~line 240). Spawn chars become floor at load — no tile/render work.
+  3. SYMBOL BUDGET counts updated; '{' removed from the unassigned list.
+  4. VERIFY: '{' is only pencilled in by the NOT IMPLEMENTED excavation room doc.
+     If that room ships first, fall back to '/'.
+
+STAT BLOCK
+==========
+  maxHealth()                   110
+  attackDamage()                18   (a two-handed molten slam)
+  attackRangeTiles()            1
+  attackCadenceTurns()          1
+  moveEveryNTurns()             2    (ponderous — it is kiteable, and it should be)
+  isRanged()                    false
+  heightMultiplier()            1.15f
+  flatReduction()               3f   (TIME-AVERAGED crust — see BALANCE)
+  armorPool() / dodgeChance()   0
+  baseCreditReward()            16
+  baseXpReward()                DERIVED from TP — never hand-set.
+  moveSet()                     MOVESET_NONE (empty)
+
+NO NEW SpecialAbility VERB. Both mechanics are passive/positional, driven from the
+existing EXECUTE phase — nothing is added to SpecialAbility, so
+BalanceSchema.SPECIAL_VERB_PRICING is untouched and the COVERAGE rule stays green.
+
+MECHANIC 1 — COOLING CRUST
+==========================
+State: enemy.crustStacks (int, 0..CINDERFORGE_CRUST_MAX_STACKS = 3).
+
+  GAIN   At the END of the Colossus's own turn, if it took NO damage since its
+         previous turn, crustStacks++ (capped). Each stack adds
+         CINDERFORGE_CRUST_ARMOR_PER_STACK (4) to enemy.armor.
+  LOSE   The instant it takes ANY damage: crustStacks = 0, armour contribution
+         removed, and that hit deals CINDERFORGE_CRUST_SHATTER_MULTIPLIER (1.25x)
+         damage if it broke a full 3-stack crust. Breaking a fully cooled shell is
+         loud and rewarding; it is not a punishment for having waited, it is the
+         payoff for coming back out.
+  FLOOR  crustStacks is per-instance and never persists across a level.
+
+At 3 stacks its armour is 12 flat against a reference 25-damage hit — a ~48%
+reduction. That is severe on purpose: the number exists to make "keep firing" the
+right answer, and it evaporates on the first bullet, so it can never wall a player
+who is actually engaging.
+
+IMPORTANT: this must hook the SAME damage entry point that already exists
+(Enemy.applyDamage / the flat-armour subtraction), not a new one. Direct HP loss
+from status DoT (applyDoTDamage) BYPASSES block today — a DoT tick must still COUNT
+as damage for the purpose of resetting crust, otherwise Burning/Bleed builds are
+silently locked out of the counterplay.
+
+MECHANIC 2 — MOLTEN TRAIL
+=========================
+When the Colossus VACATES a tile (in executeMove, after the move resolves), that
+tile becomes a fire hazard via the existing HazardManager.spawnFire path — the same
+'i' tile the hazard system already owns, with lifetime
+CINDERFORGE_TRAIL_FIRE_TURNS (3).
+
+  - Uses the SHIPPED hazard system. No new hazard type, no new tile symbol, and the
+    fire it lays participates in the existing spread / barrel chain-reaction rules
+    for free (which is a great emergent moment next to an explosive barrel).
+  - The trail burns the Colossus's allies too — the hazard system already applies
+    BURNING to ANY host on the tile, player and enemies alike. Do not special-case it.
+  - It does NOT ignite the tile it is standing on, so the player is never denied the
+    tile they need to melee it from without warning.
+  - Cap: no more than CINDERFORGE_TRAIL_MAX_LIVE_TILES (6) live trail tiles per
+    Colossus, oldest expiring first, so a long chase cannot carpet a floor.
+
+Because it moves every OTHER turn, the trail is a slow-growing wall rather than a
+sprint-line. Kiting it is still correct — it just costs you the ground you kite over.
+
+BEHAVIOUR — COMMIT / EXECUTE INTEGRATION
+========================================
+The turn engine does not change (docs/enemy-system.txt, PRE-COMMITTED INTENT MODEL).
+
+  computeNextPlan()  -> ordinary melee planning (computeMeleePlan). No new branch is
+                        strictly required; the Colossus is a plain chaser whose
+                        IDENTITY is in the two passive hooks.
+  phaseBExecute()    -> executeMove: after the move resolves, ignite the vacated tile
+                        (trail). End of the enemy's turn: evaluate the crust gain.
+  damage path        -> reset crust on any damage taken, incl. DoT ticks.
+
+Deliberately no bespoke plan branch: the Shell Brute and Void Shroud already own the
+"clever melee AI" space. The Colossus is dumb, huge and relentless, and its pressure
+comes from the board state it creates, not from outsmarting the player.
+
+TELEGRAPH & READABILITY
+=======================
+  - The slam is a normal committed melee attack with the standard one-turn intent
+    icon and predicted-damage number — 18 damage is well under
+    TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION, and it is telegraphed regardless.
+  - The crust level is drawn ON THE SPRITE (below), so "why did that shot feel weak"
+    is always answerable by looking at it.
+  - Fire tiles use the existing hazard art, which the player already knows how to
+    read by the time a Colossus appears (floor 2+).
+
+VISUAL EFFECTS (renderer spec — EnemyRenderer / ImpactEffectSystem)
+===================================================================
+Procedural only; no new texture assets.
+
+  1. SEAM GLOW = SOFTNESS. The sprite tint is driven by crustStacks:
+       0 stacks -> full-bright orange (CINDERFORGE_TINT_HOT), seams blazing
+       3 stacks -> darkened, desaturated charcoal (CINDERFORGE_TINT_COOLED)
+     Lerped over ~0.4s so a shatter is a visible FLASH back to hot, not a snap.
+     CRITICAL: the cooled tint must stay distinguishable from the DORMANT_SHADE_DAMPEN
+     (0.7) darkening used for sleeping enemies — keep a bright orange RIM highlight on
+     the cooled state so "hardened" never reads as "asleep".
+
+  2. CRUST PLATES. One additive dark-plate quad per stack, drawn over the sprite at
+     fixed offsets (shoulders, chest, hips) — a literal count of the armour, readable
+     at a glance and at distance. Pre-allocated quads; no per-frame allocation.
+
+  3. SHATTER. When crust breaks: an outward burst of orange shard particles, a white
+     flash frame, and a short screen shake (all existing ImpactEffectSystem verbs).
+     A 3-stack shatter uses a bigger burst than a 1-stack — the reward is felt.
+
+  4. HEAT HAZE. A subtle vertical shimmer band at the base of the billboard (a
+     sin-offset sampling of the sprite's lowest rows, amplitude
+     CINDERFORGE_HEAT_HAZE_AMPLITUDE). Sells the mass and the temperature.
+
+  5. FOOTFALL. Each completed move: an ember burst plus a brief screen shake scaled
+     by distance — the room announces it is coming even out of view.
+
+  6. DEATH — COOLING. The corpse beat runs long: the sprite blackens over ~1s, seams
+     going out one by one, then it collapses into a burst of embers, leaving one last
+     fire tile under it. Distinct from the Rimeshell's blue shatter.
+
+COUNTERPLAY
+===========
+  - NEVER STOP SHOOTING. Sustained-DPT weapons (Chaingun, Assault Rifle, Incinerator)
+    trivialise the crust; burst-and-hide play feeds it.
+  - Reload BEFORE you engage, not mid-fight — the reload turns are exactly when it
+    cools.
+  - Fight it in open rooms. In a corridor its trail takes your only exit.
+  - Bait it across an explosive barrel: its own fire chain-detonates the barrel.
+  - Its allies burn in its trail. Golems do not path around it.
+
+BALANCE — TP DERIVATION
+=======================
+  Crust as TIME-AVERAGED flat reduction. Live crust reaches 12 flat, but only against
+  a player who has stopped attacking. Against the modelled player (who is attacking
+  every turn — that is what REFERENCE_PLAYER_DPT means) crust sits near 0 most turns.
+  Priced at the honest average of ~1 stack of uptime:
+      flatReduction() = 3f
+  The comment on flatReduction() must state this derivation, because a naive reader
+  will otherwise "fix" it to 12 and blow the bruiser band.
+
+  eHP = enemyEffectiveHitPoints(110, 0, 0, 3, REFERENCE_PLAYER_DPT=25)
+      = 110 * 25/(25-3) = 125.0
+  survivalTurns      = 125.0 / 25 = 5.0
+  basicDamagePerTurn = 18 / 1 = 18.0
+  TP = 18.0 * 5.0 * 1.00 = 90.0     -> BRUISER band (70-120) OK, mid-band
+
+  The molten trail is NOT folded into this TP. Terrain danger has its own priced
+  channel — GameMath.hazardTileThreatPoints, printed by BalanceReport's HAZARDS
+  section — and folding it into the enemy TP as well would double-count it. Confirm
+  the trail's contribution shows up there once implemented.
+
+  Credits 16 (above Shell Brute's 12, below Iron Stalker's 40) matches its TP.
+  XP is derived; never add an XP constant.
+
+  GATE: BalanceConfig change -> ./gradlew test AND ./gradlew balanceSim
+  (docs/game-balance-authority.txt SECTION 7).
+
+FLOOR BANDS & SPAWNING
+======================
+  Floors 2-10+. The golem family's ANCHOR — the enemy that defines a golem floor's
+  hardest room. EncounterBudgetPlanner treats BRUISER as an anchor role already, so
+  it will be placed in the deepest room and exempted from the per-room cap for free.
+
+  Roughly one per floor. Two Colossi in one room is a trail-and-crust nightmare that
+  the per-room TP cap should already prevent — verify it does.
+
+  EVERY-FLOOR PRESENCE: the four golems are banded so at least one GOLEM archetype is
+  available at every depth (Lancer 1+, Spiresower 1+, Colossus 2+, Sentinel 3+); they
+  join the normal mixed roster immediately, with no generator change.
+
+NEW CONSTANTS
+=============
+BalanceConfig:
+  CINDERFORGE_COLOSSUS_MAX_HEALTH             = 110
+  CINDERFORGE_COLOSSUS_ATTACK_DAMAGE          = 18
+  CINDERFORGE_COLOSSUS_MOVE_EVERY_N_TURNS     = 2
+  CINDERFORGE_CRUST_MAX_STACKS                = 3
+  CINDERFORGE_CRUST_ARMOR_PER_STACK           = 4
+  CINDERFORGE_CRUST_AVERAGED_FLAT_REDUCTION   = 3f   (the priced average)
+  CINDERFORGE_CRUST_SHATTER_MULTIPLIER        = 1.25f
+  CINDERFORGE_TRAIL_FIRE_TURNS                = 3
+  CINDERFORGE_TRAIL_MAX_LIVE_TILES            = 6
+  CREDIT_REWARD_CINDERFORGE_COLOSSUS          = 16
+
+EnemyConstants (mirrors + cosmetic-only):
+  CINDERFORGE_COLOSSUS_HEIGHT_MULTIPLIER      = 1.15f
+  CINDERFORGE_TINT_HOT_R/G/B, CINDERFORGE_TINT_COOLED_R/G/B
+  CINDERFORGE_CRUST_PLATE_OFFSETS             (per-stack plate placement)
+  CINDERFORGE_HEAT_HAZE_AMPLITUDE
+  ENEMY_SHEET_ELEMENTAL_GOLEMS_PATH           (shared; add once across the golem docs)
+
+TECHNICAL NOTES — IMPLEMENTATION CHECKLIST
+==========================================
+  1. EnemyType: add CINDERFORGE_COLOSSUS with every abstract member INCLUDING
+     family() -> EnemyFamily.GOLEM (abstract; it will not compile without it).
+  2. BalanceConfig + EnemyConstants entries. Never hardcode a value.
+  3. Enemy: crustStacks field + the armour contribution, reset inside the SAME
+     damage path that already handles block/armor (and in applyDoTDamage).
+  4. EnemyManager: spawn-char case '{'; trail ignition in executeMove; crust gain at
+     end of the enemy's turn; trail tile bookkeeping (fixed-size ring buffer, no
+     per-turn allocation).
+  5. HazardManager: reuse spawnFire — do NOT add a hazard type. Confirm the live-tile
+     cap interacts sanely with the hazard system's own limits.
+  6. EnemyRenderer: Q2 region; tint-by-stacks, crust plates, heat haze, footfall,
+     the long cooling death. No allocations in render(); dispose any new Texture.
+  7. docs/tile-symbols.txt: '{' entry + budget counts, same commit as the code.
+  8. docs/enemy-system.txt: verb-table row, MELEE list in Phase B, and a MECHANICAL
+     VERB HOOKS bullet for crust + trail.
+  9. Update this file's STATUS to IMPLEMENTED.
+ 10. Gates: ./gradlew test AND ./gradlew balanceSim.
+
+INTERACTIONS
+============
+  - HAZARDS (Pillar 3): the trail is the deepest integration any enemy has with the
+    hazard system. Fire spread, barrel chains and the BURNING status all apply
+    unchanged; the Colossus is immune to nothing, including its own fire — it is made
+    of magma, but the hazard system has no exemption path and adding one for one
+    enemy is not worth the special case. If playtesting says otherwise, add a
+    HazardImmunity concept properly, for all hosts.
+  - EXPLOSIVE BARRELS: the single best emergent counter. Preserve it.
+  - STATUS: BURNING on the player from the trail stacks with everything normally.
+  - ENCOUNTER BUDGET: anchor role, one per floor.
+  - OTHER GOLEMS: the Colossus forces movement, which walks the player straight
+    through a Rimeshell Lancer's lane. That pairing is the golem family's signature
+    encounter — ship them on the same floors.
+
+DEPENDENCIES
+============
+  1. enemy_system.txt / pre-committed intent model (IMPLEMENTED).
+  2. HazardManager fire tiles + the 'i' symbol (IMPLEMENTED) — REQUIRED for the trail.
+  3. EnemyFamily (IMPLEMENTED).
+  4. The renamed shared sheet asset (IMPLEMENTED).
+  5. No new SpecialAbility, no BalanceSchema pricing row, no new status type.
+
+OPEN QUESTIONS
+==============
+  1. Should DoT ticks reset the crust? RECOMMEND YES (stated above) — otherwise
+     Incinerator/Bleed builds cannot express the counterplay at all. Confirm the DoT
+     path can signal "damage taken" without also granting the shatter bonus.
+  2. Crust gain while DORMANT: a Colossus asleep since level load would wake fully
+     cooled. RECOMMEND crust only accrues once ALERTED, so the opening burst is
+     always worth taking.
+  3. Trail lifetime 3 turns vs 4: 3 keeps corridors survivable; test at 4 on floors
+     8+ if the late game needs teeth.
+  4. Does the trail block the ENEMY pathfinder? RECOMMEND NO — allies walking into
+     their own boss's fire is good comedy and good tactics for the player.
+  5. If '{' collides with a shipped EXCAVATION_SITE room, fall back to '/'.

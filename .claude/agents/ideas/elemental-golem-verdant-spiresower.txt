@@ -1,0 +1,342 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Verdant Spiresower — emerald golem that grows healing spires
+---
+
+OVERVIEW
+========
+The third ELEMENTAL GOLEM (EnemyFamily.GOLEM). A low, four-legged mass of emerald
+crystal with a wide bladed mane and two hot yellow-green eyes, crouched in a ring of
+crystal shoots pushing up through the floor.
+
+It is the first enemy in the game that EDITS THE LEVEL. It plants crystal SPIRES —
+solid, sight-blocking tiles — and drains life from every spire that is still standing.
+Shoot the golem and it heals. Shoot the spires and it stops healing, but the room is
+already a maze. The player has to decide what to shoot, and the wrong answer is a
+fight that never ends.
+
+FAMILY & ROLE
+=============
+  family()               EnemyFamily.GOLEM
+  role()                 EnemyRole.SOLDIER          (TP band 36-66)
+  positionalMultiplier() BalanceConfig.POSITIONAL_MULT_MELEE (1.00)
+  isRanged()             false
+  tacticalVerb()         "SOWER: break the spires first — they heal it and wall you
+                          in, and it will never die while one is standing."
+
+Distinct from every shipped archetype: the Blight Corruptor SUMMONS bodies you kill
+the normal way; the Spiresower creates TERRAIN. Its adds cannot chase you, cannot be
+dodged, and change the geometry the rest of the encounter is fought on. Nothing else
+in the bestiary makes the room itself the problem.
+
+SPRITE / SOURCE ART
+===================
+Shared 2x2 sheet: textures/enemies/enemy_sheet_elemental_golems.png, sliced as in
+EnemyRenderer.buildTextureRegions (TextureRegion y=0 is the TOP of the image):
+
+    Q1 (0, 0, halfW, halfH)         -> RIMESHELL_LANCER
+    Q2 (halfW, 0, halfW, halfH)     -> CINDERFORGE_COLOSSUS
+    Q3 (0, halfH, halfW, halfH)     -> VERDANT_SPIRESOWER      <- THIS DOC
+    Q4 (halfW, halfH, halfW, halfH) -> AURIC_SENTINEL
+
+Q3 art: broad quadruped hunched low; long emerald blades sweeping back off its spine;
+narrow yellow-green eyes set deep in a crystalline face; and — critically — bright
+green shoots erupting from the ground on both sides of it, glowing at the base. The
+art already shows the mechanic: the thing brings the floor up with it.
+
+SPAWN SYMBOL — '}' (NEW, requires the strict-rule commit)
+=========================================================
+'}' is currently UNASSIGNED in docs/tile-symbols.txt. The golem family takes the
+bracket block ('[' '{' '}' '(').
+
+Single commit (docs/tile-symbols.txt STRICT RULE):
+  1. ENEMY SPAWN MARKERS entry:
+       }   Verdant Spiresower spawn   Golem faction. Melee soldier; grows healing spires.
+  2. `case '}': type = EnemyType.VERDANT_SPIRESOWER; break;` in EnemyManager's spawn
+     switch (~line 240). Spawn chars become floor at load.
+  3. SYMBOL BUDGET counts updated; '}' removed from the unassigned list.
+  4. VERIFY: '}' is only pencilled in by the NOT IMPLEMENTED excavation room doc. If
+     that room ships first, fall back to ','.
+
+SPIRE TILE SYMBOL — REUSE, DO NOT INVENT
+========================================
+The spires are NOT a new tile symbol. They are runtime-spawned SOLID PROP tiles
+stamped into the level grid by a manager, exactly the way HazardManager stamps 'i'
+and 'q'. Reuse an existing solid-prop symbol from the SOLID PROPS list (recommended:
+'g', the radioactive barrel slot, re-skinned per-level is WRONG — instead register a
+new crystal-spire SPRITE via RECIPE A and bind it to the prop symbol the spire
+manager uses).
+
+  RECOMMENDED PATH (cheapest, no symbol cost):
+    - RECIPE A (docs/environment-tileset-system.txt §9): register ONE
+      EnvironmentSpriteDefinition "prop_crystal_spire" in the solid-prop category plus
+      its procedural texture generator. That is a single register() line each.
+    - The spire manager stamps a solid-prop symbol whose palette binding for that level
+      resolves to the spire sprite.
+  If per-level palette variation makes that binding unreliable in practice, the
+  fallback is a new FIXED symbol via the STRICT RULE checklist — but try RECIPE A
+  first. Adding a symbol is the expensive option and the tileset system exists
+  specifically so that art no longer costs one.
+
+STAT BLOCK
+==========
+  maxHealth()                   100
+  attackDamage()                13   (a sweeping crystal gore)
+  attackRangeTiles()            1
+  attackCadenceTurns()          1
+  moveEveryNTurns()             2    (it would rather reposition behind its spires)
+  isRanged()                    false
+  heightMultiplier()            0.80f
+  armorPool()                   20f  (the PRICED value of its regeneration — see BALANCE)
+  dodgeChance() / flatReduction() 0
+  baseCreditReward()            13
+  baseXpReward()                DERIVED from TP — never hand-set.
+  moveSet()                     MOVESET_NONE (empty)
+
+NO NEW SpecialAbility VERB. Sowing is a bespoke behaviour hook on the existing
+IntentVerb.SPECIAL-free path (it commits as WIND_UP -> a sow resolution), the same
+precedent as the Shell Brute charge. Nothing is added to the SpecialAbility catalogue,
+so BalanceSchema.SPECIAL_VERB_PRICING is untouched and COVERAGE stays green.
+
+  (If a future pass DOES want it catalogued as a real SpecialAbility — e.g. so the
+  purple SPECIAL intent frame and sub-glyph apply — then it MUST ship with a
+  SPECIAL_VERB_PRICING row and a GameMath.specialEquivalent* formula in the same
+  commit, or the COVERAGE rule fails the build. That is a deliberate, larger change.)
+
+THE ABILITY — SOW SPIRES
+========================
+  TRIGGER   Every SPIRESOWER_SOW_CADENCE_TURNS (4) enemy turns, when ALERTED and at
+            least one legal target tile exists.
+  COMMIT    IntentVerb.WIND_UP with triggerTelegraph() — one full player turn of
+            warning, and the target tiles are marked (see VISUAL EFFECTS) so the
+            player can step out or pre-empt.
+  RESOLVE   Spawns up to SPIRESOWER_SPIRES_PER_SOW (2) spires. Target tiles are chosen
+            deterministically (the existing seeded enemy RNG — never Math.random) from
+            tiles that are ALL of:
+              - within SPIRESOWER_SOW_RADIUS_TILES (3) of the golem,
+              - walkable floor (not wall/prop/door/hazard),
+              - not the player's tile, not any enemy's tile,
+              - not the ONLY remaining path between the player and the room exit.
+            THE LAST RULE IS NOT OPTIONAL. A spire that seals the player in a dead end
+            turns a tactical puzzle into an unwinnable one. Implement it as a flood
+            fill from the player's tile to the room's exits with the candidate tile
+            treated as solid; reject the candidate if any exit becomes unreachable.
+  CAP       SPIRESOWER_MAX_LIVE_SPIRES (4) per golem. At the cap it does not sow.
+
+SPIRE PROPERTIES
+  - SOLID: blocks player movement, enemy movement and line of sight, exactly like an
+    existing solid prop. It costs the Lancer its lane and the player their sightline
+    equally.
+  - DESTRUCTIBLE: SPIRESOWER_SPIRE_HIT_POINTS (30) HP, damaged by any weapon that hits
+    its tile. Dies to roughly one shell — cheap, but every shell spent on a spire is a
+    shell not spent on the golem. That is the whole decision.
+  - DECAYS: expires after SPIRESOWER_SPIRE_LIFETIME_TURNS (8) turns even if untouched,
+    so a fled fight cannot leave a permanently mazed room.
+  - HEALS ITS SOWER: at the end of each of the golem's turns it regains
+    SPIRESOWER_REGEN_PER_SPIRE (2) HP per LIVING spire within
+    SPIRESOWER_LEY_RANGE_TILES (5), capped at maxHealth. Four spires = 8 HP/turn,
+    which is ~32% of REFERENCE_PLAYER_DPT — enough to matter, never enough to
+    out-heal focused fire.
+  - DOES NOT ATTACK. A spire is terrain, not an enemy: no health bar, no AI, no XP, no
+    entry in the enemy list, no encounter-budget cost.
+
+BEHAVIOUR — COMMIT / EXECUTE INTEGRATION
+========================================
+The turn engine does not change (docs/enemy-system.txt, PRE-COMMITTED INTENT MODEL).
+
+  computeNextPlan()  -> add computeSowerPlan(enemy, ...) beside computeChargerPlan /
+                        computeFlankerPlan. Preference order: sow (cadence due, legal
+                        tiles, under cap) > melee attack if adjacent > step toward the
+                        player, PREFERRING tiles that keep a living spire between it
+                        and the player (a one-line scoring tweak on the greedy stepper:
+                        break ties toward cover).
+  phaseBExecute()    -> executeSow() stamps the spires; end-of-turn regen tick.
+
+SPIRE OWNERSHIP: a new small manager in the hazard package (SpireManager, mirroring
+ExplosiveBarrelManager/HazardManager) owns spire tiles, their HP, their lifetimes and
+the level-grid stamping/unstamping. World owns it and wires it into the tick bus. It
+must clear on level teardown, and every stamped tile MUST be restored on expiry or
+death — a leaked solid tile is a permanently broken level.
+
+TELEGRAPH & READABILITY
+=======================
+  - Sowing telegraphs a full player turn ahead through the standard WIND_UP intent
+    frame, AND the target tiles are marked on the floor, so a spire never appears
+    where the player did not see it coming.
+  - The ley-lines (below) make "which spire is healing it" visible without a HUD.
+  - Its melee (13) is an ordinary telegraphed attack, far under
+    TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION.
+
+VISUAL EFFECTS (renderer spec — EnemyRenderer / a spire renderer / ImpactEffectSystem)
+======================================================================================
+Procedural only, apart from the RECIPE A spire sprite.
+
+  1. LEY-LINES — THE SIGNATURE. A thin, pulsing green line drawn from the golem to
+     each living spire in range: the visible proof of the heal link. Drawn in the
+     billboard pass at floor level, tile-quantised, alpha pulsing at
+     SPIRESOWER_LEY_PULSE_SPEED, brightening on each regen tick so the player SEES
+     the heal happen. Kill a spire and its line snaps with a green spark. This single
+     effect teaches the whole mechanic without one word of tutorial.
+
+  2. SOW TELEGRAPH. On the commit turn, the target tiles get a green floor rune that
+     grows over the turn — a ring of shoots pushing up. Same floor-decal draw path as
+     the Lancer's aim line.
+
+  3. SPIRE BIRTH. An upward shard burst, a bright green flash and a short screen shake
+     as each spire erupts. The spire itself has a slow internal glow pulse SYNCED to
+     the golem's (same clock, same phase) — they visibly belong to each other.
+
+  4. EYE BRIGHTNESS = SPIRE COUNT. The golem's eye glow (an additive quad over the
+     sprite's eye position) scales with the number of living spires: dim at zero,
+     blazing at four. A second, redundant readout of the same state — readable even
+     when the ley-lines are occluded.
+
+  5. SPIRE DEATH. A shatter burst of emerald shards, the ley-line snapping, and the
+     golem FLINCHING (reuse the existing hit-flash on the golem itself, at low
+     strength) — feedback that hurting the terrain hurt the enemy.
+
+  6. GOLEM DEATH — WITHERING. Every living spire shatters in sequence over ~0.6s,
+     ley-lines whipping out, then the golem collapses into a spray of green shards.
+     The room visibly returns to normal, which is its own reward.
+
+COUNTERPLAY
+===========
+  - SPIRES FIRST. A player who focuses the golem while four spires are up is fighting
+    a 132-eHP enemy that regenerates; a player who clears the spires is fighting a
+    100-HP soldier. Same enemy, two very different fights, and the choice is theirs.
+  - Blast weapons (Grenade Launcher, Double Barrel) clear spires and golem together —
+    the first enemy that makes area weapons feel smart rather than sloppy.
+  - Close FAST. It sows at range-3 and prefers cover; in melee it has nothing.
+  - Or leave. Spires decay in 8 turns, and it is slow. Disengaging is a legitimate,
+    intended answer for a player low on ammo — very much in line with the roguelike
+    pillars.
+
+BALANCE — TP DERIVATION
+=======================
+  Regeneration priced as an ARMOUR POOL. Regen is extra effective HP, and the model
+  already has the right primitive for that — armorPool() feeds
+  GameMath.enemyEffectiveHitPoints directly. Expected regen over a fight:
+      SPIRESOWER_REGEN_PER_SPIRE (2) * expected living spires (~2, averaged over the
+      fight — it starts at 0 and is being shot) * expected fight length (~5 turns)
+      = 20 HP
+  So armorPool() = 20f, with that derivation written into the comment above it.
+
+  eHP = enemyEffectiveHitPoints(100, 20, 0, 0, REFERENCE_PLAYER_DPT=25)
+      = 100 + 20 = 120.0
+  survivalTurns      = 120.0 / 25 = 4.8
+  basicDamagePerTurn = 13 / 1 = 13.0
+  TP = 13.0 * 4.8 * 1.00 = 62.4     -> SOLDIER band (36-66) OK, upper-mid
+
+  The spires' TERRAIN value (blocked tiles, blocked LOS) is deliberately unpriced: it
+  hurts its own family as much as the player, and the model has no positional-denial
+  channel for enemies. Flag it for review if playtesting says the Spiresower is
+  over-performing its 62 TP.
+
+  Credits 13 sits between Void Shroud (12) and Mire Wraith (15) — consistent with TP.
+  XP is derived; never add an XP constant.
+
+  GATE: BalanceConfig change -> ./gradlew test AND ./gradlew balanceSim
+  (docs/game-balance-authority.txt SECTION 7).
+
+FLOOR BANDS & SPAWNING
+======================
+  Floors 1-10+. Alongside the Rimeshell Lancer, one of the two golems present from
+  depth 1 — its mechanic is legible immediately and it is slow enough to teach on.
+
+  Rarely more than one per floor: two Spiresowers can cross-heal through each other's
+  spires (both are in ley range of both spire sets), which is a genuinely nasty
+  emergent encounter. Allowed, but the per-room TP cap should keep it to a deep-floor
+  rarity — verify it does.
+
+  EVERY-FLOOR PRESENCE: the four golems are banded so at least one GOLEM archetype is
+  available at every depth (Lancer 1+, Spiresower 1+, Colossus 2+, Sentinel 3+); they
+  join the normal mixed roster immediately, with no generator change.
+
+NEW CONSTANTS
+=============
+BalanceConfig:
+  VERDANT_SPIRESOWER_MAX_HEALTH               = 100
+  VERDANT_SPIRESOWER_ATTACK_DAMAGE            = 13
+  VERDANT_SPIRESOWER_MOVE_EVERY_N_TURNS       = 2
+  SPIRESOWER_REGEN_ARMOR_POOL                 = 20f  (the priced regen)
+  SPIRESOWER_SOW_CADENCE_TURNS                = 4
+  SPIRESOWER_SPIRES_PER_SOW                   = 2
+  SPIRESOWER_MAX_LIVE_SPIRES                  = 4
+  SPIRESOWER_SOW_RADIUS_TILES                 = 3
+  SPIRESOWER_LEY_RANGE_TILES                  = 5
+  SPIRESOWER_REGEN_PER_SPIRE                  = 2
+  SPIRESOWER_SPIRE_HIT_POINTS                 = 30
+  SPIRESOWER_SPIRE_LIFETIME_TURNS             = 8
+  CREDIT_REWARD_VERDANT_SPIRESOWER            = 13
+
+EnemyConstants (mirrors + cosmetic-only):
+  VERDANT_SPIRESOWER_HEIGHT_MULTIPLIER        = 0.80f
+  SPIRESOWER_LEY_PULSE_SPEED
+  SPIRESOWER_EYE_GLOW_MIN / _MAX
+  SPIRESOWER_SPIRE_HEIGHT_MULTIPLIER
+  ENEMY_SHEET_ELEMENTAL_GOLEMS_PATH           (shared; add once across the golem docs)
+
+TECHNICAL NOTES — IMPLEMENTATION CHECKLIST
+==========================================
+  1. EnemyType: add VERDANT_SPIRESOWER with every abstract member INCLUDING
+     family() -> EnemyFamily.GOLEM (abstract; it will not compile without it).
+  2. BalanceConfig + EnemyConstants entries. Never hardcode.
+  3. RECIPE A: register the crystal-spire EnvironmentSpriteDefinition + its texture
+     generator (docs/environment-tileset-system.txt §9). Update that doc in the same
+     commit — it is the single source of truth for the tileset system.
+  4. hazard/SpireManager: spire list (fixed-capacity, pre-allocated), HP, lifetimes,
+     level-grid stamp/unstamp, tick subscriber, dispose/clear on level teardown.
+     Model it on ExplosiveBarrelManager. It MUST restore every stamped tile.
+  5. Weapon damage routing: a weapon hit on a spire tile must reach SpireManager.
+     Extend the existing hit-target seam (entity/EnemyHitTarget or its caller) rather
+     than adding a second, parallel damage path.
+  6. EnemyManager: spawn-char case '}'; computeSowerPlan; executeSow; the end-of-turn
+     regen tick; the cover-preferring tie-break on the greedy stepper.
+  7. Reachability guard: the flood-fill check that a candidate spire tile never seals
+     the player off. Non-negotiable. Add a unit test for it.
+  8. EnemyRenderer (+ spire draw): Q3 region; ley-lines, sow telegraph, spire birth,
+     eye glow, spire shatter, the withering death. No allocations in render();
+     pre-size the ley-line scratch arrays; dispose any new Texture.
+  9. docs/tile-symbols.txt: only if the RECIPE A path is abandoned for a new symbol.
+ 10. docs/enemy-system.txt: verb-table row, MELEE list in Phase B, MECHANICAL VERB
+     HOOKS bullet for sowing.
+ 11. Update this file's STATUS to IMPLEMENTED.
+ 12. Gates: ./gradlew test AND ./gradlew balanceSim.
+
+INTERACTIONS
+============
+  - LINE OF SIGHT: spires are opaque, so they feed GameMath.tileLineOfSightClear for
+    free — no LOS change needed, and ranged allies lose their lanes to them too.
+  - RANGED ALLIES: a Spiresower actively degrades a Rimeshell Lancer's lane. Good:
+    the family should not be a strictly-better stack.
+  - HAZARDS: fire does NOT spread through a spire tile (it is solid). Spires can wall
+    off a fire, which is a nice player tool next to a Cinderforge Colossus.
+  - LEVEL GENERATION: it needs floor space to sow. The encounter planner should avoid
+    placing it in one-tile corridors — where it is nearly harmless — but no code
+    change is required for correctness, only for quality.
+  - ENCOUNTER BUDGET: ordinary SOLDIER; spires cost no budget (they are terrain).
+
+DEPENDENCIES
+============
+  1. enemy_system.txt / pre-committed intent model (IMPLEMENTED).
+  2. EnemyFamily (IMPLEMENTED).
+  3. The tileset system + RECIPE A (IMPLEMENTED) — for the spire sprite.
+  4. ExplosiveBarrelManager / HazardManager (IMPLEMENTED) — as the pattern to copy for
+     SpireManager and for runtime level-grid stamping.
+  5. The renamed shared sheet asset (IMPLEMENTED).
+  6. No new SpecialAbility, no BalanceSchema pricing row, no new status type.
+
+OPEN QUESTIONS
+==============
+  1. Do spires block ENEMY movement as well as the player's? RECOMMEND YES — the
+    symmetry is honest, readable, and gives the player a reason to let one live.
+  2. Should a spire drop anything on destruction? RECOMMEND NO — free loot from a
+    renewable source is an exploit (farm the golem, harvest the spires).
+  3. Two Spiresowers cross-healing: cap total regen per golem regardless of spire
+    count, or let it ride as a deep-floor spike? RECOMMEND letting it ride and
+    watching the sim bands first.
+  4. Should killing the golem instantly shatter its spires (as specced) or leave them
+    to decay? Instant shatter is more satisfying and prevents leftover terrain; keep
+    it unless level flow argues otherwise.
+  5. If RECIPE A binding proves unreliable, fall back to a new FIXED symbol via the
+     STRICT RULE checklist — and update docs/tile-symbols.txt in that same commit.

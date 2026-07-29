@@ -19,6 +19,7 @@ public enum EnemyType {
         @Override public float  heightMultiplier()   { return EnemyConstants.PLAGUE_HULK_HEIGHT_MULTIPLIER; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_PLAGUE_HULK; }
         @Override public String displayName()        { return "Plague Hulk"; }
+        @Override public EnemyFamily family()        { return EnemyFamily.ABERRATION; }
         @Override public EnemyRole role()            { return EnemyRole.SOLDIER; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
         @Override public int    attackCadenceTurns() { return EnemyConstants.PLAGUE_HULK_MOVE_EVERY_N_TURNS; }
@@ -38,6 +39,7 @@ public enum EnemyType {
         @Override public float  heightMultiplier()   { return EnemyConstants.EYE_TYRANT_HEIGHT_MULTIPLIER; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_EYE_TYRANT; }
         @Override public String displayName()        { return "Eye Tyrant"; }
+        @Override public EnemyFamily family()        { return EnemyFamily.ABERRATION; }
         @Override public EnemyRole role()            { return EnemyRole.CHAFF; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
         @Override public int    attackCadenceTurns() { return 1; }
@@ -57,6 +59,7 @@ public enum EnemyType {
         @Override public float  heightMultiplier()   { return EnemyConstants.GORE_BITER_HEIGHT_MULTIPLIER; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_GORE_BITER; }
         @Override public String displayName()        { return "Gore Biter"; }
+        @Override public EnemyFamily family()        { return EnemyFamily.ABERRATION; }
         @Override public EnemyRole role()            { return EnemyRole.CHAFF; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_FAST_MELEE; }
         @Override public int    attackCadenceTurns() { return 1; }
@@ -73,6 +76,7 @@ public enum EnemyType {
         @Override public float  heightMultiplier()   { return EnemyConstants.SHELL_BRUTE_HEIGHT_MULTIPLIER; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_SHELL_BRUTE; }
         @Override public String displayName()        { return "Shell Brute"; }
+        @Override public EnemyFamily family()        { return EnemyFamily.INSECT; }
         @Override public EnemyRole role()            { return EnemyRole.BRUISER; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
         @Override public int    attackCadenceTurns() { return 1; }
@@ -89,6 +93,7 @@ public enum EnemyType {
         @Override public float  heightMultiplier()   { return EnemyConstants.MIRE_WRAITH_HEIGHT_MULTIPLIER; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_MIRE_WRAITH; }
         @Override public String displayName()        { return "Mire Wraith"; }
+        @Override public EnemyFamily family()        { return EnemyFamily.ABERRATION; }
         @Override public EnemyRole role()            { return EnemyRole.SOLDIER; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
         @Override public int    attackCadenceTurns() { return 1; }
@@ -108,6 +113,7 @@ public enum EnemyType {
         @Override public float  heightMultiplier()   { return EnemyConstants.IRON_STALKER_HEIGHT_MULTIPLIER; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_IRON_STALKER; }
         @Override public String displayName()        { return "Iron Stalker"; }
+        @Override public EnemyFamily family()        { return EnemyFamily.INSECT; }
         @Override public EnemyRole role()            { return EnemyRole.MINI_ELITE; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_FAST_MELEE; }
         @Override public int    attackCadenceTurns() { return 1; }
@@ -127,6 +133,7 @@ public enum EnemyType {
         @Override public float  heightMultiplier()   { return EnemyConstants.ACID_DRONE_HEIGHT_MULTIPLIER; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_ACID_DRONE; }
         @Override public String displayName()        { return "Acid Drone"; }
+        @Override public EnemyFamily family()        { return EnemyFamily.MACHINE; }
         @Override public EnemyRole role()            { return EnemyRole.SOLDIER; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
         @Override public int    attackCadenceTurns() { return 1; }
@@ -146,6 +153,7 @@ public enum EnemyType {
         @Override public float  heightMultiplier()   { return EnemyConstants.VOID_SHROUD_HEIGHT_MULTIPLIER; }
         @Override public int    baseCreditReward()   { return GameBalance.CREDIT_REWARD_VOID_SHROUD; }
         @Override public String displayName()        { return "Void Shroud"; }
+        @Override public EnemyFamily family()        { return EnemyFamily.DEMON; }
         @Override public EnemyRole role()            { return EnemyRole.SOLDIER; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_FAST_MELEE; }
         @Override public int    attackCadenceTurns() { return 1; }
@@ -169,6 +177,7 @@ public enum EnemyType {
         @Override public float  heightMultiplier()    { return EnemyConstants.GHOUL_HEIGHT_MULTIPLIER; }
         @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_GHOUL; }
         @Override public String displayName()         { return "Ghoul"; }
+        @Override public EnemyFamily family()         { return EnemyFamily.UNDEAD; }
         @Override public EnemyRole role()             { return EnemyRole.CHAFF; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
         @Override public int    attackCadenceTurns()  { return 1; }
@@ -185,6 +194,7 @@ public enum EnemyType {
         @Override public float  heightMultiplier()    { return EnemyConstants.CRAWLER_HEIGHT_MULTIPLIER; }
         @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_CRAWLER; }
         @Override public String displayName()         { return "Crawler"; }
+        @Override public EnemyFamily family()         { return EnemyFamily.UNDEAD; }
         @Override public EnemyRole role()             { return EnemyRole.CHAFF; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_FAST_MELEE; }
         @Override public int    attackCadenceTurns()  { return 1; }
@@ -201,6 +211,7 @@ public enum EnemyType {
         @Override public float  heightMultiplier()    { return EnemyConstants.REVENANT_HEIGHT_MULTIPLIER; }
         @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_REVENANT; }
         @Override public String displayName()         { return "Revenant"; }
+        @Override public EnemyFamily family()         { return EnemyFamily.UNDEAD; }
         // BRUISER, not SOLDIER: its stats (TP 79, golden ratio 2.4) are honestly bruiser-tier — a
         // fast, non-charging bruiser counterpart to the Shell Brute charger. Reclassified in the
         // game-balance-tuning contract pass so its Threat-Point cost is priced correctly by the
@@ -221,6 +232,7 @@ public enum EnemyType {
         @Override public float  heightMultiplier()    { return EnemyConstants.VORTEX_EYE_HEIGHT_MULTIPLIER; }
         @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_VORTEX_EYE; }
         @Override public String displayName()         { return "Vortex Eye"; }
+        @Override public EnemyFamily family()         { return EnemyFamily.UNDEAD; }
         @Override public EnemyRole role()             { return EnemyRole.CHAFF; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
         @Override public int    attackCadenceTurns()  { return 1; }
@@ -240,6 +252,7 @@ public enum EnemyType {
         @Override public float  heightMultiplier()    { return EnemyConstants.BLIGHT_CORRUPTOR_HEIGHT_MULTIPLIER; }
         @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_BLIGHT_CORRUPTOR; }
         @Override public String displayName()         { return "Blight Corruptor"; }
+        @Override public EnemyFamily family()         { return EnemyFamily.UNDEAD; }
         @Override public EnemyRole role()             { return EnemyRole.SOLDIER; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
         @Override public int    attackCadenceTurns()  { return 1; }
@@ -266,6 +279,7 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return BossBalance.statsForDepth(BossBalance.Archetype.OVERSEER, EnemyConstants.OVERSEER_DEPTH).xpReward; }
         @Override public int    baseCreditReward()   { return BossBalance.statsForDepth(BossBalance.Archetype.OVERSEER, EnemyConstants.OVERSEER_DEPTH).creditReward; }
         @Override public String displayName()        { return "The Overseer"; }
+        @Override public EnemyFamily family()        { return EnemyFamily.MACHINE; }
         @Override public EnemyRole role()            { return EnemyRole.BOSS; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
         @Override public int    attackCadenceTurns() { return 1; }
@@ -283,6 +297,7 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return BossBalance.statsForDepth(BossBalance.Archetype.CORRUPTOR, EnemyConstants.CORRUPTOR_DEPTH).xpReward; }
         @Override public int    baseCreditReward()   { return BossBalance.statsForDepth(BossBalance.Archetype.CORRUPTOR, EnemyConstants.CORRUPTOR_DEPTH).creditReward; }
         @Override public String displayName()        { return "The Corruptor"; }
+        @Override public EnemyFamily family()        { return EnemyFamily.ABERRATION; }
         @Override public EnemyRole role()            { return EnemyRole.BOSS; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
         @Override public int    attackCadenceTurns() { return 1; }
@@ -300,6 +315,7 @@ public enum EnemyType {
         @Override public int    baseXpReward()       { return BossBalance.statsForDepth(BossBalance.Archetype.HELL_BARON, EnemyConstants.HELL_BARON_DEPTH).xpReward; }
         @Override public int    baseCreditReward()   { return BossBalance.statsForDepth(BossBalance.Archetype.HELL_BARON, EnemyConstants.HELL_BARON_DEPTH).creditReward; }
         @Override public String displayName()        { return "Hell Baron"; }
+        @Override public EnemyFamily family()        { return EnemyFamily.DEMON; }
         @Override public EnemyRole role()            { return EnemyRole.BOSS; }
         @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
         @Override public int    attackCadenceTurns() { return 1; }
@@ -327,6 +343,18 @@ public enum EnemyType {
     public abstract int     baseCreditReward();
     /** Human-readable name shown in HUD name tags (e.g. "Plague Hulk LVL 2") and kill messages. */
     public abstract String  displayName();
+
+    /**
+     * The bestiary FAMILY this archetype belongs to — undead, insect, machine, demon, aberration,
+     * golem. Orthogonal to {@link #role()}: the family says WHAT the thing is, the role says what job
+     * it does in an encounter.
+     *
+     * <p>DESCRIPTIVE ONLY today — no system reads it, so declaring it changed no behaviour. It is
+     * abstract (rather than defaulted) deliberately: a new archetype must state its family at compile
+     * time, so the taxonomy can never silently fall out of date. See {@link EnemyFamily} for the
+     * family-coherent-floor rule this metadata is being staged for.
+     */
+    public abstract EnemyFamily family();
 
     // -------------------------------------------------------------------------
     // Tactical metadata (balance idea 4 — Tactical Combat Depth)

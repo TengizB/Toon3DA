@@ -1,0 +1,330 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Auric Sentinel — gold golem whose shards are armour and ammo
+---
+
+OVERVIEW
+========
+The fourth ELEMENTAL GOLEM (EnemyFamily.GOLEM). An upright figure of amber and gold
+crystal on darker violet limbs, a blazing spike-crown on its head — and three golden
+SHARDS orbiting it in a slow ring.
+
+The shards are the entire enemy. Each one absorbs ONE incoming hit COMPLETELY,
+whatever its size, and each one is also a projectile it must SPEND to attack. A
+railgun slug and a chaingun tick are worth exactly the same to a shard: nothing. It
+is the first enemy in the game where the RIGHT WEAPON matters more than the right
+position, and it is deliberately the mirror of the Rimeshell Lancer (which wants big
+burst into an open shell).
+
+FAMILY & ROLE
+=============
+  family()               EnemyFamily.GOLEM
+  role()                 EnemyRole.SOLDIER          (TP band 36-66)
+  positionalMultiplier() BalanceConfig.POSITIONAL_MULT_RANGED (1.30)
+  isRanged()             true
+  tacticalVerb()         "SENTINEL: its shards are armour AND ammo — strip them with
+                          rapid fire, or bait it into spending them."
+
+No shipped archetype poses this question. Eye Tyrant asks "where are you standing";
+Iron Stalker asks "how much do you commit"; the Sentinel asks "WHAT ARE YOU HOLDING".
+A player with a Chaingun laughs at it; a player with a Railgun has to think.
+
+SPRITE / SOURCE ART
+===================
+Shared 2x2 sheet: textures/enemies/enemy_sheet_elemental_golems.png, sliced as in
+EnemyRenderer.buildTextureRegions (TextureRegion y=0 is the TOP of the image):
+
+    Q1 (0, 0, halfW, halfH)         -> RIMESHELL_LANCER
+    Q2 (halfW, 0, halfW, halfH)     -> CINDERFORGE_COLOSSUS
+    Q3 (0, halfH, halfW, halfH)     -> VERDANT_SPIRESOWER
+    Q4 (halfW, halfH, halfW, halfH) -> AURIC_SENTINEL          <- THIS DOC
+
+Q4 art: symmetrical bipedal stance, arms spread; a brilliant gold spike-crown; body
+of stacked amber crystal over dusky violet limbs; and — the identity — five detached
+golden shards hanging in the air around its head and shoulders. The art shows the
+shards ALREADY DETACHED, which is the mechanic: they are not armour plating, they are
+a separate, countable, spendable resource.
+
+SPAWN SYMBOL — '(' (NEW, requires the strict-rule commit)
+=========================================================
+'(' is currently UNASSIGNED in docs/tile-symbols.txt. The golem family takes the
+bracket block ('[' '{' '}' '(').
+
+Single commit (docs/tile-symbols.txt STRICT RULE):
+  1. ENEMY SPAWN MARKERS entry:
+       (   Auric Sentinel spawn   Golem faction. Ranged; orbiting shards absorb one hit each.
+  2. `case '(': type = EnemyType.AURIC_SENTINEL; break;` in EnemyManager's spawn
+     switch (~line 240). Spawn chars become floor at load.
+  3. SYMBOL BUDGET counts updated; '(' removed from the unassigned list.
+  4. VERIFY: '(' is only pencilled in by the NOT IMPLEMENTED excavation room doc. If
+     that room ships first, fall back to '_'.
+
+STAT BLOCK
+==========
+  maxHealth()                   70    (glassy under the shards — intentionally low)
+  attackDamage()                15    (a launched shard)
+  attackRangeTiles()            5
+  attackCadenceTurns()          2     (it can only fire as fast as it re-grows shards)
+  moveEveryNTurns()             1     (it repositions to keep a cardinal line)
+  isRanged()                    true
+  heightMultiplier()            1.00f
+  armorPool()                   70f   (the PRICED value of shard absorption — see BALANCE)
+  dodgeChance() / flatReduction() 0
+  baseCreditReward()            14
+  baseXpReward()                DERIVED from TP — never hand-set.
+  moveSet()                     MOVESET_NONE (empty)
+
+NO NEW SpecialAbility VERB. Shard absorption is a damage-pipeline hook; shard launch
+is an ordinary IntentVerb.ATTACK_RANGED with a resource cost. Nothing is added to the
+SpecialAbility catalogue, so BalanceSchema.SPECIAL_VERB_PRICING is untouched and the
+COVERAGE rule stays green.
+
+THE ABILITY — ORBITING SHARDS
+=============================
+State: enemy.shardCount (int, 0..AURIC_MAX_SHARDS = 3), enemy.shardRegenCounter.
+
+  ABSORB    While shardCount > 0, ANY single incoming damage instance is NULLIFIED and
+            consumes exactly one shard. Not reduced — nullified, whatever the amount.
+            A 90-damage railgun slug and a 10-damage chaingun tick both cost the
+            Sentinel one shard and cost the player one shot.
+            THE HOOK GOES IN Enemy.applyDamage, BEFORE block and flat armour, and it
+            must be per-INSTANCE-of-damage, not per-turn: a multi-pellet or multi-tile
+            weapon that resolves as several separate applyDamage calls strips several
+            shards in one trigger pull. That is the intended reward for a wide weapon,
+            and it must fall out of the implementation rather than being special-cased.
+            DoT ticks (applyDoTDamage) do NOT consume shards and are NOT absorbed —
+            they bypass to HP. Burning a Sentinel down is a legitimate, distinct answer
+            and keeps status builds relevant.
+
+  SPEND     Firing consumes one shard. With shardCount == 0 it CANNOT attack at all: it
+            retreats to maximum range and regenerates, fully defanged. Making the
+            player's aggression directly disarm the enemy is the point — the counter to
+            its offence and the counter to its defence are the same action.
+
+  REGROW    +1 shard every AURIC_SHARD_REGEN_TURNS (3) enemy turns, up to the cap. The
+            counter advances every turn, including turns it fired, so a passive player
+            faces a permanently full ring.
+
+  FIRE RULE Mandatory cardinal-line constraint (isSameCardinalLine) — the launched
+            shard travels only along a true row or column, with clear LOS, within
+            attackRangeTiles(). No diagonals, ever. The Sentinel steers toward
+            alignment on its move turns like every other ranged archetype.
+
+WEAPON MATH — WHY IT IS INTERESTING
+  Against a full ring, per trigger pull:
+    Railgun         (1 huge hit)          -> 1 shard,  0 HP damage. Terrible.
+    Double Barrel   (1-2 hits)            -> 1-2 shards, 0 HP. Poor.
+    Chaingun        (many small hits)     -> ring gone in a burst, then full damage.
+    Shotgun         (1 hit, fast reload)  -> mediocre, but cheap to strip with.
+    Incinerator/DoT (bypasses shards)     -> ignores the gimmick entirely.
+  The Sentinel is therefore a LOADOUT TEST, and pairs beautifully with the Rimeshell
+  Lancer, which inverts every one of those answers. A floor containing both cannot be
+  solved with a single weapon — which is exactly what the build-diversity pillar wants
+  out of an encounter.
+
+BEHAVIOUR — COMMIT / EXECUTE INTEGRATION
+========================================
+The turn engine does not change (docs/enemy-system.txt, PRE-COMMITTED INTENT MODEL).
+
+  computeNextPlan()  -> add computeSentinelPlan(enemy, ...) beside the existing ranged
+                        planner. Preference: fire (shard available, cardinal line, LOS,
+                        in range) > retreat to max range while shardless > step toward
+                        cardinal alignment > wait. It KITES when shardless and only
+                        then — a Sentinel with a full ring stands and shoots, so its
+                        aggression level is itself a readout of its shard count.
+  phaseBExecute()    -> executeRangedAttack decrements shardCount on a committed shot
+                        (and still fires — the shard is spent even if the shot whiffs
+                        under the standard fairness re-validation; committing to a shot
+                        it cannot take is a real cost and a real bait).
+  damage path        -> the absorb hook in Enemy.applyDamage, before block/armor.
+  end of its turn    -> advance shardRegenCounter, grow a shard when due.
+
+TELEGRAPH & READABILITY
+=======================
+  - The shard COUNT is visible at all times as the orbiting ring — this is the whole
+    readability contract, and it needs no HUD, no bar and no text.
+  - Shots are committed a full turn ahead in the standard ranged intent frame with the
+    predicted-damage number.
+  - 15 damage is far under TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION, and is telegraphed
+    regardless.
+  - A shardless Sentinel visibly stops attacking and backs off, so "it is disarmed
+    right now" is legible from across the room.
+
+VISUAL EFFECTS (renderer spec — EnemyRenderer / ImpactEffectSystem)
+===================================================================
+Procedural only; no new texture assets beyond the shared sheet.
+
+  1. THE ORBIT RING — THE SIGNATURE. shardCount additive gold quads orbiting the
+     billboard: angle = wallClock * AURIC_SHARD_ORBIT_SPEED + shardIndex * (2*PI/3),
+     with a slight vertical bob per shard and a size falloff for the far side of the
+     ring so it reads as 3D orbit rather than a flat halo. Drawn in the same pass as
+     the sprite, after it, respecting the same z-buffer occlusion test.
+     Pre-allocate the quad transforms in the constructor — this draws every frame for
+     every visible Sentinel and must not allocate.
+
+  2. ABSORB — SHARD SHATTER. The struck shard flashes white, bursts into gold sparks,
+     and the ring VISIBLY closes up (remaining shards re-space to even angles over
+     ~0.25s). Plus a distinct "clink" of feedback: a bright gold ring-flash on the
+     billboard INSTEAD of the usual red hit flash, so the player instantly knows the
+     hit did nothing to its health. That distinction is the most important single
+     effect in this doc — without it the enemy reads as a bullet sponge instead of a
+     puzzle.
+
+  3. LAST SHARD GONE — EXPOSED. The body's amber glow drops to a dull matte; a thin
+     violet crack pattern lights across the sprite. It looks fragile because it is:
+     70 HP and no answer. This is the "now" cue.
+
+  4. REGROW. A gold mote rises from the ground, spirals up into the ring and
+     crystallises into a new shard with a soft chime-flash. Long enough to see and
+     interrupt-worthy — a player who sees it should feel the clock running.
+
+  5. FIRE. The shard breaks orbit, streaks down the lane as an additive gold bolt with
+     a short trail, and the ring closes behind it. The projectile is the armour
+     leaving — the player watches the enemy disarm itself.
+
+  6. DEATH — COLLAPSE. Every remaining shard falls out of orbit and shatters on the
+     floor, then the body comes apart into gold shards with a bright amber flash.
+
+COUNTERPLAY
+===========
+  - RAPID FIRE STRIPS IT. Chaingun / Assault Rifle / any multi-hit weapon deletes the
+    ring in one burst.
+  - Wide/multi-hit weapons strip several shards per trigger pull.
+  - DoT bypasses shards entirely — Incinerator, Bleed, hazard fire all hit HP directly.
+  - BAIT IT. Every shot it takes is one shard less. Dance in and out of its lane while
+    a slow weapon reloads and it will disarm itself.
+  - Do NOT open on it with a Railgun. Save the burst for AFTER the ring is gone —
+    with 70 HP, one good hit into an exposed Sentinel is nearly the whole fight.
+
+BALANCE — TP DERIVATION
+=======================
+  Shard absorption priced as an ARMOUR POOL. Absorbing a hit is exactly "extra
+  effective HP", and armorPool() feeds GameMath.enemyEffectiveHitPoints directly.
+  Against the modelled player, one absorbed hit is worth about one reference hit:
+      shards absorbed over a fight ~= 3 (the ring) + ~0.5 (one regrow) = 3.5
+      value per absorbed hit          ~= REFERENCE_PLAYER_DPT (25) * 0.8 = 20
+      armorPool()                      = 3.5 * 20 = 70f
+  The 0.8 factor is the honest discount for the fact that a player who reads the enemy
+  correctly strips shards with CHEAP hits, not reference-sized ones. That derivation
+  must be written into the comment above armorPool(), because the number looks absurd
+  without it.
+
+  eHP = enemyEffectiveHitPoints(70, 70, 0, 0, REFERENCE_PLAYER_DPT=25)
+      = 70 + 70 = 140.0
+  survivalTurns      = 140.0 / 25 = 5.6
+  basicDamagePerTurn = 15 / 2 = 7.5
+  TP = 7.5 * 5.6 * 1.30 = 54.6      -> SOLDIER band (36-66) OK, mid-band
+
+  RISK, STATED PLAINLY: this is the archetype in the golem set whose TP is most
+  sensitive to the player's loadout — its effective eHP swings hard between a Chaingun
+  build and a Railgun build, and a single averaged armorPool cannot express that. The
+  simulator is the right instrument: run ./gradlew balanceSim across the policy matrix
+  and check the S-* bands per policy, not just the aggregate. If the spread is
+  unacceptable, the lever is AURIC_MAX_SHARDS (3 -> 2), not the HP.
+
+  Credits 14 sits between Void Shroud (12) and Mire Wraith (15) — consistent with TP.
+  XP is derived; never add an XP constant.
+
+  GATE: BalanceConfig change -> ./gradlew test AND ./gradlew balanceSim
+  (docs/game-balance-authority.txt SECTION 7).
+
+FLOOR BANDS & SPAWNING
+======================
+  Floors 3-10+. The last golem introduced: by depth 3 the player has a second weapon,
+  which is precisely the decision the Sentinel tests. Shipping it on floor 1, against a
+  single starting weapon, would be a wall rather than a puzzle.
+
+  EVERY-FLOOR PRESENCE: the four golems are banded so at least one GOLEM archetype is
+  available at every depth (Lancer 1+, Spiresower 1+, Colossus 2+, Sentinel 3+); they
+  join the normal mixed roster immediately, with no generator change.
+
+  BEST PAIRING: with the Rimeshell Lancer, whose counters it inverts. A room with both
+  cannot be solved by one weapon.
+
+NEW CONSTANTS
+=============
+BalanceConfig:
+  AURIC_SENTINEL_MAX_HEALTH                   = 70
+  AURIC_SENTINEL_ATTACK_DAMAGE                = 15
+  AURIC_SENTINEL_RANGE_TILES                  = 5
+  AURIC_SENTINEL_MOVE_EVERY_N_TURNS           = 1
+  AURIC_MAX_SHARDS                            = 3
+  AURIC_SHARD_REGEN_TURNS                     = 3
+  AURIC_SHARD_ARMOR_POOL                      = 70f   (the priced absorption)
+  CREDIT_REWARD_AURIC_SENTINEL                = 14
+
+EnemyConstants (mirrors + cosmetic-only):
+  AURIC_SENTINEL_HEIGHT_MULTIPLIER            = 1.00f
+  AURIC_SHARD_ORBIT_SPEED                     (radians/sec)
+  AURIC_SHARD_ORBIT_RADIUS_FRACTION           (of sprite width)
+  AURIC_SHARD_SIZE_FRACTION                   (of sprite height)
+  AURIC_SHARD_BOB_AMPLITUDE
+  AURIC_ABSORB_FLASH_R/G/B                    (the gold "no damage" flash)
+  AURIC_EXPOSED_TINT_R/G/B                    (the dull matte, shardless)
+  ENEMY_SHEET_ELEMENTAL_GOLEMS_PATH           (shared; add once across the golem docs)
+
+TECHNICAL NOTES — IMPLEMENTATION CHECKLIST
+==========================================
+  1. EnemyType: add AURIC_SENTINEL with every abstract member INCLUDING
+     family() -> EnemyFamily.GOLEM (abstract; it will not compile without it).
+  2. BalanceConfig + EnemyConstants entries. Never hardcode.
+  3. Enemy: shardCount + shardRegenCounter; the absorb hook at the TOP of applyDamage
+     (before block and flat armor), explicitly NOT in applyDoTDamage.
+  4. EnemyManager: spawn-char case '('; computeSentinelPlan; shard spend on a committed
+     shot; regen at end of its turn; the shardless retreat behaviour.
+  5. EnemyRenderer: Q4 region; the orbit ring, absorb shatter + gold flash, the exposed
+     tint, the regrow spiral, the fire streak, the collapse death. NO ALLOCATIONS in
+     render() — pre-allocate the per-shard transforms; dispose any new Texture.
+  6. Weapon interaction: verify multi-hit weapons genuinely produce multiple
+     applyDamage calls (they should — marchShot walks tiles). If a weapon batches its
+     damage into one call, the "wide weapons strip more shards" promise silently fails;
+     fix the weapon, not the Sentinel.
+  7. docs/tile-symbols.txt: the '(' entry + budget counts, same commit as the code.
+  8. docs/enemy-system.txt: verb-table row, RANGED list in Phase B, MECHANICAL VERB
+     HOOKS bullet for the shard economy.
+  9. Update this file's STATUS to IMPLEMENTED.
+ 10. Gates: ./gradlew test AND ./gradlew balanceSim (watch the per-policy S-* bands,
+     not just the aggregate — see the RISK note in BALANCE).
+
+INTERACTIONS
+============
+  - CARDINAL-LINE RULE: mandatory and satisfied — shard launches only travel a true
+    cardinal lane and never re-target after commit.
+  - STATUS / DoT: deliberately bypasses shards. This is the balance safety valve and
+    the reason a status build is never hard-countered.
+  - HAZARDS: fire tiles damage it through the shards (hazard damage is a DoT tick).
+    Herding a Sentinel into a Colossus's molten trail is a genuinely clever play; keep
+    it working.
+  - BLOCK / ARMOR: shards resolve BEFORE both, so the ordering in applyDamage is
+    shards -> block -> flat armor -> HP. Write that order into the method comment.
+  - ENCOUNTER BUDGET: ordinary SOLDIER; no anchor privileges.
+  - OTHER GOLEMS: pairs with the Rimeshell Lancer by design (inverted weapon
+    counters). Behind a Verdant Spiresower's spires it is frustrating — the spires
+    deny its own lanes as much as the player's sightlines, so the combination is
+    self-limiting rather than oppressive.
+
+DEPENDENCIES
+============
+  1. enemy_system.txt / pre-committed intent model (IMPLEMENTED).
+  2. EnemyFamily (IMPLEMENTED).
+  3. The renamed shared sheet asset (IMPLEMENTED).
+  4. A multi-hit weapon in the player's hands by floor 3 (Chaingun / Assault Rifle) —
+     already true of the shipped loadout progression. Verify before shipping the floor
+     band; if the player can reach floor 3 with only single-hit weapons, this enemy is
+     unfair there and the band moves to 4+.
+  5. No new SpecialAbility, no BalanceSchema pricing row, no new status type.
+
+OPEN QUESTIONS
+==============
+  1. Should a shard absorb a hit ENTIRELY (as specced) or cap the absorption at some
+     value? Entire absorption is the readable, teachable rule and the reason the enemy
+     is interesting; capping it turns the Sentinel into ordinary armour. RECOMMEND
+     keeping full absorption and tuning AURIC_MAX_SHARDS instead.
+  2. Do shards block the AREA/blast component of explosive weapons, or only direct
+     hits? RECOMMEND blast counts as one instance (one shard) — simple and consistent.
+  3. Should a shardless Sentinel flee the ROOM entirely rather than kite at max range?
+     RECOMMEND kiting only; a fleeing enemy that leaves the encounter is a new
+     behaviour the AI has no precedent for.
+  4. Melee/backstab: does a backstab bypass shards? RECOMMEND NO — a universal bypass
+     erases the puzzle for anyone holding a melee option.
+  5. If '(' collides with a shipped EXCAVATION_SITE room, fall back to '_'.

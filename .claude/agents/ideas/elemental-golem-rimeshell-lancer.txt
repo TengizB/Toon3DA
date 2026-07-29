@@ -1,0 +1,328 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Rimeshell Lancer — armoured ice golem with a molten lance
+---
+
+OVERVIEW
+========
+The first of the four ELEMENTAL GOLEM archetypes (EnemyFamily.GOLEM). A squat,
+quadrupedal mound of blue-violet ice crystal with a furnace burning somewhere
+inside it: two orange eyes and a molten LANCE it fires straight down a cardinal
+lane.
+
+Its whole design is one trade the player can see and exploit: the ice shell makes
+it the most damage-resistant non-elite in the game, but the shell must OPEN for
+the lance to fire. It is armoured OR dangerous, never both at once. Every other
+ranged enemy in the bestiary punishes you for standing in its line; the Lancer
+punishes you for shooting at the wrong moment.
+
+FAMILY & ROLE
+=============
+  family()               EnemyFamily.GOLEM
+  role()                 EnemyRole.SOLDIER          (TP band 36-66)
+  positionalMultiplier() BalanceConfig.POSITIONAL_MULT_RANGED (1.30)
+  isRanged()             true
+  tacticalVerb()         "LANCER: armoured until it fires — bait the lance, step
+                          off the lane, then burst it through the open shell."
+
+The verb is distinct from every shipped archetype. Eye Tyrant = "break its line".
+Mire Wraith = "prioritise it, don't let the DOT stack". The Lancer = "attack it on
+the RIGHT TURN" — a timing puzzle, not a positioning one (though the lane still has
+to be respected, which is what makes both halves solvable at once).
+
+SPRITE / SOURCE ART
+===================
+Shared 2x2 sheet: textures/enemies/enemy_sheet_elemental_golems.png
+Sliced exactly like the blight/infernal sheets in EnemyRenderer.buildTextureRegions
+(TextureRegion y=0 is the TOP of the image):
+
+    Q1 (0, 0, halfW, halfH)               -> RIMESHELL_LANCER      <- THIS DOC
+    Q2 (halfW, 0, halfW, halfH)           -> CINDERFORGE_COLOSSUS
+    Q3 (0, halfH, halfW, halfH)           -> VERDANT_SPIRESOWER
+    Q4 (halfW, halfH, halfW, halfH)       -> AURIC_SENTINEL
+
+Q1 art: low, wide, four-legged crystal mass; overlapping blue and violet shards
+fanning back over its spine like a frozen mane; two slit eyes glowing hot orange;
+an orange-white lance of fire projecting forward from the head. Reads instantly as
+"cold body, hot core" — which IS the mechanic.
+
+SPAWN SYMBOL — '[' (NEW, requires the strict-rule commit)
+=========================================================
+'[' is currently UNASSIGNED in docs/tile-symbols.txt. The four golems take the
+bracket block ('[' '{' '}' '(') so the family is recognisable at a glance in a
+level file.
+
+Before or during implementation, in a SINGLE commit (docs/tile-symbols.txt STRICT
+RULE):
+  1. Add to the ENEMY SPAWN MARKERS section of docs/tile-symbols.txt:
+       [   Rimeshell Lancer spawn   Golem faction. Armoured ranged lane-beamer.
+  2. Add `case '[': type = EnemyType.RIMESHELL_LANCER; break;` to the spawn switch
+     in EnemyManager (around line 240) — spawn chars are stripped to floor by
+     LevelLoader, so no isWall/PropRenderer work is needed.
+  3. Update the SYMBOL BUDGET counts (assigned 85 -> 86, unassigned 10 -> 9) and
+     remove '[' from the "Unassigned characters" list.
+  4. VERIFY FIRST: '[' is pencilled in (not reserved) by the NOT IMPLEMENTED
+     excavation-monolith-chamber-room.txt design. If that room ships first, fall
+     back to ')' and update this doc.
+
+STAT BLOCK
+==========
+  maxHealth()                   90
+  attackDamage()                14   (the lance)
+  attackRangeTiles()            6
+  attackCadenceTurns()          2    (charge turn + fire turn — see BEHAVIOUR)
+  moveEveryNTurns()             2    (heavy; it repositions slowly)
+  isRanged()                    true
+  heightMultiplier()            0.85f
+  flatReduction()               5f   (TIME-AVERAGED shell — see BALANCE)
+  armorPool() / dodgeChance()   0
+  baseCreditReward()            10
+  baseXpReward()                DERIVED — do NOT hand-set. XP comes from
+                                XP_PER_THREAT_POINT * depth-scaled TP.
+  moveSet()                     MOVESET_NONE (empty)
+
+NO NEW SpecialAbility VERB. The lance is a bespoke behaviour hook built from the
+EXISTING IntentVerb.WIND_UP -> ATTACK_RANGED pair, exactly like the Shell Brute
+charge. This deliberately avoids touching BalanceSchema.SPECIAL_VERB_PRICING (a
+new SpecialAbility with no pricing row fails the COVERAGE rule and breaks the
+build).
+
+THE ABILITY — RIME LANCE
+========================
+A two-turn channelled beam down one cardinal lane, with the shell as its cost.
+
+  TURN 1 — CHARGE (IntentVerb.WIND_UP, EnemyState.WINDING_UP)
+    Precondition (all must hold at COMMIT time):
+      - player is on the same tile column OR the same tile row (isSameCardinalLine
+        — MANDATORY, the project's ranged rule),
+      - Chebyshev distance <= attackRangeTiles(),
+      - tileLineOfSightClear along the lane,
+      - the Lancer is not already channelling.
+    On commit it captures lanceDirectionColumn / lanceDirectionRow (the same field
+    pattern as Enemy.chargeDirectionColumn/Row) and calls triggerTelegraph().
+    THE SHELL OPENS: the live per-instance mitigation (Enemy.armor) drops to 0 for
+    the whole of the following player turn. This is the punish window.
+
+  TURN 2 — FIRE (IntentVerb.ATTACK_RANGED)
+    Re-validation at EXECUTE time (the standard fairness rules R1-R6): the lance
+    fires down the COMMITTED lane regardless of where the player now stands. If the
+    player stepped off that row/column the beam simply misses — no damage, no free
+    re-target. Bait-and-sidestep is the counter, and it works because the lane was
+    locked a full turn earlier.
+    The beam is PIERCING: it resolves every tile from the Lancer to the first WALL
+    (Level.isWall / a closed door / a solid prop), not to the first body. It damages
+    the player for attackDamage() AND every OTHER ENEMY standing in the lane for
+    RIMESHELL_LANCE_FRIENDLY_FIRE_FRACTION (0.5) of that damage. Golems do not care
+    about each other.
+    The shell RESEALS at the end of this turn (Enemy.armor restored).
+
+  COOLDOWN
+    RIMESHELL_LANCE_COOLDOWN_TURNS (2) enemy turns before it may charge again. While
+    on cooldown, or with no clean lane, it behaves as an ordinary slow ranged unit:
+    it steps toward cardinal alignment (never diagonal-fires) and does not kite.
+
+The friendly fire is not a bug to be balanced away — it is the second half of the
+puzzle. A Lancer at the back of a corridor packed with its own family is a resource
+the player can USE: pull the pack into the lane, let the beam fly, and the room
+thins itself out. This is the first enemy in the game whose attack the player can
+weaponise, and it is the reason the golem family is fun to fight in a corridor.
+
+BEHAVIOUR — COMMIT / EXECUTE INTEGRATION
+========================================
+All of this lives in EnemyManager's existing three-phase turn (see
+docs/enemy-system.txt, PRE-COMMITTED INTENT MODEL). Nothing about the turn engine
+changes.
+
+  computeNextPlan()  -> add a computeLancerPlan(enemy, ...) branch, keyed on
+                        type == RIMESHELL_LANCER, sitting beside the existing
+                        computeChargerPlan / computeFlankerPlan branches. Order of
+                        preference: continue a committed channel > start a channel
+                        (canBeginLance) > step toward cardinal alignment > wait.
+  phaseBExecute()    -> executeWindUp() already covers the charge turn for the Shell
+                        Brute; add an executeLanceBeam() for the fire turn (lane walk
+                        + player hit + ally splash + shell reseal).
+
+Shell state is per-INSTANCE, not per-type: set enemy.armor = RIMESHELL_SHELL_ARMOR
+at spawn (beside the existing depth-scaling assignments), zero it on the charge
+commit, restore it after the beam resolves. The type-level flatReduction() is only
+the TP-pricing average (below) — the two must never be wired to each other.
+
+TELEGRAPH & READABILITY
+=======================
+Contract: no hit the player takes should be one the telegraph did not warn about.
+
+  - The charge turn is a full player turn of warning, drawn in the existing WIND_UP
+    intent frame with the predicted-damage number (order-1/order-2 machinery, free).
+  - The lane itself is drawn (see VISUAL EFFECTS) so "am I in it?" is answered
+    without counting tiles.
+  - The shell opening is shown on the SPRITE, not only in the intent frame, so the
+    punish window is legible even when the intent icon is off-screen.
+  - The lance damage (14) sits far under TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION
+    anyway, so the telegraph audit passes on both counts.
+
+VISUAL EFFECTS (renderer spec — EnemyRenderer / ImpactEffectSystem)
+===================================================================
+Procedural only; no new texture assets beyond the shared sheet.
+
+  1. IDLE — FROST BREATH. A slow cyan rim-light pulse on the sprite edge
+     (sin(clock * RIMESHELL_FROST_PULSE_SPEED)), amplitude small. Cold, patient,
+     inert-looking. Reuses the existing per-enemy tint path — no extra draw call.
+
+  2. CHARGE TURN — SHELL OPEN. Three simultaneous, all readable at 6 tiles:
+     a. A white-hot mote grows between the eyes: an additive whitePixelTexture quad
+        scaled from 0 to RIMESHELL_CHARGE_MOTE_SIZE over the turn's telegraph timer.
+     b. CRACK GLOW: the sprite tint lerps from ice-blue toward orange
+        (RIMESHELL_SHELL_OPEN_TINT) — the body visibly "heats". This is the
+        shell-is-down tell.
+     c. AIM LINE: a thin cyan line drawn tile-by-tile down the committed lane from
+        the Lancer to the stopping wall, alpha pulsing. Drawn in the same billboard
+        pass as the sprite, at floor level, so it is occluded correctly by the
+        wall z-buffer. Tile-quantised — never a free-floating diagonal.
+
+  3. FIRE TURN — THE LANCE. An additive orange-white beam quad swept down the lane
+     over RIMESHELL_LANCE_BEAM_SECONDS, with a white core and an orange falloff, plus
+     a short screen shake (ImpactEffectSystem, existing) and an ember burst at each
+     tile it passes through. Anything it hits gets the standard hit flash. A frost
+     ring puffs off the Lancer at the muzzle — the ice/fire contrast is the identity.
+
+  4. RESEAL. The tint snaps back to ice-blue over ~0.3s with a brief white frost
+     bloom, which doubles as the "your punish window just closed" cue.
+
+  5. DEATH — SHATTER. The kill burst uses cold colours: a spray of blue-white shard
+     particles instead of the default gore palette, plus one bright orange flash as
+     the core goes out. Corpse decal as normal.
+
+COUNTERPLAY
+===========
+  - RIGHT TURN, not right position: shoot it on the charge turn and the shell is
+    open; shoot it while sealed and you lose ~20% of every hit to flat reduction.
+  - Sidestep the lane on the charge turn and the whole beam is wasted, then it is
+    on cooldown AND out of position.
+  - Corridor fights are in the player's favour: line its family up in the lane.
+  - Burst weapons (Railgun, Double Barrel) are excellent INTO the open shell; chip
+    weapons are the worst answer to it — the exact inverse of the Auric Sentinel,
+    which is why the two make a good floor pair.
+
+BALANCE — TP DERIVATION (numbers, not vibes)
+============================================
+Everything below is the existing model (docs/game-balance-authority.txt); no new
+formula is invented.
+
+  Shell as TIME-AVERAGED flat reduction. The live shell is RIMESHELL_SHELL_ARMOR = 7
+  flat, but it is DOWN for 1 turn of every ~3 (charge turn out of charge+fire+
+  cooldown-ish cycle), so type-level pricing uses the average:
+      flatReduction() = round(7 * (1 - 1/3)) ~= 5
+  That average is the honest number to price, because TP is a per-turn average model.
+  The comment on flatReduction() must state this derivation.
+
+  eHP = enemyEffectiveHitPoints(90, 0, 0, 5, REFERENCE_PLAYER_DPT=25)
+      = 90 * 25/(25-5) = 112.5
+  survivalTurns      = 112.5 / 25 = 4.5
+  basicDamagePerTurn = 14 / 2 = 7.0
+  TP = 7.0 * 4.5 * 1.30 = 40.95      -> SOLDIER band (36-66) OK, low-mid
+
+  Friendly fire and the lane-lock are PLAYER-FAVOURING, so pricing them at zero is
+  conservative in the right direction.
+
+  Credits 10 sits between Acid Drone (8) and Void Shroud (12) — consistent with TP.
+  XP is derived; never add an XP constant.
+
+  GATE: this is a BalanceConfig change, so BOTH gates must pass —
+    ./gradlew test         (unit tests + the full balance audit; every commit)
+    ./gradlew balanceSim   (the behavioural bands; required for BalanceConfig edits)
+  See docs/game-balance-authority.txt SECTION 7 — THE CHANGE PROTOCOL.
+
+FLOOR BANDS & SPAWNING
+======================
+  Floors 1-10+. The golem family's baseline body; present at every depth.
+
+  EVERY-FLOOR PRESENCE: the four golems are banded so at least one GOLEM archetype
+  is in the candidate roster at EVERY depth (Lancer 1+, Spiresower 1+, Colossus 2+,
+  Sentinel 3+). Until family-coherent floors ship they simply join the existing
+  mixed roster and the EncounterBudgetPlanner spends TP on them like any other
+  archetype — no generator change is needed for them to start appearing.
+
+  FAMILY-COHERENT FLOORS (the staged rule EnemyFamily was added for): when a floor
+  picks GOLEM as its family, its whole roster comes from these four. NOTE THE GAP —
+  the family currently covers SOLDIER x3 + BRUISER anchor and has NO CHAFF, so a
+  pure-golem floor would have no cheap bodies to spend the tail of the budget on.
+  Adding a GOLEM chaff archetype (a "Shardling" — a knee-high crystal fragment,
+  ~24 HP, fast, melee) is a prerequisite for GOLEM-family floors, not for these four
+  archetypes to ship.
+
+NEW CONSTANTS
+=============
+BalanceConfig (balance-bearing — these are the ones the gates audit):
+  RIMESHELL_LANCER_MAX_HEALTH                 = 90
+  RIMESHELL_LANCER_ATTACK_DAMAGE              = 14
+  RIMESHELL_LANCER_RANGE_TILES                = 6
+  RIMESHELL_LANCER_MOVE_EVERY_N_TURNS         = 2
+  RIMESHELL_SHELL_ARMOR                       = 7     (live per-instance flat)
+  RIMESHELL_SHELL_AVERAGED_FLAT_REDUCTION     = 5f    (the priced average)
+  RIMESHELL_LANCE_COOLDOWN_TURNS              = 2
+  RIMESHELL_LANCE_FRIENDLY_FIRE_FRACTION      = 0.5f
+  CREDIT_REWARD_RIMESHELL_LANCER              = 10
+
+EnemyConstants (mirrors of the above + cosmetic-only values):
+  RIMESHELL_LANCER_HEIGHT_MULTIPLIER          = 0.85f
+  RIMESHELL_FROST_PULSE_SPEED                 (idle rim pulse, radians/sec)
+  RIMESHELL_CHARGE_MOTE_SIZE                  (fraction of sprite height)
+  RIMESHELL_SHELL_OPEN_TINT_R/G/B             (the heat tint)
+  RIMESHELL_LANCE_BEAM_SECONDS                (beam sweep duration)
+  ENEMY_SHEET_ELEMENTAL_GOLEMS_PATH           = "textures/enemies/enemy_sheet_elemental_golems.png"
+                                                (shared by all four golem docs — add once)
+
+TECHNICAL NOTES — IMPLEMENTATION CHECKLIST
+==========================================
+  1. EnemyType: add RIMESHELL_LANCER with every abstract member, INCLUDING
+     family() -> EnemyFamily.GOLEM (family() is abstract; it will not compile
+     without it — that is intentional).
+  2. BalanceConfig + EnemyConstants: the constants above. Never hardcode.
+  3. EnemyManager: spawn-char case '['; computeLancerPlan + executeLanceBeam;
+     shell open/reseal on enemy.armor; lance direction fields on Enemy (mirror
+     chargeDirectionColumn/Row).
+  4. Enemy: lanceDirectionColumn/Row, lanceCooldownTurns. Plain int fields.
+  5. EnemyRenderer: register the Q1 region from the golem sheet; the frost pulse,
+     charge mote, aim line, beam sweep and shatter death. NO ALLOCATIONS in
+     render() — pre-size any per-lane scratch arrays in the constructor, and
+     dispose any new Texture in dispose().
+  6. docs/tile-symbols.txt: the '[' entry + budget counts (same commit as the code).
+  7. docs/enemy-system.txt: add the row to the tactical-verb table, the archetype
+     to the RANGED list in Phase B, and a MECHANICAL VERB HOOKS bullet for the lance.
+  8. Update this file's STATUS to IMPLEMENTED.
+  9. Gates: ./gradlew test AND ./gradlew balanceSim.
+
+INTERACTIONS
+============
+  - CARDINAL-LINE RULE: mandatory and satisfied — the lance only ever commits down a
+    true cardinal lane, and never re-targets after commit.
+  - HAZARDS: the beam does NOT ignite fire tiles (that is the Colossus's job) —
+    keeping each golem's floor-effect distinct is deliberate.
+  - STATUS: no immunities in v1. If a later pass wants flavour, CHILLED-style
+    resistance belongs to the shell, not to the lance.
+  - ENCOUNTER BUDGET: an ordinary SOLDIER; no anchor privileges.
+  - OTHER GOLEMS: pairs best with the Cinderforge Colossus (which forces you to keep
+    moving, straight through the Lancer's lane) and worst-for-the-player with the
+    Verdant Spiresower (whose spires give the Lancer cover to reseal behind).
+
+DEPENDENCIES
+============
+  1. enemy_system.txt / the pre-committed intent model (IMPLEMENTED) — the turn
+     engine, WIND_UP verb, telegraph rendering and fairness re-validation.
+  2. EnemyFamily (IMPLEMENTED — the taxonomy this archetype is classified under).
+  3. The renamed shared sheet asset (IMPLEMENTED — assets/textures/enemies/
+     enemy_sheet_elemental_golems.png).
+  4. Nothing else. No new SpecialAbility, no BalanceSchema pricing row, no new
+     status type.
+
+OPEN QUESTIONS
+==============
+  1. Should the beam stop at a CLOSED DOOR (recommended: yes — doors already block
+     sight and the player should be able to shut one on the lane) or burn through?
+  2. Friendly-fire fraction 0.5 — tune against pack density once the golem floors
+     exist; 1.0 may be more fun and is easier to explain.
+  3. Does the open shell also increase damage taken (a VULNERABLE-style multiplier)
+     on top of dropping flat reduction? Recommend NOT in v1 — dropping the flat
+     reduction is already a legible ~20% swing, and stacking a multiplier makes the
+     TP average harder to defend.
+  4. If '[' collides with a shipped EXCAVATION_SITE room, fall back to ')'.
