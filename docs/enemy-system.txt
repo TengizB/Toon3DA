@@ -47,10 +47,13 @@ Every ALERTED/CHASING/ATTACKING enemy acts once:
     - Else → step toward player via greedy Manhattan minimizer.
     - Move cooldown governed by moveEveryNTurns() per type.
 
-  RANGED enemies (EYE_TYRANT, MIRE_WRAITH, ACID_DRONE):
+  RANGED enemies (EYE_TYRANT, MIRE_WRAITH, ACID_DRONE, VORTEX_EYE, AURIC_SENTINEL):
     - Distance < RANGED_KITE_MIN_TILES (2) → flee first, then re-evaluate.
     - In range AND has LOS AND on same cardinal line → fire in place (no move).
     - Out of range OR no LOS OR not on cardinal line → step toward player.
+    - AURIC_SENTINEL inverts the kiting rule (computeSentinelPlan): with a shard in the ring it STANDS
+      AND SHOOTS at any range, even point-blank; it only kites once the ring is EMPTY, because then it
+      cannot attack at all. Its aggression level is therefore a readout of its shard count.
 
 ## CRITICAL — Ranged Attack Cardinal Line Rule
 
@@ -182,7 +185,8 @@ of the bodies filling those roles.
   INSECT       Shell Brute, Iron Stalker
   MACHINE      Acid Drone, The Overseer (boss)
   DEMON        Void Shroud, Hell Baron (boss)
-  GOLEM        (reserved — the four elemental golems; see the elemental-golem-* idea docs)
+  GOLEM        Auric Sentinel (the Rimeshell Lancer / Cinderforge Colossus / Verdant Spiresower are
+               still design docs — their art already sits in the shared sheet's Q1-Q3)
 
 STATUS: DESCRIPTIVE ONLY. Nothing reads family() yet — no spawn, budget, AI or render path branches
 on it, so adding the taxonomy changed zero behaviour and every archetype stays spawnable on every
@@ -263,6 +267,14 @@ until you can state its verb in one sentence and that verb is DISTINCT from ever
   Plague Hulk    '1'   SOLDIER     TANK: kill at range — don't grind it down in melee.
   Shell Brute    '4'   BRUISER     CHARGER: sidestep its charge, then punish the recovery.
   Iron Stalker   '!'   MINI_ELITE  MINI-ELITE: commit resources or avoid — a deliberate mid-floor spike.
+  Auric Sentinel '('   SOLDIER     SENTINEL: its shards are armour AND ammo — strip them with rapid
+                                   fire, or bait it into spending them.
+
+FLOOR BANDS — EnemyType.minSpawnDepth() (default 1) is a DATA gate the EncounterBudgetPlanner applies
+when it builds its fill pool, never a switch. Only the Auric Sentinel raises it (3): it asks "WHAT ARE
+YOU HOLDING", a question the player cannot answer on floor 1 with a single starting weapon, so shipping
+it there would be a wall rather than a puzzle. Hand-authored levels are NOT gated — a level file may
+place '(' at any depth deliberately.
 
 ENCOUNTER BUDGET (Pillar 1) — the floor generator (LevelGenerator) SPENDS a per-depth Threat-Point
 budget instead of rolling enemies at random, via EncounterBudgetPlanner:
@@ -341,6 +353,35 @@ labels them:
     EnemyManager.pendingExecuteDeaths and applied in a second pass after the phaseB loop finishes.
   - BLIGHT_CORRUPTOR — SUMMON (order-5) spawns VORTEX_EYE (not GHOUL) on empty adjacent tiles, each
     spawn marked with a green portal ring-pulse + spark burst (ImpactEventListener.onEnemySpawned).
+  - AURIC_SENTINEL — SHARD ECONOMY (.claude/agents/ideas/elemental-golem-auric-sentinel.txt). Its
+    orbiting shards are simultaneously its armour and its ammunition, so the counter to its offence and
+    the counter to its defence are the SAME action. Implemented as plain state + a damage-pipeline hook,
+    NOT as a SpecialAbility verb, so the SpecialAbility catalogue and BalanceSchema.SPECIAL_VERB_PRICING
+    are untouched and the verb COVERAGE rule stays green. Four touch points:
+      ABSORB  Enemy.applyDamage, at the TOP — ahead of Block and flat armour, so the full mitigation
+              order is SHARD -> Block -> armor -> HP. While shardCount > 0 any single incoming damage
+              INSTANCE is NULLIFIED (not reduced) and costs one shard, whatever its size: a railgun slug
+              and a chaingun tick are worth exactly the same. Because it is per-instance, a weapon that
+              resolves as several applyDamage calls (a Chaingun burst, a multi-tile march, an ability's
+              bonus hit) strips several shards on one trigger pull — that reward FALLS OUT of the rule
+              rather than being special-cased. Enemy.applyDoTDamage deliberately does NOT absorb, so
+              burns/poison/hazard fire bite straight into HP: the safety valve that keeps a status build
+              from ever being hard-countered.
+      SPEND   EnemyManager.executeRangedAttack calls Enemy.spendShardForShot BEFORE the fairness
+              re-validation, so a committed shot the player dodges still costs a shard (a real bait).
+              With an empty ring the committed shot cannot happen at all — the enemy is disarmed.
+      REGROW  EnemyManager.advanceShardRegrowth at the end of every enemy turn (including stunned turns
+              and turns it fired), +1 shard per AURIC_SHARD_REGEN_TURNS up to AURIC_MAX_SHARDS, so a
+              passive player faces a permanently full ring.
+      READ    EnemyRenderer pass 1.55 draws one additive gold quad per LIVE shard orbiting the
+              billboard. The ring IS the readability contract — remaining armour and remaining ammo are
+              the same number, legible with no HUD, no bar and no text. An absorbed hit plays a GOLD
+              flash INSTEAD of the usual white hit flash (and no damage number), which is the single
+              most important effect on the archetype: without it the enemy reads as a bullet sponge
+              rather than a puzzle. A shardless body drops to a dull violet matte — the "hit it NOW" cue.
+    TP pricing: absorption is priced as an ARMOUR POOL (EnemyType.armorPool -> 70), because absorbing a
+    hit IS extra effective HP; see BalanceConfig.AURIC_SHARD_ARMOR_POOL for the derivation and for the
+    stated RISK that one averaged pool cannot express a loadout-dependent eHP swing.
 
 All hooks respect the cardinal-line constraint; the charge only fires down a true cardinal lane.
 

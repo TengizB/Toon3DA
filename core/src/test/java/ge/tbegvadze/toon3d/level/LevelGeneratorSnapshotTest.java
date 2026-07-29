@@ -29,7 +29,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class LevelGeneratorSnapshotTest {
 
     /**
-     * SHA-256 over {@link #fingerprint()}, re-baselined for the ENCOUNTER DENSITY change
+     * SHA-256 over {@link #fingerprint()}, re-baselined for the AURIC SENTINEL archetype
+     * (.claude/agents/ideas/elemental-golem-auric-sentinel.txt).
+     *
+     * <p>The new archetype joins {@code EncounterBudgetPlanner}'s fill pool, so from its
+     * {@code minSpawnDepth} of 3 the roster roulette draws differently, the roster's size and
+     * composition change, and the later grid passes that run AFTER enemy placement (atmospheric wall
+     * theming, connectivity repair, lock-and-key, stairs) consume a shifted RNG sequence and stamp
+     * different tiles. SCOPE OF THE CHANGE WAS VERIFIED, not assumed: a digest over depths 1-2 alone is
+     * BYTE-IDENTICAL to the previous baseline, because the depth band keeps the Sentinel out of the
+     * candidate list entirely on shallow floors — only depths 3+ move, which is exactly the intended
+     * blast radius. Determinism itself is unaffected (the digest is stable across separate JVM runs).
+     *
+     * <p>PRIOR RE-BASELINE (retained for history) — the ENCOUNTER DENSITY change
      * (.claude/agents/ideas/encounter-density-and-corpse-semantics.txt).
      *
      * <p>NOTE ON THE PREVIOUS BASELINE: it was already STALE before this change — the committed digest
@@ -64,7 +76,7 @@ class LevelGeneratorSnapshotTest {
      * reviewed behaviour change.
      */
     private static final String EXPECTED_DIGEST =
-            "07068d2178444e072a643fc2de67ae5da387bc711dd30854bfcca81ee7f457c5";
+            "729f93d0a1f7ff97214ab6e0cbe729d2b7224cd5a4312a3ac118fabebe841b2c";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

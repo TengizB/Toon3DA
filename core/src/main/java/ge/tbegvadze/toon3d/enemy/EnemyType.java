@@ -264,6 +264,42 @@ public enum EnemyType {
     },
 
     // -------------------------------------------------------------------------
+    // Elemental golem faction (EnemyFamily.GOLEM) — animate mineral constructs sharing the
+    // enemy_sheet_elemental_golems 2x2 sheet. See .claude/agents/ideas/elemental-golem-*.txt.
+    // -------------------------------------------------------------------------
+
+    AURIC_SENTINEL {
+        @Override public int    maxHealth()          { return EnemyConstants.AURIC_SENTINEL_MAX_HEALTH; }
+        @Override public int    attackDamage()        { return EnemyConstants.AURIC_SENTINEL_ATTACK_DAMAGE; }
+        @Override public int    attackRangeTiles()    { return EnemyConstants.AURIC_SENTINEL_RANGE_TILES; }
+        @Override public int    moveEveryNTurns()     { return EnemyConstants.AURIC_SENTINEL_MOVE_EVERY_N_TURNS; }
+        @Override public boolean isRanged()           { return true; }
+        @Override public float  heightMultiplier()    { return EnemyConstants.AURIC_SENTINEL_HEIGHT_MULTIPLIER; }
+        @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_AURIC_SENTINEL; }
+        @Override public String displayName()         { return "Auric Sentinel"; }
+        @Override public EnemyFamily family()         { return EnemyFamily.GOLEM; }
+        @Override public EnemyRole role()             { return EnemyRole.SOLDIER; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
+        @Override public int    attackCadenceTurns()  { return EnemyConstants.AURIC_SENTINEL_ATTACK_CADENCE_TURNS; }
+        @Override public char   spawnChar()           { return '('; }
+        @Override public String tacticalVerb()        { return "SENTINEL: its shards are armour AND ammo — strip them with rapid fire, or bait it into spending them."; }
+        /**
+         * The PRICED value of shard absorption (see BalanceConfig.AURIC_SHARD_ARMOR_POOL for the full
+         * derivation — the number looks absurd without it). Absorbing a hit outright IS extra effective
+         * HP, so the shard ring is priced as an ARMOUR POOL and flows straight into
+         * GameMath.enemyEffectiveHitPoints: 3.5 absorbed hits over a fight * ~20 value per hit = 70.
+         * No new SpecialAbility verb is introduced, so BalanceSchema's verb COVERAGE rule is untouched.
+         */
+        @Override public float  armorPool()           { return EnemyConstants.AURIC_SHARD_ARMOR_POOL; }
+        @Override public int    maxShards()           { return EnemyConstants.AURIC_MAX_SHARDS; }
+        @Override public int    shardRegenTurns()     { return EnemyConstants.AURIC_SHARD_REGEN_TURNS; }
+        @Override public int    minSpawnDepth()       { return EnemyConstants.AURIC_SENTINEL_MIN_SPAWN_DEPTH; }
+        // MOVESET_NONE (the default): shard absorption is a damage-pipeline hook and the shard launch is
+        // an ordinary ATTACK_RANGED with a resource cost, so nothing is added to the SpecialAbility
+        // catalogue and SPECIAL_VERB_PRICING stays exactly as it was.
+    },
+
+    // -------------------------------------------------------------------------
     // Boss archetypes — BossFloorController sets actual scaled HP/damage at spawn;
     // values here are used for initial Enemy construction and XP budget.
     // AI is driven by BossAttackPattern, not moveEveryNTurns() / isRanged().
@@ -420,6 +456,35 @@ public enum EnemyType {
     public float dodgeChance()   { return 0f; }
     /** Flat damage shaved off each incoming hit (punishes chip damage). Default 0 — Iron Stalker later. */
     public float flatReduction() { return 0f; }
+
+    // -------------------------------------------------------------------------
+    // Orbiting-shard economy (elemental-golem-auric-sentinel) — the AURIC_SENTINEL's shards are BOTH
+    // its armour (each one nullifies exactly one incoming damage instance) and its ammunition (each
+    // shot spends one). Declared as plain archetype DATA here rather than as a SpecialAbility verb: the
+    // absorb is a damage-pipeline hook (Enemy.applyDamage) and the launch is an ordinary ATTACK_RANGED
+    // with a resource cost, so the SpecialAbility catalogue — and BalanceSchema's verb pricing COVERAGE
+    // rule — are untouched. Every archetype defaults to 0 shards, i.e. no shard behaviour at all.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Size of a full shard ring; {@link Enemy} starts each instance at this value. 0 (the default) means
+     * this archetype has no shards, so every shard code path is inert for it.
+     */
+    public int maxShards() { return 0; }
+
+    /**
+     * Enemy turns between shard re-growths, up to {@link #maxShards()}. Meaningless (and unread) while
+     * {@code maxShards() == 0}; the 1 default simply keeps the modulo in the regrowth step safe.
+     */
+    public int shardRegenTurns() { return 1; }
+
+    /**
+     * The shallowest floor the encounter planner may spend budget on this archetype (1 = any floor).
+     * A DATA gate, not a switch: {@code EncounterBudgetPlanner} filters its fill pool by this value, so
+     * banding a new archetype to deeper floors costs one override and no generator edit. Today only the
+     * Auric Sentinel raises it — it tests a loadout decision the player cannot yet make on floor 1.
+     */
+    public int minSpawnDepth() { return 1; }
 
     /**
      * This archetype's effective HP through the shared survivability primitive (order 5). With the

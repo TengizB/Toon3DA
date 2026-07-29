@@ -53,4 +53,31 @@ public interface ImpactEventListener {
      * @param heightMultiplier the spawned enemy type's billboard height fraction
      */
     default void onEnemySpawned(int tileColumn, int tileRow, float heightMultiplier) {}
+
+    /**
+     * Called when an orbiting shard is destroyed (elemental-golem-auric-sentinel), whether it was spent
+     * absorbing a hit, spent launching a shot, or lost when the ring collapsed on death. Lets the effect
+     * system play the gold "clink" — a spark burst plus a ring pulse — which, together with the gold
+     * billboard flash that REPLACES the usual red hit flash, is what tells the player the hit did
+     * nothing to the enemy's health. Default: no-op.
+     *
+     * @param tileColumn       the shard-bearing enemy's tile column
+     * @param tileRow          the shard-bearing enemy's tile row
+     * @param heightMultiplier the enemy type's billboard height fraction (scales effect placement)
+     * @param shardsShattered  how many shards broke at once (1 for an absorb or a launch; the whole
+     *                         remaining ring when the enemy dies)
+     */
+    default void onShardShattered(int tileColumn, int tileRow, float heightMultiplier,
+                                  int shardsShattered) {}
+
+    /**
+     * Called when a shard-bearing enemy re-grows a shard (elemental-golem-auric-sentinel), so the
+     * effect system can play the gold crystallise flash. The player who sees it should feel the clock
+     * running: the ring is coming back. Default: no-op.
+     *
+     * @param tileColumn       the enemy's tile column
+     * @param tileRow          the enemy's tile row
+     * @param heightMultiplier the enemy type's billboard height fraction
+     */
+    default void onShardRegrown(int tileColumn, int tileRow, float heightMultiplier) {}
 }

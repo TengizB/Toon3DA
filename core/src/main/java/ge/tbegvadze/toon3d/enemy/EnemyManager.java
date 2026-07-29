@@ -251,6 +251,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 case 'K': type = EnemyType.REVENANT;         break;
                 case 'V': type = EnemyType.VORTEX_EYE;       break;
                 case '*': type = EnemyType.BLIGHT_CORRUPTOR; break;
+                case '(': type = EnemyType.AURIC_SENTINEL;   break;
                 case 'n': continue; // Boss spawn — BossFloorController seeds the correct boss by depth
                 default:  type = EnemyType.PLAGUE_HULK;   break;
             }
@@ -518,9 +519,17 @@ public final class EnemyManager implements EnemyHitTarget {
 
         // Block absorption (strategy-combat-order-3): capture the buffer before the hit so we can tell
         // how much the shield ate and whether it shattered, then fire the Block-specific feedback.
+        // The shard ring (elemental-golem-auric-sentinel) resolves INSIDE applyDamage, ahead of Block,
+        // so capture it here too: an absorbed hit must read as gold "nothing happened", never as a
+        // red damage number, or the Sentinel reads as a bullet sponge instead of a puzzle.
         int blockBefore = enemy.block;
+        int shardsBefore = enemy.shardCount;
         enemy.applyDamage(totalDamage, exposed, activationBlockPierceFraction);
         if (exposed) enemy.consumeExposed();
+        if (enemy.shardCount < shardsBefore) {
+            spawnShardAbsorbFeedback(enemy);
+            return;   // the shard ate the whole hit: no hit flash, no damage number, no HP change
+        }
         int blockAbsorbed = blockBefore - enemy.block;
         if (blockAbsorbed > 0) {
             boolean shattered = enemy.block == 0 && totalDamage > blockBefore;
@@ -612,6 +621,7 @@ public final class EnemyManager implements EnemyHitTarget {
             enemy.advanceAttackAnim(deltaTime);
             enemy.advanceIntentPop(deltaTime);
             enemy.advanceSlide(deltaTime);   // ORDER 2: cosmetic boss locomotion slide (no-op when idle)
+            enemy.advanceShardAbsorbFlash(deltaTime); // gold absorb flash (no-op without shards)
         }
     }
 
@@ -714,15 +724,33 @@ public final class EnemyManager implements EnemyHitTarget {
             if (enemy.skipNextAction) {
                 enemy.skipNextAction    = false;
                 enemy.plannedAction.verb = IntentVerb.STUNNED;
+                advanceShardRegrowth(enemy);
                 continue;
             }
             executePlan(enemy, playerColumn, playerRow, player);
+            advanceShardRegrowth(enemy);
         }
         // Apply any self-inflicted deaths (e.g. a detonating Plague Hulk) AFTER the loop above
         // finishes, so removing them never shifts enemies.get(index) mid-iteration (R-self-destruct).
         for (int deathIndex = 0; deathIndex < pendingExecuteDeathCount; deathIndex++) {
             killEnemy(pendingExecuteDeaths[deathIndex], false);
             pendingExecuteDeaths[deathIndex] = null;
+        }
+    }
+
+    /**
+     * Advances a shard-bearing enemy's re-growth clock at the END of its turn and plays the gold
+     * crystallise flash on the turn a shard actually returns (elemental-golem-auric-sentinel). Called
+     * for every acting enemy — including one whose committed action was cancelled by a stun — because
+     * the ring regrows on its own clock, not on the enemy's success. A no-op for every archetype with
+     * no shards, and for an enemy that died during its own action (a corpse grows nothing).
+     */
+    private void advanceShardRegrowth(Enemy enemy) {
+        if (!enemy.isAlive()) return;
+        if (!enemy.advanceShardRegrowth()) return;
+        if (impactEventListener != null) {
+            impactEventListener.onShardRegrown(enemy.tileColumn, enemy.tileRow,
+                    enemy.type.heightMultiplier());
         }
     }
 
@@ -816,8 +844,25 @@ public final class EnemyManager implements EnemyHitTarget {
      * readability; damage and status only apply if the player is still on the same cardinal line,
      * in range, with clear LOS and no ally blocking the shot. Stepping off the lane makes the shot
      * miss into the empty lane — the same "you dodged, enjoy the free turn" payoff as the melee whiff.
+     *
+     * <p>A shard-bearing shooter (elemental-golem-auric-sentinel) must SPEND a shard to fire, and the
+     * shard is spent up front — before the fairness re-validation below — so a committed shot the
+     * player then steps out of still costs it a shard. Committing to a shot it cannot land is a real
+     * cost and a real bait. If the player stripped the ring during their turn the committed shot cannot
+     * happen at all: the enemy is disarmed, visibly does nothing, and the player who read the ring is
+     * rewarded with a free turn.
      */
     private void executeRangedAttack(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow, Player player) {
+        if (enemy.type.maxShards() > 0) {
+            if (!enemy.spendShardForShot()) {
+                enemy.state = EnemyState.ALERTED;   // disarmed mid-commit — no shot, no animation
+                return;
+            }
+            if (impactEventListener != null) {
+                impactEventListener.onShardShattered(enemy.tileColumn, enemy.tileRow,
+                        enemy.type.heightMultiplier(), 1);
+            }
+        }
         enemy.state = EnemyState.ATTACKING;
         enemy.triggerAttackAnim();
         faceEnemyToward(enemy, playerColumn, playerRow); // order-6: a kiter that fires without moving still faces its shot
@@ -1068,6 +1113,8 @@ public final class EnemyManager implements EnemyHitTarget {
             } else {
                 computeMeleePlan(enemy, plan, playerColumn, playerRow);
             }
+        } else if (enemy.type == EnemyType.AURIC_SENTINEL) {
+            computeSentinelPlan(enemy, plan, playerColumn, playerRow);
         } else {
             computeRangedPlan(enemy, plan, playerColumn, playerRow);
         }
@@ -1369,6 +1416,54 @@ public final class EnemyManager implements EnemyHitTarget {
         }
     }
 
+    /**
+     * SENTINEL plan (Auric Sentinel, elemental-golem-auric-sentinel) — a ranged planner whose whole
+     * shape is driven by the shard ring, so the enemy's AGGRESSION LEVEL is itself a readout of its
+     * shard count. Preference order:
+     *   - shard available + a clear cardinal firing line → commit ATTACK_RANGED (it stands and shoots).
+     *   - SHARDLESS                                       → retreat toward maximum range and regrow;
+     *                                                       it cannot attack at all, and it visibly
+     *                                                       stops trying, so "it is disarmed right now"
+     *                                                       is legible from across the room.
+     *   - armed but no line                               → brace if it is hurting, else step toward
+     *                                                       cardinal alignment, else wait.
+     *
+     * <p>It deliberately does NOT kite at close range while armed — unlike {@link #computeRangedPlan},
+     * a full ring means it holds its ground and fires point-blank. Kiting is the tell for "empty".
+     * Every shot obeys the mandatory cardinal-line constraint; a launched shard only ever travels a
+     * true row or column, and never re-targets after commit.
+     */
+    private void computeSentinelPlan(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow) {
+        int distance = GameMath.chebyshevDistanceTiles(
+                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+        int rangeLimit = enemy.type.attackRangeTiles();
+
+        if (!enemy.hasShard()) {
+            // Fully defanged: back off to maximum range and let the ring regrow. Kiting only, never
+            // fleeing the encounter — a departing enemy is a behaviour the AI has no precedent for.
+            if (distance <= rangeLimit && enemy.shouldMoveThisTurn()) {
+                plan.setFlee(playerColumn, playerRow);
+            } else {
+                plan.set(IntentVerb.WAIT, enemy.tileColumn, enemy.tileRow);
+            }
+            return;
+        }
+
+        boolean canFireNow = distance <= rangeLimit
+                && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                && hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                && !hasEnemyBlockingShot(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+        if (canFireNow) {
+            plan.setAttack(IntentVerb.ATTACK_RANGED, playerColumn, playerRow, enemy.scaledAttackDamage());
+        } else if (shouldDefend(enemy, playerColumn, playerRow)) {
+            commitDefend(enemy, plan);
+        } else if (enemy.shouldMoveThisTurn()) {
+            plan.set(IntentVerb.MOVE, playerColumn, playerRow); // steer toward a cardinal lane
+        } else {
+            plan.set(IntentVerb.WAIT, enemy.tileColumn, enemy.tileRow);
+        }
+    }
+
     // -------------------------------------------------------------------------
     // SPECIAL move-set selection (strategy-combat-order-5) — COMMIT side
     // -------------------------------------------------------------------------
@@ -1577,6 +1672,25 @@ public final class EnemyManager implements EnemyHitTarget {
             impactEventListener.onBlockAbsorbed(enemy.tileColumn, enemy.tileRow,
                     enemy.type.heightMultiplier(), blockAbsorbed, shattered);
         }
+    }
+
+    /**
+     * Fires the SHARD-specific feedback when an orbiting shard nullifies a hit
+     * (elemental-golem-auric-sentinel): an "ABSORBED" gold floater plus gold sparks and a ring pulse.
+     * The caller deliberately skips the ordinary hit flash and damage number so this reads as a
+     * DIFFERENT event from a normal hit — the enemy's health did not move, and the player must see
+     * that instantly. The first time it happens the player is told what to do about it. Cosmetic only.
+     */
+    private void spawnShardAbsorbFeedback(Enemy enemy) {
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("ABSORBED", EventTextSystem.COLOR_GOLD);
+        }
+        if (impactEventListener != null) {
+            impactEventListener.onShardShattered(enemy.tileColumn, enemy.tileRow,
+                    enemy.type.heightMultiplier(), 1);
+        }
+        showCombatTipOnce("shard_absorb",
+                "ABSORBED — each shard eats ONE hit. Strip them with rapid fire.");
     }
 
     private void applyRangedAttackStatusEffect(Enemy enemy, Player player) {
@@ -1864,6 +1978,14 @@ public final class EnemyManager implements EnemyHitTarget {
 
     private void killEnemy(Enemy enemy, boolean isMeleeKill) {
         occupancy[enemy.tileColumn][enemy.tileRow] = false;
+        // COLLAPSE (elemental-golem-auric-sentinel): any shards still in orbit fall out of the ring and
+        // shatter on the floor with the body. Fired before the tile is cleared so the burst plays where
+        // the enemy actually stood. No-op for every archetype without shards, and for an empty ring.
+        if (enemy.shardCount > 0 && impactEventListener != null) {
+            impactEventListener.onShardShattered(enemy.tileColumn, enemy.tileRow,
+                    enemy.type.heightMultiplier(), enemy.shardCount);
+        }
+        enemy.shardCount = 0;
         char currentCell = level.getCell(enemy.tileColumn, enemy.tileRow);
         if (!Level.isStairsDown(currentCell)
                 && !Level.isMedicalPickup(currentCell)
@@ -1927,6 +2049,7 @@ public final class EnemyManager implements EnemyHitTarget {
             case REVENANT:     return '7'; // shells  — heavy undead brawler
             case VORTEX_EYE:   return '8'; // cells   — energy caster (ranged)
             case BLIGHT_CORRUPTOR: return '7'; // shells — infected brute
+            case AURIC_SENTINEL:   return '8'; // cells  — crystal golem, energy ranged
             default:           return '6';
         }
     }

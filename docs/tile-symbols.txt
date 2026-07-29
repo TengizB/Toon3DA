@@ -163,6 +163,9 @@ z   Crawler spawn         Necrotic faction. Fast, fragile low melee chaff; rushe
 K   Revenant spawn        Necrotic faction. Fast, hard-hitting undead soldier melee.
 V   Vortex Eye spawn      Necrotic faction. Short-range ranged chaff caster (weaker, closer kiter than Eye Tyrant).
 *   Blight Corruptor spawn Necrotic faction. Durable slow infected brute soldier melee.
+(   Auric Sentinel spawn  Golem faction. Ranged; three orbiting shards each absorb ONE hit outright and
+                          each shot spends one, so stripping the ring also disarms it. Floors 3-10+
+                          (EnemyType.minSpawnDepth gates the generator; hand levels are not gated).
 n   Boss spawn (depth-keyed)  Replaced at load time with floor ' '; BossFloorController seeds the correct boss based on World.currentDepth. Exactly one per boss-floor arena.
 
 ---
@@ -170,8 +173,8 @@ n   Boss spawn (depth-keyed)  Replaced at load time with floor ' '; BossFloorCon
 SYMBOL BUDGET
 -------------
 Total printable ASCII characters: 95  (codes 32-126)
-Assigned to a FIXED or FLEXIBLE symbol:  85
-Unassigned characters:                   10
+Assigned to a FIXED or FLEXIBLE symbol:  86
+Unassigned characters:                    9
 
 The symbol/sprite-reuse system (docs/environment-tileset-system.txt) REMOVED the scarcity this budget
 used to track. Symbol count no longer limits how much environment art or how many rooms the game can
@@ -186,12 +189,14 @@ blueprint), NEITHER of which consumes a symbol. The 85 assigned symbols split in
     small per-level subset.
 
 Unassigned characters (available if a genuinely new FIXED gameplay meaning is ever needed):
-o [ { } ( ) / , _ :
-  (o [ { } ( ) / , _ : were historically pencilled in for the EXCAVATION_SITE room design,
+o [ { } ) / , _ :
+  (o [ { } ) / , _ : were historically pencilled in for the EXCAVATION_SITE room design,
   .claude/agents/ideas/excavation-monolith-chamber-room.txt — NOT IMPLEMENTED. " ' ; ? < \ ] - | `
   are ASSIGNED to the STELLAR_OBSERVATORY room as FLEXIBLE symbols; the allocator keeps their
   observatory sprites contained to that room via the "observatory" theme tag.)
-  ('~' and '*' are Ghoul / Blight Corruptor enemy-spawn markers.)
+  ('~' and '*' are Ghoul / Blight Corruptor enemy-spawn markers; '(' is the Auric Sentinel marker,
+  taken from that same pencilled-in excavation block — the golem faction claims the bracket block, so
+  if EXCAVATION_SITE is ever built it uses the remaining brackets and '_' instead.)
 Uppercase taken: K V (enemy spawns), D F I J W, Z (cryo) — check WALLS / DOORS above.
 Lowercase taken: 'z' (Crawler spawn), e i j n q ('i' fire hazard, 'q' toxic hazard).
 

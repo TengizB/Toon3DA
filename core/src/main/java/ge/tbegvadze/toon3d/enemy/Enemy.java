@@ -182,6 +182,51 @@ public class Enemy implements StatusHost {
     public int     selfDestructTurnsRemaining = 0;
     public boolean selfDestructed            = false;
 
+    // -------------------------------------------------------------------------
+    // Orbiting shard economy (elemental-golem-auric-sentinel) — the Auric Sentinel's shards are BOTH
+    // its armour and its ammunition. Inert for every archetype whose type.maxShards() is 0.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Live shards in the ring, 0..{@code type.maxShards()}. Each one nullifies exactly ONE incoming
+     * damage INSTANCE ({@link #applyDamage}) and each shot SPENDS one ({@link #spendShardForShot}), so
+     * the counter to this enemy's offence and the counter to its defence are the same action. At 0 it
+     * cannot attack at all. The count is the whole readability contract — EnemyRenderer draws exactly
+     * this many orbiting quads, so the player reads the enemy's remaining armour AND its remaining
+     * ammunition off the same ring, with no HUD, bar or text.
+     *
+     * <p>Assigned in the constructor from {@code type.maxShards()} (0 for every archetype but the
+     * Sentinel) rather than by a field initialiser, so an enemy is never briefly ringless at spawn.
+     */
+    public int shardCount;
+
+    /**
+     * Enemy turns accumulated toward the next shard re-growth. Advanced once per enemy turn — including
+     * turns it fired or was stunned — so a passive player faces a permanently full ring.
+     */
+    public int shardRegenCounter = 0;
+
+    /**
+     * Shards the ring held immediately before the most recent CHANGE (a loss or a re-growth). Read ONLY
+     * by the renderer, to interpolate the surviving shards from their old spacing to their new even
+     * spacing while {@link #shardRespaceTimerSeconds} runs. Never read by the simulation.
+     */
+    public int shardCountBeforeAbsorb = 0;
+
+    /**
+     * Wall-clock seconds remaining in the ring's re-space animation, armed by ANY change to the shard
+     * count — absorbing a hit, launching a shot, or re-growing — so the ring always closes up (or opens)
+     * smoothly instead of snapping. Cosmetic only.
+     */
+    public float shardRespaceTimerSeconds = 0f;
+
+    /**
+     * Wall-clock seconds remaining in the GOLD absorb flash — the "that hit did nothing to my health"
+     * tell that replaces the ordinary white hit flash. Armed ONLY by an absorb, never by a shot: the
+     * flash means "your damage was nullified", so firing must not counterfeit it. Cosmetic only.
+     */
+    public float shardAbsorbFlashTimerSeconds = 0f;
+
     /**
      * True only for an add spawned by the boss's SUMMON tactic (boss-fight-mobile-overseer ORDER 6).
      * Set at spawn time by EnemyManager.spawnBossMinion; level-placed enemies and regular-summoner
@@ -202,7 +247,86 @@ public class Enemy implements StatusHost {
         this.tileRow       = tileRow;
         this.maxHealth     = type.maxHealth();
         this.health        = this.maxHealth;
+        // A shard-bearing archetype (today only AURIC_SENTINEL) spawns with a FULL ring; every other
+        // archetype reports 0 shards, which makes every shard code path inert for it.
+        this.shardCount    = type.maxShards();
         this.activeEffects = buildEffectsMap();
+    }
+
+    // -------------------------------------------------------------------------
+    // Shard economy behaviour (elemental-golem-auric-sentinel). All no-ops when shardCount is 0.
+    // -------------------------------------------------------------------------
+
+    /** True while this enemy still holds at least one shard — i.e. it is both armoured and armed. */
+    public boolean hasShard() {
+        return shardCount > 0;
+    }
+
+    /**
+     * Spends one shard to launch it as a projectile, returning false when the ring is EMPTY and the
+     * enemy is therefore disarmed. Called from the EXECUTE phase on a committed shot: the shard is
+     * spent even if the shot then whiffs under the standard fairness re-validation, so committing to a
+     * shot the player steps out of is a real cost — and a real bait.
+     */
+    public boolean spendShardForShot() {
+        if (shardCount <= 0) return false;
+        // The ring closes up behind a launched shard exactly as it does after an absorb — but NOT the
+        // gold absorb flash, which means "your damage did nothing" and must never fire on the enemy's
+        // own shot.
+        beginShardRespace();
+        shardCount--;
+        return true;
+    }
+
+    /** Arms the ring's re-space animation and records the pre-change count the renderer lerps from. */
+    private void beginShardRespace() {
+        shardCountBeforeAbsorb   = shardCount;
+        shardRespaceTimerSeconds = EnemyConstants.AURIC_SHARD_RESPACE_SECONDS;
+    }
+
+    /**
+     * Advances the re-growth clock by one enemy turn and grows a shard when due, returning true only on
+     * the turn a shard actually appears (so the caller can fire the re-grow effect). The counter runs on
+     * EVERY turn — including turns the enemy fired, braced or was stunned — so a passive player faces a
+     * permanently full ring, and the clock keeps running at the cap rather than stalling.
+     */
+    public boolean advanceShardRegrowth() {
+        int maxShards = type.maxShards();
+        if (maxShards <= 0) return false;
+        shardRegenCounter++;
+        if (shardRegenCounter < type.shardRegenTurns()) return false;
+        shardRegenCounter = 0;
+        if (shardCount >= maxShards) return false;   // ring already full — the clock simply restarts
+        beginShardRespace();
+        shardCount++;
+        return true;
+    }
+
+    /** Decrements both shard cosmetic timers by deltaTime, clamping at zero. Call once per frame. */
+    public void advanceShardAbsorbFlash(float deltaTime) {
+        if (shardAbsorbFlashTimerSeconds > 0f) {
+            shardAbsorbFlashTimerSeconds -= deltaTime;
+            if (shardAbsorbFlashTimerSeconds < 0f) shardAbsorbFlashTimerSeconds = 0f;
+        }
+        if (shardRespaceTimerSeconds > 0f) {
+            shardRespaceTimerSeconds -= deltaTime;
+            if (shardRespaceTimerSeconds < 0f) shardRespaceTimerSeconds = 0f;
+        }
+    }
+
+    /** Gold absorb-flash strength in [0, 1]: 1 the instant a shard ate a hit, 0 once settled. */
+    public float getShardAbsorbFlashStrength() {
+        if (EnemyConstants.AURIC_ABSORB_FLASH_DURATION_SECONDS <= 0f) return 0f;
+        return shardAbsorbFlashTimerSeconds / EnemyConstants.AURIC_ABSORB_FLASH_DURATION_SECONDS;
+    }
+
+    /**
+     * Ring re-space progress in [0, 1]: 0 the instant the shard count changed (surviving shards still
+     * at their OLD spacing), 1 once they have settled at their new even spacing.
+     */
+    public float getShardRespaceProgress() {
+        if (EnemyConstants.AURIC_SHARD_RESPACE_SECONDS <= 0f) return 1f;
+        return 1f - shardRespaceTimerSeconds / EnemyConstants.AURIC_SHARD_RESPACE_SECONDS;
     }
 
     private static EnumMap<StatusType, StatusEffect> buildEffectsMap() {
@@ -229,6 +353,10 @@ public class Enemy implements StatusHost {
         // Enemies have no dodge or toughness reduction — DoT damage applies directly.
         // Status DoT (burning/poison/bleed) BYPASSES Block by design (strategy-combat-order-3):
         // status builds are the rock-paper-scissors answer to defensive, Block-stacking enemies.
+        // For the same reason it bypasses SHARDS (elemental-golem-auric-sentinel): a burn ticks
+        // straight into a Sentinel's HP without consuming a shard, so burning one down is a legitimate,
+        // distinct answer to the archetype and no status build is ever hard-countered by it. It is also
+        // why hazard tiles (fire/toxic, which apply status) damage a Sentinel through its ring.
         health = Math.max(0, health - amount);
     }
 
@@ -357,14 +485,32 @@ public class Enemy implements StatusHost {
     }
 
     /**
-     * Block → armor → HP mitigation with an EXPOSED override and an ARMOR_PIERCE Block-pierce
+     * SHARD → Block → armor → HP mitigation with an EXPOSED override and an ARMOR_PIERCE Block-pierce
      * fraction (weapon-ability audit). {@code ignoreBlock} skips Block entirely (EXPOSED);
      * otherwise {@code blockPierceFraction} (clamped to [0, 1]) shrinks the Block that can
      * absorb this hit, so a fraction of the damage bleeds straight through to HP even against a
      * shielded enemy. pierce = 0 reproduces the plain Block → armor → HP behaviour exactly.
      * The un-pierced portion of Block is left intact — the hit only bypasses it, never spends it.
+     *
+     * <p><b>SHARDS RESOLVE FIRST</b> (elemental-golem-auric-sentinel), ahead of both Block and flat
+     * armour: while the ring holds a shard, ANY single incoming damage instance is NULLIFIED — not
+     * reduced, nullified, whatever its size — and consumes exactly one shard. A 90-damage railgun slug
+     * and a 10-damage chaingun tick both cost the Sentinel one shard and cost the player one shot,
+     * which is the whole puzzle: the RIGHT WEAPON matters more than the right position.
+     *
+     * <p>Because absorption is per INSTANCE of damage rather than per turn, a weapon that resolves as
+     * several separate {@code applyDamage} calls (a Chaingun burst, a multi-tile march, an ability's
+     * bonus hit) strips several shards on one trigger pull. That is the intended reward for a rapid or
+     * wide weapon and it FALLS OUT of this implementation rather than being special-cased anywhere.
+     * Status DoT deliberately bypasses this hook entirely — see {@link #applyDoTDamage}.
      */
     public void applyDamage(int amount, boolean ignoreBlock, float blockPierceFraction) {
+        if (amount > 0 && shardCount > 0) {
+            beginShardRespace();
+            shardCount--;
+            shardAbsorbFlashTimerSeconds = EnemyConstants.AURIC_ABSORB_FLASH_DURATION_SECONDS;
+            return;   // fully absorbed — Block, armour and HP are all untouched by this hit
+        }
         int remaining = amount;
         if (!ignoreBlock) {
             float clampedPierce = Math.max(0f, Math.min(1f, blockPierceFraction));

@@ -54,6 +54,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final Map<EnemyType, TextureRegion> textureRegions;
     private final Texture                       blightSheetTexture;
     private final Texture                       infernalSheetTexture;
+    // Elemental golem 2x2 sheet — only Q4 (AURIC_SENTINEL) has a shipped archetype today.
+    private final Texture                       elementalGolemSheetTexture;
     // Necrotic faction — one standalone Texture per archetype (drawn full-frame).
     private final Texture                       blightCorruptorTexture;
     private final Texture                       vortexEyeTexture;
@@ -102,6 +104,13 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final float[]   intentCenterXs;
     private final float[]   intentClusterTops;
     private final boolean[] drawIntentFlags;
+
+    // Pre-allocated orbiting-shard-ring cache (elemental-golem-auric-sentinel) — parallel to
+    // sortedIndices, populated in pass 1 and consumed by the shard pass (pass 1.55). The ring draws every
+    // frame for every visible Sentinel, so the geometry is cached rather than recomputed, and NOTHING
+    // here allocates: the per-shard transforms are plain floats resolved inside the draw loop.
+    private final float[]   shardDepths;
+    private final boolean[] drawShardFlags;
 
     // Fixed per-particle phase offsets so overlay particles are evenly but non-uniformly spread.
     // Static so the table is built once per JVM load and shared by every EnemyRenderer instance.
@@ -166,6 +175,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.fxSpriteHeights     = new float[scratchSize];
         this.fxSpriteWidths      = new float[scratchSize];
         this.fxDrawFlags         = new boolean[scratchSize];
+        this.shardDepths         = new float[scratchSize];
+        this.drawShardFlags      = new boolean[scratchSize];
         this.intentCenterXs      = new float[scratchSize];
         this.intentClusterTops   = new float[scratchSize];
         this.drawIntentFlags     = new boolean[scratchSize];
@@ -175,6 +186,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
         // Load sprite sheets; fall back to a solid-colour placeholder when the file is absent
         this.blightSheetTexture   = loadSheetOrFallback(ENEMY_SHEET_BLIGHT_PATH,   0.60f, 0.20f, 0.60f);
         this.infernalSheetTexture = loadSheetOrFallback(ENEMY_SHEET_INFERNAL_PATH, 0.70f, 0.25f, 0.10f);
+        // Elemental golems — amber/gold fallback if the shared sheet is absent.
+        this.elementalGolemSheetTexture = loadSheetOrFallback(ENEMY_SHEET_ELEMENTAL_GOLEMS_PATH,
+                0.85f, 0.65f, 0.20f);
         // Necrotic faction — each archetype is a single standalone PNG drawn full-frame.
         this.blightCorruptorTexture = loadSheetOrFallback(ENEMY_BLIGHT_CORRUPTOR_PATH, 0.40f, 0.60f, 0.20f);
         this.vortexEyeTexture       = loadSheetOrFallback(ENEMY_VORTEX_EYE_PATH,       0.55f, 0.25f, 0.70f);
@@ -183,7 +197,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.revenantTexture        = loadSheetOrFallback(ENEMY_REVENANT_PATH,         0.50f, 0.50f, 0.55f);
         // Overseer boss portrait — its own full-frame texture (ORDER 8), cyan-tinted fallback if absent.
         this.overseerBossTexture    = loadSheetOrFallback(ENEMY_BOSS_OVERSEER_PATH,     0.55f, 0.80f, 0.95f);
-        this.textureRegions       = buildTextureRegions(blightSheetTexture, infernalSheetTexture);
+        this.textureRegions       = buildTextureRegions(blightSheetTexture, infernalSheetTexture,
+                                                       elementalGolemSheetTexture);
         // Map the standalone PNGs as full-frame regions (one whole image per archetype).
         textureRegions.put(EnemyType.BLIGHT_CORRUPTOR, new TextureRegion(blightCorruptorTexture));
         textureRegions.put(EnemyType.VORTEX_EYE,       new TextureRegion(vortexEyeTexture));
@@ -286,6 +301,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
             drawBarFlags[sortedPosition]    = false;
             drawBeamFlags[sortedPosition]   = false;
             fxDrawFlags[sortedPosition]     = false;
+            drawShardFlags[sortedPosition]  = false;
             drawIntentFlags[sortedPosition] = false;
             float attackAnimStrength      = enemy.getAttackAnimStrength();
 
@@ -418,6 +434,27 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 }
             }
 
+            // AURIC SENTINEL shard states (elemental-golem-auric-sentinel), in the order they must read:
+            //   1. EXPOSED — a shardless Sentinel drops from amber glow to a dull violet matte. It looks
+            //      fragile because it IS: no shards, 70 HP and no answer. This is the "hit it NOW" cue.
+            //   2. ABSORB  — a GOLD flash instead of the usual white hit flash. The enemy took a hit and
+            //      its health did not move, and the player must see that difference instantly; without
+            //      it the Sentinel reads as a bullet sponge rather than a puzzle. Drawn after the matte
+            //      so the flash still reads on an already-exposed body (a hit that ate its LAST shard).
+            if (enemy.type.maxShards() > 0) {
+                if (enemy.shardCount == 0) {
+                    spriteRed   = GameMath.lerp(spriteRed,   AURIC_EXPOSED_TINT_R, AURIC_EXPOSED_TINT_STRENGTH);
+                    spriteGreen = GameMath.lerp(spriteGreen, AURIC_EXPOSED_TINT_G, AURIC_EXPOSED_TINT_STRENGTH);
+                    spriteBlue  = GameMath.lerp(spriteBlue,  AURIC_EXPOSED_TINT_B, AURIC_EXPOSED_TINT_STRENGTH);
+                }
+                float shardFlashStrength = enemy.getShardAbsorbFlashStrength();
+                if (shardFlashStrength > 0f) {
+                    spriteRed   = GameMath.lerp(spriteRed,   AURIC_ABSORB_FLASH_R, shardFlashStrength);
+                    spriteGreen = GameMath.lerp(spriteGreen, AURIC_ABSORB_FLASH_G, shardFlashStrength);
+                    spriteBlue  = GameMath.lerp(spriteBlue,  AURIC_ABSORB_FLASH_B, shardFlashStrength);
+                }
+            }
+
             // Block plating shimmer (strategy-combat-order-3): a translucent steely-blue tint while the
             // enemy holds active Block, gently pulsing so a braced enemy visibly "plates over."
             if (enemy.block > 0) {
@@ -467,6 +504,12 @@ public final class EnemyRenderer implements Renderable, Disposable {
             fxSpriteHeights[sortedPosition] = spriteScreenHeight;
             fxSpriteWidths[sortedPosition]  = spriteScreenWidth;
             fxDrawFlags[sortedPosition]     = true;
+
+            // Cache the shard-ring draw for pass 1.6 — the fx* geometry above is exactly what the ring
+            // needs, so only the depth and the flag are extra. Flagged even at zero shards is pointless,
+            // so an empty ring simply never enters the pass.
+            shardDepths[sortedPosition]     = depth;
+            drawShardFlags[sortedPosition]  = enemy.shardCount > 0;
 
             // Dash afterimage / motion trail (ORDER 8): draw fading ghost billboards at the trailing tiles
             // of the slide path so a multi-tile boss dash reads as a deliberate sprint, not a teleport
@@ -666,6 +709,65 @@ public final class EnemyRenderer implements Renderable, Disposable {
             batch.setColor(Color.WHITE);
             batch.end();
             batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA); // restore default alpha blend
+        }
+
+        // =====================================================================
+        // Pass 1.55: ORBITING SHARD RING (elemental-golem-auric-sentinel) — THE SIGNATURE.
+        // One additive gold quad per live shard, orbiting the billboard. This ring is the archetype's
+        // entire readability contract: the count is simultaneously the enemy's remaining armour (each
+        // shard eats one hit outright) and its remaining ammunition (each shot spends one), so the
+        // player reads both off the same ring with no HUD, no bar and no text. Drawn AFTER the sprite
+        // so the shards sit in front of the body, and behind the health-bar cluster.
+        // Zero allocations: every per-shard transform is a local float from GameMath.
+        // =====================================================================
+        boolean anyShardRing = false;
+        for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+            if (drawShardFlags[sortedPosition]) { anyShardRing = true; break; }
+        }
+        if (anyShardRing) {
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE); // additive gold
+            batch.begin();
+            for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+                if (!drawShardFlags[sortedPosition]) continue;
+                Enemy enemy = enemies.get(sortedIndices[sortedPosition]);
+
+                float centerColumn       = fxCenterColumns[sortedPosition];
+                int   centerScreenColumn = (int) centerColumn;
+                if (centerScreenColumn < 0 || centerScreenColumn >= WALL_PROJECTION_SCREEN_WIDTH) continue;
+                // Same centre-column wall occlusion test the bars and affliction overlays use.
+                if (shardDepths[sortedPosition] >= wallRenderer.getZBufferUnchecked(centerScreenColumn)) continue;
+
+                float spriteHeight = fxSpriteHeights[sortedPosition];
+                float spriteWidth  = fxSpriteWidths[sortedPosition];
+                float orbitRadius  = spriteWidth  * AURIC_SHARD_ORBIT_RADIUS_FRACTION;
+                float ringCenterY  = fxDrawBottoms[sortedPosition]
+                                     + spriteHeight * AURIC_SHARD_ORBIT_HEIGHT_FRACTION;
+                float nominalSize  = spriteHeight * AURIC_SHARD_SIZE_FRACTION;
+                // After ANY change to the count the survivors slide from their OLD spacing to their new
+                // even spacing, so a lost shard reads as the ring closing up rather than as a jump.
+                float respaceProgress = enemy.getShardRespaceProgress();
+
+                batch.setColor(AURIC_SHARD_R, AURIC_SHARD_G, AURIC_SHARD_B, 1f);
+                for (int shardIndex = 0; shardIndex < enemy.shardCount; shardIndex++) {
+                    float angleRadians = GameMath.shardOrbitAngleRadians(
+                            statusAnimationClock, AURIC_SHARD_ORBIT_SPEED, shardIndex,
+                            enemy.shardCount, enemy.shardCountBeforeAbsorb, respaceProgress);
+                    float shardCenterX = centerColumn
+                            + GameMath.shardOrbitOffsetX(angleRadians, orbitRadius);
+                    // Independent slow bob per shard, phase-offset by index so they never lock step.
+                    float shardCenterY = ringCenterY + GameMath.pickupBobOffset(
+                            statusAnimationClock, AURIC_SHARD_BOB_SPEED, AURIC_SHARD_BOB_AMPLITUDE,
+                            shardIndex * MathUtils.PI2 / Math.max(1, enemy.shardCount), spriteHeight);
+                    float shardSize = nominalSize
+                            * GameMath.shardOrbitSizeScale(angleRadians, AURIC_SHARD_FAR_SIDE_SIZE_FALLOFF);
+                    // Rotate each quad by its own orbit angle so the shards visibly tumble as they sweep.
+                    drawCenteredQuad(shardCenterX, shardCenterY, shardSize, shardSize,
+                            angleRadians * MathUtils.radiansToDegrees);
+                }
+            }
+            batch.setColor(Color.WHITE);
+            batch.end();
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA); // restore alpha blend
         }
 
         // =====================================================================
@@ -1536,6 +1638,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
         shapeRenderer.dispose();
         blightSheetTexture.dispose();
         infernalSheetTexture.dispose();
+        elementalGolemSheetTexture.dispose();
         blightCorruptorTexture.dispose();
         vortexEyeTexture.dispose();
         ghoulTexture.dispose();
@@ -1556,7 +1659,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
      * is the top of the image, matching LibGDX's batch.draw() source convention.
      */
     private static Map<EnemyType, TextureRegion> buildTextureRegions(Texture blightSheet,
-                                                                      Texture infernalSheet) {
+                                                                      Texture infernalSheet,
+                                                                      Texture elementalGolemSheet) {
         Map<EnemyType, TextureRegion> map = new HashMap<>();
 
         // Blight sheet (Q1=top-left, Q2=top-right, Q3=bottom-left, Q4=bottom-right)
@@ -1574,6 +1678,15 @@ public final class EnemyRenderer implements Renderable, Disposable {
         map.put(EnemyType.SHELL_BRUTE,  new TextureRegion(infernalSheet, infernalHalfW, 0,            infernalHalfW, infernalHalfH));
         map.put(EnemyType.ACID_DRONE,   new TextureRegion(infernalSheet, 0,            infernalHalfH, infernalHalfW, infernalHalfH));
         map.put(EnemyType.VOID_SHROUD,  new TextureRegion(infernalSheet, infernalHalfW, infernalHalfH, infernalHalfW, infernalHalfH));
+
+        // Elemental golem sheet. Q1 (0,0) / Q2 (halfW,0) / Q3 (0,halfH) are the Rimeshell Lancer,
+        // Cinderforge Colossus and Verdant Spiresower — art that ships ahead of its archetypes
+        // (.claude/agents/ideas/elemental-golem-*.txt), so only Q4 is mapped today. An unmapped type
+        // is skipped by the draw loop's null-region guard, never drawn from a wrong quadrant.
+        int golemHalfW = elementalGolemSheet.getWidth()  / 2;
+        int golemHalfH = elementalGolemSheet.getHeight() / 2;
+        map.put(EnemyType.AURIC_SENTINEL,
+                new TextureRegion(elementalGolemSheet, golemHalfW, golemHalfH, golemHalfW, golemHalfH));
 
         // Boss types — reuse the blight sheet PLAGUE_HULK region as a placeholder until
         // dedicated boss texture assets are available.

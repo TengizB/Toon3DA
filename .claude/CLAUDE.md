@@ -303,7 +303,7 @@ Quick summary of categories:
 - **Solid props (13):** `g E T L C # % & = @ I J W`
 - **Walkable decals (5):** `m s . O e`
 - **Pickups (7):** `r y b + H a A`
-- **Enemy spawns (5):** `1 2 3 4 5` (replaced with floor at load time)
+- **Enemy spawns (14):** `1 2 3 4 5 ! $ ^ ~ z K V * (` (replaced with floor at load time)
 
 `Level.isWall(char)` is the single authority on which chars are solid — both `WallRenderer` and `PlayerController` call it. When adding a new wall type, add it there first.
 
@@ -429,7 +429,7 @@ All 16 reference docs — read these before implementing anything in their domai
 
 | File | Lines | What it covers |
 |---|---|---|
-| `tile-symbols.txt` | 221 | Complete tile character reference — walls, doors, floors, props, pickups, enemies + the FIXED/FLEXIBLE model. **Single source of truth for level format.** |
+| `tile-symbols.txt` | 231 | Complete tile character reference — walls, doors, floors, props, pickups, enemies + the FIXED/FLEXIBLE model. **Single source of truth for level format.** |
 | `environment-tileset-system.txt` | 850 | Symbol/sprite-reuse subsystem: categories, sprite registry, symbol budget, per-level palette, allocator, room blueprints, texture realization, render integration, and RECIPE A (add a sprite) / RECIPE B (add a room). **Single source of truth; update on any tileset/room/palette change.** |
 | `route-map-system.txt` | 939 | Branching route-map subsystem: data model + registries, DAG generation & regions, node->floor pipeline, overlay/interaction, special-level profiles, ROUTE ECONOMICS (the priced map: node EV ledger, derived pips, map-gen guarantees, trajectory audit), node/region catalogs, and the extensibility recipes. **Single source of truth; update on any route change.** |
 | `game-balance-knowledge.txt` | 842 | Complete map of the CURRENT balance state: the four primitives (eHP/DPT/TTK/TP), every balance-bearing file, all bands/anchors, and the consolidated known-problems list. **Read before touching any balance number.** The old `balance-rule-system.txt` contract doc is DELETED (deprecated); its replacement is created by the `new-game-balancr-order-*.txt` idea series (order 1). |
@@ -437,7 +437,7 @@ All 16 reference docs — read these before implementing anything in their domai
 | `enemy-health-bars.txt` | 282 | Health bar geometry, gradient colors, HP text rendering spec |
 | `procedural-level-generation.txt` | 208 | Dungeon generator algorithm, room types, wall distribution logic |
 | `procedural-vitals-hud.txt` | 202 | HUD rendering pipeline — procedural shapes, no sprite textures |
-| `enemy-system.txt` | 189 | Enemy types, AI turn logic, pathfinding, attack resolution |
+| `enemy-system.txt` | 401 | Enemy types, AI turn logic, pathfinding, attack resolution |
 | `tick-system.txt` | 167 | Turn-based game loop, TickEventBus, TickSubscriber pattern |
 | `xp-level-progression.txt` | 146 | Player leveling curve, attribute rewards, level-up card system |
 | `dda-raycasting-math.txt` | 152 | DDA algorithm proof, perspective projection, Y-up correction |

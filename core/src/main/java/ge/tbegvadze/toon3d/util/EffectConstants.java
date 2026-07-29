@@ -328,6 +328,22 @@ public final class EffectConstants {
     public static final float SUMMON_PORTAL_R = 0.45f, SUMMON_PORTAL_G = 0.90f, SUMMON_PORTAL_B = 0.35f;
     public static final float SUMMON_PORTAL_RING_MAX_RADIUS       = 70f;
 
+    // Auric shard "clink" — gold sparks + a ring pulse when an orbiting shard is destroyed
+    // (elemental-golem-auric-sentinel), whether it was spent absorbing a hit, spent launching a shot,
+    // or lost when the ring collapsed on death. Deliberately GOLD, not the Block blue and not the
+    // red flesh-hit spray, so an absorbed hit reads as its own event: "that did nothing to its health".
+    public static final int   SHARD_SPARK_COUNT                   = 12;
+    public static final float SHARD_SPARK_SPEED_MIN               = 50f;
+    public static final float SHARD_SPARK_SPEED_MAX               = 150f;
+    public static final float SHARD_SPARK_LIFE_SECONDS            = 0.42f;
+    public static final float SHARD_SPARK_R = 1.00f, SHARD_SPARK_G = 0.82f, SHARD_SPARK_B = 0.28f;
+    /** Max radius of the ring pulse drawn when a shard shatters. */
+    public static final float SHARD_SHATTER_RING_MAX_RADIUS       = 58f;
+    /** Max radius of the softer ring pulse drawn when a shard crystallises back into the ring. */
+    public static final float SHARD_REGROW_RING_MAX_RADIUS        = 44f;
+    /** Sparks in the gentler re-grow flash — fewer than a shatter, so growth never outshouts loss. */
+    public static final int   SHARD_REGROW_SPARK_COUNT            = 7;
+
     // Animated affliction overlays drawn on the enemy billboard each frame (additive glow):
     // rising flames for BURNING, floating bubbles for POISONED, falling droplets for BLEED.
     public static final int   AFFLICTION_FX_PARTICLES            = 7;    // particles per active status per enemy

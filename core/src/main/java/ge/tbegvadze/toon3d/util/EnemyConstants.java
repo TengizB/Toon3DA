@@ -10,6 +10,10 @@ public final class EnemyConstants {
     // Infernal sheet Q1=GORE_BITER, Q2=SHELL_BRUTE, Q3=ACID_DRONE, Q4=VOID_SHROUD.
     public static final String  ENEMY_SHEET_BLIGHT_PATH          = "textures/enemies/enemy_sheet_blight.png";
     public static final String  ENEMY_SHEET_INFERNAL_PATH        = "textures/enemies/enemy_sheet_infernal.png";
+    // Elemental golem sheet — Q1=RIMESHELL_LANCER, Q2=CINDERFORGE_COLOSSUS, Q3=VERDANT_SPIRESOWER,
+    // Q4=AURIC_SENTINEL. Only Q4 has a shipped archetype today; the other three quadrants are art
+    // waiting on their design docs (.claude/agents/ideas/elemental-golem-*.txt).
+    public static final String  ENEMY_SHEET_ELEMENTAL_GOLEMS_PATH = "textures/enemies/enemy_sheet_elemental_golems.png";
 
     // Necrotic faction — individual single-sprite PNGs (one texture per archetype, drawn
     // full-frame rather than sliced from a 2x2 sheet). EnemyRenderer loads each as its own
@@ -136,6 +140,58 @@ public final class EnemyConstants {
     public static final int     BLIGHT_CORRUPTOR_ATTACK_DAMAGE      = BalanceConfig.BLIGHT_CORRUPTOR_ATTACK_DAMAGE;
     public static final int     BLIGHT_CORRUPTOR_MOVE_EVERY_N_TURNS = BalanceConfig.BLIGHT_CORRUPTOR_MOVE_EVERY_N_TURNS;
     public static final float   BLIGHT_CORRUPTOR_HEIGHT_MULTIPLIER  = 1.00f;
+
+    // AURIC_SENTINEL — elemental GOLEM ranged soldier whose orbiting shards are armour AND ammo
+    // (spawn '('). Stats mirror BalanceConfig; everything below AURIC_SHARD_ARMOR_POOL is cosmetic.
+    public static final int     AURIC_SENTINEL_MAX_HEALTH           = BalanceConfig.AURIC_SENTINEL_MAX_HEALTH;
+    public static final int     AURIC_SENTINEL_ATTACK_DAMAGE        = BalanceConfig.AURIC_SENTINEL_ATTACK_DAMAGE;
+    public static final int     AURIC_SENTINEL_RANGE_TILES          = BalanceConfig.AURIC_SENTINEL_RANGE_TILES;
+    public static final int     AURIC_SENTINEL_MOVE_EVERY_N_TURNS   = BalanceConfig.AURIC_SENTINEL_MOVE_EVERY_N_TURNS;
+    public static final int     AURIC_SENTINEL_ATTACK_CADENCE_TURNS = BalanceConfig.AURIC_SENTINEL_ATTACK_CADENCE_TURNS;
+    public static final int     AURIC_SENTINEL_MIN_SPAWN_DEPTH      = BalanceConfig.AURIC_SENTINEL_MIN_SPAWN_DEPTH;
+    public static final int     AURIC_MAX_SHARDS                    = BalanceConfig.AURIC_MAX_SHARDS;
+    public static final int     AURIC_SHARD_REGEN_TURNS             = BalanceConfig.AURIC_SHARD_REGEN_TURNS;
+    public static final float   AURIC_SHARD_ARMOR_POOL              = BalanceConfig.AURIC_SHARD_ARMOR_POOL;
+    public static final float   AURIC_SENTINEL_HEIGHT_MULTIPLIER    = 1.00f;
+
+    // --- Orbit ring cosmetics (EnemyRenderer). The ring IS the readability contract: the live shard
+    // count is legible from across the room with no HUD, no bar and no text, so these values are tuned
+    // for "countable at a glance" rather than for spectacle.
+    /** Angular speed of the shard ring, radians per wall-clock second. */
+    public static final float   AURIC_SHARD_ORBIT_SPEED             = 1.60f;
+    /** Ring radius as a fraction of the billboard's on-screen width. */
+    public static final float   AURIC_SHARD_ORBIT_RADIUS_FRACTION   = 0.46f;
+    /** Shard quad size as a fraction of the billboard's on-screen height. */
+    public static final float   AURIC_SHARD_SIZE_FRACTION           = 0.13f;
+    /** Height of the ring's centre above the sprite's feet, as a fraction of sprite height. */
+    public static final float   AURIC_SHARD_ORBIT_HEIGHT_FRACTION   = 0.76f;
+    /** Per-shard vertical bob amplitude, as a fraction of sprite height. */
+    public static final float   AURIC_SHARD_BOB_AMPLITUDE           = 0.030f;
+    /** Per-shard vertical bob speed, radians per wall-clock second. */
+    public static final float   AURIC_SHARD_BOB_SPEED               = 2.40f;
+    /** How much smaller a shard draws on the FAR side of the orbit, so the ring reads as 3D (0–1). */
+    public static final float   AURIC_SHARD_FAR_SIDE_SIZE_FALLOFF   = 0.35f;
+    /** Seconds the surviving shards take to re-space to even angles after one is lost. */
+    public static final float   AURIC_SHARD_RESPACE_SECONDS         = 0.25f;
+    // Shard body colour (hot gold), drawn additively.
+    public static final float   AURIC_SHARD_R                       = 1.00f;
+    public static final float   AURIC_SHARD_G                       = 0.82f;
+    public static final float   AURIC_SHARD_B                       = 0.28f;
+    // ABSORB flash: a bright GOLD ring-flash on the billboard INSTEAD of the usual white/red hit
+    // flash. This distinction is the single most important effect on this archetype — without it the
+    // Sentinel reads as a bullet sponge instead of a puzzle.
+    public static final float   AURIC_ABSORB_FLASH_R                = 1.00f;
+    public static final float   AURIC_ABSORB_FLASH_G                = 0.90f;
+    public static final float   AURIC_ABSORB_FLASH_B                = 0.45f;
+    /** Seconds the gold absorb flash lasts; also the window the ring re-spaces over. */
+    public static final float   AURIC_ABSORB_FLASH_DURATION_SECONDS = 0.28f;
+    // EXPOSED (shardless) tint: the amber glow drops to a dull violet matte so "it is disarmed RIGHT
+    // NOW, hit it" is legible from across the room.
+    public static final float   AURIC_EXPOSED_TINT_R                = 0.38f;
+    public static final float   AURIC_EXPOSED_TINT_G                = 0.30f;
+    public static final float   AURIC_EXPOSED_TINT_B                = 0.46f;
+    /** Blend strength of the shardless matte tint (0 = unchanged, 1 = fully violet). */
+    public static final float   AURIC_EXPOSED_TINT_STRENGTH         = 0.45f;
 
     // Shared ranged AI — kiting constants reused across ranged types
     public static final int     RANGED_KITE_MIN_TILES            = BalanceConfig.RANGED_KITE_MIN_TILES;

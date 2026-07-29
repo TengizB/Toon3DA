@@ -51,7 +51,9 @@ public final class EncounterBudgetPlanner {
             EnemyType.CRAWLER,          // scuttler  (fast melee chaff)
             EnemyType.VORTEX_EYE,       // eye       (short-range ranged chaff)
             EnemyType.REVENANT,         // reanimator(fast melee soldier)
-            EnemyType.BLIGHT_CORRUPTOR  // carrier   (durable melee soldier)
+            EnemyType.BLIGHT_CORRUPTOR, // carrier   (durable melee soldier)
+            // Elemental golems — depth-banded by EnemyType.minSpawnDepth() (see fillTypes below).
+            EnemyType.AURIC_SENTINEL    // sentinel  (ranged soldier; shards are armour AND ammo)
     };
 
     /** Divergence guard: every added enemy raises spent TP by a positive cost, but cap roster size anyway. */
@@ -60,6 +62,15 @@ public final class EncounterBudgetPlanner {
     private final int    depth;
     private final Random random;
     private final float  budgetScale;
+    /**
+     * {@link #FILL_TYPES} filtered to the archetypes this floor is deep enough to field, in the same
+     * order, computed once per planner. The gate is DATA on the archetype ({@link
+     * EnemyType#minSpawnDepth()}), never a switch here: an archetype that tests a decision the player
+     * cannot yet make — the Auric Sentinel's "what weapon are you holding?" — is simply absent from
+     * shallow floors, and banding a future archetype costs one override and no edit to this class.
+     * Filtering preserves FILL_TYPES order, so the deterministic tie-breaks below are unaffected.
+     */
+    private final List<EnemyType> fillTypes;
 
     public EncounterBudgetPlanner(int depth, Random random) {
         this(depth, random, 1f);
@@ -79,6 +90,16 @@ public final class EncounterBudgetPlanner {
         // This used to read "> 0f ? scale : 1f", which turned a zero into the FULL budget — the one
         // value in the range where asking for nothing gave you everything.
         this.budgetScale = budgetScale >= 0f ? budgetScale : 1f;
+        this.fillTypes   = fillTypesForDepth(this.depth);
+    }
+
+    /** {@link #FILL_TYPES} in declaration order, minus archetypes banded below the given depth. */
+    private static List<EnemyType> fillTypesForDepth(int depth) {
+        List<EnemyType> available = new ArrayList<>(FILL_TYPES.length);
+        for (EnemyType type : FILL_TYPES) {
+            if (type.minSpawnDepth() <= depth) available.add(type);
+        }
+        return available;
     }
 
     /** Plans the floor's enemy roster by spending the depth-scaled Threat-Point budget. */
@@ -228,7 +249,7 @@ public final class EncounterBudgetPlanner {
         while (roster.size() < ROSTER_SAFETY_CAP) {
             EnemyType cheapest     = null;
             float     cheapestCost = Float.MAX_VALUE;
-            for (EnemyType type : FILL_TYPES) {
+            for (EnemyType type : fillTypes) {
                 float typeSpent = spentByType.getOrDefault(type, 0f);
                 if (type.role() == EnemyRole.CHAFF) {
                     // Never CREATE a lone chaff — only reinforce a pack that already stands at full
@@ -259,8 +280,8 @@ public final class EncounterBudgetPlanner {
 
     private EnemyType chooseFill(EnumMap<EnemyType, Float> spentByType, float spent, float budget,
                                  float maxPerType, boolean hasRanged, boolean hasMelee) {
-        List<EnemyType> affordable = new ArrayList<>(FILL_TYPES.length);
-        for (EnemyType type : FILL_TYPES) {
+        List<EnemyType> affordable = new ArrayList<>(fillTypes.size());
+        for (EnemyType type : fillTypes) {
             float cost      = threatOf(type);
             float typeSpent = spentByType.getOrDefault(type, 0f);
             // CHAFF is only offered when a full minimum PACK fits (order 5 pack coherence): the golden-band
