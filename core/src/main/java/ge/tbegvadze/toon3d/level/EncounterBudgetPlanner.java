@@ -34,8 +34,9 @@ public final class EncounterBudgetPlanner {
 
     /** Anchor-role archetypes (bruiser / mini-elite), cheapest first. */
     private static final EnemyType[] ANCHOR_TYPES = {
-            EnemyType.SHELL_BRUTE,   // bruiser  — the standard anchor
-            EnemyType.IRON_STALKER   // mini-elite — rare elite-gauntlet anchor
+            EnemyType.SHELL_BRUTE,          // bruiser  — the standard anchor (POSITIONING puzzle)
+            EnemyType.CINDERFORGE_COLOSSUS, // bruiser  — the golem anchor    (TEMPO puzzle), floor 2+
+            EnemyType.IRON_STALKER          // mini-elite — rare elite-gauntlet anchor
     };
 
     /** Non-anchor archetypes (chaff + soldiers) the budget is filled with. */
@@ -71,6 +72,14 @@ public final class EncounterBudgetPlanner {
      * Filtering preserves FILL_TYPES order, so the deterministic tie-breaks below are unaffected.
      */
     private final List<EnemyType> fillTypes;
+    /**
+     * {@link #ANCHOR_TYPES} filtered by the same {@link EnemyType#minSpawnDepth()} data gate, in the same
+     * order. Anchors are depth-banded for exactly the reason fills are: the Cinderforge Colossus asks
+     * "can you keep firing instead of ducking into cover to reload", which is not a choice a floor-1
+     * player with one weapon can make, so it simply is not a candidate down there. Filtering preserves
+     * declaration order, so the deterministic cheapest-first tie-breaks below are unaffected.
+     */
+    private final List<EnemyType> anchorTypes;
 
     public EncounterBudgetPlanner(int depth, Random random) {
         this(depth, random, 1f);
@@ -90,13 +99,18 @@ public final class EncounterBudgetPlanner {
         // This used to read "> 0f ? scale : 1f", which turned a zero into the FULL budget — the one
         // value in the range where asking for nothing gave you everything.
         this.budgetScale = budgetScale >= 0f ? budgetScale : 1f;
-        this.fillTypes   = fillTypesForDepth(this.depth);
+        this.fillTypes   = spawnableAtDepth(FILL_TYPES,   this.depth);
+        this.anchorTypes = spawnableAtDepth(ANCHOR_TYPES, this.depth);
     }
 
-    /** {@link #FILL_TYPES} in declaration order, minus archetypes banded below the given depth. */
-    private static List<EnemyType> fillTypesForDepth(int depth) {
-        List<EnemyType> available = new ArrayList<>(FILL_TYPES.length);
-        for (EnemyType type : FILL_TYPES) {
+    /**
+     * The given archetype table in DECLARATION ORDER, minus every archetype banded below this depth by
+     * its {@link EnemyType#minSpawnDepth()}. Shared by the fill pool and the anchor pool so the depth
+     * gate is one rule applied uniformly, not two similar loops that can drift apart.
+     */
+    private static List<EnemyType> spawnableAtDepth(EnemyType[] table, int depth) {
+        List<EnemyType> available = new ArrayList<>(table.length);
+        for (EnemyType type : table) {
             if (type.minSpawnDepth() <= depth) available.add(type);
         }
         return available;
@@ -172,13 +186,14 @@ public final class EncounterBudgetPlanner {
     // -------------------------------------------------------------------------
 
     private EnemyType chooseAnchor(float budget) {
-        if (budget <= 0f) return null;
+        if (budget <= 0f)         return null;
+        if (anchorTypes.isEmpty()) return null;   // no archetype is deep enough to anchor this floor
 
         // Deliberate elite-gauntlet floor: a mini-elite anchor that exceeds the normal reserve.
         boolean eliteFloor = depth >= BalanceConfig.ENCOUNTER_ELITE_ANCHOR_MIN_DEPTH
                 && random.nextFloat() < BalanceConfig.ENCOUNTER_ELITE_ANCHOR_FLOOR_CHANCE;
         if (eliteFloor) {
-            EnemyType elite = ANCHOR_TYPES[ANCHOR_TYPES.length - 1]; // most expensive anchor
+            EnemyType elite = anchorTypes.get(anchorTypes.size() - 1); // most expensive available anchor
             if (threatOf(elite) <= budget) return elite;
         }
 
@@ -191,7 +206,7 @@ public final class EncounterBudgetPlanner {
 
         EnemyType best     = null;
         float     bestCost = -1f;
-        for (EnemyType type : ANCHOR_TYPES) {
+        for (EnemyType type : anchorTypes) {
             float cost = threatOf(type);
             if (cost <= anchorBudget && cost > bestCost) {
                 best     = type;
@@ -214,7 +229,7 @@ public final class EncounterBudgetPlanner {
         float     anchorCeiling      = budget * BalanceConfig.ENCOUNTER_ANCHOR_BUDGET_CEILING_FRACTION;
         EnemyType ceilingBest        = null;
         float     ceilingBestCost    = -1f;
-        for (EnemyType type : ANCHOR_TYPES) {
+        for (EnemyType type : anchorTypes) {
             float cost = threatOf(type);
             if (cost <= anchorCeiling && cost > ceilingBestCost) {
                 ceilingBest     = type;

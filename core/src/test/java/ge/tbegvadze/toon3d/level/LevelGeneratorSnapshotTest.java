@@ -29,17 +29,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class LevelGeneratorSnapshotTest {
 
     /**
-     * SHA-256 over {@link #fingerprint()}, re-baselined for the AURIC SENTINEL archetype
-     * (.claude/agents/ideas/elemental-golem-auric-sentinel.txt).
+     * SHA-256 over {@link #fingerprint()}, re-baselined for the CINDERFORGE COLOSSUS archetype
+     * (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt).
      *
-     * <p>The new archetype joins {@code EncounterBudgetPlanner}'s fill pool, so from its
-     * {@code minSpawnDepth} of 3 the roster roulette draws differently, the roster's size and
-     * composition change, and the later grid passes that run AFTER enemy placement (atmospheric wall
-     * theming, connectivity repair, lock-and-key, stairs) consume a shifted RNG sequence and stamp
-     * different tiles. SCOPE OF THE CHANGE WAS VERIFIED, not assumed: a digest over depths 1-2 alone is
-     * BYTE-IDENTICAL to the previous baseline, because the depth band keeps the Sentinel out of the
-     * candidate list entirely on shallow floors — only depths 3+ move, which is exactly the intended
-     * blast radius. Determinism itself is unaffected (the digest is stable across separate JVM runs).
+     * <p>The new archetype is a BRUISER ANCHOR, so it joins {@code EncounterBudgetPlanner}'s ANCHOR pool
+     * (not the fill pool) from its {@code minSpawnDepth} of 2. From depth 2 onward the anchor roulette
+     * draws differently, the chosen anchor and the roster's composition change, and the later grid passes
+     * that run AFTER enemy placement (atmospheric wall theming, connectivity repair, lock-and-key,
+     * stairs) consume a shifted RNG sequence and stamp different tiles. SCOPE OF THE CHANGE WAS VERIFIED,
+     * not assumed: a digest over DEPTH 1 alone is BYTE-IDENTICAL to the previous baseline (verified by
+     * building the pre-change generator from HEAD and re-digesting depth 1 across all 40 seeds — same
+     * hash), because the depth band keeps the Colossus out of the anchor pool entirely on floor 1. Only
+     * depths 2+ move, which is exactly the intended blast radius. Determinism itself is unaffected (the
+     * digest is stable across separate JVM runs).
+     *
+     * <p>PRIOR RE-BASELINE (retained for history) — the AURIC SENTINEL archetype
+     * (.claude/agents/ideas/elemental-golem-auric-sentinel.txt): the first golem joined the FILL pool at
+     * {@code minSpawnDepth} 3, shifting the roster roulette from depth 3 onward while leaving depths 1-2
+     * byte-identical.
      *
      * <p>PRIOR RE-BASELINE (retained for history) — the ENCOUNTER DENSITY change
      * (.claude/agents/ideas/encounter-density-and-corpse-semantics.txt).
@@ -76,7 +83,7 @@ class LevelGeneratorSnapshotTest {
      * reviewed behaviour change.
      */
     private static final String EXPECTED_DIGEST =
-            "729f93d0a1f7ff97214ab6e0cbe729d2b7224cd5a4312a3ac118fabebe841b2c";
+            "27256c89242914e9f3489840bc67f3ef62ef2e5601beb5c73e96fdbbe23c9004";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

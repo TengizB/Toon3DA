@@ -46,6 +46,35 @@ public final class GameMath {
         return start + interpolationFactor * (end - start);
     }
 
+    /*
+     * Formula: easeTowardLinear — frame-rate-independent constant-rate approach to a target
+     * Derivation:
+     *   A cosmetic value that must take a FIXED wall-clock time to travel the full [0, 1] range,
+     *   whatever the frame rate, moves at a constant rate of 1 / durationSeconds per second:
+     *       step  = deltaTime / durationSeconds
+     *       delta = end - current
+     *       next  = current + clamp(step, 0, |delta|) * sign(delta)
+     *   Clamping the step to the remaining distance is what guarantees the value never OVERSHOOTS on a
+     *   long frame — the reason this is a constant-rate approach rather than the usual exponential
+     *   lerp(current, end, deltaTime * k), which is frame-rate dependent and never actually arrives.
+     *   Used for the Cinderforge Colossus's crust tint, where "0.4s to go from cooled to hot" is a
+     *   stated design value and arriving exactly matters (the tint must settle, not asymptote).
+     * Edge cases:
+     *   durationSeconds <= 0 -> snaps straight to end (an instant ease is a snap, not a divide by zero).
+     *   deltaTime <= 0 -> returns current unchanged (a paused frame moves nothing).
+     *   current == end -> returns end exactly, so the value settles with no float residue.
+     */
+    public static float easeTowardLinear(float current, float end, float deltaTime,
+                                         float durationSeconds) {
+        if (durationSeconds <= 0f) return end;
+        if (deltaTime <= 0f)       return current;
+        float difference = end - current;
+        if (difference == 0f)      return end;
+        float step = deltaTime / durationSeconds;
+        if (step >= Math.abs(difference)) return end;
+        return current + (difference > 0f ? step : -step);
+    }
+
     // =========================================================================
     // QUADRATIC BEZIER (single axis)
     // =========================================================================
@@ -3393,6 +3422,30 @@ public final class GameMath {
     public static float compoundDepthMultiplier(float perDepthScale, int depth) {
         int floorsDescended = Math.max(0, depth - 1);
         return (float) Math.pow(perDepthScale, floorsDescended);
+    }
+
+    /*
+     * Formula: distanceAttenuatedShake — how hard a distant impact shakes the screen
+     * Derivation:
+     *   A heavy footfall should be FELT near the player and merely sensed far away, so its magnitude
+     *   falls off linearly with tile distance and reaches exactly zero at a cutoff:
+     *       attenuation = 1 - distanceTiles / maxDistanceTiles     (clamped to [0, 1])
+     *       shake       = baseMagnitude * attenuation
+     *   Linear rather than inverse-square on purpose: an inverse-square falloff collapses to almost
+     *   nothing within two tiles, which would erase the "something huge is walking around out of view"
+     *   read this exists to deliver. The hard cutoff at maxDistanceTiles keeps a far-off enemy from
+     *   contributing a permanent low-grade jitter.
+     * Edge cases:
+     *   maxDistanceTiles <= 0 -> returns 0 (a cutoff of zero means nothing is ever felt).
+     *   distanceTiles <= 0 -> full baseMagnitude (an impact on the player's own tile).
+     *   distanceTiles >= maxDistanceTiles -> exactly 0, never negative.
+     */
+    public static float distanceAttenuatedShake(float baseMagnitude, int distanceTiles,
+                                                int maxDistanceTiles) {
+        if (maxDistanceTiles <= 0)               return 0f;
+        if (distanceTiles >= maxDistanceTiles)   return 0f;
+        if (distanceTiles <= 0)                  return baseMagnitude;
+        return baseMagnitude * (1f - (float) distanceTiles / maxDistanceTiles);
     }
 
     /*

@@ -80,4 +80,58 @@ public interface ImpactEventListener {
      * @param heightMultiplier the enemy type's billboard height fraction
      */
     default void onShardRegrown(int tileColumn, int tileRow, float heightMultiplier) {}
+
+    /**
+     * Called when a Cinderforge Colossus's COOLING CRUST gains a stack
+     * (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt) — i.e. the player let a whole
+     * enemy turn pass without hurting it. A cold, quiet tell by design: the loud beat belongs to the
+     * SHATTER, and a hardening enemy should feel like something the player let happen. Default: no-op.
+     *
+     * @param tileColumn       the enemy's tile column
+     * @param tileRow          the enemy's tile row
+     * @param heightMultiplier the enemy type's billboard height fraction
+     * @param crustStacks      the stack count AFTER the gain (1..max)
+     */
+    default void onCrustCooled(int tileColumn, int tileRow, float heightMultiplier, int crustStacks) {}
+
+    /**
+     * Called when a cooled crust SHATTERS under a hit — the payoff beat for coming back out and firing
+     * (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt). Scaled by how much shell broke:
+     * breaking a full three-stack shell must feel bigger than chipping a single stack, because the
+     * player earned more. Default: no-op.
+     *
+     * @param tileColumn       the enemy's tile column
+     * @param tileRow          the enemy's tile row
+     * @param heightMultiplier the enemy type's billboard height fraction
+     * @param stacksBroken     how many crust stacks broke at once (1..max)
+     * @param wasFullCrust     true when the shell was FULLY cooled, i.e. this hit also earned the
+     *                         shatter damage bonus — the cue deserves the bigger burst and the flash
+     */
+    default void onCrustShattered(int tileColumn, int tileRow, float heightMultiplier,
+                                  int stacksBroken, boolean wasFullCrust) {}
+
+    /**
+     * Called when something enormous completes a step — today only the Cinderforge Colossus. The room
+     * should announce that it is coming even when it is out of view, so the shake is scaled by distance
+     * rather than gated on visibility. Default: no-op.
+     *
+     * @param tileColumn        the tile the enemy stepped ONTO
+     * @param tileRow           the tile the enemy stepped ONTO
+     * @param heightMultiplier  the enemy type's billboard height fraction
+     * @param distanceTiles     Chebyshev distance from the player, used to attenuate the shake
+     */
+    default void onHeavyFootfall(int tileColumn, int tileRow, float heightMultiplier,
+                                 int distanceTiles) {}
+
+    /**
+     * Called when a magma construct dies and collapses into embers
+     * (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt). Distinct from the generic death
+     * burst {@link #onEnemyKilled} already fires: this is the archetype's own colour, so a Colossus
+     * going out reads as a furnace being extinguished. Default: no-op.
+     *
+     * @param tileColumn       the tile the enemy died on
+     * @param tileRow          the tile the enemy died on
+     * @param heightMultiplier the enemy type's billboard height fraction
+     */
+    default void onEmberCollapse(int tileColumn, int tileRow, float heightMultiplier) {}
 }

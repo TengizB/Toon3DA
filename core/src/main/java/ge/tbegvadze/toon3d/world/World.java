@@ -994,6 +994,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (incinerator != null) {
             incinerator.setHazardIgniteTarget(hazardManager::igniteFire);
         }
+        // MOLTEN TRAIL (elemental-golem-cinderforge-colossus): the Colossus lights the tile it vacates
+        // through the SAME shipped hazard path, so its fire spreads and chain-detonates barrels for free.
+        // Re-wired here alongside the incinerator's sink because HazardManager is rebuilt per floor.
+        enemyManager.setHazardIgniteTarget(hazardManager);
         enemyManager.setEnemyDeathHazardListener((deadType, tileColumn, tileRow, selfDestructMassive) -> {
             // Plague Hulk leaves a lingering toxic cloud where it dies (area-denial verb). A Hulk
             // that survived its self-destruct countdown to detonate (plague-hulk-self-destruct.txt)
@@ -1004,6 +1008,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                         ? BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES
                         : BalanceConfig.HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS;
                 hazardManager.spawnToxicCloud(tileColumn, tileRow, radius);
+            }
+            // A dying magma construct leaves ONE last fire tile under itself
+            // (elemental-golem-cinderforge-colossus): the furnace goes out where it fell. Data-driven off
+            // the archetype's own trail duration rather than a type switch, so any future magma golem
+            // inherits the beat by declaring leavesTrailFireTurns().
+            if (deadType.leavesTrailFireTurns() > 0) {
+                hazardManager.igniteFire(tileColumn, tileRow, deadType.leavesTrailFireTurns());
             }
         });
 

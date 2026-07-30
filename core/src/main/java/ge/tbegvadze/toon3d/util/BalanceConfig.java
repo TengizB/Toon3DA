@@ -288,6 +288,54 @@ public final class BalanceConfig {
      */
     public static final float AURIC_SHARD_ARMOR_POOL            = 70f;
 
+    // CINDERFORGE_COLOSSUS (spawn '{') — the golem family's melee BRUISER ANCHOR
+    // (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt). A towering furnace of magma
+    // crystal that PUNISHES HESITATION with two passive mechanics: it hardens every turn it takes no
+    // damage (COOLING CRUST), and every tile it leaves behind catches fire (MOLTEN TRAIL). It is the
+    // roster's TEMPO test — the Shell Brute is the POSITIONING bruiser (sidestep the lane, punish the
+    // recovery); the Colossus is the one you must never stop shooting.
+    public static final int CINDERFORGE_COLOSSUS_MAX_HEALTH          = 110;
+    public static final int CINDERFORGE_COLOSSUS_ATTACK_DAMAGE       = 18;
+    /** Ponderous by design: it is KITEABLE, and it should be — the trail is the price of kiting it. Range: 1–3. */
+    public static final int CINDERFORGE_COLOSSUS_MOVE_EVERY_N_TURNS  = 2;
+    /**
+     * Shallowest floor the encounter planner may seat a Colossus as the floor's anchor. Floor 1 is the
+     * player's first weapon and first reload, and "never stop shooting" is not yet a choice they can
+     * make; from floor 2 it is. Hand-authored levels are NOT gated. Range: 1–3.
+     */
+    public static final int CINDERFORGE_COLOSSUS_MIN_SPAWN_DEPTH     = 2;
+    /** Crust stacks a fully cooled shell holds. THE lever if hesitation is punished too hard. Range: 2–4. */
+    public static final int CINDERFORGE_CRUST_MAX_STACKS             = 3;
+    /** Flat damage reduction each cooled crust stack contributes while it stands. Range: 3–6. */
+    public static final int CINDERFORGE_CRUST_ARMOR_PER_STACK        = 4;
+    /**
+     * The PRICED value of the crust, fed to GameMath.enemyEffectiveHitPoints as flat reduction.
+     *
+     * <p>TIME-AVERAGED, and the number looks wrong without this note — a naive reader will "fix" it to
+     * 12 and blow the bruiser band. LIVE crust reaches {@code MAX_STACKS * ARMOR_PER_STACK} = 12 flat,
+     * but ONLY against a player who has stopped attacking. The modelled player attacks every turn (that
+     * is exactly what REFERENCE_PLAYER_DPT means), and any damage shatters the whole shell, so against
+     * the modelled player the crust sits near zero on most turns. Priced at the honest average of about
+     * one stack of uptime: 1 * 4 ~= 3.
+     *     eHP = enemyEffectiveHitPoints(110, 0, 0, 3, 25) = 110 * 25/(25-3) = 125.0
+     *     TP  = (18/1) * (125.0/25) * POSITIONAL_MULT_MELEE = 18 * 5.0 * 1.00 = 90.0  (BRUISER 70-120)
+     * The MOLTEN TRAIL is deliberately NOT folded in here: terrain danger has its own priced channel
+     * (GameMath.hazardTileThreatPoints, printed by BalanceReport's HAZARDS section), and counting it in
+     * the enemy's TP as well would double-count it.
+     */
+    public static final float CINDERFORGE_CRUST_AVERAGED_FLAT_REDUCTION = 3f;
+    /**
+     * Damage multiplier on the single hit that breaks a FULLY cooled (max-stack) shell. Breaking a fully
+     * hardened Colossus is loud and rewarding — it is the PAYOFF for coming back out, not a punishment
+     * for having waited. Deliberately only on a full shell, so it never fires on incidental chip.
+     * Range: 1.0–1.5.
+     */
+    public static final float CINDERFORGE_CRUST_SHATTER_MULTIPLIER   = 1.25f;
+    /** Turns a molten-trail fire tile burns. 3 keeps corridors survivable; test 4 on floors 8+. Range: 2–5. */
+    public static final int CINDERFORGE_TRAIL_FIRE_TURNS             = 3;
+    /** Live trail tiles ONE Colossus may hold at once, so a long chase cannot carpet a floor. Range: 4–8. */
+    public static final int CINDERFORGE_TRAIL_MAX_LIVE_TILES         = 6;
+
     // Global enemy AI knobs — perception and kiting tuning shared across types.
     /** Tiles within which an enemy notices the player and wakes. Range: 3–6. */
     public static final int ALERT_RADIUS_TILES        = 4;
@@ -391,6 +439,8 @@ public final class BalanceConfig {
     public static final int CREDIT_REWARD_BLIGHT_CORRUPTOR = 13;
     /** Sits between Void Shroud (12) and Mire Wraith (15) — consistent with its mid-soldier TP. */
     public static final int CREDIT_REWARD_AURIC_SENTINEL    = 14;
+    /** Above the Shell Brute (12), far below the Iron Stalker (40) — matches its mid-BRUISER TP of ~90. */
+    public static final int CREDIT_REWARD_CINDERFORGE_COLOSSUS = 16;
 
     // -------------------------------------------------------------------------------------
     // SPECIAL-VERB TP EQUIVALENCE (new-game-balancr order 5) — cycle-averaged threat pricing.

@@ -49,6 +49,11 @@ public class Enemy implements StatusHost {
      * {@link #applyDamage}. Distinct from the ARMOR_PIERCE ability, which pierces Block (the
      * enemy's active damage-absorbing shield), not this flat layer.
      * Default 0; depth-scaled enemies may receive a non-zero value at spawn time.
+     *
+     * <p>The Cinderforge Colossus's COOLING CRUST rides on this same field rather than on a parallel
+     * one: each stack adds {@link EnemyConstants#CINDERFORGE_CRUST_ARMOR_PER_STACK} here while it
+     * stands and removes it again on {@link #shatterCrust}, so the crust automatically obeys the
+     * existing mitigation order and every armour-aware system sees it for free.
      */
     public int        armor = 0;
     /**
@@ -227,6 +232,52 @@ public class Enemy implements StatusHost {
      */
     public float shardAbsorbFlashTimerSeconds = 0f;
 
+    // -------------------------------------------------------------------------
+    // Cooling crust + molten trail (elemental-golem-cinderforge-colossus) — the CINDERFORGE_COLOSSUS
+    // gets HARDER the longer the player stops shooting it, and sets fire to every tile it leaves.
+    // Inert for every archetype whose type.crustMaxStacks() / type.leavesTrailFireTurns() is 0.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Live crust stacks, 0..{@code type.crustMaxStacks()}. Each stack adds
+     * {@link EnemyConstants#CINDERFORGE_CRUST_ARMOR_PER_STACK} to {@link #armor} while it stands; ANY
+     * damage shatters the WHOLE shell at once ({@link #shatterCrust}). Gained at the end of the enemy's
+     * own turn only when it took no damage since its previous turn ({@link #advanceCrustCooling}), so
+     * the stack count is a direct readout of how long the player has hesitated.
+     *
+     * <p>Per-instance and never persisted across a level — a fresh Colossus always enters the fight bare
+     * and soft, so the opening burst is always worth taking.
+     */
+    public int crustStacks = 0;
+
+    /**
+     * True once this enemy has taken damage of ANY kind since its previous turn — a weapon hit, an
+     * ability, a barrel, or a status DoT tick. Read (and cleared) once per turn by
+     * {@link #advanceCrustCooling}: hesitation is measured in "turns during which nothing hurt it", so
+     * the flag is the whole gain condition. DoT counts deliberately, or a Burning/Bleed build could
+     * never express the counterplay at all.
+     */
+    public boolean damagedSinceLastTurn = false;
+
+    /**
+     * Crust level the RENDERER shows, easing toward the live {@code crustStacks / max} fraction over
+     * {@link EnemyConstants#CINDERFORGE_TINT_LERP_SECONDS}. Cosmetic only — the simulation always reads
+     * {@link #crustStacks}, which changes instantly. The ease is what makes a shatter a visible FLASH
+     * back to hot instead of a snap.
+     */
+    private float crustTintLevel = 0f;
+
+    /**
+     * Remaining turns of each live MOLTEN TRAIL tile this enemy has lit, as a fixed-size ring of
+     * counters. The hazard system owns the actual fire; this is only the per-Colossus LIVE-TILE CAP
+     * bookkeeping ({@link EnemyConstants#CINDERFORGE_TRAIL_MAX_LIVE_TILES}), so one long chase cannot
+     * carpet a floor. Pre-sized at construction and compacted in place — {@link #advanceTrailTiles} runs
+     * every enemy turn and never allocates.
+     */
+    private final int[] trailTileTurnsRemaining =
+            new int[EnemyConstants.CINDERFORGE_TRAIL_MAX_LIVE_TILES];
+    private int         trailTileCount = 0;
+
     /**
      * True only for an add spawned by the boss's SUMMON tactic (boss-fight-mobile-overseer ORDER 6).
      * Set at spawn time by EnemyManager.spawnBossMinion; level-placed enemies and regular-summoner
@@ -329,6 +380,127 @@ public class Enemy implements StatusHost {
         return 1f - shardRespaceTimerSeconds / EnemyConstants.AURIC_SHARD_RESPACE_SECONDS;
     }
 
+    // -------------------------------------------------------------------------
+    // Cooling crust behaviour (elemental-golem-cinderforge-colossus). All no-ops when crustMaxStacks is 0.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Advances the cooling clock by one of this enemy's own turns, gaining a crust stack when it took NO
+     * damage since its previous turn, and returns true only on the turn a stack actually forms (so the
+     * caller can fire the cooling effect). Consumes {@link #damagedSinceLastTurn} either way, which is
+     * what makes the mechanic "one uninterrupted turn = one stack" rather than a cumulative timer.
+     *
+     * <p>Called only for ALERTED enemies taking a turn, so a Colossus asleep since level load can never
+     * wake up already fully hardened — the opening burst is always worth taking.
+     */
+    public boolean advanceCrustCooling() {
+        int maxStacks = type.crustMaxStacks();
+        if (maxStacks <= 0) return false;
+        boolean tookDamage   = damagedSinceLastTurn;
+        damagedSinceLastTurn = false;
+        if (tookDamage) return false;
+        if (crustStacks >= maxStacks) return false;   // already fully cooled — nothing more to gain
+        crustStacks++;
+        armor += EnemyConstants.CINDERFORGE_CRUST_ARMOR_PER_STACK;
+        return true;
+    }
+
+    /**
+     * Shatters the entire crust, removing its armour contribution, and returns how many stacks broke
+     * (0 when there was no crust, which is the common case for every other archetype). Called from BOTH
+     * damage entry points — {@link #applyDamage} and {@link #applyDoTDamage} — because "any damage
+     * resets it" has to mean ANY, or a Burning/Bleed build is silently locked out of the counterplay.
+     */
+    public int shatterCrust() {
+        damagedSinceLastTurn = true;
+        if (crustStacks <= 0) return 0;
+        int brokenStacks = crustStacks;
+        crustStacks      = 0;
+        armor            = Math.max(0,
+                armor - brokenStacks * EnemyConstants.CINDERFORGE_CRUST_ARMOR_PER_STACK);
+        return brokenStacks;
+    }
+
+    /** True while this enemy wears a FULLY cooled shell — the state that pays the shatter bonus. */
+    public boolean hasFullCrust() {
+        int maxStacks = type.crustMaxStacks();
+        return maxStacks > 0 && crustStacks >= maxStacks;
+    }
+
+    /**
+     * The damage {@code amount} becomes once the FULL-shell shatter bonus is applied, or {@code amount}
+     * unchanged when there is no full shell to break. Pure query, no side effects.
+     *
+     * <p>Single source of truth for the multiplier: {@link #applyDamage} routes through it to compute the
+     * real hit, and the caller routes through it to compute the number it FLOATS on screen. Without a
+     * shared helper the two drift, and a shatter that hits for 31 while the floater says 25 turns the
+     * archetype's payoff beat into a bug report.
+     */
+    public int crustShatterAmplified(int amount) {
+        if (amount <= 0 || !hasFullCrust()) return amount;
+        return Math.round(amount * EnemyConstants.CINDERFORGE_CRUST_SHATTER_MULTIPLIER);
+    }
+
+    /**
+     * Eases the RENDERED crust level toward the live stack fraction. Call once per frame; a no-op for
+     * every archetype without crust. Cosmetic only.
+     */
+    public void advanceCrustTint(float deltaTime) {
+        int maxStacks = type.crustMaxStacks();
+        if (maxStacks <= 0) return;
+        float target = (float) crustStacks / maxStacks;
+        crustTintLevel = GameMath.easeTowardLinear(crustTintLevel, target, deltaTime,
+                EnemyConstants.CINDERFORGE_TINT_LERP_SECONDS);
+    }
+
+    /** Rendered crust level in [0, 1]: 0 = blazing hot and soft, 1 = fully cooled and hardened. */
+    public float getCrustTintLevel() {
+        return crustTintLevel;
+    }
+
+    // -------------------------------------------------------------------------
+    // Molten trail bookkeeping (elemental-golem-cinderforge-colossus).
+    // -------------------------------------------------------------------------
+
+    /**
+     * True when this enemy may light ANOTHER trail tile — i.e. it leaves a trail at all and is still
+     * under its per-Colossus live-tile cap. The cap is what stops a long chase from carpeting a floor;
+     * the oldest tiles expire first on their own, so the cap simply skips a tile rather than stealing
+     * one back from the hazard system (which owns the fire once it is lit).
+     */
+    public boolean canLightTrailTile() {
+        return type.leavesTrailFireTurns() > 0
+                && trailTileCount < trailTileTurnsRemaining.length;
+    }
+
+    /** Records a freshly lit trail tile against the live-tile cap. Call only after a successful ignition. */
+    public void recordTrailTile(int lifetimeTurns) {
+        if (trailTileCount >= trailTileTurnsRemaining.length) return;
+        trailTileTurnsRemaining[trailTileCount++] = lifetimeTurns;
+    }
+
+    /**
+     * Ages every live trail tile by one turn and drops the expired ones, keeping the live count honest
+     * against the hazard system's own lifetimes. Compacts the fixed-size ring in place — no allocation.
+     * A no-op for every archetype that leaves no trail.
+     */
+    public void advanceTrailTiles() {
+        if (trailTileCount <= 0) return;
+        int survivorCount = 0;
+        for (int tileIndex = 0; tileIndex < trailTileCount; tileIndex++) {
+            int turnsLeft = trailTileTurnsRemaining[tileIndex] - 1;
+            if (turnsLeft > 0) {
+                trailTileTurnsRemaining[survivorCount++] = turnsLeft;
+            }
+        }
+        trailTileCount = survivorCount;
+    }
+
+    /** Live trail tiles this enemy currently holds against its cap. Exposed for tests and telemetry. */
+    public int liveTrailTileCount() {
+        return trailTileCount;
+    }
+
     private static EnumMap<StatusType, StatusEffect> buildEffectsMap() {
         EnumMap<StatusType, StatusEffect> map = new EnumMap<>(StatusType.class);
         for (StatusType type : StatusType.values()) {
@@ -357,6 +529,15 @@ public class Enemy implements StatusHost {
         // straight into a Sentinel's HP without consuming a shard, so burning one down is a legitimate,
         // distinct answer to the archetype and no status build is ever hard-countered by it. It is also
         // why hazard tiles (fire/toxic, which apply status) damage a Sentinel through its ring.
+        //
+        // It does NOT, however, bypass the Cinderforge Colossus's COOLING CRUST reset
+        // (elemental-golem-cinderforge-colossus): a DoT tick still COUNTS as damage taken, so a burn or
+        // a bleed keeps the shell shattered and the enemy soft. Without that, an Incinerator or Bleed
+        // build could not express the archetype's counterplay at all — it would watch the Colossus
+        // harden through its own damage. The tick deliberately claims no shatter BONUS (that payoff
+        // belongs to the player who came back out and pulled the trigger), which is why it calls
+        // shatterCrust directly rather than going through applyDamage's shatter branch.
+        shatterCrust();
         health = Math.max(0, health - amount);
     }
 
@@ -503,14 +684,34 @@ public class Enemy implements StatusHost {
      * bonus hit) strips several shards on one trigger pull. That is the intended reward for a rapid or
      * wide weapon and it FALLS OUT of this implementation rather than being special-cased anywhere.
      * Status DoT deliberately bypasses this hook entirely — see {@link #applyDoTDamage}.
+     *
+     * <p><b>THE COOLING CRUST SHATTERS LAST</b> (elemental-golem-cinderforge-colossus), after the whole
+     * mitigation chain has run, so the full order is SHARD -> [x1.25 on a full shell] -> Block -> armor
+     * (crust included) -> HP -> crust shatters. Two consequences are deliberate: the shell protects the
+     * very blow that breaks it (otherwise hardening would buy the enemy literally nothing), and the hit
+     * that breaks a FULLY cooled shell is amplified first — the payoff for coming back out. Every damage
+     * instance shatters the shell, so a player who keeps firing never faces crust at all, which is the
+     * entire lesson the archetype teaches.
      */
     public void applyDamage(int amount, boolean ignoreBlock, float blockPierceFraction) {
         if (amount > 0 && shardCount > 0) {
             beginShardRespace();
             shardCount--;
             shardAbsorbFlashTimerSeconds = EnemyConstants.AURIC_ABSORB_FLASH_DURATION_SECONDS;
+            // An absorbed hit still COUNTS as damage taken for any crust this enemy might wear, so no
+            // archetype can ever be built that hardens while its shards eat the incoming fire.
+            shatterCrust();
             return;   // fully absorbed — Block, armour and HP are all untouched by this hit
         }
+        // COOLING CRUST (elemental-golem-cinderforge-colossus). The shell is still standing when this
+        // blow lands — its flat armour is already inside `armor` and reduces THIS hit, which is the
+        // whole point of having hardened. Breaking a FULLY cooled shell pays the shatter multiplier
+        // first: it is the payoff for coming back out and firing, not a punishment for having waited.
+        // Then the shell is gone, and every later hit meets the bare body.
+        // Captured BEFORE the shatter multiplier rewrites `amount`, so "did the player connect?" stays a
+        // question about the incoming hit rather than about the amplified one.
+        boolean landedHit = amount > 0;
+        amount = crustShatterAmplified(amount);
         int remaining = amount;
         if (!ignoreBlock) {
             float clampedPierce = Math.max(0f, Math.min(1f, blockPierceFraction));
@@ -519,9 +720,16 @@ public class Enemy implements StatusHost {
             block -= absorbed;
             remaining = amount - absorbed;
         }
-        if (remaining <= 0) return;             // fully braced — HP untouched this turn
-        int afterArmor = Math.max(0, remaining - armor);
-        health = Math.max(0, health - afterArmor);
+        if (remaining > 0) {                    // remaining <= 0 => fully braced, HP untouched this turn
+            int afterArmor = Math.max(0, remaining - armor);
+            health = Math.max(0, health - afterArmor);
+        }
+        // The crust falls AFTER mitigation, never before — so the shell the player just broke actually
+        // protected the blow that broke it. A hit swallowed whole by Block still shatters it: the player
+        // pulled the trigger and connected, and an enemy that could brace AND keep cooling would make
+        // "never stop shooting" unanswerable. Cheap for every other archetype (crustStacks is 0, so this
+        // only sets the damage flag nothing else reads).
+        if (landedHit) shatterCrust();
     }
 
     /** Resets the hit-flash timer to full duration. Calling again before it expires re-triggers cleanly. */

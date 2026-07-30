@@ -1,7 +1,43 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Enemies
 TITLE: Cinderforge Colossus — magma golem that hardens when unharmed
 ---
+
+IMPLEMENTATION NOTES (as shipped)
+=================================
+Built exactly to spec — BRUISER anchor, TP 90.0 (mid 70-120 band), golden ratio 2.4, both verified live
+by BalanceReport's ENEMIES table; the balance audit (`./gradlew test`) is green.
+
+  * COOLING CRUST: Enemy.crustStacks + Enemy.armor (rides the EXISTING flat-armour field, so it obeys
+    the shared mitigation order for free). Shatter fires from BOTH Enemy.applyDamage AND
+    Enemy.applyDoTDamage, so a burn/bleed tick resets it (OPEN QUESTION 1 -> YES, as recommended). Full
+    order: SHARD -> [x1.25 full-shell shatter bonus] -> Block -> armor(crust) -> HP -> shatter, so the
+    shell protects the blow that breaks it. Crust only accrues once ALERTED (OPEN QUESTION 2 -> as
+    recommended). Priced as TIME-AVERAGED flatReduction() = 3 (BalanceConfig.CINDERFORGE_CRUST_AVERAGED_
+    FLAT_REDUCTION); NO new SpecialAbility verb, so SPECIAL_VERB_PRICING/COVERAGE untouched.
+  * MOLTEN TRAIL: EnemyManager.executeMove ignites the vacated tile via the shipped
+    HazardManager.igniteFire(col,row,CINDERFORGE_TRAIL_FIRE_TURNS) — a new 3-arg overload on the shared
+    HazardIgniteTarget interface (default-delegates, so the Incinerator/test stubs are unaffected). Real
+    'i' fire: spreads, chain-detonates barrels, burns allies (NOT special-cased — OPEN QUESTION 4 -> the
+    pathfinder does not avoid it). Per-Colossus live-tile cap via a fixed ring buffer on Enemy. Trail
+    threat shows up in BalanceReport's HAZARDS "Fire 'i'" row, NOT double-counted into the enemy TP.
+  * minSpawnDepth 2 (OPEN QUESTION 5 -> '{' did NOT collide; the excavation room is still NOT
+    IMPLEMENTED, so no fallback to '/' was needed). Because it is an ANCHOR (one pick/floor, largest-
+    fitting), its 90-TP body does not fit the tight floor-2 reserve, so it begins anchoring from floor 3
+    in practice; the gate opening at 2 is deliberate and hand levels are ungated.
+  * RENDER: crust-driven tint (hot orange <-> charcoal, eased, hot-rim floor so it never reads asleep),
+    one dark plate + molten seam per stack, heat-haze shimmer, quiet-cool / loud-shatter / footfall /
+    ember-collapse effects. DEATH (spec item 6) is realized as the ember-collapse particle burst + one
+    last fire tile, matching how the sibling Auric Sentinel's death "COLLAPSE" shipped — the engine
+    removes enemies instantly on death and has no lingering-dying-sprite subsystem, so a literal ~1s
+    blacken-in-place would need a new system neither golem has; the burst is the architecture-consistent
+    realization.
+  * Contract test: core/.../enemy/CinderforgeColossusTest.java (crust gain/cap, DoT reset, full-shell
+    bonus, mitigation-before-shatter, trail cap, depth gate). Snapshot digest re-baselined (new anchor
+    shifts the depth-2+ roster roulette; depth-1 digest verified byte-identical to HEAD).
+  * KNOWN: `./gradlew balanceSim` has 6 failing S-* band tests, but they FAIL IDENTICALLY on HEAD
+    (pre-existing "quantity must be >= 1" crash in BalanceSimulator.runPolicy, unrelated to this
+    archetype). Not fixed here — out of scope.
 
 OVERVIEW
 ========
