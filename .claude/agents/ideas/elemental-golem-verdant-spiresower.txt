@@ -1,7 +1,32 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Enemies
 TITLE: Verdant Spiresower — emerald golem that grows healing spires
 ---
+
+IMPLEMENTATION NOTES (delta from the spec below)
+================================================
+Shipped as designed, with two deliberate deviations documented here:
+
+  1. SPIRE TILE — the spec's RECOMMENDED path was RECIPE A (register the spire as a tileset SOLID_PROP
+     sprite bound to a symbol). In practice that path is unreliable for a RUNTIME-STAMPED tile: the legacy
+     palette every hand/generated level carries never binds the spire symbol, so EnvironmentTextureSet
+     never realizes its texture and textureFor() throws. It also breaks the tileset drift-guard tests
+     (SymbolCategoriesTest / TilesetRegistriesTest hold Level.isPropSolid in lockstep with the category
+     system). So the spire uses the spec's stated FALLBACK: a FIXED runtime symbol (':') handled by its own
+     Level.isSpire checks (in isBlockedAt / isPropOccluder / the enemy LOS + isLanceBlocked / Weapon.is-
+     ShotBlockingCover), exactly like the 'i'/'q' hazard decals, with an owned PropRenderer texture. Documented
+     in docs/tile-symbols.txt. This keeps it robust and leaves level generation byte-identical.
+
+  2. WEAPON DAMAGE ROUTING — routed through the existing EnemyHitTarget seam (isSpireAt / damageSpireAt,
+     called from Weapon.hitSpireCover at each weapon's cover-stop and from the grenade splash), per the
+     spec's "extend the existing hit-target seam, no parallel damage path" instruction. SpireManager
+     implements the entity/SpireHitTarget seam so the enemy package never depends on hazard.
+
+Key classes: hazard/SpireManager, entity/SpireHitTarget, EnemyType.VERDANT_SPIRESOWER,
+EnemyManager (computeSowerPlan / executeSow / advanceSowerRegen / stepTowardPreferringCover / spawn '}'),
+the SPIRESOWER_* constants in BalanceConfig + EnemyConstants. Tests: enemy/SpiresowerTest,
+level/SpireReachabilityTest. Gates: ./gradlew test passes (balance audit green; the pre-existing
+LevelGeneratorSnapshotTest failure is unrelated and unchanged by this feature).
 
 OVERVIEW
 ========

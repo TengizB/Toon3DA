@@ -13,6 +13,7 @@ import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.*;
 import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
 import ge.tbegvadze.toon3d.hazard.HazardManager;
+import ge.tbegvadze.toon3d.hazard.SpireManager;
 import ge.tbegvadze.toon3d.hud.HudRenderer;
 import ge.tbegvadze.toon3d.input.PlayerController;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
@@ -164,6 +165,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private EnemyAttackEffectSystem enemyAttackEffectSystem;
     private ExplosiveBarrelManager explosiveBarrelManager;
     private HazardManager          hazardManager;
+    // Crystal-spire simulation for the Verdant Spiresower (rebuilt per floor, like HazardManager). Holds no
+    // GPU resources; cleared on floor teardown so no stamped solid tile is ever leaked.
+    private SpireManager           spireManager;
     // Held so the per-floor HazardManager rebuild can re-wire the incinerator's tile-ignition sink.
     private Incinerator            incinerator;
     private TickEventBus           tickEventBus;
@@ -895,6 +899,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyAttackEffectSystem.dispose();
         levelRenderer.dispose();
         if (bossHudRenderer != null) { bossHudRenderer.dispose(); bossHudRenderer = null; }
+        // Restore any spire-stamped tiles on the OUTGOING level before it is replaced, so no solid tile is
+        // ever leaked across a floor transition. The SpireManager holds no GPU resources (no dispose()).
+        if (spireManager != null) spireManager.clear();
         bossFloorController = null;
 
         // Reposition player at the new spawn point before rebuilding systems so
@@ -998,6 +1005,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // through the SAME shipped hazard path, so its fire spreads and chain-detonates barrels for free.
         // Re-wired here alongside the incinerator's sink because HazardManager is rebuilt per floor.
         enemyManager.setHazardIgniteTarget(hazardManager);
+
+        // Crystal-spire simulation (elemental-golem-verdant-spiresower) — the Verdant Spiresower's solid,
+        // healing spires. Rebuilt per floor like the HazardManager; it stamps the spire char onto the grid
+        // (auto-culled from PropRenderer when a tile is restored) and fires its birth/shatter bursts through
+        // the impact system. Wired into EnemyManager through the entity-package SpireHitTarget seam.
+        spireManager = new SpireManager(targetLevel, doorManager);
+        spireManager.setVisualListener(propRenderer::addDynamicProp);
+        spireManager.setImpactEventListener(impactEffectSystem);
+        enemyManager.setSpireHitTarget(spireManager);
         enemyManager.setEnemyDeathHazardListener((deadType, tileColumn, tileRow, selfDestructMassive) -> {
             // Plague Hulk leaves a lingering toxic cloud where it dies (area-denial verb). A Hulk
             // that survived its self-destruct countdown to detonate (plague-hulk-self-destruct.txt)
@@ -1039,7 +1055,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // The shared assembly (TickPipeline) owns the dispatch ORDER, so a simulated floor
         // (sim.SimWorld) resolves its turns in exactly the order a played floor does.
-        tickEventBus = TickPipeline.standardFloor(inventory, hazardManager, statusEffectController,
+        tickEventBus = TickPipeline.standardFloor(inventory, hazardManager, spireManager,
+                                                  statusEffectController,
                                                   player, enemyManager, playerStats,
                                                   bossFloorController, gameState);
         // RUN AUTOPSY (order 9): count the turns a boss fight actually takes, so the reported number

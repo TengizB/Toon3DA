@@ -109,6 +109,12 @@ J   AI core node        Tall server tower: chassis with edge cooling fins, crown
 \   Floating cargo crate Magnetically tethered supply crate hanging off the deck, tilted ~20deg, cyan tether-beam to a deck clamp. STELLAR_OBSERVATORY room only. 0.55x wall height
 |   Docking strut pylon  Tapered titanium support strut with a clamp collar and a vertical ladder of status LEDs. STELLAR_OBSERVATORY room only. 0.92x wall height
 <   Astro-nav holo table Low console projecting a translucent rotating cyan wireframe star-chart globe. STELLAR_OBSERVATORY room only. 0.60x wall height
+:   Crystal spire        Emerald crystal shoot grown by a Verdant Spiresower. RUNTIME-ONLY — NEVER authored
+                        in a level file; stamped into the grid at runtime by SpireManager exactly like the
+                        'i'/'q' hazard decals, and auto-culled when its tile is restored. Solid: blocks
+                        movement, line of sight and shots, and takes flat weapon damage (30 HP). Decays
+                        after 8 turns; heals its sower while it stands. A FIXED gameplay symbol handled by
+                        its own Level.isSpire checks, NOT through the tileset category system. 0.62x wall height
 
 WALKABLE DECALS (player walks over; rendered as flat billboard)
 --------------------------------------------------------------
@@ -175,6 +181,11 @@ V   Vortex Eye spawn      Necrotic faction. Short-range ranged chaff caster (wea
                           piercing molten lance straight down a cardinal lane — armoured OR dangerous,
                           never both. The beam also splashes any golem ally caught in the lane. Floors
                           1-10+ (a SOLDIER; hand levels are not gated).
+}   Verdant Spiresower spawn  Golem faction. Melee soldier that EDITS THE LEVEL: every few turns it grows
+                          solid, sight-blocking crystal SPIRES (the runtime ':' prop) that drain life into
+                          it while they stand and wall the room into a maze. Shoot the golem and it heals;
+                          shoot the spires and it stops. The reachability guard never lets a spire seal the
+                          player off from the exit. Floors 1-10+ (a SOLDIER; hand levels are not gated).
 n   Boss spawn (depth-keyed)  Replaced at load time with floor ' '; BossFloorController seeds the correct boss based on World.currentDepth. Exactly one per boss-floor arena.
 
 ---
@@ -182,8 +193,8 @@ n   Boss spawn (depth-keyed)  Replaced at load time with floor ' '; BossFloorCon
 SYMBOL BUDGET
 -------------
 Total printable ASCII characters: 95  (codes 32-126)
-Assigned to a FIXED or FLEXIBLE symbol:  88
-Unassigned characters:                    7
+Assigned to a FIXED or FLEXIBLE symbol:  90
+Unassigned characters:                    5
 
 The symbol/sprite-reuse system (docs/environment-tileset-system.txt) REMOVED the scarcity this budget
 used to track. Symbol count no longer limits how much environment art or how many rooms the game can
@@ -198,9 +209,10 @@ blueprint), NEITHER of which consumes a symbol. The 85 assigned symbols split in
     small per-level subset.
 
 Unassigned characters (available if a genuinely new FIXED gameplay meaning is ever needed):
-o } ) / , _ :
-  (o } ) / , _ : were historically pencilled in for the EXCAVATION_SITE room design,
-  .claude/agents/ideas/excavation-monolith-chamber-room.txt — NOT IMPLEMENTED. " ' ; ? < \ ] - | `
+o ) / , _
+  (o ) / , _ were historically pencilled in for the EXCAVATION_SITE room design,
+  .claude/agents/ideas/excavation-monolith-chamber-room.txt — NOT IMPLEMENTED. '}' from that block is
+  now the Verdant Spiresower enemy-spawn marker and ':' its runtime crystal-spire prop. " ' ; ? < \ ] - | `
   are ASSIGNED to the STELLAR_OBSERVATORY room as FLEXIBLE symbols; the allocator keeps their
   observatory sprites contained to that room via the "observatory" theme tag.)
   ('~' and '*' are Ghoul / Blight Corruptor enemy-spawn markers; '(', '{' and '[' are the Auric

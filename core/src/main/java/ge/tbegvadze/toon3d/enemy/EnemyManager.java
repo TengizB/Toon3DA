@@ -8,6 +8,7 @@ import ge.tbegvadze.toon3d.entity.Loadout;
 import ge.tbegvadze.toon3d.entity.boss.Boss;
 import ge.tbegvadze.toon3d.entity.MeleeWeapon;
 import ge.tbegvadze.toon3d.entity.Player;
+import ge.tbegvadze.toon3d.entity.SpireHitTarget;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.EnemySpawnPoint;
@@ -21,6 +22,7 @@ import ge.tbegvadze.toon3d.status.StatusResistance;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.BossBalance;
+import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.StatsStore;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
@@ -136,6 +138,22 @@ public final class EnemyManager implements EnemyHitTarget {
      */
     private HazardIgniteTarget hazardIgniteTarget = null;
 
+    /**
+     * Crystal-spire simulation seam for the Verdant Spiresower (SpireManager, wired per floor by World).
+     * Null in headless tests / no-World construction, which makes every sow, regen and spire query a safe
+     * no-op — so an enemy turn never needs a spire system. Reached through the entity-package
+     * {@link SpireHitTarget} so the enemy package never depends on the hazard package.
+     */
+    private SpireHitTarget spireHitTarget = null;
+
+    // Sow-target selection scratch — the candidate box for one sow (radius R -> (2R+1)^2 tiles), gathered
+    // once per commit and never reallocated (project rule: no allocation inside takeTurn()).
+    private static final int SOW_CANDIDATE_CAPACITY =
+            (2 * EnemyConstants.SPIRESOWER_SOW_RADIUS_TILES + 1)
+          * (2 * EnemyConstants.SPIRESOWER_SOW_RADIUS_TILES + 1);
+    private final int[] sowCandidateColumns = new int[SOW_CANDIDATE_CAPACITY];
+    private final int[] sowCandidateRows    = new int[SOW_CANDIDATE_CAPACITY];
+
     /** Notified when the never-softlock emergency ammo lifeline fires (order 3, part D) — for telemetry. */
     public interface EmergencySupplyListener {
         void onEmergencySupplyGranted();
@@ -234,6 +252,56 @@ public final class EnemyManager implements EnemyHitTarget {
         this.hazardIgniteTarget = target;
     }
 
+    /**
+     * Injects the crystal-spire seam used by the Verdant Spiresower
+     * (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt). World re-wires this whenever the
+     * per-floor {@code SpireManager} is rebuilt. Null (the default, and the case in headless unit tests)
+     * makes every sow, regen and spire query a safe no-op, so no test needs a spire system to take a turn.
+     */
+    public void setSpireHitTarget(SpireHitTarget target) {
+        this.spireHitTarget = target;
+    }
+
+    @Override
+    public boolean isSpireAt(int tileColumn, int tileRow) {
+        return spireHitTarget != null && spireHitTarget.isSpireAt(tileColumn, tileRow);
+    }
+
+    /**
+     * Routes a weapon hit that stopped on a spire's cover tile into the SpireManager (the design's
+     * "extend the existing hit-target seam" rule). Fires the ordinary hit spark + damage number so a spire
+     * reads as something you damaged, and — when the hit DESTROYS the spire — FLINCHES its sower, so the
+     * player sees that hurting the terrain hurt the enemy. The golem's death withering (shattering all its
+     * spires) is handled in {@link #killEnemy}, not here.
+     */
+    @Override
+    public void damageSpireAt(int tileColumn, int tileRow, int amount) {
+        if (spireHitTarget == null) return;
+        int ownerId = spireHitTarget.spireOwnerAt(tileColumn, tileRow);
+        boolean hit = spireHitTarget.damageSpireAt(tileColumn, tileRow, amount);
+        if (!hit) return;
+        float worldX = tileColumn * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
+        float worldY = tileRow * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
+        if (impactEventListener != null) {
+            impactEventListener.onEnemyHit(worldX, worldY,
+                    EnemyConstants.SPIRESOWER_SPIRE_HEIGHT_MULTIPLIER, amount);
+        }
+        if (!spireHitTarget.isSpireAt(tileColumn, tileRow)) {
+            Enemy owner = findAliveEnemyById(ownerId);
+            if (owner != null) owner.triggerHitFlash();   // low-strength flinch: hurting the terrain hurt it
+        }
+    }
+
+    /** Finds a living enemy by its stable id, or null. Used to flinch a Spiresower whose spire was broken. */
+    private Enemy findAliveEnemyById(int enemyId) {
+        if (enemyId < 0) return null;
+        for (int index = 0; index < enemies.size(); index++) {
+            Enemy enemy = enemies.get(index);
+            if (enemy.getId() == enemyId && enemy.isAlive()) return enemy;
+        }
+        return null;
+    }
+
     @Override
     public void notifyMeleeAttack() {
         pendingMeleeKill = true;
@@ -272,6 +340,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 case '(': type = EnemyType.AURIC_SENTINEL;   break;
                 case '{': type = EnemyType.CINDERFORGE_COLOSSUS; break;
                 case '[': type = EnemyType.RIMESHELL_LANCER;  break;
+                case '}': type = EnemyType.VERDANT_SPIRESOWER; break;
                 case 'n': continue; // Boss spawn — BossFloorController seeds the correct boss by depth
                 default:  type = EnemyType.PLAGUE_HULK;   break;
             }
@@ -758,12 +827,14 @@ public final class EnemyManager implements EnemyHitTarget {
                 enemy.plannedAction.verb = IntentVerb.STUNNED;
                 advanceShardRegrowth(enemy);
                 advanceCrustCooling(enemy);
+                advanceSowerRegen(enemy);
                 enemy.advanceLanceCooldown();
                 continue;
             }
             executePlan(enemy, playerColumn, playerRow, player);
             advanceShardRegrowth(enemy);
             advanceCrustCooling(enemy);
+            advanceSowerRegen(enemy);
             // Count the lance cooldown down on this Lancer's own clock — including a turn a stun cancelled
             // (the shell reseals on its own schedule, not on the enemy's success). A no-op for everything
             // else, and for an enemy that died during its own action.
@@ -957,6 +1028,11 @@ public final class EnemyManager implements EnemyHitTarget {
             executeLanceBeam(enemy, playerColumn, playerRow, player);
             return;
         }
+        if (enemy.type == EnemyType.VERDANT_SPIRESOWER) {
+            // The sower's WIND_UP resolves into a bespoke SOW (terrain creation), not a rush or a beam.
+            executeSow(enemy, playerColumn, playerRow);
+            return;
+        }
         boolean connected = performCharge(enemy, playerColumn, playerRow, player);
         if (!connected) {
             enemy.skipNextAction = true; // committed rush missed — punishable recovery
@@ -1053,7 +1129,8 @@ public final class EnemyManager implements EnemyHitTarget {
         return Level.isWall(cell)
                 || doorManager.blocksSight(tileColumn, tileRow)
                 || Level.isPropSolid(cell)
-                || Level.isColumn(cell);
+                || Level.isColumn(cell)
+                || Level.isSpire(cell);   // a crystal spire stops the rime lance like any solid tile
     }
 
     /**
@@ -1082,6 +1159,10 @@ public final class EnemyManager implements EnemyHitTarget {
             if (!stepTowardTile(enemy, plan.targetColumn, plan.targetRow, playerColumn, playerRow)) {
                 stepToward(enemy, playerColumn, playerRow);
             }
+        } else if (enemy.type == EnemyType.VERDANT_SPIRESOWER) {
+            // Sower: close on the player but PREFER a step that keeps a living spire between it and them —
+            // it would rather reposition behind its own terrain than walk into the open.
+            stepTowardPreferringCover(enemy, playerColumn, playerRow);
         } else {
             // Plain chase — track the player's LIVE position (stuck/wiggle aware), not the stale
             // commit-time tile in plan.targetColumn/Row (that tile is kept only for icon display).
@@ -1314,6 +1395,8 @@ public final class EnemyManager implements EnemyHitTarget {
                 computeChargerPlan(enemy, plan, playerColumn, playerRow);
             } else if (enemy.type == EnemyType.VOID_SHROUD) {
                 computeFlankerPlan(enemy, plan, playerColumn, playerRow, player);
+            } else if (enemy.type == EnemyType.VERDANT_SPIRESOWER) {
+                computeSowerPlan(enemy, plan, playerColumn, playerRow);
             } else {
                 computeMeleePlan(enemy, plan, playerColumn, playerRow);
             }
@@ -1587,6 +1670,153 @@ public final class EnemyManager implements EnemyHitTarget {
         int toEnemyRow    = enemy.tileRow    - playerRow;
         // Negative dot product = enemy is behind where the player looks.
         return toEnemyColumn * faceColumn + toEnemyRow * faceRow < 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // SOWER plan (Verdant Spiresower, elemental-golem-verdant-spiresower) — COMMIT side.
+    // The first enemy that EDITS THE LEVEL: it plants solid, sight-blocking crystal SPIRES that heal it
+    // while they stand. Sowing is a bespoke WIND_UP -> sow hook (the Shell Brute charge precedent), so it
+    // introduces no SpecialAbility verb. The heal is priced as an armour pool; the spire TERRAIN is unpriced.
+    // -------------------------------------------------------------------------
+
+    /**
+     * SOWER plan preference order (per the design doc): sow (cadence due, under cap, at least one legal
+     * tile) > melee attack if adjacent > brace if hurting > step toward the player PREFERRING cover (a tile
+     * with a living spire between it and the player) > wait. Sowing commits a WIND_UP telegraphed a full
+     * player turn ahead, and the chosen target tiles are marked (see the floor telegraph) so a spire never
+     * appears where the player did not see it coming.
+     */
+    private void computeSowerPlan(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow) {
+        if (canSowThisTurn(enemy) && selectSowTargets(enemy, playerColumn, playerRow) > 0) {
+            // Predicted damage 0 — a sow is terrain creation, not an attack; the WIND_UP frame telegraphs it.
+            plan.setWindUp(enemy.tileColumn, enemy.tileRow, 0, 1);
+            enemy.state = EnemyState.WINDING_UP;
+            enemy.triggerTelegraph();   // one full player turn of warning
+            return;
+        }
+        enemy.sowTargetCount = 0; // not sowing this turn — clear any stale floor telegraph
+        if (isCardinallyAdjacent(enemy, playerColumn, playerRow)) {
+            plan.setAttack(IntentVerb.ATTACK_MELEE, playerColumn, playerRow, enemy.scaledAttackDamage());
+        } else if (shouldDefend(enemy, playerColumn, playerRow)) {
+            commitDefend(enemy, plan);
+        } else if (enemy.shouldMoveThisTurn()) {
+            plan.set(IntentVerb.MOVE, playerColumn, playerRow); // executeMove steps it toward the player, cover-preferring
+        } else {
+            plan.set(IntentVerb.WAIT, enemy.tileColumn, enemy.tileRow);
+        }
+    }
+
+    /** True when this sower may begin a sow this turn: it has a spire seam, it is on cadence, and it is under its cap. */
+    private boolean canSowThisTurn(Enemy enemy) {
+        if (spireHitTarget == null) return false;
+        if (enemy.turnCounter % EnemyConstants.SPIRESOWER_SOW_CADENCE_TURNS != 0) return false;
+        return spireHitTarget.liveSpireCountForOwner(enemy.getId()) < EnemyConstants.SPIRESOWER_MAX_LIVE_SPIRES;
+    }
+
+    /**
+     * Chooses up to {@code SPIRESOWER_SPIRES_PER_SOW} sow target tiles (bounded also by the remaining cap
+     * headroom) and stores them on the enemy so the floor telegraph and {@link #executeSow} agree on the
+     * exact cells. A candidate must be within the sow radius, walkable floor (not wall/prop/door/existing
+     * spire), not the player's or any enemy's tile, and — the NON-OPTIONAL rule — must not seal the player
+     * off from a level exit (the SpireManager flood-fill guard, treating already-chosen candidates as solid
+     * too). Selection is deterministic (the seeded {@code effectRandom} stream, never Math.random). Returns
+     * the number of tiles chosen (0 = no legal sow this turn, fall through to normal behaviour).
+     */
+    private int selectSowTargets(Enemy enemy, int playerColumn, int playerRow) {
+        int radius = EnemyConstants.SPIRESOWER_SOW_RADIUS_TILES;
+        int candidateCount = 0;
+        for (int rowOffset = -radius; rowOffset <= radius; rowOffset++) {
+            for (int columnOffset = -radius; columnOffset <= radius; columnOffset++) {
+                if (columnOffset == 0 && rowOffset == 0) continue; // never under itself
+                int candidateColumn = enemy.tileColumn + columnOffset;
+                int candidateRow    = enemy.tileRow    + rowOffset;
+                if (!isLegalSowTile(candidateColumn, candidateRow, playerColumn, playerRow)) continue;
+                sowCandidateColumns[candidateCount] = candidateColumn;
+                sowCandidateRows[candidateCount]    = candidateRow;
+                candidateCount++;
+            }
+        }
+
+        int capHeadroom = EnemyConstants.SPIRESOWER_MAX_LIVE_SPIRES
+                - spireHitTarget.liveSpireCountForOwner(enemy.getId());
+        int wanted = Math.min(EnemyConstants.SPIRESOWER_SPIRES_PER_SOW, Math.max(0, capHeadroom));
+
+        int chosen = 0;
+        int remaining = candidateCount;
+        while (chosen < wanted && remaining > 0) {
+            int pickIndex = wiggleRandom.nextInt(remaining);
+            int candidateColumn = sowCandidateColumns[pickIndex];
+            int candidateRow    = sowCandidateRows[pickIndex];
+            // Reject a candidate that would seal the player off from an exit, treating the tiles already
+            // chosen THIS sow as solid too, so two spires never combine to trap the player.
+            boolean seals = spireHitTarget.wouldSealExit(playerColumn, playerRow,
+                    candidateColumn, candidateRow, enemy.sowTargetColumns, enemy.sowTargetRows, chosen);
+            if (!seals) {
+                enemy.sowTargetColumns[chosen] = candidateColumn;
+                enemy.sowTargetRows[chosen]    = candidateRow;
+                chosen++;
+            }
+            // Remove the picked candidate from the pool (swap with the last live entry) either way.
+            remaining--;
+            sowCandidateColumns[pickIndex] = sowCandidateColumns[remaining];
+            sowCandidateRows[pickIndex]    = sowCandidateRows[remaining];
+        }
+        enemy.sowTargetCount = chosen;
+        return chosen;
+    }
+
+    /** True when a tile is a legal sow target BEFORE the reachability guard: in bounds, walkable, unoccupied. */
+    private boolean isLegalSowTile(int tileColumn, int tileRow, int playerColumn, int playerRow) {
+        if (tileColumn < 0 || tileColumn >= level.getWidth())  return false;
+        if (tileRow    < 0 || tileRow    >= level.getHeight()) return false;
+        if (level.isBlockedAt(tileColumn, tileRow, doorManager)) return false; // wall/prop/door/existing spire
+        if (tileColumn == playerColumn && tileRow == playerRow) return false;
+        if (occupancy[tileColumn][tileRow]) return false; // an enemy stands here
+        return true;
+    }
+
+    /**
+     * Executes a committed sow (from {@link #executeWindUp}): stamps each pre-selected spire tile, RE-
+     * validating it at execution time exactly as {@code executeSummon} does — the player or an ally may have
+     * stepped onto a marked cell during their turn, and that cell simply grows nothing (the same "reposition
+     * dodges it" fairness the other committed actions honour). Bounded by the per-sower live cap.
+     */
+    private void executeSow(Enemy enemy, int playerColumn, int playerRow) {
+        enemy.state = EnemyState.ATTACKING;
+        enemy.triggerTelegraph();
+        if (spireHitTarget != null) {
+            for (int targetIndex = 0; targetIndex < enemy.sowTargetCount; targetIndex++) {
+                if (spireHitTarget.liveSpireCountForOwner(enemy.getId())
+                        >= EnemyConstants.SPIRESOWER_MAX_LIVE_SPIRES) break;
+                int targetColumn = enemy.sowTargetColumns[targetIndex];
+                int targetRow    = enemy.sowTargetRows[targetIndex];
+                if (level.isBlockedAt(targetColumn, targetRow, doorManager)) continue;
+                if (targetColumn == playerColumn && targetRow == playerRow)  continue;
+                if (occupancy[targetColumn][targetRow])                      continue;
+                spireHitTarget.sowSpire(targetColumn, targetRow, enemy.getId(),
+                        EnemyConstants.SPIRESOWER_SPIRE_LIFETIME_TURNS);
+            }
+        }
+        enemy.sowTargetCount = 0; // batch consumed — clears the floor telegraph until the next sow
+    }
+
+    /**
+     * End-of-turn REGEN for a Verdant Spiresower: it regains {@code SPIRESOWER_REGEN_PER_SPIRE} HP per
+     * LIVING spire within {@code SPIRESOWER_LEY_RANGE_TILES}, capped at maxHealth, and caches the count for
+     * the renderer's eye glow. Called for every acting sower — including a stun-cancelled turn — because the
+     * ley-lines drain on the world's clock, not on the enemy's success. A no-op for every other archetype
+     * and for a corpse. This is the "shoot the golem and it heals" half of the whole decision.
+     */
+    private void advanceSowerRegen(Enemy enemy) {
+        if (enemy.type != EnemyType.VERDANT_SPIRESOWER) return;
+        if (!enemy.isAlive()) return;
+        if (spireHitTarget == null) { enemy.livingSpireCount = 0; return; }
+        int living = spireHitTarget.countLivingSpiresNear(
+                enemy.tileColumn, enemy.tileRow, EnemyConstants.SPIRESOWER_LEY_RANGE_TILES);
+        enemy.livingSpireCount = living;
+        if (living <= 0) return;
+        int heal = living * EnemyConstants.SPIRESOWER_REGEN_PER_SPIRE;
+        enemy.health = Math.min(enemy.maxHealth, enemy.health + heal);
     }
 
     /**
@@ -2053,6 +2283,75 @@ public final class EnemyManager implements EnemyHitTarget {
     }
 
     /**
+     * Greedy step toward the player identical to {@link #stepToward}, except that among the equally-good
+     * (minimum-distance) candidate steps it BREAKS TIES toward a tile that keeps a living spire between the
+     * sower and the player — the one-line scoring tweak the Verdant Spiresower design asks for. Cover never
+     * overrides getting closer; it only decides between two steps that close the gap equally. Falls back to
+     * the shared wiggle when fully stuck, exactly like {@link #stepToward}.
+     */
+    private void stepTowardPreferringCover(Enemy enemy, int playerColumn, int playerRow) {
+        int bestColumn   = enemy.tileColumn;
+        int bestRow      = enemy.tileRow;
+        int bestDistance = Integer.MAX_VALUE;
+        boolean bestHasCover = false;
+        boolean moved        = false;
+
+        for (int directionIndex = 0; directionIndex < 4; directionIndex++) {
+            int targetColumn = enemy.tileColumn + STEP_COLUMNS[directionIndex];
+            int targetRow    = enemy.tileRow    + STEP_ROWS[directionIndex];
+            if (!isPassableForEnemy(targetColumn, targetRow, playerColumn, playerRow)) continue;
+            int distance = GameMath.manhattanDistanceTiles(targetColumn, targetRow, playerColumn, playerRow);
+            boolean hasCover = spireBetween(targetColumn, targetRow, playerColumn, playerRow);
+            boolean better = distance < bestDistance
+                    || (distance == bestDistance && hasCover && !bestHasCover);
+            if (better) {
+                bestDistance = distance;
+                bestColumn   = targetColumn;
+                bestRow      = targetRow;
+                bestHasCover = hasCover;
+                moved        = true;
+            }
+        }
+
+        if (!moved && EnemyConstants.ENEMY_GREEDY_WIGGLE_ENABLED
+                && enemy.stuckTurns >= EnemyConstants.STUCK_TURNS_BEFORE_WIGGLE) {
+            wiggleStep(enemy, playerColumn, playerRow);
+            enemy.stuckTurns = 0;
+            return;
+        }
+        if (moved) {
+            int previousManhattan = GameMath.manhattanDistanceTiles(
+                    enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+            enemy.stuckTurns = (bestDistance >= previousManhattan) ? enemy.stuckTurns + 1 : 0;
+            commitMove(enemy, bestColumn, bestRow);
+        } else {
+            enemy.stuckTurns++;
+        }
+    }
+
+    /**
+     * True when a living spire sits on the straight cardinal segment between a tile and the player — i.e.
+     * the tile would put a spire "in the way" as cover. Only meaningful when the tile shares the player's
+     * row or column; a diagonal offset has no single covering line, so it returns false. No-op (false)
+     * without a spire seam.
+     */
+    private boolean spireBetween(int fromColumn, int fromRow, int toColumn, int toRow) {
+        if (spireHitTarget == null) return false;
+        if (fromColumn == toColumn) {
+            int step = Integer.signum(toRow - fromRow);
+            for (int row = fromRow + step; row != toRow; row += step) {
+                if (spireHitTarget.isSpireAt(fromColumn, row)) return true;
+            }
+        } else if (fromRow == toRow) {
+            int step = Integer.signum(toColumn - fromColumn);
+            for (int column = fromColumn + step; column != toColumn; column += step) {
+                if (spireHitTarget.isSpireAt(column, fromRow)) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Greedily steps the enemy one tile toward an arbitrary goal tile (not necessarily the
      * player) while never walking onto the player or through walls/other enemies. Returns true
      * if a move was made. Used by the flanker to path toward the tile behind the player.
@@ -2221,7 +2520,8 @@ public final class EnemyManager implements EnemyHitTarget {
                     return Level.isWall(cell)
                             || doorManager.blocksSight(column, row)
                             || Level.isPropSolid(cell)
-                            || Level.isColumn(cell);
+                            || Level.isColumn(cell)
+                            || Level.isSpire(cell);   // spires are opaque — they cost ranged allies their lanes too
                 });
     }
 
@@ -2275,6 +2575,14 @@ public final class EnemyManager implements EnemyHitTarget {
         if (enemy.type.baseArmor() > 0 && impactEventListener != null) {
             impactEventListener.onFrostShatter(enemy.tileColumn, enemy.tileRow,
                     enemy.type.heightMultiplier());
+        }
+        // WITHERING (elemental-golem-verdant-spiresower): a dying Spiresower's spires all shatter and their
+        // tiles are restored, so the room visibly returns to normal — its own reward, and it guarantees no
+        // solid tile is ever leaked by the sower's death. A no-op for every other archetype (owner id has
+        // no spires). Fired before the tile is cleared / the enemy is removed, so the shatter bursts play
+        // where the spires actually stood.
+        if (enemy.type == EnemyType.VERDANT_SPIRESOWER && spireHitTarget != null) {
+            spireHitTarget.shatterSpiresOf(enemy.getId());
         }
         char currentCell = level.getCell(enemy.tileColumn, enemy.tileRow);
         if (!Level.isStairsDown(currentCell)

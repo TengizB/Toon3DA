@@ -1856,6 +1856,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 new TextureRegion(elementalGolemSheet, golemHalfW, 0,          golemHalfW, golemHalfH));
         map.put(EnemyType.AURIC_SENTINEL,
                 new TextureRegion(elementalGolemSheet, golemHalfW, golemHalfH, golemHalfW, golemHalfH));
+        // Q3 (bottom-left) — the Verdant Spiresower (elemental-golem-verdant-spiresower). TextureRegion y=0
+        // is the TOP of the image, so the BOTTOM row starts at y = golemHalfH.
+        map.put(EnemyType.VERDANT_SPIRESOWER,
+                new TextureRegion(elementalGolemSheet, 0, golemHalfH, golemHalfW, golemHalfH));
 
         // Boss types — reuse the blight sheet PLAGUE_HULK region as a placeholder until
         // dedicated boss texture assets are available.

@@ -917,6 +917,7 @@ public abstract class Weapon implements WeaponProfile {
             }
             // Columns and solid props are physical cover — even the lance cannot pierce them.
             if (isShotBlockingCover(targetCell)) {
+                hitSpireCover(enemyHitTarget, targetColumn, targetRow, distanceTiles);
                 clearLastHit();
                 return hitAnyEnemy ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
@@ -957,7 +958,22 @@ public abstract class Weapon implements WeaponProfile {
      * an inert solid (radioactive barrel, crate, terminal, …) that simply blocks the shot.
      */
     protected static boolean isShotBlockingCover(char cell) {
-        return Level.isPropSolid(cell) || Level.isColumn(cell);
+        return Level.isPropSolid(cell) || Level.isColumn(cell) || Level.isSpire(cell);
+    }
+
+    /**
+     * Routes a shot that STOPPED on a solid cover tile into a crystal spire, if one is there
+     * (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt). A spire is a solid prop, so a hitscan
+     * shot marching toward the golem already halts on its tile via {@link #isShotBlockingCover}; this turns
+     * that halt into a hit, so "shoot the spires OR the golem" is a real decision. Extends the EXISTING
+     * {@link EnemyHitTarget} seam (no parallel damage path) and carries the weapon's distance-scaled damage.
+     * No-op when there is no spire on the tile or no hit target. Call it at the cover-stop branch of each
+     * weapon's march, passing the tile the shot stopped on and the distance it travelled.
+     */
+    protected void hitSpireCover(EnemyHitTarget enemyHitTarget, int tileColumn, int tileRow, int distanceTiles) {
+        if (enemyHitTarget == null) return;
+        if (!enemyHitTarget.isSpireAt(tileColumn, tileRow)) return;
+        enemyHitTarget.damageSpireAt(tileColumn, tileRow, damageAtDistance(distanceTiles));
     }
 
     /** Returns true for melee weapons; false for all ranged weapons. */

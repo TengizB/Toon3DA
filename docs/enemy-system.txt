@@ -42,7 +42,8 @@ The first wakeup sets World.gameState.redAlert = true (drives the red wall pulse
 ### Phase B — Action
 Every ALERTED/CHASING/ATTACKING enemy acts once:
 
-  MELEE enemies (PLAGUE_HULK, GORE_BITER, SHELL_BRUTE, IRON_STALKER, VOID_SHROUD, CINDERFORGE_COLOSSUS):
+  MELEE enemies (PLAGUE_HULK, GORE_BITER, SHELL_BRUTE, IRON_STALKER, VOID_SHROUD, CINDERFORGE_COLOSSUS,
+  VERDANT_SPIRESOWER):
     - Manhattan distance == 1 (cardinal adjacent only, never diagonal) → swing.
     - Else → step toward player via greedy Manhattan minimizer.
     - Move cooldown governed by moveEveryNTurns() per type.
@@ -50,6 +51,12 @@ Every ALERTED/CHASING/ATTACKING enemy acts once:
       PASSIVE hooks, not in clever AI. It HARDENS (gains flat armour) on every turn it takes no damage,
       and it IGNITES the tile it just vacated, so ducking into cover to reload lets it cool while the
       corridor behind you burns. Its danger is the board state it creates, not outsmarting the player.
+    - VERDANT_SPIRESOWER (computeSowerPlan) is the first enemy that EDITS THE LEVEL. On its sow cadence
+      (SPIRESOWER_SOW_CADENCE_TURNS), under its live-spire cap, it commits a WIND_UP that resolves a turn
+      later into a bespoke SOW (executeSow → SpireManager stamps solid, sight-blocking crystal spires that
+      heal it while they stand). Otherwise it swings if adjacent, else steps toward the player PREFERRING a
+      step that keeps a living spire between it and them (stepTowardPreferringCover). See MECHANICAL VERB
+      HOOKS below.
 
   RANGED enemies (EYE_TYRANT, MIRE_WRAITH, ACID_DRONE, VORTEX_EYE, AURIC_SENTINEL, RIMESHELL_LANCER):
     - Distance < RANGED_KITE_MIN_TILES (2) → flee first, then re-evaluate.
@@ -193,8 +200,8 @@ of the bodies filling those roles.
   INSECT       Shell Brute, Iron Stalker
   MACHINE      Acid Drone, The Overseer (boss)
   DEMON        Void Shroud, Hell Baron (boss)
-  GOLEM        Rimeshell Lancer, Auric Sentinel, Cinderforge Colossus (the Verdant Spiresower is
-               still a design doc — its art already sits in the shared sheet's Q3)
+  GOLEM        Rimeshell Lancer, Auric Sentinel, Cinderforge Colossus, Verdant Spiresower (Q3 of the
+               shared elemental-golem sheet)
 
 STATUS: DESCRIPTIVE ONLY. Nothing reads family() yet — no spawn, budget, AI or render path branches
 on it, so adding the taxonomy changed zero behaviour and every archetype stays spawnable on every
@@ -281,6 +288,8 @@ until you can state its verb in one sentence and that verb is DISTINCT from ever
                                    shooting, and it burns the ground behind it.
   Rimeshell Lancer '[' SOLDIER     LANCER: armoured until it fires — bait the lance, step off the lane,
                                    then burst it through the open shell.
+  Verdant Spiresower '}' SOLDIER   SOWER: break the spires first — they heal it and wall you in, and it
+                                   will never die while one is standing.
 
 Two BRUISERS, two different failures: the Shell Brute is a POSITIONING puzzle (sidestep the lane, punish
 the recovery); the Cinderforge Colossus is a TEMPO puzzle (never let the damage stop). The Rimeshell
@@ -466,6 +475,37 @@ labels them:
     TP pricing: an ordinary ranged SOLDIER — eHP through the shared flat-reduction primitive on the
     AVERAGED shell yields TP ~41 (mid-low SOLDIER band); friendly fire and the lane-lock are
     player-favouring and priced at zero. See BalanceConfig.RIMESHELL_SHELL_AVERAGED_FLAT_REDUCTION.
+  - VERDANT_SPIRESOWER — SOW SPIRES + LEY-LINE REGEN (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt).
+    The first enemy that EDITS THE LEVEL. Built from plain state + a bespoke WIND_UP -> sow hook (the Shell
+    Brute charge precedent) plus a damage-pipeline-adjacent regen tick, so NO SpecialAbility verb is added
+    and the BalanceSchema COVERAGE rule is untouched. The spire TILES live in hazard/SpireManager (reached
+    through the entity/SpireHitTarget seam), NOT on the enemy.
+      SOW     computeSowerPlan: on SPIRESOWER_SOW_CADENCE_TURNS, under SPIRESOWER_MAX_LIVE_SPIRES, it
+              selectSowTargets (deterministic seeded RNG) up to SPIRESOWER_SPIRES_PER_SOW walkable tiles
+              within SPIRESOWER_SOW_RADIUS_TILES, then commits a WIND_UP telegraphed a full player turn
+              ahead. A turn later executeWindUp branches by type to executeSow, which re-validates each
+              tile and SpireManager.sowSpire stamps a solid ':' crystal spire (SPIRESOWER_SPIRE_HIT_POINTS
+              HP, decays after SPIRESOWER_SPIRE_LIFETIME_TURNS). A spire blocks movement, LOS and shots
+              (Level.isSpire, checked in isBlockedAt / the enemy LOS + isLanceBlocked / Weapon.isShotBlocking-
+              Cover), so it costs ranged golem allies their lanes exactly as it costs the player their
+              sightline.
+      GUARD   NON-OPTIONAL: selectSowTargets rejects any tile that SpireManager.wouldSealExit reports would
+              cut the player off from a level exit — a flood fill from the player with the candidate (and
+              the tiles already chosen this sow) treated as solid. A spire that seals a dead end turns a
+              puzzle into a softlock; the guard forbids it. Pinned by level.SpireReachabilityTest.
+      HEAL    advanceSowerRegen at the END of the sower's turn: +SPIRESOWER_REGEN_PER_SPIRE HP per LIVING
+              spire within SPIRESOWER_LEY_RANGE_TILES (capped at maxHealth). "Shoot the golem and it heals;
+              shoot the spires and it stops" — the whole decision. A weapon hit that stops on a spire tile
+              routes through EnemyHitTarget.damageSpireAt (Weapon.hitSpireCover) into the SpireManager; a
+              destroyed spire FLINCHES its sower, and the sower's death WITHERS every spire it planted
+              (killEnemy -> shatterSpiresOf), restoring the room.
+      READ    livingSpireCount (cached on the enemy) drives the eye-glow scale (dim at zero, blazing at the
+              cap); the ley-lines and spire/birth/shatter bursts are procedural (ImpactEventListener
+              onSpireBorn/onSpireShattered).
+    TP pricing: the regeneration is priced as an ARMOUR POOL (SPIRESOWER_REGEN_ARMOR_POOL = 20) fed to
+    GameMath.enemyEffectiveHitPoints, yielding TP ~62 (upper-mid SOLDIER band). The spires' TERRAIN value
+    is deliberately UNPRICED — it hurts the golem's own family as much as the player, and the model has no
+    positional-denial channel. See BalanceConfig.SPIRESOWER_REGEN_ARMOR_POOL.
 
 All hooks respect the cardinal-line constraint; the charge only fires down a true cardinal lane, and the
 lance only ever commits down a true row or column and never re-targets after commit.

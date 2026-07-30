@@ -60,7 +60,9 @@ public class PlasmaRifle extends Weapon {
                 return hitEnemy ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (isShotBlockingCover(targetCell)) {
-                // Column / solid prop is physical cover — the bolt cannot pierce through it.
+                // Column / solid prop is physical cover — the bolt cannot pierce through it (a crystal
+                // spire on the tile takes the hit).
+                hitSpireCover(enemyHitTarget, targetColumn, targetRow, distanceTiles);
                 return hitEnemy ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (enemyHitTarget != null) {

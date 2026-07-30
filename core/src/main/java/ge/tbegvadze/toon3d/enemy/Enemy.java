@@ -561,6 +561,31 @@ public class Enemy implements StatusHost {
         if (lanceCooldownTurns > 0) lanceCooldownTurns--;
     }
 
+    // -------------------------------------------------------------------------
+    // Crystal spire sowing (elemental-golem-verdant-spiresower) — the Verdant Spiresower plants solid,
+    // sight-blocking spires that heal it while they stand. Inert for every other archetype (the arrays are
+    // sized 0 for a non-sower, so no per-turn cost). The spire TILES themselves live in the SpireManager,
+    // not here; these fields are only the sower's commit-time telegraph and its cached heal readout.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Pre-selected sow target tiles for a committed WIND_UP sow, chosen at COMMIT time so the floor
+     * telegraph is honest: the exact tiles marked during the player's turn are the ones executeSow plants
+     * into one turn later (the same pattern SUMMON uses). Sized to {@code SPIRESOWER_SPIRES_PER_SOW} for a
+     * sower, 0 for everything else. {@code sowTargetCount} says how many slots are live this cast.
+     */
+    public final int[] sowTargetColumns = new int[EnemyConstants.SPIRESOWER_SPIRES_PER_SOW];
+    public final int[] sowTargetRows    = new int[EnemyConstants.SPIRESOWER_SPIRES_PER_SOW];
+    public int         sowTargetCount   = 0;
+
+    /**
+     * Living spires currently healing this sower (within ley range), refreshed by EnemyManager's end-of-turn
+     * regen tick. Read ONLY by EnemyRenderer to scale the eye glow (dim at zero, blazing at the cap) — a
+     * second, redundant readout of the heal state that stays legible even when the ley-lines are occluded.
+     * Never read by the simulation.
+     */
+    public int livingSpireCount = 0;
+
     private static EnumMap<StatusType, StatusEffect> buildEffectsMap() {
         EnumMap<StatusType, StatusEffect> map = new EnumMap<>(StatusType.class);
         for (StatusType type : StatusType.values()) {

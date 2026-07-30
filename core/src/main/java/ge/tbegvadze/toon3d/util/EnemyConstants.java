@@ -308,6 +308,47 @@ public final class EnemyConstants {
     /** Blend strength of the shell-open heat wash (0 = untinted, 1 = fully orange). The punish-window tell. */
     public static final float   RIMESHELL_SHELL_OPEN_TINT_STRENGTH  = 0.55f;
 
+    // VERDANT_SPIRESOWER — elemental GOLEM terrain-editing melee SOLDIER: it plants solid crystal spires
+    // that heal it while they stand (spawn '}'). Stats mirror BalanceConfig; everything below the spawn
+    // symbol is cosmetic. The regeneration is priced as an ARMOUR POOL (SPIRESOWER_REGEN_ARMOR_POOL); the
+    // terrain the spires create is deliberately unpriced (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt).
+    public static final int     VERDANT_SPIRESOWER_MAX_HEALTH        = BalanceConfig.VERDANT_SPIRESOWER_MAX_HEALTH;
+    public static final int     VERDANT_SPIRESOWER_ATTACK_DAMAGE     = BalanceConfig.VERDANT_SPIRESOWER_ATTACK_DAMAGE;
+    public static final int     VERDANT_SPIRESOWER_MOVE_EVERY_N_TURNS = BalanceConfig.VERDANT_SPIRESOWER_MOVE_EVERY_N_TURNS;
+    public static final float   SPIRESOWER_REGEN_ARMOR_POOL          = BalanceConfig.SPIRESOWER_REGEN_ARMOR_POOL;
+    public static final int     SPIRESOWER_SOW_CADENCE_TURNS         = BalanceConfig.SPIRESOWER_SOW_CADENCE_TURNS;
+    public static final int     SPIRESOWER_SPIRES_PER_SOW            = BalanceConfig.SPIRESOWER_SPIRES_PER_SOW;
+    public static final int     SPIRESOWER_MAX_LIVE_SPIRES           = BalanceConfig.SPIRESOWER_MAX_LIVE_SPIRES;
+    public static final int     SPIRESOWER_SOW_RADIUS_TILES          = BalanceConfig.SPIRESOWER_SOW_RADIUS_TILES;
+    public static final int     SPIRESOWER_LEY_RANGE_TILES           = BalanceConfig.SPIRESOWER_LEY_RANGE_TILES;
+    public static final int     SPIRESOWER_REGEN_PER_SPIRE           = BalanceConfig.SPIRESOWER_REGEN_PER_SPIRE;
+    public static final int     SPIRESOWER_SPIRE_HIT_POINTS          = BalanceConfig.SPIRESOWER_SPIRE_HIT_POINTS;
+    public static final int     SPIRESOWER_SPIRE_LIFETIME_TURNS      = BalanceConfig.SPIRESOWER_SPIRE_LIFETIME_TURNS;
+    public static final float   VERDANT_SPIRESOWER_HEIGHT_MULTIPLIER = 0.80f;
+    /**
+     * The runtime SOLID-PROP tile char the SpireManager stamps into the level grid for a crystal spire. A
+     * FIXED gameplay symbol (never authored into level files, placed only at runtime like the hazard 'i'/'q'
+     * decals): Level.isPropSolid special-cases it so it blocks movement, line of sight and shots, and
+     * PropRenderer draws it with an owned green-crystal texture. Documented in docs/tile-symbols.txt.
+     */
+    public static final char    SPIRE_TILE_CHAR                      = ':';
+    /** Billboard height of a spire — a low, ground-anchored crystal shoot. */
+    public static final float   SPIRESOWER_SPIRE_HEIGHT_MULTIPLIER   = 0.62f;
+
+    // --- Spiresower cosmetics (EnemyRenderer / PropRenderer). The ley-lines are THE SIGNATURE: a thin
+    // green thread from the golem to each living spire, the visible proof of the heal link. The eye glow is
+    // a second, redundant readout of the same state (dim at zero spires, blazing at the cap).
+    /** Ley-line alpha pulse speed, radians per wall-clock second. */
+    public static final float   SPIRESOWER_LEY_PULSE_SPEED           = 3.20f;
+    /** Emerald ley/spire tint. */
+    public static final float   SPIRESOWER_TINT_R                    = 0.30f;
+    public static final float   SPIRESOWER_TINT_G                    = 1.00f;
+    public static final float   SPIRESOWER_TINT_B                    = 0.42f;
+    /** Eye-glow additive strength at ZERO living spires (dim). */
+    public static final float   SPIRESOWER_EYE_GLOW_MIN              = 0.10f;
+    /** Eye-glow additive strength at the spire CAP (blazing). */
+    public static final float   SPIRESOWER_EYE_GLOW_MAX              = 0.85f;
+
     // Shared ranged AI — kiting constants reused across ranged types
     public static final int     RANGED_KITE_MIN_TILES            = BalanceConfig.RANGED_KITE_MIN_TILES;
 

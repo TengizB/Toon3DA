@@ -373,6 +373,36 @@ public enum EnemyType {
         // SpecialAbility catalogue — and BalanceSchema's SPECIAL_VERB_PRICING coverage rule — are untouched.
     },
 
+    VERDANT_SPIRESOWER {
+        @Override public int    maxHealth()          { return EnemyConstants.VERDANT_SPIRESOWER_MAX_HEALTH; }
+        @Override public int    attackDamage()        { return EnemyConstants.VERDANT_SPIRESOWER_ATTACK_DAMAGE; }
+        @Override public int    attackRangeTiles()    { return 1; }
+        @Override public int    moveEveryNTurns()     { return EnemyConstants.VERDANT_SPIRESOWER_MOVE_EVERY_N_TURNS; }
+        @Override public boolean isRanged()           { return false; }
+        @Override public float  heightMultiplier()    { return EnemyConstants.VERDANT_SPIRESOWER_HEIGHT_MULTIPLIER; }
+        @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_VERDANT_SPIRESOWER; }
+        @Override public String displayName()         { return "Verdant Spiresower"; }
+        @Override public EnemyFamily family()         { return EnemyFamily.GOLEM; }
+        @Override public EnemyRole role()             { return EnemyRole.SOLDIER; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
+        @Override public int    attackCadenceTurns()  { return 1; }
+        @Override public char   spawnChar()           { return '}'; }
+        @Override public String tacticalVerb()        { return "SOWER: break the spires first — they heal it and wall you in, and it will never die while one is standing."; }
+        /**
+         * The PRICED value of the Spiresower's REGENERATION (see
+         * {@link BalanceConfig#SPIRESOWER_REGEN_ARMOR_POOL} for the full derivation). Regen is extra
+         * effective HP, so it is priced as an ARMOUR POOL and flows straight into
+         * GameMath.enemyEffectiveHitPoints: ~2 HP/turn * ~2 spires * ~5 turns = 20. No new SpecialAbility
+         * verb is introduced (sowing is a bespoke WIND_UP -> sow hook, the Shell Brute charge precedent),
+         * so BalanceSchema's SPECIAL_VERB_PRICING coverage rule is untouched.
+         */
+        @Override public float  armorPool()           { return EnemyConstants.SPIRESOWER_REGEN_ARMOR_POOL; }
+        // MOVESET_NONE (the default) and NO bespoke SpecialAbility: sowing commits an ordinary
+        // IntentVerb.WIND_UP and resolves into a bespoke sow (SpireManager stamps the tiles), exactly as
+        // the Rimeshell Lancer's lance is built from WIND_UP -> ATTACK. Nothing is added to the
+        // SpecialAbility catalogue, so BalanceSchema COVERAGE stays green.
+    },
+
     // -------------------------------------------------------------------------
     // Boss archetypes — BossFloorController sets actual scaled HP/damage at spawn;
     // values here are used for initial Enemy construction and XP budget.

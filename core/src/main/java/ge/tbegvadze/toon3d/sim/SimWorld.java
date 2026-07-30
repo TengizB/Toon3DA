@@ -29,6 +29,7 @@ import ge.tbegvadze.toon3d.entity.boss.Boss;
 import ge.tbegvadze.toon3d.entity.boss.BossFactory;
 import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
 import ge.tbegvadze.toon3d.hazard.HazardManager;
+import ge.tbegvadze.toon3d.hazard.SpireManager;
 import ge.tbegvadze.toon3d.input.PlayerController;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
 import ge.tbegvadze.toon3d.item.AmmoType;
@@ -327,6 +328,11 @@ public final class SimWorld implements LevelTransitionListener {
         // measure a floor whose terrain danger simply does not exist (SimWorld plays through the REAL
         // systems — that is the whole point of the order-9 gate).
         enemyManager.setHazardIgniteTarget(hazardManager);
+        // The Verdant Spiresower's crystal SPIRES must be live in the SIMULATOR too, or the behavioural
+        // bands would measure a sower that never sows and never regenerates — modelling it as a plain
+        // 100-HP soldier and mispricing its floors. SpireManager is headless (no GPU / listener needed).
+        SpireManager spireManager = new SpireManager(level, doorManager);
+        enemyManager.setSpireHitTarget(spireManager);
         enemyManager.setEnemyDeathHazardListener((deadType, tileColumn, tileRow, selfDestructMassive) -> {
             if (deadType == ge.tbegvadze.toon3d.enemy.EnemyType.PLAGUE_HULK) {
                 hazardManager.spawnToxicCloud(tileColumn, tileRow, selfDestructMassive
@@ -353,7 +359,8 @@ public final class SimWorld implements LevelTransitionListener {
         gameState.isBossFloor = bossFloorController != null;
 
         // Same assembly the played game uses, so the turn ORDER is identical (see TickPipeline).
-        tickEventBus = TickPipeline.standardFloor(inventory, hazardManager, statusEffectController,
+        tickEventBus = TickPipeline.standardFloor(inventory, hazardManager, spireManager,
+                                                  statusEffectController,
                                                   player, enemyManager, playerStats,
                                                   bossFloorController, gameState);
 
