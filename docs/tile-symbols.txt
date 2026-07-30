@@ -170,6 +170,11 @@ V   Vortex Eye spawn      Necrotic faction. Short-range ranged chaff caster (wea
                           every turn it takes no damage — any hit shatters the shell — and ignites every
                           tile it vacates via the fire hazard system. Floors 2-10+ (EnemyType.minSpawnDepth
                           gates the generator as a BRUISER anchor; hand levels are not gated).
+[   Rimeshell Lancer spawn  Golem faction. Armoured ranged lane-beamer. The toughest non-elite WHILE
+                          SEALED (a live flat ice shell), but the shell must OPEN for one turn to fire a
+                          piercing molten lance straight down a cardinal lane — armoured OR dangerous,
+                          never both. The beam also splashes any golem ally caught in the lane. Floors
+                          1-10+ (a SOLDIER; hand levels are not gated).
 n   Boss spawn (depth-keyed)  Replaced at load time with floor ' '; BossFloorController seeds the correct boss based on World.currentDepth. Exactly one per boss-floor arena.
 
 ---
@@ -177,8 +182,8 @@ n   Boss spawn (depth-keyed)  Replaced at load time with floor ' '; BossFloorCon
 SYMBOL BUDGET
 -------------
 Total printable ASCII characters: 95  (codes 32-126)
-Assigned to a FIXED or FLEXIBLE symbol:  87
-Unassigned characters:                    8
+Assigned to a FIXED or FLEXIBLE symbol:  88
+Unassigned characters:                    7
 
 The symbol/sprite-reuse system (docs/environment-tileset-system.txt) REMOVED the scarcity this budget
 used to track. Symbol count no longer limits how much environment art or how many rooms the game can
@@ -193,15 +198,15 @@ blueprint), NEITHER of which consumes a symbol. The 85 assigned symbols split in
     small per-level subset.
 
 Unassigned characters (available if a genuinely new FIXED gameplay meaning is ever needed):
-o [ } ) / , _ :
-  (o [ } ) / , _ : were historically pencilled in for the EXCAVATION_SITE room design,
+o } ) / , _ :
+  (o } ) / , _ : were historically pencilled in for the EXCAVATION_SITE room design,
   .claude/agents/ideas/excavation-monolith-chamber-room.txt — NOT IMPLEMENTED. " ' ; ? < \ ] - | `
   are ASSIGNED to the STELLAR_OBSERVATORY room as FLEXIBLE symbols; the allocator keeps their
   observatory sprites contained to that room via the "observatory" theme tag.)
-  ('~' and '*' are Ghoul / Blight Corruptor enemy-spawn markers; '(' and '{' are the Auric Sentinel
-  and Cinderforge Colossus markers, taken from that same pencilled-in excavation block — the golem
-  faction claims the bracket block, so if EXCAVATION_SITE is ever built it uses the remaining brackets
-  and '_' instead.)
+  ('~' and '*' are Ghoul / Blight Corruptor enemy-spawn markers; '(', '{' and '[' are the Auric
+  Sentinel, Cinderforge Colossus and Rimeshell Lancer markers, taken from that same pencilled-in
+  excavation block — the golem faction claims the bracket block, so if EXCAVATION_SITE is ever built it
+  uses the remaining brackets and '_' instead.)
 Uppercase taken: K V (enemy spawns), D F I J W, Z (cryo) — check WALLS / DOORS above.
 Lowercase taken: 'z' (Crawler spawn), e i j n q ('i' fire hazard, 'q' toxic hazard).
 

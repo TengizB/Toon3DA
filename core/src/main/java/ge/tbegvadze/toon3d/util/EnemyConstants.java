@@ -273,6 +273,41 @@ public final class EnemyConstants {
     /** Alpha of each additive shimmer sliver. */
     public static final float   CINDERFORGE_HEAT_HAZE_ALPHA         = 0.30f;
 
+    // RIMESHELL_LANCER — elemental GOLEM ranged SOLDIER: armoured until it fires a piercing molten lance
+    // down one cardinal lane (spawn '['). Stats mirror BalanceConfig; everything below the beam-seconds is
+    // cosmetic. The sealed ice shell (RIMESHELL_SHELL_ARMOR) is a LIVE per-instance value on Enemy.armor;
+    // the type-level flatReduction() below is the TIME-AVERAGED price only — the two are never wired
+    // together (.claude/agents/ideas/elemental-golem-rimeshell-lancer.txt).
+    public static final int     RIMESHELL_LANCER_MAX_HEALTH         = BalanceConfig.RIMESHELL_LANCER_MAX_HEALTH;
+    public static final int     RIMESHELL_LANCER_ATTACK_DAMAGE      = BalanceConfig.RIMESHELL_LANCER_ATTACK_DAMAGE;
+    public static final int     RIMESHELL_LANCER_RANGE_TILES        = BalanceConfig.RIMESHELL_LANCER_RANGE_TILES;
+    public static final int     RIMESHELL_LANCER_MOVE_EVERY_N_TURNS = BalanceConfig.RIMESHELL_LANCER_MOVE_EVERY_N_TURNS;
+    public static final int     RIMESHELL_SHELL_ARMOR               = BalanceConfig.RIMESHELL_SHELL_ARMOR;
+    public static final float   RIMESHELL_SHELL_AVERAGED_FLAT_REDUCTION
+            = BalanceConfig.RIMESHELL_SHELL_AVERAGED_FLAT_REDUCTION;
+    public static final int     RIMESHELL_LANCE_COOLDOWN_TURNS      = BalanceConfig.RIMESHELL_LANCE_COOLDOWN_TURNS;
+    public static final float   RIMESHELL_LANCE_FRIENDLY_FIRE_FRACTION
+            = BalanceConfig.RIMESHELL_LANCE_FRIENDLY_FIRE_FRACTION;
+    public static final float   RIMESHELL_LANCER_HEIGHT_MULTIPLIER  = 0.85f;
+
+    // --- Rimeshell cosmetics (EnemyRenderer). "Cold body, hot core" IS the mechanic, so the sprite must
+    // say it at a glance: a slow cyan frost pulse while sealed and patient, a hot orange heat wash the
+    // whole turn the shell is open (the punish window), so "hit it NOW" is legible without the intent icon.
+    /** Idle frost rim-pulse speed, radians per wall-clock second — slow and patient. */
+    public static final float   RIMESHELL_FROST_PULSE_SPEED         = 2.10f;
+    /** Peak strength of the idle cyan frost pulse blended over the base shade (small, cold, inert-looking). */
+    public static final float   RIMESHELL_FROST_PULSE_AMPLITUDE     = 0.18f;
+    /** Cyan frost rim colour, blended over the sealed sprite. */
+    public static final float   RIMESHELL_FROST_TINT_R              = 0.55f;
+    public static final float   RIMESHELL_FROST_TINT_G              = 0.85f;
+    public static final float   RIMESHELL_FROST_TINT_B              = 1.00f;
+    /** SHELL-OPEN heat wash — the body visibly "heats" toward orange the turn the lance is charging. */
+    public static final float   RIMESHELL_SHELL_OPEN_TINT_R         = 1.00f;
+    public static final float   RIMESHELL_SHELL_OPEN_TINT_G         = 0.52f;
+    public static final float   RIMESHELL_SHELL_OPEN_TINT_B         = 0.18f;
+    /** Blend strength of the shell-open heat wash (0 = untinted, 1 = fully orange). The punish-window tell. */
+    public static final float   RIMESHELL_SHELL_OPEN_TINT_STRENGTH  = 0.55f;
+
     // Shared ranged AI — kiting constants reused across ranged types
     public static final int     RANGED_KITE_MIN_TILES            = BalanceConfig.RANGED_KITE_MIN_TILES;
 

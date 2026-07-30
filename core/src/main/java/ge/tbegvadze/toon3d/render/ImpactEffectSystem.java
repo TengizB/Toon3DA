@@ -322,6 +322,52 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     }
 
     @Override
+    public void onLanceBeam(int originColumn, int originRow, int stepColumn, int stepRow,
+                            int reachTiles, float heightMultiplier) {
+        // Sear each tile the beam crossed with a short ember burst, so the lane reads as swept rather than
+        // as a point flash. Walks the exact committed tiles the beam resolved (reachTiles of them).
+        for (int step = 1; step <= reachTiles; step++) {
+            int tileColumn = originColumn + stepColumn * step;
+            int tileRow    = originRow    + stepRow    * step;
+            spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
+                    EffectConstants.RIMESHELL_LANCE_BEAM_R, EffectConstants.RIMESHELL_LANCE_BEAM_G,
+                    EffectConstants.RIMESHELL_LANCE_BEAM_B,
+                    EffectConstants.RIMESHELL_LANCE_SPARKS_PER_TILE,
+                    EffectConstants.RIMESHELL_LANCE_SPARK_SPEED_MIN,
+                    EffectConstants.RIMESHELL_LANCE_SPARK_SPEED_MAX,
+                    EffectConstants.RIMESHELL_LANCE_SPARK_LIFE_SECONDS);
+        }
+        // A cold FROST ring puffs off the muzzle as the hot lance fires — the ice/fire contrast is the
+        // archetype's identity, so the discharge deliberately mixes the two colours.
+        spawnColoredRingPulse(originColumn, originRow, heightMultiplier,
+                EffectConstants.RIMESHELL_FROST_R, EffectConstants.RIMESHELL_FROST_G,
+                EffectConstants.RIMESHELL_FROST_B, EffectConstants.RIMESHELL_LANCE_MUZZLE_RING_MAX_RADIUS);
+        triggerShake(EffectConstants.RIMESHELL_LANCE_SHAKE_MAGNITUDE,
+                EffectConstants.RIMESHELL_LANCE_SHAKE_DURATION_SECONDS);
+    }
+
+    @Override
+    public void onFrostShatter(int tileColumn, int tileRow, float heightMultiplier) {
+        // A furnace behind ice going out: a wide spray of cold blue-white shards plus one hot orange core
+        // flash, layered over the generic death debris onEnemyKilled already threw.
+        spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.RIMESHELL_FROST_R, EffectConstants.RIMESHELL_FROST_G,
+                EffectConstants.RIMESHELL_FROST_B,
+                EffectConstants.FROST_SHATTER_SPARK_COUNT,
+                EffectConstants.FROST_SHATTER_SPARK_SPEED_MIN,
+                EffectConstants.FROST_SHATTER_SPARK_SPEED_MAX,
+                EffectConstants.FROST_SHATTER_SPARK_LIFE_SECONDS);
+        spawnColoredRingPulse(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.RIMESHELL_FROST_R, EffectConstants.RIMESHELL_FROST_G,
+                EffectConstants.RIMESHELL_FROST_B, EffectConstants.FROST_SHATTER_RING_MAX_RADIUS);
+        // The single hot core flash — the furnace at the heart of the ice, snuffed.
+        triggerColoredFlash(EffectConstants.RIMESHELL_LANCE_BEAM_R, EffectConstants.RIMESHELL_LANCE_BEAM_G,
+                EffectConstants.RIMESHELL_LANCE_BEAM_B,
+                EffectConstants.CRUST_FULL_SHATTER_FLASH_SECONDS,
+                EffectConstants.CRUST_FULL_SHATTER_FLASH_MAX_ALPHA);
+    }
+
+    @Override
     public void onEnemySpawned(int tileColumn, int tileRow, float heightMultiplier) {
         // Sickly green portal: a ring pulse plus an outward spark burst on the tile a SUMMON
         // ability just materialized a new enemy on, so the pop-in reads as an event, not a glitch.

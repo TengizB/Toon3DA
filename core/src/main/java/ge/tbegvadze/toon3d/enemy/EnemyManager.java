@@ -271,6 +271,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 case '*': type = EnemyType.BLIGHT_CORRUPTOR; break;
                 case '(': type = EnemyType.AURIC_SENTINEL;   break;
                 case '{': type = EnemyType.CINDERFORGE_COLOSSUS; break;
+                case '[': type = EnemyType.RIMESHELL_LANCER;  break;
                 case 'n': continue; // Boss spawn — BossFloorController seeds the correct boss by depth
                 default:  type = EnemyType.PLAGUE_HULK;   break;
             }
@@ -757,11 +758,16 @@ public final class EnemyManager implements EnemyHitTarget {
                 enemy.plannedAction.verb = IntentVerb.STUNNED;
                 advanceShardRegrowth(enemy);
                 advanceCrustCooling(enemy);
+                enemy.advanceLanceCooldown();
                 continue;
             }
             executePlan(enemy, playerColumn, playerRow, player);
             advanceShardRegrowth(enemy);
             advanceCrustCooling(enemy);
+            // Count the lance cooldown down on this Lancer's own clock — including a turn a stun cancelled
+            // (the shell reseals on its own schedule, not on the enemy's success). A no-op for everything
+            // else, and for an enemy that died during its own action.
+            if (enemy.isAlive()) enemy.advanceLanceCooldown();
         }
         // Apply any self-inflicted deaths (e.g. a detonating Plague Hulk) AFTER the loop above
         // finishes, so removing them never shifts enemies.get(index) mid-iteration (R-self-destruct).
@@ -943,10 +949,111 @@ public final class EnemyManager implements EnemyHitTarget {
      * charge multiplier; a whiff leaves the brute in a punishable one-turn recovery (skipNextAction).
      */
     private void executeWindUp(Enemy enemy, int playerColumn, int playerRow, Player player) {
+        // The WIND_UP -> ATTACK pair is shared by two archetypes with very different follow-throughs: the
+        // Shell Brute RUSHES down its locked lane (melee), the Rimeshell Lancer FIRES a piercing beam down
+        // its locked lane (ranged) and never moves. Both locked their lane a full player turn earlier, so
+        // both honour the sidestep counter — they just resolve it differently.
+        if (enemy.type == EnemyType.RIMESHELL_LANCER) {
+            executeLanceBeam(enemy, playerColumn, playerRow, player);
+            return;
+        }
         boolean connected = performCharge(enemy, playerColumn, playerRow, player);
         if (!connected) {
             enemy.skipNextAction = true; // committed rush missed — punishable recovery
         }
+    }
+
+    /**
+     * Executes a committed RIME LANCE (elemental-golem-rimeshell-lancer): a piercing molten beam swept
+     * straight down the LOCKED cardinal lane captured at commit time. It resolves every tile from the
+     * Lancer to the first WALL / closed door / solid prop — never stopping at a body — so it damages the
+     * player (for the full lance damage) AND every OTHER enemy in the lane (for
+     * {@link EnemyConstants#RIMESHELL_LANCE_FRIENDLY_FIRE_FRACTION} of it; golems do not care about each
+     * other). The player is only hit if they are STILL on the committed lane — a sidestep during the punish
+     * window wastes the whole beam (no damage, no re-target), which is the counter, and it works because
+     * the lane was locked a turn ago.
+     *
+     * <p>The shell RESEALS and the cooldown arms at the end of this turn, either way. An ally killed by the
+     * splash is queued for deferred removal ({@link #pendingExecuteDeaths}), exactly like a self-destruct,
+     * because this runs inside phaseBExecute's by-index iteration over {@code enemies}.
+     */
+    private void executeLanceBeam(Enemy enemy, int playerColumn, int playerRow, Player player) {
+        enemy.state = EnemyState.ATTACKING;
+        enemy.triggerAttackAnim();
+        int stepColumn = enemy.lanceDirectionColumn;
+        int stepRow    = enemy.lanceDirectionRow;
+        int lanceDamage = enemy.scaledAttackDamage();
+        int allyDamage  = Math.max(1, Math.round(
+                lanceDamage * EnemyConstants.RIMESHELL_LANCE_FRIENDLY_FIRE_FRACTION));
+
+        int column = enemy.tileColumn;
+        int row    = enemy.tileRow;
+        int reachTiles = 0;
+        // Walk the locked lane out to the weapon's range, stopping at the first blocker. The beam is
+        // PIERCING, so a body in the lane is damaged but does NOT stop the beam.
+        for (int step = 0; step < enemy.type.attackRangeTiles(); step++) {
+            int nextColumn = column + stepColumn;
+            int nextRow    = row    + stepRow;
+            if (isLanceBlocked(nextColumn, nextRow)) break;   // wall / closed door / solid prop
+            column = nextColumn;
+            row    = nextRow;
+            reachTiles++;
+            if (column == playerColumn && row == playerRow) {
+                // Player still on the committed lane — the shot connects. Use the Lancer's tile as the lane
+                // origin so a guarding player's facing arc is judged against where the beam comes from.
+                player.applyDirectionalDamage(lanceDamage, enemy.worldCenterX(), enemy.worldCenterY());
+            }
+            Object occupant = enemyAt(column, row);
+            if (occupant != null && occupant != enemy) {
+                damageAllyInLane((Enemy) occupant, allyDamage);
+            }
+        }
+
+        enemy.resealShell();
+        enemy.lanceCooldownTurns = EnemyConstants.RIMESHELL_LANCE_COOLDOWN_TURNS;
+        if (impactEventListener != null) {
+            impactEventListener.onLanceBeam(enemy.tileColumn, enemy.tileRow,
+                    stepColumn, stepRow, reachTiles, enemy.type.heightMultiplier());
+        }
+    }
+
+    /**
+     * Applies a friendly-fire splash hit to an ally caught in the lance lane and queues it for deferred
+     * removal if it dies (never removing it mid-iteration, per {@link #pendingExecuteDeaths}). No XP or
+     * credits are awarded: the player did not land this kill, the beam did — the payoff is the room
+     * thinning itself out, which is reward enough.
+     */
+    private void damageAllyInLane(Enemy ally, int allyDamage) {
+        if (!ally.isAlive()) return;
+        ally.applyDamage(allyDamage);
+        if (impactEventListener != null) {
+            impactEventListener.onEnemyHit(ally.worldCenterX(), ally.worldCenterY(),
+                    ally.type.heightMultiplier(), allyDamage);
+        }
+        if (ally.isAlive()) return;
+        // Dead from the splash — fire the death burst and queue removal (guard against a double-queue,
+        // e.g. two Lancers beaming the same tile in one turn).
+        if (impactEventListener != null) {
+            impactEventListener.onEnemyKilled(ally.worldCenterX(), ally.worldCenterY(),
+                    ally.type.heightMultiplier(), allyDamage);
+        }
+        for (int deathIndex = 0; deathIndex < pendingExecuteDeathCount; deathIndex++) {
+            if (pendingExecuteDeaths[deathIndex] == ally) return;
+        }
+        if (pendingExecuteDeathCount < MAX_PENDING_EXECUTE_DEATHS) {
+            pendingExecuteDeaths[pendingExecuteDeathCount++] = ally;
+        }
+    }
+
+    /** True when a tile stops the rime lance: out of bounds, a wall, a closed door, or a solid prop. */
+    private boolean isLanceBlocked(int tileColumn, int tileRow) {
+        if (tileColumn < 0 || tileColumn >= level.getWidth())  return true;
+        if (tileRow    < 0 || tileRow    >= level.getHeight()) return true;
+        char cell = level.getCell(tileColumn, tileRow);
+        return Level.isWall(cell)
+                || doorManager.blocksSight(tileColumn, tileRow)
+                || Level.isPropSolid(cell)
+                || Level.isColumn(cell);
     }
 
     /**
@@ -1212,6 +1319,8 @@ public final class EnemyManager implements EnemyHitTarget {
             }
         } else if (enemy.type == EnemyType.AURIC_SENTINEL) {
             computeSentinelPlan(enemy, plan, playerColumn, playerRow);
+        } else if (enemy.type == EnemyType.RIMESHELL_LANCER) {
+            computeLancerPlan(enemy, plan, playerColumn, playerRow);
         } else {
             computeRangedPlan(enemy, plan, playerColumn, playerRow);
         }
@@ -1560,6 +1669,44 @@ public final class EnemyManager implements EnemyHitTarget {
         if (canFireNow) {
             plan.setAttack(IntentVerb.ATTACK_RANGED, playerColumn, playerRow, enemy.scaledAttackDamage());
         } else if (shouldDefend(enemy, playerColumn, playerRow)) {
+            commitDefend(enemy, plan);
+        } else if (enemy.shouldMoveThisTurn()) {
+            plan.set(IntentVerb.MOVE, playerColumn, playerRow); // steer toward a cardinal lane
+        } else {
+            plan.set(IntentVerb.WAIT, enemy.tileColumn, enemy.tileRow);
+        }
+    }
+
+    /**
+     * LANCER plan (Rimeshell Lancer, elemental-golem-rimeshell-lancer) — a slow ranged SOLDIER whose
+     * whole design is one visible trade: it is the toughest non-elite WHILE SEALED, but the ice shell
+     * must OPEN for the molten lance to fire. Preference order (per the design doc):
+     *   - off cooldown + a clear cardinal firing line → commit a WIND_UP charge: LOCK the lane, OPEN the
+     *     shell (drop the live flat armour to 0 for the whole player turn — the punish window), telegraph.
+     *     The beam itself fires a turn later down the committed lane (executeLanceBeam via executeWindUp).
+     *   - otherwise (on cooldown, or no clean lane)     → behave as an ordinary slow ranged unit: brace if
+     *     hurting, else step toward cardinal alignment, else wait. It NEVER kites and NEVER diagonal-fires.
+     *
+     * <p>The mandatory cardinal-line constraint is honoured at both ends: the charge only commits when the
+     * player shares a true row or column ({@link #canFireCardinalLine}), and the beam never re-targets
+     * after commit — a sidestep off the locked lane wastes the whole shot.
+     */
+    private void computeLancerPlan(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow) {
+        int rangeLimit = enemy.type.attackRangeTiles();
+        if (enemy.lanceCooldownTurns <= 0
+                && canFireCardinalLine(enemy, playerColumn, playerRow, rangeLimit)) {
+            // LOCK the lane at commit time — the beam fires straight down this direction next turn no
+            // matter where the player then stands. Signum of the (cardinal) gap is the unit lane vector.
+            enemy.lanceDirectionColumn = Integer.signum(playerColumn - enemy.tileColumn);
+            enemy.lanceDirectionRow    = Integer.signum(playerRow    - enemy.tileRow);
+            enemy.openShell();          // THE PUNISH WINDOW opens now, for the whole of the coming player turn
+            plan.setWindUp(playerColumn, playerRow, enemy.scaledAttackDamage(), 1);
+            enemy.state = EnemyState.WINDING_UP;
+            enemy.triggerTelegraph();   // full player turn of warning, drawn in the WIND_UP intent frame
+            return;
+        }
+        // Sealed and out of position (or on cooldown): a slow ranged unit that steps toward alignment.
+        if (shouldDefend(enemy, playerColumn, playerRow)) {
             commitDefend(enemy, plan);
         } else if (enemy.shouldMoveThisTurn()) {
             plan.set(IntentVerb.MOVE, playerColumn, playerRow); // steer toward a cardinal lane
@@ -2121,6 +2268,14 @@ public final class EnemyManager implements EnemyHitTarget {
             impactEventListener.onEmberCollapse(enemy.tileColumn, enemy.tileRow,
                     enemy.type.heightMultiplier());
         }
+        // SHATTER (elemental-golem-rimeshell-lancer): a Lancer goes out in cold blue-white shards with one
+        // hot orange core flash as the furnace dies — the ice/fire contrast that is its whole identity,
+        // distinct from the generic death burst. Keyed on baseArmor() so it stays data-driven (today only
+        // the Lancer has a shell); a no-op for every other archetype.
+        if (enemy.type.baseArmor() > 0 && impactEventListener != null) {
+            impactEventListener.onFrostShatter(enemy.tileColumn, enemy.tileRow,
+                    enemy.type.heightMultiplier());
+        }
         char currentCell = level.getCell(enemy.tileColumn, enemy.tileRow);
         if (!Level.isStairsDown(currentCell)
                 && !Level.isMedicalPickup(currentCell)
@@ -2186,6 +2341,7 @@ public final class EnemyManager implements EnemyHitTarget {
             case BLIGHT_CORRUPTOR: return '7'; // shells — infected brute
             case AURIC_SENTINEL:   return '8'; // cells  — crystal golem, energy ranged
             case CINDERFORGE_COLOSSUS: return '7'; // shells — heavy melee golem anchor
+            case RIMESHELL_LANCER: return '8'; // cells  — crystal golem, molten energy lance
             default:           return '6';
         }
     }

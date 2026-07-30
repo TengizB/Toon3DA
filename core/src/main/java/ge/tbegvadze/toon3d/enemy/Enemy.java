@@ -176,6 +176,29 @@ public class Enemy implements StatusHost {
     public int chargeDirectionColumn = 0;
     public int chargeDirectionRow    = 0;
 
+    // -------------------------------------------------------------------------
+    // Rime lance channel (elemental-golem-rimeshell-lancer) — the Lancer's molten beam. The lane is
+    // LOCKED when it commits the WIND_UP charge and fired straight down it a turn later regardless of
+    // where the player now stands (a sidestep off the lane wastes the whole beam). Inert for every
+    // archetype whose type.baseArmor() is 0 (i.e. everything but the Lancer).
+    // -------------------------------------------------------------------------
+
+    /**
+     * Committed cardinal lane direction captured when the Lancer commits its WIND_UP charge, mirroring
+     * {@link #chargeDirectionColumn}/{@link #chargeDirectionRow}. Read by EnemyManager.executeLanceBeam on
+     * the following turn: the beam fires down THIS locked lane, never re-homing on the player's live tile.
+     */
+    public int lanceDirectionColumn = 0;
+    public int lanceDirectionRow    = 0;
+
+    /**
+     * Enemy turns remaining before this Lancer may charge another lance. Set to
+     * {@link EnemyConstants#RIMESHELL_LANCE_COOLDOWN_TURNS} the turn a beam fires and counted down once per
+     * enemy turn ({@link #advanceLanceCooldown}); while it is above zero the shell stays sealed and the
+     * Lancer behaves as an ordinary slow ranged unit.
+     */
+    public int lanceCooldownTurns = 0;
+
     /**
      * Plague Hulk low-HP finisher (see .claude/agents/ideas/plague-hulk-self-destruct.txt). Once
      * {@code selfDestructPrimed} is set it is STICKY — the Hulk never reverts to attacking, moving,
@@ -301,6 +324,10 @@ public class Enemy implements StatusHost {
         // A shard-bearing archetype (today only AURIC_SENTINEL) spawns with a FULL ring; every other
         // archetype reports 0 shards, which makes every shard code path inert for it.
         this.shardCount    = type.maxShards();
+        // A shell-bearing archetype (today only RIMESHELL_LANCER) spawns SEALED, with its live flat shell
+        // already up; every other archetype reports 0, i.e. unarmoured. Set here rather than by the depth
+        // scaler so a directly-constructed instance (tests) is never briefly shell-less.
+        this.armor         = type.baseArmor();
         this.activeEffects = buildEffectsMap();
     }
 
@@ -499,6 +526,39 @@ public class Enemy implements StatusHost {
     /** Live trail tiles this enemy currently holds against its cap. Exposed for tests and telemetry. */
     public int liveTrailTileCount() {
         return trailTileCount;
+    }
+
+    // -------------------------------------------------------------------------
+    // Rime lance shell behaviour (elemental-golem-rimeshell-lancer). All no-ops when baseArmor() is 0.
+    // -------------------------------------------------------------------------
+
+    /**
+     * OPENS the ice shell — drops the live flat mitigation to 0 for the punish window. Called by
+     * EnemyManager when the Lancer commits its lance charge; the shell stays down for the whole of the
+     * following player turn, then {@link #resealShell} restores it after the beam fires. A no-op-ish
+     * setter for any archetype with no shell (it simply zeroes an already-zero {@code armor}).
+     */
+    public void openShell() {
+        armor = 0;
+    }
+
+    /** RESEALS the ice shell to its full live value after the lance fires. Restores {@link Enemy#armor}. */
+    public void resealShell() {
+        armor = type.baseArmor();
+    }
+
+    /** True while a shell-bearing Lancer is currently OPEN (charging) — the window a burst punishes. */
+    public boolean isShellOpen() {
+        return type.baseArmor() > 0 && armor <= 0;
+    }
+
+    /**
+     * Counts the lance cooldown down by one of this enemy's own turns, clamped at zero. Called once per
+     * enemy turn from EnemyManager; while it is above zero the Lancer may not begin another charge. A
+     * no-op for every archetype that never lances (its cooldown never leaves zero).
+     */
+    public void advanceLanceCooldown() {
+        if (lanceCooldownTurns > 0) lanceCooldownTurns--;
     }
 
     private static EnumMap<StatusType, StatusEffect> buildEffectsMap() {

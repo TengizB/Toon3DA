@@ -134,4 +134,33 @@ public interface ImpactEventListener {
      * @param heightMultiplier the enemy type's billboard height fraction
      */
     default void onEmberCollapse(int tileColumn, int tileRow, float heightMultiplier) {}
+
+    /**
+     * Called when a Rimeshell Lancer discharges its RIME LANCE down a cardinal lane
+     * (.claude/agents/ideas/elemental-golem-rimeshell-lancer.txt), so the effect system can sweep an
+     * orange-white beam and puff a frost ring off the muzzle — the ice/fire contrast that is the
+     * archetype's identity. The lane is given as a unit cardinal step so the effect can walk the exact
+     * tiles the beam resolved. Default: no-op.
+     *
+     * @param originColumn     the Lancer's tile column (the muzzle)
+     * @param originRow        the Lancer's tile row (the muzzle)
+     * @param stepColumn       unit cardinal lane direction in columns (-1, 0, or 1)
+     * @param stepRow          unit cardinal lane direction in rows (-1, 0, or 1)
+     * @param reachTiles       how many tiles the beam travelled before a wall stopped it
+     * @param heightMultiplier the enemy type's billboard height fraction (scales effect placement)
+     */
+    default void onLanceBeam(int originColumn, int originRow, int stepColumn, int stepRow,
+                             int reachTiles, float heightMultiplier) {}
+
+    /**
+     * Called when a Rimeshell Lancer dies and its ice shell SHATTERS
+     * (.claude/agents/ideas/elemental-golem-rimeshell-lancer.txt): a cold spray of blue-white shards plus
+     * one hot orange core flash as the furnace goes out. Distinct from the generic death burst
+     * {@link #onEnemyKilled} already fires, so a Lancer going out reads as its own event. Default: no-op.
+     *
+     * @param tileColumn       the tile the enemy died on
+     * @param tileRow          the tile the enemy died on
+     * @param heightMultiplier the enemy type's billboard height fraction
+     */
+    default void onFrostShatter(int tileColumn, int tileRow, float heightMultiplier) {}
 }

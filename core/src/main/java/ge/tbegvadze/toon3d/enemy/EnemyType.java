@@ -335,6 +335,44 @@ public enum EnemyType {
         // its pressure comes from the board state it creates rather than from outsmarting the player.
     },
 
+    RIMESHELL_LANCER {
+        @Override public int    maxHealth()          { return EnemyConstants.RIMESHELL_LANCER_MAX_HEALTH; }
+        @Override public int    attackDamage()        { return EnemyConstants.RIMESHELL_LANCER_ATTACK_DAMAGE; }
+        @Override public int    attackRangeTiles()    { return EnemyConstants.RIMESHELL_LANCER_RANGE_TILES; }
+        @Override public int    moveEveryNTurns()     { return EnemyConstants.RIMESHELL_LANCER_MOVE_EVERY_N_TURNS; }
+        @Override public boolean isRanged()           { return true; }
+        @Override public float  heightMultiplier()    { return EnemyConstants.RIMESHELL_LANCER_HEIGHT_MULTIPLIER; }
+        @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_RIMESHELL_LANCER; }
+        @Override public String displayName()         { return "Rimeshell Lancer"; }
+        @Override public EnemyFamily family()         { return EnemyFamily.GOLEM; }
+        @Override public EnemyRole role()             { return EnemyRole.SOLDIER; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_RANGED; }
+        // The cadence term of its TP value: one lance per two turns (charge turn + fire turn).
+        @Override public int    attackCadenceTurns()  { return 2; }
+        @Override public char   spawnChar()           { return '['; }
+        @Override public String tacticalVerb()        { return "LANCER: armoured until it fires — bait the lance, step off the lane, then burst it through the open shell."; }
+        /**
+         * The TIME-AVERAGED shell, NOT its live value. The live sealed shell is
+         * {@link EnemyConstants#RIMESHELL_SHELL_ARMOR} (7) flat and is the roster's toughest non-elite,
+         * but it DROPS TO 0 for one turn of every ~3 (the charge turn, out of charge + fire + cooldown),
+         * so type-level pricing uses the honest per-turn average round(7 * (1 - 1/3)) ≈ 5. TP is a per-turn
+         * average model, so the average is the number to price; wiring this to the live 7 would inflate the
+         * TP out of band. See {@link BalanceConfig#RIMESHELL_SHELL_AVERAGED_FLAT_REDUCTION} for the full
+         * derivation — the live shell and this priced average must NEVER be wired to each other.
+         */
+        @Override public float  flatReduction()       { return EnemyConstants.RIMESHELL_SHELL_AVERAGED_FLAT_REDUCTION; }
+        /**
+         * The LIVE sealed shell (per-instance, on {@link Enemy#armor}). Distinct from {@link #flatReduction()}
+         * on purpose: this is what the simulation subtracts from an incoming hit while the shell stands,
+         * dropped to 0 by EnemyManager the turn the lance charges and restored after it fires. Every other
+         * archetype has no shell and leaves this 0.
+         */
+        @Override public int    baseArmor()           { return EnemyConstants.RIMESHELL_SHELL_ARMOR; }
+        // MOVESET_NONE (the default) and NO new SpecialAbility: the lance is a bespoke behaviour hook built
+        // from the EXISTING IntentVerb.WIND_UP -> ATTACK_RANGED pair (like the Shell Brute charge), so the
+        // SpecialAbility catalogue — and BalanceSchema's SPECIAL_VERB_PRICING coverage rule — are untouched.
+    },
+
     // -------------------------------------------------------------------------
     // Boss archetypes — BossFloorController sets actual scaled HP/damage at spawn;
     // values here are used for initial Enemy construction and XP budget.
@@ -488,6 +526,14 @@ public enum EnemyType {
 
     /** Extra absorbed-HP pool (player-style armour). Default 0 — no non-boss archetype uses it yet. */
     public float armorPool()     { return 0f; }
+    /**
+     * LIVE flat armour a fresh instance of this archetype spawns with, assigned to {@link Enemy#armor} at
+     * construction. Default 0 — every archetype is unarmoured at spawn unless it overrides this. The
+     * Rimeshell Lancer is the first user: its sealed ice shell. Deliberately SEPARATE from
+     * {@link #flatReduction()} (which is the TIME-AVERAGED value the Threat-Point model prices) — the live
+     * shell and the priced average must never be wired to each other.
+     */
+    public int   baseArmor()     { return 0; }
     /** Dodge probability applied to eHP as 1/(1-dodge). Default 0 — no non-boss archetype uses it yet. */
     public float dodgeChance()   { return 0f; }
     /**

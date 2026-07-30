@@ -1,6 +1,32 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Enemies
 TITLE: Rimeshell Lancer — armoured ice golem with a molten lance
+---
+
+IMPLEMENTATION NOTES (as built)
+===============================
+Shipped faithfully to this spec. One deliberate structural choice worth recording: the two-turn
+channel is implemented as the SINGLE existing WIND_UP commit + its EXECUTE, NOT as two separate
+committed verbs. computeLancerPlan commits ONE WIND_UP (opening the shell for the following player
+turn — the punish window — and telegraphing in the existing intent frame); executeWindUp branches by
+type to executeLanceBeam on the following EXECUTE, which fires the beam and reseals. This keeps the
+shell open for EXACTLY one player turn ("down 1 of ~3") and reuses the Shell Brute's proven
+WIND_UP->EXECUTE machinery verbatim — the design's "WIND_UP -> ATTACK_RANGED pair" read as "charge
+turn telegraphs, fire turn resolves", which is exactly this. No new SpecialAbility verb, no
+BalanceSchema pricing row, so COVERAGE stays green.
+
+Files touched: BalanceConfig / EnemyConstants / GameBalance / EffectConstants (constants), EnemyType
+(RIMESHELL_LANCER + baseArmor()), Enemy (lance fields + openShell/resealShell/isShellOpen/
+advanceLanceCooldown, baseArmor at construction), EnemyManager (spawn '[', computeLancerPlan,
+executeLanceBeam + isLanceBlocked + damageAllyInLane, advanceLanceCooldown, frost-shatter death,
+loot case), LevelLoader (spawn '['), EncounterBudgetPlanner (FILL_TYPES), ImpactEventListener +
+ImpactEffectSystem (onLanceBeam / onFrostShatter), EnemyRenderer (Q1 region + frost/heat tint),
+docs/tile-symbols.txt, docs/enemy-system.txt, RimeshellLancerTest.
+
+OPEN QUESTION resolutions: Q1 the beam STOPS at a closed door (isLanceBlocked treats a sight-blocking
+door as a wall — recommended option). Q2 friendly fire kept at 0.5. Q3 the open shell only drops flat
+reduction, no VULNERABLE multiplier (recommended). Q4 '[' did NOT collide — excavation-monolith-
+chamber-room.txt is still NOT IMPLEMENTED, so '[' was free.
 ---
 
 OVERVIEW

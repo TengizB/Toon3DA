@@ -336,6 +336,44 @@ public final class BalanceConfig {
     /** Live trail tiles ONE Colossus may hold at once, so a long chase cannot carpet a floor. Range: 4–8. */
     public static final int CINDERFORGE_TRAIL_MAX_LIVE_TILES         = 6;
 
+    // RIMESHELL_LANCER (spawn '[') — the golem family's first ranged SOLDIER
+    // (.claude/agents/ideas/elemental-golem-rimeshell-lancer.txt). A squat crystal mass with a furnace
+    // core: it is the game's most damage-resistant non-elite WHILE SEALED, but its ice shell must OPEN
+    // for the molten lance to fire — armoured OR dangerous, never both at once. Every other ranged enemy
+    // punishes you for standing in its line; the Lancer punishes you for shooting on the wrong turn.
+    public static final int RIMESHELL_LANCER_MAX_HEALTH             = 90;
+    public static final int RIMESHELL_LANCER_ATTACK_DAMAGE          = 14;
+    public static final int RIMESHELL_LANCER_RANGE_TILES            = 6;
+    /** Heavy: it repositions slowly, and should — the shell is the reason it can afford to. Range: 1–3. */
+    public static final int RIMESHELL_LANCER_MOVE_EVERY_N_TURNS     = 2;
+    /**
+     * LIVE per-instance flat mitigation of the sealed ice shell — the roster's toughest non-elite while
+     * it stands. DROPS TO 0 the whole player turn the Lancer is charging (the punish window) and reseals
+     * after the beam. This is the SIMULATED shell; it is deliberately NOT the number priced into Threat
+     * Points (see {@link #RIMESHELL_SHELL_AVERAGED_FLAT_REDUCTION}) — the two must never be wired to each
+     * other, because TP is a per-turn AVERAGE and the shell is up on most turns but down on one. Range: 5–9.
+     */
+    public static final int RIMESHELL_SHELL_ARMOR                  = 7;
+    /**
+     * The PRICED shell, fed to GameMath.enemyEffectiveHitPoints as flat reduction — the TIME-AVERAGE of
+     * the live {@link #RIMESHELL_SHELL_ARMOR}, NOT its peak. The shell is DOWN for one turn of every ~3
+     * (charge out of charge + fire + cooldown), so the honest per-turn average is round(7 * (1 - 1/3)) ≈ 5.
+     *     eHP = enemyEffectiveHitPoints(90, 0, 0, 5, 25) = 90 * 25/(25-5) = 112.5
+     *     TP  = (14/2) * (112.5/25) * POSITIONAL_MULT_RANGED = 7 * 4.5 * 1.30 = 40.95  (SOLDIER 36-66)
+     * The friendly fire and the lane-lock are PLAYER-FAVOURING, so pricing them at zero is conservative
+     * in the right direction. A naive reader will "fix" this to 7 and drift the number out of the honest
+     * average — which is exactly why it is a named constant with this note, not a literal.
+     */
+    public static final float RIMESHELL_SHELL_AVERAGED_FLAT_REDUCTION = 5f;
+    /** Enemy turns after a lance fires before it may charge again — the sealed, armoured half. Range: 1–4. */
+    public static final int RIMESHELL_LANCE_COOLDOWN_TURNS         = 2;
+    /**
+     * Fraction of the lance's damage every OTHER enemy standing in the beam takes — golems do not care
+     * about each other. NOT a bug to balance away: it is the second half of the puzzle. Pull a pack into
+     * the lane, bait the shot, and the room thins itself out. Priced at zero (player-favouring). Range: 0.5–1.0.
+     */
+    public static final float RIMESHELL_LANCE_FRIENDLY_FIRE_FRACTION = 0.5f;
+
     // Global enemy AI knobs — perception and kiting tuning shared across types.
     /** Tiles within which an enemy notices the player and wakes. Range: 3–6. */
     public static final int ALERT_RADIUS_TILES        = 4;
@@ -441,6 +479,8 @@ public final class BalanceConfig {
     public static final int CREDIT_REWARD_AURIC_SENTINEL    = 14;
     /** Above the Shell Brute (12), far below the Iron Stalker (40) — matches its mid-BRUISER TP of ~90. */
     public static final int CREDIT_REWARD_CINDERFORGE_COLOSSUS = 16;
+    /** Between Acid Drone (8) and Void Shroud (12) — consistent with its low-mid SOLDIER TP of ~41. */
+    public static final int CREDIT_REWARD_RIMESHELL_LANCER  = 10;
 
     // -------------------------------------------------------------------------------------
     // SPECIAL-VERB TP EQUIVALENCE (new-game-balancr order 5) — cycle-averaged threat pricing.
