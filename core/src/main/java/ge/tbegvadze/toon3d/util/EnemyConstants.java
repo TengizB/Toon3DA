@@ -11,8 +11,8 @@ public final class EnemyConstants {
     public static final String  ENEMY_SHEET_BLIGHT_PATH          = "textures/enemies/enemy_sheet_blight.png";
     public static final String  ENEMY_SHEET_INFERNAL_PATH        = "textures/enemies/enemy_sheet_infernal.png";
     // Elemental golem sheet — Q1=RIMESHELL_LANCER, Q2=CINDERFORGE_COLOSSUS, Q3=VERDANT_SPIRESOWER,
-    // Q4=AURIC_SENTINEL. Only Q4 has a shipped archetype today; the other three quadrants are art
-    // waiting on their design docs (.claude/agents/ideas/elemental-golem-*.txt).
+    // Q4=AURIC_SENTINEL. Q2 and Q4 have shipped archetypes today; Q1 and Q3 are art waiting on their
+    // design docs (.claude/agents/ideas/elemental-golem-*.txt).
     public static final String  ENEMY_SHEET_ELEMENTAL_GOLEMS_PATH = "textures/enemies/enemy_sheet_elemental_golems.png";
 
     // Necrotic faction — individual single-sprite PNGs (one texture per archetype, drawn
@@ -192,6 +192,86 @@ public final class EnemyConstants {
     public static final float   AURIC_EXPOSED_TINT_B                = 0.46f;
     /** Blend strength of the shardless matte tint (0 = unchanged, 1 = fully violet). */
     public static final float   AURIC_EXPOSED_TINT_STRENGTH         = 0.45f;
+
+    // CINDERFORGE_COLOSSUS — elemental GOLEM melee BRUISER anchor that HARDENS while unharmed and sets
+    // the ground behind it on fire (spawn '{'). Stats mirror BalanceConfig; everything below
+    // CINDERFORGE_TRAIL_MAX_LIVE_TILES is cosmetic.
+    public static final int     CINDERFORGE_COLOSSUS_MAX_HEALTH         = BalanceConfig.CINDERFORGE_COLOSSUS_MAX_HEALTH;
+    public static final int     CINDERFORGE_COLOSSUS_ATTACK_DAMAGE      = BalanceConfig.CINDERFORGE_COLOSSUS_ATTACK_DAMAGE;
+    public static final int     CINDERFORGE_COLOSSUS_MOVE_EVERY_N_TURNS = BalanceConfig.CINDERFORGE_COLOSSUS_MOVE_EVERY_N_TURNS;
+    public static final int     CINDERFORGE_COLOSSUS_MIN_SPAWN_DEPTH    = BalanceConfig.CINDERFORGE_COLOSSUS_MIN_SPAWN_DEPTH;
+    public static final int     CINDERFORGE_CRUST_MAX_STACKS            = BalanceConfig.CINDERFORGE_CRUST_MAX_STACKS;
+    public static final int     CINDERFORGE_CRUST_ARMOR_PER_STACK       = BalanceConfig.CINDERFORGE_CRUST_ARMOR_PER_STACK;
+    public static final float   CINDERFORGE_CRUST_AVERAGED_FLAT_REDUCTION
+            = BalanceConfig.CINDERFORGE_CRUST_AVERAGED_FLAT_REDUCTION;
+    public static final float   CINDERFORGE_CRUST_SHATTER_MULTIPLIER    = BalanceConfig.CINDERFORGE_CRUST_SHATTER_MULTIPLIER;
+    public static final int     CINDERFORGE_TRAIL_FIRE_TURNS            = BalanceConfig.CINDERFORGE_TRAIL_FIRE_TURNS;
+    public static final int     CINDERFORGE_TRAIL_MAX_LIVE_TILES        = BalanceConfig.CINDERFORGE_TRAIL_MAX_LIVE_TILES;
+    public static final float   CINDERFORGE_COLOSSUS_HEIGHT_MULTIPLIER  = 1.15f;
+
+    // --- SEAM GLOW = SOFTNESS (EnemyRenderer). The sprite's tint is driven by the live crust count, so
+    // "how hard is it right now" is answerable by LOOKING at it: full-bright orange at zero stacks,
+    // darkened charcoal at a full shell. The Q2 art is already a lattice of dark crust over glowing
+    // seams, so the tint just turns up or down what the sprite already says.
+    /** Sprite tint at ZERO crust stacks — seams blazing, the "hit me now" state. */
+    public static final float   CINDERFORGE_TINT_HOT_R              = 1.00f;
+    public static final float   CINDERFORGE_TINT_HOT_G              = 0.62f;
+    public static final float   CINDERFORGE_TINT_HOT_B              = 0.26f;
+    /** Sprite tint at a FULL crust shell — darkened, desaturated charcoal. */
+    public static final float   CINDERFORGE_TINT_COOLED_R           = 0.46f;
+    public static final float   CINDERFORGE_TINT_COOLED_G           = 0.32f;
+    public static final float   CINDERFORGE_TINT_COOLED_B           = 0.26f;
+    /** Blend strength of the hot/cooled tint over the base shade (0 = untinted, 1 = fully tinted). */
+    public static final float   CINDERFORGE_TINT_STRENGTH           = 0.55f;
+    /**
+     * Seconds the tint takes to ease between two crust levels, so a shatter is a visible FLASH back to
+     * hot rather than a snap. Cosmetic only — the simulation changes the stack count instantly.
+     */
+    public static final float   CINDERFORGE_TINT_LERP_SECONDS       = 0.40f;
+    /**
+     * CRITICAL READABILITY FLOOR. The cooled tint must never be confusable with the
+     * DORMANT_SHADE_DAMPEN (0.7) darkening used for a SLEEPING enemy — "hardened" must never read as
+     * "asleep". A cooled Colossus therefore keeps a hot orange rim: its red channel is floored at this
+     * fraction of full brightness no matter how cool it is, and the additive seam pass below still
+     * burns. A dormant enemy has neither.
+     */
+    public static final float   CINDERFORGE_RIM_MIN_RED             = 0.72f;
+
+    // --- CRUST PLATES: one dark plate per live stack, drawn over the sprite at fixed offsets
+    // (shoulders / chest / hips). A literal COUNT of the armour, readable at a glance and at distance —
+    // the same discipline as the Auric ring: the stack count is the whole readability contract, and it
+    // lives on the body, not in the HUD.
+    /** Per-stack plate centre, as a fraction of sprite WIDTH from the billboard centre (index = stack-1). */
+    public static final float[] CINDERFORGE_CRUST_PLATE_OFFSET_X    = { -0.20f,  0.20f,  0.00f };
+    /** Per-stack plate centre, as a fraction of sprite HEIGHT above the sprite's feet (index = stack-1). */
+    public static final float[] CINDERFORGE_CRUST_PLATE_OFFSET_Y    = {  0.74f,  0.74f,  0.46f };
+    /** Plate width as a fraction of the billboard's on-screen width. */
+    public static final float   CINDERFORGE_CRUST_PLATE_WIDTH_FRACTION  = 0.30f;
+    /** Plate height as a fraction of the billboard's on-screen height. */
+    public static final float   CINDERFORGE_CRUST_PLATE_HEIGHT_FRACTION = 0.11f;
+    /** Plate body colour — cooled black crust. Drawn in ordinary alpha blend so it actually DARKENS. */
+    public static final float   CINDERFORGE_CRUST_PLATE_R           = 0.10f;
+    public static final float   CINDERFORGE_CRUST_PLATE_G           = 0.07f;
+    public static final float   CINDERFORGE_CRUST_PLATE_B           = 0.07f;
+    /** Opacity of a crust plate. Below 1 so the sprite's own lattice still shows through. */
+    public static final float   CINDERFORGE_CRUST_PLATE_ALPHA       = 0.80f;
+    /** Height of the glowing molten seam drawn under each plate, as a fraction of the plate height. */
+    public static final float   CINDERFORGE_CRUST_SEAM_HEIGHT_FRACTION = 0.26f;
+
+    // --- HEAT HAZE: a shimmer band at the base of the billboard, sold as a few additive orange slivers
+    // whose horizontal offset oscillates. Cheap, allocation-free, and it sells the mass and the
+    // temperature without resampling the sprite (this renderer draws one texture column at a time, so a
+    // true refraction re-sample has no place to live).
+    /** Horizontal shimmer amplitude, as a fraction of the billboard's on-screen width. */
+    public static final float   CINDERFORGE_HEAT_HAZE_AMPLITUDE     = 0.055f;
+    /** Shimmer oscillation speed, radians per wall-clock second. */
+    public static final float   CINDERFORGE_HEAT_HAZE_SPEED         = 3.10f;
+    /** Height of the shimmer band above the sprite's feet, as a fraction of sprite height. */
+    public static final float   CINDERFORGE_HEAT_HAZE_ZONE_FRACTION = 0.22f;
+    /** Number of shimmer slivers drawn in the band. */
+    public static final int     CINDERFORGE_HEAT_HAZE_SLIVERS       = 4;
+    /** Alpha of each additive shimmer sliver. */
+    public static final float   CINDERFORGE_HEAT_HAZE_ALPHA         = 0.30f;
 
     // Shared ranged AI — kiting constants reused across ranged types
     public static final int     RANGED_KITE_MIN_TILES            = BalanceConfig.RANGED_KITE_MIN_TILES;

@@ -112,6 +112,12 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final float[]   shardDepths;
     private final boolean[] drawShardFlags;
 
+    // Pre-allocated CRUST-PLATE / heat-haze cache (elemental-golem-cinderforge-colossus) — parallel to
+    // sortedIndices, populated in pass 1 and consumed by the crust pass (pass 1.56). Only a flag is
+    // needed: the pass reuses the fx* billboard geometry and sortedDepths, and every per-plate transform
+    // is a local float. Nothing here allocates.
+    private final boolean[] drawCrustFlags;
+
     // Fixed per-particle phase offsets so overlay particles are evenly but non-uniformly spread.
     // Static so the table is built once per JVM load and shared by every EnemyRenderer instance.
     private static final float[] AFFLICTION_PHASE_OFFSETS =
@@ -177,6 +183,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.fxDrawFlags         = new boolean[scratchSize];
         this.shardDepths         = new float[scratchSize];
         this.drawShardFlags      = new boolean[scratchSize];
+        this.drawCrustFlags      = new boolean[scratchSize];
         this.intentCenterXs      = new float[scratchSize];
         this.intentClusterTops   = new float[scratchSize];
         this.drawIntentFlags     = new boolean[scratchSize];
@@ -302,6 +309,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
             drawBeamFlags[sortedPosition]   = false;
             fxDrawFlags[sortedPosition]     = false;
             drawShardFlags[sortedPosition]  = false;
+            drawCrustFlags[sortedPosition]  = false;
             drawIntentFlags[sortedPosition] = false;
             float attackAnimStrength      = enemy.getAttackAnimStrength();
 
@@ -455,6 +463,27 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 }
             }
 
+            // CINDERFORGE COLOSSUS — SEAM GLOW = SOFTNESS (elemental-golem-cinderforge-colossus). The
+            // sprite's tint is driven by the eased crust level, so "why did that shot feel weak" is
+            // always answerable by LOOKING at it: blazing orange at zero stacks, darkened charcoal at a
+            // full shell. The Q2 art is already a lattice of dark crust over glowing seams, so this only
+            // turns up or down what the sprite is already saying.
+            //
+            // CRITICAL: the cooled state must never be confusable with the DORMANT_SHADE_DAMPEN darkening
+            // used for a SLEEPING enemy — "hardened" reading as "asleep" would invert the tactical
+            // meaning entirely. So a cooled Colossus keeps a hot orange RIM: its red channel is floored,
+            // and the additive seam/haze pass below still burns. A dormant enemy has neither.
+            if (enemy.type.crustMaxStacks() > 0) {
+                float crustLevel = enemy.getCrustTintLevel();
+                float targetRed   = GameMath.lerp(CINDERFORGE_TINT_HOT_R, CINDERFORGE_TINT_COOLED_R, crustLevel);
+                float targetGreen = GameMath.lerp(CINDERFORGE_TINT_HOT_G, CINDERFORGE_TINT_COOLED_G, crustLevel);
+                float targetBlue  = GameMath.lerp(CINDERFORGE_TINT_HOT_B, CINDERFORGE_TINT_COOLED_B, crustLevel);
+                spriteRed   = GameMath.lerp(spriteRed,   targetRed,   CINDERFORGE_TINT_STRENGTH);
+                spriteGreen = GameMath.lerp(spriteGreen, targetGreen, CINDERFORGE_TINT_STRENGTH);
+                spriteBlue  = GameMath.lerp(spriteBlue,  targetBlue,  CINDERFORGE_TINT_STRENGTH);
+                spriteRed   = Math.max(spriteRed, baseShade * CINDERFORGE_RIM_MIN_RED);
+            }
+
             // Block plating shimmer (strategy-combat-order-3): a translucent steely-blue tint while the
             // enemy holds active Block, gently pulsing so a braced enemy visibly "plates over."
             if (enemy.block > 0) {
@@ -505,11 +534,15 @@ public final class EnemyRenderer implements Renderable, Disposable {
             fxSpriteWidths[sortedPosition]  = spriteScreenWidth;
             fxDrawFlags[sortedPosition]     = true;
 
-            // Cache the shard-ring draw for pass 1.6 — the fx* geometry above is exactly what the ring
+            // Cache the shard-ring draw for pass 1.55 — the fx* geometry above is exactly what the ring
             // needs, so only the depth and the flag are extra. Flagged even at zero shards is pointless,
             // so an empty ring simply never enters the pass.
             shardDepths[sortedPosition]     = depth;
             drawShardFlags[sortedPosition]  = enemy.shardCount > 0;
+
+            // Cache the crust-plate / heat-haze draw for pass 1.56. Every magma construct gets the haze
+            // (it is always hot, even bare), so the flag is the ARCHETYPE, not the live stack count.
+            drawCrustFlags[sortedPosition]  = enemy.type.crustMaxStacks() > 0;
 
             // Dash afterimage / motion trail (ORDER 8): draw fading ghost billboards at the trailing tiles
             // of the slide path so a multi-tile boss dash reads as a deliberate sprint, not a teleport
@@ -763,6 +796,104 @@ public final class EnemyRenderer implements Renderable, Disposable {
                     // Rotate each quad by its own orbit angle so the shards visibly tumble as they sweep.
                     drawCenteredQuad(shardCenterX, shardCenterY, shardSize, shardSize,
                             angleRadians * MathUtils.radiansToDegrees);
+                }
+            }
+            batch.setColor(Color.WHITE);
+            batch.end();
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA); // restore alpha blend
+        }
+
+        // =====================================================================
+        // Pass 1.56: CRUST PLATES + HEAT HAZE (elemental-golem-cinderforge-colossus).
+        // The plates are a LITERAL COUNT of the Colossus's armour — one dark plate per live crust stack,
+        // at fixed body positions (shoulders, chest, hips) — drawn in ordinary alpha blend because they
+        // must DARKEN the body, which additive blending cannot do. A glowing molten seam is drawn
+        // additively under each one, and a shimmer band at the feet sells the mass and the temperature.
+        //
+        // Same readability discipline as the Auric ring: the count lives on the BODY, legible at a glance
+        // and at distance, with no HUD, no bar and no text. Drawn after the sprite so the plates sit on
+        // the body, and before the health-bar cluster. Zero allocations — every transform is a local float.
+        // =====================================================================
+        boolean anyCrust = false;
+        for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+            if (drawCrustFlags[sortedPosition]) { anyCrust = true; break; }
+        }
+        if (anyCrust) {
+            // --- Sub-pass A: the dark plates, in the DEFAULT alpha blend (they subtract light).
+            batch.begin();
+            for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+                if (!drawCrustFlags[sortedPosition]) continue;
+                Enemy enemy = enemies.get(sortedIndices[sortedPosition]);
+                if (enemy.crustStacks <= 0) continue;   // a bare Colossus wears no plates
+                if (isCrustBillboardOccluded(sortedPosition)) continue;
+
+                float centerColumn = fxCenterColumns[sortedPosition];
+                float spriteHeight = fxSpriteHeights[sortedPosition];
+                float spriteWidth  = fxSpriteWidths[sortedPosition];
+                float drawBottom   = fxDrawBottoms[sortedPosition];
+                float plateWidth   = spriteWidth  * CINDERFORGE_CRUST_PLATE_WIDTH_FRACTION;
+                float plateHeight  = spriteHeight * CINDERFORGE_CRUST_PLATE_HEIGHT_FRACTION;
+
+                batch.setColor(CINDERFORGE_CRUST_PLATE_R, CINDERFORGE_CRUST_PLATE_G,
+                               CINDERFORGE_CRUST_PLATE_B, CINDERFORGE_CRUST_PLATE_ALPHA);
+                int plateCount = Math.min(enemy.crustStacks, CINDERFORGE_CRUST_PLATE_OFFSET_X.length);
+                for (int plateIndex = 0; plateIndex < plateCount; plateIndex++) {
+                    float plateCenterX = centerColumn
+                            + spriteWidth  * CINDERFORGE_CRUST_PLATE_OFFSET_X[plateIndex];
+                    float plateCenterY = drawBottom
+                            + spriteHeight * CINDERFORGE_CRUST_PLATE_OFFSET_Y[plateIndex];
+                    drawCenteredQuad(plateCenterX, plateCenterY, plateWidth, plateHeight, 0f);
+                }
+            }
+            batch.setColor(Color.WHITE);
+            batch.end();
+
+            // --- Sub-pass B: the additive molten glow — a seam under each plate plus the base shimmer.
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE); // additive magma
+            batch.begin();
+            for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+                if (!drawCrustFlags[sortedPosition]) continue;
+                Enemy enemy = enemies.get(sortedIndices[sortedPosition]);
+                if (isCrustBillboardOccluded(sortedPosition)) continue;
+
+                float centerColumn = fxCenterColumns[sortedPosition];
+                float spriteHeight = fxSpriteHeights[sortedPosition];
+                float spriteWidth  = fxSpriteWidths[sortedPosition];
+                float drawBottom   = fxDrawBottoms[sortedPosition];
+
+                // Molten seam under each plate: the crust is a crust OVER something still burning, and
+                // this line is what keeps a fully cooled Colossus from ever reading as switched off.
+                float plateWidth  = spriteWidth  * CINDERFORGE_CRUST_PLATE_WIDTH_FRACTION;
+                float plateHeight = spriteHeight * CINDERFORGE_CRUST_PLATE_HEIGHT_FRACTION;
+                float seamHeight  = plateHeight * CINDERFORGE_CRUST_SEAM_HEIGHT_FRACTION;
+                batch.setColor(CINDERFORGE_TINT_HOT_R, CINDERFORGE_TINT_HOT_G, CINDERFORGE_TINT_HOT_B, 1f);
+                int plateCount = Math.min(enemy.crustStacks, CINDERFORGE_CRUST_PLATE_OFFSET_X.length);
+                for (int plateIndex = 0; plateIndex < plateCount; plateIndex++) {
+                    float seamCenterX = centerColumn
+                            + spriteWidth  * CINDERFORGE_CRUST_PLATE_OFFSET_X[plateIndex];
+                    float seamCenterY = drawBottom
+                            + spriteHeight * CINDERFORGE_CRUST_PLATE_OFFSET_Y[plateIndex]
+                            - plateHeight / 2f;
+                    drawCenteredQuad(seamCenterX, seamCenterY, plateWidth, seamHeight, 0f);
+                }
+
+                // HEAT HAZE: a shimmer band at the feet, sold as a few additive slivers whose horizontal
+                // offset oscillates out of phase. This renderer draws the sprite one texture COLUMN at a
+                // time, so a true refraction re-sample has nowhere to live; the shimmer reads the same
+                // from a metre away and costs four quads.
+                float bandHeight   = spriteHeight * CINDERFORGE_HEAT_HAZE_ZONE_FRACTION;
+                float sliverHeight = bandHeight / CINDERFORGE_HEAT_HAZE_SLIVERS;
+                float amplitude    = spriteWidth * CINDERFORGE_HEAT_HAZE_AMPLITUDE;
+                batch.setColor(CINDERFORGE_TINT_HOT_R, CINDERFORGE_TINT_HOT_G, CINDERFORGE_TINT_HOT_B,
+                               CINDERFORGE_HEAT_HAZE_ALPHA);
+                for (int sliverIndex = 0; sliverIndex < CINDERFORGE_HEAT_HAZE_SLIVERS; sliverIndex++) {
+                    // Phase-offset per sliver so the band ripples rather than sliding as one block.
+                    float phase = sliverIndex * MathUtils.PI2 / CINDERFORGE_HEAT_HAZE_SLIVERS;
+                    float wobble = amplitude * MathUtils.sin(
+                            statusAnimationClock * CINDERFORGE_HEAT_HAZE_SPEED + phase);
+                    float sliverCenterY = drawBottom + sliverHeight * (sliverIndex + 0.5f);
+                    drawCenteredQuad(centerColumn + wobble, sliverCenterY,
+                                     spriteWidth * 0.9f, sliverHeight * 0.5f, 0f);
                 }
             }
             batch.setColor(Color.WHITE);
@@ -1618,6 +1749,17 @@ public final class EnemyRenderer implements Renderable, Disposable {
     }
 
     /**
+     * The same centre-column wall-occlusion test the shard, affliction and health-bar passes use, hoisted
+     * into a helper because the crust pass runs it in two sub-passes. Returns true when the billboard's
+     * centre column is off-screen or hidden behind a nearer wall, so the caller skips its overlay.
+     */
+    private boolean isCrustBillboardOccluded(int sortedPosition) {
+        int centerScreenColumn = (int) fxCenterColumns[sortedPosition];
+        if (centerScreenColumn < 0 || centerScreenColumn >= WALL_PROJECTION_SCREEN_WIDTH) return true;
+        return sortedDepths[sortedPosition] >= wallRenderer.getZBufferUnchecked(centerScreenColumn);
+    }
+
+    /**
      * Draws a white-pixel quad centered at {@code (centerX, centerY)} with the given size, rotated by
      * {@code rotationDegrees} about its center. The batch colour must be set by the caller.
      */
@@ -1679,12 +1821,15 @@ public final class EnemyRenderer implements Renderable, Disposable {
         map.put(EnemyType.ACID_DRONE,   new TextureRegion(infernalSheet, 0,            infernalHalfH, infernalHalfW, infernalHalfH));
         map.put(EnemyType.VOID_SHROUD,  new TextureRegion(infernalSheet, infernalHalfW, infernalHalfH, infernalHalfW, infernalHalfH));
 
-        // Elemental golem sheet. Q1 (0,0) / Q2 (halfW,0) / Q3 (0,halfH) are the Rimeshell Lancer,
-        // Cinderforge Colossus and Verdant Spiresower — art that ships ahead of its archetypes
-        // (.claude/agents/ideas/elemental-golem-*.txt), so only Q4 is mapped today. An unmapped type
-        // is skipped by the draw loop's null-region guard, never drawn from a wrong quadrant.
+        // Elemental golem sheet. Q1 (0,0) and Q3 (0,halfH) are the Rimeshell Lancer and Verdant
+        // Spiresower — art that ships ahead of its archetypes (.claude/agents/ideas/elemental-golem-*.txt)
+        // and so is not mapped yet. An unmapped type is skipped by the draw loop's null-region guard,
+        // never drawn from a wrong quadrant. TextureRegion y=0 is the TOP of the image, so Q2 (the
+        // Cinderforge Colossus) is the TOP-RIGHT quadrant.
         int golemHalfW = elementalGolemSheet.getWidth()  / 2;
         int golemHalfH = elementalGolemSheet.getHeight() / 2;
+        map.put(EnemyType.CINDERFORGE_COLOSSUS,
+                new TextureRegion(elementalGolemSheet, golemHalfW, 0,          golemHalfW, golemHalfH));
         map.put(EnemyType.AURIC_SENTINEL,
                 new TextureRegion(elementalGolemSheet, golemHalfW, golemHalfH, golemHalfW, golemHalfH));
 

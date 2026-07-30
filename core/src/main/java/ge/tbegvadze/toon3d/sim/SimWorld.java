@@ -323,11 +323,18 @@ public final class SimWorld implements LevelTransitionListener {
         hazardManager.setExplosiveBarrelManager(explosiveBarrelManager);
         explosiveBarrelManager.setDetonationListener(hazardManager::igniteFireFromExplosion);
         if (incinerator != null) incinerator.setHazardIgniteTarget(hazardManager::igniteFire);
+        // The Colossus's MOLTEN TRAIL must be live in the SIMULATOR too, or the behavioural bands would
+        // measure a floor whose terrain danger simply does not exist (SimWorld plays through the REAL
+        // systems — that is the whole point of the order-9 gate).
+        enemyManager.setHazardIgniteTarget(hazardManager);
         enemyManager.setEnemyDeathHazardListener((deadType, tileColumn, tileRow, selfDestructMassive) -> {
             if (deadType == ge.tbegvadze.toon3d.enemy.EnemyType.PLAGUE_HULK) {
                 hazardManager.spawnToxicCloud(tileColumn, tileRow, selfDestructMassive
                         ? BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES
                         : BalanceConfig.HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS);
+            }
+            if (deadType.leavesTrailFireTurns() > 0) {
+                hazardManager.igniteFire(tileColumn, tileRow, deadType.leavesTrailFireTurns());
             }
         });
 

@@ -303,7 +303,7 @@ Quick summary of categories:
 - **Solid props (13):** `g E T L C # % & = @ I J W`
 - **Walkable decals (5):** `m s . O e`
 - **Pickups (7):** `r y b + H a A`
-- **Enemy spawns (14):** `1 2 3 4 5 ! $ ^ ~ z K V * (` (replaced with floor at load time)
+- **Enemy spawns (15):** `1 2 3 4 5 ! $ ^ ~ z K V * ( {` (replaced with floor at load time)
 
 `Level.isWall(char)` is the single authority on which chars are solid — both `WallRenderer` and `PlayerController` call it. When adding a new wall type, add it there first.
 

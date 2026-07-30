@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.hazard;
 
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.entity.HazardIgniteTarget;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
@@ -39,7 +40,7 @@ import java.util.Random;
  * Zero allocation per turn: the per-turn snapshot and pending-ignition buffers are pre-allocated.
  * Holds no GPU resources, so it needs no dispose().
  */
-public final class HazardManager {
+public final class HazardManager implements HazardIgniteTarget {
 
     /** Stamped onto the level grid for a fire tile so PropRenderer can draw it. */
     private static final char FIRE_CHAR  = 'i';
@@ -132,8 +133,21 @@ public final class HazardManager {
     // -------------------------------------------------------------------------
 
     /** Ignites (or refreshes) a fire tile, if the tile is an eligible floor/stain cell. */
+    @Override
     public void igniteFire(int tileColumn, int tileRow) {
         ignite(tileColumn, tileRow, FIRE, BalanceConfig.HAZARD_FIRE_LIFETIME_TURNS);
+    }
+
+    /**
+     * Ignites (or refreshes) a fire tile with a CALLER-CHOSEN lifetime, for sources whose burn duration
+     * is their own tunable rather than the global hazard default — today the Cinderforge Colossus's
+     * molten trail ({@code BalanceConfig.CINDERFORGE_TRAIL_FIRE_TURNS}). The fire itself is ordinary:
+     * it spreads, chain-detonates barrels and burns ANY host standing on it, allies included, exactly
+     * like every other fire tile. Same eligibility rules — a no-op on walls and non-spreadable cells.
+     */
+    @Override
+    public void igniteFire(int tileColumn, int tileRow, int lifetimeTurns) {
+        ignite(tileColumn, tileRow, FIRE, lifetimeTurns);
     }
 
     /** Spawns (or refreshes) a toxic pool, if the tile is an eligible floor/stain cell. */

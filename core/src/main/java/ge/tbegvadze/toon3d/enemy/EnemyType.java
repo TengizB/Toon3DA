@@ -299,6 +299,42 @@ public enum EnemyType {
         // catalogue and SPECIAL_VERB_PRICING stays exactly as it was.
     },
 
+    CINDERFORGE_COLOSSUS {
+        @Override public int    maxHealth()          { return EnemyConstants.CINDERFORGE_COLOSSUS_MAX_HEALTH; }
+        @Override public int    attackDamage()        { return EnemyConstants.CINDERFORGE_COLOSSUS_ATTACK_DAMAGE; }
+        @Override public int    attackRangeTiles()    { return 1; }
+        @Override public int    moveEveryNTurns()     { return EnemyConstants.CINDERFORGE_COLOSSUS_MOVE_EVERY_N_TURNS; }
+        @Override public boolean isRanged()           { return false; }
+        @Override public float  heightMultiplier()    { return EnemyConstants.CINDERFORGE_COLOSSUS_HEIGHT_MULTIPLIER; }
+        @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_CINDERFORGE_COLOSSUS; }
+        @Override public String displayName()         { return "Cinderforge Colossus"; }
+        @Override public EnemyFamily family()         { return EnemyFamily.GOLEM; }
+        @Override public EnemyRole role()             { return EnemyRole.BRUISER; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
+        @Override public int    attackCadenceTurns()  { return 1; }
+        @Override public char   spawnChar()           { return '{'; }
+        @Override public String tacticalVerb()        { return "FORGE: keep the pressure on — it re-hardens the moment you stop shooting, and it burns the ground behind it."; }
+        /**
+         * The TIME-AVERAGED crust, NOT its live peak. Live crust reaches
+         * {@code CINDERFORGE_CRUST_MAX_STACKS * CINDERFORGE_CRUST_ARMOR_PER_STACK} = 12 flat, but only
+         * against a player who has STOPPED ATTACKING — and the modelled player attacks every turn, which
+         * is precisely what REFERENCE_PLAYER_DPT means. Any damage shatters the whole shell, so against
+         * that player the crust sits near zero on most turns. See
+         * {@link BalanceConfig#CINDERFORGE_CRUST_AVERAGED_FLAT_REDUCTION} for the full derivation —
+         * "fixing" this to 12 would blow the BRUISER band, which is exactly why the number is a named
+         * constant with its own note rather than a literal here.
+         */
+        @Override public float  flatReduction()       { return EnemyConstants.CINDERFORGE_CRUST_AVERAGED_FLAT_REDUCTION; }
+        @Override public int    crustMaxStacks()      { return EnemyConstants.CINDERFORGE_CRUST_MAX_STACKS; }
+        @Override public int    leavesTrailFireTurns() { return EnemyConstants.CINDERFORGE_TRAIL_FIRE_TURNS; }
+        @Override public int    minSpawnDepth()       { return EnemyConstants.CINDERFORGE_COLOSSUS_MIN_SPAWN_DEPTH; }
+        // MOVESET_NONE (the default) and NO bespoke plan branch: both of its mechanics are passive and
+        // positional, driven from the EXECUTE phase, so the SpecialAbility catalogue — and
+        // BalanceSchema's SPECIAL_VERB_PRICING coverage rule — are untouched. The Shell Brute and Void
+        // Shroud already own the "clever melee AI" space; the Colossus is dumb, huge and relentless, and
+        // its pressure comes from the board state it creates rather than from outsmarting the player.
+    },
+
     // -------------------------------------------------------------------------
     // Boss archetypes — BossFloorController sets actual scaled HP/damage at spawn;
     // values here are used for initial Enemy construction and XP budget.
@@ -454,7 +490,11 @@ public enum EnemyType {
     public float armorPool()     { return 0f; }
     /** Dodge probability applied to eHP as 1/(1-dodge). Default 0 — no non-boss archetype uses it yet. */
     public float dodgeChance()   { return 0f; }
-    /** Flat damage shaved off each incoming hit (punishes chip damage). Default 0 — Iron Stalker later. */
+    /**
+     * Flat damage shaved off each incoming hit (punishes chip damage). Default 0. The Cinderforge
+     * Colossus is the first user: it supplies the TIME-AVERAGED value of its cooling crust here, so the
+     * crust re-prices its TP/TTK/golden ratio for free rather than through a bespoke TP term.
+     */
     public float flatReduction() { return 0f; }
 
     // -------------------------------------------------------------------------
@@ -478,11 +518,37 @@ public enum EnemyType {
      */
     public int shardRegenTurns() { return 1; }
 
+    // -------------------------------------------------------------------------
+    // Cooling crust + molten trail (elemental-golem-cinderforge-colossus) — the CINDERFORGE_COLOSSUS
+    // hardens on every turn it takes no damage, and ignites every tile it vacates. Declared as plain
+    // archetype DATA for the same reason the shard economy is: the crust is a damage-pipeline hook and
+    // the trail is a movement hook, so no SpecialAbility verb is introduced and BalanceSchema's verb
+    // pricing COVERAGE rule is untouched. Every archetype defaults to "no crust, no trail".
+    // -------------------------------------------------------------------------
+
+    /**
+     * Crust stacks a fully cooled shell holds; 0 (the default) means this archetype has no crust at all,
+     * so every crust code path is inert for it. Each stack contributes
+     * {@code EnemyConstants.CINDERFORGE_CRUST_ARMOR_PER_STACK} flat armour while it stands, and ANY
+     * damage shatters the whole shell at once.
+     */
+    public int crustMaxStacks() { return 0; }
+
+    /**
+     * Turns of FIRE this archetype leaves on each tile it VACATES; 0 (the default) means it leaves no
+     * trail. Routed through the shipped {@code HazardManager.igniteFire} path, so the trail participates
+     * in the existing fire spread and barrel chain-reaction rules for free — and burns this enemy's own
+     * allies, which is deliberate and must not be special-cased away.
+     */
+    public int leavesTrailFireTurns() { return 0; }
+
     /**
      * The shallowest floor the encounter planner may spend budget on this archetype (1 = any floor).
-     * A DATA gate, not a switch: {@code EncounterBudgetPlanner} filters its fill pool by this value, so
-     * banding a new archetype to deeper floors costs one override and no generator edit. Today only the
-     * Auric Sentinel raises it — it tests a loadout decision the player cannot yet make on floor 1.
+     * A DATA gate, not a switch: {@code EncounterBudgetPlanner} filters BOTH its anchor pool and its fill
+     * pool by this value, so banding a new archetype to deeper floors costs one override and no generator
+     * edit. Two archetypes raise it, each because it asks a question floor 1 cannot answer: the Auric
+     * Sentinel (3) tests which weapon you are holding, and the Cinderforge Colossus (2) tests whether you
+     * can keep firing without reloading into cover.
      */
     public int minSpawnDepth() { return 1; }
 

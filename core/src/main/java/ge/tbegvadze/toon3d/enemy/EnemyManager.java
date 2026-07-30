@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.enemy;
 
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.entity.EnemyHitTarget;
+import ge.tbegvadze.toon3d.entity.HazardIgniteTarget;
 import ge.tbegvadze.toon3d.entity.ImpactEventListener;
 import ge.tbegvadze.toon3d.entity.Loadout;
 import ge.tbegvadze.toon3d.entity.boss.Boss;
@@ -128,6 +129,12 @@ public final class EnemyManager implements EnemyHitTarget {
     private float activationBlockPierceFraction = 0f;
     // Injected by World so melee kills can drop ammo matching the player's equipped ranged weapons.
     private Loadout loadout = null;
+    /**
+     * Fire-ignition sink for the Cinderforge Colossus's MOLTEN TRAIL, wired per floor by World (the
+     * HazardManager is rebuilt each floor). Null in headless tests and no-World construction, which
+     * makes every trail ignition a safe no-op.
+     */
+    private HazardIgniteTarget hazardIgniteTarget = null;
 
     /** Notified when the never-softlock emergency ammo lifeline fires (order 3, part D) — for telemetry. */
     public interface EmergencySupplyListener {
@@ -216,6 +223,17 @@ public final class EnemyManager implements EnemyHitTarget {
         this.emergencySupplyListener = listener;
     }
 
+    /**
+     * Injects the fire-ignition sink used by the MOLTEN TRAIL
+     * (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt). World re-wires this whenever the
+     * per-floor {@code HazardManager} is rebuilt, exactly as it does for the Incinerator. Null (the
+     * default, and the case in headless unit tests) makes every trail ignition a safe no-op, so no test
+     * needs a hazard system just to take an enemy turn.
+     */
+    public void setHazardIgniteTarget(HazardIgniteTarget target) {
+        this.hazardIgniteTarget = target;
+    }
+
     @Override
     public void notifyMeleeAttack() {
         pendingMeleeKill = true;
@@ -252,6 +270,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 case 'V': type = EnemyType.VORTEX_EYE;       break;
                 case '*': type = EnemyType.BLIGHT_CORRUPTOR; break;
                 case '(': type = EnemyType.AURIC_SENTINEL;   break;
+                case '{': type = EnemyType.CINDERFORGE_COLOSSUS; break;
                 case 'n': continue; // Boss spawn — BossFloorController seeds the correct boss by depth
                 default:  type = EnemyType.PLAGUE_HULK;   break;
             }
@@ -522,6 +541,14 @@ public final class EnemyManager implements EnemyHitTarget {
         // The shard ring (elemental-golem-auric-sentinel) resolves INSIDE applyDamage, ahead of Block,
         // so capture it here too: an absorbed hit must read as gold "nothing happened", never as a
         // red damage number, or the Sentinel reads as a bullet sponge instead of a puzzle.
+        // COOLING CRUST (elemental-golem-cinderforge-colossus): a hit that breaks a FULLY cooled shell is
+        // AMPLIFIED inside applyDamage, so the number floated on screen must be the amplified one or the
+        // archetype's payoff beat reads as a bug. Both sides route through the same pure query, and it is
+        // evaluated BEFORE the hit, while the shell is still standing.
+        int crustBefore   = enemy.crustStacks;
+        boolean fullCrust = enemy.hasFullCrust();
+        totalDamage       = enemy.crustShatterAmplified(totalDamage);
+
         int blockBefore = enemy.block;
         int shardsBefore = enemy.shardCount;
         enemy.applyDamage(totalDamage, exposed, activationBlockPierceFraction);
@@ -529,6 +556,9 @@ public final class EnemyManager implements EnemyHitTarget {
         if (enemy.shardCount < shardsBefore) {
             spawnShardAbsorbFeedback(enemy);
             return;   // the shard ate the whole hit: no hit flash, no damage number, no HP change
+        }
+        if (crustBefore > 0 && enemy.crustStacks == 0) {
+            spawnCrustShatterFeedback(enemy, crustBefore, fullCrust);
         }
         int blockAbsorbed = blockBefore - enemy.block;
         if (blockAbsorbed > 0) {
@@ -622,6 +652,7 @@ public final class EnemyManager implements EnemyHitTarget {
             enemy.advanceIntentPop(deltaTime);
             enemy.advanceSlide(deltaTime);   // ORDER 2: cosmetic boss locomotion slide (no-op when idle)
             enemy.advanceShardAbsorbFlash(deltaTime); // gold absorb flash (no-op without shards)
+            enemy.advanceCrustTint(deltaTime);        // hot<->cooled seam glow (no-op without crust)
         }
     }
 
@@ -725,10 +756,12 @@ public final class EnemyManager implements EnemyHitTarget {
                 enemy.skipNextAction    = false;
                 enemy.plannedAction.verb = IntentVerb.STUNNED;
                 advanceShardRegrowth(enemy);
+                advanceCrustCooling(enemy);
                 continue;
             }
             executePlan(enemy, playerColumn, playerRow, player);
             advanceShardRegrowth(enemy);
+            advanceCrustCooling(enemy);
         }
         // Apply any self-inflicted deaths (e.g. a detonating Plague Hulk) AFTER the loop above
         // finishes, so removing them never shifts enemies.get(index) mid-iteration (R-self-destruct).
@@ -751,6 +784,27 @@ public final class EnemyManager implements EnemyHitTarget {
         if (impactEventListener != null) {
             impactEventListener.onShardRegrown(enemy.tileColumn, enemy.tileRow,
                     enemy.type.heightMultiplier());
+        }
+    }
+
+    /**
+     * Advances a crust-bearing enemy's COOLING clock at the END of its turn, and ages its live molten
+     * trail tiles by the same turn (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt).
+     *
+     * <p>Called for EVERY acting enemy — including one whose committed action a stun cancelled — because
+     * the crust hardens on the world's clock, not on the enemy's success: a stun-locked Colossus that
+     * nobody is shooting is still cooling, which is precisely the "stop shooting and it gets worse"
+     * lesson. Only ALERTED enemies reach this, so a Colossus asleep since level load never wakes already
+     * armoured. A no-op for every archetype with no crust and no trail, and for an enemy that died during
+     * its own action (a corpse cools nothing).
+     */
+    private void advanceCrustCooling(Enemy enemy) {
+        if (!enemy.isAlive()) return;
+        enemy.advanceTrailTiles();
+        if (!enemy.advanceCrustCooling()) return;
+        if (impactEventListener != null) {
+            impactEventListener.onCrustCooled(enemy.tileColumn, enemy.tileRow,
+                    enemy.type.heightMultiplier(), enemy.crustStacks);
         }
     }
 
@@ -912,6 +966,8 @@ public final class EnemyManager implements EnemyHitTarget {
      * the goal is unreachable this step (R4 — a failed move re-paths quietly, unlike a whiffed attack).
      */
     private void executeMove(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow) {
+        int originColumn = enemy.tileColumn;
+        int originRow    = enemy.tileRow;
         if (plan.fleeFromTarget) {
             stepAway(enemy, playerColumn, playerRow);
         } else if (plan.goalIsFixedTile) {
@@ -925,6 +981,47 @@ public final class EnemyManager implements EnemyHitTarget {
             stepToward(enemy, playerColumn, playerRow);
         }
         enemy.state = EnemyState.CHASING;
+        // The move has RESOLVED, so the vacated tile is known and the enemy is already standing
+        // elsewhere. A blocked step leaves origin == current, and neither hook fires: nothing was
+        // vacated and nothing landed.
+        if (enemy.tileColumn != originColumn || enemy.tileRow != originRow) {
+            igniteMoltenTrail(enemy, originColumn, originRow);
+            notifyHeavyFootfall(enemy, playerColumn, playerRow);
+        }
+    }
+
+    /**
+     * MOLTEN TRAIL (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt): sets fire to the tile
+     * a Cinderforge Colossus just VACATED, so the ground the player would have retreated across is
+     * burning behind it. Three deliberate properties:
+     *
+     * <p>It uses the SHIPPED hazard system rather than a new hazard type, so the trail participates in
+     * fire spread and explosive-barrel chain reactions for free — baiting a Colossus across a barrel is
+     * the archetype's best emergent counter, and it costs no code. It burns this enemy's ALLIES exactly
+     * as it burns the player, because the hazard system applies BURNING to any host on the tile and
+     * special-casing that away for one archetype would be both more code and worse tactics. And it never
+     * ignites the tile the Colossus is STANDING on, so the player is never denied the tile they need to
+     * melee it from without warning.
+     *
+     * <p>Bounded by the per-Colossus live-tile cap, so a long chase cannot carpet a floor.
+     */
+    private void igniteMoltenTrail(Enemy enemy, int vacatedColumn, int vacatedRow) {
+        int trailFireTurns = enemy.type.leavesTrailFireTurns();
+        if (trailFireTurns <= 0)        return;
+        if (hazardIgniteTarget == null) return;   // headless / no-World construction — safe no-op
+        if (!enemy.canLightTrailTile()) return;   // at the live-tile cap; the oldest expires first
+        hazardIgniteTarget.igniteFire(vacatedColumn, vacatedRow, trailFireTurns);
+        enemy.recordTrailTile(trailFireTurns);
+    }
+
+    /** Fires the heavy-footfall beat (ember burst + distance-scaled shake) for a massive archetype. */
+    private void notifyHeavyFootfall(Enemy enemy, int playerColumn, int playerRow) {
+        if (enemy.type != EnemyType.CINDERFORGE_COLOSSUS) return;
+        if (impactEventListener == null) return;
+        int distanceTiles = GameMath.chebyshevDistanceTiles(
+                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+        impactEventListener.onHeavyFootfall(enemy.tileColumn, enemy.tileRow,
+                enemy.type.heightMultiplier(), distanceTiles);
     }
 
     // -------------------------------------------------------------------------
@@ -1384,6 +1481,19 @@ public final class EnemyManager implements EnemyHitTarget {
     }
 
     /**
+     * True when the enemy has a clear, unobstructed cardinal firing line within range to the player.
+     * Shared validation for all ranged planners: checks range, line-of-sight, and blocking.
+     */
+    private boolean canFireCardinalLine(Enemy enemy, int playerColumn, int playerRow, int rangeLimit) {
+        int distance = GameMath.chebyshevDistanceTiles(
+                enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+        return distance <= rangeLimit
+                && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                && hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                && !hasEnemyBlockingShot(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+    }
+
+    /**
      * RANGED plan (Eye Tyrant, Mire Wraith, Acid Drone). One committed verb per turn:
      *   - too close and not melee-pinned  → retreat (MOVE flee); no shot this turn.
      *   - a clear cardinal firing line now → commit ATTACK_RANGED with its predicted damage.
@@ -1398,10 +1508,7 @@ public final class EnemyManager implements EnemyHitTarget {
         int distance    = GameMath.chebyshevDistanceTiles(
                 enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
         boolean meleePinned = isCardinallyAdjacent(enemy, playerColumn, playerRow);
-        boolean canFireNow  = distance <= rangeLimit
-                && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
-                && hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
-                && !hasEnemyBlockingShot(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+        boolean canFireNow  = canFireCardinalLine(enemy, playerColumn, playerRow, rangeLimit);
 
         if (distance < EnemyConstants.RANGED_KITE_MIN_TILES && !meleePinned) {
             plan.setFlee(playerColumn, playerRow);       // too close — reposition, no shot this turn
@@ -1449,10 +1556,7 @@ public final class EnemyManager implements EnemyHitTarget {
             return;
         }
 
-        boolean canFireNow = distance <= rangeLimit
-                && isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
-                && hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
-                && !hasEnemyBlockingShot(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+        boolean canFireNow = canFireCardinalLine(enemy, playerColumn, playerRow, rangeLimit);
         if (canFireNow) {
             plan.setAttack(IntentVerb.ATTACK_RANGED, playerColumn, playerRow, enemy.scaledAttackDamage());
         } else if (shouldDefend(enemy, playerColumn, playerRow)) {
@@ -1691,6 +1795,29 @@ public final class EnemyManager implements EnemyHitTarget {
         }
         showCombatTipOnce("shard_absorb",
                 "ABSORBED — each shard eats ONE hit. Strip them with rapid fire.");
+    }
+
+    /**
+     * Fires the CRUST-specific feedback when a cooled shell breaks
+     * (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt): a "CRUST SHATTERED" floater plus
+     * an orange shard burst, sized by how much shell broke. Unlike a shard absorb this does NOT suppress
+     * the ordinary hit flash and damage number — the hit really did land, and on a full shell it landed
+     * HARDER than normal, so the player should see a big number. The floater's job is only to explain
+     * why. Cosmetic only.
+     *
+     * @param stacksBroken how many crust stacks the hit broke at once
+     * @param wasFullCrust true when the shell was fully cooled, so this hit also earned the damage bonus
+     */
+    private void spawnCrustShatterFeedback(Enemy enemy, int stacksBroken, boolean wasFullCrust) {
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("CRUST SHATTERED", EventTextSystem.COLOR_GOLD);
+        }
+        if (impactEventListener != null) {
+            impactEventListener.onCrustShattered(enemy.tileColumn, enemy.tileRow,
+                    enemy.type.heightMultiplier(), stacksBroken, wasFullCrust);
+        }
+        showCombatTipOnce("crust_shatter",
+                "IT HARDENS WHEN YOU STOP SHOOTING — keep the pressure on and it never gets to cool.");
     }
 
     private void applyRangedAttackStatusEffect(Enemy enemy, Player player) {
@@ -1986,6 +2113,14 @@ public final class EnemyManager implements EnemyHitTarget {
                     enemy.type.heightMultiplier(), enemy.shardCount);
         }
         enemy.shardCount = 0;
+        // COLLAPSE (elemental-golem-cinderforge-colossus): a magma construct goes out as embers rather
+        // than as the generic death burst, so a Colossus dying reads as a furnace being extinguished.
+        // The last fire tile it leaves under itself is placed by the death HAZARD hook (World), which is
+        // where every other area-denial death effect already lives.
+        if (enemy.type.leavesTrailFireTurns() > 0 && impactEventListener != null) {
+            impactEventListener.onEmberCollapse(enemy.tileColumn, enemy.tileRow,
+                    enemy.type.heightMultiplier());
+        }
         char currentCell = level.getCell(enemy.tileColumn, enemy.tileRow);
         if (!Level.isStairsDown(currentCell)
                 && !Level.isMedicalPickup(currentCell)
@@ -2050,6 +2185,7 @@ public final class EnemyManager implements EnemyHitTarget {
             case VORTEX_EYE:   return '8'; // cells   — energy caster (ranged)
             case BLIGHT_CORRUPTOR: return '7'; // shells — infected brute
             case AURIC_SENTINEL:   return '8'; // cells  — crystal golem, energy ranged
+            case CINDERFORGE_COLOSSUS: return '7'; // shells — heavy melee golem anchor
             default:           return '6';
         }
     }

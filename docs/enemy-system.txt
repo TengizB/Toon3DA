@@ -42,10 +42,14 @@ The first wakeup sets World.gameState.redAlert = true (drives the red wall pulse
 ### Phase B — Action
 Every ALERTED/CHASING/ATTACKING enemy acts once:
 
-  MELEE enemies (PLAGUE_HULK, GORE_BITER, SHELL_BRUTE, IRON_STALKER, VOID_SHROUD):
+  MELEE enemies (PLAGUE_HULK, GORE_BITER, SHELL_BRUTE, IRON_STALKER, VOID_SHROUD, CINDERFORGE_COLOSSUS):
     - Manhattan distance == 1 (cardinal adjacent only, never diagonal) → swing.
     - Else → step toward player via greedy Manhattan minimizer.
     - Move cooldown governed by moveEveryNTurns() per type.
+    - CINDERFORGE_COLOSSUS is a plain greedy chaser (no bespoke plan branch): its identity is in two
+      PASSIVE hooks, not in clever AI. It HARDENS (gains flat armour) on every turn it takes no damage,
+      and it IGNITES the tile it just vacated, so ducking into cover to reload lets it cool while the
+      corridor behind you burns. Its danger is the board state it creates, not outsmarting the player.
 
   RANGED enemies (EYE_TYRANT, MIRE_WRAITH, ACID_DRONE, VORTEX_EYE, AURIC_SENTINEL):
     - Distance < RANGED_KITE_MIN_TILES (2) → flee first, then re-evaluate.
@@ -185,8 +189,8 @@ of the bodies filling those roles.
   INSECT       Shell Brute, Iron Stalker
   MACHINE      Acid Drone, The Overseer (boss)
   DEMON        Void Shroud, Hell Baron (boss)
-  GOLEM        Auric Sentinel (the Rimeshell Lancer / Cinderforge Colossus / Verdant Spiresower are
-               still design docs — their art already sits in the shared sheet's Q1-Q3)
+  GOLEM        Auric Sentinel, Cinderforge Colossus (the Rimeshell Lancer / Verdant Spiresower are
+               still design docs — their art already sits in the shared sheet's Q1 / Q3)
 
 STATUS: DESCRIPTIVE ONLY. Nothing reads family() yet — no spawn, budget, AI or render path branches
 on it, so adding the taxonomy changed zero behaviour and every archetype stays spawnable on every
@@ -269,12 +273,21 @@ until you can state its verb in one sentence and that verb is DISTINCT from ever
   Iron Stalker   '!'   MINI_ELITE  MINI-ELITE: commit resources or avoid — a deliberate mid-floor spike.
   Auric Sentinel '('   SOLDIER     SENTINEL: its shards are armour AND ammo — strip them with rapid
                                    fire, or bait it into spending them.
+  Cinderforge C. '{'   BRUISER     FORGE: keep the pressure on — it re-hardens the moment you stop
+                                   shooting, and it burns the ground behind it.
 
-FLOOR BANDS — EnemyType.minSpawnDepth() (default 1) is a DATA gate the EncounterBudgetPlanner applies
-when it builds its fill pool, never a switch. Only the Auric Sentinel raises it (3): it asks "WHAT ARE
-YOU HOLDING", a question the player cannot answer on floor 1 with a single starting weapon, so shipping
-it there would be a wall rather than a puzzle. Hand-authored levels are NOT gated — a level file may
-place '(' at any depth deliberately.
+Two BRUISERS, two different failures: the Shell Brute is a POSITIONING puzzle (sidestep the lane, punish
+the recovery); the Cinderforge Colossus is a TEMPO puzzle (never let the damage stop).
+
+FLOOR BANDS — EnemyType.minSpawnDepth() (default 1) is a DATA gate the EncounterBudgetPlanner applies to
+BOTH its fill pool and its anchor pool, never a switch. Two archetypes raise it, each because it asks a
+question floor 1 cannot answer: the Auric Sentinel (3) asks "WHAT ARE YOU HOLDING" — unanswerable on
+floor 1 with a single starting weapon — and the Cinderforge Colossus (2) asks "CAN YOU KEEP FIRING
+without ducking into cover to reload", which is a real choice only once you have a weapon and know its
+reload. Because the Colossus is a BRUISER ANCHOR (chosen at most once per floor as the largest anchor
+that fits the reserve), its 90-TP body does not fit the tight floor-2 anchor reserve, so in practice it
+begins anchoring from floor 3; the DATA gate opening at 2 is deliberate and hand-authored levels are NOT
+gated — a level file may place '(' or '{' at any depth deliberately.
 
 ENCOUNTER BUDGET (Pillar 1) — the floor generator (LevelGenerator) SPENDS a per-depth Threat-Point
 budget instead of rolling enemies at random, via EncounterBudgetPlanner:
@@ -382,6 +395,40 @@ labels them:
     TP pricing: absorption is priced as an ARMOUR POOL (EnemyType.armorPool -> 70), because absorbing a
     hit IS extra effective HP; see BalanceConfig.AURIC_SHARD_ARMOR_POOL for the derivation and for the
     stated RISK that one averaged pool cannot express a loadout-dependent eHP swing.
+  - CINDERFORGE_COLOSSUS — COOLING CRUST + MOLTEN TRAIL
+    (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt). THE GAME PUNISHES HESITATION: it
+    hardens while you hide and burns the ground you would have retreated across. Like the Sentinel it is
+    plain state + two PASSIVE hooks, NOT a SpecialAbility verb, so the SpecialAbility catalogue and
+    BalanceSchema.SPECIAL_VERB_PRICING are untouched and the COVERAGE rule stays green. Touch points:
+      CRUST   Enemy.crustStacks (0..CINDERFORGE_CRUST_MAX_STACKS). GAIN: at the END of the Colossus's own
+              turn (EnemyManager.advanceCrustCooling), if it took NO damage since its previous turn,
+              +1 stack, each adding CINDERFORGE_CRUST_ARMOR_PER_STACK to Enemy.armor. LOSE: ANY damage
+              shatters the WHOLE shell (Enemy.shatterCrust), removing the armour. The shatter fires in
+              BOTH damage entry points — applyDamage AND applyDoTDamage — because "any damage" must
+              include a burn/bleed tick, or a status build could not express the counterplay. The crust
+              rides on the existing `armor` field, so it shatters LAST (order: SHARD -> [x shatter bonus]
+              -> Block -> armor(crust) -> HP -> shatter): the shell protects the very blow that breaks
+              it, and breaking a FULLY cooled shell amplifies that hit by CINDERFORGE_CRUST_SHATTER_-
+              MULTIPLIER (the payoff for coming back out). Crust only accrues once ALERTED, so a sleeper
+              never wakes pre-hardened. TP pricing: TIME-AVERAGED flat reduction (EnemyType.flatReduction
+              -> 3, ~1 stack of uptime), because the modelled player attacks every turn — see
+              BalanceConfig.CINDERFORGE_CRUST_AVERAGED_FLAT_REDUCTION.
+      TRAIL   EnemyManager.executeMove ignites the VACATED tile after the move resolves, via the shipped
+              HazardManager.igniteFire(col, row, CINDERFORGE_TRAIL_FIRE_TURNS) — a real 'i' fire tile, so
+              it spreads, chain-detonates barrels, and burns ANY host (player AND the Colossus's own
+              allies) for free. It never ignites the tile it STANDS on (the player is never denied a melee
+              tile without warning), and a per-Colossus live-tile cap (Enemy trail ring buffer,
+              CINDERFORGE_TRAIL_MAX_LIVE_TILES) stops a long chase carpeting a floor. The trail's threat
+              is priced in the HAZARDS channel (BalanceReport's Fire 'i' row), NOT folded into the enemy
+              TP — folding it in both places would double-count it.
+      READ    EnemyRenderer: the sprite tint is driven by the crust level (blazing orange at 0 stacks ->
+              charcoal at a full shell, eased over CINDERFORGE_TINT_LERP_SECONDS so a shatter FLASHES back
+              to hot), plus one dark PLATE per live stack (a literal armour count on the body) with a
+              glowing molten seam, plus a heat-haze shimmer at the feet. A cooled Colossus keeps a hot
+              orange RIM (CINDERFORGE_RIM_MIN_RED) so "hardened" never reads as "asleep" (the dormant
+              dampen). ImpactEventListener adds a quiet ember tell on cooling, a loud ember burst +
+              shake + (full-shell) white flash on shatter, a distance-scaled footfall shake, and an ember
+              COLLAPSE on death (which also drops one last fire tile, via the death-hazard hook in World).
 
 All hooks respect the cardinal-line constraint; the charge only fires down a true cardinal lane.
 

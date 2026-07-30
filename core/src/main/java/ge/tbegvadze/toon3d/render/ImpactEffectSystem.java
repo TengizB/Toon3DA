@@ -252,6 +252,76 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     }
 
     @Override
+    public void onCrustCooled(int tileColumn, int tileRow, float heightMultiplier, int crustStacks) {
+        // Deliberately QUIET: a few slow embers settling, no ring, no shake. The loud beat belongs to the
+        // shatter. A Colossus hardening is something the player LET happen, and the sprite's darkening
+        // seams are already saying so — this is just enough motion to draw the eye there.
+        spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.CRUST_EMBER_R, EffectConstants.CRUST_EMBER_G, EffectConstants.CRUST_EMBER_B,
+                EffectConstants.CRUST_COOL_SPARK_COUNT,
+                EffectConstants.CRUST_COOL_SPARK_SPEED_MIN, EffectConstants.CRUST_COOL_SPARK_SPEED_MAX,
+                EffectConstants.CRUST_COOL_SPARK_LIFE_SECONDS);
+    }
+
+    @Override
+    public void onCrustShattered(int tileColumn, int tileRow, float heightMultiplier,
+                                 int stacksBroken, boolean wasFullCrust) {
+        // The payoff beat. Sized by how much shell broke, so a full three-stack shatter is visibly and
+        // physically bigger than chipping one stack — the player earned more, and should feel more.
+        int sparkCount = EffectConstants.CRUST_SHATTER_SPARKS_PER_STACK * Math.max(1, stacksBroken);
+        spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.CRUST_EMBER_R, EffectConstants.CRUST_EMBER_G, EffectConstants.CRUST_EMBER_B,
+                sparkCount,
+                EffectConstants.CRUST_SHATTER_SPARK_SPEED_MIN, EffectConstants.CRUST_SHATTER_SPARK_SPEED_MAX,
+                EffectConstants.CRUST_SHATTER_SPARK_LIFE_SECONDS);
+        spawnColoredRingPulse(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.CRUST_EMBER_R, EffectConstants.CRUST_EMBER_G, EffectConstants.CRUST_EMBER_B,
+                EffectConstants.CRUST_SHATTER_RING_MAX_RADIUS);
+        float shakeMagnitude = EffectConstants.CRUST_SHATTER_SHAKE_MAGNITUDE;
+        if (wasFullCrust) {
+            // Only a FULLY cooled shell earns the white flash frame and the heavier shake — the same
+            // shell that earned the damage bonus, so the cue and the reward always agree.
+            shakeMagnitude *= EffectConstants.CRUST_FULL_SHATTER_SHAKE_MULTIPLIER;
+            triggerColoredFlash(1.00f, 0.96f, 0.92f,
+                    EffectConstants.CRUST_FULL_SHATTER_FLASH_SECONDS,
+                    EffectConstants.CRUST_FULL_SHATTER_FLASH_MAX_ALPHA);
+        }
+        triggerShake(shakeMagnitude, EffectConstants.CRUST_SHATTER_SHAKE_DURATION_SECONDS);
+    }
+
+    @Override
+    public void onHeavyFootfall(int tileColumn, int tileRow, float heightMultiplier, int distanceTiles) {
+        spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.CRUST_EMBER_R, EffectConstants.CRUST_EMBER_G, EffectConstants.CRUST_EMBER_B,
+                EffectConstants.FOOTFALL_EMBER_COUNT,
+                EffectConstants.FOOTFALL_EMBER_SPEED_MIN, EffectConstants.FOOTFALL_EMBER_SPEED_MAX,
+                EffectConstants.FOOTFALL_EMBER_LIFE_SECONDS);
+        // The shake is NOT gated on visibility — hearing something huge coming through a wall is the
+        // whole point. It just falls off with distance, so a Colossus across the floor is a rumour and
+        // one in the next tile is a threat.
+        float shakeMagnitude = GameMath.distanceAttenuatedShake(
+                EffectConstants.FOOTFALL_SHAKE_MAGNITUDE, distanceTiles,
+                EffectConstants.FOOTFALL_SHAKE_MAX_DISTANCE_TILES);
+        if (shakeMagnitude > 0f) {
+            triggerShake(shakeMagnitude, EffectConstants.FOOTFALL_SHAKE_DURATION_SECONDS);
+        }
+    }
+
+    @Override
+    public void onEmberCollapse(int tileColumn, int tileRow, float heightMultiplier) {
+        // A furnace going out: a wide, slow, hot burst layered over the generic death debris that
+        // onEnemyKilled already threw, so the archetype's death reads as its own event.
+        spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.CRUST_EMBER_R, EffectConstants.CRUST_EMBER_G, EffectConstants.CRUST_EMBER_B,
+                EffectConstants.EMBER_COLLAPSE_COUNT,
+                EffectConstants.EMBER_COLLAPSE_SPEED_MIN, EffectConstants.EMBER_COLLAPSE_SPEED_MAX,
+                EffectConstants.EMBER_COLLAPSE_LIFE_SECONDS);
+        spawnColoredRingPulse(tileColumn, tileRow, heightMultiplier,
+                EffectConstants.CRUST_EMBER_R, EffectConstants.CRUST_EMBER_G, EffectConstants.CRUST_EMBER_B,
+                EffectConstants.EMBER_COLLAPSE_RING_MAX_RADIUS);
+    }
+
+    @Override
     public void onEnemySpawned(int tileColumn, int tileRow, float heightMultiplier) {
         // Sickly green portal: a ring pulse plus an outward spark burst on the tile a SUMMON
         // ability just materialized a new enemy on, so the pop-in reads as an event, not a glitch.

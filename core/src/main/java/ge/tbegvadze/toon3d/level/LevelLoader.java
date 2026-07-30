@@ -54,7 +54,7 @@ public class LevelLoader {
         //   '1'=Plague Hulk  '2'=Eye Tyrant   '3'=Gore Biter  '4'=Shell Brute  '5'=Mire Wraith
         //   '!'=Iron Stalker '$'=Acid Drone    '^'=Void Shroud
         //   '~'=Ghoul        'z'=Crawler       'K'=Revenant   'V'=Vortex Eye   '*'=Blight Corruptor
-        //   '('=Auric Sentinel (elemental golem)
+        //   '('=Auric Sentinel  '{'=Cinderforge Colossus (elemental golems)
         // Record each spawn, then replace the cell with lit-floor so the grid
         // stays traversable and existing renderers need no changes.
         List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
@@ -64,7 +64,7 @@ public class LevelLoader {
                 if (cell == '1' || cell == '2' || cell == '3' || cell == '4' || cell == '5'
                         || cell == '!' || cell == '$' || cell == '^'
                         || cell == '~' || cell == 'z' || cell == 'K' || cell == 'V' || cell == '*'
-                        || cell == '(' || cell == 'n') {
+                        || cell == '(' || cell == '{' || cell == 'n') {
                     spawnPoints.add(new EnemySpawnPoint(cell, tileColumn, tileRow));
                     matrix[tileRow][tileColumn] = ' ';
                 }

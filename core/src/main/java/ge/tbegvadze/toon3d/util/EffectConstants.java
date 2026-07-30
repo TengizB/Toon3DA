@@ -344,6 +344,52 @@ public final class EffectConstants {
     /** Sparks in the gentler re-grow flash — fewer than a shatter, so growth never outshouts loss. */
     public static final int   SHARD_REGROW_SPARK_COUNT            = 7;
 
+    // Cinderforge crust + molten trail (elemental-golem-cinderforge-colossus). Hot ORANGE, distinct from
+    // both the Block blue and the Auric gold: this family of effects means "magma", and the player must
+    // never confuse a crust shatter with a shard absorb — one is progress, the other is nothing.
+    public static final float CRUST_EMBER_R = 1.00f, CRUST_EMBER_G = 0.48f, CRUST_EMBER_B = 0.12f;
+    /** Sparks thrown PER BROKEN STACK when a cooled crust shatters — a bigger shell throws more. */
+    public static final int   CRUST_SHATTER_SPARKS_PER_STACK      = 9;
+    public static final float CRUST_SHATTER_SPARK_SPEED_MIN       = 70f;
+    public static final float CRUST_SHATTER_SPARK_SPEED_MAX       = 210f;
+    public static final float CRUST_SHATTER_SPARK_LIFE_SECONDS    = 0.50f;
+    /** Max radius of the ring pulse on a crust shatter. */
+    public static final float CRUST_SHATTER_RING_MAX_RADIUS       = 66f;
+    /** Screen-shake magnitude when a crust shatters, scaled up again for a FULL shell. */
+    public static final float CRUST_SHATTER_SHAKE_MAGNITUDE       = 5.0f;
+    public static final float CRUST_SHATTER_SHAKE_DURATION_SECONDS = 0.16f;
+    /** Extra shake multiplier when the shell that broke was FULLY cooled — the reward must be felt. */
+    public static final float CRUST_FULL_SHATTER_SHAKE_MULTIPLIER = 1.80f;
+    /** Duration of the white flash frame on a FULL-shell shatter. Only a full shell earns it. */
+    public static final float CRUST_FULL_SHATTER_FLASH_SECONDS    = 0.10f;
+    public static final float CRUST_FULL_SHATTER_FLASH_MAX_ALPHA  = 0.30f;
+    /** Sparks in the quiet cooling tell — deliberately few; hardening is the player's mistake, not a beat. */
+    public static final int   CRUST_COOL_SPARK_COUNT              = 4;
+    public static final float CRUST_COOL_SPARK_SPEED_MIN          = 18f;
+    public static final float CRUST_COOL_SPARK_SPEED_MAX          = 55f;
+    public static final float CRUST_COOL_SPARK_LIFE_SECONDS       = 0.55f;
+
+    // FOOTFALL — the room announces that something enormous is walking, even out of view.
+    public static final int   FOOTFALL_EMBER_COUNT                = 8;
+    public static final float FOOTFALL_EMBER_SPEED_MIN            = 20f;
+    public static final float FOOTFALL_EMBER_SPEED_MAX            = 80f;
+    public static final float FOOTFALL_EMBER_LIFE_SECONDS         = 0.45f;
+    /** Shake magnitude of a footfall taken right next to the player, before distance attenuation. */
+    public static final float FOOTFALL_SHAKE_MAGNITUDE            = 3.2f;
+    public static final float FOOTFALL_SHAKE_DURATION_SECONDS     = 0.12f;
+    /**
+     * Tiles beyond which a footfall no longer shakes the screen at all. Inside it the magnitude falls off
+     * linearly, so a Colossus two rooms away is felt faintly and one in your face is felt hard.
+     */
+    public static final int   FOOTFALL_SHAKE_MAX_DISTANCE_TILES   = 10;
+
+    // EMBER COLLAPSE — a magma construct dying: a wide, slow, hot burst instead of the generic debris.
+    public static final int   EMBER_COLLAPSE_COUNT                = 26;
+    public static final float EMBER_COLLAPSE_SPEED_MIN            = 30f;
+    public static final float EMBER_COLLAPSE_SPEED_MAX            = 190f;
+    public static final float EMBER_COLLAPSE_LIFE_SECONDS         = 0.90f;
+    public static final float EMBER_COLLAPSE_RING_MAX_RADIUS      = 88f;
+
     // Animated affliction overlays drawn on the enemy billboard each frame (additive glow):
     // rising flames for BURNING, floating bubbles for POISONED, falling droplets for BLEED.
     public static final int   AFFLICTION_FX_PARTICLES            = 7;    // particles per active status per enemy
