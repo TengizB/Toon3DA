@@ -51,13 +51,17 @@ Every ALERTED/CHASING/ATTACKING enemy acts once:
       and it IGNITES the tile it just vacated, so ducking into cover to reload lets it cool while the
       corridor behind you burns. Its danger is the board state it creates, not outsmarting the player.
 
-  RANGED enemies (EYE_TYRANT, MIRE_WRAITH, ACID_DRONE, VORTEX_EYE, AURIC_SENTINEL):
+  RANGED enemies (EYE_TYRANT, MIRE_WRAITH, ACID_DRONE, VORTEX_EYE, AURIC_SENTINEL, RIMESHELL_LANCER):
     - Distance < RANGED_KITE_MIN_TILES (2) → flee first, then re-evaluate.
     - In range AND has LOS AND on same cardinal line → fire in place (no move).
     - Out of range OR no LOS OR not on cardinal line → step toward player.
     - AURIC_SENTINEL inverts the kiting rule (computeSentinelPlan): with a shard in the ring it STANDS
       AND SHOOTS at any range, even point-blank; it only kites once the ring is EMPTY, because then it
       cannot attack at all. Its aggression level is therefore a readout of its shard count.
+    - RIMESHELL_LANCER (computeLancerPlan) NEVER kites: off cooldown with a clean cardinal lane it commits
+      a WIND_UP charge (opening its ice shell for the punish window), then fires a piercing lane beam a
+      turn later via executeLanceBeam; otherwise it steps toward alignment or braces. See MECHANICAL VERB
+      HOOKS below.
 
 ## CRITICAL — Ranged Attack Cardinal Line Rule
 
@@ -189,8 +193,8 @@ of the bodies filling those roles.
   INSECT       Shell Brute, Iron Stalker
   MACHINE      Acid Drone, The Overseer (boss)
   DEMON        Void Shroud, Hell Baron (boss)
-  GOLEM        Auric Sentinel, Cinderforge Colossus (the Rimeshell Lancer / Verdant Spiresower are
-               still design docs — their art already sits in the shared sheet's Q1 / Q3)
+  GOLEM        Rimeshell Lancer, Auric Sentinel, Cinderforge Colossus (the Verdant Spiresower is
+               still a design doc — its art already sits in the shared sheet's Q3)
 
 STATUS: DESCRIPTIVE ONLY. Nothing reads family() yet — no spawn, budget, AI or render path branches
 on it, so adding the taxonomy changed zero behaviour and every archetype stays spawnable on every
@@ -275,9 +279,12 @@ until you can state its verb in one sentence and that verb is DISTINCT from ever
                                    fire, or bait it into spending them.
   Cinderforge C. '{'   BRUISER     FORGE: keep the pressure on — it re-hardens the moment you stop
                                    shooting, and it burns the ground behind it.
+  Rimeshell Lancer '[' SOLDIER     LANCER: armoured until it fires — bait the lance, step off the lane,
+                                   then burst it through the open shell.
 
 Two BRUISERS, two different failures: the Shell Brute is a POSITIONING puzzle (sidestep the lane, punish
-the recovery); the Cinderforge Colossus is a TEMPO puzzle (never let the damage stop).
+the recovery); the Cinderforge Colossus is a TEMPO puzzle (never let the damage stop). The Rimeshell
+Lancer is a TIMING puzzle (shoot on the RIGHT turn — when its shell is open, not while it is sealed).
 
 FLOOR BANDS — EnemyType.minSpawnDepth() (default 1) is a DATA gate the EncounterBudgetPlanner applies to
 BOTH its fill pool and its anchor pool, never a switch. Two archetypes raise it, each because it asks a
@@ -429,8 +436,39 @@ labels them:
               dampen). ImpactEventListener adds a quiet ember tell on cooling, a loud ember burst +
               shake + (full-shell) white flash on shatter, a distance-scaled footfall shake, and an ember
               COLLAPSE on death (which also drops one last fire tile, via the death-hazard hook in World).
+  - RIMESHELL_LANCER — RIME LANCE + ICE SHELL (.claude/agents/ideas/elemental-golem-rimeshell-lancer.txt).
+    ARMOURED OR DANGEROUS, NEVER BOTH: the shell that makes it the toughest non-elite must OPEN for the
+    lance to fire, so the puzzle is TIMING — shoot it on the RIGHT turn. Built from the EXISTING
+    WIND_UP -> ATTACK pair (exactly like the Shell Brute charge), so NO SpecialAbility verb is added and
+    BalanceSchema.SPECIAL_VERB_PRICING / COVERAGE are untouched. Touch points:
+      CHARGE  computeLancerPlan: off cooldown (Enemy.lanceCooldownTurns == 0) with a clean cardinal firing
+              line, it commits a WIND_UP, LOCKS the lane (Enemy.lanceDirectionColumn/Row, mirroring the
+              charger's chargeDirection), and OPENS the shell (Enemy.openShell zeroes the live Enemy.armor)
+              for the whole of the following player turn — the punish window. triggerTelegraph draws the
+              warning in the existing WIND_UP intent frame with the predicted-damage number.
+      FIRE    executeWindUp branches by type to executeLanceBeam: a PIERCING beam swept straight down the
+              LOCKED lane out to attackRangeTiles, stopping at the first wall / closed door / solid prop
+              (isLanceBlocked), never at a body. It hits the player for the full lance damage ONLY if they
+              are still on the committed lane (a sidestep wastes it — the counter, and it works because the
+              lane was locked a turn earlier), and splashes every OTHER enemy in the lane for
+              RIMESHELL_LANCE_FRIENDLY_FIRE_FRACTION (0.5) — golems do not care about each other, so a pack
+              pulled into the lane thins itself out. The shell RESEALS (Enemy.resealShell) and the cooldown
+              arms (RIMESHELL_LANCE_COOLDOWN_TURNS) at the end of the turn either way.
+      SHELL   Enemy.armor IS the live shell: set to type.baseArmor() (RIMESHELL_SHELL_ARMOR = 7) at spawn,
+              zeroed on the charge commit, restored after the beam. Per-INSTANCE; the type-level
+              flatReduction() is the TIME-AVERAGED price only (RIMESHELL_SHELL_AVERAGED_FLAT_REDUCTION = 5,
+              the shell is down ~1 turn of every ~3) and the two are NEVER wired together.
+      READ    EnemyRenderer: a slow cyan FROST pulse while sealed, and a hot orange HEAT wash the whole
+              turn the shell is open (Enemy.isShellOpen) — the "hit it NOW" cue, legible even with the
+              intent icon off-screen. ImpactEventListener sweeps an orange-white BEAM + muzzle frost ring +
+              shake on fire (onLanceBeam), and a cold blue-white SHATTER with one hot core flash on death
+              (onFrostShatter).
+    TP pricing: an ordinary ranged SOLDIER — eHP through the shared flat-reduction primitive on the
+    AVERAGED shell yields TP ~41 (mid-low SOLDIER band); friendly fire and the lane-lock are
+    player-favouring and priced at zero. See BalanceConfig.RIMESHELL_SHELL_AVERAGED_FLAT_REDUCTION.
 
-All hooks respect the cardinal-line constraint; the charge only fires down a true cardinal lane.
+All hooks respect the cardinal-line constraint; the charge only fires down a true cardinal lane, and the
+lance only ever commits down a true row or column and never re-targets after commit.
 
 TERRAIN HAZARDS (Pillar 3) — HazardManager (hazard pkg) owns a two-sided fire/toxic chain-reaction
 system, ticked once per turn by HazardTickSubscriber (before the status tick so a tile bites the

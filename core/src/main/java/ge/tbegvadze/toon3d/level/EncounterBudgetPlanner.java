@@ -54,7 +54,8 @@ public final class EncounterBudgetPlanner {
             EnemyType.REVENANT,         // reanimator(fast melee soldier)
             EnemyType.BLIGHT_CORRUPTOR, // carrier   (durable melee soldier)
             // Elemental golems — depth-banded by EnemyType.minSpawnDepth() (see fillTypes below).
-            EnemyType.AURIC_SENTINEL    // sentinel  (ranged soldier; shards are armour AND ammo)
+            EnemyType.AURIC_SENTINEL,   // sentinel  (ranged soldier; shards are armour AND ammo)
+            EnemyType.RIMESHELL_LANCER  // lancer    (ranged soldier; armoured until it fires a lane beam)
     };
 
     /** Divergence guard: every added enemy raises spent TP by a positive cost, but cap roster size anyway. */

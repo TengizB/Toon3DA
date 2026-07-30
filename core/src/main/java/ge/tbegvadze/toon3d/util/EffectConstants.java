@@ -390,6 +390,31 @@ public final class EffectConstants {
     public static final float EMBER_COLLAPSE_LIFE_SECONDS         = 0.90f;
     public static final float EMBER_COLLAPSE_RING_MAX_RADIUS      = 88f;
 
+    // RIME LANCE — the Rimeshell Lancer's molten beam sweeping a cardinal lane, and its cold death shatter
+    // (.claude/agents/ideas/elemental-golem-rimeshell-lancer.txt). Orange-white beam (ice/fire contrast is
+    // the identity); the death is deliberately COLD (blue-white shards) with a single hot core flash.
+    public static final float RIMESHELL_LANCE_BEAM_R = 1.00f, RIMESHELL_LANCE_BEAM_G = 0.68f, RIMESHELL_LANCE_BEAM_B = 0.32f;
+    /** Ember sparks thrown at EACH tile the beam passes through, sold as the lance searing the lane. */
+    public static final int   RIMESHELL_LANCE_SPARKS_PER_TILE     = 5;
+    public static final float RIMESHELL_LANCE_SPARK_SPEED_MIN     = 60f;
+    public static final float RIMESHELL_LANCE_SPARK_SPEED_MAX     = 180f;
+    public static final float RIMESHELL_LANCE_SPARK_LIFE_SECONDS  = 0.40f;
+    /** Max radius of the frost ring that puffs off the muzzle as the lance fires — the ice/fire contrast. */
+    public static final float RIMESHELL_LANCE_MUZZLE_RING_MAX_RADIUS = 52f;
+    /** Frost muzzle-ring colour (cold cyan) — deliberately NOT the hot beam colour. */
+    public static final float RIMESHELL_FROST_R = 0.62f, RIMESHELL_FROST_G = 0.86f, RIMESHELL_FROST_B = 1.00f;
+    /** Screen-shake magnitude of a lance discharge, before distance attenuation. */
+    public static final float RIMESHELL_LANCE_SHAKE_MAGNITUDE     = 4.2f;
+    public static final float RIMESHELL_LANCE_SHAKE_DURATION_SECONDS = 0.14f;
+
+    // FROST SHATTER — a Rimeshell Lancer dying: a spray of cold blue-white shards plus one hot orange core
+    // flash as the furnace goes out. Layered over the generic death debris onEnemyKilled already threw.
+    public static final int   FROST_SHATTER_SPARK_COUNT           = 24;
+    public static final float FROST_SHATTER_SPARK_SPEED_MIN       = 40f;
+    public static final float FROST_SHATTER_SPARK_SPEED_MAX       = 200f;
+    public static final float FROST_SHATTER_SPARK_LIFE_SECONDS    = 0.80f;
+    public static final float FROST_SHATTER_RING_MAX_RADIUS       = 80f;
+
     // Animated affliction overlays drawn on the enemy billboard each frame (additive glow):
     // rising flames for BURNING, floating bubbles for POISONED, falling droplets for BLEED.
     public static final int   AFFLICTION_FX_PARTICLES            = 7;    // particles per active status per enemy

@@ -497,6 +497,7 @@ public final class GameBalance {
     public static final int   CREDIT_REWARD_BLIGHT_CORRUPTOR = BalanceConfig.CREDIT_REWARD_BLIGHT_CORRUPTOR;
     public static final int   CREDIT_REWARD_AURIC_SENTINEL    = BalanceConfig.CREDIT_REWARD_AURIC_SENTINEL;
     public static final int   CREDIT_REWARD_CINDERFORGE_COLOSSUS = BalanceConfig.CREDIT_REWARD_CINDERFORGE_COLOSSUS;
+    public static final int   CREDIT_REWARD_RIMESHELL_LANCER  = BalanceConfig.CREDIT_REWARD_RIMESHELL_LANCER;
     public static final float CREDIT_DEPTH_SCALE          = BalanceConfig.CREDIT_DEPTH_SCALE;
     public static final int   CREDIT_CHIPS_PER_FLOOR_MIN  = BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MIN;
     public static final int   CREDIT_CHIPS_PER_FLOOR_MAX  = BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MAX;

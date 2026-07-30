@@ -484,6 +484,28 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 spriteRed   = Math.max(spriteRed, baseShade * CINDERFORGE_RIM_MIN_RED);
             }
 
+            // RIMESHELL LANCER — COLD BODY, HOT CORE (elemental-golem-rimeshell-lancer). The sprite must
+            // say the whole mechanic at a glance: a slow cyan frost pulse while the shell is SEALED and
+            // patient, and a hot orange heat wash for the whole turn the shell is OPEN (charging), so the
+            // punish window is legible even when the intent icon is off-screen. The shell-open wash is the
+            // "hit it NOW" cue and WINS over the idle frost, which must never muddy it. Keyed on baseArmor()
+            // so it stays data-driven; a no-op for every archetype with no shell.
+            if (enemy.type.baseArmor() > 0) {
+                if (enemy.isShellOpen()) {
+                    spriteRed   = GameMath.lerp(spriteRed,   RIMESHELL_SHELL_OPEN_TINT_R, RIMESHELL_SHELL_OPEN_TINT_STRENGTH);
+                    spriteGreen = GameMath.lerp(spriteGreen, RIMESHELL_SHELL_OPEN_TINT_G, RIMESHELL_SHELL_OPEN_TINT_STRENGTH);
+                    spriteBlue  = GameMath.lerp(spriteBlue,  RIMESHELL_SHELL_OPEN_TINT_B, RIMESHELL_SHELL_OPEN_TINT_STRENGTH);
+                } else if (enemy.isAlerted()) {
+                    // Half-wave pulse in [0, amplitude] so the rim breathes cyan without ever tinting toward
+                    // the dark that a dormant enemy uses — "patient" must never read as "asleep".
+                    float frostPulse = RIMESHELL_FROST_PULSE_AMPLITUDE
+                            * (0.5f + 0.5f * MathUtils.sin(statusAnimationClock * RIMESHELL_FROST_PULSE_SPEED));
+                    spriteRed   = GameMath.lerp(spriteRed,   RIMESHELL_FROST_TINT_R, frostPulse);
+                    spriteGreen = GameMath.lerp(spriteGreen, RIMESHELL_FROST_TINT_G, frostPulse);
+                    spriteBlue  = GameMath.lerp(spriteBlue,  RIMESHELL_FROST_TINT_B, frostPulse);
+                }
+            }
+
             // Block plating shimmer (strategy-combat-order-3): a translucent steely-blue tint while the
             // enemy holds active Block, gently pulsing so a braced enemy visibly "plates over."
             if (enemy.block > 0) {
@@ -1821,13 +1843,15 @@ public final class EnemyRenderer implements Renderable, Disposable {
         map.put(EnemyType.ACID_DRONE,   new TextureRegion(infernalSheet, 0,            infernalHalfH, infernalHalfW, infernalHalfH));
         map.put(EnemyType.VOID_SHROUD,  new TextureRegion(infernalSheet, infernalHalfW, infernalHalfH, infernalHalfW, infernalHalfH));
 
-        // Elemental golem sheet. Q1 (0,0) and Q3 (0,halfH) are the Rimeshell Lancer and Verdant
-        // Spiresower — art that ships ahead of its archetypes (.claude/agents/ideas/elemental-golem-*.txt)
-        // and so is not mapped yet. An unmapped type is skipped by the draw loop's null-region guard,
-        // never drawn from a wrong quadrant. TextureRegion y=0 is the TOP of the image, so Q2 (the
-        // Cinderforge Colossus) is the TOP-RIGHT quadrant.
+        // Elemental golem sheet. Q3 (0,halfH) is the Verdant Spiresower — art that ships ahead of its
+        // archetype (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt) and so is not mapped yet.
+        // An unmapped type is skipped by the draw loop's null-region guard, never drawn from a wrong
+        // quadrant. TextureRegion y=0 is the TOP of the image, so Q1 (the Rimeshell Lancer) is the
+        // TOP-LEFT quadrant and Q2 (the Cinderforge Colossus) is the TOP-RIGHT.
         int golemHalfW = elementalGolemSheet.getWidth()  / 2;
         int golemHalfH = elementalGolemSheet.getHeight() / 2;
+        map.put(EnemyType.RIMESHELL_LANCER,
+                new TextureRegion(elementalGolemSheet, 0,          0,          golemHalfW, golemHalfH));
         map.put(EnemyType.CINDERFORGE_COLOSSUS,
                 new TextureRegion(elementalGolemSheet, golemHalfW, 0,          golemHalfW, golemHalfH));
         map.put(EnemyType.AURIC_SENTINEL,
