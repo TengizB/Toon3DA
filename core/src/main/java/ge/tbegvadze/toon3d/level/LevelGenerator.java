@@ -3239,6 +3239,41 @@ public class LevelGenerator implements ILevelGenerator {
                 carveEmergencyCorridor(grid, rooms.get(0), room);
             }
         }
+
+        // Definitive backstop: the per-room loop above only checks room CENTRES, so a solid prop or
+        // column dropped into a walkway during decoration can still strand a floor pocket whose centre
+        // lies elsewhere. This guarantees EVERY walkable floor tile is reachable from the spawn.
+        repairUnreachableFloorRegions(grid, startColumn, startRow);
+    }
+
+    /**
+     * Connectivity backstop mirroring {@link LinearCorridorGenerator}. The per-room-centre audit can
+     * miss a region that a solid prop, column, or wall accent walled off yet whose centre tile lies
+     * elsewhere — the exact bug where an unwalkable environment element blocks a walkway and makes an
+     * area unreachable. This floods from the spawn and, while any walkable floor tile is still
+     * unreachable, carves a blocker-clearing corridor from the spawn to one such tile, reconnecting
+     * that whole region. It repeats until every floor tile is reachable, so the player can always reach
+     * all loot, enemies, and the exit. Deterministic (no RNG use) — the seeded draw sequence is
+     * untouched; only genuinely-stranded seeds gain carved tiles.
+     */
+    private void repairUnreachableFloorRegions(char[][] grid, int spawnColumn, int spawnRow) {
+        int safetyCap = LevelGenConstants.LEVEL_GEN_GRID_WIDTH + LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+        for (int iteration = 0; iteration < safetyCap; iteration++) {
+            boolean[][] reachable = floodFillBlocking(grid, spawnColumn, spawnRow, -1, -1);
+            int targetColumn = -1;
+            int targetRow    = -1;
+            for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT && targetColumn < 0; tileRow++) {
+                for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
+                    if (!reachable[tileRow][tileColumn] && isWalkableFloor(grid, tileColumn, tileRow)) {
+                        targetColumn = tileColumn;
+                        targetRow    = tileRow;
+                        break;
+                    }
+                }
+            }
+            if (targetColumn < 0) return; // every floor tile is reachable
+            carveEmergencyCorridor(grid, spawnColumn, spawnRow, targetColumn, targetRow);
+        }
     }
 
     private boolean isTileReachable(char[][] grid, int startColumn, int startRow,
@@ -3289,10 +3324,12 @@ public class LevelGenerator implements ILevelGenerator {
     }
 
     private void carveEmergencyCorridor(char[][] grid, Room fromRoom, Room toRoom) {
-        int fromColumn = fromRoom.centerColumn();
-        int fromRow    = fromRoom.centerRow();
-        int toColumn   = toRoom.centerColumn();
-        int toRow      = toRoom.centerRow();
+        carveEmergencyCorridor(grid, fromRoom.centerColumn(), fromRoom.centerRow(),
+                                     toRoom.centerColumn(),   toRoom.centerRow());
+    }
+
+    private void carveEmergencyCorridor(char[][] grid, int fromColumn, int fromRow,
+                                        int toColumn, int toRow) {
         carveEmergencyHorizontal(grid, fromRow, fromColumn, toColumn);
         carveEmergencyVertical(grid, toColumn, fromRow, toRow);
     }
@@ -3302,8 +3339,7 @@ public class LevelGenerator implements ILevelGenerator {
         int maxColumn = Math.max(column1, column2);
         for (int tileColumn = minColumn; tileColumn <= maxColumn; tileColumn++) {
             if (!isInBounds(tileColumn, fixedRow)) continue;
-            char cell = grid[fixedRow][tileColumn];
-            if (Level.isWall(cell) || Level.isPropSolid(cell)) {
+            if (isEmergencyBlocker(grid[fixedRow][tileColumn])) {
                 grid[fixedRow][tileColumn] = 'l';
             }
         }
@@ -3314,11 +3350,20 @@ public class LevelGenerator implements ILevelGenerator {
         int maxRow = Math.max(row1, row2);
         for (int tileRow = minRow; tileRow <= maxRow; tileRow++) {
             if (!isInBounds(fixedColumn, tileRow)) continue;
-            char cell = grid[tileRow][fixedColumn];
-            if (Level.isWall(cell) || Level.isPropSolid(cell)) {
+            if (isEmergencyBlocker(grid[tileRow][fixedColumn])) {
                 grid[tileRow][fixedColumn] = 'l';
             }
         }
+    }
+
+    /**
+     * A tile an emergency corridor must clear to reach a stranded region: solid walls, solid props,
+     * AND cylindrical columns 'P'. Columns are included because the flood-fill treats a column as a
+     * blocker (isBfsPassable), so a corridor that could not punch through a column sitting on the
+     * straight repair path would leave the region sealed despite the repair pass running.
+     */
+    private boolean isEmergencyBlocker(char cell) {
+        return Level.isWall(cell) || Level.isPropSolid(cell) || Level.isColumn(cell);
     }
 
     // -------------------------------------------------------------------------

@@ -161,6 +161,10 @@ public class CavernGenerator implements ILevelGenerator {
 
         // Phase 10 — connectivity audit
         verifyChamberConnectivity(grid, chambers);
+        // Definitive backstop: the chamber audit only checks chamber CENTRES, so a solid prop or a
+        // stalagmite column scattered across the open cave body during decoration can seal off a floor
+        // pocket whose centre lies elsewhere. This guarantees every walkable floor tile is reachable.
+        repairUnreachableFloorRegions(grid);
 
         return new Level(grid, spawnPoints, weaponSpawnPoints,
                          LevelPalettes.generatedWithBaseWall(seed));
@@ -1380,6 +1384,110 @@ public class CavernGenerator implements ILevelGenerator {
             currentColumn = Math.max(1, Math.min(LevelGenConstants.LEVEL_GEN_GRID_WIDTH  - 2, currentColumn));
             currentRow    = Math.max(1, Math.min(LevelGenConstants.LEVEL_GEN_GRID_HEIGHT - 2, currentRow));
         }
+    }
+
+    /**
+     * Connectivity backstop mirroring {@link LinearCorridorGenerator}. verifyChamberConnectivity() only
+     * checks chamber CENTRES, so a solid prop or a stalagmite column 'P' scattered across the open cave
+     * body during decoration can seal off a floor pocket whose centre lies elsewhere — the exact bug
+     * where an unwalkable element blocks a walkway and strands a reachable area. This floods from the
+     * spawn and, while any walkable floor tile is still unreachable, carves a blocker-clearing tunnel
+     * from the spawn to one such tile, reconnecting that whole region. It repeats until every floor tile
+     * is reachable. Deterministic (no RNG use) — the seeded draw sequence is untouched.
+     */
+    private void repairUnreachableFloorRegions(char[][] grid) {
+        int safetyCap = LevelGenConstants.LEVEL_GEN_GRID_WIDTH + LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+        for (int iteration = 0; iteration < safetyCap; iteration++) {
+            boolean[][] reachable = computeReachableFromSpawn(grid);
+            int targetColumn = -1;
+            int targetRow    = -1;
+            for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT && targetColumn < 0; tileRow++) {
+                for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
+                    if (!reachable[tileRow][tileColumn] && isWalkableTile(grid[tileRow][tileColumn])) {
+                        targetColumn = tileColumn;
+                        targetRow    = tileRow;
+                        break;
+                    }
+                }
+            }
+            if (targetColumn < 0) return; // every floor tile is reachable
+            carveEmergencyCorridor(grid, spawnColumn, spawnRow, targetColumn, targetRow);
+        }
+    }
+
+    /**
+     * Flood-fills the set of tiles reachable from the player spawn using the in-game movement rule
+     * (only solid walls, solid props, and columns block — floor, doors, decals, and pickups all pass),
+     * so the repair never mistakes a walkable pickup/decal for a blocker.
+     */
+    private boolean[][] computeReachableFromSpawn(char[][] grid) {
+        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
+        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+        boolean[][] visited = new boolean[gridHeight][gridWidth];
+        int[] stackColumns = new int[gridWidth * gridHeight];
+        int[] stackRows    = new int[gridWidth * gridHeight];
+        int   stackTop     = 0;
+        visited[spawnRow][spawnColumn] = true;
+        stackColumns[stackTop] = spawnColumn;
+        stackRows[stackTop]    = spawnRow;
+        stackTop++;
+
+        int[] deltaColumns = {0, 0, 1, -1};
+        int[] deltaRows    = {1, -1, 0, 0};
+        while (stackTop > 0) {
+            stackTop--;
+            int currentColumn = stackColumns[stackTop];
+            int currentRow    = stackRows[stackTop];
+            for (int direction = 0; direction < 4; direction++) {
+                int neighborColumn = currentColumn + deltaColumns[direction];
+                int neighborRow    = currentRow    + deltaRows[direction];
+                if (!isInBounds(neighborColumn, neighborRow)) continue;
+                if (visited[neighborRow][neighborColumn]) continue;
+                if (isEmergencyBlocker(grid[neighborRow][neighborColumn])) continue;
+                visited[neighborRow][neighborColumn] = true;
+                stackColumns[stackTop] = neighborColumn;
+                stackRows[stackTop]    = neighborRow;
+                stackTop++;
+            }
+        }
+        return visited;
+    }
+
+    private void carveEmergencyCorridor(char[][] grid, int fromColumn, int fromRow,
+                                        int toColumn, int toRow) {
+        carveEmergencyHorizontal(grid, fromRow, fromColumn, toColumn);
+        carveEmergencyVertical(grid, toColumn, fromRow, toRow);
+    }
+
+    private void carveEmergencyHorizontal(char[][] grid, int fixedRow, int column1, int column2) {
+        int minColumn = Math.min(column1, column2);
+        int maxColumn = Math.max(column1, column2);
+        for (int tileColumn = minColumn; tileColumn <= maxColumn; tileColumn++) {
+            if (!isInBounds(tileColumn, fixedRow)) continue;
+            if (isEmergencyBlocker(grid[fixedRow][tileColumn])) {
+                grid[fixedRow][tileColumn] = 'l';
+            }
+        }
+    }
+
+    private void carveEmergencyVertical(char[][] grid, int fixedColumn, int row1, int row2) {
+        int minRow = Math.min(row1, row2);
+        int maxRow = Math.max(row1, row2);
+        for (int tileRow = minRow; tileRow <= maxRow; tileRow++) {
+            if (!isInBounds(fixedColumn, tileRow)) continue;
+            if (isEmergencyBlocker(grid[tileRow][fixedColumn])) {
+                grid[tileRow][fixedColumn] = 'l';
+            }
+        }
+    }
+
+    /**
+     * A tile an emergency corridor must clear to reach a stranded region: solid walls, solid props,
+     * AND stalagmite columns 'P'. Columns are included so a corridor can always punch through one that
+     * happens to sit on the straight repair path, matching the flood's blocker rule.
+     */
+    private boolean isEmergencyBlocker(char cell) {
+        return Level.isWall(cell) || Level.isPropSolid(cell) || Level.isColumn(cell);
     }
 
     // -------------------------------------------------------------------------
