@@ -29,7 +29,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class LevelGeneratorSnapshotTest {
 
     /**
-     * SHA-256 over {@link #fingerprint()}, re-baselined for the CINDERFORGE COLOSSUS archetype
+     * SHA-256 over {@link #fingerprint()}, re-baselined for the WALKWAY-BLOCKING CONNECTIVITY FIX.
+     *
+     * <p>{@code verifyAndRepairConnectivity()} previously audited only room CENTRES, so a solid prop,
+     * wall accent, or 'P' column dropped into a walkway during decoration could strand a floor pocket
+     * whose centre lay elsewhere, leaving part of the level unreachable. A definitive backstop —
+     * {@code repairUnreachableFloorRegions()}, mirroring {@code LinearCorridorGenerator} — now floods
+     * from the spawn and carves a blocker-clearing corridor to any stranded walkable floor tile until
+     * every floor tile is reachable. It is DETERMINISTIC and consumes no RNG, so the seeded draw
+     * sequence is untouched; the only grids that change are the genuinely-stranded seeds, where the
+     * carved corridor tiles differ. The new invariant is pinned directly by {@code GeneratorReachabilityTest}.
+     *
+     * <p>PRIOR RE-BASELINE (retained for history) — the CINDERFORGE COLOSSUS archetype
      * (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt).
      *
      * <p>The new archetype is a BRUISER ANCHOR, so it joins {@code EncounterBudgetPlanner}'s ANCHOR pool
@@ -83,7 +94,7 @@ class LevelGeneratorSnapshotTest {
      * reviewed behaviour change.
      */
     private static final String EXPECTED_DIGEST =
-            "27256c89242914e9f3489840bc67f3ef62ef2e5601beb5c73e96fdbbe23c9004";
+            "0922b639074c7f4efe2cc687bbee66e5f4188e92ebe73ff85ddd5e809b141649";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {
