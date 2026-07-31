@@ -135,7 +135,9 @@ public class Railgun extends Weapon {
                 return hitAnyEnemy ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (isShotBlockingCover(targetCell)) {
-                // Column / solid prop is physical cover — even the infinite-pierce slug stops here.
+                // Column / solid prop is physical cover — even the infinite-pierce slug stops here (a
+                // crystal spire on the tile takes the hit).
+                hitSpireCover(enemyHitTarget, targetColumn, targetRow, distanceTiles);
                 return hitAnyEnemy ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (enemyHitTarget != null) {

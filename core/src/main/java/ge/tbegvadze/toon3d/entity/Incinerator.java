@@ -165,7 +165,10 @@ public class Incinerator extends Weapon {
                 }
 
                 if (isShotBlockingCover(targetCell)) {
-                    break; // column / solid prop blocks this lateral flame ray
+                    // Column / solid prop blocks this lateral flame ray (a crystal spire on the tile takes
+                    // a flat hit — spires are terrain, not status hosts, so they burn as direct damage).
+                    hitSpireCover(enemyHitTarget, targetColumn, targetRow, distanceTiles);
+                    break;
                 }
 
                 // The flame actually reaches this tile (it passed every blocking check):

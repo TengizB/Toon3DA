@@ -176,6 +176,15 @@ public class GrenadeLauncher extends Weapon {
             char splashCell  = level.getCell(splashColumn, splashRow);
             boolean splashIsBarrel = barrelHitTarget != null
                     && barrelHitTarget.isExplosiveBarrel(splashColumn, splashRow);
+            int splashDamage = (offsetIndex == 0)
+                    ? WeaponConstants.GRENADE_SPLASH_DAMAGE
+                    : WeaponConstants.GRENADE_FALLOFF_DAMAGE;
+            // A crystal spire caught in the blast takes the splash damage before it absorbs the rest — a
+            // blast weapon clears spires and the golem together, which is the whole point of bringing one
+            // to a Verdant Spiresower (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt).
+            if (enemyHitTarget != null && enemyHitTarget.isSpireAt(splashColumn, splashRow)) {
+                enemyHitTarget.damageSpireAt(splashColumn, splashRow, splashDamage);
+            }
             if (Level.isWall(splashCell) || Level.isColumn(splashCell)
                     || (Level.isPropSolid(splashCell) && !splashIsBarrel)) {
                 continue; // walls, columns and (non-barrel) solid props absorb the blast
@@ -183,9 +192,6 @@ public class GrenadeLauncher extends Weapon {
             if (enemyHitTarget != null) {
                 Object splashEnemy = enemyHitTarget.enemyAt(splashColumn, splashRow);
                 if (splashEnemy != null) {
-                    int splashDamage = (offsetIndex == 0)
-                            ? WeaponConstants.GRENADE_SPLASH_DAMAGE
-                            : WeaponConstants.GRENADE_FALLOFF_DAMAGE;
                     enemyHitTarget.applyDamageTo(splashEnemy, splashDamage);
                 }
             }

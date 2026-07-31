@@ -374,6 +374,45 @@ public final class BalanceConfig {
      */
     public static final float RIMESHELL_LANCE_FRIENDLY_FIRE_FRACTION = 0.5f;
 
+    // VERDANT_SPIRESOWER (spawn '}') — the golem family's terrain-editing melee SOLDIER
+    // (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt). It plants solid, sight-blocking
+    // crystal SPIRES that drain life into it while they stand: shoot the golem and it heals, shoot the
+    // spires and it stops — the room is already a maze. The first enemy that makes the board itself the
+    // problem. Melee-only up close; it prefers to reposition behind its spires and sow at range.
+    public static final int VERDANT_SPIRESOWER_MAX_HEALTH          = 100;
+    public static final int VERDANT_SPIRESOWER_ATTACK_DAMAGE       = 13;
+    /** Heavy and patient — it would rather reposition behind its spires than close. Range: 1–3. */
+    public static final int VERDANT_SPIRESOWER_MOVE_EVERY_N_TURNS  = 2;
+    /**
+     * The PRICED value of the Spiresower's REGENERATION, fed to GameMath.enemyEffectiveHitPoints as an
+     * ARMOUR POOL — regen is simply extra effective HP, and the model already owns that primitive. Expected
+     * regen over a fight:
+     *     SPIRESOWER_REGEN_PER_SPIRE (2) * expected living spires (~2, averaged — it starts at 0 and is
+     *     being shot) * expected fight length (~5 turns) = 20 HP.
+     *     eHP = enemyEffectiveHitPoints(100, 20, 0, 0, 25) = 120.0 ; survivalTurns = 120/25 = 4.8
+     *     TP  = (13/1) * 4.8 * POSITIONAL_MULT_MELEE = 13 * 4.8 * 1.00 = 62.4  (SOLDIER 36-66, upper-mid)
+     * The spires' TERRAIN value (blocked tiles + blocked LOS) is deliberately UNPRICED: it hurts its own
+     * family (ranged allies lose their lanes) as much as the player, and the model has no positional-denial
+     * channel for enemies. Flag for review if the sim says it over-performs its 62 TP. Range: 12–28.
+     */
+    public static final float SPIRESOWER_REGEN_ARMOR_POOL         = 20f;
+    /** Enemy turns between sow attempts — a readable rhythm the player learns to pre-empt. Range: 3–6. */
+    public static final int SPIRESOWER_SOW_CADENCE_TURNS          = 4;
+    /** Spires planted per sow (each into a distinct legal tile). Range: 1–3. */
+    public static final int SPIRESOWER_SPIRES_PER_SOW             = 2;
+    /** Hard cap on live spires per golem; at the cap it does not sow. Range: 3–6. */
+    public static final int SPIRESOWER_MAX_LIVE_SPIRES            = 4;
+    /** Chebyshev radius within which a sow may plant a spire. Range: 2–4. */
+    public static final int SPIRESOWER_SOW_RADIUS_TILES           = 3;
+    /** Chebyshev range within which a living spire heals its sower each turn. Range: 4–6. */
+    public static final int SPIRESOWER_LEY_RANGE_TILES            = 5;
+    /** HP the sower regains per LIVING spire in ley range at the end of each of its turns. Range: 1–3. */
+    public static final int SPIRESOWER_REGEN_PER_SPIRE           = 2;
+    /** A spire's HP — dies to roughly one shell, but that is a shell not spent on the golem. Range: 20–45. */
+    public static final int SPIRESOWER_SPIRE_HIT_POINTS          = 30;
+    /** World turns a spire stands before it decays on its own, so a fled fight never leaves a mazed room. Range: 6–12. */
+    public static final int SPIRESOWER_SPIRE_LIFETIME_TURNS      = 8;
+
     // Global enemy AI knobs — perception and kiting tuning shared across types.
     /** Tiles within which an enemy notices the player and wakes. Range: 3–6. */
     public static final int ALERT_RADIUS_TILES        = 4;
@@ -481,6 +520,8 @@ public final class BalanceConfig {
     public static final int CREDIT_REWARD_CINDERFORGE_COLOSSUS = 16;
     /** Between Acid Drone (8) and Void Shroud (12) — consistent with its low-mid SOLDIER TP of ~41. */
     public static final int CREDIT_REWARD_RIMESHELL_LANCER  = 10;
+    /** Sits between Void Shroud (12) and Mire Wraith (15) — consistent with its upper-mid SOLDIER TP of ~62. */
+    public static final int CREDIT_REWARD_VERDANT_SPIRESOWER = 13;
 
     // -------------------------------------------------------------------------------------
     // SPECIAL-VERB TP EQUIVALENCE (new-game-balancr order 5) — cycle-averaged threat pricing.

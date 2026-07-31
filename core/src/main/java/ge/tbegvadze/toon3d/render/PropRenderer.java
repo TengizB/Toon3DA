@@ -17,6 +17,7 @@ import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
 import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
 import ge.tbegvadze.toon3d.tileset.EnvironmentSpriteRegistry;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
+import ge.tbegvadze.toon3d.util.EnemyConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.ArrayList;
@@ -82,6 +83,7 @@ public class PropRenderer implements Renderable, Disposable {
             case '0': return AMMO_PICKUP_HEIGHT_FRACTION;
             case 'i': return PROP_HEIGHT_HAZARD_FIRE;    // fire hazard tile
             case 'q': return PROP_HEIGHT_HAZARD_TOXIC;   // toxic hazard pool
+            case EnemyConstants.SPIRE_TILE_CHAR: return EnemyConstants.SPIRESOWER_SPIRE_HEIGHT_MULTIPLIER;
             default:  return 0.70f;
         }
     }
@@ -966,6 +968,9 @@ public class PropRenderer implements Renderable, Disposable {
         map.put('8', generatePlasmaCellTexture());     // CELLS   — glowing cyan energy canister
         map.put('9', generateRocketTexture());         // ROCKETS — olive warhead with fins
         map.put('0', generateRailSlugsTexture());      // SLUGS   — heavy silver rail rounds
+        // Crystal spire (elemental-golem-verdant-spiresower) — a runtime SOLID prop stamped by the
+        // SpireManager, resolved through this owned texture (its char is not a tileset palette symbol).
+        map.put(EnemyConstants.SPIRE_TILE_CHAR, generateCrystalSpireTexture());
         // 'i' (fire) and 'q' (toxic) are NOT static entries — they are animated and resolved
         // per-frame from hazardFireFrames / hazardToxicFrames via resolvePropTexture().
         return map;
@@ -1884,6 +1889,67 @@ public class PropRenderer implements Renderable, Disposable {
     // Armour shard ('a') — a fractured chamfered steel plate with a diagonal brushed
     // gradient, gouged scratches, a charged cyan rim along the broken edges, a central
     // power cell and a cyan floor pool. 160×160 (4× the legacy 40×40, identical aspect).
+    /**
+     * Procedural CRYSTAL SPIRE billboard (elemental-golem-verdant-spiresower) — a low, faceted emerald
+     * shoot pushing up out of the floor, brightest at its glowing base, with a couple of smaller side
+     * shoots. Solid, ground-anchored; drawn wherever a Verdant Spiresower has sown one. Emerald tint by
+     * design so the ley-line thread to the golem reads as "these belong to each other". No assets — pure
+     * Pixmap, disposed via {@link #finalize(Pixmap)}.
+     */
+    private static Texture generateCrystalSpireTexture() {
+        final int textureWidth = 96, textureHeight = 160;
+        Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        final int baseRow = textureHeight - 12;   // the crystal roots into the floor here
+        // Warm emerald ground glow at the base — the "erupting from the ground, glowing at the base" tell.
+        pixmap.setColor(0.20f, 0.95f, 0.42f, 0.22f);
+        pixmap.fillCircle(textureWidth / 2, baseRow, 30);
+        pixmap.setColor(0.35f, 1.0f, 0.55f, 0.32f);
+        pixmap.fillCircle(textureWidth / 2, baseRow, 16);
+
+        // Two low side shoots flanking the main spike (drawn first so the main spike overlaps them).
+        drawSpireBlade(pixmap, 26, baseRow, 20, 58, 0.10f, 0.60f, 0.28f, 0.16f, 0.82f, 0.40f);
+        drawSpireBlade(pixmap, 70, baseRow, 16, 46, 0.10f, 0.60f, 0.28f, 0.16f, 0.82f, 0.40f);
+
+        // The tall central spike — a bright left facet and a darker right facet meeting at the ridge.
+        int apexColumn = textureWidth / 2;
+        int apexRow    = 12;
+        int halfWidth  = 22;
+        // Left (lit) facet.
+        pixmap.setColor(0.34f, 1.0f, 0.54f, 1f);
+        pixmap.fillTriangle(apexColumn, apexRow,
+                apexColumn - halfWidth, baseRow,
+                apexColumn, baseRow);
+        // Right (shadowed) facet.
+        pixmap.setColor(0.10f, 0.66f, 0.30f, 1f);
+        pixmap.fillTriangle(apexColumn, apexRow,
+                apexColumn, baseRow,
+                apexColumn + halfWidth, baseRow);
+        // Bright ridge highlight down the centre and a hot spark at the apex.
+        pixmap.setColor(0.70f, 1.0f, 0.80f, 1f);
+        pixmap.drawLine(apexColumn, apexRow, apexColumn, baseRow);
+        pixmap.fillCircle(apexColumn, apexRow + 3, 3);
+        // A couple of internal facet seams to read as crystal rather than a flat triangle.
+        pixmap.setColor(0.20f, 0.86f, 0.44f, 0.85f);
+        pixmap.drawLine(apexColumn - halfWidth + 4, baseRow - 4, apexColumn, apexRow + halfWidth);
+        pixmap.drawLine(apexColumn + halfWidth - 4, baseRow - 4, apexColumn, apexRow + halfWidth);
+
+        return finalize(pixmap);
+    }
+
+    /** Draws one small emerald side-shoot (a slim triangle rooted at the base) for the crystal spire. */
+    private static void drawSpireBlade(Pixmap pixmap, int rootColumn, int rootRow, int halfWidth, int height,
+                                       float darkR, float darkG, float darkB,
+                                       float litR, float litG, float litB) {
+        int apexRow = rootRow - height;
+        pixmap.setColor(litR, litG, litB, 1f);
+        pixmap.fillTriangle(rootColumn, apexRow, rootColumn - halfWidth, rootRow, rootColumn, rootRow);
+        pixmap.setColor(darkR, darkG, darkB, 1f);
+        pixmap.fillTriangle(rootColumn, apexRow, rootColumn, rootRow, rootColumn + halfWidth, rootRow);
+    }
+
     private static Texture generateArmourShardTexture() {
         final int textureWidth = 160, textureHeight = 160;
         Pixmap pixmap = new Pixmap(textureWidth, textureHeight, Pixmap.Format.RGBA8888);

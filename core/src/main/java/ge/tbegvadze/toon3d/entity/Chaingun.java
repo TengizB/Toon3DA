@@ -174,7 +174,8 @@ public class Chaingun extends Weapon {
                 return enemiesHit > 0 ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (isShotBlockingCover(targetCell)) {
-                // column / solid prop blocks the shot
+                // column / solid prop blocks the shot (a crystal spire on the tile takes the hit)
+                hitSpireCover(enemyHitTarget, targetColumn, targetRow, distanceTiles);
                 return enemiesHit > 0 ? new FireResult(true, distanceTiles) : FireResult.HIT_WALL;
             }
             if (enemyHitTarget != null) {

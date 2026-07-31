@@ -314,6 +314,19 @@ public class Level {
         return SymbolCategories.categoryOf(cell) == TileCategory.SOLID_PROP;
     }
 
+    /**
+     * True for a runtime CRYSTAL SPIRE tile grown by a Verdant Spiresower (SpireManager). A FIXED gameplay
+     * symbol that never appears in an authored level file — it is stamped into the grid at runtime like the
+     * hazard 'i'/'q' decals, so it carries NO tileset category and is handled by its own dedicated checks
+     * rather than through {@link #isPropSolid} (which the drift-guard tests hold in lockstep with the
+     * category system). It blocks movement, line of sight, shots and prop occlusion through the explicit
+     * {@code isSpire} calls in {@link #isBlockedAt}, {@link #isPropOccluder}, {@code Weapon.isShotBlockingCover}
+     * and the enemy LOS / lance checks (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt).
+     */
+    public static boolean isSpire(char cell) {
+        return cell == ge.tbegvadze.toon3d.util.EnemyConstants.SPIRE_TILE_CHAR;
+    }
+
     /** Returns true for a shop vending machine tile ('@'), stamped solid by World.placeMachine. */
     public static boolean isShop(char cell) {
         return cell == '@';
@@ -349,6 +362,7 @@ public class Level {
      */
     public static boolean isPropOccluder(char cell) {
         return isPropSolid(cell)
+            || isSpire(cell)   // a runtime crystal spire is an elevated solid billboard — it occludes
             || isKeycardPickup(cell)
             || isMedicalPickup(cell)
             || isArmourPickup(cell)
@@ -371,6 +385,7 @@ public class Level {
         if (isDoor(cell)) return !doorManager.isPassable(tileColumn, tileRow);
         if (isPropSolid(cell)) return true;
         if (isColumn(cell)) return true;
+        if (isSpire(cell)) return true;   // a runtime crystal spire blocks movement like any solid prop
         return false;
     }
 

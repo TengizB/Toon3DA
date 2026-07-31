@@ -89,4 +89,22 @@ public interface EnemyHitTarget {
      * @param fraction fraction of the target's Block to bypass, in [0, 1]; 0 disarms
      */
     default void setActivationBlockPierce(float fraction) {}
+
+    /**
+     * True when a live CRYSTAL SPIRE (grown by a Verdant Spiresower) occupies the given tile
+     * (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt). A spire is SOLID terrain, not an
+     * enemy — it has no health bar, no AI, no XP — so it is reached through this shot seam rather than
+     * {@link #enemyAt}: a weapon whose shot stops on a spire's cover tile queries this and, if true,
+     * routes the hit through {@link #damageSpireAt} instead of into a wall. Default false; EnemyManager
+     * overrides to delegate to the SpireManager. Extends the EXISTING hit-target seam rather than adding a
+     * parallel damage path.
+     */
+    default boolean isSpireAt(int tileColumn, int tileRow) { return false; }
+
+    /**
+     * Applies {@code amount} damage to a spire on the given tile (no-op if none is there). A spire has flat
+     * HP and no mitigation, so this carries the raw weapon damage; destroying it snaps the golem's heal
+     * link. Default no-op; EnemyManager overrides to delegate to the SpireManager.
+     */
+    default void damageSpireAt(int tileColumn, int tileRow, int amount) {}
 }

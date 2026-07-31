@@ -88,7 +88,9 @@ public class ArcCannon extends Weapon {
                 return FireResult.HIT_WALL;
             }
             if (isShotBlockingCover(targetCell)) {
-                // Column / solid prop is physical cover — the bolt cannot pass it.
+                // Column / solid prop is physical cover — the bolt cannot pass it (a crystal spire on the
+                // tile takes the hit).
+                hitSpireCover(enemyHitTarget, targetColumn, targetRow, distanceTiles);
                 return FireResult.HIT_WALL;
             }
             if (enemyHitTarget != null) {

@@ -4,6 +4,7 @@ import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.entity.PlayerInventory;
 import ge.tbegvadze.toon3d.hazard.HazardManager;
+import ge.tbegvadze.toon3d.hazard.SpireManager;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
 
@@ -32,10 +33,14 @@ public final class TickPipeline {
      *   <li>the enemy roster's turn</li>
      * </ol>
      *
+     * @param spireManager  the floor's crystal-spire simulation (Verdant Spiresower), or null when the
+     *                      floor / caller has none — its lifetime decay ticks alongside hazards, before the
+     *                      enemy turn, so a spire sown during an enemy turn keeps its full lifetime
      * @param bossController the floor's boss controller, or null on an ordinary floor
      */
     public static TickEventBus standardFloor(PlayerInventory inventory,
                                              HazardManager hazardManager,
+                                             SpireManager spireManager,
                                              StatusEffectController statusEffectController,
                                              Player player,
                                              EnemyManager enemyManager,
@@ -45,6 +50,11 @@ public final class TickPipeline {
         TickEventBus bus = new TickEventBus();
         bus.subscribe(new WeaponReloadSubscriber(inventory));
         bus.subscribe(new HazardTickSubscriber(hazardManager));
+        // Crystal-spire decay (elemental-golem-verdant-spiresower) — ticks with hazards, before the enemy
+        // turn, so a spire sown this turn is not immediately aged. Null on floors/callers without spires.
+        if (spireManager != null) {
+            bus.subscribe(context -> spireManager.tickLifetimes());
+        }
         bus.subscribe(new StatusEffectSubscriber(statusEffectController, player, enemyManager));
         bus.subscribe(context -> playerStats.tickTempArmor());
         if (bossController != null) {

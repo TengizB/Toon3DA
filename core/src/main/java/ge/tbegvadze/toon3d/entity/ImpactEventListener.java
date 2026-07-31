@@ -163,4 +163,24 @@ public interface ImpactEventListener {
      * @param heightMultiplier the enemy type's billboard height fraction
      */
     default void onFrostShatter(int tileColumn, int tileRow, float heightMultiplier) {}
+
+    /**
+     * Called when a Verdant Spiresower grows a CRYSTAL SPIRE on a tile
+     * (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt): an upward shard burst, a bright green
+     * flash and a short shake as the spire erupts. Default: no-op.
+     *
+     * @param tileColumn the tile the spire erupted on
+     * @param tileRow    the tile the spire erupted on
+     */
+    default void onSpireBorn(int tileColumn, int tileRow) {}
+
+    /**
+     * Called when a crystal spire shatters — under a hit, on decay, or when its sower dies and the room
+     * withers back to normal (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt). A shatter burst
+     * of emerald shards; the heal ley-line snaps. Default: no-op.
+     *
+     * @param tileColumn the tile the spire shattered on
+     * @param tileRow    the tile the spire shattered on
+     */
+    default void onSpireShattered(int tileColumn, int tileRow) {}
 }
