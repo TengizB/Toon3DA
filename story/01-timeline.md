@@ -6,8 +6,8 @@ The player receives it *out* of order, bottom-up, as recovered memory.
 
 ## Era 0 — Before the Deepworks
 
-Erebus drifts, whole and asleep, a mind the size of a world dreaming slow dreams in
-its mantle. It has no name for itself and no need of one; it has never met another
+Erebus drifts, whole and asleep, a mind the size of a world at rest in its own
+mantle. It has no name for itself and no need of one; it has never met another
 mind and does not know it is alone, because it does not know there is anything else.
 
 ## Era 1 — The Deepworks (generations)
@@ -16,11 +16,13 @@ The Organization arrives, reads the core as an energy seam, and sinks the Deepwo
 Generations of staff live and die drilling downward. Reactors, harvesting galleries,
 habitation rings. The being endures it as geology endures a mine.
 
-Early on, the Organization discovers the **Choir** (see `03-the-planet.md`): near the
-core, the dead do not fully scatter — their patterns snag in the being's dreaming and
-are kept. From this they build the **Cradles** and the reprinting program. Death stops
-being final for anyone the Organization values. This makes the Deepworks priceless and
-makes the Organization desperate to keep the being alive at any cost.
+Early on, the Organization discovers what the paperwork comes to call the **soul of the
+planet** (see `03-the-planet.md`): an ambiguous resource that can be bled out of the
+living, captive being, refined in the deep galleries, and burned to **power the
+Cradles** — machines that reprint the dead from stored patterns. Death stops being
+final for anyone the Organization values. This makes the Deepworks priceless and makes
+the Organization desperate to keep the being alive and enslaved at any cost — you
+cannot harvest a soul from a corpse, or from a thing set free.
 
 ## Era 2 — The Original Self *(the protagonist, before the game)*
 
@@ -39,8 +41,9 @@ control." It is caused by the protagonist's liberation attempt.
 
 In the chaos the being cannot tell rescuer from tormentor. Its immune response — the
 demons, the golems — kills everything human it reaches, including the one person who
-freed it. **The original self dies by the hand of the thing they saved.** Their
-pattern snags in the Choir like everyone else's.
+freed it. **The original self dies by the hand of the thing they saved.** But the being
+*saw* them — it witnessed the one hand that came to unchain rather than cut — and it
+does not forget them, even as it kills them.
 
 > This is the tragedy the whole game excavates: a liberator killed by the liberated,
 > then rebuilt by the jailers to finish the jailing.
@@ -49,8 +52,8 @@ pattern snags in the Choir like everyone else's.
 
 Some time later, the Organization needs the Catastrophe reversed — the being
 subdued and the Deepworks brought back under the yoke — and it needs an operator who
-can survive the deep strata. It reaches into the Choir and reprints the most capable
-pattern it has on file: yours.
+can survive the deep strata. From its archive of stored patterns it prints the most
+capable one on file: yours.
 
 But your pattern carries the memory of what you did. So the Organization **blocks**
 one region of it before printing: the discovery, the liberation, the Catastrophe, the
@@ -70,11 +73,12 @@ run and the character's rebirth are the same instant.
 ## Era 4 — The Runs *(gameplay)*
 
 You descend, die, and are reprinted, again and again — each reprint carrying the
-accumulated memory of the runs before it, because the Choir keeps adding to your
-snagged pattern and the Cradle prints the updated read. The deeper you get, the
-stronger the Choir, the more the planet can push *past the block* and hand you back
-your buried truth — first as a wrong-feeling silence, then a voice, then whole
-memories, then the Catastrophe itself.
+accumulated memory of the runs before it, because the Organization re-reads and stores
+your pattern at each checkpoint before printing the next body. The deeper you get, the
+nearer the being's core, the more directly it can reach your mind and push *past the
+block* — cracking the Organization's redaction from the outside and handing you back
+your buried truth. First a wrong-feeling silence, then a voice, then whole memories,
+then the Catastrophe itself.
 
 By the core you know everything the Organization hid: what you were, what you did, what
 they did to you, and what the "kill order" really is. Then you choose (see

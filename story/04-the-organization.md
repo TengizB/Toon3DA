@@ -3,8 +3,8 @@
 ## The real antagonist
 
 The antagonist is not the planet, and not a demon at the bottom. It is the
-**Organization** — the institution that sank the Deepworks, tortures the being to keep
-its afterlife-field warm, owns the Cradles, owns your body, owns your memory, and gave
+**Organization** — the institution that sank the Deepworks, keeps the being enslaved to
+bleed the soul out of it, owns the Cradles, owns your body, owns your memory, and gave
 you the order that inverts everything your true self died for.
 
 It is **faceless.** There is no named handler, no villain with a monologue. It is
@@ -27,21 +27,21 @@ The truth, recovered in stages:
 1. There is no "contaminant." The thing you're sent to purge is the **being defending
    itself**. "Stabilize Erebus" means **re-subdue the being** — put it back under the
    yoke the Catastrophe loosened.
-2. The Organization does **not** want the planet dead. It needs it alive. The Choir —
-   the being's dreaming — is the only reason the Cradles work, the only reason anyone
-   the Organization values ever comes back from death. **Kill the planet and their
-   immortality dies with it.** So the "kill order" you believe you're carrying is
-   really a **re-chaining order**: hurt it back into submission, keep it alive, keep it
-   dreaming, keep the afterlife running.
-3. The deepest, coldest truth: the being's **suffering is a feature.** A calm mind
-   dreams a shallow Choir; a tortured mind dreams a deep one. The Organization keeps
-   Erebus in deliberate agony because pain makes it a better backup drive. The
-   Deepworks is not a mine that happens to hurt the planet. It is a **torture engine
-   whose product is other people's immortality.**
+2. The Organization does **not** want the planet dead. It needs it alive. The **soul
+   of the planet** — the harvested resource that fuels the Cradles — can only be
+   gathered from the living, captive being. **Kill it or free it and the soul stops,
+   the Cradles go dark, and every immortality the Organization sells dies with it.** So
+   the "kill order" you believe you're carrying is really a **re-chaining order**: hurt
+   the being back into submission, keep it alive, keep it enslaved, keep it bleeding.
+3. The Deepworks is not a mine that happens to hurt the planet. It is a **soul farm**:
+   an operation that keeps one conscious being alive and in chains for as long as
+   possible, harvesting the thing that makes it a person and burning it so that
+   strangers can cheat death. The being's captivity is not a side effect of the
+   business — it *is* the business.
 
 So your gut-punch, late: you thought your grim mission was at least a mercy — put down
 a monster, save the surface. It is not a mercy-kill. It is re-enslavement of a victim,
-so that strangers can keep cheating death on the strength of its screaming.
+so that strangers can keep cheating death on what is bled out of it.
 
 ## Why it chose you specifically
 
@@ -85,5 +85,5 @@ Resist the urge to personify. The horror of the Organization is that it is an
 bottom to shoot that ends it. It is a policy. It will reprint another operator after
 you. The only way to hurt it is at the core, by choosing an ending that takes its
 engine away (see `06-endings.md`) — and even then it survives as an institution; you
-only rob it of *this* being, *this* Choir, *this* immortality. Keep it faceless so the
+only rob it of *this* being, *this* soul supply, *this* immortality. Keep it faceless so the
 player's anger has nowhere satisfying to land. That discomfort is the point.

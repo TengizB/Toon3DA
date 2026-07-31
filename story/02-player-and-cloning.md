@@ -3,10 +3,11 @@
 ## Who you are
 
 You are an **operator** of the Deepworks — the Organization's word, stamped on you
-along with a serial. You are a **reprint**: a body the Cradle grew around a pattern
-lifted out of the planet's dreaming. You *know* this from the first moment; the game
-never pretends otherwise. The opening card tells you your previous self is dead and a
-new one is being printed. You have done this many times.
+along with a serial. You are a **reprint**: a fresh body the Cradle grew from a stored
+copy of your pattern, fuelled by refined **soul of the planet** (see `03-the-planet.md`).
+You *know* this from the first moment; the game never pretends otherwise. The opening
+card tells you your previous self is dead and a new one is being printed. You have done
+this many times.
 
 **The character is unnamed and ungendered on purpose.** The Organization refers to
 you only by serial ("Operator"). The name of your original self is one of the last
@@ -35,19 +36,24 @@ The descent is the process of the block failing.
 
 ## The Cradle — how respawn works in the fiction
 
-1. You die. Permanently. That body is gone and is never coming back — this is real
+1. The Organization holds a **checkpoint**: a stored read of your pattern, taken at the
+   last stable point. This is *their data*, on *their* machines. They own it.
+2. You die. Permanently. That body is gone and is never coming back — this is real
    death, every time.
-2. Your pattern does not scatter. Because you die inside the **Choir** (the planet's
-   dreaming field — see `03-the-planet.md`), the being catches and holds it, updated
-   with everything that just happened to you.
-3. The Organization's **Cradle** reaches into the Choir, reads the held pattern up to
-   the last stable **checkpoint**, and prints a fresh body around it.
+3. The **Cradle** grows a fresh body from the stored checkpoint, burning a measure of
+   refined **soul of the planet** as the fuel that animates it. No captive planet, no
+   soul, no reprint.
 4. You wake at the last checkpoint node, mission intact, one death heavier.
 
+Two things the Organization owns make you possible, and they are separate: the
+**checkpoint** (your backup data) and the **soul** (the fuel). Both are leashes it can
+cut — it can withhold authorization to print your data, and freeing the planet ends the
+fuel. The endings turn on exactly this (see `06-endings.md`).
+
 So respawn is **both** permadeath and a new person every time — exactly the
-double-truth the design wants. The body is mortal and final. The pattern is
-continuous. Whether *you* are the pattern or just the latest copy of it is the
-question the game refuses to answer.
+double-truth the design wants. The body is mortal and final. The stored pattern is
+continuous. Whether *you* are that pattern or just the latest copy printed from it is
+the question the game refuses to answer.
 
 ## The identity question (deliberately unresolved)
 

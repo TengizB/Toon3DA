@@ -28,7 +28,7 @@ the Organization's own machinery. There is no clean side. At the core, you decid
 | `00-premise.md` | Core premise, setting, the elevator-pitch of every system-as-story |
 | `01-timeline.md` | Full chronology — the pre-game original self through the player's runs |
 | `02-player-and-cloning.md` | The clone, the Cradle, blocked memory, the identity questions |
-| `03-the-planet.md` | The being, the Choir field, the voice, enemy families as lore |
+| `03-the-planet.md` | The being, the harvested soul, the voice, enemy families as lore |
 | `04-the-organization.md` | The antagonist, its real motive, the printer explanation, its voice |
 | `05-descent-structure.md` | Regions of the descent and the staged reveal beats |
 | `06-endings.md` | The several endings and what each costs |
@@ -44,8 +44,10 @@ the Organization's own machinery. There is no clean side. At the core, you decid
 2. **The planet recognizes you** — but stays silent for the first stretch. From the
    mid-descent on it speaks as a "voice in your head," and takes an active role in
    restoring your memory.
-3. **The Organization keeps the planet alive and suffering on purpose** — the Choir
-   field (its dreaming) is what makes the Cradles work, and pain deepens the field.
+3. **The Organization keeps the planet alive and enslaved on purpose** — it harvests
+   the **soul of the planet**, an ambiguous, deliberately-unexplained resource, and
+   burns it to power the Cradles (the reprint machines). The soul can only be gathered
+   while the being is kept captive; free it or kill it and all reprinting ends.
 4. **Identity is left unresolved.** Same soul in a new body, or a new person wearing
    its memories? The game never answers. Different characters *assume* different
    answers; the player picks what to believe.

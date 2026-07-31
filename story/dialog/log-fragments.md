@@ -3,8 +3,8 @@
 Recovered staff and operator logs, seeded per region. These are the **breadcrumb**
 layer — the reveal that arrives through the *world* rather than through the planet's
 voice or the Organization's orders. They carry the facts the Organization will never
-confess: the harvest, the suffering-as-feature, the truth of the Cradles, and — at the
-bottom — your own original words.
+confess: the soul harvest, the truth of the Cradles, the fact that the captive being is
+the fuel, and — at the bottom — your own original words.
 
 **Delivery TBD** (audio diaries, text terminals, environmental). For now these are
 tone-and-content drafts. Author them as written by *people*, with the small human
@@ -32,14 +32,16 @@ The first true crack. The language of a factory, applied to a body.
   resonance. Whole gallery, same note. I asked the biologist. She said don't file that.
   I'm filing it."
 
-## Region 3 — Choir Labs
-How you come back. What the Cradles are. The suffering-as-feature truth, stated by the
-people who engineered it.
+## Region 3 — The Reliquary
+How you come back. What the Cradles are. That the captive being is the fuel, stated by
+the people who engineered it.
 
-- **Cradle engineer:** "Reprint fidelity is proportional to field depth. Field depth is
-  proportional to — and I want this on record because no one will say it in a meeting —
-  *subject distress.* A calm subject dreams shallow. We do not keep it calm. Our
-  immortality is measured in its pain. We should at least admit that to ourselves."
+- **Cradle engineer:** "Every print draws down the reserve. I want this on record
+  because no one will say it in a meeting: the 'reserve' is the subject. We are not
+  running the Cradles on some inert extract — we are burning *it*, the living thing,
+  ounce by ounce, and it does not grow back fast. Keep it alive, keep it chained, keep
+  it yielding. That is the whole business. Our immortality is measured in what we take
+  out of it. We should at least admit that to ourselves."
 - **Archivist:** "Pattern EX-[REDACTED] flagged: recovered from the Catastrophe event,
   high deep-strata competence, unmatched survivability. Approved for reprint. Memory
   redaction: mandatory, regions tagged 'liberation,' 'core sabotage,' 'terminal.' Do

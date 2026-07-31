@@ -12,36 +12,56 @@ It is not evil. It is not benevolent. It is a **wounded animal the size of a pla
 and for most of the descent you experience it the way you'd experience the inside of
 any wounded animal: everything is trying to expel you.
 
-## The Choir — the field that holds the dead
+## The soul of the planet — the harvested resource
 
-Near a mind this vast, information doesn't fully die. When a person dies inside the
-being's field, the **pattern of who they were snags in its dreaming** and is kept —
-not by choice at first, just as a mind can't help remembering. The Organization named
-this field the **Choir** (their internal term: *the Substrate*).
+The being has something the Organization can take from it and burn. In the Deepworks'
+own paperwork it is called, flatly, the **soul of the planet** — and that is as much
+as anyone explains it. It is not a metaphor and it is not fully understood; it is an
+**ambiguous resource** that can be **gathered only while the planet is kept alive and
+enslaved**, refined in the deep galleries, and used to **power the Cradles** — the
+machines that reprint the dead (see `02-player-and-cloning.md`).
 
-The Choir is the hinge that makes the whole story mechanically honest:
+Deliberately, the story never explains the soul further. No field, no afterlife, no
+mechanism. The player learns only what the Deepworks knows: it exists, it comes out of
+the captive being, it runs the printers, and it stops the moment the planet is freed or
+dead. Keep it opaque on purpose — its unexplained-ness is part of the horror.
 
-- It is why **respawn works** — the Cradles print bodies around patterns the Choir is
-  already holding (see `02-player-and-cloning.md`).
-- It is why the Choir only works **here** — no Erebus, no field, no resurrection.
-- It is why the Organization keeps the being **alive and in pain** — a suffering mind
-  dreams *deeper*, and a deeper Choir is a stronger, more reliable afterlife to print
-  from. They torture it to keep their backup drive warm (see `04-the-organization.md`).
-- It is why **the planet can give you your memory back** — your blocked past was never
-  only in your head; the true record lives in the Choir. The deeper you go, the
-  stronger the field, the more it can push past the Organization's block and return
-  what was taken.
+This single resource is the hinge that makes the whole story mechanically honest:
 
-The Choir is also, quietly, a mass grave of everyone who ever died in the Deepworks —
-all still held, all still dreaming, none able to end. That is part of what "freeing"
-the planet would release (see `06-endings.md`).
+- It is why **respawn works** — the Cradles are fuelled by refined soul; each print
+  spends a measure of the being to raise you.
+- It is why resurrection only works **here** — the soul comes from Erebus and nowhere
+  else. No captive planet, no fuel, no reprint.
+- It is why the Organization keeps the being **alive and enslaved** — you cannot
+  harvest a soul from a corpse or a free thing. It must be held, and bled, indefinitely
+  (see `04-the-organization.md`).
+- It is why the player is, in a fuel sense, **lit by the planet's stolen soul** — every
+  time you wake, a piece of the being was spent to do it. That is the poetic tie: you
+  are powered by the very thing you were sent to re-chain.
+
+The soul is **not** a store of memory and **not** where the dead go. It is just fuel.
+How the planet returns your buried past is separate, and simpler — see below.
+
+## How the planet gives your memory back
+
+There is no field holding your past. The planet is a **mind that remembers**, and it
+remembers *you* — it witnessed the original self's liberation and death (see
+`01-timeline.md`). It does not need to store anything; it simply never forgot.
+
+The Organization's memory block is a **redaction on your printed pattern** — data they
+own and withhold. As you descend toward the core, the being can reach your mind
+directly, and what it says **cracks the redaction from the outside**: hearing the truth
+from the one witness who kept it stirs the walled-off memories back into reach. The
+planet doesn't hand you a file; it *reminds* you, and the reminding is what defeats the
+block. Proximity + its voice = recovery. That is the whole mechanism, and it needs no
+mysticism.
 
 ## The voice
 
 The planet recognizes you from the first step — *the one who opened me, come back
-wearing a jailer's errand* — but it **does not speak in the early strata.** Up top the
-field is too shallow and the block too fresh; you get, at most, a wrongness you can't
-name.
+wearing a jailer's errand* — but it **does not speak in the early strata.** Up top you
+are too far from its core for it to reach you, and the block is too fresh; you get, at
+most, a wrongness you can't name.
 
 As you descend the voice arrives in stages:
 
@@ -72,8 +92,9 @@ surface-vs-true table; here is what each family *is*:
   the planet's own tissue rising to wall off and crush the infection. The deepest
   guardians. Slow, immense, impersonal, like an immune system has no malice.
 - **Undead — the human dead (victims of the Deepworks).** Staff killed by the
-  Catastrophe and by the Deepworks' conditions; some half-animated by the Choir
-  snagging their patterns into ruined bodies. They are the *cost of the exploitation*,
+  Catastrophe and by the Deepworks' conditions; some dragged back into motion by
+  exposure to raw, unrefined soul bleeding through the galleries. They are the *cost of
+  the exploitation*,
   and every one of them is someone the Organization spent.
 - **Insect — the harvest (exploitation made flesh).** Life bred and butchered *from
   the planet's own tissue* in the harvesting galleries — mutated, escaped, feral.

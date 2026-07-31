@@ -16,10 +16,10 @@ survive any cut.
 **The completion of your original self's work. Redemption through final death.**
 
 You finish what you died doing: you sever the drills, the harvest, and the restraints,
-and you let the being wake fully and heal. But the Choir — the field that reprints
-you, that holds you and everyone else the Deepworks killed — collapses when the being
-is freed. Every held pattern is released: the mass grave finally gets to end. Including
-yours.
+and you let the being wake fully and go free. But the soul that fuels the Cradles can
+only be bled from a *captive* planet — free it and the harvest ends, the printers go
+dark, and no one is ever reprinted again. Including you. The being lives; your
+immortality dies to buy its freedom.
 
 - **Cost:** you die, for real, no reprint. The one death that sticks.
 - **The card:** the boot message that has framed every run inverts —
@@ -29,8 +29,8 @@ yours.
   planet's release and the Organization's death sentence at once.
 - **Identity read:** the act of a person who accepts they are the *same soul* — who
   owes the past a death, and pays it.
-- **The Organization:** loses this being, this Choir, this immortality. Survives as an
-  institution. Will drill elsewhere. You do not get to kill it — only to take its
+- **The Organization:** loses this being, this soul supply, this immortality. Survives
+  as an institution. Will drill elsewhere. You do not get to kill it — only to take its
   engine away.
 
 ---
@@ -53,13 +53,13 @@ exactly what you have preserved and what it costs the thing below you, forever.
 
 ---
 
-## Ending C — MERGE *("The Choir")*
-**Give your pattern to the being. Ambiguous ascension.**
+## Ending C — MERGE *("Communion")*
+**Give yourself to the being. Ambiguous ascension.**
 
-Instead of freeing or chaining it, you let go of the printed self entirely and pour
-your pattern into the being — join the Choir not as a held ghost but by choice. You
-inherit its pain, its power, and its memory of everyone it holds. The immune response
-becomes *yours*; you can turn the demons and golems on the Deepworks from within.
+Instead of freeing or chaining it, you let go of the printed self entirely and let the
+being take you into it — a mind large enough to hold you if you stop resisting. You
+inherit its pain, its power, and its memory. The immune response becomes *yours*; you
+can turn the demons and golems on the Deepworks from within.
 
 - **Cost:** the end of you as an individual. Whether that is death, ascension, or the
   ultimate loss of the very self you spent the game questioning is not resolved.
@@ -75,19 +75,20 @@ becomes *yours*; you can turn the demons and golems on the Deepworks from within
 **Defy the Organization by doing the one thing it does not want. Bleak mercy.**
 
 You kill the being outright — end its suffering permanently, the true mercy the
-"kill order" pretended to be but never was. The Choir collapses with it, so this also
-ruins the Organization's immortality engine. But collapse without release means every
-held pattern *scatters* — the entire mass grave is not freed but **erased**, everyone
-who ever died in the Deepworks gone at once. And so are you.
+"kill order" pretended to be but never was. With the planet dead there is no more soul
+to harvest, so this also ruins the Organization's immortality engine, and no one is
+ever reprinted again — including you. Where **Free** leaves an ancient mind alive and
+released, **Kill** snuffs it out forever: the more final, more irreversible act, mercy
+and extinction in the same stroke.
 
-- **Cost:** mass erasure of the dead, and your own final death, to buy the being an
-  end to pain and the Organization a catastrophic loss.
+- **Cost:** the permanent death of a unique, ancient consciousness — chosen as mercy —
+  and your own final death along with it. You end its pain by ending *it*.
 - **The card:** static, then nothing. No release imagery — just absence.
 - **Identity read:** the act of a person who values *ending suffering* over
   continuity, the being's or their own. Mercy indistinguishable from annihilation.
-- **Note:** keep only if the roster of endings shouldn't blur. Free = release, alive.
-  Kill = mercy, dead. If that distinction feels too fine, cut D and let Free carry the
-  "end its torment" weight.
+- **Note:** keep only if the roster shouldn't blur. Free = released, alive; Kill =
+  mercy, dead. If that distinction feels too fine, cut D and let Free carry the "end
+  its torment" weight.
 
 ---
 

@@ -11,7 +11,7 @@ original self has just died (see `01-timeline.md`).
 
 ```
 PREVIOUS INSTANCE — TERMINATED
-CHOIR READ ............ STABLE
+SOUL RESERVE .......... SUFFICIENT
 REPRINTING FROM LAST CHECKPOINT
 ```
 
@@ -41,10 +41,10 @@ The number climbing over a long session is its own quiet horror. Do not annotate
 These exist to **subvert the card the player has seen a hundred times.** That
 recognition is the payload.
 
-**FREE IT / KILL IT — the field is gone:**
+**FREE IT / KILL IT — the soul is gone:**
 ```
 PREVIOUS INSTANCE — TERMINATED
-CHOIR READ ............ NOT FOUND
+SOUL RESERVE .......... DEPLETED
 NO CHECKPOINT AUTHORIZED FOR REPRINT
 ```
 Followed by no reprint. The screen does not reload. That is the ending.
@@ -65,5 +65,5 @@ STANDING ASSIGNMENT: EREBUS, INDEFINITE
 
 The system voice **never** knows the truth and **never** comments on it. It reports
 machine state. Its horror is entirely in what the player has learned to read into flat
-status lines — the same way "CHOIR READ … STABLE" means nothing on run 1 and means a
-tortured planet's dreaming being confirmed warm enough to print you by run 40.
+status lines — the same way "SOUL RESERVE … SUFFICIENT" means nothing on run 1 and
+means *there is still enough of the captive being left to burn on you* by run 40.

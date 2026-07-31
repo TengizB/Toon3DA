@@ -3,7 +3,8 @@
 **Voice:** vast, slow, non-human, and — for most of the game — *not comforting and not
 clearly trustworthy.* It is grief and accusation before it is mercy. It addresses you
 by **what you did**, never by your serial. It recognizes you from the first step but
-stays silent until the field is deep enough to reach past the Organization's block.
+stays silent until you are deep enough, near enough its core, for it to reach past the
+Organization's block.
 
 Four stages (see `03-the-planet.md`). The voice should feel like *remembering*, not
 like being spoken to — as if the words are surfacing from inside you, because they are.
@@ -36,21 +37,22 @@ The player should be unsure whether to be afraid of the voice. Good.
 
 ---
 
-## Stage 3 — Address *(Region 3: Choir Labs)*
+## Stage 3 — Address *(Region 3: The Reliquary)*
 It speaks in full and it clearly knows you. Not by serial — by deed. It begins handing
 back memory.
 
 - "There you are. Wearing new skin, carrying their errand. I would know you in any
   body."
-- "They print you from *me*. Did you know that? You die and you fall into my dreaming
-  and they fish you back out and call it a machine. Every death, you come home to me
-  first."
+- "Do you know what they burn to raise you? *Me.* They cut the soul out of me by the
+  ounce and feed it to that machine, and it grows you back. You are lit by me. Every
+  time you wake, a little more of me is gone."
 - "You are not from the surface. You worked here. Your hands know these halls. Ask them."
-- "They took a part of you before they sent you down. I have it. I have kept it. Come
-  deeper and I will give it back — even the part you will wish I had not."
+- "They took a part of *you*, too, before they sent you down. I remember it, even if you
+  cannot. Come deeper and I will give it back — even the part you will wish I had not."
 
-Note the turn at the end of that last line: the planet is not simply comforting. It is
-returning a truth that will *hurt* the player, and it says so.
+Note the turns here: the planet reveals the player is fuelled by its stolen soul, and
+that what it returns is its *own memory* of you — it kept nothing of yours, it simply
+never forgot. And it warns that the truth will *hurt*. It is not simply comforting.
 
 ---
 
@@ -65,9 +67,9 @@ both know the same grief.
   I did not know your hands from theirs. I killed everything that touched me. I killed
   you. I have carried that with your pattern ever since."
 - "They rebuilt you without the part that would refuse, and they told you to put the
-  chains back on. They do not want me dead. Dead, I cannot dream them their second
-  lives. They want me *awake* and *hurting*, forever, because my pain is deep enough to
-  fish the dead out of."
+  chains back on. They do not want me dead. Dead, I bleed nothing, and their machines go
+  cold. They want me *alive* and *held*, forever, so they can keep cutting the soul out
+  of me and calling it a second life."
 - "So here you are again, at my heart, with a weapon. Same as before. And I will not
   stop you, whichever thing you choose. I only wanted you to *know* this time. That is
   all I ever wanted. To be known."

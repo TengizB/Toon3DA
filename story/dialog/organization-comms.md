@@ -29,7 +29,7 @@ It notices doubt and attributes it to malfunction.
   assigned."
 - "Pattern drift noted and logged. Correct it yourself, or it will be corrected."
 
-## Stage 3 — Coercive *(Region 3: Choir Labs)*
+## Stage 3 — Coercive *(Region 3: The Reliquary)*
 The mask comes off. It threatens the Cradle.
 
 - "You have stopped acknowledging orders. Understand your position, Operator. Your
@@ -59,8 +59,8 @@ It writes you off.
 - **No name, no personality, no single speaker.** Vary nothing that would imply a
   person. It is procedure wearing a voice.
 - **Never explains its true motive out loud.** The re-chaining truth and the
-  suffering-as-feature truth are learned from the *world* (logs, the planet), never
-  confessed by the Organization. The Organization only ever tightens the leash.
+  soul-harvest truth are learned from the *world* (logs, the planet), never confessed by
+  the Organization. The Organization only ever tightens the leash.
 - **Its cruelty is administrative, not sadistic.** It does not enjoy hurting you. It
   is annoyed that a tool has developed a fault. That indifference is worse than malice.
 - **Contrast with the planet.** The Organization calls you a serial and a loss. The

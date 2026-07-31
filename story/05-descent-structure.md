@@ -7,7 +7,7 @@ existing route-map regions; region names below are narrative placeholders.
 
 The rule of the staging: **the Organization owns the story at the top; the planet
 takes it back on the way down.** Every stratum, the briefing loses a little authority
-and the Choir gains a little voice.
+and the being's voice gains a little ground.
 
 ## Region 1 — The Habitation Rings *(surface strata)*
 **Understanding: clean good vs. evil.**
@@ -34,18 +34,20 @@ and the Choir gains a little voice.
   planet's own tissue.** Logs describe extraction, yield, tolerances — the language of
   a factory, not a defense. First real doubt: *who was doing what to whom?*
 
-## Region 3 — The Choir Labs *(mid-deep strata)*
+## Region 3 — The Reliquary *(mid-deep strata)*
 **Understanding: the frame starts to invert.**
 
-- Mood: the resurrection heart of the Deepworks — Cradle banks, pattern archives.
+- Mood: the resurrection heart of the Deepworks — Cradle banks, pattern archives, and
+  the refineries where raw soul is rendered into printer fuel.
 - Enemies: **machine** (failed Cradle-prints — wrong, half-formed *you*s), **undead**.
 - The planet: **address.** It speaks to you in full for the first time, and it knows
   you — names you by what you did, not by your serial. It begins handing back memory.
 - The Organization: **coercive.** It threatens the Cradle — *complete the objective or
   no reprint will be authorized.* The mask of "for your benefit" comes off.
-- What you learn: **how you come back** — the Choir, the Cradle, that you are printed
-  from a pattern the planet holds. And that **you are not an external operator.** You
-  worked here. The block starts to fail.
+- What you learn: **how you come back** — that the Cradles print you from a stored
+  pattern and burn the **soul of the planet** to do it; that you are, in a fuel sense,
+  lit by the captive being. And that **you are not an external operator.** You worked
+  here. The block starts to fail.
 
 ## Region 4 — The Wound *(deep strata)*
 **Understanding: full inversion.**
