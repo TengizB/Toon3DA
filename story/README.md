@@ -7,7 +7,9 @@ system messages, log fragments).
 > **START HERE → [`STORY.md`](STORY.md)** is the canonical, self-contained story
 > reference: the full story, what it means, and how it must be told, all in one file.
 > Read it first for complete understanding; the numbered files below are the deep dives.
-> The story/dialog **UI build plan** lives in `.claude/agents/ideas/story-ui-order-1..7.txt`.
+> The story/dialog **UI build plan** lives in `.claude/agents/ideas/story-ui-order-1..9.txt`
+> (visual language, barks, boot card, interactive choices, moment catalog, codex, engine
+> integration, title/start screen with the death phrase, and atmosphere & mood).
 
 **Status:** narrative locked; delivery designed (see `08-storytelling-delivery.md` and the
 `story-ui-order-*` series); implementation not yet started.

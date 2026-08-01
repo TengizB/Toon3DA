@@ -181,7 +181,8 @@ facts. Ambiguity delivered as the loss of a belief you held lands; ambiguity ann
 
 Delivery is a first-class part of the design, because a text-only cosmic-horror story dies if
 players won't read it. (Full spec: `08-storytelling-delivery.md`; UI build plan:
-`.claude/agents/ideas/story-ui-order-1..7.txt`.)
+`.claude/agents/ideas/story-ui-order-1..9.txt`, which also covers the title/start screen that
+opens with "you have just died" (order-8) and the overall atmosphere & mood (order-9).)
 
 - **Micro-doses only.** One short, plain line at a time, tied to what just happened (enter a
   room, a kill, low health, a pickup, a death). Never a paragraph on screen.
@@ -299,7 +300,7 @@ the antagonist faceless and unbeatable is deliberate.
 | `story/dialog/planet-voice.md` | The planet's four stages of voice |
 | `story/dialog/system-cards.md` | Boot/reprint cards + endgame variants |
 | `story/dialog/log-fragments.md` | Codex log text + each one's AI one-line take |
-| `.claude/agents/ideas/story-ui-order-1..7.txt` | The story/dialog **UI** build plan (visual language, barks, boot card, interactive choices, moment catalog, codex, engine integration & persistence) |
+| `.claude/agents/ideas/story-ui-order-1..9.txt` | The story/dialog **UI** build plan: visual language (1), barks (2), boot card (3), interactive choices (4), moment catalog (5), codex/pacing/accessibility (6), engine integration & persistence + roguelike story-gating (7), framing screens — title/start with the death phrase, transitions, menus, ending screens (8), and atmosphere & mood direction (9) |
 
 ---
 

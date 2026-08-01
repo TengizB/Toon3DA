@@ -6,7 +6,9 @@ TITLE: Story UI 1 — Visual language & readability foundations
 PURPOSE
 The shared foundation every other story-UI file depends on. Defines HOW story text
 looks and reads, so all four voices are instantly recognizable and never hard to read
-on a phone. Build this first; orders 2–6 reference these rules and constants.
+on a phone. Build this first; orders 2–8 reference these rules and constants. The overall
+audiovisual MOOD these visuals serve is directed by order-9 (atmosphere & mood) — read it
+alongside this file so the visual language and the mood agree.
 
 READ FIRST
 - story/08-storytelling-delivery.md  (the four voices, the delivery rules)

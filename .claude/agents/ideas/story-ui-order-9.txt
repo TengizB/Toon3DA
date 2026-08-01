@@ -1,0 +1,92 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Story UI 9 — Atmosphere & mood direction (audiovisual)
+---
+
+PURPOSE
+The mood bible. Defines the overall FEELING of the game and how atmosphere carries the
+story as much as the words do. This is cross-cutting: it informs order-1 (visual language),
+order-8 (framing screens), the environment art, and audio. Read it before making any
+audiovisual mood decision. It is direction, not a single screen.
+
+THE INTENDED FEELING (one line)
+Lonely, wrong, and quietly grieving — cosmic horror by RESTRAINT, not gore. The dread comes
+from realizing the "monster" is a victim and you are its betrayer, not from jump scares.
+
+THE FIVE PILLARS OF MOOD
+1. LONELINESS — you are one small thing, deep, alone but for a voice in your ear and a voice
+   in your head. Wide empty spaces, distant sounds, no crowds.
+2. WRONGNESS — something is subtly off before you can name it: a held note under the
+   machinery, a corridor that feels watched, light that flickers when the planet is near.
+3. RESTRAINT — silence and space do the work. Long quiet lulls; the game is not a constant
+   assault. Horror lands because it is rare and earned.
+4. GRIEF — deep down the mood turns from fear to sorrow. The Wound and Core should feel less
+   like a monster's lair and more like standing inside something in pain.
+5. THE TURN (mood tracks the story's grey) — it STARTS almost mundane and corporate (false
+   safety, fluorescent normalcy) and CURDLES as the truth surfaces. Atmosphere is part of
+   "the grey is staged, not stated": the world stops feeling like a job and starts feeling
+   like a crime.
+
+MOOD PROGRESSION BY REGION (lighting, palette, sound — track the reveal)
+  Region 1 Habitation Rings — cold, clean fluorescent; desaturated corporate greys/blues;
+     hum of failing machinery; almost ordinary. False safety.
+  Region 2 Harvesting Galleries — wet, organic, industrial-abattoir; sickly reds and meat
+     tones creeping into the grey; dripping, the same low note the specimens scream on.
+  Region 3 The Reliquary — sterile but humming with power; sharp lights over Cradle banks;
+     the drone gains a pulse; unsettlingly clinical for what it does.
+  Region 4 The Wound — no longer facility; raw living tissue, drills in flesh; deep reds,
+     bioluminescence, a slow heartbeat felt more than heard; warmth that reads as a body.
+  Region 5 The Core — overwhelming, intimate, vast; you are INSIDE the mind. Sound and light
+     resolve into something almost tender. Awe over terror.
+
+COLOR & LIGHT DIRECTION
+- Global drift: desaturated/cold at the top → saturated organic reds and living light at the
+  bottom. The player should feel they've left "facility" and entered "body."
+- Reuse and extend existing systems, do not reinvent: EffectConstants (ambient light,
+  vignette, transitions), RenderConstants red-alert pulse, WallRenderer distance shading,
+  FloorCeilingRenderer backdrop, HitVignetteRenderer. Add region ambient-light/tint params
+  to EffectConstants/RenderConstants (never hardcode).
+- Darkness is a tool: limited sight lines, shadow, the deep feeling of not-far-enough light.
+
+SOUND & MUSIC (supports "make them feel it" without voice acting)
+- A LOW PLANETARY DRONE is the spine of the audio. It is faint at the top and deepens with
+  descent; deep down it carries a slow heartbeat/pulse. When the planet is "near" (before it
+  speaks), the drone swells and the world quiets around it.
+- SILENCE is used deliberately — cut sound to near-nothing in key moments; let footsteps and
+  the drone breathe. Never wall-to-wall music.
+- Per-voice audio motifs (ties to order-7 Part D speaker stings): ORA warm/human, planet
+  low/organic, Organization cold/electronic. A brief motif can underscore each entity's beats.
+- Enemy-family sound identity: undead (human, wrong), insect (that shared scream-note),
+  machine (cold servo/alarm), demon/golem (deep, planetary, pained — NOT generic monster
+  roars; they should sound like the planet, because they are).
+- Music is minimal and ambient; it SWELLS only at story beats and the core. No action-movie
+  score; this is dread and grief, not spectacle.
+
+SCREEN EFFECTS IN SERVICE OF DREAD (subtle, never cheap)
+- Subtle film grain / low-light noise for unease (togglable).
+- "Wrongness" cues when the planet reaches for you: a brief desaturation flicker, a frame of
+  a sign reading wrong, the drone catching. Rare, never a flash-bang.
+- Deep down, a heartbeat-synced vignette pulse (reuse HitVignetteRenderer / red-alert pulse
+  machinery). Gentle.
+- Combat screen-shake/impact (ImpactEffectSystem) stays, but must NOT disturb story panels
+  (order-1) or become the dominant mood — restraint holds even in fights.
+
+PACING OF DREAD
+- Alternate tension and lull. After an intense fight or a heavy reveal, give a quiet space.
+- Do not stack scares. The scariest tool is a quiet room that feels occupied.
+- Let the boot card / reprint moments be small pockets of calm-dread, not punishment.
+
+MOOD MUST NEVER FIGHT READABILITY OR FAIRNESS
+- Story-UI panels always stay legible over any atmosphere (dark panel behind text, order-1).
+- Darkness/effects never hide gameplay-critical information (enemies on the same cardinal
+  line, hazards). Atmosphere is a coat of paint over a readable game, never a fog over it.
+
+ACCESSIBILITY
+- Settings: reduce grain/noise, reduce screen-shake, reduce flashing-adjacent effects,
+  master/music/ambient volume, and a "reduced motion" option. Mood degrades gracefully — the
+  game is fully playable and legible with all effects minimized.
+
+DEFINITION OF DONE
+- Each region reads with its intended palette/light/sound; the drone deepens with descent and
+  swells when the planet nears; silence and lulls are used; mood curdles from corporate-normal
+  to grieving-body across the descent; all effects are togglable and never harm readability.

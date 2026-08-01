@@ -6,7 +6,9 @@ TITLE: Story UI 3 — Reprint / boot card (the death drip beat)
 PURPOSE
 The full-screen card shown every time the player is reprinted after death. It is the
 game's most reliable story channel — the player sees it every run — so it doubles as a
-guaranteed bite-sized story beat. Depends on order-1.
+guaranteed bite-sized story beat. Depends on order-1. The wider framing FLOW around this
+card (title/start screen with the death phrase, death->reprint transition, ending
+screens) is order-8; the mood of it all is order-9.
 
 READ FIRST
 - story/dialog/system-cards.md  (exact card text + endgame variants)
