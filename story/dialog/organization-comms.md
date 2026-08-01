@@ -1,56 +1,47 @@
 # The Organization — Transmissions
 
-**Voice:** strict, demanding, proprietary, faceless. Addresses you as "Operator" or by
-serial. Never reassures, never explains itself, never negotiates. Treats you as
-equipment that has a function. As the descent proceeds and your "pattern drifts," the
-transmissions escalate from procedural → corrective → coercive → denial (see
-`04-the-organization.md`). Draft lines below; tune, don't inflate.
+**Voice:** cold, clipped, commanding, faceless. Calls you "Operator" or a serial. Never
+reassures, never explains itself. Treats you as equipment with a function. **Rare** — it
+speaks at region gates and when you deviate, so each line lands. **One or two short lines,
+plain words** (`08-storytelling-delivery.md`). As the descent proceeds and your "pattern
+drifts," it escalates: procedural → corrective → coercive → denial (see
+`04-the-organization.md`).
 
 ---
 
 ## Stage 1 — Procedural *(Region 1: Habitation Rings)*
-Flat mission direction. You are being operated.
+Flat orders. You are being operated.
 
-- "Operator. Descent authorized. Objective: reach the reactor core, purge the
-  contaminant, restore Erebus to stable yield. Proceed."
-- "Contaminant density rising with depth. Expected. Continue."
-- "Casualty assets in your path are expended stock. Clear them. They are not your
-  concern."
-- "You are performing within tolerance. Continue the descent."
+- "Operator. Go down. Purge the contaminant. Restore the yield."
+- "More of them the deeper you go. Expected. Keep moving."
+- "The dead in your way are spent stock. Clear them."
+- "You're within tolerance. Continue."
 
 ## Stage 2 — Corrective *(Region 2: Harvesting Galleries)*
-It notices doubt and attributes it to malfunction.
+It notices doubt and calls it a fault.
 
-- "Operator, your transmission includes non-mission content. Disregard auditory
-  artifacts. Depth degrades the print. This is expected."
-- "The specimens are extraction stock. Their origin is not your objective. Return to
-  the descent."
-- "You are querying the record. The record is not yours to query. Function as
-  assigned."
-- "Pattern drift noted and logged. Correct it yourself, or it will be corrected."
+- "There's noise in your head. It's a printing fault. Ignore it."
+- "The specimens are stock. Where they came from is not your job."
+- "You're reading things you shouldn't. Stop. Work."
+- "Pattern drift logged. Fix it, or we will."
 
 ## Stage 3 — Coercive *(Region 3: The Reliquary)*
 The mask comes off. It threatens the Cradle.
 
-- "You have stopped acknowledging orders. Understand your position, Operator. Your
-  continuity is our property. The Cradle answers to us."
-- "Complete the objective, or your next checkpoint will not be authorized. You will
-  die the way stock dies. Once."
-- "Whatever is speaking to you down there did not build you. We built you. It cannot
-  reprint you. Remember which of us owns the door."
-- "You worked here once. That is why you were chosen. It is not a reason to hesitate.
-  It is a reason you are useful."
+- "You've stopped answering. Remember who owns your next body."
+- "Finish the job, or we don't bring you back. You die once, like stock."
+- "That voice can't reprint you. We built you. We own the door."
+- "You worked here once. That's why we picked you. Not a reason to stop."
 
-## Stage 4 — Denial *(Region 4: The Wound → Region 5: Core)*
+## Stage 4 — Denial *(Region 4: The Wound → Core)*
 It writes you off.
 
-- "Pattern unrecoverable. Reprint authorization: pending revocation."
-- "You are no longer an operator. You are a loss being written down."
-- "Finish the objective and this is forgotten. Refuse it and you are already deleted —
-  you simply have not stopped moving yet."
-- *(final, if the player chooses to free/kill)* — silence, then the system card does
-  what the Organization threatened: `NO CHECKPOINT AUTHORIZED FOR REPRINT`. The
-  Organization never says goodbye. It just stops owning you.
+- "Pattern flagged. Reprint authorization: pending revocation."
+- "You're not an operator now. You're a loss we're writing down."
+- "Do the job and this is forgotten. Refuse and you're already deleted."
+- *(final, if the player frees/kills)* — silence. Then the system card does what the
+  Organization threatened: `NO CHECKPOINT AUTHORIZED FOR REPRINT`. It never says
+  goodbye. It just stops owning you.
 
 ---
 

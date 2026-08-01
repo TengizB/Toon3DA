@@ -33,7 +33,8 @@ the Organization's own machinery. There is no clean side. At the core, you decid
 | `05-descent-structure.md` | Regions of the descent and the staged reveal beats |
 | `06-endings.md` | The several endings and what each costs |
 | `07-themes-and-questions.md` | The philosophy and the deliberately-unanswered questions |
-| `dialog/` | All written text: opening cards, the Organization's comms, the planet's voice, log fragments |
+| `08-storytelling-delivery.md` | **How the story reaches the player** — the four voices, the drip design, and how to make a non-reader want the story (read this before touching dialog) |
+| `dialog/` | All written text: the AI assistant (main channel), Organization comms, the planet's voice, system cards, log fragments |
 
 ## Decisions locked (from design conversation)
 
@@ -54,3 +55,13 @@ the Organization's own machinery. There is no clean side. At the core, you decid
 5. **Several endings**, each with a real cost. No "correct" one.
 6. **The Organization is faceless** — never a named handler. Referred to only as
    "the Organization." Its comms are strict, demanding, and cold.
+7. **Three entities speak to the player**, plus the machine System voice:
+   - **The planet** reaches *into* you (grief, fragments, the pull down).
+   - **The Organization** talks *at* you (orders, threats, cold).
+   - **The AI assistant** talks *with* you — the warm, funny guide and **primary
+     storytelling channel**. It sets the mood, reads logs aloud so you never face a
+     wall of text, and slowly turns from cheerful company helper to frightened ally.
+     Name TBD (default **ORA**). See `dialog/ai-assistant.md`.
+8. **Delivery rule (text-only game, players who don't read):** story arrives as **one
+   short plain line at a time, tied to a moment** — never paragraphs. Long text lives
+   only in the opt-in **codex**. Full design in `08-storytelling-delivery.md`.
