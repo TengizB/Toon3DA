@@ -4991,4 +4991,46 @@ public final class GameMath {
     public static long floorSeed(long runSeed, int depth) {
         return runSeed * 0x9E3779B97F4A7C15L + depth;
     }
+
+    /*
+     * Formula: story speaker sting sample (16-bit PCM)
+     * Derivation:
+     *   A single mono audio sample for a short non-verbal speaker "sting" (Story UI order-1).
+     *   time            t          = sampleIndex / sampleRateHz
+     *   oscillator      wave(t)     = sine  : sin(2*pi*frequencyHz*t)
+     *                               = square: sign(sin(2*pi*frequencyHz*t))  (hard, for the Organization)
+     *   envelope        env(t)      = linear attack/release over `envelopeFraction` of the tone so
+     *                                 the start/end fade to zero (no click).  With total length T:
+     *                                   attack/release window w = envelopeFraction * T
+     *                                   env = min(1, t/w, (T - t)/w), clamped to [0,1]
+     *   amplitude scale s           = volume * 32767 (full-scale 16-bit)
+     *   sample          = round(s * env(t) * wave(t)), clamped to the signed-16-bit range.
+     * Edge cases:
+     *   sampleRateHz <= 0 or totalSamples <= 0 -> returns 0 (silence) rather than dividing by zero.
+     *   envelopeFraction <= 0 -> no fade (env = 1) so a click is possible; callers pass > 0.
+     *   envelopeFraction >= 0.5 -> attack and release meet; env peaks below 1 but never negative.
+     *   clamp guards against float rounding pushing the value just past +/-32767.
+     */
+    public static short storyStingSample(float frequencyHz, boolean square, float volume,
+                                         int sampleIndex, int totalSamples, int sampleRateHz,
+                                         float envelopeFraction) {
+        if (sampleRateHz <= 0 || totalSamples <= 0) return 0;
+        float time  = sampleIndex / (float) sampleRateHz;
+        float phase = MathUtils.PI2 * frequencyHz * time;
+        float wave  = square ? (MathUtils.sin(phase) >= 0f ? 1f : -1f) : MathUtils.sin(phase);
+
+        float envelope = 1f;
+        if (envelopeFraction > 0f) {
+            float windowSamples = envelopeFraction * totalSamples;
+            float attack  = sampleIndex / windowSamples;
+            float release = (totalSamples - sampleIndex) / windowSamples;
+            envelope = Math.min(1f, Math.min(attack, release));
+            if (envelope < 0f) envelope = 0f;
+        }
+
+        int value = Math.round(volume * 32767f * envelope * wave);
+        if (value >  32767) value =  32767;
+        if (value < -32768) value = -32768;
+        return (short) value;
+    }
 }

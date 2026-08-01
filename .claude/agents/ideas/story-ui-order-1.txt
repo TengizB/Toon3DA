@@ -1,7 +1,38 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Story UI 1 — Visual language & readability foundations
 ---
+
+IMPLEMENTATION NOTES (order-1 foundation delivered)
+- Headless narrative model: core/.../narrative/ — Speaker (AI / PLANET / ORGANIZATION /
+  SYSTEM, each = name string id + SpeakerIcon + TypeStyle), SpeakerIcon, TypeStyle,
+  StoryLine (references a localisation string id only), StoryStrings (externalised
+  I18N-style table: defaults() + fromProperties(); missing ids resolve to a visible !id!
+  marker), StoryText.wrapToMaxChars (pure ~40-char word wrap), StorySampleLines (one line
+  per speaker). No LibGDX imports.
+- Constants: util/StoryUiConstants.java — STORY_TEXT_SIZE, STORY_LINE_MAX_CHARS, panel
+  alpha/geometry, fade + hold timing (slow default), per-speaker accent colours + chip
+  geometry (indexed by Speaker.ordinal()), bark/exchange/boot-card/codex rects, choice-
+  button min height (72px thumb target), HUD/touch SAFE ZONES derived from HudConstants +
+  TouchConstants, and speaker-sting audio params.
+- Render: render/StoryPanelRenderer.java (rounded dark panel + accent bar + procedural
+  speaker icon + name + pre-wrapped light body text; fade + Planet jitter; owns and
+  disposes SpriteBatch/ShapeRenderer/BitmapFont; no draw-path allocation) and
+  render/StorySpeakerStings.java (procedural per-speaker WAV stings via
+  GameMath.storyStingSample; Disposable; graceful no-op with audio off). Reviewed
+  render/EventTextSystem + EventTextRenderer first — bark layer (order-2) should mirror
+  that pool pattern.
+- Localisation asset: assets/story/story-strings.properties (kept in sync with
+  StoryStrings.defaults()).
+- DoD test screen: lwjgl3 StoryUiShowcase + StoryUiShowcaseLauncher (dev only) — renders
+  one sample line per speaker over a split bright/dark backdrop with faux HUD + touch-zone
+  markers, plays each sting staggered. Run: ./gradlew lwjgl3:storyUiShowcase
+- Guards: core/src/test/.../narrative/StoryUiFoundationTest.java (string-table coverage,
+  one-line-per-speaker, wrap ≤ max chars, colour/sting arrays vs enum, bark/exchange clear
+  of HUD + touch clusters). Documented StoryUiConstants + the narrative package in CLAUDE.md.
+- Deferred to later orders (this file is the foundation only): the live bark toast layer
+  (order-2), exchange choices + wiring (order-4), boot card (order-5), codex (order-6),
+  and the accessibility settings UI — order-1 defines their constants/anchors + primitives.
 
 PURPOSE
 The shared foundation every other story-UI file depends on. Defines HOW story text

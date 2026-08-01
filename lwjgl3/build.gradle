@@ -59,6 +59,18 @@ run {
   if (os.contains('mac')) jvmArgs += "-XstartOnFirstThread"
 }
 
+// Dev-only: launches the Story UI order-1 speaker showcase (the definition-of-done test
+// screen). Development testing only — the game ships on Android. Run: ./gradlew lwjgl3:storyUiShowcase
+tasks.register('storyUiShowcase', JavaExec) {
+  description = 'Runs the Story UI order-1 speaker showcase test screen.'
+  group       = 'application'
+  workingDir  = rootProject.file('assets').path
+  classpath   = sourceSets.main.runtimeClasspath
+  mainClass   = 'ge.tbegvadze.toon3d.lwjgl3.StoryUiShowcaseLauncher'
+  jvmArgs += "--enable-native-access=ALL-UNNAMED"
+  if (os.contains('mac')) jvmArgs += "-XstartOnFirstThread"
+}
+
 jar {
 // sets the name of the .jar file this produces to the name of the game or app, with the version after.
   archiveFileName.set("${appName}-${projectVersion}.jar")
