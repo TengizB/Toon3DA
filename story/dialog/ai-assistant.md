@@ -64,11 +64,11 @@ the barks getting shorter, stranger, quieter.
    words. Chooses you over the mission, in small ways it hopes the Organization won't
    log.
 
-### Optional darker beat — ORA gets wiped too
-The Organization periodically **resets ORA** to keep its doubt from accumulating — so
-some runs your friend has *forgotten* what it worked out last run, and says an early
-cheerful line again. The player notices before ORA does. It mirrors your own blocked
-memory, costs almost no text, and is genuinely upsetting. Recommended, but optional.
+**ORA's memory is continuous — it is never wiped or reset.** Whatever it works out, it
+keeps. This is the point of the character: everything else in the game resets on death,
+but ORA remembers every run, every death, and every truth it uncovers. It is the one
+unbroken thread the player has, and its doubt only ever grows — it never resets to
+cheerful. Do not write a beat where ORA forgets.
 
 ---
 
@@ -110,11 +110,6 @@ These show voice and arc. Each is one line, triggered by a gameplay event.
   that way."
 - *(at the core)* "Whatever you choose down here — I'm still here. That's the one thing
   they can't reprint out of me."
-
-### Optional wipe beat
-- *(a Region 3 boot, but ORA sounds like Region 1 again)* "Morning, sunshine! Reprint —
-  huh. The counter says seventy-four but I feel like today's the first day. ...Weird.
-  Let's get to work!"  *(the player knows ORA has been wiped; ORA doesn't)*
 
 ---
 
