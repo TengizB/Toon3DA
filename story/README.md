@@ -4,7 +4,13 @@ This folder is the single home for the game's narrative: premise, world, timelin
 characters, the descent structure, endings, themes, and all written text (dialog,
 system messages, log fragments).
 
-**Status:** DRAFT — narrative locked, delivery (how the player receives it) TBD.
+> **START HERE → [`STORY.md`](STORY.md)** is the canonical, self-contained story
+> reference: the full story, what it means, and how it must be told, all in one file.
+> Read it first for complete understanding; the numbered files below are the deep dives.
+> The story/dialog **UI build plan** lives in `.claude/agents/ideas/story-ui-order-1..7.txt`.
+
+**Status:** narrative locked; delivery designed (see `08-storytelling-delivery.md` and the
+`story-ui-order-*` series); implementation not yet started.
 
 ## The one-paragraph pitch
 

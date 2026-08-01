@@ -17,6 +17,19 @@ LEGEND
   [B] bark (non-blocking, no choice)      [E] exchange (pauses, 2–3 options)
   [C] boot card beat (order-3)            one-shot unless noted
 
+GATING NOTE (see order-7 Part A)
+Everything below is gated by DEEPEST STORY REGION reached (persistent) and fires ONCE.
+Death/reprint never rewinds; re-entering a cleared region does NOT replay its mandatory
+beats — at most it shows short "already-known" flavor barks.
+
+COLD OPEN / FIRST LAUNCH (before Region 1 content)
+- [C] First-ever boot card fires immediately — "your previous self has died" — before the
+  player has done anything (in-fiction the original just died). Same card as every run.
+- [B] ORA introduces herself in 1–2 barks as control begins.
+- TUTORIAL THROUGH ORA: each control is taught by a single ORA bark the first time it's
+  needed ("Tap forward to step. Everything good is down."), not a separate text tutorial.
+- The Region 1 teaching exchange (below) is the first choice — low-stakes on purpose.
+
 GLOBAL / ALWAYS-ON
 - [C] Every reprint: region-appropriate AI wake-up line + system card.
 - [B] First appearance of each enemy FAMILY: a one-line intro (AI or planet).

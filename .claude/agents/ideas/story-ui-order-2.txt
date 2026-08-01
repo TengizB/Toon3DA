@@ -14,6 +14,13 @@ WHAT A BARK IS
 - Auto-dismisses after a hold time, or when the next bark replaces it.
 - Never has choices (choices are order-4 "exchanges"). A bark is read-and-forget.
 
+ROGUELIKE STORY-GATING (critical — see order-7 Part A)
+This is a permadeath roguelike with a branching route map, but the story is a linear
+descent. Barks are gated by the DEEPEST STORY REGION ever reached (persistent), NOT by
+the current run. One-shot beats fire ONCE (persistent "seen" flag) and never replay when
+the player re-enters a region on a later run. Death never rewinds the story — ORA's tone
+and the planet's voice stage only ever move forward. Full model + persistence in order-7.
+
 WHERE IT APPEARS (screen position)
 - Lower-third band, centered horizontally, ABOVE the HUD and ABOVE the thumb controls,
   BELOW the weapon sprite. Must never overlap touch buttons or the crosshair/weapon.

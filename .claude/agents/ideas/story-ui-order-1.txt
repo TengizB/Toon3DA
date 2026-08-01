@@ -74,6 +74,13 @@ ACCESSIBILITY BASELINE
   toggle is a nice-to-have.
 - Nothing critical is conveyed by color alone — always the name chip + icon too.
 
+TWO CROSS-CUTTING RULES (specified in order-7 — honor them from the start)
+- LOCALIZATION: never hardcode a story string in Java. Every line is a stable string ID
+  in an externalized table (I18NBundle-style). Narrative data references ids only.
+- AUDIO CUES: no voice acting, but each speaker gets one short non-verbal "sting" when a
+  line appears (pre-attentively signals WHO is talking). Sounds are Disposable — own and
+  dispose them. The game must be fully understandable with audio OFF.
+
 DEFINITION OF DONE
 - StoryUiConstants exists; a test screen renders one sample line per speaker, each
   clearly distinct, readable over the 3D view, not overlapping HUD/touch controls.

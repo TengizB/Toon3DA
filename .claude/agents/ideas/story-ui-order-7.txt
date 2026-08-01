@@ -1,0 +1,142 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Story UI 7 — Engine integration, persistence & roguelike story-gating
+---
+
+PURPOSE
+The technical backbone the UX files (1–6) assume but don't specify. Covers the hard
+questions: how a LINEAR story survives a ROGUELIKE with permadeath and a branching route
+map; what narrative state persists and where; localization; audio cues; and how story UI
+coexists with the other overlays. Build alongside order-1/2; everything else leans on it.
+
+READ FIRST
+- .claude/CLAUDE.md (route-map subsystem, StatsStore/Preferences, RunPhase, overlays,
+  "no allocations in render", "every Disposable disposed", viewport rules)
+- docs/route-map-system.txt (RouteMap, regions, RunPhase.ROUTE_SELECT, node->floor)
+- docs/tick-system.txt (TickEventBus)
+- story/00..08 and story/dialog/*
+
+============================================================
+PART A — ROGUELIKE STORY-GATING (the critical reconciliation)
+============================================================
+PROBLEM: the story is a linear descent (Regions 1→5, story/05-descent-structure.md), but
+the GAME is a permadeath roguelike with a procedural, branching route map and reprints.
+If story beats were tied to the current run, dying would rewind the plot and re-show
+beats every attempt — unreadable and annoying.
+
+RULE: **Story progress is gated by the DEEPEST STORY REGION the player has ever reached,
+which is PERSISTENT. Death/reprint never rewinds the story.**
+- The route map's regions map onto the five STORY regions (Habitation Rings → Harvesting
+  Galleries → Reliquary → Wound → Core). Reaching a story region for the FIRST TIME (ever,
+  across all runs) unlocks that region's beats.
+- Every mandatory beat and one-shot bark is fired ONCE, keyed by a persistent
+  "seen" flag (Part B). Re-entering a region on a later run does NOT replay them; it may
+  show short "already-known" flavor barks instead of the full beat.
+- The AI's tone, the planet's voice stage, and the Organization's escalation are all
+  driven by DEEPEST-REGION-REACHED, not by the current run — so ORA's growing doubt and
+  the planet's growing voice only ever move forward, matching "ORA's memory is continuous"
+  (story/dialog/ai-assistant.md) and the planet's staged reveal.
+- The reprint boot card (order-3) is the one beat that fires EVERY death by design; its
+  AI line is chosen by deepest-region-reached so it also only moves forward.
+
+DIEGETIC FIT: this is not a hand-wave — it IS the premise. The clone remembers every run;
+ORA is never wiped; the planet never forgets you. Persistent story across deaths is the
+fiction, not a concession to it. (story/02-player-and-cloning.md, 03-the-planet.md.)
+
+EDGE CASES
+- Branching route: if regions can be reached out of the "ideal" order, gate strictly by
+  region depth, and make each region's beats self-contained so any path reads correctly.
+- If the player reaches the Core region, the ending exchange (order-5) becomes available;
+  guard it so it only triggers at the intended final node, not on any Core-region floor.
+
+============================================================
+PART B — PERSISTED NARRATIVE STATE (what survives, and where)
+============================================================
+Persist via LibGDX Preferences, following the util/StatsStore.java pattern (add a sibling
+StoryStore or extend StatsStore; keys documented next to ProgressionConstants-style keys).
+Headless narrative state lives in …toon3d.narrative and is (de)serialized here.
+
+MUST PERSIST:
+- deepestStoryRegionReached (drives all gating — Part A).
+- seenBeatFlags: a set/bitset of one-shot bark & exchange ids already fired.
+- instanceCount (the reprint/death counter shown on the boot card).
+- stance: the three lightweight leanings (planet / organization / ORA bond) from order-4.
+- consequentialOutcomes: e.g. "deletedArchivistLog=true", ending-alignment hints.
+- codexUnlocked: set of unlocked codex entry ids (order-6).
+- settings: story text size / hold time, timers on/off (order-6 Part D).
+
+RULES
+- Write on meaningful change (beat seen, choice made, codex unlock), not every frame.
+- Treat as SINGLE-SAVE meta-progression (survives permadeath) unless the game later adds
+  save slots. A "new game" / wipe option must clear all of the above together.
+- Versioning: stamp a schema version so future changes migrate cleanly.
+
+============================================================
+PART C — LOCALIZATION / STRING EXTERNALIZATION
+============================================================
+This is a text-heavy game, so NO story string is hardcoded in Java. Every line (barks,
+exchange prompts, options, system cards, codex entries, log full-text) is referenced by a
+stable STRING ID and stored in an externalized table (LibGDX I18NBundle or a simple
+key->text asset). The narrative data (order-2/4/5) references ids only.
+- Speaker name chips, choice labels, and system-card labels are all ids too.
+- Keep ids stable once shipped (translations key off them).
+- The AI's "log take" and the log's full codex text are separate ids (bark vs codex).
+
+============================================================
+PART D — AUDIO CUES (no voice acting, but sound still matters)
+============================================================
+There are no voice actors, but tiny non-verbal SOUND CUES massively aid readability and
+pre-attentively signal WHO is speaking before a word is read (supports the "make them
+read" goal). Keep them short, distinct, and disposed properly (Sound is Disposable).
+- One short "speaker sting" per voice, played when a line appears:
+    AI = soft friendly blip; Planet = low organic tone; Organization = cold terminal beep;
+    System = neutral click.
+- Optional per-character typewriter tick as text reveals (togglable; off respects the
+  text-speed setting). Never loud, never long.
+- Exchange open/confirm cues (a gentle "panel open", a firm "choice picked").
+- All cues route through the game's existing audio; add volumes to StoryUiConstants.
+- Sound is optional polish — the game MUST be fully understandable with audio off.
+
+============================================================
+PART E — OVERLAY PRECEDENCE & INTERRUPTS
+============================================================
+Story UI shares the screen with existing overlays (inventory, level-up, death, route
+select). Define strict precedence so nothing collides:
+- HARD-PAUSE overlays (death, level-up card, inventory, RunPhase.ROUTE_SELECT nav
+  console) take precedence: while one is open, SUPPRESS barks (queue them) and never open
+  an EXCHANGE. Resume the queue after it closes.
+- The reprint boot card (order-3) is itself a hard-pause screen; it owns the death moment.
+- Combat intensity: per order-6, hold barks during spikes; deliver in the lull.
+- An EXCHANGE, once open, blocks player world-actions (reuse action-lock) but must yield
+  to a forced system event (e.g. app pause/resume) gracefully — re-open on resume.
+- Never stack two story panels. One story element visible at a time, ever.
+
+============================================================
+PART F — FIRST BOOT / COLD OPEN (see also order-5)
+============================================================
+The very first launch must introduce ORA and the world in the SAME small-dose style:
+- The first-ever boot card fires (order-3) — "your previous self has died" — before the
+  player has done anything, exactly as designed (story/dialog/system-cards.md).
+- ORA introduces herself in 1–2 barks as the first controls are used; the tutorial is
+  taught THROUGH ORA (she names each control as it's first relevant), not a separate
+  wall-of-text tutorial. Keep it one line per control, tied to the moment it's needed.
+- The order-5 Region 1 "teaching exchange" is the first choice, kept low-stakes so the
+  player learns the choice UI safely.
+
+============================================================
+PART G — BUILD / TEST CHECKLIST
+============================================================
+- Unit-test the headless narrative layer: gating (Part A), one-shot flags, stance nudges,
+  persistence round-trip (save→load→identical), localization id resolution.
+- "Skimmer path" test (order-6 Part C): a playthrough that dismisses everything optional
+  still surfaces every MANDATORY beat via unskippable channels, and still reaches a
+  coherent ending choice.
+- "Death does not rewind" test: reach Region 3, die, restart the descent — Region 1/2
+  beats do NOT replay; ORA/planet/Org tone stays at Region-3 level.
+- Persistence survives app kill/restart. "New game" wipes all narrative state together.
+- No allocations in render(); all Sounds/Fonts/Textures disposed; viewport.apply() honored.
+
+DEFINITION OF DONE
+- Narrative state persists across deaths and app restarts; story never rewinds on death;
+  all strings are externalized ids; speaker audio cues play and are disposable; story UI
+  correctly yields to every other overlay; first boot teaches controls through ORA.
