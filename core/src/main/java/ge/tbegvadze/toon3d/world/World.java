@@ -43,6 +43,11 @@ import ge.tbegvadze.toon3d.level.LevelLoader;
 import ge.tbegvadze.toon3d.level.RoomBlueprints;
 import ge.tbegvadze.toon3d.level.StartGameLevelGenerator;
 import ge.tbegvadze.toon3d.level.WeaponSpawnPoint;
+import ge.tbegvadze.toon3d.narrative.BarkCatalog;
+import ge.tbegvadze.toon3d.narrative.BarkSystem;
+import ge.tbegvadze.toon3d.narrative.BarkTrigger;
+import ge.tbegvadze.toon3d.narrative.StoryProgress;
+import ge.tbegvadze.toon3d.narrative.StoryRegion;
 import ge.tbegvadze.toon3d.render.BossHudRenderer;
 import ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
@@ -95,6 +100,8 @@ import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 import ge.tbegvadze.toon3d.util.StatsStore;
+import ge.tbegvadze.toon3d.util.StoryStore;
+import ge.tbegvadze.toon3d.util.StoryUiConstants;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.util.RenderConstants;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
@@ -316,6 +323,21 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private       boolean              resetRequested         = false;
 
     // -------------------------------------------------------------------------
+    // Story UI — BARK LAYER (order-2): the non-blocking one-liner channel.
+    // barkSystem is the headless brain (which line, when, one-shot flags, region gating, rate
+    // limit); storyBarkRenderer only draws whatever it says is active.  Narrative progress is
+    // PERSISTENT (StoryStore), so death never rewinds the story — the pools are gated by the
+    // deepest story region ever reached, not by this run.
+    // -------------------------------------------------------------------------
+    private final BarkSystem         barkSystem;
+    private final StoryBarkRenderer  storyBarkRenderer;
+    /** Seeded stream for "does this moment even ask for a line" rolls (kills). */
+    private final java.util.Random   storyMomentRandom;
+    private StoryBarkTickSubscriber  storyBarkTickSubscriber;
+    /** Edge detector for the low-health bark: fires on the way DOWN through the threshold only. */
+    private boolean                  healthAboveLowThreshold = true;
+
+    // -------------------------------------------------------------------------
     // Timing accumulators
     // -------------------------------------------------------------------------
     private float alertTimeSeconds    = 0f;
@@ -388,6 +410,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         eventChoiceOverlayRenderer = new EventChoiceOverlayRenderer();
         // Card deck seeded off the run seed so a given run's level-up offers are reproducible.
         upgradeCardDeck        = new UpgradeCardDeck(runSeed ^ 0xCA12D00D5EED1234L);
+
+        // Story UI bark layer (order-2) — run-persistent, but its NARRATIVE state is cross-run:
+        // StoryProgress reads/writes the deepest story region reached and the one-shot beat flags
+        // through StoryStore (Preferences), so a reprint never replays a beat or rewinds ORA's tone.
+        // The string table comes from the externalised asset, falling back to the built-in defaults.
+        barkSystem = new BarkSystem(BarkCatalog.defaultRegistry(), StoryStringsLoader.load(),
+                                    new StoryProgress(new StoryStore()),
+                                    runSeed ^ StoryUiConstants.STORY_BARK_SELECTION_SEED_SALT);
+        storyMomentRandom = new java.util.Random(runSeed ^ StoryUiConstants.STORY_MOMENT_SEED_SALT);
+        storyBarkRenderer = new StoryBarkRenderer();
+        storyBarkRenderer.setBarkSystem(barkSystem);
 
         // Event text and hit vignette — run-persistent feedback systems
         eventTextSystem     = new EventTextSystem();
@@ -966,6 +999,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyManager.setKillEventListener((nameTag, xpAwarded) -> {
             eventTextSystem.spawnWithColor(nameTag + " +" + xpAwarded + "XP", EventTextSystem.COLOR_GREEN);
             runStats.recordKill();
+            // Story bark (order-2): kills are frequent, barks must not be. Only a fraction of kills
+            // even ASK, and the bark layer's own cooldown decides whether that ask is answered.
+            if (storyMomentRandom.nextFloat() < StoryUiConstants.STORY_BARK_KILL_CHANCE) {
+                barkSystem.request(BarkTrigger.KILL);
+            }
         });
         enemyManager.setKillCreditListener((baseReward, dungeonDepth) -> {
             int scaled = Math.round(baseReward * (1f + (dungeonDepth - 1) * GameBalance.CREDIT_DEPTH_SCALE));
@@ -1065,6 +1103,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             runStats.recordTick();
             runStats.recordBossFloorTurn();
         });
+
+        // Story bark layer (order-2): the turn stream is where "a new enemy family woke up",
+        // "the player is circling" and "the player has stopped acting" are visible. Rebuilt with
+        // the floor so its per-floor memory (walked tiles) resets exactly when the floor does.
+        storyBarkTickSubscriber = new StoryBarkTickSubscriber(barkSystem, enemyManager,
+                                                              targetLevel.getWidth(),
+                                                              targetLevel.getHeight());
+        tickEventBus.subscribe(storyBarkTickSubscriber);
 
         // Create the controller before building ground items so weapon roll generation
         // can look up arsenal weapons via findWeaponInArsenalForType().
@@ -1572,6 +1618,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
 
     public void update(float deltaTime) {
+        // OVERLAY PRECEDENCE (order-7 Part E): a hard-pause overlay — death, level-up, inventory,
+        // shop, weapon inspect, the nav console, an event choice — owns the screen. Suppress the
+        // bark layer while one is open: requests still QUEUE, nothing is delivered or aged, and the
+        // queue resumes intact afterwards. Two story panels never stack, and a bark never talks over
+        // a modal.
+        barkSystem.setSuppressed(runPhase != RunPhase.PLAYING);
+
         // DEAD phase — death beat then death screen; no game simulation
         if (runPhase == RunPhase.DEAD) {
             deathBeatTimerSeconds += deltaTime;
@@ -1605,6 +1658,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     rebuildForLevel(buildNextFloor());
                     applyPendingFloorEffects();
                     detectRegionEntry();
+                    requestFloorArrivalBarks();
                 } else if (isStartingRoom) {
                     // Leaving the staging room: the real run begins. The normal path already generated
                     // the route map and player-committed the depth-1 node in
@@ -1622,6 +1676,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     rebuildForLevel(buildNextFloor());
                     applyPendingFloorEffects();
                     detectRegionEntry();
+                    requestFloorArrivalBarks();
                 } else {
                     currentDepth++;
                     playerProgress.setFloorDepth(currentDepth);
@@ -1629,6 +1684,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     rebuildForLevel(buildNextFloor());
                     applyPendingFloorEffects();
                     detectRegionEntry();
+                    requestFloorArrivalBarks();
                 }
                 fadeTimerSeconds = 0f;
                 runPhase = RunPhase.FADING_IN;
@@ -1812,6 +1868,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 player.directionX, player.directionY, player.fieldOfViewRadians);
         impactEffectSystem.update(deltaTime);
         eventTextSystem.update(deltaTime);
+        // Story bark layer (order-2): advance the fade/hold clock and deliver the next queued line,
+        // then hand its speaker sting to the renderer (audio is an update-path side effect, never a
+        // draw-path one). The idle clock only runs here, in PLAYING, so time spent inside an overlay
+        // is never mistaken for the player standing still.
+        barkSystem.update(deltaTime);
+        storyBarkRenderer.playPendingSpeakerSting();
+        if (storyBarkTickSubscriber != null) storyBarkTickSubscriber.update(deltaTime);
+        updateLowHealthStoryBark();
         abilityFeedback.update(deltaTime);
         hitVignetteRenderer.update(deltaTime);
         guardShieldRenderer.update(deltaTime);
@@ -1956,6 +2020,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         eventTextRenderer.render(camera);
         if (bossHudRenderer != null) bossHudRenderer.render(camera);
 
+        // Story bark (order-2): the non-blocking one-liner panel, at its fixed top-centre anchor —
+        // above the HUD, the thumb clusters, the weapon sprite and the mini-map. Drawn only while
+        // PLAYING so it never sits on top of a modal overlay (its queue is suppressed there anyway).
+        if (runPhase == RunPhase.PLAYING) {
+            storyBarkRenderer.render(camera);
+        }
+
         // Inventory overlay — drawn above HUD and event text, below fade/death overlays.
         if (runPhase == RunPhase.INVENTORY_OPEN) {
             inventoryOverlayRenderer.setTime(facilityTimeSeconds);
@@ -2026,6 +2097,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         impactEffectRenderer.dispose();
         fadeOverlayRenderer.dispose();
         eventTextRenderer.dispose();
+        // Story bark layer (order-2): the renderer owns the story panel primitive (batch, shapes,
+        // font) and the per-speaker stings. BarkSystem itself is headless — no GPU/audio handles.
+        storyBarkRenderer.dispose();
         hitVignetteRenderer.dispose();
         guardShieldRenderer.dispose();
         levelUpOverlayRenderer.dispose();
@@ -2288,6 +2362,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return; // already announced this region
         }
         lastAnnouncedRegionIndex = region.regionIndex();
+
+        // STORY GATING (order-2 / order-7 Part A): record the story region this route region maps
+        // onto BEFORE asking for beats, so the pools are selected at the new depth. reachRegion()
+        // only ever moves forward — a fresh run starting at the surface cannot rewind the story.
+        StoryRegion storyRegion = StoryRegion.fromRouteRegionIndex(region.regionIndex());
+        barkSystem.getProgress().reachRegion(storyRegion);
+        // ORA marks the stratum, then the Organization's cold order. Both are one-shot mandatory
+        // beats: a later run re-entering a cleared region says nothing here.
+        barkSystem.request(BarkTrigger.REGION_ENTERED);
+        barkSystem.request(BarkTrigger.REGION_GATE_ORDER);
+
         RegionAmbience ambience = RouteRegistries.regionAmbience().getOrFallback(region.themeId());
         String regionName = ambience != null ? ambience.displayName() : region.displayName();
         if (eventTextSystem != null) {
@@ -2301,6 +2386,41 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         Gdx.app.log("RouteMap", "region-entry index=" + region.regionIndex() + " name=" + regionName
                 + (ambience != null ? " faction=" + ambience.enemyFactionId()
                         + " music=" + ambience.musicId() : ""));
+    }
+
+    /**
+     * Story barks tied to arriving on a fresh floor (order-2): ORA's line about the room you just
+     * walked into, plus — every {@code STORY_BARK_DEEP_STRATA_INTERVAL} floors — a deep-strata
+     * milestone, which is the planet's channel.  The planet has no lines in Region 1, so the
+     * milestone simply says nothing up there: its silence is the design, not a special case here.
+     *
+     * <p>Both are requests, not commands: the bark layer's rate limit, priority and one-shot rules
+     * decide what (if anything) is actually spoken.
+     */
+    private void requestFloorArrivalBarks() {
+        if (isStartingRoom) return;   // the staging room is not a story floor
+        barkSystem.request(BarkTrigger.FLOOR_ARRIVAL);
+        if (currentDepth > 0 && currentDepth % StoryUiConstants.STORY_BARK_DEEP_STRATA_INTERVAL == 0) {
+            barkSystem.request(BarkTrigger.DEEP_STRATA);
+        }
+    }
+
+    /**
+     * Fires the low-health bark on the way DOWN through the threshold only, and re-arms once the
+     * player heals back above it — so a fight spent hovering at low HP produces one line, not a
+     * stream of them (the bark layer's cooldown is the second guard).
+     */
+    private void updateLowHealthStoryBark() {
+        float healthFraction = player.getHealthFraction();
+        if (healthAboveLowThreshold) {
+            if (healthFraction > 0f
+                    && healthFraction <= StoryUiConstants.STORY_BARK_LOW_HEALTH_FRACTION) {
+                healthAboveLowThreshold = false;
+                barkSystem.request(BarkTrigger.LOW_HEALTH);
+            }
+        } else if (healthFraction > StoryUiConstants.STORY_BARK_LOW_HEALTH_FRACTION) {
+            healthAboveLowThreshold = true;
+        }
     }
 
     private void applyInventoryConsumableEffect() {

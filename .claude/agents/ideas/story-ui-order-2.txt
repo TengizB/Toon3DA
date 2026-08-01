@@ -1,7 +1,53 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Story UI 2 — Bark system (non-blocking one-liners) + trigger moments
 ---
+
+IMPLEMENTATION NOTES (order-2 bark layer delivered)
+- Headless brain (core/.../narrative/, no LibGDX): StoryRegion (the five story regions + the
+  route-region -> story-region map), StoryProgress + StoryProgressStore (+ InMemory... for
+  tests) holding the PERSISTENT deepest-region-reached and the one-shot "seen" ids,
+  BarkTrigger / BarkPriority / BarkDefinition / BarkRegistry / BarkCatalog (the moment->line
+  catalog; a new line is ONE register() call, never a switch), BarkStrings (the fallback text
+  table, folded into StoryStrings.defaults()), and BarkSystem (selection, region gating,
+  one-shot flags, queue, priority, rate limit, fade/hold clock, suppression). 52 catalogued
+  lines across 9 triggers.
+- Persistence: util/StoryStore (LibGDX Preferences, same file as StatsStore, "story." key
+  prefix + a schema version) — so a beat fires once EVER and the story never rewinds on death.
+  Order-7 Part B extends this with stance / consequential outcomes / codex / settings.
+- Render: render/StoryBarkRenderer (draws the order-1 story panel at the STORY_BARK_* anchor;
+  owns + disposes the panel primitive and the speaker stings) and render/StoryStringsLoader
+  (the one place the string asset is read; StoryUiShowcase now shares it).
+- Constants: a BARK LAYER section in util/StoryUiConstants (hold, min interval, queue capacity
+  + staleness, kill chance, low-health fraction, idle seconds, backtrack steps, deep-strata
+  interval, a per-BarkTrigger cooldown table indexed by ordinal, seed salts). The fade/hold
+  envelope is GameMath.storyPanelVisibleFraction + storyPanelLifetimeSeconds.
+- Engine wiring (World): floor arrival + deep-strata milestone after each floor build; region
+  entry + the Organization's gate order inside detectRegionEntry() (which now also records the
+  story region reached); an occasional kill line off the kill listener (rolled from a seeded
+  stream, so a shared run seed replays the same lines); a low-health edge detector. The rest
+  lives in world/StoryBarkTickSubscriber (rebuilt per floor with the tick bus): first sight of
+  an enemy FAMILY, backtracking, and the idle timer. Barks are SUPPRESSED (queued, not dropped)
+  whenever a hard-pause overlay owns the screen, and drawn only in the PLAYING phase.
+- DESIGN CHANGE — bark anchor: this file asked for a lower-third band, but the lower third is
+  already occupied (thumb clusters top out at y=344, the weapon sprite reaches y=240, event
+  text anchors at y=470). The bark therefore uses the top-centre anchor order-1 already defined
+  (STORY_BARK_X/Y, 340..940 x 562..692): a fixed spot the eye learns, clear of the HUD, both
+  thumb clusters, the weapon sprite and the mini-map — all four guarded by tests. Panel height
+  went 118 -> 130 after the DoD screen showed a two-line bark's descenders touching the border.
+- LOG PICKUP trigger deliberately NOT added: there is no log/data-slate item in the game yet,
+  and an unfireable trigger is dead data. It belongs with order-5's content wiring.
+- Guards: core/src/test/.../narrative/StoryBarkTest.java (18 tests) — catalog/asset/text-table
+  sync, the two-line wrap cap, tone shift by region, the planet's Region-1 silence, the
+  Organization at every gate, one-shot-fires-once-across-runs, death-does-not-rewind, one bark
+  on screen at a time + auto-dismiss, rate limit, flavour dropped / critical never dropped,
+  critical cuts the current line short, suppression queues and resumes, stale reactive lines
+  dropped, and the wrapped read model. Whole fast gate green (247 tests).
+- DoD screen: lwjgl3 StoryBarkShowcase + StoryBarkShowcaseLauncher (dev only) — replays a
+  scripted descent of moments through the REAL BarkSystem + StoryBarkRenderer over a split
+  bright/dark backdrop with HUD/cluster/mini-map markers.
+  Run: ./gradlew lwjgl3:storyBarkShowcase
+  Headless capture: add -DstoryBark.screenshotDirectory=<dir> (one PNG per beat, then exits).
 
 PURPOSE
 The main, always-on storytelling channel: short one-line messages that pop up DURING

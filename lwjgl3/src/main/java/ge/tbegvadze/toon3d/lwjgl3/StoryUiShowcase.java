@@ -21,6 +21,7 @@ import ge.tbegvadze.toon3d.narrative.StoryStrings;
 import ge.tbegvadze.toon3d.narrative.StoryText;
 import ge.tbegvadze.toon3d.render.StoryPanelRenderer;
 import ge.tbegvadze.toon3d.render.StorySpeakerStings;
+import ge.tbegvadze.toon3d.render.StoryStringsLoader;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
@@ -80,22 +81,11 @@ public final class StoryUiShowcase extends ApplicationAdapter {
         captionFont   = new BitmapFont();
         panelRenderer = new StoryPanelRenderer();
         stings        = new StorySpeakerStings();
-        strings       = loadStrings();
+        // Order-2 added StoryStringsLoader as the ONE place the string asset is read (with the
+        // built-in defaults as its fallback); the showcase shares it with the game.
+        strings       = StoryStringsLoader.load();
 
         prepareSamplePanels();
-    }
-
-    /** Loads the externalised string table from assets, falling back to the built-in defaults. */
-    private StoryStrings loadStrings() {
-        try {
-            if (Gdx.files.internal("story/story-strings.properties").exists()) {
-                return StoryStrings.fromProperties(
-                        Gdx.files.internal("story/story-strings.properties").readString("UTF-8"));
-            }
-        } catch (Exception loadFailure) {
-            // fall through to defaults
-        }
-        return StoryStrings.defaults();
     }
 
     /** Resolves, styles (uppercase for the Organization) and wraps each sample line once. */

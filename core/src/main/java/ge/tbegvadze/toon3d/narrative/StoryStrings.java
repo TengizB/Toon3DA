@@ -66,10 +66,10 @@ public final class StoryStrings {
     }
 
     /**
-     * The built-in fallback table.  Holds the four speaker names and the four order-1
-     * sample lines (one per speaker) used by the showcase / definition-of-done, plus is
-     * the safety net when the properties asset is unavailable.  Keep in sync with
-     * {@code assets/story/story-strings.properties}.
+     * The built-in fallback table.  Holds the four speaker names, the four order-1 sample lines
+     * (one per speaker) used by the showcase / definition-of-done, and — folded in from
+     * {@link BarkStrings} — every order-2 bark line.  It is the safety net when the properties
+     * asset is unavailable.  Keep in sync with {@code assets/story/story-strings.properties}.
      */
     public static StoryStrings defaults() {
         StoryStrings strings = new StoryStrings();
@@ -85,6 +85,9 @@ public final class StoryStrings {
         strings.put("story.sample.planet", "...you smell the same...");
         strings.put("story.sample.org",    "Operator. Go down. Purge the contaminant.");
         strings.put("story.sample.system", "PREVIOUS INSTANCE - TERMINATED. REPRINTING.");
+
+        // Order-2 bark layer: every one-liner the bark catalog can deliver.
+        BarkStrings.registerDefaults(strings);
 
         return strings;
     }

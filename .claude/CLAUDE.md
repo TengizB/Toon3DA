@@ -204,7 +204,7 @@ Root package (`ge.tbegvadze.toon3d`) is reserved for `Main.java` only.
 | `…toon3d.tileset` | Symbol/sprite-reuse tileset subsystem (headless, no LibGDX imports): `TileCategory`, `EnvironmentSpriteDefinition` + `EnvironmentSpriteRegistry`, `TilesetRegistries.bootstrap()` — the data-driven art catalog of every wall/column/prop/decal sprite; `SymbolBudget` (FIXED/FLEXIBLE split) + `SymbolCategories`; `LevelPalette` + `LevelPalettes.legacy()` (per-level symbol→category+sprite binding, carried by `Level`); `SymbolAllocator` (deterministic per-level palette engine); `RoomBlueprint` + `RoomBlueprintRegistry` room demands. See `docs/environment-tileset-system.txt`. |
 | `…toon3d.sim` | Headless BALANCE SIMULATOR (new-game-balancr order 9): `SimWorld` plays whole runs turn-by-turn through the REAL systems with a scripted `PlayerPolicy` (NAIVE / TACTICAL / HOARDER-START-WEAPON) instead of touch input; `BalanceSimulator` runs the seed matrix, `BehavioralBands` evaluates the six S-* bands, `SimReport` writes the summary. No LibGDX render state; drives the real `PlayerController` through the `ActionSource` seam. See `docs/game-balance-authority.txt` SECTION 7. |
 | `…toon3d.render.tilesetgfx` | Render-layer half of the tileset subsystem (MAY import LibGDX): `TextureGeneratorRegistry` (sprite id → procedural texture generator, `TilesetGfxBootstrap`) + `EnvironmentTextureSet` (per-level realized textures for only the palette's sprites; `Disposable`). Turns headless sprite ids into pixels. See `docs/environment-tileset-system.txt`. |
-| `…toon3d.narrative` | Story UI headless narrative model (order-1 foundation, NO LibGDX imports — testable, data-driven): the four `Speaker`s (each an identity: name string id + `SpeakerIcon` + `TypeStyle`), `StoryLine` (speaker + localisation string id only), `StoryStrings` (the externalised I18N-style string table; `defaults()` + `fromProperties()`), `StoryText.wrapToMaxChars` (pure line wrap), `StorySampleLines`. Localisation rule: narrative data references string ids only — never a hardcoded story string in Java. Render lives in `…toon3d.render` (`StoryPanelRenderer`, `StorySpeakerStings`); accent colours + geometry live in `util/StoryUiConstants`. |
+| `…toon3d.narrative` | Story UI headless narrative model (NO LibGDX imports — testable, data-driven). **order-1 foundation:** the four `Speaker`s (each an identity: name string id + `SpeakerIcon` + `TypeStyle`), `StoryLine` (speaker + localisation string id only), `StoryStrings` (the externalised I18N-style string table; `defaults()` + `fromProperties()`), `StoryText.wrapToMaxChars` (pure line wrap), `StorySampleLines`. **order-2 BARK LAYER** (the always-on, non-blocking one-liner channel): `StoryRegion` (the five story regions — the gating axis), `StoryProgress` + `StoryProgressStore` (PERSISTENT deepest-region-reached + one-shot "seen" flags; `InMemoryStoryProgressStore` for tests, `util/StoryStore` for the game), `BarkTrigger`/`BarkPriority`/`BarkDefinition`/`BarkRegistry`/`BarkCatalog` (the moment→line catalog — a new line is ONE `register()` call, never a switch), `BarkStrings`, and `BarkSystem` (selection, region gating, one-shot flags, queue, rate limit, fade/hold clock). Localisation rule: narrative data references string ids only — never a hardcoded story string in Java. Render lives in `…toon3d.render` (`StoryPanelRenderer`, `StoryBarkRenderer`, `StorySpeakerStings`, `StoryStringsLoader`); accent colours + geometry live in `util/StoryUiConstants`. |
 
 New class: pick the most specific matching package. If none fits, add a subpackage and document it here.
 
@@ -274,7 +274,7 @@ Never hardcode a value anywhere. Always add to the matching constant file first,
 | `ProgressionConstants.java` | XP, death beat, stats preferences key |
 | `TouchConstants.java` | On-screen button sizes, positions, alpha values |
 | `TilesetConstants.java` | Symbol/sprite-reuse partition: FIXED vs FLEXIBLE symbol tables per category, fixed-sprite exceptions, palette-seed salt |
-| `StoryUiConstants.java` | Story UI visual language (order-1): panel rects/anchors (bark, exchange, boot card, codex), `STORY_TEXT_SIZE`/`STORY_LINE_MAX_CHARS`, panel alpha, fade/hold timing, per-speaker accent colours + chip geometry, choice-button size, HUD/touch safe zones, speaker-sting audio params |
+| `StoryUiConstants.java` | Story UI visual language (order-1): panel rects/anchors (bark, exchange, boot card, codex), `STORY_TEXT_SIZE`/`STORY_LINE_MAX_CHARS`, panel alpha, fade/hold timing, per-speaker accent colours + chip geometry, choice-button size, HUD/touch safe zones, speaker-sting audio params, string-asset path. **Bark pacing (order-2):** hold/min-interval/queue capacity + staleness, kill chance, low-health fraction, idle seconds, backtrack steps, deep-strata interval, per-`BarkTrigger` cooldown table, seed salts |
 
 ### `util/GameMath.java`
 Every non-trivial formula as a `public static` method. **Never implement a formula inline in game code.** Required comment block above every method:
@@ -383,6 +383,13 @@ Branching route-map subsystem (headless, no LibGDX). `RouteMap` is the run's for
 
 ### `render/RouteMapOverlayRenderer.java`
 The full-screen "FACILITY NAV" console drawn during `RunPhase.ROUTE_SELECT` (procedural ShapeRenderer/BitmapFont, no textures). Node icons + region crests are procedural painters in `render/routeicons/`, registered via `RouteIconBootstrap`. See the OVERLAY VISUAL SPEC / INTERACTION & CONTROLS sections of `docs/route-map-system.txt`.
+
+### `narrative/BarkSystem.java` + `narrative/BarkCatalog.java` (Story UI order-2)
+The BARK LAYER: short one-line messages that pop up **during** play without stopping the game. `BarkSystem` is the headless brain (which line, when, one at a time, queue, priority, rate limit, fade/hold clock); `render/StoryBarkRenderer` only draws what it says is active, at the fixed `STORY_BARK_*` anchor. **Adding a line is ONE `register()` call in `BarkCatalog`** — never a switch, and never a hardcoded string (rows carry localisation ids resolved through `StoryStrings`).
+
+**ROGUELIKE STORY-GATING (mandatory):** pools are gated by `StoryProgress.getDeepestRegion()` — the deepest `StoryRegion` **ever** reached, persisted via `util/StoryStore`. Death never rewinds the story: ORA's tone, the planet's voice stage and the Organization's escalation only ever move forward, and one-shot beats (region entry, gate orders, first sight of an enemy family) never replay on a later run. Tone shifts are expressed purely by which region band a row is registered in — **never** by an `if (region == …)` in game code. The planet has no Region-1 rows at all; that silence is the design.
+
+Moments are fired from `World` (floor arrival, region entry, kills, low health, deep-strata milestones) and from `world/StoryBarkTickSubscriber` (first sight of an enemy family, backtracking, idle). Barks are suppressed — queued, not dropped — while any hard-pause overlay owns the screen.
 
 ### `input/touch/TouchInputState.java`
 Holds which `TouchAction` is currently held or was just tapped. `PlayerController` polls this each frame.
@@ -514,6 +521,8 @@ Render order each frame (World.render):
 6. LevelRenderer.render()         — 2D mini-map overlay, top-left corner
 7. Player.render()                — player dot and direction indicator on mini-map
 8. HudRenderer.render()           — HUD panels, drawn last (always on top)
+9. StoryBarkRenderer.render()     — story bark panel (order-2), PLAYING phase only, above the
+                                    HUD/event text but below every modal overlay and the fade
 ```
 
 ### HUD Layout (HudRenderer)
