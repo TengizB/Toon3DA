@@ -51,11 +51,10 @@ class StoryBarkTest {
         }
     }
 
-    /** Total on-screen life of one delivered bark. */
-    private static float barkLifetimeSeconds() {
-        return StoryUiConstants.STORY_FADE_IN_SECONDS
-                + StoryUiConstants.STORY_BARK_HOLD_SECONDS
-                + StoryUiConstants.STORY_FADE_OUT_SECONDS;
+    /** Dismisses the bark on screen and runs its fade-out to completion. */
+    private static void dismissAndSettle(BarkSystem system) {
+        system.dismissActiveBark();
+        advance(system, StoryUiConstants.STORY_FADE_OUT_SECONDS + 0.05f);
     }
 
     // -------------------------------------------------------------------------
@@ -238,20 +237,67 @@ class StoryBarkTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void onlyOneBarkIsEverOnScreenAndItAutoDismisses() {
+    void onlyOneBarkIsEverOnScreenAndItNeverStacks() {
         BarkSystem system = newSystemInRegion(StoryRegion.HABITATION_RINGS);
         system.request(BarkTrigger.FLOOR_ARRIVAL);
         system.request(BarkTrigger.LOW_HEALTH);
         advance(system, FRAME_SECONDS);
         assertTrue(system.hasActiveBark());
         assertEquals(1, system.getQueuedCount(), "the second line must wait, not stack");
+    }
 
-        advance(system, barkLifetimeSeconds());
-        assertFalse(system.hasActiveBark(), "a bark must auto-dismiss after its hold");
+    /** The headline rule of the dismissal model: a line NEVER vanishes on its own. */
+    @Test
+    void aBarkNeverDisappearsByItself() {
+        BarkSystem system = newSystemInRegion(StoryRegion.HABITATION_RINGS);
+        system.request(BarkTrigger.FLOOR_ARRIVAL);
+        advance(system, FRAME_SECONDS);
+        String barkId = system.getActiveBarkId();
+        assertNotNull(barkId);
+
+        // Five minutes of play later, a slow reader still has their line.
+        advance(system, 300f);
+        assertTrue(system.hasActiveBark(), "a bark timed out instead of waiting for the player");
+        assertEquals(barkId, system.getActiveBarkId());
+        assertEquals(1f, system.getVisibleFraction(), 0.001f, "a held bark must stay fully opaque");
     }
 
     @Test
-    void theRateLimitSpacesDeliveries() {
+    void dismissingFadesTheBarkOutAndFreesTheScreen() {
+        BarkSystem system = newSystemInRegion(StoryRegion.HABITATION_RINGS);
+        system.request(BarkTrigger.FLOOR_ARRIVAL);
+        advance(system, FRAME_SECONDS);
+        assertTrue(system.hasActiveBark());
+
+        assertTrue(system.dismissActiveBark(), "the first dismiss should take effect");
+        assertFalse(system.dismissActiveBark(), "dismissing twice must be a no-op");
+        assertTrue(system.isActiveBarkDismissed());
+        // Mid fade-out it is still on screen, just dimmer.
+        advance(system, StoryUiConstants.STORY_FADE_OUT_SECONDS / 2f);
+        assertTrue(system.hasActiveBark());
+        assertTrue(system.getVisibleFraction() < 1f, "a dismissed bark should be fading");
+
+        advance(system, StoryUiConstants.STORY_FADE_OUT_SECONDS);
+        assertFalse(system.hasActiveBark(), "the fade-out never finished");
+    }
+
+    /** Even a mandatory beat waits: nothing may snatch a line the player is still reading. */
+    @Test
+    void aCriticalArrivalWaitsInsteadOfCuttingTheCurrentLineShort() {
+        BarkSystem system = newSystemInRegion(StoryRegion.HABITATION_RINGS);
+        system.request(BarkTrigger.KILL);
+        advance(system, FRAME_SECONDS);
+        String readingBarkId = system.getActiveBarkId();
+
+        system.request(BarkTrigger.REGION_ENTERED);
+        advance(system, 60f);
+        assertEquals(readingBarkId, system.getActiveBarkId(),
+                "a critical beat cut short the line the player was reading");
+        assertEquals(1, system.getQueuedCount());
+    }
+
+    @Test
+    void theRateLimitSpacesDeliveriesFromTheMomentTheScreenFrees() {
         BarkSystem system = newSystemInRegion(StoryRegion.HABITATION_RINGS);
         assertTrue(system.request(BarkTrigger.FLOOR_ARRIVAL));
         assertTrue(system.request(BarkTrigger.LOW_HEALTH));
@@ -260,12 +306,14 @@ class StoryBarkTest {
         String firstBarkId = system.getActiveBarkId();
         assertNotNull(firstBarkId);
 
-        // The first line ends, but the interval has not elapsed: the screen stays empty.
-        advance(system, barkLifetimeSeconds());
+        // The player reads at their own pace, then closes it. The interval starts HERE, not at
+        // delivery — so a slow reader is never punished with a burst of queued lines.
+        advance(system, 5f);
+        dismissAndSettle(system);
         assertFalse(system.hasActiveBark());
         assertEquals(1, system.getQueuedCount());
 
-        advance(system, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS - barkLifetimeSeconds() + 0.2f);
+        advance(system, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.2f);
         assertTrue(system.hasActiveBark(), "the queued line never arrived after the interval");
         assertFalse(firstBarkId.equals(system.getActiveBarkId()));
     }
@@ -276,7 +324,8 @@ class StoryBarkTest {
         // Nothing on screen, nothing queued, no cooldown: flavour is allowed.
         assertTrue(system.request(BarkTrigger.IDLE));
         advance(system, FRAME_SECONDS);
-        assertEquals("bark.idle.rings", system.getActiveBarkId());
+        assertTrue(system.getActiveBarkId().startsWith("bark.idle.rings"),
+                "expected an idle line, got " + system.getActiveBarkId());
 
         // Now a line IS on screen — flavour is dropped rather than queued.
         assertFalse(system.request(BarkTrigger.BACKTRACK), "flavour queued under pressure");
@@ -293,19 +342,6 @@ class StoryBarkTest {
     }
 
     @Test
-    void aCriticalArrivalCutsTheCurrentBarkShort() {
-        BarkSystem system = newSystemInRegion(StoryRegion.HABITATION_RINGS);
-        system.request(BarkTrigger.KILL);
-        advance(system, 1f);
-        float fractionBefore = system.getVisibleFraction();
-        assertEquals(1f, fractionBefore, 0.001f, "the bark should be fully held before the cut");
-
-        system.request(BarkTrigger.REGION_ENTERED);
-        advance(system, StoryUiConstants.STORY_FADE_OUT_SECONDS + 0.05f);
-        assertFalse(system.hasActiveBark(), "the reactive line should have faded out early");
-    }
-
-    @Test
     void suppressionQueuesAndResumesIntact() {
         BarkSystem system = newSystemInRegion(StoryRegion.HABITATION_RINGS);
         system.setSuppressed(true);
@@ -319,6 +355,28 @@ class StoryBarkTest {
         assertTrue(system.hasActiveBark(), "the queue did not resume after the overlay closed");
     }
 
+    /**
+     * A player who leaves a bark up for a long time must not be buried in a burst of stale lines
+     * when they finally close it — but a MANDATORY beat still survives the wait.
+     */
+    @Test
+    void aLongReadDropsStaleReactiveLinesButKeepsCriticalOnes() {
+        BarkSystem system = newSystemInRegion(StoryRegion.HABITATION_RINGS);
+        system.request(BarkTrigger.FLOOR_ARRIVAL);
+        advance(system, FRAME_SECONDS);
+        system.request(BarkTrigger.KILL);              // reactive, queued behind it
+        system.request(BarkTrigger.REGION_ENTERED);    // mandatory, queued behind it
+        assertEquals(2, system.getQueuedCount());
+
+        advance(system, StoryUiConstants.STORY_BARK_QUEUE_STALE_SECONDS + 1f);
+        assertEquals(1, system.getQueuedCount(), "the reactive line should have gone stale");
+
+        dismissAndSettle(system);
+        advance(system, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.2f);
+        assertEquals("bark.region.rings", system.getActiveBarkId(),
+                "the mandatory beat must survive however long the player reads");
+    }
+
     @Test
     void aStaleReactiveLineIsDroppedRatherThanSaidLate() {
         BarkSystem system = newSystemInRegion(StoryRegion.HABITATION_RINGS);
@@ -329,6 +387,94 @@ class StoryBarkTest {
 
         advance(system, StoryUiConstants.STORY_BARK_QUEUE_STALE_SECONDS + 0.5f);
         assertEquals(0, system.getQueuedCount(), "a stale reactive line must be dropped");
+    }
+
+    // -------------------------------------------------------------------------
+    // Anti-spam: no repeats, deep pools, and a lore/levity balance
+    // -------------------------------------------------------------------------
+
+    /** The fix for "ORA keeps saying the same thing": a line cannot come back for a while. */
+    @Test
+    void aLineIsNeverRepeatedWhileItIsStillInRecentMemory() {
+        BarkSystem system = newSystemInRegion(StoryRegion.RELIQUARY);
+        java.util.Set<String> spoken = new java.util.HashSet<>();
+
+        // Drain one whole pool: every delivery must be a line we have not heard yet.
+        for (int barkIndex = 0; barkIndex < 4; barkIndex++) {
+            if (!system.request(BarkTrigger.FLOOR_ARRIVAL)) break;
+            advance(system, FRAME_SECONDS);
+            String barkId = system.getActiveBarkId();
+            assertNotNull(barkId, "nothing was delivered on round " + barkIndex);
+            assertTrue(spoken.add(barkId), "ORA repeated " + barkId + " while it was still recent");
+            dismissAndSettle(system);
+            advance(system, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.2f);
+            // The per-trigger cooldown is the other half of the anti-spam guard; skip past it.
+            advance(system, StoryUiConstants
+                    .STORY_BARK_TRIGGER_COOLDOWN_SECONDS[BarkTrigger.FLOOR_ARRIVAL.ordinal()] + 1f);
+        }
+        assertTrue(spoken.size() >= 3, "the floor-arrival pool is too shallow to avoid repeats");
+    }
+
+    /** Every repeatable moment needs a pool deep enough that the no-repeat filter has room. */
+    @Test
+    void repeatableMomentsHaveDeepPoolsInEveryRegion() {
+        BarkRegistry registry = BarkCatalog.defaultRegistry();
+        BarkTrigger[] repeatable = { BarkTrigger.FLOOR_ARRIVAL, BarkTrigger.KILL };
+        for (BarkTrigger trigger : repeatable) {
+            for (StoryRegion region : StoryRegion.values()) {
+                int poolSize = 0;
+                for (BarkDefinition row : registry.getForTrigger(trigger)) {
+                    if (row.matchesRegion(region)) poolSize++;
+                }
+                assertTrue(poolSize >= 4,
+                        trigger + " in " + region + " has only " + poolSize + " lines");
+            }
+        }
+    }
+
+    /** ORA jokes sometimes, not constantly: lore must outweigh levity, everywhere she speaks. */
+    @Test
+    void loreOutweighsLevityOverall() {
+        float loreWeight = 0f;
+        float levityWeight = 0f;
+        for (BarkDefinition row : BarkCatalog.defaultRegistry().getAll()) {
+            if (row.getTone() == BarkTone.LEVITY) levityWeight += row.getWeight();
+            else                                   loreWeight   += row.getWeight();
+        }
+        assertTrue(loreWeight > levityWeight * 2f,
+                "the catalog is too jokey: lore=" + loreWeight + " levity=" + levityWeight);
+    }
+
+    /** ...but she is not humourless early on, and never flippant at the bottom. */
+    @Test
+    void humourLivesNearTheSurfaceAndDiesNearTheCore() {
+        BarkRegistry registry = BarkCatalog.defaultRegistry();
+        boolean surfaceHasLevity = false;
+        for (BarkDefinition row : registry.getForTrigger(BarkTrigger.FLOOR_ARRIVAL)) {
+            if (row.matchesRegion(StoryRegion.HABITATION_RINGS) && row.getTone() == BarkTone.LEVITY) {
+                surfaceHasLevity = true;
+            }
+        }
+        assertTrue(surfaceHasLevity, "Region 1 ORA should still be funny");
+
+        for (BarkDefinition row : registry.getAll()) {
+            boolean deepOnly = !row.matchesRegion(StoryRegion.HABITATION_RINGS)
+                            && !row.matchesRegion(StoryRegion.HARVESTING_GALLERIES)
+                            && row.matchesRegion(StoryRegion.CORE);
+            if (deepOnly) {
+                assertEquals(BarkTone.LORE, row.getTone(),
+                        "a joke survived into the deepest strata: " + row.getId());
+            }
+        }
+    }
+
+    /** The planet never jokes, in any region it speaks. */
+    @Test
+    void thePlanetOnlyEverSpeaksLore() {
+        for (BarkDefinition row : BarkCatalog.defaultRegistry().getAll()) {
+            if (row.getSpeaker() != Speaker.PLANET) continue;
+            assertEquals(BarkTone.LORE, row.getTone(), "the planet made a joke: " + row.getId());
+        }
     }
 
     @Test

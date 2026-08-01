@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.PixmapIO;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
@@ -46,9 +47,14 @@ import ge.tbegvadze.toon3d.util.TouchConstants;
 public final class StoryBarkShowcase extends ApplicationAdapter {
 
     /** Seconds between scripted moments — comfortably past the bark rate limit. */
-    private static final float BEAT_SPACING_SECONDS = StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 1.5f;
-    /** How long after a moment fires a screenshot is taken (past the fade-in, inside the hold). */
+    private static final float BEAT_SPACING_SECONDS = StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 4f;
+    /** How long after a moment fires a screenshot is taken (past the fade-in, fully opaque). */
     private static final float SCREENSHOT_OFFSET_SECONDS = 1.0f;
+    /**
+     * A bark now waits for the PLAYER, so the showcase plays one: it "reads" each line for this long
+     * and then dismisses it, which is what lets the scripted sequence advance on its own.
+     */
+    private static final float SIMULATED_READ_SECONDS = 3.0f;
 
     /** One scripted moment: the story region to be in, and the trigger to fire. */
     private static final StoryRegion[] SCRIPT_REGIONS = {
@@ -78,6 +84,10 @@ public final class StoryBarkShowcase extends ApplicationAdapter {
     private int    scriptIndex;
     private int    screenshotsTaken;
     private String screenshotDirectory;
+    /** How long the current line has been "read" before the showcase closes it for the player. */
+    private float  readingSeconds;
+    /** Pre-allocated unprojection target — never recreated per frame. */
+    private final Vector2 touchWorldPosition = new Vector2();
 
     @Override
     public void create() {
@@ -107,6 +117,7 @@ public final class StoryBarkShowcase extends ApplicationAdapter {
         advanceScript();
         barkSystem.update(deltaTime);
         barkRenderer.playPendingSpeakerSting();
+        handleDismissal(deltaTime);
 
         ScreenUtils.clear(0.04f, 0.04f, 0.05f, 1f);
         viewport.apply();
@@ -116,6 +127,32 @@ public final class StoryBarkShowcase extends ApplicationAdapter {
         barkRenderer.render(camera);
 
         captureScriptedScreenshot();
+    }
+
+    /**
+     * Closes the bark on screen the way a player would.  Clicking the X dismisses it immediately
+     * (so the close affordance can be tried by hand on desktop); otherwise the showcase "reads" the
+     * line for {@link #SIMULATED_READ_SECONDS} and then closes it, which is what keeps the scripted
+     * sequence moving in a headless capture run.
+     */
+    private void handleDismissal(float deltaTime) {
+        if (!barkSystem.hasActiveBark() || barkSystem.isActiveBarkDismissed()) {
+            readingSeconds = 0f;
+            return;
+        }
+        if (Gdx.input.justTouched()) {
+            touchWorldPosition.set(Gdx.input.getX(), Gdx.input.getY());
+            viewport.unproject(touchWorldPosition);
+            if (StoryBarkRenderer.isInsideCloseButton(touchWorldPosition.x, touchWorldPosition.y)) {
+                barkSystem.dismissActiveBark();
+                return;
+            }
+        }
+        readingSeconds += deltaTime;
+        if (readingSeconds >= SIMULATED_READ_SECONDS) {
+            readingSeconds = 0f;
+            barkSystem.dismissActiveBark();
+        }
     }
 
     /** Fires the next scripted moment once its slot comes round. */

@@ -27,10 +27,17 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
  *       conditional in game code.  Death never rewinds it.</li>
  *   <li><b>One-shot beats.</b> A row marked one-shot is marked seen when DELIVERED and never fires
  *       again, in this run or any later one.</li>
- *   <li><b>One at a time.</b> Exactly one bark on screen, ever.  New arrivals queue; a
- *       STORY-CRITICAL arrival cuts the current line short instead of stacking on it.</li>
- *   <li><b>Rate limit.</b> At most one delivery per {@code STORY_BARK_MIN_INTERVAL_SECONDS}, plus a
- *       per-trigger cooldown, so kills and low health stay fresh and never chatter.</li>
+ *   <li><b>One at a time, and NEVER on a timer.</b> Exactly one bark on screen, ever, and it stays
+ *       there until the PLAYER dismisses it ({@link #dismissActiveBark()} — the panel's X or a
+ *       swipe).  Nothing, not even a mandatory beat, cuts a line short: a player must never lose a
+ *       line they were still reading.  Everything else waits in the queue.</li>
+ *   <li><b>No repeats.</b> A line said within the last {@code STORY_BARK_RECENT_MEMORY} barks is
+ *       not eligible; if that empties a moment's pool, the moment stays silent.</li>
+ *   <li><b>Rate limit.</b> At most one delivery per {@code STORY_BARK_MIN_INTERVAL_SECONDS} of
+ *       FREE screen (the clock runs only while no bark is up, so reading slowly never causes a
+ *       pile-up), plus a per-trigger cooldown, so kills and low health never chatter.</li>
+ *   <li><b>Tone balance.</b> Rows carry a {@link BarkTone}; lore outweighs levity by weight, so ORA
+ *       is dry occasionally rather than constantly.</li>
  *   <li><b>Priority.</b> STORY_CRITICAL is never dropped; REACTIVE is dropped when the queue is
  *       full; FLAVOR is dropped the moment there is any pressure at all.</li>
  *   <li><b>Suppression.</b> While a hard-pause overlay owns the screen (order-7 Part E) the system
@@ -60,14 +67,23 @@ public final class BarkSystem {
     private final String[] activeLines = new String[StoryUiConstants.STORY_BARK_MAX_LINES];
     private int            activeLineCount;
     private float          activeElapsedSeconds;
-    private float          activeHoldSeconds;
-    private boolean        activeWasCutShort;
+    private boolean        activeDismissed;
+    private float          activeDismissElapsedSeconds;
     private Speaker        justAppearedSpeaker;
 
     // ---- pacing -------------------------------------------------------------------------------
-    private float         secondsSinceLastDelivery = Float.MAX_VALUE;
+    /** Time since the screen was last FREED (a bark finished fading out), not since it appeared. */
+    private float         secondsSinceScreenFreed  = Float.MAX_VALUE;
     private final float[] triggerCooldownRemaining = new float[BarkTrigger.values().length];
     private boolean       suppressed;
+
+    /**
+     * Ring of the last {@code STORY_BARK_RECENT_MEMORY} lines said.  A candidate still in here is
+     * not eligible — which is what stops ORA repeating herself when a moment fires often.
+     */
+    private final String[] recentlySpokenIds =
+            new String[Math.max(1, StoryUiConstants.STORY_BARK_RECENT_MEMORY)];
+    private int recentlySpokenNextIndex;
 
     /** Reused selection scratch — cleared and refilled per request, never allocated per frame. */
     private final List<BarkDefinition> candidateScratch = new ArrayList<>();
@@ -148,12 +164,8 @@ public final class BarkSystem {
         queuedDefinitions[queuedCount] = chosen;
         queuedAgeSeconds[queuedCount]  = 0f;
         queuedCount++;
-
-        // A mandatory beat cuts a lower-priority line short rather than waiting behind it.
-        if (critical && activeDefinition != null
-                && priority.isHigherThan(activeDefinition.getPriority())) {
-            cutActiveShort();
-        }
+        // NOTE: even a mandatory beat waits its turn behind the line already on screen. Nothing
+        // ever cuts a bark short — the player, and only the player, decides when they have read it.
         return true;
     }
 
@@ -172,6 +184,9 @@ public final class BarkSystem {
             if (!row.matchesRegion(region))          continue;
             if (!row.matchesSubject(subjectKey))     continue;
             if (row.isOneShot() && progress.hasSeen(row.getId())) continue;
+            // ANTI-REPETITION: a line said in the last few barks is not eligible. If that empties
+            // the pool, the moment says nothing at all — silence always beats hearing it twice.
+            if (wasRecentlySpoken(row.getId()))      continue;
             if (bestPriority == null || row.getPriority().isHigherThan(bestPriority)) {
                 bestPriority = row.getPriority();
             }
@@ -202,7 +217,7 @@ public final class BarkSystem {
             // Flavour never waits: any pressure at all and it is simply not said.
             return activeDefinition == null
                     && queuedCount == 0
-                    && secondsSinceLastDelivery >= StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS;
+                    && secondsSinceScreenFreed >= StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS;
         }
         return queuedCount < queuedDefinitions.length;
     }
@@ -254,7 +269,6 @@ public final class BarkSystem {
     public void update(float deltaTime) {
         if (suppressed) return;
 
-        secondsSinceLastDelivery += deltaTime;
         for (int triggerIndex = 0; triggerIndex < triggerCooldownRemaining.length; triggerIndex++) {
             if (triggerCooldownRemaining[triggerIndex] > 0f) {
                 triggerCooldownRemaining[triggerIndex] -= deltaTime;
@@ -262,15 +276,17 @@ public final class BarkSystem {
         }
 
         if (activeDefinition != null) {
+            // A bark on screen has NO hold timer: it waits for the player. Only the fade-out, once
+            // they dismiss it, is on a clock. The rate-limit clock does not run while they read.
             activeElapsedSeconds += deltaTime;
-            float lifetime = GameMath.storyPanelLifetimeSeconds(
-                    StoryUiConstants.STORY_FADE_IN_SECONDS, activeHoldSeconds,
-                    StoryUiConstants.STORY_FADE_OUT_SECONDS);
-            if (activeElapsedSeconds >= lifetime) {
-                activeDefinition  = null;
-                activeLineCount   = 0;
-                activeSpeakerName = null;
+            if (activeDismissed) {
+                activeDismissElapsedSeconds += deltaTime;
+                if (activeDismissElapsedSeconds >= StoryUiConstants.STORY_FADE_OUT_SECONDS) {
+                    retireActiveBark();
+                }
             }
+        } else {
+            secondsSinceScreenFreed += deltaTime;
         }
 
         for (int queueIndex = queuedCount - 1; queueIndex >= 0; queueIndex--) {
@@ -282,9 +298,33 @@ public final class BarkSystem {
         }
 
         if (activeDefinition == null && queuedCount > 0
-                && secondsSinceLastDelivery >= StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS) {
+                && secondsSinceScreenFreed >= StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS) {
             deliver(takeNextQueued());
         }
+    }
+
+    /**
+     * Dismisses the bark on screen — the player tapped its X or swiped it away.  Starts the
+     * fade-out; the next queued line follows once the rate limit allows.  No-op when nothing is on
+     * screen or it is already fading.
+     *
+     * @return true when a bark was actually dismissed by this call
+     */
+    public boolean dismissActiveBark() {
+        if (activeDefinition == null || activeDismissed) return false;
+        activeDismissed             = true;
+        activeDismissElapsedSeconds = 0f;
+        return true;
+    }
+
+    /** Clears the finished bark and starts the rate-limit clock from the moment the screen freed. */
+    private void retireActiveBark() {
+        activeDefinition            = null;
+        activeSpeakerName           = null;
+        activeLineCount             = 0;
+        activeDismissed             = false;
+        activeDismissElapsedSeconds = 0f;
+        secondsSinceScreenFreed     = 0f;
     }
 
     /**
@@ -317,27 +357,33 @@ public final class BarkSystem {
         for (int lineIndex = 0; lineIndex < activeLineCount; lineIndex++) {
             activeLines[lineIndex] = wrapped.get(lineIndex);
         }
-        activeSpeakerName    = strings.get(definition.getSpeaker().getNameStringId());
-        activeDefinition     = definition;
-        activeElapsedSeconds = 0f;
-        activeHoldSeconds    = StoryUiConstants.STORY_BARK_HOLD_SECONDS;
-        activeWasCutShort    = false;
-        justAppearedSpeaker  = definition.getSpeaker();
+        activeSpeakerName           = strings.get(definition.getSpeaker().getNameStringId());
+        activeDefinition            = definition;
+        activeElapsedSeconds        = 0f;
+        activeDismissed             = false;
+        activeDismissElapsedSeconds = 0f;
+        justAppearedSpeaker         = definition.getSpeaker();
 
-        secondsSinceLastDelivery = 0f;
         triggerCooldownRemaining[definition.getTrigger().ordinal()] =
                 StoryUiConstants.STORY_BARK_TRIGGER_COOLDOWN_SECONDS[definition.getTrigger().ordinal()];
         if (definition.isOneShot()) {
             progress.markSeen(definition.getId());
         }
+        rememberSpoken(definition.getId());
     }
 
-    /** Shortens the active bark's hold so it begins fading out now (a critical line is waiting). */
-    private void cutActiveShort() {
-        if (activeDefinition == null || activeWasCutShort) return;
-        activeWasCutShort = true;
-        float elapsedHold = Math.max(0f, activeElapsedSeconds - StoryUiConstants.STORY_FADE_IN_SECONDS);
-        activeHoldSeconds = Math.min(activeHoldSeconds, elapsedHold);
+    /** Records a line in the no-repeat ring so it cannot be picked again for a while. */
+    private void rememberSpoken(String barkId) {
+        recentlySpokenIds[recentlySpokenNextIndex] = barkId;
+        recentlySpokenNextIndex = (recentlySpokenNextIndex + 1) % recentlySpokenIds.length;
+    }
+
+    /** True when this line is still inside the no-repeat memory. */
+    private boolean wasRecentlySpoken(String barkId) {
+        for (int memoryIndex = 0; memoryIndex < recentlySpokenIds.length; memoryIndex++) {
+            if (barkId.equals(recentlySpokenIds[memoryIndex])) return true;
+        }
+        return false;
     }
 
     // -------------------------------------------------------------------------
@@ -371,12 +417,18 @@ public final class BarkSystem {
         return activeElapsedSeconds;
     }
 
-    /** 0..1 fade multiplier for the whole panel (fade in -> hold -> fade out). */
+    /** 0..1 fade multiplier for the whole panel (fade in -> held until dismissed -> fade out). */
     public float getVisibleFraction() {
         if (activeDefinition == null) return 0f;
         return GameMath.storyPanelVisibleFraction(activeElapsedSeconds,
-                StoryUiConstants.STORY_FADE_IN_SECONDS, activeHoldSeconds,
+                StoryUiConstants.STORY_FADE_IN_SECONDS,
+                activeDismissed, activeDismissElapsedSeconds,
                 StoryUiConstants.STORY_FADE_OUT_SECONDS);
+    }
+
+    /** True once the player dismissed the bark on screen and it is fading out. */
+    public boolean isActiveBarkDismissed() {
+        return activeDismissed;
     }
 
     /**

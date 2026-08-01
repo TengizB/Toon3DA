@@ -336,6 +336,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private StoryBarkTickSubscriber  storyBarkTickSubscriber;
     /** Edge detector for the low-health bark: fires on the way DOWN through the threshold only. */
     private boolean                  healthAboveLowThreshold = true;
+    /** Swipe-to-dismiss tracking: set when a touch goes down inside the bark panel. */
+    private boolean                  barkSwipeTracking;
+    private float                    barkSwipeStartX;
+    private float                    barkSwipeStartY;
 
     // -------------------------------------------------------------------------
     // Timing accumulators
@@ -1874,6 +1878,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // is never mistaken for the player standing still.
         barkSystem.update(deltaTime);
         storyBarkRenderer.playPendingSpeakerSting();
+        updateStoryBarkTouch();
         if (storyBarkTickSubscriber != null) storyBarkTickSubscriber.update(deltaTime);
         updateLowHealthStoryBark();
         abilityFeedback.update(deltaTime);
@@ -2399,9 +2404,61 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      */
     private void requestFloorArrivalBarks() {
         if (isStartingRoom) return;   // the staging room is not a story floor
-        barkSystem.request(BarkTrigger.FLOOR_ARRIVAL);
+        // Most floors ORA says nothing at all. Commenting on every single arrival is what made her
+        // feel like a chatterbox; silence is part of the character (story/dialog/ai-assistant.md).
+        if (storyMomentRandom.nextFloat() < StoryUiConstants.STORY_BARK_FLOOR_ARRIVAL_CHANCE) {
+            barkSystem.request(BarkTrigger.FLOOR_ARRIVAL);
+        }
         if (currentDepth > 0 && currentDepth % StoryUiConstants.STORY_BARK_DEEP_STRATA_INTERVAL == 0) {
             barkSystem.request(BarkTrigger.DEEP_STRATA);
+        }
+    }
+
+    /**
+     * Routes touches to the bark on screen (order-2).  A bark never disappears on a timer, so the
+     * player closes it themselves, two ways:
+     * <ul>
+     *   <li>TAP the close X in the panel's top-right corner, or</li>
+     *   <li>SWIPE — press anywhere on the panel and drag {@code STORY_BARK_SWIPE_DISMISS_DISTANCE}
+     *       in any direction.</li>
+     * </ul>
+     * The bark sits at the top-centre of the screen, clear of every touch button, so consuming
+     * input here can never eat a movement or fire tap.  A tap that lands on the panel but is not
+     * the X (and never becomes a swipe) does nothing — so a mis-tap cannot silently close a line
+     * the player has not read.
+     */
+    private void updateStoryBarkTouch() {
+        if (gameViewport == null || !barkSystem.hasActiveBark() || barkSystem.isActiveBarkDismissed()) {
+            barkSwipeTracking = false;
+            return;
+        }
+        if (!Gdx.input.isTouched()) {
+            barkSwipeTracking = false;   // finger lifted: a swipe that never travelled far enough
+            return;
+        }
+
+        cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+        gameViewport.unproject(cardTouchPosition);
+
+        if (Gdx.input.justTouched()) {
+            if (StoryBarkRenderer.isInsideCloseButton(cardTouchPosition.x, cardTouchPosition.y)) {
+                barkSystem.dismissActiveBark();
+                barkSwipeTracking = false;
+                return;
+            }
+            barkSwipeTracking = StoryBarkRenderer.isInsidePanel(cardTouchPosition.x, cardTouchPosition.y);
+            barkSwipeStartX   = cardTouchPosition.x;
+            barkSwipeStartY   = cardTouchPosition.y;
+            return;
+        }
+
+        if (!barkSwipeTracking) return;
+        float travelX = cardTouchPosition.x - barkSwipeStartX;
+        float travelY = cardTouchPosition.y - barkSwipeStartY;
+        float travelDistance = (float) Math.sqrt(travelX * travelX + travelY * travelY);
+        if (travelDistance >= StoryUiConstants.STORY_BARK_SWIPE_DISMISS_DISTANCE) {
+            barkSystem.dismissActiveBark();
+            barkSwipeTracking = false;
         }
     }
 

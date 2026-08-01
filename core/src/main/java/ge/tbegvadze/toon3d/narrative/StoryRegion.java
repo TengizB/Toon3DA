@@ -20,25 +20,36 @@ package ge.tbegvadze.toon3d.narrative;
 public enum StoryRegion {
 
     /** Region 1 — belief; clean good vs evil.  The planet is silent here. */
-    HABITATION_RINGS("Habitation Rings"),
+    HABITATION_RINGS("Habitation Rings", "rings"),
     /** Region 2 — the first crack.  The planet whispers single wrong-language words. */
-    HARVESTING_GALLERIES("Harvesting Galleries"),
+    HARVESTING_GALLERIES("Harvesting Galleries", "galleries"),
     /** Region 3 — the frame inverts.  The planet addresses you by deed. */
-    RELIQUARY("The Reliquary"),
+    RELIQUARY("The Reliquary", "reliquary"),
     /** Region 4 — full inversion.  Near communion; ORA drops the corporate words. */
-    WOUND("The Wound"),
+    WOUND("The Wound", "wound"),
     /** Region 5 — everything; the ending choice. */
-    CORE("The Core");
+    CORE("The Core", "core");
 
     private final String displayName;
+    private final String catalogKey;
 
-    StoryRegion(String displayName) {
+    StoryRegion(String displayName, String catalogKey) {
         this.displayName = displayName;
+        this.catalogKey  = catalogKey;
     }
 
     /** Human-readable region name (debug/logging only — player-facing text is a string id). */
     public String getDisplayName() {
         return displayName;
+    }
+
+    /**
+     * The short, stable token this region uses inside bark and localisation ids (e.g. "reliquary"
+     * in {@code bark.region.reliquary}).  Lives here so the catalog never needs a switch — and
+     * NEVER change a shipped one: it is baked into persisted one-shot "seen" keys.
+     */
+    public String getCatalogKey() {
+        return catalogKey;
     }
 
     /** True when this region is at least as deep as {@code other} (the gating comparison). */

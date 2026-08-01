@@ -59,7 +59,27 @@ public final class StoryBarkRenderer implements Renderable, Disposable {
                 StoryUiConstants.STORY_BARK_X, StoryUiConstants.STORY_BARK_Y,
                 StoryUiConstants.STORY_BARK_WIDTH, StoryUiConstants.STORY_BARK_HEIGHT,
                 barkSystem.getVisibleFraction(),
-                barkSystem.getActiveElapsedSeconds());
+                barkSystem.getActiveElapsedSeconds(),
+                true);   // a bark never auto-dismisses, so it always shows its close X
+    }
+
+    /**
+     * True when the given world point is inside the bark's close-X hit rect — grown past the drawn
+     * glyph by {@code STORY_BARK_CLOSE_TOUCH_PADDING} so it stays a comfortable thumb target.
+     */
+    public static boolean isInsideCloseButton(float worldX, float worldY) {
+        float halfExtent = StoryUiConstants.STORY_BARK_CLOSE_GLYPH_SIZE / 2f
+                + StoryUiConstants.STORY_BARK_CLOSE_TOUCH_PADDING;
+        return Math.abs(worldX - StoryUiConstants.STORY_BARK_CLOSE_CENTER_X) <= halfExtent
+            && Math.abs(worldY - StoryUiConstants.STORY_BARK_CLOSE_CENTER_Y) <= halfExtent;
+    }
+
+    /** True when the given world point is inside the bark panel itself (where a swipe may start). */
+    public static boolean isInsidePanel(float worldX, float worldY) {
+        return worldX >= StoryUiConstants.STORY_BARK_X
+            && worldX <= StoryUiConstants.STORY_BARK_X + StoryUiConstants.STORY_BARK_WIDTH
+            && worldY >= StoryUiConstants.STORY_BARK_Y
+            && worldY <= StoryUiConstants.STORY_BARK_TOP_Y;
     }
 
     @Override

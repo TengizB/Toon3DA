@@ -156,6 +156,22 @@ public final class StoryUiConstants {
     public static final float STORY_BARK_TOP_Y   = 692f;                              // top edge
     public static final float STORY_BARK_Y       = STORY_BARK_TOP_Y - STORY_BARK_HEIGHT; // bottom edge
 
+    // CLOSE AFFORDANCE — a bark NEVER auto-dismisses (a player must never lose a line to a timer
+    // they could not read in time).  It stays until the player closes it: tap the X, or swipe the
+    // panel in any direction.  The X sits in the panel's top-right corner; its TOUCH rect is grown
+    // past the drawn glyph so it stays a comfortable thumb target without a big visual box.
+    public static final float STORY_BARK_CLOSE_GLYPH_SIZE     = 22f;
+    public static final float STORY_BARK_CLOSE_STROKE         = 3f;
+    public static final float STORY_BARK_CLOSE_MARGIN         = 14f;
+    public static final float STORY_BARK_CLOSE_TOUCH_PADDING  = 18f;
+    /** Drag this far (world units) starting inside the panel to swipe a bark away. */
+    public static final float STORY_BARK_SWIPE_DISMISS_DISTANCE = 60f;
+    /** Centre of the close glyph, derived from the panel rect (top-right corner, inside padding). */
+    public static final float STORY_BARK_CLOSE_CENTER_X =
+            STORY_BARK_X + STORY_BARK_WIDTH - STORY_BARK_CLOSE_MARGIN - STORY_BARK_CLOSE_GLYPH_SIZE / 2f;
+    public static final float STORY_BARK_CLOSE_CENTER_Y =
+            STORY_BARK_TOP_Y - STORY_BARK_CLOSE_MARGIN - STORY_BARK_CLOSE_GLYPH_SIZE / 2f;
+
     // Exchange panel (order-4): a prompt + a couple of tappable choices, upper-centre.
     public static final float STORY_EXCHANGE_WIDTH  = 640f;
     public static final float STORY_EXCHANGE_HEIGHT = 300f;
@@ -186,24 +202,37 @@ public final class StoryUiConstants {
     // A bark is: fade in -> hold -> fade out, one on screen at a time, everything else queued.
     // These numbers are the anti-overwhelm budget (order-6 Part B): if in doubt, raise them.
     // =====================================================================
-    // How long a delivered bark holds before it fades on its own (slow, accessible default).
-    public static final float STORY_BARK_HOLD_SECONDS         = STORY_HOLD_SECONDS_DEFAULT;
-    // HARD rate limit: at most one bark per this many seconds of gameplay, whatever asks.
-    public static final float STORY_BARK_MIN_INTERVAL_SECONDS = 7f;
+    // NO AUTO-DISMISS: a delivered bark holds until the player closes it (see the CLOSE AFFORDANCE
+    // block above).  Only the fade IN and the fade OUT are timed; there is no hold timer at all.
+    // HARD rate limit: at most one bark per this many seconds of gameplay, whatever asks.  Measured
+    // from the moment the previous bark was DISMISSED, so reading slowly never causes a pile-up.
+    public static final float STORY_BARK_MIN_INTERVAL_SECONDS = 12f;
     // Pending barks waiting for the screen.  Small on purpose — a long queue IS chatter.
-    public static final int   STORY_BARK_QUEUE_CAPACITY       = 4;
-    // A queued non-critical bark this old is stale: its moment has passed, so it is dropped.
-    public static final float STORY_BARK_QUEUE_STALE_SECONDS  = 12f;
+    public static final int   STORY_BARK_QUEUE_CAPACITY       = 3;
+    // A queued non-critical bark this old is stale: its moment has passed, so it is dropped
+    // rather than shown late.  Generous, because the player now controls when the screen frees up.
+    public static final float STORY_BARK_QUEUE_STALE_SECONDS  = 25f;
+    // ANTI-REPETITION: never re-use a line said within the last N barks.  If every candidate for a
+    // moment is still in that memory, the moment says NOTHING — silence beats a repeat.
+    public static final int   STORY_BARK_RECENT_MEMORY        = 10;
     // Chance an individual kill even asks for a line (kills are frequent; barks must not be).
-    public static final float STORY_BARK_KILL_CHANCE          = 0.22f;
+    public static final float STORY_BARK_KILL_CHANCE          = 0.07f;
+    // Chance arriving on a floor asks for a line — most floors ORA simply says nothing.
+    public static final float STORY_BARK_FLOOR_ARRIVAL_CHANCE = 0.40f;
     // Health fraction whose downward crossing fires the low-health bark.
     public static final float STORY_BARK_LOW_HEALTH_FRACTION  = 0.30f;
     // No player action for this long => an idle flavour quip may fire.
-    public static final float STORY_BARK_IDLE_SECONDS         = 25f;
+    public static final float STORY_BARK_IDLE_SECONDS         = 45f;
     // Re-stepping this many already-cleared tiles in a row reads as backtracking.
-    public static final int   STORY_BARK_BACKTRACK_STEPS      = 6;
+    public static final int   STORY_BARK_BACKTRACK_STEPS      = 10;
     // Every Nth floor is a deep-strata milestone (the planet's growing whispers).
     public static final int   STORY_BARK_DEEP_STRATA_INTERVAL = 3;
+
+    // TONE BALANCE — every ORA pool mixes lines that MOVE THE STORY with lines that are just her
+    // being dry.  Lore outweighs levity by these selection weights, so she is funny sometimes, not
+    // constantly (narrative/BarkTone).  Tune the mix here; never by editing selection code.
+    public static final float STORY_BARK_WEIGHT_LORE   = 1.0f;
+    public static final float STORY_BARK_WEIGHT_LEVITY = 0.40f;
 
     // Seed salts, mixed with the run seed so the bark layer's rolls join the reproducible run
     // (a shared seed replays the same lines) without colliding with any other seeded stream.
@@ -216,15 +245,15 @@ public final class StoryUiConstants {
     // A test guards this array against the enum drifting.  Zero = the moment is naturally rare
     // (a floor arrival, a one-shot beat) and needs no cooldown beyond the global rate limit.
     public static final float[] STORY_BARK_TRIGGER_COOLDOWN_SECONDS = {
-            0f,     // FLOOR_ARRIVAL           — once per floor by construction
+            75f,    // FLOOR_ARRIVAL            — a short floor must not always earn a line
             0f,     // REGION_ENTERED           — one-shot mandatory beat
             0f,     // REGION_GATE_ORDER        — one-shot mandatory beat
             0f,     // ENEMY_FAMILY_FIRST_SEEN  — one-shot per family
-            45f,    // KILL                     — reactive flavour; stays fresh only if rare
-            40f,    // LOW_HEALTH
-            20f,    // DEEP_STRATA
-            60f,    // IDLE
-            75f,    // BACKTRACK
+            180f,   // KILL                     — reactive flavour; stays fresh only if RARE
+            120f,   // LOW_HEALTH
+            90f,    // DEEP_STRATA
+            300f,   // IDLE                     — a quip every five minutes at most
+            300f,   // BACKTRACK
     };
 
     // =====================================================================

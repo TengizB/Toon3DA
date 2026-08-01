@@ -62,6 +62,19 @@ public final class StoryPanelRenderer implements Disposable {
                           String[] bodyLines, int bodyLineCount,
                           float panelX, float panelY, float panelWidth, float panelHeight,
                           float visibleFraction, float elapsedSeconds) {
+        drawPanel(camera, speaker, speakerName, bodyLines, bodyLineCount,
+                  panelX, panelY, panelWidth, panelHeight, visibleFraction, elapsedSeconds, false);
+    }
+
+    /**
+     * As above, plus an optional CLOSE glyph (an X) in the panel's top-right corner — drawn by any
+     * panel the player must dismiss themselves, such as the order-2 bark.  Its hit rect lives in
+     * {@link StoryUiConstants} so input and drawing cannot drift apart.
+     */
+    public void drawPanel(OrthographicCamera camera, Speaker speaker, String speakerName,
+                          String[] bodyLines, int bodyLineCount,
+                          float panelX, float panelY, float panelWidth, float panelHeight,
+                          float visibleFraction, float elapsedSeconds, boolean drawCloseGlyph) {
         int speakerIndex = speaker.ordinal();
         float accentRed   = StoryUiConstants.SPEAKER_ACCENT_R[speakerIndex];
         float accentGreen = StoryUiConstants.SPEAKER_ACCENT_G[speakerIndex];
@@ -69,7 +82,7 @@ public final class StoryPanelRenderer implements Disposable {
         float fade        = MathUtils.clamp(visibleFraction, 0f, 1f);
 
         drawPanelShapes(camera, speaker, panelX, panelY, panelWidth, panelHeight,
-                        accentRed, accentGreen, accentBlue, fade);
+                        accentRed, accentGreen, accentBlue, fade, drawCloseGlyph);
         drawPanelText(camera, speaker, speakerName, bodyLines, bodyLineCount,
                       panelX, panelY, panelHeight,
                       accentRed, accentGreen, accentBlue, fade, elapsedSeconds);
@@ -81,7 +94,8 @@ public final class StoryPanelRenderer implements Disposable {
 
     private void drawPanelShapes(OrthographicCamera camera, Speaker speaker,
                                  float panelX, float panelY, float panelWidth, float panelHeight,
-                                 float accentRed, float accentGreen, float accentBlue, float fade) {
+                                 float accentRed, float accentGreen, float accentBlue, float fade,
+                                 boolean drawCloseGlyph) {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapes.setProjectionMatrix(camera.combined);
@@ -115,8 +129,30 @@ public final class StoryPanelRenderer implements Disposable {
         drawSpeakerIcon(speaker.getIcon(), iconX, iconY, iconSize,
                         accentRed, accentGreen, accentBlue, fade);
 
+        // CLOSE affordance (order-2 bark): an X in the top-right corner.  Drawn in the body's light
+        // colour, not the accent, so it reads as a control rather than part of the speaker chip.
+        if (drawCloseGlyph) {
+            drawCloseGlyph(StoryUiConstants.STORY_BARK_CLOSE_CENTER_X,
+                           StoryUiConstants.STORY_BARK_CLOSE_CENTER_Y,
+                           StoryUiConstants.STORY_BARK_CLOSE_GLYPH_SIZE,
+                           StoryUiConstants.STORY_BARK_CLOSE_STROKE, fade);
+        }
+
         shapes.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    /**
+     * Draws an X from two crossed bars (Filled ShapeRenderer only, so it shares the single shape
+     * pass).  {@code size} is the glyph's full width/height; {@code stroke} its bar thickness.
+     */
+    private void drawCloseGlyph(float centerX, float centerY, float size, float stroke, float fade) {
+        shapes.setColor(StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
+                        StoryUiConstants.STORY_BODY_B, fade);
+        float half = size / 2f;
+        // rectLine draws a thick line between two points — the two diagonals of the glyph box.
+        shapes.rectLine(centerX - half, centerY - half, centerX + half, centerY + half, stroke);
+        shapes.rectLine(centerX - half, centerY + half, centerX + half, centerY - half, stroke);
     }
 
     /** Draws the tiny procedural chip glyph for a speaker (Filled ShapeRenderer only). */
@@ -185,14 +221,19 @@ public final class StoryPanelRenderer implements Disposable {
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
 
+        // CONTENT GUTTER: text starts one element-gap PAST the accent bar's right edge, using the
+        // same geometry the bar and icon are drawn from (drawPanelShapes).  Deriving it any other
+        // way is what made the bar sit under the first glyph of every body line.
         float contentLeft = panelX + StoryUiConstants.STORY_PANEL_PADDING
-                + StoryUiConstants.STORY_CHIP_ACCENT_BAR_WIDTH;
+                + StoryUiConstants.STORY_CHIP_ACCENT_BAR_WIDTH
+                + StoryUiConstants.STORY_CHIP_ELEMENT_GAP;
         float chipTopY    = panelY + panelHeight - StoryUiConstants.STORY_PANEL_PADDING;
         float shadow      = StoryUiConstants.STORY_TEXT_SHADOW_OFFSET;
 
-        // Speaker name — sits after the icon, coloured with the accent (part of the chip).
-        float nameX = contentLeft + StoryUiConstants.STORY_CHIP_ACCENT_BAR_WIDTH
-                + StoryUiConstants.STORY_CHIP_ICON_SIZE + StoryUiConstants.STORY_CHIP_ELEMENT_GAP * 2f;
+        // Speaker name — sits after the icon, coloured with the accent (part of the chip).  The icon
+        // occupies contentLeft .. contentLeft + iconSize, so the name clears it by one gap.
+        float nameX = contentLeft + StoryUiConstants.STORY_CHIP_ICON_SIZE
+                + StoryUiConstants.STORY_CHIP_ELEMENT_GAP;
         float nameTopY = chipTopY - 4f;
         font.getData().setScale(StoryUiConstants.STORY_NAME_TEXT_SIZE);
         drawWithShadow(speakerName, nameX, nameTopY, accentRed, accentGreen, accentBlue, fade, shadow);

@@ -9,8 +9,8 @@ package ge.tbegvadze.toon3d.narrative;
  * switch statement" discipline as {@code route/RouteRegistries}).
  *
  * <h3>How the tone shift is encoded</h3>
- * There is no "if region == 3" anywhere.  Each row simply declares the STORY REGION BAND it belongs
- * to, and {@link BarkSystem} selects only rows whose band contains the deepest region ever reached:
+ * There is no "if region == 3" anywhere.  Each row declares the STORY REGION BAND it belongs to,
+ * and {@link BarkSystem} selects only rows whose band contains the deepest region ever reached:
  * <ul>
  *   <li>ORA parrots the Organization ("contaminant", "purge", "yield") in the Habitation Rings and
  *       the Galleries, cracks in the Reliquary, and refuses the words from the Wound down.</li>
@@ -20,6 +20,15 @@ package ge.tbegvadze.toon3d.narrative;
  *   <li>The Organization speaks only at region gates, one cold line per region, escalating
  *       procedural -&gt; corrective -&gt; coercive -&gt; denial.</li>
  * </ul>
+ *
+ * <h3>How the humour is balanced</h3>
+ * Every row carries a {@link BarkTone}.  Most are {@link BarkTone#LORE} — they tell the player
+ * something about the place, the Organization, ORA or the planet — and a minority are
+ * {@link BarkTone#LEVITY}, her dry asides.  Lore outweighs levity by selection weight
+ * ({@code StoryUiConstants.STORY_BARK_WEIGHT_*}), so she is funny sometimes and meaningful most of
+ * the time.  Rebalance in the constants file, never by editing selection code.  Pools are also kept
+ * DEEP (4-5 lines per region per repeatable moment) so the no-repeat memory always has somewhere to
+ * go; the deeper the pool, the longer before the player hears anything twice.
  *
  * <p>ONE-SHOT rows (region entry, gate orders, first sight of an enemy family) carry
  * {@code oneShot(true)} and are keyed by their row id in the persistent seen-set, so they fire once
@@ -56,80 +65,74 @@ public final class BarkCatalog {
     }
 
     // -------------------------------------------------------------------------
-    // Floor arrival — the room you just walked into.  ORA, reactive, repeatable.
+    // Floor arrival — ORA reads the room you just walked into.  Repeatable.
     // -------------------------------------------------------------------------
     private static void registerFloorArrival(BarkRegistry registry) {
-        registry.register(row("bark.floor.rings.1", "story.bark.floor.rings.1")
-                .trigger(BarkTrigger.FLOOR_ARRIVAL).region(StoryRegion.HABITATION_RINGS).build());
-        registry.register(row("bark.floor.rings.2", "story.bark.floor.rings.2")
-                .trigger(BarkTrigger.FLOOR_ARRIVAL).region(StoryRegion.HABITATION_RINGS).build());
-        registry.register(row("bark.floor.galleries.1", "story.bark.floor.galleries.1")
-                .trigger(BarkTrigger.FLOOR_ARRIVAL).region(StoryRegion.HARVESTING_GALLERIES).build());
-        registry.register(row("bark.floor.galleries.2", "story.bark.floor.galleries.2")
-                .trigger(BarkTrigger.FLOOR_ARRIVAL).region(StoryRegion.HARVESTING_GALLERIES).build());
-        registry.register(row("bark.floor.reliquary.1", "story.bark.floor.reliquary.1")
-                .trigger(BarkTrigger.FLOOR_ARRIVAL).region(StoryRegion.RELIQUARY).build());
-        registry.register(row("bark.floor.reliquary.2", "story.bark.floor.reliquary.2")
-                .trigger(BarkTrigger.FLOOR_ARRIVAL).region(StoryRegion.RELIQUARY).build());
+        floorLine(registry, "bark.floor.rings.1", StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
+        floorLine(registry, "bark.floor.rings.2", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
+        floorLine(registry, "bark.floor.rings.3", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
+        floorLine(registry, "bark.floor.rings.4", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
+        floorLine(registry, "bark.floor.rings.5", StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
+
+        floorLine(registry, "bark.floor.galleries.1", StoryRegion.HARVESTING_GALLERIES, BarkTone.LEVITY);
+        floorLine(registry, "bark.floor.galleries.2", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
+        floorLine(registry, "bark.floor.galleries.3", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
+        floorLine(registry, "bark.floor.galleries.4", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
+        floorLine(registry, "bark.floor.galleries.5", StoryRegion.HARVESTING_GALLERIES, BarkTone.LEVITY);
+
+        floorLine(registry, "bark.floor.reliquary.1", StoryRegion.RELIQUARY, BarkTone.LORE);
+        floorLine(registry, "bark.floor.reliquary.2", StoryRegion.RELIQUARY, BarkTone.LORE);
+        floorLine(registry, "bark.floor.reliquary.3", StoryRegion.RELIQUARY, BarkTone.LORE);
+        floorLine(registry, "bark.floor.reliquary.4", StoryRegion.RELIQUARY, BarkTone.LORE);
+        floorLine(registry, "bark.floor.reliquary.5", StoryRegion.RELIQUARY, BarkTone.LEVITY);
+
+        // The Wound and the Core: she has stopped joking about any of this.
         registry.register(row("bark.floor.wound.1", "story.bark.floor.wound.1")
                 .trigger(BarkTrigger.FLOOR_ARRIVAL).regionFrom(StoryRegion.WOUND).build());
         registry.register(row("bark.floor.wound.2", "story.bark.floor.wound.2")
                 .trigger(BarkTrigger.FLOOR_ARRIVAL).regionFrom(StoryRegion.WOUND).build());
-        registry.register(row("bark.floor.core.1", "story.bark.floor.core.1")
-                .trigger(BarkTrigger.FLOOR_ARRIVAL).region(StoryRegion.CORE).build());
+        registry.register(row("bark.floor.wound.3", "story.bark.floor.wound.3")
+                .trigger(BarkTrigger.FLOOR_ARRIVAL).regionFrom(StoryRegion.WOUND).build());
+        registry.register(row("bark.floor.wound.4", "story.bark.floor.wound.4")
+                .trigger(BarkTrigger.FLOOR_ARRIVAL).regionFrom(StoryRegion.WOUND).build());
+        floorLine(registry, "bark.floor.core.1", StoryRegion.CORE, BarkTone.LORE);
+        floorLine(registry, "bark.floor.core.2", StoryRegion.CORE, BarkTone.LORE);
+    }
+
+    private static void floorLine(BarkRegistry registry, String id, StoryRegion region, BarkTone tone) {
+        registry.register(row(id, storyIdFor(id))
+                .trigger(BarkTrigger.FLOOR_ARRIVAL).region(region).tone(tone).build());
     }
 
     // -------------------------------------------------------------------------
     // Region entry — one mandatory ORA beat per story region.  One-shot, critical.
     // -------------------------------------------------------------------------
     private static void registerRegionEntry(BarkRegistry registry) {
-        registerRegionBeat(registry, "bark.region.rings",     "story.bark.region.rings",
-                           StoryRegion.HABITATION_RINGS);
-        registerRegionBeat(registry, "bark.region.galleries", "story.bark.region.galleries",
-                           StoryRegion.HARVESTING_GALLERIES);
-        registerRegionBeat(registry, "bark.region.reliquary", "story.bark.region.reliquary",
-                           StoryRegion.RELIQUARY);
-        registerRegionBeat(registry, "bark.region.wound",     "story.bark.region.wound",
-                           StoryRegion.WOUND);
-        registerRegionBeat(registry, "bark.region.core",      "story.bark.region.core",
-                           StoryRegion.CORE);
-    }
-
-    private static void registerRegionBeat(BarkRegistry registry, String id, String textStringId,
-                                           StoryRegion region) {
-        registry.register(row(id, textStringId)
-                .trigger(BarkTrigger.REGION_ENTERED)
-                .region(region)
-                .priority(BarkPriority.STORY_CRITICAL)
-                .oneShot(true)
-                .build());
+        for (StoryRegion region : StoryRegion.values()) {
+            String id = "bark.region." + region.getCatalogKey();
+            registry.register(row(id, storyIdFor(id))
+                    .trigger(BarkTrigger.REGION_ENTERED)
+                    .region(region)
+                    .priority(BarkPriority.STORY_CRITICAL)
+                    .oneShot(true)
+                    .build());
+        }
     }
 
     // -------------------------------------------------------------------------
     // Region gate — the Organization, once per region, escalating.  One-shot, critical.
     // -------------------------------------------------------------------------
     private static void registerGateOrders(BarkRegistry registry) {
-        registerGateOrder(registry, "bark.gate.rings",     "story.bark.gate.rings",
-                          StoryRegion.HABITATION_RINGS);
-        registerGateOrder(registry, "bark.gate.galleries", "story.bark.gate.galleries",
-                          StoryRegion.HARVESTING_GALLERIES);
-        registerGateOrder(registry, "bark.gate.reliquary", "story.bark.gate.reliquary",
-                          StoryRegion.RELIQUARY);
-        registerGateOrder(registry, "bark.gate.wound",     "story.bark.gate.wound",
-                          StoryRegion.WOUND);
-        registerGateOrder(registry, "bark.gate.core",      "story.bark.gate.core",
-                          StoryRegion.CORE);
-    }
-
-    private static void registerGateOrder(BarkRegistry registry, String id, String textStringId,
-                                          StoryRegion region) {
-        registry.register(row(id, textStringId)
-                .speaker(Speaker.ORGANIZATION)
-                .trigger(BarkTrigger.REGION_GATE_ORDER)
-                .region(region)
-                .priority(BarkPriority.STORY_CRITICAL)
-                .oneShot(true)
-                .build());
+        for (StoryRegion region : StoryRegion.values()) {
+            String id = "bark.gate." + region.getCatalogKey();
+            registry.register(row(id, storyIdFor(id))
+                    .speaker(Speaker.ORGANIZATION)
+                    .trigger(BarkTrigger.REGION_GATE_ORDER)
+                    .region(region)
+                    .priority(BarkPriority.STORY_CRITICAL)
+                    .oneShot(true)
+                    .build());
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -137,17 +140,16 @@ public final class BarkCatalog {
     // One-shot per family, valid in every region (a family can debut at any depth).
     // -------------------------------------------------------------------------
     private static void registerEnemyFamilies(BarkRegistry registry) {
-        registerFamily(registry, "UNDEAD",     "bark.family.undead",     "story.bark.family.undead");
-        registerFamily(registry, "INSECT",     "bark.family.insect",     "story.bark.family.insect");
-        registerFamily(registry, "MACHINE",    "bark.family.machine",    "story.bark.family.machine");
-        registerFamily(registry, "ABERRATION", "bark.family.aberration", "story.bark.family.aberration");
-        registerFamily(registry, "DEMON",      "bark.family.demon",      "story.bark.family.demon");
-        registerFamily(registry, "GOLEM",      "bark.family.golem",      "story.bark.family.golem");
+        registerFamily(registry, "UNDEAD",     "bark.family.undead");
+        registerFamily(registry, "INSECT",     "bark.family.insect");
+        registerFamily(registry, "MACHINE",    "bark.family.machine");
+        registerFamily(registry, "ABERRATION", "bark.family.aberration");
+        registerFamily(registry, "DEMON",      "bark.family.demon");
+        registerFamily(registry, "GOLEM",      "bark.family.golem");
     }
 
-    private static void registerFamily(BarkRegistry registry, String familyName,
-                                       String id, String textStringId) {
-        registry.register(row(id, textStringId)
+    private static void registerFamily(BarkRegistry registry, String familyName, String id) {
+        registry.register(row(id, storyIdFor(id))
                 .trigger(BarkTrigger.ENEMY_FAMILY_FIRST_SEEN)
                 .subjectKey(familyName)
                 .oneShot(true)
@@ -155,75 +157,85 @@ public final class BarkCatalog {
     }
 
     // -------------------------------------------------------------------------
-    // Kills — ORA's confidence rotting across the descent.  Reactive, rate-limited.
+    // Kills — ORA's confidence rotting across the descent.  Reactive, heavily rate-limited.
     // -------------------------------------------------------------------------
     private static void registerKills(BarkRegistry registry) {
-        registry.register(row("bark.kill.rings.1", "story.bark.kill.rings.1")
-                .trigger(BarkTrigger.KILL).region(StoryRegion.HABITATION_RINGS).build());
-        registry.register(row("bark.kill.rings.2", "story.bark.kill.rings.2")
-                .trigger(BarkTrigger.KILL).region(StoryRegion.HABITATION_RINGS).build());
-        registry.register(row("bark.kill.galleries.1", "story.bark.kill.galleries.1")
-                .trigger(BarkTrigger.KILL).region(StoryRegion.HARVESTING_GALLERIES).build());
-        registry.register(row("bark.kill.galleries.2", "story.bark.kill.galleries.2")
-                .trigger(BarkTrigger.KILL).region(StoryRegion.HARVESTING_GALLERIES).build());
-        registry.register(row("bark.kill.reliquary.1", "story.bark.kill.reliquary.1")
-                .trigger(BarkTrigger.KILL).region(StoryRegion.RELIQUARY).build());
-        registry.register(row("bark.kill.reliquary.2", "story.bark.kill.reliquary.2")
-                .trigger(BarkTrigger.KILL).region(StoryRegion.RELIQUARY).build());
-        registry.register(row("bark.kill.wound.1", "story.bark.kill.wound.1")
-                .trigger(BarkTrigger.KILL).regionFrom(StoryRegion.WOUND).build());
-        registry.register(row("bark.kill.wound.2", "story.bark.kill.wound.2")
-                .trigger(BarkTrigger.KILL).regionFrom(StoryRegion.WOUND).build());
+        killLine(registry, "bark.kill.rings.1", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
+        killLine(registry, "bark.kill.rings.2", StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
+        killLine(registry, "bark.kill.rings.3", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
+        killLine(registry, "bark.kill.rings.4", StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
+
+        killLine(registry, "bark.kill.galleries.1", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
+        killLine(registry, "bark.kill.galleries.2", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
+        killLine(registry, "bark.kill.galleries.3", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
+        killLine(registry, "bark.kill.galleries.4", StoryRegion.HARVESTING_GALLERIES, BarkTone.LEVITY);
+
+        killLine(registry, "bark.kill.reliquary.1", StoryRegion.RELIQUARY, BarkTone.LORE);
+        killLine(registry, "bark.kill.reliquary.2", StoryRegion.RELIQUARY, BarkTone.LORE);
+        killLine(registry, "bark.kill.reliquary.3", StoryRegion.RELIQUARY, BarkTone.LORE);
+        killLine(registry, "bark.kill.reliquary.4", StoryRegion.RELIQUARY, BarkTone.LORE);
+
+        for (int lineNumber = 1; lineNumber <= 4; lineNumber++) {
+            String id = "bark.kill.wound." + lineNumber;
+            registry.register(row(id, storyIdFor(id))
+                    .trigger(BarkTrigger.KILL).regionFrom(StoryRegion.WOUND).build());
+        }
+    }
+
+    private static void killLine(BarkRegistry registry, String id, StoryRegion region, BarkTone tone) {
+        registry.register(row(id, storyIdFor(id))
+                .trigger(BarkTrigger.KILL).region(region).tone(tone).build());
     }
 
     // -------------------------------------------------------------------------
-    // Low health — one line per tone stage.
+    // Low health — two lines per tone stage.  Never a joke below the Galleries.
     // -------------------------------------------------------------------------
     private static void registerLowHealth(BarkRegistry registry) {
-        registry.register(row("bark.lowhealth.rings", "story.bark.lowhealth.rings")
-                .trigger(BarkTrigger.LOW_HEALTH).region(StoryRegion.HABITATION_RINGS).build());
-        registry.register(row("bark.lowhealth.mid", "story.bark.lowhealth.mid")
-                .trigger(BarkTrigger.LOW_HEALTH)
-                .regionBand(StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY).build());
-        registry.register(row("bark.lowhealth.deep", "story.bark.lowhealth.deep")
-                .trigger(BarkTrigger.LOW_HEALTH).regionFrom(StoryRegion.WOUND).build());
+        lowHealthLine(registry, "bark.lowhealth.rings.1",
+                      StoryRegion.HABITATION_RINGS, StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
+        lowHealthLine(registry, "bark.lowhealth.rings.2",
+                      StoryRegion.HABITATION_RINGS, StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
+        lowHealthLine(registry, "bark.lowhealth.mid.1",
+                      StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY, BarkTone.LORE);
+        lowHealthLine(registry, "bark.lowhealth.mid.2",
+                      StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY, BarkTone.LORE);
+        lowHealthLine(registry, "bark.lowhealth.deep.1",
+                      StoryRegion.WOUND, StoryRegion.CORE, BarkTone.LORE);
+        lowHealthLine(registry, "bark.lowhealth.deep.2",
+                      StoryRegion.WOUND, StoryRegion.CORE, BarkTone.LORE);
+    }
+
+    private static void lowHealthLine(BarkRegistry registry, String id,
+                                      StoryRegion firstRegion, StoryRegion lastRegion, BarkTone tone) {
+        registry.register(row(id, storyIdFor(id))
+                .trigger(BarkTrigger.LOW_HEALTH).regionBand(firstRegion, lastRegion).tone(tone).build());
     }
 
     // -------------------------------------------------------------------------
     // Deep-strata milestones — THE PLANET.  No rows in Region 1: that silence is the design.
+    // Every planet line is LORE; it has never made a joke in its life.
     // -------------------------------------------------------------------------
     private static void registerDeepStrata(BarkRegistry registry) {
         // Region 2 — whispers: single wrong-language words, easy to blame on the deep.
-        registerWhisper(registry, "bark.strata.galleries.1", "story.bark.strata.galleries.1");
-        registerWhisper(registry, "bark.strata.galleries.2", "story.bark.strata.galleries.2");
-        registerWhisper(registry, "bark.strata.galleries.3", "story.bark.strata.galleries.3");
-        registerWhisper(registry, "bark.strata.galleries.4", "story.bark.strata.galleries.4");
-
+        for (int lineNumber = 1; lineNumber <= 4; lineNumber++) {
+            planetLine(registry, "bark.strata.galleries." + lineNumber,
+                       StoryRegion.HARVESTING_GALLERIES, StoryRegion.HARVESTING_GALLERIES);
+        }
         // Region 3 — address: it knows you, by deed, not by serial.
-        registerPlanetLine(registry, "bark.strata.reliquary.1", "story.bark.strata.reliquary.1",
-                           StoryRegion.RELIQUARY, StoryRegion.RELIQUARY);
-        registerPlanetLine(registry, "bark.strata.reliquary.2", "story.bark.strata.reliquary.2",
-                           StoryRegion.RELIQUARY, StoryRegion.RELIQUARY);
-        registerPlanetLine(registry, "bark.strata.reliquary.3", "story.bark.strata.reliquary.3",
-                           StoryRegion.RELIQUARY, StoryRegion.RELIQUARY);
-
+        for (int lineNumber = 1; lineNumber <= 4; lineNumber++) {
+            planetLine(registry, "bark.strata.reliquary." + lineNumber,
+                       StoryRegion.RELIQUARY, StoryRegion.RELIQUARY);
+        }
         // Region 4 -> Core — communion: plain, gentle, terrible.
-        registerPlanetLine(registry, "bark.strata.wound.1", "story.bark.strata.wound.1",
-                           StoryRegion.WOUND, StoryRegion.CORE);
-        registerPlanetLine(registry, "bark.strata.wound.2", "story.bark.strata.wound.2",
-                           StoryRegion.WOUND, StoryRegion.CORE);
-        registerPlanetLine(registry, "bark.strata.wound.3", "story.bark.strata.wound.3",
-                           StoryRegion.WOUND, StoryRegion.CORE);
+        for (int lineNumber = 1; lineNumber <= 4; lineNumber++) {
+            planetLine(registry, "bark.strata.wound." + lineNumber,
+                       StoryRegion.WOUND, StoryRegion.CORE);
+        }
     }
 
-    private static void registerWhisper(BarkRegistry registry, String id, String textStringId) {
-        registerPlanetLine(registry, id, textStringId,
-                           StoryRegion.HARVESTING_GALLERIES, StoryRegion.HARVESTING_GALLERIES);
-    }
-
-    private static void registerPlanetLine(BarkRegistry registry, String id, String textStringId,
-                                           StoryRegion firstRegion, StoryRegion lastRegion) {
-        registry.register(row(id, textStringId)
+    private static void planetLine(BarkRegistry registry, String id,
+                                   StoryRegion firstRegion, StoryRegion lastRegion) {
+        registry.register(row(id, storyIdFor(id))
                 .speaker(Speaker.PLANET)
                 .trigger(BarkTrigger.DEEP_STRATA)
                 .regionBand(firstRegion, lastRegion)
@@ -231,35 +243,62 @@ public final class BarkCatalog {
     }
 
     // -------------------------------------------------------------------------
-    // Idle / backtracking — pure flavour, dropped first under any pressure.
+    // Idle / backtracking — the flavour pools, dropped first under any pressure and on the
+    // longest cooldowns in the table.  This is where ORA is allowed to be funny most often.
     // -------------------------------------------------------------------------
     private static void registerIdleAndBacktrack(BarkRegistry registry) {
-        registry.register(row("bark.idle.rings", "story.bark.idle.rings")
-                .trigger(BarkTrigger.IDLE).priority(BarkPriority.FLAVOR)
-                .region(StoryRegion.HABITATION_RINGS).build());
-        registry.register(row("bark.idle.mid", "story.bark.idle.mid")
-                .trigger(BarkTrigger.IDLE).priority(BarkPriority.FLAVOR)
-                .regionBand(StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY).build());
-        registry.register(row("bark.idle.deep", "story.bark.idle.deep")
-                .trigger(BarkTrigger.IDLE).priority(BarkPriority.FLAVOR)
-                .regionFrom(StoryRegion.WOUND).build());
+        flavourLine(registry, BarkTrigger.IDLE, "bark.idle.rings.1",
+                    StoryRegion.HABITATION_RINGS, StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
+        flavourLine(registry, BarkTrigger.IDLE, "bark.idle.rings.2",
+                    StoryRegion.HABITATION_RINGS, StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
+        flavourLine(registry, BarkTrigger.IDLE, "bark.idle.mid.1",
+                    StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY, BarkTone.LEVITY);
+        flavourLine(registry, BarkTrigger.IDLE, "bark.idle.mid.2",
+                    StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY, BarkTone.LORE);
+        flavourLine(registry, BarkTrigger.IDLE, "bark.idle.deep.1",
+                    StoryRegion.WOUND, StoryRegion.CORE, BarkTone.LORE);
+        flavourLine(registry, BarkTrigger.IDLE, "bark.idle.deep.2",
+                    StoryRegion.WOUND, StoryRegion.CORE, BarkTone.LORE);
 
-        registry.register(row("bark.backtrack.rings", "story.bark.backtrack.rings")
-                .trigger(BarkTrigger.BACKTRACK).priority(BarkPriority.FLAVOR)
-                .region(StoryRegion.HABITATION_RINGS).build());
-        registry.register(row("bark.backtrack.mid", "story.bark.backtrack.mid")
-                .trigger(BarkTrigger.BACKTRACK).priority(BarkPriority.FLAVOR)
-                .regionBand(StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY).build());
-        registry.register(row("bark.backtrack.deep", "story.bark.backtrack.deep")
-                .trigger(BarkTrigger.BACKTRACK).priority(BarkPriority.FLAVOR)
-                .regionFrom(StoryRegion.WOUND).build());
+        flavourLine(registry, BarkTrigger.BACKTRACK, "bark.backtrack.rings.1",
+                    StoryRegion.HABITATION_RINGS, StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
+        flavourLine(registry, BarkTrigger.BACKTRACK, "bark.backtrack.rings.2",
+                    StoryRegion.HABITATION_RINGS, StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
+        flavourLine(registry, BarkTrigger.BACKTRACK, "bark.backtrack.mid.1",
+                    StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY, BarkTone.LORE);
+        flavourLine(registry, BarkTrigger.BACKTRACK, "bark.backtrack.mid.2",
+                    StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY, BarkTone.LORE);
+        flavourLine(registry, BarkTrigger.BACKTRACK, "bark.backtrack.deep.1",
+                    StoryRegion.WOUND, StoryRegion.CORE, BarkTone.LORE);
+        flavourLine(registry, BarkTrigger.BACKTRACK, "bark.backtrack.deep.2",
+                    StoryRegion.WOUND, StoryRegion.CORE, BarkTone.LORE);
     }
 
-    /** Shared row prologue: ORA, reactive priority — the defaults most rows keep. */
+    private static void flavourLine(BarkRegistry registry, BarkTrigger trigger, String id,
+                                    StoryRegion firstRegion, StoryRegion lastRegion, BarkTone tone) {
+        registry.register(row(id, storyIdFor(id))
+                .trigger(trigger)
+                .priority(BarkPriority.FLAVOR)
+                .regionBand(firstRegion, lastRegion)
+                .tone(tone)
+                .build());
+    }
+
+    /** Shared row prologue: ORA, reactive priority, lore tone — the defaults most rows keep. */
     private static BarkDefinition.Builder row(String id, String textStringId) {
         return BarkDefinition.builder(id)
                 .speaker(Speaker.AI)
                 .textStringId(textStringId)
-                .priority(BarkPriority.REACTIVE);
+                .priority(BarkPriority.REACTIVE)
+                .tone(BarkTone.LORE);
+    }
+
+    /**
+     * The localisation id for a row id.  Row ids and string ids are kept in lockstep by
+     * construction ({@code bark.foo.1} -> {@code story.bark.foo.1}), so a new line cannot be
+     * registered against a mistyped string id — a test resolves every one of them.
+     */
+    private static String storyIdFor(String barkId) {
+        return "story." + barkId;
     }
 }
