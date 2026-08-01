@@ -30,6 +30,7 @@ public final class BarkDefinition {
     private final BarkPriority priority;
     private final boolean      oneShot;
     private final String       subjectKey;
+    private final BarkTone     tone;
     private final float        weight;
 
     private BarkDefinition(Builder builder) {
@@ -42,7 +43,10 @@ public final class BarkDefinition {
         this.priority     = builder.priority;
         this.oneShot      = builder.oneShot;
         this.subjectKey   = builder.subjectKey;
-        this.weight       = builder.weight;
+        this.tone         = builder.tone;
+        // An explicit weight wins; otherwise the tone sets it, which is how the lore/levity balance
+        // is enforced by data rather than by selection code.
+        this.weight       = builder.weight > 0f ? builder.weight : builder.tone.getSelectionWeight();
     }
 
     /** Stable catalog id.  Doubles as the persistent one-shot "seen" key — never change a shipped id. */
@@ -72,7 +76,13 @@ public final class BarkDefinition {
      */
     public String getSubjectKey() { return subjectKey; }
 
-    /** Relative selection weight inside its pool.  Always &gt; 0. */
+    /** Whether this line moves the story ({@link BarkTone#LORE}) or is a dry aside. */
+    public BarkTone getTone() { return tone; }
+
+    /**
+     * Relative selection weight inside its pool — resolved at build time, so it is always &gt; 0 here:
+     * an explicit {@code weight(...)} if one was given, otherwise the {@link BarkTone}'s weight.
+     */
     public float getWeight() { return weight; }
 
     /** True when this row may be spoken with the given deepest-region-reached. */
@@ -102,7 +112,8 @@ public final class BarkDefinition {
         private BarkPriority priority     = BarkPriority.REACTIVE;
         private boolean      oneShot      = false;
         private String       subjectKey   = null;
-        private float        weight       = 1f;
+        private BarkTone     tone         = BarkTone.LORE;   // the channel exists to tell the story
+        private float        weight       = 0f;               // 0 = "use the tone's weight"
 
         private Builder(String id) {
             if (id == null || id.isEmpty()) {
@@ -117,6 +128,8 @@ public final class BarkDefinition {
         public Builder priority(BarkPriority value)   { this.priority     = value; return this; }
         public Builder oneShot(boolean value)         { this.oneShot      = value; return this; }
         public Builder subjectKey(String value)       { this.subjectKey   = value; return this; }
+        public Builder tone(BarkTone value)           { this.tone         = value; return this; }
+        /** Overrides the tone's default weight.  Leave unset for the standard lore/levity balance. */
         public Builder weight(float value)            { this.weight       = value; return this; }
 
         /** Restricts this row to a single story region. */
@@ -153,8 +166,12 @@ public final class BarkDefinition {
             if (firstRegion.ordinal() > lastRegion.ordinal()) {
                 throw new IllegalArgumentException("bark " + id + " has an inverted region band");
             }
-            if (weight <= 0f) {
-                throw new IllegalArgumentException("bark " + id + " needs a positive weight");
+            if (tone == null) {
+                throw new IllegalArgumentException("bark " + id + " has no tone");
+            }
+            // weight 0 is the "inherit the tone's weight" sentinel; a NEGATIVE weight is a bug.
+            if (weight < 0f) {
+                throw new IllegalArgumentException("bark " + id + " has a negative weight");
             }
             return new BarkDefinition(this);
         }

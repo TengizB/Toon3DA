@@ -43,6 +43,36 @@ IMPLEMENTATION NOTES (order-2 bark layer delivered)
   on screen at a time + auto-dismiss, rate limit, flavour dropped / critical never dropped,
   critical cuts the current line short, suppression queues and resumes, stale reactive lines
   dropped, and the wrapped read model. Whole fast gate green (247 tests).
+
+PLAYTEST FIXES (after the first build — these OVERRIDE the original spec above)
+- NO AUTO-DISMISS (supersedes "auto-dismisses after a hold time"). Players could not always read
+  a line before it vanished, so a bark now holds indefinitely and the PLAYER closes it: tap the X
+  in the panel's top-right corner, or swipe the panel (STORY_BARK_CLOSE_* / _SWIPE_DISMISS_DISTANCE,
+  hit-tested by StoryBarkRenderer.isInsideCloseButton/isInsidePanel, driven by World's
+  updateStoryBarkTouch). Nothing cuts a line short any more — not even a STORY-CRITICAL beat, which
+  now waits its turn. The rate-limit clock runs only while the screen is FREE, so a slow reader is
+  never punished with a burst of queued lines; queued non-critical lines still go stale and are
+  dropped rather than shown late. GameMath.storyPanelVisibleFraction became the dismissible variant
+  (fade in -> held -> fade out on dismissal) and STORY_BARK_HOLD_SECONDS is gone.
+- PANEL LAYOUT: the accent bar sat under the first glyph of every body line. Body text and the
+  speaker icon now share one CONTENT GUTTER derived from the same geometry the bar is drawn from
+  (padding + bar width + element gap), and the speaker name is measured from the icon rather than
+  re-adding the bar width.
+- ANTI-SPAM (ORA was repeating herself and joking constantly): a no-repeat ring
+  (STORY_BARK_RECENT_MEMORY = 10) makes a recently-said line ineligible — if that empties a pool the
+  moment says nothing; per-trigger cooldowns went to minutes (KILL 45->180s, IDLE/BACKTRACK 300s,
+  FLOOR_ARRIVAL gained 75s); the kill roll dropped 0.22 -> 0.07 and floor arrival became a 0.40 roll
+  so most floors are silent; the global interval went 7 -> 12s and the idle threshold 25 -> 45s.
+- TONE BALANCE (new narrative/BarkTone): every row is LORE (moves the story) or LEVITY (a dry
+  aside), and the tone sets the selection weight (1.0 vs 0.40 in StoryUiConstants), so ORA is funny
+  sometimes and meaningful most of the time. Pools were rewritten and deepened to 4-5 lines per
+  region per repeatable moment — 83 lines now, most of them carrying actual lore (evacuation
+  notices, extraction tolerances, Cradle racks, pattern archives, serials that match yours). Humour
+  is concentrated near the surface and absent below the Reliquary; the planet never jokes at all.
+- Tests grew to 25 (fast gate 255): no-auto-dismiss, dismiss-fades-and-frees, critical-waits,
+  no-repeat, pool depth per region, lore-outweighs-levity, humour-near-the-surface-only,
+  planet-only-lore, and long-read-drops-stale-but-keeps-critical.
+
 - DoD screen: lwjgl3 StoryBarkShowcase + StoryBarkShowcaseLauncher (dev only) — replays a
   scripted descent of moments through the REAL BarkSystem + StoryBarkRenderer over a split
   bright/dark backdrop with HUD/cluster/mini-map markers.

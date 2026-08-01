@@ -5035,50 +5035,38 @@ public final class GameMath {
     }
 
     /*
-     * Formula: story panel visible fraction (fade in -> hold -> fade out)
+     * Formula: dismissible story panel visible fraction (fade in -> hold indefinitely -> fade out)
      * Derivation:
-     *   A story panel's on-screen life is three consecutive spans measured from the moment it was
-     *   delivered (Story UI order-1 motion rules; the bark layer of order-2 drives it every frame):
-     *       [0, fadeIn)                            rising:  f = elapsed / fadeIn
-     *       [fadeIn, fadeIn + hold)                 held:    f = 1
-     *       [fadeIn + hold, fadeIn + hold + fadeOut) falling: f = 1 - (elapsed - fadeIn - hold)/fadeOut
-     *       beyond                                  gone:    f = 0
-     *   Solving the falling span for its start s = fadeIn + hold gives f = (s + fadeOut - elapsed)/fadeOut,
-     *   which is 1 at elapsed = s and 0 at elapsed = s + fadeOut, so the three spans join continuously.
-     *   The result is clamped to [0, 1] and multiplies every element the panel draws (alpha only —
-     *   the panel never moves, so combat screen shake cannot disturb story text).
+     *   A story bark has NO hold timer: it fades in, then stays at full opacity for as long as the
+     *   player needs, and only fades out once THEY dismiss it (Story UI order-2).  So the alpha is
+     *   driven by two independent clocks rather than one:
+     *       deliveredElapsed  — seconds since the panel appeared
+     *       dismissElapsed    — seconds since the player dismissed it (only meaningful once dismissed)
+     *   Rising  (not dismissed, deliveredElapsed < fadeIn):  f = deliveredElapsed / fadeIn
+     *   Held    (not dismissed, otherwise):                   f = 1
+     *   Falling (dismissed):                                  f = fadeInReached * (1 - dismissElapsed/fadeOut)
+     *   where fadeInReached is the alpha the panel had when it was dismissed — dismissing during the
+     *   fade-in must not pop the panel to full opacity before fading it out, so the falling ramp is
+     *   scaled by min(1, deliveredElapsed/fadeIn) and the curve stays continuous at the moment of
+     *   dismissal.  The result is clamped to [0, 1] and multiplies alpha only; the panel never moves,
+     *   so combat screen shake cannot disturb story text.
      * Edge cases:
-     *   elapsed <= 0            -> 0 (nothing drawn before the panel is delivered).
-     *   fadeIn <= 0             -> the rising span is skipped; the panel starts fully opaque.
-     *   fadeOut <= 0            -> the panel vanishes the instant the hold ends (no divide by zero).
-     *   hold <= 0               -> legal: fade straight in and back out (used when a queued bark cuts
-     *                              the current one short).
+     *   deliveredElapsed <= 0 -> 0 (nothing drawn before the panel is delivered).
+     *   fadeIn  <= 0          -> the rising span is skipped; the panel starts fully opaque.
+     *   fadeOut <= 0          -> the panel vanishes the instant it is dismissed (no divide by zero).
+     *   dismissElapsed >= fadeOut -> 0; the caller then retires the panel.
      *   float drift at a span boundary can only move the result by an epsilon; the clamp absorbs it.
      */
-    public static float storyPanelVisibleFraction(float elapsedSeconds, float fadeInSeconds,
-                                                  float holdSeconds, float fadeOutSeconds) {
-        if (elapsedSeconds <= 0f) return 0f;
-        if (fadeInSeconds > 0f && elapsedSeconds < fadeInSeconds) {
-            return MathUtils.clamp(elapsedSeconds / fadeInSeconds, 0f, 1f);
-        }
-        float fadeOutStart = Math.max(0f, fadeInSeconds) + Math.max(0f, holdSeconds);
-        if (elapsedSeconds < fadeOutStart) return 1f;
-        if (fadeOutSeconds <= 0f) return 0f;
-        float remaining = fadeOutStart + fadeOutSeconds - elapsedSeconds;
-        return MathUtils.clamp(remaining / fadeOutSeconds, 0f, 1f);
-    }
-
-    /*
-     * Formula: story panel total lifetime
-     * Derivation:
-     *   The elapsed time at which storyPanelVisibleFraction() first reaches 0 again:
-     *       lifetime = fadeIn + hold + fadeOut
-     *   Negative spans are treated as 0 so a caller cannot shorten the panel below its own fades.
-     * Edge cases:
-     *   all three zero -> lifetime 0: the panel is already finished on the frame it is delivered.
-     */
-    public static float storyPanelLifetimeSeconds(float fadeInSeconds, float holdSeconds,
+    public static float storyPanelVisibleFraction(float deliveredElapsedSeconds, float fadeInSeconds,
+                                                  boolean dismissed, float dismissElapsedSeconds,
                                                   float fadeOutSeconds) {
-        return Math.max(0f, fadeInSeconds) + Math.max(0f, holdSeconds) + Math.max(0f, fadeOutSeconds);
+        if (deliveredElapsedSeconds <= 0f) return 0f;
+        float risen = fadeInSeconds > 0f
+                ? MathUtils.clamp(deliveredElapsedSeconds / fadeInSeconds, 0f, 1f)
+                : 1f;
+        if (!dismissed) return risen;
+        if (fadeOutSeconds <= 0f) return 0f;
+        float falling = 1f - MathUtils.clamp(dismissElapsedSeconds / fadeOutSeconds, 0f, 1f);
+        return MathUtils.clamp(risen * falling, 0f, 1f);
     }
 }
