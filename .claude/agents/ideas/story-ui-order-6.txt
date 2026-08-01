@@ -1,0 +1,68 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Story UI 6 — Codex, pacing, anti-skip & accessibility (wrap-up)
+---
+
+PURPOSE
+The opt-in archive plus the whole-system rules that keep story UI from annoying the
+player: pacing budget, anti-skip philosophy, and accessibility. Build last; it ties
+orders 1–5 together. Depends on all of them.
+
+PART A — THE CODEX (the one place long text is allowed)
+- A quiet, out-of-the-way menu that ARCHIVES everything already said, plus the FULL text
+  of any log the player chose to interact with. Nothing here is forced.
+- Purpose: the ~20% who love lore can read for hours; the ~80% never open it and still
+  get the whole story from barks/exchanges.
+
+  ACCESS
+  - From the pause/menu overlay (a book/terminal icon). Never interrupts play.
+  - Optional: a subtle "NEW" dot when an entry unlocks, to invite (not force) a look.
+
+  LAYOUT (readable, scrollable, thumb-friendly)
+  - Left/top: category tabs — e.g. LOGS, PEOPLE, THE PLANET, THE ORGANIZATION, ORA,
+    MEMORIES (your original self). Right/body: scrollable entry list → entry detail.
+  - Big tap targets, large body text, generous line spacing, dark panel. Smooth scroll,
+    no horizontal scroll. Long entries scroll within their own panel.
+  - Each entry: title, source, full text, and (for logs) the AI's take shown at top.
+
+  UNLOCKS & REWARD (pay them for engaging — 08 lever #3)
+  - Entries unlock from log pickups, probe choices, and story beats.
+  - Completion perks: small cosmetic rewards or a tiny meta bonus for filling a category.
+    Never required; never gameplay-critical.
+  - MEMORIES category fills as the block lifts region by region — the codex itself shows
+    the player reassembling their true past.
+
+PART B — PACING BUDGET (anti-overwhelm)
+- Barks: hard rate-limit (order-2). No chatter. Silence is allowed and good.
+- Exchanges: ~2–4 per region max (order-5). Never back-to-back.
+- No story UI during intense combat spikes — queue it for the lull right after.
+- If in doubt, cut. Under-telling beats over-telling for this audience.
+
+PART C — ANTI-SKIP PHILOSOPHY (make them WANT it, don't trap them)
+- Never trap the player in text. One tap always advances. Frustration makes skimming.
+- We earn attention, not force it:
+    • one line at a time (short = read without deciding to),
+    • the AI is funny and the player bonds with her,
+    • choices make the player a participant (order-4),
+    • curiosity gaps ("...huh") and reading-for-loot pull them forward.
+- Mandatory beats ride unskippable channels (boot card, first-appearance barks, the core
+  ending exchange), so even a pure skimmer cannot miss the spine of the story.
+- A player who skips everything optional should STILL understand: who they are, what the
+  Organization does, and what choice they face at the core. Verify this "skimmer path."
+
+PART D — ACCESSIBILITY & SETTINGS
+- Story-text size / hold-time setting (slow, comfortable default).
+- Nothing critical conveyed by color alone (always name chip + icon).
+- Timers off by default; if any timed moment exists, it has a disable toggle and a clear
+  default option (order-4).
+- High-contrast panels; no flashing; combat screen-shake never disturbs story panels.
+- Left/right-handed friendly: story panels centered, clear of both thumb clusters.
+
+PART E — TELEMETRY (optional, for tuning)
+- Log which barks/exchanges were seen, skipped fast, or read; which choices were picked;
+  codex open rate. Use it to tune pacing and prune lines players ignore. No PII.
+
+DEFINITION OF DONE
+- Codex opens from the menu, lists unlocked entries by category, scrolls readably, shows
+  "NEW" on unlock, and rewards completion. A "skim everything" playthrough still conveys
+  the core story on unskippable channels. All accessibility settings function.

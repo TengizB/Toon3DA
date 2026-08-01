@@ -1,0 +1,65 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Story UI 2 — Bark system (non-blocking one-liners) + trigger moments
+---
+
+PURPOSE
+The main, always-on storytelling channel: short one-line messages that pop up DURING
+play without stopping the game. Carries ~80% of the story (mostly the AI assistant).
+Depends on order-1 (visual language).
+
+WHAT A BARK IS
+- One speaker line, 1–2 lines of text, on the story panel from order-1.
+- Non-blocking: the game keeps running; the player keeps moving/tapping.
+- Auto-dismisses after a hold time, or when the next bark replaces it.
+- Never has choices (choices are order-4 "exchanges"). A bark is read-and-forget.
+
+WHERE IT APPEARS (screen position)
+- Lower-third band, centered horizontally, ABOVE the HUD and ABOVE the thumb controls,
+  BELOW the weapon sprite. Must never overlap touch buttons or the crosshair/weapon.
+- Fixed anchor from StoryUiConstants. Same spot every time so the eye learns it.
+
+QUEUE BEHAVIOR (so it never spams)
+- One bark on screen at a time. New barks queue.
+- Max hold ~3–5s (tunable), then fade. If a new bark arrives, current one fades early.
+- Hard rate limit: no more than 1 bark per N seconds of gameplay (anti-overwhelm; see
+  order-6 pacing). Low-priority barks are dropped if the queue is stale.
+- Priority tiers: STORY-CRITICAL (mandatory beats) > REACTIVE (kills, rooms) > FLAVOR
+  (idle quips). Critical never dropped; flavor dropped first under pressure.
+
+WHEN BARKS POP UP — trigger moments (data-driven, via TickEventBus / game events)
+Hook the narrative system to existing game events. Suggested triggers:
+
+  Trigger event                         Typical speaker   Example (see dialog docs)
+  ------------------------------------  ----------------  ----------------------------
+  Enter a new room / region for 1st time AI               "Objective's down. Let's go."
+  First time a new enemy FAMILY appears  AI / Planet       "These 'specimens' scream..."
+  Kill (occasional, not every kill)      AI                "See? Contaminant. Sure."
+  Low health crosses a threshold         AI                "Ten percent. Bold. Dumb."
+  Pick up a log / data-slate             AI (the "take")   one-line lore take (order-5)
+  Region gate reached                    Organization      a cold order (rare)
+  Deep-strata proximity milestones       Planet            growing whispers/fragments
+  Idle too long / backtracking           AI (flavor)       dry quip, low priority
+  Boot / reprint                         AI + System       handled by order-3
+
+RULES
+- Every bark is tied to a MOMENT (an event). No free-floating lore on a timer.
+- "First time only" flags for one-shot lines (don't repeat the room-intro every visit).
+- Reactive barks (kills, low HP) are randomized from a small pool and rate-limited so
+  they stay fresh and never chatter.
+- The AI parrots Organization words early ("contaminant", "asset") and drops them late —
+  the bark pool is REGION-GATED so tone tracks the descent (order-5 owns the schedule).
+- Planet barks stay tiny and grow across regions (silence → whispers → address).
+
+IMPLEMENTATION NOTES
+- Reuse/extend render/EventTextSystem.java + EventTextRenderer.java if suitable — the
+  game already shows transient on-screen event text; the bark layer is the same shape
+  with speaker identity + queue + priority added.
+- Narrative logic (which line, when, one-shot flags, region gating, rate limit) is
+  headless in …toon3d.narrative and subscribes to TickEventBus (docs/tick-system.txt).
+- No allocations in render(): pre-build the panel, pool bark objects, reuse the font.
+
+DEFINITION OF DONE
+- Walking into rooms, killing, and low HP each surface the right one-line bark with the
+  correct speaker chip, non-blocking, rate-limited, one-shot lines fire once, and the
+  pool shifts tone by region.

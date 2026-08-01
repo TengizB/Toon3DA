@@ -1,0 +1,89 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Story UI 4 — Interactive dialog & choice system (multiple response options)
+---
+
+PURPOSE
+The engagement layer the player asked for: certain story moments PAUSE the game and
+offer 2–3 tappable response options, so the player speaks instead of skipping. This is
+what turns passive reading into participation. Depends on order-1 and order-2.
+
+WHY IT FITS THIS GAME
+The game is turn-based with an action lock (nothing moves until the player acts). So
+pausing for a short exchange is natural and cheap: during an EXCHANGE the world simply
+takes no turns until the player taps a response. No real-time pressure, no unfairness.
+
+BARK vs EXCHANGE (two shapes, one system)
+- BARK (order-2): non-blocking, no choice, auto-dismiss. ~80% of story.
+- EXCHANGE (this file): blocking, 2–3 choices, player must tap to proceed. Rare and
+  deliberate — a handful per region — so it stays special and is never a chore.
+
+THE EXCHANGE PANEL (layout — readable, thumb-friendly)
+- Appears lower-center / lower-third, over a dark ~0.85 panel (never over touch zones).
+- Top: speaker chip (color + icon + name) + the speaker's line (max 3 short lines).
+- Below: 2–3 response buttons STACKED vertically, full width, large height (comfortable
+  thumb target from StoryUiConstants). Each button holds ONE short player line.
+- Clear pressed/selected state. One tap selects and advances. No tiny targets, no
+  timers by default (see "timed" below).
+- The world dims slightly behind the panel to signal "we've paused for this."
+
+THREE KINDS OF CHOICE (most are cheap; few are consequential)
+1. STANCE choice (most common, cheap):
+   - How you respond in character — e.g. DEFIANT / CURIOUS / OBEDIENT / COLD.
+   - No branching plot. It changes the immediate reply and nudges a hidden STANCE model
+     (see below). Lets the player express themselves so they stay engaged and read on.
+2. PROBE choice (rewards curiosity):
+   - Pick which question to ask ("What is a Reliquary?" / "What do they burn?" / "Skip").
+   - Each probe returns a short answer bark AND may unlock a codex entry (order-6).
+   - Optionally a probe reveals a small reward (marks a secret, tiny buff) — pays the
+     player for engaging (08 lever #3).
+3. CONSEQUENTIAL choice (rare, real weight):
+   - Actually changes something: the ENDINGS at the core (06-endings.md), plus a few
+     mid-game trust beats (e.g. "Let ORA delete this log so the Organization can't see
+     it?" yes/no). These are few and hand-placed in order-5.
+
+THE HIDDEN STANCE MODEL (makes cheap choices feel meaningful)
+- Track three lightweight leanings in the headless narrative layer:
+    • toward the PLANET (empathy / listening)
+    • toward the ORGANIZATION (obedience / mission)
+    • bond with ORA (trust / warmth)
+- Stance is nudged by stance/consequential choices. It NEVER hard-gates content, but it:
+    • flavors ORA's warmth and which lines she offers,
+    • colors small reactions from the planet/Organization,
+    • softly signals which ENDING the player is aligned to at the core (the ending choice
+      is still fully open to all — stance just adds resonance, per "no correct ending").
+- Keep it invisible (no meter on screen). The player feels it, never manages it.
+
+ANTI-SKIP DESIGN (why the player won't just mash through)
+- An exchange REQUIRES a tap on an actual option to proceed — there is no blank "next",
+  so the player must at least glance at the choices.
+- Options are SHORT and DISTINCT (one line each), so reading them is fast and tempting.
+- Because choices flavor ORA and the ending, players quickly learn the words matter.
+- Rare frequency keeps them wanted, not resented. If exchanges feel frequent, cut them.
+- Provide a global "story speed" setting, but NEVER a "disable choices" toggle — the
+  choice IS the engagement; instead keep them short enough that no one wants to skip.
+
+OPTIONAL: TIMED CHOICES (use sparingly, accessibility-guarded)
+- A few high-tension planet/Organization moments MAY show a slim timer for drama.
+- If used: generous time, a clearly-marked DEFAULT option auto-selected on timeout, and
+  a setting to disable timers entirely. Default project stance: no timers unless a
+  specific moment in order-5 calls for one.
+
+DATA MODEL (headless, testable — …toon3d.narrative)
+- An EXCHANGE = { speaker, promptLineId, options[] }, option = { playerLineId, kind,
+  stanceEffect?, unlocksCodexId?, reward?, nextExchangeId? }.
+- Exchanges are DATA, registered in a registry and triggered by events (order-5 lists
+  the triggers). No switch statements in the renderer — same discipline as route/tileset
+  registries. The renderer just draws whatever exchange the narrative layer hands it.
+
+IMPLEMENTATION NOTES
+- New overlay renderer in …toon3d.render draws the exchange panel + buttons; input via
+  the touch/unproject path (input/touch). Buttons are world-space rects; hit-test with
+  camera.unproject. No keyboard.
+- While an exchange is open, the world takes no ticks (reuse the action-lock concept).
+- No allocations in render(); pool option buttons; dispose the font/renderer.
+
+DEFINITION OF DONE
+- A scripted exchange pops at a trigger, dims the world, shows a speaker line + 2–3 big
+  tappable options; tapping one shows the reply, nudges stance, optionally unlocks a
+  codex entry, and returns control. A consequential yes/no changes a tracked outcome.
