@@ -1,0 +1,68 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Story UI 3 — Reprint / boot card (the death drip beat)
+---
+
+PURPOSE
+The full-screen card shown every time the player is reprinted after death. It is the
+game's most reliable story channel — the player sees it every run — so it doubles as a
+guaranteed bite-sized story beat. Depends on order-1. The wider framing FLOW around this
+card (title/start screen with the death phrase, death->reprint transition, ending
+screens) is order-8; the mood of it all is order-9.
+
+READ FIRST
+- story/dialog/system-cards.md  (exact card text + endgame variants)
+- story/dialog/ai-assistant.md  (the AI wake-up line per region)
+- story/06-endings.md           (the endgame card subversions)
+
+WHEN IT POPS UP
+- On every death → reprint transition, before control returns at the last checkpoint.
+- On the very FIRST run too (in-fiction the original self just died) — same card.
+- Endgame variants replace it at the chosen ending (order-5 / endings doc).
+
+LAYOUT (full-screen, minimal, readable)
+- Centered on the 1280x720 world, dark full-bleed background.
+- Three stacked elements, generous spacing:
+    1. SYSTEM status lines (monospace, grey) — the machine voice:
+         PREVIOUS INSTANCE — TERMINATED
+         SOUL RESERVE .......... SUFFICIENT
+         REPRINTING FROM LAST CHECKPOINT
+    2. Optional instance counter (quiet, never celebrated):  INSTANCE #0048
+    3. One AI wake-up line (amber, friendly) — the story beat, region-appropriate:
+         e.g. "Morning, sunshine. Reprint forty-eight. New record. So proud."
+- A single large "CONTINUE" tap target at the bottom (thumb-friendly), OR auto-advance
+  after a short readable hold with tap-to-skip. Prefer tap-to-continue so the beat is
+  never missed, but never trap the player — one tap always proceeds.
+
+TONE ARC ACROSS THE DESCENT (the drip)
+- Early: AI cheerful, counts deaths like a scoreboard.
+- Middle: AI distracted, starts asking what the printers run on.
+- Late: AI quiet, protective ("I didn't tell them the last thing you found").
+- The SYSTEM lines never editorialize — their horror is what the player learns to read
+  into "SOUL RESERVE … SUFFICIENT" (order-5 schedules which AI line shows when).
+
+ENDGAME SUBVERSION (the payload — see 06-endings.md)
+- FREE / KILL ending: the card the player has seen 100 times inverts —
+         SOUL RESERVE .......... DEPLETED
+         NO CHECKPOINT AUTHORIZED FOR REPRINT
+  …then it does NOT reload. That absence is the ending. Handle the "no continue" state.
+- OBEY ending: a cold "reward" card (reprint priority raised, standing assignment).
+- MERGE ending: the card never comes; the interface stops being the player's.
+
+READABILITY / UX
+- Big text, high contrast, no flashing. This screen appears on a possibly-frustrated
+  player (they just died) — keep it calm, fast to dismiss, never mocking beyond ORA's
+  affectionate ribbing.
+- Respect a "reduce text hold" setting.
+
+IMPLEMENTATION NOTES
+- This is a distinct screen/overlay state in the render order; it pauses the world.
+- Reuse the existing overlay pattern (render/DeathOverlayRenderer.java,
+  FadeOverlayRenderer.java) for structure and disposal discipline.
+- All strings come from the narrative data layer (region-gated AI line + fixed system
+  lines), never hardcoded in the renderer.
+
+DEFINITION OF DONE
+- Every reprint shows the card with the correct region-appropriate AI line; the counter
+  climbs; the endgame variants render and the FREE/KILL variant correctly ends the run
+  with no reprint.

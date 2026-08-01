@@ -1,0 +1,120 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Story UI 5 — Moment catalog: when barks, exchanges & choices pop up
+---
+
+PURPOSE
+The schedule. Maps every story beat to a concrete gameplay MOMENT across the five
+regions, and marks which are barks (non-blocking) and which are exchanges (choices).
+This is the content wiring for orders 2, 3, and 4. Depends on all of them.
+
+READ FIRST
+- story/05-descent-structure.md  (the five regions and the mandatory reveal beats)
+- story/dialog/*                 (the actual lines)
+- story-ui-order-2 (barks), order-3 (boot card), order-4 (exchanges/choices)
+
+LEGEND
+  [B] bark (non-blocking, no choice)      [E] exchange (pauses, 2–3 options)
+  [C] boot card beat (order-3)            one-shot unless noted
+
+GATING NOTE (see order-7 Part A)
+Everything below is gated by DEEPEST STORY REGION reached (persistent) and fires ONCE.
+Death/reprint never rewinds; re-entering a cleared region does NOT replay its mandatory
+beats — at most it shows short "already-known" flavor barks.
+
+COLD OPEN / FIRST LAUNCH (before Region 1 content)
+- [C] First-ever boot card fires immediately — "your previous self has died" — before the
+  player has done anything (in-fiction the original just died). Same card as every run.
+- [B] ORA introduces herself in 1–2 barks as control begins.
+- TUTORIAL THROUGH ORA: each control is taught by a single ORA bark the first time it's
+  needed ("Tap forward to step. Everything good is down."), not a separate text tutorial.
+- The Region 1 teaching exchange (below) is the first choice — low-stakes on purpose.
+
+GLOBAL / ALWAYS-ON
+- [C] Every reprint: region-appropriate AI wake-up line + system card.
+- [B] First appearance of each enemy FAMILY: a one-line intro (AI or planet).
+- [B] Low-health threshold, occasional kills, idle/backtrack: rate-limited flavor.
+- [B] Every log pickup: the AI one-line "take" (full text → codex). Some log pickups
+  ALSO open a PROBE exchange (below).
+
+============================================================
+REGION 1 — HABITATION RINGS  (belief; clean good vs evil)
+============================================================
+- [B] First room: AI onboarding cheer, parrots "contaminant" / "purge".
+- [B] Kills: AI confident ("Nothing violence can't purge").
+- [E] EARLY TEACHING EXCHANGE (first quiet moment) — introduces the choice UI painlessly:
+    Speaker AI: "Quick thing while it's quiet — how are you feeling about all this?"
+    Options (STANCE): "Ready to work." / "Something feels off." / "Just point me down."
+    → flavors ORA's tone; no stakes. Teaches the player that choices exist and are safe.
+- [B] Organization at region gate: flat order (rare).
+- Seed (no text): undead wearing serials near yours — environmental only.
+
+============================================================
+REGION 2 — HARVESTING GALLERIES  (first doubt)
+============================================================
+- [B] Enter gallery: AI "the smell in here is a war crime."
+- [B] Yield-report log take: "They're mining something that... heals. Weird."
+- [E] PROBE EXCHANGE on the harvest (after the yield log):
+    Speaker AI: "You want me to dig into what they're cutting out of these walls?"
+    Options (PROBE): "Dig into it." → lore bark + codex unlock (+ optional small reward)
+                     "Not now."     → skip; can revisit later
+- [B] First insect kill: "They scream on the same note as the room. ...Just me? Great."
+- [E] ORGANIZATION DEMAND EXCHANGE (corrective): the Org tells you to ignore the noise.
+    Speaker Organization: "There's noise in your head. It's a fault. Ignore it."
+    Options (STANCE toward Org): "Understood." (obey) / "...It doesn't feel like a fault."
+                                 (push back) / say nothing (cold)
+    → nudges Organization/planet stance; ORA reacts differently to each.
+
+============================================================
+REGION 3 — THE RELIQUARY  (frame inverts; planet speaks in full)
+============================================================
+- [B] Enter: AI "This is where they bring me back. I always thought that was nice."
+- [E] THE PLANET'S FIRST REAL EXCHANGE (mandatory beat — it addresses you by deed):
+    Speaker Planet: "There you are. New face. Same weight."
+    Options: "Who are you?" (probe → it reveals it's the planet)
+             "Stay out of my head." (defiant → it answers with grief anyway)
+             "...I know you." (empathy → strong planet/ORA resonance)
+    → first big stance moment; all paths continue the reveal, tone differs.
+- [B] Cradle-engineer log take (quiet): "The 'reserve' is the planet. We burn it to make
+      you." (the soul-fuel reveal)
+- [E] CONSEQUENTIAL TRUST BEAT (mid-game weight):
+    Speaker AI: "This archivist log is about an operator they rebuilt with the memory cut
+    out. I could scrub our copy so the Organization can't cross-check it. Want me to?"
+    Options: "Delete it." (bond+, hides from Org) / "Leave it." (honest, risk)
+    → tracked outcome; small later payoff in how the Org treats you.
+- [C] Boot card AI line shifts to "I'm not counting for fun anymore."
+
+============================================================
+REGION 4 — THE WOUND  (full inversion; near communion)
+============================================================
+- [B] AI drops corporate words entirely: "I'm not going to call it a contaminant. I can't."
+- [B] Demons/golems intro reframed: "That's not an enemy. That's a body defending itself."
+- [E] PLANET COMMUNION EXCHANGE (mandatory — it shows you the Catastrophe & your death):
+    delivered as a short sequence of planet fragments with 1–2 quiet response choices
+    ("I did this?" / "I don't remember" / stay silent) — reactions, not branches.
+- [E] ORGANIZATION COERCION EXCHANGE (it threatens the Cradle):
+    Options: comply / refuse / silence → sets up the ending alignment.
+- [C] Boot card AI: "I didn't tell them the last thing you found. Let's keep it that way."
+
+============================================================
+REGION 5 — THE CORE  (everything; the ending choice)
+============================================================
+- [E] THE ENDING EXCHANGE (the one fully consequential choice — see 06-endings.md):
+    After the final memory lands (you caused the Catastrophe; you died freeing it; the
+    "kill order" is really re-chaining), the player chooses:
+        FREE IT  /  OBEY  /  MERGE  /  (KILL IT, if kept)
+    - Present as large, unhurried, equally-weighted options. No "recommended" marker,
+      no good/bad labels. Stance may add a line of resonance but never restricts choice.
+    - Each option shows a one-line confirm of what it costs before committing (readable,
+      no accidental taps on an ending).
+- [C] The chosen ending's boot-card subversion fires (order-3 / 06-endings.md).
+
+PACING BUDGET (do not overwhelm)
+- Aim ~2–4 EXCHANGES per region max; everything else is barks. If a region feels talky,
+  demote exchanges to barks. Exchanges are special because they are rare.
+- Never two exchanges back-to-back without gameplay between them.
+
+DEFINITION OF DONE
+- Each region triggers its listed barks and exchanges at the right moments; the mandatory
+  reveal beats (05-descent-structure.md) all fire on unskippable channels; the core
+  ending exchange offers all endings equally and routes to the correct boot-card ending.

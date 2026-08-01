@@ -1,0 +1,103 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Story UI 8 — Framing screens: title/start, death phrase, transitions, menus
+---
+
+PURPOSE
+The screens that BOOK-END play and set tone before/after the player is in the world: the
+app-launch / title screen (which opens with "you have just died"), the death→reprint
+transition, the pause menu, and the ending screens. order-3 owns the in-run reprint boot
+CARD; this file owns the whole framing FLOW around it. Depends on order-1 (visual
+language), order-3 (boot card), order-7 (persistence, endings), order-9 (mood).
+
+READ FIRST
+- story/dialog/system-cards.md (the death phrasing + endgame variants)
+- story/06-endings.md, .claude/agents/ideas/story-ui-order-3 / order-7 / order-9
+
+CORE PRINCIPLE
+There is NO cheerful title screen. The very first thing the player sees (after any
+required studio/engine logo) is the game telling them they are already dead. The framing
+is a cold Deepworks terminal, never a fantasy splash. Mood per order-9.
+
+============================================================
+A — APP LAUNCH / TITLE SCREEN (opens with the death phrase)
+============================================================
+LAUNCH SEQUENCE (first line the player ever reads = a death notice):
+  1. Black screen. A low drone (order-9). No music sting, no logo fanfare.
+  2. System text types out, unhurried, monospace, centered:
+         PREVIOUS INSTANCE — TERMINATED
+         SOUL RESERVE .......... SUFFICIENT
+     Then a beat, then the game title resolves quietly beneath it.
+  3. The menu fades in under the title.
+- This fires on EVERY launch, but the very FIRST launch is the designed shock: the player
+  has done nothing and is already being told they died. It reads as flavor at first;
+  hours later they learn it was literally announcing the original self's death.
+
+THE MENU (minimal, cold, terminal-styled, thumb-friendly)
+- CONTINUE DESCENT  — resume; present only when meta-progress exists (order-7 persistence).
+- NEW OPERATOR      — new game. If a save exists, a confirm: "This wipes the current
+                      operator line and all recovered memory. Proceed?" (wipes ALL
+                      narrative state together, per order-7 Part B).
+- CODEX             — opens the archive (order-6). Available from the menu even before a run.
+- SETTINGS          — story text size / hold time, timers, reduced-effects, audio (order-9).
+- QUIT.
+- Large tap targets, high contrast, no clutter. The title screen itself is quiet dread,
+  not a feature list.
+
+FIRST-LAUNCH → COLD OPEN HANDOFF
+- Selecting NEW OPERATOR (or CONTINUE with no run yet) hands off to the in-run cold open
+  (order-5 / order-7 Part F): the first reprint boot card (order-3), then ORA's intro and
+  the tutorial-through-ORA. The title death lines and the boot card share the same
+  system-voice styling so they read as one continuous machine.
+
+============================================================
+B — DEATH → REPRINT TRANSITION (in-run)
+============================================================
+The moment-to-moment loop's most repeated framing. Keep it calm (the player just died and
+may be frustrated) but never mocking beyond ORA's affection.
+  1. Player dies → brief desaturation / slow fade to black (reuse FadeOverlayRenderer;
+     mood per order-9). No gory "YOU DIED" splash.
+  2. The reprint boot CARD (order-3): system lines + region-appropriate ORA wake-up line +
+     the quiet instance counter.
+  3. One tap → fade back in at the last checkpoint.
+- This transition is a DRIP beat, not a punishment screen. Fast to dismiss; one tap always
+  proceeds. Respect the text-hold-time setting.
+- The existing death overlay (render/DeathOverlayRenderer.java) should be folded into this
+  framing so there is ONE death→reprint presentation, not two competing screens.
+
+============================================================
+C — PAUSE / IN-SUIT MENU
+============================================================
+- Diegetic-ish "suit paused" panel: RESUME, CODEX, SETTINGS, ABANDON RUN (with confirm).
+- Opening pause SUPPRESSES barks and never opens an exchange (order-7 Part E precedence).
+- Minimal, readable, does not spoil (no plot summary; the codex holds lore).
+
+============================================================
+D — ENDING SCREENS (the payoff — see 06-endings.md, order-3)
+============================================================
+Each ending resolves on a framing screen that SUBVERTS the launch/boot framing the player
+has seen every run:
+- FREE / KILL: the card inverts —
+        SOUL RESERVE .......... DEPLETED
+        NO CHECKPOINT AUTHORIZED FOR REPRINT
+  …and does NOT return to gameplay. It resolves to a quiet end screen (credits / return to
+  a changed title). The absence of the usual reprint IS the ending. Handle the "no
+  continue" state cleanly.
+- OBEY: a cold "reward" screen (reprint priority raised; standing assignment) — you're kept.
+- MERGE: the interface stops being the player's; the view is "from everywhere," no card.
+- After an ending, the title screen may reflect the choice (subtle), and the run's
+  meta-progress state marks the story complete. New Operator still available.
+
+READABILITY / UX / TECH
+- All framing screens: big text, high contrast, no flashing, gentle motion.
+- Reuse existing overlay patterns (FadeOverlayRenderer, DeathOverlayRenderer) and dispose
+  all fonts/textures. No allocations in render(). Honor viewport.apply() so touch maps
+  correctly on these screens (see CLAUDE.md viewport rule).
+- All strings are externalized ids (order-7 Part C); the death phrase is a shared id with
+  the boot card.
+
+DEFINITION OF DONE
+- Launch opens on the death phrase + quiet title; menu offers Continue/New/Codex/Settings/
+  Quit with a wipe-confirm; death→reprint is one calm tap-through transition; pause
+  suppresses story UI; each ending resolves on the correct subverted framing screen, with
+  FREE/KILL ending the run with no reprint.

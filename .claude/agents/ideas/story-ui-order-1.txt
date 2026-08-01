@@ -1,0 +1,88 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Story UI 1 — Visual language & readability foundations
+---
+
+PURPOSE
+The shared foundation every other story-UI file depends on. Defines HOW story text
+looks and reads, so all four voices are instantly recognizable and never hard to read
+on a phone. Build this first; orders 2–8 reference these rules and constants. The overall
+audiovisual MOOD these visuals serve is directed by order-9 (atmosphere & mood) — read it
+alongside this file so the visual language and the mood agree.
+
+READ FIRST
+- story/08-storytelling-delivery.md  (the four voices, the delivery rules)
+- story/dialog/ai-assistant.md, planet-voice.md, organization-comms.md, system-cards.md
+- .claude/CLAUDE.md sections: Coordinate System (0,0 bottom-left, 1280x720, FitViewport),
+  HUD Layout, TouchConstants, "No allocations inside render()", "Every Disposable disposed"
+
+PLATFORM CONSTRAINTS (mandatory)
+- Mobile only. Touch only. Large tap targets. No keyboard, ever.
+- World is 1280x720 units, origin bottom-left, Y-up. All UI in WORLD units, never raw
+  pixels. Unproject touch through the camera.
+- The bottom ~130px is the HUD; the thumb-cluster touch controls sit at the lower-left
+  and lower-right. Story UI must NOT overlap the touch controls or the HUD panels.
+
+THE FOUR SPEAKERS — one identity each (color + icon + name chip)
+The player must know who is talking WITHOUT reading a name. Every story line carries a
+small speaker chip: a colored bar + a tiny icon + the speaker name.
+
+  Speaker        Color (suggested)     Icon idea            Tone of type
+  -------------  --------------------  -------------------  --------------------------
+  AI assistant   warm amber / green    small friendly ring  clean, rounded, friendly
+  The Planet     deep organic red      cracked/eye glyph    slightly unstable, spaced
+  Organization   cold steel blue       corporate bracket    hard, condensed, ALL-CAPS
+  System         neutral grey/white    terminal caret       monospace status text
+
+- Colors must pass contrast on both dark and bright wall backdrops — always draw text on
+  a semi-opaque panel behind it (never text straight on the 3D view).
+- The planet's type may use subtle letter-spacing / slight jitter to feel "not a person,"
+  but must stay READABLE. Never sacrifice legibility for style.
+
+READABILITY RULES (hard requirements)
+- Minimum body text height: large enough to read at arm's length on a phone. Define
+  STORY_TEXT_SIZE in constants; err big. Never tiny.
+- Max ~40 characters per line. Wrap; never shrink text to fit.
+- Max 2 lines for a bark; max 3 short lines for an exchange prompt.
+- Panel background: rounded dark panel at ~0.80 alpha behind all story text so it reads
+  over any backdrop. Reuse HUD_PANEL_ALPHA styling for consistency.
+- High contrast: light text on dark panel. Speaker color is only in the chip/accent bar,
+  never in the body text color (colored body text hurts readability).
+- Never place story text under the thumb controls or behind the weapon sprite.
+
+MOTION / TIMING (gentle, never jarring)
+- Fade-in ~0.15s, hold, fade-out ~0.2s. No hard pop.
+- No flashing. No fast scrolling. Screen shake from combat must not move story panels.
+
+NEW CONSTANTS FILE
+Add util/StoryUiConstants.java (follow the "never hardcode" rule). It holds:
+- Panel rects/anchors for: bark toast, exchange panel, boot card, codex.
+- STORY_TEXT_SIZE, STORY_LINE_MAX_CHARS, panel alpha, fade durations.
+- Per-speaker accent colors and chip geometry.
+- Choice-button size (see order-4): min height must be a comfortable thumb target.
+Document the new file in CLAUDE.md's "Split Constant Files" table in the same commit.
+
+ARCHITECTURE NOTE (headless vs render split — match the codebase)
+- Headless narrative logic (what to say, when, choices, stance) lives in a NEW package
+  …toon3d.narrative (no LibGDX imports), so it is testable and data-driven.
+- Rendering lives in …toon3d.render (may import LibGDX). The repo already has
+  render/EventTextSystem.java + EventTextRenderer.java — REVIEW THEM FIRST; the bark
+  layer (order-2) should extend or mirror that pattern, not reinvent it.
+- Fonts: use one BitmapFont (FreeType if needed) owned and DISPOSED by the renderer.
+  No font allocation inside render().
+
+ACCESSIBILITY BASELINE
+- A "text speed / hold time" setting (slow default). A "dyslexia-friendly spacing"
+  toggle is a nice-to-have.
+- Nothing critical is conveyed by color alone — always the name chip + icon too.
+
+TWO CROSS-CUTTING RULES (specified in order-7 — honor them from the start)
+- LOCALIZATION: never hardcode a story string in Java. Every line is a stable string ID
+  in an externalized table (I18NBundle-style). Narrative data references ids only.
+- AUDIO CUES: no voice acting, but each speaker gets one short non-verbal "sting" when a
+  line appears (pre-attentively signals WHO is talking). Sounds are Disposable — own and
+  dispose them. The game must be fully understandable with audio OFF.
+
+DEFINITION OF DONE
+- StoryUiConstants exists; a test screen renders one sample line per speaker, each
+  clearly distinct, readable over the 3D view, not overlapping HUD/touch controls.
