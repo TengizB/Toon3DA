@@ -154,6 +154,9 @@ Thumbs.db
 *#*#
 /.kotlin/
 /assets/assets.txt
+# Procedural speaker stings (render/StorySpeakerStings) are generated at runtime into the
+# app's local directory — which is /assets when a desktop dev launcher runs from there.
+/assets/story-stings/
 
 ## Special cases:
 
