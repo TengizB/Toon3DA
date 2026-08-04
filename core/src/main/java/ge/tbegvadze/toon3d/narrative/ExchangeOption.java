@@ -28,6 +28,7 @@ public final class ExchangeOption {
     private final String             rewardItemTypeName;
     private final int                rewardQuantity;
     private final String             nextExchangeId;
+    private final BootCardVariant    endingVariant;
 
     private ExchangeOption(Builder builder) {
         this.id                 = builder.id;
@@ -40,6 +41,7 @@ public final class ExchangeOption {
         this.rewardItemTypeName = builder.rewardItemTypeName;
         this.rewardQuantity     = builder.rewardQuantity;
         this.nextExchangeId     = builder.nextExchangeId;
+        this.endingVariant      = builder.endingVariant;
     }
 
     /** Stable id, unique within its exchange.  Doubles as the recorded value of a CONSEQUENTIAL
@@ -83,6 +85,18 @@ public final class ExchangeOption {
     /** Id of a follow-up exchange opened immediately after this one, or null. */
     public String getNextExchangeId() { return nextExchangeId; }
 
+    /**
+     * The ENDING this option commits the run to, or null — which is what every option in the game
+     * except the four at the very bottom returns (Story UI order-5, {@code story/06-endings.md}).
+     *
+     * <p>The narrative layer only NAMES the ending; it never ends anything.  {@code World} reads this
+     * back through {@link ExchangeSystem#consumePendingEndingVariant()} once the exchange has closed
+     * and hands it to {@code World.presentEndingCard}, which is the order-3 seam that subverts the
+     * reprint card the player has read a hundred times.  Keeping the commitment on this side of the
+     * seam is what lets the whole ending schedule be unit-tested with no render context.
+     */
+    public BootCardVariant getEndingVariant() { return endingVariant; }
+
     public static Builder builder(String id) {
         return new Builder(id);
     }
@@ -100,6 +114,7 @@ public final class ExchangeOption {
         private String             rewardItemTypeName;
         private int                rewardQuantity;
         private String             nextExchangeId;
+        private BootCardVariant    endingVariant;
 
         private Builder(String id) {
             if (id == null || id.isEmpty()) {
@@ -114,6 +129,18 @@ public final class ExchangeOption {
         public Builder replySpeaker(Speaker value)      { this.replySpeaker       = value; return this; }
         public Builder unlocksCodexId(String value)     { this.unlocksCodexId     = value; return this; }
         public Builder nextExchangeId(String value)     { this.nextExchangeId     = value; return this; }
+
+        /**
+         * Commits the run to one ending when this option is picked (order-5).  Reserved for the four
+         * confirmation options at the Core: an ending must never be one careless tap away, so a row
+         * carrying this must also be {@link ExchangeOptionKind#CONSEQUENTIAL} — {@link #build()}
+         * enforces it — and in practice is reached only from a confirmation prompt that has already
+         * stated the cost in plain words.
+         */
+        public Builder endingVariant(BootCardVariant value) {
+            this.endingVariant = value;
+            return this;
+        }
 
         /** Nudges one leaning.  May be called once per {@link Stance}; amounts accumulate. */
         public Builder stanceNudge(Stance stance, int amount) {
@@ -141,6 +168,13 @@ public final class ExchangeOption {
             }
             if (rewardItemTypeName != null && rewardQuantity <= 0) {
                 throw new IllegalArgumentException("exchange option " + id + " rewards nothing");
+            }
+            // An ending is the one answer the game can never take back, so it may only be given by an
+            // option the system already records permanently.  A STANCE-flavoured ending would be an
+            // ending the player's save has no memory of choosing.
+            if (endingVariant != null && kind != ExchangeOptionKind.CONSEQUENTIAL) {
+                throw new IllegalArgumentException("exchange option " + id
+                        + " commits an ending but is not CONSEQUENTIAL");
             }
             return new ExchangeOption(this);
         }

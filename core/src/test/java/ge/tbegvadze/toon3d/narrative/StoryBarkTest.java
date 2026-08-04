@@ -119,6 +119,94 @@ class StoryBarkTest {
     }
 
     // -------------------------------------------------------------------------
+    // The order-5 moment schedule: the cold open and the tutorial
+    // -------------------------------------------------------------------------
+
+    /**
+     * Every control ORA teaches must actually have a line, or a player is left holding a button
+     * nobody told them about — the failure mode the tutorial-through-ORA design exists to prevent.
+     */
+    @Test
+    void everyControlHintHasALine() {
+        BarkRegistry registry = BarkCatalog.defaultRegistry();
+        StoryStrings strings  = StoryStrings.defaults();
+        for (ControlHint hint : ControlHint.values()) {
+            BarkDefinition found = null;
+            for (BarkDefinition row : registry.getForTrigger(BarkTrigger.CONTROL_HINT)) {
+                if (row.matchesSubject(hint.getSubjectKey())) found = row;
+            }
+            assertNotNull(found, "no line teaches " + hint);
+            assertTrue(strings.has(found.getTextStringId()),
+                    hint + " has no text for " + found.getTextStringId());
+        }
+    }
+
+    /**
+     * The tutorial and the cold open fire exactly once for the life of the save, and nothing may
+     * drop them: a hint that loses a race with a flavour quip is a control the player never learns.
+     */
+    @Test
+    void theColdOpenAndTheTutorialAreOneShotAndNeverDropped() {
+        BarkRegistry registry = BarkCatalog.defaultRegistry();
+        BarkTrigger[] mandatory = { BarkTrigger.RUN_START, BarkTrigger.CONTROL_HINT };
+        for (BarkTrigger trigger : mandatory) {
+            for (BarkDefinition row : registry.getForTrigger(trigger)) {
+                assertTrue(row.isOneShot(), row.getId() + " would repeat on a later run");
+                assertEquals(BarkPriority.STORY_CRITICAL, row.getPriority(),
+                        row.getId() + " can be dropped as chatter");
+            }
+        }
+    }
+
+    /** ORA introduces herself to a new player, and never again once they know her. */
+    @Test
+    void theColdOpenGreetsAPlayerOnceAndThenStops() {
+        InMemoryStoryProgressStore store = new InMemoryStoryProgressStore();
+        BarkSystem firstRun = newSystem(new StoryProgress(store));
+        assertTrue(firstRun.request(BarkTrigger.RUN_START), "ORA never introduced herself");
+        assertTrue(firstRun.request(BarkTrigger.RUN_START), "the pool held only one greeting");
+
+        // Read both of them: a one-shot is spent on DELIVERY, not on being asked for.
+        advance(firstRun, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.05f);
+        dismissAndSettle(firstRun);
+        advance(firstRun, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.05f);
+        dismissAndSettle(firstRun);
+
+        // Both rows spent — a later run gets nothing, whatever else has happened.
+        BarkSystem laterRun = newSystem(new StoryProgress(store));
+        assertFalse(laterRun.request(BarkTrigger.RUN_START),
+                "ORA introduced herself to someone who already knows her");
+    }
+
+    /** A control hint waits for its own control: asking about one never spends another's line. */
+    @Test
+    void aControlHintOnlyAnswersItsOwnControl() {
+        BarkSystem system = newSystemInRegion(StoryRegion.HABITATION_RINGS);
+        assertTrue(system.request(BarkTrigger.CONTROL_HINT, ControlHint.RELOAD.getSubjectKey()));
+        assertFalse(system.request(BarkTrigger.CONTROL_HINT, ControlHint.RELOAD.getSubjectKey()),
+                "the same control was taught twice");
+        assertTrue(system.request(BarkTrigger.CONTROL_HINT, ControlHint.HEAL.getSubjectKey()),
+                "teaching one control consumed another's line");
+    }
+
+    /** The mandatory log beats are the ones a player must not miss, so nothing may drop them. */
+    @Test
+    void theMandatoryLogBeatsAreOneShotAndCritical() {
+        BarkRegistry registry = BarkCatalog.defaultRegistry();
+        String[] mandatoryIds = { "bark.log.galleries.yield", "bark.log.reliquary.cradle" };
+        for (String id : mandatoryIds) {
+            BarkDefinition row = null;
+            for (BarkDefinition candidate : registry.getForTrigger(BarkTrigger.LOG_FOUND)) {
+                if (candidate.getId().equals(id)) row = candidate;
+            }
+            assertNotNull(row, "the mandatory log beat " + id + " is missing");
+            assertTrue(row.isOneShot(), id + " would replay on a later run");
+            assertEquals(BarkPriority.STORY_CRITICAL, row.getPriority(),
+                    id + " can be dropped as chatter");
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Placement — the bark must never sit on any other UI element
     // -------------------------------------------------------------------------
 
@@ -419,7 +507,8 @@ class StoryBarkTest {
     @Test
     void repeatableMomentsHaveDeepPoolsInEveryRegion() {
         BarkRegistry registry = BarkCatalog.defaultRegistry();
-        BarkTrigger[] repeatable = { BarkTrigger.FLOOR_ARRIVAL, BarkTrigger.KILL };
+        BarkTrigger[] repeatable = { BarkTrigger.FLOOR_ARRIVAL, BarkTrigger.KILL,
+                                     BarkTrigger.LOG_FOUND };
         for (BarkTrigger trigger : repeatable) {
             for (StoryRegion region : StoryRegion.values()) {
                 int poolSize = 0;

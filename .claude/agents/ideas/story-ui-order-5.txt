@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Story UI 5 — Moment catalog: when barks, exchanges & choices pop up
 ---
@@ -118,3 +118,57 @@ DEFINITION OF DONE
 - Each region triggers its listed barks and exchanges at the right moments; the mandatory
   reveal beats (05-descent-structure.md) all fire on unskippable channels; the core
   ending exchange offers all endings equally and routes to the correct boot-card ending.
+
+============================================================
+IMPLEMENTATION NOTES (as built)
+============================================================
+Built entirely as catalog rows + firing sites: NO new renderer, and every beat is one
+register() call plus one call site (see .claude/CLAUDE.md, "The MOMENT SCHEDULE").
+
+CHANNELS ADDED
+- BarkTrigger.RUN_START        -> COLD OPEN. Two one-shot rows; World asks once per run
+  start (World.requestColdOpenBarks), so run 1 gets one line and run 2 the other.
+- BarkTrigger.CONTROL_HINT     -> the tutorial, subject-keyed by narrative/ControlHint
+  (MOVE / FIRE / RELOAD / HEAL / SWITCH_WEAPON / INVENTORY). Each fires the first time
+  that control is USEFUL, not at run start. One-shot + STORY_CRITICAL.
+- BarkTrigger.LOG_FOUND        -> ORA's take on a facility terminal. 4+ lines per region
+  plus the two mandatory one-shot beats (galleries yield report, reliquary cradle note).
+- ExchangeTrigger.LOG_FOUND / ORGANIZATION_ORDER / QUIET_MOMENT.
+
+CARRIER FOR "LOG PICKUP"
+There is no log ITEM in the game and none was added. The channel rides the existing 'T'
+computer terminal prop: stepping orthogonally adjacent to one is reading it, reusing the
+auto-trigger idiom of the heal station and the EVENT console (World.updateLogTerminals),
+capped at STORY_LOG_TAKES_PER_FLOOR. Terminals are common but NOT guaranteed per floor,
+which is why no mandatory SPINE beat rides this channel alone — the five must-land beats
+of 05-descent-structure.md all ride region entry, which cannot be routed around.
+
+EXCHANGE SCHEDULE AS BUILT (18 rows, budget 20; per-region cap enforced by test)
+  R1 entry briefing (Org) | R1 quiet-moment TEACHING (ORA)
+  R2 entry cutting-floors (ORA) | R2 log yield ledger (ORA) | R2 org demand (Org)
+  R3 entry planet address (Planet) | R3 log trust beat (ORA, consequential) + chain
+  R4 entry planet voice (Planet) | R4 org coercion (Org)
+  R5 entry last order (Org) | R5 THE ENDING + three confirmations
+  floating: three deep-strata check-ins (one per leaning + neutral)
+The R2 ledger and R3 trust beat MOVED off region entry onto the log channel, so each
+region's entry slot carries its mandatory reveal beat instead.
+
+THE ENDING (deviation worth recording)
+The panel is sized for THREE options (STORY_EXCHANGE_MAX_OPTIONS; a fourth plate would
+collide with the HUD), and the doc requires a one-line cost confirm before committing.
+Both are satisfied by a two-step shape: a DOOR of three equal ways out -> a CONFIRMATION
+that states the price -> commit, with "Not yet." backing out of every confirmation. All
+four endings are reachable; FREE and KILL share a door because they are the same decision
+about the harvest and differ only in whether the being survives it (06-endings.md,
+Ending D's own note). Nothing is ranked and stance never gates.
+
+GUARD FOR THE ENDING
+The route map is endless, so "Core region" is many floors. The ending opens on deepest
+region == CORE **and** the Core band's boss defeated (World.requestCoreEndingExchange) —
+a forced convergence, which is what order-7 Part A asks for.
+
+NOT IN SCOPE HERE
+- The codex (full log text, "the AI's take shown at top") is order-6.
+- What surrounds the final screen — title return, credits, the MERGE presentation — is
+  order-8. MERGE currently freezes the world with no card, which is order-3's documented
+  behaviour for it.
