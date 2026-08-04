@@ -1,7 +1,59 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Story UI 3 — Reprint / boot card (the death drip beat)
 ---
+
+IMPLEMENTATION NOTES (order-3 boot card delivered)
+- Headless model (core/.../narrative/, no LibGDX): BootCardVariant (REPRINT + the four endgame
+  subversions; carries only the two BEHAVIOURAL facts — showsCard() and allowsReprint()),
+  BootCardDefinition (what a variant PRINTS, as data), BootWakeLine (one region-gated ORA
+  greeting), BootCardRegistry + BootCardCatalog (registration, never a switch: a new ORA line
+  or a whole new ending card is ONE register() call), BootCardStrings (the fallback text
+  table, folded into StoryStrings.defaults() beside BarkStrings), and BootCardSystem (the
+  brain: variant, region-gated line selection, no-repeat, {instance} substitution, reveal
+  clock, continue policy). 12 system lines + 19 ORA wake lines.
+- Persistence: StoryProgressStore/StoryProgress/InMemoryStoryProgressStore + util/StoryStore
+  gained the REPRINT COUNT (key "story.reprintCount", same prefs file + schema version as
+  order-2). It only climbs — a death is what makes it climb — so the counter survives death
+  and app restart alike. The card SHARES the bark layer's StoryProgress, so ORA's greeting is
+  gated by the same persistent deepest-region-reached; death never rewinds her tone.
+- Render: render/BootCardRenderer — dark full-bleed backdrop, then the SYSTEM status panel,
+  the quiet counter and ORA's panel, drawn by reusing the order-1 StoryPanelRenderer twice so
+  the card speaks the same visual language as every other story panel. Owns + disposes the
+  panel primitive, its shapes, batch and font. isInsideContinueButton() is the hit test.
+- Constants: a BOOT / REPRINT CARD section in util/StoryUiConstants (backdrop, the top-down
+  stack anchors, counter prefix/padding/colour, the CONTINUE rect, reveal + fade timing, the
+  reduce-text-hold scale, seed salt). Panel heights follow one documented rule — 30 * lines +
+  70 — which reproduces the bark's tuned 130 at two lines; a test pins it.
+- GameMath: bootCardRevealedLineCount (the terminal print-in reveal) and formatInstanceCounter
+  (fixed-width padding, so the counter's glyph box never changes size as the number climbs).
+- Engine wiring (World): a new RunPhase.BOOT_CARD that EVERY run opens in — which is every
+  reprint, the first one included. World presents the card in the constructor and leaves the
+  phase only when the player taps CONTINUE; the world is frozen behind it and barks are already
+  suppressed by the existing "not PLAYING" rule. Touch controls are hidden in this phase.
+  presentEndingCard(variant) + isBootCardTerminal() are the seam orders 5/8 call.
+- DESIGN DECISION — no auto-advance at all (the file offered it as an alternative). The card
+  waits for the player, exactly like the order-2 bark after its playtest fix: nobody should
+  lose a beat to a timer. "Never trap the player" is honoured instead by CONTINUE always
+  working from frame zero, even mid-reveal, and by a tap anywhere else completing the reveal.
+  The "reduce text hold" setting scales that staggered reveal (STORY_TEXT_HOLD_SCALE_REDUCED).
+- SCOPE BOUNDARY — the endgame variants RENDER and the FREE/KILL "no reprint" state is fully
+  implemented (no CONTINUE is drawn, requestContinue() is refused, the phase has no exit, and
+  isBootCardTerminal() exposes it). What is NOT here, because it is not order-3's: what TRIGGERS
+  an ending (order-5's schedule) and what surrounds that final screen — return to title, credits
+  (order-8's framing flow). Until order-8 lands, only the REPRINT variant is reachable in play.
+- Guards: core/src/test/.../narrative/StoryBootCardTest.java (27 tests) — catalog/asset/table
+  sync, one-row cap on every system line, ORA's two-line cap at the widest counter, pool depth
+  per region, first run already counts as reprint 1, the counter climbs + survives a restart,
+  region gating per region, death-does-not-rewind, no repeat across consecutive reprints,
+  continue-works-mid-reveal, never-auto-advances, reveal steps + skip, reduce-text-hold,
+  FREE/KILL refuse to reprint, the card inverts, OBEY still continues, MERGE shows nothing,
+  clear() leaves no stale state, and the layout/thumb-target geometry. Fast gate green (282).
+- DoD screen: lwjgl3 BootCardShowcase + BootCardShowcaseLauncher (dev only) — one reprint per
+  story region over a shared StoryProgress (so ORA's arc and the climbing counter play as one
+  descent), then OBEY, FREE and KILL.
+  Run: ./gradlew lwjgl3:bootCardShowcase
+  Headless capture: add -DbootCard.screenshotDirectory=<dir> (one PNG per card, then exits).
 
 PURPOSE
 The full-screen card shown every time the player is reprinted after death. It is the

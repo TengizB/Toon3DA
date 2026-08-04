@@ -68,8 +68,9 @@ public final class StoryStrings {
     /**
      * The built-in fallback table.  Holds the four speaker names, the four order-1 sample lines
      * (one per speaker) used by the showcase / definition-of-done, and — folded in from
-     * {@link BarkStrings} — every order-2 bark line.  It is the safety net when the properties
-     * asset is unavailable.  Keep in sync with {@code assets/story/story-strings.properties}.
+     * {@link BarkStrings} and {@link BootCardStrings} — every order-2 bark line and every order-3
+     * boot-card line.  It is the safety net when the properties asset is unavailable.  Keep in sync
+     * with {@code assets/story/story-strings.properties}.
      */
     public static StoryStrings defaults() {
         StoryStrings strings = new StoryStrings();
@@ -88,6 +89,8 @@ public final class StoryStrings {
 
         // Order-2 bark layer: every one-liner the bark catalog can deliver.
         BarkStrings.registerDefaults(strings);
+        // Order-3 boot card: the machine-voice status cards and ORA's reprint wake-up lines.
+        BootCardStrings.registerDefaults(strings);
 
         return strings;
     }
