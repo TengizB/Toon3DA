@@ -47,10 +47,13 @@ public final class BarkCatalog {
     public static void bootstrap(BarkRegistry registry) {
         if (registry == null || !registry.isEmpty()) return;
 
+        registerColdOpen(registry);
+        registerControlHints(registry);
         registerFloorArrival(registry);
         registerRegionEntry(registry);
         registerGateOrders(registry);
         registerEnemyFamilies(registry);
+        registerLogTakes(registry);
         registerKills(registry);
         registerLowHealth(registry);
         registerDeepStrata(registry);
@@ -62,6 +65,105 @@ public final class BarkCatalog {
         BarkRegistry registry = new BarkRegistry();
         bootstrap(registry);
         return registry;
+    }
+
+    // -------------------------------------------------------------------------
+    // COLD OPEN (order-5) — the first voice the player ever hears.  In fiction the original self has
+    // just died and this print is opening its eyes, so ORA introduces herself while control is being
+    // handed over.  Both rows are one-shot and Region 1 only, and the world asks for ONE per run
+    // start: a brand-new player meets her on run 1, hears the second line on run 2, and after that
+    // she never introduces herself again — because by then she is not a stranger.
+    // -------------------------------------------------------------------------
+    private static void registerColdOpen(BarkRegistry registry) {
+        coldOpenLine(registry, "bark.coldopen.1");
+        coldOpenLine(registry, "bark.coldopen.2");
+    }
+
+    private static void coldOpenLine(BarkRegistry registry, String id) {
+        registry.register(row(id, storyIdFor(id))
+                .trigger(BarkTrigger.RUN_START)
+                .region(StoryRegion.HABITATION_RINGS)
+                .priority(BarkPriority.STORY_CRITICAL)
+                .oneShot(true)
+                .build());
+    }
+
+    // -------------------------------------------------------------------------
+    // TUTORIAL THROUGH ORA (order-5) — the game's entire tutorial, one line per control, taught the
+    // first time that control is actually needed.  There is no tutorial screen and there will not be
+    // one: a diagram of twelve buttons is something a player skips, and a voice that explains one
+    // thing at the moment it matters is something they read.  Every row is one-shot ever (the flag
+    // is persistent, so a reprint never re-teaches) and STORY_CRITICAL, because a line that teaches
+    // a control must never be dropped as chatter.  Region-unrestricted on purpose: a player may not
+    // hold a second gun until the Reliquary, and the hint must still be there when they do.
+    // -------------------------------------------------------------------------
+    private static void registerControlHints(BarkRegistry registry) {
+        for (ControlHint hint : ControlHint.values()) {
+            String id = "bark.control." + hint.getCatalogKey();
+            registry.register(row(id, storyIdFor(id))
+                    .trigger(BarkTrigger.CONTROL_HINT)
+                    .subjectKey(hint.getSubjectKey())
+                    .priority(BarkPriority.STORY_CRITICAL)
+                    .oneShot(true)
+                    .build());
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // LOG TAKES (order-5) — ORA's one-line reaction to whatever the player just read off a facility
+    // terminal.  The full text of a log is order-6's codex; this channel is the part a player who
+    // never opens a menu still gets, which is why the pools are deep and repeatable.
+    //
+    // Two rows are different: the yield report in the Galleries and the cradle-engineer log in the
+    // Reliquary are the MANDATORY reveal beats of their regions (story/05-descent-structure.md), so
+    // they are one-shot and STORY_CRITICAL and win their pool the first time the player reads
+    // anything down there.
+    // -------------------------------------------------------------------------
+    private static void registerLogTakes(BarkRegistry registry) {
+        logLine(registry, "bark.log.rings.1", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
+        logLine(registry, "bark.log.rings.2", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
+        logLine(registry, "bark.log.rings.3", StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
+        logLine(registry, "bark.log.rings.4", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
+
+        logLine(registry, "bark.log.galleries.1", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
+        logLine(registry, "bark.log.galleries.2", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
+        logLine(registry, "bark.log.galleries.3", StoryRegion.HARVESTING_GALLERIES, BarkTone.LEVITY);
+        logLine(registry, "bark.log.galleries.4", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
+
+        logLine(registry, "bark.log.reliquary.1", StoryRegion.RELIQUARY, BarkTone.LORE);
+        logLine(registry, "bark.log.reliquary.2", StoryRegion.RELIQUARY, BarkTone.LORE);
+        logLine(registry, "bark.log.reliquary.3", StoryRegion.RELIQUARY, BarkTone.LORE);
+        logLine(registry, "bark.log.reliquary.4", StoryRegion.RELIQUARY, BarkTone.LORE);
+
+        for (int lineNumber = 1; lineNumber <= 4; lineNumber++) {
+            String id = "bark.log.wound." + lineNumber;
+            registry.register(row(id, storyIdFor(id))
+                    .trigger(BarkTrigger.LOG_FOUND).region(StoryRegion.WOUND).build());
+        }
+        for (int lineNumber = 1; lineNumber <= 4; lineNumber++) {
+            String id = "bark.log.core." + lineNumber;
+            registry.register(row(id, storyIdFor(id))
+                    .trigger(BarkTrigger.LOG_FOUND).region(StoryRegion.CORE).build());
+        }
+
+        // The two mandatory log beats: the yield report ("they're mining something that heals") and
+        // the cradle engineer's note (the soul-fuel reveal).
+        mandatoryLogBeat(registry, "bark.log.galleries.yield", StoryRegion.HARVESTING_GALLERIES);
+        mandatoryLogBeat(registry, "bark.log.reliquary.cradle", StoryRegion.RELIQUARY);
+    }
+
+    private static void logLine(BarkRegistry registry, String id, StoryRegion region, BarkTone tone) {
+        registry.register(row(id, storyIdFor(id))
+                .trigger(BarkTrigger.LOG_FOUND).region(region).tone(tone).build());
+    }
+
+    private static void mandatoryLogBeat(BarkRegistry registry, String id, StoryRegion region) {
+        registry.register(row(id, storyIdFor(id))
+                .trigger(BarkTrigger.LOG_FOUND)
+                .region(region)
+                .priority(BarkPriority.STORY_CRITICAL)
+                .oneShot(true)
+                .build());
     }
 
     // -------------------------------------------------------------------------

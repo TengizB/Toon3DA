@@ -49,6 +49,7 @@ import ge.tbegvadze.toon3d.narrative.BarkTrigger;
 import ge.tbegvadze.toon3d.narrative.BootCardCatalog;
 import ge.tbegvadze.toon3d.narrative.BootCardSystem;
 import ge.tbegvadze.toon3d.narrative.BootCardVariant;
+import ge.tbegvadze.toon3d.narrative.ControlHint;
 import ge.tbegvadze.toon3d.narrative.ExchangeCatalog;
 import ge.tbegvadze.toon3d.narrative.ExchangeSystem;
 import ge.tbegvadze.toon3d.narrative.ExchangeTrigger;
@@ -256,6 +257,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * "ENTERING: …" beat + theming + telemetry exactly once. -1 before the first floor.
      */
     private int                     lastAnnouncedRegionIndex = -1;
+    /**
+     * The depth at which the current region was entered, so the Organization's demand exchange can
+     * land a floor LATER than the region gate (Story UI order-5). The region-entry exchange already
+     * fires at the gate; asking two blocking questions with no gameplay between them is the one
+     * pacing failure order-6 Part B names by name. -1 before the first region is entered.
+     */
+    private int                     regionEntryDepth = -1;
 
     // -------------------------------------------------------------------------
     // Player stat system — persistent across floor transitions (Order 6)
@@ -302,6 +310,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * ordinary floors.
      */
     private java.util.List<int[]> chargedHealStations = new java.util.ArrayList<>();
+
+    /**
+     * Unread facility-terminal tiles on the current floor (Story UI order-5's LOG channel). Each entry
+     * is a {@code {tileColumn, tileRow}} pair; stepping orthogonally adjacent to one is "the player
+     * read what was left on it" and fires the LOG_FOUND moment, reusing the same auto-trigger idiom as
+     * the heal station and the EVENT console so reading never costs a button. Refreshed on every floor
+     * rebuild and consumed after {@code STORY_LOG_TAKES_PER_FLOOR} takes — a server room holds a dozen
+     * terminals and ORA has one opinion about them.
+     */
+    private java.util.List<int[]> unreadLogTerminals  = new java.util.ArrayList<>();
+    private int                   logTakesThisFloor   = 0;
 
     // -------------------------------------------------------------------------
     // Ground items — weapon pickups placed by LevelGenerator; rebuilt per floor
@@ -358,6 +377,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private StoryBarkTickSubscriber  storyBarkTickSubscriber;
     /** Edge detector for the low-health bark: fires on the way DOWN through the threshold only. */
     private boolean                  healthAboveLowThreshold = true;
+    // Story UI — MOMENT SCHEDULE (order-5): the run-scoped latches behind the cold open and the
+    // ending.  Everything else in the schedule is latched PERSISTENTLY by the narrative layer's
+    // one-shot flags; these two are per-run because they answer "has this run started / finished
+    // yet", which is a question about this run and nothing else.
+    private boolean                  coldOpenRequested;
+    private boolean                  coreEndingRequested;
+    /**
+     * Set once the player has committed to an ending.  The run is over: no sim, no ticks, no input.
+     * For the three endings that print a card the BOOT_CARD phase is already holding the screen; for
+     * MERGE there is no card, and this flag is the whole of "the interface stopped being yours".
+     */
+    private boolean                  runEnded;
     /** Swipe-to-dismiss tracking: set when a touch goes down inside the bark panel. */
     private boolean                  barkSwipeTracking;
     private float                    barkSwipeStartX;
@@ -1160,7 +1191,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Story bark layer (order-2): the turn stream is where "a new enemy family woke up",
         // "the player is circling" and "the player has stopped acting" are visible. Rebuilt with
         // the floor so its per-floor memory (walked tiles) resets exactly when the floor does.
-        storyBarkTickSubscriber = new StoryBarkTickSubscriber(barkSystem, enemyManager,
+        storyBarkTickSubscriber = new StoryBarkTickSubscriber(barkSystem, exchangeSystem, enemyManager,
                                                               targetLevel.getWidth(),
                                                               targetLevel.getHeight());
         tickEventBus.subscribe(storyBarkTickSubscriber);
@@ -1207,6 +1238,19 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         armedEventStations = new java.util.ArrayList<>();
         for (int[] station : targetLevel.getEventStationTiles()) {
             armedEventStations.add(new int[]{station[0], station[1]});
+        }
+
+        // Story LOG terminals (order-5): every computer terminal on the floor is something the crew
+        // left behind, so walking up to one is a moment. Scanned once per floor rebuild — this is the
+        // only full-grid pass here and it happens on a level change, never per frame.
+        unreadLogTerminals = new java.util.ArrayList<>();
+        logTakesThisFloor  = 0;
+        for (int tileColumn = 0; tileColumn < targetLevel.getWidth(); tileColumn++) {
+            for (int tileRow = 0; tileRow < targetLevel.getHeight(); tileRow++) {
+                if (targetLevel.getCell(tileColumn, tileRow) == StoryUiConstants.STORY_LOG_TERMINAL_SYMBOL) {
+                    unreadLogTerminals.add(new int[]{tileColumn, tileRow});
+                }
+            }
         }
 
         // Build ground items from weapon spawn points. Each item gets a pre-rolled
@@ -1703,6 +1747,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             }
             if (bootCardSystem.isContinueRequested()) {
                 bootCardSystem.clear();
+                // OBEY (order-5) is the one ending whose card still continues, because the reward it
+                // hands the player is more of the same, forever. Continuing from it therefore means
+                // exactly that: the reset path, a fresh print, the same descent, with the counter one
+                // higher and the player now knowing what it costs. Nothing else in the game ends this
+                // way, which is the horror.
+                if (runEnded) {
+                    StatsStore.updateAndSave(runStats, persistentStats);
+                    resetRequested = true;
+                    return;
+                }
                 runPhase = RunPhase.PLAYING;
             }
             return;
@@ -1928,6 +1982,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
+        // The ending the player just chose (order-5). Consumed only once the exchange has faded, so
+        // the last thing they read as themselves is the reply to their own answer. Everything below
+        // is skipped from here on: the run is over.
+        commitPendingStoryEnding();
+        if (runEnded) {
+            return;
+        }
+
         // PLAYING phase — normal game simulation
         runStats.realSecondsPlayed += deltaTime;
         doorManager.update(deltaTime);
@@ -1970,6 +2032,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return; // the event overlay just opened — pause the sim for this frame
         }
 
+        // Story LOG terminals (order-5): the same adjacency idiom again — walking up to a computer
+        // terminal is reading it, and ORA has a line about what the crew left on it.
+        updateLogTerminals();
+
         if (touchInputState != null) {
             touchInputState.update(deltaTime);
         }
@@ -1993,6 +2059,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         updateStoryBarkTouch();
         if (storyBarkTickSubscriber != null) storyBarkTickSubscriber.update(deltaTime);
         updateLowHealthStoryBark();
+        // Story MOMENT SCHEDULE (order-5): the cold open once per run, the tutorial lines as each
+        // control becomes useful, and — at the bottom of the descent, with the Core's boss down —
+        // the ending choice. All three only ASK; the narrative layer's one-shot flags mean a veteran
+        // player gets nothing from the first two and reaches the third exactly once.
+        requestColdOpenBarks();
+        requestControlHintBarks();
+        requestCoreEndingExchange();
         abilityFeedback.update(deltaTime);
         hitVignetteRenderer.update(deltaTime);
         guardShieldRenderer.update(deltaTime);
@@ -2503,6 +2576,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return; // already announced this region
         }
         lastAnnouncedRegionIndex = region.regionIndex();
+        regionEntryDepth         = currentDepth;
 
         // STORY GATING (order-2 / order-7 Part A): record the story region this route region maps
         // onto BEFORE asking for beats, so the pools are selected at the new depth. reachRegion()
@@ -2555,6 +2629,138 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             // and almost always gets nothing — which is exactly the budget an exchange should have.
             exchangeSystem.request(ExchangeTrigger.DEEP_STRATA);
         }
+        // The Organization's demand for this region (order-5) — held back until at least one floor
+        // of gameplay has passed since the gate, so it never lands back-to-back with the region-entry
+        // exchange. Only two regions have a row, and both are one-shot, so this almost always asks
+        // for nothing.
+        if (regionEntryDepth >= 0
+                && currentDepth - regionEntryDepth >= StoryUiConstants.STORY_ORGANIZATION_ORDER_FLOOR_DELAY) {
+            exchangeSystem.request(ExchangeTrigger.ORGANIZATION_ORDER);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Story MOMENT SCHEDULE (Story UI order-5) — the gameplay sites the catalogs hang off.
+    // Every method here only ASKS; the bark and exchange layers own whether anything is said.
+    // -------------------------------------------------------------------------
+
+    /**
+     * The COLD OPEN (order-5): the first thing that happens once control is actually the player's.
+     * ORA introduces herself and the one control they need to know about — and because both rows are
+     * one-shot and persistent, a veteran on their fortieth reprint gets neither.
+     *
+     * <p>Fires from the first PLAYING frame of a run rather than from the boot card, so the lines
+     * land on the world instead of on a modal the player is still reading.
+     */
+    private void requestColdOpenBarks() {
+        if (coldOpenRequested || isStartingRoom) return;
+        coldOpenRequested = true;
+        barkSystem.request(BarkTrigger.RUN_START);
+        barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.MOVE.getSubjectKey());
+    }
+
+    /**
+     * The rest of the tutorial (order-5): each control taught by one ORA line, the first time that
+     * control is genuinely useful — an empty magazine, real damage with a medkit in the bag, a second
+     * gun, something worth stashing.  Asking every frame is free: each row is one-shot for the life
+     * of the save, so after a player's first hour this method never produces anything again.
+     *
+     * <p>Deliberately NOT "teach everything at the start": six lines at once is a manual, and a
+     * manual is the thing this game replaced with a voice.
+     */
+    private void requestControlHintBarks() {
+        // reserveAmmo > 0 is doing real work: it is -1 for melee and for an empty hand (which have
+        // nothing to reload) and 0 when the reserve is dry (nothing to reload WITH). Telling a player
+        // holding a knife to reload would be the exact failure this channel exists to avoid.
+        if (hudState.currentAmmo == 0 && hudState.reserveAmmo > 0) {
+            barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.RELOAD.getSubjectKey());
+        }
+        if (hudState.medicalCharges > 0) {
+            barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.INVENTORY.getSubjectKey());
+            if (player.getHealthFraction() <= StoryUiConstants.STORY_BARK_LOW_HEALTH_FRACTION) {
+                barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.HEAL.getSubjectKey());
+            }
+        }
+        if (countEquippedRangedWeapons() >= 2) {
+            barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.SWITCH_WEAPON.getSubjectKey());
+        }
+    }
+
+    /** How many ranged weapons the loadout is currently holding — 2+ makes switching a decision. */
+    private int countEquippedRangedWeapons() {
+        Loadout loadout = inventory != null ? inventory.getLoadout() : null;
+        if (loadout == null) return 0;
+        int weaponCount = 0;
+        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+            if (loadout.getSlot(slotIndex) != null) weaponCount++;
+        }
+        return weaponCount;
+    }
+
+    /**
+     * The LOG channel (order-5): stepping orthogonally adjacent to a facility terminal is the player
+     * reading what the crew left on it, and ORA says one line about it.  Mirrors the auto-doc heal
+     * station and the EVENT console exactly, so a log costs no new button and no aiming — which is
+     * the only reason a player who does not read will ever read one.
+     *
+     * <p>The terminal is consumed either way, and the whole floor stops offering takes after
+     * {@code STORY_LOG_TAKES_PER_FLOOR}: a server room is a dozen terminals and one opinion.
+     *
+     * <p>A handful of logs per region also carry an EXCHANGE — held pending, never opened here, so it
+     * arrives once the player is standing still (openPendingStoryExchange).
+     */
+    private void updateLogTerminals() {
+        if (unreadLogTerminals.isEmpty() || player == null || player.isDead()) return;
+        if (logTakesThisFloor >= StoryUiConstants.STORY_LOG_TAKES_PER_FLOOR) return;
+        int playerColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
+        int playerRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
+        for (int index = 0; index < unreadLogTerminals.size(); index++) {
+            int[] terminal = unreadLogTerminals.get(index);
+            int manhattan = Math.abs(terminal[0] - playerColumn) + Math.abs(terminal[1] - playerRow);
+            if (manhattan > 1) continue;   // not adjacent yet (the terminal tile itself is solid)
+            unreadLogTerminals.remove(index);
+            logTakesThisFloor++;
+            barkSystem.request(BarkTrigger.LOG_FOUND);
+            exchangeSystem.request(ExchangeTrigger.LOG_FOUND);
+            return;
+        }
+    }
+
+    /**
+     * THE ENDING (order-5, story/06-endings.md): opens the one fully consequential choice in the
+     * game, once, at the bottom.
+     *
+     * <p>The guard is the edge case order-7 Part A names: the route map is endless, so "the Core"
+     * is a story region many floors can belong to, and the ending must NOT open on just any of them.
+     * It waits for the deepest region ever reached to be the Core AND for the Core's own boss to be
+     * down — a forced convergence the player cannot route around, which is exactly what a final node
+     * needs to be. Everything after that (idle, alive, no bark on screen) is the ordinary exchange
+     * readiness check, inherited by holding the beat pending rather than opening it here.
+     */
+    private void requestCoreEndingExchange() {
+        if (coreEndingRequested)                                                        return;
+        if (barkSystem.getProgress().getDeepestRegion() != StoryRegion.CORE)             return;
+        if (bossFloorController == null || !bossFloorController.isBossDefeated())        return;
+        coreEndingRequested = exchangeSystem.requestById(ExchangeCatalog.CORE_ENDING_EXCHANGE_ID);
+    }
+
+    /**
+     * Ends the run the way the player's last answer said to (order-5).  The narrative layer only
+     * NAMES the ending; everything that happens because of it happens here.
+     *
+     * <p>Three of the four subvert the reprint card the player has read a hundred times, which is the
+     * strongest instrument the endings have (order-3, story/06-endings.md).  MERGE is the one that
+     * does not: it presents no card at all, because the interface simply stops being the player's —
+     * so the world is frozen exactly where it stands and nothing else is drawn or simulated.  What
+     * surrounds either of those final screens (a return to the title, credits) is order-8's.
+     */
+    private void commitPendingStoryEnding() {
+        BootCardVariant ending = exchangeSystem.consumePendingEndingVariant();
+        if (ending == null) return;
+        Gdx.app.log("StoryEnding", "ending chosen: " + ending.name());
+        runEnded = true;
+        if (touchInputState != null) touchInputState.resetAllButtonStates();
+        presentEndingCard(ending);   // false for MERGE: no card, and none is wanted
     }
 
     /**

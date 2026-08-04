@@ -75,8 +75,9 @@ public final class ExchangeSystem {
     private ExchangeDefinition pendingDefinition;
 
     // ---- effects the engine must apply (consumed once, never re-applied) ------------------------
-    private String pendingRewardItemTypeName;
-    private int    pendingRewardQuantity;
+    private String          pendingRewardItemTypeName;
+    private int             pendingRewardQuantity;
+    private BootCardVariant pendingEndingVariant;
 
     /** Reused selection scratch — cleared and refilled per request, never allocated per frame. */
     private final List<ExchangeDefinition> candidateScratch = new ArrayList<>();
@@ -143,8 +144,24 @@ public final class ExchangeSystem {
     }
 
     /**
-     * Opens a specific exchange by id, bypassing triggers entirely — the seam order-5 uses for
-     * hand-placed beats, and the path an option's {@code nextExchangeId} chain takes.
+     * Holds a specific exchange by id as PENDING — the "ask for this exact beat, but wait until the
+     * player is standing still" path order-5's hand-placed moments take (the ending choice at the
+     * Core).  Nothing opens here; {@link #openPending()} does, once the world is ready to stop, which
+     * is how a hand-placed beat inherits exactly the same readiness bars as a triggered one.
+     *
+     * @return true when the exchange exists and is now waiting to open
+     */
+    public boolean requestById(String exchangeId) {
+        if (activeDefinition != null || pendingDefinition != null) return false;
+        ExchangeDefinition definition = registry.getById(exchangeId);
+        if (definition == null) return false;
+        pendingDefinition = definition;
+        return true;
+    }
+
+    /**
+     * Opens a specific exchange by id, bypassing triggers entirely — the path an option's
+     * {@code nextExchangeId} chain takes.
      *
      * @return true when the exchange exists and is now on screen
      */
@@ -277,6 +294,12 @@ public final class ExchangeSystem {
             pendingRewardItemTypeName = option.getRewardItemTypeName();
             pendingRewardQuantity     = option.getRewardQuantity();
         }
+        if (option.getEndingVariant() != null) {
+            // The run is over; it just does not know it yet.  The engine picks this up once the panel
+            // has faded (order-5), so the player still reads the reply to their own last answer before
+            // the boot card they have seen a hundred times comes back changed.
+            pendingEndingVariant = option.getEndingVariant();
+        }
 
         if (option.getReplyStringId() != null) {
             Speaker replySpeaker = option.getReplySpeaker() != null
@@ -381,6 +404,7 @@ public final class ExchangeSystem {
         finished                  = false;
         pendingRewardItemTypeName = null;
         pendingRewardQuantity     = 0;
+        pendingEndingVariant      = null;
     }
 
     /** Clears the on-screen exchange only.  Shared by {@link #clear()} and by opening a new one. */
@@ -508,5 +532,26 @@ public final class ExchangeSystem {
     /** How many of the pending reward item to grant.  Read this BEFORE consuming the name. */
     public int getPendingRewardQuantity() {
         return pendingRewardQuantity;
+    }
+
+    /**
+     * True once the player has committed to an ENDING and the exchange that asked has closed
+     * (order-5).  Deliberately gated on the panel being gone: the reply to their own last answer is
+     * the final thing they read as themselves, and the ending card must not land on top of it.
+     */
+    public boolean hasPendingEnding() {
+        return pendingEndingVariant != null && activeDefinition == null;
+    }
+
+    /**
+     * The {@link BootCardVariant} the player's last answer committed the run to, or null.  Reading it
+     * CLEARS it, so an ending can never fire twice.  {@code World} hands the result straight to
+     * {@code presentEndingCard} — the narrative layer names the ending and nothing more.
+     */
+    public BootCardVariant consumePendingEndingVariant() {
+        if (activeDefinition != null) return null;   // still on screen: the answer is not final yet
+        BootCardVariant variant = pendingEndingVariant;
+        pendingEndingVariant = null;
+        return variant;
     }
 }

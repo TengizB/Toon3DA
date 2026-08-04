@@ -28,9 +28,31 @@ public enum ExchangeTrigger {
     DEEP_STRATA,
 
     /**
+     * The player just read a facility terminal (order-5's LOG channel).  Most logs are a bark and
+     * nothing more; a handful per region carry the beat that is worth stopping for, which is why
+     * the region's heaviest PROBE and CONSEQUENTIAL rows hang here rather than on region entry —
+     * the player asked for this one by walking up to it.
+     */
+    LOG_FOUND,
+
+    /**
+     * The Organization transmitted, one floor after the region's gate order (order-5).  Deliberately
+     * NOT the gate itself: the region-entry exchange already fires there, and two exchanges without
+     * gameplay between them is exactly the pacing failure order-6 Part B forbids.
+     */
+    ORGANIZATION_ORDER,
+
+    /**
+     * A genuinely quiet moment in play — the floor's enemies are all still asleep and the player has
+     * walked a while without a fight.  The home of the low-stakes teaching exchange that shows a new
+     * player, at no risk, that answering is a thing they get to do.
+     */
+    QUIET_MOMENT,
+
+    /**
      * Not fired by any moment — presented by id ({@link ExchangeSystem#present(String)}).  The seam
-     * for order-5's hand-placed consequential beats and for follow-up exchanges chained from an
-     * option's {@code nextExchangeId}.
+     * for order-5's hand-placed consequential beats (the ending choice and its confirmations) and for
+     * follow-up exchanges chained from an option's {@code nextExchangeId}.
      */
     MANUAL
 }

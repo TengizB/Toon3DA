@@ -39,8 +39,20 @@ class StoryExchangeTest {
     /** A frame step small enough that fade assertions are exact to a few hundredths. */
     private static final float FRAME_SECONDS = 1f / 60f;
 
-    /** The whole catalog must stay SMALL — an exchange stops the world, so rarity is the design. */
-    private static final int EXCHANGE_BUDGET = 12;
+    /**
+     * The whole catalog must stay SMALL — an exchange stops the world, so rarity is the design.
+     * Order-5 filled the schedule out to its intended shape (two to three deliberate stops per
+     * region, plus the ending and its confirmations), and this is the ceiling for it.  Raising this
+     * number is not the fix for a catalog that has outgrown it; deleting rows is.
+     */
+    private static final int EXCHANGE_BUDGET = 20;
+
+    /**
+     * The per-region pacing budget from order-5: at most this many exchanges a player can be STOPPED
+     * by in one region.  Chained follow-ups (a confirmation, a probe handing the decision back) do
+     * not count — they are the same stop, continued.
+     */
+    private static final int EXCHANGES_PER_REGION_BUDGET = 4;
 
     private static ExchangeSystem newSystem(StoryProgress progress) {
         return new ExchangeSystem(ExchangeCatalog.defaultRegistry(), StoryStrings.defaults(),
@@ -201,6 +213,247 @@ class StoryExchangeTest {
         }
     }
 
+    /**
+     * The per-region PACING BUDGET (order-5): a player must never be stopped more than a handful of
+     * times in one region.  Counted as the region's OWN beats — rows banded to exactly this region —
+     * because that is what a player walking through it meets.  Chained rows are excluded (a
+     * confirmation is the same stop, continued), and the floating deep-strata pool is counted
+     * separately below, since those rows are shared across four regions rather than owed to any one.
+     */
+    @Test
+    void noRegionStopsThePlayerMoreThanTheBudget() {
+        ExchangeRegistry registry = ExchangeCatalog.defaultRegistry();
+        for (StoryRegion region : StoryRegion.values()) {
+            int stops = 0;
+            for (ExchangeDefinition exchange : registry.getAll()) {
+                if (exchange.getTrigger() == ExchangeTrigger.MANUAL) continue;   // reached by a chain
+                if (exchange.getFirstRegion() != region || exchange.getLastRegion() != region) continue;
+                stops++;
+            }
+            // The ending is hand-presented (MANUAL) but is still a stop of its own at the Core.
+            if (region == StoryRegion.CORE) stops++;
+            assertTrue(stops <= EXCHANGES_PER_REGION_BUDGET,
+                    "region " + region + " can stop the player " + stops
+                            + " times; demote one to a bark rather than raising the budget");
+        }
+    }
+
+    /**
+     * The floating pool — rows not owed to any single region — must stay small too, because they land
+     * on top of whatever the current region already owes.  Every one of them is one-shot, so this is
+     * the total number of extra stops a whole campaign can produce.
+     */
+    @Test
+    void theFloatingPoolStaysSmall() {
+        int floating = 0;
+        for (ExchangeDefinition exchange : ExchangeCatalog.defaultRegistry().getAll()) {
+            if (exchange.getTrigger() == ExchangeTrigger.MANUAL) continue;
+            if (exchange.getFirstRegion() != exchange.getLastRegion()) floating++;
+        }
+        assertTrue(floating <= EXCHANGES_PER_REGION_BUDGET,
+                "the multi-region pool has grown to " + floating + " stops");
+    }
+
+    /**
+     * Every hand-written row must be REACHABLE.  A MANUAL row is only reached from a chain or from
+     * the one id {@code World} presents by hand, so an unreferenced one is a beat nobody ever sees.
+     */
+    @Test
+    void everyManualExchangeIsReachable() {
+        ExchangeRegistry registry = ExchangeCatalog.defaultRegistry();
+        Set<String> chainTargets = new HashSet<>();
+        chainTargets.add(ExchangeCatalog.CORE_ENDING_EXCHANGE_ID);
+        for (ExchangeDefinition exchange : registry.getAll()) {
+            for (ExchangeOption option : exchange.getOptions()) {
+                if (option.getNextExchangeId() != null) chainTargets.add(option.getNextExchangeId());
+            }
+        }
+        for (ExchangeDefinition exchange : registry.getAll()) {
+            if (exchange.getTrigger() != ExchangeTrigger.MANUAL) continue;
+            assertTrue(chainTargets.contains(exchange.getId()),
+                    exchange.getId() + " is MANUAL and nothing reaches it — it is a beat nobody sees");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // THE ENDING (order-5, story/06-endings.md)
+    // -------------------------------------------------------------------------
+
+    /** Every ending in the game must be reachable from the one choice at the Core. */
+    @Test
+    void theEndingOffersEveryEnding() {
+        Set<BootCardVariant> reachable = new HashSet<>();
+        for (ExchangeDefinition exchange : ExchangeCatalog.defaultRegistry().getAll()) {
+            for (ExchangeOption option : exchange.getOptions()) {
+                if (option.getEndingVariant() != null) reachable.add(option.getEndingVariant());
+            }
+        }
+        for (BootCardVariant variant : BootCardVariant.values()) {
+            if (variant == BootCardVariant.REPRINT) continue;   // not an ending, the frame around one
+            assertTrue(reachable.contains(variant),
+                    variant + " cannot be chosen; every ending must be on offer at the Core");
+        }
+    }
+
+    /**
+     * No ending may be one tap away.  The door opens a confirmation that states the price, and only
+     * the confirmation can commit — which is also why every ending option is CONSEQUENTIAL.
+     */
+    @Test
+    void anEndingIsNeverOneTapAway() {
+        ExchangeRegistry registry = ExchangeCatalog.defaultRegistry();
+        ExchangeDefinition door = registry.getById(ExchangeCatalog.CORE_ENDING_EXCHANGE_ID);
+        assertNotNull(door, "the ending exchange is missing");
+        for (ExchangeOption option : door.getOptions()) {
+            assertNull(option.getEndingVariant(),
+                    "the ending door commits '" + option.getId() + "' without a confirmation");
+            assertNotNull(option.getNextExchangeId(),
+                    "the ending door's '" + option.getId() + "' leads nowhere");
+        }
+        for (ExchangeDefinition exchange : registry.getAll()) {
+            for (ExchangeOption option : exchange.getOptions()) {
+                if (option.getEndingVariant() == null) continue;
+                assertEquals(ExchangeOptionKind.CONSEQUENTIAL, option.getKind(),
+                        exchange.getId() + "/" + option.getId() + " ends the game unrecorded");
+            }
+        }
+    }
+
+    /** Reading the price is never paying it: every confirmation has a way back to the door. */
+    @Test
+    void everyEndingConfirmationCanBeBackedOutOf() {
+        ExchangeRegistry registry = ExchangeCatalog.defaultRegistry();
+        for (ExchangeDefinition exchange : registry.getAll()) {
+            boolean isConfirmation = false;
+            boolean hasWayBack     = false;
+            for (ExchangeOption option : exchange.getOptions()) {
+                if (option.getEndingVariant() != null) isConfirmation = true;
+                if (ExchangeCatalog.CORE_ENDING_EXCHANGE_ID.equals(option.getNextExchangeId())) {
+                    hasWayBack = true;
+                }
+            }
+            if (!isConfirmation) continue;
+            assertTrue(hasWayBack, exchange.getId() + " commits an ending with no way back");
+        }
+    }
+
+    /** Every ending answer files under ONE key, so order-8 asks a single question of the save. */
+    @Test
+    void everyEndingRecordsUnderTheSameOutcomeKey() {
+        for (ExchangeDefinition exchange : ExchangeCatalog.defaultRegistry().getAll()) {
+            boolean endsTheGame = false;
+            for (ExchangeOption option : exchange.getOptions()) {
+                if (option.getEndingVariant() != null) endsTheGame = true;
+            }
+            if (!endsTheGame) continue;
+            assertEquals(ExchangeCatalog.CORE_ENDING_OUTCOME_ID, exchange.getOutcomeId(),
+                    exchange.getId() + " files its ending under its own key");
+        }
+    }
+
+    /** The whole flow, as the player walks it: door, price, commit, and the named ending. */
+    @Test
+    void choosingAnEndingNamesItOnlyOnceTheExchangeHasClosed() {
+        InMemoryStoryProgressStore store = new InMemoryStoryProgressStore();
+        StoryProgress progress = new StoryProgress(store);
+        progress.reachRegion(StoryRegion.CORE);
+        ExchangeSystem system = newSystem(progress);
+
+        assertTrue(system.requestById(ExchangeCatalog.CORE_ENDING_EXCHANGE_ID));
+        assertTrue(system.openPending());
+        assertEquals(ExchangeCatalog.CORE_ENDING_EXCHANGE_ID, system.getActiveExchangeId());
+
+        system.selectOption(0);   // "Break the drills." — opens the price, commits nothing
+        assertEquals("exchange.core.ending.unmake", system.getActiveExchangeId());
+        assertTrue(system.isAwaitingChoice());
+        assertNull(system.consumePendingEndingVariant(), "an ending fired before it was confirmed");
+
+        system.selectOption(0);   // "Let it wake."
+        assertTrue(system.isShowingReply());
+        assertNull(system.consumePendingEndingVariant(),
+                "the ending fired while the player was still reading the reply");
+
+        system.requestContinue();
+        advance(system, StoryUiConstants.STORY_EXCHANGE_FADE_OUT_SECONDS + FRAME_SECONDS);
+        assertTrue(system.hasPendingEnding());
+        assertEquals(BootCardVariant.ENDING_FREE, system.consumePendingEndingVariant());
+        assertNull(system.consumePendingEndingVariant(), "the ending could fire twice");
+        assertEquals("free", progress.getOutcome(ExchangeCatalog.CORE_ENDING_OUTCOME_ID));
+        assertEquals("free", new StoryProgress(store).getOutcome(ExchangeCatalog.CORE_ENDING_OUTCOME_ID));
+    }
+
+    /** Backing out of a price returns the player to the door with every way still open. */
+    @Test
+    void backingOutOfAPriceReturnsToTheDoor() {
+        ExchangeSystem system = newSystemInRegion(StoryRegion.CORE);
+        assertTrue(system.requestById(ExchangeCatalog.CORE_ENDING_EXCHANGE_ID));
+        assertTrue(system.openPending());
+
+        system.selectOption(1);   // "Put the restraints back."
+        assertEquals("exchange.core.ending.obey", system.getActiveExchangeId());
+        system.selectOption(1);   // "Not yet."
+        assertEquals(ExchangeCatalog.CORE_ENDING_EXCHANGE_ID, system.getActiveExchangeId());
+        assertEquals(3, system.getOptionCount(), "a way out was lost by looking at its price");
+        assertNull(system.consumePendingEndingVariant());
+    }
+
+    /**
+     * The hidden stance model flavours; it never gates.  A player who has been the Organization's
+     * creature all game must still be able to free the being, and vice versa.
+     */
+    @Test
+    void noStanceCanCloseAnEnding() {
+        for (Stance leaning : Stance.values()) {
+            StoryProgress progress = new StoryProgress();
+            progress.reachRegion(StoryRegion.CORE);
+            progress.nudgeStance(leaning, 9);
+            ExchangeSystem system = newSystem(progress);
+            assertTrue(system.requestById(ExchangeCatalog.CORE_ENDING_EXCHANGE_ID));
+            assertTrue(system.openPending());
+            assertEquals(3, system.getOptionCount(),
+                    "a " + leaning + " leaning narrowed the ending choice");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // The order-5 moment schedule
+    // -------------------------------------------------------------------------
+
+    /** The teaching exchange is Region 1 only: after that, the player knows how this works. */
+    @Test
+    void theTeachingExchangeOnlyEverOpensInTheFirstRegion() {
+        assertEquals("exchange.rings.teaching",
+                openedIdFor(StoryRegion.HABITATION_RINGS, ExchangeTrigger.QUIET_MOMENT));
+        for (StoryRegion region : StoryRegion.values()) {
+            if (region == StoryRegion.HABITATION_RINGS) continue;
+            assertFalse(newSystemInRegion(region).request(ExchangeTrigger.QUIET_MOMENT),
+                    "the teaching exchange is still being offered in " + region);
+        }
+    }
+
+    /** Reading a log opens the regions' heaviest beats, and nothing above the Galleries. */
+    @Test
+    void theLogBeatsBelongToTheRegionsThatHaveSomethingWrittenDown() {
+        assertEquals("exchange.galleries.ledger",
+                openedIdFor(StoryRegion.HARVESTING_GALLERIES, ExchangeTrigger.LOG_FOUND));
+        assertEquals("exchange.reliquary.log",
+                openedIdFor(StoryRegion.RELIQUARY, ExchangeTrigger.LOG_FOUND));
+        assertFalse(newSystemInRegion(StoryRegion.HABITATION_RINGS).request(ExchangeTrigger.LOG_FOUND),
+                "a log beat opened before there was anything worth stopping for");
+    }
+
+    /** The Organization only interrupts where it wants something, and it escalates when it does. */
+    @Test
+    void theOrganizationDemandsOnlyWhereItEscalates() {
+        assertEquals("exchange.galleries.demand",
+                openedIdFor(StoryRegion.HARVESTING_GALLERIES, ExchangeTrigger.ORGANIZATION_ORDER));
+        assertEquals("exchange.wound.coercion",
+                openedIdFor(StoryRegion.WOUND, ExchangeTrigger.ORGANIZATION_ORDER));
+        assertFalse(newSystemInRegion(StoryRegion.HABITATION_RINGS)
+                        .request(ExchangeTrigger.ORGANIZATION_ORDER),
+                "the Organization made a demand before it had anything to correct");
+    }
+
     /** A reward is granted by the engine through {@code ItemType.valueOf} — a typo must not ship. */
     @Test
     void everyRewardNamesARealItemType() {
@@ -313,16 +566,20 @@ class StoryExchangeTest {
 
     @Test
     void theRegionEntryBeatIsGatedByTheDeepestRegionReached() {
-        assertEquals("exchange.rings.briefing",     openedIdFor(StoryRegion.HABITATION_RINGS));
-        assertEquals("exchange.galleries.ledger",   openedIdFor(StoryRegion.HARVESTING_GALLERIES));
-        assertEquals("exchange.reliquary.log",      openedIdFor(StoryRegion.RELIQUARY));
-        assertEquals("exchange.wound.voice",        openedIdFor(StoryRegion.WOUND));
-        assertEquals("exchange.core.order",         openedIdFor(StoryRegion.CORE));
+        assertEquals("exchange.rings.briefing",       openedIdFor(StoryRegion.HABITATION_RINGS));
+        assertEquals("exchange.galleries.arrival",    openedIdFor(StoryRegion.HARVESTING_GALLERIES));
+        assertEquals("exchange.reliquary.address",    openedIdFor(StoryRegion.RELIQUARY));
+        assertEquals("exchange.wound.voice",          openedIdFor(StoryRegion.WOUND));
+        assertEquals("exchange.core.order",           openedIdFor(StoryRegion.CORE));
     }
 
     private static String openedIdFor(StoryRegion region) {
+        return openedIdFor(region, ExchangeTrigger.REGION_ENTERED);
+    }
+
+    private static String openedIdFor(StoryRegion region, ExchangeTrigger trigger) {
         ExchangeSystem system = newSystemInRegion(region);
-        openFor(system, ExchangeTrigger.REGION_ENTERED);
+        openFor(system, trigger);
         return system.getActiveExchangeId();
     }
 
@@ -425,7 +682,7 @@ class StoryExchangeTest {
         StoryProgress progress = new StoryProgress(store);
         progress.reachRegion(StoryRegion.RELIQUARY);
         ExchangeSystem system = newSystem(progress);
-        assertTrue(openFor(system, ExchangeTrigger.REGION_ENTERED));
+        assertTrue(openFor(system, ExchangeTrigger.LOG_FOUND));
         assertEquals("exchange.reliquary.log", system.getActiveExchangeId());
         assertFalse(progress.hasOutcome("exchange.reliquary.log"));
 
@@ -440,7 +697,7 @@ class StoryExchangeTest {
         StoryProgress progress = new StoryProgress();
         progress.reachRegion(StoryRegion.RELIQUARY);
         ExchangeSystem system = newSystem(progress);
-        openFor(system, ExchangeTrigger.REGION_ENTERED);
+        openFor(system, ExchangeTrigger.LOG_FOUND);
         answerAndFinish(system, 1);   // "Leave it. Let them read it."
         assertEquals("keep", progress.getOutcome("exchange.reliquary.log"));
     }
@@ -450,7 +707,7 @@ class StoryExchangeTest {
         StoryProgress progress = new StoryProgress();
         progress.reachRegion(StoryRegion.RELIQUARY);
         ExchangeSystem system = newSystem(progress);
-        openFor(system, ExchangeTrigger.REGION_ENTERED);
+        openFor(system, ExchangeTrigger.LOG_FOUND);
 
         // Ask what it says first — the probe answers, then hands the same decision back.
         assertTrue(system.selectOption(2));
@@ -473,7 +730,7 @@ class StoryExchangeTest {
         StoryProgress progress = new StoryProgress();
         progress.reachRegion(StoryRegion.HARVESTING_GALLERIES);
         ExchangeSystem system = newSystem(progress);
-        openFor(system, ExchangeTrigger.REGION_ENTERED);
+        openFor(system, ExchangeTrigger.LOG_FOUND);
         assertEquals("exchange.galleries.ledger", system.getActiveExchangeId());
 
         assertNull(system.consumePendingRewardItemTypeName(), "a reward appeared before the answer");

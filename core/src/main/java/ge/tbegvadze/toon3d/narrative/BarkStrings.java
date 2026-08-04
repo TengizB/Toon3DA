@@ -27,6 +27,9 @@ public final class BarkStrings {
 
     /** Adds every order-2 bark line to {@code strings}.  Returns the same table for chaining. */
     public static StoryStrings registerDefaults(StoryStrings strings) {
+        registerColdOpen(strings);
+        registerControlHints(strings);
+        registerLogTakes(strings);
         registerFloorArrival(strings);
         registerRegionAndGate(strings);
         registerFamilies(strings);
@@ -35,6 +38,63 @@ public final class BarkStrings {
         registerPlanet(strings);
         registerIdleAndBacktrack(strings);
         return strings;
+    }
+
+    /** The cold open (order-5) — the first voice the player ever hears, twice in a lifetime. */
+    private static void registerColdOpen(StoryStrings strings) {
+        strings.put("story.bark.coldopen.1",         "You're up. I'm ORA. I do the talking down here.");
+        strings.put("story.bark.coldopen.2",         "Hi again. Still ORA. Still the only voice left.");
+    }
+
+    /**
+     * The whole tutorial (order-5), one line per control, said the first time it is needed.  Each
+     * must NAME the control plainly enough to act on and still sound like her — a line that reads as
+     * a manual entry has spent the character to say something a diagram could have said.
+     */
+    private static void registerControlHints(StoryStrings strings) {
+        strings.put("story.bark.control.move",       "Tap forward to step. Everything good is down.");
+        strings.put("story.bark.control.fire",       "It's awake. Fire button, bottom right. Go on.");
+        strings.put("story.bark.control.reload",     "You're dry. Reload before it notices, ideally.");
+        strings.put("story.bark.control.heal",       "You're carrying a medkit. Heal. Now would be good.");
+        strings.put("story.bark.control.switch_weapon",
+                                                     "Two guns now. Switch weapon cycles them.");
+        strings.put("story.bark.control.inventory",  "Open the bag when you get a second. It fills up.");
+    }
+
+    /**
+     * Log takes (order-5) — ORA's one-line reaction to a terminal the player walked up to.  This is
+     * the channel that carries the facility's paperwork to a player who will never open a codex, so
+     * every line is a fact about what was DONE here, not a mood.
+     */
+    private static void registerLogTakes(StoryStrings strings) {
+        strings.put("story.bark.log.rings.1",        "Shift roster. Everyone signed out. Nobody left.");
+        strings.put("story.bark.log.rings.2",        "Maintenance log. Complaints about noise below.");
+        strings.put("story.bark.log.rings.3",        "A lunch order, dated the last day. Soup. Bold.");
+        strings.put("story.bark.log.rings.4",        "Safety notice, sixty pages. None about the deep.");
+
+        strings.put("story.bark.log.galleries.1",    "Extraction quotas. Someone missed theirs. Twice.");
+        strings.put("story.bark.log.galleries.2",    "Tolerance sheet. It lists 'live weight'. Live.");
+        strings.put("story.bark.log.galleries.3",    "A form for reporting screaming. Box was ticked.");
+        strings.put("story.bark.log.galleries.4",    "Transport manifest. Down empty, up full. Daily.");
+        strings.put("story.bark.log.galleries.yield",
+                                                     "Yield report. They're mining something that heals.");
+
+        strings.put("story.bark.log.reliquary.1",    "Cradle service log. Your name is in the column.");
+        strings.put("story.bark.log.reliquary.2",    "Pattern integrity report. Mine's flagged. Lovely.");
+        strings.put("story.bark.log.reliquary.3",    "Fuel intake sheet. Nobody wrote where it's from.");
+        strings.put("story.bark.log.reliquary.4",    "An operator's note. The handwriting is yours.");
+        strings.put("story.bark.log.reliquary.cradle",
+                                                     "The 'reserve' is the planet. They burn it to make you.");
+
+        strings.put("story.bark.log.wound.1",        "Drill maintenance. Depth in metres. Into what.");
+        strings.put("story.bark.log.wound.2",        "A field note. It says 'the subject is awake'.");
+        strings.put("story.bark.log.wound.3",        "Someone stopped writing halfway through a word.");
+        strings.put("story.bark.log.wound.4",        "Sedation schedule. Hourly. For forty years.");
+
+        strings.put("story.bark.log.core.1",         "Nothing is filed down here. Only its memory.");
+        strings.put("story.bark.log.core.2",         "The last log is a resignation. Never submitted.");
+        strings.put("story.bark.log.core.3",         "Someone wrote 'I'm sorry' and left it running.");
+        strings.put("story.bark.log.core.4",         "A checklist for re-chaining. Step one is you.");
     }
 
     /** Arriving on a new floor — ORA reads the room.  Mostly what this place WAS. */

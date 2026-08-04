@@ -303,7 +303,8 @@ public final class StoryUiConstants {
 
     // PER-TRIGGER COOLDOWNS (seconds) — indexed by narrative/BarkTrigger.ordinal(), in that enum's
     // declaration order: 0 FLOOR_ARRIVAL, 1 REGION_ENTERED, 2 REGION_GATE_ORDER,
-    // 3 ENEMY_FAMILY_FIRST_SEEN, 4 KILL, 5 LOW_HEALTH, 6 DEEP_STRATA, 7 IDLE, 8 BACKTRACK.
+    // 3 ENEMY_FAMILY_FIRST_SEEN, 4 KILL, 5 LOW_HEALTH, 6 DEEP_STRATA, 7 IDLE, 8 BACKTRACK,
+    // 9 RUN_START, 10 CONTROL_HINT, 11 LOG_FOUND.
     // A test guards this array against the enum drifting.  Zero = the moment is naturally rare
     // (a floor arrival, a one-shot beat) and needs no cooldown beyond the global rate limit.
     public static final float[] STORY_BARK_TRIGGER_COOLDOWN_SECONDS = {
@@ -316,7 +317,31 @@ public final class StoryUiConstants {
             90f,    // DEEP_STRATA
             300f,   // IDLE                     — a quip every five minutes at most
             300f,   // BACKTRACK
+            0f,     // RUN_START                — one-shot cold open, twice in a lifetime
+            0f,     // CONTROL_HINT             — one-shot tutorial; a dropped hint is a stuck player
+            120f,   // LOG_FOUND                — a room full of terminals must yield ONE take
     };
+
+    // =====================================================================
+    // MOMENT SCHEDULE (order-5) — the gameplay side of "when does a story beat fire".  The catalogs
+    // own WHAT is said; these numbers own how often the world is even allowed to ask.
+    // =====================================================================
+    // The solid prop that counts as a readable facility log.  Walking orthogonally adjacent to one
+    // is the LOG_FOUND moment — the same auto-trigger idiom as the heal station and the EVENT
+    // console, so reading never costs the player a button they had to be taught.  'T' is the
+    // computer terminal (docs/tile-symbols.txt); it is common enough that every region band contains
+    // several, and never guaranteed, which is why no MANDATORY spine beat rides this channel alone.
+    public static final char  STORY_LOG_TERMINAL_SYMBOL = 'T';
+    // At most one log take per floor: a server room holds a dozen terminals and ORA has one opinion.
+    public static final int   STORY_LOG_TAKES_PER_FLOOR = 1;
+    // A floor is "quiet" for the teaching exchange once the player has walked this many fresh tiles
+    // on it with nothing awake.  Long enough that it never fires in the first corridor of a fight,
+    // short enough that a new player meets the choice UI early in their first run.
+    public static final int   STORY_QUIET_MOMENT_MIN_STEPS = 14;
+    // Floors after a region's gate before the Organization's demand exchange may open.  NOT zero:
+    // the region-entry exchange fires at the gate, and two exchanges with no gameplay between them
+    // is the pacing failure order-6 Part B names by name.
+    public static final int   STORY_ORGANIZATION_ORDER_FLOOR_DELAY = 1;
 
     // =====================================================================
     // BOOT / REPRINT CARD (order-3) — the full-screen card shown every time the player is

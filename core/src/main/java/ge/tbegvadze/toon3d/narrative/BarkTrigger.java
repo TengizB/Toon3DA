@@ -33,5 +33,20 @@ public enum BarkTrigger {
     /** The player has taken no action for a while — dry flavour quip, lowest priority. */
     IDLE,
     /** The player keeps re-walking tiles they already cleared on this floor. */
-    BACKTRACK
+    BACKTRACK,
+    /**
+     * Control has just been handed to the player at the start of a run (order-5's COLD OPEN).  ORA
+     * introduces herself here; the rows are one-shot, so she does it once and then never again.
+     */
+    RUN_START,
+    /**
+     * A control has become useful for the first time and ORA teaches it in one line — the game's
+     * entire tutorial.  Subject key = {@code ControlHint.name()}.
+     */
+    CONTROL_HINT,
+    /**
+     * The player walked up to a facility terminal and read what was left on it (order-5's LOG
+     * channel).  ORA's one-line "take" on the log; the full text is order-6's codex.
+     */
+    LOG_FOUND
 }
